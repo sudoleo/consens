@@ -170,6 +170,7 @@ function reasoningText(entry) {
 }
 
 function renderReasoningOverview() {
+    renderReasoningControls();
     const policy = meta().reasoning || {};
     const flowContainer = document.getElementById('reasoningFlowOverview');
     const modelContainer = document.getElementById('reasoningModelOverview');
@@ -234,6 +235,100 @@ function renderReasoningOverview() {
         appendRow(provider, 'Pro judge', judgePolicy.pro);
         appendRow(provider, 'Chat memory', (policy.chat_memory || {})[provider]);
     });
+}
+
+function renderReasoningControls() {
+    const container = document.getElementById('reasoningControls');
+    const profile = document.getElementById('reasoningProfile');
+    const scope = document.getElementById('reasoningScope');
+    if (!container || !profile || !scope) return;
+    const draft = globalModelsData.reasoning_policy || { profile: 'existing', models: {} };
+    globalModelsData.reasoning_policy = draft;
+    profile.value = draft.profile;
+    profile.onchange = () => {
+        draft.profile = profile.value;
+        markDirty();
+        renderReasoningControls();
+    };
+    scope.onchange = (event) => {
+        event.stopPropagation();
+        renderReasoningControls();
+    };
+    const showProtected = document.getElementById('reasoningShowProtected');
+    showProtected.onchange = (event) => {
+        event.stopPropagation();
+        renderReasoningControls();
+    };
+    showProtected.oninput = event => event.stopPropagation();
+    scope.oninput = event => event.stopPropagation();
+    container.replaceChildren();
+    const table = document.createElement('table');
+    table.className = 'reasoning-budget-table';
+    const head = table.createTHead().insertRow();
+    ['Model / usage', 'Policy', 'Preview for selected request type', 'Why / protection'].forEach(text => {
+        const th = document.createElement('th');
+        th.scope = 'col';
+        th.textContent = text;
+        head.appendChild(th);
+    });
+    const body = table.createTBody();
+    let changed = 0;
+    let exceptions = 0;
+    let protectedModels = 0;
+    const controls = ((meta().reasoning || {}).controls || [])
+        .filter(control => scope.value !== 'deep' || control.deep_model);
+    controls.forEach(control => {
+        const override = draft.models[control.model];
+        const choice = override || draft.profile;
+        const preview = control.previews[choice][scope.value];
+        const original = control.previews.existing[scope.value];
+        const differs = JSON.stringify(preview) !== JSON.stringify(original);
+        if (differs) changed += 1;
+        if (override) exceptions += 1;
+        if (!control.supported) protectedModels += 1;
+        if (!control.supported && !showProtected.checked) return;
+        const row = body.insertRow();
+        const modelCell = row.insertCell();
+        const name = document.createElement('strong');
+        name.textContent = control.label;
+        name.title = control.model;
+        const usage = document.createElement('small');
+        const reasons = dependencyReasons(control.provider, control.model);
+        usage.textContent = `${providerLabel(control.provider)} · ${reasons.length ? reasons.join(', ') : 'Available in picker'}`;
+        modelCell.append(name, usage);
+        const policyCell = row.insertCell();
+        if (control.supported) {
+            const select = document.createElement('select');
+            select.dataset.reasoningModel = control.model;
+            select.setAttribute('aria-label', `Reasoning policy for ${control.label}`);
+            [['', 'Follow default'], ['economy', 'Always use savings'], ['existing', 'Keep existing · quality exception']].forEach(([value, label]) => {
+                select.add(new Option(label, value));
+            });
+            select.value = override || '';
+            select.onchange = () => {
+                if (select.value) draft.models[control.model] = select.value;
+                else delete draft.models[control.model];
+                markDirty();
+                renderReasoningControls();
+                Array.from(container.querySelectorAll('select'))
+                    .find(el => el.dataset.reasoningModel === control.model)?.focus();
+            };
+            policyCell.appendChild(select);
+        } else {
+            policyCell.textContent = 'Protected / unchanged';
+        }
+        const valueCell = row.insertCell();
+        valueCell.textContent = reasoningText({ reasoning: preview });
+        if (differs) {
+            const before = document.createElement('small');
+            before.textContent = `Previously: ${reasoningText({ reasoning: original })}`;
+            valueCell.appendChild(before);
+            valueCell.className = 'reasoning-budget-changed';
+        }
+        row.insertCell().textContent = control.note;
+    });
+    container.appendChild(table);
+    document.getElementById('reasoningSummary').textContent = `${changed} of ${controls.length} models changed vs. original behavior for this request type · ${exceptions} explicit exceptions · ${protectedModels} models protected / unchanged. Low is an effort setting, not a hard token or euro limit.`;
 }
 
 function renderWatchModelConfig() {
@@ -1226,6 +1321,7 @@ async function saveModels() {
 
     const data = {
         premium: [],
+        reasoning_policy: globalModelsData.reasoning_policy || { profile: 'existing', models: {} },
         consensus: consensusListValues(),
         preset_models: currentPresetModels(),
         deep_think_model: currentDeepThinkModel(),

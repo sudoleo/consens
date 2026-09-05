@@ -1105,6 +1105,8 @@ def _reasoning_admin_meta(data: dict) -> dict:
     deep_think_answers = {}
     judges = {}
     chat_memory = {}
+    policy = data.get("reasoning_policy", cfg.get_reasoning_policy())
+    controls = []
 
     def entry(provider: str, model: str, reasoning, source: str) -> dict:
         model_config = cfg.get_model_config(model, provider)
@@ -1122,26 +1124,50 @@ def _reasoning_admin_meta(data: dict) -> dict:
         Judges and the chat-memory compressor pass ``effort`` into the same
         ``setdefault``, so an explicit model policy keeps winning there too.
         """
-        model_config = cfg.get_model_config(model, provider)
-        request_reasoning = (
-            (model_config.request_config or {}).get("reasoning")
-            if model_config else None
+        return cfg.effective_engine_reasoning(
+            provider, model, effort=cfg.judge_reasoning_effort(provider), policy=policy,
         )
-        if isinstance(request_reasoning, dict) and request_reasoning:
-            return dict(request_reasoning), "MODEL_REQUEST_CONFIG"
-        return {"effort": cfg.judge_reasoning_effort(provider)}, "judge_reasoning_effort"
 
     for provider in PROVIDER_KEYS:
         model_answers[provider] = {}
         for model in data.get(provider) or []:
-            reasoning, source = cfg.effective_model_reasoning(provider, model)
+            reasoning, source = cfg.effective_model_reasoning(provider, model, policy=policy)
             model_answers[provider][model] = entry(
                 provider, model, reasoning, source
             )
+            supported = model in cfg.reasoning_savings_models()
+            note = "Low cap; existing off/minimal settings stay off/minimal."
+            if model in (cfg.DEFAULT_MISTRAL_MODEL, cfg.MISTRAL_PRO_MODEL):
+                note = "Savings uses none (minimal thinking); this model supports none/high, not low. Keep existing for demanding reasoning tasks."
+            if not supported:
+                if model == cfg.KIMI_PRO_MODEL:
+                    note = "Required reasoning stays enabled; no verified low cap."
+                elif reasoning and (reasoning.get("enabled") is False or reasoning.get("effort") == "none"):
+                    note = "Already off; preserved."
+                elif reasoning and reasoning.get("effort") == "low":
+                    note = "Already low; no verified further reduction."
+                else:
+                    note = "Existing behavior preserved; no verified savings control. Provider default is not an off switch."
+            if model in (cfg.MUSE_BASE_MODEL, cfg.MUSE_PRO_MODEL):
+                note = "Required reasoning; already low. Cannot be switched off."
+            previews = {}
+            for choice in ("existing", "economy"):
+                preview_policy = {"profile": choice, "models": {}}
+                previews[choice] = {
+                    "answers": cfg.effective_model_reasoning(provider, model, policy=preview_policy)[0],
+                    "deep": cfg.effective_model_reasoning(provider, model, deep_think=True, policy=preview_policy)[0],
+                    "synthesis": cfg.effective_engine_reasoning(provider, model, policy=preview_policy)[0],
+                    "helpers": cfg.effective_engine_reasoning(provider, model, effort=cfg.judge_reasoning_effort(provider), policy=preview_policy)[0],
+                }
+            controls.append({
+                "model": model, "provider": provider, "label": cfg.get_model_label(model),
+                "deep_model": model == cfg.PROVIDERS[provider].pro_model,
+                "supported": supported, "note": note, "previews": previews,
+            })
 
         deep_model = cfg.PROVIDERS[provider].pro_model
         deep_reasoning, deep_source = cfg.effective_model_reasoning(
-            provider, deep_model, deep_think=True
+            provider, deep_model, deep_think=True, policy=policy
         )
         deep_think_answers[provider] = entry(
             provider, deep_model, deep_reasoning, deep_source
@@ -1167,6 +1193,7 @@ def _reasoning_admin_meta(data: dict) -> dict:
         )
 
     return {
+        "controls": controls,
         "model_answers": model_answers,
         "deep_think_answers": deep_think_answers,
         "judges": judges,
@@ -1175,13 +1202,13 @@ def _reasoning_admin_meta(data: dict) -> dict:
             {
                 "name": "Standard answers",
                 "setting": "Per model",
-                "detail": "Explicit model policy; otherwise the provider default.",
+                "detail": "Model policy and Admin savings cap; otherwise provider default.",
                 "code": "app/core/config.py · MODEL_REQUEST_CONFIG",
             },
             {
                 "name": "Deep Think answers",
                 "setting": f"{cfg.REASONING_EFFORT_FOR_DEEP} fallback",
-                "detail": "Uses each family's Pro model. Model overrides and Mistral high take precedence.",
+                "detail": "Uses each family's Pro model. The Admin savings cap also applies here.",
                 "code": "app/core/config.py · effective_model_reasoning",
             },
             {
@@ -1205,7 +1232,7 @@ def _reasoning_admin_meta(data: dict) -> dict:
             {
                 "name": "Consensus synthesis",
                 "setting": "Per model",
-                "detail": "No global effort cap; the selected engine keeps its model policy.",
+                "detail": "Selected engine policy, including the Admin savings cap.",
                 "code": "app/core/config.py · MODEL_REQUEST_CONFIG",
             },
             {
@@ -1362,6 +1389,7 @@ def get_models(request: Request):
         if doc.exists:
             raw_data = doc.to_dict() or {}
             data = normalize_models_document(raw_data)
+            data["reasoning_policy"] = cfg.validate_reasoning_policy(raw_data.get("reasoning_policy", {"profile": "existing", "models": {}}))
             data["limits"] = normalize_limits_config(raw_data.get("limits"))
             data["memory_edit"] = cfg.normalize_memory_edit_config(
                 raw_data.get("memory_edit")
@@ -1392,6 +1420,7 @@ def get_models(request: Request):
                 "chat_memory_models": cfg.get_chat_memory_models(),
                 "limits": get_limits_config(),
                 "memory_edit": cfg.get_memory_edit_config(),
+                "reasoning_policy": cfg.get_reasoning_policy(),
             }
         # Der Umschlag-Key darf nie wie ein Provider heissen: die Familie
         # "meta" (Muse) haette sonst ihre Modell-Liste verloren.
@@ -1419,6 +1448,10 @@ def update_models(request: Request, data: dict = Body(...)):
                 cfg.WATCH_CONSENSUS_MODELS_BY_TIER
             )
         normalized = normalize_models_document(normalization_input)
+        try:
+            normalized["reasoning_policy"] = cfg.validate_reasoning_policy(data.get("reasoning_policy", cfg.get_reasoning_policy()))
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         normalized["limits"] = normalize_limits_config(data.get("limits"))
         incoming_memory_edit = data.get("memory_edit")
         # Kompatibilitaet fuer einen bereits offenen Admin-Tab aus der Version
@@ -1534,6 +1567,7 @@ def update_models(request: Request, data: dict = Body(...)):
             "chat_memory_models": normalized["chat_memory_models"],
             "limits": normalized["limits"],
             "memory_edit": normalized["memory_edit"],
+            "reasoning_policy": normalized["reasoning_policy"],
         }
         _persist_and_activate_models(doc_ref, models_document)
 

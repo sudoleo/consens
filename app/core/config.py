@@ -760,8 +760,17 @@ MODEL_CONFIGS: dict[str, ModelConfig] = {}
 MODEL_REQUEST_CONFIG: dict[str, dict[str, Any]] = {
     GROK_NO_REASONING_MODEL: {"reasoning": {"effort": "none"}},
     GROK_PRO_MODEL: {"reasoning": {"effort": "high"}},
-    KIMI_BASE_MODEL: {"reasoning": {"enabled": False}},
-    KIMI_PRO_MODEL: {"reasoning": {"enabled": False}},
+    # Live probes: automatic routing can emit tool syntax as answer text.
+    # Moonshot preserves model-directed search; do not fall back to other hosts.
+    KIMI_BASE_MODEL: {
+        "provider": {"only": ["moonshotai"], "allow_fallbacks": False},
+        "reasoning": {"enabled": False},
+    },
+    # K3 requires thinking. Disabling it prevented search in the same route.
+    KIMI_PRO_MODEL: {
+        "provider": {"only": ["moonshotai"], "allow_fallbacks": False},
+        "reasoning": {"enabled": True},
+    },
     GLM_BASE_MODEL: {"reasoning": {"effort": "low"}},
     GLM_PRO_MODEL: {"reasoning": {"effort": "low"}},
     # Muse denkt zwingend (OpenRouter meldet reasoning.mandatory=true); die
@@ -917,11 +926,72 @@ def get_model_config(model_id: str | None, provider: str | None = None) -> Model
     )
 
 
+REASONING_POLICY = {"profile": "existing", "models": {}}
+
+
+def reasoning_savings_models() -> set[str]:
+    """Verified savings controls; see docs/reasoning-policy.md for sources."""
+    return {
+        DEFAULT_MISTRAL_MODEL, MISTRAL_PRO_MODEL, GROK_PRO_MODEL,
+        OPENAI_PRO_MODEL,
+    }
+
+
+def validate_reasoning_policy(value) -> dict:
+    if not isinstance(value, dict) or set(value) != {"profile", "models"}:
+        raise ValueError("reasoning_policy requires profile and models")
+    if value["profile"] not in ("existing", "economy"):
+        raise ValueError("reasoning_policy.profile must be existing or economy")
+    overrides = value["models"]
+    if not isinstance(overrides, dict) or len(overrides) > 100:
+        raise ValueError("reasoning_policy.models must be a model mapping")
+    for model, setting in overrides.items():
+        if model not in reasoning_savings_models() or setting not in ("existing", "economy"):
+            raise ValueError(f"Unsupported reasoning override: {model}")
+    return {"profile": value["profile"], "models": dict(overrides)}
+
+
+def get_reasoning_policy() -> dict:
+    return {"profile": REASONING_POLICY["profile"], "models": dict(REASONING_POLICY["models"])}
+
+
+def apply_reasoning_policy(value=None) -> None:
+    policy = validate_reasoning_policy(value if value is not None else {"profile": "existing", "models": {}})
+    REASONING_POLICY.update(policy)
+
+
+def cap_model_reasoning(model_id, reasoning, source, *, policy=None):
+    """Cost cap, not a minimum: keep disabled/none/minimal reasoning intact.
+
+    Required and binary reasoning models retain their original contract. A
+    model exception restores all of its previous flow-specific settings.
+    """
+    policy = get_reasoning_policy() if policy is None else policy
+    choice = policy["models"].get(model_id, policy["profile"])
+    if choice != "economy" or model_id not in reasoning_savings_models():
+        return reasoning, source
+    if reasoning and (reasoning.get("enabled") is False or reasoning.get("effort") in ("none", "minimal", "low")):
+        return reasoning, source
+    # Mistral supports none/high, not low. Its existing helper calls already
+    # use none. GPT-5.5 defaults to medium; explicitly low reduces that default.
+    effort = "none" if model_id in (DEFAULT_MISTRAL_MODEL, MISTRAL_PRO_MODEL) else "low"
+    return {"effort": effort}, "Admin savings cap"
+
+
+def effective_engine_reasoning(provider, model_id, *, effort=None, policy=None):
+    model_config = get_model_config(model_id, provider)
+    explicit = (model_config.request_config or {}).get("reasoning") if model_config else None
+    value = dict(explicit) if explicit else ({"effort": effort} if effort else None)
+    source = "MODEL_REQUEST_CONFIG" if explicit else ("judge_reasoning_effort" if effort else "provider default")
+    return cap_model_reasoning(canonical_model_id(model_id, provider), value, source, policy=policy)
+
+
 def effective_model_reasoning(
     provider: str,
     model_id: str | None,
     *,
     deep_think: bool = False,
+    policy=None,
 ) -> tuple[dict[str, Any] | None, str]:
     """Resolve the reasoning payload and its source for an answer-model call.
 
@@ -937,12 +1007,12 @@ def effective_model_reasoning(
     request_config = dict(model_config.request_config or {}) if model_config else {}
     explicit = request_config.get("reasoning")
     if isinstance(explicit, dict) and explicit:
-        return dict(explicit), "MODEL_REQUEST_CONFIG"
+        return cap_model_reasoning(internal_model, dict(explicit), "MODEL_REQUEST_CONFIG", policy=policy)
     if provider_key == "mistral" and internal_model in MISTRAL_REASONING_MODELS:
-        return {"effort": "high"}, "MISTRAL_REASONING_MODELS"
+        return cap_model_reasoning(internal_model, {"effort": "high"}, "MISTRAL_REASONING_MODELS", policy=policy)
     if deep_think:
-        return {"effort": REASONING_EFFORT_FOR_DEEP}, "REASONING_EFFORT_FOR_DEEP"
-    return None, "provider default"
+        return cap_model_reasoning(internal_model, {"effort": REASONING_EFFORT_FOR_DEEP}, "REASONING_EFFORT_FOR_DEEP", policy=policy)
+    return cap_model_reasoning(internal_model, None, "provider default", policy=policy)
 
 
 def judge_reasoning_effort(provider: str) -> str:
@@ -1715,6 +1785,7 @@ def _capture_runtime_config() -> dict:
         "watch_consensus": dict(WATCH_CONSENSUS_MODELS_BY_TIER),
         "limits": dict(LIMITS),
         "memory_edit_config": dict(MEMORY_EDIT_CONFIG),
+        "reasoning_policy": get_reasoning_policy(),
     }
 
 
@@ -1758,6 +1829,7 @@ def _restore_runtime_config(state: dict) -> None:
     LIMITS.update(state["limits"])
     MEMORY_EDIT_CONFIG.clear()
     MEMORY_EDIT_CONFIG.update(state["memory_edit_config"])
+    apply_reasoning_policy(state["reasoning_policy"])
     _sync_limit_constants()
     ALL_ALLOWED_MODELS = _all_allowed_models()
     rebuild_model_configs()
@@ -1778,6 +1850,7 @@ def load_models_from_db(*, strict: bool = False, persist_backfill: bool = True) 
         doc = doc_ref.get(timeout=5.0, retry=None)
         if doc.exists:
             data = doc.to_dict()
+            apply_reasoning_policy(data.get("reasoning_policy"))
             new_provider_keys = [
                 provider for provider in PROVIDERS if provider not in data
             ]
@@ -1908,6 +1981,7 @@ def load_models_from_db(*, strict: bool = False, persist_backfill: bool = True) 
             logging.info("Models configuration loaded from Firestore successfully.")
         elif persist_backfill:
             # If document doesn't exist, create it with default values
+            apply_reasoning_policy()
             doc_ref.set({
                 **{
                     provider.key: sorted(provider.models)
@@ -1927,10 +2001,12 @@ def load_models_from_db(*, strict: bool = False, persist_backfill: bool = True) 
                 "watch_consensus_models": dict(WATCH_CONSENSUS_MODELS_BY_TIER),
                 "limits": get_limits_config(),
                 "memory_edit": get_memory_edit_config(),
+                "reasoning_policy": get_reasoning_policy(),
             }, timeout=5.0, retry=None)
             rebuild_model_configs()
             logging.info("Created default models configuration in Firestore.")
         else:
+            apply_reasoning_policy()
             logging.info(
                 "Models configuration is missing; using code defaults until the "
                 "supervised post-readiness backfill runs."

@@ -89,7 +89,10 @@ class RegistryCoverageTests(unittest.TestCase):
     def test_kimi_and_glm_request_and_attachment_policies_are_data(self):
         self.assertEqual(
             cfg.MODEL_CONFIGS[cfg.KIMI_BASE_MODEL].request_config,
-            {"reasoning": {"enabled": False}},
+            {
+                "provider": {"only": ["moonshotai"], "allow_fallbacks": False},
+                "reasoning": {"enabled": False},
+            },
         )
         self.assertEqual(
             cfg.MODEL_CONFIGS[cfg.GLM_PRO_MODEL].request_config,

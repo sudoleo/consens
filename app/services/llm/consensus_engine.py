@@ -136,10 +136,14 @@ def _resolve_engine(engine_model: str) -> tuple[str, str, str] | None:
     return config.provider, config.api_model, model_ref
 
 
-def _engine_request_config(provider: str, api_model: str, model_ref: str) -> dict:
+def _engine_request_config(provider: str, api_model: str, model_ref: str, *, effort=None) -> dict:
     internal_id = model_ref if model_ref in cfg.MODEL_CONFIGS else str(api_model).split("/", 1)[-1]
     model_config = cfg.get_model_config(internal_id, provider)
-    return dict(model_config.request_config or {}) if model_config else {}
+    request_config = dict(model_config.request_config or {}) if model_config else {}
+    reasoning, _ = cfg.effective_engine_reasoning(provider, internal_id, effort=effort)
+    if reasoning is not None:
+        request_config["reasoning"] = reasoning
+    return request_config
 
 
 def _call_engine_text(
@@ -180,7 +184,7 @@ def _call_engine_text(
     response_format = _structured_response_format(json_mode, json_schema)
     if response_format is not None:
         payload["response_format"] = response_format
-    request_config = _engine_request_config(provider, api_model, model_ref)
+    request_config = _engine_request_config(provider, api_model, model_ref, effort=effort)
     if effort:
         request_config.setdefault("reasoning", {"effort": effort})
     _merge_nested_config(payload, request_config)
@@ -267,7 +271,7 @@ def _stream_engine_text(
         raise _InvalidEngineError("OpenRouter credential is missing")
     temperature = _effective_temperature(provider, api_model, temperature)
     response_format = _structured_response_format(json_mode, json_schema)
-    request_config = _engine_request_config(provider, api_model, model_ref)
+    request_config = _engine_request_config(provider, api_model, model_ref, effort=effort)
     if effort:
         request_config.setdefault("reasoning", {"effort": effort})
     yield from stream_chat_completion_text(

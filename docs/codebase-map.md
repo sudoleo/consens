@@ -2805,8 +2805,15 @@ Basiswerte, `MODEL_ORDER_BY_PROVIDER`, der Firestore-Load samt Backfill sowie
 Picker. Die `ALLOWED_*_MODELS`-Namen bleiben Aliasse auf DASSELBE Set-Objekt der
 Registry (der Firestore-Load mutiert in place). Familienspezifische Hygiene
 steht in `PROVIDER_MODEL_MIGRATIONS`/`PROVIDER_DEPRECATED_MODELS`, Reasoning-
-Varianten als Daten in `MODEL_REQUEST_CONFIG`: Kimi K2.6/K3 senden
-`reasoning.enabled=false`, GLM 5.3 Flash/5.3 `reasoning.effort=low`.
+Varianten als Daten in `MODEL_REQUEST_CONFIG`: Kimi K2.6 sendet
+`reasoning.enabled=false`, K3 zwingend `reasoning.enabled=true` (auch Deep Think).
+Beide Kimi-Modelle begrenzen OpenRouter auf `provider.only=["moonshotai"]`
+mit `allow_fallbacks=false`; das bestehende `zdr=true` bleibt beim Merge erhalten.
+Live-Diagnose: automatische Routen lieferten kaputte Tool-Ausgaben; K3 suchte
+auf der Moonshot-Route erst mit aktiviertem Reasoning. Suche bleibt modellgesteuert
+über `openrouter:web_search`, ohne gemeinsame Quellen oder neue Transport-Retries.
+Die Modellkonfiguration gilt auch für Consensus-Aufrufe; Ausgabe-/Suchbudgets
+bleiben unverändert. GLM 5.3 Flash/5.3 sendet `reasoning.effort=low`.
 Feste Reasoning-Werte liegen ebenfalls zentral in `config.py`
 (`REASONING_EFFORT_FOR_*`, `judge_reasoning_effort`);
 `effective_model_reasoning` bildet daraus mit den Modell-Overrides exakt die
@@ -2918,9 +2925,22 @@ Modelllisten werden bewusst nicht live gegen Provider-APIs validiert; diese
 Pflege bleibt eine explizite Admin-Aufgabe.
 Das Admin-UI (Tabs: Models / Consensus & Deep Think / Limits / Accounts / API /
 Shared Pages / Consensus Watch / Topics / SEO) bekommt via
-  `GET /api/admin/models` ein `meta`-Objekt (Alias-Auflösung, Labels und
-  referenzierende Defaults/Presets/Watches/Judges). `meta.reasoning` ist eine
-  read-only Projektion derselben zentralen Runtime-Policy: Der Models-Tab zeigt
+  `GET /api/admin/models` ein `_meta`-Objekt (Alias-Auflösung, Labels und
+  referenzierende Defaults/Presets/Watches/Judges). `app_config/models.reasoning_policy`
+  speichert das zentrale Sparprofil (`existing`/`economy`) und Modell-Ausnahmen.
+  GET/POST liefern/speichern es über den bestehenden Save-/Reload-/Rollback-Flow;
+  fehlende Felder alter Clients erhalten die aktive Policy. Ohne DB-Feld bleibt
+  das bisherige Verhalten erhalten. Der Models-Tab zeigt eine Vorschau je
+  Einsatzbereich mit bearbeitbaren Modell-Ausnahmen; geschützte Modelle sind
+  zuschaltbar. `cap_model_reasoning` begrenzt verifizierte Modelle auf `low`,
+  Mistral auf das unterstützte `none`; Pflicht-Reasoning, unbekannte Modelle und
+  bereits reduzierte Einstellungen bleiben erhalten. `effective_model_reasoning`
+  (Antworten inklusive Deep Think) und `effective_engine_reasoning`
+  (synchrone/streamende Consensus-, Judge-, Resolve- und Memory-Aufrufe) verwenden
+  dieselbe Policy. Feste Extraktions-/SEO-/Publisher-Tasks behalten ihre Werte.
+  Details und Quellen: `docs/reasoning-policy.md`.
+  `_meta.reasoning` projiziert dieselbe Runtime-Policy ohne Aktivierung: Die
+  eingeklappten technischen Details zeigen weiterhin
   die effektiven Einstellungen je Laufart sowie aufgeklappt je Modell, Deep-
   Think-Modell, Standard-/Pro-Judge und Chat-Memory-Modell einschließlich
   Policy-Name und aufgelöstem API-Modell (Judges und Chat-Memory teilen sich

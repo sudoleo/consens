@@ -410,6 +410,25 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertEqual(pro["api_model"], "meta/muse-spark-1.3")
         self.assertEqual(pro["payload"]["reasoning"], {"effort": "low"})
 
+    def test_kimi_search_keeps_moonshot_zdr_route_and_model_reasoning(self):
+        for model, deep, thinking in (
+            (cfg.KIMI_BASE_MODEL, False, False),
+            (cfg.KIMI_PRO_MODEL, False, True),
+            (cfg.KIMI_BASE_MODEL, True, True),
+        ):
+            with self.subTest(model=model, deep=deep):
+                payload = build_provider_payload(
+                    "kimi", question="current events", model_override=model,
+                    deep_search=deep, max_output_tokens=4096,
+                )["payload"]
+                self.assertEqual(payload["provider"], {
+                    "zdr": True, "only": ["moonshotai"], "allow_fallbacks": False,
+                })
+                self.assertEqual(payload["reasoning"], {"enabled": thinking})
+                self.assertEqual(payload["max_tokens"], 4096)
+                self.assertEqual(payload["tools"][0]["type"], "openrouter:web_search")
+                self.assertEqual(payload["tools"][0]["parameters"]["max_uses"], 5 if deep else 1)
+
     def test_kimi_and_glm_payload_policies_are_applied(self):
         kimi = build_provider_payload(
             "kimi", question="q", system_prompt="s",

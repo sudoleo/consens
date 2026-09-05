@@ -176,7 +176,10 @@ class OpenRouterTemperatureTests(unittest.TestCase):
     def test_engine_aliases_keep_model_specific_reasoning_policies(self):
         self.assertEqual(
             _engine_request_config("kimi", "moonshotai/kimi-k2.6", "moonshotai/kimi-k2.6"),
-            {"reasoning": {"enabled": False}},
+            {
+                "provider": {"only": ["moonshotai"], "allow_fallbacks": False},
+                "reasoning": {"enabled": False},
+            },
         )
         self.assertEqual(
             _engine_request_config("glm", "z-ai/glm-5.3", "z-ai/glm-5.3"),
