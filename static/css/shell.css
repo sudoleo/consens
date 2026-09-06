@@ -3629,6 +3629,37 @@ body.dark-mode .feedback-modal h2 {
 
 /* Neutral filled controls. Primary and destructive actions retain their
    semantic colours; text-only actions retain their transparent treatment. */
+/* The feature explanation is one surface, not a white card inside a modal. */
+body:not(.dark-mode) #proFeatureModal .pro-header {
+  background: transparent;
+  border-bottom: 0;
+}
+
+body:not(.dark-mode) #proFeatureModal .pro-beta-panel {
+  margin-top: 0;
+  padding: 0 24px 24px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+}
+
+body:not(.dark-mode) #proFeatureModal .btn-free {
+  background: var(--app-surface-hover);
+  border-color: transparent;
+  color: var(--ink);
+  box-shadow: none;
+}
+
+body:not(.dark-mode) #proFeatureModal .btn-free:is(:hover, :focus-visible) {
+  background: var(--app-surface-selected);
+}
+
+@media (max-width: 620px) {
+  body:not(.dark-mode) #proFeatureModal .pro-beta-panel {
+    padding: 0 18px 18px;
+  }
+}
+
 body :is(.attach-trigger, .model-picker-display, .auth-top-login,
   .claim-jump-link, .diff-resolve-btn, .share-secondary-btn,
   .watch-setup-edit, .watch-setup-chip, .memory-edit-cancel),
