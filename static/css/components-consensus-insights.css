@@ -2,7 +2,7 @@
    Consensus Insights: Verdict-Header, Claim-Badges, Differences-Karten
    ========================================================================== */
 
-@import url('./components-consensus-visuals.css?v=20260906-palette1');
+@import url('./components-consensus-visuals.css?v=20260906-claimhit1');
 
 /* Karte, die ein Inline-Marker gerade geoeffnet hat: kurzer Wash in der
    Bernstein-Note des Markers, der von selbst verblasst. Bewusst kein Ring -
@@ -63,13 +63,14 @@
   flex-shrink: 0;
 }
 
-/* Das Badge steht rechtsbuendig. Seine zentrierte 44px-Touchflaeche ragte
-   deshalb auf schmalen Displays ueber den Container hinaus. Die gleiche
-   Trefferbreite bleibt erhalten, waechst hier aber nur nach innen. */
-.claims-fallback-row .claim-badge::after {
-  left: auto;
-  right: 0;
-  transform: translateY(-50%);
+/* Standalone fallback badges have room for a full touch target, extending
+   inward so it stays inside the row. Inline badges stay citation-safe. */
+@media (pointer: coarse) {
+  .claims-fallback-row .claim-badge::after {
+    left: auto;
+    right: 0;
+    width: 44px;
+  }
 }
 
 /* --- Popover / Bottom Sheet ---------------------------------------------- */

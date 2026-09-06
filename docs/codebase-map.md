@@ -1155,6 +1155,10 @@ der Python-Staleness-Test auch indirekte Änderungen erkennt.
   Hover wirkt in beide Richtungen: `.cx-claim.is-hovered` (vertiefte Marke)
   ↔ `.claim-badge.is-linked-hover`. Wo ein Badge steht, ist es das
   fokussierbare Steuerelement und die Passage nur ein zusätzlicher Mausweg.
+  Inline-Quoten haben auf Mausgeraeten nur ihre sichtbare Trefferflaeche;
+  auf Touch erweitert `::after` nur die Hoehe auf 44 px. So ueberdeckt das
+  Badge keine direkt folgende `.src-ref`-Quelle. Nur alleinstehende Badges
+  in Fallback-Zeilen behalten eine nach innen gerichtete 44-px-Touchbreite.
   An einer **Differenz** gibt es daneben seit 2026-08-15 nichts mehr — dort
   macht `attachPassageControl` den ersten Span selbst zum Steuerelement
   (`role="button"`, `tabindex="0"`, sprechendes `aria-label`, Enter/Space),
