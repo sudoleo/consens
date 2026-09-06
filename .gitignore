@@ -36,6 +36,10 @@ recordings/
 recording/
 .recording-tools/
 
+# Local LinkedIn production assets and editorial/demo notes
+/artifacts/linkedin/
+/docs/linkedin-*.md
+
 # Local operator workflow notes
 docs/seo-share-indexing-process.md
 
