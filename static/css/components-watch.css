@@ -6,7 +6,7 @@
    ========================================================================== */
 
 /* --- View-Switch: Pill oben mittig (Consensus | Watches), fixed.
-       Immer sichtbar (auch ausgeloggt — Watches fragt dann per Popup nach
+       Auf Start-/Watch-Ansicht sichtbar (ausgeloggt fragt Watches nach
        Login), Klicks + aktiver Zustand in watch.js. Bleibt über der
        Watch-Seite stehen (z: --z-header). --- */
 .view-switch {

@@ -157,7 +157,7 @@ consensus" und „Checking for contradictions" zum Ergebnis; die lokale synchron
 Widerspruchsauswertung hält ihren angekündigten Zustand dafür 1,1 Sekunden. Der
 Lauf hat drei strittige Stellen (kritischer Widerspruch zur
 Schlusszeile, kleiner zur Ursachenbenennung, eine abweichende Gewichtung zur
-Entschuldigung) und sechs Claims; der Score 52/100 ist nicht gegriffen, sondern
+Entschuldigung) und aktuell 19 Claims; der Score 45/100 ist nicht gegriffen, sondern
 die Rechnung aus `consensus_scoring.py` auf genau diese Daten. Quellen gibt es
 bewusst keine — auf „kann ich das so schreiben?" zitiert kein Modell eine
 Studie, und der Quellen-Tab blendet sich bei leerer Liste ohnehin aus. Der
@@ -330,11 +330,47 @@ der Python-Staleness-Test auch indirekte Änderungen erkennt.
   Highlights und Schatten mehr. `static/css/public-tokens.css` spiegelt die
   identische Skala, deshalb sind Landing-/Public-Mockups aus demselben Material
   wie `/app` (Testvertrag: `tests/test_public_design_system.py`). Dark Mode
-  überschreibt ausschließlich die fünf Werte + die Ampel.
+  überschreibt die Grundwerte + die Ampel.
+  Seit 2026-09-06 hebt `shell.css` Chat-Fragen (auch historische), Claim-Popovers
+  und Claim-/Contradiction-Hoverkarten mit dem lokalen Token `--chat-surface`
+  ab: dezentes Neutralgrau (`#f5f5f5`) in Light,
+  unveraendert `#303338` in Dark. Der Composer nutzt eigene
+  `--composer-*`-Tokens fuer Flaeche, Kontur, Schatten und einen maskierten
+  6-px-Backdrop-Blur hinter dem transparenten Thread-Wrapper. Desktop bleibt
+  sticky, Mobile fixed; die bestehende Hoehenreserve und Menue-Ebene bleiben
+  erhalten. Die anschliessende /app-Vereinheitlichung nutzt `--app-surface`
+  auf `body` fuer alle angehobenen Flaechen und bindet dort `--raise`,
+  `--chat-surface`, Container-/Response-/Glass-Aliasse neu. Hover und Auswahl
+  haben eigene `--app-surface-hover`/`--app-surface-selected`-Toene.
+  Der Consensus-/Watches-Umschalter ist in Threads und Direktvergleichen
+  ausgeblendet; auf Start- und Watch-Ansicht bleibt er sichtbar. Sein aktives
+  Segment ist in Light weiss mit dezenter Kontur.
+  Die Thread-Container starten deshalb mit 30 px oberem Padding (46 px bis
+  1099 px fuer die verbleibende Float-Navigation, vorher 58 px).
+  Light-Highlights nutzen produktweit Jade/Bernstein/Rosenrot und Schiefergrau.
+  `variables.css` und `public-tokens.css` spiegeln die neue Grundpalette
+  (Canvas #fafafa, Flaechen #f5f5f5, Felder weiss) und Status-Akzente.
+  Beide importieren `status-palette.css`: gemeinsame Light-Regeln fuer
+  Statuspunkte, Claim-Labels, Resolve-Konturen, Verdict sowie Watch-/Admin-
+  Statusanzeigen. Explizite Highlight-/Hover-Flaechen stehen im gemeinsamen
+  `components-consensus-visuals.css`. Dark-Paletten bleiben unveraendert;
+  Text und Quoten neutral. Oeffentliche CSS-Importketten werden mitversioniert.
+  Modals, Picker, Account-/Anhang-/Kopiermenues, Memory-Dialoge und neutrale Buttons
+  verwenden dieselbe Skala; Primaer- und destruktive Aktionen behalten ihre
+  Bedeutung. `components-input.css`
+  nimmt `.close` aus dem generischen Primaerbutton-Stil aus, damit die
+  vorhandenen neutralen Dialog-Schliessen-Stile greifen.
+  Die anschliessende Light-Invertierung setzt ausschliesslich in
+  `body:not(.dark-mode)` den Canvas und Sidebar-Grund auf fast weisses
+  `#fafafa`, eingelassene Felder auf Weiss (`--ground`/`--well` plus
+  BG-/Input-/Chip-Aliasse); angehobene
+  Popups, Fragen und neutrale Buttons nutzen wieder das urspruengliche
+  Warmgrau. Der schwebende Composer ist entsprechend grau mit fast weissem
+  Blur-Hintergrund. Die Dark-Palette und Public-Seiten bleiben unveraendert.
 - **Kontext am Composer: eine Familie (seit 2026-08-17)** — Zitat
   (`.composer-quote`) und Anhänge (`.attachment-bar`/`.attachment-chip`) hängen
   beide an der nächsten Frage und sehen deshalb gleich aus: Kachel auf
-  `--ground` (eine Stufe über dem `--well` des Feldes, dieselbe Bewegung wie
+  `--ground` (seit 2026-09-06 auf der hellen/angehobenen Composer-Flaeche, wie
   (+) und Lauf-Schalter), `--radius-sm`, **keine** Rahmen, Verläufe, Blur oder
   Schatten, Dateityp-Plakette monochrom auf `--ink`-Wash statt in Rot/Blau.
   Drei Fallen, die das alte Bild „gebastelt" wirken ließen und Regression-Gefahr
@@ -3428,6 +3464,47 @@ ersten Check statt eines leeren Consensus-Panels.
 ---
 
 ## 9. Bei Änderungen aktualisieren
+
+Lokales Video-Tooling (gitignored): `recording/premium-capture.cjs` nimmt die
+echte clientseitige Demo im isolierten E2E-Profil auf. `CONSENS_CAPTURE_OUT`
+wählt das Ausgabeziel; `CONSENS_CAPTURE_NORMAL=1` erfasst zusätzlich den normalen
+Composer samt gemessenen Rechtecken der Schlussfrage. Das zusammenhängende
+Consensus-Dokument enthält DOM-relative Kameraanker; fixierte Navigation wird
+nur während dieser Dokumentaufnahme ausgeblendet.
+Aktuell erzeugen `recording/light-stage.html`, `light-scene.js` und
+`light-render.cjs` v9: 70 Sekunden in echtem Light-Theme, 60 fps, getrennte
+4:5-/16:9-Kompositionen. `light-capture.cjs` erfasst zusätzlich die Send-Mitte,
+die unmarkierte Synthese, vollständigen Kontext und das geöffnete Difference-
+Detail. Vollformat-Canvas-Layer verhindern wechselnde Schärfe durch CSS-
+Bitmap-Caching. Die redaktionelle Erklärung trennt Synthese, Coverage Judge
+und Difference Judge korrekt. `light-studio.js` stellt die lokale Zeitleiste
+bereit; `light-deliver.py` prüft und bündelt die Exporte. Details:
+`docs/linkedin-launch-light.md`.
+Historisch erzeugen `recording/cinematic-stage.html`, `cinematic-scene.js` und
+`cinematic-render.cjs` v8: 66 Sekunden, eigenständige 4:5-/16:9-Kompositionen,
+perspektivische Übergänge, frontale Lesephasen und dasselbe Dokument bis zur
+Hover-Evidenz. Die Szene stellt `initFilm`, `drawFilm` und `filmReport` nur in
+der lokalen Render-Seite bereit. Ein portables Motion-Studio verwendet dieselbe
+Zeitleiste (`cinematic-studio.js`). `cinematic-deliver.py` prüft die kodierten
+Master und bündelt Auslieferung und Produktionsquellen. Der Renderer prüft
+Quellen, Bildgeometrie, Encoding und Audiopegel.
+Musik: lizenzierter Neon-Auszug (No Melody Alt Mix), Quelle 32,15–98,15 Sekunden.
+Der abgelehnte v6-Montageschnitt und v7 (`continuity-render.cjs`, 76 Sekunden)
+bleiben historisch erhalten.
+`recording/record-linkedin-demo.cjs` exportiert dafür seine Server-/Browser-Helfer;
+sein Serverstart setzt jetzt ebenfalls das isolierte E2E-Profil.
+Produktmodule und API-Verträge bleiben davon unberührt. Details und Ausgabe:
+`recording/README.md`, `docs/linkedin-launch-light.md`.
+
+Aktueller lokaler Videoschnitt v10: `recording/focus-scene.js`,
+`focus-stage.html` und `focus-render.cjs` ergänzen native Nahfahrten,
+selektive Canvas-Schärfe, synchronisierte Cursorziele und bewegtes Licht.
+Die zusätzliche Modell-Icon-Leiste entfällt. `focus-studio.js` verwendet
+dieselbe deterministische Zeitleiste; `focus-studio-check.cjs` und
+`focus-deliver.py` prüfen und verpacken die Ausgabe unter `recordings/launch-v10`.
+Die echten UI-Quellen stammen aus v9; dessen Renderer bleibt erhalten.
+Produktionsmodule/API-Flows ändern sich nicht. Details:
+`docs/linkedin-launch-focus.md`.
 
 Diese Datei ist die zentrale Architektur-Karte. **Aktualisiere sie im selben
 Commit/PR**, wenn sich Folgendes ändert:

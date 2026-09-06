@@ -1,4 +1,5 @@
 @import url('./typography.css?v=20260731-inter1');
+@import url('./status-palette.css?v=20260906-palette1');
 
 /* ==========================================================================
    Public design foundation
@@ -21,9 +22,9 @@
   /* Surface scale — the same five values as static/css/variables.css. The
      marketing pages and the product mockups they contain must be made of the
      same material as /app, otherwise the screenshots stop being screenshots. */
-  --ground: #f2f1ef;
-  --raise: #eae8e5;
-  --well: #e6e4e0;
+  --ground: #fafafa;
+  --raise: #f5f5f5;
+  --well: #fff;
   --ink: #222428;
   --ink-2: #5c5f66;
   --ink-3: #64676d;
@@ -31,12 +32,12 @@
   --line-soft: rgba(34, 36, 40, 0.07);
   --lift: 0 1px 2px rgba(28, 30, 33, 0.05), 0 14px 34px rgba(28, 30, 33, 0.08);
 
-  --agree: #3d8f76;
-  --agree-bg: rgba(61, 143, 118, 0.15);
-  --partial: #a8791b;
-  --partial-bg: rgba(168, 121, 27, 0.16);
-  --dispute: #a94f34;
-  --dispute-bg: rgba(169, 79, 52, 0.15);
+  --agree: #287d68;
+  --agree-bg: #e1efe9;
+  --partial: #946b1f;
+  --partial-bg: #f7edcf;
+  --dispute: #b14f5b;
+  --dispute-bg: #f5e0e3;
 
   --text-primary: var(--ink);
   --text-secondary: var(--ink-3);

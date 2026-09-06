@@ -253,20 +253,20 @@
    Bewusst niedrige Deckung: der Text darunter behaelt seinen WCAG-Kontrast,
    und eine Antwort, in der fast jeder Satz eine Marke traegt, bleibt lesbar. */
 :root {
-  --cx-mark-agree: color-mix(in srgb, var(--agree) 13%, transparent);
-  --cx-mark-agree-strong: color-mix(in srgb, var(--agree) 24%, transparent);
-  --cx-mark-note: color-mix(in srgb, var(--ink) 10%, transparent);
-  --cx-mark-note-strong: color-mix(in srgb, var(--ink) 17%, transparent);
+  --cx-mark-agree: #e1efe9;
+  --cx-mark-agree-strong: #cce3da;
+  --cx-mark-note: #eceef1;
+  --cx-mark-note-strong: #dfe3e8;
   /* Die duenne Abdeckung ist die LEISESTE Marke von allen: gerade so viel
      Grau, dass der Satz sich vom unmarkierten Text abhebt - nicht mehr. Wer
      ueber eine Antwort liest, in der fast jeder Satz eine Marke traegt, soll
      die gemessenen Saetze sehen und nicht die ungemessenen. */
-  --cx-mark-thin: color-mix(in srgb, var(--ink) 5%, transparent);
-  --cx-mark-thin-strong: color-mix(in srgb, var(--ink) 11%, transparent);
-  --cx-mark-split: color-mix(in srgb, var(--partial) 20%, transparent);
-  --cx-mark-split-strong: color-mix(in srgb, var(--partial) 34%, transparent);
-  --cx-mark-major: color-mix(in srgb, var(--dispute) 20%, transparent);
-  --cx-mark-major-strong: color-mix(in srgb, var(--dispute) 34%, transparent);
+  --cx-mark-thin: #f2f3f5;
+  --cx-mark-thin-strong: #e7e9ed;
+  --cx-mark-split: #f7edcf;
+  --cx-mark-split-strong: #f0ddaa;
+  --cx-mark-major: #f5e0e3;
+  --cx-mark-major-strong: #ecc7ce;
 }
 
 .dark-mode {

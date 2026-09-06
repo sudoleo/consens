@@ -1,5 +1,5 @@
 {
-  "sources": "a5d09394b533",
+  "sources": "29f51242de56",
   "inputs": [
     "package-lock.json",
     "scripts/build_frontend.mjs",
@@ -28,6 +28,7 @@
     "static/css/public-shell.css",
     "static/css/public-tokens.css",
     "static/css/shell.css",
+    "static/css/status-palette.css",
     "static/css/topics.css",
     "static/css/typography.css",
     "static/css/variables.css",
@@ -104,6 +105,6 @@
     }
   ],
   "styles": {
-    "app": "/static/dist/app.5a981f204f54.css"
+    "app": "/static/dist/app.eedf5bb1e170.css"
   }
 }

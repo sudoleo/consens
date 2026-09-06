@@ -12,6 +12,42 @@
    fades out at both ends, never from a rectangle drawn around content.
    ========================================================================== */
 
+/* App surface aliases. The light foundation matches public-tokens.css;
+   rebind aliases on body so inherited custom properties
+   resolve against this app's light/dark surface, including older components. */
+body,
+body.dark-mode {
+  --app-surface: #fff;
+  --app-surface-hover: color-mix(in srgb, var(--app-surface) 94%, var(--ink));
+  --app-surface-selected: color-mix(in srgb, var(--app-surface) 89%, var(--ink));
+  --raise: var(--app-surface);
+  --chat-surface: var(--app-surface);
+  --container-bg: var(--app-surface);
+  --response-bg: var(--app-surface);
+  --glass-bg: var(--app-surface);
+  --glass-bg-strong: var(--app-surface);
+  --glass-bg-soft: var(--app-surface);
+  --sidebar-hover: var(--app-surface-hover);
+}
+
+/* Light mode: near-white canvas and subtle neutral-grey raised surfaces. */
+body:not(.dark-mode) {
+  --app-surface: #f5f5f5;
+  --app-surface-hover: #ededed;
+  --app-surface-selected: #e7e7e7;
+  --ground: #fafafa;
+  --well: #fff;
+  --bg-color: var(--ground);
+  --sidebar-bg: var(--ground);
+  --input-bg: var(--well);
+  --chip-bg: var(--ground);
+  --code-bg: #fff;
+}
+
+body.dark-mode {
+  --app-surface: #303338;
+}
+
 /* --------------------------------------------------------------------------
    1. Elevation
 
@@ -186,7 +222,7 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
 
 .sidebar-new-run:hover,
 .sidebar-new-run:focus-visible {
-  background: var(--well);
+  background: var(--app-surface-hover);
   border-color: var(--line-soft);
   outline: none;
 }
@@ -307,7 +343,7 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
 
 .sidebar-search-trigger:hover,
 .sidebar-search-trigger:focus-visible {
-  background: var(--well);
+  background: var(--app-surface-hover);
   color: var(--ink);
   outline: none;
 }
@@ -359,7 +395,7 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
 
 .sidebar-search-box input:hover,
 .sidebar-search-box input:focus {
-  background: var(--well);
+  background: var(--app-surface-hover);
   outline: none;
   box-shadow: inset 0 0 0 1px var(--line);
 }
@@ -672,6 +708,13 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
   color: var(--ink-2);
 }
 
+/* Conversations (including direct comparisons) keep the header clear.
+   Watches retains its navigation even when a conversation is underneath. */
+body:not(.is-hero):not(:has(#watchDashboard:not([hidden]))) .view-switch,
+body.direct-comparison-active:not(:has(#watchDashboard:not([hidden]))) .view-switch {
+  display: none;
+}
+
 .view-switch-btn.is-active {
   background: var(--ground);
   color: var(--ink);
@@ -680,29 +723,38 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
 }
 
 /* --------------------------------------------------------------------------
-   4. Composer — an inset field, not a card
-
-   The old container was a white card with a border and a drop shadow. It is
-   now a well: a shade darker than the page, no contour. Above it sits a
-   hairline that fades out at both ends, so the input area is bounded without
-   being boxed.
+   4. Chat surfaces and floating composer
+   The composer shares the app surface hue with its own translucent finish.
    -------------------------------------------------------------------------- */
+:root {
+  --composer-surface: rgba(245, 245, 245, 0.96);
+  --composer-edge: rgba(34, 36, 40, 0.09);
+  --composer-shadow: 0 2px 6px rgba(28, 30, 33, 0.04), 0 8px 28px rgba(28, 30, 33, 0.08);
+  --composer-halo: rgba(250, 250, 250, 0.5);
+}
+body.dark-mode {
+  --composer-surface: rgba(48, 51, 56, 0.96);
+  --composer-edge: rgba(255, 255, 255, 0.12);
+  --composer-shadow: 0 2px 6px rgba(0, 0, 0, 0.18), 0 8px 28px rgba(0, 0, 0, 0.28);
+  --composer-halo: rgba(25, 26, 28, 0.5);
+}
+.claim-popover {
+  background: var(--chat-surface);
+}
 .chat-input-container,
 body:not(.dark-mode) .chat-input-container {
-  background: var(--well);
-  border: 0;
+  background: var(--composer-surface);
+  border: 1px solid var(--composer-edge);
   border-radius: var(--radius-xl);
-  box-shadow: none;
+  box-shadow: var(--composer-shadow);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
 }
-
 .chat-input-container::before {
   display: none;
 }
-
 .chat-input-container:focus-within {
-  box-shadow: 0 0 0 1px var(--line);
+  box-shadow: 0 0 0 1px var(--line), var(--composer-shadow);
 }
 
 .input-field {
@@ -1016,7 +1068,7 @@ body:not(.dark-mode) .chat-input-container {
 }
 
 .run-model-skip-btn:hover {
-  background: var(--well);
+  background: var(--app-surface-hover);
   color: var(--ink);
 }
 
@@ -1966,6 +2018,7 @@ body:not(.is-hero) .container {
   flex-direction: column;
   box-sizing: border-box;
   min-height: calc(100dvh - 10px);
+  padding-top: 30px;
   padding-bottom: 0;
 }
 
@@ -2014,7 +2067,7 @@ body:not(.is-hero) .input-section {
   margin-bottom: 0;
   padding-top: 14px;
   padding-bottom: 10px;
-  background: var(--ground);
+  background: transparent;
 }
 
 /* Auf Overlay-/Mobile-Breiten bleibt der Composer unabhaengig von der
@@ -2027,6 +2080,8 @@ body:not(.is-hero) .input-section {
 @media (max-width: 1099px) {
   body:not(.is-hero) .container {
     container-type: normal;
+    /* Leave room for the floating sidebar navigation on narrow screens. */
+    padding-top: 46px;
     padding-bottom: var(--thread-composer-height, 154px);
   }
 
@@ -2252,19 +2307,19 @@ body:not(.is-hero).agent-mode-enabled:not(.agent-mode-show-answers) .response-se
   display: none;
 }
 
-/* The composer's upper edge is a horizon that fades out at both ends, not
-   the top line of a box. It replaces the hairline the consensus section used
-   to draw when the composer still sat above the result. */
+/* Feathered backdrop: scrolling text remains faintly visible underneath.
+   Never intercept clicks or clip the menus above the floating field. */
 body:not(.is-hero) .input-section::before {
   content: "";
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 1px;
-  background: var(--line);
-  -webkit-mask-image: linear-gradient(90deg, transparent, #000 16%, #000 84%, transparent);
-  mask-image: linear-gradient(90deg, transparent, #000 16%, #000 84%, transparent);
+  inset: -12px -8px 0;
+  z-index: -1;
+  pointer-events: none;
+  background: var(--composer-halo);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  -webkit-mask-image: linear-gradient(180deg, transparent, #000 28px);
+  mask-image: linear-gradient(180deg, transparent, #000 28px);
 }
 
 body:not(.is-hero) .consensus-section::before {
@@ -2304,7 +2359,7 @@ body:not(.is-hero) .consensus-section::before {
      als Zug des Nutzers liest und nicht als erste Zeile der Antwort. Gesetzt
      wird er trotzdem linksbuendig (siehe .thread-ask). Die Nachricht selbst
      steht seit 2026-08-14 auf einer eigenen, eine Stufe abgesetzten Flaeche
-     (`--raise`, in beiden Modi genau ein Ton von der Seite entfernt) — die
+     (`--chat-surface`, warmgrau bzw. im Dark Mode deutlich angehoben) — die
      Blase ist die Sprecherkennzeichnung, nicht eine Farbe. */
   box-sizing: border-box;
   max-width: 70%;
@@ -2320,7 +2375,7 @@ body:not(.is-hero) .consensus-section::before {
   border-color: transparent;
   border-width: 11px 15px;
   border-radius: var(--radius-lg);
-  background: var(--raise);
+  background: var(--chat-surface);
   font-family: var(--font-sans);
   font-size: var(--font-size-base);
   line-height: var(--line-height-reading);
@@ -2427,7 +2482,7 @@ body:not(.is-hero) .consensus-section::before {
   border-color: transparent;
   border-width: 11px 15px;
   border-radius: var(--radius-lg);
-  background: var(--raise);
+  background: var(--chat-surface);
   font-family: var(--font-sans);
   font-size: var(--font-size-base);
   line-height: var(--line-height-reading);
@@ -3246,7 +3301,7 @@ body.is-hero .consensus-section::before {
 .watch-card-toggle:hover,
 .watch-example-chip:hover {
   border: 0;
-  background: var(--well);
+  background: var(--app-surface-hover);
   color: var(--ink);
 }
 
@@ -3339,7 +3394,7 @@ body.is-hero .consensus-section::before {
 
 .consensus-model .select-wrapper .model-picker-display:hover,
 .consensus-model .select-wrapper .model-picker-display:focus-visible {
-  background: var(--well);
+  background: var(--app-surface-hover);
   border: 0;
   color: var(--ink);
   box-shadow: none;
@@ -3464,7 +3519,7 @@ body:has(#postDemoLoginPrompt:not([hidden])) .chat-input-container {
   gap: 5px;
   padding: 11px 13px;
   border-radius: var(--radius-md);
-  background: var(--raise);
+  background: var(--chat-surface);
   color: var(--ink);
   box-shadow: 0 1px 2px rgba(28, 30, 33, 0.06), 0 14px 34px rgba(28, 30, 33, 0.12);
   font-size: var(--font-size-xs);
@@ -3544,4 +3599,84 @@ body.is-hero.agent-mode-enabled .response-section {
    Vergleichsflaeche. Diese spaete Regel gewinnt gegen den mobilen Empty-Hero. */
 body.is-hero.direct-comparison-active .response-section {
   display: flex;
+}
+
+/* Shared raised layers: avoid legacy translucent mixes and white gradients
+   washing out dark dialogs. The reading canvas and semantic alerts stay put. */
+body #emailPopup,
+body :is(.modal-content, .auth-modal, .feedback-modal, .settings-modal-content,
+  .faq-modal, .pro-modal-content, .popup, .attachment-viewer,
+  .memory-edit-dialog, .memory-selection-menu, .memory-edit-toast,
+  .model-picker-menu, .model-picker-panel, .attach-menu, .sidebar-quota,
+  .consensus-actions-menu),
+body.dark-mode :is(.modal-content, .auth-modal, .feedback-modal, .settings-modal-content,
+  .faq-modal, .pro-modal-content, .popup, .attachment-viewer,
+  .memory-edit-dialog, .memory-selection-menu, .memory-edit-toast,
+  .model-picker-menu, .model-picker-panel, .attach-menu, .sidebar-quota,
+  .consensus-actions-menu) {
+  background: var(--app-surface);
+  box-shadow: var(--lift);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+body :is(.settings-header, .faq-header),
+body.dark-mode :is(.settings-header, .faq-header),
+body .feedback-modal h2,
+body.dark-mode .feedback-modal h2 {
+  background: var(--app-surface);
+}
+
+/* Neutral filled controls. Primary and destructive actions retain their
+   semantic colours; text-only actions retain their transparent treatment. */
+body :is(.attach-trigger, .model-picker-display, .auth-top-login,
+  .claim-jump-link, .diff-resolve-btn, .share-secondary-btn,
+  .watch-setup-edit, .watch-setup-chip, .memory-edit-cancel),
+body .consensus-model .select-wrapper .model-picker-display {
+  background: var(--app-surface);
+}
+
+body :is(.attach-trigger, .model-picker-display, .auth-top-login,
+  .claim-jump-link, .diff-resolve-btn, .share-secondary-btn,
+  .watch-setup-edit, .watch-setup-chip, .memory-edit-cancel):is(:hover, :focus-visible):not(:disabled):not([aria-disabled="true"]),
+body .consensus-model .select-wrapper .model-picker-display:is(:hover, :focus-visible) {
+  background: var(--app-surface-hover);
+}
+
+body .model-picker-option:is(:hover, :focus-visible):not(:disabled):not([aria-disabled="true"]),
+body.dark-mode .model-picker-option:is(:hover, :focus-visible):not(:disabled):not([aria-disabled="true"]) {
+  background: var(--app-surface-hover);
+}
+
+body .model-picker-option.is-selected,
+body.dark-mode .model-picker-option.is-selected,
+body .view-switch-btn.is-active {
+  background: var(--app-surface-selected);
+}
+
+body:not(.dark-mode) .view-switch-btn.is-active {
+  background: #fff;
+  box-shadow: 0 0 0 1px rgba(34, 36, 40, 0.07), 0 1px 3px rgba(34, 36, 40, 0.06);
+}
+
+/* Match controls nested inside the new opaque panels. */
+body .theme-toggle,
+body .theme-toggle.is-dark {
+  background: var(--app-surface) !important;
+  border-color: var(--line) !important;
+  color: var(--ink-2) !important;
+  box-shadow: none !important;
+}
+
+body .theme-toggle:is(:hover, :focus-visible) {
+  background: var(--app-surface-hover) !important;
+}
+
+/* The OAuth control carries legacy important declarations of its own. */
+body #loginModalContent .oauth-button {
+  background: var(--app-surface) !important;
+  box-shadow: none;
+}
+body #loginModalContent .oauth-button:is(:hover, :focus-visible):not(:disabled) {
+  background: var(--app-surface-hover) !important;
 }

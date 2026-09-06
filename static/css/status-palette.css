@@ -1,0 +1,31 @@
+/* Shared light status accents. Explicit theme guard preserves existing dark colors. */
+:root:not(.dark-mode) body:not(.dark-mode) .consensus-verdict.is-calm { --verdict-ring: var(--agree); }
+:root:not(.dark-mode) body:not(.dark-mode) .consensus-verdict.is-warn { --verdict-ring: var(--partial); }
+:root:not(.dark-mode) body:not(.dark-mode) .watch-event-major {
+  color: var(--dispute);
+  background: var(--dispute-bg);
+}
+:root:not(.dark-mode) body:not(.dark-mode) .watch-version-fallback {
+  border-color: color-mix(in srgb, var(--partial) 42%, var(--line));
+  background: var(--partial-bg);
+}
+:root:not(.dark-mode) body:not(.dark-mode) .reasoning-budget-changed { color: var(--agree); }
+:root:not(.dark-mode) body:not(.dark-mode) .share-mod-badge.reported { background: var(--dispute); }
+:root:not(.dark-mode) body:not(.dark-mode) .share-mod-badge.review { background: var(--partial); }
+:root:not(.dark-mode) body:not(.dark-mode) .share-mod-badge.indexed { background: var(--agree); }
+:root:not(.dark-mode) body:not(.dark-mode) .admin-btn.danger {
+  color: var(--dispute);
+  border-color: var(--dispute);
+  background: var(--dispute-bg);
+}
+:root:not(.dark-mode) body:not(.dark-mode) .sev-dot.is-ok { background: var(--agree); }
+:root:not(.dark-mode) body:not(.dark-mode) .sev-dot.is-warn { background: var(--partial); }
+:root:not(.dark-mode) body:not(.dark-mode) .sev-dot.is-crit { background: var(--dispute); }
+:root:not(.dark-mode) body:not(.dark-mode) .sev-dot.is-info { background: #667085; }
+:root:not(.dark-mode) body:not(.dark-mode) .claim-section-label.is-agree { color: var(--agree); }
+:root:not(.dark-mode) body:not(.dark-mode) .claim-section-label.is-dissent { color: var(--partial); }
+:root:not(.dark-mode) body:not(.dark-mode) .resolve-outcome.is-resolved { border-left-color: var(--agree); }
+:root:not(.dark-mode) body:not(.dark-mode) .resolve-outcome.is-mixed { border-left-color: var(--partial); }
+:root:not(.dark-mode) body:not(.dark-mode) .resolve-outcome.is-standoff { border-left-color: var(--dispute); }
+:root:not(.dark-mode) body:not(.dark-mode) .consensus-verdict.is-alert { --verdict-ring: var(--dispute); }
+
