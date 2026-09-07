@@ -1712,9 +1712,12 @@ Turn 3 und spätere Turns benutzen eine serverseitig autoritative Context-Versio
   Karte".
   **Satz-Index (seit 2026-08-07):** Der Judge schreibt Anker nicht mehr ab.
   `_enumerate_consensus_sentences` nummeriert die prüfbaren Sätze der
-  Konsensantwort (Überschriften, Tabellen, Code und **abgesetzte Formeln**
-  — `$$…$$`, `\[…\]` — bleiben außen vor, Listenzähler und `[S1]`-Tags gehören
-  nicht zum Satz) und stellt jedem ein `[n] ` voran;
+  Konsensantwort sowie einzelne Datenzellen von Markdown-Tabellen (auch kurze
+  Werte; beide Judges berücksichtigen Spaltenüberschrift und Zeilenkontext).
+  Tabellenköpfe und Trennzeilen bleiben Kontext; Zellenanker überschreiten
+  keine Zellgrenzen. Überschriften, Code und **abgesetzte Formeln**
+  — `$$…$$`, `\[…\]` — bleiben außen vor. Listenzähler und `[S1]`-Tags gehören
+  nicht zum Fließtext-Satz. Der Index stellt jedem Eintrag ein `[n] ` voran;
   der Judge liefert nur noch `claims[].s` bzw. `differences[].s` (`0` = der
   Konsens sagt dazu nichts), der Server setzt daraus den exakten Originalsatz
   in `anchor`/`consensus_anchor` ein. Der Anker ist damit per Konstruktion

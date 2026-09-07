@@ -9,6 +9,7 @@ from app.services.llm.consensus_engine import (
     _call_engine_text,
     _differences_attempts,
     _enumerate_consensus_sentences,
+    _sentence_reference,
     _legacy_differences_text,
     _judge_effort,
     _provider_error_is_retryable,
@@ -876,7 +877,7 @@ class ConsensusSentenceSplitTests(unittest.TestCase):
             "Der Zuwachs betraegt $17{,}5\\%$ gegenueber dem Vorquartal.",
         ])
 
-    def test_headings_tables_and_code_are_not_numbered(self):
+    def test_headings_table_headers_and_code_are_not_numbered(self):
         text = (
             "# Titel\n\n"
             "Der erste pruefbare Satz steht hier.\n\n"
@@ -898,6 +899,33 @@ class ConsensusSentenceSplitTests(unittest.TestCase):
             "**Weltklasse:** ca. 1.300 Watt Dauerleistung.",
             "Ein Hobbyfahrer schafft dagegen rund 200 Watt.",
         ])
+
+    def test_table_cells_include_short_values_and_preserve_context(self):
+        numbered, sentences = self.sentences(
+            "| Building | Height |\n|---|:---:|\n"
+            "| Tower | **330 m** |\n| Other | 330 m |\n\n"
+            "The next paragraph remains a sentence."
+        )
+        self.assertEqual(sentences, [
+            "Tower", "**330 m**", "Other", "330 m",
+            "The next paragraph remains a sentence.",
+        ])
+        self.assertIn("| Building | Height |\n|---|:---:|", numbered)
+        self.assertIn("| [1] Tower | [2] **330 m** |", numbered)
+        self.assertEqual(_sentence_reference(4, sentences), ("330 m", 4, 1))
+
+    def test_table_without_outer_pipes_and_escaped_pipe(self):
+        numbered, sentences = self.sentences(
+            "Name | Value\n--- | ---\nA | left\\|right\nB | 42"
+        )
+        self.assertEqual(sentences, ["A", "left\\|right", "B", "42"])
+        self.assertIn("[1] A | [2] left\\|right", numbered)
+
+    def test_table_inside_code_is_not_numbered(self):
+        _, sentences = self.sentences(
+            "```\nName | Value\n--- | ---\nA | 42\n```"
+        )
+        self.assertEqual(sentences, [])
 
     def test_sentence_count_is_capped(self):
         text = " ".join(f"Dies ist der Satz Nummer {i} im Text." for i in range(200))

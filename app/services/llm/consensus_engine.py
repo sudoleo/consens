@@ -682,13 +682,33 @@ def _sentence_spans(text: str) -> list:
     return spans
 
 
+def _table_cell_spans(line: str) -> list:
+    """Original offsets of pipe-table cells, respecting escaped pipes."""
+    boundaries = [-1]
+    for index, char in enumerate(line):
+        if char != "|":
+            continue
+        backslashes = len(line[:index]) - len(line[:index].rstrip("\\"))
+        if backslashes % 2 == 0:
+            boundaries.append(index)
+    if len(boundaries) == 1:
+        return []
+    boundaries.append(len(line))
+    spans = list(zip((index + 1 for index in boundaries[:-1]), boundaries[1:]))
+    if not line[spans[0][0]:spans[0][1]].strip():
+        spans.pop(0)
+    if spans and not line[spans[-1][0]:spans[-1][1]].strip():
+        spans.pop()
+    return spans
+
+
 def _enumerate_consensus_sentences(consensus_answer: str):
     """Nummeriert die Saetze der Konsensantwort.
 
     Gibt (annotierter Text, Saetze) zurueck. Der annotierte Text ist die
     unveraenderte Antwort mit einem "[n] " vor jedem nummerierten Satz - der
     Judge sieht also weiterhin Ueberschriften, Tabellen und Code im Kontext,
-    kann sich aber nur auf pruefbare Fliesstext-Saetze beziehen.
+    kann sich auf Fliesstext-Saetze und einzelne Tabellenzellen beziehen.
     sentences[n-1] ist der exakte Originalausschnitt fuer den Anker."""
     text = str(consensus_answer or "")
     sentences = []
@@ -696,8 +716,10 @@ def _enumerate_consensus_sentences(consensus_answer: str):
     in_fence = False
     in_math = False
     pos = 0
+    table_columns = 0
+    lines = text.split("\n")
 
-    for line in text.split("\n"):
+    for line_index, line in enumerate(lines):
         line_start = pos
         pos += len(line) + 1
         stripped = line.strip()
@@ -712,9 +734,33 @@ def _enumerate_consensus_sentences(consensus_answer: str):
             # Eine einzeilige Formel ("$$...$$") ist bereits geschlossen.
             in_math = not _MATH_BLOCK_CLOSE_RE.search(stripped[2:])
             continue
-        # Ueberschriften und Tabellenzeilen tragen keine pruefbare Aussage,
-        # Code darf nicht angefasst werden, und eine Tabellenzeile waere im
-        # gerenderten DOM ohnehin kein zusammenhaengender Textknoten.
+        # Recognize a table through its delimiter row, including tables with
+        # no outer pipes. Headers remain context; each body cell is an anchor.
+        if not in_fence and stripped:
+            cells = _table_cell_spans(line)
+            next_line = lines[line_index + 1] if line_index + 1 < len(lines) else ""
+            delimiter = _table_cell_spans(next_line)
+            if cells and len(cells) == len(delimiter) and all(
+                re.fullmatch(r":?-+:?", next_line[start:end].strip())
+                for start, end in delimiter
+            ):
+                table_columns = len(cells)
+                continue
+            if table_columns and cells:
+                if all(re.fullmatch(r":?-+:?", line[start:end].strip()) for start, end in cells):
+                    continue
+                for start, end in cells[:table_columns]:
+                    if len(sentences) >= MAX_CONSENSUS_SENTENCES:
+                        break
+                    fragment = line[start:end].strip()
+                    if not fragment:
+                        continue
+                    absolute = line_start + start + len(line[start:end]) - len(line[start:end].lstrip())
+                    sentences.append(fragment)
+                    marks.append((absolute, len(sentences)))
+                continue
+        table_columns = 0
+        # Headings and code remain outside the checkable sentence index.
         if in_fence or not stripped or stripped.startswith(("#", "|")):
             continue
         if _THEMATIC_BREAK_RE.match(stripped):
@@ -951,6 +997,8 @@ def _build_differences_prompt_from(context: _JudgeContext) -> str:
         "disagreement.\n"
         "- Write \"claim\", \"stance\", and \"verify\" in the same language as the model responses.\n"
         "- \"best_model\": the model whose answer is closest to the consensus answer.\n\n"
+        "Numbered table cells are valid anchors too. Interpret short values using their "
+        "column headers and row labels; attach a contradiction to the disputed cell.\n"
         "Consensus answer (sentences numbered):\n" + numbered_answer + "\n\n"
         "Model responses:\n" + responses_text + "\n"
     )

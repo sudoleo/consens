@@ -189,6 +189,9 @@ def build_coverage_prompt(
     return (
         f"{question_preamble}"
         f"{task}"
+        "Numbered table cells are also statements: interpret each in the context of its "
+        "column header and row label, including short numbers or values. Classify labels "
+        "without a factual assertion as context_only.\n"
         "Every sentence of the consensus answer that can carry a checkable statement is "
         'prefixed with its number in square brackets, for example "[7] ". Sentence [7] '
         'has the id "s7". You refer to sentences by id only — never copy their wording.\n'

@@ -63,6 +63,29 @@ function badgeFor(ctx, text) {
 }
 
 describe("claim coverage states", () => {
+  it("renders claims and contradictions inside separate table cells", () => {
+    const ctx = boot();
+    ctx.body.innerHTML = "<table><thead><tr><th>Height</th><th>Price</th></tr></thead>"
+      + "<tbody><tr><td><strong>330 m</strong></td><td>29 euros</td></tr></tbody></table>";
+    render(ctx, data([
+      { anchor: "**330 m**", agree: MODELS, dissent: [], coverage: "supported" },
+      { anchor: "29 euros", agree: ["OpenAI"], dissent: [], coverage: "thin" }
+    ], [{
+      claim: "the ticket price", type: "contradiction", severity: "major",
+      consensus_anchor: "29 euros",
+      positions: [
+        { models: ["OpenAI"], stance: "29 euros", quote: "29 euros" },
+        { models: ["Gemini"], stance: "35 euros", quote: "35 euros" }
+      ]
+    }]));
+    const cells = ctx.body.querySelectorAll("td");
+    expect(cells[0].querySelector(".cx-claim.is-unanimous")).not.toBeNull();
+    expect(cells[1].querySelector(".cx-claim")).not.toBeNull();
+    expect(cells[1].querySelector(".cx-claim.is-thin")).toBeNull();
+    expect(ctx.body.querySelectorAll("th .cx-claim")).toHaveLength(0);
+    expect(ctx.fallback.hidden).toBe(true);
+  });
+
   it("marks a supported, a split and a thin sentence differently", () => {
     const ctx = boot();
     render(ctx, data([
