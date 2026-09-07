@@ -1675,6 +1675,7 @@
         }
 
         window.clearResponseBoxes = function (options = {}) {
+          window.App.answerReader?.reset?.();
           if (!options.silent) trackAppEvent("app_responses_cleared");
           if (options.keepRunSelection !== true) {
             window.App.runRegistry?.clearVisible?.();

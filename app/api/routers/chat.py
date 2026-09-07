@@ -95,6 +95,7 @@ from app.services.usage_repository import (
     canonical_request_fingerprint,
 )
 from app.services.consensus_pipeline import analyze_provider_answers
+from app.services.llm.provider_runtime import analysis_budgeted
 
 router = APIRouter()
 
@@ -324,7 +325,9 @@ def cap_engine_text(value, limit: int):
     legitime Antworten liegen weit unter dem Limit, nur Abuse-Payloads nicht."""
     if not isinstance(value, str) or len(value) <= limit:
         return value
-    return value[:limit].rstrip()
+    # Keep the exact cap length so downstream judges can conservatively flag
+    # the shared evidence boundary, including cuts landing on whitespace.
+    return value[:limit]
 
 
 # Historische Feldnamen der /consensus-Antworten. Neue Familien kommen ohne
@@ -1575,6 +1578,7 @@ def consensus(request: Request, data: dict = Body(...)):
                 "tier": tier,
             }
 
+        @analysis_budgeted
         def consensus_event_source():
             consensus_text = ""
             consensus_failed = False

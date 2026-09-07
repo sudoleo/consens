@@ -22,12 +22,16 @@ function data(claims, differences = []) {
   return { models_compared: MODELS, claims, differences };
 }
 
-function boot() {
+function boot(storedCounts = null) {
   const { window, document } = loadScripts([
     "static/js/consensus-anchor.js",
     "static/js/consensus-insights.js"
   ], {
+    before(window) {
+      if (storedCounts !== null) window.localStorage.setItem("consensio.showClaimCounts.v1", storedCounts);
+    },
     body: `
+      <input type="checkbox" id="claimCountsSwitch">
       <article class="thread-history-turn" data-turn-id="t1">
         <div class="consensus-answer-body thread-history-answer-body"><p>${ANSWER}</p></div>
         <div class="consensus-claims-fallback" hidden></div>
@@ -127,6 +131,34 @@ describe("claim coverage states", () => {
     const badge = ctx.body.querySelector(".claim-badge");
     expect(badge.classList.contains("is-thin")).toBe(false);
     expect(badge.textContent).toBe("3/3");
+  });
+
+  it("defaults counts off and keeps claim details accessible by keyboard", () => {
+    const ctx = boot();
+    render(ctx, data([{ anchor: SUPPORTED, agree: ["OpenAI", "Gemini"], dissent: [], coverage: "supported" }]));
+    expect(ctx.document.body.classList.contains("claim-counts-visible")).toBe(false);
+    const passage = ctx.body.querySelector(".cx-claim");
+    expect(passage.tabIndex).toBe(0);
+    passage.dispatchEvent(new ctx.window.KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    const popup = ctx.document.getElementById("claimPopover");
+    expect(popup.hidden).toBe(false);
+    expect(popup.querySelector(".claim-support-ratio").textContent).toBe("2/2");
+    expect(popup.textContent).toContain("models that addressed this support it");
+    expect(popup.textContent).toContain("Not addressed");
+    expect(popup.textContent).not.toContain("All 2");
+    const toggle = ctx.document.getElementById("claimCountsSwitch");
+    toggle.click();
+    expect(ctx.document.body.classList.contains("claim-counts-visible")).toBe(true);
+    expect(ctx.window.localStorage.getItem("consensio.showClaimCounts.v1")).toBe("true");
+    expect(passage.hasAttribute("tabindex")).toBe(false);
+    toggle.click();
+    expect(passage.tabIndex).toBe(0);
+  });
+
+  it("restores an explicit opt-in", () => {
+    const ctx = boot("true");
+    expect(ctx.document.body.classList.contains("claim-counts-visible")).toBe(true);
+    expect(ctx.document.getElementById("claimCountsSwitch").checked).toBe(true);
   });
 
   it("derives the state from the counts for snapshots without the field", () => {

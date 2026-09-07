@@ -1119,7 +1119,7 @@ def test_bookmark_restores_the_view_the_run_had_not_the_current_toggle():
     assert "window.enterDirectComparisonView?.();" in firebase
 
     # Eine Ansicht, ein Aufbau — geteilt mit dem frisch gesendeten Vergleich.
-    assert 'document.body.classList.add("is-hero", "direct-comparison-active")' in core
+    assert 'document.body.classList.add("direct-comparison-active")' in core
     # Der Ausstieg in den Thread raeumt die Marke wieder ab.
     assert 'classList.remove("is-hero", "direct-comparison-active")' in core
 

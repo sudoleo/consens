@@ -406,7 +406,8 @@ async def topic_page(
     # apparatus, so the finding leads when there is no editorial override.
     default_description = (
         f"{public_topic['lead_question']} Current agreement "
-        f"{selected['agreement_score']}/100, with a versioned consensus timeline "
+        + (f"{selected['agreement_score']}/100" if selected.get("agreement_score") is not None else "not assessable")
+        + ", with a versioned consensus timeline "
         "and time-matched evidence."
     )
     if finding:

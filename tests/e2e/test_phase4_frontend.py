@@ -1392,7 +1392,10 @@ def test_disabled_agent_mode_is_six_answers_only(browser, phase4_server):
             expect(page.locator(f"#{response_id}")).to_contain_text(
                 "Direct answer from", timeout=10000
             )
-            expect(page.locator(f"#{response_id}")).to_be_visible()
+            provider = page.locator(f"#{response_id}").get_attribute('data-model')
+            answer = page.locator(f'.is-direct .answer-reader-body[data-provider="{provider}"]')
+            expect(answer).to_be_visible()
+            expect(answer).to_contain_text('Direct answer from')
 
         page.wait_for_function(
             "() => {"
@@ -1410,7 +1413,7 @@ def test_disabled_agent_mode_is_six_answers_only(browser, phase4_server):
             for body in model_bookmark_bodies
         )
         assert page.locator("body").evaluate(
-            "el => el.classList.contains('is-hero')"
+            "el => !el.classList.contains('is-hero')"
             " && el.classList.contains('direct-comparison-active')"
             " && !el.classList.contains('agent-mode-enabled')"
         )

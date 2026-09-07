@@ -2289,6 +2289,7 @@ function loadSingleBookmarkUI(sourceBookmark, conversationTurns = [], options = 
             window.showBookmarkAttachments(bookmark.attachments || []);
         }
     }
+    if (directComparison) window.App?.answerReader?.showDirectBookmark?.(bookmark);
     if (!continuationTurn) {
         window.App?.followup?.markContinuationUnavailable?.();
     }

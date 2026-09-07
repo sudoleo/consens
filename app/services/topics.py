@@ -671,7 +671,9 @@ def update_topic(
     return {**existing, **updates}
 
 
-def _normalize_score(value) -> int:
+def _normalize_score(value) -> int | None:
+    if value is None:
+        return None
     if isinstance(value, bool):
         raise TopicError("bad_request", "Agreement score must be between 0 and 100.")
     try:

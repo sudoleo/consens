@@ -127,8 +127,8 @@
       {% if run.opinion_changes %}<em>{{ run.opinion_changes | length }} opinion change{{ "s" if run.opinion_changes | length != 1 }}</em>{% endif %}
     </span>
     <span class="timeline-score">
-      <strong>{{ run.agreement_score }}</strong>
-      <i><b style="width: {{ run.agreement_score }}%"></b></i>
+      {% if run.agreement_score is not none %}<strong>{{ run.agreement_score }}</strong>
+      <i><b style="width: {{ run.agreement_score }}%"></b></i>{% else %}<small>Insufficient evidence</small>{% endif %}
     </span>
   </a>
 </li>
@@ -555,7 +555,7 @@
                   {% for event in record.material_events %}
                   <li>
                     <time datetime="{{ event.iso }}">{{ event.display }}</time>
-                    <strong>{{ event.agreement_score }}/100</strong>
+                    <strong>{% if event.agreement_score is not none %}{{ event.agreement_score }}/100{% else %}Insufficient evidence{% endif %}</strong>
                     {% if event.change_type == "major" %}<span class="watch-event-major">Major</span>{% endif %}
                     {% if event.summary %}<p>{{ event.summary }}</p>{% endif %}
                     {% if event.run_id and event.run_id != selected.id %}<a class="watch-version-link" href="/topics/{{ topic.slug }}?version={{ event.run_id }}">View this version</a>{% endif %}

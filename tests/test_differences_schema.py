@@ -347,7 +347,7 @@ class JudgePolicyTests(unittest.TestCase):
     def test_differences_judge_uses_openrouter_json_schema(self):
         response = mock.Mock(status_code=200)
         response.json.return_value = {"choices": [{"message": {"content": "{}"}}]}
-        with mock.patch("app.services.llm.consensus_engine.requests.post", return_value=response) as post:
+        with mock.patch("app.services.llm.consensus_engine.cancellable_post_json", return_value=response.json.return_value) as post:
             raw = _call_engine_text(
                 "gemini", cfg.openrouter_model_id(cfg.DEFAULT_GEMINI_MODEL, "gemini"),
                 cfg.DEFAULT_GEMINI_MODEL, self.ALL_KEYS,
@@ -577,7 +577,7 @@ class LegacyTextSynthesisTests(unittest.TestCase):
             "claims": [], "differences": [], "best_model": "Gemini",
             "models_compared": FOUR_MODELS,
         })
-        self.assertIn("**partially** credible", legacy)
+        self.assertIn("**not assessable**", legacy)
 
     def test_only_emphasis_is_largely_credible(self):
         legacy = _legacy_differences_text({
@@ -598,7 +598,7 @@ class LegacyTextSynthesisTests(unittest.TestCase):
             "best_model": "",
             "models_compared": FOUR_MODELS,
         })
-        self.assertIn("**hardly** credible", legacy)
+        self.assertIn("**not assessable**", legacy)
 
 
 class AgreementScoreTests(unittest.TestCase):

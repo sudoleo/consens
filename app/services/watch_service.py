@@ -1466,7 +1466,8 @@ def complete_watch_run(watch_id: str, claimed: dict, result: dict, *, now=None,
     history = {
         "schema_version": 2,
         "ts": now,
-        "agreement_score": int(result["agreement_score"]),
+        "agreement_score": (int(result["agreement_score"])
+                            if isinstance(result.get("agreement_score"), (int, float)) else None),
         "verdict": str(result.get("verdict") or "")[:80],
         "changed": bool(result.get("changed")),
         "severity": str(result.get("severity") or "minor")[:10],

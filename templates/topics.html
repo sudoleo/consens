@@ -83,8 +83,8 @@
               {% endif %}
             </span>
             <span class="topic-card-data">
-              <span class="topic-score{% if entry.latest_agreement_score >= 75 %} is-high{% elif entry.latest_agreement_score >= 50 %} is-mid{% else %} is-low{% endif %}">
-                <strong>{{ entry.latest_agreement_score }}</strong><small>/100 agreement</small>
+              <span class="topic-score{% if entry.latest_agreement_score is not none and entry.latest_agreement_score >= 75 %} is-high{% elif entry.latest_agreement_score is not none and entry.latest_agreement_score >= 50 %} is-mid{% else %} is-low{% endif %}">
+                {% if entry.latest_agreement_score is not none %}<strong>{{ entry.latest_agreement_score }}</strong><small>/100 agreement</small>{% else %}<small>Insufficient evidence</small>{% endif %}
               </span>
               <span class="topic-run-meta">
                 <strong>{{ entry.run_count }} snapshot{{ "s" if entry.run_count != 1 }}</strong>

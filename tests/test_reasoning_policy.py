@@ -128,7 +128,7 @@ def test_stream_and_json_engine_send_same_capped_policy():
     args = ("grok", "x-ai/grok-4.3", "Grok-Pro", {"openrouter": "test-key"})
     kwargs = {"system": "system", "prompt": "prompt", "max_tokens": 100, "effort": "low"}
     with mock.patch.object(engine, "mock_llm_enabled", return_value=False), mock.patch.object(engine, "openrouter_api_key", return_value="test-key"):
-        with mock.patch.object(engine.requests, "post", return_value=response) as post:
+        with mock.patch.object(engine, "cancellable_post_json", return_value=response.json.return_value) as post:
             assert engine._call_engine_text(*args, **kwargs) == "ok"
             assert post.call_args.kwargs["json"]["reasoning"] == {"effort": "low"}
         with mock.patch("app.services.llm.streaming.stream_chat_completion_text", return_value=iter([])) as stream:

@@ -162,7 +162,19 @@ die Rechnung aus `consensus_scoring.py` auf genau diese Daten. Quellen gibt es
 bewusst keine — auf „kann ich das so schreiben?" zitiert kein Modell eine
 Studie, und der Quellen-Tab blendet sich bei leerer Liste ohnehin aus. Der
 Landing-Walkthrough (Szene 01–03) zeigt denselben Lauf, damit Hero, Demo und
-Mockups eine Geschichte erzählen. Die Demo bleibt vollständig clientseitig und ruft weder
+Mockups eine Geschichte erzählen. Die Demo aktiviert vor jedem Start das konfigurierte Balanced-Preset ueber
+`App.selectConsensusPreset('balanced')`, einschliesslich aller sechs Familien
+und ihrer aktuellen Modelllabels. Daily-/Custom-Ausschluesse werden dabei durch
+Balanced ersetzt. Die sechs redaktionell geschriebenen Demo-Perspektiven werden
+bei geaenderten Preset-Familien samt Claims, Zitaten und Differences konsistent
+auf die aktuelle Aufstellung abgebildet; es werden keine LLMs aufgerufen.
+Modell-Spinner setzen `responseState=pending` ohne Antworttext. Waehrend des
+Streams wird aus den lokalen HTML-Vorlagen reines Markdown in
+`dataset.consensusAnswer` geschrieben; der Leser interpretiert Ladeindikator-HTML
+nicht als Antwort. Alle sechs Texte enden mit `responseState=complete`.
+Die Demo verwendet bei deaktiviertem Agent Mode ebenfalls
+`enterDirectComparisonView()` statt eigener Hero-Klassen, damit die Antworten
+im gemeinsamen Thread-Layout sichtbar bleiben. Sie bleibt vollständig clientseitig und ruft weder
 `recordModelVote` noch `/consensus`/Bookmark-Persistenz auf; Demo-Läufe verändern
 damit weder das Best-answer-Nutzungssignal noch `differences_stats`.
 Produktgeschichte führt danach über Ask/Run/Decide zum vierten
@@ -706,8 +718,8 @@ der Python-Staleness-Test auch indirekte Änderungen erkennt.
   der Provenance-Zeile gewandert — agent-mode.js adressiert ihn unveraendert
   per `getElementById`, die Position ist kein Vertrag. Sie gilt nur fuer fertige
   Agent-Mode-Ergebnisse: `.agent-mode-enabled:not(.agent-mode-show-answers)`
-  blendet dort die Antwortboxen aus. Im Direktvergleich bleiben alle sechs
-  Antwortboxen durchgehend sichtbar. Sobald der fertige Consensus-Fuss sichtbar ist, bleibt
+  blendet dort die Antwortboxen aus. Im Direktvergleich zeigt der gemeinsame
+  Leser alle ausgewaehlten Modellantworten; die alten Boxen bleiben Renderziele. Sobald der fertige Consensus-Fuss sichtbar ist, bleibt
   `#agentModeAnswersRow` immer vorhanden; er haengt nicht mehr an einer
   fehleranfaelligen Erkennung aktiver/abgeschlossener Modellboxen.
   Vorher war der Schalter an den Agent Mode gebunden und damit in zwei von
@@ -932,7 +944,8 @@ der Python-Staleness-Test auch indirekte Änderungen erkennt.
   exakt oberhalb des Composers, ohne Lücke oder Überdeckung. Die Menues am
   Composer (`.attach-menu`, Consensus-Picker)
   oeffnen im Thread nach **oben** in Richtung des gelesenen Ergebnisses; im
-  Hero bleibt es bei „nach unten". Das Fragefeld wächst über
+  Hero normalerweise nach unten. Der Modell-Picker passt Richtung, Position
+  und Maximalhoehe an den tatsaechlichen freien Viewport an. Das Fragefeld wächst über
   `app-init.js::resizeQuestionInput()` automatisch mit seinem Inhalt: bis
   220 px auf Desktop bzw. 180 px auf Mobile; danach scrollt nur noch die
   Textarea. Programmatische Leerungen/Füllungen lösen dafür ein `input`-Event
@@ -1094,7 +1107,14 @@ der Python-Staleness-Test auch indirekte Änderungen erkennt.
   Treffen zwei Marken denselben Satz, hebt `markSentence` die Marke über
   `MARK_LEVELS` (unanimous < minor < split < major) auf die stärkere Stufe an,
   statt die zuerst gesetzte Klasse zu behalten.
-  Das `.claim-badge` daneben zeigt seit 2026-07-27 wieder die scanbare Quote
+  Die Inline-Quote ist standardmäßig ausgeblendet. Settings → Display →
+  `#claimCountsSwitch` aktiviert sie browserlokal über
+  `consensio.showClaimCounts.v1` / die Body-Klasse `claim-counts-visible`.
+  Ohne Badge übernimmt die Passage den Tastaturzugang; Hover und Klick bleiben
+  für Live- und gespeicherte Antworten verfügbar. Hover und Detaildialog betonen
+  die Quote fett und beziehen den Nenner ausdrücklich auf Modelle, die den Claim
+  behandelt haben; „Not addressed“ bleibt separat. Dünne Abdeckung zeigt keine Quote.
+  Das optionale `.claim-badge` daneben zeigt die scanbare Quote
   „4/6", jetzt als ruhige Mikro-Marke mit tabellarischen Ziffern, transparenter
   Flaeche und feiner Kontur. Sie ist damit klar von hochgestellten
   Quellenzahlen unterschieden; Neutral = Einigkeit, Bernstein
@@ -1120,8 +1140,8 @@ der Python-Staleness-Test auch indirekte Änderungen erkennt.
   als Widerspruch ausgegeben. `renderStoredConsensusClaims` verankert dieselben
   Claims containerlokal in archivierten Chat-Turns, sodass ein Bookmark-Restore
   nicht nur beim neuesten Turn Claim-Support zeigt. „View answer“ öffnet dort
-  die Answers-Schublade genau dieses archivierten Turns statt der globalen
-  Modellbox des neuesten Turns.
+  den gemeinsamen Modellantwort-Leser mit genau diesem archivierten Turn
+  statt der globalen Modellbox des neuesten Turns.
   Dasselbe gilt seit 2026-08-17 für die Differences-Schublade: `buildDifference
   Cards(container, …)` baut die Karten in einen beliebigen Container, und
   `window.renderStoredDifferenceCards(container, differences_data, {modelLabel})`
@@ -1205,9 +1225,9 @@ der Python-Staleness-Test auch indirekte Änderungen erkennt.
   explizit `runId`/Context; `cancelCurrentQuery(runId)` bricht gezielt nur
   dessen Controller ab. Ein valider Agent-Mode-Lauf
   beendet über `window.exitHeroMode()` den zentrierten Input-Leerzustand; der
-  Direktvergleich behält den Hero-/Screenshot-Aufbau — **zeigt seit
-  2026-08-31 aber seine Frage** (`#threadAsk` über dem Composer), statt sie
-  beim Senden spurlos abzuräumen. Vor
+  Direktvergleich zeigt `#threadAsk` als Dokumentkopf, darunter alle
+  Modellantworten im offenen Raster und danach den Composer. Die Frage
+  bleibt beim Senden sichtbar. Vor
   `/prepare` gilt eine harte Mindestzahl von zwei ausgewählten Modellen;
   `app-init.js::updateQuestionInputAccess` deaktiviert den Send-Button bereits
   synchron dazu, während `query-send.js` programmgesteuerte Starts nochmals
@@ -1430,8 +1450,9 @@ laufenden Request, Consensus oder Save gelesen werden. Entfernte Controls wie
    dem sichtbaren Stream und erreichen erst beim Abschluss 100 Prozent. Nach
    dem Fan-out wechselt die Anzeige zur nicht prozentual geschaetzten
    Synthesephase und verschwindet bei Abschluss, Fehler oder Abbruch.
-   **Agent Mode aus:** `query-send.js` behaelt den Hero-/Screenshot-
-   Aufbau mit Composer oben und sechs sichtbaren Antwortboxen bei; die Frage wird
+   **Agent Mode aus:** `model-answer-reader.js` zeigt alle Originalantworten
+   rahmenlos in zwei Spalten (bei schmaler Leseflaeche untereinander). Die
+   Frage steht einmal als normale Chat-Nachricht darueber, der Composer darunter. Die Frage wird
    nur an `/ask_*` gefächert. Es gibt keinen Pipeline-Block, keinen
    `/consensus`-Aufruf und folglich keine Differences oder Claims. Die Body-
    Klasse `.direct-comparison-active` haelt diesen Layoutzustand auch mobil
@@ -1518,6 +1539,45 @@ Turn 3 und spätere Turns benutzen eine serverseitig autoritative Context-Versio
   `/prepare`-Fallback-Pfad des Frontends überlebt.
 
 ### Consensus & Differences
+
+**Pipeline-Härtung (2026-09-07):**
+- Synthese und beide Judges verwenden denselben Antwort-Cap aus
+  `get_consensus_answer_char_limit()` (Default 40.000 Zeichen je Modell).
+  Die separate Judge-Kürzung auf 6.000 Zeichen entfällt. Der Satzindex bleibt
+  auf 80 Einträge begrenzt; weitere prüfbare Sätze werden vollständig gezählt
+  und als `evidence_coverage.unindexed_sentences` ausgewiesen. Antworten am
+  Eingabe-Cap werden konservativ als `truncated_answers` markiert.
+- Agreement und Abdeckung sind getrennt: `coverage_percent` zählt Claims mit
+  mindestens zwei behandelnden Modellen relativ zu allen Claims einschließlich
+  nicht indexierter Sätze. Unter 50 % oder ohne auswertbaren Claim gilt
+  `coverage_status=insufficient`, `score=null`, `level=insufficient`.
+  Bei 50–79 % oder gekürzter Beweisbasis gilt `limited` und höchstens 64/100;
+  ab 80 % ohne Eingabelücke gilt `sufficient`. Dies sind konservative
+  Produktgrenzen, keine kalibrierte Wahrscheinlichkeit sachlicher Richtigkeit.
+  App und Shares zeigen die Abdeckung separat. Snapshots erhalten alle 80
+  Claims, Coverage-Judge-Metadaten, `evidence_coverage`, `analysis_runtime`
+  sowie `scored_claims`/`thin_claims`/`total_claims` und den Null-Score.
+  Watch/Topic-Verläufe akzeptieren fehlende Scores; daraus entstehen weder
+  künstliche Nullpunkte noch numerische Drift-Alarme.
+- `llm/provider_runtime.py::analysis_budgeted` bindet ein gemeinsames,
+  threadsicheres Budget von Synthesestart bis zum Abschluss beider Judges.
+  Default: 180 Sekunden und höchstens acht externe Analyse-Aufrufe insgesamt
+  (einschließlich Fallbacks und Coverage-Repair), konfigurierbar über
+  `ANALYSIS_TIMEOUT_SECONDS` (10–600) und `ANALYSIS_MAX_CALLS` (3–12).
+  Der Browser-SSE-Producer und `consensus_pipeline.analyze_provider_answers`
+  bilden die äußere Grenze; einzelne Engine-Einstiege erhalten denselben
+  Schutz bei direkter Nutzung. Der davor liegende Antwort-Fan-out bleibt
+  durch seine bestehenden Provider-Limits geschützt.
+- Nicht streamende Engine-Aufrufe und Analyse-SSE verwenden HTTPX-Tasks auf
+  dem vorhandenen synchronen Provider-Worker. Disconnect und Deadline brechen
+  auch das Warten auf HTTP-Header oder weitere Body-Daten ab; es entstehen
+  keine zusätzlichen Netzwerk-Worker und keine Transport-Retries. Das Budget
+  wird explizit an den Coverage-Thread weitergegeben. `analysis_runtime`
+  enthält sämtliche bezahlten Versuche und die gesamte Analyse-Laufzeit;
+  Judge-`duration_ms` umfasst Wiederholungen und beim Coverage-Judge Repair.
+  Providerseitig bereits verbrauchte Tokens können durch Abbruch nicht
+  rückwirkend erstattet werden.
+
 - Im App-Layout steht `#consensusOutput` oberhalb der Modellantworten: Das
   synthetisierte Ergebnis ist die Primäransicht, die einzelnen Antworten sind
   darunter die prüfbare Grundlage.
@@ -1792,7 +1852,7 @@ Turn 3 und spätere Turns benutzen eine serverseitig autoritative Context-Versio
   ({provider, model, tier, attempts, duration_ms, sentences, covered,
   repaired, missing}). Fällt der Coverage-Judge komplett aus, bleibt der Lauf
   intakt und die Antwort einfach ohne Marken — besser als jeder Satz grau.
-- Agreement-Score (`consensus_scoring.py::compute_agreement_score`): 0-100 aus Claim-Zustimmungsquoten
+- Agreement-Score (`consensus_scoring.py::compute_agreement_score`): 0-100 oder null bei unzureichender Abdeckung aus Claim-Zustimmungsquoten
   minus severity-gewichteter Widerspruchs-Penalty (major 0.25 / minor 0.10 /
   emphasis 0.05), mit Caps ("very" nur ohne Differenzen; 1 Major → max
   "partially", 2+ Major → max "hardly"; 2 Modelle → max 75). Liegt als
@@ -1845,16 +1905,108 @@ läuft für Registry-Runs über deren Status/Controller und die kompatible
 `consensus-lifecycle.js`-Brücke (`isActiveRun`, `finishRun`, `setSynthesizing`,
 `cancelCurrentConsensus(runId)`). Agent Mode ist die **einzige** Stelle,
 die den Auto-Consensus-Toggle erzwingt/sperrt: aktiv = an, inaktiv = aus; der
-gekoppelte Settings-Schalter ist in beiden Zustaenden read-only. Standardmäßig bleiben die sechs
-Einzelantwortboxen verborgen; `#agentModeAnswersToggle` setzt ausschließlich die
-session-lokale Body-Klasse `.agent-mode-show-answers`, ohne Agent Mode oder dessen
-Auto-Consensus-Kopplung zu deaktivieren.
+gekoppelte Settings-Schalter ist in beiden Zustaenden read-only. Standardmäßig
+bleiben die Einzelantwortboxen verborgen; `#agentModeAnswersToggle` oeffnet den
+gemeinsamen `window.App.answerReader`, ohne Agent Mode oder dessen
+Auto-Consensus-Kopplung zu deaktivieren. Die bisherige Body-Klasse
+`.agent-mode-show-answers` bleibt nur als Legacy-Fallback ohne Reader-Modul.
 
 Bei deaktiviertem Agent Mode ist der Fan-out selbst das Endergebnis. Der Client
 bleibt in der durch `.direct-comparison-active` markierten Vergleichsansicht,
-zeigt alle sechs Streams direkt und startet weder Consensus noch Differences/
-Claims. Follow-up-/Chat-Turn-Persistenz wird in diesem Ein-Frage-Pfad nicht
+zeigt den Antwortleser inline mit Modellstatus und startet weder Consensus noch
+Differences/Claims. Follow-up-/Chat-Turn-Persistenz wird in diesem Ein-Frage-Pfad nicht
 begonnen, weil deren Abschluss an `/consensus` gebunden ist.
+
+### Gemeinsamer Modellantwort-Leser
+`static/js/model-answer-reader.js` wird in `bundles.json` nach den Attachments
+und vor `agent-mode.js` geladen. `window.App.answerReader` stellt `project`,
+`openLive`, `toggleLive`, `isLiveOpen`, `registerTurn`, `canOpenStored`,
+`openStored`, `showDirectBookmark`, `close` und `reset` bereit. `run-view.js` projiziert ausgewaehlte
+RunContexts explizit; ein auf die alten Response-Boxen begrenzter Observer
+bedient Demo und Legacy-Bookmark-Restores. Das Modul startet keine Modelllaeufe;
+dekorative Quellen-Favicons nutzen den bestehenden `/api/topics/favicon?d=`-Proxy
+(lazy geladen, bei Fehlern mit Buchstaben-Fallback).
+
+`#modelAnswerReader` ist eine einzige Leseflaeche: inline in `.response-section`
+beim Direktvergleich, sonst in einem nativen `dialog` ausserhalb `.container`.
+Der Direktvergleich zeigt alle Modelle ohne Auswahl-Tabs und ohne aeusseren Rahmen.
+Sein Kopf nennt „Direct comparison“ und erklaert „Agent Mode is off for this
+comparison“: der gespeicherte Ergebnismodus ist getrennt von der Einstellung
+fuer die naechste Frage. Die Agent-Mode-Ausblendregel in `shell.css` nimmt
+`.direct-comparison-active` explizit aus.
+`firebase.js::loadSingleBookmarkUI` uebergibt Direktvergleich-Bookmarks nach dem
+Restore an `answerReader.showDirectBookmark`. Der Reader haelt deren Antworten,
+Modelllabels und Quellen als eigenen Snapshot; aktuelle Modell-Ausschluesse
+oder alte DOM-Datasets duerfen die gespeicherten Antworten nicht filtern oder
+ersetzen. DOM-Observer erhalten diesen Snapshot, Run-Projektion, Ansichtswechsel
+und Reset loeschen ihn. Die Agent-Mode-Praeferenz bleibt beim Oeffnen unveraendert.
+Der bestehende `#threadAsk` bleibt inklusive Anhaengen/Expand die einzige Frage
+und verwendet dieselbe rechtsbuendige Nachrichtenblase wie Agent Mode.
+`enterDirectComparisonView()` entfernt `is-hero`: Seitenbreite, Zentrierung,
+kompakter Composer, mobile Collapse-/Scrollreserve und Menues kommen aus dem
+normalen Thread-Layout, ohne direkte Layout-Sondermasse. Vor der ersten Frage
+zeigen beide Modi nur den zentrierten Composer; leere Response-Ziele bleiben
+verborgen und inert. Der Composer wird im DOM hinter die Antworten versetzt
+und beim Verlassen an seinen Kommentaranker zurueckgesetzt.
+Der Direktvergleich zeigt keinen Copy-Button pro Antwort und keine grauen
+Warteflaechen; Pending/Reasoning/Streaming stehen ausschliesslich im Modellkopf.
+Fehlertexte bleiben sichtbar. Der Composer-Picker misst beim Oeffnen, Scrollen
+und Resize den verfuegbaren Viewport (inkl. VisualViewport), waehlt oben/unten
+und begrenzt Breite und Hoehe; sein bestehender DOM-/Tastaturvertrag bleibt.
+Modellfamilie und gespeicherte Version werden separat gezeigt; fehlende
+Versionsdaten ersetzen niemals den bekannten Familiennamen.
+Ab 1400px ist der einfache Leser rechts angedockt, mit entsprechend schmalerer
+Chatspalte. Die Dockbreite waechst zwischen 420 und 560px (30vw); der Chat bleibt in der
+Restflaeche zwischen linker Navigation und Leser zentriert, auch bei eingeklappter
+Navigation. Die Textbreite des Chats bleibt auf 900px begrenzt.
+Auf kleineren Viewports sowie beim erweiterten Zweiervergleich oeffnet er modal
+(native Fokusbegrenzung/Escape); bis 1099px bildschirmfuellend
+inklusive Safe-Area-Abstaenden. Im Dialog stehen zwei Antworten erst ab 760px tatsaechlicher
+Leserbreite nebeneinander, sonst schaltet man zwischen A und B um.
+Unter 500px ersetzt eine kompakte Modellauswahl die mehrzeilige Modellnavigation.
+`static/css/model-answer-reader.css` folgt `shell.css` und verwendet ausschliesslich
+App-Tokens und die bestehende Inter-/Markdown-Typografie.
+Nur der Dialog verwendet kompaktere Kopf-/Kartenabstaende (24px Aussenrand,
+mobil 16px) und 14px Difference-Titel; der Inline-Leser bleibt davon unberuehrt.
+Im erweiterten Popup teilen Frage, Tabs, Modellauswahl und Inhalt dieselbe
+volle Innenbreite statt separater 840-/720px-Spalten. Desktop-Popups verwenden
+32px Seitenabstand und 16px Fliesstext fuer Einzelantworten; Zweiervergleich
+und angedockter Leser behalten ihre eigene Typografie.
+Die Frage steht in einer aufklappbaren Kontextkarte; erst mehrere Turns blenden
+die Frageauswahl ein. Modellnavigation und Antwortkopf nutzen die vorhandenen
+Provider-Icons. Fertige Antworten zeigen keinen redundanten Status-Badge;
+laufende und fehlgeschlagene Modelle behalten ihren sichtbaren Status.
+Frage- und Modellauswahl verwenden eigene Listbox-Popovers mit App-Tokens,
+Fragevorschauen beziehungsweise Provider-Icons und Tastaturbedienung. Die
+versteckten Selects halten nur die Auswahlwerte. Escape schliesst zuerst ein
+offenes Auswahlmenue, danach den Leser; ein Klick auf den Modal-Hintergrund
+schliesst den Leser ebenfalls. Die Frage klappt ohne doppelte Textausgabe auf.
+Der Frage-Chevron wird nur bei abgeschnittenem Text angezeigt. `openPanel(kind,
+trigger, turn, index)` integriert Differences und Sources in denselben Leser;
+die Abschnittsnavigation bleibt an die ausgewaehlte Frage gebunden. Live- und
+Archiv-Footer sowie Difference-Marker oeffnen diese Ansicht. Die bestehenden
+Karten/Quellenlisten werden mit Platzhaltern in den Leser verschoben und beim
+Schliessen/Wechsel zurueckgesetzt; IDs und Event-Handler bleiben erhalten. Der
+Legacy-Differences-Text bleibt als Streaming-Ziel an Ort und Stelle (Lesekopie).
+Differences starten als aufklappbarer Ueberblick mit Typ und Kernaussage; ihre
+Positionen, Zitate, Pruefhinweise und Resolve-Aktionen bleiben erhalten.
+Ein einzelner Unterschied wird direkt geoeffnet; mehrere starten als Ueberblick.
+In der erweiterten Desktopansicht stehen Modellpositionen zweispaltig.
+Quellenkarten zeigen Favicon, Domain, Titel und unveraenderte Referenznummer;
+Auszuege werden separat aufgeklappt. Archivdaten bleiben turn-lokal.
+
+Die originalen `.response-box`-IDs bleiben versteckte Render-/Konfigurationsziele;
+im ungesendeten Hero bleiben sie verborgen und inert; die Modellauswahl erfolgt
+ueber Sidebar und Composer-Picker.
+`consensus-run.js::appendHistoryTurn` registriert Turn-Daten an ihrem Article per
+WeakMap und ersetzt die gestapelten Originaltexte durch einen Reader-Button.
+Die Quellen, Modellnamen und Texte des Readers kommen jeweils aus diesem Turn;
+`consensus-insights.js` fuehrt Live- und gespeicherte Claim-Spruenge in denselben
+Leser. Eine alte ausgewaehlte Antwort bleibt bei spaeteren Turn-Projektionen
+angeheftet; Wechsel in einen anderen Lauf, neue Ansicht und Logout schliessen
+beziehungsweise resetten den Leser. Modellwechsel merken lokale Lesepositionen
+(maximal 100 Eintraege), ein Stream wechselt weder Modell noch Leseposition.
+Die bisherigen Schubladen sind nur der Fallback ohne geladenes Reader-Modul.
 
 Der Agent Mode ist an zwei Stellen schaltbar: `#agentModeSwitch` in den Settings
 und `#agentModeMenuSwitch` direkt unter Deep Think im (+)-Menü. Beide Controls
@@ -1866,9 +2018,8 @@ Tier-Gate; er ist auch für Free-Nutzer bedienbar.
 **Default fuer neue Nutzer** (seit 2026-07-27 auf allen Geraeten, vorher nur
 mobil): `agentMode = "true"` und `agentModePanelCollapsed = "false"` werden beim
 Laden von `agent-mode.js` gesetzt, solange die localStorage-Keys fehlen. Der
-Einstieg zeigt damit die gebuendelte Modell-Liste statt sechs leerer
-Antwortboxen (`body.is-hero.agent-mode-enabled .response-section {display:none}`
-in `shell.css`); eine explizite Nutzerentscheidung (`setAgentMode(…, {persist:
+Einstieg zeigt in beiden Modi den zentrierten Composer ohne leere
+Antwortboxen (`body.is-hero .response-section` in `components-input.css`); eine explizite Nutzerentscheidung (`setAgentMode(…, {persist:
 true})`) ueberschreibt den Default dauerhaft.
 
 ### Attachments (ab Plus)

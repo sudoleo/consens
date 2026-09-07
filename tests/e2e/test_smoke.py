@@ -818,15 +818,16 @@ def test_disabled_agent_mode_stays_in_direct_six_answer_comparison(app_page):
     app_page.wait_for_timeout(1500)
 
     expect(app_page.locator("body")).to_have_class(
-        re.compile(r"\bis-hero\b.*\bdirect-comparison-active\b")
+        re.compile(r"\bdirect-comparison-active\b")
     )
-    expect(app_page.locator("#threadAsk")).to_be_hidden()
+    expect(app_page.locator("#threadAsk")).to_be_visible()
     expect(app_page.locator("#consensusRun")).to_be_hidden()
     expect(app_page.locator("#consensusOutput")).to_be_hidden()
     expect(app_page.locator("#consensusAnswerBody .cx-claim, #consensusAnswerBody .claim-badge")).to_have_count(0)
     expect(app_page.locator("#differencesCards")).to_be_hidden()
     for _, response_id, _ in PROVIDERS.values():
-        expect(app_page.locator(f"#{response_id}")).to_be_visible()
+        provider = app_page.locator(f"#{response_id}").get_attribute('data-model')
+        expect(app_page.locator(f'.is-direct .answer-reader-body[data-provider="{provider}"]')).to_be_visible()
 
     layout = app_page.evaluate(
         """() => {
@@ -835,7 +836,7 @@ def test_disabled_agent_mode_stays_in_direct_six_answer_comparison(app_page):
           return { inputBottom: input.bottom, responsesTop: responses.top };
         }"""
     )
-    assert layout["inputBottom"] <= layout["responsesTop"] + 1
+    assert layout["inputBottom"] > layout["responsesTop"]
     assert consensus_requests == []
 
 

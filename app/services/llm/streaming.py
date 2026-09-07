@@ -31,7 +31,9 @@ from app.services.llm.engines import (
     openrouter_headers,
 )
 from app.services.llm.provider_runtime import (
-    PROVIDER_HTTP_TIMEOUT,
+    analysis_http_timeout,
+    current_analysis_budget,
+    cancellable_sse_lines,
     ProviderCancellation,
     ProviderCancelled,
     bind_provider_cancellation,
@@ -138,24 +140,28 @@ def keepalive_streaming_response(source) -> ProviderStreamingResponse:
 def iter_sse_events(response: requests.Response) -> Iterator[Tuple[Optional[str], str]]:
     """Read standard event/data pairs, ignoring OpenRouter heartbeat comments."""
     with managed_provider_resource(response):
-        event_name: Optional[str] = None
-        data_lines: list[str] = []
-        for raw_line in response.iter_lines():
-            line = raw_line.decode("utf-8", "replace") if isinstance(raw_line, bytes) else (raw_line or "")
-            if line == "":
-                if data_lines:
-                    yield event_name, "\n".join(data_lines)
-                event_name = None
-                data_lines = []
-                continue
-            if line.startswith(":"):
-                continue
-            if line.startswith("event:"):
-                event_name = line[len("event:"):].strip()
-            elif line.startswith("data:"):
-                data_lines.append(line[len("data:"):].lstrip())
-        if data_lines:
-            yield event_name, "\n".join(data_lines)
+        yield from _sse_pairs(response.iter_lines())
+
+
+def _sse_pairs(lines):
+    event_name: Optional[str] = None
+    data_lines: list[str] = []
+    for raw_line in lines:
+        line = raw_line.decode("utf-8", "replace") if isinstance(raw_line, bytes) else (raw_line or "")
+        if line == "":
+            if data_lines:
+                yield event_name, "\n".join(data_lines)
+            event_name = None
+            data_lines = []
+            continue
+        if line.startswith(":"):
+            continue
+        if line.startswith("event:"):
+            event_name = line[len("event:"):].strip()
+        elif line.startswith("data:"):
+            data_lines.append(line[len("data:"):].lstrip())
+    if data_lines:
+        yield event_name, "\n".join(data_lines)
 
 
 def _parse_json(data_str: str) -> Optional[dict]:
@@ -178,22 +184,35 @@ def _content_text(value: Any) -> str:
     )
 
 
-def _iter_openrouter_chunks(*, api_key: str, payload: dict) -> Iterator[StreamEvent]:
-    raise_if_provider_cancelled()
-    request_payload = dict(payload)
-    request_payload["stream"] = True
+def _openrouter_sse(*, api_key, request_payload):
+    if current_analysis_budget() is not None:
+        lines = cancellable_sse_lines(
+            OPENROUTER_CHAT_COMPLETIONS_URL, headers=openrouter_headers(api_key), json=request_payload,
+        )
+        try:
+            yield from _sse_pairs(lines)
+        finally:
+            lines.close()
+        return
     response = requests.post(
         OPENROUTER_CHAT_COMPLETIONS_URL,
         headers=openrouter_headers(api_key),
         json=request_payload,
-        timeout=PROVIDER_HTTP_TIMEOUT,
+        timeout=analysis_http_timeout(),
         stream=True,
     )
     if response.status_code >= 400:
         with managed_provider_resource(response):
             _raise_provider_http_status(response)
 
-    for _, data_str in iter_sse_events(response):
+    yield from iter_sse_events(response)
+
+
+def _iter_openrouter_chunks(*, api_key: str, payload: dict) -> Iterator[StreamEvent]:
+    raise_if_provider_cancelled()
+    request_payload = dict(payload)
+    request_payload["stream"] = True
+    for _, data_str in _openrouter_sse(api_key=api_key, request_payload=request_payload):
         raise_if_provider_cancelled()
         if data_str.strip() == "[DONE]":
             return

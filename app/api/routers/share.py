@@ -779,9 +779,16 @@ def share_page(request: Request, slug_id: str):
     if not isinstance(base_score, (int, float)):
         base_score = display_data.get("agreement_score")
     latest_score = base_score if isinstance(base_score, (int, float)) else None
+    if agreement_data.get("coverage_status") == "insufficient":
+        latest_score = None
     scoreboard = {
         "score": int(latest_score) if isinstance(latest_score, (int, float)) else None,
         "level": str(agreement_data.get("level") or ""),
+        "coverage_status": agreement_data.get("coverage_status"),
+        "coverage_percent": agreement_data.get("coverage_percent"),
+        "scored_claims": agreement_data.get("scored_claims"),
+        "total_claims": agreement_data.get("total_claims"),
+        "evidence_incomplete": agreement_data.get("evidence_incomplete", False),
         "model_count": model_count,
         "contradiction_count": contradiction_count,
         "source_count": len(sources_view),

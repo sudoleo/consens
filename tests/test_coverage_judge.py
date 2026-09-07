@@ -254,7 +254,9 @@ class CoverageScoringTests(unittest.TestCase):
         self.assertEqual(scored["thin_claims"], 1)
 
         without_thin = compute_agreement_score({**data, "claims": data["claims"][:1]})
-        self.assertEqual(scored["score"], without_thin["score"])
+        self.assertLess(scored["score"], without_thin["score"])
+        self.assertEqual(scored["coverage_percent"], 50)
+        self.assertEqual(scored["coverage_status"], "limited")
 
 
 class CoverageJudgePolicyTests(unittest.TestCase):

@@ -862,6 +862,37 @@
     }
   }
 
+  // Fit composer menus to the visible viewport, including short windows and
+  // the virtual keyboard. Keep the existing menu host and keyboard handlers.
+  function fitComposerPicker(state) {
+    if (!state?.menu.classList.contains('is-open') || !state.host.closest('.chat-input-container')) return;
+    const trigger = (state.displayButton || state.host).getBoundingClientRect();
+    const parent = state.menu.offsetParent;
+    if (!parent) return;
+    const bounds = parent.getBoundingClientRect();
+    const viewport = window.visualViewport;
+    const topEdge = (viewport?.offsetTop || 0) + 12;
+    const bottomEdge = (viewport?.offsetTop || 0) + (viewport?.height || innerHeight) - 12;
+    const leftEdge = (viewport?.offsetLeft || 0) + 12;
+    const rightEdge = (viewport?.offsetLeft || 0) + (viewport?.width || innerWidth) - 12;
+    const above = trigger.top - topEdge - 8;
+    const below = bottomEdge - trigger.bottom - 8;
+    const upward = above > below;
+    const width = Math.min(320, rightEdge - leftEdge);
+    Object.assign(state.menu.style, {
+      boxSizing: 'border-box',
+      width: `${width}px`, maxHeight: `${Math.max(0, Math.min(420, upward ? above : below))}px`,
+      left: `${Math.max(leftEdge, Math.min(trigger.left, rightEdge - width)) - bounds.left - parent.clientLeft}px`,
+      right: 'auto',
+      top: upward ? 'auto' : `${trigger.bottom - bounds.top - parent.clientTop + 8}px`,
+      bottom: upward ? `${bounds.bottom - parent.clientTop - trigger.top + 8}px` : 'auto'
+    });
+  }
+  const fitOpenPicker = () => fitComposerPicker(getModelPickerState(expandedModelPicker));
+  window.addEventListener('resize', fitOpenPicker);
+  window.addEventListener('scroll', fitOpenPicker, true);
+  window.visualViewport?.addEventListener('resize', fitOpenPicker);
+
   function openModelPicker(select) {
     const state = getModelPickerState(select);
     if (!select || select.disabled || !state) return;
@@ -892,6 +923,7 @@
     }
 
     expandedModelPicker = select;
+    fitComposerPicker(state);
   }
 
   function initCustomModelPicker(select, options = {}) {
@@ -974,6 +1006,7 @@
   });
 
   // --- Exporte fuer das in initApp verbliebene Wiring + andere Module ---
+  window.App.selectConsensusPreset = presetId => selectConsensusPreset(document.getElementById('consensusModelDropdown'), presetId);
   window.App.applyTierDefaultModels = applyTierDefaultModels;
   window.App.setModelSelectionState = setModelSelectionState;
   window.App.setRunModelBlock = setRunModelBlock;

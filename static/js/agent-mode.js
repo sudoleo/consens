@@ -101,6 +101,7 @@
   }
 
   function syncAnswerPreviews() {
+    if (window.App?.answerReader) return;
     document.querySelectorAll(".response-section > .response-box").forEach(box => {
       const content = box.querySelector(".collapsible-content");
       const existing = box.querySelector(".response-answer-more");
@@ -352,8 +353,10 @@
 
     if (answersRow) answersRow.hidden = false;
     if (answersToggle) {
-      const label = modelAnswersVisible ? "Hide answers" : "Compare answers";
-      answersToggle.setAttribute("aria-expanded", String(modelAnswersVisible));
+      const answersVisible = window.App?.answerReader
+        ? window.App.answerReader.isLiveOpen() : modelAnswersVisible;
+      const label = answersVisible ? "Hide answers" : "Compare answers";
+      answersToggle.setAttribute("aria-expanded", String(answersVisible));
       answersToggle.title = label;
       answersToggle.setAttribute("aria-label", label);
       // Gezielt das Label, nicht "das erste span": der Chip traegt seit
@@ -363,7 +366,7 @@
         labelEl.textContent = label;
         // Kurzform fuer die Telefon-Leiste (siehe shell.css): dort steht das
         // Substantiv allein, damit die drei Knoepfe einzeilig bleiben.
-        labelEl.dataset.short = modelAnswersVisible ? "Hide" : "Answers";
+        labelEl.dataset.short = answersVisible ? "Hide" : "Answers";
       }
     }
 
@@ -591,6 +594,11 @@
   }
 
   function setModelAnswersVisible(visible, options = {}) {
+    if (window.App?.answerReader) {
+      if (visible) return window.App.answerReader.openLive();
+      window.App.answerReader.close();
+      return true;
+    }
     const nextVisible = !!visible;
     const changed = modelAnswersVisible !== nextVisible;
     modelAnswersVisible = nextVisible;
@@ -630,6 +638,11 @@
   const agentAnswersToggle = document.getElementById("agentModeAnswersToggle");
   if (agentAnswersToggle) {
     agentAnswersToggle.addEventListener("click", function () {
+      if (window.App?.answerReader) {
+        window.App.answerReader.toggleLive(this);
+        updateAgentModeUI();
+        return;
+      }
       setModelAnswersVisible(!modelAnswersVisible, { track: true });
     });
   }

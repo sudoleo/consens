@@ -12,6 +12,7 @@ from dataclasses import asdict, dataclass
 from typing import Callable, Iterable, Mapping
 
 import app.core.config as cfg
+from app.services.llm.provider_runtime import analysis_budgeted
 from app.services.llm.citations import to_plain
 from app.services.llm.consensus_engine import (
     compute_agreement_score,
@@ -48,6 +49,7 @@ def _answer_slots(answers: Mapping[str, ProviderAnswer | str]) -> dict[str, str]
     }
 
 
+@analysis_budgeted
 def analyze_provider_answers(
     *,
     question: str,

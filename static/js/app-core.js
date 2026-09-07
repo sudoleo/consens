@@ -386,31 +386,15 @@
     }, 3000);
   }
 
-  // Desktop-Schwelle des Hero-CSS (components-input.css): ab hier sind die
-  // Response-Boxen ohne Agent Mode schon vor der ersten Frage sichtbar.
-  const heroDesktopQuery = window.matchMedia("(min-width: 1100px)");
-
-  // Haelt inert/aria-hidden der .response-section synchron zur CSS-Sichtbarkeit
-  // im Hero: verborgen nur, wenn der Hero zentriert ist (Agent Mode aktiv oder
-  // kein Desktop). Wird auch von agent-mode.js (updateAgentModeUI) gerufen.
+  // Both modes use the same empty composer; answer targets stay inaccessible
+  // until a question has started.
   function syncHeroResponseAccess() {
     const responses = document.querySelector(".response-section");
     if (!responses) return;
-    const directComparisonActive = document.body.classList.contains("direct-comparison-active");
-    const hiddenInHero =
-      document.body.classList.contains("is-hero") &&
-      !directComparisonActive &&
-      (document.body.classList.contains("agent-mode-enabled") || !heroDesktopQuery.matches);
+    const hiddenInHero = document.body.classList.contains("is-hero");
     responses.inert = hiddenInHero;
-    if (hiddenInHero) {
-      responses.setAttribute("aria-hidden", "true");
-    } else {
-      responses.removeAttribute("aria-hidden");
-    }
-  }
-
-  if (typeof heroDesktopQuery.addEventListener === "function") {
-    heroDesktopQuery.addEventListener("change", syncHeroResponseAccess);
+    if (hiddenInHero) responses.setAttribute("aria-hidden", "true");
+    else responses.removeAttribute("aria-hidden");
   }
   syncHeroResponseAccess();
 
@@ -422,19 +406,11 @@
     syncHeroResponseAccess();
   }
 
-  // Der Direktvergleich (Agent Mode aus) ist keine Zwischenstufe des Threads,
-  // sondern eine eigene Ansicht: Composer oben, sechs Antworten darunter, kein
-  // Consensus. Ein frisch gesendeter Vergleich und ein aus einem Bookmark
-  // wiederhergestellter muessen dieselbe Ansicht ergeben — deshalb steht sie
-  // hier einmal statt zweimal (query-send.js, firebase.js).
-  //
-  // Die gestellte Frage raeumt diese Ansicht NICHT mehr ab. Sie tat es, weil
-  // der Direktvergleich keinen Thread fuehrt — nur stand danach nirgends
-  // mehr, was gefragt worden war: das Feld ist beim Senden leer, und die
-  // sechs Antworten wiederholen die Frage nicht. Den Kopf setzen die beiden
-  // Aufrufer unmittelbar danach selbst.
+  // Direct answers share the normal thread shell: question bubble, dimensions,
+  // compact composer and upward-opening menus. Only the result differs.
   function enterDirectComparisonView() {
-    document.body.classList.add("is-hero", "direct-comparison-active");
+    document.body.classList.remove("is-hero");
+    document.body.classList.add("direct-comparison-active");
     syncHeroResponseAccess();
   }
 

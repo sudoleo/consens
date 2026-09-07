@@ -113,6 +113,23 @@
           const MARKER_VISIBILITY_STORAGE_KEY = "consensio.showConsensusMarkers.v1";
           const MARKERS_HIDDEN_CLASS = "consensus-markers-hidden";
           const markerToggle = $("consensusMarkerToggle");
+          const CLAIM_COUNTS_KEY = "consensio.showClaimCounts.v1";
+          const claimCountsToggle = $("claimCountsSwitch");
+
+          function restoreClaimCounts() {
+            let show = false;
+            try { show = localStorage.getItem(CLAIM_COUNTS_KEY) === "true"; } catch (_) {}
+            document.body.classList.toggle("claim-counts-visible", show);
+            if (claimCountsToggle) claimCountsToggle.checked = show;
+            applyConsensusMarkerVisibility(storedConsensusMarkersVisible());
+          }
+
+          claimCountsToggle?.addEventListener("change", function () {
+            try { localStorage.setItem(CLAIM_COUNTS_KEY, String(this.checked)); } catch (_) {}
+            document.body.classList.toggle("claim-counts-visible", this.checked);
+            applyConsensusMarkerVisibility(storedConsensusMarkersVisible());
+          });
+          window.addEventListener("pageshow", restoreClaimCounts);
 
           function storedConsensusMarkersVisible() {
             try {
@@ -145,6 +162,32 @@
           function applyConsensusMarkerVisibility(visible) {
             const show = visible !== false;
             document.body.classList.toggle(MARKERS_HIDDEN_CLASS, !show);
+            document.querySelectorAll(".cx-claim").forEach(function (mark) {
+              const group = mark.cxGroup;
+              if (!group || group.spans[0] !== mark) return;
+              const control = activeControl(group);
+              if (!control?.el.classList.contains("claim-badge")) return;
+              const accessible = show && !document.body.classList.contains("claim-counts-visible");
+              ["role", "tabindex", "aria-label"].forEach(function (attr) { mark.removeAttribute(attr); });
+              delete mark.dataset.markerVisibleRole;
+              delete mark.dataset.markerVisibleTabindex;
+              delete mark.dataset.markerVisibleAriaLabel;
+              if (accessible) {
+                mark.setAttribute("role", "button");
+                mark.tabIndex = 0;
+                mark.setAttribute("aria-label", control.el.getAttribute("aria-label"));
+              }
+              if (!mark.dataset.cxKeyboard) {
+                mark.dataset.cxKeyboard = "1";
+                mark.addEventListener("keydown", function (event) {
+                  if (event.key !== "Enter" && event.key !== " ") return;
+                  event.preventDefault();
+                  activeControl(group)?.activate(event);
+                });
+                mark.addEventListener("focus", function () { setPassageHover(group, true); });
+                mark.addEventListener("blur", function () { setPassageHover(group, false); });
+              }
+            });
             syncMarkerPassageAccess(show);
             if (!show) closeClaimPopover();
             if (markerToggle) {
@@ -461,9 +504,6 @@
             if (!pop) return;
             closeClaimPopover({ restoreFocus: false });
             claimPopoverTrigger = anchorEl || document.activeElement;
-
-            const agreeCount = claim.agree.length;
-            const total = agreeCount + claim.dissent.length;
             const coverage = claimCoverage(claim);
 
             const header = document.createElement("div");
@@ -471,11 +511,7 @@
             const title = document.createElement("span");
             title.className = "claim-popover-title";
             title.id = "claimPopoverTitle";
-            title.textContent = coverage === "thin"
-              ? "Too few models addressed this"
-              : claim.dissent.length
-                ? `${agreeCount} of ${total} models agree`
-                : `All ${total} models agree`;
+            appendClaimSupport(title, claim);
             const close = document.createElement("button");
             close.type = "button";
             close.className = "claim-popover-close";
@@ -612,6 +648,7 @@
           }
 
           function jumpToModelAnswer(model, quote) {
+            if (window.App?.answerReader?.openLive(model, quote)) return;
             const box = $(MODEL_BOX_IDS[model] || "");
             if (!box) return;
 
@@ -657,9 +694,11 @@
 
             return {
               canOpen: function (model) {
+                if (window.App?.answerReader?.canOpenStored(body.closest?.(".thread-history-turn"), model)) return true;
                 return !!targetFor(model);
               },
               open: function (model, quote) {
+                if (window.App?.answerReader?.openStored(body.closest?.(".thread-history-turn"), model, quote)) return;
                 const section = targetFor(model);
                 if (!section) return;
                 const panel = section.closest(".thread-history-panel");
@@ -703,6 +742,7 @@
           function storedDifferenceFocus(body) {
             return function (index) {
               const turn = body.closest?.(".thread-history-turn");
+              if (turn && window.App?.answerReader?.openPanel('differences', null, turn, index)) return;
               const card = turn?.querySelectorAll(
                 ".thread-history-differences .diff-card"
               )[index];
@@ -775,7 +815,8 @@
             // "critical"-Aussage machen statt fälschlich "none critical".
             const hasSeverity = differences.some(d => d.severity === "major" || d.severity === "minor");
             const emphases = differences.length - contradictions;
-            const hasScore = agreement && typeof agreement.score === "number";
+            const insufficient = agreement?.coverage_status === "insufficient";
+            const hasScore = !insufficient && agreement && typeof agreement.score === "number";
 
             const boundedScore = hasScore
               ? Math.max(0, Math.min(100, agreement.score))
@@ -784,7 +825,7 @@
             // Widerspruchsstatus bleibt als getrennte Detailzeile sichtbar.
             // Nur alte Snapshots ohne Score fallen auf die Difference-Ampel
             // zurueck.
-            const cls = hasScore
+            const cls = insufficient ? "is-warn" : hasScore
               ? (boundedScore >= 65 ? "is-calm" : (boundedScore >= 40 ? "is-warn" : "is-alert"))
               : (contradictions === 0 ? "is-calm" : (critical > 0 ? "is-alert" : "is-warn"));
             verdict.classList.remove("is-calm", "is-warn", "is-alert");
@@ -846,7 +887,9 @@
             main.className = "verdict-main";
             const headline = document.createElement("span");
             headline.className = "verdict-headline";
-            if (hasScore && boundedScore >= 85) {
+            if (insufficient) {
+              headline.textContent = "Insufficient evidence to assess agreement";
+            } else if (hasScore && boundedScore >= 85) {
               headline.textContent = "High agreement";
             } else if (hasScore && boundedScore >= 65) {
               headline.textContent = "Strong agreement";
@@ -904,6 +947,16 @@
                 " · disputed: " + contradictionTopics));
             }
 
+            if (agreement && typeof agreement.coverage_percent === "number") {
+              const coverageNote = document.createElement("span");
+              coverageNote.className = "verdict-coverage";
+              coverageNote.textContent = " · Coverage: " + agreement.scored_claims + "/"
+                + agreement.total_claims + " claims (" + agreement.coverage_percent + "%)";
+              if (agreement.evidence_incomplete) coverageNote.textContent += " · evidence incomplete";
+              coverageNote.title = "Claims assessed against at least two model responses. Coverage is separate from agreement.";
+              detail.appendChild(coverageNote);
+            }
+
             // Transparenz: welche (unabhängige) Modellfamilie die Analyse
             // geliefert hat. Als Nachsatz derselben Zeile statt als rechts
             // ausgerichteter Zweizeiler — eine Fußnote, die einen eigenen
@@ -951,14 +1004,8 @@
               + " — open details";
           }
 
-          // Seit 2026-07-27 nur noch ein Punkt, kein "4/6" mehr. Neben den
-          // hochgestellten Quellenzahlen standen im selben Satz zwei
-          // konkurrierende Zahlensysteme — der Leser musste erst sortieren,
-          // welche Zahl worauf zeigt. Die Quote steht jetzt dort, wo sie
-          // ohnehin schon stand: in der Hover-Vorschau (buildClaimPreview),
-          // im Tooltip und in der Karte beim Klick. Der Punkt bleibt als
-          // fokussierbares, tippbares Steuerelement mit 44px-Trefferflaeche —
-          // dieselbe Sprache wie der Widerspruchs-Marker daneben.
+          // Inline counts are opt-in; the marked passage remains accessible
+          // when the badge is hidden. Fallback rows retain their detail button.
           function makeBadge(claim, modelsCompared, answerNavigation) {
             const badge = document.createElement("button");
             badge.type = "button";
@@ -1012,6 +1059,7 @@
           // Öffnet die zugehörige Karte im Differences-Überblick und hebt sie
           // kurz hervor. Das <details> darüber (Phase 4) wird mit aufgeklappt.
           function focusDifferenceCard(index) {
+            if (window.App?.answerReader?.openPanel('differences', null, null, index)) return;
             const cards = $("differencesCards");
             const card = cards?.querySelectorAll(".diff-card")[index];
             if (!card) return;
@@ -1244,6 +1292,17 @@
             return head;
           }
 
+          function appendClaimSupport(target, claim) {
+            if (claimCoverage(claim) === "thin") {
+              target.textContent = "Too few models addressed this";
+              return;
+            }
+            const ratio = document.createElement("strong");
+            ratio.className = "claim-support-ratio";
+            ratio.textContent = claim.agree.length + "/" + (claim.agree.length + claim.dissent.length);
+            target.append(ratio, document.createTextNode(" models that addressed this support it"));
+          }
+
           function previewRow(label, text) {
             const row = document.createElement("div");
             row.className = "insight-preview-row";
@@ -1259,17 +1318,9 @@
 
           function buildClaimPreview(claim, modelsCompared) {
             const frag = document.createDocumentFragment();
-            const agreeCount = claim.agree.length;
-            const total = agreeCount + claim.dissent.length;
-            const coverage = claimCoverage(claim);
-            frag.appendChild(previewHead(
-              coverage === "thin"
-                ? "Too few models addressed this"
-                : claim.dissent.length
-                  ? agreeCount + " of " + total + " models support this"
-                  : "All " + total + " models agree",
-              claim.dissent.length ? "is-warn" : null
-            ));
+            const head = previewHead("", claim.dissent.length ? "is-warn" : null);
+            appendClaimSupport(head.lastElementChild, claim);
+            frag.appendChild(head);
             if (claim.agree.length) {
               frag.appendChild(previewRow(
                 "Agree", claim.agree.map(modelDisplayName).join(", ")));
@@ -1534,7 +1585,8 @@
               // Nur noch Emphasis-Marken treten hinter das Badge zurueck.
               if (overlappingDifference) suppressControl(overlappingDifference.control);
               attachControl(result, badge, function () {
-                openClaimPopover(claim, badge, modelsCompared, answerNavigation);
+                const anchor = document.body.classList.contains("claim-counts-visible") ? badge : result.spans[0];
+                openClaimPopover(claim, anchor, modelsCompared, answerNavigation);
               }, function () { return buildClaimPreview(claim, modelsCompared); });
             });
 
@@ -2485,7 +2537,7 @@
           // Startzustand schliesst applyConsensusMarkerVisibility ein eventuell
           // offenes Popover und braucht deshalb dessen inzwischen initialisierten
           // Modal-State.
-          restoreConsensusMarkerVisibility();
+          restoreClaimCounts();
           markerToggle?.addEventListener("click", function () {
             const show = document.body.classList.contains(MARKERS_HIDDEN_CLASS);
             try {

@@ -10,8 +10,6 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Mapping
 
-import requests
-
 import app.core.config as cfg
 from app.core.observability import safe_exception, safe_traceback
 from app.services.llm.citations import coerce_text
@@ -19,7 +17,6 @@ from app.services.llm.credentials import openrouter_api_key
 from app.services.llm.engines import (
     OPENROUTER_CHAT_COMPLETIONS_URL,
     _merge_nested_config,
-    _raise_provider_http_status,
     openrouter_headers,
 )
 from app.services.llm.consensus_scoring import (
@@ -36,11 +33,15 @@ from app.services.llm.consensus_parsing import (
 )
 from app.services.llm.mock_llm import mock_engine_stream, mock_engine_text, mock_llm_enabled
 from app.services.llm.provider_runtime import (
-    PROVIDER_HTTP_TIMEOUT,
+    AnalysisBudgetExceeded,
+    ProviderCancelled,
+    analysis_budgeted,
+    bind_analysis_budget,
+    current_analysis_budget,
+    claim_analysis_call,
+    cancellable_post_json,
     bind_provider_cancellation,
     current_provider_cancellation,
-    managed_provider_resource,
-    raise_if_provider_cancelled,
 )
 
 # Familien-ID und Anzeigename einer jeden Familie plus die gaengigen
@@ -160,7 +161,7 @@ def _call_engine_text(
     effort: str | None = None,
     json_schema: dict | None = None,
 ) -> str:
-    raise_if_provider_cancelled()
+    claim_analysis_call()
     if mock_llm_enabled():
         # E2E-Suite: deterministische Engine-Antwort; Prompt-Bau, Parsing,
         # Verifikation und Agreement-Score laufen weiterhin echt.
@@ -188,16 +189,11 @@ def _call_engine_text(
     if effort:
         request_config.setdefault("reasoning", {"effort": effort})
     _merge_nested_config(payload, request_config)
-    response = requests.post(
+    data = cancellable_post_json(
         OPENROUTER_CHAT_COMPLETIONS_URL,
         json=payload,
         headers=openrouter_headers(api_key),
-        timeout=PROVIDER_HTTP_TIMEOUT,
     )
-    with managed_provider_resource(response):
-        if response.status_code >= 400:
-            _raise_provider_http_status(response)
-        data = response.json()
     message = ((data.get("choices") or [{}])[0].get("message") or {})
     text = coerce_text(message.get("content")).strip()
     if not text:
@@ -258,6 +254,7 @@ def _stream_engine_text(
     und {"type": "reasoning"} als Fortschrittsmarker, solange ein
     Reasoning-Modell noch denkt (hält SSE-Verbindungen aktiv und speist den
     "Reasoning"-Indikator im Frontend)."""
+    claim_analysis_call()
     if mock_llm_enabled():
         # E2E-Suite: siehe _call_engine_text.
         for text in mock_engine_stream(prompt=prompt, json_mode=json_mode):
@@ -370,7 +367,7 @@ def _model_answer_items(answers, excluded_models) -> list[tuple[str, str]]:
         name = cfg.PROVIDER_LABEL_BY_ID.get(str(key).lower(), str(key))
         if not isinstance(answer, str) or not answer.strip() or normalize_model_name(name) in excluded:
             continue
-        items.append((name, answer))
+        items.append((name, answer[:cfg.get_consensus_answer_char_limit()]))
     return items
 
 
@@ -492,6 +489,7 @@ def is_consensus_error_text(text) -> bool:
     return not stripped or stripped.startswith(CONSENSUS_ERROR_PREFIXES)
 
 
+@analysis_budgeted
 def query_consensus(
     question: str,
     answers: Mapping[str, str],
@@ -537,6 +535,8 @@ def query_consensus(
                 max_tokens=cfg.CONSENSUS_MAX_TOKENS,
                 temperature=CONSENSUS_TEMPERATURE,
             )
+        except (ProviderCancelled, AnalysisBudgetExceeded):
+            break
         except Exception as e:
             last_error = "provider request failed."
             logging.warning(
@@ -550,7 +550,7 @@ def query_consensus(
     return f"Consensus error: {last_error}"
 
 
-MAX_DIFF_ANSWER_CHARS = 6000
+# All analysis stages use cfg.get_consensus_answer_char_limit().
 
 
 # ---------------------------------------------------------------------------
@@ -702,7 +702,7 @@ def _table_cell_spans(line: str) -> list:
     return spans
 
 
-def _enumerate_consensus_sentences(consensus_answer: str):
+def _enumerate_consensus_sentences(consensus_answer: str, limit=MAX_CONSENSUS_SENTENCES):
     """Nummeriert die Saetze der Konsensantwort.
 
     Gibt (annotierter Text, Saetze) zurueck. Der annotierte Text ist die
@@ -750,7 +750,7 @@ def _enumerate_consensus_sentences(consensus_answer: str):
                 if all(re.fullmatch(r":?-+:?", line[start:end].strip()) for start, end in cells):
                     continue
                 for start, end in cells[:table_columns]:
-                    if len(sentences) >= MAX_CONSENSUS_SENTENCES:
+                    if limit is not None and len(sentences) >= limit:
                         break
                     fragment = line[start:end].strip()
                     if not fragment:
@@ -770,7 +770,7 @@ def _enumerate_consensus_sentences(consensus_answer: str):
         content_start = prefix.end() if prefix else 0
         content = line[content_start:]
         for start, end in _sentence_spans(content):
-            if len(sentences) >= MAX_CONSENSUS_SENTENCES:
+            if limit is not None and len(sentences) >= limit:
                 break
             fragment = content[start:end].strip()
             if len(fragment.split()) < MIN_SENTENCE_WORDS:
@@ -780,7 +780,7 @@ def _enumerate_consensus_sentences(consensus_answer: str):
             # Marke zu verschieben: markiert wird der Satzanfang.
             sentences.append(text[absolute:line_start + content_start + end].strip())
             marks.append((absolute, len(sentences)))
-        if len(sentences) >= MAX_CONSENSUS_SENTENCES:
+        if limit is not None and len(sentences) >= limit:
             break
 
     if not marks:
@@ -880,6 +880,8 @@ class _JudgeContext:
     numbered_answer: str    # Konsensantwort mit "[n] " vor jedem Satz
     sentences: tuple        # sentences[n-1] = exakter Originalsatz zu "[n]"
     resolved_question: str
+    unindexed_sentences: int = 0
+    truncated_answers: int = 0
 
 
 def _build_judge_context(
@@ -907,11 +909,12 @@ def _build_judge_context(
         label = chr(ord("A") + idx)      # A, B, C, ...
         anon_label = f"Model {label}"
         anon_map[anon_label] = name
-        answers_by_model[name] = (text or "")[:MAX_DIFF_ANSWER_CHARS]
+        answers_by_model[name] = (text or "")
         labels.append(anon_label)
         lines.append(f"- {anon_label}: {answers_by_model[name]}")
 
     numbered_answer, sentences = _enumerate_consensus_sentences(consensus_answer)
+    _, all_sentences = _enumerate_consensus_sentences(consensus_answer, limit=None)
 
     return _JudgeContext(
         anon_map=anon_map,
@@ -921,6 +924,8 @@ def _build_judge_context(
         numbered_answer=numbered_answer,
         sentences=tuple(sentences),
         resolved_question=str(resolved_question or ""),
+        unindexed_sentences=max(0, len(all_sentences) - len(sentences)),
+        truncated_answers=sum(len(text) >= cfg.get_consensus_answer_char_limit() for _, text in model_answers),
     )
 
 
@@ -1219,7 +1224,9 @@ def _legacy_differences_text(data: dict) -> str:
     Freitext und strukturierte Auswertung nie divergieren."""
     differences = data.get("differences") or []
     agreement = data.get("agreement") or compute_agreement_score(data)
-    credibility = _CREDIBILITY_SENTENCES.get(agreement.get("level"), _CREDIBILITY_SENTENCES["partially"])
+    credibility = ("Agreement is **not assessable**: insufficient evidence coverage."
+                   if agreement.get("level") == "insufficient" else
+                   _CREDIBILITY_SENTENCES.get(agreement.get("level"), _CREDIBILITY_SENTENCES["partially"]))
 
     lines = [credibility, "", "_____________", ""]
     if differences:
@@ -1708,7 +1715,7 @@ def _judge_metadata(provider: str, api_model: str, tier: str, attempts: int = 0,
     anonymen Telemetrie (nur Metadaten, keine Texte). Der Schlüssel
     "adjudicator" ist für eine spätere Adjudicator-Runde reserviert.
     attempts = Nummer des erfolgreichen Versuchs (1 = kein Retry nötig),
-    duration_ms = Dauer nur dieses Versuchs."""
+    duration_ms = Gesamtdauer der Rolle inklusive vorheriger Versuche und Repair."""
     return {
         "provider": cfg.provider_label(provider),
         "model": api_model,
@@ -1806,6 +1813,8 @@ def _repair_coverage(engine, api_keys, context, missing: list) -> dict:
             coverage.build_coverage_schema(labels, ids),
             is_retry=False,
         )
+    except (ProviderCancelled, AnalysisBudgetExceeded):
+        raise
     except Exception as exc:
         logging.warning("Coverage repair call failed category=%s", safe_exception(exc))
         return {}
@@ -1837,6 +1846,7 @@ def _run_coverage_judge(context: _JudgeContext, api_keys: dict, differences_mode
     )
 
     skip_retries_for = set()
+    total_started = time.monotonic()
     executed = 0
     for engine, is_retry in attempts:
         provider, api_model, _model_ref = engine
@@ -1847,6 +1857,8 @@ def _run_coverage_judge(context: _JudgeContext, api_keys: dict, differences_mode
         started = time.monotonic()
         try:
             raw = _call_coverage_engine(engine, api_keys, prompt, schema, is_retry)
+        except (ProviderCancelled, AnalysisBudgetExceeded):
+            break
         except Exception as exc:
             if not _provider_error_is_retryable(exc):
                 skip_retries_for.add(attempt_key)
@@ -1873,14 +1885,19 @@ def _run_coverage_judge(context: _JudgeContext, api_keys: dict, differences_mode
                 "Coverage judge skipped %d of %d sentences; requesting them again",
                 len(missing), len(ids),
             )
-            fixes = _repair_coverage(engine, api_keys, context, missing)
+            try:
+                fixes = _repair_coverage(engine, api_keys, context, missing)
+            except (ProviderCancelled, AnalysisBudgetExceeded):
+                fixes = {}
+            else:
+                executed += 1
             repaired = len(fixes)
             parsed.update(fixes)
             missing = coverage.missing_sentence_ids(parsed, ids)
 
         meta = _judge_metadata(
             provider, api_model, "standard",
-            attempts=executed, duration_ms=duration_ms,
+            attempts=executed, duration_ms=int((time.monotonic() - total_started) * 1000),
         )
         meta.update({
             "sentences": len(ids),
@@ -1959,15 +1976,18 @@ def _apply_coverage(data: dict, coverage_result, coverage_meta, context, consens
     steht bereits beim Nutzer, die Widersprueche sind analysiert. Ein Fehler
     ausgerechnet hier darf davon nichts mehr kaputtmachen -- er kostet die
     Marken, sonst nichts."""
-    if not coverage_result:
-        return None
     try:
-        claims = _coverage_claims(coverage_result, context)
-        if not claims:
-            return None
+        data["evidence_coverage"] = {
+            "unindexed_sentences": context.unindexed_sentences,
+            "truncated_answers": context.truncated_answers,
+        }
+        claims = _coverage_claims(coverage_result, context) if coverage_result else (data.get("claims") or [])
         _verify_claims(claims, consensus_answer, context.answers_by_model)
         data["claims"] = claims
         data["agreement"] = compute_agreement_score(data)
+        budget = current_analysis_budget()
+        if budget:
+            data["analysis_runtime"] = budget.snapshot()
         if coverage_meta:
             judges = data.setdefault("judges", {})
             judges["coverage"] = coverage_meta
@@ -1988,8 +2008,13 @@ def _coverage_in_background(context, api_keys, differences_model):
     Worker uebertragen: sonst telefoniert der Coverage-Call noch munter weiter,
     nachdem der Nutzer den Lauf abgebrochen hat."""
     cancellation = current_provider_cancellation()
+    budget = current_analysis_budget()
 
     def _work():
+        with bind_analysis_budget(budget):
+            return _bound_work()
+
+    def _bound_work():
         if cancellation is None:
             return _run_coverage_judge(context, api_keys, differences_model)
         with bind_provider_cancellation(cancellation):
@@ -2007,7 +2032,9 @@ def _collect_coverage(pool, future):
     """Ergebnis des Nebenläufers einsammeln; ein Fehler dort darf den Lauf
     niemals kippen."""
     try:
-        return future.result()
+        budget = current_analysis_budget()
+        timeout = max(0.05, budget.deadline - time.monotonic()) + 0.2 if budget else None
+        return future.result(timeout=timeout)
     except Exception as exc:
         logging.warning(
             "Coverage judge thread failed category=%s at=%s",
@@ -2018,6 +2045,7 @@ def _collect_coverage(pool, future):
         pool.shutdown(wait=False)
 
 
+@analysis_budgeted
 def query_differences(
     answers: Mapping[str, str],
     consensus_answer: str,
@@ -2058,6 +2086,7 @@ def query_differences(
         last_error = "empty result from differences engine."
         skip_retries_for = set()
         executed_attempts = 0
+        judge_started = time.monotonic()
         for (provider, api_model, model_ref), is_retry, judge_tier in attempts:
             attempt_key = (provider, api_model, judge_tier)
             if is_retry and attempt_key in skip_retries_for:
@@ -2077,6 +2106,8 @@ def query_differences(
                     effort=_judge_effort(provider, api_model, judge_tier),
                     json_schema=DIFFERENCES_JSON_SCHEMA,
                 )
+            except (ProviderCancelled, AnalysisBudgetExceeded):
+                break
             except Exception as e:
                 last_error = "provider request failed."
                 if not _provider_error_is_retryable(e):
@@ -2102,7 +2133,7 @@ def query_differences(
             if data is not None:
                 data["judges"] = {"differences": _judge_metadata(
                     provider, api_model, judge_tier,
-                    attempts=attempt_no, duration_ms=duration_ms,
+                    attempts=attempt_no, duration_ms=int((time.monotonic() - judge_started) * 1000),
                 )}
                 coverage_result, coverage_meta = _collect_coverage(
                     coverage_pool, coverage_future
@@ -2302,6 +2333,7 @@ def _stream_consensus_engine(consensus_model: str, api_keys: dict, consensus_pro
     )
 
 
+@analysis_budgeted
 def stream_consensus(
     question: str,
     answers: Mapping[str, str],
@@ -2349,6 +2381,8 @@ def stream_consensus(
         except _InvalidEngineError as e:
             yield {"type": "final", "text": str(e), "error": True}
             return
+        except (ProviderCancelled, AnalysisBudgetExceeded):
+            break
         except Exception as e:
             last_error = "provider request failed."
             logging.warning(
@@ -2366,6 +2400,7 @@ def stream_consensus(
     yield {"type": "final", "text": f"Consensus error: {last_error}", "error": True}
 
 
+@analysis_budgeted
 def stream_differences(
     answers: Mapping[str, str],
     consensus_answer: str,
@@ -2402,6 +2437,7 @@ def stream_differences(
         last_error = "empty result from differences engine."
         skip_retries_for = set()
         executed_attempts = 0
+        judge_started = time.monotonic()
         for (provider, api_model, model_ref), is_retry, judge_tier in attempts:
             attempt_key = (provider, api_model, judge_tier)
             if is_retry and attempt_key in skip_retries_for:
@@ -2432,6 +2468,8 @@ def stream_differences(
                     # Roh-JSON wird im Frontend nicht gerendert; die Deltas halten
                     # nur die SSE-Verbindung aktiv (auch während der Retries).
                     yield {"type": "delta", "text": text}
+            except (ProviderCancelled, AnalysisBudgetExceeded):
+                break
             except Exception as e:
                 last_error = "provider request failed."
                 if not _provider_error_is_retryable(e):
@@ -2459,7 +2497,7 @@ def stream_differences(
             if data is not None:
                 data["judges"] = {"differences": _judge_metadata(
                     provider, api_model, judge_tier,
-                    attempts=attempt_no, duration_ms=duration_ms,
+                    attempts=attempt_no, duration_ms=int((time.monotonic() - judge_started) * 1000),
                 )}
                 coverage_result, coverage_meta = _collect_coverage(
                     coverage_pool, coverage_future

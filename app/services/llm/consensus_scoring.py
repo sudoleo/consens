@@ -30,19 +30,25 @@ def compute_agreement_score(data: dict) -> dict:
             thin += 1
             continue
         ratios.append(agree / (agree + dissent))
-    base = sum(ratios) / len(ratios) if ratios else 1.0
+    # Agreement describes measured claims; coverage describes whether that
+    # measurement represents the answer. Missing evidence is not agreement.
+    evidence = data.get("evidence_coverage") or {}
+    thin += max(0, int(evidence.get("unindexed_sentences") or 0))
+    total = len(ratios) + thin
+    coverage = len(ratios) / total if total else 0.0
+    incomplete = bool(evidence.get("truncated_answers") or evidence.get("unindexed_sentences"))
+    status = "insufficient" if not ratios or coverage < 0.5 else (
+        "limited" if coverage < 0.8 or incomplete else "sufficient"
+    )
+    base = sum(ratios) / len(ratios) if ratios else 0.0
     contradictions = [item for item in differences if item.get("type") == "contradiction"]
     major = sum(1 for item in contradictions if item.get("severity") != "minor")
     minor = len(contradictions) - major
     emphases = len(differences) - len(contradictions)
     score = base - 0.25 * major - 0.10 * minor - 0.05 * emphases
     caps = [1.0]
-    if not ratios:
-        # Kein einziger belegter Satz - entweder hat die Antwort gar keine
-        # pruefbaren Saetze, oder der Coverage-Judge ist ausgefallen. Ohne
-        # diese Kappe stuende dort "very credible", weil kein Claim etwas
-        # abgezogen hat: volle Zuversicht aus null Messungen. Genau die
-        # Behauptung darf das Produkt nicht aufstellen.
+    if status == "limited":
+        # Partial coverage cannot support a high overall agreement verdict.
         caps.append(0.64)
     if differences:
         caps.append(0.84)
@@ -56,10 +62,10 @@ def compute_agreement_score(data: dict) -> dict:
         caps.append(0.75)
     elif model_count <= 1:
         caps.append(0.50)
-    score_pct = int(round(max(0.0, min(score, *caps)) * 100))
-    level = "not"
+    score_pct = int(round(max(0.0, min(score, *caps)) * 100)) if status != "insufficient" else None
+    level = "insufficient" if score_pct is None else "not"
     for threshold, name in AGREEMENT_LEVEL_THRESHOLDS:
-        if score_pct >= threshold:
+        if score_pct is not None and score_pct >= threshold:
             level = name
             break
     return {
@@ -74,5 +80,9 @@ def compute_agreement_score(data: dict) -> dict:
         # sieht ein Score aus 2 Claims genauso aus wie einer aus 40.
         "scored_claims": len(ratios),
         "thin_claims": thin,
+        "coverage_percent": int(round(coverage * 100)),
+        "coverage_status": status,
+        "total_claims": total,
+        "evidence_incomplete": incomplete,
     }
 

@@ -61,7 +61,8 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       vollständig deckenden, gut lesbaren Hintergrund.
       Mit Agent Mode steht das Eingabefeld mit Begrüßung mittig und wechselt
       nach dem Senden in den geführten Thread. Ohne Agent Mode bleiben Composer
-      oben und die sechs Modell-Antwortboxen darunter wie im Ausgangs-Mockup.
+      oben; nach dem Senden zeigt der gemeinsame Modellantwort-Leser darunter
+      eine Originalantwort oder einen gezielten Zweiervergleich.
 - [ ] Login-Dialog: Fokus wandert beim Öffnen hinein, Tab bleibt im Dialog,
       Escape/Backdrop/benannter Close-Button schließen ihn und geben den Fokus
       an den Auslöser zurück. Mit altem `id_token` und blockiertem Firebase-CDN
@@ -102,11 +103,25 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       Der dezente „Hide checks“-Link blendet Satzfarben, Quoten und die lange Erklärung
       aus, lässt „Show checks“ stehen und stellt alles auch nach einem Reload
       wieder her.
-- [ ] Ohne Agent Mode bleibt die Oberfläche im direkten Vergleich: kein
-      Pipeline-Block, kein Thread-Kopf und kein `/consensus`-Request; alle sechs
-      Antworten streamen sichtbar in ihre Boxen, Consensus, Differences und
-      Claims bleiben leer/verborgen. Das gilt in Light/Dark und mobil ohne
-      horizontalen Overflow.
+- [ ] Ohne Agent Mode bleibt die Oberfläche im direkten Vergleich: Frage und
+      Antwortleser, kein Pipeline-Block und kein `/consensus`-Request. Alle
+      Modellantworten und Status sind gleichzeitig sichtbar: zwei offene Spalten,
+      mobil untereinander, ohne aeusseren Rahmen und Copy-Schaltflaechen.
+      Vor dem Start gibt es keine leeren Modellboxen. Warten wird nur im
+      Modellkopf gezeigt; Fehlermeldungen bleiben sichtbar. Frage, Seitenmasse
+      und Composer entsprechen dem normalen Chat (auch Sidebar auf/zu).
+      Der Picker bleibt beim Oeffnen und Resize vollstaendig im Viewport. Streaming eines Modells erhaelt
+      Textauswahl und geoeffnete Quellen in unveraenderten Nachbarantworten. Consensus, Differences und Claims bleiben
+      leer/verborgen. Das gilt in Light/Dark und mobil ohne horizontalen Overflow.
+- [ ] Agent-Mode-Modellantwort-Leser bei 390/768/1024/1440px: mobil/tablet modal mit
+      Rueckweg, Escape/Fokus-Rueckgabe, Desktop angedockt. Zwei Antworten nur ab
+      760px Leserbreite nebeneinander, sonst A/B-Umschaltung. Lange Namen,
+      Fragen, Code, Tabellen und Quellen bleiben lesbar. Scrollposition bleibt
+      bei Streams und beim Wechsel zurueck zu einem Modell erhalten.
+- [ ] Frage 1 im Leser oeffnen, waehrend Frage 2 streamt: Modelltext und Quellen
+      bleiben bei Frage 1. Archivierte Claim-Spruenge oeffnen deren Modell im
+      gemeinsamen Leser. Run-/Bookmark-Wechsel und Logout zeigen keine alten
+      Reader-Inhalte. Keine gestapelten Vollantworten im Chat-Verlauf.
 - [ ] Mit Agent Mode erscheint die kompakte Pipeline: Zähler folgt den fertigen
       Modellantworten, danach wird „Consensus & differences“ ohne falsche
       Prozent-/Zeitprognose aktiv; Abschluss, Fehler und Stop blenden die Zeile
@@ -556,3 +571,19 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
 - [ ] Dark/Light-Toggle in Settings (Desktop und Mobile).
 - [ ] Mobile-Layout (< 768px): Overlay-Sidebar, Info-Popups.
 - [ ] System-Prompt-Modal + Help-Modal (app-ui.js) öffnen/speichern.
+
+### Gemeinsame Detail-Seitenleiste
+- [ ] Differences und Sources aus aktuellem und archiviertem Turn oeffnen rechts denselben Leser; auf Handy/Tablet bildschirmfuellend.
+- [ ] Abschnitts- und Fragenwechsel behalten die korrekte Zuordnung; Schliessen stellt Karten/Quellenlisten an ihren Ursprungsort zurueck.
+- [ ] Differences zeigen zuerst Typ und Kernaussage. Aufklappen zeigt Positionen, Zitate, Pruefhinweis und vorhandene Resolve-Aktionen; Marker oeffnen die passende Karte.
+- [ ] Quellen zeigen Titel/Domain; laengere Auszuege sind separat aufklappbar.
+- [ ] Kurze Fragen haben keinen nutzlosen Chevron; lange Fragen lassen sich ohne doppelten Text auf- und zuklappen.
+- [ ] Desktop 1440/1920/2560px: Chat in der Restflaeche zentriert, Leser waechst mit; linke Navigation ein- und ausklappen.
+- [ ] Quellen-Favicons geladen und fehlgeschlagen: Titel, Domain und Referenznummer bleiben in beiden Faellen lesbar; Fehler zeigen einen Buchstaben statt kaputtem Bild.
+- [ ] Ein einzelner Unterschied direkt offen; erweiterte Desktopansicht mit Positionen nebeneinander, Handy untereinander.
+
+- [ ] Frische Sitzung mit Agent Mode an: gespeicherten Direktvergleich oeffnen.
+      Alle gespeicherten Modelle sind sichtbar, auch aktuell ausgeschlossene.
+      „Direct comparison“ erklaert Agent Mode fuer dieses Ergebnis; die
+      Einstellung fuer die naechste Frage bleibt an. Wechsel zu einem
+      Consensus-Bookmark und zurueck zeigt keine leeren oder fremden Antworten.

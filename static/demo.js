@@ -389,6 +389,25 @@ All six models agree on the mechanics: new date first, say what she gets on the 
 BestModel: Anthropic`
 };
 
+// Six authored viewpoints are instantiated for the configured Balanced families.
+// Keep every claim/quote attached to the same viewpoint if an admin changes
+// a preset family (for example Claude -> Kimi). These are local demo fixtures.
+function buildDemoDataForModels(models) {
+  const replacements = models.filter(model => !DEMO_MODELS.includes(model));
+  const mapping = Object.fromEntries(DEMO_MODELS.map(model => [model,
+    models.includes(model) ? model : replacements.shift()]));
+  function remap(value) {
+    if (typeof value === 'string') return mapping[value] || value;
+    if (Array.isArray(value)) return value.map(remap);
+    if (value && typeof value === 'object') return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [mapping[key] || key, remap(item)]));
+    return value;
+  }
+  return remap(DEMO_DATA);
+}
+let activeDemoData = DEMO_DATA;
+let activeDemoModels = DEMO_MODELS;
+
 /* === DEMO: Timing & Typing Configuration =============================== */
 const DEMO_PHASES = {
   preType: true,
@@ -408,8 +427,8 @@ const DEMO_CONSENSUS_JITTER_MS = 600;
 const DEMO_DIFFERENCES_REVIEW_MS = 1100;
 const DEMO_DELAY_BOOST_MS = 1800;
 
-Object.keys(DEMO_DATA.delays).forEach(key => {
-  DEMO_DATA.delays[key] = (DEMO_DATA.delays[key] || 1500) + DEMO_DELAY_BOOST_MS;
+Object.keys(activeDemoData.delays).forEach(key => {
+  activeDemoData.delays[key] = (activeDemoData.delays[key] || 1500) + DEMO_DELAY_BOOST_MS;
 });
 
 const MODEL_TO_BOX = {
@@ -451,6 +470,30 @@ function tokenizeForStream(html) {
   return tokens;
 }
 
+// Convert authored demo fragments into the same Markdown payload as a real
+// model. Raw spinner/HTML markup must never become an answer in the reader.
+function demoResponseMarkdown(html) {
+  const fragment = document.createElement('div');
+  fragment.innerHTML = html;
+  function read(node) {
+    if (node.nodeType === Node.TEXT_NODE) return node.textContent.trim() ? node.textContent.replace(/\s+/g, ' ') : '';
+    const text = Array.from(node.childNodes).map(read).join('');
+    const tag = node.tagName?.toLowerCase();
+    if (/^h[1-6]$/.test(tag || '')) return `\n\n${'#'.repeat(Number(tag[1]))} ${text.trim()}\n\n`;
+    if (tag === 'li') {
+      const marker = node.parentElement?.tagName === 'OL'
+        ? `${Array.from(node.parentElement.children).indexOf(node) + 1}.` : '-';
+      return `${marker} ${text.trim()}\n`;
+    }
+    if (['p', 'ul', 'ol', 'div'].includes(tag)) return `\n\n${text.trim()}\n\n`;
+    if (tag === 'br') return '\n';
+    if (tag === 'b' || tag === 'strong') return `**${text}**`;
+    if (tag === 'em' || tag === 'i') return `*${text}*`;
+    return text;
+  }
+  return read(fragment).replace(/\n{3,}/g, '\n\n').trim();
+}
+
 // Baut die Antwort wortweise auf – wie ein echter Streaming-Response.
 // Tags zählen nicht gegen das Wort-Budget, der Browser schließt offene
 // Tags beim Zuweisen von innerHTML automatisch, daher bleibt das Markup gültig.
@@ -479,6 +522,11 @@ function streamDemoInto(outputEl, html, runId, opts = {}) {
         if (token[0] !== "<" && token.trim()) added++;
       }
       outputEl.innerHTML = acc;
+      const box = outputEl.closest('.response-box');
+      if (box) {
+        box.dataset.responseState = 'streaming';
+        box.dataset.consensusAnswer = demoResponseMarkdown(acc);
+      }
       if (typeof outputEl.scrollTop === "number") outputEl.scrollTop = outputEl.scrollHeight;
       if (index < tokens.length) {
         setTimeout(tick, tickMs);
@@ -539,13 +587,17 @@ async function typeIntoInput(inputEl, text, speed = 14, options = {}) {
 }
 
 function getBox(model) {
-  const id = MODEL_TO_BOX[model];
+  const id = window.App.modelPrefs.find(pref => pref.key === model)?.responseId || MODEL_TO_BOX[model];
   const box = document.getElementById(id);
   if (!box || box.classList.contains("excluded") || box.style.display === "none") return null;
   return box;
 }
 
 function setSpinnerEl(box) {
+  delete box.dataset.consensusAnswer;
+  delete box.dataset.responseError;
+  delete box.dataset.responseSkipped;
+  box.dataset.responseState = 'pending';
   const p = box.querySelector(".collapsible-content");
   if (p) p.innerHTML = window.spinnerHTML;
 }
@@ -553,7 +605,9 @@ function setSpinnerEl(box) {
 window.setSpinnerEl = setSpinnerEl;
 
 function renderDemoModelResponse(model, outputEl) {
-  const markdown = DEMO_DATA.responses[model] || "";
+  const markdown = demoResponseMarkdown(activeDemoData.responses[model] || "");
+  const box = outputEl.closest('.response-box');
+  if (box) box.dataset.responseState = 'complete';
   // Ohne Quellen, aber ueber denselben Weg wie eine echte Antwort: der
   // Renderer legt nebenbei die Kopier-/Bestantwort-Daten am Kasten ab.
   if (window.renderModelResponseWithSources) {
@@ -575,9 +629,9 @@ async function renderDemoConsensus(mainP, diffP) {
   // Konsens-Antwort als Streaming-Response aufbauen, danach sauber rendern,
   // damit Copy-Buttons und die Inline-Marker auf fertigem Markup sitzen.
   if (mainP) {
-    await streamDemoInto(mainP, DEMO_DATA.consensus, runId, DEMO_CONSENSUS_STREAM);
+    await streamDemoInto(mainP, activeDemoData.consensus, runId, DEMO_CONSENSUS_STREAM);
     if (runId !== demoRunId) return;
-    if (window.injectMarkdown) window.injectMarkdown(mainP, DEMO_DATA.consensus);
+    if (window.injectMarkdown) window.injectMarkdown(mainP, activeDemoData.consensus);
   }
 
   // Konsenstext steht: ab hier prueft die Auswertung auf Widersprueche.
@@ -591,16 +645,16 @@ async function renderDemoConsensus(mainP, diffP) {
   // Demo-Daten gehören zu keinem Bookmark: Resolve-Persistenz-Payload leeren,
   // damit eine Resolve-Runde hier nie ein altes Bookmark überschreibt.
   window.lastConsensusBookmarkPayload = null;
-  const includedCount = (DEMO_DATA.differencesData?.models_compared || []).length || 6;
+  const includedCount = (activeDemoData.differencesData?.models_compared || []).length || 6;
   const structuredRendered = window.renderConsensusInsights
-    ? window.renderConsensusInsights(DEMO_DATA.differencesData, includedCount)
+    ? window.renderConsensusInsights(activeDemoData.differencesData, includedCount)
     : false;
 
   if (!structuredRendered && diffP) {
     window.App.differencesPanel?.expandForFallback?.();
-    window.applyCredibilityFrame?.(diffP, DEMO_DATA.differences);
-    const differences = window.colorizeCredibility?.(DEMO_DATA.differences)
-      ?? DEMO_DATA.differences;
+    window.applyCredibilityFrame?.(diffP, activeDemoData.differences);
+    const differences = window.colorizeCredibility?.(activeDemoData.differences)
+      ?? activeDemoData.differences;
     if (window.injectMarkdown) {
       window.injectMarkdown(diffP, differences);
     } else {
@@ -618,15 +672,20 @@ async function renderDemoConsensus(mainP, diffP) {
 }
 
 async function runDemoFlow() {
+  // The demonstration always uses the complete Balanced lineup, not the
+  // intersection of its fixture authors with a previous Daily/Custom choice.
+  window.App.selectConsensusPreset?.('balanced');
+  window.App.answerReader?.reset?.();
+  const balanced = window.CONSENSUS_PRESETS?.find(preset => preset.id === 'balanced');
+  activeDemoModels = window.App.modelPrefs.filter(pref => balanced?.models?.[pref.provider]).map(pref => pref.key);
+  activeDemoData = buildDemoDataForModels(activeDemoModels);
   const agentModeEnabled = window.isAgentModeEnabled?.() === true;
   // Auch die lokale Demo respektiert den Produktmodus: Agent Mode baut den
   // Thread auf, der Direktvergleich bleibt bei den sechs Antwortfenstern.
   if (agentModeEnabled) {
     window.exitHeroMode?.();
   } else {
-    document.body.classList.add("is-hero", "direct-comparison-active");
-    window.App?.setThreadQuestion?.("");
-    window.syncHeroResponseAccess?.();
+    window.enterDirectComparisonView?.();
     window.App?.consensusPipeline?.dismiss?.();
   }
   const runId = ++demoRunId;
@@ -662,9 +721,8 @@ async function runDemoFlow() {
   // Die fertig getippte Frage wird jetzt "abgeschickt": Sie wandert in den
   // Thread-Kopf und verschwindet wie bei einem echten Lauf aus dem Composer.
   // Erst danach beginnen Fortschrittsanzeige und Modell-Spinner.
-  if (agentModeEnabled) {
-    window.App?.setThreadQuestion?.(DEMO_SCENARIO_PROMPT);
-  }
+  window.App.state.set("lastQuestion", DEMO_SCENARIO_PROMPT, "run");
+  window.App?.setThreadQuestion?.(DEMO_SCENARIO_PROMPT);
   if (qi) {
     qi.value = "";
     qi.dispatchEvent(new Event("input", { bubbles: true }));
@@ -672,21 +730,21 @@ async function runDemoFlow() {
   }
 
   window.setAgentModeStatus?.("running");
-  Object.keys(MODEL_TO_BOX).forEach(key => {
+  activeDemoModels.forEach(key => {
     const box = getBox(key);
     if (box) setSpinnerEl(box);
   });
 
   // Jede Modellantwort läuft zeitversetzt als Streaming-Response ein und wird
   // danach sauber gerendert (für [S1]-Quellenlinks und Copy-Buttons).
-  await Promise.all(Object.keys(MODEL_TO_BOX).map(model =>
+  await Promise.all(activeDemoModels.map(model =>
     new Promise(resolve => {
-      const start = DEMO_STREAM_STARTS[model] ?? (DEMO_DATA.delays[model] || 1800);
+      const start = DEMO_STREAM_STARTS[model] ?? (activeDemoData.delays[model] || 1800);
       setTimeout(async () => {
         const box = getBox(model);
         const p = box?.querySelector(".collapsible-content");
         if (!p) { resolve(); return; }
-        await streamDemoInto(p, DEMO_DATA.responses[model] || "", runId, DEMO_RESPONSE_STREAM);
+        await streamDemoInto(p, activeDemoData.responses[model] || "", runId, DEMO_RESPONSE_STREAM);
         if (runId === demoRunId) renderDemoModelResponse(model, p);
         resolve();
       }, start);

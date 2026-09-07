@@ -186,6 +186,8 @@
         </div>
         {% endif %}
         <ul class="share-scoreboard-facts">
+          {% if scoreboard.coverage_status == "insufficient" %}<li>Insufficient evidence to assess agreement</li>{% endif %}
+          {% if scoreboard.coverage_percent is defined and scoreboard.coverage_percent is not none %}<li>Coverage: <b>{{ scoreboard.scored_claims }}/{{ scoreboard.total_claims }}</b> claims ({{ scoreboard.coverage_percent }}%){% if scoreboard.evidence_incomplete %} · evidence incomplete{% endif %}</li>{% endif %}
           {% if scoreboard.model_count %}<li><b>{{ scoreboard.model_count }}</b> AI models</li>{% endif %}
           {% if has_differences_view %}<li{% if scoreboard.contradiction_count %} class="is-contradiction"{% endif %}><b>{{ scoreboard.contradiction_count }}</b> contradiction{{ "s" if scoreboard.contradiction_count != 1 }}</li>{% endif %}
           {% if scoreboard.source_count %}<li><b>{{ scoreboard.source_count }}</b> source{{ "s" if scoreboard.source_count != 1 }}</li>{% endif %}

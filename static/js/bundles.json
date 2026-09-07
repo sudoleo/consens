@@ -74,6 +74,7 @@
         "static/js/markdown-stream.js",
         "static/js/sources.js",
         "static/js/attachments.js",
+        "static/js/model-answer-reader.js",
         "static/js/agent-mode.js",
         "static/js/consensus-progress.js",
         {

@@ -7,7 +7,7 @@
 @import url('./css/base.css?v=20260731-inter1');
 @import url('./css/layout.css?v=20260901-costflow');
 /* components.css was split by section into the files below (same cascade order). */
-@import url('./css/components-input.css?v=20260817-quoteask4');
+@import url('./css/components-input.css?v=20260907-readerfinish1');
 @import url('./css/components-attachment-viewer.css?v=20260731-inter1');
 @import url('./css/components-consensus.css?v=20260901-watchnudge1');
 @import url('./css/components-controls.css?v=20260731-inter1');
@@ -17,10 +17,11 @@
 @import url('./css/components-model-picker.css?v=20260901-kimiglm1');
 @import url('./css/components-feedback.css?v=20260731-inter1');
 @import url('./css/components-consensus-insights.css?v=20260906-claimhit1');
-@import url('./css/components-watch.css?v=20260802-readingchrome1');
+@import url('./css/components-watch.css?v=20260907-readerfinish1');
 /* Shell layer — loaded LAST so the frameless redesign wins on equal
    specificity. Elevation, sidebar, topbar, composer and thread material. */
 @import url('./css/shell.css?v=20260906-featurepopup1');
+@import url('./css/model-answer-reader.css?v=20260907-readerfinish1');
 
 /* Template-only utilities live after every component import so they preserve
    the old inline-style initial state. They intentionally do not use

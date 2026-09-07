@@ -330,6 +330,7 @@
     window.syncHeroResponseAccess?.();
     window.App.syncSendButtonRunning?.();
 
+    window.App.answerReader?.project?.(context);
     projectedPhase = context.phase;
     projectedStatus = context.status;
   }

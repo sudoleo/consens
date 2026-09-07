@@ -1570,6 +1570,15 @@ img { display: block; max-width: 100%; }
   }
 }
 
+@media (max-width: 899px) and (min-height: 620px) and (prefers-reduced-motion: no-preference) {
+  /* Keep the absolute progress rail below the card, even when the stacked
+     content is taller than the viewport. Include its bottom offset, height
+     and a 24px gap in the stage's measured height. */
+  .lp-scene-stage {
+    padding-bottom: calc(clamp(20px, 4vh, 48px) + 26px);
+  }
+}
+
 @media (min-width: 900px) and (min-height: 620px) {
   .lp-scroll-scene { min-height: 250vh; }
 

@@ -422,7 +422,7 @@ def sanitize_differences_data(data):
         return None
 
     claims = []
-    for claim in (data.get("claims") or [])[:30]:
+    for claim in (data.get("claims") or [])[:80]:
         if not isinstance(claim, dict):
             continue
         anchor = _clip(claim.get("anchor"), 500)
@@ -505,20 +505,37 @@ def sanitize_differences_data(data):
     agreement = data.get("agreement")
     if isinstance(agreement, dict):
         result["agreement"] = {
-            "score": _coerce_bounded_int(agreement.get("score"), 0, 100),
+            "score": (_coerce_bounded_int(agreement.get("score"), 0, 100)
+                      if agreement.get("score") is not None else None),
             "level": _clip(agreement.get("level"), 20),
             "model_count": _coerce_bounded_int(agreement.get("model_count"), 0, 12),
             "major_contradictions": _coerce_bounded_int(agreement.get("major_contradictions"), 0, 50),
             "minor_contradictions": _coerce_bounded_int(agreement.get("minor_contradictions"), 0, 50),
             "emphases": _coerce_bounded_int(agreement.get("emphases"), 0, 50),
         }
+        for field in ("scored_claims", "thin_claims", "total_claims", "coverage_percent"):
+            if field in agreement:
+                result["agreement"][field] = _coerce_bounded_int(agreement[field], 0, 100 if field == "coverage_percent" else 10000)
+        if agreement.get("coverage_status") in {"insufficient", "limited", "sufficient"}:
+            result["agreement"]["coverage_status"] = agreement["coverage_status"]
+            result["agreement"]["evidence_incomplete"] = bool(agreement.get("evidence_incomplete"))
+            if agreement["coverage_status"] == "insufficient":
+                result["agreement"]["score"] = None
+                result["agreement"]["level"] = "insufficient"
+
+    for field, keys in (
+        ("evidence_coverage", ("unindexed_sentences", "truncated_answers")),
+        ("analysis_runtime", ("attempts", "duration_ms")),
+    ):
+        if isinstance(data.get(field), dict):
+            result[field] = {key: _coerce_bounded_int(data[field].get(key), 0, 1_000_000) for key in keys}
 
     # Judge-Metadaten (Provider/Modell/Stufe, keine Texte): bleiben im
     # Snapshot, damit Bookmarks/Shares die Judge-Fußnote anzeigen können.
     judges = data.get("judges")
     if isinstance(judges, dict):
         sanitized_judges = {}
-        for role in ("differences", "adjudicator"):
+        for role in ("differences", "adjudicator", "coverage"):
             entry = judges.get(role)
             if isinstance(entry, dict) and entry.get("provider"):
                 sanitized_judges[role] = {
@@ -526,6 +543,9 @@ def sanitize_differences_data(data):
                     "model": _clip(entry.get("model"), 80),
                     "tier": _clip(entry.get("tier"), 20),
                 }
+                for key in ("attempts", "duration_ms", "sentences", "covered", "repaired", "missing"):
+                    if key in entry:
+                        sanitized_judges[role][key] = _coerce_bounded_int(entry[key], 0, 1_000_000)
         if sanitized_judges:
             result["judges"] = sanitized_judges
 

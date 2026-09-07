@@ -17,10 +17,11 @@ class CapEngineTextTests(unittest.TestCase):
         capped = cap_engine_text("a" * 500, 100)
         self.assertEqual(len(capped), 100)
 
-    def test_truncation_strips_trailing_whitespace(self):
-        text = "word " * 100  # 500 Zeichen, Schnitt landet auf einem Space
-        capped = cap_engine_text(text, 103)
-        self.assertFalse(capped.endswith(" "))
+    def test_truncation_keeps_detectable_cap_even_at_whitespace(self):
+        text = "word " * 100
+        capped = cap_engine_text(text, 100)
+        self.assertEqual(len(capped), 100)
+        self.assertTrue(capped.endswith(" "))
 
     def test_empty_string_stays_falsy(self):
         # Wichtig für die Missing-Parameter-Validierung in /consensus:

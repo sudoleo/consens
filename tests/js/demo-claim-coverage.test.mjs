@@ -14,11 +14,22 @@ function readDemoData() {
       currentEvidenceSources: []
     }
   };
-  vm.runInNewContext(`${dataOnly}\nwindow.__testDemoData = DEMO_DATA;`, sandbox);
-  return sandbox.window.__testDemoData;
+  vm.runInNewContext(`${dataOnly}\nwindow.__testDemoData = DEMO_DATA; window.__testBuildDemo = buildDemoDataForModels;`, sandbox);
+  return { ...sandbox.window.__testDemoData, buildForModels: sandbox.window.__testBuildDemo };
 }
 
 describe("interactive demo claim coverage", () => {
+  it("provides six complete viewpoints and consistent claims for updated Balanced families", () => {
+    const data = readDemoData();
+    const models = ['OpenAI', 'Gemini', 'DeepSeek', 'Kimi', 'GLM', 'Meta'];
+    const demo = data.buildForModels(models);
+    expect(Object.keys(demo.responses).sort()).toEqual([...models].sort());
+    expect(Object.values(demo.responses).every(text => text.length > 500)).toBe(true);
+    expect(demo.differencesData.models_compared.sort()).toEqual([...models].sort());
+    expect(JSON.stringify(demo.differencesData)).not.toMatch(/Mistral|Anthropic|Grok/);
+    expect(demo.differencesData.differences).toHaveLength(3);
+  });
+
   it("marks every checkable consensus passage with the current coverage contract", () => {
     const data = readDemoData();
     const { window, document } = loadScripts([

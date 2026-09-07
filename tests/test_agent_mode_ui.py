@@ -23,7 +23,7 @@ def test_answer_disclosure_is_agent_mode_only():
     assert "showModelAnswers()" in script
     assert "body:not(.is-hero).agent-mode-enabled:not(.agent-mode-show-answers)" in css
     assert "body:not(.is-hero):not(.agent-mode-show-answers)" not in css
-    assert "body:not(.is-hero).agent-mode-enabled:not(.agent-mode-show-answers)" in shell
+    assert "body:not(.is-hero).agent-mode-enabled:not(.agent-mode-show-answers):not(.direct-comparison-active)" in shell
     assert ".agent-mode-answers-row[hidden]" in css
 
 
@@ -41,7 +41,7 @@ def test_disabled_agent_mode_is_a_direct_six_answer_flow():
     # auseinanderlaufen.
     assert 'if (context.config?.agentMode === false)' in view
     assert 'window.enterDirectComparisonView?.();' in view
-    assert 'document.body.classList.add("is-hero", "direct-comparison-active")' in core
+    assert 'document.body.classList.add("direct-comparison-active")' in core
     # Die Frage bleibt stehen: der Direktvergleich fuehrt keinen Thread, aber
     # ohne sie steht auf dem Schirm nur noch die Antwort auf etwas, das
     # nirgends mehr geschrieben steht (User-Befund 2026-08-31).
@@ -54,9 +54,9 @@ def test_disabled_agent_mode_is_a_direct_six_answer_flow():
     assert 'autoToggle.checked = !!enabled;' in agent
     assert 'autoToggle.disabled = true;' in agent
     assert 'if (isAgentModeEnabled()) {' in agent
-    assert 'directComparisonActive' in core
-    assert 'body.is-hero.direct-comparison-active .response-section' in input_css
-    assert 'body.is-hero.direct-comparison-active .consensus-section' in input_css
+    assert 'const hiddenInHero = document.body.classList.contains("is-hero")' in core
+    assert 'body.is-hero .response-section,' in input_css
+    assert 'body.is-hero .consensus-section { display: none; }' in input_css
 
 
 def test_plus_menu_agent_mode_switch_is_free_and_synchronized():

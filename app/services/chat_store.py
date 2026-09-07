@@ -378,7 +378,9 @@ def normalize_turn_differences_data(value: object) -> dict | None:
         return None
     raw_agreement = value.get("agreement") if isinstance(value, dict) else None
     raw_score = raw_agreement.get("score") if isinstance(raw_agreement, dict) else None
-    if not _valid_supplied_score(raw_score):
+    if isinstance(raw_agreement, dict) and raw_agreement.get("coverage_status") == "insufficient":
+        sanitized["agreement"]["score"] = None
+    elif not _valid_supplied_score(raw_score):
         agreement = sanitized.get("agreement")
         if isinstance(agreement, dict):
             agreement.pop("score", None)

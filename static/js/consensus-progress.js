@@ -813,11 +813,15 @@
     if (event.target.closest("#newRunButton")) setComposerRunNotice("");
     const diffTab = event.target.closest("#consensusDifferencesTab");
     if (diffTab) {
+      if (window.App?.answerReader?.openPanel('differences', diffTab)) return;
       togglePanel(diffTab, $("consensusDifferencesPanel"));
       return;
     }
     const sourcesTab = event.target.closest("#consensusSourcesTab");
-    if (sourcesTab) togglePanel(sourcesTab, $("consensusSourcesPanel"));
+    if (sourcesTab) {
+      if (window.App?.answerReader?.openPanel('sources', sourcesTab)) return;
+      togglePanel(sourcesTab, $("consensusSourcesPanel"));
+    }
   });
 
   // The differences drawer is a <details>; anything that opens or closes it

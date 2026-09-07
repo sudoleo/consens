@@ -334,6 +334,8 @@
         fill(panel);
 
         tab.addEventListener("click", () => {
+          const kind = shortLabel === 'Differences' ? 'differences' : shortLabel === 'Sources' ? 'sources' : null;
+          if (kind && window.App?.answerReader?.openPanel(kind, tab, turn)) return;
           const open = tab.getAttribute("aria-expanded") === "true";
           tab.setAttribute("aria-expanded", String(!open));
           panel.hidden = open;
@@ -412,7 +414,9 @@
         ? Object.entries(turnData.model_answers).map(([provider, item]) => ({ provider, item }))
         : [];
       const usableAnswers = storedAnswers.filter(({ item }) => String(item?.answer || "").trim());
-      if (usableAnswers.length) {
+      if (window.App?.answerReader) {
+        window.App.answerReader.registerTurn(turn, turnData, tabs);
+      } else if (usableAnswers.length) {
         addDrawer("Compare answers", "Answers", usableAnswers.length, panel => {
           const models = document.createElement("div");
           models.className = "thread-history-models";

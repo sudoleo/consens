@@ -8,8 +8,13 @@ remain explicit in the consensus layer and therefore auditable.
 from __future__ import annotations
 
 from contextlib import contextmanager
+import asyncio
+import functools
+import inspect
+import logging
 import os
 import threading
+import time
 from typing import Callable, Iterator
 
 import httpx
@@ -31,6 +36,8 @@ PROVIDER_READ_TIMEOUT_SECONDS = _bounded_env_float(
     "PROVIDER_READ_TIMEOUT_SECONDS", 120.0, 10.0, 300.0
 )
 PROVIDER_KEY_CHECK_TIMEOUT_SECONDS = 15.0
+ANALYSIS_TIMEOUT_SECONDS = _bounded_env_float("ANALYSIS_TIMEOUT_SECONDS", 180.0, 10.0, 600.0)
+ANALYSIS_MAX_CALLS = int(_bounded_env_float("ANALYSIS_MAX_CALLS", 8, 3, 12))
 
 
 def provider_http_timeout(read_seconds: float | None = None) -> tuple[float, float]:
@@ -110,6 +117,10 @@ class ProviderCancellation:
         for close in closers:
             _close_safely(close)
 
+    def close(self) -> None:
+        """Allow a child cancellation scope to register with its parent."""
+        self.cancel()
+
 
 def _close_safely(close: Callable[[], None]) -> None:
     try:
@@ -150,6 +161,9 @@ def raise_if_provider_cancelled() -> None:
     cancellation = current_provider_cancellation()
     if cancellation:
         cancellation.raise_if_cancelled()
+    budget = current_analysis_budget()
+    if budget:
+        budget.check()
 
 
 @contextmanager
@@ -166,3 +180,173 @@ def managed_provider_resource(resource):
         close = getattr(resource, "close", None)
         if callable(close):
             _close_safely(close)
+
+
+class AnalysisBudgetExceeded(TimeoutError):
+    """Content-free terminal limit; never a reason to retry a paid call."""
+
+
+class AnalysisBudget:
+    def __init__(self, seconds=None, max_calls=None):
+        self.started = time.monotonic()
+        self.deadline = self.started + (ANALYSIS_TIMEOUT_SECONDS if seconds is None else seconds)
+        self.max_calls = ANALYSIS_MAX_CALLS if max_calls is None else max_calls
+        self.calls = 0
+        self.lock = threading.Lock()
+
+    def check(self):
+        if time.monotonic() >= self.deadline:
+            raise AnalysisBudgetExceeded("analysis deadline exceeded")
+
+    def consume(self):
+        with self.lock:
+            self.check()
+            if self.calls >= self.max_calls:
+                raise AnalysisBudgetExceeded("analysis call budget exhausted")
+            self.calls += 1
+
+    def snapshot(self):
+        return {"attempts": self.calls, "duration_ms": int((time.monotonic() - self.started) * 1000)}
+
+
+def current_analysis_budget():
+    return getattr(_thread_context, "analysis_budget", None)
+
+
+@contextmanager
+def bind_analysis_budget(budget):
+    previous = current_analysis_budget()
+    _thread_context.analysis_budget = budget
+    try:
+        yield budget
+    finally:
+        _thread_context.analysis_budget = previous
+
+
+@contextmanager
+def analysis_budget_scope():
+    """One budget from synthesis through both judges, shared across threads."""
+    existing = current_analysis_budget()
+    if existing is not None:
+        yield existing
+        return
+    budget = AnalysisBudget()
+    cancellation = ProviderCancellation()
+    # Parent disconnect propagates to both roles. Async socket guards enforce
+    # the deadline without allocating a timer thread per analysis.
+    parent = current_provider_cancellation()
+    unregister = parent.register(cancellation) if parent else lambda: None
+    try:
+        with bind_analysis_budget(budget), bind_provider_cancellation(cancellation):
+            yield budget
+    finally:
+        unregister()
+        cancellation.cancel()
+        logging.info("Analysis completed attempts=%d duration_ms=%d", budget.calls, budget.snapshot()["duration_ms"])
+
+
+def analysis_budgeted(function):
+    # Generator scope must live across next() calls, not only their creation.
+    if inspect.isgeneratorfunction(function):
+        @functools.wraps(function)
+        def stream(*args, **kwargs):
+            with analysis_budget_scope():
+                yield from function(*args, **kwargs)
+        return stream
+    @functools.wraps(function)
+    def call(*args, **kwargs):
+        with analysis_budget_scope():
+            return function(*args, **kwargs)
+    return call
+
+
+def analysis_http_timeout():
+    budget = current_analysis_budget()
+    if budget is None:
+        return PROVIDER_HTTP_TIMEOUT
+    budget.check()
+    return provider_http_timeout(min(PROVIDER_READ_TIMEOUT_SECONDS, max(0.01, budget.deadline - time.monotonic())))
+
+
+def claim_analysis_call():
+    raise_if_provider_cancelled()
+    budget = current_analysis_budget()
+    if budget:
+        budget.consume()
+
+
+async def _guard_provider_io(awaitable, cancellation, budget):
+    task = asyncio.ensure_future(awaitable)
+    try:
+        while True:
+            if cancellation:
+                cancellation.raise_if_cancelled()
+            if budget:
+                budget.check()
+            done, _ = await asyncio.wait({task}, timeout=0.05)
+            if done:
+                return task.result()
+    finally:
+        if not task.done():
+            task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+
+def cancellable_post_json(url, *, json, headers):
+    """Cancel the actual socket task even while waiting for response headers.
+
+    Runs only in synchronous provider workers, never on FastAPI's event loop.
+    No transport retries. Polling monitors cancellation, not provider results.
+    """
+    cancellation = current_provider_cancellation()
+    budget = current_analysis_budget()
+    connect, read = analysis_http_timeout()
+
+    async def request():
+        async with httpx.AsyncClient(timeout=httpx.Timeout(read, connect=connect)) as client:
+            response = await _guard_provider_io(client.post(url, json=json, headers=headers), cancellation, budget)
+            # Keep the existing content-free HTTP status contract.
+            if response.status_code >= 400:
+                from app.services.llm.engines import _raise_provider_http_status
+                _raise_provider_http_status(response)
+            return response.json()
+    return asyncio.run(request())
+
+
+def cancellable_sse_lines(url, *, json, headers):
+    """Drive async socket reads on the existing synchronous SSE worker.
+
+    A deadline/disconnect cancels header reads and idle body reads alike; no
+    extra producer thread, abandoned request or hidden retry is introduced.
+    """
+    cancellation = current_provider_cancellation()
+    budget = current_analysis_budget()
+    connect, read = analysis_http_timeout()
+    loop = asyncio.new_event_loop()
+    client = httpx.AsyncClient(timeout=httpx.Timeout(read, connect=connect))
+    response = None
+
+    def guarded(awaitable):
+        return _guard_provider_io(awaitable, cancellation, budget)
+
+    try:
+        request = client.build_request("POST", url, json=json, headers=headers)
+        response = loop.run_until_complete(guarded(client.send(request, stream=True)))
+        if response.status_code >= 400:
+            from app.services.llm.engines import _raise_provider_http_status
+            _raise_provider_http_status(response)
+        lines = response.aiter_lines()
+        while True:
+            try:
+                line = loop.run_until_complete(guarded(lines.__anext__()))
+            except StopAsyncIteration:
+                return
+            yield line
+    finally:
+        try:
+            if response is not None:
+                loop.run_until_complete(response.aclose())
+        finally:
+            loop.run_until_complete(client.aclose())
+            loop.run_until_complete(loop.shutdown_asyncgens())
+            loop.close()
