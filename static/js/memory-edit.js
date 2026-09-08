@@ -23,7 +23,7 @@
   function sourceForNode(node) {
     const el = node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement;
     if (el?.closest("#consensusAnswerBody, .thread-history-answer")) return "consensus";
-    if (el?.closest(".response-box .collapsible-content")) return "model_answer";
+    if (el?.closest(".response-box .collapsible-content, .answer-reader-body")) return "model_answer";
     if (el?.closest(".thread-ask-text, .thread-history-question")) return "question";
     return null;
   }
@@ -45,6 +45,7 @@
     if (!state.selection || !canAskAbout(state.selection)) return;
     hideMenu();
     window.getSelection?.()?.removeAllRanges?.();
+    if (state.selection.reader) window.App?.answerReader?.close({ focus: false });
     window.App.quote.set(state.selection.text);
     window.App.quote.focusComposer();
     window.App?.trackAppEvent?.("app_quote_asked", { source: state.selection.kind });
@@ -114,6 +115,9 @@
     toast.setAttribute("aria-live", "polite");
 
     document.body.append(menu, backdrop, toast);
+    document.addEventListener("close", event => {
+      if (event.target.contains?.(menu)) hideMenu();
+    }, true);
     menu.querySelector("[data-selection-action='ask']")
       ?.addEventListener("click", askAboutSelection);
     menu.querySelectorAll("[data-memory-intent]").forEach(button => {
@@ -143,9 +147,11 @@
     if (menu) menu.hidden = true;
   }
 
-  function showSelection(text, kind, rect) {
+  function showSelection(text, kind, rect, sourceNode = null) {
     if (!text || text.length > 2000 || !rect) return hideMenu();
-    const selection = { text, kind };
+    const sourceElement = sourceNode?.nodeType === Node.ELEMENT_NODE ? sourceNode : sourceNode?.parentElement;
+    const readerDialog = sourceElement?.closest('.answer-reader-dialog[open]');
+    const selection = { text, kind, reader: !!readerDialog };
     // Zitieren braucht kein Konto, Memory schon. Bleibt nichts uebrig, bleibt
     // auch das Menue weg — ein Balken mit einem ausgegrauten Rest ist keine
     // Auswahl, sondern eine Werbeflaeche.
@@ -154,6 +160,10 @@
     if (!askable && !rememberable) return hideMenu();
     state.selection = selection;
     const menu = document.getElementById("memorySelectionMenu");
+    // A modal native reader makes body siblings inert. Keep the toolbar in
+    // its dialog until an action returns to the composer or the Memory dialog.
+    const menuHost = readerDialog || document.body;
+    if (menu.parentElement !== menuHost) menuHost.appendChild(menu);
     menu.querySelectorAll("[data-selection-group]").forEach(node => {
       const group = node.dataset.selectionGroup;
       node.hidden = group === "ask" ? !askable
@@ -194,7 +204,7 @@
     const range = selection.getRangeAt(0);
     const kind = sourceForNode(range.commonAncestorContainer);
     if (!kind) return hideMenu();
-    showSelection(text, kind, range.getBoundingClientRect());
+    showSelection(text, kind, range.getBoundingClientRect(), range.commonAncestorContainer);
   }
 
   function dialogCopy(intent) {
@@ -227,6 +237,10 @@
     if (!state.selection || !user()) return;
     state.intent = intent === "add" ? "add" : "correct";
     state.returnFocus = trigger || null;
+    if (state.selection.reader) {
+      window.App?.answerReader?.close();
+      state.returnFocus = document.activeElement;
+    }
     const copy = dialogCopy(state.intent);
     const backdrop = document.getElementById("memoryEditBackdrop");
     const textarea = document.getElementById("memoryEditCorrection");

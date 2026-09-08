@@ -96,6 +96,10 @@
     const original = pref && document.getElementById(pref.responseId)?.querySelector("img");
     if (original) {
       const image = document.createElement("img"); image.src = original.src; image.alt = "";
+      // Preserve the existing dark-theme treatment of monochrome provider logos.
+      ['chatgpt-logo', 'grok-logo', 'mono-logo'].forEach(name => {
+        if (original.classList.contains(name)) image.classList.add(name);
+      });
       mark.append(image);
     } else mark.textContent = answer.label.slice(0, 1).toUpperCase();
     mark.setAttribute("aria-hidden", "true");
@@ -704,8 +708,11 @@
   }
   function update(next, isDirect) {
     const previous = live;
-    live = next;
     const changedRun = previous && previous.runId !== next.runId;
+    // The live inspector holds the shared render targets, not an immutable
+    // turn snapshot. Release it when those targets start serving another run.
+    if (changedRun && inspector && !inspector.turn) close({ focus: false });
+    live = next;
     if (changedRun && open) {
       const history = turns().filter(t => t !== selected && t !== live);
       const sameTurn = history.find(t => t.key === selected?.key || (t.question === selected?.question

@@ -108,7 +108,6 @@ body.answer-reader-ready:not(.is-hero) .response-section > .response-box {
 .answer-reader-model-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .answer-reader-model-mark { width: 20px; height: 20px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; }
 .answer-reader-model-mark img { display: block; width: 100%; height: 100%; object-fit: contain; }
-.dark-mode .answer-reader-model-mark img { background: #f5f5f5; border-radius: 4px; padding: 2px; }
 .answer-reader-model-dot { width: 5px; height: 5px; flex-shrink: 0; border-radius: 50%; background: var(--partial); }
 [data-state="complete"] > .answer-reader-model-dot { display: none; }
 [data-state="error"] > .answer-reader-model-dot { background: var(--dispute); }
@@ -133,7 +132,7 @@ body.answer-reader-ready:not(.is-hero) .response-section > .response-box {
 .answer-reader-answer { min-width: 0; overflow-wrap: anywhere; }
 .answer-reader-answer-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 22px 0; margin-bottom: 4px; }
 .answer-reader-identity { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.answer-reader-identity .answer-reader-model-mark { width: 30px; height: 30px; padding: 4px; border: 1px solid var(--line-soft); border-radius: var(--radius-xs); background: var(--well); }
+.answer-reader-identity .answer-reader-model-mark { width: 24px; height: 24px; padding: 0; border: 0; background: transparent; }
 .answer-reader-caption { display: block; font-size: 11px; color: var(--ink-2); margin-top: 3px; }
 .answer-reader-answer-header h3 { margin: 0; font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); }
 .answer-reader-state { color: var(--ink-2); font-size: 11px; padding: 4px 8px; border-radius: var(--radius-pill); background: var(--raise); }

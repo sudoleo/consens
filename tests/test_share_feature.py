@@ -2253,6 +2253,30 @@ class ShareSeoEnhancementTests(unittest.TestCase):
         self.assertIn("2</b> checks since 20 Jun 2026", body)
         self.assertIn("2 checks since 20 Jun 2026. ", body)
 
+    def test_unscored_watch_check_keeps_its_change_and_version_link(self):
+        doc = self._share_doc()
+        history = self._history()
+        history[-1].update(agreement_score=None, run_id="unscored12345678", has_snapshot=True)
+        version = {
+            "run_id": "unscored12345678", "ts": history[-1]["ts"],
+            "consensus_md": "The latest unscored answer.",
+            "differences_data": {"agreement": {"score": None, "coverage_status": "insufficient"}},
+            "differences_text": "", "sources": [], "included_models": ["OpenAI", "Gemini"],
+            "consensus_model": "OpenAI", "answered_at": history[-1]["ts"].isoformat(),
+        }
+        meta = {"status": "active", "interval": "weekly", "last_successful_run_id": version["run_id"]}
+        with patch.object(share_router.snapshots, "get_share", return_value=doc), \
+                patch.object(share_router.snapshots, "list_watch_history", return_value=history), \
+                patch.object(share_router.watch_service, "get_public_watch_meta", return_value=meta), \
+                patch.object(share_router.snapshots, "get_watch_version", return_value=version):
+            response = self.client.get("/s/%s-%s" % (doc["slug"], self.share_id))
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Insufficient evidence for latest agreement", response.text)
+        self.assertIn("Changed since last check", response.text)
+        self.assertIn("?version=unscored12345678", response.text)
+        self.assertNotIn('cy="None"', response.text)
+        self.assertNotIn("None/100", response.text)
+
     def test_historical_version_does_not_claim_the_full_tracking_record(self):
         doc = self._share_doc()
         history = self._history()

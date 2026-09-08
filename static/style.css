@@ -20,8 +20,8 @@
 @import url('./css/components-watch.css?v=20260907-readerfinish1');
 /* Shell layer — loaded LAST so the frameless redesign wins on equal
    specificity. Elevation, sidebar, topbar, composer and thread material. */
-@import url('./css/shell.css?v=20260906-featurepopup1');
-@import url('./css/model-answer-reader.css?v=20260907-readerfinish1');
+@import url('./css/shell.css?v=20260908-readerfix');
+@import url('./css/model-answer-reader.css?v=20260908-readerfix');
 
 /* Template-only utilities live after every component import so they preserve
    the old inline-style initial state. They intentionally do not use

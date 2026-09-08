@@ -1995,6 +1995,15 @@ In der erweiterten Desktopansicht stehen Modellpositionen zweispaltig.
 Quellenkarten zeigen Favicon, Domain, Titel und unveraenderte Referenznummer;
 Auszuege werden separat aufgeklappt. Archivdaten bleiben turn-lokal.
 
+Modell-Icons im Leser und Direktvergleich haben weder Hintergrund noch Rahmen;
+monochrome Logos uebernehmen die bestehende Dark-Theme-Invertierung.
+Ein offener Live-Inspector schliesst beim Run-Wechsel, bevor er als alter Turn
+weiter angezeigt werden kann: seine Quellen-/Differences-Knoten sind weiterhin
+die wiederverwendeten Live-Renderziele. Gespeicherte Antwort-Snapshots bleiben
+davon unabhaengig. `memory-edit.js` erkennt `.answer-reader-body` als
+Modellantwort, haengt das Auswahlmenue bei einem nativen Reader-Dialog in diesen
+Dialog und schliesst den Leser vor „Ask about this“ oder dem Memory-Dialog,
+damit Composer und Memory wieder fokussierbar sind.
 Die originalen `.response-box`-IDs bleiben versteckte Render-/Konfigurationsziele;
 im ungesendeten Hero bleiben sie verborgen und inert; die Modellauswahl erfolgt
 ueber Sidebar und Composer-Picker.
@@ -2808,6 +2817,10 @@ CLI mit `firebase deploy --only firestore:rules,firestore:indexes`):
   Lease/Fehlerzähler sowie bis zu 16 denormalisierte `history_points` für
   Dashboard-Listen); keine IP-/User-Agent-Daten. Conditions werden nie in
   öffentliche Share-Payloads oder History-Punkte kopiert.
+  Erfolgreiche Checks ohne messbaren Agreement-Score (`null`) bleiben in
+  Watch-/Topic-Verlaeufen, Versionslinks, Change-Events und Position Maps erhalten.
+  `history_view.py` laesst ihre Y-Koordinate leer und unterbricht die Zahlenkurve;
+  Templates zeigen dafuer „Insufficient evidence“, niemals null/0 als Messwert.
   Verlaufspunkte liegen datenminimiert in `shares/{id}/watch_history` und
   verändern den Share-Snapshot nicht. Neben Score/Change-Metadaten können sie
   eine kompakte `opinion_map` tragen: maximal vier aus der strukturierten

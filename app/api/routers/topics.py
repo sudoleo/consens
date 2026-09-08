@@ -68,14 +68,14 @@ def _topic_history_view(runs_raw, selected_version: int):
     for run in runs_raw:
         observed_at = run.get("observed_at")
         score = run.get("agreement_score")
-        if not isinstance(observed_at, datetime) or not isinstance(score, (int, float)):
+        if not isinstance(observed_at, datetime) or (score is not None and not isinstance(score, (int, float))):
             continue
         if int(run.get("version") or 0) > selected_version:
             continue
         opinion_map = run.get("opinion_map")
         points.append({
             "ts": observed_at,
-            "agreement_score": int(score),
+            "agreement_score": int(score) if score is not None else None,
             "changed": str(run.get("change_type") or "stable") != "stable",
             "change_summary": str(run.get("change_summary") or ""),
             "severity": "major" if run.get("change_type") == "major" else "",

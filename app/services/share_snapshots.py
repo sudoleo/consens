@@ -1770,12 +1770,12 @@ def list_watch_history(share_id, db=None, max_items=100):
         data = doc.to_dict() or {}
         ts = data.get("ts")
         score = data.get("agreement_score")
-        if not isinstance(ts, datetime) or not isinstance(score, (int, float)):
+        if not isinstance(ts, datetime) or (score is not None and not isinstance(score, (int, float))):
             continue
         points.append({
             "run_id": str(doc.id),
             "ts": ts,
-            "agreement_score": max(0, min(100, int(score))),
+            "agreement_score": max(0, min(100, int(score))) if score is not None else None,
             "verdict": _clip(data.get("verdict"), 80),
             "changed": bool(data.get("changed")),
             "severity": _clip(data.get("severity"), 10),

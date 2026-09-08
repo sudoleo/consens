@@ -58,7 +58,8 @@ def build_history_view(points):
     coords = []
     for index, point in enumerate(points):
         x = left + (plot_w * index / (count - 1) if count > 1 else plot_w / 2)
-        y = top + plot_h * (100 - point["agreement_score"]) / 100
+        score = point.get("agreement_score")
+        y = top + plot_h * (100 - score) / 100 if isinstance(score, (int, float)) else None
         score_event = bool(point.get("score_event"))
         trigger = point.get("trigger") if point.get("trigger") in {"stable", "changed"} else "stable"
         coords.append({
@@ -68,13 +69,20 @@ def build_history_view(points):
             "anchor_id": f"check-{index + 1}",
             "trigger": trigger,
             "x": round(x, 1),
-            "y": round(y, 1),
+            "y": round(y, 1) if y is not None else None,
             "score_event": score_event,
         })
-    path = " ".join(
-        ("M" if index == 0 else "L") + f" {point['x']} {point['y']}"
-        for index, point in enumerate(coords)
-    )
+    # Keep unscored runs in chronology, events and position maps. A gap in the
+    # measurement must not turn into a zero or a line through missing evidence.
+    segments = []
+    connected = False
+    for point in coords:
+        if point["y"] is None:
+            connected = False
+            continue
+        segments.append(("L" if connected else "M") + f" {point['x']} {point['y']}")
+        connected = True
+    path = " ".join(segments)
     events = [point for point in reversed(coords) if point["trigger"] == "changed"]
     mapped_points = [point for point in coords if point.get("opinion_map")]
     position_view = None

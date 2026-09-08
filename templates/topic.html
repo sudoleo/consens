@@ -528,9 +528,9 @@
               <div class="topic-history-block" id="agreement">
                 <div class="topic-panel-head is-inner">
                   <h3>How this answer held up</h3>
-                  <strong class="watch-history-latest">{{ history.latest_score }}<span>/100</span><small> agreement at this check</small></strong>
+                  <strong class="watch-history-latest">{% if history.latest_score is not none %}{{ history.latest_score }}<span>/100</span><small> agreement at this check</small>{% else %}<small>Insufficient evidence at this check</small>{% endif %}</strong>
                 </div>
-                <p class="topic-panel-lead">The same question, re-asked {{ history.points | length }} times. The score moves between a small set of grading levels, so read the steps as levels, not as measurements.</p>
+                <p class="topic-panel-lead">The same question, re-asked {{ history.points | length }} times. The score moves between a small set of grading levels, so read the steps as levels, not as measurements. Gaps mark checks with insufficient evidence.</p>
                 <div class="watch-chart-scroll">
                   <svg class="watch-chart" viewBox="0 0 {{ history.width }} {{ history.height }}" role="img"
                        aria-label="Agreement score from {{ history.start_date }} to {{ history.end_date }}">
@@ -541,7 +541,7 @@
                     <text class="watch-axis-label" x="13" y="94">50</text>
                     <text class="watch-axis-label" x="21" y="165">0</text>
                     <path class="watch-chart-line" d="{{ history.path }}"></path>
-                    {% for point in history.points %}
+                    {% for point in history.points if point.y is not none %}
                     <circle class="watch-chart-point{% if point.trigger == "changed" %} is-change{% endif %}" cx="{{ point.x }}" cy="{{ point.y }}" r="{% if point.trigger == "changed" %}5{% else %}4{% endif %}">
                       <title>{{ point.ts.strftime("%Y-%m-%d") }}: {{ point.agreement_score }}/100{% if point.change_summary %}. {{ point.change_summary }}{% endif %}</title>
                     </circle>

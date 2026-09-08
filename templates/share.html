@@ -65,7 +65,7 @@
     <text class="watch-axis-label" x="21" y="165">0</text>
     {% endif %}
     <path class="watch-chart-line" d="{{ history.path }}"></path>
-    {% for point in history.points %}
+    {% for point in history.points if point.y is not none %}
     <a class="watch-chart-target" href="#watch-run-{{ point.anchor_id }}"
        aria-label="{{ point.ts.strftime('%Y-%m-%d') }}: {{ point.agreement_score }} out of 100 agreement{% if point.change_summary %}. {{ point.change_summary }}{% endif %}">
       <circle class="watch-chart-point{% if point.trigger == "changed" %} is-change{% endif %}" cx="{{ point.x }}" cy="{{ point.y }}" r="{% if compact %}{% if point.trigger == "changed" %}8{% else %}7{% endif %}{% elif point.trigger == "changed" %}5{% else %}4{% endif %}">
@@ -148,7 +148,7 @@
               <div>
                 <p class="eyebrow" id="watchCompactAgreementHeading">Agreement over time</p>
               </div>
-              <strong>{{ watch_history.latest_score }}<span>/100</span></strong>
+              <strong>{% if watch_history.latest_score is not none %}{{ watch_history.latest_score }}<span>/100</span>{% else %}Insufficient evidence{% endif %}</strong>
             </div>
             {{ agreement_chart(watch_history, true) }}
             <a class="watch-full-chart-link" href="#watchFullAgreement">View full chart</a>
@@ -425,7 +425,7 @@
             <p class="eyebrow">Consensus Watch</p>
             <h2 id="watchHistoryHeading">Run history</h2>
           </div>
-          <strong class="watch-history-latest">{{ watch_history.latest_score }}<span>/100</span><small> latest agreement</small></strong>
+          <strong class="watch-history-latest">{% if watch_history.latest_score is not none %}{{ watch_history.latest_score }}<span>/100</span><small> latest agreement</small>{% else %}<small>Insufficient evidence for latest agreement</small>{% endif %}</strong>
         </div>
         {% if watch_drift and watch_drift.baseline_changed and watch_drift.baseline_summary %}
         <p class="watch-drift-baseline"><strong>Since tracking began:</strong> {{ watch_drift.baseline_summary }}</p>
@@ -434,7 +434,7 @@
           <summary>View the full agreement chart</summary>
           <div class="watch-agreement-heading">
             <h3>Agreement over time</h3>
-            <p>How strongly the models support the same claims. Every point links to its run below.</p>
+            <p>How strongly the models support the same claims. Every point links to its run below. Gaps mark checks with insufficient evidence.</p>
           </div>
           <div class="watch-chart-scroll">{{ agreement_chart(watch_history) }}</div>
         </details>
@@ -450,7 +450,7 @@
               <time datetime="{{ point.ts.isoformat() }}">{{ point.ts.strftime("%Y-%m-%d") }}</time>
               <span class="watch-run-state">{% if point.trigger == "changed" %}Meaningful change{% else %}Stable{% endif %}</span>
             </div>
-            <strong>{{ point.agreement_score }}<span>/100 agreement</span></strong>
+            <strong>{% if point.agreement_score is not none %}{{ point.agreement_score }}<span>/100 agreement</span>{% else %}Insufficient evidence{% endif %}</strong>
             <p>{% if point.trigger == "changed" %}{{ point.change_summary or "The consensus moved materially in this check." }}{% elif point.restated and point.change_summary %}<span class="watch-run-restated">Restated, not moved:</span> {{ point.change_summary }}{% else %}No meaningful movement detected in this check.{% endif %}</p>
             {% if point.has_snapshot and point.run_id %}<a class="watch-version-link" href="{{ watch_selected_version.current_url }}?version={{ point.run_id }}">Open this consensus</a>{% endif %}
           </li>

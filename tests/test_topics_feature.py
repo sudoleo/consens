@@ -921,6 +921,28 @@ def test_topic_page_shows_the_position_map_and_agreement_history(monkeypatch):
     assert "Return to the current consensus" in historical.text
 
 
+def test_topic_page_keeps_unscored_latest_run_and_its_position_map(monkeypatch):
+    db = FakeFirestore()
+    monkeypatch.setattr(topics, "db_firestore", db)
+    topic = topics.create_topic(topic_payload(), actor_uid="admin", db=db, now=NOW)
+    topics.create_run(topic["id"], run_payload(), actor_uid="admin", db=db, now=NOW)
+    latest = topics.create_run(topic["id"], run_payload(
+        agreement_score=None, change_type="major", change_summary="Unscored material change.",
+        opinion_map=opinion_map_payload(stance="A 2027 launch", moved=True),
+    ), actor_uid="admin", db=db, now=NOW)
+    app = FastAPI()
+    app.state.limiter = limiter
+    app.include_router(topics_router.router)
+    response = TestClient(app).get("/topics/gpt-6")
+    assert response.status_code == 200
+    assert "Insufficient evidence at this check" in response.text
+    assert "Unscored material change." in response.text
+    assert "A 2027 launch" in response.text
+    assert latest["id"] in response.text
+    assert 'cy="None"' not in response.text
+    assert "None/100" not in response.text
+
+
 def test_topic_page_leads_with_the_finding_and_folds_unchanged_checks(monkeypatch):
     """The page states the finding first, then the statements it is made of,
     then the record that produced them.
