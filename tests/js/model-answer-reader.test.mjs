@@ -50,6 +50,21 @@ function archive(ctx, id = "t1") {
 afterEach(() => { contexts.splice(0).forEach(ctx => ctx.dom.window.close()); });
 
 describe("model answer reader", () => {
+  it("moves direct readiness to the composer and retains the normal reader heading", () => {
+    const ctx = boot();
+    const state = run(); state.config.agentMode = false;
+    ctx.project(state);
+    expect(ctx.reader.directSummary()).toBe('1 of 2 ready');
+    expect(ctx.document.querySelector('.answer-reader-header').hidden).toBe(true);
+    expect(ctx.document.getElementById('answerReaderMode').hidden).toBe(true);
+    state.modelResults.Anthropic.status = 'error'; ctx.project(state);
+    expect(ctx.reader.directSummary()).toBe('1 of 2 ready · 1 unavailable');
+    ctx.project(run('agent')); ctx.reader.openLive();
+    expect(ctx.reader.directSummary()).toBeNull();
+    expect(ctx.document.querySelector('.answer-reader-header').hidden).toBe(false);
+    ctx.reader.reset();
+    expect(ctx.reader.directSummary()).toBeNull();
+  });
   it("keeps saved model versions independent of current model choices", () => {
     const ctx = boot();
     ctx.project(run());

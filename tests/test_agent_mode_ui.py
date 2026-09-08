@@ -93,20 +93,15 @@ def test_the_switch_shows_the_setting_not_the_run_on_screen():
     assert 'document.body.classList.toggle("agent-mode-enabled", enabled);' in ui
 
 
-def test_the_direct_comparison_says_that_every_turn_starts_over():
-    """Ohne Agent Mode gibt es keinen Folgeturn: jede Frage ist ein eigener
-    Lauf ohne Kontext. Das stand nirgends — man merkte es daran, dass die
-    naechste Frage bei null anfing."""
+def test_direct_comparison_keeps_compact_copy_and_an_accurate_placeholder():
+    """Die kompakte Leiste ersetzt den langen Hinweis; der Platzhalter bleibt korrekt."""
     template = (ROOT / "templates" / "index.html").read_text(encoding="utf-8")
     script = (ROOT / "static" / "js" / "agent-mode.js").read_text(encoding="utf-8")
     run = (ROOT / "static" / "js" / "consensus-run.js").read_text(encoding="utf-8")
 
-    assert 'id="modeNotice"' in template
-    assert "Follow-up questions need Agent Mode." in script
-    # Der Hinweis haengt am Schalter, nicht am sichtbaren Lauf: umlegen zeigt
-    # sofort, was der naechste Lauf tut.
-    assert "renderModeNotice(preference);" in script
-    assert "notice.hidden = !!agentModeOn;" in script
+    assert 'id="modeNotice"' not in template
+    assert "Follow-up questions need Agent Mode." not in script
+    assert "Independent answers, no consensus." in script
     # ... und der Platzhalter verspricht kein Follow-up, das es nicht gibt.
     assert "window.isAgentModeEnabled?.() === true" in run
     assert "window.App?.followup?.render?.();" in script

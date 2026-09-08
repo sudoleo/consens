@@ -287,22 +287,66 @@
       : "Auto Consensus is available only in Agent Mode";
   }
 
-  // Ohne Agent Mode ist jede Frage ein eigener Lauf: es gibt keinen Thread,
-  // keinen Folgeturn und keinen Kontext aus der vorigen Antwort. Das war
-  // nirgends gesagt — man merkte es erst daran, dass die Frage nach dem
-  // Senden verschwand und die naechste bei null anfing. Der Hinweis steht
-  // deshalb dort, wo die Folge eintritt (unter dem Composer), und er haengt
-  // am SCHALTER, nicht am sichtbaren Lauf: umlegen zeigt sofort, was der
-  // naechste Lauf tut.
-  const MODE_NOTICE_TEXT =
-    "Direct comparison: every question starts a new run. "
-    + "Follow-up questions need Agent Mode.";
-
-  function renderModeNotice(agentModeOn) {
-    const notice = document.getElementById("modeNotice");
-    if (!notice) return;
-    notice.textContent = agentModeOn ? "" : MODE_NOTICE_TEXT;
-    notice.hidden = !!agentModeOn;
+  // Composer controls always describe the next question. The answer reader
+  // supplies a separate, frozen summary for the direct comparison on screen.
+  function renderComposerMode() {
+    const bar = document.getElementById("composerModeBar");
+    if (!bar) return;
+    const enabled = isAgentModeEnabled();
+    bar.hidden = enabled && !document.body.classList.contains("is-hero");
+    bar.dataset.agentMode = String(enabled);
+    document.getElementById("composerAgentToggle").setAttribute("aria-checked", String(enabled));
+    document.getElementById("composerAgentState").textContent = enabled ? "On" : "Off";
+    document.getElementById("composerModeDescription").textContent = enabled
+      ? "Automatic consensus after the models answer."
+      : "Direct comparison · Independent answers, no consensus.";
+    document.getElementById("composerAgentToggle").title = document.getElementById("composerModeDescription").textContent;
+    const models = window.App.modelPrefs.filter(pref => document.getElementById(pref.checkId)?.checked);
+    const icons = document.getElementById("composerModelIcons");
+    const deep = !!document.getElementById("deepSearchToggle")?.checked;
+    const deepButton = document.getElementById("composerDeepToggle");
+    if (deepButton) {
+      deepButton.setAttribute("aria-checked", String(deep));
+      deepButton.title = `Deep Think ${deep ? "on" : "off"} · Stronger reasoning${window.isUserPro ? "" : " · Pro"}`;
+      document.getElementById("composerDeepState").textContent = deep ? "On" : "Off";
+    }
+    const attachButton = document.getElementById("composerAttachButton");
+    if (attachButton) attachButton.title = `Add attachment${window.isUserPlus ? "" : " · Plus"}`;
+    const labels = models.map(pref => {
+      const select = document.getElementById(pref.selectId);
+      return deep ? (window.App.deepThinkModelLabels[pref.key] || pref.label)
+        : (window.App.getModelOptionLabel(select?.selectedOptions[0]) || pref.label);
+    });
+    const key = JSON.stringify(models.map((pref, i) => [pref.key, labels[i]]));
+    if (icons.dataset.models !== key) {
+      icons.replaceChildren(...models.map((pref, i) => {
+        const mark = document.createElement("span");
+        mark.className = "composer-model-icon";
+        mark.title = `${pref.label} · ${labels[i]}`;
+        mark.setAttribute("role", "img");
+        mark.setAttribute("aria-label", mark.title);
+        const original = document.getElementById(pref.responseId)?.querySelector("img");
+        if (original) {
+          const image = document.createElement("img");
+          image.src = original.src;
+          image.alt = "";
+          ["chatgpt-logo", "grok-logo", "mono-logo"].forEach(name => {
+            if (original.classList.contains(name)) image.classList.add(name);
+          });
+          mark.append(image);
+        } else mark.textContent = pref.label.slice(0, 1);
+        return mark;
+      }));
+      icons.dataset.models = key;
+    }
+    const summary = window.App.answerReader?.directSummary?.();
+    const status = document.getElementById("composerComparisonStatus");
+    status.hidden = !summary;
+    status.textContent = summary
+      ? `${enabled ? "Current result: direct comparison · " : ""}${summary}. ${enabled ? "Agent Mode was off for this comparison." : ""}`.trim()
+      : "";
+    status.title = status.textContent;
+    status.dataset.compact = summary ? summary.replace(/^(\d+) of (\d+) ready/, "$1/$2").replace(/ unavailable$/, "!") : "";
   }
 
   function updateAgentModeUI() {
@@ -335,12 +379,8 @@
     document.body.classList.toggle("agent-mode-enabled", enabled);
     document.body.classList.toggle("agent-mode-running", enabled && agentModeStatus === "running");
     // "direct-comparison-active" beschreibt, was GERADE AUF DEM SCHIRM steht,
-    // der Agent-Mode-Schalter dagegen, was der NAECHSTE Lauf tut. Nur das
-    // Umlegen des Schalters raeumt den sichtbaren Direktvergleich weg (siehe
-    // setAgentMode) — nicht jeder beilaeufige updateAgentModeUI-Aufruf. Sonst
-    // riss die naechstbeste /ask-Antwort oder ein Bookmark-Restore die
-    // wiederhergestellte Vergleichsansicht wieder ein und liess nur die Frage
-    // stehen.
+    // der Agent-Mode-Schalter dagegen, was der NAECHSTE Lauf tut. Umschalten
+    // behaelt das angezeigte Ergebnis; erst eine neue Projektion wechselt es.
     // Hero-Desktop zeigt die Response-Boxen nur ohne Agent Mode; inert/
     // aria-hidden muessen der CSS-Sichtbarkeit folgen (app-core.js).
     if (typeof window.syncHeroResponseAccess === "function") {
@@ -384,7 +424,7 @@
       toggleSwitch.setAttribute("aria-label", toggleSwitch.title);
     }
     setAutoConsensusForAgentMode(preference);
-    renderModeNotice(preference);
+    renderComposerMode();
     if (panel) panel.setAttribute("aria-hidden", String(!enabled));
 
     // Eingeklappter Zustand: Panel wird zur Kompaktzeile (Titel, beantwortete
@@ -483,12 +523,8 @@
     }
     if (wasEnabled !== nextEnabled) {
       modelAnswersVisible = false;
-      // Der Schalter wechselt den Modus: ein sichtbarer Direktvergleich (oder
-      // ein aus einem Bookmark wiederhergestellter) gehoert zum alten Modus.
-      // (updateAgentModeUI unten synchronisiert inert/aria-hidden danach.)
-      if (nextEnabled) {
-        document.body.classList.remove("direct-comparison-active");
-      }
+      // Keep the displayed result, including saved direct comparisons. The
+      // composer labels its original mode separately from the next-run setting.
       document.body.classList.add("agent-mode-transitioning");
       window.setTimeout(() => {
         document.body.classList.remove("agent-mode-transitioning");
@@ -653,6 +689,27 @@
       setAgentMode(this.checked, { persist: true });
     });
   }
+
+  document.getElementById("composerAgentToggle")?.addEventListener("click", function () {
+    setAgentMode(!isAgentModeEnabled(), { persist: true });
+  });
+  // Reuse the original controls, including their plan checks and file picker.
+  document.getElementById("composerDeepToggle")?.addEventListener("click", function () {
+    document.getElementById("deepSearchToggle")?.click();
+    renderComposerMode();
+  });
+  document.getElementById("composerAttachButton")?.addEventListener("click", function () {
+    document.getElementById("attachUploadOption")?.click();
+  });
+  let composerIsHero = document.body.classList.contains("is-hero");
+  new MutationObserver(function () {
+    if (!window.document?.body) return;
+    const isHero = document.body.classList.contains("is-hero");
+    if (isHero === composerIsHero) return;
+    composerIsHero = isHero;
+    renderComposerMode();
+  }).observe(document.body, { attributes: true, attributeFilter: ["class"] });
+  window.App.renderComposerMode = renderComposerMode;
 
   window.setAgentModeStatus = setAgentModeStatus;
   window.projectAgentModeRun = projectAgentModeRun;

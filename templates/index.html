@@ -515,6 +515,27 @@
           </button>
         </div>
       </div>
+      <div id="composerModeBar" class="composer-mode-bar" aria-label="Comparison mode" hidden>
+        <div class="composer-mode-controls">
+          <button type="button" id="composerAgentToggle" class="composer-agent-toggle" role="switch" aria-checked="true" aria-label="Agent Mode" aria-describedby="composerModeDescription">
+            <span class="composer-mode-dot" aria-hidden="true"></span>
+            <span class="composer-agent-label">Agent Mode</span><span id="composerAgentState" class="composer-agent-state">On</span>
+          </button>
+          <button type="button" id="composerDeepToggle" class="composer-agent-toggle composer-tool" role="switch" aria-checked="false" aria-label="Deep Think" title="Deep Think">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.6 6.4L21 12l-6.4 2.6L12 21l-2.6-6.4L3 12l6.4-2.6Z"/></svg>
+            <span class="composer-tool-label">Deep Think</span><span id="composerDeepState" class="composer-agent-state composer-tool-label">Off</span>
+          </button>
+          <button type="button" id="composerAttachButton" class="composer-agent-toggle composer-tool" aria-label="Add attachment" title="Add attachment">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 12 7-7a4 4 0 0 1 5.7 5.7L10.5 20.9a6 6 0 0 1-8.5-8.5L12 2.5M6 14l9-9" transform="translate(1 1) scale(.85)"/></svg>
+            <span class="composer-tool-label">Attach</span>
+          </button>
+          <div class="composer-mode-models" aria-label="Models for your next question">
+            <span id="composerModelIcons" class="composer-model-icons"></span>
+          </div>
+        </div>
+        <p id="composerModeDescription" class="composer-mode-description">Automatic consensus after the models answer.</p>
+        <p id="composerComparisonStatus" class="composer-comparison-status" role="status" aria-live="polite" hidden></p>
+      </div>
       <div id="postDemoLoginPrompt" class="post-demo-login-prompt" role="status" aria-live="polite" hidden>
         <span class="post-demo-login-icon" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -528,18 +549,6 @@
         </div>
         <button type="button" id="postDemoLoginButton" class="post-demo-login-action">Log in or sign up</button>
       </div>
-      <!-- Was der Modus fuer die naechste Frage bedeutet. Nur ohne Agent Mode
-           sichtbar, weil nur dort etwas fehlt: kein Thread, kein Folgeturn,
-           kein Kontext aus der vorigen Antwort. Der Hinweis haengt am
-           SCHALTER, nicht am sichtbaren Lauf — umlegen zeigt sofort, was der
-           naechste Lauf tut. Gefuellt von static/js/agent-mode.js. -->
-      <p id="modeNotice" class="mode-notice" role="status" hidden></p>
-
-      <!-- Der Modus-Erklaerer ist entfallen: Agent Mode und Deep Think stehen
-           im (+)-Menue, Agent Mode und Auto Consensus zusaetzlich in den
-           Settings, und der gefuehrte Lauf benennt jeden Schritt waehrend er
-           laeuft. Eine vierte Stelle, die dasselbe erklaert, war Ballast. -->
-
       <!-- Disclaimer + Legal-Links gehören zum Eingabebereich. Dadurch folgen
            sie dessen Hero-/Agent-Mode-Bewegung und bleiben immer darunter. -->
       <footer class="app-footer">

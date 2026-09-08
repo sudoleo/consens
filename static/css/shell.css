@@ -2215,9 +2215,6 @@ body:not(.is-hero) .input-section {
     padding-top: 0;
   }
 
-  body:not(.is-hero) .mode-notice {
-    margin-top: 6px;
-  }
 }
 
 /* ---- B) Handy: die Zeile ist ein Zustand, der sich oeffnet ---------------- */
@@ -2231,9 +2228,6 @@ body:not(.is-hero) .input-section {
   body.composer-collapsed:not(.is-hero) .composer-run-notice,
   body.composer-collapsed:not(.is-hero) .consensus-switch-container,
   body.composer-collapsed:not(.is-hero) .demo-chip,
-  /* Der Modus-Hinweis gehoert zur Fusszeile und geht mit ihr: der
-     eingeklappte Composer ist genau eine Zeile. */
-  body.composer-collapsed:not(.is-hero) .mode-notice,
   body.composer-collapsed:not(.is-hero) .app-footer {
     display: none;
   }
@@ -3447,26 +3441,6 @@ body.is-hero .chat-input-container .consensus-model .select-wrapper .model-picke
   display: none;
 }
 
-/* ---- Was der Modus fuer die naechste Frage bedeutet ----------------------
-   Steht unter dem Composer, wo die Folge eintritt, und in derselben leisen
-   Stufe wie der Disclaimer darunter: eine Bedingung des Laufs, keine
-   Warnung. Sichtbar nur ohne Agent Mode — im Agent Mode fehlt nichts, was
-   angesagt werden muesste. */
-.mode-notice {
-  width: 100%;
-  box-sizing: border-box;
-  margin: 10px 0 0;
-  padding: 0 2px;
-  font-size: var(--font-size-micro);
-  line-height: var(--line-height-ui);
-  text-align: center;
-  color: var(--ink-3);
-}
-
-.mode-notice[hidden] {
-  display: none;
-}
-
 @media (max-width: 640px) {
   .chat-input-container .consensus-switch-container {
     position: relative;
@@ -3719,4 +3693,128 @@ body #loginModalContent .oauth-button {
 }
 body #loginModalContent .oauth-button:is(:hover, :focus-visible):not(:disabled) {
   background: var(--app-surface-hover) !important;
+}
+
+/* The mode belongs to the composer, including its compact mobile state. */
+.chat-input-container {
+  /* Keep the entire rounded edge above the animated toolbar. Open menus
+     retain their higher z-index from components-input.css. */
+  z-index: 1;
+}
+.input-section:has(> .composer-mode-bar:not([hidden])) > .chat-input-container {
+  margin-bottom: 0;
+}
+.composer-mode-bar {
+  position: relative;
+  z-index: 0;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  height: 36px;
+  width: calc(100% - 24px);
+  box-sizing: border-box;
+  margin: 0 12px;
+  padding: 0 14px;
+  border-radius: 0 0 18px 18px;
+  background: var(--composer-surface);
+  color: var(--ink-2);
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: left;
+}
+.composer-mode-controls {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.composer-agent-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 32px;
+  padding: 3px 6px;
+  margin-left: -6px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.composer-agent-toggle:hover { background: var(--app-surface-selected); }
+.composer-agent-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.composer-tool { margin-left: 0; font-weight: 500; }
+.composer-tool svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+.composer-tool[aria-checked="true"], .composer-tool[aria-checked="true"] .composer-agent-state { color: var(--mode-active); }
+.input-section:has(> .composer-mode-bar:not([hidden])) #deepThinkInputIndicator { display: none; }
+.composer-mode-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ink-3); }
+.composer-agent-state { color: var(--ink-3); font-size: 11px; font-weight: 500; }
+.composer-mode-bar { --mode-active: #24814b; }
+.dark-mode .composer-mode-bar { --mode-active: #84cc9e; }
+.composer-mode-bar[data-agent-mode="true"] .composer-mode-dot { background: var(--mode-active); box-shadow: 0 0 0 3px color-mix(in srgb, var(--mode-active) 12%, transparent); }
+.composer-mode-bar[data-agent-mode="true"] #composerAgentState { color: var(--mode-active); }
+.composer-mode-models { display: flex; align-items: center; gap: 8px; color: var(--ink-3); }
+.composer-model-icons { display: flex; align-items: center; padding-left: 8px; }
+.composer-model-icon {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  margin-left: -8px;
+  border: 2px solid var(--app-surface);
+  border-radius: 50%;
+  background: var(--app-surface);
+  box-sizing: border-box;
+  font-size: 10px;
+}
+.composer-model-icon img { width: 14px; height: 14px; object-fit: contain; }
+/* Keep the explanation accessible without adding another visual row. */
+.composer-mode-description {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.composer-comparison-status {
+  margin: 0 0 0 auto;
+  min-width: 0;
+  color: var(--ink-3);
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.composer-mode-bar:not([hidden]) {
+  animation: composer-mode-reveal 260ms cubic-bezier(.22, 1, .36, 1) both;
+}
+@keyframes composer-mode-reveal {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .composer-mode-bar:not([hidden]) { animation: none; }
+}
+.composer-mode-bar[hidden], .composer-mode-bar [hidden], .answer-reader-header[hidden] { display: none; }
+@media (max-width: 480px) {
+  .composer-mode-bar { padding: 0 8px; gap: 8px; font-size: 11px; }
+  .composer-mode-controls { gap: 6px; }
+  .composer-agent-toggle { gap: 4px; }
+  .composer-agent-label { font-size: 0; }
+  .composer-agent-label::after { content: "Agent"; font-size: 11px; }
+  .composer-model-icon { width: 22px; height: 22px; margin-left: -10px; }
+  .composer-model-icons { padding-left: 10px; }
+  .composer-mode-models { gap: 5px; }
+  .composer-comparison-status { font-size: 0; }
+  .composer-comparison-status::after { content: attr(data-compact); font-size: 11px; }
+}
+@media (max-width: 700px) {
+  .composer-tool-label { display: none; }
+  .composer-tool { width: 28px; justify-content: center; padding: 0; }
 }

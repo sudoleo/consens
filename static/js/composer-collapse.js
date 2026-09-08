@@ -230,6 +230,9 @@
     }
     if (!isCollapsed()) return;
 
+    // This persistent control must not move between pointerdown and click.
+    if (event.target.closest(".composer-mode-bar")) return;
+
     // Waehrend eines Laufs ist der Senden-Knopf der Abbrechen-Knopf: der
     // einzige Griff, der eingeklappt sichtbar bleibt und seine eigene Wirkung
     // behalten muss.
@@ -253,6 +256,7 @@
   // Fokus kann auch ohne Tap ankommen (Tastatur, Sprachassistent, ein Skript,
   // das eine Frage vorbefuellt).
   document.addEventListener("focusin", function (event) {
+    if (event.target.closest?.(".composer-mode-bar")) return;
     if (event.target.closest?.(".input-section")) expand();
   });
 

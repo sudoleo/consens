@@ -705,15 +705,36 @@ der Python-Staleness-Test auch indirekte Änderungen erkennt.
   stattfindet, gibt Text UND Anhänge unveraendert zurueck. Solange sie schwebt,
   blendet `body.thread-message-pending` den Composer-`#attachmentBar` aus,
   damit dieselben Chips nicht zweimal dastehen.
-- **`agent-mode.js`** — Agent-Mode-**Zustand**, Status-Hub und Timer; einzige
+- **`agent-mode.js`** — Agent-Mode-**Zustand**, Status-Hub und Timer.
+  Composer-Modusleiste `#composerModeBar` direkt unter dem Input: erreichbarer
+  Agent-/Deep-Think-Schalter, Upload-Shortcut und Anbieter-Favicons der nächsten Frage.
+  Die Leiste erscheint im Hero immer; nach Chatstart nur bei ausgeschaltetem Agent Mode,
+  schließt ohne Abstand unter dem Input an und ist seitlich um 12 px eingerückt.
+  Sie bleibt auf Desktop und Mobile eine einzelne 36-px-Zeile. Die Erklärung
+  ist am Modusschalter als Tooltip/Screenreader-Beschreibung verfügbar;
+  die doppelte Modellzahl entfällt und mobil zeigt der Bereitschaftsstatus die Kurzform.
+  Deep Think und Upload nutzen per Klick die bestehenden Controls und deren
+  Pro-/Plus-Gates. Mobil sind beide reine Icon-Buttons. Ein auf Hero-Wechsel
+  begrenzter Body-Observer synchronisiert Chatstart und „New comparison“;
+  der bestehende Deep-Think-Indikator im Input ist bei sichtbarer Leiste verborgen.
+  Die Modell-Favicons überlappen leicht wie ein Icon-Stapel.
+  Beim Einblenden erscheinen Opazität und 5-px-Versatz über 260 ms; bei
+  `prefers-reduced-motion` entfällt die Animation. Der lange Folgeturn-Hinweis
+  `#modeNotice` ist entfernt, damit die Leiste kompakt bleibt.
+  `window.App.renderComposerMode()` synchronisiert sie mit Settings/Plus-Menü;
+  `answerReader.directSummary()` liefert separat die Bereitschaft des sichtbaren
+  Direktvergleichs (auch Bookmarks und Fehler). Der Leser aktualisiert die Leiste
+  bei Projektion/Reset und blendet seinen bisherigen Direktvergleich-Header aus.
+  `composer-collapse.js` lässt Klicks auf die Modusleiste auch eingeklappt direkt durch.
+  Die bestehende Kopplung bleibt die einzige
   Stelle, die den Auto-Consensus-Toggle erzwingt/sperrt. `setAgentModeStatus`
   verwaltet weiterhin jeden Modelllauf, reicht Statusereignisse aber nur im
   Agent Mode an die gefuehrte Consensus-Pipeline weiter.
   Seit 2026-07-27 ist das Panel `#agentModePanel` als **Fortschrittsanzeige
   stillgelegt** (in `shell.css` auf `display:none`): zwei Progress-UIs fuer
   einen Request waren genau der Ueberschuss, den der gefuehrte Lauf abbaut.
-  Agent Mode behaelt danach nur noch zwei Aufgaben: Modelle gruppieren und
-  Auto-Consensus. Der session-lokale
+  Agent Mode gruppiert Modelle, steuert Auto-Consensus und erklärt den Modus
+  an der Composer-Leiste. Der session-lokale
   „Compare answers/Hide answers"-Disclosure (`#agentModeAnswersRow`) ist ins Markup
   der Provenance-Zeile gewandert — agent-mode.js adressiert ihn unveraendert
   per `getElementById`, die Position ist kein Vertrag. Sie gilt nur fuer fertige
@@ -751,8 +772,7 @@ der Python-Staleness-Test auch indirekte Änderungen erkennt.
   beschreiben den NAECHSTEN Lauf. Vorher sprangen sie nach jeder Antwort in
   die alte Stellung zurueck, obwohl `localStorage` laengst umgestellt war.
   Die Body-Klassen (`agent-mode-enabled` &c.) folgen weiterhin dem Lauf auf
-  dem Schirm. Am selben Schalter haengt der Hinweis `#modeNotice` unter dem
-  Composer: ohne Agent Mode gibt es keinen Folgeturn, jede Frage ist ein
+  dem Schirm. Ohne Agent Mode gibt es keinen Folgeturn, jede Frage ist ein
   eigener Lauf — `isArmed()` in `consensus-run.js` prueft dieselbe Bedingung,
   damit der Platzhalter kein Follow-up verspricht, das nicht kommt.
 - **`consensus-progress.js`** — der **gefuehrte Lauf** `#consensusRun` unter dem

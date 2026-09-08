@@ -1156,11 +1156,11 @@ def test_bookmark_restores_the_view_the_run_had_not_the_current_toggle():
     # Der Ausstieg in den Thread raeumt die Marke wieder ab.
     assert 'classList.remove("is-hero", "direct-comparison-active")' in core
 
-    # Nur das Umlegen des Schalters beendet den sichtbaren Direktvergleich,
-    # nicht jeder beilaeufige UI-Sync.
+    # Auch das Umlegen behaelt jetzt den sichtbaren Direktvergleich. Die neue
+    # Composer-Leiste erklaert dessen urspruenglichen Modus separat; erst die
+    # naechste Frage ersetzt das Ergebnis (Browser-Test: test_composer_mode_bar).
     strip = 'document.body.classList.remove("direct-comparison-active");'
-    assert agent.count(strip) == 1
-    assert strip in agent.split("function setAgentMode(", 1)[1].split("function setAgentModeStatus(", 1)[0]
+    assert strip not in agent
 
     # Bei eingeschaltetem Agent Mode darf das Modell-Panel nicht ueber den
     # wiederhergestellten Antworten auftauchen.

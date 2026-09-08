@@ -431,6 +431,7 @@
     if (!secondary) pair = false;
   }
   function modeLayout() {
+    App.renderComposerMode?.();
     root.hidden = !open && !direct;
     const modal = open && !direct && (!wideScreen.matches || expanded || pair);
     const docked = open && !direct && !modal;
@@ -566,7 +567,8 @@
     root.classList.toggle('is-inspecting', !!inspector);
     get('Inspector').hidden = !inspector; get('Columns').hidden = !!inspector;
     get('Title').textContent = inspector ? (inspector.kind === 'differences' ? 'Differences' : 'Sources') : (direct ? 'Direct comparison' : 'Model answers');
-    get('Mode').hidden = !direct;
+    get('Mode').hidden = true;
+    root.querySelector('.answer-reader-header').hidden = direct;
     if (inspector) {
       inspector.trigger?.setAttribute('aria-expanded', 'true');
       get('Status').textContent = inspector.kind === 'differences' ? 'Compare claims, then explore the detail' : 'References for this answer';
@@ -805,6 +807,12 @@
   });
 
   App.answerReader = Object.freeze({
+    directSummary() {
+      if (!direct || !selected) return null;
+      const ready = selected.answers.filter(answer => answer.status === 'complete').length;
+      const unavailable = selected.answers.filter(answer => ['error', 'skipped', 'canceled'].includes(answer.status)).length;
+      return `${ready} of ${selected.answers.length} ready${unavailable ? ` · ${unavailable} unavailable` : ''}`;
+    },
     close,
     openPanel,
     project(context) { if (context) { savedDirect = null; update(fromRun(context), context.config?.agentMode === false); } },
