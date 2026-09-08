@@ -1523,6 +1523,7 @@ function showBookmarkSaveError(status, detail, scope = "") {
 }
 
 async function saveBookmark(question, response, modelName, mode, previousQuestion = "", runOptions = null) {
+  const modelLabel = String(runOptions?.modelLabel || "").trim() || null;
   const boundRunId = String(runOptions?.runId || "").trim() || null;
   const requestUser = runOptions?.auth?.user || auth.currentUser;
   if (!requestUser) return;
@@ -1555,6 +1556,7 @@ async function saveBookmark(question, response, modelName, mode, previousQuestio
           question,
           response,
           modelName,
+          modelLabel,
           mode,
           bookmarkId: bookmarkId || null,
           previousQuestion,

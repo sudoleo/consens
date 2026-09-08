@@ -1997,6 +1997,15 @@ Auszuege werden separat aufgeklappt. Archivdaten bleiben turn-lokal.
 
 Modell-Icons im Leser und Direktvergleich haben weder Hintergrund noch Rahmen;
 monochrome Logos uebernehmen die bestehende Dark-Theme-Invertierung.
+
+Direktvergleich-Saves geben die eingefrorene `modelLabel` des RunContext ueber
+`query-send.js` und `firebase.js::saveBookmark` an `POST /bookmark` weiter.
+Der Endpoint validiert das optionale Label und speichert es pro Anbieter in
+`model_labels` zusammen mit der Antwort; weitere Anbieter bleiben erhalten.
+Alte Clients ohne Label ersetzen eine eventuell veraltete Version durch den
+Anbieternamen. Bei historischen Antworten ohne konkrete Modellversion bleibt
+die Versionszeile im Direktvergleich leer; die aktuelle Picker-Auswahl wird
+niemals als historische Modellversion ausgegeben.
 Ein offener Live-Inspector schliesst beim Run-Wechsel, bevor er als alter Turn
 weiter angezeigt werden kann: seine Quellen-/Differences-Knoten sind weiterhin
 die wiederverwendeten Live-Renderziele. Gespeicherte Antwort-Snapshots bleiben

@@ -322,7 +322,7 @@
           providerConfig.provider,
           context.mode,
           context.previousExchange?.question || "",
-          persistenceOptions(context)
+          { ...persistenceOptions(context), modelLabel: providerConfig.modelLabel || providerConfig.modelId }
         );
         if (promise?.catch) promise.catch(() => undefined);
       }

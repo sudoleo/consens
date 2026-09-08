@@ -60,6 +60,7 @@ class BookmarkModelRequest(BaseModel):
     question: StrictStr = Field(min_length=1, max_length=8_000)
     response: StrictStr = Field(min_length=1, max_length=40_000)
     modelName: BookmarkModelName
+    modelLabel: StrictStr | None = Field(default=None, max_length=80)
     mode: Literal["Standard", "Deep Think"]
     bookmarkId: StrictStr | None = Field(default=None, max_length=100)
     previousQuestion: StrictStr = Field(default="", max_length=4_000)
@@ -562,12 +563,18 @@ def save_bookmark(request: Request, payload: BookmarkModelRequest):
     
     doc_id = _bookmark_document_id(question, data.get("bookmarkId"))
     
+    model_labels = share_snapshots.sanitize_model_labels(
+        {modelName: data.get("modelLabel")}, [modelName]
+    )
     dataToMerge = {
         "query": question,
         "previous_question": previous_question,
         "timestamp": firestore.SERVER_TIMESTAMP,
         "mode": mode,
-        "responses": { modelName: response_text }
+        "responses": { modelName: response_text },
+        # Merge only this provider's provenance with its answer. Older clients
+        # must not leave a previous answer's model version attached to new text.
+        "model_labels": {modelName: model_labels.get(modelName, modelName)},
     }
     title = _stable_bookmark_title(uid, question, previous_question, chat_binding)
     if title:

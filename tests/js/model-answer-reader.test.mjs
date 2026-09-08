@@ -50,6 +50,31 @@ function archive(ctx, id = "t1") {
 afterEach(() => { contexts.splice(0).forEach(ctx => ctx.dom.window.close()); });
 
 describe("model answer reader", () => {
+  it("keeps saved model versions independent of current model choices", () => {
+    const ctx = boot();
+    ctx.project(run());
+    ctx.reader.showDirectBookmark({ id: 'saved', query: 'Earlier question',
+      responses: {OpenAI: 'Earlier answer'}, model_labels: {OpenAI: 'GPT saved version'} });
+    expect(ctx.document.querySelector('.answer-reader-caption').textContent).toBe('GPT saved version');
+  });
+
+  it.each([undefined, 'OpenAI', 'Model not recorded'])("omits unknown legacy version %s without inventing one", label => {
+    const ctx = boot();
+    ctx.project(run());
+    ctx.reader.showDirectBookmark({ id: 'legacy', query: 'Earlier question',
+      responses: {OpenAI: 'Earlier answer'}, model_labels: {OpenAI: label} });
+    expect(ctx.document.querySelector('.answer-reader-caption').hidden).toBe(true);
+    expect(ctx.document.querySelector('.answer-reader-answer h3').textContent).toBe('ChatGPT');
+    expect(ctx.document.querySelector('.answer-reader-body').textContent).toBe('Earlier answer');
+  });
+
+  it("uses the frozen model ID if a live run has no display label", () => {
+    const ctx = boot(); const state = run(); state.config.agentMode = false;
+    Object.assign(state.config.providers[0], {modelLabel: '', modelId: 'openai/gpt-saved'});
+    ctx.project(state);
+    expect(ctx.document.querySelector('.answer-reader-caption').textContent).toBe('openai/gpt-saved');
+  });
+
   it("shows only the selected original and updates streaming text without changing selection or scroll", () => {
     const ctx = boot(); const state = run(); ctx.project(state);
     ctx.reader.openLive("Claude");

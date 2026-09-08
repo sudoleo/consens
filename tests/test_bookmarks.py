@@ -35,8 +35,8 @@ class FakeBookmarkRef:
     def set(self, incoming, merge=False):
         assert merge is True
         for key, value in incoming.items():
-            if key == "responses":
-                self.data.setdefault("responses", {}).update(value)
+            if key in {"responses", "model_labels"}:
+                self.data.setdefault(key, {}).update(value)
             elif value is bookmarks_router.firestore.SERVER_TIMESTAMP:
                 # Production Firestore resolves transforms before the route's
                 # post-write read. Keep this tiny fake faithful to that
@@ -372,6 +372,39 @@ def test_direct_comparison_model_name_contract_follows_provider_registry():
             "modelName": model_name,
         })
         assert validated.modelName == model_name
+
+
+@pytest.mark.parametrize("label, expected", [
+    ("Gemini 2.5 Pro", "Gemini 2.5 Pro"),
+    ("Gemini 2.5 Flash · Pro", "Gemini 2.5 Flash"),
+    (None, "Gemini"),
+    ("<script>bad</script>", "Gemini"),
+])
+def test_direct_comparison_saves_model_version_with_answer(label, expected):
+    bookmark_ref = FakeBookmarkRef("direct_models", {
+        "responses": {"OpenAI": "Existing answer", "Gemini": "Old answer"},
+        "model_labels": {"OpenAI": "GPT saved version", "Gemini": "Old Gemini version"},
+    })
+    app = FastAPI()
+    app.state.limiter = limiter
+    app.include_router(bookmarks_router.router)
+    payload = {
+        "id_token": "token", "question": "Compare", "response": "New Gemini answer",
+        "modelName": "Gemini", "mode": "Standard", "bookmarkId": "direct_models",
+    }
+    if label is not None:
+        payload["modelLabel"] = label
+    with (
+        patch.object(bookmarks_router, "verify_user_token", return_value="uid-1"),
+        patch.object(bookmarks_router, "db_firestore", FakeFirestore(bookmark_ref)),
+        patch.object(bookmarks_router.api_uid_limiter, "check"),
+    ):
+        response = TestClient(app).post("/bookmark", json=payload)
+    assert response.status_code == 200
+    saved = response.json()["bookmark"]
+    assert saved["model_labels"] == {"OpenAI": "GPT saved version", "Gemini": expected}
+    assert saved["responses"] == {"OpenAI": "Existing answer", "Gemini": "New Gemini answer"}
+    assert bookmark_ref.data["model_labels"] == saved["model_labels"]
 
 
 def test_followup_bookmark_keeps_complete_previous_turn_for_restore():

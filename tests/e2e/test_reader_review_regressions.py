@@ -42,9 +42,16 @@ def select_answer_text(page):
     body = page.locator('.answer-reader-body p').first
     body.evaluate("""async element => {
       element.scrollIntoView({block:'start',behavior:'instant'});
-      // Complete the scroll before the selection gesture: scrolling dismisses
-      // the toolbar intentionally, including delayed browser scroll events.
-      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      // Ask about this animates the composer scroll. Two animation frames are
+      // insufficient when immediately reopening the modal: wait until those
+      // scroll events settle before starting the next selection gesture.
+      await new Promise(resolve => {
+        let timer;
+        const finish = () => { document.removeEventListener('scroll', settle, true); resolve(); };
+        const settle = () => { clearTimeout(timer); timer = setTimeout(finish, 100); };
+        document.addEventListener('scroll', settle, true);
+        settle();
+      });
       const range = document.createRange();
       range.setStart(element.firstChild,0); range.setEnd(element.firstChild,80);
       const selection = getSelection(); selection.removeAllRanges(); selection.addRange(range);

@@ -1336,22 +1336,25 @@ def test_disabled_agent_mode_is_six_answers_only(browser, phase4_server):
     context, page = _real_firebase_page(browser, phase4_server)
     model_bookmark_bodies = []
     bookmark_responses = {}
+    bookmark_labels = {}
+    saved_bookmark = {}
 
     def model_bookmark_route(route):
         body = json.loads(route.request.post_data or "{}")
         model_bookmark_bodies.append(body)
         bookmark_responses[body["modelName"]] = body["response"]
-        _json(route, {
-            "bookmark": {
-                "id": body.get("bookmarkId") or "direct-comparison-bookmark",
-                "query": body["question"],
-                "title": body["question"],
-                "mode": body.get("mode") or "Standard",
-                "responses": dict(bookmark_responses),
-                "sources": body.get("sources") or [],
-                "attachments": body.get("attachments") or [],
-            }
+        bookmark_labels[body["modelName"]] = body.get("modelLabel")
+        saved_bookmark.update({
+            "id": body.get("bookmarkId") or "direct-comparison-bookmark",
+            "query": body["question"],
+            "title": body["question"],
+            "mode": body.get("mode") or "Standard",
+            "responses": dict(bookmark_responses),
+            "model_labels": dict(bookmark_labels),
+            "sources": body.get("sources") or [],
+            "attachments": body.get("attachments") or [],
         })
+        _json(route, {"bookmark": saved_bookmark})
 
     try:
         consensus_requests = []
@@ -1430,6 +1433,25 @@ def test_disabled_agent_mode_is_six_answers_only(browser, phase4_server):
         auto_toggle = page.locator("#autoConsensusToggle")
         expect(auto_toggle).not_to_be_checked()
         expect(auto_toggle).to_be_disabled()
+        expected_labels = page.evaluate("""() => Object.fromEntries(
+            App.runRegistry.visible().config.providers.map(p => [p.provider, p.modelLabel]))""")
+        assert bookmark_labels == expected_labels
+        assert all(label and label != provider for provider, label in bookmark_labels.items())
+        page.route(f"**/bookmarks/{saved_bookmark['id']}",
+                   lambda route: _json(route, {"bookmark": saved_bookmark}))
+        # A choice for the next run must never replace saved answer provenance.
+        page.evaluate("""() => App.modelPrefs.forEach(pref => {
+            document.getElementById(pref.textId).textContent = 'Different next-run model';
+            const select = document.getElementById(pref.selectId);
+            select.selectedIndex = select.options.length - 1;
+        })""")
+        page.evaluate("id => window.openBookmark(id)", saved_bookmark["id"])
+        for provider, label in expected_labels.items():
+            caption = page.locator('.answer-reader-answer').filter(
+                has=page.locator(f'.answer-reader-body[data-provider="{provider}"]')
+            ).locator('.answer-reader-caption')
+            expect(caption).to_be_visible()
+            expect(caption).to_have_text(label)
     finally:
         context.close()
 

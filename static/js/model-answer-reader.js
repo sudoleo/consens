@@ -366,7 +366,7 @@
       runId: context.runId, question: String(context.question || ""),
       answers: (context.config?.providers || []).map(config => {
         const result = context.modelResults?.[config.provider] || {};
-        return { provider: config.provider, label: config.modelLabel || config.provider,
+        return { provider: config.provider, label: config.modelLabel || config.modelId || config.provider,
           text: String(result.text || result.streamText || ""), status: result.status || "pending",
           error: result.error?.message || result.error, sources: result.sources || context.evidenceSources || [] };
       })
@@ -487,9 +487,11 @@
     status.dataset.state = answer.status;
     status.hidden = answer.status === "complete";
     const identity = document.createElement("div"); identity.className = "answer-reader-identity";
-    const caption = document.createElement("span"); caption.className = "answer-reader-caption"; caption.textContent = direct
-      ? (knownModel && answer.label !== answer.provider ? answer.label : 'Model version unavailable')
-      : 'Original response';
+    const caption = document.createElement("span"); caption.className = "answer-reader-caption";
+    caption.textContent = direct ? (knownModel && answer.label !== answer.provider ? answer.label : '') : 'Original response';
+    // Legacy snapshots may predate model provenance. Never substitute the
+    // current picker choice for the model that produced a historical answer.
+    caption.hidden = !caption.textContent;
     const names = document.createElement("div"); names.append(title, caption);
     identity.append(modelMark(answer), names);
     header.append(identity, status);
