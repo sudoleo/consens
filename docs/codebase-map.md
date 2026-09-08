@@ -189,7 +189,18 @@ gemeinsamen Zeitraum ab diesem Datum; später ergänzte Familien (Meta/Muse ab
 02.09.2026) tragen ihr eigenes Startdatum in der Zeile. Es trennt dieses
 Judge-Signal ausdrücklich vom kontrollierten Accuracy-Benchmark.
 `/benchmark` verlinkt im Hero zurück auf diese zweite Perspektive. Die Consensus-Engine-Seite nutzt weiterhin die Ergebnisdarstellung
-aus `partials/product_result_mockup.html`. **Seit 2026-07-25 spiegeln alle
+aus `partials/product_result_mockup.html`.
+Eingabe-Mockups im Landing-Hero und der Ask-Szene verwenden zusätzlich
+`partials/composer_toolbar_mockup.html`: dieselbe 36-px-Leiste mit Agent Mode,
+Deep Think, Attach und sechs gestapelten Provider-Icons wie die App, seitlich
+12 px eingerückt. Der Input liegt wie in `/app` explizit vor der animierten
+Leiste, damit seine abgerundete Unterkante vollständig sichtbar bleibt.
+Im Hero ersetzt sie die separate Provider-Zeile. Die
+Ask-Szene blendet sie beim Senden aus (reservierter Platz stabilisiert die
+Scroll-Zeitachse); reine Agent-Ergebnis-Mockups bleiben ohne Eingabeleiste.
+Die Vorschau enthält keine scheinbar bedienbaren Schalter; der Hero-Input
+verlinkt weiterhin auf die echte Demo.
+**Seit 2026-07-25 spiegeln alle
 Marketing-Mockups die Inline-Confidence-Darstellung der App** (Scene 03 in
 `landing.html` inkl. der drei Slider-Beispiele, `product_result_mockup.html`
 und die beiden Mockups in `consensus-engine.html`): eine Antwort in voller

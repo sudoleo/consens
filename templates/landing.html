@@ -23,7 +23,7 @@
   <meta name="twitter:image" content="https://www.consens.io/static/og-home-v2.png?v=20260802">
   <meta name="twitter:image:alt" content="The risk of one perspective | consens.io">
   <title>Track Where AI Answers Disagree and Change | consens.io</title>
-  <link rel="stylesheet" href="/static/css/landing.css?v=20260907-mobile-rail1">
+  <link rel="stylesheet" href="/static/css/landing.css?v=20260908-composerdock">
   <link rel="stylesheet" href="/static/css/benchmark.css?v=20260731-inter1">
   <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260621-logo2" sizes="any" type="image/png">
@@ -82,6 +82,7 @@
              field stays the thing you reach for. -->
         <h1 class="lp-hero-claim"><span>AI answers shape what the world believes.</span> <span>We track when they move.</span></h1>
 
+        <div class="lp-hero-composer lp-composer-preview">
         <a id="heroDemoField" class="lp-prompt lp-hero-prompt" href="/app?demo=1"
            data-umami-event="landing_hero_demo_start"
            aria-label="Start the interactive demo: watch one question run across six AI models">
@@ -102,20 +103,7 @@
             </span>
           </span>
         </a>
-
-        <!-- The provider names live in the accessibility tree only: nine marks
-             are one image, nine labelled pills are a second line of text under
-             a field that is supposed to be the loudest thing on the screen. -->
-        <div class="lp-chips lp-hero-models" aria-label="Nine model families available; each run compares up to six">
-          <span><img src="/static/icons/chat_icons/chatgpt.png" alt=""><span class="lp-chip-name">ChatGPT</span></span>
-          <span><img src="/static/icons/chat_icons/claude.png" alt=""><span class="lp-chip-name">Claude</span></span>
-          <span><img src="/static/icons/chat_icons/gemini-icon.png" alt=""><span class="lp-chip-name">Gemini</span></span>
-          <span><img src="/static/icons/chat_icons/mistral.png" alt=""><span class="lp-chip-name">Mistral</span></span>
-          <span><img src="/static/icons/chat_icons/deepseek.png" alt=""><span class="lp-chip-name">DeepSeek</span></span>
-          <span><img src="/static/icons/chat_icons/grok.png" alt=""><span class="lp-chip-name">Grok</span></span>
-          <span><img src="/static/icons/chat_icons/kimi.svg" alt=""><span class="lp-chip-name">Kimi</span></span>
-          <span><img src="/static/icons/chat_icons/zai.svg" alt=""><span class="lp-chip-name">GLM</span></span>
-          <span><img src="/static/icons/chat_icons/meta.svg" alt=""><span class="lp-chip-name">Muse</span></span>
+        {% include "partials/composer_toolbar_mockup.html" %}
         </div>
         <!-- On a screen tall enough for it the pulse is pinned to the bottom
              edge of the first screen (see landing.css): a status line reads as
@@ -143,7 +131,7 @@
             <div class="lp-head lp-reveal">
               <p class="lp-eyebrow">01 · Ask</p>
               <h2 class="lp-h2">Start from one prompt.</h2>
-              <p class="lp-lead">One field, one run switch, one send.<span class="lp-wide-only"> The app opens exactly here, with no modes to learn before the first question.</span></p>
+              <p class="lp-lead">One prompt. Your models, ready to compare.<span class="lp-wide-only"> Agent Mode builds the consensus; Deep Think and attachments are within reach.</span></p>
             </div>
             <div class="lp-scene-visual lp-reveal">
               <div class="lp-app">
@@ -158,6 +146,7 @@
                   <!-- The greeting is gone on purpose. The field types a real
                        question into itself, which says the same thing without
                        spending a line of text on it. -->
+                  <div class="lp-composer-preview">
                   <div class="lp-composer" data-ask-composer>
                     <span class="lp-composer-text" data-ask-text></span>
                     <div class="lp-composer-row">
@@ -169,6 +158,8 @@
                         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.4 3.6 21 12 3.4 20.4 7 12z" fill="currentColor"></path></svg>
                       </span>
                     </div>
+                  </div>
+                  {% include "partials/composer_toolbar_mockup.html" %}
                   </div>
                   <p class="lp-composer-foot">Please avoid personal or sensitive data. AI models can make mistakes.</p>
                 </div>
@@ -671,7 +662,7 @@
 
   {% include "partials/public_footer.html" %}
 
-  <script defer src="/static/js/landing-scenes.js?v=20260814-message1"></script>
+  <script defer src="/static/js/landing-scenes.js?v=20260908-composerbar"></script>
   <script defer src="/static/js/landing-insights.js?v=20260815-claimmark1"></script>
   <script>
     document.addEventListener("DOMContentLoaded", () => {

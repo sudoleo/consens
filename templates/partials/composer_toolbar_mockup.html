@@ -1,0 +1,20 @@
+{# Shared, non-interactive preview of the /app starting toolbar. #}
+<div class="lp-composer-tools" role="group" aria-label="Composer preview: Agent Mode on, Deep Think off, attachments and six selected models">
+  <span class="lp-composer-tool lp-composer-agent">
+    <i class="lp-composer-mode-dot" aria-hidden="true"></i>
+    <span class="lp-composer-agent-name">Agent Mode</span><span class="lp-composer-state is-on">On</span>
+  </span>
+  <span class="lp-composer-tool" title="Deep Think off · Pro" aria-label="Deep Think off">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.6 6.4L21 12l-6.4 2.6L12 21l-2.6-6.4L3 12l6.4-2.6Z"/></svg>
+    <span class="lp-composer-tool-label">Deep Think</span><span class="lp-composer-state lp-composer-tool-label">Off</span>
+  </span>
+  <span class="lp-composer-tool" title="Attachments · Plus" aria-label="Attachments">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 12 7-7a4 4 0 0 1 5.7 5.7L10.5 20.9a6 6 0 0 1-8.5-8.5L12 2.5M6 14l9-9" transform="translate(1 1) scale(.85)"/></svg>
+    <span class="lp-composer-tool-label">Attach</span>
+  </span>
+  <span class="lp-composer-models" aria-label="Selected model providers">
+    {% for name, icon, mono in [('ChatGPT', 'chatgpt.png', true), ('Mistral', 'mistral.png', false), ('Claude', 'claude.png', false), ('Gemini', 'gemini-icon.png', false), ('DeepSeek', 'deepseek.png', false), ('Grok', 'grok.png', true)] %}
+    <span class="lp-composer-model" title="{{ name }}"><img src="/static/icons/chat_icons/{{ icon }}" alt="{{ name }}" width="14" height="14"{% if mono %} class="lp-composer-mono"{% endif %}></span>
+    {% endfor %}
+  </span>
+</div>

@@ -42,6 +42,7 @@
     const composer = scene.querySelector("[data-ask-composer]");
     const chip = scene.querySelector("[data-ask-chip]");
     const send = scene.querySelector("[data-ask-send]");
+    const tools = scene.querySelector(".lp-composer-tools");
     const notes = Array.from(scene.querySelectorAll("[data-ask-note]"));
     if (!text || !composer) return null;
 
@@ -84,6 +85,12 @@
       if (send) {
         send.classList.toggle("is-ready", typed >= 1);
         send.classList.toggle("is-pressed", p >= 0.9);
+      }
+      // Agent Mode hides the starting toolbar after send, as in /app. Keep
+      // its layout slot so scrolling backwards has a stable progress range.
+      if (tools) {
+        tools.classList.toggle("is-sent", p >= 0.9);
+        tools.setAttribute("aria-hidden", String(p >= 0.9));
       }
 
       // The three notes step through in time with the controls above them.
@@ -318,10 +325,10 @@
 
       if (reducedMotion) {
         // A still frame, chosen so each scene shows what it is about: the
-        // finished question for 01, a run mid-flight (two steps checked off,
+        // finished question with its toolbar, ready to send for 01; a run mid-flight (two steps checked off,
         // the judge working) for 02. Rendering 02 at the very end would
         // leave the page with no run on it at all.
-        render(scene.dataset.scene === "run" ? 0.86 : 1);
+        render(0.86);
         scene.classList.add("is-static");
       }
     });

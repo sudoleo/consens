@@ -2971,3 +2971,70 @@ img { display: block; max-width: 100%; }
   .lp-watch-story { margin-top: 26px; }
   .lp-final { gap: 20px; }
 }
+
+/* Shared composer preview: the same 36px starting toolbar as /app. */
+.lp-composer-preview { isolation: isolate; }
+.lp-composer-preview > :is(.lp-prompt, .lp-composer) {
+  /* The input's outer hairline must paint above the animated toolbar. */
+  z-index: 1;
+}
+.lp-hero-composer {
+  width: min(680px, 100%);
+  margin: clamp(30px, 4.5vw, 46px) auto 0;
+}
+.lp-hero-composer .lp-prompt.lp-hero-prompt { width: 100%; margin: 0; }
+.lp-hero-composer .lp-prompt.lp-hero-prompt:is(:hover, :focus-visible) { transform: none; }
+.lp-composer-tools {
+  --lp-mode-active: #24814b;
+  position: relative;
+  z-index: 0;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  width: calc(100% - 24px);
+  height: 36px;
+  margin: 0 12px;
+  padding: 0 14px;
+  border-radius: 0 0 18px 18px;
+  background: var(--lp-field);
+  color: var(--ink-2);
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: left;
+  white-space: nowrap;
+  animation: lpComposerToolsIn 260ms cubic-bezier(.22, 1, .36, 1) both;
+  transition: opacity 180ms ease, visibility 180ms ease;
+}
+.dark-mode .lp-composer-tools { --lp-mode-active: #84cc9e; }
+.lp-composer-tool { display: inline-flex; align-items: center; gap: 7px; flex-shrink: 0; }
+.lp-composer-agent { font-weight: 600; color: var(--ink); }
+.lp-composer-state { font-size: 11px; font-weight: 500; color: var(--ink-3); }
+.lp-composer-state.is-on { color: var(--lp-mode-active); }
+.lp-composer-mode-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--lp-mode-active); box-shadow: 0 0 0 3px color-mix(in srgb, var(--lp-mode-active) 12%, transparent); }
+.lp-composer-tool svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.lp-composer-models { display: flex; align-items: center; padding-left: 8px; }
+.lp-composer-model { display: grid; place-items: center; width: 24px; height: 24px; margin-left: -8px; border: 2px solid var(--lp-field); border-radius: 50%; background: var(--lp-field); }
+.lp-composer-model img { width: 14px; height: 14px; object-fit: contain; }
+.dark-mode .lp-composer-mono { filter: invert(1); }
+.lp-composer-tools.is-sent { visibility: hidden; opacity: 0; animation: none; }
+@keyframes lpComposerToolsIn {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (max-width: 700px) {
+  .lp-composer-tool-label { display: none; }
+}
+@media (max-width: 480px) {
+  .lp-composer-tools { padding: 0 8px; gap: 14px; font-size: 11px; }
+  .lp-composer-tool { gap: 4px; }
+  .lp-composer-agent-name { font-size: 0; }
+  .lp-composer-agent-name::after { content: 'Agent'; font-size: 11px; }
+  .lp-composer-models { padding-left: 10px; }
+  .lp-composer-model { width: 22px; height: 22px; margin-left: -10px; }
+  /* A single auto-minimum grid track let the benchmark teaser widen the page. */
+  .lp-section .bench-hero { grid-template-columns: minmax(0, 1fr); }
+  .lp-section .bench-hero > * { min-width: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lp-composer-tools { animation: none; transition: none; }
+}
