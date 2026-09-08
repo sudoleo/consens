@@ -12,15 +12,16 @@
 @import url('./css/components-consensus.css?v=20260901-watchnudge1');
 @import url('./css/components-controls.css?v=20260731-inter1');
 @import url('./css/components-modals.css?v=20260901-costflow');
-@import url('./css/components-misc.css?v=20260807-composergrow1');
+@import url('./css/components-misc.css?v=20260909-democta');
+@import url('./css/demo-action.css?v=20260909-democta');
 @import url('./css/components-memory-edit.css?v=20260817-quoteask1');
 @import url('./css/components-model-picker.css?v=20260901-kimiglm1');
 @import url('./css/components-feedback.css?v=20260731-inter1');
-@import url('./css/components-consensus-insights.css?v=20260906-claimhit1');
+@import url('./css/components-consensus-insights.css?v=20260908-claimhit1');
 @import url('./css/components-watch.css?v=20260907-readerfinish1');
 /* Shell layer — loaded LAST so the frameless redesign wins on equal
    specificity. Elevation, sidebar, topbar, composer and thread material. */
-@import url('./css/shell.css?v=20260908-readerfix');
+@import url('./css/shell.css?v=20260909-modelpicker');
 @import url('./css/model-answer-reader.css?v=20260908-readerfix');
 
 /* Template-only utilities live after every component import so they preserve

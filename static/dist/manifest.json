@@ -1,5 +1,5 @@
 {
-  "sources": "bf6e7ffc8540",
+  "sources": "b3f585dee019",
   "inputs": [
     "package-lock.json",
     "scripts/build_frontend.mjs",
@@ -21,6 +21,7 @@
     "static/css/components-model-picker.css",
     "static/css/components-watch.css",
     "static/css/consensus-engine.css",
+    "static/css/demo-action.css",
     "static/css/landing.css",
     "static/css/layout.css",
     "static/css/model-answer-reader.css",
@@ -95,18 +96,18 @@
     },
     {
       "name": "demo",
-      "src": "/static/dist/demo.112b0da254a9.js",
+      "src": "/static/dist/demo.639b5a1996da.js",
       "module": true,
       "defer": false
     },
     {
       "name": "app",
-      "src": "/static/dist/app.a367a3a64af6.js",
+      "src": "/static/dist/app.b1928ba3cc81.js",
       "module": false,
       "defer": true
     }
   ],
   "styles": {
-    "app": "/static/dist/app.26dc67e7bfb2.css"
+    "app": "/static/dist/app.adbbb02f8963.css"
   }
 }

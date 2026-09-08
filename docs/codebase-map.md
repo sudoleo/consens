@@ -143,7 +143,13 @@ Betriebsfragen und Quellen: `docs/legal-review-2026-09-05.md`. Die primäre
 Navigation beschränkt sich auf Product, Watches, Topics, Questions, Benchmark
 und die App-CTA; Model guide und About liegen im Footer. Der Landing-Hero
 ist seit 2026-07-17 demo-first: Ein klickbares Input-Feld (Look des /app-Inputs,
-"Try the demo"-Pill, Provider-Chips darunter) verlinkt auf `/app?demo=1`;
+"Try the demo"-Button, Provider-Chips darunter) verlinkt auf `/app?demo=1`;
+Landing-Hero und App-Composer teilen die `.demo-action`-Gestaltung aus
+`static/css/demo-action.css` (Import in `landing.css` und `static/style.css`):
+kontrastreiche Theme-Farben, abgerundetes Rechteck, identisches Play-Symbol,
+Hover-/Druck-/Fokuszustände und mindestens 44 px Höhe auf Touch-Geräten.
+Die App zeigt ebenfalls „Try the demo“, bis 640 px platzsparend „Demo“;
+der zugängliche Name und der Startablauf bleiben unverändert.
 `static/demo.js` erkennt den Parameter und startet die Demo automatisch in der
 echten App. Dabei wird zuerst die vollständige Frage in den Composer getippt;
 beim simulierten Absenden wandert sie in den Thread-Kopf, der Composer wird
@@ -460,9 +466,14 @@ der Python-Staleness-Test auch indirekte Änderungen erkennt.
 - **Navigation/Settings-Shell** (`templates/index.html`, `layout.css`,
   `shell.css`, `components-modals.css`, `app-init.js`, `firebase.js`) — Models
   und Bookmarks sind Sidebar-Abschnitte mit integrierten Icons. Models bleibt
-  eine einzelne kompakte Zeile mit Providerzahl; Klick öffnet den bestehenden
-  Run-Picker am Composer, statt die Providerzeilen in der Navigation
-  aufzuklappen. Die Provider-Inklusion im Custom-Picker nutzt klare
+  eine einzelne kompakte Zeile mit Providerzahl; Gäste erhalten beim Klick den
+  kurzen Hinweis „Please log in to configure your models.“. Eingeloggt öffnet
+  der Klick den bestehenden Run-Picker am Composer, statt die Providerzeilen in der Navigation
+  aufzuklappen. Die Modell-Icons unter dem Composer sind mit
+  `#composerModelPicker` ebenfalls ein nativer Button und nutzen denselben
+  Picker-Einstieg samt Gast-Hinweis und Fokusübergabe. Klick, Enter und
+  Leertaste öffnen damit die vorhandene Modellwahl; nur der Sidebar-Einstieg
+  schließt zuvor eine mobile Overlay-Sidebar. Die Provider-Inklusion im Custom-Picker nutzt klare
   Checkboxen statt Toggle-Switches. Die Chat-Suche belegt keine
   permanente Zeile mehr, sondern ersetzt bei Hover/Fokus den Bookmarks-Titel
   (auf Touch-Geräten bleibt sie dauerhaft erreichbar). Die frühere Sidebar-/
@@ -1303,9 +1314,10 @@ der Python-Staleness-Test auch indirekte Änderungen erkennt.
 - **`app-init.js`** — das gesamte `initApp()`: Theme, Usage/Limits + User-Status,
   Response-Box-Toggles, Sidebar/Layout, Modals, Tooltips, Evidence-Rendering,
   API-Key-Test. Bis 768 px erzeugt Enter im Composer immer einen Absatz; nur
-  Desktop-Enter sendet. Der Sidebar-Eintrag „Models“ erklärt bei geschlossenem
-  Composer-Gate zuerst die notwendige Follow-up-/Neuvergleich-Wahl, statt einen
-  unsichtbaren Picker zu öffnen. `clearResponseBoxes({silent?})` entfernt außerdem den kompletten
+  Desktop-Enter sendet. Der Sidebar-Eintrag „Models“ zeigt Gästen einen kurzen
+  Login-Hinweis und öffnet für eingeloggte Nutzer den Modell-Picker; eine
+  Follow-up-/Neuvergleich-Wahl ist dafür nicht nötig.
+  `clearResponseBoxes({silent?})` entfernt außerdem den kompletten
   fragebezogenen Share-/Citation-/Evidence-State. Der Usage-Countdown rechnet
   bis UTC-Mitternacht und fordert beim erkannten UTC-Tageswechsel über
   `window.refreshUsageData()` einen neuen autoritativen Serverstand an, statt

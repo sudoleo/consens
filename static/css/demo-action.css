@@ -1,0 +1,75 @@
+/* Shared demo entry on the public hero and in the app composer. */
+.demo-action,
+button.demo-action {
+  box-sizing: border-box;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-height: 40px;
+  padding: 0 15px 0 11px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: var(--ink);
+  color: var(--ground);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-tight);
+  letter-spacing: var(--tracking-normal);
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+  user-select: none;
+  touch-action: manipulation;
+  box-shadow: none;
+  transition: background-color .16s ease, transform .12s ease;
+}
+
+.demo-action-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 22px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+}
+
+.demo-action-icon svg {
+  display: block;
+  width: 12px;
+  height: 12px;
+  transform: translateX(.5px);
+}
+
+.demo-action:hover,
+.lp-hero-prompt:hover .demo-action {
+  opacity: 1;
+  background: color-mix(in srgb, var(--ink) 88%, var(--ground));
+}
+
+.demo-action:active,
+.lp-hero-prompt:active .demo-action {
+  background: color-mix(in srgb, var(--ink) 80%, var(--ground));
+  transform: translateY(1px);
+}
+
+.demo-action:focus-visible,
+.lp-hero-prompt:focus-visible .demo-action {
+  outline: 2px solid var(--ink);
+  outline-offset: 3px;
+}
+
+@media (pointer: coarse) {
+  .demo-action,
+  button.demo-action { min-height: 44px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .demo-action,
+  button.demo-action { transition: none; }
+  .demo-action:active,
+  .lp-hero-prompt:active .demo-action { transform: none; }
+}

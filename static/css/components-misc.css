@@ -351,56 +351,7 @@ header .sidebar-toggle.collapse-btn {
 }
 
 .demo-chip {
-  all: unset;
-  box-sizing: border-box;
-  display: inline-flex;
   position: static;
-  height: 36px;
-  padding: 0 11px;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  line-height: var(--line-height-solid);
-  font-family: inherit;
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-semibold);
-  letter-spacing: var(--tracking-normal);
-  color: var(--ink-2, var(--text-color));
-  background: transparent;
-  border: 1px solid var(--line, var(--sidebar-border));
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  user-select: none;
-  transition: color .15s ease, background-color .15s ease, border-color .15s ease;
-}
-
-/* Play glyph — a crisp, recognizable demo affordance. Drawn in the chip's own
-   text color so it stays legible in both light and dark themes. */
-.demo-chip::before {
-  content: "";
-  flex: none;
-  width: 0;
-  height: 0;
-  margin-left: 1px;
-  border-top: 4px solid transparent;
-  border-bottom: 4px solid transparent;
-  border-left: 7px solid currentColor;
-  border-radius: 1px;
-}
-
-.demo-chip:hover {
-  color: var(--ink, var(--text-color));
-  border-color: color-mix(in srgb, var(--ink) 24%, var(--line));
-  background: var(--raise, var(--container-bg));
-}
-
-.demo-chip:active {
-  background: color-mix(in srgb, var(--ink) 7%, transparent);
-}
-
-.demo-chip:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent) 68%, transparent);
-  outline-offset: 2px;
 }
 
 .chat-input-container.has-question-input .demo-chip,
@@ -427,7 +378,7 @@ header .sidebar-toggle.collapse-btn {
     display: inline;
   }
 
-  .demo-chip {
+  .demo-chip.demo-action {
     padding: 0 10px;
     gap: 6px;
   }

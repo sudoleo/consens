@@ -14,6 +14,7 @@
 
 @import url('./public-tokens.css?v=20260906-palette1');
 @import url('./components-consensus-visuals.css?v=20260906-claimhit1');
+@import url('./demo-action.css?v=20260909-democta');
 
 *,
 *::before,
@@ -404,27 +405,8 @@ img { display: block; max-width: 100%; }
 }
 
 .lp-demo-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  flex: 0 0 auto;
   margin-left: auto;
-  height: 40px;
-  padding: 0 20px;
-  border-radius: 999px;
-  background: var(--accent);
-  color: #ffffff;
-  font-size: var(--font-size-base);
-  font-weight: var(--font-weight-semibold);
-  line-height: var(--line-height-solid);
-  white-space: nowrap;
-  box-shadow: none;
-  transition: background-color .2s ease;
 }
-
-.lp-demo-btn svg { width: 15px; height: 15px; }
-.dark-mode .lp-demo-btn { color: #141414; }
-.lp-hero-prompt:hover .lp-demo-btn { background: var(--accent-hover); }
 
 /* The marks lose their pills here. A pill is a label, and nine labels under
    the field are a paragraph the eye has to read; nine bare marks are a single
@@ -594,7 +576,6 @@ img { display: block; max-width: 100%; }
 
 @media (max-width: 600px) {
   .lp-prompt.lp-hero-prompt { padding: 16px; padding-bottom: 12px; gap: 18px; min-height: 140px; }
-  .lp-demo-btn { height: 38px; padding: 0 16px; font-size: var(--font-size-sm); }
 
   .lp-hero-pulse { width: 100%; }
 

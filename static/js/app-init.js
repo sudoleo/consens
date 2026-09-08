@@ -1210,27 +1210,34 @@
         // Models remains one compact sidebar row. Its detailed controls open
         // on the composer's existing run picker instead of expanding the
         // navigation into a six-row settings panel.
-        document.getElementById("sidebarModelPicker")?.addEventListener("click", function (event) {
-          event.preventDefault();
-          event.stopPropagation();
-          // Kein Choice-State mehr, den die Modellwahl stoeren koennte: eine
-          // Folgefrage ist der Default, und die Modelle duerfen dabei jederzeit
-          // gewechselt werden (der naechste Lauf nutzt die neue Auswahl).
-          const consensusSelect = document.getElementById("consensusModelDropdown");
-          if (!consensusSelect) return;
+        document.querySelectorAll("#sidebarModelPicker, #composerModelPicker").forEach(trigger => {
+          trigger.addEventListener("click", function (event) {
+            event.preventDefault();
+            event.stopPropagation();
+            if (!window.auth?.currentUser) {
+              showPopup("Please log in to configure your models.");
+              return;
+            }
+            // Kein Choice-State mehr, den die Modellwahl stoeren koennte: eine
+            // Folgefrage ist der Default, und die Modelle duerfen dabei jederzeit
+            // gewechselt werden (der naechste Lauf nutzt die neue Auswahl).
+            const consensusSelect = document.getElementById("consensusModelDropdown");
+            if (!consensusSelect) return;
 
-          const openPicker = () => {
-            window.App.openModelPicker(consensusSelect);
-            consensusSelect._customModelPicker?.displayButton?.focus({ preventScroll: true });
-          };
+            const openPicker = () => {
+              window.App.openModelPicker(consensusSelect);
+              consensusSelect._customModelPicker?.displayButton?.focus({ preventScroll: true });
+            };
 
-          if (usesOverlaySidebar()) {
-            closeOverlaySidebar();
-            window.setTimeout(openPicker, 180);
-          } else {
-            openPicker();
-          }
-          trackAppEvent("app_model_picker_opened", { source: "sidebar" });
+            const source = trigger.id === "sidebarModelPicker" ? "sidebar" : "composer_toolbar";
+            if (source === "sidebar" && usesOverlaySidebar()) {
+              closeOverlaySidebar();
+              window.setTimeout(openPicker, 180);
+            } else {
+              openPicker();
+            }
+            trackAppEvent("app_model_picker_opened", { source });
+          });
         });
 
         window.toggleAllResponses = function () {

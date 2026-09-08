@@ -23,6 +23,11 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       Runs erzeugt keinen Fehlerreport.
 
 ## Öffentliche Seiten
+- [ ] Demo-Einstieg auf `/` und `/app`: gleiches Play-Symbol, Theme-Kontrast,
+      abgerundete Form und sichtbarer Tastaturfokus. „Try the demo“ wird in der
+      App bis 640 px zu „Demo“; bei 320/390 px bleiben Demo und Senden innerhalb
+      des Composers. Touch-Ziele sind mindestens 44 px hoch. Klick/Enter startet
+      den bestehenden Demo-Ablauf, ohne dass der Einstieg doppelt auslöst.
 - [ ] `/`, `/about`, `/ai-model-comparison`, `/consensus-engine`, `/benchmark`,
       `/privacy`, `/terms`, `/imprint` und öffentliche Share-/Unavailable-Seiten
       verwenden dieselbe Navigation, denselben Footer und die an `/app`
@@ -69,9 +74,14 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       verschwinden die Skeletons; Login/Sign-up bleiben sichtbar und erklären
       den temporären Auth-Ausfall statt tote Aktionen zu zeigen.
 - [ ] Sidebar-Navigation: Models ist eine einzelne kompakte Zeile mit
-      Providerzahl und öffnet den Run-Picker am Composer; sie klappt keine
+      Providerzahl. Gäste sehen beim Klick „Please log in to configure your
+      models.“; der Picker bleibt geschlossen und die mobile Sidebar offen.
+      Eingeloggt öffnet die Zeile den Run-Picker am Composer; sie klappt keine
       Providerzeilen auf. Der Custom-Picker nutzt Checkboxen statt
       Toggle-Switches und bleibt in Light/Dark vollständig deckend und lesbar.
+      Auch die Modell-Icons unter dem Input öffnen per Klick, Enter und
+      Leertaste den Picker; Gäste sehen denselben Login-Hinweis. Nach einem
+      Modellwechsel bleiben die neu gerenderten Icons anklickbar.
       Bei offener Desktop-Sidebar bleibt das Eingabefeld in der Viewport-Mitte;
       mobil verschwindet die schwebende Brand vollständig.
 - [ ] Die Landingpage verlinkt direkt im Hero mit einer schmalen Live-Zeile auf

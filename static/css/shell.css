@@ -86,7 +86,9 @@ body.dark-mode {
    only while the sidebar is closed.
    -------------------------------------------------------------------------- */
 .sidebar {
+  --sidebar-text-muted: var(--ink);
   background: var(--ground);
+  color: var(--ink);
   border-right: 1px solid var(--line-soft);
   gap: 10px;
   text-align: left;
@@ -135,7 +137,7 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
   min-width: 0;
   margin-bottom: 0;
   text-decoration: none;
-  color: var(--ink-2);
+  color: var(--ink);
 }
 
 .sidebar-brand-link:hover {
@@ -256,7 +258,7 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
   min-height: 44px;
   padding: 7px 8px;
   border-radius: var(--radius-sm);
-  color: var(--ink-2);
+  color: var(--ink);
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-semibold);
   letter-spacing: normal;
@@ -272,6 +274,7 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
 }
 
 .sidebar-bookmarks-head .sidebar-heading-label span {
+  color: var(--ink);
   min-width: 0;
   justify-self: start;
   text-align: left;
@@ -302,7 +305,7 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
 .bookmarks-section.is-locked .sidebar-toggle-btn {
   color: var(--ink-3);
   cursor: default;
-  opacity: 0.58;
+  opacity: 1;
 }
 
 .bookmarks-section.is-locked .sidebar-search-box {
@@ -417,7 +420,7 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
 /* Section headings shrink to quiet eyebrows — the list is the content. */
 .sidebar-static-heading,
 .sidebar-toggle-btn {
-  color: var(--ink-3);
+  color: var(--ink);
 }
 
 .sidebar-section h2 {
@@ -443,7 +446,7 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
   border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--ink-2);
+  color: var(--ink);
   font: inherit;
   text-align: left;
   cursor: pointer;
@@ -479,7 +482,7 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
 
 .sidebar-model-copy span {
   overflow: hidden;
-  color: var(--ink-3);
+  color: var(--ink);
   font-size: var(--font-size-micro);
   font-weight: var(--font-weight-medium);
   line-height: var(--line-height-heading);
@@ -512,7 +515,7 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
   border-radius: var(--radius-xs);
   background: transparent;
   box-shadow: none;
-  color: var(--ink-2);
+  color: var(--ink);
   padding: 6px 8px;
 }
 
@@ -594,7 +597,7 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
   justify-content: space-between;
   align-items: center;
   font-size: var(--font-size-micro);
-  color: var(--ink-3);
+  color: var(--ink);
 }
 
 .quota-row {
@@ -615,7 +618,7 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
 }
 
 .quota-top span {
-  color: var(--ink-3);
+  color: var(--ink);
   font-variant-numeric: tabular-nums;
   font-size: var(--font-size-micro);
 }
@@ -647,7 +650,7 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
 
 .sidebar-quota-foot {
   font-size: var(--font-size-micro);
-  color: var(--ink-3);
+  color: var(--ink);
 }
 
 .quota-trigger {
@@ -3756,7 +3759,7 @@ body #loginModalContent .oauth-button:is(:hover, :focus-visible):not(:disabled) 
 .dark-mode .composer-mode-bar { --mode-active: #84cc9e; }
 .composer-mode-bar[data-agent-mode="true"] .composer-mode-dot { background: var(--mode-active); box-shadow: 0 0 0 3px color-mix(in srgb, var(--mode-active) 12%, transparent); }
 .composer-mode-bar[data-agent-mode="true"] #composerAgentState { color: var(--mode-active); }
-.composer-mode-models { display: flex; align-items: center; gap: 8px; color: var(--ink-3); }
+.composer-mode-models { display: flex; align-items: center; gap: 8px; margin-left: 0; padding: 3px 0; color: var(--ink-3); }
 .composer-model-icons { display: flex; align-items: center; padding-left: 8px; }
 .composer-model-icon {
   display: grid;

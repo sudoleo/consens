@@ -93,7 +93,7 @@ def test_demo_watch_nudge_and_dedicated_model_pulse_match_the_product_contract()
     # Zwei Beschriftungen, eine sichtbar: in der Knopfzeile des Composers ist
     # auf dem Handy kein Platz fuer den ganzen Satz, sonst faellt der
     # Senden-Knopf in eine zweite Zeile.
-    assert '<span class="demo-chip-label demo-chip-label-full">Watch demo</span>' in demo
+    assert '<span class="demo-chip-label demo-chip-label-full">Try the demo</span>' in demo
     assert '<span class="demo-chip-label demo-chip-label-short">Demo</span>' in demo
     assert 'btn.setAttribute("aria-label", "Start interactive demo")' in demo
     assert "inputActions.prepend(btn)" in demo
