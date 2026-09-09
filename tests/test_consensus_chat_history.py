@@ -660,6 +660,7 @@ def test_insufficient_answers_fail_before_own_key_or_engine_checks(
     monkeypatch.setattr(chat_router, "record_differences_stats", forbid("stats"))
     monkeypatch.setattr(chat_router, "reserve_usage_run", forbid("usage_reserve"))
     monkeypatch.setattr(chat_router, "consume_usage_run", forbid("usage_consume"))
+    monkeypatch.setattr(chat_router, "authorize_usage_operation", forbid("usage_authorize"))
 
     response = client.post(
         "/consensus",
@@ -772,6 +773,7 @@ def test_completed_turn_replays_without_engine_writes_or_usage(
     monkeypatch.setattr(chat_router, "record_differences_stats", forbid("stats"))
     monkeypatch.setattr(chat_router, "reserve_usage_run", forbid("usage_reserve"))
     monkeypatch.setattr(chat_router, "consume_usage_run", forbid("usage_consume"))
+    monkeypatch.setattr(chat_router, "authorize_usage_operation", forbid("usage_authorize"))
 
     response = client.post(
         "/consensus",
@@ -832,6 +834,7 @@ def test_completed_replay_precedes_current_model_tier_and_credentials(
     monkeypatch.setattr(chat_router, "query_differences", forbid("differences"))
     monkeypatch.setattr(chat_router, "reserve_usage_run", forbid("usage_reserve"))
     monkeypatch.setattr(chat_router, "consume_usage_run", forbid("usage_consume"))
+    monkeypatch.setattr(chat_router, "authorize_usage_operation", forbid("usage_authorize"))
 
     response = client.post(
         "/consensus",

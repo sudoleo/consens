@@ -9,6 +9,7 @@ never modified after creation.
 from __future__ import annotations
 
 import hashlib
+import math
 import re
 import secrets
 from datetime import datetime, timedelta, timezone
@@ -827,12 +828,56 @@ def create_run(
 def list_runs(topic_id: str, *, db=None, max_items: int = 100) -> list[dict]:
     db = db if db is not None else db_firestore
     ref = db.collection(TOPICS_COLLECTION).document(topic_id).collection("runs")
-    runs = [{"id": doc.id, **(doc.to_dict() or {})} for doc in ref.stream()]
+
+    def read(transaction):
+        def full_history():
+            return [
+                {"id": doc.id, **(doc.to_dict() or {})}
+                for doc in ref.stream(transaction=transaction)
+            ]
+
+        if max_items <= 0:
+            # Preserve the historical Python slicing contract for internal callers.
+            return full_history()
+        # Single-field ordering uses Firestore's automatic index. Fetch one
+        # extra row to prove that the cutoff does not split a timestamp tie:
+        # version remains the existing secondary ordering, even for imports
+        # without a version field. Ordering on version would hide such imports.
+        runs = [
+            {"id": doc.id, **(doc.to_dict() or {})}
+            for doc in ref.order_by("observed_at", direction="DESCENDING")
+            .limit(max_items + 1).stream(transaction=transaction)
+        ]
+        if any(not isinstance(run.get("observed_at"), datetime) for run in runs):
+            return full_history()
+        if len(runs) <= max_items:
+            # order_by excludes missing fields. An unfiltered count at the SAME
+            # snapshot proves that a short result contains the entire history,
+            # avoiding a second N-document read for ordinary short histories.
+            result = ref.count(alias="runs").get(transaction=transaction)
+            value = result[0][0].value
+            if (not isinstance(value, (int, float)) or isinstance(value, bool)
+                    or not math.isfinite(value) or value < 0 or value != int(value)):
+                raise ValueError("Invalid topic run aggregation count")
+            if int(value) != len(runs):
+                return full_history()
+        elif runs[max_items - 1]["observed_at"] == runs[max_items]["observed_at"]:
+            return full_history()
+        return runs
+
+    fake_runner = getattr(db, "run_transaction", None)
+    if callable(fake_runner):
+        runs = fake_runner(read)
+    else:
+        from firebase_admin import firestore
+
+        runs = firestore.transactional(read)(db.transaction(read_only=True))
     runs.sort(
         key=lambda item: (
             item.get("observed_at") if isinstance(item.get("observed_at"), datetime)
             else datetime.min.replace(tzinfo=timezone.utc),
             item.get("version") or 0,
+            item["id"],
         )
     )
     return runs[-max_items:]

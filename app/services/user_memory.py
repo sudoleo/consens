@@ -28,6 +28,10 @@ from __future__ import annotations
 
 import logging
 import re
+import threading
+import time
+from collections import OrderedDict
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 from app.core.observability import safe_exception
@@ -238,6 +242,86 @@ def build_interactive_memory_boundary_prompt(base_prompt: str) -> str:
 # parallele Requests eines einzigen Nutzerklicks daran haengen.
 PROFILE_READ_TIMEOUT_SECONDS = 3.0
 
+# Only the parallel requests of one interactive run share a snapshot. Settings
+# reads and new run keys always read Firestore. Keep personal text short-lived
+# and cap both completed entries and concurrent loaders.
+PROFILE_RUN_CACHE_TTL_SECONDS = 120.0
+PROFILE_RUN_CACHE_MAX_ENTRIES = 256
+
+
+@dataclass
+class _ProfileSnapshot:
+    repository: object
+    ready: threading.Event = field(default_factory=threading.Event)
+    text: str = ""
+    expires_at: float = 0.0
+    invalidated: bool = False
+
+
+class _RunProfileSnapshotCache:
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._entries: OrderedDict[tuple, _ProfileSnapshot] = OrderedDict()
+
+    def invalidate(self, uid: str) -> None:
+        with self._lock:
+            for key, entry in list(self._entries.items()):
+                if key[1] == uid:
+                    entry.invalidated = True
+                    del self._entries[key]
+
+    def load(self, repository, uid, run_key, max_notes_chars, loader) -> str:
+        key = (id(repository), uid, run_key, max_notes_chars)
+        now = time.monotonic()
+        with self._lock:
+            for old_key, old_entry in list(self._entries.items()):
+                if old_entry.ready.is_set() and old_entry.expires_at <= now:
+                    del self._entries[old_key]
+            entry = self._entries.get(key)
+            leader = entry is None
+            if leader:
+                if len(self._entries) >= PROFILE_RUN_CACHE_MAX_ENTRIES:
+                    # Never evict an active loader: its followers must continue
+                    # sharing it, and in-flight state must remain bounded too.
+                    victim = next((k for k, v in self._entries.items() if v.ready.is_set()), None)
+                    if victim is not None:
+                        del self._entries[victim]
+                if len(self._entries) < PROFILE_RUN_CACHE_MAX_ENTRIES:
+                    entry = _ProfileSnapshot(repository)
+                    self._entries[key] = entry
+            else:
+                self._entries.move_to_end(key)
+        if entry is None:
+            return loader()
+        if not leader:
+            # Optional memory must never leave another request waiting forever.
+            if not entry.ready.wait(PROFILE_READ_TIMEOUT_SECONDS + 0.1):
+                return ""
+            return "" if entry.invalidated else entry.text
+        try:
+            text = loader()
+            with self._lock:
+                if not entry.invalidated:
+                    entry.text = text
+                    entry.expires_at = time.monotonic() + PROFILE_RUN_CACHE_TTL_SECONDS
+            return "" if entry.invalidated else entry.text
+        except BaseException:
+            # Share failure with current waiters, but allow the next call to retry.
+            with self._lock:
+                if self._entries.get(key) is entry:
+                    del self._entries[key]
+            raise
+        finally:
+            entry.ready.set()
+
+
+_profile_run_cache = _RunProfileSnapshotCache()
+
+
+def invalidate_profile_snapshots(uid: str) -> None:
+    """Discard this process's snapshots when the profile/account is deleted."""
+    _profile_run_cache.invalidate(str(uid or "").strip())
+
 
 def _bounded_get(reference):
     """Einen Dokument-Read mit hartem Budget lesen.
@@ -319,6 +403,7 @@ class FirestoreUserMemoryRepository:
 
     def delete(self, uid: str) -> None:
         self._profile_ref(uid).delete()
+        invalidate_profile_snapshots(uid)
 
     def _transaction(self, operation):
         if self._transaction_runner is not None:
@@ -353,6 +438,7 @@ def load_profile_text(
     uid: str,
     *,
     max_notes_chars: int = MAX_NOTES_CHARS,
+    run_key: str | None = None,
 ) -> str:
     """Der Profilblock fuer einen Lauf -- fail-open.
 
@@ -360,15 +446,25 @@ def load_profile_text(
     Frage gestellt, nicht eine Einstellung geoeffnet. Der Lauf geht dann ohne
     Profil raus, so wie vor diesem Feature. Sichtbar bleibt es trotzdem, sonst
     faellt es still fuer alle aus, ohne dass irgendwo etwas kaputt aussieht.
+
+    Mit Lauf-Key teilen parallele Modell-Requests desselben Owners und Workers
+    hoechstens 120 Sekunden denselben Snapshot. Profil-Edits gelten fuer den
+    naechsten Lauf; Einstellungen und Requests ohne Key werden nie gecacht.
     """
     if not uid:
         return ""
-    try:
+
+    def load():
         try:
             profile = repository.get(uid, max_notes_chars=max_notes_chars)
         except TypeError:
             profile = repository.get(uid)
         return render_profile(profile, max_notes_chars=max_notes_chars)
+
+    try:
+        if isinstance(run_key, str) and run_key.strip() and len(run_key) <= 200:
+            return _profile_run_cache.load(repository, uid, run_key, max_notes_chars, load)
+        return load()
     except Exception as exc:
         logging.warning("user memory load failed category=%s", safe_exception(exc))
         return ""

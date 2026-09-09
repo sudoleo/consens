@@ -27,6 +27,7 @@ class FakeDocumentReference:
         if transaction is not None:
             return transaction.get(self)
         with self._db.lock:
+            self._db.reads.append(self.path)
             return FakeSnapshot(self._db.documents.get(self.path))
 
 
@@ -45,6 +46,9 @@ class FakeTransaction:
         self._writes = []
 
     def get(self, ref):
+        if self._writes:
+            raise AssertionError("Firestore transactions must read before writing")
+        self._db.reads.append(ref.path)
         return FakeSnapshot(self._db.documents.get(ref.path))
 
     def set(self, ref, data, merge=False):
@@ -71,6 +75,7 @@ class FakeTransaction:
 class FakeFirestore:
     def __init__(self):
         self.documents = {}
+        self.reads = []
         self.lock = threading.RLock()
 
     def collection(self, name):

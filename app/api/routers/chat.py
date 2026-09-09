@@ -90,7 +90,8 @@ from app.services.usage_repository import (
     UsageLimits,
     UsageRunExpired,
     UsageRunConflict,
-    UsageRunNotFound,
+    UsageOperationConflict,
+    UsageRunReleased,
     UsageTransitionError,
     canonical_request_fingerprint,
 )
@@ -247,52 +248,56 @@ def consume_usage_run(uid: str, key: str):
         ) from None
 
 
-def claim_usage_operation(uid: str, key: str, operation: str, request_payload):
-    """Claim one provider/Judge operation before external work begins."""
+def authorize_usage_operation(
+    uid: str, data: dict, operation: str, request_payload: dict,
+    *, tier, deep_think: bool, purpose: Optional[str] = None,
+):
+    """Keep quota, run binding and execution claim in one transaction."""
+    key = get_usage_run_key(data)
     try:
-        claim = run_usage_repository.claim_operation(
-            uid,
-            key,
-            operation,
+        result, claim = run_usage_repository.authorize_operation(
+            uid, key, RunKind.DEEP_THINK if deep_think else RunKind.REGULAR,
+            get_run_usage_limits(tier), operation,
             canonical_request_fingerprint(request_payload),
+            request_fingerprint=usage_run_fingerprint(
+                data, question=str(data.get("question") or "").strip(),
+                deep_think=deep_think, purpose=purpose,
+            ),
         )
-    except UsageRunNotFound as exc:
+    except UsageLimitExceeded as exc:
+        detail = usage_response_fields(exc.snapshot, tier)
+        detail.update({
+            "error": (
+                "Your Deep Think quota is exhausted for this UTC day."
+                if exc.limiting_bucket == "deep_think"
+                else "Your run quota is exhausted for this UTC day."
+            ),
+            "error_code": f"{exc.limiting_bucket}_usage_limit_exceeded",
+        })
+        raise HTTPException(status_code=403, detail=detail) from None
+    except (UsageRunConflict, UsageRunExpired, UsageRunReleased, UsageTransitionError) as exc:
+        code = (
+            "usage_operation_conflict" if isinstance(exc, UsageOperationConflict) else
+            "usage_run_conflict" if isinstance(exc, UsageRunConflict) else
+            "usage_run_expired" if isinstance(exc, UsageRunExpired) else
+            "usage_run_released" if isinstance(exc, UsageRunReleased) else
+            "usage_run_transition"
+        )
         raise HTTPException(
-            status_code=404,
-            detail={"error": str(exc), "error_code": "usage_run_not_found"},
-        ) from None
-    except UsageRunExpired as exc:
-        raise HTTPException(
-            status_code=409,
-            detail={"error": str(exc), "error_code": "usage_run_expired"},
-        ) from None
-    except UsageRunConflict as exc:
-        raise HTTPException(
-            status_code=409,
-            detail={"error": str(exc), "error_code": "usage_operation_conflict"},
-        ) from None
-    except UsageTransitionError as exc:
-        raise HTTPException(
-            status_code=409,
-            detail={"error": str(exc), "error_code": "usage_run_transition"},
+            status_code=409, detail={"error": str(exc), "error_code": code},
         ) from None
     except FirestoreAborted:
-        raise HTTPException(
-            status_code=503,
-            detail={
-                "error": "Usage authorization is temporarily busy. Please retry.",
-                "error_code": "usage_storage_busy",
-            },
-        ) from None
+        raise HTTPException(status_code=503, detail={
+            "error": "Usage authorization is temporarily busy. Please retry.",
+            "error_code": "usage_storage_busy",
+        }) from None
     if claim.idempotent:
-        raise HTTPException(
-            status_code=409,
-            detail={
-                "error": "This logical operation was already started.",
-                "error_code": "usage_operation_already_claimed",
-            },
-        )
-    return claim
+        raise HTTPException(status_code=409, detail={
+            "error": "This logical operation was already started.",
+            "error_code": "usage_operation_already_claimed",
+        })
+    return result
+
 
 def parse_boolean_flag(value) -> bool:
     return str(value).strip().lower() == "true"
@@ -922,6 +927,7 @@ def handle_ask(provider: AskProvider, request: Request, data: dict):
             user_memory_repository,
             uid,
             max_notes_chars=cfg.get_memory_char_limit(tier),
+            run_key=data.get("usage_run_key"),
         )
         if memory_text:
             system_prompt = user_memory.build_user_memory_system_prompt(
@@ -1006,13 +1012,9 @@ def handle_ask(provider: AskProvider, request: Request, data: dict):
         if not developer_key:
             raise HTTPException(status_code=500, detail="Server error: API key missing")
 
-        usage_key, _ = reserve_usage_run(
-            uid, data, tier=tier, deep_think=deep_search
-        )
-        usage_result = consume_usage_run(uid, usage_key)
-        claim_usage_operation(
+        usage_result = authorize_usage_operation(
             uid,
-            usage_key,
+            data,
             f"ask:{provider.label.lower()}",
             {
                 "schema": 1,
@@ -1027,6 +1029,7 @@ def handle_ask(provider: AskProvider, request: Request, data: dict):
                 "turn_id": data.get("turn_id"),
                 "context_version_id": data.get("context_version_id"),
             },
+            tier=tier, deep_think=deep_search,
         )
 
         return _run_ask(
@@ -1138,17 +1141,9 @@ def prepare(request: Request, data: dict = Body(...)):
         usage_key, _ = reserve_usage_run(
             uid, data, tier=tier, deep_think=deep_think
         )
-        # Den Slot sofort mitverbrauchen. Der anschliessende parallele
-        # /ask_*-Fan-out ruft zwar weiterhin reserve+consume, trifft danach aber
-        # ausschliesslich die idempotenten No-Write-Pfade (der Run ist bereits
-        # consumed). Genau das behebt die "Usage accounting is temporarily busy"-
-        # 503er: sechs gleichzeitige Read-Modify-WRITE-Transaktionen auf
-        # demselben usage_days-Dokument erzeugten Firestore-Contention (Aborted).
-        # Nach dem Vorab-Consume schreibt im Fan-out kein Request mehr; reine
-        # Lese-Transaktionen kollidieren nie. Ergo genau ein wirksamer
-        # Reserve+Consume pro Lauf, hier und seriell statt 6x parallel. Der
-        # Consume im Fan-out bleibt als Selbstheilung erhalten (falls /prepare
-        # nur reservieren, aber nicht konsumieren konnte).
+        # Consume once before fan-out so later authorization only reads the
+        # daily counters and writes the operation claim. The combined authorize
+        # path also consumes a leftover reservation if prepare was interrupted.
         usage_result = consume_usage_run(uid, usage_key)
         response.update(usage_response_fields(usage_result.snapshot, tier))
         response["usage_run_status"] = usage_result.status.value
@@ -1339,13 +1334,9 @@ def consensus(request: Request, data: dict = Body(...)):
 
     usage_result = None
     if not use_own_keys:
-        usage_key, _ = reserve_usage_run(
-            uid, data, tier=tier, deep_think=deep_think
-        )
-        usage_result = consume_usage_run(uid, usage_key)
-        claim_usage_operation(
+        usage_result = authorize_usage_operation(
             uid,
-            usage_key,
+            data,
             "consensus",
             {
                 "schema": 1,
@@ -1360,6 +1351,7 @@ def consensus(request: Request, data: dict = Body(...)):
                 "turn_id": data.get("turn_id"),
                 "context_version_id": context_version_id,
             },
+            tier=tier, deep_think=deep_think,
         )
 
     # Share-Feature: Ergebnis nur für verifizierte Nutzer persistieren.
@@ -1982,17 +1974,9 @@ def resolve(request: Request, data: dict = Body(...)):
 
     usage_result = None
     if not use_own_keys:
-        usage_key, _ = reserve_usage_run(
+        usage_result = authorize_usage_operation(
             uid,
             data,
-            tier=tier,
-            deep_think=False,
-            purpose="resolve",
-        )
-        usage_result = consume_usage_run(uid, usage_key)
-        claim_usage_operation(
-            uid,
-            usage_key,
             "resolve",
             {
                 "schema": 1,
@@ -2000,6 +1984,7 @@ def resolve(request: Request, data: dict = Body(...)):
                 "claim": claim,
                 "positions": positions,
             },
+            tier=tier, deep_think=False, purpose="resolve",
         )
 
     api_keys = build_engine_api_keys(data, use_own_keys)

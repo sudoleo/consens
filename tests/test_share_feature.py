@@ -1,6 +1,8 @@
 import unittest
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
+from threading import Event
 from unittest.mock import patch
 
 from fastapi import FastAPI
@@ -1143,6 +1145,83 @@ class ModerationAndCleanupTests(unittest.TestCase):
         # Themen-Treffer schlaegt den neueren, aber unverwandten Share.
         self.assertIn(relevant, items[0]["path"])
         self.assertEqual(len(items), 2)
+
+    def test_related_candidate_pool_serves_different_pages_and_arguments(self):
+        solar = self._make_share(indexed=True, question="Solar panels cost")
+        france = self._make_share(indexed=True, question="France capital")
+        self._make_share(indexed=True, visibility="private")
+        self._make_share(indexed=True, status="blocked")
+        with patch.object(snapshots, "db_firestore", self.db), patch.object(
+            snapshots, "_load_related_candidates", wraps=snapshots._load_related_candidates
+        ) as loader:
+            first = snapshots.list_related_shares(solar, "France capital", limit=1)
+            self.assertIn(france, first[0]["path"])
+            first[0]["question"] = "mutated caller copy"
+            second = snapshots.list_related_shares(france, "Solar panels", limit=4)
+            self.assertIn(solar, second[0]["path"])
+            self.assertEqual(len(second), 1)
+            self.assertEqual(snapshots.list_related_shares(solar, "France capital")[0]["question"], "France capital")
+            self.assertEqual(loader.call_count, 1)
+            snapshots.list_related_shares(solar, "France capital", scan_limit=10)
+            self.assertEqual(loader.call_count, 2)
+            snapshots.moderate_share(france, action="block", db=self.db)
+            self.assertEqual(snapshots.list_related_shares(solar, "France capital"), [])
+            self.assertEqual(loader.call_count, 3)
+
+    def test_related_pool_expiry_and_explicit_database_bypass(self):
+        timer = [0]
+        cache = snapshots.TTLCache(maxsize=8, ttl=900, timer=lambda: timer[0])
+        item = self._make_share(indexed=True)
+        with patch.object(snapshots, "db_firestore", self.db), patch.object(
+            snapshots, "_related_candidates_cache", cache
+        ), patch.object(snapshots, "_load_related_candidates", wraps=snapshots._load_related_candidates) as loader:
+            self.assertEqual(len(snapshots.list_related_shares("other", "")), 1)
+            self._share(item)["visibility"] = "private"
+            self.assertEqual(snapshots.list_related_shares("other", "", db=self.db), [])
+            timer[0] = 899
+            self.assertEqual(len(snapshots.list_related_shares("new-page", "")), 1)
+            timer[0] = 901
+            self.assertEqual(snapshots.list_related_shares("other", ""), [])
+            self.assertEqual(loader.call_count, 3)
+
+    def test_related_pool_coalesces_concurrent_misses(self):
+        self._make_share(indexed=True)
+        with patch.object(snapshots, "db_firestore", self.db), patch.object(
+            snapshots, "_load_related_candidates", wraps=snapshots._load_related_candidates
+        ) as loader, ThreadPoolExecutor(max_workers=8) as executor:
+            results = list(executor.map(lambda i: snapshots.list_related_shares(str(i), "question"), range(24)))
+            self.assertTrue(all(len(result) == 1 for result in results))
+            self.assertEqual(loader.call_count, 1)
+
+    def test_related_invalidation_during_fill_cannot_leave_stale_pool(self):
+        item = self._make_share(indexed=True)
+        entered, release, invalidating = Event(), Event(), Event()
+        original = snapshots._load_related_candidates
+
+        def delayed_load(db, scan_limit):
+            result = original(db, scan_limit)
+            entered.set()
+            self.assertTrue(release.wait(5))
+            return result
+
+        def invalidate():
+            self._share(item)["visibility"] = "private"
+            invalidating.set()
+            snapshots.invalidate_share_cache(item)
+
+        with patch.object(snapshots, "db_firestore", self.db), patch.object(
+            snapshots, "_load_related_candidates", side_effect=delayed_load
+        ), ThreadPoolExecutor(max_workers=2) as executor:
+            first = executor.submit(snapshots.list_related_shares, "other", "")
+            try:
+                self.assertTrue(entered.wait(5))
+                invalidation = executor.submit(invalidate)
+                self.assertTrue(invalidating.wait(5))
+            finally:
+                release.set()
+            first.result(timeout=5)
+            invalidation.result(timeout=5)
+            self.assertEqual(snapshots.list_related_shares("other", ""), [])
 
     def test_share_cache_returns_cached_until_invalidated(self):
         share_id = self._make_share()

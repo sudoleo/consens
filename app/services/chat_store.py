@@ -1006,7 +1006,10 @@ class ChatStore:
         """One page of turns including consensus, sources and model answers.
 
         The chat is verified once for the whole page instead of once per turn,
-        so a page costs 2 + N reads rather than 2 + 8N. Pass ``status`` to keep
+        so a page needs 2 + N SDK calls. Billable document reads still include
+        the chat, every queried turn (including the pagination sentinel), and
+        each returned model answer; empty queries also have a minimum charge.
+        Pass ``status`` to keep
         only turns in that lifecycle state; pagination still reflects the full
         page so the cursor stays stable.
         """

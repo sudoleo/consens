@@ -92,8 +92,8 @@ def test_prepare_and_parallel_models_consume_exactly_one_run(run_api):
     prepared = _prepare(client, key)
     assert prepared.status_code == 200
     # /prepare reserviert UND verbraucht den Slot sofort (ein wirksamer
-    # Reserve+Consume pro Lauf); der Fan-out unten trifft danach nur noch die
-    # idempotenten No-Write-Pfade und erzeugt keine Firestore-Contention mehr.
+    # Reserve+Consume pro Lauf); der Fan-out liest danach die Tageszaehler
+    # und schreibt ausschliesslich die einmaligen Operations-Claims.
     assert prepared.json()["usage_run_status"] == "consumed"
     assert prepared.json()["free_usage_remaining"] == FREE_TOTAL - 1
 
@@ -215,7 +215,7 @@ def test_exhausted_firestore_contention_returns_structured_503(run_api, monkeypa
     client, repository = run_api
     key = "contention-run"
     assert _prepare(client, key).status_code == 200
-    monkeypatch.setattr(repository, "consume", lambda *_args, **_kwargs: (_ for _ in ()).throw(Aborted("contention")))
+    monkeypatch.setattr(repository, "authorize_operation", lambda *_args, **_kwargs: (_ for _ in ()).throw(Aborted("contention")))
 
     response = _ask(client, "/ask_gemini", "gemini", key)
 
@@ -235,3 +235,39 @@ def test_deep_think_counts_once_total_and_once_in_deep_quota(run_api, monkeypatc
     snapshot = repository.snapshot(UID, _limits(is_pro=True))
     assert snapshot.total.consumed == 1
     assert snapshot.deep_think.consumed == 1
+
+
+@pytest.mark.parametrize("changed,expected_code", [
+    ({"question": "Different question"}, "usage_run_conflict"),
+    ({"stream": True}, "usage_operation_conflict"),
+    ({}, "usage_operation_already_claimed"),
+])
+def test_authorization_rejections_never_start_a_second_provider(run_api, monkeypatch, changed, expected_code):
+    client, _ = run_api
+    calls = []
+    def provider(_provider, **kwargs):
+        calls.append(True)
+        return {"response": "answer", **kwargs["extras"]}
+    monkeypatch.setattr(chat_router, "_run_ask", provider)
+    payload = {
+        "question": "What changed?", "usage_run_key": "bound-operation",
+        "model": cfg.FREE_DEFAULT_MODEL_BY_PROVIDER["openai"],
+    }
+    assert client.post("/ask_openai", headers=AUTH, json=payload).status_code == 200
+    response = client.post("/ask_openai", headers=AUTH, json={**payload, **changed})
+    assert response.status_code == 409
+    assert response.json()["detail"]["error_code"] == expected_code
+    assert len(calls) == 1
+
+
+def test_prepared_run_can_finish_when_daily_limit_is_exhausted(run_api):
+    client, repository = run_api
+    assert _prepare(client, "last-allowed").status_code == 200
+    for index in range(FREE_TOTAL - 1):
+        key = f"other-run-{index}"
+        repository.reserve(UID, key, RunKind.REGULAR, _limits())
+        repository.consume(UID, key)
+    response = _ask(client, "/ask_openai", "openai", "last-allowed")
+    assert response.status_code == 200
+    assert response.json()["free_usage_remaining"] == 0
+    assert repository.snapshot(UID, _limits()).total.consumed == FREE_TOTAL

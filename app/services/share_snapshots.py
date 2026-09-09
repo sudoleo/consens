@@ -20,6 +20,7 @@ import secrets
 import string
 import unicodedata
 from datetime import datetime, timedelta, timezone
+from threading import RLock
 from urllib.parse import urlsplit
 
 from cachetools import TTLCache
@@ -775,10 +776,12 @@ _share_cache = TTLCache(maxsize=1024, ttl=SHARE_CACHE_TTL_SECONDS)
 # Dedup-Canonical-Lookups (question_hash -> Ziel oder None) separat cachen;
 # jede Moderation kann Canonical-Ziele ändern, daher wird er mit invalidiert.
 _canonical_cache = TTLCache(maxsize=1024, ttl=SHARE_CACHE_TTL_SECONDS)
-# "Verwandte Fragen"-Vorschläge (share_id -> Liste). Längere TTL, da nur aus
-# dem selten wechselnden Index-Set gespeist; bei Moderation mit-invalidiert.
+# "Verwandte Fragen": gemeinsamer Kandidatenbestand, bei Moderation invalidiert.
 RELATED_CACHE_TTL_SECONDS = 900
-_related_cache = TTLCache(maxsize=512, ttl=RELATED_CACHE_TTL_SECONDS)
+# A single compact indexed pool serves different share pages. Serialize fills
+# with invalidation so a concurrent moderation cannot refill stale candidates.
+_related_candidates_cache = TTLCache(maxsize=8, ttl=RELATED_CACHE_TTL_SECONDS)
+_related_cache_lock = RLock()
 # Öffentliche /questions-Hub-Seite: eine Liste für alle Besucher, daher ein
 # einzelner Cache-Eintrag; bei Moderation mit-invalidiert.
 _hub_cache = TTLCache(maxsize=1, ttl=RELATED_CACHE_TTL_SECONDS)
@@ -799,7 +802,8 @@ def invalidate_share_cache(share_id=None):
     else:
         _share_cache.pop(share_id, None)
     _canonical_cache.clear()
-    _related_cache.clear()
+    with _related_cache_lock:
+        _related_candidates_cache.clear()
     _hub_cache.clear()
 
 
@@ -1564,6 +1568,31 @@ def _question_tokens(question):
     return {t for t in tokens if len(t) >= 3 and t not in _RELATED_STOPWORDS}
 
 
+def _load_related_candidates(db, scan_limit):
+    candidates = []
+    docs = (
+        _where(db.collection(SHARES_COLLECTION), "indexed", "==", True)
+        .limit(scan_limit)
+        .stream()
+    )
+    for doc in docs:
+        data = doc.to_dict() or {}
+        if (data.get("status") != "active"
+                or str(data.get("visibility") or "public") != "public"):
+            continue
+        question = data.get("question") or ""
+        created_at = data.get("created_at")
+        candidates.append({
+            "id": doc.id,
+            "path": share_path(data.get("slug") or "", doc.id),
+            "question": _clip(question, 200),
+            "models_count": len(data.get("included_models") or []),
+            "tokens": frozenset(_question_tokens(question)),
+            "created_key": created_at.isoformat() if isinstance(created_at, datetime) else "",
+        })
+    return candidates
+
+
 def list_related_shares(exclude_share_id, question, db=None, limit=4, scan_limit=400):
     """Vorschläge "verwandte Fragen" für die öffentliche Share-Seite.
 
@@ -1571,47 +1600,25 @@ def list_related_shares(exclude_share_id, question, db=None, limit=4, scan_limit
     noindex/private/gesperrte Snapshots. Relevanz über Token-Überlappung der
     Frage, Tie-Break und Fallback über Aktualität. Read-only, gecacht.
     """
-    use_cache = db is None and bool(exclude_share_id)
-    if use_cache and exclude_share_id in _related_cache:
-        return _related_cache[exclude_share_id]
-
-    db = db if db is not None else db_firestore
-    query_tokens = _question_tokens(question)
-    docs = (
-        _where(db.collection(SHARES_COLLECTION), "indexed", "==", True)
-        .limit(scan_limit)
-        .stream()
-    )
-
-    candidates = []
-    for doc in docs:
-        if doc.id == exclude_share_id:
-            continue
-        data = doc.to_dict() or {}
-        if (data.get("status") != "active"
-                or str(data.get("visibility") or "public") != "public"):
-            continue
-        candidate_question = data.get("question") or ""
-        overlap = len(query_tokens & _question_tokens(candidate_question)) if query_tokens else 0
-        created_at = data.get("created_at")
-        created_key = created_at.isoformat() if isinstance(created_at, datetime) else ""
-        candidates.append({
-            "path": share_path(data.get("slug") or "", doc.id),
-            "question": _clip(candidate_question, 200),
-            "models_count": len(data.get("included_models") or []),
-            "overlap": overlap,
-            "created_key": created_key,
-        })
-
-    # Beste Überlappung zuerst, bei Gleichstand die neuesten.
-    candidates.sort(key=lambda item: (item["overlap"], item["created_key"]), reverse=True)
-    related = [
-        {"path": c["path"], "question": c["question"], "models_count": c["models_count"]}
-        for c in candidates[:limit]
-    ]
-    if use_cache:
-        _related_cache[exclude_share_id] = related
-    return related
+    use_cache = db is None
+    query_tokens = frozenset(_question_tokens(question))
+    with _related_cache_lock:
+        if use_cache and scan_limit in _related_candidates_cache:
+            pool = _related_candidates_cache[scan_limit]
+        else:
+            pool = _load_related_candidates(db if db is not None else db_firestore, scan_limit)
+            if use_cache:
+                _related_candidates_cache[scan_limit] = pool
+        candidates = [item for item in pool if item["id"] != exclude_share_id]
+        candidates.sort(
+            key=lambda item: (len(query_tokens & item["tokens"]), item["created_key"]),
+            reverse=True,
+        )
+        related = [
+            {name: item[name] for name in ("path", "question", "models_count")}
+            for item in candidates[:limit]
+        ]
+        return related
 
 
 def list_hub_shares(db=None, max_items=1000):

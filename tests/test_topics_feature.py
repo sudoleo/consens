@@ -1,6 +1,7 @@
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 import pytest
@@ -59,20 +60,35 @@ class FakeDocument:
 
 
 class FakeQuery:
-    def __init__(self, collection, filters):
+    def __init__(self, collection, filters, ordering=None, max_items=None):
         self.collection = collection
         self.filters = filters
+        self.ordering = ordering
+        self.max_items = max_items
 
     def where(self, field, op, value):
-        return FakeQuery(self.collection, self.filters + [(field, op, value)])
+        return FakeQuery(self.collection, self.filters + [(field, op, value)], self.ordering, self.max_items)
 
-    def stream(self):
-        snapshots = self.collection.stream()
+    def order_by(self, field, direction):
+        return FakeQuery(self.collection, self.filters, (field, direction), self.max_items)
+
+    def limit(self, value):
+        return FakeQuery(self.collection, self.filters, self.ordering, value)
+
+    def stream(self, transaction=None):
+        snapshots = self.collection._snapshots(transaction)
         for field, op, value in self.filters:
             assert op == "=="
             snapshots = [
                 snap for snap in snapshots if (snap.to_dict() or {}).get(field) == value
             ]
+        if self.ordering:
+            field, direction = self.ordering
+            snapshots = [snap for snap in snapshots if field in snap.to_dict()]
+            snapshots.sort(key=lambda snap: (snap.to_dict()[field], snap.id), reverse=direction == "DESCENDING")
+        if self.max_items is not None:
+            snapshots = snapshots[:self.max_items]
+        self.collection.db.query_reads.append((self.collection.path, self.ordering, self.max_items, len(snapshots)))
         return snapshots
 
 
@@ -87,17 +103,43 @@ class FakeCollection:
     def where(self, field, op, value):
         return FakeQuery(self, [(field, op, value)])
 
-    def stream(self):
+    def order_by(self, field, direction):
+        return FakeQuery(self, []).order_by(field, direction)
+
+    def count(self, alias):
+        assert alias == "runs"
+        return FakeRunCount(self)
+
+    def stream(self, transaction=None):
+        snapshots = self._snapshots(transaction)
+        self.db.query_reads.append((self.path, None, None, len(snapshots)))
+        return snapshots
+
+    def _snapshots(self, transaction=None):
+        documents = transaction.documents if transaction else self.db.documents
         return [
             FakeSnapshot(FakeDocument(self.db, path), data)
-            for path, data in self.db.documents.items()
+            for path, data in documents.items()
             if len(path) == len(self.path) + 1 and path[:-1] == self.path
         ]
+
+
+class FakeRunCount:
+    def __init__(self, collection):
+        self.collection = collection
+
+    def get(self, transaction=None):
+        self.collection.db.count_reads += 1
+        assert transaction is not None
+        count = len(self.collection._snapshots(transaction))
+        return [[SimpleNamespace(value=count or 0.0)]]
 
 
 class FakeFirestore:
     def __init__(self):
         self.documents = {}
+        self.query_reads = []
+        self.count_reads = 0
         self.fail_transaction_after_staged_writes = None
 
     def collection(self, name):
@@ -113,6 +155,7 @@ class FakeFirestore:
 class FakeTransaction:
     def __init__(self, db):
         self.db = db
+        self.documents = {path: dict(data) for path, data in db.documents.items()}
         self.operations = []
 
     def get(self, ref):
@@ -138,6 +181,142 @@ class FakeTransaction:
                 ref.update(data)
             else:
                 ref.delete()
+
+
+def test_list_runs_bounds_long_histories_and_preserves_ascending_chronology():
+    db = FakeFirestore()
+    for index in range(300):
+        db.documents[("topics", "topic", "runs", f"r{index:03}")] = {
+            "observed_at": NOW + timedelta(days=index), "version": 300 - index,
+        }
+    runs = topics.list_runs("topic", db=db, max_items=100)
+    assert [run["id"] for run in runs] == [f"r{index:03}" for index in range(200, 300)]
+    assert db.query_reads == [(("topics", "topic", "runs"), ("observed_at", "DESCENDING"), 101, 101)]
+
+
+def test_list_runs_keeps_legacy_missing_dates_and_versions():
+    db = FakeFirestore()
+    db.documents[("topics", "topic", "runs", "legacy")] = {"version": 99}
+    db.documents[("topics", "topic", "runs", "noversion")] = {"observed_at": NOW}
+    db.documents[("topics", "topic", "runs", "versioned")] = {"observed_at": NOW, "version": 1}
+    runs = topics.list_runs("topic", db=db)
+    assert [run["id"] for run in runs] == ["legacy", "noversion", "versioned"]
+    assert db.count_reads == 1
+    assert db.query_reads[-1] == (("topics", "topic", "runs"), None, None, 3)
+
+
+@pytest.mark.parametrize("size", [0, 1, 20, 100])
+def test_list_runs_short_complete_history_uses_count_instead_of_document_rescan(size):
+    db = FakeFirestore()
+    for index in range(size):
+        db.documents[("topics", "topic", "runs", f"r{index:03}")] = {"observed_at": NOW + timedelta(days=index)}
+    runs = topics.list_runs("topic", db=db)
+    assert len(runs) == size
+    assert db.count_reads == 1
+    assert db.query_reads == [(("topics", "topic", "runs"), ("observed_at", "DESCENDING"), 101, size)]
+
+
+def test_list_runs_count_proof_uses_same_snapshot_during_deletion():
+    db = FakeFirestore()
+    ref = db.collection("topics").document("topic").collection("runs")
+    ref.document("legacy").set({"version": 1})
+    ref.document("valid").set({"observed_at": NOW})
+    original = FakeRunCount.get
+
+    def concurrent_delete(count, transaction=None):
+        ref.document("valid").delete()
+        return original(count, transaction=transaction)
+
+    with mock.patch.object(FakeRunCount, "get", concurrent_delete):
+        runs = topics.list_runs("topic", db=db)
+    assert [run["id"] for run in runs] == ["legacy", "valid"]
+    assert db.query_reads[-1][-1] == 2
+
+
+@pytest.mark.parametrize("count", [True, "1", -1, 0.5, float("inf"), float("nan")])
+def test_list_runs_rejects_invalid_counts_without_expensive_fallback(count):
+    db = FakeFirestore()
+    with mock.patch.object(FakeRunCount, "get", return_value=[[SimpleNamespace(value=count)]]):
+        with pytest.raises(ValueError, match="Invalid topic run aggregation count"):
+            topics.list_runs("topic", db=db)
+    assert len(db.query_reads) == 1
+
+
+def test_list_runs_count_failure_does_not_fall_back_to_a_full_scan():
+    db = FakeFirestore()
+    with mock.patch.object(FakeRunCount, "get", side_effect=RuntimeError("aggregation unavailable")):
+        with pytest.raises(RuntimeError, match="aggregation unavailable"):
+            topics.list_runs("topic", db=db)
+    assert len(db.query_reads) == 1
+
+
+def test_list_runs_sdk_count_is_unfiltered_and_shares_read_only_transaction():
+    from google.auth.credentials import AnonymousCredentials
+    from google.cloud.firestore_v1 import Client
+    from google.cloud.firestore_v1.types import (
+        BeginTransactionResponse, CommitResponse, RunAggregationQueryResponse,
+    )
+
+    db = Client(project="demo-topic-read-test", credentials=AnonymousCredentials())
+    api = mock.Mock()
+    api.begin_transaction.return_value = BeginTransactionResponse(transaction=b"snapshot")
+    api.run_query.return_value = iter([])
+    api.run_aggregation_query.return_value = iter([
+        RunAggregationQueryResponse(result={"aggregate_fields": {"runs": {"integer_value": 0}}})
+    ])
+    api.commit.return_value = CommitResponse()
+    db._firestore_api_internal = api
+
+    assert topics.list_runs("topic", db=db) == []
+    assert api.begin_transaction.call_args.kwargs["request"]["options"]._pb.HasField("read_only")
+    ordered = api.run_query.call_args.kwargs["request"]
+    aggregate = api.run_aggregation_query.call_args.kwargs["request"]
+    assert ordered["transaction"] == aggregate["transaction"] == b"snapshot"
+    assert ordered["structured_query"].limit == 101
+    query = aggregate["structured_aggregation_query"].structured_query
+    assert not query.order_by
+    assert not query._pb.HasField("where")
+    assert not query._pb.HasField("limit")
+    assert query.from_[0].collection_id == "runs"
+    assert api.run_query.call_count == 1
+    assert api.commit.call_args.kwargs["request"]["writes"] == []
+
+
+def test_list_runs_resolves_timestamp_boundary_by_version_and_document_id():
+    db = FakeFirestore()
+    for name, version in [("a", 4), ("b", 1), ("c", 3), ("d", 3)]:
+        db.documents[("topics", "topic", "runs", name)] = {"observed_at": NOW, "version": version}
+    assert [run["id"] for run in topics.list_runs("topic", db=db, max_items=2)] == ["d", "a"]
+    assert db.query_reads[-1] == (("topics", "topic", "runs"), None, None, 4)
+
+
+def test_list_runs_ignores_missing_dates_when_newer_window_is_full():
+    db = FakeFirestore()
+    db.documents[("topics", "topic", "runs", "legacy")] = {"version": 99}
+    for index in range(4):
+        db.documents[("topics", "topic", "runs", f"r{index}")] = {"observed_at": NOW + timedelta(days=index)}
+    assert [run["id"] for run in topics.list_runs("topic", db=db, max_items=2)] == ["r2", "r3"]
+    assert len(db.query_reads) == 1
+
+
+def test_list_runs_query_failure_is_not_hidden_by_a_full_scan():
+    db = FakeFirestore()
+    with mock.patch.object(FakeQuery, "stream", side_effect=RuntimeError("query unavailable")):
+        with pytest.raises(RuntimeError, match="query unavailable"):
+            topics.list_runs("topic", db=db)
+    assert db.query_reads == []
+
+
+def test_list_runs_invalid_legacy_timestamp_uses_original_sorting():
+    db = FakeFirestore()
+    ref = db.collection("topics").document("topic").collection("runs")
+    ref.document("invalid").set({"observed_at": "old import", "version": 10})
+    ref.document("valid").set({"observed_at": NOW, "version": 1})
+    # Firestore supports mixed stored types; inject the server's ordered output
+    # because the small fake deliberately only sorts homogeneous field types.
+    with mock.patch.object(FakeQuery, "stream", return_value=ref._snapshots()):
+        assert [run["id"] for run in topics.list_runs("topic", db=db, max_items=1)] == ["valid"]
+    assert db.query_reads[-1] == (("topics", "topic", "runs"), None, None, 2)
 
 
 def topic_payload(**overrides):

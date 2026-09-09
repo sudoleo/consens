@@ -16,6 +16,7 @@ from app.services import (
     persistence_guard,
     share_snapshots,
     topics,
+    user_memory,
     watch_service,
 )
 from app.services.api_account_cleanup import FirestoreApiAccountCleanup
@@ -55,6 +56,7 @@ class FirestoreAccountDeletion:
         existing = snap.to_dict() if snap.exists else {}
         if existing.get("status") == "completed":
             invalidate_auth_tombstone_cache(uid, blocked=True)
+            user_memory.invalidate_profile_snapshots(uid)
             return existing
         payload = {
             "schema_version": 1,
@@ -72,10 +74,12 @@ class FirestoreAccountDeletion:
             payload["email"] = normalized_email
         ref.set(payload, merge=True)
         invalidate_auth_tombstone_cache(uid, blocked=True)
+        user_memory.invalidate_profile_snapshots(uid)
         return {**existing, **payload}
 
     def cleanup_uid(self, uid: str) -> list[str]:
         uid = self._validate_uid(uid)
+        user_memory.invalidate_profile_snapshots(uid)
         ref = self._job_ref(uid)
         snap = ref.get()
         if not snap.exists:

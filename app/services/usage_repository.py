@@ -137,6 +137,14 @@ class UsageRunConflict(UsageRepositoryError):
     pass
 
 
+class UsageOperationConflict(UsageRunConflict):
+    """An operation payload conflicts, rather than the logical run."""
+
+
+class UsageRunReleased(UsageRepositoryError):
+    pass
+
+
 class UsageTransitionError(UsageRepositoryError):
     pass
 
@@ -154,6 +162,12 @@ class UsageDataError(UsageRepositoryError):
 
 
 class UsageRepository(Protocol):
+    def authorize_operation(
+        self, uid: str, idempotency_key: str, kind: RunKind,
+        limits: UsageLimits, operation: str, operation_fingerprint: str,
+        *, request_fingerprint: str, now: datetime | None = None,
+    ) -> tuple[UsageRunResult, UsageOperationClaim]: ...
+
     def reserve(
         self,
         uid: str,
@@ -219,6 +233,150 @@ class FirestoreUsageRepository:
     def __init__(self, db, *, transaction_runner: TransactionRunner | None = None):
         self._db = db
         self._transaction_runner = transaction_runner
+
+    def authorize_operation(
+        self, uid: str, idempotency_key: str, kind: RunKind,
+        limits: UsageLimits, operation: str, operation_fingerprint: str,
+        *, request_fingerprint: str, now: datetime | None = None,
+    ) -> tuple[UsageRunResult, UsageOperationClaim]:
+        """Reserve/consume/claim atomically, reading each document only once.
+
+        Prepared runs only need the deletion fence, run and current day
+        counters (three reads). Legacy direct calls can still create a run;
+        reservations from older clients are consumed in this same transaction.
+        No cached state may authorize external work.
+        """
+        uid = _validate_uid(uid)
+        key_hash = _idempotency_hash(idempotency_key)
+        kind = _coerce_kind(kind)
+        operation = _validate_operation(operation)
+        request_fingerprint = _validate_fingerprint(request_fingerprint)
+        operation_fingerprint = _validate_fingerprint(operation_fingerprint)
+        now = _as_utc(now)
+        run_ref = self._run_ref(uid, key_hash)
+
+        def authorize(tx):
+            persistence_guard.ensure_account_write_allowed(
+                uid=uid, db=self._db, transaction=tx
+            )
+            run_snap = run_ref.get(transaction=tx)
+            if run_snap.exists:
+                run_data = run_snap.to_dict() or {}
+                if _stored_kind(run_data) is not kind:
+                    raise UsageRunConflict(
+                        "Idempotency key is already bound to a different run kind"
+                    )
+                if not hmac.compare_digest(
+                    _stored_request_fingerprint(run_data), request_fingerprint
+                ):
+                    raise UsageRunConflict(
+                        "Idempotency key is already bound to a different request"
+                    )
+                utc_date = _stored_utc_date(run_data)
+                expires_at = _stored_expires_at(run_data)
+                if now >= expires_at:
+                    raise UsageRunExpired("Usage run has expired")
+                status = _stored_status(run_data)
+                if status is RunStatus.RELEASED:
+                    raise UsageRunReleased("This usage run was already released. Start a new run.")
+                run_limits = _stored_limits(run_data)
+            else:
+                utc_date = now.date().isoformat()
+                expires_at = datetime.combine(
+                    now.date() + timedelta(days=1), time.min, tzinfo=timezone.utc
+                )
+                status = None
+                run_limits = limits
+                run_data = {
+                    "schema_version": USAGE_SCHEMA_VERSION,
+                    "kind": kind.value,
+                    "utc_date": utc_date,
+                    "total_limit_at_reservation": limits.total,
+                    "deep_think_limit_at_reservation": limits.deep_think,
+                    "request_fingerprint": request_fingerprint,
+                    "expires_at": expires_at,
+                    "operation_claims": {},
+                    "created_at": now,
+                }
+
+            day_data = self._read_day(tx, uid, utc_date)
+            if status is None:
+                snapshot = _snapshot(uid, utc_date, day_data, run_limits)
+                limiting_bucket = (
+                    "total" if snapshot.total.remaining < 1 else
+                    "deep_think" if kind is RunKind.DEEP_THINK
+                    and snapshot.deep_think.remaining < 1 else None
+                )
+                if limiting_bucket:
+                    raise UsageLimitExceeded(
+                        uid=uid, kind=kind, utc_date=utc_date,
+                        snapshot=snapshot, limiting_bucket=limiting_bucket,
+                    )
+            elif status is RunStatus.RESERVED:
+                if day_data["total_reserved"] < 1:
+                    raise UsageDataError("Reserved counter is inconsistent with usage run")
+                if kind is RunKind.DEEP_THINK and day_data["deep_think_reserved"] < 1:
+                    raise UsageDataError("Deep Think counter is inconsistent with usage run")
+
+            claims = run_data.get("operation_claims")
+            if claims is None:
+                claims = {}
+            if not isinstance(claims, dict):
+                raise UsageDataError("Invalid operation claims in Firestore")
+            existing = claims.get(operation)
+            if existing is not None:
+                if not isinstance(existing, dict):
+                    raise UsageDataError("Invalid operation claim in Firestore")
+                stored_fingerprint = _validate_fingerprint(
+                    existing.get("request_fingerprint"), error_type=UsageDataError
+                )
+                if not hmac.compare_digest(stored_fingerprint, operation_fingerprint):
+                    raise UsageOperationConflict("Operation is already bound to a different request")
+                claimed_at = _stored_datetime(existing.get("claimed_at"), "claim time")
+            else:
+                claimed_at = now
+
+            # All reads and validations precede every write, as Firestore requires.
+            if status is not RunStatus.CONSUMED:
+                if status is RunStatus.RESERVED:
+                    day_data["total_reserved"] -= 1
+                    if kind is RunKind.DEEP_THINK:
+                        day_data["deep_think_reserved"] -= 1
+                day_data["total_consumed"] += 1
+                if kind is RunKind.DEEP_THINK:
+                    day_data["deep_think_consumed"] += 1
+                day_data.update({
+                    "schema_version": USAGE_SCHEMA_VERSION,
+                    "utc_date": utc_date, "updated_at": now,
+                })
+                tx.set(self._day_ref(uid, utc_date), day_data, merge=True)
+            if existing is None or status is not RunStatus.CONSUMED:
+                updated_claims = dict(claims)
+                updated_claims[operation] = {
+                    "request_fingerprint": operation_fingerprint,
+                    "claimed_at": claimed_at,
+                }
+                updates = {
+                    "status": RunStatus.CONSUMED.value,
+                    "operation_claims": updated_claims, "updated_at": now,
+                }
+                if status is not RunStatus.CONSUMED:
+                    updates["consumed_at"] = now
+                if run_snap.exists:
+                    tx.update(run_ref, updates)
+                else:
+                    tx.set(run_ref, {**run_data, **updates})
+            return (
+                _result(uid, key_hash, kind, RunStatus.CONSUMED, utc_date,
+                        day_data, run_limits, idempotent=status is RunStatus.CONSUMED),
+                UsageOperationClaim(
+                    uid=uid, idempotency_hash=key_hash, operation=operation,
+                    request_fingerprint=operation_fingerprint, claimed_at=claimed_at,
+                    expires_at=expires_at, idempotent=existing is not None,
+                ),
+            )
+
+        return self._transaction(authorize)
 
     def reserve(
         self,
@@ -621,12 +779,9 @@ class FirestoreUsageRepository:
     def _transaction(self, operation: Callable[[object], T]) -> T:
         if self._transaction_runner is not None:
             return self._transaction_runner(operation)
-        # Ein UI-Lauf fannt mehrere /ask_* Requests parallel mit demselben
-        # Idempotency-Key aus. Der erste Request konsumiert den Run, die
-        # restlichen muessen danach idempotent den CONSUMED-Stand lesen. Fuenf
-        # Firestore-Versuche reichen bei sechs gleichzeitigen Transaktionen
-        # nicht verlaesslich; ein hoeheres SDK-Retry-Budget laesst die kurze
-        # Hot-Document-Kollision auslaufen, ohne den Run mehrfach zu zaehlen.
+        # Parallel provider claims share one run document. Keep the retry
+        # budget for that contention, including legacy reserve/consume callers;
+        # transaction retries must never authorize an operation twice.
         transaction = self._db.transaction(max_attempts=12)
 
         @firestore.transactional

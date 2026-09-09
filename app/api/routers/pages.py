@@ -3,6 +3,8 @@ from __future__ import annotations
 import os
 import logging
 import re
+import threading
+import time
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Request, Body, HTTPException
@@ -16,6 +18,7 @@ from app.core.site import SITE_URL
 from app.core.version import REPO_URL, get_commit_short
 from app.core.security import verify_user_token, extract_id_token, db_firestore
 from firebase_admin import firestore
+from google.api_core.exceptions import FailedPrecondition
 from google.cloud.firestore_v1.base_query import FieldFilter
 from app.services import persistence_guard
 from pydantic import BaseModel, ConfigDict, Field, StrictStr, field_validator
@@ -182,6 +185,14 @@ def model_pulse(req: Request):
 
 _MODEL_PULSE_COMPARABLE_SINCE = datetime(2026, 8, 31, tzinfo=timezone.utc)
 _MODEL_PULSE_PERIOD = "since-2026-08-31"
+_LEADERBOARD_CACHE_TTL_SECONDS = 60
+# Two bounded, independently locked entries: concurrent cache misses for the
+# same period share one Firestore scan. Keep the client in the entry so a
+# replaced database client can never reuse another database's totals.
+_leaderboard_cache: dict[str, tuple[object, float, dict[str, int]]] = {}
+_leaderboard_cache_locks = {
+    period: threading.Lock() for period in ("all", _MODEL_PULSE_PERIOD)
+}
 _LEADERBOARD_FAMILY_BY_PROVIDER = {
     "openai": "OpenAI / ChatGPT",
     "mistral": "Mistral",
@@ -262,6 +273,104 @@ def _leaderboard_rows(totals: dict[str, int]) -> list[dict]:
     return rows
 
 
+def _count_period_leaderboard(db) -> dict[str, int]:
+    """Count indexed vote entries without transferring historical documents.
+
+    The vote writer atomically creates a lifetime leaderboard document for
+    every model label. Those IDs therefore also cover historical aliases;
+    account deletion removes vote markers but retains that model catalog.
+    Read the catalog and counts at one transactional snapshot so a new model
+    or a concurrent deletion cannot split this refresh across database states.
+    """
+    @firestore.transactional
+    def read(transaction):
+        models = set(cfg.VALID_LEADERBOARD_MODELS) | set(cfg.LEADERBOARD_MODEL_ALIASES)
+        models.update(
+            snapshot.id
+            for snapshot in db.collection("leaderboard").stream(transaction=transaction)
+        )
+        families: dict[str, list[str]] = {}
+        for model in sorted(models):
+            families.setdefault(_leaderboard_family(model), []).append(model)
+        base_query = db.collection(persistence_guard.VOTES_COLLECTION).where(
+            filter=FieldFilter("vote_type", "==", "BestModel")
+        ).where(filter=FieldFilter("created_at", ">=", _MODEL_PULSE_COMPARABLE_SINCE))
+        totals = {}
+        for family, aliases in families.items():
+            count = 0
+            # Firestore caps `in` queries at 30 alternatives. The catalog can
+            # retain more historical labels as models evolve.
+            for offset in range(0, len(aliases), 30):
+                result = base_query.where(
+                    filter=FieldFilter("model", "in", aliases[offset:offset + 30])
+                ).count(alias="selections").get(transaction=transaction, retry=None, timeout=10)
+                value = result[0][0].value
+                # The installed SDK decodes an integer zero as double 0.0.
+                if (
+                    not isinstance(value, (int, float)) or isinstance(value, bool)
+                    or value < 0 or value != int(value)
+                ):
+                    raise ValueError("Invalid leaderboard aggregation count")
+                count += int(value)
+            if count:
+                totals[family] = count
+        return totals
+
+    return read(db.transaction(read_only=True))
+
+
+def _leaderboard_index_pending(exc: FailedPrecondition) -> bool:
+    message = str(exc).lower()
+    return "index" in message and any(
+        marker in message for marker in ("requires an index", "not ready", "building")
+    )
+
+
+def _read_leaderboard_totals(period: str) -> dict[str, int]:
+    """Cache public totals for one minute, including legitimate empty results.
+
+    A failed or partial refresh is never published. Refreshes continue to derive
+    period totals from live vote markers, so account deletion retains its
+    existing behavior without a separate counter migration/decrement path.
+    """
+    db = db_firestore
+    with _leaderboard_cache_locks[period]:
+        cached = _leaderboard_cache.get(period)
+        if cached and cached[0] is db and cached[1] > time.monotonic():
+            return dict(cached[2])
+        totals = {}
+        if period == "all":
+            for snapshot in db.collection("leaderboard").stream():
+                selections = int(snapshot.to_dict().get("BestModel") or 0)
+                if selections <= 0:
+                    continue
+                family = _leaderboard_family(snapshot.id)
+                totals[family] = totals.get(family, 0) + selections
+        else:
+            try:
+                totals = _count_period_leaderboard(db)
+            except FailedPrecondition as exc:
+                if not _leaderboard_index_pending(exc):
+                    raise
+                # Deploying the code before its composite index is ready must
+                # not break the public page. Only this specific index error
+                # permits the legacy scan, still bounded to one refresh/minute.
+                logging.warning("model leaderboard index pending; using cached legacy scan")
+                votes = db.collection(persistence_guard.VOTES_COLLECTION).where(
+                    filter=FieldFilter("created_at", ">=", _MODEL_PULSE_COMPARABLE_SINCE)
+                )
+                for snapshot in votes.stream():
+                    vote = snapshot.to_dict() or {}
+                    if vote.get("vote_type") != "BestModel":
+                        continue
+                    family = _leaderboard_family(vote.get("model"))
+                    totals[family] = totals.get(family, 0) + 1
+        _leaderboard_cache[period] = (
+            db, time.monotonic() + _LEADERBOARD_CACHE_TTL_SECONDS, totals,
+        )
+        return dict(totals)
+
+
 @router.get("/api/model-leaderboard")
 @limiter.limit("30/minute")
 def public_model_leaderboard(request: Request):
@@ -271,24 +380,7 @@ def public_model_leaderboard(request: Request):
         raise HTTPException(status_code=400, detail="Unsupported model pulse period")
 
     try:
-        totals = {}
-        if period == "all":
-            for snapshot in db_firestore.collection("leaderboard").stream():
-                selections = int(snapshot.to_dict().get("BestModel") or 0)
-                if selections <= 0:
-                    continue
-                family = _leaderboard_family(snapshot.id)
-                totals[family] = totals.get(family, 0) + selections
-        else:
-            votes = db_firestore.collection(persistence_guard.VOTES_COLLECTION).where(
-                filter=FieldFilter("created_at", ">=", _MODEL_PULSE_COMPARABLE_SINCE)
-            )
-            for snapshot in votes.stream():
-                vote = snapshot.to_dict() or {}
-                if vote.get("vote_type") != "BestModel":
-                    continue
-                family = _leaderboard_family(vote.get("model"))
-                totals[family] = totals.get(family, 0) + 1
+        totals = _read_leaderboard_totals(period)
     except Exception as exc:
         logging.error(
             "public model leaderboard read failed category=%s",
