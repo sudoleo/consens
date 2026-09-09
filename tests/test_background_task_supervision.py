@@ -110,6 +110,11 @@ def test_retention_loop_runs_cleanup_before_first_sleep(monkeypatch):
         lambda: calls.append("shares") or 3,
     )
 
+    from app.services import source_check_jobs
+    from types import SimpleNamespace
+    monkeypatch.setattr(source_check_jobs, "repository",
+        lambda: SimpleNamespace(cleanup=lambda: calls.append("sources") or 4))
+
     async def stop_after_first_tick(seconds):
         raise asyncio.CancelledError
 
@@ -122,11 +127,12 @@ def test_retention_loop_runs_cleanup_before_first_sleep(monkeypatch):
             pass
 
     asyncio.run(exercise())
-    assert calls == ["pending", "shares"]
+    assert calls == ["pending", "shares", "sources"]
     health = background_tasks.task_health_snapshot()["retention-maintenance"]
     assert health["details"] == {
         "expired_pending_deleted": 2,
         "revoked_shares_deleted": 3,
+        "source_checks_deleted": 4,
     }
 
 

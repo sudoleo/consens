@@ -97,6 +97,24 @@ def _final_sse_payload(response):
     return json.loads(matches[-1])
 
 
+@pytest.mark.parametrize('stream', [False, True])
+def test_source_verification_replays_from_completed_turn(chat_consensus_api, stream):
+    client, store, monkeypatch = chat_consensus_api
+    from app.services import source_verification as sv
+    snapshot = {'schema_version': 1, 'answer_version': sv.answer_version('Stored consensus'),
+                'status': 'partial', 'scope': {'pairs': 1, 'checked_pairs': 0}, 'findings': []}
+    store.validation_result = {'id': TURN_ID, 'status': 'completed', 'question': 'What changed?'}
+    store.turn_detail = {'id': TURN_ID, 'status': 'completed', 'consensus': 'Stored consensus',
+                         'differences': 'Stored differences', 'source_verification': snapshot}
+    monkeypatch.setattr(sv, 'start_source_verification', lambda **_: pytest.fail('replay must not verify again'))
+    response = client.post('/consensus', headers=AUTH, json=_base_payload(stream=stream))
+    payload = _final_sse_payload(response) if stream else response.json()
+    assert payload['source_verification'] == snapshot
+    assert payload['consensus_response'] == 'Stored consensus'
+    if stream:
+        assert response.text.index('event: consensus.final') < response.text.index('event: sources.final')
+
+
 @pytest.fixture
 def chat_consensus_api(monkeypatch):
     limiter.reset()
@@ -117,6 +135,58 @@ def chat_consensus_api(monkeypatch):
     app.state.limiter = limiter
     app.include_router(chat_router.router)
     return TestClient(app), store, monkeypatch
+
+
+@pytest.mark.parametrize("source_status", ["queued", "complete"])
+def test_durable_source_check_does_not_delay_consensus_completion(chat_consensus_api, source_status):
+    from app.services import source_check_jobs
+    client, store, monkeypatch = chat_consensus_api
+    snapshot = {"schema_version": 3, "job_id": "a" * 64, "status": source_status, "findings": []}
+    original = {"agreement": {"score": 88}, "claims": [{"text": "Original claim"}]}
+    submitted = []
+    def submit(**kwargs):
+        submitted.append(kwargs)
+        return snapshot
+    monkeypatch.setattr(source_check_jobs, "submit_advisory", submit)
+    monkeypatch.setattr(chat_router, "stream_consensus", lambda *a, **kw: iter([
+        {"type": "final", "text": "Consensus"}]))
+    monkeypatch.setattr(chat_router, "stream_differences", lambda *a, **kw: iter([
+        {"type": "final", "text": "Differences", "data": original}]))
+    response = client.post("/consensus", headers=AUTH, json=_base_payload(stream=True))
+    assert response.status_code == 200
+    events = [(name, json.loads(data)) for name, data in re.findall(
+        r"event: ([\w.]+)\r?\ndata: (.+?)\r?\n\r?\n", response.text)]
+    names = [name for name, _ in events]
+    assert names.index("consensus.final") < names.index("sources.final") < names.index("differences.final") < names.index("final")
+    assert dict(events)["final"]["source_verification"] == snapshot
+    assert store.completions[0][3]["differences_data"] == original
+    assert store.completions[0][3]["source_verification"] == snapshot
+    assert submitted[0]["context"]["uid"] == UID
+    assert submitted[0]["context"]["references"] == [f"users/{UID}/chats/{CHAT_ID}"]
+
+
+@pytest.mark.parametrize("stream", [False, True])
+def test_disabled_source_check_skips_third_judge_and_keeps_analysis(chat_consensus_api, stream):
+    from app.services import source_verification as sv, consensus_pipeline
+    client, store, monkeypatch = chat_consensus_api
+    def unexpected(**kwargs):
+        pytest.fail("Disabled source checks must not start fetching or judging")
+    monkeypatch.setattr(sv, "start_source_verification", unexpected)
+    monkeypatch.setattr(consensus_pipeline, "start_source_verification", unexpected)
+    monkeypatch.setattr(chat_router, "stream_consensus", lambda *a, **kw: iter([
+        {"type": "final", "text": "Consensus"}]))
+    monkeypatch.setattr(chat_router, "stream_differences", lambda *a, **kw: iter([
+        {"type": "final", "text": "Differences", "data": {"agreement": {"score": 88}}}]))
+    response = client.post("/consensus", headers=AUTH,
+                           json=_base_payload(stream=stream, check_sources=False))
+    assert response.status_code == 200
+    payload = _final_sse_payload(response) if stream else response.json()
+    assert payload["consensus_response"] == "Consensus"
+    assert payload["differences_data"]["agreement"]["score"] == 88
+    assert payload["source_verification"] is None
+    assert store.completions[0][3]["source_verification"] is None
+    if stream:
+        assert "event: sources." not in response.text
 
 
 def test_consensus_without_chat_ids_remains_legacy_compatible(chat_consensus_api):
@@ -436,19 +506,16 @@ def test_non_streaming_completion_maps_answers_labels_sources_and_result(chat_co
     assert completion["differences"] == "Differences"
     assert completion["differences_data"]["agreement"]["score"] == 88
     assert completion["result_id"] == RESULT_ID
-    assert completion["sources"] == [{
-        "id": "",
-        "url": "https://global.example/source",
-        "title": "Global source",
-        "provider": "Search",
-    }]
+    assert [(source["id"], source["url"]) for source in completion["sources"]] == [
+        ("S1", "https://global.example/source"),
+        ("S2", "https://openai.example/source"),
+        ("S3", "https://mistral.example/source"),
+    ]
     assert set(completion["model_answers"]) == {"OpenAI", "Mistral"}
-    assert completion["model_answers"]["OpenAI"] == {
-        "provider": "OpenAI",
-        "answer": "OpenAI answer",
-        "model_label": "gpt-test",
-        "sources": _base_payload()["model_sources"]["OpenAI"],
-    }
+    model = completion["model_answers"]["OpenAI"]
+    assert (model["provider"], model["answer"], model["model_label"]) == ("OpenAI", "OpenAI answer", "gpt-test")
+    assert model["sources"][0]["id"] == "S2"
+    assert model["sources"][0]["url"] == "https://openai.example/source"
     assert "own-key-secret" not in json.dumps(completion)
 
 
@@ -486,7 +553,7 @@ def test_missing_turn_sources_falls_back_to_deduplicated_model_sources(chat_cons
     response = client.post("/consensus", headers=AUTH, json=payload)
 
     assert response.status_code == 200
-    assert store.completions[0][3]["sources"] == [{"id": "", **duplicate}]
+    assert store.completions[0][3]["sources"] == [{"id": "S1", **duplicate}]
 
 
 def test_streaming_success_completes_exactly_once(chat_consensus_api):

@@ -1016,6 +1016,9 @@ def normalize_models_document(data: dict) -> dict:
         if chosen in PROVIDER_KEYS and chosen != engine_provider:
             clean_families[engine_provider] = chosen
     normalized["judge_families"] = clean_families
+    normalized["source_verification_model"] = cfg.normalize_source_verification_model(
+        normalized.get("source_verification_model"), normalized
+    )
 
     return normalized
 
@@ -1069,6 +1072,10 @@ def _model_dependencies(data: dict) -> dict:
 
     for provider, model in (data.get("defaults") or {}).items():
         add(provider, model, "Free default")
+    for provider in PROVIDER_KEYS:
+        for model in data.get(provider) or []:
+            if cfg.openrouter_model_id(model, provider) == data.get("source_verification_model"):
+                add(provider, model, "Source verification")
     for preset_id, preset in (data.get("preset_models") or {}).items():
         for provider, model in cfg._preset_answer_mapping(preset).items():
             add(provider, model, f"{preset_id} preset")
@@ -1293,6 +1300,8 @@ def _admin_meta(data: dict) -> dict:
         "judge_defaults": dict(cfg._BASE_DIFFERENCES_JUDGE_BY_PROVIDER),
         "judge_pro_defaults": dict(cfg._BASE_PRO_JUDGE_BY_PROVIDER),
         "chat_memory_defaults": dict(cfg._BASE_CHAT_MEMORY_MODEL_BY_PROVIDER),
+        "source_verification_models": cfg.source_verification_model_options(data),
+        "source_verification_default": cfg.DEFAULT_SOURCE_VERIFICATION_MODEL,
         "judge_priority": list(cfg.JUDGE_FAMILY_PRIORITY),
         "preset_definitions": list(cfg.CONSENSUS_PRESET_DEFINITIONS),
         "provider_keys": list(PROVIDER_KEYS),
@@ -1310,6 +1319,10 @@ def _validate_admin_models_input(data: dict, normalized: dict) -> None:
     Werte verschwinden oder wieder auftauchen.
     """
     premium = set(normalized["premium"])
+    if "source_verification_model" in data:
+        chosen_source = data["source_verification_model"]
+        if not isinstance(chosen_source, str) or chosen_source.strip() != normalized["source_verification_model"]:
+            raise HTTPException(status_code=400, detail="Select a configured source-verification model using its full OpenRouter ID.")
     for provider in PROVIDER_KEYS:
         models = normalized[provider]
         if not models:
@@ -1418,6 +1431,7 @@ def get_models(request: Request):
                 "judge_models_pro": cfg.get_pro_judge_models(),
                 "judge_families": cfg.get_judge_families(),
                 "chat_memory_models": cfg.get_chat_memory_models(),
+                "source_verification_model": cfg.get_source_verification_model(),
                 "limits": get_limits_config(),
                 "memory_edit": cfg.get_memory_edit_config(),
                 "reasoning_policy": cfg.get_reasoning_policy(),
@@ -1440,6 +1454,8 @@ def update_models(request: Request, data: dict = Body(...)):
 
     try:
         normalization_input = dict(data)
+        if "source_verification_model" not in data:
+            normalization_input["source_verification_model"] = cfg.get_source_verification_model()
         # Ein bereits geoeffneter Admin-Tab aus der Version vor dieser
         # additiven Einstellung darf den aktiven Watch-Consensus-Wert nicht
         # unbemerkt auf den Default zuruecksetzen.
@@ -1479,7 +1495,7 @@ def update_models(request: Request, data: dict = Body(...)):
                 if incoming_memory_edit.get(key) != normalized_memory_edit.get(key):
                     raise HTTPException(status_code=400, detail=f"Invalid memory-edit setting: {key}")
             normalized["memory_edit"] = normalized_memory_edit
-        _validate_admin_models_input(data, normalized)
+        _validate_admin_models_input({**data, "source_verification_model": normalization_input["source_verification_model"]}, normalized)
         incoming_presets = data.get("preset_models")
         if not isinstance(incoming_presets, dict):
             raise HTTPException(status_code=400, detail="preset_models must contain Daily, Balanced and High Quality mappings")
@@ -1565,6 +1581,7 @@ def update_models(request: Request, data: dict = Body(...)):
             "judge_models_pro": normalized["judge_models_pro"],
             "judge_families": normalized["judge_families"],
             "chat_memory_models": normalized["chat_memory_models"],
+            "source_verification_model": normalized["source_verification_model"],
             "limits": normalized["limits"],
             "memory_edit": normalized["memory_edit"],
             "reasoning_policy": normalized["reasoning_policy"],

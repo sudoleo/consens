@@ -83,6 +83,9 @@ CONSENSUS_MAX_LENGTH = MAX_CONSENSUS_CHARS
 DIFFERENCES_MAX_LENGTH = MAX_DIFFERENCES_TEXT_CHARS
 MODEL_LABEL_MAX_LENGTH = 80
 MODEL_ANSWER_MAX_LENGTH_FALLBACK = 40_000
+# An explicit complete-document budget leaves room below Firestore's 1 MiB
+# hard limit. Sources are retained in full; oversized documents are rejected.
+CHAT_DOCUMENT_MAX_BYTES = 750_000
 MODEL_SOURCES_MAX_ITEMS = MAX_SOURCES
 TURN_SOURCES_MAX_ITEMS = MAX_SOURCES
 RESULT_ID_MAX_LENGTH = SHARE_ID_LENGTH
@@ -357,9 +360,7 @@ def normalize_model_answers(value: object) -> dict[str, dict]:
             "provider": provider,
             "model_label": labels.get(provider, provider)[:MODEL_LABEL_MAX_LENGTH],
             "answer": answer,
-            "sources": sanitize_sources(item.get("sources"))[
-                :MODEL_SOURCES_MAX_ITEMS
-            ],
+            "sources": sanitize_sources(item.get("sources")),
         }
     return {
         provider: normalized[provider]
@@ -369,7 +370,7 @@ def normalize_model_answers(value: object) -> dict[str, dict]:
 
 
 def normalize_turn_sources(value: object) -> list[dict]:
-    return sanitize_sources(value)[:TURN_SOURCES_MAX_ITEMS]
+    return sanitize_sources(value)
 
 
 def normalize_turn_differences_data(value: object) -> dict | None:
@@ -508,7 +509,7 @@ def model_answer_metadata(data: object) -> dict | None:
         "provider": provider,
         "model_label": labels.get(provider, provider)[:MODEL_LABEL_MAX_LENGTH],
         "answer": answer[:_model_answer_char_limit()],
-        "sources": sanitize_sources(source.get("sources"))[:MODEL_SOURCES_MAX_ITEMS],
+        "sources": sanitize_sources(source.get("sources")),
     }
     for field in ("created_at", "updated_at"):
         if source.get(field) is not None:
@@ -520,6 +521,8 @@ def turn_detail(turn_id: object, data: object, model_answers: dict[str, dict]) -
     source = data if isinstance(data, dict) else {}
     result = turn_metadata(turn_id, source)
     if "consensus" in source:
+        from app.services.source_verification import stored_verification
+        result["source_verification"] = stored_verification(source.get("source_verification"), source.get("consensus"))
         result["consensus"] = _bounded_text(
             source.get("consensus"), CONSENSUS_MAX_LENGTH, field_name="consensus"
         )
@@ -838,9 +841,13 @@ class ChatStore:
         differences_data: object,
         sources: object,
         result_id: object = None,
+        source_verification: object = None,
     ) -> dict:
         question = normalize_question(question)
         normalized_answers = normalize_model_answers(model_answers)
+        for answer in normalized_answers.values():
+            if persistence_guard.estimate_document_bytes(answer) + 256 > CHAT_DOCUMENT_MAX_BYTES:
+                raise ValueError('Model answer document exceeds the storage byte budget')
         consensus = _bounded_text(
             consensus,
             CONSENSUS_MAX_LENGTH,
@@ -854,6 +861,8 @@ class ChatStore:
         )
         differences_data = normalize_turn_differences_data(differences_data)
         sources = normalize_turn_sources(sources)
+        from app.services.source_verification import stored_verification
+        source_verification = stored_verification(source_verification, consensus)
         result_id = normalize_result_id(result_id)
         included_models = list(normalized_answers)
         agreement_score = _agreement_score(differences_data)
@@ -870,6 +879,7 @@ class ChatStore:
             differences_data=differences_data,
             sources=sources,
             result_id=result_id,
+            source_verification=source_verification,
         )
 
         def operation(transaction):
@@ -897,21 +907,10 @@ class ChatStore:
             if status != TURN_STATUS_PENDING:
                 raise TurnStatusConflict("Turn status transition is not allowed")
 
-            answers_ref = turn_ref.collection("model_answers")
-            for provider, answer in normalized_answers.items():
-                answer_document = {
-                    **answer,
-                    "created_at": firestore.SERVER_TIMESTAMP,
-                    "updated_at": firestore.SERVER_TIMESTAMP,
-                }
-                transaction.set(
-                    answers_ref.document(PROVIDER_DOCUMENT_IDS[provider]),
-                    answer_document,
-                )
-
             turn_updates = {
                 "status": TURN_STATUS_COMPLETED,
                 "consensus": consensus,
+                "source_verification": source_verification,
                 "differences": differences,
                 "differences_data": differences_data,
                 "sources": sources,
@@ -925,6 +924,19 @@ class ChatStore:
                 turn_updates["agreement_score"] = agreement_score
             if result_id is not None:
                 turn_updates["result_id"] = result_id
+            if persistence_guard.estimate_document_bytes({**turn_data, **turn_updates}) > CHAT_DOCUMENT_MAX_BYTES:
+                raise ValueError('Turn document exceeds the storage byte budget')
+            answers_ref = turn_ref.collection("model_answers")
+            for provider, answer in normalized_answers.items():
+                answer_document = {
+                    **answer,
+                    "created_at": firestore.SERVER_TIMESTAMP,
+                    "updated_at": firestore.SERVER_TIMESTAMP,
+                }
+                transaction.set(
+                    answers_ref.document(PROVIDER_DOCUMENT_IDS[provider]),
+                    answer_document,
+                )
             transaction.update(turn_ref, turn_updates)
             transaction.update(chat_ref, {"updated_at": firestore.SERVER_TIMESTAMP})
 
@@ -1341,6 +1353,7 @@ def _completion_fingerprint(
     differences_data: dict | None,
     sources: list[dict],
     result_id: str | None,
+    source_verification: dict | None = None,
 ) -> str:
     payload = {
         "schema_version": TURN_SCHEMA_VERSION,
@@ -1353,6 +1366,7 @@ def _completion_fingerprint(
             if provider in model_answers
         },
         "consensus": consensus,
+        "source_verification": source_verification,
         "differences": differences,
         "differences_data": differences_data,
         "sources": sources,

@@ -179,45 +179,45 @@ def sanitize_sources(model_sources):
 
     Die IDs ("S1", "S2", …) sind bereits die global nummerierten IDs aus dem
     Frontend, auf die sich die [S1]-Tags im Konsens-Markdown beziehen.
-    Nur http(s)-URLs werden übernommen.
+    Nur http(s)-URLs werden übernommen. Die Zahl der Quellen wird nicht
+    abgeschnitten; Request-/Dokument-Bytebudgets begrenzen die Gesamtgröße.
+    URL-Pfade bleiben case-sensitive, und verschiedene zitierte IDs derselben
+    URL bleiben auflösbar, da dieser Sanitizer keine Antworttexte umschreibt.
     """
+    from app.services.source_catalog import canonical_source_url
+
     if isinstance(model_sources, dict):
         ordered_keys = [k for k in PROVIDER_ORDER if k in model_sources]
         ordered_keys += [k for k in model_sources if k not in PROVIDER_ORDER]
-        candidates = []
-        for key in ordered_keys:
-            value = model_sources.get(key)
-            if isinstance(value, list):
-                candidates.extend(value)
+        candidates = (item for key in ordered_keys
+                      if isinstance(model_sources.get(key), list)
+                      for item in model_sources[key])
     elif isinstance(model_sources, list):
         candidates = model_sources
     else:
         candidates = []
 
     sanitized = []
-    seen_urls = set()
+    seen_references = set()
     seen_ids = set()
     for item in candidates:
         if not isinstance(item, dict):
             continue
         url = _clip(item.get("url"), 2000)
-        try:
-            scheme = urlsplit(url).scheme.lower()
-        except ValueError:
-            continue
-        if scheme not in ("http", "https"):
-            continue
-        url_key = url.lower().rstrip("/")
-        if url_key in seen_urls:
+        url_key = canonical_source_url(url)
+        if not url_key:
             continue
 
         raw_id = _clip(item.get("id"), 10)
         id_match = _SOURCE_ID_RE.match(raw_id)
         source_id = "S%d" % int(id_match.group(1)) if id_match else ""
+        reference_key = (source_id, url_key)
+        if reference_key in seen_references:
+            continue
         if source_id and source_id in seen_ids:
             source_id = ""
 
-        seen_urls.add(url_key)
+        seen_references.add(reference_key)
         if source_id:
             seen_ids.add(source_id)
         sanitized.append({
@@ -226,8 +226,6 @@ def sanitize_sources(model_sources):
             "url": url,
             "provider": _clip(item.get("provider"), 40),
         })
-        if len(sanitized) >= MAX_SOURCES:
-            break
 
     sanitized.sort(key=_source_sort_key)
     return sanitized
@@ -588,7 +586,7 @@ def _sanitize_pending_model_responses(model_responses):
 
 def build_pending_result(uid, question, consensus_md, differences_data,
                          differences_text, model_sources, included_providers,
-                         model_labels, consensus_model, model_responses=None):
+                         model_labels, consensus_model, model_responses=None, source_verification=None):
     """Baut das pending_results-Dokument; None, wenn Pflichtfelder fehlen."""
     question = _clip(question, MAX_QUESTION_CHARS)
     consensus_md = str(consensus_md or "").strip()
@@ -597,11 +595,13 @@ def build_pending_result(uid, question, consensus_md, differences_data,
     if len(consensus_md) > MAX_CONSENSUS_CHARS:
         consensus_md = consensus_md[:MAX_CONSENSUS_CHARS].rstrip() + "\n\n*[truncated]*"
 
+    from app.services.source_verification import stored_verification
     payload = {
         "schema_version": 1,
         "owner_uid": uid,
         "question": question,
         "consensus_md": consensus_md,
+        "source_verification": stored_verification(source_verification, consensus_md),
         "differences_data": sanitize_differences_data(differences_data),
         "differences_text": _clip(differences_text, MAX_DIFFERENCES_TEXT_CHARS),
         "sources": sanitize_sources(model_sources),
@@ -642,14 +642,14 @@ def save_pending_result(payload, db=None):
 def persist_pending_result(uid, question, consensus_md, differences_data,
                            differences_text, model_sources, included_providers,
                            model_labels, consensus_model, model_responses=None,
-                           db=None):
+                           db=None, source_verification=None):
     """Best-effort-Persistenz aus /consensus heraus: Fehler dürfen den
     Konsens-Stream nie beeinträchtigen, daher wird hier alles geschluckt."""
     try:
         payload = build_pending_result(
             uid, question, consensus_md, differences_data, differences_text,
             model_sources, included_providers, model_labels, consensus_model,
-            model_responses,
+            model_responses, source_verification=source_verification,
         )
         if payload is None:
             return None
@@ -836,6 +836,7 @@ def _build_share_document(
         "status": "active",
         "question": question,
         "consensus_md": consensus_md,
+        "source_verification": payload.get("source_verification"),
         "differences_data": payload.get("differences_data"),
         "differences_text": payload.get("differences_text") or "",
         "sources": sources,
@@ -909,6 +910,7 @@ def create_share_from_api_run(uid, run, db=None, consume_quota=None):
         model_labels,
         plan.get("consensus_model"),
         model_responses,
+        source_verification=result.get("source_verification"),
     )
     if payload is None:
         raise ShareError("bad_result", "The run has no publishable result.")
@@ -954,6 +956,9 @@ def create_share_from_api_run(uid, run, db=None, consume_quota=None):
                 "visibility": "public",
             }
 
+        source_retention = _prepare_source_check_retention(
+            db, transaction, uid, share_doc.get('source_verification'), share_id)
+
         if consume_quota is not None:
             if not consume_quota():
                 raise ShareError(
@@ -968,6 +973,8 @@ def create_share_from_api_run(uid, run, db=None, consume_quota=None):
                 limit=SHARE_DAILY_LIMIT,
             )
         transaction.set(share_ref, share_doc)
+        if source_retention:
+            transaction.update(*source_retention)
         return {
             "share_id": share_id,
             "slug": share_doc["slug"],
@@ -976,6 +983,25 @@ def create_share_from_api_run(uid, run, db=None, consume_quota=None):
         }
 
     return _run_transaction(db, publish)
+
+
+def _prepare_source_check_retention(db, transaction, uid, snapshot, share_id):
+    """Read before quota/share writes; commit retention with publication itself."""
+    if not isinstance(snapshot, dict) or not snapshot.get('job_id'):
+        return None
+    from app.services.source_check_repository import SourceCheckRepository
+    ref = SourceCheckRepository(db).ref(snapshot['job_id'])
+    snap = ref.get(transaction=transaction)
+    if not snap.exists:
+        raise ShareError('bad_result', 'The source check is no longer available.')
+    job = snap.to_dict()
+    if job.get('uid') != uid or job.get('status') == 'deleting':
+        raise ShareError('bad_result', 'The source check is no longer available.')
+    references = list(job.get('references') or [])
+    path = f'{SHARES_COLLECTION}/{share_id}'
+    if path not in references:
+        references.append(path)
+    return ref, {'references': references, 'cleanup_at': _utcnow() + timedelta(days=30)}
 
 
 def create_share_from_pending(uid, result_id, db=None, consume_quota=None,
@@ -1063,6 +1089,9 @@ def create_share_from_pending(uid, result_id, db=None, consume_quota=None,
                     "visibility": visibility,
                 }
 
+        source_retention = _prepare_source_check_retention(
+            db, transaction, uid, share_doc.get('source_verification'), share_id)
+
         if consume_quota is not None:
             if not consume_quota():
                 raise ShareError(
@@ -1080,6 +1109,8 @@ def create_share_from_pending(uid, result_id, db=None, consume_quota=None,
         if visibility == "public":
             backlinks["share_id"] = share_id
         transaction.set(share_ref, share_doc)
+        if source_retention:
+            transaction.update(*source_retention)
         transaction.update(pending_ref, backlinks)
         return {
             "share_id": share_id,
@@ -1820,6 +1851,7 @@ def _watch_version_payload(run_id, data):
         "run_id": str(run_id or ""),
         "ts": ts,
         "consensus_md": _clip(data.get("consensus_md"), MAX_CONSENSUS_CHARS),
+        "source_verification": data.get("source_verification"),
         "differences_data": sanitize_differences_data(data.get("differences_data")),
         "differences_text": _clip(data.get("differences_text"), MAX_DIFFERENCES_TEXT_CHARS),
         "sources": sanitize_sources(data.get("sources")),
@@ -1877,6 +1909,7 @@ def public_share_payload(data):
         "slug": data.get("slug") or "",
         "question": data.get("question") or "",
         "consensus_md": data.get("consensus_md") or "",
+        "source_verification": data.get("source_verification"),
         "differences_data": data.get("differences_data"),
         "differences_text": data.get("differences_text") or "",
         "sources": data.get("sources") or [],

@@ -279,6 +279,7 @@ async function streamSSERequest(url, payload, signal, deltaRenderers) {
       }
       const renderer = renderers[eventName];
       if (!renderer || !data) return;
+      if (renderer.receive) { renderer.receive(data); return; }
       const deltaText = coerceStreamText(data.text);
       if (deltaText) {
         renderer.append(deltaText);
@@ -294,7 +295,7 @@ async function streamSSERequest(url, payload, signal, deltaRenderers) {
     }
     return { ok: true, status: response.status, data: finalData, streamed: true };
   } finally {
-    Object.values(renderers).forEach(renderer => renderer && renderer.stop());
+    Object.values(renderers).forEach(renderer => renderer?.stop?.());
   }
 }
 window.streamSSERequest = streamSSERequest;

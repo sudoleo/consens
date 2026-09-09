@@ -1,6 +1,12 @@
-# Spezifikation: dritter Judge zur Quellenprüfung
+# Historische Spezifikation: dritter Judge zur Quellenprüfung
 
-Stand: 9. September 2026. Implementierungsauftrag, noch nicht umgesetzt. Diese Spezifikation ersetzt für Version 1 die früheren Quellen-Judge-Konzeptvarianten.
+Historischer Entwurf vom 9. September 2026. Dieser Text dokumentiert eine frühere
+Planung und ist **kein aktueller Implementierungsvertrag**. Die inzwischen
+implementierte v3-Belegprüfung mit vollständiger Paketplanung, dauerhafter Queue,
+revidierbaren Statusseiten und geänderten Ergebniswerten ist in
+[source-verification.md](source-verification.md) beschrieben. Insbesondere der
+hier genannte Wert `mismatch` und die Begrenzung auf einen gemeinsamen Judge-Call
+gelten für v3 nicht. Der folgende Entwurf bleibt als historische Referenz erhalten.
 
 ## 1. Aufgabe und Grenzen
 

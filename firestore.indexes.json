@@ -34,5 +34,16 @@
       ]
     }
   ],
-  "fieldOverrides": []
+  "fieldOverrides": [
+    { "collectionGroup": "source_check_jobs", "fieldPath": "snapshot", "indexes": [] },
+    { "collectionGroup": "source_check_jobs", "fieldPath": "source_totals", "indexes": [] },
+    { "collectionGroup": "source_check_jobs", "fieldPath": "statement_totals", "indexes": [] },
+    { "collectionGroup": "source_check_jobs", "fieldPath": "source_progress", "indexes": [] },
+    { "collectionGroup": "source_check_jobs", "fieldPath": "statement_progress", "indexes": [] },
+    { "collectionGroup": "source_check_jobs", "fieldPath": "fetched_documents", "indexes": [] },
+    { "collectionGroup": "source_check_jobs", "fieldPath": "references", "indexes": [] },
+    { "collectionGroup": "source_check_cache", "fieldPath": "payload", "indexes": [] },
+    { "collectionGroup": "data", "fieldPath": "payload", "indexes": [] },
+    { "collectionGroup": "packages", "fieldPath": "payload", "indexes": [] }
+  ]
 }

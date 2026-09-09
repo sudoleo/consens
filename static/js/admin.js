@@ -115,6 +115,7 @@ window.addEventListener('beforeunload', (event) => {
 // (Judges, Consensus-Add) spiegeln.
 document.getElementById('tab-models').addEventListener('change', () => {
     renderJudgeSelects();
+    renderSourceVerificationSelect();
     renderConsensusAddSelect();
     renderPresetModels();
     renderWatchModelConfig();
@@ -640,6 +641,7 @@ function renderUI() {
     renderPresetModels();
     renderDeepThinkSelect();
     renderJudgeSelects();
+    renderSourceVerificationSelect(true);
     renderWatchModelConfig();
 }
 
@@ -994,6 +996,34 @@ function renderDeepThinkSelect() {
 // ==============================
 // Differences Judges
 // ==============================
+function currentSourceVerificationModel() {
+    return document.getElementById('sourceVerificationModelSelect')?.value
+        || globalModelsData.source_verification_model
+        || meta().source_verification_default
+        || 'google/gemini-3.5-flash-lite';
+}
+
+function renderSourceVerificationSelect(fromSaved = false) {
+    const select = document.getElementById('sourceVerificationModelSelect');
+    if (!select) return;
+    const chosen = fromSaved
+        ? globalModelsData.source_verification_model || meta().source_verification_default || 'google/gemini-3.5-flash-lite'
+        : currentSourceVerificationModel();
+    const options = Array.isArray(meta().source_verification_models) ? meta().source_verification_models : [];
+    const rows = options.filter(row => row && typeof row.id === 'string');
+    // Never silently change an unsaved selection while another setting changes.
+    if (!rows.some(row => row.id === chosen)) rows.unshift({id: chosen, label: chosen});
+    select.replaceChildren();
+    rows.forEach(row => {
+        const option = document.createElement('option');
+        option.value = row.id;
+        option.textContent = row.label && row.label !== row.id ? `${row.label} (${row.id})` : row.id;
+        if (row.id === meta().source_verification_default) option.textContent += ' — default';
+        select.appendChild(option);
+    });
+    select.value = chosen;
+}
+
 function currentJudgeModels() {
     const result = {};
     document.querySelectorAll('[data-judge-provider]').forEach(select => {
@@ -1327,6 +1357,7 @@ async function saveModels() {
         deep_think_model: currentDeepThinkModel(),
         judge_models: currentJudgeModels(),
         judge_models_pro: currentProJudgeModels(),
+        source_verification_model: currentSourceVerificationModel(),
         judge_families: currentJudgeFamilies(),
         chat_memory_models: currentChatMemoryModels(),
         watch_models: { free: {}, pro: {} },

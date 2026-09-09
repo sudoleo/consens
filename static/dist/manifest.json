@@ -1,5 +1,5 @@
 {
-  "sources": "5e2e4d224e75",
+  "sources": "d6ca9342019d",
   "inputs": [
     "package-lock.json",
     "scripts/build_frontend.mjs",
@@ -32,6 +32,7 @@
     "static/css/public-tokens.css",
     "static/css/shell.css",
     "static/css/skeleton.css",
+    "static/css/source-verification.css",
     "static/css/status-palette.css",
     "static/css/topics.css",
     "static/css/typography.css",
@@ -69,6 +70,7 @@
     "static/js/run-view.js",
     "static/js/share-dialog.js",
     "static/js/sidebar-quota.js",
+    "static/js/source-verification.js",
     "static/js/sources.js",
     "static/js/usage-limit.js",
     "static/js/user-memory.js",
@@ -92,7 +94,7 @@
     },
     {
       "name": "firebase",
-      "src": "/static/dist/firebase.e8b560bc297d.js",
+      "src": "/static/dist/firebase.7117cb561f5f.js",
       "module": true,
       "defer": false
     },
@@ -104,12 +106,12 @@
     },
     {
       "name": "app",
-      "src": "/static/dist/app.66141348bd89.js",
+      "src": "/static/dist/app.f736d96fa825.js",
       "module": false,
       "defer": true
     }
   ],
   "styles": {
-    "app": "/static/dist/app.8530930a45e2.css"
+    "app": "/static/dist/app.09dd5ea7cbf3.css"
   }
 }

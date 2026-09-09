@@ -223,11 +223,12 @@
   function panelNodes(kind, turn) {
     if (turn) {
       const content = turn.querySelector(kind === "differences" ? '.thread-history-differences' : '.thread-history-sources');
-      if (content) return [content];
+      if (content) return kind === 'sources'
+        ? [turn.querySelector('.source-verification-report'), content].filter(Boolean) : [content];
       if (kind === "differences") return Array.from(turn.querySelectorAll('.thread-history-detail-body'));
       return [];
     }
-    if (kind === "sources") return [document.getElementById('consensusSourcesList')].filter(Boolean);
+    if (kind === "sources") return [document.getElementById('sourceVerificationReport'), document.getElementById('consensusSourcesList')].filter(Boolean);
     const cards = document.getElementById('differencesCards');
     if (cards && !cards.hidden && cards.childNodes.length) return [cards];
     const fallback = document.querySelector('#consensusDifferencesPanel .consensus-differences-content > p');

@@ -44,6 +44,7 @@ from app.api.routers import (
     client_errors,
     pages,
     share,
+    source_checks,
     topics,
     users,
     watch,
@@ -56,6 +57,7 @@ from app.services.api_consensus_runner import (
 )
 from app.services.llm.mock_llm import mock_llm_enabled
 from app.services.retention_maintenance import retention_maintenance_loop
+from app.services.source_check_jobs import source_check_worker_loop
 from app.services.topic_runner import topic_scheduler_loop
 from app.services.watch_scheduler import watch_scheduler_loop
 from app.services.watch_service import backfill_publisher_watch_lineage
@@ -158,6 +160,7 @@ async def lifespan(app: FastAPI):
     api_account_cleanup_task = _supervised_task(
         api_account_cleanup.retry_loop, "consensus-api-account-cleanup"
     )
+    source_check_task = _supervised_task(source_check_worker_loop, 'source-check-workers')
     account_deletion_task = _supervised_task(
         account_deletion.retry_loop, "full-account-deletion-cleanup"
     )
@@ -167,6 +170,7 @@ async def lifespan(app: FastAPI):
         seo_review_task,
         api_maintenance_task,
         retention_task,
+        source_check_task,
         api_account_cleanup_task,
         account_deletion_task,
         model_config_backfill_task,
@@ -284,6 +288,7 @@ for internal_router in (
     pages.router,
     admin.router,
     share.router,
+    source_checks.router,
     watch.router,
     topics.router,
 ):

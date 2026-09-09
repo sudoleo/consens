@@ -1447,6 +1447,7 @@ body:not(.is-hero) #verifyBanner {
    Nothing is lost when the run collapses — it just stops taking up screen.
    -------------------------------------------------------------------------- */
 .run-provenance {
+  --footer-ink: #000;
   position: relative;
   isolation: isolate;
   display: grid;
@@ -1837,6 +1838,23 @@ body.agreement-verdict-hidden .run-provenance::before {
 
 .run-replay-cost:empty {
   display: none;
+}
+
+/* Keep the complete result toolbar legible in both themes. */
+body.dark-mode .run-provenance {
+  --footer-ink: #fff;
+}
+
+.run-provenance .consensus-tab,
+.run-provenance .consensus-tab-chevron,
+.run-provenance .consensus-tab-count,
+.run-provenance .consensus-footer-facts,
+.run-provenance .run-provenance-facts b,
+.run-provenance .run-replay-btn,
+.run-provenance .run-replay-cost,
+.run-provenance .consensus-footer-actions .consensus-share-pill,
+.run-provenance .consensus-footer-actions .consensus-actions-toggle {
+  color: var(--footer-ink);
 }
 
 .run-replay-btn:focus-visible {
@@ -3085,6 +3103,26 @@ body.agent-mode-enabled .agent-mode-panel,
   margin-top: 4px;
   color: var(--ink-2);
   font-size: var(--font-size-micro);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+
+.source-teaser-check {
+  margin-top: 7px;
+  padding-top: 7px;
+  border-top: 1px solid var(--line);
+  font-size: var(--font-size-micro);
+  color: var(--ink-2);
+  font-weight: var(--font-weight-medium);
+}
+
+.source-teaser-check-detail {
+  margin-top: 3px;
+  color: var(--ink-3);
+  font-size: var(--font-size-micro);
+  overflow-wrap: anywhere;
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;

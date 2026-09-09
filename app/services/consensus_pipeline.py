@@ -14,6 +14,7 @@ from typing import Callable, Iterable, Mapping
 import app.core.config as cfg
 from app.services.llm.provider_runtime import analysis_budgeted
 from app.services.llm.citations import to_plain
+from app.services.source_verification import start_source_verification, source_records
 from app.services.llm.consensus_engine import (
     compute_agreement_score,
     is_consensus_error_text,
@@ -35,6 +36,7 @@ class ConsensusAnalysis:
     differences_text: str
     differences_data: dict | None
     agreement: dict | None
+    source_verification: dict | None = None
 
 
 def _answer_slots(answers: Mapping[str, ProviderAnswer | str]) -> dict[str, str]:
@@ -64,6 +66,9 @@ def analyze_provider_answers(
     allow_consensus_error: bool = False,
     skipped_differences_text: str = "",
     require_differences_data: bool = True,
+    verification_sources: list | None = None,
+    check_sources: bool = True,
+    verification_submit: Callable | None = None,
 ) -> ConsensusAnalysis:
     """Run domain synthesis/parsing/scoring for normalized provider answers."""
     if len([answer for answer in answers.values() if answer]) < 2:
@@ -105,6 +110,15 @@ def analyze_provider_answers(
             differences_data=None,
             agreement=None,
         )
+    from app.services.source_check_jobs import current_context, submit_advisory
+    submit = verification_submit or (submit_advisory if current_context() else None)
+    verification = (submit or start_source_verification)(
+        question=question, consensus=consensus, keys=keys,
+        sources=verification_sources if verification_sources is not None else source_records(model_sources),
+        resolved_question=resolved_question,
+    ) if check_sources else None
+    def verification_result():
+        return verification if isinstance(verification, dict) else verification.result() if verification is not None else None
     differences_text, differences_data = judge(
         slots,
         consensus,
@@ -121,6 +135,7 @@ def analyze_provider_answers(
             differences_text=differences_text,
             differences_data=None,
             agreement=None,
+            source_verification=verification_result(),
         )
     agreement = differences_data.get("agreement")
     if not isinstance(agreement, dict):
@@ -131,6 +146,7 @@ def analyze_provider_answers(
         differences_text=differences_text,
         differences_data=differences_data,
         agreement=agreement,
+        source_verification=verification_result(),
     )
 
 
@@ -178,6 +194,7 @@ def run_consensus_pipeline(
         "differences": analysis.differences_text,
         "differences_data": analysis.differences_data,
         "agreement": analysis.agreement,
+        "source_verification": analysis.source_verification,
         "model_answers": [
             asdict(answers[provider])
             for provider in provider_order

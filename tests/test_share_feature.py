@@ -256,12 +256,12 @@ class SanitizerTests(unittest.TestCase):
             ],
             "Gemini": [{"id": "s1", "title": "A", "url": "https://example.org/a"}],
         })
-        self.assertEqual([s["id"] for s in result], ["S1", "S2"])
+        self.assertEqual([s["id"] for s in result], ["S1", "S2", "S4"])
         self.assertTrue(all(s["url"].startswith("https://") for s in result))
 
-    def test_sources_cap(self):
+    def test_sources_preserve_all_entries_beyond_legacy_count_cap(self):
         many = [{"id": "S%d" % i, "url": "https://example.org/%d" % i} for i in range(80)]
-        self.assertEqual(len(snapshots.sanitize_sources(many)), snapshots.MAX_SOURCES)
+        self.assertEqual(len(snapshots.sanitize_sources(many)), 80)
 
     def test_differences_whitelist(self):
         data = {
@@ -655,6 +655,38 @@ class ShareFlowTests(unittest.TestCase):
         result_id = result_id or snapshots.generate_share_id()
         self.db.stores[snapshots.PENDING_COLLECTION][result_id] = make_pending(self.uid, **overrides)
         return result_id
+
+    def test_publication_retains_source_check_atomically(self):
+        job_id = 'a' * 64
+        job = {'uid': self.uid, 'status': 'queued', 'references': ['users/user-1/chats/chat-1']}
+        self.db.stores['source_check_jobs'][job_id] = dict(job)
+        result_id = self._store_pending(source_verification={'job_id': job_id})
+        # A failed transaction must not publish or extend the job lifetime.
+        self.db.fail_transaction_after_staged_writes = 2
+        with self.assertRaises(RuntimeError):
+            snapshots.create_share_from_pending(self.uid, result_id, db=self.db, consume_quota=lambda: True)
+        self.assertFalse(self.db.stores[snapshots.SHARES_COLLECTION])
+        self.assertEqual(self.db.stores['source_check_jobs'][job_id], job)
+        self.db.fail_transaction_after_staged_writes = None
+        result = snapshots.create_share_from_pending(self.uid, result_id, db=self.db, consume_quota=lambda: True)
+        saved = self.db.stores['source_check_jobs'][job_id]
+        self.assertEqual(saved['references'], job['references'] + ['shares/' + result['share_id']])
+        self.assertGreater(saved['cleanup_at'], datetime.now(timezone.utc) + timedelta(days=29))
+
+    def test_publication_rejects_missing_foreign_or_deleting_source_check_before_quota(self):
+        for job in (None, {'uid': 'stranger', 'status': 'complete'}, {'uid': self.uid, 'status': 'deleting'}):
+            with self.subTest(job=job):
+                self.db = FakeDb()
+                job_id = 'b' * 64
+                if job:
+                    self.db.stores['source_check_jobs'][job_id] = job
+                result_id = self._store_pending(source_verification={'job_id': job_id})
+                charged = []
+                with self.assertRaises(ShareError):
+                    snapshots.create_share_from_pending(self.uid, result_id, db=self.db,
+                        consume_quota=lambda: charged.append(True) or True)
+                self.assertEqual(charged, [])
+                self.assertFalse(self.db.stores[snapshots.SHARES_COLLECTION])
 
     def test_unknown_result_id_raises_not_found(self):
         with self.assertRaises(ShareError) as ctx:

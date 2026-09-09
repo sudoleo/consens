@@ -155,7 +155,7 @@ def test_privileged_app_and_admin_templates_are_external_script_surfaces():
     admin = source("templates/admin.html")
     assert len(admin.splitlines()) < 700
     assert "/static/css/admin.css?v=20260906-reasoning" in admin
-    assert "/static/js/admin.js?v=20260906-reasoning" in admin
+    assert re.search(r'src="/static/js/admin\.js\?v=\d{8}-[a-z0-9.-]+"', admin)
     assert "createAdminClient" in source("static/js/admin.js")
     benchmark = source("templates/admin_benchmark.html")
     assert 'id="adminBootstrapConfig"' in benchmark

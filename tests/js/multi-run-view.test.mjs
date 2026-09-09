@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { loadScripts } from "./helpers/appWindow.mjs";
 
 const BODY = `
+  <div id="threadHistory" hidden></div>
   <div id="bookmarksContainer"></div>
   <button id="sendButton"></button>
   <span id="openaiModelText"></span>
@@ -25,11 +26,11 @@ const BODY = `
   </section>
 `;
 
-function boot() {
+function boot({ realHistory = false } = {}) {
   const user = { uid: "view-user", getIdToken: vi.fn(async () => "token") };
   const state = new Map();
   const harness = loadScripts(
-    ["static/js/run-registry.js", "static/js/run-view.js"],
+    ["static/js/run-registry.js", ...(realHistory ? ["static/js/consensus-run.js"] : []), "static/js/run-view.js"],
     {
       body: BODY,
       before(window) {
@@ -127,6 +128,172 @@ function createRunning(registry, question) {
 }
 
 describe("selected RunContext projection", () => {
+  it('continues source hydration after consensus succeeds without projecting a hidden run', () => {
+    const {registry, window, document, dom} = boot({realHistory: true});
+    const observe = vi.fn(() => vi.fn());
+    window.App.sourceVerification = {observe, renderCurrent: vi.fn()};
+    const run = createRunning(registry, 'First');
+    const queued = {job_id: 'job-first', status: 'queued', answer_version: 'first'};
+    run.consensus.status = 'complete'; run.consensus.text = 'Consensus First';
+    run.consensus.sourceVerification = queued;
+    run.consensus.completedTurn = {source_verification: queued};
+    run.consensus.bookmarkPayload = {};
+    run.completedBasis = {bookmarkId: run.bookmark.id, currentTurn: run.consensus.completedTurn};
+    registry.setStatus(run.runId, 'succeeded');
+    expect(observe).toHaveBeenCalledOnce();
+    const binding = observe.mock.calls[0][0];
+    expect(binding.isActive()).toBe(true);
+    const second = createRunning(registry, 'Second');
+    second.consensus.status = 'complete'; second.consensus.text = 'Consensus Second';
+    registry.renderVisible();
+    const before = document.getElementById('consensusAnswerBody').textContent;
+    const complete = {...queued, status: 'complete', findings: [{sentence_id: 1, source_id: 'S1'}]};
+    binding.onUpdate(complete);
+    expect(run.consensus.completedTurn.source_verification).toBe(complete);
+    expect(run.consensus.bookmarkPayload.sourceVerification).toBe(complete);
+    expect(run.completedBasis.currentTurn.source_verification).toEqual(complete);
+    expect(document.getElementById('consensusAnswerBody').textContent).toBe(before);
+    registry.show(run.runId);
+    expect(observe).toHaveBeenCalledOnce();
+    registry.clearAll();
+    expect(binding.isActive()).toBe(false);
+    dom.window.close();
+  });
+  it('hydrates a saved terminal source stub for a historical turn only while its body exists', () => {
+    const {window, document, dom} = boot({realHistory: true});
+    const observe = vi.fn(() => vi.fn()), render = vi.fn();
+    window.App.sourceVerification = {observe, render};
+    const turn = {turn_id: 'old', question: 'Old', consensus: 'Saved consensus',
+      source_verification: {job_id: 'old-job', status: 'complete', findings: []}};
+    window.App.followup.renderStoredTurn(turn);
+    expect(observe).toHaveBeenCalledOnce();
+    const binding = observe.mock.calls[0][0];
+    expect(binding.snapshot.status).toBe('complete');
+    expect(binding.isActive()).toBe(true);
+    const hydrated = {...turn.source_verification, findings: [{sentence_id: 1, source_id: 'S1'}]};
+    binding.onUpdate(hydrated);
+    expect(turn.source_verification).toBe(hydrated);
+    expect(render.mock.calls.at(-1)[2]).toBe(hydrated);
+    document.querySelector('.thread-history-turn').remove();
+    expect(binding.isActive()).toBe(false);
+    dom.window.close();
+  });
+  it("preserves completed history, open drawers and waiting model animations during follow-up streaming", () => {
+    const { registry, window, document, dom } = boot({ realHistory: true });
+    window.spinnerHTML = '<span class="thinking-wrap"><span class="thinking typing-indicator"></span></span>';
+    const run = registry.create({
+      question: "Second question",
+      config: { agentMode: true, providers: [
+        { provider: "OpenAI", modelLabel: "OpenAI" },
+        { provider: "Gemini", modelLabel: "Gemini" }
+      ] }
+    });
+    run.historyTurns.push({ turn_id: "first-turn", question: "First question",
+      consensus: "Completed consensus", differences: "A previous difference" });
+    run.modelResults.OpenAI = { status: "streaming", streamText: "New answer" };
+    run.modelResults.Gemini = { status: "pending", streamText: "" };
+    run.phase = "answers";
+    registry.setStatus(run.runId, "running");
+
+    const historyTurn = document.querySelector(".thread-history-turn");
+    const tab = historyTurn.querySelector(".consensus-tab");
+    tab.click();
+    tab.focus();
+    const panel = document.getElementById(tab.getAttribute("aria-controls"));
+    const spinner = document.querySelector("#geminiResponse .thinking-wrap");
+    const render = vi.spyOn(window, "injectMarkdown");
+    for (let i = 0; i < 12; i += 1) {
+      run.modelResults.OpenAI.streamText += " token";
+      registry.renderVisible();
+    }
+    expect(document.querySelector(".thread-history-turn")).toBe(historyTurn);
+    expect(document.activeElement).toBe(tab);
+    expect(panel.hidden).toBe(false);
+    expect(document.querySelector("#geminiResponse .thinking-wrap")).toBe(spinner);
+    expect(render.mock.calls.every(([element]) => element.closest("#openaiResponse"))).toBe(true);
+    expect(document.querySelector("#openaiResponse .collapsible-content").textContent).toBe(run.modelResults.OpenAI.streamText);
+
+    // An actual history change must still project, including an in-place update.
+    run.historyTurns[0].consensus = "Updated saved consensus";
+    registry.renderVisible();
+    expect(document.querySelector(".thread-history-answer-body").textContent).toBe("Updated saved consensus");
+    run.modelResults.Gemini.status = "reasoning";
+    registry.renderVisible();
+    expect(document.querySelector("#geminiResponse .typing-indicator").dataset.text).toBe("Reasoning");
+    run.modelResults.Gemini = { status: "complete", text: "Finished answer", sources: [] };
+    registry.renderVisible();
+    expect(document.querySelector("#geminiResponse .thinking-wrap")).toBeNull();
+    expect(document.getElementById("geminiResponse").dataset.responseState).toBe("complete");
+    const completedNode = document.querySelector("#geminiResponse .collapsible-content").firstChild;
+    run.modelResults.OpenAI.streamText += " more";
+    registry.renderVisible();
+    expect(document.querySelector("#geminiResponse .collapsible-content").firstChild).toBe(completedNode);
+
+    // Saved views can replace the same DOM; returning must invalidate caches.
+    registry.showSavedView({ type: "bookmark", bookmarkId: "saved" }, { bookmarkId: "saved" });
+    window.App.followup.clearHistory();
+    document.querySelector("#geminiResponse .collapsible-content").textContent = "Saved answer";
+    registry.show(run.runId);
+    expect(document.querySelector(".thread-history-answer-body").textContent).toBe("Updated saved consensus");
+    expect(document.querySelector("#geminiResponse .collapsible-content").textContent).toBe("Finished answer");
+    dom.window.close();
+  });
+
+  it("refreshes model source mappings and terminal errors without text changes", () => {
+    const { registry, window, document, dom } = boot();
+    const run = createRunning(registry, "Sources");
+    const render = vi.spyOn(window, "injectMarkdown");
+    registry.renderVisible();
+    expect(render).not.toHaveBeenCalled();
+    run.evidenceSources.push({ id: "S1", url: "https://example.com" });
+    run.modelResults.OpenAI.sources.push({ id: "S1", url: "https://example.com" });
+    registry.renderVisible();
+    expect(render).toHaveBeenCalled();
+    expect(JSON.parse(document.getElementById("openaiResponse").dataset.consensusSources)).toHaveLength(1);
+    run.modelResults.OpenAI.status = "skipped";
+    run.modelResults.OpenAI.error = "Skipped model";
+    registry.renderVisible();
+    expect(document.getElementById("openaiResponse").dataset.responseSkipped).toBe("true");
+    expect(document.querySelector("#openaiResponse .collapsible-content").textContent).toBe("Skipped model");
+    dom.window.close();
+  });
+
+  it("publishes insights while sources are pending and preserves their DOM through source and final events", () => {
+    const { registry, window, document, dom } = boot();
+    const run = createRunning(registry, "Independent judges");
+    const sourceRender = vi.fn();
+    window.App.sourceVerification = { renderCurrent: sourceRender };
+    window.renderConsensusInsights = vi.fn(() => {
+      document.getElementById("consensusAnswerBody").innerHTML = '<span class="cx-claim">Consensus claim</span>';
+      document.querySelector(".consensus-differences p").innerHTML = '<span class="diff-card">Original difference</span>';
+      return true;
+    });
+    registry.update(run.runId, context => {
+      Object.assign(context.consensus, { text: "Consensus claim", status: "complete",
+        differences: "Original difference", differencesData: { agreement: { score: 88 } },
+        differencesComplete: true, sourceVerification: { status: "pending" } });
+      context.phase = "sources";
+    });
+    const claim = document.querySelector(".cx-claim"), diff = document.querySelector(".diff-card");
+    expect(claim).not.toBeNull(); expect(diff).not.toBeNull();
+    expect(window.App.consensusPipeline.onConsensusEnd).toHaveBeenCalled();
+    expect(sourceRender).toHaveBeenLastCalledWith({ status: "pending" }, {differencesData: run.consensus.differencesData});
+    const renders = window.renderConsensusInsights.mock.calls.length;
+    const resets = window.resetConsensusInsights.mock.calls.length;
+    run.consensus.sourceVerification = { status: "complete", findings: [] };
+    window.App.runView.projectSources(run);
+    expect(window.resetConsensusInsights).toHaveBeenCalledTimes(resets);
+    registry.setStatus(run.runId, "succeeded");
+    expect(window.renderConsensusInsights).toHaveBeenCalledTimes(renders);
+    expect(document.querySelector(".cx-claim")).toBe(claim);
+    expect(document.querySelector(".diff-card")).toBe(diff);
+    const other = createRunning(registry, "Other");
+    sourceRender.mockClear();
+    window.App.runView.projectSources(run);
+    expect(sourceRender).not.toHaveBeenCalled();
+    expect(registry.visible()).toBe(other);
+    dom.window.close();
+  });
   it("keeps late background updates out of the visible DOM and restores either run from its row", () => {
     const { registry, document, dom } = boot();
     const runA = createRunning(registry, "A");

@@ -97,6 +97,7 @@ class FirestoreAccountDeletion:
             ("waitlist_feedback", lambda: self._delete_uid_queries(uid)),
             ("owned_shares", lambda: self._delete_owned_shares(uid)),
             ("pending_results", lambda: self._delete_query("pending_results", "owner_uid", uid)),
+            ("source_check_jobs", lambda: self._delete_source_checks(uid)),
             ("orphan_watches", lambda: self._delete_orphan_watches(uid)),
             ("watch_indexes", lambda: self._delete_watch_indexes(uid)),
             ("watch_brief", lambda: self._db.collection("watch_briefs").document(uid).delete()),
@@ -220,6 +221,10 @@ class FirestoreAccountDeletion:
         errors = self._api_cleanup.cleanup_uid(uid)
         if errors:
             raise AccountDeletionError("API cleanup failed: " + ", ".join(errors))
+
+    def _delete_source_checks(self, uid: str) -> None:
+        from app.services.source_check_repository import SourceCheckRepository
+        SourceCheckRepository(self._db).delete_owner(uid)
 
     def _delete_user_subcollections(self, uid: str) -> None:
         user_ref = self._db.collection("users").document(uid)

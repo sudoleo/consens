@@ -460,6 +460,7 @@
         question: context.question,
         mode: context.mode,
         deepSearch: context.config.deepSearch,
+        checkSources: context.config.checkSources,
         selectedModels: context.config.providers.map(provider => provider.modelId),
         consensusModel: context.config.consensusModel,
         isFollowup: Boolean(context.previousExchange),
@@ -617,6 +618,7 @@
     const usage = createUsage(deepSearch, useOwnKeys);
     const config = {
       agentMode,
+      checkSources: window.App.isSourceCheckEnabled?.() !== false,
       autoConsensus: agentMode && document.getElementById("autoConsensusToggle")?.checked !== false,
       deepSearch,
       useOwnKeys,

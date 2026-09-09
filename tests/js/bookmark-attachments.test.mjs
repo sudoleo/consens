@@ -11,7 +11,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { loadScripts, ROOT } from "./helpers/appWindow.mjs";
 
@@ -149,9 +149,7 @@ describe("attachments of a saved question", () => {
       value: [new window.File(["a,b\n1,2"], "rows.csv", { type: "text/csv" })]
     });
     input.dispatchEvent(new window.Event("change"));
-    await new Promise(resolve => window.setTimeout(resolve, 20));
-
-    expect(window.pendingAttachments).toHaveLength(1);
+    await vi.waitFor(() => expect(window.pendingAttachments).toHaveLength(1));
     expect(window.pendingAttachments[0].mime).toBe("text/plain");
   });
 

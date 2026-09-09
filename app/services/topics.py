@@ -374,20 +374,44 @@ def normalize_evidence(value) -> list[dict]:
         return []
     if not isinstance(value, list):
         raise TopicError("bad_request", "Evidence must be a list.")
+    from app.services.source_catalog import canonical_source_url
     evidence = []
-    seen = set()
-    for raw in value[:80]:
+    seen, by_id, reserved_ids = set(), {}, set()
+    for raw in value:
+        if not isinstance(raw, dict):
+            raise TopicError("bad_request", "Each evidence item must be an object.")
+        if 'id' in raw or 'source_id' in raw:
+            source_id = str(raw.get('id', raw.get('source_id')) or '')
+            match = re.fullmatch(r'S?([0-9]{1,6})', source_id, re.I)
+            if source_id and (not match or int(match[1]) == 0):
+                raise TopicError('bad_request', 'Evidence citation IDs must be positive S-numbers.')
+            if match:
+                reserved_ids.add('S' + str(int(match[1])))
+    next_id = 1
+    for raw in value:
         if not isinstance(raw, dict):
             raise TopicError("bad_request", "Each evidence item must be an object.")
         url = _valid_url(raw.get("url"))
-        if url in seen:
+        url_key = canonical_source_url(url)
+        if 'id' in raw or 'source_id' in raw:
+            match = re.fullmatch(r'S?([0-9]{1,6})', str(raw.get('id', raw.get('source_id')) or ''), re.I)
+            source_id = 'S' + str(int(match[1])) if match else ''
+        else:
+            while 'S' + str(next_id) in reserved_ids:
+                next_id += 1
+            source_id = 'S' + str(next_id)
+            reserved_ids.add(source_id)
+        reference_key = (source_id, url_key)
+        if reference_key in seen:
             continue
+        if source_id and source_id in by_id and by_id[source_id] != url_key:
+            raise TopicError('bad_request', 'An evidence citation ID refers to different URLs.')
         kind = str(raw.get("type") or "").strip().lower()
         kind = LEGACY_EVIDENCE_TYPE_MAP.get(kind, kind)
         if kind not in EVIDENCE_TYPES:
             raise TopicError("bad_request", f"Unsupported evidence type: {kind}")
         evidence.append({
-            "id": f"S{len(evidence) + 1}",
+            "id": source_id,
             "type": kind,
             "title": _clean(raw.get("title"), limit=240, required=True, label="Evidence title"),
             "url": url,
@@ -395,7 +419,9 @@ def normalize_evidence(value) -> list[dict]:
             "published_at": _clean(raw.get("published_at"), limit=40, label="Evidence date"),
             "excerpt": _clean_multiline(raw.get("excerpt"), limit=600, label="Evidence excerpt"),
         })
-        seen.add(url)
+        seen.add(reference_key)
+        if source_id:
+            by_id[source_id] = url_key
     return evidence
 
 
@@ -748,6 +774,7 @@ def create_run(
         "created_at": now,
         "created_by": actor_uid,
         "consensus_md": consensus_md,
+        "source_verification": data.get("source_verification"),
         "agreement_score": _normalize_score(data.get("agreement_score")),
         "change_type": change_type,
         "change_summary": change_summary,

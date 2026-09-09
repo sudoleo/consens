@@ -17,6 +17,15 @@
 (function () {
   const AGENT_MODE_STORAGE_KEY = "agentMode";
   const AGENT_PANEL_COLLAPSED_KEY = "agentModePanelCollapsed";
+  let checkSources = true;
+  try { checkSources = localStorage.getItem("checkSources") !== "false"; } catch (_) {}
+  window.App.isSourceCheckEnabled = () => checkSources;
+
+  function setSourceCheckEnabled(enabled) {
+    checkSources = !!enabled;
+    try { localStorage.setItem("checkSources", String(checkSources)); } catch (_) {}
+    renderComposerMode();
+  }
 
   // Default fuer neue Nutzer (seit 2026-07-27 auf ALLEN Geraeten, vorher nur
   // mobil): Agent Mode aktiv und Panel AUSGEKLAPPT — die Modellnamen sind
@@ -290,9 +299,19 @@
   // Composer controls always describe the next question. The answer reader
   // supplies a separate, frozen summary for the direct comparison on screen.
   function renderComposerMode() {
+    ["sourceCheckMenuSwitch", "sourceCheckSwitch"].forEach(id => {
+      const control = document.getElementById(id);
+      if (control) control.checked = checkSources;
+    });
     const bar = document.getElementById("composerModeBar");
     if (!bar) return;
     const enabled = isAgentModeEnabled();
+    const sourcesButton = document.getElementById("composerSourcesToggle");
+    if (sourcesButton) {
+      sourcesButton.setAttribute("aria-checked", String(checkSources));
+      sourcesButton.title = `Check Sources ${checkSources ? "on" : "off"} · Check cited sources for the next consensus`;
+      document.getElementById("composerSourcesState").textContent = checkSources ? "On" : "Off";
+    }
     bar.hidden = enabled && !document.body.classList.contains("is-hero");
     window.App.attachments?.syncComposerPlacement?.();
     bar.dataset.agentMode = String(enabled);
@@ -693,6 +712,14 @@
 
   document.getElementById("composerAgentToggle")?.addEventListener("click", function () {
     setAgentMode(!isAgentModeEnabled(), { persist: true });
+  });
+  document.getElementById("composerSourcesToggle")?.addEventListener("click", function () {
+    setSourceCheckEnabled(!checkSources);
+  });
+  ["sourceCheckMenuSwitch", "sourceCheckSwitch"].forEach(id => {
+    document.getElementById(id)?.addEventListener("change", function () {
+      setSourceCheckEnabled(this.checked);
+    });
   });
   // Reuse the original controls, including their plan checks and file picker.
   document.getElementById("composerDeepToggle")?.addEventListener("click", function () {

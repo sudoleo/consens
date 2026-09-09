@@ -20,12 +20,15 @@
   let projectedRunId = null;
   let projectedPhase = null;
   let projectedStatus = null;
+  let consensusProjection = null;
+  let historyProjection = null;
+  const modelProjections = new Map();
 
   function selectedConfig(context, provider) {
     return (context.config?.providers || []).find(item => item.provider === provider) || null;
   }
 
-  function renderModel(context, definition) {
+  function renderModel(context, definition, force) {
     const box = document.getElementById(definition.boxId);
     const output = box?.querySelector(".collapsible-content");
     if (!box || !output) return;
@@ -34,6 +37,15 @@
     const result = context.modelResults[definition.provider] || null;
     const selected = Boolean(config);
     box.classList.toggle("excluded", !selected);
+    const status = result?.status || "pending";
+    const markdown = String(result?.text || result?.streamText || "");
+    const signature = JSON.stringify([context.runId, config, status, markdown,
+      result?.error, result?.sources, context.evidenceSources]);
+    const previous = modelProjections.get(definition.provider);
+    // Other models' tokens must not restart this model's loading animation
+    // or reparse its unchanged Markdown, math and source links.
+    if (!force && previous?.output === output && previous.signature === signature) return;
+    modelProjections.set(definition.provider, { output, signature });
     delete box.dataset.responseError;
     delete box.dataset.responseSkipped;
     delete box.dataset.consensusAnswer;
@@ -49,7 +61,6 @@
       return;
     }
 
-    const status = result?.status || "pending";
     box.dataset.responseState = status === "streaming" ? "pending" : status;
     if (status === "error" || status === "skipped" || status === "canceled") {
       box.dataset.responseError = "true";
@@ -58,7 +69,6 @@
       return;
     }
 
-    const markdown = String(result?.text || result?.streamText || "");
     if (markdown) {
       box.dataset.consensusAnswer = markdown;
       box.dataset.consensusSources = JSON.stringify(result?.sources || []);
@@ -88,24 +98,33 @@
     output.classList.toggle("is-visible", visible);
   }
 
-  function renderConsensus(context) {
+  function renderConsensus(context, force) {
     const response = document.getElementById("consensusResponse");
     const body = window.App.consensusBodyEl?.(response);
     const differences = response?.querySelector(".consensus-differences p");
     if (!response || !body || !differences) return;
+    const state = context.consensus;
+    const signature = JSON.stringify([context.runId, state.text || state.streamText || "",
+      state.status === "streaming", state.differencesData, state.differences,
+      state.error, context.evidenceSources]);
+    if (!force && consensusProjection?.body === body && consensusProjection.signature === signature) {
+      projectSources(context);
+      return;
+    }
+    consensusProjection = { body, signature };
 
     window.resetConsensusInsights?.();
     window.resetCredibilityFrame?.(response.querySelector(".consensus-differences"));
     body.classList.remove("is-streaming");
     differences.classList.remove("is-streaming");
 
-    const state = context.consensus;
     const text = String(state.text || state.streamText || "");
     const visible = Boolean(text) || ["pending", "streaming", "differences", "complete", "error"].includes(state.status);
     setConsensusVisible(visible);
     if (!visible) {
       body.replaceChildren();
       differences.replaceChildren();
+      projectSources(context);
       return;
     }
 
@@ -122,6 +141,7 @@
 
     if (!state.text) {
       differences.replaceChildren();
+      projectSources(context);
       return;
     }
 
@@ -148,6 +168,16 @@
         differences.replaceChildren();
       }
     }
+    projectSources(context);
+  }
+
+  // A third-judge event never projects the answer, model responses or insights.
+  function projectSources(context) {
+    window.App.watchRunSources?.(context);
+    if (!registry.isVisible(context.runId)) return;
+    const verification = context.consensus.sourceVerification?.status === "pending"
+      && ["failed", "canceled"].includes(context.status) ? { status: "failed" } : context.consensus.sourceVerification;
+    window.App.sourceVerification?.renderCurrent(verification, {differencesData: context.consensus.differencesData});
   }
 
   function syncCompatibilityState(context) {
@@ -166,9 +196,17 @@
     }
   }
 
-  function syncConversationProjection(context) {
+  function syncConversationProjection(context, force) {
     const followup = window.App.followup;
-    followup?.renderStoredTurns?.(context.historyTurns || []);
+    const history = document.getElementById("threadHistory");
+    const signature = JSON.stringify(context.historyTurns || []);
+    // A follow-up's completed turns do not change with its stream. Rebuilding
+    // them per token repeats Markdown/claim rendering and layout measurements,
+    // and also discards any open history drawers and keyboard focus.
+    if (force || historyProjection?.history !== history || historyProjection?.signature !== signature) {
+      followup?.renderStoredTurns?.(context.historyTurns || []);
+      historyProjection = { history, signature };
+    }
     followup?.reset?.();
     if (context.status === "succeeded" && context.consensus.completedTurn && context.consensus.text) {
       followup?.offer?.(context.question, context.consensus.text, context.consensus.completedTurn);
@@ -199,6 +237,12 @@
       return;
     }
     const phaseChanged = force || projectedPhase !== context.phase || projectedStatus !== context.status;
+    if (context.consensus.differencesComplete && ["running", "starting"].includes(context.status)) {
+      if (force) pipeline.dismiss?.();
+      pipeline.onConsensusEnd?.();
+      pipeline.renderProvenance?.();
+      return;
+    }
     if (!phaseChanged) {
       pipeline.renderProvenance?.();
       return;
@@ -268,6 +312,8 @@
       projectedRunId = null;
       projectedPhase = null;
       projectedStatus = null;
+      historyProjection = null;
+      modelProjections.clear();
       window.projectAgentModeRun?.(null);
       // Nothing on screen belongs to a run any more: a saved bookmark, or a
       // cleared view. A run still going in the background reports itself in
@@ -310,10 +356,10 @@
     // nirgends mehr geschrieben steht.
     window.App.setThreadQuestion?.(context.question);
     window.App.setThreadQuestionAttachments?.(context.attachmentMeta || []);
-    syncConversationProjection(context);
-    providers().forEach(provider => renderModel(context, provider));
+    syncConversationProjection(context, forcePipeline);
+    providers().forEach(provider => renderModel(context, provider, forcePipeline));
     window.renderEvidenceSources?.(context.evidenceSources || []);
-    renderConsensus(context);
+    renderConsensus(context, forcePipeline);
     syncCompatibilityState(context);
     if (context.config?.agentMode === false) window.projectAgentModeRun?.(context);
     else syncAgentStatus(context, forcePipeline);
@@ -344,6 +390,8 @@
     if (context.phase === "answers") return "Models answering";
     if (context.phase === "consensus") return "Writing consensus";
     if (context.phase === "differences") return "Checking differences";
+    if (context.phase === "sources") return "Checking sources";
+    if (context.phase === "finalizing") return "Saving result";
     return "Running";
   }
 
@@ -400,6 +448,6 @@
     }
   });
 
-  window.App.runView = Object.freeze({ project, ensureRunRow });
+  window.App.runView = Object.freeze({ project, projectSources, ensureRunRow });
   registry.setProjector(project);
 })();

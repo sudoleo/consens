@@ -631,6 +631,37 @@ def test_automatic_evidence_orders_direct_sources_before_rumors():
     assert [item["type"] for item in evidence] == ["primary", "research", "rumor"]
 
 
+def test_topic_evidence_keeps_citation_ids_when_quality_sort_changes_order():
+    sources = [
+        {"id": "S2", "title": "Prediction market", "url": "https://kalshi.com/markets/gpt6"},
+        {"id": "S7", "title": "Official update", "url": "https://openai.com/index/update"},
+        {"id": "S12", "title": "Paper", "url": "https://arxiv.org/abs/2607.12345"},
+    ]
+    evidence = topics.normalize_evidence(topic_runner.evidence_from_sources(sources, topics.normalize_source_rules({})))
+    assert [item["id"] for item in evidence] == ["S7", "S12", "S2"]
+    assert {item["id"]: item["url"] for item in evidence} == {item["id"]: item["url"] for item in sources}
+    assert topics.normalize_evidence(evidence) == evidence
+
+
+def test_topic_evidence_preserves_more_than_eighty_sources_and_case_sensitive_paths():
+    sources = [{"id": f"S{index}", "title": str(index), "url": f"https://example.test/{index}"}
+               for index in range(1, 99)]
+    sources.extend([{"id": "S99", "title": "Upper", "url": "https://example.test/Page"},
+                    {"id": "S100", "title": "Lower", "url": "https://example.test/page"}])
+    evidence = topics.normalize_evidence(topic_runner.evidence_from_sources(sources, topics.normalize_source_rules({})))
+    assert len(evidence) == 100
+    assert {item["id"]: item["url"] for item in evidence}["S100"] == "https://example.test/page"
+
+
+def test_topic_evidence_legacy_ids_skip_explicit_ids_and_conflicts_fail_explicitly():
+    base = {"type": "primary", "title": "Evidence", "url": "https://openai.com/index/update"}
+    evidence = topics.normalize_evidence([{**base, "id": "S4"}, {**base, "url": "https://example.test/legacy"},
+                                         {**base, "id": "S7"}])
+    assert [item["id"] for item in evidence] == ["S4", "S1", "S7"]
+    with pytest.raises(topics.TopicError, match="different URLs"):
+        topics.normalize_evidence([{**base, "id": "S4"}, {**base, "id": "S4", "url": "https://different.test"}])
+
+
 def test_topic_followers_use_separate_collection_and_double_opt_in(monkeypatch):
     monkeypatch.setenv("WATCH_UNSUBSCRIBE_SECRET", "topic-test-secret")
     db = FakeFirestore()

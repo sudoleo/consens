@@ -37,6 +37,33 @@
     return consensusLifecycle.isActiveRun(runId);
   }
 
+  const sourceRunObservers = new WeakMap();
+  window.App.watchRunSources = function (context) {
+    const registry = window.App.runRegistry;
+    const snapshot = context?.consensus?.sourceVerification;
+    if (!snapshot?.job_id || context.consensus.status !== 'complete' || !registry?.isAuthCurrent(context)) return;
+    const existing = sourceRunObservers.get(context);
+    if (existing?.jobId === snapshot.job_id) return;
+    existing?.stop();
+    const jobId = snapshot.job_id;
+    const stop = window.App.sourceVerification?.observe({ snapshot, auth: context.auth,
+      useOwnKeys: context.config?.useOwnKeys === true,
+      getOwnKey: () => window.localStorage.getItem('openrouterKey'),
+      isActive: () => registry.get(context.runId) === context && context.consensus.sourceVerification?.job_id === jobId,
+      onUpdate(value) {
+        context.consensus.sourceVerification = value;
+        if (context.consensus.completedTurn) context.consensus.completedTurn.source_verification = value;
+        if (context.consensus.bookmarkPayload) context.consensus.bookmarkPayload.sourceVerification = value;
+        if (context.completedBasis?.currentTurn) context.completedBasis.currentTurn.source_verification = value;
+        // Keep the continuation basis current too. Its projection remains bound
+        // to the visible run; a hidden completion cannot repaint another answer.
+        if (context.completedBasis) registry.setCompletedBasis(context.runId, context.completedBasis);
+        window.App.runView?.projectSources?.(context);
+      }
+    });
+    sourceRunObservers.set(context, {jobId, stop: stop || (() => {})});
+  };
+
   function finishConsensusRun(runId) {
     consensusLifecycle.finishRun(runId);
   }
@@ -383,7 +410,8 @@
         );
       }
 
-      if (turnSources.length) {
+      let sourceReport = null;
+      if (turnSources.length || turnData.source_verification) {
         const list = document.createElement("ol");
         list.className = "thread-history-sources";
         turnSources.forEach((source, index) => {
@@ -406,7 +434,12 @@
           list.appendChild(item);
         });
         addDrawer("Verify sources", "Sources", turnSources.length, panel => {
+          const report = document.createElement("div");
+          sourceReport = report;
+          report.className = "source-verification-report";
+          panel.appendChild(report);
           panel.appendChild(list);
+          window.App.sourceVerification?.render(answerBody, report, turnData.source_verification, {differencesData: turnData.differences_data});
         });
       }
 
@@ -442,6 +475,19 @@
       turn.append(question, answer);
       history.appendChild(turn);
       history.hidden = false;
+      if (sourceReport && turnData.source_verification?.job_id) {
+        const user = window.auth?.currentUser;
+        const jobId = turnData.source_verification.job_id;
+        window.App.sourceVerification?.observe({snapshot: turnData.source_verification,
+          auth: {user, uid: user?.uid, generation: window.App.authState?.generation},
+          getOwnKey: () => window.localStorage.getItem('openrouterKey'),
+          isActive: () => turn.isConnected && answerBody.isConnected && turnData.source_verification?.job_id === jobId,
+          onUpdate(value) {
+            turnData.source_verification = value;
+            window.App.sourceVerification?.render(answerBody, sourceReport, value, {differencesData: turnData.differences_data});
+          }
+        });
+      }
       // Erst im DOM laesst sich messen, ob der Clamp ueberhaupt greift; nur
       // dann bekommt der Turn seinen Aufklapp-Link.
       requestAnimationFrame(() => {
@@ -783,6 +829,7 @@
         useOwnKeys: context.config.useOwnKeys,
         usage_run_key: context.usage?.key || null,
         deep_search: context.config.deepSearch,
+        check_sources: context.config.checkSources !== false,
         question: context.question,
         answers: Object.fromEntries(
           familyKeys().map(provider => [provider, runAnswer(context, provider)])
@@ -806,6 +853,24 @@
       }
 
       const requestResult = await streamSSERequest("/consensus", payload, controller.signal, {
+        "sources.status": { receive(data) {
+          if (!registry.isExecuting(context.runId)) return;
+          context.consensus.sourceVerification = { status: data.status };
+          window.App.runView?.projectSources?.(context);
+        } },
+        "sources.final": { receive(data) {
+          if (!registry.isExecuting(context.runId)) return;
+          context.consensus.sourceVerification = data.source_verification;
+          window.App.runView?.projectSources?.(context);
+        } },
+        "differences.final": { receive(data) {
+          if (!registry.isExecuting(context.runId)) return;
+          context.consensus.differences = String(data.differences || "");
+          context.consensus.differencesData = data.differences_data || null;
+          context.consensus.differencesComplete = true;
+          context.phase = context.consensus.sourceVerification?.status === "pending" ? "sources" : "finalizing";
+          if (registry.isVisible(context.runId)) registry.renderVisible();
+        } },
         "consensus.delta": contextConsensusRenderer(context, "consensus"),
         "consensus.final": contextConsensusRenderer(context, "consensus-final"),
         "differences.delta": contextConsensusRenderer(context, "differences")
@@ -861,8 +926,10 @@
       context.consensus.status = "complete";
       context.consensus.text = String(data.consensus_response || context.consensus.text || "");
       context.consensus.streamText = context.consensus.text;
-      context.consensus.differences = String(data.differences || "");
-      context.consensus.differencesData = data.differences_data || null;
+      context.consensus.differences = String(data.differences || context.consensus.differences || "");
+      context.consensus.differencesData = data.differences_data || context.consensus.differencesData || null;
+      context.consensus.differencesComplete = true;
+      context.consensus.sourceVerification = data.source_verification || context.consensus.sourceVerification || null;
       context.consensus.sources = context.evidenceSources.map(source => ({ ...source }));
       context.consensus.resultId = data.result_id || null;
       context.consensus.modelLabels = modelLabels;
@@ -878,6 +945,7 @@
         consensus: context.consensus.text,
         differences: context.consensus.differences,
         differences_data: context.consensus.differencesData,
+        source_verification: context.consensus.sourceVerification,
         sources: context.evidenceSources.map(source => ({ ...source })),
         model_answers: modelAnswers,
         attachments: context.attachmentMeta.map(item => ({ ...item }))
@@ -958,6 +1026,7 @@
       context.attachments = [];
       registry.setStatus(context.runId, "succeeded");
       registry.setCompletedBasis(context.runId, completedBasis);
+      window.App.watchRunSources(context);
 
       if (registry.isAuthCurrent(context) && data.chat_replayed !== true) {
         const best = context.consensus.differencesData?.best_model || parseBestModel(context.consensus.differences);
@@ -1050,6 +1119,9 @@
     const question = (window.lastQuestion ?? "").trim()
       || (document.getElementById("questionInput")?.value ?? "").trim();
     const replayRun = replayPendingTurn ? window.App.chatSession?.logicalRun : null;
+    const checkSources = replayRun
+      ? replayRun.checkSources !== false
+      : window.App.isSourceCheckEnabled?.() !== false;
     // A completed reconciliation replays the original logical run even when
     // the user changed controls while the transport disposition was unknown.
     const useOwnKeys = replayRun
@@ -1328,6 +1400,8 @@
         label.textContent = text;
       }
       const consensusMainEl = window.App.consensusBodyEl(consensusDiv);
+      let sourceVerificationSnapshot = null;
+      let earlyDifferences = null;
       const consensusMainRenderer = createStreamRenderer(
         consensusMainEl,
         () => isActiveConsensusRun(consensusRunId)
@@ -1384,6 +1458,7 @@
           useOwnKeys: useOwnKeys,
           usage_run_key: usageRun?.key || null,
           deep_search: deepThink,
+          check_sources: checkSources,
           question: question,
           answers: answers,
           model_sources: model_sources,
@@ -1407,11 +1482,35 @@
           : [];
       }
       const consensusRequestResult = await streamSSERequest("/consensus", consensusPayload, consensusSignal, {
+          "sources.status": { receive(data) {
+            if (!isActiveConsensusRun(consensusRunId)) return;
+            sourceVerificationSnapshot = { status: data.status };
+            window.App.sourceVerification?.renderCurrent(sourceVerificationSnapshot);
+          } },
+          "sources.final": { receive(data) {
+            if (!isActiveConsensusRun(consensusRunId)) return;
+            sourceVerificationSnapshot = data.source_verification;
+            window.App.sourceVerification?.renderCurrent(sourceVerificationSnapshot);
+          } },
+          "differences.final": { receive(data) {
+            if (!isActiveConsensusRun(consensusRunId)) return;
+            earlyDifferences = data;
+            let structured = false;
+            try { structured = window.renderConsensusInsights?.(data.differences_data, includedAnswerCount) === true; }
+            catch (error) { console.error("Could not render differences:", error); }
+            if (!structured && differencesEl) injectMarkdown(differencesEl, data.differences || "The differences check is unavailable.");
+            window.App.consensusPipeline?.onConsensusEnd?.();
+            window.App.sourceVerification?.renderCurrent(sourceVerificationSnapshot);
+          } },
           "consensus.delta": consensusMainRenderer,
           "consensus.final": consensusFinalPhaseRenderer,
           "differences.delta": differencesPhaseRenderer
         });
       const data = consensusRequestResult.data || {};
+      if (earlyDifferences) {
+        data.differences_data = data.differences_data || earlyDifferences.differences_data;
+        data.differences = data.differences || earlyDifferences.differences;
+      }
       const completedReplay = data.chat_replayed === true;
       if (!data.consensus_response && completedConsensusText) {
         data.consensus_response = completedConsensusText;
@@ -1489,6 +1588,8 @@
         if (mainEl) {
           // Konsens-Text inkl. [S1]-Links, Copy-Buttons usw.
           injectMarkdown(mainEl, data.consensus_response);
+          window.App.sourceVerification?.renderCurrent(data.source_verification || sourceVerificationSnapshot,
+            {differencesData: data.differences_data});
         }
 
         if (diffEl) {
@@ -1536,6 +1637,7 @@
           consensus: data.consensus_response,
           differences: data.differences || "",
           differences_data: data.differences_data || null,
+          source_verification: data.source_verification || sourceVerificationSnapshot || null,
           sources: Array.isArray(window.currentEvidenceSources)
             ? window.currentEvidenceSources
             : [],
@@ -1596,6 +1698,23 @@
           differencesData: data.differences_data || null,
           conversation: bookmarkConversation
         };
+        if (completedTurn.source_verification?.job_id && mainEl) {
+          const sourceUser = window.auth?.currentUser;
+          const sourceJobId = completedTurn.source_verification.job_id;
+          const sourceBodyText = mainEl.textContent;
+          const sourceBookmarkPayload = window.lastConsensusBookmarkPayload;
+          window.App.sourceVerification?.observe({snapshot: completedTurn.source_verification,
+            auth: {user: sourceUser, uid: sourceUser?.uid, generation: window.App.authState?.generation},
+            useOwnKeys, getOwnKey: () => window.localStorage.getItem('openrouterKey'),
+            isActive: () => mainEl.isConnected && mainEl.dataset.sourceCheckJob === sourceJobId
+              && mainEl.textContent === sourceBodyText,
+            onUpdate(value) {
+              completedTurn.source_verification = value;
+              sourceBookmarkPayload.sourceVerification = value;
+              window.App.sourceVerification?.renderCurrent(value, {differencesData: completedTurn.differences_data});
+            }
+          });
+        }
         if (!completedReplay && window.auth?.currentUser) {
           if (data.bookmark_persisted === true && data.bookmark_meta) {
             window.acceptPersistedConsensusBookmark?.(data.bookmark_meta, bookmarkConversation);

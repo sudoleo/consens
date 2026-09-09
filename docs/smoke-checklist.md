@@ -603,6 +603,53 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
 - [ ] Quellen-Favicons geladen und fehlgeschlagen: Titel, Domain und Referenznummer bleiben in beiden Faellen lesbar; Fehler zeigen einen Buchstaben statt kaputtem Bild.
 - [ ] Ein einzelner Unterschied direkt offen; erweiterte Desktopansicht mit Positionen nebeneinander, Handy untereinander.
 
+### Check Sources: dauerhafte Belegprüfung
+- [ ] Check Sources vor dem Start ausschalten und während des Laufs einschalten:
+      Der gestartete Lauf behält seine ursprüngliche Einstellung; erst der nächste
+      Consensus übernimmt die Änderung.
+- [ ] Mehr Quellen und Satz-Quellen-Zuordnungen als ein Prüfpaket verwenden:
+      Alle zitierten Quellen erhalten einen Status. Quellenanzahl, geprüfte
+      Zuordnungen, noch ausstehende Prüfungen und nicht prüfbare Einträge bleiben
+      getrennt sichtbar; kein später Quellenverweis verschwindet wegen seiner Position.
+- [ ] Quellen-GET absichtlich verzögern: Consensus, Differences und Laufabschluss
+      sind bereits benutzbar. Die Quellenprüfung aktualisiert sich anschließend
+      schrittweise, ohne Antwort, Agreement-Score, Claim-Knoten oder offene
+      Quellenpassagen und Tastaturfokus zu ersetzen.
+- [ ] Quellen mit widersprechender Zahl, fehlender Bedingung, unklarem Beleg,
+      falschem Zeitraum und Abruf-Timeout prüfen: „Statement contradicted“,
+      „Partly supported“, „Support unclear“ und „Not checked“ bleiben unterscheidbar.
+      Originalpassage, Prüfzeit und konkrete technische Fehlerursache sind lesbar;
+      ein Prüfabschluss allein erzeugt keinen positiven Gesamt-Haken.
+- [ ] Einen identischen Quellenbeleg mehrerer Modelle öffnen: Herkunft nennt die
+      beteiligten Modelle und erklärt die gemeinsame Quelle. Modell-Zustimmung
+      und -Dissens gehören zum selben Satz und bleiben von Quellenbelegen getrennt.
+- [ ] Während der Quellenprüfung zu einem anderen Lauf oder Bookmark wechseln:
+      Ergebnisse landen nur im ursprünglichen Lauf. Ein geschlossenes oder neu
+      geöffnetes Bookmark sowie historische Turns laden auch aus kompakten,
+      bereits abgeschlossenen Job-Snapshots die vollständigen Details nach.
+- [ ] Ausloggen oder einen Lauf entfernen, während ein Quellen-GET offen ist:
+      Der Request wird abgebrochen; seine verspätete Antwort verändert weder
+      fremde Inhalte noch die neue Sitzung. Tab ausblenden stoppt regelmäßige
+      Abfragen; Rückkehr setzt die Aktualisierung fort.
+- [ ] Unveränderte Job-Revision mehrmals abfragen: nur kompakter Header-Check
+      mit `after_revision`, keine erneuten Detailseiten und keine DOM-Neuzeichnung.
+      Bei Änderungen werden alle Cursor-Seiten derselben Revision geladen;
+      ein Revisionswechsel währenddessen startet die Seitensammlung neu.
+- [ ] Quellen-GET mit 403/404 beantworten: „Updates unavailable“ und eine
+      verständliche Erklärung erscheinen; der letzte Befund bleibt erhalten.
+      Drei vorübergehende Abruffehler zeigen einen Wiederholungs-Hinweis;
+      erfolgreiche Aktualisierung entfernt ihn, ohne den Belegstatus umzudeuten.
+- [ ] Eigenkey-Lauf nach verlorenem Worker-Credential öffnen: höchstens eine
+      automatische Wiederaufnahme mit dem vorhandenen eigenen Schlüssel;
+      ein Serverkey-Lauf darf diesen Schlüssel nicht verwenden. Ohne Schlüssel
+      bleibt die notwendige Eingabe sichtbar, ohne einen neuen Consensus zu starten.
+- [ ] Öffentliche Share-/Topic-Ansichten zeigen nur ihren gebundenen Snapshot und
+      laden dessen Quellenstatus nach. Bei historischen Versionen wandern weder
+      Befunde noch Quellen aus einer neueren Version hinein.
+- [ ] Desktop sowie 390/320px, Hell/Dunkel und reduzierte Bewegung prüfen:
+      Quellenstatus bleibt sichtbar, Badges und Originalpassagen umbrechen ohne
+      horizontales Scrollen; reduzierte Bewegung deaktiviert Ladeanimationen.
+
 - [ ] Frische Sitzung mit Agent Mode an: gespeicherten Direktvergleich oeffnen.
       Alle gespeicherten Modelle sind sichtbar, auch aktuell ausgeschlossene.
       „Direct comparison“ erklaert Agent Mode fuer dieses Ergebnis; die

@@ -20,6 +20,7 @@ from app.services.llm.citations import result_sources, result_text, to_plain
 from app.services.llm.credentials import openrouter_api_key, resolve_developer_api_keys
 from app.services.llm.engines import query_model
 from app.services.llm.mock_llm import mock_ask_result, mock_llm_enabled
+from app.services.source_catalog import normalize_provider_answers
 
 
 # Familien und ihre Labels kommen aus der Provider-Registry; die Reihenfolge
@@ -151,4 +152,4 @@ def fan_out_provider_answers(
                 response=text,
                 sources=to_plain(result_sources(raw)),
             )
-    return answers
+    return normalize_provider_answers(answers)

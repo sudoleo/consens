@@ -79,13 +79,14 @@ Threadpool aus. `async def` bleibt nur für echte Await-Pfade (Mail, explizites
 
 | Router | Zweck (Auswahl an Pfaden) |
 |---|---|
+| `source_checks.py` | Dauerhafte Quellenprüfung: owner-gebundenes `GET /api/source-checks/{job_id}` mit `cursor`, `revision` und `after_revision`; `POST .../{job_id}/resume` nimmt den eigenen OpenRouter-Key nur in den Prozessspeicher auf. `GET /api/share/{share_id}/source-check?version=...` und `GET /api/topics/{slug}/source-check?version=...` prüfen pro Paketseite aktive Ressource, Sichtbarkeit, Run- und Antwortversion. Seiten liefern `source_verification` plus `next_cursor`, bei geändertem Stand 409. API-Key-Clients verwenden den rungebundenen Endpoint in `api_v1.py`: `GET /api/v1/consensus/runs/{run_id}/source-check`, auch als `result.source_verification.status_url` ausgegeben. |
 | `pages.py` | HTML-Seiten + SEO: `/` (Landing, auch mit aktiver Session direkt erreichbar), `/model-pulse` (öffentliche, erklärte Best-answer-Rangliste), `/app` (Haupt-App), `/app/watches` (gleiche App-Shell; watch.js öffnet anhand des Pfads das Watch-Dashboard), `/admin` (inkl. Topics-Tab), `/admin/topics` (308-Kompatibilitätsredirect auf `/admin#topics`), `/admin/benchmark` (Benchmark-Run-Visualisierung), `/about`, `/ai-model-comparison`, `/consensus-engine` (nutzerfreundliche Consensus-Engine-Erklärung), `/privacy` `/imprint` `/terms`, `robots.txt`, `sitemap*.xml`. Außerdem der öffentliche, familienaggregierte Best-answer-Zähler `GET /api/model-leaderboard` (60 s Browser-/CDN-Cache; `period=all|since-2026-08-31`; alle neun Familien einschließlich Nullständen, Kimi/GLM und Meta/Muse mit eigenem Verfügbarkeitsdatum aus `_LEADERBOARD_AVAILABLE_SINCE`). Beide Zeiträume nutzen zusätzlich einen serverseitigen 60-s-Cache mit serialisiertem Refresh pro Zeitraum/Prozess. Der gemeinsame Zeitraum zählt die datierten, deduplizierten `model_votes` ab 31.08.2026 über indexierte `count()`-Abfragen pro Familie; Modellkatalog und Counts werden im selben Read-only-Transaktionssnapshot gelesen. Solange der neue `model_votes`-Index aus `firestore.indexes.json` fehlt/aufbaut, greift nur für diesen Indexfehler der gecachte Legacy-Scan. Kontolöschungen entfernen weiterhin Votes aus dem Zeitraum, ohne Lifetime-Zähler zurückzusetzen; `/feedback`, `/vote`, `/check_keys` bleiben die weiteren internen Seiten-Routen (Key-Test nur für verifizierte Logins). Feedback ist persistent pro UID auf 30 Sekunden und 10/UTC-Tag begrenzt. Ein Best-answer-Vote muss an ein noch gültiges, owner-gebundenes `result_id` gebunden sein, zum serverseitigen Gewinner passen und kann pro Lauf genau einmal zählen. |
 | `chat.py` | Kern-LLM-Flow: `/prepare`, die aus `cfg.PROVIDERS[*].ask_endpoint` erzeugten `/ask_*`-Routen (aktuell zusätzlich `/ask_kimi` und `/ask_glm`), `/consensus`, `/resolve`. `/prepare` und die `/ask_*`-Endpoints akzeptieren weiter das optionale Legacy-`context`-Feld für nicht migrierte Bookmark-Fortsetzungen. Additiv laden `/ask_*` das owner-gebundene Tripel `chat_id`/`turn_id`/`context_version_id`; Legacy- und Versionskontext zusammen werden abgewiesen. Alle `/ask_*`-Endpoints laufen über `handle_ask` + die deklarative Familien-Registry `ASK_PROVIDERS`; Transport und Credential sind für alle OpenRouter, `useOwnKeys` wählt optional `openrouter_key`. `/consensus` akzeptiert optional Chat-/Turn-IDs plus `turn_sources` und die exakt am Turn verknüpfte `context_version_id`, prüft alles owner-gebunden vor dem Judge und finalisiert nach Consensus, Differences und Share-`result_id` in Streaming- wie JSON-Pfad über `ChatStore`. Sendet der Browser die stabile `bookmarkId`, schreibt `/consensus` den autoritativen Bookmark-Snapshot vor seinem erfolgreichen Final-Event und liefert kompakte `bookmark_meta`; ein separater Browser-Request ist nur noch Fallback. Ein bereits completed Turn wird mit Consensus, Differences, Quellen und Modellantworten owner-geschützt wiedergegeben, ohne Engine-/Differences-/Share-/Statistik-/Completion- oder Usage-Write; ohne IDs bleibt der Legacy-Vertrag unverändert. |
 | `chat_history.py` | Additive, owner-gebundene Chat-Persistenz: `POST/GET /chats`, `GET /chats/{chat_id}`, `DELETE /chats/{chat_id}` (dreistufige Kaskade über `ChatStore.delete_chat`; vor der Enumeration wird der Chat transaktional auf `deleting` gesetzt, damit kein paralleler Turn als Subcollection-Waise nachrutschen kann), `POST/GET /chats/{chat_id}/turns`, das vollständige `GET /chats/{chat_id}/turns/{turn_id}` sowie `POST /chats/{chat_id}/turns/{turn_id}/context` für eine idempotente autoritative Context-Version. Das UID-Budget `build_context` liegt ausschließlich auf diesem POST, nicht auf dem Turn-GET. Listen sind begrenzt und mit selbstenthaltenden, UID-/Ressourcen-gebundenen HMAC-Cursors paginiert (`updated_at` + Dokument-ID für Chats, `position` + Dokument-ID für Turns); Cursor-Dokumente werden nicht erneut als veränderliche Seitengrenze gelesen. Create-Chat serialisiert das Owner-Limit über `chat_state/quota`, Create-Turn ist über `client_request_id` idempotent. `ChatStore.complete_turn`/`fail_turn` lesen Chat, Turn und Account-Tombstone in derselben Transaktion und akzeptieren ausschließlich einen weiterhin `active` Chat; eine nach dem `deleting`-Marker eintreffende Completion kann deshalb keine Modellantwort-Waisen erzeugen. Completion bleibt per Payload-Fingerprint idempotent. Es gibt bewusst keinen öffentlichen Completion-/Fail-Write-Endpoint. Alle `/chats`-Antworten erhalten über die Security-Middleware `private, no-store`. Bei einer aktiven Fortsetzung erzeugt der Browser den pending Turn nach `/prepare` vor Context und Fan-out; Turn 1 entsteht erst bei der Consensus-Anforderung. Finalisiert wird weiterhin ausschließlich serverseitig über `/consensus`. |
 | `client_errors.py` | Nimmt unter `POST /api/client-errors` ausschließlich same-origin, größenbegrenzte kritische Browsermeldungen an (5/min pro IP). Freitext, Stack, konkrete IDs/Slugs und Providerdetails werden verworfen; nur allowgelistete Typ-/Phasenkategorien, eine abstrahierte Route und bei echten Skript-/Stylesheet-Ladefehlern eine grobe Ressourcenklasse (`app_bundle`, `static_asset`, `jsdelivr_dependency`, `firebase_dependency`, `same_origin_resource`, `unknown_resource`) erreichen den nicht-blockierenden Telegram-Alert. Der Endpoint liefert keine Konfigurationsdetails zurück. |
 | `auth.py` | `/register`, `/confirm-registration` (setzt nach verifiziertem Login zusätzlich eine kurzlebige HttpOnly-Session für private servergerenderte Seiten), `DELETE /auth/session` (lokales Logout-Cleanup). `/register` gibt für Neuanlage, Bestand und Create-Race exakt `{"status":"check_inbox"}` zurück, nie UID/E-Mail/Custom-Token. Unbekannte Adressen erhalten ein serverseitig zufälliges, dem anonymen Aufrufer unbekanntes Übergangspasswort; neue und bestehende Adressen durchlaufen danach denselben Firebase-Mailbox-Setup-Pfad. Der Browser versucht keinen Login mit den eingesendeten Legacy-Credentials. Nur ein tatsächlich neues Konto löst den PII-freien Telegram-Admin-Alert aus. `/confirm-registration` prüft Revocation live und erkennt damit auch gerade neu angelegte Google-Konten serverseitig. |
 | `users.py` | `/user_status`, `/usage`, `/usage/run/release`, `GET`/`PUT /api/my/memory` sowie `POST /api/my/memory/edit|undo` (User-Memory samt explizitem, revisioniertem Luna-Patch, siehe §3), `/delete_account`, `/track-interest`. `/delete_account` legt vor jeder Löschung einen persistenten, fail-closed Auftrag über `FirestoreAccountDeletion` an. Die idempotente Kaskade umfasst API-Zugang/Telegram, alle Nutzer-Subcollections, Chats, Waitlist/Feedback, Pending Results, Persistence-Guards/Votes, Watches/Briefs, Follow-Challenges/E-Mail-Follows, eigene Shares über deren bestehende Hard-Delete-Kaskade, Profil und Firebase Auth. Jeder Bereich wird separat quittiert und bei Fehlern vom fünfminütigen Maintenance-Loop erneut versucht; bis dahin lautet die Antwort ehrlich `202 cleanup_pending`, erst der vollständige Abschluss ergibt 200. Owner-gebundene Create/Update/Delete-Transaktionen lesen den Account-Tombstone als ersten Teil derselben Mutation; nur interne Cleanup-Kaskaden verwenden explizite Bypässe. Dadurch können bereits authentifizierte, verspätete Requests keinen zuvor quittierten Bereich neu befüllen. `/track-interest` ist der idempotente Pro-Beta-Zugangsrequest (ein Pending-Dokument pro UID, kein Billing); aktive Pro-Konten werden abgewiesen. **Seit 2026-07-25 ruft die App diesen Endpunkt nicht mehr auf** — es wird nichts mehr angeboten, das man anfragen könnte; der Endpunkt bleibt nur bestehen, damit vorhandene Waitlist-Dokumente nicht verwaisen. |
-| `bookmarks.py` | `GET /bookmarks` liefert ausschließlich kompakte Metadaten, standardmäßig 30 Einträge und einen opaken Cursor; `GET /bookmarks/{id}` liefert owner-geschützt den Vollinhalt. Chat-Bookmarks referenzieren additiv `chat_id`/letzte `turn_id`; `GET /bookmarks/{id}/conversation` paginiert dafür die vollständigen owner-gebundenen completed Turns aus `ChatStore`, statt den wachsenden Transcript in ein Bookmark-Dokument zu kopieren; der Normalpfad läuft über `ChatStore.list_turn_details` (Chat einmal pro Seite geprüft, Modellantworten je Turn mit **einer** Query) und benötigt damit `2 + N` SDK-Aufrufe pro Seite. Abgerechnet werden weiterhin Dokument-Reads: Chat + gelesene Turn-Dokumente (inklusive Pagination-Sentinel) + alle zurückgegebenen Antwortdokumente; eine Query ist nicht ein einzelner Dokument-Read. Scheitert nur dieser optimierte Collection-Read, fällt der Endpoint korrektheitshalber auf `list_turns` + owner-gebundene Turn-Details zurück, statt den Browser auf zwei Bookmark-Snapshots zu reduzieren. Der Endpunkt ist bewusst ein synchrones `def`, damit die blockierenden Reads im Threadpool statt auf dem Event-Loop laufen. `/bookmark` (POST/DELETE), `/bookmark/consensus` sowie `POST /bookmark/consensus/share-result` erhalten Speichern, Löschen und die sichere Share-/Watch-Rehydration. Consensus-Inhalte werden aus einem owner-gebundenen Pending Result oder completed Turn serverseitig materialisiert, nicht aus frei behaupteten Clientfeldern; die alten, ignorierten Client-Kopien bleiben für gecachte Clients im Schema, werden aber nicht mehr formvalidiert und können den autoritativen Save daher nicht mit 422 blockieren. Die Evidence-Grenze des Modell-Saves entspricht mit 50 `share_snapshots.MAX_SOURCES`. `persist_authoritative_consensus_bookmark` ist der gemeinsame Writer für den primären `/consensus`-Abschluss und den idempotenten `/bookmark/consensus`-Fallback. Der breite slowapi-IP-Schutz sitzt vor der Tokenprüfung; die eigentlichen Modell- und Consensus-Save-Budgets gelten danach pro UID, damit der interne Preset-Fan-out nicht mit fremden Nutzern an einem Proxy-/NAT-Bucket konkurriert. Persistent gelten höchstens 250 Bookmarks, 750 kB je Dokument und 25 MB geschätztes Gesamtbudget pro UID. `DELETE /bookmark` liest die Chat-Bindung **vor** dem Löschen und räumt den gebundenen Chat per `ChatStore.delete_chat` mit ab — best effort, damit eine fehlgeschlagene Kaskade eine bereits erfolgte Löschung nicht in einen Retry verwandelt. Saves akzeptieren eine validierte stabile `bookmarkId`, sodass alle Turns einer laufenden Unterhaltung dasselbe Sidebar-Bookmark aktualisieren; Legacy-Saves ohne ID bleiben fragebasiert. `previous_question`/`previous_turn` bleiben als kompatibler Ein-Turn-Fallback für alte Bookmarks ohne Chat-Bindung erhalten. Alle Bookmark-Antworten sind wie `/chats` `private, no-store`. Die Save-Endpunkte liefern weiterhin den zusammengeführten Datensatz zurück; der Client reduziert ihn sofort auf Listenmetadaten und hält höchstens das geöffnete Detail im Cache. Der seltene Browser-Fallback sendet nur IDs plus kleine Legacy-Texte, nutzt `keepalive`, wiederholt Netz-/408-/425-/429-/5xx-Fehler begrenzt und zeigt einen endgültigen Fehler dedupliziert verständlich an. |
+| `bookmarks.py` | `GET /bookmarks` liefert ausschließlich kompakte Metadaten, standardmäßig 30 Einträge und einen opaken Cursor; `GET /bookmarks/{id}` liefert owner-geschützt den Vollinhalt. Chat-Bookmarks referenzieren additiv `chat_id`/letzte `turn_id`; `GET /bookmarks/{id}/conversation` paginiert dafür die vollständigen owner-gebundenen completed Turns aus `ChatStore`, statt den wachsenden Transcript in ein Bookmark-Dokument zu kopieren; der Normalpfad läuft über `ChatStore.list_turn_details` (Chat einmal pro Seite geprüft, Modellantworten je Turn mit **einer** Query) und benötigt damit `2 + N` SDK-Aufrufe pro Seite. Abgerechnet werden weiterhin Dokument-Reads: Chat + gelesene Turn-Dokumente (inklusive Pagination-Sentinel) + alle zurückgegebenen Antwortdokumente; eine Query ist nicht ein einzelner Dokument-Read. Scheitert nur dieser optimierte Collection-Read, fällt der Endpoint korrektheitshalber auf `list_turns` + owner-gebundene Turn-Details zurück, statt den Browser auf zwei Bookmark-Snapshots zu reduzieren. Der Endpunkt ist bewusst ein synchrones `def`, damit die blockierenden Reads im Threadpool statt auf dem Event-Loop laufen. `/bookmark` (POST/DELETE), `/bookmark/consensus` sowie `POST /bookmark/consensus/share-result` erhalten Speichern, Löschen und die sichere Share-/Watch-Rehydration. Consensus-Inhalte werden aus einem owner-gebundenen Pending Result oder completed Turn serverseitig materialisiert, nicht aus frei behaupteten Clientfeldern; die alten, ignorierten Client-Kopien bleiben für gecachte Clients im Schema, werden aber nicht mehr formvalidiert und können den autoritativen Save daher nicht mit 422 blockieren. Quellenlisten werden nicht nach Anzahl gekürzt; die bestehenden Dokument- und Request-Bytebudgets begrenzen den Save ausdrücklich. `persist_authoritative_consensus_bookmark` ist der gemeinsame Writer für den primären `/consensus`-Abschluss und den idempotenten `/bookmark/consensus`-Fallback. Der breite slowapi-IP-Schutz sitzt vor der Tokenprüfung; die eigentlichen Modell- und Consensus-Save-Budgets gelten danach pro UID, damit der interne Preset-Fan-out nicht mit fremden Nutzern an einem Proxy-/NAT-Bucket konkurriert. Persistent gelten höchstens 250 Bookmarks, 750 kB je Dokument und 25 MB geschätztes Gesamtbudget pro UID. `DELETE /bookmark` liest die Chat-Bindung **vor** dem Löschen und räumt den gebundenen Chat per `ChatStore.delete_chat` mit ab — best effort, damit eine fehlgeschlagene Kaskade eine bereits erfolgte Löschung nicht in einen Retry verwandelt. Saves akzeptieren eine validierte stabile `bookmarkId`, sodass alle Turns einer laufenden Unterhaltung dasselbe Sidebar-Bookmark aktualisieren; Legacy-Saves ohne ID bleiben fragebasiert. `previous_question`/`previous_turn` bleiben als kompatibler Ein-Turn-Fallback für alte Bookmarks ohne Chat-Bindung erhalten. Alle Bookmark-Antworten sind wie `/chats` `private, no-store`. Die Save-Endpunkte liefern weiterhin den zusammengeführten Datensatz zurück; der Client reduziert ihn sofort auf Listenmetadaten und hält höchstens das geöffnete Detail im Cache. Der seltene Browser-Fallback sendet nur IDs plus kleine Legacy-Texte, nutzt `keepalive`, wiederholt Netz-/408-/425-/429-/5xx-Fehler begrenzt und zeigt einen endgültigen Fehler dedupliziert verständlich an. |
 | `share.py` | `/api/share` (POST), `/api/share/{id}` (DELETE), `/api/my/shares`, `/api/share/{id}/report`, öffentliche Seite `/s/{slug_id}`, `sitemap-shares.xml`. |
 | `watch.py` | Consensus Watch: `/api/watch` (POST), `/api/my/watches` (inkl. Original-Baseline-Score, kompakter History je Watch und autoritativer Plan-/Active-Limit-Metadaten für die UI), `/api/watch/{id}` (PATCH/DELETE), Morning-Brief-Einstellungen `/api/my/watch-brief` (GET/PATCH), nutzergebundene Telegram-Verbindung `/api/my/telegram` (GET/DELETE), `/api/my/telegram/link|test` (POST) und der per Secret-Header geschützte `/api/telegram/webhook`; außerdem öffentliche, HMAC-signierte `/watch/unsubscribe`- und `/watch/brief/unsubscribe`-Links. |
 | `topics.py` | Eigenständige öffentliche Topic-Ticker: Hub `/topics`, versionierte Detailseite `/topics/{slug}` (`?version=<run_id>`, rendert Position Map + Agreement-Kurve über `services/history_view.py` — dieselbe Darstellung wie die Watch-Seiten, bewusst nur bis zum gewählten Snapshot), `sitemap-topics.xml`, Double-Opt-in-Follow unter `/api/topics/{slug}/follow` + `/topic-follow/confirm|unsubscribe`; der Versand-Claim ist persistent gehasht und besitzt Resend-, Empfänger- und globales Stundenbudget. Der Favicon-Proxy ist auf 30 Requests/Minute, acht parallele Requests, einen eigenen Vierer-Executor, zwei Sekunden Upstream-Zeit sowie einen 2.000-Einträge-LRU einschließlich 24-h-Negativcache begrenzt. Admin-CRUD liegt unter `/api/admin/topics`. Ein leeres `POST /api/admin/topics/{id}/runs` führt den konfigurierten Research-/Consensus-Run aus; ein Payload mit `consensus_md` bleibt als expliziter Legacy-Import verfügbar. |
@@ -198,7 +199,7 @@ Judge-Signal ausdrücklich vom kontrollierten Accuracy-Benchmark.
 aus `partials/product_result_mockup.html`.
 Eingabe-Mockups im Landing-Hero und der Ask-Szene verwenden zusätzlich
 `partials/composer_toolbar_mockup.html`: dieselbe 36-px-Leiste mit Agent Mode,
-Deep Think, Attach und sechs gestapelten Provider-Icons wie die App, seitlich
+Check Sources (On) an zweiter Stelle, Deep Think, Attach und sechs gestapelten Provider-Icons wie die App, seitlich
 12 px eingerückt. Der Input liegt wie in `/app` explizit vor der animierten
 Leiste, damit seine abgerundete Unterkante vollständig sichtbar bleibt.
 Im Hero ersetzt sie die separate Provider-Zeile. Die
@@ -206,6 +207,9 @@ Ask-Szene blendet sie beim Senden aus (reservierter Platz stabilisiert die
 Scroll-Zeitachse); reine Agent-Ergebnis-Mockups bleiben ohne Eingabeleiste.
 Die Vorschau enthält keine scheinbar bedienbaren Schalter; der Hero-Input
 verlinkt weiterhin auf die echte Demo.
+Container-Queries kürzen die Werkzeuglabels anhand der tatsächlichen Breite
+des jeweiligen Mockups, damit die Ask-Vorschau auch auf Desktop und bei 320 px
+mit dem zusätzlichen Check-Sources-Eintrag nicht überläuft.
 **Seit 2026-07-25 spiegeln alle
 Marketing-Mockups die Inline-Confidence-Darstellung der App** (Scene 03 in
 `landing.html` inkl. der drei Slider-Beispiele, `product_result_mockup.html`
@@ -695,8 +699,11 @@ der Python-Staleness-Test auch indirekte Änderungen erkennt.
   `dataset.consensusAnswer` / `dataset.consensusSources`; `window.currentEvidenceSources`.
   Seit 2026-07-27 zwei Darstellungen: **im Konsenstext** (Container ist bzw.
   liegt in `#consensusAnswerBody`) werden `[S3]`-Tags zu hochgestellten Zahlen
-  `.src-ref` — die Nummer ist die Position in `window.currentEvidenceSources`,
-  also identisch mit der Liste in `#consensusSourcesList`
+  `.src-ref` — die Nummer stammt aus der expliziten Quellen-ID (`S3` → `3`),
+  unabhängig von Sortierung oder Lücken in `window.currentEvidenceSources`.
+  Nur alte Einträge ohne ID verwenden den Positions-Fallback; fehlende oder
+  mehrdeutige explizite IDs erhalten keinen Link. Dieselben IDs stehen in
+  `#consensusSourcesList`
   (`app-init.js::renderEvidenceSources`, geoeffnet ueber den Quellen-Chip).
   In den Modellantworten bleiben es die Favicon-Chips `.source-link`.
   Ein Hover auf `.src-ref` oeffnet `#sourceTeaser` (Favicon, Host, Titel,
@@ -897,8 +904,9 @@ der Python-Staleness-Test auch indirekte Änderungen erkennt.
   Die Tabs bleiben rahmenlos (Text, Zahl, Chevron; aktiv per Schriftgewicht,
   Unterstreichung und gedrehtem Chevron) — ein Rechteck um ein Wort ist genau
   der Rahmen, den diese Shell sonst ueberall abbaut. Der Fuss erscheint
-  nur bei `stage === "idle"|"done"` — Quellen landen schon waehrend der
-  Antwortphase und wuerden ihn sonst unter einer halben Antwort aufmachen.
+  nur bei `stage === "idle"|"done"|"differences"` — nach fertiger Synthese
+  sind Quellen unabhaengig von laufenden Judges zugaenglich; waehrend der
+  Antwortphase bleibt er unter dem noch unvollstaendigen Text verborgen.
   Unter den Tabs gibt es im geschlossenen Zustand keinen eigenen
   Differences-Trenner und `.consensus-divider` ist stillgelegt; die einzige
   Abschnittsgrenze zum Composer ist dessen auslaufender Horizont. Ein
@@ -1277,6 +1285,11 @@ der Python-Staleness-Test auch indirekte Änderungen erkennt.
   gefrorene Mode-/Modell-Labels aus dem Context wieder auf. Registry-Ereignisse
   dürfen für Hintergrundläufe nur deren anklickbare Sidebar-Zeile aktualisieren
   (Preparing/Models answering/Writing consensus/Completed/Failed/Canceled).
+  Beim Streaming bleiben unveränderte Modellboxen (inklusive Ladeindikatoren)
+  und abgeschlossene History-Turns im DOM erhalten. Inhalts-Signaturen beziehen
+  Status, Fehler und Quellen ein; ein Sichtwechsel invalidiert die Projektion.
+  So parst eine Folgefrage nicht pro Token den gesamten bisherigen Verlauf neu
+  und erhält geöffnete History-Details sowie deren Fokus.
 - **`query-send.js`** — `window.sendQuestion`: `/prepare` + `/ask_*`-Fan-out,
   vorgelagerte Turn-/Context-Bindung, Streaming-Rendering, Usage/Tier-UI,
   Agent-Mode-gebundener Auto-Consensus-Trigger und vollständiger RunContext-
@@ -1601,6 +1614,122 @@ Turn 3 und spätere Turns benutzen eine serverseitig autoritative Context-Versio
   `/prepare`-Fallback-Pfad des Frontends überlebt.
 
 ### Consensus & Differences
+
+**Quellenprüfung v3 (2026-09-09):** `services/source_catalog.py` vereinheitlicht
+vor der Synthese die lokalen Quellen-IDs der Modelle. `fan_out_provider_answers`
+und der Browser-Consensus-Pfad verwenden denselben Katalog. Bereits konsistente
+globale Browser-IDs bleiben stabil; fehlende oder mehrdeutige Verweise erhalten
+keinen zufälligen Link. Identische Dokumente werden mit Modell-Provenienz
+zusammengeführt; URL-Pfad/-Query bleiben case-sensitive. Code-Spannen und
+Fences werden beim Umschreiben nicht verändert. Share-, Chat- und Bookmark-
+Normalizer schneiden Quellen nicht mehr bei 50 Einträgen ab. Topic-Evidence
+behält die IDs auch nach Qualitätssortierung und wird nicht auf 80 gekürzt.
+Bestehende Request-/Bookmark-Bytebudgets gelten weiter; Chat-Turns und einzelne
+Modellantwort-Dokumente werden vor Writes bei mehr als 750.000 serialisierten
+Bytes ausdrücklich abgewiesen, statt Quellen still zu verlieren.
+
+`services/source_verification.py` plant nach der fertigen Synthese **alle**
+zitierten Satz-/Quellen-Paare; unzitierte Modellquellen und literale Code-Tags
+gehören nicht zum Prüfumfang. Schema 3 (`check_type: source_evidence`,
+`prompt_version: source-evidence-v3`) ergänzt die getrennten Thema-/Zeitwerte
+um `support: supported|partial|contradicted|unknown`. Belegwirkung umfasst auch
+Zahlen, Einheiten, Bedingungen und Meinungszuschreibung. Nicht unbekannte
+Belegurteile benötigen validierte Originalpassagen aus dem tatsächlich
+gesendeten Auszug **und** dem abgerufenen Dokument. Die Prüfung verändert
+Consensus, Coverage, Differences und Agreement nicht; sie beweist auch nicht
+die Wahrheit des Quelldokuments selbst.
+Die Annahmegrenze für Originalbelege ist vier Zitate mit je höchstens 400
+Zeichen und insgesamt höchstens 800 Zeichen pro Befund; der Prompt fordert
+weiterhin kurze 1–2 Zitate. Nicht wortgetreue oder fehlende erforderliche Belege
+bleiben `unavailable` mit `evidence_mismatch`, unbekannten Bewertungsachsen und
+leeren Zitaten. Strukturfehler behalten `invalid_output`; zusätzliche
+Modellaufrufe entstehen durch diese Validierung nicht.
+
+Produktive Browser-/API-/Watch-/Topic-Kontexte geben UID und stabile Run-ID an
+`source_check_jobs.py`. `source_check_repository.py` speichert einen kompakten
+Jobheader, den vollständigen komprimierten Plan und separate Paketergebnisse.
+Paketgrenzen beschränken Arbeit pro Dokument/Call, niemals die Gesamtzahl
+zitierter Quellen. Vier Worker je Prozess arbeiten mit persistenten
+300-s-Leases; die begrenzt paginierte Queue setzt ihren Scan fort. Ein
+Lease-Token sperrt verspätete Ergebnisse, vollständig abgeschlossene Pakete
+werden nicht erneut ausgeführt. Alle Befunde behalten einen expliziten Zustand:
+`pending`, `checked` oder `unavailable`; unbekannte Belegwirkung ist von
+technisch nicht prüfbaren Quellen getrennt. Reine vorübergehende Abruffehler
+ohne bezahlten Judge-Call werden höchstens dreimal mit mindestens 31 s Abstand
+versucht. Ein Prozessabbruch vor dem Ergebnis-Commit kann das unfertige Paket
+erneut zur Ausführung bringen; es gibt keine Exactly-once-Garantie für externe
+Modellaufrufe.
+
+Repository-Reads und Query-Streams haben je RPC ein 5-s-Timeout und keine
+automatischen SDK-Retries. Das ist keine Gesamtlaufzeitgarantie für einen
+Endpoint: mehrere Reads werden nacheinander ausgeführt. Transaktionen besitzen
+drei Konfliktversuche; ihre Begin-/Commit-/Rollback-RPCs behalten die SDK-
+Lifecycle-Defaults. Die gemeinsam genutzte Account-Tombstone-Prüfung behält
+ihre bestehende Timeout-Policy.
+
+`source_documents.py` lädt öffentliche HTML-/Textdokumente mit DNS-/Redirect-
+Prüfung, IP-Pinning und begrenzten komprimierten/dekomprimierten Bytes. Der
+ursprüngliche Host wird ohne künstlich ergänzten Standardport gesendet, damit
+kanonische HTTPS-Weiterleitungen keine Schleife bilden; TLS prüft weiterhin
+den ursprünglichen Hostnamen. Relevante
+Originalabschnitte und Tabellen mit Nachbarkontext werden aus dem begrenzten
+Gesamtdokument ausgewählt, statt nur dessen Anfang zu prüfen. LRU,
+Singleflight und kurzer Negativcache vermeiden wiederholte Abrufe; zusätzliche
+UID-gebundene Firestore-Dokument-/Judge-Caches teilen Ergebnisse zwischen
+Workern. Der Judge-Cache bindet Frage, Folgekontext, Datum, Auszüge, Modell und
+Promptversion und validiert Treffer erneut. PDF bleibt `unsupported_document`.
+Das Quellenmodell kommt aus `app_config/models.source_verification_model`
+(Default `google/gemini-3.5-flash-lite`, Admin: Consensus & Deep Think → Source Checks).
+Admin-GET/POST liefern und validieren die Auswahl; `_meta.source_verification_models`
+liefert die Optionen, `_meta.source_verification_default` den Standard. Neue Jobs
+frieren das Modell in Limits und Snapshot für Transport/Cache ein; alte Jobs
+behalten ihr gespeichertes Modell. Die bisherige Modell-Umgebungsvariable wird
+nicht mehr ausgewertet. Paketbudgets kommen weiterhin aus `SOURCE_VERIFICATION_*`;
+Defaults 32k Inputzeichen, 4k Auszüge, 3k Ausgabetokens,
+60 s je Paket. Details und Evaluationsgrenzen: [source-verification.md](source-verification.md).
+
+`consensus.final` beendet den Antworttext, `differences.final` die bisherigen
+Judges. Das gemeinsame `final` wartet nicht auf den Quellenauftrag:
+`sources.final`/`source_verification` können einen noch laufenden Jobverweis
+enthalten. Die UI liest alle Paketseiten über `GET /api/source-checks/{job_id}`
+mit Owner-Auth, Revisionsprüfung und `after_revision`-Polling. Eigene
+OpenRouter-Keys werden nur im Prozessspeicher gehalten und sind dort für den
+Auftrag höchstens 24 h nutzbar. Eine nicht geheime
+Worker-ID mit separatem 10-s-Heartbeat/30-s-Gültigkeit verhindert, dass andere
+lebende Prozesse solche Jobs übernehmen; nach Verlust des Keys pausieren sie
+mit `awaiting_credentials`. Der authentifizierte
+`POST /api/source-checks/{job_id}/resume` bindet den erneut gelieferten Key an
+den aktuellen Knoten, ohne ein aktives fremdes Paket zu unterbrechen.
+
+Chat-/Bookmark-/Share-/API-/Watch-/Topic-Snapshots speichern den Jobverweis;
+Wiederöffnen startet keinen neuen Judge. Aufbewahrung ist referenzgebunden,
+unreferenzierte Jobs werden nach 30 Tagen bereinigt. Account-Tombstones,
+Elternstatus und transaktionale Löschmarker schützen vor Wiederanlage.
+Public-Paketseiten prüfen bei jedem Abruf den aktiven Share bzw. Topic-Run und
+die Antwortversion; ein Job-ID-Link allein gewährt keinen öffentlichen Zugriff.
+Alte v1/v2-Snapshots bleiben unverändert lesbar, ohne erfundene v3-Belegurteile.
+
+`static/js/source-verification.js` exportiert `window.App.sourceVerification`
+(`render`, `renderCurrent`, `clear`, `watch`, `observe`, `applySourceList`, `getCitationCheck`); Ladung nach
+`consensus-anchor.js` in `bundles.json`, außerdem auf öffentlichen Ergebnissen.
+RunContext: `consensus.sourceVerification`. Quellenupdates projizieren den
+Bericht, ohne Synthese/Claims/Differences neu aufzubauen. Bestehende S-Verweise
+öffnen Quelle, Originalpassagen und Gründe; der Bericht verbindet sie mit
+vorhandenen Modellpositionen. `providers` zeigt gemeinsame Quellenherkunft,
+keine unabhängige Bestätigung. Der Sources-Tab zeigt Fortschritt, Auffälligkeiten
+und Unklarheiten statt eines pauschalen positiven Abschluss-Hakens.
+Positive v3-Belegverweise werden sofort grün; Quellenkarten erst bei vollständig
+positiven zugeordneten Befunden. Teilbelege/Unklarheiten sind gelb, Widersprüche
+rot und ausstehende Prüfungen neutral. Der Tab zeigt geprüfte/gesamte Paare,
+offene und nicht prüfbare Paare; der Bericht aggregiert technische Fehlergründe.
+`renderEvidenceSources` setzt explizite S-IDs an die Listeneinträge und übernimmt
+über `applySourceList(list, answerBody)` bereits vorhandene, per WeakMap an den
+Antwortcontainer gebundene Befunde; Ansichtswechsel entfernen vorherige Markierungen.
+`sources.js` zeigt im gestalteten Quellen-Teaser den über `getCitationCheck(ref)`
+an den konkreten Belegverweis gebundenen Prüfstatus samt Ergebnis und Hinweis
+auf die begrenzte Aussagekraft. Solche Verweise erhalten kein natives `title`;
+`aria-label`, Fokus, Escape und das eigene Popup bleiben verfügbar. Öffentliche
+Verweise ohne diesen Teaser behalten ihren Tooltip-Fallback.
 
 **Pipeline-Härtung (2026-09-07):**
 - Synthese und beide Judges verwenden denselben Antwort-Cap aus
@@ -2713,8 +2842,10 @@ CLI mit `firebase deploy --only firestore:rules,firestore:indexes`):
     Firestore-Transaktion nach allen Reads geschrieben; `turn_count` und
     `latest_question` bleiben dabei unverändert. Consensus (100.000 Zeichen),
     Differences (50.000), Modellantworten (dynamisches Consensus-Answer-Limit),
-    Modell-Labels (80), Result-ID (16) und Quellen (50; URL 2.000, Titel 300,
-    Provider 40) sind serverseitig begrenzt. Responses und Persistenz verwenden
+    Modell-Labels (80), Result-ID (16) und Quellenfelder (URL 2.000, Titel 300,
+    Provider 40) sind serverseitig begrenzt. Quellen haben kein Anzahl-Limit;
+    Turn und jedes Modellantwort-Dokument werden oberhalb von 750.000
+    serialisierten Bytes vor den Writes abgewiesen. Responses und Persistenz verwenden
     Feld-Allowlists; API-Keys, Tokens, Credentials, Roh-Attachments und
     unbekannte Felder werden verworfen.
   - `watch_state/quota` serialisiert die Zahl aktiver Owner-Watches;
@@ -2877,6 +3008,25 @@ CLI mit `firebase deploy --only firestore:rules,firestore:indexes`):
   lokale `run_time` + IANA-`timezone`, `last_run_at`, `next_run_at` sowie
   kurzlebiger `lease_run_id`/`lease_until`.
 - `pending_results` — kurzlebige Consensus-Ergebnisse fürs Sharing (TTL/Cleanup).
+- `source_check_jobs/{sha256}` — UID-/Run-/Antwortversion-gebundener Jobheader
+  mit Status, Revision, Paket-/Quellen-/Satzfortschritt, Lease-Token,
+  `next_attempt_at` und Aufbewahrungsreferenzen. `data/plan` enthält den
+  vollständigen komprimierten Plan, `packages/{index}` getrennte komprimierte
+  Ergebnisse; jeweils höchstens 700.000 Zeichen Base64-Payload. Die gesamte
+  Planung wird atomar angenommen, kein Quellenzähl-Limit kürzt den Inhalt.
+  Paketseiten umfassen vier Pakete. Unreferenzierte Jobs werden nach 30 Tagen
+  per Cleanup gelöscht; lebende Elternreferenzen verlängern die Aufbewahrung.
+- `source_check_cache/{sha256}` — UID-gebundene Dokument-/Judge-Cacheeinträge
+  mit komprimiertem Payload und `expires_at`; keine API-Keys. Die eigene
+  Cache-ID bindet auch Frage-/Dokument-/Promptkontext des jeweiligen Cachetyps.
+- `source_check_workers/{process-id}` — nicht geheime 30-s-Prozessmarken für
+  Own-Key-Affinität, alle zehn Sekunden separat erneuert; enthält keinen Key.
+  Queue und Ablaufbereinigung nutzen einzelne Feldindizes.
+  `firestore.indexes.json` nimmt die großen Jobfelder `snapshot`,
+  `source_totals`, `statement_totals`, `references` sowie Cache-/Plan-/Paket-
+  `payload` aus der automatischen Indexierung. Diese Konfiguration muss beim
+  Deployment über den bestehenden Firestore-Index-Workflow mit ausgerollt
+  werden; die lokalen Änderungen allein stellen keine Indexkonfiguration bereit.
 - `persistence_usage/{kind-sha256(uid)}` — transaktionale, restart- und
   multi-worker-feste Bookmark-Anzahl/-Bytes sowie Feedback-Cooldown/-Tageszahl;
   weder UID noch E-Mail stehen im Dokumentpfad. `model_votes/{sha256(uid:result)}`
@@ -3826,6 +3976,38 @@ messen die Textanker erneut. Ausgabe:
 `artifacts/linkedin/2026-09-09-sentence-v14`; Ablauf und QA:
 `docs/linkedin-launch-sentence.md`.
 
+Lokale Video-Fassung v15: `recording/decision-*` verwendet einen gemeinsamen
+Story-Vertrag in `decision-scenario.cjs` für Entscheidungsfrage, sechs Antworten,
+Consensus, Unterschied und fertige Kundenmitteilung. Der feste Termin wird als
+zusätzliche Nutzerinformation gekennzeichnet. Native Aufnahmen und Renderer
+prüfen denselben Inhalt; `decision-story-qa.cjs` prüft die semantischen Zuordnungen.
+App-Dateien bleiben unverändert. Ausgabe:
+`artifacts/linkedin/2026-09-09-decision-v15`; Details und Reproduktion:
+[`linkedin-launch-decision.md`](linkedin-launch-decision.md).
+
+Lokale Video-Fassung v16: `recording/synthesis-*` demonstriert anhand einer
+kurzen offenen Frage, wie ergänzende Modellbeiträge zu drei direkten
+Handlungsschritten zusammengeführt werden. `synthesis-scenario.cjs` ist der
+gemeinsame Inhaltsvertrag; native Supportmarkierungen sind durch vollständige
+Sätze in den Demo-Antworten gedeckt. Keine Modellabstimmung oder erzwungener
+Widerspruch in der Synthese. App-Dateien unverändert. Ausgabe:
+`artifacts/linkedin/2026-09-09-synthesis-v16`; Details:
+[`linkedin-launch-synthesis.md`](linkedin-launch-synthesis.md).
+
+Lokale Video-Fassung v17: `recording/claims-*` ergänzt v16 um eine native
+Antwortseite mit Agreement und Contradiction gleichzeitig. Ein begrenzter
+Widerspruch über Erinnerungsintervalle bleibt im direkten Syntheseergebnis
+markiert; DOM-Anker und Claim-Sichtbarkeit werden geprüft. Ausgabe:
+`artifacts/linkedin/2026-09-09-claims-v17`; Details:
+[`linkedin-launch-claims.md`](linkedin-launch-claims.md). App-Dateien unverändert.
+
+Lokale Video-Fassung v18: `recording/reader-*` ersetzt die wiederholte
+Schluss-Synthese durch echte native Gegenpositionen und den Modellantwort-Reader.
+Capture bedient `#agentModeAnswersToggle` und die Provider-Tabs; Klickpunkte und
+vollständige Antworttexte werden verifiziert. Claim-Seite bleibt erhalten.
+Ausgabe: `artifacts/linkedin/2026-09-09-reader-v18`; Details:
+[`linkedin-launch-reader.md`](linkedin-launch-reader.md). App-Dateien unverändert.
+
 Diese Datei ist die zentrale Architektur-Karte. **Aktualisiere sie im selben
 Commit/PR**, wenn sich Folgendes ändert:
 
@@ -3854,3 +4036,61 @@ Commit/PR**, wenn sich Folgendes ändert:
 Faustregel: Wenn ein neuer Agent durch deine Änderung an einer der obigen Stellen
 **überrascht** würde, gehört es hier rein. Kurz halten — verifizierte Fakten statt
 Implementierungsdetails. Bei Detailtiefe lieber auf den Code verweisen.
+
+Der Composer-Schalter `#composerSourcesToggle` („Check Sources“) steht direkt
+nach Agent Mode und speichert On/Off unter `localStorage.checkSources` (Default
+On). `agent-mode.js` synchronisiert ihn mit `#sourceCheckMenuSwitch` direkt unter
+Agent Mode im (+)-Menü und `#sourceCheckSwitch` unter Settings → Runs. Alle drei
+Controls verwenden denselben Setter und bleiben unabhängig vom angezeigten Lauf.
+Landing-Hero/Ask-Vorschau, Landing-Texte, In-App-FAQ und Consensus-Engine-Seite
+erklären die optionale Beleg-/Themen-/Zeitraumprüfung und ihre Steuerung.
+`window.App.isSourceCheckEnabled()` liefert die Auswahl für den nächsten
+Lauf; `query-send.js` friert sie als `config.checkSources` im RunContext ein.
+`/consensus` akzeptiert `check_sources: false`: Streaming und JSON überspringen
+dann Quellen-Fetch und dritten Judge, ohne `sources.*`-Events; der Snapshot ist
+`null`. Consensus und Differences laufen weiter. Ohne Feld bleibt die Prüfung
+aktiv; gespeicherte completed Turns werden mit ihrem bestehenden Ergebnis
+wiedergegeben. Ein gespeicherter Jobverweis lädt seinen aktuellen Prüfstand
+nach, ohne einen neuen Auftrag anzulegen. Andere Pipeline-Aufrufer behalten
+den aktiven Default.
+
+Quellenprüfung-UI und neue Judge-Begründungen sind auf Englisch. Der Pending-Status
+bleibt am Tab für Screenreader verfügbar; sichtbar schimmert der Text direkt im
+Label, ohne zusätzlichen Balken oder zweite Statuszeile daneben. Originalzitate
+und gespeicherte Texte werden nicht nachträglich übersetzt.
+
+Die Quellenprüfung berücksichtigt ausschließlich S-Verweise im fertigen Consensus.
+Unzitierte Quellen aus Modellantworten gelangen weder in Fetches noch Judge-Input
+oder Quellenprüfungs-Snapshot; Code-Beispiele mit wörtlichen S-Tags zählen nicht.
+
+Quellenprüfung-Robustheit v3: Die 60-s-Frist und 3k Ausgabetokens gelten pro
+Paket; mehrere Pakete bearbeiten alle zitierten Quellen. Vollständige Objekte
+aus am Tokenlimit abgeschnittenen Antworten bleiben nach Validierung erhalten;
+fehlende Ergebnisse erhalten `unavailable` mit sicherem Fehlercode.
+Prozess-/Browser-Abbruch verliert keinen bereits angenommenen Prüfplan.
+`source-check-loading` nutzt Textverlauf/`background-clip:text`; mobile Labels,
+Reduced Motion und `aria-busy` bleiben unterstützt.
+
+„Hide checks“ blendet über die bestehende Body-Klasse
+`consensus-markers-hidden` auch Farbe, Hintergrund und Prüf-Unterstreichung der
+S-Referenzen aus. Quellenlinks, Hover-Ergebnisse und gespeicherte Urteile bleiben
+verfügbar; „Show checks“ zeigt auch zwischenzeitlich eingetroffene Urteile wieder.
+
+Quellenbericht-Navigation: Die Übersicht zeigt S-Kürzel, Domain und ein
+Hauptergebnis je Satz-/Quellen-Paar. Vollständige Aussagen und die Diagnose der
+Prüfung liegen in separaten, anfangs geschlossenen Disclosures; Themen-/Zeitstatus,
+Modellprovenienz und Originalpassagen erscheinen in den Quelldetails. Ein Klick
+auf eine gebundene S-Referenz öffnet genau dieses Paar und hebt seine Zeile für
+2,4 Sekunden hervor; erneutes Klicken erneuert die Hervorhebung, Polling erhält
+sie für die verbleibende Zeit. Reduced Motion verzichtet auf Animationen.
+
+Quellenbericht-Darstellung: Auszüge nutzen Marked + DOMPurify und den bestehenden
+Math-Renderer (auch auf Share-Seiten); S-Tags stehen separat an den Quellenzeilen,
+literaler Code bleibt erhalten. Karten gruppieren Aussage, Domain und Beleg-/
+Themen-/Zeitstatus; Originalpassagen, Gründe und gemeinsame Modell-Provenienz
+sind einklappbar. Fortschritt unterscheidet ausstehende Arbeit, geprüfte
+Unklarheiten und technisch nicht prüfbare Quellen. Ein fertiger Quellenauftrag
+ist kein pauschales positives Quellenurteil. Claims/Differences und der
+Agreement-Score bleiben unverändert; gespeicherte alte Prüfungen behalten ihre
+damalige Bedeutung. Maßgeblicher v3-Vertrag steht oben unter „Consensus &
+Differences“ sowie in [source-verification.md](source-verification.md).

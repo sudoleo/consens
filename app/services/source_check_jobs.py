@@ -1,0 +1,356 @@
+"""Background source checking: persistent packages, bounded active work.
+
+User API keys only live in this process. After restart an own-key job pauses
+until its authenticated owner supplies the key again; it never switches to a
+developer key. Shared caches are tenant-scoped and contain no credentials.
+"""
+from __future__ import annotations
+
+import asyncio
+import contextvars
+import logging
+import threading
+import time
+import uuid
+from collections import deque
+from contextlib import contextmanager
+from dataclasses import asdict
+
+from app.core.background_tasks import task_succeeded
+from app.core.observability import correlation_scope, record_metric, safe_exception
+from app.services.source_check_repository import (
+    SourceCheckRepository, SourceCheckNotFound, SourceCheckResourceGone, compact, digest, utcnow,
+)
+from app.services.persistence_guard import AccountDeletionInProgress
+
+_context = contextvars.ContextVar('source_check_context', default=None)
+_keys = {}
+_keys_lock = threading.Lock()
+_active_owners = set()
+_active_lock = threading.Lock()
+_repository = None
+WORKER_ID = uuid.uuid4().hex
+_heartbeat_lock = threading.Lock()
+_heartbeats = {}
+_scan_lock = threading.Lock()
+_scans = {}
+
+
+def repository():
+    global _repository
+    if _repository is None:
+        from app.core.security import db_firestore
+        _repository = SourceCheckRepository(db_firestore)
+    return _repository
+
+
+@contextmanager
+def source_check_context(uid, run_key, *, own_keys=False, references=(), origin='interactive'):
+    token = _context.set(dict(uid=uid, run_key=run_key, own_keys=own_keys,
+                             references=list(references), origin=origin))
+    try:
+        yield
+    finally:
+        _context.reset(token)
+
+
+def current_context():
+    return _context.get()
+
+
+def remember_key(job_id, uid, key):
+    if not key or len(key) > 4096:
+        raise ValueError('Invalid API key')
+    purge_expired_keys()
+    with _keys_lock:
+        _keys[job_id] = (uid, key, time.monotonic() + 24 * 3600)
+
+
+def purge_expired_keys():
+    with _keys_lock:
+        now = time.monotonic()
+        for job_id in [key for key, value in _keys.items() if value[2] <= now]:
+            _keys.pop(job_id, None)
+
+
+def forget_key(job_id):
+    with _keys_lock:
+        _keys.pop(job_id, None)
+
+
+def _refresh_worker(repo, *, force=False):
+    # The independent heartbeat clears idle credentials even without another
+    # submission, and before any database failure can interrupt the refresh.
+    purge_expired_keys()
+    with _heartbeat_lock:
+        last = _heartbeats.get((id(repo), WORKER_ID), float('-inf'))
+        if force or time.monotonic() - last >= 10:
+            repo.heartbeat_worker(WORKER_ID)
+            _heartbeats[(id(repo), WORKER_ID)] = time.monotonic()
+
+
+def resume_source_check(job_id, uid, key):
+    repo = repository()
+    job = repo.get(job_id, uid)
+    if job.get('credential_mode') != 'own':
+        return job
+    _refresh_worker(repo, force=True)
+    remember_key(job_id, uid, key)
+    resumed = repo.resume(job_id, uid, worker_id=WORKER_ID)
+    # A running package retains its credential process until the lease ends.
+    # A POST served by another node must not interrupt that in-flight call.
+    if resumed.get('credential_worker_id') != WORKER_ID or resumed['status'] in ('complete', 'partial', 'skipped', 'failed'):
+        forget_key(job_id)
+    return resumed
+
+
+def submit_source_check(*, question, consensus, sources, keys, resolved_question='', context=None):
+    from app.services.source_verification import Limits, plan_source_verification
+    from app.services.llm.credentials import openrouter_api_key
+    context = context or current_context()
+    if not context or not context.get('uid'):
+        raise ValueError('Source check requires an owner context')
+    limits = Limits.configured()
+    plan = plan_source_verification(question=question, consensus=consensus, sources=sources,
+                                   resolved_question=resolved_question, limits=limits)
+    if not plan['packages']:
+        return plan['snapshot']
+    from app.services.llm.mock_llm import mock_llm_enabled
+    if mock_llm_enabled():
+        from app.services.source_verification import verify_sources
+        return verify_sources(question=question, consensus=consensus, sources=sources,
+            keys={}, resolved_question=resolved_question,
+            fetch=lambda *_: (_ for _ in ()).throw(ValueError('mock_unavailable')))
+    plan['limits'] = asdict(limits)
+    # Admission accepts the entire bounded plan atomically, before any paid work.
+    repo = repository()
+    if context.get('own_keys'):
+        _refresh_worker(repo, force=True)
+    job = repo.create(uid=context['uid'], run_key=context['run_key'], plan=plan,
+        credential_mode='own' if context.get('own_keys') else 'server',
+        references=context.get('references', ()), origin=context.get('origin', 'interactive'),
+        credential_worker_id=WORKER_ID if context.get('own_keys') else None)
+    if context.get('own_keys') and job['status'] not in ('complete', 'partial', 'skipped'):
+        key = openrouter_api_key(keys)
+        if key:
+            job = resume_source_check(job['job_id'], context['uid'], key)
+    record_metric('source_check', 'accepted', processed=job['package_count'])
+    # The response is a small durable reference. The paginated endpoint exposes
+    # every planned pair, including ones that are still waiting for a worker.
+    return {**job['snapshot'], 'findings': [], 'documents': [], 'sources': []}
+
+
+def unavailable_snapshot(consensus, code='persistence_error'):
+    from app.services.source_verification import answer_version, collect_claims, PROMPT_VERSION
+    claims = collect_claims(consensus, [])
+    pairs = sum(len(c['source_ids']) for c in claims)
+    return dict(schema_version=3, check_type='source_evidence', prompt_version=PROMPT_VERSION,
+        answer_version=answer_version(consensus), status='failed', findings=[], documents=[], sources=[],
+        scope={'pairs': pairs, 'checked_pairs': 0, 'processed_pairs': 0}, runtime={'error_code': code})
+
+
+def submit_advisory(**kwargs):
+    try:
+        return submit_source_check(**kwargs)
+    except (AccountDeletionInProgress, SourceCheckResourceGone):
+        raise
+    except Exception as exc:
+        logging.warning('Source check persistence failed category=%s', safe_exception(exc))
+        record_metric('source_check', 'persistence', outcome='failure')
+        return unavailable_snapshot(kwargs['consensus'])
+
+
+def _cached_fetch(uid, repo):
+    from app.services.source_documents import fetch_document
+    def fetch(url, limits):
+        key = ['document-v3', url, limits.max_bytes]
+        try:
+            cached = repo.cache_get(uid, key)
+            if cached is not None:
+                record_metric('source_cache', 'document_hit')
+                return cached
+        except Exception:
+            record_metric('source_cache', 'read', outcome='failure')
+        value = fetch_document(url, limits)
+        try:
+            repo.cache_put(uid, key, value, seconds=limits.cache_seconds)
+        except Exception:
+            record_metric('source_cache', 'write', outcome='failure')
+        return value
+    return fetch
+
+
+def _cached_judge(uid, repo):
+    from app.services.source_verification import judge_sources, SYSTEM, PROMPT_VERSION
+    def judge(payload, keys, limits):
+        # Includes applicability date/question and model/prompt contract. Cached
+        # raw output is still validated against this package's exact passages.
+        key = ['verdict-v3', PROMPT_VERSION, SYSTEM, limits.model,
+               payload, limits.output_tokens]
+        try:
+            cached = repo.cache_get(uid, key)
+            if cached is not None:
+                record_metric('source_cache', 'judge_hit')
+                return cached, {'calls': 0, 'cache_hit': True}
+        except Exception:
+            record_metric('source_cache', 'read', outcome='failure')
+        raw, usage = judge_sources(payload, keys, limits)
+        if not usage.get('output_truncated'):
+            try:
+                repo.cache_put(uid, key, raw, seconds=3600)
+            except Exception:
+                record_metric('source_cache', 'write', outcome='failure')
+        return raw, usage
+    return judge
+
+
+def interrupted_package(plan, package):
+    from app.services.source_verification import _snapshot, _pending, _finish_snapshot, _now
+    result = _snapshot(plan['snapshot']['answer_version'], package['pairs'], package.get('sources', []),
+                       model=plan['snapshot'].get('model'))
+    result.update(package_id=package['id'], checked_at=_now(),
+                  findings=[{**_pending(pair, 'worker_interrupted'), 'checked_at': _now()}
+                            for pair in package['pairs']],
+                  runtime={'calls': 0, 'duration_ms': 0, 'error_code': 'worker_interrupted'})
+    return _finish_snapshot(result)
+
+
+def _retryable_fetch_only(result):
+    """Retry transient retrieval only; never repeat a paid/uncertain judge call."""
+    transient = {'fetch_timeout', 'rate_limited', 'upstream_error', 'network_error',
+                 'dns_busy', 'incomplete_document'}
+    findings = result.get('findings') or []
+    return (bool(findings) and result.get('runtime', {}).get('calls', 0) == 0
+            and all(not f.get('checked') and f.get('reason_code') in transient for f in findings))
+
+
+def _due_candidates(repo):
+    """Rotate bounded batches; foreign own-key jobs cannot hide later ready work."""
+    fetched = False
+    for _ in range(24):
+        with _scan_lock:
+            state = _scans.setdefault((id(repo), WORKER_ID), {'cursor': None, 'pending': deque(), 'cutoff': None})
+            if not state['pending']:
+                if fetched:
+                    return
+                if state['cursor'] is None:
+                    state['cutoff'] = utcnow()
+                rows, cursor = repo.due_page(limit=24, cursor=state['cursor'], now=state['cutoff'])
+                state['cursor'] = cursor
+                state['pending'].extend(rows)
+                fetched = True
+                if not state['pending']:
+                    return
+            candidate = state['pending'].popleft()
+        yield candidate
+
+
+def process_one(repo=None):
+    from app.services.source_verification import Limits, execute_source_package
+    from app.services.llm.credentials import resolve_developer_api_keys
+    repo = repo or repository()
+    try:
+        _refresh_worker(repo)
+    except Exception as exc:
+        logging.warning('Source worker heartbeat failed category=%s', safe_exception(exc))
+        record_metric('source_queue', 'heartbeat', outcome='failure')
+        return False
+    for candidate in _due_candidates(repo):
+        uid = candidate['uid']
+        with _active_lock:
+            if uid in _active_owners:
+                continue
+            _active_owners.add(uid)
+        claimed = None
+        try:
+            claimed = repo.claim(candidate['job_id'], worker_id=WORKER_ID)
+            if not claimed:
+                continue
+            if claimed['credential_mode'] == 'own':
+                with _keys_lock:
+                    saved = _keys.get(claimed['job_id'])
+                if not saved or saved[0] != uid or saved[2] <= time.monotonic():
+                    repo.pause_credentials(claimed)
+                    return True
+                keys = {'OpenRouter': saved[1]}
+            else:
+                keys = resolve_developer_api_keys()
+            plan = repo.get_plan(claimed['job_id'])
+            # The accepted plan owns its model for its entire lifetime. Legacy
+            # plans already recorded the actual model in their snapshot.
+            plan_limits = dict(plan['limits'])
+            plan_limits['model'] = plan['snapshot'].get('model') or plan_limits.get('model') or Limits().model
+            package = plan['packages'][claimed['completed_packages']]
+            with correlation_scope(prefix='source'):
+                if claimed.get('attempts', 0) > 3:
+                    result = interrupted_package(plan, package)
+                else:
+                    result = execute_source_package(package=package,
+                        question=plan['question'], resolved_question=plan.get('resolved_question', ''),
+                        answer_version=plan['snapshot']['answer_version'], keys=keys,
+                        limits=Limits(**plan_limits), fetch=_cached_fetch(uid, repo), judge=_cached_judge(uid, repo))
+                if claimed.get('attempts', 0) < 3 and _retryable_fetch_only(result):
+                    # Wait past the local negative-cache TTL before trying this
+                    # document again. Other owners/jobs can use this worker meanwhile.
+                    repo.retry(claimed, delay=31)
+                    record_metric('source_queue', 'fetch_retry', retries=1)
+                    return True
+                if repo.finish_package(claimed, result):
+                    record_metric('source_queue', 'package', processed=len(result.get('findings', [])))
+            if claimed['completed_packages'] + 1 == claimed['package_count']:
+                forget_key(claimed['job_id'])
+            return True
+        except (AccountDeletionInProgress, SourceCheckResourceGone):
+            # Cleanup is idempotent and intentionally bypasses owner fences.
+            repo.delete(candidate['job_id'])
+            forget_key(candidate['job_id'])
+        except Exception as exc:
+            logging.warning('Source worker failed category=%s', safe_exception(exc))
+            record_metric('source_queue', 'worker', outcome='failure')
+            if claimed:
+                # Retry infrastructure failures, bounded by the persisted attempt
+                # counter. A completed package never starts its model again.
+                repo.retry(claimed, delay=15)
+            return False
+        finally:
+            with _active_lock:
+                _active_owners.discard(uid)
+    return False
+
+
+async def source_check_worker_loop():
+    from app.services.llm.mock_llm import mock_llm_enabled
+    async def worker():
+        while True:
+            if not mock_llm_enabled():
+                worked = await asyncio.to_thread(process_one)
+                task_succeeded('source-check-workers')
+            else:
+                worked = False
+            await asyncio.sleep(.1 if worked else 2)
+    # No unbounded executor queue: each loop submits at most one package.
+    async def heartbeat():
+        while True:
+            if not mock_llm_enabled():
+                try:
+                    await asyncio.to_thread(_refresh_worker, repository())
+                except Exception as exc:
+                    logging.warning('Source worker heartbeat failed category=%s', safe_exception(exc))
+                    record_metric('source_queue', 'heartbeat', outcome='failure')
+            await asyncio.sleep(10)
+    workers = [asyncio.create_task(worker()) for _ in range(4)]
+    # Independent liveness continues while every package worker awaits a model.
+    workers.append(asyncio.create_task(heartbeat()))
+    try:
+        await asyncio.gather(*workers)
+    finally:
+        for item in workers:
+            item.cancel()
+        await asyncio.gather(*workers, return_exceptions=True)
+
+
+def retain_source_check(snapshot, uid, path, db=None):
+    if not isinstance(snapshot, dict) or not snapshot.get('job_id'):
+        return
+    repo = SourceCheckRepository(db) if db is not None else repository()
+    repo.retain(snapshot['job_id'], uid, path)

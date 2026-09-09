@@ -85,6 +85,65 @@ Mögliche Statuswerte sind `accepted`, `reserved`, `running`, `succeeded` und
 `failed`. Nur `succeeded` enthält `result`; nur `failed` enthält `error`.
 Ein Schlüssel kann ausschließlich Runs seiner zugeordneten UID lesen.
 
+### Quellenprüfung nachladen
+
+Die Quellenprüfung läuft als dauerhafter Hintergrundauftrag. Ein Run kann
+bereits `succeeded` sein, während seine Quellen noch `queued` oder `running`
+sind. `result.source_verification` enthält den beim Run-Abschluss gespeicherten
+Stand mit `job_id`, `answer_version` und `status_url`, sofern ein Auftrag
+angenommen wurde. Das normale Run-GET aktualisiert diesen Snapshot nicht;
+den aktuellen Prüfstand liefert der zusätzliche Endpoint:
+
+```http
+GET /api/v1/consensus/runs/{run_id}/source-check
+X-API-Key: cns_live_…
+```
+
+Er ist an den Run und dessen UID gebunden; eine fremde Job-ID gewährt keinen
+Zugriff. Ohne gespeicherten Quellenauftrag liefert er `404`. Die v1-Anforderung
+besitzt weiterhin keinen per-Request-Schalter für diese Prüfung.
+
+Die Antwort enthält `source_verification` und `next_cursor`. Der Snapshot
+enthält den Gesamtfortschritt und die `revision`, seine `findings`, `documents`
+und `sources` dagegen nur die aktuelle Paketseite. Eine Seite umfasst höchstens
+vier Pakete. Alle im Consensus zitierten Satz-/Quellen-Paare werden geplant;
+Paketgrenzen kürzen weder die Quellenliste noch die Anzahl geplanter Prüfungen.
+Unzitierte Modellquellen und S-Tags in Code-Beispielen gehören nicht dazu.
+
+Zum vollständigen Lesen:
+
+1. Die erste Seite ohne Cursor laden und deren `source_verification.revision`
+   merken.
+2. Solange `next_cursor` nicht `null` ist, diesen Wert als `cursor` und die
+   gemerkte Revision als `revision` mitsenden. Befunde zusammenführen und
+   Quellen/Dokumente anhand ihrer ID deduplizieren.
+3. Bei `409` alle bisher gelesenen Seiten dieses Durchlaufs verwerfen und
+   wieder bei der ersten Seite beginnen: Zwischenzeitlich wurde ein Paket
+   abgeschlossen oder der Jobstatus geändert.
+4. Für spätere Aktualisierungen auf der ersten Seite
+   `after_revision=<zuletzt vollständig gelesene Revision>` verwenden. Bei
+   unverändertem Stand kommt `unchanged: true` mit einem kompakten Header und
+   `next_cursor: null`; die bereits gelesenen Befunde bleiben beim Client.
+
+Beispiel für eine Folgeseite:
+
+```http
+GET /api/v1/consensus/runs/{run_id}/source-check?cursor=4&revision=7
+X-API-Key: cns_live_…
+```
+
+Jobstatus `complete` bedeutet abgeschlossene Verarbeitung, keine pauschale
+Bestätigung der Quellen. V3 trennt `support: supported|partial|contradicted|unknown`
+von Thema und zeitlicher Eignung; technisch nicht prüfbare Paare bleiben explizit
+`unavailable`. Dokumentabruf und Judge-Eingaben sind begrenzt; beispielsweise
+werden PDFs nicht unterstützt. Vollständiger Ergebnis- und Ausführungsvertrag:
+[source-verification.md](source-verification.md).
+
+Run- und Share-Inhalte behalten ihre Antwortversion; der zugehörige Quellenjob
+kann seinen Bearbeitungsstand weiterentwickeln. Eine Share-Publikation bindet
+den Auftrag an die veröffentlichte Ressource, sodass die Quellenprüfung auch
+nach Ablauf des ursprünglichen API-Runs verfügbar bleiben kann.
+
 ## Aufbewahrung und vorzeitige Löschung
 
 Jeder Run und sein Idempotenz-Mapping erhalten bei Annahme ein `expires_at` und

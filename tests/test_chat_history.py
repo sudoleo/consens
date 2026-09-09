@@ -921,7 +921,7 @@ def test_complete_turn_rejects_unknown_or_too_many_providers_before_writes(chat_
     assert database.model_answers("owner-uid", chat["id"], turn["id"]) == {}
 
 
-def test_completion_applies_text_model_label_and_source_limits(chat_api, monkeypatch):
+def test_completion_limits_text_metadata_but_preserves_all_sources(chat_api, monkeypatch):
     client, database = chat_api
     chat = create_chat(client)
     turn = create_turn(client, chat["id"])
@@ -935,7 +935,7 @@ def test_completion_applies_text_model_label_and_source_limits(chat_api, monkeyp
                 "id": f"S{index}", "title": "t" * 500,
                 "url": f"https://example.test/{index}", "provider": "p" * 100,
             }
-            for index in range(chat_store.MODEL_SOURCES_MAX_ITEMS + 5)
+            for index in range(80)
         ],
     })
     payload["consensus"] = "c" * (chat_store.CONSENSUS_MAX_LENGTH + 10)
@@ -949,11 +949,30 @@ def test_completion_applies_text_model_label_and_source_limits(chat_api, monkeyp
     stored_turn = database.turns("owner-uid", chat["id"])[turn["id"]]
     assert answer["answer"] == "a" * 12
     assert answer["model_label"] == "OpenAI"
-    assert len(answer["sources"]) == chat_store.MODEL_SOURCES_MAX_ITEMS
+    assert len(answer["sources"]) == 80
     assert len(answer["sources"][0]["title"]) == 300
     assert len(answer["sources"][0]["provider"]) == 40
     assert len(stored_turn["consensus"]) == chat_store.CONSENSUS_MAX_LENGTH
     assert len(stored_turn["differences"]) == chat_store.DIFFERENCES_MAX_LENGTH
+
+
+@pytest.mark.parametrize("target", ["turn", "model_answer"])
+def test_completion_rejects_oversized_source_documents_without_partial_writes(chat_api, target):
+    client, database = chat_api
+    chat = create_chat(client)
+    turn = create_turn(client, chat["id"])
+    payload = completion_payload(providers=("OpenAI",))
+    sources = [{"id": f"S{index}", "url": f"https://example.test/{index}/" + "x" * 1900,
+                "title": "t" * 300} for index in range(1, 401)]
+    if target == "turn":
+        payload["sources"] = sources
+    else:
+        payload["model_answers"]["OpenAI"]["sources"] = sources
+    before = copy.deepcopy(database.turns("owner-uid", chat["id"])[turn["id"]])
+    with pytest.raises(ValueError, match="storage byte budget"):
+        chat_store.ChatStore(database).complete_turn("owner-uid", chat["id"], turn["id"], **payload)
+    assert database.turns("owner-uid", chat["id"])[turn["id"]] == before
+    assert database.model_answers("owner-uid", chat["id"], turn["id"]) == {}
 
 
 def test_completion_retry_is_idempotent_but_changed_payload_conflicts(chat_api):

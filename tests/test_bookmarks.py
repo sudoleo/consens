@@ -350,13 +350,11 @@ def test_direct_comparison_model_save_accepts_full_evidence_budget():
         "mode": "Standard",
         "sources": [
             {"id": f"S{i}", "url": f"https://source-{i}.example"}
-            for i in range(1, share_snapshots.MAX_SOURCES + 1)
+            for i in range(1, 101)
         ],
     }
     assert bookmarks_router.BookmarkModelRequest.model_validate(payload)
-    payload["sources"].append({"id": "overflow", "url": "https://overflow.example"})
-    with pytest.raises(ValueError):
-        bookmarks_router.BookmarkModelRequest.model_validate(payload)
+    assert len(bookmarks_router.BookmarkModelRequest.model_validate(payload).sources) == 100
 
 
 def test_direct_comparison_model_name_contract_follows_provider_registry():

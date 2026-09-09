@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -178,6 +179,413 @@ def _real_firebase_page(
         " && typeof window.openShareDialog === 'function'"
     )
     return context, page
+
+
+@pytest.mark.parametrize('width,dark', [(1280, False), (390, False), (390, True), (320, False)])
+def test_source_verification_display_and_restore(browser, phase4_server, width, dark):
+    context, page = _real_firebase_page(browser, phase4_server)
+    try:
+        page.set_viewport_size({'width': width, 'height': 900})
+        page.evaluate('''dark => {
+          document.documentElement.classList.toggle('dark-mode', dark);
+          document.body.classList.toggle('dark-mode', dark);
+          window.exitHeroMode?.();
+          window.revealConsensusOutput?.();
+          const response = document.getElementById('consensusResponse');
+          const body = window.App.consensusBodyEl(response);
+          const sources = [{id:'S1',url:'https://example.com/prices',title:'Annual pricing'}];
+          window.App.state.set('currentEvidenceSources', sources, 'evidence');
+          window.renderEvidenceSources(sources);
+          window.injectMarkdown(body, 'The plan costs 20 euros. [S1] A second sentence is unchanged.', sources);
+          window.renderConsensusInsights({models_compared:['OpenAI','Gemini'],claims:[], differences:[{
+            claim:'The price', consensus_anchor:'The plan costs 20 euros.', type:'contradiction',severity:'major',
+            positions:[{models:['OpenAI'],stance:'20 euros',quote:'20 euros'},
+              {models:['Gemini'],stance:'30 euros',quote:'30 euros'}]
+          }]},2);
+          window.App.consensusPipeline.onConsensusEnd();
+          window.App.sourceVerification.renderCurrent({status:'pending'});
+          window.__originalClaim = body.querySelector('.cx-claim');
+          window.__originalDifference = document.querySelector('.diff-card');
+          window.__originalClaimHTML = window.__originalClaim.outerHTML;
+          window.__originalDifferenceHTML = window.__originalDifference.outerHTML;
+          window.__sourceSnapshot = {schema_version:3,status:'partial', scope:{sources:1,checked_sources:0,pairs:2,checked_pairs:1,processed_pairs:2}, findings:[{
+            sentence_id:1, source_id:'S1', claim:'The plan costs 20 euros.', checked:true,
+            support:'partial',topical:'relevant', temporal:'suitable', anchor_occurrence:0,checked_at:'2026-09-09T12:00:00Z',
+            reason:'The quoted price applies only to students.', quotes:['Students pay 20 euros. Other customers pay 30 euros.']
+          }], documents:[{source_id:'S1',url:'https://example.com/prices',title:'Annual pricing',
+            retrieved_at:'2026-09-09T12:00:00Z', dates:[], truncated:true}]};
+        }''', dark)
+        response = page.locator('#consensusResponse')
+        expect(page.locator('#consensusSourceCheckStatus')).to_have_text('· Checking sources…')
+        expect(page.locator('#consensusSourcesTab .source-check-loading')).to_be_visible()
+        source_label = page.locator('#consensusSourcesTab .consensus-tab-label')
+        assert source_label.evaluate("el => getComputedStyle(el).animationName") == 'source-label-shine'
+        assert source_label.evaluate("el => getComputedStyle(el).backgroundClip") == 'text'
+        before_position = source_label.evaluate("el => getComputedStyle(el).backgroundPosition")
+        page.wait_for_function("previous => getComputedStyle(document.querySelector('#consensusSourcesTab .consensus-tab-label')).backgroundPosition !== previous", arg=before_position)
+        expect(source_label.locator('.skeleton')).to_have_count(0)
+        output = Path(__file__).resolve().parents[2] / 'artifacts' / 'source-verification-ui'
+        output.mkdir(parents=True, exist_ok=True)
+        source_label.evaluate("el => el.getAnimations({subtree: true}).forEach(a => { a.pause(); a.currentTime = 640; })")
+        page.locator('#consensusSourcesTab').screenshot(path=str(output / f'label-pending-{width}-{dark}.png'))
+        source_label.evaluate("el => el.getAnimations({subtree: true}).forEach(a => a.play())")
+        expect(response.locator('.cx-claim')).to_have_count(1)
+        expect(page.locator('.diff-card')).to_have_count(1)
+        expect(page.locator('#consensusSourcesTab')).to_be_visible()
+        page.locator('#consensusSourcesTab').click()
+        expect(page.locator('#sourceVerificationReport')).to_be_visible()
+        expect(page.locator('#sourceVerificationReport')).to_have_attribute('aria-busy', 'true')
+        expect(page.locator('.source-check-skeleton-row')).to_have_count(3)
+        page.wait_for_function("() => getComputedStyle(document.querySelector('.source-check-skeleton')).opacity === '1'")
+        assert page.evaluate("getComputedStyle(document.querySelector('.source-check-skeleton .skeleton')).backgroundColor") not in ('rgba(0, 0, 0, 0)', 'transparent')
+        assert page.evaluate("getComputedStyle(document.querySelector('.source-check-skeleton .skeleton'), '::after').animationName") == 'skeleton-shimmer'
+        output = Path(__file__).resolve().parents[2] / 'artifacts' / 'source-verification-ui'
+        output.mkdir(parents=True, exist_ok=True)
+        page.screenshot(path=str(output / f'pending-{width}-{dark}.png'))
+        page.emulate_media(reduced_motion='reduce')
+        assert source_label.evaluate("el => getComputedStyle(el).animationName") == 'none'
+        assert page.evaluate("getComputedStyle(document.querySelector('.source-check-skeleton .skeleton'), '::after').animationName") == 'none'
+        page.emulate_media(reduced_motion='no-preference')
+        page.evaluate('window.App.sourceVerification.renderCurrent(window.__sourceSnapshot)')
+        expect(page.locator('#sourceVerificationReport .skeleton')).to_have_count(0)
+        expect(page.locator('#consensusSourcesTab .source-check-loading')).to_have_count(0)
+        expect(page.locator('.source-check-badges')).to_contain_text('Partly supported')
+        expect(page.locator('#consensusSourceCheckStatus')).to_have_text('· 1/2 checked · 1 unavailable · 1 issue')
+        expect(page.locator('.source-check-done, .source-check-status-reviewed')).to_have_count(0)
+        assert page.evaluate('''() => window.__originalClaim === document.querySelector('#consensusAnswerBody .cx-claim')
+          && window.__originalDifference === document.querySelector('.diff-card')
+          && window.__originalClaim.outerHTML === window.__originalClaimHTML
+          && window.__originalDifference.outerHTML === window.__originalDifferenceHTML''')
+        expect(response.locator('.source-check-button, .source-check-mark')).to_have_count(0)
+        expect(response.locator('.src-ref[data-source-check="issue"]')).to_have_count(1)
+        page.locator('#sourceVerificationReport .source-check-row > summary').click()
+        expect(page.locator('.source-verification-panel blockquote')).to_have_text(
+            'Students pay 20 euros. Other customers pay 30 euros.')
+        expect(page.locator('#sourceVerificationReport')).to_contain_text('1 of 2 citation checks completed · 1 not checked')
+        assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth + 1')
+        output = Path(__file__).resolve().parents[2] / 'artifacts' / 'source-verification-ui'
+        output.mkdir(parents=True, exist_ok=True)
+        page.screenshot(path=str(output / f'{width}-{dark}.png'))
+        page.evaluate('''() => {
+          const response = document.getElementById('consensusResponse');
+          const body = window.App.consensusBodyEl(response);
+          window.App.sourceVerification.renderCurrent(null);
+          window.App.sourceVerification.renderCurrent(JSON.parse(JSON.stringify(window.__sourceSnapshot)));
+        }''')
+        expect(response.locator('.src-ref[data-source-check="issue"]')).to_have_count(1)
+        expect(response.locator('.cx-claim')).to_have_text('The plan costs 20 euros.')
+        # Use the actual Markdown parser/sanitizer, including saved multi-source excerpts.
+        page.evaluate(r"""() => {
+          const excerpts = [
+            'Budget **11–20 € per person** and *drinks*. [S1]',
+            'Try ~~old prices~~ [the menu](https://example.com/menu), with `**literal** [S9]` code. [S2]',
+            '- Vegetarian options\n- **Vegan** options\n\n> A short quotation. [S3]',
+            '| Item | Price |\n| --- | --- |\n| Burger | **12 €** |',
+            'Seasonal deals. <img src=x onerror="window.__sourceXss=true"><script>window.__sourceXss=true</script> [S5]'
+          ];
+          const findings = excerpts.map((claim, i) => ({sentence_id:i+1,source_id:'S'+(i+1),claim,
+            checked:i<4,topical:'relevant',temporal:'suitable',reason:'The topic and period match.',quotes:[]}));
+          findings.push({...findings[0],source_id:'S6',checked:false});
+          window.App.sourceVerification.renderCurrent({status:'partial',scope:{pairs:6,checked_pairs:4},findings,
+            documents:findings.map(f => ({source_id:f.source_id,source_url:'https://menu.hansimglueck-burgergrill.de/menus',title:'Restaurant menu'}))});
+        }""")
+        report = page.locator('#sourceVerificationReport')
+        expect(report.locator('.source-check-claim strong').first).to_have_text('11–20 € per person')
+        expect(report.locator('.source-check-claim em')).to_have_text('drinks')
+        expect(report.locator('.source-check-claim del')).to_have_text('old prices')
+        expect(report.locator('.source-check-claim code')).to_have_text('**literal** [S9]')
+        expect(report.locator('.source-check-claim li')).to_have_count(2)
+        expect(report.locator('.source-check-claim table')).to_have_count(1)
+        expect(report.locator('.source-check-claim img, .source-check-claim script')).to_have_count(0)
+        expect(report.locator('.source-check-claim').first).not_to_contain_text('[S1]')
+        expect(report.locator('.source-check-claim a')).to_have_attribute('rel', 'noopener noreferrer')
+        assert not page.evaluate('Boolean(window.__sourceXss)')
+        expect(report).to_contain_text('4 of 6 citation checks completed · 2 not checked')
+        expect(report.locator('.is-unchecked')).to_have_count(2)
+        assert report.evaluate('el => el.scrollWidth <= el.clientWidth + 1')
+        assert page.evaluate('document.documentElement.scrollWidth <= innerWidth + 1')
+        if width <= 640:
+            expect(page.locator('#consensusSourcesTab .source-check-status-copy')).to_be_visible()
+        page.screenshot(path=str(output / f'reviewed-{width}-{dark}.png'))
+    finally:
+        context.close()
+
+
+@pytest.mark.parametrize("width", [390, 1280])
+def test_composer_source_check_toggle_persists_and_freezes_run_payload(browser, phase4_server, width):
+    context, page = _real_firebase_page(browser, phase4_server)
+    try:
+        page.set_viewport_size({"width": width, "height": 820})
+        toggle = page.locator("#composerSourcesToggle")
+        expect(toggle).to_be_visible()
+        expect(toggle).to_have_attribute("aria-checked", "true")
+        assert page.locator(".composer-mode-controls > button").nth(1).get_attribute("id") == "composerSourcesToggle"
+        toggle.click()
+        page.reload()
+        expect(toggle).to_have_attribute("aria-checked", "false")
+        page.wait_for_function("() => Boolean(window.auth?.currentUser)")
+        assert page.evaluate("document.documentElement.scrollWidth <= innerWidth + 1")
+        output = Path(__file__).resolve().parents[2] / "artifacts" / "source-verification-ui"
+        output.mkdir(parents=True, exist_ok=True)
+        page.locator('#attachTrigger').click()
+        menu_toggle = page.locator('#sourceCheckMenuSwitch')
+        expect(menu_toggle).not_to_be_checked()
+        assert page.locator('#attachMenu .attach-menu-toggle').last.get_attribute('for') == 'sourceCheckMenuSwitch'
+        page.locator('label[for="sourceCheckMenuSwitch"]').click()
+        expect(menu_toggle).to_be_checked()
+        expect(toggle).to_have_attribute('aria-checked', 'true')
+        expect(page.locator('#sourceCheckSwitch')).to_be_checked()
+        page.screenshot(path=str(output / f"menu-toggle-{width}.png"))
+        page.locator('label[for="sourceCheckMenuSwitch"]').click()
+        expect(toggle).to_have_attribute('aria-checked', 'false')
+        page.locator('#attachTrigger').click()
+        page.screenshot(path=str(output / f"toggle-{width}.png"))
+        page.evaluate('''() => {
+          const registry = window.App.runRegistry;
+          const run = registry.create({question:'Check toggle', config:{agentMode:true,
+            checkSources:window.App.isSourceCheckEnabled(), consensusModel:'Gemini',
+            providers:[{provider:'OpenAI'}, {provider:'Gemini'}]}});
+          run.chatSession = null;
+          run.modelResults = {OpenAI:{status:'complete',text:'First answer'},
+            Gemini:{status:'complete',text:'Second answer'}};
+          registry.setStatus(run.runId,'running');
+          document.getElementById('composerSourcesToggle').click();
+          const fetch = window.fetch;
+          window.fetch = (url, options) => {
+            if (url !== '/consensus') return fetch(url, options);
+            window.__sourceTogglePayload = JSON.parse(options.body);
+            return Promise.resolve(new Response(JSON.stringify({consensus_response:'Consensus',
+              differences:'Differences',differences_data:{agreement:{score:88}},chat_replayed:true}),
+              {headers:{'content-type':'application/json'}}));
+          };
+          window.App.executeConsensusRun(run);
+        }''')
+        page.wait_for_function("() => Boolean(window.__sourceTogglePayload)")
+        assert page.evaluate("window.__sourceTogglePayload.check_sources") is False
+        assert page.evaluate("window.App.isSourceCheckEnabled()") is True
+    finally:
+        context.close()
+
+
+def test_followup_stream_preserves_history_and_model_loading_nodes(browser, phase4_server):
+    context, page = _real_firebase_page(browser, phase4_server)
+    try:
+        page.evaluate('''() => {
+          const registry = window.App.runRegistry;
+          const run = registry.create({question:'Second question', config:{agentMode:true,
+            providers:[{provider:'OpenAI',modelLabel:'OpenAI'}, {provider:'Gemini',modelLabel:'Gemini'}]}});
+          run.historyTurns.push({turn_id:'first',question:'First question',
+            consensus:'A completed answer with **Markdown** and a source. [S1]',
+            differences:'A completed comparison.', sources:[{id:'S1',url:'https://example.com',title:'Source'}]});
+          run.modelResults = {OpenAI:{status:'streaming',streamText:'A new answer'}, Gemini:{status:'pending'}};
+          run.phase = 'answers';
+          registry.setStatus(run.runId,'running');
+          window.__followupRun = run;
+          window.__followupHistory = document.querySelector('.thread-history-turn');
+          window.__followupSpinner = document.querySelector('#geminiResponse .thinking-wrap');
+          window.__followupBar = document.querySelector('#runDetail [data-box="openaiResponse"] i');
+          window.__followupHistoryMutations = 0;
+          new MutationObserver(records => { window.__followupHistoryMutations += records.length; })
+            .observe(document.getElementById('threadHistory'), {childList:true,subtree:true});
+        }''')
+        expect(page.locator('#runDetail')).to_be_visible()
+        assert page.evaluate('Boolean(window.__followupSpinner && window.__followupBar)')
+        page.evaluate('''async () => {
+          for (let i = 0; i < 12; i++) {
+            window.__followupRun.modelResults.OpenAI.streamText += ' another token';
+            window.App.runRegistry.renderVisible();
+            await new Promise(resolve => setTimeout(resolve, 120));
+          }
+        }''')
+        assert page.evaluate('''() => window.__followupHistory === document.querySelector('.thread-history-turn')
+          && window.__followupSpinner === document.querySelector('#geminiResponse .thinking-wrap')
+          && window.__followupBar === document.querySelector('#runDetail [data-box="openaiResponse"] i')
+          && window.__followupHistoryMutations === 0''')
+        assert page.evaluate("parseFloat(window.__followupBar.style.getPropertyValue('--p')) > 12")
+        expect(page.locator('#openaiResponse .collapsible-content')).to_contain_text('another token')
+    finally:
+        context.close()
+
+
+@pytest.mark.parametrize("width", [1280, 390])
+def test_source_judge_stream_keeps_completed_claims_and_differences(browser, phase4_server, width):
+    """Consensus finishes before durable jobs; source progress preserves reader nodes."""
+    context, page = _real_firebase_page(browser, phase4_server)
+    try:
+        page.set_viewport_size({"width": width, "height": 900})
+        page.evaluate('''() => {
+          const registry = window.App.runRegistry;
+          const sources = [1,2,3].map(i => ({id:'S'+i,url:'https://example.com/prices'+i,title:'Prices '+i}));
+          const run = registry.create({question:'What does the plan cost?', config:{agentMode:true,
+            consensusModel:'Gemini', providers:[{provider:'OpenAI',modelLabel:'OpenAI'},
+              {provider:'Gemini',modelLabel:'Gemini'}]}});
+          run.chatSession = null;
+          run.evidenceSources = sources;
+          run.modelResults = {OpenAI:{status:'complete',text:'20 euros',sources},
+            Gemini:{status:'complete',text:'30 euros',sources}};
+          registry.setStatus(run.runId,'running');
+          window.__judgeRun = run;
+          window.__judgeOriginal = {models_compared:['OpenAI','Gemini'], claims:[], differences:[{
+            claim:'The price',consensus_anchor:'The plan costs 20 euros.',type:'contradiction',severity:'major',
+            positions:[{models:['OpenAI'],stance:'20 euros',quote:'20 euros'},
+              {models:['Gemini'],stance:'30 euros',quote:'30 euros'}]}]};
+          const fetch = window.fetch;
+          window.__sourceGetResolvers = []; window.__sourceGetCalls = 0;
+          window.fetch = (url, options) => {
+            if (String(url).includes('/api/source-checks/durable-job')) {
+              window.__sourceGetCalls++;
+              window.__sourceAuthHeader = options.headers.Authorization;
+              return new Promise(resolve => window.__sourceGetResolvers.push(resolve));
+            }
+            return url === '/consensus' ? Promise.resolve(new Response(
+              new ReadableStream({start(controller) { window.__judgeStream = controller; }}),
+              {headers:{'content-type':'text/event-stream'}})) : fetch(url, options);
+          };
+          window.__sourceDeliver = value => window.__sourceGetResolvers.shift()(new Response(
+            JSON.stringify({source_verification:value,next_cursor:null}),{headers:{'content-type':'application/json'}}));
+          window.__judgeSend = (name, data) => window.__judgeStream.enqueue(
+            new TextEncoder().encode('event: ' + name + '\\ndata: ' + JSON.stringify(data) + '\\n\\n'));
+          window.__judgeCompletion = window.App.executeConsensusRun(run);
+        }''')
+        page.wait_for_function('() => Boolean(window.__judgeStream)')
+        page.evaluate('''() => {
+          window.__judgeSend('consensus.final',{text:'The plan costs 20 euros. [S1] [S2] [S3]'});
+          window.__judgeSend('sources.status',{status:'pending'});
+          window.__judgeSend('differences.final',{differences:'Original difference',differences_data:window.__judgeOriginal});
+        }''')
+        expect(page.locator('#consensusAnswerBody .cx-claim')).to_have_count(1)
+        expect(page.locator('.diff-card')).to_have_count(1)
+        page.evaluate('''() => {
+          window.__judgeClaim = document.querySelector('#consensusAnswerBody .cx-claim');
+          window.__judgeDifference = document.querySelector('.diff-card');
+          window.__judgeSnapshot = {schema_version:3,job_id:'durable-job',answer_version:'answer-one',revision:0,
+            status:'queued',credential_mode:'server',scope:{sources:3,checked_sources:0,pairs:3,checked_pairs:0,processed_pairs:0},
+            sources:window.__judgeRun.evidenceSources,findings:[],documents:[]};
+          window.__judgeSend('sources.final',{source_verification:window.__judgeSnapshot});
+          window.__judgeSend('final',{consensus_response:'The plan costs 20 euros. [S1] [S2] [S3]',
+            differences:'Original difference',differences_data:window.__judgeOriginal,
+            source_verification:window.__judgeSnapshot,chat_replayed:true});
+          window.__judgeStream.close();
+        }''')
+        # No source GET has completed: the answer and the run are already done.
+        page.wait_for_function("() => window.__judgeRun.status === 'succeeded' && window.__sourceGetCalls === 1")
+        assert page.evaluate("window.__sourceAuthHeader") == 'Bearer token-account-a'
+        expect(page.locator('#consensusSourceCheckStatus')).to_have_text('· 0/3 checked · 3 pending')
+        assert page.evaluate('''() => window.__judgeClaim === document.querySelector('#consensusAnswerBody .cx-claim')
+          && window.__judgeDifference === document.querySelector('.diff-card')''')
+        page.locator('#consensusSourcesTab').click()
+        expect(page.locator('#sourceVerificationReport')).to_contain_text('3 pending')
+        page.evaluate('''() => {
+          const base = {sentence_id:1,claim:'The plan costs 20 euros.',anchor_occurrence:0,
+            checked:false,state:'pending',support:'unknown',topical:'unknown',temporal:'unknown',reason_code:null,quotes:[]};
+          window.__judgeProgress = {...window.__judgeSnapshot,revision:1,status:'running',
+            scope:{sources:3,checked_sources:1,pairs:3,checked_pairs:1,processed_pairs:1},
+            findings:[{...base,source_id:'S1',checked:true,state:'checked',support:'supported',topical:'relevant',temporal:'suitable',
+              reason:'The source explicitly gives this price.',quotes:['The plan costs 20 euros.'],checked_at:'2026-09-09T12:00:00Z'},
+              {...base,source_id:'S2'},{...base,source_id:'S3'}]};
+          window.__sourceDeliver(window.__judgeProgress);
+        }''')
+        report = page.locator('#sourceVerificationReport')
+        expect(report).to_contain_text('Statement supported')
+        expect(report).to_contain_text('2 pending')
+        expect(page.locator('#consensusAnswerBody .src-ref[data-source-number="1"]')).to_have_attribute('data-source-check', 'supported')
+        expect(page.locator('#consensusAnswerBody .src-ref[data-source-number="2"]')).to_have_attribute('data-source-check', 'pending')
+        expect(page.locator('#consensusSourcesList [data-source-id="S1"]')).to_have_attribute('data-source-card-check', 'supported')
+        expect(page.locator('#consensusSourcesList [data-source-id="S2"]')).to_have_attribute('data-source-card-check', 'pending')
+        expect(page.locator('#consensusSourcesList [data-source-id="S1"]')).to_contain_text('✓ Verified support')
+        expect(report.locator('.source-check-row')).to_have_count(3)
+        report.locator('.source-check-row > summary').first.click()
+        expect(report.locator('blockquote')).to_have_text('The plan costs 20 euros.')
+        expect(report.locator('time')).to_have_attribute('datetime','2026-09-09T12:00:00.000Z')
+        page.wait_for_function('() => window.__sourceGetCalls === 2')
+        page.evaluate('''() => {
+          window.__judgeFinished = {...window.__judgeProgress,revision:2,status:'partial',
+            scope:{sources:3,checked_sources:2,processed_sources:3,pairs:3,checked_pairs:2,processed_pairs:3},
+            findings:[window.__judgeProgress.findings[0],
+              {...window.__judgeProgress.findings[1],checked:true,state:'checked',reason:'The available passage does not establish the price.'},
+              {...window.__judgeProgress.findings[2],state:'unavailable',reason_code:'fetch_timeout'}]};
+          window.__sourceDeliver(window.__judgeFinished);
+        }''')
+        expect(report).to_contain_text('1 unclear')
+        expect(report).to_contain_text('2 of 3 sources checked')
+        expect(report).to_contain_text('1 not checked')
+        expect(report.locator('.is-unchecked')).to_have_count(1)
+        expect(report).to_contain_text('Support unclear')
+        expect(page.locator('#consensusAnswerBody .src-ref[data-source-number="2"]')).to_have_attribute('data-source-check', 'unknown')
+        expect(page.locator('#consensusSourcesList [data-source-id="S2"]')).to_have_attribute('data-source-card-check', 'unknown')
+        expect(page.locator('#consensusSourcesList [data-source-card-check="supported"]')).to_have_count(1)
+        report.locator('.source-check-row > summary').nth(2).click()
+        expect(report).to_contain_text('Source retrieval timed out')
+        expect(report.locator('.source-check-done')).to_have_count(0)
+        assert report.locator('.source-check-row').first.get_attribute('open') is not None
+        assert page.evaluate('''() => window.__judgeRun.status === 'succeeded'
+          && window.__judgeRun.consensus.completedTurn.source_verification.status === 'partial'
+          && window.__judgeClaim === document.querySelector('#consensusAnswerBody .cx-claim')
+          && window.__judgeDifference === document.querySelector('.diff-card')
+          && JSON.stringify(window.__judgeRun.consensus.differencesData) === JSON.stringify(window.__judgeOriginal)''')
+        assert report.evaluate('el => el.scrollWidth <= el.clientWidth + 1')
+        assert page.evaluate('document.documentElement.scrollWidth <= innerWidth + 1')
+        output = Path(__file__).resolve().parents[2] / 'artifacts' / 'source-verification-ui'
+        output.mkdir(parents=True, exist_ok=True)
+        page.screenshot(path=str(output / f'durable-progress-{width}.png'))
+        # The Sources tab opened a modal reader over the answer. Dismiss it
+        # before interacting with the citation in the underlying consensus.
+        page.keyboard.press('Escape')
+        expect(page.locator('.answer-reader-dialog')).not_to_be_visible()
+        ref = page.locator('#consensusAnswerBody .src-ref[data-source-number="1"]')
+        # The user-level visibility toggle must also hide citation verdict colors.
+        toggle = page.locator('#consensusMarkerToggle')
+        checked_style = ref.evaluate("el => [getComputedStyle(el).color, getComputedStyle(el).backgroundColor]")
+        toggle.click()
+        expect(toggle).to_have_text('Show checks')
+        hidden_style = ref.evaluate("el => [getComputedStyle(el).color, getComputedStyle(el).backgroundColor]")
+        assert hidden_style[1] == 'rgba(0, 0, 0, 0)'
+        assert hidden_style != checked_style
+        expect(ref).to_have_attribute('data-source-check', 'supported')
+        page.evaluate('window.App.sourceVerification.renderCurrent(window.__judgeFinished)')
+        assert ref.evaluate("el => getComputedStyle(el).backgroundColor") == 'rgba(0, 0, 0, 0)'
+        toggle.click()
+        expect(toggle).to_have_text('Hide checks')
+        page.wait_for_function("style => { const el = document.querySelector('#consensusAnswerBody .src-ref[data-source-number=\"1\"]'); return getComputedStyle(el).color === style[0] && getComputedStyle(el).backgroundColor === style[1]; }", arg=checked_style)
+        ref.hover()
+        teaser = page.locator('#sourceTeaser')
+        expect(teaser).to_be_visible()
+        expect(teaser).to_contain_text('Source checked: supports this statement.')
+        expect(teaser).to_contain_text('The source explicitly gives this price.')
+        # A native browser tooltip requires a title. Keep it absent after the
+        # browser's long-hover delay as well as the initial pointer event.
+        page.wait_for_timeout(1200)
+        assert ref.get_attribute('title') is None
+        assert teaser.evaluate('el => el.getBoundingClientRect().width <= innerWidth - 16')
+        page.screenshot(path=str(output / f'checked-source-hover-{width}.png'))
+        ref.focus()
+        expect(ref).to_have_attribute('aria-describedby', 'sourceTeaser')
+        page.keyboard.press('Escape')
+        expect(teaser).not_to_be_visible()
+        expect(ref).to_be_focused()
+        # Citation navigation reveals the exact result and draws the eye to its S label.
+        ref.click()
+        selected_row = report.locator('.source-check-row[data-pair="1:S1"]')
+        expect(selected_row).to_have_class(re.compile('source-check-navigation-target'))
+        expect(selected_row.locator('summary .source-check-reference')).to_be_in_viewport()
+        expect(selected_row).to_have_attribute('open', '')
+        expect(report.locator('.source-check-navigation-target')).to_have_count(1)
+        expect(report.locator('.source-check-row > summary .source-check-badge')).to_have_count(3)
+        expect(report.locator('.source-check-diagnostics')).not_to_have_attribute('open', '')
+        expect(report.locator('.source-check-statement')).not_to_have_attribute('open', '')
+        expect(report.locator('.source-check-statement .source-check-claim')).not_to_be_visible()
+        page.screenshot(path=str(output / f'compact-source-target-{width}.png'))
+        expect(selected_row).not_to_have_class(re.compile('source-check-navigation-target'), timeout=4000)
+        page.keyboard.press('Escape')
+        ref.click()
+        expect(selected_row).to_have_class(re.compile('source-check-navigation-target'))
+        page.keyboard.press('Escape')
+        page.evaluate('window.App.sourceVerification.renderCurrent(null)')
+        expect(page.locator('#consensusAnswerBody [data-source-check]')).to_have_count(0)
+        expect(page.locator('#consensusSourcesList [data-source-card-check]')).to_have_count(0)
+        assert ref.get_attribute('title') is None
+    finally:
+        context.close()
 
 
 def test_auth_module_failure_exposes_usable_login_dialog(browser, phase4_server):

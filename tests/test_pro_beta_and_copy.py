@@ -247,7 +247,7 @@ def test_cost_flow_matches_the_pipeline_it_claims_to_describe():
              "seven", "eight", "nine", "ten"]
     # Der Prosa-Satz ueber dem Flow nennt dieselbe Summe wie die Punkte.
     assert f"{words[total]} calls to {words[cfg.MAX_RUN_FAMILIES]} providers" in html
-    assert f"{words[total].capitalize()} calls before you see a word" in html
+    assert f"{words[total].capitalize()} calls for a full analysis, plus an optional source check" in html
 
     # Der zweite Judge ist der Coverage-Judge; ohne ihn waere "2 judges" falsch.
     engine = (ROOT / "app" / "services" / "llm" / "consensus_engine.py").read_text(encoding="utf-8")

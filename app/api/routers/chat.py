@@ -611,6 +611,8 @@ def _replay_completed_chat_turn(
         "chat_replayed": True,
     }
     result_id = turn.get("result_id")
+    if turn.get("source_verification") is not None:
+        payload["source_verification"] = turn["source_verification"]
     if isinstance(result_id, str) and result_id:
         payload["result_id"] = result_id
 
@@ -619,6 +621,11 @@ def _replay_completed_chat_turn(
 
     def replay_event_source():
         yield sse_pack("consensus.final", {"text": consensus_text})
+        yield sse_pack("differences.final", {
+            "differences": payload["differences"], "differences_data": payload["differences_data"],
+        })
+        if payload.get("source_verification"):
+            yield sse_pack("sources.final", {"source_verification": payload["source_verification"]})
         yield sse_pack("final", payload)
 
     return StreamingResponse(
@@ -1233,6 +1240,7 @@ def consensus(request: Request, data: dict = Body(...)):
     answers_by_model = _incoming_answers(data, answer_char_limit)
     excluded_models = data.get("excluded_models", [])
     model_sources   = data.get("model_sources", {})
+    check_sources = data.get("check_sources", True) is not False
     if not isinstance(excluded_models, list):
         excluded_models = []
     excluded_models = list({normalize_model_name(model) for model in excluded_models if model})
@@ -1264,6 +1272,11 @@ def consensus(request: Request, data: dict = Body(...)):
             detail=f"A run compares at most {cfg.MAX_RUN_FAMILIES} model answers.",
         )
 
+    from app.services.source_catalog import normalize_source_catalog
+    included_answers, model_sources, canonical_sources = normalize_source_catalog(
+        included_answers, model_sources=model_sources,
+        turn_sources=data.get('turn_sources') if isinstance(data.get('turn_sources'), list) else None,
+    )
     # Familien-Sicht derselben Antworten: die Engines und die Domaenen-
     # Pipeline sprechen Familien-IDs, Persistenz und Anzeige die Labels.
     included_by_provider = {
@@ -1383,7 +1396,25 @@ def consensus(request: Request, data: dict = Body(...)):
                 else []
             )
         ]
+    raw_turn_sources = canonical_sources
     sanitized_turn_sources = sanitize_sources(raw_turn_sources)
+    from app.services.source_verification import source_records
+    verification_sources = source_records(raw_turn_sources)
+    source_verification = None
+
+    def enqueue_verification(**options):
+        from app.services.source_check_jobs import submit_advisory
+        references = []
+        if validated_chat_turn_ids:
+            references.append(f"users/{uid}/chats/{validated_chat_turn_ids[0]}")
+        bookmark_id = str(data.get('bookmarkId') or '')
+        if re.fullmatch(r'[A-Za-z0-9_-]{1,160}', bookmark_id):
+            references.append(f'users/{uid}/bookmarks/{bookmark_id}')
+        context = dict(uid=uid, run_key=str(data.get('usage_run_key') or
+            (':'.join(validated_chat_turn_ids) if validated_chat_turn_ids else hashlib.sha256(
+                (question + options['consensus'] + str(time.time_ns())).encode()).hexdigest())),
+            own_keys=use_own_keys, references=references, origin='interactive')
+        return submit_advisory(**options, context=context)
 
     def record_run_stats(differences_data):
         # Anonyme Differences-Telemetrie (keine Texte, keine UID — siehe
@@ -1416,6 +1447,7 @@ def consensus(request: Request, data: dict = Body(...)):
             model_labels=model_labels,
             consensus_model=consensus_model,
             model_responses=included_answers,
+            source_verification=source_verification,
         )
 
     def persist_chat_completion(
@@ -1439,6 +1471,7 @@ def consensus(request: Request, data: dict = Body(...)):
                 differences_data=differences_data,
                 sources=sanitized_turn_sources,
                 result_id=result_id,
+                source_verification=source_verification,
             )
             return True
         except Exception as exc:
@@ -1490,6 +1523,7 @@ def consensus(request: Request, data: dict = Body(...)):
             "differences": differences_text,
             "differences_data": differences_data,
             "sources": sanitized_turn_sources,
+            "source_verification": source_verification,
             "included_models": [
                 f"{provider}: {allowed_model_labels.get(provider, provider)}"
                 for provider in included_answers
@@ -1572,6 +1606,7 @@ def consensus(request: Request, data: dict = Body(...)):
 
         @analysis_budgeted
         def consensus_event_source():
+            nonlocal source_verification
             consensus_text = ""
             consensus_failed = False
             differences_text = ""
@@ -1624,6 +1659,13 @@ def consensus(request: Request, data: dict = Body(...)):
                     # judge so a later mobile/network interruption cannot
                     # erase an answer the user already received.
                     yield sse_pack("consensus.final", {"text": consensus_text})
+                    if check_sources:
+                        source_verification = enqueue_verification(
+                            question=question, consensus=consensus_text,
+                            sources=verification_sources, keys=api_keys,
+                            resolved_question=resolved_question,
+                        )
+                        yield sse_pack("sources.final", {"source_verification": source_verification})
                     last_reasoning_at = None
                     # Die Analyse hat ihren EIGENEN Fehlerrahmen. Sie laeuft
                     # erst, nachdem die Antwort den Nutzer erreicht hat -- ein
@@ -1631,16 +1673,21 @@ def consensus(request: Request, data: dict = Body(...)):
                     # gescheitert markieren und die Antwort nicht mehr aus der
                     # Persistenz halten. Der Lauf verliert dann seine Marken
                     # und Widerspruchskarten, aber nicht die Antwort.
+                    differences_complete = False
                     try:
-                        for item in stream_differences(
+                        differences_stream = stream_differences(
                             included_by_provider,
                             consensus_text,
                             api_keys,
                             differences_model=consensus_model,
                             excluded_models=excluded_models,
                             resolved_question=resolved_question,
-                        ):
-                            if item.get("type") == "delta":
+                        )
+                        for item in differences_stream:
+                            if item.get("type") == "source_verification":
+                                source_verification = item["data"]
+                                yield sse_pack("sources.final", {"source_verification": source_verification})
+                            elif item.get("type") == "delta":
                                 # Das Frontend rendert diese Deltas nicht mehr (die Engine
                                 # liefert JSON); sie halten nur die SSE-Verbindung aktiv.
                                 text = coerce_text(item.get("text"))
@@ -1653,6 +1700,11 @@ def consensus(request: Request, data: dict = Body(...)):
                             else:
                                 differences_text = coerce_text(item.get("text"))
                                 differences_data = item.get("data")
+                                differences_complete = True
+                                yield sse_pack("differences.final", {
+                                    "differences": differences_text,
+                                    "differences_data": differences_data,
+                                })
                     except GeneratorExit:
                         raise
                     except Exception as exc:
@@ -1660,8 +1712,12 @@ def consensus(request: Request, data: dict = Body(...)):
                             "Differences analysis failed category=%s at=%s",
                             safe_exception(exc), safe_traceback(exc),
                         )
-                        differences_text = ""
-                        differences_data = None
+                        if not differences_complete:
+                            differences_text = ""
+                            differences_data = None
+                            yield sse_pack("differences.final", {
+                                "differences": "", "differences_data": None, "error": True,
+                            })
             except GeneratorExit:
                 _fail_chat_turn_best_effort(
                     uid,
@@ -1690,6 +1746,7 @@ def consensus(request: Request, data: dict = Body(...)):
                 "consensus_response": consensus_text,
                 "differences": differences_text,
                 "differences_data": differences_data,
+                "source_verification": source_verification,
             }
             result_id = None
             chat_persisted = False
@@ -1751,11 +1808,15 @@ def consensus(request: Request, data: dict = Body(...)):
             allow_consensus_error=True,
             skipped_differences_text=DIFFERENCES_SKIPPED_TEXT,
             require_differences_data=False,
+            verification_sources=verification_sources,
+            check_sources=check_sources,
+            verification_submit=enqueue_verification,
         )
         consensus_answer = analysis.consensus
         consensus_failed = is_consensus_error_text(consensus_answer)
         differences = analysis.differences_text
         differences_data = analysis.differences_data
+        source_verification = analysis.source_verification
     except Exception as exc:
         failed = _fail_chat_turn_best_effort(
             uid,
@@ -1778,6 +1839,7 @@ def consensus(request: Request, data: dict = Body(...)):
         "consensus_response": consensus_answer,
         "differences": differences,
         "differences_data": differences_data,
+        "source_verification": source_verification,
     }
     chat_persisted = False
     chat_turn_state = "pending"

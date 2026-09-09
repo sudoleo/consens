@@ -81,6 +81,7 @@ def test_failed_area_remains_pending_and_only_that_area_is_retried(monkeypatch):
         "guards": 0,
         "follows": 0,
         "auth": 0,
+        "source_checks": 0,
     }
 
     monkeypatch.setattr(
@@ -110,6 +111,8 @@ def test_failed_area_remains_pending_and_only_that_area_is_retried(monkeypatch):
             raise RuntimeError("injected share failure")
 
     monkeypatch.setattr(service, "_delete_owned_shares", shares)
+    monkeypatch.setattr(service, "_delete_source_checks",
+        lambda uid: calls.__setitem__("source_checks", calls["source_checks"] + 1))
 
     def delete_query(collection, field, value):
         key = "pending" if collection == "pending_results" else "watches"
@@ -154,6 +157,7 @@ def test_failed_area_remains_pending_and_only_that_area_is_retried(monkeypatch):
     assert first_errors == ["owned_shares"]
     assert second_errors == []
     assert calls["shares"] == 2
+    assert calls["source_checks"] == 1
     assert calls["api"] == 1
     assert calls["subcollections"] == 1
     assert calls["chats"] == 1

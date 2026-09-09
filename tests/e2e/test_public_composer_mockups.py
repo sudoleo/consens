@@ -43,6 +43,7 @@ def test_public_composer_mockups(browser, phase4_server, width, dark, reduced):
         previews = page.locator('.lp-composer-preview')
         for preview in previews.all():
             bar = preview.locator('.lp-composer-tools')
+            expect(bar.locator('.lp-composer-tool').nth(1)).to_have_attribute('aria-label', 'Check Sources on')
             expect(bar.locator('img')).to_have_count(6)
             assert bar.evaluate('el => el.scrollWidth <= el.clientWidth + 1')
             assert bar.evaluate('el => Math.abs(el.getBoundingClientRect().height - 36) < 1')
@@ -80,6 +81,8 @@ def test_public_composer_mockups(browser, phase4_server, width, dark, reduced):
         page.goto(phase4_server + '/consensus-engine', wait_until='networkidle')
         expect(page.locator('.public-product-result')).to_be_visible()
         expect(page.locator('.lp-composer-tools')).to_have_count(0)
+        expect(page.get_by_role('heading', name='Can I turn the source check off?')).to_have_count(1)
+        assert page.evaluate('document.documentElement.scrollWidth <= innerWidth + 1')
         assert errors == []
     finally:
         context.close()

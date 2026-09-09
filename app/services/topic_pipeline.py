@@ -112,6 +112,7 @@ def execute_topic(
         "verdict": pipeline["agreement"].get("level") or "",
         "opinion_map": position_map,
         "differences_data": differences,
+        "source_verification": pipeline.get("source_verification"),
         "differences_text": pipeline["differences"],
         "sources": share_snapshots.sanitize_sources(model_sources),
         "included_models": share_snapshots.build_included_models(

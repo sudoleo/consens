@@ -67,7 +67,7 @@ def evidence_from_sources(sources, source_rules: dict) -> list[dict]:
         for domain in source_rules.get("preferred_domains") or []
     ]
     evidence = []
-    for source in sources or []:
+    for index, source in enumerate(sources or []):
         if not isinstance(source, dict) or not source.get("url"):
             continue
         url = topics.canonical_evidence_url(source["url"])
@@ -78,6 +78,8 @@ def evidence_from_sources(sources, source_rules: dict) -> list[dict]:
         title = raw_title if raw_title and not raw_title.isdigit() else host or url
         publisher = str(source.get("provider") or host)[:120]
         evidence.append({
+            # Ranking affects display order, never the citation's identity.
+            "id": source.get("id", source.get("source_id", f"S{index + 1}")),
             "type": _source_type(
                 url, allowed, preferred, title=title, publisher=publisher
             ),
@@ -159,14 +161,17 @@ def execute_claimed_topic(claimed: dict, *, actor_uid: str, db=None,
     recent = topics.list_runs(claimed["id"], db=db, max_items=KNOWN_CLAIM_RUNS)
     run_config = claimed.get("run_config") or {}
     try:
-        result = executor(
-            _research_question(claimed),
-            str(previous.get("consensus_md") or ""),
-            previous_opinion_map=previous.get("opinion_map"),
-            model_overrides=run_config.get("provider_models"),
-            known_claims=known_claims_from_runs(recent),
-            claim_key_prefix=str(claimed.get("current_run_id") or ""),
-        )
+        from app.services.source_check_jobs import source_check_context
+        with source_check_context(claimed.get('created_by') or actor_uid,
+                'topic:' + str(claimed.get('current_run_id')), references=[f"topics/{claimed['id']}"], origin='topic'):
+            result = executor(
+                _research_question(claimed),
+                str(previous.get("consensus_md") or ""),
+                previous_opinion_map=previous.get("opinion_map"),
+                model_overrides=run_config.get("provider_models"),
+                known_claims=known_claims_from_runs(recent),
+                claim_key_prefix=str(claimed.get("current_run_id") or ""),
+            )
         changed = bool(result.get("changed"))
         change_type = (
             str(result.get("severity") or "minor")
@@ -197,6 +202,7 @@ def execute_claimed_topic(claimed: dict, *, actor_uid: str, db=None,
                     run_config.get("provider_models") or {}
                 ),
                 "differences_data": result.get("differences_data") or {},
+                "source_verification": result.get("source_verification"),
                 "opinion_map": result.get("opinion_map") or {},
                 "run_mode": "automatic",
             },

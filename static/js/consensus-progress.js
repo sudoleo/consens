@@ -513,10 +513,9 @@
     const facts = $("runProvenanceFacts");
     if (!wrap || !facts) return;
 
-    // The footer is what the run hands over to, so it never appears beside a
-    // running one. Sources land while the models are still answering; without
-    // this the "Sources" chip would show up under a half-written answer.
-    if (stage !== "idle" && stage !== "done") {
+    // Once synthesis is complete, sources are independently inspectable while
+    // either judge is still running. Keep the footer hidden for partial text.
+    if (stage !== "idle" && stage !== "done" && stage !== "differences") {
       wrap.hidden = true;
       return;
     }

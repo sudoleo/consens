@@ -98,14 +98,24 @@ function createSourceChip(src, fallbackLabel) {
 function getSourceRefs(sourceText, sources) {
   const refs = [];
   const sourceTagRegex = /\[((?:S?\d+)(?:,\s*S?\d+)*)\]/g;
+  const sourceList = Array.isArray(sources) ? sources : [];
+  const normalizeId = value => {
+    const match = String(value ?? '').trim().match(/^S?(\d+)$/i);
+    return match ? Number(match[1]) : null;
+  };
 
   String(sourceText || "").replace(sourceTagRegex, (match, innerContent) => {
     innerContent.split(",").forEach(part => {
       const token = part.trim();
       const idNum = parseInt(token.replace(/^S/i, ""), 10);
+      const matches = sourceList.filter(source => source && normalizeId(source.id ?? source.source_id) === idNum);
+      const legacy = sourceList[idNum - 1];
       refs.push({
         token,
-        src: Number.isFinite(idNum) ? sources[idNum - 1] : null
+        // Explicit IDs are authoritative, including sparse catalogs. Duplicate
+        // IDs stay unresolved; a reserved missing ID must not borrow its neighbor.
+        src: matches.length === 1 ? matches[0] : matches.length ? null
+          : legacy && legacy.id == null && legacy.source_id == null ? legacy : null
       });
     });
     return match;
@@ -139,10 +149,9 @@ function createSourceRef(ref) {
   el.className = "src-ref";
   el.textContent = number ? String(number) : ref.token;
   el.dataset.sourceNumber = number ? String(number) : "";
-  // The teaser is the explanation; the native tooltip is the fallback for
-  // keyboard and touch, where no hover exists.
-  el.title = getSourceTitle(ref.src, ref.token);
-  el.setAttribute("aria-label", `Source ${number || ref.token}: ${el.title}`);
+  // The styled teaser also opens on keyboard focus. A title would produce a
+  // second browser tooltip after a long hover.
+  el.setAttribute("aria-label", `Source ${number || ref.token}: ${getSourceTitle(ref.src, ref.token)}`);
   // Die Nummer allein ist keine Identitaet: ein archivierter Turn nummeriert
   // seine EIGENE Quellenliste, waehrend window.currentEvidenceSources schon
   // dem naechsten Lauf gehoert. Der Teaser liest deshalb die aufgeloeste
@@ -504,8 +513,7 @@ function renderModelResponseWithSources(outputEl, markdown, incomingSources) {
 // A raised number says "there is a source", not "which one". Hovering it
 // answers that without leaving the sentence — the same bargain the marked
 // passages in the consensus already make: look closer, stay in place. Click
-// still opens the source, and the title attribute covers keyboard and touch,
-// where there is no hover to lean on.
+// still opens the source; keyboard focus opens the same accessible teaser.
 
 const sourceTeaser = (function () {
   let el = null;
@@ -525,10 +533,10 @@ const sourceTeaser = (function () {
 
   function lookup(number) {
     const list = Array.isArray(window.currentEvidenceSources) ? window.currentEvidenceSources : [];
-    return list[number - 1] || null;
+    return getSourceRefs(`[S${number}]`, list)[0]?.src || null;
   }
 
-  function fill(node, src, number) {
+  function fill(node, src, number, target) {
     node.innerHTML = "";
 
     const head = document.createElement("div");
@@ -572,6 +580,18 @@ const sourceTeaser = (function () {
       body.textContent = String(snippet);
       node.appendChild(body);
     }
+    const check = window.App.sourceVerification?.getCitationCheck(target);
+    const note = document.createElement("div");
+    note.className = "source-teaser-check";
+    note.dataset.state = check?.state || 'unchecked';
+    note.textContent = check?.summary || 'This citation has not been checked.';
+    node.appendChild(note);
+    if (check?.detail) {
+      const detail = document.createElement("div");
+      detail.className = "source-teaser-check-detail";
+      detail.textContent = check.detail;
+      node.appendChild(detail);
+    }
   }
 
   function place(node, target) {
@@ -599,20 +619,34 @@ const sourceTeaser = (function () {
   function show(target) {
     const number = parseInt(target.dataset.sourceNumber || "", 10);
     if (!Number.isFinite(number)) return;
-    const src = target.sourceData || lookup(number);
-    if (!src) return;
+    const src = Object.prototype.hasOwnProperty.call(target, 'sourceData') ? target.sourceData : lookup(number);
+    if (!src) { hide(); return; }
+
+    // Also repair restored/legacy refs whose HTML still carries a title.
+    target.removeAttribute('title');
 
     window.clearTimeout(hideTimer);
     hideTimer = null;
+    if (anchor && anchor !== target) unlinkDescription(anchor);
     anchor = target;
     const node = ensure();
-    fill(node, src, number);
+    fill(node, src, number, target);
+    const descriptions = new Set((target.getAttribute('aria-describedby') || '').split(/\s+/).filter(Boolean));
+    descriptions.add(node.id);
+    target.setAttribute('aria-describedby', [...descriptions].join(' '));
     place(node, target);
     node.classList.add("is-visible");
   }
 
+  function unlinkDescription(target) {
+    const descriptions = (target.getAttribute('aria-describedby') || '').split(/\s+/).filter(id => id && id !== 'sourceTeaser');
+    if (descriptions.length) target.setAttribute('aria-describedby', descriptions.join(' '));
+    else target.removeAttribute('aria-describedby');
+  }
+
   function hide() {
     if (!el) return;
+    if (anchor) unlinkDescription(anchor);
     anchor = null;
     el.classList.remove("is-visible");
     window.clearTimeout(hideTimer);
@@ -631,6 +665,20 @@ const sourceTeaser = (function () {
   });
 
   document.addEventListener("pointerdown", () => hide());
+  document.addEventListener('focusin', event => {
+    const ref = event.target.closest?.('.src-ref');
+    if (ref) show(ref);
+  });
+  document.addEventListener('focusout', event => {
+    if (anchor === event.target) hide();
+  });
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && anchor) hide();
+  });
+  document.addEventListener('source-check-updated', event => {
+    if (anchor && !anchor.isConnected) hide();
+    else if (anchor && event.target.contains(anchor)) show(anchor);
+  });
   window.addEventListener("scroll", () => { if (anchor) hide(); }, { passive: true });
   window.addEventListener("resize", () => { if (anchor) hide(); });
 
@@ -643,3 +691,4 @@ window.registerResponseSources = registerResponseSources;
 window.prepareResponseSources = prepareResponseSources;
 window.renderModelResponseWithSources = renderModelResponseWithSources;
 window.hideSourceTeaser = sourceTeaser.hide;
+window.App.sourceTeaser = sourceTeaser;

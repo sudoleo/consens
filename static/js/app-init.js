@@ -1128,7 +1128,8 @@
 
         // Quellenverzeichnis unter der Antwort. Die hochgestellten Zahlen im
         // Konsenstext zeigen hierher, deshalb ist die Reihenfolge dieser Liste
-        // der Vertrag: Position n == [Sn]. Das Panel selbst bleibt zu, bis der
+        // der Vertrag: Die explizite Quellen-ID bleibt auch bei Lücken erhalten.
+        // Das Panel selbst bleibt zu, bis der
         // Quellen-Chip in der Fusszeile es oeffnet.
         function renderEvidenceSources(sources) {
           const panel = document.getElementById("consensusSourcesPanel");
@@ -1143,15 +1144,17 @@
             return;
           }
 
+          const hasExplicitIds = sources.some(src => /^S[1-9]\d*$/i.test(String(src.id || '')));
           sources.forEach((src, idx) => {
-            const number = idx + 1;
+            const explicitId = String(src.id || '').match(/^S([1-9]\d*)$/i);
+            const number = explicitId ? Number(explicitId[1]) : hasExplicitIds ? null : idx + 1;
             const li = document.createElement("li");
             li.className = "consensus-source-item";
-            li.value = number;
+            if (number !== null) { li.dataset.sourceId = 'S' + number; li.value = number; }
 
             const index = document.createElement("span");
             index.className = "consensus-source-index";
-            index.textContent = String(number);
+            index.textContent = number === null ? '—' : String(number);
             li.appendChild(index);
 
             const body = document.createElement("div");
@@ -1200,6 +1203,7 @@
 
           // Sichtbar wird das Panel erst ueber den Chip; hier zaehlt nur, dass
           // es Inhalt hat, damit der Chip erscheinen kann.
+          window.App?.sourceVerification?.applySourceList?.(listEl, document.getElementById('consensusAnswerBody'));
           window.App?.consensusPipeline?.renderProvenance?.();
         }
 

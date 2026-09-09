@@ -8,12 +8,14 @@ import { loadScripts } from "./helpers/appWindow.mjs";
 const BODY = `
   <div id="composerModeBar">
     <button id="composerAgentToggle"></button><span id="composerAgentState"></span>
+    <button id="composerSourcesToggle"></button><span id="composerSourcesState"></span>
     <p id="composerModeDescription"></p><span id="composerModelIcons"></span>
     <p id="composerComparisonStatus"></p>
     <button id="composerDeepToggle"></button><span id="composerDeepState"></span>
     <button id="composerAttachButton"></button>
   </div>
   <input id="agentModeMenuSwitch" type="checkbox"><input id="agentModeSwitch" type="checkbox">
+  <input id="sourceCheckMenuSwitch" type="checkbox"><input id="sourceCheckSwitch" type="checkbox">
   <input id="autoConsensusToggle" type="checkbox">
   <input id="deepSearchToggle" type="checkbox"><button id="attachUploadOption"></button>
   <div id="agentModePanel">
@@ -54,6 +56,31 @@ function boot() {
 }
 
 describe("agent mode panel projection", () => {
+  it("toggles and persists source checks independently of Agent Mode and projected runs", () => {
+    const { window, document, dom } = boot();
+    window.updateAgentModeUI();
+    const toggle = document.getElementById('composerSourcesToggle');
+    expect(window.App.isSourceCheckEnabled()).toBe(true);
+    expect(toggle.getAttribute('aria-checked')).toBe('true');
+    toggle.click();
+    expect(window.App.isSourceCheckEnabled()).toBe(false);
+    expect(window.localStorage.getItem('checkSources')).toBe('false');
+    expect(document.getElementById('sourceCheckMenuSwitch').checked).toBe(false);
+    expect(document.getElementById('sourceCheckSwitch').checked).toBe(false);
+    expect(document.getElementById('composerSourcesState').textContent).toBe('Off');
+    window.setAgentMode(false, { persist: true });
+    window.projectAgentModeRun({runId: 'old', config: {agentMode: false, checkSources: true}});
+    expect(toggle.getAttribute('aria-checked')).toBe('false');
+    document.getElementById('sourceCheckMenuSwitch').click();
+    expect(window.localStorage.getItem('checkSources')).toBe('true');
+    expect(toggle.getAttribute('aria-checked')).toBe('true');
+    expect(document.getElementById('sourceCheckSwitch').checked).toBe(true);
+    document.getElementById('sourceCheckSwitch').click();
+    expect(toggle.getAttribute('aria-checked')).toBe('false');
+    expect(document.getElementById('sourceCheckMenuSwitch').checked).toBe(false);
+    dom.window.close();
+  });
+
   it("shows the starting toolbar, hides it in an agent chat and restores it for a new comparison", async () => {
     const { window, document, dom } = boot();
     const bar = document.getElementById('composerModeBar');

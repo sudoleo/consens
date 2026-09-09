@@ -25,10 +25,12 @@ async def retention_maintenance_loop() -> None:
     while True:
         pending_deleted = await asyncio.to_thread(cleanup_expired_pending)
         shares_deleted = await asyncio.to_thread(cleanup_revoked_shares)
+        from app.services.source_check_jobs import repository
+        source_checks_deleted = await asyncio.to_thread(repository().cleanup)
         task_succeeded(
             TASK_NAME,
             expired_pending_deleted=pending_deleted,
             revoked_shares_deleted=shares_deleted,
+            source_checks_deleted=source_checks_deleted,
         )
         await asyncio.sleep(RETENTION_MAINTENANCE_INTERVAL_SECONDS)
-

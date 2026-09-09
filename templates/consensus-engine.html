@@ -17,7 +17,7 @@
   <meta name="twitter:description" content="A technical but readable explanation of how consens.io builds consensus and differences analysis.">
   <meta name="twitter:image" content="https://www.consens.io/static/favicon-square.png">
   <title>How the Consensus Engine Works | consens.io</title>
-<link rel="stylesheet" href="/static/css/landing.css?v=20260909-skeleton1">
+<link rel="stylesheet" href="/static/css/landing.css?v=20260909-source-toggle">
   <link rel="stylesheet" href="/static/css/consensus-engine.css?v=20260804-verdict3">
   <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260621-logo2" sizes="any" type="image/png">
@@ -62,7 +62,7 @@
             "name": "Why is there a separate judge model?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Two separate judges check the consensus. The Differences Judge finds the substantive disagreements; the Coverage Judge answers, for every single sentence, which models support, contradict, or never addressed it. Both prefer a different model family than the one that wrote the consensus, to reduce self-judging bias."
+              "text": "The Differences Judge finds substantive disagreements; the Coverage Judge checks which models support, contradict, or never addressed each sentence. With Check Sources on, an additional judge checks every cited source for statement support, topic and time period, with results arriving progressively. This optional source check does not change the agreement score."
             }
           },
           {
@@ -250,8 +250,9 @@
           </article>
           <article class="lp-card ce-role-card">
             <p class="lp-eyebrow">Analysis layer</p>
-            <h3>Two independent judges</h3>
+            <h3>Two analysis judges, plus an optional source check</h3>
             <p>The Differences Judge works out the contradictions; the Coverage Judge belongs to the same pass but has one narrow job, and therefore runs on a cheaper model: a verdict for every sentence, with none allowed to be skipped. For independence, consens.io prefers a different model family from the Consensus Engine for both.</p>
+            <p>With Check Sources on, an additional judge checks every source cited in the finished consensus against its statements, including important numbers, conditions, topic and time period. Checks run in the background in bounded batches. Verify sources shows progress, original passages and explicit reasons when a source cannot be checked; the answer and agreement score stay unchanged.</p>
           </article>
         </div>
       </div>
@@ -455,6 +456,10 @@
           <h2 class="lp-h2">Common questions.</h2>
         </div>
         <div class="ce-faq-list">
+          <article>
+            <h3>Can I turn the source check off?</h3>
+            <p>Yes. Check Sources starts on. Switch it off beside Agent Mode under the input, directly below Agent Mode in the (+) menu, or in Settings → Runs. Your choice is saved for the next consensus. The source check assesses whether cited passages support, partly support or contradict each statement, alongside topic and time period. Every cited source is scheduled; inaccessible documents and inconclusive evidence get explicit statuses. A supported statement is evidence from that source, not a guarantee of truth. Consensus, claims and differences still run when it is off.</p>
+          </article>
           <article>
             <h3>Is the consensus just the majority answer?</h3>
             <p>No. The engine writes a synthesis from the included model responses. Agreement matters, but the output is written as a readable answer with caveats, not as a simple vote.</p>
