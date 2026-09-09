@@ -3782,9 +3782,49 @@ selektive Canvas-Schärfe, synchronisierte Cursorziele und bewegtes Licht.
 Die zusätzliche Modell-Icon-Leiste entfällt. `focus-studio.js` verwendet
 dieselbe deterministische Zeitleiste; `focus-studio-check.cjs` und
 `focus-deliver.py` prüfen und verpacken die Ausgabe unter `recordings/launch-v10`.
-Die echten UI-Quellen stammen aus v9; dessen Renderer bleibt erhalten.
+Die echten UI-Quellen werden mit `light-capture.cjs` aktualisiert; dessen
+`CONSENS_CAPTURE_OUT` waehlt das Ziel. Der finale LinkedIn-Export vom 09.09.
+liegt unter `artifacts/linkedin/2026-09-09-final`; `CONSENS_FOCUS_OUT` und
+`CONSENS_FOCUS_FORMATS` grenzen Renderer und QA/Delivery darauf ein. Gepolsterte
+Antwortausschnitte behalten gemessene Kamera-/Klickanker; der Follow-up wird
+nach Schliessen des Readers im geoeffneten echten Composer erfasst.
 Produktionsmodule/API-Flows ändern sich nicht. Details:
 `docs/linkedin-launch-focus.md`.
+
+Lokale Video-Fassung v11: `recording/kinetic-director.js` ergänzt eine eigene
+Kachel-Eröffnung, einen auf den Sendeknopf gerichteten Zoom und das Signet-Outro
+mit darunter enthülltem Namen. `kinetic-base-scene.js` erhält die Erklärung
+beider Judges und beide Difference-Positionen. `kinetic-audio.py` erzeugt aus
+dem lizenzierten Neon-Ausschnitt 50,15–120,15 s eine gemessene gemeinsame
+Musik-Zeitleiste sowie synthetisierte Übergangsgeräusche. `kinetic-render.cjs`
+rendert 70 s bei 60 fps in 4:5 und 16:9; `kinetic-studio.js` spielt die gleiche
+Szene anhand der Audio-Uhr ab. QA und Delivery: `kinetic-qa.cjs` und
+`kinetic-deliver.py`. Ausgabe: `artifacts/linkedin/2026-09-09-kinetic-v11`;
+Details: `docs/linkedin-launch-kinetic.md`. Die v10-Dateien bleiben erhalten;
+Produktmodule und API-Flows ändern sich dadurch nicht.
+
+Lokale Video-Fassung v12: `recording/cohesive-*` vereinheitlicht Oberfläche,
+Antwortkarten, Kamera und Ton über den gesamten 70-Sekunden-Film. Der neue
+Aha-Abschnitt macht das fehlende Datumskriterium explizit; der Follow-up ergänzt
+diese Information. Drei getrennte Beiträge für Motion Design, Sound und
+Art Direction werden über dieselbe deterministische Zeitleiste integriert.
+Ausgabe: `artifacts/linkedin/2026-09-09-cohesive-v12`; Produktionsnotizen:
+`docs/linkedin-launch-cohesive.md`. App-Module und API-Flows sind unverändert.
+
+Lokale Video-Fassung v13: `recording/concise-*` verwendet die v12-Basis mit
+13-Wort-Mailauszug im nativen Composer, schrittweisem Textaufbau, fortlaufender
+Kamerabewegung und Fokus auf der Schlusszeile. Eigener Capture aktualisiert
+nur das Input-Asset samt Textkoordinaten. Ausgabe:
+`artifacts/linkedin/2026-09-09-concise-v13`; Reproduktion und QA:
+`docs/linkedin-launch-concise.md`. Produkt- und API-Flows bleiben unverändert.
+
+Lokale Video-Fassung v14: `recording/sentence-*` ersetzt den Mailauszug durch
+einen vollständigen Schreibauftrag mit nativen Einzelzeichen-Aufnahmen.
+`sentence-scenario.cjs` passt nur die lokale Capture-Demo samt Antworttexten
+und Claim-Ankern an; `static/demo.js` bleibt unverändert. Neue Aufnahmen
+messen die Textanker erneut. Ausgabe:
+`artifacts/linkedin/2026-09-09-sentence-v14`; Ablauf und QA:
+`docs/linkedin-launch-sentence.md`.
 
 Diese Datei ist die zentrale Architektur-Karte. **Aktualisiere sie im selben
 Commit/PR**, wenn sich Folgendes ändert:
