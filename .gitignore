@@ -45,3 +45,11 @@ docs/seo-share-indexing-process.md
 
 # Design-Vorschau aus scripts/render_watch_preview.py (kein Artefakt)
 _preview/
+
+# Local browser captures, diagnostic scripts and downloaded video references
+/test-results/
+/artifacts/video-references/
+
+# Evidence accompanying the checked-in benchmark research report (no prompts)
+!/artifacts/research/consensio-2026-09-08/benchmark-findings.json
+!/artifacts/research/consensio-2026-09-08/benchmark-question-results.json

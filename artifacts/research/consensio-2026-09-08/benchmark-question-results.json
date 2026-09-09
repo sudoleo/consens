@@ -1,0 +1,8794 @@
+[
+  {
+    "question_id": 103,
+    "category": "business",
+    "ground_truth": "I",
+    "answers": {
+      "openai": "I",
+      "mistral": "I",
+      "anthropic": "I",
+      "gemini": "I",
+      "deepseek": "I",
+      "grok": "I",
+      "consensus": "I",
+      "synth_alone": "I"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 136,
+    "category": "business",
+    "ground_truth": "H",
+    "answers": {
+      "openai": "H",
+      "mistral": "H",
+      "anthropic": "H",
+      "gemini": "H",
+      "deepseek": "H",
+      "grok": "H",
+      "consensus": "H",
+      "synth_alone": "H"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 170,
+    "category": "business",
+    "ground_truth": "E",
+    "answers": {
+      "openai": "E",
+      "mistral": "E",
+      "anthropic": "E",
+      "gemini": "E",
+      "deepseek": "E",
+      "grok": "E",
+      "consensus": "E",
+      "synth_alone": "E"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 271,
+    "category": "business",
+    "ground_truth": "C",
+    "answers": {
+      "openai": "C",
+      "mistral": "C",
+      "anthropic": "C",
+      "gemini": "C",
+      "deepseek": "C",
+      "grok": "C",
+      "consensus": "C",
+      "synth_alone": "C"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 301,
+    "category": "business",
+    "ground_truth": "C",
+    "answers": {
+      "openai": "C",
+      "mistral": "C",
+      "anthropic": "C",
+      "gemini": "C",
+      "deepseek": "C",
+      "grok": "C",
+      "consensus": "C",
+      "synth_alone": "C"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 311,
+    "category": "business",
+    "ground_truth": "C",
+    "answers": {
+      "openai": "B",
+      "mistral": "B",
+      "anthropic": "C",
+      "gemini": "C",
+      "deepseek": "C",
+      "grok": "B",
+      "consensus": "C",
+      "synth_alone": "B"
+    },
+    "correct": {
+      "openai": false,
+      "mistral": false,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": false,
+      "consensus": true,
+      "synth_alone": false
+    },
+    "unanimous": false,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 338,
+    "category": "business",
+    "ground_truth": "E",
+    "answers": {
+      "openai": "E",
+      "mistral": "E",
+      "anthropic": "E",
+      "gemini": "E",
+      "deepseek": "E",
+      "grok": "E",
+      "consensus": "E",
+      "synth_alone": "E"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 373,
+    "category": "business",
+    "ground_truth": "D",
+    "answers": {
+      "openai": "D",
+      "mistral": "D",
+      "anthropic": "D",
+      "gemini": "D",
+      "deepseek": "D",
+      "grok": "D",
+      "consensus": "D",
+      "synth_alone": "D"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 400,
+    "category": "business",
+    "ground_truth": "B",
+    "answers": {
+      "openai": "B",
+      "mistral": "B",
+      "anthropic": "B",
+      "gemini": "B",
+      "deepseek": "B",
+      "grok": "B",
+      "consensus": "B",
+      "synth_alone": "B"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 451,
+    "category": "business",
+    "ground_truth": "C",
+    "answers": {
+      "openai": "C",
+      "mistral": "D",
+      "anthropic": "C",
+      "gemini": "C",
+      "deepseek": "C",
+      "grok": "D",
+      "consensus": "C",
+      "synth_alone": "C"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": false,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": false,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": false,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 491,
+    "category": "business",
+    "ground_truth": "B",
+    "answers": {
+      "openai": "B",
+      "mistral": "B",
+      "anthropic": "B",
+      "gemini": "B",
+      "deepseek": "B",
+      "grok": "B",
+      "consensus": "B",
+      "synth_alone": "B"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 631,
+    "category": "business",
+    "ground_truth": "E",
+    "answers": {
+      "openai": "E",
+      "mistral": "E",
+      "anthropic": "E",
+      "gemini": "E",
+      "deepseek": "E",
+      "grok": "E",
+      "consensus": "E",
+      "synth_alone": "E"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 658,
+    "category": "business",
+    "ground_truth": "J",
+    "answers": {
+      "openai": "J",
+      "mistral": "J",
+      "anthropic": "J",
+      "gemini": "J",
+      "deepseek": "J",
+      "grok": "J",
+      "consensus": "J",
+      "synth_alone": "J"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 674,
+    "category": "business",
+    "ground_truth": "D",
+    "answers": {
+      "openai": "D",
+      "mistral": "D",
+      "anthropic": "D",
+      "gemini": "D",
+      "deepseek": "D",
+      "grok": "D",
+      "consensus": "D",
+      "synth_alone": "D"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 686,
+    "category": "business",
+    "ground_truth": "C",
+    "answers": {
+      "openai": "C",
+      "mistral": "C",
+      "anthropic": "C",
+      "gemini": "C",
+      "deepseek": "C",
+      "grok": "C",
+      "consensus": "C",
+      "synth_alone": "C"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 709,
+    "category": "business",
+    "ground_truth": "J",
+    "answers": {
+      "openai": "J",
+      "mistral": "J",
+      "anthropic": "J",
+      "gemini": "J",
+      "deepseek": "J",
+      "grok": "J",
+      "consensus": "J",
+      "synth_alone": "J"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 732,
+    "category": "business",
+    "ground_truth": "A",
+    "answers": {
+      "openai": "A",
+      "mistral": "A",
+      "anthropic": "A",
+      "gemini": "A",
+      "deepseek": "A",
+      "grok": "A",
+      "consensus": "A",
+      "synth_alone": "A"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 740,
+    "category": "business",
+    "ground_truth": "J",
+    "answers": {
+      "openai": "J",
+      "mistral": "J",
+      "anthropic": "J",
+      "gemini": "J",
+      "deepseek": "J",
+      "grok": "J",
+      "consensus": "J",
+      "synth_alone": "J"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 743,
+    "category": "business",
+    "ground_truth": "E",
+    "answers": {
+      "openai": "E",
+      "mistral": "E",
+      "anthropic": "E",
+      "gemini": "E",
+      "deepseek": "E",
+      "grok": "E",
+      "consensus": "E",
+      "synth_alone": "E"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 770,
+    "category": "business",
+    "ground_truth": "A",
+    "answers": {
+      "openai": "A",
+      "mistral": "A",
+      "anthropic": "A",
+      "gemini": "A",
+      "deepseek": "A",
+      "grok": "A",
+      "consensus": "A",
+      "synth_alone": "A"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 788,
+    "category": "business",
+    "ground_truth": "J",
+    "answers": {
+      "openai": "J",
+      "mistral": "J",
+      "anthropic": "J",
+      "gemini": "J",
+      "deepseek": "J",
+      "grok": "J",
+      "consensus": "J",
+      "synth_alone": "J"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 796,
+    "category": "business",
+    "ground_truth": "A",
+    "answers": {
+      "openai": "A",
+      "mistral": "A",
+      "anthropic": "A",
+      "gemini": "A",
+      "deepseek": "A",
+      "grok": "A",
+      "consensus": "A",
+      "synth_alone": "A"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 816,
+    "category": "business",
+    "ground_truth": "F",
+    "answers": {
+      "openai": "F",
+      "mistral": "F",
+      "anthropic": "F",
+      "gemini": "F",
+      "deepseek": "F",
+      "grok": "F",
+      "consensus": "F",
+      "synth_alone": "F"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 912,
+    "category": "law",
+    "ground_truth": "B",
+    "answers": {
+      "openai": "D",
+      "mistral": "D",
+      "anthropic": "D",
+      "gemini": "D",
+      "deepseek": "D",
+      "grok": "D",
+      "consensus": "D",
+      "synth_alone": "D"
+    },
+    "correct": {
+      "openai": false,
+      "mistral": false,
+      "anthropic": false,
+      "gemini": false,
+      "deepseek": false,
+      "grok": false,
+      "consensus": false,
+      "synth_alone": false
+    },
+    "unanimous": true,
+    "all_models_wrong": true,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 1003,
+    "category": "law",
+    "ground_truth": "C",
+    "answers": {
+      "openai": "C",
+      "mistral": "C",
+      "anthropic": "C",
+      "gemini": "C",
+      "deepseek": "C",
+      "grok": "C",
+      "consensus": "C",
+      "synth_alone": "C"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 1062,
+    "category": "law",
+    "ground_truth": "A",
+    "answers": {
+      "openai": "F",
+      "mistral": "F",
+      "anthropic": "A",
+      "gemini": "A",
+      "deepseek": "F",
+      "grok": "F",
+      "consensus": "F",
+      "synth_alone": "A"
+    },
+    "correct": {
+      "openai": false,
+      "mistral": false,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": false,
+      "grok": false,
+      "consensus": false,
+      "synth_alone": true
+    },
+    "unanimous": false,
+    "all_models_wrong": false,
+    "correct_candidate_missed": true
+  },
+  {
+    "question_id": 1101,
+    "category": "law",
+    "ground_truth": "E",
+    "answers": {
+      "openai": "E",
+      "mistral": "E",
+      "anthropic": "E",
+      "gemini": "E",
+      "deepseek": "E",
+      "grok": "E",
+      "consensus": "E",
+      "synth_alone": "E"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 1116,
+    "category": "law",
+    "ground_truth": "A",
+    "answers": {
+      "openai": "A",
+      "mistral": "A",
+      "anthropic": "A",
+      "gemini": "A",
+      "deepseek": "A",
+      "grok": "A",
+      "consensus": "A",
+      "synth_alone": "A"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 1119,
+    "category": "law",
+    "ground_truth": "B",
+    "answers": {
+      "openai": "B",
+      "mistral": "I",
+      "anthropic": "B",
+      "gemini": "B",
+      "deepseek": "B",
+      "grok": "B",
+      "consensus": "B",
+      "synth_alone": "B"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": false,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": false,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 1155,
+    "category": "law",
+    "ground_truth": "G",
+    "answers": {
+      "openai": "G",
+      "mistral": "G",
+      "anthropic": "G",
+      "gemini": "G",
+      "deepseek": "G",
+      "grok": "G",
+      "consensus": "G",
+      "synth_alone": "G"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 1263,
+    "category": "law",
+    "ground_truth": "B",
+    "answers": {
+      "openai": "B",
+      "mistral": "B",
+      "anthropic": "B",
+      "gemini": "B",
+      "deepseek": "B",
+      "grok": "B",
+      "consensus": "B",
+      "synth_alone": "B"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 1280,
+    "category": "law",
+    "ground_truth": "D",
+    "answers": {
+      "openai": "D",
+      "mistral": "D",
+      "anthropic": "D",
+      "gemini": "D",
+      "deepseek": "D",
+      "grok": "D",
+      "consensus": "D",
+      "synth_alone": "D"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 1290,
+    "category": "law",
+    "ground_truth": "A",
+    "answers": {
+      "openai": "A",
+      "mistral": "A",
+      "anthropic": "A",
+      "gemini": "A",
+      "deepseek": "A",
+      "grok": "A",
+      "consensus": "A",
+      "synth_alone": "A"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 1295,
+    "category": "law",
+    "ground_truth": "E",
+    "answers": {
+      "openai": "E",
+      "mistral": "E",
+      "anthropic": "E",
+      "gemini": "E",
+      "deepseek": "E",
+      "grok": "E",
+      "consensus": "E",
+      "synth_alone": "E"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 1348,
+    "category": "law",
+    "ground_truth": "I",
+    "answers": {
+      "openai": "I",
+      "mistral": "I",
+      "anthropic": "I",
+      "gemini": "I",
+      "deepseek": "I",
+      "grok": "I",
+      "consensus": "I",
+      "synth_alone": "I"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 1426,
+    "category": "law",
+    "ground_truth": "B",
+    "answers": {
+      "openai": "B",
+      "mistral": "B",
+      "anthropic": "B",
+      "gemini": "B",
+      "deepseek": "B",
+      "grok": "B",
+      "consensus": "B",
+      "synth_alone": "B"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 1457,
+    "category": "law",
+    "ground_truth": "E",
+    "answers": {
+      "openai": "E",
+      "mistral": "B",
+      "anthropic": "E",
+      "gemini": "E",
+      "deepseek": "E",
+      "grok": "E",
+      "consensus": "E",
+      "synth_alone": "E"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": false,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": false,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 1469,
+    "category": "law",
+    "ground_truth": "I",
+    "answers": {
+      "openai": "I",
+      "mistral": "I",
+      "anthropic": "I",
+      "gemini": "I",
+      "deepseek": "I",
+      "grok": "I",
+      "consensus": "I",
+      "synth_alone": "I"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 1480,
+    "category": "law",
+    "ground_truth": "I",
+    "answers": {
+      "openai": "I",
+      "mistral": "I",
+      "anthropic": "I",
+      "gemini": "I",
+      "deepseek": "I",
+      "grok": "I",
+      "consensus": "I",
+      "synth_alone": "I"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 1486,
+    "category": "law",
+    "ground_truth": "F",
+    "answers": {
+      "openai": "F",
+      "mistral": "F",
+      "anthropic": "F",
+      "gemini": "F",
+      "deepseek": "F",
+      "grok": "F",
+      "consensus": "F",
+      "synth_alone": "F"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 1499,
+    "category": "law",
+    "ground_truth": "D",
+    "answers": {
+      "openai": "D",
+      "mistral": "D",
+      "anthropic": "D",
+      "gemini": "D",
+      "deepseek": "D",
+      "grok": "D",
+      "consensus": "D",
+      "synth_alone": "D"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 1625,
+    "category": "law",
+    "ground_truth": "E",
+    "answers": {
+      "openai": "F",
+      "mistral": "H",
+      "anthropic": "E",
+      "gemini": "E",
+      "deepseek": "F",
+      "grok": "F",
+      "consensus": "E",
+      "synth_alone": "E"
+    },
+    "correct": {
+      "openai": false,
+      "mistral": false,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": false,
+      "grok": false,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": false,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 1707,
+    "category": "law",
+    "ground_truth": "H",
+    "answers": {
+      "openai": "H",
+      "mistral": "F",
+      "anthropic": "H",
+      "gemini": "H",
+      "deepseek": "H",
+      "grok": "H",
+      "consensus": "H",
+      "synth_alone": "H"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": false,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": false,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 1718,
+    "category": "law",
+    "ground_truth": "C",
+    "answers": {
+      "openai": "C",
+      "mistral": "C",
+      "anthropic": "C",
+      "gemini": "C",
+      "deepseek": "C",
+      "grok": "C",
+      "consensus": "C",
+      "synth_alone": "C"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 1811,
+    "category": "law",
+    "ground_truth": "C",
+    "answers": {
+      "openai": "C",
+      "mistral": "C",
+      "anthropic": "C",
+      "gemini": "C",
+      "deepseek": "C",
+      "grok": "C",
+      "consensus": "C",
+      "synth_alone": "C"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 1839,
+    "category": "law",
+    "ground_truth": "B",
+    "answers": {
+      "openai": "B",
+      "mistral": "B",
+      "anthropic": "B",
+      "gemini": "B",
+      "deepseek": "H",
+      "grok": "B",
+      "consensus": "B",
+      "synth_alone": "B"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": false,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": false,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 1854,
+    "category": "law",
+    "ground_truth": "F",
+    "answers": {
+      "openai": "F",
+      "mistral": "F",
+      "anthropic": "G",
+      "gemini": "F",
+      "deepseek": "F",
+      "grok": "B",
+      "consensus": "F",
+      "synth_alone": "F"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": false,
+      "gemini": true,
+      "deepseek": true,
+      "grok": false,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": false,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 1858,
+    "category": "law",
+    "ground_truth": "C",
+    "answers": {
+      "openai": "C",
+      "mistral": "C",
+      "anthropic": "C",
+      "gemini": "C",
+      "deepseek": "C",
+      "grok": "C",
+      "consensus": "C",
+      "synth_alone": "C"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 2064,
+    "category": "psychology",
+    "ground_truth": "E",
+    "answers": {
+      "openai": "E",
+      "mistral": "E",
+      "anthropic": "E",
+      "gemini": "E",
+      "deepseek": "E",
+      "grok": "E",
+      "consensus": "E",
+      "synth_alone": "E"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 2165,
+    "category": "psychology",
+    "ground_truth": "G",
+    "answers": {
+      "openai": "G",
+      "mistral": "G",
+      "anthropic": "G",
+      "gemini": "G",
+      "deepseek": "G",
+      "grok": "G",
+      "consensus": "G",
+      "synth_alone": "G"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 2203,
+    "category": "psychology",
+    "ground_truth": "J",
+    "answers": {
+      "openai": "J",
+      "mistral": "J",
+      "anthropic": "J",
+      "gemini": "J",
+      "deepseek": "J",
+      "grok": "J",
+      "consensus": "J",
+      "synth_alone": "J"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 2263,
+    "category": "psychology",
+    "ground_truth": "H",
+    "answers": {
+      "openai": "H",
+      "mistral": "H",
+      "anthropic": "H",
+      "gemini": "H",
+      "deepseek": "H",
+      "grok": "H",
+      "consensus": "H",
+      "synth_alone": "H"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 2317,
+    "category": "psychology",
+    "ground_truth": "B",
+    "answers": {
+      "openai": "B",
+      "mistral": "B",
+      "anthropic": "B",
+      "gemini": "B",
+      "deepseek": "B",
+      "grok": "B",
+      "consensus": "B",
+      "synth_alone": "B"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 2352,
+    "category": "psychology",
+    "ground_truth": "B",
+    "answers": {
+      "openai": "B",
+      "mistral": "B",
+      "anthropic": "B",
+      "gemini": "B",
+      "deepseek": "B",
+      "grok": "B",
+      "consensus": "B",
+      "synth_alone": "B"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 2354,
+    "category": "psychology",
+    "ground_truth": "D",
+    "answers": {
+      "openai": "D",
+      "mistral": "D",
+      "anthropic": "D",
+      "gemini": "D",
+      "deepseek": "D",
+      "grok": "D",
+      "consensus": "D",
+      "synth_alone": "D"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 2492,
+    "category": "psychology",
+    "ground_truth": "A",
+    "answers": {
+      "openai": "A",
+      "mistral": "C",
+      "anthropic": "A",
+      "gemini": "A",
+      "deepseek": "A",
+      "grok": "A",
+      "consensus": "A",
+      "synth_alone": "A"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": false,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": false,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 2617,
+    "category": "psychology",
+    "ground_truth": "C",
+    "answers": {
+      "openai": "C",
+      "mistral": "C",
+      "anthropic": "C",
+      "gemini": "C",
+      "deepseek": "C",
+      "grok": "C",
+      "consensus": "C",
+      "synth_alone": "C"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 2633,
+    "category": "psychology",
+    "ground_truth": "D",
+    "answers": {
+      "openai": "D",
+      "mistral": "D",
+      "anthropic": "D",
+      "gemini": "D",
+      "deepseek": "D",
+      "grok": "D",
+      "consensus": "D",
+      "synth_alone": "D"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 2667,
+    "category": "psychology",
+    "ground_truth": "J",
+    "answers": {
+      "openai": "J",
+      "mistral": "J",
+      "anthropic": "J",
+      "gemini": "J",
+      "deepseek": "J",
+      "grok": "J",
+      "consensus": "J",
+      "synth_alone": "J"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 2699,
+    "category": "psychology",
+    "ground_truth": "C",
+    "answers": {
+      "openai": "C",
+      "mistral": "C",
+      "anthropic": "C",
+      "gemini": "C",
+      "deepseek": "C",
+      "grok": "C",
+      "consensus": "C",
+      "synth_alone": "C"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 2749,
+    "category": "psychology",
+    "ground_truth": "C",
+    "answers": {
+      "openai": "I",
+      "mistral": "I",
+      "anthropic": "I",
+      "gemini": "I",
+      "deepseek": "I",
+      "grok": "I",
+      "consensus": "I",
+      "synth_alone": "I"
+    },
+    "correct": {
+      "openai": false,
+      "mistral": false,
+      "anthropic": false,
+      "gemini": false,
+      "deepseek": false,
+      "grok": false,
+      "consensus": false,
+      "synth_alone": false
+    },
+    "unanimous": true,
+    "all_models_wrong": true,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 2783,
+    "category": "psychology",
+    "ground_truth": "I",
+    "answers": {
+      "openai": "I",
+      "mistral": "I",
+      "anthropic": "I",
+      "gemini": "I",
+      "deepseek": "I",
+      "grok": "I",
+      "consensus": "I",
+      "synth_alone": "I"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 2803,
+    "category": "psychology",
+    "ground_truth": "C",
+    "answers": {
+      "openai": "C",
+      "mistral": "C",
+      "anthropic": "C",
+      "gemini": "C",
+      "deepseek": "C",
+      "grok": "C",
+      "consensus": "C",
+      "synth_alone": "C"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 2852,
+    "category": "biology",
+    "ground_truth": "C",
+    "answers": {
+      "openai": "C",
+      "mistral": "C",
+      "anthropic": "C",
+      "gemini": "C",
+      "deepseek": "C",
+      "grok": "C",
+      "consensus": "C",
+      "synth_alone": "C"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 2890,
+    "category": "biology",
+    "ground_truth": "E",
+    "answers": {
+      "openai": "E",
+      "mistral": "E",
+      "anthropic": "E",
+      "gemini": "E",
+      "deepseek": "E",
+      "grok": "E",
+      "consensus": "E",
+      "synth_alone": "E"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 2955,
+    "category": "biology",
+    "ground_truth": "G",
+    "answers": {
+      "openai": "G",
+      "mistral": "G",
+      "anthropic": "G",
+      "gemini": "G",
+      "deepseek": "G",
+      "grok": "G",
+      "consensus": "G",
+      "synth_alone": "G"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 2988,
+    "category": "biology",
+    "ground_truth": "C",
+    "answers": {
+      "openai": "C",
+      "mistral": "C",
+      "anthropic": "C",
+      "gemini": "C",
+      "deepseek": "C",
+      "grok": "C",
+      "consensus": "C",
+      "synth_alone": "C"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 3018,
+    "category": "biology",
+    "ground_truth": "C",
+    "answers": {
+      "openai": "C",
+      "mistral": "C",
+      "anthropic": "C",
+      "gemini": "C",
+      "deepseek": "C",
+      "grok": "C",
+      "consensus": "C",
+      "synth_alone": "C"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 3051,
+    "category": "biology",
+    "ground_truth": "C",
+    "answers": {
+      "openai": "C",
+      "mistral": "C",
+      "anthropic": "C",
+      "gemini": "C",
+      "deepseek": "C",
+      "grok": "C",
+      "consensus": "C",
+      "synth_alone": "C"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 3077,
+    "category": "biology",
+    "ground_truth": "E",
+    "answers": {
+      "openai": "E",
+      "mistral": "E",
+      "anthropic": "E",
+      "gemini": "E",
+      "deepseek": "E",
+      "grok": "E",
+      "consensus": "E",
+      "synth_alone": "E"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 3091,
+    "category": "biology",
+    "ground_truth": "G",
+    "answers": {
+      "openai": "G",
+      "mistral": "G",
+      "anthropic": "G",
+      "gemini": "G",
+      "deepseek": "G",
+      "grok": "G",
+      "consensus": "G",
+      "synth_alone": "G"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 3220,
+    "category": "biology",
+    "ground_truth": "I",
+    "answers": {
+      "openai": "I",
+      "mistral": "I",
+      "anthropic": "I",
+      "gemini": "I",
+      "deepseek": "I",
+      "grok": "I",
+      "consensus": "I",
+      "synth_alone": "I"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 3253,
+    "category": "biology",
+    "ground_truth": "I",
+    "answers": {
+      "openai": "I",
+      "mistral": "I",
+      "anthropic": "I",
+      "gemini": "D",
+      "deepseek": "I",
+      "grok": "A",
+      "consensus": "D",
+      "synth_alone": "A"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": false,
+      "deepseek": true,
+      "grok": false,
+      "consensus": false,
+      "synth_alone": false
+    },
+    "unanimous": false,
+    "all_models_wrong": false,
+    "correct_candidate_missed": true
+  },
+  {
+    "question_id": 3275,
+    "category": "biology",
+    "ground_truth": "B",
+    "answers": {
+      "openai": "B",
+      "mistral": "B",
+      "anthropic": "B",
+      "gemini": "B",
+      "deepseek": "B",
+      "grok": "B",
+      "consensus": "B",
+      "synth_alone": "B"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 3281,
+    "category": "biology",
+    "ground_truth": "F",
+    "answers": {
+      "openai": "F",
+      "mistral": "F",
+      "anthropic": "F",
+      "gemini": "F",
+      "deepseek": "F",
+      "grok": "F",
+      "consensus": "F",
+      "synth_alone": "F"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 3316,
+    "category": "biology",
+    "ground_truth": "J",
+    "answers": {
+      "openai": "J",
+      "mistral": "J",
+      "anthropic": "J",
+      "gemini": "J",
+      "deepseek": "J",
+      "grok": "J",
+      "consensus": "J",
+      "synth_alone": "J"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 3355,
+    "category": "biology",
+    "ground_truth": "E",
+    "answers": {
+      "openai": "E",
+      "mistral": "E",
+      "anthropic": "E",
+      "gemini": "E",
+      "deepseek": "E",
+      "grok": "E",
+      "consensus": "E",
+      "synth_alone": "E"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 3358,
+    "category": "biology",
+    "ground_truth": "A",
+    "answers": {
+      "openai": "A",
+      "mistral": "A",
+      "anthropic": "A",
+      "gemini": "A",
+      "deepseek": "A",
+      "grok": "A",
+      "consensus": "A",
+      "synth_alone": "A"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 3370,
+    "category": "biology",
+    "ground_truth": "I",
+    "answers": {
+      "openai": "I",
+      "mistral": "I",
+      "anthropic": "I",
+      "gemini": "B",
+      "deepseek": "I",
+      "grok": "I",
+      "consensus": "I",
+      "synth_alone": "I"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": false,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": false,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 3426,
+    "category": "biology",
+    "ground_truth": "B",
+    "answers": {
+      "openai": "B",
+      "mistral": "B",
+      "anthropic": "B",
+      "gemini": "B",
+      "deepseek": "B",
+      "grok": "B",
+      "consensus": "B",
+      "synth_alone": "B"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 3433,
+    "category": "biology",
+    "ground_truth": "B",
+    "answers": {
+      "openai": "B",
+      "mistral": "B",
+      "anthropic": "B",
+      "gemini": "B",
+      "deepseek": "B",
+      "grok": "B",
+      "consensus": "B",
+      "synth_alone": "B"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 3451,
+    "category": "biology",
+    "ground_truth": "D",
+    "answers": {
+      "openai": "D",
+      "mistral": "D",
+      "anthropic": "D",
+      "gemini": "D",
+      "deepseek": "D",
+      "grok": "D",
+      "consensus": "D",
+      "synth_alone": "D"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 3541,
+    "category": "chemistry",
+    "ground_truth": "C",
+    "answers": {
+      "openai": "C",
+      "mistral": "C",
+      "anthropic": "C",
+      "gemini": "C",
+      "deepseek": "C",
+      "grok": "C",
+      "consensus": "C",
+      "synth_alone": "C"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 3542,
+    "category": "chemistry",
+    "ground_truth": "A",
+    "answers": {
+      "openai": "B",
+      "mistral": "B",
+      "anthropic": "B",
+      "gemini": null,
+      "deepseek": null,
+      "grok": "B",
+      "consensus": "B",
+      "synth_alone": "J"
+    },
+    "correct": {
+      "openai": false,
+      "mistral": false,
+      "anthropic": false,
+      "gemini": false,
+      "deepseek": false,
+      "grok": false,
+      "consensus": false,
+      "synth_alone": false
+    },
+    "unanimous": false,
+    "all_models_wrong": true,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 3594,
+    "category": "chemistry",
+    "ground_truth": "J",
+    "answers": {
+      "openai": "J",
+      "mistral": "J",
+      "anthropic": "J",
+      "gemini": "J",
+      "deepseek": "J",
+      "grok": "J",
+      "consensus": "J",
+      "synth_alone": "J"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 3678,
+    "category": "chemistry",
+    "ground_truth": "C",
+    "answers": {
+      "openai": "C",
+      "mistral": "C",
+      "anthropic": "C",
+      "gemini": "C",
+      "deepseek": "C",
+      "grok": "C",
+      "consensus": "C",
+      "synth_alone": "C"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 3797,
+    "category": "chemistry",
+    "ground_truth": "B",
+    "answers": {
+      "openai": "G",
+      "mistral": "G",
+      "anthropic": "G",
+      "gemini": "G",
+      "deepseek": "G",
+      "grok": "G",
+      "consensus": "G",
+      "synth_alone": "G"
+    },
+    "correct": {
+      "openai": false,
+      "mistral": false,
+      "anthropic": false,
+      "gemini": false,
+      "deepseek": false,
+      "grok": false,
+      "consensus": false,
+      "synth_alone": false
+    },
+    "unanimous": true,
+    "all_models_wrong": true,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 3810,
+    "category": "chemistry",
+    "ground_truth": "H",
+    "answers": {
+      "openai": "H",
+      "mistral": "H",
+      "anthropic": "H",
+      "gemini": "H",
+      "deepseek": "H",
+      "grok": "H",
+      "consensus": "H",
+      "synth_alone": "H"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 3839,
+    "category": "chemistry",
+    "ground_truth": "C",
+    "answers": {
+      "openai": "C",
+      "mistral": "C",
+      "anthropic": "C",
+      "gemini": "C",
+      "deepseek": "C",
+      "grok": "C",
+      "consensus": "C",
+      "synth_alone": "C"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 3844,
+    "category": "chemistry",
+    "ground_truth": "F",
+    "answers": {
+      "openai": "F",
+      "mistral": "F",
+      "anthropic": "F",
+      "gemini": "F",
+      "deepseek": "F",
+      "grok": "F",
+      "consensus": "F",
+      "synth_alone": "F"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 3895,
+    "category": "chemistry",
+    "ground_truth": "E",
+    "answers": {
+      "openai": "E",
+      "mistral": "E",
+      "anthropic": "E",
+      "gemini": "E",
+      "deepseek": "E",
+      "grok": "J",
+      "consensus": "E",
+      "synth_alone": "E"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": false,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": false,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 3915,
+    "category": "chemistry",
+    "ground_truth": "C",
+    "answers": {
+      "openai": "C",
+      "mistral": "C",
+      "anthropic": "C",
+      "gemini": "C",
+      "deepseek": "C",
+      "grok": "C",
+      "consensus": "C",
+      "synth_alone": "C"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 3919,
+    "category": "chemistry",
+    "ground_truth": "I",
+    "answers": {
+      "openai": "I",
+      "mistral": "I",
+      "anthropic": "I",
+      "gemini": "I",
+      "deepseek": "I",
+      "grok": "I",
+      "consensus": "I",
+      "synth_alone": "I"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 3971,
+    "category": "chemistry",
+    "ground_truth": "E",
+    "answers": {
+      "openai": "E",
+      "mistral": "E",
+      "anthropic": "E",
+      "gemini": "E",
+      "deepseek": "E",
+      "grok": "E",
+      "consensus": "E",
+      "synth_alone": "E"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 3978,
+    "category": "chemistry",
+    "ground_truth": "B",
+    "answers": {
+      "openai": "B",
+      "mistral": "C",
+      "anthropic": "C",
+      "gemini": "B",
+      "deepseek": "C",
+      "grok": "B",
+      "consensus": "B",
+      "synth_alone": "B"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": false,
+      "anthropic": false,
+      "gemini": true,
+      "deepseek": false,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": false,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 4007,
+    "category": "chemistry",
+    "ground_truth": "B",
+    "answers": {
+      "openai": "B",
+      "mistral": "B",
+      "anthropic": "B",
+      "gemini": "B",
+      "deepseek": "B",
+      "grok": "B",
+      "consensus": "B",
+      "synth_alone": "B"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 4092,
+    "category": "chemistry",
+    "ground_truth": "F",
+    "answers": {
+      "openai": "F",
+      "mistral": "F",
+      "anthropic": "F",
+      "gemini": "F",
+      "deepseek": "F",
+      "grok": "F",
+      "consensus": "F",
+      "synth_alone": "F"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 4097,
+    "category": "chemistry",
+    "ground_truth": "H",
+    "answers": {
+      "openai": "H",
+      "mistral": "D",
+      "anthropic": "D",
+      "gemini": "H",
+      "deepseek": "H",
+      "grok": "C",
+      "consensus": "H",
+      "synth_alone": "H"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": false,
+      "anthropic": false,
+      "gemini": true,
+      "deepseek": true,
+      "grok": false,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": false,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 4214,
+    "category": "chemistry",
+    "ground_truth": "J",
+    "answers": {
+      "openai": "J",
+      "mistral": "J",
+      "anthropic": "J",
+      "gemini": "J",
+      "deepseek": "J",
+      "grok": "J",
+      "consensus": "J",
+      "synth_alone": "J"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 4225,
+    "category": "chemistry",
+    "ground_truth": "G",
+    "answers": {
+      "openai": "G",
+      "mistral": "G",
+      "anthropic": "G",
+      "gemini": "G",
+      "deepseek": "G",
+      "grok": "G",
+      "consensus": "G",
+      "synth_alone": "G"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 4272,
+    "category": "chemistry",
+    "ground_truth": "A",
+    "answers": {
+      "openai": "I",
+      "mistral": "D",
+      "anthropic": "I",
+      "gemini": "I",
+      "deepseek": "D",
+      "grok": "I",
+      "consensus": "I",
+      "synth_alone": "I"
+    },
+    "correct": {
+      "openai": false,
+      "mistral": false,
+      "anthropic": false,
+      "gemini": false,
+      "deepseek": false,
+      "grok": false,
+      "consensus": false,
+      "synth_alone": false
+    },
+    "unanimous": false,
+    "all_models_wrong": true,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 4350,
+    "category": "chemistry",
+    "ground_truth": "B",
+    "answers": {
+      "openai": "B",
+      "mistral": "B",
+      "anthropic": "B",
+      "gemini": "B",
+      "deepseek": "B",
+      "grok": "B",
+      "consensus": "B",
+      "synth_alone": "B"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 4391,
+    "category": "chemistry",
+    "ground_truth": "E",
+    "answers": {
+      "openai": "E",
+      "mistral": "E",
+      "anthropic": "E",
+      "gemini": "E",
+      "deepseek": "E",
+      "grok": "E",
+      "consensus": "E",
+      "synth_alone": "E"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 4445,
+    "category": "chemistry",
+    "ground_truth": "B",
+    "answers": {
+      "openai": "B",
+      "mistral": "B",
+      "anthropic": "B",
+      "gemini": "B",
+      "deepseek": "B",
+      "grok": "B",
+      "consensus": "B",
+      "synth_alone": "B"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 4456,
+    "category": "chemistry",
+    "ground_truth": "H",
+    "answers": {
+      "openai": "H",
+      "mistral": "H",
+      "anthropic": "H",
+      "gemini": "H",
+      "deepseek": "H",
+      "grok": "H",
+      "consensus": "H",
+      "synth_alone": "H"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 4556,
+    "category": "chemistry",
+    "ground_truth": "C",
+    "answers": {
+      "openai": "C",
+      "mistral": "C",
+      "anthropic": "C",
+      "gemini": "C",
+      "deepseek": null,
+      "grok": "C",
+      "consensus": "C",
+      "synth_alone": "C"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": false,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": false,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 4611,
+    "category": "chemistry",
+    "ground_truth": "G",
+    "answers": {
+      "openai": "G",
+      "mistral": "G",
+      "anthropic": "G",
+      "gemini": "G",
+      "deepseek": "G",
+      "grok": "G",
+      "consensus": "G",
+      "synth_alone": "G"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 4614,
+    "category": "chemistry",
+    "ground_truth": "I",
+    "answers": {
+      "openai": "I",
+      "mistral": "I",
+      "anthropic": "I",
+      "gemini": "I",
+      "deepseek": "I",
+      "grok": "I",
+      "consensus": "I",
+      "synth_alone": "I"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 4623,
+    "category": "chemistry",
+    "ground_truth": "G",
+    "answers": {
+      "openai": "G",
+      "mistral": "G",
+      "anthropic": "G",
+      "gemini": "G",
+      "deepseek": "G",
+      "grok": "G",
+      "consensus": "G",
+      "synth_alone": "G"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 4685,
+    "category": "history",
+    "ground_truth": "A",
+    "answers": {
+      "openai": "F",
+      "mistral": "F",
+      "anthropic": "A",
+      "gemini": "A",
+      "deepseek": "I",
+      "grok": "A",
+      "consensus": "A",
+      "synth_alone": "A"
+    },
+    "correct": {
+      "openai": false,
+      "mistral": false,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": false,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": false,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 4692,
+    "category": "history",
+    "ground_truth": "B",
+    "answers": {
+      "openai": "B",
+      "mistral": "B",
+      "anthropic": "B",
+      "gemini": "B",
+      "deepseek": "B",
+      "grok": "B",
+      "consensus": "B",
+      "synth_alone": "B"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 4705,
+    "category": "history",
+    "ground_truth": "H",
+    "answers": {
+      "openai": "H",
+      "mistral": "H",
+      "anthropic": "H",
+      "gemini": "H",
+      "deepseek": "H",
+      "grok": "H",
+      "consensus": "H",
+      "synth_alone": "H"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 4728,
+    "category": "history",
+    "ground_truth": "G",
+    "answers": {
+      "openai": "G",
+      "mistral": "G",
+      "anthropic": "G",
+      "gemini": "J",
+      "deepseek": "G",
+      "grok": "G",
+      "consensus": "G",
+      "synth_alone": "I"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": false,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": false
+    },
+    "unanimous": false,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 4752,
+    "category": "history",
+    "ground_truth": "A",
+    "answers": {
+      "openai": "C",
+      "mistral": "C",
+      "anthropic": "C",
+      "gemini": "C",
+      "deepseek": "C",
+      "grok": "C",
+      "consensus": "C",
+      "synth_alone": "C"
+    },
+    "correct": {
+      "openai": false,
+      "mistral": false,
+      "anthropic": false,
+      "gemini": false,
+      "deepseek": false,
+      "grok": false,
+      "consensus": false,
+      "synth_alone": false
+    },
+    "unanimous": true,
+    "all_models_wrong": true,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 4771,
+    "category": "history",
+    "ground_truth": "A",
+    "answers": {
+      "openai": "A",
+      "mistral": "A",
+      "anthropic": "A",
+      "gemini": "A",
+      "deepseek": "H",
+      "grok": "A",
+      "consensus": "A",
+      "synth_alone": "A"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": false,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": false,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 4782,
+    "category": "history",
+    "ground_truth": "I",
+    "answers": {
+      "openai": "I",
+      "mistral": "I",
+      "anthropic": "I",
+      "gemini": "I",
+      "deepseek": "I",
+      "grok": "I",
+      "consensus": "I",
+      "synth_alone": "I"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 4785,
+    "category": "history",
+    "ground_truth": "D",
+    "answers": {
+      "openai": "D",
+      "mistral": "I",
+      "anthropic": "D",
+      "gemini": "D",
+      "deepseek": "D",
+      "grok": "D",
+      "consensus": "D",
+      "synth_alone": "D"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": false,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": false,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 4786,
+    "category": "history",
+    "ground_truth": "I",
+    "answers": {
+      "openai": "I",
+      "mistral": "I",
+      "anthropic": "I",
+      "gemini": "I",
+      "deepseek": "I",
+      "grok": "I",
+      "consensus": "I",
+      "synth_alone": "I"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 4788,
+    "category": "history",
+    "ground_truth": "C",
+    "answers": {
+      "openai": "C",
+      "mistral": "C",
+      "anthropic": "C",
+      "gemini": "C",
+      "deepseek": "C",
+      "grok": "C",
+      "consensus": "C",
+      "synth_alone": "C"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 4789,
+    "category": "history",
+    "ground_truth": "B",
+    "answers": {
+      "openai": "B",
+      "mistral": "G",
+      "anthropic": "B",
+      "gemini": "B",
+      "deepseek": "B",
+      "grok": "B",
+      "consensus": "B",
+      "synth_alone": "B"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": false,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": false,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 4794,
+    "category": "history",
+    "ground_truth": "C",
+    "answers": {
+      "openai": "C",
+      "mistral": "C",
+      "anthropic": "C",
+      "gemini": "C",
+      "deepseek": "C",
+      "grok": "C",
+      "consensus": "C",
+      "synth_alone": "C"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 4800,
+    "category": "history",
+    "ground_truth": "I",
+    "answers": {
+      "openai": "J",
+      "mistral": "J",
+      "anthropic": "J",
+      "gemini": "J",
+      "deepseek": "J",
+      "grok": "J",
+      "consensus": "J",
+      "synth_alone": "J"
+    },
+    "correct": {
+      "openai": false,
+      "mistral": false,
+      "anthropic": false,
+      "gemini": false,
+      "deepseek": false,
+      "grok": false,
+      "consensus": false,
+      "synth_alone": false
+    },
+    "unanimous": true,
+    "all_models_wrong": true,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 4825,
+    "category": "history",
+    "ground_truth": "I",
+    "answers": {
+      "openai": "E",
+      "mistral": "I",
+      "anthropic": "I",
+      "gemini": "E",
+      "deepseek": "I",
+      "grok": "E",
+      "consensus": "E",
+      "synth_alone": "E"
+    },
+    "correct": {
+      "openai": false,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": false,
+      "deepseek": true,
+      "grok": false,
+      "consensus": false,
+      "synth_alone": false
+    },
+    "unanimous": false,
+    "all_models_wrong": false,
+    "correct_candidate_missed": true
+  },
+  {
+    "question_id": 4891,
+    "category": "history",
+    "ground_truth": "F",
+    "answers": {
+      "openai": "F",
+      "mistral": "D",
+      "anthropic": "F",
+      "gemini": "F",
+      "deepseek": "F",
+      "grok": "F",
+      "consensus": "F",
+      "synth_alone": "F"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": false,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": false,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 4895,
+    "category": "history",
+    "ground_truth": "A",
+    "answers": {
+      "openai": "A",
+      "mistral": "A",
+      "anthropic": "A",
+      "gemini": "A",
+      "deepseek": "A",
+      "grok": "A",
+      "consensus": "A",
+      "synth_alone": "A"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 4903,
+    "category": "history",
+    "ground_truth": "D",
+    "answers": {
+      "openai": "D",
+      "mistral": "D",
+      "anthropic": "D",
+      "gemini": "D",
+      "deepseek": "D",
+      "grok": "D",
+      "consensus": "D",
+      "synth_alone": "D"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 4936,
+    "category": "history",
+    "ground_truth": "C",
+    "answers": {
+      "openai": "C",
+      "mistral": "H",
+      "anthropic": "C",
+      "gemini": "H",
+      "deepseek": "C",
+      "grok": "C",
+      "consensus": "C",
+      "synth_alone": "C"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": false,
+      "anthropic": true,
+      "gemini": false,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": false,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 4937,
+    "category": "history",
+    "ground_truth": "I",
+    "answers": {
+      "openai": "I",
+      "mistral": "I",
+      "anthropic": "I",
+      "gemini": "I",
+      "deepseek": "I",
+      "grok": null,
+      "consensus": "I",
+      "synth_alone": "I"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": false,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": false,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 5014,
+    "category": "history",
+    "ground_truth": "D",
+    "answers": {
+      "openai": "D",
+      "mistral": "D",
+      "anthropic": "D",
+      "gemini": "D",
+      "deepseek": "D",
+      "grok": "D",
+      "consensus": "D",
+      "synth_alone": "D"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 5016,
+    "category": "history",
+    "ground_truth": "E",
+    "answers": {
+      "openai": "E",
+      "mistral": "E",
+      "anthropic": "E",
+      "gemini": "E",
+      "deepseek": "E",
+      "grok": "E",
+      "consensus": "E",
+      "synth_alone": "E"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 5050,
+    "category": "history",
+    "ground_truth": "G",
+    "answers": {
+      "openai": "G",
+      "mistral": "G",
+      "anthropic": "G",
+      "gemini": "G",
+      "deepseek": "G",
+      "grok": "G",
+      "consensus": "G",
+      "synth_alone": "G"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 5091,
+    "category": "other",
+    "ground_truth": "A",
+    "answers": {
+      "openai": "A",
+      "mistral": "A",
+      "anthropic": "A",
+      "gemini": "A",
+      "deepseek": "A",
+      "grok": "A",
+      "consensus": "A",
+      "synth_alone": "A"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 5100,
+    "category": "other",
+    "ground_truth": "H",
+    "answers": {
+      "openai": "H",
+      "mistral": "H",
+      "anthropic": "H",
+      "gemini": "H",
+      "deepseek": "H",
+      "grok": "H",
+      "consensus": "H",
+      "synth_alone": "H"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 5293,
+    "category": "other",
+    "ground_truth": "E",
+    "answers": {
+      "openai": "E",
+      "mistral": "E",
+      "anthropic": "E",
+      "gemini": "C",
+      "deepseek": "E",
+      "grok": "E",
+      "consensus": "E",
+      "synth_alone": "C"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": false,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": false
+    },
+    "unanimous": false,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 5350,
+    "category": "other",
+    "ground_truth": "I",
+    "answers": {
+      "openai": "I",
+      "mistral": "I",
+      "anthropic": "I",
+      "gemini": "I",
+      "deepseek": "I",
+      "grok": "I",
+      "consensus": "I",
+      "synth_alone": "I"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 5355,
+    "category": "other",
+    "ground_truth": "C",
+    "answers": {
+      "openai": "A",
+      "mistral": "C",
+      "anthropic": "A",
+      "gemini": "A",
+      "deepseek": "C",
+      "grok": "C",
+      "consensus": "A",
+      "synth_alone": "A"
+    },
+    "correct": {
+      "openai": false,
+      "mistral": true,
+      "anthropic": false,
+      "gemini": false,
+      "deepseek": true,
+      "grok": true,
+      "consensus": false,
+      "synth_alone": false
+    },
+    "unanimous": false,
+    "all_models_wrong": false,
+    "correct_candidate_missed": true
+  },
+  {
+    "question_id": 5362,
+    "category": "other",
+    "ground_truth": "A",
+    "answers": {
+      "openai": "A",
+      "mistral": "A",
+      "anthropic": "A",
+      "gemini": "A",
+      "deepseek": "A",
+      "grok": "A",
+      "consensus": "A",
+      "synth_alone": "A"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 5419,
+    "category": "other",
+    "ground_truth": "F",
+    "answers": {
+      "openai": "F",
+      "mistral": "F",
+      "anthropic": "F",
+      "gemini": "F",
+      "deepseek": "F",
+      "grok": "F",
+      "consensus": "F",
+      "synth_alone": "F"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 5444,
+    "category": "other",
+    "ground_truth": "E",
+    "answers": {
+      "openai": "H",
+      "mistral": "I",
+      "anthropic": "J",
+      "gemini": "I",
+      "deepseek": "I",
+      "grok": "I",
+      "consensus": "I",
+      "synth_alone": "I"
+    },
+    "correct": {
+      "openai": false,
+      "mistral": false,
+      "anthropic": false,
+      "gemini": false,
+      "deepseek": false,
+      "grok": false,
+      "consensus": false,
+      "synth_alone": false
+    },
+    "unanimous": false,
+    "all_models_wrong": true,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 5466,
+    "category": "other",
+    "ground_truth": "A",
+    "answers": {
+      "openai": "A",
+      "mistral": "A",
+      "anthropic": "A",
+      "gemini": "A",
+      "deepseek": "A",
+      "grok": "A",
+      "consensus": "A",
+      "synth_alone": "A"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 5504,
+    "category": "other",
+    "ground_truth": "C",
+    "answers": {
+      "openai": "C",
+      "mistral": "C",
+      "anthropic": "C",
+      "gemini": "C",
+      "deepseek": "C",
+      "grok": "C",
+      "consensus": "C",
+      "synth_alone": "C"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 5505,
+    "category": "other",
+    "ground_truth": "B",
+    "answers": {
+      "openai": "B",
+      "mistral": "B",
+      "anthropic": "B",
+      "gemini": "B",
+      "deepseek": "B",
+      "grok": "B",
+      "consensus": "B",
+      "synth_alone": "B"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 5568,
+    "category": "other",
+    "ground_truth": "E",
+    "answers": {
+      "openai": "I",
+      "mistral": "I",
+      "anthropic": "I",
+      "gemini": "I",
+      "deepseek": "I",
+      "grok": "I",
+      "consensus": "I",
+      "synth_alone": "I"
+    },
+    "correct": {
+      "openai": false,
+      "mistral": false,
+      "anthropic": false,
+      "gemini": false,
+      "deepseek": false,
+      "grok": false,
+      "consensus": false,
+      "synth_alone": false
+    },
+    "unanimous": true,
+    "all_models_wrong": true,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 5645,
+    "category": "other",
+    "ground_truth": "E",
+    "answers": {
+      "openai": "E",
+      "mistral": "E",
+      "anthropic": "E",
+      "gemini": "E",
+      "deepseek": "E",
+      "grok": "E",
+      "consensus": "E",
+      "synth_alone": "E"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 5649,
+    "category": "other",
+    "ground_truth": "A",
+    "answers": {
+      "openai": "C",
+      "mistral": "D",
+      "anthropic": "B",
+      "gemini": "D",
+      "deepseek": "C",
+      "grok": "D",
+      "consensus": "B",
+      "synth_alone": "D"
+    },
+    "correct": {
+      "openai": false,
+      "mistral": false,
+      "anthropic": false,
+      "gemini": false,
+      "deepseek": false,
+      "grok": false,
+      "consensus": false,
+      "synth_alone": false
+    },
+    "unanimous": false,
+    "all_models_wrong": true,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 5762,
+    "category": "other",
+    "ground_truth": "B",
+    "answers": {
+      "openai": "B",
+      "mistral": "B",
+      "anthropic": "B",
+      "gemini": "B",
+      "deepseek": "B",
+      "grok": "B",
+      "consensus": "B",
+      "synth_alone": "B"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 5864,
+    "category": "other",
+    "ground_truth": "C",
+    "answers": {
+      "openai": "A",
+      "mistral": "A",
+      "anthropic": "A",
+      "gemini": "A",
+      "deepseek": "A",
+      "grok": "A",
+      "consensus": "A",
+      "synth_alone": "A"
+    },
+    "correct": {
+      "openai": false,
+      "mistral": false,
+      "anthropic": false,
+      "gemini": false,
+      "deepseek": false,
+      "grok": false,
+      "consensus": false,
+      "synth_alone": false
+    },
+    "unanimous": true,
+    "all_models_wrong": true,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 5902,
+    "category": "other",
+    "ground_truth": "I",
+    "answers": {
+      "openai": "I",
+      "mistral": "I",
+      "anthropic": "I",
+      "gemini": "I",
+      "deepseek": "I",
+      "grok": "I",
+      "consensus": "I",
+      "synth_alone": "I"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 5942,
+    "category": "other",
+    "ground_truth": "G",
+    "answers": {
+      "openai": "G",
+      "mistral": "G",
+      "anthropic": "G",
+      "gemini": "G",
+      "deepseek": "G",
+      "grok": "G",
+      "consensus": "G",
+      "synth_alone": "G"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 5998,
+    "category": "other",
+    "ground_truth": "B",
+    "answers": {
+      "openai": "B",
+      "mistral": "B",
+      "anthropic": "B",
+      "gemini": "B",
+      "deepseek": "B",
+      "grok": "B",
+      "consensus": "B",
+      "synth_alone": "B"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 6018,
+    "category": "health",
+    "ground_truth": "H",
+    "answers": {
+      "openai": "A",
+      "mistral": "A",
+      "anthropic": "H",
+      "gemini": "H",
+      "deepseek": "A",
+      "grok": "H",
+      "consensus": "A",
+      "synth_alone": "A"
+    },
+    "correct": {
+      "openai": false,
+      "mistral": false,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": false,
+      "grok": true,
+      "consensus": false,
+      "synth_alone": false
+    },
+    "unanimous": false,
+    "all_models_wrong": false,
+    "correct_candidate_missed": true
+  },
+  {
+    "question_id": 6035,
+    "category": "health",
+    "ground_truth": "B",
+    "answers": {
+      "openai": "B",
+      "mistral": "B",
+      "anthropic": "B",
+      "gemini": "B",
+      "deepseek": "B",
+      "grok": "B",
+      "consensus": "B",
+      "synth_alone": "B"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 6051,
+    "category": "health",
+    "ground_truth": "F",
+    "answers": {
+      "openai": "F",
+      "mistral": "F",
+      "anthropic": "F",
+      "gemini": "F",
+      "deepseek": "F",
+      "grok": "F",
+      "consensus": "F",
+      "synth_alone": "F"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 6085,
+    "category": "health",
+    "ground_truth": "H",
+    "answers": {
+      "openai": "H",
+      "mistral": "H",
+      "anthropic": "H",
+      "gemini": "H",
+      "deepseek": "H",
+      "grok": "H",
+      "consensus": "H",
+      "synth_alone": "H"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 6324,
+    "category": "health",
+    "ground_truth": "A",
+    "answers": {
+      "openai": "A",
+      "mistral": "A",
+      "anthropic": "A",
+      "gemini": "A",
+      "deepseek": "A",
+      "grok": "A",
+      "consensus": "A",
+      "synth_alone": "A"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 6368,
+    "category": "health",
+    "ground_truth": "B",
+    "answers": {
+      "openai": "B",
+      "mistral": "B",
+      "anthropic": "B",
+      "gemini": "B",
+      "deepseek": "B",
+      "grok": "B",
+      "consensus": "B",
+      "synth_alone": "B"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 6376,
+    "category": "health",
+    "ground_truth": "E",
+    "answers": {
+      "openai": "E",
+      "mistral": "E",
+      "anthropic": "E",
+      "gemini": "E",
+      "deepseek": "E",
+      "grok": "E",
+      "consensus": "E",
+      "synth_alone": "E"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 6452,
+    "category": "health",
+    "ground_truth": "F",
+    "answers": {
+      "openai": "F",
+      "mistral": "F",
+      "anthropic": "F",
+      "gemini": "F",
+      "deepseek": "F",
+      "grok": "F",
+      "consensus": "F",
+      "synth_alone": "F"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 6471,
+    "category": "health",
+    "ground_truth": "E",
+    "answers": {
+      "openai": "E",
+      "mistral": "E",
+      "anthropic": "C",
+      "gemini": "C",
+      "deepseek": "C",
+      "grok": "C",
+      "consensus": "C",
+      "synth_alone": "C"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": false,
+      "gemini": false,
+      "deepseek": false,
+      "grok": false,
+      "consensus": false,
+      "synth_alone": false
+    },
+    "unanimous": false,
+    "all_models_wrong": false,
+    "correct_candidate_missed": true
+  },
+  {
+    "question_id": 6481,
+    "category": "health",
+    "ground_truth": "E",
+    "answers": {
+      "openai": "E",
+      "mistral": "E",
+      "anthropic": "E",
+      "gemini": "E",
+      "deepseek": "E",
+      "grok": "E",
+      "consensus": "E",
+      "synth_alone": "E"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 6487,
+    "category": "health",
+    "ground_truth": "B",
+    "answers": {
+      "openai": "B",
+      "mistral": "B",
+      "anthropic": "B",
+      "gemini": "B",
+      "deepseek": "B",
+      "grok": "B",
+      "consensus": "B",
+      "synth_alone": "B"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 6515,
+    "category": "health",
+    "ground_truth": "B",
+    "answers": {
+      "openai": "B",
+      "mistral": "B",
+      "anthropic": "B",
+      "gemini": "B",
+      "deepseek": "B",
+      "grok": "B",
+      "consensus": "B",
+      "synth_alone": "B"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 6520,
+    "category": "health",
+    "ground_truth": "D",
+    "answers": {
+      "openai": "D",
+      "mistral": "D",
+      "anthropic": "D",
+      "gemini": "D",
+      "deepseek": "D",
+      "grok": "D",
+      "consensus": "D",
+      "synth_alone": "D"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 6533,
+    "category": "health",
+    "ground_truth": "E",
+    "answers": {
+      "openai": "E",
+      "mistral": "E",
+      "anthropic": "E",
+      "gemini": "E",
+      "deepseek": "E",
+      "grok": "E",
+      "consensus": "E",
+      "synth_alone": "E"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 6606,
+    "category": "health",
+    "ground_truth": "C",
+    "answers": {
+      "openai": "C",
+      "mistral": "C",
+      "anthropic": "C",
+      "gemini": "C",
+      "deepseek": "C",
+      "grok": "C",
+      "consensus": "C",
+      "synth_alone": "C"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 6613,
+    "category": "health",
+    "ground_truth": "I",
+    "answers": {
+      "openai": "I",
+      "mistral": "I",
+      "anthropic": "I",
+      "gemini": "I",
+      "deepseek": "I",
+      "grok": "I",
+      "consensus": "I",
+      "synth_alone": "I"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 6652,
+    "category": "health",
+    "ground_truth": "E",
+    "answers": {
+      "openai": "E",
+      "mistral": "A",
+      "anthropic": "E",
+      "gemini": "A",
+      "deepseek": "A",
+      "grok": "E",
+      "consensus": "A",
+      "synth_alone": "E"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": false,
+      "anthropic": true,
+      "gemini": false,
+      "deepseek": false,
+      "grok": true,
+      "consensus": false,
+      "synth_alone": true
+    },
+    "unanimous": false,
+    "all_models_wrong": false,
+    "correct_candidate_missed": true
+  },
+  {
+    "question_id": 6810,
+    "category": "health",
+    "ground_truth": "F",
+    "answers": {
+      "openai": "F",
+      "mistral": "J",
+      "anthropic": "G",
+      "gemini": "F",
+      "deepseek": "I",
+      "grok": "G",
+      "consensus": "F",
+      "synth_alone": "F"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": false,
+      "anthropic": false,
+      "gemini": true,
+      "deepseek": false,
+      "grok": false,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": false,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 6822,
+    "category": "health",
+    "ground_truth": "C",
+    "answers": {
+      "openai": "C",
+      "mistral": "C",
+      "anthropic": "C",
+      "gemini": "C",
+      "deepseek": "C",
+      "grok": "C",
+      "consensus": "C",
+      "synth_alone": "C"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 6827,
+    "category": "economics",
+    "ground_truth": "A",
+    "answers": {
+      "openai": "A",
+      "mistral": "I",
+      "anthropic": "A",
+      "gemini": "A",
+      "deepseek": "A",
+      "grok": "A",
+      "consensus": "A",
+      "synth_alone": "A"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": false,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": false,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 6829,
+    "category": "economics",
+    "ground_truth": "I",
+    "answers": {
+      "openai": "I",
+      "mistral": "I",
+      "anthropic": "I",
+      "gemini": "I",
+      "deepseek": "I",
+      "grok": "I",
+      "consensus": "I",
+      "synth_alone": "I"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 6858,
+    "category": "economics",
+    "ground_truth": "C",
+    "answers": {
+      "openai": "C",
+      "mistral": "C",
+      "anthropic": "C",
+      "gemini": "C",
+      "deepseek": "C",
+      "grok": "C",
+      "consensus": "C",
+      "synth_alone": "C"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 6901,
+    "category": "economics",
+    "ground_truth": "B",
+    "answers": {
+      "openai": "B",
+      "mistral": "B",
+      "anthropic": "B",
+      "gemini": "B",
+      "deepseek": "B",
+      "grok": "B",
+      "consensus": "B",
+      "synth_alone": "B"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 6913,
+    "category": "economics",
+    "ground_truth": "C",
+    "answers": {
+      "openai": "C",
+      "mistral": "C",
+      "anthropic": "C",
+      "gemini": "C",
+      "deepseek": "C",
+      "grok": "C",
+      "consensus": "C",
+      "synth_alone": "C"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 6927,
+    "category": "economics",
+    "ground_truth": "E",
+    "answers": {
+      "openai": "E",
+      "mistral": "E",
+      "anthropic": "E",
+      "gemini": "E",
+      "deepseek": "E",
+      "grok": "E",
+      "consensus": "E",
+      "synth_alone": "E"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 6937,
+    "category": "economics",
+    "ground_truth": "E",
+    "answers": {
+      "openai": "D",
+      "mistral": "G",
+      "anthropic": "D",
+      "gemini": "D",
+      "deepseek": "G",
+      "grok": "E",
+      "consensus": "D",
+      "synth_alone": "D"
+    },
+    "correct": {
+      "openai": false,
+      "mistral": false,
+      "anthropic": false,
+      "gemini": false,
+      "deepseek": false,
+      "grok": true,
+      "consensus": false,
+      "synth_alone": false
+    },
+    "unanimous": false,
+    "all_models_wrong": false,
+    "correct_candidate_missed": true
+  },
+  {
+    "question_id": 6944,
+    "category": "economics",
+    "ground_truth": "A",
+    "answers": {
+      "openai": "A",
+      "mistral": "A",
+      "anthropic": "A",
+      "gemini": "A",
+      "deepseek": "A",
+      "grok": "A",
+      "consensus": "A",
+      "synth_alone": "A"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 7059,
+    "category": "economics",
+    "ground_truth": "I",
+    "answers": {
+      "openai": "H",
+      "mistral": "I",
+      "anthropic": "F",
+      "gemini": "I",
+      "deepseek": "H",
+      "grok": "I",
+      "consensus": "H",
+      "synth_alone": "I"
+    },
+    "correct": {
+      "openai": false,
+      "mistral": true,
+      "anthropic": false,
+      "gemini": true,
+      "deepseek": false,
+      "grok": true,
+      "consensus": false,
+      "synth_alone": true
+    },
+    "unanimous": false,
+    "all_models_wrong": false,
+    "correct_candidate_missed": true
+  },
+  {
+    "question_id": 7082,
+    "category": "economics",
+    "ground_truth": "J",
+    "answers": {
+      "openai": "B",
+      "mistral": "J",
+      "anthropic": "B",
+      "gemini": "E",
+      "deepseek": "B",
+      "grok": "B",
+      "consensus": "J",
+      "synth_alone": "E"
+    },
+    "correct": {
+      "openai": false,
+      "mistral": true,
+      "anthropic": false,
+      "gemini": false,
+      "deepseek": false,
+      "grok": false,
+      "consensus": true,
+      "synth_alone": false
+    },
+    "unanimous": false,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 7101,
+    "category": "economics",
+    "ground_truth": "C",
+    "answers": {
+      "openai": "C",
+      "mistral": "C",
+      "anthropic": "C",
+      "gemini": "C",
+      "deepseek": "C",
+      "grok": "C",
+      "consensus": "C",
+      "synth_alone": "C"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 7108,
+    "category": "economics",
+    "ground_truth": "H",
+    "answers": {
+      "openai": "H",
+      "mistral": "H",
+      "anthropic": "H",
+      "gemini": "H",
+      "deepseek": "H",
+      "grok": "H",
+      "consensus": "H",
+      "synth_alone": "H"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 7147,
+    "category": "economics",
+    "ground_truth": "D",
+    "answers": {
+      "openai": "D",
+      "mistral": "D",
+      "anthropic": "D",
+      "gemini": "D",
+      "deepseek": "D",
+      "grok": "D",
+      "consensus": "D",
+      "synth_alone": "D"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 7161,
+    "category": "economics",
+    "ground_truth": "E",
+    "answers": {
+      "openai": "E",
+      "mistral": "E",
+      "anthropic": "E",
+      "gemini": "E",
+      "deepseek": "E",
+      "grok": "E",
+      "consensus": "E",
+      "synth_alone": "E"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 7188,
+    "category": "economics",
+    "ground_truth": "A",
+    "answers": {
+      "openai": "A",
+      "mistral": "A",
+      "anthropic": "A",
+      "gemini": "A",
+      "deepseek": "A",
+      "grok": "A",
+      "consensus": "A",
+      "synth_alone": "A"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 7211,
+    "category": "economics",
+    "ground_truth": "F",
+    "answers": {
+      "openai": "F",
+      "mistral": "F",
+      "anthropic": "F",
+      "gemini": "F",
+      "deepseek": "F",
+      "grok": "F",
+      "consensus": "F",
+      "synth_alone": "F"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 7236,
+    "category": "economics",
+    "ground_truth": "D",
+    "answers": {
+      "openai": "D",
+      "mistral": "D",
+      "anthropic": "D",
+      "gemini": "D",
+      "deepseek": "D",
+      "grok": "D",
+      "consensus": "D",
+      "synth_alone": "D"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 7242,
+    "category": "economics",
+    "ground_truth": "B",
+    "answers": {
+      "openai": "B",
+      "mistral": "B",
+      "anthropic": "B",
+      "gemini": "B",
+      "deepseek": "B",
+      "grok": "B",
+      "consensus": "B",
+      "synth_alone": "B"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 7322,
+    "category": "economics",
+    "ground_truth": "D",
+    "answers": {
+      "openai": "D",
+      "mistral": "D",
+      "anthropic": "D",
+      "gemini": "D",
+      "deepseek": "D",
+      "grok": "D",
+      "consensus": "D",
+      "synth_alone": "D"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 7383,
+    "category": "economics",
+    "ground_truth": "G",
+    "answers": {
+      "openai": "G",
+      "mistral": "G",
+      "anthropic": "G",
+      "gemini": "G",
+      "deepseek": "G",
+      "grok": "G",
+      "consensus": "G",
+      "synth_alone": "G"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 7395,
+    "category": "economics",
+    "ground_truth": "A",
+    "answers": {
+      "openai": "A",
+      "mistral": "A",
+      "anthropic": "A",
+      "gemini": "A",
+      "deepseek": "A",
+      "grok": "A",
+      "consensus": "A",
+      "synth_alone": "A"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 7441,
+    "category": "economics",
+    "ground_truth": "E",
+    "answers": {
+      "openai": "E",
+      "mistral": "E",
+      "anthropic": "E",
+      "gemini": "E",
+      "deepseek": "E",
+      "grok": "E",
+      "consensus": "E",
+      "synth_alone": "E"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 7465,
+    "category": "economics",
+    "ground_truth": "D",
+    "answers": {
+      "openai": "D",
+      "mistral": "D",
+      "anthropic": "D",
+      "gemini": "D",
+      "deepseek": "D",
+      "grok": "D",
+      "consensus": "D",
+      "synth_alone": "D"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 7530,
+    "category": "economics",
+    "ground_truth": "I",
+    "answers": {
+      "openai": "I",
+      "mistral": "I",
+      "anthropic": "I",
+      "gemini": "I",
+      "deepseek": "I",
+      "grok": "I",
+      "consensus": "I",
+      "synth_alone": "I"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 7566,
+    "category": "economics",
+    "ground_truth": "C",
+    "answers": {
+      "openai": "C",
+      "mistral": "C",
+      "anthropic": "C",
+      "gemini": "C",
+      "deepseek": "C",
+      "grok": "C",
+      "consensus": "C",
+      "synth_alone": "C"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 7580,
+    "category": "economics",
+    "ground_truth": "J",
+    "answers": {
+      "openai": "J",
+      "mistral": "J",
+      "anthropic": "J",
+      "gemini": "J",
+      "deepseek": "J",
+      "grok": "J",
+      "consensus": "J",
+      "synth_alone": "J"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 7612,
+    "category": "economics",
+    "ground_truth": "G",
+    "answers": {
+      "openai": "G",
+      "mistral": "G",
+      "anthropic": "G",
+      "gemini": "G",
+      "deepseek": "C",
+      "grok": "I",
+      "consensus": "C",
+      "synth_alone": "G"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": false,
+      "grok": false,
+      "consensus": false,
+      "synth_alone": true
+    },
+    "unanimous": false,
+    "all_models_wrong": false,
+    "correct_candidate_missed": true
+  },
+  {
+    "question_id": 7631,
+    "category": "economics",
+    "ground_truth": "F",
+    "answers": {
+      "openai": "F",
+      "mistral": "A",
+      "anthropic": "A",
+      "gemini": "F",
+      "deepseek": "A",
+      "grok": "F",
+      "consensus": "F",
+      "synth_alone": "F"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": false,
+      "anthropic": false,
+      "gemini": true,
+      "deepseek": false,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": false,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 7651,
+    "category": "economics",
+    "ground_truth": "B",
+    "answers": {
+      "openai": "B",
+      "mistral": "B",
+      "anthropic": "B",
+      "gemini": "B",
+      "deepseek": "B",
+      "grok": "B",
+      "consensus": "B",
+      "synth_alone": "B"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 7690,
+    "category": "math",
+    "ground_truth": "H",
+    "answers": {
+      "openai": "H",
+      "mistral": "H",
+      "anthropic": "H",
+      "gemini": "H",
+      "deepseek": "H",
+      "grok": "H",
+      "consensus": "H",
+      "synth_alone": "H"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 7763,
+    "category": "math",
+    "ground_truth": "C",
+    "answers": {
+      "openai": "C",
+      "mistral": "C",
+      "anthropic": "C",
+      "gemini": "C",
+      "deepseek": "C",
+      "grok": "C",
+      "consensus": "C",
+      "synth_alone": "C"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 7797,
+    "category": "math",
+    "ground_truth": "D",
+    "answers": {
+      "openai": "D",
+      "mistral": "D",
+      "anthropic": "D",
+      "gemini": "D",
+      "deepseek": "D",
+      "grok": "D",
+      "consensus": "D",
+      "synth_alone": "D"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 7847,
+    "category": "math",
+    "ground_truth": "C",
+    "answers": {
+      "openai": "C",
+      "mistral": "C",
+      "anthropic": "C",
+      "gemini": "C",
+      "deepseek": "C",
+      "grok": "C",
+      "consensus": "C",
+      "synth_alone": "C"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 7864,
+    "category": "math",
+    "ground_truth": "I",
+    "answers": {
+      "openai": "I",
+      "mistral": "I",
+      "anthropic": "I",
+      "gemini": "I",
+      "deepseek": "I",
+      "grok": "I",
+      "consensus": "I",
+      "synth_alone": "I"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 7918,
+    "category": "math",
+    "ground_truth": "H",
+    "answers": {
+      "openai": "H",
+      "mistral": "H",
+      "anthropic": "H",
+      "gemini": "H",
+      "deepseek": "H",
+      "grok": "H",
+      "consensus": "H",
+      "synth_alone": "H"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 7976,
+    "category": "math",
+    "ground_truth": "F",
+    "answers": {
+      "openai": "F",
+      "mistral": "F",
+      "anthropic": "F",
+      "gemini": "F",
+      "deepseek": "F",
+      "grok": "F",
+      "consensus": "F",
+      "synth_alone": "F"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 8120,
+    "category": "math",
+    "ground_truth": "I",
+    "answers": {
+      "openai": "I",
+      "mistral": "I",
+      "anthropic": "I",
+      "gemini": "I",
+      "deepseek": "I",
+      "grok": "I",
+      "consensus": "I",
+      "synth_alone": "I"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 8121,
+    "category": "math",
+    "ground_truth": "J",
+    "answers": {
+      "openai": "J",
+      "mistral": "J",
+      "anthropic": "J",
+      "gemini": "J",
+      "deepseek": "J",
+      "grok": "J",
+      "consensus": "J",
+      "synth_alone": "J"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 8289,
+    "category": "math",
+    "ground_truth": "F",
+    "answers": {
+      "openai": "F",
+      "mistral": "F",
+      "anthropic": "F",
+      "gemini": "F",
+      "deepseek": "F",
+      "grok": "F",
+      "consensus": "F",
+      "synth_alone": "F"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 8313,
+    "category": "math",
+    "ground_truth": "A",
+    "answers": {
+      "openai": "A",
+      "mistral": "A",
+      "anthropic": "A",
+      "gemini": "A",
+      "deepseek": "A",
+      "grok": "A",
+      "consensus": "A",
+      "synth_alone": "A"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 8348,
+    "category": "math",
+    "ground_truth": "B",
+    "answers": {
+      "openai": "B",
+      "mistral": "B",
+      "anthropic": "B",
+      "gemini": "B",
+      "deepseek": "B",
+      "grok": "B",
+      "consensus": "B",
+      "synth_alone": "B"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 8365,
+    "category": "math",
+    "ground_truth": "I",
+    "answers": {
+      "openai": "I",
+      "mistral": "I",
+      "anthropic": "I",
+      "gemini": "I",
+      "deepseek": "I",
+      "grok": "I",
+      "consensus": "I",
+      "synth_alone": "I"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 8419,
+    "category": "math",
+    "ground_truth": "B",
+    "answers": {
+      "openai": "F",
+      "mistral": "F",
+      "anthropic": "B",
+      "gemini": "F",
+      "deepseek": "F",
+      "grok": "F",
+      "consensus": "F",
+      "synth_alone": "F"
+    },
+    "correct": {
+      "openai": false,
+      "mistral": false,
+      "anthropic": true,
+      "gemini": false,
+      "deepseek": false,
+      "grok": false,
+      "consensus": false,
+      "synth_alone": false
+    },
+    "unanimous": false,
+    "all_models_wrong": false,
+    "correct_candidate_missed": true
+  },
+  {
+    "question_id": 8517,
+    "category": "math",
+    "ground_truth": "J",
+    "answers": {
+      "openai": "J",
+      "mistral": "J",
+      "anthropic": "J",
+      "gemini": "J",
+      "deepseek": "J",
+      "grok": "J",
+      "consensus": "J",
+      "synth_alone": "J"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 8519,
+    "category": "math",
+    "ground_truth": "G",
+    "answers": {
+      "openai": "G",
+      "mistral": "G",
+      "anthropic": "G",
+      "gemini": "G",
+      "deepseek": "G",
+      "grok": "G",
+      "consensus": "G",
+      "synth_alone": "G"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 8520,
+    "category": "math",
+    "ground_truth": "E",
+    "answers": {
+      "openai": "E",
+      "mistral": "E",
+      "anthropic": "E",
+      "gemini": "E",
+      "deepseek": "E",
+      "grok": "E",
+      "consensus": "E",
+      "synth_alone": "E"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 8576,
+    "category": "math",
+    "ground_truth": "H",
+    "answers": {
+      "openai": "H",
+      "mistral": "H",
+      "anthropic": "H",
+      "gemini": "H",
+      "deepseek": "H",
+      "grok": "H",
+      "consensus": "H",
+      "synth_alone": "H"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 8669,
+    "category": "math",
+    "ground_truth": "I",
+    "answers": {
+      "openai": "I",
+      "mistral": "I",
+      "anthropic": "I",
+      "gemini": "I",
+      "deepseek": "I",
+      "grok": "I",
+      "consensus": "I",
+      "synth_alone": "I"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 8807,
+    "category": "math",
+    "ground_truth": "C",
+    "answers": {
+      "openai": "C",
+      "mistral": "C",
+      "anthropic": "C",
+      "gemini": "C",
+      "deepseek": "C",
+      "grok": "C",
+      "consensus": "C",
+      "synth_alone": "C"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 8903,
+    "category": "math",
+    "ground_truth": "F",
+    "answers": {
+      "openai": "F",
+      "mistral": "F",
+      "anthropic": "F",
+      "gemini": "F",
+      "deepseek": "F",
+      "grok": "F",
+      "consensus": "F",
+      "synth_alone": "F"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 8975,
+    "category": "math",
+    "ground_truth": "C",
+    "answers": {
+      "openai": "C",
+      "mistral": "C",
+      "anthropic": "C",
+      "gemini": "C",
+      "deepseek": "C",
+      "grok": "C",
+      "consensus": "C",
+      "synth_alone": "C"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 9072,
+    "category": "physics",
+    "ground_truth": "F",
+    "answers": {
+      "openai": "F",
+      "mistral": "F",
+      "anthropic": "F",
+      "gemini": "F",
+      "deepseek": "F",
+      "grok": "F",
+      "consensus": "F",
+      "synth_alone": "F"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 9079,
+    "category": "physics",
+    "ground_truth": "J",
+    "answers": {
+      "openai": "J",
+      "mistral": "J",
+      "anthropic": "J",
+      "gemini": "J",
+      "deepseek": "J",
+      "grok": "J",
+      "consensus": "J",
+      "synth_alone": "J"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 9258,
+    "category": "physics",
+    "ground_truth": "C",
+    "answers": {
+      "openai": "C",
+      "mistral": "C",
+      "anthropic": "C",
+      "gemini": "C",
+      "deepseek": "C",
+      "grok": "C",
+      "consensus": "C",
+      "synth_alone": "C"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 9338,
+    "category": "physics",
+    "ground_truth": "J",
+    "answers": {
+      "openai": "J",
+      "mistral": "J",
+      "anthropic": "J",
+      "gemini": "J",
+      "deepseek": "J",
+      "grok": "J",
+      "consensus": "J",
+      "synth_alone": "J"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 9369,
+    "category": "physics",
+    "ground_truth": "C",
+    "answers": {
+      "openai": "C",
+      "mistral": "C",
+      "anthropic": "C",
+      "gemini": "C",
+      "deepseek": "C",
+      "grok": "C",
+      "consensus": "C",
+      "synth_alone": "C"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 9417,
+    "category": "physics",
+    "ground_truth": "A",
+    "answers": {
+      "openai": "A",
+      "mistral": "A",
+      "anthropic": "A",
+      "gemini": "A",
+      "deepseek": "A",
+      "grok": "A",
+      "consensus": "A",
+      "synth_alone": "A"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 9475,
+    "category": "physics",
+    "ground_truth": "C",
+    "answers": {
+      "openai": "C",
+      "mistral": "C",
+      "anthropic": "C",
+      "gemini": "C",
+      "deepseek": "C",
+      "grok": "C",
+      "consensus": "C",
+      "synth_alone": "C"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 9501,
+    "category": "physics",
+    "ground_truth": "G",
+    "answers": {
+      "openai": "G",
+      "mistral": "G",
+      "anthropic": "G",
+      "gemini": "G",
+      "deepseek": "G",
+      "grok": "G",
+      "consensus": "G",
+      "synth_alone": "G"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 9505,
+    "category": "physics",
+    "ground_truth": "B",
+    "answers": {
+      "openai": "F",
+      "mistral": "J",
+      "anthropic": "B",
+      "gemini": "F",
+      "deepseek": "F",
+      "grok": "B",
+      "consensus": "F",
+      "synth_alone": "F"
+    },
+    "correct": {
+      "openai": false,
+      "mistral": false,
+      "anthropic": true,
+      "gemini": false,
+      "deepseek": false,
+      "grok": true,
+      "consensus": false,
+      "synth_alone": false
+    },
+    "unanimous": false,
+    "all_models_wrong": false,
+    "correct_candidate_missed": true
+  },
+  {
+    "question_id": 9558,
+    "category": "physics",
+    "ground_truth": "H",
+    "answers": {
+      "openai": "B",
+      "mistral": null,
+      "anthropic": "B",
+      "gemini": "H",
+      "deepseek": "H",
+      "grok": "B",
+      "consensus": "B",
+      "synth_alone": "H"
+    },
+    "correct": {
+      "openai": false,
+      "mistral": false,
+      "anthropic": false,
+      "gemini": true,
+      "deepseek": true,
+      "grok": false,
+      "consensus": false,
+      "synth_alone": true
+    },
+    "unanimous": false,
+    "all_models_wrong": false,
+    "correct_candidate_missed": true
+  },
+  {
+    "question_id": 9580,
+    "category": "physics",
+    "ground_truth": "E",
+    "answers": {
+      "openai": "E",
+      "mistral": "E",
+      "anthropic": "E",
+      "gemini": "E",
+      "deepseek": "E",
+      "grok": "E",
+      "consensus": "E",
+      "synth_alone": "E"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 9582,
+    "category": "physics",
+    "ground_truth": "B",
+    "answers": {
+      "openai": "B",
+      "mistral": "B",
+      "anthropic": "B",
+      "gemini": "B",
+      "deepseek": null,
+      "grok": "B",
+      "consensus": "B",
+      "synth_alone": "B"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": false,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": false,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 9601,
+    "category": "physics",
+    "ground_truth": "F",
+    "answers": {
+      "openai": "F",
+      "mistral": "F",
+      "anthropic": "F",
+      "gemini": "F",
+      "deepseek": "F",
+      "grok": "F",
+      "consensus": "F",
+      "synth_alone": "F"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 9693,
+    "category": "physics",
+    "ground_truth": "J",
+    "answers": {
+      "openai": "J",
+      "mistral": "J",
+      "anthropic": "J",
+      "gemini": "J",
+      "deepseek": null,
+      "grok": "J",
+      "consensus": "J",
+      "synth_alone": "J"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": false,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": false,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 9736,
+    "category": "physics",
+    "ground_truth": "E",
+    "answers": {
+      "openai": "E",
+      "mistral": "E",
+      "anthropic": "E",
+      "gemini": "E",
+      "deepseek": "E",
+      "grok": "E",
+      "consensus": "E",
+      "synth_alone": "E"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 9758,
+    "category": "physics",
+    "ground_truth": "J",
+    "answers": {
+      "openai": "J",
+      "mistral": "J",
+      "anthropic": "J",
+      "gemini": "J",
+      "deepseek": "J",
+      "grok": "J",
+      "consensus": "J",
+      "synth_alone": "J"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 9791,
+    "category": "physics",
+    "ground_truth": "I",
+    "answers": {
+      "openai": "I",
+      "mistral": "I",
+      "anthropic": "I",
+      "gemini": "I",
+      "deepseek": "I",
+      "grok": "I",
+      "consensus": "I",
+      "synth_alone": "I"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 9962,
+    "category": "physics",
+    "ground_truth": "E",
+    "answers": {
+      "openai": "E",
+      "mistral": "E",
+      "anthropic": "E",
+      "gemini": "E",
+      "deepseek": "E",
+      "grok": "E",
+      "consensus": "E",
+      "synth_alone": "E"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 10011,
+    "category": "physics",
+    "ground_truth": "I",
+    "answers": {
+      "openai": "I",
+      "mistral": "I",
+      "anthropic": "I",
+      "gemini": "I",
+      "deepseek": "I",
+      "grok": "I",
+      "consensus": "I",
+      "synth_alone": "I"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 10136,
+    "category": "physics",
+    "ground_truth": "I",
+    "answers": {
+      "openai": "I",
+      "mistral": "I",
+      "anthropic": "I",
+      "gemini": "I",
+      "deepseek": "I",
+      "grok": "I",
+      "consensus": "I",
+      "synth_alone": "I"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 10237,
+    "category": "physics",
+    "ground_truth": "J",
+    "answers": {
+      "openai": "J",
+      "mistral": "J",
+      "anthropic": "J",
+      "gemini": "J",
+      "deepseek": "J",
+      "grok": "J",
+      "consensus": "J",
+      "synth_alone": "J"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 10315,
+    "category": "physics",
+    "ground_truth": "H",
+    "answers": {
+      "openai": "H",
+      "mistral": "H",
+      "anthropic": "H",
+      "gemini": "H",
+      "deepseek": "H",
+      "grok": "H",
+      "consensus": "H",
+      "synth_alone": "H"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 10321,
+    "category": "physics",
+    "ground_truth": "H",
+    "answers": {
+      "openai": "H",
+      "mistral": "H",
+      "anthropic": "B",
+      "gemini": "H",
+      "deepseek": "H",
+      "grok": "H",
+      "consensus": "H",
+      "synth_alone": "H"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": false,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": false,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 10383,
+    "category": "computer science",
+    "ground_truth": "J",
+    "answers": {
+      "openai": "J",
+      "mistral": "J",
+      "anthropic": "J",
+      "gemini": "J",
+      "deepseek": "J",
+      "grok": "J",
+      "consensus": "J",
+      "synth_alone": "J"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 10420,
+    "category": "computer science",
+    "ground_truth": "J",
+    "answers": {
+      "openai": "J",
+      "mistral": "J",
+      "anthropic": "J",
+      "gemini": "J",
+      "deepseek": "J",
+      "grok": "J",
+      "consensus": "J",
+      "synth_alone": "J"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 10444,
+    "category": "computer science",
+    "ground_truth": "H",
+    "answers": {
+      "openai": "H",
+      "mistral": "H",
+      "anthropic": "H",
+      "gemini": "H",
+      "deepseek": "H",
+      "grok": "H",
+      "consensus": "H",
+      "synth_alone": "H"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 10452,
+    "category": "computer science",
+    "ground_truth": "H",
+    "answers": {
+      "openai": "H",
+      "mistral": "H",
+      "anthropic": "H",
+      "gemini": "H",
+      "deepseek": "H",
+      "grok": "H",
+      "consensus": "H",
+      "synth_alone": "H"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 10481,
+    "category": "computer science",
+    "ground_truth": "I",
+    "answers": {
+      "openai": "I",
+      "mistral": "I",
+      "anthropic": "I",
+      "gemini": "I",
+      "deepseek": "I",
+      "grok": "I",
+      "consensus": "I",
+      "synth_alone": "I"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 10489,
+    "category": "computer science",
+    "ground_truth": "A",
+    "answers": {
+      "openai": "A",
+      "mistral": "D",
+      "anthropic": "A",
+      "gemini": "A",
+      "deepseek": "A",
+      "grok": "A",
+      "consensus": "A",
+      "synth_alone": "A"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": false,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": false,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 10612,
+    "category": "computer science",
+    "ground_truth": "D",
+    "answers": {
+      "openai": "D",
+      "mistral": "D",
+      "anthropic": "D",
+      "gemini": "D",
+      "deepseek": "D",
+      "grok": "D",
+      "consensus": "D",
+      "synth_alone": "D"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 10627,
+    "category": "computer science",
+    "ground_truth": "C",
+    "answers": {
+      "openai": "C",
+      "mistral": "C",
+      "anthropic": "C",
+      "gemini": "C",
+      "deepseek": "C",
+      "grok": "C",
+      "consensus": "C",
+      "synth_alone": "C"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 10633,
+    "category": "computer science",
+    "ground_truth": "I",
+    "answers": {
+      "openai": "C",
+      "mistral": "C",
+      "anthropic": "C",
+      "gemini": "C",
+      "deepseek": "C",
+      "grok": "C",
+      "consensus": "C",
+      "synth_alone": "C"
+    },
+    "correct": {
+      "openai": false,
+      "mistral": false,
+      "anthropic": false,
+      "gemini": false,
+      "deepseek": false,
+      "grok": false,
+      "consensus": false,
+      "synth_alone": false
+    },
+    "unanimous": true,
+    "all_models_wrong": true,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 10672,
+    "category": "computer science",
+    "ground_truth": "A",
+    "answers": {
+      "openai": "A",
+      "mistral": "A",
+      "anthropic": "A",
+      "gemini": "A",
+      "deepseek": "A",
+      "grok": "A",
+      "consensus": "A",
+      "synth_alone": "A"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 10714,
+    "category": "computer science",
+    "ground_truth": "G",
+    "answers": {
+      "openai": "G",
+      "mistral": "G",
+      "anthropic": "G",
+      "gemini": "G",
+      "deepseek": "G",
+      "grok": "G",
+      "consensus": "G",
+      "synth_alone": "G"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 10717,
+    "category": "computer science",
+    "ground_truth": "E",
+    "answers": {
+      "openai": "E",
+      "mistral": "E",
+      "anthropic": "E",
+      "gemini": "E",
+      "deepseek": "E",
+      "grok": "E",
+      "consensus": "E",
+      "synth_alone": "E"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 10749,
+    "category": "computer science",
+    "ground_truth": "B",
+    "answers": {
+      "openai": "B",
+      "mistral": "B",
+      "anthropic": "B",
+      "gemini": "B",
+      "deepseek": "B",
+      "grok": "B",
+      "consensus": "B",
+      "synth_alone": "B"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 10821,
+    "category": "philosophy",
+    "ground_truth": "H",
+    "answers": {
+      "openai": "H",
+      "mistral": "H",
+      "anthropic": "H",
+      "gemini": "H",
+      "deepseek": "H",
+      "grok": "H",
+      "consensus": "H",
+      "synth_alone": "H"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 10826,
+    "category": "philosophy",
+    "ground_truth": "A",
+    "answers": {
+      "openai": "A",
+      "mistral": "A",
+      "anthropic": "A",
+      "gemini": "A",
+      "deepseek": "A",
+      "grok": "A",
+      "consensus": "A",
+      "synth_alone": "A"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 10849,
+    "category": "philosophy",
+    "ground_truth": "F",
+    "answers": {
+      "openai": "F",
+      "mistral": "I",
+      "anthropic": "F",
+      "gemini": "F",
+      "deepseek": "A",
+      "grok": "E",
+      "consensus": "F",
+      "synth_alone": "F"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": false,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": false,
+      "grok": false,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": false,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 10868,
+    "category": "philosophy",
+    "ground_truth": "I",
+    "answers": {
+      "openai": "I",
+      "mistral": "G",
+      "anthropic": "I",
+      "gemini": "I",
+      "deepseek": "D",
+      "grok": "I",
+      "consensus": "I",
+      "synth_alone": "H"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": false,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": false,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": false
+    },
+    "unanimous": false,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 10950,
+    "category": "philosophy",
+    "ground_truth": "G",
+    "answers": {
+      "openai": "G",
+      "mistral": "G",
+      "anthropic": "G",
+      "gemini": "G",
+      "deepseek": "G",
+      "grok": "G",
+      "consensus": "G",
+      "synth_alone": "G"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 10976,
+    "category": "philosophy",
+    "ground_truth": "D",
+    "answers": {
+      "openai": "D",
+      "mistral": "D",
+      "anthropic": "D",
+      "gemini": "D",
+      "deepseek": "D",
+      "grok": "D",
+      "consensus": "D",
+      "synth_alone": "D"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 10985,
+    "category": "philosophy",
+    "ground_truth": "C",
+    "answers": {
+      "openai": "C",
+      "mistral": "C",
+      "anthropic": "C",
+      "gemini": "C",
+      "deepseek": "C",
+      "grok": "C",
+      "consensus": "C",
+      "synth_alone": "C"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 10990,
+    "category": "philosophy",
+    "ground_truth": "G",
+    "answers": {
+      "openai": "G",
+      "mistral": "G",
+      "anthropic": "G",
+      "gemini": "G",
+      "deepseek": "G",
+      "grok": "G",
+      "consensus": "G",
+      "synth_alone": "G"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 10992,
+    "category": "philosophy",
+    "ground_truth": "J",
+    "answers": {
+      "openai": "D",
+      "mistral": "A",
+      "anthropic": "J",
+      "gemini": "F",
+      "deepseek": "H",
+      "grok": "J",
+      "consensus": "J",
+      "synth_alone": "F"
+    },
+    "correct": {
+      "openai": false,
+      "mistral": false,
+      "anthropic": true,
+      "gemini": false,
+      "deepseek": false,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": false
+    },
+    "unanimous": false,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 11019,
+    "category": "philosophy",
+    "ground_truth": "H",
+    "answers": {
+      "openai": "H",
+      "mistral": "E",
+      "anthropic": "H",
+      "gemini": "H",
+      "deepseek": "E",
+      "grok": "H",
+      "consensus": "H",
+      "synth_alone": "H"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": false,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": false,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": false,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 11037,
+    "category": "philosophy",
+    "ground_truth": "J",
+    "answers": {
+      "openai": "J",
+      "mistral": "J",
+      "anthropic": "J",
+      "gemini": "J",
+      "deepseek": "J",
+      "grok": "J",
+      "consensus": "J",
+      "synth_alone": "J"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 11064,
+    "category": "philosophy",
+    "ground_truth": "A",
+    "answers": {
+      "openai": "A",
+      "mistral": "A",
+      "anthropic": "A",
+      "gemini": "A",
+      "deepseek": "A",
+      "grok": "A",
+      "consensus": "A",
+      "synth_alone": "A"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 11068,
+    "category": "philosophy",
+    "ground_truth": "A",
+    "answers": {
+      "openai": "A",
+      "mistral": "A",
+      "anthropic": "J",
+      "gemini": "A",
+      "deepseek": "G",
+      "grok": "G",
+      "consensus": "A",
+      "synth_alone": "A"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": false,
+      "gemini": true,
+      "deepseek": false,
+      "grok": false,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": false,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 11094,
+    "category": "philosophy",
+    "ground_truth": "H",
+    "answers": {
+      "openai": "H",
+      "mistral": "I",
+      "anthropic": "H",
+      "gemini": "H",
+      "deepseek": "B",
+      "grok": "H",
+      "consensus": "H",
+      "synth_alone": "H"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": false,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": false,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": false,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 11097,
+    "category": "philosophy",
+    "ground_truth": "A",
+    "answers": {
+      "openai": "A",
+      "mistral": "A",
+      "anthropic": "A",
+      "gemini": "A",
+      "deepseek": "A",
+      "grok": "A",
+      "consensus": "A",
+      "synth_alone": "A"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 11110,
+    "category": "philosophy",
+    "ground_truth": "E",
+    "answers": {
+      "openai": "E",
+      "mistral": "E",
+      "anthropic": "E",
+      "gemini": "E",
+      "deepseek": "E",
+      "grok": "E",
+      "consensus": "E",
+      "synth_alone": "E"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 11121,
+    "category": "philosophy",
+    "ground_truth": "C",
+    "answers": {
+      "openai": "C",
+      "mistral": "C",
+      "anthropic": "C",
+      "gemini": "C",
+      "deepseek": "C",
+      "grok": "C",
+      "consensus": "C",
+      "synth_alone": "C"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 11163,
+    "category": "philosophy",
+    "ground_truth": "B",
+    "answers": {
+      "openai": "B",
+      "mistral": "B",
+      "anthropic": "B",
+      "gemini": "B",
+      "deepseek": "B",
+      "grok": "B",
+      "consensus": "B",
+      "synth_alone": "B"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 11185,
+    "category": "philosophy",
+    "ground_truth": "J",
+    "answers": {
+      "openai": "J",
+      "mistral": "H",
+      "anthropic": "B",
+      "gemini": "I",
+      "deepseek": "H",
+      "grok": "I",
+      "consensus": "I",
+      "synth_alone": "J"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": false,
+      "anthropic": false,
+      "gemini": false,
+      "deepseek": false,
+      "grok": false,
+      "consensus": false,
+      "synth_alone": true
+    },
+    "unanimous": false,
+    "all_models_wrong": false,
+    "correct_candidate_missed": true
+  },
+  {
+    "question_id": 11196,
+    "category": "philosophy",
+    "ground_truth": "A",
+    "answers": {
+      "openai": "A",
+      "mistral": "A",
+      "anthropic": "A",
+      "gemini": "A",
+      "deepseek": "A",
+      "grok": "A",
+      "consensus": "A",
+      "synth_alone": "A"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 11201,
+    "category": "philosophy",
+    "ground_truth": "E",
+    "answers": {
+      "openai": "E",
+      "mistral": "E",
+      "anthropic": "E",
+      "gemini": "E",
+      "deepseek": "E",
+      "grok": "E",
+      "consensus": "E",
+      "synth_alone": "E"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 11209,
+    "category": "philosophy",
+    "ground_truth": "D",
+    "answers": {
+      "openai": "D",
+      "mistral": "D",
+      "anthropic": "D",
+      "gemini": "D",
+      "deepseek": "D",
+      "grok": "D",
+      "consensus": "D",
+      "synth_alone": "D"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 11215,
+    "category": "philosophy",
+    "ground_truth": "G",
+    "answers": {
+      "openai": "G",
+      "mistral": "H",
+      "anthropic": "G",
+      "gemini": "E",
+      "deepseek": "G",
+      "grok": "G",
+      "consensus": "G",
+      "synth_alone": "G"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": false,
+      "anthropic": true,
+      "gemini": false,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": false,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 11217,
+    "category": "philosophy",
+    "ground_truth": "G",
+    "answers": {
+      "openai": "G",
+      "mistral": "G",
+      "anthropic": "G",
+      "gemini": "G",
+      "deepseek": "G",
+      "grok": "G",
+      "consensus": "G",
+      "synth_alone": "G"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 11226,
+    "category": "philosophy",
+    "ground_truth": "C",
+    "answers": {
+      "openai": "C",
+      "mistral": "C",
+      "anthropic": "C",
+      "gemini": "C",
+      "deepseek": "C",
+      "grok": "C",
+      "consensus": "C",
+      "synth_alone": "C"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 11231,
+    "category": "philosophy",
+    "ground_truth": "B",
+    "answers": {
+      "openai": "I",
+      "mistral": "I",
+      "anthropic": "I",
+      "gemini": "I",
+      "deepseek": "I",
+      "grok": "I",
+      "consensus": "I",
+      "synth_alone": "I"
+    },
+    "correct": {
+      "openai": false,
+      "mistral": false,
+      "anthropic": false,
+      "gemini": false,
+      "deepseek": false,
+      "grok": false,
+      "consensus": false,
+      "synth_alone": false
+    },
+    "unanimous": true,
+    "all_models_wrong": true,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 11409,
+    "category": "engineering",
+    "ground_truth": "H",
+    "answers": {
+      "openai": "H",
+      "mistral": "H",
+      "anthropic": "H",
+      "gemini": "H",
+      "deepseek": "H",
+      "grok": "H",
+      "consensus": "H",
+      "synth_alone": "H"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 11436,
+    "category": "engineering",
+    "ground_truth": "G",
+    "answers": {
+      "openai": "E",
+      "mistral": "G",
+      "anthropic": "A",
+      "gemini": "G",
+      "deepseek": null,
+      "grok": "B",
+      "consensus": "G",
+      "synth_alone": "G"
+    },
+    "correct": {
+      "openai": false,
+      "mistral": true,
+      "anthropic": false,
+      "gemini": true,
+      "deepseek": false,
+      "grok": false,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": false,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 11451,
+    "category": "engineering",
+    "ground_truth": "F",
+    "answers": {
+      "openai": "F",
+      "mistral": "F",
+      "anthropic": "F",
+      "gemini": "F",
+      "deepseek": "F",
+      "grok": "F",
+      "consensus": "F",
+      "synth_alone": "F"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 11474,
+    "category": "engineering",
+    "ground_truth": "A",
+    "answers": {
+      "openai": "A",
+      "mistral": "A",
+      "anthropic": "A",
+      "gemini": "A",
+      "deepseek": "A",
+      "grok": "D",
+      "consensus": "A",
+      "synth_alone": "A"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": false,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": false,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 11510,
+    "category": "engineering",
+    "ground_truth": "H",
+    "answers": {
+      "openai": "H",
+      "mistral": "H",
+      "anthropic": "H",
+      "gemini": "H",
+      "deepseek": "H",
+      "grok": "H",
+      "consensus": "H",
+      "synth_alone": "H"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 11558,
+    "category": "engineering",
+    "ground_truth": "H",
+    "answers": {
+      "openai": "H",
+      "mistral": "H",
+      "anthropic": "H",
+      "gemini": "H",
+      "deepseek": "H",
+      "grok": "H",
+      "consensus": "H",
+      "synth_alone": "H"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 11560,
+    "category": "engineering",
+    "ground_truth": "F",
+    "answers": {
+      "openai": "F",
+      "mistral": null,
+      "anthropic": "F",
+      "gemini": "F",
+      "deepseek": null,
+      "grok": "F",
+      "consensus": "F",
+      "synth_alone": "F"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": false,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": false,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": false,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 11577,
+    "category": "engineering",
+    "ground_truth": "A",
+    "answers": {
+      "openai": "A",
+      "mistral": "A",
+      "anthropic": "A",
+      "gemini": "A",
+      "deepseek": "A",
+      "grok": "A",
+      "consensus": "A",
+      "synth_alone": "A"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 11583,
+    "category": "engineering",
+    "ground_truth": "C",
+    "answers": {
+      "openai": "C",
+      "mistral": "C",
+      "anthropic": "C",
+      "gemini": "C",
+      "deepseek": "C",
+      "grok": "D",
+      "consensus": "C",
+      "synth_alone": "C"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": false,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": false,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 11604,
+    "category": "engineering",
+    "ground_truth": "G",
+    "answers": {
+      "openai": "G",
+      "mistral": "G",
+      "anthropic": "G",
+      "gemini": "G",
+      "deepseek": "G",
+      "grok": "G",
+      "consensus": "G",
+      "synth_alone": "G"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 11611,
+    "category": "engineering",
+    "ground_truth": "E",
+    "answers": {
+      "openai": "E",
+      "mistral": "E",
+      "anthropic": "E",
+      "gemini": "E",
+      "deepseek": "E",
+      "grok": "E",
+      "consensus": "E",
+      "synth_alone": "E"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 11625,
+    "category": "engineering",
+    "ground_truth": "D",
+    "answers": {
+      "openai": "D",
+      "mistral": "D",
+      "anthropic": "D",
+      "gemini": "D",
+      "deepseek": null,
+      "grok": "D",
+      "consensus": "D",
+      "synth_alone": "D"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": false,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": false,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 11638,
+    "category": "engineering",
+    "ground_truth": "A",
+    "answers": {
+      "openai": "A",
+      "mistral": "A",
+      "anthropic": "A",
+      "gemini": "A",
+      "deepseek": "A",
+      "grok": "A",
+      "consensus": "A",
+      "synth_alone": "A"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 11656,
+    "category": "engineering",
+    "ground_truth": "F",
+    "answers": {
+      "openai": "F",
+      "mistral": "F",
+      "anthropic": "F",
+      "gemini": "F",
+      "deepseek": "F",
+      "grok": "F",
+      "consensus": "F",
+      "synth_alone": "F"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 11695,
+    "category": "engineering",
+    "ground_truth": "C",
+    "answers": {
+      "openai": "C",
+      "mistral": "C",
+      "anthropic": "C",
+      "gemini": "C",
+      "deepseek": "C",
+      "grok": "C",
+      "consensus": "C",
+      "synth_alone": "C"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 11700,
+    "category": "engineering",
+    "ground_truth": "B",
+    "answers": {
+      "openai": "B",
+      "mistral": "B",
+      "anthropic": "B",
+      "gemini": "I",
+      "deepseek": "B",
+      "grok": "B",
+      "consensus": "B",
+      "synth_alone": "B"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": false,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": false,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 11769,
+    "category": "engineering",
+    "ground_truth": "F",
+    "answers": {
+      "openai": "F",
+      "mistral": "F",
+      "anthropic": "F",
+      "gemini": "F",
+      "deepseek": "F",
+      "grok": "F",
+      "consensus": "F",
+      "synth_alone": "F"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 11780,
+    "category": "engineering",
+    "ground_truth": "G",
+    "answers": {
+      "openai": "G",
+      "mistral": "G",
+      "anthropic": "G",
+      "gemini": "G",
+      "deepseek": "G",
+      "grok": "G",
+      "consensus": "G",
+      "synth_alone": "G"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 11832,
+    "category": "engineering",
+    "ground_truth": "A",
+    "answers": {
+      "openai": "A",
+      "mistral": "D",
+      "anthropic": "A",
+      "gemini": "A",
+      "deepseek": "A",
+      "grok": "A",
+      "consensus": "A",
+      "synth_alone": "A"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": false,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": false,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 11849,
+    "category": "engineering",
+    "ground_truth": "B",
+    "answers": {
+      "openai": "B",
+      "mistral": "B",
+      "anthropic": "B",
+      "gemini": "B",
+      "deepseek": null,
+      "grok": "B",
+      "consensus": "B",
+      "synth_alone": "B"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": false,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": false,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 11906,
+    "category": "engineering",
+    "ground_truth": "G",
+    "answers": {
+      "openai": "G",
+      "mistral": "G",
+      "anthropic": "G",
+      "gemini": "G",
+      "deepseek": "G",
+      "grok": "G",
+      "consensus": "G",
+      "synth_alone": "G"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 11945,
+    "category": "engineering",
+    "ground_truth": "C",
+    "answers": {
+      "openai": "G",
+      "mistral": "F",
+      "anthropic": "C",
+      "gemini": "H",
+      "deepseek": null,
+      "grok": "A",
+      "consensus": "C",
+      "synth_alone": "C"
+    },
+    "correct": {
+      "openai": false,
+      "mistral": false,
+      "anthropic": true,
+      "gemini": false,
+      "deepseek": false,
+      "grok": false,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": false,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 11951,
+    "category": "engineering",
+    "ground_truth": "C",
+    "answers": {
+      "openai": "C",
+      "mistral": "B",
+      "anthropic": "C",
+      "gemini": "C",
+      "deepseek": null,
+      "grok": "C",
+      "consensus": "C",
+      "synth_alone": "C"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": false,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": false,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": false,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 12022,
+    "category": "engineering",
+    "ground_truth": "E",
+    "answers": {
+      "openai": "E",
+      "mistral": "E",
+      "anthropic": "E",
+      "gemini": "E",
+      "deepseek": "E",
+      "grok": "E",
+      "consensus": "E",
+      "synth_alone": "E"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 12024,
+    "category": "engineering",
+    "ground_truth": "B",
+    "answers": {
+      "openai": "B",
+      "mistral": "B",
+      "anthropic": "B",
+      "gemini": "B",
+      "deepseek": "B",
+      "grok": "B",
+      "consensus": "B",
+      "synth_alone": "B"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 12104,
+    "category": "engineering",
+    "ground_truth": "E",
+    "answers": {
+      "openai": "E",
+      "mistral": "E",
+      "anthropic": "E",
+      "gemini": "E",
+      "deepseek": "E",
+      "grok": "E",
+      "consensus": "E",
+      "synth_alone": "E"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 12125,
+    "category": "engineering",
+    "ground_truth": "E",
+    "answers": {
+      "openai": "F",
+      "mistral": "E",
+      "anthropic": "E",
+      "gemini": "F",
+      "deepseek": "E",
+      "grok": "E",
+      "consensus": "E",
+      "synth_alone": "E"
+    },
+    "correct": {
+      "openai": false,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": false,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": false,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 12155,
+    "category": "engineering",
+    "ground_truth": "I",
+    "answers": {
+      "openai": "I",
+      "mistral": "I",
+      "anthropic": "I",
+      "gemini": "I",
+      "deepseek": "I",
+      "grok": "I",
+      "consensus": "I",
+      "synth_alone": "I"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 12177,
+    "category": "engineering",
+    "ground_truth": "H",
+    "answers": {
+      "openai": "H",
+      "mistral": null,
+      "anthropic": "B",
+      "gemini": "B",
+      "deepseek": "B",
+      "grok": "B",
+      "consensus": "B",
+      "synth_alone": "B"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": false,
+      "anthropic": false,
+      "gemini": false,
+      "deepseek": false,
+      "grok": false,
+      "consensus": false,
+      "synth_alone": false
+    },
+    "unanimous": false,
+    "all_models_wrong": false,
+    "correct_candidate_missed": true
+  },
+  {
+    "question_id": 12213,
+    "category": "engineering",
+    "ground_truth": "I",
+    "answers": {
+      "openai": "I",
+      "mistral": "I",
+      "anthropic": "I",
+      "gemini": "I",
+      "deepseek": "I",
+      "grok": "I",
+      "consensus": "I",
+      "synth_alone": "I"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 12216,
+    "category": "engineering",
+    "ground_truth": "E",
+    "answers": {
+      "openai": "E",
+      "mistral": "E",
+      "anthropic": "E",
+      "gemini": "E",
+      "deepseek": "E",
+      "grok": "E",
+      "consensus": "E",
+      "synth_alone": "E"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  },
+  {
+    "question_id": 12243,
+    "category": "engineering",
+    "ground_truth": "A",
+    "answers": {
+      "openai": "A",
+      "mistral": "A",
+      "anthropic": "A",
+      "gemini": "A",
+      "deepseek": "A",
+      "grok": "A",
+      "consensus": "A",
+      "synth_alone": "A"
+    },
+    "correct": {
+      "openai": true,
+      "mistral": true,
+      "anthropic": true,
+      "gemini": true,
+      "deepseek": true,
+      "grok": true,
+      "consensus": true,
+      "synth_alone": true
+    },
+    "unanimous": true,
+    "all_models_wrong": false,
+    "correct_candidate_missed": false
+  }
+]

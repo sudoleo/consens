@@ -1,0 +1,158 @@
+{
+  "scope": "Offline analysis of stored June 2026 artifacts, not a fresh model benchmark or current production quality estimate.",
+  "run": "pooled_v1",
+  "created": "2026-06-29T21:00:27.117625+00:00",
+  "label_mode": "names",
+  "pooled_from": [
+    "final_v1",
+    "experiment_v1",
+    "random_v1"
+  ],
+  "records": 2512,
+  "questions": 314,
+  "duplicate_cells": 0,
+  "error_cells": 0,
+  "timestamp_range": [
+    "2026-06-28T17:58:00.267308+00:00",
+    "2026-06-29T20:48:04.028790+00:00"
+  ],
+  "correct_counts": {
+    "openai": 284,
+    "mistral": 264,
+    "anthropic": 285,
+    "gemini": 281,
+    "deepseek": 267,
+    "grok": 277,
+    "consensus": 286,
+    "synth_alone": 286
+  },
+  "accuracy_percent": {
+    "openai": 90.4459,
+    "mistral": 84.0764,
+    "anthropic": 90.7643,
+    "gemini": 89.4904,
+    "deepseek": 85.0318,
+    "grok": 88.2166,
+    "consensus": 91.0828,
+    "synth_alone": 91.0828
+  },
+  "disagreement_questions": 68,
+  "unanimous_questions": 246,
+  "unanimous_wrong_question_ids": [
+    912,
+    2749,
+    3797,
+    4752,
+    4800,
+    5568,
+    5864,
+    10633,
+    11231
+  ],
+  "unanimous_wrong_percent": 3.658536585365854,
+  "all_six_wrong_question_ids": [
+    912,
+    2749,
+    3542,
+    3797,
+    4272,
+    4752,
+    4800,
+    5444,
+    5568,
+    5649,
+    5864,
+    10633,
+    11231
+  ],
+  "oracle_any_candidate_correct": 301,
+  "correct_candidate_missed_question_ids": [
+    1062,
+    3253,
+    4825,
+    5355,
+    6018,
+    6471,
+    6652,
+    6937,
+    7059,
+    7612,
+    8419,
+    9505,
+    9558,
+    11185,
+    12177
+  ],
+  "consensus_correct_when_all_candidates_wrong": 0,
+  "paired_comparisons": {
+    "synth_alone": {
+      "consensus_only_correct": 6,
+      "baseline_only_correct": 6,
+      "discordant_pairs": 12,
+      "exact_two_sided_p": 1.0
+    },
+    "anthropic": {
+      "consensus_only_correct": 9,
+      "baseline_only_correct": 8,
+      "discordant_pairs": 17,
+      "exact_two_sided_p": 1.0
+    }
+  },
+  "identical_consensus_and_alone_texts": 0,
+  "synthetic_agreement_example": {
+    "input": {
+      "models_compared": [
+        "openai",
+        "mistral",
+        "anthropic",
+        "gemini",
+        "deepseek",
+        "grok"
+      ],
+      "differences": [],
+      "claims": [
+        {
+          "anchor": "Illustrative assertion, not a real user response.",
+          "agree": [
+            "openai",
+            "mistral",
+            "anthropic",
+            "gemini",
+            "deepseek",
+            "grok"
+          ],
+          "dissent": []
+        }
+      ]
+    },
+    "output": {
+      "score": 100,
+      "level": "very",
+      "model_count": 6,
+      "major_contradictions": 0,
+      "minor_contradictions": 0,
+      "emphases": 0,
+      "scored_claims": 1,
+      "thin_claims": 0,
+      "coverage_percent": 100,
+      "coverage_status": "sufficient",
+      "total_claims": 1,
+      "evidence_incomplete": false
+    },
+    "interpretation": "A deterministic agreement-only example; this does not measure live false-confidence frequency."
+  },
+  "cost_caveat": "Consensus est_cost_usd uses candidate output caps as estimated input tokens in benchmark.runner._consensus_estimate. Do not treat as billed usage or compare cost ratios with measured baseline usage.",
+  "source_sha256": {
+    "data/benchmark/runs/pooled_v1/calls.jsonl": "c82c757bf947a723f92c607774b3a7fc60488e03d816be97e1fea7c327310a97",
+    "data/benchmark/runs/pooled_v1/results.json": "72a96d8566af1ed2b936b33fb43b6b64dbab129bc5e1f67fcc7d3f11dd622bf3",
+    "data/benchmark/runs/pooled_v1/manifest.json": "5be7609cd69d7b3ed16fb58e134054dcad48ba5b510084c1268caa7c39785494",
+    "app/services/llm/consensus_scoring.py": "55914fedbccdd71955cca0fbf5dc91b27a03c8bf1dd4d8f63d1c0c7c14354856",
+    "app/services/llm/coverage_judge.py": "a58e1acc375257decffafafe813de29d48996cac9e4d7f91024f4d53de442bd5",
+    "app/services/llm/consensus_engine.py": "d0c300088a0fbc4052e7dc9a3a4154d512358f838f754e498f41914a9558abd7",
+    "app/services/llm/resolve_engine.py": "08d39ecbbb7310681481daf517343e3ddb5a7dedeb80a74f7ce1415db3b11ecd",
+    "app/services/topic_runner.py": "2fd48a54a64acff7a012206e75de1fb16b1e39ca1959158ce600ff66f14b2fbd",
+    "app/services/claim_ledger.py": "6d37cfae4b59f31b240fd17b91ef75e6c5fd387778ae1b7a4aa4fea0b2c2263b",
+    "benchmark/runner.py": "9e3b6754d1a5f34dc99400f032e03b48ed0037afa2e5e05c2cdb7abc1ae4da47",
+    "templates/benchmark.html": "6640ca6faed6994cbed83315b3afa6f39492767c0885e5b22cd4dc2ab4f868d6"
+  }
+}
