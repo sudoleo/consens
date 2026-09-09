@@ -401,10 +401,12 @@
       <!-- Nur im Agent-Mode-Hero und nur bei ausreichender Viewport-Fläche sichtbar. -->
       <p class="hero-greeting">What should the models cross-check?</p>
       <div class="chat-input-container u-position-relative">
-        <!-- Noch nicht gesendete Anhaenge. Beim Senden wandern sie an die
+        <!-- Fallback fuer die im Agent-Chat verborgene Toolbar. attachments.js
+             verschiebt dieselbe Leiste im Hero/Direktvergleich unter das Feld.
+             Noch nicht gesendete Anhaenge. Beim Senden wandern sie an die
              Nachricht (#threadAskAttachments) — ein Anhang gehoert zu der
              Frage, mit der er rausgegangen ist, nicht ans leere Feld. -->
-        <div id="attachmentBar" class="attachment-bar" hidden></div>
+        <div id="attachmentBar" class="attachment-bar composer-attachments" role="group" aria-label="Files for your next question" hidden></div>
         <!-- "Run again" fuellt nur vor, abgeschickt wird bewusst. Genau
              dazwischen steht hier, was das Abschicken kostet. Gesetzt und
              wieder geleert von consensus-progress.js. -->
@@ -515,7 +517,7 @@
           </button>
         </div>
       </div>
-      <div id="composerModeBar" class="composer-mode-bar" aria-label="Comparison mode" hidden>
+      <div id="composerModeBar" class="composer-mode-bar" aria-label="Question options and attachments" hidden>
         <div class="composer-mode-controls">
           <button type="button" id="composerAgentToggle" class="composer-agent-toggle" role="switch" aria-checked="true" aria-label="Agent Mode" aria-describedby="composerModeDescription">
             <span class="composer-mode-dot" aria-hidden="true"></span>

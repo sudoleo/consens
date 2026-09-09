@@ -1,0 +1,84 @@
+/* Shared loading material for the app and public pages. Shapes reserve their
+   final geometry; only the light layer moves, never the layout. */
+.skeleton {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  isolation: isolate;
+  flex-shrink: 0;
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  border-radius: 4px;
+  pointer-events: none;
+}
+
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 15%,
+    color-mix(in srgb, var(--ink) 6%, transparent) 50%, transparent 85%);
+  transform: translateX(-100%);
+  animation: skeleton-shimmer 2.4s cubic-bezier(.4, 0, .2, 1) infinite;
+}
+
+@keyframes skeleton-shimmer {
+  0%, 10% { transform: translateX(-100%); }
+  70%, 100% { transform: translateX(100%); }
+}
+
+/* A fast response can replace the reserved space before it becomes visible. */
+.skeleton-group {
+  animation: skeleton-enter 180ms ease-out 120ms both;
+}
+
+@keyframes skeleton-enter {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.login-skeleton {
+  display: inline-block;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+}
+
+.skeleton-line {
+  display: inline-block;
+  height: .72rem;
+  vertical-align: middle;
+}
+
+.skeleton-bookmark {
+  display: flex;
+  align-items: center;
+  height: 31px;
+  padding: 0 8px;
+}
+
+.skeleton-bookmark .skeleton { width: 83%; height: 10px; }
+.skeleton-bookmark:nth-child(2) .skeleton { width: 64%; }
+.skeleton-bookmark:nth-child(3) .skeleton { width: 91%; }
+.skeleton-bookmark:nth-child(4) .skeleton { width: 72%; }
+
+.answer-skeleton {
+  display: grid;
+  gap: 14px;
+  padding-block: 8px 18px;
+  max-width: 640px;
+}
+
+.answer-skeleton .skeleton { height: 10px; width: 96%; }
+.answer-skeleton .skeleton:nth-child(2) { width: 88%; }
+.answer-skeleton .skeleton:nth-child(3) { width: 93%; }
+.answer-skeleton .skeleton:last-child { width: 57%; }
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton::after { animation: none; display: none; }
+  .skeleton-group { animation: none; }
+}
+
+@media (forced-colors: active) {
+  .skeleton { background: GrayText; opacity: .2; }
+  .skeleton::after { display: none; }
+}

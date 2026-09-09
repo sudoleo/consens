@@ -60,20 +60,24 @@
     }
     try {
       if (document.documentElement.dataset.authUnavailable === "true") return;
+      // A resolved session owns the UI; a cached token must not overwrite it.
+      if (authState?.known) return;
       if (!localStorage.getItem("id_token")) return;
-      const line = '<i class="skeleton skeleton-line skeleton-line-usage"></i>';
+      const line = '<i class="skeleton skeleton-line skeleton-line-usage" role="img" aria-label="Loading usage"></i>';
       const free = document.getElementById("freeUsageDisplay");
       const deep = document.getElementById("deepUsageDisplay");
       if (free) free.innerHTML = "Runs: " + line;
       if (deep) deep.innerHTML = "Deep Think: " + line;
       const bookmarks = document.getElementById("bookmarksContainer");
       if (bookmarks) {
-        bookmarks.innerHTML = '<div class="skeleton skeleton-bookmark" aria-hidden="true"></div>'.repeat(4);
+        bookmarks.innerHTML = '<div class="skeleton-group bookmarks-skeleton" role="status" aria-label="Loading chats">'
+          + '<div class="skeleton-bookmark" aria-hidden="true"><span class="skeleton"></span></div>'.repeat(4)
+          + '</div>';
       }
       const login = document.getElementById("loginContainer");
       if (login) {
         login.hidden = false;
-        login.innerHTML = '<span class="skeleton login-skeleton" aria-hidden="true" role="status" aria-label="Loading account"></span>';
+        login.innerHTML = '<span class="skeleton-group" role="status" aria-label="Loading account"><span class="skeleton login-skeleton" aria-hidden="true"></span></span>';
       }
     } catch (_) { /* best-effort first paint */ }
   });

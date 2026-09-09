@@ -13,6 +13,7 @@
    ========================================================================== */
 
 @import url('./public-tokens.css?v=20260906-palette1');
+@import url('./skeleton.css?v=20260909-skeleton1');
 @import url('./components-consensus-visuals.css?v=20260906-claimhit1');
 @import url('./demo-action.css?v=20260909-democta');
 
@@ -860,23 +861,19 @@ img { display: block; max-width: 100%; }
   color: var(--accent);
 }
 
-.lp-model-pulse-skeleton {
-  display: block;
-  height: 42px;
-  border-radius: var(--radius-sm);
-  background: linear-gradient(90deg, var(--surface-2, var(--ground)) 25%, var(--line-soft) 50%, var(--surface-2, var(--ground)) 75%);
-  background-size: 200% 100%;
-  animation: lpModelPulseLoading 1.4s ease-in-out infinite;
-}
+/* Match the rank, provider mark, label and value of the final rows. */
+.lp-model-pulse-row.lp-model-pulse-skeleton { pointer-events: none; }
+.lp-model-pulse-skeleton .skeleton-rank { width: 14px; height: 10px; }
+.lp-model-pulse-skeleton .skeleton-mark { width: 100%; aspect-ratio: 1; border-radius: 50%; }
+.lp-model-pulse-skeleton .skeleton-label { width: 70%; max-width: 160px; height: 11px; }
+.lp-model-pulse-skeleton:nth-child(3n + 2) .skeleton-label { width: 54%; }
+.lp-model-pulse-skeleton:nth-child(3n) .skeleton-label { width: 82%; }
+.lp-model-pulse-skeleton .skeleton-value { width: 36px; height: 10px; }
 
 .lp-model-pulse-empty {
   margin: 2px 0 20px;
   color: var(--text-secondary);
   font-size: var(--font-size-sm);
-}
-
-@keyframes lpModelPulseLoading {
-  to { background-position: -200% 0; }
 }
 
 @media (max-width: 560px) {
@@ -889,7 +886,6 @@ img { display: block; max-width: 100%; }
 
 @media (prefers-reduced-motion: reduce) {
   .lp-model-pulse-meter i { transition: none; }
-  .lp-model-pulse-skeleton { animation: none; }
 }
 
 /* --- Hero window: the end result (verdict + consensus + differences) ------- */

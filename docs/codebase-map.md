@@ -271,7 +271,15 @@ der Python-Staleness-Test auch indirekte Änderungen erkennt.
 - **`app-bootstrap.js`** — liest die escaped Jinja-Konfiguration aus
   `#appBootstrapConfig`, initialisiert die bisherigen read-only `window.*`-
   Configwerte sowie den sicheren Umami-Wrapper und stellt Agent-/Auth-/Skeleton-
-  First-Paint ohne Inline-Skript her.
+  First-Paint ohne Inline-Skript her. Bereits aufgeloeste Auth-Zustaende werden
+  nicht durch gecachte Token/Skeletons ueberschrieben. `css/skeleton.css` liefert
+  gemeinsame Light-/Dark-Platzhalter fuer Account, Chatliste, wartende
+  Modellantworten und den oeffentlichen Model Pulse: formgetreue Zeilen,
+  verzögertes Einblenden, ruhiger Transform-Shimmer, statisch bei Reduced Motion.
+  Die Chatlisten-Skeletons bleiben in `firebase.js` bis zur erfolgreichen
+  Metadatenantwort erhalten; Fehler/Logout/Watchdog raeumen sie weiter ab.
+  Der Antwortleser ersetzt Platzhalter mit dem ersten Text oder einem terminalen
+  Zustand; Statuslabels bleiben sichtbar, die leere Ladeflaeche ist `aria-busy`.
 - **`app-state.js`** — einzige Schreibschnittstelle für laufbezogene Frage,
   Evidence, Citation-/Share-Kontext, Tierlimits und Spinner-Markup der
   **gerade projizierten Ansicht**. Der autoritative State eines aktiven Laufs
@@ -1121,6 +1129,11 @@ der Python-Staleness-Test auch indirekte Änderungen erkennt.
   markiert/scrollt synchron zum Zitat; die Geometrie-Abfrage erzwingt das
   aktualisierte Layout selbst. Der aktive Agent Mode wird dabei nicht
   verändert.
+  Difference-Karten zeigen pro Position die Modell-Icons aus den Antwortboxen
+  mit deren Dark-Theme-Klassen und zugänglichen Modellnamen/Tooltips; ohne Icon
+  dient der Anfangsbuchstabe als Fallback. Der zusätzliche „Worth verifying“-
+  Block entfällt. Der Resolve-Button füllt die Kartenbreite mit rechtsbündigem
+  Plus-Badge; die Sprunglinks zu den Modellantworten bleiben erhalten.
   Der Verdict leitet Farbe und Überschrift aus derselben Score-Skala ab wie das
   Backend: 85+ „High", 65–84 „Strong", 40–64 „Partial", 20–39 „Low", darunter
   „Very low agreement"; Grün beginnt erst bei 65. Contradictions und Emphasis
@@ -2090,6 +2103,17 @@ Antwortboxen (`body.is-hero .response-section` in `components-input.css`); eine 
 true})`) ueberschreibt den Default dauerhaft.
 
 ### Attachments (ab Plus)
+Noch nicht gesendete Dateien stehen als kompakte Vorschau-/Entfernen-Chips in
+der Leiste unter dem Eingabefeld. `attachments.js` verschiebt dieselbe
+`#attachmentBar` in die sichtbare `#composerModeBar`; verbirgt Agent Mode die
+Toolbar nach dem Hero, kehrt sie an ihren Composer-Anker oberhalb des Felds
+zurueck. `App.attachments.syncComposerPlacement()` wird beim Toolbar-Rendering
+und Attachment-Rendering aufgerufen; Fokus, Datei-Bytes und Listener bleiben
+erhalten. Neue Dateien oeffnen einen eingeklappten mobilen Composer. Beim Senden
+geht die vorhandene Metadaten-Uebergabe weiterhin an die jeweilige Frage; leere
+Entwuerfe und gespeicherte Nachrichten zeigen keine bearbeitbaren Datei-Chips.
+`css/composer-attachments.css` gestaltet ausschliesslich den Composer-Tray;
+Vorschau und Entfernen sind getrennte native Buttons.
 Frontend `attachments.js` baut Payload; Backend `app/services/llm/attachments.py`
 validiert: max **2** Dateien, serverseitig je **5 MB** und zusammen höchstens
 **6 MB**, MIMEs PDF/DOCX/TXT/PNG/JPEG/WebP

@@ -2388,7 +2388,9 @@ async function loadBookmarks({ append = false, loadAll = false } = {}) {
     if (!append) {
       window.bookmarksData = [];
       bookmarksNextCursor = null;
-      if (container) container.innerHTML = "";
+      // Keep the first-paint placeholder until the metadata actually arrives.
+      const skeleton = container?.querySelector(".bookmarks-skeleton");
+      if (container) container.replaceChildren(...(skeleton ? [skeleton] : []));
       // A metadata refresh must not make an in-flight bookmark disappear.
       ensurePendingBookmarkDOM(window.App.bookmarkSession?.pending);
       restoreRegistryRunRows();
@@ -2402,6 +2404,7 @@ async function loadBookmarks({ append = false, loadAll = false } = {}) {
       const data = await response.json();
       if (!isCurrentAuthenticatedUser(requestUid, requestGeneration)) return false;
       if (!response.ok) throw new Error(data.detail || `Could not load bookmarks (${response.status})`);
+      container?.querySelector(".bookmarks-skeleton")?.remove();
       (data.bookmarks || []).forEach(item => upsertBookmarkMeta(item, { prepend: false }));
       bookmarksNextCursor = data.next_cursor || null;
       cursor = bookmarksNextCursor;

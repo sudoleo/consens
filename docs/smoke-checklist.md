@@ -57,6 +57,17 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       ungestylten Dialoge. Die Browser-Konsole meldet keine Modul-/CSP-Fehler.
 
 ## Kern-Flow
+- [ ] Anhänge: PDF/Text/Bild im neuen Chat unter dem Feld in der Toolbar;
+      Vorschau und Entfernen separat per Tastatur/Touch erreichbar. Lange Namen
+      und zwei Dateien passen in Light/Dark bei 390 px. Nach dem Senden stehen
+      Dateien an der Frage. Agent-Toolbar bleibt verborgen; neue Folgefrage-
+      Dateien erscheinen stattdessen im Composer. Moduswechsel/„New comparison“,
+      Fehler vor dem Senden und mobile Collapse-Zustände verlieren keine Dateien.
+- [ ] Skeletons: Bei gedrosseltem Laden bleiben Chat-Platzhalter bis zur
+      Metadatenantwort stehen; leere Liste, Fehler und Logout entfernen sie.
+      Wartende Modellantworten zeigen Textzeilen bis zum ersten Token oder
+      Abbruch/Fehler. Light/Dark, Mobile und Reduced Motion pruefen; der Model
+      Pulse reserviert neun Ranking-Zeilen und ersetzt sie durch echte Daten.
 - [ ] Frischer `/app`-Load passt ohne vertikales Scrollen in den Desktop-
       Viewport; der Consensus-Picker hat keinen horizontalen Scrollbalken.
 - [ ] Frischer `/app`-Load: keine Topbar; Brand + Collapse im Sidebar-Kopf,

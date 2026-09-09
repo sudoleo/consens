@@ -381,10 +381,30 @@
 }
 
 .diff-position-label {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-semibold);
   color: color-mix(in srgb, var(--text-color) 84%, var(--sidebar-text-muted));
-  margin-bottom: 1px;
+  margin-bottom: 8px;
+}
+
+.diff-position-model {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+}
+
+.diff-position-model img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 .diff-position-stance {
@@ -470,20 +490,20 @@
 
 /* --- Resolve-Runde: Button + Ergebnis in der Widerspruchs-Karte ----------- */
 .diff-resolve {
-  margin-top: 8px;
+  margin-top: 16px;
 }
 
 .diff-resolve-btn {
-  /* Kompakter Ghost-Button wie im Mockup: ein ruhiger Einzeiler mit dem
-     kleinen Pro-Chip am rechten Rand. */
-  display: inline-flex;
+  /* Kartenbreiter Abschluss mit ausgerichtetem Icon, Text und Plus-Chip. */
+  display: flex;
+  width: 100%;
   max-width: 100%;
   box-sizing: border-box;
   align-items: center;
   justify-content: flex-start;
   gap: 10px;
-  min-height: 28px;
-  padding: 5px 8px 5px 12px;
+  min-height: 40px;
+  padding: 10px 12px;
   border-radius: 6px;
   border: 1px solid color-mix(in srgb, var(--sidebar-border) 90%, transparent);
   background: transparent;
@@ -492,9 +512,9 @@
   font-weight: var(--font-weight-semibold);
   font-family: inherit;
   line-height: var(--line-height-heading);
-  text-align: center;
+  text-align: left;
   cursor: pointer;
-  white-space: nowrap;
+  white-space: normal;
   transition: box-shadow 0.2s ease, color 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
 }
 
@@ -507,6 +527,7 @@
 
 .diff-resolve-btn-label {
   min-width: 0;
+  line-height: 1.4;
 }
 
 .diff-resolve-icon {
@@ -557,11 +578,15 @@
 
 /* Mockup-Variante des zentralen Pro-Badges: kompakt und leicht eckig. */
 .diff-resolve-pro-chip {
+  display: inline-flex;
+  align-items: center;
+  align-self: center;
   flex-shrink: 0;
   margin-left: auto;
   padding: 1px 5px;
   border-radius: 4px;
   font-size: var(--font-size-micro);
+  line-height: 1.4;
   letter-spacing: var(--tracking-wide);
   box-shadow: none;
 }

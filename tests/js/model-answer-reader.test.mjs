@@ -50,6 +50,26 @@ function archive(ctx, id = "t1") {
 afterEach(() => { contexts.splice(0).forEach(ctx => ctx.dom.window.close()); });
 
 describe("model answer reader", () => {
+  it.each([false, true])("replaces waiting skeletons on first text and terminal states (agent=%s)", agentMode => {
+    const ctx = boot();
+    const state = run("loading", { modelResults: { OpenAI: {status: "pending"}, Anthropic: {status: "reasoning"} } });
+    state.config.agentMode = agentMode;
+    ctx.project(state);
+    if (agentMode) ctx.reader.openLive("OpenAI");
+    const body = () => ctx.document.querySelector('.answer-reader-body[data-provider="OpenAI"]');
+    expect(body().hidden).toBe(false);
+    expect(body().getAttribute("aria-busy")).toBe("true");
+    expect(body().querySelector(".answer-skeleton")).not.toBeNull();
+    state.modelResults.OpenAI = {status: "streaming", text: "First words"}; ctx.project(state);
+    expect(body().textContent).toBe("First words");
+    expect(body().hasAttribute("aria-busy")).toBe(false);
+    expect(body().querySelector(".skeleton")).toBeNull();
+    for (const status of ["error", "canceled", "skipped"]) {
+      state.modelResults.OpenAI = {status}; ctx.project(state);
+      expect(body().querySelector(".skeleton")).toBeNull();
+      expect(body().textContent).toMatch(/could not answer|stopped|skipped/);
+    }
+  });
   it("moves direct readiness to the composer and retains the normal reader heading", () => {
     const ctx = boot();
     const state = run(); state.config.agentMode = false;

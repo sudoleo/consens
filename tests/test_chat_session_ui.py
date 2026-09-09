@@ -675,7 +675,9 @@ def test_archived_difference_cards_carry_no_live_run_controls():
     assert "(isStatic && !diff.resolution)" in cards
     assert 'resolveSection.querySelectorAll("button").forEach' in cards
     # Die Modellnamen kommen aus dem Turn, nicht aus den Live-Boxen.
-    assert "pos.models.map(labelFor)" in cards
+    assert "const name = labelFor(model);" in cards
+    assert "mark.title = name;" in cards
+    assert 'mark.setAttribute("aria-label", name);' in cards
     assert "function storedModelLabeller(modelAnswers)" in (
         (ROOT / "static" / "js" / "consensus-run.js").read_text(encoding="utf-8")
     )

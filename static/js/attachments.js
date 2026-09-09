@@ -71,6 +71,21 @@
     const questionInput = document.getElementById("questionInput");
     if (!trigger || !menu || !uploadOption || !fileInput || !bar) return;
 
+    // One tray, two homes: the starting toolbar and the agent-chat composer.
+    // Move the actual nodes so previews/removal keep their state and handlers.
+    const composerHome = document.createComment("composer-attachments-home");
+    bar.before(composerHome);
+    function syncComposerPlacement() {
+      const toolbar = document.getElementById("composerModeBar");
+      const inToolbar = toolbar && !toolbar.hidden;
+      const parent = inToolbar ? toolbar : composerHome.parentNode;
+      if (!parent || bar.parentNode === parent) return;
+      const focus = bar.contains(document.activeElement) ? document.activeElement : null;
+      if (inToolbar) toolbar.prepend(bar);
+      else composerHome.after(bar);
+      focus?.focus({ preventScroll: true });
+    }
+
     let pendingFileReads = 0;
     let dragDepth = 0;
     // Auswahlzustand je blockierter Familie vor dem Anhang.
@@ -345,17 +360,16 @@
 
       if (readonly) return chip;
 
-      chip.setAttribute("role", "button");
-      chip.tabIndex = 0;
-      chip.title = "Click to preview " + att.name;
-      chip.addEventListener("click", function () {
+      // Preview and removal are sibling buttons, never nested controls.
+      const preview = document.createElement("button");
+      preview.type = "button";
+      preview.className = "attachment-chip-preview";
+      preview.title = "Preview " + att.name;
+      preview.setAttribute("aria-label", "Preview " + att.name + ", " + formatFileSize(att.size));
+      preview.append(...chip.childNodes);
+      chip.appendChild(preview);
+      preview.addEventListener("click", function () {
         openAttachmentViewer(att);
-      });
-      chip.addEventListener("keydown", function (event) {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          openAttachmentViewer(att);
-        }
       });
       return chip;
     }
@@ -412,6 +426,7 @@
     }
 
     function renderAttachmentChips() {
+      syncComposerPlacement();
       bar.innerHTML = "";
       const items = window.pendingAttachments;
       bar.hidden = items.length === 0;
@@ -429,6 +444,9 @@
           event.stopPropagation();
           window.pendingAttachments.splice(index, 1);
           renderAttachmentChips();
+          const next = bar.querySelectorAll(".attachment-chip-remove")[Math.min(index, window.pendingAttachments.length - 1)];
+          const toolbar = document.getElementById("composerModeBar");
+          (next || (!toolbar?.hidden && document.getElementById("composerAttachButton")) || trigger).focus({ preventScroll: true });
         });
         chip.appendChild(removeBtn);
 
@@ -442,11 +460,16 @@
         notice.className = "attachment-provider-notice";
         notice.setAttribute("role", "status");
         notice.setAttribute("aria-live", "polite");
-        notice.textContent = attachmentBlockMessage(blockedFamilies);
+        notice.textContent = blockedFamilies.map(family => family.label).join(", ")
+          + " paused · No attachment support";
+        notice.title = attachmentBlockMessage(blockedFamilies);
         bar.appendChild(notice);
       }
 
       syncAttachmentCompatibility();
+      // Files arriving from the picker/paste must stay visible on mobile,
+      // even if the composer collapsed while the file was being read.
+      if (items.length) window.App?.composer?.expand?.();
     }
 
     window.renderAttachmentChips = renderAttachmentChips;
@@ -455,8 +478,10 @@
       detachForMessage: detachForMessage,
       messageMeta: messageMeta,
       renderMessageAttachments: renderMessageAttachments,
-      refreshCompatibility: syncAttachmentCompatibility
+      refreshCompatibility: syncAttachmentCompatibility,
+      syncComposerPlacement: syncComposerPlacement
     };
+    syncComposerPlacement();
 
     window.clearPendingAttachments = function () {
       if (!window.pendingAttachments.length) return;

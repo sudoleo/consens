@@ -502,9 +502,13 @@
     if (answer.text && !answer.error) {
       if (window.injectMarkdown) window.injectMarkdown(body, answer.html || answer.text, answer.sources);
       else body.textContent = answer.text;
+    } else if (!answer.error && ['pending', 'idle', 'reasoning', 'streaming'].includes(answer.status)) {
+      body.classList.add("is-loading");
+      body.setAttribute("aria-busy", "true");
+      body.innerHTML = '<div class="answer-skeleton skeleton-group" aria-hidden="true">'
+        + '<span class="skeleton"></span>'.repeat(4) + '</div>';
     } else {
       body.classList.add("is-empty");
-      body.hidden = direct && !answer.error && ['pending', 'idle', 'reasoning', 'streaming'].includes(answer.status);
       body.textContent = String(answer.error || ({ pending: "Waiting for this model…", reasoning: "This model is reasoning…",
         streaming: "This model is writing…", skipped: "This model was skipped.", canceled: "This model was stopped.",
         error: "This model could not answer." })[answer.status] || "No answer is available.");

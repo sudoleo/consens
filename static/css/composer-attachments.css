@@ -1,0 +1,102 @@
+/* Pending files share the material and width of the lower composer toolbar.
+   Sent-message chips keep their own, read-only presentation. */
+.composer-mode-bar:has(> #attachmentBar:not([hidden])) {
+  height: auto;
+  min-height: 36px;
+  flex-wrap: wrap;
+  row-gap: 0;
+}
+.composer-mode-bar > #attachmentBar:not([hidden]) {
+  flex: 1 0 100%;
+  order: -1;
+  margin: 10px 0 2px;
+  padding: 0 0 10px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.composer-mode-bar:has(> #attachmentBar:not([hidden])) .composer-mode-controls {
+  min-height: 36px;
+}
+#attachmentBar {
+  min-width: 0;
+  gap: 8px;
+}
+#attachmentBar[hidden] { display: none; }
+#attachmentBar .attachment-chip {
+  display: flex;
+  flex: 0 1 280px;
+  min-width: 0;
+  max-width: 100%;
+  gap: 0;
+  padding: 0;
+  border: 1px solid var(--line-soft);
+  border-radius: 9px;
+  background: var(--well);
+  overflow: hidden;
+}
+.attachment-chip-preview {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  gap: 8px;
+  min-height: 38px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.attachment-chip-preview:hover { background: var(--app-surface-hover); }
+#attachmentBar .attachment-chip-thumb,
+#attachmentBar .attachment-chip-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 5px;
+}
+#attachmentBar .attachment-chip-meta { flex: 1; gap: 0; }
+#attachmentBar .attachment-chip-name {
+  max-width: none;
+  font-size: 12px;
+  font-weight: 500;
+}
+#attachmentBar .attachment-chip-size { font-size: 10px; line-height: 1.4; }
+#attachmentBar .attachment-chip-remove {
+  width: 32px;
+  height: 38px;
+  border-radius: 0 8px 8px 0;
+  margin: 0;
+}
+#attachmentBar :is(.attachment-chip-preview, .attachment-chip-remove):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -3px;
+}
+#attachmentBar .attachment-provider-notice {
+  margin: 0;
+  padding: 0 2px;
+  background: transparent;
+  color: var(--ink-2);
+  font-size: 11px;
+  font-weight: 400;
+}
+/* When Agent Mode hides the toolbar, the same compact files sit above the
+   draft. They cannot disappear just because the mobile composer collapsed. */
+.chat-input-container > #attachmentBar:not([hidden]) {
+  flex: 1 0 100%;
+  padding-bottom: 8px;
+}
+@media (max-width: 640px) {
+  #attachmentBar .attachment-chip { flex: 1 1 calc(50% - 4px); }
+  #attachmentBar .attachment-chip:only-child { flex-grow: 0; flex-basis: 100%; }
+  #attachmentBar .attachment-chip-preview { gap: 6px; padding-inline: 6px; }
+  #attachmentBar .attachment-chip-name { font-size: 11px; }
+}
+@media (pointer: coarse) {
+  #attachmentBar .attachment-chip-preview { min-height: 44px; }
+  #attachmentBar .attachment-chip-remove { width: 44px; height: 44px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #attachmentBar .attachment-chip { transition: none; }
+}

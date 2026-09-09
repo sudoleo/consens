@@ -294,6 +294,7 @@
     if (!bar) return;
     const enabled = isAgentModeEnabled();
     bar.hidden = enabled && !document.body.classList.contains("is-hero");
+    window.App.attachments?.syncComposerPlacement?.();
     bar.dataset.agentMode = String(enabled);
     document.getElementById("composerAgentToggle").setAttribute("aria-checked", String(enabled));
     document.getElementById("composerAgentState").textContent = enabled ? "On" : "Off";

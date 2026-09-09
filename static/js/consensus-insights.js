@@ -2340,11 +2340,30 @@
                   const posEl = document.createElement("div");
                   posEl.className = "diff-position";
 
-                  // Modellnamen als kompakte Kopfzeile der Position statt
-                  // "Position A (2 models: …)".
+                  // Gleiche Modell-Icons und Theme-Behandlung wie im Antwort-Leser.
                   const label = document.createElement("div");
                   label.className = "diff-position-label";
-                  label.textContent = pos.models.map(labelFor).join(", ");
+                  pos.models.forEach(function (model) {
+                    const name = labelFor(model);
+                    const mark = document.createElement("span");
+                    mark.className = "diff-position-model";
+                    mark.title = name;
+                    mark.setAttribute("role", "img");
+                    mark.setAttribute("aria-label", name);
+                    const original = $(MODEL_BOX_IDS[model] || "")?.querySelector("img");
+                    if (original) {
+                      const icon = document.createElement("img");
+                      icon.src = original.src;
+                      icon.alt = "";
+                      ["chatgpt-logo", "grok-logo", "mono-logo"].forEach(function (cls) {
+                        if (original.classList.contains(cls)) icon.classList.add(cls);
+                      });
+                      mark.appendChild(icon);
+                    } else {
+                      mark.textContent = name.slice(0, 1).toUpperCase();
+                    }
+                    label.appendChild(mark);
+                  });
                   posEl.appendChild(label);
 
                   if (pos.stance) {
@@ -2379,14 +2398,6 @@
                   body.appendChild(posEl);
                 });
 
-                if (diff.verify) {
-                  const verify = document.createElement("div");
-                  verify.className = "diff-verify";
-                  const lead = document.createElement("b");
-                  lead.textContent = "Worth verifying: ";
-                  verify.append(lead, document.createTextNode(diff.verify));
-                  body.appendChild(verify);
-                }
                 // Im Archiv nur das PERSISTIERTE Ergebnis, nie der Auslöser:
                 // eine Resolve-Runde laeuft gegen die Modelle des aktiven Laufs.
                 // Deshalb faellt jeder Knopf raus, auch bei einer Resolution
