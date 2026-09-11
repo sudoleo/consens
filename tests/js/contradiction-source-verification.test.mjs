@@ -21,6 +21,10 @@ describe('contradiction evidence presentation', () => {
     expect(result.querySelector('blockquote').textContent).toBe(finding.evidence[0].quote);
     expect(result.querySelector('script')).toBeNull();
     expect(result.querySelector('a').href).toBe('https://example.com/prices');
+    expect(result.querySelector('details').open).toBe(false);
+    result.querySelector('details').open=true;
+    window.App.sourceVerification.renderCurrent(snapshot, options);
+    expect(document.querySelector('.contradiction-source-check details').open).toBe(true);
     expect(result.textContent).toContain('Annual plan');
     expect(document.querySelector('#consensusSourcesTab').dataset.checkState).toBe('');
     expect(document.querySelector('#consensusAnswerBody').textContent).toBe('Consensus stays unchanged.');

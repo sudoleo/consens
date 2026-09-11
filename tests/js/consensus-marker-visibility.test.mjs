@@ -55,6 +55,14 @@ function renderContradiction(window) {
 }
 
 describe("consensus sentence-check visibility", () => {
+  it('keeps contradiction cards and sentence marks when advisory source hooks fail', () => {
+    const {window,document}=boot('true','all');
+    window.App.sourceVerification={bindDifferenceCard(){throw new Error('Bad source metadata');},refreshDifferences(){throw new Error('Bad source evidence');}};
+    expect(()=>renderContradiction(window)).not.toThrow();
+    expect(document.querySelectorAll('#differencesCards .diff-card')).toHaveLength(1);
+    expect(document.querySelectorAll('#consensusAnswerBody .cx-claim')).toHaveLength(1);
+    expect(document.querySelector('#differencesCards').hidden).toBe(false);
+  });
   it("uses the persistent settings selection without removing the analysis", () => {
     const { window, document } = boot();
     renderContradiction(window);

@@ -104,9 +104,12 @@
     const differences = response?.querySelector(".consensus-differences p");
     if (!response || !body || !differences) return;
     const state = context.consensus;
+    const sourceReferences = state.sourceReferenceMode !== 'none'
+      && state.sourceVerification?.check_type !== 'contradiction_evidence';
+    body.dataset.sourceReferences = sourceReferences ? 'legacy' : 'none';
     const signature = JSON.stringify([context.runId, state.text || state.streamText || "",
       state.status === "streaming", state.differencesData, state.differences,
-      state.error, context.evidenceSources]);
+      state.error, context.evidenceSources, sourceReferences]);
     if (!force && consensusProjection?.body === body && consensusProjection.signature === signature) {
       projectSources(context);
       return;
@@ -151,7 +154,7 @@
     if (state.differencesData && typeof state.differencesData === "object") {
       try {
         structured = window.renderConsensusInsights?.(state.differencesData, successful, {
-          sources: context.evidenceSources || []
+          sources: sourceReferences ? context.evidenceSources || [] : []
         }) === true;
       } catch (error) {
         console.error("Could not render run differences:", error);

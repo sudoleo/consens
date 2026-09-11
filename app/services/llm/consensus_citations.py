@@ -15,6 +15,11 @@ _ENVIRONMENT = re.compile(r"\\begin\{(equation|align|alignat|gather|CD)\*?\}")
 _PARTIAL_SOURCE = re.compile(r"\[(?:S\d{0,6}(?:\s*,\s*S?\d{0,6})*)?(?:\](?:\([^\n)]*)?)?$", re.I)
 _PARTIAL_ESCAPE = re.compile(r"\\(?:[a-zA-Z]*(?:\{[^}\n]*\}?)?)?$")
 _PARTIAL_RUN = re.compile(r"[`$]+$")
+# Same conservative inline-dollar contract as math-render.js: a short,
+# single-line pair with a LaTeX signal, never arbitrary currency prose.
+_INLINE_DOLLAR = re.compile(r"\$(?!\s)((?:[^$\n\\]|\\[^\n])+?)(?<![\s\\])\$(?![\w$])")
+_PARTIAL_INLINE_DOLLAR = re.compile(r"(?<![\\$\w])\$(?![\s$])((?:[^$\n\\]|\\[^\n]){0,200})(?:\\)?(?:\$)?$")
+_LATEX_SIGNAL = re.compile(r"\\[A-Za-z]|[\^_{}]")
 
 
 class ConsensusCitationFilter:
@@ -24,6 +29,7 @@ class ConsensusCitationFilter:
         self.literal = ""
         self.line_start = True
         self.indented_line = False
+        self.previous_char = ""
 
     def feed(self, text: str, *, final: bool = False) -> str:
         self.pending += str(text or "")
@@ -34,6 +40,7 @@ class ConsensusCitationFilter:
         out = []
         for line in lines:
             out.append(self._line(line))
+            self.previous_char = line[-1:]
             self.line_start = line.endswith(("\n", "\r"))
             if self.line_start:
                 self.indented_line = False
@@ -50,8 +57,19 @@ class ConsensusCitationFilter:
                     if start and self.pending[start - 1] == "\\":
                         start -= 1
                     cutoff = min(cutoff, start)
+            complete_math = [match for match in _INLINE_DOLLAR.finditer(self.pending)
+                if len(match[1]) <= 200 and _LATEX_SIGNAL.search(match[1])
+                and not re.match(r"[\\$\w]", self.pending[match.start() - 1] if match.start() else self.previous_char)]
+            dollar = _PARTIAL_INLINE_DOLLAR.search(self.pending)
+            if (dollar and (dollar.start() or not re.match(r"[\\$\w]", self.previous_char))
+                    and not any(match.start() <= dollar.start() < match.end() for match in complete_math)):
+                cutoff = min(cutoff, dollar.start())
+            for math in complete_math:
+                if math.start() <= cutoff < math.end():
+                    cutoff = math.start() if math.end() == len(self.pending) else math.end()
             if cutoff:
                 out.append(self._line(self.pending[:cutoff]))
+                self.previous_char = self.pending[cutoff - 1]
                 self.pending = self.pending[cutoff:]
                 self.line_start = False
         return "".join(out)
@@ -117,11 +135,18 @@ class ConsensusCitationFilter:
                 out.append(match[0])
                 i += len(match[0])
             elif line.startswith("$$", i):
-                # Match the app's KaTeX delimiters. A single dollar denotes
-                # currency in this product, not a math span.
                 self.literal = "$$"
                 out.append(self.literal)
                 i += len(self.literal)
+            elif line[i] == "$":
+                previous = line[i - 1] if i else self.previous_char
+                math = _INLINE_DOLLAR.match(line, i) if not re.match(r"[\\$\w]", previous) else None
+                if math and len(math[1]) <= 200 and _LATEX_SIGNAL.search(math[1]):
+                    out.append(math[0])
+                    i = math.end()
+                else:
+                    out.append(line[i])
+                    i += 1
             else:
                 citation = _SOURCE.match(line, i)
                 if citation:

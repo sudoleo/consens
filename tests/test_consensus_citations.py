@@ -6,7 +6,7 @@ import pytest
 
 from app.services.llm.consensus_citations import ConsensusCitationFilter, strip_consensus_source_markers
 from app.services.llm.consensus_engine import (
-    _build_consensus_prompt, parse_differences_payload, query_consensus, stream_consensus,
+    _build_consensus_prompt, _build_differences_prompt, parse_differences_payload, query_consensus, stream_consensus,
 )
 
 
@@ -20,6 +20,9 @@ from app.services.llm.consensus_engine import (
     ("~~~\n[S1]\n~~~\n    [S2]\nFact.[S3]", "~~~\n[S1]\n~~~\n    [S2]\nFact."),
     (r"Math \([S1]\) and \[[S2]\]. Fact.[S3]", r"Math \([S1]\) and \[[S2]\]. Fact."),
     ("$$\n[S1]\n$$\nFact.[S2]", "$$\n[S1]\n$$\nFact."),
+    ("Math $f_{[S1]}$; fact.[S2]", "Math $f_{[S1]}$; fact."),
+    (r"Math $\sum_{i\in[S1]} i$; fact.[S2]", r"Math $\sum_{i\in[S1]} i$; fact."),
+    ("Currency $5[S1] and $6[S2].", "Currency $5 and $6."),
     (r"\begin{align}[S1]\end{align} Fact.[S2]", r"\begin{align}[S1]\end{align} Fact."),
     (r"\begin{equation*}[S1]\end{equation*} Fact.[S2]", r"\begin{equation*}[S1]\end{equation*} Fact."),
     ("Cost $5.[S1] Revenue 10 $. [S2]", "Cost $5. Revenue 10 $. "),
@@ -44,6 +47,16 @@ def test_synthesis_keeps_source_information_but_prohibits_tags():
     assert "A.[S1]" in prompt
     assert "Do not output S-source references" in prompt
     assert "include the existing source tag" not in prompt
+
+
+def test_differences_prompt_keeps_source_eligibility_separate_from_detection():
+    prompt = _build_differences_prompt(
+        {"openai": "Choose PostgreSQL.", "gemini": "Choose MongoDB."},
+        "Choose PostgreSQL.", [],
+    )[0]
+    assert "never a filter for reporting differences" in prompt
+    assert "competing preferences or recommendations" in prompt
+    assert "must not remove a difference or change its type or severity" in prompt
 
 
 def test_prose_streams_immediately_and_partial_markers_never_leak():
@@ -106,3 +119,44 @@ def test_unmatched_anchor_cannot_be_marked_validated():
     diff = _parsed({"checkable": True, "question": "Rate?"}, anchor="The rate is 91%.")
     assert diff["consensus_anchor"] == ""
     assert diff["consensus_anchor_validated"] is False
+
+
+@pytest.mark.parametrize("factual", [None, {"checkable": False, "question": "Which option is preferable?"},
+                                     {"checkable": True, "question": "Which documented limit applies?"}])
+def test_source_check_eligibility_never_filters_differences_or_claims(factual):
+    """Regression: the new field is metadata, not a display or scoring gate.
+
+    The non-checkable recommendation case was also exercised with a live
+    Differences judge: it remains a major contradiction in the returned data.
+    """
+    consensus = "Choose PostgreSQL. Both products store data."
+    positions = [
+        {"stance": "Choose PostgreSQL", "models": ["Model A"], "quote": "Choose PostgreSQL."},
+        {"stance": "Choose MongoDB", "models": ["Model B"], "quote": "Choose MongoDB."},
+    ]
+    raw_differences = [
+        {"claim": "Opposite recommendations", "consensus_anchor": "Choose PostgreSQL.",
+         "type": "contradiction", "severity": "major", "positions": positions},
+        {"claim": "A side-detail disagreement", "type": "contradiction", "severity": "minor", "positions": positions},
+        {"claim": "Different priorities", "type": "emphasis", "positions": positions},
+    ]
+    if factual is not None:
+        for diff in raw_differences:
+            diff["factual_check"] = factual
+    payload = {"differences": raw_differences, "best_model": "Model A", "claims": [
+        {"anchor": "Both products store data.", "agree": ["Model A", "Model B"], "dissent": []},
+    ]}
+    data, _ = parse_differences_payload(json.dumps(payload), {"Model A": "OpenAI", "Model B": "Gemini"},
+        consensus_answer=consensus, model_answers={
+            "OpenAI": "Choose PostgreSQL. Both products store data.",
+            "Gemini": "Choose MongoDB. Both products store data.",
+        })
+    assert [(diff["type"], diff["severity"]) for diff in data["differences"]] == [
+        ("contradiction", "major"), ("contradiction", "minor"), ("emphasis", ""),
+    ]
+    assert len(data["claims"]) == 1
+    assert data["claims"][0]["agree"] == ["OpenAI", "Gemini"]
+    assert data["agreement"]["major_contradictions"] == 1
+    assert data["agreement"]["minor_contradictions"] == 1
+    assert data["agreement"]["emphases"] == 1
+    assert all(len(diff["positions"]) == 2 for diff in data["differences"])

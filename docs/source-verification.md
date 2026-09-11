@@ -6,6 +6,11 @@ Faktenprüfung des Consensus**. Consensus, Agreement, Coverage und Modellpositio
 bleiben unverändert; `/resolve` ist eine unabhängige, explizit gestartete Modellrunde.
 Die alten v1–v3-Verträge stehen weiter unten und gelten nur für alte Prüfungen.
 
+Differences und Claims behalten ihre bisherige Erkennung, Markierung und
+Bewertung – auch bei Empfehlungen, abweichenden Präferenzen und deaktivierter
+Quellenprüfung. `factual_check` filtert ausschließlich den separaten Prüfauftrag.
+Ein Fehler beim Quellen-UI darf den Aufbau der Differences/Claims nicht abbrechen.
+
 ## Synthese und Auslösung
 
 `consensus_engine.py` behält Quelleninformationen im Synthese-Input und verbietet
@@ -147,6 +152,12 @@ existing sources“. Ergebnisse stehen direkt bei ihrer Contradiction, mit
 Belegpassagen, Quellenlinks, Position und Bedingungen. Topics erhalten bei Bedarf
 gebundene Streitpunktkarten im Quellenbericht. Originalzitate bleiben unverändert.
 Kein Zustand behauptet „Antwort verifiziert“.
+Der kompakte Status und seine Begründung bleiben sichtbar; `View evidence`
+öffnet Originalpassagen/Links und erhält den offenen Zustand bei Updates.
+Neue Consensus-Ansichten unterbinden auch nachträgliche Quellen-Linkifizierung
+numerischer Notation wie `[1]`; die ursprünglichen Modellantworten behalten
+ihre Quellenverweise. Der Sanitizer erhält zusätzlich die vom Math-Renderer
+unterstützten, LaTeX-haltigen Inline-Dollar-Ausdrücke.
 
 - Keine geeigneten Widersprüche: `skipped` / `no_checkable_contradictions`,
   „No checkable contradictions detected“.

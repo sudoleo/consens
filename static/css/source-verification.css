@@ -147,4 +147,6 @@ body.consensus-markers-hidden .share-md a[data-source-check]:focus-visible {
 .contradiction-source-provenance { margin-bottom: .3rem; }
 .contradiction-source-quote { white-space: pre-wrap; overflow-wrap: anywhere; margin: .4rem 0; padding-left: .75rem; border-left: 2px solid var(--border-color, #d6d6d6); }
 .contradiction-source-context { font-size: .8rem; opacity: .8; }
+.contradiction-source-evidence-details > summary { cursor: pointer; min-height: 44px; padding: .6rem 0; box-sizing: border-box; font-size: .8rem; }
+.contradiction-source-evidence-details > summary:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; border-radius: 3px; }
 .contradiction-source-differences .diff-card { margin-top: 1.2rem; }

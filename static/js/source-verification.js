@@ -235,6 +235,7 @@
       navigationHighlights.delete(target);
     }
     const previous = presentations.get(body);
+    rememberEvidenceDisclosures(previous?.differenceCards);
     previous?.differenceCards?.querySelectorAll('.contradiction-source-check').forEach(node => node.remove());
     if (previous?.differenceCards) differencePresentations.delete(previous.differenceCards);
     presentations.delete(body);
@@ -627,6 +628,17 @@
 
   const differencePresentations = new WeakMap();
   const cardDifferences = new WeakMap();
+  const evidenceDisclosures = new WeakMap();
+  function rememberEvidenceDisclosures(cards) {
+    if (!cards) return;
+    const state = evidenceDisclosures.get(cards) || new Map();
+    cards.querySelectorAll('.contradiction-source-check').forEach(section => {
+      const disclosure = section.querySelector('.contradiction-source-evidence-details');
+      if (disclosure) state.set(section.dataset.contradictionId, disclosure.open);
+    });
+    while (state.size > 100) state.delete(state.keys().next().value);
+    evidenceDisclosures.set(cards, state);
+  }
   function bindDifferenceCard(card, difference) { cardDifferences.set(card, difference); }
   function differenceIdentity(diff) {
     return JSON.stringify([diff.claim, diff.consensus_anchor, (diff.positions || []).map(pos => [pos.stance, pos.quote, pos.models])]);
@@ -645,13 +657,13 @@
   function sameBinding(a, b) {
     return ['job_id', 'run_id', 'answer_version', 'schema_version', 'check_type', 'prompt_version'].every(key => a?.[key] == null || a[key] === b?.[key]);
   }
-  function contradictionResult(item, verification) {
+  function contradictionResult(item, verification, evidenceOpen = false) {
     const section = element('section', 'contradiction-source-check');
     section.dataset.contradictionId = item.contradiction_id;
     section.dataset.checkState = item.state || 'unavailable';
-    section.append(element('h4', 'contradiction-source-heading', 'Existing-source check'));
+    section.append(element('h4', 'contradiction-source-heading', 'Source check'));
     const position = (item.positions || []).find(pos => pos.id === item.supported_position_id);
-    const positionName = position ? `${position.id}: ${position.summary || (position.models || []).join(', ')}` : '';
+    const positionName = position ? position.summary || (position.models || []).join(', ') : '';
     const evidence = (item.evidence || []).filter(proof => proof.quote && proof.source_id
       && (verification.sources || []).some(source => source.id === proof.source_id));
     const supported = item.checked && evidence.length > 0;
@@ -659,16 +671,21 @@
       : item.state === 'pending' ? 'Waiting to check this contradiction'
       : !item.checked ? 'Check unavailable: ' + reasonLabel(item.reason_code)
       : !supported ? 'Existing evidence is insufficient'
-      : {supports_position: positionName ? `Sources support ${positionName}` : 'Existing evidence is insufficient',
+      : {supports_position: positionName ? `Sources support: ${positionName}` : 'Existing evidence is insufficient',
         conditions_explain: 'Different conditions explain the disagreement', sources_conflict: 'The sources disagree',
         insufficient_evidence: 'Existing evidence is insufficient'}[item.verdict] || 'Existing evidence is insufficient';
     section.append(element('p', 'contradiction-source-verdict', verdict));
     if (item.coverage_limited) section.append(element('p', 'contradiction-source-context', 'Some sources were omitted due to the source budget.'));
     if (item.reason && (supported || item.verdict === 'insufficient_evidence')) section.append(element('p', 'contradiction-source-reason', item.reason));
+    const disclosure = element('details', 'contradiction-source-evidence-details');
+    disclosure.open = evidenceOpen;
+    disclosure.append(element('summary', '', `View evidence · ${evidence.length} ${evidence.length === 1 ? 'passage' : 'passages'}`));
     if (supported) evidence.forEach(proof => {
       const source = verification.sources.find(value => value.id === proof.source_id);
       const block = element('div', 'contradiction-source-evidence');
-      const provenance = element('p', 'contradiction-source-provenance', proof.position_id ? `${proof.position_id} · ` : '');
+      const positionModels = (item.positions || []).find(value => value.id === proof.position_id)?.models || [];
+      const provenance = element('p', 'contradiction-source-provenance', positionModels.length
+        ? `${positionModels.join(', ')} · ` : proof.position_id ? `${proof.position_id} · ` : '');
       try {
         const url = new URL(source.url);
         if (['https:', 'http:'].includes(url.protocol)) {
@@ -681,13 +698,15 @@
       const context = [['Date', proof.date], ['Scope', proof.scope], ['Limitations', proof.limitations]]
         .filter(([, value]) => value).map(([label, value]) => `${label}: ${value}`).join(' · ');
       if (context) block.append(element('p', 'contradiction-source-context', context));
-      section.append(block);
+      disclosure.append(block);
     });
+    if (supported) section.append(disclosure);
     return section;
   }
   function refreshDifferences(cards) {
     const presentation = differencePresentations.get(cards);
     if (!presentation) return;
+    rememberEvidenceDisclosures(cards);
     cards.querySelectorAll('.contradiction-source-check').forEach(node => node.remove());
     const {verification, differencesData} = presentation;
     (verification.findings || []).forEach(item => {
@@ -706,7 +725,8 @@
       });
       if (matches.length !== 1) return;
       const card = matches[0];
-      (card.querySelector('.diff-card-body') || card).append(contradictionResult(item, verification));
+      (card.querySelector('.diff-card-body') || card).append(contradictionResult(item, verification,
+        evidenceDisclosures.get(cards)?.get(item.contradiction_id) === true));
     });
   }
   function renderContradictions(body, target, verification, options, previousCards) {

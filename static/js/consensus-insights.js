@@ -2349,7 +2349,9 @@
             } else {
               differences.forEach(function (diff) {
                 const card = document.createElement("details");
-                window.App.sourceVerification?.bindDifferenceCard(card, diff);
+                // Source checks are advisory. A malformed check must never
+                // interrupt the original cards or the subsequent claim marks.
+                try { window.App.sourceVerification?.bindDifferenceCard(card, diff); } catch (_) {}
                 let cardClass = "diff-card " + (diff.type === "contradiction" ? "is-contradiction" : "is-emphasis");
                 if (diff.type === "contradiction" && diff.severity === "major") cardClass += " is-major";
                 card.className = cardClass;
@@ -2470,7 +2472,7 @@
                 if (diff.resolution) markCardResolved(card, diff.resolution.outcome);
               });
             }
-            window.App.sourceVerification?.refreshDifferences(cards);
+            try { window.App.sourceVerification?.refreshDifferences(cards); } catch (_) {}
             return cards;
           }
 

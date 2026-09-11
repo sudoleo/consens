@@ -276,6 +276,10 @@ function createSourceListCluster(refs) {
 
 function linkifySourceTags(containerEl, sources) {
   if (!containerEl || !sources || !sources.length) return;
+  // New consensus prose has no source-reference syntax. In particular, a
+  // mathematical/numeric [1] must not acquire a citation from the model catalogue.
+  // Original model answers and saved legacy consensus keep their own links.
+  if (containerEl.closest?.('[data-source-references="none"]')) return;
 
   const numbered = wantsNumberedRefs(containerEl);
   const ignoredParents = new Set(["A", "CODE", "PRE", "SCRIPT", "STYLE", "TEXTAREA"]);

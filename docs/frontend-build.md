@@ -34,6 +34,17 @@ npm test
 wenn nicht). Denselben Abgleich macht `tests/test_frontend_build.py` im
 normalen pytest-Lauf, ohne Node.
 
+## Lokalen Backend-Stand prüfen
+
+Ein neuer Frontend-Build lädt Python-Module eines laufenden Uvicorn-Workers nicht
+neu. Auch mit `--reload` kann ein hängen gebliebener lokaler Watcher neue Dateien
+übersehen. Wenn neue Assets zusammen mit altem API-Verhalten auftreten, den
+Build-Commit in der App mit `git rev-parse --short HEAD` und die Startzeit des
+Python-Workers mit den Änderungen vergleichen. Den zugehörigen lokalen Server
+anschließend vollständig neu starten und einen **neuen** Lauf prüfen.
+Ein neu geladener alter Bookmark bleibt weiterhin ein historisches Ergebnis.
+Ein Cache-Reload im Browser allein behebt veraltete Backend-Module nicht.
+
 ## Wie es zusammenhängt
 
 ```

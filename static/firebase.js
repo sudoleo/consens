@@ -2200,6 +2200,8 @@ function loadSingleBookmarkUI(sourceBookmark, conversationTurns = [], options = 
         // WICHTIG: Die Konsens-Antwort zuerst rendern – die Claim-Badges
         // (Modell-Zustimmung) verankern sich am Text der Hauptantwort.
         const conMain = window.App.consensusBodyEl(consensusDiv);
+        const sourceReferences = bookmark.responses.source_verification?.check_type !== 'contradiction_evidence';
+        conMain.dataset.sourceReferences = sourceReferences ? 'legacy' : 'none';
         renderContent(conMain, consensusText);
 
         // --- Differences Box ---
@@ -2214,7 +2216,8 @@ function loadSingleBookmarkUI(sourceBookmark, conversationTurns = [], options = 
 
         let structuredRendered = false;
         if (window.renderConsensusInsights && differencesData && typeof differencesData === "object") {
-            structuredRendered = window.renderConsensusInsights(differencesData, includedCount);
+            structuredRendered = window.renderConsensusInsights(differencesData, includedCount,
+              sourceReferences ? {} : {sources: []});
         }
 
         // Resolve-Persistenz: Payload setzen, damit eine Resolve-Runde aus dem

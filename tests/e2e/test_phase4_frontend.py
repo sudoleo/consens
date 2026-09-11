@@ -410,7 +410,8 @@ def test_followup_stream_preserves_history_and_model_loading_nodes(browser, phas
 @pytest.mark.parametrize("width", [1280, 390])
 def test_source_judge_stream_keeps_completed_claims_and_differences(browser, phase4_server, width):
     """Consensus finishes before durable jobs; source progress preserves reader nodes."""
-    context, page = _real_firebase_page(browser, phase4_server)
+    context, page = _real_firebase_page(browser, phase4_server,
+        init_script="localStorage.setItem('consensio.consensusHighlightMode.v1','all')")
     try:
         page.set_viewport_size({"width": width, "height": 900})
         page.evaluate('''() => {
@@ -446,6 +447,9 @@ def test_source_judge_stream_keeps_completed_claims_and_differences(browser, pha
           window.__judgeSend = (name, data) => window.__judgeStream.enqueue(
             new TextEncoder().encode('event: ' + name + '\\ndata: ' + JSON.stringify(data) + '\\n\\n'));
           window.__judgeCompletion = window.App.executeConsensusRun(run);
+          // This fixture exercises the saved v3 citation mode. New v4 runs
+          // have a separate regression and never create consensus references.
+          run.consensus.sourceReferenceMode = 'legacy';
         }''')
         page.wait_for_function('() => Boolean(window.__judgeStream)')
         page.evaluate('''() => {
@@ -534,18 +538,19 @@ def test_source_judge_stream_keeps_completed_claims_and_differences(browser, pha
         expect(page.locator('.answer-reader-dialog')).not_to_be_visible()
         ref = page.locator('#consensusAnswerBody .src-ref[data-source-number="1"]')
         # The user-level visibility toggle must also hide citation verdict colors.
-        toggle = page.locator('#consensusMarkerToggle')
+        toggle = page.locator('#consensusHighlightsSelect')
+        original_mode = toggle.input_value()
         checked_style = ref.evaluate("el => [getComputedStyle(el).color, getComputedStyle(el).backgroundColor]")
-        toggle.click()
-        expect(toggle).to_have_text('Show checks')
+        toggle.evaluate("el => {el.value='none'; el.dispatchEvent(new Event('change',{bubbles:true}));}")
+        expect(toggle).to_have_value('none')
         hidden_style = ref.evaluate("el => [getComputedStyle(el).color, getComputedStyle(el).backgroundColor]")
         assert hidden_style[1] == 'rgba(0, 0, 0, 0)'
         assert hidden_style != checked_style
         expect(ref).to_have_attribute('data-source-check', 'supported')
         page.evaluate('window.App.sourceVerification.renderCurrent(window.__judgeFinished)')
         assert ref.evaluate("el => getComputedStyle(el).backgroundColor") == 'rgba(0, 0, 0, 0)'
-        toggle.click()
-        expect(toggle).to_have_text('Hide checks')
+        toggle.evaluate("(el,value) => {el.value=value; el.dispatchEvent(new Event('change',{bubbles:true}));}", original_mode)
+        expect(toggle).to_have_value(original_mode)
         page.wait_for_function("style => { const el = document.querySelector('#consensusAnswerBody .src-ref[data-source-number=\"1\"]'); return getComputedStyle(el).color === style[0] && getComputedStyle(el).backgroundColor === style[1]; }", arg=checked_style)
         ref.hover()
         teaser = page.locator('#sourceTeaser')

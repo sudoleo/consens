@@ -127,6 +127,31 @@ Geltungsbereichsnotiz.
 
 ## Abnahmegrenze
 
+### Nachprüfung: Differences, Claims und lokale Versionsmischung
+
+Am 11.09.2026 meldete der Nutzer fehlende Differences und weiterhin farbige
+S-Quellen auf `127.0.0.1:8000/app`. Die laufende Seite lud bereits den neuen
+Frontend-Build, während der Python-Worker noch vor der Umstellung gestartet
+worden war und den alten Build `82558be` meldete. Der sichtbare gespeicherte
+Döner-Vergleich enthielt Claims, eine `different_emphasis`-Difference sowie eine
+historische Satz–Quellen-Prüfung. Das war kein neuer v4-Prüflauf.
+
+Drei echte Analyseaufrufe mit bewusst gegensätzlichen Modellantworten prüften
+die Erkennung separat: Der Vergleich von `list.sort()` und `sorted()` ergab
+einen großen Widerspruch und einen geteilten Claim; explizit unterschiedliche
+PostgreSQL-/MongoDB-Empfehlungen blieben als großer Widerspruch mit
+`factual_check.checkable: false` erhalten. Prüfbarkeit ist damit eine Zusatzangabe
+für die Quellenprüfung und kein Filter für Differences oder Claims. Diese
+gezielten Fälle belegen keine allgemeine Erkennungsquote.
+
+Zusätzlich wurden zwei unabhängige Darstellungsrisiken korrigiert: Fehler in
+den Quellen-UI-Hooks dürfen die ursprünglichen Karten und Markierungen nicht
+abbrechen; neue Consensus-Texte dürfen numerische Schreibweisen wie `[1]`
+nicht über den Modellquellenkatalog in farbige S-Links umwandeln. Die
+Stream-/Polling-Abnahme prüft beide Schalterstellungen sowie unveränderte
+Claim- und Difference-DOM-Knoten nach dem Eintreffen des Quellenurteils.
+Gespeicherte Legacy-Antworten und ihre Quellenlinks bleiben erhalten.
+
 Die drei Beispiele zeigen zwei fachlich passende Live-Urteile mit validierten
 Quellenzitaten und eine Enthaltung durch die Belegvalidierung. Der erste
 Sandbox-Versuch prüfte außerdem die ehrliche Behandlung realer Abruffehler.

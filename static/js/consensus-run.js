@@ -288,6 +288,8 @@
       const turnSources = Array.isArray(turnData.sources) ? turnData.sources : [];
       const answerBody = document.createElement("div");
       answerBody.className = "consensus-answer-body";
+      const sourceReferences = turnData.source_verification?.check_type !== 'contradiction_evidence';
+      answerBody.dataset.sourceReferences = sourceReferences ? 'legacy' : 'none';
       if (typeof window.injectMarkdown === "function") {
         window.injectMarkdown(answerBody, turnData.consensus, turnSources);
       } else {
@@ -301,7 +303,7 @@
         answerBody,
         turnData.differences_data,
         claimsFallback,
-        turnSources
+        sourceReferences ? turnSources : []
       );
       const verdict = this.staticizeHistoryNode(liveVerdict)
         || this.buildStoredAgreement(turnData.differences_data);
@@ -776,6 +778,7 @@
     context.controllers.consensus = controller;
     context.phase = "consensus";
     context.consensus.status = "pending";
+    context.consensus.sourceReferenceMode = 'none';
     context.consensus.error = null;
     registry.update(context.runId, () => {});
 
@@ -876,6 +879,7 @@
         "differences.delta": contextConsensusRenderer(context, "differences")
       });
       const data = requestResult.data || {};
+      if (data.chat_replayed) context.consensus.sourceReferenceMode = data.source_verification?.check_type === 'contradiction_evidence' ? 'none' : 'legacy';
       if (!data.consensus_response && context.consensus.text) data.consensus_response = context.consensus.text;
       updateContextUsage(context, data);
       if (!registry.isExecuting(context.runId)) return data;
@@ -1400,6 +1404,7 @@
         label.textContent = text;
       }
       const consensusMainEl = window.App.consensusBodyEl(consensusDiv);
+      if (consensusMainEl) consensusMainEl.dataset.sourceReferences = 'none';
       let sourceVerificationSnapshot = null;
       let earlyDifferences = null;
       const consensusMainRenderer = createStreamRenderer(
@@ -1496,7 +1501,7 @@
             if (!isActiveConsensusRun(consensusRunId)) return;
             earlyDifferences = data;
             let structured = false;
-            try { structured = window.renderConsensusInsights?.(data.differences_data, includedAnswerCount) === true; }
+            try { structured = window.renderConsensusInsights?.(data.differences_data, includedAnswerCount, {sources: []}) === true; }
             catch (error) { console.error("Could not render differences:", error); }
             if (!structured && differencesEl) injectMarkdown(differencesEl, data.differences || "The differences check is unavailable.");
             window.App.consensusPipeline?.onConsensusEnd?.();
@@ -1586,7 +1591,8 @@
         const diffEl = consensusDiv.querySelector(".consensus-differences p");
 
         if (mainEl) {
-          // Konsens-Text inkl. [S1]-Links, Copy-Buttons usw.
+          if (data.chat_replayed) mainEl.dataset.sourceReferences = data.source_verification?.check_type === 'contradiction_evidence' ? 'none' : 'legacy';
+          // New synthesis stays citation-free; legacy replays retain their links.
           injectMarkdown(mainEl, data.consensus_response);
           window.App.sourceVerification?.renderCurrent(data.source_verification || sourceVerificationSnapshot,
             {differencesData: data.differences_data});
@@ -1602,7 +1608,8 @@
             structuredRendered = window.renderConsensusInsights
               ? window.renderConsensusInsights(
                   data.differences_data,
-                  completedReplay ? replayedAnswerCount : includedAnswerCount
+                  completedReplay ? replayedAnswerCount : includedAnswerCount,
+                  mainEl?.dataset.sourceReferences === 'none' ? {sources: []} : {}
                 )
               : false;
           } catch (renderError) {

@@ -107,4 +107,5 @@ def test_bookmark_view_and_logout_keep_run_ownership_explicit():
     assert "window.App.runRegistry?.beginAction?.(" in insights
     assert "expectedBookmarkVersion" in insights
     assert "signal: actionController.signal" in insights
-    assert "sources: context.evidenceSources || []" in view
+    assert "sources: sourceReferences ? context.evidenceSources || [] : []" in view
+    assert "body.dataset.sourceReferences = sourceReferences ? 'legacy' : 'none'" in view

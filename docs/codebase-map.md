@@ -1736,6 +1736,14 @@ für zitierte Satz-/Quellen-Paare bleibt zur Verarbeitung alter Pläne erhalten.
 `consensus-anchor.js` in `bundles.json`, außerdem auf öffentlichen Ergebnissen.
 RunContext: `consensus.sourceVerification`. V4-Ergebnisse erscheinen direkt
 bei ihrer Contradiction, mit validierten Belegpassagen und Quellenlinks.
+Neue Runs setzen zusätzlich `consensus.sourceReferenceMode: none` und am
+Antwortcontainer `data-source-references="none"`. Dadurch macht die Darstellung
+aus numerischen `[1]`-Notationen keine Quellenlinks; Modellantworten und Legacy-
+Consensus behalten ihre Verweise. Source-Check-Hooks sind vom Aufbau der
+Differences-Karten/Claim-Marker getrennt abgesichert. Der Prüfstatus bleibt
+sichtbar, `View evidence` klappt die Originalpassagen bei Bedarf auf und behält
+seinen Zustand bei Polling. `factual_check` ist ausschließlich Prüfmetadatum;
+es filtert weder Differences noch Claims oder deren Agreement-Beitrag.
 Positions-/Ankervergleich und Run-/Antwortbindung verhindern Zuordnung zu
 einem anderen Streitpunkt; Polling erneuert Befunde, ohne Texte/Agreement
 neu zu berechnen. Topics ohne bestehende Karten erhalten gebundene
