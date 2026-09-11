@@ -82,10 +82,18 @@
   }
   function coverageText(verification) {
     const { total, checked, remaining } = coverage(verification);
-    if (isContradictionCheck(verification)) return `${checked} of ${total} contradictions checked`
-      + (verification.scope?.omitted_contradictions ? ` · ${verification.scope.omitted_contradictions} omitted by budget` : '')
-      + (verification.scope?.unavailable_contradictions ? ` · ${verification.scope.unavailable_contradictions} unavailable` : '')
-      + (verification.scope?.excluded_contradictions ? ` · ${verification.scope.excluded_contradictions} not checked` : '');
+    if (isContradictionCheck(verification)) {
+      const unresolved = (verification.findings || []).filter(isRejectedContradictionCheck).length;
+      if (unresolved > 0 && unresolved === total && !isPending(verification)) {
+        return total === 1 ? 'Contradiction remains unresolved' : `${total} contradictions remain unresolved`;
+      }
+      const unavailable = Math.max(0, (verification.scope?.unavailable_contradictions || 0) - unresolved);
+      return `${checked} of ${total} source checks completed`
+        + (unresolved ? ` · ${unresolved} ${unresolved === 1 ? 'contradiction remains' : 'contradictions remain'} unresolved` : '')
+        + (verification.scope?.omitted_contradictions ? ` · ${verification.scope.omitted_contradictions} omitted by budget` : '')
+        + (unavailable ? ` · ${unavailable} unavailable` : '')
+        + (verification.scope?.excluded_contradictions ? ` · ${verification.scope.excluded_contradictions} not checked` : '');
+    }
     const scope = verification.scope || {};
     const sourceCount = scope.sources ?? scope.source_count;
     const sources = Number.isFinite(sourceCount) ? `${scope.checked_sources || 0} of ${sourceCount} sources checked · ` : '';
@@ -96,6 +104,10 @@
   }
   function isPending(verification) { return ['pending', 'queued', 'running'].includes(verification?.status); }
   function isContradictionCheck(value) { return Number(value?.schema_version) === 4 && value?.check_type === 'contradiction_evidence'; }
+  function isRejectedContradictionCheck(item) {
+    return item && (['evidence_mismatch', 'invalid_output'].includes(item.reason_code)
+      || (Array.isArray(item.validation_errors) && item.validation_errors.some(error => typeof error?.code === 'string')));
+  }
   function assessment(verification) {
     const findings = (verification?.findings || []).filter(Boolean);
     const issues = findings.filter(item => item.checked && (['partial', 'contradicted'].includes(item.support)
@@ -812,7 +824,7 @@
     const evidence = (Array.isArray(item.evidence) ? item.evidence : []).filter(proof => proof?.quote && proof.source_id
       && (verification.sources || []).some(source => source.id === proof.source_id));
     const supported = item.checked && !rejected && evidence.length > 0;
-    const verdict = rejected ? 'Check unavailable: Judge response rejected'
+    const verdict = isRejectedContradictionCheck(item) ? 'Contradiction remains unresolved'
       : item.state === 'omitted' ? 'Omitted: ' + reasonLabel(item.reason_code)
       : item.state === 'pending' ? 'Waiting to check this contradiction'
       : !item.checked ? 'Check unavailable: ' + reasonLabel(item.reason_code)
@@ -821,9 +833,13 @@
         conditions_explain: 'Different conditions explain the disagreement', sources_conflict: 'The sources disagree',
         insufficient_evidence: 'Existing evidence is insufficient'}[item.verdict] || 'Existing evidence is insufficient';
     section.append(element('p', 'contradiction-source-verdict', verdict));
+    if (isRejectedContradictionCheck(item)) section.append(element('p', 'contradiction-source-context',
+      item.reason_code === 'evidence_mismatch'
+        ? 'The source check returned no reliable conclusion because its supporting evidence could not be verified.'
+        : 'The source check returned no reliable conclusion because its result could not be validated.'));
     if (rejected) section.append(rejectionDetails(validationErrors, item, verification));
     else if (!item.checked && item.reason_code === 'evidence_mismatch') section.append(element('p', 'contradiction-source-context',
-      'No more specific rejection reason was saved with this result.'));
+      'Evidence quotes could not be verified. No more specific rejection reason was saved with this result.'));
     if (item.coverage_limited) section.append(element('p', 'contradiction-source-context', 'Some sources were omitted due to the source budget.'));
     if (!rejected && item.reason && (supported || item.verdict === 'insufficient_evidence')) section.append(element('p', 'contradiction-source-reason', item.reason));
     const modelNote = fallbackModelNote(verification);

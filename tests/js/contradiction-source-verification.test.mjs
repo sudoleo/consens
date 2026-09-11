@@ -120,7 +120,7 @@ describe('excluded contradiction visibility', () => {
     const {window,document}=boot();
     window.App.sourceVerification.renderCurrent({...snapshot,exclusions:[excluded],
       scope:{contradictions:1,checked_contradictions:1,detected_contradictions:2,excluded_contradictions:1}},options);
-    expect(document.querySelector('#consensusSourceCheckStatus').textContent).toContain('1 of 2 contradictions checked');
+    expect(document.querySelector('#consensusSourceCheckStatus').textContent).toContain('1 of 2 source checks completed');
   });
   it('shows classification and technical reasons together without turning them into a source verdict', () => {
     const {window,document}=boot();
@@ -167,6 +167,46 @@ describe('excluded contradiction visibility', () => {
 describe('precise source-judge rejection diagnostics', () => {
   const rejection = {...finding,checked:false,state:'unavailable',reason_code:'evidence_mismatch',evidence:[],reason:'',
     validation_errors:[{code:'quote_not_in_original',evidence_index:1,source_id:'S1',position_id:'P2'}]};
+  it('describes the rejected source check as unresolved in the footer, report and detail', () => {
+    const {window,document}=boot();
+    window.App.sourceVerification.renderCurrent({...snapshot,status:'partial',
+      scope:{contradictions:1,checked_contradictions:0,unavailable_contradictions:1},
+      findings:[{...rejection,validation_errors:[{code:'date_not_in_source'},{code:'missing_required_evidence'}]}]},options);
+    const label=document.querySelector('#consensusSourceCheckStatus');
+    expect(label.textContent).toBe(' · Contradiction remains unresolved');
+    expect(label.getAttribute('aria-label')).toContain('Contradiction remains unresolved');
+    expect(document.querySelector('#sourceVerificationReport .source-verification-status').textContent).toBe('Contradiction remains unresolved');
+    expect(document.querySelector('.contradiction-source-verdict').textContent).toBe('Contradiction remains unresolved');
+    expect(document.querySelector('.contradiction-source-check').textContent).toContain('The source check returned no reliable conclusion because its supporting evidence could not be verified.');
+    expect(document.body.textContent).not.toContain('0 of 1');
+    expect(document.body.textContent).not.toContain('1 unavailable');
+  });
+  it('counts multiple rejected checks without implying no source comparison was attempted', () => {
+    const {window,document}=boot();
+    window.App.sourceVerification.renderCurrent({...snapshot,status:'partial',
+      scope:{contradictions:2,checked_contradictions:0,unavailable_contradictions:2},
+      findings:[rejection,{...rejection,contradiction_id:'c-two'}]},options);
+    expect(document.querySelector('#consensusSourceCheckStatus').textContent).toBe(' · 2 contradictions remain unresolved');
+  });
+  it('separates rejected conclusions, unavailable sources and omitted checks in a mixed result', () => {
+    const {window,document}=boot();
+    window.App.sourceVerification.renderCurrent({...snapshot,status:'partial',
+      scope:{contradictions:4,checked_contradictions:1,unavailable_contradictions:2,omitted_contradictions:1},
+      findings:[finding,{...rejection,contradiction_id:'c-two'},
+        {...rejection,contradiction_id:'c-three',reason_code:'fetch_error',validation_errors:[]},
+        {...rejection,contradiction_id:'c-four',state:'omitted',reason_code:'url_limit',validation_errors:[]}]},options);
+    expect(document.querySelector('#consensusSourceCheckStatus').textContent).toBe(' · 1 of 4 source checks completed · 1 contradiction remains unresolved · 1 omitted by budget · 1 unavailable');
+  });
+  it('keeps running checks and inaccessible sources distinct from rejected conclusions', () => {
+    const {window,document}=boot();
+    const value={...snapshot,status:'running',scope:{contradictions:1,checked_contradictions:0,unavailable_contradictions:1},findings:[rejection]};
+    window.App.sourceVerification.renderCurrent(value,options);
+    expect(document.querySelector('#consensusSourceCheckStatus').textContent).toContain('Checking contradictions against existing sources');
+    window.App.sourceVerification.renderCurrent({...value,status:'partial',findings:[{...rejection,reason_code:'fetch_error',validation_errors:[]}]},options);
+    expect(document.querySelector('#consensusSourceCheckStatus').textContent).toContain('1 unavailable');
+    expect(document.querySelector('.contradiction-source-verdict').textContent).toContain('Source could not be retrieved');
+    expect(document.body.textContent).not.toContain('Contradiction remains unresolved');
+  });
   it('shows the exact safe rejection reason with its known source and model position', () => {
     const {window,document}=boot();
     const value={...snapshot,findings:[rejection]};const before=JSON.stringify(value);

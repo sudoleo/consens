@@ -4166,6 +4166,11 @@ Plan-Read, Fetch oder Judge. Alte API-/Topic-Prüfendpunkte bleiben für histori
 Daten lesbar. Chat-Shares behalten ihre gespeicherten Prüfergebnisse.
 
 Die Prüfung erklärt erkannte faktische Streitpunkte anhand vorhandener Quellen.
+Verworfene Prüfurteile erscheinen als „Contradiction remains unresolved“
+(bei mehreren mit Anzahl), mit verständlicher Erklärung und den gespeicherten
+Validierungsgründen im Detail. Gemischte Ergebnisse trennen abgeschlossene
+Prüfungen, ungeklärte Widersprüche, nicht verfügbare und ausgelassene Prüfungen;
+die gespeicherten Statuswerte und die Validierung bleiben unverändert.
 „No checkable contradictions detected“ heißt ausschließlich, dass Differences
 keinen geeigneten Prüfauftrag erkannt hat. Laufende Arbeit, deaktivierte
 Prüfung, fehlgeschlagene Analyse/Abrufe, unzureichende Evidenz und Budgetauslassung
