@@ -76,7 +76,7 @@ body.answer-reader-ready:not(.is-hero) .response-section > .response-box {
 .answer-reader-dialog.is-docked {
   inset: 0 0 0 auto;
   margin: 0;
-  width: var(--reader-dock-width, 520px);
+  width: var(--reader-dock-width, 640px);
   height: 100dvh;
   border-radius: 0;
   border-width: 0 0 0 1px;
@@ -161,7 +161,7 @@ body.answer-reader-ready:not(.is-hero) .response-section > .response-box {
 body.answer-reader-modal { overflow: hidden; }
 @media (min-width: 1400px) {
   body.answer-reader-docked {
-    --reader-dock-width: clamp(420px, 30vw, 560px);
+    --reader-dock-width: clamp(520px, 36vw, 720px);
     --reader-left-rail: 260px;
     --reader-chat-width: min(900px, calc(100vw - var(--reader-left-rail) - var(--reader-dock-width) - 64px));
   }
@@ -346,34 +346,50 @@ body.answer-reader-modal { overflow: hidden; }
   --reader-card-inset: 16px;
 }
 .answer-reader-dialog .model-answer-reader {
-  padding: max(20px, env(safe-area-inset-top))
+  padding: max(16px, env(safe-area-inset-top))
     max(var(--reader-inset), env(safe-area-inset-right)) 0
     max(var(--reader-inset), env(safe-area-inset-left));
 }
 .answer-reader-dialog .answer-reader-header {
-  align-items: flex-start;
+  align-items: center;
   flex-shrink: 0;
 }
+.answer-reader-dialog .answer-reader-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 10px;
+  row-gap: 2px;
+}
 .answer-reader-dialog .answer-reader-header h2 {
-  font-size: var(--font-size-base);
+  margin: 0;
+  font-size: var(--font-size-sm);
   line-height: 1.4;
   letter-spacing: var(--tracking-tight);
 }
 .answer-reader-dialog .answer-reader-heading > span {
   display: block;
+  font-size: 11px;
   line-height: 1.5;
 }
+.answer-reader-dialog .answer-reader-icon-button { width: 32px; height: 32px; padding: 7px; }
 .answer-reader-dialog .answer-reader-context {
   flex-shrink: 0;
-  margin-top: 12px;
+  margin-top: 6px;
   margin-bottom: 0;
-  padding: 8px 0 12px;
+  padding: 4px 0 8px;
 }
+.answer-reader-dialog .answer-reader-context details { margin-top: 2px; line-height: 1.5; }
 .answer-reader-dialog .answer-reader-sections {
   flex-shrink: 0;
   gap: 24px;
 }
-.answer-reader-dialog .answer-reader-sections button { padding-block: 10px; }
+.answer-reader-dialog .answer-reader-sections button { padding-block: 8px; }
+.answer-reader-dialog .answer-reader-toolbar { margin: 6px 0; gap: 6px; }
+.answer-reader-dialog .answer-reader-toolbar button { padding: 5px 8px; }
+.answer-reader-dialog .answer-reader-models { margin-bottom: 12px; }
+.answer-reader-dialog .answer-reader-models button { min-height: 32px; padding: 5px 8px; gap: 6px; }
+.answer-reader-dialog .answer-reader-models .answer-reader-model-mark { width: 16px; height: 16px; }
 .answer-reader-dialog .answer-reader-inspector {
   padding-top: 16px;
   line-height: 1.65;
@@ -410,8 +426,21 @@ body.answer-reader-modal { overflow: hidden; }
   padding: 12px;
   margin-top: 14px;
 }
-.answer-reader-dialog .answer-reader-answer-header { padding-block: 16px; }
+.answer-reader-dialog .answer-reader-answer-header { padding-block: 12px; margin-bottom: 0; }
+.answer-reader-dialog .answer-reader-identity { gap: 8px; }
+.answer-reader-dialog .answer-reader-identity .answer-reader-model-mark { width: 20px; height: 20px; }
 .answer-reader-dialog .answer-reader-body { line-height: 1.7; }
+/* Supporting text uses the app's small body size; expanded reading keeps
+   its document scale. No changes to the consensus or inline comparison. */
+.answer-reader-dialog.is-docked .answer-reader-body { font-size: var(--font-size-sm); }
+.answer-reader-dialog.is-docked .answer-reader-body :is(h1,h2,h3,h4) { margin: 1.4em 0 .6em; }
+.answer-reader-dialog.is-docked .answer-reader-body h1 { font-size: 20px; }
+.answer-reader-dialog.is-docked .answer-reader-body h2 { font-size: 18px; }
+.answer-reader-dialog.is-docked .answer-reader-body h3 { font-size: 16px; }
+.answer-reader-dialog.is-docked .answer-reader-body h4 { font-size: var(--font-size-sm); }
+.answer-reader-dialog.is-docked .answer-reader-body > :first-child { margin-top: 0; }
+.answer-reader-dialog.is-docked .answer-reader-body p { margin-bottom: .9em; }
+.answer-reader-dialog.is-docked .answer-reader-body li { margin-bottom: .3em; }
 .answer-reader-dialog li.answer-reader-source-card {
   padding: 16px 40px 16px var(--reader-card-inset);
   gap: 12px;
@@ -436,6 +465,10 @@ body.answer-reader-modal { overflow: hidden; }
 @media (max-height: 600px) {
   .answer-reader-dialog .model-answer-reader { padding-top: max(12px, env(safe-area-inset-top)); }
   .answer-reader-dialog .answer-reader-context { margin-top: 8px; }
+}
+@media (pointer: coarse) {
+  .answer-reader-dialog .answer-reader-icon-button { width: 44px; }
+  .answer-reader-dialog :is(.answer-reader-icon-button, .answer-reader-models button) { min-height: 44px; }
 }
 
 /* Expanded reading view: one shared left edge and usable width for the
