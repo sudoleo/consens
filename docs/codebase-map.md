@@ -2225,6 +2225,10 @@ Leserbreite nebeneinander, sonst schaltet man zwischen A und B um.
 Unter 500px ersetzt eine kompakte Modellauswahl die mehrzeilige Modellnavigation.
 `static/css/model-answer-reader.css` folgt `shell.css` und verwendet ausschliesslich
 App-Tokens und die bestehende Inter-/Markdown-Typografie.
+Der Leser blendet beim Oeffnen in 180ms ein: angedockt mit 16px Bewegung von
+rechts, modal mit 8px von unten und sanftem Backdrop. Abschnittswechsel und
+Streaming starten die Animation nicht neu; Schliessen bleibt unmittelbar.
+Bei `prefers-reduced-motion: reduce` entfaellt die Oeffnungsanimation.
 Nur der Dialog verwendet kompaktere Kopf-/Kartenabstaende (24px Seitenrand,
 mobil 16px): Titel (14px) und Bereitschaftsstatus teilen eine umbrechende Zeile,
 Frage, Tabs und Modellchips folgen mit reduziertem Abstand. Modellchips und

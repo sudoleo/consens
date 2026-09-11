@@ -88,6 +88,7 @@ def test_wide_reader_centering_and_source_cards(browser, phase4_server, width, t
         dialog = page.locator('.answer-reader-dialog')
         chat = page.locator('.container')
         def assert_centered(left):
+            dialog.evaluate("el => Promise.all(el.getAnimations().map(animation => animation.finished))")
             bounds = chat.bounding_box()
             expected = (left + dialog.bounding_box()['x']) / 2
             assert abs(bounds['x'] + bounds['width'] / 2 - expected) <= 2
@@ -155,7 +156,7 @@ def test_detail_panel_survives_resize_and_short_viewports(browser, phase4_server
             page.set_viewport_size({'width': width, 'height': height})
             dialog = page.locator('.answer-reader-dialog')
             expect(dialog).to_have_attribute('data-modal', str(width < 1400).lower())
-            page.wait_for_timeout(150)
+            dialog.evaluate("el => Promise.all(el.getAnimations().map(animation => animation.finished))")
             metrics = page.evaluate("""() => {
               const rect = s => document.querySelector(s).getBoundingClientRect();
               const panel = rect('.answer-reader-dialog'), close = rect('#answerReaderClose');

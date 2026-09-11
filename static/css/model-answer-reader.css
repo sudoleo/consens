@@ -83,6 +83,28 @@ body.answer-reader-ready:not(.is-hero) .response-section > .response-box {
   /* A docked inspector stays below modal backdrops and their dialogs. */
   z-index: calc(var(--z-modal) - 2);
 }
+/* Only entering the reader moves it; tab changes and streaming stay still.
+   Keep the travel short and closing immediate, even during the entrance. */
+@media (prefers-reduced-motion: no-preference) {
+  .answer-reader-dialog[open] {
+    animation: answer-reader-enter 180ms cubic-bezier(.22, 1, .36, 1);
+  }
+  .answer-reader-dialog[open].is-docked {
+    --reader-enter-x: 16px;
+    --reader-enter-y: 0px;
+  }
+  .answer-reader-dialog[open]::backdrop {
+    animation: answer-reader-backdrop-enter 180ms ease-out;
+  }
+}
+@keyframes answer-reader-enter {
+  from { opacity: 0; transform: translate(var(--reader-enter-x, 0px), var(--reader-enter-y, 8px)); }
+  to { opacity: 1; transform: translate(0, 0); }
+}
+@keyframes answer-reader-backdrop-enter {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
 .answer-reader-dialog .model-answer-reader { height: 100%; min-height: 0; padding: 24px 28px 0; }
 .answer-reader-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .answer-reader-heading { min-width: 0; }
