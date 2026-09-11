@@ -4106,8 +4106,9 @@ verfügbar; eine andere Highlight-Auswahl zeigt die passenden, auch inzwischen
 eingetroffenen Urteile wieder.
 
 Quellenbericht-Navigation: Die Übersicht zeigt S-Kürzel, Domain und ein
-Hauptergebnis je Satz-/Quellen-Paar. Vollständige Aussagen und die Diagnose der
-Prüfung liegen in separaten, anfangs geschlossenen Disclosures; Themen-/Zeitstatus,
+Hauptergebnis je Satz-/Quellen-Paar. Vollständige Aussagen stehen dauerhaft über
+ihren Quellen, ohne eigene Aufklappsteuerung. Die Diagnose der Prüfung bleibt
+anfangs geschlossen; Themen-/Zeitstatus,
 Modellprovenienz und Originalpassagen erscheinen in den Quelldetails. Ein Klick
 auf eine gebundene S-Referenz öffnet genau dieses Paar und hebt seine Zeile für
 2,4 Sekunden hervor; erneutes Klicken erneuert die Hervorhebung, Polling erhält
@@ -4115,11 +4116,11 @@ sie für die verbleibende Zeit. Reduced Motion verzichtet auf Animationen.
 
 Reader-Darstellung: `model-answer-reader.css` hält Sources und Differences
 im Detailpanel als flache Listen mit feinen Trennern. Quellen zeigen Titel vor
-Domain und Prüfstatus; Aussagen, Quelldetails und Prüfdiagnose nutzen einheitliche
-Chevron-Disclosures. Die Quellenzeilen bleiben auch mobil einzeilig, ihre
-Aussagenvorschau ist auf zwei Zeilen begrenzt.
-Aussagen- und Quellen-Disclosures zeigen auch geöffnet nur einen Chevron,
-ohne das zusätzliche Plus-/Minuszeichen aus dem Basisstil. Der angedockte
+Domain und Prüfstatus. Statements sind vollständig sichtbar; Markdown-Fettungen
+bleiben erhalten, kleine Labels und dezente Modellhinweise trennen Aussage und
+Metadaten. Größere Gruppenabstände erleichtern das Erfassen. Nur Quelldetails und
+Prüfdiagnose haben Chevron-Disclosures. Die Quellenzeilen bleiben auch mobil
+einzeilig und zeigen geöffnet wie geschlossen genau einen Pfeil. Der angedockte
 Reader liegt unter Modal-Backdrops, damit Settings darüber bedienbar bleiben.
 Touch-Ziele haben mindestens
 44 px Höhe. Resolve ist eine kompakte sekundäre Aktion und respektiert weiterhin

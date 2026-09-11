@@ -413,13 +413,8 @@
       const section = element("section", "source-check-group");
       const claim = element("div", "source-check-claim");
       renderClaim(claim, group[0].claim);
-      const statement = element('details', 'source-check-statement');
-      statement.dataset.disclosure = `claim:${id}`;
-      statement.open = openDisclosures.has(statement.dataset.disclosure);
-      const claimSummary = element('summary', 'source-check-statement-summary');
-      claimSummary.append(element('span', 'source-check-statement-label', 'Statement'),
-        element('span', 'source-check-statement-preview', claim.textContent.replace(/\s+/g, ' ').trim()));
-      statement.append(claimSummary, claim);
+      const statement = element('div', 'source-check-statement');
+      statement.append(element('div', 'source-check-statement-label', 'Statement'), claim);
       section.append(statement);
       const matches = (options.differencesData?.claims || []).filter(item => item
         && item.sentence_id != null && String(item.sentence_id) === String(id));
@@ -429,7 +424,6 @@
         statement.append(element('p', 'source-check-model-evidence', `Models: ${new Set(evidence.agree).size} agree · ${dissent} dissent. Model agreement does not establish source support.`));
       }
       panel.append(section);
-      if (focusKey === statement.dataset.disclosure) claimSummary.focus({preventScroll: true});
       group.forEach(item => {
         const documentData = (verification.documents || []).find(doc => doc.source_id === item.source_id)
           || (verification.sources || []).find(source => source.id === item.source_id);

@@ -69,13 +69,11 @@ def test_inspector_density_disclosures_and_footer(browser, phase4_server, theme)
             rows.first.locator('summary').click()
             expect_single_chevron(rows.first.locator('summary'), '::before', opened=False)
             statement = inspector.locator('.source-check-statement').first
-            expect_single_chevron(statement.locator('summary'), '::after', opened=False)
-            statement.locator('summary').focus()
-            page.keyboard.press('Enter')
-            expect(statement).to_have_attribute('open', '')
-            expect_single_chevron(statement.locator('summary'), '::after', opened=True)
-            reader_screenshot(page, f'source-chevron-open-{width}-{theme}')
-            page.keyboard.press('Enter')
+            expect(statement.locator('summary')).to_have_count(0)
+            expect(statement.locator('.source-check-claim')).to_be_visible()
+            expect(statement.locator('.source-check-claim')).to_contain_text('across all age groups.')
+            expect(inspector.locator('.source-check-statement-preview')).to_have_count(0)
+            reader_screenshot(page, f'source-statements-{width}-{theme}')
             cards = inspector.locator('.answer-reader-source-card')
             assert cards.first.bounding_box()['height'] < 115
             assert rows.first.bounding_box()['height'] <= 48

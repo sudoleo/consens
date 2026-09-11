@@ -41,7 +41,7 @@ describe("independent source verification", () => {
     }
     expect(tab.title).toBe('View sources');
   });
-  it('keeps overview diagnostics and full statements secondary while every source verdict stays visible', () => {
+  it('shows full statements directly while source details remain collapsible across updates', () => {
     const {window, report} = boot();
     const snapshot = {...result, schema_version: 3, status: 'partial', findings: [
       {...finding, support: 'partial'}, {...finding, source_id: 'S2', checked: false, reason_code: 'evidence_mismatch', reason: ''}
@@ -51,7 +51,8 @@ describe("independent source verification", () => {
     expect(report.querySelector('.source-check-failure-summary').closest('details')).toBe(report.querySelector('.source-check-diagnostics'));
     expect(report.textContent).toContain('Evidence quotes could not be verified');
     const statement = report.querySelector('.source-check-statement');
-    expect(statement.open).toBe(false);
+    expect(statement.tagName).toBe('DIV');
+    expect(statement.querySelector('summary')).toBeNull();
     expect(statement.querySelector('.source-check-claim').textContent).toBe(finding.claim);
     expect(report.querySelectorAll('.source-check-row')).toHaveLength(2);
     report.querySelectorAll('.source-check-row').forEach(row => {
@@ -59,10 +60,12 @@ describe("independent source verification", () => {
       expect(row.querySelectorAll('.source-check-row-summary .source-check-badge')).toHaveLength(1);
       expect(row.querySelector('.source-check-reference')).not.toBeNull();
     });
-    statement.open = true; statement.querySelector('summary').focus();
+    const row = report.querySelector('.source-check-row');
+    row.open = true; row.querySelector('summary').focus();
     window.App.sourceVerification.renderCurrent(snapshot);
-    expect(report.querySelector('.source-check-statement').open).toBe(true);
-    expect(window.document.activeElement).toBe(report.querySelector('.source-check-statement > summary'));
+    expect(report.querySelector('.source-check-statement .source-check-claim').textContent).toBe(finding.claim);
+    expect(report.querySelector('.source-check-row').open).toBe(true);
+    expect(window.document.activeElement).toBe(report.querySelector('.source-check-row > summary'));
   });
   it('never presents a single green verdict when topic or time has a problem', () => {
     const {window, report} = boot();
