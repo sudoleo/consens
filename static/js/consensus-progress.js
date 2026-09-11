@@ -112,6 +112,54 @@
   const rowProgress = new Map();
   const rowTextCounts = new Map();
   const characterFormat = new Intl.NumberFormat(document.documentElement.lang || "en");
+  const counterMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)");
+  const rowCounters = new Map();
+  const COUNTER_DURATION_MS = 260;
+  let counterFrame = null;
+
+  function writeCharacters(element, value) {
+    const label = characterFormat.format(Math.floor(value)) + " chars";
+    if (element.textContent !== label) element.textContent = label;
+  }
+
+  function animateCounters() {
+    counterFrame = null;
+    const now = performance.now();
+    let moving = false;
+    rowCounters.forEach(counter => {
+      if (counter.value === counter.target) return;
+      const fraction = counterMotion?.matches ? 1
+        : Math.min(1, Math.max(0, (now - counter.started) / COUNTER_DURATION_MS));
+      counter.value = fraction === 1 ? counter.target
+        : counter.from + (counter.target - counter.from) * (1 - Math.pow(1 - fraction, 3));
+      writeCharacters(counter.element, counter.value);
+      moving ||= fraction < 1;
+    });
+    if (moving) counterFrame = requestAnimationFrame(animateCounters);
+  }
+
+  function showCharacters(boxId, element, target) {
+    let counter = rowCounters.get(boxId);
+    // A reopened run starts at its real snapshot. Only new chunks count up.
+    if (!counter || counter.element !== element || counterMotion?.matches || target < counter.value) {
+      counter = { element, value: target, from: target, target, started: performance.now() };
+      rowCounters.set(boxId, counter);
+      writeCharacters(element, target);
+      return;
+    }
+    if (counter.target !== target) {
+      counter.from = counter.value;
+      counter.target = target;
+      counter.started = performance.now();
+      if (counterFrame === null) counterFrame = requestAnimationFrame(animateCounters);
+    }
+  }
+
+  function stopCounters() {
+    if (counterFrame !== null) cancelAnimationFrame(counterFrame);
+    counterFrame = null;
+    rowCounters.clear();
+  }
 
   function answerCharacters(box) {
     // The projected raw answer excludes loader labels, source controls and
@@ -177,13 +225,14 @@
     btn.type = "button";
     btn.className = "run-model-skip-btn";
     const name = box.dataset.shortLabel || box.dataset.model || "this model";
-    btn.textContent = "Taking longer — skip";
+    btn.textContent = "Skip";
     btn.title = "Go on without " + name + ". Its answer is dropped from this run.";
     btn.setAttribute("aria-label", "Skip " + name + ", it is taking longer than expected");
     btn.addEventListener("click", event => {
       event.preventDefault();
       event.stopPropagation();
       btn.disabled = true;
+      btn.textContent = "…";
       window.App?.skipModel?.(box.id);
     });
     slot.appendChild(btn);
@@ -228,16 +277,20 @@
       const time = row.querySelector(".run-model-time");
       if (time) {
         if (done) {
+          rowCounters.delete(box.id);
           if (!rowTimes.has(box.id)) rowTimes.set(box.id, Date.now() - startedAt);
           time.textContent = state === "done"
-            ? "✓ Done — " + seconds(rowTimes.get(box.id)).toFixed(1) + "s"
+            ? "✓ Done · " + seconds(rowTimes.get(box.id)).toFixed(1) + "s"
             : { error: "Failed", skipped: "Skipped", canceled: "Canceled" }[state];
           time.title = state === "done" ? characterFormat.format(chars) + " characters received" : "";
         } else {
-          time.textContent = chars ? characterFormat.format(chars) + " chars"
-            : state === "reasoning" ? "Reasoning" : "Waiting";
-          time.title = chars ? "Characters received — answer is still streaming"
-            : state === "reasoning" ? "The model is reasoning — no answer text yet"
+          if (chars) showCharacters(box.id, time, chars);
+          else {
+            rowCounters.delete(box.id);
+            time.textContent = state === "reasoning" ? "Reasoning" : "Waiting";
+          }
+          time.title = chars ? "Characters received; answer is still streaming"
+            : state === "reasoning" ? "The model is reasoning; no answer text yet"
               : "Waiting for the first answer text";
         }
       }
@@ -314,7 +367,7 @@
       if (step.note) {
         next.textContent = step.note;
       } else if (step.next) {
-        next.innerHTML = "Next — " + step.next.map(t => "<b>" + t + "</b>").join(" → ");
+        next.innerHTML = "Next: " + step.next.map(t => "<b>" + t + "</b>").join(" → ");
       } else {
         next.textContent = "";
       }
@@ -403,6 +456,7 @@
   }
 
   function resetState() {
+    stopCounters();
     stopTicker();
     if (handoffTimer) {
       clearTimeout(handoffTimer);
@@ -429,6 +483,7 @@
   }
 
   function enter(nextStage) {
+    if (nextStage !== "answers") stopCounters();
     stage = nextStage;
     render();
   }

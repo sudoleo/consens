@@ -921,6 +921,7 @@ body:not(.dark-mode) .chat-input-container {
   display: flex;
   flex-wrap: wrap;
   gap: 3px 12px;
+  margin-bottom: 10px;
   font-size: var(--font-size-xs);
   color: var(--ink-3);
 }
@@ -954,15 +955,15 @@ body:not(.dark-mode) .chat-input-container {
   height: 12px;
   border-radius: 3px;
   background: var(--ink-2);
-  animation: runActivity 2.4s ease-in-out infinite;
+  animation: runActivity 3s ease-in-out infinite;
 }
 
 .run-pulse i:nth-child(2) { height: 18px; animation-delay: 0.2s; }
 .run-pulse i:nth-child(3) { height: 9px; animation-delay: 0.4s; }
 
 @keyframes runActivity {
-  0%, 100% { opacity: 0.5; transform: scaleY(0.75); }
-  50% { opacity: 1; transform: scaleY(1); }
+  0%, 100% { opacity: 0.6; transform: scaleY(0.85); }
+  50% { opacity: 0.95; transform: scaleY(1); }
 }
 
 .run[data-stage="done"] .run-pulse i {
@@ -971,6 +972,9 @@ body:not(.dark-mode) .chat-input-container {
 }
 
 .run-label {
+  width: fit-content;
+  max-width: 100%;
+  justify-self: start;
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-medium);
   letter-spacing: var(--tracking-tight);
@@ -980,18 +984,20 @@ body:not(.dark-mode) .chat-input-container {
 /* Only the active work label shimmers. The answer remains still and readable. */
 @supports (background-clip: text) {
   .run:not([data-stage="idle"]):not([data-stage="done"]) .run-label {
-    background: linear-gradient(105deg, var(--ink-2) 25%, var(--ink) 45%, var(--ink-2) 65%);
-    background-size: 240% 100%;
+    --run-sheen: color-mix(in srgb, var(--ink-2) 40%, var(--ground));
+    background: linear-gradient(108deg, var(--ink-2) 35%, var(--run-sheen) 48%, var(--run-sheen) 52%, var(--ink-2) 65%);
+    background-size: 280% 100%;
     background-clip: text;
     -webkit-background-clip: text;
     color: transparent;
-    animation: runTextShimmer 3.2s linear infinite;
+    animation: runTextShimmer 4s linear infinite;
   }
+  body.dark-mode .run:not([data-stage="idle"]):not([data-stage="done"]) .run-label { --run-sheen: var(--ink); }
 }
 
 @keyframes runTextShimmer {
-  from { background-position: 160% 0; }
-  to { background-position: -80% 0; }
+  0% { background-position: 140% 0; }
+  85%, 100% { background-position: -40% 0; }
 }
 
 .run-count {
@@ -1035,7 +1041,7 @@ body:not(.dark-mode) .chat-input-container {
 .run-track.is-indeterminate i {
   width: 34%;
   transition: none;
-  animation: runSweep 1.25s ease-in-out infinite;
+  animation: runSweep 2.4s ease-in-out infinite;
 }
 
 @keyframes runSweep {
@@ -1062,7 +1068,7 @@ body:not(.dark-mode) .chat-input-container {
 .run-detail {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 0;
   margin: 2px 0 0 28px;
 }
 
@@ -1070,13 +1076,12 @@ body:not(.dark-mode) .chat-input-container {
   display: none;
 }
 
-/* Name links, der Live-Fortschritt in der Mitte, gemessene Zeit rechts. Das
-   Skip-Angebot belegt erst dann eine eigene Spalte, wenn es gebraucht wird. */
+/* A reserved action column keeps every track and row stable when Skip appears. */
 .run-model {
   display: grid;
-  grid-template-columns: minmax(76px, 112px) minmax(24px, 1fr) 122px;
+  grid-template-columns: minmax(76px, 112px) minmax(24px, 1fr) 122px 42px;
   align-items: center;
-  min-height: 30px;
+  min-height: 26px;
   gap: 10px;
 }
 
@@ -1085,27 +1090,36 @@ body:not(.dark-mode) .chat-input-container {
 }
 
 .run-model-skip {
-  grid-column: 2 / -1;
-  grid-row: 2;
-  justify-self: end;
-}
-
-/* The skip offer only takes room once it has something to say. */
-.run-model-skip:empty {
-  display: none;
+  grid-column: 4;
+  grid-row: 1;
+  min-width: 0;
 }
 
 .run-model-skip-btn {
-  border: 0;
-  border-radius: var(--radius-pill);
-  padding: 3px 10px;
-  background: var(--raise);
-  color: var(--ink-3);
+  display: block;
+  width: 100%;
+  height: 22px;
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+  padding: 0;
+  background: transparent;
+  color: var(--ink-2);
   font: inherit;
   font-size: var(--font-size-micro);
   white-space: nowrap;
   cursor: pointer;
-  transition: color 0.15s ease, background-color 0.15s ease;
+  animation: runSkipReveal 220ms ease-out both;
+  transition: color 0.18s ease, background-color 0.18s ease, border-color 0.18s ease;
+}
+
+@keyframes runSkipReveal {
+  from { opacity: 0; transform: translateX(3px); }
+  to { opacity: 1; transform: none; }
+}
+
+.run-model-skip-btn:focus-visible {
+  outline: 2px solid var(--ink-2);
+  outline-offset: 2px;
 }
 
 .run-model-skip-btn:hover {
@@ -1116,6 +1130,12 @@ body:not(.dark-mode) .chat-input-container {
 .run-model-skip-btn:disabled {
   opacity: 0.5;
   cursor: default;
+}
+
+@media (pointer: coarse) {
+  .run-model { min-height: 44px; }
+  .run-model-skip { min-width: 44px; justify-self: end; }
+  .run-model-skip-btn { min-height: 44px; }
 }
 
 .run-model-name {
@@ -1159,6 +1179,7 @@ body:not(.dark-mode) .chat-input-container {
   text-align: right;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
 }
 
 .run-model[data-state="done"] .run-model-time {
@@ -1172,7 +1193,8 @@ body:not(.dark-mode) .chat-input-container {
 
 @media (prefers-reduced-motion: reduce) {
   .run, .run.is-gone, .run-model-track i, .run-track i { transition: none; }
-  .run-pulse i, .run-track.is-indeterminate i { animation: none; }
+  .run-pulse i, .run-track.is-indeterminate i, .run-model-skip-btn { animation: none; }
+  .run-model-skip-btn { transition: none; }
   .run:not([data-stage="idle"]):not([data-stage="done"]) .run-label {
     animation: none;
     background: none;
@@ -1941,8 +1963,8 @@ body.dark-mode .run-provenance {
 
 @media (max-width: 640px) {
   .run-model {
-    grid-template-columns: minmax(62px, 88px) minmax(16px, 1fr) 110px;
-    gap: 8px;
+    grid-template-columns: minmax(62px, 88px) minmax(12px, 1fr) 100px 40px;
+    gap: 6px;
   }
 
   .run-detail { margin-left: 0; }

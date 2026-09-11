@@ -20,8 +20,8 @@ ORIGIN = "https://consens-progress.test"
 
 
 @pytest.fixture
-def progress_page(browser):
-    context = browser.new_context(viewport={"width": 1280, "height": 800})
+def progress_page(browser, request):
+    context = browser.new_context(viewport={"width": 1280, "height": 800}, **getattr(request, "param", {}))
     template = (ROOT / "templates/index.html").read_text(encoding="utf-8")
     markup = re.search(r'<section id="consensusRun"[\s\S]*?</section>', template).group()
     css = json.loads((ROOT / "static/dist/manifest.json").read_text())["styles"]["app"]
@@ -73,6 +73,8 @@ def progress_page(browser):
       progressFixture(4, '', 'reasoning');
     }''')
     expect(page.locator('[data-box="model-0"] .run-model-time')).to_have_text("1,234 chars")
+    page.evaluate("() => document.fonts.ready")
+    page.wait_for_function("getComputedStyle(document.getElementById('consensusRun')).transform === 'none'")
     yield page
     assert not errors
     context.close()
@@ -86,9 +88,14 @@ def test_model_status_layout_and_phase_handoff(progress_page, width, dark):
     page.evaluate("dark => document.body.classList.toggle('dark-mode', dark)", dark)
     expect(page.locator('[data-box="model-4"] .run-model-time')).to_have_text("Reasoning")
     expect(page.locator('[data-box="model-5"] .run-model-time')).to_have_text("Waiting")
-    expect(page.locator('[data-box="model-2"] .run-model-time')).to_contain_text("✓ Done —")
-    expect(page.locator("#runNext")).to_have_text("Next — Write the consensus → Check for contradictions")
+    expect(page.locator('[data-box="model-2"] .run-model-time')).to_contain_text("✓ Done ·")
+    expect(page.locator("#runNext")).to_have_text("Next: Write the consensus → Check for contradictions")
     expect(page.locator("#runTrack")).not_to_be_visible()
+    assert page.locator(".run-now").bounding_box()["y"] - (
+        page.locator("#runPast").bounding_box()["y"] + page.locator("#runPast").bounding_box()["height"]
+    ) >= 16
+    assert page.locator("#runLabel").bounding_box()["width"] < 220
+    assert page.locator(".run-model").first.bounding_box()["height"] <= 28
     page.evaluate("() => progressFixture(0, 'A'.repeat(987654))")
     expect(page.locator('[data-box="model-0"] .run-model-time')).to_have_text("987,654 chars")
     assert page.evaluate('''() => {
@@ -128,13 +135,38 @@ def test_reduced_motion_keeps_status_readable_and_static(progress_page):
     assert page.locator("#runBar").evaluate("el => getComputedStyle(el).animationName") == "none"
 
 
-def test_only_phase_summary_is_live_and_skip_is_keyboard_accessible(progress_page):
+@pytest.mark.parametrize("width", [320, 1280])
+def test_only_phase_summary_is_live_and_skip_is_keyboard_accessible(progress_page, width):
     page = progress_page
+    page.set_viewport_size({"width": width, "height": 850})
     expect(page.locator('#runStatus[role="status"][aria-live="polite"]')).to_have_count(1)
     assert page.locator("#consensusRun").get_attribute("aria-live") is None
     assert page.locator("#runDetail").get_attribute("aria-hidden") is None
     skip = page.locator('[data-box="model-5"] .run-model-skip-btn')
+    tracks = page.locator(".run-model-track").all()
+    before = [track.bounding_box() for track in tracks]
+    height = page.locator("#consensusRun").bounding_box()["height"]
     expect(skip).to_be_visible(timeout=12000)
+    expect(skip).to_have_text("Skip")
+    assert [track.bounding_box() for track in tracks] == before
+    assert page.locator("#consensusRun").bounding_box()["height"] == height
+    assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+    screenshot_dir = os.environ.get("PROGRESS_SCREENSHOTS")
+    if screenshot_dir:
+        page.wait_for_function("getComputedStyle(document.querySelector('[data-box=\"model-5\"] .run-model-skip-btn')).opacity === '1'")
+        page.screenshot(path=str(Path(screenshot_dir) / f"skip-{width}.png"))
     skip.focus()
     page.keyboard.press("Enter")
     assert page.evaluate("window.skippedModel") == "model-5"
+
+
+@pytest.mark.parametrize("progress_page", [{"has_touch": True}], indirect=True)
+def test_skip_has_a_full_touch_target_without_overflow(progress_page):
+    page = progress_page
+    page.set_viewport_size({"width": 320, "height": 850})
+    skip = page.locator('[data-box="model-5"] .run-model-skip-btn')
+    expect(skip).to_be_visible(timeout=12000)
+    box = skip.bounding_box()
+    assert box["width"] >= 44 and box["height"] >= 44
+    assert box["x"] + box["width"] <= 320
+    assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")

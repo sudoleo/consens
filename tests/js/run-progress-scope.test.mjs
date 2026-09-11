@@ -60,6 +60,9 @@ function boot() {
     {
       body: BODY,
       before(window) {
+        // These state tests use immediate counters. Motion has a controlled
+        // requestAnimationFrame clock in run-progress-animation.test.mjs.
+        window.matchMedia = () => ({ matches: true });
         window.auth = { currentUser: user };
         window.App = {
           authState: {
@@ -278,7 +281,7 @@ describe("guided-run block belongs to the visible run", () => {
     });
     await new Promise(resolve => setTimeout(resolve, 220));
     const completion = aStatus.textContent;
-    expect(completion).toMatch(/^✓ Done — \d+\.\ds$/);
+    expect(completion).toMatch(/^✓ Done · \d+\.\ds$/);
     expect(aStatus.title).toBe("8 characters received");
     await new Promise(resolve => setTimeout(resolve, 220));
     expect(aStatus.textContent).toBe(completion);

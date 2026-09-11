@@ -838,14 +838,23 @@ der Python-Staleness-Test auch indirekte Änderungen erkennt.
   Zeichen (`1,234 chars`): Unicode-Codepoints aus dem projizierten rohen
   `dataset.consensusAnswer`, ohne Lade-/Fehlertexte oder Markdown-Bedienelemente.
   Ohne Antworttext steht dort `Waiting` bzw. `Reasoning`, beim Abschluss
-  `✓ Done — 12.3s`; Fehler, Skip und Cancel bleiben eigene terminale Labels.
+  `✓ Done · 12.3s`; Fehler, Skip und Cancel bleiben eigene terminale Labels.
   Der Zaehlcache wird mit dem projizierten Lauf zurueckgesetzt. Die aktive
   Taetigkeitszeile hat drei sanft atmende Striche und einen Textschimmer;
   waehrend des Fan-outs genuegen die Modellbalken, der Gesamtbalken ist dort
-  ausgeblendet. `Next — … → …` steht unter den Modellzeilen. Reduced Motion
+  ausgeblendet. `Next: … → …` steht unter den Modellzeilen. Reduced Motion
   deaktiviert Schimmer, Striche, Sweep und Uebergaenge. Nur `#runStatus` ist
   eine Live-Region und wird bei Phasen-/Abschlusswechsel aktualisiert, damit
   Zeichenzahlen nicht fortlaufend vorgelesen werden; Skip bleibt zugaenglich.
+  Die verfeinerte Animation begrenzt den viersekündigen Schimmer auf die
+  Textbreite. Zwischen abgeschlossenen Schritten und aktivem Status liegen
+  18 px; Modellzeilen sind 26 px hoch (Touch: 44 px). Ein gemeinsamer
+  requestAnimationFrame-Loop interpoliert neue Zeichenzahlen ueber 260 ms
+  ohne den empfangenen Zielwert zu ueberschreiten. Neue Chunks setzen am
+  aktuellen Anzeigewert an, ein wiedergeoeffneter Lauf startet direkt bei
+  seinem Snapshot. Terminalstatus, Phasenwechsel und Reset stoppen die
+  Animation; Reduced Motion zeigt sofort den echten Wert. `Skip` erscheint
+  in einer von Anfang an reservierten Aktionsspalte ohne Layoutsprung.
   Am Ende klappt der Block zusammen und uebergibt an den **Provenance-Fuss**
   `#runProvenance` unter der Antwort. Seit **2026-07-28 zwei Zeilen statt drei**
   — die Anordnung macht allein das Grid in `shell.css`
@@ -1555,7 +1564,7 @@ laufenden Request, Consensus oder Save gelesen werden. Entfernte Controls wie
    `query-send.js` einen eigenen `AbortController` (der Lauf-Controller
    kaskadiert darauf). Haben mindestens zwei Modelle geantwortet und wartet der
    Lauf danach ≥ 8 s weiter, bietet die Modellzeile im gefuehrten Lauf
-   „Taking longer — skip" an; `window.App.skipModel(boxId)` bricht genau dieses
+   „Skip" an; `window.App.skipModel(boxId)` bricht genau dieses
    Modell ab, markiert die Box als `responseState="error"` +
    `responseSkipped="true"` und zaehlt es einmalig als beantwortet.
 

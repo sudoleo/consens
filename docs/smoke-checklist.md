@@ -58,13 +58,16 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
 
 ## Kern-Flow
 - [ ] Agent-Run: Modellzeilen zeigen echte empfangene Zeichen, vor dem ersten
-      Text `Waiting`/`Reasoning`, danach `Done — Zeit` bzw. getrennte
+      Text `Waiting`/`Reasoning`, danach `Done · Zeit` bzw. getrennte
       Fehler-/Skip-/Cancel-Labels. Modellbalken bleiben monoton, neue oder
       gewechselte Runs zeigen keine fremden Zeichenzahlen. Strich-Animation
       und Textschimmer passen in Light/Dark bei 320 px; Reduced Motion bleibt
       statisch. Screenreader lesen nur Phasen-/Abschlusswechsel vor, Skip ist
       per Tastatur erreichbar. Automatisiert: `test_consensus_live_progress.py`
       (isolierte Browser-Komponente) und `run-progress-scope.test.mjs`.
+      Neue Chunks zaehlen ruhig hoch, bleiben hoechstens beim empfangenen
+      Wert und stoppen bei Abschluss/Ansichtswechsel. `Skip` veraendert beim
+      Erscheinen keine Balkenbreite oder Zeilenhoehe; Touch-Ziele sind 44 px.
 - [ ] Modellantwort-Sidebar mit sechs Antworten: 520–720 px Dockbreite ab
       1400 px, ruhige einzeilige Kopfzeile und 14-px-Lesetext. Chat und
       Composer bleiben neben der Sidebar sichtbar. Light/Dark, eingeklappte
