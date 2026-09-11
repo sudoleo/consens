@@ -1,5 +1,5 @@
 {
-  "sources": "1f0fe3e01861",
+  "sources": "3c112d35ad3e",
   "inputs": [
     "package-lock.json",
     "scripts/build_frontend.mjs",
