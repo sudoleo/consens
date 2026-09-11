@@ -25,7 +25,7 @@ def progress_page(browser):
     template = (ROOT / "templates/index.html").read_text(encoding="utf-8")
     markup = re.search(r'<section id="consensusRun"[\s\S]*?</section>', template).group()
     css = json.loads((ROOT / "static/dist/manifest.json").read_text())["styles"]["app"]
-    content = f'''<!doctype html><html lang="en"><head>
+    content = f'''<!doctype html><html lang="en"><head><meta charset="utf-8">
       <link rel="stylesheet" href="{css}">
       <style>body {{ display:block; min-height:100vh; padding:24px 16px; }}
       main {{ max-width:720px; margin:0 auto; }}
@@ -39,7 +39,8 @@ def progress_page(browser):
             return
         asset = (ROOT / path.lstrip("/")).resolve()
         if asset.is_relative_to(ROOT / "static") and asset.is_file():
-            route.fulfill(body=asset.read_bytes(), content_type=mimetypes.guess_type(str(asset))[0] or "application/octet-stream")
+            mime = mimetypes.guess_type(str(asset))[0] or "application/octet-stream"
+            route.fulfill(body=asset.read_bytes(), content_type=mime + "; charset=utf-8")
         else:
             route.abort()
 
@@ -85,6 +86,8 @@ def test_model_status_layout_and_phase_handoff(progress_page, width, dark):
     page.evaluate("dark => document.body.classList.toggle('dark-mode', dark)", dark)
     expect(page.locator('[data-box="model-4"] .run-model-time')).to_have_text("Reasoning")
     expect(page.locator('[data-box="model-5"] .run-model-time')).to_have_text("Waiting")
+    expect(page.locator('[data-box="model-2"] .run-model-time')).to_contain_text("✓ Done —")
+    expect(page.locator("#runNext")).to_have_text("Next — Write the consensus → Check for contradictions")
     expect(page.locator("#runTrack")).not_to_be_visible()
     page.evaluate("() => progressFixture(0, 'A'.repeat(987654))")
     expect(page.locator('[data-box="model-0"] .run-model-time')).to_have_text("987,654 chars")
@@ -100,6 +103,8 @@ def test_model_status_layout_and_phase_handoff(progress_page, width, dark):
     }''')
     screenshot_dir = os.environ.get("PROGRESS_SCREENSHOTS")
     if screenshot_dir and width in (390, 1280):
+        page.evaluate("() => progressFixture(0, 'A'.repeat(1234))")
+        expect(page.locator('[data-box="model-0"] .run-model-time')).to_have_text("1,234 chars")
         path = Path(screenshot_dir)
         path.mkdir(parents=True, exist_ok=True)
         page.screenshot(path=str(path / f"progress-{width}-{'dark' if dark else 'light'}.png"))
