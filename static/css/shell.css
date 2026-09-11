@@ -1697,9 +1697,19 @@ body.agreement-verdict-hidden .run-provenance::before {
   display: none;
 }
 
-/* A source verdict is supporting information, never a fourth item inside
-   the Sources button. It uses the available row width in every viewport. */
+/* Desktop keeps the detailed status as another entry point to Sources.
+   Mobile folds it into a small status icon on the existing Sources button. */
 .consensus-footer-source-status {
+  appearance: none;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  box-shadow: none;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  min-height: 32px;
+  justify-self: start;
   padding: 0 0 4px;
   color: var(--ink-3);
   font-size: var(--font-size-xs);
@@ -1781,9 +1791,29 @@ body:not(.is-hero) .consensus-output {
   padding-bottom: 24px;
 }
 
+.consensus-footer-source-status:hover { color: var(--ink); text-decoration: underline; }
+.consensus-footer-source-status:focus-visible { outline: 2px solid var(--ink-2); outline-offset: 3px; }
+.consensus-source-check-icon { display: none; }
+
 @media (max-width: 640px) {
-  .run-provenance > .consensus-footer-source-status {
-    text-align: center;
+  .run-provenance > .consensus-footer-source-status,
+  .run-provenance #runProvenanceFacts { display: none; }
+  #consensusSourcesTab { flex-wrap: nowrap; column-gap: 4px; }
+  #consensusSourcesTab .consensus-tab-count { margin-inline-start: 0; }
+  .consensus-source-check-icon:not(:empty) {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 12px;
+    width: 12px;
+    height: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1;
+    color: var(--ink-2);
+  }
+  #consensusSourcesTab[data-check-state="issue"] .consensus-source-check-icon {
+    color: var(--cx-warn-ink, #a66a14);
   }
 }
 
@@ -1992,13 +2022,13 @@ body.dark-mode .run-provenance {
   .run-provenance:has(.consensus-verdict[hidden]),
   body.agreement-verdict-hidden .run-provenance {
     grid-template-columns: auto minmax(0, 1fr);
-    grid-template-areas: "verdict verdict" "tabs tabs" "status status" "actions facts";
+    grid-template-areas: "verdict verdict" "tabs tabs" "actions facts";
     gap: 2px 12px;
   }
 
   .run-provenance:has(.consensus-verdict[hidden]),
   body.agreement-verdict-hidden .run-provenance {
-    grid-template-areas: "tabs tabs" "status status" "actions facts";
+    grid-template-areas: "tabs tabs" "actions facts";
   }
 
   .run-provenance > .consensus-footer-actions { justify-self: start; }

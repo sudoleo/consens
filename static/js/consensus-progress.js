@@ -910,6 +910,10 @@
       togglePanel(diffTab, $("consensusDifferencesPanel"));
       return;
     }
+    if (event.target.closest("#consensusSourceCheckButton")) {
+      $("consensusSourcesTab")?.click();
+      return;
+    }
     const sourcesTab = event.target.closest("#consensusSourcesTab");
     if (sourcesTab) {
       if (window.App?.answerReader?.openPanel('sources', sourcesTab)) return;

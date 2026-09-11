@@ -903,15 +903,21 @@ der Python-Staleness-Test auch indirekte Änderungen erkennt.
   bilden die primäre Zeile, Share / Watch / Cite stehen daneben. Eine zweite,
   zurückhaltende Zeile enthält Quellenstatus und Laufdetails. Bis 640 px
   nutzen die drei Navigationspunkte gleichmäßig die volle Breite; Quellenstatus
-  folgt bei Bedarf, danach stehen ausschließlich Aktions-Icons links und
-  Laufdetails rechts. Die Icons behalten 44-px-Ziele, aria-label und Tooltips.
+  und Laufdetails (Modellzahl/Dauer) sind mobil ausgeblendet. Darunter stehen
+  Aktions-Icons links und „Run again“ rechts. Die Icons behalten 44-px-Ziele,
+  aria-label und Tooltips.
   `.run-provenance` nutzt Grid mit Varianten für ausgeblendetes Verdict.
   Die stabilen Hosts `#consensusFooterTabs`, `#consensusFooterActions` und
   `.consensus-footer-facts` stehen direkt darin. Sichtbare Kurzlabels kommen
   weiterhin aus `data-short`; die vollständigen Namen bleiben für Screenreader.
   Der Status `#consensusSourceCheckStatus` liegt separat in
-  `.consensus-footer-source-status`; Sources referenziert ihn per
-  `aria-describedby`. Leere Statuszeilen und Status bei verstecktem Sources-Tab
+  `.consensus-footer-source-status` als `#consensusSourceCheckButton`, der dieselbe
+  Sources-Navigation auslöst. Sources referenziert den Status auch mobil per
+  `aria-describedby`. Mobil zeigt `data-check-state` am Sources-Tab ein Häkchen
+  nur bei vollständiger positiver v3-Prüfung; `!` bedeutet Quellenprobleme,
+  `?` unklare/unvollständige oder technisch nicht verfügbare Ergebnisse. Pending
+  behält den Label-Schimmer. Ohne Prüfung bleibt das Icon leer; ein neuer Lauf
+  setzt den Zustand zurück. Leere Statuszeilen und Status bei verstecktem Sources-Tab
   sind nicht sichtbar. Die Markierungserklärung und der Hide/Show-Button sind
   entfernt; ihre Aufgabe übernimmt Settings → Display.
   Der Run-again-Knopf setzt über `#newRunButton` den normalen Hero-/Composer-
@@ -4117,8 +4123,8 @@ ohne das zusätzliche Plus-/Minuszeichen aus dem Basisstil. Der angedockte
 Reader liegt unter Modal-Backdrops, damit Settings darüber bedienbar bleiben.
 Touch-Ziele haben mindestens
 44 px Höhe. Resolve ist eine kompakte sekundäre Aktion und respektiert weiterhin
-`[hidden]` nach Abschluss. `shell.css` zentriert die separate Source-Checks-Zeile
-unter den drei Footer-Tabs bis 640 px. API-, Prüf- und Reader-Navigation bleiben
+`[hidden]` nach Abschluss. `shell.css` ersetzt die separate Source-Checks-Zeile
+bis 640 px durch den kompakten Status am Sources-Tab. API-, Prüf- und Reader-Navigation bleiben
 unverändert; Browser-Abdeckung: `tests/e2e/test_inspector_polish.py`.
 
 Quellenbericht-Darstellung: Auszüge nutzen Marked + DOMPurify und den bestehenden

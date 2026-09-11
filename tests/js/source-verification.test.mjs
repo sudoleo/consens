@@ -13,6 +13,34 @@ const result = { status: "complete", scope: { checked_pairs: 2, pairs: 2 },
   documents: [{ source_id: "S1", source_url: "https://example.com", title: "Prices" }] };
 
 describe("independent source verification", () => {
+  it('keeps the compact Sources verdict honest across result and run changes', () => {
+    const {window, document} = boot();
+    const good = {...finding, support: 'supported', topical: 'relevant', temporal: 'suitable'};
+    const clean = {schema_version: 3, status: 'complete', findings: [good], scope: {pairs: 1, checked_pairs: 1}};
+    const tab = document.getElementById('consensusSourcesTab');
+    const cases = [
+      [clean, 'supported', '✓'],
+      [{...clean, status: 'running'}, 'pending', ''],
+      [{...clean, findings: [{...good, support: 'partial'}]}, 'issue', '!'],
+      [{...clean, findings: [{...good, support: 'unknown'}]}, 'unknown', '?'],
+      [{...clean, status: 'partial', scope: {pairs: 17, checked_pairs: 2}}, 'unknown', '?'],
+      [{...clean, findings: [], scope: {pairs: 1, checked_pairs: 1}}, 'unknown', '?'],
+      [{...clean, schema_version: 2}, 'unknown', '?'],
+      [{...clean, status: 'failed'}, 'unknown', '?'],
+      [{...clean, status: 'awaiting_credentials'}, 'unknown', '?'],
+      [{...clean, findings: [], scope: {pairs: 0, checked_pairs: 0}}, 'unknown', '?'],
+      [{...clean, status: 'skipped'}, '', ''],
+      [null, '', ''],
+    ];
+    for (const [snapshot, state, icon] of cases) {
+      window.App.sourceVerification.renderCurrent(snapshot);
+      expect(tab.dataset.checkState).toBe(state);
+      expect(tab.querySelectorAll('.consensus-source-check-icon')).toHaveLength(1);
+      expect(tab.querySelector('.consensus-source-check-icon').textContent).toBe(icon);
+      expect(tab.querySelector('.consensus-source-check-icon').getAttribute('aria-hidden')).toBe('true');
+    }
+    expect(tab.title).toBe('View sources');
+  });
   it('keeps overview diagnostics and full statements secondary while every source verdict stays visible', () => {
     const {window, report} = boot();
     const snapshot = {...result, schema_version: 3, status: 'partial', findings: [

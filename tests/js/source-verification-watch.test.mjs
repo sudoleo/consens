@@ -29,6 +29,7 @@ describe('bound source check watcher', () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(document.querySelector('.source-check-refresh-notice').textContent).toContain('last received results');
     expect(document.getElementById('consensusSourceCheckStatus').textContent).toBe(' · Updates unavailable');
+    expect(document.getElementById('consensusSourcesTab').dataset.checkState).toBe('unknown');
     expect(document.querySelector('.source-check-loading')).toBeNull();
     expect(document.querySelector('.source-check-refresh-stopped')).not.toBeNull();
     expect(document.getElementById('sourceVerificationReport').hasAttribute('aria-busy')).toBe(false);

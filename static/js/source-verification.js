@@ -29,6 +29,7 @@
     }
     document.querySelector('#consensusSourcesTab .consensus-tab-label')?.classList.toggle('source-check-loading',
       label?.dataset.sourcePending === 'true' && !state?.terminal);
+    if (label) setTabStatus(state ? 'unknown' : label.dataset.sourceTabState || '', label.title);
   }
   function setRefreshState(jobId, state) {
     if (!jobId) return;
@@ -269,10 +270,41 @@
       + (issues ? ` · ${issues} ${issues === 1 ? 'issue' : 'issues'}` : '')
       + (unknown ? ` · ${unknown} unclear` : '');
   }
+  function tabStatus(verification, rendered) {
+    if (!verification || verification.status === 'skipped') return '';
+    if (!rendered) return 'unknown';
+    if (isPending(verification)) return 'pending';
+    const {total, checked, remaining} = coverage(verification);
+    const {issues, unknown} = assessment(verification);
+    if (issues > 0) return 'issue';
+    // Completion is not a positive verdict. Legacy topic-only results and
+    // partial snapshots must not acquire a statement-support checkmark.
+    const findings = (verification.findings || []).filter(Boolean);
+    const completeAssessment = Number.isFinite(verification.scope?.issues)
+      && Number.isFinite(verification.scope?.unknown_pairs)
+      || findings.length >= total && findings.every(item => findingState(item, verification) === 'supported');
+    return verification.status === 'complete' && Number(verification.schema_version) >= 3
+      && total > 0 && checked === total && !remaining && !unknown && completeAssessment
+      ? 'supported' : 'unknown';
+  }
+  function setTabStatus(state, description) {
+    const tab = document.getElementById('consensusSourcesTab');
+    if (!tab) return;
+    tab.dataset.checkState = state;
+    tab.title = description ? `Sources: ${description}` : 'View sources';
+    let icon = tab.querySelector('.consensus-source-check-icon');
+    if (!icon) {
+      icon = element('span', 'consensus-source-check-icon');
+      icon.setAttribute('aria-hidden', 'true');
+      tab.append(icon);
+    }
+    icon.textContent = {supported: '✓', issue: '!', unknown: '?'}[state] || '';
+  }
   function renderCurrent(verification, options) {
     const rendered = renderSafe(document.getElementById("consensusAnswerBody"), document.getElementById("sourceVerificationReport"), verification, options);
     const label = document.getElementById("consensusSourceCheckStatus");
     const pending = rendered && isPending(verification);
+    const state = tabStatus(verification, rendered);
     const tabLabel = document.querySelector("#consensusSourcesTab .consensus-tab-label");
     if (verification?.job_id || verification?.scope?.pairs > 0) {
       const tab = document.getElementById('consensusSourcesTab');
@@ -289,6 +321,8 @@
       label.dataset.sourceStatusText = verification ? ' · ' + message : '';
       label.dataset.sourceStatusTitle = label.title;
       label.dataset.sourcePending = String(isPending(verification));
+      label.dataset.sourceTabState = state;
+      setTabStatus(state, verification ? label.title : '');
       label.append(element('span', 'source-check-status-copy', verification ? ' · ' + message : ''));
       label.classList.toggle("source-check-status-pending", pending);
       if (verification?.job_id) applyRefreshLabel(verification.job_id, refreshStates.get(verification.job_id));
