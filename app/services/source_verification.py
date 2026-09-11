@@ -51,6 +51,11 @@ class Limits:
     output_tokens: int = 3000
     output_chars: int = 20000
     cache_seconds: int = 3600
+    max_contradictions: int = 4
+    max_urls: int = 8
+    input_tokens: int = 24000
+    total_seconds: int = 60
+    fallback_sources_per_position: int = 2
     model: str = field(default_factory=lambda: cfg.get_source_verification_model())
 
     @classmethod
@@ -210,13 +215,17 @@ def judge_sources(payload, keys, limits):
     if not key:
         raise SourceCheckError('missing_credential')
     model = limits.model
+    system = SYSTEM
+    if payload.get('mode') == 'contradiction_evidence' or payload.get('check_type') == 'contradiction_evidence':
+        from app.services.contradiction_verification import SYSTEM as contradiction_system
+        system = contradiction_system
     # This classifier needs little reasoning; reserve the output budget for JSON.
     reasoning = {'reasoning': {'effort': 'minimal'}} if model == 'openai/gpt-5-mini' else {}
     result = cancellable_post_json(OPENROUTER_CHAT_COMPLETIONS_URL,
         headers=openrouter_headers(key), json={
             'model': model,
             **reasoning,
-            'messages': [{'role': 'system', 'content': SYSTEM},
+            'messages': [{'role': 'system', 'content': system},
                          {'role': 'user', 'content': json.dumps(payload, ensure_ascii=False)}],
             'provider': {'zdr': True}, 'max_tokens': limits.output_tokens,
             'response_format': {'type': 'json_object'},
@@ -339,9 +348,15 @@ def _snapshot(version, pairs, sources, *, model=None):
             'sources': sources, 'runtime': {'calls': 0, 'duration_ms': 0}}
 
 
-def plan_source_verification(*, question, consensus, sources, resolved_question='', limits=None):
+def plan_source_verification(*, question, consensus, sources, resolved_question='', limits=None,
+                             differences_data=None, model_answers=None, model_sources=None, run_id=''):
     """Pure serializable plan. Limits bound packages, never discard cited pairs."""
     limits = limits or Limits.configured()
+    if differences_data is not None:
+        from app.services.contradiction_verification import plan_contradiction_verification
+        return plan_contradiction_verification(question=question, consensus=consensus, sources=sources,
+            resolved_question=resolved_question, limits=limits, differences_data=differences_data,
+            model_answers=model_answers, model_sources=model_sources, run_id=run_id)
     claims = collect_claims(consensus, sources)
     pairs = [{k: v for k, v in claim.items() if k not in ('source_ids', 'context')}
              | {'source_id': sid} for claim in claims for sid in claim['source_ids']]
@@ -383,6 +398,9 @@ def plan_source_verification(*, question, consensus, sources, resolved_question=
 
 
 def _finish_snapshot(result):
+    if result.get('check_type') == 'contradiction_evidence':
+        from app.services.contradiction_verification import finish_snapshot
+        return finish_snapshot(result)
     findings = result['findings']
     checked = [p for p in findings if p.get('checked')]
     processed = [p for p in findings if p.get('checked') or p.get('state') == 'unavailable']
@@ -412,6 +430,11 @@ def execute_source_package(*, package, question, answer_version, keys, resolved_
     """Execute one package. No persistent credentials or external state writes."""
     from app.core.observability import record_metric
     limits = limits or Limits.configured()
+    if package.get('mode') == 'contradiction_evidence':
+        from app.services.contradiction_verification import execute_contradiction_package
+        return execute_contradiction_package(package=package, question=question,
+            answer_version=answer_version, keys=keys, resolved_question=resolved_question,
+            limits=limits, fetch=fetch, judge=judge)
     started = time.monotonic()
     pairs = package['pairs']
     result = _snapshot(answer_version, pairs, package['sources'], model=limits.model)
@@ -512,6 +535,9 @@ def execute_source_package(*, package, question, answer_version, keys, resolved_
 
 def merge_source_verification(snapshot, package_result):
     """Idempotent merge: replacing a package never duplicates findings or cost."""
+    if snapshot.get('check_type') == 'contradiction_evidence':
+        from app.services.contradiction_verification import merge_verification
+        return merge_verification(snapshot, package_result)
     result = json.loads(json.dumps(snapshot))
     if result['answer_version'] != package_result['answer_version']:
         raise ValueError('answer_version_mismatch')
@@ -533,10 +559,12 @@ def merge_source_verification(snapshot, package_result):
 
 
 def verify_sources(*, question, consensus, sources, keys, resolved_question='',
-                   limits=None, fetch=fetch_document, judge=judge_sources):
+                   limits=None, fetch=fetch_document, judge=judge_sources,
+                   differences_data=None, model_answers=None, model_sources=None, run_id=''):
     limits = limits or Limits.configured()
     plan = plan_source_verification(question=question, consensus=consensus, sources=sources,
-                                    resolved_question=resolved_question, limits=limits)
+        resolved_question=resolved_question, limits=limits, differences_data=differences_data,
+        model_answers=model_answers, model_sources=model_sources, run_id=run_id)
     snapshot = plan['snapshot']
     cache = {}
     def once(url, fetch_limits):
@@ -561,9 +589,19 @@ def start_source_verification(**kwargs):
         return _start_source_verification(**kwargs)
     except Exception:
         future = Future()
-        future.set_result({'schema_version': 3, 'check_type': 'source_evidence', 'answer_version': answer_version(kwargs.get('consensus')),
-                           'status': 'failed', 'scope': {}, 'findings': [], 'documents': []})
+        future.set_result(_failed_start(kwargs))
         return future
+
+
+def _failed_start(kwargs):
+    contradiction = kwargs.get('differences_data') is not None
+    from app.services.contradiction_verification import PROMPT_VERSION as contradiction_prompt
+    return {'schema_version': 4 if contradiction else 3,
+            'check_type': 'contradiction_evidence' if contradiction else 'source_evidence',
+            'prompt_version': contradiction_prompt if contradiction else PROMPT_VERSION,
+            'run_id': str(kwargs.get('run_id', '')), 'answer_version': answer_version(kwargs.get('consensus')),
+            'status': 'failed', 'reason_code': 'verification_failed', 'scope': {},
+            'findings': [], 'sources': [], 'documents': []}
 
 
 def _start_source_verification(**kwargs):
@@ -571,12 +609,14 @@ def _start_source_verification(**kwargs):
     from app.services.llm.mock_llm import mock_llm_enabled
     def safe_verify(**options):
         try:
-            return verify_sources(**kwargs, **options)
+            return verify_sources(**{**kwargs, **options})
         except Exception:
-            return {'schema_version': 3, 'check_type': 'source_evidence', 'answer_version': answer_version(kwargs['consensus']),
-                    'status': 'failed', 'scope': {}, 'findings': [], 'documents': []}
-    claims = collect_claims(kwargs['consensus'], kwargs.get('sources'))
-    if not claims or mock_llm_enabled():
+            return _failed_start(kwargs)
+    contradiction = kwargs.get('differences_data') is not None
+    has_work = bool(plan_source_verification(**{k: v for k, v in kwargs.items()
+        if k not in ('keys', 'fetch', 'judge')})['packages']) if contradiction else bool(
+            collect_claims(kwargs['consensus'], kwargs.get('sources')))
+    if not has_work or mock_llm_enabled():
         future = Future()
         result = safe_verify(fetch=lambda *_: (_ for _ in ()).throw(ValueError('unavailable')))
         future.set_result(result)
@@ -665,11 +705,12 @@ def stored_verification(value, consensus):
         if len(json.dumps(value, ensure_ascii=False).encode()) > 300000:
             # Hydrated durable results can exceed the embedding budget. Keep
             # their exact job reference; authorized endpoints reload all pages.
-            if (value.get('schema_version') != 3 or value.get('check_type') != 'source_evidence'
+            if ((value.get('schema_version'), value.get('check_type')) not in
+                    ((3, 'source_evidence'), (4, 'contradiction_evidence'))
                     or not isinstance(value.get('job_id'), str)
                     or not re.fullmatch(r'[a-f0-9]{64}', value['job_id'])
                     or value.get('status') not in ('queued', 'running', 'awaiting_credentials',
-                        'complete', 'partial', 'failed', 'skipped', 'cancelled')):
+                        'complete', 'partial', 'failed', 'skipped', 'cancelled', 'disabled')):
                 return None
             stub = {key: value[key] for key in ('schema_version', 'check_type', 'job_id',
                                                'answer_version', 'status')}
@@ -678,13 +719,14 @@ def stored_verification(value, consensus):
                 stub['revision'] = value['revision']
             if value.get('credential_mode') in ('own', 'server'):
                 stub['credential_mode'] = value['credential_mode']
-            for key in ('prompt_version', 'model', 'checked_at', 'source_version'):
+            for key in ('prompt_version', 'model', 'checked_at', 'source_version', 'run_id', 'reason_code'):
                 if isinstance(value.get(key), str) and len(value[key]) <= 200:
                     stub[key] = value[key]
             scope = value.get('scope') if isinstance(value.get('scope'), dict) else {}
             for key in ('statements', 'pairs', 'checked_pairs', 'processed_pairs', 'checked_statements',
                         'sources', 'fetched_sources', 'checked_sources', 'processed_sources',
-                        'issues', 'unknown_pairs', 'unavailable_pairs'):
+                        'issues', 'unknown_pairs', 'unavailable_pairs', 'contradictions',
+                        'checked_contradictions', 'omitted_contradictions', 'unavailable_contradictions'):
                 if type(scope.get(key)) is int and 0 <= scope[key] <= 2**53 - 1:
                     stub['scope'][key] = scope[key]
             value = stub

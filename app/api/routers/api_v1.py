@@ -382,8 +382,14 @@ def get_run_source_check(request: Request, run_id: str,
     snapshot = (run.get('result') or {}).get('source_verification') or {}
     if not snapshot.get('job_id'):
         raise HTTPException(404, 'Source check not found')
+    if snapshot.get('check_type') == 'contradiction_evidence':
+        from app.services.source_verification import answer_version
+        if (snapshot.get('run_id') != 'api:' + run_id
+                or snapshot.get('answer_version') != answer_version((run.get('result') or {}).get('consensus_response', ''))):
+            raise HTTPException(404, 'Source check not found')
     from app.api.routers.source_checks import check_page
-    return check_page(snapshot['job_id'], uid=identity.uid, cursor=cursor, revision=revision, after_revision=after_revision)
+    return check_page(snapshot['job_id'], uid=identity.uid, cursor=cursor, revision=revision,
+                      after_revision=after_revision, expected_snapshot=snapshot)
 
 
 @router.get(

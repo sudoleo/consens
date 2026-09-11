@@ -469,6 +469,8 @@ def sanitize_differences_data(data):
                 "models": _sanitize_str_list(position.get("models"), 40, 12),
                 "quote": _clip(position.get("quote"), 500),
             })
+            if isinstance(position.get("quote_models"), list):
+                positions[-1]["quote_models"] = _sanitize_str_list(position["quote_models"], 40, 12)
         if not claim_text or not positions:
             continue
         entry = {
@@ -479,6 +481,15 @@ def sanitize_differences_data(data):
             "positions": positions,
             "verify": _clip(diff.get("verify"), 500),
         }
+        factual = diff.get("factual_check")
+        if isinstance(factual, dict):
+            entry["factual_check"] = {
+                "checkable": factual.get("checkable") is True,
+                "question": _clip(factual.get("question"), 500),
+                "reason": _clip(factual.get("reason"), 500),
+            }
+        if type(diff.get("consensus_anchor_validated")) is bool:
+            entry["consensus_anchor_validated"] = diff["consensus_anchor_validated"]
         sentence_id = diff.get("sentence_id")
         occurrence = diff.get("anchor_occurrence")
         if isinstance(sentence_id, int) and not isinstance(sentence_id, bool) and 1 <= sentence_id <= 80:

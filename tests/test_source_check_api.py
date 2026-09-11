@@ -99,3 +99,38 @@ def test_unchanged_poll_does_not_read_large_plan_or_package_documents(source_api
         params={'after_revision': job['revision']}, headers={'Authorization': 'Bearer owner'})
     assert response.status_code == 200
     assert response.json()['unchanged'] is True
+
+
+@pytest.mark.parametrize('field', ['run_id', 'answer_version', 'prompt_version'])
+@pytest.mark.parametrize('unchanged', [False, True])
+def test_v4_public_share_rejects_wrong_job_version_on_every_page(source_api, field, unchanged):
+    from copy import deepcopy
+    from test_contradiction_verification import plan, CONSENSUS
+    from app.services import share_snapshots
+    client, repo, _, monkeypatch = source_api
+    accepted = plan()
+    job = repo.create(uid='owner', run_key='run-1', plan=accepted)
+    embedded = deepcopy(job['snapshot'])
+    share = {'owner_uid': 'owner', 'status': 'active', 'visibility': 'public',
+             'consensus_md': CONSENSUS, 'source_verification': embedded}
+    monkeypatch.setattr(share_snapshots, 'get_share', lambda _: share)
+    url = '/api/share/abcd1234/source-check'
+    params = {'after_revision': 0} if unchanged else {}
+    assert client.get(url, params=params).status_code == 200
+    embedded[field] = 'different'
+    assert client.get(url, params=params).status_code == 404
+
+
+def test_v4_topic_binds_requested_run_even_when_answer_is_identical(source_api):
+    from test_contradiction_verification import plan, CONSENSUS
+    from app.services import topics
+    client, repo, _, monkeypatch = source_api
+    accepted = plan(run_id='topic:one')
+    job = repo.create(uid='owner', run_key='topic:one', plan=accepted,
+                      origin='topic', references=['topics/topic-id'])
+    monkeypatch.setattr(topics, 'resolve_topic_by_slug', lambda _: ({
+        'id': 'topic-id', 'latest_run_id': 'one', 'status': 'active'}, None))
+    monkeypatch.setattr(topics, 'get_run', lambda *a: {
+        'consensus_md': CONSENSUS, 'source_verification': job['snapshot']})
+    assert client.get('/api/topics/test/source-check?version=one').status_code == 200
+    assert client.get('/api/topics/test/source-check?version=two').status_code == 404

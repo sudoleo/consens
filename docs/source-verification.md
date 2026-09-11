@@ -1,4 +1,182 @@
-# Quellenpruefung: Belegwirkung, Thema und Zeitraum (v3)
+# Widersprüche anhand vorhandener Quellen prüfen (v4)
+
+Neue Runs prüfen ausschließlich geeignete, von Differences erkannte faktische
+Widersprüche anhand bereits vorhandener Modellquellen. Das ist **keine vollständige
+Faktenprüfung des Consensus**. Consensus, Agreement, Coverage und Modellpositionen
+bleiben unverändert; `/resolve` ist eine unabhängige, explizit gestartete Modellrunde.
+Die alten v1–v3-Verträge stehen weiter unten und gelten nur für alte Prüfungen.
+
+## Synthese und Auslösung
+
+`consensus_engine.py` behält Quelleninformationen im Synthese-Input und verbietet
+S-Verweise in der Ausgabe. `llm/consensus_citations.py` entfernt unerwartete
+S-Citation-Marker inkrementell vor Ausgabe, Differences und Speicherung. Der
+Scanner erhält Codebeispiele, Code-Fences und Mathematik und behandelt über
+Stream-Chunks geteilte Marker/Delimiter konsistent. Normale Prosa wird sofort
+weitergegeben. Modellantworten behalten ihre Quellen; gespeicherte Consensus-Texte
+werden beim Lesen nicht nachträglich bereinigt.
+
+Der vorhandene Differences-Aufruf liefert zusätzlich
+`factual_check: {checkable: boolean, question: string, reason: string}` pro
+Difference. Präferenzen, Empfehlungen und bloße Schwerpunkte sind ausdrücklich
+nicht prüfbar. Der Server validiert Consensus-Anker und Modellzitate und ergänzt
+`consensus_anchor_validated` sowie `positions[].quote_models`. Fehlende Angaben
+in Legacy-Differences werden nicht als Freigabe interpretiert. Ein separater
+Klassifizierungsaufruf wird nicht verwendet.
+
+Nur `type: contradiction`, `severity: major`, `checkable: true`, eine nichtleere
+Streitfrage und validierte Anker aller Positionen ergeben einen Prüfauftrag.
+Die Quellenprüfung startet nach erfolgreichem Differences-Abschluss in
+`consensus_pipeline.py` und im separaten SSE-Pfad von `chat.py`. Der Browser
+bekommt `consensus.final` schon davor, dann `differences.final`, anschließend den
+`source_verification`-Jobverweis. HTTP-/SSE-Abschluss warten nicht auf Fetch/Judge.
+API, Watches und Topics benutzen dieselbe Pipeline mit ihrem Owner-/Run-Kontext.
+
+## Modus, Identität und Ergebnisse
+
+`schema_version: 4`, `check_type: contradiction_evidence` und
+`prompt_version: contradiction-evidence-v1` unterscheiden neue Prüfungen.
+`source_verification.py` bleibt der gemeinsame Entry Point und dispatcht
+`plan_source_verification`, `execute_source_package`, `merge_source_verification`
+und `verify_sources` in den neuen Modus von `contradiction_verification.py`.
+Dafür übergeben Aufrufer `differences_data`, `model_answers`, `model_sources`
+und `run_id`. Ohne `differences_data` bleibt der Legacy-v3-Vertrag verfügbar.
+
+Ein Finding beschreibt einen ganzen Streitpunkt, kein Satz-/Quellen-Paar:
+
+- `contradiction_id`, `difference_index`, `run_id`, `answer_version`, `positions_version`.
+- `question`, `consensus_anchor`, `anchor_occurrence`, `positions` mit stabilen P1/P2-IDs,
+  Originalzitat, Stance (`summary`), Modellen und tatsächlichen Zitatgebern.
+- `state: pending|checked|unavailable|omitted`, `checked`, `reason_code`, `reason`.
+- `verdict: supports_position|conditions_explain|sources_conflict|insufficient_evidence`.
+- `supported_position_id` nur für die ausdrücklich gestützte Position.
+- `evidence[]` mit `source_id`, `position_id`, Originalzitat, Datum, Geltungsbereich
+  und Einschränkungen. `checked_at` und Dokumentprovenienz bleiben verfügbar.
+
+Die ID bindet Promptvertrag, Run, Antwortversion, Difference, Frage, Anker und
+Positionen. Der dauerhafte Jobschlüssel bindet zusätzlich den vollständigen
+Prüfplan, Quellen, Frage/Folgekontext und eingefrorene Limits. Ändert sich eine
+geprüfte Position, darf kein früherer Befund übernommen werden. Result-Commit,
+Merge, Owner-/Public-Polling und Browser-Kartenbindung prüfen diese Identität.
+
+Ein substanzielles Urteil braucht valide wortgetreue Belegpassagen. Zitate müssen
+sowohl im tatsächlich gesendeten Auszug als auch im abgerufenen Originaltext
+vorkommen und einer dem Streitpunkt zugeordneten Quelle und Position angehören.
+Bis zu acht Zitate mit je 400 und insgesamt 1.600 Zeichen sind zulässig.
+Erfundene Zitate, falsche Zuordnung und nicht belegte Datumsangaben sind keine
+Evidenz. Widersprüchliche Quellen und unterschiedliche Bedingungen benötigen
+Belege für alle Positionen. Eine gestützte Position braucht ihre eigenen Belege;
+fehlt die Gegenseite im Abruf, wird daraus kein Sieg durch Quellenmangel.
+
+Datierung, Geltungsbereich, Populationen, Definitionen und Einschränkungen sind
+Teil der Beurteilung. Abruf- oder Copyrightdatum beweisen keine Aktualität.
+Modellmehrheit ist kein Quellenbeweis; fehlende Quellen, Fetch-Fehler und fehlende
+Belege sind keine Widerlegung. Auch ein korrekt validiertes Quellenzitat beweist
+nicht, dass sein Dokument inhaltlich wahr ist. Webseiten- und Modelltext bleiben
+untrusted data. Die Zitatvalidierung ersetzt keine semantische Wahrheitsgarantie.
+
+## Quellenwahl und Gesamtbudgets
+
+`source_catalog.py` und die modellbezogenen Quellen bleiben die einzigen
+Quellenbestände. Direkte Zuordnung entsteht aus der strittigen Originalpassage
+und ihren unmittelbar zugehörigen Referenzen. Ohne direkte Zuordnung werden
+begrenzt vorhandene Quellen des jeweiligen Modells, andernfalls des gemeinsamen
+Katalogs, herangezogen. Dieser Fallback ist als `origin: catalog_fallback`
+markiert; direkte Zuordnung als `reference`. Eine Round-Robin-Auswahl berücksichtigt
+alle Positionen vor zusätzlichen URLs einer Seite. Reicht das URL-Budget nicht
+für eine vorhandene Gegenseite, bleibt die Prüfung ausdrücklich ausgelassen.
+Teilweise begrenzte Quellenabdeckung trägt `coverage_limited`/`omitted_sources`.
+
+URL-identische Dokumente werden einmal sicher abgerufen; relevante Passagen
+werden je Position ausgewählt und bleiben gemeinsam erhalten. Prüfinterne
+D-IDs identifizieren kanonische URLs, S-IDs in Modellantworten bleiben erhalten.
+`source_documents.py` übernimmt den bisherigen sicheren Abruf, Bytebudgets und
+Passageauswahl. Es gibt **keine neue Websuche** und keinen Browserabruf als Fallback.
+PDF und sonstige nicht unterstützte Formate bleiben explizit nicht abrufbar.
+
+Ein v4-Job hat genau ein begrenztes Paket und höchstens einen Judge-Aufruf im
+normalen Durchlauf. Die folgenden Limits gelten für den gesamten Auftrag und
+werden bei Aufnahme gespeichert; Umgebungsschlüssel haben Präfix
+`SOURCE_VERIFICATION_`. Positive Werte sind höchstens viermal so groß wie Default.
+
+| Suffix | Default | Gesamtgrenze |
+| --- | ---: | --- |
+| MAX_CONTRADICTIONS | 4 | Automatisch zu untersuchende Streitpunkte |
+| MAX_URLS | 8 | Eindeutige vorhandene Dokument-URLs |
+| INPUT_TOKENS | 24000 | Konservative UTF-8-Byte-Obergrenze inkl. Prompt/Envelope |
+| TOTAL_SECONDS | 60 | Aktive Ausführung des gesamten Pakets |
+| FALLBACK_SOURCES_PER_POSITION | 2 | Katalogergänzung pro Position ohne direkte Zuordnung |
+
+Bestehende `INPUT_CHARS` (32000), `DOCUMENT_CHARS` (4000), `TOTAL_CHARS` (24000),
+`MAX_BYTES` (400000), `FETCH_SECONDS` (5), `OUTPUT_TOKENS` (3000) und
+`OUTPUT_CHARS` (20000) begrenzen zusätzlich Input, Passagen, Abruf und Ausgabe.
+Auslassungen bleiben als Findings mit `contradiction_limit`, `url_limit`,
+`input_limit` oder `time_limit` sichtbar. Ein Tokenbudget ist eine obere Schranke,
+kein Versprechen, es voll auszunutzen. Queue-Wartezeit/BYOK-Pausen gehören nicht
+zur aktiven Ausführungszeit. Repository-RPCs behalten ihre eigenen Zeitgrenzen.
+
+## Jobs, Wiederaufnahme und alte Daten
+
+Die vorhandenen Firestore-Jobs, Pakete, Lease-Tokens, ownergebundenes Polling,
+Revisionsprüfung, BYOK-Wiederaufnahme, Parent-/Account-Löschgrenzen und Retention
+werden weiterverwendet. Der Quellen-Judge kommt weiterhin aus der bestehenden
+Admin-Modellkonfiguration und wird im Plan eingefroren. Dokument-Cache bleibt
+UID-gebunden; Urteilscache trennt v3/v4 und bindet Modus, Prompt, Modell, Kontext,
+Datum, Positionen, Originalauszüge und Ausgabegrenze. Cache-Hits werden erneut
+validiert und zählen nicht als bezahlter Call.
+
+Neue v4-Abruffehler lösen keine automatische Fetch-Wiederholung aus. Nach einem
+Prozessabbruch vor dem Result-Commit kann die bestehende Lease-Recovery das
+Paket erneut ausführen, begrenzt auf drei Versuche. Das bleibt ausdrücklich
+keine Exactly-once-Garantie für externe Modellaufrufe. Ein verlorener Own-Key
+pausiert den Auftrag als `awaiting_credentials`, ohne Entwickler-Key-Fallback.
+
+Neue `check_sources: false` Runs speichern `status: disabled` ohne Fetch/Judge
+oder `sources.*`-Events. Der Schalter und `localStorage.checkSources` bleiben
+erhalten; seine eingefrorene Einstellung gilt nur für den jeweiligen neuen Run.
+Alte null-Snapshots und alte v1/v2/v3-Texte/Befunde bleiben unverändert lesbar.
+Ein Legacy-v3-Plan läuft weiter mit seiner damaligen Satz-/Quellen-Semantik.
+Bookmarks, Shares, Chat-Turns, API, Watches und Topics speichern denselben
+Jobverweis; Wiederöffnen startet keinen neuen Judge. Public-/API-Abrufe prüfen
+Run/Antwortbindung zusätzlich zur Berechtigung.
+
+## Darstellung und Abnahme
+
+Englische UI: „Check contradictions“, Hilfetext „Check contradictions against
+existing sources“. Ergebnisse stehen direkt bei ihrer Contradiction, mit
+Belegpassagen, Quellenlinks, Position und Bedingungen. Topics erhalten bei Bedarf
+gebundene Streitpunktkarten im Quellenbericht. Originalzitate bleiben unverändert.
+Kein Zustand behauptet „Antwort verifiziert“.
+
+- Keine geeigneten Widersprüche: `skipped` / `no_checkable_contradictions`,
+  „No checkable contradictions detected“.
+- Ausgeschaltet: `disabled`; bisher gespeichertes null bleibt Legacy/unbekannt.
+- Differences fehlgeschlagen: `failed` / `differences_failed`, keine Prüfung.
+- Infrastrukturfehler: `failed` / `persistence_error` bzw. konkrete Abruf-/Judgegründe.
+- Fachlich unzureichend: `checked` / `insufficient_evidence`.
+- Budgetauslassung: `omitted` und konkreter Grund; kein positives Abschlussurteil.
+
+Gezielte Tests: `test_consensus_citations.py`, `test_contradiction_verification.py`,
+`test_contradiction_jobs.py`, `test_consensus_chat_history.py`, die bestehenden
+Source-Check-Repository-/API- und Legacy-Tests sowie JS-Tests der
+Quellenprüfung/Bookmarks/Streams. Manuelle Originalquellen-Abnahme:
+[source-verification-manual-review.md](source-verification-manual-review.md).
+Die Beispiele messen konkrete Fehlerfälle, keine allgemeine Faktenprüfungsquote.
+
+Abschlussstand 11.09.2026: `python -m pytest tests` **2002 bestanden**,
+`npm test` **285 bestanden**, sieben gezielte Browserprüfungen (Desktop/Mobil
+und öffentliche Composer-Mockups) bestanden; `npm run build` erfolgreich.
+Die Live-Abnahme umfasste genau drei Judge-Aufrufe: zwei fachlich zutreffende,
+originalbelegte Positionsurteile und eine sichere Enthaltung wegen
+`evidence_mismatch`. Keine nachträglichen Änderungen bestehender Antworten.
+
+---
+
+Die folgenden Abschnitte dokumentieren ausschließlich den unverändert lesbaren
+Legacy-Vertrag (v1–v3). Beschreibungen „Check Sources prüft …“ beziehen sich dort
+auf damalige Jobs und nicht auf neu erzeugte v4-Consensus-Antworten.
+
+# Historischer Vertrag: zitierte Satz-/Quellen-Paare (v1–v3)
 
 Check Sources prueft jede im fertigen Consensus zitierte Satz-/Quellen-Zuordnung.
 Unzitierte Quellen der Modellantworten und literale S-Tags in Code-Beispielen

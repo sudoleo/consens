@@ -2349,6 +2349,7 @@
             } else {
               differences.forEach(function (diff) {
                 const card = document.createElement("details");
+                window.App.sourceVerification?.bindDifferenceCard(card, diff);
                 let cardClass = "diff-card " + (diff.type === "contradiction" ? "is-contradiction" : "is-emphasis");
                 if (diff.type === "contradiction" && diff.severity === "major") cardClass += " is-major";
                 card.className = cardClass;
@@ -2469,6 +2470,7 @@
                 if (diff.resolution) markCardResolved(card, diff.resolution.outcome);
               });
             }
+            window.App.sourceVerification?.refreshDifferences(cards);
             return cards;
           }
 

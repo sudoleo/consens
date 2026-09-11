@@ -474,11 +474,11 @@
               <span class="slider"></span>
             </span>
           </label>
-          <label class="attach-menu-toggle" for="sourceCheckMenuSwitch" title="Check Sources">
+          <label class="attach-menu-toggle" for="sourceCheckMenuSwitch" title="Check contradictions">
             <svg class="attach-menu-source-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H5v18h14V8Z M14 3v5h5 M8 14l3 3 5-6"/></svg>
             <span class="attach-menu-toggle-text">
-              <span class="search-mode-label deep-switch-label">Check Sources</span>
-              <span class="attach-menu-toggle-sub">Check every cited source for statement support, topic and time period. Results arrive progressively.</span>
+              <span class="search-mode-label deep-switch-label">Check contradictions</span>
+              <span class="attach-menu-toggle-sub">Check factual contradictions against existing sources from both model positions. Results appear in Differences.</span>
             </span>
             <span class="switch deep-switch attach-menu-switch">
               <input type="checkbox" id="sourceCheckMenuSwitch" checked>
@@ -533,9 +533,9 @@
             <span class="composer-mode-dot" aria-hidden="true"></span>
             <span class="composer-agent-label">Agent Mode</span><span id="composerAgentState" class="composer-agent-state">On</span>
           </button>
-          <button type="button" id="composerSourcesToggle" class="composer-agent-toggle composer-tool" role="switch" aria-checked="true" aria-label="Check Sources" title="Check Sources · Check cited sources for the next consensus">
+          <button type="button" id="composerSourcesToggle" class="composer-agent-toggle composer-tool" role="switch" aria-checked="true" aria-label="Check contradictions" title="Check contradictions · Check contradictions against existing sources for the next consensus">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H5v18h14V8Z M14 3v5h5 M8 14l3 3 5-6"/></svg>
-            <span class="composer-tool-label">Check Sources</span><span id="composerSourcesState" class="composer-agent-state composer-tool-label">On</span>
+            <span class="composer-tool-label">Check contradictions</span><span id="composerSourcesState" class="composer-agent-state composer-tool-label">On</span>
           </button>
           <button type="button" id="composerDeepToggle" class="composer-agent-toggle composer-tool" role="switch" aria-checked="false" aria-label="Deep Think" title="Deep Think">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.6 6.4L21 12l-6.4 2.6L12 21l-2.6-6.4L3 12l6.4-2.6Z"/></svg>
@@ -634,7 +634,7 @@
                     aria-expanded="false" aria-controls="consensusSourcesPanel"
                     aria-describedby="consensusSourceCheckStatus" hidden>
                     <svg class="consensus-tab-chevron" viewBox="0 0 12 12" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 4.5 6 8l3.5-3.5"/></svg>
-                    <span class="consensus-tab-label" data-short="Sources">Verify sources</span>
+                    <span class="consensus-tab-label" data-short="Sources">Sources</span>
                     <span class="consensus-tab-count" id="consensusSourcesTabCount"></span>
                   </button>
                 </div>
@@ -1132,8 +1132,8 @@
               <div class="settings-section">
                 <label for="sourceCheckSwitch" class="custom-checkbox-label settings-switch-row">
                   <span>
-                    <strong>Check Sources</strong>
-                    <small>Check every cited source for statement support, topic and time period. Saved for the next consensus; results arrive progressively.</small>
+                    <strong>Check contradictions</strong>
+                    <small>Check factual contradictions against existing sources. Saved for the next consensus; results appear in Differences.</small>
                   </span>
                   <input type="checkbox" id="sourceCheckSwitch" checked>
                 </label>
@@ -1458,13 +1458,13 @@
             <div class="faq-item">
               <h3>
                 <span class="faq-number">12.</span>
-                What does Check Sources do?
+                What does Check contradictions do?
                 <span class="faq-toggle-icon">＋</span>
               </h3>
               <p>
-                Check Sources checks every cited source against the statements that cite it, including important numbers, conditions, topic and time period.
-                Open Verify sources below the answer to see original passages, supported or contradicted statements, and progress.
-                Checks continue in the background; unavailable sources receive an explicit status. Evidence can be incomplete, and model agreement is separate from source support. Check Sources starts on and can be switched
+                Check contradictions examines major, factually checkable disagreements using existing sources from both model positions.
+                Open Differences to see results beside each contradiction, original passages and source links.
+                Checks run in the background with limits; unavailable evidence and omitted checks are shown explicitly. This is not a complete fact-check of the consensus. Sources remain accessible in the model answers. Model agreement is separate from source evidence. Check contradictions starts on and can be switched
                 off under the input, in the (+) menu, or in Settings → Runs. Your choice is saved for the next
                 consensus; switching it off skips this check while keeping the consensus, claims and differences.
               </p>

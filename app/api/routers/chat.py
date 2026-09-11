@@ -1659,13 +1659,9 @@ def consensus(request: Request, data: dict = Body(...)):
                     # judge so a later mobile/network interruption cannot
                     # erase an answer the user already received.
                     yield sse_pack("consensus.final", {"text": consensus_text})
-                    if check_sources:
-                        source_verification = enqueue_verification(
-                            question=question, consensus=consensus_text,
-                            sources=verification_sources, keys=api_keys,
-                            resolved_question=resolved_question,
-                        )
-                        yield sse_pack("sources.final", {"source_verification": source_verification})
+                    if not check_sources:
+                        from app.services.source_check_jobs import disabled_snapshot
+                        source_verification = disabled_snapshot(consensus_text)
                     last_reasoning_at = None
                     # Die Analyse hat ihren EIGENEN Fehlerrahmen. Sie laeuft
                     # erst, nachdem die Antwort den Nutzer erreicht hat -- ein
@@ -1700,11 +1696,27 @@ def consensus(request: Request, data: dict = Body(...)):
                             else:
                                 differences_text = coerce_text(item.get("text"))
                                 differences_data = item.get("data")
-                                differences_complete = True
+                                differences_complete = not item.get("error", False)
                                 yield sse_pack("differences.final", {
                                     "differences": differences_text,
                                     "differences_data": differences_data,
                                 })
+                        # The accepted plan is based on the successful structured
+                        # Differences result. Fetches and the evidence judge run
+                        # in durable workers, after the answer was delivered.
+                        if check_sources:
+                            if differences_complete and isinstance(differences_data, dict):
+                                source_verification = enqueue_verification(
+                                    question=question, consensus=consensus_text,
+                                    sources=verification_sources, keys=api_keys,
+                                    resolved_question=resolved_question,
+                                    differences_data=differences_data,
+                                    model_answers=included_by_provider, model_sources=model_sources,
+                                )
+                            else:
+                                from app.services.consensus_pipeline import _differences_check_failed
+                                source_verification = _differences_check_failed(consensus_text)
+                            yield sse_pack("sources.final", {"source_verification": source_verification})
                     except GeneratorExit:
                         raise
                     except Exception as exc:
@@ -1718,6 +1730,10 @@ def consensus(request: Request, data: dict = Body(...)):
                             yield sse_pack("differences.final", {
                                 "differences": "", "differences_data": None, "error": True,
                             })
+                        if check_sources:
+                            from app.services.consensus_pipeline import _differences_check_failed
+                            source_verification = _differences_check_failed(consensus_text)
+                            yield sse_pack("sources.final", {"source_verification": source_verification})
             except GeneratorExit:
                 _fail_chat_turn_best_effort(
                     uid,

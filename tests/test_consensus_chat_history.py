@@ -141,7 +141,8 @@ def chat_consensus_api(monkeypatch):
 def test_durable_source_check_does_not_delay_consensus_completion(chat_consensus_api, source_status):
     from app.services import source_check_jobs
     client, store, monkeypatch = chat_consensus_api
-    snapshot = {"schema_version": 3, "job_id": "a" * 64, "status": source_status, "findings": []}
+    snapshot = {"schema_version": 4, "check_type": "contradiction_evidence",
+                "job_id": "a" * 64, "status": source_status, "findings": []}
     original = {"agreement": {"score": 88}, "claims": [{"text": "Original claim"}]}
     submitted = []
     def submit(**kwargs):
@@ -157,12 +158,15 @@ def test_durable_source_check_does_not_delay_consensus_completion(chat_consensus
     events = [(name, json.loads(data)) for name, data in re.findall(
         r"event: ([\w.]+)\r?\ndata: (.+?)\r?\n\r?\n", response.text)]
     names = [name for name, _ in events]
-    assert names.index("consensus.final") < names.index("sources.final") < names.index("differences.final") < names.index("final")
+    assert names.index("consensus.final") < names.index("differences.final") < names.index("sources.final") < names.index("final")
     assert dict(events)["final"]["source_verification"] == snapshot
     assert store.completions[0][3]["differences_data"] == original
     assert store.completions[0][3]["source_verification"] == snapshot
     assert submitted[0]["context"]["uid"] == UID
     assert submitted[0]["context"]["references"] == [f"users/{UID}/chats/{CHAT_ID}"]
+    assert submitted[0]["differences_data"] is original
+    assert submitted[0]["model_answers"]["openai"] == "OpenAI answer"
+    assert submitted[0]["model_sources"]["Mistral"]
 
 
 @pytest.mark.parametrize("stream", [False, True])
@@ -183,10 +187,47 @@ def test_disabled_source_check_skips_third_judge_and_keeps_analysis(chat_consens
     payload = _final_sse_payload(response) if stream else response.json()
     assert payload["consensus_response"] == "Consensus"
     assert payload["differences_data"]["agreement"]["score"] == 88
-    assert payload["source_verification"] is None
-    assert store.completions[0][3]["source_verification"] is None
+    assert payload["source_verification"]["status"] == "disabled"
+    assert payload["source_verification"]["check_type"] == "contradiction_evidence"
+    assert store.completions[0][3]["source_verification"] == payload["source_verification"]
     if stream:
         assert "event: sources." not in response.text
+
+
+@pytest.mark.parametrize('stream', [False, True])
+def test_failed_differences_never_start_source_job(chat_consensus_api, stream):
+    from app.services import source_check_jobs
+    client, store, monkeypatch = chat_consensus_api
+    monkeypatch.setattr(source_check_jobs, 'submit_advisory',
+                        lambda **_: pytest.fail('No successful Differences result'))
+    monkeypatch.setattr(chat_router, 'query_differences', lambda *a, **kw: ('', None))
+    monkeypatch.setattr(chat_router, 'stream_consensus', lambda *a, **kw: iter([
+        {'type': 'final', 'text': 'Consensus'}]))
+    monkeypatch.setattr(chat_router, 'stream_differences', lambda *a, **kw: iter([
+        {'type': 'final', 'text': '', 'data': None, 'error': True}]))
+    response = client.post('/consensus', headers=AUTH, json=_base_payload(stream=stream))
+    assert response.status_code == 200
+    payload = _final_sse_payload(response) if stream else response.json()
+    assert payload['consensus_response'] == 'Consensus'
+    assert payload['source_verification']['status'] == 'failed'
+    assert payload['source_verification']['reason_code'] == 'differences_failed'
+    assert store.completions[0][3]['source_verification'] == payload['source_verification']
+
+
+@pytest.mark.parametrize('stream', [False, True])
+def test_no_checkable_differences_skips_sources_without_job(chat_consensus_api, stream):
+    from app.services import source_check_jobs
+    client, store, monkeypatch = chat_consensus_api
+    monkeypatch.setattr(source_check_jobs, 'repository', lambda: pytest.fail('No eligible work to persist'))
+    monkeypatch.setattr(chat_router, 'stream_consensus', lambda *a, **kw: iter([
+        {'type': 'final', 'text': 'Consensus'}]))
+    monkeypatch.setattr(chat_router, 'stream_differences', lambda *a, **kw: iter([
+        {'type': 'final', 'text': 'Differences', 'data': {'differences': []}}]))
+    response = client.post('/consensus', headers=AUTH, json=_base_payload(stream=stream))
+    payload = _final_sse_payload(response) if stream else response.json()
+    assert payload['source_verification']['status'] == 'skipped'
+    assert payload['source_verification']['reason_code'] == 'no_checkable_contradictions'
+    assert 'job_id' not in payload['source_verification']
 
 
 def test_consensus_without_chat_ids_remains_legacy_compatible(chat_consensus_api):

@@ -14,7 +14,7 @@ import time
 import uuid
 from collections import deque
 from contextlib import contextmanager
-from dataclasses import asdict
+from dataclasses import asdict, replace
 
 from app.core.background_tasks import task_succeeded
 from app.core.observability import correlation_scope, record_metric, safe_exception
@@ -104,7 +104,8 @@ def resume_source_check(job_id, uid, key):
     return resumed
 
 
-def submit_source_check(*, question, consensus, sources, keys, resolved_question='', context=None):
+def submit_source_check(*, question, consensus, sources, keys, resolved_question='', context=None,
+                        differences_data=None, model_answers=None, model_sources=None, run_id=''):
     from app.services.source_verification import Limits, plan_source_verification
     from app.services.llm.credentials import openrouter_api_key
     context = context or current_context()
@@ -112,7 +113,8 @@ def submit_source_check(*, question, consensus, sources, keys, resolved_question
         raise ValueError('Source check requires an owner context')
     limits = Limits.configured()
     plan = plan_source_verification(question=question, consensus=consensus, sources=sources,
-                                   resolved_question=resolved_question, limits=limits)
+        resolved_question=resolved_question, limits=limits, differences_data=differences_data,
+        model_answers=model_answers, model_sources=model_sources, run_id=str(context['run_key']))
     if not plan['packages']:
         return plan['snapshot']
     from app.services.llm.mock_llm import mock_llm_enabled
@@ -120,6 +122,8 @@ def submit_source_check(*, question, consensus, sources, keys, resolved_question
         from app.services.source_verification import verify_sources
         return verify_sources(question=question, consensus=consensus, sources=sources,
             keys={}, resolved_question=resolved_question,
+            differences_data=differences_data, model_answers=model_answers,
+            model_sources=model_sources, run_id=str(context['run_key']),
             fetch=lambda *_: (_ for _ in ()).throw(ValueError('mock_unavailable')))
     plan['limits'] = asdict(limits)
     # Admission accepts the entire bounded plan atomically, before any paid work.
@@ -140,13 +144,25 @@ def submit_source_check(*, question, consensus, sources, keys, resolved_question
     return {**job['snapshot'], 'findings': [], 'documents': [], 'sources': []}
 
 
-def unavailable_snapshot(consensus, code='persistence_error'):
+def unavailable_snapshot(consensus, code='persistence_error', *, check_type='source_evidence', run_id=''):
     from app.services.source_verification import answer_version, collect_claims, PROMPT_VERSION
+    if check_type == 'contradiction_evidence':
+        return dict(schema_version=4, check_type=check_type, prompt_version='contradiction-evidence-v1',
+            run_id=run_id, answer_version=answer_version(consensus), status='failed',
+            findings=[], documents=[], sources=[], reason_code=code,
+            scope={'contradictions': 0, 'checked_contradictions': 0, 'omitted_contradictions': 0,
+                   'unavailable_contradictions': 0}, runtime={'error_code': code})
     claims = collect_claims(consensus, [])
     pairs = sum(len(c['source_ids']) for c in claims)
     return dict(schema_version=3, check_type='source_evidence', prompt_version=PROMPT_VERSION,
         answer_version=answer_version(consensus), status='failed', findings=[], documents=[], sources=[],
         scope={'pairs': pairs, 'checked_pairs': 0, 'processed_pairs': 0}, runtime={'error_code': code})
+
+
+def disabled_snapshot(consensus):
+    result = unavailable_snapshot(consensus, 'disabled', check_type='contradiction_evidence')
+    result.update(status='disabled', runtime={})
+    return result
 
 
 def submit_advisory(**kwargs):
@@ -157,23 +173,43 @@ def submit_advisory(**kwargs):
     except Exception as exc:
         logging.warning('Source check persistence failed category=%s', safe_exception(exc))
         record_metric('source_check', 'persistence', outcome='failure')
-        return unavailable_snapshot(kwargs['consensus'])
+        context = kwargs.get('context') or current_context() or {}
+        return unavailable_snapshot(kwargs['consensus'],
+            check_type='contradiction_evidence' if kwargs.get('differences_data') is not None else 'source_evidence',
+            run_id=str(context.get('run_key') or ''))
 
 
-def _cached_fetch(uid, repo):
+def _cache_rpc_fits(bounded):
+    if not bounded:
+        return True
+    from app.services.llm.provider_runtime import current_analysis_budget
+    from app.services.source_check_repository import RPC_SECONDS
+    budget = current_analysis_budget()
+    return budget is None or budget.deadline - time.monotonic() > RPC_SECONDS + .1
+
+
+def _cached_fetch(uid, repo, *, bounded=False):
     from app.services.source_documents import fetch_document
     def fetch(url, limits):
         key = ['document-v3', url, limits.max_bytes]
         try:
-            cached = repo.cache_get(uid, key)
+            cached = repo.cache_get(uid, key) if _cache_rpc_fits(bounded) else None
             if cached is not None:
                 record_metric('source_cache', 'document_hit')
                 return cached
         except Exception:
             record_metric('source_cache', 'read', outcome='failure')
+        if bounded:
+            from app.services.llm.provider_runtime import current_analysis_budget
+            budget = current_analysis_budget()
+            if budget:
+                budget.check()
+                limits = replace(limits, fetch_seconds=min(limits.fetch_seconds,
+                    max(.01, budget.deadline - time.monotonic())))
         value = fetch_document(url, limits)
         try:
-            repo.cache_put(uid, key, value, seconds=limits.cache_seconds)
+            if _cache_rpc_fits(bounded):
+                repo.cache_put(uid, key, value, seconds=limits.cache_seconds)
         except Exception:
             record_metric('source_cache', 'write', outcome='failure')
         return value
@@ -185,17 +221,23 @@ def _cached_judge(uid, repo):
     def judge(payload, keys, limits):
         # Includes applicability date/question and model/prompt contract. Cached
         # raw output is still validated against this package's exact passages.
-        key = ['verdict-v3', PROMPT_VERSION, SYSTEM, limits.model,
+        contradiction = payload.get('check_type') == 'contradiction_evidence'
+        if contradiction:
+            from app.services.contradiction_verification import judge_contradictions, SYSTEM as system, PROMPT_VERSION as prompt_version
+            call = judge_contradictions
+        else:
+            call, system, prompt_version = judge_sources, SYSTEM, PROMPT_VERSION
+        key = ['verdict-v4' if contradiction else 'verdict-v3', prompt_version, system, limits.model,
                payload, limits.output_tokens]
         try:
-            cached = repo.cache_get(uid, key)
+            cached = repo.cache_get(uid, key) if _cache_rpc_fits(contradiction) else None
             if cached is not None:
                 record_metric('source_cache', 'judge_hit')
                 return cached, {'calls': 0, 'cache_hit': True}
         except Exception:
             record_metric('source_cache', 'read', outcome='failure')
-        raw, usage = judge_sources(payload, keys, limits)
-        if not usage.get('output_truncated'):
+        raw, usage = call(payload, keys, limits)
+        if not usage.get('output_truncated') and _cache_rpc_fits(contradiction):
             try:
                 repo.cache_put(uid, key, raw, seconds=3600)
             except Exception:
@@ -205,6 +247,9 @@ def _cached_judge(uid, repo):
 
 
 def interrupted_package(plan, package):
+    if package.get('mode') == 'contradiction_evidence':
+        from app.services.contradiction_verification import package_failure_snapshot
+        return package_failure_snapshot(plan, package, 'worker_interrupted')
     from app.services.source_verification import _snapshot, _pending, _finish_snapshot, _now
     result = _snapshot(plan['snapshot']['answer_version'], package['pairs'], package.get('sources', []),
                        model=plan['snapshot'].get('model'))
@@ -217,6 +262,10 @@ def interrupted_package(plan, package):
 
 def _retryable_fetch_only(result):
     """Retry transient retrieval only; never repeat a paid/uncertain judge call."""
+    if result.get('check_type') == 'contradiction_evidence':
+        # One admitted v4 package is the total fetch/call/time budget; a failed
+        # side remains visible instead of multiplying that budget on retry.
+        return False
     transient = {'fetch_timeout', 'rate_limited', 'upstream_error', 'network_error',
                  'dns_busy', 'incomplete_document'}
     findings = result.get('findings') or []
@@ -288,7 +337,9 @@ def process_one(repo=None):
                     result = execute_source_package(package=package,
                         question=plan['question'], resolved_question=plan.get('resolved_question', ''),
                         answer_version=plan['snapshot']['answer_version'], keys=keys,
-                        limits=Limits(**plan_limits), fetch=_cached_fetch(uid, repo), judge=_cached_judge(uid, repo))
+                        limits=Limits(**plan_limits),
+                        fetch=_cached_fetch(uid, repo, bounded=package.get('mode') == 'contradiction_evidence'),
+                        judge=_cached_judge(uid, repo))
                 if claimed.get('attempts', 0) < 3 and _retryable_fetch_only(result):
                     # Wait past the local negative-cache TTL before trying this
                     # document again. Other owners/jobs can use this worker meanwhile.

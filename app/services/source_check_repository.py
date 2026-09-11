@@ -81,6 +81,8 @@ def compact(snapshot):
 
 def _complete_result(plan, package, result):
     """Commit exactly one result per planned pair, even for malformed workers."""
+    if package.get('mode') == 'contradiction_evidence':
+        return _complete_contradictions(plan, package, result)
     result = result if isinstance(result, dict) else {}
     matches = {}
     valid_version = (result.get('answer_version') == plan['snapshot']['answer_version']
@@ -109,6 +111,51 @@ def _complete_result(plan, package, result):
     runtime = result.get('runtime') if isinstance(result.get('runtime'), dict) else {}
     return {**result, 'answer_version': plan['snapshot']['answer_version'], 'package_id': package['id'],
             'findings': findings, 'documents': documents, 'sources': package.get('sources', []), 'runtime': runtime}
+
+
+def _complete_contradictions(plan, package, result):
+    """Preserve the admitted run, answer and positions when committing v4 work."""
+    result = result if isinstance(result, dict) else {}
+    snapshot = plan['snapshot']
+    valid = (result.get('schema_version') == 4
+             and result.get('check_type') == 'contradiction_evidence'
+             and result.get('answer_version') == snapshot['answer_version']
+             and result.get('run_id') == snapshot.get('run_id')
+             and result.get('package_id') == package['id'])
+    matches = {}
+    for row in result.get('findings', []) if isinstance(result.get('findings'), list) else []:
+        if isinstance(row, dict) and isinstance(row.get('contradiction_id'), str):
+            matches.setdefault(row['contradiction_id'], []).append(row)
+    findings = []
+    for pair in package['pairs']:
+        rows = matches.get(pair['contradiction_id'], [])
+        bound = valid and len(rows) == 1 and all(rows[0].get(k) == pair.get(k)
+            for k in ('positions_version', 'answer_version', 'run_id'))
+        if pair.get('state') in ('omitted', 'unavailable'):
+            # A worker must not silently turn a budget omission into a verdict.
+            finding = dict(pair)
+        elif bound:
+            finding = {**pair, **rows[0]}
+            for key in ('contradiction_id', 'difference_index', 'positions_version', 'answer_version',
+                        'run_id', 'positions', 'question', 'consensus_anchor'):
+                finding[key] = pair.get(key)
+            checked = finding.get('checked') is True
+            state = finding.get('state')
+            finding.update(checked=checked, pending=False,
+                state='checked' if checked else 'omitted' if state == 'omitted' else 'unavailable')
+        else:
+            finding = {**pair, 'checked': False, 'pending': False, 'state': 'unavailable',
+                'verdict': 'insufficient_evidence', 'supported_position_id': None,
+                'reason': '', 'reason_code': 'invalid_output', 'evidence': []}
+        findings.append(finding)
+    ids = {source['id'] for source in package.get('sources', [])}
+    documents = [doc for doc in result.get('documents', []) if isinstance(doc, dict)
+                 and doc.get('source_id') in ids] if valid and isinstance(result.get('documents'), list) else []
+    return {**snapshot, **result, 'schema_version': 4, 'check_type': 'contradiction_evidence',
+        'run_id': snapshot.get('run_id'), 'answer_version': snapshot['answer_version'],
+        'package_id': package['id'], 'findings': findings, 'documents': documents,
+        'sources': package.get('sources', []),
+        'runtime': result.get('runtime') if isinstance(result.get('runtime'), dict) else {}}
 
 
 class SourceCheckRepository:
@@ -161,6 +208,15 @@ class SourceCheckRepository:
     def create(self, *, uid, run_key, plan, credential_mode='server', references=(), origin='interactive', credential_worker_id=None):
         job_id = digest([uid, run_key, plan['snapshot']['answer_version'],
                          plan['snapshot'].get('prompt_version'), plan.get('sources', plan['snapshot'].get('sources'))])
+        contradiction = plan['snapshot'].get('check_type') == 'contradiction_evidence'
+        if contradiction:
+            if len(plan['packages']) > 1:
+                raise ValueError('contradiction_plan_requires_one_bounded_package')
+            # Changing a disputed position, its passage, applicability context,
+            # source assignment or admitted budget creates a distinct plan.
+            job_id = digest(['source-check-v4', uid, run_key, plan['snapshot']['answer_version'],
+                plan['snapshot'].get('prompt_version'), plan['snapshot'].get('check_type'),
+                plan.get('question'), plan.get('resolved_question'), plan.get('limits'), plan['packages']])
         ref = self.ref(job_id)
         payload = pack(plan)
         now = utcnow()
@@ -174,6 +230,8 @@ class SourceCheckRepository:
             references=list(dict.fromkeys(references)), cleanup_at=now + timedelta(days=30))
         totals, statements = {}, {}
         for package in plan['packages']:
+            if contradiction:
+                continue
             for pair in package['pairs']:
                 sid = pair['source_id']
                 totals[sid] = totals.get(sid, 0) + 1
@@ -291,6 +349,28 @@ class SourceCheckRepository:
             plan = unpack(plan_snap.to_dict()['payload'])
             completed_result = _complete_result(plan, plan['packages'][index], result)
             payload = pack(completed_result)
+            if plan['snapshot'].get('check_type') == 'contradiction_evidence':
+                # V4 deliberately admits one bounded package: both positions
+                # share one URL set, one token budget and one execution deadline.
+                findings = completed_result['findings']
+                checked = sum(f.get('checked') is True for f in findings)
+                omitted = sum(f.get('state') == 'omitted' for f in findings)
+                scope = {**plan['snapshot'].get('scope', {}),
+                    'contradictions': len(findings), 'checked_contradictions': checked,
+                    'omitted_contradictions': omitted,
+                    'unavailable_contradictions': len(findings) - checked - omitted,
+                    'processed_contradictions': len(findings),
+                    'fetched_sources': len({d.get('source_url') or d.get('url')
+                                           for d in completed_result['documents']})}
+                status = 'complete' if checked == len(findings) else 'partial'
+                revision = job['revision'] + 1
+                summary = {**job['snapshot'], **compact(completed_result),
+                    'scope': scope, 'status': status, 'revision': revision, 'checked_at': now.isoformat()}
+                tx.set(ref.collection('packages').document(f'{index:06d}'), {'payload': payload})
+                tx.update(ref, dict(status=status, snapshot=summary, revision=revision,
+                    completed_packages=index + 1, updated_at=now,
+                    next_attempt_at=None, lease_token=None, attempts=0))
+                return True
             old = job['snapshot']
             summary = dict(old)
             scope = dict(old.get('scope') or {})
@@ -432,10 +512,19 @@ class SourceCheckRepository:
                 for doc in stored.get('documents', []):
                     documents[doc['source_id']] = doc
             else:
-                findings.extend({**pair, 'checked': False, 'pending': job['status'] in ACTIVE,
-                    'support': 'unknown', 'topical': 'unknown', 'temporal': 'unknown',
-                    'reason': '', 'reason_code': 'awaiting_credentials' if job['status'] == 'awaiting_credentials' else 'pending',
-                    'quotes': []} for pair in package['pairs'])
+                if package.get('mode') == 'contradiction_evidence':
+                    for pair in package['pairs']:
+                        if pair.get('state') in ('omitted', 'unavailable'):
+                            findings.append(dict(pair))
+                        else:
+                            findings.append({**pair, 'checked': False,
+                                'pending': job['status'] in ACTIVE, 'state': 'pending',
+                                'reason_code': 'awaiting_credentials' if job['status'] == 'awaiting_credentials' else None})
+                else:
+                    findings.extend({**pair, 'checked': False, 'pending': job['status'] in ACTIVE,
+                        'support': 'unknown', 'topical': 'unknown', 'temporal': 'unknown',
+                        'reason': '', 'reason_code': 'awaiting_credentials' if job['status'] == 'awaiting_credentials' else 'pending',
+                        'quotes': []} for pair in package['pairs'])
             for source in package.get('sources', []):
                 sources[source['id']] = source
         # Avoid stitching pages from different versions during a package commit.

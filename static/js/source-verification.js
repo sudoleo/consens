@@ -70,12 +70,20 @@
   }
   function coverage(verification) {
     const findings = (verification?.findings || []).filter(Boolean);
+    if (isContradictionCheck(verification)) {
+      const total = verification.scope?.contradictions ?? findings.length;
+      const checked = verification.scope?.checked_contradictions ?? findings.filter(item => item.checked).length;
+      return {total, checked, remaining: Math.max(0, total - checked)};
+    }
     const total = Math.max(0, verification?.scope?.pairs ?? findings.length);
     const checked = Math.min(total, Math.max(0, verification?.scope?.checked_pairs ?? findings.filter(item => item.checked).length));
     return { total, checked, remaining: total - checked };
   }
   function coverageText(verification) {
     const { total, checked, remaining } = coverage(verification);
+    if (isContradictionCheck(verification)) return `${checked} of ${total} contradictions checked`
+      + (verification.scope?.omitted_contradictions ? ` · ${verification.scope.omitted_contradictions} omitted by budget` : '')
+      + (verification.scope?.unavailable_contradictions ? ` · ${verification.scope.unavailable_contradictions} unavailable` : '');
     const scope = verification.scope || {};
     const sourceCount = scope.sources ?? scope.source_count;
     const sources = Number.isFinite(sourceCount) ? `${scope.checked_sources || 0} of ${sourceCount} sources checked · ` : '';
@@ -85,6 +93,7 @@
       + (pending ? ` · ${pending} pending` : '') + (unavailable ? ` · ${unavailable} not checked` : '');
   }
   function isPending(verification) { return ['pending', 'queued', 'running'].includes(verification?.status); }
+  function isContradictionCheck(value) { return Number(value?.schema_version) === 4 && value?.check_type === 'contradiction_evidence'; }
   function assessment(verification) {
     const findings = (verification?.findings || []).filter(Boolean);
     const issues = findings.filter(item => item.checked && (['partial', 'contradicted'].includes(item.support)
@@ -156,6 +165,7 @@
     for (let parent = ref?.parentElement; parent; parent = parent.parentElement) {
       const verification = presentations.get(parent)?.verification;
       if (!verification) continue;
+      if (isContradictionCheck(verification)) return null;
       if (isPending(verification)) return Object.freeze({state: 'pending', summary: 'This citation is waiting to be checked.', detail: ''});
       return Object.freeze({state: 'unchecked', summary: 'No check result is available for this citation.', detail: ''});
     }
@@ -183,7 +193,7 @@
     if (presentation) presentation.lists.add(list);
     list.querySelectorAll('.source-check-card-status').forEach(node => node.remove());
     list.querySelectorAll('[data-source-card-check]').forEach(node => delete node.dataset.sourceCardCheck);
-    if (!verification || Number(verification.schema_version) < 3) return;
+    if (!verification || Number(verification.schema_version) < 3 || isContradictionCheck(verification)) return;
     const grouped = new Map();
     const findings = (verification.findings || []).filter(Boolean);
     const sources = verification.sources || [];
@@ -225,6 +235,8 @@
       navigationHighlights.delete(target);
     }
     const previous = presentations.get(body);
+    previous?.differenceCards?.querySelectorAll('.contradiction-source-check').forEach(node => node.remove());
+    if (previous?.differenceCards) differencePresentations.delete(previous.differenceCards);
     presentations.delete(body);
     previous?.lists.forEach(list => applySourceList(list, body));
     if (body) delete body.dataset.sourceCheckJob;
@@ -245,6 +257,14 @@
   }
   function status(verification) {
     if (!verification) return "";
+    if (isContradictionCheck(verification)) {
+      if (verification.status === 'skipped') return verification.reason_code === 'disabled' ? 'Contradiction source checks disabled' : 'No checkable contradictions detected';
+      if (verification.status === 'disabled') return 'Contradiction source checks disabled';
+      if (verification.runtime?.error_code === 'differences_failed') return 'Contradiction source check unavailable: Differences analysis failed';
+      if (verification.status === 'queued') return 'Contradiction source check queued';
+      if (isPending(verification)) return 'Checking contradictions against existing sources…';
+      if (verification.status === 'complete' || verification.status === 'partial') return coverageText(verification);
+    }
     if (verification.status === 'queued') return 'Source check queued';
     if (isPending(verification)) return "Checking sources…";
     if (verification.status === 'awaiting_credentials') return 'Source check needs an API key';
@@ -261,6 +281,7 @@
     return coverage(verification).remaining ? 'Source check incomplete' : coverage(verification).checked ? 'Source check complete' : 'No sources checked';
   }
   function compactStatus(verification) {
+    if (isContradictionCheck(verification)) return status(verification);
     const {total, checked, remaining} = coverage(verification);
     if (!total || ['failed', 'awaiting_credentials', 'skipped'].includes(verification.status)) return status(verification);
     const {issues, unknown} = assessment(verification);
@@ -274,6 +295,8 @@
     if (!verification || verification.status === 'skipped') return '';
     if (!rendered) return 'unknown';
     if (isPending(verification)) return 'pending';
+    // A settled dispute never verifies the entire answer or source catalogue.
+    if (isContradictionCheck(verification)) return '';
     const {total, checked, remaining} = coverage(verification);
     const {issues, unknown} = assessment(verification);
     if (issues > 0) return 'issue';
@@ -306,7 +329,7 @@
     const pending = rendered && isPending(verification);
     const state = tabStatus(verification, rendered);
     const tabLabel = document.querySelector("#consensusSourcesTab .consensus-tab-label");
-    if (verification?.job_id || verification?.scope?.pairs > 0) {
+    if (verification?.job_id || verification?.scope?.pairs > 0 || isContradictionCheck(verification)) {
       const tab = document.getElementById('consensusSourcesTab');
       if (tab) tab.hidden = false;
     }
@@ -349,8 +372,13 @@
     const focusedRow = document.activeElement?.closest?.('.source-check-row, details[data-disclosure]');
     const focusKey = focusedRow && target.contains(focusedRow) ? focusedRow.dataset.pair || focusedRow.dataset.disclosure : null;
     const focusOnLink = document.activeElement?.classList.contains('source-check-link');
+    const previousCards = presentations.get(body)?.differenceCards;
     clear(body, target, true);
     if (!verification) return;
+    if (isContradictionCheck(verification)) {
+      renderContradictions(body, target, verification, options, previousCards);
+      return;
+    }
     const list = body.id === 'consensusAnswerBody' ? document.getElementById('consensusSourcesList')
       : body.closest('.thread-history-turn') ? target.parentElement : (body.matches('.share-md') ? document : null);
     presentations.set(body, {verification, lists: new Set()});
@@ -573,6 +601,11 @@
     });
   }
   function reasonLabel(code) {
+    if (['contradiction_limit', 'url_limit', 'input_limit', 'time_limit'].includes(code)) return {
+      contradiction_limit: 'Contradiction budget reached', url_limit: 'Source URL budget reached',
+      input_limit: 'Input token budget reached', time_limit: 'Time budget reached'
+    }[code];
+    if (code === 'no_sources') return 'No existing sources could be associated with this disagreement';
     return { pending: 'Waiting for a check', queued: 'Waiting for capacity', fetch_failed: 'Source could not be retrieved',
       fetch_error: 'Source could not be retrieved', unavailable: 'Source unavailable', robots_denied: 'Website disallows access',
       timeout: 'Request timed out', blocked_url: 'Source URL cannot be accessed', unsafe_url: 'Source URL cannot be accessed',
@@ -592,9 +625,129 @@
       unknown: 'Evidence is inconclusive' }[code] || 'Check could not be completed (' + String(code).replace(/[^a-zA-Z0-9_ -]/g, '').slice(0, 80).replace(/_/g, ' ') + ')';
   }
 
+  const differencePresentations = new WeakMap();
+  const cardDifferences = new WeakMap();
+  function bindDifferenceCard(card, difference) { cardDifferences.set(card, difference); }
+  function differenceIdentity(diff) {
+    return JSON.stringify([diff.claim, diff.consensus_anchor, (diff.positions || []).map(pos => [pos.stance, pos.quote, pos.models])]);
+  }
+  function findingKey(item) { return item.contradiction_id || `${item.sentence_id}:${item.source_id}`; }
+  function samePositions(item, diff) {
+    const label = value => String(value || '').toLowerCase().replace(/^claude$/, 'anthropic');
+    const models = values => JSON.stringify((values || []).map(label));
+    return Array.isArray(item.positions) && item.positions.length === diff.positions?.length
+      && item.positions.every((position, index) => {
+        const displayed = diff.positions[index];
+        return position.summary === displayed.stance && position.quote === displayed.quote
+          && models(position.models) === models(displayed.models);
+      });
+  }
+  function sameBinding(a, b) {
+    return ['job_id', 'run_id', 'answer_version', 'schema_version', 'check_type', 'prompt_version'].every(key => a?.[key] == null || a[key] === b?.[key]);
+  }
+  function contradictionResult(item, verification) {
+    const section = element('section', 'contradiction-source-check');
+    section.dataset.contradictionId = item.contradiction_id;
+    section.dataset.checkState = item.state || 'unavailable';
+    section.append(element('h4', 'contradiction-source-heading', 'Existing-source check'));
+    const position = (item.positions || []).find(pos => pos.id === item.supported_position_id);
+    const positionName = position ? `${position.id}: ${position.summary || (position.models || []).join(', ')}` : '';
+    const evidence = (item.evidence || []).filter(proof => proof.quote && proof.source_id
+      && (verification.sources || []).some(source => source.id === proof.source_id));
+    const supported = item.checked && evidence.length > 0;
+    const verdict = item.state === 'omitted' ? 'Omitted: ' + reasonLabel(item.reason_code)
+      : item.state === 'pending' ? 'Waiting to check this contradiction'
+      : !item.checked ? 'Check unavailable: ' + reasonLabel(item.reason_code)
+      : !supported ? 'Existing evidence is insufficient'
+      : {supports_position: positionName ? `Sources support ${positionName}` : 'Existing evidence is insufficient',
+        conditions_explain: 'Different conditions explain the disagreement', sources_conflict: 'The sources disagree',
+        insufficient_evidence: 'Existing evidence is insufficient'}[item.verdict] || 'Existing evidence is insufficient';
+    section.append(element('p', 'contradiction-source-verdict', verdict));
+    if (item.coverage_limited) section.append(element('p', 'contradiction-source-context', 'Some sources were omitted due to the source budget.'));
+    if (item.reason && (supported || item.verdict === 'insufficient_evidence')) section.append(element('p', 'contradiction-source-reason', item.reason));
+    if (supported) evidence.forEach(proof => {
+      const source = verification.sources.find(value => value.id === proof.source_id);
+      const block = element('div', 'contradiction-source-evidence');
+      const provenance = element('p', 'contradiction-source-provenance', proof.position_id ? `${proof.position_id} · ` : '');
+      try {
+        const url = new URL(source.url);
+        if (['https:', 'http:'].includes(url.protocol)) {
+          const link = element('a', 'source-check-link', source.title || url.hostname);
+          link.href = url.href; link.target = '_blank'; link.rel = 'noopener noreferrer'; provenance.append(link);
+        }
+      } catch (_) { /* An invalid source URL is never a clickable link. */ }
+      // Original evidence must remain verbatim, including literal code and S tags.
+      block.append(provenance, element('blockquote', 'contradiction-source-quote', proof.quote));
+      const context = [['Date', proof.date], ['Scope', proof.scope], ['Limitations', proof.limitations]]
+        .filter(([, value]) => value).map(([label, value]) => `${label}: ${value}`).join(' · ');
+      if (context) block.append(element('p', 'contradiction-source-context', context));
+      section.append(block);
+    });
+    return section;
+  }
+  function refreshDifferences(cards) {
+    const presentation = differencePresentations.get(cards);
+    if (!presentation) return;
+    cards.querySelectorAll('.contradiction-source-check').forEach(node => node.remove());
+    const {verification, differencesData} = presentation;
+    (verification.findings || []).forEach(item => {
+      if (!item.contradiction_id || !sameBinding(verification, {...verification, run_id: item.run_id, answer_version: item.answer_version})) return;
+      const diff = differencesData?.differences?.[item.difference_index];
+      if (!diff || diff.type !== 'contradiction' || diff.severity !== 'major'
+        || diff.factual_check?.checkable !== true || diff.factual_check.question !== item.question
+        || diff.consensus_anchor !== item.consensus_anchor || !samePositions(item, diff)) return;
+      const matches = [...cards.querySelectorAll('.diff-card')].filter(card => {
+        let displayed = cardDifferences.get(card);
+        if (!displayed && card.dataset.difference) {
+          try { displayed = JSON.parse(card.dataset.difference); } catch (_) { return false; }
+        }
+        return displayed ? differenceIdentity(displayed) === differenceIdentity(diff)
+          : card.querySelector('.diff-card-claim, h3')?.textContent === diff.claim;
+      });
+      if (matches.length !== 1) return;
+      const card = matches[0];
+      (card.querySelector('.diff-card-body') || card).append(contradictionResult(item, verification));
+    });
+  }
+  function renderContradictions(body, target, verification, options, previousCards) {
+    let cards = previousCards?.isConnected ? previousCards : body.id === 'consensusAnswerBody'
+      ? document.getElementById('differencesCards') : body.closest('.thread-history-turn')?.querySelector('.thread-history-differences');
+    if (!cards && body.matches('.share-md')) cards = document.getElementById('differencesView');
+    const box = element('section', 'source-verification source-verification-contradictions');
+    if (verification.job_id) { body.dataset.sourceCheckJob = verification.job_id; box.dataset.sourceCheckJob = verification.job_id; }
+    box.dataset.sourcePending = String(isPending(verification));
+    const summary = element('p', 'source-verification-status', status(verification)); summary.setAttribute('role', 'status');
+    box.append(summary, element('p', 'source-check-coverage', 'Checks factual disagreements using sources already supplied by the models. This is not a complete fact-check of the consensus.'));
+    if (cards) box.append(element('p', 'source-verification-explanation', 'Results and original evidence appear with each contradiction in Differences.'));
+    target.prepend(box);
+    if (!cards && (verification.findings || []).length) {
+      cards = element('div', 'contradiction-source-differences');
+      box.append(cards);
+      (options.differencesData?.differences || []).forEach(diff => {
+        if (diff?.type !== 'contradiction') return;
+        const card = element('article', 'diff-card');
+        bindDifferenceCard(card, diff);
+        card.append(element('h3', 'diff-card-claim', diff.claim));
+        (diff.positions || []).forEach(pos => {
+          const position = element('div', 'diff-position');
+          position.append(element('p', '', (pos.models || []).join(', ')), element('p', '', pos.stance), element('blockquote', '', pos.quote));
+          card.append(position);
+        });
+        cards.append(card);
+      });
+    }
+    presentations.set(body, {verification, differenceCards: cards, lists: new Set()});
+    if (cards) {
+      differencePresentations.set(cards, {verification, differencesData: options.differencesData});
+      refreshDifferences(cards);
+    }
+    applyRefreshNotice(box, refreshStates.get(verification.job_id));
+    if (isPending(verification) && !refreshStates.get(verification.job_id)?.terminal) target.setAttribute('aria-busy', 'true');
+  }
+
   // The caller owns the run/turn and credentials. This helper never reads App state.
   // Each cycle publishes only after reading a consistent, complete set of pages.
-  function watch({ jobId, url, getToken, onUpdate, isActive, onError } = {}) {
+  function watch({ jobId, url, getToken, onUpdate, isActive, onError, expectedSnapshot } = {}) {
     let endpoint;
     try { endpoint = new URL(url || `/api/source-checks/${encodeURIComponent(jobId || '')}`, window.location.origin); }
     catch (_) { throw new Error('Invalid source check URL'); }
@@ -643,7 +796,10 @@
           const page = await response.json();
           let value = page.source_verification;
           if (!value || typeof value !== 'object' || (jobId && value.job_id && value.job_id !== jobId)) throw new Error('Invalid source check snapshot');
-          if (snapshot && (value.revision !== revision || value.answer_version !== snapshot.answer_version)) {
+          if (!sameBinding(expectedSnapshot || previous, value)) {
+            const error = new Error('Source check belongs to a different answer'); error.status = 409; throw error;
+          }
+          if (snapshot && (value.revision !== revision || !sameBinding(snapshot, value))) {
             const error = new Error('Source check changed during refresh'); error.status = 409; throw error;
           }
           if (!snapshot) { snapshot = value; revision = value.revision ?? null; }
@@ -652,7 +808,7 @@
           sameRevision = previous && revision != null && previous.revision === revision
             && previous.answer_version === value.answer_version && previous.status === value.status;
           if (sameRevision) value = {...value, findings: previous.findings, documents: previous.documents, sources: previous.sources};
-          for (const item of value.findings || []) if (item) findings.set(`${item.sentence_id}:${item.source_id}`, item);
+          for (const item of value.findings || []) if (item) findings.set(findingKey(item), item);
           for (const item of value.documents || []) if (item) documents.set(item.source_id, item);
           for (const item of value.sources || []) if (item) sources.set(item.id || item.source_id, item);
           cursor = sameRevision ? null : page.next_cursor ?? null;
@@ -666,7 +822,7 @@
         // evidence for the same answer until the full terminal snapshot arrives.
         if (previous && isPending(snapshot) && previous.answer_version === snapshot.answer_version) {
           for (const item of previous.findings || []) {
-            const key = `${item.sentence_id}:${item.source_id}`;
+            const key = findingKey(item);
             if (!findings.has(key)) findings.set(key, item);
           }
           for (const item of previous.documents || []) if (!documents.has(item.source_id)) documents.set(item.source_id, item);
@@ -713,7 +869,7 @@
     function validate() { if (!active()) stop(); }
     function begin() {
       if (!active()) return stop();
-      stopWatch = watch({ jobId, getToken: () => auth.user.getIdToken(), isActive: active,
+      stopWatch = watch({ jobId, expectedSnapshot: snapshot, getToken: () => auth.user.getIdToken(), isActive: active,
         onError(error) { onError?.(error); if ([401, 403, 404, 410].includes(error.status)) stop(); },
         onUpdate(value) {
           if (!active()) return stop();
@@ -760,7 +916,7 @@
     begin();
     return stop;
   }
-  window.App.sourceVerification = Object.freeze({ render: renderSafe, renderCurrent, clear, applySourceList, getCitationCheck, watch, observe });
+  window.App.sourceVerification = Object.freeze({ render: renderSafe, renderCurrent, clear, applySourceList, getCitationCheck, watch, observe, refreshDifferences, bindDifferenceCard });
   document.addEventListener("DOMContentLoaded", () => {
     document.querySelectorAll("[data-source-verification]").forEach(root => {
       try {
@@ -769,7 +925,7 @@
         const snapshot = JSON.parse(root.dataset.sourceVerification);
         const options = {differencesData: (() => { try { return JSON.parse(root.dataset.differencesData || '{}'); } catch (_) { return {}; } })()};
         render(body, report, snapshot, options);
-        if (root.dataset.sourceCheckUrl) watch({jobId: snapshot?.job_id, url: root.dataset.sourceCheckUrl,
+        if (root.dataset.sourceCheckUrl) watch({jobId: snapshot?.job_id, expectedSnapshot: snapshot, url: root.dataset.sourceCheckUrl,
           isActive: () => root.isConnected && body?.isConnected && report?.isConnected,
           onUpdate: value => renderSafe(body, report, value, options)});
       } catch (_) { /* old or missing snapshot */ }

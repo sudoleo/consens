@@ -114,7 +114,8 @@ class ConsensusPromptAnonymizationTests(unittest.TestCase):
         prompt = build_prompt()
         self.assertIn("not as a limit on your reasoning", prompt)
         self.assertIn("never use an uncited recollection", prompt)
-        self.assertIn("do not omit them merely for brevity", prompt)
+        self.assertIn("Do not output S-source references", prompt)
+        self.assertNotIn("do not omit them merely for brevity", prompt)
         self.assertNotIn("Use citations sparingly", prompt)
 
     def test_prompt_forbids_false_memory_persistence_claims(self):

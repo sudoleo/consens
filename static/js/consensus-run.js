@@ -1485,12 +1485,12 @@
           "sources.status": { receive(data) {
             if (!isActiveConsensusRun(consensusRunId)) return;
             sourceVerificationSnapshot = { status: data.status };
-            window.App.sourceVerification?.renderCurrent(sourceVerificationSnapshot);
+            window.App.sourceVerification?.renderCurrent(sourceVerificationSnapshot, {differencesData: earlyDifferences?.differences_data});
           } },
           "sources.final": { receive(data) {
             if (!isActiveConsensusRun(consensusRunId)) return;
             sourceVerificationSnapshot = data.source_verification;
-            window.App.sourceVerification?.renderCurrent(sourceVerificationSnapshot);
+            window.App.sourceVerification?.renderCurrent(sourceVerificationSnapshot, {differencesData: earlyDifferences?.differences_data});
           } },
           "differences.final": { receive(data) {
             if (!isActiveConsensusRun(consensusRunId)) return;
@@ -1500,7 +1500,7 @@
             catch (error) { console.error("Could not render differences:", error); }
             if (!structured && differencesEl) injectMarkdown(differencesEl, data.differences || "The differences check is unavailable.");
             window.App.consensusPipeline?.onConsensusEnd?.();
-            window.App.sourceVerification?.renderCurrent(sourceVerificationSnapshot);
+            window.App.sourceVerification?.renderCurrent(sourceVerificationSnapshot, {differencesData: earlyDifferences?.differences_data});
           } },
           "consensus.delta": consensusMainRenderer,
           "consensus.final": consensusFinalPhaseRenderer,

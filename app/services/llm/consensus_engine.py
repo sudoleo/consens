@@ -13,6 +13,7 @@ from typing import Mapping
 import app.core.config as cfg
 from app.core.observability import safe_exception, safe_traceback
 from app.services.llm.citations import coerce_text
+from app.services.llm.consensus_citations import ConsensusCitationFilter, strip_consensus_source_markers
 from app.services.llm.credentials import openrouter_api_key
 from app.services.llm.engines import (
     OPENROUTER_CHAT_COMPLETIONS_URL,
@@ -435,14 +436,12 @@ def _build_consensus_prompt(
         "comparison itself. Smooth over every other divergence silently. If uncertainty remains "
         "important, state it as ordinary factual uncertainty without referring to the underlying "
         "experts or models. "
-        "When a central factual claim is directly supported by a cited source in the provided opinions, "
-        "include the existing source tag such as [S1] next to that claim. At the end of a sentence, "
-        "place the tag after the terminal punctuation without a space, for example: claim.[S1] "
-        "Use only source tags that were provided in the opinions or their compact source lists; never invent new source IDs. "
-        "Treat those tags as provenance for the supplied material, not as a limit on your reasoning. "
-        "You may draw a clearly reasoned conclusion without a source tag, but never use an uncited recollection "
-        "to dismiss sourced, time-sensitive information. Preserve relevant source tags for current or "
-        "otherwise time-sensitive factual claims; do not omit them merely for brevity. "
+        "Use the supplied source information to assess the opinions, especially current or time-sensitive facts. "
+        "Treat sources as provenance, not as a limit on your reasoning; never use an uncited recollection "
+        "to dismiss sourced, time-sensitive information. "
+        "Do not output S-source references such as [S1] or [S1, S2], source-ID links, or a source-ID list "
+        "in your final answer. Sources remain accessible in the original model responses. "
+        "Preserve literal code examples and mathematical notation when those are part of the answer. "
         "Do not claim that you, consens.io, or any model saved, updated, or will remember "
         "personal information; persistent state changes happen only through separate explicit controls. "
         "Provide only the final, balanced answer. "
@@ -545,7 +544,9 @@ def query_consensus(
             )
             continue
         if result:
-            return result
+            result = strip_consensus_source_markers(result)
+            if result.strip():
+                return result
         last_error = "empty response from consensus engine."
     return f"Consensus error: {last_error}"
 
@@ -972,6 +973,7 @@ def _build_differences_prompt_from(context: _JudgeContext) -> str:
         '      "s": 7,\n'
         '      "type": "contradiction",\n'
         '      "severity": "major",\n'
+        '      "factual_check": {"checkable": true, "question": "specific factual question", "reason": "why original sources can settle it"},\n'
         '      "positions": [\n'
         '        {"stance": "one short sentence", "models": ["Model A"], "quote": "verbatim short quote"}\n'
         "      ],\n"
@@ -991,6 +993,12 @@ def _build_differences_prompt_from(context: _JudgeContext) -> str:
         "- \"severity\" (only for type \"contradiction\"): \"major\" when the disagreement changes the overall "
         "conclusion, recommendation, or a central fact of the answer; \"minor\" when it concerns a side detail "
         "that leaves the conclusion intact. Omit it for \"emphasis\" differences.\n"
+        "- \"factual_check\": classify source-checkability in this same analysis. Set \"checkable\" true "
+        "only for a specific, externally verifiable factual disagreement. Supply its precise \"question\" "
+        "and a short \"reason\", including relevant dates, scope or conditions. Set it false for preferences, "
+        "subjective values, competing recommendations, or mere differences of emphasis. A recommendation "
+        "is checkable only when the actual disputed point is an explicit factual premise, not which option "
+        "is preferable. When uncertain, set false. This classifies the dispute; it does not verify any fact.\n"
         "- \"s\" inside a difference: the number of the consensus sentence that states the disputed point, so the "
         "reader can see it marked in place. Use 0 if the consensus answer does not state it at all.\n"
         "- Report every distinct disagreement you find, not just the most obvious one, and give each its own "
@@ -1175,6 +1183,9 @@ def _normalize_differences(raw_differences, anon_map: dict, sentences: list = No
         sentence_anchor, sentence_id, anchor_occurrence = _sentence_reference(
             entry.get("s"), sentences
         )
+        factual = entry.get("factual_check")
+        factual = factual if isinstance(factual, dict) else {}
+        factual_question = _clip(factual.get("question"), MAX_DIFF_TEXT_CHARS)
         difference = {
             "claim": claim,
             # Stelle im Konsenstext, an der der Widerspruch haengt: aus der
@@ -1189,6 +1200,13 @@ def _normalize_differences(raw_differences, anon_map: dict, sentences: list = No
             "type": diff_type,
             "severity": severity,
             "positions": positions,
+            "consensus_anchor_validated": False,
+            "factual_check": {
+                "checkable": factual.get("checkable") is True and bool(factual_question)
+                and diff_type == "contradiction",
+                "question": factual_question,
+                "reason": _clip(factual.get("reason"), MAX_DIFF_TEXT_CHARS),
+            },
             "verify": _clip(entry.get("verify"), MAX_DIFF_TEXT_CHARS),
         }
         if sentence_id is not None:
@@ -1364,6 +1382,7 @@ def _verify_differences_data(data: dict, consensus_answer: str, model_answers: d
     _verify_claims(data.get("claims") or [], consensus_text, model_answers, _find)
 
     for diff in data.get("differences") or []:
+        diff["consensus_anchor_validated"] = False
         # Der Widerspruchs-Anker zeigt in die KONSENSANTWORT (nicht in eine
         # Modellantwort). Nicht auffindbar = halluziniert -> leeren, damit das
         # Frontend keinen falschen Satz markiert.
@@ -1371,6 +1390,7 @@ def _verify_differences_data(data: dict, consensus_answer: str, model_answers: d
             span = _find("__consensus__", consensus_text, diff["consensus_anchor"])
             if span:
                 diff["consensus_anchor"] = _clip(span, MAX_DIFF_TEXT_CHARS)
+                diff["consensus_anchor_validated"] = True
             else:
                 logging.info(
                     "Difference anchor not found in consensus answer anchor_chars=%d",
@@ -1379,13 +1399,15 @@ def _verify_differences_data(data: dict, consensus_answer: str, model_answers: d
                 diff["consensus_anchor"] = ""
 
         for position in diff.get("positions") or []:
+            position["quote_models"] = []
             if not position.get("quote"):
                 continue
             span = None
             for model in position.get("models") or []:
-                span = _find(model, model_answers.get(model) or "", position["quote"])
-                if span:
-                    break
+                model_span = _find(model, model_answers.get(model) or "", position["quote"])
+                if model_span:
+                    position["quote_models"].append(model)
+                    span = span or model_span
             if span:
                 position["quote"] = _clip(span, MAX_DIFF_QUOTE_CHARS)
             else:
@@ -1535,6 +1557,16 @@ DIFFERENCES_JSON_SCHEMA = {
                     "s": {"type": "integer"},
                     "type": {"type": "string", "enum": ["contradiction", "emphasis"]},
                     "severity": {"type": "string", "enum": ["major", "minor"]},
+                    "factual_check": {
+                        "type": "object",
+                        "properties": {
+                            "checkable": {"type": "boolean"},
+                            "question": {"type": "string"},
+                            "reason": {"type": "string"},
+                        },
+                        "required": ["checkable", "question", "reason"],
+                        "additionalProperties": False,
+                    },
                     "positions": {
                         "type": "array",
                         "items": {
@@ -1551,7 +1583,7 @@ DIFFERENCES_JSON_SCHEMA = {
                     "verify": {"type": "string"},
                 },
                 "required": [
-                    "claim", "s", "type", "severity", "positions", "verify",
+                    "claim", "s", "type", "severity", "positions", "verify", "factual_check",
                 ],
                 "additionalProperties": False,
             },
@@ -2370,14 +2402,16 @@ def stream_consensus(
     last_error = "empty response from consensus engine."
     for engine_model in engine_models:
         parts = []
+        citation_filter = ConsensusCitationFilter()
         try:
             for event in _stream_consensus_engine(engine_model, api_keys, consensus_prompt):
                 if event.get("type") == "reasoning":
                     yield {"type": "reasoning"}
                     continue
-                text = event.get("text") or ""
+                text = citation_filter.feed(event.get("text") or "")
                 parts.append(text)
-                yield {"type": "delta", "text": text}
+                if text:
+                    yield {"type": "delta", "text": text}
         except _InvalidEngineError as e:
             yield {"type": "final", "text": str(e), "error": True}
             return
@@ -2391,6 +2425,10 @@ def stream_consensus(
             )
             continue
 
+        tail = citation_filter.feed("", final=True)
+        if tail:
+            parts.append(tail)
+            yield {"type": "delta", "text": tail}
         final_text = "".join(parts).strip()
         if final_text:
             yield {"type": "final", "text": final_text}

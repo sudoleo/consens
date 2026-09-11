@@ -14,6 +14,7 @@ from typing import Callable, Iterable, Mapping
 import app.core.config as cfg
 from app.services.llm.provider_runtime import analysis_budgeted
 from app.services.llm.citations import to_plain
+from app.services.llm.consensus_citations import strip_consensus_source_markers
 from app.services.source_verification import start_source_verification, source_records
 from app.services.llm.consensus_engine import (
     compute_agreement_score,
@@ -110,15 +111,9 @@ def analyze_provider_answers(
             differences_data=None,
             agreement=None,
         )
-    from app.services.source_check_jobs import current_context, submit_advisory
-    submit = verification_submit or (submit_advisory if current_context() else None)
-    verification = (submit or start_source_verification)(
-        question=question, consensus=consensus, keys=keys,
-        sources=verification_sources if verification_sources is not None else source_records(model_sources),
-        resolved_question=resolved_question,
-    ) if check_sources else None
-    def verification_result():
-        return verification if isinstance(verification, dict) else verification.result() if verification is not None else None
+    # Also covers injected synthesis callables (benchmarks and topic runners).
+    # Saved answers never pass through this new-generation boundary.
+    consensus = strip_consensus_source_markers(consensus)
     differences_text, differences_data = judge(
         slots,
         consensus,
@@ -135,19 +130,39 @@ def analyze_provider_answers(
             differences_text=differences_text,
             differences_data=None,
             agreement=None,
-            source_verification=verification_result(),
+            source_verification=_differences_check_failed(consensus) if check_sources else _source_check_disabled(consensus),
         )
     agreement = differences_data.get("agreement")
     if not isinstance(agreement, dict):
         agreement = compute_agreement_score(differences_data)
         differences_data["agreement"] = agreement
+    from app.services.source_check_jobs import current_context, submit_advisory
+    submit = verification_submit or (submit_advisory if current_context() else None)
+    verification = (submit or start_source_verification)(
+        question=question, consensus=consensus, keys=keys,
+        sources=verification_sources if verification_sources is not None else source_records(model_sources),
+        resolved_question=resolved_question, differences_data=differences_data,
+        model_answers=slots, model_sources=model_sources,
+    ) if check_sources else _source_check_disabled(consensus)
     return ConsensusAnalysis(
         consensus=consensus,
         differences_text=differences_text,
         differences_data=differences_data,
         agreement=agreement,
-        source_verification=verification_result(),
+        source_verification=(verification if isinstance(verification, dict)
+                             else verification.result() if verification is not None else None),
     )
+
+
+def _differences_check_failed(consensus):
+    """A failed Differences phase cannot certify absence of contradictions."""
+    from app.services.source_check_jobs import unavailable_snapshot
+    return unavailable_snapshot(consensus, 'differences_failed', check_type='contradiction_evidence')
+
+
+def _source_check_disabled(consensus):
+    from app.services.source_check_jobs import disabled_snapshot
+    return disabled_snapshot(consensus)
 
 
 def run_consensus_pipeline(

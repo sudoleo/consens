@@ -43,7 +43,7 @@ def test_public_composer_mockups(browser, phase4_server, width, dark, reduced):
         previews = page.locator('.lp-composer-preview')
         for preview in previews.all():
             bar = preview.locator('.lp-composer-tools')
-            expect(bar.locator('.lp-composer-tool').nth(1)).to_have_attribute('aria-label', 'Check Sources on')
+            expect(bar.locator('.lp-composer-tool').nth(1)).to_have_attribute('aria-label', 'Check contradictions on')
             expect(bar.locator('img')).to_have_count(6)
             assert bar.evaluate('el => el.scrollWidth <= el.clientWidth + 1')
             assert bar.evaluate('el => Math.abs(el.getBoundingClientRect().height - 36) < 1')

@@ -24,14 +24,26 @@ def require_uid(request):
         raise HTTPException(401, 'Authentication failed') from None
 
 
-def check_page(job_id, *, uid, cursor, revision, after_revision=None):
+def _check_binding(actual, expected):
+    if expected is None:
+        return
+    fields = ('answer_version',)
+    if expected.get('check_type') == 'contradiction_evidence':
+        fields += ('schema_version', 'check_type', 'prompt_version', 'run_id')
+    if any(actual.get(field) != expected.get(field) for field in fields):
+        raise SourceCheckNotFound('Source check version mismatch')
+
+
+def check_page(job_id, *, uid, cursor, revision, after_revision=None, expected_snapshot=None):
     try:
         if cursor == 0 and after_revision is not None:
             job = jobs.repository().get(job_id, uid)
+            _check_binding(job['snapshot'], expected_snapshot)
             if job['revision'] == after_revision:
                 return JSONResponse({'source_verification': job['snapshot'],
                     'unchanged': True, 'next_cursor': None}, headers={'Cache-Control': 'private, no-store'})
         value = jobs.repository().page(job_id, uid=uid, cursor=cursor, revision=revision)
+        _check_binding(value['source_verification'], expected_snapshot)
         return JSONResponse(value, headers={'Cache-Control': 'private, no-store'})
     except SourceCheckNotFound:
         raise HTTPException(404, 'Source check not found') from None
@@ -96,7 +108,11 @@ def get_shared_source_check(request: Request, share_id: str,
     verification = snapshot.get('source_verification') or {}
     if not verification.get('job_id') or verification.get('answer_version') != answer_version(snapshot.get('consensus_md', '')):
         raise HTTPException(404, 'Shared source check not found')
-    return check_page(verification['job_id'], uid=data['owner_uid'], cursor=cursor, revision=revision, after_revision=after_revision)
+    if (version and version != 'original' and verification.get('check_type') == 'contradiction_evidence'
+            and verification.get('run_id') != 'watch:' + version):
+        raise HTTPException(404, 'Shared source check not found')
+    return check_page(verification['job_id'], uid=data['owner_uid'], cursor=cursor, revision=revision,
+                      after_revision=after_revision, expected_snapshot=verification)
 
 
 @router.get('/api/topics/{slug}/source-check')
@@ -116,10 +132,13 @@ def get_topic_source_check(request: Request, slug: str,
     snapshot = (run or {}).get('source_verification') or {}
     if not snapshot.get('job_id') or snapshot.get('answer_version') != answer_version((run or {}).get('consensus_md', '')):
         raise HTTPException(404, 'Source check not found')
+    if snapshot.get('check_type') == 'contradiction_evidence' and snapshot.get('run_id') != 'topic:' + run_id:
+        raise HTTPException(404, 'Source check not found')
     try:
         job = jobs.repository().get(snapshot['job_id'])
     except SourceCheckNotFound:
         raise HTTPException(404, 'Source check not found') from None
     if job.get('origin') != 'topic' or f"topics/{topic['id']}" not in job.get('references', []):
         raise HTTPException(404, 'Source check not found')
-    return check_page(job['job_id'], uid=job['uid'], cursor=cursor, revision=revision, after_revision=after_revision)
+    return check_page(job['job_id'], uid=job['uid'], cursor=cursor, revision=revision,
+                      after_revision=after_revision, expected_snapshot=snapshot)

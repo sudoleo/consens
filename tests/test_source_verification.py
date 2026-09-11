@@ -390,25 +390,31 @@ def test_sentence_ids_repeated_text_tables_and_uncited_scope():
     assert sv.collect_claims(table, [])[0]['source_ids'] == ['S1']
 
 
-def test_pipeline_starts_verification_before_other_judges(monkeypatch):
+def test_pipeline_starts_verification_after_successful_differences(monkeypatch):
     from app.services import consensus_pipeline as pipeline
-    started, other_judge = threading.Event(), threading.Event()
+    events = []
     saved_result = run()
     def verify(**kwargs):
-        started.set()
-        assert other_judge.wait(2)
+        assert events == ['differences']
+        assert kwargs['differences_data'] is differences
+        assert kwargs['model_answers']['openai'] == 'A'
+        assert kwargs['consensus'] == 'The plan costs 20 euros.'
+        events.append('sources')
         return saved_result
     monkeypatch.setattr(sv, 'verify_sources', verify)
     monkeypatch.setattr('app.services.llm.mock_llm.mock_llm_enabled', lambda: False)
     differences = {'agreement': {'score': 91}, 'differences': []}
     def judge(*args, **kwargs):
-        assert started.wait(2)
-        other_judge.set()
+        assert events == []
+        assert args[1] == 'The plan costs 20 euros.'
+        events.append('differences')
         return 'unchanged', differences
     result = pipeline.analyze_provider_answers(question='Price?',
-        answers={'OpenAI': 'A', 'Mistral': 'B'}, consensus_model='OpenAI', keys={},
-        verification_sources=SOURCES, synthesize=lambda *_, **__: TEXT, judge=judge)
-    assert result.consensus == TEXT
+        answers={'openai': 'A', 'mistral': 'B'}, consensus_model='OpenAI', keys={},
+        verification_sources=SOURCES, synthesize=lambda *_, **__: TEXT, judge=judge,
+        verification_submit=verify)
+    assert result.consensus == 'The plan costs 20 euros.'
+    assert events == ['differences', 'sources']
     assert result.differences_data is differences
     assert result.agreement == {'score': 91}
     assert result.source_verification['status'] == 'complete'

@@ -146,7 +146,7 @@ def test_consensus_actions_are_explicit_and_hover_preview_has_no_native_duplicat
 
     assert "Review differences" in template
     assert "Compare answers" in template
-    assert "Verify sources" in template
+    assert 'data-short="Sources">Sources</span>' in template
     assert "badge.title" not in insights
     assert "marker.title" not in insights
     assert "span.title" not in insights

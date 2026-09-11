@@ -309,7 +309,7 @@
     const sourcesButton = document.getElementById("composerSourcesToggle");
     if (sourcesButton) {
       sourcesButton.setAttribute("aria-checked", String(checkSources));
-      sourcesButton.title = `Check Sources ${checkSources ? "on" : "off"} · Check cited sources for the next consensus`;
+      sourcesButton.title = `Check contradictions ${checkSources ? "on" : "off"} · Check contradictions against existing sources for the next consensus`;
       document.getElementById("composerSourcesState").textContent = checkSources ? "On" : "Off";
     }
     bar.hidden = enabled && !document.body.classList.contains("is-hero");

@@ -1642,121 +1642,106 @@ Turn 3 und spätere Turns benutzen eine serverseitig autoritative Context-Versio
 
 ### Consensus & Differences
 
-**Quellenprüfung v3 (2026-09-09):** `services/source_catalog.py` vereinheitlicht
-vor der Synthese die lokalen Quellen-IDs der Modelle. `fan_out_provider_answers`
-und der Browser-Consensus-Pfad verwenden denselben Katalog. Bereits konsistente
-globale Browser-IDs bleiben stabil; fehlende oder mehrdeutige Verweise erhalten
-keinen zufälligen Link. Identische Dokumente werden mit Modell-Provenienz
-zusammengeführt; URL-Pfad/-Query bleiben case-sensitive. Code-Spannen und
-Fences werden beim Umschreiben nicht verändert. Share-, Chat- und Bookmark-
-Normalizer schneiden Quellen nicht mehr bei 50 Einträgen ab. Topic-Evidence
-behält die IDs auch nach Qualitätssortierung und wird nicht auf 80 gekürzt.
-Bestehende Request-/Bookmark-Bytebudgets gelten weiter; Chat-Turns und einzelne
-Modellantwort-Dokumente werden vor Writes bei mehr als 750.000 serialisierten
-Bytes ausdrücklich abgewiesen, statt Quellen still zu verlieren.
+**Quellenprüfung v4 (2026-09-11):** Neue Consensus-Antworten enthalten keine
+S-Quellenverweise. `llm/consensus_citations.py` entfernt unerwartete S-Zitate
+inkrementell vor Streaming-Ausgabe, nachgelagerter Analyse und Speicherung;
+literaler Code und Mathematik bleiben erhalten. Synthese-Prompts behalten die
+Quelleninformationen der Modellantworten. Bestehende Antworten werden beim
+Laden nicht umgeschrieben. `source_catalog.py` vereinheitlicht weiterhin lokale
+Modell-IDs, dedupliziert URLs mit Modellprovenienz und erhält unbekannte oder
+mehrdeutige Referenzen ohne erfundenen Link. Alle Modellquellen bleiben zugänglich.
+Chat-/Bookmark-/Share-Normalizer behalten vollständige Quellenlisten; vorhandene
+Request- und Dokument-Bytebudgets (750.000 Bytes für Turn/Modellantwort) gelten
+weiterhin ausdrücklich, ohne stilles Abschneiden nach einer Quellenanzahl.
 
-`services/source_verification.py` plant nach der fertigen Synthese **alle**
-zitierten Satz-/Quellen-Paare; unzitierte Modellquellen und literale Code-Tags
-gehören nicht zum Prüfumfang. Schema 3 (`check_type: source_evidence`,
-`prompt_version: source-evidence-v3`) ergänzt die getrennten Thema-/Zeitwerte
-um `support: supported|partial|contradicted|unknown`. Belegwirkung umfasst auch
-Zahlen, Einheiten, Bedingungen und Meinungszuschreibung. Nicht unbekannte
-Belegurteile benötigen validierte Originalpassagen aus dem tatsächlich
-gesendeten Auszug **und** dem abgerufenen Dokument. Die Prüfung verändert
-Consensus, Coverage, Differences und Agreement nicht; sie beweist auch nicht
-die Wahrheit des Quelldokuments selbst.
-Die Annahmegrenze für Originalbelege ist vier Zitate mit je höchstens 400
-Zeichen und insgesamt höchstens 800 Zeichen pro Befund; der Prompt fordert
-weiterhin kurze 1–2 Zitate. Nicht wortgetreue oder fehlende erforderliche Belege
-bleiben `unavailable` mit `evidence_mismatch`, unbekannten Bewertungsachsen und
-leeren Zitaten. Strukturfehler behalten `invalid_output`; zusätzliche
-Modellaufrufe entstehen durch diese Validierung nicht.
+Der bestehende Differences-Aufruf liefert additiv
+`differences[].factual_check = {checkable, question, reason}`. Präferenzen,
+Empfehlungen und Schwerpunkte sind keine faktisch prüfbaren Streitfragen.
+`consensus_anchor_validated` und `positions[].quote_models` entstehen aus der
+serverseitigen Validierung der Originalpassagen. Fehlende/ungültige Metadaten
+lösen keine automatische Prüfung aus. Agreement, Coverage, Consensus und die
+ursprünglichen Modellpositionen werden durch Quellenbefunde nicht verändert.
+`/resolve` bleibt eine getrennte, ausschließlich explizit gestartete Modellrunde.
+
+`source_verification.py` dispatcht neue Pläne nach
+`contradiction_verification.py`: Schema 4, `check_type: contradiction_evidence`,
+`prompt_version: contradiction-evidence-v1`. Nur `contradiction` + `major`,
+faktisch prüfbare Frage und gültige Consensus-/Modellanker werden aufgenommen.
+Jeder Befund trägt stabile `contradiction_id`, `difference_index`, `run_id`,
+`answer_version` und `positions_version`; Positionen heißen innerhalb eines
+Streitpunkts P1, P2 usw. Die vorhandenen Quellen werden anhand der jeweiligen
+Modellpassage und Referenzen zugeordnet; ein begrenzter Katalog-Fallback ist
+als solcher gekennzeichnet. URL-Deduplizierung verwendet D-IDs nur innerhalb
+der Prüfung, Quellen in Modellantworten behalten ihre S-IDs. Bei gemeinsamer
+URL bleiben die relevanten Originalpassagen beider Seiten erhalten.
+
+Ein einziges begrenztes Paket pro neuem Auftrag umfasst alle ausgewählten
+Streitpunkte und URLs. Konfigurierbare Gesamtbudgets kommen aus
+`SOURCE_VERIFICATION_MAX_CONTRADICTIONS` (4), `MAX_URLS` (8), `INPUT_TOKENS`
+(24.000, konservative Obergrenze), `TOTAL_SECONDS` (60) und
+`FALLBACK_SOURCES_PER_POSITION` (2); bestehende Input-/Ausgabe-/Abrufgrenzen
+wirken zusätzlich. Ausgelassene Streitpunkte bleiben `state: omitted` mit
+konkretem Budgetgrund; fehlende Quellen und Abruffehler bleiben getrennt.
+Keine neue Websuche und keine zusätzliche Klassifizierungsrunde.
+
+Urteile: `supports_position` mit benannter Position, `conditions_explain`,
+`sources_conflict` oder `insufficient_evidence`. Substanzielle Urteile benötigen
+wortgetreue Originalzitate aus gesendetem Auszug **und** abgerufenem Dokument,
+mit validierter Quellen-/Positionszuordnung. Bedingungen, Datum, Geltungsbereich
+und Einschränkungen gehören zum Judge-Vertrag. Quellenfehler und fehlende
+Belege widerlegen keine Position; Modellmehrheit ist kein Quellenbeweis.
 
 Produktive Browser-/API-/Watch-/Topic-Kontexte geben UID und stabile Run-ID an
-`source_check_jobs.py`. `source_check_repository.py` speichert einen kompakten
-Jobheader, den vollständigen komprimierten Plan und separate Paketergebnisse.
-Paketgrenzen beschränken Arbeit pro Dokument/Call, niemals die Gesamtzahl
-zitierter Quellen. Vier Worker je Prozess arbeiten mit persistenten
-300-s-Leases; die begrenzt paginierte Queue setzt ihren Scan fort. Ein
-Lease-Token sperrt verspätete Ergebnisse, vollständig abgeschlossene Pakete
-werden nicht erneut ausgeführt. Alle Befunde behalten einen expliziten Zustand:
-`pending`, `checked` oder `unavailable`; unbekannte Belegwirkung ist von
-technisch nicht prüfbaren Quellen getrennt. Reine vorübergehende Abruffehler
-ohne bezahlten Judge-Call werden höchstens dreimal mit mindestens 31 s Abstand
-versucht. Ein Prozessabbruch vor dem Ergebnis-Commit kann das unfertige Paket
-erneut zur Ausführung bringen; es gibt keine Exactly-once-Garantie für externe
-Modellaufrufe.
+`source_check_jobs.py`. Start erst **nach erfolgreichem Differences-Abschluss**
+in `consensus_pipeline.py` und im separaten Streaming-Pfad von `chat.py`.
+`consensus.final` liefert vorher den Antworttext; `differences.final` beendet
+den Vergleich. Danach können `sources.final` und das gemeinsame `final` einen
+noch wartenden Jobverweis liefern. Der Antwortabschluss wartet nicht auf
+Abrufe oder Judge. Neue ausgeschaltete Prüfungen speichern `status: disabled`;
+Differences-Fehler speichern `failed`/`differences_failed`; ohne geeignete
+Streitpunkte steht `skipped`/`no_checkable_contradictions`. Keiner dieser
+Zustände besagt, dass die Antwort verifiziert sei.
 
-Repository-Reads und Query-Streams haben je RPC ein 5-s-Timeout und keine
-automatischen SDK-Retries. Das ist keine Gesamtlaufzeitgarantie für einen
-Endpoint: mehrere Reads werden nacheinander ausgeführt. Transaktionen besitzen
-drei Konfliktversuche; ihre Begin-/Commit-/Rollback-RPCs behalten die SDK-
-Lifecycle-Defaults. Die gemeinsam genutzte Account-Tombstone-Prüfung behält
-ihre bestehende Timeout-Policy.
+Bestehende Job-/Owner-/BYOK-/Lease-/Recovery-Infrastruktur bleibt erhalten:
+kompakter Firestore-Header, komprimierter Plan, separate Paketergebnisse, vier
+Worker, 300-s-Leases und tokengebundene Result-Commits. V4-Idempotenz bindet Run,
+Antwort, Positionen, Kontext, Quellen und eingefrorene Limits; Judge-Caches
+trennen Modus/Schema/Prompt/Modell und validieren Treffer erneut. Abrufcache
+bleibt tenantgebunden. Normale v4-Abruffehler werden nicht automatisch erneut
+versucht und vervielfachen damit nicht das Gesamtbudget. Prozessabbruch vor
+Ergebnis-Commit kann einen externen Call nach Lease-Ablauf wiederholen
+(maximal drei Versuche, keine Exactly-once-Garantie). BYOK bleibt nur im
+Prozessspeicher, pausiert nach Schlüsselverlust und wird ownergebunden resumed;
+kein Wechsel auf Entwickler-Keys. Vorhandene Account-/Parent-Löschgrenzen,
+5-s-Read-RPCs und referenzgebundene Retention bleiben erhalten.
 
-`source_documents.py` lädt öffentliche HTML-/Textdokumente mit DNS-/Redirect-
-Prüfung, IP-Pinning und begrenzten komprimierten/dekomprimierten Bytes. Der
-ursprüngliche Host wird ohne künstlich ergänzten Standardport gesendet, damit
-kanonische HTTPS-Weiterleitungen keine Schleife bilden; TLS prüft weiterhin
-den ursprünglichen Hostnamen. Relevante
-Originalabschnitte und Tabellen mit Nachbarkontext werden aus dem begrenzten
-Gesamtdokument ausgewählt, statt nur dessen Anfang zu prüfen. LRU,
-Singleflight und kurzer Negativcache vermeiden wiederholte Abrufe; zusätzliche
-UID-gebundene Firestore-Dokument-/Judge-Caches teilen Ergebnisse zwischen
-Workern. Der Judge-Cache bindet Frage, Folgekontext, Datum, Auszüge, Modell und
-Promptversion und validiert Treffer erneut. PDF bleibt `unsupported_document`.
-Das Quellenmodell kommt aus `app_config/models.source_verification_model`
-(Default `google/gemini-3.5-flash-lite`, Admin: Consensus & Deep Think → Source Checks).
-Admin-GET/POST liefern und validieren die Auswahl; `_meta.source_verification_models`
-liefert die Optionen, `_meta.source_verification_default` den Standard. Neue Jobs
-frieren das Modell in Limits und Snapshot für Transport/Cache ein; alte Jobs
-behalten ihr gespeichertes Modell. Die bisherige Modell-Umgebungsvariable wird
-nicht mehr ausgewertet. Paketbudgets kommen weiterhin aus `SOURCE_VERIFICATION_*`;
-Defaults 32k Inputzeichen, 4k Auszüge, 3k Ausgabetokens,
-60 s je Paket. Details und Evaluationsgrenzen: [source-verification.md](source-verification.md).
+`source_documents.py` übernimmt unverändert den sicheren HTML-/Textabruf mit
+DNS-/Redirect-Prüfung, IP-Pinning, TLS-Prüfung und Bytebudgets sowie die relevante
+Originalpassagenauswahl. Keine Cookies, Proxies, Browserausführung oder Suche.
+PDF bleibt ausdrücklich `unsupported_document`. Das Modell kommt weiterhin aus
+`app_config/models.source_verification_model` (Default
+`google/gemini-3.5-flash-lite`), wird bei Aufnahme eingefroren und im Admin unter
+Consensus & Deep Think → Source Checks gewählt.
 
-`consensus.final` beendet den Antworttext, `differences.final` die bisherigen
-Judges. Das gemeinsame `final` wartet nicht auf den Quellenauftrag:
-`sources.final`/`source_verification` können einen noch laufenden Jobverweis
-enthalten. Die UI liest alle Paketseiten über `GET /api/source-checks/{job_id}`
-mit Owner-Auth, Revisionsprüfung und `after_revision`-Polling. Eigene
-OpenRouter-Keys werden nur im Prozessspeicher gehalten und sind dort für den
-Auftrag höchstens 24 h nutzbar. Eine nicht geheime
-Worker-ID mit separatem 10-s-Heartbeat/30-s-Gültigkeit verhindert, dass andere
-lebende Prozesse solche Jobs übernehmen; nach Verlust des Keys pausieren sie
-mit `awaiting_credentials`. Der authentifizierte
-`POST /api/source-checks/{job_id}/resume` bindet den erneut gelieferten Key an
-den aktuellen Knoten, ohne ein aktives fremdes Paket zu unterbrechen.
-
-Chat-/Bookmark-/Share-/API-/Watch-/Topic-Snapshots speichern den Jobverweis;
-Wiederöffnen startet keinen neuen Judge. Aufbewahrung ist referenzgebunden,
-unreferenzierte Jobs werden nach 30 Tagen bereinigt. Account-Tombstones,
-Elternstatus und transaktionale Löschmarker schützen vor Wiederanlage.
-Public-Paketseiten prüfen bei jedem Abruf den aktiven Share bzw. Topic-Run und
-die Antwortversion; ein Job-ID-Link allein gewährt keinen öffentlichen Zugriff.
-Alte v1/v2-Snapshots bleiben unverändert lesbar, ohne erfundene v3-Belegurteile.
+Chat-/Bookmark-/Share-/API-/Watch-/Topic-Snapshots speichern den v4-Jobverweis;
+Wiederöffnen startet keinen neuen Judge. Owner-Polling bleibt paginiert und
+revisionsgebunden; öffentliche/API-Endpunkte prüfen außerdem die jeweilige
+Antwort-/Run-Bindung. `share_snapshots.py` erhält die neuen Differences-Metadaten.
+Legacy v1/v2/v3-Befunde und deren Bedeutung bleiben lesbar; der v3-Prüfmodus
+für zitierte Satz-/Quellen-Paare bleibt zur Verarbeitung alter Pläne erhalten.
 
 `static/js/source-verification.js` exportiert `window.App.sourceVerification`
-(`render`, `renderCurrent`, `clear`, `watch`, `observe`, `applySourceList`, `getCitationCheck`); Ladung nach
+(`render`, `renderCurrent`, `clear`, `watch`, `observe`, `applySourceList`,
+`getCitationCheck`, `refreshDifferences`, `bindDifferenceCard`). Ladung nach
 `consensus-anchor.js` in `bundles.json`, außerdem auf öffentlichen Ergebnissen.
-RunContext: `consensus.sourceVerification`. Quellenupdates projizieren den
-Bericht, ohne Synthese/Claims/Differences neu aufzubauen. Bestehende S-Verweise
-öffnen Quelle, Originalpassagen und Gründe; der Bericht verbindet sie mit
-vorhandenen Modellpositionen. `providers` zeigt gemeinsame Quellenherkunft,
-keine unabhängige Bestätigung. Der Sources-Tab zeigt Fortschritt, Auffälligkeiten
-und Unklarheiten statt eines pauschalen positiven Abschluss-Hakens.
-Positive v3-Belegverweise werden sofort grün; Quellenkarten erst bei vollständig
-positiven zugeordneten Befunden. Teilbelege/Unklarheiten sind gelb, Widersprüche
-rot und ausstehende Prüfungen neutral. Der Tab zeigt geprüfte/gesamte Paare,
-offene und nicht prüfbare Paare; der Bericht aggregiert technische Fehlergründe.
-`renderEvidenceSources` setzt explizite S-IDs an die Listeneinträge und übernimmt
-über `applySourceList(list, answerBody)` bereits vorhandene, per WeakMap an den
-Antwortcontainer gebundene Befunde; Ansichtswechsel entfernen vorherige Markierungen.
-`sources.js` zeigt im gestalteten Quellen-Teaser den über `getCitationCheck(ref)`
-an den konkreten Belegverweis gebundenen Prüfstatus samt Ergebnis und Hinweis
-auf die begrenzte Aussagekraft. Solche Verweise erhalten kein natives `title`;
-`aria-label`, Fokus, Escape und das eigene Popup bleiben verfügbar. Öffentliche
-Verweise ohne diesen Teaser behalten ihren Tooltip-Fallback.
+RunContext: `consensus.sourceVerification`. V4-Ergebnisse erscheinen direkt
+bei ihrer Contradiction, mit validierten Belegpassagen und Quellenlinks.
+Positions-/Ankervergleich und Run-/Antwortbindung verhindern Zuordnung zu
+einem anderen Streitpunkt; Polling erneuert Befunde, ohne Texte/Agreement
+neu zu berechnen. Topics ohne bestehende Karten erhalten gebundene
+Streitpunktkarten im Bericht. Legacy-S-Citation-Bericht, Hover, Quellenfarben
+und `applySourceList` behalten die ursprüngliche v1–v3-Semantik.
+Details, Budgets und Abnahme: [source-verification.md](source-verification.md).
 
 **Pipeline-Härtung (2026-09-07):**
 - Synthese und beide Judges verwenden denselben Antwort-Cap aus
@@ -4065,76 +4050,29 @@ Faustregel: Wenn ein neuer Agent durch deine Änderung an einer der obigen Stell
 **überrascht** würde, gehört es hier rein. Kurz halten — verifizierte Fakten statt
 Implementierungsdetails. Bei Detailtiefe lieber auf den Code verweisen.
 
-Der Composer-Schalter `#composerSourcesToggle` („Check Sources“) steht direkt
-nach Agent Mode und speichert On/Off unter `localStorage.checkSources` (Default
-On). `agent-mode.js` synchronisiert ihn mit `#sourceCheckMenuSwitch` direkt unter
-Agent Mode im (+)-Menü und `#sourceCheckSwitch` unter Settings → Runs. Alle drei
-Controls verwenden denselben Setter und bleiben unabhängig vom angezeigten Lauf.
-Landing-Hero/Ask-Vorschau, Landing-Texte, In-App-FAQ und Consensus-Engine-Seite
-erklären die optionale Beleg-/Themen-/Zeitraumprüfung und ihre Steuerung.
-`window.App.isSourceCheckEnabled()` liefert die Auswahl für den nächsten
-Lauf; `query-send.js` friert sie als `config.checkSources` im RunContext ein.
-`/consensus` akzeptiert `check_sources: false`: Streaming und JSON überspringen
-dann Quellen-Fetch und dritten Judge, ohne `sources.*`-Events; der Snapshot ist
-`null`. Consensus und Differences laufen weiter. Ohne Feld bleibt die Prüfung
-aktiv; gespeicherte completed Turns werden mit ihrem bestehenden Ergebnis
-wiedergegeben. Ein gespeicherter Jobverweis lädt seinen aktuellen Prüfstand
-nach, ohne einen neuen Auftrag anzulegen. Andere Pipeline-Aufrufer behalten
-den aktiven Default.
+Der Composer-Schalter `#composerSourcesToggle` („Check contradictions“) steht
+direkt nach Agent Mode und speichert On/Off unter `localStorage.checkSources`
+(Default On). `agent-mode.js` synchronisiert ihn mit `#sourceCheckMenuSwitch`
+im (+)-Menü und `#sourceCheckSwitch` unter Settings → Runs. Alle drei Controls
+verwenden denselben Setter, unabhängig vom angezeigten Lauf. Englischsprachige
+Hilfetexte erklären „Check contradictions against existing sources“ und die
+Produktgrenze: keine vollständige Faktenprüfung des Consensus.
+`window.App.isSourceCheckEnabled()` liefert die Auswahl für den nächsten Lauf;
+`query-send.js` friert sie als `config.checkSources` im RunContext ein.
+`/consensus` akzeptiert `check_sources: false`: keine Fetch-/Judge-Aufrufe,
+keine `sources.*`-Events, neuer Snapshot `status: disabled`. Bereits gespeicherte
+completed Turns werden unverändert wiedergegeben, einschließlich früherer
+null-/v1-/v2-/v3-Ergebnisse. Jobverweise laden den aktuellen Stand nach, ohne
+neuen Auftrag. Andere Pipeline-Aufrufer behalten den aktiven Default.
 
-Quellenprüfung-UI und neue Judge-Begründungen sind auf Englisch. Der Pending-Status
-bleibt am Tab für Screenreader verfügbar; sichtbar schimmert der Text direkt im
-Label, ohne zusätzlichen Balken oder zweite Statuszeile daneben. Originalzitate
-und gespeicherte Texte werden nicht nachträglich übersetzt.
-
-Die Quellenprüfung berücksichtigt ausschließlich S-Verweise im fertigen Consensus.
-Unzitierte Quellen aus Modellantworten gelangen weder in Fetches noch Judge-Input
-oder Quellenprüfungs-Snapshot; Code-Beispiele mit wörtlichen S-Tags zählen nicht.
-
-Quellenprüfung-Robustheit v3: Die 60-s-Frist und 3k Ausgabetokens gelten pro
-Paket; mehrere Pakete bearbeiten alle zitierten Quellen. Vollständige Objekte
-aus am Tokenlimit abgeschnittenen Antworten bleiben nach Validierung erhalten;
-fehlende Ergebnisse erhalten `unavailable` mit sicherem Fehlercode.
-Prozess-/Browser-Abbruch verliert keinen bereits angenommenen Prüfplan.
-`source-check-loading` nutzt Textverlauf/`background-clip:text`; mobile Labels,
-Reduced Motion und `aria-busy` bleiben unterstützt.
-
-„No highlights“ unter Settings → Display blendet über die Body-Klasse
-`consensus-markers-hidden` auch Farbe, Hintergrund und Prüf-Unterstreichung der
-S-Referenzen aus. Quellenlinks, Hover-Ergebnisse und gespeicherte Urteile bleiben
-verfügbar; eine andere Highlight-Auswahl zeigt die passenden, auch inzwischen
-eingetroffenen Urteile wieder.
-
-Quellenbericht-Navigation: Die Übersicht zeigt S-Kürzel, Domain und ein
-Hauptergebnis je Satz-/Quellen-Paar. Vollständige Aussagen stehen dauerhaft über
-ihren Quellen, ohne eigene Aufklappsteuerung. Die Diagnose der Prüfung bleibt
-anfangs geschlossen; Themen-/Zeitstatus,
-Modellprovenienz und Originalpassagen erscheinen in den Quelldetails. Ein Klick
-auf eine gebundene S-Referenz öffnet genau dieses Paar und hebt seine Zeile für
-2,4 Sekunden hervor; erneutes Klicken erneuert die Hervorhebung, Polling erhält
-sie für die verbleibende Zeit. Reduced Motion verzichtet auf Animationen.
-
-Reader-Darstellung: `model-answer-reader.css` hält Sources und Differences
-im Detailpanel als flache Listen mit feinen Trennern. Quellen zeigen Titel vor
-Domain und Prüfstatus. Statements sind vollständig sichtbar; Markdown-Fettungen
-bleiben erhalten, kleine Labels und dezente Modellhinweise trennen Aussage und
-Metadaten. Größere Gruppenabstände erleichtern das Erfassen. Nur Quelldetails und
-Prüfdiagnose haben Chevron-Disclosures. Die Quellenzeilen bleiben auch mobil
-einzeilig und zeigen geöffnet wie geschlossen genau einen Pfeil. Der angedockte
-Reader liegt unter Modal-Backdrops, damit Settings darüber bedienbar bleiben.
-Touch-Ziele haben mindestens
-44 px Höhe. Resolve ist eine kompakte sekundäre Aktion und respektiert weiterhin
-`[hidden]` nach Abschluss. `shell.css` ersetzt die separate Source-Checks-Zeile
-bis 640 px durch den kompakten Status am Sources-Tab. API-, Prüf- und Reader-Navigation bleiben
-unverändert; Browser-Abdeckung: `tests/e2e/test_inspector_polish.py`.
-
-Quellenbericht-Darstellung: Auszüge nutzen Marked + DOMPurify und den bestehenden
-Math-Renderer (auch auf Share-Seiten); S-Tags stehen separat an den Quellenzeilen,
-literaler Code bleibt erhalten. Karten gruppieren Aussage, Domain und Beleg-/
-Themen-/Zeitstatus; Originalpassagen, Gründe und gemeinsame Modell-Provenienz
-sind einklappbar. Fortschritt unterscheidet ausstehende Arbeit, geprüfte
-Unklarheiten und technisch nicht prüfbare Quellen. Ein fertiger Quellenauftrag
-ist kein pauschales positives Quellenurteil. Claims/Differences und der
-Agreement-Score bleiben unverändert; gespeicherte alte Prüfungen behalten ihre
-damalige Bedeutung. Maßgeblicher v3-Vertrag steht oben unter „Consensus &
-Differences“ sowie in [source-verification.md](source-verification.md).
+Die Prüfung erklärt erkannte faktische Streitpunkte anhand vorhandener Quellen.
+„No checkable contradictions detected“ heißt ausschließlich, dass Differences
+keinen geeigneten Prüfauftrag erkannt hat. Laufende Arbeit, deaktivierte
+Prüfung, fehlgeschlagene Analyse/Abrufe, unzureichende Evidenz und Budgetauslassung
+haben unterschiedliche Anzeigen. Originalpassagen werden nicht übersetzt.
+Die Legacy-Darstellung zitierter Satz-/Quellen-Paare bleibt erhalten: Hover,
+Originalpassagen, Quellenzeilen und bestehende Prüf-Farben funktionieren beim
+Wiederöffnen alter Antworten. „No highlights“ verbirgt über
+`consensus-markers-hidden` weiterhin deren Markierungen, ohne Links/Befunde
+zu entfernen. Sources und Differences bleiben flache Reader-Listen;
+Resolve bleibt eine unabhängige sekundäre Aktion mit erhaltenem `[hidden]`.
