@@ -1160,11 +1160,38 @@ body:not(.dark-mode) .chat-input-container {
 }
 
 .run-model-track i {
+  position: relative;
   display: block;
   height: 100%;
   width: var(--p, 0%);
+  overflow: hidden;
+  border-radius: inherit;
   background: var(--ink-2);
   transition: width 0.3s linear;
+}
+
+/* Activity travels only inside the received-progress fill, never ahead of it. */
+.run-model:is([data-state="streaming"], [data-state="reasoning"]) .run-model-track i::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent 30%, rgb(255 255 255 / 30%) 43%, rgb(255 255 255 / 92%) 50%, rgb(255 255 255 / 30%) 57%, transparent 70%);
+  animation: runModelShimmer 3.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  animation-delay: var(--model-shimmer-delay, 0s);
+  pointer-events: none;
+}
+
+.run-model:nth-child(3n + 2) { --model-shimmer-delay: -1.1s; }
+.run-model:nth-child(3n) { --model-shimmer-delay: -2.2s; }
+
+.run-model[data-state="reasoning"] .run-model-track i::after {
+  animation-duration: 4.6s;
+  opacity: 0.65;
+}
+
+@keyframes runModelShimmer {
+  0%, 12% { transform: translateX(-100%); }
+  88%, 100% { transform: translateX(100%); }
 }
 
 .run-model[data-state="done"] .run-model-track i {
@@ -1192,6 +1219,7 @@ body:not(.dark-mode) .chat-input-container {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .run-model .run-model-track i::after { content: none !important; animation: none !important; }
   .run, .run.is-gone, .run-model-track i, .run-track i { transition: none; }
   .run-pulse i, .run-track.is-indeterminate i, .run-model-skip-btn { animation: none; }
   .run-model-skip-btn { transition: none; }
@@ -1203,6 +1231,7 @@ body:not(.dark-mode) .chat-input-container {
 }
 
 @media (forced-colors: active) {
+  .run-model .run-model-track i::after { content: none !important; animation: none !important; }
   .run:not([data-stage="idle"]):not([data-stage="done"]) .run-label {
     background: none;
     color: CanvasText;

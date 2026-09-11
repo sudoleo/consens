@@ -857,6 +857,10 @@ der Python-Staleness-Test auch indirekte Änderungen erkennt.
   in einer von Anfang an reservierten Aktionsspalte ohne Layoutsprung,
   vor den rechtsbuendigen Zeichen-/Statusangaben. Deren rechte Kante stimmt
   mit der Gesamtzeit in der aktiven Statuszeile ueberein.
+  Laufende Modellbalken tragen einen versetzten, 3,2-sekuendigen Lichtstreifen
+  innerhalb ihrer Fuellung; Reasoning schimmert langsamer und dezenter.
+  Wartende und terminale Modelle bleiben ruhig. Reduced Motion und Forced
+  Colors deaktivieren den dekorativen Balkenschimmer.
   Am Ende klappt der Block zusammen und uebergibt an den **Provenance-Fuss**
   `#runProvenance` unter der Antwort. Seit **2026-07-28 zwei Zeilen statt drei**
   — die Anordnung macht allein das Grid in `shell.css`

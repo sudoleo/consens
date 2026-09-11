@@ -1,5 +1,5 @@
 {
-  "sources": "525035e2ec37",
+  "sources": "48732e4e14f3",
   "inputs": [
     "package-lock.json",
     "scripts/build_frontend.mjs",
@@ -112,6 +112,6 @@
     }
   ],
   "styles": {
-    "app": "/static/dist/app.9303bc00589b.css"
+    "app": "/static/dist/app.f8ac61cb1a47.css"
   }
 }

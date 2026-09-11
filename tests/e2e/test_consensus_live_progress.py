@@ -132,6 +132,9 @@ def test_reduced_motion_keeps_status_readable_and_static(progress_page):
     page.emulate_media(reduced_motion="reduce")
     assert page.locator(".run-pulse i").first.evaluate("el => getComputedStyle(el).animationName") == "none"
     assert page.locator("#runLabel").evaluate("el => getComputedStyle(el).animationName") == "none"
+    for bar in page.locator(".run-model-track i").all():
+        assert bar.evaluate("el => getComputedStyle(el, '::after').animationName") == "none"
+        assert bar.evaluate("el => getComputedStyle(el, '::after').content") == "none"
     assert page.locator("#runLabel").evaluate("el => getComputedStyle(el).color") != "rgba(0, 0, 0, 0)"
     page.evaluate("() => App.consensusPipeline.onConsensusStart()")
     assert page.locator("#runBar").evaluate("el => getComputedStyle(el).animationName") == "none"
