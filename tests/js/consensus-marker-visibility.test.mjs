@@ -98,8 +98,13 @@ describe("consensus sentence-check visibility", () => {
 });
 
 const SENTENCES = ["The tower is tall.", "Tickets cost twenty euros.", "The queue is short.", "Launch is on Monday.", "Doors open at eight.", "The view is scenic."];
-function renderMixed(ctx, stored = false) {
+function renderMixed(ctx, stored = false, detached = false) {
   const body = ctx.document.getElementById("consensusAnswerBody");
+  const fallbackBox = ctx.document.getElementById("consensusClaimsFallback");
+  if (detached) {
+    body.remove();
+    fallbackBox.remove();
+  }
   body.innerHTML = SENTENCES.map(text => `<p>${text}</p>`).join("");
   const payload = {
     models_compared: ["OpenAI", "Gemini", "Anthropic"],
@@ -119,8 +124,9 @@ function renderMixed(ctx, stored = false) {
       {models:["Gemini"],stance:"Second view",quote:"Second view"},
     ]})),
   };
-  if (stored) ctx.window.renderStoredConsensusClaims(body, payload, ctx.document.getElementById("consensusClaimsFallback"), []);
+  if (stored) ctx.window.renderStoredConsensusClaims(body, payload, fallbackBox, []);
   else ctx.window.renderConsensusInsights(payload, 3);
+  return { body, fallbackBox };
 }
 
 function choose(ctx, value) {
@@ -130,6 +136,50 @@ function choose(ctx, value) {
 }
 
 describe("sentence highlight filters", () => {
+  it.each([
+    ["all", 6, 2], ["contradictions", 2, 0], ["concerns", 2, 1],
+    ["critical", 1, 0], ["none", 0, 0],
+  ])("applies %s before a previous answer enters the conversation", (mode, visibleCount, fallbackCount) => {
+    const ctx = boot();
+    choose(ctx, mode);
+    ctx.document.getElementById("claimCountsSwitch").click();
+    // History builds both containers off-DOM before appending the old turn.
+    const { body, fallbackBox } = renderMixed(ctx, true, true);
+    const assertVisibility = () => {
+      const marks = Array.from(body.querySelectorAll(".cx-claim"));
+      marks.filter(mark => mode === "none" || mark.classList.contains("is-marker-filtered"))
+        .forEach(mark => {
+          expect(mark.hasAttribute("tabindex")).toBe(false);
+          expect(mark.hasAttribute("role")).toBe(false);
+        });
+      expect(body.querySelectorAll(".claim-badge:not(.is-marker-filtered)").length)
+        .toBe(mode === "all" ? 3 : mode === "concerns" || mode === "none" ? 1 : 0);
+      expect(marks.filter(mark => !mark.classList.contains("is-marker-filtered")
+        && !ctx.document.body.classList.contains("consensus-markers-hidden")))
+        .toHaveLength(visibleCount);
+      expect(Array.from(fallbackBox.querySelectorAll(".claims-fallback-row"))
+        .filter(row => !row.classList.contains("is-marker-filtered")
+          && !ctx.document.body.classList.contains("consensus-markers-hidden")))
+        .toHaveLength(fallbackCount);
+    };
+    assertVisibility();
+    ctx.document.body.append(body, fallbackBox);
+    assertVisibility();
+    body.removeAttribute("id");
+    fallbackBox.removeAttribute("id");
+    ctx.document.body.insertAdjacentHTML("beforeend", `
+      <div id="consensusAnswerBody" class="consensus-answer-body"></div>
+      <div id="consensusClaimsFallback" class="consensus-claims-fallback" hidden></div>
+    `);
+    ctx.window.resetConsensusInsights();
+    assertVisibility();
+    renderMixed(ctx);
+    assertVisibility();
+    choose(ctx, "all");
+    expect(body.querySelectorAll(".cx-claim.is-marker-filtered")).toHaveLength(0);
+    expect(fallbackBox.querySelectorAll(".is-marker-filtered")).toHaveLength(0);
+  });
+
   it("distinguishes minor contradictions from grey emphasis and restores keyboard access", () => {
     const ctx = boot();
     renderMixed(ctx);

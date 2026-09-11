@@ -164,8 +164,8 @@
             return markersVisible && !group.spans[0].classList.contains("is-marker-filtered");
           }
 
-          function syncMarkerPassageAccess(visible) {
-            document.querySelectorAll(".cx-claim").forEach(function (mark) {
+          function syncMarkerPassageAccess(visible, root) {
+            root.querySelectorAll(".cx-claim").forEach(function (mark) {
               const accessible = visible && !mark.classList.contains("is-marker-filtered");
               ["role", "tabindex", "aria-label"].forEach(function (attribute) {
                 const dataKey = "markerVisible" + attribute.replace(
@@ -185,12 +185,12 @@
             });
           }
 
-          function applyConsensusMarkerVisibility(visible, dismiss = false) {
+          function applyConsensusMarkerVisibility(visible, dismiss = false, root = document, fallbackBox = null) {
             const show = visible !== false;
             markersVisible = show;
             document.body.classList.toggle(MARKERS_HIDDEN_CLASS, !show);
             document.body.dataset.consensusHighlightMode = show ? highlightMode : "none";
-            document.querySelectorAll(".cx-claim").forEach(function (mark) {
+            root.querySelectorAll(".cx-claim").forEach(function (mark) {
               const filtered = !matchesHighlightFilter(mark);
               mark.classList.toggle("is-marker-filtered", filtered);
               const group = mark.cxGroup;
@@ -226,8 +226,9 @@
                 mark.addEventListener("blur", function () { setPassageHover(group, false); });
               }
             });
-            syncMarkerPassageAccess(show);
-            document.querySelectorAll(".consensus-claims-fallback").forEach(function (box) {
+            syncMarkerPassageAccess(show, root);
+            const fallbackBoxes = fallbackBox ? [fallbackBox] : root.querySelectorAll(".consensus-claims-fallback");
+            fallbackBoxes.forEach(function (box) {
               const rows = Array.from(box.querySelectorAll(".claims-fallback-row"));
               rows.forEach(function (row) {
                 const include = highlightMode === "all"
@@ -1683,10 +1684,10 @@
               window.App?.consensusPipeline?.renderProvenance?.();
             }
 
-            // Auch spaeter gerenderte History-Turns verlieren im Aus-Zustand
-            // ihre Passage-Tabstopps. CSS allein wuerde sie nur unsichtbar
-            // machen, aber fuer Tastatur und Screenreader aktiv lassen.
-            applyConsensusMarkerVisibility(storedConsensusMarkersVisible());
+            // History-Turns werden vor dem Einfuegen in den DOM aufgebaut.
+            // Filter und Passage-Tabstopps deshalb direkt auf ihren Containern
+            // anwenden, damit die erste Darstellung bereits zur Auswahl passt.
+            applyConsensusMarkerVisibility(storedConsensusMarkersVisible(), false, body, fallbackBox);
 
             return {
               claims_anchored: claims.length - unanchored.length,

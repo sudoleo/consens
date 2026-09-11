@@ -551,7 +551,11 @@ der Python-Staleness-Test auch indirekte Änderungen erkennt.
   Quellenlinks. `concerns` zeigt `contradicted`, `issue`, `unknown`; die beiden
   Widerspruchsfilter zeigen bei Quellen nur `contradicted` (keine eigene
   Schwere-Einstufung bei Quellen). Links und detaillierte Prüfergebnisse
-  bleiben zugänglich. Satzfilter gelten auch für archivierte Turns und
+  bleiben zugänglich. Satzfilter und Passage-Tabstopps werden beim Rendern
+  direkt auf den Antwort-/Fallback-Containern synchronisiert, auch bevor ein
+  archivierter Turn in den DOM eingefügt wird; Folgeanfragen blenden deshalb
+  keine zuvor ausgefilterten Claims vorübergehend ein.
+  Satzfilter gelten auch für archivierte Turns und
   Fallback-Claims (`data-coverage`); `.is-marker-filtered` entfernt dabei
   Stil, Badges und unsichtbare Passage-Aktionen ohne Text-/Datenverlust.
   Der Difference-Typ, nicht allein Grau, unterscheidet Detailwidersprüche
