@@ -58,9 +58,11 @@
   // "17{,}5\%" wird "17{,}5%" - und das Prozentzeichen leitet in TeX einen
   // Kommentar ein. Die Formel verlor also stillschweigend ihr Ergebnis.
   // Ein verdoppelter Backslash ueberlebt den Markdown-Pass als einer;
-  // *, _, ` und ~ bekommen einen, damit aus "x_1" kein Kursivtext wird.
+  // Alle ASCII-Satzzeichen schuetzen: ein alleinstehendes "=" macht sonst
+  // die vorige Formelzeile zur Setext-Ueberschrift. Auch Listen, Tabellen,
+  // Links und HTML duerfen einen Formelabschnitt nicht in DOM-Knoten teilen.
   function escapeMathSegment(segment) {
-    return segment.replace(/\\/g, "\\\\").replace(/([*_`~])/g, "\\$1");
+    return segment.replace(/[!-/:-@\x5b-\x60{-~]/g, "\\$&");
   }
 
   function prepareMarkdown(markdown) {

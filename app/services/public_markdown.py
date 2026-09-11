@@ -43,6 +43,14 @@ _CODE_SEGMENT_RE = re.compile(r"(```.*?(?:```|$)|`[^`\n]*`)", re.DOTALL)
 # Markdown interpretiert die LaTeX-Delimiter \[, \], \( und \) als Escapes.
 # Verdoppeln erhaelt sie im HTML, damit KaTeX sie auf Share-Seiten findet.
 _MATH_DELIMITER_RE = re.compile(r"\\([\[\]()])")
+# Same complete spans and CommonMark punctuation protection as math-render.js.
+_MATH_SPAN_RE = re.compile(
+    r"\$\$.*?\$\$|\\\[.*?\\\]|\\\(.*?\\\)"
+    r"|\\begin\{(equation|align|alignat|gather|CD)\*?\}"
+    r".*?\\end\{\1\*?\}",
+    re.DOTALL,
+)
+_MARKDOWN_PUNCTUATION_RE = re.compile(r"[!-/:-@\x5b-\x60{-~]")
 
 # Second-Level-Suffixe wie in getSourceSiteName() im Frontend (z. B. bbc.co.uk).
 _SLD_SUFFIXES = {"co", "com", "org", "net", "ac", "gov"}
@@ -125,9 +133,19 @@ def _link_source_tags(md_text, labels):
 
 
 def _preserve_math_delimiters(md_text):
+    def protect_segment(segment):
+        pieces = []
+        cursor = 0
+        for match in _MATH_SPAN_RE.finditer(segment):
+            pieces.append(_MATH_DELIMITER_RE.sub(r"\\\\\1", segment[cursor:match.start()]))
+            pieces.append(_MARKDOWN_PUNCTUATION_RE.sub(lambda char: "\\" + char[0], match[0]))
+            cursor = match.end()
+        pieces.append(_MATH_DELIMITER_RE.sub(r"\\\\\1", segment[cursor:]))
+        return "".join(pieces)
+
     parts = _CODE_SEGMENT_RE.split(md_text)
     return "".join(
-        part if index % 2 else _MATH_DELIMITER_RE.sub(r"\\\\\1", part)
+        part if index % 2 else protect_segment(part)
         for index, part in enumerate(parts)
     )
 

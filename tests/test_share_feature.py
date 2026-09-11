@@ -618,6 +618,28 @@ class PublicMarkdownTests(unittest.TestCase):
         self.assertIn(r"<code>\[ literal \]</code>", html)
         self.assertNotIn(r"<code>\\[ literal \\]</code>", html)
 
+    def test_multiline_equations_do_not_become_markdown_headings(self):
+        for left, right in [(r"\[", r"\]"), ("$$", "$$"),
+                            (r"\begin{align}", r"\end{align}")]:
+            with self.subTest(delimiter=left):
+                formula = (
+                    left + "\n" + r"\boxed{x_{1,2}" + "\n=\n"
+                    + r"1-\frac p2 \pm \frac{i}{2}\sqrt{u+12+\frac{16}{p}}}"
+                    + "\n" + right
+                )
+                html = render_public_markdown("## Ergebnis\n\n" + formula + "\n\nWeiter **im Text**.")
+                self.assertIn(formula, html)
+                self.assertNotIn("<h1>", html)
+                self.assertEqual(html.count("<h2>"), 1)
+                self.assertIn("<strong>im Text</strong>", html)
+
+    def test_formula_markup_and_tex_escapes_survive_public_markdown(self):
+        formula = "\\[\nx_1+x_2\n- y\n= 17{,}5\\%\n\\]"
+        html = render_public_markdown(formula)
+        self.assertIn(formula, html)
+        self.assertNotIn("<li>", html)
+        self.assertNotIn("<em>", html)
+
     def test_plaintext_strips_and_clips(self):
         text = markdown_to_plaintext("# Titel\n\nEin **fetter** Satz.", limit=15)
         self.assertNotIn("<", text)

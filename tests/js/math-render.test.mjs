@@ -13,6 +13,97 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { loadScripts } from "./helpers/appWindow.mjs";
 
+function bootRenderPipeline() {
+  // Pinned test dependencies mirror the CDN versions in templates/index.html.
+  return loadScripts([
+    "node_modules/marked/marked.min.js",
+    "node_modules/dompurify/dist/purify.min.js",
+    "node_modules/katex/dist/katex.min.js",
+    "node_modules/katex/dist/contrib/auto-render.min.js",
+    "static/js/math-render.js",
+    "static/js/markdown-stream.js",
+  ], { body: '<div id="answer"></div>' });
+}
+
+const screenshotFormulas = [
+  String.raw`\[
+(y^2+py+q)(y^2-py+r)
+=
+y^4+(q+r-p^2)y^2+p(r-q)y+qr.
+\]`,
+  String.raw`\[
+v^3-48v+64
+=
+128\cos(3\theta)+64.
+\]`,
+  ...["1,2", "3,4"].flatMap((indices, index) => {
+    const sign = index ? "+" : "-";
+    const radicandSign = index ? "-" : "+";
+    return [
+      `\\[\nt_{${indices}}\n=\n${sign}\\frac p2 \\pm \\frac{i}{2} \\sqrt{u+12${radicandSign}\\frac{16}{p}}.\n\\]`,
+      `\\[\n\\boxed{ x_{${indices}}\n=\n1${sign}\\frac p2 \\pm \\frac{i}{2} \\sqrt{u+12${radicandSign}\\frac{16}{p}} }\n\\]`,
+    ];
+  }),
+];
+
+describe("Markdown and KaTeX integration", () => {
+  it.each(screenshotFormulas)("typesets the complete screenshot formula: %s", (formula) => {
+    const { window, document } = bootRenderPipeline();
+    const answer = document.getElementById("answer");
+    window.injectMarkdown(answer, `## Ergebnis\n\n${formula}\n\nWeiter **im Text**.`);
+    expect(answer.querySelectorAll("h1, h2")).toHaveLength(1);
+    expect(answer.querySelectorAll(".katex-display")).toHaveLength(1);
+    expect(answer.querySelector(".katex-error")).toBeNull();
+    expect(answer.querySelector("annotation").textContent).toBe(formula.slice(2, -2));
+    expect(answer.querySelector("strong").textContent).toBe("im Text");
+    window.close();
+  });
+
+  it("recovers a formula once its streaming delimiter is complete", async () => {
+    const { window, document } = bootRenderPipeline();
+    const answer = document.getElementById("answer");
+    const stream = window.createStreamRenderer(answer, () => true);
+    const formula = screenshotFormulas[0];
+    stream.append(formula.slice(0, -2));
+    stream.append(formula.slice(-2));
+    await new Promise(resolve => window.setTimeout(resolve, 150));
+    stream.stop();
+    expect(answer.querySelectorAll(".katex-display")).toHaveLength(1);
+    expect(answer.querySelector("h1, h2, .katex-error")).toBeNull();
+    window.close();
+  });
+
+  it.each([
+    "$$\nx_1+x_2\n=\ny^2\n$$",
+    String.raw`\begin{align}
+x_1+x_2
+=
+y^2
+\end{align}`,
+    "\\[\nx_1+x_2\n- y\n= 17{,}5\\%\n\\]",
+  ])("preserves other display delimiters and formula punctuation: %s", (formula) => {
+    const { window, document } = bootRenderPipeline();
+    const answer = document.getElementById("answer");
+    window.injectMarkdown(answer, formula);
+    expect(answer.querySelectorAll(".katex-display")).toHaveLength(1);
+    expect(answer.querySelector("h1, h2, li, em, .katex-error")).toBeNull();
+    expect(answer.querySelector("annotation").textContent).toContain("=");
+    window.close();
+  });
+
+  it("keeps code literal and renders ordinary Markdown and currency as before", () => {
+    const { window, document } = bootRenderPipeline();
+    const answer = document.getElementById("answer");
+    const formula = screenshotFormulas[0];
+    window.injectMarkdown(answer, `Titel\n=====\n\n\`\\(x_1\\)\`\n\n\`\`\`tex\n${formula}\n\`\`\`\n\n**Preis:** $100 auf $80.`);
+    expect(answer.querySelectorAll(".katex")).toHaveLength(0);
+    expect(answer.querySelector("h1").textContent).toBe("Titel");
+    expect(answer.querySelector("pre code").textContent.trim()).toBe(formula);
+    expect(answer.textContent).toContain("Preis: $100 auf $80.");
+    window.close();
+  });
+});
+
 // Das macht marked mit dem vorbereiteten Text: ein Backslash vor einem
 // ASCII-Satzzeichen ist ein Escape und verschwindet (CommonMark).
 const MARKDOWN_ESCAPE_RE = /\\([!-/:-@[-`{-~])/g;

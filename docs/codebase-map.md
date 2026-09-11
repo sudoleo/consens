@@ -704,7 +704,10 @@ der Python-Staleness-Test auch indirekte Änderungen erkennt.
   Share-/Watch-Seiten. Bewahrt `\[...\]`/`\(...\)` durch den Markdown-Pass und
   exponiert `window.ConsensusMath.{prepareMarkdown,stripMath,render}`.
   Innerhalb einer Formel ist Markdown Notation, kein Markup: Backslashes und
-  `*_`~` werden geschützt, sonst verschluckt `17{,}5\%` → `17{,}5%` als
+  alle ASCII-Satzzeichen werden geschützt; insbesondere bleibt ein einzelnes
+  `=` in mehrzeiligen Formeln Formelinhalt statt Setext-Überschrift. Derselbe
+  Schutz gilt serverseitig in `public_markdown.py` für Share-/Watch-Seiten.
+  Ohne Escape-Schutz verschluckt `17{,}5\%` → `17{,}5%` als
   TeX-Kommentar das Ergebnis. `$...$` wird nur dann als Formel gelesen, wenn
   der Inhalt ohne Leerzeichen an beiden Dollarzeichen liegt, in einer Zeile
   bleibt und ein LaTeX-Signal trägt — „6,7 Mrd. $ in Q1“ bleibt Betrag.
