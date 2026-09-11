@@ -785,7 +785,7 @@ der Python-Staleness-Test auch indirekte Änderungen erkennt.
 - **`agent-mode.js`** — Agent-Mode-**Zustand**, Status-Hub und Timer.
   Composer-Modusleiste `#composerModeBar` direkt unter dem Input: erreichbarer
   Agent-/Deep-Think-Schalter, Upload-Shortcut und Anbieter-Favicons der nächsten Frage.
-  Die Leiste erscheint im Hero immer; nach Chatstart nur bei ausgeschaltetem Agent Mode,
+  Die Leiste erscheint ab 1100px immer; darunter im Hero und nach Chatstart nur bei ausgeschaltetem Agent Mode,
   schließt ohne Abstand unter dem Input an und ist seitlich um 12 px eingerückt.
   Sie bleibt auf Desktop und Mobile eine einzelne 36-px-Zeile. Die Erklärung
   ist am Modusschalter als Tooltip/Screenreader-Beschreibung verfügbar;
@@ -793,6 +793,9 @@ der Python-Staleness-Test auch indirekte Änderungen erkennt.
   Deep Think und Upload nutzen per Klick die bestehenden Controls und deren
   Pro-/Plus-Gates. Mobil sind beide reine Icon-Buttons. Ein auf Hero-Wechsel
   begrenzter Body-Observer synchronisiert Chatstart und „New comparison“;
+  ein Media-Query-Listener synchronisiert den Desktop-Wechsel samt Anhangsplatzierung.
+  Unter 700px tatsächlicher Leistenbreite kürzt eine Container-Query die Werkzeuglabels,
+  auch neben dem angedockten Reader auf Desktop;
   der bestehende Deep-Think-Indikator im Input ist bei sichtbarer Leiste verborgen.
   Die Modell-Favicons überlappen leicht wie ein Icon-Stapel.
   Beim Einblenden erscheinen Opazität und 5-px-Versatz über 260 ms; bei
@@ -2312,7 +2315,7 @@ true})`) ueberschreibt den Default dauerhaft.
 Noch nicht gesendete Dateien stehen als kompakte Vorschau-/Entfernen-Chips in
 der Leiste unter dem Eingabefeld. `attachments.js` verschiebt dieselbe
 `#attachmentBar` in die sichtbare `#composerModeBar`; verbirgt Agent Mode die
-Toolbar nach dem Hero, kehrt sie an ihren Composer-Anker oberhalb des Felds
+Toolbar auf Mobile nach dem Hero, kehrt sie an ihren Composer-Anker oberhalb des Felds
 zurueck. `App.attachments.syncComposerPlacement()` wird beim Toolbar-Rendering
 und Attachment-Rendering aufgerufen; Fokus, Datei-Bytes und Listener bleiben
 erhalten. Neue Dateien oeffnen einen eingeklappten mobilen Composer. Beim Senden
@@ -4127,7 +4130,9 @@ im (+)-Menü und `#sourceCheckSwitch` unter Settings → Runs. Alle drei Control
 verwenden denselben Setter, unabhängig vom angezeigten Lauf. Englischsprachige
 Hilfetexte erklären „Check contradictions against existing sources“ und die
 Produktgrenze: keine vollständige Faktenprüfung des Consensus.
-`window.App.isSourceCheckEnabled()` liefert die Auswahl für den nächsten Lauf;
+Ohne Agent Mode sind alle drei Quellenprüfungs-Controls ausgeschaltet und gesperrt.
+Die gespeicherte Auswahl bleibt erhalten und gilt wieder beim Aktivieren von Agent Mode.
+`window.App.isSourceCheckEnabled()` liefert nur bei aktivem Agent Mode die Auswahl für den nächsten Lauf;
 `query-send.js` friert sie als `config.checkSources` im RunContext ein.
 `/consensus` akzeptiert `check_sources: false`: keine Fetch-/Judge-Aufrufe,
 keine `sources.*`-Events, neuer Snapshot `status: disabled`. Bereits gespeicherte

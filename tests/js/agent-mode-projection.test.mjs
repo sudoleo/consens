@@ -31,10 +31,12 @@ const BODY = `
   <div id="openaiResponse" class="response-box"><div class="collapsible-content"></div></div>
 `;
 
-function boot() {
+function boot({ desktop = false, agentMode = true, checkSources = true } = {}) {
   return loadScripts(["static/js/agent-mode.js"], {
     body: BODY,
     before(window) {
+      const media = {matches: desktop, addEventListener: vi.fn()};
+      window.matchMedia = () => media;
       window.App = {
         modelPrefs: [{
           key: "OpenAI",
@@ -50,13 +52,14 @@ function boot() {
         initCustomModelPicker: vi.fn(),
         trackAppEvent: vi.fn()
       };
-      window.localStorage.setItem("agentMode", "true");
+      window.localStorage.setItem("agentMode", String(agentMode));
+      window.localStorage.setItem("checkSources", String(checkSources));
     }
   });
 }
 
 describe("agent mode panel projection", () => {
-  it("toggles and persists source checks independently of Agent Mode and projected runs", () => {
+  it("persists source checks for agent runs and locks every control for direct comparisons", () => {
     const { window, document, dom } = boot();
     window.updateAgentModeUI();
     const toggle = document.getElementById('composerSourcesToggle');
@@ -72,12 +75,63 @@ describe("agent mode panel projection", () => {
     window.projectAgentModeRun({runId: 'old', config: {agentMode: false, checkSources: true}});
     expect(toggle.getAttribute('aria-checked')).toBe('false');
     document.getElementById('sourceCheckMenuSwitch').click();
+    expect(window.localStorage.getItem('checkSources')).toBe('false');
+    expect(toggle.disabled).toBe(true);
+    expect(document.getElementById('sourceCheckMenuSwitch').disabled).toBe(true);
+    expect(document.getElementById('sourceCheckSwitch').disabled).toBe(true);
+    window.setAgentMode(true, { persist: true });
+    expect(toggle.disabled).toBe(false);
+    expect(window.App.isSourceCheckEnabled()).toBe(false);
+    document.getElementById('sourceCheckMenuSwitch').click();
     expect(window.localStorage.getItem('checkSources')).toBe('true');
     expect(toggle.getAttribute('aria-checked')).toBe('true');
     expect(document.getElementById('sourceCheckSwitch').checked).toBe(true);
     document.getElementById('sourceCheckSwitch').click();
     expect(toggle.getAttribute('aria-checked')).toBe('false');
     expect(document.getElementById('sourceCheckMenuSwitch').checked).toBe(false);
+    dom.window.close();
+  });
+
+  it.each([true, false])("gates the saved source preference %s on reload without changing it", checkSources => {
+    const { window, document, dom } = boot({ agentMode: false, checkSources });
+    window.updateAgentModeUI();
+    expect(window.App.isSourceCheckEnabled()).toBe(false);
+    expect(document.getElementById('composerSourcesState').textContent).toBe('Off');
+    const setting = document.getElementById('sourceCheckSwitch');
+    expect(setting.checked).toBe(false);
+    expect(setting.disabled).toBe(true);
+    setting.checked = true;
+    setting.dispatchEvent(new window.Event('change'));
+    expect(setting.checked).toBe(false);
+    expect(window.localStorage.getItem('checkSources')).toBe(String(checkSources));
+    window.setAgentMode(true, { persist: true });
+    expect(window.App.isSourceCheckEnabled()).toBe(checkSources);
+    window.setAgentMode(false, { persist: true });
+    expect(window.App.isSourceCheckEnabled()).toBe(false);
+    dom.window.close();
+  });
+
+  it("keeps the desktop toolbar visible and resyncs attachments at the mobile breakpoint", () => {
+    const { window, document, dom } = boot({ desktop: true });
+    const sync = vi.fn();
+    window.App.attachments = { syncComposerPlacement: sync };
+    window.updateAgentModeUI();
+    const bar = document.getElementById('composerModeBar');
+    expect(bar.hidden).toBe(false);
+    window.setAgentMode(false, { persist: true });
+    expect(bar.hidden).toBe(false);
+    window.setAgentMode(true, { persist: true });
+    expect(bar.hidden).toBe(false);
+    const media = window.matchMedia();
+    const onChange = media.addEventListener.mock.calls[0][1];
+    media.matches = false;
+    sync.mockClear();
+    onChange();
+    expect(bar.hidden).toBe(true);
+    expect(sync).toHaveBeenCalledOnce();
+    media.matches = true;
+    onChange();
+    expect(bar.hidden).toBe(false);
     dom.window.close();
   });
 

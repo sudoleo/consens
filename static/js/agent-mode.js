@@ -19,9 +19,15 @@
   const AGENT_PANEL_COLLAPSED_KEY = "agentModePanelCollapsed";
   let checkSources = true;
   try { checkSources = localStorage.getItem("checkSources") !== "false"; } catch (_) {}
-  window.App.isSourceCheckEnabled = () => checkSources;
+  // Preserve the preference, but direct comparisons have no judges.
+  window.App.isSourceCheckEnabled = () => isAgentModeEnabled() && checkSources;
+  const desktopComposer = window.matchMedia?.("(min-width: 1100px)");
 
   function setSourceCheckEnabled(enabled) {
+    if (!isAgentModeEnabled()) {
+      renderComposerMode();
+      return;
+    }
     checkSources = !!enabled;
     try { localStorage.setItem("checkSources", String(checkSources)); } catch (_) {}
     renderComposerMode();
@@ -299,20 +305,31 @@
   // Composer controls always describe the next question. The answer reader
   // supplies a separate, frozen summary for the direct comparison on screen.
   function renderComposerMode() {
+    const enabled = isAgentModeEnabled();
+    const sourcesEnabled = window.App.isSourceCheckEnabled();
+    const sourcesTitle = enabled
+      ? `Check contradictions ${sourcesEnabled ? "on" : "off"} · Check contradictions against existing sources for the next consensus`
+      : "Enable Agent Mode to check contradictions";
     ["sourceCheckMenuSwitch", "sourceCheckSwitch"].forEach(id => {
       const control = document.getElementById(id);
-      if (control) control.checked = checkSources;
+      if (control) {
+        control.checked = sourcesEnabled;
+        control.disabled = !enabled;
+        control.title = sourcesTitle;
+        const label = control.closest("label");
+        if (label) label.title = sourcesTitle;
+      }
     });
     const bar = document.getElementById("composerModeBar");
     if (!bar) return;
-    const enabled = isAgentModeEnabled();
     const sourcesButton = document.getElementById("composerSourcesToggle");
     if (sourcesButton) {
-      sourcesButton.setAttribute("aria-checked", String(checkSources));
-      sourcesButton.title = `Check contradictions ${checkSources ? "on" : "off"} · Check contradictions against existing sources for the next consensus`;
-      document.getElementById("composerSourcesState").textContent = checkSources ? "On" : "Off";
+      sourcesButton.setAttribute("aria-checked", String(sourcesEnabled));
+      sourcesButton.disabled = !enabled;
+      sourcesButton.title = sourcesTitle;
+      document.getElementById("composerSourcesState").textContent = sourcesEnabled ? "On" : "Off";
     }
-    bar.hidden = enabled && !document.body.classList.contains("is-hero");
+    bar.hidden = !desktopComposer?.matches && enabled && !document.body.classList.contains("is-hero");
     window.App.attachments?.syncComposerPlacement?.();
     bar.dataset.agentMode = String(enabled);
     document.getElementById("composerAgentToggle").setAttribute("aria-checked", String(enabled));
@@ -738,6 +755,7 @@
     renderComposerMode();
   }).observe(document.body, { attributes: true, attributeFilter: ["class"] });
   window.App.renderComposerMode = renderComposerMode;
+  desktopComposer?.addEventListener("change", renderComposerMode);
 
   window.setAgentModeStatus = setAgentModeStatus;
   window.projectAgentModeRun = projectAgentModeRun;

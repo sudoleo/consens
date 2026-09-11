@@ -618,7 +618,7 @@
     const usage = createUsage(deepSearch, useOwnKeys);
     const config = {
       agentMode,
-      checkSources: window.App.isSourceCheckEnabled?.() !== false,
+      checkSources: agentMode && window.App.isSourceCheckEnabled?.() !== false,
       autoConsensus: agentMode && document.getElementById("autoConsensusToggle")?.checked !== false,
       deepSearch,
       useOwnKeys,

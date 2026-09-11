@@ -3823,6 +3823,7 @@ body #loginModalContent .oauth-button:is(:hover, :focus-visible):not(:disabled) 
   margin-bottom: 0;
 }
 .composer-mode-bar {
+  container: composer-options / inline-size;
   position: relative;
   z-index: 0;
   display: flex;
@@ -3863,6 +3864,8 @@ body #loginModalContent .oauth-button:is(:hover, :focus-visible):not(:disabled) 
   cursor: pointer;
 }
 .composer-agent-toggle:hover { background: var(--app-surface-selected); }
+.composer-agent-toggle:disabled { opacity: .45; cursor: default; background: transparent; }
+:is(.attach-menu-toggle, .settings-switch-row):has(input[id^="sourceCheck"]:disabled) { opacity: .5; cursor: default; }
 .composer-agent-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .composer-tool { margin-left: 0; font-weight: 500; }
 .composer-tool svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
@@ -3933,6 +3936,11 @@ body #loginModalContent .oauth-button:is(:hover, :focus-visible):not(:disabled) 
   .composer-comparison-status::after { content: attr(data-compact); font-size: 11px; }
 }
 @media (max-width: 700px) {
+  .composer-tool-label { display: none; }
+  .composer-tool { width: 28px; justify-content: center; padding: 0; }
+}
+/* A docked reader can narrow the desktop composer below the viewport width. */
+@container composer-options (max-width: 700px) {
   .composer-tool-label { display: none; }
   .composer-tool { width: 28px; justify-content: center; padding: 0; }
 }

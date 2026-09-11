@@ -33,6 +33,11 @@ def test_composer_mode_bar(browser, phase4_server, width, dark):
         page.locator('#attachTrigger').click()
         expect(bar).to_be_visible()
         expect(toggle).to_have_attribute('aria-checked', 'false')
+        expect(page.locator('#composerSourcesToggle')).to_be_disabled()
+        expect(page.locator('#composerSourcesToggle')).to_have_attribute('aria-checked', 'false')
+        expect(page.locator('#sourceCheckSwitch')).to_be_disabled()
+        expect(page.locator('#sourceCheckMenuSwitch')).to_be_disabled()
+        assert page.evaluate('App.isSourceCheckEnabled()') is False
         expect(page.locator('#agentModeMenuSwitch')).not_to_be_checked()
         expect(page.locator('#composerModeDescription')).to_contain_text('no consensus')
         expect(page.locator('#modeNotice')).to_have_count(0)
@@ -72,7 +77,12 @@ def test_composer_mode_bar(browser, phase4_server, width, dark):
         page.screenshot(path=str(output / f'{width}-{"dark" if dark else "light"}-direct.png'))
         toggle.click()
         expect(toggle).to_have_attribute('aria-checked', 'true')
-        expect(bar).to_be_hidden()
+        if width >= 1100:
+            expect(bar).to_be_visible()
+        else:
+            expect(bar).to_be_hidden()
+        expect(page.locator('#composerSourcesToggle')).to_be_enabled()
+        expect(page.locator('#composerSourcesToggle')).to_have_attribute('aria-checked', 'true')
         # Bookmark provenance does not change when the next question changes mode.
         expect(page.locator('#composerComparisonStatus')).to_contain_text('Agent Mode was off')
         expect(page.locator('.is-direct .answer-reader-answer')).to_have_count(6)
@@ -115,6 +125,13 @@ def test_toolbar_deep_think_and_upload_reuse_plan_gates(browser, phase4_server):
         chooser.value.set_files({'name': 'toolbar.txt', 'mimeType': 'text/plain', 'buffer': b'A local attachment.'})
         expect(page.locator('#attachmentBar')).to_contain_text('toolbar.txt')
         page.evaluate('window.exitHeroMode()')
+        expect(page.locator('#composerModeBar')).to_be_visible()
+        expect(page.locator('#composerModeBar #attachmentBar')).to_contain_text('toolbar.txt')
+        page.set_viewport_size({'width': 390, 'height': 844})
         expect(page.locator('#composerModeBar')).to_be_hidden()
+        expect(page.locator('.chat-input-container #attachmentBar')).to_contain_text('toolbar.txt')
+        page.set_viewport_size({'width': 1440, 'height': 900})
+        expect(page.locator('#composerModeBar')).to_be_visible()
+        expect(page.locator('#composerModeBar #attachmentBar')).to_contain_text('toolbar.txt')
     finally:
         context.close()
