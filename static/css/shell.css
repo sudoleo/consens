@@ -1079,7 +1079,7 @@ body:not(.dark-mode) .chat-input-container {
 /* A reserved action column keeps every track and row stable when Skip appears. */
 .run-model {
   display: grid;
-  grid-template-columns: minmax(76px, 112px) minmax(24px, 1fr) 122px 42px;
+  grid-template-columns: minmax(76px, 112px) minmax(24px, 1fr) 42px 122px;
   align-items: center;
   min-height: 26px;
   gap: 10px;
@@ -1090,7 +1090,7 @@ body:not(.dark-mode) .chat-input-container {
 }
 
 .run-model-skip {
-  grid-column: 4;
+  grid-column: 3;
   grid-row: 1;
   min-width: 0;
 }
@@ -1172,7 +1172,7 @@ body:not(.dark-mode) .chat-input-container {
 }
 
 .run-model-time {
-  grid-column: 3;
+  grid-column: 4;
   grid-row: 1;
   font-size: var(--font-size-micro);
   color: var(--ink-2);
@@ -1963,7 +1963,7 @@ body.dark-mode .run-provenance {
 
 @media (max-width: 640px) {
   .run-model {
-    grid-template-columns: minmax(62px, 88px) minmax(12px, 1fr) 100px 40px;
+    grid-template-columns: minmax(62px, 88px) minmax(12px, 1fr) 40px 100px;
     gap: 6px;
   }
 

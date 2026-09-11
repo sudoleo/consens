@@ -854,7 +854,9 @@ der Python-Staleness-Test auch indirekte Änderungen erkennt.
   aktuellen Anzeigewert an, ein wiedergeoeffneter Lauf startet direkt bei
   seinem Snapshot. Terminalstatus, Phasenwechsel und Reset stoppen die
   Animation; Reduced Motion zeigt sofort den echten Wert. `Skip` erscheint
-  in einer von Anfang an reservierten Aktionsspalte ohne Layoutsprung.
+  in einer von Anfang an reservierten Aktionsspalte ohne Layoutsprung,
+  vor den rechtsbuendigen Zeichen-/Statusangaben. Deren rechte Kante stimmt
+  mit der Gesamtzeit in der aktiven Statuszeile ueberein.
   Am Ende klappt der Block zusammen und uebergibt an den **Provenance-Fuss**
   `#runProvenance` unter der Antwort. Seit **2026-07-28 zwei Zeilen statt drei**
   — die Anordnung macht allein das Grid in `shell.css`

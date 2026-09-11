@@ -100,11 +100,13 @@ def test_model_status_layout_and_phase_handoff(progress_page, width, dark):
     expect(page.locator('[data-box="model-0"] .run-model-time')).to_have_text("987,654 chars")
     assert page.evaluate('''() => {
       const rows = [...document.querySelectorAll('.run-model')];
+      const timer = document.querySelector('#runTime').getBoundingClientRect();
       return document.documentElement.scrollWidth <= innerWidth && rows.every(row => {
         const name = row.querySelector('.run-model-name').getBoundingClientRect();
         const track = row.querySelector('.run-model-track').getBoundingClientRect();
         const status = row.querySelector('.run-model-time').getBoundingClientRect();
         return name.right <= track.left && track.right <= status.left
+          && Math.abs(timer.right - status.right) < 1
           && status.right <= innerWidth && row.scrollWidth <= row.clientWidth;
       });
     }''')
@@ -148,6 +150,10 @@ def test_only_phase_summary_is_live_and_skip_is_keyboard_accessible(progress_pag
     height = page.locator("#consensusRun").bounding_box()["height"]
     expect(skip).to_be_visible(timeout=12000)
     expect(skip).to_have_text("Skip")
+    assert skip.evaluate('''el => {
+      const status = el.closest('.run-model').querySelector('.run-model-time').getBoundingClientRect();
+      return el.getBoundingClientRect().right <= status.left;
+    }''')
     assert [track.bounding_box() for track in tracks] == before
     assert page.locator("#consensusRun").bounding_box()["height"] == height
     assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
