@@ -92,8 +92,8 @@
         <h2>What it does</h2>
         <p>
           You enter a single prompt and receive multiple model responses next to each other. The consensus
-          step then summarizes common ground, highlights contradictions, and gives you a compact answer as a
-          starting point.
+          step combines useful contributions, highlights contradictions, and gives you one answer with its
+          caveats. A model can add a useful detail even when the others did not mention it.
         </p>
         <p class="subtle">
           It is useful for research, learning, drafting, and everyday questions, but it is not a substitute
@@ -106,9 +106,21 @@
         <ul>
           <li>You choose which models to query and adjust the available options.</li>
           <li>The backend sends requests through OpenRouter to model endpoints and may use web-search services.</li>
-          <li>Responses are rendered side by side for direct comparison.</li>
+          <li>Agent Mode builds the consensus automatically. Open Model answers to read an original response or compare two answers side by side.</li>
           <li>Additional AI calls produce a consensus and evaluate overlaps and differences.</li>
         </ul>
+      </section>
+
+      <section class="legal-panel">
+        <h2>Check a disagreement, then keep the conversation</h2>
+        <p>In Agent Mode, <strong>Check contradictions</strong> can examine factual disputes against sources already supplied by the models. It shows the original passages and whether the evidence supports a position, depends on different conditions, or remains inconclusive. It does not fact-check every sentence or change the agreement score.</p>
+        <p>Signed-in Consensus chats save automatically. Ask a follow-up in the same conversation, reopen it from the sidebar, and optionally use Memory to carry your preferences into later chats. Memory can be reviewed, edited and switched off.</p>
+      </section>
+
+      <section class="legal-panel">
+        <h2>From a private chat to a public answer</h2>
+        <p>Publishing is a separate action. A shared answer lets readers inspect the consensus, disagreements, consulted models and sources without an account. Explore published examples in the <a href="/questions">Consensus Library</a>.</p>
+        <p><a href="/app/watches">Consensus Watches</a> rerun a question on a schedule and track changes over time. Public Watches and <a href="/topics">Topics</a> show dated versions and how model positions move; readers can follow updates by email. Watches, Topics and API runs do not run the optional chat contradiction source check.</p>
       </section>
 
       <section class="legal-panel">
@@ -226,7 +238,7 @@
     </div>
   </main>
 
-  {% set public_footer_note = "Last updated: 5 September 2026" %}
+  {% set public_footer_note = "Last updated: 12 September 2026" %}
   {% include "partials/public_footer.html" %}
 </body>
 </html>

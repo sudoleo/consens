@@ -53,73 +53,32 @@
       <div class="lp-shell pulse-board-grid">
         <article class="lp-model-pulse pulse-board" id="modelLeaderboard" aria-labelledby="modelLeaderboardTitle">
           <div class="lp-model-pulse-head">
-            <p class="lp-eyebrow" id="modelLeaderboardPeriod">All-time ranking</p>
+            <p class="lp-eyebrow" id="modelLeaderboardPeriod">{{ 'All-time ranking' if pulse_period == 'all' else 'Shared-window ranking' }}</p>
             <h2 id="modelLeaderboardTitle">Best-answer selections</h2>
             <p>Provider and product aliases are combined into one family, so Claude and Anthropic never appear as separate competitors.</p>
-            <div class="pulse-period-filter" role="group" aria-label="Model pulse time period">
-              <button type="button" data-model-pulse-period="all" aria-pressed="true">All time</button>
-              <button type="button" data-model-pulse-period="since-2026-08-31" aria-pressed="false">Since 31 Aug</button>
-            </div>
+            <form action="/model-pulse" method="get" class="pulse-period-filter" aria-label="Model pulse time period">
+              <button type="submit" name="period" value="all" data-model-pulse-period="all" aria-pressed="{{ 'true' if pulse_period == 'all' else 'false' }}">All time</button>
+              <button type="submit" name="period" value="since-2026-08-31" data-model-pulse-period="since-2026-08-31" aria-pressed="{{ 'false' if pulse_period == 'all' else 'true' }}">Since 31 Aug</button>
+            </form>
             <p class="pulse-availability-note"><strong>Kimi and GLM joined consens.io on 31 August 2026, Meta Muse on 2 September 2026.</strong> Use the shared-window view to compare the families over one period; every late arrival carries its own start date.</p>
           </div>
-          <div id="modelLeaderboardRows" class="lp-model-pulse-list is-loading" aria-live="polite" aria-busy="true">
-            <div class="lp-model-pulse-row lp-model-pulse-skeleton skeleton-group" aria-hidden="true">
-              <span class="skeleton skeleton-rank"></span>
-              <span class="skeleton skeleton-mark"></span>
-              <span class="skeleton skeleton-label"></span>
-              <span class="skeleton skeleton-value"></span>
+          <div id="modelLeaderboardRows" class="lp-model-pulse-list is-ready" role="list" aria-live="polite" aria-busy="false" data-period="{{ pulse_period }}">
+            {% for row in pulse_rows or [] %}
+            <div class="lp-model-pulse-row" role="listitem">
+              <span class="lp-model-pulse-rank">{{ '%02d' | format(loop.index) }}</span>
+              <span class="lp-model-pulse-icon"><img src="{{ row.icon }}" alt=""></span>
+              <span class="lp-model-pulse-copy">
+                <span class="lp-model-pulse-name">{{ row.family }}{% if row.available_since %}<small class="lp-model-pulse-since">tracked since <time datetime="{{ row.available_since }}">{{ row.available_since }}</time></small>{% endif %}</span>
+                <span class="lp-model-pulse-meter" style="--pulse-share: {{ row.selections / pulse_max * 100 }}"><i></i></span>
+              </span>
+              <span class="lp-model-pulse-value">{{ '{:,}'.format(row.selections) }}<small>{{ 'pick' if row.selections == 1 else 'picks' }}</small></span>
             </div>
-            <div class="lp-model-pulse-row lp-model-pulse-skeleton skeleton-group" aria-hidden="true">
-              <span class="skeleton skeleton-rank"></span>
-              <span class="skeleton skeleton-mark"></span>
-              <span class="skeleton skeleton-label"></span>
-              <span class="skeleton skeleton-value"></span>
-            </div>
-            <div class="lp-model-pulse-row lp-model-pulse-skeleton skeleton-group" aria-hidden="true">
-              <span class="skeleton skeleton-rank"></span>
-              <span class="skeleton skeleton-mark"></span>
-              <span class="skeleton skeleton-label"></span>
-              <span class="skeleton skeleton-value"></span>
-            </div>
-            <div class="lp-model-pulse-row lp-model-pulse-skeleton skeleton-group" aria-hidden="true">
-              <span class="skeleton skeleton-rank"></span>
-              <span class="skeleton skeleton-mark"></span>
-              <span class="skeleton skeleton-label"></span>
-              <span class="skeleton skeleton-value"></span>
-            </div>
-            <div class="lp-model-pulse-row lp-model-pulse-skeleton skeleton-group" aria-hidden="true">
-              <span class="skeleton skeleton-rank"></span>
-              <span class="skeleton skeleton-mark"></span>
-              <span class="skeleton skeleton-label"></span>
-              <span class="skeleton skeleton-value"></span>
-            </div>
-            <div class="lp-model-pulse-row lp-model-pulse-skeleton skeleton-group" aria-hidden="true">
-              <span class="skeleton skeleton-rank"></span>
-              <span class="skeleton skeleton-mark"></span>
-              <span class="skeleton skeleton-label"></span>
-              <span class="skeleton skeleton-value"></span>
-            </div>
-            <div class="lp-model-pulse-row lp-model-pulse-skeleton skeleton-group" aria-hidden="true">
-              <span class="skeleton skeleton-rank"></span>
-              <span class="skeleton skeleton-mark"></span>
-              <span class="skeleton skeleton-label"></span>
-              <span class="skeleton skeleton-value"></span>
-            </div>
-            <div class="lp-model-pulse-row lp-model-pulse-skeleton skeleton-group" aria-hidden="true">
-              <span class="skeleton skeleton-rank"></span>
-              <span class="skeleton skeleton-mark"></span>
-              <span class="skeleton skeleton-label"></span>
-              <span class="skeleton skeleton-value"></span>
-            </div>
-            <div class="lp-model-pulse-row lp-model-pulse-skeleton skeleton-group" aria-hidden="true">
-              <span class="skeleton skeleton-rank"></span>
-              <span class="skeleton skeleton-mark"></span>
-              <span class="skeleton skeleton-label"></span>
-              <span class="skeleton skeleton-value"></span>
-            </div>
+            {% else %}
+            <p class="lp-model-pulse-empty">Model pulse is temporarily unavailable. Please try again shortly.</p>
+            {% endfor %}
           </div>
           <div class="lp-model-pulse-foot">
-            <p><span id="modelLeaderboardTotal">Loading real-run selections…</span> No prompt text or user identity is shown in this tally.</p>
+            <p><span id="modelLeaderboardTotal">{% if pulse_rows is not none %}{{ '{:,}'.format(pulse_total) }} judge selections {{ 'from all real runs' if pulse_period == 'all' else 'since 31 Aug 2026' }}.{% else %}The live tally is temporarily unavailable.{% endif %}</span> No prompt text or user identity is shown in this tally.</p>
           </div>
         </article>
 
@@ -183,6 +142,6 @@
   </main>
 
   {% include "partials/public_footer.html" %}
-  <script defer src="/static/js/model-pulse.js?v=20260902-meta1"></script>
+  <script defer src="/static/js/model-pulse.js?v=20260912-public-refresh"></script>
 </body>
 </html>

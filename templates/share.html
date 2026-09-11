@@ -318,7 +318,7 @@
       <section class="legal-panel">
         <h2>{{ 'Contradiction source checks' if source_verification and source_verification.check_type == 'contradiction_evidence' else ('Verify sources' if source_verification else 'Sources') }}</h2>
         {% if not watch_page %}<div id="shareSourceVerificationReport" class="source-verification-report"></div>{% endif %}
-        <ol id="shareSources" class="share-sources{% if sources | length > 8 %} is-collapsed{% endif %}">
+        <ol id="shareSources" class="share-sources">
           {% for source in sources %}
           <li {% if source.num %}id="src-{{ source.num }}"{% endif %}>
             <span class="share-source-num" aria-hidden="true">{{ source.num or loop.index }}</span>
@@ -331,7 +331,7 @@
           {% endfor %}
         </ol>
         {% if sources | length > 8 %}
-        <button type="button" id="shareSourcesToggle" class="share-sources-toggle">Show all {{ sources | length }} sources</button>
+        <button type="button" id="shareSourcesToggle" class="share-sources-toggle" hidden>Show all {{ sources | length }} sources</button>
         {% endif %}
       </section>
       {% endif %}
@@ -638,6 +638,8 @@
       const list = document.getElementById("shareSources");
       const toggle = document.getElementById("shareSourcesToggle");
       if (!list || !toggle) return;
+      list.classList.add("is-collapsed");
+      toggle.hidden = false;
 
       function expand() {
         list.classList.remove("is-collapsed");

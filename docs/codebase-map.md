@@ -1,5 +1,20 @@
 # consens.io — Codebase Map
 
+Öffentliche Seiten (12.09.2026): `/model-pulse?period=all|since-2026-08-31`
+rendert Rangliste, Counts und familienbezogene Startdaten bereits serverseitig
+aus demselben 60-s-Cache wie die JSON-API. Das GET-Formular funktioniert ohne
+JavaScript; `model-pulse.js` ergänzt den Wechsel ohne Reload und erhält bei
+Fetch-Fehlern die zuletzt erfolgreiche Ansicht samt Zeitraum. Ein fehlgeschlagener
+SSR-Read liefert 503 + Retry-After statt erfundener Nullstände (Lifetime-Read
+ohne SDK-Retries, mit 5-s-Timeout). Öffentliche Legacy-Citations werden in
+`public_markdown.py` beim Rendern nummeriert; bekannte kurze Quellenlinks werden
+auf bestehende Quellenanker abgebildet, beschreibende Links und Aussagen bleiben
+erhalten. `share_snapshots.build_citation` verlinkt die Quellenliste der gewählten
+Antwortversion statt alle Redirect-URLs in den kopierbaren Beleg zu schreiben.
+Share-Meta-Descriptions lassen bekannte Citation-Labels weg; die öffentliche
+Quellenliste wird erst per JS eingeklappt und ist ohne JS vollständig sichtbar.
+Historische Snapshots und Original-Quellenziele werden nicht migriert.
+
 Kompakte Architektur-Übersicht für Coding-Agents. Ziel: in wenigen Minuten
 verstehen, wie das Projekt gebaut ist, wo Logik liegt und was bei Änderungen zu
 beachten ist. Bewusst kurz gehalten — keine vollständige Datei-/Funktionsliste.

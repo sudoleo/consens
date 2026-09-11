@@ -1948,9 +1948,10 @@ def build_citation(payload, canonical_url):
     consensus_model = (payload.get("consensus_model") or "").strip()
     if consensus_model:
         parts.append("Consensus model: %s." % consensus_model)
-    links = [s.get("url") for s in (payload.get("sources") or []) if s.get("url")]
-    if links:
-        parts.append("Sources: %s" % ", ".join(links))
+    if payload.get("sources"):
+        # Cite the answer's versioned bibliography, not a wall of expiring
+        # provider redirect tokens. Original source links remain on the page.
+        parts.append("Sources: %s#shareSources." % canonical_url)
     parts.append("Retrieved from %s" % canonical_url)
     return " ".join(parts)
 

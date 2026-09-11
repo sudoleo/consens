@@ -24,7 +24,7 @@
     const maxSelections = Math.max(...rows.map(row => row.selections), 1);
     const fragment = document.createDocumentFragment();
 
-    rows.slice(0, 9).forEach((row, index) => {
+    rows.forEach((row, index) => {
       const item = document.createElement("div");
       item.className = "lp-model-pulse-row";
       item.setAttribute("role", "listitem");
@@ -48,7 +48,7 @@
       if (row.available_since) {
         const available = document.createElement("small");
         available.className = "lp-model-pulse-since";
-        available.textContent = "tracked since 31 Aug 2026";
+        available.textContent = "tracked since " + row.available_since;
         name.appendChild(available);
       }
       const meter = document.createElement("span");
@@ -68,6 +68,7 @@
       fragment.appendChild(item);
     });
 
+    list.dataset.period = period;
     list.replaceChildren(fragment);
     list.setAttribute("role", "list");
     list.classList.remove("is-loading");
@@ -123,7 +124,14 @@
         if (currentRequest !== requestVersion) return;
         console.warn("Model pulse unavailable:", error);
         total.textContent = "The live tally is temporarily unavailable.";
-        renderEmpty("Model pulse unavailable right now.");
+        // Keep the last successful snapshot and its honest period on failure.
+        list.classList.remove("is-loading");
+        list.classList.add("is-ready");
+        list.setAttribute("aria-busy", "false");
+        const previousPeriod = list.dataset.period || "all";
+        periodButtons.forEach(button => button.setAttribute("aria-pressed", String(button.dataset.modelPulsePeriod === previousPeriod)));
+        if (periodLabel) periodLabel.textContent = previousPeriod === "all" ? "All-time ranking" : "Shared-window ranking";
+        total.textContent = "Could not refresh the tally. The previous view is still shown.";
       })
       .finally(() => {
         if (currentRequest !== requestVersion) return;
@@ -132,8 +140,11 @@
   }
 
   periodButtons.forEach(button => {
-    button.addEventListener("click", () => loadPeriod(button.dataset.modelPulsePeriod || "all"));
+    button.addEventListener("click", event => {
+      event.preventDefault();
+      loadPeriod(button.dataset.modelPulsePeriod || "all");
+    });
   });
 
-  loadPeriod("all");
+  // The initial ranking is already rendered by the server, including without JS.
 })();

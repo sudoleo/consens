@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -111,7 +112,8 @@ class SeoBasicsTests(unittest.TestCase):
         self.assertIn('<link rel="canonical" href="https://www.consens.io/model-pulse">', template)
         self.assertIn('<meta name="robots" content="index, follow">', template)
         self.assertIn('property="og:title"', template)
-        response = self.client.get("/model-pulse")
+        with patch.object(pages_router, "_read_leaderboard_totals", return_value={}):
+            response = self.client.get("/model-pulse")
         self.assertEqual(response.status_code, 200)
         self.assertIn("Live model pulse", response.text)
 

@@ -826,14 +826,14 @@ def share_page(request: Request, slug_id: str):
     if description_bits:
         prefix = " · ".join(description_bits) + ". "
         excerpt = markdown_to_plaintext(
-            payload["consensus_md"], limit=max(40, 160 - len(prefix))
+            payload["consensus_md"], limit=max(40, 160 - len(prefix)), sources=payload["sources"]
         )
         meta_description = prefix + excerpt
     else:
         meta_description = (
             f"Scheduled Consensus Watch for: {payload['question']}"[:160]
             if watch_awaiting_first_run
-            else markdown_to_plaintext(payload["consensus_md"], limit=160)
+            else markdown_to_plaintext(payload["consensus_md"], limit=160, sources=payload["sources"])
         )
 
     # Generierte OG-Karte (Scoreboard als Bild) statt Favicon, wenn möglich.

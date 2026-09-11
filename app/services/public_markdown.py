@@ -10,10 +10,9 @@ Inhalt sehen und kein unsanitisiertes LLM-HTML ausgeliefert wird:
      mit http(s)/mailto-Schema und rel="nofollow noopener noreferrer".
 
 [S1]-Quellen-Tags werden vor dem Rendern zu Links auf die Anker der
-Quellenliste (#src-1) umgeschrieben – das Python-Pendant zu
-linkifySourceTags() in index.html. Als Link-Text dient wie in der App der
-erkennbare Site-Name der Quelle (z. B. "wikipedia") statt des technischen
-Markers "[S1]"; nur ohne verwertbare URL bleibt "S1" als Fallback.
+Quellenliste (#src-1) umgeschrieben. Öffentliche Antworten nutzen nummerierte
+Verweise: alte Domain-Labels bleiben nicht als Wortsalat im Lesetext stehen.
+Gespeicherte Antworten und Quellenziele werden dabei nicht verändert.
 """
 
 import re
@@ -115,15 +114,19 @@ def _link_source_tags(md_text, labels):
             number = number.lstrip("0") or "0"
             if number not in labels:
                 return match.group(0)  # unbekannte Referenz: Lauf unverändert lassen
-            numbers.append(number)
+            if number not in numbers:
+                numbers.append(number)
         return " ".join(
-            "[%s](#src-%s)" % (labels[n] or ("S%s" % n), n) for n in numbers
+            "[[%s]](#src-%s)" % (n, n) for n in numbers
         )
 
     def replace_outside_code(segment):
         # Fussnoten am Satzende folgen dem Satzzeichen: `Aussage.[S1]`.
         segment = _TERMINAL_SOURCE_ORDER_RE.sub(r"\3\1", segment)
-        return SOURCE_RUN_RE.sub(replace_run, segment)
+        return SOURCE_RUN_RE.sub(
+            lambda match: match[0] if segment[match.end():match.end() + 1] == "("
+            else replace_run(match), segment,
+        )
 
     parts = _CODE_SEGMENT_RE.split(md_text)
     return "".join(
@@ -157,18 +160,64 @@ def render_public_markdown(md_text, sources=None):
     if labels:
         text = _link_source_tags(text, labels)
     text = _preserve_math_delimiters(text)
-    html = _MD.render(text)
+    tokens = _MD.parse(text)
+    _normalize_citation_links(tokens, sources)
+    html = _MD.renderer.render(tokens, _MD.options, {})
     return nh3.clean(html, url_schemes=_URL_SCHEMES, link_rel=_LINK_REL)
 
 
-def markdown_to_plaintext(md_text, limit=None):
+def _normalize_citation_links(tokens, sources, *, strip=False):
+    """Normalize legacy source links without touching prose, code or destinations.
+
+    Work on parsed links, not domain-looking words: a mention of GitHub or
+    Glitchwire in an actual sentence must survive. Only short source labels,
+    raw URL labels and already-numbered references are citation candidates.
+    """
+    known = {}
+    for source in sources or []:
+        match = re.fullmatch(r"S?(\d+)", str(source.get("id") or ""), re.I)
+        if not match:
+            continue
+        number = str(int(match[1]))
+        label = source_site_name(source.get("url"), source.get("title"))
+        entry = (number, label)
+        known.setdefault(str(source.get("url") or ""), entry)
+        known["#src-" + number] = entry
+    for token in tokens:
+        children = token.children or []
+        omitted = set()
+        for index, child in enumerate(children[:-2]):
+            if child.type != "link_open":
+                continue
+            href = child.attrGet("href") or ""
+            entry = known.get(href)
+            label, close = children[index + 1:index + 3]
+            if not entry or label.type != "text" or close.type != "link_close":
+                continue
+            number, site = entry
+            value = label.content.strip().lower()
+            if href.startswith("#src-") or value in {
+                site.lower(), (site + site).lower(), href.lower(),
+                source_host(href), "s" + number, number, "[" + number + "]",
+            }:
+                child.attrSet("href", "#src-" + number)
+                label.content = "[" + number + "]"
+                if strip:
+                    omitted.update((index, index + 1, index + 2))
+        if omitted:
+            token.children = [child for index, child in enumerate(children) if index not in omitted]
+
+
+def markdown_to_plaintext(md_text, limit=None, sources=None):
     """Reiner Text (für Meta-Descriptions/Anrisse): rendert und strippt alle Tags.
 
     Quellen-Marker wie "[S1]" werden entfernt – in einem SEO-Snippet sind sie
     nur technisches Rauschen.
     """
     text = SOURCE_RUN_RE.sub("", str(md_text or ""))
-    html = _MD.render(text)
+    tokens = _MD.parse(text)
+    _normalize_citation_links(tokens, sources, strip=True)
+    html = _MD.renderer.render(tokens, _MD.options, {})
     text = nh3.clean(html, tags=set())
     text = re.sub(r"\s+", " ", text).strip()
     if limit is not None and len(text) > limit:

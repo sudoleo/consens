@@ -180,7 +180,26 @@ def benchmark(req: Request):
 
 @router.get("/model-pulse", response_class=HTMLResponse)
 def model_pulse(req: Request):
-    return templates.TemplateResponse(request=req, name="model-pulse.html")
+    period = str(req.query_params.get("period") or "all").strip().lower()
+    if period not in {"all", _MODEL_PULSE_PERIOD}:
+        raise HTTPException(status_code=400, detail="Unsupported model pulse period")
+    try:
+        rows = _leaderboard_rows(_read_leaderboard_totals(period))
+    except Exception as exc:
+        logging.error("model pulse page read failed category=%s", safe_exception(exc))
+        rows = None
+    response = templates.TemplateResponse(request=req, name="model-pulse.html", context={
+        "pulse_rows": rows,
+        "pulse_period": period,
+        "pulse_total": sum(row["selections"] for row in rows or []),
+        "pulse_max": max([row["selections"] for row in rows or []] + [1]),
+    }, status_code=200 if rows is not None else 503)
+    response.headers["Cache-Control"] = (
+        "public, max-age=60, stale-while-revalidate=300" if rows is not None else "no-store"
+    )
+    if rows is None:
+        response.headers["Retry-After"] = "60"
+    return response
 
 
 _MODEL_PULSE_COMPARABLE_SINCE = datetime(2026, 8, 31, tzinfo=timezone.utc)
@@ -340,7 +359,7 @@ def _read_leaderboard_totals(period: str) -> dict[str, int]:
             return dict(cached[2])
         totals = {}
         if period == "all":
-            for snapshot in db.collection("leaderboard").stream():
+            for snapshot in db.collection("leaderboard").stream(retry=None, timeout=5):
                 selections = int(snapshot.to_dict().get("BestModel") or 0)
                 if selections <= 0:
                     continue

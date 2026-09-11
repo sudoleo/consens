@@ -542,7 +542,7 @@ class PublicPayloadTests(unittest.TestCase):
         self.assertIn('Consensus answer to "Wie funktioniert Photosynthese in Pflanzen?".', citation)
         self.assertIn("Models consulted: OpenAI: gpt-test, Google Gemini.", citation)
         self.assertIn("Consensus model: Anthropic.", citation)
-        self.assertIn("Sources: https://example.org/a", citation)
+        self.assertIn("Sources: https://www.consens.io/s/slug-abc#shareSources", citation)
         self.assertIn("Retrieved from https://www.consens.io/s/slug-abc", citation)
 
     def test_citation_empty_without_models(self):
@@ -575,8 +575,8 @@ class PublicMarkdownTests(unittest.TestCase):
         html = render_public_markdown("Fakt eins. [S1] Fakt zwei. [S1, S2]", self.SOURCES)
         self.assertIn('href="#src-1"', html)
         self.assertIn('href="#src-2"', html)
-        # Link-Text ist der erkennbare Site-Name, nicht der technische Marker.
-        self.assertIn(">example<", html)
+        # Public references use numbers; source names remain in the bibliography.
+        self.assertIn(">[1]<", html)
         self.assertNotIn("[S1]", html)
 
     def test_sentence_end_source_tags_follow_punctuation(self):
@@ -591,7 +591,7 @@ class PublicMarkdownTests(unittest.TestCase):
     def test_source_tags_without_url_fall_back_to_id(self):
         html = render_public_markdown("Fakt. [S1]", [{"id": "S1", "url": ""}])
         self.assertIn('href="#src-1"', html)
-        self.assertIn(">S1<", html)
+        self.assertIn(">[1]<", html)
 
     def test_unknown_source_tags_untouched(self):
         html = render_public_markdown("Fakt. [S9]", self.SOURCES)
@@ -1660,7 +1660,8 @@ class SharePageRouteTests(unittest.TestCase):
         self.assertIn("2</b> AI models", current.text)
         self.assertIn("Current source", current.text)
         self.assertIn("2026-07-21", current.text)
-        self.assertIn("Sources: https://current.test", current.text)
+        self.assertIn("#shareSources", current.text)
+        self.assertIn('href="https://current.test"', current.text)
         self.assertIn("Original immutable answer.", original.text)
         self.assertNotIn("Latest watched answer.", original.text)
         self.assertIn('<strong>71</strong>', original.text)

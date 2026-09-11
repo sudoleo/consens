@@ -114,7 +114,7 @@ def test_demo_watch_nudge_and_dedicated_model_pulse_match_the_product_contract()
         'class="watch-feature-nudge-close" aria-label="Dismiss new feature tip">&#10005;</button>'
         in watch
     )
-    assert "rows.slice(0, 9)" in leaderboard
+    assert "rows.forEach" in leaderboard
     assert "row.available_since" in leaderboard
     assert 'data-model-pulse-period="since-2026-08-31"' in pulse_page
     assert "Kimi and GLM joined consens.io on 31 August 2026" in pulse_page

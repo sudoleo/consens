@@ -33,9 +33,45 @@ class LeaderboardCollection:
     def __init__(self, db):
         self.db = db
 
-    def stream(self, transaction=None):
+    def stream(self, transaction=None, **kwargs):
         self.db.catalog_reads += 1
         return transaction.catalog if transaction else self.db.catalog
+
+
+@pytest.mark.parametrize("period,total", [("all", 24), ("since-2026-08-31", 3)])
+def test_pulse_renders_cached_ranking_without_javascript(monkeypatch, period, total):
+    db = LeaderboardDb()
+    monkeypatch.setattr(pages_router, "db_firestore", db)
+    app = FastAPI()
+    app.include_router(pages_router.router)
+    client = TestClient(app)
+    page = client.get("/model-pulse", params={"period": period})
+    assert page.status_code == 200
+    assert f"{total} judge selections" in page.text
+    assert page.text.count('role="listitem"') == 9
+    assert '2026-09-02</time>' in page.text
+    assert 'action="/model-pulse" method="get"' in page.text
+    assert "Loading real-run" not in page.text
+    api = client.get("/api/model-leaderboard", params={"period": period})
+    assert api.json()["total_selections"] == total
+    assert db.catalog_reads == 1
+
+
+def test_pulse_failure_is_retryable_not_a_fake_zero_ranking(monkeypatch):
+    def fail(period):
+        raise ServiceUnavailable("offline")
+    monkeypatch.setattr(pages_router, "_read_leaderboard_totals", fail)
+    app = FastAPI()
+    app.include_router(pages_router.router)
+    client = TestClient(app)
+    page = client.get("/model-pulse")
+    assert page.status_code == 503
+    assert page.headers["cache-control"] == "no-store"
+    assert page.headers["retry-after"] == "60"
+    assert "temporarily unavailable" in page.text
+    assert 'role="listitem"' not in page.text
+    assert "0 judge selections" not in page.text
+    assert client.get("/model-pulse?period=invalid").status_code == 400
 
 
 def initial_catalog():
