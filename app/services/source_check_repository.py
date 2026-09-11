@@ -10,9 +10,12 @@ import base64
 import hashlib
 import json
 import math
+import os
 import re
+import threading
 import uuid
 import zlib
+from collections import OrderedDict
 from datetime import datetime, timedelta, timezone
 
 from google.cloud.firestore_v1.base_query import FieldFilter
@@ -21,7 +24,20 @@ from firebase_admin import firestore
 
 from app.services import persistence_guard as guard
 
-COLLECTION = 'source_check_jobs'
+LEGACY_COLLECTION = 'source_check_jobs'
+DISPATCH_PROTOCOL = 'dispatch_v1'
+LOCAL_COLLECTION = 'source_check_jobs_dispatch_v1_local'
+PRODUCTION_COLLECTION = 'source_check_jobs_dispatch_v1_production'
+
+
+def queue_environment():
+    # Same host detection as security._is_production, without initializing auth.
+    return 'production' if (os.environ.get('RENDER_SERVICE_NAME') or
+        os.environ.get('ENVIRONMENT', '').strip().lower() in {'production', 'prod'}) else 'local'
+
+
+COLLECTION = PRODUCTION_COLLECTION if queue_environment() == 'production' else LOCAL_COLLECTION
+READ_COLLECTIONS = (LOCAL_COLLECTION, PRODUCTION_COLLECTION, LEGACY_COLLECTION)
 CACHE_COLLECTION = 'source_check_cache'
 WORKER_COLLECTION = 'source_check_workers'
 CREDENTIAL_AFFINITY_SECONDS = 30
@@ -50,6 +66,10 @@ class SourceCheckRevisionChanged(ValueError):
 
 
 class SourceCheckResourceGone(ValueError):
+    pass
+
+
+class SourceCheckQueueMismatch(ValueError):
     pass
 
 
@@ -160,13 +180,47 @@ def _complete_contradictions(plan, package, result):
 
 
 class SourceCheckRepository:
-    def __init__(self, db):
+    def __init__(self, db, *, environment=None):
+        from app.core.version import get_commit_sha
         self.db = db
+        self.worker_build = get_commit_sha()
+        self.queue_environment = queue_environment() if environment is None else environment
+        if self.queue_environment not in ('local', 'production'):
+            raise ValueError('invalid_source_queue_environment')
+        self.collection = PRODUCTION_COLLECTION if self.queue_environment == 'production' else LOCAL_COLLECTION
+        self._routes = OrderedDict()
+        self._routes_lock = threading.Lock()
 
-    def ref(self, job_id):
+    def _direct_ref(self, job_id, collection):
         if not _ID.fullmatch(str(job_id)):
             raise SourceCheckNotFound('Source check not found')
-        return self.db.collection(COLLECTION).document(job_id)
+        return self.db.collection(collection).document(job_id)
+
+    def _remember_route(self, job_id, collection):
+        with self._routes_lock:
+            self._routes[job_id] = collection
+            self._routes.move_to_end(job_id)
+            if len(self._routes) > 4096:
+                self._routes.popitem(last=False)
+
+    def ref(self, job_id):
+        current = self._direct_ref(job_id, self.collection)
+        with self._routes_lock:
+            collection = self._routes.get(job_id)
+        if collection:
+            return self._direct_ref(job_id, collection)
+        # Historic IDs remain opaque 64-hex URLs. Read at most three known
+        # collections; all descendants then use this same immutable route.
+        for collection in (self.collection, *(name for name in READ_COLLECTIONS if name != self.collection)):
+            ref = self._direct_ref(job_id, collection)
+            if ref.get(**_READ_OPTIONS).exists:
+                self._remember_route(job_id, collection)
+                return ref
+        return current
+
+    def owns_queue(self, job):
+        return (job.get('worker_protocol') == DISPATCH_PROTOCOL
+                and job.get('queue_environment') == self.queue_environment)
 
     def _transaction(self, operation):
         if hasattr(self.db, 'run_transaction'):
@@ -218,13 +272,15 @@ class SourceCheckRepository:
             job_id = digest(['source-check-v4', uid, run_key, plan['snapshot']['answer_version'],
                 plan['snapshot'].get('prompt_version'), plan['snapshot'].get('check_type'),
                 plan.get('question'), plan.get('resolved_question'), plan.get('limits'), plan['packages']])
-        ref = self.ref(job_id)
+        job_id = digest([DISPATCH_PROTOCOL, self.queue_environment, job_id])
+        ref = self._direct_ref(job_id, self.collection)
         payload = pack(plan)
         now = utcnow()
         snapshot = compact(plan['snapshot'])
         snapshot.update(job_id=job_id, status='queued' if plan['packages'] else 'skipped',
                         credential_mode=credential_mode, revision=0)
         job = dict(uid=uid, job_id=job_id, origin=origin, credential_mode=credential_mode,
+            worker_protocol=DISPATCH_PROTOCOL, queue_environment=self.queue_environment,
             status=snapshot['status'], snapshot=snapshot, package_count=len(plan['packages']),
             completed_packages=0, revision=0, created_at=now, updated_at=now,
             next_attempt_at=now if plan['packages'] else None, lease_token=None,
@@ -254,7 +310,9 @@ class SourceCheckRepository:
             tx.set(ref, job)
             tx.set(ref.collection('data').document('plan'), {'payload': payload})
             return job
-        return self._transaction(operation)
+        result = self._transaction(operation)
+        self._remember_route(job_id, self.collection)
+        return result
 
     def get(self, job_id, uid=None):
         snap = self.ref(job_id).get(**_READ_OPTIONS)
@@ -277,13 +335,14 @@ class SourceCheckRepository:
         # no cursor document re-read or additional composite index is needed.
         now = now or utcnow()
         limit = max(1, min(int(limit), 100))
-        query = self.db.collection(COLLECTION).where(filter=FieldFilter(
+        query = self.db.collection(self.collection).where(filter=FieldFilter(
             'next_attempt_at', '>', datetime(2000, 1, 1, tzinfo=timezone.utc))).where(filter=FieldFilter(
             'next_attempt_at', '<=', now)).order_by('next_attempt_at').limit(limit)
         if cursor is not None:
             query = query.start_after(cursor)
         rows = list(query.stream(**_STREAM_OPTIONS))
-        jobs = [s.to_dict() for s in rows if (s.to_dict() or {}).get('status') in ACTIVE]
+        jobs = [s.to_dict() for s in rows if (s.to_dict() or {}).get('status') in ACTIVE
+                and self.owns_queue(s.to_dict() or {})]
         return jobs, rows[-1] if len(rows) == limit else None
 
     def heartbeat_worker(self, worker_id, *, now=None):
@@ -292,10 +351,12 @@ class SourceCheckRepository:
             raise ValueError('invalid_worker_id')
         now = now or utcnow()
         self.db.collection(WORKER_COLLECTION).document(worker_id).set(
-            {'expires_at': now + timedelta(seconds=CREDENTIAL_AFFINITY_SECONDS)}, **_READ_OPTIONS)
+            {'expires_at': now + timedelta(seconds=CREDENTIAL_AFFINITY_SECONDS),
+             'worker_protocol': DISPATCH_PROTOCOL, 'queue_environment': self.queue_environment,
+             'worker_build': self.worker_build}, **_READ_OPTIONS)
 
     def claim(self, job_id, *, now=None, worker_id=None):
-        ref = self.ref(job_id)
+        ref = self._direct_ref(job_id, self.collection)
         now = now or utcnow()
         token = uuid.uuid4().hex
 
@@ -304,6 +365,8 @@ class SourceCheckRepository:
             if not snap.exists:
                 return None
             job = snap.to_dict()
+            if not self.owns_queue(job):
+                return None
             self._fence(tx, job)
             if job['status'] not in ACTIVE or not job.get('next_attempt_at') or job['next_attempt_at'] > now:
                 return None
@@ -323,6 +386,7 @@ class SourceCheckRepository:
             # this lease token. Already completed packages are never rerun.
             revision = job['revision'] + 1
             update = dict(status='running', lease_token=token, updated_at=now, revision=revision,
+                worker_id=worker_id, worker_build=self.worker_build,
                 snapshot={**job['snapshot'], 'status': 'running', 'revision': revision},
                 attempts=job.get('attempts', 0) + 1,
                 next_attempt_at=now + timedelta(seconds=LEASE_SECONDS))
@@ -331,7 +395,7 @@ class SourceCheckRepository:
         return self._transaction(operation)
 
     def finish_package(self, claimed, result, *, now=None):
-        ref = self.ref(claimed['job_id'])
+        ref = self._direct_ref(claimed['job_id'], self.collection)
         now = now or utcnow()
         index = claimed['completed_packages']
 
@@ -370,7 +434,7 @@ class SourceCheckRepository:
                 tx.set(ref.collection('packages').document(f'{index:06d}'), {'payload': payload})
                 tx.update(ref, dict(status=status, snapshot=summary, revision=revision,
                     completed_packages=index + 1, updated_at=now,
-                    next_attempt_at=None, lease_token=None, attempts=0))
+                    next_attempt_at=None, lease_token=None, attempts=0, last_failure=None))
                 return True
             old = job['snapshot']
             summary = dict(old)
@@ -430,7 +494,7 @@ class SourceCheckRepository:
             tx.update(ref, dict(status=status, snapshot=summary, revision=revision,
                 completed_packages=completed, source_progress=progress, statement_progress=statement_progress,
                 fetched_documents=fetched_documents, updated_at=now,
-                next_attempt_at=now if status == 'queued' else None, lease_token=None, attempts=0))
+                next_attempt_at=now if status == 'queued' else None, lease_token=None, attempts=0, last_failure=None))
             return True
         return self._transaction(operation)
 
@@ -446,11 +510,11 @@ class SourceCheckRepository:
     def pause_credentials(self, claimed):
         return self._change_claim(claimed, 'awaiting_credentials', None)
 
-    def retry(self, claimed, delay=10):
-        return self._change_claim(claimed, 'queued', utcnow() + timedelta(seconds=delay))
+    def retry(self, claimed, delay=10, *, failure=None):
+        return self._change_claim(claimed, 'queued', utcnow() + timedelta(seconds=delay), failure=failure)
 
-    def _change_claim(self, claimed, status, next_at):
-        ref = self.ref(claimed['job_id'])
+    def _change_claim(self, claimed, status, next_at, *, failure=None):
+        ref = self._direct_ref(claimed['job_id'], self.collection)
         def operation(tx):
             snap = ref.get(transaction=tx, **_READ_OPTIONS)
             if not snap.exists:
@@ -460,10 +524,16 @@ class SourceCheckRepository:
             if job['status'] != 'running' or job.get('lease_token') != claimed['lease_token']:
                 return False
             revision = job['revision'] + 1
+            diagnosis = {}
+            if (isinstance(failure, dict)
+                    and failure.get('reason_code') in {'worker_preparation_failed', 'worker_execution_failed', 'result_persistence_failed'}
+                    and type(failure.get('package_index')) is int
+                    and failure['package_index'] == claimed['completed_packages']):
+                diagnosis['last_failure'] = {key: failure[key] for key in ('reason_code', 'package_index')}
             tx.update(ref, dict(status=status, next_attempt_at=next_at, lease_token=None,
                 attempts=max(0, job.get('attempts', 0) - int(status == 'awaiting_credentials')),
                 revision=revision, updated_at=utcnow(),
-                snapshot={**job['snapshot'], 'status': status, 'revision': revision}))
+                snapshot={**job['snapshot'], 'status': status, 'revision': revision}, **diagnosis))
             return True
         return self._transaction(operation)
 
@@ -480,6 +550,10 @@ class SourceCheckRepository:
             self._fence(tx, job)
             if job['credential_mode'] != 'own' or job['status'] not in ('awaiting_credentials', 'queued'):
                 return job
+            # A key belongs to this process; never retarget another queue to a
+            # worker that cannot consume it. Historic results remain readable.
+            if not self.owns_queue(job):
+                raise SourceCheckQueueMismatch('Source check belongs to another worker queue')
             if worker_id is None and job['status'] == 'queued':
                 return job
             revision = job['revision'] + 1
@@ -577,8 +651,10 @@ class SourceCheckRepository:
         return True
 
     def delete_owner(self, uid):
-        for snap in self.db.collection(COLLECTION).where(filter=FieldFilter('uid', '==', uid)).stream(**_STREAM_OPTIONS):
-            self.delete(snap.id)
+        for collection in READ_COLLECTIONS:
+            for snap in self.db.collection(collection).where(filter=FieldFilter('uid', '==', uid)).stream(**_STREAM_OPTIONS):
+                self._remember_route(snap.id, collection)
+                self.delete(snap.id)
         for snap in self.db.collection(CACHE_COLLECTION).where(filter=FieldFilter('uid', '==', uid)).stream(**_STREAM_OPTIONS):
             snap.reference.delete(**_READ_OPTIONS)
 
@@ -605,13 +681,15 @@ class SourceCheckRepository:
             snap.reference.delete(**_READ_OPTIONS)
         for snap in self.db.collection(CACHE_COLLECTION).where(filter=FieldFilter('expires_at', '<=', now)).limit(200).stream(**_STREAM_OPTIONS):
             snap.reference.delete(**_READ_OPTIONS)
-        for snap in self.db.collection(COLLECTION).where(filter=FieldFilter('cleanup_at', '<=', now)).limit(100).stream(**_STREAM_OPTIONS):
-            job = snap.to_dict()
-            retained = any(self._reference_live(path) for path in job.get('references', []))
-            if retained:
-                self.retain_refresh(job['job_id'])
-            else:
-                deleted += int(self.delete(job['job_id'], only_if_expired_at=now))
+        for collection in READ_COLLECTIONS:
+            for snap in self.db.collection(collection).where(filter=FieldFilter('cleanup_at', '<=', now)).limit(100).stream(**_STREAM_OPTIONS):
+                job = snap.to_dict()
+                self._remember_route(snap.id, collection)
+                retained = any(self._reference_live(path) for path in job.get('references', []))
+                if retained:
+                    self.retain_refresh(job['job_id'])
+                else:
+                    deleted += int(self.delete(job['job_id'], only_if_expired_at=now))
         return deleted
 
     def retain_refresh(self, job_id):

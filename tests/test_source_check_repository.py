@@ -11,7 +11,9 @@ import pytest
 from app.services import persistence_guard
 from app.services.source_check_repository import (
     CACHE_COLLECTION, COLLECTION, LEASE_SECONDS, PAGE_PACKAGES,
+    DISPATCH_PROTOCOL, LEGACY_COLLECTION, LOCAL_COLLECTION, PRODUCTION_COLLECTION, READ_COLLECTIONS,
     SourceCheckNotFound, SourceCheckRepository, SourceCheckResourceGone, SourceCheckRevisionChanged,
+    SourceCheckQueueMismatch,
     unpack, utcnow,
 )
 
@@ -534,3 +536,132 @@ def test_due_snapshot_cursor_covers_ties_after_cursor_document_deleted(store):
     second, end = repo.due_page(limit=24, cursor=cursor)
     assert len(second) == 6 and end is None
     assert len({job['job_id'] for job in first + second}) == 30
+
+
+def legacy_copy(db, job, *, run_key='legacy'):
+    """Seed the old physical queue without changing its stored payload schema."""
+    from app.services.source_check_repository import digest
+    old_id = digest(['old-job', run_key])
+    for path, data in list(db.documents.items()):
+        if len(path) >= 2 and path[1] == job['job_id']:
+            copied = deepcopy(data)
+            if len(path) == 2:
+                copied.update(job_id=old_id)
+                copied['snapshot']['job_id'] = old_id
+                copied.pop('worker_protocol', None)
+                copied.pop('queue_environment', None)
+            db.documents[(LEGACY_COLLECTION, old_id, *path[2:])] = copied
+    return old_id
+
+
+def test_old_global_worker_cannot_see_new_jobs_and_environments_cannot_claim_each_other():
+    from google.cloud.firestore_v1.base_query import FieldFilter
+    db = FakeDb()
+    local = SourceCheckRepository(db, environment='local')
+    production = SourceCheckRepository(db, environment='production')
+    first, second = create(local), create(production)
+    assert first['job_id'] != second['job_id']
+    assert all(len(job['job_id']) == 64 for job in (first, second))
+    # This is the old deployed worker's entire queue query: it cannot observe
+    # the new header or plan, even though all processes share this database.
+    old_due = db.collection('source_check_jobs').where(filter=FieldFilter(
+        'next_attempt_at', '<=', utcnow())).stream()
+    assert list(old_due) == []
+    assert [job['job_id'] for job in local.due()] == [first['job_id']]
+    assert [job['job_id'] for job in production.due()] == [second['job_id']]
+    before = deepcopy(db.documents)
+    assert local.claim(second['job_id']) is None
+    assert production.claim(first['job_id']) is None
+    assert db.documents == before
+    assert first['worker_protocol'] == DISPATCH_PROTOCOL
+    assert first['queue_environment'] == 'local'
+
+
+def test_legacy_and_foreign_polling_retention_and_owner_deletion_remain_available():
+    db = FakeDb()
+    local = SourceCheckRepository(db, environment='local')
+    production = SourceCheckRepository(db, environment='production')
+    local_job = create(local, packages=1)
+    foreign = create(production, packages=1)
+    claim = production.claim(foreign['job_id'])
+    production.finish_package(claim, package_result(production.get_plan(foreign['job_id']), 0))
+    old_id = legacy_copy(db, foreign)
+    bookmark = 'users/owner/bookmarks/saved'
+    db.document(bookmark).set({'title': 'Saved'})
+    old_before = deepcopy(db.documents[(LEGACY_COLLECTION, old_id)])
+    for job_id in (foreign['job_id'], old_id):
+        assert local.page(job_id, uid='owner')['source_verification']['findings'][0]['checked']
+        with pytest.raises(SourceCheckNotFound):
+            local.page(job_id, uid='intruder')
+    assert db.documents[(LEGACY_COLLECTION, old_id)] == old_before
+    for job_id in (foreign['job_id'], old_id):
+        local.retain(job_id, 'owner', bookmark)
+        assert local.get(job_id)['references'] == [bookmark]
+        assert local.claim(job_id) is None
+    # Both current routes and legacy route are removed with their descendants.
+    local.delete_owner('owner')
+    assert not any(path[0] in READ_COLLECTIONS for path in db.documents)
+
+
+def test_cleanup_covers_expired_jobs_in_both_environments_and_legacy():
+    db = FakeDb()
+    local = SourceCheckRepository(db, environment='local')
+    production = SourceCheckRepository(db, environment='production')
+    first, second = create(local), create(production)
+    old_id = legacy_copy(db, first)
+    for collection, job_id in ((LOCAL_COLLECTION, first['job_id']),
+                               (PRODUCTION_COLLECTION, second['job_id']), (LEGACY_COLLECTION, old_id)):
+        db.documents[(collection, job_id)]['cleanup_at'] = utcnow() - timedelta(days=1)
+    assert local.cleanup() == 3
+    assert not any(path[0] in READ_COLLECTIONS for path in db.documents)
+
+
+def test_own_key_resume_rejects_foreign_and_legacy_queue_without_retargeting():
+    db = FakeDb()
+    local = SourceCheckRepository(db, environment='local')
+    production = SourceCheckRepository(db, environment='production')
+    foreign = create(production, credential_mode='own')
+    old_id = legacy_copy(db, foreign)
+    before = deepcopy(db.documents)
+    for job_id in (foreign['job_id'], old_id):
+        with pytest.raises(SourceCheckNotFound):
+            local.resume(job_id, 'intruder', worker_id='a' * 32)
+        with pytest.raises(SourceCheckQueueMismatch):
+            local.resume(job_id, 'owner', worker_id='a' * 32)
+    assert db.documents == before
+
+
+def test_retry_diagnosis_is_allowlisted_lease_bound_and_cleared_on_finish(store):
+    repo, db = store
+    job = create(repo, packages=1)
+    claim = repo.claim(job['job_id'])
+    failure = {'reason_code': 'worker_preparation_failed', 'package_index': 0, 'exception': 'secret'}
+    assert repo.retry(claim, delay=0, failure=failure)
+    expected = {'reason_code': 'worker_preparation_failed', 'package_index': 0}
+    assert repo.get(job['job_id'])['last_failure'] == expected
+    assert not repo.retry(claim, failure={'reason_code': 'result_persistence_failed', 'package_index': 0})
+    assert repo.get(job['job_id'])['last_failure'] == expected
+    next_claim = repo.claim(job['job_id'])
+    assert repo.finish_package(next_claim, package_result(repo.get_plan(job['job_id']), 0))
+    assert repo.get(job['job_id'])['last_failure'] is None
+    assert 'secret' not in repr(db.documents)
+
+
+@pytest.mark.parametrize('failure', [
+    {'reason_code': 'raw_exception', 'package_index': 0},
+    {'reason_code': 'worker_execution_failed', 'package_index': 1},
+    {'reason_code': 'worker_execution_failed', 'package_index': False},
+])
+def test_retry_rejects_untrusted_failure_fields(store, failure):
+    repo, _ = store
+    job = create(repo, packages=1)
+    assert repo.retry(repo.claim(job['job_id']), delay=0, failure=failure)
+    assert 'last_failure' not in repo.get(job['job_id'])
+
+
+@pytest.mark.parametrize('render,environment,expected', [('', '', 'local'),
+    ('', 'Production', 'production'), ('service', '', 'production')])
+def test_queue_environment_follows_existing_production_detection(monkeypatch, render, environment, expected):
+    monkeypatch.setenv('RENDER_SERVICE_NAME', render)
+    monkeypatch.setenv('ENVIRONMENT', environment)
+    assert SourceCheckRepository(FakeDb()).queue_environment == expected

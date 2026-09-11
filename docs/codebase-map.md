@@ -1725,9 +1725,9 @@ Worker, 300-s-Leases und tokengebundene Result-Commits. V4-Idempotenz bindet Run
 Antwort, Positionen, Kontext, Quellen und eingefrorene Limits; Judge-Caches
 trennen Modus/Schema/Prompt/Modell und validieren Treffer erneut. Abrufcache
 bleibt tenantgebunden. Normale v4-Abruffehler werden nicht automatisch erneut
-versucht und vervielfachen damit nicht das Gesamtbudget. Prozessabbruch vor
-Ergebnis-Commit kann einen externen Call nach Lease-Ablauf wiederholen
-(maximal drei Versuche, keine Exactly-once-Garantie). BYOK bleibt nur im
+versucht und vervielfachen damit nicht das Gesamtbudget. Nach Prozessabbruch vor
+Ergebnis-Commit beendet v4 die Wiederaufnahme ohne erneuten externen Call als
+nicht verfügbar (keine Exactly-once-Garantie). BYOK bleibt nur im
 Prozessspeicher, pausiert nach Schlüsselverlust und wird ownergebunden resumed;
 kein Wechsel auf Entwickler-Keys. Vorhandene Account-/Parent-Löschgrenzen,
 5-s-Read-RPCs und referenzgebundene Retention bleiben erhalten.
@@ -1753,6 +1753,23 @@ Transaktionale Cachewrites erfolgen nach dem erfolgreichen Ergebnis-Commit,
 außerhalb der Prüfdeadline. Ein erneut übernommenes v4-Paket mit ungewissem
 vorherigem Abschluss wird als `worker_interrupted` gespeichert, ohne nochmals
 bezahlte Modellaufrufe auszulösen; Credential-Pausen bleiben wiederaufnehmbar.
+Bekannte Fehler erhalten stattdessen den lease-gebunden gespeicherten Grund
+`worker_preparation_failed`, `worker_execution_failed` oder
+`result_persistence_failed` aus `last_failure` für genau diesen Paketindex.
+Die Quellen-UI benennt die Fehlerphase; rohe Exceptions werden nicht gespeichert.
+
+Neue Jobs sind physisch nach Dispatch-Protokoll und Umgebung getrennt:
+`source_check_jobs_dispatch_v1_local` / `_production`. Render oder
+`ENVIRONMENT=prod/production` wählt Production, sonst Local. Beide Werte binden
+die Job-ID und stehen im Header; Worker scannen/claimen nur ihre eigene Queue.
+Inkompatible Plan-/Limits-Verträge benötigen eine neue Dispatch-Version,
+kompatible Releases behalten wartende Jobs. Die alte globale Collection
+`source_check_jobs` und die andere Umgebung bleiben begrenzt lesbar (höchstens
+drei bekannte Collections, positiver Routingcache), einschließlich Polling,
+Shares, Retention und Accountlöschung. Es gibt keine automatische Migration
+oder Wiederholung alter Ergebnisse. Fremde BYOK-Queues können nicht auf den
+aktuellen Worker umgebogen werden; `/resume` liefert nach Ownerprüfung HTTP 409.
+Die physische Trennung schützt auch vor alten Workern ohne Versionsprüfung.
 
 Chat-/Bookmark-/Share-/API-/Watch-/Topic-Snapshots speichern den v4-Jobverweis;
 Wiederöffnen startet keinen neuen Judge. Owner-Polling bleibt paginiert und
@@ -3060,8 +3077,13 @@ CLI mit `firebase deploy --only firestore:rules,firestore:indexes`):
   lokale `run_time` + IANA-`timezone`, `last_run_at`, `next_run_at` sowie
   kurzlebiger `lease_run_id`/`lease_until`.
 - `pending_results` — kurzlebige Consensus-Ergebnisse fürs Sharing (TTL/Cleanup).
-- `source_check_jobs/{sha256}` — UID-/Run-/Antwortversion-gebundener Jobheader
-  mit Status, Revision, Paket-/Quellen-/Satzfortschritt, Lease-Token,
+- `source_check_jobs_dispatch_v1_local/{sha256}` bzw.
+  `source_check_jobs_dispatch_v1_production/{sha256}` — UID-/Run-/Antwortversion-
+  und Dispatch-Protokoll-/Umgebung-gebundener Jobheader; alte
+  `source_check_jobs/{sha256}` bleiben über den historischen Lesepfad erreichbar.
+  Header mit `worker_protocol`, `queue_environment`, letzter Worker-ID und
+  optionalem `last_failure` (sicherer Fehlercode/Paketindex), außerdem
+  Status, Revision, Paket-/Quellen-/Satzfortschritt, Lease-Token,
   `next_attempt_at` und Aufbewahrungsreferenzen. `data/plan` enthält den
   vollständigen komprimierten Plan, `packages/{index}` getrennte komprimierte
   Ergebnisse; jeweils höchstens 700.000 Zeichen Base64-Payload. Die gesamte
@@ -3072,7 +3094,8 @@ CLI mit `firebase deploy --only firestore:rules,firestore:indexes`):
   mit komprimiertem Payload und `expires_at`; keine API-Keys. Die eigene
   Cache-ID bindet auch Frage-/Dokument-/Promptkontext des jeweiligen Cachetyps.
 - `source_check_workers/{process-id}` — nicht geheime 30-s-Prozessmarken für
-  Own-Key-Affinität, alle zehn Sekunden separat erneuert; enthält keinen Key.
+  Own-Key-Affinität, alle zehn Sekunden separat erneuert; außerdem Dispatch-
+  Protokoll, Queue-Umgebung und Worker-Build zur Diagnose, keine Keys.
   Queue und Ablaufbereinigung nutzen einzelne Feldindizes.
   `firestore.indexes.json` nimmt die großen Jobfelder `snapshot`,
   `source_totals`, `statement_totals`, `references` sowie Cache-/Plan-/Paket-

@@ -239,3 +239,24 @@ describe('precise source-judge rejection diagnostics', () => {
     expect(document.querySelector('.contradiction-source-check').textContent).not.toContain('Source-check model:');
   });
 });
+
+
+describe('source-check worker failure phases', () => {
+  it.each([
+    ['worker_preparation_failed','Check could not be prepared'],
+    ['worker_execution_failed','Check failed during processing'],
+    ['result_persistence_failed','Check result could not be saved'],
+    ['worker_interrupted','Previous check did not finish; its outcome is unknown'],
+  ])('explains %s in the contradiction and source summary', (code,message) => {
+    const {window,document}=boot();
+    const result={...snapshot,status:'failed',runtime:{error_code:code},
+      scope:{contradictions:1,checked_contradictions:0},findings:[{...finding,checked:false,state:'unavailable',reason_code:code,reason:'',evidence:[]}]};
+    window.App.sourceVerification.renderCurrent(result,options);
+    expect(document.querySelector('.contradiction-source-verdict').textContent).toContain(message);
+    expect(document.querySelector('#sourceVerificationReport .source-verification-status').textContent).toBe(message);
+    expect(document.querySelector('#consensusSourceCheckStatus').textContent).toContain(message);
+    expect(document.querySelector('.contradiction-source-check blockquote')).toBeNull();
+    window.App.sourceVerification.renderCurrent({...result,status:'partial'},options);
+    expect(document.querySelector('#sourceVerificationReport .source-verification-status').textContent).toContain(message);
+  });
+});

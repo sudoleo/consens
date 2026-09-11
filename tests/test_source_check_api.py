@@ -90,6 +90,25 @@ def test_invalid_cursor_has_no_unbounded_or_cross_job_access(source_api):
     assert client.get(url, params={'cursor': 100000}, headers={'Authorization': 'Bearer owner'}).status_code == 400
 
 
+def test_other_environment_is_readable_but_cannot_take_an_own_key(source_api):
+    client, repo, _, _ = source_api
+    from app.services import source_check_jobs as jobs
+    foreign = SourceCheckRepository(repo.db, environment=(
+        'production' if repo.queue_environment == 'local' else 'local'))
+    job = foreign.create(uid='owner', run_key='other-server', plan=make_plan(1), credential_mode='own')
+    url = '/api/source-checks/' + job['job_id']
+    assert client.get(url, headers={'Authorization': 'Bearer owner'}).status_code == 200
+    before = foreign.get(job['job_id'])
+    response = client.post(url + '/resume', json={'openrouter_key': 'must-not-be-kept'},
+                           headers={'Authorization': 'Bearer owner'})
+    assert response.status_code == 409
+    assert 'another server environment or worker version' in response.json()['detail']
+    assert job['job_id'] not in jobs._keys
+    assert foreign.get(job['job_id']) == before
+    assert client.post(url + '/resume', json={'openrouter_key': 'must-not-be-kept'},
+                       headers={'Authorization': 'Bearer stranger'}).status_code == 404
+
+
 def test_unchanged_poll_does_not_read_large_plan_or_package_documents(source_api, monkeypatch):
     client, repo, job, _ = source_api
     def unexpected(*args, **kwargs):

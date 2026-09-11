@@ -258,6 +258,12 @@
     });
     body?.dispatchEvent(new CustomEvent('source-check-updated', {bubbles: true}));
   }
+  const workerFailureLabels = new Map([
+    ['worker_preparation_failed', 'Check could not be prepared'],
+    ['worker_execution_failed', 'Check failed during processing'],
+    ['result_persistence_failed', 'Check result could not be saved'],
+    ['worker_interrupted', 'Previous check did not finish; its outcome is unknown']
+  ]);
   function status(verification) {
     if (!verification) return "";
     if (isContradictionCheck(verification)) {
@@ -272,7 +278,10 @@
       if (verification.runtime?.error_code === 'differences_failed') return 'Contradiction source check unavailable: Differences analysis failed';
       if (verification.status === 'queued') return 'Contradiction source check queued';
       if (isPending(verification)) return 'Checking contradictions against existing sources…';
-      if (verification.status === 'complete' || verification.status === 'partial') return coverageText(verification);
+      if (verification.status === 'complete' || verification.status === 'partial') {
+        const failure = workerFailureLabels.get(verification.runtime?.error_code);
+        return coverageText(verification) + (failure ? ` · ${failure}` : '');
+      }
     }
     if (verification.status === 'queued') return 'Source check queued';
     if (isPending(verification)) return "Checking sources…";
@@ -280,6 +289,7 @@
     if (verification.status === "failed") {
       const code = verification.runtime?.error_code
         || (verification.runtime?.error_type === "AnalysisBudgetExceeded" ? "timeout" : "");
+      if (workerFailureLabels.has(code)) return workerFailureLabels.get(code);
       return {timeout: "Source check timed out", output_limit: "Source check response incomplete",
         invalid_output: "Source check response invalid", missing_credential: "Source check needs an API key",
         provider_error: "Source service unavailable"}[code] || "Source check unavailable";
@@ -612,6 +622,7 @@
     });
   }
   function reasonLabel(code) {
+    if (workerFailureLabels.has(code)) return workerFailureLabels.get(code);
     if (['contradiction_limit', 'url_limit', 'input_limit', 'time_limit'].includes(code)) return {
       contradiction_limit: 'Contradiction budget reached', url_limit: 'Source URL budget reached',
       input_limit: 'Input token budget reached', time_limit: 'Time budget reached'

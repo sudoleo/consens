@@ -9,7 +9,9 @@ from app.core.rate_limit import limiter
 from app.core.security import extract_id_token, verify_user_token
 from app.core.observability import safe_exception
 from app.services import source_check_jobs as jobs
-from app.services.source_check_repository import SourceCheckNotFound, SourceCheckRevisionChanged
+from app.services.source_check_repository import (
+    SourceCheckNotFound, SourceCheckRevisionChanged, SourceCheckQueueMismatch,
+)
 
 router = APIRouter()
 
@@ -80,6 +82,10 @@ def resume_source_check(request: Request, job_id: str, data: ResumeBody):
         resumed = jobs.resume_source_check(job_id, uid, data.openrouter_key)
         return JSONResponse({'source_verification': resumed['snapshot']},
                             headers={'Cache-Control': 'private, no-store'})
+    except SourceCheckQueueMismatch:
+        raise HTTPException(409,
+            'This check belongs to another server environment or worker version; '
+            'resume it on its original server or start a new comparison') from None
     except SourceCheckNotFound:
         raise HTTPException(404, 'Source check not found') from None
 

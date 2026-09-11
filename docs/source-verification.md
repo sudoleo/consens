@@ -198,10 +198,43 @@ Datum, Positionen, Originalauszüge und Ausgabegrenze. Cache-Hits werden erneut
 validiert und zählen nicht als bezahlter Call.
 
 Neue v4-Abruffehler lösen keine automatische Fetch-Wiederholung aus. Nach einem
-Prozessabbruch vor dem Result-Commit kann die bestehende Lease-Recovery das
-Paket erneut ausführen, begrenzt auf drei Versuche. Das bleibt ausdrücklich
-keine Exactly-once-Garantie für externe Modellaufrufe. Ein verlorener Own-Key
+Prozessabbruch vor dem Result-Commit beendet die Lease-Recovery das Paket ohne
+erneuten Modellaufruf als nicht verfügbar. Das bleibt ausdrücklich keine
+Exactly-once-Garantie für externe Modellaufrufe. Ein verlorener Own-Key
 pausiert den Auftrag als `awaiting_credentials`, ohne Entwickler-Key-Fallback.
+
+### Worker-Kompatibilität und getrennte Umgebungen
+
+Neue Aufträge liegen physisch in `source_check_jobs_dispatch_v1_local` oder
+`source_check_jobs_dispatch_v1_production`. Render (`RENDER_SERVICE_NAME`) bzw.
+`ENVIRONMENT=prod/production` wählt Production, sonst Local. Protokoll und
+Umgebung gehen in die weiterhin 64-stellige Job-ID ein und stehen im Header.
+Worker scannen und übernehmen ausschließlich ihre eigene Queue. Dadurch kann
+auch ein alter Worker, der noch gar keine Versionsfelder kennt, neue Aufträge
+nicht versehentlich übernehmen. Bei inkompatiblen Änderungen am gespeicherten
+Plan-/Limits-Vertrag ist eine neue Dispatch-Protokollversion erforderlich;
+normale kompatible Releases behalten ihre Queue und wartenden Aufträge.
+
+Hintergrund des Fixes vom 11.09.2026: Local und der ältere Production-Build
+`6b115b7` nutzten dieselbe globale Collection `source_check_jobs`. Die dortige
+`Limits`-Struktur verstand neue Contradiction-Pläne nicht. Die Wiederholungen
+nach jeweils 15 Sekunden endeten irreführend als `worker_interrupted`, bevor
+der Judge oder das Ersatzmodell aufgerufen werden konnten.
+
+Die alte Collection und die andere Umgebung bleiben für owner-/versionsgebundenes
+Polling, Share-/Bookmark-Wiederherstellung, Retention und Accountlöschung
+zugänglich. Sie werden nicht in die neue Queue kopiert oder automatisch erneut
+ausgeführt. BYOK-Wiederaufnahme auf der falschen Umgebung/Worker-Version liefert
+HTTP 409, bevor der Prozess den Schlüssel übernimmt. Bestehende Ergebnisse
+bleiben unverändert. Der erste historische Read sucht begrenzt in drei bekannten
+Collections; ein begrenzter Prozesscache bindet folgende Reads an denselben Pfad.
+
+Bekannte Workerfehler speichern lease-gebunden einen sicheren `last_failure`
+mit Paketindex und `worker_preparation_failed`, `worker_execution_failed` oder
+`result_persistence_failed`, ohne Exception-Text oder Nutzdaten. Die nächste
+Wiederaufnahme übernimmt diesen Grund nur für dasselbe Paket in das Ergebnis.
+`worker_interrupted` bleibt für einen unbekannten vorherigen Ausgang ohne
+gespeicherte Fehlerphase. Die UI zeigt die jeweilige Phase direkt am Widerspruch.
 
 Neue `check_sources: false` Runs speichern `status: disabled` ohne Fetch/Judge
 oder `sources.*`-Events. Der Schalter und `localStorage.checkSources` bleiben

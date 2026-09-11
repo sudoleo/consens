@@ -226,5 +226,41 @@ def test_failed_result_commit_never_repeats_paid_v4_work(store, monkeypatch):
     assert jobs.process_one(store)
     assert len(calls) == 1
     result = store.page(stub['job_id'], uid='owner')['source_verification']
-    assert result['findings'][0]['reason_code'] == 'worker_interrupted'
+    assert result['findings'][0]['reason_code'] == 'result_persistence_failed'
     assert result['findings'][0]['checked'] is False
+
+
+@pytest.mark.parametrize('phase', ['preparation', 'execution'])
+def test_worker_failure_phase_survives_retry_without_repeating_uncertain_work(store, monkeypatch, phase):
+    stub = submit()
+    target = 'get_plan' if phase == 'preparation' else 'execute_source_package'
+    owner = store if phase == 'preparation' else sv
+    original = getattr(owner, target)
+    seen = []
+    def failed(*args, **kwargs):
+        seen.append(True)
+        raise RuntimeError('private upstream message must never be persisted')
+    monkeypatch.setattr(owner, target, failed)
+    assert jobs.process_one(store) is False
+    header = store.get(stub['job_id'])
+    assert header['last_failure'] == {
+        'reason_code': 'worker_' + phase + '_failed', 'package_index': 0}
+    assert 'private upstream' not in repr(store.db.documents)
+    monkeypatch.setattr(owner, target, original)
+    monkeypatch.setattr(cv, 'judge_contradictions', lambda *args: pytest.fail('Must not repeat work'))
+    store.ref(stub['job_id']).set({'next_attempt_at': jobs.utcnow() - timedelta(seconds=1)}, merge=True)
+    jobs._scans.clear()
+    assert jobs.process_one(store)
+    result = store.page(stub['job_id'], uid='owner')['source_verification']
+    assert result['findings'][0]['reason_code'] == 'worker_' + phase + '_failed'
+    assert not result['findings'][0]['checked']
+    assert len(seen) == 1
+
+
+def test_failure_from_another_package_does_not_mislabel_a_lost_lease(store):
+    stub = submit()
+    store.ref(stub['job_id']).set({'attempts': 1, 'last_failure': {
+        'reason_code': 'result_persistence_failed', 'package_index': 7}}, merge=True)
+    assert jobs.process_one(store)
+    result = store.page(stub['job_id'], uid='owner')['source_verification']
+    assert result['findings'][0]['reason_code'] == 'worker_interrupted'

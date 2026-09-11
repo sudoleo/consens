@@ -19,7 +19,8 @@ from dataclasses import asdict, replace
 from app.core.background_tasks import task_succeeded
 from app.core.observability import correlation_scope, record_metric, safe_exception
 from app.services.source_check_repository import (
-    SourceCheckRepository, SourceCheckNotFound, SourceCheckResourceGone, compact, digest, utcnow,
+    SourceCheckRepository, SourceCheckNotFound, SourceCheckResourceGone, SourceCheckQueueMismatch,
+    compact, digest, utcnow,
 )
 from app.services.persistence_guard import AccountDeletionInProgress
 
@@ -94,6 +95,8 @@ def resume_source_check(job_id, uid, key):
     job = repo.get(job_id, uid)
     if job.get('credential_mode') != 'own':
         return job
+    if not repo.owns_queue(job):
+        raise SourceCheckQueueMismatch('Source check belongs to a different worker queue')
     _refresh_worker(repo, force=True)
     remember_key(job_id, uid, key)
     resumed = repo.resume(job_id, uid, worker_id=WORKER_ID)
@@ -256,17 +259,21 @@ def _cached_judge(uid, repo, *, deferred=None):
     return judge
 
 
-def interrupted_package(plan, package):
+def interrupted_package(plan, package, failure=None):
+    code = 'worker_interrupted'
+    if isinstance(failure, dict) and failure.get('reason_code') in (
+            'worker_preparation_failed', 'worker_execution_failed', 'result_persistence_failed'):
+        code = failure['reason_code']
     if package.get('mode') == 'contradiction_evidence':
         from app.services.contradiction_verification import package_failure_snapshot
-        return package_failure_snapshot(plan, package, 'worker_interrupted')
+        return package_failure_snapshot(plan, package, code)
     from app.services.source_verification import _snapshot, _pending, _finish_snapshot, _now
     result = _snapshot(plan['snapshot']['answer_version'], package['pairs'], package.get('sources', []),
                        model=plan['snapshot'].get('model'))
     result.update(package_id=package['id'], checked_at=_now(),
-                  findings=[{**_pending(pair, 'worker_interrupted'), 'checked_at': _now()}
+                  findings=[{**_pending(pair, code), 'checked_at': _now()}
                             for pair in package['pairs']],
-                  runtime={'calls': 0, 'duration_ms': 0, 'error_code': 'worker_interrupted'})
+                  runtime={'calls': 0, 'duration_ms': 0, 'error_code': code})
     return _finish_snapshot(result)
 
 
@@ -321,6 +328,7 @@ def process_one(repo=None):
                 continue
             _active_owners.add(uid)
         claimed = None
+        failure_code = 'worker_preparation_failed'
         try:
             claimed = repo.claim(candidate['job_id'], worker_id=WORKER_ID)
             if not claimed:
@@ -346,12 +354,17 @@ def process_one(repo=None):
             cache_writes = []
             with correlation_scope(prefix='source'):
                 if claimed.get('attempts', 0) > (1 if contradiction else 3):
-                    result = interrupted_package(plan, package)
+                    failure = claimed.get('last_failure') or {}
+                    if failure.get('package_index') != claimed['completed_packages']:
+                        failure = None
+                    result = interrupted_package(plan, package, failure)
                 else:
+                    limits = Limits(**plan_limits)
+                    failure_code = 'worker_execution_failed'
                     result = execute_source_package(package=package,
                         question=plan['question'], resolved_question=plan.get('resolved_question', ''),
                         answer_version=plan['snapshot']['answer_version'], keys=keys,
-                        limits=Limits(**plan_limits),
+                        limits=limits,
                         fetch=_cached_fetch(uid, repo, bounded=contradiction, deferred=cache_writes),
                         judge=_cached_judge(uid, repo, deferred=cache_writes))
                 if claimed.get('attempts', 0) < 3 and _retryable_fetch_only(result):
@@ -360,6 +373,7 @@ def process_one(repo=None):
                     repo.retry(claimed, delay=31)
                     record_metric('source_queue', 'fetch_retry', retries=1)
                     return True
+                failure_code = 'result_persistence_failed'
                 if repo.finish_package(claimed, result):
                     record_metric('source_queue', 'package', processed=len(result.get('findings', [])))
                     for key, value, seconds in cache_writes:
@@ -372,13 +386,16 @@ def process_one(repo=None):
             repo.delete(candidate['job_id'])
             forget_key(candidate['job_id'])
         except Exception as exc:
-            logging.warning('Source worker failed category=%s', safe_exception(exc))
+            logging.warning('Source worker failed job=%s phase=%s category=%s',
+                            candidate['job_id'], failure_code, safe_exception(exc))
             record_metric('source_queue', 'worker', outcome='failure')
             if claimed:
                 # Retry infrastructure failures, bounded by the persisted attempt
                 # counter. Retried v4 work reports an uncertain prior outcome;
                 # it must not issue another paid call after a failed commit.
-                repo.retry(claimed, delay=15)
+                repo.retry(claimed, delay=15, failure={
+                    'reason_code': failure_code,
+                    'package_index': claimed['completed_packages']})
             return False
         finally:
             with _active_lock:

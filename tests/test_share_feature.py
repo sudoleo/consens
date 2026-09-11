@@ -47,7 +47,7 @@ class FakeDocRef:
     def id(self):
         return self._key
 
-    def get(self, transaction=None):
+    def get(self, transaction=None, **kwargs):
         return FakeSnap(self._store.get(self._key))
 
     def set(self, data):
