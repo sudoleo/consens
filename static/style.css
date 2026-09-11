@@ -24,7 +24,7 @@
 /* Shell layer — loaded LAST so the frameless redesign wins on equal
    specificity. Elevation, sidebar, topbar, composer and thread material. */
 @import url('./css/shell.css?v=20260911-progress-skip');
-@import url('./css/model-answer-reader.css?v=20260911-reader-lean');
+@import url('./css/model-answer-reader.css?v=20260911-reader-layer');
 @import url('./css/composer-attachments.css?v=20260909-attachments1');
 
 /* Template-only utilities live after every component import so they preserve

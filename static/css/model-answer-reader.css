@@ -80,7 +80,8 @@ body.answer-reader-ready:not(.is-hero) .response-section > .response-box {
   height: 100dvh;
   border-radius: 0;
   border-width: 0 0 0 1px;
-  z-index: var(--z-modal);
+  /* A docked inspector stays below modal backdrops and their dialogs. */
+  z-index: calc(var(--z-modal) - 2);
 }
 .answer-reader-dialog .model-answer-reader { height: 100%; min-height: 0; padding: 24px 28px 0; }
 .answer-reader-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
@@ -511,7 +512,12 @@ body.answer-reader-modal { overflow: hidden; }
 }
 .answer-reader-dialog .source-check-diagnostics[open] > summary::after,
 .answer-reader-dialog .source-check-statement[open] > summary::after,
-.answer-reader-dialog .source-check-row[open] > summary::before { transform: rotate(225deg); margin-top: 3px; }
+.answer-reader-dialog .source-check-row[open] > summary::before {
+  /* Override the base statement's open-state minus glyph as well. */
+  content: '';
+  transform: rotate(225deg);
+  margin-top: 3px;
+}
 .answer-reader-dialog .source-verification-panel { gap: 12px; }
 .answer-reader-dialog .source-check-group { padding: 0 0 8px; border: 0; border-bottom: 1px solid var(--line-soft); border-radius: 0; }
 .answer-reader-dialog .source-check-statement { padding: 0; }

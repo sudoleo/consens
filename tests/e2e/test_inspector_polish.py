@@ -48,12 +48,40 @@ def test_inspector_density_disclosures_and_footer(browser, phase4_server, theme)
             page.keyboard.press('Enter')
             rows.first.locator('summary').click()
             expect(rows.first).to_have_attribute('open','')
+            expect_single_chevron(rows.first.locator('summary'), '::before', opened=True)
             rows.first.locator('summary').click()
+            expect_single_chevron(rows.first.locator('summary'), '::before', opened=False)
+            statement = inspector.locator('.source-check-statement').first
+            expect_single_chevron(statement.locator('summary'), '::after', opened=False)
+            statement.locator('summary').focus()
+            page.keyboard.press('Enter')
+            expect(statement).to_have_attribute('open', '')
+            expect_single_chevron(statement.locator('summary'), '::after', opened=True)
+            reader_screenshot(page, f'source-chevron-open-{width}-{theme}')
+            page.keyboard.press('Enter')
             cards = inspector.locator('.answer-reader-source-card')
             assert cards.first.bounding_box()['height'] < 115
             assert rows.first.bounding_box()['height'] <= 48
             assert page.evaluate("document.querySelector('#answerReaderScroll').scrollWidth <= document.querySelector('#answerReaderScroll').clientWidth + 1")
             reader_screenshot(page, f'polished-sources-{width}-{theme}')
+            if width == 1440:
+                page.locator('#editSystemPromptBtn').click()
+                settings = page.locator('#systemPromptModal')
+                expect(settings).to_be_visible()
+                # The actual hit target over the overlapping right edge must
+                # belong to Settings, not the later-mounted docked reader.
+                assert page.evaluate("""() => {
+                  const settings = document.querySelector('.settings-modal-content').getBoundingClientRect();
+                  const reader = document.querySelector('.answer-reader-dialog').getBoundingClientRect();
+                  const x = Math.min(settings.right - 12, Math.max(settings.left, reader.left) + 30);
+                  return !!document.elementFromPoint(x, settings.top + 30)?.closest('#systemPromptModal');
+                }""")
+                page.locator('#settingsTabDisplay').click()
+                expect(page.locator('#settingsTabDisplay')).to_have_attribute('aria-selected', 'true')
+                reader_screenshot(page, f'settings-above-sources-{theme}')
+                page.locator('#closeSystemPromptModal').click()
+                expect(settings).to_be_hidden()
+                expect(inspector).to_be_visible()
             page.locator('#answerReaderSections [data-section="differences"]').click()
             button = inspector.locator('.diff-resolve-btn')
             expect(button).to_be_visible()
@@ -72,3 +100,18 @@ def test_inspector_density_disclosures_and_footer(browser, phase4_server, theme)
             assert target.bounding_box()['height'] >= 44
     finally:
         context.close()
+
+
+def expect_single_chevron(summary, pseudo, *, opened):
+    styles = summary.evaluate("""(node, pseudo) => {
+      const arrow = getComputedStyle(node, pseudo);
+      const other = getComputedStyle(node, pseudo === '::before' ? '::after' : '::before');
+      return {content: arrow.content, transform: arrow.transform,
+        border: arrow.borderRightWidth, other: other.content,
+        marker: getComputedStyle(node).listStyleType};
+    }""", pseudo)
+    assert styles['content'] == '\"\"'  # No extra plus/minus/text glyph.
+    assert styles['other'] in ('none', 'normal')
+    assert styles['marker'] == 'none'
+    assert float(styles['border'].removesuffix('px')) > 0
+    assert styles['transform'].startswith('matrix(-' if opened else 'matrix(0.')

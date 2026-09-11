@@ -4111,7 +4111,11 @@ Reader-Darstellung: `model-answer-reader.css` hält Sources und Differences
 im Detailpanel als flache Listen mit feinen Trennern. Quellen zeigen Titel vor
 Domain und Prüfstatus; Aussagen, Quelldetails und Prüfdiagnose nutzen einheitliche
 Chevron-Disclosures. Die Quellenzeilen bleiben auch mobil einzeilig, ihre
-Aussagenvorschau ist auf zwei Zeilen begrenzt. Touch-Ziele haben mindestens
+Aussagenvorschau ist auf zwei Zeilen begrenzt.
+Aussagen- und Quellen-Disclosures zeigen auch geöffnet nur einen Chevron,
+ohne das zusätzliche Plus-/Minuszeichen aus dem Basisstil. Der angedockte
+Reader liegt unter Modal-Backdrops, damit Settings darüber bedienbar bleiben.
+Touch-Ziele haben mindestens
 44 px Höhe. Resolve ist eine kompakte sekundäre Aktion und respektiert weiterhin
 `[hidden]` nach Abschluss. `shell.css` zentriert die separate Source-Checks-Zeile
 unter den drei Footer-Tabs bis 640 px. API-, Prüf- und Reader-Navigation bleiben
