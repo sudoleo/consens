@@ -50,6 +50,14 @@ _preview/
 /test-results/
 /artifacts/video-references/
 
+# Temporary source snapshots and isolated builds used to stage progress changes.
+# Keep review screenshots and reusable verification scripts versioned.
+/artifacts/consensus-live-progress/*-before/
+/artifacts/consensus-live-progress/*staged-build/
+/artifacts/consensus-live-progress/main-backup/
+/artifacts/consensus-live-progress/*-staged.zip
+/artifacts/consensus-live-progress/*.patch
+
 # Evidence accompanying the checked-in benchmark research report (no prompts)
 !/artifacts/research/consensio-2026-09-08/benchmark-findings.json
 !/artifacts/research/consensio-2026-09-08/benchmark-question-results.json
