@@ -65,6 +65,11 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       statisch. Screenreader lesen nur Phasen-/Abschlusswechsel vor, Skip ist
       per Tastatur erreichbar. Automatisiert: `test_consensus_live_progress.py`
       (isolierte Browser-Komponente) und `run-progress-scope.test.mjs`.
+- [ ] Modellantwort-Sidebar mit sechs Antworten: 520–720 px Dockbreite ab
+      1400 px, ruhige einzeilige Kopfzeile und 14-px-Lesetext. Chat und
+      Composer bleiben neben der Sidebar sichtbar. Light/Dark, eingeklappte
+      Navigation, Expand, Zweiervergleich und Fragewechsel prüfen; auf Touch
+      bleiben Bedienelemente mindestens 44 px hoch, Schließen/Expand auch breit.
 - [ ] Anhänge: PDF/Text/Bild im neuen Chat unter dem Feld in der Toolbar;
       Vorschau und Entfernen separat per Tastatur/Touch erreichbar. Lange Namen
       und zwei Dateien passen in Light/Dark bei 390 px. Nach dem Senden stehen

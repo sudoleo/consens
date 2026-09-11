@@ -2159,7 +2159,7 @@ und begrenzt Breite und Hoehe; sein bestehender DOM-/Tastaturvertrag bleibt.
 Modellfamilie und gespeicherte Version werden separat gezeigt; fehlende
 Versionsdaten ersetzen niemals den bekannten Familiennamen.
 Ab 1400px ist der einfache Leser rechts angedockt, mit entsprechend schmalerer
-Chatspalte. Die Dockbreite waechst zwischen 420 und 560px (30vw); der Chat bleibt in der
+Chatspalte. Die Dockbreite waechst zwischen 520 und 720px (36vw); der Chat bleibt in der
 Restflaeche zwischen linker Navigation und Leser zentriert, auch bei eingeklappter
 Navigation. Die Textbreite des Chats bleibt auf 900px begrenzt.
 Auf kleineren Viewports sowie beim erweiterten Zweiervergleich oeffnet er modal
@@ -2169,8 +2169,13 @@ Leserbreite nebeneinander, sonst schaltet man zwischen A und B um.
 Unter 500px ersetzt eine kompakte Modellauswahl die mehrzeilige Modellnavigation.
 `static/css/model-answer-reader.css` folgt `shell.css` und verwendet ausschliesslich
 App-Tokens und die bestehende Inter-/Markdown-Typografie.
-Nur der Dialog verwendet kompaktere Kopf-/Kartenabstaende (24px Aussenrand,
-mobil 16px) und 14px Difference-Titel; der Inline-Leser bleibt davon unberuehrt.
+Nur der Dialog verwendet kompaktere Kopf-/Kartenabstaende (24px Seitenrand,
+mobil 16px): Titel (14px) und Bereitschaftsstatus teilen eine umbrechende Zeile,
+Frage, Tabs und Modellchips folgen mit reduziertem Abstand. Modellchips und
+Icon-Buttons sind am Desktop 32px hoch; Touch behaelt mindestens 44px hohe
+Ziele (Schliessen/Erweitern auch 44px breit). Angedockte Antworten verwenden
+14px/1.7 mit proportionalen Markdown-Titeln und kuerzeren Absatzabstaenden;
+Difference-Titel bleiben 14px. Der Inline-Leser bleibt davon unberuehrt.
 Im erweiterten Popup teilen Frage, Tabs, Modellauswahl und Inhalt dieselbe
 volle Innenbreite statt separater 840-/720px-Spalten. Desktop-Popups verwenden
 32px Seitenabstand und 16px Fliesstext fuer Einzelantworten; Zweiervergleich
