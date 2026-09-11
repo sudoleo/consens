@@ -891,6 +891,9 @@ der Python-Staleness-Test auch indirekte Änderungen erkennt.
   Bis 640 px stehen Modellname, Skip und Status ueber einem durchgehenden
   Balken ueber die volle Zeilenbreite. Die kompakten Eintraege sind 40 px
   hoch (Touch: 44 px inklusive unsichtbar erweitertem Skip-Trefferbereich).
+  Skip sitzt mobil als rahmenlose Textaktion direkt neben dem Modellnamen;
+  die Statusangabe bleibt am rechten Rand. Der reservierte Platz verhindert
+  Verschiebungen beim Einblenden.
   Desktop nutzt schmalere Namens-/Statusspalten fuer laengere Balken.
   Am Ende klappt der Block zusammen und uebergibt an den **Provenance-Fuss**
   `#runProvenance` unter der Antwort. Desktop: Differences / Answers / Sources

@@ -159,8 +159,11 @@ def test_only_phase_summary_is_live_and_skip_is_keyboard_accessible(progress_pag
     expect(skip).to_be_visible(timeout=12000)
     expect(skip).to_have_text("Skip")
     assert skip.evaluate('''el => {
+      const name = el.closest('.run-model').querySelector('.run-model-name').getBoundingClientRect();
       const status = el.closest('.run-model').querySelector('.run-model-time').getBoundingClientRect();
-      return el.getBoundingClientRect().right <= status.left;
+      const action = el.getBoundingClientRect();
+      return action.right <= status.left && (innerWidth > 640
+        || (action.left >= name.right && action.left - name.right <= 8));
     }''')
     assert [track.bounding_box() for track in tracks] == before
     assert page.locator("#consensusRun").bounding_box()["height"] == height
@@ -178,6 +181,7 @@ def test_only_phase_summary_is_live_and_skip_is_keyboard_accessible(progress_pag
 def test_skip_has_a_full_touch_target_without_overflow(progress_page):
     page = progress_page
     page.set_viewport_size({"width": 320, "height": 850})
+    page.evaluate("() => [0, 1, 4].forEach(id => progressFixture(id, 'Finished answer', 'complete'))")
     skip = page.locator('[data-box="model-5"] .run-model-skip-btn')
     before = page.locator(".run-model-track").last.bounding_box()
     expect(skip).to_be_visible(timeout=12000)

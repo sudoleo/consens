@@ -1945,15 +1945,27 @@ body.dark-mode .run-provenance {
 @media (max-width: 640px) {
   .run-model {
     box-sizing: border-box;
-    grid-template-columns: minmax(0, 1fr) 44px 102px;
+    grid-template-columns: minmax(0, max-content) 44px minmax(102px, 1fr);
     grid-template-rows: 28px 2px;
-    gap: 4px 8px;
+    gap: 4px 6px;
     min-height: 40px;
     padding-bottom: 6px;
   }
 
   .run-model-name { grid-row: 1; }
   .run-model-skip { grid-column: 2; }
+  .run-model-skip-btn {
+    border: 0;
+    background: transparent;
+    color: var(--ink-3);
+    font-weight: var(--font-weight-medium);
+  }
+  .run-model-skip-btn:hover {
+    background: transparent;
+    color: var(--ink);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
   .run-model-time { grid-column: 3; }
   .run-model-track { grid-column: 1 / -1; grid-row: 2; }
   .run-detail { margin-left: 0; }
@@ -1964,24 +1976,10 @@ body.dark-mode .run-provenance {
 
   @media (pointer: coarse) {
     .run-model { grid-template-rows: 32px 2px; min-height: 44px; }
-    /* Keep the visible pill compact while retaining its 44px touch target. */
+    /* The quiet text action retains a full touch target without a visible box. */
     .run-model-skip-btn {
-      position: relative;
-      isolation: isolate;
       height: 44px;
-      border: 0;
-      background: transparent;
     }
-    .run-model-skip-btn::before {
-      content: "";
-      position: absolute;
-      z-index: -1;
-      inset: 11px 0;
-      border: 1px solid var(--line-soft);
-      border-radius: 6px;
-      pointer-events: none;
-    }
-    .run-model-skip-btn:hover::before { background: var(--app-surface-hover); }
   }
 
   .run-provenance {
