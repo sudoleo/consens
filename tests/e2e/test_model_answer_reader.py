@@ -93,7 +93,7 @@ def test_wide_reader_centering_and_source_cards(browser, phase4_server, width, t
             assert abs(bounds['x'] + bounds['width'] / 2 - expected) <= 2
             assert bounds['x'] + bounds['width'] <= dialog.bounding_box()['x'] - 25
         assert_centered(260)
-        assert 420 <= dialog.bounding_box()['width'] <= 560
+        assert 520 <= dialog.bounding_box()['width'] <= 720
         icons = page.locator('#answerReaderInspector .answer-reader-site-icon img')
         expect(icons).to_have_count(3)
         expect(icons.first).to_be_visible()
@@ -176,8 +176,8 @@ def test_detail_panel_survives_resize_and_short_viewports(browser, phase4_server
             assert metrics['rootOverflow'] <= 1 and metrics['contentOverflow'] <= 1
             assert metrics['contentTop'] >= metrics['headerBottom']
             assert metrics['scrollHeight'] >= min(200, height * .4)
-            page.locator('#answerReaderInspector .diff-verify').first.scroll_into_view_if_needed()
-            expect(page.locator('#answerReaderInspector .diff-verify').first).to_be_in_viewport()
+            page.locator('#answerReaderInspector .diff-resolve-btn').first.scroll_into_view_if_needed()
+            expect(page.locator('#answerReaderInspector .diff-resolve-btn').first).to_be_in_viewport()
             page.evaluate("""() => {
               document.querySelector('#modelAnswerReader').scrollTop = 0;
               document.querySelector('#answerReaderScroll').scrollTop = 0;
@@ -249,7 +249,7 @@ def test_differences_and_sources_share_turn_scoped_sidebar(browser, phase4_serve
         expect(cards.first).not_to_have_attribute('open','')
         reader_screenshot(page, f'differences-overview-{width}-{theme}')
         cards.first.locator('summary').click()
-        expect(cards.first.locator('.diff-verify')).to_be_visible()
+        expect(cards.first.locator('.diff-resolve-btn')).to_be_visible()
         reader_screenshot(page, f'differences-detail-{width}-{theme}')
         # Projection may rebuild the live cards; the expanded claim stays open.
         page.evaluate('App.runRegistry.renderVisible()')
@@ -455,7 +455,7 @@ def test_direct_comparison_shares_chat_shell_and_fits_picker(browser, phase4_ser
           ctx.status = 'running';
           App.runRegistry.renderVisible();
         }""")
-        expect(page.locator('.is-direct .answer-reader-body:visible')).to_have_count(0)
+        expect(page.locator('.is-direct .answer-reader-body[aria-busy="true"] .answer-skeleton')).to_have_count(3)
         expect(page.locator('.is-direct .answer-reader-answer-actions')).to_have_count(0)
         assert not page.locator('body').evaluate("el => el.classList.contains('is-hero')")
         # Compare the actual computed shell with Agent Mode at the same width.
@@ -528,8 +528,7 @@ def test_fresh_agent_mode_session_opens_saved_direct_answers(browser, phase4_ser
         expect(page.locator('.is-direct .answer-reader-answer')).to_have_count(3)
         expect(page.locator('.answer-reader-body[data-provider="Meta"]')).to_have_text('Define success criteria with the team first.')
         expect(page.locator('#answerReaderTitle')).to_have_text('Direct comparison')
-        expect(page.locator('#answerReaderMode')).to_be_visible()
-        expect(page.locator('#answerReaderMode')).to_contain_text('Agent Mode is off for this comparison')
+        expect(page.locator('#answerReaderMode')).to_be_hidden()
         assert page.evaluate("localStorage.getItem('agentMode')") == 'true'
         expect(page.locator('#agentModeSwitch')).to_be_checked()
         page.wait_for_timeout(200)
@@ -584,7 +583,7 @@ def test_demo_uses_all_balanced_models_and_never_displays_spinner_markup(browser
             expect(page.locator('#modelAnswerReader')).to_be_visible(timeout=30000)
             expect(page.locator('#answerReaderStatus')).to_have_text('0 of 6 ready')
             expect(page.locator('.is-direct .answer-reader-answer')).to_have_count(6)
-            expect(page.locator('.is-direct .answer-reader-body:visible')).to_have_count(0)
+            expect(page.locator('.is-direct .answer-reader-body[aria-busy="true"] .answer-skeleton')).to_have_count(6)
             reader_screenshot(page, 'demo-balanced-waiting')
         page.wait_for_function('() => window.__demoFinished === true', timeout=60000)
         result = page.evaluate("""() => App.modelPrefs.filter(p => !document.getElementById(p.responseId).classList.contains('excluded')).map(p => {
