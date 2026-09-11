@@ -116,3 +116,97 @@ def test_runtime_reload_rolls_back_source_choice_when_later_activation_fails(mon
     with pytest.raises(ValueError):
         cfg.load_models_from_db(strict=True)
     assert cfg.get_source_verification_model() == 'openai/gpt-5-mini'
+
+
+def test_fallback_is_opt_in_and_uses_registered_ids_without_environment_override(monkeypatch):
+    monkeypatch.setenv('SOURCE_VERIFICATION_FALLBACK_MODEL', 'openai/gpt-5-mini')
+    cfg.apply_source_verification_model()
+    cfg.apply_source_verification_fallback_model()
+    assert cfg.get_source_verification_fallback_model() == ''
+    cfg.apply_source_verification_fallback_model('openai/gpt-5-mini')
+    assert cfg.get_source_verification_fallback_model() == 'openai/gpt-5-mini'
+    cfg.apply_source_verification_fallback_model(cfg.get_source_verification_model())
+    assert cfg.get_source_verification_fallback_model() == ''
+
+
+@pytest.mark.parametrize('invalid', [None, {}, 'Gemini', 'evil/model', 'google/gemini-3.5-flash-lite'])
+def test_invalid_or_duplicate_fallback_is_rejected_without_write(monkeypatch, invalid):
+    data = payload()
+    data['source_verification_fallback_model'] = invalid
+    monkeypatch.setattr(admin, '_require_admin', lambda *_: None)
+    write = Mock()
+    monkeypatch.setattr(admin, '_persist_and_activate_models', write)
+    with pytest.raises(HTTPException) as error:
+        admin.update_models(Mock(), data)
+    assert error.value.status_code == 400
+    write.assert_not_called()
+
+
+def test_fallback_save_and_legacy_admin_tab_preservation(monkeypatch):
+    cfg.apply_source_verification_model()
+    cfg.apply_source_verification_fallback_model('openai/gpt-5-mini')
+    data = payload()
+    data.pop('source_verification_fallback_model')
+    monkeypatch.setattr(admin, '_require_admin', lambda *_: None)
+    monkeypatch.setattr(admin, 'db_firestore', Mock())
+    write = Mock()
+    monkeypatch.setattr(admin, '_persist_and_activate_models', write)
+    admin.update_models(Mock(), data)
+    assert write.call_args.args[1]['source_verification_fallback_model'] == 'openai/gpt-5-mini'
+    data['source_verification_fallback_model'] = ''
+    admin.update_models(Mock(), data)
+    assert write.call_args.args[1]['source_verification_fallback_model'] == ''
+
+
+@pytest.mark.parametrize('supplied', [None, 'bad/model', 'google/gemini-3.5-flash-lite', 'openai/gpt-5-mini'])
+def test_fallback_database_load_migration_and_duplicate_normalization(monkeypatch, supplied):
+    data = payload()
+    data.pop('source_verification_fallback_model')
+    if supplied is not None:
+        data['source_verification_fallback_model'] = supplied
+    document = Mock()
+    document.get.return_value = Mock(exists=True, to_dict=lambda: data)
+    database = Mock()
+    database.collection.return_value.document.return_value = document
+    monkeypatch.setattr('app.core.security.db_firestore', database)
+    cfg.load_models_from_db(strict=True)
+    expected = supplied if supplied == 'openai/gpt-5-mini' else ''
+    assert cfg.get_source_verification_fallback_model() == expected
+    if supplied != expected:
+        assert any(call.args[0].get('source_verification_fallback_model') == expected
+                   for call in document.set.call_args_list)
+
+
+def test_failed_reload_restores_both_primary_and_fallback(monkeypatch):
+    cfg.apply_source_verification_model('openai/gpt-5-mini')
+    cfg.apply_source_verification_fallback_model(cfg.DEFAULT_SOURCE_VERIFICATION_MODEL)
+    data = payload()
+    data.update(source_verification_model=cfg.DEFAULT_SOURCE_VERIFICATION_MODEL,
+                source_verification_fallback_model='openai/gpt-5-mini')
+    document = Mock()
+    document.get.return_value = Mock(exists=True, to_dict=lambda: data)
+    database = Mock()
+    database.collection.return_value.document.return_value = document
+    monkeypatch.setattr('app.core.security.db_firestore', database)
+    monkeypatch.setattr(cfg, 'apply_watch_models', Mock(side_effect=ValueError('fail')))
+    with pytest.raises(ValueError):
+        cfg.load_models_from_db(strict=True)
+    assert cfg.get_source_verification_model() == 'openai/gpt-5-mini'
+    assert cfg.get_source_verification_fallback_model() == cfg.DEFAULT_SOURCE_VERIFICATION_MODEL
+
+
+def test_fallback_dependency_and_read_only_get_metadata(monkeypatch):
+    data = payload()
+    data.update(source_verification_model='openai/gpt-5-mini',
+                source_verification_fallback_model=cfg.DEFAULT_SOURCE_VERIFICATION_MODEL)
+    meta = admin._admin_meta(data)
+    assert meta['source_verification_fallback_default'] == ''
+    assert 'Source verification fallback' in meta['dependencies']['gemini']['gemini-3.5-flash-lite']
+    document = Mock()
+    document.get.return_value = Mock(exists=True, to_dict=lambda: data)
+    database = Mock()
+    database.collection.return_value.document.return_value = document
+    monkeypatch.setattr(admin, 'db_firestore', database)
+    monkeypatch.setattr(admin, '_require_admin', lambda *_: None)
+    assert admin.get_models(Mock())['source_verification_fallback_model'] == cfg.DEFAULT_SOURCE_VERIFICATION_MODEL
+    document.set.assert_not_called()

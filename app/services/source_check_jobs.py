@@ -147,7 +147,8 @@ def submit_source_check(*, question, consensus, sources, keys, resolved_question
 def unavailable_snapshot(consensus, code='persistence_error', *, check_type='source_evidence', run_id=''):
     from app.services.source_verification import answer_version, collect_claims, PROMPT_VERSION
     if check_type == 'contradiction_evidence':
-        return dict(schema_version=4, check_type=check_type, prompt_version='contradiction-evidence-v1',
+        from app.services.contradiction_verification import PROMPT_VERSION as contradiction_prompt_version
+        return dict(schema_version=4, check_type=check_type, prompt_version=contradiction_prompt_version,
             run_id=run_id, answer_version=answer_version(consensus), status='failed',
             findings=[], documents=[], sources=[], reason_code=code,
             scope={'contradictions': 0, 'checked_contradictions': 0, 'omitted_contradictions': 0,
@@ -188,7 +189,21 @@ def _cache_rpc_fits(bounded):
     return budget is None or budget.deadline - time.monotonic() > RPC_SECONDS + .1
 
 
-def _cached_fetch(uid, repo, *, bounded=False):
+def _cache_write(uid, repo, key, value, seconds, *, bounded=False, deferred=None):
+    from app.services.llm.provider_runtime import current_analysis_budget
+    if bounded and current_analysis_budget() is not None:
+        # A guarded cache transaction spans several RPCs/retries. It cannot be
+        # bounded by the per-RPC timeout, so execute it only after result commit.
+        if deferred is not None:
+            deferred.append((key, value, seconds))
+        return
+    try:
+        repo.cache_put(uid, key, value, seconds=seconds)
+    except Exception:
+        record_metric('source_cache', 'write', outcome='failure')
+
+
+def _cached_fetch(uid, repo, *, bounded=False, deferred=None):
     from app.services.source_documents import fetch_document
     def fetch(url, limits):
         key = ['document-v3', url, limits.max_bytes]
@@ -207,16 +222,12 @@ def _cached_fetch(uid, repo, *, bounded=False):
                 limits = replace(limits, fetch_seconds=min(limits.fetch_seconds,
                     max(.01, budget.deadline - time.monotonic())))
         value = fetch_document(url, limits)
-        try:
-            if _cache_rpc_fits(bounded):
-                repo.cache_put(uid, key, value, seconds=limits.cache_seconds)
-        except Exception:
-            record_metric('source_cache', 'write', outcome='failure')
+        _cache_write(uid, repo, key, value, limits.cache_seconds, bounded=bounded, deferred=deferred)
         return value
     return fetch
 
 
-def _cached_judge(uid, repo):
+def _cached_judge(uid, repo, *, deferred=None):
     from app.services.source_verification import judge_sources, SYSTEM, PROMPT_VERSION
     def judge(payload, keys, limits):
         # Includes applicability date/question and model/prompt contract. Cached
@@ -227,21 +238,20 @@ def _cached_judge(uid, repo):
             call = judge_contradictions
         else:
             call, system, prompt_version = judge_sources, SYSTEM, PROMPT_VERSION
-        key = ['verdict-v4' if contradiction else 'verdict-v3', prompt_version, system, limits.model,
+        key = ['verdict-dispatch-v1', 'v4' if contradiction else 'v3', prompt_version, system, limits.model, limits.fallback_model,
                payload, limits.output_tokens]
         try:
             cached = repo.cache_get(uid, key) if _cache_rpc_fits(contradiction) else None
             if cached is not None:
                 record_metric('source_cache', 'judge_hit')
-                return cached, {'calls': 0, 'cache_hit': True}
+                return cached['output'], {**cached.get('provenance', {}), 'calls': 0, 'cache_hit': True}
         except Exception:
             record_metric('source_cache', 'read', outcome='failure')
         raw, usage = call(payload, keys, limits)
-        if not usage.get('output_truncated') and _cache_rpc_fits(contradiction):
-            try:
-                repo.cache_put(uid, key, raw, seconds=3600)
-            except Exception:
-                record_metric('source_cache', 'write', outcome='failure')
+        if not usage.get('output_truncated'):
+            provenance = {k: usage[k] for k in ('model', 'fallback_used', 'model_attempts') if k in usage}
+            _cache_write(uid, repo, key, {'output': raw, 'provenance': provenance}, 3600,
+                         bounded=contradiction, deferred=deferred)
         return raw, usage
     return judge
 
@@ -329,17 +339,21 @@ def process_one(repo=None):
             # plans already recorded the actual model in their snapshot.
             plan_limits = dict(plan['limits'])
             plan_limits['model'] = plan['snapshot'].get('model') or plan_limits.get('model') or Limits().model
+            # Jobs admitted before the fallback option remain single-model jobs.
+            plan_limits.setdefault('fallback_model', '')
             package = plan['packages'][claimed['completed_packages']]
+            contradiction = package.get('mode') == 'contradiction_evidence'
+            cache_writes = []
             with correlation_scope(prefix='source'):
-                if claimed.get('attempts', 0) > 3:
+                if claimed.get('attempts', 0) > (1 if contradiction else 3):
                     result = interrupted_package(plan, package)
                 else:
                     result = execute_source_package(package=package,
                         question=plan['question'], resolved_question=plan.get('resolved_question', ''),
                         answer_version=plan['snapshot']['answer_version'], keys=keys,
                         limits=Limits(**plan_limits),
-                        fetch=_cached_fetch(uid, repo, bounded=package.get('mode') == 'contradiction_evidence'),
-                        judge=_cached_judge(uid, repo))
+                        fetch=_cached_fetch(uid, repo, bounded=contradiction, deferred=cache_writes),
+                        judge=_cached_judge(uid, repo, deferred=cache_writes))
                 if claimed.get('attempts', 0) < 3 and _retryable_fetch_only(result):
                     # Wait past the local negative-cache TTL before trying this
                     # document again. Other owners/jobs can use this worker meanwhile.
@@ -348,6 +362,8 @@ def process_one(repo=None):
                     return True
                 if repo.finish_package(claimed, result):
                     record_metric('source_queue', 'package', processed=len(result.get('findings', [])))
+                    for key, value, seconds in cache_writes:
+                        _cache_write(uid, repo, key, value, seconds)
             if claimed['completed_packages'] + 1 == claimed['package_count']:
                 forget_key(claimed['job_id'])
             return True
@@ -360,7 +376,8 @@ def process_one(repo=None):
             record_metric('source_queue', 'worker', outcome='failure')
             if claimed:
                 # Retry infrastructure failures, bounded by the persisted attempt
-                # counter. A completed package never starts its model again.
+                # counter. Retried v4 work reports an uncertain prior outcome;
+                # it must not issue another paid call after a failed commit.
                 repo.retry(claimed, delay=15)
             return False
         finally:

@@ -15,7 +15,7 @@
 <link rel="stylesheet" href="/static/style.css?v=20260911-statements">
     <link rel="stylesheet" href="/static/css/admin.css?v=20260906-reasoning">
 
-    <script type="module" src="/static/js/admin.js?v=20260909-source-model"></script>
+    <script type="module" src="/static/js/admin.js?v=20260911-source-fallback"></script>
 </head>
 <body class="dark-mode">
     <header class="top-bar">
@@ -152,14 +152,24 @@
             <div class="admin-section">
                 <h3>Source Checks</h3>
                 <p class="section-hint">
-                    Model that checks whether cited sources support the Consensus statements.
+                    Models that check factual contradictions against existing sources.
                     Default: Gemini 3.5 Flash-Lite. Changes apply to new checks;
-                    checks already in progress keep their original model.
+                    checks already in progress keep their original model choices.
                 </p>
                 <div class="deepthink-card">
                     <label for="sourceVerificationModelSelect">Source-check model</label>
                     <select id="sourceVerificationModelSelect" aria-label="Source-check model"></select>
                 </div>
+                <div class="deepthink-card">
+                    <label for="sourceVerificationFallbackModelSelect">Source-check fallback model</label>
+                    <select id="sourceVerificationFallbackModelSelect" aria-label="Source-check fallback model"
+                            aria-describedby="sourceVerificationFallbackHelp"></select>
+                </div>
+                <p id="sourceVerificationFallbackHelp" class="section-hint">
+                    Optional second model if the primary check is unavailable. Disabled until configured.
+                    Choose a different model from the primary. Gemini 3.5 Flash-Lite is a recommended
+                    fallback when another model is primary. Existing evidence limits still apply.
+                </p>
             </div>
 
             <div class="admin-section">

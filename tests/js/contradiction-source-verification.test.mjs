@@ -162,3 +162,80 @@ describe('excluded contradiction visibility', () => {
     expect(document.querySelector('#sourceVerificationReport .diff-card .contradiction-source-check').textContent).toContain('Not checked');
   });
 });
+
+
+describe('precise source-judge rejection diagnostics', () => {
+  const rejection = {...finding,checked:false,state:'unavailable',reason_code:'evidence_mismatch',evidence:[],reason:'',
+    validation_errors:[{code:'quote_not_in_original',evidence_index:1,source_id:'S1',position_id:'P2'}]};
+  it('shows the exact safe rejection reason with its known source and model position', () => {
+    const {window,document}=boot();
+    const value={...snapshot,findings:[rejection]};const before=JSON.stringify(value);
+    window.App.sourceVerification.renderCurrent(value,options);
+    const result=document.querySelector('.contradiction-source-check');
+    expect(result.textContent).toContain('Why this check was rejected:');
+    expect(result.textContent).toContain('Passage 2: The cited text could not be matched to the original source document.');
+    expect(result.textContent).toContain('Position: Anthropic.');
+    expect(result.querySelector('a').href).toBe('https://example.com/prices');
+    expect(result.querySelector('a').rel).toBe('noopener noreferrer');
+    expect(result.querySelector('blockquote, details')).toBeNull();
+    expect(JSON.stringify(value)).toBe(before);
+  });
+  it('never displays rejected quotes, explanations or a positive verdict even with contradictory checked metadata', () => {
+    const {window,document}=boot();
+    window.App.sourceVerification.renderCurrent({...snapshot,findings:[{...finding,validation_errors:rejection.validation_errors}]},options);
+    const result=document.querySelector('.contradiction-source-check');
+    expect(result.dataset.checkState).toBe('unavailable');
+    expect(result.textContent).not.toContain(finding.reason);
+    expect(result.textContent).not.toContain(finding.evidence[0].quote);
+    expect(result.textContent).not.toContain('Different conditions explain');
+    expect(result.querySelector('blockquote, details')).toBeNull();
+  });
+  it.each([
+    ['quote_not_in_passages','could not be found in the passages supplied to the judge'],
+    ['date_not_in_source','evidence date could not be found in the source'],
+    ['source_position_mismatch','source was not assigned to that model position'],
+    ['missing_required_evidence','lacked the original evidence required'],
+    ['duplicate_finding','more than one result for this contradiction'],
+    ['missing_finding','did not return a result for this contradiction'],
+    ['invalid_reason','did not provide a valid explanation'],
+    ['quote_total_limit','combined evidence passages exceeded'],
+  ])('explains %s without inventing quote content', (code,text) => {
+    const {window,document}=boot();
+    window.App.sourceVerification.renderCurrent({...snapshot,findings:[{...rejection,validation_errors:[{code}]}]},options);
+    expect(document.querySelector('.contradiction-source-validation').textContent).toContain(text);
+  });
+  it('does not create links for unknown, ambiguous or unsafe source identities and ignores raw diagnostics', () => {
+    const {window,document}=boot();
+    for(const sources of [snapshot.sources,[{id:'S1',url:'javascript:alert(1)'}],[...snapshot.sources,...snapshot.sources]]) {
+      const errors=[{code:'invalid_source',source_id:sources===snapshot.sources?'unplanned':'S1',position_id:'<script>',quote:'REJECTED PRIVATE QUOTE',message:'UNTRUSTED MESSAGE'},
+        {code:'<script>alert(1)</script>',evidence_index:-1}];
+      window.App.sourceVerification.renderCurrent({...snapshot,sources,findings:[{...rejection,validation_errors:errors}]},options);
+      const result=document.querySelector('.contradiction-source-check');
+      expect(result.querySelector('a,script')).toBeNull();
+      expect(result.textContent).not.toContain('REJECTED PRIVATE QUOTE');
+      expect(result.textContent).not.toContain('UNTRUSTED MESSAGE');
+      expect(result.textContent).not.toContain('alert(1)');
+      expect(result.textContent).toContain('no more specific explanation is available');
+    }
+  });
+  it('keeps legacy evidence_mismatch honest when no detailed rejection was saved', () => {
+    const {window,document}=boot();const legacy={...rejection};delete legacy.validation_errors;
+    window.App.sourceVerification.renderCurrent({...snapshot,findings:[legacy]},options);
+    const result=document.querySelector('.contradiction-source-check');
+    expect(result.textContent).toContain('Evidence quotes could not be verified');
+    expect(result.textContent).toContain('No more specific rejection reason was saved');
+    expect(result.querySelector('.contradiction-source-validation-errors')).toBeNull();
+  });
+  it('bounds rejection diagnostics and reports fallback provenance without claiming successful verification', () => {
+    const {window,document}=boot();
+    window.App.sourceVerification.renderCurrent({...snapshot,status:'failed',runtime:{model:'provider/fallback-model',fallback_used:true,
+      model_attempts:[{model:'provider/primary',status:'failed',error_code:'timeout'},{model:'provider/fallback-model',status:'succeeded'}]},
+      findings:[{...rejection,validation_errors:Array.from({length:20},()=>({code:'invalid_reason'}))}]},options);
+    const result=document.querySelector('.contradiction-source-check');
+    expect(result.querySelectorAll('.contradiction-source-validation-errors li')).toHaveLength(12);
+    expect(result.textContent).toContain('Source-check model: provider/fallback-model (fallback)');
+    expect(result.textContent).not.toContain('Checked with');
+    window.App.sourceVerification.renderCurrent({...snapshot,runtime:{model:'provider/primary',fallback_used:false},findings:[rejection]},options);
+    expect(document.querySelector('.contradiction-source-check').textContent).not.toContain('Source-check model:');
+  });
+});

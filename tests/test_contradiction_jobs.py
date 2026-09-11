@@ -1,6 +1,7 @@
 """V4 admission, durable execution and version fencing through existing jobs."""
 from copy import deepcopy
 from dataclasses import asdict, replace
+from datetime import timedelta
 
 import pytest
 
@@ -149,3 +150,81 @@ def test_share_snapshot_preserves_factual_classification_and_position_provenance
     assert restored['factual_check']['checkable'] is True
     assert restored['consensus_anchor_validated'] is True
     assert restored['positions'][1]['quote_models'] == ['Anthropic']
+
+
+def test_validation_diagnostics_survive_job_storage_and_polling(store, monkeypatch):
+    def invalid(payload, *args):
+        raw, usage = judge(payload, *args)
+        raw['findings'][0]['evidence'][0]['quote'] = 'An invented quote.'
+        return raw, usage
+    monkeypatch.setattr(cv, 'judge_contradictions', invalid)
+    stub = submit()
+    assert jobs.process_one(store)
+    result = store.page(stub['job_id'], uid='owner')['source_verification']
+    finding = result['findings'][0]
+    assert finding['reason_code'] == 'evidence_mismatch'
+    assert finding['validation_errors'][0]['code'] == 'quote_not_in_passages'
+    assert finding['evidence'] == []
+    assert 'An invented quote.' not in str(result)
+    assert sv.stored_verification(result, CONSENSUS)['findings'][0]['validation_errors'] == finding['validation_errors']
+
+
+@pytest.mark.parametrize('legacy', [False, True])
+def test_queued_fallback_selection_is_frozen_and_legacy_jobs_remain_disabled(store, monkeypatch, legacy):
+    from app.services.source_check_repository import pack
+    original = 'openai/gpt-5-mini'
+    monkeypatch.setattr(sv.cfg, 'SOURCE_VERIFICATION_FALLBACK_MODEL', original)
+    stub = submit()
+    admitted = store.get_plan(stub['job_id'])
+    assert admitted['limits']['fallback_model'] == original
+    if legacy:
+        admitted['limits'].pop('fallback_model')
+        store.ref(stub['job_id']).collection('data').document('plan').set({'payload': pack(admitted)})
+    monkeypatch.setattr(sv.cfg, 'SOURCE_VERIFICATION_FALLBACK_MODEL', 'google/gemini-3.5-flash-lite')
+    seen = []
+    def record(payload, keys, limits):
+        seen.append(limits.fallback_model)
+        return judge(payload, keys, limits)
+    monkeypatch.setattr(cv, 'judge_contradictions', record)
+    assert jobs.process_one(store)
+    assert seen == ['' if legacy else original]
+
+
+def test_cache_transactions_run_only_after_the_result_is_committed(store, monkeypatch):
+    from app.services.llm.provider_runtime import current_analysis_budget
+    stub = submit()
+    writes = []
+    original_put = store.cache_put
+    def cache_put(*args, **kwargs):
+        assert current_analysis_budget() is None
+        assert store.get(stub['job_id'])['status'] == 'complete'
+        writes.append(args[1])
+        return original_put(*args, **kwargs)
+    monkeypatch.setattr(store, 'cache_put', cache_put)
+    assert jobs.process_one(store)
+    assert len(writes) == 3  # Both source documents plus the judge output.
+
+
+def test_failed_result_commit_never_repeats_paid_v4_work(store, monkeypatch):
+    stub = submit()
+    calls = []
+    def recorded(payload, *args):
+        calls.append(payload)
+        return judge(payload, *args)
+    monkeypatch.setattr(cv, 'judge_contradictions', recorded)
+    original_finish = store.finish_package
+    finishes = []
+    def finish(*args, **kwargs):
+        finishes.append(True)
+        if len(finishes) == 1:
+            raise RuntimeError('Commit unavailable')
+        return original_finish(*args, **kwargs)
+    monkeypatch.setattr(store, 'finish_package', finish)
+    assert jobs.process_one(store) is False
+    store.ref(stub['job_id']).set({'next_attempt_at': jobs.utcnow() - timedelta(seconds=1)}, merge=True)
+    jobs._scans.clear()
+    assert jobs.process_one(store)
+    assert len(calls) == 1
+    result = store.page(stub['job_id'], uid='owner')['source_verification']
+    assert result['findings'][0]['reason_code'] == 'worker_interrupted'
+    assert result['findings'][0]['checked'] is False

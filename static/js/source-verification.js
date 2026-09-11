@@ -725,6 +725,68 @@
   function sameBinding(a, b) {
     return ['job_id', 'run_id', 'answer_version', 'schema_version', 'check_type', 'prompt_version'].every(key => a?.[key] == null || a[key] === b?.[key]);
   }
+  const rejectionExplanations = {
+    invalid_output: 'The judge response had an invalid format.',
+    invalid_finding_shape: 'The result for this contradiction had an invalid format.',
+    unknown_finding: 'The judge returned a result for an unknown contradiction.',
+    duplicate_finding: 'The judge returned more than one result for this contradiction.',
+    missing_finding: 'The judge did not return a result for this contradiction.',
+    invalid_verdict: 'The judge returned an unsupported verdict.',
+    invalid_supported_position: 'The verdict supported a position that was not part of this check.',
+    unexpected_supported_position: 'The judge selected a supported position for a verdict that does not choose one.',
+    invalid_reason: 'The judge did not provide a valid explanation.',
+    reason_too_long: 'The explanation exceeded the allowed length.',
+    invalid_evidence_shape: 'The evidence list had an invalid format.',
+    evidence_count_limit: 'The judge returned more evidence passages than allowed.',
+    invalid_evidence_entry: 'An evidence entry had an invalid format.',
+    invalid_source: 'The judge referenced a source outside this check.',
+    source_unavailable: 'The cited source document was unavailable.',
+    invalid_position: 'The evidence referred to an unknown model position.',
+    source_position_mismatch: 'The cited source was not assigned to that model position.',
+    invalid_quote_shape: 'A cited passage was missing or was not plain text.',
+    quote_too_long: 'A cited passage exceeded the allowed length.',
+    quote_not_in_passages: 'The cited text could not be found in the passages supplied to the judge.',
+    quote_not_in_original: 'The cited text could not be matched to the original source document.',
+    invalid_date: 'The evidence date was not valid text or exceeded the allowed length.',
+    date_not_in_source: 'The evidence date could not be found in the source.',
+    invalid_scope: 'The scope description was not valid text or exceeded the allowed length.',
+    invalid_limitations: 'The limitations description was not valid text or exceeded the allowed length.',
+    missing_required_evidence: 'The verdict lacked the original evidence required to justify it.',
+    quote_total_limit: 'The combined evidence passages exceeded the allowed size.'
+  };
+  function rejectionDetails(errors, item, verification) {
+    const block = element('div', 'contradiction-source-validation');
+    block.append(element('p', 'contradiction-source-reason', 'Why this check was rejected:'));
+    const list = element('ul', 'contradiction-source-validation-errors');
+    errors.forEach(error => {
+      const index = Number.isInteger(error.evidence_index) && error.evidence_index >= 0 && error.evidence_index < 8
+        ? `Passage ${error.evidence_index + 1}: ` : '';
+      const description = Object.hasOwn(rejectionExplanations, error.code)
+        ? rejectionExplanations[error.code] : 'The judge response failed validation; no more specific explanation is available.';
+      const row = element('li', '', index + description);
+      const position = (item.positions || []).find(value => value.id === error.position_id);
+      if (position?.models?.length) row.append(document.createTextNode(` Position: ${position.models.join(', ')}.`));
+      const sources = (verification.sources || []).filter(source => source.id === error.source_id);
+      if (sources.length === 1) {
+        try {
+          const url = new URL(sources[0].url);
+          if (['https:', 'http:'].includes(url.protocol)) {
+            const link = element('a', 'source-check-link', sources[0].title || url.hostname);
+            link.href = url.href; link.target = '_blank'; link.rel = 'noopener noreferrer';
+            row.append(document.createTextNode(' Source: '), link);
+          }
+        } catch (_) { /* Diagnostics never trust a malformed source URL. */ }
+      }
+      list.append(row);
+    });
+    block.append(list);
+    return block;
+  }
+  function fallbackModelNote(verification) {
+    const model = verification.runtime?.model;
+    return verification.runtime?.fallback_used === true && typeof model === 'string' && model.trim()
+      ? element('p', 'contradiction-source-context', `Source-check model: ${model.trim().slice(0, 160)} (fallback)`) : null;
+  }
   function contradictionResult(item, verification, evidenceOpen = false) {
     const section = element('section', 'contradiction-source-check');
     section.dataset.contradictionId = item.contradiction_id;
@@ -732,10 +794,15 @@
     section.append(element('h4', 'contradiction-source-heading', 'Source check'));
     const position = (item.positions || []).find(pos => pos.id === item.supported_position_id);
     const positionName = position ? position.summary || (position.models || []).join(', ') : '';
-    const evidence = (item.evidence || []).filter(proof => proof.quote && proof.source_id
+    const validationErrors = (Array.isArray(item.validation_errors) ? item.validation_errors : [])
+      .filter(error => error && typeof error.code === 'string').slice(0, 12);
+    const rejected = validationErrors.length > 0;
+    if (rejected) section.dataset.checkState = 'unavailable';
+    const evidence = (Array.isArray(item.evidence) ? item.evidence : []).filter(proof => proof?.quote && proof.source_id
       && (verification.sources || []).some(source => source.id === proof.source_id));
-    const supported = item.checked && evidence.length > 0;
-    const verdict = item.state === 'omitted' ? 'Omitted: ' + reasonLabel(item.reason_code)
+    const supported = item.checked && !rejected && evidence.length > 0;
+    const verdict = rejected ? 'Check unavailable: Judge response rejected'
+      : item.state === 'omitted' ? 'Omitted: ' + reasonLabel(item.reason_code)
       : item.state === 'pending' ? 'Waiting to check this contradiction'
       : !item.checked ? 'Check unavailable: ' + reasonLabel(item.reason_code)
       : !supported ? 'Existing evidence is insufficient'
@@ -743,8 +810,13 @@
         conditions_explain: 'Different conditions explain the disagreement', sources_conflict: 'The sources disagree',
         insufficient_evidence: 'Existing evidence is insufficient'}[item.verdict] || 'Existing evidence is insufficient';
     section.append(element('p', 'contradiction-source-verdict', verdict));
+    if (rejected) section.append(rejectionDetails(validationErrors, item, verification));
+    else if (!item.checked && item.reason_code === 'evidence_mismatch') section.append(element('p', 'contradiction-source-context',
+      'No more specific rejection reason was saved with this result.'));
     if (item.coverage_limited) section.append(element('p', 'contradiction-source-context', 'Some sources were omitted due to the source budget.'));
-    if (item.reason && (supported || item.verdict === 'insufficient_evidence')) section.append(element('p', 'contradiction-source-reason', item.reason));
+    if (!rejected && item.reason && (supported || item.verdict === 'insufficient_evidence')) section.append(element('p', 'contradiction-source-reason', item.reason));
+    const modelNote = fallbackModelNote(verification);
+    if (modelNote) section.append(modelNote);
     const disclosure = element('details', 'contradiction-source-evidence-details');
     disclosure.open = evidenceOpen;
     disclosure.append(element('summary', '', `View evidence · ${evidence.length} ${evidence.length === 1 ? 'passage' : 'passages'}`));
@@ -810,6 +882,8 @@
     box.dataset.sourcePending = String(isPending(verification));
     const summary = element('p', 'source-verification-status', status(verification)); summary.setAttribute('role', 'status');
     box.append(summary, element('p', 'source-check-coverage', 'Checks factual disagreements using sources already supplied by the models. This is not a complete fact-check of the consensus.'));
+    const modelNote = fallbackModelNote(verification);
+    if (modelNote) box.append(modelNote);
     if (cards) box.append(element('p', 'source-verification-explanation', 'Results and original evidence appear with each contradiction in Differences.'));
     target.prepend(box);
     if (!cards && ((verification.findings || []).length || (verification.exclusions || []).length)) {

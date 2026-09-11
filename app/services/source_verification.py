@@ -57,11 +57,12 @@ class Limits:
     total_seconds: int = 60
     fallback_sources_per_position: int = 2
     model: str = field(default_factory=lambda: cfg.get_source_verification_model())
+    fallback_model: str = field(default_factory=lambda: cfg.get_source_verification_fallback_model())
 
     @classmethod
     def configured(cls):
         return cls(**{name: _env(name.upper(), default, 1, default * 4)
-                      for name, default in cls().__dict__.items() if name != 'model'})
+                      for name, default in cls().__dict__.items() if name not in ('model', 'fallback_model')})
 
 
 def answer_version(text):
@@ -207,10 +208,76 @@ def _parse_judge_output(raw, *, truncated=False):
     return {'findings': findings}
 
 
+def _availability_error(exc):
+    status = getattr(exc, 'status_code', None)
+    if status is None and isinstance(exc, httpx.HTTPStatusError):
+        status = exc.response.status_code
+    if status == 429:
+        return 'rate_limited'
+    if status == 404:
+        return 'model_unavailable'
+    if isinstance(status, int) and status >= 500:
+        return 'upstream_error'
+    if isinstance(exc, (TimeoutError, httpx.TimeoutException)):
+        return 'timeout'
+    if isinstance(exc, httpx.TransportError):
+        return 'network_error'
+    return None
+
+
 def judge_sources(payload, keys, limits):
+    """One primary attempt and at most one availability fallback, same credentials.
+
+    The parent deadline/call budget remains authoritative; the primary receives
+    half the remaining time when a fallback is configured. Invalid content never
+    causes a second opinion. No raw errors, keys or rejected output are recorded.
+    """
+    from app.services.llm.credentials import openrouter_api_key
+    if not openrouter_api_key(keys):
+        raise SourceCheckError('missing_credential')
+    models = [limits.model]
+    if limits.fallback_model and limits.fallback_model != limits.model:
+        models.append(limits.fallback_model)
+    attempts = []
+    parent = current_analysis_budget()
+    contradiction = payload.get('check_type') == 'contradiction_evidence' or payload.get('mode') == 'contradiction_evidence'
+    if contradiction:
+        from app.services.contradiction_verification import _input_size
+        input_size = _input_size(payload)
+    else:
+        input_size = 0
+    for index, model in enumerate(models):
+        try:
+            raise_if_provider_cancelled()
+            if parent:
+                parent.check()
+            if index and input_size * (index + 1) > limits.input_tokens:
+                raise SourceCheckError('input_limit')
+            claim_analysis_call()
+            attempts.append({'model': model, 'status': 'started'})
+            if parent and index == 0 and len(models) > 1:
+                attempt_budget = AnalysisBudget(seconds=max(.001, (parent.deadline - time.monotonic()) / 2), max_calls=1)
+                with bind_analysis_budget(attempt_budget):
+                    raw, usage = _judge_sources_once(payload, keys, replace(limits, model=model))
+            else:
+                raw, usage = _judge_sources_once(payload, keys, replace(limits, model=model))
+            attempts[-1]['status'] = 'succeeded'
+            return raw, {**usage, 'calls': len(attempts), 'model': model,
+                'fallback_used': len(attempts) > 1, 'model_attempts': attempts}
+        except Exception as exc:
+            availability = _availability_error(exc)
+            if attempts and attempts[-1]['status'] == 'started':
+                attempts[-1].update(status='failed', error_code=availability or _failure_code(exc))
+            if index == 0 and len(models) > 1 and availability and (parent is None or time.monotonic() < parent.deadline):
+                continue
+            exc.source_runtime = {'calls': len(attempts), 'model': attempts[-1]['model'] if attempts else limits.model,
+                'fallback_used': len(attempts) > 1, 'model_attempts': attempts}
+            raise
+
+
+def _judge_sources_once(payload, keys, limits):
     from app.services.llm.credentials import openrouter_api_key
     from app.services.llm.engines import OPENROUTER_CHAT_COMPLETIONS_URL, openrouter_headers
-    claim_analysis_call()
     key = openrouter_api_key(keys)
     if not key:
         raise SourceCheckError('missing_credential')
@@ -240,6 +307,14 @@ def judge_sources(payload, keys, limits):
         raise SourceCheckError('output_limit' if truncated else 'invalid_output')
     usage = {**(result.get('usage') or {}), 'output_truncated': truncated}
     return _parse_judge_output(raw, truncated=truncated), usage
+
+
+def record_judge_runtime(result, usage):
+    for key in ('calls', 'model', 'fallback_used', 'model_attempts'):
+        if key in usage:
+            result['runtime'][key] = usage[key]
+    if usage.get('model'):
+        result['model'] = usage['model']
 
 
 def _validated_quote(value, document):
@@ -443,7 +518,7 @@ def execute_source_package(*, package, question, answer_version, keys, resolved_
     sources = {}
     for source in package['sources']:
         sources.setdefault(source['id'], []).append(source)
-    budget = AnalysisBudget(seconds=limits.seconds, max_calls=1)
+    budget = AnalysisBudget(seconds=limits.seconds, max_calls=2 if limits.fallback_model and limits.fallback_model != limits.model else 1)
     try:
         with bind_analysis_budget(budget):
             for pair in pairs:
@@ -508,6 +583,7 @@ def execute_source_package(*, package, question, answer_version, keys, resolved_
                     result['runtime']['error_code'] = 'output_limit'
                 result['runtime'].update({k: usage[k] for k in ('prompt_tokens', 'completion_tokens', 'cost')
                     if type(usage.get(k)) in (int, float) and usage[k] >= 0})
+                record_judge_runtime(result, usage)
             else:
                 accepted_by_key = {}
                 rejected_findings = {}
@@ -519,6 +595,7 @@ def execute_source_package(*, package, question, answer_version, keys, resolved_
                 result['runtime'].get('error_code') or 'invalid_output') for p in pairs]
     except Exception as exc:
         code = _failure_code(exc)
+        record_judge_runtime(result, getattr(exc, 'source_runtime', {}))
         result['runtime']['error_code'] = code
         result['findings'] = [_pending(p, errors.get(p['source_id'], code)) for p in pairs]
         logging.warning('Source package failed code=%s pairs=%d', code, len(pairs))

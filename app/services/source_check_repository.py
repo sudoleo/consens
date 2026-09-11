@@ -152,6 +152,7 @@ def _complete_contradictions(plan, package, result):
     documents = [doc for doc in result.get('documents', []) if isinstance(doc, dict)
                  and doc.get('source_id') in ids] if valid and isinstance(result.get('documents'), list) else []
     return {**snapshot, **result, 'schema_version': 4, 'check_type': 'contradiction_evidence',
+        'prompt_version': snapshot.get('prompt_version'),
         'run_id': snapshot.get('run_id'), 'answer_version': snapshot['answer_version'],
         'package_id': package['id'], 'findings': findings, 'documents': documents,
         'sources': package.get('sources', []),

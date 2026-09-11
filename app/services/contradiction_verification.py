@@ -17,7 +17,7 @@ from app.services.source_documents import select_passages, fetch_failure_code
 from app.services.llm.provider_runtime import AnalysisBudget, bind_analysis_budget, raise_if_provider_cancelled
 
 MODE = 'contradiction_evidence'
-PROMPT_VERSION = 'contradiction-evidence-v2'
+PROMPT_VERSION = 'contradiction-evidence-v3'
 _INPUT_ERRORS = {'missing_checkability', 'invalid_consensus_anchor', 'unverified_model_positions'}
 SYSTEM = '''Adjudicate the supplied factual disputes using only supplied original source passages.
 Return JSON {"findings":[{"contradiction_id":"", "verdict":"supports_position|conditions_explain|sources_conflict|insufficient_evidence",
@@ -211,6 +211,7 @@ def plan_contradiction_verification(*, question, consensus, sources, differences
             finding = _base_finding(finding, 'no_sources')
         findings.append(finding)
     snapshot = _snapshot(version, run_id, findings, list(selected.values()), limits.model)
+    snapshot['fallback_model'] = limits.fallback_model
     snapshot['exclusions'] = exclusions
     snapshot['scope'].update(detected_contradictions=len(findings) + len(exclusions),
                              excluded_contradictions=len(exclusions))
@@ -243,47 +244,126 @@ def finish_snapshot(result):
     return result
 
 
-def validate_findings(raw, expected, documents, *, rejected=None):
+def _quote_rejection_code(value, document):
+    """Explain an already rejected quote without repairing or copying its text."""
+    if not isinstance(value, str) or not value:
+        return 'invalid_quote_shape'
+    if len(value) > 402:
+        return 'quote_too_long'
+    candidates = [value]
+    if (value[0], value[-1]) in {('"', '"'), ("'", "'"), ('“', '”'),
+            ('‘', '’'), ('„', '“'), ('«', '»'), ('‹', '›')}:
+        candidates.append(value[1:-1])
+    candidates = [candidate for candidate in candidates if 1 <= len(candidate) <= 400]
+    if not candidates:
+        return 'quote_too_long'
+    if any(candidate in document['text'] for candidate in candidates):
+        return 'quote_not_in_original'
+    return 'quote_not_in_passages'
+
+
+def validate_findings(raw, expected, documents, *, rejected=None, diagnostics=None):
+    """Validate exact evidence and emit bounded, text-free rejection diagnostics.
+
+    The broad rejection categories remain compatible with existing snapshots.
+    Diagnostic IDs can only name this admitted dispute's positions and sources;
+    unknown model output, quotes, reasons and exception text are never copied.
+    """
     from app.services.source_verification import _validated_quote
     by_id = {f['contradiction_id']: f for f in expected}
     accepted, seen = {}, set()
-    for item in raw.get('findings', []) if isinstance(raw, dict) and isinstance(raw.get('findings'), list) else []:
+    errors = {key: [] for key in by_id}
+
+    def add(key, code, *, index=None, sid=None, pid=None):
+        if len(errors[key]) >= 12:
+            return
+        positions = by_id[key]['positions']
+        known_positions = {p['id'] for p in positions}
+        known_sources = {s['source_id'] for p in positions for s in p.get('sources', [])}
+        row = {'code': code}
+        if type(index) is int and 0 <= index < 8:
+            row['evidence_index'] = index
+        if isinstance(sid, str) and sid in known_sources:
+            row['source_id'] = sid
+        if isinstance(pid, str) and pid in known_positions:
+            row['position_id'] = pid
+        if row not in errors[key]:
+            errors[key].append(row)
+
+    def reject(key, broad):
+        accepted.pop(key, None)
+        if rejected is not None:
+            rejected[key] = broad
+
+    outer_valid = isinstance(raw, dict) and isinstance(raw.get('findings'), list)
+    global_errors = [] if outer_valid else ['invalid_output']
+    for item in raw['findings'] if outer_valid else []:
         if not isinstance(item, dict) or not isinstance(item.get('contradiction_id'), str):
+            if 'invalid_finding_shape' not in global_errors:
+                global_errors.append('invalid_finding_shape')
             continue
         key = item['contradiction_id']
+        if key not in by_id:
+            if 'unknown_finding' not in global_errors:
+                global_errors.append('unknown_finding')
+            continue
         if key in seen:
-            accepted.pop(key, None)
-            if rejected is not None:
-                rejected[key] = 'invalid_output'
+            add(key, 'duplicate_finding')
+            reject(key, 'invalid_output')
             continue
         seen.add(key)
-        finding = by_id.get(key)
-        if not finding:
-            continue
+        finding = by_id[key]
         positions = {p['id']: p for p in finding['positions']}
+        source_ids = {s['source_id'] for p in positions.values() for s in p.get('sources', [])}
         verdict, reason, evidence = item.get('verdict'), item.get('reason'), item.get('evidence')
         supported = item.get('supported_position_id')
-        if (verdict not in ('supports_position', 'conditions_explain', 'sources_conflict', 'insufficient_evidence')
-                or not isinstance(reason, str) or not reason.strip() or len(reason) > 600
-                or not isinstance(evidence, list) or len(evidence) > 8
-                or (verdict == 'supports_position' and (not isinstance(supported, str) or supported not in positions))
-                or (verdict != 'supports_position' and supported is not None)):
+        if verdict not in ('supports_position', 'conditions_explain', 'sources_conflict', 'insufficient_evidence'):
+            add(key, 'invalid_verdict')
+        if not isinstance(reason, str) or not reason.strip():
+            add(key, 'invalid_reason')
+        elif len(reason) > 600:
+            add(key, 'reason_too_long')
+        if not isinstance(evidence, list):
+            add(key, 'invalid_evidence_shape')
+        elif len(evidence) > 8:
+            add(key, 'evidence_count_limit')
+        if verdict == 'supports_position' and (not isinstance(supported, str) or supported not in positions):
+            add(key, 'invalid_supported_position')
+        elif verdict != 'supports_position' and supported is not None:
+            add(key, 'unexpected_supported_position', pid=supported)
+        if errors[key]:
+            reject(key, 'invalid_output')
             continue
-        quotes, failed = [], False
-        for entry in evidence:
+        quotes = []
+        for index, entry in enumerate(evidence):
             if not isinstance(entry, dict):
-                failed = True
-                break
+                add(key, 'invalid_evidence_entry', index=index)
+                continue
             sid, pid = entry.get('source_id'), entry.get('position_id')
             position = positions.get(pid) if isinstance(pid, str) else None
-            doc = documents.get(sid) if isinstance(sid, str) else None
-            if not position or not doc or sid not in {s['source_id'] for s in position.get('sources', [])}:
-                failed = True
-                break
+            known_source = isinstance(sid, str) and sid in source_ids
+            doc = documents.get(sid) if known_source else None
+            if not position:
+                add(key, 'invalid_position', index=index, sid=sid)
+            if not known_source:
+                add(key, 'invalid_source', index=index, pid=pid)
+            elif not doc:
+                add(key, 'source_unavailable', index=index, sid=sid, pid=pid)
+            if position and known_source and sid not in {s['source_id'] for s in position.get('sources', [])}:
+                add(key, 'source_position_mismatch', index=index, sid=sid, pid=pid)
+                continue
+            if not position or not doc:
+                continue
             quote = _validated_quote(entry.get('quote'), doc)
-            if not quote or any(not isinstance(entry.get(k, ''), str) or len(entry.get(k, '')) > 400 for k in ('date', 'scope', 'limitations')):
-                failed = True
-                break
+            if not quote:
+                add(key, _quote_rejection_code(entry.get('quote'), doc), index=index, sid=sid, pid=pid)
+            invalid_metadata = False
+            for field in ('date', 'scope', 'limitations'):
+                if not isinstance(entry.get(field, ''), str) or len(entry.get(field, '')) > 400:
+                    add(key, 'invalid_' + field, index=index, sid=sid, pid=pid)
+                    invalid_metadata = True
+            if not quote or invalid_metadata:
+                continue
             date = entry.get('date', '')
             if date and date.lower() not in ('unknown', 'not specified', 'not relevant'):
                 dated_text = '\n'.join(line for line in doc['text'].splitlines()
@@ -291,23 +371,34 @@ def validate_findings(raw, expected, documents, *, rejected=None):
                 documentary_dates = ' '.join(str(d.get('value', '')) for d in doc.get('dates', [])
                     if str(d.get('origin', '')).startswith(('meta:', 'time:', 'json-ld:', 'http:last-modified')))
                 if date not in dated_text and date not in documentary_dates:
-                    failed = True
-                    break
+                    add(key, 'date_not_in_source', index=index, sid=sid, pid=pid)
+                    continue
             quotes.append({'source_id': sid, 'position_id': pid, 'quote': quote,
                 **{k: entry.get(k, '') for k in ('date', 'scope', 'limitations')}})
         covered = {q['position_id'] for q in quotes}
-        if (failed or sum(len(q['quote']) for q in quotes) > 1600
-                or (verdict == 'supports_position' and supported not in covered)
-                or (verdict in ('conditions_explain', 'sources_conflict') and covered != set(positions))):
-            if rejected is not None:
-                rejected[key] = 'evidence_mismatch'
+        if sum(len(q['quote']) for q in quotes) > 1600:
+            add(key, 'quote_total_limit')
+        required = {supported} if verdict == 'supports_position' else set(positions) if verdict in ('conditions_explain', 'sources_conflict') else set()
+        for missing in sorted(required - covered):
+            add(key, 'missing_required_evidence', pid=missing)
+        if errors[key]:
+            reject(key, 'evidence_mismatch')
             continue
         if verdict == 'supports_position' and any(not any(
                 documents.get(s['source_id'], {}).get('text') for s in p.get('sources', [])) for p in positions.values()):
             verdict, supported = 'insufficient_evidence', None
             reason = 'The available passages support only one side; evidence for another position could not be examined.'
         accepted[key] = {**finding, 'checked': True, 'state': 'checked', 'reason_code': None,
-            'verdict': verdict, 'supported_position_id': supported, 'reason': reason, 'evidence': quotes}
+            'verdict': verdict, 'supported_position_id': supported, 'reason': reason, 'evidence': quotes,
+            'validation_errors': []}
+    for key in by_id:
+        if key not in seen:
+            for code in global_errors:
+                add(key, code)
+            add(key, 'missing_finding')
+            reject(key, 'invalid_output')
+        if diagnostics is not None and errors[key]:
+            diagnostics[key] = errors[key]
     return list(accepted.values())
 
 
@@ -319,13 +410,13 @@ def _input_size(payload):
 
 def execute_contradiction_package(*, package, question, answer_version, keys, resolved_question,
                                   limits, fetch, judge):
-    from app.services.source_verification import _failure_code, _now
+    from app.services.source_verification import _failure_code, _now, record_judge_runtime
     started = time.monotonic()
     result = _snapshot(answer_version, package['run_id'], copy.deepcopy(package['pairs']), package['sources'], limits.model)
     result['package_id'] = package['id']
     active = [f for f in result['findings'] if f['state'] == 'pending']
-    documents, errors, selected, accepted, rejected = {}, {}, {}, {}, {}
-    budget = AnalysisBudget(seconds=limits.total_seconds, max_calls=1)
+    documents, errors, selected, accepted, rejected, diagnostics = {}, {}, {}, {}, {}, {}
+    budget = AnalysisBudget(seconds=limits.total_seconds, max_calls=2 if limits.fallback_model and limits.fallback_model != limits.model else 1)
     payload = {'mode': MODE, 'check_type': MODE, 'question': question, 'resolved_question': resolved_question,
         'current_date': datetime.now(timezone.utc).date().isoformat(), 'disputes': [], 'documents': []}
     try:
@@ -387,10 +478,11 @@ def execute_contradiction_package(*, package, question, answer_version, keys, re
                 budget.check()
                 result['runtime']['calls'] = 1
                 raw, usage = judge(payload, keys, limits)
+                record_judge_runtime(result, usage)
                 if time.monotonic() >= budget.deadline:
                     rejected.update({f['contradiction_id']: 'time_limit' for f in prepared})
                 else:
-                    accepted = {f['contradiction_id']: f for f in validate_findings(raw, prepared, selected, rejected=rejected)}
+                    accepted = {f['contradiction_id']: f for f in validate_findings(raw, prepared, selected, rejected=rejected, diagnostics=diagnostics)}
                 if usage.get('cache_hit') is True:
                     result['runtime'].update(calls=0, cache_hits=1)
                 result['runtime'].update({k: usage[k] for k in ('prompt_tokens', 'completion_tokens', 'cost') if type(usage.get(k)) in (int, float) and usage[k] >= 0})
@@ -399,6 +491,7 @@ def execute_contradiction_package(*, package, question, answer_version, keys, re
             else:
                 rejected.update({f['contradiction_id']: next(iter(errors.values()), 'no_sources') for f in prepared})
     except Exception as exc:
+        record_judge_runtime(result, getattr(exc, 'source_runtime', {}))
         code = 'time_limit' if time.monotonic() >= budget.deadline else _failure_code(exc)
         result['runtime']['error_code'] = code
     final = []
@@ -408,7 +501,10 @@ def execute_contradiction_package(*, package, question, answer_version, keys, re
             final.append(finding)
             continue
         code = rejected.get(cid) or result['runtime'].get('error_code') or 'invalid_output'
-        final.append(accepted.get(cid) or _base_finding(finding, code, omitted=code in ('input_limit', 'time_limit')))
+        completed = accepted.get(cid) or _base_finding(finding, code, omitted=code in ('input_limit', 'time_limit'))
+        if cid in diagnostics and cid not in accepted:
+            completed['validation_errors'] = diagnostics[cid]
+        final.append(completed)
     result['findings'] = final
     result['documents'] = [{k: v for k, v in d.items() if k != 'text'} for d in documents.values()]
     result['retrieval_errors'] = [{'source_id': sid, 'reason_code': code} for sid, code in errors.items()]
@@ -417,6 +513,7 @@ def execute_contradiction_package(*, package, question, answer_version, keys, re
         finding['checked_at'] = result['checked_at']
     result['runtime']['duration_ms'] = round((time.monotonic() - started) * 1000)
     result['runtime']['input_token_upper_bound'] = _input_size(payload)
+    result['runtime']['total_input_token_upper_bound'] = _input_size(payload) * result['runtime']['calls']
     return finish_snapshot(result)
 
 
@@ -433,6 +530,7 @@ def merge_verification(snapshot, partial):
     result = copy.deepcopy(snapshot)
     result.update(findings=list(originals.values()), documents=partial.get('documents', []),
         runtime=partial['runtime'], checked_at=partial['checked_at'], retrieval_errors=partial.get('retrieval_errors', []))
+    result['model'] = partial.get('model', result.get('model'))
     return finish_snapshot(result)
 
 

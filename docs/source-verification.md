@@ -40,7 +40,7 @@ API, Watches und Topics benutzen dieselbe Pipeline mit ihrem Owner-/Run-Kontext.
 ## Modus, Identität und Ergebnisse
 
 `schema_version: 4`, `check_type: contradiction_evidence` und
-`prompt_version: contradiction-evidence-v2` unterscheiden neue Prüfungen.
+`prompt_version: contradiction-evidence-v3` unterscheiden neue Prüfungen.
 `source_verification.py` bleibt der gemeinsame Entry Point und dispatcht
 `plan_source_verification`, `execute_source_package`, `merge_source_verification`
 und `verify_sources` in den neuen Modus von `contradiction_verification.py`.
@@ -94,6 +94,20 @@ Evidenz. Widersprüchliche Quellen und unterschiedliche Bedingungen benötigen
 Belege für alle Positionen. Eine gestützte Position braucht ihre eigenen Belege;
 fehlt die Gegenseite im Abruf, wird daraus kein Sieg durch Quellenmangel.
 
+Abgelehnte Findings behalten ihre kompatible Kategorie `evidence_mismatch` oder
+`invalid_output` und speichern zusätzlich bis zu zwölf `validation_errors`.
+Jeder Eintrag enthält einen stabilen `code` und gegebenenfalls `evidence_index`
+(nullbasiert), `source_id` und `position_id`. Nur dem Prüfauftrag bekannte IDs
+werden übernommen, keine Rohzitate, freien Modellfehlermeldungen oder Credentials.
+Die Codes unterscheiden unter anderem `quote_not_in_passages`,
+`quote_not_in_original`, `source_position_mismatch`, `date_not_in_source`,
+`missing_required_evidence`, ungültige Felder und überschrittene Beleglimits.
+Die Diagnosen bleiben über Job-Persistenz, Polling und Wiederherstellung erhalten
+und erscheinen verständlich mit Belegnummer/Quelle direkt an der Contradiction.
+Historische Ablehnungen ohne Diagnose bleiben ausdrücklich unspezifisch; fehlende
+Details werden nicht nachträglich erfunden. Abgelehnte Zitate werden niemals als
+validierte Evidenz dargestellt.
+
 Datierung, Geltungsbereich, Populationen, Definitionen und Einschränkungen sind
 Teil der Beurteilung. Abruf- oder Copyrightdatum beweisen keine Aktualität.
 Modellmehrheit ist kein Quellenbeweis; fehlende Quellen, Fetch-Fehler und fehlende
@@ -120,8 +134,9 @@ D-IDs identifizieren kanonische URLs, S-IDs in Modellantworten bleiben erhalten.
 Passageauswahl. Es gibt **keine neue Websuche** und keinen Browserabruf als Fallback.
 PDF und sonstige nicht unterstützte Formate bleiben explizit nicht abrufbar.
 
-Ein v4-Job hat genau ein begrenztes Paket und höchstens einen Judge-Aufruf im
-normalen Durchlauf. Die folgenden Limits gelten für den gesamten Auftrag und
+Ein v4-Job hat genau ein begrenztes Paket und einen primären Judge-Aufruf.
+Ein optional konfiguriertes Ersatzmodell erlaubt höchstens einen zusätzlichen
+Versuch bei technischen Ausfällen. Die folgenden Limits gelten für den gesamten Auftrag und
 werden bei Aufnahme gespeichert; Umgebungsschlüssel haben Präfix
 `SOURCE_VERIFICATION_`. Positive Werte sind höchstens viermal so groß wie Default.
 
@@ -142,6 +157,37 @@ kein Versprechen, es voll auszunutzen. Queue-Wartezeit/BYOK-Pausen gehören nich
 zur aktiven Ausführungszeit. Repository-RPCs behalten ihre eigenen Zeitgrenzen.
 
 ## Jobs, Wiederaufnahme und alte Daten
+
+Im Adminbereich stehen `Source-check model` und `Source-check fallback model`.
+Die Felder `app_config/models.source_verification_model` und
+`source_verification_fallback_model` speichern vollständige OpenRouter-IDs.
+Der Fallback ist standardmäßig leer (`Disabled`); Gemini 3.5 Flash Lite ist eine
+auswählbare Empfehlung, sofern ein anderes primäres Modell verwendet wird.
+Gleiche Modelle und ungültige IDs werden beim Speichern abgewiesen. Alte
+Admin-Payloads erhalten die vorhandene Einstellung; fehlende DB-Werte laden als
+deaktiviert. Beide Modelle werden bei Job-Annahme eingefroren; alte Jobs ohne
+Fallback-Feld bleiben auch nach Konfigurationsänderungen bei einem Modell.
+
+Der Ersatzversuch erfolgt ausschließlich bei HTTP 404/429/5xx, Transportfehlern
+oder einem Timeout mit verbleibendem Gesamtbudget. Fehlende/ungültige Credentials,
+ungültige JSON-Ausgaben, abgelehnte Belege und fachliche Urteile lösen keinen
+Fallback aus. Beide Aufrufe verwenden dieselben Owner-/BYOK-Credentials und ZDR.
+Mit aktivem Ersatzmodell erhält der erste Aufruf höchstens die Hälfte der nach
+Abrufen verbleibenden Zeit. Vor dem zweiten Aufruf muss auch die wiederholte
+vollständige Eingabe ins gesamte Inputbudget passen. Es gibt keine weiteren
+Abrufe oder Websuche durch den Fallback. `runtime.model_attempts` speichert
+Modell, Status und sicheren Fehlercode, `runtime.model` das tatsächlich
+verwendete Modell, `fallback_used` den zweiten Versuch. Ein Modellwechsel ist
+kein erfolgreiches Quellenurteil. Der versionierte Urteilscache bindet beide
+Modellwahlen und erhält die Modellprovenienz bei Cachetreffern.
+Transaktionale Cache-Schreibzugriffe werden erst nach erfolgreichem Speichern
+des Prüfergebnisses ausgeführt; sie können dessen Prüfdeadline nicht mehr
+überschreiten. Einzelne begrenzte Cache-Lesezugriffe bleiben im Prüfbudget.
+Ein v4-Paket mit bereits begonnenem, aber ungewissem Abschluss startet bei
+Wiederaufnahme keine bezahlte Prüfung erneut. Es erhält `worker_interrupted`,
+falls das vorherige Ergebnis nicht gesichert wurde. Eine reine Credential-Pause
+verbraucht diesen Versuch nicht. Damit vervielfacht ein Speicherfehler weder
+Fallback-Aufrufe noch das zugelassene Gesamtbudget.
 
 Die vorhandenen Firestore-Jobs, Pakete, Lease-Tokens, ownergebundenes Polling,
 Revisionsprüfung, BYOK-Wiederaufnahme, Parent-/Account-Löschgrenzen und Retention

@@ -1665,7 +1665,7 @@ ursprünglichen Modellpositionen werden durch Quellenbefunde nicht verändert.
 
 `source_verification.py` dispatcht neue Pläne nach
 `contradiction_verification.py`: Schema 4, `check_type: contradiction_evidence`,
-`prompt_version: contradiction-evidence-v2`. Nur `contradiction` + `major`,
+`prompt_version: contradiction-evidence-v3`. Nur `contradiction` + `major`,
 faktisch prüfbare Frage und gültige Consensus-/Modellanker werden aufgenommen.
 Jeder Befund trägt stabile `contradiction_id`, `difference_index`, `run_id`,
 `answer_version` und `positions_version`; Positionen heißen innerhalb eines
@@ -1681,6 +1681,12 @@ Scope-Felder `detected_contradictions`/`excluded_contradictions` zählen sie.
 Fehlende Prüfbarkeitsangaben, ungültige Anker oder nicht zuordenbare Modellzitate
 führen ohne verbleibenden Prüfauftrag zu `contradiction_inputs_unavailable`.
 Die UI zeigt den Grund direkt an der Difference, getrennt von Quellenurteilen.
+Abgelehnte Quellenurteile tragen außerdem bis zu zwölf `validation_errors`
+mit festen Codes und ausschließlich bekannten Quellen-/Positions-IDs sowie
+optionalem Belegindex. Die bisherigen Kategorien `evidence_mismatch` und
+`invalid_output` bleiben kompatibel. Job-Persistenz und Polling erhalten die
+konkreten Gründe; die UI zeigt sie direkt am Widerspruch, ohne abgelehnte
+Rohzitate als Evidenz auszugeben.
 Für alte v4-Snapshots ohne dieses Feld werden ausschließlich Anzeigehinweise
 aus den gespeicherten Differences abgeleitet. Sachliche Termin-/Ereignisfragen
 bleiben prüfbar; Fiktion wird nicht aus widersprechenden Modellantworten
@@ -1733,6 +1739,20 @@ PDF bleibt ausdrücklich `unsupported_document`. Das Modell kommt weiterhin aus
 `app_config/models.source_verification_model` (Default
 `google/gemini-3.5-flash-lite`), wird bei Aufnahme eingefroren und im Admin unter
 Consensus & Deep Think → Source Checks gewählt.
+Das daneben wählbare `source_verification_fallback_model` ist standardmäßig
+leer (`Disabled`) und erlaubt ein anderes Registry-Modell als Ersatz. Beide
+Modellwahlen werden pro Job eingefroren; ältere Jobs ohne Fallback-Feld bleiben
+deaktiviert. Nur Verfügbarkeitsfehler (HTTP 404/429/5xx, Netzfehler, Timeout)
+lösen einen zweiten Versuch aus, nie ungültige Belege oder Credentials. Beide
+Versuche teilen Gesamtzeit/Inputbudget und dieselben BYOK-/Owner-Credentials;
+der erste erhält bei aktivem Ersatz höchstens die Hälfte der verbleibenden Zeit.
+`runtime.model_attempts`, `runtime.model` und `fallback_used` dokumentieren die
+Ausführung. Der Cachevertrag `verdict-dispatch-v1` bindet beide Modelle und
+speichert deren Provenienz neben der weiterhin separat validierten Ausgabe.
+Transaktionale Cachewrites erfolgen nach dem erfolgreichen Ergebnis-Commit,
+außerhalb der Prüfdeadline. Ein erneut übernommenes v4-Paket mit ungewissem
+vorherigem Abschluss wird als `worker_interrupted` gespeichert, ohne nochmals
+bezahlte Modellaufrufe auszulösen; Credential-Pausen bleiben wiederaufnehmbar.
 
 Chat-/Bookmark-/Share-/API-/Watch-/Topic-Snapshots speichern den v4-Jobverweis;
 Wiederöffnen startet keinen neuen Judge. Owner-Polling bleibt paginiert und

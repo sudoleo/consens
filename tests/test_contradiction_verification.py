@@ -353,3 +353,128 @@ def test_only_sources_for_metadata_within_budget_are_fetched():
     assert result['findings'][0]['reason_code'] == 'input_limit'
     assert result['findings'][1]['checked']
     assert set(fetched) == {'https://example.com/a', 'https://example.com/b'}
+
+
+def validation_case():
+    finding = plan()['snapshot']['findings'][0]
+    sources = plan()['snapshot']['sources']
+    documents = {s['id']: doc(s['url']) for s in sources}
+    evidence = [{'source_id': p['sources'][0]['source_id'], 'position_id': p['id'],
+                 'quote': documents[p['sources'][0]['source_id']]['text']} for p in finding['positions']]
+    raw = {'findings': [{'contradiction_id': finding['contradiction_id'], 'verdict': 'sources_conflict',
+        'supported_position_id': None, 'reason': 'Two different published amounts.', 'evidence': evidence}]}
+    return finding, documents, raw
+
+
+@pytest.mark.parametrize('code', [
+    'invalid_output', 'invalid_finding_shape', 'unknown_finding', 'duplicate_finding', 'missing_finding',
+    'invalid_verdict', 'invalid_supported_position', 'unexpected_supported_position', 'invalid_reason',
+    'reason_too_long', 'invalid_evidence_shape', 'evidence_count_limit', 'invalid_evidence_entry',
+    'invalid_source', 'source_unavailable', 'invalid_position', 'source_position_mismatch',
+    'invalid_quote_shape', 'quote_too_long', 'quote_not_in_passages', 'quote_not_in_original',
+    'invalid_date', 'date_not_in_source', 'invalid_scope', 'invalid_limitations',
+    'missing_required_evidence', 'quote_total_limit',
+])
+def test_every_rejection_has_precise_bounded_text_free_diagnostics(code):
+    finding, documents, raw = validation_case()
+    row = raw['findings'][0]
+    entry = row['evidence'][0]
+    sid = entry['source_id']
+    if code == 'invalid_output':
+        raw = {'findings': 'private invalid output'}
+    elif code == 'invalid_finding_shape':
+        raw['findings'] = ['private model text']
+    elif code == 'unknown_finding':
+        row['contradiction_id'] = 'private unknown model identity'
+    elif code == 'duplicate_finding':
+        raw['findings'].append(copy.deepcopy(row))
+    elif code == 'missing_finding':
+        raw['findings'] = []
+    elif code == 'invalid_verdict':
+        row['verdict'] = 'private unrecognized verdict'
+    elif code == 'invalid_supported_position':
+        row.update(verdict='supports_position', supported_position_id='private position')
+    elif code == 'unexpected_supported_position':
+        row['supported_position_id'] = 'P1'
+    elif code == 'invalid_reason':
+        row['reason'] = {'private': 'invalid reason'}
+    elif code == 'reason_too_long':
+        row['reason'] = 'private text' * 100
+    elif code == 'invalid_evidence_shape':
+        row['evidence'] = {'private': 'bad evidence array'}
+    elif code == 'evidence_count_limit':
+        row['evidence'] = [entry] * 9
+    elif code == 'invalid_evidence_entry':
+        row['evidence'][0] = 'private invalid evidence'
+    elif code == 'invalid_source':
+        entry['source_id'] = 'private source https://secret.example'
+    elif code == 'source_unavailable':
+        documents.pop(sid)
+    elif code == 'invalid_position':
+        entry['position_id'] = 'private position'
+    elif code == 'source_position_mismatch':
+        entry['source_id'] = row['evidence'][1]['source_id']
+    elif code == 'invalid_quote_shape':
+        entry['quote'] = {'private': 'not a quote'}
+    elif code == 'quote_too_long':
+        entry['quote'] = 'private quote' * 100
+    elif code == 'quote_not_in_passages':
+        documents[sid]['_original_text'] = documents[sid]['text']
+        documents[sid]['text'] = 'Different selected passage.'
+    elif code == 'quote_not_in_original':
+        documents[sid]['_original_text'] = 'Unrelated original document.'
+    elif code in ('invalid_date', 'invalid_scope', 'invalid_limitations'):
+        entry[code.removeprefix('invalid_')] = {'private': 'metadata'}
+    elif code == 'date_not_in_source':
+        entry['date'] = '2037-01-01'
+    elif code == 'missing_required_evidence':
+        row['evidence'] = [entry]
+    elif code == 'quote_total_limit':
+        entry['quote'] = 'x' * 350
+        documents[sid]['text'] = entry['quote']
+        row['evidence'] = [copy.deepcopy(entry) for _ in range(5)] + [row['evidence'][1]]
+    rejected, diagnostics = {}, {}
+    assert cv.validate_findings(raw, [finding], documents, rejected=rejected, diagnostics=diagnostics) == []
+    errors = diagnostics[finding['contradiction_id']]
+    assert code in {e['code'] for e in errors}
+    assert 1 <= len(errors) <= 12
+    assert rejected[finding['contradiction_id']] in ('invalid_output', 'evidence_mismatch')
+    for error in errors:
+        assert set(error) <= {'code', 'evidence_index', 'source_id', 'position_id'}
+        assert 'private' not in str(error)
+        if 'source_id' in error:
+            assert error['source_id'] in {s['source_id'] for p in finding['positions'] for s in p['sources']}
+        if 'position_id' in error:
+            assert error['position_id'] in {'P1', 'P2'}
+        if 'evidence_index' in error:
+            assert 0 <= error['evidence_index'] < 8
+
+
+def test_multiple_bad_quotes_are_all_rejected_and_diagnostics_are_bounded():
+    finding, documents, raw = validation_case()
+    entry = raw['findings'][0]['evidence'][0]
+    raw['findings'][0]['evidence'] = [dict(entry, quote={'private': 'not text'},
+        date={'private': 'not text'}, scope={'private': 'not text'}, limitations={'private': 'not text'}) for _ in range(8)]
+    diagnostics = {}
+    assert cv.validate_findings(raw, [finding], documents, diagnostics=diagnostics) == []
+    assert len(diagnostics[finding['contradiction_id']]) == 12
+
+
+def test_cosmetic_quotes_still_validate_without_diagnostics():
+    finding, documents, raw = validation_case()
+    raw['findings'][0]['evidence'][0]['quote'] = '“' + raw['findings'][0]['evidence'][0]['quote'] + '”'
+    rejected, diagnostics = {}, {}
+    accepted = cv.validate_findings(raw, [finding], documents, rejected=rejected, diagnostics=diagnostics)
+    assert len(accepted) == 1
+    assert accepted[0]['checked']
+    assert accepted[0]['validation_errors'] == []
+    assert rejected == diagnostics == {}
+
+
+def test_unknown_extra_finding_does_not_spoil_complete_valid_results():
+    finding, documents, raw = validation_case()
+    raw['findings'].append({'contradiction_id': 'private unknown id'})
+    diagnostics = {}
+    accepted = cv.validate_findings(raw, [finding], documents, diagnostics=diagnostics)
+    assert len(accepted) == 1
+    assert diagnostics == {}
