@@ -861,6 +861,10 @@ der Python-Staleness-Test auch indirekte Änderungen erkennt.
   innerhalb ihrer Fuellung; Reasoning schimmert langsamer und dezenter.
   Wartende und terminale Modelle bleiben ruhig. Reduced Motion und Forced
   Colors deaktivieren den dekorativen Balkenschimmer.
+  Bis 640 px stehen Modellname, Skip und Status ueber einem durchgehenden
+  Balken ueber die volle Zeilenbreite. Die kompakten Eintraege sind 40 px
+  hoch (Touch: 44 px inklusive unsichtbar erweitertem Skip-Trefferbereich).
+  Desktop nutzt schmalere Namens-/Statusspalten fuer laengere Balken.
   Am Ende klappt der Block zusammen und uebergibt an den **Provenance-Fuss**
   `#runProvenance` unter der Antwort. Seit **2026-07-28 zwei Zeilen statt drei**
   — die Anordnung macht allein das Grid in `shell.css`

@@ -95,7 +95,7 @@ def test_model_status_layout_and_phase_handoff(progress_page, width, dark):
         page.locator("#runPast").bounding_box()["y"] + page.locator("#runPast").bounding_box()["height"]
     ) >= 16
     assert page.locator("#runLabel").bounding_box()["width"] < 220
-    assert page.locator(".run-model").first.bounding_box()["height"] <= 28
+    assert page.locator(".run-model").first.bounding_box()["height"] <= (40 if width <= 640 else 28)
     page.evaluate("() => progressFixture(0, 'A'.repeat(987654))")
     expect(page.locator('[data-box="model-0"] .run-model-time')).to_have_text("987,654 chars")
     assert page.evaluate('''() => {
@@ -105,7 +105,12 @@ def test_model_status_layout_and_phase_handoff(progress_page, width, dark):
         const name = row.querySelector('.run-model-name').getBoundingClientRect();
         const track = row.querySelector('.run-model-track').getBoundingClientRect();
         const status = row.querySelector('.run-model-time').getBoundingClientRect();
-        return name.right <= track.left && track.right <= status.left
+        const bounds = row.getBoundingClientRect();
+        const layoutFits = innerWidth <= 640
+          ? track.top >= Math.max(name.bottom, status.bottom)
+            && Math.abs(track.width - bounds.width) < 1
+          : name.right <= track.left && track.right <= status.left;
+        return layoutFits
           && Math.abs(timer.right - status.right) < 1
           && status.right <= innerWidth && row.scrollWidth <= row.clientWidth;
       });
@@ -174,8 +179,16 @@ def test_skip_has_a_full_touch_target_without_overflow(progress_page):
     page = progress_page
     page.set_viewport_size({"width": 320, "height": 850})
     skip = page.locator('[data-box="model-5"] .run-model-skip-btn')
+    before = page.locator(".run-model-track").last.bounding_box()
     expect(skip).to_be_visible(timeout=12000)
     box = skip.bounding_box()
     assert box["width"] >= 44 and box["height"] >= 44
+    assert page.locator(".run-model-track").last.bounding_box() == before
+    assert page.locator(".run-model").last.bounding_box()["height"] <= 44
     assert box["x"] + box["width"] <= 320
     assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+    screenshot_dir = os.environ.get("PROGRESS_SCREENSHOTS")
+    if screenshot_dir:
+        page.screenshot(path=str(Path(screenshot_dir) / "skip-touch-320.png"))
+    skip.tap(position={"x": box["width"] / 2, "y": box["height"] - 2})
+    assert page.evaluate("window.skippedModel") == "model-5"

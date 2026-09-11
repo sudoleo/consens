@@ -1079,10 +1079,10 @@ body:not(.dark-mode) .chat-input-container {
 /* A reserved action column keeps every track and row stable when Skip appears. */
 .run-model {
   display: grid;
-  grid-template-columns: minmax(76px, 112px) minmax(24px, 1fr) 42px 122px;
+  grid-template-columns: minmax(68px, 88px) minmax(24px, 1fr) 44px 102px;
   align-items: center;
   min-height: 26px;
-  gap: 10px;
+  gap: 8px;
 }
 
 .run-model-name {
@@ -1992,14 +1992,45 @@ body.dark-mode .run-provenance {
 
 @media (max-width: 640px) {
   .run-model {
-    grid-template-columns: minmax(62px, 88px) minmax(12px, 1fr) 40px 100px;
-    gap: 6px;
+    box-sizing: border-box;
+    grid-template-columns: minmax(0, 1fr) 44px 102px;
+    grid-template-rows: 28px 2px;
+    gap: 4px 8px;
+    min-height: 40px;
+    padding-bottom: 6px;
   }
 
+  .run-model-name { grid-row: 1; }
+  .run-model-skip { grid-column: 2; }
+  .run-model-time { grid-column: 3; }
+  .run-model-track { grid-column: 1 / -1; grid-row: 2; }
   .run-detail { margin-left: 0; }
+  .run-next { margin-left: 0; margin-top: 8px; }
   .run-now { grid-template-columns: 19px minmax(0, 1fr) auto; }
   .run-time { grid-column: 3; grid-row: 1; }
   .run-count { grid-column: 2 / -1; grid-row: 2; }
+
+  @media (pointer: coarse) {
+    .run-model { grid-template-rows: 32px 2px; min-height: 44px; }
+    /* Keep the visible pill compact while retaining its 44px touch target. */
+    .run-model-skip-btn {
+      position: relative;
+      isolation: isolate;
+      height: 44px;
+      border: 0;
+      background: transparent;
+    }
+    .run-model-skip-btn::before {
+      content: "";
+      position: absolute;
+      z-index: -1;
+      inset: 11px 0;
+      border: 1px solid var(--line-soft);
+      border-radius: 6px;
+      pointer-events: none;
+    }
+    .run-model-skip-btn:hover::before { background: var(--app-surface-hover); }
+  }
 
   /* Phone: the verdict gets the full width (it is the one thing that has to
      be readable), the drawers keep their three-column strip, and actions
