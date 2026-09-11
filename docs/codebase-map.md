@@ -834,6 +834,18 @@ der Python-Staleness-Test auch indirekte Änderungen erkennt.
   existieren nur waehrend der Antwortphase, und Phasen ohne ehrlichen
   Prozentwert laufen
   indeterminiert (`.run-track.is-indeterminate`) statt einen zu erfinden.
+  Seit **2026-09-11** zeigt jede laufende Modellzeile rechts die empfangenen
+  Zeichen (`1,234 chars`): Unicode-Codepoints aus dem projizierten rohen
+  `dataset.consensusAnswer`, ohne Lade-/Fehlertexte oder Markdown-Bedienelemente.
+  Ohne Antworttext steht dort `Waiting` bzw. `Reasoning`, beim Abschluss
+  `✓ Done — 12.3s`; Fehler, Skip und Cancel bleiben eigene terminale Labels.
+  Der Zaehlcache wird mit dem projizierten Lauf zurueckgesetzt. Die aktive
+  Taetigkeitszeile hat drei sanft atmende Striche und einen Textschimmer;
+  waehrend des Fan-outs genuegen die Modellbalken, der Gesamtbalken ist dort
+  ausgeblendet. `Next — … → …` steht unter den Modellzeilen. Reduced Motion
+  deaktiviert Schimmer, Striche, Sweep und Uebergaenge. Nur `#runStatus` ist
+  eine Live-Region und wird bei Phasen-/Abschlusswechsel aktualisiert, damit
+  Zeichenzahlen nicht fortlaufend vorgelesen werden; Skip bleibt zugaenglich.
   Am Ende klappt der Block zusammen und uebergibt an den **Provenance-Fuss**
   `#runProvenance` unter der Antwort. Seit **2026-07-28 zwei Zeilen statt drei**
   — die Anordnung macht allein das Grid in `shell.css`

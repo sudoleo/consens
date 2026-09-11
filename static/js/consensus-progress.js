@@ -12,7 +12,7 @@
 // automatically, individual answers hidden until asked for) and gives up
 // its second opinion about how a run should look.
 //
-// One active step is visible: a label, a count, a timer, a single bar and
+// One active step is visible: an animated label, a count, a timer and
 // a "Next" line. Finished steps shrink to a grey check line, the per-model
 // rows exist only while the models are actually answering, and when the run
 // ends the whole block folds away and hands over to the provenance line
@@ -82,9 +82,12 @@
     const responseState = box.dataset.responseState;
     if (responseState === "complete" || responseState === "error") return true;
     if (responseState === "pending") return false;
+    if (["reasoning", "streaming", "idle"].includes(responseState)) return false;
 
-    // Demo responses do not use data-response-state. Their streaming class
-    // and thinking element still provide a reliable completion signal.
+    if (responseState === "skipped" || responseState === "canceled") return true;
+
+    // Legacy responses without a declared state use their streaming class
+    // and thinking element as a completion signal.
     // textContent, not innerText: the boxes sit behind "Compare answers"
     // and innerText reports nothing for a display:none element.
     const content = box.querySelector(".collapsible-content");
@@ -107,6 +110,27 @@
   // The fill stays monotone and only reaches 100% once the model is done.
   const rowTimes = new Map();
   const rowProgress = new Map();
+  const rowTextCounts = new Map();
+  const characterFormat = new Intl.NumberFormat(document.documentElement.lang || "en");
+
+  function answerCharacters(box) {
+    // The projected raw answer excludes loader labels, source controls and
+    // rendered Markdown/KaTeX helpers. Never count a terminal error message.
+    if (box.dataset.responseError === "true"
+      || ["error", "skipped", "canceled"].includes(box.dataset.responseState)) return 0;
+    const content = box.querySelector(".collapsible-content");
+    const text = box.dataset.consensusAnswer ?? (
+      content && !content.querySelector(".thinking-wrap")
+      && (content.classList.contains("is-streaming") || isBoxDone(box))
+        ? content.textContent || "" : ""
+    );
+    const previous = rowTextCounts.get(box.id);
+    if (previous?.text === text) return previous.count;
+    // Count Unicode code points, so a supplementary character is not two.
+    const count = Array.from(text).length;
+    rowTextCounts.set(box.id, { text, count });
+    return count;
+  }
 
   // A run is only as fast as its slowest model. Once enough models have
   // answered, a straggler is measurably late rather than merely slow — and
@@ -169,7 +193,7 @@
     if (done) return 1;
     const content = box.querySelector(".collapsible-content");
     if (content?.classList.contains("is-streaming")) {
-      const chars = (content.textContent || "").trim().length;
+      const chars = answerCharacters(box);
       const eased = 1 - Math.exp(-chars / 420);
       return Math.min(0.92, 0.12 + eased * 0.8);
     }
@@ -190,7 +214,13 @@
       const progress = Math.max(rowProgress.get(box.id) || 0, nextProgress);
       rowProgress.set(box.id, progress);
 
-      row.dataset.state = done ? "done" : "running";
+      const chars = answerCharacters(box);
+      const state = box.dataset.responseSkipped === "true" || box.dataset.responseState === "skipped"
+        ? "skipped" : box.dataset.responseState === "canceled"
+          ? "canceled" : box.dataset.responseError === "true" || box.dataset.responseState === "error"
+            ? "error" : done ? "done" : chars ? "streaming"
+              : box.dataset.responseState === "reasoning" ? "reasoning" : "waiting";
+      row.dataset.state = state;
 
       const bar = row.querySelector(".run-model-track i");
       if (bar) bar.style.setProperty("--p", (progress * 100).toFixed(1) + "%");
@@ -199,9 +229,16 @@
       if (time) {
         if (done) {
           if (!rowTimes.has(box.id)) rowTimes.set(box.id, Date.now() - startedAt);
-          time.textContent = seconds(rowTimes.get(box.id)).toFixed(1) + "s";
+          time.textContent = state === "done"
+            ? "✓ Done — " + seconds(rowTimes.get(box.id)).toFixed(1) + "s"
+            : { error: "Failed", skipped: "Skipped", canceled: "Canceled" }[state];
+          time.title = state === "done" ? characterFormat.format(chars) + " characters received" : "";
         } else {
-          time.textContent = "·";
+          time.textContent = chars ? characterFormat.format(chars) + " chars"
+            : state === "reasoning" ? "Reasoning" : "Waiting";
+          time.title = chars ? "Characters received — answer is still streaming"
+            : state === "reasoning" ? "The model is reasoning — no answer text yet"
+              : "Waiting for the first answer text";
         }
       }
 
@@ -256,7 +293,7 @@
     const count = $("runCount");
     if (count) {
       count.textContent = stage === "answers" && counts.total
-        ? `${counts.done} of ${counts.total}`
+        ? `${counts.done} of ${counts.total} finished`
         : "";
     }
 
@@ -277,7 +314,7 @@
       if (step.note) {
         next.textContent = step.note;
       } else if (step.next) {
-        next.innerHTML = "Next: " + step.next.map(t => "<b>" + t + "</b>").join(" · ");
+        next.innerHTML = "Next — " + step.next.map(t => "<b>" + t + "</b>").join(" → ");
       } else {
         next.textContent = "";
       }
@@ -285,7 +322,8 @@
     }
 
     const status = $("runStatus");
-    if (status) status.textContent = accessibleStatus(stage, counts);
+    const announcement = accessibleStatus(stage, counts);
+    if (status && status.textContent !== announcement) status.textContent = announcement;
 
     renderDetail();
   }
@@ -373,6 +411,7 @@
     past = [];
     rowTimes.clear();
     rowProgress.clear();
+    rowTextCounts.clear();
     detailBuilt = false;
     startedAt = 0;
     answersFinishedAt = 0;

@@ -357,19 +357,18 @@
          weich aus und uebergibt an die Provenance-Zeile unter der Antwort.
          Lebt im Thread (unter der Frage, wo gleich die Antwort steht), nicht
          am Composer. Gesteuert von static/js/consensus-progress.js. -->
-    <section id="consensusRun" class="run" data-stage="idle"
-      role="status" aria-live="polite" aria-atomic="true" hidden>
-      <span id="runStatus" class="visually-hidden"></span>
+    <section id="consensusRun" class="run" data-stage="idle" aria-label="Consensus progress" hidden>
+      <span id="runStatus" class="visually-hidden" role="status" aria-live="polite" aria-atomic="true"></span>
       <div class="run-past" id="runPast"></div>
       <div class="run-now">
-        <span class="run-pulse" aria-hidden="true"></span>
+        <span class="run-pulse" aria-hidden="true"><i></i><i></i><i></i></span>
         <span class="run-label" id="runLabel"></span>
         <span class="run-count" id="runCount"></span>
         <span class="run-time" id="runTime"></span>
       </div>
       <div class="run-track" id="runTrack" aria-hidden="true"><i id="runBar"></i></div>
+      <div class="run-detail" id="runDetail" hidden></div>
       <p class="run-next" id="runNext"></p>
-      <div class="run-detail" id="runDetail" aria-hidden="true" hidden></div>
     </section>
     <!-- Der Lauf hat NICHT stattgefunden. Das ist ein eigener Zustand, kein
          Zwischenschritt: der gefuehrte Lauf oben blendet sich bei "error"
