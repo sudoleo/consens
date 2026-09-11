@@ -412,7 +412,7 @@ def test_pipeline_starts_verification_after_successful_differences(monkeypatch):
     result = pipeline.analyze_provider_answers(question='Price?',
         answers={'openai': 'A', 'mistral': 'B'}, consensus_model='OpenAI', keys={},
         verification_sources=SOURCES, synthesize=lambda *_, **__: TEXT, judge=judge,
-        verification_submit=verify)
+        verification_submit=verify, check_sources=True)
     assert result.consensus == 'The plan costs 20 euros.'
     assert events == ['differences', 'sources']
     assert result.differences_data is differences

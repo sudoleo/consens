@@ -370,6 +370,15 @@ class SourceCheckRepository:
             self._fence(tx, job)
             if job['status'] not in ACTIVE or not job.get('next_attempt_at') or job['next_attempt_at'] > now:
                 return None
+            # Retire accidentally admitted background/API checks before loading
+            # their plan, resolving credentials or making any fetch/judge call.
+            if job.get('origin', 'interactive') != 'interactive':
+                revision = job['revision'] + 1
+                tx.update(ref, dict(status='cancelled', next_attempt_at=None,
+                    lease_token=None, revision=revision, updated_at=now,
+                    snapshot={**job['snapshot'], 'status': 'cancelled',
+                              'revision': revision, 'reason_code': 'chat_only'}))
+                return None
             affinity = job.get('credential_worker_id')
             if job.get('credential_mode') == 'own' and affinity and affinity != worker_id:
                 heartbeat = self.db.collection(WORKER_COLLECTION).document(affinity).get(transaction=tx, **_READ_OPTIONS)

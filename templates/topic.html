@@ -342,9 +342,8 @@
                 <p>{{ selected.change_summary }}</p>
               </div>
               {% endif %}
-              <section data-source-verification='{{ selected.source_verification | default(none) | tojson | forceescape }}' data-differences-data='{{ selected.differences_data | default(none) | tojson | forceescape }}' data-source-check-url="/api/topics/{{ topic.slug }}/source-check?version={{ selected.id }}">
+              <section data-differences-data='{{ selected.differences_data | default(none) | tojson | forceescape }}'>
                 <div class="topic-consensus prose share-md">{{ selected.consensus_html | safe }}</div>
-                {% if selected.source_verification %}<div id="shareSourceVerificationReport" class="source-verification-report"></div>{% endif %}
               </section>
               {% if selected.models %}
               <div class="topic-models">

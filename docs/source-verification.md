@@ -35,7 +35,13 @@ Die Quellenprüfung startet nach erfolgreichem Differences-Abschluss in
 `consensus_pipeline.py` und im separaten SSE-Pfad von `chat.py`. Der Browser
 bekommt `consensus.final` schon davor, dann `differences.final`, anschließend den
 `source_verification`-Jobverweis. HTTP-/SSE-Abschluss warten nicht auf Fetch/Judge.
-API, Watches und Topics benutzen dieselbe Pipeline mit ihrem Owner-/Run-Kontext.
+Nur der Consensus-Chat aktiviert die Prüfung ausdrücklich. Die gemeinsame
+Pipeline verwendet standardmäßig `check_sources=None`: Watches, Topics und
+API-Läufe erzeugen keine Prüfjobs und keine Disabled-Prüfberichte. `False`
+bleibt der explizite Opt-out eines Chat-Laufs mit `status: disabled`.
+Die Job-Annahme ignoriert Nicht-Chat-Kontexte. Noch fällige Nicht-Chat-Jobs
+werden beim Claim vor Plan-Read, Credentials, Fetch und Judge transaktional
+als `cancelled` mit `reason_code: chat_only` beendet.
 
 ## Modus, Identität und Ergebnisse
 
@@ -241,7 +247,7 @@ oder `sources.*`-Events. Der Schalter und `localStorage.checkSources` bleiben
 erhalten; seine eingefrorene Einstellung gilt nur für den jeweiligen neuen Run.
 Alte null-Snapshots und alte v1/v2/v3-Texte/Befunde bleiben unverändert lesbar.
 Ein Legacy-v3-Plan läuft weiter mit seiner damaligen Satz-/Quellen-Semantik.
-Bookmarks, Shares, Chat-Turns, API, Watches und Topics speichern denselben
+Neue Bookmarks, Chat-Shares und Chat-Turns speichern denselben
 Jobverweis; Wiederöffnen startet keinen neuen Judge. Public-/API-Abrufe prüfen
 Run/Antwortbindung zusätzlich zur Berechtigung.
 
@@ -249,8 +255,10 @@ Run/Antwortbindung zusätzlich zur Berechtigung.
 
 Englische UI: „Check contradictions“, Hilfetext „Check contradictions against
 existing sources“. Ergebnisse stehen direkt bei ihrer Contradiction, mit
-Belegpassagen, Quellenlinks, Position und Bedingungen. Topics erhalten bei Bedarf
-gebundene Streitpunktkarten im Quellenbericht. Originalzitate bleiben unverändert.
+Belegpassagen, Quellenlinks, Position und Bedingungen. Watches und Topics
+zeigen ihre bisherigen Quellenlisten ohne Prüfbericht oder Polling, auch bei
+bereits gespeicherten Prüfungen. Watch-History-Reader unterdrücken die alte
+Prüfprojektion; gespeicherte Antworten und Quellen bleiben unverändert.
 Kein Zustand behauptet „Antwort verifiziert“.
 Der kompakte Status und seine Begründung bleiben sichtbar; `View evidence`
 öffnet Originalpassagen/Links und erhält den offenen Zustand bei Updates.
@@ -353,7 +361,7 @@ unvermeidbaren `input_limit` wird der Quellenabruf versucht und jede Zuordnung
 mit explizitem Endstatus erhalten. Es gibt keine erste-Sechs-/erste-32-Auswahl
 und keine nachtraegliche Snapshot-Schleife, die Befunde aus Platzgruenden loescht.
 
-Produktive Browser-, API-, Watch- und Topic-Laufkontexte reichen Besitzer und
+Ausschließlich produktive Consensus-Chat-Laufkontexte reichen Besitzer und
 stabile Run-Identitaet an `source_check_jobs.py` weiter. `source_check_repository.py`
 speichert einen kleinen Firestore-Jobheader, einen komprimierten Plan und
 separate Paketergebnisse. Vier Worker verarbeiten begrenzte aktive Arbeit mit
@@ -385,7 +393,7 @@ ist fuer die Queue-Pagination erforderlich.
 
 Status und alle Befunde sind owner-geschuetzt paginiert abrufbar. Eine Revision
 verhindert die unbemerkte Mischung von Seiten verschiedener Bearbeitungsstaende.
-Gespeicherte Chat-/Bookmark-/Share-/API-/Watch-/Topic-Snapshots tragen den Jobverweis;
+Neue Chat-/Bookmark-/Share-Snapshots sowie historische API-/Watch-/Topic-Daten tragen den Jobverweis;
 Wiederoeffnen verursacht keinen erneuten Judge-Aufruf. Unreferenzierte Jobs werden
 nach 30 Tagen bereinigt; existierende Elternreferenzen verlaengern die Aufbewahrung.
 Account- und Ressourcenloeschungen werden vor Writes geprueft.
@@ -397,7 +405,7 @@ Account- und Ressourcenloeschungen werden vor Writes geprueft.
 | `GET /api/source-checks/{job_id}` | Firebase-Bearer-Token des Jobbesitzers |
 | `GET /api/v1/consensus/runs/{run_id}/source-check` | `X-API-Key` der Run-UID; URL steht auch in `result.source_verification.status_url` |
 | `GET /api/share/{share_id}/source-check?version=original` | Aktiver Share, veroeffentlichte Antwortversion; bei privaten Shares zusaetzlich Besitzer-Auth |
-| `GET /api/share/{share_id}/source-check?version={watch_run_id}` | Aktiver Share und genau diese zugehoerige Watch-Version |
+| `GET /api/share/{share_id}/source-check?version={watch_run_id}` | Watch-Versionen liefern keine Prüfung mehr (404); Original-Chat-Shares bleiben lesbar |
 | `GET /api/topics/{slug}/source-check?version={run_id}` | Aktives/pausiertes Topic und genau diese Run-/Antwortversion |
 
 Ohne `version` verwenden Shares den Originalstand, Topics ihren letzten Run.

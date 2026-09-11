@@ -1712,7 +1712,7 @@ mit validierter Quellen-/Positionszuordnung. Bedingungen, Datum, Geltungsbereich
 und Einschränkungen gehören zum Judge-Vertrag. Quellenfehler und fehlende
 Belege widerlegen keine Position; Modellmehrheit ist kein Quellenbeweis.
 
-Produktive Browser-/API-/Watch-/Topic-Kontexte geben UID und stabile Run-ID an
+Ausschließlich Consensus-Chat-Kontexte geben UID und stabile Run-ID an
 `source_check_jobs.py`. Start erst **nach erfolgreichem Differences-Abschluss**
 in `consensus_pipeline.py` und im separaten Streaming-Pfad von `chat.py`.
 `consensus.final` liefert vorher den Antworttext; `differences.final` beendet
@@ -1775,7 +1775,7 @@ oder Wiederholung alter Ergebnisse. Fremde BYOK-Queues können nicht auf den
 aktuellen Worker umgebogen werden; `/resume` liefert nach Ownerprüfung HTTP 409.
 Die physische Trennung schützt auch vor alten Workern ohne Versionsprüfung.
 
-Chat-/Bookmark-/Share-/API-/Watch-/Topic-Snapshots speichern den v4-Jobverweis;
+Neue Chat-/Bookmark-/Share-Snapshots speichern den v4-Jobverweis;
 Wiederöffnen startet keinen neuen Judge. Owner-Polling bleibt paginiert und
 revisionsgebunden; öffentliche/API-Endpunkte prüfen außerdem die jeweilige
 Antwort-/Run-Bindung. `share_snapshots.py` erhält die neuen Differences-Metadaten.
@@ -4129,7 +4129,17 @@ Produktgrenze: keine vollständige Faktenprüfung des Consensus.
 keine `sources.*`-Events, neuer Snapshot `status: disabled`. Bereits gespeicherte
 completed Turns werden unverändert wiedergegeben, einschließlich früherer
 null-/v1-/v2-/v3-Ergebnisse. Jobverweise laden den aktuellen Stand nach, ohne
-neuen Auftrag. Andere Pipeline-Aufrufer behalten den aktiven Default.
+neuen Auftrag. Die neutrale Pipeline startet standardmäßig keine Prüfung
+(`check_sources=None`); nur `/consensus` übergibt ausdrücklich die Chat-Auswahl.
+Watches, Topics und API-Läufe erzeugen weder Jobs noch Disabled-Prüfberichte.
+Ihre bisherigen Consensus-/Differences-/Agreement-/Quellen-Abläufe bleiben erhalten.
+Watch-History-Reader und Watch-Seiten unterdrücken auch versehentlich gespeicherte
+Prüfungen, einschließlich Original-/Historienansicht; Topic-Seiten zeigen nur die
+bisherigen Quellen. Gespeicherte Antworten und Quellen werden nicht migriert.
+Die Job-Annahme weist Nicht-Chat-Kontexte ab; noch fällige Nicht-Chat-Jobs werden
+beim Claim transaktional als `cancelled`/`chat_only` beendet, vor Credentials,
+Plan-Read, Fetch oder Judge. Alte API-/Topic-Prüfendpunkte bleiben für historische
+Daten lesbar. Chat-Shares behalten ihre gespeicherten Prüfergebnisse.
 
 Die Prüfung erklärt erkannte faktische Streitpunkte anhand vorhandener Quellen.
 „No checkable contradictions detected“ heißt ausschließlich, dass Differences

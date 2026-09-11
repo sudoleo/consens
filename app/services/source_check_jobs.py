@@ -114,6 +114,8 @@ def submit_source_check(*, question, consensus, sources, keys, resolved_question
     context = context or current_context()
     if not context or not context.get('uid'):
         raise ValueError('Source check requires an owner context')
+    if context.get('origin', 'interactive') != 'interactive':
+        return None
     limits = Limits.configured()
     plan = plan_source_verification(question=question, consensus=consensus, sources=sources,
         resolved_question=resolved_question, limits=limits, differences_data=differences_data,

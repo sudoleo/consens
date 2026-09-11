@@ -1862,7 +1862,8 @@ def _watch_version_payload(run_id, data):
         "run_id": str(run_id or ""),
         "ts": ts,
         "consensus_md": _clip(data.get("consensus_md"), MAX_CONSENSUS_CHARS),
-        "source_verification": data.get("source_verification"),
+        # Older Watch runs accidentally inherited the chat-only source check.
+        "source_verification": None,
         "differences_data": sanitize_differences_data(data.get("differences_data")),
         "differences_text": _clip(data.get("differences_text"), MAX_DIFFERENCES_TEXT_CHARS),
         "sources": sanitize_sources(data.get("sources")),

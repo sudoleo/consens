@@ -68,10 +68,13 @@ def analyze_provider_answers(
     skipped_differences_text: str = "",
     require_differences_data: bool = True,
     verification_sources: list | None = None,
-    check_sources: bool = True,
+    check_sources: bool | None = None,
     verification_submit: Callable | None = None,
 ) -> ConsensusAnalysis:
-    """Run domain synthesis/parsing/scoring for normalized provider answers."""
+    """Run synthesis/parsing/scoring; only chat opts into source checks.
+
+    None means outside the chat feature; False records the chat user's opt-out.
+    """
     if len([answer for answer in answers.values() if answer]) < 2:
         raise RuntimeError("Fewer than two provider answers completed")
     slots = _answer_slots(answers)
@@ -130,7 +133,8 @@ def analyze_provider_answers(
             differences_text=differences_text,
             differences_data=None,
             agreement=None,
-            source_verification=_differences_check_failed(consensus) if check_sources else _source_check_disabled(consensus),
+            source_verification=(_differences_check_failed(consensus) if check_sources
+                                 else _source_check_disabled(consensus) if check_sources is False else None),
         )
     agreement = differences_data.get("agreement")
     if not isinstance(agreement, dict):
@@ -143,7 +147,7 @@ def analyze_provider_answers(
         sources=verification_sources if verification_sources is not None else source_records(model_sources),
         resolved_question=resolved_question, differences_data=differences_data,
         model_answers=slots, model_sources=model_sources,
-    ) if check_sources else _source_check_disabled(consensus)
+    ) if check_sources else _source_check_disabled(consensus) if check_sources is False else None
     return ConsensusAnalysis(
         consensus=consensus,
         differences_text=differences_text,

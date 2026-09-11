@@ -261,7 +261,7 @@
           </div>
         </section>
         {% else %}
-        <section class="legal-panel" data-source-verification='{{ source_verification | default(none) | tojson | forceescape }}' data-differences-data='{{ differences_data | default(none) | tojson | forceescape }}' data-source-check-url="{{ source_check_url | default('') }}">
+        <section class="legal-panel"{% if not watch_page %} data-source-verification='{{ source_verification | default(none) | tojson | forceescape }}' data-differences-data='{{ differences_data | default(none) | tojson | forceescape }}' data-source-check-url="{{ source_check_url | default('') }}"{% endif %}>
           <h2>{% if watch_page %}{% if watch_selected_version.is_original %}Original consensus{% elif watch_selected_version.is_historical %}Consensus at this check{% else %}Current consensus{% endif %}{% else %}Consensus answer{% endif %}</h2>
           <div class="share-md">{{ consensus_html | safe }}</div>
         </section>
@@ -317,7 +317,7 @@
       {% if sources %}
       <section class="legal-panel">
         <h2>{{ 'Contradiction source checks' if source_verification and source_verification.check_type == 'contradiction_evidence' else ('Verify sources' if source_verification else 'Sources') }}</h2>
-        <div id="shareSourceVerificationReport" class="source-verification-report"></div>
+        {% if not watch_page %}<div id="shareSourceVerificationReport" class="source-verification-report"></div>{% endif %}
         <ol id="shareSources" class="share-sources{% if sources | length > 8 %} is-collapsed{% endif %}">
           {% for source in sources %}
           <li {% if source.num %}id="src-{{ source.num }}"{% endif %}>

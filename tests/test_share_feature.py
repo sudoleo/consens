@@ -1613,6 +1613,7 @@ class SharePageRouteTests(unittest.TestCase):
         doc = self._share_doc(
             consensus_md="Original immutable answer.",
             differences_data={"agreement": {"score": 71}},
+            source_verification={"job_id": "original-chat-check", "status": "complete"},
         )
         now = datetime(2026, 7, 21, 8, 0, tzinfo=timezone.utc)
         run_id = "abcdef1234567890"
@@ -1625,6 +1626,7 @@ class SharePageRouteTests(unittest.TestCase):
         }]
         version = {
             "run_id": run_id, "ts": now, "consensus_md": "Latest watched answer.",
+            "source_verification": {"job_id": "accidental-watch-check", "status": "queued"},
             "differences_data": {"agreement": {"score": 82}},
             "differences_text": "", "sources": [{"id": "S1", "title": "Current source", "url": "https://current.test"}],
             "included_models": ["OpenAI", "Google Gemini"],
@@ -1641,6 +1643,15 @@ class SharePageRouteTests(unittest.TestCase):
                 patch.object(share_router.snapshots, "get_watch_version", return_value=version):
             current = self.client.get(path)
             original = self.client.get(path + "?version=original")
+            historical = self.client.get(path + "?version=" + run_id)
+        for page in (current, original, historical):
+            self.assertEqual(page.status_code, 200)
+            self.assertNotIn("original-chat-check", page.text)
+            self.assertNotIn("accidental-watch-check", page.text)
+            self.assertNotIn('/source-check?version=', page.text)
+            self.assertNotIn('Verify sources', page.text)
+            self.assertNotIn('data-source-verification=', page.text)
+            self.assertNotIn('id="shareSourceVerificationReport"', page.text)
         self.assertIn("Latest watched answer.", current.text)
         self.assertNotIn("Original immutable answer.", current.text)
         self.assertIn("Changed since last check", current.text)

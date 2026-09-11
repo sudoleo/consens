@@ -184,7 +184,6 @@ def execute_watch(question: str, previous_consensus: str, condition: str = "",
         "verdict": agreement.get("level") or "",
         "opinion_map": position_map,
         "differences_data": differences,
-        "source_verification": pipeline.get("source_verification"),
         "differences_text": pipeline["differences"],
         "sources": share_snapshots.sanitize_sources(model_sources),
         "included_models": share_snapshots.build_included_models(
@@ -477,16 +476,13 @@ async def run_watch_tick() -> int:
                     previous_version.get("consensus_md")
                     if previous_version else original_consensus
                 )
-                from app.services.source_check_jobs import source_check_context
-                with source_check_context(claimed['owner_uid'], 'watch:' + str(claimed.get('current_run_id')),
-                        references=[f"shares/{claimed['share_id']}"], origin='watch'):
-                    result = await asyncio.to_thread(
-                        execute_watch, claimed["question"], previous_consensus,
-                        claimed.get("condition") if claimed.get("email_mode") == "condition" else "",
-                        previous_position_map,
-                        tier,
-                        baseline_consensus=original_consensus,
-                    )
+                result = await asyncio.to_thread(
+                    execute_watch, claimed["question"], previous_consensus,
+                    claimed.get("condition") if claimed.get("email_mode") == "condition" else "",
+                    previous_position_map,
+                    tier,
+                    baseline_consensus=original_consensus,
+                )
                 mail_kind = notification_kind(claimed, result)
                 run_id = str(claimed.get("current_run_id") or "")
                 persisted = await asyncio.to_thread(

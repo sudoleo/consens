@@ -316,10 +316,7 @@ def execute_persisted_run(run_id: str) -> None:
         # The usage transaction is separate from the API-run claim transaction.
         usage_repository.consume(run["uid"], usage_key_for_run(run))
         usage_consumed = True
-        from app.services.source_check_jobs import source_check_context
-        with source_check_context(run['uid'], 'api:' + run_id,
-                references=[f'api_consensus_runs/{run_id}'], origin='api'):
-            result = execute_consensus_pipeline(run)
+        result = execute_consensus_pipeline(run)
         api_run_repository.succeed(run_id, result)
     except Exception as exc:
         logging.error("Consensus API run failed category=%s", safe_exception(exc))

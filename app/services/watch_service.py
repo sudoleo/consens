@@ -1482,7 +1482,6 @@ def complete_watch_run(watch_id: str, claimed: dict, result: dict, *, now=None,
         "baseline_summary": str(result.get("baseline_summary") or "")[:400],
         "previous_run_id": str(claimed.get("last_successful_run_id") or ""),
         "consensus_md": str(result.get("consensus") or "")[:share_snapshots.MAX_CONSENSUS_CHARS],
-        "source_verification": result.get("source_verification"),
         "differences_data": share_snapshots.sanitize_differences_data(
             result.get("differences_data")
         ),
@@ -1534,7 +1533,6 @@ def complete_watch_run(watch_id: str, claimed: dict, result: dict, *, now=None,
         # comparisons and keeps the page useful if the Watch is deleted.
         share_updates.update({
             "consensus_md": history["consensus_md"],
-            "source_verification": history.get("source_verification"),
             "differences_data": history["differences_data"],
             "differences_text": history["differences_text"],
             "sources": history["sources"],
