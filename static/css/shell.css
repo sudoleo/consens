@@ -935,34 +935,63 @@ body:not(.dark-mode) .chat-input-container {
 }
 
 .run-now {
-  display: flex;
+  display: grid;
+  grid-template-columns: 19px minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 9px;
 }
 
 .run-pulse {
-  width: 7px;
-  height: 7px;
-  flex: none;
-  border-radius: 50%;
-  background: var(--agree);
-  animation: runPulse 1.5s ease-in-out infinite;
+  width: 19px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
 }
 
-@keyframes runPulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.3; transform: scale(0.72); }
+.run-pulse i {
+  width: 3px;
+  height: 12px;
+  border-radius: 3px;
+  background: var(--ink-2);
+  animation: runActivity 2.4s ease-in-out infinite;
 }
 
-.run[data-stage="done"] .run-pulse {
+.run-pulse i:nth-child(2) { height: 18px; animation-delay: 0.2s; }
+.run-pulse i:nth-child(3) { height: 9px; animation-delay: 0.4s; }
+
+@keyframes runActivity {
+  0%, 100% { opacity: 0.5; transform: scaleY(0.75); }
+  50% { opacity: 1; transform: scaleY(1); }
+}
+
+.run[data-stage="done"] .run-pulse i {
   animation: none;
+  background: var(--agree);
 }
 
 .run-label {
   font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   letter-spacing: var(--tracking-tight);
-  color: var(--ink);
+  color: var(--ink-2);
+}
+
+/* Only the active work label shimmers. The answer remains still and readable. */
+@supports (background-clip: text) {
+  .run:not([data-stage="idle"]):not([data-stage="done"]) .run-label {
+    background: linear-gradient(105deg, var(--ink-2) 25%, var(--ink) 45%, var(--ink-2) 65%);
+    background-size: 240% 100%;
+    background-clip: text;
+    -webkit-background-clip: text;
+    color: transparent;
+    animation: runTextShimmer 3.2s linear infinite;
+  }
+}
+
+@keyframes runTextShimmer {
+  from { background-position: 160% 0; }
+  to { background-position: -80% 0; }
 }
 
 .run-count {
@@ -971,12 +1000,18 @@ body:not(.dark-mode) .chat-input-container {
   font-variant-numeric: tabular-nums;
 }
 
+.run-count:empty { display: none; }
+
 .run-time {
+  grid-column: 4;
   margin-left: auto;
   font-size: var(--font-size-micro);
   color: var(--ink-3);
   font-variant-numeric: tabular-nums;
 }
+
+/* Each model already has its own live track during the fan-out. */
+.run[data-stage="answers"] > .run-track { display: none; }
 
 .run-track {
   position: relative;
@@ -1009,7 +1044,7 @@ body:not(.dark-mode) .chat-input-container {
 }
 
 .run-next {
-  margin: 0;
+  margin: 5px 0 0 28px;
   font-size: var(--font-size-xs);
   color: var(--ink-3);
 }
@@ -1027,8 +1062,8 @@ body:not(.dark-mode) .chat-input-container {
 .run-detail {
   display: flex;
   flex-direction: column;
-  gap: 5px;
-  margin-top: 2px;
+  gap: 2px;
+  margin: 2px 0 0 28px;
 }
 
 .run-detail[hidden] {
@@ -1039,8 +1074,9 @@ body:not(.dark-mode) .chat-input-container {
    Skip-Angebot belegt erst dann eine eigene Spalte, wenn es gebraucht wird. */
 .run-model {
   display: grid;
-  grid-template-columns: minmax(76px, 124px) minmax(0, 1fr) auto 38px;
+  grid-template-columns: minmax(76px, 112px) minmax(24px, 1fr) 122px;
   align-items: center;
+  min-height: 30px;
   gap: 10px;
 }
 
@@ -1049,7 +1085,9 @@ body:not(.dark-mode) .chat-input-container {
 }
 
 .run-model-skip {
-  grid-column: 3;
+  grid-column: 2 / -1;
+  grid-row: 2;
+  justify-self: end;
 }
 
 /* The skip offer only takes room once it has something to say. */
@@ -1081,8 +1119,8 @@ body:not(.dark-mode) .chat-input-container {
 }
 
 .run-model-name {
-  font-size: var(--font-size-micro);
-  color: var(--ink-3);
+  font-size: var(--font-size-xs);
+  color: var(--ink-2);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1094,6 +1132,7 @@ body:not(.dark-mode) .chat-input-container {
 
 .run-model-track {
   grid-column: 2;
+  grid-row: 1;
   height: 2px;
   border-radius: 2px;
   background: var(--line-soft);
@@ -1104,7 +1143,7 @@ body:not(.dark-mode) .chat-input-container {
   display: block;
   height: 100%;
   width: var(--p, 0%);
-  background: var(--ink-3);
+  background: var(--ink-2);
   transition: width 0.3s linear;
 }
 
@@ -1113,15 +1152,39 @@ body:not(.dark-mode) .chat-input-container {
 }
 
 .run-model-time {
-  grid-column: 4;
+  grid-column: 3;
+  grid-row: 1;
   font-size: var(--font-size-micro);
-  color: var(--ink-3);
+  color: var(--ink-2);
   text-align: right;
+  white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
 
 .run-model[data-state="done"] .run-model-time {
   color: var(--agree);
+}
+
+.run-model:is([data-state="error"], [data-state="skipped"], [data-state="canceled"]) .run-model-track i {
+  background: var(--ink-3);
+  opacity: 0.35;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .run, .run.is-gone, .run-model-track i, .run-track i { transition: none; }
+  .run-pulse i, .run-track.is-indeterminate i { animation: none; }
+  .run:not([data-stage="idle"]):not([data-stage="done"]) .run-label {
+    animation: none;
+    background: none;
+    color: var(--ink-2);
+  }
+}
+
+@media (forced-colors: active) {
+  .run:not([data-stage="idle"]):not([data-stage="done"]) .run-label {
+    background: none;
+    color: CanvasText;
+  }
 }
 
 /* ---- The run that did not happen -----------------------------------------
@@ -1878,8 +1941,14 @@ body.dark-mode .run-provenance {
 
 @media (max-width: 640px) {
   .run-model {
-    grid-template-columns: minmax(62px, 88px) minmax(0, 1fr) 34px auto;
+    grid-template-columns: minmax(62px, 88px) minmax(16px, 1fr) 110px;
+    gap: 8px;
   }
+
+  .run-detail { margin-left: 0; }
+  .run-now { grid-template-columns: 19px minmax(0, 1fr) auto; }
+  .run-time { grid-column: 3; grid-row: 1; }
+  .run-count { grid-column: 2 / -1; grid-row: 2; }
 
   /* Phone: the verdict gets the full width (it is the one thing that has to
      be readable), the drawers keep their three-column strip, and actions

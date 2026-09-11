@@ -211,4 +211,103 @@ describe("guided-run block belongs to the visible run", () => {
     expect(facts.textContent).toContain("1 models");
     dom.window.close();
   });
+
+  it("counts raw streamed characters without Markdown UI or surrogate duplication", async () => {
+    const { registry, document, dom } = boot();
+    const run = startRun(registry, "characters");
+    registry.update(run.runId, context => {
+      context.modelResults.OpenAI.streamText = "a".repeat(1234) + "😀";
+    });
+    // Rendering can add math, citation labels or copy buttons. They aren't tokens.
+    document.querySelector(".collapsible-content").textContent = "rendered decorations";
+    await new Promise(resolve => setTimeout(resolve, 220));
+    const row = document.querySelector(".run-model");
+    const status = row.querySelector(".run-model-time");
+    expect(status.textContent).toBe("1,235 chars");
+    expect(row.dataset.state).toBe("streaming");
+    const bar = row.querySelector("i");
+    const previous = parseFloat(bar.style.getPropertyValue("--p"));
+    registry.update(run.runId, context => {
+      context.modelResults.OpenAI.streamText += "abc";
+    });
+    await new Promise(resolve => setTimeout(resolve, 220));
+    expect(status.textContent).toBe("1,238 chars");
+    expect(parseFloat(bar.style.getPropertyValue("--p"))).toBeGreaterThanOrEqual(previous);
+    expect(parseFloat(bar.style.getPropertyValue("--p"))).toBeLessThan(100);
+    dom.window.close();
+  });
+
+  it("does not count waiting or reasoning placeholders", async () => {
+    const { registry, document, dom } = boot();
+    const run = startRun(registry, "waiting");
+    for (const [state, label] of [["pending", "Waiting"], ["reasoning", "Reasoning"]]) {
+      registry.update(run.runId, context => {
+        context.modelResults.OpenAI = { status: state };
+      });
+      await new Promise(resolve => setTimeout(resolve, 220));
+      expect(document.querySelector(".run-model-time").textContent).toBe(label);
+      expect(document.querySelector(".run-model").dataset.state).not.toBe("done");
+    }
+    dom.window.close();
+  });
+
+  it.each([["error", "Failed"], ["skipped", "Skipped"], ["canceled", "Canceled"]])(
+    "shows %s as a terminal outcome, never a successful answer or character count",
+    async (state, label) => {
+      const { registry, document, dom } = boot();
+      const run = startRun(registry, state);
+      registry.update(run.runId, context => {
+        context.modelResults.OpenAI = { status: state, error: "Not answer text" };
+      });
+      await new Promise(resolve => setTimeout(resolve, 220));
+      expect(document.querySelector(".run-model-time").textContent).toBe(label);
+      expect(document.querySelector(".run-model").dataset.state).not.toBe("done");
+      expect(document.getElementById("runCount").textContent).toBe("1 of 1 finished");
+      dom.window.close();
+    }
+  );
+
+  it("freezes completion time and restores only the selected run's characters", async () => {
+    const { registry, document, dom } = boot();
+    const a = startRun(registry, "A");
+    await new Promise(resolve => setTimeout(resolve, 220));
+    const aStatus = document.querySelector(".run-model-time");
+    expect(aStatus.textContent).toBe("4 chars");
+    registry.update(a.runId, context => {
+      context.modelResults.OpenAI = { status: "complete", text: "finished" };
+    });
+    await new Promise(resolve => setTimeout(resolve, 220));
+    const completion = aStatus.textContent;
+    expect(completion).toMatch(/^✓ Done — \d+\.\ds$/);
+    expect(aStatus.title).toBe("8 characters received");
+    await new Promise(resolve => setTimeout(resolve, 220));
+    expect(aStatus.textContent).toBe(completion);
+    registry.clearVisible();
+    const b = startRun(registry, "B");
+    registry.update(b.runId, context => { context.modelResults.OpenAI.streamText = "different"; });
+    await new Promise(resolve => setTimeout(resolve, 220));
+    expect(document.querySelector(".run-model-time").textContent).toBe("9 chars");
+    registry.show(a.runId);
+    await new Promise(resolve => setTimeout(resolve, 220));
+    expect(document.querySelector(".run-model-time").textContent).toMatch(/^✓ Done/);
+    expect(document.querySelector(".run-model-time").title).toBe("8 characters received");
+    dom.window.close();
+  });
+
+  it("does not repeatedly announce each timer tick or streamed character", async () => {
+    const { registry, document, window, dom } = boot();
+    const run = startRun(registry, "announcements");
+    await new Promise(resolve => setTimeout(resolve, 220));
+    const announcements = vi.fn();
+    const observer = new window.MutationObserver(announcements);
+    observer.observe(document.getElementById("runStatus"), { childList: true, characterData: true, subtree: true });
+    registry.update(run.runId, context => { context.modelResults.OpenAI.streamText += "new text"; });
+    await new Promise(resolve => setTimeout(resolve, 450));
+    expect(announcements).not.toHaveBeenCalled();
+    registry.update(run.runId, context => { context.modelResults.OpenAI = { status: "complete", text: "done" }; });
+    await new Promise(resolve => setTimeout(resolve, 220));
+    expect(announcements).toHaveBeenCalledTimes(1);
+    observer.disconnect();
+    dom.window.close();
+  });
 });
