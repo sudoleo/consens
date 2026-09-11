@@ -284,7 +284,8 @@
     const toggleBtn = document.createElement("button");
     toggleBtn.type = "button";
     toggleBtn.className = "consensus-actions-toggle";
-    toggleBtn.setAttribute("aria-label", "Copy options");
+    toggleBtn.setAttribute("aria-label", "Citation and copy options");
+    toggleBtn.title = "Citation and copy options";
     toggleBtn.setAttribute("aria-haspopup", "menu");
     toggleBtn.setAttribute("aria-expanded", "false");
     toggleBtn.innerHTML = `

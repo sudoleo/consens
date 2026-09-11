@@ -28,6 +28,7 @@ function boot(storedCounts = null) {
     "static/js/consensus-insights.js"
   ], {
     before(window) {
+      window.localStorage.setItem("consensio.consensusHighlightMode.v1", "all");
       if (storedCounts !== null) window.localStorage.setItem("consensio.showClaimCounts.v1", storedCounts);
     },
     body: `

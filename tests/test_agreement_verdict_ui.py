@@ -39,24 +39,15 @@ def test_settings_offer_three_agreement_display_levels_persistently():
     assert "body.agreement-verdict-hidden .consensus-verdict" in shell
 
 
-def test_the_hidden_verdict_lets_drawers_share_the_line_with_the_actions():
-    shell = (ROOT / "static" / "css" / "shell.css").read_text(encoding="utf-8")
-
-    merged = shell.split("body.agreement-verdict-hidden .run-provenance::before", 1)[1]
-    merged = merged.split("/* The headline is a headline", 1)[0]
-
-    # Ohne Urteil stand Share/Watch/Cite allein in einer halbleeren Zeile ueber
-    # den Schubladen. Wo die Breite reicht, teilen sie sich eine Grundlinie.
-    assert "@media (min-width: 641px)" in merged
-    assert "flex-wrap: wrap" in merged
-    for area, order in (("tabs", 1), ("facts", 2), ("actions", 3)):
-        block = merged.split(f"consensus-footer-{area} {{", 1)[1].split("}", 1)[0]
-        assert f"order: {order}" in block
-    # Die Fakten duerfen die Zeile weder aufsaugen (flex-grow) noch als leere
-    # Huelle eine Luecke kosten — beides trieb die Aktionen in den Umbruch.
-    assert "flex: 0 1 auto" in merged
-    assert ":has(.run-provenance-facts:not(:empty))" in merged
-    assert ":has(.run-replay-btn:not([hidden]))" in merged
+def test_footer_status_is_separate_from_navigation_and_tools_follow_it():
+    template = (ROOT / "templates" / "index.html").read_text(encoding="utf-8")
+    source_tab = template.split('id="consensusSourcesTab"', 1)[1].split("</button>", 1)[0]
+    assert 'aria-describedby="consensusSourceCheckStatus"' in source_tab
+    assert 'id="consensusSourceCheckStatus"' not in source_tab
+    assert template.index('id="consensusFooterTabs"') < template.index('id="consensusSourceCheckStatus"')
+    assert template.index('id="consensusFooterTabs"') < template.index('id="consensusFooterActions"')
+    assert 'id="consensusMarkerLegend"' not in template
+    assert "About these highlights" not in template
 
 
 def test_the_old_agreement_score_switch_choice_still_applies():
@@ -76,13 +67,11 @@ def test_sentence_checks_have_a_discreet_persistent_visibility_control():
         encoding="utf-8"
     )
 
-    assert 'id="consensusMarkerToggle"' in template
-    assert '>Hide checks</button>' in template
+    assert 'id="consensusMarkerToggle"' not in template
+    assert 'id="consensusHighlightsSelect"' in template
     assert ":not(.consensus-marker-toggle)" in inputs
     assert "consensio.showConsensusMarkers.v1" in insights
     assert 'classList.toggle(MARKERS_HIDDEN_CLASS, !show)' in insights
-    assert 'show ? "Hide checks" : "Show checks"' in insights
-    assert "body.consensus-markers-hidden .consensus-marker-legend-copy" in shell
     assert "body.consensus-markers-hidden .consensus-answer-body .claim-badge" in shell
 
 

@@ -550,10 +550,23 @@
   line-height: var(--line-height-ui);
 }
 
+#systemPromptModal {
+  --settings-gutter: clamp(12px, 3vw, 32px);
+  height: 100dvh;
+  box-sizing: border-box;
+  padding: max(var(--settings-gutter), env(safe-area-inset-top))
+    max(var(--settings-gutter), env(safe-area-inset-right))
+    max(var(--settings-gutter), env(safe-area-inset-bottom))
+    max(var(--settings-gutter), env(safe-area-inset-left));
+  overflow: hidden;
+}
+
 .settings-modal-content {
-  width: min(92vw, 620px);
-  max-height: min(84vh, 720px);
-  margin: clamp(20px, 7vh, 64px) auto;
+  box-sizing: border-box;
+  width: min(100%, 960px);
+  height: min(100%, 760px);
+  max-height: 100%;
+  margin: max(0px, calc((100dvh - 760px - 2 * var(--settings-gutter)) / 2)) auto 0;
   padding: 0;
   display: flex;
   flex-direction: column;
@@ -571,7 +584,7 @@
   align-items: center;
   justify-content: space-between;
   flex-shrink: 0;
-  padding: 16px 20px;
+  padding: 12px 24px;
   border-bottom: 1px solid var(--sidebar-border);
   background: var(--container-bg);
 }
@@ -592,12 +605,15 @@
 .settings-header .close,
 .settings-header .help-button {
   float: none;
-  width: 30px;
-  height: 30px;
+  width: 44px;
+  height: 44px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
   border-radius: var(--radius-sm);
   color: var(--sidebar-text-muted);
   font-size: var(--font-size-xl);
@@ -614,7 +630,7 @@
 }
 
 /* Reiter statt einer langen Bahn: links das Inhaltsverzeichnis, rechts genau
-   eine Kategorie. Ab 640px nebeneinander, darunter eine scrollbare Leiste
+   eine Kategorie. Ab 700px nebeneinander, darunter eine scrollbare Leiste
    ueber dem Panel. */
 .settings-layout {
   flex: 1;
@@ -623,12 +639,15 @@
 }
 
 .settings-nav {
-  flex: 0 0 152px;
+  box-sizing: border-box;
+  flex: 0 0 184px;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 2px;
   overflow-y: auto;
-  padding: 12px 8px;
+  padding: 20px 12px;
+  overscroll-behavior: contain;
   /* Dieselbe Linie wie Kopfzeile und Gruppen des Modals -- zwei Linienstaerken
      in einem Fenster fallen sofort auf. */
   border-right: 1px solid var(--sidebar-border);
@@ -642,7 +661,8 @@
    sahen aus wie sechs Aktionsknoepfe statt wie eine Navigation. */
 .settings-nav-item {
   flex: 0 0 auto;
-  padding: 6px 8px;
+  min-height: 44px;
+  padding: 10px 12px;
   border: 0;
   border-radius: var(--radius-xs);
   background: transparent;
@@ -684,11 +704,15 @@
 .settings-body {
   flex: 1;
   min-width: 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 22px;
   overflow-y: auto;
-  padding: 18px 20px 20px;
+  padding: 26px clamp(20px, 3vw, 32px) 32px;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  overflow-wrap: anywhere;
 }
 
 .settings-category[hidden] {
@@ -700,7 +724,7 @@
 }
 
 .settings-category-heading {
-  margin: 0 2px 12px;
+  margin: 0 0 20px;
 }
 
 .settings-category-heading h3 {
@@ -726,7 +750,7 @@
 }
 
 .settings-group > .settings-section {
-  padding: 14px 15px;
+  padding: 18px 20px;
 }
 
 .settings-group > .settings-section + .settings-section {
@@ -749,6 +773,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 18px;
+  min-height: 44px;
   font-weight: var(--font-weight-semibold);
 }
 
@@ -778,9 +803,15 @@
    des Consensus-Pickers, damit die App nur eine Select-Sprache spricht. */
 .settings-choice-row {
   cursor: pointer;
+  flex-wrap: wrap;
+}
+
+.settings-choice-row > span:first-child {
+  flex: 1 1 200px;
 }
 
 .settings-select {
+  max-width: 100%;
   position: relative;
   flex: 0 0 auto;
   display: inline-flex;
@@ -788,7 +819,8 @@
 }
 
 .settings-select select {
-  min-height: 34px;
+  min-height: 44px;
+  max-width: 100%;
   padding: 6px 30px 6px 11px;
   border: 1px solid color-mix(in srgb, var(--sidebar-border) 68%, transparent);
   border-radius: var(--radius-sm);
@@ -865,14 +897,18 @@
   align-items: center;
   justify-content: space-between;
   gap: 18px;
+  flex-wrap: wrap;
 }
 
 .settings-danger-section > div {
   min-width: 0;
+  flex: 1 1 240px;
 }
 
 .settings-danger-btn {
   flex: 0 0 auto;
+  min-height: 44px;
+  max-width: 100%;
   padding: 8px 12px;
   border: 1px solid #c0392b;
   border-radius: var(--radius-xs);
@@ -909,9 +945,23 @@
   opacity: 0.62;
 }
 
-/* Unter 640px hat eine 168px-Spalte neben dem Panel keinen Platz mehr: die
+/* Unter 700px hat eine Navigationsspalte neben dem Panel keinen Platz mehr: die
    Reiter kippen ueber das Panel und scrollen waagerecht. */
-@media (max-width: 639px) {
+@media (max-width: 699px) {
+  #systemPromptModal {
+    --settings-gutter: 8px;
+    height: 100dvh;
+  }
+
+  .settings-modal-content {
+    height: 100%;
+    margin: 0 auto;
+  }
+
+  .settings-header {
+    padding: 8px 14px;
+  }
+
   .settings-layout {
     flex-direction: column;
   }
@@ -925,23 +975,25 @@
     padding: 8px 10px;
     border-right: 0;
     border-bottom: 1px solid var(--sidebar-border);
-    scrollbar-width: none;
-  }
-
-  .settings-nav::-webkit-scrollbar {
-    display: none;
+    scrollbar-width: thin;
   }
 }
 
 @media (max-width: 520px) {
   .settings-body {
     gap: 19px;
-    padding: 15px 14px 18px;
+    padding: 20px 14px 24px;
   }
 
-  .settings-danger-section {
-    align-items: flex-start;
-    flex-direction: column;
+  .settings-group > .settings-section {
+    padding: 16px 14px;
+  }
+
+  .settings-modal-content .settings-body input[type="text"],
+  .settings-modal-content .settings-body textarea,
+  .settings-modal-content .settings-select select {
+    /* Avoid focus zoom on iOS, which otherwise moves the close action away. */
+    font-size: 16px;
   }
 }
 
@@ -954,6 +1006,7 @@
 
 .settings-section p {
   margin: 6px 0 0;
+  font-size: var(--font-size-xs);
   color: var(--sidebar-text-muted) !important;
   line-height: var(--line-height-ui);
 }
@@ -1057,13 +1110,20 @@
    ist Prominenz eine Frage der Position (erster Reiter), nicht der Gestaltung.
    -------------------------------------------------------------------------- */
 .settings-memory-fields {
-  display: flex;
-  flex-direction: column;
-  gap: 13px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: 18px 20px;
+}
+
+.settings-memory-subheading,
+.settings-memory-field--notes,
+.settings-memory-actions {
+  grid-column: 1 / -1;
 }
 
 .settings-memory-field {
   position: relative;
+  min-width: 0;
 }
 
 .settings-memory-field .settings-field-label {
@@ -1095,7 +1155,8 @@
 }
 
 .settings-memory-field--notes textarea {
-  min-height: 260px;
+  min-height: 180px;
+  height: clamp(180px, 28dvh, 260px);
   resize: vertical;
   line-height: 1.55;
 }
@@ -1143,6 +1204,7 @@
 }
 
 .settings-inline-btn {
+  min-height: 44px;
   padding: 8px 10px;
   border: 0;
   border-radius: var(--radius-xs);

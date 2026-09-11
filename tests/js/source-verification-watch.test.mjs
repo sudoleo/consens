@@ -13,7 +13,7 @@ function boot() {
 }
 function mountReport(document) {
   document.body.innerHTML = '<div id="consensusAnswerBody">The price is 20 euros.</div><div id="sourceVerificationReport"></div>'
-    + '<button id="consensusSourcesTab"><span class="consensus-tab-label">Sources</span><span id="consensusSourceCheckStatus"></span></button>';
+    + '<button id="consensusSourcesTab"><span class="consensus-tab-label">Sources</span></button><span id="consensusSourceCheckStatus"></span>';
 }
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());

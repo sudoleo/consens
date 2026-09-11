@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import { loadScripts } from "./helpers/appWindow.mjs";
 function boot() {
   const env = loadScripts(["static/js/consensus-anchor.js", "static/js/source-verification.js"]);
-  env.document.body.innerHTML = `<div id="consensusAnswerBody"><p><span class="cx-claim">The plan costs 20 euros.</span> <a class="src-ref" data-source-number="1" title="Original source" href="#src-1">1</a><a class="src-ref" data-source-number="2" href="#src-2">2</a> Another sentence. <a class="src-ref" data-source-number="1" href="#src-1">1</a></p></div><div class="diff-card">Original difference</div><button id="consensusSourcesTab"><span class="consensus-tab-label">Verify sources</span><span id="consensusSourceCheckStatus"></span></button><div hidden><div id="sourceVerificationReport"></div></div>`;
+  env.document.body.innerHTML = `<div id="consensusAnswerBody"><p><span class="cx-claim">The plan costs 20 euros.</span> <a class="src-ref" data-source-number="1" title="Original source" href="#src-1">1</a><a class="src-ref" data-source-number="2" href="#src-2">2</a> Another sentence. <a class="src-ref" data-source-number="1" href="#src-1">1</a></p></div><div class="diff-card">Original difference</div><button id="consensusSourcesTab"><span class="consensus-tab-label">Verify sources</span></button><span id="consensusSourceCheckStatus"></span><div hidden><div id="sourceVerificationReport"></div></div>`;
   return { ...env, body: env.document.getElementById("consensusAnswerBody"), report: env.document.getElementById("sourceVerificationReport") };
 }
 const finding = { sentence_id: 1, source_id: "S1", claim: "The plan costs 20 euros.",

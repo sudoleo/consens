@@ -57,6 +57,13 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       ungestylten Dialoge. Die Browser-Konsole meldet keine Modul-/CSP-Fehler.
 
 ## Kern-Flow
+- [ ] Sources/Differences: kompakte Quellenlisten, kontrastreiche Titel und
+      Aussagen, Check-details-Chevrons und kleiner Resolve-Button in Light/Dark
+      bei 320/390 px sowie als Desktop-Sidebar. Disclosures per Enter bedienen;
+      Touch-Ziele bleiben 44 px hoch, abgeschlossener Resolve blendet den Button
+      aus. Source Checks stehen mobil mittig unter den Tabs; nach dem letzten
+      Ergebnis bleiben 24 px Luft vor dem Composer. Automatisiert:
+      `tests/e2e/test_inspector_polish.py`.
 - [ ] Agent-Run: Modellzeilen zeigen echte empfangene Zeichen, vor dem ersten
       Text `Waiting`/`Reasoning`, danach `Done · Zeit` bzw. getrennte
       Fehler-/Skip-/Cancel-Labels. Modellbalken bleiben monoton, neue oder
@@ -116,9 +123,28 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       Judge-Auswahl (kein Benchmark/User-Vote/Accuracy-Score), führt
       Anthropic/Claude nicht doppelt und verlinkt den kontrollierten Benchmark;
       `/benchmark` verlinkt seinerseits sichtbar zurück auf den Model pulse.
-- [ ] Settings: Experience, Connections, Model behavior und Account sind als
-      klar getrennte Kategorien erkennbar; alle Schalter, API-Key-Felder,
-      System Prompt und Account-Löschung funktionieren weiterhin.
+- [ ] Settings: Memory, Model behavior, Runs, Display, Connections und Account
+      bleiben bei 320/390/700/768/1440 px Breite und geringer Höhe erreichbar.
+      Kein horizontaler Inhaltsüberlauf; Kopf und Schließen bleiben beim Scrollen
+      sichtbar. Kurze Memory-Felder wechseln passend zur Inhaltsbreite zwischen
+      einer und zwei Spalten. Light/Dark, Tastaturnavigation und mobile
+      Eingabefokussierung prüfen; Schalter, API-Key-Feld und System Prompt
+      funktionieren weiterhin. Account-Löschung nur im isolierten Testprofil.
+- [ ] Settings → Display → Answer & source highlights: All / Contradictions /
+      Disagreements & issues / Critical contradictions / None bei 320/390 px und Desktop prüfen. Graue Detail-
+      widersprüche bleiben unter Contradictions sichtbar, graue Emphasis nicht.
+      Wechsel gilt sofort und nach Reload auch für archivierte Antworten;
+      Default ohne gespeicherte Wahl: Disagreements & issues. Ausgefilterte Passagen haben
+      keine unsichtbaren Tabstopps/Hover-Aktionen; Text, Quellenlinks und
+      vollständige Differences bleiben verfügbar. Quellenmarkierungen folgen
+      demselben Filter, auch nach spät eintreffenden Prüfergebnissen.
+- [ ] Antwort-Footer: Differences / Answers / Sources bei 320–1440 px und
+      Full/Summary/Hidden auf gleicher Grundlinie. Quellenstatus steht separat
+      über volle Breite, auch bei Pending/Reconnecting/Unavailable oder langen
+      Statusmeldungen. Ohne Quellen keine leere Statuszeile. Keine Legende/Hide-Aktion unter der Antwort.
+      Share/Watch/Cite stehen auf Desktop neben der Hauptnavigation; mobil
+      nur Icons mit zugänglichen Namen. Run again bleibt erreichbar, ohne sich mit
+      Laufzeit oder Kosten zu überlagern; Cite-Menü sitzt am neuen Host.
 - [ ] „Show agreement score“ ist standardmäßig aktiv. Ausschalten blendet die
       numerische Score-Anzeige im aktuellen Consensus und in archivierten Turns
       aus; die qualitative Einordnung/Widerspruchswarnung bleibt sichtbar. Nach
@@ -136,10 +162,8 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       kein Usage-Run, kein `/prepare`, kein Ein-Modell-Fan-out.
 - [ ] Antworten alle ausgewählten `/ask_*` mit HTTP-/Netzfehler, endet der Lauf
       sichtbar und in Analytics als Fehler; kein Consensus startet. Nach dem
-      ersten echten Lauf enthält `#consensusMarkerLegend` weiterhin seinen Text.
-      Der dezente „Hide checks“-Link blendet Satzfarben, Quoten und die lange Erklärung
-      aus, lässt „Show checks“ stehen und stellt alles auch nach einem Reload
-      wieder her.
+      ersten echten Lauf bleiben die in Settings gewählten Markierungsfilter
+      aktiv; Antworttext und Quellenlinks bleiben bei „No highlights“ lesbar.
 - [ ] Ohne Agent Mode bleibt die Oberfläche im direkten Vergleich: Frage und
       Antwortleser, kein Pipeline-Block und kein `/consensus`-Request. Alle
       Modellantworten und Status sind gleichzeitig sichtbar: zwei offene Spalten,

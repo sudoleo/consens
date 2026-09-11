@@ -497,7 +497,7 @@ der Python-Staleness-Test auch indirekte Änderungen erkennt.
   sitzt oben rechts, während der Sidebar-Footer nur für eingeloggte Accounts
   das Avatar-Menü mit deckender Light-/Dark-Fläche zeigt. Settings sind seit
   2026-08-17 **Reiter statt einer langen Bahn**: `.settings-layout` trägt links
-  die Liste `.settings-nav` (ab 640px eine 168px-Spalte, darunter eine
+  die Liste `.settings-nav` (ab 700px eine 184px-Spalte, darunter eine
   waagerecht scrollende Leiste über dem Panel) und rechts `.settings-body` mit
   genau EINEM sichtbaren `.settings-category[role=tabpanel]`. Sechs
   aufgeklappte Kategorien untereinander waren beim Öffnen eine Wand — man
@@ -510,7 +510,7 @@ der Python-Staleness-Test auch indirekte Änderungen erkennt.
   ist in Runs (`#agentModeSwitch`, `#autoConsensusToggle`) und Display (Theme,
   `#agreementDisplaySelect`) aufgeteilt.
   Die Reiter tragen die Sprache der Sidebar-Listen: flache Zeile, transparent
-  im Ruhezustand, 32 px hoch, Hover und Auswahl sind ein Tint. **`.settings-nav-item`
+  im Ruhezustand, mindestens 44 px hoch, Hover und Auswahl sind ein Tint. **`.settings-nav-item`
   muss in der `button:not(...)`-Kette in `components-input.css` stehen** —
   ohne den Ausschluss bekommen die Reiter die gefüllte Button-Fläche samt
   10/16-Polsterung und sehen aus wie sechs Aktionsknöpfe statt wie eine
@@ -530,6 +530,33 @@ der Python-Staleness-Test auch indirekte Änderungen erkennt.
   fällt die Auswahl auf den ersten verfügbaren zurück statt ein leeres Panel zu
   zeigen. Die Version steht in `.settings-footer` am Fenster, nicht im Body —
   dort stünde sie unter jedem einzelnen Panel.
+  Das Settings-Fenster nutzt bis zu 960 × 760 px mit stabiler Höhe beim
+  Reiterwechsel; Dynamic-Viewport-Höhe und Safe-Area-Abstände begrenzen es.
+  Kopf, Navigation und Footer bleiben außerhalb des scrollenden Inhalts.
+  Kurze Memory-Felder bilden bei ausreichend Inhaltsbreite zwei Spalten,
+  Notiz und Aktionen bleiben über die volle Breite. Auswahl-/Aktionszeilen
+  umbrechen bei Platzmangel; mobile Eingaben vermeiden Fokus-Zoom mit 16 px.
+  Der Controller synchronisiert `aria-orientation` mit dem 700-px-Breakpoint
+  und hält aktivierte Reiter im sichtbaren Navigationsausschnitt.
+  Display → `#consensusHighlightsSelect` steuert Antwort- und Quellenmarkierungen
+  browserlokal über `consensio.consensusHighlightMode.v1`: `all`,
+  `contradictions` (inklusive grauer Detailwidersprüche), `concerns`
+  (Default: kritische Widersprüche, Split-Claims und auffällige/unklare Quellen)
+  oder `critical` (kritische Widersprüche). Fachliche Optionsnamen und ein
+  umbrechender Hilfetext erklären die Farben. Bestehende explizite Auswahlen
+  bleiben erhalten; fehlende/ungültige Werte fallen auf `concerns` zurück.
+  „No highlights“ verwendet weiterhin `consensio.showConsensusMarkers.v1`.
+  `consensus-insights.js` setzt `body[data-consensus-highlight-mode]`; CSS
+  filtert damit auch später eintreffende `data-source-check`-Markierungen auf
+  Quellenlinks. `concerns` zeigt `contradicted`, `issue`, `unknown`; die beiden
+  Widerspruchsfilter zeigen bei Quellen nur `contradicted` (keine eigene
+  Schwere-Einstufung bei Quellen). Links und detaillierte Prüfergebnisse
+  bleiben zugänglich. Satzfilter gelten auch für archivierte Turns und
+  Fallback-Claims (`data-coverage`); `.is-marker-filtered` entfernt dabei
+  Stil, Badges und unsichtbare Passage-Aktionen ohne Text-/Datenverlust.
+  Der Difference-Typ, nicht allein Grau, unterscheidet Detailwidersprüche
+  von Emphasis/Thin. Es gibt keine separate Legende oder Hide/Show-Aktion
+  unter der Antwort mehr; die Einstellung liegt ausschließlich unter Display.
   Die Display-Einstellung `#agreementDisplaySelect` speichert ihre
   browserlokale Wahl unter `consensio.agreementDisplay.v1` und kennt drei
   Stufen: `full` (Standard), `summary` — die Body-Klasse
@@ -866,18 +893,24 @@ der Python-Staleness-Test auch indirekte Änderungen erkennt.
   hoch (Touch: 44 px inklusive unsichtbar erweitertem Skip-Trefferbereich).
   Desktop nutzt schmalere Namens-/Statusspalten fuer laengere Balken.
   Am Ende klappt der Block zusammen und uebergibt an den **Provenance-Fuss**
-  `#runProvenance` unter der Antwort. Seit **2026-07-28 zwei Zeilen statt drei**
-  — die Anordnung macht allein das Grid in `shell.css`
-  (`grid-template-areas`), die fuenf Bloecke liegen im Markup flach
-  nebeneinander: (1) **Verdict** `#consensusVerdict` (Score-Ring, einzeilige
-  Headline, EINE Meta-Zeile) links, `#consensusFooterActions` mit Teilen/
-  Beobachten/Zitieren rechts; (2) `#consensusFooterTabs` mit den drei
-  Aufklapp-Flaechen `#consensusDifferencesTab` / „Compare answers"
-  (`#agentModeAnswersRow`, seit 2026-07-27 **nicht mehr agent-mode-gated**,
-  siehe `agent-mode.js`) / `#consensusSourcesTab` links, Lauf-Fakten
-  „N models · X s" + „Run again" rechts (Letzteres setzt über `#newRunButton`
-  den normalen Hero-/Composer-Ausgangszustand zurück und füllt die letzte
-  Frage vor, sendet aber nicht automatisch). Eine Wiederholung ist ein
+  `#runProvenance` unter der Antwort. Desktop: Differences / Answers / Sources
+  bilden die primäre Zeile, Share / Watch / Cite stehen daneben. Eine zweite,
+  zurückhaltende Zeile enthält Quellenstatus und Laufdetails. Bis 640 px
+  nutzen die drei Navigationspunkte gleichmäßig die volle Breite; Quellenstatus
+  folgt bei Bedarf, danach stehen ausschließlich Aktions-Icons links und
+  Laufdetails rechts. Die Icons behalten 44-px-Ziele, aria-label und Tooltips.
+  `.run-provenance` nutzt Grid mit Varianten für ausgeblendetes Verdict.
+  Die stabilen Hosts `#consensusFooterTabs`, `#consensusFooterActions` und
+  `.consensus-footer-facts` stehen direkt darin. Sichtbare Kurzlabels kommen
+  weiterhin aus `data-short`; die vollständigen Namen bleiben für Screenreader.
+  Der Status `#consensusSourceCheckStatus` liegt separat in
+  `.consensus-footer-source-status`; Sources referenziert ihn per
+  `aria-describedby`. Leere Statuszeilen und Status bei verstecktem Sources-Tab
+  sind nicht sichtbar. Die Markierungserklärung und der Hide/Show-Button sind
+  entfernt; ihre Aufgabe übernimmt Settings → Display.
+  Der Run-again-Knopf setzt über `#newRunButton` den normalen Hero-/Composer-
+  Ausgangszustand zurück und füllt die letzte Frage vor, sendet aber nicht
+  automatisch. Eine Wiederholung ist ein
   **vollstaendiger zweiter Lauf** und kostet entsprechend Kontingent; seit
   2026-07-28 steht der Preis deshalb am Knopf (`#runReplayCost`, „· uses 1
   run", bei unbegrenztem Plan leer) und nach dem Klick bis zum Absenden ueber
@@ -886,70 +919,19 @@ der Python-Staleness-Test auch indirekte Änderungen erkennt.
   .runs()` — derselben Quelle wie der Kontingent-Ring, damit hier nie ein
   zweiter, falscher Preis entsteht; ein MutationObserver auf `#usageDisplay`
   zieht das Label nach, wenn das Kontingent spaeter eintrifft.
-  Der Verdict stand vorher UEBER der Antwort und
-  bewertete sie, bevor sie gelesen war.
-  **Was dabei entfallen ist, ist Doppelung, keine Information:** die
-  Modellzahl stand in Fakten UND Verdict-Detail, „N contested passages" sagte
-  ein drittes Mal, was „N critical" und die Zahl an „Review differences"
-  schon sagen; die Judge-Fussnote war ein rechtsbuendiger Zweizeiler und ist
-  jetzt Nachsatz derselben Meta-Zeile (`.verdict-judge` inline, der Zusatz
-  „independent of the consensus engine" liegt im `title`). Die Headline zeigt
-  seither **genau ein** Thema (schwerwiegendstes zuerst, `TOPIC_MAX_SHOWN`)
-  statt mehrerer Fragmente plus „+2 more". Seit 2026-08-04 gibt es fuer dieses
-  eine Thema keine feste 7-Wort-Kuerzung mehr: Es nutzt die vorhandene Breite
-  und bricht an der echten Layoutkante um.
-  **Das Urteil ist ein Messwert, keine Flaeche (2026-08-04).** Der Versuch von
-  2026-07-28, die eine Aussage, die der Leser nicht uebersehen darf, mit einer
-  getoenten Platte (`color-mix` aus `--verdict-ring` in `--raise`, als
-  `.run-provenance::before` ueber Urteil UND Aktionen) aus dem Grau des Fusses
-  zu heben, hat das Kernergebnis wie ein Fehlerbanner aussehen lassen: eine
-  eingefaerbte Box mitten in einer bewusst rahmenlosen Seite. Sie ist weg —
-  aber was sie geleistet hat, musste bleiben: **sie hat das Auge gruppiert**
-  („die alte Faerbung hat dem Auge und dem Gehirn geholfen"; ohne Ersatz ging
-  das Urteil im Fuss unter). Drei Mittel ohne Kasten uebernehmen das:
-  (1) die **Ampelfarbe sitzt auf der Zahl selbst** (`--verdict-ring` als
-  `color` von `.verdict-score-num`), also auf dem Element, das der Leser
-  zuerst ansieht; (2) **Groesse und Luft** — `--font-size-2xl`,
-  `padding: 7px 0 17px`, Headline auf `--font-size-base`; (3) eine **an beiden
-  Enden auslaufende Haarlinie** (`.run-provenance::before`, Grid-Row 1,
-  `align-self: end`, mask-image wie der Composer-Horizont), die den Fuss in
-  zwei Baender teilt: oben Urteil + Aktionen, unten die Schubladen.
-  Die Hierarchie traegt also Typografie: `.verdict-gauge` (92px) setzt den
-  Score in `--font-size-2xl` mit tabellarischen Ziffern, daneben ein
-  gedaempftes „/100", darunter ein 4px-Messbalken (`.verdict-meter` /
-  `.verdict-meter-fill`, Breite aus `--val`) in derselben Ampelfarbe. Zahl,
-  Nenner und Balken sind zentral in `components-consensus-insights.css`
-  definiert (NICHT in `shell.css` doppelt), damit /app und Mockups nicht
-  auseinanderlaufen. Der frueher noetige Ring samt Bildunterschrift
-  „agreement" entfaellt: der Nenner steht sichtbar daneben und das Wort
-  „agreement" ohnehin in jeder Headline (High/Strong/Partial/Low/Very low).
-  Die ungefuellte Strecke traegt 22 % derselben Farbe — bei Score 0 waere der
-  Balken sonst ausgerechnet im staerksten Fall stumm. Die **dritte Ampelstufe**
-  `is-alert` (Agreement unter 40; Widerspruchsschwere steht separat in der
-  Detailzeile) bleibt unveraendert. Achtung: die Fuss-Feinheiten muessen NACH
-  dem rahmenlosen Reset (`.consensus-verdict.is-warn { background: none }`) in
-  `shell.css` stehen — gleiche Spezifitaet, spaeter gewinnt. Die Marketing-
-  Mockups (`landing.html`, `consensus-engine.html`,
-  `partials/product_result_mockup.html` + `landing.css`) tragen dieselbe
-  Struktur und muessen mitwandern.
-  Die Tabs bleiben rahmenlos (Text, Zahl, Chevron; aktiv per Schriftgewicht,
-  Unterstreichung und gedrehtem Chevron) — ein Rechteck um ein Wort ist genau
-  der Rahmen, den diese Shell sonst ueberall abbaut. Der Fuss erscheint
-  nur bei `stage === "idle"|"done"|"differences"` — nach fertiger Synthese
-  sind Quellen unabhaengig von laufenden Judges zugaenglich; waehrend der
-  Antwortphase bleibt er unter dem noch unvollstaendigen Text verborgen.
-  Unter den Tabs gibt es im geschlossenen Zustand keinen eigenen
-  Differences-Trenner und `.consensus-divider` ist stillgelegt; die einzige
-  Abschnittsgrenze zum Composer ist dessen auslaufender Horizont. Ein
-  geoeffneter Differences-/Sources-Drawer behaelt intern eine feine Oberkante.
-  Verdict und Teilen/Beobachten/Zitieren liegen auf Desktop in einer
-  gemeinsamen, dezent getoenten Summary-Flaeche; die Aktionen sind an deren
-  Oberkante statt vertikal mittig ausgerichtet. Auf ≤640 px ordnet dasselbe
-  Grid um: Verdict ueber volle Breite, darunter die drei Tabs als gleich
-  breite Dreierspalte (Chevron aus, Kurzlabel aus `data-short` via `::after`,
-  damit die Knoepfe einzeilig bleiben), danach Aktionen und Lauf-Fakten in
-  **getrennten** Zeilen. So kann keine Kombination aus Watch, Modellzahl,
-  Citation und Run-again-Kosten horizontal ueberlappen.
+  Das Verdict bleibt unter der Antwort: Ampelfarbe auf der Agreement-Zahl,
+  Headline mit dem schwerwiegendsten Thema, eine Meta-Zeile. Der Gauge
+  (`.verdict-gauge`, Zahl /100 und Messbalken) ist weiterhin zentral in
+  `components-consensus-insights.css` definiert. Die Footer-Hülle trägt keine
+  Summary-Fläche; eine feine Unterkante trennt ein sichtbares Verdict von
+  der Navigation. Full/Summary/Hidden beeinflussen ausschließlich das Urteil.
+  Die Tabs bleiben rahmenlos mit Hover-/Fokus- und Offen-Zuständen.
+  Der Footer erscheint bei `stage === "idle"|"done"|"differences"`;
+  Quellen sind nach fertiger Synthese unabhängig von laufenden Judges zugänglich.
+  Geschlossene Differences-/Sources-Panels nehmen keinen zusätzlichen Platz ein;
+  geöffnete Panels behalten ihre interne Oberkante. Öffentliche Marketing-
+  Mockups haben eigene Footer-Strukturen und werden durch diese App-Hülle
+  nicht geändert.
   Beim Oeffnen fahren alle drei Disclosures ihren jeweiligen Inhaltsanfang
   nach dem Layout per sanftem `scrollIntoView({block:"nearest"})` an:
   Differences den Drawer, Sources den ersten Quellen-Eintrag und Compare
@@ -1036,7 +1018,9 @@ der Python-Staleness-Test auch indirekte Änderungen erkennt.
   Höhe wird als Bottom-Padding der Thread-`.container` reserviert. Dafür wird
   dort `container-type` aufgehoben, da es ein `position:fixed`-Containing-Block
   erzeugen würde. So endet der Ergebnis-Footer am vollständigen Scrollende
-  exakt oberhalb des Composers, ohne Lücke oder Überdeckung. Die Menues am
+  oberhalb des Composers, ohne Überdeckung. Zusätzlich gibt
+  `.consensus-output` dem letzten Ergebnis auf allen Breiten 24 px Luft
+  unterhalb des Footers; die gemessene Composer-Reserve bleibt unverändert. Die Menues am
   Composer (`.attach-menu`, Consensus-Picker)
   oeffnen im Thread nach **oben** in Richtung des gelesenen Ergebnisses; im
   Hero normalerweise nach unten. Der Modell-Picker passt Richtung, Position
@@ -1807,14 +1791,10 @@ Verweise ohne diesen Teaser behalten ihren Tooltip-Fallback.
   ist einspaltig. Die Antwort (`.consensus-main`, volle Breite) rendert in den
   stabilen Container **`#consensusAnswerBody`** — einziges Render-/Streamziel,
   Zugriff ausschließlich über **`window.App.consensusBodyEl(scope?)`**
-  (das alte `.consensus-main p` gibt es nicht mehr). Darunter liegt eine
-  Legendenzeile (`#consensusMarkerLegend`) mit dem bewusst dezenten
-  `#consensusMarkerToggle`: Er blendet Farben, Quoten, unankerte Claim-Zeilen
-  und die lange Legende rein clientseitig aus, lässt Analyse/Differences aber
-  bestehen und persistiert die Präferenz unter
-  `localStorage.consensio.showConsensusMarkers.v1`. Im Aus-Zustand bleibt nur
-  „Show checks“ als Wiederaktivierung sichtbar; eingeschaltet ist derselbe
-  flächenlose Inline-Link als „Hide checks“ erkennbar. Darunter folgt der zugeklappte
+  (das alte `.consensus-main p` gibt es nicht mehr). Darunter liegt der
+  kompakte Antwort-Footer; Markierungsfilter werden ausschließlich über
+  Settings → Display gesteuert (Default: Disagreements & issues, siehe oben).
+  Der zugeklappte
   `<details id="consensusDifferencesPanel" class="consensus-differences
   consensus-differences-panel">`; `#differencesCards` und das Karten-Rendering
   sind inhaltlich unverändert. `window.App.differencesPanel.{setSynthesizing,
@@ -4107,10 +4087,11 @@ Prozess-/Browser-Abbruch verliert keinen bereits angenommenen Prüfplan.
 `source-check-loading` nutzt Textverlauf/`background-clip:text`; mobile Labels,
 Reduced Motion und `aria-busy` bleiben unterstützt.
 
-„Hide checks“ blendet über die bestehende Body-Klasse
+„No highlights“ unter Settings → Display blendet über die Body-Klasse
 `consensus-markers-hidden` auch Farbe, Hintergrund und Prüf-Unterstreichung der
 S-Referenzen aus. Quellenlinks, Hover-Ergebnisse und gespeicherte Urteile bleiben
-verfügbar; „Show checks“ zeigt auch zwischenzeitlich eingetroffene Urteile wieder.
+verfügbar; eine andere Highlight-Auswahl zeigt die passenden, auch inzwischen
+eingetroffenen Urteile wieder.
 
 Quellenbericht-Navigation: Die Übersicht zeigt S-Kürzel, Domain und ein
 Hauptergebnis je Satz-/Quellen-Paar. Vollständige Aussagen und die Diagnose der
@@ -4119,6 +4100,16 @@ Modellprovenienz und Originalpassagen erscheinen in den Quelldetails. Ein Klick
 auf eine gebundene S-Referenz öffnet genau dieses Paar und hebt seine Zeile für
 2,4 Sekunden hervor; erneutes Klicken erneuert die Hervorhebung, Polling erhält
 sie für die verbleibende Zeit. Reduced Motion verzichtet auf Animationen.
+
+Reader-Darstellung: `model-answer-reader.css` hält Sources und Differences
+im Detailpanel als flache Listen mit feinen Trennern. Quellen zeigen Titel vor
+Domain und Prüfstatus; Aussagen, Quelldetails und Prüfdiagnose nutzen einheitliche
+Chevron-Disclosures. Die Quellenzeilen bleiben auch mobil einzeilig, ihre
+Aussagenvorschau ist auf zwei Zeilen begrenzt. Touch-Ziele haben mindestens
+44 px Höhe. Resolve ist eine kompakte sekundäre Aktion und respektiert weiterhin
+`[hidden]` nach Abschluss. `shell.css` zentriert die separate Source-Checks-Zeile
+unter den drei Footer-Tabs bis 640 px. API-, Prüf- und Reader-Navigation bleiben
+unverändert; Browser-Abdeckung: `tests/e2e/test_inspector_polish.py`.
 
 Quellenbericht-Darstellung: Auszüge nutzen Marked + DOMPurify und den bestehenden
 Math-Renderer (auch auf Share-Seiten); S-Tags stehen separat an den Quellenzeilen,

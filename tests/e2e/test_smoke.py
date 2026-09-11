@@ -923,11 +923,10 @@ def test_consensus_renders_differences_and_agreement_score(app_page, get_console
     assert footer_metrics["display"] == "grid"
     assert footer_metrics["columns"] == 3
     assert footer_metrics["scrollWidth"] <= footer_metrics["clientWidth"]
-    assert all(height <= 40 for height in footer_metrics["buttonHeights"])
+    assert all(44 <= height <= 48 for height in footer_metrics["buttonHeights"])
 
-    # Mobile: Aktionen und Lauf-Fakten leben in getrennten Zeilen. Zuvor
-    # teilten sie sich eine Grid-Zeile und Watch/Cite kollidierten bei langen
-    # Laufdaten sichtbar mit "6 models" und "Run again".
+    # Mobile: kompakte Aktions-Icons und Lauf-Fakten teilen die zweite
+    # Werkzeugzeile ohne Kollision; die drei Tabs bleiben davor prominent.
     footer_layout = app_page.locator("#runProvenance").evaluate(
         """element => {
           const actions = element.querySelector("#consensusFooterActions").getBoundingClientRect();
@@ -943,7 +942,7 @@ def test_consensus_renders_differences_and_agreement_score(app_page, get_console
             ordered:
               verdict.bottom <= tabs.top + 1
               && tabs.bottom <= actions.top + 1
-              && actions.bottom <= facts.top + 1,
+              && actions.right <= facts.left + 1,
           };
         }"""
     )

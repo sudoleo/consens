@@ -1543,61 +1543,26 @@ body:not(.is-hero) #verifyBanner {
   }
 }
 
-/* ---- Provenance footer ---------------------------------------------------
-   What the run leaves behind, in TWO lines that read top to bottom:
-
-     1. the verdict (score ring + headline + one meta line) and, on the same
-        baseline at the right edge, the actions on it: Share / Watch / Cite.
-        The verdict used to sit ABOVE the answer and judged the text before it
-        was read; it belongs behind it.
-     2. the three drawers — contradictions, model answers, sources — with the
-        run's own facts and the restart at the right end.
-
-   It was three lines until 2026-07-28. The first of them was an actions row
-   whose left half was usually empty, and the model count appeared twice in
-   two rows that were both grey, small and full of dots. One row less, no
-   emptier: same information, half the noise.
-
-   Nothing is lost when the run collapses — it just stops taking up screen.
+/* ---- Result footer -------------------------------------------------------
+   Stable reading order: verdict, navigation, source-check summary, actions
+   and run details. Hidden sections collapse without leaving empty grid rows.
    -------------------------------------------------------------------------- */
 .run-provenance {
   --footer-ink: #000;
-  position: relative;
-  isolation: isolate;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  grid-template-areas:
-    "verdict actions"
-    "tabs    facts"
-    "offer   offer";
-  align-items: start;
-  gap: 9px 16px;
+  grid-template-areas: "verdict verdict" "tabs actions" "status facts";
+  align-items: center;
+  gap: 4px 20px;
   margin-top: 16px;
-  padding-top: 11px;
+  padding-top: 8px;
   border-top: 1px solid var(--line-soft);
   font-size: var(--font-size-xs);
   color: var(--ink-3);
 }
 
-/* Keine getoente Summary-Flaeche mehr: eine eingefaerbte Platte im sonst
-   rahmenlosen Fuss las sich wie ein Fehlerbanner, nicht wie das Kernergebnis.
-   Was die Platte aber geleistet hat, muss bleiben: sie hat das Auge gruppiert
-   und den Blick gehalten. Das uebernehmen jetzt drei Mittel ohne Kasten —
-   die Ampelfarbe auf der Zahl selbst, mehr Luft um das Urteil, und diese
-   Haarlinie, die den Fuss in zwei Baender teilt (oben das Urteil samt
-   Aktionen, unten die Schubladen). Sie laeuft an beiden Enden aus, dieselbe
-   Sprache wie der Composer-Horizont: Trennung durch eine Linie, die keine
-   Kante ist. */
 .run-provenance::before {
-  content: "";
-  grid-column: 1 / -1;
-  grid-row: 1;
-  align-self: end;
-  height: 1px;
-  background: var(--line);
-  -webkit-mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent);
-  mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent);
-  pointer-events: none;
+  content: none;
 }
 
 .run-provenance:has(.consensus-verdict[hidden])::before {
@@ -1609,29 +1574,19 @@ body:not(.is-hero) #verifyBanner {
 }
 
 .run-provenance > .consensus-verdict {
-  z-index: 1;
-  grid-area: verdict;
   min-width: 0;
+  border-bottom: 1px solid var(--line-soft);
 }
 
-.run-provenance > .consensus-footer-actions {
-  z-index: 1;
-  grid-area: actions;
-}
-
+.run-provenance > .consensus-verdict { grid-area: verdict; }
 .run-provenance > .consensus-footer-tabs { grid-area: tabs; }
+.run-provenance > .consensus-footer-actions { grid-area: actions; justify-self: end; }
+.run-provenance > .consensus-footer-source-status { grid-area: status; }
 .run-provenance > .consensus-footer-facts { grid-area: facts; }
-.run-provenance > .run-provenance-actions { grid-area: offer; }
 
-.run-provenance > .consensus-footer-tabs,
-.run-provenance > .consensus-footer-facts {
-  align-self: center;
-}
-
-.run-provenance > .consensus-footer-actions {
-  align-self: start;
-  margin-top: 8px;
-  margin-right: 6px;
+.run-provenance:has(.consensus-verdict[hidden]),
+body.agreement-verdict-hidden .run-provenance {
+  grid-template-areas: "tabs actions" "status facts";
 }
 
 .consensus-footer-facts {
@@ -1641,6 +1596,8 @@ body:not(.is-hero) #verifyBanner {
   justify-content: flex-end;
   gap: 4px 10px;
   text-align: right;
+  min-width: 0;
+  margin-left: auto;
 }
 
 .run-provenance-facts:empty {
@@ -1652,11 +1609,9 @@ body:not(.is-hero) #verifyBanner {
   font-weight: var(--font-weight-medium);
 }
 
-/* Share / Watch / Cite: the three things you do WITH a finished answer.
-   Desktop verankert sie oben in der Summary-Flaeche; mobil bekommen sie eine
-   eigene Zeile. Sie hingen frueher absolut positioniert an der Ueberschrift. */
+/* Share / Watch / Cite form one group in the result toolbar. */
 .consensus-footer-actions {
-  margin-left: auto;
+  min-width: 0;
   display: inline-flex;
   align-items: center;
 }
@@ -1668,7 +1623,8 @@ body:not(.is-hero) #verifyBanner {
 .consensus-footer-actions .consensus-copy-inline {
   position: static;
   transform: none;
-  gap: 2px;
+  gap: 12px;
+  flex-wrap: wrap;
   white-space: nowrap;
 }
 
@@ -1676,9 +1632,10 @@ body:not(.is-hero) #verifyBanner {
    row is a guessing game. */
 .consensus-footer-actions .consensus-share-pill {
   width: auto;
-  height: 26px;
+  min-height: 44px;
+  height: auto;
   gap: 5px;
-  padding: 0 8px;
+  padding: 0 4px;
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-medium);
 }
@@ -1687,9 +1644,10 @@ body:not(.is-hero) #verifyBanner {
   /* The base rule sizes it as a 28px icon square with font-size:0 so the
      label stays hidden. In the footer the label is the point. */
   width: auto;
-  height: 26px;
+  min-height: 44px;
+  height: auto;
   gap: 5px;
-  padding: 0 8px;
+  padding: 0 4px;
   font-size: var(--font-size-xs);
 }
 
@@ -1735,55 +1693,35 @@ body.agreement-verdict-hidden .run-provenance::before {
   display: none;
 }
 
-/* Ohne Urteil blieb in der ersten Zeile nur Share/Watch/Cite am rechten Rand
-   stehen, die Schubladen eine Zeile tiefer links — zwei halbleere Zeilen mit
-   einer Luecke dazwischen, wo vorher das Urteil stand. Ist die Breite da,
-   ruecken sie auf EINE Grundlinie: Schubladen links, Lauf-Fakten in der Mitte,
-   Aktionen rechts.
+.consensus-footer-facts:not(:has(.run-provenance-facts:not(:empty))):not(:has(.run-replay-btn:not([hidden]))) {
+  display: none;
+}
 
-   Bewusst Flex statt eines dritten Grid-Rasters: ob die drei nebeneinander
-   passen, haengt an der Zahl der Chips ("Verify sources" gibt es nur mit
-   Quellen) und an der Laenge der Lauf-Fakten — das weiss keine Media-Query
-   vorher. Wird es eng, bricht die Aktionsgruppe von selbst in die naechste
-   Zeile um, statt sich in die Chips zu schieben. Das Handy behaelt sein
-   gestapeltes Raster (Block unten), da ist ohnehin kein Platz. */
-@media (min-width: 641px) {
-  body.agreement-verdict-hidden .run-provenance {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    column-gap: 16px;
-    row-gap: 9px;
-  }
+/* A source verdict is supporting information, never a fourth item inside
+   the Sources button. It uses the available row width in every viewport. */
+.consensus-footer-source-status {
+  padding: 0 0 4px;
+  color: var(--ink-3);
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
 
-  body.agreement-verdict-hidden .run-provenance > .consensus-footer-tabs {
-    order: 1;
-  }
+.consensus-footer-source-label {
+  font-weight: var(--font-weight-medium);
+}
 
-  /* Nur so breit wie ihr Inhalt: mit flex-grow sog die Fakten-Spalte den
-     ganzen Rest der Zeile auf und trieb die Aktionen selbst dann in einen
-     Umbruch, wenn nebeneinander reichlich Platz war. An den rechten Rand
-     schiebt die Aktionen ihr eigenes margin-left:auto. */
-  body.agreement-verdict-hidden .run-provenance > .consensus-footer-facts {
-    order: 2;
-    flex: 0 1 auto;
-  }
+.consensus-footer-source-status .source-check-status {
+  display: inline;
+  white-space: normal;
+  font-size: inherit;
+  font-weight: var(--font-weight-regular);
+  line-height: inherit;
+}
 
-  /* Ein Lauf ohne eigene Fakten (kein Summary, kein "Run again") hinterlaesst
-     eine leere, aber vorhandene Spalte — die kostete eine Luecke von 16px und
-     hat die Aktionen genau daran in den Umbruch gedraengt. :empty greift hier
-     nicht: die Huelle hat Kinder, sie sind nur leer bzw. hidden. */
-  body.agreement-verdict-hidden .run-provenance > .consensus-footer-facts:not(
-    :has(.run-provenance-facts:not(:empty))
-  ):not(:has(.run-replay-btn:not([hidden]))) {
-    display: none;
-  }
-
-  body.agreement-verdict-hidden .run-provenance > .consensus-footer-actions {
-    order: 3;
-    align-self: center;
-    margin-top: 0;
-  }
+.consensus-footer-source-status:not(:has(.source-check-status-copy:not(:empty))),
+.run-provenance:has(#consensusSourcesTab[hidden]) .consensus-footer-source-status {
+  display: none;
 }
 
 /* The headline is a headline: one line. It used to chain two truncated
@@ -1823,23 +1761,35 @@ body.agreement-verdict-hidden .run-provenance::before {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px 18px;
+  gap: 4px 24px;
 }
 
 .consensus-footer-tabs:empty {
   display: none;
 }
 
-/* On desktop the final action line needs a little air before the composer's
-   separating horizon. Mobile keeps its tightly measured fixed-composer
-   reserve unchanged. */
-@media (min-width: 1100px) {
-  body:not(.is-hero) .consensus-output {
-    padding-bottom: 10px;
+.run-provenance .consensus-tab-label[data-short] { font-size: 0; }
+.run-provenance .consensus-tab-label[data-short]::after {
+  content: attr(data-short);
+  font-size: 13px;
+  font-weight: var(--font-weight-semibold);
+}
+
+/* Keep a small reading pause after the final answer in both thread layouts.
+   The fixed mobile composer still reserves its separately measured height. */
+body:not(.is-hero) .consensus-output {
+  padding-bottom: 24px;
+}
+
+@media (max-width: 640px) {
+  .run-provenance > .consensus-footer-source-status {
+    text-align: center;
   }
 }
 
 .consensus-tab {
+  min-height: 44px;
+  box-sizing: border-box;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -1916,6 +1866,12 @@ body.agreement-verdict-hidden .run-provenance::before {
 }
 
 .run-replay-btn {
+  min-height: 44px;
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0 4px;
   border: 0;
   padding: 0;
   background: none;
@@ -1961,11 +1917,7 @@ body.dark-mode .run-provenance {
 
 .run-provenance .consensus-tab,
 .run-provenance .consensus-tab-chevron,
-.run-provenance .consensus-tab-count,
-.run-provenance .consensus-footer-facts,
-.run-provenance .run-provenance-facts b,
 .run-provenance .run-replay-btn,
-.run-provenance .run-replay-cost,
 .run-provenance .consensus-footer-actions .consensus-share-pill,
 .run-provenance .consensus-footer-actions .consensus-actions-toggle {
   color: var(--footer-ink);
@@ -2032,60 +1984,53 @@ body.dark-mode .run-provenance {
     .run-model-skip-btn:hover::before { background: var(--app-surface-hover); }
   }
 
-  /* Phone: the verdict gets the full width (it is the one thing that has to
-     be readable), the drawers keep their three-column strip, and actions
-     sowie run facts get separate rows so neither can overlap the other. */
   .run-provenance {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-areas:
-      "verdict"
-      "tabs"
-      "actions"
-      "facts"
-      "offer";
     gap: 8px;
     margin-top: 12px;
-    padding-top: 9px;
+    padding-top: 8px;
   }
+
+  .run-provenance,
+  .run-provenance:has(.consensus-verdict[hidden]),
+  body.agreement-verdict-hidden .run-provenance {
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas: "verdict verdict" "tabs tabs" "status status" "actions facts";
+    gap: 2px 12px;
+  }
+
+  .run-provenance:has(.consensus-verdict[hidden]),
+  body.agreement-verdict-hidden .run-provenance {
+    grid-template-areas: "tabs tabs" "status status" "actions facts";
+  }
+
+  .run-provenance > .consensus-footer-actions { justify-self: start; }
 
   .consensus-footer-facts {
-    box-sizing: border-box;
-    width: 100%;
-    justify-content: flex-start;
-    gap: 5px 8px;
-    padding-inline: 4px;
-    text-align: left;
+    flex-direction: column;
+    align-items: flex-end;
+    justify-content: center;
+    gap: 0;
+    margin: 0;
+    text-align: right;
+    overflow-wrap: anywhere;
   }
 
-  .run-replay-btn {
-    min-height: 30px;
-    padding: 0 4px;
+  .consensus-footer-actions .consensus-copy-inline { gap: 0; }
+
+  .consensus-footer-actions :is(.consensus-share-pill, .consensus-actions-toggle) {
+    width: 44px;
+    min-height: 44px;
+    padding: 0;
+    justify-content: center;
   }
 
-  .run-provenance > .consensus-footer-actions,
-  .run-provenance > .consensus-footer-facts {
-    align-self: start;
+  .consensus-footer-actions :is(.consensus-share-pill, .consensus-actions-toggle) > span {
+    display: none;
   }
 
-  .run-provenance > .consensus-footer-actions {
-    width: 100%;
-    margin-left: 0;
-    margin-top: 0;
-    margin-right: 0;
-    padding-inline: 0;
-  }
-
-  .consensus-footer-actions .consensus-copy-inline {
-    width: 100%;
-    flex-wrap: wrap;
-    justify-content: flex-start;
-  }
-
-  .consensus-footer-actions .consensus-share-pill,
-  .consensus-footer-actions .consensus-actions-toggle {
-    height: 30px;
-    padding-inline: 6px;
-    font-size: var(--font-size-micro);
+  .consensus-footer-actions :is(.share-pill-icon, .quote-toggle-icon) {
+    width: 16px;
+    height: 16px;
   }
 
   .run-provenance .consensus-verdict {
@@ -2110,7 +2055,9 @@ body.dark-mode .run-provenance {
 
   .consensus-footer-tabs {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: none;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
     gap: 4px;
     width: 100%;
   }
@@ -2118,10 +2065,10 @@ body.dark-mode .run-provenance {
   .consensus-tab {
     width: 100%;
     min-width: 0;
-    min-height: 36px;
+    min-height: 44px;
     justify-content: center;
     gap: 4px;
-    padding: 6px 3px;
+    padding: 8px 3px;
     border-radius: 8px;
     font-size: var(--font-size-micro);
     text-align: center;
@@ -2876,65 +2823,16 @@ body.agreement-verdict-hidden .thread-history-footer:not(:has(.consensus-tab)) {
   color: var(--ink);
 }
 
-/* Satzpruefungen sind standardmaessig sichtbar, lassen sich aber direkt an
-   ihrer Legende aus dem Lesefluss nehmen. Der Schalter ist bewusst nur ein
-   leiser Textlink; im Aus-Zustand ersetzt er die komplette Erklaerung. */
-.consensus-marker-toggle {
-  display: inline-flex;
-  align-items: baseline;
-  margin: 0 0 0 0.45em;
-  padding: 0;
-  min-width: 0;
-  min-height: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-  color: inherit;
-  font: inherit;
-  line-height: inherit;
-  vertical-align: baseline;
-  white-space: nowrap;
-  appearance: none;
-  text-decoration: underline;
-  text-decoration-color: color-mix(in srgb, currentColor 35%, transparent);
-  text-underline-offset: 2px;
-  cursor: pointer;
-  opacity: 0.72;
-}
-
-.consensus-marker-toggle:hover,
-.consensus-marker-toggle:focus-visible {
-  background: transparent;
-  box-shadow: none;
-  color: var(--ink-2);
-  text-decoration-color: currentColor;
-  opacity: 1;
-  outline: none;
-}
-
-.consensus-marker-toggle:focus-visible {
-  border-radius: 2px;
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent);
-}
-
-body.consensus-markers-hidden .consensus-marker-legend-copy {
-  display: none;
-}
-
-body.consensus-markers-hidden .consensus-marker-legend {
-  margin-top: 7px;
-}
-
-body.consensus-markers-hidden .consensus-marker-toggle {
-  margin-left: 0;
-}
-
+.consensus-answer-body .claim-badge.is-marker-filtered,
+.consensus-claims-fallback.is-marker-filtered,
+.consensus-claims-fallback .claims-fallback-row.is-marker-filtered,
 body.consensus-markers-hidden .consensus-answer-body .claim-badge,
 body.consensus-markers-hidden .consensus-claims-fallback {
   display: none !important;
 }
 
+.consensus-answer-body .cx-claim.is-marker-filtered,
+.consensus-answer-body .cx-claim.is-marker-filtered.is-hovered,
 body.consensus-markers-hidden .consensus-answer-body .cx-claim,
 body.consensus-markers-hidden .consensus-answer-body .cx-claim.is-hovered {
   margin: 0;
@@ -4009,4 +3907,16 @@ body #loginModalContent .oauth-button:is(:hover, :focus-visible):not(:disabled) 
 @media (max-width: 700px) {
   .composer-tool-label { display: none; }
   .composer-tool { width: 28px; justify-content: center; padding: 0; }
+}
+
+/* Source references stay navigable; the preference only filters verdict accents. */
+body[data-consensus-highlight-mode="concerns"] :is(.src-ref, .source-link)[data-source-check]:not([data-source-check="contradicted"]):not([data-source-check="issue"]):not([data-source-check="unknown"]),
+body:is([data-consensus-highlight-mode="contradictions"], [data-consensus-highlight-mode="critical"]) :is(.src-ref, .source-link)[data-source-check]:not([data-source-check="contradicted"]) {
+  color: var(--ink-3, #697386);
+  background: transparent;
+  text-decoration: none;
+}
+
+body[data-consensus-highlight-mode] :is(.src-ref, .source-link)[data-source-check]:is(:hover, :focus-visible) {
+  text-decoration: underline;
 }

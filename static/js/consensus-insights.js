@@ -107,12 +107,21 @@
 
           function $(id) { return document.getElementById(id); }
 
-          // Die Satzpruefung bleibt Teil des Ergebnisses; diese Praeferenz
-          // schaltet nur ihre visuelle Ebene ab. Der winzige Link am Ende der
-          // Legende ist absichtlich der einzige UI-Chrome dafuer.
+          // Display filters never change the analysis or saved answer data.
+          // Settings control both sentence highlights and source-reference verdicts.
           const MARKER_VISIBILITY_STORAGE_KEY = "consensio.showConsensusMarkers.v1";
+          const MARKER_FILTER_KEY = "consensio.consensusHighlightMode.v1";
+          const MARKER_FILTERS = {
+            all: "Highlight all model and source checks. Agreement is not proof of correctness.",
+            contradictions: "Highlight model contradictions, including minor details, and sources that contradict a claim.",
+            concerns: "Highlight critical contradictions and split model views, plus contradicting, problematic or unclear sources (red and amber).",
+            critical: "Highlight critical model contradictions and sources that contradict a claim (red).",
+          };
+          const highlightSelect = $("consensusHighlightsSelect");
+          const highlightHelp = $("consensusHighlightsHelp");
+          let highlightMode = "concerns";
+          let markersVisible = true;
           const MARKERS_HIDDEN_CLASS = "consensus-markers-hidden";
-          const markerToggle = $("consensusMarkerToggle");
           const CLAIM_COUNTS_KEY = "consensio.showClaimCounts.v1";
           const claimCountsToggle = $("claimCountsSwitch");
 
@@ -131,22 +140,39 @@
           });
           window.addEventListener("pageshow", restoreClaimCounts);
 
-          function storedConsensusMarkersVisible() {
+          function readMarkerPreferences() {
             try {
-              return window.localStorage.getItem(MARKER_VISIBILITY_STORAGE_KEY) !== "false";
-            } catch (_) {
-              return true;
-            }
+              markersVisible = window.localStorage.getItem(MARKER_VISIBILITY_STORAGE_KEY) !== "false";
+              const stored = window.localStorage.getItem(MARKER_FILTER_KEY);
+              highlightMode = Object.hasOwn(MARKER_FILTERS, stored) ? stored : "concerns";
+            } catch (_) { /* Keep the working session preference if storage is unavailable. */ }
+            return markersVisible;
+          }
+
+          function storedConsensusMarkersVisible() {
+            return markersVisible;
+          }
+
+          function matchesHighlightFilter(mark) {
+            if (highlightMode === "all") return true;
+            if (highlightMode === "contradictions") return !!mark.cxGroup?.hasContradiction;
+            return mark.classList.contains("is-major")
+              || (highlightMode === "concerns" && mark.classList.contains("is-split"));
+          }
+
+          function passageIsVisible(group) {
+            return markersVisible && !group.spans[0].classList.contains("is-marker-filtered");
           }
 
           function syncMarkerPassageAccess(visible) {
             document.querySelectorAll(".cx-claim").forEach(function (mark) {
+              const accessible = visible && !mark.classList.contains("is-marker-filtered");
               ["role", "tabindex", "aria-label"].forEach(function (attribute) {
                 const dataKey = "markerVisible" + attribute.replace(
                   /(^|-)([a-z])/g,
                   function (_all, _dash, letter) { return letter.toUpperCase(); }
                 );
-                if (!visible) {
+                if (!accessible) {
                   if (mark.hasAttribute(attribute) && !(dataKey in mark.dataset)) {
                     mark.dataset[dataKey] = mark.getAttribute(attribute);
                   }
@@ -159,15 +185,26 @@
             });
           }
 
-          function applyConsensusMarkerVisibility(visible) {
+          function applyConsensusMarkerVisibility(visible, dismiss = false) {
             const show = visible !== false;
+            markersVisible = show;
             document.body.classList.toggle(MARKERS_HIDDEN_CLASS, !show);
+            document.body.dataset.consensusHighlightMode = show ? highlightMode : "none";
             document.querySelectorAll(".cx-claim").forEach(function (mark) {
+              const filtered = !matchesHighlightFilter(mark);
+              mark.classList.toggle("is-marker-filtered", filtered);
               const group = mark.cxGroup;
               if (!group || group.spans[0] !== mark) return;
+              if (!show || filtered || dismiss) {
+                group.hover = false;
+                applyPassageHover(group);
+              }
+              group.controls.forEach(function (entry) {
+                if (!entry.isPassage) entry.el.classList.toggle("is-marker-filtered", filtered);
+              });
               const control = activeControl(group);
               if (!control?.el.classList.contains("claim-badge")) return;
-              const accessible = show && !document.body.classList.contains("claim-counts-visible");
+              const accessible = show && !filtered && !document.body.classList.contains("claim-counts-visible");
               ["role", "tabindex", "aria-label"].forEach(function (attr) { mark.removeAttribute(attr); });
               delete mark.dataset.markerVisibleRole;
               delete mark.dataset.markerVisibleTabindex;
@@ -180,6 +217,7 @@
               if (!mark.dataset.cxKeyboard) {
                 mark.dataset.cxKeyboard = "1";
                 mark.addEventListener("keydown", function (event) {
+                  if (!passageIsVisible(group)) return;
                   if (event.key !== "Enter" && event.key !== " ") return;
                   event.preventDefault();
                   activeControl(group)?.activate(event);
@@ -189,19 +227,29 @@
               }
             });
             syncMarkerPassageAccess(show);
-            if (!show) closeClaimPopover();
-            if (markerToggle) {
-              markerToggle.textContent = show ? "Hide checks" : "Show checks";
-              markerToggle.setAttribute("aria-expanded", String(show));
-              markerToggle.setAttribute(
-                "aria-label",
-                show ? "Hide sentence checks" : "Show sentence checks"
-              );
+            document.querySelectorAll(".consensus-claims-fallback").forEach(function (box) {
+              const rows = Array.from(box.querySelectorAll(".claims-fallback-row"));
+              rows.forEach(function (row) {
+                const include = highlightMode === "all"
+                  || (highlightMode === "concerns" && row.dataset.coverage === "split");
+                row.classList.toggle("is-marker-filtered", !include);
+              });
+              box.classList.toggle("is-marker-filtered", rows.length > 0
+                && rows.every(row => row.classList.contains("is-marker-filtered")));
+            });
+            if (!show || dismiss) {
+              closeClaimPopover();
+              hideHoverPreview();
             }
+            if (highlightSelect) highlightSelect.value = show ? highlightMode : "none";
+            if (highlightHelp) highlightHelp.textContent = show
+              ? MARKER_FILTERS[highlightMode]
+              : "Sentence and source-check highlights are hidden. All analysis remains available in the details.";
+
           }
 
           function restoreConsensusMarkerVisibility() {
-            applyConsensusMarkerVisibility(storedConsensusMarkersVisible());
+            applyConsensusMarkerVisibility(readMarkerPreferences());
           }
 
           function modelDisplayName(model) {
@@ -1147,6 +1195,7 @@
           }
 
           function setPassageHover(group, on) {
+            if (on && !passageIsVisible(group)) return;
             group.hover = on;
             if (on) {
               applyPassageHover(group);
@@ -1185,6 +1234,7 @@
                 span.addEventListener("mouseleave", function () { setPassageHover(group, false); });
               }
               span.addEventListener("click", function (event) {
+                if (!passageIsVisible(group)) return;
                 // Quellenchips und [S1]-Links im Satz behalten Vorrang, und wer
                 // Text markiert, will ihn kopieren und nichts oeffnen.
                 if (event.target.closest("a, button")) return;
@@ -1252,6 +1302,7 @@
           }
 
           function showHoverPreview(group) {
+            if (!passageIsVisible(group)) return;
             const active = activeControl(group);
             const build = (active && active.preview) ? active
               : group.controls.find(function (c) { return c.preview && !c.suppressed; });
@@ -1411,6 +1462,7 @@
             if (!host.dataset.cxKeyboard) {
               host.dataset.cxKeyboard = "1";
               host.addEventListener("keydown", function (event) {
+                if (!passageIsVisible(group)) return;
                 if (event.key !== "Enter" && event.key !== " " && event.key !== "Spacebar") return;
                 event.preventDefault();
                 const target = activeControl(group);
@@ -1512,6 +1564,9 @@
                 function () { focusDifference(index); },
                 function () { return buildDiffPreview(diff); }
               );
+              if (diff.type === "contradiction" && result.spans[0]?.cxGroup) {
+                result.spans[0].cxGroup.hasContradiction = true;
+              }
               differenceControls.push({
                 spans: result.spans,
                 control: control,
@@ -1606,6 +1661,7 @@
               unanchored.forEach(function (claim) {
                 const row = document.createElement("div");
                 row.className = "claims-fallback-row";
+                row.dataset.coverage = claimCoverage(claim);
                 const text = document.createElement("span");
                 text.className = "claims-fallback-text";
                 renderInlineMarkdown(text, claim.anchor);
@@ -1621,11 +1677,6 @@
             // Legende nur, wenn wirklich etwas markiert wurde. Sie verhindert,
             // dass unmarkierter Text als geprueft-und-bestaetigt gelesen wird.
             if (!options.stored) {
-              const legend = $("consensusMarkerLegend");
-              if (legend) {
-                legend.hidden = !body.querySelector(".cx-claim, .claim-badge");
-              }
-
               // Die Provenance-Zeile zaehlt die strittigen Stellen aus genau
               // diesen Markern. Sie wird beim Laufende zuerst ohne sie gerendert
               // (die Marker entstehen erst hier) und holt die Zahl jetzt nach.
@@ -2478,8 +2529,6 @@
               fallbackBox.hidden = true;
               fallbackBox.innerHTML = "";
             }
-            const legend = $("consensusMarkerLegend");
-            if (legend) legend.hidden = true;
             // Nur der aktive Consensus wird fuer den naechsten Lauf
             // zurueckgesetzt. Statische Follow-up-Turns in #threadHistory
             // behalten ihre sichtbaren Quoten und Marken.
@@ -2548,16 +2597,16 @@
           // Startzustand schliesst applyConsensusMarkerVisibility ein eventuell
           // offenes Popover und braucht deshalb dessen inzwischen initialisierten
           // Modal-State.
+          readMarkerPreferences();
           restoreClaimCounts();
-          markerToggle?.addEventListener("click", function () {
-            const show = document.body.classList.contains(MARKERS_HIDDEN_CLASS);
+          highlightSelect?.addEventListener("change", function () {
+            const show = this.value !== "none";
+            if (show) highlightMode = Object.hasOwn(MARKER_FILTERS, this.value) ? this.value : "concerns";
             try {
-              window.localStorage.setItem(MARKER_VISIBILITY_STORAGE_KEY, String(show));
-            } catch (_) { /* Storage denial: the session state still works. */ }
-            applyConsensusMarkerVisibility(show);
-            window.trackUmamiEvent?.("app_consensus_markers_visibility_changed", {
-              visible: show
-            });
+              localStorage.setItem(MARKER_FILTER_KEY, highlightMode);
+              localStorage.setItem(MARKER_VISIBILITY_STORAGE_KEY, String(show));
+            } catch (_) { /* The selection still applies during this session. */ }
+            applyConsensusMarkerVisibility(show, true);
           });
           window.addEventListener("pageshow", restoreConsensusMarkerVisibility);
 

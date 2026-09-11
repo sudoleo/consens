@@ -397,34 +397,44 @@ body.answer-reader-modal { overflow: hidden; }
 }
 .answer-reader-dialog .answer-reader-inspector .differences-cards { gap: 12px; }
 .answer-reader-dialog .answer-reader-inspector .diff-card {
-  border-radius: var(--radius-sm);
+  border: 0;
+  border-bottom: 1px solid var(--line-soft);
+  border-radius: 0;
+  background: transparent;
+  overflow: visible;
 }
 .answer-reader-dialog .answer-reader-inspector .diff-card > .diff-card-summary {
-  padding: 16px 40px 16px var(--reader-card-inset);
-  gap: 8px;
+  padding: 12px 28px 12px 0;
+  gap: 6px;
 }
 .answer-reader-dialog .answer-reader-inspector .diff-card-summary::after {
-  right: 18px;
-  top: 21px;
+  right: 6px;
+  top: 17px;
 }
 .answer-reader-dialog .answer-reader-inspector .diff-card[open] > .diff-card-summary::after {
-  top: 25px;
+  top: 21px;
 }
 .answer-reader-dialog .answer-reader-inspector .diff-card-claim {
   font-size: var(--font-size-sm);
   line-height: 1.6;
-  font-weight: var(--font-weight-medium);
+  font-weight: var(--font-weight-semibold);
   letter-spacing: normal;
 }
 .answer-reader-dialog .answer-reader-inspector .diff-card-body {
-  padding: 0 var(--reader-card-inset) var(--reader-card-inset);
+  padding: 0 0 16px;
+  border-top: 0;
+  background: transparent;
 }
-.answer-reader-dialog .answer-reader-inspector .diff-position { padding-block: 16px; }
+.answer-reader-dialog .answer-reader-inspector .diff-position { padding-block: 12px; }
 .answer-reader-dialog .answer-reader-inspector .diff-position-stance { line-height: 1.65; }
 .answer-reader-dialog .answer-reader-inspector .diff-position-quote { margin-top: 10px; }
 .answer-reader-dialog .answer-reader-inspector .diff-verify {
-  padding: 12px;
-  margin-top: 14px;
+  padding: 2px 0 2px 12px;
+  margin-top: 12px;
+  border: 0;
+  border-left: 2px solid var(--line);
+  border-radius: 0;
+  background: transparent;
 }
 .answer-reader-dialog .answer-reader-answer-header { padding-block: 12px; margin-bottom: 0; }
 .answer-reader-dialog .answer-reader-identity { gap: 8px; }
@@ -442,9 +452,12 @@ body.answer-reader-modal { overflow: hidden; }
 .answer-reader-dialog.is-docked .answer-reader-body p { margin-bottom: .9em; }
 .answer-reader-dialog.is-docked .answer-reader-body li { margin-bottom: .3em; }
 .answer-reader-dialog li.answer-reader-source-card {
-  padding: 16px 40px 16px var(--reader-card-inset);
-  gap: 12px;
-  border-radius: var(--radius-sm);
+  padding: 10px 40px 10px var(--reader-card-inset);
+  gap: 10px;
+  border: 0;
+  border-bottom: 1px solid var(--line-soft);
+  border-radius: 0;
+  background: transparent;
 }
 .answer-reader-dialog .answer-reader-site-icon {
   width: 30px;
@@ -457,6 +470,89 @@ body.answer-reader-modal { overflow: hidden; }
   right: 16px;
 }
 .answer-reader-dialog .answer-reader-source-out { top: 34px; right: 15px; }
+
+/* Sources and differences use the same quiet document surface as Answers. */
+.answer-reader-dialog .answer-reader-inspector :is(.consensus-sources-list, .thread-history-sources) { gap: 0; }
+.answer-reader-dialog li.answer-reader-source-card .consensus-source-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+.answer-reader-dialog li.answer-reader-source-card .consensus-source-title { order: -1; color: var(--ink); line-height: 1.5; }
+.answer-reader-dialog li.answer-reader-source-card .consensus-source-host { margin: 2px 0 0; line-height: 1.4; }
+.answer-reader-dialog .source-check-card-status { margin-top: 3px; font-size: 11px; font-weight: 400; background: transparent; }
+.answer-reader-dialog .answer-reader-source-excerpt { width: 100%; margin-top: 8px; padding-top: 6px; }
+.answer-reader-dialog .source-verification { margin-bottom: 12px; }
+.answer-reader-dialog .source-verification-status { font-size: 14px; color: var(--ink); }
+.answer-reader-dialog .source-check-coverage { color: var(--ink-2); font-size: 12px; }
+.answer-reader-dialog .source-check-diagnostics { margin: 4px 0 12px; color: var(--ink-2); }
+.answer-reader-dialog .source-check-diagnostics > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 0;
+  list-style: none;
+  color: var(--ink);
+}
+.answer-reader-dialog .source-check-diagnostics > summary::-webkit-details-marker { display: none; }
+.answer-reader-dialog .source-check-diagnostics > summary::after,
+.answer-reader-dialog .source-check-statement-summary::after,
+.answer-reader-dialog .source-check-row-summary::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  flex: 0 0 6px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg);
+  margin-top: -3px;
+  color: var(--ink-2);
+}
+.answer-reader-dialog .source-check-diagnostics[open] > summary::after,
+.answer-reader-dialog .source-check-statement[open] > summary::after,
+.answer-reader-dialog .source-check-row[open] > summary::before { transform: rotate(225deg); margin-top: 3px; }
+.answer-reader-dialog .source-verification-panel { gap: 12px; }
+.answer-reader-dialog .source-check-group { padding: 0 0 8px; border: 0; border-bottom: 1px solid var(--line-soft); border-radius: 0; }
+.answer-reader-dialog .source-check-statement { padding: 0; }
+.answer-reader-dialog .source-check-statement-summary { min-height: 36px; font-size: 13px; color: var(--ink); }
+.answer-reader-dialog .source-check-statement-label { font-size: 11px; color: var(--ink-2); }
+.answer-reader-dialog .source-check-statement-preview { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.5; }
+.answer-reader-dialog .source-check-row { padding: 0; }
+.answer-reader-dialog .source-check-row-summary { grid-template-columns: minmax(0, 1fr) auto 10px; gap: 8px; min-height: 40px; padding: 0; }
+.answer-reader-dialog .source-check-row-summary::before { grid-column: 3; grid-row: 1; }
+.answer-reader-dialog .source-check-badges { grid-column: 2; grid-row: 1; margin: 0; }
+.answer-reader-dialog .source-check-domain { font-size: 13px; color: var(--ink); }
+.answer-reader-dialog .source-check-badge { font-size: 11px; }
+.answer-reader-dialog .source-check-badge.is-unchecked { font-style: normal; color: var(--ink-2); }
+.answer-reader-dialog .source-check-detail { color: var(--ink); }
+.answer-reader-dialog .diff-resolve { margin-top: 12px; }
+.answer-reader-dialog .diff-resolve-btn {
+  display: inline-flex;
+  width: auto;
+  min-height: 32px;
+  padding: 6px 10px;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink);
+  background: transparent;
+  border-color: var(--line);
+}
+.answer-reader-dialog .diff-resolve-pro-chip {
+  margin-left: 2px;
+  padding: 1px 4px;
+  font-size: 10px;
+  background: var(--well);
+  color: var(--ink-2);
+  border: 1px solid var(--line);
+  box-shadow: none;
+}
+.answer-reader-dialog .diff-resolve-btn[hidden] { display: none; }
+@media (pointer: coarse) {
+  .answer-reader-dialog :is(.source-check-row-summary, .source-check-statement-summary,
+    .source-check-diagnostics > summary, .diff-resolve-btn) { min-height: 44px; }
+}
 @media (max-width: 759px) {
   .answer-reader-dialog { --reader-inset: 16px; --reader-card-inset: 14px; }
   .answer-reader-dialog .model-answer-reader { padding-top: max(12px, env(safe-area-inset-top)); }

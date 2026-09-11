@@ -72,6 +72,10 @@ const settingsTabs = (function () {
     });
 
     if (options?.focus) target.focus();
+    // Keep the selected section visible in the horizontal mobile navigation.
+    if (target.getClientRects().length) {
+      target.scrollIntoView({ block: "nearest", inline: "nearest" });
+    }
     const body = document.querySelector(".settings-body");
     if (body) body.scrollTop = 0;
   }
@@ -101,6 +105,16 @@ const settingsTabs = (function () {
     const nav = document.querySelector(".settings-nav");
     if (!nav || nav.dataset.bound === "true") return;
     nav.dataset.bound = "true";
+    const stackedLayout = window.matchMedia("(max-width: 699px)");
+    const syncOrientation = () => {
+      nav.setAttribute("aria-orientation", stackedLayout.matches ? "horizontal" : "vertical");
+      const active = activeTab();
+      if (active?.getClientRects().length) {
+        active.scrollIntoView({ block: "nearest", inline: "nearest" });
+      }
+    };
+    syncOrientation();
+    stackedLayout.addEventListener("change", syncOrientation);
 
     nav.addEventListener("click", event => {
       const tab = event.target.closest("[data-settings-tab]");
@@ -137,8 +151,8 @@ function openSettingsModal() {
   textarea.value = getStoredSystemPrompt();
   // Immer auf dem ersten Reiter oeffnen. Der zuletzt benutzte waere clever,
   // aber unvorhersehbar — man findet Einstellungen ueber einen festen Ort.
-  settingsTabs.reset();
   modal.style.display = "block";
+  settingsTabs.reset();
   window.App?.trackAppEvent?.("app_settings_open");
 }
 
