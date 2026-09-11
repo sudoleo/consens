@@ -40,7 +40,7 @@ API, Watches und Topics benutzen dieselbe Pipeline mit ihrem Owner-/Run-Kontext.
 ## Modus, Identität und Ergebnisse
 
 `schema_version: 4`, `check_type: contradiction_evidence` und
-`prompt_version: contradiction-evidence-v1` unterscheiden neue Prüfungen.
+`prompt_version: contradiction-evidence-v2` unterscheiden neue Prüfungen.
 `source_verification.py` bleibt der gemeinsame Entry Point und dispatcht
 `plan_source_verification`, `execute_source_package`, `merge_source_verification`
 und `verify_sources` in den neuen Modus von `contradiction_verification.py`.
@@ -57,6 +57,27 @@ Ein Finding beschreibt einen ganzen Streitpunkt, kein Satz-/Quellen-Paar:
 - `supported_position_id` nur für die ausdrücklich gestützte Position.
 - `evidence[]` mit `source_id`, `position_id`, Originalzitat, Datum, Geltungsbereich
   und Einschränkungen. `checked_at` und Dokumentprovenienz bleiben verfügbar.
+
+Vor der Quellenprüfung ausgeschlossene große Widersprüche stehen separat in
+`exclusions[]`: `exclusion_id`, Run-/Antwortbindung, Difference-Index, Anker,
+ursprüngliche Positionen, `positions_version`, Streitfrage und alle `reason_codes`.
+`not_factual` protokolliert die Klassifizierung, `missing_checkability`,
+`invalid_consensus_anchor` und `unverified_model_positions` die fehlenden
+Prüfvoraussetzungen. `scope.detected_contradictions` und
+`scope.excluded_contradictions` erhalten die erkannten bzw. ausgeschlossenen
+Streitpunkte auch dann, wenn kein Judge-Auftrag entstehen konnte. Ohne Auftrag,
+aber mit technischen Ausschlüssen lautet der Grund
+`contradiction_inputs_unavailable`, nicht `no_checkable_contradictions`.
+Diese Diagnosen sind keine Quellenurteile und werden direkt an der Difference
+angezeigt. Alte v4-Snapshots ohne `exclusions` können entsprechende Hinweise aus
+ihren vorhandenen Differences für die Anzeige ableiten; gespeicherte Inhalte
+werden dafür nicht umgeschrieben. Der neue Promptvertrag trennt Cache- und
+Idempotenzschlüssel von bisherigen Prüfungen.
+
+Ob ein Ereignis stattgefunden hat, ist eine faktische Streitfrage. Abweichende
+Datumsannahmen oder unbelegte Berichte machen sie nicht zu einer Präferenz oder
+automatisch zu Fiktion. Fehlende Evidenz wird erst in der Quellenprüfung als
+unzureichend bewertet; sie ist kein Grund, eine Tatsachenfrage auszufiltern.
 
 Die ID bindet Promptvertrag, Run, Antwortversion, Difference, Frage, Anker und
 Positionen. Der dauerhafte Jobschlüssel bindet zusätzlich den vollständigen

@@ -36,7 +36,7 @@ describe('contradiction evidence presentation', () => {
     [{status:'failed',runtime:{error_code:'differences_failed'},findings:[]},'Differences analysis failed'],
     [{scope:{contradictions:1,checked_contradictions:0,omitted_contradictions:1},findings:[{...finding,checked:false,state:'omitted',reason_code:'url_limit',evidence:[]}]},'Source URL budget reached'],
   ])('distinguishes empty, disabled, failed and budget omissions', (changes,label) => {
-    const {window,document}=boot(); window.App.sourceVerification.renderCurrent({...snapshot,...changes},options);
+    const {window,document}=boot(); window.App.sourceVerification.renderCurrent({...snapshot,...changes},changes.status === 'skipped' ? {differencesData:{differences:[]}} : options);
     expect(document.body.textContent).toContain(label);
     expect(document.body.textContent).not.toContain('Answer verified');
     expect(document.querySelector('#consensusSourcesTab').hidden).toBe(false);
@@ -95,5 +95,70 @@ describe('contradiction evidence presentation', () => {
       const second=vi.fn(); const stop=window.App.sourceVerification.watch({jobId:'job-one',expectedSnapshot:snapshot,isActive:()=>true,onUpdate:second});
       await vi.advanceTimersByTimeAsync(0); expect(second).not.toHaveBeenCalled(); stop();
     } finally {vi.useRealTimers();}
+  });
+});
+
+
+describe('excluded contradiction visibility', () => {
+  const excluded = {exclusion_id:'excluded-one',difference_index:0,run_id:snapshot.run_id,answer_version:snapshot.answer_version,
+    consensus_anchor:diff.consensus_anchor,positions:diff.positions,question:diff.factual_check.question,
+    reason_code:'unverified_model_positions',reason_codes:['unverified_model_positions']};
+  const unchecked = {...snapshot,status:'skipped',findings:[],scope:{contradictions:0,checked_contradictions:0,detected_contradictions:1,excluded_contradictions:1},
+    reason_code:'contradiction_inputs_unavailable',exclusions:[excluded]};
+  it('shows a technical exclusion on the red card and never claims no contradictions exist', () => {
+    const {window,document}=boot();const before=JSON.stringify(unchecked);
+    window.App.sourceVerification.renderCurrent(unchecked,options);
+    const section=document.querySelector('.diff-card .contradiction-source-check');
+    expect(section.textContent).toContain('Not checked');
+    expect(section.textContent).toContain('Original model passages could not be matched');
+    expect(section.querySelector('details')).toBeNull();
+    expect(document.querySelector('#consensusSourceCheckStatus').textContent).toContain('Contradiction source checks unavailable');
+    expect(document.body.textContent).not.toContain('No checkable contradictions detected');
+    expect(JSON.stringify(unchecked)).toBe(before);
+  });
+  it('counts excluded contradictions in the displayed total for a mixed result', () => {
+    const {window,document}=boot();
+    window.App.sourceVerification.renderCurrent({...snapshot,exclusions:[excluded],
+      scope:{contradictions:1,checked_contradictions:1,detected_contradictions:2,excluded_contradictions:1}},options);
+    expect(document.querySelector('#consensusSourceCheckStatus').textContent).toContain('1 of 2 contradictions checked');
+  });
+  it('shows classification and technical reasons together without turning them into a source verdict', () => {
+    const {window,document}=boot();
+    window.App.sourceVerification.renderCurrent({...unchecked,exclusions:[{...excluded,reason_code:'not_factual',
+      reason_codes:['not_factual','unverified_model_positions'],reason:'The two models recommend different workflows.'}]},options);
+    const section=document.querySelector('.contradiction-source-check');
+    expect(section.textContent).toContain('Not selected for source checking');
+    expect(section.textContent).toContain('The analysis classified this dispute as not fact-checkable.');
+    expect(section.textContent).toContain('Original model passages could not be matched.');
+    expect(section.textContent).toContain('different workflows');
+    expect(section.textContent).not.toContain('Sources support');
+  });
+  it('derives only display explanations for old terminal v4 snapshots with missing quote matches', () => {
+    const {window,document}=boot();const legacy={...unchecked};delete legacy.exclusions;
+    const before=JSON.stringify(legacy);
+    window.App.sourceVerification.renderCurrent(legacy,options);
+    expect(document.querySelector('.contradiction-source-check').textContent).toContain('Original model passages could not be matched');
+    expect(JSON.stringify(legacy)).toBe(before);
+    expect(legacy.exclusions).toBeUndefined();
+    window.App.sourceVerification.renderCurrent({...legacy,status:'queued'},options);
+    expect(document.querySelector('.contradiction-source-check')).toBeNull();
+    window.App.sourceVerification.renderCurrent({...legacy,status:'disabled'},options);
+    expect(document.querySelector('.contradiction-source-check')).toBeNull();
+  });
+  it('does not attach exclusions to different raw positions, question, anchor, or answer', () => {
+    const {window,document}=boot();
+    for(const changed of [
+      {...excluded,positions:[{...diff.positions[0],quote_models:['Different model']},diff.positions[1]]},
+      {...excluded,question:'Other question'}, {...excluded,consensus_anchor:'Other anchor'}, {...excluded,answer_version:'Other version'}
+    ]) {
+      window.App.sourceVerification.renderCurrent({...unchecked,exclusions:[changed]},options);
+      expect(document.querySelector('.contradiction-source-check')).toBeNull();
+    }
+  });
+  it('explains an excluded contradiction in the public fallback when no Differences panel exists', () => {
+    const {window,document}=boot();
+    document.getElementById('differencesCards').remove();
+    window.App.sourceVerification.renderCurrent(unchecked,options);
+    expect(document.querySelector('#sourceVerificationReport .diff-card .contradiction-source-check').textContent).toContain('Not checked');
   });
 });

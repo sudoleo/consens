@@ -6,7 +6,8 @@ import pytest
 
 from app.services.llm.consensus_citations import ConsensusCitationFilter, strip_consensus_source_markers
 from app.services.llm.consensus_engine import (
-    _build_consensus_prompt, _build_differences_prompt, parse_differences_payload, query_consensus, stream_consensus,
+    _build_consensus_prompt, _build_differences_prompt, _formatted_quote_finder,
+    parse_differences_payload, query_consensus, stream_consensus,
 )
 
 
@@ -57,6 +58,53 @@ def test_differences_prompt_keeps_source_eligibility_separate_from_detection():
     assert "never a filter for reporting differences" in prompt
     assert "competing preferences or recommendations" in prompt
     assert "must not remove a difference or change its type or severity" in prompt
+    assert "Current server date (UTC):" in prompt
+    assert "Whether an event happened" in prompt
+    assert "Do not infer a fictional user scenario" in prompt
+    assert "do not make a factual dispute non-checkable" in prompt
+
+
+def test_model_quote_matching_accepts_only_formatting_omissions_and_keeps_original_span():
+    original = ("Die **Weltmeisterschaft 2026** [S1] hat **bereits stattgefunden** [S2] "
+                "und **Deutschland** [S3] spielte **im Viertelfinale** [S4] gegen Frankreich.")
+    copied = ("Die Weltmeisterschaft 2026 hat bereits stattgefunden "
+              "und Deutschland spielte im Viertelfinale gegen Frankreich.")
+    find = _formatted_quote_finder()
+    assert find("A", original, copied) == original
+    assert find("A", original, copied.replace("bereits", "nicht")) is None
+    assert find("A", original, copied.replace("2026", "2025")) is None
+    assert find("A", original, copied.replace("und Deutschland", "Deutschland")) is None
+
+
+@pytest.mark.parametrize("original,altered", [
+    ("Literal `[S1]+[S2]`.", "Literal `+`."),
+    (r"Notation \([S1]+[S2]\).", r"Notation \(+\)."),
+    ("Notation $$[S1]+[S2]$$.", "Notation $$+$$."),
+    ("Notation $f_{[S1]}$.", "Notation $f_{}$."),
+])
+def test_formatted_quote_fallback_never_ignores_literal_code_or_math(original, altered):
+    assert _formatted_quote_finder()("A", original, altered) is None
+
+
+def test_real_original_position_span_survives_markdown_and_interleaved_citations():
+    original = ("Die **Weltmeisterschaft 2026** [S1] hat **bereits stattgefunden** [S2] "
+                "und **Deutschland** [S3] spielte **im Viertelfinale** [S4] gegen Frankreich.")
+    copied = ("Die Weltmeisterschaft 2026 hat bereits stattgefunden "
+              "und Deutschland spielte im Viertelfinale gegen Frankreich.")
+    opposite = "Die Weltmeisterschaft 2026 hat noch nicht stattgefunden."
+    payload = {"differences": [{"claim": "Hat das Turnier stattgefunden?", "type": "contradiction",
+        "severity": "major", "consensus_anchor": "Das Turnier hat stattgefunden.",
+        "positions": [
+            {"stance": "Das Turnier ist vorbei", "models": ["Model A"], "quote": copied},
+            {"stance": "Das Turnier steht bevor", "models": ["Model B"], "quote": opposite},
+        ]}], "best_model": "Model A"}
+    data, _ = parse_differences_payload(json.dumps(payload), {"Model A": "OpenAI", "Model B": "Kimi"},
+        consensus_answer="Das Turnier hat stattgefunden.", model_answers={"OpenAI": original, "Kimi": opposite})
+    positions = data["differences"][0]["positions"]
+    assert positions[0]["quote"] == original
+    assert positions[0]["quote_models"] == ["OpenAI"]
+    assert positions[1]["quote"] == opposite
+    assert positions[1]["quote_models"] == ["Kimi"]
 
 
 def test_prose_streams_immediately_and_partial_markers_never_leak():

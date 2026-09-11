@@ -136,3 +136,36 @@ def test_new_consensus_stream_preserves_claims_and_checks_only_major_contradicti
         assert not errors
     finally:
         context.close()
+
+
+@pytest.mark.parametrize('width', [1440, 390])
+def test_excluded_red_contradiction_is_explained_in_reader(browser, phase4_server, width):
+    context, page = _real_firebase_page(browser, phase4_server)
+    try:
+        page.set_viewport_size({'width':width,'height':1000})
+        seed_insights(page)
+        page.evaluate("""() => {
+          const ctx=App.runRegistry.visible();
+          const diff=ctx.consensus.differencesData.differences[0];
+          ctx.consensus.differencesData.differences.splice(1);
+          diff.consensus_anchor=ctx.consensus.text;
+          diff.factual_check={checkable:false,question:'Which participants are included in the total?',reason:'The analysis treated this as a difference in recommendations.'};
+          ctx.consensus.sourceVerification={schema_version:4,check_type:'contradiction_evidence',status:'skipped',
+            reason_code:'no_checkable_contradictions',scope:{contradictions:0,checked_contradictions:0},findings:[]};
+          window.__excludedOriginal=JSON.stringify(ctx.consensus.sourceVerification);
+          App.runRegistry.renderVisible();
+        }""")
+        expect(page.locator('#consensusAnswerBody .cx-claim')).to_have_count(1)
+        expect(page.locator('#consensusSourceCheckStatus')).to_contain_text('Contradiction source checks unavailable')
+        page.locator('#consensusDifferencesTab').click()
+        result=page.locator('#answerReaderInspector .is-major .contradiction-source-check')
+        expect(result).to_be_visible()
+        expect(result).to_contain_text('Not selected for source checking')
+        expect(result).to_contain_text('The analysis classified this dispute as not fact-checkable.')
+        expect(result).to_contain_text('Original model passages could not be matched.')
+        expect(result.locator('a, details')).to_have_count(0)
+        assert page.evaluate('JSON.stringify(App.runRegistry.visible().consensus.sourceVerification) === __excludedOriginal')
+        assert result.evaluate('el => el.scrollWidth <= el.clientWidth + 1')
+        reader_screenshot(page,f'excluded-source-{width}')
+    finally:
+        context.close()

@@ -71,7 +71,8 @@
   function coverage(verification) {
     const findings = (verification?.findings || []).filter(Boolean);
     if (isContradictionCheck(verification)) {
-      const total = verification.scope?.contradictions ?? findings.length;
+      const total = verification.scope?.detected_contradictions
+        ?? (verification.scope?.contradictions ?? findings.length) + (verification.scope?.excluded_contradictions || 0);
       const checked = verification.scope?.checked_contradictions ?? findings.filter(item => item.checked).length;
       return {total, checked, remaining: Math.max(0, total - checked)};
     }
@@ -83,7 +84,8 @@
     const { total, checked, remaining } = coverage(verification);
     if (isContradictionCheck(verification)) return `${checked} of ${total} contradictions checked`
       + (verification.scope?.omitted_contradictions ? ` · ${verification.scope.omitted_contradictions} omitted by budget` : '')
-      + (verification.scope?.unavailable_contradictions ? ` · ${verification.scope.unavailable_contradictions} unavailable` : '');
+      + (verification.scope?.unavailable_contradictions ? ` · ${verification.scope.unavailable_contradictions} unavailable` : '')
+      + (verification.scope?.excluded_contradictions ? ` · ${verification.scope.excluded_contradictions} not checked` : '');
     const scope = verification.scope || {};
     const sourceCount = scope.sources ?? scope.source_count;
     const sources = Number.isFinite(sourceCount) ? `${scope.checked_sources || 0} of ${sourceCount} sources checked · ` : '';
@@ -259,7 +261,13 @@
   function status(verification) {
     if (!verification) return "";
     if (isContradictionCheck(verification)) {
-      if (verification.status === 'skipped') return verification.reason_code === 'disabled' ? 'Contradiction source checks disabled' : 'No checkable contradictions detected';
+      if (verification.status === 'skipped') {
+        if (verification.reason_code === 'disabled') return 'Contradiction source checks disabled';
+        const excluded = verification.exclusions || [];
+        if (verification.reason_code === 'contradiction_inputs_unavailable' || excluded.some(hasInputBlocker)) return 'Contradiction source checks unavailable';
+        if (excluded.length) return `${excluded.length} ${excluded.length === 1 ? 'contradiction' : 'contradictions'} not selected for source checking`;
+        return 'No checkable contradictions detected';
+      }
       if (verification.status === 'disabled') return 'Contradiction source checks disabled';
       if (verification.runtime?.error_code === 'differences_failed') return 'Contradiction source check unavailable: Differences analysis failed';
       if (verification.status === 'queued') return 'Contradiction source check queued';
@@ -325,6 +333,7 @@
     icon.textContent = {supported: '✓', issue: '!', unknown: '?'}[state] || '';
   }
   function renderCurrent(verification, options) {
+    verification = displayVerification(verification, options?.differencesData);
     const rendered = renderSafe(document.getElementById("consensusAnswerBody"), document.getElementById("sourceVerificationReport"), verification, options);
     const label = document.getElementById("consensusSourceCheckStatus");
     const pending = rendered && isPending(verification);
@@ -368,6 +377,7 @@
   }
   function render(body, target, verification, options = {}) {
     if (!body || !target) return;
+    verification = displayVerification(verification, options.differencesData);
     const openRows = new Set([...target.querySelectorAll('.source-check-row[open]')].map(row => row.dataset.pair));
     const openDisclosures = new Set([...target.querySelectorAll('details[data-disclosure][open]')].map(node => node.dataset.disclosure));
     const focusedRow = document.activeElement?.closest?.('.source-check-row, details[data-disclosure]');
@@ -629,6 +639,64 @@
   const differencePresentations = new WeakMap();
   const cardDifferences = new WeakMap();
   const evidenceDisclosures = new WeakMap();
+  const inputBlockers = ['missing_checkability', 'invalid_consensus_anchor', 'unverified_model_positions'];
+  function exclusionCodes(item) { return Array.isArray(item.reason_codes) ? item.reason_codes : [item.reason_code]; }
+  function hasInputBlocker(item) { return exclusionCodes(item).some(code => inputBlockers.includes(code)); }
+  function exactJSON(value) {
+    if (Array.isArray(value)) return JSON.stringify(value.map(item => JSON.parse(exactJSON(item))));
+    if (value && typeof value === 'object') return JSON.stringify(Object.fromEntries(Object.keys(value).sort().map(key => [key, JSON.parse(exactJSON(value[key]))])));
+    return JSON.stringify(value ?? null);
+  }
+  function displayVerification(verification, differencesData) {
+    if (!isContradictionCheck(verification) || verification.reason_code === 'disabled' || Array.isArray(verification.exclusions)
+      || !['skipped', 'complete', 'partial'].includes(verification.status)) return verification;
+    const excluded = [];
+    (differencesData?.differences || []).forEach((diff, index) => {
+      if (diff?.type !== 'contradiction' || diff.severity !== 'major'
+        || (verification.findings || []).some(item => item?.difference_index === index)) return;
+      const reasons = [];
+      if (diff.factual_check?.checkable === false) reasons.push('not_factual');
+      else if (diff.factual_check?.checkable !== true || !diff.factual_check?.question) reasons.push('missing_checkability');
+      if (!diff.consensus_anchor || diff.consensus_anchor_validated === false) reasons.push('invalid_consensus_anchor');
+      if (!Array.isArray(diff.positions) || diff.positions.length < 2 || diff.positions.some(position => !position?.quote
+        || !Array.isArray(position.quote_models) || !position.quote_models.length)) reasons.push('unverified_model_positions');
+      if (!reasons.length && verification.status !== 'skipped') return;
+      excluded.push({difference_index: index, consensus_anchor: diff.consensus_anchor, positions: diff.positions,
+        question: diff.factual_check?.question || '', reason_code: reasons[0] || 'not_checked', reason_codes: reasons.length ? reasons : ['not_checked'],
+        reason: reasons.includes('not_factual') ? diff.factual_check?.reason || '' : ''});
+    });
+    // Presentation-only diagnosis for old snapshots. Never change the persisted
+    // plan, model positions, verdicts or the result sent to an observer callback.
+    return {...verification, exclusions: excluded, scope: {...verification.scope, excluded_contradictions: excluded.length}};
+  }
+  function exclusionResult(item) {
+    const section = element('section', 'contradiction-source-check');
+    section.dataset.checkState = 'excluded';
+    section.dataset.contradictionId = item.exclusion_id || `excluded:${item.difference_index}`;
+    const codes = exclusionCodes(item);
+    section.append(element('h4', 'contradiction-source-heading', 'Source check'));
+    section.append(element('p', 'contradiction-source-verdict', codes.includes('not_factual')
+      ? 'Not selected for source checking' : 'Not checked'));
+    const explanations = {not_factual: 'The analysis classified this dispute as not fact-checkable.',
+      missing_checkability: 'The analysis did not establish whether this dispute is fact-checkable.',
+      invalid_consensus_anchor: 'The disagreement could not be matched to the consensus text.',
+      unverified_model_positions: 'Original model passages could not be matched.',
+      not_checked: 'No source-check result is available for this contradiction.'};
+    [...new Set(codes)].forEach(code => section.append(element('p', 'contradiction-source-reason', explanations[code] || 'This contradiction was not checked.')));
+    if (codes.includes('not_factual') && item.reason) section.append(element('p', 'contradiction-source-context', item.reason));
+    return section;
+  }
+  function matchingDifferenceCards(cards, diff, exactPositions = false) {
+    return [...cards.querySelectorAll('.diff-card')].filter(card => {
+      let displayed = cardDifferences.get(card);
+      if (!displayed && card.dataset.difference) {
+        try { displayed = JSON.parse(card.dataset.difference); } catch (_) { return false; }
+      }
+      return displayed ? differenceIdentity(displayed) === differenceIdentity(diff)
+        && (!exactPositions || exactJSON(displayed.positions) === exactJSON(diff.positions))
+        : card.querySelector('.diff-card-claim, h3')?.textContent === diff.claim;
+    });
+  }
   function rememberEvidenceDisclosures(cards) {
     if (!cards) return;
     const state = evidenceDisclosures.get(cards) || new Map();
@@ -715,18 +783,22 @@
       if (!diff || diff.type !== 'contradiction' || diff.severity !== 'major'
         || diff.factual_check?.checkable !== true || diff.factual_check.question !== item.question
         || diff.consensus_anchor !== item.consensus_anchor || !samePositions(item, diff)) return;
-      const matches = [...cards.querySelectorAll('.diff-card')].filter(card => {
-        let displayed = cardDifferences.get(card);
-        if (!displayed && card.dataset.difference) {
-          try { displayed = JSON.parse(card.dataset.difference); } catch (_) { return false; }
-        }
-        return displayed ? differenceIdentity(displayed) === differenceIdentity(diff)
-          : card.querySelector('.diff-card-claim, h3')?.textContent === diff.claim;
-      });
+      const matches = matchingDifferenceCards(cards, diff);
       if (matches.length !== 1) return;
       const card = matches[0];
       (card.querySelector('.diff-card-body') || card).append(contradictionResult(item, verification,
         evidenceDisclosures.get(cards)?.get(item.contradiction_id) === true));
+    });
+    (verification.exclusions || []).forEach(item => {
+      const diff = differencesData?.differences?.[item.difference_index];
+      if (!diff || diff.type !== 'contradiction' || diff.severity !== 'major'
+        || item.consensus_anchor !== diff.consensus_anchor || exactJSON(item.positions) !== exactJSON(diff.positions)
+        || (item.question || '') !== (diff.factual_check?.question || '')
+        || (item.run_id != null && item.run_id !== verification.run_id)
+        || (item.answer_version != null && item.answer_version !== verification.answer_version)) return;
+      const matches = matchingDifferenceCards(cards, diff, true);
+      if (matches.length !== 1 || matches[0].querySelector('.contradiction-source-check')) return;
+      (matches[0].querySelector('.diff-card-body') || matches[0]).append(exclusionResult(item));
     });
   }
   function renderContradictions(body, target, verification, options, previousCards) {
@@ -740,7 +812,7 @@
     box.append(summary, element('p', 'source-check-coverage', 'Checks factual disagreements using sources already supplied by the models. This is not a complete fact-check of the consensus.'));
     if (cards) box.append(element('p', 'source-verification-explanation', 'Results and original evidence appear with each contradiction in Differences.'));
     target.prepend(box);
-    if (!cards && (verification.findings || []).length) {
+    if (!cards && ((verification.findings || []).length || (verification.exclusions || []).length)) {
       cards = element('div', 'contradiction-source-differences');
       box.append(cards);
       (options.differencesData?.differences || []).forEach(diff => {

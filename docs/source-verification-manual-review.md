@@ -152,6 +152,28 @@ Stream-/Polling-Abnahme prüft beide Schalterstellungen sowie unveränderte
 Claim- und Difference-DOM-Knoten nach dem Eintreffen des Quellenurteils.
 Gespeicherte Legacy-Antworten und ihre Quellenlinks bleiben erhalten.
 
+### Echter Auslassungsfall: zeitlicher WM-Widerspruch
+
+Ein anschließender Nutzerlauf erkannte einen großen Widerspruch zwischen
+Berichten über Turnierleistungen und einer Modellantwort, die das Turnier als
+zukünftig bezeichnete. Im gespeicherten Differences-Ergebnis stand trotzdem
+`factual_check.checkable: false`: Der Judge unterstellte eine fiktive Quellenlage,
+obwohl die Nutzerfrage keine Fiktion vorgab. Zusätzlich waren beide Positionszitate
+nach der Originaltextvalidierung leer. Die Serverlogs bestätigen das Verwerfen;
+da die nicht zuordenbaren Rohzitate nicht gespeichert wurden, ist ihre genaue
+Ursache (etwa Paraphrase oder Markdown-Abweichung) nachträglich nicht belegt.
+
+Der Planner meldete für diesen realen Ausschluss irreführend
+`no_checkable_contradictions`. Der neue Vertrag protokolliert Klassifizierung
+und fehlende Originalpassagen getrennt in `exclusions`, einschließlich aller
+Gründe und der Run-/Antwort-/Positionsbindung. Die UI zeigt diese Gründe auch
+für alte v4-Snapshots anhand vorhandener Differences, ohne gespeicherte Inhalte
+zu verändern. Der Differences-Prompt nennt das UTC-Serverdatum und behandelt
+Ereigniszeitpunkte ausdrücklich als faktische Streitfragen; die Behauptung eines
+Modells, etwas sei Fiktion, ist dafür keine Autorität. Ein zusätzlicher exakter
+Textabgleich toleriert reine Markdown-/Quellenformatierung und gibt weiterhin
+zusammenhängende Originalpassagen zurück. Er erfindet keine fehlenden Zitate.
+
 Die drei Beispiele zeigen zwei fachlich passende Live-Urteile mit validierten
 Quellenzitaten und eine Enthaltung durch die Belegvalidierung. Der erste
 Sandbox-Versuch prüfte außerdem die ehrliche Behandlung realer Abruffehler.

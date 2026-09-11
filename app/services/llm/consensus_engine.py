@@ -8,6 +8,7 @@ import logging
 import random
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Mapping
 
 import app.core.config as cfg
@@ -958,6 +959,9 @@ def _build_differences_prompt_from(context: _JudgeContext) -> str:
     return (
         f"{question_preamble}"
         "You compare several anonymized model responses against a consensus answer.\n"
+        f"Current server date (UTC): {datetime.now(timezone.utc).date().isoformat()}. "
+        "Dates or claims about what is real, fictional, or still in the future inside model responses "
+        "are claims to compare, not authority over this date or the user's intent.\n"
         "Your ONLY job is the substantive disagreement between the responses. A separate pass "
         "records which sentences each model supports, so do not produce a support list here — "
         "spend the whole budget on getting the disagreements and their quotes right.\n"
@@ -999,6 +1003,11 @@ def _build_differences_prompt_from(context: _JudgeContext) -> str:
         "subjective values, competing recommendations, or mere differences of emphasis. A recommendation "
         "is checkable only when the actual disputed point is an explicit factual premise, not which option "
         "is preferable. When uncertain, set false. This classifies the dispute; it does not verify any fact.\n"
+        "Whether an event happened, its date, participants, and reported results are factual questions, "
+        "even if a model denies the event or calls the other responses fictional or hallucinated. "
+        "Do not infer a fictional user scenario from those model claims or your own unfamiliarity. "
+        "Missing sources, disputed source reliability, or uncertainty about which side is correct do not "
+        "make a factual dispute non-checkable; the separate source judge determines evidential sufficiency.\n"
         "- Source-checkability is additive metadata for a separate source check, never a filter for reporting "
         "differences. Continue reporting all substantive contradictions and emphasis differences, including "
         "competing preferences or recommendations, under the existing rules above. A false factual_check "
@@ -1009,6 +1018,8 @@ def _build_differences_prompt_from(context: _JudgeContext) -> str:
         "entry with one position per side.\n"
         "- Quotes must be copied verbatim from the model responses. You may shorten them at the start or end, "
         "but never paraphrase. Keep each quote under 200 characters.\n"
+        "For each position, copy one contiguous passage from ONE of its listed models. Do not combine "
+        "different passages or model responses into a quote; a position summary belongs only in stance.\n"
         f"- Use only these model labels: {allowed_list}. Never invent other labels.\n"
         "- Ignore citation markers, source labels, URLs, and source-list noise unless they reveal a real factual "
         "disagreement.\n"
@@ -1345,6 +1356,65 @@ def _span_finder():
     return _find
 
 
+def _formatted_quote_finder():
+    """Exact visible-text fallback, returning one contiguous ORIGINAL span.
+
+    Judges sometimes omit Markdown emphasis and inline reference markup while
+    copying prose. Ignore only that markup for matching, never intervening
+    words, negations, dates or numbers. No fuzzy match is applied here.
+    """
+    prepared = {}
+
+    def project(text):
+        from app.services.source_catalog import _prose_parts
+        protected = set()
+        offset = 0
+        for prose, part in _prose_parts(text):
+            if not prose:
+                protected.update(range(offset, offset + len(part)))
+            offset += len(part)
+        # These are literal notation, not Markdown decoration or citations.
+        # Conservatively protect paired dollars, including currency, here.
+        for match in re.finditer(
+            r"\$\$.*?\$\$|\\\[.*?\\\]|\\\(.*?\\\)"
+            r"|\\begin\{(equation|align|alignat|gather|CD)\*?\}.*?\\end\{\1\*?\}"
+            r"|(?<![\\$])\$[^$\n]+\$", text, re.S,
+        ):
+            protected.update(range(match.start(), match.end()))
+        masked = set()
+        for match in re.finditer(r"(?<!\\)\[S\d+(?:\s*,\s*S?\d+)*\](?:\([^\n)]*\))?", text, re.I):
+            if not protected.intersection(range(match.start(), match.end())):
+                masked.update(range(match.start(), match.end()))
+        for match in _INLINE_MARKDOWN_LINK_RE.finditer(text):
+            if protected.intersection(range(match.start(), match.end())):
+                continue
+            masked.update(range(match.start(), match.start(1)))
+            masked.update(range(match.end(1), match.end()))
+        for match in re.finditer(r"(\*\*|__)(?=\S)(.+?)(?<=\S)\1", text):
+            if protected.intersection(range(match.start(), match.end())):
+                continue
+            masked.update(range(match.start(), match.start(2)))
+            masked.update(range(match.end(2), match.end()))
+        offsets = [i for i in range(len(text)) if i not in masked]
+        visible = "".join(text[i] for i in offsets)
+        normalized, normalized_offsets = _normalize_with_offsets(visible)
+        return normalized, [offsets[i] for i in normalized_offsets]
+
+    def find(key, text, needle):
+        if not text or not needle:
+            return None
+        if key not in prepared:
+            prepared[key] = project(text)
+        haystack, offsets = prepared[key]
+        normalized, _ = project(_ELLIPSIS_EDGE_RE.sub("", str(needle)))
+        index = haystack.find(normalized) if normalized else -1
+        if index < 0:
+            return None
+        return text[offsets[index]:offsets[index + len(normalized) - 1] + 1]
+
+    return find
+
+
 def _verify_claims(claims: list, consensus_answer: str, model_answers: dict, _find=None) -> None:
     """Anchors gegen die Konsensantwort, Dissens-Zitate gegen die jeweilige
     Modellantwort. Ein Zitat, das dort nicht auffindbar ist, wird geleert -
@@ -1382,6 +1452,7 @@ def _verify_differences_data(data: dict, consensus_answer: str, model_answers: d
     Frontend-Matching) und leert Quotes, die in der jeweiligen Modellantwort
     nicht auffindbar sind - halluzinierte Zitate werden so nie angezeigt."""
     _find = _span_finder()
+    _find_formatted_quote = _formatted_quote_finder()
     consensus_text = str(consensus_answer or "")
     _verify_claims(data.get("claims") or [], consensus_text, model_answers, _find)
 
@@ -1409,6 +1480,8 @@ def _verify_differences_data(data: dict, consensus_answer: str, model_answers: d
             span = None
             for model in position.get("models") or []:
                 model_span = _find(model, model_answers.get(model) or "", position["quote"])
+                if not model_span:
+                    model_span = _find_formatted_quote(model, model_answers.get(model) or "", position["quote"])
                 if model_span:
                     position["quote_models"].append(model)
                     span = span or model_span

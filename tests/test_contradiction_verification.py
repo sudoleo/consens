@@ -72,7 +72,8 @@ def test_ineligible_differences_never_schedule(path, value):
     data['differences'][0][path] = value
     result = plan(differences_data=data)
     assert result['packages'] == []
-    assert result['snapshot']['reason_code'] == 'no_checkable_contradictions'
+    expected = 'contradiction_inputs_unavailable' if path in ('consensus_anchor_validated', 'consensus_anchor') or value is None else 'no_checkable_contradictions'
+    assert result['snapshot']['reason_code'] == expected
 
 
 def test_unverified_model_position_never_drops_one_side_into_judge():
@@ -80,6 +81,40 @@ def test_unverified_model_position_never_drops_one_side_into_judge():
     data['differences'][0]['positions'][1]['quote_models'] = []
     assert not plan(differences_data=data)['packages']
     assert not plan(model_answers={'OpenAI': ANSWERS['OpenAI'], 'Anthropic': 'Other text'})['packages']
+
+
+def test_missing_original_quotes_are_explicit_exclusions_not_absent_contradictions():
+    data = differences()
+    data['differences'][0]['positions'][1].update(quote='', quote_models=[])
+    result = plan(differences_data=data)
+    snapshot = result['snapshot']
+    assert result['packages'] == []
+    assert snapshot['findings'] == []
+    assert snapshot['reason_code'] == 'contradiction_inputs_unavailable'
+    assert snapshot['scope']['detected_contradictions'] == 1
+    assert snapshot['scope']['excluded_contradictions'] == 1
+    exclusion = snapshot['exclusions'][0]
+    assert exclusion['reason_codes'] == ['unverified_model_positions']
+    assert exclusion['positions'] == data['differences'][0]['positions']
+    assert exclusion['exclusion_id'] == plan(differences_data=data)['snapshot']['exclusions'][0]['exclusion_id']
+    assert exclusion['exclusion_id'] != plan(differences_data=data, run_id='other')['snapshot']['exclusions'][0]['exclusion_id']
+    assert cv.finish_snapshot(snapshot)['reason_code'] == 'contradiction_inputs_unavailable'
+
+
+def test_mixed_checks_keep_excluded_dispute_and_all_exclusion_causes():
+    data = differences()
+    excluded = copy.deepcopy(data['differences'][0])
+    excluded['factual_check'] = {'checkable': False, 'question': 'Has the event happened?', 'reason': 'The analysis assumed fiction.'}
+    excluded['positions'][0].update(quote='', quote_models=[])
+    data['differences'].append(excluded)
+    result = run(differences_data=data)
+    assert result['scope']['checked_contradictions'] == 1
+    assert result['scope']['detected_contradictions'] == 2
+    assert result['scope']['excluded_contradictions'] == 1
+    assert len(result['findings']) == 1
+    assert result['exclusions'][0]['reason_codes'] == ['not_factual', 'unverified_model_positions']
+    assert result['exclusions'][0]['reason'] == 'The analysis assumed fiction.'
+    assert sv.stored_verification(result, CONSENSUS) == result
 
 
 def test_identity_binds_run_answer_positions_and_question():

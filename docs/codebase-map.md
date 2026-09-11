@@ -1665,7 +1665,7 @@ ursprünglichen Modellpositionen werden durch Quellenbefunde nicht verändert.
 
 `source_verification.py` dispatcht neue Pläne nach
 `contradiction_verification.py`: Schema 4, `check_type: contradiction_evidence`,
-`prompt_version: contradiction-evidence-v1`. Nur `contradiction` + `major`,
+`prompt_version: contradiction-evidence-v2`. Nur `contradiction` + `major`,
 faktisch prüfbare Frage und gültige Consensus-/Modellanker werden aufgenommen.
 Jeder Befund trägt stabile `contradiction_id`, `difference_index`, `run_id`,
 `answer_version` und `positions_version`; Positionen heißen innerhalb eines
@@ -1674,6 +1674,17 @@ Modellpassage und Referenzen zugeordnet; ein begrenzter Katalog-Fallback ist
 als solcher gekennzeichnet. URL-Deduplizierung verwendet D-IDs nur innerhalb
 der Prüfung, Quellen in Modellantworten behalten ihre S-IDs. Bei gemeinsamer
 URL bleiben die relevanten Originalpassagen beider Seiten erhalten.
+
+Vorab ausgeschlossene große Widersprüche bleiben in `exclusions[]` mit
+Run-/Antwort-/Positionsbindung und allen Ausschlussgründen sichtbar; die
+Scope-Felder `detected_contradictions`/`excluded_contradictions` zählen sie.
+Fehlende Prüfbarkeitsangaben, ungültige Anker oder nicht zuordenbare Modellzitate
+führen ohne verbleibenden Prüfauftrag zu `contradiction_inputs_unavailable`.
+Die UI zeigt den Grund direkt an der Difference, getrennt von Quellenurteilen.
+Für alte v4-Snapshots ohne dieses Feld werden ausschließlich Anzeigehinweise
+aus den gespeicherten Differences abgeleitet. Sachliche Termin-/Ereignisfragen
+bleiben prüfbar; Fiktion wird nicht aus widersprechenden Modellantworten
+unterstellt. Der Differences-Prompt nennt das aktuelle UTC-Serverdatum.
 
 Ein einziges begrenztes Paket pro neuem Auftrag umfasst alle ausgewählten
 Streitpunkte und URLs. Konfigurierbare Gesamtbudgets kommen aus

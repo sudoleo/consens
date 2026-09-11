@@ -17,7 +17,8 @@ from app.services.source_documents import select_passages, fetch_failure_code
 from app.services.llm.provider_runtime import AnalysisBudget, bind_analysis_budget, raise_if_provider_cancelled
 
 MODE = 'contradiction_evidence'
-PROMPT_VERSION = 'contradiction-evidence-v1'
+PROMPT_VERSION = 'contradiction-evidence-v2'
+_INPUT_ERRORS = {'missing_checkability', 'invalid_consensus_anchor', 'unverified_model_positions'}
 SYSTEM = '''Adjudicate the supplied factual disputes using only supplied original source passages.
 Return JSON {"findings":[{"contradiction_id":"", "verdict":"supports_position|conditions_explain|sources_conflict|insufficient_evidence",
 "supported_position_id":null, "reason":"", "evidence":[{"source_id":"S1","position_id":"P1","quote":"",
@@ -122,22 +123,23 @@ def plan_contradiction_verification(*, question, consensus, sources, differences
             [_label(p) for p in previous.get('providers', []) + source.get('providers', [])]))}
     records = list(merged.values())
     differences = differences_data.get('differences', []) if isinstance(differences_data, dict) else []
-    findings, selected, accepted_count = [], {}, 0
+    findings, exclusions, selected, accepted_count = [], [], {}, 0
     for index, diff in enumerate(differences if isinstance(differences, list) else []):
         if not isinstance(diff, dict) or diff.get('type') != 'contradiction' or diff.get('severity') != 'major':
             continue
         check = diff.get('factual_check')
         anchor = diff.get('consensus_anchor')
-        if (not isinstance(check, dict) or check.get('checkable') is not True
-                or not isinstance(check.get('question'), str) or not check['question'].strip()
-                or diff.get('consensus_anchor_validated') is not True
+        reasons = []
+        if not isinstance(check, dict) or not isinstance(check.get('question'), str) or not check['question'].strip():
+            reasons.append('missing_checkability')
+        elif check.get('checkable') is not True:
+            reasons.append('not_factual')
+        if (diff.get('consensus_anchor_validated') is not True
                 or not isinstance(anchor, str) or not anchor or anchor not in consensus):
-            continue
+            reasons.append('invalid_consensus_anchor')
         raw_positions = diff.get('positions')
-        if not isinstance(raw_positions, list):
-            continue
         positions = []
-        for pos in raw_positions:
+        for pos in raw_positions if isinstance(raw_positions, list) else []:
             if not isinstance(pos, dict):
                 continue
             quote = pos.get('quote')
@@ -149,7 +151,18 @@ def plan_contradiction_verification(*, question, consensus, sources, differences
                 'quote': quote, 'models': [_label(m) for m in pos.get('models', []) if isinstance(m, str)] if isinstance(pos.get('models'), list) else [],
                 'quote_models': quote_models})
         # Dropping an unanchored side would silently adjudicate a different dispute.
-        if len(positions) < 2 or len(positions) != len(raw_positions):
+        if len(positions) < 2 or len(positions) != len(raw_positions or []):
+            reasons.append('unverified_model_positions')
+        if reasons:
+            original_positions = copy.deepcopy(raw_positions) if isinstance(raw_positions, list) else []
+            exclusion = {'difference_index': index, 'run_id': str(run_id), 'answer_version': version,
+                'consensus_anchor': anchor, 'positions': original_positions,
+                'positions_version': _digest(original_positions),
+                'question': check.get('question', '') if isinstance(check, dict) else '',
+                'reason_code': reasons[0], 'reason_codes': reasons,
+                'reason': str(check.get('reason', '') or '') if isinstance(check, dict) else ''}
+            exclusion['exclusion_id'] = _digest([PROMPT_VERSION, exclusion])
+            exclusions.append(exclusion)
             continue
         positions_version = _digest(positions)
         identity = [PROMPT_VERSION, str(run_id), version, index, anchor, check['question'], positions_version]
@@ -198,6 +211,11 @@ def plan_contradiction_verification(*, question, consensus, sources, differences
             finding = _base_finding(finding, 'no_sources')
         findings.append(finding)
     snapshot = _snapshot(version, run_id, findings, list(selected.values()), limits.model)
+    snapshot['exclusions'] = exclusions
+    snapshot['scope'].update(detected_contradictions=len(findings) + len(exclusions),
+                             excluded_contradictions=len(exclusions))
+    if not findings and any(_INPUT_ERRORS.intersection(e['reason_codes']) for e in exclusions):
+        snapshot['reason_code'] = 'contradiction_inputs_unavailable'
     snapshot['budgets'] = {name: getattr(limits, name) for name in
         ('max_contradictions', 'max_urls', 'input_tokens', 'total_seconds', 'fallback_sources_per_position')}
     package = {'id': _digest([PROMPT_VERSION, run_id, version, findings, list(selected.values())])[:32],
@@ -215,7 +233,8 @@ def finish_snapshot(result):
         omitted_contradictions=omitted, unavailable_contradictions=unavailable,
         fetched_sources=len({d.get('source_url', d.get('url')) for d in result.get('documents', [])}))
     if not findings:
-        result.update(status='skipped', reason_code='no_checkable_contradictions')
+        blocked = any(_INPUT_ERRORS.intersection(e.get('reason_codes', [])) for e in result.get('exclusions', []))
+        result.update(status='skipped', reason_code='contradiction_inputs_unavailable' if blocked else 'no_checkable_contradictions')
     elif checked + omitted + unavailable < len(findings):
         result['status'] = 'running'
     else:
