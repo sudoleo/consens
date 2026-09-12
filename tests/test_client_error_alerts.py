@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+import pytest
 from fastapi.testclient import TestClient
 
 from app.api.routers import client_errors
@@ -17,6 +18,21 @@ def _client(monkeypatch, captured):
     app.state.limiter = limiter
     app.include_router(client_errors.router)
     return TestClient(app)
+
+
+@pytest.mark.parametrize("kind", [
+    "request_failed", "stream_read_failed", "stream_handler_failed",
+    "stream_incomplete", "consensus_processing_failed", "private@example.test",
+])
+def test_consensus_failure_kind_is_allowlisted(monkeypatch, kind):
+    captured = []
+    response = _client(monkeypatch, captured).post("/api/client-errors", json={
+        "type": "consensus_failed", "phase": "consensus_connection",
+        "message": "private prompt", "failure_kind": kind, "path": "/app",
+    })
+    assert response.status_code == 202
+    assert captured[0].get("failure_kind") == (None if "@" in kind else kind)
+    assert "private" not in str(captured)
 
 
 def test_client_error_report_is_accepted_and_sanitized(monkeypatch):

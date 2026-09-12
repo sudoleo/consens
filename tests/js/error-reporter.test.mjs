@@ -21,6 +21,15 @@ function fail(window, element) {
 }
 
 describe("critical resource reporting", () => {
+  it("preserves distinct stream failure categories during deduplication", () => {
+    const { window, dom, reports } = boot();
+    for (const kind of ["stream_read_failed", "stream_handler_failed", "stream_read_failed"]) {
+      window.App.reportCriticalError({ type: "consensus_failed", phase: "consensus_connection",
+        message: "Failed", failure_kind: kind });
+    }
+    expect(reports.map(report => report.failure_kind)).toEqual(["stream_read_failed", "stream_handler_failed"]);
+    dom.window.close();
+  });
   it("ignores optional source favicons", () => {
     const { window, document, reports } = boot();
     const image = document.createElement("img");

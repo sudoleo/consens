@@ -173,6 +173,9 @@ def _critical_error_message(report: Mapping) -> str:
         lines.append(f"Path: {path}")
     if resource_class:
         lines.append(f"Resource: {resource_class}")
+    failure_kind = _scrub_alert_text(report.get("failure_kind"), limit=80)
+    if failure_kind:
+        lines.append(f"Failure: {failure_kind}")
     lines.extend(("", message))
     if details:
         lines.extend(("", f"Details: {details}"))
@@ -195,7 +198,8 @@ def send_critical_error_notification(report: Mapping) -> dict:
     path = _scrub_alert_text(report.get("path"), limit=200)
     resource_class = _scrub_alert_text(report.get("resource_class"), limit=80)
     fingerprint = "\x1f".join(
-        (source, error_type, phase, path, resource_class, message)
+        (source, error_type, phase, path, resource_class,
+         _scrub_alert_text(report.get("failure_kind"), limit=80), message)
     )
     reservation = _reserve_critical_delivery(fingerprint)
     if reservation != "reserved":

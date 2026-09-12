@@ -217,21 +217,29 @@ async function readSSEStream(response, onEvent) {
     } catch (_) {
       return;
     }
-    onEvent(eventName, parsed);
+    return onEvent(eventName, parsed);
   }
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    let separatorIndex;
-    while ((separatorIndex = buffer.indexOf("\n\n")) !== -1) {
-      const rawEvent = buffer.slice(0, separatorIndex);
-      buffer = buffer.slice(separatorIndex + 2);
-      dispatch(rawEvent);
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let separatorIndex;
+      while ((separatorIndex = buffer.indexOf("\n\n")) !== -1) {
+        const rawEvent = buffer.slice(0, separatorIndex);
+        buffer = buffer.slice(separatorIndex + 2);
+        // The application final/error frame is authoritative. Waiting for EOF
+        // can turn an already completed response into a later network failure.
+        if (dispatch(rawEvent) === true) return;
+      }
     }
+    if (buffer.trim()) dispatch(buffer);
+  } finally {
+    // Do not let a stalled/rejected transport cleanup replace the result.
+    try { Promise.resolve(reader.cancel?.()).catch(() => {}); } catch (_) {}
+    try { reader.releaseLock?.(); } catch (_) {}
   }
-  if (buffer.trim()) dispatch(buffer);
 }
 
 // Führt einen POST-Request aus, der wahlweise als SSE-Stream (stream:true)
@@ -241,6 +249,7 @@ async function readSSEStream(response, onEvent) {
 // die bisherige JSON-Antwort (final-Event des Streams bzw. JSON-Body).
 async function streamSSERequest(url, payload, signal, deltaRenderers) {
   const renderers = deltaRenderers || {};
+  let failureKind = "request_failed";
   try {
     const response = await fetch(url, {
       method: "POST",
@@ -249,6 +258,7 @@ async function streamSSERequest(url, payload, signal, deltaRenderers) {
       signal
     });
 
+    failureKind = "stream_read_failed";
     const contentType = (response.headers.get("content-type") || "").toLowerCase();
     if (!contentType.includes("text/event-stream") || !response.body) {
       const rawBody = await response.text();
@@ -271,29 +281,45 @@ async function streamSSERequest(url, payload, signal, deltaRenderers) {
     await readSSEStream(response, (eventName, data) => {
       if (eventName === "final" || eventName === "error") {
         finalData = data;
-        return;
+        return true;
       }
-      if (eventName === "reasoning") {
-        Object.values(renderers).forEach(renderer => renderer && renderer.markReasoning && renderer.markReasoning());
-        return;
-      }
-      const renderer = renderers[eventName];
-      if (!renderer || !data) return;
-      if (renderer.receive) { renderer.receive(data); return; }
-      const deltaText = coerceStreamText(data.text);
-      if (deltaText) {
-        renderer.append(deltaText);
-      } else if (data.reasoning && renderer.markReasoning) {
-        // Reasoning-Marker auf einem benannten Event (z. B. consensus.delta):
-        // nur den zugehörigen Renderer markieren, nicht alle.
-        renderer.markReasoning();
+      failureKind = "stream_handler_failed";
+      try {
+        if (eventName === "reasoning") {
+          Object.values(renderers).forEach(renderer => renderer && renderer.markReasoning && renderer.markReasoning());
+          return;
+        }
+        const renderer = renderers[eventName];
+        if (!renderer || !data) return;
+        if (renderer.receive) { renderer.receive(data); return; }
+        const deltaText = coerceStreamText(data.text);
+        if (deltaText) {
+          renderer.append(deltaText);
+        } else if (data.reasoning && renderer.markReasoning) {
+          // Reasoning-Marker auf einem benannten Event (z. B. consensus.delta):
+          // nur den zugehörigen Renderer markieren, nicht alle.
+          renderer.markReasoning();
+        }
+      } catch (error) {
+        // Keep handler failures distinct from failures of reader.read().
+        throw Object.assign(new Error(error?.message || "Stream rendering failed."), {
+          name: error?.name || "Error", streamFailureKind: "stream_handler_failed"
+        });
+      } finally {
+        failureKind = "stream_read_failed";
       }
     });
 
     if (!finalData) {
-      finalData = { error: "Connection lost before the response was completed." };
+      throw Object.assign(new Error("Connection lost before the response was completed."), {
+        streamFailureKind: "stream_incomplete"
+      });
     }
     return { ok: true, status: response.status, data: finalData, streamed: true };
+  } catch (error) {
+    throw Object.assign(new Error(error?.message || "The request failed."), {
+      name: error?.name || "Error", streamFailureKind: error?.streamFailureKind || failureKind
+    });
   } finally {
     Object.values(renderers).forEach(renderer => renderer?.stop?.());
   }

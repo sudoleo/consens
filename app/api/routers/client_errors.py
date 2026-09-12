@@ -44,6 +44,10 @@ _ALLOWED_RESOURCE_CLASSES = {
     "same_origin_resource",
     "unknown_resource",
 }
+_ALLOWED_FAILURE_KINDS = {
+    "request_failed", "stream_read_failed", "stream_handler_failed",
+    "stream_incomplete", "consensus_processing_failed",
+}
 
 
 def _bounded_string(data: dict, field: str, limit: int, *, required: bool = False) -> str:
@@ -126,5 +130,8 @@ def report_client_error(
     }
     if resource_class:
         report["resource_class"] = resource_class
+    raw_failure_kind = _bounded_string(data, "failure_kind", 80)
+    if error_type == "consensus_failed" and raw_failure_kind in _ALLOWED_FAILURE_KINDS:
+        report["failure_kind"] = raw_failure_kind
     background_tasks.add_task(send_critical_error_notification, report)
     return {"status": "accepted"}

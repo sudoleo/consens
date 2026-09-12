@@ -42,6 +42,7 @@
       report.type,
       report.phase,
       report.resource_class,
+      report.failure_kind,
       report.message,
       report.path
     ].join("|");
@@ -68,6 +69,7 @@
       path: window.location.pathname
     };
     const resourceClass = String(value.resource_class || "");
+    if (value.failure_kind) report.failure_kind = String(value.failure_kind);
     const details = compactDetails(value.details);
     const stack = String(value.stack || value.error?.stack || value.reason?.stack || "");
     if (resourceClass) report.resource_class = resourceClass;

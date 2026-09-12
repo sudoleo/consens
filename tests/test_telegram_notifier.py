@@ -126,8 +126,10 @@ def test_critical_error_message_includes_safe_resource_class():
         "phase": "asset_load",
         "path": "/app",
         "resource_class": "app_bundle",
+        "failure_kind": "stream_read_failed",
         "message": "A required browser script or stylesheet failed to load.",
     })
+    assert "Failure: stream_read_failed" in text
 
     assert "Resource: app_bundle" in text
 

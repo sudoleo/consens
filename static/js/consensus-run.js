@@ -1060,6 +1060,7 @@
       window.App.reportCriticalError?.({
         type: "consensus_failed",
         phase: "consensus_connection",
+        failure_kind: error?.streamFailureKind || "consensus_processing_failed",
         message: "The consensus request ended without a confirmed result.",
         details: `run ${context.requestIdentity}`
       });

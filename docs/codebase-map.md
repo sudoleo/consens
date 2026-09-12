@@ -1664,6 +1664,17 @@ Turn 3 und spätere Turns benutzen eine serverseitig autoritative Context-Versio
 
 ### Consensus & Differences
 
+**SSE-Abschluss und Browserdiagnose (2026-09-12):** `markdown-stream.js`
+beendet den Reader mit dem autoritativen `final`-/`error`-Event; ein späterer
+Netzfehler beim Warten auf EOF darf ein fertiges Ergebnis nicht verwerfen.
+`consensus.final` bleibt ein Zwischenereignis: Differences und Persistenz
+werden weiterhin bis zum gesamten `final` abgewartet. Ein EOF ohne Abschluss
+ist ein expliziter Streamfehler. Consensus-Alerts unterscheiden über das
+serverseitig allowgelistete `failure_kind` Request-, Read-, Eventhandler-,
+unvollständige Stream- und sonstige Verarbeitungsfehler. Die Kategorie wird
+in Telegram angezeigt und bei der Deduplizierung berücksichtigt; Freitext,
+Stack und Nutzdaten werden am Browser-Intake weiterhin verworfen.
+
 **Quellenprüfung v4 (2026-09-11):** Neue Consensus-Antworten enthalten keine
 S-Quellenverweise. `llm/consensus_citations.py` entfernt unerwartete S-Zitate
 inkrementell vor Streaming-Ausgabe, nachgelagerter Analyse und Speicherung;
