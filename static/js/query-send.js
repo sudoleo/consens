@@ -582,7 +582,7 @@
     const attachmentMeta = attachments.map(item => ({ name: item.name, mime: item.mime, size: item.size || 0 }));
     if (attachments.length && !window.isUserPlus) {
       if (!window.App.showProFeatureModal?.("File uploads")) {
-        window.App.showPopup?.("File uploads are off here. Remove the attachments to continue.");
+        window.App.showPopup?.("File uploads are not available on your account yet. Remove the attachments to continue.");
       }
       return null;
     }

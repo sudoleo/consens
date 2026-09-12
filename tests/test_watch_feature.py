@@ -1984,7 +1984,7 @@ class WatchFrontendContractTests(unittest.TestCase):
         self.assertIn('id="watchDashLimit"', html_source)
         self.assertIn('id="watchDialogLimit"', source)
         self.assertIn("Paused Watches do not count.", source)
-        self.assertIn("costs me money each time", source)
+        self.assertIn("limited during early access", source)
         self.assertIn('id="watchUsageDisplay"', html_source)
         self.assertIn('action.textContent = "Watch limit reached"', source)
 

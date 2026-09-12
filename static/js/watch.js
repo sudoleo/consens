@@ -374,7 +374,7 @@
   }
 
   function showWatchCostInfo() {
-    window.App?.showProFeatureModal?.("More frequent Consensus Watch checks");
+    window.App?.showAccessInfo?.();
   }
 
   function renderSidebarWatchQuota(limits) {
@@ -386,7 +386,7 @@
   function renderWatchLimit(target, limits) {
     if (!target || !limits) return;
     const tier = window.App.normalizeTier?.(limits.plan) || "free";
-    // Nur Free bekommt die Kostenerklaerung samt "Why limits?": Plus und Pro
+    // Nur Free bekommt den Early-Access-Hinweis: Plus und Pro
     // haben ihr groesseres Kontingent schon.
     const isFree = tier === "free";
     const planLabel = tier === "pro"
@@ -408,7 +408,7 @@
       </div>
       <div class="watch-limit-detail">
         <span>Paused Watches do not count.</span>
-        ${isFree ? `<span>Every Watch re-runs your question on a schedule and costs me money each time, which is why the number is capped.</span><button type="button" class="watch-limit-upgrade">Why limits?</button>` : ""}
+        ${isFree ? `<span>Watch slots and check intervals are limited during early access.</span><button type="button" class="watch-limit-upgrade">About early access</button>` : ""}
       </div>`;
     target.querySelector(".watch-limit-upgrade")?.addEventListener("click", showWatchCostInfo);
   }
@@ -920,7 +920,6 @@
         if (error.status === 429) {
           watchState.setLimits(null);
           loadWatchLimits(true).then(applyDialogWatchLimit).catch(() => {});
-          if (!window.isUserPlus) showWatchCostInfo();
         }
         popup("Watch could not be started: " + error.message);
       }

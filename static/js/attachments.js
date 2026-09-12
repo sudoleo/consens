@@ -295,7 +295,7 @@
       trackAppEvent("app_attachment_locked_click", { source: source });
       const shown = window.App?.showProFeatureModal?.("File uploads");
       if (!shown) {
-        window.App?.showPopup?.("File uploads are off here. Attached files make every one of the six calls a lot longer.");
+        window.App?.showPopup?.("File uploads are not available on your account yet. You can enter your question as text.");
       }
     }
 

@@ -1,6 +1,6 @@
 // =====================================================================
 // user-tier.js
-// Tier-/Pro-UI: Badge, "Why limits"-Link, Deep-Search-Sperre, Premium-Modell-
+// Tier-/Pro-UI: Badge, Early-Access-Link, Deep-Search-Sperre, Premium-Modell-
 // Optionen je nach Pro/Plus/Free/ausgeloggt. In eigene IIFE gekapselt.
 // Extrahiert aus templates/index.html (initApp-Closure).
 // Exporte: window.updateUserTierUI, window.updatePremiumModelsState,
@@ -46,6 +46,8 @@
     const upgradeLink = document.getElementById("upgradeLink");
     const deepSearchLabel = document.querySelector('.switch.deep-switch');
 
+    window.App.dismissFeatureAccessNotice?.();
+
     // === CASE 1: NICHT EINGELOGGT ===
     if (!isLoggedIn) {
       // Alles verstecken
@@ -67,7 +69,7 @@
 
     // === CASE 2: EINGELOGGT (Pro, Plus oder Free) ===
     // Das Badge traegt den Namen der Stufe; nur Free hat keines und sieht
-    // dafuer den "Why limits"-Link.
+    // dafuer den Early-Access-Link.
     if (badge) {
       badge.style.display = tier === TIER_FREE ? "none" : "inline-block";
       if (tier !== TIER_FREE) badge.textContent = isPro ? "Pro" : "Plus";

@@ -245,9 +245,9 @@
              Name sagt nichts, was das Avatar-Kuerzel daneben nicht schon
              zeigt — die Adresse steht weiterhin im Konto-Popup. -->
         <div class="sidebar-account-meta">
-          <a id="upgradeLink" class="u-display-none" href="#" aria-label="Why there are limits" title="Why there are limits">
+          <a id="upgradeLink" class="u-display-none" href="#" aria-label="About early access" title="About early access">
             <span class="upgrade-link-glyph" aria-hidden="true">?</span>
-            <span class="upgrade-link-text">Why limits</span>
+            <span class="upgrade-link-text">Early access</span>
           </a>
         </div>
         <!-- Kontingent-Ring: das einzige Element im Shell, das dauerhaft eine
@@ -914,60 +914,30 @@
     </div>
   </div>
 
-  <div id="proFeatureModal" class="modal">
+  <aside id="featureAccessNotice" class="feature-access-notice" aria-label="Feature availability" hidden>
+    <p id="featureAccessMessage" role="status" aria-live="polite" aria-atomic="true"></p>
+    <a id="featureAccessDetails" href="#proFeatureModal">About early access</a>
+    <button type="button" id="closeFeatureAccessNotice" class="close" aria-label="Dismiss feature notice">&times;</button>
+  </aside>
+
+  <div id="proFeatureModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="accessInfoTitle">
     <div class="modal-content pro-modal-content">
-      <span class="close" id="closeProModal">&times;</span>
+      <button type="button" class="close" id="closeProModal" aria-label="Close early access information">&times;</button>
 
       <div class="pro-header">
-        <p class="eyebrow">Why this is off</p>
-        <h2><span class="highlight-tech" id="proModalFeatureName">Deep Think</span>: switched off by default</h2>
-        <p id="proModalDescription">This one costs a multiple of a normal run, so it stays off by default.</p>
+        <h2 id="accessInfoTitle">Early access</h2>
+        <p>consens.io is in active development and currently free to use.</p>
       </div>
 
       <div class="pro-beta-panel">
         <p>
-          It’s free while I’m testing it, and there’s nothing to buy today. If people want
-          these runs regularly, a membership is how I’d make that possible. So tell me at
-          <a href="mailto:contact@consens.io">contact@consens.io</a>. :&#41;
+          Usage limits apply, and some features are available only to selected accounts.
+          Paid plans are coming. There is no subscription to buy yet.
         </p>
         <p>
-          Why not everything, for everyone? One question is nine calls to six providers, and
-          every one of them lands on me. So the expensive parts are switched on
-          per account instead of for everyone.
+          Feedback or a feature you'd like to use? Write to
+          <a href="mailto:contact@consens.io">contact@consens.io</a>.
         </p>
-        <!-- Der Satz darueber behauptet "neun Calls"; hier steht der Beleg.
-             Jeder Punkt ist ein bezahlter Modell-Call, die Zahl der Punkte IST
-             die Aussage — deshalb keine Farbe, keine Animation, keine zweite
-             Skala und keine Wiederholung der Aussage in Prosa. -->
-        <figure class="cost-flow">
-          <div class="cost-flow-track">
-            <div class="cost-flow-stage">
-              <span class="cost-flow-head">
-                <span class="cost-flow-dots" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></span>
-                <span class="cost-flow-name">6 answers</span>
-              </span>
-              <span class="cost-flow-note">One per model family, in parallel.</span>
-            </div>
-            <span class="cost-flow-arrow" aria-hidden="true"></span>
-            <div class="cost-flow-stage">
-              <span class="cost-flow-head">
-                <span class="cost-flow-dots" aria-hidden="true"><i></i></span>
-                <span class="cost-flow-name">1 synthesis</span>
-              </span>
-              <span class="cost-flow-note">Reads all six, writes the one you get.</span>
-            </div>
-            <span class="cost-flow-arrow" aria-hidden="true"></span>
-            <div class="cost-flow-stage">
-              <span class="cost-flow-head">
-                <span class="cost-flow-dots" aria-hidden="true"><i></i><i></i></span>
-                <span class="cost-flow-name">2 judges</span>
-              </span>
-              <span class="cost-flow-note">One finds the disagreements, one checks every sentence.</span>
-            </div>
-          </div>
-          <figcaption class="cost-flow-foot">Nine calls for a full analysis, plus an optional source check. Deep Think costs several times more.</figcaption>
-        </figure>
-
         <div class="pro-beta-actions">
           <button class="btn-free" id="keepFreeBtn">Got it</button>
         </div>
@@ -1227,14 +1197,14 @@
             aria-labelledby="settingsConnectionsTitle">
             <div class="settings-category-heading">
               <h3 id="settingsConnectionsTitle">Connections</h3>
-              <p>Run on my quota, or use your own OpenRouter key and pay your own bill.</p>
+              <p>Use the included allowance or connect your own OpenRouter API key.</p>
             </div>
             <div class="settings-group">
               <div class="settings-section">
                 <label for="useOwnKeysSwitch" class="custom-checkbox-label settings-switch-row">
                   <span>
                     <strong>Use your own API keys</strong>
-                    <small>Your key stays in this browser and replaces my quota, so runs then cost you, not me.</small>
+                    <small>Your key is stored in this browser. Requests use your OpenRouter account and are billed by OpenRouter.</small>
                   </span>
                   <input type="checkbox" id="useOwnKeysSwitch">
                 </label>
@@ -1434,9 +1404,8 @@
                 <span class="faq-toggle-icon">＋</span>
               </h3>
               <p>
-                As many as the current limit allows. The sidebar always shows the authoritative remaining number, Deep
-                Think counted separately. The limits come from what I can afford to pay this month, not from a plan you
-                are missing.
+                Your remaining runs are shown in the sidebar. Deep Think has a separate allowance.
+                Usage is limited during early access, and limits may change as the service develops.
               </p>
             </div>
 
@@ -1447,12 +1416,10 @@
                 <span class="faq-toggle-icon">＋</span>
               </h3>
               <p>
-                Nothing. It's free while I'm testing it. There are limits because every run calls six model providers
-                and costs me real money, and the features that are switched off are simply the expensive ones, which I
-                enable per account rather than for everyone. So there's nothing to buy today. But if I keep hearing
-                that people want those runs regularly, a membership is how I'd make that possible, so tell me at
-                <a href="mailto:contact@consens.io">contact@consens.io</a>. In the meantime you can plug in your own
-                provider API keys under Settings if you need more runs than the limit allows. Have fun with it :)
+                consens.io is currently free during early access. Usage limits apply, and some features
+                are available only to selected accounts. Paid plans are coming. There is no subscription to buy yet.
+                For more runs, you can connect your own OpenRouter API key in Settings and pay OpenRouter directly.
+                Feedback is welcome at <a href="mailto:contact@consens.io">contact@consens.io</a>.
               </p>
             </div>
             <div class="faq-item">

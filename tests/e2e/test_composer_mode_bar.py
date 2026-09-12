@@ -97,23 +97,62 @@ def test_composer_mode_bar(browser, phase4_server, width, dark):
         context.close()
 
 
-def test_toolbar_deep_think_and_upload_reuse_plan_gates(browser, phase4_server):
+@pytest.mark.parametrize("width,dark", [(1440, False), (390, False), (320, True)])
+def test_toolbar_deep_think_and_upload_reuse_plan_gates(browser, phase4_server, width, dark):
     context, page = _real_firebase_page(browser, phase4_server,
         init_script="localStorage.setItem('agentMode', 'true');")
     try:
+        page.set_viewport_size({'width': width, 'height': 844})
+        page.evaluate("dark => document.body.classList.toggle('dark-mode', dark)", dark)
+        draft = page.locator('#questionInput')
+        draft.fill('Keep this question while I explore the app.')
         deep = page.locator('#composerDeepToggle')
         deep.click()
-        expect(page.locator('#proFeatureModal')).to_be_visible()
-        expect(page.locator('#proModalFeatureName')).to_have_text('Deep Think')
+        notice = page.locator('#featureAccessNotice')
+        expect(notice).to_be_visible()
+        expect(notice).to_contain_text('Deep Think')
+        expect(page.locator('#proFeatureModal')).to_be_hidden()
         expect(deep).to_have_attribute('aria-checked', 'false')
-        page.locator('#closeProModal').click()
+        draft.fill('The composer is still usable.')
         page.locator('#composerAttachButton').click()
-        expect(page.locator('#proModalFeatureName')).to_have_text('File uploads')
-        page.locator('#closeProModal').click()
-        page.evaluate("""() => {
-            App.state.set('isUserPro', true, 'userTier');
-            App.state.set('isUserPlus', true, 'userTier');
-        }""")
+        expect(notice).to_contain_text('File uploads')
+        expect(notice).not_to_contain_text('Deep Think')
+        expect(page.locator('#proFeatureModal')).to_be_hidden()
+        expect(draft).to_have_value('The composer is still usable.')
+        output = Path('test-results/early-access')
+        output.mkdir(parents=True, exist_ok=True)
+        page.screenshot(path=str(output / f'{width}-notice.png'))
+        rect = notice.bounding_box()
+        assert rect['x'] >= 0 and rect['x'] + rect['width'] <= width
+        page.locator('#featureAccessDetails').click()
+        modal = page.locator('#proFeatureModal')
+        expect(modal).to_be_visible()
+        expect(notice).to_be_hidden()
+        expect(modal.locator('a[href="mailto:contact@consens.io"]')).to_be_visible()
+        expect(page.locator('#closeProModal')).to_be_focused()
+        page.keyboard.press('Shift+Tab')
+        expect(page.locator('#keepFreeBtn')).to_be_focused()
+        page.keyboard.press('Tab')
+        expect(page.locator('#closeProModal')).to_be_focused()
+        page.screenshot(path=str(output / f'{width}-info.png'))
+        page.keyboard.press('Escape')
+        expect(modal).to_be_hidden()
+        assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+        # The explicit sidebar information link remains available after dismissal.
+        page.locator('#upgradeLink').evaluate('(el) => el.click()')
+        expect(modal).to_be_visible()
+        page.locator('#keepFreeBtn').click()
+        expect(modal).to_be_hidden()
+        # Plus keeps uploads and Resolve, while Deep Think stays gated.
+        page.evaluate("window.updateUserTierUI('plus', true)")
+        assert page.evaluate("App.showProFeatureModal('Resolve')") is False
+        with page.expect_file_chooser():
+            page.locator('#composerAttachButton').click()
+        expect(notice).to_be_hidden()
+        deep.click()
+        expect(notice).to_contain_text('Deep Think')
+        page.evaluate("window.updateUserTierUI('pro', true)")
+        expect(notice).to_be_hidden()
         deep.click()
         expect(deep).to_have_attribute('aria-checked', 'true')
         expect(page.locator('#deepSearchToggle')).to_be_checked()
@@ -124,6 +163,7 @@ def test_toolbar_deep_think_and_upload_reuse_plan_gates(browser, phase4_server):
             page.locator('#composerAttachButton').click()
         chooser.value.set_files({'name': 'toolbar.txt', 'mimeType': 'text/plain', 'buffer': b'A local attachment.'})
         expect(page.locator('#attachmentBar')).to_contain_text('toolbar.txt')
+        page.set_viewport_size({'width': 1440, 'height': 900})
         page.evaluate('window.exitHeroMode()')
         expect(page.locator('#composerModeBar')).to_be_visible()
         expect(page.locator('#composerModeBar #attachmentBar')).to_contain_text('toolbar.txt')

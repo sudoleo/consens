@@ -1526,11 +1526,49 @@
   width: auto;
 }
 
+.feature-access-notice {
+  position: fixed;
+  z-index: var(--z-modal);
+  top: max(72px, env(safe-area-inset-top));
+  right: 16px;
+  width: min(360px, calc(100vw - 32px));
+  box-sizing: border-box;
+  padding: 16px 44px 16px 16px;
+  color: var(--text-color);
+  background: var(--app-surface, var(--container-bg));
+  border: 1px solid var(--sidebar-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--lift);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-ui);
+}
+
+.feature-access-notice[hidden] { display: none; }
+.feature-access-notice p { margin: 0 0 8px; }
+.feature-access-notice a {
+  color: var(--sidebar-text-muted);
+  text-decoration: underline !important;
+  text-underline-offset: 2px;
+}
+.feature-access-notice .close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 30px;
+  height: 30px;
+  margin: 0;
+  padding: 0;
+  color: var(--sidebar-text-muted);
+  background: transparent;
+  border: 0;
+  font-size: var(--font-size-xl);
+}
+
 .pro-modal-content {
   position: relative;
   display: flex;
   flex-direction: column;
-  width: min(92vw, 720px);
+  width: min(92vw, 520px);
   max-height: min(86vh, 720px);
   padding: 0;
   overflow: hidden;
@@ -1617,141 +1655,6 @@
 
 .pro-beta-panel a:hover,
 .faq-item p a:hover { color: var(--accent); }
-/* --------------------------------------------------------------------------
-   Kosten-Flow im "Why limits"-Popup
-
-   Drei Stufen nebeneinander, dazwischen eine Haarlinie mit Pfeilspitze. Der
-   Traeger der Aussage sind die Punkte: sechs, einer, zwei — neun. Deshalb
-   sind sie alle gleich gross und gleich grau; eine Semantikfarbe wuerde
-   behaupten, ein Call sei anders teuer als der andere.
-
-   Unter 620px kippt die Reihe in eine Spalte und der Pfeil dreht sich mit,
-   damit die Richtung nicht verloren geht.
-   -------------------------------------------------------------------------- */
-.cost-flow {
-  margin: 14px 0 0;
-  padding: 13px 0 0;
-  border-top: 1px solid var(--line);
-}
-
-.cost-flow-track {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-}
-
-.cost-flow-stage {
-  flex: 1 1 0;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-
-/* Punkte und Beschriftung. Auf dem Desktop untereinander (die Punktreihe
-   bildet dann eine durchgehende Linie ueber alle drei Stufen), auf dem Handy
-   nebeneinander — dort zaehlt jede eingesparte Zeile. */
-.cost-flow-head {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 5px;
-  min-width: 0;
-}
-
-/* Die Punktreihe. box-shadow statt background auf einem eigenen Element
-   waere kuerzer, aber sechs echte Kinder lassen sich sauber umbrechen. */
-.cost-flow-dots {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  min-height: 8px;
-}
-
-.cost-flow-dots i {
-  width: 7px;
-  height: 7px;
-  flex: none;
-  border-radius: 50%;
-  background: var(--ink-2);
-}
-
-.cost-flow-name {
-  color: var(--text-color);
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-semibold);
-  font-variant-numeric: tabular-nums;
-}
-
-.cost-flow-note {
-  color: var(--sidebar-text-muted);
-  font-size: var(--font-size-micro);
-  line-height: var(--line-height-ui);
-}
-
-/* Pfeil als Haarlinie mit Spitze, auf der Hoehe der Punktreihe. */
-.cost-flow-arrow {
-  position: relative;
-  flex: 0 0 22px;
-  align-self: flex-start;
-  height: 7px;
-  margin-top: 0;
-  border-top: 1px solid var(--line);
-  transform: translateY(3px);
-}
-
-.cost-flow-arrow::after {
-  content: "";
-  position: absolute;
-  top: -3px;
-  right: 0;
-  width: 5px;
-  height: 5px;
-  border-top: 1px solid var(--line);
-  border-right: 1px solid var(--line);
-  transform: rotate(45deg);
-}
-
-.cost-flow-foot {
-  margin: 11px 0 0;
-  color: var(--sidebar-text-muted);
-  font-size: var(--font-size-micro);
-  line-height: var(--line-height-ui);
-}
-
-@media (max-width: 620px) {
-  .cost-flow-track {
-    flex-direction: column;
-    gap: 6px;
-  }
-
-  .cost-flow-head {
-    flex-direction: row;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .cost-flow-arrow {
-    flex: none;
-    width: 7px;
-    height: 14px;
-    margin-left: 3px;
-    border-top: 0;
-    border-left: 1px solid var(--line);
-    transform: none;
-  }
-
-  .cost-flow-arrow::after {
-    top: auto;
-    right: auto;
-    bottom: 0;
-    left: -3px;
-    border-top: 0;
-    border-right: 1px solid var(--line);
-    border-bottom: 1px solid var(--line);
-  }
-}
-
 .pro-beta-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
 
 /* Auf dem Telefon war der Kopf allein fast ein Drittel des Fensters. Weniger
@@ -1759,7 +1662,7 @@
    Frage, nicht die Frage selbst. */
 @media (max-width: 620px) {
   .pro-modal-content {
-    width: min(94vw, 720px);
+    width: min(94vw, 520px);
     max-height: min(88vh, 720px);
   }
 

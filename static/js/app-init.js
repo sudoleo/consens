@@ -538,62 +538,6 @@
           trackAppEvent("app_deep_think_changed", { enabled: this.checked });
         });
 
-        // --- Pro Modal Referenzen ---
-        // Das Modal verkauft nichts: es erklaert nur, warum ein Feature aus ist.
-        const proModal = document.getElementById("proFeatureModal");
-        const closeProBtn = document.getElementById("closeProModal");
-        const keepFreeBtn = document.getElementById("keepFreeBtn");
-
-        // Funktion zum Schließen des Modals
-        function closeProModal() {
-          proModal.style.display = "none";
-        }
-
-        // Event Listener für Schließen-Buttons
-        if (closeProBtn) closeProBtn.addEventListener("click", closeProModal);
-        if (keepFreeBtn) keepFreeBtn.addEventListener("click", closeProModal);
-
-        // Pro-Modal mit Feature-Name öffnen. Gibt zurück, ob das Modal gezeigt
-        // werden konnte, damit Aufrufer sonst auf ein Popup ausweichen können.
-        // Der Untertitel nennt beim geklickten Feature den echten Grund: was
-        // dieser Lauf kostet (Fallback: generischer Text).
-        const PRO_FEATURE_DESCRIPTIONS = {
-          "Deep Think": "Deep Think puts the reasoning models on your question. One run costs several times a normal one, so it stays off unless I switch it on for an account.",
-          "High Quality mode": "High Quality mode uses the expensive model set for all six answers and for the synthesis. It is the priciest run consens.io can do.",
-          "Resolve": "A Resolve round sends the disagreeing models back at each other, which is a second full round of calls on top of the run you already made.",
-          "More frequent Consensus Watch checks": "A Watch re-runs your question on a schedule. More Watches and shorter intervals mean more paid runs every single day.",
-          "File uploads": "An attached file is read and sent along to every model, which makes all six calls a lot longer, and longer prompts cost more per run.",
-        };
-        const PRO_FEATURE_DESCRIPTION_FALLBACK = "This one costs a multiple of a normal run, so it stays off by default.";
-        // Ab Plus freigeschaltet: fuer diese beiden ist Plus schon genug, das
-        // Modal darf einem Plus-Konto also nicht mehr in den Weg kommen.
-        const PLUS_FEATURES = new Set(["Resolve", "File uploads"]);
-        window.App.showProFeatureModal = function (featureName) {
-          if (window.isUserPro) return false;
-          if (window.isUserPlus && PLUS_FEATURES.has(featureName)) return false;
-          const nameEl = document.getElementById("proModalFeatureName");
-          if (nameEl && featureName) nameEl.textContent = featureName;
-          const descEl = document.getElementById("proModalDescription");
-          if (descEl) {
-            descEl.textContent = PRO_FEATURE_DESCRIPTIONS[featureName] || PRO_FEATURE_DESCRIPTION_FALLBACK;
-          }
-          if (!proModal) return false;
-          proModal.style.display = "block";
-          trackAppEvent("app_pro_beta_opened", { feature: featureName || "general" });
-          return true;
-        };
-
-        // Klick außerhalb schließt Modal
-        window.addEventListener("click", (event) => {
-          if (event.target === proModal) {
-            closeProModal();
-          }
-        });
-
-        // Kein Zugangs-Request mehr: das Modal erklaert nur noch die Kosten.
-        // Der Server-Endpunkt /track-interest bleibt bestehen, wird aber von
-        // der App nicht mehr aufgerufen.
-
         // --- DEEP THINK TOGGLE SPERRE ---
         document.getElementById("deepSearchToggle").addEventListener("click", function (event) {
           // Wir prüfen die globale Variable window.isUserPro
@@ -601,9 +545,9 @@
             event.preventDefault(); // Verhindert das Umschalten des Toggles
             trackAppEvent("app_deep_think_locked_click");
 
-            // Modal anzeigen (mit passendem Feature-Namen im Header)
+            // Kurzen Funktionshinweis anzeigen, ohne den Arbeitsfluss zu blockieren.
             if (!window.App.showProFeatureModal("Deep Think")) {
-              window.App?.showPopup?.("Deep Think is off here. It costs a multiple of a normal run.");
+              window.App?.showPopup?.("Deep Think is not available on your account yet.");
             }
           }
         });
@@ -1860,16 +1804,6 @@
 
         // Tier-/Pro-UI (updateUserTierUI, updatePremiumModelsState) ist nach
         // static/js/user-tier.js ausgelagert. Exporte gleichen Namens auf window.
-
-        // Event Listener für den "Why limits?"-Link in der Sidebar
-        const headerUpgradeLink = document.getElementById("upgradeLink");
-
-        if (headerUpgradeLink) {
-          headerUpgradeLink.addEventListener("click", function (e) {
-            e.preventDefault();
-            window.App.showProFeatureModal?.("The expensive extras");
-          });
-        }
 
         // 1. Tooltip Element einmalig erstellen
         const tooltip = document.createElement('div');

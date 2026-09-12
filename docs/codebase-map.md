@@ -598,12 +598,10 @@ der Python-Staleness-Test auch indirekte Änderungen erkennt.
   (`false` = `summary`) und mitgeschrieben, damit ein Rollback dieselbe Wahl
   sieht.
   Die Usage-Gruppe zeigt zusätzlich das aktive Watch-Kontingent aus
-  `/api/my/watches`. Es wird nichts verkauft: Gesperrte Features öffnen einen
-  reinen Erklärdialog („Warum ist das aus?“ → dieser Lauf kostet ein Vielfaches,
-  deshalb pro Account statt für alle freigeschaltet), ohne Preis, Kauf,
-  Zugangs-Request oder Browser-Alert. Formel ist „nothing to buy **today**“ plus
-  offener Hinweis auf eine mögliche spätere Mitgliedschaft — nie „es gibt nichts
-  zu kaufen“. Der Sidebar-Link heißt „Why limits?“ und öffnet denselben Dialog.
+  `/api/my/watches`. Gesperrte Features zeigen einen kurzen Hinweis ohne
+  Unterbrechung; der Sidebar-Link „Early access“ öffnet die allgemeine Erklärung
+  mit Kontaktmail und Hinweis auf spätere bezahlte Angebote. Verhalten und
+  Modulvertrag stehen unter **Auth / Usage / Tier**.
 - **User Memory (`user-memory.js`, `memory-edit.js`, `app/services/user_memory.py`,
   `app/services/memory_edit.py`, seit 2026-08-17)** —
   ein **selbst geschriebener** Kontext aus Kurzprofil (`role`, `focus`, `style`,
@@ -2376,6 +2374,18 @@ Gesamtexpansion und Kompressionsverhältnis besitzen feste Budgets. `document.xm
 wird nur chunkweise bis zum Budget expandiert und DTD/Entities werden abgewiesen.
 
 ### Auth / Usage / Tier
+- **Early-Access-Hinweise:** `static/js/feature-access.js` lädt im App-Bundle
+  nach `app-core.js`. Der bestehende Aufruf `App.showProFeatureModal(feature)`
+  zeigt einen kurzen, nicht blockierenden Hinweis in `#featureAccessNotice`;
+  weitere gesperrte Funktionen ersetzen dessen Text statt Dialoge zu stapeln.
+  Pro sowie Plus bei Resolve/Anhängen passieren weiterhin ohne Hinweis.
+  `App.showAccessInfo()` öffnet die kurze Erklärung in `#proFeatureModal`
+  ausschließlich über einen bewussten Info-Klick (Sidebar, Hinweis oder Watch).
+  Sie nennt Early Access, begrenzte Verfügbarkeit, geplante bezahlte Angebote
+  und `contact@consens.io`. Escape, Fokus-Rückgabe und Tab-Schleife gehören
+  zum Dialog. Tier-Aktualisierungen schließen den Funktionshinweis über
+  `App.dismissFeatureAccessNotice()`. Die Landingpage enthält keinen Kosten-
+  oder Testphasen-Abschnitt; FAQ und About erläutern den aktuellen Zugang.
 - Firebase-ID-Token wird mit `verify_user_token` geprüft (Standard: nur
   E-Mail-verifizierte Nutzer; `allow_unverified=True` nur für Registrierung/Delete).
 - Das Login-Overlay ist ein echtes `role="dialog"` mit `aria-modal`,

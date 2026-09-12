@@ -1937,7 +1937,7 @@ def test_watch_limit_is_explained_before_creation(app_page):
 
     app_page.click("#watchDashCreate")
     expect(app_page.locator("#watchDialogLimit")).to_contain_text(
-        "costs me money each time"
+        "limited during early access"
     )
     expect(app_page.locator("#watchQuestionNext")).to_be_disabled()
     expect(app_page.locator("#watchQuestionNext")).to_have_text("Watch limit reached")
@@ -2064,6 +2064,7 @@ def test_consensus_presets_apply_full_model_sets_and_gate_thorough(app_page):
             understandableLabel,
             hasProBadge,
             proModalDisplay: document.getElementById("proFeatureModal").style.display,
+            featureNoticeHidden: document.getElementById("featureAccessNotice").hidden,
           };
         }"""
     )
@@ -2072,7 +2073,8 @@ def test_consensus_presets_apply_full_model_sets_and_gate_thorough(app_page):
     assert result["storedPreset"] == "fast"
     assert result["understandableLabel"]
     assert result["hasProBadge"]
-    assert result["proModalDisplay"] == "block"
+    assert result["proModalDisplay"] != "block"
+    assert result["featureNoticeHidden"] is False
 
     app_page.evaluate(
         """() => {

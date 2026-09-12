@@ -574,6 +574,14 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
 - [ ] Bookmark-Attachments werden angezeigt.
 
 ## Auth / Usage / Tier
+
+- Mit Free mehrere gesperrte Funktionen anklicken (Deep Think, High Quality,
+  Anhänge, Resolve): ein kurzer Hinweis wird ersetzt, kein Vollbild-Dialog;
+  Frage und Modellauswahl bleiben erhalten und der Composer bleibt bedienbar.
+- „About early access“ im Hinweis oder „Early access“ in der Sidebar öffnet
+  die kurze Erklärung mit Kontaktmail. Schließen, Escape, Tab-Schleife und
+  Fokus-Rückgabe auf Desktop und Mobil prüfen. Plus darf Anhänge/Resolve,
+  Pro alle vorhandenen Funktionen weiterhin direkt nutzen.
 - [ ] E-Mail-Registrierung mit neuer und bestehender Adresse zeigt denselben
       neutralen „Check your inbox“-Zustand; die `/register`-Bodies sind exakt
       gleich und enthalten weder UID/E-Mail noch Custom-Token. Das eingesendete

@@ -66,6 +66,7 @@
           "file": "static/js/app-core.js",
           "note": "Shared base (window.App): central config + helpers. MUST load first."
         },
+        "static/js/feature-access.js",
         "static/js/model-picker.js",
         {
           "file": "static/js/math-render.js",

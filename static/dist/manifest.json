@@ -1,5 +1,5 @@
 {
-  "sources": "c98b57b91175",
+  "sources": "06c9a197b0cf",
   "inputs": [
     "package-lock.json",
     "scripts/build_frontend.mjs",
@@ -60,6 +60,7 @@
     "static/js/consensus-run.js",
     "static/js/email-verify.js",
     "static/js/error-reporter.js",
+    "static/js/feature-access.js",
     "static/js/markdown-stream.js",
     "static/js/math-render.js",
     "static/js/memory-edit.js",
@@ -106,12 +107,12 @@
     },
     {
       "name": "app",
-      "src": "/static/dist/app.d2ae4d81b37f.js",
+      "src": "/static/dist/app.db2a010493f8.js",
       "module": false,
       "defer": true
     }
   ],
   "styles": {
-    "app": "/static/dist/app.d3ffda323e7d.css"
+    "app": "/static/dist/app.9f9bef46e835.css"
   }
 }

@@ -139,17 +139,15 @@ def test_pro_beta_request_is_fenced_during_account_deletion():
     assert database.waitlist_document.writes == 0
 
 
-def test_locked_feature_modal_explains_the_cost_and_sells_nothing():
+def test_access_information_explains_availability_and_sells_nothing():
     html = (ROOT / "templates" / "index.html").read_text(encoding="utf-8")
-    js = (ROOT / "static" / "js" / "app-init.js").read_text(encoding="utf-8")
+    js = (ROOT / "static" / "js" / "feature-access.js").read_text(encoding="utf-8")
     modal = html[html.index('id="proFeatureModal"'):html.index('id="popupContainer"')]
-    assert "free while I’m testing it" in modal
-    assert "nothing to buy today" in modal
-    assert "switched off by default" in modal
-    # Kein Zukunftsversprechen in beide Richtungen: Pro-Features gibt es, eine
-    # spaetere Mitgliedschaft ist moeglich und wird als moeglich benannt.
-    assert "membership" in modal
-    assert "per account instead of for everyone" in modal
+    assert "Early access" in modal
+    assert "currently free to use" in modal
+    assert "Paid plans are coming" in modal
+    assert "no subscription to buy yet" in modal
+    assert "selected accounts" in modal
     assert "contact@consens.io" in modal
     for sales_copy in ("Request Pro access", "Join Pro beta", "smokeTestUpgradeBtn", "pricing-grid", "€"):
         assert sales_copy not in modal
@@ -161,29 +159,27 @@ def test_locked_feature_modal_explains_the_cost_and_sells_nothing():
 def test_sidebar_link_explains_limits_instead_of_offering_an_upgrade():
     html = (ROOT / "templates" / "index.html").read_text(encoding="utf-8")
     layout = (ROOT / "static" / "css" / "layout.css").read_text(encoding="utf-8")
-    assert 'aria-label="Why there are limits"' in html
-    assert ">Why limits</span>" in html
+    assert 'aria-label="About early access"' in html
+    assert ">Early access</span>" in html
     assert "#upgradeLink" in layout
     assert "white-space: nowrap" in layout
     # Der Kontoname stand daneben und hat die Zeile ueberfuellt; er ist raus.
     assert 'id="accountLabel"' not in html
 
 
-def test_public_pages_state_the_free_while_testing_position():
+def test_access_copy_is_in_about_and_app_without_a_landing_cost_section():
     pages = {
-        "landing": ROOT / "templates" / "landing.html",
         "about": ROOT / "templates" / "about.html",
         "app": ROOT / "templates" / "index.html",
     }
     for name, path in pages.items():
         text = path.read_text(encoding="utf-8").lower()
-        assert "free while i'm testing it" in text, name
-        assert "costs me real money" in text or "costs me money" in text or "lands on me" in text, name
-        # Kein pauschales "es wird nie etwas kosten": die Moeglichkeit einer
-        # spaeteren Mitgliedschaft steht ausdruecklich auf jeder dieser Seiten,
-        # zusammen mit dem Kontaktweg, ueber den sich Interesse zeigen kann.
-        assert "membership" in text, name
+        assert "early access" in text, name
+        assert "paid plans are coming" in text, name
         assert "contact@consens.io" in text, name
+    landing = (ROOT / "templates" / "landing.html").read_text(encoding="utf-8")
+    assert 'id="cost"' not in landing
+    assert "free while I'm testing it" not in landing
 
 
 def test_no_page_claims_that_nothing_will_ever_be_for_sale():
@@ -224,35 +220,6 @@ def test_user_visible_plan_copy_has_no_stale_literal_plan_values():
         assert stale not in text
     assert "window.APP_LIMITS" in text
     assert 'id="watchUsageDisplay"' in text
-
-
-def test_cost_flow_matches_the_pipeline_it_claims_to_describe():
-    """Der Flow im "Why limits"-Popup nennt konkrete Zahlen. Sie muessen dem
-    Code entsprechen, sonst erklaert das Popup ein Produkt, das es nicht gibt.
-
-    Geprueft wird die Kette selbst: so viele Antwortmodelle wie ein Lauf
-    zulaesst, EIN Synthese-Call, und ZWEI Judges (Differences + Coverage)."""
-    import app.core.config as cfg
-
-    html = (ROOT / "templates" / "index.html").read_text(encoding="utf-8")
-    flow = html[html.index('class="cost-flow"'):html.index('class="pro-beta-actions"')]
-
-    assert f"{cfg.MAX_RUN_FAMILIES} answers" in flow
-    assert "1 synthesis" in flow
-    assert "2 judges" in flow
-    # Ein Punkt = ein bezahlter Call. Die Summe im Titel muss aufgehen.
-    total = cfg.MAX_RUN_FAMILIES + 1 + 2
-    assert flow.count("<i></i>") == total
-    words = ["zero", "one", "two", "three", "four", "five", "six",
-             "seven", "eight", "nine", "ten"]
-    # Der Prosa-Satz ueber dem Flow nennt dieselbe Summe wie die Punkte.
-    assert f"{words[total]} calls to {words[cfg.MAX_RUN_FAMILIES]} providers" in html
-    assert f"{words[total].capitalize()} calls for a full analysis, plus an optional source check" in html
-
-    # Der zweite Judge ist der Coverage-Judge; ohne ihn waere "2 judges" falsch.
-    engine = (ROOT / "app" / "services" / "llm" / "consensus_engine.py").read_text(encoding="utf-8")
-    assert "_coverage_attempts" in engine
-    assert (ROOT / "app" / "services" / "llm" / "coverage_judge.py").is_file()
 
 
 def test_footer_shows_the_running_commit_and_links_to_the_repository():

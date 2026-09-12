@@ -1923,7 +1923,7 @@
             window.trackUmamiEvent?.("app_resolve_pro_teaser_click");
             const shown = window.App?.showProFeatureModal?.("Resolve");
             if (!shown) {
-              window.App?.showPopup?.("Resolve is off here. It is a second full round of model calls.");
+              window.App?.showPopup?.("Resolve is not available on your account yet. You can still review the differences and model answers.");
             }
           }
 
