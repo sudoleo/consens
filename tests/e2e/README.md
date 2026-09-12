@@ -18,6 +18,17 @@ npm install --global firebase-tools@13.35.1
 
 ## Sicherer lokaler Lauf
 
+Unter Windows kapselt der gemeinsame Einstieg Voraussetzungen, Build-Abgleich,
+Emulator-Lebenszyklus und Wiederherstellung der Shell-Umgebung:
+
+```powershell
+.\dev.ps1 check browser
+```
+
+Optional grenzt `-TestPath tests/e2e/<datei>.py` die Suite ein. Setup und genaue
+Semantik: [`docs/testing.md`](../../docs/testing.md). Die folgenden direkten
+Befehle bleiben für individuelle Runner-Optionen und andere Umgebungen verfügbar.
+
 Terminal 1 startet nur den Emulator. Es ist absichtlich kein Firebase-
 Standardprojekt in `.firebaserc` hinterlegt:
 

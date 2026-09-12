@@ -1,5 +1,69 @@
 # Tests und sichere Ausführung
 
+## Gemeinsamer Einstieg unter Windows
+
+PowerShell 5.1 oder neuer, aus dem Projektverzeichnis:
+
+```powershell
+.\dev.ps1 check frontend
+.\dev.ps1 check backend
+.\dev.ps1 check browser
+```
+
+| Ziel | Ablauf |
+|---|---|
+| `frontend` | `npm test`, danach `npm run build:check`. Ein veralteter Build führt zum Fehler; mit `npm run build` bewusst neu erzeugen. |
+| `backend` | `venv/Scripts/python.exe -m pytest tests -q` mit `UNIT_TEST_MODE=1`; geerbte E2E-Schalter werden für den Lauf entfernt. |
+| `browser` | Voraussetzungen und Build prüfen, dann Firebase `emulators:exec` mit der Playwright-Suite. Die CLI startet und beendet ihren Emulator auch bei fehlgeschlagenen Tests; die Pytest-Fixtures verwalten den App-Server und Browser. |
+
+Eine einzelne Datei oder ein Verzeichnis innerhalb der gewählten Suite:
+
+```powershell
+.\dev.ps1 check frontend -TestPath tests/js/app-state.test.mjs
+.\dev.ps1 check backend -TestPath tests/test_streaming.py
+.\dev.ps1 check browser -TestPath tests/e2e/test_phase2_transactions.py
+```
+
+Testpfade beziehen sich auf das Projektverzeichnis, auch wenn das Skript aus
+einem anderen Arbeitsverzeichnis aufgerufen wird. `-TestPath` akzeptiert die
+üblichen Repository-Pfade aus Buchstaben, Ziffern, `_`, `-`, `.` und Trennern;
+für weitere Runner-Optionen oder Pytest-Selektoren die direkten Befehle unten
+verwenden. `backend` lehnt explizite `tests/e2e`-Pfade ab.
+
+`.\dev.ps1 help` zeigt die Kurzreferenz. Das Skript installiert keine Pakete und
+verändert keine Builds. Fehlende Voraussetzungen werden mit einem Setup-Hinweis
+gemeldet. Für Browserprüfungen braucht es zusätzlich die unten beschriebenen
+E2E-Abhängigkeiten, Chromium, Firebase CLI und Java 21+ auf `PATH` oder unter
+`JAVA_HOME`. Der erste Emulatorstart kann den von der CLI benötigten Emulator
+herunterladen; Browser-Flows benötigen weiterhin die dokumentierten CDN-Assets.
+
+Firestore-Host und Port stammen aus `firebase.json`, die Demo-Projekt-ID und
+Loopback-Prüfung aus `app/core/e2e_profile.py`. Geerbte Projekt- und Credential-
+Einstellungen werden für den Browserlauf ersetzt beziehungsweise entfernt.
+Danach stellt das Skript Arbeitsverzeichnis und alle von ihm geänderten
+Umgebungsvariablen wieder her, auch bei Fehlern. Fehlercodes der aufgerufenen
+Werkzeuge werden weitergegeben; fehlende Voraussetzungen liefern Exit-Code 1.
+Ein bereits belegter Emulatorport ist ein Startfehler, kein Anlass, fremde
+Prozesse zu beenden. Auch der App-Testport muss frei sein.
+
+### Pflege
+
+`dev.ps1` koordiniert bestehende Werkzeuge: npm-Skripte bleiben in `package.json`,
+Pytest-Fixtures und Testisolation in `tests/`, Emulator-Konfiguration und
+Sicherheitsvertrag in ihren bestehenden Dateien. Neue Tests innerhalb einer
+Suite werden automatisch vom jeweiligen Runner gefunden. Änderungen an diesen
+Einstiegspunkten oder Voraussetzungen im selben Auftrag in `dev.ps1`, dieser
+Dokumentation und gegebenenfalls `tests/e2e/README.md` nachziehen. Keine zweite
+Liste einzelner Tests im Skript pflegen.
+
+Die Regressionstests für Aufruf, Fehlercodes, Pfadauswahl und Wiederherstellung
+der Shell laufen mit temporären CLI-Doubles auf den verfügbaren Windows-
+PowerShell-Versionen; sie ersetzen keinen echten Emulatorlauf:
+
+```powershell
+.\dev.ps1 check backend -TestPath tests/test_dev_cli.py
+```
+
 ## Abhängigkeiten
 
 Die Abhängigkeiten sind nach Zweck getrennt:

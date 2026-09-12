@@ -3545,6 +3545,14 @@ Pages-/Watch-Tabs nicht. `/admin/topics` redirectet auf diesen Tab.
 
 ## 7. Tests, Smoke-Checks & lokale Befehle
 
+- **Windows-Einstieg:** `dev.ps1 check frontend|backend|browser` koordiniert
+  die vorhandenen npm-/Pytest-Befehle; `-TestPath` begrenzt den Lauf auf eine
+  Datei oder ein Verzeichnis der gewählten Suite. Frontend prüft zusätzlich
+  den Build-Stand. Browser nutzt Firebase `emulators:exec` für Start und Stopp,
+  liest Host/Port aus `firebase.json` und den Demo-Projekt-/Loopback-Vertrag
+  aus `app/core/e2e_profile.py`. Die aufrufende Shell erhält ihre Umgebung und
+  ihr Arbeitsverzeichnis auch bei Fehlern zurück. Regressionstests des Einstiegs:
+  `tests/test_dev_cli.py`; Setup und Pflege: `docs/testing.md`.
 - **Reguläre Tests** (`tests/`, pytest; Browser-Suite standardmäßig
   ausgeschlossen). Abhängigkeiten kommen aus `requirements-test.txt`, Lauf:
   ```powershell

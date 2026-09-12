@@ -18,6 +18,10 @@ Inhalt, plus ein echter JS-Test-Runner.
 
 ## Befehle
 
+Unter Windows führt `.\dev.ps1 check frontend` die JS-Tests und anschließend
+den Build-Abgleich aus; `-TestPath tests/js/<datei>.test.mjs` begrenzt die Tests.
+Setup und weitere Prüfziele: [`testing.md`](testing.md).
+
 ```bash
 npm install
 ```

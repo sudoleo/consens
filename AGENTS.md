@@ -39,9 +39,12 @@
 
 ## Codebase
 
-**Erst lesen:** [`docs/codebase-map.md`](docs/codebase-map.md) — kompakte
-Architektur-Karte (Stack, Routing, Frontend-Module, Kern-Flows, Backend, Daten,
-kritische `window.*`/DOM-Verträge, lokale Befehle).
+**Gezielt nachschlagen:** [`docs/codebase-map.md`](docs/codebase-map.md) ist die
+Architektur-Referenz für Stack, Routing, Module, Kern-Flows, Daten und kritische
+`window.*`/DOM-Verträge. Bei unbekannten Abläufen und übergreifenden Änderungen
+die relevanten Abschnitte über Überschriften oder Suche finden und lesen;
+weitere Abschnitte bei erkennbaren Abhängigkeiten nachladen. Für klar begrenzte
+Text-, Stil- oder Dokumentationskorrekturen genügt der betroffene Kontext.
 
 **Pflicht:** Wenn du **Architektur, Module, API-Endpoints oder Kern-Flows**
 änderst, dokumentiere das im selben Commit/PR in `docs/codebase-map.md` mit
@@ -56,6 +59,13 @@ passen — bei Abweichung gilt der Code, und die Karte wird korrigiert.
   dem Inhalt, es gibt dort nichts mehr von Hand zu bumpen) — Details in
   [`docs/frontend-build.md`](docs/frontend-build.md). Die öffentlichen Seiten
   und `admin.html` hängen weiter am manuellen `?v=`-Buster.
-- Tests: `npm test` (JS-Verhalten, Vitest + jsdom) und
-  `.\venv\Scripts\python.exe -m pytest tests`. Für alles, was noch keine
-  Auto-Tests hat, `docs/smoke-checklist.md` durchgehen.
+- Windows-Einstieg für Tests: `.\dev.ps1 check frontend|backend|browser`,
+  optional `-TestPath <Datei oder Verzeichnis>`; direkte Runner-Befehle und Setup
+  stehen in `docs/testing.md`. Bei Änderungen an Test-/Build-Einstiegspunkten
+  oder Voraussetzungen `dev.ps1` und die zugehörige Dokumentation im selben
+  Auftrag mitpflegen. Prüfumfang nach betroffenem Verhalten und Risiko wählen;
+  vollständige Suiten bei übergreifenden Änderungen oder vorgeschriebenen Checks.
+  Nach erfolgreichen Prüfungen nur bei weiteren Änderungen, Fehlern oder
+  konkreten offenen Risiken erneut oder breiter testen. Für Verhalten ohne
+  Auto-Tests die betroffenen Punkte in `docs/smoke-checklist.md` prüfen;
+  reine Dokumentationskorrekturen auf Inhalt, Links und Diff prüfen.
