@@ -102,6 +102,13 @@
       <span>Watches</span>
     </button>
   </nav>
+  <div id="mobileConversationActions" class="mobile-conversation-actions" role="group" aria-label="Conversation actions">
+    <button type="button" id="mobileNewRunButton" class="mobile-new-run input-action-btn-subtle" aria-label="New chat" title="Start a new comparison">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M12 5H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-6M16 4l4 4M10 14l1-4 7-7a1.4 1.4 0 0 1 2 2l-7 7-3 2Z"></path>
+      </svg>
+    </button>
+  </div>
   </header>
   <div id="appSidebar" class="sidebar">
     <!-- Kompakter Sidebar-Kopf: Wortmarke links, Collapse-Aktion rechts. Der
@@ -132,6 +139,7 @@
     <!-- Pinned: model controls — does not scroll with bookmarks.
          Usage lebt jetzt im Kontingent-Panel über dem Account-Footer. -->
     <div class="sidebar-pinned">
+      <div id="mobileSidebarViews" class="mobile-sidebar-views"></div>
 
       <div id="usageOptions" class="visually-hidden u-mt-0">
         <h2 class="sidebar-static-heading">Usage</h2>

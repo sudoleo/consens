@@ -88,6 +88,10 @@
           "file": "static/js/watch.js",
           "note": "Needs consensus-actions.js and the share modal."
         },
+        {
+          "file": "static/js/mobile-header.js",
+          "note": "Moves the existing Share/Watch/Cite controls and view switch after both action modules have initialized."
+        },
         "static/js/user-tier.js",
         "static/js/user-memory.js",
         "static/js/memory-edit.js",

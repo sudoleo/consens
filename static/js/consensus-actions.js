@@ -243,10 +243,8 @@
     const mainSection = consensusBox.querySelector(".consensus-main");
     if (!mainSection) return;
 
-    // Share/Watch/Cite gehoeren zu der FERTIGEN Antwort, nicht zu ihrer
-    // Ueberschrift: sie leben in der Fusszeile (#consensusFooterActions), wo
-    // auch die Fakten des Laufs stehen. Faellt der Slot weg, bleibt die alte
-    // Position in der Ueberschrift als Rueckfall bestehen.
+    // The footer owns actions for the completed answer. mobile-header.js moves
+    // this same host into the mobile header and mirrors the footer's readiness.
     const host = document.getElementById("consensusFooterActions")
       || mainSection.querySelector("h2");
     if (!host) return;
@@ -341,6 +339,12 @@
       if (!menu.classList.contains("open")) return;
       if (menu.contains(evt.target) || actionsWrapper.contains(evt.target)) return;
       closeMenu();
+    });
+
+    document.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape" || !menu.classList.contains("open")) return;
+      closeMenu();
+      toggleBtn.focus({preventScroll: true});
     });
 
     window.addEventListener("scroll", () => {

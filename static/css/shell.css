@@ -700,6 +700,7 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
    3. Topbar / view switch
    -------------------------------------------------------------------------- */
 .app-mobile-header { display: contents; }
+.mobile-conversation-actions, .mobile-sidebar-views { display: none; }
 
 .view-switch {
   background: var(--raise);
@@ -4016,27 +4017,44 @@ body[data-consensus-highlight-mode] :is(.src-ref, .source-link)[data-source-chec
     margin-inline-start: auto;
   }
 
-  body.is-hero .app-mobile-header .auth-top-actions,
-  body:has(#watchDashboard:not([hidden])) .app-mobile-header .auth-top-actions { margin-inline-start: 0; }
-
   .app-mobile-header .auth-top-login,
   .app-mobile-header .auth-top-signup { min-height: 44px; }
 
-  body:not(.is-hero) .app-mobile-header .brand-float {
-    display: inline-flex;
-    gap: 6px;
-  }
+  .app-mobile-header .brand-float,
+  body:not(.is-hero) .app-mobile-header .brand-float { display: none; }
 
-  body:not(.is-hero) .app-mobile-header .brand-float-title {
-    display: inline;
-    font-size: .875rem;
+  body:has(.watch-page:not([hidden])) .app-mobile-header .app-nav-float { display: flex; }
+
+  .mobile-conversation-actions { display: flex; align-items: center; gap: 0; order: 4; margin-inline-start: auto; }
+  .app-mobile-header .auth-top-actions { margin-inline-start: auto; }
+  .app-mobile-header .auth-top-actions:not([hidden]) ~ .mobile-conversation-actions { margin-inline-start: 0; }
+  .app-mobile-header .consensus-footer-actions { display: inline-flex; margin: 0; }
+  .app-mobile-header .consensus-footer-actions[hidden] { display: none; }
+  .app-mobile-header .consensus-copy-inline { gap: 0; flex-wrap: nowrap; }
+  .app-mobile-header :is(.mobile-new-run, .consensus-share-pill, .consensus-actions-toggle) {
+    display: inline-flex; align-items: center; justify-content: center; flex: 0 0 44px;
+    width: 44px; height: 44px; min-height: 44px; padding: 0; border: 0;
+    border-radius: 8px; background: transparent; color: var(--ink-2); cursor: pointer;
   }
+  .app-mobile-header :is(.mobile-new-run, .consensus-share-pill, .consensus-actions-toggle):hover { color: var(--ink); background: var(--raise); }
+  .app-mobile-header :is(.mobile-new-run, .consensus-share-pill, .consensus-actions-toggle):focus-visible { outline: 2px solid var(--ink); outline-offset: -3px; }
+  .app-mobile-header :is(.mobile-new-run, .consensus-share-pill, .consensus-actions-toggle) svg { width: 21px; height: 21px; flex: 0 0 21px; }
+  .app-mobile-header :is(.consensus-share-pill, .consensus-actions-toggle) > span { display: none; }
+
+  .mobile-sidebar-views { display: block; margin-bottom: 12px; }
+  .sidebar #mobileSidebarViews #viewSwitch {
+    position: static; display: flex; width: 100%; box-sizing: border-box; margin: 0;
+    transform: none; opacity: 1; visibility: visible; pointer-events: auto;
+  }
+  .mobile-sidebar-views .view-switch-btn { flex: 1; min-height: 44px; }
 
   body:has(.app-mobile-header) .container {
     padding-top: calc(var(--app-mobile-header-height) + 12px);
   }
 
   .sidebar:not(.active) { box-shadow: none; }
+  /* The mobile menu also covers Watches; shared dialogs remain above it. */
+  .sidebar.active { z-index: var(--z-header); }
 
   body.is-reading-chrome-hidden .app-mobile-header,
   body:has(.sidebar.active) .app-mobile-header {

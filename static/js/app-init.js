@@ -879,6 +879,9 @@
         // background run keeps its private context and remains reachable from
         // the sidebar; only logout tears down the complete registry.
         document.getElementById("newRunButton")?.addEventListener("click", function () {
+          if (document.getElementById("watchDashboard")?.hidden === false) {
+            document.getElementById("viewSwitchConsensus")?.click();
+          }
           window.clearResponseBoxes?.({ silent: true });
           window.clearPreparedBookmarkShareResult?.();
           window.App.state.set("currentEvidenceSources", [], "evidence");
@@ -1011,6 +1014,7 @@
             }
           }, true);
           document.querySelector(".app-nav-float")?.addEventListener("focusin", revealAndResync);
+          document.querySelector(".app-mobile-header")?.addEventListener("focusin", revealAndResync);
           document.getElementById("viewSwitch")?.addEventListener("focusin", revealAndResync);
 
           // Opening/closing Watches, clearing a result, or returning to the

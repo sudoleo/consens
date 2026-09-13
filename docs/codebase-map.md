@@ -473,10 +473,21 @@ der Python-Staleness-Test auch indirekte Änderungen erkennt.
   Aufwärtsscrollen, Seitenanfang und Tastatur-Navigation blenden sie wieder ein.
   Der Zustand ist rein transient als `body.is-reading-chrome-hidden` und
   verändert weder Sidebar-Persistenz noch Watch-/Consensus-Daten.
-- **Mobile Kopfleiste** — `header.app-mobile-header` bündelt bei ≤1099 px
-  Menü, kontextabhängige Wortmarke, View-Switch und Gast-Login auf einer deckenden,
-  56 px hohen Fläche mit Safe-Area-Zuschlag und feiner Unterkante. Der Menüknopf
-  nutzt ein SVG und eine 44 × 44 px große Touchfläche; beide Sidebar-Toggles
+- **Mobile Kopfleiste** — `header.app-mobile-header` zeigt bei ≤1099 px links
+  das Menü und rechts New chat sowie Share/Watch/Cite für die fertige Antwort.
+  Logo und mittlerer Titel entfallen. Die deckende Fläche ist 56 px hoch mit
+  Safe-Area-Zuschlag und feiner Unterkante; alle Icons haben 44 × 44 px Touchflächen.
+  `mobile-header.js` lädt nach `consensus-actions.js` und `watch.js` und verschiebt
+  dieselben `#consensusFooterActions`-DOM-Knoten nach `#mobileConversationActions`,
+  auf Desktop exakt zurück in den Footer. Readiness folgt `#runProvenance`,
+  `#consensusOutput`, Hero und Watch-Ansicht; es gibt keine duplizierten Handler.
+  Der Cite-Dialog verankert sich dadurch am sichtbaren Icon, Escape schließt ihn
+  und setzt den Fokus zurück. Der Gast-Login bleibt auch neben den Aktionen
+  erreichbar. Das mobile Seitenmenü liegt beim Öffnen über der Watch-Seite.
+  `#viewSwitch` wandert mobil nach `#mobileSidebarViews`; auf Desktop an seinen
+  ursprünglichen Ort. Auch aus Watches führt New chat über den bestehenden
+  `#newRunButton`-Handler zum leeren Composer, ohne Hintergrund-Runs abzubrechen.
+  Beide Sidebar-Toggles
   referenzieren `#appSidebar` per `aria-controls`. Der Inhaltsanfang reserviert
   die Leistenhöhe. Reading Chrome blendet mobil die gesamte Leiste gemeinsam
   aus/ein; eine offene Overlay-Sidebar blendet sie ebenfalls aus. Auf Desktop
