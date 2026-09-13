@@ -774,12 +774,30 @@
     // plan, model positions, verdicts or the result sent to an observer callback.
     return {...verification, exclusions: excluded, scope: {...verification.scope, excluded_contradictions: excluded.length}};
   }
+  function sourceCheckHeading(section, label, tone) {
+    section.dataset.checkTone = tone;
+    const header = element('div', 'contradiction-source-header');
+    const heading = element('h4', 'contradiction-source-heading');
+    const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    icon.setAttribute('viewBox', '0 0 24 24');
+    icon.setAttribute('aria-hidden', 'true');
+    icon.setAttribute('focusable', 'false');
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', 'M10.5 17a6.5 6.5 0 1 0 0-13 6.5 6.5 0 0 0 0 13Zm4.6-1.9L21 21M8.5 9h4M8.5 12h2.5');
+    icon.append(path);
+    heading.append(icon, document.createTextNode('Source check'));
+    header.append(heading, element('span', 'contradiction-source-status', label));
+    section.append(header);
+  }
+  function sourceCheckGuidance(section, message) {
+    section.append(element('p', 'contradiction-source-guidance', message));
+  }
   function exclusionResult(item) {
     const section = element('section', 'contradiction-source-check');
     section.dataset.checkState = 'excluded';
     section.dataset.contradictionId = item.exclusion_id || `excluded:${item.difference_index}`;
     const codes = exclusionCodes(item);
-    section.append(element('h4', 'contradiction-source-heading', 'Source check'));
+    sourceCheckHeading(section, 'Not checked', 'neutral');
     section.append(element('p', 'contradiction-source-verdict', codes.includes('not_factual')
       ? 'Not selected for source checking' : 'Not checked'));
     const explanations = {not_factual: 'The analysis classified this dispute as not fact-checkable.',
@@ -789,6 +807,9 @@
       not_checked: 'No source-check result is available for this contradiction.'};
     [...new Set(codes)].forEach(code => section.append(element('p', 'contradiction-source-reason', explanations[code] || 'This contradiction was not checked.')));
     if (codes.includes('not_factual') && item.reason) section.append(element('p', 'contradiction-source-context', item.reason));
+    sourceCheckGuidance(section, codes.includes('not_factual')
+      ? 'Compare the reasoning and assumptions in the model answers to assess this disagreement.'
+      : 'This check does not confirm either position. Compare the original sources linked to the model answers.');
     return section;
   }
   function matchingDifferenceCards(cards, diff, exactPositions = false) {
@@ -896,16 +917,23 @@
     const section = element('section', 'contradiction-source-check');
     section.dataset.contradictionId = item.contradiction_id;
     section.dataset.checkState = item.state || 'unavailable';
-    section.append(element('h4', 'contradiction-source-heading', 'Source check'));
     const position = (item.positions || []).find(pos => pos.id === item.supported_position_id);
     const positionName = position ? position.summary || (position.models || []).join(', ') : '';
     const validationErrors = (Array.isArray(item.validation_errors) ? item.validation_errors : [])
       .filter(error => error && typeof error.code === 'string').slice(0, 12);
     const rejected = validationErrors.length > 0;
-    if (rejected) section.dataset.checkState = 'unavailable';
+    if (isRejectedContradictionCheck(item)) section.dataset.checkState = 'unavailable';
     const evidence = (Array.isArray(item.evidence) ? item.evidence : []).filter(proof => proof?.quote && proof.source_id
       && (verification.sources || []).some(source => source.id === proof.source_id));
-    const supported = item.checked && !rejected && evidence.length > 0;
+    const inconclusive = isRejectedContradictionCheck(item);
+    const supported = item.checked && !inconclusive && evidence.length > 0;
+    const resolved = supported && !inconclusive && ['supports_position', 'conditions_explain'].includes(item.verdict)
+      && (item.verdict !== 'supports_position' || Boolean(positionName));
+    sourceCheckHeading(section,
+      inconclusive ? 'No conclusion' : item.state === 'omitted' ? 'Not checked'
+        : item.state === 'pending' ? 'In progress' : !item.checked ? 'Unavailable'
+        : resolved ? 'Evidence reviewed' : 'Inconclusive',
+      inconclusive ? 'attention' : ['omitted', 'pending'].includes(item.state) ? 'neutral' : resolved ? 'positive' : 'attention');
     const verdict = isRejectedContradictionCheck(item) ? 'Contradiction remains unresolved'
       : item.state === 'omitted' ? 'Omitted: ' + reasonLabel(item.reason_code)
       : item.state === 'pending' ? 'Waiting to check this contradiction'
@@ -923,7 +951,15 @@
     else if (!item.checked && item.reason_code === 'evidence_mismatch') section.append(element('p', 'contradiction-source-context',
       'Evidence quotes could not be verified. No more specific rejection reason was saved with this result.'));
     if (item.coverage_limited) section.append(element('p', 'contradiction-source-context', 'Some sources were omitted due to the source budget.'));
-    if (!rejected && item.reason && (supported || item.verdict === 'insufficient_evidence')) section.append(element('p', 'contradiction-source-reason', item.reason));
+    if (!inconclusive && item.reason && (supported || item.verdict === 'insufficient_evidence')) section.append(element('p', 'contradiction-source-reason', item.reason));
+    if (inconclusive) sourceCheckGuidance(section,
+      'Neither position is confirmed by this check. Compare the original sources before relying on either claim.');
+    else if (item.state === 'pending') section.append(element('p', 'contradiction-source-context',
+      'The model positions will be compared against the sources they supplied. The result will appear here.'));
+    else if (!item.checked) sourceCheckGuidance(section,
+      'This disagreement is still unverified. Open the sources linked to the model answers to compare the claims directly.');
+    else if (!resolved) sourceCheckGuidance(section,
+      'The available sources do not settle this disagreement. Compare their dates and scope before choosing a position.');
     const modelNote = fallbackModelNote(verification);
     if (modelNote) section.append(modelNote);
     const disclosure = element('details', 'contradiction-source-evidence-details');

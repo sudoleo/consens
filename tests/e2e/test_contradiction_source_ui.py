@@ -5,7 +5,23 @@ from test_phase4_frontend import _real_firebase_page, phase4_server  # noqa: F40
 from test_model_answer_reader import seed_insights, reader_screenshot
 
 
-@pytest.mark.parametrize('width', [1440, 390])
+def assert_source_check_fits(result):
+    assert result.evaluate("""el => {
+      const rect=el.getBoundingClientRect(), style=getComputedStyle(el);
+      let left=0, right=innerWidth;
+      for(let parent=el.parentElement;parent;parent=parent.parentElement) {
+        if(['auto','scroll','hidden','clip'].includes(getComputedStyle(parent).overflowX)) {
+          const bounds=parent.getBoundingClientRect();
+          left=Math.max(left,bounds.left);right=Math.min(right,bounds.right);
+        }
+      }
+      return rect.left>=left-1 && rect.right<=right+1 && el.scrollWidth<=el.clientWidth+1
+        && parseFloat(style.paddingLeft)>=14 && parseFloat(style.paddingRight)>=14
+        && parseFloat(style.outlineOffset)<=0 && style.boxShadow.includes('inset');
+    }""")
+
+
+@pytest.mark.parametrize('width', [1440, 390, 320])
 def test_contradiction_evidence_reader(browser, phase4_server, width):
     context, page = _real_firebase_page(browser, phase4_server)
     errors = []
@@ -46,6 +62,7 @@ def test_contradiction_evidence_reader(browser, phase4_server, width):
         expect(result).to_be_visible()
         expect(result).to_have_class('contradiction-source-check source-check-result-target')
         expect(result).to_be_focused()
+        assert_source_check_fits(result)
         expect(result.locator('.contradiction-source-reason')).to_be_in_viewport()
         reader_screenshot(page, f'source-check-jump-{width}')
         page.evaluate("document.body.classList.add('dark-mode')")
@@ -65,14 +82,22 @@ def test_contradiction_evidence_reader(browser, phase4_server, width):
         page.evaluate("""() => {
           const ctx=App.runRegistry.visible();
           const check=ctx.consensus.sourceVerification;
-          check.findings[0]={...check.findings[0],checked:false,state:'unavailable',reason_code:'evidence_mismatch',evidence:[],reason:''};
+          check.findings[0]={...check.findings[0],checked:false,state:'unavailable',reason_code:'invalid_output',evidence:[],reason:'',coverage_limited:false};
           check.scope={contradictions:1,checked_contradictions:0,unavailable_contradictions:1};
           App.sourceVerification.renderCurrent(check,{differencesData:ctx.consensus.differencesData});
         }""")
-        expect(result).to_contain_text('Evidence quotes could not be verified')
+        expect(result).to_contain_text('result could not be validated')
+        expect(result.locator('.contradiction-source-status')).to_have_text('No conclusion')
+        expect(result.locator('.contradiction-source-guidance')).to_contain_text('Neither position is confirmed')
         expect(result.locator('blockquote')).to_have_count(0)
         expect(result).not_to_contain_text('Different conditions explain')
+        page.evaluate('App.sourceVerification.openResults(document.getElementById("consensusSourceCheckButton"))')
+        expect(result).to_be_focused()
+        expect(result.locator('.contradiction-source-guidance')).to_be_in_viewport()
+        assert_source_check_fits(result)
         reader_screenshot(page, f'contradiction-evidence-unavailable-{width}')
+        page.evaluate("document.body.classList.add('dark-mode')")
+        reader_screenshot(page, f'contradiction-evidence-unavailable-dark-{width}')
         assert not errors
     finally:
         context.close()

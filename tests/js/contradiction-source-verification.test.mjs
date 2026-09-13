@@ -382,6 +382,40 @@ describe('precise source-judge rejection diagnostics', () => {
 
 describe('source-check worker failure phases', () => {
   it.each([
+    [{checked:false,state:'unavailable',reason_code:'invalid_output',evidence:[]}, 'No conclusion', 'attention', 'Neither position is confirmed'],
+    [{checked:false,state:'unavailable',reason_code:'fetch_error',evidence:[]}, 'Unavailable', 'attention', 'still unverified'],
+    [{checked:false,state:'omitted',reason_code:'url_limit',evidence:[]}, 'Not checked', 'neutral', 'still unverified'],
+    [{checked:false,state:'pending',reason_code:'pending',evidence:[]}, 'In progress', 'neutral', 'result will appear here'],
+    [{verdict:'insufficient_evidence'}, 'Inconclusive', 'attention', 'do not settle this disagreement'],
+    [{verdict:'sources_conflict'}, 'Inconclusive', 'attention', 'dates and scope'],
+  ])('gives an honest status and useful context for incomplete checks', (changes, label, tone, guidance) => {
+    const {window,document}=boot();
+    window.App.sourceVerification.renderCurrent({...snapshot,findings:[{...finding,...changes,reason:''}]},options);
+    const result=document.querySelector('.contradiction-source-check');
+    expect(result.querySelector('.contradiction-source-status').textContent).toBe(label);
+    expect(result.dataset.checkTone).toBe(tone);
+    expect(result.textContent).toContain(guidance);
+    expect(result.textContent).not.toContain('Evidence reviewed');
+  });
+  it.each(['conditions_explain', 'insufficient_evidence'])('does not present rejected evidence as reviewed when a saved checked flag contradicts the rejection (%s)', verdict => {
+    const {window,document}=boot();
+    window.App.sourceVerification.renderCurrent({...snapshot,findings:[{...finding,verdict,reason_code:'invalid_output'}]},options);
+    const result=document.querySelector('.contradiction-source-check');
+    expect(result.dataset.checkTone).toBe('attention');
+    expect(result.dataset.checkState).toBe('unavailable');
+    expect(result.querySelector('.contradiction-source-evidence-details')).toBeNull();
+    expect(result.textContent).not.toContain(finding.reason);
+    expect(result.textContent).not.toContain(finding.evidence[0].quote);
+  });
+  it('reserves the positive status for a supported outcome without adding a failure hint', () => {
+    const {window,document}=boot();
+    window.App.sourceVerification.renderCurrent(snapshot,options);
+    const result=document.querySelector('.contradiction-source-check');
+    expect(result.dataset.checkTone).toBe('positive');
+    expect(result.querySelector('.contradiction-source-status').textContent).toBe('Evidence reviewed');
+    expect(result.querySelector('.contradiction-source-guidance')).toBeNull();
+  });
+  it.each([
     ['worker_preparation_failed','Check could not be prepared'],
     ['worker_execution_failed','Check failed during processing'],
     ['result_persistence_failed','Check result could not be saved'],

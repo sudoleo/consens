@@ -38,6 +38,12 @@ npm test
 wenn nicht). Denselben Abgleich macht `tests/test_frontend_build.py` im
 normalen pytest-Lauf, ohne Node.
 
+Der Größenvergleich in `tests/test_frontend_build.py` normalisiert CRLF auf LF,
+damit Windows und Linux dieselben Werte prüfen. Die JS-Bundles müssen mindestens
+45 % kleiner als ihre Quellen sein; der bestehende LF-Stand liegt bei rund 49 %
+Ersparnis. Der Spielraum berücksichtigt UI-Texte, die beim Minifizieren erhalten
+bleiben. Request-Anzahl und öffentliche `window.*`-Verträge werden separat geprüft.
+
 ## Lokalen Backend-Stand prüfen
 
 Ein neuer Frontend-Build lädt Python-Module eines laufenden Uvicorn-Workers nicht

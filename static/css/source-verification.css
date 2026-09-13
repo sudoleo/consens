@@ -140,28 +140,43 @@ body.consensus-markers-hidden .share-md a[data-source-check]:focus-visible {
 }
 
 /* Dispute evidence is separate from model agreement and resolve results. */
-.contradiction-source-check { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border-color, #d6d6d6); font-size: .875rem; line-height: 1.6; }
-.contradiction-source-heading { margin: 0 0 .4rem; font-size: .75rem; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; opacity: .75; }
-.contradiction-source-verdict { font-weight: 600; margin: .4rem 0; }
+.contradiction-source-check { --source-result-surface: color-mix(in srgb, var(--ink, #242629) 2%, transparent); box-sizing: border-box; min-width: 0; margin-top: 1rem; padding: 16px 18px; border: 1px solid color-mix(in srgb, var(--ink, #242629) 12%, transparent); border-radius: 10px; background: var(--source-result-surface); font-size: .875rem; line-height: 1.6; overflow-wrap: anywhere; }
+.contradiction-source-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 12px; margin-bottom: 12px; }
+.contradiction-source-heading { display: inline-flex; align-items: center; gap: 7px; margin: 0; font-size: .8rem; font-weight: 600; line-height: 1.5; }
+.contradiction-source-heading svg { width: 18px; height: 18px; flex: 0 0 18px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; opacity: .7; }
+.contradiction-source-status { padding: 2px 8px; border-radius: 5px; color: var(--muted, #697386); background: color-mix(in srgb, var(--ink, #242629) 6%, transparent); font-size: .7rem; font-weight: 500; line-height: 1.6; }
+[data-check-tone="attention"] .contradiction-source-status { color: var(--cx-warn-ink, #a66a14); background: color-mix(in srgb, var(--cx-warn-ink, #a66a14) 10%, transparent); }
+[data-check-tone="positive"] .contradiction-source-status { color: #17804c; background: color-mix(in srgb, #17804c 10%, transparent); }
+.dark-mode [data-check-tone="positive"] .contradiction-source-status { color: #79cba1; }
+.dark-mode [data-check-tone="attention"] .contradiction-source-status { color: #e3bc7a; }
+.contradiction-source-check .contradiction-source-verdict { font-weight: 600; margin: 0 0 6px; }
+.contradiction-source-check .contradiction-source-reason { margin: 6px 0; }
+.contradiction-source-check .contradiction-source-guidance { margin: 12px 0 0; padding-top: 10px; border-top: 1px solid color-mix(in srgb, var(--ink, #242629) 9%, transparent); font-size: .8rem; color: var(--ink-2, var(--muted, #697386)); line-height: 1.6; }
+.contradiction-source-validation { margin-top: 10px; font-size: .8rem; }
+.contradiction-source-validation-errors { margin: 6px 0; padding-left: 18px; }
+.contradiction-source-validation-errors li + li { margin-top: 5px; }
 .contradiction-source-evidence { margin-top: .9rem; }
 .contradiction-source-provenance { margin-bottom: .3rem; }
 .contradiction-source-quote { white-space: pre-wrap; overflow-wrap: anywhere; margin: .4rem 0; padding-left: .75rem; border-left: 2px solid var(--border-color, #d6d6d6); }
 .contradiction-source-context { font-size: .8rem; opacity: .8; }
+.contradiction-source-check .contradiction-source-context { margin: 6px 0; }
 .contradiction-source-evidence-details > summary { cursor: pointer; min-height: 44px; padding: .6rem 0; box-sizing: border-box; font-size: .8rem; }
 .contradiction-source-evidence-details > summary:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; border-radius: 3px; }
 .contradiction-source-differences .diff-card { margin-top: 1.2rem; }
 
 /* One brief reading cue after an explicit jump; no layout shift or verdict color. */
-.source-check-result-target { border-radius: 6px; scroll-margin-block: 1rem; animation: source-result-cue 2.8s ease-out both; }
-.source-check-result-target, .source-check-result-target:focus { outline: 1px solid transparent; outline-offset: 5px; }
+.source-check-result-target { border-radius: 10px; scroll-margin-block: 1rem; animation: source-result-cue 2.8s ease-out both; }
+.source-check-result-target, .source-check-result-target:focus { outline: 2px solid transparent; outline-offset: -2px; }
 @keyframes source-result-cue {
-  0%, 100% { background-color: transparent; box-shadow: 0 0 0 5px transparent; outline-color: transparent; }
-  8%, 72% { background-color: color-mix(in srgb, #8494d4 12%, transparent); box-shadow: 0 0 0 5px color-mix(in srgb, #8494d4 12%, transparent); outline-color: color-mix(in srgb, #8494d4 65%, transparent); }
+  0%, 100% { background-color: var(--source-result-surface, transparent); box-shadow: inset 0 0 0 2px transparent; }
+  8%, 72% { background-color: color-mix(in srgb, #8494d4 10%, transparent); box-shadow: inset 0 0 0 2px color-mix(in srgb, #8494d4 65%, transparent); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .source-check-result-target { animation: none; background-color: color-mix(in srgb, #8494d4 12%, transparent); box-shadow: 0 0 0 5px color-mix(in srgb, #8494d4 12%, transparent); }
-  .source-check-result-target, .source-check-result-target:focus { outline-color: color-mix(in srgb, #8494d4 65%, transparent); }
+  .source-check-result-target { animation: none; background-color: color-mix(in srgb, #8494d4 10%, transparent); box-shadow: inset 0 0 0 2px color-mix(in srgb, #8494d4 65%, transparent); }
 }
 @media (forced-colors: active) {
-  .source-check-result-target, .source-check-result-target:focus { animation: none; outline: 2px solid Highlight; outline-offset: 4px; box-shadow: none; }
+  .source-check-result-target, .source-check-result-target:focus { animation: none; outline: 2px solid Highlight; outline-offset: -2px; box-shadow: none; }
+}
+@media (max-width: 640px) {
+  .contradiction-source-check { padding: 14px; }
 }

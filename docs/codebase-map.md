@@ -1833,6 +1833,13 @@ für zitierte Satz-/Quellen-Paare bleibt zur Verarbeitung alter Pläne erhalten.
 `consensus-anchor.js` in `bundles.json`, außerdem auf öffentlichen Ergebnissen.
 RunContext: `consensus.sourceVerification`. V4-Ergebnisse erscheinen direkt
 bei ihrer Contradiction, mit validierten Belegpassagen und Quellenlinks.
+Die kompakte Ergebniskarte trennt Prüfstatus, Urteil und Begründung; bei
+Fehlschlägen, unzureichender Evidenz und ausgeschlossenen Prüfungen erklärt
+ein kurzer Hinweis, wie der Nutzer den offenen Widerspruch einordnen kann.
+Nur ein mit Evidenz belegtes, gültiges Positions-/Bedingungsurteil erhält
+den positiven Status. Die 2,8-sekündige Navigationsmarkierung liegt innerhalb
+der Karte, damit Scrollcontainer sie nicht abschneiden; Reduced Motion und
+Forced Colors verwenden ebenfalls eine innenliegende Markierung.
 Neue Runs setzen zusätzlich `consensus.sourceReferenceMode: none` und am
 Antwortcontainer `data-source-references="none"`. Dadurch macht die Darstellung
 aus numerischen `[1]`-Notationen keine Quellenlinks; Modellantworten und Legacy-
