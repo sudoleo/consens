@@ -1,4 +1,8 @@
 {
+  "intro": {
+    "brand": "consens.io",
+    "lines": ["Multiple AI models.", "One combined answer."]
+  },
   "prompt": "I built a habit tracker. How do I keep users coming back?",
   "models": [
     {

@@ -3,8 +3,9 @@ const {spawn}=require('node:child_process'),{once}=require('node:events');
 const {chromium}=require('playwright-core');
 const {ROOT,OUT,FF,findChrome}=require('./runtime.cjs');
 const timing=JSON.parse(fs.readFileSync(path.join(__dirname,'timing.json'),'utf8'));
-const stills=process.argv.includes('--stills'),fps=timing.fps,duration=timing.sourceDuration+timing.readingWindows.reduce((n,w)=>n+w.extra,0);
-const toOutput=t=>Number((t+timing.readingWindows.reduce((n,w)=>n+w.extra*Math.max(0,Math.min(1,(t-w.start)/(w.end-w.start))),0)).toFixed(6));
+const introEnd=timing.intro.duration+timing.intro.transitionDuration,introOffset=introEnd-timing.intro.resumeSource;
+const stills=process.argv.includes('--stills'),fps=timing.fps,duration=timing.sourceDuration+introOffset+timing.readingWindows.reduce((n,w)=>n+w.extra,0);
+const toOutput=t=>Number((t+introOffset+timing.readingWindows.reduce((n,w)=>n+w.extra*Math.max(0,Math.min(1,(t-w.start)/(w.end-w.start))),0)).toFixed(6));
 const b64=(p,type)=>`data:${type};base64,${fs.readFileSync(p).toString('base64')}`;
 const content=JSON.parse(fs.readFileSync(path.join(__dirname,'content.json'),'utf8'));
 const icon=file=>b64(path.join(ROOT,'assets/icons',file),file.endsWith('.svg')?'image/svg+xml':'image/png');
@@ -26,10 +27,16 @@ async function main(){
  const page=await browser.newPage({viewport:{width:1080,height:1350},deviceScaleFactor:1});const errors=[];page.on('pageerror',e=>errors.push(e.message));await page.setContent(html);await page.evaluate(()=>window.ready);
  const originalTimes=[.7,2.7,2.92,3.08,5.8,6.35,6.45,6.6,6.8,6.9,6.99,7,7.2,7.48,7.52,8.6,9.5,10.6,11.6,12.6,13.8,14.8,15.8,16.8,17.6,18.75,19.8,20.6,21.7,22.15,22.8,23.1,23.8,24.9,25.7,26.3,27.2,28.3,29.2,30.1,30.9,31.8,32.8,33.6,34.2,35.3,35.8,36.2,36.8,37.7,38.75,39.1,40.5,42.2,43.4,44.8,46.8];
  const times=[...new Set([...originalTimes.map(t=>t>=13.85?Number((t+3).toFixed(2)):t),11.22,11.7,12.15,12.85,13.55,14.5,15.2,15.6,16,16.35,16.45,16.85,19.65,20,20.5,21,21.5,22,22.5,23,23.2,23.5,28.8,29.3,30,31,32,33,34,35,36,37,37.2,3.2,4.4,5.4,7.8,8.2,9,9.8,10.3,10.9,11.1,25.05,25.6,25.75,26,35.5,35.8,36.1,47.5,48,48.5,49.4])].map(toOutput).sort((a,b)=>a-b);
- const qa=[];for(const t of times){const report=await page.evaluate(t=>drawFullFilm(t),t);await page.locator('#fullFilm').screenshot({path:path.join(OUT,'qa/stills',`${t}.png`)});qa.push(report);}
+ times.push(...[0,.3,.65,1,1.4,1.8,2.2,2.6,3.1,3.5,4,4.3,4.6,4.9,5,5.15,5.25,5.35,5.55,5.7]);times.sort((a,b)=>a-b);
+ const qa=[];for(const t of [...new Set(times)]){const report=await page.evaluate(t=>drawFullFilm(t),t);await page.locator('#fullFilm').screenshot({path:path.join(OUT,'qa/stills',`${t}.png`)});qa.push(report);}
  const seek=[];for(const t of [0,3.8,6.4,6.9,7.3,8.2,9.8,10.9,11,12.85,14.8,17.6,20.5,22.8,25.8,27.7,29,31.2,34.8,36.2,38.9,44.5].map(t=>toOutput(t>=13.85?t+3:t))){
  const a=await page.evaluate(t=>{drawFullFilm(t);return document.getElementById('fullFilm').toDataURL();},t);await page.evaluate(t=>drawFullFilm(t),duration-t);
  const b=await page.evaluate(t=>{drawFullFilm(t);return document.getElementById('fullFilm').toDataURL();},t);seek.push({t,identical:a===b});}
+ for(const t of [0,.3,1.4,2.2,3.5,4.6,5.15,5.55]){
+   const draw=t=>{drawFullFilm(t);return document.getElementById('fullFilm').toDataURL();};
+   const a=await page.evaluate(draw,t);await page.evaluate(t=>drawFullFilm(t),duration-t);
+   seek.push({t,identical:a===await page.evaluate(draw,t)});
+ }
  const frameText=t=>qa.find(f=>Math.abs(f.sourceTime-t)<1e-5).text.filter(x=>x.alpha>.9).map(x=>x.text);
  const visible=t=>frameText(t>=13.85?Number((t+3).toFixed(2)):t);
  const exact=t=>qa.find(f=>Math.abs(f.sourceTime-t)<1e-5);
@@ -39,6 +46,16 @@ async function main(){
  {check:'Differences are highlighted in the shared answer',ok:qa.some(f=>f.judges?.highlightInSharedAnswer&&f.text.some(x=>x.text==='Find differences'&&x.alpha>.9)&&f.text.some(x=>x.text==='Contradiction'&&x.alpha>.9))},
  {check:'Different advice has no redundant closing tagline',ok:qa.every(f=>!f.text.some(x=>x.text==='Same goal. Different timing.'))},
  {check:'Sources remain conditional and return context without a verdict or example',ok:qa.some(f=>f.sourceCheck?.returnedToAnswer)&&qa.filter(f=>f.sourceCheck).every(f=>f.sourceCheck.majorOnly&&f.sourceCheck.factualOnly&&f.sourceCheck.citedSourcesOnly&&!f.sourceCheck.outcomeClaimed&&!f.sourceCheck.concreteExample)}
+ );
+ editorial.push(
+   {check:'The intro names the product and explains multiple AI models becoming one answer, readable for almost three seconds',ok:[1.4,1.8,2.2,2.6,3.1,3.5,4].every(t=>{
+     const r=qa.find(f=>f.time===t);return [study.intro.brand,...study.intro.lines].every(line=>r.text.some(x=>x.text===line&&x.alpha>.99))&&r.text.filter(x=>study.intro.lines.includes(x.text)).every(x=>x.width<936);
+   })},
+   {check:'Six distinct provider marks establish the input before converging into Consens',ok:qa.find(f=>f.time===1.4).introNodes.every(n=>n.alpha>.99&&n.merge===0)&&qa.find(f=>f.time===4).introNodes.every(n=>n.merge===1&&n.alpha===0)},
+   {check:'Moving brand text clears the incoming question throughout the handoff',ok:qa.filter(r=>r.intro?.handoff>0).every(r=>{
+     const brand=r.text.find(x=>x.text===study.intro.brand),question=r.text.find(x=>x.text==='One question.');
+     return brand&&question&&brand.y+20<question.y-question.size;
+   })}
  );
  if(errors.length||seek.some(x=>!x.identical)||editorial.some(x=>!x.ok))throw Error(JSON.stringify({errors,seek,editorial}));
  const phraseFrames=[];
@@ -56,16 +73,16 @@ async function main(){
  if(referenceArg){
    const reference=await browser.newPage({viewport:{width:1080,height:1350},deviceScaleFactor:1});
    await reference.setContent(fs.readFileSync(path.resolve(referenceArg.slice('--reference='.length)),'utf8'));await reference.evaluate(()=>window.ready);
-   for(const t of [...new Set([...Array.from({length:Math.ceil(duration*4)},(_,i)=>i/4),...times])].sort((a,b)=>a-b)){
+   for(const t of [...new Set([...Array.from({length:Math.ceil(duration*4)},(_,i)=>i/4),...times])].filter(t=>t>=introEnd&&t<duration).sort((a,b)=>a-b)){
      const draw=t=>{drawFullFilm(t);return document.getElementById('fullFilm').toDataURL();};
-     const a=await reference.evaluate(draw,t),b=await page.evaluate(draw,t);
-     retained.push({time:t,identical:a===b,ok:a===b});
+     const a=await reference.evaluate(draw,Number((t-introOffset).toFixed(6))),b=await page.evaluate(draw,t);
+     retained.push({time:t,referenceTime:t-introOffset,identical:a===b,ok:a===b});
    }
    await reference.close();if(retained.some(x=>!x.ok))throw Error(JSON.stringify({retained}));
  }
  const keyframes=[];
  for(let i=0;i<study.prompt.length;i++){
-   let frame=Math.ceil((timing.typing.start+(i+1)*timing.typing.duration/study.prompt.length)*fps-1e-8);
+   let frame=Math.ceil((introOffset+timing.typing.start+(i+1)*timing.typing.duration/study.prompt.length)*fps-1e-8);
    let at=await page.evaluate(t=>drawFullFilm(t).promptCount,frame/fps);
    if(at<i+1){frame++;at=await page.evaluate(t=>drawFullFilm(t).promptCount,frame/fps);}
    const before=await page.evaluate(t=>drawFullFilm(t).promptCount,(frame-1)/fps);
@@ -73,33 +90,33 @@ async function main(){
    keyframes.push({index:i+1,char:study.prompt[i],frame,time:frame/fps,before,after:at});
  }
  const pacing=timing.readingWindows.map(w=>({...w,outputStart:toOutput(w.start),outputEnd:toOutput(w.end)}));
- if(Math.abs(duration-57)>1e-8||toOutput(19.65)!==19.65)throw Error('Unexpected duration or changed opening');
- const motionFrames=await page.evaluate(({fps})=>{
+ if(Math.abs(duration-60)>1e-8||toOutput(timing.intro.resumeSource)!==introEnd)throw Error('Unexpected duration or intro handoff');
+ const motionFrames=await page.evaluate(({fps,introOffset})=>{
    const crop=document.createElement('canvas');crop.width=64;crop.height=64;const ctx=crop.getContext('2d'),previous={},frames=[];
    for(let f=19.65*fps;f<=27.8*fps;f++){
-     const r=drawFullFilm(f/fps),animations=(r.judges?.animations||[]).map(a=>{
+     const r=drawFullFilm(f/fps+introOffset),animations=(r.judges?.animations||[]).map(a=>{
        ctx.clearRect(0,0,64,64);ctx.drawImage(document.getElementById('fullFilm'),(a.role==='coverage'?481:940)-32,1032,64,64,0,0,64,64);
        const pixels=crop.toDataURL(),pixelChanged=previous[a.role]!==pixels;previous[a.role]=pixels;return {...a,pixelChanged};
      });frames.push({time:r.time,sourceTime:r.sourceTime,animations,mark:r.mark});
    }return frames;
- },{fps});
+ },{fps,introOffset});
  const motionChecks=[];
  for(const role of ['coverage','differences']){
    const states=motionFrames.flatMap((r,i)=>r.animations.filter(a=>a.role===role).map(a=>({...a,time:r.time,sourceDelta:i?r.sourceTime-motionFrames[i-1].sourceTime:0})));
    const spinning=states.filter(a=>a.enter===1&&a.spinnerAlpha===1),checks=states.filter(a=>a.checkProgress>0&&a.checkProgress<1);
-   motionChecks.push({check:`${role}: spinner advances every encoded frame, including slowed reading windows`,samples:spinning.length,readingWindowSamples:spinning.filter(a=>a.sourceDelta<.5/fps).length,ok:spinning.length>30&&spinning.some(a=>a.sourceDelta<.5/fps)&&spinning.every((a,i)=>a.pixelChanged&&Math.abs(a.motionTime-a.time)<1e-8&&(!i||Math.abs(a.angle-spinning[i-1].angle-6/fps)<1e-8))});
+   motionChecks.push({check:`${role}: spinner advances every encoded frame, including slowed reading windows`,samples:spinning.length,readingWindowSamples:spinning.filter(a=>a.sourceDelta<.5/fps).length,ok:spinning.length>30&&spinning.some(a=>a.sourceDelta<.5/fps)&&spinning.every((a,i)=>a.pixelChanged&&Math.abs(a.motionTime-(a.time-introOffset))<1e-8&&(!i||Math.abs(a.angle-spinning[i-1].angle-6/fps)<1e-8))});
    motionChecks.push({check:`${role}: checkmark draws without stalls in 0.3-0.4 seconds`,samples:checks.length,ok:checks.length>=18&&checks.length<=24&&checks.every((a,i)=>a.pixelChanged&&(!i||a.checkProgress>checks[i-1].checkProgress))&&states.some(a=>a.checkProgress===1&&a.spinnerAlpha===0)});
  }
  const sweep=motionFrames.filter(r=>r.mark?.progress>0&&r.mark.progress<1),label=motionFrames.filter(r=>r.mark?.labelAlpha>0&&r.mark.labelAlpha<1);
  motionChecks.push({check:'Highlight sweeps continuously for 0.8-0.9 seconds across the narrative reading hold',samples:sweep.length,ok:sweep.length>=48&&sweep.length<=54&&sweep.every((r,i)=>!i||(r.mark.progress>sweep[i-1].mark.progress&&r.mark.progress-sweep[i-1].mark.progress<.04))&&motionFrames.some(r=>r.mark?.progress===1)});
  motionChecks.push({check:'Contradiction label starts with the highlight and finishes fading within 0.25 seconds',samples:label.length,ok:label.length>=12&&label.length<=15&&label[0]?.time===sweep[0]?.time&&label.every((r,i)=>!i||r.mark.labelAlpha>label[i-1].mark.labelAlpha)&&sweep.some(r=>r.mark.labelAlpha===1)});
  if(motionChecks.some(x=>!x.ok))throw Error(JSON.stringify({motionChecks}));
- const readerFrames=await page.evaluate(({fps})=>{
-   const frames=[];for(let f=Math.floor(43.7*fps);f<49*fps;f++){const r=drawFullFilm(f/fps);if(r.cursorMotion)frames.push(r.cursorMotion);}return frames;
- },{fps});
- const sourceSurfaceFrames=await page.evaluate(()=>{
-   const frames=[];for(let t=40.9;t<43.21;t+=1/30){const r=drawFullFilm(t),s=r.sourceCheck.surface,pixel=[...document.getElementById('fullFilm').getContext('2d').getImageData(s.x+s.w/2,s.y+12,1,1).data];frames.push({time:t,pixel});}return frames;
- });
+ const readerFrames=await page.evaluate(({fps,introOffset})=>{
+   const frames=[];for(let f=Math.floor(43.7*fps);f<49*fps;f++){const r=drawFullFilm(f/fps+introOffset);if(r.cursorMotion)frames.push(r.cursorMotion);}return frames;
+ },{fps,introOffset});
+ const sourceSurfaceFrames=await page.evaluate(introOffset=>{
+   const frames=[];for(let t=40.9;t<43.21;t+=1/30){const r=drawFullFilm(t+introOffset),s=r.sourceCheck.surface,pixel=[...document.getElementById('fullFilm').getContext('2d').getImageData(s.x+s.w/2,s.y+12,1,1).data];frames.push({time:t+introOffset,pixel});}return frames;
+ },introOffset);
  const polishChecks=[
    {check:'Empty-input caret has a visible gap before the placeholder A',ok:exact(2.92).caret.typedCount===0&&exact(2.92).caret.placeholderX-exact(2.92).caret.x-exact(2.92).caret.width>=5},
    {check:'Question text is gone before model cards enter',ok:[6.9,6.99,7.2,7.48].every(t=>exact(t).text.every(x=>!x.text.includes('I built a habit tracker')||x.alpha===0))},
@@ -120,8 +137,8 @@ async function main(){
  for(let f=0;f<duration*fps;f++){const jpeg=await page.evaluate(t=>{drawFullFilm(t);return document.getElementById('fullFilm').toDataURL('image/jpeg',.97).split(',')[1];},f/fps);if(!encoder.stdin.write(Buffer.from(jpeg,'base64')))await once(encoder.stdin,'drain');if(f%120===0)console.log('RENDER',`${f/fps}/${duration}s`);}
  encoder.stdin.end();const [code]=await closed;if(code)throw Error(log);
  await run(['-y','-v','error','-i',silent,'-i',path.join(ROOT,'assets/audio/soundtrack.m4a'),'-map','0:v','-map','1:a','-c:v','copy','-c:a','copy','-t',String(duration),'-movflags','+faststart',path.join(OUT,'consensio-4x5.mp4')]);
- await run(['-y','-v','error','-ss','17.8','-i',silent,'-frames:v','1',path.join(OUT,'poster.jpg')]);
- fs.writeFileSync(path.join(OUT,'cut.json'),JSON.stringify({duration,fps,width:1080,height:1350,frames:duration*fps,prompt:study.prompt,reference:'Current 57-second composition, consolidated from v30 with its existing encoded soundtrack.',chapters:[{t:0,label:'Intro'},{t:3,label:'Question'},{t:7.5,label:'Model answers'},{t:11.2,label:'Combine the useful parts'},{t:16.4,label:'Consensus'},{t:19.65,label:'Two judges'},{t:23.2,label:'Different recommendations'},{t:28.8,label:'Conditional source judge'},{t:37.3,label:'Original answers'},{t:45,label:'Outro'}].map(ch=>({...ch,t:toOutput(ch.t)})),readingWindows:timing.readingWindows,provenance:'Authored illustrated workflow. Content pairs explain this example, not a fixed model-pairing algorithm. Direct labelled original-answer excerpts. No native overview, live model run, or factual check outcome asserted.',sceneSha256:crypto.createHash('sha256').update(scene+baseScene).digest('hex')},null,2));
+ await run(['-y','-v','error','-ss',String(toOutput(17.8)),'-i',silent,'-frames:v','1',path.join(OUT,'poster.jpg')]);
+ fs.writeFileSync(path.join(OUT,'cut.json'),JSON.stringify({duration,fps,width:1080,height:1350,frames:duration*fps,prompt:study.prompt,reference:'60-second composition with a five-second cinematic explanation and continuous brand-to-question handoff.',chapters:[{t:0,label:'What is consens.io?'},...[{t:3,label:'Question'},{t:7.5,label:'Model answers'},{t:11.2,label:'Combine the useful parts'},{t:16.4,label:'Consensus'},{t:19.65,label:'Two judges'},{t:23.2,label:'Different recommendations'},{t:28.8,label:'Conditional source judge'},{t:37.3,label:'Original answers'},{t:45,label:'Outro'}].map(ch=>({...ch,t:toOutput(ch.t)}))],intro:timing.intro,introOffset,readingWindows:timing.readingWindows,provenance:'Authored illustrated workflow. Content pairs explain this example, not a fixed model-pairing algorithm. Direct labelled original-answer excerpts. No native overview, live model run, or factual check outcome asserted.',sceneSha256:crypto.createHash('sha256').update(scene+baseScene).digest('hex')},null,2));
  console.log('MASTER READY');
  }finally{await browser.close();}
 }

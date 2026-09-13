@@ -14,7 +14,9 @@ def sheet(paths,times,target):
         im=Image.open(file).convert('RGB');im.thumbnail((w,h));x=(i%cols)*(w+10);y=(i//cols)*(h+30);canvas.paste(im,(x,y+25));draw.text((x+6,y+6),f'{t:.2f}s',fill='white')
     canvas.save(target,quality=95)
 timing=json.loads((ROOT/'src/timing.json').read_text())
-def output_time(t):return round(t+sum(w['extra']*max(0,min(1,(t-w['start'])/(w['end']-w['start']))) for w in timing['readingWindows']),6)
+intro_offset=timing['intro']['duration']+timing['intro']['transitionDuration']-timing['intro']['resumeSource']
+
+def output_time(t):return round(t+intro_offset+sum(w['extra']*max(0,min(1,(t-w['start'])/(w['end']-w['start']))) for w in timing['readingWindows']),6)
 report=json.loads((QA/'render-checks.json').read_text())
 duration=report['duration'];frame_count=round(duration*report['fps'])
 assert not report['errors'] and all(s['identical'] for s in report['seek']) and all(s['ok'] for s in report['editorial'])
@@ -24,7 +26,8 @@ assert all(s['ok'] for s in report['polishChecks'])
 if '--stills' in sys.argv:
     times=[f['time'] for f in report['frames']]
     for name,lo,hi in [('intro',0,7.5),('answers',7.5,11.2),('synthesis',10.5,17),('consensus',17,23),('contradiction',23,29),('sources',29,37.3),('reader',37.3,45),('outro',45,51)]:
-        selected=[t for t in times if output_time(lo)<=t<output_time(hi)];sheet([QA/'stills'/f'{t}.png' for t in selected],selected,QA/f'preflight-{name}.jpg')
+        start=0 if name=='intro' else output_time(lo)
+        selected=[t for t in times if start<=t<output_time(hi)];sheet([QA/'stills'/f'{t}.png' for t in selected],selected,QA/f'preflight-{name}.jpg')
     print('PREFLIGHT SHEETS READY');sys.exit()
 video=OUT/'consensio-4x5.mp4'
 result=run(['-hide_banner','-i',str(video),'-af','loudnorm=I=-16:TP=-2:LRA=9:print_format=json','-f','null','-']);log=result.stderr.decode(errors='replace');(QA/'decode-audio.txt').write_text(log,encoding='utf8')
@@ -40,6 +43,8 @@ groups['answers']=[6.96,7.2,7.48,7.52,7.8,8.2,8.6,9,9.5,9.8,10.3,10.9,11.1]
 groups['text-continuity']=[24.85,25.05,25.2,25.4,25.6,25.7,25.75,25.8,26]
 groups['outro']=[45.5,46.5,47.5,48,48.5,49,49.8]
 groups={name:[output_time(t) for t in times] for name,times in groups.items()}
+groups['intro']=[0,.3,.65,1,1.4,1.8,2.2,2.6,3.1,3.5,4,4.3,4.6,4.9,5,5.15,5.25,5.35,5.55,5.7,6.3]
+groups['story']=[1.4,3.5,5.35]+groups['story'][1:]
 for name,times in groups.items():
     folder=QA/f'encoded-{name}';folder.mkdir(exist_ok=True);paths=[]
     for i,t in enumerate(times):
@@ -53,7 +58,7 @@ for i,still in enumerate(d<.04):
         end=i if not still else i+1
         if (end-start)/12>=.5:spans.append({'start':round(start/12,2),'end':round(end/12,2),'duration':round((end-start)/12,2)})
         start=None
-summary={'duration':duration,'fps':60,'frames':frame_count,'size':[1080,1350],'LUFS':float(levels['input_i']),'truePeak':float(levels['input_tp']),'seekChecks':len(report['seek']),'editorialChecks':report['editorial'],'nearStaticSpans':spans,'motionMeasurement':'12 fps decoded sample at 216x270, mean absolute luminance delta <0.04/255; diagnostic only, not an aesthetic score.','sha256':hashlib.sha256(video.read_bytes()).hexdigest(),'subjectiveAudioReview':'Not performed. No assertion of subjective real-time listening.','scope':'Current standalone film: deterministic seeks, editorial checks, judge motion, source-card continuity, paced cursors and preserved encoded soundtrack.'}
+summary={'duration':duration,'fps':60,'frames':frame_count,'size':[1080,1350],'LUFS':float(levels['input_i']),'truePeak':float(levels['input_tp']),'seekChecks':len(report['seek']),'editorialChecks':report['editorial'],'nearStaticSpans':spans,'motionMeasurement':'12 fps decoded sample at 216x270, mean absolute luminance delta <0.04/255; diagnostic only, not an aesthetic score.','sha256':hashlib.sha256(video.read_bytes()).hexdigest(),'subjectiveAudioReview':'Not performed. No assertion of subjective real-time listening.','scope':'Current standalone film: deterministic seeks, editorial checks, judge motion, source-card continuity, paced cursors and cinematic intro and included 60-second soundtrack.'}
 summary['referenceFrames']=report['retained']
 def audio_hash(file):return hashlib.sha256(run(['-v','error','-i',str(file),'-map','0:a:0','-c:a','copy','-f','adts','pipe:1']).stdout).hexdigest()
 summary['audioStreamSha256']=audio_hash(video)
@@ -65,10 +70,11 @@ summary['audioDesign']=json.loads((OUT/'music-credit.json').read_text())['audioD
 summary['readingWindows']=report['pacing']
 summary['inputCharacterTimingChecks']=len(report['typing']['keyframes'])
 summary['phraseContinuityFrames']=len(report['phraseFrames'])
-for name,start,length in [('opening-review',0,16.5),('source-reader-review',40,13)]:
+for name,start,length in [('intro-review',0,9),('opening-review',0,19.5),('source-reader-review',40+intro_offset,13)]:
     run(['-y','-v','error','-ss',str(start),'-i',str(video),'-t',str(length),'-c:v','libx264','-crf','17','-preset','medium','-pix_fmt','yuv420p','-c:a','aac','-b:a','192k','-movflags','+faststart',str(OUT/f'{name}.mp4')])
 motion_sheets=[('input-caret',2.88,.22,(100,518,420,76),(630,114),3,12),('input-handoff',6.6,1.1,(60,165,960,465),(576,279),3,6),('source-surface',41,2.25,(60,400,960,560),(576,336),3,6),('reader-open',43.65,1.7,(60,350,960,800),(432,360),3,6),('reader-switch',47,1.95,(60,350,960,800),(432,360),3,6)]
 for name,start,length,(x,y,w,h),(sw,sh),cols,rate in motion_sheets:
+    start+=intro_offset
     raw=run(['-v','error','-ss',str(start),'-i',str(video),'-t',str(length),'-vf',f'fps={rate},crop={w}:{h}:{x}:{y},scale={sw}:{sh}','-pix_fmt','rgb24','-f','rawvideo','pipe:1']).stdout
     frames=np.frombuffer(raw,np.uint8).reshape(-1,sh,sw,3);canvas=Image.new('RGB',(cols*(sw+8),((len(frames)+cols-1)//cols)*(sh+28)),'#252a2f');draw=ImageDraw.Draw(canvas)
     for i,frame in enumerate(frames):

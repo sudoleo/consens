@@ -1,6 +1,11 @@
 {
   "sourceDuration": 50,
   "fps": 60,
+  "intro": {
+    "duration": 5,
+    "transitionDuration": 0.7,
+    "resumeSource": 2.7
+  },
   "typing": {
     "start": 3.05,
     "duration": 2.65

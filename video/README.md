@@ -1,7 +1,7 @@
 # consens.io product video
 
-A 57-second product film built with Canvas, Playwright and FFmpeg, developed
-with Codex. This is the consolidated v30 composition: one source tree, one
+A 60-second product film built with Canvas, Playwright and FFmpeg, developed
+with Codex. This is the current composition with a five-second cinematic explanation: one source tree, one
 timeline and one render destination. It renders without the consens.io app,
 Firebase, API keys or previous video versions.
 
@@ -53,12 +53,18 @@ never regenerated implicitly. The original v30 is retained locally as
 `npm run check` executes the scene in headless Chrome, saves stills and checks
 deterministic seeks, text continuity, judge motion, reading windows, icon
 proportions and cursor pacing. `npm run qa` checks the completed MP4, including
-all 3,420 decoded frames and the encoded audio against the included soundtrack.
+all 3,600 decoded frames and the encoded audio against the included soundtrack.
 These checks are specific to this film; adapt them deliberately when changing
 its content. They do not replace watching and listening to the finished film.
 
 In the parent app repository, `.\dev.ps1 check video` runs the same scene check.
 The standalone npm commands remain the canonical entry points.
+
+The opening names consens.io and explains “Multiple AI models. One combined answer.”
+Six provider marks converge into the brand, which moves into the demo header.
+Five seconds of introduction plus a 0.7-second handoff replace the former
+2.7-second opening. Later scenes retain their reading and motion timings.
+`output/intro-review.mp4` isolates the new opening and transition.
 
 ## Where to work
 
@@ -90,15 +96,16 @@ Python tools honor `NODE_BINARY` if Node is not available as `node` on PATH.
 Windows is the validated platform for this cleanup; other platforms can differ
 in font rasterization and encoding.
 
-Optional comparison to a previously rendered self-contained scene:
+Optional comparison to the pre-intro v30 self-contained scene:
 
 ```sh
 node src/render.cjs --stills --reference=/absolute/path/to/source.html
 ```
 
-This checks matching output times at quarter-second intervals and all review
-stills. It is for changes expected to preserve those frames; run it with the same
-browser version. Ordinary rendering has no dependency on that reference.
+This checks the preserved scenes after the intro at their corresponding output
+times, accounting for the three-second offset, at quarter-second intervals and
+all review stills. Run it with the same browser version. Ordinary rendering has
+no dependency on that reference.
 
 To rebuild the music edit, see [the audio notes](assets/audio/README.md).
 

@@ -41,7 +41,7 @@ window.initFullFilm=async function(data){
   function chip(s,x,y,w,alpha=1){c.save();c.globalAlpha*=alpha;box(x,y,w,43,{fill:'#ebeae6',r:21,shadow:0,stroke:false});txt(s,x+w/2,y+29,21,540,P.secondary,1,'center');c.restore();}
   function cursor(x,y,alpha=1,press=0){c.save();c.globalAlpha*=alpha;c.translate(x,y);c.scale(1-.13*press,1-.13*press);c.shadowColor='#00000022';c.shadowBlur=7;c.shadowOffsetY=3;c.beginPath();c.moveTo(0,0);c.lineTo(0,38);c.lineTo(10,28);c.lineTo(20,47);c.lineTo(28,42);c.lineTo(18,25);c.lineTo(33,24);c.closePath();c.fillStyle=P.ink;c.fill();c.shadowColor='transparent';c.strokeStyle='white';c.lineWidth=2.2;c.stroke();c.restore();}
   function pacedCursor(event,target,kind){
-    const t=report.time;if(t<event.start||t>=event.fade+event.fadeDuration)return;
+    const t=report.motionTime;if(t<event.start||t>=event.fade+event.fadeDuration)return;
     const progress=q(t,event.start,event.duration),press=q(t,event.click,.08)*(1-q(t,event.click+.08,.14));
     const x=mix(event.from[0],target.x,progress),y=mix(event.from[1],target.y,progress)-event.arc*Math.sin(progress*Math.PI);
     const alpha=q(t,event.start,.18)*(1-q(t,event.fade,event.fadeDuration));
@@ -51,6 +51,42 @@ window.initFullFilm=async function(data){
   function arrow(x,y,size=20,color=P.paper){c.save();c.strokeStyle=color;c.lineCap='round';c.lineJoin='round';c.lineWidth=3;c.beginPath();c.moveTo(x,y+size/2);c.lineTo(x,y-size/2);c.moveTo(x-size/2,y);c.lineTo(x,y-size/2);c.lineTo(x+size/2,y);c.stroke();c.restore();}
   function stream(s,x,y,w,size,t,start,dur){const words=s.split(' '),n=Math.ceil(words.length*clamp((t-start)/dur));if(n>0)wrap(words.slice(0,n).join(' '),x,y,w,size,510);}
   function footer(){txt('Illustrated workflow · authored demo',72,1290,18,430,P.secondary,.78);txt('Neon · Scott Buckley · CC BY 4.0',1008,1290,17,430,P.secondary,.78,'right');}
+  function cinematicIntro(t){
+    const handoff=q(t,data.timing.intro.duration,data.timing.intro.transitionDuration);
+    const landing=q(t,3.9,data.timing.intro.duration-3.9),copyAlpha=q(t,.12,.62,out)*(1-q(t,4.15,.7));
+    // A quiet push-in: recognizable providers gather into the shared answer.
+    // All marks retain their proportions; the same brand moves into the header.
+    const camera=mix(1.055,1,q(t,0,4.5));
+    c.save();c.translate(540,520);c.scale(camera,camera);c.translate(-540,-520);
+    const light=c.createRadialGradient(540,480,20,540,480,470);
+    light.addColorStop(0,'rgba(255,254,250,.95)');light.addColorStop(.55,'rgba(237,228,206,.28)');light.addColorStop(1,'rgba(245,244,241,0)');
+    c.save();c.globalAlpha=1-q(t,4.3,.8);c.fillStyle=light;c.fillRect(50,30,980,940);c.restore();
+    const points=[[272,315],[540,230],[808,315],[808,607],[540,702],[272,607]];
+    report.introNodes=[];
+    for(let i=0;i<6;i++){
+      const enter=q(t,i*.055,.65,out),merge=q(t,1.65+i*.095,1.4),alpha=clamp(enter*(1-q(merge,.66,.34)));
+      const drift=Math.sin(t*.7+i)*8*(1-merge);
+      const x=mix(points[i][0],540,merge),y=mix(points[i][1]+drift,465,merge),size=mix(106,40,merge);
+      c.save();c.globalAlpha*=alpha;box(x-size/2,y-size/2+22*(1-enter),size,size,{r:25,shadow:1.15,stroke:false});
+      icon(i,x-size*.25,y-size*.25+22*(1-enter),size*.5);c.restore();
+      report.introNodes.push({i,x,y,merge,alpha});
+    }
+    c.restore();
+    const logoEnter=q(t,.75,1.05,out),logoWidth=mix(166,45,landing);
+    const lx=bez(457,457,72,72,landing),ly=bez(395,280,59,59,landing);
+    c.save();c.globalAlpha=logoEnter;c.translate(lx+logoWidth/2,ly+logoWidth*mark.height/mark.width/2);
+    c.rotate(-.07*(1-logoEnter));c.drawImage(mark,-logoWidth/2,-logoWidth*mark.height/mark.width/2,logoWidth,logoWidth*mark.height/mark.width);c.restore();
+    const brandSize=mix(86,30,landing);font(86,620);const brandX=(W-c.measureText(data.study.intro.brand).width)/2;
+    txt(data.study.intro.brand,mix(brandX,132,landing),mix(840,87,landing),brandSize,620,P.ink,q(t,.45,.65,out));
+    txt(data.study.intro.lines[0],540,950+20*(1-copyAlpha),70,520,P.ink,copyAlpha,'center');
+    txt(data.study.intro.lines[1],540,1043+20*(1-copyAlpha),70,580,P.ink,q(t,.6,.65,out)*(1-q(t,4.15,.7)),'center');
+    if(handoff>0){
+      c.save();c.globalAlpha=handoff;
+      intro(data.timing.intro.resumeSource-data.timing.intro.transitionDuration+t-data.timing.intro.duration);
+      footer();c.restore();
+    }
+    report.phase='cinematic-intro';report.intro={handoff,landing,logoWidth,copyAlpha};
+  }
   function intro(t){
     const transform=q(t,1.7,1.03),exit=q(t,6.55,.65),enter=q(t,0,.72,out);
     c.save();c.globalAlpha*=1-exit;
@@ -226,14 +262,18 @@ window.initFullFilm=async function(data){
     return t-added;
   }
   window.drawFullFilm=function(t){
-    const outputTime=t;t=sourceTime(t);
-    report={time:outputTime,sourceTime:t,text:[],icons:[],phase:''};c.setTransform(1,0,0,1,0,0);c.globalAlpha=1;c.fillStyle=P.bg;c.fillRect(0,0,W,H);
-    if(t>=7.5&&t<28.55){const v=studyTime(t);drawStudy(v,outputTime);c.drawImage(study,0,0);report.phase=window.studyReport.phase;report.text=window.studyReport.text;report.icons=window.studyReport.icons;report.phrases=window.studyReport.phrases;report.judges=window.studyReport.judges;report.mark=window.studyReport.mark;report.studyTime=v;window.fullFilmReport=report;return report;}
+    const outputTime=t,introTiming=data.timing.intro,offset=introTiming.duration+introTiming.transitionDuration-introTiming.resumeSource;
+    // Subtracting the offset must not turn a scene boundary such as 6.45
+    // into 6.449999999999999 and leave one frame in the preceding scene.
+    const motionTime=Number((t-offset).toFixed(9));t=sourceTime(motionTime);
+    report={time:outputTime,motionTime,sourceTime:t,text:[],icons:[],phase:''};c.setTransform(1,0,0,1,0,0);c.globalAlpha=1;c.fillStyle=P.bg;c.fillRect(0,0,W,H);
+    if(outputTime<introTiming.duration+introTiming.transitionDuration){cinematicIntro(outputTime);window.fullFilmReport=report;return report;}
+    if(t>=7.5&&t<28.55){const v=studyTime(t);drawStudy(v,motionTime);c.drawImage(study,0,0);report.phase=window.studyReport.phase;report.text=window.studyReport.text;report.icons=window.studyReport.icons;report.phrases=window.studyReport.phrases;report.judges=window.studyReport.judges;report.mark=window.studyReport.mark;report.studyTime=v;window.fullFilmReport=report;return report;}
     // The legacy scene clock runs after the targeted reading-time remap above.
     const mediaTime=t;if(t>=28.55)t-=3;
     if(t<42)brand();
     if(t<6.45)intro(t);else if(t<7.5)inputBridge(t);
-    if(t>=25.55&&t<26.15){drawStudy(studyTime(mediaTime),outputTime);c.save();c.globalAlpha=1-q(t,25.55,.35);c.drawImage(study,0,0);c.restore();}
+    if(t>=25.55&&t<26.15){drawStudy(studyTime(mediaTime),motionTime);c.save();c.globalAlpha=1-q(t,25.55,.35);c.drawImage(study,0,0);c.restore();}
     if(t>=25.8&&t<34.35)structuredSources(t);
     if(t>=34.25&&t<42.6)directReader(t);
     if(t>=42)outro(t-8);

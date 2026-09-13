@@ -2,7 +2,7 @@
   "name": "consensio-video",
   "version": "0.1.0",
   "private": true,
-  "description": "Standalone Canvas, Playwright and FFmpeg product film; current v30 composition.",
+  "description": "Standalone Canvas, Playwright and FFmpeg product film; cinematic introduction and current 60-second composition.",
   "engines": {
     "node": ">=18"
   },

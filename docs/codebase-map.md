@@ -4041,15 +4041,19 @@ ersten Check statt eines leeren Consensus-Panels.
 
 ### Eigenständige Videoproduktion
 
-`video/` enthält den konsolidierten LinkedIn-Film (v30, 57 Sekunden, 1080 × 1350,
+`video/` enthält den konsolidierten LinkedIn-Film (60 Sekunden, 1080 × 1350,
 60 fps). `src/content.json` enthält die geschriebenen Beispielinhalte und
 Asset-Zuordnungen; `src/timing.json` trennt narrative Lesefenster von kontinuierlicher
 Judge-/Cursorbewegung. `full-film-study.js` (Modelle/Synthese/Judges) lädt vor
-`full-film-scene.js` (Eingabe/Quellen/Reader/Outro). Ihre `window.*`-Funktionen
+`full-film-scene.js` (cinematische Einleitung/Eingabe/Quellen/Reader/Outro). Ihre `window.*`-Funktionen
 gehören nur zur generierten Canvas-Seite, nicht zur App.
 
 `src/render.cjs` bettet lokale Assets ein, prüft die Szene in Playwright/Chrome,
-encodiert per FFmpeg und übernimmt die vorhandene AAC-Tonspur. `src/qa.py` prüft
+encodiert per FFmpeg und übernimmt die mitgelieferte 60-Sekunden-AAC-Tonspur.
+Die fünfsekündige Einleitung erklärt das Produkt; ein 0,7-Sekunden-Übergang
+führt Marke und Name in den Demo-Header. Sie ersetzt 2,7 Sekunden des alten
+Einstiegs. `timing.json.intro` definiert den Versatz von drei Sekunden; narrative
+Lesefenster und die bisherigen Bewegungszeiten bleiben erhalten. `src/qa.py` prüft
 das MP4 und erstellt Bildfolgen und Review-Clips. `src/preview.py` liefert den
 Kapitelplayer mit Byte-Range-Seeks ausschließlich auf Loopback aus. Gemeinsame
 Pfade/Tool-Auswahl: `src/runtime.cjs` und `src/runtime.py`.

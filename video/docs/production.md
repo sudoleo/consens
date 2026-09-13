@@ -41,12 +41,16 @@ Reference downloads and copied third-party implementations are not render inputs
    redraws it entirely from a requested timestamp. Rendering and QA use this
    same function, including after seeking backwards.
 3. The source timeline lasts 50 seconds. Ten reading windows add seven seconds.
+   The cinematic intro adds three seconds: five seconds plus a 0.7-second
+   handoff replace the first 2.7 source seconds. `timing.json` records that
+   boundary. Source time and the existing motion clock resume with an offset,
+   preserving the rest of the edit.
    The output-to-source mapping slows selected narrative moments. Judge loaders,
    checkmarks, highlighting and reader cursors use continuous output time so
    those reading windows cannot freeze an animation.
-4. Playwright runs Chrome and captures each of the 3,420 frames. FFmpeg encodes
+4. Playwright runs Chrome and captures each of the 3,600 frames. FFmpeg encodes
    JPEG frames to H.264 (CRF 16, yuv420p, fast-start MP4), then copies the included
-   AAC soundtrack without re-encoding it.
+   60-second AAC soundtrack without re-encoding it.
 5. QA decodes the finished file, checks dimensions/frame count/audio, and makes
    contact sheets and focused clips for review.
 
@@ -54,6 +58,11 @@ The two scene files communicate through `window.initStudy`, `window.drawStudy`,
 `window.studyReport`, `window.initFullFilm` and `window.drawFullFilm` inside the
 generated page only. They have no contract with the parent app's `window.App`.
 `full-film-study.js` loads before `full-film-scene.js`.
+
+The intro uses the same warm paper and Inter as the demo: restrained light,
+recognizable provider marks, a slow camera settle, and the same logo and name
+travelling into the header. The explanatory lines stay fully readable for
+almost three seconds. Avoid a separate logo bumper that delays the explanation.
 
 ## Iterate with evidence
 

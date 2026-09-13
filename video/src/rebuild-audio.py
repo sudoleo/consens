@@ -26,8 +26,9 @@ def write_wav(path,samples):
 def rms(x):return float(np.sqrt(np.mean(x.astype(np.float64)**2)))
 def db(x):return float(20*np.log10(max(float(x),1e-12)))
 timing=json.loads((ROOT/'src/timing.json').read_text())
-duration=timing['sourceDuration']+sum(w['extra'] for w in timing['readingWindows']);fade_in=3.;fade_out=1.45
-assert duration==57
+intro=timing['intro'];intro_offset=intro['duration']+intro['transitionDuration']-intro['resumeSource']
+duration=timing['sourceDuration']+intro_offset+sum(w['extra'] for w in timing['readingWindows']);fade_in=3.;fade_out=1.45
+assert duration==60
 source_start=115.15;phrase_duration=18.;period=16.;overlap=2.
 raw=run(['-v','error','-ss',str(source_start),'-i',str(MUSIC),'-t',str(phrase_duration),'-ar',str(RATE),'-ac','2','-f','f32le','pipe:1']).stdout
 phrase=np.frombuffer(raw,np.float32).reshape(-1,2)

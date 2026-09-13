@@ -12,7 +12,7 @@
     "musicFadeInSeconds": 3.0,
     "musicFadeOutSeconds": 1.45,
     "musicTargetBeforeFadesLUFS": -21,
-    "musicStaticGainDb": -3.15,
+    "musicStaticGainDb": -3.21,
     "musicSourceRange": [
       115.15,
       133.15
@@ -27,7 +27,7 @@
     "musicDuckDuringTypingDb": 0,
     "typingEnabled": false,
     "typingEvents": 0,
-    "mixPeakDbFS": -9.29,
+    "mixPeakDbFS": -9.35,
     "scoreIdenticalToMusicBed": true
   },
   "subjectiveListening": "Not performed; technical checks only."

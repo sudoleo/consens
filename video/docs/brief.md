@@ -8,13 +8,15 @@ Consolidated from the user's production brief and feedback through v30.
 - **Takeaway:** complementary model contributions become one useful answer;
   checking makes disagreements understandable and original answers accessible.
 - **Example:** “I built a habit tracker. How do I keep users coming back?”
-- **Format:** English on-screen text, 4:5, 1080 × 1350, 60 fps, 57 seconds.
+- **Format:** English on-screen text, 4:5, 1080 × 1350, 60 fps, 60 seconds.
 - **Sound:** restrained music without a speaker or typing sounds; understandable
   while muted.
 
 ## Story
 
-Intro → question and Send → staggered model answers → synthesis → shared answer
+Five-second product explanation (“Multiple AI models. One combined answer.”),
+with six provider marks converging into consens.io → continuous brand handoff
+→ question and Send → staggered model answers → synthesis → shared answer
 → Coverage and Differences judges, shown in sequence → highlighted disagreement
 and the two reminder positions → conditional source check → original answers
 and model switch → logo with the name below it.
@@ -29,7 +31,7 @@ outcome or real model run.
 Use one light visual system, warm paper, Inter, restrained shadows and consistent
 cards. Provider icons retain their proportions. Movement should direct attention
 and land cleanly. Keep little information on screen at once. More explanation
-requires more reading time; 57 seconds is this composition's result, not a limit
+requires more reading time; 60 seconds is this composition's result, not a limit
 for future stories.
 
 Retain the v30 refinements: the caret starts before the placeholder, the question
