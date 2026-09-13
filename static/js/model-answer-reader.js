@@ -27,6 +27,7 @@
   let renderKey = "";
   let pendingSync = null;
   let inspector = null;
+  let composerMotion = null;
 
   const root = document.createElement("section");
   root.id = "modelAnswerReader";
@@ -34,6 +35,10 @@
   root.hidden = true;
   root.setAttribute("aria-label", "Model answers");
   root.innerHTML = `
+    <div class="answer-reader-preview-intro" id="answerReaderPreviewIntro" hidden>
+      <h2>One question. Individual answers.</h2>
+      <p id="answerReaderPreviewDescription">Send a question to see each model’s answer here, side by side. Agent Mode is off, so answers stay separate.</p>
+    </div>
     <header class="answer-reader-header">
       <div class="answer-reader-heading"><h2 id="answerReaderTitle">Model answers</h2><span id="answerReaderStatus" role="status" aria-live="polite"></span></div>
       <div class="answer-reader-actions">
@@ -434,6 +439,8 @@
   function modeLayout() {
     App.renderComposerMode?.();
     root.hidden = !open && !direct;
+    root.classList.toggle("is-preview", !!selected?.preview);
+    get("PreviewIntro").hidden = !selected?.preview;
     const modal = open && !direct && (!wideScreen.matches || expanded || pair);
     const docked = open && !direct && !modal;
     document.body.classList.toggle("answer-reader-docked", docked);
@@ -487,7 +494,7 @@
     status.className = "answer-reader-state";
     status.textContent = stateLabel(answer);
     status.dataset.state = answer.status;
-    status.hidden = answer.status === "complete";
+    status.hidden = answer.status === "complete" || answer.status === "preview";
     const identity = document.createElement("div"); identity.className = "answer-reader-identity";
     const caption = document.createElement("span"); caption.className = "answer-reader-caption";
     caption.textContent = direct ? (knownModel && answer.label !== answer.provider ? answer.label : '') : 'Original response';
@@ -500,7 +507,10 @@
     const body = document.createElement("div");
     body.className = "consensus-answer-body answer-reader-body";
     body.dataset.provider = answer.provider;
-    if (answer.text && !answer.error) {
+    if (answer.status === "preview") {
+      body.classList.add("is-preview-placeholder");
+      body.innerHTML = '<span>Answer appears here</span><div class="answer-preview-lines" aria-hidden="true"><i></i><i></i></div>';
+    } else if (answer.text && !answer.error) {
       if (window.injectMarkdown) window.injectMarkdown(body, answer.html || answer.text, answer.sources);
       else body.textContent = answer.text;
     } else if (!answer.error && ['pending', 'idle', 'reasoning', 'streaming'].includes(answer.status)) {
@@ -716,6 +726,7 @@
     return true;
   }
   function update(next, isDirect) {
+    document.body.classList.remove("direct-comparison-preview");
     const previous = live;
     const changedRun = previous && previous.runId !== next.runId;
     // The live inspector holds the shared render targets, not an immutable
@@ -736,6 +747,7 @@
   }
   function syncDOM() {
     pendingSync = null;
+    if (document.body.classList.contains("direct-comparison-preview")) return;
     if (App.runRegistry?.visible?.()) return;
     const isDirect = document.body.classList.contains("direct-comparison-active");
     const next = isDirect && savedDirect ? savedDirect : fromDOM();
@@ -744,6 +756,57 @@
   }
   function scheduleSync() {
     if (pendingSync === null) pendingSync = window.setTimeout(syncDOM, 60);
+  }
+
+  // The empty comparison is a configuration preview, never a RunContext or
+  // a saved answer. Once a question/bookmark is projected, its frozen result
+  // owns the reader again and next-question controls cannot replace it.
+  function syncPreview(enabled, models) {
+    const classes = document.body.classList;
+    const wasPreview = classes.contains("direct-comparison-preview");
+    if (!wasPreview && !classes.contains("is-hero")) return;
+    if (App.runRegistry?.visible?.()) return;
+    if (enabled && !wasPreview) return;
+    const changing = wasPreview === enabled;
+    const before = changing ? composer?.getBoundingClientRect() : null;
+    // Read the final layout immediately; animate its viewport delta instead
+    // of transitioning between incompatible hero/fixed composer transforms.
+    if (changing) {
+      composerMotion?.cancel();
+      composerMotion = null;
+      classes.add("comparison-layout-changing");
+    }
+    if (enabled) {
+      direct = false; open = false; selected = null; live = null;
+      classes.remove("direct-comparison-preview", "direct-comparison-active");
+      classes.add("is-hero");
+    } else {
+      selected = { key: "comparison-preview", preview: true, question: "", answers: models.map(item => ({
+        provider: item.pref.key, label: item.model || item.label, status: "preview", text: "", sources: []
+      })) };
+      live = null; direct = true; open = false;
+      classes.remove("is-hero", "composer-collapsed");
+      classes.add("direct-comparison-preview", "direct-comparison-active");
+      get("PreviewDescription").textContent = models.length
+        ? "Send a question to see each model’s answer here, side by side. Agent Mode is off, so answers stay separate."
+        : "Choose at least one model in the model picker below, then send your question.";
+    }
+    window.syncHeroResponseAccess?.();
+    render();
+    if (!changing) return;
+    const after = composer?.getBoundingClientRect();
+    if (before && after && composer.animate && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      const motion = composer.animate([
+        { translate: `${before.left - after.left}px ${before.top - after.top}px` },
+        { translate: "0px 0px" }
+      ], { duration: 300, easing: "cubic-bezier(.22, 1, .36, 1)" });
+      composerMotion = motion;
+      motion.finished.catch(() => {}).then(() => {
+        if (composerMotion !== motion) return;
+        composerMotion = null;
+        classes.remove("comparison-layout-changing");
+      });
+    } else classes.remove("comparison-layout-changing");
   }
 
   get("Close").addEventListener("click", () => close());
@@ -812,8 +875,9 @@
   });
 
   App.answerReader = Object.freeze({
+    syncPreview,
     directSummary() {
-      if (!direct || !selected) return null;
+      if (!direct || !selected || selected.preview) return null;
       const ready = selected.answers.filter(answer => answer.status === 'complete').length;
       const unavailable = selected.answers.filter(answer => ['error', 'skipped', 'canceled'].includes(answer.status)).length;
       return `${ready} of ${selected.answers.length} ready${unavailable ? ` · ${unavailable} unavailable` : ''}`;

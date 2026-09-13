@@ -131,7 +131,7 @@ body.is-hero .consensus-section {
   pointer-events: none;
 }
 
-/* Both modes start with the same centered composer, without empty models. */
+/* Agent Mode keeps the centered hero. The direct preview exits this shell. */
 body.is-hero .response-section,
 body.is-hero .consensus-section { display: none; }
 

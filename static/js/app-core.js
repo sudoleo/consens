@@ -386,8 +386,8 @@
     }, 3000);
   }
 
-  // Both modes use the same empty composer; answer targets stay inaccessible
-  // until a question has started.
+  // The centered hero hides answer targets. The direct-comparison preview
+  // uses the accessible thread shell even before a question has started.
   function syncHeroResponseAccess() {
     const responses = document.querySelector(".response-section");
     if (!responses) return;
@@ -402,14 +402,14 @@
   // verlaesst auch den Direktvergleich. Die Marke haengen zu lassen waere eine
   // Mine — sie steuert Sichtbarkeit und inert der .response-section.
   function exitHeroMode() {
-    document.body.classList.remove("is-hero", "direct-comparison-active");
+    document.body.classList.remove("is-hero", "direct-comparison-active", "direct-comparison-preview");
     syncHeroResponseAccess();
   }
 
   // Direct answers share the normal thread shell: question bubble, dimensions,
   // compact composer and upward-opening menus. Only the result differs.
   function enterDirectComparisonView() {
-    document.body.classList.remove("is-hero");
+    document.body.classList.remove("is-hero", "direct-comparison-preview");
     document.body.classList.add("direct-comparison-active");
     syncHeroResponseAccess();
   }

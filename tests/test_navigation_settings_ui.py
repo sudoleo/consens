@@ -213,7 +213,7 @@ def test_demo_never_writes_product_usage_signals():
 def test_mobile_brand_and_desktop_input_centering_contract():
     layout = read("static/css/layout.css")
 
-    assert "calc(100vw - 520px)" in layout
+    assert "calc(100vw - 568px)" in layout
     assert "translateX(130px)" not in layout
     assert "@media (max-width: 1099px)" in layout
     assert ".brand-float," in layout

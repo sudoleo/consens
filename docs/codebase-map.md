@@ -507,7 +507,8 @@ der Python-Staleness-Test auch indirekte Änderungen erkennt.
   Help-FAQ-Rangliste lebt jetzt ausschließlich auf `/model-pulse`; die
   Landingpage verlinkt oben dezent dorthin und die App-Shell lädt keinen
   Firestore-Live-Listener mehr. Bei offener Desktop-Sidebar begrenzen symmetrische
-  Gutters die Contentbreite und halten den Input in der Viewport-Mitte; mobil
+  Gutters (260px Navigation plus 24px Abstand je Seite) die Contentbreite und
+  halten den Input in der Viewport-Mitte; mobil
   bleibt außerhalb der Sidebar nur der Burger sichtbar. Gast-Login/-Sign-up
   sitzt oben rechts, während der Sidebar-Footer nur für eingeloggte Accounts
   das Avatar-Menü mit deckender Light-/Dark-Fläche zeigt. Settings sind seit
@@ -2207,7 +2208,7 @@ begonnen, weil deren Abschluss an `/consensus` gebunden ist.
 `static/js/model-answer-reader.js` wird in `bundles.json` nach den Attachments
 und vor `agent-mode.js` geladen. `window.App.answerReader` stellt `project`,
 `openLive`, `toggleLive`, `isLiveOpen`, `registerTurn`, `canOpenStored`,
-`openStored`, `showDirectBookmark`, `close` und `reset` bereit. `run-view.js` projiziert ausgewaehlte
+`openStored`, `showDirectBookmark`, `syncPreview`, `directSummary`, `close` und `reset` bereit. `run-view.js` projiziert ausgewaehlte
 RunContexts explizit; ein auf die alten Response-Boxen begrenzter Observer
 bedient Demo und Legacy-Bookmark-Restores. Das Modul startet keine Modelllaeufe;
 dekorative Quellen-Favicons nutzen den bestehenden `/api/topics/favicon?d=`-Proxy
@@ -2216,9 +2217,11 @@ dekorative Quellen-Favicons nutzen den bestehenden `/api/topics/favicon?d=`-Prox
 `#modelAnswerReader` ist eine einzige Leseflaeche: inline in `.response-section`
 beim Direktvergleich, sonst in einem nativen `dialog` ausserhalb `.container`.
 Der Direktvergleich zeigt alle Modelle ohne Auswahl-Tabs und ohne aeusseren Rahmen.
-Sein Kopf nennt „Direct comparison“ und erklaert „Agent Mode is off for this
-comparison“: der gespeicherte Ergebnismodus ist getrennt von der Einstellung
-fuer die naechste Frage. Die Agent-Mode-Ausblendregel in `shell.css` nimmt
+Der Ergebnis-Kopf bleibt verborgen; der Composer zeigt den Bereitschaftsstatus
+und bei abweichender naechster Einstellung „Agent Mode was off“. Nur die leere
+Vorschau zeigt die Einleitung „One question. Individual answers.“. Der gespeicherte
+Ergebnismodus bleibt getrennt von der Einstellung fuer die naechste Frage.
+Die Agent-Mode-Ausblendregel in `shell.css` nimmt
 `.direct-comparison-active` explizit aus.
 `firebase.js::loadSingleBookmarkUI` uebergibt Direktvergleich-Bookmarks nach dem
 Restore an `answerReader.showDirectBookmark`. Der Reader haelt deren Antworten,
@@ -2231,8 +2234,9 @@ und verwendet dieselbe rechtsbuendige Nachrichtenblase wie Agent Mode.
 `enterDirectComparisonView()` entfernt `is-hero`: Seitenbreite, Zentrierung,
 kompakter Composer, mobile Collapse-/Scrollreserve und Menues kommen aus dem
 normalen Thread-Layout, ohne direkte Layout-Sondermasse. Vor der ersten Frage
-zeigen beide Modi nur den zentrierten Composer; leere Response-Ziele bleiben
-verborgen und inert. Der Composer wird im DOM hinter die Antworten versetzt
+zeigt Agent Mode den zentrierten Composer; ausgeschaltet erscheint bereits
+die Vergleichsvorschau (siehe „Agent Mode“ unten). Die alten Response-Ziele
+bleiben verborgen; die Vorschau ist zugaenglich. Der Composer wird im DOM hinter die Antworten versetzt
 und beim Verlassen an seinen Kommentaranker zurueckgesetzt.
 Der Direktvergleich zeigt keinen Copy-Button pro Antwort und keine grauen
 Warteflaechen; Pending/Reasoning/Streaming stehen ausschliesslich im Modellkopf.
@@ -2331,9 +2335,21 @@ Tier-Gate; er ist auch für Free-Nutzer bedienbar.
 **Default fuer neue Nutzer** (seit 2026-07-27 auf allen Geraeten, vorher nur
 mobil): `agentMode = "true"` und `agentModePanelCollapsed = "false"` werden beim
 Laden von `agent-mode.js` gesetzt, solange die localStorage-Keys fehlen. Der
-Einstieg zeigt in beiden Modi den zentrierten Composer ohne leere
-Antwortboxen (`body.is-hero .response-section` in `components-input.css`); eine explizite Nutzerentscheidung (`setAgentMode(…, {persist:
-true})`) ueberschreibt den Default dauerhaft.
+Einstieg zeigt im Agent Mode den zentrierten Composer. Bei ausgeschaltetem
+Agent Mode zeigt `answerReader.syncPreview(enabled, models)` sofort das echte
+Direktvergleichsraster mit den aktuell ausgewaehlten Modellnamen und statischen
+Antwortplatzhaltern. `direct-comparison-preview` markiert diesen Leerzustand;
+er nutzt die Thread-Shell (`direct-comparison-active`, ohne `is-hero`) mit
+unten angedocktem Composer. Die Vorschau ist weder RunContext noch Antwort
+und zeigt keinen Bereitschafts-/Ladestatus. `updateAgentModeUI()` synchronisiert
+sie auch bei Modellwechseln, „New comparison“ und gespeicherter Off-Praeferenz.
+Anschalten kehrt nur aus der Vorschau zum Hero zurueck; laufende und gespeicherte
+Ergebnisse bleiben unveraendert. Run-/Bookmark-Projektionen entfernen die
+Vorschaumarke und ersetzen die Platzhalter. Der Composer animiert beim Wechsel
+seine Positionsdifferenz in 300 ms; Reduced Motion bleibt unmittelbar. Mobil
+steht das Raster einspaltig, mit derselben fixierten Eingabe und Scrollreserve
+wie die Antworten. Eine explizite Nutzerentscheidung (`setAgentMode(…,
+{persist:true})`) ueberschreibt den Default dauerhaft.
 
 ### Attachments (ab Plus)
 Noch nicht gesendete Dateien stehen als kompakte Vorschau-/Entfernen-Chips in

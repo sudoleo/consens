@@ -645,3 +645,46 @@ body.direct-comparison-active .consensus-section { display: none; }
 .is-direct .answer-reader-header h2 { color: var(--ink); font-size: 16px; font-weight: 600; }
 .is-direct .answer-reader-header { padding-bottom: 0; }
 .answer-reader-mode { color: var(--ink-2); font-size: 13px; line-height: 1.6; margin: 6px 0 24px; }
+
+/* Before sending, use the same provider identities and document grid as the
+   result. Quiet rules suggest the answer space without implying a request. */
+.answer-reader-preview-intro { padding: 12px 0 30px; }
+.answer-reader-preview-intro h2 {
+  margin: 0 0 10px;
+  text-align: left;
+  color: var(--ink);
+  font-size: clamp(21px, 2.2vw, 28px);
+  font-weight: 500;
+  letter-spacing: -.035em;
+  line-height: 1.25;
+}
+.answer-reader-preview-intro p {
+  max-width: 540px;
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 14px;
+  line-height: 1.65;
+  text-wrap: pretty;
+}
+.is-preview .answer-reader-body.is-preview-placeholder {
+  color: var(--ink-3);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.answer-preview-lines { display: grid; gap: 10px; margin: 15px 0 6px; }
+.answer-preview-lines i { display: block; height: 3px; width: 78%; background: var(--line-soft); border-radius: 3px; }
+.answer-preview-lines i:last-child { width: 52%; }
+body.comparison-layout-changing .input-section { transition: none; }
+@media (prefers-reduced-motion: no-preference) {
+  .model-answer-reader.is-preview { animation: comparison-preview-enter 300ms ease-out both; }
+}
+@keyframes comparison-preview-enter {
+  from { opacity: 0; translate: 0 8px; }
+  to { opacity: 1; translate: 0 0; }
+}
+@media (max-width: 759px) {
+  .answer-reader-preview-intro { padding: 12px 0 24px; }
+  .is-preview .answer-reader-columns.is-grid { gap: 20px; }
+  .is-preview .answer-reader-answer-header { padding: 14px 0 12px; }
+  .answer-preview-lines { display: none; }
+}

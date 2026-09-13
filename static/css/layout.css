@@ -21,14 +21,15 @@
 }
 
 /* Desktop (>1099px): Die fixe Sidebar nimmt keinen Flow-Platz weg. Bei
-   offener Sidebar begrenzen symmetrische 260px-Gutters die Breite, sodass
+   offener Sidebar begrenzen symmetrische 284px-Gutters (260px Navigation
+   plus 24px Abstand) die Breite, sodass
    Input und Ergebnisse in der echten Viewport-Mitte bleiben und zugleich
    nicht unter die Sidebar laufen. Eingeklappt steht fast die volle Breite
    zur Verfügung. Fixed-Overlays dürfen weiterhin NICHT im Container liegen
    (container-type macht ihn ohnehin zum Containing Block). */
 @media (min-width: 1100px) {
   .container {
-    width: min(var(--app-container-width, 980px), calc(100vw - 520px));
+    width: min(var(--app-container-width, 980px), calc(100vw - 568px));
   }
 
   body:has(.sidebar.collapsed) .container {

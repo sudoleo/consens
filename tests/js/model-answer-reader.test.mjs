@@ -50,6 +50,38 @@ function archive(ctx, id = "t1") {
 afterEach(() => { contexts.splice(0).forEach(ctx => ctx.dom.window.close()); });
 
 describe("model answer reader", () => {
+  it("previews selected models without creating an answer or a loading state", () => {
+    const ctx = boot();
+    ctx.document.body.classList.add('is-hero');
+    const models = [{ pref: { key: 'OpenAI' }, model: 'Chosen GPT' },
+      { pref: { key: 'Gemini' }, model: 'Chosen Gemini' }];
+    ctx.reader.syncPreview(false, models);
+    expect(ctx.document.body.classList.contains('is-hero')).toBe(false);
+    expect(ctx.document.querySelectorAll('.is-preview .answer-reader-answer')).toHaveLength(2);
+    expect(ctx.document.querySelector('.answer-reader-caption').textContent).toBe('Chosen GPT');
+    expect(ctx.document.querySelectorAll('[aria-busy="true"], .skeleton')).toHaveLength(0);
+    expect(ctx.reader.directSummary()).toBeNull();
+    ctx.reader.syncPreview(false, []);
+    expect(ctx.document.querySelectorAll('.answer-reader-answer')).toHaveLength(0);
+    expect(ctx.document.getElementById('answerReaderPreviewDescription').textContent).toContain('Choose at least one model');
+    ctx.reader.syncPreview(true, models);
+    expect(ctx.document.body.classList.contains('is-hero')).toBe(true);
+    expect(ctx.document.getElementById('modelAnswerReader').hidden).toBe(true);
+  });
+
+  it("replaces the preview with a real run and protects its frozen answers from mode changes", () => {
+    const ctx = boot();
+    ctx.document.body.classList.add('is-hero');
+    ctx.reader.syncPreview(false, [{ pref: { key: 'OpenAI' }, model: 'Preview GPT' }]);
+    const state = run(); state.config.agentMode = false;
+    ctx.project(state);
+    ctx.reader.syncPreview(true, []);
+    expect(ctx.document.body.classList.contains('direct-comparison-preview')).toBe(false);
+    expect(ctx.document.querySelector('.is-preview')).toBeNull();
+    expect(ctx.document.getElementById('answerReaderColumns').textContent).toContain('GPT answer r1');
+    expect(ctx.reader.directSummary()).toBe('1 of 2 ready');
+  });
+
   it.each([false, true])("replaces waiting skeletons on first text and terminal states (agent=%s)", agentMode => {
     const ctx = boot();
     const state = run("loading", { modelResults: { OpenAI: {status: "pending"}, Anthropic: {status: "reasoning"} } });

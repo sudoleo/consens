@@ -99,9 +99,12 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       zweites Login-Feld. Das Account-Popup hat in Light und Dark einen
       vollständig deckenden, gut lesbaren Hintergrund.
       Mit Agent Mode steht das Eingabefeld mit Begrüßung mittig und wechselt
-      nach dem Senden in den geführten Thread. Ohne Agent Mode bleiben Composer
-      oben; nach dem Senden zeigt der gemeinsame Modellantwort-Leser darunter
-      eine Originalantwort oder einen gezielten Zweiervergleich.
+      nach dem Senden in den geführten Thread. Ausschalten zeigt sofort das
+      Vergleichsraster mit ausgewählten Modellen und ruhigen Platzhaltern;
+      der Composer gleitet nach unten. Mobil einspaltig, alle Modelle oberhalb
+      des fixierten Composers erreichbar. Light/Dark, Reduced Motion,
+      Modellauswahl, gespeichertes Off und „New comparison“ prüfen. Anschalten
+      erhält den Entwurf; vorhandene Antworten bleiben beim Umschalten stehen.
 - [ ] Login-Dialog: Fokus wandert beim Öffnen hinein, Tab bleibt im Dialog,
       Escape/Backdrop/benannter Close-Button schließen ihn und geben den Fokus
       an den Auslöser zurück. Mit altem `id_token` und blockiertem Firebase-CDN

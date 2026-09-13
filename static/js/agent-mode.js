@@ -415,6 +415,7 @@
 
     document.body.classList.toggle("agent-mode-enabled", enabled);
     document.body.classList.toggle("agent-mode-running", enabled && agentModeStatus === "running");
+    window.App.answerReader?.syncPreview?.(isAgentModeEnabled(), activeModels);
     // "direct-comparison-active" beschreibt, was GERADE AUF DEM SCHIRM steht,
     // der Agent-Mode-Schalter dagegen, was der NAECHSTE Lauf tut. Umschalten
     // behaelt das angezeigte Ergebnis; erst eine neue Projektion wechselt es.
@@ -752,7 +753,7 @@
     const isHero = document.body.classList.contains("is-hero");
     if (isHero === composerIsHero) return;
     composerIsHero = isHero;
-    renderComposerMode();
+    updateAgentModeUI();
   }).observe(document.body, { attributes: true, attributeFilter: ["class"] });
   window.App.renderComposerMode = renderComposerMode;
   desktopComposer?.addEventListener("change", renderComposerMode);

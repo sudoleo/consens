@@ -445,8 +445,9 @@ def test_direct_comparison_shares_chat_shell_and_fits_picker(browser, phase4_ser
     try:
         page.set_viewport_size({'width':width, 'height':900})
         page.evaluate('setAgentMode(false, {persist:true})')
-        expect(page.locator('.response-section')).not_to_be_visible()
-        assert page.locator('.response-section').evaluate('el => el.inert')
+        expect(page.locator('.response-section')).to_be_visible()
+        expect(page.locator('#answerReaderPreviewIntro')).to_be_visible()
+        assert not page.locator('.response-section').evaluate('el => el.inert')
         reader_screenshot(page, f'direct-empty-{width}-{theme}')
         seed_reader(page, direct=True)
         page.evaluate("""() => {
