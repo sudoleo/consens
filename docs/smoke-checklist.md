@@ -148,6 +148,14 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       Share/Watch/Cite stehen auf Desktop neben der Hauptnavigation; mobil
       nur Icons mit zugänglichen Namen. Run again bleibt erreichbar, ohne sich mit
       Laufzeit oder Kosten zu überlagern; Cite-Menü sitzt am neuen Host.
+- [ ] Source-check-Status anklicken: Bei v4 direkt zur Prüfbegründung in
+      Differences, inklusive Gründen für ausgelassene/unverfügbare Prüfungen.
+      Bei mehreren Karten wird zuerst eine nicht abgeschlossene Prüfung geöffnet;
+      nur ihr Prüfbereich bekommt Fokus und eine nach 2,8 Sekunden ausblendende
+      Markierung. Wiederholter Klick startet den Hinweis neu. Polling erhält die
+      Restdauer, Run-Wechsel/Clear entfernt ihn. Legacy/ohne Einzelbefund führt
+      zum markierten Sources-Bericht. Reduced Motion ohne Bewegung;
+      Forced Colors mit sichtbarem Systemrahmen.
 - [ ] „Show agreement score“ ist standardmäßig aktiv. Ausschalten blendet die
       numerische Score-Anzeige im aktuellen Consensus und in archivierten Turns
       aus; die qualitative Einordnung/Widerspruchswarnung bleibt sichtbar. Nach

@@ -932,8 +932,16 @@ der Python-Staleness-Test auch indirekte Änderungen erkennt.
   `.consensus-footer-facts` stehen direkt darin. Sichtbare Kurzlabels kommen
   weiterhin aus `data-short`; die vollständigen Namen bleiben für Screenreader.
   Der Status `#consensusSourceCheckStatus` liegt separat in
-  `.consensus-footer-source-status` als `#consensusSourceCheckButton`, der dieselbe
-  Sources-Navigation auslöst. Sources referenziert den Status auch mobil per
+  `.consensus-footer-source-status` als `#consensusSourceCheckButton`. Dieser
+  öffnet über `sourceVerification.openResults` bei v4 die konkrete Prüfbegründung
+  in Differences: zuerst eine nicht abgeschlossene/ausgelassene Prüfung, sonst
+  das erste Ergebnis. Nur die zugehörige Karte wird aufgeklappt; der Prüfbereich
+  erhält Fokus, wird in Sicht gescrollt und für 2,8 Sekunden dezent hervorgehoben.
+  Polling erhält den verbleibenden Hinweis, ein anderer Run/Antwortstand oder
+  Clear entfernt ihn. Reduced Motion verzichtet auf Animation und sanftes Scrollen;
+  Forced Colors nutzt einen Systemrahmen. Legacy-Prüfungen und v4 ohne gebundenes
+  Einzelergebnis öffnen und markieren den Statusbericht in Sources.
+  Sources referenziert den Status auch mobil per
   `aria-describedby`. Mobil zeigt `data-check-state` am Sources-Tab ein Häkchen
   nur bei vollständiger positiver v3-Prüfung; `!` bedeutet Quellenprobleme,
   `?` unklare/unvollständige oder technisch nicht verfügbare Ergebnisse. Pending
@@ -1811,7 +1819,7 @@ Legacy v1/v2/v3-Befunde und deren Bedeutung bleiben lesbar; der v3-Prüfmodus
 für zitierte Satz-/Quellen-Paare bleibt zur Verarbeitung alter Pläne erhalten.
 
 `static/js/source-verification.js` exportiert `window.App.sourceVerification`
-(`render`, `renderCurrent`, `clear`, `watch`, `observe`, `applySourceList`,
+(`render`, `renderCurrent`, `clear`, `openResults`, `watch`, `observe`, `applySourceList`,
 `getCitationCheck`, `refreshDifferences`, `bindDifferenceCard`). Ladung nach
 `consensus-anchor.js` in `bundles.json`, außerdem auf öffentlichen Ergebnissen.
 RunContext: `consensus.sourceVerification`. V4-Ergebnisse erscheinen direkt
@@ -2281,7 +2289,8 @@ versteckten Selects halten nur die Auswahlwerte. Escape schliesst zuerst ein
 offenes Auswahlmenue, danach den Leser; ein Klick auf den Modal-Hintergrund
 schliesst den Leser ebenfalls. Die Frage klappt ohne doppelte Textausgabe auf.
 Der Frage-Chevron wird nur bei abgeschnittenem Text angezeigt. `openPanel(kind,
-trigger, turn, index)` integriert Differences und Sources in denselben Leser;
+trigger, turn, index, options)` integriert Differences und Sources in denselben Leser;
+`options.reveal` lässt einen expliziten Ergebnissprung auch bei wiederholtem Klick offen.
 die Abschnittsnavigation bleibt an die ausgewaehlte Frage gebunden. Live- und
 Archiv-Footer sowie Difference-Marker oeffnen diese Ansicht. Die bestehenden
 Karten/Quellenlisten werden mit Platzhaltern in den Leser verschoben und beim

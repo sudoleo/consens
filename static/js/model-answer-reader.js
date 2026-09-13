@@ -308,8 +308,8 @@
       }
     });
   }
-  function openPanel(kind, trigger, turn = null, index = null) {
-    if (inspector?.kind === kind && inspector.turn === turn && trigger && index === null) { close(); return true; }
+  function openPanel(kind, trigger, turn = null, index = null, options = {}) {
+    if (inspector?.kind === kind && inspector.turn === turn && trigger && index === null && !options.reveal) { close(); return true; }
     releaseInspector(); closePicker(); savePosition();
     const data = turn && stored.get(turn);
     const snapshot = data ? fromStored(data) : (App.runRegistry?.visible?.() ? fromRun(App.runRegistry.visible()) : fromDOM());

@@ -1,4 +1,4 @@
-import {describe, it, expect, vi} from 'vitest';
+import {afterEach, describe, it, expect, vi} from 'vitest';
 import {loadScripts} from './helpers/appWindow.mjs';
 const positions = [{id:'P1', summary:'20 euros for everyone',models:['OpenAI'],quote:'It costs 20 euros.'},
   {id:'P2',summary:'20 euros for students only',models:['Anthropic'],quote:'Students pay 20 euros.'}];
@@ -8,10 +8,109 @@ const finding = {contradiction_id:'c-one', difference_index:0, run_id:'run-one',
   evidence:[{source_id:'S1',position_id:'P2',quote:'Students pay 20 euros. [S2] <script>literal</script>',date:'2026-09-11',scope:'Students',limitations:'Annual plan'}]};
 const snapshot = {schema_version:4,check_type:'contradiction_evidence',run_id:'run-one',answer_version:'answer-one',job_id:'job-one',
   status:'complete',revision:1,scope:{contradictions:1,checked_contradictions:1},findings:[finding],sources:[{id:'S1',url:'https://example.com/prices',title:'Student pricing'}]};
-function boot() {
-  return loadScripts(['static/js/source-verification.js'], {body:'<div id="consensusAnswerBody">Consensus stays unchanged.</div><div id="differencesCards"><details class="diff-card"><summary class="diff-card-claim">Who pays 20 euros?</summary><div class="diff-card-body">Original model positions</div></details></div><div id="sourceVerificationReport"></div><button id="consensusSourcesTab" hidden><span class="consensus-tab-label">Sources</span></button><span id="consensusSourceCheckStatus"></span>'});
+const navigationWindows = [];
+afterEach(async () => {
+  // Let native disclosure events and reader observers settle before disposal.
+  await new Promise(resolve => setTimeout(resolve, 0));
+  navigationWindows.splice(0).forEach(dom => dom.window.close());
+});
+function boot(navigation = false) {
+  const env = loadScripts(['static/js/source-verification.js', ...(navigation ? ['static/js/consensus-progress.js', 'static/js/model-answer-reader.js'] : [])], {
+    body:'<section class="response-section"></section><div id="consensusAnswerBody">Consensus stays unchanged.</div><details id="consensusDifferencesPanel"><div id="differencesCards"><details class="diff-card"><summary class="diff-card-claim">Who pays 20 euros?</summary><div class="diff-card-body">Original model positions</div></details></div></details><div id="consensusSourcesPanel" hidden><div id="sourceVerificationReport"></div></div><button id="consensusSourcesTab" hidden><span class="consensus-tab-label">Sources</span></button><button id="consensusSourceCheckButton">Source check<span id="consensusSourceCheckStatus"></span></button>',
+    before(window) {
+      if (navigation) window.App = {runRegistry: {visible: () => ({runId:'run-one',question:'Who pays?',
+        config:{agentMode:true,providers:[{provider:'OpenAI'}]},modelResults:{OpenAI:{text:'A model answer',status:'complete'}}})}};
+      window.matchMedia = () => ({matches: false, addEventListener() {}});
+      window.HTMLElement.prototype.scrollIntoView = vi.fn();
+      window.HTMLDialogElement.prototype.showModal = function () { this.open = true; };
+      window.HTMLDialogElement.prototype.close = function () { this.open = false; };
+    }
+  });
+  if (navigation) env.window.App.sourceVerification.bindDifferenceCard(env.document.querySelector('.diff-card'), diff);
+  return env;
 }
 const options={differencesData:{differences:[diff]}};
+describe('source-check footer navigation', () => {
+  it('opens the checked explanation in Differences with only the result highlighted and focused', () => {
+    const {window,document,dom}=boot(true);
+    try {
+      window.App.sourceVerification.renderCurrent(snapshot, options);
+      document.getElementById('consensusSourceCheckButton').click();
+      const result = document.querySelector('#answerReaderInspector .contradiction-source-check');
+      expect(result.textContent).toContain(finding.reason);
+      expect(result.closest('.diff-card').open).toBe(true);
+      expect(result.classList.contains('source-check-result-target')).toBe(true);
+      expect(document.activeElement).toBe(result);
+      expect(result.querySelector('details').open).toBe(false);
+      expect(document.querySelectorAll('.source-check-result-target')).toHaveLength(1);
+      expect(result.scrollIntoView).toHaveBeenLastCalledWith({block:'start',behavior:'smooth'});
+      expect(document.getElementById('consensusSourceCheckButton').getAttribute('aria-controls')).toBe('consensusDifferencesPanel');
+    } finally { navigationWindows.push(dom); }
+  });
+  it('prioritizes an excluded check among several cards and leaves other cards collapsed', () => {
+    const {window,document,dom}=boot(true);
+    try {
+      const second = {...diff,claim:'A second disagreement',consensus_anchor:'Second anchor'};
+      document.getElementById('differencesCards').insertAdjacentHTML('beforeend','<details class="diff-card"><summary class="diff-card-claim">A second disagreement</summary><div class="diff-card-body">Second model positions</div></details>');
+      window.App.sourceVerification.renderCurrent({...snapshot, exclusions:[{exclusion_id:'second',difference_index:1,
+        consensus_anchor:second.consensus_anchor,positions:second.positions,question:second.factual_check.question,reason_code:'unverified_model_positions'}]},
+        {differencesData:{differences:[diff,second]}});
+      document.getElementById('consensusSourceCheckButton').click();
+      const selected=document.querySelector('.source-check-result-target');
+      expect(selected.textContent).toContain('Original model passages could not be matched.');
+      expect(selected.closest('.diff-card').open).toBe(true);
+      expect(document.querySelector('.diff-card').open).toBe(false);
+    } finally { navigationWindows.push(dom); }
+  });
+  it('keeps the cue through polling, expires it, retriggers it and clears it on a different answer', () => {
+    vi.useFakeTimers();
+    const {window,document,dom}=boot(true);
+    window.Date=Date;
+    window.setTimeout=(fn,ms)=>setTimeout(fn,ms); window.clearTimeout=id=>clearTimeout(id);
+    try {
+      const api=window.App.sourceVerification;
+      api.renderCurrent(snapshot,options);
+      document.getElementById('consensusSourceCheckButton').click();
+      vi.advanceTimersByTime(1000);
+      api.renderCurrent({...snapshot,revision:2},options);
+      expect(document.querySelector('.source-check-result-target')).toBe(document.activeElement);
+      vi.advanceTimersByTime(1801);
+      expect(document.querySelector('.source-check-result-target')).toBeNull();
+      document.getElementById('consensusSourceCheckButton').click();
+      expect(document.querySelectorAll('.source-check-result-target')).toHaveLength(1);
+      api.renderCurrent({...snapshot,answer_version:'another',findings:[{...finding,answer_version:'another'}]},options);
+      expect(document.querySelector('.source-check-result-target')).toBeNull();
+      api.clear(document.getElementById('consensusAnswerBody'),document.getElementById('sourceVerificationReport'));
+      vi.advanceTimersByTime(3000);
+      expect(document.querySelector('.source-check-result-target')).toBeNull();
+    } finally { navigationWindows.push(dom); vi.useRealTimers(); }
+  });
+  it.each([3,4])('opens the report when no per-contradiction result exists (schema %s)', schema_version => {
+    const {window,document,dom}=boot(true);
+    try {
+      window.matchMedia=()=>({matches:true,addEventListener(){}});
+      window.App.sourceVerification.renderCurrent({...snapshot,schema_version,status:'disabled',findings:[]},options);
+      document.getElementById('consensusSourceCheckButton').click();
+      const result=document.querySelector('#answerReaderInspector .source-verification');
+      expect(result.classList.contains('source-check-result-target')).toBe(true);
+      expect(document.activeElement).toBe(result);
+      expect(result.scrollIntoView).toHaveBeenLastCalledWith({block:'start',behavior:'auto'});
+      expect(document.getElementById('consensusSourceCheckButton').getAttribute('aria-controls')).toBe('consensusSourcesPanel');
+      document.getElementById('consensusSourceCheckButton').click();
+      expect(document.querySelector('#answerReaderInspector .source-check-result-target')).not.toBeNull();
+    } finally { navigationWindows.push(dom); }
+  });
+  it('opens the relevant disclosure when the reader is unavailable', () => {
+    const {window,document,dom}=boot();
+    try {
+      window.App.sourceVerification.renderCurrent(snapshot,options);
+      expect(window.App.sourceVerification.openResults(document.getElementById('consensusSourceCheckButton'))).toBe(true);
+      expect(document.getElementById('consensusDifferencesPanel').open).toBe(true);
+      expect(document.querySelector('.diff-card').open).toBe(true);
+      expect(document.querySelector('.source-check-result-target').textContent).toContain(finding.reason);
+    } finally { navigationWindows.push(dom); }
+  });
+});
 describe('contradiction evidence presentation', () => {
   it('shows attributed verbatim evidence inside the contradiction, never a verified-answer badge', () => {
     const {window,document}=boot(); const original=JSON.stringify(snapshot);

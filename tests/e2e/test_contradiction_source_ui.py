@@ -35,10 +35,23 @@ def test_contradiction_evidence_reader(browser, phase4_server, width):
               {id:'Dresults',url:'https://results.example.invalid/report',title:'Official race results and finishing times'}]};
           App.runRegistry.renderVisible();
         }""")
-        page.locator('#consensusDifferencesTab').click()
+        if width > 640:
+            page.locator('#consensusSourceCheckButton').click()
+        else:
+            # The compact footer hides its status button; verify the same jump
+            # in the narrow reader without changing that independent layout.
+            page.evaluate('App.sourceVerification.openResults(document.getElementById("consensusSourceCheckButton"))')
         inspector = page.locator('#answerReaderInspector')
         result = inspector.locator('.contradiction-source-check')
         expect(result).to_be_visible()
+        expect(result).to_have_class('contradiction-source-check source-check-result-target')
+        expect(result).to_be_focused()
+        expect(result.locator('.contradiction-source-reason')).to_be_in_viewport()
+        reader_screenshot(page, f'source-check-jump-{width}')
+        page.evaluate("document.body.classList.add('dark-mode')")
+        reader_screenshot(page, f'source-check-jump-dark-{width}')
+        page.evaluate("document.body.classList.remove('dark-mode')")
+        expect(result).not_to_have_class('contradiction-source-check source-check-result-target', timeout=4000)
         expect(result).to_contain_text('Different conditions explain the disagreement')
         expect(result.locator('blockquote')).to_have_count(2)
         expect(result.locator('a')).to_have_count(2)
@@ -157,9 +170,16 @@ def test_excluded_red_contradiction_is_explained_in_reader(browser, phase4_serve
         }""")
         expect(page.locator('#consensusAnswerBody .cx-claim')).to_have_count(1)
         expect(page.locator('#consensusSourceCheckStatus')).to_contain_text('Contradiction source checks unavailable')
-        page.locator('#consensusDifferencesTab').click()
+        if width > 640:
+            page.locator('#consensusSourceCheckButton').focus()
+            page.keyboard.press('Enter')
+        else:
+            page.evaluate('App.sourceVerification.openResults(document.getElementById("consensusSourceCheckButton"))')
         result=page.locator('#answerReaderInspector .is-major .contradiction-source-check')
         expect(result).to_be_visible()
+        expect(result).to_be_focused()
+        expect(result).to_have_class('contradiction-source-check source-check-result-target')
+        expect(result.locator('.contradiction-source-reason').first).to_be_in_viewport()
         expect(result).to_contain_text('Not selected for source checking')
         expect(result).to_contain_text('The analysis classified this dispute as not fact-checkable.')
         expect(result).to_contain_text('Original model passages could not be matched.')
@@ -167,5 +187,14 @@ def test_excluded_red_contradiction_is_explained_in_reader(browser, phase4_serve
         assert page.evaluate('JSON.stringify(App.runRegistry.visible().consensus.sourceVerification) === __excludedOriginal')
         assert result.evaluate('el => el.scrollWidth <= el.clientWidth + 1')
         reader_screenshot(page,f'excluded-source-{width}')
+        page.locator('#answerReaderClose').click()
+        page.emulate_media(reduced_motion='reduce', forced_colors='active')
+        page.evaluate('App.sourceVerification.openResults(document.getElementById("consensusSourceCheckButton"))')
+        expect(result).to_be_focused()
+        expect(result).to_have_css('animation-name', 'none')
+        expect(result).to_have_css('outline-style', 'solid')
+        expect(result).to_have_css('outline-width', '2px')
+        expect(result.locator('.contradiction-source-reason').first).to_be_in_viewport()
+        expect(result).not_to_have_class('contradiction-source-check source-check-result-target', timeout=4000)
     finally:
         context.close()

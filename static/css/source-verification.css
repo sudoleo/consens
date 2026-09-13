@@ -150,3 +150,18 @@ body.consensus-markers-hidden .share-md a[data-source-check]:focus-visible {
 .contradiction-source-evidence-details > summary { cursor: pointer; min-height: 44px; padding: .6rem 0; box-sizing: border-box; font-size: .8rem; }
 .contradiction-source-evidence-details > summary:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; border-radius: 3px; }
 .contradiction-source-differences .diff-card { margin-top: 1.2rem; }
+
+/* One brief reading cue after an explicit jump; no layout shift or verdict color. */
+.source-check-result-target { border-radius: 6px; scroll-margin-block: 1rem; animation: source-result-cue 2.8s ease-out both; }
+.source-check-result-target, .source-check-result-target:focus { outline: 1px solid transparent; outline-offset: 5px; }
+@keyframes source-result-cue {
+  0%, 100% { background-color: transparent; box-shadow: 0 0 0 5px transparent; outline-color: transparent; }
+  8%, 72% { background-color: color-mix(in srgb, #8494d4 12%, transparent); box-shadow: 0 0 0 5px color-mix(in srgb, #8494d4 12%, transparent); outline-color: color-mix(in srgb, #8494d4 65%, transparent); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .source-check-result-target { animation: none; background-color: color-mix(in srgb, #8494d4 12%, transparent); box-shadow: 0 0 0 5px color-mix(in srgb, #8494d4 12%, transparent); }
+  .source-check-result-target, .source-check-result-target:focus { outline-color: color-mix(in srgb, #8494d4 65%, transparent); }
+}
+@media (forced-colors: active) {
+  .source-check-result-target, .source-check-result-target:focus { animation: none; outline: 2px solid Highlight; outline-offset: 4px; box-shadow: none; }
+}

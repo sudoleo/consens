@@ -147,6 +147,78 @@
   const bindings = new WeakMap();
   const presentations = new WeakMap();
   const navigationHighlights = new WeakMap();
+  const resultNavigation = new WeakMap();
+  function resultIdentity(verification) {
+    return JSON.stringify([verification?.run_id, verification?.answer_version, verification?.job_id]);
+  }
+  function clearResultNavigation(body) {
+    const state = resultNavigation.get(body);
+    if (!state) return;
+    window.clearTimeout(state.timer);
+    state.node?.classList.remove('source-check-result-target');
+    resultNavigation.delete(body);
+  }
+  function restoreResultNavigation(body, report) {
+    const state = resultNavigation.get(body);
+    if (!state) return;
+    const presentation = presentations.get(body);
+    const host = state.kind === 'differences' ? presentation?.differenceCards : report;
+    const node = state.key
+      ? [...(host?.querySelectorAll('.contradiction-source-check') || [])].find(item => item.dataset.contradictionId === state.key)
+      : host?.querySelector('.source-verification');
+    if (!node || state.until <= Date.now() || state.identity !== resultIdentity(presentation?.verification)) {
+      clearResultNavigation(body); return;
+    }
+    if (node !== state.node) {
+      const focused = state.focused;
+      state.node?.classList.remove('source-check-result-target');
+      state.node = node;
+      node.style.animationDelay = `${-Math.max(0, 2800 - (state.until - Date.now()))}ms`;
+      node.classList.add('source-check-result-target');
+      node.tabIndex = -1;
+      if (focused) node.focus({preventScroll: true});
+    }
+    state.focused = false;
+  }
+  // The footer opens the explanation, which lives with the disagreement in v4.
+  // Only validated, rendered results can be navigation destinations.
+  function openResults(trigger) {
+    const body = document.getElementById('consensusAnswerBody');
+    const report = document.getElementById('sourceVerificationReport');
+    const presentation = presentations.get(body);
+    const cards = presentation?.differenceCards;
+    const sections = isContradictionCheck(presentation?.verification)
+      ? [...(cards?.querySelectorAll('.contradiction-source-check') || [])] : [];
+    const result = sections.find(node => node.dataset.checkState !== 'checked') || sections[0];
+    const kind = result ? 'differences' : 'sources';
+    const node = result || report?.querySelector('.source-verification');
+    if (!node) return false;
+    const index = result ? [...cards.querySelectorAll('.diff-card')].indexOf(result.closest('.diff-card')) : null;
+    if (!window.App.answerReader?.openPanel(kind, trigger, null, index, {reveal: true})) {
+      const panel = document.getElementById(kind === 'differences' ? 'consensusDifferencesPanel' : 'consensusSourcesPanel');
+      if (!panel) return false;
+      panel.hidden = false;
+      if (panel.matches('details')) panel.open = true;
+      document.getElementById(kind === 'differences' ? 'consensusDifferencesTab' : 'consensusSourcesTab')?.setAttribute('aria-expanded', 'true');
+    }
+    if (result?.closest('details.diff-card')) result.closest('details.diff-card').open = true;
+    clearResultNavigation(body);
+    const state = {node, kind, key: result?.dataset.contradictionId, identity: resultIdentity(presentation?.verification), until: Date.now() + 2800};
+    resultNavigation.set(body, state);
+    state.timer = window.setTimeout(() => clearResultNavigation(body), 2800);
+    window.requestAnimationFrame(() => {
+      const destination = state.node;
+      if (resultNavigation.get(body) !== state || !destination.isConnected) return;
+      // Flush the removed cue so another explicit click restarts its animation.
+      destination.getBoundingClientRect();
+      destination.style.animationDelay = `${-Math.max(0, 2800 - (state.until - Date.now()))}ms`;
+      destination.classList.add('source-check-result-target');
+      destination.tabIndex = -1;
+      destination.focus({preventScroll: true});
+      destination.scrollIntoView?.({block: 'start', behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'});
+    });
+    return true;
+  }
   function highlightRow(target, row, identity) {
     const previous = navigationHighlights.get(target);
     if (previous?.timer) window.clearTimeout(previous.timer);
@@ -244,6 +316,11 @@
     });
   }
   function clear(body, target, preserveNavigation = false) {
+    if (!preserveNavigation) clearResultNavigation(body);
+    else {
+      const navigation = resultNavigation.get(body);
+      if (navigation) navigation.focused = document.activeElement === navigation.node;
+    }
     if (!preserveNavigation && target) {
       window.clearTimeout(navigationHighlights.get(target)?.timer);
       navigationHighlights.delete(target);
@@ -357,6 +434,8 @@
   function renderCurrent(verification, options) {
     verification = displayVerification(verification, options?.differencesData);
     const rendered = renderSafe(document.getElementById("consensusAnswerBody"), document.getElementById("sourceVerificationReport"), verification, options);
+    const hasResult = presentations.get(document.getElementById('consensusAnswerBody'))?.differenceCards?.querySelector('.contradiction-source-check');
+    document.getElementById('consensusSourceCheckButton')?.setAttribute('aria-controls', hasResult ? 'consensusDifferencesPanel' : 'consensusSourcesPanel');
     const label = document.getElementById("consensusSourceCheckStatus");
     const pending = rendered && isPending(verification);
     const state = tabStatus(verification, rendered);
@@ -395,7 +474,10 @@
       }
       return false;
     }
-    finally { body?.dispatchEvent(new CustomEvent('source-check-updated', {bubbles: true})); }
+    finally {
+      restoreResultNavigation(body, target);
+      body?.dispatchEvent(new CustomEvent('source-check-updated', {bubbles: true}));
+    }
   }
   function render(body, target, verification, options = {}) {
     if (!body || !target) return;
@@ -1109,7 +1191,7 @@
     begin();
     return stop;
   }
-  window.App.sourceVerification = Object.freeze({ render: renderSafe, renderCurrent, clear, applySourceList, getCitationCheck, watch, observe, refreshDifferences, bindDifferenceCard });
+  window.App.sourceVerification = Object.freeze({ render: renderSafe, renderCurrent, clear, openResults, applySourceList, getCitationCheck, watch, observe, refreshDifferences, bindDifferenceCard });
   document.addEventListener("DOMContentLoaded", () => {
     document.querySelectorAll("[data-source-verification]").forEach(root => {
       try {
