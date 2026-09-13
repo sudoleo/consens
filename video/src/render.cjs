@@ -10,12 +10,13 @@ const b64=(p,type)=>`data:${type};base64,${fs.readFileSync(p).toString('base64')
 const content=JSON.parse(fs.readFileSync(path.join(__dirname,'content.json'),'utf8'));
 const icon=file=>b64(path.join(ROOT,'assets/icons',file),file.endsWith('.svg')?'image/svg+xml':'image/png');
 const {reader,providers:providerAssets,...story}=content;
-const study={...story,font:b64(path.join(ROOT,'assets/fonts/InterVariable.woff2'),'font/woff2'),logo:b64(path.join(ROOT,'assets/logo.png'),'image/png'),models:story.models.map(m=>({...m,icon:icon(m.icon)})),judgeMotion:timing.judgeMotion,cleanEntry:true,semanticSynthesis:true,modelEntrance:[-.46,0,.46,.92,1.38,1.84],modelReveal:[.72,1.11,1.5,1.89,2.28,2.67]};
+const color=JSON.parse(fs.readFileSync(path.join(__dirname,'color.json'),'utf8'));
+const study={...story,color,font:b64(path.join(ROOT,'assets/fonts/InterVariable.woff2'),'font/woff2'),logo:b64(path.join(ROOT,'assets/logo.png'),'image/png'),models:story.models.map(m=>({...m,icon:icon(m.icon)})),judgeMotion:timing.judgeMotion,cleanEntry:true,semanticSynthesis:true,modelEntrance:[-.46,0,.46,.92,1.38,1.84],modelReveal:[.72,1.11,1.5,1.89,2.28,2.67]};
 const providers=providerAssets.map(p=>({...p,icon:icon(p.icon)}));
 const data={study,providers,timing,reader};
 const referenceArg=process.argv.find(a=>a.startsWith('--reference='));
 const baseScene=fs.readFileSync(path.join(__dirname,'full-film-study.js'),'utf8'),scene=fs.readFileSync(path.join(__dirname,'full-film-scene.js'),'utf8');
-const html=`<!doctype html><html><head><meta charset="utf-8"><title>consens.io product film</title><style>body{margin:0;background:#f5f4f1}canvas{display:block;width:1080px;height:1350px}canvas[hidden]{display:none}</style></head><body><canvas id="film"></canvas><script>${baseScene}</script><script>${scene}</script><script>window.ready=initFullFilm(${JSON.stringify(data)})</script></body></html>`;
+const html=`<!doctype html><html><head><meta charset="utf-8"><title>consens.io product film</title><style>body{margin:0;background:${color.bg}}canvas{display:block;width:1080px;height:1350px}canvas[hidden]{display:none}</style></head><body><canvas id="film"></canvas><script>${baseScene}</script><script>${scene}</script><script>window.ready=initFullFilm(${JSON.stringify(data)})</script></body></html>`;
 function run(args){return new Promise((resolve,reject)=>{const p=spawn(FF,args,{stdio:['ignore','ignore','pipe']});let log='';p.stderr.on('data',d=>log+=d);p.on('close',code=>code?reject(Error(log)):resolve(log));});}
 async function main(){
  fs.mkdirSync(path.join(OUT,'qa/stills'),{recursive:true});fs.writeFileSync(path.join(OUT,'source.html'),html);
@@ -121,7 +122,7 @@ async function main(){
    {check:'Empty-input caret has a visible gap before the placeholder A',ok:exact(2.92).caret.typedCount===0&&exact(2.92).caret.placeholderX-exact(2.92).caret.x-exact(2.92).caret.width>=5},
    {check:'Question text is gone before model cards enter',ok:[6.9,6.99,7.2,7.48].every(t=>exact(t).text.every(x=>!x.text.includes('I built a habit tracker')||x.alpha===0))},
    {check:'Redundant synthesis subtitle removed',ok:qa.every(f=>f.text.every(x=>x.text!=='Combine the useful parts.'))},
-   {check:'Source-check surface remains the same white through its return and rest',samples:sourceSurfaceFrames.length,ok:sourceSurfaceFrames.every(f=>JSON.stringify(f.pixel)==='[255,254,253,255]')}
+   {check:'Source-check surface remains the same white through its return and rest',samples:sourceSurfaceFrames.length,ok:sourceSurfaceFrames.every(f=>JSON.stringify(f.pixel)===JSON.stringify([...color.paper.slice(1).match(/../g).map(h=>parseInt(h,16)),255]))}
  ];
  for(const kind of ['open-original-answers','switch-model']){
    const frames=readerFrames.filter(f=>f.kind===kind),travel=frames.filter(f=>f.progress>0&&f.progress<1),hold=frames.filter(f=>f.progress===1&&f.press===0&&f.alpha>.5);
@@ -132,13 +133,13 @@ async function main(){
  fs.writeFileSync(path.join(OUT,'qa/render-checks.json'),JSON.stringify({errors,seek,editorial,retained,phraseFrames,motionChecks,motionFrames,polishChecks,readerFrames,sourceSurfaceFrames,duration,fps,pacing,typing:{...timing.typing,prompt:study.prompt,keyframes},frames:qa},null,2));
  if(stills){console.log('STILLS READY');return;}
  const silent=path.join(OUT,'consensio-4x5-silent.mp4');
- const encoder=spawn(FF,['-y','-v','error','-f','image2pipe','-framerate',String(fps),'-c:v','mjpeg','-i','pipe:0','-c:v','libx264','-preset','medium','-crf','16','-pix_fmt','yuv420p','-movflags','+faststart',silent],{stdio:['pipe','ignore','pipe']});
+ const encoder=spawn(FF,['-y','-v','error','-f','image2pipe','-framerate',String(fps),'-c:v','mjpeg','-i','pipe:0','-vf','scale=in_color_matrix=bt601:out_color_matrix=bt709:in_range=pc:out_range=tv','-c:v','libx264','-preset','medium','-crf','16','-pix_fmt','yuv420p','-color_primaries','bt709','-color_trc','bt709','-colorspace','bt709','-color_range','tv','-movflags','+faststart',silent],{stdio:['pipe','ignore','pipe']});
  let log='';encoder.stderr.on('data',d=>log+=d);const closed=once(encoder,'close');
  for(let f=0;f<duration*fps;f++){const jpeg=await page.evaluate(t=>{drawFullFilm(t);return document.getElementById('fullFilm').toDataURL('image/jpeg',.97).split(',')[1];},f/fps);if(!encoder.stdin.write(Buffer.from(jpeg,'base64')))await once(encoder.stdin,'drain');if(f%120===0)console.log('RENDER',`${f/fps}/${duration}s`);}
  encoder.stdin.end();const [code]=await closed;if(code)throw Error(log);
  await run(['-y','-v','error','-i',silent,'-i',path.join(ROOT,'assets/audio/soundtrack.m4a'),'-map','0:v','-map','1:a','-c:v','copy','-c:a','copy','-t',String(duration),'-movflags','+faststart',path.join(OUT,'consensio-4x5.mp4')]);
  await run(['-y','-v','error','-ss',String(toOutput(17.8)),'-i',silent,'-frames:v','1',path.join(OUT,'poster.jpg')]);
- fs.writeFileSync(path.join(OUT,'cut.json'),JSON.stringify({duration,fps,width:1080,height:1350,frames:duration*fps,prompt:study.prompt,reference:'60-second composition with a five-second cinematic explanation and continuous brand-to-question handoff.',chapters:[{t:0,label:'What is consens.io?'},...[{t:3,label:'Question'},{t:7.5,label:'Model answers'},{t:11.2,label:'Combine the useful parts'},{t:16.4,label:'Consensus'},{t:19.65,label:'Two judges'},{t:23.2,label:'Different recommendations'},{t:28.8,label:'Conditional source judge'},{t:37.3,label:'Original answers'},{t:45,label:'Outro'}].map(ch=>({...ch,t:toOutput(ch.t)}))],intro:timing.intro,introOffset,readingWindows:timing.readingWindows,provenance:'Authored illustrated workflow. Content pairs explain this example, not a fixed model-pairing algorithm. Direct labelled original-answer excerpts. No native overview, live model run, or factual check outcome asserted.',sceneSha256:crypto.createHash('sha256').update(scene+baseScene).digest('hex')},null,2));
+ fs.writeFileSync(path.join(OUT,'cut.json'),JSON.stringify({duration,fps,width:1080,height:1350,frames:duration*fps,color:{name:color.name,palette:color,primaries:'bt709',transfer:'bt709',matrix:'bt709',range:'tv'},prompt:study.prompt,reference:'60-second composition with a five-second cinematic explanation and continuous brand-to-question handoff.',chapters:[{t:0,label:'What is consens.io?'},...[{t:3,label:'Question'},{t:7.5,label:'Model answers'},{t:11.2,label:'Combine the useful parts'},{t:16.4,label:'Consensus'},{t:19.65,label:'Two judges'},{t:23.2,label:'Different recommendations'},{t:28.8,label:'Conditional source judge'},{t:37.3,label:'Original answers'},{t:45,label:'Outro'}].map(ch=>({...ch,t:toOutput(ch.t)}))],intro:timing.intro,introOffset,readingWindows:timing.readingWindows,provenance:'Authored illustrated workflow. Content pairs explain this example, not a fixed model-pairing algorithm. Direct labelled original-answer excerpts. No native overview, live model run, or factual check outcome asserted.',sceneSha256:crypto.createHash('sha256').update(scene+baseScene+JSON.stringify(color)).digest('hex')},null,2));
  console.log('MASTER READY');
  }finally{await browser.close();}
 }

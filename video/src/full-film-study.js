@@ -2,14 +2,14 @@
  * Authored editorial explanation, not a recording of a live model run.
  */
 window.initStudy = async function(data) {
+  const P=data.color;
   const W=1080,H=1350,cv=document.getElementById('film');cv.width=W;cv.height=H;
   const c=cv.getContext('2d',{alpha:false});
   const face=new FontFace('Inter',`url(${data.font})`,{weight:'100 900'});await face.load();document.fonts.add(face);
   const load=async(src)=>{const im=new Image();im.src=src;await im.decode();return im;};
   const logo=await load(data.logo),icons=await Promise.all(data.models.map(m=>load(m.icon)));
   const mark=document.createElement('canvas');mark.width=logo.width;mark.height=logo.height;
-  const mc=mark.getContext('2d');mc.drawImage(logo,0,0);mc.globalCompositeOperation='source-in';mc.fillStyle='#222428';mc.fillRect(0,0,mark.width,mark.height);
-  const P={bg:'#f5f4f1',paper:'#fffefd',ink:'#222428',secondary:'#62666d',quiet:'#9a9c9f',line:'#deddd8',amber:'#f7edcf',amberInk:'#946b1f'};
+  const mc=mark.getContext('2d');mc.drawImage(logo,0,0);mc.globalCompositeOperation='source-in';mc.fillStyle=P.ink;mc.fillRect(0,0,mark.width,mark.height);
   const clamp=x=>Math.max(0,Math.min(1,x)),mix=(a,b,u)=>a+(b-a)*u;
   const smooth=x=>{x=clamp(x);return x*x*x*(x*(x*6-15)+10);};
   const out=x=>1-Math.pow(1-clamp(x),4),into=x=>Math.pow(clamp(x),3);
@@ -19,7 +19,7 @@ window.initStudy = async function(data) {
   const JM=data.judgeMotion;
   function path(x,y,w,h,r=20){c.beginPath();c.roundRect(x,y,w,h,r);}
   function box(x,y,w,h,{fill=P.paper,r=22,shadow=1,stroke=true}={}){
-    c.save();path(x,y,w,h,r);c.fillStyle=fill;c.shadowColor=`rgba(34,36,40,${.07*shadow})`;c.shadowBlur=26*shadow;c.shadowOffsetY=12*shadow;c.fill();c.shadowColor='transparent';
+    c.save();path(x,y,w,h,r);c.fillStyle=fill;c.shadowColor=`rgba(${P.shadowRgb.join(',')},${P.shadowOpacity*shadow})`;c.shadowBlur=26*shadow;c.shadowOffsetY=12*shadow;c.fill();c.shadowColor='transparent';
     if(stroke){c.lineWidth=1.2;c.strokeStyle=P.line;c.stroke();}c.restore();
   }
   function txt(s,x,y,size=36,weight=450,color=P.ink,alpha=1,align='left'){
@@ -47,7 +47,7 @@ window.initStudy = async function(data) {
     iconReport.push({name:data.models[i].name,natural:[im.width,im.height],drawn:[w,h],alpha:c.globalAlpha});c.restore();
   }
   window.studyCardEntry=(t,i)=>data.modelEntrance?q(t,data.modelEntrance[i],.4,out):1;
-  function capsule(s,x,y,w,alpha=1){c.save();c.globalAlpha*=alpha;path(x,y,w,36,18);c.fillStyle='#ebeae6';c.fill();txt(s,x+w/2,y+24,17,520,P.secondary,1,'center');c.restore();}
+  function capsule(s,x,y,w,alpha=1){c.save();c.globalAlpha*=alpha;path(x,y,w,36,18);c.fillStyle=P.chip;c.fill();txt(s,x+w/2,y+24,17,520,P.secondary,1,'center');c.restore();}
   function heading(t){
     const sections=[{a:0,b:3.15,text:'Six answers.',sub:'A habit tracker. Better retention.'},{a:data.semanticSynthesis?3.15:3.55,b:6.55,text:'One richer answer.',sub:''},{a:6.85,b:8.75,text:'Compare all answers.',sub:'',size:72},{a:9.05,b:12.2,text:'Different advice.',sub:'When should reminders be sent?',subSize:34}];
     for(const s of sections){const a=(s.a===0?1:q(t,s.a,.28,out))*(1-q(t,s.b-.18,.18));if(a<=0)continue;const dy=s.a===0?0:18*(1-q(t,s.a,.35,out));
@@ -58,7 +58,7 @@ window.initStudy = async function(data) {
     c.save();c.strokeStyle=P.ink;c.lineWidth=2.2;c.lineCap='round';c.lineJoin='round';c.beginPath();c.moveTo(x-size*.48,y);if(progress<.35)c.lineTo(mix(x-size*.48,x-size*.08,progress/.35),mix(y,y+size*.35,progress/.35));else{c.lineTo(x-size*.08,y+size*.35);c.lineTo(mix(x-size*.08,x+size*.65,(progress-.35)/.65),mix(y+size*.35,y-size*.45,(progress-.35)/.65));}c.stroke();c.restore();
   }
   function smallLoader(x,y,w,t,i,alpha=1){
-    c.save();c.globalAlpha*=alpha;path(x,y,w,5,2.5);c.fillStyle='#e9e8e4';c.fill();c.clip();const u=(t*1.15+i*.16)%1;c.fillStyle='#94999e';c.fillRect(x-65+u*(w+95),y,76,5);c.restore();
+    c.save();c.globalAlpha*=alpha;path(x,y,w,5,2.5);c.fillStyle=P.track;c.fill();c.clip();const u=(t*1.15+i*.16)%1;c.fillStyle=P.trackInk;c.fillRect(x-65+u*(w+95),y,76,5);c.restore();
   }
   function answer(i,x,y,w,h,t,alpha=1,scale=1,angle=0,revealStart=.72+i*.23){
     c.save();c.globalAlpha*=alpha;c.translate(x+w/2,y+h/2);c.rotate(angle);c.scale(scale,scale);c.translate(-w/2,-h/2);
@@ -118,7 +118,7 @@ window.initStudy = async function(data) {
     lines(words.slice(0,count).join(' '),x,y,w,size,weight,color,1,size*1.25);
   }
   function trace(x1,y1,x2,y2,p,alpha=1){
-    if(p<=0)return;c.save();c.globalAlpha=alpha;const mid=(y1+y2)/2;c.lineWidth=2;c.strokeStyle='#bebfb9';c.beginPath();
+    if(p<=0)return;c.save();c.globalAlpha=alpha;const mid=(y1+y2)/2;c.lineWidth=2;c.strokeStyle=P.connector;c.beginPath();
     c.moveTo(x1,y1);for(let i=1;i<=45;i++){const u=Math.min(p,i/45);const x=bez(x1,x1,x2,x2,u),y=bez(y1,mid,mid,y2,u);c.lineTo(x,y);if(i/45>=p)break;}c.stroke();
     if(p<1){const x=bez(x1,x1,x2,x2,p),y=bez(y1,mid,mid,y2,p);c.fillStyle=P.ink;c.beginPath();c.arc(x,y,4,0,Math.PI*2);c.fill();}c.restore();
   }
@@ -139,7 +139,7 @@ window.initStudy = async function(data) {
       box(x,y,441,150,{r:18,shadow:.4});c.globalAlpha*=dim;
       txt(kind?'Differences judge':'Coverage judge',x+26,y+43,24,490,P.secondary);
       txt(kind?'Find differences':'Check support',x+26,y+99,34,550);
-      const cx=x+391,cy=y+91;c.strokeStyle='#d9d9d2';c.lineWidth=2;
+      const cx=x+391,cy=y+91;c.strokeStyle=P.spinnerTrack;c.lineWidth=2;
       c.beginPath();c.arc(cx,cy,17,0,Math.PI*2);c.stroke();
       if(spinnerAlpha>0){c.save();c.globalAlpha*=spinnerAlpha;c.strokeStyle=P.ink;c.beginPath();c.arc(cx,cy,17,angle,angle+Math.PI*1.15);c.stroke();c.restore();}
       if(ready>0)check(cx,cy,ready,12);

@@ -31,11 +31,16 @@ outcome or real model run.
 
 ## Direction
 
-Use one light visual system, warm paper, Inter, restrained shadows and consistent
+Use one light visual system, neutral bright surfaces, Inter, restrained cool shadows and consistent
 cards. Provider icons retain their proportions. Movement should direct attention
 and land cleanly. Keep little information on screen at once. More explanation
 requires more reading time; 60 seconds is this composition's result, not a limit
 for future stories.
+
+Color direction: clean daylight, pure white cards and slightly deeper charcoal.
+The intro light is subtly cool; remove the former cream/gold cast. Keep provider
+colors natural and use amber only for the explanatory highlights. The shared
+palette is in `src/color.json`; the exported video is explicitly Rec.709.
 
 Retain the v30 refinements: the caret starts before the placeholder, the question
 leaves before model cards arrive, the redundant synthesis subtitle is removed,

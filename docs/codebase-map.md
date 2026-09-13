@@ -4044,18 +4044,22 @@ ersten Check statt eines leeren Consensus-Panels.
 `video/` enthält den konsolidierten LinkedIn-Film (60 Sekunden, 1080 × 1350,
 60 fps). `src/content.json` enthält die geschriebenen Beispielinhalte und
 Asset-Zuordnungen; `src/timing.json` trennt narrative Lesefenster von kontinuierlicher
-Judge-/Cursorbewegung. `full-film-study.js` (Modelle/Synthese/Judges) lädt vor
+Judge-/Cursorbewegung. `src/color.json` enthält die gemeinsame helle, neutrale
+Palette mit kühlen Schatten und Intro-Licht; beide Szenen erhalten sie eingebettet.
+`full-film-study.js` (Modelle/Synthese/Judges) lädt vor
 `full-film-scene.js` (cinematische Einleitung/Eingabe/Quellen/Reader/Outro). Ihre `window.*`-Funktionen
 gehören nur zur generierten Canvas-Seite, nicht zur App.
 
 `src/render.cjs` bettet lokale Assets ein, prüft die Szene in Playwright/Chrome,
-encodiert per FFmpeg und übernimmt die mitgelieferte 60-Sekunden-AAC-Tonspur.
+encodiert die JPEG-Frames explizit als Limited-Range-Rec.709 inklusive Farbmetadaten
+per FFmpeg und übernimmt die mitgelieferte 60-Sekunden-AAC-Tonspur.
 Die fünfsekündige Einleitung erklärt das Produkt mit Logo ohne große Wortmarke;
 ein 0,7-Sekunden-Übergang führt das Logo in den Demo-Header und blendet dort
 den kleinen Namen ein. Sie ersetzt 2,7 Sekunden des alten
 Einstiegs. `timing.json.intro` definiert den Versatz von drei Sekunden; narrative
 Lesefenster und die bisherigen Bewegungszeiten bleiben erhalten. `src/qa.py` prüft
-das MP4 und erstellt Bildfolgen und Review-Clips. `src/preview.py` liefert den
+das MP4 einschließlich Farbprofil und dekodierter Hintergrundfarben und erstellt
+Bildfolgen und Review-Clips. `src/preview.py` liefert den
 Kapitelplayer mit Byte-Range-Seeks ausschließlich auf Loopback aus. Gemeinsame
 Pfade/Tool-Auswahl: `src/runtime.cjs` und `src/runtime.py`.
 

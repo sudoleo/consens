@@ -35,7 +35,7 @@ Reference downloads and copied third-party implementations are not render inputs
 
 ## How this renderer works
 
-1. `render.cjs` reads `content.json`, `timing.json` and local assets. It embeds
+1. `render.cjs` reads `content.json`, `timing.json`, `color.json` and local assets. It embeds
    everything into `output/source.html`; there are no remote font or image loads.
 2. `initFullFilm(data)` initializes a 1080 × 1350 canvas. `drawFullFilm(seconds)`
    redraws it entirely from a requested timestamp. Rendering and QA use this
@@ -49,7 +49,8 @@ Reference downloads and copied third-party implementations are not render inputs
    checkmarks, highlighting and reader cursors use continuous output time so
    those reading windows cannot freeze an animation.
 4. Playwright runs Chrome and captures each of the 3,600 frames. FFmpeg encodes
-   JPEG frames to H.264 (CRF 16, yuv420p, fast-start MP4), then copies the included
+   full-range JPEG frames to limited-range Rec.709 H.264 (CRF 16, yuv420p,
+   fast-start MP4, explicit color metadata), then copies the included
    60-second AAC soundtrack without re-encoding it.
 5. QA decodes the finished file, checks dimensions/frame count/audio, and makes
    contact sheets and focused clips for review.
@@ -59,11 +60,18 @@ The two scene files communicate through `window.initStudy`, `window.drawStudy`,
 generated page only. They have no contract with the parent app's `window.App`.
 `full-film-study.js` loads before `full-film-scene.js`.
 
-The intro uses the same warm paper and Inter as the demo: restrained light,
+The intro uses the same neutral bright surfaces and Inter as the demo: restrained cool light,
 recognizable provider marks, a slow camera settle, and the logo travelling into
 the header. The opening omits the wordmark; the small name fades in only with
 the question scene. The explanatory lines stay fully readable for
 almost three seconds. Avoid a separate logo bumper that delays the explanation.
+
+Grade graphic scenes at their source: use the shared `color.json` for surfaces,
+ink, shadows and light, so the brand artwork and semantic accent colors remain
+intentional. The current daylight grade follows the site's neutral white/charcoal
+foundation, with a subtle cool lift in the film. Review an intro, a white card,
+a highlight and the outro together. Check the encoded output's color metadata
+and decoded neutral samples as well as the original canvas stills.
 
 ## Iterate with evidence
 

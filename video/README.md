@@ -73,6 +73,7 @@ Five seconds of introduction plus a 0.7-second handoff replace the former
 | --- | --- |
 | [src/content.json](src/content.json) | Prompt, six model contributions, synthesis, reader excerpts and provider order. |
 | [src/timing.json](src/timing.json) | Reading windows and continuous judge/cursor motion. |
+| [src/color.json](src/color.json) | Shared neutral daylight palette, cool shadows and intro light. |
 | [src/full-film-scene.js](src/full-film-scene.js) | Opening, input, source check, reader and outro. |
 | [src/full-film-study.js](src/full-film-study.js) | Model cards, synthesis, judges and the highlighted disagreement. |
 | [src/render.cjs](src/render.cjs) | Asset embedding, scene checks and frame-by-frame encoding. |
@@ -97,7 +98,8 @@ Python tools honor `NODE_BINARY` if Node is not available as `node` on PATH.
 Windows is the validated platform for this cleanup; other platforms can differ
 in font rasterization and encoding.
 
-Optional comparison to the pre-intro v30 self-contained scene:
+Historical comparison to the pre-intro v30 self-contained scene (the current
+grade deliberately changes its pixels, so skip this for ordinary QA):
 
 ```sh
 node src/render.cjs --stills --reference=/absolute/path/to/source.html
@@ -109,6 +111,15 @@ all review stills. Run it with the same browser version. Ordinary rendering has
 no dependency on that reference.
 
 To rebuild the music edit, see [the audio notes](assets/audio/README.md).
+
+The current grade uses near-neutral bright backgrounds, pure white cards, deep
+charcoal and restrained cool shadows, informed by Consens's public color tokens.
+Provider artwork retains its original colors; amber remains a semantic highlight.
+Both scene files read `src/color.json`. The renderer explicitly converts the
+browser's full-range JPEG frames to limited-range Rec.709 and writes matching
+primaries, transfer and matrix metadata. QA checks that metadata and decoded
+background samples across the film. The historical v30 pixel comparison above
+is expected to fail for this intentional visual change.
 
 ## Moving into its own repository
 

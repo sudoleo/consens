@@ -34,7 +34,17 @@ result=run(['-hide_banner','-i',str(video),'-af','loudnorm=I=-16:TP=-2:LRA=9:pri
 assert '1080x1350' in log and '60 fps' in log
 counts=re.findall(r'frame=\s*(\d+)',log);assert counts and int(counts[-1])==frame_count
 assert not re.search('corrupt decoded|Invalid data|Error while',log,re.I)
+assert re.search(r'Video:.*yuv420p\(tv,\s*bt709\)',log), 'Export must declare limited-range Rec.709'
 levels=json.loads(log[log.rfind('{'):log.rfind('}')+1]);assert -24<float(levels['input_i'])<-18;assert float(levels['input_tp'])<=-1.5
+palette=json.loads((ROOT/'src/color.json').read_text(encoding='utf-8'))
+expected_bg=np.array([int(palette['bg'][i:i+2],16) for i in (1,3,5)])
+color_samples=[]
+for t in [1.8,8.4,21.8,33.15,44,57.8]:
+    raw=run(['-v','error','-ss',str(t),'-i',str(video),'-frames:v','1','-vf','crop=12:12:24:24','-pix_fmt','rgb24','-f','rawvideo','pipe:1']).stdout
+    rgb=np.frombuffer(raw,np.uint8).reshape(-1,3).mean(axis=0)
+    sample={'time':t,'rgb':np.round(rgb,2).tolist(),'maxChannelError':round(float(np.abs(rgb-expected_bg).max()),2)}
+    assert sample['maxChannelError']<=4, f'Encoded background color drift: {sample}'
+    color_samples.append(sample)
 groups={'story':[.8,4.8,7.2,9.6,11.7,13.4,15.8,17.6,19.2,20.9,22.8,23.9,25.2,27.1,28.9,30.4,31.7,33.4,35.3,36.6,38.75,39.7,43.5,46.3], 'joins':[6.35,6.5,6.65,6.8,6.95,7.1,7.3,7.48,7.52,7.7,25.55,25.7,25.85,26,26.15,34.1,34.3,34.5,35.8,36.1], 'contradiction':[19.9,20.5,21.4,21.9,22.15,22.4,22.8,23.2,23.6,24.1,24.8,25.3], 'sources':[26.4,27.25,28,28.8,29.6,30.2,30.7,31.4,32.1,32.8,33.4,34], 'reader':[35.4,35.8,36.1,36.6,37.2,38.75,39.2,40.5]}
 groups={name:[round(t+3,2) if t>=13.85 else t for t in times] for name,times in groups.items()}
 groups['synthesis']=[11.2,11.7,12.15,12.85,13.55,14.5,15.2,15.6,16,16.35,16.45,16.85,17.8,18.8]
@@ -60,6 +70,7 @@ for i,still in enumerate(d<.04):
         start=None
 summary={'duration':duration,'fps':60,'frames':frame_count,'size':[1080,1350],'LUFS':float(levels['input_i']),'truePeak':float(levels['input_tp']),'seekChecks':len(report['seek']),'editorialChecks':report['editorial'],'nearStaticSpans':spans,'motionMeasurement':'12 fps decoded sample at 216x270, mean absolute luminance delta <0.04/255; diagnostic only, not an aesthetic score.','sha256':hashlib.sha256(video.read_bytes()).hexdigest(),'subjectiveAudioReview':'Not performed. No assertion of subjective real-time listening.','scope':'Current standalone film: deterministic seeks, editorial checks, judge motion, source-card continuity, paced cursors and cinematic intro and included 60-second soundtrack.'}
 summary['referenceFrames']=report['retained']
+summary['colorGrade']={'name':palette['name'],'profile':'Rec.709 / limited range','background':palette['bg'],'decodedBackgroundSamples':color_samples}
 def audio_hash(file):return hashlib.sha256(run(['-v','error','-i',str(file),'-map','0:a:0','-c:a','copy','-f','adts','pipe:1']).stdout).hexdigest()
 summary['audioStreamSha256']=audio_hash(video)
 summary['audioStreamIdenticalToSoundtrack']=summary['audioStreamSha256']==audio_hash(ROOT/'assets/audio/soundtrack.m4a')
