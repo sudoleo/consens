@@ -4050,8 +4050,9 @@ gehören nur zur generierten Canvas-Seite, nicht zur App.
 
 `src/render.cjs` bettet lokale Assets ein, prüft die Szene in Playwright/Chrome,
 encodiert per FFmpeg und übernimmt die mitgelieferte 60-Sekunden-AAC-Tonspur.
-Die fünfsekündige Einleitung erklärt das Produkt; ein 0,7-Sekunden-Übergang
-führt Marke und Name in den Demo-Header. Sie ersetzt 2,7 Sekunden des alten
+Die fünfsekündige Einleitung erklärt das Produkt mit Logo ohne große Wortmarke;
+ein 0,7-Sekunden-Übergang führt das Logo in den Demo-Header und blendet dort
+den kleinen Namen ein. Sie ersetzt 2,7 Sekunden des alten
 Einstiegs. `timing.json.intro` definiert den Versatz von drei Sekunden; narrative
 Lesefenster und die bisherigen Bewegungszeiten bleiben erhalten. `src/qa.py` prüft
 das MP4 und erstellt Bildfolgen und Review-Clips. `src/preview.py` liefert den

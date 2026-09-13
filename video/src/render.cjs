@@ -48,11 +48,11 @@ async function main(){
  {check:'Sources remain conditional and return context without a verdict or example',ok:qa.some(f=>f.sourceCheck?.returnedToAnswer)&&qa.filter(f=>f.sourceCheck).every(f=>f.sourceCheck.majorOnly&&f.sourceCheck.factualOnly&&f.sourceCheck.citedSourcesOnly&&!f.sourceCheck.outcomeClaimed&&!f.sourceCheck.concreteExample)}
  );
  editorial.push(
-   {check:'The intro names the product and explains multiple AI models becoming one answer, readable for almost three seconds',ok:[1.4,1.8,2.2,2.6,3.1,3.5,4].every(t=>{
-     const r=qa.find(f=>f.time===t);return [study.intro.brand,...study.intro.lines].every(line=>r.text.some(x=>x.text===line&&x.alpha>.99))&&r.text.filter(x=>study.intro.lines.includes(x.text)).every(x=>x.width<936);
-   })},
+   {check:'The intro explains multiple AI models becoming one answer, readable for almost three seconds without a repeated wordmark',ok:[1.4,1.8,2.2,2.6,3.1,3.5,4].every(t=>{
+     const r=qa.find(f=>f.time===t);return study.intro.lines.every(line=>r.text.some(x=>x.text===line&&x.alpha>.99))&&r.text.filter(x=>study.intro.lines.includes(x.text)).every(x=>x.width<936);
+   })&&qa.filter(r=>r.intro&&r.time<timing.intro.duration).every(r=>r.text.every(x=>x.text!==study.intro.brand))},
    {check:'Six distinct provider marks establish the input before converging into Consens',ok:qa.find(f=>f.time===1.4).introNodes.every(n=>n.alpha>.99&&n.merge===0)&&qa.find(f=>f.time===4).introNodes.every(n=>n.merge===1&&n.alpha===0)},
-   {check:'Moving brand text clears the incoming question throughout the handoff',ok:qa.filter(r=>r.intro?.handoff>0).every(r=>{
+   {check:'The small header wordmark enters clear of the question during the handoff',ok:qa.filter(r=>r.intro?.handoff>0).every(r=>{
      const brand=r.text.find(x=>x.text===study.intro.brand),question=r.text.find(x=>x.text==='One question.');
      return brand&&question&&brand.y+20<question.y-question.size;
    })}

@@ -55,7 +55,7 @@ window.initFullFilm=async function(data){
     const handoff=q(t,data.timing.intro.duration,data.timing.intro.transitionDuration);
     const landing=q(t,3.9,data.timing.intro.duration-3.9),copyAlpha=q(t,.12,.62,out)*(1-q(t,4.15,.7));
     // A quiet push-in: recognizable providers gather into the shared answer.
-    // All marks retain their proportions; the same brand moves into the header.
+    // All marks retain their proportions; the logo moves into the header.
     const camera=mix(1.055,1,q(t,0,4.5));
     c.save();c.translate(540,520);c.scale(camera,camera);c.translate(-540,-520);
     const light=c.createRadialGradient(540,480,20,540,480,470);
@@ -76,11 +76,10 @@ window.initFullFilm=async function(data){
     const lx=bez(457,457,72,72,landing),ly=bez(395,280,59,59,landing);
     c.save();c.globalAlpha=logoEnter;c.translate(lx+logoWidth/2,ly+logoWidth*mark.height/mark.width/2);
     c.rotate(-.07*(1-logoEnter));c.drawImage(mark,-logoWidth/2,-logoWidth*mark.height/mark.width/2,logoWidth,logoWidth*mark.height/mark.width);c.restore();
-    const brandSize=mix(86,30,landing);font(86,620);const brandX=(W-c.measureText(data.study.intro.brand).width)/2;
-    txt(data.study.intro.brand,mix(brandX,132,landing),mix(840,87,landing),brandSize,620,P.ink,q(t,.45,.65,out));
-    txt(data.study.intro.lines[0],540,950+20*(1-copyAlpha),70,520,P.ink,copyAlpha,'center');
-    txt(data.study.intro.lines[1],540,1043+20*(1-copyAlpha),70,580,P.ink,q(t,.6,.65,out)*(1-q(t,4.15,.7)),'center');
+    txt(data.study.intro.lines[0],540,890+20*(1-copyAlpha),70,520,P.ink,copyAlpha,'center');
+    txt(data.study.intro.lines[1],540,983+20*(1-copyAlpha),70,580,P.ink,q(t,.6,.65,out)*(1-q(t,4.15,.7)),'center');
     if(handoff>0){
+      txt(data.study.intro.brand,132,87,30,620,P.ink,handoff);
       c.save();c.globalAlpha=handoff;
       intro(data.timing.intro.resumeSource-data.timing.intro.transitionDuration+t-data.timing.intro.duration);
       footer();c.restore();

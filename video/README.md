@@ -60,8 +60,9 @@ its content. They do not replace watching and listening to the finished film.
 In the parent app repository, `.\dev.ps1 check video` runs the same scene check.
 The standalone npm commands remain the canonical entry points.
 
-The opening names consens.io and explains “Multiple AI models. One combined answer.”
-Six provider marks converge into the brand, which moves into the demo header.
+The opening shows the logo and explains “Multiple AI models. One combined answer.”
+Six provider marks converge into the logo, which moves into the demo header.
+The wordmark appears only with the demo header, keeping the opening uncluttered.
 Five seconds of introduction plus a 0.7-second handoff replace the former
 2.7-second opening. Later scenes retain their reading and motion timings.
 `output/intro-review.mp4` isolates the new opening and transition.

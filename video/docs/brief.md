@@ -21,6 +21,9 @@ with six provider marks converging into consens.io → continuous brand handoff
 and the two reminder positions → conditional source check → original answers
 and model switch → logo with the name below it.
 
+The opening uses the logo and explanation without a large “consens.io” wordmark.
+The small name enters with the demo header during the handoff to the question.
+
 The paired suggestions explain the written example, not a fixed model-pairing
 algorithm. The source check is conditional on major factual contradictions and
 works with cited sources. This illustration does not invent a source, verified

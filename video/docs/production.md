@@ -60,8 +60,9 @@ generated page only. They have no contract with the parent app's `window.App`.
 `full-film-study.js` loads before `full-film-scene.js`.
 
 The intro uses the same warm paper and Inter as the demo: restrained light,
-recognizable provider marks, a slow camera settle, and the same logo and name
-travelling into the header. The explanatory lines stay fully readable for
+recognizable provider marks, a slow camera settle, and the logo travelling into
+the header. The opening omits the wordmark; the small name fades in only with
+the question scene. The explanatory lines stay fully readable for
 almost three seconds. Avoid a separate logo bumper that delays the explanation.
 
 ## Iterate with evidence
