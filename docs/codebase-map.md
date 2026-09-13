@@ -473,6 +473,15 @@ der Python-Staleness-Test auch indirekte Änderungen erkennt.
   Aufwärtsscrollen, Seitenanfang und Tastatur-Navigation blenden sie wieder ein.
   Der Zustand ist rein transient als `body.is-reading-chrome-hidden` und
   verändert weder Sidebar-Persistenz noch Watch-/Consensus-Daten.
+- **Mobile Kopfleiste** — `header.app-mobile-header` bündelt bei ≤1099 px
+  Menü, kontextabhängige Wortmarke, View-Switch und Gast-Login auf einer deckenden,
+  56 px hohen Fläche mit Safe-Area-Zuschlag und feiner Unterkante. Der Menüknopf
+  nutzt ein SVG und eine 44 × 44 px große Touchfläche; beide Sidebar-Toggles
+  referenzieren `#appSidebar` per `aria-controls`. Der Inhaltsanfang reserviert
+  die Leistenhöhe. Reading Chrome blendet mobil die gesamte Leiste gemeinsam
+  aus/ein; eine offene Overlay-Sidebar blendet sie ebenfalls aus. Auf Desktop
+  bleibt der Wrapper `display: contents` und die bestehende Float-Anordnung
+  erhalten. Reader-Dialoge bleiben oberhalb der Kopfleiste.
 - **`sidebar-quota.js`** — Kontingent-Ring im Sidebar-Footer (`#quotaTrigger`)
   + Panel `#sidebarQuota` (Runs / Deep Think / Watches + Reset-Zeit). Rechnet
   **nichts** selbst: ein MutationObserver spiegelt die weiterhin von
@@ -509,7 +518,7 @@ der Python-Staleness-Test auch indirekte Änderungen erkennt.
   Firestore-Live-Listener mehr. Bei offener Desktop-Sidebar begrenzen symmetrische
   Gutters (260px Navigation plus 24px Abstand je Seite) die Contentbreite und
   halten den Input in der Viewport-Mitte; mobil
-  bleibt außerhalb der Sidebar nur der Burger sichtbar. Gast-Login/-Sign-up
+  stehen Menü und im Gespräch die Wortmarke in der deckenden Kopfleiste. Gast-Login/-Sign-up
   sitzt oben rechts, während der Sidebar-Footer nur für eingeloggte Accounts
   das Avatar-Menü mit deckender Light-/Dark-Fläche zeigt. Settings sind seit
   2026-08-17 **Reiter statt einer langen Bahn**: `.settings-layout` trägt links

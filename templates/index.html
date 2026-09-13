@@ -69,11 +69,13 @@
 </head>
 
 <body class="is-hero">
-  <!-- Schwebende Navigation oben links: Sidebar-Toggle + Mini-Brand
-       (Brand nur sichtbar, wenn die Sidebar zu ist). Ersetzt die Topbar. -->
+  <!-- Mobile: one opaque reading header. Desktop keeps the floating controls. -->
+  <header class="app-mobile-header" aria-label="App navigation">
   <div class="app-nav-float">
-    <button id="toggleSidebarButton" class="sidebar-toggle collapse-btn" aria-label="Open sidebar" aria-expanded="false" title="Open sidebar">
-      <span class="burger-icon">&#9776;</span>
+    <button id="toggleSidebarButton" class="sidebar-toggle" type="button" aria-label="Open sidebar" aria-controls="appSidebar" aria-expanded="false" title="Open sidebar">
+      <svg class="burger-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+        <path d="M4 6h16M4 12h16M4 18h16"></path>
+      </svg>
     </button>
     <a href="/" class="brand-float" aria-label="consens.io home">
       <img src="/static/favicon.png" alt="" class="app-favicon">
@@ -100,7 +102,8 @@
       <span>Watches</span>
     </button>
   </nav>
-  <div class="sidebar">
+  </header>
+  <div id="appSidebar" class="sidebar">
     <!-- Kompakter Sidebar-Kopf: Wortmarke links, Collapse-Aktion rechts. Der
          schwebende Toggle erscheint weiterhin nur bei geschlossener Sidebar. -->
     <div class="sidebar-brand-row">
@@ -109,7 +112,7 @@
         <span class="sidebar-brand-title">consens.io</span>
       </a>
       <button id="sidebarToggleInner" class="sidebar-toggle sidebar-toggle-square" type="button"
-        aria-label="Collapse sidebar" aria-expanded="true" title="Collapse sidebar">
+        aria-label="Collapse sidebar" aria-controls="appSidebar" aria-expanded="true" title="Collapse sidebar">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
           <line x1="3" y1="6" x2="21" y2="6"></line>
           <line x1="3" y1="12" x2="21" y2="12"></line>

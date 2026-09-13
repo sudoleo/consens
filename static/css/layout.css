@@ -101,24 +101,27 @@ body:has(.watch-page:not([hidden])) .app-nav-float {
    JS removes this state near the top, on upward travel and before keyboard
    focus moves into the controls. Visibility follows the fade so an invisible
    button can neither intercept pointers nor receive focus. */
-body.is-reading-chrome-hidden .app-nav-float {
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-  transform: translateY(calc(-100% - 20px));
-  transition-delay: 0s, 0s, 0s, 0.22s;
-}
+@media (min-width: 1100px) {
+  body.is-reading-chrome-hidden .app-nav-float {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transform: translateY(calc(-100% - 20px));
+    transition-delay: 0s, 0s, 0s, 0.22s;
+  }
 
-body.is-reading-chrome-hidden .view-switch {
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-  transform: translate(-50%, calc(-100% - 20px));
-  transition-delay: 0s, 0s, 0s, 0s, 0.22s;
+  body.is-reading-chrome-hidden .view-switch {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transform: translate(-50%, calc(-100% - 20px));
+    transition-delay: 0s, 0s, 0s, 0s, 0.22s;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .app-nav-float,
+  .app-mobile-header,
   .view-switch {
     transition-duration: 0.01ms !important;
   }
@@ -567,13 +570,10 @@ body:has(.sidebar.active) .brand-float {
 }
 
 .burger-icon {
-  display: inline-block;
-  width: 34px;
-  height: 34px;
-  line-height: 34px;
-  font-size: var(--font-size-lg);
-  text-align: center;
-  color: var(--icon-color);
+  display: block;
+  width: 22px;
+  height: 22px;
+  color: var(--ink);
 }
 
 /* Sections sind eigenstaendige Cards – die alten Trennlinien entfallen. */

@@ -156,6 +156,13 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       Restdauer, Run-Wechsel/Clear entfernt ihn. Legacy/ohne Einzelbefund führt
       zum markierten Sources-Bericht. Reduced Motion ohne Bewegung;
       Forced Colors mit sichtbarem Systemrahmen.
+- [ ] Mobile Navigation bei 320–1099 px: Menü mit 44-px-Touchfläche in einer
+      deckenden Kopfleiste; kein durchscheinender Antworttext. Inhaltsanfang
+      bleibt unterhalb der Leiste, Menü/View-Switch/Gast-Login überlappen nicht.
+      Abwärtsscrollen blendet die gesamte Leiste aus; Hochscrollen und
+      Tastatur-Navigation holen sie zurück, auch im Watch-Dashboard. Sidebar
+      öffnen/schließen und Fokus-Rückgabe funktionieren. Light/Dark, Reduced
+      Motion und Desktop-Float-Navigation bleiben bedienbar.
 - [ ] „Show agreement score“ ist standardmäßig aktiv. Ausschalten blendet die
       numerische Score-Anzeige im aktuellen Consensus und in archivierten Turns
       aus; die qualitative Einordnung/Widerspruchswarnung bleibt sichtbar. Nach

@@ -699,6 +699,8 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
 /* --------------------------------------------------------------------------
    3. Topbar / view switch
    -------------------------------------------------------------------------- */
+.app-mobile-header { display: contents; }
+
 .view-switch {
   background: var(--raise);
   border: 0;
@@ -3955,4 +3957,93 @@ body:is([data-consensus-highlight-mode="contradictions"], [data-consensus-highli
 
 body[data-consensus-highlight-mode] :is(.src-ref, .source-link)[data-source-check]:is(:hover, :focus-visible) {
   text-decoration: underline;
+}
+
+/* Mobile navigation has its own opaque surface above the reading area.
+   The existing scroll controller hides/reveals the entire header together. */
+@media (max-width: 1099px) {
+  body:has(.app-mobile-header) { --app-mobile-header-height: calc(56px + env(safe-area-inset-top, 0px)); }
+
+  .app-mobile-header {
+    position: fixed;
+    inset: 0 0 auto;
+    z-index: var(--z-header);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    box-sizing: border-box;
+    height: var(--app-mobile-header-height);
+    padding: calc(5px + env(safe-area-inset-top, 0px)) max(12px, env(safe-area-inset-right, 0px)) 6px max(12px, env(safe-area-inset-left, 0px));
+    background: var(--ground);
+    border-bottom: 1px solid var(--line-soft);
+    transition: transform .22s ease, opacity .18s ease, visibility 0s linear 0s;
+  }
+
+  .app-mobile-header .app-nav-float,
+  body:has(.sidebar.collapsed) .app-mobile-header .app-nav-float {
+    position: static;
+    flex: 0 0 auto;
+    gap: 8px;
+    transition: none;
+  }
+
+  .app-mobile-header .sidebar-toggle {
+    width: 44px;
+    height: 44px;
+    flex: 0 0 44px;
+    padding: 0;
+    color: var(--ink);
+    border-radius: 8px;
+  }
+
+  .app-mobile-header .sidebar-toggle:focus-visible {
+    outline: 2px solid var(--ink);
+    outline-offset: -3px;
+  }
+
+  .app-mobile-header .view-switch {
+    position: static;
+    order: 2;
+    margin-inline: auto;
+    transform: none;
+    transition: background-color .15s ease, color .15s ease;
+  }
+
+  .app-mobile-header .auth-top-actions {
+    position: static;
+    flex: 0 0 auto;
+    order: 3;
+    margin-inline-start: auto;
+  }
+
+  body.is-hero .app-mobile-header .auth-top-actions,
+  body:has(#watchDashboard:not([hidden])) .app-mobile-header .auth-top-actions { margin-inline-start: 0; }
+
+  .app-mobile-header .auth-top-login,
+  .app-mobile-header .auth-top-signup { min-height: 44px; }
+
+  body:not(.is-hero) .app-mobile-header .brand-float {
+    display: inline-flex;
+    gap: 6px;
+  }
+
+  body:not(.is-hero) .app-mobile-header .brand-float-title {
+    display: inline;
+    font-size: .875rem;
+  }
+
+  body:has(.app-mobile-header) .container {
+    padding-top: calc(var(--app-mobile-header-height) + 12px);
+  }
+
+  .sidebar:not(.active) { box-shadow: none; }
+
+  body.is-reading-chrome-hidden .app-mobile-header,
+  body:has(.sidebar.active) .app-mobile-header {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transform: translateY(-100%);
+    transition-delay: 0s, 0s, .22s;
+  }
 }
