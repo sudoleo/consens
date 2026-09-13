@@ -4019,6 +4019,11 @@ ersten Check statt eines leeren Consensus-Panels.
   Disconnect bedeutet „Serverarbeit abbrechen“; aktive Responses müssen am
   normalen Ende und bei Cancellation geschlossen werden. Automatische
   Transport-Retries dürfen keinen zweiten kostenpflichtigen Versuch verstecken.
+  OpenRouter-Fehler im JSON-Body oder SSE-Event werden auch bei HTTP 200 als
+  `_ProviderResponseError` behandelt. Nur numerische HTTP-Fehlercodes (400–599,
+  auch als dreistellige ASCII-Zeichenfolge) bleiben für `safe_exception` erhalten;
+  408/504 werden wie HTTP-Timeouts klassifiziert. Rohmeldungen und Metadaten
+  werden verworfen. Ein Fehlerbody gilt dadurch nicht als leere Modellantwort.
 - **Observability ist content-frei.** Request- und Scheduler-Correlation-IDs,
   Provider/Job-Name, Erfolg/Fehler/Timeout, Anzahl und Laufzeit dürfen geloggt
   bzw. unter `/health/metrics` aggregiert werden. Prompts, Modellantworten,

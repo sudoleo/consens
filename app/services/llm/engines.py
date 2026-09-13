@@ -58,6 +58,18 @@ class _ProviderHTTPStatusError(RuntimeError):
         self.status_code = int(status_code)
 
 
+class _ProviderResponseError(RuntimeError):
+    """An upstream error body/SSE event, possibly inside an HTTP 200 response."""
+
+    def __init__(self, error):
+        super().__init__("upstream provider returned an error in the response")
+        code = error.get("code") if isinstance(error, dict) else None
+        if isinstance(code, str) and len(code) == 3 and code.isascii() and code.isdecimal():
+            code = int(code)
+        # Retain only HTTP error status metadata, never raw provider details.
+        self.status_code = code if type(code) is int and 400 <= code <= 599 else None
+
+
 def _raise_provider_http_status(response) -> None:
     raise _ProviderHTTPStatusError(int(response.status_code))
 
@@ -253,6 +265,8 @@ def query_model(
             if response.status_code >= 400:
                 _raise_provider_http_status(response)
             data = response.json()
+        if data.get("error"):
+            raise _ProviderResponseError(data["error"])
         message = (((data.get("choices") or [{}])[0].get("message")) or {})
         result = parse_openrouter_response(
             coerce_text(message.get("content")),

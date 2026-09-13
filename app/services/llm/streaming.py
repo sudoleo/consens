@@ -23,6 +23,7 @@ from app.services.llm.citations import (
 )
 from app.services.llm.engines import (
     OPENROUTER_CHAT_COMPLETIONS_URL,
+    _ProviderResponseError,
     _error,
     _log_model_selection,
     _merge_nested_config,
@@ -220,7 +221,7 @@ def _iter_openrouter_chunks(*, api_key: str, payload: dict) -> Iterator[StreamEv
         if not data:
             continue
         if data.get("error"):
-            raise RuntimeError("OpenRouter stream returned an error event")
+            raise _ProviderResponseError(data["error"])
         for choice in data.get("choices") or []:
             if not isinstance(choice, dict):
                 continue
