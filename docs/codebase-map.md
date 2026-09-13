@@ -4023,120 +4023,29 @@ ersten Check statt eines leeren Consensus-Panels.
 
 ---
 
+### Eigenständige Videoproduktion
+
+`video/` enthält den konsolidierten LinkedIn-Film (v30, 57 Sekunden, 1080 × 1350,
+60 fps). `src/content.json` enthält die geschriebenen Beispielinhalte und
+Asset-Zuordnungen; `src/timing.json` trennt narrative Lesefenster von kontinuierlicher
+Judge-/Cursorbewegung. `full-film-study.js` (Modelle/Synthese/Judges) lädt vor
+`full-film-scene.js` (Eingabe/Quellen/Reader/Outro). Ihre `window.*`-Funktionen
+gehören nur zur generierten Canvas-Seite, nicht zur App.
+
+`src/render.cjs` bettet lokale Assets ein, prüft die Szene in Playwright/Chrome,
+encodiert per FFmpeg und übernimmt die vorhandene AAC-Tonspur. `src/qa.py` prüft
+das MP4 und erstellt Bildfolgen und Review-Clips. `src/preview.py` liefert den
+Kapitelplayer mit Byte-Range-Seeks ausschließlich auf Loopback aus. Gemeinsame
+Pfade/Tool-Auswahl: `src/runtime.cjs` und `src/runtime.py`.
+
+Der Ordner hat eigene npm-/Python-Abhängigkeiten und benötigt weder App-Server
+noch alte Exportordner, `static/`, Firebase oder Provider-Zugänge. Quellen und
+benötigte Assets werden versioniert; `output/`, installierte Werkzeuge und die
+optionale Originalmusik bleiben lokal. `.\dev.ps1 check video` delegiert den
+Szenentest, `npm run render` und `npm run qa` laufen innerhalb von `video/`.
+Setup, Reproduktion und Auslagerung: [Video-README](../video/README.md).
+
 ## 9. Bei Änderungen aktualisieren
-
-Lokales Video-Tooling (gitignored): `recording/premium-capture.cjs` nimmt die
-echte clientseitige Demo im isolierten E2E-Profil auf. `CONSENS_CAPTURE_OUT`
-wählt das Ausgabeziel; `CONSENS_CAPTURE_NORMAL=1` erfasst zusätzlich den normalen
-Composer samt gemessenen Rechtecken der Schlussfrage. Das zusammenhängende
-Consensus-Dokument enthält DOM-relative Kameraanker; fixierte Navigation wird
-nur während dieser Dokumentaufnahme ausgeblendet.
-Aktuell erzeugen `recording/light-stage.html`, `light-scene.js` und
-`light-render.cjs` v9: 70 Sekunden in echtem Light-Theme, 60 fps, getrennte
-4:5-/16:9-Kompositionen. `light-capture.cjs` erfasst zusätzlich die Send-Mitte,
-die unmarkierte Synthese, vollständigen Kontext und das geöffnete Difference-
-Detail. Vollformat-Canvas-Layer verhindern wechselnde Schärfe durch CSS-
-Bitmap-Caching. Die redaktionelle Erklärung trennt Synthese, Coverage Judge
-und Difference Judge korrekt. `light-studio.js` stellt die lokale Zeitleiste
-bereit; `light-deliver.py` prüft und bündelt die Exporte. Details:
-`docs/linkedin-launch-light.md`.
-Historisch erzeugen `recording/cinematic-stage.html`, `cinematic-scene.js` und
-`cinematic-render.cjs` v8: 66 Sekunden, eigenständige 4:5-/16:9-Kompositionen,
-perspektivische Übergänge, frontale Lesephasen und dasselbe Dokument bis zur
-Hover-Evidenz. Die Szene stellt `initFilm`, `drawFilm` und `filmReport` nur in
-der lokalen Render-Seite bereit. Ein portables Motion-Studio verwendet dieselbe
-Zeitleiste (`cinematic-studio.js`). `cinematic-deliver.py` prüft die kodierten
-Master und bündelt Auslieferung und Produktionsquellen. Der Renderer prüft
-Quellen, Bildgeometrie, Encoding und Audiopegel.
-Musik: lizenzierter Neon-Auszug (No Melody Alt Mix), Quelle 32,15–98,15 Sekunden.
-Der abgelehnte v6-Montageschnitt und v7 (`continuity-render.cjs`, 76 Sekunden)
-bleiben historisch erhalten.
-`recording/record-linkedin-demo.cjs` exportiert dafür seine Server-/Browser-Helfer;
-sein Serverstart setzt jetzt ebenfalls das isolierte E2E-Profil.
-Produktmodule und API-Verträge bleiben davon unberührt. Details und Ausgabe:
-`recording/README.md`, `docs/linkedin-launch-light.md`.
-
-Aktueller lokaler Videoschnitt v10: `recording/focus-scene.js`,
-`focus-stage.html` und `focus-render.cjs` ergänzen native Nahfahrten,
-selektive Canvas-Schärfe, synchronisierte Cursorziele und bewegtes Licht.
-Die zusätzliche Modell-Icon-Leiste entfällt. `focus-studio.js` verwendet
-dieselbe deterministische Zeitleiste; `focus-studio-check.cjs` und
-`focus-deliver.py` prüfen und verpacken die Ausgabe unter `recordings/launch-v10`.
-Die echten UI-Quellen werden mit `light-capture.cjs` aktualisiert; dessen
-`CONSENS_CAPTURE_OUT` waehlt das Ziel. Der finale LinkedIn-Export vom 09.09.
-liegt unter `artifacts/linkedin/2026-09-09-final`; `CONSENS_FOCUS_OUT` und
-`CONSENS_FOCUS_FORMATS` grenzen Renderer und QA/Delivery darauf ein. Gepolsterte
-Antwortausschnitte behalten gemessene Kamera-/Klickanker; der Follow-up wird
-nach Schliessen des Readers im geoeffneten echten Composer erfasst.
-Produktionsmodule/API-Flows ändern sich nicht. Details:
-`docs/linkedin-launch-focus.md`.
-
-Lokale Video-Fassung v11: `recording/kinetic-director.js` ergänzt eine eigene
-Kachel-Eröffnung, einen auf den Sendeknopf gerichteten Zoom und das Signet-Outro
-mit darunter enthülltem Namen. `kinetic-base-scene.js` erhält die Erklärung
-beider Judges und beide Difference-Positionen. `kinetic-audio.py` erzeugt aus
-dem lizenzierten Neon-Ausschnitt 50,15–120,15 s eine gemessene gemeinsame
-Musik-Zeitleiste sowie synthetisierte Übergangsgeräusche. `kinetic-render.cjs`
-rendert 70 s bei 60 fps in 4:5 und 16:9; `kinetic-studio.js` spielt die gleiche
-Szene anhand der Audio-Uhr ab. QA und Delivery: `kinetic-qa.cjs` und
-`kinetic-deliver.py`. Ausgabe: `artifacts/linkedin/2026-09-09-kinetic-v11`;
-Details: `docs/linkedin-launch-kinetic.md`. Die v10-Dateien bleiben erhalten;
-Produktmodule und API-Flows ändern sich dadurch nicht.
-
-Lokale Video-Fassung v12: `recording/cohesive-*` vereinheitlicht Oberfläche,
-Antwortkarten, Kamera und Ton über den gesamten 70-Sekunden-Film. Der neue
-Aha-Abschnitt macht das fehlende Datumskriterium explizit; der Follow-up ergänzt
-diese Information. Drei getrennte Beiträge für Motion Design, Sound und
-Art Direction werden über dieselbe deterministische Zeitleiste integriert.
-Ausgabe: `artifacts/linkedin/2026-09-09-cohesive-v12`; Produktionsnotizen:
-`docs/linkedin-launch-cohesive.md`. App-Module und API-Flows sind unverändert.
-
-Lokale Video-Fassung v13: `recording/concise-*` verwendet die v12-Basis mit
-13-Wort-Mailauszug im nativen Composer, schrittweisem Textaufbau, fortlaufender
-Kamerabewegung und Fokus auf der Schlusszeile. Eigener Capture aktualisiert
-nur das Input-Asset samt Textkoordinaten. Ausgabe:
-`artifacts/linkedin/2026-09-09-concise-v13`; Reproduktion und QA:
-`docs/linkedin-launch-concise.md`. Produkt- und API-Flows bleiben unverändert.
-
-Lokale Video-Fassung v14: `recording/sentence-*` ersetzt den Mailauszug durch
-einen vollständigen Schreibauftrag mit nativen Einzelzeichen-Aufnahmen.
-`sentence-scenario.cjs` passt nur die lokale Capture-Demo samt Antworttexten
-und Claim-Ankern an; `static/demo.js` bleibt unverändert. Neue Aufnahmen
-messen die Textanker erneut. Ausgabe:
-`artifacts/linkedin/2026-09-09-sentence-v14`; Ablauf und QA:
-`docs/linkedin-launch-sentence.md`.
-
-Lokale Video-Fassung v15: `recording/decision-*` verwendet einen gemeinsamen
-Story-Vertrag in `decision-scenario.cjs` für Entscheidungsfrage, sechs Antworten,
-Consensus, Unterschied und fertige Kundenmitteilung. Der feste Termin wird als
-zusätzliche Nutzerinformation gekennzeichnet. Native Aufnahmen und Renderer
-prüfen denselben Inhalt; `decision-story-qa.cjs` prüft die semantischen Zuordnungen.
-App-Dateien bleiben unverändert. Ausgabe:
-`artifacts/linkedin/2026-09-09-decision-v15`; Details und Reproduktion:
-[`linkedin-launch-decision.md`](linkedin-launch-decision.md).
-
-Lokale Video-Fassung v16: `recording/synthesis-*` demonstriert anhand einer
-kurzen offenen Frage, wie ergänzende Modellbeiträge zu drei direkten
-Handlungsschritten zusammengeführt werden. `synthesis-scenario.cjs` ist der
-gemeinsame Inhaltsvertrag; native Supportmarkierungen sind durch vollständige
-Sätze in den Demo-Antworten gedeckt. Keine Modellabstimmung oder erzwungener
-Widerspruch in der Synthese. App-Dateien unverändert. Ausgabe:
-`artifacts/linkedin/2026-09-09-synthesis-v16`; Details:
-[`linkedin-launch-synthesis.md`](linkedin-launch-synthesis.md).
-
-Lokale Video-Fassung v17: `recording/claims-*` ergänzt v16 um eine native
-Antwortseite mit Agreement und Contradiction gleichzeitig. Ein begrenzter
-Widerspruch über Erinnerungsintervalle bleibt im direkten Syntheseergebnis
-markiert; DOM-Anker und Claim-Sichtbarkeit werden geprüft. Ausgabe:
-`artifacts/linkedin/2026-09-09-claims-v17`; Details:
-[`linkedin-launch-claims.md`](linkedin-launch-claims.md). App-Dateien unverändert.
-
-Lokale Video-Fassung v18: `recording/reader-*` ersetzt die wiederholte
-Schluss-Synthese durch echte native Gegenpositionen und den Modellantwort-Reader.
-Capture bedient `#agentModeAnswersToggle` und die Provider-Tabs; Klickpunkte und
-vollständige Antworttexte werden verifiziert. Claim-Seite bleibt erhalten.
-Ausgabe: `artifacts/linkedin/2026-09-09-reader-v18`; Details:
-[`linkedin-launch-reader.md`](linkedin-launch-reader.md). App-Dateien unverändert.
 
 Diese Datei ist die zentrale Architektur-Karte. **Aktualisiere sie im selben
 Commit/PR**, wenn sich Folgendes ändert:

@@ -32,11 +32,11 @@ node_modules/
 !static/dist/manifest.json
 
 # Recording assets and local video generation tooling
-recordings/
-recording/
-.recording-tools/
+# Standalone video sources are versioned; video/.gitignore excludes outputs.
+!/video/src/*.json
+!/video/assets/audio/credit.json
 
-# Local LinkedIn production assets and editorial/demo notes
+# Local LinkedIn image posts and editorial notes
 /artifacts/linkedin/
 /docs/linkedin-*.md
 
@@ -46,9 +46,8 @@ docs/seo-share-indexing-process.md
 # Design-Vorschau aus scripts/render_watch_preview.py (kein Artefakt)
 _preview/
 
-# Local browser captures, diagnostic scripts and downloaded video references
+# Local browser captures and diagnostic scripts
 /test-results/
-/artifacts/video-references/
 
 # Temporary source snapshots and isolated builds used to stage progress changes.
 # Keep review screenshots and reusable verification scripts versioned.

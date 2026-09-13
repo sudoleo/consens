@@ -1,0 +1,20 @@
+{
+  "name": "consensio-video",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Standalone Canvas, Playwright and FFmpeg product film; current v30 composition.",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "check": "node src/render.cjs --stills",
+    "render": "node src/render.cjs",
+    "doctor": "node src/runtime.cjs",
+    "preview": "python src/preview.py",
+    "qa": "python src/qa.py"
+  },
+  "dependencies": {
+    "@ffmpeg-installer/ffmpeg": "1.1.0",
+    "playwright-core": "1.60.0"
+  }
+}

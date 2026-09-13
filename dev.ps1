@@ -12,16 +12,17 @@ Run the project's existing local checks. See docs/testing.md for setup.
 param(
     [ValidateSet('check', 'help')]
     [string]$Command = 'help',
-    [ValidateSet('frontend', 'backend', 'browser')]
+    [ValidateSet('frontend', 'backend', 'browser', 'video')]
     [string]$Target,
     [string]$TestPath
 )
 
 if ($Command -eq 'help') {
-    Write-Host 'Usage: .\dev.ps1 check <frontend|backend|browser> [-TestPath <test file or directory>]'
+    Write-Host 'Usage: .\dev.ps1 check <frontend|backend|browser|video> [-TestPath <test file or directory>]'
     Write-Host 'frontend: JavaScript tests + build:check (run npm run build to rebuild)'
     Write-Host 'backend:  isolated pytest suite; browser tests excluded'
     Write-Host 'browser:  build:check + Playwright using a disposable Firestore emulator'
+    Write-Host 'video:    standalone scene checks and stills (setup: video/README.md; no TestPath)'
     Write-Host 'Setup and maintenance: docs/testing.md'
     exit 0
 }
@@ -63,7 +64,8 @@ function Invoke-DevStep([string]$Label, [string]$Executable, [string[]]$Argument
 }
 
 try {
-    if (-not $Target) { throw 'Choose frontend, backend or browser. Run .\dev.ps1 help.' }
+    if (-not $Target) { throw 'Choose frontend, backend, browser or video. Run .\dev.ps1 help.' }
+    if ($Target -eq 'video' -and $TestPath) { throw 'check video runs the complete scene check and does not accept TestPath.' }
     Push-Location -LiteralPath $PSScriptRoot
     $locationPushed = $true
 
@@ -71,6 +73,7 @@ try {
         'frontend' { 'tests/js' }
         'backend' { 'tests' }
         'browser' { 'tests/e2e' }
+        'video' { 'video/src' }
     }
     $selectedTests = $testRoot
     if ($TestPath) {
@@ -112,6 +115,13 @@ try {
     }
 
     switch ($Target) {
+        'video' {
+            $videoNode = Find-DevCommand 'node' 'Install Node.js and add it to PATH; see video/README.md.'
+            if (-not (Test-Path -LiteralPath 'video/node_modules/playwright-core/package.json')) {
+                throw 'Video dependencies are missing. Run npm --prefix video ci; see video/README.md.'
+            }
+            Invoke-DevStep 'Video scene checks and stills' $videoNode @('video/src/render.cjs', '--stills')
+        }
         'frontend' {
             $testArguments = @('test')
             if ($TestPath) { $testArguments += @('--', $selectedTests) }

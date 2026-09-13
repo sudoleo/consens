@@ -84,3 +84,8 @@ Model agreement should not be interpreted as factual correctness. Consensus is t
 ---
 
 This repository contains the implementation of an actively developed experimental system. Models, prompts, aggregation methods, and evaluation procedures may change over time.
+
+## Product video
+
+The standalone [video project](video/README.md) contains the current LinkedIn film,
+its editable scene code, assets, render commands and production notes.
