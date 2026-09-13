@@ -23,6 +23,12 @@ miniature cards and explanations competed for attention in early versions.
 The retained judge scene shows Coverage, then Differences, then the highlight.
 If more explanation is necessary, give it time or remove another idea.
 
+Write system actions as short active statements or processing states. Establish
+Consens as the actor (“Consens combines.”), then show its work (“Checking
+sources.”). Imperatives make automated steps sound like tasks for the viewer.
+Replace ambiguous copy within the existing space; avoid longer explanations or
+extra labels. Reserve instructions for intentional viewer interactions.
+
 Keep object identity across transitions. Incoming text should not overlap the
 outgoing question. A highlighted phrase should remain one glyph run as it moves:
 changing font weight or replacing text mid-transition can produce a visible jump.

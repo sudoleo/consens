@@ -163,7 +163,7 @@ window.initFullFilm=async function(data){
     const u=t-25.8,enter=q(t,25.94,.38,out),exit=1-q(t,34.05,.22);
     const back=q(u,6.35,.8),grow=q(u,6.15,.8),documentsOut=1-q(u,6.22,.35);
     c.save();c.globalAlpha*=enter*exit;
-    txt('Check the sources.',72,236+16*(1-enter),76,580,P.ink,1-q(t,33.96,.18));
+    txt('Checking sources.',72,236+16*(1-enter),76,580,P.ink,1-q(t,33.96,.18));
     txt('For major factual disputes.',76,302,34,490,P.secondary,q(u,.32,.28));
 
     // The answer stays in view: only the disputed passage branches into a check.
@@ -215,12 +215,12 @@ window.initFullFilm=async function(data){
     const reading=1-q(u,6.58,.16),context=q(u,6.78,.3,out);
     c.save();c.globalAlpha*=judge;box(jx,jy,jw,134,{r:20,shadow:mix(.55,0,back),fill:P.paper});
     txt('Source judge',jx+30,jy+40,24,510,P.secondary,reading);
-    txt('Compare the evidence',jx+30,jy+94,41,550,P.ink,reading);
+    txt('Comparing evidence',jx+30,jy+94,41,550,P.ink,reading);
     txt('Source check',jx+30,jy+40,24,510,P.secondary,context);
-    txt('Explain the disagreement',jx+30,jy+94,41,550,P.ink,context);
+    txt('Adding source context',jx+30,jy+94,41,550,P.ink,context);
     // Magnifying glass, not a success tick: no verdict is asserted for this demo.
     const mx=jx+jw-62,my=jy+66;c.strokeStyle=P.ink;c.lineWidth=2.6;c.beginPath();c.arc(mx,my,15,0,Math.PI*2);c.moveTo(mx+11,my+11);c.lineTo(mx+24,my+24);c.stroke();c.restore();
-    txt('Follow the citations.',72,1166,36,490,P.ink,q(u,.95,.3)*(1-q(u,3.52,.22)));
+    txt('Following citations.',72,1166,36,490,P.ink,q(u,.95,.3)*(1-q(u,3.52,.22)));
     c.restore();
     report.phase='conditional-source-check';
     report.sourceCheck={conditional:true,majorOnly:true,factualOnly:true,citedSourcesOnly:true,outcomeClaimed:false,concreteExample:false,sharedAnswerAnchor:true,returnedToAnswer:back>.99,surfaceFill:P.paper,surface:{x:jx,y:jy,w:jw,h:134},step:u<3.8?'follow-citations':u<6.35?'compare-cited-passages':'return-source-context'};

@@ -5,8 +5,9 @@ Consolidated from the user's production brief and feedback through v30.
 - **Audience:** people interested in AI on X and LinkedIn who already use models
   such as ChatGPT and want useful perspectives from more than one model.
 - **Action:** open consens.io and try it.
-- **Takeaway:** complementary model contributions become one useful answer;
-  checking makes disagreements understandable and original answers accessible.
+- **Takeaway:** Consens combines complementary model contributions for the user,
+  compares the answers and detects disagreements. It checks cited sources for
+  major factual contradictions; original answers remain accessible.
 - **Example:** “I built a habit tracker. How do I keep users coming back?”
 - **Format:** English on-screen text, 4:5, 1080 × 1350, 60 fps, 60 seconds.
 - **Sound:** restrained music without a speaker or typing sounds; understandable
@@ -14,7 +15,7 @@ Consolidated from the user's production brief and feedback through v30.
 
 ## Story
 
-Five-second product explanation (“Multiple AI models. One combined answer.”),
+Five-second product explanation (“Multiple AI models. Combined for you.”),
 with six provider marks converging into consens.io → continuous brand handoff
 → question and Send → staggered model answers → synthesis → shared answer
 → Coverage and Differences judges, shown in sequence → highlighted disagreement
@@ -23,6 +24,12 @@ and model switch → logo with the name below it.
 
 The opening uses the logo and explanation without a large “consens.io” wordmark.
 The small name enters with the demo header during the handoff to the question.
+
+Keep automated work explicit without adding copy: “Consens combines.” and
+“Consens compares.” establish the actor, followed by “Differences detected.”
+and “Checking sources.” Judge and citation labels describe processing rather
+than instructing the viewer. “Read every answer.” is the viewer's optional
+inspection step. Retain the same headline sizes, line count and reading time.
 
 The paired suggestions explain the written example, not a fixed model-pairing
 algorithm. The source check is conditional on major factual contradictions and

@@ -49,7 +49,7 @@ window.initStudy = async function(data) {
   window.studyCardEntry=(t,i)=>data.modelEntrance?q(t,data.modelEntrance[i],.4,out):1;
   function capsule(s,x,y,w,alpha=1){c.save();c.globalAlpha*=alpha;path(x,y,w,36,18);c.fillStyle=P.chip;c.fill();txt(s,x+w/2,y+24,17,520,P.secondary,1,'center');c.restore();}
   function heading(t){
-    const sections=[{a:0,b:3.15,text:'Six answers.',sub:'A habit tracker. Better retention.'},{a:data.semanticSynthesis?3.15:3.55,b:6.55,text:'One richer answer.',sub:''},{a:6.85,b:8.75,text:'Compare all answers.',sub:'',size:72},{a:9.05,b:12.2,text:'Different advice.',sub:'When should reminders be sent?',subSize:34}];
+    const sections=[{a:0,b:3.15,text:'Six answers.',sub:'A habit tracker. Better retention.'},{a:data.semanticSynthesis?3.15:3.55,b:6.55,text:'Consens combines.',sub:''},{a:6.85,b:8.75,text:'Consens compares.',sub:'',size:72},{a:9.05,b:12.2,text:'Differences detected.',sub:'When should reminders be sent?',subSize:34}];
     for(const s of sections){const a=(s.a===0?1:q(t,s.a,.28,out))*(1-q(t,s.b-.18,.18));if(a<=0)continue;const dy=s.a===0?0:18*(1-q(t,s.a,.35,out));
       txt(s.text,72,236+dy,s.size||78,580,P.ink,a);if(s.sub)txt(s.sub,76,287,s.subSize||26,440,P.secondary,a);
     }
@@ -138,7 +138,7 @@ window.initStudy = async function(data) {
       c.save();c.globalAlpha*=enter*leave;
       box(x,y,441,150,{r:18,shadow:.4});c.globalAlpha*=dim;
       txt(kind?'Differences judge':'Coverage judge',x+26,y+43,24,490,P.secondary);
-      txt(kind?'Find differences':'Check support',x+26,y+99,34,550);
+      txt(kind?'Finding differences':'Checking support',x+26,y+99,34,550);
       const cx=x+391,cy=y+91;c.strokeStyle=P.spinnerTrack;c.lineWidth=2;
       c.beginPath();c.arc(cx,cy,17,0,Math.PI*2);c.stroke();
       if(spinnerAlpha>0){c.save();c.globalAlpha*=spinnerAlpha;c.strokeStyle=P.ink;c.beginPath();c.arc(cx,cy,17,angle,angle+Math.PI*1.15);c.stroke();c.restore();}
