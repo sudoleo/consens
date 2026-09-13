@@ -2394,6 +2394,9 @@ wird nur chunkweise bis zum Budget expandiert und DTD/Entities werden abgewiesen
   nach `app-core.js`. Der bestehende Aufruf `App.showProFeatureModal(feature)`
   zeigt einen kurzen, nicht blockierenden Hinweis in `#featureAccessNotice`;
   weitere gesperrte Funktionen ersetzen dessen Text statt Dialoge zu stapeln.
+  Der Hinweis verschwindet nach fünf Sekunden automatisch; ein neuer Hinweis
+  startet die Frist erneut. Manuelles Schließen und Öffnen der Erklärung
+  löschen den laufenden Timer ebenfalls.
   Pro sowie Plus bei Resolve/Anhängen passieren weiterhin ohne Hinweis.
   `App.showAccessInfo()` öffnet die kurze Erklärung in `#proFeatureModal`
   ausschließlich über einen bewussten Info-Klick (Sidebar, Hinweis oder Watch).

@@ -19,8 +19,11 @@
     "More Consensus Watches": "Your active Watch limit has been reached. Pause a Watch to make room for another.",
   };
   let returnFocus = null;
+  let dismissTimer = null;
 
   function dismissNotice() {
+    window.clearTimeout(dismissTimer);
+    dismissTimer = null;
     if (notice) notice.hidden = true;
   }
 
@@ -31,6 +34,8 @@
     message.textContent = messages[featureName]
       || `${featureName || "This feature"} is not available on your account yet.`;
     notice.hidden = false;
+    window.clearTimeout(dismissTimer);
+    dismissTimer = window.setTimeout(dismissNotice, 5000);
     app.trackAppEvent?.("app_feature_access_notice", { feature: featureName || "general" });
     return true;
   };

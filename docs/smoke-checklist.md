@@ -581,6 +581,8 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
 - Mit Free mehrere gesperrte Funktionen anklicken (Deep Think, High Quality,
   Anhänge, Resolve): ein kurzer Hinweis wird ersetzt, kein Vollbild-Dialog;
   Frage und Modellauswahl bleiben erhalten und der Composer bleibt bedienbar.
+  Nach fünf Sekunden verschwindet der Hinweis automatisch; ein weiterer
+  Klick auf eine gesperrte Funktion startet die fünf Sekunden erneut.
 - „About early access“ im Hinweis oder „Early access“ in der Sidebar öffnet
   die kurze Erklärung mit Kontaktmail. Schließen, Escape, Tab-Schleife und
   Fokus-Rückgabe auf Desktop und Mobil prüfen. Plus darf Anhänge/Resolve,
