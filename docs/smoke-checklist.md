@@ -386,6 +386,9 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       + Modell-Zeilen, Usage-Counter aktualisiert sich, Fehlerfall reaktiviert
       den Button.
 - [ ] Share-Dialog: Link erstellen, Liste anzeigen, Link kopieren.
+- [ ] Mobil Share in der Topbar öffnen: Der Dialog erscheint mittig im sichtbaren
+      Bildschirm, auch nach dem Scrollen. Auf kleinen Bildschirmen bleiben Titel
+      und Schließen sichtbar; lange Inhalte scrollen innerhalb des Dialogs.
 - [ ] Während Share-/Bookmark-Requests Konto A → Logout → Konto B wechseln:
       späte A-Antworten ändern weder B-Sidebar/-Session noch das aktuelle Modal.
       Bei schnellem Bookmark-Klick A→B bleibt B sichtbar, auch wenn A zuletzt

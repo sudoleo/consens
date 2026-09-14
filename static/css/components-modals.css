@@ -2006,10 +2006,9 @@ html.share-modal-open body {
 }
 @media (max-width: 600px) {
   #shareModal {
-    align-items: flex-end; height: 100dvh;
+    height: 100dvh;
     padding: max(8px, env(safe-area-inset-top)) 8px max(8px, env(safe-area-inset-bottom));
   }
-  #shareModal.is-watch-dialog { align-items: center; }
   #shareModal .share-modal-content {
     width: 100%; max-width: none; max-height: 100%;
     border-radius: var(--radius-lg);
