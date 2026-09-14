@@ -121,6 +121,11 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       Modellwechsel bleiben die neu gerenderten Icons anklickbar.
       Bei offener Desktop-Sidebar bleibt das Eingabefeld in der Viewport-Mitte;
       mobil verschwindet die schwebende Brand vollständig.
+- [ ] Mobile Sidebar: Consensus/Watches erscheinen als kompakte Textnavigation
+      mit beiden ausgeschriebenen Namen und Unterstreichung der aktiven Ansicht.
+      Bei 320–1099 px, Light/Dark und Tastaturbedienung bleiben beide Ziele
+      erreichbar; ein Ansichtswechsel schließt die Sidebar. Beim Vergrößern auf
+      Desktop kehrt die Navigation als schwebender Switch zurück.
 - [ ] Die Landingpage verlinkt direkt im Hero mit einer schmalen Live-Zeile auf
       `/model-pulse`. Die eigene Seite erklärt „Best answer“ als anonymisierte
       Judge-Auswahl (kein Benchmark/User-Vote/Accuracy-Score), führt

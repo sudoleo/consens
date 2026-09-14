@@ -4041,12 +4041,36 @@ body[data-consensus-highlight-mode] :is(.src-ref, .source-link)[data-source-chec
   .app-mobile-header :is(.mobile-new-run, .consensus-share-pill, .consensus-actions-toggle) svg { width: 21px; height: 21px; flex: 0 0 21px; }
   .app-mobile-header :is(.consensus-share-pill, .consensus-actions-toggle) > span { display: none; }
 
-  .mobile-sidebar-views { display: block; margin-bottom: 12px; }
+  .sidebar-pinned { margin-top: 0; }
+  .mobile-sidebar-views { display: block; margin-bottom: 8px; }
+  /* In the sidebar, use quiet text navigation with a clear active underline. */
   .sidebar #mobileSidebarViews #viewSwitch {
     position: static; display: flex; width: 100%; box-sizing: border-box; margin: 0;
     transform: none; opacity: 1; visibility: visible; pointer-events: auto;
+    gap: 12px; padding: 0; border-radius: 0; border-bottom: 1px solid var(--line-soft);
+    background: transparent; box-shadow: none;
   }
-  .mobile-sidebar-views .view-switch-btn { flex: 1; min-height: 44px; }
+  #mobileSidebarViews .view-switch-btn {
+    flex: 0 0 auto; justify-content: center; min-height: 44px; margin: 0; padding: 0 10px;
+    border: 0; border-radius: 6px; background: transparent; box-shadow: none;
+    color: var(--ink-2); font-size: 13px; font-weight: var(--font-weight-medium); line-height: 1.2;
+  }
+  #mobileSidebarViews .view-switch-btn > span { display: inline; }
+  #mobileSidebarViews .view-switch-btn > svg { display: none; }
+  #mobileSidebarViews .view-switch-btn::before {
+    content: ""; position: absolute; inset: auto 10px -1px; height: 2px;
+    border-radius: 1px; background: transparent; pointer-events: none;
+  }
+  #mobileSidebarViews .view-switch-btn.is-active {
+    background: transparent; box-shadow: none; color: var(--ink);
+    font-weight: var(--font-weight-semibold);
+  }
+  #mobileSidebarViews .view-switch-btn.is-active::before { background: currentColor; }
+  #mobileSidebarViews .view-switch-btn:hover { background: var(--raise); color: var(--ink); }
+  #mobileSidebarViews .view-switch-btn:focus-visible {
+    outline: 2px solid var(--ink); outline-offset: -3px;
+  }
+  #mobileSidebarViews .view-switch-btn.has-watch-pulse::after { display: none; }
 
   body:has(.app-mobile-header) .container {
     padding-top: calc(var(--app-mobile-header-height) + 12px);

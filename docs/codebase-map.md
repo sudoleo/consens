@@ -484,8 +484,10 @@ der Python-Staleness-Test auch indirekte Änderungen erkennt.
   Der Cite-Dialog verankert sich dadurch am sichtbaren Icon, Escape schließt ihn
   und setzt den Fokus zurück. Der Gast-Login bleibt auch neben den Aktionen
   erreichbar. Das mobile Seitenmenü liegt beim Öffnen über der Watch-Seite.
-  `#viewSwitch` wandert mobil nach `#mobileSidebarViews`; auf Desktop an seinen
-  ursprünglichen Ort. Auch aus Watches führt New chat über den bestehenden
+  `#viewSwitch` wandert mobil nach `#mobileSidebarViews` und erscheint dort als
+  kompakte Textnavigation mit ausgeschriebenem Consensus/Watches, aktiver
+  Unterstreichung und 44-px-Touchflächen. Auf Desktop kehrt er als Pillen-Switch
+  an seinen ursprünglichen Ort zurück. Auch aus Watches führt New chat über den bestehenden
   `#newRunButton`-Handler zum leeren Composer, ohne Hintergrund-Runs abzubrechen.
   Beide Sidebar-Toggles
   referenzieren `#appSidebar` per `aria-controls`. Der Inhaltsanfang reserviert
