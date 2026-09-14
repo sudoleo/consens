@@ -4015,10 +4015,32 @@ body[data-consensus-highlight-mode] :is(.src-ref, .source-link)[data-source-chec
     flex: 0 0 auto;
     order: 3;
     margin-inline-start: auto;
+    gap: 8px;
   }
 
-  .app-mobile-header .auth-top-login,
-  .app-mobile-header .auth-top-signup { min-height: 44px; }
+  /* A 32px button surface inside a 44px touch target keeps the header light. */
+  .app-mobile-header #authTopActions button {
+    position: relative; isolation: isolate; display: inline-flex; justify-content: center;
+    box-sizing: border-box; min-width: 44px; height: 44px; min-height: 44px; padding: 0 12px;
+    border: 0; border-radius: 7px; background: transparent; box-shadow: none;
+    font-size: 13px; opacity: 1;
+  }
+  .app-mobile-header #authTopActions button::before {
+    content: ""; position: absolute; z-index: -1; inset: 6px 0;
+    border: 1px solid var(--line-soft); border-radius: 7px;
+    background: var(--ground); pointer-events: none;
+    transition: background-color .15s ease, border-color .15s ease;
+  }
+  .app-mobile-header #authTopActions .auth-top-signup::before {
+    background: var(--button-bg); border-color: var(--button-bg);
+  }
+  .app-mobile-header #authTopActions .auth-top-login:hover::before { background: var(--raise); }
+  .app-mobile-header #authTopActions .auth-top-signup:hover::before {
+    background: color-mix(in srgb, var(--button-bg) 88%, var(--ground));
+  }
+  .app-mobile-header #authTopActions button:focus-visible {
+    outline: 2px solid var(--ink); outline-offset: -3px;
+  }
 
   .app-mobile-header .brand-float,
   body:not(.is-hero) .app-mobile-header .brand-float { display: none; }
@@ -4028,6 +4050,8 @@ body[data-consensus-highlight-mode] :is(.src-ref, .source-link)[data-source-chec
   .mobile-conversation-actions { display: flex; align-items: center; gap: 0; order: 4; margin-inline-start: auto; }
   .app-mobile-header .auth-top-actions { margin-inline-start: auto; }
   .app-mobile-header .auth-top-actions:not([hidden]) ~ .mobile-conversation-actions { margin-inline-start: 0; }
+  .app-mobile-header .auth-top-actions:not([hidden]) ~ .mobile-conversation-actions .mobile-new-run,
+  .app-mobile-header .auth-top-actions:not([hidden]) ~ .mobile-conversation-actions:has(.consensus-footer-actions[hidden]) { display: none; }
   .app-mobile-header .consensus-footer-actions { display: inline-flex; margin: 0; }
   .app-mobile-header .consensus-footer-actions[hidden] { display: none; }
   .app-mobile-header .consensus-copy-inline { gap: 0; flex-wrap: nowrap; }
@@ -4088,4 +4112,9 @@ body[data-consensus-highlight-mode] :is(.src-ref, .source-link)[data-source-chec
     transform: translateY(-100%);
     transition-delay: 0s, 0s, .22s;
   }
+}
+
+@media (max-width: 400px) {
+  .app-mobile-header #authTopActions { gap: 4px; }
+  .app-mobile-header #authTopActions button { padding-inline: 6px; font-size: 12px; }
 }

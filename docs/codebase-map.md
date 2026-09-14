@@ -474,7 +474,7 @@ der Python-Staleness-Test auch indirekte Änderungen erkennt.
   Der Zustand ist rein transient als `body.is-reading-chrome-hidden` und
   verändert weder Sidebar-Persistenz noch Watch-/Consensus-Daten.
 - **Mobile Kopfleiste** — `header.app-mobile-header` zeigt bei ≤1099 px links
-  das Menü und rechts New chat sowie Share/Watch/Cite für die fertige Antwort.
+  das Menü und rechts angemeldet New chat sowie Share/Watch/Cite für die fertige Antwort.
   Logo und mittlerer Titel entfallen. Die deckende Fläche ist 56 px hoch mit
   Safe-Area-Zuschlag und feiner Unterkante; alle Icons haben 44 × 44 px Touchflächen.
   `mobile-header.js` lädt nach `consensus-actions.js` und `watch.js` und verschiebt
@@ -482,8 +482,11 @@ der Python-Staleness-Test auch indirekte Änderungen erkennt.
   auf Desktop exakt zurück in den Footer. Readiness folgt `#runProvenance`,
   `#consensusOutput`, Hero und Watch-Ansicht; es gibt keine duplizierten Handler.
   Der Cite-Dialog verankert sich dadurch am sichtbaren Icon, Escape schließt ihn
-  und setzt den Fokus zurück. Der Gast-Login bleibt auch neben den Aktionen
-  erreichbar. Das mobile Seitenmenü liegt beim Öffnen über der Watch-Seite.
+  und setzt den Fokus zurück. Gäste sehen Log in und Sign up statt New chat;
+  die Sichtbarkeit folgt dem bestehenden Auth-Container ohne eigene Session-Kopie.
+  Beide Auth-Aktionen bleiben auch neben den Antwortaktionen erreichbar. Ihre
+  dezent gerundeten Flächen sind 32 px hoch, die Touchziele weiterhin 44 px.
+  Das mobile Seitenmenü liegt beim Öffnen über der Watch-Seite.
   `#viewSwitch` wandert mobil nach `#mobileSidebarViews` und erscheint dort als
   kompakte Textnavigation mit ausgeschriebenem Consensus/Watches, aktiver
   Unterstreichung und 44-px-Touchflächen. Auf Desktop kehrt er als Pillen-Switch

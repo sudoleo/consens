@@ -81,25 +81,32 @@ def test_mobile_menu_has_opaque_header_and_yields_while_reading(browser, phase4_
         context.close()
 
 
-@pytest.mark.parametrize('width', [320, 640])
-def test_guest_navigation_fits_and_login_still_opens(browser, phase4_server, width):
-    context, page = _real_firebase_page(browser, phase4_server, initial_uid=None)
+@pytest.mark.parametrize('width,theme', [(320, 'light'), (390, 'dark'), (640, 'light'), (1099, 'dark')])
+def test_guest_navigation_fits_and_auth_dialogs_open(browser, phase4_server, width, theme):
+    context, page = _real_firebase_page(browser, phase4_server, initial_uid=None,
+        init_script=f"localStorage.setItem('theme','{theme}')")
     try:
         page.set_viewport_size({'width': width, 'height': 820})
         header = page.locator('.app-mobile-header')
         menu = page.locator('#toggleSidebarButton')
         switch = page.locator('#viewSwitch')
         auth = page.locator('#authTopActions')
+        login = page.locator('#authTopLoginBtn')
+        signup = page.locator('#authTopSignupBtn')
         expect(menu).to_be_visible()
         expect(page.locator('#mobileSidebarViews #viewSwitch')).to_have_count(1)
         expect(switch).not_to_be_in_viewport()
         expect(auth).to_be_visible()
+        expect(login).to_be_visible()
+        expect(signup).to_be_visible()
+        expect(page.locator('#mobileNewRunButton')).to_be_hidden()
         expect(header.locator('#consensusFooterActions')).to_be_hidden()
-        bounds = [item.bounding_box() for item in [menu, auth, page.locator('#mobileNewRunButton')]]
+        bounds = [item.bounding_box() for item in [menu, login, signup]]
         assert bounds[0]['x'] + bounds[0]['width'] <= bounds[1]['x']
         assert bounds[1]['x'] + bounds[1]['width'] <= bounds[2]['x']
         assert bounds[2]['x'] + bounds[2]['width'] <= width
         assert all(item['y'] >= 0 and item['y'] + item['height'] <= header.bounding_box()['height'] for item in bounds)
+        assert all(item['height'] >= 44 and item['width'] >= 44 for item in bounds)
         reader_screenshot(page, f'mobile-header-guest-{width}')
         seed_insights(page)
         expect(header.locator('#consensusShareButton')).to_be_visible()
@@ -108,15 +115,30 @@ def test_guest_navigation_fits_and_login_still_opens(browser, phase4_server, wid
         assert all(a['x']+a['width']<=b['x']+.5 for a,b in zip(bounds,bounds[1:]))
         assert bounds[-1]['x']+bounds[-1]['width']<=width
         reader_screenshot(page, f'mobile-header-guest-answer-{width}')
-        page.locator('#authTopLoginBtn').click()
+        signup.click()
         expect(page.locator('#loginModal')).to_be_visible()
+        expect(page.locator('#loginForm')).to_have_attribute('data-mode', 'register')
+        page.keyboard.press('Escape')
+        expect(signup).to_be_focused()
+        login.click()
+        expect(page.locator('#loginModal')).to_be_visible()
+        expect(page.locator('#loginForm')).to_have_attribute('data-mode', 'login')
+        page.keyboard.press('Escape')
+        expect(login).to_be_focused()
+        page.evaluate("() => window.__switchE2EUser('account-a')")
+        expect(auth).to_be_hidden()
+        expect(page.locator('#mobileNewRunButton')).to_be_visible()
+        page.evaluate('() => window.__switchE2EUser(null)')
+        expect(signup).to_be_visible()
+        expect(page.locator('#mobileNewRunButton')).to_be_hidden()
     finally:
         context.close()
 
 
 @pytest.mark.parametrize('new_chat', [False, True])
 def test_watch_navigation_uses_the_same_mobile_surface(browser, phase4_server, new_chat):
-    context, page = _real_firebase_page(browser, phase4_server, initial_uid=None, path='/app/watches')
+    context, page = _real_firebase_page(browser, phase4_server,
+        initial_uid='account-a' if new_chat else None, path='/app/watches')
     try:
         page.set_viewport_size({'width': 390, 'height': 820})
         header = page.locator('.app-mobile-header')

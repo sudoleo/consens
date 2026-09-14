@@ -126,6 +126,10 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       Bei 320–1099 px, Light/Dark und Tastaturbedienung bleiben beide Ziele
       erreichbar; ein Ansichtswechsel schließt die Sidebar. Beim Vergrößern auf
       Desktop kehrt die Navigation als schwebender Switch zurück.
+- [ ] Mobile Gast-Kopfleiste: Log in und Sign up öffnen den jeweiligen Auth-Dialog;
+      New chat erscheint erst angemeldet. Beide Buttons wirken flach und bleiben
+      auch bei 320 px neben den Aktionen einer fertigen Antwort ohne Überlappung
+      bedienbar. Light/Dark, Login/Logout und Fokusrückgabe nach Schließen prüfen.
 - [ ] Die Landingpage verlinkt direkt im Hero mit einer schmalen Live-Zeile auf
       `/model-pulse`. Die eigene Seite erklärt „Best answer“ als anonymisierte
       Judge-Auswahl (kein Benchmark/User-Vote/Accuracy-Score), führt
