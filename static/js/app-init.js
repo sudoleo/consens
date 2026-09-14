@@ -281,7 +281,8 @@
           const canAsk = window.userCanAskQuestions();
           const canType = window.userCanTypeQuestions();
           const selectedModelCount = window.App.getSelectedModelCount?.() || 0;
-          const hasMinimumModels = selectedModelCount >= 2;
+          const hasMinimumModels = window.App.agentChat?.isSelected?.()
+            ? window.App.agentChat.canUse() : selectedModelCount >= 2;
           const canStartRun = canAsk && hasMinimumModels;
           const sendButton = document.getElementById("sendButton");
           const postDemoLoginPrompt = document.getElementById("postDemoLoginPrompt");

@@ -53,6 +53,7 @@ PROVIDER_DOCUMENT_IDS = {
 }
 MAX_MODEL_ANSWERS = cfg.MAX_RUN_FAMILIES
 FAILED_TURN_ERROR_CODES = frozenset({
+    "agent_failed",
     "consensus_failed",
     "cancelled",
     "insufficient_answers",
@@ -420,6 +421,7 @@ def chat_metadata(chat_id: object, data: object, *, compact: bool = False) -> di
         "updated_at": source.get("updated_at"),
         "turn_count": _safe_non_negative_int(source.get("turn_count")),
         "latest_question": str(source.get("latest_question") or ""),
+        "execution_mode": source.get("execution_mode", "consensus"),
     }
     if not compact:
         result = {
@@ -442,6 +444,7 @@ def turn_metadata(turn_id: object, data: object) -> dict:
         "status": str(source.get("status") or ""),
         "question": str(source.get("question") or ""),
         "mode": str(source.get("mode") or ""),
+        "execution_mode": source.get("execution_mode", "consensus"),
         "deep_search": source.get("deep_search") is True,
         "selected_models": [
             str(item) for item in source.get("selected_models", [])
@@ -519,7 +522,13 @@ def model_answer_metadata(data: object) -> dict | None:
 
 def turn_detail(turn_id: object, data: object, model_answers: dict[str, dict]) -> dict:
     source = data if isinstance(data, dict) else {}
+    if source.get("execution_mode") == "agent" and "assistant_response" in source:
+        # Existing history consumers read `consensus`; storage keeps the
+        # single-model answer under its own domain name, without duplicating it.
+        source = {**source, "consensus": source["assistant_response"]}
     result = turn_metadata(turn_id, source)
+    if source.get("execution_mode") == "agent":
+        result["assistant_response"] = source.get("consensus", "")
     if "consensus" in source:
         from app.services.source_verification import stored_verification
         result["source_verification"] = stored_verification(source.get("source_verification"), source.get("consensus"))
@@ -570,7 +579,9 @@ class ChatStore:
         self.db = db
         self._transaction_runner = transaction_runner
 
-    def create_chat(self, uid: str, *, title: str = "") -> dict:
+    def create_chat(self, uid: str, *, title: str = "", execution_mode: str = "consensus") -> dict:
+        if execution_mode not in {"consensus", "agent"}:
+            raise ValueError("Invalid execution mode")
         title = normalize_title(title)
         self._ensure_chat_counter(uid, fence_writes=True)
         chat_id = secrets.token_hex(16)
@@ -578,6 +589,7 @@ class ChatStore:
         counter_ref = self._chat_counter_ref(uid)
         document = {
             "schema_version": CHAT_SCHEMA_VERSION,
+            "execution_mode": execution_mode,
             "title": title,
             "status": CHAT_STATUS_ACTIVE,
             "created_at": firestore.SERVER_TIMESTAMP,
@@ -676,6 +688,8 @@ class ChatStore:
         if not snapshot.exists:
             raise ChatNotFound("Chat not found")
         data = snapshot.to_dict() or {}
+        if data.get("execution_mode") == "agent":
+            raise TurnStatusConflict("Agent turns cannot run consensus")
         if data.get("question") != question:
             raise TurnQuestionConflict("Turn question does not match")
         if data.get("status") not in {TURN_STATUS_PENDING, TURN_STATUS_COMPLETED}:
@@ -731,6 +745,7 @@ class ChatStore:
         consensus_model: str,
         client_request_id: str | None = None,
         attachments: object = None,
+        execution_mode: str = "consensus",
     ) -> dict:
         question = normalize_question(question)
         mode = normalize_mode(mode)
@@ -767,6 +782,8 @@ class ChatStore:
                 raise ChatNotFound("Chat not found")
             if (chat_snapshot.to_dict() or {}).get("status") != CHAT_STATUS_ACTIVE:
                 raise ChatNotFound("Chat not found")
+            if (chat_snapshot.to_dict() or {}).get("execution_mode", "consensus") != execution_mode:
+                raise TurnStatusConflict("Conversation mode cannot be changed")
 
             if client_request_id:
                 existing = turn_ref.get(transaction=transaction)
@@ -785,6 +802,10 @@ class ChatStore:
                     return
 
             chat_data = chat_snapshot.to_dict() or {}
+            if execution_mode == "agent":
+                lock_until = chat_data.get("agent_lock_until")
+                if isinstance(lock_until, datetime) and lock_until > datetime.now(timezone.utc):
+                    raise TurnStatusConflict("An agent turn is already running in this conversation")
             position = _safe_non_negative_int(chat_data.get("turn_count")) + 1
             # In der Transaktion, damit parallele Anlagen das Limit nicht
             # gemeinsam ueberschiessen koennen. turn_count liegt hier ohnehin
@@ -800,6 +821,7 @@ class ChatStore:
                 "status": TURN_STATUS_PENDING,
                 "question": question,
                 "mode": mode,
+                "execution_mode": execution_mode,
                 "deep_search": deep_search,
                 "selected_models": list(selected_models),
                 "consensus_model": consensus_model,
@@ -816,6 +838,11 @@ class ChatStore:
                 "updated_at": firestore.SERVER_TIMESTAMP,
                 "latest_question": latest_question_preview(question),
             }
+            if execution_mode == "agent":
+                chat_updates.update({
+                    "agent_turn_id": turn_id,
+                    "agent_lock_until": datetime.now(timezone.utc) + timedelta(minutes=5),
+                })
             if position == 1 and not str(chat_data.get("title") or "").strip():
                 chat_updates["title"] = derive_title(question)
 
@@ -895,6 +922,8 @@ class ChatStore:
             if (chat_snapshot.to_dict() or {}).get("status") != CHAT_STATUS_ACTIVE:
                 raise ChatNotFound("Chat not found")
             turn_data = turn_snapshot.to_dict() or {}
+            if turn_data.get("execution_mode") == "agent":
+                raise TurnStatusConflict("Agent turns cannot be completed by consensus")
             if turn_data.get("question") != question:
                 raise TurnQuestionConflict("Turn question does not match")
 

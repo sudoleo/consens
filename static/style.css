@@ -9,11 +9,11 @@
 @import url('./css/layout.css?v=20260913-mobile-header');
 @import url('./css/skeleton.css?v=20260909-skeleton1');
 /* components.css was split by section into the files below (same cascade order). */
-@import url('./css/components-input.css?v=20260911-mobile-footer');
+@import url('./css/components-input.css?v=20260914-agent1');
 @import url('./css/components-attachment-viewer.css?v=20260731-inter1');
 @import url('./css/components-consensus.css?v=20260901-watchnudge1');
 @import url('./css/components-controls.css?v=20260731-inter1');
-@import url('./css/components-modals.css?v=20260911-settings');
+@import url('./css/components-modals.css?v=20260914-agent1');
 @import url('./css/components-misc.css?v=20260909-democta');
 @import url('./css/demo-action.css?v=20260909-democta');
 @import url('./css/components-memory-edit.css?v=20260817-quoteask1');
@@ -24,8 +24,9 @@
 /* Shell layer — loaded LAST so the frameless redesign wins on equal
    specificity. Elevation, sidebar, topbar, composer and thread material. */
 @import url('./css/shell.css?v=20260914-mobile-actions');
-@import url('./css/model-answer-reader.css?v=20260911-statements');
+@import url('./css/model-answer-reader.css?v=20260914-agent1');
 @import url('./css/composer-attachments.css?v=20260909-attachments1');
+@import url('./css/agent-chat.css?v=20260914-agent1');
 
 /* Template-only utilities live after every component import so they preserve
    the old inline-style initial state. They intentionally do not use

@@ -1810,6 +1810,17 @@ function renderAccountTierDetail(account) {
     ].filter(Boolean).join(' | ');
 
     panel.append(head, meta);
+    const usage = document.createElement('div');
+    usage.className = 'api-key-meta';
+    const agentUsage = account.agent_usage || {};
+    const cost = Number(agentUsage.estimated_cost_nano_usd || 0) / 1e9;
+    usage.textContent = `Agent Beta · simulated total: $${cost.toFixed(6)} USD · `
+        + `${Number(agentUsage.input_tokens || 0).toLocaleString()} input / `
+        + `${Number(agentUsage.output_tokens || 0).toLocaleString()} output tokens · `
+        + `${Number(agentUsage.calls || 0)} calls`
+        + (agentUsage.unmetered_calls ? ` · ${agentUsage.unmetered_calls} without usage data` : '')
+        + (agentUsage.unsettled_calls ? ` · ${agentUsage.unsettled_calls} pending/unsettled` : '');
+    panel.append(usage);
     panel.hidden = false;
 }
 

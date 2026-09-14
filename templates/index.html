@@ -504,6 +504,13 @@
              Lauf sagt jetzt selbst, was passiert, statt es hier anzukuendigen.
              .consensus-switch-container bleibt als Selektor-Vertrag bestehen. -->
         <div class="consensus-switch-container">
+          <label id="chatExecutionControl" class="chat-execution-control" hidden>
+            <span class="visually-hidden">Chat mode</span>
+            <select id="chatExecutionMode" aria-label="Chat mode">
+              <option value="consensus">Consensus</option>
+              <option value="agent">Agent · Beta</option>
+            </select>
+          </label>
           <button type="button" id="attachTrigger" class="attach-trigger" aria-haspopup="true" aria-expanded="false" aria-controls="attachMenu" title="Add attachment" aria-label="Add attachment">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <line x1="12" y1="5" x2="12" y2="19"></line>
@@ -696,6 +703,12 @@
       </div>
     </div>
 
+    <section id="agentAnswer" class="agent-answer" aria-label="Agent answer" hidden>
+        <div id="agentAnswerLabel" class="thread-history-answer-label" role="status">Agent · Beta</div>
+        <div id="agentAnswerBody" class="consensus-answer-body markdown-content"></div>
+        <p id="agentAnswerError" role="alert" hidden></p>
+        <button id="agentRecover" type="button" class="thread-ask-more" hidden>Recover saved answer</button>
+    </section>
     <div class="response-section" inert aria-hidden="true">
       <div id="agentModePanel" class="agent-mode-panel" aria-live="polite" aria-hidden="true">
         <div class="agent-mode-header">

@@ -169,7 +169,7 @@ def _bookmark_bootstrap(bookmarks) -> tuple[int, int]:
     return count, total_bytes
 
 
-def write_bookmark(*, uid: str, doc_ref, patch: dict, db, current_guard=None) -> dict:
+def write_bookmark(*, uid: str, doc_ref, patch: dict, db, current_guard=None, transaction_guard=None) -> dict:
     """Merge one bookmark while enforcing persistent count/byte quotas."""
     if not hasattr(db, "transaction") and not hasattr(db, "run_transaction"):
         # Explicit seam for the route-level tiny fakes. Production Firestore
@@ -188,6 +188,8 @@ def write_bookmark(*, uid: str, doc_ref, patch: dict, db, current_guard=None) ->
 
     def persist(tx):
         ensure_account_write_allowed(uid=uid, db=db, transaction=tx)
+        if transaction_guard is not None:
+            transaction_guard(tx)
         current_snapshot = _get(doc_ref, tx)
         current = current_snapshot.to_dict() or {} if current_snapshot.exists else {}
         if current_guard is not None and not current_guard(current):

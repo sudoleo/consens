@@ -284,7 +284,7 @@
       answer.className = "thread-history-answer";
       const answerLabel = document.createElement("div");
       answerLabel.className = "thread-history-answer-label";
-      answerLabel.textContent = "Consensus Answer";
+      answerLabel.textContent = turnData.execution_mode === "agent" || turnData.mode === "Agent" ? "Agent answer" : "Consensus Answer";
       const turnSources = Array.isArray(turnData.sources) ? turnData.sources : [];
       const answerBody = document.createElement("div");
       answerBody.className = "consensus-answer-body";

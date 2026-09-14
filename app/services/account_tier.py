@@ -95,6 +95,7 @@ def _serialize(uid: str, data: dict, *, email: str = "") -> dict:
         "attachments": entitlements.attachments,
         "resolve": entitlements.resolve,
         "role": str(data.get("role") or ""),
+        "agent_usage": data.get("agent_usage") or {},
         "tier_updated_at": updated_at.isoformat() if isinstance(updated_at, datetime) else "",
         "tier_updated_by": str(data.get("tier_updated_by") or ""),
         "tier_note": str(data.get("tier_note") or ""),

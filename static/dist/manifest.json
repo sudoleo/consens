@@ -1,11 +1,12 @@
 {
-  "sources": "cf9579974be5",
+  "sources": "a52e47ad697c",
   "inputs": [
     "package-lock.json",
     "scripts/build_frontend.mjs",
     "static/app-ui.js",
     "static/css/admin-benchmark.css",
     "static/css/admin.css",
+    "static/css/agent-chat.css",
     "static/css/base.css",
     "static/css/benchmark.css",
     "static/css/components-attachment-viewer.css",
@@ -39,6 +40,7 @@
     "static/css/variables.css",
     "static/demo.js",
     "static/firebase.js",
+    "static/js/agent-chat.js",
     "static/js/agent-mode.js",
     "static/js/app-bootstrap.js",
     "static/js/app-core.js",
@@ -84,7 +86,7 @@
   "scripts": [
     {
       "name": "head",
-      "src": "/static/dist/head.8f43bef341c3.js",
+      "src": "/static/dist/head.174f3639766b.js",
       "module": false,
       "defer": false
     },
@@ -96,7 +98,7 @@
     },
     {
       "name": "firebase",
-      "src": "/static/dist/firebase.22caf9ee47af.js",
+      "src": "/static/dist/firebase.7682b4d9b1c7.js",
       "module": true,
       "defer": false
     },
@@ -108,12 +110,12 @@
     },
     {
       "name": "app",
-      "src": "/static/dist/app.46192fdc6b19.js",
+      "src": "/static/dist/app.be4facb7fb30.js",
       "module": false,
       "defer": true
     }
   ],
   "styles": {
-    "app": "/static/dist/app.68686a049d69.css"
+    "app": "/static/dist/app.a1cb7afdb051.css"
   }
 }

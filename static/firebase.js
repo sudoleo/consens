@@ -371,6 +371,8 @@ async function checkUserStatusOnLoad(user, token, generation) {
       // Wer hier weiterhin nur das Flag durchreicht, macht aus jedem
       // Plus-Konto beim Laden ein Free-Konto. /user_status liefert "tier".
       const tier = data.tier ?? data.is_pro;
+      window.App.agentAccess = { uid: user.uid, allowed: data.agent_access === true };
+      window.App.agentChat?.render?.();
 
       // A) Der saubere Weg (falls vorhanden):
       if (typeof window.updateUserTierUI === "function") {
@@ -2131,6 +2133,7 @@ function loadSingleBookmarkUI(sourceBookmark, conversationTurns = [], options = 
         turnId: authoritativeChatRestored ? continuationTurn?.turn_id : "",
         question: displayQuestion,
         consensus: String(bookmark?.responses?.consensus || ""),
+        executionMode: bookmark.mode === "Agent" ? "agent" : "consensus",
         currentTurn: continuationTurn || null,
         historyTurns: materialized.historyTurns || [],
         continuationUnavailable: !continuationTurn,

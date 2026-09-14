@@ -1152,7 +1152,7 @@ def test_bookmark_restores_the_view_the_run_had_not_the_current_toggle():
     # Eine Ansicht, ein Aufbau — geteilt mit dem frisch gesendeten Vergleich.
     assert 'document.body.classList.add("direct-comparison-active")' in core
     # Der Ausstieg in den Thread raeumt die Marke wieder ab.
-    assert 'classList.remove("is-hero", "direct-comparison-active")' in core
+    assert 'classList.remove("is-hero", "direct-comparison-active", "direct-comparison-preview")' in core
 
     # Auch das Umlegen behaelt jetzt den sichtbaren Direktvergleich. Die neue
     # Composer-Leiste erklaert dessen urspruenglichen Modus separat; erst die

@@ -247,13 +247,13 @@ async function readSSEStream(response, onEvent) {
 // deltaRenderers: { eventName: streamRenderer } für die Live-Anzeige.
 // Rückgabe: { ok, status, data, streamed } – data hat dieselbe Struktur wie
 // die bisherige JSON-Antwort (final-Event des Streams bzw. JSON-Body).
-async function streamSSERequest(url, payload, signal, deltaRenderers) {
+async function streamSSERequest(url, payload, signal, deltaRenderers, requestOptions = {}) {
   const renderers = deltaRenderers || {};
   let failureKind = "request_failed";
   try {
     const response = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...requestOptions.headers },
       body: JSON.stringify({ ...payload, stream: true }),
       signal
     });

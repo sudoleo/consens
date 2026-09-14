@@ -105,6 +105,13 @@ def iter_sse_with_keepalive(
             events.put(done)
         except BaseException as exc:  # noqa: BLE001
             events.put(exc)
+        finally:
+            # A disconnect can occur between the producer's yield and the
+            # queue write. Close it explicitly so receipts/resources settle
+            # now, rather than depending on generator garbage collection.
+            close = getattr(source, "close", None)
+            if callable(close):
+                close()
 
     threading.Thread(
         target=pump,

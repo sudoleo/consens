@@ -445,7 +445,7 @@ def test_chat_creation_uses_server_id_and_storage_allowlist(chat_api):
     assert chat["latest_question"] == ""
     assert set(database.chats("owner-uid")[chat["id"]]) == {
         "schema_version", "title", "status", "created_at", "updated_at",
-        "turn_count", "latest_question",
+        "turn_count", "latest_question", "execution_mode",
     }
 
     rejected = client.post(
@@ -606,7 +606,7 @@ def test_first_and_second_turn_are_monotone_and_update_chat(chat_api):
         set(turn) <= {
             "schema_version", "position", "status", "question", "mode",
             "deep_search", "selected_models", "consensus_model", "created_at",
-            "updated_at", "client_request_id",
+            "updated_at", "client_request_id", "execution_mode",
         }
         for turn in stored_turns.values()
     )
@@ -1063,7 +1063,7 @@ def test_fail_turn_is_allowlisted_idempotent_and_terminal(chat_api):
     assert set(database.turns("owner-uid", chat["id"])[failed["id"]]) == {
         "schema_version", "position", "status", "question", "mode", "deep_search",
         "selected_models", "consensus_model", "created_at", "updated_at",
-        "error_code", "failed_at",
+        "error_code", "failed_at", "execution_mode",
     }
     with pytest.raises(chat_store.TurnStatusConflict):
         store.fail_turn(

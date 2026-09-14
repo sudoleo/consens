@@ -261,6 +261,8 @@ def _authoritative_consensus_payload(uid: str, result_id: str, chat_binding: dic
         except ChatNotFound:
             turn = None
         if turn and turn.get("status") == "completed":
+            if turn.get("execution_mode") == "agent":
+                raise HTTPException(status_code=409, detail="Agent answers are not consensus results.")
             answers = turn.get("model_answers")
             clean_answers = {}
             model_labels = {}
@@ -792,6 +794,8 @@ def prepare_bookmark_share_result(request: Request, data: dict = Body(...)):
     if not snap.exists:
         raise HTTPException(status_code=404, detail="Bookmark not found.")
     bookmark = snap.to_dict() or {}
+    if bookmark.get("execution_mode") == "agent" or bookmark.get("mode") == "Agent":
+        raise HTTPException(status_code=400, detail="Sharing Agent Beta answers is not available yet.")
     expected_version = str(data.get("expectedVersion") or "").strip().lower()
     if expected_version and (
         not re.fullmatch(r"[0-9a-f]{64}", expected_version)

@@ -57,6 +57,13 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       ungestylten Dialoge. Die Browser-Konsole meldet keine Modul-/CSP-Fehler.
 
 ## Kern-Flow
+- [ ] Agent Beta: als Pro und Admin auswählen, Text senden, Folgefrage und
+      gespeicherten Chat öffnen; keine Consensus-/Judge-Anzeige. Free/Plus
+      erhalten keinen Zugang. Moduswechsel erfordert einen neuen Chat.
+      Abbruch/Recover erzeugt keinen Doppelaufruf; Kosten im Admin-Lookup
+      inklusive unbekannter/offener Messungen prüfen. Automatisiert durch
+      `test_agent_runs.py`, `agent-chat.test.mjs` und
+      `test_agent_chat_frontend.py` (Browser-APIs gemockt).
 - [ ] Sources/Differences: kompakte Quellenlisten, kontrastreiche Titel und
       Aussagen, Check-details-Chevrons und kleiner Resolve-Button in Light/Dark
       bei 320/390 px sowie als Desktop-Sidebar. Disclosures per Enter bedienen;

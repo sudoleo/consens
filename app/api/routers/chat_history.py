@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Literal
 
 from fastapi import APIRouter, Body, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
@@ -68,6 +69,7 @@ class ChatCreateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     title: str | None = None
+    execution_mode: Literal["consensus", "agent"] = "consensus"
 
     @field_validator("title")
     @classmethod
@@ -288,8 +290,12 @@ def create_chat(
     payload: ChatCreateRequest | None = Body(default=None),
 ):
     uid = _chat_uid(request, "create_chat")
+    execution_mode = payload.execution_mode if payload else "consensus"
+    if execution_mode == "agent":
+        from app.api.routers.agent import require_agent_access
+        require_agent_access(uid)
     try:
-        chat = _store().create_chat(uid, title=(payload.title if payload else "") or "")
+        chat = _store().create_chat(uid, title=(payload.title if payload else "") or "", execution_mode=execution_mode)
         return {"status": "success", "chat": chat}
     except Exception as exc:
         _raise_store_error(exc, operation="create chat", uid=uid)
@@ -390,6 +396,8 @@ def build_turn_context(
         target, _predecessors = repository.load_target_and_predecessors(
             uid, chat_id, turn_id
         )
+        if target.get("execution_mode") == "agent" or target.get("mode") == "Agent":
+            raise ChatContextConflict("Agent context does not use the consensus compressor")
         if target.get("status") == "completed":
             context = service.build_for_turn(
                 uid,

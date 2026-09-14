@@ -15,6 +15,7 @@ from app.core.security import (
     extract_id_token,
     get_user_tier,
     is_user_pro,
+    is_user_admin,
     invalidate_tier_cache,
     db_firestore,
 )
@@ -84,6 +85,7 @@ def get_user_status(request: Request):
             # is_pro heisst weiterhin "Frontier-Modelle und Deep Think" und ist
             # fuer Plus False; "tier" traegt die vollstaendige Stufe.
             "is_pro": entitlements.is_pro,
+            "agent_access": entitlements.is_pro or is_user_admin(uid),
             "tier": entitlements.tier,
             "attachments": entitlements.attachments,
             "resolve": entitlements.resolve,

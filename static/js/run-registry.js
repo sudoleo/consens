@@ -69,6 +69,8 @@
       bookmarkId,
       question: String(value.question || ""),
       consensus: String(value.consensus || ""),
+      executionMode: value.executionMode === "agent" || value.currentTurn?.execution_mode === "agent"
+        || value.currentTurn?.mode === "Agent" ? "agent" : "consensus",
       currentTurn: cloneValue(value.currentTurn || value.current_turn || null),
       historyTurns: cloneValue(value.historyTurns || value.history_turns || []),
       continuationUnavailable: value.continuationUnavailable === true,

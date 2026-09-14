@@ -311,6 +311,15 @@
   }
 
   function renderProjection(context) {
+    window.App.agentChat?.render?.();
+    if (context?.config?.executionMode === "agent") {
+      projectedRunId = null;
+      consensusProjection = null;
+      historyProjection = null;
+      modelProjections.clear();
+      window.App.agentChat.project(context);
+      return;
+    }
     if (!context) {
       projectedRunId = null;
       projectedPhase = null;

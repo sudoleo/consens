@@ -737,6 +737,13 @@
     }
     if (!registry.claimStartAction()) return;
 
+    if (window.App.agentChat?.isSelected?.()) {
+      if (window.updateQuestionInputAccess && !window.updateQuestionInputAccess()) return;
+      if (window.validateInputText && !window.validateInputText()) return;
+      await window.App.agentChat.send();
+      return;
+    }
+
     const selectedCount = window.App.getSelectedModelCount?.() || 0;
     if (selectedCount < 2) {
       window.updateQuestionInputAccess?.();

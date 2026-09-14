@@ -1,0 +1,21 @@
+.chat-execution-control { display: inline-flex; align-items: center; max-width: 150px; }
+.chat-execution-control[hidden] { display: none; }
+.chat-execution-control select {
+  font: inherit; font-size: 12px; font-weight: 600; color: var(--ink);
+  background: var(--raise); border: 1px solid var(--line); border-radius: 9px;
+  padding: 7px 8px; max-width: 100%; cursor: pointer;
+}
+.chat-execution-control select:disabled { opacity: .8; cursor: default; }
+.chat-execution-control select:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.agent-answer { width: 100%; padding: 22px 0; order: 4; }
+.agent-answer[hidden] { display: none; }
+.agent-answer .thread-history-answer-label { margin-bottom: 12px; }
+#agentAnswerError { color: var(--ink); border-left: 2px solid var(--ink); padding-left: 12px; }
+body.single-agent-active :is(#consensusOutput, #consensusRun, #agentModePanel, .response-section,
+  #composerModeBar, .consensus-model-inline, #attachTrigger, #deepThinkInputIndicator,
+  #runProvenance, .consensus-footer-actions, #composerRunNotice, #heroResponseAccess,
+  .models-section, .models-section + .sidebar-separator) { display: none !important; }
+body:not(.single-agent-active) #agentAnswer { display: none; }
+body.single-agent-active #agentAnswer:not([hidden]) { display: block; }
+body.single-agent-active #threadAsk:not([hidden]) { display: block; }
+@media (max-width: 600px) { .chat-execution-control { max-width: 125px; } }

@@ -109,6 +109,7 @@
         "static/js/consensus-insights.js",
         "static/js/chat-session.js",
         "static/js/consensus-run.js",
+        "static/js/agent-chat.js",
         {
           "file": "static/js/run-view.js",
           "note": "Projects only runRegistry.visibleRunId into the shared DOM; must follow consensus-run.js (follow-up renderer) and precede query-send.js."

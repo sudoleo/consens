@@ -1997,7 +1997,7 @@ class WatchFrontendContractTests(unittest.TestCase):
         self.assertIn("overflow-y: auto", modal_css)
         self.assertIn("height: 100dvh", modal_css)
         self.assertIn("env(safe-area-inset-bottom)", modal_css)
-        self.assertIn("#shareModal.is-watch-dialog { align-items: center; }", modal_css)
+        self.assertIn("align-items: center", modal_css.split("#shareModal {", 1)[1].split("}", 1)[0])
         self.assertIn("max-height: 100%", modal_css)
         self.assertNotIn("<style", html_source)
 

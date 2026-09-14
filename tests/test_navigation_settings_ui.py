@@ -176,7 +176,8 @@ def test_consensus_run_requires_two_selected_models_before_starting():
     query_send = read("static/js/query-send.js")
     model_picker = read("static/js/model-picker.js")
 
-    assert "const hasMinimumModels = selectedModelCount >= 2" in app_init
+    assert "window.App.agentChat?.isSelected?.()" in app_init
+    assert "window.App.agentChat.canUse() : selectedModelCount >= 2" in app_init
     assert "sendButton.disabled = !canStartRun" in app_init
     assert "if (selectedCount < 2)" in query_send
     assert 'reason: "minimum_models"' in query_send

@@ -28,7 +28,8 @@ beachten ist. Bewusst kurz gehalten — keine vollständige Datei-/Funktionslist
 
 consens.io vergleicht Antworten mehrerer LLM-Provider nebeneinander und
 synthetisiert daraus einen **Consensus** plus eine strukturierte
-**Differences**-Analyse. Optional: Agent Mode (Auto-Consensus), Datei-Anhänge
+**Differences**-Analyse. Optional: Agent Mode (Auto-Consensus), separater
+**Agent · Beta** (ein Textmodell, Admin/Pro), Datei-Anhänge
 (ab Plus), öffentliche Share-Seiten. Es gibt drei Kontostufen: **Free**,
 **Plus** und **Pro** (siehe §4 „Auth / Usage / Tier").
 
@@ -94,10 +95,11 @@ Threadpool aus. `async def` bleibt nur für echte Await-Pfade (Mail, explizites
 
 | Router | Zweck (Auswahl an Pfaden) |
 |---|---|
+| `agent.py` | `POST /agent`: serverseitig Admin/Pro-geschützter einzelner Textmodell-Aufruf im bestehenden Chat. Striktes Schema, owner-gebundene Chat-/Request-IDs, SSE, idempotente Wiederaufnahme fertiger Antworten und simulierte Tokenkosten. Kein `/prepare`, Fan-out, Consensus, Judge, Webtool oder Memory-Kompressor. `recover_only` liest/finalisiert ausschließlich vorhandene fertige Antworten. |
 | `source_checks.py` | Dauerhafte Quellenprüfung: owner-gebundenes `GET /api/source-checks/{job_id}` mit `cursor`, `revision` und `after_revision`; `POST .../{job_id}/resume` nimmt den eigenen OpenRouter-Key nur in den Prozessspeicher auf. `GET /api/share/{share_id}/source-check?version=...` und `GET /api/topics/{slug}/source-check?version=...` prüfen pro Paketseite aktive Ressource, Sichtbarkeit, Run- und Antwortversion. Seiten liefern `source_verification` plus `next_cursor`, bei geändertem Stand 409. API-Key-Clients verwenden den rungebundenen Endpoint in `api_v1.py`: `GET /api/v1/consensus/runs/{run_id}/source-check`, auch als `result.source_verification.status_url` ausgegeben. |
 | `pages.py` | HTML-Seiten + SEO: `/` (Landing, auch mit aktiver Session direkt erreichbar), `/model-pulse` (öffentliche, erklärte Best-answer-Rangliste), `/app` (Haupt-App), `/app/watches` (gleiche App-Shell; watch.js öffnet anhand des Pfads das Watch-Dashboard), `/admin` (inkl. Topics-Tab), `/admin/topics` (308-Kompatibilitätsredirect auf `/admin#topics`), `/admin/benchmark` (Benchmark-Run-Visualisierung), `/about`, `/ai-model-comparison`, `/consensus-engine` (nutzerfreundliche Consensus-Engine-Erklärung), `/privacy` `/imprint` `/terms`, `robots.txt`, `sitemap*.xml`. Außerdem der öffentliche, familienaggregierte Best-answer-Zähler `GET /api/model-leaderboard` (60 s Browser-/CDN-Cache; `period=all|since-2026-08-31`; alle neun Familien einschließlich Nullständen, Kimi/GLM und Meta/Muse mit eigenem Verfügbarkeitsdatum aus `_LEADERBOARD_AVAILABLE_SINCE`). Beide Zeiträume nutzen zusätzlich einen serverseitigen 60-s-Cache mit serialisiertem Refresh pro Zeitraum/Prozess. Der gemeinsame Zeitraum zählt die datierten, deduplizierten `model_votes` ab 31.08.2026 über indexierte `count()`-Abfragen pro Familie; Modellkatalog und Counts werden im selben Read-only-Transaktionssnapshot gelesen. Solange der neue `model_votes`-Index aus `firestore.indexes.json` fehlt/aufbaut, greift nur für diesen Indexfehler der gecachte Legacy-Scan. Kontolöschungen entfernen weiterhin Votes aus dem Zeitraum, ohne Lifetime-Zähler zurückzusetzen; `/feedback`, `/vote`, `/check_keys` bleiben die weiteren internen Seiten-Routen (Key-Test nur für verifizierte Logins). Feedback ist persistent pro UID auf 30 Sekunden und 10/UTC-Tag begrenzt. Ein Best-answer-Vote muss an ein noch gültiges, owner-gebundenes `result_id` gebunden sein, zum serverseitigen Gewinner passen und kann pro Lauf genau einmal zählen. |
 | `chat.py` | Kern-LLM-Flow: `/prepare`, die aus `cfg.PROVIDERS[*].ask_endpoint` erzeugten `/ask_*`-Routen (aktuell zusätzlich `/ask_kimi` und `/ask_glm`), `/consensus`, `/resolve`. `/prepare` und die `/ask_*`-Endpoints akzeptieren weiter das optionale Legacy-`context`-Feld für nicht migrierte Bookmark-Fortsetzungen. Additiv laden `/ask_*` das owner-gebundene Tripel `chat_id`/`turn_id`/`context_version_id`; Legacy- und Versionskontext zusammen werden abgewiesen. Alle `/ask_*`-Endpoints laufen über `handle_ask` + die deklarative Familien-Registry `ASK_PROVIDERS`; Transport und Credential sind für alle OpenRouter, `useOwnKeys` wählt optional `openrouter_key`. `/consensus` akzeptiert optional Chat-/Turn-IDs plus `turn_sources` und die exakt am Turn verknüpfte `context_version_id`, prüft alles owner-gebunden vor dem Judge und finalisiert nach Consensus, Differences und Share-`result_id` in Streaming- wie JSON-Pfad über `ChatStore`. Sendet der Browser die stabile `bookmarkId`, schreibt `/consensus` den autoritativen Bookmark-Snapshot vor seinem erfolgreichen Final-Event und liefert kompakte `bookmark_meta`; ein separater Browser-Request ist nur noch Fallback. Ein bereits completed Turn wird mit Consensus, Differences, Quellen und Modellantworten owner-geschützt wiedergegeben, ohne Engine-/Differences-/Share-/Statistik-/Completion- oder Usage-Write; ohne IDs bleibt der Legacy-Vertrag unverändert. |
-| `chat_history.py` | Additive, owner-gebundene Chat-Persistenz: `POST/GET /chats`, `GET /chats/{chat_id}`, `DELETE /chats/{chat_id}` (dreistufige Kaskade über `ChatStore.delete_chat`; vor der Enumeration wird der Chat transaktional auf `deleting` gesetzt, damit kein paralleler Turn als Subcollection-Waise nachrutschen kann), `POST/GET /chats/{chat_id}/turns`, das vollständige `GET /chats/{chat_id}/turns/{turn_id}` sowie `POST /chats/{chat_id}/turns/{turn_id}/context` für eine idempotente autoritative Context-Version. Das UID-Budget `build_context` liegt ausschließlich auf diesem POST, nicht auf dem Turn-GET. Listen sind begrenzt und mit selbstenthaltenden, UID-/Ressourcen-gebundenen HMAC-Cursors paginiert (`updated_at` + Dokument-ID für Chats, `position` + Dokument-ID für Turns); Cursor-Dokumente werden nicht erneut als veränderliche Seitengrenze gelesen. Create-Chat serialisiert das Owner-Limit über `chat_state/quota`, Create-Turn ist über `client_request_id` idempotent. `ChatStore.complete_turn`/`fail_turn` lesen Chat, Turn und Account-Tombstone in derselben Transaktion und akzeptieren ausschließlich einen weiterhin `active` Chat; eine nach dem `deleting`-Marker eintreffende Completion kann deshalb keine Modellantwort-Waisen erzeugen. Completion bleibt per Payload-Fingerprint idempotent. Es gibt bewusst keinen öffentlichen Completion-/Fail-Write-Endpoint. Alle `/chats`-Antworten erhalten über die Security-Middleware `private, no-store`. Bei einer aktiven Fortsetzung erzeugt der Browser den pending Turn nach `/prepare` vor Context und Fan-out; Turn 1 entsteht erst bei der Consensus-Anforderung. Finalisiert wird weiterhin ausschließlich serverseitig über `/consensus`. |
+| `chat_history.py` | Additive, owner-gebundene Chat-Persistenz: `POST/GET /chats`, `GET /chats/{chat_id}`, `DELETE /chats/{chat_id}` (dreistufige Kaskade über `ChatStore.delete_chat`; vor der Enumeration wird der Chat transaktional auf `deleting` gesetzt, damit kein paralleler Turn als Subcollection-Waise nachrutschen kann), `POST/GET /chats/{chat_id}/turns`, das vollständige `GET /chats/{chat_id}/turns/{turn_id}` sowie `POST /chats/{chat_id}/turns/{turn_id}/context` für eine idempotente autoritative Context-Version. Das UID-Budget `build_context` liegt ausschließlich auf diesem POST, nicht auf dem Turn-GET. Listen sind begrenzt und mit selbstenthaltenden, UID-/Ressourcen-gebundenen HMAC-Cursors paginiert (`updated_at` + Dokument-ID für Chats, `position` + Dokument-ID für Turns); Cursor-Dokumente werden nicht erneut als veränderliche Seitengrenze gelesen. Create-Chat serialisiert das Owner-Limit über `chat_state/quota`, Create-Turn ist über `client_request_id` idempotent. `ChatStore.complete_turn`/`fail_turn` lesen Chat, Turn und Account-Tombstone in derselben Transaktion und akzeptieren ausschließlich einen weiterhin `active` Chat; eine nach dem `deleting`-Marker eintreffende Completion kann deshalb keine Modellantwort-Waisen erzeugen. Completion bleibt per Payload-Fingerprint idempotent. Es gibt bewusst keinen öffentlichen Completion-/Fail-Write-Endpoint. Alle `/chats`-Antworten erhalten über die Security-Middleware `private, no-store`. Bei einer aktiven Fortsetzung erzeugt der Browser den pending Turn nach `/prepare` vor Context und Fan-out; Turn 1 entsteht erst bei der Consensus-Anforderung. Consensus-Turns werden serverseitig über `/consensus`, Agent-Turns über `/agent` finalisiert. |
 | `client_errors.py` | Nimmt unter `POST /api/client-errors` ausschließlich same-origin, größenbegrenzte kritische Browsermeldungen an (5/min pro IP). Freitext, Stack, konkrete IDs/Slugs und Providerdetails werden verworfen; nur allowgelistete Typ-/Phasenkategorien, eine abstrahierte Route und bei echten Skript-/Stylesheet-Ladefehlern eine grobe Ressourcenklasse (`app_bundle`, `static_asset`, `jsdelivr_dependency`, `firebase_dependency`, `same_origin_resource`, `unknown_resource`) erreichen den nicht-blockierenden Telegram-Alert. Der Endpoint liefert keine Konfigurationsdetails zurück. |
 | `auth.py` | `/register`, `/confirm-registration` (setzt nach verifiziertem Login zusätzlich eine kurzlebige HttpOnly-Session für private servergerenderte Seiten), `DELETE /auth/session` (lokales Logout-Cleanup). `/register` gibt für Neuanlage, Bestand und Create-Race exakt `{"status":"check_inbox"}` zurück, nie UID/E-Mail/Custom-Token. Unbekannte Adressen erhalten ein serverseitig zufälliges, dem anonymen Aufrufer unbekanntes Übergangspasswort; neue und bestehende Adressen durchlaufen danach denselben Firebase-Mailbox-Setup-Pfad. Der Browser versucht keinen Login mit den eingesendeten Legacy-Credentials. Nur ein tatsächlich neues Konto löst den PII-freien Telegram-Admin-Alert aus. `/confirm-registration` prüft Revocation live und erkennt damit auch gerade neu angelegte Google-Konten serverseitig. |
 | `users.py` | `/user_status`, `/usage`, `/usage/run/release`, `GET`/`PUT /api/my/memory` sowie `POST /api/my/memory/edit|undo` (User-Memory samt explizitem, revisioniertem Luna-Patch, siehe §3), `/delete_account`, `/track-interest`. `/delete_account` legt vor jeder Löschung einen persistenten, fail-closed Auftrag über `FirestoreAccountDeletion` an. Die idempotente Kaskade umfasst API-Zugang/Telegram, alle Nutzer-Subcollections, Chats, Waitlist/Feedback, Pending Results, Persistence-Guards/Votes, Watches/Briefs, Follow-Challenges/E-Mail-Follows, eigene Shares über deren bestehende Hard-Delete-Kaskade, Profil und Firebase Auth. Jeder Bereich wird separat quittiert und bei Fehlern vom fünfminütigen Maintenance-Loop erneut versucht; bis dahin lautet die Antwort ehrlich `202 cleanup_pending`, erst der vollständige Abschluss ergibt 200. Owner-gebundene Create/Update/Delete-Transaktionen lesen den Account-Tombstone als ersten Teil derselben Mutation; nur interne Cleanup-Kaskaden verwenden explizite Bypässe. Dadurch können bereits authentifizierte, verspätete Requests keinen zuvor quittierten Bereich neu befüllen. `/track-interest` ist der idempotente Pro-Beta-Zugangsrequest (ein Pending-Dokument pro UID, kein Billing); aktive Pro-Konten werden abgewiesen. **Seit 2026-07-25 ruft die App diesen Endpunkt nicht mehr auf** — es wird nichts mehr angeboten, das man anfragen könnte; der Endpunkt bleibt nur bestehen, damit vorhandene Waitlist-Dokumente nicht verwaisen. |
@@ -1527,6 +1529,65 @@ laufenden Request, Consensus oder Save gelesen werden. Entfernte Controls wie
 ---
 
 ## 4. Kern-Flows
+
+### Agent · Beta: ein Textmodell (2026-09-14)
+
+Der zusätzliche Composer-Selektor `#chatExecutionMode` wählt für neue Chats
+`consensus` oder `agent`. Der bisherige „Agent Mode“-Schalter bleibt die
+Auto-Consensus-Einstellung. `/user_status.agent_access` gilt für Pro **oder**
+Admins, serverseitig nochmals bei Chat-Anlage und jedem `/agent` geprüft.
+Free/Plus sowie anonyme Nutzer haben keinen Zugriff. Der Modus wird bei
+`POST /chats` in `execution_mode` festgelegt; fehlende Legacy-Werte bedeuten
+`consensus`. Bestehende Unterhaltungen wechseln ihn nicht.
+
+`static/js/agent-chat.js` nutzt den bestehenden Composer, `runRegistry`,
+Sidebar-Bookmarks und Verlauf, mit eigenem Antwortbereich `#agentAnswer`.
+`query-send.js` dispatcht vor Modellanzahl- und Consensus-Kontingentprüfungen
+in diesen Ablauf. `run-view.js` projiziert den gewählten Agent-Lauf getrennt;
+`normalizeBasis` erhält den Modus auch beim Bookmark-Restore. Dateien werden
+vor dem Senden abgelehnt und sind im strikten Endpoint-Schema nicht erlaubt.
+„Recover saved answer“ verwendet dieselbe Request-Identität und `recover_only`,
+startet also niemals eine neue Modellanfrage. Share/Watch stehen hier nicht
+zur Verfügung; Agent-Antworten lassen sich serverseitig nicht als Consensus
+materialisieren. Die übrigen Consensus-/Direktvergleichs-Flows bleiben bestehen.
+
+`app/services/agent_runs.py` trennt Chat-/Turn-Orchestrierung und persistente
+Abrechnung vom Texttransport in `llm/agent_client.py`. Der Standard ist
+`deepseek/deepseek-v4.1-flash`; Modell, Label, Output-Limit und versionierte
+Simulationstarife sind über `AGENT_*` konfigurierbar (siehe
+[`agent-mode.md`](agent-mode.md)). Es gilt genau ein OpenRouter-Aufruf mit
+ZDR, deaktivierten Fallbacks, maximal 4.096 Output-Tokens und 180 Sekunden
+Gesamtbudget. Der Kontext besteht aus Systemtext sowie allen abgeschlossenen
+User-/Assistant-Turns in Reihenfolge. Über 120.000 Zeichen fordert der Server
+einen neuen Chat an; es gibt keine zusätzliche LLM-Kompression.
+
+`ChatStore` speichert Agent-Turns mit `execution_mode: agent` und eigener
+`assistant_response`; `turn_detail` liefert zusätzlich den bisherigen
+`consensus`-Leseschlüssel als Kompatibilitätsalias. Generic Create-Turn,
+Consensus-Completion und Context-Build akzeptieren keine Agent-Unterhaltung.
+Eine transaktionale Chat-Sperre verhindert gleichzeitige neue Turns; nach
+fünf Minuten kann ein abgestürzter Lauf durch einen **neuen** Turn abgelöst
+werden. Derselbe verbrauchte Request wird niemals erneut ausgeführt.
+
+Vor dem Providerstart entsteht pro Schritt ein deduplizierter Beleg unter
+`users/{uid}/llm_calls/{sha256(chat,turn,step)}` mit Modell-/Tarifsnapshot und
+Status `running`. Abschluss und `users/{uid}.agent_usage` werden atomar
+verbucht: Input/Output, Cache-Input, Reasoning (bereits in Output enthalten),
+`estimated_cost_nano_usd` als Integer sowie gemessene, unbekannte und noch
+unabgeschlossene Aufrufe. Nur tatsächlich vom Provider gemeldete Tokens
+fließen in die Kostensumme; fehlende Usage bei Abbruch/Fehler wird nicht
+geschätzt. Es gibt keinen Guthabenabzug und keinen Consensus-Usage-Write.
+Die Admin-Kontoansicht zeigt diese kumulierten Werte beim Nutzer-Lookup.
+
+SSE-Abbruch schließt den Provider-Socket; der Producer wird explizit geschlossen
+und finalisiert seinen Beleg auch bei Disconnect. Ein Prozessabsturz kann einen
+unabgeschlossenen Beleg hinterlassen, der sichtbar bleibt und keinen erneuten
+Modellaufruf autorisiert. Chat-Löschung entfernt keine entstandenen Kosten;
+Settlement erzeugt dabei keine gelöschten Turns neu. Bookmark-Writes prüfen
+den aktiven Chat innerhalb derselben Transaktion (`transaction_guard`), und
+ältere Replays überschreiben keinen neueren Bookmark-Turn. Die bestehende
+Kontolöschung entfernt auch `llm_calls`; Tombstones sperren verspätete Writer.
+
 
 ### Browser-Run-Lifecycle und Sichtwechsel
 
