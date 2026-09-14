@@ -87,5 +87,6 @@ This repository contains the implementation of an actively developed experimenta
 
 ## Product video
 
-The standalone [video project](video/README.md) contains the current LinkedIn film,
-its editable scene code, assets, render commands and production notes.
+The film and its editable scene code, assets, render commands and production
+notes now live in [sudoleo/consens-video](https://github.com/sudoleo/consens-video).
+The video project is independent of this application.

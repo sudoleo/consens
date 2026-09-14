@@ -31,11 +31,6 @@ node_modules/
 # Ohne sie liefert app/core/assets.py automatisch die Einzeldateien aus.
 !static/dist/manifest.json
 
-# Recording assets and local video generation tooling
-# Standalone video sources are versioned; video/.gitignore excludes outputs.
-!/video/src/*.json
-!/video/assets/audio/credit.json
-
 # Local LinkedIn image posts and editorial notes
 /artifacts/linkedin/
 /docs/linkedin-*.md

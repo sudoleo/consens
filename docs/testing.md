@@ -8,7 +8,6 @@ PowerShell 5.1 oder neuer, aus dem Projektverzeichnis:
 .\dev.ps1 check frontend
 .\dev.ps1 check backend
 .\dev.ps1 check browser
-.\dev.ps1 check video
 ```
 
 | Ziel | Ablauf |
@@ -16,7 +15,6 @@ PowerShell 5.1 oder neuer, aus dem Projektverzeichnis:
 | `frontend` | `npm test`, danach `npm run build:check`. Ein veralteter Build führt zum Fehler; mit `npm run build` bewusst neu erzeugen. |
 | `backend` | `venv/Scripts/python.exe -m pytest tests -q` mit `UNIT_TEST_MODE=1`; geerbte E2E-Schalter werden für den Lauf entfernt. |
 | `browser` | Voraussetzungen und Build prüfen, dann Firebase `emulators:exec` mit der Playwright-Suite. Die CLI startet und beendet ihren Emulator auch bei fehlgeschlagenen Tests; die Pytest-Fixtures verwalten den App-Server und Browser. |
-| `video` | Eigenständige Canvas-Szene in Chrome prüfen und Stills erzeugen (`video/src/render.cjs --stills`); kein App-Server oder Emulator. Setup: [Video-README](../video/README.md). Kein `-TestPath`. |
 
 Eine einzelne Datei oder ein Verzeichnis innerhalb der gewählten Suite:
 
@@ -32,13 +30,15 @@ einem anderen Arbeitsverzeichnis aufgerufen wird. `-TestPath` akzeptiert die
 für weitere Runner-Optionen oder Pytest-Selektoren die direkten Befehle unten
 verwenden. `backend` lehnt explizite `tests/e2e`-Pfade ab.
 
-`.\dev.ps1 help` zeigt die Kurzreferenz. Das Skript installiert keine Pakete;
-`video` schreibt seine Prüfbilder nach `video/output/`, die App-Ziele verändern
-keine Builds. Fehlende Voraussetzungen werden mit einem Setup-Hinweis
+`.\dev.ps1 help` zeigt die Kurzreferenz. Das Skript installiert keine Pakete
+und verändert keine Builds. Fehlende Voraussetzungen werden mit einem Setup-Hinweis
 gemeldet. Für Browserprüfungen braucht es zusätzlich die unten beschriebenen
 E2E-Abhängigkeiten, Chromium, Firebase CLI und Java 21+ auf `PATH` oder unter
 `JAVA_HOME`. Der erste Emulatorstart kann den von der CLI benötigten Emulator
 herunterladen; Browser-Flows benötigen weiterhin die dokumentierten CDN-Assets.
+
+Videoproduktion und ihre Prüfungen liegen separat in
+[sudoleo/consens-video](https://github.com/sudoleo/consens-video).
 
 Firestore-Host und Port stammen aus `firebase.json`, die Demo-Projekt-ID und
 Loopback-Prüfung aus `app/core/e2e_profile.py`. Geerbte Projekt- und Credential-

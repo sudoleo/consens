@@ -40,8 +40,7 @@ def cli(tmp_path, request):
         )
 
     for relative in ("tests/js/example.test.mjs", "tests/e2e/test_example.py", "tests/test_example.py",
-                     "node_modules/vitest/vitest.mjs", "node_modules/esbuild/package.json",
-                     "video/src/render.cjs", "video/node_modules/playwright-core/package.json"):
+                     "node_modules/vitest/vitest.mjs", "node_modules/esbuild/package.json"):
         path = root / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         path.touch()
@@ -157,25 +156,6 @@ def test_frontend_runs_tests_then_build_check_from_repository_root(cli):
         ("npm", ["test", "--", "tests/js/example.test.mjs"]), ("npm", ["run", "build:check"])
     ]
     assert all(call["cwd"] == str(root) for call in calls)
-
-
-@pytest.mark.parametrize("failure", ["", "node"])
-def test_video_runs_standalone_check_and_preserves_exit_code(cli, failure):
-    root, run = cli
-    result, calls = run("video", failure=failure)
-    assert result.returncode == (23 if failure else 0), result.stdout + result.stderr
-    assert [(call["tool"], call["args"]) for call in calls] == [
-        ("node", ["video/src/render.cjs", "--stills"])
-    ]
-    assert calls[0]["cwd"] == str(root)
-
-
-def test_video_rejects_test_path_before_running_tools(cli):
-    _, run = cli
-    result, calls = run("video", test_path="video/src/render.cjs")
-    assert result.returncode == 1
-    assert "does not accept TestPath" in result.stdout + result.stderr
-    assert calls == []
 
 
 @pytest.mark.parametrize("failure,expected_calls", [("npm-test", 1), ("npm-run", 2)])

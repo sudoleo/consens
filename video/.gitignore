@@ -1,7 +1,0 @@
-node_modules/
-.venv/
-__pycache__/
-output/
-.local/
-*.log
-assets/audio/neon-source.mp3
