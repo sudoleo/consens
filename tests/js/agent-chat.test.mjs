@@ -6,7 +6,6 @@ const BODY = `<div id="chatExecutionControl" class="select-wrapper"><select id="
   <textarea id="questionInput"></textarea><div id="threadHistory"></div>
   <div id="agentModelControls"><div class="select-wrapper agent-model-picker"><select id="agentModelDropdown" aria-label="Agent model"></select></div>
   <div class="select-wrapper agent-effort-control"><select id="agentReasoningEffort" aria-label="Agent reasoning effort"></select></div><button id="agentModelsRetry" hidden></button></div>
-  <p id="agentModelNotice" hidden></p>
   <section id="agentAnswer" hidden><div id="agentAnswerLabel"></div>
   <div id="agentAnswerActivity"></div><div id="agentAnswerBody"></div><p id="agentAnswerError" hidden></p></section>`;
 
@@ -155,7 +154,15 @@ describe("single-model agent chat", () => {
     window.localStorage.setItem("agent_settings_owner", JSON.stringify({ model_id: "removed-model", reasoning_effort: "ultra" }));
     await selectAgent(window);
     expect(document.getElementById("agentModelDropdown").value).toBe(CATALOG.default_model_id);
-    expect(document.getElementById("agentModelNotice").hidden).toBe(false);
+    expect(document.getElementById("agentModelNotice")).toBe(null);
+    expect(document.querySelector(".agent-model-picker .model-picker-display").textContent).toContain("DeepSeek V4.1 Flash");
+    expect(JSON.parse(window.localStorage.getItem("agent_settings_owner"))).toEqual({
+      model_id: CATALOG.default_model_id, reasoning_effort: "default",
+    });
+    expect(window.App.showPopup).toHaveBeenCalledTimes(1);
+    window.App.agentChat.render();
+    window.App.agentChat.render();
+    expect(window.App.showPopup).toHaveBeenCalledTimes(1);
     expect(document.getElementById("agentReasoningEffort").value).toBe("default");
     document.getElementById("questionInput").value = "Question";
     await window.App.agentChat.send();
@@ -398,6 +405,47 @@ describe("single-model agent chat", () => {
     expect(document.querySelector("#agentAnswerActivity img")).toBe(null);
     expect(document.getElementById("agentAnswerActivity").textContent).toContain("Saved thought");
     expect(document.getElementById("agentAnswerActivity").textContent).toContain("120 tokens");
+    dom.window.close();
+  });
+
+  it("repairs a removed history model for the next message without changing its saved label", async () => {
+    const { window, document, dom } = boot();
+    await selectAgent(window);
+    const settings = { model_id: "removed-model", label: "Historical model", reasoning_effort: "ultra" };
+    const basis = { chatId: "c".repeat(32), bookmarkId: "old", question: "Old question", consensus: "Old answer", executionMode: "agent",
+      currentTurn: { id: "old-turn", question: "Old question", consensus: "Old answer", agent_settings: settings } };
+    window.App.runRegistry.showSavedView({ type: "bookmark" }, basis);
+    expect(document.getElementById("agentModelDropdown").value).toBe(CATALOG.default_model_id);
+    expect(document.getElementById("agentAnswerLabel").textContent).toContain("Historical model");
+    window.App.agentChat.render();
+    expect(window.App.showPopup).toHaveBeenCalledTimes(1);
+    expect(window.App.runRegistry.getSelectedConversationBasis().currentTurn.agent_settings).toEqual(settings);
+    document.getElementById("questionInput").value = "Follow up";
+    await window.App.agentChat.send();
+    expect(window.streamSSERequest.mock.calls[0][1]).toMatchObject({ model_id: CATALOG.default_model_id, reasoning_effort: "default" });
+    dom.window.close();
+  });
+
+  it.each(["server_tool", "provider_native"])("hides legacy unconfirmed searches (%s) while preserving reasoning and measured costs", flag => {
+    const { window, document, dom } = boot();
+    const host = document.getElementById("agentAnswerActivity");
+    const events = [
+      { id: "r1", kind: "reasoning", format: "text", text: "A casual greeting. No tool needed." },
+      { id: "s1", kind: "tool", name: "web_search", status: "unknown", [flag]: true },
+    ];
+    window.App.agentActivity.renderTurn(host, { agent_activity: events,
+      agent_usage: { input_tokens: 800, output_tokens: 62, estimated_cost_nano_usd: 400000, cost_source: "provider", complete: true } });
+    expect(host.querySelector(".agent-activity-title").textContent).toBe("Reasoning");
+    expect(host.querySelector(".agent-activity-tool")).toBe(null);
+    expect(host.querySelector(".agent-usage").textContent).toBe("862 tokens · $0.0004 provider cost");
+    // A count or citations confirm use even if the response was interrupted.
+    for (const evidence of [{ count: 1 }, { sources: [{ url: "https://example.org", title: "Source" }] }]) {
+      window.App.agentActivity.renderTurn(host, { agent_activity: [{ ...events[1], ...evidence }] });
+      expect(host.querySelector(".agent-activity-tool")).not.toBe(null);
+    }
+    // Unknown client-call outcomes are not the legacy synthetic native event.
+    window.App.agentActivity.renderTurn(host, { agent_activity: [{ ...events[1], [flag]: false }] });
+    expect(host.querySelector(".agent-activity-tool")).not.toBe(null);
     dom.window.close();
   });
 

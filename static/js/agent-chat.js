@@ -35,11 +35,15 @@
     return selections.get(selectionKey()) || saved || preferred || { model_id: catalog?.default_model_id, reasoning_effort: "default" };
   }
   function selection() {
-    const preferred = preferredSelection();
+    const preferred = preferredSelection() || {};
     const model = catalog?.models.find(item => item.id === preferred.model_id)
       || catalog?.models.find(item => item.id === catalog.default_model_id) || catalog?.models[0];
     return model ? { model_id: model.id,
       reasoning_effort: model.reasoning_efforts.includes(preferred.reasoning_effort) ? preferred.reasoning_effort : "default" } : preferred;
+  }
+  function rememberSelection(value) {
+    selections.set(selectionKey(), value);
+    try { localStorage.setItem(`agent_settings_${catalogOwner}`, JSON.stringify(value)); } catch (_) {}
   }
   async function loadModels() {
     if (!canUse() || catalogStatus !== "idle") return;
@@ -73,9 +77,7 @@
     const host = document.getElementById("agentModelControls");
     const select = document.getElementById("agentModelDropdown");
     const effort = document.getElementById("agentReasoningEffort");
-    const notice = document.getElementById("agentModelNotice");
     if (host) host.hidden = !agent;
-    if (notice) notice.hidden = true;
     if (!agent || !select || !effort) {
       if (select) App.collapseExpandedModelPicker?.(select);
       if (effort) App.collapseExpandedModelPicker?.(effort);
@@ -85,10 +87,14 @@
     const ready = catalogStatus === "ready" && canUse();
     const running = registry.isExecuting(registry.visible()?.runId);
     const current = selection();
-    const previous = preferredSelection();
-    if (notice && ready && previous.model_id && previous.model_id !== current.model_id) {
-      notice.textContent = "Previous model unavailable. Your next message will use the selected model.";
-      notice.hidden = false;
+    const previous = preferredSelection() || {};
+    if (ready && !running && (previous.model_id !== current.model_id || previous.reasoning_effort !== current.reasoning_effort)) {
+      // Repair the next-message preference once; historical settings stay frozen.
+      rememberSelection(current);
+      if (previous.model_id && previous.model_id !== current.model_id) {
+        const label = catalog.models.find(item => item.id === current.model_id)?.label;
+        App.showPopup?.(`Previous model unavailable. Selected ${label} for your next message.`);
+      }
     }
     const options = ready ? catalog.models : [{ id: "", label: catalogStatus === "failed" ? "Models unavailable" : "Loading models…" }];
     const signature = JSON.stringify(options);
@@ -105,13 +111,6 @@
     select.value = ready ? current.model_id || catalog.default_model_id : "";
     select.disabled = !ready || running;
     const model = catalog?.models.find(item => item.id === select.value);
-    if (notice && ready && notice.hidden && model?.tools_by_effort) {
-      const available = model.tools_by_effort[current.reasoning_effort || "default"] || [];
-      const searchModel = catalog.models.find(item => Object.values(item.tools_by_effort || {}).some(tools => tools.includes("web_search")));
-      notice.textContent = available.includes("web_search") ? "Web search is available when needed."
-        : searchModel ? `Web search is available with ${searchModel.label}.` : "Web search is not available for this model.";
-      notice.hidden = false;
-    }
     const efforts = model?.reasoning_efforts || ["default"];
     const effortSignature = JSON.stringify([model?.id, efforts]);
     if (effort.dataset.options !== effortSignature) {
@@ -142,8 +141,7 @@
     const model = catalog?.models.find(item => item.id === select?.value);
     if (!model || !canUse()) return;
     const value = { model_id: model.id, reasoning_effort: model.reasoning_efforts.includes(effort.value) ? effort.value : "default" };
-    selections.set(selectionKey(), value);
-    try { localStorage.setItem(`agent_settings_${catalogOwner}`, JSON.stringify(value)); } catch (_) {}
+    rememberSelection(value);
     render();
   }
   function activityHost(key) {

@@ -1548,8 +1548,12 @@ Denkstufe zeigt nur bestätigte Optionen mit kurzen Erläuterungen. Native Selec
 bleiben als State-/Event-Vertrag bestehen; zugängliche Trigger übernehmen den
 Fokus. Menüs unterstützen Pfeiltasten, Home/End, Escape, Fokusrückgabe und
 angepasste Breiten im sichtbaren Viewport. Entfernte gespeicherte Modelle werden
-mit sichtbarem Hinweis auf den angebotenen Standard abgeglichen, sodass Anzeige
-und nächster Request übereinstimmen.
+auf den angebotenen Standard abgeglichen und als nächste Auswahl in Session und
+LocalStorage gespeichert. Ein kurzlebiges Popup erklärt die Korrektur einmal;
+historische Einstellungen bleiben erhalten. Es gibt keinen dauerhaften Modell-
+oder Suchverfügbarkeitshinweis neben den Pickern, der deren Beschriftung verdrängt.
+Die Kontrollgruppe reserviert nur Platz für Senden; der alte Consensus-Abstand
+von 300 Pixeln würde den Modellnamen auch ohne Hinweis abschneiden.
 Die Wahl wird beim `input`-Ereignis vor folgenden Projektionen gespeichert;
 Läufe ohne Chat-ID bekommen einen eigenen Schlüssel und laufende Antworten
 zeigen ihre eingefrorenen Einstellungen statt einer alten Draft-Wahl.
@@ -1650,13 +1654,22 @@ und `require_parameters` wurden nach reproduziertem Haiku-404 entfernt.
 Native Suche reserviert vorsorglich das volle Modellfenster je möglichem
 Suchsegment plus Modellfortsetzung; Exa reserviert begrenzten Inhalt inklusive
 UTF-8-/Protokollreserve. Providergrenzen und Quellen stehen in `agent-mode.md`.
-Nur zurückgegebene Quellenannotationen und Such-Usage erzeugen bestätigte
+Nur zurückgegebene Quellenannotationen oder ein positiver Suchzähler erzeugen
 Tool-Ereignisse, mit bis zu fünf HTTP(S)-Quellenlinks. Die API garantiert keine
 nativen Startzeiten/Queries; diese werden nicht erfunden. Fehlende Such-Usage
-bleibt `unknown`; eine gemeldete Gesamtkostensumme kann trotzdem vollständig
+verbraucht intern vorsorglich das reservierte Suchbudget, erzeugt jedoch auch bei
+Abbruch/Fehler keinen unbelegten Suchschritt. Der gemeinsame Renderer blendet
+früher gespeicherte `unknown`-Server-Suchereignisse ohne Zähler/Quellen aus.
+Eine gemeldete Gesamtkostensumme kann trotzdem vollständig
 sein. `usage.cost` umfasst Token-/Cache-/Suchkosten der tatsächlichen Route und
 wird einmal verbucht. Ohne Gesamtbetrag ist die Katalogrechnung als Schätzung
 markiert, fehlende Suchkosten machen sie unvollständig.
+
+`agent_runs.AGENT_SYSTEM_PROMPT` ist der gemeinsame Systemprompt aller Modelle.
+Er überlässt die Toolwahl dem Modell, nennt direkte Antworten für Begrüßungen,
+Smalltalk und ohne Tools zuverlässig lösbare Aufgaben sowie Websuche bei Bedarf
+an aktuellen/externen Informationen oder ausdrücklichem Suchauftrag. Der Prompt
+wird vor die User-/Assistant-Historie gesetzt; Tools sind separate Request-Schemas.
 
 `agent_provider_limits.py` bremst wiederholte 429 pro Modell und gehashtem API-Key:
 prozesslokale Map mit höchstens 256 Einträgen, Wartezeit aus `Retry-After` (auch

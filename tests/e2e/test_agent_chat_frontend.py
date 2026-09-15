@@ -401,7 +401,7 @@ def test_native_search_sources_in_chat_and_saved_activity(browser, phase4_server
         page.locator(".agent-model-picker .model-picker-display").click()
         page.locator('#agentModelControls [data-value="claude-haiku-4-5"]').click()
         expect(page.locator("#agentModelDropdown")).to_have_value("claude-haiku-4-5")
-        expect(page.locator("#agentModelNotice")).to_have_text("Web search is available when needed.")
+        expect(page.locator("#agentModelNotice")).to_have_count(0)
         page.locator("#questionInput").fill(turn["question"])
         expect(page.locator("#agentModelDropdown")).to_have_value("claude-haiku-4-5")
         page.locator("#sendButton").click()
@@ -422,5 +422,53 @@ def test_native_search_sources_in_chat_and_saved_activity(browser, phase4_server
         expect(details.locator("a")).to_have_count(2)
         expected_tokens = page.evaluate("() => (1400).toLocaleString() + ' tokens'")
         expect(details.locator(".agent-usage")).to_contain_text(expected_tokens)
+    finally:
+        context.close()
+
+
+@pytest.mark.parametrize("width", [1280, 320])
+def test_removed_preference_and_legacy_phantom_search(browser, phase4_server, width):
+    context, page = _real_firebase_page(browser, phase4_server)
+    try:
+        page.set_viewport_size({"width": width, "height": 900})
+        page.route("**/user_status", lambda route: _json(route, {"tier": "pro", "is_pro": True, "agent_access": True}))
+        page.route("**/agent/models", lambda route: _json(route, CATALOG))
+        page.route("**/chats", lambda route: _json(route, {"chat": {"id": "a" * 32}}))
+        turn = {"id": "b" * 32, "status": "completed", "execution_mode": "agent", "question": "was geht ab",
+                "consensus": "Hey! Wie kann ich dir helfen?",
+                "agent_settings": {"model_id": CATALOG["default_model_id"], "label": "DeepSeek V4.1 Flash", "reasoning_effort": "default"},
+                "agent_activity": [
+                    {"version": 1, "id": "r1", "kind": "reasoning", "format": "text", "text": "A casual greeting. No tool needed."},
+                    {"version": 1, "id": "s1", "kind": "tool", "name": "web_search", "status": "unknown", "server_tool": True}],
+                "agent_usage": {"input_tokens": 800, "output_tokens": 62, "estimated_cost_nano_usd": 400000, "cost_source": "provider", "complete": True}}
+        def respond(route):
+            assert route.request.post_data_json["model_id"] == CATALOG["default_model_id"]
+            final = {"response": turn["consensus"], "chat_id": "a" * 32, "turn_id": turn["id"], "turn": turn}
+            route.fulfill(content_type="text/event-stream", body="event: final\ndata: " + json.dumps(final) + "\n\n")
+        page.route("**/agent", respond)
+        page.evaluate("async () => { await window.__switchE2EUser('account-a'); }")
+        page.evaluate("() => localStorage.setItem(`agent_settings_${auth.currentUser.uid}`, JSON.stringify({model_id:'removed-model',reasoning_effort:'ultra'}))")
+        _choose_mode(page, "agent")
+        expect(page.locator("#agentModelDropdown")).to_have_value(CATALOG["default_model_id"])
+        page.evaluate("() => { App.agentChat.render(); App.agentChat.render(); }")
+        assert page.evaluate("() => JSON.parse(localStorage.getItem(`agent_settings_${auth.currentUser.uid}`)).model_id") == CATALOG["default_model_id"]
+        expect(page.locator(".explanation-popup")).to_have_count(1)
+        expect(page.locator("#agentModelNotice")).to_have_count(0)
+        label = page.locator(".agent-model-picker .model-picker-display-text")
+        expect(label).to_have_text("DeepSeek V4.1 Flash")
+        assert label.evaluate("el => el.clientWidth > 0 && el.scrollWidth <= el.clientWidth + 1")
+        assert page.evaluate("() => document.documentElement.scrollWidth <= window.innerWidth + 1")
+        expect(page.locator(".explanation-popup")).to_have_count(0)
+        _snapshot(page, f"agent-repaired-selection-{width}")
+        page.locator("#questionInput").fill(turn["question"])
+        page.locator("#sendButton").click()
+        expect(page.locator("#agentAnswerBody")).to_have_text(turn["consensus"])
+        details = page.locator("#agentAnswerActivity details")
+        expect(details.locator("summary")).to_have_text("Reasoning")
+        details.locator("summary").click()
+        expect(details.locator(".agent-activity-reasoning")).to_have_text("A casual greeting. No tool needed.")
+        expect(details.locator(".agent-activity-tool")).to_have_count(0)
+        expect(details.locator(".agent-usage")).to_have_text("862 tokens · $0.0004 provider cost")
+        _snapshot(page, f"agent-greeting-without-search-{width}")
     finally:
         context.close()

@@ -34,8 +34,10 @@ Snapshot auch nach einer Konfigurationsänderung.
 Modus, Modell und Denkstufe verwenden denselben Custom-Picker mit eigenem
 Agent-Zustand. Menübreiten passen sich dem sichtbaren Viewport an; Tastaturwahl,
 Escape und Fokusrückgabe funktionieren für alle drei Controls. Nicht mehr
-verfügbare gespeicherte Modelle werden mit Hinweis auf den angebotenen Standard
-abgeglichen; derselbe Wert wird angezeigt und gesendet.
+verfügbare gespeicherte Modelle werden auf den angebotenen Standard abgeglichen;
+die korrigierte nächste Auswahl wird in Session und LocalStorage gespeichert.
+Ein kurzes Popup erklärt die Änderung einmal. Historische Modelleinstellungen
+bleiben erhalten. Im Composer stehen keine dauerhaften Hinweise neben den Pickern.
 Änderungen werden bereits beim `input`-Ereignis in der Capture-Phase gespeichert,
 bevor nachfolgende UI-Projektionen alte Werte zurücksetzen können. Ein neu
 angelegter Lauf ohne Chat-ID hat einen eigenen Auswahl-Schlüssel; laufende
@@ -100,17 +102,27 @@ OpenRouter zwischen Providern desselben Modells wechseln. Agent erzwingt weder
 `only: ["anthropic"]` noch `require_parameters`, die funktionierende Haiku-Routen
 ausgeschlossen hatten. `tool_choice` wird nur für echte Client-Tools gesetzt.
 Der bestehende DeepSeek-Standard bleibt erhalten. Der Katalog liefert
-`tools_by_effort`, der Composer zeigt die Suchverfügbarkeit, der Turn speichert
+`tools_by_effort`; der Turn speichert
 die Freigaben in `agent_settings.tools` und die Budgetversion in `.policy`.
 
 Die Chat-API liefert Quellenannotationen und `usage.server_tool_use.web_search_requests`,
 aber keine zugesicherten nativen Startzeiten oder Suchqueries. Deshalb zeigt
 die Aktivität ausschließlich bestätigte Nutzung/Quellen, niemals erfundene
-„Suche läuft“-Schritte. Ohne Such-Usage bleibt die Nutzung unbekannt. Je Request
+„Suche läuft“-Schritte. Ohne Zähler/Quellen erscheint keine Suchzeile, auch nicht
+bei Fehlern oder Abbruch. Fehlende Such-Usage verbraucht nur intern vorsorglich
+das reservierte Suchbudget. Alte gespeicherte `unknown`-Server-Suchereignisse ohne
+positiven Zähler oder Quellen werden ebenfalls ausgeblendet. Je Request
 werden höchstens fünf unterschiedliche HTTP(S)-Quellen mit Titel/URL übernommen;
 sie bleiben im Turn und werden sicher als Links dargestellt. Native interne
 Suchinhalte liegen beim Provider; dessen `max_results` ist **kein** natives
 Kontextlimit. Fehlende Rohresultate werden nicht rekonstruiert.
+
+Der Systemprompt in `app/services/agent_runs.py` (`AGENT_SYSTEM_PROMPT`) gilt
+für alle Modelle und steht vor der User-/Assistant-Historie. Er fordert direkte
+Antworten bei Begrüßungen, Smalltalk und Aufgaben, die ohne Tools zuverlässig
+lösbar sind. Für aktuelle/externe Informationen oder einen ausdrücklichen
+Suchauftrag darf das Modell suchen. Tool-Schemas werden separat angeboten;
+ihre Verfügbarkeit löst keine Suche aus.
 
 Geprüfte offizielle Dokumentation (15.09.2026):
 

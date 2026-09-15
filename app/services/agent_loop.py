@@ -117,23 +117,24 @@ class AgentLoop:
                         self.costs.reconcile(reservation, value.usage)
                         self.completion.usage = self.costs.total()
                         self.completion.reasoning_truncated |= value.reasoning_truncated
-                        if searches and step_status != "succeeded":
+                        count = value.usage.get("web_search_requests") if value.usage else None
+                        known = type(count) is int and 0 <= count <= searches
+                        if searches and step_status != "succeeded" and ((known and count) or value.sources):
                             self.tool_event(f"{step}:web_search", "web_search", "unknown", sources=value.sources,
+                                            count=count if known else None,
                                             text="The request ended before search completion could be confirmed.", server_tool=True)
                         self.store.settle(self.uid, self.chat_id, self.turn_id, completion=value,
                                           status=step_status, step=step, final=False)
                     self.check(budget)
                     if searches:
-                        count = value.usage.get("web_search_requests") if value.usage else None
-                        known = type(count) is int and 0 <= count <= searches
+                        # Budget uncertainty consumes the reservation, but does
+                        # not establish that the model actually used a tool.
                         self.remaining_tools -= count if known else searches
                         # The Chat API exposes citations/usage, not native start
                         # timestamps or raw search queries. Do not invent them.
                         if (known and count) or value.sources:
                             yield self.tool_event(f"{step}:web_search", "web_search", "succeeded",
                                 count=count if known else None, sources=value.sources, server_tool=True)
-                        elif not known:
-                            yield self.tool_event(f"{step}:web_search", "web_search", "unknown", server_tool=True)
                     yield self.activity({"step_id": "run", "id": "usage", "kind": "usage", "usage": self.completion.usage})
                     self.completion.text, self.completion.finish_reason = value.text, value.finish_reason
                     self.costs.check()

@@ -52,7 +52,11 @@
     const view = host._agentActivity;
     const reasoning = events.filter(item => item.kind === "reasoning"
       && ["text", "summary"].includes(item.format) && item.text);
-    const tools = events.filter(item => item.kind === "tool");
+    // Older saved turns mistook a missing search counter for tool activity.
+    // Preserve real client calls and searches backed by counts or citations.
+    const tools = events.filter(item => item.kind === "tool" && !(item.name === "web_search"
+      && item.status === "unknown" && (item.server_tool || item.provider_native)
+      && !(Number.isInteger(item.count) && item.count > 0) && !item.sources?.length));
     const activeTool = tools.findLast(item => item.status === "running");
     const latest = events.filter(item => item.kind === "status").at(-1);
     const writing = latest ? latest.status === "responding" : responding;

@@ -1,9 +1,11 @@
 /* Agent chat shares the shell's surfaces, picker and mobile composer. */
 .chat-execution-control { display: inline-flex; align-items: center; flex: 0 0 auto; min-width: 0; max-width: 140px; }
-.chat-execution-control[hidden], .agent-model-controls[hidden], .agent-effort-control[hidden], .agent-model-notice[hidden] { display: none; }
+.chat-execution-control[hidden], .agent-model-controls[hidden], .agent-effort-control[hidden] { display: none; }
 .agent-model-controls { display: flex; align-items: center; gap: 4px; min-width: 0; margin: 0; }
 .agent-model-picker { display: flex; justify-content: flex-start; min-width: 0; max-width: 220px; flex: 1 1 auto; }
 .agent-effort-control { display: flex; min-width: 0; flex: 0 0 auto; }
+/* Agent only needs room for Send, not the Consensus action group. */
+body.single-agent-active .chat-input-container .consensus-switch-container { max-width: calc(100% - 46px); }
 .chat-input-container :is(.chat-execution-control, .agent-model-controls .select-wrapper) { position: relative; }
 .chat-input-container :is(.chat-execution-control, .agent-model-controls .select-wrapper)::after { display: none; }
 .chat-input-container :is(.chat-execution-control, .agent-model-controls) .native-model-picker {
@@ -46,7 +48,6 @@
 .chat-input-container :is(.chat-execution-control, .agent-model-controls) .model-picker-option:focus-visible { outline: 2px solid var(--ink-3); outline-offset: -2px; background: var(--raise); }
 .chat-input-container :is(.chat-execution-control, .agent-model-controls) .model-picker-option-label { white-space: normal; overflow-wrap: anywhere; }
 .model-picker-option-description { flex-basis: 100%; font-size: 11px; color: var(--ink-3); font-weight: 400; line-height: 1.5; }
-.agent-model-notice { flex: 1 1 100%; margin: 2px 4px 0; color: var(--ink-2); font-size: 11px; line-height: 1.5; }
 :is(#agentModelsRetry, #agentRecover):not([hidden]) {
   display: inline-flex; align-items: center; min-height: 38px; padding: 4px 8px;
   border-radius: 6px; font-size: 12px; white-space: nowrap;
@@ -110,7 +111,7 @@ body.single-agent-active #threadAsk:not([hidden]) { display: flex; }
 }
 @media (max-width: 700px) {
   body.single-agent-active .chat-input-container .consensus-switch-container {
-    flex: 1 1 0; max-width: calc(100% - 46px); flex-wrap: wrap; gap: 2px 4px;
+    flex: 1 1 0; flex-wrap: wrap; gap: 2px 4px;
   }
   .agent-model-controls { flex: 1 1 100%; max-width: 100%; gap: 2px; }
   body.single-agent-active .chat-input-container .input-actions-container { align-self: flex-end; }

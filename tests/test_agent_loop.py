@@ -212,6 +212,7 @@ def test_close_during_provider_stream_settles_cancelled_and_closes_socket(store,
     assert closed == [0]
     assert totals(store)["unmetered_calls"] == 1
     assert store.get_turn(UID, loop.chat_id, loop.turn_id)["error_code"] == "cancelled"
+    assert not any(e.get("kind") == "tool" for e in loop.completion.activity)
 
 
 def test_missing_native_usage_is_partial_and_keeps_reservation(store, monkeypatch):
@@ -223,7 +224,43 @@ def test_missing_native_usage_is_partial_and_keeps_reservation(store, monkeypatc
     assert loop.completion.usage["complete"] is False
     assert loop.costs.tokens == 600_000
     assert totals(store)["incomplete_calls"] == 1
-    assert any(e and e.get("kind") == "tool" and e["status"] == "unknown" for e in events)
+    assert loop.remaining_tools == 0
+    assert not any(e and e.get("kind") == "tool" for e in events)
+    saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
+    assert not any(e.get("kind") == "tool" for e in saved["agent_activity"])
+
+
+@pytest.mark.parametrize("selection_id", [m.selection_id for m, _ in agent_client.agent_models()])
+@pytest.mark.parametrize("search_count", [None, 0])
+def test_greetings_offer_optional_search_without_inventing_tool_activity(store, monkeypatch, selection_id, search_count):
+    raw = {"prompt_tokens": 800, "completion_tokens": 62, "cost": 0.0004}
+    if search_count is not None:
+        raw["server_tool_use"] = {"web_search_requests": search_count}
+    requests, _, _ = transport(monkeypatch, [[packet({"content": "Hey!", "reasoning": "A greeting. No tool needed."}, finish="stop", usage=raw)]])
+    loop = loop_for(store)
+    loop.model = resolve_agent_model(selection_id)
+    loop.messages[-1]["content"] = "was geht ab"
+    events = list(loop.run())
+    assert len(requests) == 1
+    assert "tool_choice" not in requests[0] and "plugins" not in requests[0]
+    assert requests[0]["tools"][0]["type"] == "openrouter:web_search"
+    assert not any(e and e.get("kind") == "tool" for e in events)
+    assert loop.completion.usage["complete"] is True
+    assert loop.completion.usage["estimated_cost_nano_usd"] == 400_000
+    assert totals(store)["calls"] == 1
+
+
+@pytest.mark.parametrize("sources", [[], [{"type": "url_citation", "url_citation": {"url": "https://example.org/report", "title": "Report"}}]])
+def test_interrupted_search_only_records_activity_if_use_is_confirmed(store, monkeypatch, sources):
+    transport(monkeypatch, [[packet({"content": "Partial", "annotations": sources}), RuntimeError("Stream interrupted")]])
+    loop = loop_for(store)
+    with pytest.raises(RuntimeError, match="Stream interrupted"):
+        list(loop.run())
+    saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
+    tools = [e for e in saved["agent_activity"] if e.get("kind") == "tool"]
+    assert len(tools) == (1 if sources else 0)
+    if sources:
+        assert tools[0]["status"] == "unknown" and tools[0]["sources"][0]["url"] == "https://example.org/report"
 
 
 @pytest.mark.parametrize("selection_id", [m.selection_id for m, _ in agent_client.agent_models()])
