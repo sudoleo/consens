@@ -1818,7 +1818,8 @@ function renderAccountTierDetail(account) {
         + `${Number(agentUsage.input_tokens || 0).toLocaleString()} input / `
         + `${Number(agentUsage.output_tokens || 0).toLocaleString()} output tokens · `
         + `${Number(agentUsage.calls || 0)} calls`
-        + (agentUsage.unmetered_calls ? ` · ${agentUsage.unmetered_calls} without usage data` : '')
+        + (agentUsage.unmetered_calls ? ` · ${agentUsage.unmetered_calls} without token usage data` : '')
+        + (agentUsage.incomplete_calls ? ` · ${agentUsage.incomplete_calls} with partial usage data` : '')
         + (agentUsage.unsettled_calls ? ` · ${agentUsage.unsettled_calls} pending/unsettled` : '');
     panel.append(usage);
     panel.hidden = false;

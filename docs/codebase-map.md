@@ -95,7 +95,7 @@ Threadpool aus. `async def` bleibt nur für echte Await-Pfade (Mail, explizites
 
 | Router | Zweck (Auswahl an Pfaden) |
 |---|---|
-| `agent.py` | `GET /agent/models` und `POST /agent`: serverseitig Admin/Pro-geschützter Modellkatalog bzw. einzelner Textmodell-Aufruf im bestehenden Chat. Strikte Modell-/Reasoning-Auswahl, owner-gebundene Chat-/Request-IDs, SSE mit sichtbarem Reasoning und Usage, idempotente Wiederaufnahme fertiger Antworten und simulierte Tokenkosten. Kein `/prepare`, Fan-out, Consensus, Judge, Webtool oder Memory-Kompressor. `recover_only` liest/finalisiert ausschließlich vorhandene fertige Antworten. |
+| `agent.py` | `GET /agent/models` und `POST /agent`: Admin/Pro-geschützter Modellkatalog mit Tool-Fähigkeiten und begrenzter Modell-/Tool-Lauf im bestehenden Chat. Strikte Auswahl, owner-gebundene IDs, SSE mit sichtbarem Reasoning, bestätigten Tool-Ergebnissen/Quellen und aggregierter Usage. Native Suche zunächst direkt im gewählten Claude Haiku 4.5 über Anthropic; kein eigener Suchdienst. Idempotente Schrittbelege und Wiederaufnahme fertiger Antworten. Kein `/prepare`, Fan-out, Consensus, Judge oder Memory-Kompressor. `recover_only` startet nie einen Modellaufruf. |
 | `source_checks.py` | Dauerhafte Quellenprüfung: owner-gebundenes `GET /api/source-checks/{job_id}` mit `cursor`, `revision` und `after_revision`; `POST .../{job_id}/resume` nimmt den eigenen OpenRouter-Key nur in den Prozessspeicher auf. `GET /api/share/{share_id}/source-check?version=...` und `GET /api/topics/{slug}/source-check?version=...` prüfen pro Paketseite aktive Ressource, Sichtbarkeit, Run- und Antwortversion. Seiten liefern `source_verification` plus `next_cursor`, bei geändertem Stand 409. API-Key-Clients verwenden den rungebundenen Endpoint in `api_v1.py`: `GET /api/v1/consensus/runs/{run_id}/source-check`, auch als `result.source_verification.status_url` ausgegeben. |
 | `pages.py` | HTML-Seiten + SEO: `/` (Landing, auch mit aktiver Session direkt erreichbar), `/model-pulse` (öffentliche, erklärte Best-answer-Rangliste), `/app` (Haupt-App), `/app/watches` (gleiche App-Shell; watch.js öffnet anhand des Pfads das Watch-Dashboard), `/admin` (inkl. Topics-Tab), `/admin/topics` (308-Kompatibilitätsredirect auf `/admin#topics`), `/admin/benchmark` (Benchmark-Run-Visualisierung), `/about`, `/ai-model-comparison`, `/consensus-engine` (nutzerfreundliche Consensus-Engine-Erklärung), `/privacy` `/imprint` `/terms`, `robots.txt`, `sitemap*.xml`. Außerdem der öffentliche, familienaggregierte Best-answer-Zähler `GET /api/model-leaderboard` (60 s Browser-/CDN-Cache; `period=all|since-2026-08-31`; alle neun Familien einschließlich Nullständen, Kimi/GLM und Meta/Muse mit eigenem Verfügbarkeitsdatum aus `_LEADERBOARD_AVAILABLE_SINCE`). Beide Zeiträume nutzen zusätzlich einen serverseitigen 60-s-Cache mit serialisiertem Refresh pro Zeitraum/Prozess. Der gemeinsame Zeitraum zählt die datierten, deduplizierten `model_votes` ab 31.08.2026 über indexierte `count()`-Abfragen pro Familie; Modellkatalog und Counts werden im selben Read-only-Transaktionssnapshot gelesen. Solange der neue `model_votes`-Index aus `firestore.indexes.json` fehlt/aufbaut, greift nur für diesen Indexfehler der gecachte Legacy-Scan. Kontolöschungen entfernen weiterhin Votes aus dem Zeitraum, ohne Lifetime-Zähler zurückzusetzen; `/feedback`, `/vote`, `/check_keys` bleiben die weiteren internen Seiten-Routen (Key-Test nur für verifizierte Logins). Feedback ist persistent pro UID auf 30 Sekunden und 10/UTC-Tag begrenzt. Ein Best-answer-Vote muss an ein noch gültiges, owner-gebundenes `result_id` gebunden sein, zum serverseitigen Gewinner passen und kann pro Lauf genau einmal zählen. |
 | `chat.py` | Kern-LLM-Flow: `/prepare`, die aus `cfg.PROVIDERS[*].ask_endpoint` erzeugten `/ask_*`-Routen (aktuell zusätzlich `/ask_kimi` und `/ask_glm`), `/consensus`, `/resolve`. `/prepare` und die `/ask_*`-Endpoints akzeptieren weiter das optionale Legacy-`context`-Feld für nicht migrierte Bookmark-Fortsetzungen. Additiv laden `/ask_*` das owner-gebundene Tripel `chat_id`/`turn_id`/`context_version_id`; Legacy- und Versionskontext zusammen werden abgewiesen. Alle `/ask_*`-Endpoints laufen über `handle_ask` + die deklarative Familien-Registry `ASK_PROVIDERS`; Transport und Credential sind für alle OpenRouter, `useOwnKeys` wählt optional `openrouter_key`. `/consensus` akzeptiert optional Chat-/Turn-IDs plus `turn_sources` und die exakt am Turn verknüpfte `context_version_id`, prüft alles owner-gebunden vor dem Judge und finalisiert nach Consensus, Differences und Share-`result_id` in Streaming- wie JSON-Pfad über `ChatStore`. Sendet der Browser die stabile `bookmarkId`, schreibt `/consensus` den autoritativen Bookmark-Snapshot vor seinem erfolgreichen Final-Event und liefert kompakte `bookmark_meta`; ein separater Browser-Request ist nur noch Fallback. Ein bereits completed Turn wird mit Consensus, Differences, Quellen und Modellantworten owner-geschützt wiedergegeben, ohne Engine-/Differences-/Share-/Statistik-/Completion- oder Usage-Write; ohne IDs bleibt der Legacy-Vertrag unverändert. |
@@ -1565,13 +1565,13 @@ wird als nicht unterstützte Option abgewiesen; fertige Replays bleiben JSON.
 
 `agent-activity.js` wird laut `bundles.json` vor `consensus-run.js` und
 `agent-chat.js` geladen. `App.agentActivity` verarbeitet versionierte `activity`-
-SSE-Ereignisse (Status, sichtbares Reasoning, Usage) mit eigener Schritt-ID und
+SSE-Ereignisse (Status, sichtbares Reasoning, Usage, Tool) mit eigener Schritt-ID und
 rendert die aufklappbare Anzeige im Live-Chat und über den vorhandenen
 History-Renderer. Reasoning-Texte/Summaries werden getrennt vom Antworttext
 behandelt, als Text dargestellt und auf 32.000 Zeichen begrenzt. Verschlüsselte
 Blöcke bleiben außerhalb des Anzeige-/Persistenzvertrags; fehlende Texte oder
 Messwerte werden nicht erfunden. Ein gemeinsamer Scrollbereich folgt dem Stream,
-solange der Nutzer nicht zurückscrollt. Live-Reasoning öffnet sich automatisch,
+solange der Nutzer nicht zurückscrollt. Live-Reasoning und Tool-Ereignisse öffnen sich automatisch,
 nach Abschluss klappt es zu; eine explizite Nutzerwahl bleibt bestehen. Nur die
 laufende Statuszeile zeigt Strich und Lichtlauf (`source-label-shine` wie beim
 Quellencheck; ohne Animation bei Reduced Motion/Forced Colors). Stop-/Fehlerstatus
@@ -1603,25 +1603,57 @@ behält von erfolgreich gespeicherten Agent-Läufen höchstens zwölf Snapshots
 Ältere Chats werden regulär aus ihren Server-Bookmarks geladen. Laufende,
 fehlgeschlagene und andere Pipeline-Ergebnisse fallen nicht unter diese Bereinigung.
 
-`app/services/agent_runs.py` trennt Chat-/Turn-Orchestrierung und persistente
-Abrechnung vom Texttransport in `llm/agent_client.py`. Der Standard ist
+`app/services/agent_loop.py` steuert den begrenzten Modell-/Tool-Loop.
+`agent_policy.py` friert gemeinsame Limits/Freigaben ein; `agent_tools.py`
+enthält native Konfiguration und die zunächst leere Registry für später
+freigegebene lokale, lesende Tools. Strikte Pydantic-Schemas, höchstens ein
+Client-Tool pro Modellantwort, 2.048 Zeichen Argumente, 8.000 Zeichen Ergebnisse,
+validierte Namen/Typen und deduplizierte Call-IDs gelten vor jeder Ausführung.
+Eine Client-Tool-Fortsetzung benötigt ein geprüftes nicht denkendes Protokoll;
+Signaturen/Reasoning-Blöcke werden nicht stillschweigend entfernt und dann
+wiederverwendet. Die vollständige Schnittstelle wird mit einem lokalen Testtool
+geprüft; zusätzliche Produkttools oder Modell-Delegation sind nicht freigegeben.
+`agent_costs.py` berechnet Simulationstarife, reserviert gemeinsame Token-/Kosten-
+Budgets und aggregiert gemessene Usage. `agent_runs.py` hält persistente Claims,
+Abrechnung und Turn-Abschluss; `llm/agent_client.py` übersetzt einen Providerrequest
+und validiert/beschränkt dessen Stream. Der Standard ist
 `deepseek/deepseek-v4.1-flash`; Modell, Label, Output-Limit und versionierte
 Simulationstarife sind über `AGENT_*` konfigurierbar (siehe
-[`agent-mode.md`](agent-mode.md)). Es gilt genau ein OpenRouter-Aufruf mit
-ZDR, deaktivierten Fallbacks, standardmäßig maximal 4.096 Output-Tokens und
-180 Sekunden Providerbudget. Der Kontext besteht aus Systemtext sowie allen abgeschlossenen
+[`agent-mode.md`](agent-mode.md)). Es gelten höchstens drei OpenRouter-Requests,
+zwei Tool-Nutzungen, 800.000 Input-/Output-Tokens als konservatives Zulassungsbudget
+und 1 USD simuliertes Kostenbudget je Turn. ZDR, deaktivierte Fallbacks und
+standardmäßig maximal 4.096 Output-Tokens pro Request bleiben bestehen.
+Alle Schritte teilen 180 Sekunden Laufzeit; das Budget wird vor und nach RPCs
+geprüft. Unbekannte Usage gibt reservierte Tokens/Kosten nicht wieder frei.
+Der Kontext besteht aus Systemtext sowie allen abgeschlossenen
 User-/Assistant-Turns in Reihenfolge. Über 120.000 Zeichen fordert der Server
 einen neuen Chat an; es gibt keine zusätzliche LLM-Kompression.
 Kleinere Modellfenster haben zusätzlich ein konservatives UTF-8-Bytebudget
 einschließlich Output-Reserve vor dem bezahlten Claim.
+
+Die erste Integration verwendet `openrouter:web_search` direkt im gewählten
+`anthropic/claude-haiku-4.5`-Request, gepinnt auf `anthropic`, mit `engine: native`,
+`max_uses: 2` und `max_tool_calls: 2`. Der Provider führt seinen nativen Suchdialog
+innerhalb dieses Requests aus; kein zusätzlicher Suchdienst oder Suchmodell.
+Andere Picker-Modelle erhalten keine pauschale Suchfähigkeit. `GET /agent/models`
+liefert `tools_by_effort`; der Composer zeigt die Verfügbarkeit. Native Suche
+reserviert vorsorglich das volle Modellfenster je möglichem Suchsegment plus
+Modellfortsetzung; `max_results` gilt nicht als natives Inputlimit. Dokumentierte
+Providergrenzen und offizielle Quellen stehen in `agent-mode.md`.
+Nur zurückgegebene Quellenannotationen und Such-Usage erzeugen bestätigte
+Tool-Ereignisse, mit bis zu fünf HTTP(S)-Quellenlinks. Die API garantiert keine
+nativen Startzeiten/Queries; diese werden nicht erfunden. Fehlende Such-Usage
+bleibt `unknown` und macht die Kostensumme unvollständig. Bestätigte Suchen
+zählen zusätzlich mit 0,01 USD pro Suche in der versionierten Simulation.
 
 `app/services/agent_runtime.py` begrenzt aktive Agent-Produzenten pro Prozess
 auf 16 (`AGENT_MAX_CONCURRENT_RUNS`, 1–64); Überlast liefert vor Turn-Anlage
 503 mit `Retry-After: 5`. Zusätzlich reserviert `AgentRunStore.claim` atomar
 mit Beleg/Kostenzählern maximal zwei aktive Agent-Läufe je Nutzer in
 `users/{uid}/chat_state/agent_runs.leases`, instanzübergreifend ohne globales
-Hotspot-Dokument. Die Lease läuft nach fünf Minuten aus und wird beim Settlement
-in derselben Transaktion entfernt. Ein Owner-Limit nach Streamstart liefert
+Hotspot-Dokument. Der Slot gehört zum ganzen Lauf. Owner-/Chat-Lease werden beim
+ersten Claim gemeinsam auf fünf Minuten gesetzt, zwischen Schritten nicht
+verlängert und erst bei `finish_run` atomar freigegeben. Ein Owner-Limit nach Streamstart liefert
 ein SSE-Fehlerereignis und gibt den unbezahlten Turn frei.
 Der Claim erfolgt erst im gestarteten Produzenten. `AgentStreamingResponse`
 bereinigt auch Antworten, deren Iterator wegen Disconnect nie betreten wurde;
@@ -1636,22 +1668,35 @@ Consensus-Completion und Context-Build akzeptieren keine Agent-Unterhaltung.
 Eine transaktionale Chat-Sperre verhindert gleichzeitige neue Turns; nach
 fünf Minuten kann ein abgestürzter Lauf durch einen **neuen** Turn abgelöst
 werden. Derselbe verbrauchte Request wird niemals erneut ausgeführt.
-`agent_settings` entsteht atomar bei Create-Turn; `agent_activity`,
+`agent_settings` mit Tool-Freigaben und Policy-Snapshot entsteht atomar bei Create-Turn; `agent_activity`,
 `agent_usage`, `agent_finish_reason` und `agent_reasoning_truncated` werden
-beim Settlement mit Antwort/Status gespeichert und nur im vollständigen
+beim Laufabschluss mit Antwort/Status gespeichert und nur im vollständigen
 Turn-Detail ausgegeben. Gespeichertes Reasoning wird nicht in Folgeprompts
 übernommen. Alte Turns ohne diese Felder bleiben darstellbar.
 Agent-Turn-GET und -Listen überspringen leere `model_answers`-Abfragen.
 
 Vor dem Providerstart entsteht pro Schritt ein deduplizierter Beleg unter
 `users/{uid}/llm_calls/{sha256(chat,turn,step)}` mit Modell-/Tarifsnapshot und
-Status `running`. Abschluss und `users/{uid}.agent_usage` werden atomar
+Status `running`. IDs sind `completion:0..2`; der erste Beleg enthält zusätzlich
+`run_token`, `run_status`, `last_step` und den Policy-Snapshot. Jeder weitere
+Claim prüft Besitzer, Vorgänger-Settlement, Lease und Schrittbudget transaktional.
+Schritt-Settlement und `users/{uid}.agent_usage` werden atomar
 verbucht: Input/Output, Cache-Input, Reasoning (bereits in Output enthalten),
 `estimated_cost_nano_usd` als Integer sowie gemessene, unbekannte und noch
-unabgeschlossene Aufrufe. Nur tatsächlich vom Provider gemeldete Tokens
+unabgeschlossene Aufrufe. `incomplete_calls` kennzeichnet gemessene Token-Belege
+mit fehlender nativer Such-Usage; aggregierte `agent_usage.complete=false`
+kennzeichnet Teilsummen im Chat. Bekannte Suchkosten bleiben auch ohne gemeldete
+Tokens erhalten; unbekannte Tokenfelder bleiben `null`. Getrennte Usage-Chunks
+werden pro Request zusammengeführt. Nur tatsächlich vom Provider gemeldete Tokens
 fließen in die Kostensumme; fehlende Usage bei Abbruch/Fehler wird nicht
 geschätzt. Es gibt keinen Guthabenabzug und keinen Consensus-Usage-Write.
 Die Admin-Kontoansicht zeigt diese kumulierten Werte beim Nutzer-Lookup.
+`settle(final=False)` schließt einzelne Belege, `finish_run` anschließend den
+Turn mit aggregierter Aktivität/Usage. Ein Absturz dazwischen erlaubt keinen
+neuen Aufruf; nur bereits gespeicherte Antworten sind wiederherstellbar.
+`activity`-IDs sind mit dem Schritt präfixiert; `status.clear_response` verwirft
+Zwischenantworttext vor der nächsten Completion. Tooltexte werden als Text,
+Quellen als validierte Links mit `noopener noreferrer` gerendert.
 
 SSE-Abbruch schließt den Provider-Socket; der Producer wird explizit geschlossen
 und finalisiert seinen Beleg auch bei Disconnect. Ein Prozessabsturz kann einen
@@ -1664,7 +1709,8 @@ Kontolöschung entfernt auch `llm_calls`; Tombstones sperren verspätete Writer.
 Der gemeinsame SSE-Pump puffert höchstens 64 Ereignisse. Ist der Puffer wegen
 eines langsamen Clients 30 Sekunden voll, wird der Producer abgebrochen und
 geschlossen; Queue-Wartezeiten prüfen Abbruch regelmäßig. Die Keepalive-Frequenz
-bleibt 15 Sekunden. Persistenz-RPCs sind nicht Teil des Providerbudgets; diese
+bleibt 15 Sekunden. Synchrone Persistenz-RPCs werden nicht unterbrochen, das
+gemeinsame Zeitbudget wird nach ihrer Rückkehr erneut geprüft. Diese
 Architektur ist weiterhin für begrenzte Chat-Läufe vorgesehen. Dauerhafte
 Hintergrundjobs brauchen später Worker, Checkpoints und Wiederanbindung.
 

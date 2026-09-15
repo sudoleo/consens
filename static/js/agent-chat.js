@@ -104,6 +104,13 @@
     select.value = ready ? current.model_id || catalog.default_model_id : "";
     select.disabled = !ready || running;
     const model = catalog?.models.find(item => item.id === select.value);
+    if (notice && ready && notice.hidden && model?.tools_by_effort) {
+      const available = model.tools_by_effort[current.reasoning_effort || "default"] || [];
+      const searchModel = catalog.models.find(item => Object.values(item.tools_by_effort || {}).some(tools => tools.includes("web_search")));
+      notice.textContent = available.includes("web_search") ? "Web search is available when needed."
+        : searchModel ? `Web search is available with ${searchModel.label}.` : "Web search is not available for this model.";
+      notice.hidden = false;
+    }
     const efforts = model?.reasoning_efforts || ["default"];
     const effortSignature = JSON.stringify([model?.id, efforts]);
     if (effort.dataset.options !== effortSignature) {
@@ -338,6 +345,7 @@
         activity: { receive(event) {
           if (!registry.isExecuting(context.runId) || !registry.isAuthCurrent(context)) return;
           App.agentActivity?.receive(context.metadata.agentActivity, event);
+          if (event.kind === "status" && event.clear_response) context.consensus.streamText = "";
           if (event.settings) context.metadata.agentSettings = event.settings;
           if (event.kind === "usage") context.metadata.agentUsage = event.usage;
           if (!timer) timer = setTimeout(() => { timer = null; registry.update(context.runId, () => {}); }, 100);

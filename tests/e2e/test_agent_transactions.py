@@ -8,6 +8,7 @@ from google.cloud import firestore
 from app.core.e2e_profile import E2E_PROJECT_ID, assert_safe_e2e_environment
 from app.services.account_deletion import FirestoreAccountDeletion
 from app.services.agent_runs import AgentRunStore
+from app.services.agent_policy import AgentPolicy
 from app.services.agent_runtime import AgentCapacityExceeded
 from app.services.llm.agent_client import AgentModel, AgentCompletion, measured_usage
 
@@ -31,7 +32,7 @@ def test_parallel_workers_share_admission_and_settle_each_receipt_once():
         def claim(item):
             gate.wait(timeout=5)
             try:
-                return AgentRunStore(db).claim(uid, *item, model)
+                return AgentRunStore(db).claim(uid, *item, model, run_token=uid, policy=AgentPolicy().snapshot())
             except AgentCapacityExceeded:
                 return False
 
@@ -48,13 +49,28 @@ def test_parallel_workers_share_admission_and_settle_each_receipt_once():
         completion.usage = measured_usage({"prompt_tokens": 100, "completion_tokens": 10}, model)
 
         def settle(_):
-            return AgentRunStore(db).settle(uid, *winners[0], completion=completion, status="succeeded")
+            return AgentRunStore(db).settle(uid, *winners[0], completion=completion, status="succeeded", final=False)
 
         with ThreadPoolExecutor(max_workers=4) as pool:
             assert sum(pool.map(settle, range(4))) == 1
         totals = db.collection("users").document(uid).get().to_dict()["agent_usage"]
         assert totals["measured_calls"] == 1 and totals["unsettled_calls"] == 1
         assert totals["estimated_cost_nano_usd"] == completion.usage["estimated_cost_nano_usd"]
+        assert len(store.active_ref(uid).get().to_dict()["leases"]) == 2
+        # A paid continuation keeps the SAME owner slot and has its own receipt.
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            assert sum(pool.map(lambda _: AgentRunStore(db).claim(uid, *winners[0], model,
+                step="completion:1", run_token=uid), range(4))) == 1
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            assert sum(pool.map(lambda _: AgentRunStore(db).settle(uid, *winners[0], completion=completion,
+                status="succeeded", step="completion:1", final=False), range(4))) == 1
+        assert len(store.active_ref(uid).get().to_dict()["leases"]) == 2
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            assert sum(pool.map(lambda _: AgentRunStore(db).finish_run(uid, *winners[0], completion=completion,
+                status="succeeded", run_token=uid), range(4))) == 1
+        totals = db.collection("users").document(uid).get().to_dict()["agent_usage"]
+        assert totals["measured_calls"] == 2 and totals["unsettled_calls"] == 1
+        assert totals["estimated_cost_nano_usd"] == 2 * completion.usage["estimated_cost_nano_usd"]
         replacement = next(item for item, allowed in zip(turns, admitted) if not allowed)
         assert store.claim(uid, *replacement, model)
         # Chat deletion does not prevent the receipt from freeing its owner slot.

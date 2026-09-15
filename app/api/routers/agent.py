@@ -1,4 +1,4 @@
-"""Admin/Pro-only single-model text turns in the existing chat storage."""
+"""Admin/Pro-only bounded Agent turns in the existing chat storage."""
 from __future__ import annotations
 
 import logging
@@ -14,11 +14,14 @@ from app.api.routers.chat_history import _chat_uid, _raise_store_error
 from app.api.routers.bookmarks import _bookmark_meta
 from app.services import persistence_guard
 from app.services.agent_runs import AgentRunStore
+from app.services.agent_loop import AgentLoop
+from app.services.agent_policy import AgentPolicy
+from app.services.agent_tools import configured_model
 from app.services.agent_runtime import AgentCapacityExceeded, AgentStreamingResponse, agent_capacity
 from app.services.chat_store import normalize_question, ChatNotFound, TurnStatusConflict, _idempotent_turn_id
 from app.services.llm.agent_client import AgentCompletion, agent_model, agent_model_options, resolve_agent_model
 from app.services.llm.credentials import resolve_developer_api_keys, openrouter_api_key
-from app.services.llm.provider_runtime import ProviderCancellation, ProviderCancelled
+from app.services.llm.provider_runtime import AnalysisBudgetExceeded, ProviderCancellation, ProviderCancelled
 from app.services.llm.streaming import iter_sse_with_keepalive, sse_pack, SSE_HEADERS
 from app.services.llm.mock_llm import mock_llm_enabled
 
@@ -123,7 +126,7 @@ def run_agent(request: Request, payload: AgentRequest):
         if payload.recover_only:
             raise HTTPException(status_code=404, detail="No saved answer is available for this request yet.")
         try:
-            model = resolve_agent_model(payload.model_id, payload.reasoning_effort)
+            model = configured_model(resolve_agent_model(payload.model_id, payload.reasoning_effort))
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from None
         key = openrouter_api_key(resolve_developer_api_keys())
@@ -137,7 +140,8 @@ def run_agent(request: Request, payload: AgentRequest):
             uid, payload.chat_id, question=payload.question, mode="Agent", deep_search=False,
             selected_models=[model.model], consensus_model=model.model,
             client_request_id=payload.client_request_id, execution_mode="agent",
-            agent_settings={**model.settings(), "selection": {"model_id": payload.model_id, "reasoning_effort": payload.reasoning_effort}},
+            agent_settings={**model.settings(), "policy": AgentPolicy().snapshot(),
+                            "selection": {"model_id": payload.model_id, "reasoning_effort": payload.reasoning_effort}},
         )
         if turn["status"] == "completed":
             lease.release()
@@ -161,43 +165,31 @@ def run_agent(request: Request, payload: AgentRequest):
     cancellation = ProviderCancellation()
 
     def events():
-        completion = AgentCompletion()
+        loop = AgentLoop(store=store, uid=uid, chat_id=payload.chat_id, turn_id=turn["id"],
+                         model=model, messages=messages, api_key=key or "", cancellation=cancellation,
+                         completion_factory=AgentCompletion,
+                         mock_answer="Agent test answer: " + payload.question if mock_llm_enabled() else None)
+        completion = loop.completion
         status = "failed"
-        claimed = False
         error = "The agent response could not be completed. Please try a new message."
         try:
-            cancellation.raise_if_cancelled()
-            claimed = store.claim(uid, payload.chat_id, turn["id"], model)
-            if not claimed:
-                raise TurnStatusConflict("This agent request has already started. Reopen the conversation to check its result.")
-            cancellation.raise_if_cancelled()
-            yield sse_pack("started", {"chat_id": payload.chat_id, "turn_id": turn["id"]})
-            yield sse_pack("activity", completion.event("status", "started", status="working", settings=model.settings()))
-            if mock_llm_enabled():
-                completion.text = "Agent test answer: " + payload.question
-                completion.finish_reason = "stop"
-                # Mock output is not provider-measured usage.
-                yield sse_pack("delta", {"text": completion.text})
-            else:
-                yield from (sse_pack(event["type"], event) for event in completion.stream(
-                    model=model, messages=messages, api_key=key or ""))
+            source = loop.run()
+            try:
+                for event in source:
+                    if event:
+                        yield sse_pack(event["type"], event)
+            finally:
+                source.close()
             status = "succeeded"
         except (ProviderCancelled, GeneratorExit):
             status = "cancelled"
             raise
-        except (AgentCapacityExceeded, TurnStatusConflict) as exc:
+        except (AgentCapacityExceeded, TurnStatusConflict, AnalysisBudgetExceeded) as exc:
             error = str(exc)
         except Exception as exc:
             logging.warning("Agent completion failed category=%s", safe_exception(exc))
-        finally:
-            # This runs on the producer thread even after the browser leaves.
-            # Unknown usage remains explicitly visible in the admin totals.
-            if claimed:
-                completion.event("status", "finished", status=status, finish_reason=completion.finish_reason)
-                store.settle(uid, payload.chat_id, turn["id"], completion=completion, status=status)
-            else:
-                store.release_unclaimed(uid, payload.chat_id, turn["id"])
         if status != "succeeded":
+            yield sse_pack("activity", {"version": 1, "step_id": "run", "id": "run/usage", "kind": "usage", "usage": completion.usage})
             yield sse_pack("error", {"error": error})
             return
         try:

@@ -93,11 +93,16 @@ venv\Scripts\python.exe -m playwright install chromium
 
 ## Reguläre Suite
 
-Agent Beta: Backend-Verträge in `tests/test_agent_runs.py`, Browser-State in
+Agent Beta: Backend-Verträge in `tests/test_agent_runs.py` und
+`tests/test_agent_loop.py` (native Suche, Schrittbudgets, Tool-Schemas, Abbruch
+und Teilabrechnung), Browser-State in
 `tests/js/agent-chat.test.mjs`. Der isolierte Layout-/Bookmark-Browserlauf
 `tests/e2e/test_agent_chat_frontend.py` nutzt dieselben vollständig gemockten
 APIs und den writerfreien Server wie die Phase-4-Suite (siehe E2E-README).
 Er benötigt keinen laufenden Emulator und ruft kein reales Modell auf.
+Die Transaktionsprüfung `tests/e2e/test_agent_transactions.py` prüft mit
+`dev.ps1 check browser -TestPath tests/e2e/test_agent_transactions.py` auch
+mehrere bezahlte Schritte innerhalb desselben Owner-Slots im lokalen Emulator.
 
 ```powershell
 venv\Scripts\python.exe -m pytest tests -q

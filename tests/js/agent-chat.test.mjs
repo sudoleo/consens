@@ -357,4 +357,61 @@ describe("single-model agent chat", () => {
     expect(document.getElementById("agentAnswerActivity").textContent).toContain("120 tokens");
     dom.window.close();
   });
+
+  it("renders confirmed native sources, partial usage and safe links from history", () => {
+    const { window, document, dom } = boot();
+    const host = document.getElementById("agentAnswerActivity");
+    const events = [];
+    const native = { version: 1, step_id: "completion:0:web_search", id: "completion:0:web_search/tool", kind: "tool",
+      name: "web_search", status: "succeeded", count: 2, sources: [
+        { url: "https://example.com/report", title: '<img src=x onerror="alert(1)">Report' },
+        { url: "javascript:alert(1)", title: "Unsafe" }, { url: "https://user:pass@example.com", title: "Credentials" }], };
+    window.App.agentActivity.receive(events, native);
+    window.App.agentActivity.receive(events, { ...native, count: 1 });
+    expect(events).toHaveLength(1);
+    window.App.agentActivity.renderTurn(host, { agent_activity: events, agent_usage: {
+      input_tokens: 100, output_tokens: 20, complete: false, estimated_cost_nano_usd: 10000000 } });
+    expect(host.textContent).toContain("Activity and sources");
+    expect(host.textContent).toContain("Web search · Completed · 1 search");
+    expect(host.textContent).toContain("usage incomplete");
+    expect(host.querySelector("img")).toBe(null);
+    expect(host.querySelectorAll("a")).toHaveLength(1);
+    expect(host.querySelector("a").rel).toBe("noopener noreferrer");
+    expect(host.querySelector("details").open).toBe(false);
+    dom.window.close();
+  });
+
+  it("keeps tool states honest and clears intermediate answer text for a new step", async () => {
+    const { window, document, dom } = boot();
+    await selectAgent(window);
+    let handlers, resolve;
+    window.streamSSERequest = vi.fn((_url, _payload, _signal, received) => {
+      handlers = received;
+      return new Promise(r => { resolve = r; });
+    });
+    document.getElementById("questionInput").value = "Question";
+    const pending = window.App.agentChat.send();
+    await vi.waitFor(() => expect(handlers).toBeDefined());
+    const run = window.App.runRegistry.visible();
+    handlers.delta.append("Let me check.");
+    const event = { version: 1, step_id: "tool:0", id: "tool:0/tool", kind: "tool", name: "double", status: "running" };
+    handlers.activity.receive(event);
+    window.App.agentChat.project(run);
+    const host = document.getElementById("agentAnswerActivity");
+    expect(host.textContent).toContain("Using tool…");
+    expect(host.querySelector("details").open).toBe(true);
+    handlers.activity.receive({ ...event, status: "succeeded", text: '{"result":4}' });
+    handlers.activity.receive({ version: 1, step_id: "completion:1", id: "completion:1/started", kind: "status", status: "working", clear_response: true });
+    expect(run.consensus.streamText).toBe("");
+    handlers.delta.append("The result is 4.");
+    window.App.agentChat.project(run);
+    expect(host.textContent).not.toContain("Using tool…");
+    expect(document.getElementById("agentAnswerBody").textContent).not.toContain("Let me check");
+    window.App.runRegistry.cancel(run.runId);
+    handlers.activity.receive({ ...event, status: "running" });
+    expect(run.metadata.agentActivity.find(item => item.id === event.id).status).toBe("succeeded");
+    resolve({ ok: true, data: { response: "Late", turn: {} } });
+    await pending;
+    dom.window.close();
+  });
 });

@@ -1,6 +1,6 @@
 # Agent · Beta
 
-Ein Textmodell im normalen Chat, verfügbar für Pro-Nutzer und Admins. Der
+Ein begrenzter Modell-/Tool-Lauf im normalen Chat, verfügbar für Pro-Nutzer und Admins. Der
 Modus ist pro Unterhaltung festgelegt. Neue Chats starten über den vorhandenen
 Sidebar-Knopf; die Consensus-Ausführung bleibt separat auswählbar.
 
@@ -53,12 +53,85 @@ Abbruchmechanismus. Begrenzung: 32.000 Zeichen sichtbares Reasoning, höchstens
 32 Reasoning-/Status-Einträge vor den abschließenden Status-/Usage-Ereignissen;
 eine gekürzte Darstellung wird gekennzeichnet. Das Antwortlimit bleibt separat.
 
-`activity`-SSE-Ereignisse haben `version: 1`, `step_id: completion:0`, eine `id`
-und `kind: status | reasoning | usage`. Reasoning-Deltas tragen `append: true`
+`activity`-SSE-Ereignisse haben `version: 1`, eine `step_id`, eine laufweit eindeutige `id`
+und `kind: status | reasoning | usage | tool`. Reasoning-Deltas tragen `append: true`
 und `format: text | summary`; gespeicherte Ereignisse enthalten den zusammen-
 gefügten Text. `agent-activity.js` verarbeitet und rendert diese Ereignisse für
-laufende Antworten und gespeicherte Turns. Neue Tool-Schritte können später
-denselben Vertrag um eigene Schritt-IDs und Ereignistypen erweitern.
+laufende Antworten und gespeicherte Turns. Schritt-IDs sind `completion:0..2`,
+`tool:0..1`, `completion:N:web_search` und `run`. IDs enthalten den Schritt als
+Präfix. `status.clear_response` ersetzt bei einer Modellfortsetzung einen
+vorherigen Zwischenantworttext. Die eigentliche Turn-Antwort ist nur die letzte
+Modellantwort. Tool-Einträge zeigen `running`, `succeeded`, `failed`, `blocked`,
+`cancelled` oder `unknown` sowie begrenzte Ergebnisse/Quellen. Die Anzeige öffnet
+sich auch für Tool-Ereignisse. Der Browser hält höchstens 64 Aktivitätseinträge;
+der Server begrenzt Reasoning weiterhin über den gesamten Lauf auf 32.000 Zeichen.
+
+## Begrenzter Tool-Loop und native Websuche (2026-09-15)
+
+`agent_loop.py` steuert Modell → explizites Tool → Ergebnis → Modell mit einem
+gemeinsamen Budget. `agent_tools.py` enthält die Freigaben und die erweiterbare
+Registry für lokale, ausschließlich lesende Tools; sie ist im Produkt zunächst
+leer. Neue Einträge brauchen ein striktes Pydantic-Argumentschema (`extra=forbid`),
+eine serverseitige Freigabe und einen abbrechbaren Executor. Argumente sind auf
+2.048 Zeichen beschränkt; unbekannte Tools, doppelte JSON-Schlüssel, falsche Typen,
+zusätzliche Felder, parallele Calls und wiederholte Call-IDs werden abgewiesen.
+Ergebnisse sind auf 8.000 Zeichen begrenzt. Kein `eval`, Shell- oder Schreibtool.
+Die Fortsetzung mit Client-Tools ist zunächst nur für Haikus nicht denkendes
+Protokoll freigegeben; andere Modelle benötigen eine Prüfung ihrer kompletten
+Reasoning-/Signatur-Rückgabe. Es werden keine verschlüsselten Blöcke gespeichert.
+
+**Der erste produktive Anwendungsfall nutzt die native Suche direkt im gewählten
+Modellrequest.** Kein eigener Suchdienst und kein zusätzliches Suchmodell.
+Bei `anthropic/claude-haiku-4.5` wird `openrouter:web_search` mit `engine: native`
+und `max_uses: 2` freigegeben. Routing ist auf `anthropic` mit ZDR und ohne Fallback
+festgelegt; Bedrock bietet diese Suche nicht an. OpenRouter führt den nativen
+Modell-/Suchdialog innerhalb dieses Requests aus. `max_tool_calls` begrenzt
+zusätzlich dessen Server-Tool-Budget. Falls der Provider die dokumentierten
+Fähigkeiten nicht bereitstellt, endet der Request mit Fehler; kein Client-Fallback.
+Der bestehende DeepSeek-Standard bleibt erhalten. Für weitere Picker-Modelle
+ist Suche erst nach konkreter Prüfung freigegeben. Der Katalog liefert
+`tools_by_effort`, der Composer zeigt die Suchverfügbarkeit, der Turn speichert
+die Freigaben in `agent_settings.tools` und die Budgetversion in `.policy`.
+
+Die Chat-API liefert Quellenannotationen und `usage.server_tool_use.web_search_requests`,
+aber keine zugesicherten nativen Startzeiten oder Suchqueries. Deshalb zeigt
+die Aktivität ausschließlich bestätigte Nutzung/Quellen, niemals erfundene
+„Suche läuft“-Schritte. Ohne Such-Usage bleibt die Nutzung unbekannt. Je Request
+werden höchstens fünf unterschiedliche HTTP(S)-Quellen mit Titel/URL übernommen;
+sie bleiben im Turn und werden sicher als Links dargestellt. Native interne
+Suchinhalte liegen beim Provider; dessen `max_results` ist **kein** natives
+Kontextlimit. Fehlende Rohresultate werden nicht rekonstruiert.
+
+Geprüfte offizielle Dokumentation (15.09.2026):
+
+- [OpenRouter: Web Search](https://openrouter.ai/docs/guides/features/server-tools/web-search): native Engine, Anthropic-`max_uses`, Usage und Grenzen.
+- [OpenRouter: Server Tools](https://openrouter.ai/docs/guides/features/server-tools): serverseitige Schleife, gemeinsame Schrittgrenze und Kombination mit Client-Tools.
+- [OpenRouter: Client Tools](https://openrouter.ai/docs/guides/features/tool-calling): gestreamte Tool-Aufrufe und Ergebnisrückgabe.
+- [Claude: Web Search](https://platform.claude.com/docs/en/agents-and-tools/tool-use/web-search-tool) und [Haiku-Modellprofil](https://openrouter.ai/anthropic/claude-haiku-4.5): konkrete Fähigkeit, Providergrenzen und Preise.
+- [Öffentlicher Haiku-Endpunktkatalog](https://openrouter.ai/api/v1/models/anthropic/claude-haiku-4.5/endpoints): Anthropic-Preise und unterstützte Parameter. `parallel_tool_calls` ist dort nicht angeboten und wird nicht gesendet; der Parser begrenzt Client-Calls selbst.
+
+### Gemeinsame Budgets
+
+`AgentPolicy` ist serverseitig und wird je Turn eingefroren:
+
+| Grenze | Wert |
+|---|---|
+| Bezahlte Modellrequests | höchstens 3, Schritte `completion:0..2` |
+| Tool-Nutzungen | höchstens 2, native Suche und Client-Tools gemeinsam |
+| Laufzeit | 180 Sekunden gemeinsam ab Produzentenstart |
+| Input + Output | 800.000 Tokens als konservatives Zulassungsbudget |
+| Simulierte Kosten | 1 USD Zulassungsbudget pro Nachricht |
+| Output pro Modellrequest | weiterhin standardmäßig 4.096 Tokens |
+| Tool-Ergebnis / Quellen | 8.000 Zeichen / 5 Links |
+
+`agent_costs.py` reserviert vor jedem Claim ein konservatives UTF-8-Inputbudget
+plus Output-Reserve und prüft das Modellfenster. Native Suche reserviert wegen
+unbekannten Provider-Kontexts das volle Modellfenster je möglichem Suchsegment
+einschließlich Modellfortsetzung. Tatsächliche Usage löst Reserven ab; fehlt sie,
+bleibt die gesamte Reserve gebunden. Unbekannte Suchnutzung verbraucht vorsorglich
+alle dafür reservierten Tool-Slots. Diese Beträge sind Simulationen und keine
+harte Obergrenze einer Provider-Rechnung. Native interne Modellsegmente werden
+nicht als zusätzliche von uns gestartete HTTP-Requests gezählt.
 
 ## Konfiguration
 
@@ -89,8 +162,10 @@ oder Schlüsselwechsel ohne neuen Modellaufruf wiederherstellbar.
 
 Weitere Picker-Modelle nutzen feste Basistarife aus dem Katalogsnapshot,
 einschließlich Cache-Read-Tarif (sonst normaler Input-Tarif). Zeitabhängige
-Angebote, Schwellenpreise, Cache-Write- und Web-Tool-Zuschläge werden in dieser
-Simulation nicht nachgebildet. Der bestehende `AGENT_*`-Tarif für das
+Angebote, Schwellenpreise und Cache-Write-Zuschläge werden in dieser
+Simulation nicht nachgebildet. Bestätigte native Anthropic-Suchen zählen mit
+0,01 USD pro gemeldeter Suche zusätzlich zu Tokens; dieser Tarif ist Bestandteil
+der Policyversion. Der bestehende `AGENT_*`-Tarif für das
 Standardmodell bleibt separat konfigurierbar; diese Werte sind weiterhin keine
 Provider-Rechnung.
 
@@ -110,10 +185,30 @@ Tokenzahlen ergänzt. Ein Prozessabsturz hinterlässt einen offenen Beleg,
 den ein Retry nicht erneut ausführen darf. Kosten werden derzeit weder vom
 Guthaben noch vom Consensus-Tageskontingent abgezogen.
 
+Jeder bezahlte Schritt besitzt einen eigenen Beleg unter
+`llm_calls/{sha256(chat,turn,step)}`. Claim und Verbrauchszähler bzw. Settlement
+und Kostensumme sind jeweils atomar. Belege enthalten keine Fragen oder Antworten.
+Der erste Beleg hält zusätzlich `run_token`, `run_status`, `last_step` und den
+Policy-Snapshot. Eine Fortsetzung benötigt denselben Laufbesitzer, den erfolgreich
+abgerechneten Vorgänger, eine aktive Lease und das passende Schrittbudget.
+`settle(final=False)` gibt den Nutzer-Slot nicht frei. `finish_run` finalisiert
+Turn, Aktivitäten und aggregierte Usage und gibt den einen Lauf-Slot atomar frei.
+Eine verlorene Finish-Transaktion kann einen pending Turn hinterlassen; ohne
+gespeicherte Antwort erlaubt Recovery keinen neuen Modellaufruf.
+
+`agent_usage.complete=false` kennzeichnet eine Teilsumme, auch wenn Tokens
+gemessen wurden, aber die Suchnutzung fehlt. `incomplete_calls` zählt solche
+Belege zusätzlich zu `measured_calls`; Adminansicht und Chat weisen darauf hin.
+Bereits gemessene Kosten früherer Schritte bleiben bei späterem Fehler erhalten.
+Bekannte Suchkosten werden auch ohne gemeldete Tokenzahlen verbucht; die
+Tokenfelder bleiben dann `null`. Auf mehrere Usage-Chunks verteilte Token- und
+Suchangaben werden pro Request vor dem einmaligen Settlement zusammengeführt.
+
 ## Grenzen und Erweiterung
 
-Ein Textmodell, Streaming, persistenter Verlauf. Kein Fan-out, Judge,
-Webzugriff, eigenes API-Key-Routing oder weiterer LLM-Aufruf für Memory.
+Ein gewähltes Chatmodell, Streaming, persistenter Verlauf und die oben
+freigegebenen Tools. Kein Fan-out, Judge, eigener Suchdienst, eigenes
+API-Key-Routing oder weiterer LLM-Aufruf für Memory.
 Dateien und `stream: false` werden abgewiesen. Das Providerbudget beträgt 180 Sekunden;
 ein Kontext über 120.000 Zeichen erfordert einen neuen Chat.
 Für kleinere Modellfenster wird zusätzlich vor dem bezahlten Aufruf ein
@@ -127,23 +222,26 @@ Pro Prozess laufen höchstens 16 Agent-Produzenten; die konfigurierbare Grenze
 weist Überlast vor Turn-Anlage mit 503 und `Retry-After: 5` ab. Pro Nutzer
 erlaubt eine Firestore-Transaktion maximal zwei aktive Agent-Läufe auch über
 mehrere Instanzen. Die Reservierung unter `chat_state/agent_runs` entsteht
-atomar mit dem Beleg und wird beim Settlement entfernt. Nach Prozessabsturz
+atomar mit dem ersten Beleg und wird erst beim Laufabschluss entfernt. Nach Prozessabsturz
 läuft sie nach fünf Minuten aus; offene Belege bleiben sichtbar und werden
 nicht erneut ausgeführt. Replays fertiger Antworten brauchen keinen freien Slot.
 
 Der Claim entsteht erst beim Start des Stream-Produzenten. Disconnect vor
 der ersten Iteration gibt den unbezahlten Turn und den Prozess-Slot frei.
 Der gemeinsame SSE-Puffer ist auf 64 Ereignisse begrenzt; 30 Sekunden ohne
-freien Pufferplatz brechen den Produzenten ab. Datenbank-RPCs liegen außerhalb
-des Providerbudgets. Lang laufende Hintergrundaufgaben benötigen später eine
+freien Pufferplatz brechen den Produzenten ab. Das Zeitbudget wird auch vor und
+nach Datenbank-/Tool-Schritten geprüft; laufende synchrone Datenbank-RPCs selbst
+werden nicht unterbrochen. Die fünfminütige Owner-/Chat-Lease wird bei Erst-Claim
+gemeinsam gesetzt und zwischen Schritten nicht verlängert. Damit bleibt Abstand
+zum dreiminütigen Providerbudget. Lang laufende Hintergrundaufgaben benötigen später eine
 dauerhafte Job-Ausführung mit Checkpoints; diese Version führt begrenzte
 Chat-Antworten innerhalb eines HTTP-Requests aus.
 
-Ein späterer Agent-Loop kann weitere explizite Schritte mit eigenen
-`llm_calls`-Belegen anfügen. Transport, Turn-Persistenz und Abrechnung sind
-getrennt. Die Consensus-Pipeline ist noch kein Tool und wird nicht implizit
-gestartet. Beim Einbau von Tools müssen Berechtigungen, Schrittbudgets und
-Tool-Ergebnisse zusätzlich modelliert werden.
+Transport (`llm/agent_client.py`), Ablauf (`agent_loop.py`), Policy/Tools
+(`agent_policy.py`, `agent_tools.py`), Kosten (`agent_costs.py`) und persistente
+Belege (`agent_runs.py`) sind getrennt. Die Registry ist die Erweiterungsstelle
+für spätere explizit freigegebene Tools. Modell-Delegation und Kontextkomprimierung
+sind nicht Bestandteil dieser Version. Die Consensus-Pipeline ist kein Tool.
 
 ## Prüfungen
 
@@ -157,3 +255,7 @@ mit echten Firestore-Transaktionen im isolierten lokalen Emulator.
 Auth-Wechsel. `tests/e2e/test_agent_chat_frontend.py` prüft die gebaute App,
 echten Bookmark-Restore und Desktop-/Mobile-Layout mit gemockten APIs,
 dem writerfreien Phase-4-Testserver und ohne bezahlte Modellaufrufe.
+`tests/test_agent_loop.py` prüft zusätzlich den nativen Request-/Usage-Vertrag,
+den vollständigen Client-Tool-Loop mit einem lokalen Testtool, Argumentvalidierung,
+gemeinsame Budgets, Schrittbelege, Mehrfach-Claims, Abbruch und Löschung zwischen
+Schritten. Das ist keine Aussage über bezahlte Live-Provideraufrufe oder Produktionslast.

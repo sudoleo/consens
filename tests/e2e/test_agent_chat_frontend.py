@@ -16,6 +16,8 @@ CATALOG = {"default_model_id": "deepseek/deepseek-v4.1-flash", "models": [
     {"id": "gpt-5.6-sol", "label": "GPT-5.6 Sol", "reasoning_efforts": ["default", "low", "medium", "high"], "reasoning_available": True},
     {"id": "plain", "label": "Model without reasoning", "reasoning_efforts": ["default"], "reasoning_available": False},
     {"id": "long", "label": "A model with a particularly long display name", "reasoning_efforts": ["default", "high"], "reasoning_available": True},
+    {"id": "claude-haiku-4-5", "label": "Claude Haiku 4.5", "reasoning_efforts": ["default"], "reasoning_available": False,
+     "tools_by_effort": {"default": ["web_search"]}},
 ]}
 
 
@@ -361,5 +363,57 @@ def test_shared_consensus_picker_still_navigates_submenus(browser, phase4_server
         expect(menu).to_be_visible()
         page.keyboard.press("Escape")
         expect(menu).not_to_be_visible()
+    finally:
+        context.close()
+
+
+@pytest.mark.parametrize("width,dark", [(1280, False), (390, True), (320, False)])
+def test_native_search_sources_in_chat_and_saved_activity(browser, phase4_server, width, dark):
+    context, page = _real_firebase_page(browser, phase4_server)
+    try:
+        page.set_viewport_size({"width": width, "height": 900})
+        page.route("**/user_status", lambda route: _json(route, {"tier": "pro", "is_pro": True, "agent_access": True}))
+        page.route("**/agent/models", lambda route: _json(route, CATALOG))
+        page.route("**/chats", lambda route: _json(route, {"chat": {"id": "a" * 32}}))
+        activity = [{"version": 1, "step_id": "completion:0:web_search", "id": "completion:0:web_search/tool",
+                     "kind": "tool", "name": "web_search", "status": "succeeded", "count": 2, "provider_native": True,
+                     "sources": [{"url": "https://example.com/report", "title": "Research report with a long descriptive source title"},
+                                 {"url": "https://example.org/analysis", "title": "Analysis and methodology"}]}]
+        turn = {"id": "b" * 32, "status": "completed", "execution_mode": "agent", "question": "Research the topic",
+                "consensus": "The current sources support this answer.", "agent_activity": activity,
+                "agent_settings": {"model_id": "claude-haiku-4-5", "label": "Claude Haiku 4.5", "reasoning_effort": "default"},
+                "agent_usage": {"input_tokens": 1200, "output_tokens": 200, "estimated_cost_nano_usd": 22200000, "complete": True}}
+        def respond(route):
+            assert route.request.post_data_json["model_id"] == "claude-haiku-4-5"
+            final = {"response": turn["consensus"], "chat_id": "a" * 32, "turn_id": turn["id"], "turn": turn}
+            body = "event: activity\ndata: " + json.dumps(activity[0]) + "\n\n"
+            body += "event: final\ndata: " + json.dumps(final) + "\n\n"
+            route.fulfill(content_type="text/event-stream", body=body)
+        page.route("**/agent", respond)
+        page.evaluate("async () => { await window.__switchE2EUser('account-a'); }")
+        page.evaluate("dark => { document.documentElement.classList.toggle('dark-mode', dark); document.body.classList.toggle('dark-mode', dark); }", dark)
+        _choose_mode(page, "agent")
+        page.locator(".agent-model-picker .model-picker-display").click()
+        page.locator('#agentModelControls [data-value="claude-haiku-4-5"]').click()
+        expect(page.locator("#agentModelNotice")).to_have_text("Web search is available when needed.")
+        page.locator("#questionInput").fill(turn["question"])
+        page.locator("#sendButton").click()
+        page.wait_for_function("() => App.runRegistry.visible()?.status === 'succeeded'")
+        details = page.locator("#agentAnswerActivity details")
+        expect(details.locator("summary")).to_have_text("Activity and sources")
+        details.locator("summary").click()
+        expect(details.locator(".agent-activity-tool")).to_contain_text("Web search · Completed · 2 searches")
+        expect(details.locator("a")).to_have_count(2)
+        expect(details.locator("a").first).to_have_attribute("rel", "noopener noreferrer")
+        details.scroll_into_view_if_needed()
+        assert page.evaluate("() => document.documentElement.scrollWidth <= window.innerWidth + 1")
+        box = details.bounding_box()
+        assert box["x"] >= 0 and box["x"] + box["width"] <= width
+        _snapshot(page, f"agent-native-search-{width}-{'dark' if dark else 'light'}")
+        # The shared history renderer receives the same authoritative activity.
+        page.evaluate("turn => { App.agentActivity.renderTurn(document.getElementById('agentAnswerActivity'), turn); }", turn)
+        expect(details.locator("a")).to_have_count(2)
+        expected_tokens = page.evaluate("() => (1400).toLocaleString() + ' tokens'")
+        expect(details.locator(".agent-usage")).to_contain_text(expected_tokens)
     finally:
         context.close()
