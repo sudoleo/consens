@@ -1,29 +1,40 @@
-"""Explicit read-only client tools and provider-native tool configuration.
+"""Explicit read-only client tools and shared OpenRouter search configuration.
 
-No custom search service: native search executes in the selected provider's
-request. The client registry is intentionally empty until a product tool is
+No custom search service: search executes in the selected model's request.
+The client registry is intentionally empty until a product tool is
 approved; new tools must supply a strict argument model and bounded executor.
 """
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 import json
 import re
 from typing import Callable
 
 from pydantic import BaseModel
 
-from app.services.agent_policy import tools_for_model
+from app.core import config as cfg
+from app.services.llm.engines import web_search_tool
 
 
 def configured_model(model):
-    if "web_search" not in tools_for_model(model):
-        return model
-    config = dict(model.request_config)
-    config["provider"] = {**config.get("provider", {}), "only": ["anthropic"]}
-    return replace(model, request_config=config)
+    # Reuse product routing. Extra Agent-only pinning/require_parameters
+    # excluded working Anthropic endpoints (HTTP 404).
+    return model
 
 
-def native_tools(searches):
-    return [{"type": "openrouter:web_search", "parameters": {"engine": "native", "max_uses": searches}}] if searches else []
+def search_family(model):
+    return next((p.key for p in cfg.PROVIDERS.values()
+                 if model.model.startswith(p.openrouter_prefix.rstrip("/") + "/")), "")
+
+
+def search_tools(model, searches):
+    return [web_search_tool(search_family(model), max_uses=searches,
+                           max_results=5, max_total_results=5 * searches, max_characters=2000)] if searches else []
+
+
+def uses_native_search(model):
+    # auto delegates these publishers to native search; Grok deliberately
+    # shares Consensus's bounded Exa route. Other families use Exa via auto.
+    return search_family(model) in {"openai", "anthropic", "gemini"}
 
 
 @dataclass(frozen=True)

@@ -16,6 +16,7 @@ from app.services import persistence_guard
 from app.services.agent_runs import AgentRunStore
 from app.services.agent_loop import AgentLoop
 from app.services.agent_policy import AgentPolicy
+from app.services.agent_provider_limits import AgentProviderCooldown, provider_cooldowns, provider_failure
 from app.services.agent_tools import configured_model
 from app.services.agent_runtime import AgentCapacityExceeded, AgentStreamingResponse, agent_capacity
 from app.services.chat_store import normalize_question, ChatNotFound, TurnStatusConflict, _idempotent_turn_id
@@ -132,6 +133,7 @@ def run_agent(request: Request, payload: AgentRequest):
         key = openrouter_api_key(resolve_developer_api_keys())
         if not key and not mock_llm_enabled():
             raise HTTPException(status_code=503, detail="Agent model is not configured.")
+        provider_cooldowns.check(model, key or "")
         bookmark = db_firestore.collection("users").document(uid).collection("bookmarks").document(payload.bookmark_id).get()
         if bookmark.exists and (bookmark.to_dict() or {}).get("chat_id") != payload.chat_id:
             raise TurnStatusConflict("Bookmark belongs to another conversation")
@@ -156,6 +158,8 @@ def run_agent(request: Request, payload: AgentRequest):
                 lease.release()
         if isinstance(exc, HTTPException):
             raise
+        if isinstance(exc, AgentProviderCooldown):
+            raise HTTPException(status_code=429, detail=str(exc), headers={"Retry-After": str(exc.retry_after)}) from None
         if isinstance(exc, AgentCapacityExceeded):
             raise HTTPException(status_code=503, detail=str(exc), headers={"Retry-After": "5"}) from None
         if isinstance(exc, ValueError):
@@ -172,6 +176,7 @@ def run_agent(request: Request, payload: AgentRequest):
         completion = loop.completion
         status = "failed"
         error = "The agent response could not be completed. Please try a new message."
+        failure = {}
         try:
             source = loop.run()
             try:
@@ -186,11 +191,18 @@ def run_agent(request: Request, payload: AgentRequest):
             raise
         except (AgentCapacityExceeded, TurnStatusConflict, AnalysisBudgetExceeded) as exc:
             error = str(exc)
+        except AgentProviderCooldown as exc:
+            error = str(exc)
+            failure = {"code": "provider_rate_limited", "retry_after": exc.retry_after}
         except Exception as exc:
-            logging.warning("Agent completion failed category=%s", safe_exception(exc))
+            provider_cooldowns.record(model, key or "", exc)
+            failure = provider_failure(exc)
+            error = failure.pop("error")
+            logging.warning("Agent completion failed category=%s model=%s code=%s retry_after=%s",
+                            safe_exception(exc), model.model, failure["code"], failure.get("retry_after"))
         if status != "succeeded":
             yield sse_pack("activity", {"version": 1, "step_id": "run", "id": "run/usage", "kind": "usage", "usage": completion.usage})
-            yield sse_pack("error", {"error": error})
+            yield sse_pack("error", {"error": error, **failure})
             return
         try:
             completed = store.get_turn(uid, payload.chat_id, turn["id"])

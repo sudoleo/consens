@@ -332,12 +332,12 @@ def test_catalog_reuses_allowlist_and_restricts_reasoning(api, monkeypatch):
     assert response.headers["cache-control"] == "private, no-store"
     models = {item["id"]: item for item in response.json()["models"]}
     assert models["deepseek/deepseek-v4.1-flash"]["reasoning_efforts"] == ["default", "low", "high", "max"]
-    assert "none" not in models[cfg.GEMINI_35_FLASH_MODEL]["reasoning_efforts"]
+    assert "none" not in models[cfg.DEFAULT_GEMINI_MODEL]["reasoning_efforts"]
     assert models[cfg.GROK_NO_REASONING_MODEL]["reasoning_efforts"] == ["default"]
-    assert models["gpt-4o"]["reasoning_efforts"] == ["default"]
-    assert not models["gpt-4o"]["reasoning_available"]
-    monkeypatch.delitem(cfg.MODEL_CONFIGS, "gpt-4o")
-    assert "gpt-4o" not in {item["id"] for item in client.get("/agent/models", headers=AUTH).json()["models"]}
+    assert set(models) == set(cfg.CONSENSUS_PRESET_MODELS["fast"]["answers"].values()) | {"deepseek/deepseek-v4.1-flash"}
+    assert all("web_search" in item["tools_by_effort"]["default"] for item in models.values())
+    monkeypatch.delitem(cfg.MODEL_CONFIGS, cfg.DEFAULT_ANTHROPIC_MODEL)
+    assert cfg.DEFAULT_ANTHROPIC_MODEL not in {item["id"] for item in client.get("/agent/models", headers=AUTH).json()["models"]}
     monkeypatch.setattr(agent, "is_user_pro", lambda uid: False)
     assert client.get("/agent/models", headers=AUTH).status_code == 403
     assert client.get("/agent/models").status_code == 401
@@ -364,12 +364,12 @@ def test_model_effort_snapshot_switch_and_recovery_identity(api, monkeypatch):
     client, store, calls = api
     chat_id = store.create_chat(UID, execution_mode="agent")["id"]
     payload = {"chat_id": chat_id, "question": "Hi", "client_request_id": "first", "bookmark_id": "bm1",
-        "model_id": "gpt-5.6-sol", "reasoning_effort": "low"}
+        "model_id": "gpt-5.6-luna", "reasoning_effort": "low"}
     assert "event: final" in client.post("/agent", json=payload, headers=AUTH).text
-    assert calls[0]["model"].model == "openai/gpt-5.6-sol"
+    assert calls[0]["model"].model == "openai/gpt-5.6-luna"
     assert calls[0]["model"].request_config["reasoning"] == {"effort": "low", "exclude": False, "summary": "auto"}
     saved = client.post("/agent", json=payload, headers=AUTH).json()["turn"]
-    assert saved["agent_settings"]["model_id"] == "gpt-5.6-sol"
+    assert saved["agent_settings"]["model_id"] == "gpt-5.6-luna"
     assert saved["agent_settings"]["reasoning_effort"] == "low"
     assert saved["agent_activity"][-1]["status"] == "succeeded"
     assert saved["agent_usage"]["input_tokens"] == 1000
@@ -401,10 +401,10 @@ def test_reasoning_stream_formats_are_bounded_and_never_leak_encrypted_data(monk
         yield ""
     monkeypatch.setattr(agent_client, "cancellable_sse_lines", lines)
     completion = AgentCompletion()
-    model = agent_client.resolve_agent_model("gpt-5.6-sol", "medium")
+    model = agent_client.resolve_agent_model("gpt-5.6-luna", "medium")
     events = list(completion.stream(model=model, messages=[], api_key="test"))
     assert requests[0]["reasoning"]["effort"] == "medium"
-    assert requests[0]["provider"] == {"zdr": True, "allow_fallbacks": False}
+    assert requests[0]["provider"] == {"zdr": True}
     assert completion.text == "Answer"
     assert completion.reasoning_truncated
     assert completion.reasoning_chars == 32000
@@ -414,25 +414,27 @@ def test_reasoning_stream_formats_are_bounded_and_never_leak_encrypted_data(monk
     assert all(event["version"] == 1 for event in events if event["type"] == "activity")
 
 
-def test_selected_model_prices_and_mandatory_provider_routes():
-    model = agent_client.resolve_agent_model("gpt-5.6-sol", "low")
+def test_selected_model_prices_and_mandatory_provider_routes(monkeypatch):
+    model = agent_client.resolve_agent_model("gpt-5.6-luna", "low")
     usage = measured_usage({"prompt_tokens": 1000, "completion_tokens": 100,
         "prompt_tokens_details": {"cached_tokens": 200}}, model)
-    assert usage["estimated_cost_nano_usd"] == 2640000
+    assert usage["estimated_cost_nano_usd"] == 284000
     from app.core import config as cfg
-    kimi = agent_client.resolve_agent_model(cfg.KIMI_PRO_MODEL, "low")
+    monkeypatch.setenv("AGENT_MODEL", cfg.MODEL_CONFIGS[cfg.KIMI_PRO_MODEL].api_model)
+    kimi = agent_client.resolve_agent_model(reasoning_effort="low")
     assert kimi.request_config["provider"]["only"] == ["moonshotai"]
 
 
-def test_context_check_precedes_paid_claim_for_small_model(api):
+def test_context_check_precedes_paid_claim_for_small_model(api, monkeypatch):
     client, store, calls = api
     chat_id, turn = pending(store)
     value = receipt()
     value.text = "Old answer " * 1600
     store.claim(UID, chat_id, turn["id"], AgentModel())
     store.settle(UID, chat_id, turn["id"], completion=value, status="succeeded")
+    monkeypatch.setenv("AGENT_MODEL", "openai/gpt-3.5-turbo")
     response = client.post("/agent", headers=AUTH, json={"chat_id": chat_id, "question": "Continue",
-        "client_request_id": "small", "bookmark_id": "bm1", "model_id": "gpt-3.5-turbo"})
+        "client_request_id": "small", "bookmark_id": "bm1"})
     assert response.status_code == 422 and "too long" in response.text
     assert totals(store)["calls"] == 1
     assert not calls

@@ -16,7 +16,7 @@ CATALOG = {"default_model_id": "deepseek/deepseek-v4.1-flash", "models": [
     {"id": "gpt-5.6-sol", "label": "GPT-5.6 Sol", "reasoning_efforts": ["default", "low", "medium", "high"], "reasoning_available": True},
     {"id": "plain", "label": "Model without reasoning", "reasoning_efforts": ["default"], "reasoning_available": False},
     {"id": "long", "label": "A model with a particularly long display name", "reasoning_efforts": ["default", "high"], "reasoning_available": True},
-    {"id": "claude-haiku-4-5", "label": "Claude Haiku 4.5", "reasoning_efforts": ["default"], "reasoning_available": False,
+    {"id": "claude-haiku-4-5", "label": "Claude Haiku 4.5", "reasoning_efforts": ["default"], "reasoning_available": True,
      "tools_by_effort": {"default": ["web_search"]}},
 ]}
 
@@ -126,6 +126,11 @@ def test_single_agent_send_followup_restore_and_layout(browser, phase4_server, w
         expect(page.locator("#consensusOutput")).not_to_be_visible()
         expect(page.locator("#chatExecutionMode")).to_be_disabled()
         expect(page.locator("#agentAnswerLabel")).to_contain_text("GPT-5.6 Sol")
+        assert page.locator("#threadAsk").evaluate("el => getComputedStyle(el).display") == "flex"
+        label_box = page.locator("#threadAsk .thread-ask-label").bounding_box()
+        bubble_box = page.locator("#threadAsk .thread-ask-text").bounding_box()
+        assert abs(label_box["x"] + label_box["width"] - bubble_box["x"] - bubble_box["width"]) < 2
+        expect(page.locator("#agentAnswerActivity .agent-activity-marker")).to_have_count(0)
         page.locator("#questionInput").fill("Now explain the next step")
         page.locator(".agent-model-picker .model-picker-display").click()
         page.locator('#agentModelControls [data-value="deepseek/deepseek-v4.1-flash"]').click()
@@ -395,8 +400,10 @@ def test_native_search_sources_in_chat_and_saved_activity(browser, phase4_server
         _choose_mode(page, "agent")
         page.locator(".agent-model-picker .model-picker-display").click()
         page.locator('#agentModelControls [data-value="claude-haiku-4-5"]').click()
+        expect(page.locator("#agentModelDropdown")).to_have_value("claude-haiku-4-5")
         expect(page.locator("#agentModelNotice")).to_have_text("Web search is available when needed.")
         page.locator("#questionInput").fill(turn["question"])
+        expect(page.locator("#agentModelDropdown")).to_have_value("claude-haiku-4-5")
         page.locator("#sendButton").click()
         page.wait_for_function("() => App.runRegistry.visible()?.status === 'succeeded'")
         details = page.locator("#agentAnswerActivity details")

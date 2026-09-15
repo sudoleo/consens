@@ -26,16 +26,13 @@
       const details = document.createElement("details");
       details.className = "agent-activity";
       const summary = document.createElement("summary");
-      const marker = document.createElement("span");
-      marker.className = "agent-activity-marker";
-      marker.setAttribute("aria-hidden", "true");
       const title = document.createElement("span");
       title.className = "agent-activity-title";
       title.setAttribute("role", "status");
       const chevron = document.createElement("span");
       chevron.className = "agent-activity-chevron";
       chevron.setAttribute("aria-hidden", "true");
-      summary.append(marker, title, chevron);
+      summary.append(title, chevron);
       const content = document.createElement("div");
       content.className = "agent-activity-content";
       content.tabIndex = 0;
@@ -122,8 +119,9 @@
     const measured = usage && Number.isFinite(usage.input_tokens) && Number.isFinite(usage.output_tokens);
     const tokens = measured ? `${(usage.input_tokens + usage.output_tokens).toLocaleString()} ${usage.complete === false ? "measured tokens · usage incomplete" : "tokens"}` : "Usage unavailable";
     const dollars = Number.isFinite(usage?.estimated_cost_nano_usd) ? usage.estimated_cost_nano_usd / 1e9 : NaN;
+    const providerCost = usage?.cost_source === "provider";
     const cost = Number.isFinite(dollars)
-      ? ` · ~$${dollars.toFixed(dollars > 0 && dollars < .0001 ? 6 : 4)} simulated` : "";
+      ? ` · ${providerCost ? "" : "~"}$${dollars.toFixed(dollars > 0 && dollars < .0001 ? 6 : 4)} ${providerCost ? "provider cost" : "estimated"}` : "";
     view.usageEl.textContent = tokens + cost;
     view.usageEl.title = measured ? `${usage.input_tokens.toLocaleString()} input · ${usage.output_tokens.toLocaleString()} output tokens` : "The provider did not report token usage.";
     view.usageEl.hidden = running;

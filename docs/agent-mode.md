@@ -13,8 +13,9 @@ Die letzte Wahl wird kontogebunden gespeichert, die Wahl eines geöffneten Chats
 stammt aus dessen letztem Turn. Consensus-Presets werden dadurch nicht geändert.
 
 `GET /agent/models` liefert nach derselben Admin-/Pro-Prüfung den konfigurierten
-Standard plus die Schnittmenge aus `cfg.MODEL_CONFIGS` und dem überprüften
-`app/services/llm/agent_model_catalog.json`. Labels, interne IDs, API-Aliasse und
+Standard plus die Daily-Antwortmodelle aus `cfg.CONSENSUS_PRESET_MODELS["fast"]`,
+soweit sie in `cfg.MODEL_CONFIGS` und dem überprüften
+`app/services/llm/agent_model_catalog.json` enthalten sind. Labels, interne IDs, API-Aliasse und
 Provider-Routing kommen aus der vorhandenen Registry. Der öffentliche
 [OpenRouter-Katalog](https://openrouter.ai/api/v1/models) wurde am 15.09.2026
 abgerufen; es gibt keinen Live-Abruf beim Öffnen des Pickers. Bei neuen Modellen
@@ -35,17 +36,24 @@ Agent-Zustand. Menübreiten passen sich dem sichtbaren Viewport an; Tastaturwahl
 Escape und Fokusrückgabe funktionieren für alle drei Controls. Nicht mehr
 verfügbare gespeicherte Modelle werden mit Hinweis auf den angebotenen Standard
 abgeglichen; derselbe Wert wird angezeigt und gesendet.
+Änderungen werden bereits beim `input`-Ereignis in der Capture-Phase gespeichert,
+bevor nachfolgende UI-Projektionen alte Werte zurücksetzen können. Ein neu
+angelegter Lauf ohne Chat-ID hat einen eigenen Auswahl-Schlüssel; laufende
+Antworten zeigen ihre eingefrorenen Einstellungen statt einer früheren Draft-Wahl.
+Die Frage verwendet wie Consensus den rechtsbündigen Flex-Container und eine
+an den Inhalt angepasste Nachrichtenblase.
 
 Die aufklappbare Aktivitätsanzeige öffnet sich beim ersten sichtbaren Reasoning
 und klappt nach Abschluss automatisch zu. Eine manuelle Auf-/Zu-Auswahl bleibt
 bestehen. Ein gemeinsamer Scrollbereich folgt neuen Textblöcken, solange der
-Nutzer nicht zurückscrollt. Die Statuszeile verwendet den Strich-/Lichtlauf des
+Nutzer nicht zurückscrollt. Die Statuszeile verwendet den Lichtlauf des
 Quellenchecks; bei Reduced Motion/Forced Colors und nach Stop/Fehler/Abschluss
 bleibt sie statisch. Gestoppte Turns werden auch im gespeicherten Zustand als
 gestoppt beschriftet, ein Output-Limit ist bereits eingeklappt erkennbar.
 Die Anzeige bleibt im Verlauf verfügbar. Sie zeigt ausschließlich vom Provider
 gelieferte Reasoning-Texte/Zusammenfassungen, Arbeitsstatus und gemeldeten
-Verbrauch mit simulierten Kosten. OpenAI-Summaries werden angefordert.
+Verbrauch mit Provider-Kosten oder ausdrücklich markierten Schätzungen.
+Vor den Statusbezeichnungen stehen keine Striche. OpenAI-Summaries werden angefordert.
 Verschlüsselte Reasoning-Blöcke werden weder angezeigt noch gespeichert.
 Fehlendes sichtbares Reasoning und fehlende Usage sind ausdrücklich erkennbar;
 es werden keine Denktexte erfunden. Die Stopptaste nutzt weiterhin den gemeinsamen
@@ -66,7 +74,7 @@ Modellantwort. Tool-Einträge zeigen `running`, `succeeded`, `failed`, `blocked`
 sich auch für Tool-Ereignisse. Der Browser hält höchstens 64 Aktivitätseinträge;
 der Server begrenzt Reasoning weiterhin über den gesamten Lauf auf 32.000 Zeichen.
 
-## Begrenzter Tool-Loop und native Websuche (2026-09-15)
+## Begrenzter Tool-Loop und modellübergreifende Websuche (2026-09-15)
 
 `agent_loop.py` steuert Modell → explizites Tool → Ergebnis → Modell mit einem
 gemeinsamen Budget. `agent_tools.py` enthält die Freigaben und die erweiterbare
@@ -80,16 +88,18 @@ Die Fortsetzung mit Client-Tools ist zunächst nur für Haikus nicht denkendes
 Protokoll freigegeben; andere Modelle benötigen eine Prüfung ihrer kompletten
 Reasoning-/Signatur-Rückgabe. Es werden keine verschlüsselten Blöcke gespeichert.
 
-**Der erste produktive Anwendungsfall nutzt die native Suche direkt im gewählten
-Modellrequest.** Kein eigener Suchdienst und kein zusätzliches Suchmodell.
-Bei `anthropic/claude-haiku-4.5` wird `openrouter:web_search` mit `engine: native`
-und `max_uses: 2` freigegeben. Routing ist auf `anthropic` mit ZDR und ohne Fallback
-festgelegt; Bedrock bietet diese Suche nicht an. OpenRouter führt den nativen
-Modell-/Suchdialog innerhalb dieses Requests aus. `max_tool_calls` begrenzt
-zusätzlich dessen Server-Tool-Budget. Falls der Provider die dokumentierten
-Fähigkeiten nicht bereitstellt, endet der Request mit Fehler; kein Client-Fallback.
-Der bestehende DeepSeek-Standard bleibt erhalten. Für weitere Picker-Modelle
-ist Suche erst nach konkreter Prüfung freigegeben. Der Katalog liefert
+**Jedes angebotene Modell erhält dieselbe Suchintegration wie Consensus.**
+`engines.web_search_tool` liefert `openrouter:web_search` mit `engine: auto`;
+Grok verwendet wie Consensus `exa`. OpenRouter führt native Suche oder Exa
+innerhalb des gewählten Modellrequests aus. Das Modell entscheidet, ob es sucht.
+Kein eigener Suchdienst und kein zusätzliches Suchmodell. Agent setzt `max_uses: 2`,
+`max_tool_calls: 2`, fünf Ergebnisse pro Suche, zehn insgesamt und 2.000 Zeichen
+pro Ergebnis; die Ergebnisgrenzen gelten für Exa, nicht für native Suche.
+ZDR und Registry-Routing bleiben erhalten. Ohne expliziten Registry-Pin darf
+OpenRouter zwischen Providern desselben Modells wechseln. Agent erzwingt weder
+`only: ["anthropic"]` noch `require_parameters`, die funktionierende Haiku-Routen
+ausgeschlossen hatten. `tool_choice` wird nur für echte Client-Tools gesetzt.
+Der bestehende DeepSeek-Standard bleibt erhalten. Der Katalog liefert
 `tools_by_effort`, der Composer zeigt die Suchverfügbarkeit, der Turn speichert
 die Freigaben in `agent_settings.tools` und die Budgetversion in `.policy`.
 
@@ -104,9 +114,11 @@ Kontextlimit. Fehlende Rohresultate werden nicht rekonstruiert.
 
 Geprüfte offizielle Dokumentation (15.09.2026):
 
-- [OpenRouter: Web Search](https://openrouter.ai/docs/guides/features/server-tools/web-search): native Engine, Anthropic-`max_uses`, Usage und Grenzen.
+- [OpenRouter: Web Search](https://openrouter.ai/docs/guides/features/server-tools/web-search): Auto/Exa, native Suche, Gebühren und Grenzen. Native `max_uses` wird nur an Anthropic weitergegeben.
 - [OpenRouter: Server Tools](https://openrouter.ai/docs/guides/features/server-tools): serverseitige Schleife, gemeinsame Schrittgrenze und Kombination mit Client-Tools.
 - [OpenRouter: Client Tools](https://openrouter.ai/docs/guides/features/tool-calling): gestreamte Tool-Aufrufe und Ergebnisrückgabe.
+- [OpenRouter: Usage Accounting](https://openrouter.ai/docs/cookbook/administration/usage-accounting): `usage.cost` als Gesamtbetrag, native Tokenzahlen und Cache-Details.
+- [OpenRouter: Fehler](https://openrouter.ai/docs/api_reference/errors-and-debugging): HTTP-/SSE-Fehler und `Retry-After`.
 - [Claude: Web Search](https://platform.claude.com/docs/en/agents-and-tools/tool-use/web-search-tool) und [Haiku-Modellprofil](https://openrouter.ai/anthropic/claude-haiku-4.5): konkrete Fähigkeit, Providergrenzen und Preise.
 - [Öffentlicher Haiku-Endpunktkatalog](https://openrouter.ai/api/v1/models/anthropic/claude-haiku-4.5/endpoints): Anthropic-Preise und unterstützte Parameter. `parallel_tool_calls` ist dort nicht angeboten und wird nicht gesendet; der Parser begrenzt Client-Calls selbst.
 
@@ -117,9 +129,9 @@ Geprüfte offizielle Dokumentation (15.09.2026):
 | Grenze | Wert |
 |---|---|
 | Bezahlte Modellrequests | höchstens 3, Schritte `completion:0..2` |
-| Tool-Nutzungen | höchstens 2, native Suche und Client-Tools gemeinsam |
+| Tool-Nutzungen | Budget 2, serverseitige Suche und Client-Tools gemeinsam; native Providergrenzen siehe oben |
 | Laufzeit | 180 Sekunden gemeinsam ab Produzentenstart |
-| Input + Output | 800.000 Tokens als konservatives Zulassungsbudget |
+| Input + Output | 4.000.000 Tokens als konservatives Zulassungsbudget einschließlich verdeckter Suchsegmente |
 | Simulierte Kosten | 1 USD Zulassungsbudget pro Nachricht |
 | Output pro Modellrequest | weiterhin standardmäßig 4.096 Tokens |
 | Tool-Ergebnis / Quellen | 8.000 Zeichen / 5 Links |
@@ -127,7 +139,10 @@ Geprüfte offizielle Dokumentation (15.09.2026):
 `agent_costs.py` reserviert vor jedem Claim ein konservatives UTF-8-Inputbudget
 plus Output-Reserve und prüft das Modellfenster. Native Suche reserviert wegen
 unbekannten Provider-Kontexts das volle Modellfenster je möglichem Suchsegment
-einschließlich Modellfortsetzung. Tatsächliche Usage löst Reserven ab; fehlt sie,
+einschließlich Modellfortsetzung. Exa reserviert stattdessen die begrenzten
+Suchergebnisse einschließlich UTF-8-/Protokollreserve je Fortsetzung. Das größere
+Tokenbudget erlaubt die vollen Fenster von Gemini und Luna; das Kostenbudget
+bleibt bei 1 USD. Fehlen Tokenzahlen oder eine vollständige Kostensumme,
 bleibt die gesamte Reserve gebunden. Unbekannte Suchnutzung verbraucht vorsorglich
 alle dafür reservierten Tool-Slots. Diese Beträge sind Simulationen und keine
 harte Obergrenze einer Provider-Rechnung. Native interne Modellsegmente werden
@@ -144,35 +159,38 @@ Optionale Umgebungsvariablen werden vor einem neuen Aufruf validiert:
 | `AGENT_MODEL` | `deepseek/deepseek-v4.1-flash` |
 | `AGENT_LABEL` | `DeepSeek V4.1 Flash` |
 | `AGENT_MAX_OUTPUT_TOKENS` | `4096` (erlaubt: 256–16384) |
-| `AGENT_INPUT_USD_PER_MILLION` | `0.15` |
-| `AGENT_OUTPUT_USD_PER_MILLION` | `0.60` |
-| `AGENT_CACHE_READ_USD_PER_MILLION` | `0.003` |
-| `AGENT_PRICING_VERSION` | `openrouter-2026-09-14` |
+| `AGENT_INPUT_USD_PER_MILLION` | Katalogwert, aktuell `0.30` für den Standard |
+| `AGENT_OUTPUT_USD_PER_MILLION` | Katalogwert, aktuell `1.20` für den Standard |
+| `AGENT_CACHE_READ_USD_PER_MILLION` | Katalogwert, aktuell `0.006` für den Standard |
+| `AGENT_CACHE_WRITE_USD_PER_MILLION` | Katalogwert, sonst Input-Tarif |
+| `AGENT_PRICING_VERSION` | `openrouter-2026-09-15` |
 | `AGENT_MAX_CONCURRENT_RUNS` | `16` pro Prozess (erlaubt: 1–64) |
 
-Die initialen Simulationstarife entsprechen dem am 14.09.2026 gelesenen
-[OpenRouter-Modellangebot](https://openrouter.ai/deepseek/deepseek-v4.1-flash).
-Provider können unterschiedliche Tarife haben. Das sind feste simulierte
-Kosten, keine Abbildung einer OpenRouter-Rechnung. Ein anderes `AGENT_MODEL`
+Die Tarife dienen der Budgetreservierung und der gekennzeichneten Schätzung,
+falls `usage.cost` fehlt. Auch das Standardmodell liest immer seinen aktuellen
+Katalogsnapshot; die früheren fest eingebauten DeepSeek-Tarife überstimmen ihn
+nicht mehr. Ein anderes `AGENT_MODEL`
 benötigt einen Katalogeintrag: Kontext-/Outputgrenzen, Registry-Routing und
 ohne expliziten Override auch Label, Tarife und Preisversion stammen dann von
 diesem Modell. Bereits beanspruchte Aufrufe
 behalten ihren Snapshot; abgeschlossene Requests bleiben trotz Konfigurations-
 oder Schlüsselwechsel ohne neuen Modellaufruf wiederherstellbar.
 
-Weitere Picker-Modelle nutzen feste Basistarife aus dem Katalogsnapshot,
-einschließlich Cache-Read-Tarif (sonst normaler Input-Tarif). Zeitabhängige
-Angebote, Schwellenpreise und Cache-Write-Zuschläge werden in dieser
-Simulation nicht nachgebildet. Bestätigte native Anthropic-Suchen zählen mit
-0,01 USD pro gemeldeter Suche zusätzlich zu Tokens; dieser Tarif ist Bestandteil
-der Policyversion. Der bestehende `AGENT_*`-Tarif für das
-Standardmodell bleibt separat konfigurierbar; diese Werte sind weiterhin keine
-Provider-Rechnung.
+Für jede Modellantwort hat ein valider `usage.cost` Vorrang: Er umfasst die
+aktuelle Route, Cache-/Kontexttarife und Suchgebühren. Darauf werden keine
+weiteren Token- oder Suchkosten addiert. Der Katalogfallback berechnet nur
+gemeldete Input-/Output-Tokens, Cache-Reads und Cache-Writes sowie bekannte
+Suchnutzung zum konfigurierten Such-/Katalogtarif. Er bleibt ausdrücklich eine
+Schätzung: Native/Exa-Routen und Tarifstufen können vom Snapshot abweichen.
+`AGENT_*`-Tarif-Overrides verändern niemals einen gemeldeten Provider-Gesamtbetrag.
 
 ## Verbrauch
 
 `users/{uid}.agent_usage` enthält die kumulierten Input-/Output-Tokens und
 `estimated_cost_nano_usd` (geteilt durch 1.000.000.000 ergibt USD).
+Der Feldname bleibt kompatibel; neue Usage hat `cost_source: provider | catalog | mixed`.
+Die Kontosumme trennt zusätzlich `provider_cost_nano_usd` und `catalog_cost_nano_usd`;
+alte Summen ohne Herkunft werden in der Adminansicht als geschätzter Anteil behandelt.
 Cache-Hits werden zum Cache-Tarif berechnet. Reasoning-Tokens sind eine
 Teilmenge der Output-Tokens und werden nicht nochmals addiert. Die Admin-
 Kontoansicht zeigt die Summe, die Tokenmengen und unvollständige Messungen.
@@ -196,13 +214,37 @@ Turn, Aktivitäten und aggregierte Usage und gibt den einen Lauf-Slot atomar fre
 Eine verlorene Finish-Transaktion kann einen pending Turn hinterlassen; ohne
 gespeicherte Antwort erlaubt Recovery keinen neuen Modellaufruf.
 
-`agent_usage.complete=false` kennzeichnet eine Teilsumme, auch wenn Tokens
-gemessen wurden, aber die Suchnutzung fehlt. `incomplete_calls` zählt solche
+`agent_usage.complete=false` kennzeichnet eine Teilsumme: fehlende Tokens oder,
+bei fehlendem Provider-Gesamtbetrag, unbekannte Suchkosten. Eine vorhandene
+Gesamtkostensumme braucht keine Suchanzahl, um vollständig zu sein. `incomplete_calls` zählt solche
 Belege zusätzlich zu `measured_calls`; Adminansicht und Chat weisen darauf hin.
 Bereits gemessene Kosten früherer Schritte bleiben bei späterem Fehler erhalten.
 Bekannte Suchkosten werden auch ohne gemeldete Tokenzahlen verbucht; die
 Tokenfelder bleiben dann `null`. Auf mehrere Usage-Chunks verteilte Token- und
 Suchangaben werden pro Request vor dem einmaligen Settlement zusammengeführt.
+
+### Providerfehler und 429
+
+HTTP-Fehler und Fehler innerhalb eines HTTP-200-SSE-Streams behalten ihren
+Statuscode. Der Chat unterscheidet Rate-Limit, fehlende Route und fehlenden
+Providerzugriff. Logs enthalten Modell-ID, sichere Fehlerkategorie und Wartezeit,
+keine Provider-Rohtexte, Prompts oder Schlüssel. `Retry-After` bleibt erhalten.
+`agent_provider_limits.py` sperrt weitere Agent-Anfragen für dieselbe Modell-/
+API-Key-Kombination pro Prozess bis zum angegebenen Zeitpunkt (ohne Header:
+30 Sekunden). Die Map enthält höchstens 256 Einträge, Schlüssel nur als Hash.
+Prüfung vor Turn-Anlage und vor jedem Schritt; fertige Antworten bleiben ohne
+Provideranfrage wiederherstellbar. Andere Modelle bleiben nutzbar. Keine
+automatischen Transport-Retries; OpenRouter-Fallbacks betreffen dasselbe Modell.
+Die Wartefrist ersetzt keine providerseitigen oder instanzübergreifenden Limits.
+
+Live-Prüfung am 15.09.2026: Die alte Haiku-Agent-Route lieferte HTTP 404,
+der Consensus-Request HTTP 200. Nach der Angleichung waren Suchanfragen für
+Haiku, beide DeepSeek-Modelle, Gemini, Grok und Mistral samt Quellen und
+Provider-Gesamtkosten erfolgreich. Luna lieferte auch mit unverändertem
+Consensus-Request `rate_limit_exceeded` vom Upstream. Das ist kein Beleg für
+eine funktionierende Luna-Live-Anfrage; dessen Suchvertrag ist zusätzlich mit
+gemocktem Transport geprüft. Der Key war nicht im Free-Tier und hatte kein
+gemeldetes Ausgabenlimit. Diese punktuelle Prüfung ersetzt keinen Lasttest.
 
 ## Grenzen und Erweiterung
 

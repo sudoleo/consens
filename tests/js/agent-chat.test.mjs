@@ -49,6 +49,49 @@ async function selectAgent(window) {
 }
 
 describe("single-model agent chat", () => {
+  it("commits a draft model before an input-triggered projection can restore the old model", async () => {
+    const { window, document, dom } = boot();
+    await selectAgent(window);
+    const select = document.getElementById("agentModelDropdown");
+    select.addEventListener("input", () => window.App.agentChat.render());
+    document.querySelector("#agentModelControls .model-picker-display").click();
+    document.querySelector('#agentModelControls [data-value="gpt-4o"]').click();
+    expect(select.value).toBe("gpt-4o");
+    window.App.agentChat.render();
+    expect(select.value).toBe("gpt-4o");
+    document.getElementById("questionInput").value = "First question";
+    await window.App.agentChat.send();
+    expect(window.streamSSERequest.mock.calls[0][1].model_id).toBe("gpt-4o");
+    expect(select.value).toBe("gpt-4o");
+    dom.window.close();
+  });
+
+  it("keeps a running chat's model independent of an earlier draft selection", async () => {
+    const { window, document, dom } = boot();
+    await selectAgent(window);
+    const select = document.getElementById("agentModelDropdown");
+    select.value = CATALOG.default_model_id;
+    select.dispatchEvent(new window.Event("change"));
+    window.App.runRegistry.create({ question: "Restored run", config: {
+      executionMode: "agent", agentSettings: { model_id: "gpt-4o", reasoning_effort: "default" } },
+      metadata: { agentSettings: { model_id: "gpt-4o", reasoning_effort: "default" } } });
+    expect(select.value).toBe("gpt-4o");
+    dom.window.close();
+  });
+
+  it("shows provider costs separately from estimates and removes status dashes", () => {
+    const { window, document, dom } = boot();
+    const host = document.getElementById("agentAnswerActivity");
+    const usage = { input_tokens: 100, output_tokens: 20, estimated_cost_nano_usd: 12000000, cost_source: "provider" };
+    window.App.agentActivity.render(host, { usage, status: "failed" });
+    expect(host.querySelector(".agent-usage").textContent).toContain("$0.0120 provider cost");
+    expect(host.querySelector("summary").textContent).toBe("Response failed");
+    expect(host.querySelector(".agent-activity-marker")).toBe(null);
+    window.App.agentActivity.render(host, { usage: { ...usage, cost_source: "catalog" } });
+    expect(host.querySelector(".agent-usage").textContent).toContain("~$0.0120 estimated");
+    dom.window.close();
+  });
+
   it.each(["cancel", "error"])("keeps the selected conversation when a background follow-up ends: %s", async end => {
     const { window, document, dom } = boot();
     await selectAgent(window);

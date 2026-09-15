@@ -1814,7 +1814,10 @@ function renderAccountTierDetail(account) {
     usage.className = 'api-key-meta';
     const agentUsage = account.agent_usage || {};
     const cost = Number(agentUsage.estimated_cost_nano_usd || 0) / 1e9;
-    usage.textContent = `Agent Beta · simulated total: $${cost.toFixed(6)} USD · `
+    const measuredCost = Number(agentUsage.provider_cost_nano_usd || 0) / 1e9;
+    const estimatedCost = Math.max(0, cost - measuredCost);
+    usage.textContent = `Agent Beta · recorded total: $${cost.toFixed(6)} USD `
+        + `($${measuredCost.toFixed(6)} provider cost, ~$${estimatedCost.toFixed(6)} estimated) · `
         + `${Number(agentUsage.input_tokens || 0).toLocaleString()} input / `
         + `${Number(agentUsage.output_tokens || 0).toLocaleString()} output tokens · `
         + `${Number(agentUsage.calls || 0)} calls`

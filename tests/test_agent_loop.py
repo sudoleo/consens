@@ -85,9 +85,11 @@ def test_native_search_stays_in_selected_model_request_with_real_citations(store
     assert len(requests) == 1 and closed == [0]
     request = requests[0]
     assert request["model"] == "anthropic/claude-haiku-4.5"
-    assert request["tools"] == [{"type": "openrouter:web_search", "parameters": {"engine": "native", "max_uses": 2}}]
+    assert request["tools"] == [{"type": "openrouter:web_search", "parameters": {
+        "engine": "auto", "max_uses": 2, "max_results": 5, "max_total_results": 10, "max_characters": 2000}}]
     assert request["max_tool_calls"] == 2
-    assert request["provider"] == {"zdr": True, "allow_fallbacks": False, "require_parameters": True, "only": ["anthropic"]}
+    assert request["provider"] == {"zdr": True}
+    assert "tool_choice" not in request
     assert "plugins" not in request
     assert "parallel_tool_calls" not in request
     tool_events = [event for event in events if event and event.get("kind") == "tool"]
@@ -224,13 +226,19 @@ def test_missing_native_usage_is_partial_and_keeps_reservation(store, monkeypatc
     assert any(e and e.get("kind") == "tool" and e["status"] == "unknown" for e in events)
 
 
-def test_no_native_search_is_assumed_for_other_picker_models(store, monkeypatch):
+@pytest.mark.parametrize("selection_id", [m.selection_id for m, _ in agent_client.agent_models()])
+def test_every_offered_model_can_use_the_consensus_search_route(store, monkeypatch, selection_id):
+    from app.services.agent_tools import search_family
+    from app.services.llm.engines import build_provider_payload
     requests, _, _ = transport(monkeypatch, [[packet({"content": "Answer"}, finish="stop", usage=usage())]])
     loop = loop_for(store)
-    loop.model = resolve_agent_model()
+    loop.model = resolve_agent_model(selection_id)
     list(loop.run())
-    assert tools_for_model(loop.model) == ()
-    assert "tools" not in requests[0]
+    assert tools_for_model(loop.model) == ("web_search",)
+    family = search_family(loop.model)
+    reference = build_provider_payload(family)["payload"]
+    assert requests[0]["tools"][0]["parameters"]["engine"] == reference["tools"][0]["parameters"]["engine"]
+    assert requests[0]["max_tool_calls"] == 2
     assert loop.completion.usage["complete"] is True
 
 
@@ -303,12 +311,12 @@ def test_reported_native_limit_violation_is_accounted_and_stops(store, monkeypat
 
 
 def test_usage_beyond_total_budget_stops_after_accounting(store, monkeypatch):
-    raw = {**usage(1), "prompt_tokens": 900_000}
+    raw = {**usage(1), "prompt_tokens": 4_100_000}
     transport(monkeypatch, [[packet({"content": "Answer"}, finish="stop", usage=raw)]])
     loop = loop_for(store)
     with pytest.raises(AnalysisBudgetExceeded, match="beyond"):
         list(loop.run())
-    assert totals(store)["input_tokens"] == 900_000
+    assert totals(store)["input_tokens"] == 4_100_000
     assert store.get_turn(UID, loop.chat_id, loop.turn_id)["status"] == "failed"
 
 

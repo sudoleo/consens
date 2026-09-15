@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
+import math
 from typing import Any
 
 import requests
@@ -50,12 +53,21 @@ _DEEP_SEARCH_MODEL_BY_PROVIDER = {
 _SEARCH_ENGINE_BY_PROVIDER = {"grok": "exa"}
 
 
+def web_search_tool(provider: str, *, max_uses: int, **limits) -> dict:
+    """One search configuration shared by Consensus and Agent chat."""
+    return {"type": "openrouter:web_search", "parameters": {
+        "engine": _SEARCH_ENGINE_BY_PROVIDER.get(provider, "auto"),
+        "max_uses": max_uses, **limits,
+    }}
+
+
 class _ProviderHTTPStatusError(RuntimeError):
     """Content-free upstream status error for metrics and retry policy."""
 
-    def __init__(self, status_code: int):
+    def __init__(self, status_code: int, *, retry_after=None):
         super().__init__("upstream provider returned an HTTP error")
         self.status_code = int(status_code)
+        self.retry_after = retry_after
 
 
 class _ProviderResponseError(RuntimeError):
@@ -71,7 +83,23 @@ class _ProviderResponseError(RuntimeError):
 
 
 def _raise_provider_http_status(response) -> None:
-    raise _ProviderHTTPStatusError(int(response.status_code))
+    headers = getattr(response, "headers", {})
+    delay = _retry_after_seconds(headers.get("Retry-After"))
+    raise _ProviderHTTPStatusError(int(response.status_code), retry_after=delay)
+
+
+def _retry_after_seconds(value):
+    if not isinstance(value, str) or len(value) > 100:
+        return None
+    try:
+        seconds = float(value)
+    except ValueError:
+        try:
+            date = parsedate_to_datetime(value)
+            seconds = (date - datetime.now(timezone.utc)).total_seconds()
+        except (ValueError, TypeError, OverflowError):
+            return None
+    return max(1, math.ceil(seconds)) if math.isfinite(seconds) and 0 <= seconds <= 86400 else None
 
 
 def _error(provider: str, error: Exception | str, *, timeout: bool = False):
@@ -200,13 +228,7 @@ def build_provider_payload(
     }
     if not benchmark_mode:
         max_uses = 5 if deep_search else 1
-        payload["tools"] = [{
-            "type": "openrouter:web_search",
-            "parameters": {
-                "engine": _SEARCH_ENGINE_BY_PROVIDER.get(provider_key, "auto"),
-                "max_uses": max_uses,
-            },
-        }]
+        payload["tools"] = [web_search_tool(provider_key, max_uses=max_uses)]
         payload["max_tool_calls"] = max_uses + 1
 
     request_config = dict(model_config.request_config or {})

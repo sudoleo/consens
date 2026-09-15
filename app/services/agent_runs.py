@@ -161,7 +161,10 @@ class AgentRunStore(ChatStore):
             totals[key] = totals.get(key, 0) + 1
             if usage is not None and not usage.get("complete", True):
                 totals["incomplete_calls"] = totals.get("incomplete_calls", 0) + 1
-            for field in ("input_tokens", "output_tokens", "cached_input_tokens", "reasoning_tokens", "estimated_cost_nano_usd"):
+            if usage is not None and usage.get("estimated_cost_nano_usd") is not None:
+                cost_key = "provider_cost_nano_usd" if usage.get("cost_source") == "provider" else "catalog_cost_nano_usd"
+                totals[cost_key] = totals.get(cost_key, 0) + usage["estimated_cost_nano_usd"]
+            for field in ("input_tokens", "output_tokens", "cached_input_tokens", "cache_write_tokens", "reasoning_tokens", "estimated_cost_nano_usd"):
                 if usage is not None and usage.get(field) is not None:
                     totals[field] = totals.get(field, 0) + usage[field]
             totals["updated_at"] = firestore.SERVER_TIMESTAMP

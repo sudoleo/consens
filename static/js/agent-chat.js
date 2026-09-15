@@ -23,12 +23,13 @@
   function selectionKey() {
     const context = registry.visible();
     const basis = registry.getSelectedConversationBasis({ includeHistory: false });
-    return `${catalogOwner}:${context?.metadata.chatId || basis?.chatId || "draft"}`;
+    return `${catalogOwner}:${context?.metadata.chatId || context?.basis?.chatId || basis?.chatId || (context ? `run:${context.runId}` : "draft")}`;
   }
   function preferredSelection() {
     const context = registry.visible();
     const basis = registry.getSelectedConversationBasis({ includeHistory: false });
     const saved = context?.consensus.completedTurn?.agent_settings || context?.metadata.agentSettings || basis?.currentTurn?.agent_settings;
+    if (context && registry.isExecuting(context.runId)) return context.config.agentSettings || saved;
     let preferred;
     try { preferred = JSON.parse(localStorage.getItem(`agent_settings_${catalogOwner}`) || "null"); } catch (_) {}
     return selections.get(selectionKey()) || saved || preferred || { model_id: catalog?.default_model_id, reasoning_effort: "default" };
@@ -399,8 +400,13 @@
       const context = registry.visible();
       if (context?.status === "failed" && context.metadata.requestSent) send(context);
     });
-    document.getElementById("agentModelDropdown")?.addEventListener("change", changeSelection);
-    document.getElementById("agentReasoningEffort")?.addEventListener("change", changeSelection);
+    // The shared picker emits input before change. Commit before other UI
+    // listeners can project the previous draft selection back into the select.
+    for (const id of ["agentModelDropdown", "agentReasoningEffort"]) {
+      const control = document.getElementById(id);
+      control?.addEventListener("input", changeSelection, true);
+      control?.addEventListener("change", changeSelection, true);
+    }
     document.getElementById("agentModelsRetry")?.addEventListener("click", () => { catalogStatus = "idle"; render(); });
     render();
   });

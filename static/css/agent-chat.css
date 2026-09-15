@@ -67,7 +67,7 @@ body.single-agent-active :is(#consensusOutput, #consensusRun, #agentModePanel, .
   .models-section, .models-section + .sidebar-separator, .demo-chip) { display: none !important; }
 body:not(.single-agent-active) #agentAnswer { display: none; }
 body.single-agent-active #agentAnswer:not([hidden]) { display: block; }
-body.single-agent-active #threadAsk:not([hidden]) { display: block; }
+body.single-agent-active #threadAsk:not([hidden]) { display: flex; }
 
 /* One quiet disclosure. Live state uses the source-check light sweep. */
 .agent-activity { margin: 0 0 18px; color: var(--ink-3); font-size: 13px; }
@@ -80,16 +80,13 @@ body.single-agent-active #threadAsk:not([hidden]) { display: block; }
 .agent-activity > summary:focus-visible { outline: 2px solid var(--ink-2); outline-offset: 3px; }
 .agent-activity > summary:hover { color: var(--ink); }
 .agent-activity-title { font-weight: 500; }
-.agent-activity-marker { flex: 0 0 14px; width: 14px; height: 2px; border-radius: 2px; background: currentColor; opacity: .5; }
 .agent-activity-chevron { width: 5px; height: 5px; margin-left: 2px; border-right: 1px solid currentColor; border-bottom: 1px solid currentColor; transform: rotate(45deg); transition: transform .18s ease; opacity: .6; }
 .agent-activity[open] .agent-activity-chevron { transform: rotate(225deg); }
-.agent-activity.is-running .agent-activity-title,
-.agent-activity.is-running .agent-activity-marker {
+.agent-activity.is-running .agent-activity-title {
   background-image: linear-gradient(105deg, var(--ink-2) 40%, var(--ground) 50%, var(--ink-2) 60%);
   background-size: 250% 100%; animation: source-label-shine 1.6s linear infinite;
 }
 .agent-activity.is-running .agent-activity-title { background-clip: text; -webkit-background-clip: text; color: transparent; }
-.agent-activity.is-running .agent-activity-marker { opacity: 1; }
 .agent-activity-content {
   border-left: 1px solid var(--line); padding: 4px 14px 4px 16px; margin: 6px 0 8px 6px;
   max-height: 240px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin;
@@ -105,12 +102,10 @@ body.single-agent-active #threadAsk:not([hidden]) { display: block; }
 .agent-activity-tool a { display: block; width: fit-content; max-width: 100%; margin-top: 5px; color: var(--ink-2); font-size: 12px; text-decoration: underline; text-underline-offset: 3px; }
 .agent-activity-tool a:hover { color: var(--ink); }
 .agent-activity-tool a:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
-.agent-activity-note, .agent-usage { margin: 8px 0 4px 23px; font-size: 11px; line-height: 1.6; color: var(--ink-3); }
+.agent-activity-note, .agent-usage { margin: 8px 0 4px; font-size: 11px; line-height: 1.6; color: var(--ink-3); }
 .agent-usage { font-variant-numeric: tabular-nums; }
 @media (prefers-reduced-motion: reduce), (forced-colors: active) {
-  .agent-activity.is-running .agent-activity-title,
-  .agent-activity.is-running .agent-activity-marker { animation: none; background: none; color: var(--ink-2); }
-  .agent-activity.is-running .agent-activity-marker { background: currentColor; }
+  .agent-activity.is-running .agent-activity-title { animation: none; background: none; color: var(--ink-2); }
   .agent-activity-chevron { transition: none; }
 }
 @media (max-width: 700px) {

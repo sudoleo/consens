@@ -3,7 +3,8 @@ from uuid import uuid4
 
 from app.services.agent_costs import RunCosts
 from app.services.agent_policy import AgentPolicy, supports_client_tools, tools_for_model
-from app.services.agent_tools import ToolRegistry, native_tools
+from app.services.agent_provider_limits import provider_cooldowns
+from app.services.agent_tools import ToolRegistry, search_tools
 from app.services.chat_store import TurnStatusConflict
 from app.services.llm.agent_client import AgentCompletion
 from app.services.llm.provider_runtime import (
@@ -74,10 +75,11 @@ class AgentLoop:
                     searches = self.remaining_tools if "web_search" in tools_for_model(self.model) else 0
                     schemas = self.registry.schemas if supports_client_tools(self.model) else []
                     allow_client = bool(schemas) and self.remaining_tools > 0 and index + 1 < self.policy.max_calls
-                    tools = [*schemas, *native_tools(searches)]
+                    tools = [*schemas, *search_tools(self.model, searches)]
                     reservation = self.costs.reserve(self.model, self.messages, tools, native_searches=searches)
                     value = self.factory()
                     value.step_id = step
+                    provider_cooldowns.check(self.model, self.api_key)
                     if not self.store.claim(self.uid, self.chat_id, self.turn_id, self.model, step=step,
                                             run_token=self.run_token, policy=self.policy.snapshot()):
                         raise TurnStatusConflict("This agent step has already started. Reopen the saved conversation.")
@@ -117,7 +119,7 @@ class AgentLoop:
                         self.completion.reasoning_truncated |= value.reasoning_truncated
                         if searches and step_status != "succeeded":
                             self.tool_event(f"{step}:web_search", "web_search", "unknown", sources=value.sources,
-                                            text="The request ended before search completion could be confirmed.", provider_native=True)
+                                            text="The request ended before search completion could be confirmed.", server_tool=True)
                         self.store.settle(self.uid, self.chat_id, self.turn_id, completion=value,
                                           status=step_status, step=step, final=False)
                     self.check(budget)
@@ -129,9 +131,9 @@ class AgentLoop:
                         # timestamps or raw search queries. Do not invent them.
                         if (known and count) or value.sources:
                             yield self.tool_event(f"{step}:web_search", "web_search", "succeeded",
-                                count=count if known else None, sources=value.sources, provider_native=True)
+                                count=count if known else None, sources=value.sources, server_tool=True)
                         elif not known:
-                            yield self.tool_event(f"{step}:web_search", "web_search", "unknown", provider_native=True)
+                            yield self.tool_event(f"{step}:web_search", "web_search", "unknown", server_tool=True)
                     yield self.activity({"step_id": "run", "id": "usage", "kind": "usage", "usage": self.completion.usage})
                     self.completion.text, self.completion.finish_reason = value.text, value.finish_reason
                     self.costs.check()

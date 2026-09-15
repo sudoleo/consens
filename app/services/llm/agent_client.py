@@ -10,9 +10,9 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from app.core import config as cfg
-from app.services.agent_costs import NATIVE_SEARCH_NANO_USD, token_cost_nanos
+from app.services.agent_costs import provider_cost_nanos, search_cost_nanos, token_cost_nanos
 
-from app.services.llm.engines import OPENROUTER_CHAT_COMPLETIONS_URL, openrouter_headers
+from app.services.llm.engines import OPENROUTER_CHAT_COMPLETIONS_URL, _ProviderResponseError, openrouter_headers
 from app.services.llm.provider_runtime import (
     AnalysisBudget, bind_analysis_budget, cancellable_sse_lines, current_analysis_budget,
 )
@@ -28,6 +28,8 @@ class AgentModel:
     input_usd_per_million: str = "0.15"
     output_usd_per_million: str = "0.60"
     cache_read_usd_per_million: str = "0.003"
+    cache_write_usd_per_million: str = ""
+    web_search_usd_per_request: str | None = None
     pricing_version: str = "openrouter-2026-09-14"
     selection_id: str = "deepseek/deepseek-v4.1-flash"
     reasoning_effort: str = "default"
@@ -53,28 +55,29 @@ def agent_model() -> AgentModel:
     if not metadata:
         raise ValueError("The configured agent model needs a catalog entry with prices and context limits.")
     entry = next((entry for entry in cfg.MODEL_CONFIGS.values() if entry.api_model == model_id), None)
-    if model_id != defaults.model:
-        pricing = metadata["pricing"]
-        defaults = replace(defaults, model=model_id, label=entry.label if entry else model_id,
-            input_usd_per_million=str(Decimal(pricing["prompt"]) * 1_000_000),
-            output_usd_per_million=str(Decimal(pricing["completion"]) * 1_000_000),
-            cache_read_usd_per_million=str(Decimal(pricing.get("input_cache_read", pricing["prompt"])) * 1_000_000),
-            pricing_version=_CATALOG["version"])
+    pricing = metadata["pricing"]
+    defaults = replace(defaults, model=model_id, label=entry.label if entry else defaults.label if model_id == defaults.model else model_id,
+        input_usd_per_million=str(Decimal(pricing["prompt"]) * 1_000_000),
+        output_usd_per_million=str(Decimal(pricing["completion"]) * 1_000_000),
+        cache_read_usd_per_million=str(Decimal(pricing.get("input_cache_read", pricing["prompt"])) * 1_000_000),
+        cache_write_usd_per_million=str(Decimal(pricing.get("input_cache_write", pricing["prompt"])) * 1_000_000),
+        web_search_usd_per_request=pricing.get("web_search"), pricing_version=_CATALOG["version"])
     values = {}
     for name in ("model", "label", "input_usd_per_million", "output_usd_per_million",
-                 "cache_read_usd_per_million", "pricing_version"):
+                 "cache_read_usd_per_million", "cache_write_usd_per_million", "pricing_version"):
         values[name] = os.environ.get("AGENT_" + name.upper(), getattr(defaults, name)).strip()
         if not values[name]:
             raise ValueError("Empty agent configuration")
     values["max_output_tokens"] = int(os.environ.get("AGENT_MAX_OUTPUT_TOKENS", "4096"))
     if not 256 <= values["max_output_tokens"] <= 16384:
         raise ValueError("Invalid agent output limit")
-    for name in ("input_usd_per_million", "output_usd_per_million", "cache_read_usd_per_million"):
+    for name in ("input_usd_per_million", "output_usd_per_million", "cache_read_usd_per_million", "cache_write_usd_per_million"):
         price = Decimal(values[name])
         if not price.is_finite() or price < 0 or price > 1000:
             raise ValueError("Invalid agent price")
     values["max_output_tokens"] = min(values["max_output_tokens"], metadata["top_provider"].get("max_completion_tokens") or values["max_output_tokens"])
     return AgentModel(**values, selection_id=values["model"], context_length=metadata["context_length"],
+                      web_search_usd_per_request=defaults.web_search_usd_per_request,
                       request_config=dict(entry.request_config or {}) if entry else {})
 
 
@@ -94,16 +97,17 @@ def _choices(model, metadata):
 
 
 def agent_models():
-    """Reuse the active product allowlist; only priced, known text models qualify.
+    """Reuse Daily's active answer models plus the configured default.
 
     The checked-in public catalog is a versioned simulation baseline, not a
     live provider quote. No user-controlled prices or provider URLs are used.
     """
     default = agent_model()
     result = [(default, _CATALOG["models"].get(default.model, {}))]
+    daily = set(cfg.CONSENSUS_PRESET_MODELS["fast"]["answers"].values())
     for entry in sorted(cfg.MODEL_CONFIGS.values(), key=lambda x: (x.provider, x.label)):
         metadata = _CATALOG["models"].get(entry.api_model)
-        if not metadata or entry.api_model == default.model:
+        if entry.internal_id not in daily or not metadata or entry.api_model == default.model:
             continue
         pricing = metadata["pricing"]
         per_million = lambda key, fallback: str(Decimal(pricing.get(key, fallback)) * 1_000_000)
@@ -113,6 +117,8 @@ def agent_models():
             input_usd_per_million=per_million("prompt", "0"),
             output_usd_per_million=per_million("completion", "0"),
             cache_read_usd_per_million=per_million("input_cache_read", pricing["prompt"]),
+            cache_write_usd_per_million=per_million("input_cache_write", pricing["prompt"]),
+            web_search_usd_per_request=pricing.get("web_search"),
             pricing_version=_CATALOG["version"], request_config=dict(entry.request_config or {}),
             context_length=metadata["context_length"],
         ), metadata))
@@ -151,27 +157,45 @@ def resolve_agent_model(model_id=None, reasoning_effort="default"):
     raise ValueError("This model is not available in Agent Beta.")
 
 
-def measured_usage(raw: object, model: AgentModel) -> dict | None:
+def measured_usage(raw: object, model: AgentModel, *, searches_enabled=False) -> dict | None:
     """Missing counts are unknown, never estimated or silently set to zero."""
     if not isinstance(raw, dict):
         return None
     prompt = raw.get("prompt_tokens", raw.get("input_tokens"))
     completion = raw.get("completion_tokens", raw.get("output_tokens"))
     valid = lambda value: type(value) is int and 0 <= value <= 10_000_000
-    if not valid(prompt) or not valid(completion):
+    tokens_known = valid(prompt) and valid(completion)
+    cost = provider_cost_nanos(raw.get("cost"))
+    if not tokens_known and cost is None:
         return None
     prompt_details = raw.get("prompt_tokens_details", raw.get("input_tokens_details")) or {}
     output_details = raw.get("completion_tokens_details", raw.get("output_tokens_details")) or {}
     cached = prompt_details.get("cached_tokens", 0) if isinstance(prompt_details, dict) else 0
     reasoning = output_details.get("reasoning_tokens", 0) if isinstance(output_details, dict) else 0
-    cached = cached if valid(cached) and cached <= prompt else 0
-    reasoning = reasoning if valid(reasoning) and reasoning <= completion else 0
+    written = prompt_details.get("cache_write_tokens", 0) if isinstance(prompt_details, dict) else 0
+    cached = cached if tokens_known and valid(cached) and cached <= prompt else 0
+    written = written if tokens_known and valid(written) and written <= prompt - cached else 0
+    reasoning = reasoning if tokens_known and valid(reasoning) and reasoning <= completion else 0
+    server_use = raw.get("server_tool_use")
+    searches = server_use.get("web_search_requests") if isinstance(server_use, dict) else None
+    searches_known = valid(searches)
+    source = "provider" if cost is not None else "catalog"
+    complete = tokens_known
+    if cost is None:
+        cost = token_cost_nanos(model, prompt, completion, cached, written)
+        if searches_enabled:
+            price = search_cost_nanos(model)
+            complete = searches_known and (searches == 0 or price is not None)
+            if searches_known and price is not None:
+                cost += searches * price
     # Integer nanodollars avoid cumulative float/rounding drift. Reasoning is
     # already included in completion_tokens and must not be charged twice.
     return {
-        "input_tokens": prompt, "output_tokens": completion,
-        "cached_input_tokens": cached, "reasoning_tokens": reasoning,
-        "estimated_cost_nano_usd": token_cost_nanos(model, prompt, completion, cached),
+        "input_tokens": prompt if tokens_known else None, "output_tokens": completion if tokens_known else None,
+        "cached_input_tokens": cached if tokens_known else None, "cache_write_tokens": written if tokens_known else None,
+        "reasoning_tokens": reasoning if tokens_known else None,
+        "web_search_requests": searches if searches_known else None,
+        "estimated_cost_nano_usd": cost, "cost_source": source, "complete": complete,
         "pricing_version": model.pricing_version,
         "source": "provider", "billing_mode": "simulation", "currency": "USD",
     }
@@ -275,28 +299,23 @@ class AgentCompletion:
             "model": model.model, "messages": messages,
             "max_tokens": model.max_output_tokens,
             "stream": True, "stream_options": {"include_usage": True},
-            "provider": {"zdr": True, "allow_fallbacks": False},
+            "provider": {"zdr": True},
         }
         payload.update({k: v for k, v in model.request_config.items() if k != "provider"})
         payload.update(model=model.model, messages=messages, max_tokens=model.max_output_tokens,
                        stream=True, stream_options={"include_usage": True})
         payload["provider"].update(model.request_config.get("provider") or {})
-        payload["provider"].update(zdr=True, allow_fallbacks=False)
+        payload["provider"]["zdr"] = True
         # All execution-affecting fields are owned by this adapter, never model
         # arguments, user settings or arbitrary registry configuration.
         for field in ("tools", "tool_choice", "plugins", "parallel_tool_calls", "max_tool_calls", "stop_server_tools_when"):
             payload.pop(field, None)
         if tools:
-            # Anthropic's checked endpoint does not advertise parallel_tool_calls.
-            # Enforce client-call cardinality in the parser instead of sending
-            # an unsupported parameter with require_parameters=True.
-            payload.update(tools=tools, tool_choice="auto" if allow_tool_calls or native_searches else "none")
-            payload["provider"]["require_parameters"] = True
+            payload["tools"] = tools
+            if any(tool.get("type") == "function" for tool in tools):
+                payload["tool_choice"] = "auto" if allow_tool_calls or native_searches else "none"
         if native_searches:
             payload["max_tool_calls"] = native_searches
-            # Bedrock does not support this native search. Explicitly pin the
-            # checked first integration, including the existing ZDR constraint.
-            payload["provider"]["only"] = ["anthropic"]
         with bind_analysis_budget(current_analysis_budget() or AnalysisBudget(seconds=180, max_calls=1)):
             lines = cancellable_sse_lines(
                 OPENROUTER_CHAT_COMPLETIONS_URL, json=payload,
@@ -315,13 +334,17 @@ class AgentCompletion:
                     reported = data.get("usage")
                     if isinstance(reported, dict):
                         for field in ("prompt_tokens", "completion_tokens", "prompt_tokens_details", "completion_tokens_details",
-                                      "input_tokens", "output_tokens", "input_tokens_details", "output_tokens_details"):
+                                      "input_tokens", "output_tokens", "input_tokens_details", "output_tokens_details", "cost"):
                             if field in reported:
-                                self._raw_usage[field] = reported[field]
+                                if field.endswith("_details") and isinstance(reported[field], dict):
+                                    previous = self._raw_usage.get(field)
+                                    self._raw_usage[field] = {**(previous if isinstance(previous, dict) else {}), **reported[field]}
+                                else:
+                                    self._raw_usage[field] = reported[field]
                         server_use = reported.get("server_tool_use")
                         if isinstance(server_use, dict) and "web_search_requests" in server_use:
                             self._raw_usage["server_tool_use"] = {"web_search_requests": server_use["web_search_requests"]}
-                    usage = measured_usage(self._raw_usage, model) if isinstance(reported, dict) else None
+                    usage = measured_usage(self._raw_usage, model, searches_enabled=bool(native_searches)) if isinstance(reported, dict) else None
                     known = False
                     if native_searches and isinstance(reported, dict):
                         server_use = self._raw_usage.get("server_tool_use")
@@ -329,22 +352,19 @@ class AgentCompletion:
                         known = type(count) is int and 0 <= count <= 10_000
                         if usage is None and known:
                             # Search cost can be known even if token usage is not.
+                            price = search_cost_nanos(model)
                             usage = {"input_tokens": None, "output_tokens": None, "cached_input_tokens": None,
-                                     "reasoning_tokens": None, "estimated_cost_nano_usd": 0,
+                                     "reasoning_tokens": None, "estimated_cost_nano_usd": count * price if price is not None else None,
+                                     "web_search_requests": count, "complete": False, "cost_source": "catalog",
                                      "pricing_version": model.pricing_version, "source": "provider",
                                      "billing_mode": "simulation", "currency": "USD"}
-                        if usage is not None:
-                            usage.update(web_search_requests=count if known else None,
-                                         complete=known and usage["input_tokens"] is not None)
-                            if known:
-                                usage["estimated_cost_nano_usd"] += count * NATIVE_SEARCH_NANO_USD
                     if usage is not None:
                         self.usage = usage
                         yield self.event("usage", "usage", usage=usage)
                         if native_searches and known and count > native_searches:
                             raise RuntimeError("Provider exceeded the native search limit")
                     if data.get("error"):
-                        raise RuntimeError("Agent provider failed")
+                        raise _ProviderResponseError(data["error"])
                     for choice in data.get("choices") or []:
                         if choice.get("index", 0) != 0:
                             raise ValueError("Unexpected parallel completion")

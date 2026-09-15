@@ -95,7 +95,7 @@ Threadpool aus. `async def` bleibt nur für echte Await-Pfade (Mail, explizites
 
 | Router | Zweck (Auswahl an Pfaden) |
 |---|---|
-| `agent.py` | `GET /agent/models` und `POST /agent`: Admin/Pro-geschützter Modellkatalog mit Tool-Fähigkeiten und begrenzter Modell-/Tool-Lauf im bestehenden Chat. Strikte Auswahl, owner-gebundene IDs, SSE mit sichtbarem Reasoning, bestätigten Tool-Ergebnissen/Quellen und aggregierter Usage. Native Suche zunächst direkt im gewählten Claude Haiku 4.5 über Anthropic; kein eigener Suchdienst. Idempotente Schrittbelege und Wiederaufnahme fertiger Antworten. Kein `/prepare`, Fan-out, Consensus, Judge oder Memory-Kompressor. `recover_only` startet nie einen Modellaufruf. |
+| `agent.py` | `GET /agent/models` und `POST /agent`: Admin/Pro-geschützter Daily-Modellkatalog plus konfigurierter Standard und begrenzter Modell-/Tool-Lauf im bestehenden Chat. Strikte Auswahl, owner-gebundene IDs, SSE mit sichtbarem Reasoning, bestätigten Tool-Ergebnissen/Quellen und aggregierter Usage. Alle angebotenen Modelle erhalten die gemeinsame Consensus-Websuche (Auto, Grok: Exa); kein eigener Suchdienst. Vorrang für gemeldete Provider-Gesamtkosten, idempotente Schrittbelege, modellgebundene 429-Wartefrist und Wiederaufnahme fertiger Antworten. Kein `/prepare`, Fan-out, Consensus, Judge oder Memory-Kompressor. `recover_only` startet nie einen Modellaufruf. |
 | `source_checks.py` | Dauerhafte Quellenprüfung: owner-gebundenes `GET /api/source-checks/{job_id}` mit `cursor`, `revision` und `after_revision`; `POST .../{job_id}/resume` nimmt den eigenen OpenRouter-Key nur in den Prozessspeicher auf. `GET /api/share/{share_id}/source-check?version=...` und `GET /api/topics/{slug}/source-check?version=...` prüfen pro Paketseite aktive Ressource, Sichtbarkeit, Run- und Antwortversion. Seiten liefern `source_verification` plus `next_cursor`, bei geändertem Stand 409. API-Key-Clients verwenden den rungebundenen Endpoint in `api_v1.py`: `GET /api/v1/consensus/runs/{run_id}/source-check`, auch als `result.source_verification.status_url` ausgegeben. |
 | `pages.py` | HTML-Seiten + SEO: `/` (Landing, auch mit aktiver Session direkt erreichbar), `/model-pulse` (öffentliche, erklärte Best-answer-Rangliste), `/app` (Haupt-App), `/app/watches` (gleiche App-Shell; watch.js öffnet anhand des Pfads das Watch-Dashboard), `/admin` (inkl. Topics-Tab), `/admin/topics` (308-Kompatibilitätsredirect auf `/admin#topics`), `/admin/benchmark` (Benchmark-Run-Visualisierung), `/about`, `/ai-model-comparison`, `/consensus-engine` (nutzerfreundliche Consensus-Engine-Erklärung), `/privacy` `/imprint` `/terms`, `robots.txt`, `sitemap*.xml`. Außerdem der öffentliche, familienaggregierte Best-answer-Zähler `GET /api/model-leaderboard` (60 s Browser-/CDN-Cache; `period=all|since-2026-08-31`; alle neun Familien einschließlich Nullständen, Kimi/GLM und Meta/Muse mit eigenem Verfügbarkeitsdatum aus `_LEADERBOARD_AVAILABLE_SINCE`). Beide Zeiträume nutzen zusätzlich einen serverseitigen 60-s-Cache mit serialisiertem Refresh pro Zeitraum/Prozess. Der gemeinsame Zeitraum zählt die datierten, deduplizierten `model_votes` ab 31.08.2026 über indexierte `count()`-Abfragen pro Familie; Modellkatalog und Counts werden im selben Read-only-Transaktionssnapshot gelesen. Solange der neue `model_votes`-Index aus `firestore.indexes.json` fehlt/aufbaut, greift nur für diesen Indexfehler der gecachte Legacy-Scan. Kontolöschungen entfernen weiterhin Votes aus dem Zeitraum, ohne Lifetime-Zähler zurückzusetzen; `/feedback`, `/vote`, `/check_keys` bleiben die weiteren internen Seiten-Routen (Key-Test nur für verifizierte Logins). Feedback ist persistent pro UID auf 30 Sekunden und 10/UTC-Tag begrenzt. Ein Best-answer-Vote muss an ein noch gültiges, owner-gebundenes `result_id` gebunden sein, zum serverseitigen Gewinner passen und kann pro Lauf genau einmal zählen. |
 | `chat.py` | Kern-LLM-Flow: `/prepare`, die aus `cfg.PROVIDERS[*].ask_endpoint` erzeugten `/ask_*`-Routen (aktuell zusätzlich `/ask_kimi` und `/ask_glm`), `/consensus`, `/resolve`. `/prepare` und die `/ask_*`-Endpoints akzeptieren weiter das optionale Legacy-`context`-Feld für nicht migrierte Bookmark-Fortsetzungen. Additiv laden `/ask_*` das owner-gebundene Tripel `chat_id`/`turn_id`/`context_version_id`; Legacy- und Versionskontext zusammen werden abgewiesen. Alle `/ask_*`-Endpoints laufen über `handle_ask` + die deklarative Familien-Registry `ASK_PROVIDERS`; Transport und Credential sind für alle OpenRouter, `useOwnKeys` wählt optional `openrouter_key`. `/consensus` akzeptiert optional Chat-/Turn-IDs plus `turn_sources` und die exakt am Turn verknüpfte `context_version_id`, prüft alles owner-gebunden vor dem Judge und finalisiert nach Consensus, Differences und Share-`result_id` in Streaming- wie JSON-Pfad über `ChatStore`. Sendet der Browser die stabile `bookmarkId`, schreibt `/consensus` den autoritativen Bookmark-Snapshot vor seinem erfolgreichen Final-Event und liefert kompakte `bookmark_meta`; ein separater Browser-Request ist nur noch Fallback. Ein bereits completed Turn wird mit Consensus, Differences, Quellen und Modellantworten owner-geschützt wiedergegeben, ohne Engine-/Differences-/Share-/Statistik-/Completion- oder Usage-Write; ohne IDs bleibt der Legacy-Vertrag unverändert. |
@@ -1550,9 +1550,14 @@ Fokus. Menüs unterstützen Pfeiltasten, Home/End, Escape, Fokusrückgabe und
 angepasste Breiten im sichtbaren Viewport. Entfernte gespeicherte Modelle werden
 mit sichtbarem Hinweis auf den angebotenen Standard abgeglichen, sodass Anzeige
 und nächster Request übereinstimmen.
+Die Wahl wird beim `input`-Ereignis vor folgenden Projektionen gespeichert;
+Läufe ohne Chat-ID bekommen einen eigenen Schlüssel und laufende Antworten
+zeigen ihre eingefrorenen Einstellungen statt einer alten Draft-Wahl.
+Die aktuelle Frage behält den rechtsbündigen Flex-Container wie Consensus.
 Modellwechsel gelten für die nächste Nachricht, laufende Einstellungen sind
 gesperrt. `GET /agent/models` ist Admin-/Pro-geschützt und liefert den Standard
-sowie aktive Registry-Modelle mit geprüftem Katalogsnapshot. Labels, IDs,
+sowie Daily-Antwortmodelle aus `CONSENSUS_PRESET_MODELS["fast"]` mit aktivem Registry-
+Eintrag und geprüftem Katalogsnapshot. Labels, IDs,
 API-Aliasse und Routing werden aus `cfg.MODEL_CONFIGS` wiederverwendet; Preise
 und Reasoning-Fähigkeiten liegen versioniert in `llm/agent_model_catalog.json`.
 Ein neuer Registry-Eintrag ist erst nach Aufnahme in diesen Snapshot auswählbar.
@@ -1573,8 +1578,9 @@ Blöcke bleiben außerhalb des Anzeige-/Persistenzvertrags; fehlende Texte oder
 Messwerte werden nicht erfunden. Ein gemeinsamer Scrollbereich folgt dem Stream,
 solange der Nutzer nicht zurückscrollt. Live-Reasoning und Tool-Ereignisse öffnen sich automatisch,
 nach Abschluss klappt es zu; eine explizite Nutzerwahl bleibt bestehen. Nur die
-laufende Statuszeile zeigt Strich und Lichtlauf (`source-label-shine` wie beim
+laufende Statuszeile zeigt den Lichtlauf (`source-label-shine` wie beim
 Quellencheck; ohne Animation bei Reduced Motion/Forced Colors). Stop-/Fehlerstatus
+und Reasoning tragen keine vorangestellten Striche. Status
 und Output-Limit sind auch eingeklappt erkennbar. Die Sidebar verwendet für Agent-
 Läufe eigene Statuswörter und „New chat“. Katalog-Reload und Antwort-Recovery
 haben eigene sichtbare Aktionsregeln; die geerbte `thread-ask-more`-Klasse blendet
@@ -1613,15 +1619,16 @@ Eine Client-Tool-Fortsetzung benötigt ein geprüftes nicht denkendes Protokoll;
 Signaturen/Reasoning-Blöcke werden nicht stillschweigend entfernt und dann
 wiederverwendet. Die vollständige Schnittstelle wird mit einem lokalen Testtool
 geprüft; zusätzliche Produkttools oder Modell-Delegation sind nicht freigegeben.
-`agent_costs.py` berechnet Simulationstarife, reserviert gemeinsame Token-/Kosten-
-Budgets und aggregiert gemessene Usage. `agent_runs.py` hält persistente Claims,
+`agent_costs.py` reserviert gemeinsame Token-/Kosten-Budgets und aggregiert Usage.
+Gemeldete OpenRouter-Gesamtkosten haben Vorrang; nur ohne diese wird anhand
+gemeldeter Tokens und Katalogtarife geschätzt. `agent_runs.py` hält persistente Claims,
 Abrechnung und Turn-Abschluss; `llm/agent_client.py` übersetzt einen Providerrequest
 und validiert/beschränkt dessen Stream. Der Standard ist
 `deepseek/deepseek-v4.1-flash`; Modell, Label, Output-Limit und versionierte
 Simulationstarife sind über `AGENT_*` konfigurierbar (siehe
 [`agent-mode.md`](agent-mode.md)). Es gelten höchstens drei OpenRouter-Requests,
-zwei Tool-Nutzungen, 800.000 Input-/Output-Tokens als konservatives Zulassungsbudget
-und 1 USD simuliertes Kostenbudget je Turn. ZDR, deaktivierte Fallbacks und
+zwei Tool-Nutzungen, 4.000.000 Input-/Output-Tokens als konservatives Zulassungsbudget
+einschließlich verdeckter Suchsegmente und 1 USD Kostenreserve je Turn. ZDR und
 standardmäßig maximal 4.096 Output-Tokens pro Request bleiben bestehen.
 Alle Schritte teilen 180 Sekunden Laufzeit; das Budget wird vor und nach RPCs
 geprüft. Unbekannte Usage gibt reservierte Tokens/Kosten nicht wieder frei.
@@ -1631,20 +1638,32 @@ einen neuen Chat an; es gibt keine zusätzliche LLM-Kompression.
 Kleinere Modellfenster haben zusätzlich ein konservatives UTF-8-Bytebudget
 einschließlich Output-Reserve vor dem bezahlten Claim.
 
-Die erste Integration verwendet `openrouter:web_search` direkt im gewählten
-`anthropic/claude-haiku-4.5`-Request, gepinnt auf `anthropic`, mit `engine: native`,
-`max_uses: 2` und `max_tool_calls: 2`. Der Provider führt seinen nativen Suchdialog
-innerhalb dieses Requests aus; kein zusätzlicher Suchdienst oder Suchmodell.
-Andere Picker-Modelle erhalten keine pauschale Suchfähigkeit. `GET /agent/models`
-liefert `tools_by_effort`; der Composer zeigt die Verfügbarkeit. Native Suche
-reserviert vorsorglich das volle Modellfenster je möglichem Suchsegment plus
-Modellfortsetzung; `max_results` gilt nicht als natives Inputlimit. Dokumentierte
-Providergrenzen und offizielle Quellen stehen in `agent-mode.md`.
+Die Websuche verwendet für jedes angebotene Modell `engines.web_search_tool`,
+denselben Builder wie Consensus: `openrouter:web_search`, `engine: auto`, für
+Grok `exa`. OpenRouter führt Suche und Modellfortsetzung im gewählten Request
+aus. Agent setzt `max_uses: 2`, `max_tool_calls: 2` und Exa-Ergebnisgrenzen
+(5 je Suche, 10 insgesamt, 2.000 Zeichen je Ergebnis). Native Provider ignorieren
+Ergebnisgrenzen; natives `max_uses` gilt nur für Anthropic. `GET /agent/models`
+liefert `tools_by_effort`. Registry-Routing bleibt erhalten, sonst darf OpenRouter
+Provider desselben Modells wechseln. Die früheren Agent-Filter `only: anthropic`
+und `require_parameters` wurden nach reproduziertem Haiku-404 entfernt.
+Native Suche reserviert vorsorglich das volle Modellfenster je möglichem
+Suchsegment plus Modellfortsetzung; Exa reserviert begrenzten Inhalt inklusive
+UTF-8-/Protokollreserve. Providergrenzen und Quellen stehen in `agent-mode.md`.
 Nur zurückgegebene Quellenannotationen und Such-Usage erzeugen bestätigte
 Tool-Ereignisse, mit bis zu fünf HTTP(S)-Quellenlinks. Die API garantiert keine
 nativen Startzeiten/Queries; diese werden nicht erfunden. Fehlende Such-Usage
-bleibt `unknown` und macht die Kostensumme unvollständig. Bestätigte Suchen
-zählen zusätzlich mit 0,01 USD pro Suche in der versionierten Simulation.
+bleibt `unknown`; eine gemeldete Gesamtkostensumme kann trotzdem vollständig
+sein. `usage.cost` umfasst Token-/Cache-/Suchkosten der tatsächlichen Route und
+wird einmal verbucht. Ohne Gesamtbetrag ist die Katalogrechnung als Schätzung
+markiert, fehlende Suchkosten machen sie unvollständig.
+
+`agent_provider_limits.py` bremst wiederholte 429 pro Modell und gehashtem API-Key:
+prozesslokale Map mit höchstens 256 Einträgen, Wartezeit aus `Retry-After` (auch
+HTTP-Datum), sonst 30 Sekunden. Prüfung vor Turn-Anlage und jedem Schritt;
+kein automatischer Transport-Retry. Andere Modelle und fertige Replays bleiben
+nutzbar. HTTP- und SSE-Fehler behalten ihren Status und liefern verständliche
+Fehlermeldungen; Logs beschränken sich auf Modell-ID, Kategorie und Wartefrist.
 
 `app/services/agent_runtime.py` begrenzt aktive Agent-Produzenten pro Prozess
 auf 16 (`AGENT_MAX_CONCURRENT_RUNS`, 1–64); Überlast liefert vor Turn-Anlage
@@ -1681,15 +1700,17 @@ Status `running`. IDs sind `completion:0..2`; der erste Beleg enthält zusätzli
 `run_token`, `run_status`, `last_step` und den Policy-Snapshot. Jeder weitere
 Claim prüft Besitzer, Vorgänger-Settlement, Lease und Schrittbudget transaktional.
 Schritt-Settlement und `users/{uid}.agent_usage` werden atomar
-verbucht: Input/Output, Cache-Input, Reasoning (bereits in Output enthalten),
+verbucht: Input/Output, Cache-Reads/-Writes, Reasoning (bereits in Output enthalten),
 `estimated_cost_nano_usd` als Integer sowie gemessene, unbekannte und noch
-unabgeschlossene Aufrufe. `incomplete_calls` kennzeichnet gemessene Token-Belege
-mit fehlender nativer Such-Usage; aggregierte `agent_usage.complete=false`
-kennzeichnet Teilsummen im Chat. Bekannte Suchkosten bleiben auch ohne gemeldete
+unabgeschlossene Aufrufe. `cost_source: provider | catalog | mixed` unterscheidet
+gemeldete Kosten von Schätzungen; Kontosummen führen zusätzlich
+`provider_cost_nano_usd` und `catalog_cost_nano_usd`. `incomplete_calls` und
+`agent_usage.complete=false` kennzeichnen Teilsummen. Bekannte Kosten bleiben auch ohne gemeldete
 Tokens erhalten; unbekannte Tokenfelder bleiben `null`. Getrennte Usage-Chunks
-werden pro Request zusammengeführt. Nur tatsächlich vom Provider gemeldete Tokens
-fließen in die Kostensumme; fehlende Usage bei Abbruch/Fehler wird nicht
-geschätzt. Es gibt keinen Guthabenabzug und keinen Consensus-Usage-Write.
+werden pro Request zusammengeführt. Ein valides `usage.cost` hat Vorrang vor
+Tokenpreisrechnungen; der Schätzfallback nutzt ausschließlich gemeldete Tokens.
+Fehlende Usage bei Abbruch/Fehler wird nicht erfunden.
+Es gibt keinen Guthabenabzug und keinen Consensus-Usage-Write.
 Die Admin-Kontoansicht zeigt diese kumulierten Werte beim Nutzer-Lookup.
 `settle(final=False)` schließt einzelne Belege, `finish_run` anschließend den
 Turn mit aggregierter Aktivität/Usage. Ein Absturz dazwischen erlaubt keinen

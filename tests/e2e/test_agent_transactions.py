@@ -46,7 +46,8 @@ def test_parallel_workers_share_admission_and_settle_each_receipt_once():
             assert not any(pool.map(lambda _: AgentRunStore(db).claim(uid, *winners[0], model), range(4)))
         completion = AgentCompletion()
         completion.text, completion.finish_reason = "Saved answer", "stop"
-        completion.usage = measured_usage({"prompt_tokens": 100, "completion_tokens": 10}, model)
+        completion.usage = measured_usage({"prompt_tokens": 100, "completion_tokens": 10,
+            "prompt_tokens_details": {"cache_write_tokens": 40}, "cost": .0123}, model)
 
         def settle(_):
             return AgentRunStore(db).settle(uid, *winners[0], completion=completion, status="succeeded", final=False)
@@ -71,6 +72,8 @@ def test_parallel_workers_share_admission_and_settle_each_receipt_once():
         totals = db.collection("users").document(uid).get().to_dict()["agent_usage"]
         assert totals["measured_calls"] == 2 and totals["unsettled_calls"] == 1
         assert totals["estimated_cost_nano_usd"] == 2 * completion.usage["estimated_cost_nano_usd"]
+        assert totals["provider_cost_nano_usd"] == 24_600_000
+        assert totals["cache_write_tokens"] == 80
         replacement = next(item for item, allowed in zip(turns, admitted) if not allowed)
         assert store.claim(uid, *replacement, model)
         # Chat deletion does not prevent the receipt from freeing its owner slot.
