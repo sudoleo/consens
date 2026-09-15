@@ -14,6 +14,25 @@ if os.environ.get("RUN_E2E") != "1":
 
 
 @pytest.fixture(autouse=True)
+def _default_prompt_configuration(monkeypatch):
+    """Default prompt reads must not contact Firestore in the unit suite."""
+    from types import SimpleNamespace
+    from app.services import prompt_config
+
+    class EmptyConfigDb:
+        def collection(self, _name):
+            return self
+
+        def document(self, _name):
+            return self
+
+        def get(self, **_kwargs):
+            return SimpleNamespace(exists=False)
+
+    monkeypatch.setattr(prompt_config, "_runtime_store", prompt_config.PromptConfigStore(EmptyConfigDb()))
+
+
+@pytest.fixture(autouse=True)
 def _neutral_user_memory_profile():
     """Jeder authentifizierte /ask_* liest jetzt das User-Memory-Profil.
 

@@ -3,16 +3,18 @@ from typing import Optional
 from zoneinfo import ZoneInfo
 from fastapi import HTTPException
 import app.core.config as cfg
+from app.services import prompt_config
 
-def get_date_context() -> str:
-    """Fresh server-owned clock; Berlin is a reference, not user geolocation."""
-    now = datetime.now(ZoneInfo("Europe/Berlin"))
+def get_date_context(timezone_name=None) -> str:
+    """Fresh server-owned clock; the configured zone is not user geolocation."""
+    timezone_name = timezone_name or prompt_config.get_config()["reference_timezone"]
+    now = datetime.now(ZoneInfo(timezone_name))
     weekday = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")[now.weekday()]
     offset = now.strftime("%z")
     return (
         f"Current date: {weekday}, {now.date().isoformat()}. "
         f"Reference time at request start: {now:%H:%M:%S}. "
-        f"Reference timezone: Europe/Berlin (UTC{offset[:3]}:{offset[3:]}). "
+        f"Reference timezone: {timezone_name} (UTC{offset[:3]}:{offset[3:]}). "
         "Resolve relative dates such as today, tomorrow, and yesterday using this date, "
         "not dates in earlier messages, unless the user specifies another reference date or timezone. "
         "This reference timezone is an application default. The user's location and local "
@@ -21,10 +23,8 @@ def get_date_context() -> str:
 
 
 def get_system_prompt() -> str:
-    return (
-        f"{get_date_context()}\n\n"
-        "Please answer thoroughly and precisely, explaining your reasoning and covering the relevant details. Do not oversimplify. No follow-up questions."
-    )
+    config = prompt_config.get_config()
+    return f"{get_date_context(config['reference_timezone'])}\n\n{config['prompts']['answers']}"
 
 FOLLOWUP_CONTEXT_HEADER = "PREVIOUS EXCHANGE (context for a follow-up question):"
 

@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import Mapping
 
 import app.core.config as cfg
+from app.services import prompt_config
 from app.core.observability import safe_exception, safe_traceback
 from app.services.llm.citations import coerce_text
 from app.services.llm.base import get_date_context
@@ -391,7 +392,8 @@ def _build_consensus_prompt(
     if shuffle:
         random.shuffle(model_answers)
 
-    prompt_parts = [f"{get_date_context()}\n\n"]
+    config = prompt_config.get_config()
+    prompt_parts = [f"{get_date_context(config['reference_timezone'])}\n\n"]
 
     prompt_parts.append(
         f"Please provide your answer in the same language as the user's question. "
@@ -426,42 +428,7 @@ def _build_consensus_prompt(
         label = f"Expert {chr(ord('A') + idx)}"
         prompt_parts.append(_format_expert_opinion(label, name, answer, model_sources))
 
-    user_facing_instruction = (
-        "Use the expert-opinion framing only for your internal synthesis. "
-        "The final answer is for an end user, so do not mention experts, expert opinions, models, "
-        "model responses, consensus mechanics, or that sources disagree. "
-        "Where the opinions diverge on something that matters for the reader's decision, name that "
-        "divergence inside the sentence it belongs to: a short clause giving the substantive reason "
-        "for it, such as a differing assumption, timeframe, scope, or definition. Do not count how "
-        "many opinions took which side, do not attribute positions to anyone, and do not describe the "
-        "comparison itself. Smooth over every other divergence silently. If uncertainty remains "
-        "important, state it as ordinary factual uncertainty without referring to the underlying "
-        "experts or models. "
-        "Use the supplied source information to assess the opinions, especially current or time-sensitive facts. "
-        "Treat sources as provenance, not as a limit on your reasoning; never use an uncited recollection "
-        "to dismiss sourced, time-sensitive information. "
-        "Do not output S-source references such as [S1] or [S1, S2], source-ID links, or a source-ID list "
-        "in your final answer. Sources remain accessible in the original model responses. "
-        "Preserve literal code examples and mathematical notation when those are part of the answer. "
-        "Do not claim that you, consens.io, or any model saved, updated, or will remember "
-        "personal information; persistent state changes happen only through separate explicit controls. "
-        "Provide only the final, balanced answer. "
-        "Do not ask the user any follow-up or clarifying questions; answer directly with the information available."
-    )
-
-    prompt_parts.append(
-        "You receive multiple expert opinions on a specific question. "
-        "Treat all expert opinions equally. Do not focus on the answer of one model. "
-        "Your task is to combine these responses into a comprehensive, correct, and coherent answer. "
-        "Approach them like an interested, independent journalist: understand what each contributes, "
-        "weigh the reasoning and available evidence, and then form your own reasoned assessment rather "
-        "than mechanically following a majority. Separate reasoned inference from facts recalled from "
-        "your own training. For time-sensitive claims, lack of familiarity is not evidence that something "
-        "does not exist; do not override current information in the opinions merely because it may postdate "
-        "your knowledge. "
-        "Structure the answer clearly and coherently. "
-        + user_facing_instruction
-    )
+    prompt_parts.append(config["prompts"]["consensus"])
 
     return "".join(prompt_parts)
 

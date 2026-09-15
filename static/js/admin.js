@@ -1,10 +1,12 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
 import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
 import { createAdminClient } from "/static/js/admin-api.js?v=20260901-plustier1";
+import { createPromptConfigPanel } from "/static/js/admin-prompt-config.js?v=20260915-prompts1";
 
 const app = initializeApp(window.FIREBASE_CONFIG);
 const auth = getAuth(app);
 const shareAdminRequest = createAdminClient(auth);
+const promptConfigPanel = createPromptConfigPanel(shareAdminRequest);
 
 let providers = [];
 const limitGroups = [
@@ -73,7 +75,7 @@ let globalModelsData = {};
 // ==============================
 // Tabs
 // ==============================
-const TAB_IDS = ['models', 'consensus', 'limits', 'accounts', 'api', 'shares', 'watches', 'topics', 'seo'];
+const TAB_IDS = ['models', 'consensus', 'configuration', 'limits', 'accounts', 'api', 'shares', 'watches', 'topics', 'seo'];
 function activateTab(tabId) {
     if (!TAB_IDS.includes(tabId)) tabId = 'models';
     if (tabId !== 'api') clearIssuedApiKey();
@@ -83,7 +85,7 @@ function activateTab(tabId) {
         btn.classList.toggle('active', id === tabId);
         btn.setAttribute('aria-selected', id === tabId ? 'true' : 'false');
     });
-    document.getElementById('adminSavebar').hidden = tabId === 'topics' || tabId === 'accounts';
+    document.getElementById('adminSavebar').hidden = ['topics', 'accounts', 'configuration'].includes(tabId);
     history.replaceState(null, '', `#${tabId}`);
 }
 document.querySelectorAll('.admin-tabs button').forEach(btn => {
@@ -3531,6 +3533,7 @@ document.getElementById('collectSeoBtn').addEventListener('click', async functio
 });
 
 onAuthStateChanged(auth, async (user) => {
+    promptConfigPanel.setUser(user?.uid || null);
     if (user) {
         const idToken = await user.getIdToken();
         fetchModels(idToken);

@@ -73,8 +73,9 @@
   }
 
   function currentSystemPrompt() {
-    const base = localStorage.getItem("systemPrompt")
-      || "Please answer thoroughly and precisely, explaining your reasoning and covering the relevant details. Do not oversimplify. Do not ask any follow-up or clarifying questions; answer directly with the information available.";
+    const base = window.App.getCustomSystemPrompt?.() ?? localStorage.getItem("systemPrompt") ?? "";
+    // Empty means the live app default supplied by /prepare (also by /ask on fallback).
+    if (!base.trim()) return "";
     const now = new Date();
     const weekday = now.toLocaleDateString("en-US", { weekday: "long" });
     const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;

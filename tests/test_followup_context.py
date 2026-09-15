@@ -242,6 +242,56 @@ def test_prepare_with_context_works_for_free_users():
     assert response.status_code == 200
 
 
+@pytest.mark.parametrize("custom", ["", "My personal answer instructions."])
+def test_prepare_uses_admin_answer_default_unless_user_has_custom_instructions(monkeypatch, custom):
+    from app.services import prompt_config
+
+    config = prompt_config.defaults()
+    config["prompts"]["answers"] = "Admin-configured answer instructions."
+    monkeypatch.setattr(prompt_config, "get_config", lambda: config)
+    client = make_client()
+    p1, p2 = auth_patches()
+    with p1, p2:
+        response = client.post("/prepare", headers=AUTH_HEADER,
+                               json={"question": "hello", "system_prompt": custom})
+    assert response.status_code == 200
+    actual = response.json()["system_prompt"]
+    if custom:
+        assert actual == custom
+    else:
+        assert "Admin-configured answer instructions." in actual
+        assert "Current date:" in actual
+
+
+@pytest.mark.parametrize("answer_prompt", ["x" * 10000, "😀" * 7000], ids=["char-limit", "utf8-limit"])
+def test_maximum_admin_prompt_survives_prepare_to_ask_round_trip(monkeypatch, answer_prompt):
+    from app.services import prompt_config
+
+    config = prompt_config.defaults()
+    config["prompts"]["answers"] = answer_prompt
+    config = prompt_config.validate_config(config)
+    monkeypatch.setattr(prompt_config, "get_config", lambda: config)
+    captured = {}
+
+    def fake_run_ask(provider, **kwargs):
+        captured.update(kwargs)
+        return {"ok": True}
+
+    client = make_client()
+    p1, p2 = auth_patches()
+    with p1, p2, patch.object(chat_router, "_run_ask", side_effect=fake_run_ask):
+        prepared = client.post("/prepare", headers=AUTH_HEADER,
+                               json={"question": "hello", "system_prompt": ""})
+        assert prepared.status_code == 200
+        actual = prepared.json()["system_prompt"]
+        response = client.post("/ask_gemini", headers=AUTH_HEADER, json={
+            "question": "hello", "model": free_model("gemini"), "system_prompt": actual,
+        })
+    assert response.status_code == 200
+    assert answer_prompt in captured["system_prompt"]
+    assert captured["system_prompt"].count("Current date:") == 1
+
+
 def test_ask_rejects_oversized_context_before_provider_call():
     client = make_client()
     uid = "uid-followup-pro"

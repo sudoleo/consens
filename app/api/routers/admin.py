@@ -23,6 +23,7 @@ from app.services import (
     mailer,
     persistence_guard,
     publisher_config,
+    prompt_config,
     seo_data,
     seo_recommendation,
     seo_weekly_review,
@@ -81,6 +82,13 @@ class AdminIssueApiKeyRequest(BaseModel):
     scopes: list[Literal["consensus:run", "share:write", "share:index"]] = Field(
         default_factory=lambda: ["consensus:run", "share:write"]
     )
+
+
+class AdminPromptConfigRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    revision: int = Field(ge=0)
+    config: dict
 
 
 class AdminPublisherConfigRequest(BaseModel):
@@ -160,6 +168,32 @@ def _require_admin(request, data):
 
 
 _SHARE_ERROR_STATUS = {"not_found": 404, "bad_request": 400}
+
+
+@router.get("/api/admin/prompt-config")
+def admin_get_prompt_config(request: Request):
+    _require_admin(request, {})
+    try:
+        return prompt_config.admin_config()
+    except Exception as exc:
+        logging.error("Admin prompt config read failed category=%s", safe_exception(exc))
+        raise HTTPException(status_code=503, detail="Prompt configuration could not be loaded. Please retry.") from None
+
+
+@router.put("/api/admin/prompt-config")
+@limiter.limit("20/minute")
+def admin_save_prompt_config(request: Request, data: AdminPromptConfigRequest):
+    uid = _require_admin(request, {})
+    try:
+        saved = prompt_config.save_config(data.config, expected_revision=data.revision, updated_by=uid)
+        return {"config": saved}
+    except prompt_config.PromptConfigConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+    except prompt_config.PromptConfigError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    except Exception as exc:
+        logging.error("Admin prompt config write failed category=%s", safe_exception(exc))
+        raise HTTPException(status_code=503, detail="Prompt configuration could not be saved. Reload to check the saved revision before retrying.") from None
 
 
 @router.get("/api/admin/seo")

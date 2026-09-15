@@ -13,9 +13,9 @@
           data-firebase-app-id="{{ firebase_app_id | e }}">
     <script src="/static/js/admin-config.js?v=20260811-phase6"></script>
 <link rel="stylesheet" href="/static/style.css?v=20260915-agent-polish">
-    <link rel="stylesheet" href="/static/css/admin.css?v=20260906-reasoning">
+    <link rel="stylesheet" href="/static/css/admin.css?v=20260915-prompts1">
 
-    <script type="module" src="/static/js/admin.js?v=20260915-agent-search-v2"></script>
+    <script type="module" src="/static/js/admin.js?v=20260915-prompts1"></script>
 </head>
 <body class="dark-mode">
     <header class="top-bar">
@@ -36,6 +36,7 @@
         <nav class="admin-tabs" role="tablist" aria-label="Admin sections">
             <button type="button" data-tab="models" role="tab">Models</button>
             <button type="button" data-tab="consensus" role="tab">Consensus &amp; Deep Think</button>
+            <button type="button" data-tab="configuration" role="tab">Configuration</button>
             <button type="button" data-tab="limits" role="tab">Limits</button>
             <button type="button" data-tab="accounts" role="tab">Accounts</button>
             <button type="button" data-tab="api" role="tab">API</button>
@@ -205,6 +206,8 @@
                 </div>
             </div>
         </section>
+
+        {% include "partials/admin_prompt_config.html" %}
 
         <section id="tab-limits" class="admin-tab-panel" role="tabpanel" hidden>
             <p class="section-hint section-hint-compact">

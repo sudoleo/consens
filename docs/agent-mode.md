@@ -118,15 +118,24 @@ Suchinhalte liegen beim Provider; dessen `max_results` ist **kein** natives
 Kontextlimit. Fehlende Rohresultate werden nicht rekonstruiert.
 
 Der Systemprompt in `app/services/agent_runs.py` (`get_agent_system_prompt`) setzt
-`AGENT_SYSTEM_PROMPT`, den frischen Datumsblock aus `llm/base.get_date_context`
+den konfigurierten Agent-Prompt aus `prompt_config`, den frischen Datumsblock aus `llm/base.get_date_context`
 und die ausgewählte Modellidentität zusammen. Datum, Wochentag, Uhrzeit bei
-Request-Start und `Europe/Berlin` mit aktuellem UTC-Offset werden pro Nachricht
-neu berechnet, auch bei gespeicherten Chats über Mitternacht. Berlin ist die
+Request-Start und die konfigurierte Referenzzeitzone (Default `Europe/Berlin`)
+mit aktuellem UTC-Offset werden pro Nachricht
+neu berechnet, auch bei gespeicherten Chats über Mitternacht. Die Zeitzone ist die
 Anwendungsreferenz, kein angenommener Nutzerstandort; eine abweichende Nutzer-
 Zeitzone oder ein ausdrücklich genanntes Bezugsdatum hat Vorrang. Das Datum
 muss damit nicht über ein Tool erfragt werden. Derselbe Datumsblock wird von
 Consensus-Einzelantworten, Synthese und Differences verwendet.
-Der Prompt steht vor der User-/Assistant-Historie. Er fordert direkte
+`/admin#configuration` bearbeitet den Agent-Prompt, den Standard der Consensus-
+Einzelantworten, die Synthese-Anweisungen und die Zeitzone. `app_config/prompts`
+speichert die aktive Revision, `revisions` darunter die atomare Historie.
+Runtime-Worker übernehmen gespeicherte Änderungen innerhalb von 30 Sekunden;
+bei Lesefehlern bleibt ihr letzter gültiger Stand aktiv. Ohne Datenbankeintrag
+gelten die versionierten Defaults in `app/services/prompt_defaults.py`.
+Datum, Modellidentität, Verlauf und Tool-Schemas bleiben codegeneriert.
+
+Der Prompt steht vor der User-/Assistant-Historie. Der Standard fordert direkte
 Antworten bei Begrüßungen, Smalltalk und Aufgaben, die ohne Tools zuverlässig
 lösbar sind. Für aktuelle/externe Informationen oder einen ausdrücklichen
 Suchauftrag darf das Modell suchen. Tool-Schemas werden separat angeboten;

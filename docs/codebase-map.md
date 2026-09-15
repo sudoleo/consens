@@ -1444,7 +1444,11 @@ der Python-Staleness-Test auch indirekte Änderungen erkennt.
 Das Admin-Dashboard ist ebenfalls externisiert: `static/css/admin.css` enthält
 die vormals template-lokalen Styles, `static/js/admin.js` Auth, Rendering und
 Aktionen. `static/js/admin-api.js` kapselt den authentifizierten JSON-Transport;
+`static/js/admin-prompt-config.js` besitzt den separaten Configuration-Tab:
+Laden/Speichern, Änderungsanzeige, Zurücksetzen einzelner Prompts auf App-Defaults
+und Schutz vor verspäteten Antworten eines vorherigen Login-Zustands.
 `admin.html` bleibt Markup und trägt nur deklarative `data-*`-Konfiguration.
+Der Configuration-Tab liegt im inkludierten Partial `partials/admin_prompt_config.html`.
 
 **Nicht unter `static/js/`** (älter, eigene Verantwortung):
 - **`static/firebase.js`** (ES-Modul) — Firebase-Init, Login/Logout, Token-Handling,
@@ -1515,6 +1519,9 @@ Aktionen. `static/js/admin-api.js` kapselt den authentifizierten JSON-Transport;
   beendet beim Start denselben Hero-Leerzustand wie eine echte Anfrage.
 - **`static/app-ui.js`** — alleiniger Binder für System-Prompt-/Help-Modal
   (keine zweite Bindung mehr in `app-init.js`) + App-Width-Resizer.
+  `window.App.getCustomSystemPrompt()` liefert nur persönliche Anweisungen;
+  bekannte historische App-Defaults werden aus `localStorage.systemPrompt`
+  entfernt, damit die zentrale Admin-Konfiguration greifen kann.
 
 **Abhängigkeitsrichtung**: Bootstrap-/State-Owner + `run-registry.js` →
 `app-core.js` → Feature-Module/`run-view.js` →
@@ -1665,11 +1672,12 @@ sein. `usage.cost` umfasst Token-/Cache-/Suchkosten der tatsächlichen Route und
 wird einmal verbucht. Ohne Gesamtbetrag ist die Katalogrechnung als Schätzung
 markiert, fehlende Suchkosten machen sie unvollständig.
 
-`agent_runs.get_agent_system_prompt(model)` ergänzt `AGENT_SYSTEM_PROMPT` pro
+`agent_runs.get_agent_system_prompt(model)` ergänzt den Agent-Prompt aus `prompt_config` pro
 Nachricht um `llm/base.get_date_context()` und die ausgewählte Modellidentität.
-Datum, Wochentag, Uhrzeit bei Request-Start und `Europe/Berlin` mit UTC-Offset
+Datum, Wochentag, Uhrzeit bei Request-Start und die konfigurierte Referenzzeitzone
+(Default `Europe/Berlin`) mit UTC-Offset
 werden frisch berechnet und in das Kontextbudget eingerechnet. Ältere Antworten
-im Verlauf ändern dieses heutige Bezugsdatum nicht. Berlin ist ausdrücklich
+im Verlauf ändern dieses heutige Bezugsdatum nicht. Die Zeitzone ist ausdrücklich
 eine Anwendungsreferenz, kein Nutzerstandort; vom Nutzer genannte Bezugsdaten
 oder Zeitzonen gehen vor.
 Der Prompt überlässt die Toolwahl dem Modell, nennt direkte Antworten für Begrüßungen,
@@ -1789,12 +1797,14 @@ Hintergrundjobs brauchen später Worker, Checkpoints und Wiederanbindung.
 `llm/base.get_date_context()` liefert den gemeinsamen serverseitigen Datumsblock
 für den Standard-Systemprompt der Einzelantworten, Agent, Consensus-Synthese
 und Differences. Er enthält Datum/Wochentag, Uhrzeit bei Prompt-Erzeugung sowie
-die Referenzzeitzone `Europe/Berlin` inklusive Sommer-/Winterzeit-Offset. Es ist
+die konfigurierte Referenzzeitzone (Default `Europe/Berlin`) inklusive Sommer-/Winterzeit-Offset. Es ist
 kein beim Serverstart eingefrorener Wert. Eigene Client-Systemprompts behalten
 ihren bisherigen Vorrang; der Standard wird nicht ungefragt angehängt.
-Im interaktiven Consensus-Frontend ergänzt `query-send.currentSystemPrompt`
-bereits bei jedem Start das lokale Browserdatum vor dem gespeicherten Prompt;
-dieser explizite Client-Prompt geht weiterhin an `/prepare` und den Fan-out.
+Ohne persönliche Anweisungen sendet `query-send.currentSystemPrompt` einen leeren
+Wert; `/prepare` setzt den konfigurierten Einzelantwort-Standard und den frischen
+serverseitigen Datumsblock ein. Nur vor einem ausdrücklich gespeicherten eigenen
+Prompt ergänzt der Browser wie bisher sein lokales Datum. Dieser persönliche
+Client-Prompt behält Vorrang in `/prepare` und im Fan-out.
 
 1. Frontend `sendQuestion` (`query-send.js`) ruft zuerst **`POST /prepare`**:
    Auth sowie transaktionale Usage-Reservierung und sofortiger
@@ -3112,6 +3122,9 @@ app/core/
 app/api/routers/             siehe §2
   api_v1.py                  Gescopte Run-, Publish-, Share-Lifecycle- und Indexing-API + OpenAPI-Modelle
   chat_history.py            Owner-gebundene Chat-/Turn-API inkl. vollständigem Turn-Detail
+app/services/
+  prompt_config.py           DB-Konfiguration der Systemprompts, Validierung, Transaktionsrevisionen und 30-s-Cache
+  prompt_defaults.py         Versionierte Ausgangstexte für Agent, Einzelantworten und Synthese
 app/services/llm/
   provider_runtime.py        Zentrale Timeout-/Retry-Policy + Stream-Cancellation
   provider_transport.py      Kanonischer Provider-Fan-out, Labels, Key-/Transport-Dispatch
@@ -3369,6 +3382,29 @@ CLI mit `firebase deploy --only firestore:rules,firestore:indexes`):
   (`tier_at_acceptance`, mit `is_pro_at_acceptance` als Altfeld) sowie terminal
   `result` oder sanitisiertem `error` und 30-Tage-`expires_at`. Erlaubte Hauptfolge:
   `accepted → reserved → running → succeeded|failed`.
+- `app_config/prompts` — globale Prompt-Konfiguration aus `prompt_config.py`:
+  `prompts.agent`, `prompts.answers`, `prompts.consensus`, `reference_timezone`,
+  ganzzahlige `revision`, UTC-`updated_at` und Admin-UID `updated_by`.
+  `GET /api/admin/prompt-config` (Router `admin.py`) liest frisch und liefert
+  zusätzlich Defaults und Limits; es erzeugt keinen Datensatz.
+  `PUT /api/admin/prompt-config` verlangt `revision` plus vollständige `config`,
+  validiert IANA-Zeitzone und exakt drei nichtleere Texte (je höchstens 10.000
+  Zeichen / 28.000 UTF-8-Bytes, keine Steuerzeichen außer Tab/Zeilenumbrüchen).
+  Die Grenzen lassen Platz für den Datumsblock beim `/prepare`→`/ask_*`-Roundtrip
+  mit dessen 12.000-Zeichen-/32.000-Byte-Limit.
+  Beide Endpoints prüfen widerrufbare Auth-Tokens und `is_user_admin`.
+  Eine Firestore-Transaktion prüft die erwartete Revision und schreibt aktive
+  Konfiguration sowie vollständigen Audit-Snapshot unter
+  `app_config/prompts/revisions/{revision:012d}` gemeinsam. Konflikte liefern 409;
+  der Browser bewahrt den Entwurf. Unveränderte bereits gespeicherte Werte
+  erzeugen keine neue Revision. Runtime-Reads sind pro Worker 30 Sekunden
+  gecacht; bei Lesefehlern bleibt der letzte gültige Stand oder der App-Default
+  aktiv. Admin-Lese-/Schreibfehler liefern 503 und keine vorgetäuschte Speicherung.
+  `prompt_defaults.py` ist der versionierte Fallback und die Quelle für Reset.
+  Freitext wird als Text behandelt, nicht als interpolierte Vorlage. Datum,
+  Modellidentität, Verlauf, Quellen-/Antwort-Scaffolding und Tooldefinitionen
+  werden weiterhin im Code zusammengesetzt. Eigene Nutzer-Prompts haben für
+  Einzelantworten Vorrang. Judge-/Resolve-/Spezialprompts bleiben im Code.
 - `app_config/models` — von `load_models_from_db()` gelesen/erzeugt: erlaubte
   Modelle pro Provider, `premium`, `consensus`, `preset_models`, `deep_think_model`,
   `judge_models`, `judge_models_pro`, `judge_families`, `watch_models`,
@@ -3809,8 +3845,10 @@ konfigurierte Modell-ID); Free darf auch hier keine Pro-/Premium-Engine verwende
   Judges + `deep_think_model`. Provider-
 Modelllisten werden bewusst nicht live gegen Provider-APIs validiert; diese
 Pflege bleibt eine explizite Admin-Aufgabe.
-Das Admin-UI (Tabs: Models / Consensus & Deep Think / Limits / Accounts / API /
-Shared Pages / Consensus Watch / Topics / SEO) bekommt via
+Das Admin-UI (Tabs: Models / Consensus & Deep Think / Configuration / Limits / Accounts / API /
+Shared Pages / Consensus Watch / Topics / SEO) besitzt unter `/admin#configuration`
+einen unabhängigen Save-/Reload-Bereich für Systemprompts und Referenzzeitzone.
+Die anderen Konfigurations-Tabs bekommen via
   `GET /api/admin/models` ein `_meta`-Objekt (Alias-Auflösung, Labels und
   referenzierende Defaults/Presets/Watches/Judges). `app_config/models.reasoning_policy`
   speichert das zentrale Sparprofil (`existing`/`economy`) und Modell-Ausnahmen.

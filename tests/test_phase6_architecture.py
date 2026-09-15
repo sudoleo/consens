@@ -145,6 +145,7 @@ def test_privileged_app_and_admin_templates_are_external_script_surfaces():
     for name in (
         "templates/index.html",
         "templates/admin.html",
+        "templates/partials/admin_prompt_config.html",
         "templates/admin_benchmark.html",
     ):
         html = source(name)
@@ -154,7 +155,7 @@ def test_privileged_app_and_admin_templates_are_external_script_surfaces():
         assert not re.search(r"\sstyle\s*=", html, re.I)
     admin = source("templates/admin.html")
     assert len(admin.splitlines()) < 700
-    assert "/static/css/admin.css?v=20260906-reasoning" in admin
+    assert re.search(r'href="/static/css/admin\.css\?v=\d{8}-[a-z0-9.-]+"', admin)
     assert re.search(r'src="/static/js/admin\.js\?v=\d{8}-[a-z0-9.-]+"', admin)
     assert "createAdminClient" in source("static/js/admin.js")
     benchmark = source("templates/admin_benchmark.html")
