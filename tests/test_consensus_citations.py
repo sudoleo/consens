@@ -58,7 +58,8 @@ def test_differences_prompt_keeps_source_eligibility_separate_from_detection():
     assert "never a filter for reporting differences" in prompt
     assert "competing preferences or recommendations" in prompt
     assert "must not remove a difference or change its type or severity" in prompt
-    assert "Current server date (UTC):" in prompt
+    assert "Current date:" in prompt
+    assert "Reference timezone: Europe/Berlin" in prompt
     assert "Whether an event happened" in prompt
     assert "Do not infer a fictional user scenario" in prompt
     assert "do not make a factual dispute non-checkable" in prompt

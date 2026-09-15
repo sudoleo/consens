@@ -1665,8 +1665,14 @@ sein. `usage.cost` umfasst Token-/Cache-/Suchkosten der tatsächlichen Route und
 wird einmal verbucht. Ohne Gesamtbetrag ist die Katalogrechnung als Schätzung
 markiert, fehlende Suchkosten machen sie unvollständig.
 
-`agent_runs.AGENT_SYSTEM_PROMPT` ist der gemeinsame Systemprompt aller Modelle.
-Er überlässt die Toolwahl dem Modell, nennt direkte Antworten für Begrüßungen,
+`agent_runs.get_agent_system_prompt(model)` ergänzt `AGENT_SYSTEM_PROMPT` pro
+Nachricht um `llm/base.get_date_context()` und die ausgewählte Modellidentität.
+Datum, Wochentag, Uhrzeit bei Request-Start und `Europe/Berlin` mit UTC-Offset
+werden frisch berechnet und in das Kontextbudget eingerechnet. Ältere Antworten
+im Verlauf ändern dieses heutige Bezugsdatum nicht. Berlin ist ausdrücklich
+eine Anwendungsreferenz, kein Nutzerstandort; vom Nutzer genannte Bezugsdaten
+oder Zeitzonen gehen vor.
+Der Prompt überlässt die Toolwahl dem Modell, nennt direkte Antworten für Begrüßungen,
 Smalltalk und ohne Tools zuverlässig lösbare Aufgaben sowie Websuche bei Bedarf
 an aktuellen/externen Informationen oder ausdrücklichem Suchauftrag. Der Prompt
 wird vor die User-/Assistant-Historie gesetzt; Tools sind separate Request-Schemas.
@@ -1779,6 +1785,17 @@ Hintergrundjobs brauchen später Worker, Checkpoints und Wiederanbindung.
   serverseitiger Disposition behält den Fence bis zum Reload/Session-Reset.
 
 ### Anfrage an Modelle (Streaming)
+
+`llm/base.get_date_context()` liefert den gemeinsamen serverseitigen Datumsblock
+für den Standard-Systemprompt der Einzelantworten, Agent, Consensus-Synthese
+und Differences. Er enthält Datum/Wochentag, Uhrzeit bei Prompt-Erzeugung sowie
+die Referenzzeitzone `Europe/Berlin` inklusive Sommer-/Winterzeit-Offset. Es ist
+kein beim Serverstart eingefrorener Wert. Eigene Client-Systemprompts behalten
+ihren bisherigen Vorrang; der Standard wird nicht ungefragt angehängt.
+Im interaktiven Consensus-Frontend ergänzt `query-send.currentSystemPrompt`
+bereits bei jedem Start das lokale Browserdatum vor dem gespeicherten Prompt;
+dieser explizite Client-Prompt geht weiterhin an `/prepare` und den Fan-out.
+
 1. Frontend `sendQuestion` (`query-send.js`) ruft zuerst **`POST /prepare`**:
    Auth sowie transaktionale Usage-Reservierung und sofortiger
    Verbrauch anhand des vom Client erzeugten, kostenfreien `usage_run_key`; Antwort: finaler

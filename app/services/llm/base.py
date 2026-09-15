@@ -4,11 +4,25 @@ from zoneinfo import ZoneInfo
 from fastapi import HTTPException
 import app.core.config as cfg
 
-def get_system_prompt() -> str:
+def get_date_context() -> str:
+    """Fresh server-owned clock; Berlin is a reference, not user geolocation."""
     now = datetime.now(ZoneInfo("Europe/Berlin"))
-    today_str = now.strftime("%A, %Y-%m-%d")
+    weekday = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")[now.weekday()]
+    offset = now.strftime("%z")
     return (
-        f"Today is {today_str}. "
+        f"Current date: {weekday}, {now.date().isoformat()}. "
+        f"Reference time at request start: {now:%H:%M:%S}. "
+        f"Reference timezone: Europe/Berlin (UTC{offset[:3]}:{offset[3:]}). "
+        "Resolve relative dates such as today, tomorrow, and yesterday using this date, "
+        "not dates in earlier messages, unless the user specifies another reference date or timezone. "
+        "This reference timezone is an application default. The user's location and local "
+        "timezone are unknown unless provided."
+    )
+
+
+def get_system_prompt() -> str:
+    return (
+        f"{get_date_context()}\n\n"
         "Please answer thoroughly and precisely, explaining your reasoning and covering the relevant details. Do not oversimplify. No follow-up questions."
     )
 

@@ -17,6 +17,7 @@ from app.services import persistence_guard
 from app.services.agent_runtime import AgentCapacityExceeded
 from app.services.chat_store import ChatStore, ChatNotFound, TurnStatusConflict, TURN_PAGE_SIZE_MAX
 from app.services.llm.agent_client import AgentModel
+from app.services.llm.base import get_date_context
 
 
 AGENT_SYSTEM_PROMPT = (
@@ -36,6 +37,13 @@ OWNER_CONCURRENT_RUNS = 2
 RUN_LEASE_SECONDS = 300
 
 
+def get_agent_system_prompt(model=None):
+    prompt = f"{AGENT_SYSTEM_PROMPT}\n\n{get_date_context()}"
+    if model is not None:
+        prompt += f"\nSelected model for this response: {model.label} ({model.model})."
+    return prompt
+
+
 class AgentRunStore(ChatStore):
     def active_ref(self, uid):
         return self.db.collection("users").document(uid).collection("chat_state").document("agent_runs")
@@ -47,9 +55,10 @@ class AgentRunStore(ChatStore):
         return self.db.collection("users").document(uid).collection("llm_calls").document(key)
 
     def messages(self, uid, chat_id, target, model=None):
-        messages = [{"role": "system", "content": AGENT_SYSTEM_PROMPT}]
+        system_prompt = get_agent_system_prompt(model)
+        messages = [{"role": "system", "content": system_prompt}]
         cursor = ""
-        chars = len(AGENT_SYSTEM_PROMPT) + len(target["question"])
+        chars = len(system_prompt) + len(target["question"])
         while True:
             # Agent answers live on the turn itself. Do not issue an empty
             # model_answers subcollection query for every message in history.

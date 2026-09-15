@@ -70,9 +70,9 @@ class ConsensusFollowUpQuestionTests(unittest.TestCase):
         self.assertIn("How would you rate consens.io from 1 to 10?", prompt)
         self.assertIn("This question is a follow-up", prompt)
 
-    def test_single_turn_prompt_is_byte_identical_to_before(self):
-        # Ein Lauf ohne Folgefrage darf sich nicht veraendern: an diesem Prompt
-        # haengt die Kalibrierung von Synthese und Agreement-Score.
+    @mock.patch("app.services.llm.consensus_engine.get_date_context", return_value="Fixed reference clock.")
+    def test_empty_followup_keeps_the_same_clock_prompt_unchanged(self, _clock):
+        # Nur die Follow-up-Rahmung vergleichen, unabhaengig vom Sekundenwechsel.
         without = build_prompt(shuffle=False)
         self.assertEqual(without, build_prompt(shuffle=False, resolved_question=""))
         self.assertNotIn("This question is a follow-up", without)
