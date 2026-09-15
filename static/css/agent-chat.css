@@ -14,8 +14,43 @@
 body.single-agent-active :is(#consensusOutput, #consensusRun, #agentModePanel, .response-section,
   #composerModeBar, .consensus-model-inline, #attachTrigger, #deepThinkInputIndicator,
   #runProvenance, .consensus-footer-actions, #composerRunNotice, #heroResponseAccess,
-  .models-section, .models-section + .sidebar-separator) { display: none !important; }
+  .models-section, .models-section + .sidebar-separator, .demo-chip) { display: none !important; }
 body:not(.single-agent-active) #agentAnswer { display: none; }
 body.single-agent-active #agentAnswer:not([hidden]) { display: block; }
 body.single-agent-active #threadAsk:not([hidden]) { display: block; }
 @media (max-width: 600px) { .chat-execution-control { max-width: 125px; } }
+
+.agent-model-controls { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.agent-model-controls[hidden], .agent-effort-control[hidden] { display: none; }
+.agent-model-picker { min-width: 0; max-width: 240px; }
+.agent-model-picker .model-picker-display { max-width: 100%; min-width: 0; }
+.agent-model-picker .model-picker-display-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.agent-effort-control select {
+  font: inherit; font-size: 12px; color: var(--ink); background: var(--raise);
+  border: 1px solid var(--line); border-radius: 9px; padding: 7px 6px; max-width: 100%; cursor: pointer;
+}
+.agent-effort-control select:disabled, .agent-model-picker button:disabled { opacity: .6; cursor: default; }
+.agent-effort-control select:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.agent-activity { margin: 0 0 18px; color: var(--ink-3); font-size: 13px; }
+.agent-activity summary { cursor: pointer; padding: 7px 0; width: fit-content; }
+.agent-activity summary:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; border-radius: 4px; }
+.agent-activity-title { color: var(--ink); }
+.agent-activity.is-running .agent-activity-title::after {
+  content: ''; display: inline-block; width: 5px; height: 5px; margin-left: 8px;
+  border-radius: 50%; background: currentColor; animation: agent-working 1.5s ease-in-out infinite;
+}
+.agent-activity-content { border-left: 1px solid var(--line); padding-left: 14px; margin: 8px 0; }
+.agent-activity-status { margin: 7px 0; font-size: 12px; }
+.agent-activity-reasoning {
+  color: var(--ink); opacity: .8; white-space: pre-wrap; overflow-wrap: anywhere;
+  line-height: 1.6; max-height: 220px; overflow-y: auto; overscroll-behavior: contain;
+}
+.agent-activity-note, .agent-usage { margin: 8px 0 0; font-size: 12px; line-height: 1.5; }
+@keyframes agent-working { 50% { opacity: .25; } }
+@media (prefers-reduced-motion: reduce) { .agent-activity.is-running .agent-activity-title::after { animation: none; } }
+@media (max-width: 700px) {
+  body.single-agent-active .chat-input-container .consensus-switch-container { flex-wrap: wrap; }
+  .agent-model-controls { flex-wrap: wrap; gap: 5px; max-width: 100%; }
+  .agent-model-picker { max-width: 180px; }
+  .agent-effort-control select { font-size: 11px; padding: 6px; }
+}

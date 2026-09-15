@@ -176,7 +176,9 @@ def test_client_makes_one_tool_free_request_and_reads_final_usage_chunk(monkeypa
     monkeypatch.setattr(agent_client, "cancellable_sse_lines", lines)
     completion = AgentCompletion()
     messages = [{"role": "user", "content": "Hi"}]
-    assert list(completion.stream(model=AgentModel(), messages=messages, api_key="test")) == [{"type": "delta", "text": "Hello"}]
+    events = list(completion.stream(model=AgentModel(), messages=messages, api_key="test"))
+    assert [event for event in events if event["type"] == "delta"] == [{"type": "delta", "text": "Hello"}]
+    assert events[0]["status"] == "responding"
     assert len(requests) == 1
     assert "tools" not in requests[0] and "plugins" not in requests[0]
     assert requests[0]["stream_options"] == {"include_usage": True}
@@ -320,3 +322,117 @@ def test_account_cleanup_removes_step_receipts(store):
     store.claim(UID, chat_id, turn["id"], AgentModel())
     FirestoreAccountDeletion(store.db)._delete_user_subcollections(UID)
     assert not store.receipt_ref(UID, chat_id, turn["id"]).get().exists
+
+
+def test_catalog_reuses_allowlist_and_restricts_reasoning(api, monkeypatch):
+    from app.core import config as cfg
+    client, store, calls = api
+    response = client.get("/agent/models", headers=AUTH)
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "private, no-store"
+    models = {item["id"]: item for item in response.json()["models"]}
+    assert models["deepseek/deepseek-v4.1-flash"]["reasoning_efforts"] == ["default", "low", "high", "max"]
+    assert "none" not in models[cfg.GEMINI_35_FLASH_MODEL]["reasoning_efforts"]
+    assert models[cfg.GROK_NO_REASONING_MODEL]["reasoning_efforts"] == ["default"]
+    assert models["gpt-4o"]["reasoning_efforts"] == ["default"]
+    assert not models["gpt-4o"]["reasoning_available"]
+    monkeypatch.delitem(cfg.MODEL_CONFIGS, "gpt-4o")
+    assert "gpt-4o" not in {item["id"] for item in client.get("/agent/models", headers=AUTH).json()["models"]}
+    monkeypatch.setattr(agent, "is_user_pro", lambda uid: False)
+    assert client.get("/agent/models", headers=AUTH).status_code == 403
+    assert client.get("/agent/models").status_code == 401
+    assert not calls
+
+
+@pytest.mark.parametrize("selection", [
+    {"model_id": "not-a-model"},
+    {"model_id": "deepseek/deepseek-v4.1-flash", "reasoning_effort": "medium"},
+    {"model_id": "gpt-4o", "reasoning_effort": "high"},
+    {"model_id": "gemini-3.5-flash", "reasoning_effort": "none"},
+])
+def test_invalid_selections_do_not_start_or_lock_a_turn(api, selection):
+    client, store, calls = api
+    chat_id = store.create_chat(UID, execution_mode="agent")["id"]
+    response = client.post("/agent", headers=AUTH, json={"chat_id": chat_id, "question": "Hi",
+        "client_request_id": "first", "bookmark_id": "bm1", **selection})
+    assert response.status_code == 422
+    assert store.get_chat(UID, chat_id)["turn_count"] == 0
+    assert not calls
+
+
+def test_model_effort_snapshot_switch_and_recovery_identity(api, monkeypatch):
+    client, store, calls = api
+    chat_id = store.create_chat(UID, execution_mode="agent")["id"]
+    payload = {"chat_id": chat_id, "question": "Hi", "client_request_id": "first", "bookmark_id": "bm1",
+        "model_id": "gpt-5.6-sol", "reasoning_effort": "low"}
+    assert "event: final" in client.post("/agent", json=payload, headers=AUTH).text
+    assert calls[0]["model"].model == "openai/gpt-5.6-sol"
+    assert calls[0]["model"].request_config["reasoning"] == {"effort": "low", "exclude": False, "summary": "auto"}
+    saved = client.post("/agent", json=payload, headers=AUTH).json()["turn"]
+    assert saved["agent_settings"]["model_id"] == "gpt-5.6-sol"
+    assert saved["agent_settings"]["reasoning_effort"] == "low"
+    assert saved["agent_activity"][-1]["status"] == "succeeded"
+    assert saved["agent_usage"]["input_tokens"] == 1000
+    assert client.post("/agent", json={**payload, "reasoning_effort": "high"}, headers=AUTH).status_code == 409
+    next_payload = {**payload, "client_request_id": "second", "model_id": "deepseek/deepseek-v4.1-flash"}
+    assert "event: final" in client.post("/agent", json=next_payload, headers=AUTH).text
+    assert calls[1]["model"].model == "deepseek/deepseek-v4.1-flash"
+    assert calls[1]["messages"][1:3] == [{"role": "user", "content": "Hi"}, {"role": "assistant", "content": "A helpful answer"}]
+    monkeypatch.setattr(agent, "resolve_agent_model", lambda *a: pytest.fail("Replay must use saved settings"))
+    assert client.post("/agent", json={**payload, "recover_only": True}, headers=AUTH).status_code == 200
+    assert len(calls) == 2
+
+
+def test_reasoning_stream_formats_are_bounded_and_never_leak_encrypted_data(monkeypatch):
+    chunks = [
+        {"reasoning": "legacy "}, {"reasoning_content": "alias"},
+        {"reasoning": "duplicate", "reasoning_details": [{"type": "reasoning.summary", "summary": "Summary ", "index": 1}]},
+        {"reasoning_details": [{"type": "reasoning.summary", "summary": "continued", "index": 1}]},
+        {"reasoning_details": [{"type": "reasoning.encrypted", "data": "secret", "text": "secret"}]},
+        {"reasoning": "x" * 40000}, {"content": "Answer"},
+    ]
+    requests = []
+    def lines(url, **kwargs):
+        requests.append(kwargs["json"])
+        for delta in chunks:
+            yield "data: " + json.dumps({"choices": [{"delta": delta}]})
+            yield ""
+        yield 'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}'
+        yield ""
+    monkeypatch.setattr(agent_client, "cancellable_sse_lines", lines)
+    completion = AgentCompletion()
+    model = agent_client.resolve_agent_model("gpt-5.6-sol", "medium")
+    events = list(completion.stream(model=model, messages=[], api_key="test"))
+    assert requests[0]["reasoning"]["effort"] == "medium"
+    assert requests[0]["provider"] == {"zdr": True, "allow_fallbacks": False}
+    assert completion.text == "Answer"
+    assert completion.reasoning_truncated
+    assert completion.reasoning_chars == 32000
+    serialized = json.dumps(completion.activity)
+    assert "secret" not in serialized and "duplicate" not in serialized
+    assert "Summary continued" in serialized and "legacy alias" in serialized
+    assert all(event["version"] == 1 for event in events if event["type"] == "activity")
+
+
+def test_selected_model_prices_and_mandatory_provider_routes():
+    model = agent_client.resolve_agent_model("gpt-5.6-sol", "low")
+    usage = measured_usage({"prompt_tokens": 1000, "completion_tokens": 100,
+        "prompt_tokens_details": {"cached_tokens": 200}}, model)
+    assert usage["estimated_cost_nano_usd"] == 2640000
+    from app.core import config as cfg
+    kimi = agent_client.resolve_agent_model(cfg.KIMI_PRO_MODEL, "low")
+    assert kimi.request_config["provider"]["only"] == ["moonshotai"]
+
+
+def test_context_check_precedes_paid_claim_for_small_model(api):
+    client, store, calls = api
+    chat_id, turn = pending(store)
+    value = receipt()
+    value.text = "Old answer " * 1600
+    store.claim(UID, chat_id, turn["id"], AgentModel())
+    store.settle(UID, chat_id, turn["id"], completion=value, status="succeeded")
+    response = client.post("/agent", headers=AUTH, json={"chat_id": chat_id, "question": "Continue",
+        "client_request_id": "small", "bookmark_id": "bm1", "model_id": "gpt-3.5-turbo"})
+    assert response.status_code == 422 and "too long" in response.text
+    assert totals(store)["calls"] == 1
+    assert not calls

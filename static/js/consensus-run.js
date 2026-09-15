@@ -309,6 +309,12 @@
         || this.buildStoredAgreement(turnData.differences_data);
       if (verdict) verdict.classList.add("thread-history-verdict");
       answer.append(answerLabel, answerBody, claimsFallback);
+      if (turnData.execution_mode === "agent" || turnData.mode === "Agent") {
+        answerLabel.textContent = window.App.agentActivity?.label(turnData.agent_settings) || "Agent answer";
+        const activity = document.createElement("div");
+        window.App.agentActivity?.renderTurn(activity, turnData);
+        answer.insertBefore(activity, answerBody);
+      }
 
       // Der Fuss eines archivierten Turns spricht dieselbe Sprache wie der
       // Fuss der aktiven Antwort: EINE Zeile leiser Schubladen nebeneinander

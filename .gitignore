@@ -6,6 +6,8 @@ __pycache__/
 *json
 !firebase.json
 !firestore.indexes.json
+# Reviewed public model capabilities and simulation tariffs; no credentials.
+!app/services/llm/agent_model_catalog.json
 consensai-firebase-adminsdk-fbsvc-9064a77134.json
 
 # Benchmark: Run-Outputs bleiben lokal, die eingefrorenen Sample-Manifeste

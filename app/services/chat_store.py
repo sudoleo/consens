@@ -529,6 +529,9 @@ def turn_detail(turn_id: object, data: object, model_answers: dict[str, dict]) -
     result = turn_metadata(turn_id, source)
     if source.get("execution_mode") == "agent":
         result["assistant_response"] = source.get("consensus", "")
+        for field in ("agent_settings", "agent_activity", "agent_usage", "agent_finish_reason", "agent_reasoning_truncated"):
+            if field in source:
+                result[field] = source[field]
     if "consensus" in source:
         from app.services.source_verification import stored_verification
         result["source_verification"] = stored_verification(source.get("source_verification"), source.get("consensus"))
@@ -746,6 +749,7 @@ class ChatStore:
         client_request_id: str | None = None,
         attachments: object = None,
         execution_mode: str = "consensus",
+        agent_settings: dict | None = None,
     ) -> dict:
         question = normalize_question(question)
         mode = normalize_mode(mode)
@@ -795,7 +799,8 @@ class ChatStore:
                         deep_search=deep_search,
                         selected_models=selected_models,
                         consensus_model=consensus_model,
-                    ):
+                    ) or (execution_mode == "agent" and agent_settings is not None
+                          and (existing.to_dict() or {}).get("agent_settings") != agent_settings):
                         raise ChatIdempotencyConflict(
                             "client_request_id conflicts with an existing turn"
                         )
@@ -830,6 +835,8 @@ class ChatStore:
             }
             if attachments:
                 turn_document["attachments"] = attachments
+            if execution_mode == "agent" and agent_settings is not None:
+                turn_document["agent_settings"] = agent_settings
             if client_request_id:
                 turn_document["client_request_id"] = client_request_id
 

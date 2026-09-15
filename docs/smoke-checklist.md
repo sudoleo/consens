@@ -64,6 +64,13 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       inklusive unbekannter/offener Messungen prüfen. Automatisiert durch
       `test_agent_runs.py`, `agent-chat.test.mjs` und
       `test_agent_chat_frontend.py` (Browser-APIs gemockt).
+      Agent-Modell im bestehenden Custom-Picker per Maus/Tastatur wechseln,
+      nur unterstützte Reasoning-Stufen wählen; Einstellungen während eines
+      Laufs gesperrt. Reasoning getrennt vom Antworttext auf-/zuklappen,
+      während des Denkens stoppen. Folgefrage mit anderem Modell senden und
+      nach Bookmark-Restore Modell, Denkstufe, Aktivität und Usage prüfen.
+      Mobil zuerst den eingeklappten Composer antippen; Picker bei 320/390 px
+      und in Light/Dark vollständig im Viewport halten.
 - [ ] Sources/Differences: kompakte Quellenlisten, kontrastreiche Titel und
       Aussagen, Check-details-Chevrons und kleiner Resolve-Button in Light/Dark
       bei 320/390 px sowie als Desktop-Sidebar. Disclosures per Enter bedienen;

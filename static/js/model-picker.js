@@ -448,6 +448,7 @@
     }
 
     if (state.displayButton) {
+      state.displayButton.disabled = select.disabled;
       state.displayButton.querySelector(".model-picker-display-text").textContent = displayLabel;
       state.displayButton.title = displayTitle;
     }
@@ -793,7 +794,7 @@
       function commitSelection(event) {
         event.preventDefault();
         event.stopPropagation();
-        if (option.disabled) return;
+        if (option.disabled || targetSelect.disabled) return;
 
         // Das change-Event traegt die ganze Persistenz (app-init.js speichert
         // pref_select_* und schaltet auf "custom" um) — deshalb wird es auch
@@ -978,9 +979,24 @@
     });
 
     host.addEventListener("keydown", event => {
+      if (menu.contains(event.target)) {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          event.stopPropagation();
+          collapseExpandedModelPicker(select);
+          (displayButton || host).focus();
+        } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+          event.preventDefault();
+          const items = Array.from(menu.querySelectorAll("button:not(:disabled)"));
+          const index = items.indexOf(event.target);
+          items[(index + (event.key === "ArrowDown" ? 1 : -1) + items.length) % items.length]?.focus();
+        }
+        return;
+      }
       if (event.key === "Enter" || event.key === " " || event.key === "ArrowDown") {
         event.preventDefault();
         openModelPicker(select);
+        menu.querySelector(".is-selected:not(:disabled), button:not(:disabled)")?.focus();
       } else if (event.key === "Escape") {
         collapseExpandedModelPicker(select);
       }

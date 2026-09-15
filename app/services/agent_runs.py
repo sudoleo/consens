@@ -30,7 +30,7 @@ class AgentRunStore(ChatStore):
         step_id = hashlib.sha256(f"agent\0{chat_id}\0{turn_id}\0completion:0".encode()).hexdigest()
         return self.db.collection("users").document(uid).collection("llm_calls").document(step_id)
 
-    def messages(self, uid, chat_id, target):
+    def messages(self, uid, chat_id, target, model=None):
         messages = [{"role": "system", "content": AGENT_SYSTEM_PROMPT}]
         cursor = ""
         chars = len(AGENT_SYSTEM_PROMPT) + len(target["question"])
@@ -52,6 +52,10 @@ class AgentRunStore(ChatStore):
             if not cursor:
                 break
         messages.append({"role": "user", "content": target["question"]})
+        # Conservative byte bound for models with smaller windows. Actual
+        # token counting and compaction are separate follow-up work.
+        if model and sum(len(m["content"].encode("utf-8")) + 16 for m in messages) + model.max_output_tokens > model.context_length:
+            raise ValueError("This conversation is too long for the selected model. Choose a model with a larger context or start a new chat.")
         return messages
 
     def claim(self, uid, chat_id, turn_id, model: AgentModel):
@@ -127,6 +131,9 @@ class AgentRunStore(ChatStore):
                 if (turn.to_dict() or {}).get("status") == "pending":
                     patch = {"status": "completed" if status == "succeeded" else "failed",
                              "updated_at": firestore.SERVER_TIMESTAMP}
+                    patch.update(agent_activity=completion.activity, agent_usage=usage,
+                                 agent_finish_reason=completion.finish_reason,
+                                 agent_reasoning_truncated=completion.reasoning_truncated)
                     if status == "succeeded":
                         # Legacy history/rendering contract; execution_mode is
                         # authoritative and no consensus computation took place.

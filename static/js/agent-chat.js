@@ -4,6 +4,116 @@
   const App = window.App = window.App || {};
   const registry = App.runRegistry;
   let preference = "consensus";
+  let catalog = null;
+  let catalogOwner = "";
+  let catalogStatus = "idle";
+  let loadGeneration = 0;
+  const selections = new Map();
+
+  function selectionKey() {
+    const context = registry.visible();
+    const basis = registry.getSelectedConversationBasis();
+    return `${catalogOwner}:${context?.metadata.chatId || basis?.chatId || "draft"}`;
+  }
+  function selection() {
+    const context = registry.visible();
+    const basis = registry.getSelectedConversationBasis();
+    const saved = context?.consensus.completedTurn?.agent_settings || context?.metadata.agentSettings || basis?.currentTurn?.agent_settings;
+    let preferred;
+    try { preferred = JSON.parse(localStorage.getItem(`agent_settings_${catalogOwner}`) || "null"); } catch (_) {}
+    return selections.get(selectionKey()) || saved || preferred || { model_id: catalog?.default_model_id, reasoning_effort: "default" };
+  }
+  async function loadModels() {
+    if (!canUse() || catalogStatus !== "idle") return;
+    const uid = catalogOwner;
+    const generation = ++loadGeneration;
+    catalogStatus = "loading";
+    try {
+      const token = await window.auth.currentUser.getIdToken();
+      if (uid !== window.auth?.currentUser?.uid || generation !== loadGeneration) return;
+      const response = await fetch("/agent/models", { headers: { Authorization: `Bearer ${token}` } });
+      const data = await response.json();
+      if (uid !== window.auth?.currentUser?.uid || generation !== loadGeneration || !canUse()) return;
+      if (!response.ok || !Array.isArray(data.models) || !data.models.length) throw new Error("Model list unavailable");
+      catalog = data;
+      catalogStatus = "ready";
+    } catch (_) {
+      if (uid === catalogOwner && generation === loadGeneration) catalogStatus = "failed";
+    } finally {
+      if (uid === catalogOwner && generation === loadGeneration) render();
+    }
+  }
+  function renderControls(agent) {
+    const uid = canUse() ? window.auth.currentUser.uid : "";
+    if (uid !== catalogOwner) {
+      catalogOwner = uid;
+      catalog = null;
+      catalogStatus = "idle";
+      loadGeneration++;
+      selections.clear();
+    }
+    const host = document.getElementById("agentModelControls");
+    const select = document.getElementById("agentModelDropdown");
+    const effort = document.getElementById("agentReasoningEffort");
+    if (host) host.hidden = !agent;
+    if (!agent || !select || !effort) return;
+    if (canUse() && catalogStatus === "idle") loadModels();
+    const ready = catalogStatus === "ready" && canUse();
+    const running = registry.isExecuting(registry.visible()?.runId);
+    const current = selection();
+    const options = ready ? catalog.models : [{ id: "", label: catalogStatus === "failed" ? "Models unavailable" : "Loading models…" }];
+    const signature = JSON.stringify(options);
+    if (select.dataset.options !== signature) {
+      select.replaceChildren(...options.map(model => {
+        const option = document.createElement("option");
+        option.value = model.id;
+        option.textContent = model.label;
+        option.dataset.modelLabel = model.label;
+        return option;
+      }));
+      select.dataset.options = signature;
+    }
+    select.value = ready ? current.model_id || catalog.default_model_id : "";
+    select.disabled = !ready || running;
+    const model = catalog?.models.find(item => item.id === select.value);
+    const efforts = model?.reasoning_efforts || ["default"];
+    const effortSignature = JSON.stringify([model?.id, efforts]);
+    if (effort.dataset.options !== effortSignature) {
+      effort.replaceChildren(...efforts.map(value => {
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = value === "default" ? "Default reasoning" : value === "none" ? "Reasoning off" : `${value[0].toUpperCase() + value.slice(1)} reasoning`;
+        return option;
+      }));
+      effort.dataset.options = effortSignature;
+    }
+    effort.value = efforts.includes(current.reasoning_effort) ? current.reasoning_effort : "default";
+    effort.disabled = !ready || running || efforts.length < 2;
+    effort.parentElement.hidden = ready && !model?.reasoning_available;
+    document.getElementById("agentModelsRetry")?.toggleAttribute("hidden", catalogStatus !== "failed");
+    App.initCustomModelPicker?.(select);
+    if (select.disabled) App.collapseExpandedModelPicker?.(select);
+    window.syncCustomModelPickers?.();
+  }
+  function changeSelection() {
+    const select = document.getElementById("agentModelDropdown");
+    const effort = document.getElementById("agentReasoningEffort");
+    const model = catalog?.models.find(item => item.id === select?.value);
+    if (!model || !canUse()) return;
+    const value = { model_id: model.id, reasoning_effort: model.reasoning_efforts.includes(effort.value) ? effort.value : "default" };
+    selections.set(selectionKey(), value);
+    try { localStorage.setItem(`agent_settings_${catalogOwner}`, JSON.stringify(value)); } catch (_) {}
+    render();
+  }
+  function activityHost(key) {
+    const host = document.getElementById("agentAnswerActivity");
+    if (host && host.dataset.turn !== key) {
+      host.replaceChildren();
+      delete host._agentActivity;
+      host.dataset.turn = key;
+    }
+    return host;
+  }
 
   function canUse() {
     const access = App.agentAccess;
@@ -18,7 +128,13 @@
   }
   function render() {
     const agent = selectedMode() === "agent";
+    renderControls(agent);
     document.body.classList.toggle("single-agent-active", agent);
+    const greeting = document.querySelector(".hero-greeting");
+    if (greeting) {
+      if (!greeting.dataset.consensusGreeting) greeting.dataset.consensusGreeting = greeting.textContent;
+      greeting.textContent = agent ? "What can I help you with?" : greeting.dataset.consensusGreeting;
+    }
     const label = document.getElementById("chatExecutionControl");
     const select = document.getElementById("chatExecutionMode");
     const locked = Boolean(registry.visible() || registry.getSelectedConversationBasis());
@@ -38,7 +154,10 @@
     const recover = document.getElementById("agentRecover");
     if (recover) recover.hidden = !agent || context?.status !== "failed" || !context?.metadata.requestSent;
     if (panel) panel.hidden = !agent || (!context && !basis);
-    if (agent && !context && basis) renderAnswer(basis.consensus || "", "", "Agent · Beta");
+    if (agent && !context && basis) {
+      renderAnswer(basis.consensus || "", "", App.agentActivity?.label(basis.currentTurn?.agent_settings) || "Agent · Beta");
+      App.agentActivity?.renderTurn(activityHost(`${basis.chatId}:${basis.turnId}`), basis.currentTurn);
+    }
     window.updateQuestionInputAccess?.();
   }
   function renderAnswer(text, error, label) {
@@ -74,7 +193,13 @@
     }
     const state = context.consensus;
     renderAnswer(state.text || state.streamText || "", state.error?.message || "",
-      registry.isExecuting(context.runId) ? "Agent · responding…" : "Agent · Beta");
+      App.agentActivity?.label(state.completedTurn?.agent_settings || context.metadata.agentSettings) || "Agent · Beta");
+    App.agentActivity?.render(activityHost(context.runId), {
+      events: state.completedTurn?.agent_activity || context.metadata.agentActivity || [],
+      usage: state.completedTurn?.agent_usage || context.metadata.agentUsage, running: registry.isExecuting(context.runId),
+      status: context.status, truncated: state.completedTurn?.agent_reasoning_truncated,
+      finishReason: state.completedTurn?.agent_finish_reason,
+    });
     App.syncSendButtonRunning?.();
   }
   function apiError(data) {
@@ -91,6 +216,12 @@
     const draft = input?.value || "";
     const question = recovery?.question || String(App.quote?.compose?.(draft) ?? draft).trim();
     if (!question) return;
+    const settings = recovery?.config.agentSettings || {
+      ...selection(), reasoning_effort: document.getElementById("agentReasoningEffort")?.value || "default",
+    };
+    if (!recovery && (!catalog || !catalog.models.some(model => model.id === settings.model_id))) {
+      App.showPopup?.("Choose an available agent model before sending."); return;
+    }
     const basis = recovery?.basis || registry.getSelectedConversationBasis();
     if (basis && (!basis.chatId || basis.continuationUnavailable)) {
       App.showPopup?.("Reopen this saved chat before continuing."); return;
@@ -103,7 +234,8 @@
         bookmarkId: recovery?.bookmark.id || basis?.bookmarkId || `b_agent_${crypto.randomUUID().replaceAll("-", "")}`,
         bookmarkTitle: basis?.title || question,
         config: { executionMode: "agent", agentMode: true, autoConsensus: false,
-          deepSearch: false, checkSources: false, useOwnKeys: false, providers: [] },
+          deepSearch: false, checkSources: false, useOwnKeys: false, providers: [], agentSettings: settings },
+        metadata: { agentActivity: [], agentSettings: { ...settings, label: catalog?.models.find(model => model.id === settings.model_id)?.label } },
         usage: { status: "simulation", key: null },
       });
     } catch (error) { App.showPopup?.(error.message); return; }
@@ -149,7 +281,16 @@
         chat_id: chatId, question, client_request_id: context.requestIdentity,
         bookmark_id: context.bookmark.id,
         recover_only: Boolean(recovery),
+        model_id: settings.model_id,
+        reasoning_effort: settings.reasoning_effort || "default",
       }, signal, {
+        activity: { receive(event) {
+          if (!registry.isExecuting(context.runId) || !registry.isAuthCurrent(context)) return;
+          App.agentActivity?.receive(context.metadata.agentActivity, event);
+          if (event.settings) context.metadata.agentSettings = event.settings;
+          if (event.kind === "usage") context.metadata.agentUsage = event.usage;
+          if (!timer) timer = setTimeout(() => { timer = null; registry.update(context.runId, () => {}); }, 100);
+        } },
         delta: { append(text) {
           if (!registry.isExecuting(context.runId) || !registry.isAuthCurrent(context)) return;
           context.consensus.streamText += text;
@@ -199,6 +340,9 @@
       const context = registry.visible();
       if (context?.status === "failed" && context.metadata.requestSent) send(context);
     });
+    document.getElementById("agentModelDropdown")?.addEventListener("change", changeSelection);
+    document.getElementById("agentReasoningEffort")?.addEventListener("change", changeSelection);
+    document.getElementById("agentModelsRetry")?.addEventListener("click", () => { catalogStatus = "idle"; render(); });
     render();
   });
 })();

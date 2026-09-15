@@ -517,6 +517,18 @@
               <line x1="5" y1="12" x2="19" y2="12"></line>
             </svg>
           </button>
+          <div id="agentModelControls" class="agent-model-controls consensus-model" hidden>
+            <div class="select-wrapper agent-model-picker">
+              <select id="agentModelDropdown" aria-label="Agent model" disabled>
+                <option value="">Loading models…</option>
+              </select>
+            </div>
+            <label class="agent-effort-control" title="Reasoning for your next message">
+              <span class="visually-hidden">Reasoning effort</span>
+              <select id="agentReasoningEffort" aria-label="Agent reasoning effort" disabled><option value="default">Default reasoning</option></select>
+            </label>
+            <button id="agentModelsRetry" type="button" class="thread-ask-more" hidden>Reload models</button>
+          </div>
           <!-- Lauf-Schalter: Modellanzahl + Preset in einem Chip. model-picker.js
                ersetzt das Select durch den Custom-Picker mit Preset-Ebene. -->
           <div class="consensus-model consensus-model-inline" title="How many models answer, and which one writes the consensus">
@@ -705,6 +717,7 @@
 
     <section id="agentAnswer" class="agent-answer" aria-label="Agent answer" hidden>
         <div id="agentAnswerLabel" class="thread-history-answer-label" role="status">Agent · Beta</div>
+        <div id="agentAnswerActivity"></div>
         <div id="agentAnswerBody" class="consensus-answer-body markdown-content"></div>
         <p id="agentAnswerError" role="alert" hidden></p>
         <button id="agentRecover" type="button" class="thread-ask-more" hidden>Recover saved answer</button>

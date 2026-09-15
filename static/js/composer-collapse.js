@@ -237,6 +237,7 @@
     // einzige Griff, der eingeklappt sichtbar bleibt und seine eigene Wirkung
     // behalten muss.
     if (event.target.closest(".input-actions-container")) {
+      if (event.target.closest("#sendButton.is-cancel-action")) return;
       expand();
       return;
     }
@@ -256,6 +257,7 @@
   // Fokus kann auch ohne Tap ankommen (Tastatur, Sprachassistent, ein Skript,
   // das eine Frage vorbefuellt).
   document.addEventListener("focusin", function (event) {
+    if (event.target.closest?.("#sendButton.is-cancel-action")) return;
     if (event.target.closest?.(".composer-mode-bar")) return;
     if (event.target.closest?.(".input-section")) expand();
   });

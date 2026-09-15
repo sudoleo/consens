@@ -95,7 +95,7 @@ Threadpool aus. `async def` bleibt nur für echte Await-Pfade (Mail, explizites
 
 | Router | Zweck (Auswahl an Pfaden) |
 |---|---|
-| `agent.py` | `POST /agent`: serverseitig Admin/Pro-geschützter einzelner Textmodell-Aufruf im bestehenden Chat. Striktes Schema, owner-gebundene Chat-/Request-IDs, SSE, idempotente Wiederaufnahme fertiger Antworten und simulierte Tokenkosten. Kein `/prepare`, Fan-out, Consensus, Judge, Webtool oder Memory-Kompressor. `recover_only` liest/finalisiert ausschließlich vorhandene fertige Antworten. |
+| `agent.py` | `GET /agent/models` und `POST /agent`: serverseitig Admin/Pro-geschützter Modellkatalog bzw. einzelner Textmodell-Aufruf im bestehenden Chat. Strikte Modell-/Reasoning-Auswahl, owner-gebundene Chat-/Request-IDs, SSE mit sichtbarem Reasoning und Usage, idempotente Wiederaufnahme fertiger Antworten und simulierte Tokenkosten. Kein `/prepare`, Fan-out, Consensus, Judge, Webtool oder Memory-Kompressor. `recover_only` liest/finalisiert ausschließlich vorhandene fertige Antworten. |
 | `source_checks.py` | Dauerhafte Quellenprüfung: owner-gebundenes `GET /api/source-checks/{job_id}` mit `cursor`, `revision` und `after_revision`; `POST .../{job_id}/resume` nimmt den eigenen OpenRouter-Key nur in den Prozessspeicher auf. `GET /api/share/{share_id}/source-check?version=...` und `GET /api/topics/{slug}/source-check?version=...` prüfen pro Paketseite aktive Ressource, Sichtbarkeit, Run- und Antwortversion. Seiten liefern `source_verification` plus `next_cursor`, bei geändertem Stand 409. API-Key-Clients verwenden den rungebundenen Endpoint in `api_v1.py`: `GET /api/v1/consensus/runs/{run_id}/source-check`, auch als `result.source_verification.status_url` ausgegeben. |
 | `pages.py` | HTML-Seiten + SEO: `/` (Landing, auch mit aktiver Session direkt erreichbar), `/model-pulse` (öffentliche, erklärte Best-answer-Rangliste), `/app` (Haupt-App), `/app/watches` (gleiche App-Shell; watch.js öffnet anhand des Pfads das Watch-Dashboard), `/admin` (inkl. Topics-Tab), `/admin/topics` (308-Kompatibilitätsredirect auf `/admin#topics`), `/admin/benchmark` (Benchmark-Run-Visualisierung), `/about`, `/ai-model-comparison`, `/consensus-engine` (nutzerfreundliche Consensus-Engine-Erklärung), `/privacy` `/imprint` `/terms`, `robots.txt`, `sitemap*.xml`. Außerdem der öffentliche, familienaggregierte Best-answer-Zähler `GET /api/model-leaderboard` (60 s Browser-/CDN-Cache; `period=all|since-2026-08-31`; alle neun Familien einschließlich Nullständen, Kimi/GLM und Meta/Muse mit eigenem Verfügbarkeitsdatum aus `_LEADERBOARD_AVAILABLE_SINCE`). Beide Zeiträume nutzen zusätzlich einen serverseitigen 60-s-Cache mit serialisiertem Refresh pro Zeitraum/Prozess. Der gemeinsame Zeitraum zählt die datierten, deduplizierten `model_votes` ab 31.08.2026 über indexierte `count()`-Abfragen pro Familie; Modellkatalog und Counts werden im selben Read-only-Transaktionssnapshot gelesen. Solange der neue `model_votes`-Index aus `firestore.indexes.json` fehlt/aufbaut, greift nur für diesen Indexfehler der gecachte Legacy-Scan. Kontolöschungen entfernen weiterhin Votes aus dem Zeitraum, ohne Lifetime-Zähler zurückzusetzen; `/feedback`, `/vote`, `/check_keys` bleiben die weiteren internen Seiten-Routen (Key-Test nur für verifizierte Logins). Feedback ist persistent pro UID auf 30 Sekunden und 10/UTC-Tag begrenzt. Ein Best-answer-Vote muss an ein noch gültiges, owner-gebundenes `result_id` gebunden sein, zum serverseitigen Gewinner passen und kann pro Lauf genau einmal zählen. |
 | `chat.py` | Kern-LLM-Flow: `/prepare`, die aus `cfg.PROVIDERS[*].ask_endpoint` erzeugten `/ask_*`-Routen (aktuell zusätzlich `/ask_kimi` und `/ask_glm`), `/consensus`, `/resolve`. `/prepare` und die `/ask_*`-Endpoints akzeptieren weiter das optionale Legacy-`context`-Feld für nicht migrierte Bookmark-Fortsetzungen. Additiv laden `/ask_*` das owner-gebundene Tripel `chat_id`/`turn_id`/`context_version_id`; Legacy- und Versionskontext zusammen werden abgewiesen. Alle `/ask_*`-Endpoints laufen über `handle_ask` + die deklarative Familien-Registry `ASK_PROVIDERS`; Transport und Credential sind für alle OpenRouter, `useOwnKeys` wählt optional `openrouter_key`. `/consensus` akzeptiert optional Chat-/Turn-IDs plus `turn_sources` und die exakt am Turn verknüpfte `context_version_id`, prüft alles owner-gebunden vor dem Judge und finalisiert nach Consensus, Differences und Share-`result_id` in Streaming- wie JSON-Pfad über `ChatStore`. Sendet der Browser die stabile `bookmarkId`, schreibt `/consensus` den autoritativen Bookmark-Snapshot vor seinem erfolgreichen Final-Event und liefert kompakte `bookmark_meta`; ein separater Browser-Request ist nur noch Fallback. Ein bereits completed Turn wird mit Consensus, Differences, Quellen und Modellantworten owner-geschützt wiedergegeben, ohne Engine-/Differences-/Share-/Statistik-/Completion- oder Usage-Write; ohne IDs bleibt der Legacy-Vertrag unverändert. |
@@ -1530,7 +1530,7 @@ laufenden Request, Consensus oder Save gelesen werden. Entfernte Controls wie
 
 ## 4. Kern-Flows
 
-### Agent · Beta: ein Textmodell (2026-09-14)
+### Agent · Beta: Chat mit Modellwahl und Aktivität (2026-09-15)
 
 Der zusätzliche Composer-Selektor `#chatExecutionMode` wählt für neue Chats
 `consensus` oder `agent`. Der bisherige „Agent Mode“-Schalter bleibt die
@@ -1542,6 +1542,28 @@ Free/Plus sowie anonyme Nutzer haben keinen Zugriff. Der Modus wird bei
 
 `static/js/agent-chat.js` nutzt den bestehenden Composer, `runRegistry`,
 Sidebar-Bookmarks und Verlauf, mit eigenem Antwortbereich `#agentAnswer`.
+`#agentModelDropdown` verwendet `App.initCustomModelPicker` mit eigener Auswahl
+ohne Consensus-Presets; `#agentReasoningEffort` zeigt nur bestätigte Stufen.
+Modellwechsel gelten für die nächste Nachricht, laufende Einstellungen sind
+gesperrt. `GET /agent/models` ist Admin-/Pro-geschützt und liefert den Standard
+sowie aktive Registry-Modelle mit geprüftem Katalogsnapshot. Labels, IDs,
+API-Aliasse und Routing werden aus `cfg.MODEL_CONFIGS` wiederverwendet; Preise
+und Reasoning-Fähigkeiten liegen versioniert in `llm/agent_model_catalog.json`.
+Ein neuer Registry-Eintrag ist erst nach Aufnahme in diesen Snapshot auswählbar.
+`POST /agent` prüft `model_id`/`reasoning_effort` vor dem Providerstart. Die
+Request-Identität bindet auch die Auswahl; abweichende Retries liefern 409.
+
+`agent-activity.js` wird laut `bundles.json` vor `consensus-run.js` und
+`agent-chat.js` geladen. `App.agentActivity` verarbeitet versionierte `activity`-
+SSE-Ereignisse (Status, sichtbares Reasoning, Usage) mit eigener Schritt-ID und
+rendert die aufklappbare Anzeige im Live-Chat und über den vorhandenen
+History-Renderer. Reasoning-Texte/Summaries werden getrennt vom Antworttext
+behandelt, als Text dargestellt und auf 32.000 Zeichen begrenzt. Verschlüsselte
+Blöcke bleiben außerhalb des Anzeige-/Persistenzvertrags; fehlende Texte oder
+Messwerte werden nicht erfunden. Details: [`agent-mode.md`](agent-mode.md).
+`composer-collapse.js` lässt den mobilen Stop-Button während einer laufenden
+Antwort an seiner Position: weder Pointerdown noch Fokus auf diesem Button
+klappt den Composer auf, sodass der folgende Klick den Abbruch sicher trifft.
 `query-send.js` dispatcht vor Modellanzahl- und Consensus-Kontingentprüfungen
 in diesen Ablauf. `run-view.js` projiziert den gewählten Agent-Lauf getrennt;
 `normalizeBasis` erhält den Modus auch beim Bookmark-Restore. Dateien werden
@@ -1560,6 +1582,8 @@ ZDR, deaktivierten Fallbacks, maximal 4.096 Output-Tokens und 180 Sekunden
 Gesamtbudget. Der Kontext besteht aus Systemtext sowie allen abgeschlossenen
 User-/Assistant-Turns in Reihenfolge. Über 120.000 Zeichen fordert der Server
 einen neuen Chat an; es gibt keine zusätzliche LLM-Kompression.
+Kleinere Modellfenster haben zusätzlich ein konservatives UTF-8-Bytebudget
+einschließlich Output-Reserve vor dem bezahlten Claim.
 
 `ChatStore` speichert Agent-Turns mit `execution_mode: agent` und eigener
 `assistant_response`; `turn_detail` liefert zusätzlich den bisherigen
@@ -1568,6 +1592,11 @@ Consensus-Completion und Context-Build akzeptieren keine Agent-Unterhaltung.
 Eine transaktionale Chat-Sperre verhindert gleichzeitige neue Turns; nach
 fünf Minuten kann ein abgestürzter Lauf durch einen **neuen** Turn abgelöst
 werden. Derselbe verbrauchte Request wird niemals erneut ausgeführt.
+`agent_settings` entsteht atomar bei Create-Turn; `agent_activity`,
+`agent_usage`, `agent_finish_reason` und `agent_reasoning_truncated` werden
+beim Settlement mit Antwort/Status gespeichert und nur im vollständigen
+Turn-Detail ausgegeben. Gespeichertes Reasoning wird nicht in Folgeprompts
+übernommen. Alte Turns ohne diese Felder bleiben darstellbar.
 
 Vor dem Providerstart entsteht pro Schritt ein deduplizierter Beleg unter
 `users/{uid}/llm_calls/{sha256(chat,turn,step)}` mit Modell-/Tarifsnapshot und

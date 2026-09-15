@@ -14,7 +14,7 @@ from app.api.routers.bookmarks import _bookmark_meta
 from app.services import persistence_guard
 from app.services.agent_runs import AgentRunStore
 from app.services.chat_store import normalize_question, ChatNotFound, TurnStatusConflict, _idempotent_turn_id
-from app.services.llm.agent_client import AgentCompletion, agent_model
+from app.services.llm.agent_client import AgentCompletion, agent_model, agent_model_options, resolve_agent_model
 from app.services.llm.credentials import resolve_developer_api_keys, openrouter_api_key
 from app.services.llm.provider_runtime import ProviderCancellation, ProviderCancelled
 from app.services.llm.streaming import ProviderStreamingResponse, iter_sse_with_keepalive, sse_pack, SSE_HEADERS
@@ -36,6 +36,8 @@ class AgentRequest(BaseModel):
     question: str
     stream: bool = True
     recover_only: bool = False
+    model_id: str | None = Field(default=None, min_length=1, max_length=160)
+    reasoning_effort: str = Field(default="default", pattern=r"^(default|none|minimal|low|medium|high|xhigh|max)$")
 
     @field_validator("question")
     @classmethod
@@ -78,6 +80,15 @@ def _final(uid, payload, store, turn):
             "response": turn["consensus"], "execution_mode": "agent", "bookmark_meta": bookmark_meta}
 
 
+@router.get("/agent/models")
+@limiter.limit("60/minute")
+def available_agent_models(request: Request):
+    from fastapi.responses import JSONResponse
+    uid = _chat_uid(request)
+    require_agent_access(uid)
+    return JSONResponse(agent_model_options(), headers={"Cache-Control": "private, no-store"})
+
+
 @router.post("/agent")
 @limiter.limit("30/minute")
 def run_agent(request: Request, payload: AgentRequest):
@@ -99,12 +110,19 @@ def run_agent(request: Request, payload: AgentRequest):
         if existing:
             if existing["question"] != payload.question or existing.get("execution_mode") != "agent":
                 raise TurnStatusConflict("Request identity conflicts with another turn")
+            selection = {"model_id": payload.model_id, "reasoning_effort": payload.reasoning_effort}
+            prior_selection = existing.get("agent_settings", {}).get("selection", {"model_id": None, "reasoning_effort": "default"})
+            if prior_selection != selection:
+                raise TurnStatusConflict("Request identity conflicts with different agent settings")
             if existing["status"] == "completed":
                 return _final(uid, payload, store, existing)
             raise HTTPException(status_code=409, detail="This request has already started. Reopen the saved conversation or send a new message after it finishes.")
         if payload.recover_only:
             raise HTTPException(status_code=404, detail="No saved answer is available for this request yet.")
-        model = agent_model()
+        try:
+            model = resolve_agent_model(payload.model_id, payload.reasoning_effort)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from None
         key = openrouter_api_key(resolve_developer_api_keys())
         if not key and not mock_llm_enabled():
             raise HTTPException(status_code=503, detail="Agent model is not configured.")
@@ -112,14 +130,19 @@ def run_agent(request: Request, payload: AgentRequest):
             uid, payload.chat_id, question=payload.question, mode="Agent", deep_search=False,
             selected_models=[model.model], consensus_model=model.model,
             client_request_id=payload.client_request_id, execution_mode="agent",
+            agent_settings={**model.settings(), "selection": {"model_id": payload.model_id, "reasoning_effort": payload.reasoning_effort}},
         )
         if turn["status"] == "completed":
             return _final(uid, payload, store, store.get_turn(uid, payload.chat_id, turn["id"]))
-        messages = store.messages(uid, payload.chat_id, turn)
+        messages = store.messages(uid, payload.chat_id, turn, model=model)
         if not store.claim(uid, payload.chat_id, turn["id"], model):
             raise HTTPException(status_code=409, detail="This agent request has already started. Reopen the conversation to check its result.")
     except HTTPException:
         raise
+    except ValueError as exc:
+        if turn:
+            store.release_unclaimed(uid, payload.chat_id, turn["id"])
+        raise HTTPException(status_code=422, detail=str(exc)) from None
     except Exception as exc:
         if turn:
             store.release_unclaimed(uid, payload.chat_id, turn["id"])
@@ -130,6 +153,7 @@ def run_agent(request: Request, payload: AgentRequest):
         status = "failed"
         try:
             yield sse_pack("started", {"chat_id": payload.chat_id, "turn_id": turn["id"]})
+            yield sse_pack("activity", completion.event("status", "started", status="working", settings=model.settings()))
             if mock_llm_enabled():
                 completion.text = "Agent test answer: " + payload.question
                 completion.finish_reason = "stop"
@@ -147,6 +171,7 @@ def run_agent(request: Request, payload: AgentRequest):
         finally:
             # This runs on the producer thread even after the browser leaves.
             # Unknown usage remains explicitly visible in the admin totals.
+            completion.event("status", "finished", status=status, finish_reason=completion.finish_reason)
             store.settle(uid, payload.chat_id, turn["id"], completion=completion, status=status)
         if status != "succeeded":
             yield sse_pack("error", {"error": "The agent response could not be completed. Please try a new message."})

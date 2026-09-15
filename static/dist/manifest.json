@@ -1,5 +1,5 @@
 {
-  "sources": "a52e47ad697c",
+  "sources": "97217c947312",
   "inputs": [
     "package-lock.json",
     "scripts/build_frontend.mjs",
@@ -40,6 +40,7 @@
     "static/css/variables.css",
     "static/demo.js",
     "static/firebase.js",
+    "static/js/agent-activity.js",
     "static/js/agent-chat.js",
     "static/js/agent-mode.js",
     "static/js/app-bootstrap.js",
@@ -110,12 +111,12 @@
     },
     {
       "name": "app",
-      "src": "/static/dist/app.be4facb7fb30.js",
+      "src": "/static/dist/app.675d2fd953cd.js",
       "module": false,
       "defer": true
     }
   ],
   "styles": {
-    "app": "/static/dist/app.a1cb7afdb051.css"
+    "app": "/static/dist/app.2216d9da530b.css"
   }
 }
