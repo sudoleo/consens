@@ -396,6 +396,12 @@
   function statusLabel(context) {
     if (context.status === "succeeded") return "Completed";
     if (context.status === "failed") return "Failed";
+    if (context.config?.executionMode === "agent") {
+      if (context.status === "canceled") return "Stopped";
+      if (context.consensus?.streamText) return "Writing answer";
+      if (context.metadata?.agentActivity?.some(event => event.kind === "reasoning")) return "Thinking";
+      return "Working";
+    }
     if (context.status === "canceled") return "Canceled";
     if (context.phase === "answers_ready") return "Answers ready";
     if (context.phase === "prepare") return "Preparing";

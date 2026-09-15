@@ -1542,8 +1542,14 @@ Free/Plus sowie anonyme Nutzer haben keinen Zugriff. Der Modus wird bei
 
 `static/js/agent-chat.js` nutzt den bestehenden Composer, `runRegistry`,
 Sidebar-Bookmarks und Verlauf, mit eigenem Antwortbereich `#agentAnswer`.
-`#agentModelDropdown` verwendet `App.initCustomModelPicker` mit eigener Auswahl
-ohne Consensus-Presets; `#agentReasoningEffort` zeigt nur bestätigte Stufen.
+`#chatExecutionMode`, `#agentModelDropdown` und `#agentReasoningEffort` verwenden
+`App.initCustomModelPicker` mit eigener Auswahl ohne Consensus-Presets; die
+Denkstufe zeigt nur bestätigte Optionen mit kurzen Erläuterungen. Native Selects
+bleiben als State-/Event-Vertrag bestehen; zugängliche Trigger übernehmen den
+Fokus. Menüs unterstützen Pfeiltasten, Home/End, Escape, Fokusrückgabe und
+angepasste Breiten im sichtbaren Viewport. Entfernte gespeicherte Modelle werden
+mit sichtbarem Hinweis auf den angebotenen Standard abgeglichen, sodass Anzeige
+und nächster Request übereinstimmen.
 Modellwechsel gelten für die nächste Nachricht, laufende Einstellungen sind
 gesperrt. `GET /agent/models` ist Admin-/Pro-geschützt und liefert den Standard
 sowie aktive Registry-Modelle mit geprüftem Katalogsnapshot. Labels, IDs,
@@ -1560,7 +1566,15 @@ rendert die aufklappbare Anzeige im Live-Chat und über den vorhandenen
 History-Renderer. Reasoning-Texte/Summaries werden getrennt vom Antworttext
 behandelt, als Text dargestellt und auf 32.000 Zeichen begrenzt. Verschlüsselte
 Blöcke bleiben außerhalb des Anzeige-/Persistenzvertrags; fehlende Texte oder
-Messwerte werden nicht erfunden. Details: [`agent-mode.md`](agent-mode.md).
+Messwerte werden nicht erfunden. Ein gemeinsamer Scrollbereich folgt dem Stream,
+solange der Nutzer nicht zurückscrollt. Live-Reasoning öffnet sich automatisch,
+nach Abschluss klappt es zu; eine explizite Nutzerwahl bleibt bestehen. Nur die
+laufende Statuszeile zeigt Strich und Lichtlauf (`source-label-shine` wie beim
+Quellencheck; ohne Animation bei Reduced Motion/Forced Colors). Stop-/Fehlerstatus
+und Output-Limit sind auch eingeklappt erkennbar. Die Sidebar verwendet für Agent-
+Läufe eigene Statuswörter und „New chat“. Katalog-Reload und Antwort-Recovery
+haben eigene sichtbare Aktionsregeln; die geerbte `thread-ask-more`-Klasse blendet
+sie nicht aus. Details: [`agent-mode.md`](agent-mode.md).
 `composer-collapse.js` lässt den mobilen Stop-Button während einer laufenden
 Antwort an seiner Position: weder Pointerdown noch Fokus auf diesem Button
 klappt den Composer auf, sodass der folgende Klick den Abbruch sicher trifft.

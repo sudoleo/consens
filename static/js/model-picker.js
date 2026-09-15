@@ -451,9 +451,10 @@
       state.displayButton.disabled = select.disabled;
       state.displayButton.querySelector(".model-picker-display-text").textContent = displayLabel;
       state.displayButton.title = displayTitle;
+      state.displayButton.setAttribute("aria-label", `${select.getAttribute("aria-label") || "Choose model"}: ${displayLabel}`);
     }
 
-    state.host.setAttribute("aria-label", `Choose model: ${displayLabel}`);
+    if (!state.displayButton) state.host.setAttribute("aria-label", `Choose model: ${displayLabel}`);
     state.menu.querySelectorAll(".model-picker-option[data-value]").forEach(item => {
       const isSelected = item.dataset.value === select.value;
       item.classList.toggle("is-selected", isSelected);
@@ -765,6 +766,7 @@
       item.setAttribute("role", "option");
       item.setAttribute("aria-selected", String(option.selected));
       item.disabled = option.disabled;
+      item.tabIndex = -1;
       item.classList.toggle("is-selected", option.selected);
       const badges = (option.dataset.modelBadge || "")
         .split(/\s*(?:\u00c2\u00b7|\u00b7)\s*/)
@@ -780,6 +782,12 @@
       label.className = "model-picker-option-label";
       label.textContent = window.App.getModelOptionLabel(option);
       item.appendChild(label);
+      if (option.dataset.description) {
+        const description = document.createElement("span");
+        description.className = "model-picker-option-description";
+        description.textContent = option.dataset.description;
+        item.appendChild(description);
+      }
 
       badges.forEach(badgeText => {
         const badge = document.createElement("span");
@@ -811,7 +819,9 @@
           renderCustomModelPicker(select);
           return;
         }
+        const restoreFocus = state.menu.contains(document.activeElement);
         collapseExpandedModelPicker(select);
+        if (restoreFocus) (state.displayButton || state.host).focus();
       }
 
       item.addEventListener("pointerdown", event => {
@@ -879,7 +889,7 @@
     const above = trigger.top - topEdge - 8;
     const below = bottomEdge - trigger.bottom - 8;
     const upward = above > below;
-    const width = Math.min(320, rightEdge - leftEdge);
+    const width = Math.min(state.menuWidth || 320, rightEdge - leftEdge);
     Object.assign(state.menu.style, {
       boxSizing: 'border-box',
       width: `${width}px`, maxHeight: `${Math.max(0, Math.min(420, upward ? above : below))}px`,
@@ -934,15 +944,21 @@
     if (!host) return;
 
     host.classList.add("custom-model-picker", "is-enhanced");
-    host.setAttribute("role", "button");
-    host.setAttribute("aria-haspopup", "listbox");
-    host.setAttribute("aria-expanded", "false");
+    if (options.externalTrigger) {
+      host.setAttribute("role", "button");
+      host.setAttribute("aria-haspopup", "listbox");
+      host.setAttribute("aria-expanded", "false");
+    }
     host.tabIndex = options.externalTrigger ? 0 : -1;
     select.classList.add("native-model-picker");
+    select.tabIndex = -1;
+    select.setAttribute("aria-hidden", "true");
 
     const menu = document.createElement("div");
     menu.className = "model-picker-menu";
     menu.setAttribute("role", "listbox");
+    menu.id = `${select.id}-menu`;
+    menu.setAttribute("aria-label", select.getAttribute("aria-label") || "Models");
 
     let displayButton = null;
     if (!options.externalTrigger) {
@@ -951,12 +967,14 @@
       displayButton.className = "model-picker-display";
       displayButton.setAttribute("aria-haspopup", "listbox");
       displayButton.setAttribute("aria-expanded", "false");
+      displayButton.setAttribute("aria-controls", menu.id);
       displayButton.innerHTML = '<span class="model-picker-display-text"></span>';
       host.appendChild(displayButton);
       displayButton.addEventListener("click", event => {
         event.preventDefault();
         event.stopPropagation();
-        openModelPicker(select);
+        if (expandedModelPicker === select) collapseExpandedModelPicker(select);
+        else openModelPicker(select);
       });
     }
 
@@ -965,6 +983,7 @@
       host,
       menu,
       displayButton,
+      menuWidth: options.menuWidth,
       // Preset-Ebene nur fuer den Consensus-Picker (options.presets) und nur,
       // wenn der Server Presets liefert — sonst unveraendert die Modell-Liste.
       presets: !!options.presets && getConsensusPresets().length > 0,
@@ -985,11 +1004,13 @@
           event.stopPropagation();
           collapseExpandedModelPicker(select);
           (displayButton || host).focus();
-        } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        } else if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
           event.preventDefault();
           const items = Array.from(menu.querySelectorAll("button:not(:disabled)"));
           const index = items.indexOf(event.target);
-          items[(index + (event.key === "ArrowDown" ? 1 : -1) + items.length) % items.length]?.focus();
+          const next = event.key === "Home" ? 0 : event.key === "End" ? items.length - 1
+            : (index + (event.key === "ArrowDown" ? 1 : -1) + items.length) % items.length;
+          items[next]?.focus();
         }
         return;
       }
@@ -1002,6 +1023,11 @@
       }
     });
 
+    host.addEventListener("focusout", event => {
+      // activeElement is briefly <body> during pointer focus transfer. Closing
+      // here via a microtask would remove the option before pointerup commits.
+      if (event.relatedTarget && !host.contains(event.relatedTarget)) collapseExpandedModelPicker(select);
+    });
     select.addEventListener("change", () => syncCustomModelPicker(select));
     renderCustomModelPicker(select);
   }

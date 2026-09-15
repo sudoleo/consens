@@ -71,6 +71,13 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       nach Bookmark-Restore Modell, Denkstufe, Aktivität und Usage prüfen.
       Mobil zuerst den eingeklappten Composer antippen; Picker bei 320/390 px
       und in Light/Dark vollständig im Viewport halten.
+      Alle drei Picker per Klick, Pfeiltasten, Home/End und Escape bedienen;
+      Auswahl gibt den Fokus zurück. Lange Modellnamen und eine scrollende
+      Modellliste bei 320×568 prüfen. Live-Reasoning: Lichtlauf wie beim
+      Quellencheck, ein Scrollbereich, Zurückscrollen bleibt erhalten; nach
+      Abschluss automatisch zu, manuelle Wahl beibehalten. Reduced Motion
+      deaktiviert den Lichtlauf. Katalogfehler mit Reload, entfernte Modellwahl,
+      fehlendes Reasoning/Usage, Output-Limit und Fehler nach Streamstart prüfen.
 - [ ] Sources/Differences: kompakte Quellenlisten, kontrastreiche Titel und
       Aussagen, Check-details-Chevrons und kleiner Resolve-Button in Light/Dark
       bei 320/390 px sowie als Desktop-Sidebar. Disclosures per Enter bedienen;

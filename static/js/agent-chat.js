@@ -9,19 +9,36 @@
   let catalogStatus = "idle";
   let loadGeneration = 0;
   const selections = new Map();
+  const effortCopy = {
+    default: ["Auto", "Use the model’s default reasoning"],
+    none: ["Off", "Answer without extended reasoning"],
+    minimal: ["Minimal", "Keep reasoning to a minimum"],
+    low: ["Low", "Spend less time reasoning"],
+    medium: ["Medium", "Balance depth and response time"],
+    high: ["High", "Spend more time on complex questions"],
+    xhigh: ["Extra high", "Explore the question in greater depth"],
+    max: ["Max", "Use the highest supported reasoning effort"],
+  };
 
   function selectionKey() {
     const context = registry.visible();
     const basis = registry.getSelectedConversationBasis();
     return `${catalogOwner}:${context?.metadata.chatId || basis?.chatId || "draft"}`;
   }
-  function selection() {
+  function preferredSelection() {
     const context = registry.visible();
     const basis = registry.getSelectedConversationBasis();
     const saved = context?.consensus.completedTurn?.agent_settings || context?.metadata.agentSettings || basis?.currentTurn?.agent_settings;
     let preferred;
     try { preferred = JSON.parse(localStorage.getItem(`agent_settings_${catalogOwner}`) || "null"); } catch (_) {}
     return selections.get(selectionKey()) || saved || preferred || { model_id: catalog?.default_model_id, reasoning_effort: "default" };
+  }
+  function selection() {
+    const preferred = preferredSelection();
+    const model = catalog?.models.find(item => item.id === preferred.model_id)
+      || catalog?.models.find(item => item.id === catalog.default_model_id) || catalog?.models[0];
+    return model ? { model_id: model.id,
+      reasoning_effort: model.reasoning_efforts.includes(preferred.reasoning_effort) ? preferred.reasoning_effort : "default" } : preferred;
   }
   async function loadModels() {
     if (!canUse() || catalogStatus !== "idle") return;
@@ -55,12 +72,23 @@
     const host = document.getElementById("agentModelControls");
     const select = document.getElementById("agentModelDropdown");
     const effort = document.getElementById("agentReasoningEffort");
+    const notice = document.getElementById("agentModelNotice");
     if (host) host.hidden = !agent;
-    if (!agent || !select || !effort) return;
+    if (notice) notice.hidden = true;
+    if (!agent || !select || !effort) {
+      if (select) App.collapseExpandedModelPicker?.(select);
+      if (effort) App.collapseExpandedModelPicker?.(effort);
+      return;
+    }
     if (canUse() && catalogStatus === "idle") loadModels();
     const ready = catalogStatus === "ready" && canUse();
     const running = registry.isExecuting(registry.visible()?.runId);
     const current = selection();
+    const previous = preferredSelection();
+    if (notice && ready && previous.model_id && previous.model_id !== current.model_id) {
+      notice.textContent = "Previous model unavailable. Your next message will use the selected model.";
+      notice.hidden = false;
+    }
     const options = ready ? catalog.models : [{ id: "", label: catalogStatus === "failed" ? "Models unavailable" : "Loading models…" }];
     const signature = JSON.stringify(options);
     if (select.dataset.options !== signature) {
@@ -82,17 +110,22 @@
       effort.replaceChildren(...efforts.map(value => {
         const option = document.createElement("option");
         option.value = value;
-        option.textContent = value === "default" ? "Default reasoning" : value === "none" ? "Reasoning off" : `${value[0].toUpperCase() + value.slice(1)} reasoning`;
+        const [label, description] = effortCopy[value] || [value, "Reasoning effort"];
+        option.textContent = label;
+        option.dataset.modelLabel = label;
+        option.dataset.description = description;
         return option;
       }));
       effort.dataset.options = effortSignature;
     }
     effort.value = efforts.includes(current.reasoning_effort) ? current.reasoning_effort : "default";
     effort.disabled = !ready || running || efforts.length < 2;
-    effort.parentElement.hidden = ready && !model?.reasoning_available;
+    effort.parentElement.hidden = !ready || !model?.reasoning_available;
     document.getElementById("agentModelsRetry")?.toggleAttribute("hidden", catalogStatus !== "failed");
     App.initCustomModelPicker?.(select);
+    App.initCustomModelPicker?.(effort, { menuWidth: 270 });
     if (select.disabled) App.collapseExpandedModelPicker?.(select);
+    if (effort.disabled || effort.parentElement.hidden) App.collapseExpandedModelPicker?.(effort);
     window.syncCustomModelPickers?.();
   }
   function changeSelection() {
@@ -130,7 +163,15 @@
     const agent = selectedMode() === "agent";
     renderControls(agent);
     document.body.classList.toggle("single-agent-active", agent);
+    const chatTab = document.getElementById("viewSwitchConsensus");
+    if (chatTab) chatTab.textContent = agent ? "Chat" : "Consensus";
     const greeting = document.querySelector(".hero-greeting");
+    const newChat = document.getElementById("newRunButton");
+    if (newChat) {
+      const text = newChat.querySelector("span");
+      if (text) text.textContent = agent ? "New chat" : "New comparison";
+      newChat.title = agent ? "Start a new chat" : "Start a new comparison";
+    }
     if (greeting) {
       if (!greeting.dataset.consensusGreeting) greeting.dataset.consensusGreeting = greeting.textContent;
       greeting.textContent = agent ? "What can I help you with?" : greeting.dataset.consensusGreeting;
@@ -143,6 +184,11 @@
       select.value = agent ? "agent" : "consensus";
       select.disabled = locked || !canUse();
       select.title = locked ? "Start a new chat to change mode" : "Chat mode";
+      App.initCustomModelPicker?.(select, { menuWidth: 290 });
+      if (select.disabled) App.collapseExpandedModelPicker?.(select);
+      window.syncCustomModelPickers?.();
+      const button = select._customModelPicker?.displayButton;
+      if (button && locked) button.title = "Start a new chat to change mode";
     }
     const panel = document.getElementById("agentAnswer");
     const context = registry.visible();
@@ -197,6 +243,7 @@
     App.agentActivity?.render(activityHost(context.runId), {
       events: state.completedTurn?.agent_activity || context.metadata.agentActivity || [],
       usage: state.completedTurn?.agent_usage || context.metadata.agentUsage, running: registry.isExecuting(context.runId),
+      responding: Boolean(state.text || state.streamText),
       status: context.status, truncated: state.completedTurn?.agent_reasoning_truncated,
       finishReason: state.completedTurn?.agent_finish_reason,
     });
@@ -245,7 +292,7 @@
     context.consensus.status = "pending";
     context.cancelHook = () => {
       context.consensus.status = "canceled";
-      context.consensus.error = { message: "Response stopped." };
+      context.consensus.error = null;
       context.bookmark.status = "canceled";
       if (context.basis) registry.selectConversationBasis(context.basis);
     };

@@ -1,11 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import { loadScripts } from "./helpers/appWindow.mjs";
 
-const BODY = `<label id="chatExecutionControl"><select id="chatExecutionMode">
-  <option value="consensus">Consensus</option><option value="agent">Agent</option></select></label>
+const BODY = `<div id="chatExecutionControl" class="select-wrapper"><select id="chatExecutionMode" aria-label="Chat mode">
+  <option value="consensus">Consensus</option><option value="agent">Agent</option></select></div>
   <textarea id="questionInput"></textarea><div id="threadHistory"></div>
-  <div id="agentModelControls"><div class="select-wrapper"><select id="agentModelDropdown"></select></div>
-  <label><select id="agentReasoningEffort"></select></label><button id="agentModelsRetry" hidden></button></div>
+  <div id="agentModelControls"><div class="select-wrapper agent-model-picker"><select id="agentModelDropdown" aria-label="Agent model"></select></div>
+  <div class="select-wrapper agent-effort-control"><select id="agentReasoningEffort" aria-label="Agent reasoning effort"></select></div><button id="agentModelsRetry" hidden></button></div>
+  <p id="agentModelNotice" hidden></p>
   <section id="agentAnswer" hidden><div id="agentAnswerLabel"></div>
   <div id="agentAnswerActivity"></div><div id="agentAnswerBody"></div><p id="agentAnswerError" hidden></p></section>`;
 
@@ -48,6 +49,64 @@ async function selectAgent(window) {
 }
 
 describe("single-model agent chat", () => {
+  it("reconciles a removed saved model with the displayed choice before sending", async () => {
+    const { window, document, dom } = boot();
+    window.localStorage.setItem("agent_settings_owner", JSON.stringify({ model_id: "removed-model", reasoning_effort: "ultra" }));
+    await selectAgent(window);
+    expect(document.getElementById("agentModelDropdown").value).toBe(CATALOG.default_model_id);
+    expect(document.getElementById("agentModelNotice").hidden).toBe(false);
+    expect(document.getElementById("agentReasoningEffort").value).toBe("default");
+    document.getElementById("questionInput").value = "Question";
+    await window.App.agentChat.send();
+    expect(window.streamSSERequest.mock.calls[0][1]).toMatchObject({ model_id: CATALOG.default_model_id, reasoning_effort: "default" });
+    dom.window.close();
+  });
+
+  it("uses the same keyboard picker for effort and returns focus after choosing", async () => {
+    const { window, document, dom } = boot();
+    await selectAgent(window);
+    const trigger = document.querySelector(".agent-effort-control .model-picker-display");
+    trigger.focus();
+    trigger.dispatchEvent(new window.KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true }));
+    expect(document.activeElement.dataset.value).toBe("default");
+    document.activeElement.dispatchEvent(new window.KeyboardEvent("keydown", { key: "End", bubbles: true, cancelable: true }));
+    expect(document.activeElement.dataset.value).toBe("max");
+    document.activeElement.click();
+    expect(document.getElementById("agentReasoningEffort").value).toBe("max");
+    expect(document.activeElement).toBe(trigger);
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+    trigger.click();
+    expect(trigger.getAttribute("aria-expanded")).toBe("true");
+    trigger.click();
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+    trigger.click();
+    document.getElementById("questionInput").focus();
+    await Promise.resolve();
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+    dom.window.close();
+  });
+
+  it("collapses finished reasoning, preserves explicit disclosure, and restores stopped status", () => {
+    const { window, document, dom } = boot();
+    const activity = window.App.agentActivity;
+    const host = document.getElementById("agentAnswerActivity");
+    const events = [{ id: "r1", kind: "reasoning", format: "text", text: "Consider the question" }];
+    activity.render(host, { events, running: true });
+    const details = host.querySelector("details");
+    expect(details.open).toBe(true);
+    activity.render(host, { events, running: false });
+    expect(details.open).toBe(false);
+    details.querySelector("summary").click();
+    activity.render(host, { events, running: false });
+    expect(details.open).toBe(true);
+    activity.renderTurn(host, { status: "failed", error_code: "cancelled", agent_activity: events });
+    expect(host.querySelector(".agent-activity-title").textContent).toBe("Response stopped");
+    expect(host.querySelector(".agent-activity").classList.contains("is-running")).toBe(false);
+    activity.render(host, { usage: { input_tokens: 10, output_tokens: 3, estimated_cost_nano_usd: null } });
+    expect(host.querySelector(".agent-usage").textContent).toBe("13 tokens");
+    dom.window.close();
+  });
+
   it("requires the current account's entitlement and retains no cross-account access", async () => {
     const { window, document, dom } = boot({ allowed: false });
     await selectAgent(window);
@@ -206,7 +265,7 @@ describe("single-model agent chat", () => {
     expect(details.textContent).toContain("First thought");
     expect(document.getElementById("agentAnswerBody").textContent).not.toContain("First thought");
     expect(document.getElementById("agentModelDropdown").disabled).toBe(true);
-    details.open = false;
+    details.querySelector("summary").click();
     handlers.activity.receive({ ...event, text: " continued" });
     window.App.agentChat.project(run);
     expect(details.open).toBe(false);

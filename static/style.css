@@ -26,7 +26,7 @@
 @import url('./css/shell.css?v=20260914-mobile-actions');
 @import url('./css/model-answer-reader.css?v=20260914-agent1');
 @import url('./css/composer-attachments.css?v=20260909-attachments1');
-@import url('./css/agent-chat.css?v=20260915-agent-harness');
+@import url('./css/agent-chat.css?v=20260915-agent-polish');
 
 /* Template-only utilities live after every component import so they preserve
    the old inline-style initial state. They intentionally do not use

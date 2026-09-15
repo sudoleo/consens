@@ -14,7 +14,34 @@ from test_phase4_frontend import phase4_server, _real_firebase_page, _json
 CATALOG = {"default_model_id": "deepseek/deepseek-v4.1-flash", "models": [
     {"id": "deepseek/deepseek-v4.1-flash", "label": "DeepSeek V4.1 Flash", "reasoning_efforts": ["default", "low", "high", "max"], "reasoning_available": True},
     {"id": "gpt-5.6-sol", "label": "GPT-5.6 Sol", "reasoning_efforts": ["default", "low", "medium", "high"], "reasoning_available": True},
+    {"id": "plain", "label": "Model without reasoning", "reasoning_efforts": ["default"], "reasoning_available": False},
+    {"id": "long", "label": "A model with a particularly long display name", "reasoning_efforts": ["default", "high"], "reasoning_available": True},
 ]}
+
+
+def _choose_mode(page, mode):
+    page.locator("#chatExecutionControl .model-picker-display").click()
+    page.locator(f'#chatExecutionControl [data-value="{mode}"]').click()
+    expect(page.locator("#chatExecutionMode")).to_have_value(mode)
+
+
+def _snapshot(page, name):
+    if not os.environ.get("AGENT_SCREENSHOTS"):
+        return
+    target = Path(os.environ["AGENT_SCREENSHOTS"])
+    target.mkdir(parents=True, exist_ok=True)
+    page.screenshot(path=str(target / f"{name}.png"))
+
+
+def _choose_effort(page, effort):
+    page.locator(".agent-effort-control .model-picker-display").click()
+    menu = page.locator(".agent-effort-control .model-picker-menu").bounding_box()
+    assert menu["x"] >= 0 and menu["x"] + menu["width"] <= page.viewport_size["width"]
+    assert menu["y"] >= 0 and menu["y"] + menu["height"] <= page.viewport_size["height"]
+    theme = page.evaluate("() => document.body.classList.contains('dark-mode') ? 'dark' : 'light'")
+    position = page.evaluate("() => document.body.classList.contains('is-hero') ? 'hero' : 'thread'")
+    _snapshot(page, f"agent-effort-{position}-{page.viewport_size['width']}-{theme}")
+    page.locator(f'.agent-effort-control [data-value="{effort}"]').click()
 
 
 @pytest.mark.parametrize("width,dark", [(1280, False), (390, False), (390, True), (320, False)])
@@ -65,13 +92,16 @@ def test_single_agent_send_followup_restore_and_layout(browser, phase4_server, w
         page.evaluate("async () => { await window.__switchE2EUser('account-a'); }")
         expect(page.locator("#chatExecutionMode")).to_be_visible()
         page.evaluate("dark => { document.documentElement.classList.toggle('dark-mode', dark); document.body.classList.toggle('dark-mode', dark); }", dark)
-        page.locator("#chatExecutionMode").select_option("agent")
+        _choose_mode(page, "agent")
+        assert not errors
         expect(page.locator("#agentModelDropdown")).to_be_enabled()
         expect(page.locator(".hero-greeting")).to_have_text("What can I help you with?")
+        expect(page.locator(".hero-greeting")).to_be_visible()
+        expect(page.locator("#viewSwitchConsensus")).to_have_text("Chat")
         expect(page.locator(".demo-chip")).not_to_be_visible()
-        page.locator("#agentModelControls .model-picker-display").click()
-        expect(page.locator("#agentModelControls .model-picker-menu")).to_be_visible()
-        menu = page.locator("#agentModelControls .model-picker-menu").bounding_box()
+        page.locator(".agent-model-picker .model-picker-display").click()
+        expect(page.locator(".agent-model-picker .model-picker-menu")).to_be_visible()
+        menu = page.locator(".agent-model-picker .model-picker-menu").bounding_box()
         assert menu["x"] >= 0 and menu["x"] + menu["width"] <= width
         if os.environ.get("AGENT_SCREENSHOTS"):
             target = Path(os.environ["AGENT_SCREENSHOTS"])
@@ -83,27 +113,28 @@ def test_single_agent_send_followup_restore_and_layout(browser, phase4_server, w
             page.keyboard.press("Enter")
         else:
             page.locator('#agentModelControls [data-value="gpt-5.6-sol"]').click()
-        page.locator("#agentReasoningEffort").select_option("medium")
+        _choose_effort(page, "medium")
+        _snapshot(page, f"agent-composer-{width}-{'dark' if dark else 'light'}")
         expect(page.locator("#composerAgentToggle")).not_to_be_visible()
         page.locator("#questionInput").fill("Explain the first step")
         page.locator("#sendButton").click()
         expect(page.locator("#agentAnswerBody")).to_contain_text("Explain the first step")
-        page.wait_for_function("App.runRegistry.visible()?.status === 'succeeded'")
+        page.wait_for_function("() => App.runRegistry.visible()?.status === 'succeeded'")
         expect(page.locator("#agentAnswer")).to_be_visible()
         expect(page.locator("#consensusOutput")).not_to_be_visible()
         expect(page.locator("#chatExecutionMode")).to_be_disabled()
         expect(page.locator("#agentAnswerLabel")).to_contain_text("GPT-5.6 Sol")
         page.locator("#questionInput").fill("Now explain the next step")
-        page.locator("#agentModelControls .model-picker-display").click()
+        page.locator(".agent-model-picker .model-picker-display").click()
         page.locator('#agentModelControls [data-value="deepseek/deepseek-v4.1-flash"]').click()
-        page.locator("#agentReasoningEffort").select_option("low")
+        _choose_effort(page, "low")
         page.locator("#sendButton").click()
-        page.wait_for_function("App.runRegistry.visible()?.status === 'succeeded' && App.runRegistry.visible().question.includes('next')")
+        page.wait_for_function("() => App.runRegistry.visible()?.status === 'succeeded' && App.runRegistry.visible().question.includes('next')")
         expect(page.locator("#threadHistory")).to_contain_text("Explain the first step")
-        expect(page.locator("#threadHistory")).to_contain_text("Agent answer")
         expect(page.locator("#threadHistory")).to_contain_text("GPT-5.6 Sol")
         expect(page.locator("#agentAnswerLabel")).to_contain_text("DeepSeek V4.1 Flash")
         expect(page.locator("#agentAnswerActivity")).to_contain_text("I am considering")
+        expect(page.locator("#agentAnswerActivity details")).not_to_have_attribute("open", "")
         expect(page.locator("#agentAnswerBody")).to_contain_text("Now explain the next step")
         assert len(calls) == 2
         assert calls[0]["chat_id"] == calls[1]["chat_id"]
@@ -126,6 +157,11 @@ def test_single_agent_send_followup_restore_and_layout(browser, phase4_server, w
         expect(page.locator("#agentAnswerBody")).to_contain_text("Now explain the next step")
         expect(page.locator("#agentAnswerActivity")).to_contain_text("I am considering")
         expect(page.locator("#agentReasoningEffort")).to_have_value("low")
+        if width < 1100 and page.locator("#toggleSidebarButton").get_attribute("aria-expanded") == "true":
+            page.locator("#sidebarToggleInner").click()
+        page.locator("#agentAnswerActivity summary").click()
+        expect(page.locator("#agentAnswerActivity .agent-activity-reasoning")).to_be_visible()
+        expect(page.locator("#agentAnswerActivity .agent-usage")).to_contain_text("tokens")
         assert page.evaluate("App.agentChat.isSelected()")
         if width < 1100 and page.locator("#toggleSidebarButton").get_attribute("aria-expanded") != "true":
             page.locator("#toggleSidebarButton").click()
@@ -133,22 +169,25 @@ def test_single_agent_send_followup_restore_and_layout(browser, phase4_server, w
         if width < 1100 and page.locator("#toggleSidebarButton").get_attribute("aria-expanded") == "true":
             page.locator("#sidebarToggleInner").click()
         expect(page.locator("#chatExecutionMode")).to_be_enabled()
-        page.locator("#chatExecutionMode").select_option("consensus")
+        _choose_mode(page, "consensus")
         expect(page.locator("#agentAnswer")).not_to_be_visible()
+        expect(page.locator("#viewSwitchConsensus")).to_have_text("Consensus")
         assert not errors
     finally:
         context.close()
 
 
-def test_live_reasoning_disclosure_and_stop(browser, phase4_server):
+@pytest.mark.parametrize("width,dark", [(1280, False), (390, True), (320, False)])
+def test_live_reasoning_disclosure_and_stop(browser, phase4_server, width, dark):
     context, page = _real_firebase_page(browser, phase4_server)
     try:
-        page.set_viewport_size({"width": 390, "height": 900})
+        page.set_viewport_size({"width": width, "height": 900})
         page.route("**/user_status", lambda route: _json(route, {"tier": "pro", "is_pro": True, "agent_access": True}))
         page.route("**/agent/models", lambda route: _json(route, CATALOG))
         page.route("**/chats", lambda route: _json(route, {"chat": {"id": "a" * 32}}))
         page.evaluate("async () => { await window.__switchE2EUser('account-a'); }")
-        page.locator("#chatExecutionMode").select_option("agent")
+        page.evaluate("dark => { document.documentElement.classList.toggle('dark-mode', dark); document.body.classList.toggle('dark-mode', dark); }", dark)
+        _choose_mode(page, "agent")
         expect(page.locator("#agentModelDropdown")).to_be_enabled()
         # Exercise the production SSE parser with a stream that remains open.
         # Mock fetch honors AbortSignal just as the real network request does.
@@ -170,6 +209,26 @@ def test_live_reasoning_disclosure_and_stop(browser, phase4_server):
         expect(page.locator("#agentAnswerActivity .agent-activity-reasoning")).to_be_visible()
         expect(page.locator("#agentAnswerBody")).to_be_empty()
         expect(page.locator("#agentModelDropdown")).to_be_disabled()
+        expect(page.locator(".agent-model-picker .model-picker-display")).to_be_disabled()
+        title = page.locator("#agentAnswerActivity .agent-activity-title")
+        assert title.evaluate("el => getComputedStyle(el).animationName") == "source-label-shine"
+        _snapshot(page, f"agent-live-{width}-{'dark' if dark else 'light'}")
+        if width == 1280:
+            expect(page.locator(".run-entry-status")).to_have_text("Thinking")
+            expect(page.locator("#newRunButton")).to_have_text("New chat")
+        # A long trace must follow new blocks, but leave a reader scrolling up alone.
+        page.evaluate("""() => window.__emitAgent({version:1, step_id:'completion:0', kind:'reasoning', id:'r2',
+          format:'text', text:'A measured reasoning step.\\n'.repeat(100), append:true})""")
+        content = page.locator("#agentAnswerActivity .agent-activity-content")
+        expect(content).to_contain_text("A measured reasoning step.")
+        assert content.evaluate("el => el.scrollHeight > el.clientHeight && el.scrollTop > 0")
+        content.evaluate("el => { el.scrollTop = 0; }")
+        page.evaluate("""() => window.__emitAgent({version:1, step_id:'completion:0', kind:'reasoning', id:'r2',
+          format:'text', text:'End of reasoning.', append:true})""")
+        expect(content).to_contain_text("End of reasoning.")
+        assert content.evaluate("el => el.scrollTop") == 0
+        page.emulate_media(reduced_motion="reduce")
+        assert title.evaluate("el => getComputedStyle(el).animationName") == "none"
         page.locator("#agentAnswerActivity summary").click()
         page.evaluate("() => window.__emitAgent({version:1, step_id:'completion:0', kind:'reasoning', id:'r1', format:'summary', text:' Still checking.', append:true})")
         expect(page.locator("#agentAnswerActivity details")).not_to_have_attribute("open", "")
@@ -179,6 +238,128 @@ def test_live_reasoning_disclosure_and_stop(browser, phase4_server):
         page.locator("#sendButton").click()
         page.wait_for_function("() => App.runRegistry.visible()?.status === 'canceled'")
         expect(page.locator("#agentAnswerActivity .agent-activity-title")).to_have_text("Response stopped")
-        expect(page.locator("#agentAnswerError")).to_have_text("Response stopped.")
+        expect(page.locator("#agentAnswerError")).not_to_be_visible()
+        assert title.evaluate("el => getComputedStyle(el).animationName") == "none"
+    finally:
+        context.close()
+
+
+def test_small_viewport_long_model_and_missing_reasoning(browser, phase4_server):
+    context, page = _real_firebase_page(browser, phase4_server)
+    try:
+        page.set_viewport_size({"width": 320, "height": 568})
+        page.route("**/user_status", lambda route: _json(route, {"tier": "pro", "is_pro": True, "agent_access": True}))
+        # Enough options to require an internally scrolling picker.
+        catalog = {**CATALOG, "models": CATALOG["models"] + [
+            {**CATALOG["models"][0], "id": f"extra-{i}", "label": f"Additional model {i}"} for i in range(30)]}
+        page.route("**/agent/models", lambda route: _json(route, catalog))
+        page.route("**/chats", lambda route: _json(route, {"chat": {"id": "a" * 32}}))
+        page.evaluate("async () => { await window.__switchE2EUser('account-a'); }")
+        _choose_mode(page, "agent")
+        expect(page.locator("#agentModelDropdown")).to_be_enabled()
+        trigger = page.locator(".agent-model-picker .model-picker-display")
+        trigger.click()
+        menu = page.locator(".agent-model-picker .model-picker-menu")
+        bounds = menu.bounding_box()
+        assert bounds["y"] >= 0 and bounds["y"] + bounds["height"] <= 568
+        assert menu.evaluate("el => el.scrollHeight > el.clientHeight")
+        page.locator('.agent-model-picker [data-value="long"]').click()
+        expect(trigger).to_have_attribute("title", "A model with a particularly long display name")
+        assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+        _choose_effort(page, "high")
+        _snapshot(page, "agent-long-name-320")
+        trigger.click()
+        page.locator('.agent-model-picker [data-value="plain"]').click()
+        expect(page.locator(".agent-effort-control")).not_to_be_visible()
+        page.route("**/agent", lambda route: _json(route, {
+            "response": "A concise answer.", "chat_id": "a" * 32, "turn_id": "b" * 32,
+            "turn": {"id": "b" * 32, "execution_mode": "agent", "status": "completed", "consensus": "A concise answer.",
+                "agent_settings": {"label": "Model without reasoning", "model_id": "plain"},
+                "agent_activity": [], "agent_usage": None, "agent_finish_reason": "length"}}))
+        page.locator("#questionInput").fill("A simple question")
+        page.locator("#sendButton").click()
+        expect(page.locator("#agentAnswerBody")).to_have_text("A concise answer.")
+        expect(page.locator("#agentAnswerActivity .agent-activity-title")).to_have_text("Response limit reached")
+        page.locator("#agentAnswerActivity summary").click()
+        expect(page.locator(".agent-activity-note")).to_contain_text("No visible reasoning")
+        expect(page.locator(".agent-activity-note")).to_contain_text("output limit")
+        expect(page.locator(".agent-usage")).to_have_text("Usage unavailable")
+        _snapshot(page, "agent-no-reasoning-320")
+    finally:
+        context.close()
+
+
+def test_model_catalog_retry_and_failed_stream(browser, phase4_server):
+    context, page = _real_firebase_page(browser, phase4_server)
+    try:
+        page.set_viewport_size({"width": 390, "height": 844})
+        page.route("**/user_status", lambda route: _json(route, {"tier": "pro", "is_pro": True, "agent_access": True}))
+        attempts = []
+        def models(route):
+            attempts.append(True)
+            if len(attempts) == 1:
+                route.fulfill(status=503, content_type="application/json", body='{"detail":"Unavailable"}')
+            else:
+                _json(route, CATALOG)
+        page.route("**/agent/models", models)
+        page.route("**/chats", lambda route: _json(route, {"chat": {"id": "a" * 32}}))
+        page.evaluate("async () => { await window.__switchE2EUser('account-a'); }")
+        _choose_mode(page, "agent")
+        expect(page.locator("#agentModelsRetry")).to_be_visible()
+        expect(page.locator(".agent-model-picker .model-picker-display")).to_be_disabled()
+        page.locator("#agentModelsRetry").click()
+        expect(page.locator(".agent-model-picker .model-picker-display")).to_be_enabled()
+        calls = []
+        def agent_response(route):
+            request = route.request.post_data_json
+            calls.append(request)
+            if not request["recover_only"]:
+                route.fulfill(content_type="text/event-stream",
+                    body='event: error\ndata: {"error":"The model is temporarily unavailable."}\n\n')
+            else:
+                _json(route, {"response": "Recovered saved answer.", "chat_id": "a" * 32, "turn_id": "b" * 32,
+                    "turn": {"id": "b" * 32, "status": "completed", "execution_mode": "agent", "consensus": "Recovered saved answer."}})
+        page.route("**/agent", agent_response)
+        page.locator("#questionInput").fill("A question")
+        page.locator("#sendButton").click()
+        expect(page.locator("#agentAnswerError")).to_have_text("The model is temporarily unavailable.")
+        expect(page.locator("#agentRecover")).to_be_visible()
+        expect(page.locator("#agentAnswerActivity .agent-activity-title")).to_have_text("Response failed")
+        assert page.locator(".agent-activity-title").evaluate("el => getComputedStyle(el).animationName") == "none"
+        assert len(attempts) == 2
+        _snapshot(page, "agent-error-390")
+        page.locator("#agentRecover").click()
+        expect(page.locator("#agentAnswerBody")).to_have_text("Recovered saved answer.")
+        expect(page.locator("#agentAnswerError")).not_to_be_visible()
+        expect(page.locator("#agentRecover")).not_to_be_visible()
+        assert len(calls) == 2
+        assert calls[1]["recover_only"] is True
+        for key in ("client_request_id", "chat_id", "model_id", "reasoning_effort"):
+            assert calls[1][key] == calls[0][key]
+    finally:
+        context.close()
+
+
+def test_shared_consensus_picker_still_navigates_submenus(browser, phase4_server):
+    context, page = _real_firebase_page(browser, phase4_server)
+    try:
+        page.route("**/user_status", lambda route: _json(route, {"tier": "pro", "is_pro": True, "agent_access": True}))
+        page.evaluate("async () => { await window.__switchE2EUser('account-a'); }")
+        picker = page.locator(".consensus-model-inline")
+        picker.locator(".model-picker-display").click()
+        picker.locator(".model-picker-custom-option").click()
+        picker.locator(".model-picker-row-open").filter(has_text="Writes the consensus").click()
+        menu = picker.locator(".model-picker-menu")
+        expect(menu).to_be_visible()
+        option = menu.locator("[data-value]:not(:disabled)").last
+        selected = option.get_attribute("data-value")
+        option.click()
+        expect(page.locator("#consensusModelDropdown")).to_have_value(selected)
+        expect(menu).not_to_be_visible()
+        assert page.evaluate("() => localStorage.getItem('pref_consensus_preset')") == "custom"
+        picker.locator(".model-picker-display").click()
+        expect(menu).to_be_visible()
+        page.keyboard.press("Escape")
+        expect(menu).not_to_be_visible()
     finally:
         context.close()

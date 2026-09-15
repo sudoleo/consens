@@ -1,16 +1,66 @@
-.chat-execution-control { display: inline-flex; align-items: center; max-width: 150px; }
-.chat-execution-control[hidden] { display: none; }
-.chat-execution-control select {
-  font: inherit; font-size: 12px; font-weight: 600; color: var(--ink);
-  background: var(--raise); border: 1px solid var(--line); border-radius: 9px;
-  padding: 7px 8px; max-width: 100%; cursor: pointer;
+/* Agent chat shares the shell's surfaces, picker and mobile composer. */
+.chat-execution-control { display: inline-flex; align-items: center; flex: 0 0 auto; min-width: 0; max-width: 140px; }
+.chat-execution-control[hidden], .agent-model-controls[hidden], .agent-effort-control[hidden], .agent-model-notice[hidden] { display: none; }
+.agent-model-controls { display: flex; align-items: center; gap: 4px; min-width: 0; margin: 0; }
+.agent-model-picker { display: flex; justify-content: flex-start; min-width: 0; max-width: 220px; flex: 1 1 auto; }
+.agent-effort-control { display: flex; min-width: 0; flex: 0 0 auto; }
+.chat-input-container :is(.chat-execution-control, .agent-model-controls .select-wrapper) { position: relative; }
+.chat-input-container :is(.chat-execution-control, .agent-model-controls .select-wrapper)::after { display: none; }
+.chat-input-container :is(.chat-execution-control, .agent-model-controls) .native-model-picker {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: 0; opacity: 0; pointer-events: none;
 }
-.chat-execution-control select:disabled { opacity: .8; cursor: default; }
-.chat-execution-control select:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
-.agent-answer { width: 100%; padding: 22px 0; order: 4; }
+.chat-input-container :is(.chat-execution-control, .agent-model-controls) .model-picker-display {
+  display: inline-flex; align-items: center; justify-content: flex-start; gap: 8px;
+  min-width: 0; max-width: 100%; min-height: 36px; padding: 7px 10px;
+  border: 1px solid transparent; border-radius: 9px; background: transparent; box-shadow: none;
+  color: var(--ink-2); font: inherit; font-size: 12px; font-weight: 500; line-height: 20px;
+  cursor: pointer; transition: background .15s ease, color .15s ease;
+}
+.chat-input-container .agent-model-picker .model-picker-display { color: var(--ink); }
+.chat-input-container .chat-execution-control .model-picker-display { background: var(--raise); }
+.chat-input-container :is(.chat-execution-control, .agent-model-controls) .model-picker-display::after {
+  content: ''; flex: 0 0 5px; width: 5px; height: 5px; margin-top: -3px;
+  border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg); opacity: .65;
+}
+.chat-input-container :is(.chat-execution-control, .agent-model-controls) .model-picker-display:hover:not(:disabled),
+.chat-input-container :is(.chat-execution-control, .agent-model-controls) .model-picker-display[aria-expanded="true"] {
+  background: var(--raise); color: var(--ink);
+}
+.chat-input-container :is(.chat-execution-control, .agent-model-controls) .model-picker-display:focus-visible {
+  outline: 2px solid var(--ink-2); outline-offset: 2px;
+}
+.chat-input-container :is(.chat-execution-control, .agent-model-controls) .model-picker-display:disabled { opacity: .6; cursor: default; }
+.chat-input-container .chat-execution-control .model-picker-display:disabled { background: transparent; }
+.chat-input-container .chat-execution-control .model-picker-display:disabled::after { display: none; }
+.agent-effort-control .model-picker-display-text::before { content: 'Reasoning · '; color: var(--ink-3); font-weight: 400; }
+.chat-input-container :is(.chat-execution-control, .agent-model-controls) .model-picker-menu {
+  border: 1px solid var(--line); background: var(--well); border-radius: 14px; padding: 6px; box-shadow: var(--lift);
+  overscroll-behavior: contain; scrollbar-width: thin; z-index: 1600;
+}
+.chat-input-container :is(.chat-execution-control, .agent-model-controls) .model-picker-option {
+  display: flex; flex-wrap: wrap; gap: 3px; min-height: 42px; padding: 10px 30px 10px 11px;
+  color: var(--ink); font-size: 13px; line-height: 1.4; border-radius: 8px;
+}
+.chat-input-container :is(.chat-execution-control, .agent-model-controls) .model-picker-option:is(:hover, .is-selected) { background: var(--raise); }
+.chat-input-container :is(.chat-execution-control, .agent-model-controls) .model-picker-option:focus-visible { outline: 2px solid var(--ink-3); outline-offset: -2px; background: var(--raise); }
+.chat-input-container :is(.chat-execution-control, .agent-model-controls) .model-picker-option-label { white-space: normal; overflow-wrap: anywhere; }
+.model-picker-option-description { flex-basis: 100%; font-size: 11px; color: var(--ink-3); font-weight: 400; line-height: 1.5; }
+.agent-model-notice { flex: 1 1 100%; margin: 2px 4px 0; color: var(--ink-2); font-size: 11px; line-height: 1.5; }
+:is(#agentModelsRetry, #agentRecover):not([hidden]) {
+  display: inline-flex; align-items: center; min-height: 38px; padding: 4px 8px;
+  border-radius: 6px; font-size: 12px; white-space: nowrap;
+}
+:is(#agentModelsRetry, #agentRecover):focus-visible { outline: 2px solid var(--ink-2); outline-offset: 2px; }
+.agent-answer { width: 100%; min-width: 0; padding: 22px 0; order: 4; }
 .agent-answer[hidden] { display: none; }
-.agent-answer .thread-history-answer-label { margin-bottom: 12px; }
-#agentAnswerError { color: var(--ink); border-left: 2px solid var(--ink); padding-left: 12px; }
+.agent-answer .thread-history-answer-label,
+.thread-history-answer:has(.agent-activity) .thread-history-answer-label {
+  margin-bottom: 6px; color: var(--ink-3); font-size: 12px; font-weight: 500; line-height: 1.6;
+  letter-spacing: 0; text-transform: none;
+}
+#agentAnswerError { color: var(--ink-2); border-left: 2px solid var(--line); padding: 4px 0 4px 12px; font-size: 13px; line-height: 1.6; }
+#agentAnswerBody:empty { display: none; }
 body.single-agent-active :is(#consensusOutput, #consensusRun, #agentModePanel, .response-section,
   #composerModeBar, .consensus-model-inline, #attachTrigger, #deepThinkInputIndicator,
   #runProvenance, .consensus-footer-actions, #composerRunNotice, #heroResponseAccess,
@@ -18,39 +68,63 @@ body.single-agent-active :is(#consensusOutput, #consensusRun, #agentModePanel, .
 body:not(.single-agent-active) #agentAnswer { display: none; }
 body.single-agent-active #agentAnswer:not([hidden]) { display: block; }
 body.single-agent-active #threadAsk:not([hidden]) { display: block; }
-@media (max-width: 600px) { .chat-execution-control { max-width: 125px; } }
 
-.agent-model-controls { display: flex; align-items: center; gap: 6px; min-width: 0; }
-.agent-model-controls[hidden], .agent-effort-control[hidden] { display: none; }
-.agent-model-picker { min-width: 0; max-width: 240px; }
-.agent-model-picker .model-picker-display { max-width: 100%; min-width: 0; }
-.agent-model-picker .model-picker-display-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.agent-effort-control select {
-  font: inherit; font-size: 12px; color: var(--ink); background: var(--raise);
-  border: 1px solid var(--line); border-radius: 9px; padding: 7px 6px; max-width: 100%; cursor: pointer;
-}
-.agent-effort-control select:disabled, .agent-model-picker button:disabled { opacity: .6; cursor: default; }
-.agent-effort-control select:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+/* One quiet disclosure. Live state uses the source-check light sweep. */
 .agent-activity { margin: 0 0 18px; color: var(--ink-3); font-size: 13px; }
-.agent-activity summary { cursor: pointer; padding: 7px 0; width: fit-content; }
-.agent-activity summary:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; border-radius: 4px; }
-.agent-activity-title { color: var(--ink); }
-.agent-activity.is-running .agent-activity-title::after {
-  content: ''; display: inline-block; width: 5px; height: 5px; margin-left: 8px;
-  border-radius: 50%; background: currentColor; animation: agent-working 1.5s ease-in-out infinite;
+.agent-activity > summary {
+  display: flex; align-items: center; gap: 9px; width: fit-content; max-width: 100%;
+  min-height: 36px; padding: 4px 4px 4px 0; box-sizing: border-box; list-style: none;
+  cursor: pointer; border-radius: 5px; line-height: 1.5;
 }
-.agent-activity-content { border-left: 1px solid var(--line); padding-left: 14px; margin: 8px 0; }
-.agent-activity-status { margin: 7px 0; font-size: 12px; }
-.agent-activity-reasoning {
-  color: var(--ink); opacity: .8; white-space: pre-wrap; overflow-wrap: anywhere;
-  line-height: 1.6; max-height: 220px; overflow-y: auto; overscroll-behavior: contain;
+.agent-activity > summary::-webkit-details-marker { display: none; }
+.agent-activity > summary:focus-visible { outline: 2px solid var(--ink-2); outline-offset: 3px; }
+.agent-activity > summary:hover { color: var(--ink); }
+.agent-activity-title { font-weight: 500; }
+.agent-activity-marker { flex: 0 0 14px; width: 14px; height: 2px; border-radius: 2px; background: currentColor; opacity: .5; }
+.agent-activity-chevron { width: 5px; height: 5px; margin-left: 2px; border-right: 1px solid currentColor; border-bottom: 1px solid currentColor; transform: rotate(45deg); transition: transform .18s ease; opacity: .6; }
+.agent-activity[open] .agent-activity-chevron { transform: rotate(225deg); }
+.agent-activity.is-running .agent-activity-title,
+.agent-activity.is-running .agent-activity-marker {
+  background-image: linear-gradient(105deg, var(--ink-2) 40%, var(--ground) 50%, var(--ink-2) 60%);
+  background-size: 250% 100%; animation: source-label-shine 1.6s linear infinite;
 }
-.agent-activity-note, .agent-usage { margin: 8px 0 0; font-size: 12px; line-height: 1.5; }
-@keyframes agent-working { 50% { opacity: .25; } }
-@media (prefers-reduced-motion: reduce) { .agent-activity.is-running .agent-activity-title::after { animation: none; } }
+.agent-activity.is-running .agent-activity-title { background-clip: text; -webkit-background-clip: text; color: transparent; }
+.agent-activity.is-running .agent-activity-marker { opacity: 1; }
+.agent-activity-content {
+  border-left: 1px solid var(--line); padding: 4px 14px 4px 16px; margin: 6px 0 8px 6px;
+  max-height: 240px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent; overflow-wrap: anywhere;
+}
+.agent-activity-content[hidden] { display: none; }
+.agent-activity-content:focus-visible { outline: 1px solid var(--ink-3); outline-offset: 2px; border-radius: 3px; }
+.agent-activity-reasoning { color: var(--ink-2); white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.75; font-size: 13px; }
+.agent-activity-reasoning + .agent-activity-reasoning { margin-top: 12px; }
+.agent-activity-note, .agent-usage { margin: 8px 0 4px 23px; font-size: 11px; line-height: 1.6; color: var(--ink-3); }
+.agent-usage { font-variant-numeric: tabular-nums; }
+@media (prefers-reduced-motion: reduce), (forced-colors: active) {
+  .agent-activity.is-running .agent-activity-title,
+  .agent-activity.is-running .agent-activity-marker { animation: none; background: none; color: var(--ink-2); }
+  .agent-activity.is-running .agent-activity-marker { background: currentColor; }
+  .agent-activity-chevron { transition: none; }
+}
 @media (max-width: 700px) {
-  body.single-agent-active .chat-input-container .consensus-switch-container { flex-wrap: wrap; }
-  .agent-model-controls { flex-wrap: wrap; gap: 5px; max-width: 100%; }
-  .agent-model-picker { max-width: 180px; }
-  .agent-effort-control select { font-size: 11px; padding: 6px; }
+  body.single-agent-active .chat-input-container .consensus-switch-container {
+    flex: 1 1 0; max-width: calc(100% - 46px); flex-wrap: wrap; gap: 2px 4px;
+  }
+  .agent-model-controls { flex: 1 1 100%; max-width: 100%; gap: 2px; }
+  body.single-agent-active .chat-input-container .input-actions-container { align-self: flex-end; }
+  .agent-model-picker { max-width: 210px; }
+  .agent-effort-control .model-picker-display-text::before { content: ''; }
+  .chat-input-container :is(.chat-execution-control, .agent-model-controls) .model-picker-display { min-height: 38px; padding-inline: 8px; }
+  .agent-activity > summary { min-height: 44px; }
+  .agent-activity-content { max-height: 200px; }
+}
+@media (min-height: 620px) {
+  body.single-agent-active.is-hero .hero-greeting {
+    opacity: 1; visibility: visible; transform: none; font-size: clamp(20px, 5vw, 24px);
+  }
+}
+@media (min-width: 1100px) {
+  body.single-agent-active:not(.is-hero) .agent-model-picker { max-width: 180px; }
+  body.single-agent-active:not(.is-hero) .agent-effort-control .model-picker-display-text::before { content: ''; }
 }

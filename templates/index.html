@@ -504,31 +504,30 @@
              Lauf sagt jetzt selbst, was passiert, statt es hier anzukuendigen.
              .consensus-switch-container bleibt als Selektor-Vertrag bestehen. -->
         <div class="consensus-switch-container">
-          <label id="chatExecutionControl" class="chat-execution-control" hidden>
-            <span class="visually-hidden">Chat mode</span>
+          <div id="chatExecutionControl" class="chat-execution-control select-wrapper" hidden>
             <select id="chatExecutionMode" aria-label="Chat mode">
-              <option value="consensus">Consensus</option>
-              <option value="agent">Agent · Beta</option>
+              <option value="consensus" data-description="Compare perspectives from multiple models">Consensus</option>
+              <option value="agent" data-description="Chat directly with the model you choose">Agent · Beta</option>
             </select>
-          </label>
+          </div>
           <button type="button" id="attachTrigger" class="attach-trigger" aria-haspopup="true" aria-expanded="false" aria-controls="attachMenu" title="Add attachment" aria-label="Add attachment">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <line x1="12" y1="5" x2="12" y2="19"></line>
               <line x1="5" y1="12" x2="19" y2="12"></line>
             </svg>
           </button>
-          <div id="agentModelControls" class="agent-model-controls consensus-model" hidden>
+          <div id="agentModelControls" class="agent-model-controls" hidden>
             <div class="select-wrapper agent-model-picker">
               <select id="agentModelDropdown" aria-label="Agent model" disabled>
                 <option value="">Loading models…</option>
               </select>
             </div>
-            <label class="agent-effort-control" title="Reasoning for your next message">
-              <span class="visually-hidden">Reasoning effort</span>
+            <div class="select-wrapper agent-effort-control" title="Reasoning for your next message">
               <select id="agentReasoningEffort" aria-label="Agent reasoning effort" disabled><option value="default">Default reasoning</option></select>
-            </label>
+            </div>
             <button id="agentModelsRetry" type="button" class="thread-ask-more" hidden>Reload models</button>
           </div>
+          <p id="agentModelNotice" class="agent-model-notice" role="status" hidden></p>
           <!-- Lauf-Schalter: Modellanzahl + Preset in einem Chip. model-picker.js
                ersetzt das Select durch den Custom-Picker mit Preset-Ebene. -->
           <div class="consensus-model consensus-model-inline" title="How many models answer, and which one writes the consensus">

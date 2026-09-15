@@ -30,8 +30,20 @@ Server. Geänderte Einstellungen unter derselben Request-ID liefern 409,
 ungültige Auswahlwerte vor dem Modellaufruf 422. Recovery nutzt den gespeicherten
 Snapshot auch nach einer Konfigurationsänderung.
 
-Die aufklappbare Aktivitätsanzeige öffnet sich im laufenden Chat und bleibt
-anschließend im Verlauf verfügbar. Sie zeigt ausschließlich vom Provider
+Modus, Modell und Denkstufe verwenden denselben Custom-Picker mit eigenem
+Agent-Zustand. Menübreiten passen sich dem sichtbaren Viewport an; Tastaturwahl,
+Escape und Fokusrückgabe funktionieren für alle drei Controls. Nicht mehr
+verfügbare gespeicherte Modelle werden mit Hinweis auf den angebotenen Standard
+abgeglichen; derselbe Wert wird angezeigt und gesendet.
+
+Die aufklappbare Aktivitätsanzeige öffnet sich beim ersten sichtbaren Reasoning
+und klappt nach Abschluss automatisch zu. Eine manuelle Auf-/Zu-Auswahl bleibt
+bestehen. Ein gemeinsamer Scrollbereich folgt neuen Textblöcken, solange der
+Nutzer nicht zurückscrollt. Die Statuszeile verwendet den Strich-/Lichtlauf des
+Quellenchecks; bei Reduced Motion/Forced Colors und nach Stop/Fehler/Abschluss
+bleibt sie statisch. Gestoppte Turns werden auch im gespeicherten Zustand als
+gestoppt beschriftet, ein Output-Limit ist bereits eingeklappt erkennbar.
+Die Anzeige bleibt im Verlauf verfügbar. Sie zeigt ausschließlich vom Provider
 gelieferte Reasoning-Texte/Zusammenfassungen, Arbeitsstatus und gemeldeten
 Verbrauch mit simulierten Kosten. OpenAI-Summaries werden angefordert.
 Verschlüsselte Reasoning-Blöcke werden weder angezeigt noch gespeichert.
