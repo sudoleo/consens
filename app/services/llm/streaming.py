@@ -59,6 +59,8 @@ def sse_pack(event: str, data: Dict[str, Any]) -> str:
 
 
 SSE_KEEPALIVE_INTERVAL_SECONDS = 15.0
+SSE_QUEUE_SIZE = 64
+SSE_BACKPRESSURE_TIMEOUT_SECONDS = 30.0
 
 
 class ProviderStreamingResponse(StreamingResponse):
@@ -90,28 +92,47 @@ def iter_sse_with_keepalive(
     interval_seconds: float = SSE_KEEPALIVE_INTERVAL_SECONDS,
     cancellation: ProviderCancellation | None = None,
 ):
-    events: queue.Queue = queue.Queue()
+    events: queue.Queue = queue.Queue(maxsize=SSE_QUEUE_SIZE)
     done = object()
     cancellation = cancellation or ProviderCancellation()
+    stopped = threading.Event()
+
+    def enqueue(item):
+        deadline = time.monotonic() + SSE_BACKPRESSURE_TIMEOUT_SECONDS
+        while True:
+            cancellation.raise_if_cancelled()
+            try:
+                events.put(item, timeout=0.05)
+                return
+            except queue.Full:
+                if time.monotonic() >= deadline:
+                    cancellation.cancel()
+                    cancellation.raise_if_cancelled()
 
     def pump():
         try:
             with bind_provider_cancellation(cancellation):
                 for item in source:
                     cancellation.raise_if_cancelled()
-                    events.put(item)
-            events.put(done)
+                    enqueue(item)
+            enqueue(done)
         except ProviderCancelled:
-            events.put(done)
+            pass
         except BaseException as exc:  # noqa: BLE001
-            events.put(exc)
+            try:
+                enqueue(exc)
+            except ProviderCancelled:
+                pass
         finally:
             # A disconnect can occur between the producer's yield and the
             # queue write. Close it explicitly so receipts/resources settle
             # now, rather than depending on generator garbage collection.
             close = getattr(source, "close", None)
-            if callable(close):
-                close()
+            try:
+                if callable(close):
+                    close()
+            finally:
+                stopped.set()
 
     threading.Thread(
         target=pump,
@@ -119,18 +140,28 @@ def iter_sse_with_keepalive(
         name="sse-keepalive-pump",
     ).start()
 
+    next_keepalive = time.monotonic() + interval_seconds
     try:
         while True:
             try:
-                item = events.get(timeout=interval_seconds)
+                item = events.get(timeout=min(interval_seconds, 0.1))
             except queue.Empty:
-                yield ": keepalive\n\n"
+                if stopped.is_set():
+                    return
+                try:
+                    cancellation.raise_if_cancelled()
+                except ProviderCancelled:
+                    return
+                if time.monotonic() >= next_keepalive:
+                    yield ": keepalive\n\n"
+                    next_keepalive = time.monotonic() + interval_seconds
                 continue
             if item is done:
                 return
             if isinstance(item, BaseException):
                 raise item
             yield item
+            next_keepalive = time.monotonic() + interval_seconds
     finally:
         cancellation.cancel()
 

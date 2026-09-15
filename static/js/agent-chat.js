@@ -22,12 +22,12 @@
 
   function selectionKey() {
     const context = registry.visible();
-    const basis = registry.getSelectedConversationBasis();
+    const basis = registry.getSelectedConversationBasis({ includeHistory: false });
     return `${catalogOwner}:${context?.metadata.chatId || basis?.chatId || "draft"}`;
   }
   function preferredSelection() {
     const context = registry.visible();
-    const basis = registry.getSelectedConversationBasis();
+    const basis = registry.getSelectedConversationBasis({ includeHistory: false });
     const saved = context?.consensus.completedTurn?.agent_settings || context?.metadata.agentSettings || basis?.currentTurn?.agent_settings;
     let preferred;
     try { preferred = JSON.parse(localStorage.getItem(`agent_settings_${catalogOwner}`) || "null"); } catch (_) {}
@@ -155,7 +155,7 @@
   function selectedMode() {
     const context = registry.visible();
     if (context) return context.config.executionMode || "consensus";
-    const basis = registry.getSelectedConversationBasis();
+    const basis = registry.getSelectedConversationBasis({ includeHistory: false });
     if (basis) return basis.executionMode || "consensus";
     return canUse() ? preference : "consensus";
   }
@@ -178,7 +178,7 @@
     }
     const label = document.getElementById("chatExecutionControl");
     const select = document.getElementById("chatExecutionMode");
-    const locked = Boolean(registry.visible() || registry.getSelectedConversationBasis());
+    const locked = Boolean(registry.visible() || registry.getSelectedConversationBasis({ includeHistory: false }));
     if (label) label.hidden = !canUse() && !agent;
     if (select) {
       select.value = agent ? "agent" : "consensus";
@@ -192,7 +192,7 @@
     }
     const panel = document.getElementById("agentAnswer");
     const context = registry.visible();
-    const basis = registry.getSelectedConversationBasis();
+    const basis = registry.getSelectedConversationBasis({ includeHistory: false });
     if (!agent || !context) {
       const history = document.getElementById("threadHistory");
       if (history) delete history.dataset.agentHistory;
@@ -232,7 +232,10 @@
     App.state?.set?.("currentEvidenceSources", [], "evidence");
     window.lastConsensusBookmarkPayload = null;
     const history = document.getElementById("threadHistory");
-    const signature = JSON.stringify(context.historyTurns);
+    // Agent history is fixed for a run after its initial previous-turn append.
+    // Avoid serializing and duplicating all saved reasoning in a DOM attribute
+    // on every streamed activity update.
+    const signature = `${context.runId}:${context.historyTurns.length}`;
     if (history && history.dataset.agentHistory !== signature) {
       App.followup?.renderStoredTurns?.(context.historyTurns);
       history.dataset.agentHistory = signature;
@@ -269,7 +272,7 @@
     if (!recovery && (!catalog || !catalog.models.some(model => model.id === settings.model_id))) {
       App.showPopup?.("Choose an available agent model before sending."); return;
     }
-    const basis = recovery?.basis || registry.getSelectedConversationBasis();
+    const basis = recovery ? recovery.basis : registry.getSelectedConversationBasis();
     if (basis && (!basis.chatId || basis.continuationUnavailable)) {
       App.showPopup?.("Reopen this saved chat before continuing."); return;
     }
@@ -294,7 +297,7 @@
       context.consensus.status = "canceled";
       context.consensus.error = null;
       context.bookmark.status = "canceled";
-      if (context.basis) registry.selectConversationBasis(context.basis);
+      if (context.basis && registry.visible()?.runId === context.runId) registry.selectConversationBasis(context.basis);
     };
     registry.setStatus(context.runId, "running");
     if (!recovery) {
@@ -319,6 +322,7 @@
         if (!response.ok) throw new Error(apiError(data));
         chatId = data.chat.id;
       }
+      if (!registry.isAuthCurrent(context) || signal.aborted) return;
       context.metadata.chatId = chatId;
       context.metadata.requestSent = true;
       context.phase = "answers";
@@ -364,12 +368,12 @@
         currentTurn: turn, historyTurns: context.historyTurns, title: context.bookmark.title,
       });
     } catch (error) {
-      if (error.name === "AbortError" || !registry.isAuthCurrent(context)) return;
+      if (signal.aborted || error.name === "AbortError" || !registry.isAuthCurrent(context)) return;
       context.consensus.status = "error";
       context.consensus.error = { message: error.message };
       context.bookmark.status = "failed";
       registry.setStatus(context.runId, "failed", { message: error.message });
-      if (context.basis) registry.selectConversationBasis(context.basis);
+      if (context.basis && registry.visible()?.runId === context.runId) registry.selectConversationBasis(context.basis);
     } finally {
       clearTimeout(timer);
       context.controllers.query = null;

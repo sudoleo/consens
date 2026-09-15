@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Literal
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from firebase_admin import firestore
@@ -13,11 +14,12 @@ from app.api.routers.chat_history import _chat_uid, _raise_store_error
 from app.api.routers.bookmarks import _bookmark_meta
 from app.services import persistence_guard
 from app.services.agent_runs import AgentRunStore
+from app.services.agent_runtime import AgentCapacityExceeded, AgentStreamingResponse, agent_capacity
 from app.services.chat_store import normalize_question, ChatNotFound, TurnStatusConflict, _idempotent_turn_id
 from app.services.llm.agent_client import AgentCompletion, agent_model, agent_model_options, resolve_agent_model
 from app.services.llm.credentials import resolve_developer_api_keys, openrouter_api_key
 from app.services.llm.provider_runtime import ProviderCancellation, ProviderCancelled
-from app.services.llm.streaming import ProviderStreamingResponse, iter_sse_with_keepalive, sse_pack, SSE_HEADERS
+from app.services.llm.streaming import iter_sse_with_keepalive, sse_pack, SSE_HEADERS
 from app.services.llm.mock_llm import mock_llm_enabled
 
 router = APIRouter()
@@ -34,7 +36,7 @@ class AgentRequest(BaseModel):
     client_request_id: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
     bookmark_id: str = Field(pattern=r"^[A-Za-z0-9_]{1,100}$")
     question: str
-    stream: bool = True
+    stream: Literal[True] = True
     recover_only: bool = False
     model_id: str | None = Field(default=None, min_length=1, max_length=160)
     reasoning_effort: str = Field(default="default", pattern=r"^(default|none|minimal|low|medium|high|xhigh|max)$")
@@ -100,6 +102,7 @@ def run_agent(request: Request, payload: AgentRequest):
         raise HTTPException(status_code=429, detail="Too many agent requests. Please wait.") from None
     store = AgentRunStore(db_firestore)
     turn = None
+    lease = None
     try:
         # Read before applying today's configuration: old requests remain
         # replayable after a model/price/key change without another paid call.
@@ -126,6 +129,10 @@ def run_agent(request: Request, payload: AgentRequest):
         key = openrouter_api_key(resolve_developer_api_keys())
         if not key and not mock_llm_enabled():
             raise HTTPException(status_code=503, detail="Agent model is not configured.")
+        bookmark = db_firestore.collection("users").document(uid).collection("bookmarks").document(payload.bookmark_id).get()
+        if bookmark.exists and (bookmark.to_dict() or {}).get("chat_id") != payload.chat_id:
+            raise TurnStatusConflict("Bookmark belongs to another conversation")
+        lease = agent_capacity.acquire()
         turn = store.create_turn(
             uid, payload.chat_id, question=payload.question, mode="Agent", deep_search=False,
             selected_models=[model.model], consensus_model=model.model,
@@ -133,25 +140,37 @@ def run_agent(request: Request, payload: AgentRequest):
             agent_settings={**model.settings(), "selection": {"model_id": payload.model_id, "reasoning_effort": payload.reasoning_effort}},
         )
         if turn["status"] == "completed":
+            lease.release()
             return _final(uid, payload, store, store.get_turn(uid, payload.chat_id, turn["id"]))
         messages = store.messages(uid, payload.chat_id, turn, model=model)
-        if not store.claim(uid, payload.chat_id, turn["id"], model):
-            raise HTTPException(status_code=409, detail="This agent request has already started. Reopen the conversation to check its result.")
-    except HTTPException:
-        raise
-    except ValueError as exc:
-        if turn:
-            store.release_unclaimed(uid, payload.chat_id, turn["id"])
-        raise HTTPException(status_code=422, detail=str(exc)) from None
     except Exception as exc:
-        if turn:
-            store.release_unclaimed(uid, payload.chat_id, turn["id"])
+        try:
+            if turn:
+                store.release_unclaimed(uid, payload.chat_id, turn["id"])
+        finally:
+            if lease:
+                lease.release()
+        if isinstance(exc, HTTPException):
+            raise
+        if isinstance(exc, AgentCapacityExceeded):
+            raise HTTPException(status_code=503, detail=str(exc), headers={"Retry-After": "5"}) from None
+        if isinstance(exc, ValueError):
+            raise HTTPException(status_code=422, detail=str(exc)) from None
         _raise_store_error(exc, operation="prepare agent turn", uid=uid)
+
+    cancellation = ProviderCancellation()
 
     def events():
         completion = AgentCompletion()
         status = "failed"
+        claimed = False
+        error = "The agent response could not be completed. Please try a new message."
         try:
+            cancellation.raise_if_cancelled()
+            claimed = store.claim(uid, payload.chat_id, turn["id"], model)
+            if not claimed:
+                raise TurnStatusConflict("This agent request has already started. Reopen the conversation to check its result.")
+            cancellation.raise_if_cancelled()
             yield sse_pack("started", {"chat_id": payload.chat_id, "turn_id": turn["id"]})
             yield sse_pack("activity", completion.event("status", "started", status="working", settings=model.settings()))
             if mock_llm_enabled():
@@ -166,15 +185,20 @@ def run_agent(request: Request, payload: AgentRequest):
         except (ProviderCancelled, GeneratorExit):
             status = "cancelled"
             raise
+        except (AgentCapacityExceeded, TurnStatusConflict) as exc:
+            error = str(exc)
         except Exception as exc:
             logging.warning("Agent completion failed category=%s", safe_exception(exc))
         finally:
             # This runs on the producer thread even after the browser leaves.
             # Unknown usage remains explicitly visible in the admin totals.
-            completion.event("status", "finished", status=status, finish_reason=completion.finish_reason)
-            store.settle(uid, payload.chat_id, turn["id"], completion=completion, status=status)
+            if claimed:
+                completion.event("status", "finished", status=status, finish_reason=completion.finish_reason)
+                store.settle(uid, payload.chat_id, turn["id"], completion=completion, status=status)
+            else:
+                store.release_unclaimed(uid, payload.chat_id, turn["id"])
         if status != "succeeded":
-            yield sse_pack("error", {"error": "The agent response could not be completed. Please try a new message."})
+            yield sse_pack("error", {"error": error})
             return
         try:
             completed = store.get_turn(uid, payload.chat_id, turn["id"])
@@ -183,8 +207,16 @@ def run_agent(request: Request, payload: AgentRequest):
             logging.warning("Agent bookmark failed category=%s", safe_exception(exc))
             yield sse_pack("error", {"error": "The answer was saved to chat history, but its bookmark could not be saved. Retry this request to recover it."})
 
-    cancellation = ProviderCancellation()
-    return ProviderStreamingResponse(
-        iter_sse_with_keepalive(events(), cancellation=cancellation), cancellation=cancellation,
+    def stream_events():
+        if not lease.start():
+            return
+        try:
+            yield from events()
+        finally:
+            lease.release()
+
+    return AgentStreamingResponse(
+        iter_sse_with_keepalive(stream_events(), cancellation=cancellation), cancellation=cancellation,
+        lease=lease, cleanup=lambda: store.release_unclaimed(uid, payload.chat_id, turn["id"]),
         media_type="text/event-stream", headers={**SSE_HEADERS, "Cache-Control": "private, no-store"},
     )

@@ -36,6 +36,31 @@ function spec(question, extra = {}) {
 }
 
 describe("App.runRegistry", () => {
+  it("bounds saved Agent snapshots without dropping unsaved or other pipeline results", () => {
+    const { registry, dom } = bootRegistry();
+    const legacy = registry.create(spec("Legacy"));
+    registry.setStatus(legacy.runId, "succeeded");
+    const failed = registry.create(spec("Failed", { config: { executionMode: "agent" } }));
+    registry.setStatus(failed.runId, "failed");
+    function saved(bookmarkId) {
+      const run = registry.create(spec("Agent", { bookmarkId, config: { executionMode: "agent" } }));
+      run.bookmark.status = "succeeded";
+      registry.setStatus(run.runId, "succeeded");
+      registry.setCompletedBasis(run.runId, { runId: run.runId, bookmarkId, chatId: bookmarkId, question: "Q", consensus: "A", executionMode: "agent" });
+      return run;
+    }
+    for (let i = 0; i < 40; i++) saved("same-chat");
+    expect(registry.list()).toHaveLength(3);
+    expect(registry.findByBookmarkId("same-chat").runId).toBe(registry.visible().runId);
+    for (let i = 0; i < 20; i++) saved(`chat-${i}`);
+    expect(registry.list()).toHaveLength(14);
+    expect(registry.get(legacy.runId)).toBe(legacy);
+    expect(registry.get(failed.runId)).toBe(failed);
+    expect(registry.findByBookmarkId("chat-0")).toBe(null); // reload from its saved bookmark
+    expect(registry.findByBookmarkId("chat-19")).toBe(registry.visible());
+    dom.window.close();
+  });
+
   it("freezes each start snapshot and admits at most two executing runs", () => {
     const { registry, dom } = bootRegistry();
     const mutable = spec("A");

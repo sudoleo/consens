@@ -436,3 +436,44 @@ def test_context_check_precedes_paid_claim_for_small_model(api):
     assert response.status_code == 422 and "too long" in response.text
     assert totals(store)["calls"] == 1
     assert not calls
+
+
+def test_agent_history_never_queries_empty_model_answers(store, monkeypatch):
+    chat_id, turn = pending(store)
+    monkeypatch.setattr(store, "_model_answers", lambda *args: pytest.fail("Agent turns have no model_answers subcollection"))
+    assert store.get_turn(UID, chat_id, turn["id"])["id"] == turn["id"]
+    assert len(store.list_turns(UID, chat_id)["turns"]) == 1
+
+
+@pytest.mark.parametrize("model_id", ["moonshotai/kimi-k3", "openai/gpt-3.5-turbo"])
+def test_configured_default_uses_its_own_prices_context_and_routing(monkeypatch, model_id):
+    from app.core import config as cfg
+    from decimal import Decimal
+    monkeypatch.setenv("AGENT_MODEL", model_id)
+    model = agent_client.resolve_agent_model()
+    metadata = agent_client._CATALOG["models"][model_id]
+    assert model.context_length == metadata["context_length"]
+    assert Decimal(model.input_usd_per_million) == Decimal(metadata["pricing"]["prompt"]) * 1_000_000
+    entry = next(entry for entry in cfg.MODEL_CONFIGS.values() if entry.api_model == model_id)
+    assert model.label == entry.label
+    if model_id.startswith("moonshotai/"):
+        assert model.request_config["provider"]["only"] == ["moonshotai"]
+    monkeypatch.setenv("AGENT_INPUT_USD_PER_MILLION", "0.23")
+    assert agent_client.resolve_agent_model().input_usd_per_million == "0.23"
+
+
+def test_unknown_default_requires_catalog_instead_of_assuming_deepseek_limits(monkeypatch):
+    monkeypatch.setenv("AGENT_MODEL", "unknown/future-model")
+    with pytest.raises(ValueError, match="catalog entry"):
+        agent_client.agent_model()
+
+
+def test_bookmark_conflict_and_nonstream_request_are_rejected_before_model_call(api):
+    client, store, calls = api
+    chat_id = store.create_chat(UID, execution_mode="agent")["id"]
+    payload = {"chat_id": chat_id, "question": "Hi", "client_request_id": "first", "bookmark_id": "bm1"}
+    assert client.post("/agent", json={**payload, "stream": False}, headers=AUTH).status_code == 422
+    store.db.documents[("users", UID, "bookmarks", "bm1")] = {"chat_id": "c" * 32}
+    assert client.post("/agent", json=payload, headers=AUTH).status_code == 409
+    assert not calls
+    assert store.get_chat(UID, chat_id)["turn_count"] == 0

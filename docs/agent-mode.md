@@ -75,12 +75,15 @@ Optionale Umgebungsvariablen werden vor einem neuen Aufruf validiert:
 | `AGENT_OUTPUT_USD_PER_MILLION` | `0.60` |
 | `AGENT_CACHE_READ_USD_PER_MILLION` | `0.003` |
 | `AGENT_PRICING_VERSION` | `openrouter-2026-09-14` |
+| `AGENT_MAX_CONCURRENT_RUNS` | `16` pro Prozess (erlaubt: 1–64) |
 
 Die initialen Simulationstarife entsprechen dem am 14.09.2026 gelesenen
 [OpenRouter-Modellangebot](https://openrouter.ai/deepseek/deepseek-v4.1-flash).
 Provider können unterschiedliche Tarife haben. Das sind feste simulierte
-Kosten, keine Abbildung einer OpenRouter-Rechnung. Bei einem Modellwechsel
-auch Tarife und Preisversion aktualisieren. Bereits beanspruchte Aufrufe
+Kosten, keine Abbildung einer OpenRouter-Rechnung. Ein anderes `AGENT_MODEL`
+benötigt einen Katalogeintrag: Kontext-/Outputgrenzen, Registry-Routing und
+ohne expliziten Override auch Label, Tarife und Preisversion stammen dann von
+diesem Modell. Bereits beanspruchte Aufrufe
 behalten ihren Snapshot; abgeschlossene Requests bleiben trotz Konfigurations-
 oder Schlüsselwechsel ohne neuen Modellaufruf wiederherstellbar.
 
@@ -111,12 +114,30 @@ Guthaben noch vom Consensus-Tageskontingent abgezogen.
 
 Ein Textmodell, Streaming, persistenter Verlauf. Kein Fan-out, Judge,
 Webzugriff, eigenes API-Key-Routing oder weiterer LLM-Aufruf für Memory.
-Dateien werden abgewiesen. Das Gesamtbudget beträgt 180 Sekunden;
+Dateien und `stream: false` werden abgewiesen. Das Providerbudget beträgt 180 Sekunden;
 ein Kontext über 120.000 Zeichen erfordert einen neuen Chat.
 Für kleinere Modellfenster wird zusätzlich vor dem bezahlten Aufruf ein
 konservatives UTF-8-Bytebudget inklusive Output-Reserve geprüft. Das ist keine
 exakte Tokenzählung und noch keine Kontextkomprimierung. Sichtbares Reasoning
 wird im Verlauf gespeichert, aber nicht in spätere Modellprompts übernommen.
+
+### Parallelität und Abbruch
+
+Pro Prozess laufen höchstens 16 Agent-Produzenten; die konfigurierbare Grenze
+weist Überlast vor Turn-Anlage mit 503 und `Retry-After: 5` ab. Pro Nutzer
+erlaubt eine Firestore-Transaktion maximal zwei aktive Agent-Läufe auch über
+mehrere Instanzen. Die Reservierung unter `chat_state/agent_runs` entsteht
+atomar mit dem Beleg und wird beim Settlement entfernt. Nach Prozessabsturz
+läuft sie nach fünf Minuten aus; offene Belege bleiben sichtbar und werden
+nicht erneut ausgeführt. Replays fertiger Antworten brauchen keinen freien Slot.
+
+Der Claim entsteht erst beim Start des Stream-Produzenten. Disconnect vor
+der ersten Iteration gibt den unbezahlten Turn und den Prozess-Slot frei.
+Der gemeinsame SSE-Puffer ist auf 64 Ereignisse begrenzt; 30 Sekunden ohne
+freien Pufferplatz brechen den Produzenten ab. Datenbank-RPCs liegen außerhalb
+des Providerbudgets. Lang laufende Hintergrundaufgaben benötigen später eine
+dauerhafte Job-Ausführung mit Checkpoints; diese Version führt begrenzte
+Chat-Antworten innerhalb eines HTTP-Requests aus.
 
 Ein späterer Agent-Loop kann weitere explizite Schritte mit eigenen
 `llm_calls`-Belegen anfügen. Transport, Turn-Persistenz und Abrechnung sind
@@ -128,6 +149,10 @@ Tool-Ergebnisse zusätzlich modelliert werden.
 
 `tests/test_agent_runs.py` prüft Zugriff, einzelne Requests, echte Usage-
 Chunks, Idempotenz, Transaktionen, Verlauf und Löschrennen.
+`tests/test_agent_capacity.py` und `tests/test_stream_backpressure.py` prüfen
+konkurrierende Zulassung, Lease-Ablauf, Disconnect vor Streamstart und langsame
+Clients. `tests/e2e/test_agent_transactions.py` prüft die Konkurrenz zusätzlich
+mit echten Firestore-Transaktionen im isolierten lokalen Emulator.
 `tests/js/agent-chat.test.mjs` prüft Dispatch, Fortsetzung, Berechtigungen und
 Auth-Wechsel. `tests/e2e/test_agent_chat_frontend.py` prüft die gebaute App,
 echten Bookmark-Restore und Desktop-/Mobile-Layout mit gemockten APIs,

@@ -49,6 +49,64 @@ async function selectAgent(window) {
 }
 
 describe("single-model agent chat", () => {
+  it.each(["cancel", "error"])("keeps the selected conversation when a background follow-up ends: %s", async end => {
+    const { window, document, dom } = boot();
+    await selectAgent(window);
+    document.getElementById("questionInput").value = "First";
+    await window.App.agentChat.send();
+    const registry = window.App.runRegistry;
+    const original = registry.getSelectedConversationBasis();
+    let reject;
+    window.streamSSERequest.mockImplementationOnce(() => new Promise((_resolve, r) => { reject = r; }));
+    document.getElementById("questionInput").value = "Follow up";
+    const sending = window.App.agentChat.send();
+    await vi.waitFor(() => expect(reject).toBeTypeOf("function"));
+    const run = registry.visible();
+    const other = { chatId: "c".repeat(32), bookmarkId: "other", question: "Other", consensus: "Other answer", executionMode: "agent" };
+    registry.showSavedView({ type: "bookmark" }, other);
+    if (end === "cancel") registry.cancel(run.runId);
+    reject(new Error("Connection ended"));
+    await sending;
+    expect(registry.getSelectedConversationBasis().chatId).toBe(other.chatId);
+    expect(run.status).toBe(end === "cancel" ? "canceled" : "failed");
+    registry.show(run.runId);
+    expect(registry.getSelectedConversationBasis().chatId).toBe(original.chatId);
+    dom.window.close();
+  });
+
+  it("recovers a first message without borrowing another conversation's history", async () => {
+    const { window, document, dom } = boot();
+    await selectAgent(window);
+    window.streamSSERequest.mockRejectedValueOnce(new Error("Connection lost"));
+    document.getElementById("questionInput").value = "First";
+    await window.App.agentChat.send();
+    const failed = window.App.runRegistry.visible();
+    window.App.runRegistry.showSavedView({ type: "bookmark" }, {
+      chatId: "c".repeat(32), bookmarkId: "other", question: "Other", consensus: "Other answer", executionMode: "agent",
+      currentTurn: { id: "other-turn", question: "Other", consensus: "Other answer" },
+    });
+    await window.App.agentChat.send(failed);
+    expect(window.App.runRegistry.visible().historyTurns).toHaveLength(0);
+    expect(window.App.runRegistry.visible().basis).toBe(null);
+    expect(window.streamSSERequest.mock.calls[1][1].chat_id).toBe("a".repeat(32));
+    dom.window.close();
+  });
+
+  it("does not start a model request after cancellation during chat creation", async () => {
+    const { window, document, dom } = boot();
+    await selectAgent(window);
+    let resolve;
+    window.fetch.mockImplementationOnce(() => new Promise(r => { resolve = r; }));
+    document.getElementById("questionInput").value = "First";
+    const sending = window.App.agentChat.send();
+    await vi.waitFor(() => expect(resolve).toBeTypeOf("function"));
+    window.App.runRegistry.cancel(window.App.runRegistry.visible().runId);
+    resolve({ ok: true, json: async () => ({ chat: { id: "a".repeat(32) } }) });
+    await sending;
+    expect(window.streamSSERequest).not.toHaveBeenCalled();
+    dom.window.close();
+  });
+
   it("reconciles a removed saved model with the displayed choice before sending", async () => {
     const { window, document, dom } = boot();
     window.localStorage.setItem("agent_settings_owner", JSON.stringify({ model_id: "removed-model", reasoning_effort: "ultra" }));
@@ -214,8 +272,12 @@ describe("single-model agent chat", () => {
     document.getElementById("questionInput").value = "Question";
     await window.App.agentChat.send();
     const run = window.App.runRegistry.visible();
+    run.historyTurns.push({ question: "Old", consensus: "Long history ".repeat(10000) });
     window.App.agentChat.project(run);
+    expect(document.getElementById("threadHistory").dataset.agentHistory.length).toBeLessThan(100);
     const count = window.App.followup.renderStoredTurns.mock.calls.length;
+    window.App.agentChat.project(run);
+    expect(window.App.followup.renderStoredTurns.mock.calls.length).toBe(count);
     window.App.runRegistry.showSavedView({type: "bookmark"}, {question: "Another", consensus: "Other answer"});
     window.App.runRegistry.show(run.runId);
     window.App.agentChat.project(run);

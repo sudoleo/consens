@@ -645,10 +645,11 @@ class ChatStore:
         if not turn_snapshot.exists:
             raise ChatNotFound("Chat not found")
 
+        data = turn_snapshot.to_dict() or {}
         return turn_detail(
             turn_snapshot.id,
-            turn_snapshot.to_dict() or {},
-            self._model_answers(turn_ref),
+            data,
+            {} if data.get("execution_mode") == "agent" else self._model_answers(turn_ref),
         )
 
     def _model_answers(self, turn_ref) -> dict[str, dict]:
@@ -1072,7 +1073,7 @@ class ChatStore:
                 turn_detail(
                     snapshot.id,
                     data,
-                    self._model_answers(turns_ref.document(snapshot.id)),
+                    {} if data.get("execution_mode") == "agent" else self._model_answers(turns_ref.document(snapshot.id)),
                 )
             )
         return {

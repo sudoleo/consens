@@ -1558,6 +1558,10 @@ und Reasoning-Fähigkeiten liegen versioniert in `llm/agent_model_catalog.json`.
 Ein neuer Registry-Eintrag ist erst nach Aufnahme in diesen Snapshot auswählbar.
 `POST /agent` prüft `model_id`/`reasoning_effort` vor dem Providerstart. Die
 Request-Identität bindet auch die Auswahl; abweichende Retries liefern 409.
+Auch ein per `AGENT_MODEL` gesetzter Standard nutzt Kontext-/Outputgrenzen,
+Registry-Routing und (ohne expliziten Tarif-Override) seine eigenen Katalogpreise.
+Unbekannte Standardmodelle brauchen zuerst einen Katalogeintrag. `stream: false`
+wird als nicht unterstützte Option abgewiesen; fertige Replays bleiben JSON.
 
 `agent-activity.js` wird laut `bundles.json` vor `consensus-run.js` und
 `agent-chat.js` geladen. `App.agentActivity` verarbeitet versionierte `activity`-
@@ -1586,18 +1590,44 @@ vor dem Senden abgelehnt und sind im strikten Endpoint-Schema nicht erlaubt.
 startet also niemals eine neue Modellanfrage. Share/Watch stehen hier nicht
 zur Verfügung; Agent-Antworten lassen sich serverseitig nicht als Consensus
 materialisieren. Die übrigen Consensus-/Direktvergleichs-Flows bleiben bestehen.
+Abbruch und Fehler eines Hintergrundlaufs ändern die sichtbare Gesprächsbasis
+nicht. Beim erneuten Öffnen eines fehlgeschlagenen Agent-Folgeturns bleibt dessen
+ursprüngliche Basis erhalten. Recovery einer ersten Nachricht übernimmt keine
+Basis aus einer inzwischen geöffneten anderen Unterhaltung. Nach abgebrochener
+Chat-Anlage startet der Browser keinen Modellrequest mehr.
+Der Verlauf eines Agent-Laufs wird über Run-ID und Turn-Anzahl projiziert,
+nicht bei jedem Stream-Update komplett als JSON in ein DOM-Attribut kopiert.
+Picker-/Statusprojektionen lesen die Basis ohne Verlaufskopie. `runRegistry`
+behält von erfolgreich gespeicherten Agent-Läufen höchstens zwölf Snapshots
+(je Bookmark den neuesten); sichtbare/benutzte Snapshots sind geschützt.
+Ältere Chats werden regulär aus ihren Server-Bookmarks geladen. Laufende,
+fehlgeschlagene und andere Pipeline-Ergebnisse fallen nicht unter diese Bereinigung.
 
 `app/services/agent_runs.py` trennt Chat-/Turn-Orchestrierung und persistente
 Abrechnung vom Texttransport in `llm/agent_client.py`. Der Standard ist
 `deepseek/deepseek-v4.1-flash`; Modell, Label, Output-Limit und versionierte
 Simulationstarife sind über `AGENT_*` konfigurierbar (siehe
 [`agent-mode.md`](agent-mode.md)). Es gilt genau ein OpenRouter-Aufruf mit
-ZDR, deaktivierten Fallbacks, maximal 4.096 Output-Tokens und 180 Sekunden
-Gesamtbudget. Der Kontext besteht aus Systemtext sowie allen abgeschlossenen
+ZDR, deaktivierten Fallbacks, standardmäßig maximal 4.096 Output-Tokens und
+180 Sekunden Providerbudget. Der Kontext besteht aus Systemtext sowie allen abgeschlossenen
 User-/Assistant-Turns in Reihenfolge. Über 120.000 Zeichen fordert der Server
 einen neuen Chat an; es gibt keine zusätzliche LLM-Kompression.
 Kleinere Modellfenster haben zusätzlich ein konservatives UTF-8-Bytebudget
 einschließlich Output-Reserve vor dem bezahlten Claim.
+
+`app/services/agent_runtime.py` begrenzt aktive Agent-Produzenten pro Prozess
+auf 16 (`AGENT_MAX_CONCURRENT_RUNS`, 1–64); Überlast liefert vor Turn-Anlage
+503 mit `Retry-After: 5`. Zusätzlich reserviert `AgentRunStore.claim` atomar
+mit Beleg/Kostenzählern maximal zwei aktive Agent-Läufe je Nutzer in
+`users/{uid}/chat_state/agent_runs.leases`, instanzübergreifend ohne globales
+Hotspot-Dokument. Die Lease läuft nach fünf Minuten aus und wird beim Settlement
+in derselben Transaktion entfernt. Ein Owner-Limit nach Streamstart liefert
+ein SSE-Fehlerereignis und gibt den unbezahlten Turn frei.
+Der Claim erfolgt erst im gestarteten Produzenten. `AgentStreamingResponse`
+bereinigt auch Antworten, deren Iterator wegen Disconnect nie betreten wurde;
+die lokale Reservierung wird erst beim Producer-Ende freigegeben. Fertige
+Replays brauchen keine Laufkapazität. Ein Bookmark aus einem anderen Chat wird
+bereits vor Turn-Anlage/Providerstart abgewiesen.
 
 `ChatStore` speichert Agent-Turns mit `execution_mode: agent` und eigener
 `assistant_response`; `turn_detail` liefert zusätzlich den bisherigen
@@ -1611,6 +1641,7 @@ werden. Derselbe verbrauchte Request wird niemals erneut ausgeführt.
 beim Settlement mit Antwort/Status gespeichert und nur im vollständigen
 Turn-Detail ausgegeben. Gespeichertes Reasoning wird nicht in Folgeprompts
 übernommen. Alte Turns ohne diese Felder bleiben darstellbar.
+Agent-Turn-GET und -Listen überspringen leere `model_answers`-Abfragen.
 
 Vor dem Providerstart entsteht pro Schritt ein deduplizierter Beleg unter
 `users/{uid}/llm_calls/{sha256(chat,turn,step)}` mit Modell-/Tarifsnapshot und
@@ -1630,6 +1661,12 @@ Settlement erzeugt dabei keine gelöschten Turns neu. Bookmark-Writes prüfen
 den aktiven Chat innerhalb derselben Transaktion (`transaction_guard`), und
 ältere Replays überschreiben keinen neueren Bookmark-Turn. Die bestehende
 Kontolöschung entfernt auch `llm_calls`; Tombstones sperren verspätete Writer.
+Der gemeinsame SSE-Pump puffert höchstens 64 Ereignisse. Ist der Puffer wegen
+eines langsamen Clients 30 Sekunden voll, wird der Producer abgebrochen und
+geschlossen; Queue-Wartezeiten prüfen Abbruch regelmäßig. Die Keepalive-Frequenz
+bleibt 15 Sekunden. Persistenz-RPCs sind nicht Teil des Providerbudgets; diese
+Architektur ist weiterhin für begrenzte Chat-Läufe vorgesehen. Dauerhafte
+Hintergrundjobs brauchen später Worker, Checkpoints und Wiederanbindung.
 
 
 ### Browser-Run-Lifecycle und Sichtwechsel

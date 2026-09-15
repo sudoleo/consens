@@ -47,6 +47,18 @@ class AgentModel:
 def agent_model() -> AgentModel:
     """Operator configuration is explicit; never silently substitute a model."""
     defaults = AgentModel()
+    model_id = os.environ.get("AGENT_MODEL", defaults.model).strip()
+    metadata = _CATALOG["models"].get(model_id)
+    if not metadata:
+        raise ValueError("The configured agent model needs a catalog entry with prices and context limits.")
+    entry = next((entry for entry in cfg.MODEL_CONFIGS.values() if entry.api_model == model_id), None)
+    if model_id != defaults.model:
+        pricing = metadata["pricing"]
+        defaults = replace(defaults, model=model_id, label=entry.label if entry else model_id,
+            input_usd_per_million=str(Decimal(pricing["prompt"]) * 1_000_000),
+            output_usd_per_million=str(Decimal(pricing["completion"]) * 1_000_000),
+            cache_read_usd_per_million=str(Decimal(pricing.get("input_cache_read", pricing["prompt"])) * 1_000_000),
+            pricing_version=_CATALOG["version"])
     values = {}
     for name in ("model", "label", "input_usd_per_million", "output_usd_per_million",
                  "cache_read_usd_per_million", "pricing_version"):
@@ -60,7 +72,9 @@ def agent_model() -> AgentModel:
         price = Decimal(values[name])
         if not price.is_finite() or price < 0 or price > 1000:
             raise ValueError("Invalid agent price")
-    return AgentModel(**values, selection_id=values["model"])
+    values["max_output_tokens"] = min(values["max_output_tokens"], metadata["top_provider"].get("max_completion_tokens") or values["max_output_tokens"])
+    return AgentModel(**values, selection_id=values["model"], context_length=metadata["context_length"],
+                      request_config=dict(entry.request_config or {}) if entry else {})
 
 
 _CATALOG = json.loads(Path(__file__).with_name("agent_model_catalog.json").read_text(encoding="utf-8"))

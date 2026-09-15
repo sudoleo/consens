@@ -9,6 +9,7 @@
   window.App = window.App || {};
 
   const MAX_ACTIVE_RUNS = 2;
+  const MAX_SAVED_AGENT_RUNS = 12;
   const EXECUTING = new Set(["starting", "running"]);
   const TERMINAL = new Set(["succeeded", "failed", "canceled"]);
   const runs = new Map();
@@ -363,6 +364,9 @@
   }
 
   function basisFromContext(context) {
+    if (context?.config.executionMode === "agent" && ["failed", "canceled"].includes(context.status)) {
+      return normalizeBasis(context.basis);
+    }
     if (!context || context.status !== "succeeded") return null;
     return normalizeBasis(context.completedBasis);
   }
@@ -400,8 +404,28 @@
     return selectedConversationBasis;
   }
 
-  function getSelectedConversationBasis() {
-    return cloneValue(selectedConversationBasis);
+  function getSelectedConversationBasis({ includeHistory = true } = {}) {
+    return cloneValue(selectedConversationBasis && !includeHistory
+      ? { ...selectedConversationBasis, historyTurns: [] } : selectedConversationBasis);
+  }
+
+  function pruneSavedAgentRuns() {
+    const bookmarks = new Set();
+    let kept = 0;
+    // Saved chats can be reloaded from bookmarks. Keeping every completed
+    // follow-up would retain a separate copy of its entire history forever.
+    for (const context of Array.from(runs.values()).reverse()) {
+      if (context.config.executionMode !== "agent" || context.status !== "succeeded"
+        || context.bookmark.status !== "succeeded" || !context.completedBasis) continue;
+      const protectedRun = context.runId === visibleRunId || context.runId === selectedConversationBasis?.runId
+        || context.keepConversationLock || Array.from(actions.values()).some(action => action.ownerRunId === context.runId);
+      if (!protectedRun && (bookmarks.has(context.bookmark.id) || kept >= MAX_SAVED_AGENT_RUNS)) {
+        runs.delete(context.runId);
+        continue;
+      }
+      bookmarks.add(context.bookmark.id);
+      kept++;
+    }
   }
 
   function setCompletedBasis(runId, basis) {
@@ -409,6 +433,7 @@
     return update(runId, context => {
       context.completedBasis = normalized;
       if (visibleRunId === context.runId) selectedConversationBasis = normalized;
+      pruneSavedAgentRuns();
     });
   }
 

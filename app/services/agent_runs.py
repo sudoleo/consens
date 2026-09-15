@@ -7,12 +7,13 @@ usage and account tombstones prevent resurrecting a deleted user.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import hashlib
 
 from firebase_admin import firestore
 
 from app.services import persistence_guard
+from app.services.agent_runtime import AgentCapacityExceeded
 from app.services.chat_store import ChatStore, ChatNotFound, TurnStatusConflict, TURN_PAGE_SIZE_MAX
 from app.services.llm.agent_client import AgentModel
 
@@ -23,9 +24,14 @@ AGENT_SYSTEM_PROMPT = (
     "access in this mode. Do not claim to have searched or consulted other models."
 )
 CONTEXT_CHAR_LIMIT = 120_000
+OWNER_CONCURRENT_RUNS = 2
+RUN_LEASE_SECONDS = 300
 
 
 class AgentRunStore(ChatStore):
+    def active_ref(self, uid):
+        return self.db.collection("users").document(uid).collection("chat_state").document("agent_runs")
+
     def receipt_ref(self, uid, chat_id, turn_id):
         step_id = hashlib.sha256(f"agent\0{chat_id}\0{turn_id}\0completion:0".encode()).hexdigest()
         return self.db.collection("users").document(uid).collection("llm_calls").document(step_id)
@@ -62,6 +68,7 @@ class AgentRunStore(ChatStore):
         receipt_ref = self.receipt_ref(uid, chat_id, turn_id)
         chat_ref, turn_ref = self._chat_ref(uid, chat_id), self._turn_ref(uid, chat_id, turn_id)
         user_ref = self.db.collection("users").document(uid)
+        active_ref = self.active_ref(uid)
 
         def operation(tx):
             persistence_guard.ensure_account_write_allowed(uid=uid, db=self.db, transaction=tx)
@@ -69,6 +76,7 @@ class AgentRunStore(ChatStore):
             chat = chat_ref.get(transaction=tx)
             turn = turn_ref.get(transaction=tx)
             user = user_ref.get(transaction=tx)
+            active = active_ref.get(transaction=tx)
             if not chat.exists or not turn.exists or (chat.to_dict() or {}).get("status") != "active":
                 raise ChatNotFound("Chat not found")
             if receipt.exists:
@@ -78,6 +86,12 @@ class AgentRunStore(ChatStore):
                     or turn_data.get("status") != "pending" or chat_data.get("agent_turn_id") != turn_id
                     or chat_data.get("agent_lock_until") <= datetime.now(timezone.utc)):
                 raise TurnStatusConflict("Agent turn is no longer runnable")
+            now = datetime.now(timezone.utc)
+            leases = {key: expires for key, expires in ((active.to_dict() or {}).get("leases") or {}).items()
+                      if isinstance(expires, datetime) and expires > now}
+            if len(leases) >= OWNER_CONCURRENT_RUNS:
+                raise AgentCapacityExceeded("Two agent responses are already running. Wait for one to finish.")
+            leases[receipt_ref.id] = now + timedelta(seconds=RUN_LEASE_SECONDS)
             totals = dict((user.to_dict() or {}).get("agent_usage") or {})
             totals["calls"] = totals.get("calls", 0) + 1
             totals["unsettled_calls"] = totals.get("unsettled_calls", 0) + 1
@@ -87,6 +101,7 @@ class AgentRunStore(ChatStore):
                 "chat_id": chat_id, "turn_id": turn_id, "status": "running",
                 "model": model.snapshot(), "created_at": firestore.SERVER_TIMESTAMP,
             })
+            tx.set(active_ref, {"leases": leases})
             if user.exists:
                 tx.update(user_ref, {"agent_usage": totals})
             else:
@@ -101,12 +116,14 @@ class AgentRunStore(ChatStore):
         receipt_ref = self.receipt_ref(uid, chat_id, turn_id)
         chat_ref, turn_ref = self._chat_ref(uid, chat_id), self._turn_ref(uid, chat_id, turn_id)
         user_ref = self.db.collection("users").document(uid)
+        active_ref = self.active_ref(uid)
 
         def operation(tx):
             persistence_guard.ensure_account_write_allowed(uid=uid, db=self.db, transaction=tx)
             receipt = receipt_ref.get(transaction=tx)
             user = user_ref.get(transaction=tx)
             chat, turn = chat_ref.get(transaction=tx), turn_ref.get(transaction=tx)
+            active = active_ref.get(transaction=tx)
             if not receipt.exists or not user.exists:
                 raise ChatNotFound("Agent receipt not found")
             if (receipt.to_dict() or {}).get("status") != "running":
@@ -121,6 +138,9 @@ class AgentRunStore(ChatStore):
                     totals[field] = totals.get(field, 0) + usage[field]
             totals["updated_at"] = firestore.SERVER_TIMESTAMP
             tx.update(user_ref, {"agent_usage": totals})
+            leases = dict((active.to_dict() or {}).get("leases") or {})
+            leases.pop(receipt_ref.id, None)
+            tx.set(active_ref, {"leases": leases})
             tx.update(receipt_ref, {
                 "status": status, "usage": usage, "usage_status": "measured" if usage is not None else "unavailable",
                 "generation_id": completion.generation_id, "finish_reason": completion.finish_reason,
