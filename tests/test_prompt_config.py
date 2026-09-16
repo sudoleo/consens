@@ -192,3 +192,16 @@ def test_cache_refreshes_other_workers_and_failed_writes_never_activate(config_s
     assert other.read()["prompts"] == changed()["prompts"]
     with pytest.raises(RuntimeError):
         other.read(force=True)
+
+
+def test_delegation_limits_are_validated_and_legacy_saves_preserve_them(config_store):
+    config = prompt_config.defaults()
+    assert config["delegation"]["enabled"] is False
+    config["delegation"].update(enabled=True, max_agents=2, max_parallel=3)
+    with pytest.raises(prompt_config.PromptConfigError):
+        config_store.save(config, expected_revision=0, updated_by="admin")
+    config["delegation"]["max_parallel"] = 2
+    saved = config_store.save(config, expected_revision=0, updated_by="admin")
+    legacy = changed()
+    saved = config_store.save(legacy, expected_revision=saved["revision"], updated_by="admin")
+    assert saved["delegation"] == config["delegation"]

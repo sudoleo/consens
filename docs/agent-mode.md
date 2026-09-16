@@ -3,6 +3,8 @@
 Ein begrenzter Modell-/Tool-Lauf im normalen Chat, verfügbar für Pro-Nutzer und Admins. Der
 Modus ist pro Unterhaltung festgelegt. Neue Chats starten über den vorhandenen
 Sidebar-Knopf; die Consensus-Ausführung bleibt separat auswählbar.
+Geprüfte Modell-/Reasoning-Kombinationen können zusätzlich mit Worker-Sitzungen
+delegieren; siehe [Delegation, Grenzen und Live-Vergleich](agent-delegation.md).
 
 ## Modellwahl und Aktivität (2026-09-15)
 
@@ -275,7 +277,15 @@ eine funktionierende Luna-Live-Anfrage; dessen Suchvertrag ist zusätzlich mit
 gemocktem Transport geprüft. Der Key war nicht im Free-Tier und hatte kein
 gemeldetes Ausgabenlimit. Diese punktuelle Prüfung ersetzt keinen Lasttest.
 
-## Grenzen und Erweiterung
+## Delegation und direkter Fallback
+
+Seit 16.09.2026 kann das ausgewählte Modell über persistente Sitzungen mit
+Workern kommunizieren, Rückfragen beantworten und Nacharbeit anfordern. Die
+Freigabe ist je Modell-/Reasoning-Kombination live geprüft und im Admin
+konfigurierbar. Agenten-Seitenleiste, Limits, Endpoints, Abbruch, gemeinsame
+Kosten und Qualitäts-/Kostenvergleich sind in [agent-delegation.md](agent-delegation.md)
+beschrieben. Die folgenden Grenzen gelten für den direkten Fallback bei
+deaktivierter Delegation oder einer noch nicht geprüften Kombination.
 
 Ein gewähltes Chatmodell, Streaming, persistenter Verlauf und die oben
 freigegebenen Tools. Kein Fan-out, Judge, eigener Suchdienst, eigenes
@@ -311,8 +321,9 @@ Chat-Antworten innerhalb eines HTTP-Requests aus.
 Transport (`llm/agent_client.py`), Ablauf (`agent_loop.py`), Policy/Tools
 (`agent_policy.py`, `agent_tools.py`), Kosten (`agent_costs.py`) und persistente
 Belege (`agent_runs.py`) sind getrennt. Die Registry ist die Erweiterungsstelle
-für spätere explizit freigegebene Tools. Modell-Delegation und Kontextkomprimierung
-sind nicht Bestandteil dieser Version. Die Consensus-Pipeline ist kein Tool.
+für explizit freigegebene Tools. Die Delegation nutzt dieselben Provider und
+Belege; Kontextkomprimierung ist nicht Bestandteil dieser Version.
+Die Consensus-Pipeline ist kein Tool.
 
 ## Prüfungen
 

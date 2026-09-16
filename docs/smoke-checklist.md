@@ -57,6 +57,13 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       ungestylten Dialoge. Die Browser-Konsole meldet keine Modul-/CSP-Fehler.
 
 ## Kern-Flow
+- [x] Delegation (16.09.2026): zwei parallele Worker, Rückfrage/Antwort und
+      Nacharbeit derselben Sitzung im Integrationstest; getrennte Kosten pro
+      Agent und Run, atomare Firestore-Reservierung und Deduplizierung geprüft.
+      Agenten-Seitenleiste bei 1440/390/320 px in Hell/Dunkel mit echten Browser-
+      Renderern geprüft: Nachrichten, gespeicherte Ansichten, Schließen/Escape,
+      Kontowechsel und kein horizontaler Overflow. Live-Protokolle und begrenzter
+      Qualitäts-/Kostenvergleich siehe `agent-delegation.md`.
 - [ ] Agent Beta: als Pro und Admin auswählen, Text senden, Folgefrage und
       gespeicherten Chat öffnen; keine Consensus-/Judge-Anzeige. Free/Plus
       erhalten keinen Zugang. Moduswechsel erfordert einen neuen Chat.

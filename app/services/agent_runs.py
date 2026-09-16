@@ -15,6 +15,7 @@ from firebase_admin import firestore
 
 from app.services import persistence_guard, prompt_config
 from app.services.agent_runtime import AgentCapacityExceeded
+from app.services.agent_sessions import AgentSessionStore
 from app.services.chat_store import ChatStore, ChatNotFound, TurnStatusConflict, TURN_PAGE_SIZE_MAX
 from app.services.llm.agent_client import AgentModel
 from app.services.llm.base import get_date_context
@@ -26,26 +27,26 @@ OWNER_CONCURRENT_RUNS = 2
 RUN_LEASE_SECONDS = 300
 
 
-def get_agent_system_prompt(model=None):
-    config = prompt_config.get_config()
+def get_agent_system_prompt(model=None, config=None):
+    config = config or prompt_config.get_config()
     prompt = f"{config['prompts']['agent']}\n\n{get_date_context(config['reference_timezone'])}"
     if model is not None:
         prompt += f"\nSelected model for this response: {model.label} ({model.model})."
     return prompt
 
 
-class AgentRunStore(ChatStore):
+class AgentRunStore(AgentSessionStore, ChatStore):
     def active_ref(self, uid):
         return self.db.collection("users").document(uid).collection("chat_state").document("agent_runs")
 
     def receipt_ref(self, uid, chat_id, turn_id, step="completion:0"):
-        if not re.fullmatch(r"completion:[0-2]", step):
+        if not re.fullmatch(r"(?:completion|agent:[a-f0-9]{32}):(?:0|[1-9][0-9]?)", step):
             raise ValueError("Invalid agent step")
         key = hashlib.sha256(f"agent\0{chat_id}\0{turn_id}\0{step}".encode()).hexdigest()
         return self.db.collection("users").document(uid).collection("llm_calls").document(key)
 
-    def messages(self, uid, chat_id, target, model=None):
-        system_prompt = get_agent_system_prompt(model)
+    def messages(self, uid, chat_id, target, model=None, config=None):
+        system_prompt = get_agent_system_prompt(model, config=config)
         messages = [{"role": "system", "content": system_prompt}]
         cursor = ""
         chars = len(system_prompt) + len(target["question"])
@@ -73,7 +74,10 @@ class AgentRunStore(ChatStore):
             raise ValueError("This conversation is too long for the selected model. Choose a model with a larger context or start a new chat.")
         return messages
 
-    def claim(self, uid, chat_id, turn_id, model: AgentModel, *, step="completion:0", run_token="", policy=None):
+    def claim(self, uid, chat_id, turn_id, model: AgentModel, *, step="completion:0", run_token="", policy=None, reservation=None):
+        if reservation is not None:
+            return self._claim_delegated(uid, chat_id, turn_id, model, step=step, run_token=run_token,
+                                         policy=policy, reservation=reservation)
         receipt_ref = self.receipt_ref(uid, chat_id, turn_id, step)
         root_ref = self.receipt_ref(uid, chat_id, turn_id)
         index = int(step.split(":")[1])
@@ -157,6 +161,8 @@ class AgentRunStore(ChatStore):
                 raise ChatNotFound("Agent receipt not found")
             if (receipt.to_dict() or {}).get("status") != "running":
                 return False
+            root_ref = self.receipt_ref(uid, chat_id, turn_id)
+            root_data = (receipt if step == "completion:0" else root_ref.get(transaction=tx)).to_dict() or {}
             usage = completion.usage
             totals = dict((user.to_dict() or {}).get("agent_usage") or {})
             totals["unsettled_calls"] = max(0, totals.get("unsettled_calls", 0) - 1)
@@ -182,6 +188,9 @@ class AgentRunStore(ChatStore):
                 "generation_id": completion.generation_id, "finish_reason": completion.finish_reason,
                 "settled_at": firestore.SERVER_TIMESTAMP,
             })
+            delegated = self._delegated_settlement(root_data, step, status, usage)
+            if delegated:
+                tx.update(root_ref, delegated)
             chat_data = chat.to_dict() or {}
             if final and chat.exists and turn.exists and chat_data.get("status") == "active":
                 if (turn.to_dict() or {}).get("status") == "pending":
@@ -223,7 +232,8 @@ class AgentRunStore(ChatStore):
             if data.get("run_status") != "running":
                 return False
             last = self.receipt_ref(uid, chat_id, turn_id, data["last_step"]).get(transaction=tx).to_dict() or {}
-            if last.get("status") == "running" or (status == "succeeded" and last.get("status") != "succeeded"):
+            if (last.get("status") == "running" or "running" in data.get("step_states", {}).values()
+                    or (status == "succeeded" and last.get("status") != "succeeded")):
                 raise TurnStatusConflict("Agent step has not settled")
             tx.update(root_ref, {"run_status": status, "finished_at": firestore.SERVER_TIMESTAMP})
             leases = dict((active.to_dict() or {}).get("leases") or {})

@@ -1,8 +1,8 @@
 """Explicit read-only client tools and shared OpenRouter search configuration.
 
 No custom search service: search executes in the selected model's request.
-The client registry is intentionally empty until a product tool is
-approved; new tools must supply a strict argument model and bounded executor.
+The direct loop's registry is empty by default. Delegation supplies its own
+server-owned registry; tools require a strict argument model and bounded executor.
 """
 from dataclasses import dataclass
 import json
@@ -54,7 +54,8 @@ class ReadOnlyTool:
 
 
 class ToolRegistry:
-    def __init__(self, tools=()):
+    def __init__(self, tools=(), *, argument_limit=2048):
+        self.argument_limit = argument_limit
         self.tools = {tool.name: tool for tool in tools}
         if len(self.tools) != len(tools) or len(tools) > 8:
             raise ValueError("Invalid tool registry")
@@ -64,7 +65,7 @@ class ToolRegistry:
         function = call.get("function") or {}
         tool = self.tools.get(function.get("name"))
         raw = function.get("arguments")
-        if tool is None or not isinstance(raw, str) or len(raw) > 2048:
+        if tool is None or not isinstance(raw, str) or len(raw) > self.argument_limit:
             raise ValueError("Tool is not authorized")
         # Reject duplicate JSON keys, rather than silently accepting the last.
         def unique(pairs):

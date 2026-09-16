@@ -109,6 +109,7 @@
         "static/js/consensus-insights.js",
         "static/js/chat-session.js",
         "static/js/agent-activity.js",
+        "static/js/agent-delegation.js",
         "static/js/consensus-run.js",
         "static/js/agent-chat.js",
         {

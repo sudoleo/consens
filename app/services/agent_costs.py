@@ -1,5 +1,6 @@
 """Admission reservations and measured totals; never used to debit an account."""
 import json
+import threading
 from decimal import Decimal, InvalidOperation, ROUND_CEILING, ROUND_HALF_UP
 
 from app.services.llm.provider_runtime import AnalysisBudgetExceeded
@@ -47,8 +48,20 @@ class RunCosts:
         self.cost = 0
         self.calls = 0
         self.usages = []
+        self._lock = threading.RLock()
+
+    def release(self, reservation):
+        """Roll back admission only when no durable provider claim was made."""
+        with self._lock:
+            self.tokens -= reservation[0]
+            self.cost -= reservation[1]
+            self.calls -= 1
 
     def reserve(self, model, messages, tools=(), *, native_searches=0):
+        with self._lock:
+            return self._reserve(model, messages, tools, native_searches=native_searches)
+
+    def _reserve(self, model, messages, tools=(), *, native_searches=0):
         from app.services.agent_tools import uses_native_search
         inputs = input_bound(messages, tools)
         if inputs + model.max_output_tokens > model.context_length:
@@ -82,10 +95,11 @@ class RunCosts:
         return tokens, cost
 
     def reconcile(self, reservation, usage):
-        self.usages.append(usage)
-        if usage is not None and usage.get("complete", True):
-            self.tokens += usage["input_tokens"] + usage["output_tokens"] - reservation[0]
-            self.cost += usage["estimated_cost_nano_usd"] - reservation[1]
+        with self._lock:
+            self.usages.append(usage)
+            tokens, cost = remaining_reservation(reservation, usage)
+            self.tokens += tokens - reservation[0]
+            self.cost += cost - reservation[1]
         # Missing usage keeps the full reservation. Never guess a zero cost.
 
     def check(self):
@@ -93,16 +107,32 @@ class RunCosts:
             raise AnalysisBudgetExceeded("The provider reported usage beyond the agent's budget.")
 
     def total(self):
-        known = [usage for usage in self.usages if usage is not None]
-        measured = [usage for usage in known if usage.get("input_tokens") is not None]
-        if not known:
-            return None
-        return {**{field: (sum(u[field] for u in known if u.get(field) is not None)
-                          if any(u.get(field) is not None for u in known) else None) for field in USAGE_FIELDS},
-                "web_search_requests": (sum(usage.get("web_search_requests") or 0 for usage in known)
-                    if any(u.get("web_search_requests") is not None for u in known) else None),
-                "complete": len(measured) == len(self.usages) and all(u.get("complete", True) for u in known),
-                "measured_calls": len(measured), "unmetered_calls": len(self.usages) - len(measured),
-                "cost_source": "provider" if all(u.get("cost_source") == "provider" for u in known)
-                    else "catalog" if all(u.get("cost_source", "catalog") == "catalog" for u in known) else "mixed",
-                "source": "provider", "billing_mode": "simulation", "currency": "USD"}
+        with self._lock:
+            return aggregate_usage(self.usages)
+
+
+def remaining_reservation(reservation, usage):
+    tokens, cost = reservation
+    if usage is not None:
+        if usage.get("complete", True) and usage.get("input_tokens") is not None:
+            tokens = usage["input_tokens"] + usage["output_tokens"]
+        if usage.get("cost_complete", usage.get("complete", True)) and usage.get("estimated_cost_nano_usd") is not None:
+            cost = usage["estimated_cost_nano_usd"]
+    return tokens, cost
+
+
+def aggregate_usage(usages):
+    known = [usage for usage in usages if usage is not None]
+    measured = [usage for usage in known if usage.get("input_tokens") is not None]
+    if not known:
+        return None
+    return {**{field: (sum(u[field] for u in known if u.get(field) is not None)
+                      if any(u.get(field) is not None for u in known) else None) for field in USAGE_FIELDS},
+            "web_search_requests": (sum(usage.get("web_search_requests") or 0 for usage in known)
+                if any(u.get("web_search_requests") is not None for u in known) else None),
+            "complete": len(measured) == len(usages) and all(u.get("complete", True) for u in known),
+            "cost_complete": len(known) == len(usages) and all(u.get("cost_complete", u.get("complete", True)) for u in known),
+            "measured_calls": len(measured), "unmetered_calls": len(usages) - len(measured),
+            "cost_source": "provider" if all(u.get("cost_source") == "provider" for u in known)
+                else "catalog" if all(u.get("cost_source", "catalog") == "catalog" for u in known) else "mixed",
+            "source": "provider", "billing_mode": "simulation", "currency": "USD"}

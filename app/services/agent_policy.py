@@ -12,6 +12,19 @@ class AgentPolicy:
     max_cost_nano_usd: int = 1_000_000_000  # simulated $1, not a provider invoice cap
     result_chars: int = 8_000
     result_sources: int = 5
+    delegation: bool = False
+    max_agents: int = 4
+    max_parallel: int = 2
+    max_messages: int = 64
+    context_chars: int = 48_000
+    message_chars: int = 4000
+    worker_calls: int = 8
+    max_searches: int = 2
+
+    @classmethod
+    def from_config(cls, config):
+        return cls(**{key: value for key, value in config.items() if key in cls.__dataclass_fields__},
+                   delegation=config["enabled"], version="agent-delegation-2026-09-16-v1")
 
     def snapshot(self):
         return asdict(self)
@@ -31,3 +44,10 @@ def supports_client_tools(model):
     return (model.model == "anthropic/claude-haiku-4.5"
             and not reasoning.get("enabled") and not reasoning.get("max_tokens")
             and reasoning.get("effort", "none") == "none")
+
+
+def supports_delegation(model):
+    from app.services.llm.agent_client import _CATALOG
+    capability = _CATALOG["models"].get(model.model, {}).get("delegation", {})
+    return (capability.get("protocol") == "openrouter-reasoning-v1"
+            and model.reasoning_effort in capability.get("tested_efforts", []))

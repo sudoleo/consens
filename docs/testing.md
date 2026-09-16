@@ -2,6 +2,13 @@
 
 ## Gemeinsamer Einstieg unter Windows
 
+Delegation: `tests/test_agent_delegation.py` prüft Kommunikation, Abbruch,
+Budgets und Wiederherstellung ohne bezahlte Aufrufe;
+`tests/e2e/test_agent_transactions.py` atomare Schritte im Firestore-Emulator;
+`tests/e2e/test_agent_delegation_frontend.py` die gebaute Desktop-/Mobilansicht.
+Optionale kostenpflichtige Provider-Probes und Qualitäts-/Kostenvergleiche stehen
+in [agent-delegation.md](agent-delegation.md); sie sind kein Teil normaler Tests.
+
 PowerShell 5.1 oder neuer, aus dem Projektverzeichnis:
 
 ```powershell

@@ -126,11 +126,13 @@ def agent_models():
 
 
 def agent_model_options():
-    from app.services.agent_policy import tools_for_model
+    from app.services.agent_policy import tools_for_model, supports_delegation
     return {"default_model_id": agent_model().selection_id, "models": [
         {"id": model.selection_id, "label": model.label, "reasoning_efforts": _choices(model, metadata),
          "default_reasoning": model.request_config.get("reasoning", metadata.get("reasoning") or {}),
          "reasoning_available": bool(metadata.get("reasoning")),
+         "delegation_by_effort": {effort: supports_delegation(resolve_agent_model(model.selection_id, effort))
+                                  for effort in _choices(model, metadata)},
          "tools_by_effort": {effort: list(tools_for_model(model))
                              for effort in _choices(model, metadata)}}
         for model, metadata in agent_models()
@@ -196,6 +198,7 @@ def measured_usage(raw: object, model: AgentModel, *, searches_enabled=False) ->
         "reasoning_tokens": reasoning if tokens_known else None,
         "web_search_requests": searches if searches_known else None,
         "estimated_cost_nano_usd": cost, "cost_source": source, "complete": complete,
+        "cost_complete": source == "provider" or complete,
         "pricing_version": model.pricing_version,
         "source": "provider", "billing_mode": "simulation", "currency": "USD",
     }
@@ -216,6 +219,40 @@ class AgentCompletion:
         self.sources = []
         self._tool_parts = {}
         self._raw_usage = {}
+        self.tool_argument_limit = 2048
+        self.tool_call_limit = 1
+        self._reasoning_parts = {}
+        self._reasoning_text = ""
+
+    def assistant_message(self):
+        """Exact provider continuation data; never a public message or stored trace."""
+        message = {"role": "assistant", "content": self.text}
+        if self.tool_calls:
+            message["tool_calls"] = self.tool_calls
+        if self._reasoning_parts:
+            message["reasoning_details"] = list(self._reasoning_parts.values())
+        elif self._reasoning_text:
+            message["reasoning"] = self._reasoning_text
+        return message
+
+    def _preserve_reasoning(self, delta):
+        for detail in delta.get("reasoning_details") or []:
+            if not isinstance(detail, dict) or type(detail.get("index", 0)) is not int:
+                raise ValueError("Invalid reasoning continuation")
+            key = detail.get("index", 0)
+            target = self._reasoning_parts.setdefault(key, {})
+            for field, value in detail.items():
+                if field in {"text", "summary", "data", "signature"} and isinstance(value, str):
+                    target[field] = target.get(field, "") + value
+                elif field in target and target[field] != value:
+                    raise ValueError("Reasoning identity changed during a stream")
+                else:
+                    target[field] = value
+        text = delta.get("reasoning") or delta.get("reasoning_content")
+        if isinstance(text, str):
+            self._reasoning_text += text
+        if len(json.dumps(self._reasoning_parts)) + len(self._reasoning_text) > 128_000:
+            raise ValueError("Reasoning continuation exceeds context limit")
 
     def event(self, kind, event_id, **data):
         event = {"version": 1, "step_id": self.step_id, "kind": kind, "id": event_id, **data}
@@ -256,19 +293,19 @@ class AgentCompletion:
                 yield event
 
     def _tool_delta(self, raw):
-        if not isinstance(raw, list) or len(raw) > 1:
-            raise ValueError("Only one tool call per model step is allowed")
+        if not isinstance(raw, list) or len(raw) > self.tool_call_limit:
+            raise ValueError("Tool call batch exceeds the allowed limit")
         for part in raw:
-            if not isinstance(part, dict) or type(part.get("index")) is not int or part["index"] != 0:
+            if not isinstance(part, dict) or type(part.get("index")) is not int or not 0 <= part["index"] < self.tool_call_limit:
                 raise ValueError("Invalid tool call index")
-            target = self._tool_parts.setdefault(0, {"id": "", "type": "function", "function": {"name": "", "arguments": ""}})
+            target = self._tool_parts.setdefault(part["index"], {"id": "", "type": "function", "function": {"name": "", "arguments": ""}})
             if part.get("type", "function") != "function":
                 raise ValueError("Invalid tool call type")
             function = part.get("function") or {}
             if not isinstance(function, dict):
                 raise ValueError("Invalid tool call")
             for key, source, output, limit in (("id", part, target, 160), ("name", function, target["function"], 64),
-                                                ("arguments", function, target["function"], 2048)):
+                                                ("arguments", function, target["function"], self.tool_argument_limit)):
                 fragment = source.get(key, "")
                 if not isinstance(fragment, str) or len(output[key]) + len(fragment) > limit:
                     raise ValueError("Tool call exceeds argument limit")
@@ -314,6 +351,7 @@ class AgentCompletion:
             payload["tools"] = tools
             if any(tool.get("type") == "function" for tool in tools):
                 payload["tool_choice"] = "auto" if allow_tool_calls or native_searches else "none"
+                payload["parallel_tool_calls"] = False
         if native_searches:
             payload["max_tool_calls"] = native_searches
         with bind_analysis_budget(current_analysis_budget() or AnalysisBudget(seconds=180, max_calls=1)):
@@ -369,6 +407,8 @@ class AgentCompletion:
                         if choice.get("index", 0) != 0:
                             raise ValueError("Unexpected parallel completion")
                         delta = choice.get("delta") or {}
+                        if allow_tool_calls:
+                            self._preserve_reasoning(delta)
                         if delta.get("tool_calls"):
                             if not allow_tool_calls:
                                 raise RuntimeError("Unexpected tool call")
@@ -387,7 +427,7 @@ class AgentCompletion:
                         if choice.get("finish_reason"):
                             self.finish_reason = str(choice["finish_reason"])
                 if self.finish_reason == "tool_calls" and allow_tool_calls:
-                    self.tool_calls = list(self._tool_parts.values())
+                    self.tool_calls = [self._tool_parts[i] for i in sorted(self._tool_parts)]
                     if not self.tool_calls or any(not re.fullmatch(r"[A-Za-z0-9_-]{1,160}", call["id"]) for call in self.tool_calls):
                         raise ValueError("Invalid completed tool call")
                 elif self._tool_parts or self.finish_reason not in {"stop", "length"} or not self.text.strip():

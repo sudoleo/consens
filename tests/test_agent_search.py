@@ -85,7 +85,9 @@ def test_unknown_usage_does_not_release_a_reservation_with_known_cost_only():
     costs = RunCosts(AgentPolicy())
     reserved = costs.reserve(model, [])
     costs.reconcile(reserved, measured_usage({"cost": .01}, model))
-    assert (costs.tokens, costs.cost) == reserved
+    assert costs.tokens == reserved[0]  # Unknown tokens keep their reservation.
+    assert costs.cost == 10_000_000  # Known provider cost must not be underestimated.
+    assert costs.total()["cost_complete"] is True
     assert costs.total()["input_tokens"] is None
     assert not costs.total()["complete"]
 

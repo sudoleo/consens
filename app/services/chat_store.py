@@ -1284,6 +1284,12 @@ class ChatStore:
         # Deepest level first: an interrupted run can simply be repeated and
         # never leaves a level that is no longer reachable from its parent.
         for turn_ref in _child_documents(chat_ref.collection("turns")):
+            for agent_ref in _child_documents(turn_ref.collection("agents")):
+                for message_ref in _child_documents(agent_ref.collection("messages")):
+                    message_ref.delete()
+                agent_ref.delete()
+            for event_ref in _child_documents(turn_ref.collection("agent_events")):
+                event_ref.delete()
             for answer_ref in _child_documents(turn_ref.collection("model_answers")):
                 answer_ref.delete()
             turn_ref.delete()

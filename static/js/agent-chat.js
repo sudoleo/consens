@@ -209,7 +209,11 @@
     if (agent && !context && basis) {
       renderAnswer(basis.consensus || "", "", App.agentActivity?.label(basis.currentTurn?.agent_settings) || "Agent · Beta");
       App.agentActivity?.renderTurn(activityHost(`${basis.chatId}:${basis.turnId}`), basis.currentTurn);
+      App.agentDelegation?.project(basis.currentTurn?.agent_settings?.policy?.delegation ? {
+        chatId: basis.chatId, turnId: basis.turnId || basis.currentTurn?.id,
+        usage: basis.currentTurn?.agent_usage, running: basis.currentTurn?.status === "pending" } : null);
     }
+    if (!agent || (!context && !basis)) App.agentDelegation?.project(null);
     window.updateQuestionInputAccess?.();
   }
   function renderAnswer(text, error, label) {
@@ -257,6 +261,9 @@
       finishReason: state.completedTurn?.agent_finish_reason,
     });
     App.syncSendButtonRunning?.();
+    App.agentDelegation?.project(context.metadata.delegation || state.completedTurn?.agent_settings?.policy?.delegation ? { chatId: context.metadata.chatId,
+      turnId: state.completedTurn?.id || context.metadata.agentTurnId,
+      usage: state.completedTurn?.agent_usage || context.metadata.agentUsage, running: registry.isExecuting(context.runId) } : null);
   }
   function apiError(data) {
     const error = data?.error || data?.detail;
@@ -341,6 +348,17 @@
         model_id: settings.model_id,
         reasoning_effort: settings.reasoning_effort || "default",
       }, signal, {
+        started: { receive(event) {
+          if (registry.isAuthCurrent(context) && event.chat_id === context.metadata.chatId) {
+            context.metadata.agentTurnId = event.turn_id;
+            context.metadata.delegation = event.delegation === true;
+          }
+        } },
+        delegation: { receive(event) {
+          if (!registry.isExecuting(context.runId) || !registry.isAuthCurrent(context)) return;
+          App.agentDelegation?.receive(context, event);
+          if (!timer) timer = setTimeout(() => { timer = null; registry.update(context.runId, () => {}); }, 100);
+        } },
         activity: { receive(event) {
           if (!registry.isExecuting(context.runId) || !registry.isAuthCurrent(context)) return;
           App.agentActivity?.receive(context.metadata.agentActivity, event);

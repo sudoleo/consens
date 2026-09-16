@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 from typing import Literal
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Query
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from firebase_admin import firestore
 
@@ -12,10 +12,11 @@ from app.core.rate_limit import limiter, api_uid_limiter, ApiUidRateLimitExceede
 from app.core.security import db_firestore, is_user_admin, is_user_pro
 from app.api.routers.chat_history import _chat_uid, _raise_store_error
 from app.api.routers.bookmarks import _bookmark_meta
-from app.services import persistence_guard
+from app.services import persistence_guard, prompt_config
 from app.services.agent_runs import AgentRunStore
 from app.services.agent_loop import AgentLoop
-from app.services.agent_policy import AgentPolicy
+from app.services.agent_policy import AgentPolicy, supports_delegation
+from app.services.agent_delegation import DelegationLoop
 from app.services.agent_provider_limits import AgentProviderCooldown, provider_cooldowns, provider_failure
 from app.services.agent_tools import configured_model
 from app.services.agent_runtime import AgentCapacityExceeded, AgentStreamingResponse, agent_capacity
@@ -138,17 +139,22 @@ def run_agent(request: Request, payload: AgentRequest):
         if bookmark.exists and (bookmark.to_dict() or {}).get("chat_id") != payload.chat_id:
             raise TurnStatusConflict("Bookmark belongs to another conversation")
         lease = agent_capacity.acquire()
+        config = prompt_config.get_config()
+        delegation_config = config["delegation"]
+        delegates = delegation_config["enabled"] and supports_delegation(model)
+        policy = AgentPolicy.from_config(delegation_config) if delegates else AgentPolicy()
         turn = store.create_turn(
             uid, payload.chat_id, question=payload.question, mode="Agent", deep_search=False,
             selected_models=[model.model], consensus_model=model.model,
             client_request_id=payload.client_request_id, execution_mode="agent",
-            agent_settings={**model.settings(), "policy": AgentPolicy().snapshot(),
+            agent_settings={**model.settings(), "policy": policy.snapshot(), "config_revision": config["revision"],
+                            **({"delegation_config": delegation_config} if delegates else {}),
                             "selection": {"model_id": payload.model_id, "reasoning_effort": payload.reasoning_effort}},
         )
         if turn["status"] == "completed":
             lease.release()
             return _final(uid, payload, store, store.get_turn(uid, payload.chat_id, turn["id"]))
-        messages = store.messages(uid, payload.chat_id, turn, model=model)
+        messages = store.messages(uid, payload.chat_id, turn, model=model, config=config)
     except Exception as exc:
         try:
             if turn:
@@ -169,9 +175,11 @@ def run_agent(request: Request, payload: AgentRequest):
     cancellation = ProviderCancellation()
 
     def events():
-        loop = AgentLoop(store=store, uid=uid, chat_id=payload.chat_id, turn_id=turn["id"],
+        loop_class = DelegationLoop if delegates else AgentLoop
+        loop = loop_class(store=store, uid=uid, chat_id=payload.chat_id, turn_id=turn["id"],
                          model=model, messages=messages, api_key=key or "", cancellation=cancellation,
-                         completion_factory=AgentCompletion,
+                         completion_factory=AgentCompletion, policy=policy,
+                         **({"delegation_config": delegation_config, "cooldowns": provider_cooldowns} if delegates else {}),
                          mock_answer="Agent test answer: " + payload.question if mock_llm_enabled() else None)
         completion = loop.completion
         status = "failed"
@@ -201,6 +209,9 @@ def run_agent(request: Request, payload: AgentRequest):
             logging.warning("Agent completion failed category=%s model=%s code=%s retry_after=%s",
                             safe_exception(exc), model.model, failure["code"], failure.get("retry_after"))
         if status != "succeeded":
+            if isinstance(loop, DelegationLoop):
+                for event in loop._events():
+                    yield sse_pack("delegation", event)
             yield sse_pack("activity", {"version": 1, "step_id": "run", "id": "run/usage", "kind": "usage", "usage": completion.usage})
             yield sse_pack("error", {"error": error, **failure})
             return
@@ -224,3 +235,39 @@ def run_agent(request: Request, payload: AgentRequest):
         lease=lease, cleanup=lambda: store.release_unclaimed(uid, payload.chat_id, turn["id"]),
         media_type="text/event-stream", headers={**SSE_HEADERS, "Cache-Control": "private, no-store"},
     )
+
+
+@router.get("/agent/chats/{chat_id}/turns/{turn_id}/agents")
+@limiter.limit("120/minute")
+def list_agents(request: Request, chat_id: str, turn_id: str):
+    return _agent_details(request, chat_id, turn_id)
+
+
+@router.get("/agent/chats/{chat_id}/turns/{turn_id}/agents/{agent_id}")
+@limiter.limit("120/minute")
+def agent_details(request: Request, chat_id: str, turn_id: str, agent_id: str,
+                  after: int = Query(0, ge=0), limit: int = Query(25, ge=1, le=50)):
+    return _agent_details(request, chat_id, turn_id, agent_id=agent_id, after=after, limit=limit)
+
+
+def _agent_details(request, chat_id, turn_id, **kwargs):
+    from fastapi.responses import JSONResponse
+    uid = _chat_uid(request)
+    require_agent_access(uid)
+    try:
+        data = AgentRunStore(db_firestore).delegation_view(uid, chat_id, turn_id, **kwargs)
+        return JSONResponse(data, headers={"Cache-Control": "private, no-store"})
+    except Exception as exc:
+        _raise_store_error(exc, operation="read agent sessions", uid=uid)
+
+
+@router.post("/agent/chats/{chat_id}/turns/{turn_id}/stop")
+@limiter.limit("30/minute")
+def stop_agent_run(request: Request, chat_id: str, turn_id: str):
+    uid = _chat_uid(request)
+    require_agent_access(uid)
+    try:
+        AgentRunStore(db_firestore).stop_delegation(uid, chat_id, turn_id)
+        return {"status": "stopping"}
+    except Exception as exc:
+        _raise_store_error(exc, operation="stop agent sessions", uid=uid)

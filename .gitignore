@@ -8,6 +8,10 @@ __pycache__/
 !firestore.indexes.json
 # Reviewed public model capabilities and simulation tariffs; no credentials.
 !app/services/llm/agent_model_catalog.json
+!/artifacts/agent-delegation-protocol.json
+!/artifacts/agent-delegation-evaluation-deepseek.json
+!/artifacts/agent-delegation-ledger-check.json
+/artifacts/agent-delegation-ui/agent-*.png
 consensai-firebase-adminsdk-fbsvc-9064a77134.json
 
 # Benchmark: Run-Outputs bleiben lokal, die eingefrorenen Sample-Manifeste

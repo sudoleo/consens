@@ -19,6 +19,14 @@
         "context_length": 200000,
         "max_completion_tokens": 64000,
         "is_moderated": true
+      },
+      "delegation": {
+        "protocol": "openrouter-reasoning-v1",
+        "tested_efforts": [
+          "default"
+        ],
+        "validation": "artifacts/agent-delegation-protocol.json",
+        "tested_at": "2026-09-16T17:11:29.781907+00:00"
       }
     },
     "anthropic/claude-opus-4.8": {
@@ -68,6 +76,14 @@
         "context_length": 1024000,
         "max_completion_tokens": 384000,
         "is_moderated": false
+      },
+      "delegation": {
+        "protocol": "openrouter-reasoning-v1",
+        "tested_efforts": [
+          "default"
+        ],
+        "validation": "artifacts/agent-delegation-protocol.json",
+        "tested_at": "2026-09-16T17:11:29.781907+00:00"
       }
     },
     "deepseek/deepseek-v4-pro": {
@@ -193,6 +209,14 @@
         "context_length": 1048576,
         "max_completion_tokens": 384000,
         "is_moderated": false
+      },
+      "delegation": {
+        "protocol": "openrouter-reasoning-v1",
+        "tested_efforts": [
+          "default"
+        ],
+        "validation": "artifacts/agent-delegation-protocol.json",
+        "tested_at": "2026-09-16T17:11:29.781907+00:00"
       }
     },
     "google/gemini-2.5-flash": {
@@ -405,6 +429,14 @@
         "context_length": 1048576,
         "max_completion_tokens": 65536,
         "is_moderated": false
+      },
+      "delegation": {
+        "protocol": "openrouter-reasoning-v1",
+        "tested_efforts": [
+          "default"
+        ],
+        "validation": "artifacts/agent-delegation-protocol.json",
+        "tested_at": "2026-09-16T17:11:29.781907+00:00"
       }
     },
     "google/gemini-3.6-flash": {
@@ -526,6 +558,14 @@
         "context_length": 262144,
         "max_completion_tokens": 209715,
         "is_moderated": false
+      },
+      "delegation": {
+        "protocol": "openrouter-reasoning-v1",
+        "tested_efforts": [
+          "default"
+        ],
+        "validation": "artifacts/agent-delegation-protocol.json",
+        "tested_at": "2026-09-16T17:11:29.781907+00:00"
       }
     },
     "moonshotai/kimi-k2.6": {
@@ -954,6 +994,14 @@
         "context_length": 1000000,
         "max_completion_tokens": 900000,
         "is_moderated": false
+      },
+      "delegation": {
+        "protocol": "openrouter-reasoning-v1",
+        "tested_efforts": [
+          "default"
+        ],
+        "validation": "artifacts/agent-delegation-protocol.json",
+        "tested_at": "2026-09-16T17:11:29.781907+00:00"
       }
     },
     "z-ai/glm-5.3": {

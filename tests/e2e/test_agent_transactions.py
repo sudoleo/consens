@@ -11,6 +11,63 @@ from app.services.agent_runs import AgentRunStore
 from app.services.agent_policy import AgentPolicy
 from app.services.agent_runtime import AgentCapacityExceeded
 from app.services.llm.agent_client import AgentModel, AgentCompletion, measured_usage
+from app.services.agent_delegation_config import defaults
+from app.services.llm.provider_runtime import AnalysisBudgetExceeded
+
+
+def test_delegation_budget_journal_and_receipts_are_atomic_in_firestore():
+    assert_safe_e2e_environment()
+    db = firestore.Client(project=E2E_PROJECT_ID)
+    uid = "delegation-race-" + uuid.uuid4().hex
+    store, model = AgentRunStore(db), AgentModel()
+    try:
+        chat = store.create_chat(uid, execution_mode="agent")["id"]
+        turn = store.create_turn(uid, chat, question="Two workers", mode="Agent", deep_search=False,
+            selected_models=[model.model], consensus_model=model.model, client_request_id="delegation", execution_mode="agent")["id"]
+        config = defaults()
+        config["enabled"] = True
+        config["max_cost_nano_usd"] = 100
+        policy = AgentPolicy.from_config(config)
+        args = (uid, chat, turn)
+        assert store.claim(*args, model, run_token=uid, policy=policy.snapshot(), reservation=(1, 10))
+        completion = AgentCompletion()
+        store.settle(*args, completion=completion, status="succeeded", final=False)
+        ids = [uuid.uuid4().hex, uuid.uuid4().hex]
+        def publish(aid):
+            return AgentRunStore(db).publish_agent(*args, run_token=uid, agent_id=aid,
+                patch={"assignment": {"goal": "Independent check"}, "status": "waiting"}, event_id=aid)
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            events = list(pool.map(publish, ids))
+        assert sorted(e["seq"] for e in events) == [1, 2]
+        assert publish(ids[0]) in events
+        def claim(aid):
+            try:
+                return AgentRunStore(db).claim(*args, model, step=f"agent:{aid}:0", run_token=uid, reservation=(1, 80))
+            except AnalysisBudgetExceeded:
+                return False
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            admitted = list(pool.map(claim, ids))
+        assert sum(admitted) == 1
+        winner = ids[admitted.index(True)]
+        completion.usage = measured_usage({"prompt_tokens": 1, "completion_tokens": 1, "cost": .00000005}, model)
+        with ThreadPoolExecutor(max_workers=3) as pool:
+            assert sum(pool.map(lambda _: AgentRunStore(db).settle(*args, completion=completion, status="succeeded",
+                step=f"agent:{winner}:0", final=False), range(3))) == 1
+        root = store.receipt_ref(*args).get().to_dict()
+        assert root["reserved_cost"] == 60
+        assert store.delegation_view(*args)["usage"]["estimated_cost_nano_usd"] == 50
+        assert store.delegation_view(*args)["usage"]["cost_complete"] is False
+        store.publish_agent(*args, run_token=uid, agent_id=winner,
+            message={"sender": winner, "recipient": "orchestrator", "kind": "question", "text": "Which period?"})
+        assert store.delegation_view(*args, agent_id=winner)["messages"][0]["text"] == "Which period?"
+        store.finish_run(*args, completion=completion, status="succeeded", run_token=uid)
+        assert db.collection("users").document(uid).get().to_dict()["agent_usage"]["calls"] == 2
+        store.delete_chat(uid, chat)
+        assert not list(store._turn_ref(*args).collection("agents").stream())
+    finally:
+        FirestoreAccountDeletion(db)._delete_user_subcollections(uid)
+        db.collection("users").document(uid).delete()
+        db.close()
 
 
 def test_parallel_workers_share_admission_and_settle_each_receipt_once():
