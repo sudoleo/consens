@@ -293,30 +293,6 @@ def test_a_run_that_never_happens_gives_the_message_back():
     assert 'if (registry.isVisible(context.runId) && context.phase === "prepare")' in query
 
 
-def test_the_new_message_is_scrolled_to_once_and_never_fights_the_reader():
-    """Die Bewegung beim Absenden ist die einzige, die dieser Modul macht —
-    und sie ist die, die der Nutzer selbst ausgeloest hat. Sie geht nie nach
-    oben, unterbleibt bei kurzen Wegen und bricht bei der ersten eigenen
-    Geste ab."""
-    core = read("static/js/app-core.js")
-
-    reveal = core.split("function startSentMessageReveal(", 1)[1].split(
-        "\n  }", 1
-    )[0]
-    # Nie nach oben und nie fuer ein paar Pixel.
-    assert "Math.max(0, Math.min(wanted, maxTop)) - from" in reveal
-    assert "if (distance < REVEAL_MIN_DISTANCE) return;" in reveal
-    # Nie ueber den Boden des Dokuments hinaus.
-    assert "document.documentElement.scrollHeight - window.innerHeight" in reveal
-    # Die erste eigene Geste gewinnt.
-    assert 'REVEAL_INTERRUPTS = ["wheel", "touchstart", "keydown", "pointerdown"]' in core
-    assert "stopSentMessageReveal()" in reveal
-    assert 'window.matchMedia("(prefers-reduced-motion: reduce)")' in core
-    # Genau ein Aufrufer: das Absenden. Alles andere waere ein Thread, der
-    # beim Lesen unter den Fingern wegwandert.
-    assert read("static/js/query-send.js").count("revealSentMessage") == 1
-
-
 def test_archived_questions_clamp_like_the_active_one():
     """Eine lange Frage bleibt auch im Verlauf auf drei Zeilen eingeklappt.
     Ohne Clamp hat ab dem zweiten Turn jede lange Frage den Thread wieder

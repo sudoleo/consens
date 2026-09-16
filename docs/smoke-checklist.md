@@ -763,3 +763,13 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       „Direct comparison“ erklaert Agent Mode fuer dieses Ergebnis; die
       Einstellung fuer die naechste Frage bleibt an. Wechsel zu einem
       Consensus-Bookmark und zurueck zeigt keine leeren oder fremden Antworten.
+
+## Chat-Scrollen
+
+- [ ] Im Agent- und Consensus-Chat eine Folgefrage nach einer langen Antwort senden:
+  sanfter Sprung ans Ende; die wachsende Antwort folgt beim Mitlesen unten.
+- [ ] Währenddessen hochscrollen, Text markieren oder einen Dialog öffnen:
+  kein Zurückziehen. „Latest message“ führt wieder ans Ende; Chat-/Kontowechsel
+  und Hintergrundantworten bewegen die neue Ansicht nicht.
+- [ ] Mobil den Composer vergrößern/Viewport ändern und Reduced Motion aktivieren:
+  letzte Antwort bleibt erreichbar, reduzierte Bewegung verzichtet auf Animation.

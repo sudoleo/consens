@@ -304,9 +304,11 @@
     if (projecting) return;
     projecting = true;
     try {
+      window.App.chatScroll?.project(context);
       renderProjection(context);
     } finally {
       projecting = false;
+      window.App.chatScroll?.changed();
     }
   }
 

@@ -319,7 +319,7 @@
       App.quote?.clear?.();
     }
     App.composer?.collapse?.({ force: true });
-    App.revealSentMessage?.();
+    if (!recovery) App.revealSentMessage?.();
     let timer;
     try {
       const token = await window.auth.currentUser.getIdToken();

@@ -165,90 +165,10 @@
     }
   }
 
-  // ---- Die abgeschickte Nachricht ins Bild holen ---------------------------
-  // Genau EINE Bewegung, und zwar die, die der Nutzer selbst ausgeloest hat:
-  // der Klick auf Senden. Danach scrollt hier nichts mehr von allein — ein
-  // Thread, der beim Lesen unter den Fingern wegwandert, ist schlimmer als
-  // eine Antwort, die man selbst nach unten holt. Deshalb drei Schranken:
-  // die Bewegung geht NIE nach oben, sie unterbleibt, wenn das Ziel ohnehin
-  // fast im Bild steht, und sie bricht bei der ersten eigenen Geste (Rad,
-  // Finger, Taste) sofort ab, statt dagegen zu ziehen.
-  const REVEAL_TOP_GAP = 76;      // Luft fuer die schwebende Navigation
-  const REVEAL_MIN_DISTANCE = 24; // darunter waere es Zappeln, keine Bewegung
-  const REVEAL_DURATION = 420;
-  const REVEAL_INTERRUPTS = ["wheel", "touchstart", "keydown", "pointerdown"];
-  const reducedMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
-
-  let revealFrame = 0;
-  let revealRelease = null;
-
-  function stopSentMessageReveal() {
-    if (revealFrame) window.cancelAnimationFrame(revealFrame);
-    revealFrame = 0;
-    const release = revealRelease;
-    revealRelease = null;
-    if (release) release();
-  }
-
-  // Gemessen wird erst nach dem Layout, und zwar nach dem zweiten Frame: im
-  // ersten wird die Blase sichtbar, im zweiten steht fest, ob die Frage
-  // geklammert ist (das schaltet den "Show full question"-Link zu und aendert
-  // damit die Hoehe). Vorher gemessen, zielte die Bewegung daneben.
-  function revealSentMessage(element) {
-    stopSentMessageReveal();
-    revealFrame = window.requestAnimationFrame(() => {
-      revealFrame = window.requestAnimationFrame(() => {
-        revealFrame = 0;
-        startSentMessageReveal(element);
-      });
-    });
-  }
-
-  function startSentMessageReveal(element) {
-    const el = element
-      || document.getElementById("threadPendingAsk")
-      || document.getElementById("threadAsk");
-    if (!el || el.hidden) return;
-
-    // Der Boden des Dokuments ist die Grenze: weiter als bis dorthin laesst
-    // sich nicht scrollen, und ein Ziel dahinter wuerde die Bewegung im
-    // Nichts enden lassen.
-    const maxTop = Math.max(
-      0,
-      document.documentElement.scrollHeight - window.innerHeight
-    );
-    const wanted = el.getBoundingClientRect().top + window.scrollY - REVEAL_TOP_GAP;
-    const from = window.scrollY;
-    const distance = Math.max(0, Math.min(wanted, maxTop)) - from;
-    if (distance < REVEAL_MIN_DISTANCE) return;
-
-    if (reducedMotionQuery.matches) {
-      window.scrollTo(0, from + distance);
-      return;
-    }
-
-    const startedAt = (window.performance?.now?.() ?? Date.now());
-    const interrupt = () => stopSentMessageReveal();
-    REVEAL_INTERRUPTS.forEach(name => {
-      window.addEventListener(name, interrupt, { passive: true, capture: true });
-    });
-    revealRelease = () => REVEAL_INTERRUPTS.forEach(name => {
-      window.removeEventListener(name, interrupt, { capture: true });
-    });
-
-    const step = (now) => {
-      revealFrame = 0;
-      const elapsed = (now || (window.performance?.now?.() ?? Date.now())) - startedAt;
-      const progress = Math.min(1, Math.max(0, elapsed / REVEAL_DURATION));
-      const eased = 1 - Math.pow(1 - progress, 3);
-      window.scrollTo(0, Math.round(from + distance * eased));
-      if (progress < 1) {
-        revealFrame = window.requestAnimationFrame(step);
-        return;
-      }
-      stopSentMessageReveal();
-    };
-    revealFrame = window.requestAnimationFrame(step);
+  // Shared by the Agent and Consensus send paths; ordinary projections never
+  // force a reader back to the latest message.
+  function revealSentMessage() {
+    window.App.chatScroll?.sent();
   }
 
   // Ob eine Frage laenger als drei Zeilen ist, haengt an der Breite des

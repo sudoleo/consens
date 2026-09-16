@@ -1,5 +1,5 @@
 {
-  "sources": "f529a9e3b473",
+  "sources": "aad946b3846e",
   "inputs": [
     "package-lock.json",
     "scripts/build_frontend.mjs",
@@ -9,6 +9,7 @@
     "static/css/agent-chat.css",
     "static/css/base.css",
     "static/css/benchmark.css",
+    "static/css/chat-scroll.css",
     "static/css/components-attachment-viewer.css",
     "static/css/components-consensus-insights.css",
     "static/css/components-consensus-visuals.css",
@@ -53,6 +54,7 @@
     "static/js/auth-bootstrap.js",
     "static/js/auth-session-state.js",
     "static/js/bundles.json",
+    "static/js/chat-scroll.js",
     "static/js/chat-session.js",
     "static/js/composer-collapse.js",
     "static/js/composer-quote.js",
@@ -112,12 +114,12 @@
     },
     {
       "name": "app",
-      "src": "/static/dist/app.a7a9726bc7af.js",
+      "src": "/static/dist/app.3d203b7a9055.js",
       "module": false,
       "defer": true
     }
   ],
   "styles": {
-    "app": "/static/dist/app.b9de24768aa1.css"
+    "app": "/static/dist/app.89635abe3103.css"
   }
 }

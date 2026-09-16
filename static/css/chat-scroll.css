@@ -1,0 +1,12 @@
+/* Attached to the sticky/fixed composer, so it follows its width and height. */
+.chat-scroll-latest {
+  position: absolute; z-index: 3; top: -44px; left: 50%; transform: translateX(-50%);
+  min-height: 36px; padding: 7px 13px; border: 1px solid var(--line); border-radius: 999px;
+  background: var(--well); color: var(--ink-2); box-shadow: var(--lift);
+  font: inherit; font-size: 12px; white-space: nowrap; cursor: pointer;
+}
+.chat-scroll-latest:hover { background: var(--raise); color: var(--ink); }
+.chat-scroll-latest:focus-visible { outline: 2px solid var(--ink-2); outline-offset: 3px; }
+.chat-scroll-latest[hidden], body.is-hero .chat-scroll-latest { display: none; }
+body.chat-scroll-following .container { overflow-anchor: none; }
+@media (pointer: coarse) { .chat-scroll-latest { min-height: 44px; top: -52px; } }

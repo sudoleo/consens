@@ -1063,12 +1063,22 @@ der Python-Staleness-Test auch indirekte Änderungen erkennt.
   `followup.restoreAfterBlockedRun()`, das denselben Lauf beim Kontext haelt.
   Deshalb blendet ein Follow-up den bisherigen Konsens auch NICHT mehr beim
   Absenden aus, sondern erst beim Archivieren: bis dahin ist er die Antwort auf
-  die Frage, die oben noch als Kopf steht. Genau eine Scroll-Bewegung haengt
-  daran (`window.App.revealSentMessage`, app-core.js): einmal beim Absenden,
-  nie nach oben, nicht fuer wenige Pixel, nie ueber den Dokumentboden hinaus
-  und bei der ersten eigenen Geste (`wheel`/`touchstart`/`keydown`/
-  `pointerdown`) sofort abgebrochen. Danach scrollt nur noch
-  `revealConsensusOutput()`, wenn die neue Antwort erscheint. Der gefuehrte Lauf `#consensusRun` liegt jetzt als
+  die Frage, die oben noch als Kopf steht.
+  `App.chatScroll` (`chat-scroll.js`, nach `app-core.js` in `bundles.json`) steuert
+  das Scrollen im Agent- und Consensus-Chat. `App.revealSentMessage()` aktiviert
+  es ausschließlich beim tatsächlichen Absenden; Recovery, gespeicherte Ansichten,
+  Direktvergleich und Hintergrundläufe erzwingen keinen Sprung. Nach zwei Layout-
+  Frames scrollt es sanft zum Dokumentende und folgt wachsendem Inhalt, solange
+  unten mitgelesen wird. `run-view.js` bindet die Projektion an Run und Account;
+  ResizeObserver plus Viewport-Resize berücksichtigen Markdown, Bilder und Composer.
+  Wheel/Touch/Scrolltasten/Pointer und Textauswahl unterbrechen sofort, auch vor
+  dem ersten Frame. Erst bewusstes Abwärtsscrollen bis ans Ende oder „Latest message“
+  aktiviert das Folgen erneut. Die Schaltfläche liegt am Composer und gibt den
+  Tastaturfokus ohne Scrollsprung ans Eingabefeld zurück. Reduced Motion scrollt
+  sofort; Verkleinerung des Inhalts zieht nie nach oben. Dialoge, versteckte Tabs,
+  Run-/Kontowechsel stoppen ausstehende Animationen. Verhaltenstests liegen in
+  `tests/js/chat-scroll.test.mjs` und `tests/e2e/test_chat_scroll_frontend.py`.
+  Der gefuehrte Lauf `#consensusRun` liegt jetzt als
   Container-Kind im Thread (unter der Frage), nicht mehr in der Input-Section.
   Antwort-Typo im Mockup-Mass: `.consensus-main`-H2 als Eyebrow, Body 1.03rem/
   1.7 auf max. 64ch; `.consensus-main` ist `overflow:visible`, weil der alte
