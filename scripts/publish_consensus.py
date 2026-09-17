@@ -19,9 +19,18 @@ from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-from app.core.config import get_model_config, REASONING_EFFORT_FOR_PUBLISHER_SCREEN
+# Direct file execution puts scripts/, not the repository root, on sys.path.
+# Resolve from this file so cron also works outside the checkout directory.
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from app.core.openrouter_contract import (
+    OPENROUTER_CHAT_COMPLETIONS_URL,
+    REASONING_EFFORT_FOR_PUBLISHER_SCREEN,
+    openrouter_headers,
+    publisher_topic_model,
+)
 from app.services.llm.credentials import openrouter_api_key, resolve_developer_api_keys
-from app.services.llm.engines import OPENROUTER_CHAT_COMPLETIONS_URL, openrouter_headers
 
 
 class PublisherError(RuntimeError):
@@ -165,9 +174,7 @@ def choose_question(api_base: str, consensus_key: str, *, topic_brief="") -> str
     openrouter_key = openrouter_api_key(resolve_developer_api_keys())
     if not openrouter_key:
         raise PublisherError("OPENROUTER_API_KEY is required when CONSENSUS_QUESTION is empty")
-    model_id = os.environ.get("OPENAI_TOPIC_MODEL", "gpt-5.6-luna").strip()
-    model_config = get_model_config(model_id, provider="openai")
-    model = model_config.api_model if model_config else model_id
+    model = publisher_topic_model(os.environ.get("OPENAI_TOPIC_MODEL"))
     brief = (
         os.environ.get("CONSENSUS_TOPIC_BRIEF") or topic_brief or DEFAULT_TOPIC_BRIEF
     ).strip()

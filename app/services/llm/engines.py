@@ -8,6 +8,13 @@ from typing import Any
 import requests
 
 import app.core.config as cfg
+from app.core.openrouter_contract import (
+    OPENROUTER_BASE_URL,
+    OPENROUTER_CHAT_COMPLETIONS_URL,
+    OPENROUTER_REFERER,
+    OPENROUTER_TITLE,
+    openrouter_headers,
+)
 from app.core.observability import safe_exception
 from app.services.llm.attachments import (
     IMAGE_MIMES,
@@ -19,11 +26,6 @@ from app.services.llm.citations import coerce_text, parse_openrouter_response, r
 from app.services.llm.provider_runtime import PROVIDER_HTTP_TIMEOUT, managed_provider_resource
 
 logger = logging.getLogger(__name__)
-
-OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
-OPENROUTER_CHAT_COMPLETIONS_URL = f"{OPENROUTER_BASE_URL}/chat/completions"
-OPENROUTER_REFERER = "https://consens.io"
-OPENROUTER_TITLE = "consens.io"
 
 # Basis- und Deep-Think-Modell je Familie kommen aus der Provider-Registry:
 # Deep Think faehrt immer das Pro-Modell der Familie.
@@ -116,15 +118,6 @@ def _log_model_selection(
         deep_search,
         model_override,
     )
-
-
-def openrouter_headers(api_key: str) -> dict[str, str]:
-    return {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-        "HTTP-Referer": OPENROUTER_REFERER,
-        "X-Title": OPENROUTER_TITLE,
-    }
 
 
 def _openrouter_user_content(question: str, attachments: list[dict]) -> str | list[dict]:

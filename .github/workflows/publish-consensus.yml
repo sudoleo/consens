@@ -41,5 +41,8 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Validate standalone publisher
+        run: python -E -S -m unittest discover -s tests -p test_publisher_standalone.py -v
+
       - name: Choose, run and publish Consensus
         run: python scripts/publish_consensus.py

@@ -69,6 +69,22 @@ PowerShell-Versionen; sie ersetzen keinen echten Emulatorlauf:
 
 ## Abhängigkeiten
 
+### Standalone Publisher
+
+Der Scheduled Publisher benötigt nur Python 3.11 und die Standardbibliothek.
+Sein CI-Vertrag läuft ohne Paketinstallation, ohne geerbte Credentials und mit
+deaktivierten site-packages; HTTP-Aufrufe werden im Test ersetzt:
+
+```powershell
+python -E -S -m unittest discover -s tests -p test_publisher_standalone.py -v
+```
+
+Die Tests prüfen direkten Skriptstart (auch außerhalb des Repos), Modulstart,
+Modell-ID-Auflösung, Credentials sowie automatisches Auswählen, Publizieren,
+Watch/Indexing und die Disabled-/Disagreement-Skip-Pfade. Sie laufen bei Push/PR
+in `publisher-tests.yml` und vor jedem produktiven Publisher-Lauf. Die reguläre
+Backend-Suite findet dieselben Tests ebenfalls automatisch.
+
 Die Abhängigkeiten sind nach Zweck getrennt:
 
 - `requirements.txt`: produktive Laufzeit,
