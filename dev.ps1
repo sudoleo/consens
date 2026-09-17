@@ -21,6 +21,7 @@ if ($Command -eq 'help') {
     Write-Host 'Usage: .\dev.ps1 check <frontend|backend|browser> [-TestPath <test file or directory>]'
     Write-Host 'frontend: JavaScript tests + build:check (run npm run build to rebuild)'
     Write-Host 'backend:  isolated pytest suite; browser tests excluded'
+    Write-Host 'Publisher only (no dependencies): python -E -S -m unittest discover -s tests -p test_publisher_standalone.py -v'
     Write-Host 'browser:  build:check + Playwright using a disposable Firestore emulator'
     Write-Host 'Setup and maintenance: docs/testing.md'
     exit 0

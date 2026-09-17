@@ -5,6 +5,7 @@ import threading
 from dataclasses import dataclass, field
 from typing import Any
 from dotenv import load_dotenv
+from app.core.openrouter_contract import REASONING_EFFORT_FOR_PUBLISHER_SCREEN
 
 from app.core.entitlements import (
     TIER_FREE,
@@ -129,7 +130,6 @@ REASONING_EFFORT_FOR_JUDGE = "low"
 REASONING_EFFORT_FOR_JUDGE_BY_PROVIDER = {"mistral": "none"}
 REASONING_EFFORT_FOR_MEMORY_EDIT = "none"
 REASONING_EFFORT_FOR_SEO_REVIEW = "medium"
-REASONING_EFFORT_FOR_PUBLISHER_SCREEN = "low"
 GEMINI_MAX_TOKENS = MAX_TOKENS
 GEMINI_DEEP_MAX_TOKENS = DEEP_SEARCH_MAX_TOKENS
 DEFAULT_OPENAI_MODEL = "gpt-5.4-mini"

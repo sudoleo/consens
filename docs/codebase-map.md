@@ -110,6 +110,17 @@ Threadpool aus. `async def` bleibt nur für echte Await-Pfade (Mail, explizites
 | `api_v1.py` | Nutzergebundene asynchrone Consensus-API: Run-Start/Status/Löschung unter `/api/v1/consensus/runs`, transaktional idempotentes Publizieren erfolgreicher Runs per `POST .../{run_id}/share`, eigene Share-Liste/-Details/-Widerruf unter `/api/v1/shares` sowie direkte Admin-Indexfreigabe per `PUT /api/v1/shares/{share_id}/indexing`. Der Admin-only Scheduled Publisher liest `GET /api/v1/publisher/config`, startet Runs per `X-Consensus-Publisher: true` ohne DeepSeek und bindet per `POST /api/v1/shares/{share_id}/watch` idempotent einen Weekly-Watch mit festem Free-Modellprofil und DeepSeek-Ausschluss; dessen globale Kapazität wird zusammen mit Watch und Publisher-Zähler in derselben Transaktion geprüft. Auth über gescopte `X-API-Key`s, Run-Idempotenz über den Pflichtheader `Idempotency-Key`; Pydantic-Modelle bilden den Vertrag in `/openapi.json` ab. |
 
 Der Scheduled Publisher läuft per GitHub Actions montags, mittwochs und freitags.
+Er bleibt ein Standardbibliothek-CLI: `scripts/publish_consensus.py` ergänzt
+beim direkten Dateiaufruf den aus `__file__` ermittelten Repo-Root. Gemeinsame
+OpenRouter-URLs/Headers und Publisher-Reasoning liegen dependency-frei in
+`app/core/openrouter_contract.py`; Backend-Config und Engine re-exportieren
+ihre bisherigen Namen. Aufgeschobene Typannotationen halten den gemeinsamen
+Import auch mit dem lokalen Python-3.9-Backend kompatibel. Der Publisher importiert weder Backend-Config noch
+Engine. `OPENAI_TOPIC_MODEL` akzeptiert bare OpenAI-IDs oder qualifizierte
+OpenRouter-IDs; leer bedeutet `gpt-5.6-luna`. Credentials bleiben in
+`app/services/llm/credentials.py`. `tests/test_publisher_standalone.py` prüft
+den CLI und den gemockten Publishing-Flow ohne site-packages bei Push/PR und
+vor jedem geplanten Lauf (siehe `docs/testing.md`).
 Seine identisch in `scripts/publish_consensus.py` und
 `app/services/publisher_config.py` gehaltenen `Search-opportunity requirements`
 nehmen ein frisches AI-Produktereignis (höchstens 24, notfalls 48 Stunden alt)
