@@ -14,6 +14,18 @@ function boot(reader, fetchError) {
 }
 
 describe("SSE completion and failure diagnostics", () => {
+  it.each(["\r\n", "\r", "\n"])("recognizes final frames with %j line endings across byte boundaries", async (newline) => {
+    const bytes = new TextEncoder().encode(`: keepalive${newline}${newline}event: final${newline}data: {"consensus_response":"Grüße"}${newline}${newline}`);
+    let index = 0;
+    const reader = { read: vi.fn(async () => {
+      if (index === bytes.length) throw new TypeError("connection lost after final");
+      return { value: bytes.slice(index, ++index) };
+    }) };
+    const { window, dom } = boot(reader);
+    const result = await window.streamSSERequest("/consensus", {});
+    expect(result.data.consensus_response).toBe("Grüße");
+    dom.window.close();
+  });
   it.each(["final", "error"])("accepts %s without waiting for a later failing read", async (event) => {
     const data = event === "final" ? { consensus_response: "Complete" } : { error: "Provider failed" };
     const reader = { read: vi.fn().mockResolvedValueOnce({ value: frame(event, data) })

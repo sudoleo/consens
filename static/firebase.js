@@ -490,9 +490,37 @@ onIdTokenChanged(auth, async (user) => {
     }
 
     // ab hier nur noch verifizierte Nutzer
-    const token = await user.getIdToken(/* forceRefresh= */ false);
+    let token;
+    try {
+      token = await user.getIdToken(/* forceRefresh= */ false);
+    } catch (_) {
+      if (!isCurrentAuthenticatedUser(user.uid, generation)) return;
+      document.documentElement.dataset.authUnavailable = "true";
+      // This callback can run before the deferred app/popup module. Keep a
+      // persistent, usable recovery control in the already parsed auth shell.
+      if (loginContainer) {
+        loginContainer.replaceChildren();
+        loginContainer.hidden = false;
+        const message = document.createElement("p");
+        message.setAttribute("role", "status");
+        message.textContent = "Your session could not be refreshed. Check your connection and reload.";
+        const retry = document.createElement("button");
+        retry.type = "button";
+        retry.textContent = "Reload";
+        retry.addEventListener("click", () => window.location.reload());
+        loginContainer.append(message, retry);
+      }
+      for (const id of ["freeUsageDisplay", "deepUsageDisplay", "watchUsageDisplay"]) {
+        const node = document.getElementById(id);
+        if (node) node.textContent = "—";
+      }
+      const bookmarks = document.getElementById("bookmarksContainer");
+      if (bookmarks?.querySelector(".skeleton")) bookmarks.replaceChildren();
+      return;
+    }
     if (!isCurrentAuthenticatedUser(user.uid, generation)) return;
-    localStorage.setItem("id_token", token);
+    delete document.documentElement.dataset.authUnavailable;
+    try { localStorage.setItem("id_token", token); } catch (_) {}
     if (typeof window.updateQuestionInputAccess === "function") {
       window.updateQuestionInputAccess();
     }
@@ -819,22 +847,21 @@ document.getElementById("loginButton").addEventListener("click", () => {
   loginErr.textContent = "";
 
   signInWithEmailAndPassword(auth, email, password)
-    .then((userCredential) => {
+    .then(async (userCredential) => {
       const user = userCredential.user;
       if (user.emailVerified) {
         // Login erfolgreich, Token speichern und Seite neu laden
-        user.getIdToken().then((token) => {
-          localStorage.setItem("id_token", token);
+        const token = await user.getIdToken();
+        try { localStorage.setItem("id_token", token); } catch (_) {}
 
-          fetch("/confirm-registration", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ id_token: token })
-          })
-            .catch(err => console.error("Confirm-Registration-Fehler:", err));
+        fetch("/confirm-registration", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id_token: token })
+        })
+          .catch(err => console.error("Confirm-Registration-Fehler:", err));
 
-          window.location.href = "/app";
-        });
+        window.location.href = "/app";
       } else {
         // Unbestaetigt heisst nicht mehr "raus": das Modal geht zu, die App
         // ist da, und der Streifen (onIdTokenChanged) erklaert den einen
@@ -1191,13 +1218,16 @@ async function recordModelVote(model, type, resultId = window.lastShareResultId)
     return;
   }
   
-  const id_token = await auth.currentUser?.getIdToken(/* forceRefresh= */ false);
-  if (!id_token || !resultId) {
-    console.error("No id_token available for voting.");
-    return;
-  }
-
   try {
+    const requestUser = auth.currentUser;
+    const generation = authState.generation;
+    const id_token = await requestUser.getIdToken(/* forceRefresh= */ false);
+    if (!isCurrentAuthenticatedUser(requestUser.uid, generation)) return;
+    if (!id_token || !resultId) {
+      console.error("No id_token available for voting.");
+      return;
+    }
+
     const response = await fetch("/vote", {
       method: "POST",
       headers: { "Content-Type": "application/json" },

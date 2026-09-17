@@ -166,6 +166,11 @@ mit dem letzten Git-Commit beziehungsweise einer aktuellen Arbeitsbaumänderung.
 
 ## Browser-E2E
 
+`tests/e2e/test_browser_failure_recovery.py` nutzt den writerfreien Phase-4-Server
+mit gemocktem Firebase und APIs. Es prüft lokal ausgelieferte Markdown-/Math-
+Abhängigkeiten bei blockiertem jsDelivr sowie abgelehnte Login-/Vote-/Refresh-
+Tokens. Der Lauf erfolgt wie Phase 4 direkt mit `RUN_E2E=1` ohne Emulator.
+
 Die E2E-Suite ist ein separater Lauf und benötigt den Firestore-Emulator. Sie
 darf nie durch beliebige Credentials oder ein Firebase-Standardprojekt ersetzt
 werden. Vollständiges Setup, Writer-Inventar und Befehle:

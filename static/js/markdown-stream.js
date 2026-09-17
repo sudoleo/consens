@@ -199,6 +199,18 @@ async function readSSEStream(response, onEvent) {
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
+  let skipLF = false;
+
+  // SSE permits LF, CRLF and CR, including CRLF split across byte chunks.
+  function normalizeLines(text) {
+    let normalized = "";
+    for (const char of text) {
+      if (skipLF && char === "\n") { skipLF = false; continue; }
+      skipLF = char === "\r";
+      normalized += skipLF ? "\n" : char;
+    }
+    return normalized;
+  }
 
   function dispatch(rawEvent) {
     let eventName = "message";
@@ -224,7 +236,7 @@ async function readSSEStream(response, onEvent) {
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
-      buffer += decoder.decode(value, { stream: true });
+      buffer += normalizeLines(decoder.decode(value, { stream: true }));
       let separatorIndex;
       while ((separatorIndex = buffer.indexOf("\n\n")) !== -1) {
         const rawEvent = buffer.slice(0, separatorIndex);
@@ -234,6 +246,7 @@ async function readSSEStream(response, onEvent) {
         if (dispatch(rawEvent) === true) return;
       }
     }
+    buffer += normalizeLines(decoder.decode());
     if (buffer.trim()) dispatch(buffer);
   } finally {
     // Do not let a stalled/rejected transport cleanup replace the result.

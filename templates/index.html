@@ -45,19 +45,19 @@
   {% endfor %}
   <!-- Google Fonts -->
   <link rel="stylesheet" href="{{ frontend.style }}">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.17.0/dist/katex.min.css" integrity="sha384-vlBdW0r3AcZO/HboRPznQNowvexd3fY8qHOWkBi5q7KGgqJ+F48+DceybYmrVbmB" crossorigin="anonymous">
+  <link rel="stylesheet" href="{{ asset_url('/static/vendor/katex/0.17.0/dist/katex.min.css') }}">
   <link rel="icon" href="{{ asset_url('/static/favicon.svg') }}" type="image/svg+xml">
   <link rel="icon" href="{{ asset_url('/static/favicon-square-dark.png') }}" sizes="any" type="image/png">
   <link rel="apple-touch-icon" href="{{ asset_url('/static/favicon-square-dark.png') }}">
   <!-- Marked (Markdown -> HTML) -->
-  <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+  <script src="{{ asset_url('/static/vendor/marked/12.0.2/marked.min.js') }}"></script>
   <!-- DOMPurify (HTML Sanitizer) -->
-  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js"></script>
+  <script src="{{ asset_url('/static/vendor/dompurify/3.0.6/dist/purify.min.js') }}"></script>
   <!-- KaTeX: mathematische Ausdruecke aus Modellantworten lesbar setzen. -->
-  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.17.0/dist/katex.min.js" integrity="sha384-AtrdNsnxl/75rvBneBVH7DtOvCxSVahR2zWqle1coBKd8DEmLoviqNeJSx64gNAs" crossorigin="anonymous"></script>
-  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.17.0/dist/contrib/auto-render.min.js" integrity="sha384-bjyGPfbij8/NDKJhSGZNP/khQVgtHUE5exjm4Ydllo42FwIgYsdLO2lXGmRBf5Mz" crossorigin="anonymous"></script>
+  <script defer src="{{ asset_url('/static/vendor/katex/0.17.0/dist/katex.min.js') }}"></script>
+  <script defer src="{{ asset_url('/static/vendor/katex/0.17.0/dist/contrib/auto-render.min.js') }}"></script>
   {#
-    Everything below the CDN libraries: the auth watchdog, the two ES modules
+    Everything below the local vendor libraries: the auth watchdog, the two ES modules
     and the deferred app group. Notes on individual files (load-order
     constraints included) live next to them in static/js/bundles.json.
   #}

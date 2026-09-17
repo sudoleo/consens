@@ -80,6 +80,14 @@ nach. Zwischen zwei Dateien steht ein `;` als ASI-Schutz.
 `firebase.js` und `demo.js` sind echte ES-Module und werden einzeln gebündelt
 (Firebase-SDK bleibt externer CDN-Import).
 
+Die vorherigen jsDelivr-Abhängigkeiten von `/app` (Marked, DOMPurify, KaTeX)
+werden aus `static/vendor/<paket>/<version>/` lokal ausgeliefert. Der Build
+kopiert über `scripts/vendor_frontend.mjs` die exakt in `package.json` gepinnten
+npm-Dateien samt Lizenzen und KaTeX-Fonts; `build:check` vergleicht deren Bytes.
+Die Dateien sind mitcommittet und im Manifest-Fingerprint enthalten, sodass
+Produktion weiterhin kein Node benötigt. Bei Versionsupdates auch die Pfade
+in `templates/index.html` anpassen. `asset_url` ergänzt Inhalts-Hashes.
+
 CSS: `style.css` ist ein `@import`-Aggregator. Der Build zieht die Kette in
 Kaskadenreihenfolge in **eine** Datei. `static/dist/` liegt neben `static/css/`,
 deshalb zeigen `url(../fonts/…)` und `url(../icons/…)` weiter auf dieselben

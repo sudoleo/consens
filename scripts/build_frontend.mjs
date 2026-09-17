@@ -24,6 +24,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import * as esbuild from "esbuild";
+import { vendorFrontend } from "./vendor_frontend.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const DIST = path.join(ROOT, "static", "dist");
@@ -191,6 +192,8 @@ async function sourceFingerprint(inputFiles) {
   const files = [...new Set([
     "static/js/bundles.json",
     BUILD_SCRIPT,
+    "scripts/vendor_frontend.mjs",
+    "package.json",
     "package-lock.json",
     ...inputFiles,
   ])].sort();
@@ -216,7 +219,7 @@ async function build() {
     scripts: [],
     styles: {},
   };
-  const sourceInputs = [];
+  const sourceInputs = await vendorFrontend(ROOT, CHECK_ONLY);
 
   for (const group of config.groups) {
     const built =

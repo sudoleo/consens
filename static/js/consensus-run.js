@@ -76,6 +76,54 @@
     return error && error.name === "AbortError";
   }
 
+  // A broken response body does not prove that the server failed to commit.
+  // Reconcile through read-only history; never repeat the paid POST.
+  async function recoverConsensusResult(context, payload, signal, error) {
+    const registry = window.App.runRegistry;
+    if (!['request_failed', 'stream_read_failed', 'stream_incomplete'].includes(error?.streamFailureKind)
+        || isAbortError(error) || !payload.chat_id || !payload.turn_id) throw error;
+    const current = () => !signal.aborted && registry.isAuthCurrent(context)
+      && registry.isExecuting(context.runId);
+    if (!current()) throw error;
+    const recovery = new AbortController();
+    const cancel = () => recovery.abort();
+    signal.addEventListener('abort', cancel, { once: true });
+    const timeout = window.setTimeout(cancel, 5000);
+    try {
+      for (let attempt = 0; attempt < 3 && current() && !recovery.signal.aborted; attempt++) {
+        if (attempt) await new Promise(resolve => window.setTimeout(resolve, 500));
+        if (!current() || recovery.signal.aborted) break;
+        try {
+          const response = await fetch(`/chats/${encodeURIComponent(payload.chat_id)}/turns/${encodeURIComponent(payload.turn_id)}`, {
+            headers: { Authorization: `Bearer ${payload.id_token}` },
+            cache: 'no-store', signal: recovery.signal
+          });
+          if ([401, 403, 404].includes(response.status)) break;
+          if (!response.ok) continue;
+          const { turn } = await response.json();
+          if (!current() || recovery.signal.aborted) break;
+          if (turn?.status === 'failed') break;
+          if (turn?.status !== 'completed' || typeof turn.consensus !== 'string' || !turn.consensus.trim()) continue;
+          return { ok: true, status: 200, streamed: false, data: {
+            consensus_response: turn.consensus,
+            differences: turn.differences || '', differences_data: turn.differences_data || null,
+            sources: turn.sources || [], model_answers: turn.model_answers || {},
+            source_verification: turn.source_verification || null, result_id: turn.result_id || null,
+            chat_id: payload.chat_id, turn_id: payload.turn_id,
+            chat_persisted: true, chat_turn_state: 'completed', chat_replayed: true
+          } };
+        } catch (_) {
+          // Keep the original transport category if reconciliation also fails.
+        }
+      }
+    } finally {
+      window.clearTimeout(timeout);
+      signal.removeEventListener('abort', cancel);
+      recovery.abort();
+    }
+    throw error;
+  }
+
   function parseBestModel(differencesText) {
     if (typeof differencesText !== "string") return null;
     const regex = /BestModel:\s*(.*)/i;
@@ -883,7 +931,7 @@
         "consensus.delta": contextConsensusRenderer(context, "consensus"),
         "consensus.final": contextConsensusRenderer(context, "consensus-final"),
         "differences.delta": contextConsensusRenderer(context, "differences")
-      });
+      }).catch(error => recoverConsensusResult(context, payload, controller.signal, error));
       const data = requestResult.data || {};
       if (data.chat_replayed) context.consensus.sourceReferenceMode = data.source_verification?.check_type === 'contradiction_evidence' ? 'none' : 'legacy';
       if (!data.consensus_response && context.consensus.text) data.consensus_response = context.consensus.text;

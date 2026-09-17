@@ -273,7 +273,7 @@ Geladen werden (Reihenfolge ist Vertrag, steht in `static/js/bundles.json`,
 siehe §8): zuerst die synchronen `app-bootstrap.js`, `app-state.js`,
 `auth-session-state.js`, `run-registry.js`, `watch-state.js` und
 `error-reporter.js` (Gruppe
-`head`, render-blockierend, weil sie den First Paint seeden), dann CDN-Libs
+`head`, render-blockierend, weil sie den First Paint seeden), dann lokale Vendor-Libs
 (`marked`, `DOMPurify`, KaTeX + Auto-Render), der same-origin
 `email-verify.js` als inhaltsadressierte `window.App.emailVerification`-Brücke,
 den `auth-bootstrap.js`-Watchdog vor `firebase.js` + `demo.js` (ES-Module), dann
@@ -2018,6 +2018,23 @@ serverseitig allowgelistete `failure_kind` Request-, Read-, Eventhandler-,
 unvollständige Stream- und sonstige Verarbeitungsfehler. Die Kategorie wird
 in Telegram angezeigt und bei der Deduplizierung berücksichtigt; Freitext,
 Stack und Nutzdaten werden am Browser-Intake weiterhin verworfen.
+
+**Browser-Ausfallsicherung (2026-09-17):** Der SSE-Reader erkennt LF, CRLF und
+CR auch über Chunk-Grenzen hinweg. Nach Request-/Read-/EOF-Fehlern prüft
+`executeConsensusRun` höchstens dreimal innerhalb von fünf Sekunden den
+ownergebundenen `GET /chats/{chat_id}/turns/{turn_id}` (ohne Cache).
+Nur ein gespeicherter `completed`-Turn mit Consensus wird als Replay übernommen;
+es gibt keinen erneuten Modell-POST, Vote oder Bookmark-Write. Authwechsel und
+Cancel verwerfen späte Antworten. Ohne bestätigten Abschluss bleiben Teiltext
+und Conversation-Fence erhalten; der ursprüngliche Fehler wird gemeldet.
+Firebase-Tokenfehler beim Login, Auth-Refresh und Vote werden lokal behandelt;
+ein Auth-Refresh-Fehler zeigt einen Verbindungs-/Reload-Hinweis.
+
+`/app` lädt Marked, DOMPurify und KaTeX einschließlich Fonts aus `static/vendor/`
+mit gepinnten Versionspfaden und Inhalts-Hashes. `scripts/vendor_frontend.mjs`
+kopiert beim Frontend-Build die npm-Dateien und Lizenzen unverändert und prüft
+sie bei `build:check` bytegenau. Das Build-Manifest umfasst auch diese Dateien.
+Firebase bleibt ein externer gstatic-Import; öffentliche Seiten bleiben unverändert.
 
 **Quellenprüfung v4 (2026-09-11):** Neue Consensus-Antworten enthalten keine
 S-Quellenverweise. `llm/consensus_citations.py` entfernt unerwartete S-Zitate

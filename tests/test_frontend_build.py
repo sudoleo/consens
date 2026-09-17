@@ -9,6 +9,7 @@ the guard runs in the normal suite, with no node installed.
 from __future__ import annotations
 
 import json
+import re
 
 import pytest
 
@@ -131,3 +132,20 @@ def test_css_bundle_keeps_relative_asset_paths_resolvable():
     assert "../fonts/inter/InterVariable.woff2" in css
     for relative in ("../fonts/inter/InterVariable.woff2", "../icons/consensus.png"):
         assert (sheet.parent / relative).resolve().is_file(), relative
+
+
+def test_app_vendor_assets_are_local_versioned_and_include_fonts_and_licenses():
+    template = (assets.ROOT / "templates/index.html").read_text(encoding="utf-8")
+    assert "cdn.jsdelivr.net" not in template
+    paths = re.findall(r"asset_url\('(/static/vendor/[^']+)'\)", template)
+    assert len(paths) == 5
+    for url in paths:
+        assert (assets.ROOT / url.lstrip('/')).is_file()
+        assert '?v=' in assets.asset_url(url)
+    pins = json.loads((assets.ROOT / 'package.json').read_text())['devDependencies']
+    for package, license_name in [('marked', 'LICENSE.md'), ('dompurify', 'LICENSE'), ('katex', 'LICENSE')]:
+        directory = assets.STATIC_DIR / 'vendor' / package / pins[package]
+        assert (directory / license_name).is_file()
+    css_path = assets.STATIC_DIR / 'vendor' / 'katex' / pins['katex'] / 'dist/katex.min.css'
+    for relative in re.findall(r'url\(([^)]+)\)', css_path.read_text()):
+        assert (css_path.parent / relative.strip('\"\'')).is_file(), relative

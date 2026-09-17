@@ -1,0 +1,2 @@
+# Vendored npm assets must retain their upstream bytes on every platform.
+static/vendor/** -text -whitespace
