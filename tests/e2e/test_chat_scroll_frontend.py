@@ -6,6 +6,67 @@ from test_phase4_frontend import phase4_server, _real_firebase_page, _json
 from test_agent_chat_frontend import CATALOG, _choose_mode
 
 
+@pytest.mark.parametrize("width,reduced,dark", [(1280, False, False), (390, False, False), (320, True, True)])
+def test_consensus_stream_stays_still_and_latest_only_jumps_once(browser, phase4_server, width, reduced, dark):
+    context, page = _real_firebase_page(browser, phase4_server)
+    try:
+        page.set_viewport_size({"width": width, "height": 800})
+        page.emulate_media(reduced_motion="reduce" if reduced else "no-preference")
+        page.evaluate("""dark => {
+          document.body.classList.toggle('dark-mode', dark);
+          window.__scrollRun = App.runRegistry.create({question:'Explain the research findings',
+            config:{executionMode:'consensus',agentMode:true,providers:[]}});
+          App.runRegistry.update(__scrollRun.runId, run => {
+            run.status = 'running'; run.phase = 'consensus'; run.consensus.status = 'pending';
+          });
+          window.__sendTarget = Math.max(0, document.documentElement.scrollHeight - innerHeight);
+          App.revealSentMessage();
+          window.__appendConsensus = () => App.runRegistry.update(__scrollRun.runId, run => {
+            run.consensus.status = 'streaming';
+            run.consensus.streamText += '\\n\\n' + 'The evidence should be read carefully. Multiple independent findings help us understand the result.\\n\\n'.repeat(24);
+          });
+        }""", dark)
+        # Fast deltas arrive while the send animation is still pending.
+        before = page.evaluate("__sendTarget")
+        page.evaluate("__appendConsensus()")
+        page.wait_for_timeout(650)
+        # The mobile composer can shrink before the first frame; the jump may
+        # be shorter, but new tokens may never extend its original destination.
+        assert page.evaluate("scrollY") <= before + 3
+        before = page.evaluate("scrollY")
+        latest = page.get_by_role("button", name="Scroll to the latest message")
+        expect(latest).to_be_visible()
+        page.evaluate("__appendConsensus()")
+        page.wait_for_timeout(600)
+        assert abs(page.evaluate("scrollY") - before) < 3
+        box = latest.bounding_box()
+        composer = page.locator(".chat-input-container").bounding_box()
+        assert 0 <= box['x'] and box['x'] + box['width'] <= width
+        assert 0 <= box['y'] and box['y'] + box['height'] < composer['y']
+        capture = Path("test-results/chat-scroll")
+        capture.mkdir(parents=True, exist_ok=True)
+        page.screenshot(path=str(capture / f"consensus-{width}-{dark}.png"))
+        latest.click()
+        page.wait_for_function("() => document.documentElement.scrollHeight - innerHeight - scrollY < 3")
+        expect(latest).not_to_be_visible()
+        before = page.evaluate("scrollY")
+        page.evaluate("__appendConsensus()")
+        page.wait_for_timeout(650)
+        assert abs(page.evaluate("scrollY") - before) < 3
+        expect(latest).to_be_visible()
+        page.evaluate("""() => App.runRegistry.update(__scrollRun.runId, run => {
+          run.consensus.text = run.consensus.streamText;
+          run.consensus.status = 'complete'; run.phase = 'done'; run.status = 'succeeded';
+        })""")
+        page.wait_for_timeout(650)
+        # The completed pipeline shrinks above the reading position. Native
+        # scroll anchoring may compensate upward, but must never jump to the end.
+        assert page.evaluate("scrollY") <= before + 3
+        expect(latest).to_be_visible()
+    finally:
+        context.close()
+
+
 @pytest.mark.parametrize("width,reduced", [(1280, False), (390, False), (390, True)])
 def test_agent_chat_follows_new_messages_without_stealing_the_readers_position(browser, phase4_server, width, reduced):
     context, page = _real_firebase_page(browser, phase4_server)

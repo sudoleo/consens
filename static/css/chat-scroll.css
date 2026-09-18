@@ -1,12 +1,25 @@
 /* Attached to the sticky/fixed composer, so it follows its width and height. */
 .chat-scroll-latest {
-  position: absolute; z-index: 3; top: -44px; left: 50%; transform: translateX(-50%);
-  min-height: 36px; padding: 7px 13px; border: 1px solid var(--line); border-radius: 999px;
-  background: var(--well); color: var(--ink-2); box-shadow: var(--lift);
-  font: inherit; font-size: 12px; white-space: nowrap; cursor: pointer;
+  position: absolute; z-index: 3; bottom: calc(100% + 10px); left: 50%; transform: translateX(-50%);
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  min-height: 34px; padding: 6px 13px 6px 10px; border: 1px solid var(--line-soft); border-radius: 999px;
+  background: var(--ground); color: var(--ink-2);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .08), 0 0 0 1px color-mix(in srgb, var(--ground) 70%, transparent);
+  font: inherit; font-size: 12px; font-weight: var(--font-weight-medium); line-height: 1.4;
+  white-space: nowrap; cursor: pointer;
+  animation: chat-latest-enter 160ms ease-out both;
+  transition: color 140ms ease, background-color 140ms ease, border-color 140ms ease;
 }
-.chat-scroll-latest:hover { background: var(--raise); color: var(--ink); }
+.chat-scroll-latest-icon { width: 17px; height: 17px; flex: none; }
+.chat-scroll-latest:hover { background: var(--raise); color: var(--ink); border-color: var(--line); }
 .chat-scroll-latest:focus-visible { outline: 2px solid var(--ink-2); outline-offset: 3px; }
 .chat-scroll-latest[hidden], body.is-hero .chat-scroll-latest { display: none; }
 body.chat-scroll-following .container { overflow-anchor: none; }
-@media (pointer: coarse) { .chat-scroll-latest { min-height: 44px; top: -52px; } }
+@keyframes chat-latest-enter {
+  from { opacity: 0; transform: translate(-50%, 4px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+@media (pointer: coarse) { .chat-scroll-latest { min-height: 44px; } }
+@media (prefers-reduced-motion: reduce) {
+  .chat-scroll-latest { animation: none; transition: none; }
+}

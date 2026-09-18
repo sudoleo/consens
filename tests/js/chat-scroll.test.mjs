@@ -31,8 +31,8 @@ function boot({ reduced = false, mode = "agent" } = {}) {
 }
 
 describe("conversation scroll", () => {
-  it.each(["agent", "consensus"])("smoothly reaches the end and follows growing output in %s chat despite a hidden pending bubble", mode => {
-    const app = boot({ mode });
+  it("smoothly reaches the end and follows growing agent output despite a hidden pending bubble", () => {
+    const app = boot();
     app.window.App.revealSentMessage();
     app.tick(8);
     expect(app.window.scrollY).toBeGreaterThan(0);
@@ -42,6 +42,30 @@ describe("conversation scroll", () => {
     app.grow(500); app.tick();
     expect(app.window.scrollY).toBe(3700);
     expect(app.window.scrollTo.mock.calls.every(([value]) => value.behavior === "instant")).toBe(true);
+    app.dom.window.close();
+  });
+
+  it.each([false, true])("keeps consensus still after a single jump, including fast deltas and reduced motion: %s", reduced => {
+    const app = boot({ mode: "consensus", reduced });
+    app.window.App.revealSentMessage();
+    app.grow(800); app.tick();
+    expect(app.window.scrollY).toBe(2400);
+    app.grow(500); app.tick();
+    expect(app.window.scrollY).toBe(2400);
+    const button = app.document.querySelector(".chat-scroll-latest");
+    expect(button.hidden).toBe(false);
+    button.click();
+    app.grow(600); app.tick();
+    expect(app.window.scrollY).toBe(3700);
+    expect(button.hidden).toBe(false);
+    button.click(); app.tick();
+    expect(app.window.scrollY).toBe(4300);
+    expect(button.hidden).toBe(true);
+    app.grow(500); app.tick();
+    expect(app.window.scrollY).toBe(4300);
+    app.wheel(300); app.scroll(4800); app.grow(200); app.tick();
+    expect(app.window.scrollY).toBe(4800);
+    expect(button.hidden).toBe(false);
     app.dom.window.close();
   });
 

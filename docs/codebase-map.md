@@ -1083,12 +1083,18 @@ der Python-Staleness-Test auch indirekte Änderungen erkennt.
   das Scrollen im Agent- und Consensus-Chat. `App.revealSentMessage()` aktiviert
   es ausschließlich beim tatsächlichen Absenden; Recovery, gespeicherte Ansichten,
   Direktvergleich und Hintergrundläufe erzwingen keinen Sprung. Nach zwei Layout-
-  Frames scrollt es sanft zum Dokumentende und folgt wachsendem Inhalt, solange
-  unten mitgelesen wird. `run-view.js` bindet die Projektion an Run und Account;
+  Frames scrollt es sanft zum Dokumentende. Im Consensus-Chat wird das Ziel beim
+  Absenden eingefroren: Streaming verschiebt weder das laufende Sprungziel noch
+  die anschließende Leseposition. „Latest message“ springt dort ebenfalls nur
+  einmal zum aktuellen Ende; auch manuelles Scrollen aktiviert kein Mitlaufen.
+  Im Agent-Chat folgt es wachsendem Inhalt, solange unten mitgelesen wird.
+  `run-view.js` bindet die Projektion an Run und Account;
   ResizeObserver plus Viewport-Resize berücksichtigen Markdown, Bilder und Composer.
   Wheel/Touch/Scrolltasten/Pointer und Textauswahl unterbrechen sofort, auch vor
   dem ersten Frame. Erst bewusstes Abwärtsscrollen bis ans Ende oder „Latest message“
-  aktiviert das Folgen erneut. Die Schaltfläche liegt am Composer und gibt den
+  aktiviert im Agent-Chat das Folgen erneut. Die dezente Schaltfläche mit
+  SVG-Abwärtspfeil liegt oberhalb des Composers, blendet sich kurz ein (ohne
+  Animation bei Reduced Motion) und gibt den
   Tastaturfokus ohne Scrollsprung ans Eingabefeld zurück. Reduced Motion scrollt
   sofort; Verkleinerung des Inhalts zieht nie nach oben. Dialoge, versteckte Tabs,
   Run-/Kontowechsel stoppen ausstehende Animationen. Verhaltenstests liegen in

@@ -1,4 +1,4 @@
-// Follow the visible conversation only while the reader stays at its end.
+// Agent chats may follow output; consensus chats only move on an explicit jump.
 (function () {
   "use strict";
   const App = window.App = window.App || {};
@@ -7,6 +7,9 @@
   let context = null, following = false, frame = 0, observer = null, button = null;
   let lastY = window.scrollY, started = null, from = 0;
   let resumeUntil = 0, touchY = null;
+  let destination = null;
+
+  function followsOutput() { return context?.config?.executionMode === "agent"; }
 
   function maxTop() {
     const root = document.scrollingElement || document.documentElement;
@@ -44,13 +47,18 @@
   function step(now) {
     frame = 0;
     if (!valid() || !following || occupied()) { pause(); return; }
-    const target = maxTop();
+    const target = Math.min(destination ?? maxTop(), maxTop());
     const y = window.scrollY;
     if (target - y <= 1) {
       if (target > y) write(target);
+      if (destination !== null) following = false;
       started = null; syncButton(); return;
     }
-    if (motion.matches) { write(target); started = null; syncButton(); return; }
+    if (motion.matches) {
+      write(target);
+      if (destination !== null) following = false;
+      started = null; syncButton(); return;
+    }
     if (started === null) { started = now; from = y; }
     const progress = Math.min(1, (now - started) / 420);
     const eased = 1 - Math.pow(1 - progress, 3);
@@ -58,7 +66,10 @@
     // Never pull upwards when content gets shorter.
     write(Math.max(y, Math.min(target, Math.round(from + (target - from) * eased))));
     if (progress < 1) frame = window.requestAnimationFrame(step);
-    else { started = null; syncButton(); }
+    else {
+      if (destination !== null) following = false;
+      started = null; syncButton();
+    }
   }
   function changed() {
     if (!valid()) { pause(); return; }
@@ -71,7 +82,7 @@
     if (!button && composer) {
       button = document.createElement("button");
       button.type = "button"; button.className = "chat-scroll-latest";
-      button.textContent = "Latest message ↓";
+      button.innerHTML = '<svg class="chat-scroll-latest-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 4v12m-4.5-4.5L10 16l4.5-4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Latest message</span>';
       button.setAttribute("aria-label", "Scroll to the latest message");
       button.hidden = true;
       button.addEventListener("click", event => {
@@ -100,6 +111,9 @@
   function sent() {
     if (!valid()) return;
     cancelFrame();
+    // Snapshot the current destination before fast consensus deltas arrive.
+    // Even during the animation, new tokens must not move this target.
+    destination = followsOutput() ? null : maxTop();
     following = true;
     syncButton();
     // Let the question clamp, history append and collapsed composer settle first.
@@ -131,7 +145,7 @@
     const y = window.scrollY;
     // Only a real downward move back to the end resumes following. Layout
     // shrinkage, an interrupted animation and nested scroll areas cannot do so.
-    if (valid() && !frame && performance.now() < resumeUntil && y > lastY
+    if (valid() && followsOutput() && !frame && performance.now() < resumeUntil && y > lastY
         && maxTop() - y <= NEAR_END && !occupied()) following = true;
     lastY = y;
     syncButton();

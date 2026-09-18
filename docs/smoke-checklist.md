@@ -57,6 +57,11 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       ungestylten Dialoge. Die Browser-Konsole meldet keine Modul-/CSP-Fehler.
 
 ## Kern-Flow
+- [x] Consensus-Scroll (18.09.2026): Einmaliger Sprung beim Absenden und bei
+      „Latest message“, kein automatisches Mitlaufen mit Consensus-Deltas.
+      Schnelle Ausgabe, weitere Deltas nach dem Klick, Abschluss und Reduced
+      Motion bei 1280/390/320px im Browser geprüft; Agent-Following weiterhin
+      erfolgreich. Neuer Button in Hell/Dunkel visuell kontrolliert.
 - [x] Lesebreite (18.09.2026): 768px-Standardspalte und Zentrierung rechts der
       Desktop-Sidebar in 28 Browserzuständen bei 320–1907px geprüft, jeweils
       Startansicht und Gespräch sowie Desktop-Sidebar offen/geschlossen.
