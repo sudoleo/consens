@@ -2240,7 +2240,7 @@ body:not(.is-hero) .input-section {
     left: 50%;
     right: auto;
     bottom: 0;
-    width: min(var(--app-container-width, 900px), calc(100vw - 20px));
+    width: min(var(--app-container-width), calc(100vw - 40px));
     box-sizing: border-box;
     margin: 0;
     transform: translateX(-50%);

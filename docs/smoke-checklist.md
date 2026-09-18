@@ -57,6 +57,11 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       ungestylten Dialoge. Die Browser-Konsole meldet keine Modul-/CSP-Fehler.
 
 ## Kern-Flow
+- [x] Lesebreite (18.09.2026): 768px-Standardspalte und Zentrierung rechts der
+      Desktop-Sidebar in 28 Browserzuständen bei 320–1907px geprüft, jeweils
+      Startansicht und Gespräch sowie Desktop-Sidebar offen/geschlossen.
+      Composer und Inhalt bleiben bündig, ohne horizontalen Overflow;
+      Desktop-/Mobil-Screenshots in Hell und Dunkel visuell kontrolliert.
 - [x] Delegation (16.09.2026): zwei parallele Worker, Rückfrage/Antwort und
       Nacharbeit derselben Sitzung im Integrationstest; getrennte Kosten pro
       Agent und Run, atomare Firestore-Reservierung und Deduplizierung geprüft.

@@ -544,9 +544,13 @@ der Python-Staleness-Test auch indirekte Änderungen erkennt.
   (auf Touch-Geräten bleibt sie dauerhaft erreichbar). Die frühere Sidebar-/
   Help-FAQ-Rangliste lebt jetzt ausschließlich auf `/model-pulse`; die
   Landingpage verlinkt oben dezent dorthin und die App-Shell lädt keinen
-  Firestore-Live-Listener mehr. Bei offener Desktop-Sidebar begrenzen symmetrische
-  Gutters (260px Navigation plus 24px Abstand je Seite) die Contentbreite und
-  halten den Input in der Viewport-Mitte; mobil
+  Firestore-Live-Listener mehr. Die gemeinsame Lesespalte für Fragen, Antworten
+  und Composer ist standardmäßig 768px breit (`--app-container-width` auf
+  `body`, `layout.css`) und schrumpft auf kleinen Viewports. Bei offener
+  Desktop-Sidebar ab 1100px zentriert `--app-sidebar-offset: 260px` die Spalte
+  und den Startseiten-View-Switch im verbleibenden Bereich rechts der Navigation;
+  eingeklappt und im mobilen Overlay-Modus gilt die Viewport-Mitte. Der mobile
+  fixierte Composer verwendet dieselbe Breite wie der Spalteninhalt; mobil
   stehen Menü und im Gespräch die Wortmarke in der deckenden Kopfleiste. Gast-Login/-Sign-up
   sitzt oben rechts, während der Sidebar-Footer nur für eingeloggte Accounts
   das Avatar-Menü mit deckender Light-/Dark-Fläche zeigt. Settings sind seit
