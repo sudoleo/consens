@@ -37,7 +37,10 @@ zusätzliche Presetliste und keinen Synthese-/Consensus-Modell-Picker an. Manuel
 Familien-/Modellwahl bleibt möglich. Mindestens zwei Vergleichsmodelle müssen
 gewählt sein; ohne übergebene Auswahl gilt das zentrale Standardpreset.
 
-Die gemeinsame Bottom-Bar bleibt im Beta-Chat auf Desktop und Mobil sichtbar.
+Die gemeinsame Bottom-Bar steht im Beta-Chat nur vor der ersten Frage. Danach
+liegen ihre Optionen im bestehenden (+)-Menü im Input; das leere Eingabefeld
+ist wie beim Consensus einzeilig und wächst beim Schreiben. Auf Mobil bleibt
+das (+) auch eingeklappt direkt erreichbar. Ein neuer Chat zeigt die Startleiste wieder.
 „Agent Mode On“ ist vorerst eine Statusanzeige ohne Umschaltfunktion; sie ändert
 den bisherigen Consensus-Modus nicht. „Check contradictions“ schaltet das
 Quellenprüfungs-Tool für die nächste Nachricht frei. Der gemeinsame On/Off-Wert

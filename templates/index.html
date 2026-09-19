@@ -452,9 +452,17 @@
                  Pro): das Chip nennt die niedrigste Stufe, die sie freischaltet. -->
             <span class="pro-badge is-plus attach-pro-badge model-picker-pro-badge">Plus</span>
           </button>
-          <div class="attach-menu-hint">PDF, Word, TXT/MD/CSV, PNG, JPG and WebP &middot; limits are checked before upload</div>
+          <div id="attachMenuHint" class="attach-menu-hint">PDF, Word, TXT/MD/CSV, PNG, JPG and WebP &middot; limits are checked before upload</div>
           <div class="attach-menu-divider"></div>
           <!-- Deep Think lebt jetzt im (+)-Kontextmenü -->
+          <button type="button" id="agentReasoningMenuOption" class="attach-menu-item" aria-haspopup="listbox" hidden>
+            <span class="attach-menu-toggle-icon" aria-hidden="true"></span>
+            <span>Deep Think</span><span id="agentReasoningMenuState">Auto</span>
+          </button>
+          <button type="button" id="agentComparisonMenuOption" class="attach-menu-item" aria-haspopup="listbox" hidden>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M4 5h6v14H4zM14 5h6v14h-6z"/></svg>
+            <span>Comparison models</span>
+          </button>
           <label class="attach-menu-toggle" for="deepSearchToggle" title="Deep Think">
             <span class="attach-menu-toggle-icon" aria-hidden="true"></span>
             <span class="attach-menu-toggle-text">

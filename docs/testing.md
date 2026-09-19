@@ -223,9 +223,10 @@ und Mobil. `AGENT_SCREENSHOTS=<Verzeichnis>` speichert die Ansichten.
 `tests/test_agent_contradictions.py` prüft Tool-Freigabe, Originalbelege,
 getrennte Modell-/Quellenurteile, Primär-/Fallback-Abrechnung, Versionsbindung,
 Abbruch und Wiederholung/Recovery ohne zusätzlichen Quellen-Judge. Die Agent-Frontend-Tests prüfen
-zusätzlich eingefrorene Einstellungen, die gemeinsame Bottom-Bar und die
-Reasoning-Verknüpfung. `tests/e2e/test_agent_comparison_frontend.py` deckt die
-Leiste sowie Quellenbelege an Widerspruchskarten auf Desktop und Mobil ab.
+zusätzlich eingefrorene Einstellungen, die Startleiste und die Reasoning-Verknüpfung.
+`tests/e2e/test_agent_comparison_frontend.py` prüft den einzeiligen Composer nach
+dem Senden und bei gespeicherten Chats, das (+)-Menü per Touch mit Quellenprüfung,
+Reasoning und Compare sowie Quellenbelege an Widerspruchskarten auf Desktop und Mobil.
 Die Transaktionsprüfung `tests/e2e/test_agent_transactions.py` prüft mit
 `dev.ps1 check browser -TestPath tests/e2e/test_agent_transactions.py` auch
 mehrere bezahlte Schritte innerhalb desselben Owner-Slots im lokalen Emulator.

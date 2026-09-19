@@ -170,7 +170,7 @@ body.single-agent-active .chat-input-container .consensus-switch-container { max
 #agentAnswerError { color: var(--ink-2); border-left: 2px solid var(--line); padding: 4px 0 4px 12px; font-size: 13px; line-height: 1.6; }
 #agentAnswerBody:empty { display: none; }
 body.single-agent-active :is(#consensusOutput, #consensusRun, #agentModePanel, .response-section,
-  #attachTrigger, #deepThinkInputIndicator,
+  #deepThinkInputIndicator,
   #runProvenance, .consensus-footer-actions, #composerRunNotice, #heroResponseAccess,
   .models-section, .models-section + .sidebar-separator, .demo-chip) { display: none !important; }
 body:not(.single-agent-active) #agentAnswer { display: none; }
@@ -178,6 +178,12 @@ body.single-agent-active #agentAnswer:not([hidden]) { display: block; }
 body.single-agent-active #threadAsk:not([hidden]) { display: flex; }
 body.single-agent-active #composerAgentToggle { cursor: default; }
 body.single-agent-active #composerAgentToggle:hover { background: transparent; }
+body.single-agent-active.is-hero #attachTrigger { display: none; }
+.attach-menu :is(button, label)[hidden] { display: none; }
+.attach-menu-item:disabled { opacity: .5; cursor: default; }
+#agentReasoningMenuOption .attach-menu-toggle-icon { flex: 0 0 16px; }
+#agentReasoningMenuOption > span:nth-child(2) { flex: 1; }
+#agentReasoningMenuState { color: var(--ink-3); font-size: 12px; }
 
 .agent-model-picker .model-picker-display-text::before { content: none; }
 .agent-reasoning-option { border-top: 1px solid var(--line) !important; margin-top: 6px; padding-top: 12px !important; }
@@ -279,11 +285,12 @@ body.single-agent-active .consensus-model-inline { min-width: 0; max-width: 100%
   }
 }
 @media (min-width: 1100px) {
-  /* Agent has separate chat and comparison selectors. Keep the writing area
-     above them even for an empty follow-up, including with the sidebar open. */
-  body.single-agent-active:not(.is-hero) .chat-input-container .input-field { flex: 1 1 100%; }
-  body.single-agent-active:not(.is-hero) .chat-input-container .consensus-switch-container { display: flex; flex: 1 1 0; }
-  body.single-agent-active:not(.is-hero) .chat-input-container .input-actions-container { align-self: flex-end; }
+  /* The shared Consensus composer supplies the single-line follow-up layout. */
   body.single-agent-active:not(.is-hero) .agent-model-picker { max-width: 180px; }
   body.single-agent-active:not(.is-hero) .agent-effort-control .model-picker-display-text::before { content: ''; }
+}
+@media (max-width: 1099px) {
+  body.single-agent-active.composer-collapsed:not(.is-hero) .chat-input-container .consensus-switch-container { display: contents; }
+  body.single-agent-active.composer-collapsed:not(.is-hero) .consensus-switch-container > :not(#attachTrigger) { display: none; }
+  body.single-agent-active.composer-collapsed:not(.is-hero) #attachTrigger { order: -1; }
 }

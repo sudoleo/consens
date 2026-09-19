@@ -9,7 +9,7 @@ from test_agent_chat_frontend import CATALOG, _choose_mode, _snapshot
 
 
 @pytest.mark.parametrize("width", [390, 320])
-def test_mobile_agent_toolbar_taps_open_pickers_from_collapsed_composer(browser, phase4_server, width):
+def test_mobile_agent_plus_menu_opens_tools_from_single_line_composer(browser, phase4_server, width):
     context, page = _real_firebase_page(browser, phase4_server, has_touch=True)
     turn = {"id": "b" * 32, "execution_mode": "agent", "status": "completed", "question": "Compare plans",
             "consensus": "A saved answer.", "agent_settings": {"model_id": CATALOG["default_model_id"]}}
@@ -22,14 +22,23 @@ def test_mobile_agent_toolbar_taps_open_pickers_from_collapsed_composer(browser,
         page.evaluate("turn => App.runRegistry.showSavedView({type:'bookmark'}, {chatId:'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', turnId:turn.id, executionMode:'agent', question:turn.question, consensus:turn.consensus, currentTurn:turn})", turn)
         page.evaluate('() => { window.exitHeroMode(); App.composer.collapse({force:true}); }')
         page.wait_for_function("() => !document.body.classList.contains('composer-animating')")
-        expect(page.locator('#composerModeBar')).to_be_visible()
-        sources = page.locator('#composerSourcesToggle')
-        expect(sources).to_have_attribute('aria-checked', 'true')
-        sources.tap()
-        expect(sources).to_have_attribute('aria-checked', 'false')
-        sources.tap()
-        expect(sources).to_have_attribute('aria-checked', 'true')
-        page.locator('#composerModelPicker').tap()
+        expect(page.locator('#composerModeBar')).not_to_be_visible()
+        assert page.locator('.chat-input-container').bounding_box()['height'] <= 60
+        _snapshot(page, f'agent-single-line-{width}')
+        page.locator('#attachTrigger').tap()
+        expect(page.locator('#attachMenu')).to_be_visible()
+        assert page.evaluate("document.body.classList.contains('composer-collapsed')")
+        expect(page.locator('#agentModeMenuSwitch')).to_be_checked()
+        expect(page.locator('#agentModeMenuSwitch')).to_be_disabled()
+        expect(page.locator('#attachUploadOption')).to_be_disabled()
+        source_label = page.locator('label[for="sourceCheckMenuSwitch"]')
+        source_label.tap()
+        expect(page.locator('#sourceCheckMenuSwitch')).not_to_be_checked()
+        source_label.tap()
+        expect(page.locator('#sourceCheckMenuSwitch')).to_be_checked()
+        _snapshot(page, f'agent-plus-options-{width}')
+        page.locator('#agentComparisonMenuOption').tap()
+        expect(page.locator('#attachMenu')).not_to_be_visible()
         expect(page.locator('.consensus-model-inline .model-picker-menu')).to_be_visible()
         page.wait_for_function("() => !document.body.classList.contains('composer-animating')")
         page.locator('.consensus-model-inline .model-picker-custom-option').tap()
@@ -38,7 +47,8 @@ def test_mobile_agent_toolbar_taps_open_pickers_from_collapsed_composer(browser,
         page.keyboard.press('Escape')
         page.evaluate('() => App.composer.collapse({force:true})')
         page.wait_for_function("() => !document.body.classList.contains('composer-animating')")
-        page.locator('#composerDeepToggle').tap()
+        page.locator('#attachTrigger').tap()
+        page.locator('#agentReasoningMenuOption').tap()
         menu = page.locator('.agent-model-picker .model-picker-menu')
         expect(menu).to_be_visible()
         page.wait_for_function("() => !document.body.classList.contains('composer-animating')")
@@ -57,6 +67,7 @@ def test_mobile_agent_toolbar_taps_open_pickers_from_collapsed_composer(browser,
         page.locator('.agent-model-picker [data-setting-value="high"]').tap()
         expect(page.locator('#agentReasoningEffort')).to_have_value('high')
         expect(page.locator('#composerDeepState')).to_have_text('High')
+        expect(page.locator('#agentReasoningMenuState')).to_have_text('High')
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
     finally:
         context.close()
@@ -150,7 +161,8 @@ def test_comparison_review_and_saved_projection(browser, phase4_server, width, d
         def assert_composer_layout():
             input_box = page.locator("#questionInput").bounding_box()
             composer = page.locator(".chat-input-container").bounding_box()
-            assert input_box["width"] >= min(210, composer["width"] * .7)
+            hero = page.evaluate("document.body.classList.contains('is-hero')")
+            assert input_box["width"] >= min(210, composer["width"] * (.7 if hero else .25))
             assert input_box["height"] <= 80
             if page.locator("#agentModelControls").is_visible():
                 label = page.locator(".agent-model-picker .model-picker-display-text").bounding_box()
@@ -166,7 +178,10 @@ def test_comparison_review_and_saved_projection(browser, phase4_server, width, d
         page.locator("#questionInput").fill(saved["question"])
         page.locator("#sendButton").click()
         expect(page.locator(".agent-review-status")).to_have_text("Comparison checked")
-        expect(page.locator('#composerModeBar')).to_be_visible()
+        expect(page.locator('#composerModeBar')).not_to_be_visible()
+        page.wait_for_function("() => !document.body.classList.contains('composer-animating')")
+        assert page.locator('.chat-input-container').bounding_box()['height'] <= 60
+        expect(page.locator('#attachTrigger')).to_be_visible()
         assert requests[0]['check_sources'] is True
         assert requests[0]['reasoning_effort'] == 'high'
         expect(page.locator('#quotaTriggerValue')).to_have_text('56%')

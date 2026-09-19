@@ -17,7 +17,9 @@ const BODY = `
   <input id="agentModeMenuSwitch" type="checkbox"><input id="agentModeSwitch" type="checkbox">
   <input id="sourceCheckMenuSwitch" type="checkbox"><input id="sourceCheckSwitch" type="checkbox">
   <input id="autoConsensusToggle" type="checkbox">
-  <input id="deepSearchToggle" type="checkbox"><button id="attachUploadOption"></button>
+  <label><input id="deepSearchToggle" type="checkbox"></label><button id="attachUploadOption"></button>
+  <button id="agentReasoningMenuOption" hidden></button><span id="agentReasoningMenuState"></span>
+  <button id="agentComparisonMenuOption" hidden></button>
   <div id="agentModePanel">
     <span id="agentModeTitle"></span>
     <span id="agentModeCount"></span>
@@ -59,14 +61,18 @@ function boot({ desktop = false, agentMode = true, checkSources = true } = {}) {
 }
 
 describe("agent mode panel projection", () => {
-  it('keeps the Beta toolbar visible and its tools independent of the legacy Agent switch', () => {
-    const {window, document, dom} = boot({agentMode: false});
+  it.each([false, true])('moves Beta tools into the plus menu after chat start (desktop: %s)', async desktop => {
+    const {window, document, dom} = boot({agentMode: false, desktop});
     window.App.agentChat = {isSelected: () => true};
     window.App.openModelPicker = vi.fn();
     document.body.insertAdjacentHTML('beforeend', '<select id="agentModelDropdown"></select><select id="agentReasoningEffort" data-available="true"><option value="high">High</option></select>');
     document.body.classList.remove('is-hero');
     window.App.renderComposerMode();
-    expect(document.getElementById('composerModeBar').hidden).toBe(false);
+    expect(document.getElementById('composerModeBar').hidden).toBe(true);
+    expect(document.getElementById('agentModeMenuSwitch').disabled).toBe(true);
+    expect(document.getElementById('agentModeMenuSwitch').checked).toBe(true);
+    expect(document.getElementById('agentReasoningMenuOption').hidden).toBe(false);
+    expect(document.getElementById('deepSearchToggle').closest('label').hidden).toBe(true);
     expect(document.getElementById('composerAgentState').textContent).toBe('On');
     document.getElementById('composerAgentToggle').click();
     expect(window.localStorage.getItem('agentMode')).toBe('false');
@@ -80,12 +86,21 @@ describe("agent mode panel projection", () => {
     expect(document.getElementById('composerDeepState').textContent).toBe('High');
     document.getElementById('composerDeepToggle').click();
     expect(window.App.openModelPicker).toHaveBeenCalledWith(document.getElementById('agentModelDropdown'), {secondary: true});
+    window.App.openModelPicker.mockClear();
+    document.getElementById('agentReasoningMenuOption').click();
+    expect(window.App.openModelPicker).toHaveBeenCalledWith(document.getElementById('agentModelDropdown'), {secondary: true});
+    expect(document.getElementById('agentReasoningMenuState').textContent).toBe('High');
+    document.body.classList.add('is-hero');
+    await vi.waitFor(() => expect(document.getElementById('composerModeBar').hidden).toBe(false));
     expect(document.getElementById('deepSearchToggle').checked).toBe(false);
     window.App.agentChat.isSelected = () => false;
     window.App.renderComposerMode();
     expect(document.getElementById('composerAgentToggle').getAttribute('aria-disabled')).toBe('false');
     expect(document.getElementById('composerAttachButton').disabled).toBe(false);
     expect(document.getElementById('composerSourcesToggle').disabled).toBe(true);
+    expect(document.getElementById('agentModeMenuSwitch').disabled).toBe(false);
+    expect(document.getElementById('agentReasoningMenuOption').hidden).toBe(true);
+    expect(document.getElementById('deepSearchToggle').closest('label').hidden).toBe(false);
     dom.window.close();
   });
 

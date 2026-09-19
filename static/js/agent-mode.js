@@ -308,6 +308,31 @@
   function renderComposerMode() {
     const beta = isBeta();
     const enabled = beta || isAgentModeEnabled();
+    const menuMode = document.getElementById("agentModeMenuSwitch");
+    if (menuMode) { menuMode.checked = enabled; menuMode.disabled = beta; }
+    const menuModeCopy = menuMode?.closest("label")?.querySelector(".attach-menu-toggle-sub");
+    if (menuModeCopy) {
+      menuModeCopy.dataset.consensusCopy ||= menuModeCopy.textContent;
+      menuModeCopy.textContent = beta ? "Agent Beta is active for this chat." : menuModeCopy.dataset.consensusCopy;
+    }
+    const legacyDeep = document.getElementById("deepSearchToggle")?.closest("label");
+    if (legacyDeep) legacyDeep.hidden = beta;
+    ["agentReasoningMenuOption", "agentComparisonMenuOption"].forEach(id => {
+      const option = document.getElementById(id);
+      if (option) option.hidden = !beta;
+    });
+    const upload = document.getElementById("attachUploadOption");
+    if (upload) upload.disabled = beta;
+    const hint = document.getElementById("attachMenuHint");
+    if (hint) {
+      hint.dataset.uploadHint ||= hint.textContent;
+      hint.textContent = beta ? "Agent Beta currently supports text only." : hint.dataset.uploadHint;
+    }
+    const trigger = document.getElementById("attachTrigger");
+    if (trigger) {
+      trigger.title = beta ? "Chat options" : "Add attachment";
+      trigger.setAttribute("aria-label", trigger.title);
+    }
     const sourcesEnabled = window.App.isSourceCheckEnabled();
     const sourcesTitle = enabled
       ? `Check contradictions ${sourcesEnabled ? "on" : "off"} · Check contradictions against existing sources for the next ${beta ? "chat message" : "consensus"}`
@@ -331,7 +356,7 @@
       sourcesButton.title = sourcesTitle;
       document.getElementById("composerSourcesState").textContent = sourcesEnabled ? "On" : "Off";
     }
-    bar.hidden = !beta && !desktopComposer?.matches && enabled && !document.body.classList.contains("is-hero");
+    bar.hidden = !document.body.classList.contains("is-hero") && (beta || (!desktopComposer?.matches && enabled));
     window.App.attachments?.syncComposerPlacement?.();
     bar.dataset.agentMode = String(enabled);
     document.getElementById("composerAgentToggle").setAttribute("aria-checked", String(enabled));
@@ -346,19 +371,20 @@
     const models = window.App.modelPrefs.filter(pref => document.getElementById(pref.checkId)?.checked);
     const icons = document.getElementById("composerModelIcons");
     const deep = !beta && !!document.getElementById("deepSearchToggle")?.checked;
-    const deepButton = document.getElementById("composerDeepToggle");
-    if (deepButton) {
+    for (const [buttonId, stateId] of [["composerDeepToggle", "composerDeepState"], ["agentReasoningMenuOption", "agentReasoningMenuState"]]) {
+      const deepButton = document.getElementById(buttonId);
+      if (!deepButton) continue;
       const effort = document.getElementById("agentReasoningEffort");
       deepButton.disabled = beta && (!effort || effort.disabled || effort.dataset.available !== "true");
       deepButton.setAttribute("role", beta ? "button" : "switch");
       deepButton.setAttribute("aria-checked", String(deep));
       deepButton.title = `Deep Think ${deep ? "on" : "off"} · Stronger reasoning${window.isUserPro ? "" : " · Pro"}`;
-      document.getElementById("composerDeepState").textContent = deep ? "On" : "Off";
+      document.getElementById(stateId).textContent = deep ? "On" : "Off";
       if (beta) {
         deepButton.removeAttribute("aria-checked");
         deepButton.setAttribute("aria-haspopup", "listbox");
         deepButton.title = deepButton.disabled ? "Reasoning is unavailable or locked during this run" : "Choose reasoning for your next chat message";
-        document.getElementById("composerDeepState").textContent = effort?.selectedOptions[0]?.textContent || "Auto";
+        document.getElementById(stateId).textContent = effort?.selectedOptions[0]?.textContent || "Auto";
       } else deepButton.removeAttribute("aria-haspopup");
     }
     const attachButton = document.getElementById("composerAttachButton");
@@ -741,6 +767,7 @@
   const agentModeMenuSwitch = document.getElementById("agentModeMenuSwitch");
   if (agentModeMenuSwitch) {
     agentModeMenuSwitch.addEventListener("change", function () {
+      if (isBeta()) { renderComposerMode(); return; }
       setAgentMode(this.checked, { persist: true });
     });
   }
@@ -770,6 +797,14 @@
   document.getElementById("composerAttachButton")?.addEventListener("click", function () {
     if (isBeta()) return;
     document.getElementById("attachUploadOption")?.click();
+  });
+  document.getElementById("agentReasoningMenuOption")?.addEventListener("click", function (event) {
+    event.stopPropagation();
+    if (isBeta()) window.App.openModelPicker?.(document.getElementById("agentModelDropdown"), { secondary: true });
+  });
+  document.getElementById("agentComparisonMenuOption")?.addEventListener("click", function (event) {
+    event.stopPropagation();
+    if (isBeta()) window.App.openModelPicker?.(document.getElementById("consensusModelDropdown"));
   });
   let composerIsHero = document.body.classList.contains("is-hero");
   new MutationObserver(function () {

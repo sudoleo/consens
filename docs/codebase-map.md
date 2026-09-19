@@ -875,7 +875,7 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
 - **`agent-mode.js`** — Agent-Mode-**Zustand**, Status-Hub und Timer.
   Composer-Modusleiste `#composerModeBar` direkt unter dem Input: erreichbarer
   Agent-/Deep-Think-Schalter, Upload-Shortcut und Anbieter-Favicons der nächsten Frage.
-  Die Leiste erscheint ab 1100px immer; darunter im Hero und nach Chatstart nur bei ausgeschaltetem Agent Mode,
+  Im Consensus erscheint die Leiste ab 1100px immer; darunter im Hero und nach Chatstart nur bei ausgeschaltetem Agent Mode,
   schließt ohne Abstand unter dem Input an und ist seitlich um 12 px eingerückt.
   Sie bleibt auf Desktop und Mobile eine einzelne 36-px-Zeile. Die Erklärung
   ist am Modusschalter als Tooltip/Screenreader-Beschreibung verfügbar;
@@ -1679,15 +1679,23 @@ abgelehnt. Ohne Auswahl gilt das zentrale Default-Preset. Der öffentliche
 Metering-Katalog ergänzt die gemeinsame Registry automatisch um aktuelle
 Provider-Metadaten; neue Admin-Einträge benötigen keinen zusätzlichen Codeeintrag.
 
-Die gemeinsame `#composerModeBar` bleibt in Beta auch nach Chatstart auf Mobil
-sichtbar. `agent-mode.js` projiziert dabei „Agent Mode On“ als unveränderliche
+Die gemeinsame `#composerModeBar` ist in Beta nur im Hero sichtbar. Nach Chatstart
+nutzt Beta das vorhandene `#attachMenu`: Quellenprüfung und Agent-Status verwenden
+dieselben Controls, `#agentReasoningMenuOption` öffnet die Denkstufe des Chatmodells
+und `#agentComparisonMenuOption` den bestehenden Compare-Picker. Der Upload bleibt
+deaktiviert; der separate Consensus-Deep-Think-Schalter ist in Beta verborgen.
+Die gemeinsame einzeilige Consensus-Optik gilt für leere Folgefragen; längerer Text
+wächst wie zuvor. Mobil bleibt `#attachTrigger` auch bei `composer-collapsed` sichtbar.
+`composer-collapse.js` lässt Pointer/Fokus auf Plus und dessen Menü direkt durch,
+ohne das Layout zwischen Touch und Klick zu verschieben. Ein neuer Chat zeigt die
+Startleiste wieder. `agent-mode.js` projiziert dabei „Agent Mode On“ als unveränderliche
 Statusanzeige und aktiviert die Quellenprüfungs-Controls unabhängig vom alten
 Consensus-Agent-Schalter. `Deep Think` öffnet über
 `openModelPicker(select, {secondary: true})` die bestehende Reasoning-Auswahl;
 `Attach` bleibt bis zur Unterstützung von Anhängen deaktiviert. Vergleichsicons
 und Compare-Picker verwenden weiterhin dieselbe Modellauswahl.
 `openModelPicker` klappt einen mobilen Composer vor dem Messen und Fokussieren
-des Menüs auf. So öffnen die sichtbaren Toolbar-Shortcuts für Modelle und
+des Menüs auf. So öffnen die Shortcuts im Hero und (+)-Menü für Modelle und
 Reasoning auch dann ein bedienbares Menü, wenn dessen Elternbereich zuvor
 eingeklappt war. Ein nur bei offenem Menü aktiver ResizeObserver passt die
 Position während des Aufklappens an. Beim Einpassen begrenzen die sichtbare
