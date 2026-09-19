@@ -20,7 +20,7 @@ from app.services.agent_comparison import comparison_selection
 from app.services.agent_runs import AgentRunStore
 from app.services.agent_policy import AgentPolicy, supports_delegation
 from app.services.agent_delegation import DelegationLoop
-from app.services.agent_provider_limits import AgentProviderCooldown, provider_cooldowns, provider_failure
+from app.services.agent_provider_limits import AgentProviderCooldown, agent_failure, provider_cooldowns
 from app.services.agent_tools import configured_model
 from app.services.agent_runtime import AgentCapacityExceeded, AgentStreamingResponse, agent_capacity
 from app.services.chat_store import normalize_question, ChatNotFound, TurnStatusConflict, _idempotent_turn_id
@@ -95,7 +95,7 @@ def _final(uid, payload, store, turn):
 def _save_interrupted(uid, payload, store, turn_id):
     try:
         turn = store.get_turn(uid, payload.chat_id, turn_id)
-        if turn.get("agent_review") and turn.get("consensus") and turn["status"] == "failed":
+        if turn.get("consensus") and turn["status"] == "failed":
             _save_bookmark(uid, payload, store, turn)
         return turn
     except Exception as exc:
@@ -152,7 +152,7 @@ def run_agent(request: Request, payload: AgentRequest):
                 raise TurnStatusConflict("Request identity conflicts with different comparison models")
             if existing["status"] == "completed":
                 return _final(uid, payload, store, existing)
-            if payload.recover_only and existing["status"] == "failed" and existing.get("agent_review") and existing.get("consensus"):
+            if payload.recover_only and existing["status"] == "failed" and existing.get("consensus"):
                 return _final(uid, payload, store, existing)
             failed = existing["status"] == "failed"
             return JSONResponse({"error": "This run ended without a saved answer. Send a new message to try again." if failed
@@ -178,7 +178,7 @@ def run_agent(request: Request, payload: AgentRequest):
         # Comparisons always use the shared bounded loop; worker delegation
         # retains its separately configured model/protocol feature gate.
         delegation_config = {**delegation_config, "enabled": delegation_config["enabled"] and supports_delegation(model)}
-        policy = replace(AgentPolicy.from_config({**delegation_config, "enabled": True}), context_chars=120_000)
+        policy = AgentPolicy.for_chat(delegation_config)
         comparisons = comparison_selection(payload.comparison_models)
         model = replace(model, request_config={**model.request_config, "_agent_bounded_search": True})
         turn = store.create_turn(
@@ -244,16 +244,15 @@ def run_agent(request: Request, payload: AgentRequest):
             _save_interrupted(uid, payload, store, turn["id"])
             raise
         except (AgentCapacityExceeded, TurnStatusConflict, AnalysisBudgetExceeded) as exc:
-            error = str(exc)
-            if isinstance(exc, agent_quota.AgentTokenBudgetExceeded):
-                failure = {"code": exc.code, "required_tokens": exc.required, "available_tokens": exc.remaining}
+            failure = agent_failure(exc)
+            error = failure.pop("error")
             logging.warning("Agent admission stopped category=%s model=%s reason=%s", safe_exception(exc), model.model, error)
         except AgentProviderCooldown as exc:
             error = str(exc)
             failure = {"code": "provider_rate_limited", "retry_after": exc.retry_after}
         except Exception as exc:
             provider_cooldowns.record(model, key or "", exc)
-            failure = provider_failure(exc)
+            failure = agent_failure(exc)
             error = failure.pop("error")
             logging.warning("Agent completion failed category=%s model=%s code=%s retry_after=%s",
                             safe_exception(exc), model.model, failure["code"], failure.get("retry_after"))
@@ -262,7 +261,7 @@ def run_agent(request: Request, payload: AgentRequest):
                 yield sse_pack(event["type"], event)
             interrupted = _save_interrupted(uid, payload, store, turn["id"])
             if interrupted is not None:
-                failure["recoverable"] = bool(interrupted.get("agent_review") and interrupted.get("consensus"))
+                failure["recoverable"] = bool(interrupted.get("consensus"))
             if interrupted and interrupted.get("agent_review"):
                 yield sse_pack("review", {"review": interrupted["agent_review"]})
             yield sse_pack("activity", {"version": 1, "step_id": "run", "id": "run/usage", "kind": "usage", "usage": completion.usage})

@@ -55,7 +55,7 @@ oder `agent:<uuid>:N`. Alle Pfade liegen unter dem authentifizierten Nutzer.
 `agent_sessions.py` verwaltet kompakte Dokumente unter
 `chats/{chat}/turns/{turn}/agents/{agent}` und getrennte `messages`-Subcollections.
 `agent_events` enthält geordnete, deduplizierbare Zustandsereignisse mit globaler
-Sequenznummer. Der bestehende 64-Einträge-Trace bleibt davon getrennt.
+Sequenznummer. Die kurzen Reasoning-Zusammenfassungen bleiben davon getrennt.
 
 Jeder tatsächliche Provideraufruf erhält genau einen `llm_calls`-Beleg.
 Claim, gemeinsame Token-/Kostenreserve und Account-Zähler werden atomar geschrieben;
@@ -67,15 +67,20 @@ werden niemals zu null oder zu einem Einsparungsbeleg. Agent- und Run-Summen ver
 dieselben Schrittbelege; Reasoning ist bereits in Output-Tokens enthalten.
 
 Das System friert Admin-Konfiguration, Prompts und Modell-/Tarifsnapshots pro Run ein.
-Default: 32 Modellaufrufe, 48 Koordinationsaufrufe, 300 Sekunden, 4 Mio. konservativ
-reservierte Tokens, 3 USD Kostenreserve, 4 Agenten, 2 gleichzeitig arbeitende Worker,
-64 Nachrichten, 48.000 Kontextzeichen je Sitzung, 4.000 Zeichen je Nachricht,
-8 Modellaufrufe je Worker und 2 Suchen insgesamt. Ein Worker lässt zwei Modellaufrufe
-für den Orchestrator frei. Reserven sind Zulassungsgrenzen, keine Provider-Rechnungsgrenze.
+Für `/agent` aktiviert `AgentPolicy.for_chat` ausschließlich das zentrale
+Tages-Tokenbudget; alte Zeit-, Call-, Tool-, Worker-Runden-, Such-, Nachrichten-
+und Kostenlimits gelten dort nicht. Sie bleiben im Config-Schema für Legacy-
+und Evaluierungsaufrufe erhalten, werden aber im Admin-Editor nicht angeboten.
+Standardmäßig dürfen vier ungeprüfte Worker und zwei arbeitende Unteraufrufe
+gleichzeitig aktiv sein. Nachrichten bleiben auf 4000 Zeichen begrenzt, das
+Modellfenster und strikte Provider-Schemas gelten weiter. Details zu Vergleichen
+und Prüfungen: [Agent-Modus](agent-mode.md).
 
 Abbruch schließt sämtliche Provider-Sockets und wartet auf alle Worker. Ein Watchdog
-prüft Run-Abbruch, Chatlöschung und Account-Sperren. Die Lease dauert Laufzeit plus
-30 Sekunden. Nach Prozessverlust werden offene Belege beim Lesen nach Lease-Ablauf
+prüft alle drei Sekunden Run-Abbruch und Chatlöschung; Account-Sperren gelten für
+jeden Schreibvorgang. Die Chat-Lease dauert 120 Sekunden und wird etwa alle
+30 Sekunden atomar für Producer, Chat-Lock und Account verlängert. Kurze temporäre
+DB-Ausfälle verursachen keinen sofortigen Stopp. Nach Prozessverlust werden offene Belege beim Lesen nach Lease-Ablauf
 als abgebrochen/unbekannt abgeschlossen; bereits bezahlte Schritte werden nie
 neu gestartet. Reload lädt gespeicherte Sitzungen. Ein verlorener HTTP-Stream
 wird aus Sicherheitsgründen abgebrochen, nicht als Hintergrundjob fortgesetzt.
@@ -95,7 +100,7 @@ Reduced Motion werden unterstützt. Stop beendet den ganzen Run.
 
 Owner-/Pro-/Admin-geschützte Endpoints mit `private, no-store`:
 
-- `GET /agent/chats/{chat}/turns/{turn}/agents`: maximal acht kompakte Agenten,
+- `GET /agent/chats/{chat}/turns/{turn}/agents`: die kompakten Agenten des Turns,
   Run-Status und bekannte Gesamtkosten.
 - `GET /agent/chats/{chat}/turns/{turn}/agents/{agent}?after=<seq>&limit=25`:
   Auftrag und paginierte Nachrichten, maximal 50 je Request.

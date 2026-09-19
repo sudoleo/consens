@@ -239,7 +239,7 @@
     }
     if (panel) panel.hidden = !agent || (!context && !basis);
     if (agent && !context && basis) {
-      renderAnswer(basis.consensus || "", "", App.agentActivity?.label(basis.currentTurn?.agent_settings) || "Agent · Beta");
+      renderAnswer(basis.consensus || "", basis.currentTurn?.agent_failure?.error || "", App.agentActivity?.label(basis.currentTurn?.agent_settings) || "Agent · Beta");
       App.agentActivity?.renderTurn(activityHost(`${basis.chatId}:${basis.turnId}`), basis.currentTurn);
       App.agentReview?.render(document.getElementById("agentAnswerBody"), basis.currentTurn?.agent_review,
         { sources: basis.currentTurn?.sources, events: basis.currentTurn?.agent_activity, key: basis.turnId, question: basis.question });
@@ -285,7 +285,7 @@
       history.dataset.agentHistory = signature;
     }
     const state = context.consensus;
-    renderAnswer(state.text || state.streamText || "", state.error?.message || "",
+    renderAnswer(state.text || state.streamText || "", state.error?.message || state.completedTurn?.agent_failure?.error || "",
       App.agentActivity?.label(state.completedTurn?.agent_settings || context.metadata.agentSettings) || "Agent · Beta");
     App.agentActivity?.render(activityHost(context.runId), {
       events: state.completedTurn?.agent_activity || context.metadata.agentActivity || [],
@@ -312,7 +312,7 @@
     context.consensus.text = context.consensus.streamText = data.response;
     context.consensus.status = "complete";
     context.consensus.completedTurn = turn;
-    context.consensus.error = turn.status === "failed" ? { message: "This saved answer is incomplete. Its review did not finish successfully." } : null;
+    context.consensus.error = turn.status === "failed" ? { message: turn.agent_failure?.error || "This saved answer is incomplete. The response did not finish successfully." } : null;
     context.bookmark.status = "succeeded";
     context.persistence.consensusWrite = true;
     context.metadata.recoverable = false;

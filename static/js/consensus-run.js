@@ -360,6 +360,12 @@
         const activity = document.createElement("div");
         window.App.agentActivity?.renderTurn(activity, turnData);
         answer.insertBefore(activity, answerBody);
+        if (turnData.agent_failure?.error) {
+          const failure = document.createElement("p");
+          failure.className = "agent-review-note";
+          failure.textContent = turnData.agent_failure.error;
+          answer.append(failure);
+        }
         window.App.agentReview?.render(answerBody, turnData.agent_review,
           {sources: turnSources, events: turnData.agent_activity, key: turnData.id || turnData.turn_id, question: turnData.question});
       }

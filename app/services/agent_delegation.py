@@ -6,6 +6,7 @@ import json
 import queue
 import threading
 import time
+from itertools import count
 from typing import Literal
 from uuid import uuid4
 
@@ -16,7 +17,7 @@ from app.services.agent_quota import AgentTokenBudgetExceeded
 from app.services.agent_loop import AgentLoop
 from app.services.agent_progress import ReasoningProgress
 from app.services.agent_policy import supports_delegation
-from app.services.agent_provider_limits import AgentProviderCooldown, provider_cooldowns, provider_failure
+from app.services.agent_provider_limits import AgentRunInterrupted, agent_failure, provider_cooldowns
 from app.services.agent_tools import ReadOnlyTool, ToolRegistry, search_tools
 from app.services.llm.agent_client import AgentCompletion, agent_models, resolve_agent_model
 from app.services.llm.provider_runtime import (
@@ -91,7 +92,9 @@ class DelegationLoop(AgentLoop):
         self.tools_used = 0
         self.search_remaining = self.policy.max_searches
         self.closed = threading.Event()
-        self.budget = AnalysisBudget(seconds=self.policy.seconds, max_calls=self.policy.max_calls)
+        self.watch_error = None
+        self.budget = AnalysisBudget(seconds=self.policy.seconds, max_calls=self.policy.max_calls,
+                                     unlimited=self.policy.account_budget_only)
         self.models = {model.selection_id: resolve_agent_model(model.selection_id)
                        for model, _ in agent_models() if supports_delegation(resolve_agent_model(model.selection_id))
                        and (worker_model_ids is None or model.selection_id in worker_model_ids)}
@@ -115,10 +118,14 @@ class DelegationLoop(AgentLoop):
                            for key, model in self.models.items()}
             self.comparison = ComparisonTools(self, comparison_models)
             self.messages[0]["content"] += "\n" + PROMPT
+            if not self.policy.account_budget_only:
+                self.messages[0]["content"] += "\nAt most three comparisons and two checked answer versions per message."
             self.registry = ToolRegistry([*(self.registry.tools.values() if self.config["enabled"] else []),
                                           *self.comparison.tools], argument_limit=24_000)
 
     def _check(self, cancellation=None):
+        if self.watch_error:
+            raise self.watch_error
         self.cancellation.raise_if_cancelled()
         if cancellation:
             cancellation.raise_if_cancelled()
@@ -157,7 +164,8 @@ class DelegationLoop(AgentLoop):
     def start_agent(self, args, *, cancellation):
         self._check(cancellation)
         with self.condition:
-            if len(self.workers) >= self.policy.max_agents:
+            active = sum(not w.reviewed and w.state not in {"failed", "stopped"} for w in self.workers.values())
+            if (active if self.policy.account_budget_only else len(self.workers)) >= self.policy.max_agents:
                 raise ValueError("Agent limit reached; use an existing session or finish the work yourself.")
             if args.model_id not in self.models:
                 raise ValueError("Model has no verified worker tool protocol. Select an offered worker model.")
@@ -252,7 +260,7 @@ class DelegationLoop(AgentLoop):
         self.seen_calls.add(identity)
         with self.condition:
             self.tools_used += 1
-            if self.tools_used > self.policy.max_tools:
+            if not self.policy.account_budget_only and self.tools_used > self.policy.max_tools:
                 raise AnalysisBudgetExceeded("Shared tool limit reached")
         tool = None
         status = "failed"
@@ -276,13 +284,13 @@ class DelegationLoop(AgentLoop):
 
     def _step(self, model, messages, step, registry, cancellation, *, worker=None, searches_enabled=True):
         self._check(cancellation)
-        if len(json.dumps(messages, ensure_ascii=False)) > self.policy.context_chars:
+        if not self.policy.account_budget_only and len(json.dumps(messages, ensure_ascii=False)) > self.policy.context_chars:
             raise AnalysisBudgetExceeded("Agent session context limit reached")
         self.cooldowns.check(model, self.api_key)
         with self.condition:
-            if worker and self.costs.calls >= self.policy.max_calls - 2:
+            if not self.policy.account_budget_only and worker and self.costs.calls >= self.policy.max_calls - 2:
                 raise AnalysisBudgetExceeded("Remaining calls are reserved for the orchestrator")
-            searches = min(1, self.search_remaining) if searches_enabled else 0
+            searches = (1 if self.policy.account_budget_only else min(1, self.search_remaining)) if searches_enabled else 0
             self.search_remaining -= searches
         tools = [*registry.schemas, *search_tools(model, searches)]
         try:
@@ -318,7 +326,7 @@ class DelegationLoop(AgentLoop):
                 messages[0] = {**messages[0], "content": messages[0]["content"] +
                     "\nWeb search is unavailable for this step because its token reservation exceeds the remaining daily allowance. "
                     "Use existing evidence, state any uncertainty, and do not imply new web research."}
-                if len(json.dumps(messages, ensure_ascii=False)) > self.policy.context_chars:
+                if not self.policy.account_budget_only and len(json.dumps(messages, ensure_ascii=False)) > self.policy.context_chars:
                     raise AnalysisBudgetExceeded("Agent session context limit reached")
                 reservation = self.costs.reserve(model, messages, tools)
                 claimed = self.store.claim(self.uid, self.chat_id, self.turn_id, model, step=step,
@@ -370,6 +378,10 @@ class DelegationLoop(AgentLoop):
             self.cooldowns.record(model, self.api_key, exc)
             raise
         finally:
+            if not worker and value.text:
+                # Retain streamed text when a provider fails mid-answer. Reviewed
+                # candidates are checkpointed separately, with their exact hash.
+                self.completion.text = value.text
             if claimed:
                 self.costs.reconcile(reservation, value.usage)
                 if worker:
@@ -409,7 +421,7 @@ class DelegationLoop(AgentLoop):
                             text = worker.inbox.popleft()
                             if text is not None:
                                 worker.messages.append({"role": "user", "content": "Orchestrator message:\n" + text})
-                    if worker.calls >= self.policy.worker_calls:
+                    if not self.policy.account_budget_only and worker.calls >= self.policy.worker_calls:
                         raise AnalysisBudgetExceeded("Worker call limit reached")
                     while not self.slots.acquire(timeout=.2):
                         self._check(worker.cancellation)
@@ -444,9 +456,7 @@ class DelegationLoop(AgentLoop):
             if worker.state != "completed":
                 self._terminal(worker, "stopped", "Worker stopped.")
         except Exception as exc:
-            failure = ({"code": "provider_rate_limited", "retry_after": exc.retry_after, "error": str(exc)}
-                       if isinstance(exc, AgentProviderCooldown) else
-                       {"error": str(exc)} if isinstance(exc, AnalysisBudgetExceeded) else provider_failure(exc))
+            failure = agent_failure(exc)
             self._terminal(worker, "failed", failure["error"], failure)
         finally:
             unregister()
@@ -497,12 +507,28 @@ class DelegationLoop(AgentLoop):
                 worker.join()
 
     def _watch(self):
-        while not self.closed.wait(.5):
+        from google.api_core.exceptions import DeadlineExceeded, InternalServerError, ServiceUnavailable
+        last_verified = time.monotonic()
+        while not self.closed.wait(3):
             try:
                 self._check()
                 if self.claimed:
                     self.store.check_delegation(self.uid, self.chat_id, self.turn_id, self.run_token)
-            except Exception:
+                last_verified = time.monotonic()
+            except (DeadlineExceeded, InternalServerError, ServiceUnavailable):
+                # A short database outage is not a user stop. Leave time to
+                # reconnect before the renewable producer lease expires.
+                if time.monotonic() - last_verified < 60:
+                    continue
+                self.watch_error = AgentRunInterrupted("The connection to saved chat state was lost. Your available answer has been saved.")
+                self.cancellation.cancel()
+                return
+            except ProviderCancelled:
+                self.cancellation.cancel()
+                return
+            except Exception as exc:
+                self.watch_error = exc if isinstance(exc, (AnalysisBudgetExceeded, AgentRunInterrupted)) else AgentRunInterrupted(
+                    "The response could not continue because its saved run state is unavailable. Your available answer has been saved.")
                 self.cancellation.cancel()
                 return
 
@@ -513,7 +539,7 @@ class DelegationLoop(AgentLoop):
         watcher.start()
         try:
             with bind_analysis_budget(self.budget), bind_provider_cancellation(self.cancellation):
-                for index in range(self.policy.max_calls):
+                for index in (count() if self.policy.account_budget_only else range(self.policy.max_calls)):
                     self._check()
                     incoming = self._mail()
                     if incoming:
@@ -542,10 +568,10 @@ class DelegationLoop(AgentLoop):
                         continue
                     if self.comparison and self.comparison.comparisons:
                         if not self.comparison.finalized:
-                            # Give the model a bounded chance to issue the tool.
-                            # A missing call never silently becomes success.
+                            # A missing call never silently becomes success;
+                            # chat can keep trying within its account budget.
                             missing_judge_calls += 1
-                            if missing_judge_calls > 1:
+                            if not self.policy.account_budget_only and missing_judge_calls > 1:
                                 raise AnalysisBudgetExceeded("The model did not perform the required answer review.")
                             self.messages.append({"role": "user", "content": "The synthesis is visible. Call judge_answer now for that exact answer; do not repeat it."})
                             continue
@@ -557,8 +583,17 @@ class DelegationLoop(AgentLoop):
                     break
                 else:
                     raise AnalysisBudgetExceeded("Agent orchestration call limit reached")
-        except (ProviderCancelled, GeneratorExit):
+        except ProviderCancelled:
+            if self.watch_error:
+                self.completion.failure = agent_failure(self.watch_error)
+                raise self.watch_error
             status = "cancelled"
+            raise
+        except GeneratorExit:
+            status = "cancelled"
+            raise
+        except Exception as exc:
+            self.completion.failure = agent_failure(exc)
             raise
         finally:
             self.closed.set()

@@ -1630,7 +1630,12 @@ abgelehnt. Ohne Auswahl gilt das zentrale Default-Preset. Der öffentliche
 Metering-Snapshot deckt die gemeinsame Registry ab; neue Modelle benötigen
 weiterhin Preise/Kontextgrenzen im agent_model_catalog.json.
 
-POST /agent verwendet den bestehenden DelegationLoop als begrenzten Tool-Loop.
+POST /agent verwendet den bestehenden DelegationLoop mit `AgentPolicy.for_chat`.
+`account_budget_only` ersetzt zusätzliche Laufzeit-, Call-, Tool-, Worker-Runden-,
+Such-, Nachrichten- und Dollarlimits durch das zentrale Tages-Tokenbudget. Im
+persistierten Policy-Snapshot stehen die nicht angewendeten Limits auf null.
+Der injizierte AnalysisBudget ist nur für diesen Lauf zeit-/aufrufunbegrenzt;
+Consensus und Legacy-Aufrufer behalten ihre eigenen Grenzen.
 Worker-Delegation bleibt separat durch delegation_config.enabled und die
 geprüfte Modell-/Reasoning-Kombination freigegeben. policy.delegation aktiviert
 hier auch ohne Worker-Freigabe das gemeinsame persistente Schrittjournal.
@@ -1642,7 +1647,7 @@ stehen in [agent-delegation.md](agent-delegation.md).
 
 **Vergleich und Prüfung.** agent_comparison.py registriert compare_models und
 judge_answer mit strikten Pydantic-Argumenten. Das Modell entscheidet selbst,
-ob es die ganze Frage oder bis zu drei begründete Teilfragen vergleicht. Es
+ob es die ganze Frage oder mehrere begründete Teilfragen vergleicht. Es
 liefert einen neutralen Auftrag mit nötigem Kontext; alle Vergleichsmodelle
 sehen dieselbe isolierte Aufgabe, keine Antworten anderer Vergleichsmodelle.
 Der vorhandene fan_out_provider_answers übernimmt Fan-out, Quellen-Normalisierung
@@ -1669,11 +1674,12 @@ inklusive Quellen/Modellmetadaten. finish_run validiert diese Bindungen erneut.
 Mehrere Teilvergleiche werden getrennt gegen dieselbe Synthese geprüft; ihre
 Stimmen werden nicht zu einem künstlich größeren Panel addiert. finalize=true
 beendet die Ausgabe mit genau dem geprüften Text. finalize=false erlaubt eine
-Überarbeitung; maximal zwei Antwortversionen und 18 Judge-Versuche insgesamt.
+weitere Überarbeitungen ohne feste Versions-/Judge-Rundengrenze. Neue Vergleiche
+nach einer Prüfung entwerten die alte Bindung auch bei unverändertem Synthesetext.
 Begleittext zu anderen Toolcalls bleibt Planung und öffnet keine Syntheseversion;
 so verhindert ein angekündigter zweiter Vergleich nicht dessen Ausführung.
-Nach höchstens einer Erinnerung an einen fehlenden Toolcall scheitert der Lauf
-explizit, statt eine ungeprüfte Antwort erfolgreich abzuschließen. Ohne Vergleich
+Fehlende Judge-Toolcalls werden erneut eingefordert, solange weitere Aufrufe
+ins Tagesbudget passen; ungeprüfte Antworten werden nie erfolgreich abgeschlossen. Ohne Vergleich
 ist keine automatische Prüfung erforderlich. Ein ausdrücklicher Prüfwunsch kann
 zuerst mit compare_models eine Grundlage einholen.
 
@@ -1684,16 +1690,24 @@ Provider-Schritt wird auch nach einem Prozessabsturz nie erneut ausgeführt.
 SSE-Toolarbeit läuft in einem kontrollierten Thread, während der Producer
 Aktivitäten weiter ausgibt. Stop/Disconnect schließt Provider und wartet auf die
 aktiven Worker/Tools. Abgelaufene Leases werden zu terminalen unbekannten
-Belegen; fehlende Usage bleibt reserviert. Eine Chat-Löschung löscht keine
+Belegen; fehlende Usage bleibt reserviert. Aktive Chat-Producer erneuern ihre
+120-Sekunden-Lease etwa alle 30 Sekunden atomar mit Account-Lease und Chat-Lock.
+Der Watchdog prüft alle drei Sekunden statt zweimal pro Sekunde und toleriert
+kurze temporäre DB-Ausfälle bis 60 Sekunden. Abgelaufene oder ersetzte Producer
+dürfen keine Lease erneuern. Eine Chat-Löschung löscht keine
 entstandenen Kosten; Account-Tombstones sperren verspätete Writes.
 
 agent_review wird vor Vergleich/Judge und nach Änderungen zusammen mit dem
 exakten Antworttext auf dem Turn gespeichert. Terminale Abbrüche wandeln einen
 laufenden Prüfstatus in cancelled/failed/missing um. Agent-Bookmarks dürfen
-zusätzlich fehlgeschlagene Turns mit gespeichertem Vergleichstext darstellen;
+zusätzlich fehlgeschlagene Turns mit gespeichertem Antwort-/Vergleichstext darstellen;
 Consensus-Bookmarks bleiben auf completed beschränkt. Recovery gibt nur den
 vorhandenen Snapshot zurück, ohne erneut zu vergleichen oder zu belasten.
 assistant_response bleibt kanonisch; consensus ist der alte Lesealias.
+Direkte Teilantworten bleiben bei Providerfehlern erhalten. `agent_failure`
+enthält den sicheren Fehlercode und Grund auch im gespeicherten Turn; die UI
+zeigt ihn live und nach Reload. Provider-Timeouts sind von Kontingent-Stopp und
+Nutzerabbruch getrennt, rohe Provider-Fehler werden nicht gespeichert.
 
 **UI-Verträge.** agent-activity.js zeigt den jüngsten kurzen Reasoning-Fortschritt
 und aktuelle Tool-Aktivität als kleine Textabsätze außerhalb des standardmäßig
@@ -1732,8 +1746,8 @@ MODEL_FAMILIES inklusive apiPrefix auf; unbekannte Modelle erhalten ein Initial.
 Die Icons sind 15px groß. Im Composer öffnet das Chatmodellmenü über die
 optionale `secondarySelect`-Ebene von model-picker.js auch die Reasoning-Wahl.
 Ein gesperrter Agent-Modusschalter und die frühere Tokenzeile bleiben verborgen.
-Das Journal enthält höchstens 64 Aktivitäten; die separaten Worker-Limits
-bleiben in der Orchestrierung aktiv. agent-review.js steht in bundles.json vor
+Die Aktivitätsliste enthält auch weitere Vergleichs-/Judge-Runden über 64 Sitzungen;
+Parallelitäts- und Nachrichtengrößen bleiben begrenzt. agent-review.js steht in bundles.json vor
 consensus-run.js und rendert live aus review-SSE-Ereignissen oder gespeichertem
 agent_review. Vor Markierungen prüft es Text-/Versions-/Basisbindung.
 Pro Turn vereinigt die Quellenansicht Provider-/Suchquellen, die Quellen der
@@ -1769,7 +1783,7 @@ Claims/Prüfungen mit. Veraltete Admin-Requests scheitern mit 409, DB-Fehler wer
 nicht als erfolgreiche Änderungen ausgegeben. Gezählt wird ausschließlich
 Provider-Input + Provider-Output. Cached input und cache writes sind Teil des
 Inputs; reasoning ist Teil des Outputs. Provider-Gesamtkosten haben Vorrang vor
-Katalogschätzungen; sie bleiben als zusätzliche, separate Kostenkontrolle aktiv.
+Katalogschätzungen; Kosten werden erfasst, begrenzen den Agent-Chat aber nicht zusätzlich.
 Jeder Claim reserviert transaktional im selben Commit wie sein Beleg unter
 users/{uid}/chat_state/agent_tokens_YYYY-MM-DD[_reset_epoch]. Settlement tauscht die Reserve
 gegen gemessene Tokens genau einmal aus. Fehlende Tokenzahlen behalten ihre
@@ -1782,23 +1796,24 @@ Eine abgelehnte Reservierung ist von leerem Tagesbudget getrennt
 und damals verfügbare Tokens. Scheitert vor dem Provider-Aufruf allein die
 Zulassung mit optionaler Suche, versucht DelegationLoop denselben Schritt ohne
 Suchreserve. Der Systemkontext macht fehlende neue Recherche ausdrücklich;
-alle Kernaufruf-, Kontext-, Kosten- und Tageslimits gelten unverändert. Der
+Modellfenster und Tageskontingent bleiben verbindlich. Der
 abgelehnte Versuch schreibt keinen Beleg und startet keinen bezahlten Aufruf.
 
-Vor Vergleichen wird eine wachsende Synthese-/Judge-Reserve an Tokens und Kosten
-atomar geschützt. Vergleichsmodelle und Worker können sie nicht verbrauchen;
-Orchestrator und Judges dürfen sie nutzen. Harte Kontext-, Output-, Call-, Tool-,
-Zeit-, Parallelitäts- und Kostenlimits bleiben zusätzlich aktiv. Standardwerte
-kommen aus der bestehenden Delegationskonfiguration (32 Calls, 48 Tools,
-300 Sekunden, 3 USD Kostenreserve, 2 parallele Unteraufrufe); 120.000 Zeichen
-Kontext, bis zu 600 kB für den Review-Snapshot. Kein LLM-Kompressor.
+Im Chat entfallen pauschale Reserven für hypothetische Synthese-/Judge-Aufrufe;
+alle tatsächlich anstehenden Aufrufe reservieren weiterhin atomar im Tagesledger.
+Die alten Review-Holds bleiben für Legacy-Läufe korrekt abrechenbar. Modellfenster,
+Output-, Speicher- und Parallelitätsgrenzen bleiben technische Anforderungen:
+standardmäßig zwei parallele Unteraufrufe, initial 120.000 Zeichen Chatverlauf,
+bis zu 600 kB Review-Snapshot. Kein LLM-Kompressor. Der Admin-Prompteditor zeigt
+nur wirksame Worker-Parallelitäts-/Nachrichtengrößen und verweist auf Limits für
+das zentrale Tagesbudget; alte Config-Felder bleiben beim Speichern erhalten.
 Konten behalten maximal zwei aktive Läufe; AGENT_MAX_CONCURRENT_RUNS begrenzt
 Produzenten pro Prozess (Default 16). Consensus behält seine Run-Limits.
 
 Damit das Tageskontingent keine unbeschränkten nativen Suchfenster reservieren
 muss, nutzt Agent den gemeinsamen engines.web_search_tool-Builder mit begrenztem
 Exa-Transport (3 Treffer, je 1.000 Zeichen, maximal eine Suche pro Modellschritt
-aus dem gemeinsamen Suchbudget). Es gibt keinen neuen Suchdienst. Provider-
+ohne zusätzliche Suchanzahl pro Lauf). Es gibt keinen neuen Suchdienst. Provider-
 Routing/ZDR bleiben bestehen. Die Consensus-Suchkonfiguration bleibt unverändert.
 Nur bestätigte Zähler/Quellen erzeugen Suchaktivität. Kosten-/Tokenwerte bleiben
 bei unvollständiger Provider-Usage ausdrücklich unvollständig.

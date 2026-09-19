@@ -52,7 +52,7 @@ class AgentRunStore(AgentSessionStore, ChatStore):
         return self.db.collection("users").document(uid).collection("chat_state").document("agent_runs")
 
     def receipt_ref(self, uid, chat_id, turn_id, step="completion:0"):
-        if not re.fullmatch(r"(?:completion|agent:[a-f0-9]{32}):(?:0|[1-9][0-9]?)", step):
+        if not re.fullmatch(r"(?:completion|agent:[a-f0-9]{32}):(?:0|[1-9][0-9]*)", step):
             raise ValueError("Invalid agent step")
         key = hashlib.sha256(f"agent\0{chat_id}\0{turn_id}\0{step}".encode()).hexdigest()
         return self.db.collection("users").document(uid).collection("llm_calls").document(key)
@@ -281,6 +281,11 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                                  differences="", differences_data=None, included_models=[])
                 else:
                     patch.update(error_code="cancelled" if status == "cancelled" else "agent_failed", failed_at=firestore.SERVER_TIMESTAMP)
+                    patch["agent_failure"] = getattr(completion, "failure", None) or {
+                        "code": "cancelled" if status == "cancelled" else "agent_failed",
+                        "error": "Response stopped. Available results have been saved." if status == "cancelled" else "The response could not be completed. Available results have been saved."}
+                    if completion.text and not review:
+                        patch["assistant_response"] = completion.text
                     if review:
                         # A crash/stop cannot leave a saved review looking live.
                         review = dict(review)

@@ -1934,7 +1934,7 @@ function applyBookmarkModelPresentation(bookmark) {
 
 // Diese Funktion füllt die UI mit den Daten eines Bookmarks
 function normalizeConversationTurn(turn) {
-  if (!turn || !(turn.status === "completed" || (turn.execution_mode === "agent" && turn.status === "failed" && turn.agent_review)) || !turn.question || !turn.consensus) return null;
+  if (!turn || !(turn.status === "completed" || (turn.execution_mode === "agent" && turn.status === "failed")) || !turn.question || !turn.consensus) return null;
   return { ...turn, turn_id: turn.id || turn.turn_id || "" };
 }
 

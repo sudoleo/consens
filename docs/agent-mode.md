@@ -21,7 +21,7 @@ zusätzliche Presetliste und keinen Synthese-/Consensus-Modell-Picker an. Manuel
 Familien-/Modellwahl bleibt möglich. Mindestens zwei Vergleichsmodelle müssen
 gewählt sein; ohne übergebene Auswahl gilt das zentrale Standardpreset.
 
-Das Modell kann eine ganze Frage oder bis zu drei begründete Teilfragen
+Das Modell kann eine ganze Frage oder mehrere begründete Teilfragen
 vergleichen. Jede Vergleichsgruppe erhält denselben neutralen Auftrag samt
 notwendigem Kontext. Keine Vergleichsantwort beeinflusst die andere. Das
 Chatmodell erhält Antworten, Quellen, Status und Modellmetadaten und schreibt
@@ -33,8 +33,8 @@ unabhängige Vergleichsgrundlage eingeholt.
 
 Nach einem Vergleich ist judge_answer verpflichtend. Das Tool prüft genau den
 bereits sichtbaren Synthesetext mit der vorhandenen Differences-/Coverage-Pipeline.
-Ein fehlender Toolcall wird einmal eingefordert; danach endet der Lauf mit
-fehlender Prüfung. Das Backend lässt keinen stillen ungeprüften Abschluss zu.
+Ein fehlender Toolcall wird erneut eingefordert, solange das Tagesbudget weitere
+Aufrufe zulässt. Das Backend lässt keinen stillen ungeprüften Abschluss zu.
 
 Die Anzeige unterscheidet vollständig, teilweise, fehlgeschlagen, fehlend und
 abgebrochen. Vollständig bedeutet, dass beide Judges ihre Aufgabe abgeschlossen
@@ -43,9 +43,10 @@ keine unabhängige Faktenprüfung. Ohne Vergleich läuft keine automatische Prü
 
 Die Prüfung bindet den SHA-256 der Antwort und den Hash der konkret verwendeten
 Modellantworten samt Quellen. Nach der Prüfung wird der Text nicht umgeschrieben.
-Mit finalize=false kann das Modell einmal überarbeiten; die neue Textversion
-muss erneut geprüft werden. Maximal zwei Versionen und 18 Judge-Versuche pro
-Nachricht verhindern unbegrenzte Reparaturschleifen. Ankündigungen weiterer
+Mit finalize=false kann das Modell weiter überarbeiten; jede neue Textversion
+muss erneut geprüft werden. Weitere Vergleiche sind auch nach einer Prüfung
+möglich und entwerten die bisherige Prüfung gegen die alte Grundlage. Es gibt
+keine feste Zahl an Vergleichs-, Antwort- oder Judge-Runden. Ankündigungen weiterer
 Tool-Aufrufe zählen noch nicht als Syntheseversion. Jeder Teilvergleich behält
 seine eigene Prüfung: dieselben Modelle zählen nicht mehrfach als unabhängige
 Stimmen. Nicht abgedeckte Aussagen bleiben in der Coverage sichtbar.
@@ -147,24 +148,24 @@ Vollabfragen. Nach zehn Sekunden ohne Update wird bei sichtbarem Tab abgeglichen
 am Ende wird der terminale Zustand noch einmal geladen. Die Lease-Prüfung teilt
 ihren Receipt-Snapshot mit der Listenansicht, statt ihn doppelt zu lesen.
 
-Vor einem Vergleich schützt der Server zusätzliche Tokens und Kosten für
-Synthese und Judges gegen andere parallele Runs und Worker. Zu wenig verfügbares
-Budget kann einen Vergleich ablehnen oder eine Teilgrundlage ergeben; eine
-fehlgeschlagene Prüfung wird dabei nie zu einer erfolgreichen umgedeutet.
+Jeder tatsächlich anstehende Modellaufruf reserviert sein maximales Tokenvolumen.
+Eine zusätzliche pauschale Reserve für zukünftige Synthese-/Judge-Aufrufe entfällt
+im Chat. Reicht das Tagesbudget für einen nächsten Aufruf nicht, bleiben vorhandene
+Ergebnisse mit ihrem tatsächlichen, gegebenenfalls unvollständigen Prüfstatus erhalten.
 
-Technische Standardgrenzen stammen aus der gemeinsamen Delegationskonfiguration:
+Das zentrale Tageskontingent ist die einzige Verbrauchsgrenze des Agent-Chats.
+Es gibt kein Laufzeit-, Runden-, Tool-, Such-, Nachrichten- oder Dollarbudget pro
+Lauf. Alte Admin-Werte dafür werden von `AgentPolicy.for_chat` nicht angewendet;
+Legacy-/Evaluierungsaufrufe und die bestehende Consensus-Pipeline bleiben begrenzt.
+Technische Grenzen schützen Providerprotokoll, Speicher und Parallelität:
 
 | Grenze | Standard |
 |---|---|
-| Bezahlte Provider-Aufrufe | 32 pro Nachricht, alle Rollen zusammen |
-| Tool-Aufrufe | 48 |
-| Laufzeit | 300 Sekunden |
-| Zusätzliche Kostenreserve | 3 USD pro Nachricht |
 | Parallele Unteraufrufe | 2 |
 | Antwortmodelle pro Vergleich | vorhandene Auswahl, mindestens 2 |
 | Vergleichsantwort | 2048 Output-Tokens, maximal 6000 Zeichen |
 | Synthese | AGENT_MAX_OUTPUT_TOKENS, standardmäßig 4096 |
-| Kontext | 120000 Zeichen plus Modellfensterprüfung |
+| Kontext | Modellfensterprüfung; initialer Chatverlauf maximal 120000 Zeichen |
 | Review-Snapshot | maximal 600 kB |
 | Gleichzeitige Runs je UID | 2 |
 | Produzenten pro Prozess | AGENT_MAX_CONCURRENT_RUNS, standardmäßig 16 |
@@ -177,7 +178,7 @@ verbucht und weiterer Verbrauch blockiert. Unbekannte Nutzung ist kein Nullwert.
 
 Recherche nutzt den vorhandenen OpenRouter-Websuch-Builder. Agent begrenzt ihn
 auf Exa mit drei Treffern à maximal 1000 Zeichen pro Suche; maximal eine Suche
-pro Modellrequest aus dem gemeinsamen Suchbudget. Damit kann das Tageskontingent
+pro Modellrequest, erneut verfügbar in weiteren Runden. Damit kann das Tageskontingent
 begrenzt reservieren, ohne komplette native Modellfenster zu blockieren. Kein
 neuer Suchdienst und kein zusätzliches Suchmodell. Consensus bleibt bei seiner
 bisherigen Suchkonfiguration. Nur tatsächliche Quellenannotationen oder gemeldete
@@ -202,20 +203,29 @@ servereigene Modellauflösung und Limits verhindern eine Änderung der Policy
 
 AgentRunStore hält einen atomaren Beleg je completion:N oder agent:<uuid>:N unter
 users/{uid}/llm_calls. Der erste Beleg bindet Producer-Token, Lease, Policy,
-Schrittzustände und Eventsequenz. Verbrauch bleibt bei einer Chat-Löschung
+Schrittzustände und Eventsequenz. Eine 120-Sekunden-Lease wird während aktiver
+Läufe etwa alle 30 Sekunden transaktional für Producer, Chat und Account erneuert.
+Der Watchdog liest alle drei Sekunden statt zweimal pro Sekunde; kurze temporäre
+Datenbankfehler werden bis zu 60 Sekunden toleriert. Abgelaufene, gestoppte oder
+ersetzte Producer werden nie wiederbelebt. Verbrauch bleibt bei einer Chat-Löschung
 bestehen; Account-Tombstones verhindern verspätete Writes nach Kontolöschung.
 
 Abbruch schließt Provider und wartet auf die aktiven Tool-/Judge-Threads. Ein
 Prozessabsturz erlaubt kein erneutes Ausführen bereits beanspruchter Schritte;
 abgelaufene Leases werden in terminale unbekannte Belege überführt. Gespeicherte
 Vergleichsantworten mit abgebrochener Prüfung bleiben im Agent-Verlauf sichtbar.
+Direktantworten behalten auch bereits gestreamten Teiltext. `agent_failure` speichert
+einen sicheren Fehlercode und verständlichen Grund, der nach Reload sichtbar bleibt;
+rohe Provider-Fehlertexte werden nicht übernommen.
 Recover saved answer lädt ausschließlich den existierenden Snapshot. Auch eine
 fehlgeschlagene Antwort kann so mit ihrem tatsächlichen Prüfstatus gelesen werden.
 Ein neuer Versuch ist eine neue Nachricht mit neuem Budget, kein versteckter Retry.
 
 ## Validierung
 
-- Backend: tests/test_agent_comparison.py sowie bestehende Agent-, Delegation-,
+- Backend: tests/test_agent_continuation.py prüft 102 Aufrufe über simulierte 17 Minuten,
+  erneuerbare Leases, weitere Reviews, Kontingent-Stopp und erhaltene Fehler/Teiltexte.
+  tests/test_agent_comparison.py sowie bestehende Agent-, Delegation-,
   Budget-, Chat-, Bookmark- und Consensus-Judge-Tests.
 - Browser-State: tests/js/agent-review.test.mjs und bestehende Agent-Tests.
 - Oberfläche: tests/e2e/test_agent_comparison_frontend.py mit gemockten Providern,

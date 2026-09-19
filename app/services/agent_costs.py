@@ -87,7 +87,7 @@ class RunCosts:
                     ).quantize(Decimal("1"), rounding=ROUND_CEILING)) * segments
         if native_searches:
             cost += native_searches * (search_cost_nanos(model) or 10_000_000)
-        if (self.calls >= self.policy.max_calls or self.tokens + tokens > self.policy.max_tokens
+        if not self.policy.account_budget_only and (self.calls >= self.policy.max_calls or self.tokens + tokens > self.policy.max_tokens
                 or self.cost + cost > self.policy.max_cost_nano_usd):
             raise AnalysisBudgetExceeded("The agent's token or simulated cost budget was reached.")
         self.tokens += tokens
@@ -104,7 +104,7 @@ class RunCosts:
         # Missing usage keeps the full reservation. Never guess a zero cost.
 
     def check(self):
-        if self.tokens > self.policy.max_tokens or self.cost > self.policy.max_cost_nano_usd:
+        if not self.policy.account_budget_only and (self.tokens > self.policy.max_tokens or self.cost > self.policy.max_cost_nano_usd):
             raise AnalysisBudgetExceeded("The provider reported usage beyond the agent's budget.")
 
     def total(self):

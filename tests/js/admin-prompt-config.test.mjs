@@ -27,6 +27,23 @@ function submit(window) {
 function loaded() { return { config: structuredClone(config), defaults, max_prompt_chars: 10000, cache_seconds: 30 }; }
 
 describe('Admin prompt configuration', () => {
+    it('hides retired chat caps while preserving legacy values when saving current settings', async () => {
+        const delegation = { enabled: true, max_calls: 32, seconds: 300, max_cost_nano_usd: 3000000000,
+            max_parallel: 2, max_agents: 4, message_chars: 4000 };
+        const request = vi.fn(async (method, _path, body) => method === 'GET'
+            ? { ...loaded(), config: { ...config, delegation } }
+            : { config: { ...body.config, revision: 5 } });
+        const { window, doc, panel } = boot(request);
+        await panel.setUser('admin');
+        expect(doc.getElementById('delegation-seconds').hidden).toBe(true);
+        expect(doc.getElementById('delegation-max_parallel').hidden).toBe(false);
+        expect(doc.getElementById('delegationConfig').textContent).toContain('daily token budget');
+        change(window, 'delegation-max_parallel', '3');
+        submit(window);
+        await vi.waitFor(() => expect(doc.getElementById('promptConfigStatus').textContent).toContain('Saved.'));
+        expect(request.mock.calls[1][2].config.delegation).toEqual({ ...delegation, max_parallel: 3 });
+        window.close();
+    });
     it('loads, edits, saves exactly one config with its revision, and restores defaults as a draft', async () => {
         const request = vi.fn(async (method, _path, body) => method === 'GET' ? loaded() : { config: { ...body.config, revision: 5 } });
         const { window, doc, panel } = boot(request);

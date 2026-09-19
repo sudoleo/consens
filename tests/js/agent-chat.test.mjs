@@ -539,6 +539,20 @@ describe("single-model agent chat", () => {
     dom.window.close();
   });
 
+  it("keeps the actual failure reason visible when reopening an incomplete answer", async () => {
+    const { window, document, dom } = boot();
+    const failure = "The model provider stopped responding. Your available answer has been saved.";
+    const turn = { status: "failed", error_code: "agent_failed", execution_mode: "agent",
+      agent_failure: { code: "provider_timeout", error: failure } };
+    window.App.runRegistry.showSavedView({ type: "bookmark" }, { chatId: "a".repeat(32), turnId: "b".repeat(32),
+      question: "Q", consensus: "Preserved partial answer", executionMode: "agent", currentTurn: turn });
+    await vi.waitFor(() => expect(document.getElementById("agentModelDropdown").disabled).toBe(false));
+    expect(document.getElementById("agentAnswerBody").textContent).toBe("Preserved partial answer");
+    expect(document.getElementById("agentAnswerError").hidden).toBe(false);
+    expect(document.getElementById("agentAnswerError").textContent).toBe(failure);
+    dom.window.close();
+  });
+
   it.each(["server_tool", "provider_native"])("hides legacy unconfirmed searches (%s) while preserving reasoning and measured costs", flag => {
     const { window, document, dom } = boot();
     const host = document.getElementById("agentAnswerActivity");

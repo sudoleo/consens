@@ -49,6 +49,37 @@ class ProviderCooldowns:
 provider_cooldowns = ProviderCooldowns()
 
 
+class AgentRunInterrupted(RuntimeError):
+    """Content-free infrastructure failure, distinct from a user cancellation."""
+
+
+def agent_failure(error):
+    """The same safe failure is saved in history and sent over the live stream."""
+    from app.services.agent_quota import AgentTokenBudgetExceeded
+    from app.services.agent_runtime import AgentCapacityExceeded
+    from app.services.chat_store import TurnStatusConflict
+    from app.services.agent_runtime import AgentCapacityExceeded
+    from app.services.chat_store import TurnStatusConflict
+    from app.services.llm.provider_runtime import AnalysisBudgetExceeded
+    import httpx
+    if isinstance(error, AgentTokenBudgetExceeded):
+        return {"code": error.code, "error": str(error),
+                "required_tokens": error.required, "available_tokens": error.remaining}
+    if isinstance(error, AgentRunInterrupted):
+        return {"code": "run_interrupted", "error": str(error)}
+    if isinstance(error, (AgentCapacityExceeded, TurnStatusConflict)):
+        return {"code": "run_state_conflict", "error": str(error)}
+    if isinstance(error, (AgentCapacityExceeded, TurnStatusConflict)):
+        return {"code": "run_state_conflict", "error": str(error)}
+    if isinstance(error, AgentProviderCooldown):
+        return {"code": "provider_rate_limited", "error": str(error), "retry_after": error.retry_after}
+    if isinstance(error, AnalysisBudgetExceeded):
+        return {"code": "model_context_limit" if "context" in str(error).lower() else "run_limit", "error": str(error)}
+    if isinstance(error, (httpx.TimeoutException, TimeoutError)):
+        return {"code": "provider_timeout", "error": "The model provider stopped responding. Your available answer has been saved."}
+    return provider_failure(error)
+
+
 def provider_failure(error):
     """Safe user-facing error codes/messages, never the provider's raw body."""
     status = getattr(error, "status_code", None)

@@ -57,14 +57,23 @@ export function createPromptConfigPanel(request) {
             cacheSeconds = result.cache_seconds;
             delegationInputs.clear(); delegation.replaceChildren();
             delegation.hidden = !result.config.delegation;
+            const budgetNote = document.createElement('p');
+            budgetNote.className = 'section-hint';
+            budgetNote.textContent = 'Agent Chat uses the daily token budget in Limits. Active responses have no time, round, search or cost cap. Worker concurrency and message sizes below still apply.';
+            delegation.append(budgetNote);
+            const legacyLimits = new Set(['max_calls', 'max_tools', 'seconds', 'max_tokens', 'max_cost_nano_usd',
+                'max_messages', 'context_chars', 'worker_calls', 'max_searches']);
             const labels = { enabled: 'Allow delegation', max_calls: 'Model calls per run', max_tools: 'Coordination calls per run',
                 seconds: 'Run duration (seconds)', max_tokens: 'Shared token budget', max_cost_nano_usd: 'Shared cost budget (nanodollars; 1 USD = 1,000,000,000)',
-                max_agents: 'Agents per run', max_parallel: 'Workers running at once', max_messages: 'Messages per run',
+                max_agents: 'Unreviewed workers at once', max_parallel: 'Workers running at once', max_messages: 'Messages per run',
                 context_chars: 'Context per session (characters)', message_chars: 'Message length (characters)', worker_calls: 'Model calls per worker',
                 max_searches: 'Web searches per run', orchestrator_prompt: 'Orchestrator instructions', worker_prompt: 'Worker instructions' };
             for (const [key, value] of Object.entries(result.config.delegation || {})) {
                 const label = document.createElement('label'); label.htmlFor = `delegation-${key}`; label.textContent = labels[key] || key;
                 const input = document.createElement(typeof value === 'string' ? 'textarea' : 'input'); input.id = label.htmlFor;
+                // Preserve old configuration for legacy/evaluation callers, but
+                // don't offer ineffective run caps as Agent Chat settings.
+                label.hidden = input.hidden = legacyLimits.has(key);
                 if (typeof value === 'boolean') input.type = 'checkbox';
                 else if (typeof value === 'number') {
                     input.type = 'number'; input.step = '1'; input.required = true;

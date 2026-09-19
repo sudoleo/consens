@@ -116,6 +116,7 @@
 
 .prompt-config-fields { border: 0; padding: 0; margin: 0; min-width: 0; }
 .delegation-config[hidden] { display: none; }
+.prompt-config-fields .delegation-config [hidden] { display: none; }
 .prompt-config-fields .delegation-config input[type="checkbox"] { width: 18px; height: 18px; }
 .prompt-config-fields:disabled { opacity: .6; }
 .prompt-config-fields label { display: block; margin: 14px 0 8px; font-size: 13px; color: var(--text-color); }

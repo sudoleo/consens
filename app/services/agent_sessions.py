@@ -12,8 +12,13 @@ from app.services import persistence_guard
 from app.services import agent_quota, agent_budget_config
 from app.services.agent_costs import aggregate_usage, remaining_reservation
 from app.services.agent_runtime import AgentCapacityExceeded
+from app.services.agent_provider_limits import AgentRunInterrupted
 from app.services.chat_store import ChatNotFound, TurnStatusConflict
 from app.services.llm.provider_runtime import AnalysisBudgetExceeded, ProviderCancelled
+
+
+PRODUCER_LEASE_SECONDS = 120
+PRODUCER_RENEW_BEFORE_SECONDS = 90
 
 
 class AgentSessionStore:
@@ -54,7 +59,7 @@ class AgentSessionStore:
                 if len(leases) >= 2:
                     raise AgentCapacityExceeded("Two agent responses are already running.")
                 data = {"run_token": run_token, "run_status": "running", "policy": policy,
-                        "lease_until": now + timedelta(seconds=policy["seconds"] + 30),
+                        "lease_until": now + timedelta(seconds=PRODUCER_LEASE_SECONDS if policy.get("account_budget_only") else policy["seconds"] + 30),
                         "step_states": {}, "step_usage": {}, "reservations": {}, "event_seq": 0,
                         "reserved_tokens": 0, "reserved_cost": 0}
                 leases[root_ref.id] = data["lease_until"]
@@ -88,7 +93,7 @@ class AgentSessionStore:
             cost_hold = data.get("review_cost_hold", 0)
             cost_spend = min(cost_hold, cost) if can_spend else 0
             daily = agent_quota.reserve(daily, tokens - spend, limit=budget_config['daily_token_limit'])
-            if (len(states) >= limits["max_calls"] or data["reserved_tokens"] + tokens > limits["max_tokens"]
+            if not limits.get("account_budget_only") and (len(states) >= limits["max_calls"] or data["reserved_tokens"] + tokens > limits["max_tokens"]
                     or data["reserved_cost"] + cost + cost_hold - cost_spend > limits["max_cost_nano_usd"]):
                 raise AnalysisBudgetExceeded("The shared agent budget was reached.")
             states[step] = "running"
@@ -146,7 +151,7 @@ class AgentSessionStore:
                 extra = max(0, tokens - protected)
             daily = agent_quota.reserve(daily, extra, limit=budget_config['daily_token_limit'])
             protected_cost = max(cost, root.get("review_cost_hold", 0))
-            if root["reserved_cost"] + protected_cost > root["policy"]["max_cost_nano_usd"]:
+            if not root["policy"].get("account_budget_only") and root["reserved_cost"] + protected_cost > root["policy"]["max_cost_nano_usd"]:
                 raise AnalysisBudgetExceeded("Not enough cost budget for synthesis and review")
             tx.set(daily_ref, daily)
             if previous_ref:
@@ -201,18 +206,18 @@ class AgentSessionStore:
             if (data.get("cancel_requested") or data["lease_until"] <= datetime.now(timezone.utc)) and not ending:
                 raise ProviderCancelled("Agent run stopped")
             seq = data.get("event_seq", 0) + 1
-            if seq > 1024:
+            if not data["policy"].get("account_budget_only") and seq > 1024:
                 raise AnalysisBudgetExceeded("Agent event limit reached")
             session = {**(agent.to_dict() or {}), **(patch or {}), "id": agent_id, "seq": seq,
                        "updated_at": datetime.now(timezone.utc).isoformat()}
             if not agent.exists:
-                if data.get("agent_count", 0) >= 64:
+                if not data["policy"].get("account_budget_only") and data.get("agent_count", 0) >= 64:
                     raise AnalysisBudgetExceeded("Agent limit reached")
                 if not session.get("assignment"):
                     raise TurnStatusConflict("Agent assignment is missing")
             if message:
                 count = data.get("message_count", 0) + 1
-                if count > data["policy"]["max_messages"]:
+                if not data["policy"].get("account_budget_only") and count > data["policy"]["max_messages"]:
                     raise AnalysisBudgetExceeded("Agent message limit reached")
                 if len(message["text"]) > max(data["policy"]["message_chars"], data["policy"]["result_chars"]):
                     raise ValueError("Agent message is too long")
@@ -231,10 +236,36 @@ class AgentSessionStore:
 
     def check_delegation(self, uid, chat_id, turn_id, run_token):
         chat = self.get_chat(uid, chat_id)
-        root = self.receipt_ref(uid, chat_id, turn_id).get().to_dict() or {}
+        ref = self.receipt_ref(uid, chat_id, turn_id)
+        root = ref.get().to_dict() or {}
         if (chat.get("status") != "active" or root.get("run_token") != run_token
                 or root.get("run_status") != "running" or root.get("cancel_requested")):
             raise ProviderCancelled("Agent run stopped")
+        if not (root.get("policy") or {}).get("account_budget_only"):
+            return
+        now = datetime.now(timezone.utc)
+        if root["lease_until"] > now + timedelta(seconds=PRODUCER_RENEW_BEFORE_SECONDS):
+            return
+        # Renew all three fences together, only while this producer still owns
+        # a live lease. A crashed or superseded producer can never resume work.
+        chat_ref, active_ref = self._chat_ref(uid, chat_id), self.active_ref(uid)
+        def operation(tx):
+            persistence_guard.ensure_account_write_allowed(uid=uid, db=self.db, transaction=tx)
+            data, current_chat, active = (r.get(transaction=tx).to_dict() or {} for r in (ref, chat_ref, active_ref))
+            stamp = datetime.now(timezone.utc)
+            leases = dict(active.get("leases") or {})
+            if (data.get("cancel_requested") or current_chat.get("status") != "active"):
+                raise ProviderCancelled("Agent run stopped")
+            if (data.get("run_token") != run_token or data.get("run_status") != "running"
+                    or current_chat.get("agent_turn_id") != turn_id
+                    or data.get("lease_until", stamp) <= stamp or leases.get(ref.id, stamp) <= stamp):
+                raise AgentRunInterrupted("The response lost its active connection to saved chat state. Reopen the saved conversation to see the available results.")
+            until = stamp + timedelta(seconds=PRODUCER_LEASE_SECONDS)
+            leases[ref.id] = until
+            tx.update(ref, {"lease_until": until})
+            tx.update(chat_ref, {"agent_lock_until": until})
+            tx.set(active_ref, {"leases": leases})
+        self._transaction(operation)
 
     def stop_delegation(self, uid, chat_id, turn_id):
         self.get_turn(uid, chat_id, turn_id)
@@ -257,7 +288,7 @@ class AgentSessionStore:
             page = list(ref.collection("messages").order_by("seq").start_after({"seq": after}).limit(limit + 1).stream())
             return {"agent": agent.to_dict(), "messages": [s.to_dict() for s in page[:limit]],
                     "has_more": len(page) > limit}
-        agents = [s.to_dict() for s in self._turn_ref(uid, chat_id, turn_id).collection("agents").limit(64).stream()]
+        agents = [s.to_dict() for s in self._turn_ref(uid, chat_id, turn_id).collection("agents").stream()]
         return {"agents": [{k: v for k, v in a.items() if k != "assignment"} for a in agents],
                 "seq": root.get("event_seq", 0), "status": root.get("run_status", turn["status"]),
                 "usage": aggregate_usage(list(root.get("step_usage", {}).values())) or turn.get("agent_usage")}
@@ -275,7 +306,7 @@ class AgentSessionStore:
             if state == "running":
                 self.settle(uid, chat_id, turn_id, completion=AgentCompletion(), status="cancelled", step=step, final=False)
         settled = ref.get().to_dict()
-        for snap in self._turn_ref(uid, chat_id, turn_id).collection("agents").limit(64).stream():
+        for snap in self._turn_ref(uid, chat_id, turn_id).collection("agents").stream():
             data = snap.to_dict()
             if data["status"] not in {"completed", "failed", "stopped"}:
                 usage = aggregate_usage([value for step, value in settled.get("step_usage", {}).items()
@@ -285,6 +316,7 @@ class AgentSessionStore:
                                           "ended_at": datetime.now(timezone.utc).isoformat()},
                                    event_id="reaped-" + snap.id)
         value = AgentCompletion()
+        value.failure = {"code": "run_interrupted", "error": "The server connection ended before the response finished. The available results have been saved."}
         data = ref.get().to_dict()
         value.usage = aggregate_usage(list(data.get("step_usage", {}).values()))
         self.finish_run(uid, chat_id, turn_id, completion=value, status="cancelled", run_token=root["run_token"])

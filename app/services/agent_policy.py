@@ -1,5 +1,5 @@
 """Server-owned capabilities and shared limits, frozen once per Agent turn."""
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 
 
 @dataclass(frozen=True)
@@ -20,6 +20,15 @@ class AgentPolicy:
     message_chars: int = 4000
     worker_calls: int = 8
     max_searches: int = 2
+    account_budget_only: bool = False
+
+    @classmethod
+    def for_chat(cls, config):
+        # Chat has one spending limit: the atomic, account-wide token ledger.
+        # Keep the bounded policy for legacy callers and the Consensus pipeline.
+        return replace(cls.from_config({**config, "enabled": True}),
+                       account_budget_only=True, context_chars=120_000,
+                       version="agent-account-budget-2026-09-19-v1")
 
     @classmethod
     def from_config(cls, config):
@@ -27,7 +36,12 @@ class AgentPolicy:
                    delegation=config["enabled"], version="agent-delegation-2026-09-16-v1")
 
     def snapshot(self):
-        return asdict(self)
+        data = asdict(self)
+        if self.account_budget_only:
+            for key in ("seconds", "max_calls", "max_tools", "max_tokens", "max_cost_nano_usd",
+                        "worker_calls", "max_searches", "max_messages", "context_chars"):
+                data[key] = None
+        return data
 
 
 def tools_for_model(model):

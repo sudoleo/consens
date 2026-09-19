@@ -297,6 +297,7 @@ def test_provider_error_after_usage_still_records_cost(api, monkeypatch):
     client, store, calls = api
     def failed(self, **kwargs):
         self.__dict__.update(receipt().__dict__)
+        self.text = "Partial"
         yield {"type": "delta", "text": "Partial"}
         raise RuntimeError("Provider failed")
     monkeypatch.setattr(AgentCompletion, "stream", failed)
@@ -311,15 +312,17 @@ def test_provider_error_after_usage_still_records_cost(api, monkeypatch):
     assert error["token_budget"]["used"] == 1100
     assert error["token_budget"]["reserved"] == 0
     assert error["token_budget"]["remaining"] == 248900
-    assert error['recoverable'] is False
+    assert error['recoverable'] is True
     count = len(store.db.documents)
     for _ in range(3):
         retry = client.post('/agent', json={'chat_id': chat_id, 'question': 'Hi', 'client_request_id': 'failed',
             'bookmark_id': 'bm1', 'recover_only': True}, headers=AUTH)
-        assert retry.status_code == 409
-        assert retry.json()['recoverable'] is False
-        assert retry.json()['code'] == 'answer_unavailable'
+        assert retry.status_code == 200
+        assert retry.json()['response'] == 'Partial'
+        assert retry.json()['turn']['status'] == 'failed'
+        assert retry.json()['turn']['agent_failure']['code'] == 'provider_error'
     assert len(store.db.documents) == count
+    assert totals(store)['calls'] == 1
     turn = store.list_turns(UID, chat_id)["turns"][0]
     data = client.get(f"/agent/chats/{chat_id}/turns/{turn['id']}/agents", headers=AUTH).json()
     assert data["token_budget"]["remaining"] == 248900

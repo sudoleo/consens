@@ -47,6 +47,43 @@ def _choose_effort(page, effort):
     page.locator(f'.agent-model-picker [data-setting-value="{effort}"]').click()
 
 
+@pytest.mark.parametrize("width,dark", [(1280, False), (390, True)])
+def test_saved_interruption_keeps_reason_and_partial_answer_visible(browser, phase4_server, width, dark):
+    context, page = _real_firebase_page(browser, phase4_server)
+    errors, paid = [], []
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    page.on("request", lambda request: paid.append(request.url) if request.url.endswith("/agent") else None)
+    try:
+        page.set_viewport_size({"width": width, "height": 900})
+        page.route("**/user_status", lambda r: _json(r, {"tier": "pro", "is_pro": True, "agent_access": True}))
+        page.route("**/agent/models", lambda r: _json(r, CATALOG))
+        page.route("**/agent/budget", lambda r: _json(r, {"token_budget": {"limit": 250000, "used": 30842, "remaining": 219158}}))
+        page.evaluate("async () => { await window.__switchE2EUser('account-a'); }")
+        page.evaluate("dark => { document.documentElement.classList.toggle('dark-mode', dark); document.body.classList.toggle('dark-mode', dark); }", dark)
+        reason = "The model provider stopped responding. Your available answer has been saved."
+        turn = {"id": "b" * 32, "question": "Compare the available options.", "status": "failed", "error_code": "agent_failed",
+            "execution_mode": "agent", "consensus": "## Available result\n\nThe independent answers identify two useful options. The review is incomplete.",
+            "agent_settings": {"model_id": CATALOG["default_model_id"], "label": "DeepSeek V4.1 Flash"},
+            "agent_failure": {"code": "provider_timeout", "error": reason},
+            "agent_usage": {"input_tokens": 28000, "output_tokens": 2842, "complete": True}}
+        bookmark = {"id": "interruption", "chat_id": "a" * 32, "mode": "Agent", "execution_mode": "agent",
+            "query": turn["question"], "responses": {"consensus": turn["consensus"]}}
+        page.route("**/bookmarks/interruption/conversation*", lambda r: _json(r, {"chat_id": "a" * 32, "turns": [turn], "has_more": False}))
+        page.route("**/bookmarks/interruption", lambda r: _json(r, {"bookmark": bookmark}))
+        page.evaluate("async () => { await window.openBookmark('interruption'); }")
+        expect(page.locator("#agentAnswerError")).to_have_text(reason)
+        expect(page.locator("#agentAnswerError")).to_be_visible()
+        expect(page.locator("#agentAnswerBody h2")).to_have_text("Available result")
+        expect(page.locator("#agentAnswerActivity summary")).to_contain_text("Response failed")
+        expect(page.locator("#agentRecover")).not_to_be_visible()
+        page.locator("#agentAnswerError").scroll_into_view_if_needed()
+        assert page.evaluate("document.documentElement.scrollWidth <= innerWidth + 1")
+        _snapshot(page, f"agent-saved-interruption-{width}")
+        assert not paid and not errors
+    finally:
+        context.close()
+
+
 @pytest.mark.parametrize("width,dark", [(1280, False), (390, False), (390, True), (320, False)])
 def test_single_agent_send_followup_restore_and_layout(browser, phase4_server, width, dark):
     context, page = _real_firebase_page(browser, phase4_server)

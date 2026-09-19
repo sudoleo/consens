@@ -49,6 +49,13 @@ def test_configuration_tab_saves_reloads_and_preserves_conflicting_draft(browser
         expect(agent).to_have_value(defaults()["prompts"]["agent"])
         expect(page.locator('#savePromptConfigBtn')).to_be_enabled()
         assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth')
+        page.locator('#delegationConfig').evaluate('(element) => { element.closest("details").open = true; }')
+        expect(page.locator('#delegation-max_parallel')).to_be_visible()
+        for key in ('seconds', 'max_calls', 'max_searches', 'max_cost_nano_usd'):
+            expect(page.locator(f'#delegation-{key}')).to_be_hidden()
+            expect(page.locator(f'label[for="delegation-{key}"]')).to_be_hidden()
+        expect(page.locator('#delegationConfig > p')).to_contain_text('daily token budget')
+        page.locator('#delegationConfig').evaluate('(element) => { element.closest("details").open = false; }')
 
         # Native validation must open a collapsed, required editor rather than
         # silently rejecting submission before our submit handler can run.
@@ -64,6 +71,7 @@ def test_configuration_tab_saves_reloads_and_preserves_conflicting_draft(browser
         page.locator('#savePromptConfigBtn').click()
         expect(page.locator('#promptConfigStatus')).to_contain_text('Saved.')
         assert writes[-1]["revision"] == 0
+        assert writes[-1]["config"]["delegation"] == defaults()["delegation"]
         page.reload(wait_until="domcontentloaded")
         expect(agent).to_have_value(state["saved"]["prompts"]["agent"])
         expect(page.locator('#promptReferenceTimezone')).to_have_value('UTC')

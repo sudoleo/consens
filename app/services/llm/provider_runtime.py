@@ -187,10 +187,10 @@ class AnalysisBudgetExceeded(TimeoutError):
 
 
 class AnalysisBudget:
-    def __init__(self, seconds=None, max_calls=None):
+    def __init__(self, seconds=None, max_calls=None, *, unlimited=False):
         self.started = time.monotonic()
-        self.deadline = self.started + (ANALYSIS_TIMEOUT_SECONDS if seconds is None else seconds)
-        self.max_calls = ANALYSIS_MAX_CALLS if max_calls is None else max_calls
+        self.deadline = float("inf") if unlimited else self.started + (ANALYSIS_TIMEOUT_SECONDS if seconds is None else seconds)
+        self.max_calls = float("inf") if unlimited else ANALYSIS_MAX_CALLS if max_calls is None else max_calls
         self.calls = 0
         self.lock = threading.Lock()
 
