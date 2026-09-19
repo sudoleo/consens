@@ -303,7 +303,7 @@ def test_single_agent_send_followup_restore_and_layout(browser, phase4_server, w
         expect(page.locator("#agentAnswer")).to_be_visible()
         expect(page.locator("#consensusOutput")).not_to_be_visible()
         expect(page.locator("#chatExecutionMode")).to_be_disabled()
-        expect(page.locator("#agentAnswerLabel")).to_contain_text("GPT-5.6 Sol")
+        expect(page.locator("#agentAnswerLabel")).to_have_count(0)
         assert page.locator("#threadAsk").evaluate("el => getComputedStyle(el).display") == "flex"
         expect(page.locator("#threadAsk .thread-ask-label")).to_have_count(0)
         expect(page.locator("#agentAnswerActivity .agent-activity-marker")).to_have_count(0)
@@ -314,9 +314,9 @@ def test_single_agent_send_followup_restore_and_layout(browser, phase4_server, w
         page.locator("#sendButton").click()
         page.wait_for_function("() => App.runRegistry.visible()?.status === 'succeeded' && App.runRegistry.visible().question.includes('next')")
         expect(page.locator("#threadHistory")).to_contain_text("Explain the first step")
-        expect(page.locator("#threadHistory")).to_contain_text("GPT-5.6 Sol")
+        expect(page.locator("#threadHistory .thread-history-answer-label")).to_have_count(0)
         expect(page.locator('#threadHistory .thread-ask-label')).to_have_count(0)
-        expect(page.locator("#agentAnswerLabel")).to_contain_text("DeepSeek V4.1 Flash")
+        expect(page.locator("#agentAnswerLabel")).to_have_count(0)
         expect(page.locator("#agentAnswerActivity")).to_contain_text("I am considering")
         expect(page.locator("#agentAnswerActivity details")).not_to_have_attribute("open", "")
         expect(page.locator("#agentAnswerBody")).to_contain_text("Now explain the next step")
@@ -340,6 +340,7 @@ def test_single_agent_send_followup_restore_and_layout(browser, phase4_server, w
         expect(page.locator("#agentAnswer")).to_be_visible()
         expect(page.locator("#agentAnswerBody")).to_contain_text("Now explain the next step")
         expect(page.locator("#agentAnswerActivity")).to_contain_text("I am considering")
+        expect(page.locator("#threadHistory .thread-history-answer-label, #agentAnswerLabel")).to_have_count(0)
         expect(page.locator("#agentReasoningEffort")).to_have_value("low")
         if width < 1100 and page.locator("#toggleSidebarButton").get_attribute("aria-expanded") == "true":
             page.locator("#sidebarToggleInner").click()

@@ -6,7 +6,7 @@ const BODY = `<div id="chatExecutionControl" class="select-wrapper"><select id="
   <textarea id="questionInput"></textarea><div id="threadHistory"></div>
   <div id="agentModelControls"><div class="select-wrapper agent-model-picker"><select id="agentModelDropdown" aria-label="Agent model"></select></div>
   <div class="select-wrapper agent-effort-control"><select id="agentReasoningEffort" aria-label="Agent reasoning effort"></select></div><button id="agentModelsRetry" hidden></button></div>
-  <section id="agentAnswer" hidden><div id="agentAnswerLabel"></div>
+  <section id="agentAnswer" hidden>
   <div id="agentAnswerActivity"></div><div id="agentAnswerBody"></div><p id="agentAnswerError" hidden></p><button id="agentRecover" hidden></button></section>`;
 
 const CATALOG = { token_budget: { remaining: 188878, limit: 250000, observed_at: 1 }, default_model_id: "deepseek/deepseek-v4.1-flash", models: [
@@ -691,7 +691,7 @@ describe("single-model agent chat", () => {
       currentTurn: { id: "old-turn", question: "Old question", consensus: "Old answer", agent_settings: settings } };
     window.App.runRegistry.showSavedView({ type: "bookmark" }, basis);
     expect(document.getElementById("agentModelDropdown").value).toBe(CATALOG.default_model_id);
-    expect(document.getElementById("agentAnswerLabel").textContent).toContain("Historical model");
+    expect(document.getElementById("agentAnswerLabel")).toBeNull();
     window.App.agentChat.render();
     expect(window.App.showPopup).toHaveBeenCalledTimes(1);
     expect(window.App.runRegistry.getSelectedConversationBasis().currentTurn.agent_settings).toEqual(settings);

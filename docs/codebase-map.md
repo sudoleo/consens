@@ -1654,6 +1654,9 @@ sichtbar und werden bei der Auswahl abgelehnt. Der statische Katalog hält auße
 die separat geprüften Delegationsfähigkeiten; er begrenzt die Chatmodellauswahl nicht.
 
 Der Chatmodell-Picker zeigt zuerst eine kompakte Anbieterübersicht mit Modellzahl.
+Agent-Antworten haben keine Modellüberschrift über der Nachricht: weder die
+aktive bzw. wiederhergestellte Antwort in `agent-chat.js` noch archivierte
+Agent-Turns in `consensus-run.js`. Die Überschrift normaler Consensus-Turns bleibt bestehen.
 `agent-chat.js` erzeugt native `optgroup`-Elemente in der bestehenden Anbieterreihenfolge;
 `model-picker.js` aktiviert sie über `grouped: true` als `groups` → `group:<key>`
 mit Rückweg. Nur Modelle der geöffneten Familie stehen in der Liste. Reasoning

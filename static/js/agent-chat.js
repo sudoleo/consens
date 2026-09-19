@@ -283,8 +283,7 @@
     if (panel) panel.hidden = !agent || (!context && !basis);
     if (agent && !context && basis) {
       renderAnswer(basis.consensus || "", basis.currentTurn?.agent_failure?.error
-        || (basis.currentTurn?.status === 'failed' ? 'This response did not finish successfully.' : ''),
-        App.agentActivity?.label(basis.currentTurn?.agent_settings) || "Agent · Beta");
+        || (basis.currentTurn?.status === 'failed' ? 'This response did not finish successfully.' : ''));
       App.agentActivity?.renderTurn(activityHost(`${basis.chatId}:${basis.turnId}`), basis.currentTurn);
       App.agentReview?.render(document.getElementById("agentAnswerBody"), basis.currentTurn?.agent_review,
         { sources: basis.currentTurn?.sources, events: basis.currentTurn?.agent_activity, key: basis.turnId, question: basis.question });
@@ -295,11 +294,9 @@
     if (!agent || (!context && !basis)) App.agentDelegation?.project(null);
     window.updateQuestionInputAccess?.();
   }
-  function renderAnswer(text, error, label) {
+  function renderAnswer(text, error) {
     const body = document.getElementById("agentAnswerBody");
     const errorEl = document.getElementById("agentAnswerError");
-    const title = document.getElementById("agentAnswerLabel");
-    if (title) title.textContent = label;
     if (body && body.dataset.markdown !== text) {
       body.dataset.markdown = text;
       window.injectMarkdown?.(body, text, []);
@@ -330,8 +327,7 @@
       history.dataset.agentHistory = signature;
     }
     const state = context.consensus;
-    renderAnswer(state.text || state.streamText || "", state.error?.message || state.completedTurn?.agent_failure?.error || "",
-      App.agentActivity?.label(state.completedTurn?.agent_settings || context.metadata.agentSettings) || "Agent · Beta");
+    renderAnswer(state.text || state.streamText || "", state.error?.message || state.completedTurn?.agent_failure?.error || "");
     App.agentActivity?.render(activityHost(context.runId), {
       events: state.completedTurn?.agent_activity || context.metadata.agentActivity || [],
       usage: state.completedTurn?.agent_usage || context.metadata.agentUsage, running: registry.isExecuting(context.runId),

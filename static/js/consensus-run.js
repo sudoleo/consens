@@ -328,9 +328,12 @@
 
       const answer = document.createElement("div");
       answer.className = "thread-history-answer";
-      const answerLabel = document.createElement("div");
-      answerLabel.className = "thread-history-answer-label";
-      answerLabel.textContent = turnData.execution_mode === "agent" || turnData.mode === "Agent" ? "Agent answer" : "Consensus Answer";
+      if (turnData.execution_mode !== "agent" && turnData.mode !== "Agent") {
+        const answerLabel = document.createElement("div");
+        answerLabel.className = "thread-history-answer-label";
+        answerLabel.textContent = "Consensus Answer";
+        answer.append(answerLabel);
+      }
       const turnSources = Array.isArray(turnData.sources) ? turnData.sources : [];
       const answerBody = document.createElement("div");
       answerBody.className = "consensus-answer-body";
@@ -356,9 +359,8 @@
       const verdict = this.staticizeHistoryNode(liveVerdict)
         || this.buildStoredAgreement(turnData.differences_data);
       if (verdict) verdict.classList.add("thread-history-verdict");
-      answer.append(answerLabel, answerBody, claimsFallback);
+      answer.append(answerBody, claimsFallback);
       if (turnData.execution_mode === "agent" || turnData.mode === "Agent") {
-        answerLabel.textContent = window.App.agentActivity?.label(turnData.agent_settings) || "Agent answer";
         const activity = document.createElement("div");
         window.App.agentActivity?.renderTurn(activity, turnData);
         answer.insertBefore(activity, answerBody);

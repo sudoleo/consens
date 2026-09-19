@@ -168,11 +168,6 @@ body.single-agent-active .chat-input-container .consensus-switch-container { max
 :is(#agentModelsRetry, #agentRecover):focus-visible { outline: 2px solid var(--ink-2); outline-offset: 2px; }
 .agent-answer { width: 100%; min-width: 0; padding: 22px 0; order: 4; }
 .agent-answer[hidden] { display: none; }
-.agent-answer .thread-history-answer-label,
-.thread-history-answer:has(.agent-activity) .thread-history-answer-label {
-  margin-bottom: 6px; color: var(--ink-3); font-size: 12px; font-weight: 500; line-height: 1.6;
-  letter-spacing: 0; text-transform: none;
-}
 #agentAnswerError { color: var(--ink-2); border-left: 2px solid var(--line); padding: 4px 0 4px 12px; font-size: 13px; line-height: 1.6; }
 #agentAnswerBody:empty { display: none; }
 body.single-agent-active :is(#consensusOutput, #consensusRun, #agentModePanel, .response-section,

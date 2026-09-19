@@ -16,6 +16,8 @@ Unsicherheit wird inhaltlich erklärt. Der freigegebene Agent-Systemprompt steht
 in `prompt_defaults.py` und in der Admin-Konfiguration; der ergänzende
 Tool-Protokollprompt in `agent_comparison.py` konkretisiert denselben Ablauf.
 Der separate Consensus-Modus behält seinen bisherigen Ablauf und seine Run-Limits.
+Agent-Antworten zeigen oberhalb der Nachricht keine Modellüberschrift; dies gilt
+auch für frühere Nachrichten und wieder geöffnete Chats.
 
 ## Modelle und Bedienung
 
