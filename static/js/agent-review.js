@@ -18,7 +18,12 @@
         const template = document.createElement('template');
         template.innerHTML = window.DOMPurify.sanitize(window.marked.parse(answer.text));
         for (const link of template.content.querySelectorAll('a[href]')) {
-          if (!link.closest('code, pre')) citations.push({ url: link.getAttribute('href'), title: link.textContent });
+          if (link.closest('code, pre') || link.querySelector('img, svg')) continue;
+          const preceding = link.previousSibling?.textContent || '';
+          const title = /^https?:\/\//i.test(link.textContent)
+            ? preceding.match(/(?:^|[.,;:\n])\s*([^()[\]\n,;:]{1,100}?)\s*\($/)?.[1]?.trim() || link.textContent
+            : link.textContent;
+          citations.push({ url: link.getAttribute('href'), title });
         }
       }
       for (const source of citations) {
@@ -44,11 +49,16 @@
   }
   function render(body, review, evidence = {}) {
     if (!body?.parentElement) return;
-    const turnSources = safeSources([evidence, ...(evidence.events || []), { sources: [...body.querySelectorAll('a[href]')]
-      .filter(a => !a.closest('code, pre')).map(a => ({url: a.getAttribute('href'), title: a.textContent})) }]);
+    const version = review?.versions?.find(v => v.id === review.answer_version);
+    const raw = body.dataset.markdown ?? version?.text;
+    const turnSources = safeSources([evidence, ...(evidence.events || []), {text: raw}, { sources: [...body.querySelectorAll('a[href]')]
+      .filter(a => !a.closest('code, pre') && !a.querySelector('img, svg'))
+      .map(a => a.sourceData || {url: a.getAttribute('href'), title: a.textContent}) },
+      ...(review?.comparisons || []).flatMap(c => c.answers || []), ...(review?.versions || [])]);
     let host = body._agentReview;
     if (!review?.comparisons?.length) {
       if (host?._hasReview && typeof body.dataset.markdown === "string") window.injectMarkdown?.(body, body.dataset.markdown, []);
+      window.linkifyAgentSources?.(body, turnSources);
       body._agentModels?.remove(); body._agentModels = null;
       if (!turnSources.length) { host?.remove(); body._agentReview = null; return; }
       if (!host?.isConnected) { host = node('section', 'agent-review'); body.after(host); body._agentReview = host; }
@@ -67,15 +77,13 @@
       host = node("section", "agent-review"); body.after(host); body._agentReview = host;
       host.setAttribute("aria-label", "Answer evidence");
     }
-    const version = review.versions?.find(v => v.id === review.answer_version);
-    const raw = body.dataset.markdown ?? version?.text;
     const exact = !!version && raw === version.text && version.hash === review.answer_hash;
     const boundCheck = comparison => {
       const check = review.checks?.find(c => c.comparison_id === comparison.id);
       return exact && check?.answer_hash === version.hash && check?.basis_hash === comparison.basis_hash ? check : null;
     };
-    const signature = JSON.stringify([review, exact, turnSources]);
-    if (host.dataset.signature === signature) return;
+    const signature = JSON.stringify([review, raw, exact, turnSources]);
+    if (host.dataset.signature === signature) { window.linkifyAgentSources?.(body, turnSources); return; }
     host.dataset.signature = signature;
     host._hasReview = true;
     host.replaceChildren();
@@ -93,14 +101,14 @@
     contexts = review.comparisons.map(comparison => {
       const check = boundCheck(comparison);
       const answers = comparison.answers || [];
-      const sources = safeSources([{ sources: turnSources }, ...answers]);
+      const sources = turnSources;
       const findAnswer = name => answers.find(a => [a.provider, a.provider_label, a.model?.label].some(v => v?.toLowerCase() === name?.toLowerCase()));
       const context = { key: `agent-evidence:${comparison.id}`, question: comparison.question, scopeLabel: "Comparison focus",
         contextLabel: comparison.question.length > 64 ? comparison.question.slice(0, 61) + "…" : comparison.question,
         contextGroup: () => contexts,
         answers: [
           ...answers.map(a => ({ provider: a.provider_label || a.provider, model: a.model?.model, label: a.model?.label || a.provider,
-            text: a.text, sources: safeSources([a]), status: "complete" })),
+            text: a.text, sources: safeSources([a]), sourceReferences: 'agent', status: "complete" })),
           ...(comparison.failed_models || []).map((m, i) => ({ provider: `unavailable-${i}`, model: m.model, label: m.label,
             text: "", status: comparison.status === "cancelled" ? "canceled" : "error", error: "This model did not return a complete answer.", sources: [] }))
         ] };
@@ -151,6 +159,7 @@
           for (const prior of review.versions.slice(0, -1)) {
             history.append(node("p", "agent-review-note", `Version ${prior.id} · ${states[prior.status] || "Not reviewed"}`));
             const text = node("div", "consensus-answer-body"); window.injectMarkdown?.(text, prior.text, []); history.append(text);
+            window.linkifyAgentSources?.(text, safeSources([{sources}, {text: prior.text}]));
           }
           panel.append(history);
         }
@@ -159,11 +168,11 @@
       context.mark = () => {
         fallback.replaceChildren(); fallback.hidden = true;
         if (typeof raw === "string") window.injectMarkdown?.(body, raw, []);
-        if (!check?.differences_data) return;
-        window.renderStoredConsensusClaims?.(body, check.differences_data, fallback, sources, {
+        if (check?.differences_data) window.renderStoredConsensusClaims?.(body, check.differences_data, fallback, sources, {
           answerNavigation: navigation,
           focusDifference: differenceIndex => open("differences", { index: differenceIndex, trigger: document.activeElement })
         });
+        window.linkifyAgentSources?.(body, sources);
       };
       context.links = () => {
         const differences = check?.differences_data?.differences || [];

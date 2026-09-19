@@ -127,7 +127,11 @@ atomare Tokenreservierungen. `tests/test_agent_progress.py` prüft begrenzte
 Fortschrittsauszüge, den Vorrang von Provider-Zusammenfassungen und kompakte
 Live-/Persistenzdaten. `tests/js/agent-review.test.mjs` prüft Bindungen und
 Quellen aus Chat-Recherche, Antwortlinks und Vergleichsmodellen, auch ohne
-Vergleich. `tests/js/sidebar-quota.test.mjs` prüft die Agent-Prozentprojektion
+Vergleich. `tests/js/agent-citations.test.mjs` prüft hochgestellte Quellenzahlen,
+Paper-Titel, URL-Deduplizierung, explizite/mehrdeutige Quellen-IDs, Code- und
+Zahlennotation, nachgelieferte Metadaten, Streaming sowie unveränderte Originaltexte
+und die Reihenfolge von Prüfmarkierungen und Zitierdarstellung.
+`tests/js/sidebar-quota.test.mjs` prüft die Agent-Prozentprojektion
 und den Wechsel zurück zum unveränderten Consensus-Kontingent.
 `tests/js/agent-chat.test.mjs` prüft die manuelle Reasoning-Expansion, die separate
 Live-Vorschau und die Reasoning-Ebene im Chatmodell-Picker.
@@ -154,6 +158,10 @@ Widerspruchskarten, Markdown-Antworten, Quellen, Tastatur, kollisionsfreies
 Desktop-Docking, gespeicherte/archivierte Turns und Account-Reset. Wie Phase 4
 ohne Emulator ausführbar. Mit `AGENT_SCREENSHOTS=artifacts/agent-evidence-ui`
 werden Screenshots geschrieben. Es werden keine echten Modelle aufgerufen.
+Der Browserlauf prüft außerdem Quellenverweise in Live-/Vergleichsantworten
+sowie gespeicherte Paper-URLs aus einem fehlgeschlagenen Turn auf Desktop und
+Mobil: hochgestellte Zahlen, Quellenvorschau per Tastatur, Quellenliste,
+unveränderter Markdown und dieselben Verweise im archivierten Verlauf.
 
 Agent Beta: Backend-Verträge in `tests/test_agent_runs.py` und
 `tests/test_agent_loop.py` (gemeinsame Websuche aller angebotenen Modelle, Schrittbudgets, Tool-Schemas, Abbruch

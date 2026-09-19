@@ -95,6 +95,11 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       Abschluss automatisch zu, manuelle Wahl beibehalten. Reduced Motion
       deaktiviert den Lichtlauf. Katalogfehler mit Reload, entfernte Modellwahl,
       fehlendes Reasoning/Usage, Output-Limit und Fehler nach Streamstart prüfen.
+      Quellen im Fließtext als hochgestellte Nummern anzeigen, inklusive
+      benannter Markdown-Links und „Paper (https://…)“. Quellenvorschau per
+      Hover/Fokus, passende nummerierte Quellenliste und gespeicherte/archivierte
+      Antworten auch nach fehlgeschlagenem Run prüfen. Code/`[1]` bleiben Text.
+      Automatisiert: `agent-citations.test.mjs`, `test_agent_comparison_frontend.py`.
 - [ ] Sources/Differences: kompakte Quellenlisten, kontrastreiche Titel und
       Aussagen, Check-details-Chevrons und kleiner Resolve-Button in Light/Dark
       bei 320/390 px sowie als Desktop-Sidebar. Disclosures per Enter bedienen;

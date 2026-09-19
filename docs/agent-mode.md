@@ -87,10 +87,18 @@ zeigen dort die formatierte Originalantwort. Bei mehreren Teilvergleichen wählt
 ein beschriftetes Auswahlfeld die konkrete Markierungsgrundlage. Kontext und
 frühere Antwortversionen stehen in den Details des Lesers. Live-Ansicht und
 gespeicherter Verlauf verwenden denselben Review-Snapshot.
-Die Quellenansicht vereinigt Quellen aus der Chat-Recherche, der jeweiligen
-Vergleichsgrundlage und expliziten Links in den Antworten. Sie ist auch ohne
+Die Quellenansicht vereinigt Quellen aus der Chat-Recherche, allen
+Vergleichsgrundlagen und expliziten Links in den Antwortversionen. Sie ist auch ohne
 Vergleich verfügbar. Provider-/Suchquellen werden auf dem Turn gespeichert;
 alte Turns können sie weiterhin aus ihrem Aktivitätsjournal darstellen.
+Im Antworttext erscheinen Quellen als hochgestellte Nummern mit der gemeinsamen
+Quellenvorschau bei Hover oder Tastaturfokus. Ausgeschriebene URLs werden durch
+diese Verweise ersetzt; Namen wie „Self-Consistency“ bleiben lesbar. Dieselbe
+Darstellung gilt für gespeicherte und unvollständige Antworten, frühere Versionen
+und Vergleichsantworten. Die Nummerierung folgt der jeweiligen Quellenliste;
+der gemeinsame Turn-Katalog bleibt beim Grundlagenwechsel gleich. Originaltext
+und Judge-Bindung bleiben unverändert. Code und Zahlennotation wie `[1]` werden
+nicht als Quellen interpretiert.
 
 Der Composer zeigt Chatmodell und Compare-Auswahl. Reasoning ist eine zweite
 Ebene im Chatmodellmenü; der während einer Unterhaltung gesperrte Modusschalter

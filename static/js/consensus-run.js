@@ -337,7 +337,8 @@
       const sourceReferences = turnData.source_verification?.check_type !== 'contradiction_evidence';
       answerBody.dataset.sourceReferences = sourceReferences ? 'legacy' : 'none';
       if (typeof window.injectMarkdown === "function") {
-        window.injectMarkdown(answerBody, turnData.consensus, turnSources);
+        window.injectMarkdown(answerBody, turnData.consensus,
+          turnData.execution_mode === "agent" || turnData.mode === "Agent" ? [] : turnSources);
       } else {
         answerBody.textContent = turnData.consensus;
       }

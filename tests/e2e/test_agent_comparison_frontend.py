@@ -120,6 +120,9 @@ def test_comparison_review_and_saved_projection(browser, phase4_server, width, d
         expect(page.locator('#chatExecutionControl')).not_to_be_visible()
         expect(page.locator('.agent-effort-control')).not_to_be_visible()
         expect(page.locator("#agentAnswerBody .cx-claim")).to_have_count(1)
+        expect(page.locator('#agentAnswerBody .src-ref[href="https://example.org/billing"]')).to_have_count(1)
+        expect(page.locator('#agentAnswerBody')).to_contain_text('billing terms')
+        expect(page.locator('#agentAnswerBody')).not_to_contain_text('https://example.org/billing')
         assert len(requests[0]["comparison_models"]) >= 2
         expect(page.locator('.agent-inline-model')).to_have_count(6)
         icons = page.locator('.agent-model-stack img').evaluate_all('(els) => els.map(e => e.getAttribute("src"))')
@@ -153,6 +156,7 @@ def test_comparison_review_and_saved_projection(browser, phase4_server, width, d
         page.locator('#answerReaderInspector .diff-jump-link').first.click()
         expect(page.locator('#answerReaderColumns h3').last).to_have_text('Recommendation')
         expect(page.locator('#answerReaderColumns strong').first).to_have_text('smaller plan')
+        expect(page.locator('#answerReaderColumns .src-ref[href="https://example.org/pricing"]').first).to_be_visible()
         _snapshot(page, f"comparison-answer-{width}")
         page.locator('#answerReaderSections [data-section="sources"]').click()
         expect(page.locator('#answerReaderInspector a[href="https://example.org/pricing"]')).to_be_visible()
@@ -168,17 +172,63 @@ def test_comparison_review_and_saved_projection(browser, phase4_server, width, d
             "chatId": chat, "turnId": turn, "executionMode": "agent", "question": saved["question"], "consensus": text, "currentTurn": saved})
         expect(page.locator(".agent-review-status")).to_have_text("Comparison checked")
         expect(page.locator("#agentAnswerBody .cx-claim")).to_have_count(1)
+        expect(page.locator('#agentAnswerBody .src-ref[href="https://example.org/billing"]')).to_have_count(1)
         page.locator('.agent-evidence-link[data-section="answers"]').click()
         expect(page.locator('#answerReaderColumns')).to_contain_text('Recommendation')
         page.keyboard.press('Escape')
         page.evaluate('turn => window.App.followup.renderStoredTurns([turn])', saved)
         history = page.locator('.thread-history-turn')
         expect(history.locator('.agent-history-models img')).to_have_count(6)
+        expect(history.locator('.src-ref[href="https://example.org/billing"]')).to_have_count(1)
         history.locator('.agent-history-models button').last.click()
         expect(page.locator('#answerReaderColumns')).to_contain_text('Recommendation')
         expect(page.locator('#answerReaderModel')).to_have_value('Meta')
         page.evaluate("async () => { await window.__switchE2EUser('account-b'); }")
         expect(page.locator('#modelAnswerReader')).not_to_be_visible()
+        assert not errors
+    finally:
+        context.close()
+
+
+@pytest.mark.parametrize("width", [1280, 390])
+def test_saved_agent_paper_urls_are_numbered_citations(browser, phase4_server, width):
+    context, page = _real_firebase_page(browser, phase4_server)
+    text = ("## Kurzfassung\n\nMehrere unabhängige Perspektiven können helfen.\n\n"
+        "Verwandte Arbeiten: Self-Consistency (https://arxiv.org/abs/2203.07186), "
+        "FrugalGPT (https://arxiv.org/abs/2305.05176), RouteLLM (https://arxiv.org/abs/2406.18665).")
+    turn = {"id": "b" * 32, "question": "Welche Arbeiten untersuchen Modellvergleich und Routing?", "status": "failed",
+        "execution_mode": "agent", "consensus": text, "sources": [],
+        "agent_settings": {"model_id": CATALOG["default_model_id"], "label": "DeepSeek V4.1 Flash"}}
+    errors = []
+    page.on('pageerror', lambda error: errors.append(str(error)))
+    try:
+        page.set_viewport_size({"width": width, "height": 900})
+        page.route('**/user_status', lambda r: _json(r, {"tier": "pro", "is_pro": True, "agent_access": True}))
+        page.route('**/agent/models', lambda r: _json(r, CATALOG))
+        bookmark = {"id": "paper-citations", "chat_id": "a" * 32, "mode": "Agent", "execution_mode": "agent",
+            "query": turn["question"], "responses": {"consensus": text}}
+        page.route('**/bookmarks/paper-citations/conversation*', lambda r: _json(r, {
+            "chat_id": "a" * 32, "turns": [turn], "has_more": False}))
+        page.route('**/bookmarks/paper-citations', lambda r: _json(r, {"bookmark": bookmark}))
+        page.evaluate("async () => { await window.__switchE2EUser('account-a'); }")
+        page.evaluate("async () => { await window.openBookmark('paper-citations'); }")
+        refs = page.locator('#agentAnswerBody .src-ref')
+        expect(refs).to_have_count(3)
+        expect(page.locator('#agentAnswerBody')).not_to_contain_text('https://')
+        assert refs.first.evaluate('el => getComputedStyle(el).verticalAlign') == 'super'
+        assert page.locator('#agentAnswerBody').get_attribute('data-markdown') == text
+        refs.first.focus()
+        expect(page.locator('#sourceTeaser')).to_be_visible()
+        expect(page.locator('#sourceTeaser .source-teaser-title')).to_have_text('Self-Consistency')
+        page.locator('.agent-evidence-link[data-section="sources"]').click()
+        expect(page.locator('#answerReaderInspector a')).to_have_count(3)
+        expect(page.locator('#answerReaderInspector')).to_contain_text('FrugalGPT')
+        page.keyboard.press('Escape')
+        page.locator('#agentAnswerBody h2').scroll_into_view_if_needed()
+        _snapshot(page, f'agent-paper-citations-{width}')
+        page.evaluate('turn => window.App.followup.renderStoredTurns([turn])', turn)
+        expect(page.locator('.thread-history-turn .src-ref')).to_have_count(3)
+        assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
         assert not errors
     finally:
         context.close()

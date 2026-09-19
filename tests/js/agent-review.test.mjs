@@ -74,7 +74,7 @@ it('collects chat search, answer links and comparison citations into one source 
   d.querySelector('[data-section="sources"]').click();
   const context = w.App.answerReader.openContext.mock.calls[0][0];
   expect([...context.renderPanel('sources').querySelectorAll('a')].map(a => a.href)).toEqual([
-    'https://example.org/search', 'https://example.org/chat', 'https://example.org/plan']);
+    'https://example.org/search', 'https://example.org/chat', 'https://example.org/plan', 'https://example.org/']);
   dom.window.close();
 });
 it('makes search sources available without a comparison, including saved legacy activities', () => {

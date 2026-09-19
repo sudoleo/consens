@@ -354,6 +354,87 @@ function linkifySourceTags(containerEl, sources) {
 }
 window.linkifySourceTags = linkifySourceTags;
 
+// Agent prose cites URLs across independent model catalogs. Display numbers
+// belong to this answer's deduplicated list, never to the currently active run.
+// This is a DOM projection: the original Markdown and its review hash stay intact.
+function linkifyAgentSources(containerEl, sources) {
+  if (!containerEl || !sources?.length) return;
+  const canonical = value => {
+    try {
+      const url = new URL(value);
+      if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password) return '';
+      url.hash = '';
+      return url.href;
+    } catch (_) { return ''; }
+  };
+  const refs = new Map(sources.map((src, index) => [canonical(src.url), {src, token: String(index + 1)}]));
+  refs.delete('');
+  const skip = 'a, code, pre, script, style, textarea, .katex, mjx-container';
+  const walker = document.createTreeWalker(containerEl, NodeFilter.SHOW_TEXT, {
+    acceptNode: node => /\[S\d+(?:,\s*S?\d+)*\]/i.test(node.nodeValue || '') && !node.parentElement?.closest(skip)
+      ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT
+  });
+  const nodes = [];
+  while (walker.nextNode()) nodes.push(walker.currentNode);
+  for (const node of nodes) {
+    const text = node.nodeValue;
+    const fragment = document.createDocumentFragment();
+    let offset = 0;
+    for (const match of text.matchAll(/\[S\d+(?:,\s*S?\d+)*\]/gi)) {
+      fragment.append(document.createTextNode(text.slice(offset, match.index)));
+      const resolved = getSourceRefs(match[0].toUpperCase(), sources).map(ref => refs.get(canonical(ref.src?.url)));
+      offset = match.index + match[0].length;
+      if (resolved.length && resolved.every(Boolean)) {
+        const punctuation = text.slice(offset).match(/^([.!?]+)(?=\s|$)/);
+        if (punctuation) {
+          fragment.lastChild.nodeValue = fragment.lastChild.nodeValue.replace(/[ \t]+$/, '');
+          fragment.append(document.createTextNode(punctuation[1]));
+          offset += punctuation[1].length;
+        }
+        appendNumberedSourceRefs(fragment, resolved);
+      } else fragment.append(document.createTextNode(match[0]));
+    }
+    fragment.append(document.createTextNode(text.slice(offset)));
+    node.replaceWith(fragment);
+  }
+  for (const link of containerEl.querySelectorAll('a[href]')) {
+    if (link.closest('code, pre, .katex, mjx-container') || link.querySelector('img, svg')) continue;
+    const ref = refs.get(canonical(link.getAttribute('href')));
+    if (!ref) continue;
+    if (link.classList.contains('src-ref')) {
+      // Keep focused/hovered references alive during streamed activity updates.
+      link.textContent = ref.token;
+      link.dataset.sourceNumber = ref.token;
+      link.sourceData = ref.src;
+      link.setAttribute('aria-label', `Source ${ref.token}: ${getSourceTitle(ref.src, ref.token)}`);
+      continue;
+    }
+    const label = link.textContent.trim();
+    const rawUrl = canonical(label) === canonical(link.getAttribute('href'));
+    const existingCitation = link.classList.contains('source-link');
+    const before = link.previousSibling;
+    const after = link.nextSibling;
+    if (rawUrl && before?.nodeType === Node.TEXT_NODE && after?.nodeType === Node.TEXT_NODE
+        && /\($/.test(before.nodeValue) && /^\)/.test(after.nodeValue)) {
+      before.nodeValue = before.nodeValue.replace(/[ \t]*\($/, '');
+      after.nodeValue = after.nodeValue.slice(1);
+    } else if (rawUrl && before?.nodeType === Node.TEXT_NODE) {
+      before.nodeValue = before.nodeValue.replace(/[ \t]+$/, '');
+    }
+    const fragment = document.createDocumentFragment();
+    if (!rawUrl && !existingCitation) fragment.append(...link.childNodes);
+    // As in Consensus, a terminal citation follows the sentence punctuation.
+    const punctuation = after?.nodeType === Node.TEXT_NODE && after.nodeValue.match(/^([.!?]+)(?=\s|$)/);
+    if (punctuation) {
+      fragment.append(document.createTextNode(punctuation[1]));
+      after.nodeValue = after.nodeValue.slice(punctuation[1].length);
+    }
+    fragment.append(createSourceRef(ref));
+    link.replaceWith(fragment);
+  }
+}
+window.linkifyAgentSources = linkifyAgentSources;
+
 function normalizeEvidenceUrl(url) {
   if (!url) return "";
   try {

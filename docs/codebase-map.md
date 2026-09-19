@@ -823,6 +823,13 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   `#consensusSourcesList`
   (`app-init.js::renderEvidenceSources`, geoeffnet ueber den Quellen-Chip).
   In den Modellantworten bleiben es die Favicon-Chips `.source-link`.
+  Agent-Antworten verwenden separat `window.linkifyAgentSources`: sichere
+  HTTP(S)-Links und eindeutig auflösbare `[S#]`-Tags werden zu denselben
+  hochgestellten `.src-ref` mit Quellenvorschau. Die Nummern entsprechen der
+  deduplizierten Quellenliste des jeweiligen Turns bzw. der Einzelantwort.
+  Benannte Links behalten ihren Text; ausgeschriebene URLs samt umgebender
+  Klammer entfallen. Code, Formeln und reine Zahlennotation wie `[1]` bleiben
+  unberührt. Die Umwandlung betrifft nur den DOM, nicht Markdown oder Review-Hash.
   Ein Hover auf `.src-ref` oeffnet `#sourceTeaser` (Favicon, Host, Titel,
   Snippet); auf Touch/Keyboard traegt das `title`-Attribut dieselbe Info.
   `normalizeTerminalSourceTagOrder` korrigiert Modell-Output der Form
@@ -1783,9 +1790,15 @@ Die Aktivitätsliste enthält auch weitere Vergleichs-/Judge-Runden über 64 Sit
 Parallelitäts- und Nachrichtengrößen bleiben begrenzt. agent-review.js steht in bundles.json vor
 consensus-run.js und rendert live aus review-SSE-Ereignissen oder gespeichertem
 agent_review. Vor Markierungen prüft es Text-/Versions-/Basisbindung.
-Pro Turn vereinigt die Quellenansicht Provider-/Suchquellen, die Quellen der
-ausgewählten Vergleichsgrundlage und sichere HTTP(S)-Links aus gerenderten
-Antworten. agent_runs.py persistiert Provider-/Suchquellen beim Abschluss auch
+Pro Turn vereinigt die Quellenansicht Provider-/Suchquellen, die Quellen aller
+Vergleichsgrundlagen und sichere HTTP(S)-Links aus Antworten und früheren
+Textversionen. Der gemeinsame Katalog hält die Quellenzahlen beim Wechsel der
+Vergleichsgrundlage konsistent. `agent-review.js` setzt zuerst die gebundenen
+Prüfmarkierungen und danach die hochgestellten Quellenverweise; Live-, gespeicherte,
+abgebrochene und archivierte Antworten verwenden dieselbe Darstellung. Frühere
+Textversionen im Leser erhalten ebenfalls Quellenverweise. Vergleichsantworten
+aktivieren über `sourceReferences: 'agent'` in `model-answer-reader.js` dieselbe
+Darstellung mit ihrer eigenen Quellenliste. agent_runs.py persistiert Provider-/Suchquellen beim Abschluss auch
 auf `turn.sources`; alte Turns nutzen weiterhin `agent_activity`. Ohne Vergleich
 öffnet der Sources-Footer einen Leser mit ausschließlich dem Quellen-Tab.
 Pro Vergleich verwendet es die gemeinsamen renderStoredConsensusClaims und
