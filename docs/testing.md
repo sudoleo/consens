@@ -120,6 +120,15 @@ venv\Scripts\python.exe -m playwright install chromium
 
 ## Reguläre Suite
 
+Agent-Vergleiche: `tests/test_agent_comparison.py` führt den gemeinsamen
+Differences-/Coverage-Parser mit deterministischen Providern aus und prüft
+exakte Versionen, mehrere Teilgrundlagen, Ausfälle, Abbruch, UTC-Wechsel sowie
+atomare Tokenreservierungen. `tests/js/agent-review.test.mjs` prüft Bindungen und
+Markierungswechsel. `tests/e2e/test_agent_comparison_frontend.py` prüft die gebaute
+Desktop-/Mobilansicht samt Tastatur und gespeicherter Projektion; wie Phase 4
+ohne Emulator ausführbar. Mit `AGENT_SCREENSHOTS=artifacts/agent-comparison-ui`
+werden Screenshots geschrieben. Es werden keine echten Modelle aufgerufen.
+
 Agent Beta: Backend-Verträge in `tests/test_agent_runs.py` und
 `tests/test_agent_loop.py` (gemeinsame Websuche aller angebotenen Modelle, Schrittbudgets, Tool-Schemas, Abbruch
 und Teilabrechnung) sowie `tests/test_agent_search.py` (Provider-Gesamtkosten,

@@ -1,0 +1,219 @@
+"""Paid-step accounting and exact-version review through the real shared judges."""
+from dataclasses import replace
+import json
+from concurrent.futures import ThreadPoolExecutor
+
+import pytest
+
+from app.services import agent_quota
+from app.services.agent_comparison import comparison_selection, review_is_bound
+from app.services.agent_delegation import DelegationLoop
+from app.services.agent_delegation_config import defaults
+from app.services.agent_policy import AgentPolicy
+from app.services.llm.agent_client import AgentCompletion, measured_usage, resolve_agent_model
+from app.services.llm.provider_runtime import ProviderCancellation, ProviderCancelled, AnalysisBudgetExceeded
+from test_agent_runs import UID, AUTH, api, pending, receipt, store
+
+
+class Script:
+    def __init__(self, *, compares=1, revise=False, missing=False, fail_coverage=False, fail_model=False):
+        self.compares, self.revise, self.missing = compares, revise, missing
+        self.fail_coverage, self.fail_model = fail_coverage, fail_model
+        self.calls, self.prompts = [], []
+        self.loop = None
+
+    def factory(self):
+        script = self
+        class Completion(AgentCompletion):
+            def stream(self, *, model, messages, **kwargs):
+                script.calls.append((self.step_id, model.model))
+                self.usage = measured_usage({"prompt_tokens": 50, "completion_tokens": 20, "cost": .0001,
+                    "prompt_tokens_details": {"cached_tokens": 20}, "completion_tokens_details": {"reasoning_tokens": 10}}, model)
+                if self.step_id.startswith("completion:"):
+                    index = int(self.step_id.split(":")[-1])
+                    if index < script.compares:
+                        if script.compares > 1:
+                            self.text = f"I will compare perspective {index + 1}."
+                            yield {"type": "delta", "text": self.text}
+                        args = {"question": f"Evaluate option {index + 1}", "context": "Budget is 100. Source: https://example.org/report", "reason": "Compare trade-offs"}
+                        action = "compare_models"
+                    else:
+                        self.text = "The first option costs 100."
+                        if script.revise and index > script.compares:
+                            self.text = "The first option costs 100. The constraint matters."
+                        yield {"type": "delta", "text": self.text}
+                        if script.missing:
+                            self.finish_reason = "stop"
+                            return
+                        action, args = "judge_answer", {"finalize": not script.revise or index > script.compares}
+                    self.tool_calls = [{"id": f"call_{index}", "type": "function", "function": {"name": action, "arguments": json.dumps(args)}}]
+                    self.finish_reason = "tool_calls"
+                    return
+                schema = (model.request_config.get("response_format") or {}).get("json_schema", {}).get("schema")
+                if schema:
+                    if "sentences" in schema["properties"]:
+                        if script.fail_coverage:
+                            raise RuntimeError("Coverage unavailable")
+                        properties = schema["properties"]["sentences"]["items"]["properties"]
+                        self.text = json.dumps({"sentences": [{"id": key, "classification": "claim", "models": {name: "supports" for name in properties["models"]["properties"]}, "counter_quotes": []} for key in properties["id"]["enum"]]})
+                    else:
+                        self.text = json.dumps({"differences": [], "best_model": "Model A"})
+                else:
+                    script.prompts.append(messages)
+                    if script.fail_model and model.model.startswith("anthropic"):
+                        raise RuntimeError("Comparison unavailable")
+                    self.text = "The first option costs 100. The constraint matters."
+                self.finish_reason = "stop"
+                yield {"type": "delta", "text": self.text}
+        return Completion()
+
+
+def make_loop(store, script):
+    chat, turn = pending(store)
+    config = {**defaults(), "enabled": False, "max_searches": 0, "context_chars": 120_000}
+    loop = DelegationLoop(store=store, uid=UID, chat_id=chat, turn_id=turn["id"],
+        model=resolve_agent_model("claude-haiku-4-5"), messages=[{"role": "system", "content": "Answer."}, {"role": "user", "content": "Compare options"}],
+        api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy.from_config({**config, "enabled": True}),
+        delegation_config=config, completion_factory=script.factory,
+        comparison_models=comparison_selection({"anthropic": "claude-haiku-4-5", "openai": "gpt-5.4-mini"}))
+    script.loop = loop
+    return loop
+
+
+@pytest.mark.parametrize("compares,revise", [(1, False), (2, False), (1, True)])
+def test_real_judges_exact_versions_context_sources_and_all_usage(store, compares, revise):
+    script = Script(compares=compares, revise=revise)
+    loop = make_loop(store, script)
+    events = list(loop.run())
+    saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
+    review = saved["agent_review"]
+    assert saved["status"] == "completed"
+    assert review["status"] == "succeeded"
+    assert len(review["versions"]) == 1 + revise
+    assert saved["consensus"] == review["versions"][-1]["text"]
+    assert len(review["checks"]) == compares
+    assert review_is_bound(review, saved["consensus"])
+    assert not review_is_bound(review, saved["consensus"] + "changed")
+    assert all(c["differences_data"]["judges"]["differences"]["provider"] != "Claude" for c in review["checks"])
+    assert all(c["answer_hash"] == review["answer_hash"] for c in review["checks"])
+    for i in range(compares):
+        assert script.prompts[2 * i] == script.prompts[2 * i + 1]
+        assert "https://example.org/report" in script.prompts[2 * i][1]["content"]
+        assert "first option costs" not in script.prompts[2 * i][1]["content"]
+    usage = saved["agent_usage"]
+    assert usage["input_tokens"] + usage["output_tokens"] == len(script.calls) * 70
+    quota = agent_quota.quota_ref(store.db, UID, agent_quota.day_key()).get().to_dict()
+    assert quota["used"] == len(script.calls) * 70 and quota["reserved"] == 0
+    assert any(e["type"] == "review" and e["review"]["status"] == "running" for e in events)
+    assert sum(e["type"] == "delta" for e in events) == 1 + revise + (compares if compares > 1 else 0)
+    assert all("I will compare" not in v["text"] for v in review["versions"])
+    assert store.delegation_view(UID, loop.chat_id, loop.turn_id)["agents"]
+
+
+@pytest.mark.parametrize("failure,expected", [("fail_coverage", "partial"), ("fail_model", "failed")])
+def test_partial_or_failed_checks_never_certify_success(store, failure, expected):
+    script = Script(**{failure: True})
+    loop = make_loop(store, script)
+    list(loop.run())
+    review = store.get_turn(UID, loop.chat_id, loop.turn_id)["agent_review"]
+    assert review["status"] == expected
+
+
+def test_missing_tool_is_bounded_and_persists_unchecked_answer(store):
+    script = Script(missing=True)
+    loop = make_loop(store, script)
+    with pytest.raises(AnalysisBudgetExceeded, match="required answer review"):
+        list(loop.run())
+    saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
+    assert saved["status"] == "failed"
+    assert saved["agent_review"]["status"] == "missing"
+    assert saved["consensus"] == "The first option costs 100."
+    assert len(script.calls) == 5
+
+
+def test_atomic_daily_budget_and_duplicate_settlement(store, monkeypatch):
+    monkeypatch.setenv("AGENT_DAILY_TOKEN_LIMIT", "100")
+    loops = [make_loop(store, Script()) for _ in range(2)]
+    def claim(loop):
+        try:
+            return store.claim(UID, loop.chat_id, loop.turn_id, loop.model, run_token=loop.run_token,
+                policy=loop.policy.snapshot(), reservation=(60, 100))
+        except AnalysisBudgetExceeded:
+            return False
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        claims = list(pool.map(claim, loops))
+    assert sum(claims) == 1
+    loop = loops[claims.index(True)]
+    value = receipt()
+    value.usage = measured_usage({"prompt_tokens": 10, "completion_tokens": 5,
+        "prompt_tokens_details": {"cached_tokens": 5}, "completion_tokens_details": {"reasoning_tokens": 5}}, loop.model)
+    for _ in range(2):
+        store.settle(UID, loop.chat_id, loop.turn_id, completion=value, status="cancelled", final=False)
+    quota = agent_quota.quota_ref(store.db, UID, agent_quota.day_key()).get().to_dict()
+    assert quota["used"] == 15 and quota["reserved"] == 0
+
+
+def test_unknown_usage_keeps_admission_and_utc_day_is_separate(store, monkeypatch):
+    loop = make_loop(store, Script())
+    monkeypatch.setattr(agent_quota, "day_key", lambda: "2026-09-19")
+    assert store.claim(UID, loop.chat_id, loop.turn_id, loop.model, run_token=loop.run_token,
+        policy=loop.policy.snapshot(), reservation=(500, 100))
+    store.settle(UID, loop.chat_id, loop.turn_id, completion=receipt(measured=False), status="cancelled", final=False)
+    quota = agent_quota.quota_ref(store.db, UID, "2026-09-19").get().to_dict()
+    assert quota["reserved"] == quota["unknown"] == 500
+    assert agent_quota.public(agent_quota.quota_ref(store.db, UID, "2026-09-20").get().to_dict())["remaining"] == 250000
+
+
+def test_configured_default_uses_cross_family_judges(store):
+    loop = make_loop(store, Script())
+    loop.model = resolve_agent_model()
+    list(loop.run())
+    review = store.get_turn(UID, loop.chat_id, loop.turn_id)["agent_review"]
+    assert review["status"] == "succeeded"
+    assert review["checks"][0]["differences_data"]["judges"]["differences"]["provider"] != "DeepSeek"
+
+
+def test_midnight_moves_only_unspent_review_hold(store, monkeypatch):
+    loop = make_loop(store, Script())
+    args = (UID, loop.chat_id, loop.turn_id)
+    monkeypatch.setattr(agent_quota, "day_key", lambda: "2026-09-19")
+    assert store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(), reservation=(100, 100))
+    store.settle(*args, completion=receipt(measured=False), status="succeeded", final=False)
+    store.protect_review(*args, loop.run_token, 200)
+    monkeypatch.setattr(agent_quota, "day_key", lambda: "2026-09-20")
+    assert store.claim(*args, loop.model, step="completion:1", run_token=loop.run_token, reservation=(50, 100))
+    assert agent_quota.quota_ref(store.db, UID, "2026-09-19").get().to_dict()["reserved"] == 100
+    assert agent_quota.quota_ref(store.db, UID, "2026-09-20").get().to_dict()["reserved"] == 200
+
+
+def test_disconnect_during_review_settles_every_paid_call_and_marks_stopped(store):
+    loop = make_loop(store, Script())
+    source = loop.run()
+    for event in source:
+        if event["type"] == "review" and event["review"]["status"] == "running":
+            loop.cancellation.cancel()
+            break
+    source.close()
+    saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
+    assert saved["status"] == "failed"
+    assert saved["agent_review"]["status"] == "cancelled"
+    root = store.receipt_ref(UID, loop.chat_id, loop.turn_id).get().to_dict()
+    assert "running" not in root["step_states"].values()
+    assert root["run_status"] == "cancelled"
+
+
+def test_failed_review_recovery_preserves_status_and_never_calls_provider(api):
+    client, store, calls = api
+    loop = make_loop(store, Script(missing=True))
+    with pytest.raises(AnalysisBudgetExceeded):
+        list(loop.run())
+    payload = {"chat_id": loop.chat_id, "question": "Question one", "client_request_id": "one",
+               "bookmark_id": "agent_review_recovery", "recover_only": True}
+    before = agent_quota.quota_ref(store.db, UID, agent_quota.day_key()).get().to_dict()
+    response = client.post("/agent", json=payload, headers=AUTH)
+    assert response.status_code == 200, response.text
+    assert response.json()["turn"]["agent_review"]["status"] == "missing"
+    assert response.json()["turn"]["status"] == "failed"
+    assert calls == []
+    assert agent_quota.quota_ref(store.db, UID, agent_quota.day_key()).get().to_dict() == before
+    assert client.post("/agent", json={**payload, "comparison_models": {"openai": "gpt-5.4-mini", "anthropic": "claude-haiku-4-5"}}, headers=AUTH).status_code == 409

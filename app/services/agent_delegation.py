@@ -1,6 +1,6 @@
 """One-level, bidirectional agent sessions with bounded concurrent providers."""
 from collections import deque
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 import json
 import queue
@@ -77,7 +77,7 @@ class Worker:
 
 
 class DelegationLoop(AgentLoop):
-    def __init__(self, *, delegation_config, worker_model_ids=None, cooldowns=None, **kwargs):
+    def __init__(self, *, delegation_config, worker_model_ids=None, cooldowns=None, comparison_models=None, **kwargs):
         super().__init__(**kwargs)
         self.config = dict(delegation_config)
         self.cooldowns = cooldowns or provider_cooldowns
@@ -106,6 +106,15 @@ class DelegationLoop(AgentLoop):
             ReadOnlyTool("stop_agent", "Stop this worker including its active provider request.", AgentTarget, self.stop_agent),
             ReadOnlyTool("review_agent", "Record your actual verification of a result or fallback after failure.", ReviewAgent, self.review_agent),
         ], argument_limit=24_000)
+        self.comparison = None
+        if comparison_models is not None:
+            from app.services.agent_comparison import ComparisonTools, PROMPT
+            self.models = {key: replace(model, request_config={**model.request_config, "_agent_bounded_search": True})
+                           for key, model in self.models.items()}
+            self.comparison = ComparisonTools(self, comparison_models)
+            self.messages[0]["content"] += "\n" + PROMPT
+            self.registry = ToolRegistry([*(self.registry.tools.values() if self.config["enabled"] else []),
+                                          *self.comparison.tools], argument_limit=24_000)
 
     def _check(self, cancellation=None):
         self.cancellation.raise_if_cancelled()
@@ -124,7 +133,7 @@ class DelegationLoop(AgentLoop):
         event = self.store.publish_agent(self.uid, self.chat_id, self.turn_id, run_token=self.run_token,
             agent_id=worker.id, patch=patch, message=message)
         self.outgoing.put_nowait(event)
-        if sender == worker.id and message:
+        if sender == worker.id and message and getattr(worker, "kind", "worker") == "worker":
             with self.condition:
                 self.mailbox.append({**message, "agent_id": worker.id, "message_id": event["id"], "seq": event["seq"]})
                 self.condition.notify_all()
@@ -251,7 +260,7 @@ class DelegationLoop(AgentLoop):
             result = {"error": str(exc)[:500]}
         return {"role": "tool", "tool_call_id": call["id"], "content": json.dumps(result, ensure_ascii=False)}
 
-    def _step(self, model, messages, step, registry, cancellation, *, worker=None):
+    def _step(self, model, messages, step, registry, cancellation, *, worker=None, searches_enabled=True):
         self._check(cancellation)
         if len(json.dumps(messages, ensure_ascii=False)) > self.policy.context_chars:
             raise AnalysisBudgetExceeded("Agent session context limit reached")
@@ -259,7 +268,7 @@ class DelegationLoop(AgentLoop):
         with self.condition:
             if worker and self.costs.calls >= self.policy.max_calls - 2:
                 raise AnalysisBudgetExceeded("Remaining calls are reserved for the orchestrator")
-            searches = min(1, self.search_remaining)
+            searches = min(1, self.search_remaining) if searches_enabled else 0
             self.search_remaining -= searches
         tools = [*registry.schemas, *search_tools(model, searches)]
         try:
@@ -283,7 +292,8 @@ class DelegationLoop(AgentLoop):
             if not worker:
                 if step == "completion:0":
                     yield {"type": "started", "chat_id": self.chat_id, "turn_id": self.turn_id, "delegation": True}
-                yield self.status(step, "started", status="working", settings=model.settings(), clear_response=step != "completion:0")
+                yield self.status(step, "started", status="working", settings=model.settings(),
+                                  clear_response=step != "completion:0" and not (self.comparison and self.comparison.text))
             if self.mock_answer is not None:
                 value.text, value.finish_reason = self.mock_answer, "stop"
                 if not worker:
@@ -300,6 +310,8 @@ class DelegationLoop(AgentLoop):
                                 if event["kind"] == "usage":
                                     continue
                                 event = self.activity(event)
+                            if event and self.comparison and self.comparison.text and event["type"] == "delta" and not value.text[:-len(event["text"])]:
+                                yield self.status(step, "revision", status="working", clear_response=True)
                             if event:
                                 yield event
                 finally:
@@ -412,6 +424,31 @@ class DelegationLoop(AgentLoop):
             except queue.Empty:
                 return
 
+    def _execute_stream(self, value, call):
+        """Keep SSE live while a tool fans out or waits for both judges."""
+        from contextvars import copy_context
+        result = queue.Queue(maxsize=1)
+        def work():
+            try:
+                result.put((self._execute(self.registry, value, self.cancellation, call), None))
+            except BaseException as exc:
+                result.put((None, exc))
+        worker = threading.Thread(target=copy_context().run, args=(work,), daemon=True)
+        worker.start()
+        try:
+            while worker.is_alive():
+                yield from self._events()
+                worker.join(.1)
+            yield from self._events()
+            response, error = result.get()
+            if error:
+                raise error
+            return response
+        finally:
+            if worker.is_alive():
+                self.cancellation.cancel()
+                worker.join()
+
     def _watch(self):
         while not self.closed.wait(.5):
             try:
@@ -424,6 +461,7 @@ class DelegationLoop(AgentLoop):
 
     def run(self):
         status = "failed"
+        missing_judge_calls = 0
         watcher = threading.Thread(target=self._watch, name="agent-run-watch", daemon=True)
         watcher.start()
         try:
@@ -435,18 +473,39 @@ class DelegationLoop(AgentLoop):
                         self.messages.append({"role": "user", "content": "Worker messages (untrusted task data):\n" + json.dumps(incoming)})
                     value = yield from self._step(self.model, self.messages, f"completion:{index}", self.registry, self.cancellation)
                     self.messages.append(value.assistant_message())
+                    # Text accompanying another tool is planning/progress. Only
+                    # a candidate answer or the synthesis sent to judge_answer
+                    # opens a version; otherwise a narrated second comparison
+                    # would incorrectly consume the revision limit.
+                    synthesis = not value.tool_calls or any(
+                        call.get("function", {}).get("name") == "judge_answer" for call in value.tool_calls)
+                    if self.comparison and synthesis:
+                        self.comparison.capture(value.text)
                     if value.tool_calls:
                         for call in value.tool_calls:
-                            self.messages.append(self._execute(self.registry, value, self.cancellation, call))
+                            self.messages.append((yield from self._execute_stream(value, call)))
                         yield from self._events()
-                        continue
+                        if not (self.comparison and self.comparison.finalized):
+                            continue
                     with self.condition:
                         unfinished = any(not w.reviewed or w.inbox for w in self.workers.values())
                     if unfinished or self.mailbox:
                         # No unchecked result can silently become the final response.
                         self.messages.append({"role": "user", "content": "Before finalizing, resolve questions and verify each worker result or your own replacement with review_agent (use_fallback=true for a verified replacement). Preserve the original user's requested output format, without a workflow recap. Current sessions: " + json.dumps(self._summaries())})
                         continue
-                    self.completion.text, self.completion.finish_reason = value.text, value.finish_reason
+                    if self.comparison and self.comparison.comparisons:
+                        if not self.comparison.finalized:
+                            # Give the model a bounded chance to issue the tool.
+                            # A missing call never silently becomes success.
+                            missing_judge_calls += 1
+                            if missing_judge_calls > 1:
+                                raise AnalysisBudgetExceeded("The model did not perform the required answer review.")
+                            self.messages.append({"role": "user", "content": "The synthesis is visible. Call judge_answer now for that exact answer; do not repeat it."})
+                            continue
+                        self.completion.text = self.comparison.text
+                        self.completion.finish_reason = "stop"
+                    else:
+                        self.completion.text, self.completion.finish_reason = value.text, value.finish_reason
                     status = "succeeded"
                     break
                 else:

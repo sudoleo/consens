@@ -1703,7 +1703,7 @@
           // globalen Live-IDs. Claims werden deshalb containerlokal erneut
           // verankert; Hover und Detaildialog bleiben genauso erreichbar wie
           // beim aktuell sichtbaren Consensus.
-          function renderStoredConsensusClaims(body, data, fallbackBox, sources) {
+          function renderStoredConsensusClaims(body, data, fallbackBox, sources, options = {}) {
             if (!body || !data || typeof data !== "object") return false;
             const claims = (Array.isArray(data.claims) ? data.claims : [])
               .filter(c => c && c.anchor && Array.isArray(c.agree) && Array.isArray(c.dissent));
@@ -1723,7 +1723,7 @@
               // Ein archivierter Turn hat seine eigenen Quellen; die globale
               // Liste gehoert bereits dem naechsten Lauf.
               sources: Array.isArray(sources) ? sources : [],
-              answerNavigation: storedAnswerNavigation(body)
+              answerNavigation: options.answerNavigation || storedAnswerNavigation(body)
             });
             return claims.length > 0;
           }

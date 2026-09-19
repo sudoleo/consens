@@ -13,6 +13,49 @@ from app.services.agent_runtime import AgentCapacityExceeded
 from app.services.llm.agent_client import AgentModel, AgentCompletion, measured_usage
 from app.services.agent_delegation_config import defaults
 from app.services.llm.provider_runtime import AnalysisBudgetExceeded
+from app.services import agent_quota
+
+
+def test_daily_token_admission_and_idempotent_settlement_in_firestore(monkeypatch):
+    assert_safe_e2e_environment()
+    monkeypatch.setenv("AGENT_DAILY_TOKEN_LIMIT", "100")
+    db = firestore.Client(project=E2E_PROJECT_ID)
+    uid = "agent-token-race-" + uuid.uuid4().hex
+    store, model = AgentRunStore(db), AgentModel()
+    config = defaults()
+    config["enabled"] = True
+    policy = AgentPolicy.from_config(config)
+    try:
+        identities = []
+        for i in range(2):
+            chat = store.create_chat(uid, execution_mode="agent")["id"]
+            turn = store.create_turn(uid, chat, question="Budget race", mode="Agent", deep_search=False,
+                selected_models=[model.model], consensus_model=model.model, client_request_id=str(i), execution_mode="agent")["id"]
+            identities.append((uid, chat, turn))
+        def claim(args):
+            try:
+                return AgentRunStore(db).claim(*args, model, run_token=args[1], policy=policy.snapshot(), reservation=(60, 100))
+            except AnalysisBudgetExceeded:
+                return False
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            admitted = list(pool.map(claim, identities))
+        assert sum(admitted) == 1
+        args = identities[admitted.index(True)]
+        value = AgentCompletion()
+        value.usage = measured_usage({"prompt_tokens": 10, "completion_tokens": 5,
+            "prompt_tokens_details": {"cached_tokens": 5}, "completion_tokens_details": {"reasoning_tokens": 4}}, model)
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            assert sum(pool.map(lambda _: AgentRunStore(db).settle(*args, completion=value,
+                status="cancelled", final=False), range(2))) == 1
+        quota = agent_quota.quota_ref(db, uid, agent_quota.day_key()).get().to_dict()
+        assert quota["used"] == 15 and quota["reserved"] == 0
+        store.finish_run(*args, completion=value, status="cancelled", run_token=args[1])
+        store.delete_chat(uid, args[1])
+        assert agent_quota.quota_ref(db, uid, agent_quota.day_key()).get().to_dict()["used"] == 15
+    finally:
+        FirestoreAccountDeletion(db)._delete_user_subcollections(uid)
+        db.collection("users").document(uid).delete()
+        db.close()
 
 
 def test_delegation_budget_journal_and_receipts_are_atomic_in_firestore():

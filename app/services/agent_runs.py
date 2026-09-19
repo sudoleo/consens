@@ -14,6 +14,7 @@ import re
 from firebase_admin import firestore
 
 from app.services import persistence_guard, prompt_config
+from app.services import agent_quota
 from app.services.agent_runtime import AgentCapacityExceeded
 from app.services.agent_sessions import AgentSessionStore
 from app.services.chat_store import ChatStore, ChatNotFound, TurnStatusConflict, TURN_PAGE_SIZE_MAX
@@ -163,6 +164,10 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                 return False
             root_ref = self.receipt_ref(uid, chat_id, turn_id)
             root_data = (receipt if step == "completion:0" else root_ref.get(transaction=tx)).to_dict() or {}
+            receipt_data = receipt.to_dict() or {}
+            daily_ref = (agent_quota.quota_ref(self.db, uid, receipt_data["quota_day"])
+                         if receipt_data.get("quota_day") else None)
+            daily = daily_ref.get(transaction=tx).to_dict() if daily_ref else None
             usage = completion.usage
             totals = dict((user.to_dict() or {}).get("agent_usage") or {})
             totals["unsettled_calls"] = max(0, totals.get("unsettled_calls", 0) - 1)
@@ -178,6 +183,8 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                     totals[field] = totals.get(field, 0) + usage[field]
             totals["updated_at"] = firestore.SERVER_TIMESTAMP
             tx.update(user_ref, {"agent_usage": totals})
+            if daily_ref:
+                tx.set(daily_ref, agent_quota.settle(daily, receipt_data["quota_reserved"], usage))
             leases = dict((active.to_dict() or {}).get("leases") or {})
             if final:
                 leases.pop(self.receipt_ref(uid, chat_id, turn_id).id, None)
@@ -235,6 +242,17 @@ class AgentRunStore(AgentSessionStore, ChatStore):
             if (last.get("status") == "running" or "running" in data.get("step_states", {}).values()
                     or (status == "succeeded" and last.get("status") != "succeeded")):
                 raise TurnStatusConflict("Agent step has not settled")
+            review = (turn.to_dict() or {}).get("agent_review")
+            if status == "succeeded" and review and review.get("comparisons"):
+                from app.services.agent_comparison import review_is_bound
+                if (not review_is_bound(review, completion.text)
+                        or review.get("status") not in {"succeeded", "partial", "failed"}):
+                    raise TurnStatusConflict("The exact answer version has not been reviewed")
+            daily_ref = agent_quota.quota_ref(self.db, uid, data["quota_day"]) if data.get("quota_day") else None
+            daily = daily_ref.get(transaction=tx).to_dict() or {} if daily_ref else {}
+            if daily_ref:
+                daily["reserved"] = max(0, daily.get("reserved", 0) - data.get("review_hold", 0))
+                tx.set(daily_ref, daily)
             tx.update(root_ref, {"run_status": status, "finished_at": firestore.SERVER_TIMESTAMP})
             leases = dict((active.to_dict() or {}).get("leases") or {})
             leases.pop(root_ref.id, None)
@@ -250,6 +268,12 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                                  differences="", differences_data=None, sources=[], included_models=[])
                 else:
                     patch.update(error_code="cancelled" if status == "cancelled" else "agent_failed", failed_at=firestore.SERVER_TIMESTAMP)
+                    if review:
+                        # A crash/stop cannot leave a saved review looking live.
+                        review = dict(review)
+                        review["status"] = ("cancelled" if status == "cancelled" else
+                                            "missing" if review.get("status") == "required" else "failed")
+                        patch["agent_review"] = review
                 tx.update(turn_ref, patch)
                 if chat_data.get("agent_turn_id") == turn_id:
                     tx.update(chat_ref, {"agent_lock_until": datetime.now(timezone.utc), "updated_at": firestore.SERVER_TIMESTAMP})

@@ -1,5 +1,5 @@
 {
-  "sources": "c5f6e076caa9",
+  "sources": "581a47bcac58",
   "inputs": [
     "package-lock.json",
     "package.json",
@@ -48,6 +48,7 @@
     "static/js/agent-chat.js",
     "static/js/agent-delegation.js",
     "static/js/agent-mode.js",
+    "static/js/agent-review.js",
     "static/js/app-bootstrap.js",
     "static/js/app-core.js",
     "static/js/app-dom-events.js",
@@ -173,7 +174,7 @@
     },
     {
       "name": "firebase",
-      "src": "/static/dist/firebase.57c057a302aa.js",
+      "src": "/static/dist/firebase.890d650af819.js",
       "module": true,
       "defer": false
     },
@@ -185,17 +186,19 @@
     },
     {
       "name": "app",
-      "src": "/static/dist/app.b05b283cded0.js",
+      "src": "/static/dist/app.28531faa02f7.js",
       "module": false,
       "defer": true
     }
   ],
   "styles": {
-    "app": "/static/dist/app.976c961b9a22.css"
+    "app": "/static/dist/app.e6cf05450572.css"
   },
   "previous_assets": [
+    "app.976c961b9a22.css",
+    "app.b05b283cded0.js",
     "app.7ed7fee74cce.js",
-    "app.510a61e9521a.js",
+    "firebase.57c057a302aa.js",
     "head.4ad9e855ae24.js",
     "head.6fd653d6e163.js"
   ]

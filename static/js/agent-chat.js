@@ -78,6 +78,8 @@
     const select = document.getElementById("agentModelDropdown");
     const effort = document.getElementById("agentReasoningEffort");
     if (host) host.hidden = !agent;
+    const existingQuota = document.getElementById("agentTokenBudget");
+    if (existingQuota) existingQuota.hidden = !agent || !catalog?.token_budget;
     if (!agent || !select || !effort) {
       if (select) App.collapseExpandedModelPicker?.(select);
       if (effort) App.collapseExpandedModelPicker?.(effort);
@@ -85,6 +87,17 @@
     }
     if (canUse() && catalogStatus === "idle") loadModels();
     const ready = catalogStatus === "ready" && canUse();
+    let quota = document.getElementById("agentTokenBudget");
+    if (!quota && host) {
+      quota = document.createElement("span"); quota.id = "agentTokenBudget";
+      quota.className = "agent-token-budget"; host.parentElement.append(quota);
+    }
+    if (quota) {
+      const budget = catalog?.token_budget;
+      quota.hidden = !budget;
+      quota.textContent = budget ? `${Number(budget.remaining).toLocaleString()} tokens left today` : "";
+      quota.title = "Shared by chat, agents, comparisons and judges. Resets at 00:00 UTC. Pending calls reserve tokens.";
+    }
     const running = registry.isExecuting(registry.visible()?.runId);
     const current = selection();
     const previous = preferredSelection() || {};
@@ -167,8 +180,15 @@
   }
   function render() {
     const agent = selectedMode() === "agent";
+    const comparisonPicker = document.getElementById("consensusModelDropdown");
+    if (comparisonPicker) {
+      comparisonPicker.dataset.comparisonOnly = String(agent);
+      comparisonPicker.setAttribute("aria-label", agent ? "Comparison models" : "Models and consensus engine");
+    }
     renderControls(agent);
+    const modeChanged = document.body.classList.contains("single-agent-active") !== agent;
     document.body.classList.toggle("single-agent-active", agent);
+    if (modeChanged) requestAnimationFrame(() => App.resizeQuestionInput?.());
     const chatTab = document.getElementById("viewSwitchConsensus");
     if (chatTab) chatTab.textContent = agent ? "Chat" : "Consensus";
     const greeting = document.querySelector(".hero-greeting");
@@ -204,11 +224,12 @@
       if (history) delete history.dataset.agentHistory;
     }
     const recover = document.getElementById("agentRecover");
-    if (recover) recover.hidden = !agent || context?.status !== "failed" || !context?.metadata.requestSent;
+    if (recover) recover.hidden = !agent || !["failed", "canceled"].includes(context?.status) || !context?.metadata.requestSent;
     if (panel) panel.hidden = !agent || (!context && !basis);
     if (agent && !context && basis) {
       renderAnswer(basis.consensus || "", "", App.agentActivity?.label(basis.currentTurn?.agent_settings) || "Agent · Beta");
       App.agentActivity?.renderTurn(activityHost(`${basis.chatId}:${basis.turnId}`), basis.currentTurn);
+      App.agentReview?.render(document.getElementById("agentAnswerBody"), basis.currentTurn?.agent_review);
       App.agentDelegation?.project(basis.currentTurn?.agent_settings?.policy?.delegation ? {
         chatId: basis.chatId, turnId: basis.turnId || basis.currentTurn?.id,
         usage: basis.currentTurn?.agent_usage, running: basis.currentTurn?.status === "pending" } : null);
@@ -260,6 +281,7 @@
       status: context.status, truncated: state.completedTurn?.agent_reasoning_truncated,
       finishReason: state.completedTurn?.agent_finish_reason,
     });
+    App.agentReview?.render(document.getElementById("agentAnswerBody"), state.completedTurn?.agent_review || context.metadata.agentReview);
     App.syncSendButtonRunning?.();
     App.agentDelegation?.project(context.metadata.delegation || state.completedTurn?.agent_settings?.policy?.delegation ? { chatId: context.metadata.chatId,
       turnId: state.completedTurn?.id || context.metadata.agentTurnId,
@@ -282,6 +304,9 @@
     const settings = recovery?.config.agentSettings || {
       ...selection(), reasoning_effort: document.getElementById("agentReasoningEffort")?.value || "default",
     };
+    const comparisonModels = recovery?.config.comparisonModels || Object.fromEntries((App.modelPrefs || [])
+      .filter(pref => document.getElementById(pref.checkId)?.checked)
+      .map(pref => [pref.provider, document.getElementById(pref.selectId)?.value]));
     if (!recovery && (!catalog || !catalog.models.some(model => model.id === settings.model_id))) {
       App.showPopup?.("Choose an available agent model before sending."); return;
     }
@@ -297,7 +322,7 @@
         bookmarkId: recovery?.bookmark.id || basis?.bookmarkId || `b_agent_${crypto.randomUUID().replaceAll("-", "")}`,
         bookmarkTitle: basis?.title || question,
         config: { executionMode: "agent", agentMode: true, autoConsensus: false,
-          deepSearch: false, checkSources: false, useOwnKeys: false, providers: [], agentSettings: settings },
+          deepSearch: false, checkSources: false, useOwnKeys: false, providers: [], agentSettings: settings, comparisonModels },
         metadata: { agentActivity: [], agentSettings: { ...settings, label: catalog?.models.find(model => model.id === settings.model_id)?.label } },
         usage: { status: "simulation", key: null },
       });
@@ -310,7 +335,8 @@
       context.consensus.status = "canceled";
       context.consensus.error = null;
       context.bookmark.status = "canceled";
-      if (context.basis && registry.visible()?.runId === context.runId) registry.selectConversationBasis(context.basis);
+      if (context.metadata.agentReview) context.metadata.agentReview = { ...context.metadata.agentReview, status: "cancelled" };
+      else if (context.basis && registry.visible()?.runId === context.runId) registry.selectConversationBasis(context.basis);
     };
     registry.setStatus(context.runId, "running");
     if (!recovery) {
@@ -347,6 +373,7 @@
         recover_only: Boolean(recovery),
         model_id: settings.model_id,
         reasoning_effort: settings.reasoning_effort || "default",
+        comparison_models: Object.keys(comparisonModels).length ? comparisonModels : null,
       }, signal, {
         started: { receive(event) {
           if (registry.isAuthCurrent(context) && event.chat_id === context.metadata.chatId) {
@@ -358,6 +385,11 @@
           if (!registry.isExecuting(context.runId) || !registry.isAuthCurrent(context)) return;
           App.agentDelegation?.receive(context, event);
           if (!timer) timer = setTimeout(() => { timer = null; registry.update(context.runId, () => {}); }, 100);
+        } },
+        review: { receive(event) {
+          if (!registry.isExecuting(context.runId) || !registry.isAuthCurrent(context)) return;
+          context.metadata.agentReview = event.review;
+          registry.update(context.runId, () => {});
         } },
         activity: { receive(event) {
           if (!registry.isExecuting(context.runId) || !registry.isAuthCurrent(context)) return;
@@ -376,11 +408,13 @@
       if (!registry.isAuthCurrent(context) || signal.aborted) return;
       if (!result.ok || result.data?.error || !result.data?.turn) throw new Error(apiError(result.data));
       const data = result.data;
+      if (data.token_budget && catalog) catalog.token_budget = data.token_budget;
       const turn = { ...data.turn, turn_id: data.turn_id };
       context.consensus.text = data.response;
       context.consensus.streamText = data.response;
       context.consensus.status = "complete";
       context.consensus.completedTurn = turn;
+      if (turn.status === "failed") context.consensus.error = { message: "This saved answer is incomplete. Its review did not finish successfully." };
       context.bookmark.status = "succeeded";
       context.persistence.consensusWrite = true;
       context.phase = "done";
@@ -398,7 +432,7 @@
       context.consensus.error = { message: error.message };
       context.bookmark.status = "failed";
       registry.setStatus(context.runId, "failed", { message: error.message });
-      if (context.basis && registry.visible()?.runId === context.runId) registry.selectConversationBasis(context.basis);
+      if (!context.metadata.agentReview && context.basis && registry.visible()?.runId === context.runId) registry.selectConversationBasis(context.basis);
     } finally {
       clearTimeout(timer);
       context.controllers.query = null;
@@ -414,7 +448,7 @@
     });
     document.getElementById("agentRecover")?.addEventListener("click", () => {
       const context = registry.visible();
-      if (context?.status === "failed" && context.metadata.requestSent) send(context);
+      if (["failed", "canceled"].includes(context?.status) && context.metadata.requestSent) send(context);
     });
     // The shared picker emits input before change. Commit before other UI
     // listeners can project the previous draft selection back into the select.

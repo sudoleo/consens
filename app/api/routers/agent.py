@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import replace
 from typing import Literal
 from fastapi import APIRouter, HTTPException, Request, Query
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -13,8 +14,9 @@ from app.core.security import db_firestore, is_user_admin, is_user_pro
 from app.api.routers.chat_history import _chat_uid, _raise_store_error
 from app.api.routers.bookmarks import _bookmark_meta
 from app.services import persistence_guard, prompt_config
+from app.services import agent_quota
+from app.services.agent_comparison import comparison_selection
 from app.services.agent_runs import AgentRunStore
-from app.services.agent_loop import AgentLoop
 from app.services.agent_policy import AgentPolicy, supports_delegation
 from app.services.agent_delegation import DelegationLoop
 from app.services.agent_provider_limits import AgentProviderCooldown, provider_cooldowns, provider_failure
@@ -45,6 +47,7 @@ class AgentRequest(BaseModel):
     recover_only: bool = False
     model_id: str | None = Field(default=None, min_length=1, max_length=160)
     reasoning_effort: str = Field(default="default", pattern=r"^(default|none|minimal|low|medium|high|xhigh|max)$")
+    comparison_models: dict[str, str] | None = Field(default=None, max_length=9)
 
     @field_validator("question")
     @classmethod
@@ -84,7 +87,19 @@ def _save_bookmark(uid, payload, store, turn):
 def _final(uid, payload, store, turn):
     bookmark_meta = _save_bookmark(uid, payload, store, turn)
     return {"chat_id": payload.chat_id, "turn_id": turn["id"], "turn": turn,
-            "response": turn["consensus"], "execution_mode": "agent", "bookmark_meta": bookmark_meta}
+            "response": turn["consensus"], "execution_mode": "agent", "bookmark_meta": bookmark_meta,
+            "token_budget": agent_quota.public(agent_quota.quota_ref(store.db, uid, agent_quota.day_key()).get().to_dict())}
+
+
+def _save_interrupted(uid, payload, store, turn_id):
+    try:
+        turn = store.get_turn(uid, payload.chat_id, turn_id)
+        if turn.get("agent_review") and turn.get("consensus") and turn["status"] == "failed":
+            _save_bookmark(uid, payload, store, turn)
+        return turn
+    except Exception as exc:
+        logging.warning("Interrupted Agent snapshot unavailable category=%s", safe_exception(exc))
+        return None
 
 
 @router.get("/agent/models")
@@ -93,7 +108,8 @@ def available_agent_models(request: Request):
     from fastapi.responses import JSONResponse
     uid = _chat_uid(request)
     require_agent_access(uid)
-    return JSONResponse(agent_model_options(), headers={"Cache-Control": "private, no-store"})
+    return JSONResponse({**agent_model_options(), "token_budget": agent_quota.public(
+        agent_quota.quota_ref(db_firestore, uid, agent_quota.day_key()).get().to_dict())}, headers={"Cache-Control": "private, no-store"})
 
 
 @router.post("/agent")
@@ -122,7 +138,11 @@ def run_agent(request: Request, payload: AgentRequest):
             prior_selection = existing.get("agent_settings", {}).get("selection", {"model_id": None, "reasoning_effort": "default"})
             if prior_selection != selection:
                 raise TurnStatusConflict("Request identity conflicts with different agent settings")
+            if existing.get("agent_settings", {}).get("comparison_selection") != payload.comparison_models:
+                raise TurnStatusConflict("Request identity conflicts with different comparison models")
             if existing["status"] == "completed":
+                return _final(uid, payload, store, existing)
+            if payload.recover_only and existing["status"] == "failed" and existing.get("agent_review") and existing.get("consensus"):
                 return _final(uid, payload, store, existing)
             raise HTTPException(status_code=409, detail="This request has already started. Reopen the saved conversation or send a new message after it finishes.")
         if payload.recover_only:
@@ -141,14 +161,20 @@ def run_agent(request: Request, payload: AgentRequest):
         lease = agent_capacity.acquire()
         config = prompt_config.get_config()
         delegation_config = config["delegation"]
-        delegates = delegation_config["enabled"] and supports_delegation(model)
-        policy = AgentPolicy.from_config(delegation_config) if delegates else AgentPolicy()
+        # Comparisons always use the shared bounded loop; worker delegation
+        # retains its separately configured model/protocol feature gate.
+        delegation_config = {**delegation_config, "enabled": delegation_config["enabled"] and supports_delegation(model)}
+        policy = replace(AgentPolicy.from_config({**delegation_config, "enabled": True}), context_chars=120_000)
+        comparisons = comparison_selection(payload.comparison_models)
+        model = replace(model, request_config={**model.request_config, "_agent_bounded_search": True})
         turn = store.create_turn(
             uid, payload.chat_id, question=payload.question, mode="Agent", deep_search=False,
             selected_models=[model.model], consensus_model=model.model,
             client_request_id=payload.client_request_id, execution_mode="agent",
             agent_settings={**model.settings(), "policy": policy.snapshot(), "config_revision": config["revision"],
-                            **({"delegation_config": delegation_config} if delegates else {}),
+                            "delegation_config": delegation_config,
+                            "comparison_selection": payload.comparison_models,
+                            "comparison_models": {p: m.snapshot() for p, m in comparisons.items()},
                             "selection": {"model_id": payload.model_id, "reasoning_effort": payload.reasoning_effort}},
         )
         if turn["status"] == "completed":
@@ -175,11 +201,11 @@ def run_agent(request: Request, payload: AgentRequest):
     cancellation = ProviderCancellation()
 
     def events():
-        loop_class = DelegationLoop if delegates else AgentLoop
-        loop = loop_class(store=store, uid=uid, chat_id=payload.chat_id, turn_id=turn["id"],
+        loop = DelegationLoop(store=store, uid=uid, chat_id=payload.chat_id, turn_id=turn["id"],
                          model=model, messages=messages, api_key=key or "", cancellation=cancellation,
                          completion_factory=AgentCompletion, policy=policy,
-                         **({"delegation_config": delegation_config, "cooldowns": provider_cooldowns} if delegates else {}),
+                         delegation_config=delegation_config, cooldowns=provider_cooldowns,
+                         comparison_models=comparisons,
                          mock_answer="Agent test answer: " + payload.question if mock_llm_enabled() else None)
         completion = loop.completion
         status = "failed"
@@ -196,6 +222,7 @@ def run_agent(request: Request, payload: AgentRequest):
             status = "succeeded"
         except (ProviderCancelled, GeneratorExit):
             status = "cancelled"
+            _save_interrupted(uid, payload, store, turn["id"])
             raise
         except (AgentCapacityExceeded, TurnStatusConflict, AnalysisBudgetExceeded) as exc:
             error = str(exc)
@@ -209,9 +236,11 @@ def run_agent(request: Request, payload: AgentRequest):
             logging.warning("Agent completion failed category=%s model=%s code=%s retry_after=%s",
                             safe_exception(exc), model.model, failure["code"], failure.get("retry_after"))
         if status != "succeeded":
-            if isinstance(loop, DelegationLoop):
-                for event in loop._events():
-                    yield sse_pack("delegation", event)
+            for event in loop._events():
+                yield sse_pack(event["type"], event)
+            interrupted = _save_interrupted(uid, payload, store, turn["id"])
+            if interrupted and interrupted.get("agent_review"):
+                yield sse_pack("review", {"review": interrupted["agent_review"]})
             yield sse_pack("activity", {"version": 1, "step_id": "run", "id": "run/usage", "kind": "usage", "usage": completion.usage})
             yield sse_pack("error", {"error": error, **failure})
             return

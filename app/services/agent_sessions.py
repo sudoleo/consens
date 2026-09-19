@@ -9,6 +9,7 @@ from uuid import uuid4
 from firebase_admin import firestore
 
 from app.services import persistence_guard
+from app.services import agent_quota
 from app.services.agent_costs import aggregate_usage, remaining_reservation
 from app.services.agent_runtime import AgentCapacityExceeded
 from app.services.chat_store import ChatNotFound, TurnStatusConflict
@@ -58,6 +59,8 @@ class AgentSessionStore:
                 leases[root_ref.id] = data["lease_until"]
             elif (data.get("run_token") != run_token or data.get("run_status") != "running"
                     or data.get("lease_until", now) <= now or data.get("cancel_requested") or root_ref.id not in leases):
+                if data.get("run_token") == run_token and data.get("cancel_requested"):
+                    raise ProviderCancelled("Agent run stopped")
                 raise TurnStatusConflict("Delegation producer is no longer authorized")
             limits = data["policy"]
             states = dict(data["step_states"])
@@ -67,16 +70,36 @@ class AgentSessionStore:
             if agent is not None and (not agent.exists or (agent.to_dict() or {}).get("status") in {"stopped", "failed"}):
                 raise TurnStatusConflict("Worker session is not runnable")
             tokens, cost = reservation
+            day = agent_quota.day_key()
+            daily_ref = agent_quota.quota_ref(self.db, uid, day)
+            daily = daily_ref.get(transaction=tx).to_dict() or {}
+            # Review/synthesis can spend this run's protected budget; workers
+            # and comparisons cannot consume it.
+            protected = data.get("review_hold", 0)
+            previous_daily_ref = None
+            if data.get("quota_day") and data["quota_day"] != day:
+                previous_daily_ref = agent_quota.quota_ref(self.db, uid, data["quota_day"])
+                previous_daily = previous_daily_ref.get(transaction=tx).to_dict() or {}
+                previous_daily["reserved"] = max(0, previous_daily.get("reserved", 0) - protected)
+                daily = agent_quota.reserve(daily, protected)
+            can_spend = agent_id == "orchestrator" or (agent and (agent.to_dict() or {}).get("kind") == "judge")
+            spend = min(protected, tokens) if can_spend else 0
+            cost_hold = data.get("review_cost_hold", 0)
+            cost_spend = min(cost_hold, cost) if can_spend else 0
+            daily = agent_quota.reserve(daily, tokens - spend)
             if (len(states) >= limits["max_calls"] or data["reserved_tokens"] + tokens > limits["max_tokens"]
-                    or data["reserved_cost"] + cost > limits["max_cost_nano_usd"]):
+                    or data["reserved_cost"] + cost + cost_hold - cost_spend > limits["max_cost_nano_usd"]):
                 raise AnalysisBudgetExceeded("The shared agent budget was reached.")
             states[step] = "running"
             reservations = {**data["reservations"], step: list(reservation)}
             patch = {**data, "step_states": states, "reservations": reservations,
+                     "quota_day": day, "review_hold": protected - spend,
+                     "review_cost_hold": cost_hold - cost_spend,
                      "reserved_tokens": data["reserved_tokens"] + tokens, "reserved_cost": data["reserved_cost"] + cost}
             if agent_id == "orchestrator":
                 patch["last_step"] = step
             record = {"schema_version": 3, "purpose": "agent", "step": step, "agent_id": agent_id,
+                      "quota_day": day, "quota_reserved": tokens,
                       "chat_id": chat_id, "turn_id": turn_id, "status": "running",
                       "model": model.snapshot(), "created_at": firestore.SERVER_TIMESTAMP}
             if root.exists:
@@ -89,12 +112,47 @@ class AgentSessionStore:
             totals.update(calls=totals.get("calls", 0) + 1, unsettled_calls=totals.get("unsettled_calls", 0) + 1,
                           currency="USD", billing_mode="simulation")
             tx.set(active_ref, {"leases": leases})
+            tx.set(daily_ref, daily)
+            if previous_daily_ref:
+                tx.set(previous_daily_ref, previous_daily)
             if user.exists:
                 tx.update(user_ref, {"agent_usage": totals})
             else:
                 tx.set(user_ref, {"agent_usage": totals})
             return True
         return self._transaction(operation)
+
+    def protect_review(self, uid, chat_id, turn_id, run_token, tokens, cost=0):
+        """Atomically protect synthesis/judges from all other concurrent runs."""
+        ref = self.receipt_ref(uid, chat_id, turn_id)
+        def operation(tx):
+            persistence_guard.ensure_account_write_allowed(uid=uid, db=self.db, transaction=tx)
+            root = ref.get(transaction=tx).to_dict() or {}
+            if root.get("run_token") != run_token or root.get("run_status") != "running":
+                raise TurnStatusConflict("Agent run is closed")
+            daily_ref = agent_quota.quota_ref(self.db, uid, root["quota_day"])
+            daily = daily_ref.get(transaction=tx).to_dict() or {}
+            extra = max(0, tokens - root.get("review_hold", 0))
+            daily = agent_quota.reserve(daily, extra)
+            protected_cost = max(cost, root.get("review_cost_hold", 0))
+            if root["reserved_cost"] + protected_cost > root["policy"]["max_cost_nano_usd"]:
+                raise AnalysisBudgetExceeded("Not enough cost budget for synthesis and review")
+            tx.set(daily_ref, daily)
+            tx.update(ref, {"review_hold": root.get("review_hold", 0) + extra, "review_cost_hold": protected_cost})
+        self._transaction(operation)
+
+    def save_review(self, uid, chat_id, turn_id, run_token, review, text):
+        """Checkpoint exact text and review state before expensive work."""
+        root_ref = self.receipt_ref(uid, chat_id, turn_id)
+        turn_ref, chat_ref = self._turn_ref(uid, chat_id, turn_id), self._chat_ref(uid, chat_id)
+        def operation(tx):
+            persistence_guard.ensure_account_write_allowed(uid=uid, db=self.db, transaction=tx)
+            root, turn, chat = (r.get(transaction=tx).to_dict() or {} for r in (root_ref, turn_ref, chat_ref))
+            if (root.get("run_token") != run_token or root.get("run_status") != "running"
+                    or chat.get("status") != "active" or turn.get("status") != "pending"):
+                raise TurnStatusConflict("Agent review is closed")
+            tx.update(turn_ref, {"agent_review": review, "assistant_response": text})
+        self._transaction(operation)
 
     @staticmethod
     def _delegated_settlement(data, step, status, usage):
@@ -135,7 +193,7 @@ class AgentSessionStore:
             session = {**(agent.to_dict() or {}), **(patch or {}), "id": agent_id, "seq": seq,
                        "updated_at": datetime.now(timezone.utc).isoformat()}
             if not agent.exists:
-                if data.get("agent_count", 0) >= data["policy"]["max_agents"]:
+                if data.get("agent_count", 0) >= 64:
                     raise AnalysisBudgetExceeded("Agent limit reached")
                 if not session.get("assignment"):
                     raise TurnStatusConflict("Agent assignment is missing")
@@ -187,7 +245,7 @@ class AgentSessionStore:
             page = list(ref.collection("messages").order_by("seq").start_after({"seq": after}).limit(limit + 1).stream())
             return {"agent": agent.to_dict(), "messages": [s.to_dict() for s in page[:limit]],
                     "has_more": len(page) > limit}
-        agents = [s.to_dict() for s in self._turn_ref(uid, chat_id, turn_id).collection("agents").limit(8).stream()]
+        agents = [s.to_dict() for s in self._turn_ref(uid, chat_id, turn_id).collection("agents").limit(64).stream()]
         return {"agents": [{k: v for k, v in a.items() if k != "assignment"} for a in agents],
                 "seq": root.get("event_seq", 0), "status": root.get("run_status", turn["status"]),
                 "usage": aggregate_usage(list(root.get("step_usage", {}).values())) or turn.get("agent_usage")}
@@ -205,7 +263,7 @@ class AgentSessionStore:
             if state == "running":
                 self.settle(uid, chat_id, turn_id, completion=AgentCompletion(), status="cancelled", step=step, final=False)
         settled = ref.get().to_dict()
-        for snap in self._turn_ref(uid, chat_id, turn_id).collection("agents").limit(8).stream():
+        for snap in self._turn_ref(uid, chat_id, turn_id).collection("agents").limit(64).stream():
             data = snap.to_dict()
             if data["status"] not in {"completed", "failed", "stopped"}:
                 usage = aggregate_usage([value for step, value in settled.get("step_usage", {}).items()

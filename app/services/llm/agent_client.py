@@ -139,6 +139,25 @@ def agent_model_options():
     ]}
 
 
+def metered_model(model_id, *, max_tokens=2048):
+    """Resolve any existing answer/judge model through the shared registry."""
+    entry = cfg.get_model_config(model_id)
+    if entry is None:
+        raise ValueError("Unknown comparison or judge model")
+    metadata = _CATALOG["models"].get(entry.api_model)
+    if not metadata:
+        raise ValueError("This model has no metering catalog entry")
+    pricing = metadata["pricing"]
+    million = lambda key, fallback: str(Decimal(pricing.get(key, fallback)) * 1_000_000)
+    return AgentModel(model=entry.api_model, label=entry.label, selection_id=entry.internal_id,
+        max_output_tokens=min(max_tokens, metadata["top_provider"].get("max_completion_tokens") or max_tokens),
+        input_usd_per_million=million("prompt", "0"), output_usd_per_million=million("completion", "0"),
+        cache_read_usd_per_million=million("input_cache_read", pricing["prompt"]),
+        cache_write_usd_per_million=million("input_cache_write", pricing["prompt"]),
+        context_length=metadata["context_length"], pricing_version=_CATALOG["version"],
+        request_config=dict(entry.request_config or {}))
+
+
 def resolve_agent_model(model_id=None, reasoning_effort="default"):
     for model, metadata in agent_models():
         if model.selection_id != (model_id or agent_model().selection_id):
@@ -338,7 +357,7 @@ class AgentCompletion:
             "stream": True, "stream_options": {"include_usage": True},
             "provider": {"zdr": True},
         }
-        payload.update({k: v for k, v in model.request_config.items() if k != "provider"})
+        payload.update({k: v for k, v in model.request_config.items() if k != "provider" and not k.startswith("_agent_")})
         payload.update(model=model.model, messages=messages, max_tokens=model.max_output_tokens,
                        stream=True, stream_options={"include_usage": True})
         payload["provider"].update(model.request_config.get("provider") or {})

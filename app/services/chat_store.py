@@ -529,7 +529,7 @@ def turn_detail(turn_id: object, data: object, model_answers: dict[str, dict]) -
     result = turn_metadata(turn_id, source)
     if source.get("execution_mode") == "agent":
         result["assistant_response"] = source.get("consensus", "")
-        for field in ("agent_settings", "agent_activity", "agent_usage", "agent_finish_reason", "agent_reasoning_truncated"):
+        for field in ("agent_settings", "agent_activity", "agent_usage", "agent_finish_reason", "agent_reasoning_truncated", "agent_review"):
             if field in source:
                 result[field] = source[field]
     if "consensus" in source:

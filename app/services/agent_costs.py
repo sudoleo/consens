@@ -73,7 +73,8 @@ class RunCosts:
         elif native_searches:
             # Exa: five results with 2,000 characters each. Include worst-case
             # UTF-8, URL and argument overhead in every hidden continuation.
-            inputs += native_searches * (5 * (2000 * 4 + 3000) + 4096)
+            inputs += native_searches * ((3 * (1000 * 4 + 3000) + 4096)
+                if model.request_config.get("_agent_bounded_search") else (5 * (2000 * 4 + 3000) + 4096))
             if inputs + model.max_output_tokens > model.context_length:
                 raise AnalysisBudgetExceeded("The selected model's search context limit was reached.")
         # Account conservatively for native model continuations hidden behind

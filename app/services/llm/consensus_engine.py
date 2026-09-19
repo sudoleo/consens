@@ -164,6 +164,12 @@ def _call_engine_text(
     effort: str | None = None,
     json_schema: dict | None = None,
 ) -> str:
+    from app.services.llm.task_transport import task_transport
+    transport = task_transport.get()
+    if transport is not None:
+        return transport(provider, api_model, model_ref, system=system, prompt=prompt,
+                         max_tokens=max_tokens, temperature=temperature, json_mode=json_mode,
+                         effort=effort, json_schema=json_schema)
     claim_analysis_call()
     if mock_llm_enabled():
         # E2E-Suite: deterministische Engine-Antwort; Prompt-Bau, Parsing,
@@ -2100,7 +2106,8 @@ def _coverage_in_background(context, api_keys, differences_model):
 
     pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="coverage-judge")
     try:
-        return pool, pool.submit(_work)
+        from contextvars import copy_context
+        return pool, pool.submit(copy_context().run, _work)
     except Exception:
         pool.shutdown(wait=False)
         raise
@@ -2120,7 +2127,8 @@ def _collect_coverage(pool, future):
         )
         return None, None
     finally:
-        pool.shutdown(wait=False)
+        from app.services.llm.task_transport import task_transport
+        pool.shutdown(wait=task_transport.get() is not None)
 
 
 @analysis_budgeted
@@ -2237,7 +2245,8 @@ def query_differences(
     finally:
         # Auch bei einem Abbruch mitten in der Attempt-Schleife darf der
         # Nebenlaeufer-Thread nicht verwaisen.
-        coverage_pool.shutdown(wait=False)
+        from app.services.llm.task_transport import task_transport
+        coverage_pool.shutdown(wait=task_transport.get() is not None)
 
 
 def query_consensus_change(old_consensus: str, new_consensus: str, api_keys: dict,

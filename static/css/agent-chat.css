@@ -110,12 +110,30 @@ body.single-agent-active .chat-input-container .consensus-switch-container { max
 #agentAnswerError { color: var(--ink-2); border-left: 2px solid var(--line); padding: 4px 0 4px 12px; font-size: 13px; line-height: 1.6; }
 #agentAnswerBody:empty { display: none; }
 body.single-agent-active :is(#consensusOutput, #consensusRun, #agentModePanel, .response-section,
-  #composerModeBar, .consensus-model-inline, #attachTrigger, #deepThinkInputIndicator,
+  #composerModeBar, #attachTrigger, #deepThinkInputIndicator,
   #runProvenance, .consensus-footer-actions, #composerRunNotice, #heroResponseAccess,
   .models-section, .models-section + .sidebar-separator, .demo-chip) { display: none !important; }
 body:not(.single-agent-active) #agentAnswer { display: none; }
 body.single-agent-active #agentAnswer:not([hidden]) { display: block; }
 body.single-agent-active #threadAsk:not([hidden]) { display: flex; }
+
+.agent-model-picker .model-picker-display-text::before { content: 'Chat · '; color: var(--ink-3); font-weight: 400; }
+body.single-agent-active .consensus-switch-container { flex-wrap: wrap; }
+body.single-agent-active .consensus-model-inline { min-width: 0; max-width: 100%; }
+.agent-review { margin: 20px 0 8px; color: var(--ink-2); font-size: 12px; border-top: 1px solid var(--line); padding-top: 14px; }
+.agent-review-status { font-weight: 550; }
+.agent-review-note { color: var(--ink-3); line-height: 1.6; margin: 6px 0 12px; }
+.agent-review details { margin: 8px 0; overflow-wrap: anywhere; }
+.agent-review summary { cursor: pointer; padding: 8px 0; }
+.agent-review :is(summary, button):focus-visible { outline: 2px solid var(--ink-2); outline-offset: 3px; }
+.agent-review .agent-basis-select { font: inherit; color: var(--ink); background: var(--raise); border: 1px solid var(--line); border-radius: 6px; padding: 8px 12px; margin: 3px 6px 3px 0; cursor: pointer; }
+.agent-review .agent-basis-select[aria-pressed="true"] { border-color: var(--ink-2); }
+.agent-comparison-answer { max-height: 360px; overflow-y: auto; overscroll-behavior: contain; white-space: pre-wrap; line-height: 1.7; }
+.agent-token-budget { flex: 1 0 100%; order: 2; font-size: 11px; color: var(--ink-3); margin: 0; padding-left: 8px; text-align: left; font-variant-numeric: tabular-nums; }
+.agent-token-budget[hidden] { display: none; }
+@media (max-width: 400px) {
+  .agent-model-picker .model-picker-display-text::before { content: ''; }
+}
 
 /* One quiet disclosure. Live state uses the source-check light sweep. */
 .agent-activity { margin: 0 0 18px; color: var(--ink-3); font-size: 13px; }
@@ -174,6 +192,11 @@ body.single-agent-active #threadAsk:not([hidden]) { display: flex; }
   }
 }
 @media (min-width: 1100px) {
+  /* Agent has separate chat and comparison selectors. Keep the writing area
+     above them even for an empty follow-up, including with the sidebar open. */
+  body.single-agent-active:not(.is-hero) .chat-input-container .input-field { flex: 1 1 100%; }
+  body.single-agent-active:not(.is-hero) .chat-input-container .consensus-switch-container { display: flex; flex: 1 1 0; }
+  body.single-agent-active:not(.is-hero) .chat-input-container .input-actions-container { align-self: flex-end; }
   body.single-agent-active:not(.is-hero) .agent-model-picker { max-width: 180px; }
   body.single-agent-active:not(.is-hero) .agent-effort-control .model-picker-display-text::before { content: ''; }
 }

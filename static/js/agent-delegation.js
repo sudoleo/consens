@@ -130,7 +130,7 @@
     sidebar.setAttribute("aria-labelledby", "agentSidebarTitle");
     sidebar.tabIndex = -1;
     const header = node("div", "agent-sidebar-header");
-    const title = node("h2", "", "Agents"); title.id = "agentSidebarTitle";
+    const title = node("h2", "", "Agent activity"); title.id = "agentSidebarTitle";
     const close = node("button", "agent-sidebar-close", "Close"); close.type = "button";
     const stop = node("button", "agent-sidebar-stop", "Stop run"); stop.type = "button";
     stop.addEventListener("click", async () => {
@@ -241,7 +241,7 @@
         button.addEventListener("click", () => show(agent.id, button)); inline.append(button);
       }
       if (view.agents.size) {
-        const button = node("button", "agent-sidebar-toggle", `Agents · ${view.agents.size}`); button.type = "button";
+        const button = node("button", "agent-sidebar-toggle", `Activity · ${view.agents.size}`); button.type = "button";
         button.setAttribute("aria-controls", "agentSidebar"); button.setAttribute("aria-expanded", String(!view.closed));
         button.addEventListener("click", () => view.closed ? show(null, button) : hide(true)); inline.append(button);
       }

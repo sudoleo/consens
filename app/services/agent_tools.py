@@ -27,6 +27,9 @@ def search_family(model):
 
 
 def search_tools(model, searches):
+    if model.request_config.get("_agent_bounded_search"):
+        return [web_search_tool(search_family(model), max_uses=searches, engine="exa",
+                max_results=3, max_total_results=3 * searches, max_characters=1000)] if searches else []
     return [web_search_tool(search_family(model), max_uses=searches,
                            max_results=5, max_total_results=5 * searches, max_characters=2000)] if searches else []
 
@@ -34,7 +37,7 @@ def search_tools(model, searches):
 def uses_native_search(model):
     # auto delegates these publishers to native search; Grok deliberately
     # shares Consensus's bounded Exa route. Other families use Exa via auto.
-    return search_family(model) in {"openai", "anthropic", "gemini"}
+    return not model.request_config.get("_agent_bounded_search") and search_family(model) in {"openai", "anthropic", "gemini"}
 
 
 @dataclass(frozen=True)

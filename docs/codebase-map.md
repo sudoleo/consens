@@ -29,7 +29,7 @@ beachten ist. Bewusst kurz gehalten — keine vollständige Datei-/Funktionslist
 consens.io vergleicht Antworten mehrerer LLM-Provider nebeneinander und
 synthetisiert daraus einen **Consensus** plus eine strukturierte
 **Differences**-Analyse. Optional: Agent Mode (Auto-Consensus), separater
-**Agent · Beta** (ein Textmodell, Admin/Pro), Datei-Anhänge
+**Agent · Beta** (Chatmodell mit dynamischen Vergleichs-/Judge-Tools, Admin/Pro), Datei-Anhänge
 (ab Plus), öffentliche Share-Seiten. Es gibt drei Kontostufen: **Free**,
 **Plus** und **Pro** (siehe §4 „Auth / Usage / Tier").
 
@@ -95,7 +95,7 @@ Threadpool aus. `async def` bleibt nur für echte Await-Pfade (Mail, explizites
 
 | Router | Zweck (Auswahl an Pfaden) |
 |---|---|
-| `agent.py` | `GET /agent/models` und `POST /agent`: Admin/Pro-geschützter Daily-Modellkatalog plus konfigurierter Standard und begrenzter Modell-/Tool-Lauf im bestehenden Chat. Strikte Auswahl, owner-gebundene IDs, SSE mit sichtbarem Reasoning, bestätigten Tool-Ergebnissen/Quellen und aggregierter Usage. Alle angebotenen Modelle erhalten die gemeinsame Consensus-Websuche (Auto, Grok: Exa); kein eigener Suchdienst. Vorrang für gemeldete Provider-Gesamtkosten, idempotente Schrittbelege, modellgebundene 429-Wartefrist und Wiederaufnahme fertiger Antworten. Geprüfte Delegation mit eigenen Sitzungen, Mailboxen, Seitenleiste und atomarem gemeinsamen Budget; ergänzende `/agent/chats/{chat}/turns/{turn}/agents`-Detail-/Stop-Endpunkte. Kein `/prepare`, Consensus, Judge oder Memory-Kompressor. `recover_only` startet nie einen Modellaufruf. |
+| `agent.py` | `GET /agent/models` und `POST /agent`: Admin/Pro-geschützter Daily-Modellkatalog plus konfigurierter Standard und begrenzter Modell-/Tool-Lauf im bestehenden Chat. Strikte Auswahl, owner-gebundene IDs, SSE mit sichtbarem Reasoning, bestätigten Tool-Ergebnissen/Quellen und aggregierter Usage. Alle angebotenen Modelle erhalten die gemeinsame Consensus-Websuche (Auto, Grok: Exa); kein eigener Suchdienst. Vorrang für gemeldete Provider-Gesamtkosten, idempotente Schrittbelege, modellgebundene 429-Wartefrist und Wiederaufnahme fertiger Antworten. Geprüfte Delegation mit eigenen Sitzungen, Mailboxen, Seitenleiste und atomarem gemeinsamen Budget; ergänzende `/agent/chats/{chat}/turns/{turn}/agents`-Detail-/Stop-Endpunkte. Kein `/prepare` oder Memory-Kompressor; dynamische Vergleichs-/Judge-Tools mit eigener Tokenquote (siehe Agent-Beta-Abschnitt). `recover_only` startet nie einen Modellaufruf. |
 | `source_checks.py` | Dauerhafte Quellenprüfung: owner-gebundenes `GET /api/source-checks/{job_id}` mit `cursor`, `revision` und `after_revision`; `POST .../{job_id}/resume` nimmt den eigenen OpenRouter-Key nur in den Prozessspeicher auf. `GET /api/share/{share_id}/source-check?version=...` und `GET /api/topics/{slug}/source-check?version=...` prüfen pro Paketseite aktive Ressource, Sichtbarkeit, Run- und Antwortversion. Seiten liefern `source_verification` plus `next_cursor`, bei geändertem Stand 409. API-Key-Clients verwenden den rungebundenen Endpoint in `api_v1.py`: `GET /api/v1/consensus/runs/{run_id}/source-check`, auch als `result.source_verification.status_url` ausgegeben. |
 | `pages.py` | HTML-Seiten + SEO: `/` (Landing, auch mit aktiver Session direkt erreichbar), `/model-pulse` (öffentliche, erklärte Best-answer-Rangliste), `/app` (Haupt-App), `/app/watches` (gleiche App-Shell; watch.js öffnet anhand des Pfads das Watch-Dashboard), `/admin` (inkl. Topics-Tab), `/admin/topics` (308-Kompatibilitätsredirect auf `/admin#topics`), `/admin/benchmark` (Benchmark-Run-Visualisierung), `/about`, `/ai-model-comparison`, `/consensus-engine` (nutzerfreundliche Consensus-Engine-Erklärung), `/privacy` `/imprint` `/terms`, `robots.txt`, `sitemap*.xml`. Außerdem der öffentliche, familienaggregierte Best-answer-Zähler `GET /api/model-leaderboard` (60 s Browser-/CDN-Cache; `period=all|since-2026-08-31`; alle neun Familien einschließlich Nullständen, Kimi/GLM und Meta/Muse mit eigenem Verfügbarkeitsdatum aus `_LEADERBOARD_AVAILABLE_SINCE`). Beide Zeiträume nutzen zusätzlich einen serverseitigen 60-s-Cache mit serialisiertem Refresh pro Zeitraum/Prozess. Der gemeinsame Zeitraum zählt die datierten, deduplizierten `model_votes` ab 31.08.2026 über indexierte `count()`-Abfragen pro Familie; Modellkatalog und Counts werden im selben Read-only-Transaktionssnapshot gelesen. Solange der neue `model_votes`-Index aus `firestore.indexes.json` fehlt/aufbaut, greift nur für diesen Indexfehler der gecachte Legacy-Scan. Kontolöschungen entfernen weiterhin Votes aus dem Zeitraum, ohne Lifetime-Zähler zurückzusetzen; `/feedback`, `/vote`, `/check_keys` bleiben die weiteren internen Seiten-Routen (Key-Test nur für verifizierte Logins). Feedback ist persistent pro UID auf 30 Sekunden und 10/UTC-Tag begrenzt. Ein Best-answer-Vote muss an ein noch gültiges, owner-gebundenes `result_id` gebunden sein, zum serverseitigen Gewinner passen und kann pro Lauf genau einmal zählen. |
 | `chat.py` | Kern-LLM-Flow: `/prepare`, die aus `cfg.PROVIDERS[*].ask_endpoint` erzeugten `/ask_*`-Routen (aktuell zusätzlich `/ask_kimi` und `/ask_glm`), `/consensus`, `/resolve`. `/prepare` und die `/ask_*`-Endpoints akzeptieren weiter das optionale Legacy-`context`-Feld für nicht migrierte Bookmark-Fortsetzungen. Additiv laden `/ask_*` das owner-gebundene Tripel `chat_id`/`turn_id`/`context_version_id`; Legacy- und Versionskontext zusammen werden abgewiesen. Alle `/ask_*`-Endpoints laufen über `handle_ask` + die deklarative Familien-Registry `ASK_PROVIDERS`; Transport und Credential sind für alle OpenRouter, `useOwnKeys` wählt optional `openrouter_key`. `/consensus` akzeptiert optional Chat-/Turn-IDs plus `turn_sources` und die exakt am Turn verknüpfte `context_version_id`, prüft alles owner-gebunden vor dem Judge und finalisiert nach Consensus, Differences und Share-`result_id` in Streaming- wie JSON-Pfad über `ChatStore`. Sendet der Browser die stabile `bookmarkId`, schreibt `/consensus` den autoritativen Bookmark-Snapshot vor seinem erfolgreichen Final-Event und liefert kompakte `bookmark_meta`; ein separater Browser-Request ist nur noch Fallback. Ein bereits completed Turn wird mit Consensus, Differences, Quellen und Modellantworten owner-geschützt wiedergegeben, ohne Engine-/Differences-/Share-/Statistik-/Completion- oder Usage-Write; ohne IDs bleibt der Legacy-Vertrag unverändert. |
@@ -1593,285 +1593,142 @@ laufenden Request, Consensus oder Save gelesen werden. Entfernte Controls wie
 
 ## 4. Kern-Flows
 
-### Agent · Beta: Chat mit Modellwahl und Aktivität (2026-09-15)
+### Agent · Beta: dynamische Vergleiche und Tokenkontingent (2026-09-19)
 
-Der zusätzliche Composer-Selektor `#chatExecutionMode` wählt für neue Chats
-`consensus` oder `agent`. Der bisherige „Agent Mode“-Schalter bleibt die
-Auto-Consensus-Einstellung. `/user_status.agent_access` gilt für Pro **oder**
-Admins, serverseitig nochmals bei Chat-Anlage und jedem `/agent` geprüft.
-Free/Plus sowie anonyme Nutzer haben keinen Zugriff. Der Modus wird bei
-`POST /chats` in `execution_mode` festgelegt; fehlende Legacy-Werte bedeuten
-`consensus`. Bestehende Unterhaltungen wechseln ihn nicht.
+Agent · Beta ist ein eigener, pro Unterhaltung unveränderlicher execution_mode
+für Pro-Nutzer und Admins. Der alte Agent-Mode-Schalter gehört weiterhin zur
+unveränderten Consensus-Pipeline. POST /agent besitzt strikte owner-gebundene
+Chat-/Turn-/Request-Identitäten; recover_only startet niemals Modellaufrufe.
+Fertige Antworten sowie gespeicherte fehlgeschlagene Vergleichsantworten können
+mit exakt derselben Auswahl wiedergegeben werden. /agent/models liefert den
+bestehenden Daily-Chatmodellkatalog plus konfigurierten Standard und token_budget.
 
-`static/js/agent-chat.js` nutzt den bestehenden Composer, `runRegistry`,
-Sidebar-Bookmarks und Verlauf, mit eigenem Antwortbereich `#agentAnswer`.
-`#chatExecutionMode`, `#agentModelDropdown` und `#agentReasoningEffort` verwenden
-`App.initCustomModelPicker` mit eigener Auswahl ohne Consensus-Presets; die
-Denkstufe zeigt nur bestätigte Optionen mit kurzen Erläuterungen. Native Selects
-bleiben als State-/Event-Vertrag bestehen; zugängliche Trigger übernehmen den
-Fokus. Menüs unterstützen Pfeiltasten, Home/End, Escape, Fokusrückgabe und
-angepasste Breiten im sichtbaren Viewport. Entfernte gespeicherte Modelle werden
-auf den angebotenen Standard abgeglichen und als nächste Auswahl in Session und
-LocalStorage gespeichert. Ein kurzlebiges Popup erklärt die Korrektur einmal;
-historische Einstellungen bleiben erhalten. Es gibt keinen dauerhaften Modell-
-oder Suchverfügbarkeitshinweis neben den Pickern, der deren Beschriftung verdrängt.
-Die Kontrollgruppe reserviert nur Platz für Senden; der alte Consensus-Abstand
-von 300 Pixeln würde den Modellnamen auch ohne Hinweis abschneiden.
-Die Wahl wird beim `input`-Ereignis vor folgenden Projektionen gespeichert;
-Läufe ohne Chat-ID bekommen einen eigenen Schlüssel und laufende Antworten
-zeigen ihre eingefrorenen Einstellungen statt einer alten Draft-Wahl.
-Die aktuelle Frage behält den rechtsbündigen Flex-Container wie Consensus.
-Modellwechsel gelten für die nächste Nachricht, laufende Einstellungen sind
-gesperrt. `GET /agent/models` ist Admin-/Pro-geschützt und liefert den Standard
-sowie Daily-Antwortmodelle aus `CONSENSUS_PRESET_MODELS["fast"]` mit aktivem Registry-
-Eintrag und geprüftem Katalogsnapshot. Labels, IDs,
-API-Aliasse und Routing werden aus `cfg.MODEL_CONFIGS` wiederverwendet; Preise
-und Reasoning-Fähigkeiten liegen versioniert in `llm/agent_model_catalog.json`.
-Ein neuer Registry-Eintrag ist erst nach Aufnahme in diesen Snapshot auswählbar.
-`POST /agent` prüft `model_id`/`reasoning_effort` vor dem Providerstart. Die
-Request-Identität bindet auch die Auswahl; abweichende Retries liefern 409.
-Auch ein per `AGENT_MODEL` gesetzter Standard nutzt Kontext-/Outputgrenzen,
-Registry-Routing und (ohne expliziten Tarif-Override) seine eigenen Katalogpreise.
-Unbekannte Standardmodelle brauchen zuerst einen Katalogeintrag. `stream: false`
-wird als nicht unterstützte Option abgewiesen; fertige Replays bleiben JSON.
+**Auswahl und Orchestrierung.** agent-chat.js trennt Chatmodell/Denkstufe vom
+bestehenden Consensus-Preset-/Model-Picker: consensusModelDropdown erhält
+comparisonOnly und zeigt im Agent-Modus ausschließlich Vergleichsmodelle. Es
+gibt keine zweite Presetliste, keine Auto/Immer/Aus-Einstellung und keinen
+Synthesemodell-Picker. Die eingefrorene comparison_models-Auswahl kommt als
+Provider→interne Modell-ID mit POST /agent; unbekannte Familien/Modelle werden
+abgelehnt. Ohne Auswahl gilt das zentrale Default-Preset. Der öffentliche
+Metering-Snapshot deckt die gemeinsame Registry ab; neue Modelle benötigen
+weiterhin Preise/Kontextgrenzen im agent_model_catalog.json.
 
-`agent-activity.js` wird laut `bundles.json` vor `consensus-run.js` und
-`agent-chat.js` geladen. `App.agentActivity` verarbeitet versionierte `activity`-
-SSE-Ereignisse (Status, sichtbares Reasoning, Usage, Tool) mit eigener Schritt-ID und
-rendert die aufklappbare Anzeige im Live-Chat und über den vorhandenen
-History-Renderer. Reasoning-Texte/Summaries werden getrennt vom Antworttext
-behandelt, als Text dargestellt und auf 32.000 Zeichen begrenzt. Verschlüsselte
-Blöcke bleiben außerhalb des Anzeige-/Persistenzvertrags; fehlende Texte oder
-Messwerte werden nicht erfunden. Ein gemeinsamer Scrollbereich folgt dem Stream,
-solange der Nutzer nicht zurückscrollt. Live-Reasoning und Tool-Ereignisse öffnen sich automatisch,
-nach Abschluss klappt es zu; eine explizite Nutzerwahl bleibt bestehen. Nur die
-laufende Statuszeile zeigt den Lichtlauf (`source-label-shine` wie beim
-Quellencheck; ohne Animation bei Reduced Motion/Forced Colors). Stop-/Fehlerstatus
-und Reasoning tragen keine vorangestellten Striche. Status
-und Output-Limit sind auch eingeklappt erkennbar. Die Sidebar verwendet für Agent-
-Läufe eigene Statuswörter und „New chat“. Katalog-Reload und Antwort-Recovery
-haben eigene sichtbare Aktionsregeln; die geerbte `thread-ask-more`-Klasse blendet
-sie nicht aus. Details: [`agent-mode.md`](agent-mode.md).
-`composer-collapse.js` lässt den mobilen Stop-Button während einer laufenden
-Antwort an seiner Position: weder Pointerdown noch Fokus auf diesem Button
-klappt den Composer auf, sodass der folgende Klick den Abbruch sicher trifft.
-`query-send.js` dispatcht vor Modellanzahl- und Consensus-Kontingentprüfungen
-in diesen Ablauf. `run-view.js` projiziert den gewählten Agent-Lauf getrennt;
-`normalizeBasis` erhält den Modus auch beim Bookmark-Restore. Dateien werden
-vor dem Senden abgelehnt und sind im strikten Endpoint-Schema nicht erlaubt.
-„Recover saved answer“ verwendet dieselbe Request-Identität und `recover_only`,
-startet also niemals eine neue Modellanfrage. Share/Watch stehen hier nicht
-zur Verfügung; Agent-Antworten lassen sich serverseitig nicht als Consensus
-materialisieren. Die übrigen Consensus-/Direktvergleichs-Flows bleiben bestehen.
-Abbruch und Fehler eines Hintergrundlaufs ändern die sichtbare Gesprächsbasis
-nicht. Beim erneuten Öffnen eines fehlgeschlagenen Agent-Folgeturns bleibt dessen
-ursprüngliche Basis erhalten. Recovery einer ersten Nachricht übernimmt keine
-Basis aus einer inzwischen geöffneten anderen Unterhaltung. Nach abgebrochener
-Chat-Anlage startet der Browser keinen Modellrequest mehr.
-Der Verlauf eines Agent-Laufs wird über Run-ID und Turn-Anzahl projiziert,
-nicht bei jedem Stream-Update komplett als JSON in ein DOM-Attribut kopiert.
-Picker-/Statusprojektionen lesen die Basis ohne Verlaufskopie. `runRegistry`
-behält von erfolgreich gespeicherten Agent-Läufen höchstens zwölf Snapshots
-(je Bookmark den neuesten); sichtbare/benutzte Snapshots sind geschützt.
-Ältere Chats werden regulär aus ihren Server-Bookmarks geladen. Laufende,
-fehlgeschlagene und andere Pipeline-Ergebnisse fallen nicht unter diese Bereinigung.
+POST /agent verwendet den bestehenden DelegationLoop als begrenzten Tool-Loop.
+Worker-Delegation bleibt separat durch delegation_config.enabled und die
+geprüfte Modell-/Reasoning-Kombination freigegeben. policy.delegation aktiviert
+hier auch ohne Worker-Freigabe das gemeinsame persistente Schrittjournal.
+agent_loop.py bleibt die gemeinsame Basis und der eigenständig testbare direkte
+Legacy-Loop. Der ausgewählte Chat-Provider erhält seine vollständigen
+Reasoning-/Signaturblöcke für Tool-Fortsetzungen zurück; verschlüsselte Blöcke
+werden weder angezeigt noch persistiert. Weitere Details zur Worker-Kommunikation
+stehen in [agent-delegation.md](agent-delegation.md).
 
-`app/services/agent_loop.py` steuert den begrenzten direkten Modell-/Tool-Loop.
-Für im zentralen Katalog live geprüfte Modell-/Reasoning-Kombinationen verwendet
-`POST /agent` bei aktivierter Admin-Konfiguration stattdessen `agent_delegation.py`.
-Delegation bleibt standardmäßig aus: Der Live-Vergleich erfüllt noch nicht das
-Kosten-/Qualitäts-Freigabekriterium. Admins können sie gezielt aktivieren.
-`DelegationLoop` bietet `start_agent`, `send_agent`, `wait_agents`, `stop_agent`,
-`review_agent`; Worker haben nur `report_to_orchestrator` plus bedarfsgesteuerte
-Websuche. Stabile Sitzungen behalten Verlauf und Mailbox über Rückfragen und
-Nacharbeit. Zwei Worker können standardmäßig parallel laufen, während der
-Orchestrator selbst weiterarbeitet. Nachrichten kommen an Fortsetzungsgrenzen an;
-Token-Deltas starten keine Orchestrator-Aufrufe. Vor Finalisierung müssen alle
-Resultate oder unabhängig geprüften Ersatzlösungen bewertet sein.
-`accepted=false, use_fallback=true` dokumentiert die eigene Ersatzlösung.
+**Vergleich und Prüfung.** agent_comparison.py registriert compare_models und
+judge_answer mit strikten Pydantic-Argumenten. Das Modell entscheidet selbst,
+ob es die ganze Frage oder bis zu drei begründete Teilfragen vergleicht. Es
+liefert einen neutralen Auftrag mit nötigem Kontext; alle Vergleichsmodelle
+sehen dieselbe isolierte Aufgabe, keine Antworten anderer Vergleichsmodelle.
+Der vorhandene fan_out_provider_answers übernimmt Fan-out, Quellen-Normalisierung
+und Teilausfälle. Vergleichsmodelle erhalten keine Delegations-/Vergleichstools.
+Recherche und benötigte Quellen werden vom Orchestrator bereitgestellt;
+Vergleichsantworten sind auf 6.000 Zeichen und 2.048 Output-Tokens begrenzt.
+Überlange oder nicht vollständig beendete Antworten gelten als fehlgeschlagen.
+Mindestens zwei vollständige Antworten sind eine brauchbare Prüfgrundlage.
 
-`agent_sessions.py` erweitert `AgentRunStore` um owner-gebundene Sitzungen unter
-`chats/{chat}/turns/{turn}/agents/{agent}` mit separaten `messages` sowie geordneten
-`agent_events`. Das ersetzt nicht den bisherigen 64-Einträge-Aktivitätspfad.
-`GET /agent/chats/{chat}/turns/{turn}/agents` liefert höchstens acht kompakte Zeilen,
-`GET .../agents/{agent}?after=<seq>&limit=25` Auftrag und höchstens 50 Nachrichten,
-`POST /agent/chats/{chat}/turns/{turn}/stop` das persistente Abbruchsignal.
-Alle Endpoints prüfen Owner und Pro/Admin. Der bestehende `recover_only`-Pfad
-startet weiterhin keinen bezahlten Schritt. Nach Lease-Ablauf werden verwaiste
-Steps beim Lesen als abgebrochen mit unbekanntem Verbrauch abgeschlossen.
-Chat-Löschung kaskadiert auch Agenten, Nachrichten und Journal; Chat-/Account-
-Sperren und Run-Tokens verhindern verspätete Wiederherstellung.
+Das Chatmodell streamt die Synthese selbst und ruft danach judge_answer auf.
+Der Toolcall prüft den exakten zuletzt gestreamten Text, keinen vom Modell frei
+behaupteten Prüftext. Er nutzt unverändert query_differences samt Coverage,
+Satzindizes, Zitatprüfung, begrenzten Repairs, Judge-Auswahl und Fallbacks.
+llm/task_transport.py injiziert nur den gemessenen Providertransport via
+ContextVar; der Coverage-Thread übernimmt den Kontext. Außerhalb dieser Bindung
+bleibt der Consensus-Transport unverändert. Jeder Judge-/Retry-/Repair-Aufruf
+hat einen eigenen Agent-Schrittbeleg; der Producer wartet auch beim Abbruch
+auf die Settlement-Abschlüsse. Ein konfiguriertes Chatmodell ohne Engine-Alias
+verwendet seine Familie nur zur Judge-Policy-Auswahl, niemals zur Synthese.
 
-`static/js/agent-delegation.js` (nach `agent-activity.js` in `bundles.json`)
-stellt `App.agentDelegation.receive/project` bereit. Derselbe Zustand projiziert
-Modell-Icons neben der Aktivität und die rechte Agenten-Seitenleiste; mobil eine
-ausklappbare Detailfläche. `delegation`-SSE-Ereignisse aktualisieren kompakte Zeilen,
-Nachrichten werden separat paginiert geladen. Schließen, aufgeklappte Sitzungen
-und Scrollposition werden pro Account/Turn erhalten; Kontowechsel verwirft Requests
-und Zustand. Eigene Stop-/Escape-Bedienung, Textausgabe ohne HTML und validierte
-Quellenlinks; öffentliche Nachrichten sind kein Worker-Reasoning.
+Die serverseitigen Antwortversionen enthalten Text, SHA-256, Vergleichs-IDs und
+Prüfungen; jede Prüfung bindet zusätzlich den Hash der konkreten Antworten
+inklusive Quellen/Modellmetadaten. finish_run validiert diese Bindungen erneut.
+Mehrere Teilvergleiche werden getrennt gegen dieselbe Synthese geprüft; ihre
+Stimmen werden nicht zu einem künstlich größeren Panel addiert. finalize=true
+beendet die Ausgabe mit genau dem geprüften Text. finalize=false erlaubt eine
+Überarbeitung; maximal zwei Antwortversionen und 18 Judge-Versuche insgesamt.
+Begleittext zu anderen Toolcalls bleibt Planung und öffnet keine Syntheseversion;
+so verhindert ein angekündigter zweiter Vergleich nicht dessen Ausführung.
+Nach höchstens einer Erinnerung an einen fehlenden Toolcall scheitert der Lauf
+explizit, statt eine ungeprüfte Antwort erfolgreich abzuschließen. Ohne Vergleich
+ist keine automatische Prüfung erforderlich. Ein ausdrücklicher Prüfwunsch kann
+zuerst mit compare_models eine Grundlage einholen.
 
-`agent_delegation_config.py` definiert Rollenprompts und validierte Admin-Limits;
-`prompt_config` speichert sie revisionsgesichert unter `delegation`. Default:
-32 Modell-/48 Koordinationsaufrufe, 300 s, 4 Mio. reservierte Tokens, 3 USD Reserve,
-vier Sitzungen/zwei aktive Worker, 64 Nachrichten, 48.000 Kontextzeichen,
-4.000 Nachrichtenzeichen, acht Modellschritte je Worker, zwei Suchen pro Run.
-Prompts, Limits und Modelle/Tarife werden pro Run eingefroren. Budgetreservierungen
-werden zusätzlich zur threadsicheren lokalen Zulassung atomar auf der Root-Receipt
-geprüft. Schritte heißen `completion:N` oder `agent:<uuid>:N`; der erste Beleg hält
-deren Status, Reserven, Usage und die Event-Sequenz. Jeder bezahlte Aufruf wird
-genau einmal abgerechnet. `cost_complete` unterscheidet unbekannte Kosten von
-unbekannten Tokenzahlen. Die Lease läuft nach dem Zeitbudget plus 30 Sekunden aus.
-Stop/Disconnect propagiert an alle Provider; der Producer wartet auf alle Worker.
-Details und Live-Vergleich: [`agent-delegation.md`](agent-delegation.md).
+**Journal, Abbruch und Verlauf.** AgentRunStore/AgentSessionStore verwenden
+users/{uid}/llm_calls mit deduplizierten completion:N- und agent:<uuid>:N-Belegen,
+Producer-Token, Lease, Budget-/Tarifsnapshot und Status. Ein beanspruchter
+Provider-Schritt wird auch nach einem Prozessabsturz nie erneut ausgeführt.
+SSE-Toolarbeit läuft in einem kontrollierten Thread, während der Producer
+Aktivitäten weiter ausgibt. Stop/Disconnect schließt Provider und wartet auf die
+aktiven Worker/Tools. Abgelaufene Leases werden zu terminalen unbekannten
+Belegen; fehlende Usage bleibt reserviert. Eine Chat-Löschung löscht keine
+entstandenen Kosten; Account-Tombstones sperren verspätete Writes.
 
-`agent_policy.py` friert gemeinsame Limits/Freigaben ein; `agent_tools.py`
-enthält native Konfiguration und strikte Tool-Registries. Für den direkten
-Fallback-Loop gelten höchstens ein
-Client-Tool pro Modellantwort, 2.048 Zeichen Argumente, 8.000 Zeichen Ergebnisse,
-validierte Namen/Typen und deduplizierte Call-IDs gelten vor jeder Ausführung.
-Delegation erlaubt bis zu vier Calls und 24.000 Argumentzeichen pro Modellantwort.
-Die Freigabe steht je Modell-/Reasoning-Kombination unter
-`agent_model_catalog.json: delegation.tested_efforts`; sechs Default-Kombinationen
-sind live geprüft, Luna bleibt nach Providerfehler auf dem direkten Pfad.
-Vollständige Reasoning-/Signaturblöcke werden nur intern für denselben Provider-
-Verlauf erhalten, nie als öffentliche Agenten-Nachrichten oder verschlüsselte
-Blöcke persistiert. Nicht geprüfte Fähigkeiten werden nicht freigeschaltet.
-`agent_costs.py` reserviert gemeinsame Token-/Kosten-Budgets und aggregiert Usage.
-Gemeldete OpenRouter-Gesamtkosten haben Vorrang; nur ohne diese wird anhand
-gemeldeter Tokens und Katalogtarife geschätzt. `agent_runs.py` hält persistente Claims,
-Abrechnung und Turn-Abschluss; `llm/agent_client.py` übersetzt einen Providerrequest
-und validiert/beschränkt dessen Stream. Der Standard ist
-`deepseek/deepseek-v4.1-flash`; Modell, Label, Output-Limit und versionierte
-Simulationstarife sind über `AGENT_*` konfigurierbar (siehe
-[`agent-mode.md`](agent-mode.md)). Im direkten Fallback gelten höchstens drei OpenRouter-Requests,
-zwei Tool-Nutzungen, 4.000.000 Input-/Output-Tokens als konservatives Zulassungsbudget
-einschließlich verdeckter Suchsegmente und 1 USD Kostenreserve je Turn. ZDR und
-standardmäßig maximal 4.096 Output-Tokens pro Request bleiben bestehen.
-Alle Schritte teilen 180 Sekunden Laufzeit; das Budget wird vor und nach RPCs
-geprüft. Unbekannte Usage gibt reservierte Tokens/Kosten nicht wieder frei.
-Der Kontext besteht aus Systemtext sowie allen abgeschlossenen
-User-/Assistant-Turns in Reihenfolge. Über 120.000 Zeichen fordert der Server
-einen neuen Chat an; es gibt keine zusätzliche LLM-Kompression.
-Kleinere Modellfenster haben zusätzlich ein konservatives UTF-8-Bytebudget
-einschließlich Output-Reserve vor dem bezahlten Claim.
+agent_review wird vor Vergleich/Judge und nach Änderungen zusammen mit dem
+exakten Antworttext auf dem Turn gespeichert. Terminale Abbrüche wandeln einen
+laufenden Prüfstatus in cancelled/failed/missing um. Agent-Bookmarks dürfen
+zusätzlich fehlgeschlagene Turns mit gespeichertem Vergleichstext darstellen;
+Consensus-Bookmarks bleiben auf completed beschränkt. Recovery gibt nur den
+vorhandenen Snapshot zurück, ohne erneut zu vergleichen oder zu belasten.
+assistant_response bleibt kanonisch; consensus ist der alte Lesealias.
 
-Die Websuche verwendet für jedes angebotene Modell `engines.web_search_tool`,
-denselben Builder wie Consensus: `openrouter:web_search`, `engine: auto`, für
-Grok `exa`. OpenRouter führt Suche und Modellfortsetzung im gewählten Request
-aus. Der direkte Pfad setzt `max_uses: 2`, `max_tool_calls: 2` und Exa-Ergebnisgrenzen
-(5 je Suche, 10 insgesamt, 2.000 Zeichen je Ergebnis). Native Provider ignorieren
-Ergebnisgrenzen; natives `max_uses` gilt nur für Anthropic. `GET /agent/models`
-liefert `tools_by_effort`. Registry-Routing bleibt erhalten, sonst darf OpenRouter
-Provider desselben Modells wechseln. Die früheren Agent-Filter `only: anthropic`
-und `require_parameters` wurden nach reproduziertem Haiku-404 entfernt.
-Native Suche reserviert vorsorglich das volle Modellfenster je möglichem
-Suchsegment plus Modellfortsetzung; Exa reserviert begrenzten Inhalt inklusive
-UTF-8-/Protokollreserve. Delegation reserviert maximal eine Suche pro gleichzeitigem
-Modellschritt aus dem gemeinsamen konfigurierten Suchbudget; bestätigte ungenutzte
-Reserven werden zurückgegeben. Providergrenzen und Quellen stehen in `agent-mode.md`.
-Nur zurückgegebene Quellenannotationen oder ein positiver Suchzähler erzeugen
-Tool-Ereignisse, mit bis zu fünf HTTP(S)-Quellenlinks. Die API garantiert keine
-nativen Startzeiten/Queries; diese werden nicht erfunden. Fehlende Such-Usage
-verbraucht intern vorsorglich das reservierte Suchbudget, erzeugt jedoch auch bei
-Abbruch/Fehler keinen unbelegten Suchschritt. Der gemeinsame Renderer blendet
-früher gespeicherte `unknown`-Server-Suchereignisse ohne Zähler/Quellen aus.
-Eine gemeldete Gesamtkostensumme kann trotzdem vollständig
-sein. `usage.cost` umfasst Token-/Cache-/Suchkosten der tatsächlichen Route und
-wird einmal verbucht. Ohne Gesamtbetrag ist die Katalogrechnung als Schätzung
-markiert, fehlende Suchkosten machen sie unvollständig.
+**UI-Verträge.** agent-activity.js zeigt Reasoning/Usage. agent-delegation.js
+verwendet das bestehende geordnete Activity-Journal, Modell-Icons und die
+Agent-Detailseitenleiste auch für Vergleichs- und Judge-Aufrufe (kind).
+Das Journal enthält höchstens 64 Aktivitäten; die separaten Worker-Limits
+bleiben in der Orchestrierung aktiv. agent-review.js steht in bundles.json vor
+consensus-run.js und rendert live aus review-SSE-Ereignissen oder gespeichertem
+agent_review. Vor Markierungen prüft es Text-/Versions-/Basisbindung. Pro
+Vergleich verwendet es die gemeinsamen renderStoredConsensusClaims und
+renderStoredDifferenceCards; ein Modell-Link öffnet die zugehörige Einzelantwort.
+Vergleichsgrundlagen lassen sich per Tastatur umschalten. Frühere Textversionen,
+Quellen und Teilergebnisse bleiben einsehbar. succeeded bedeutet abgeschlossene
+Modellvergleichsprüfung, ausdrücklich keine unabhängige Faktenprüfung.
+Fehlende Coverage, fehlende Sätze, gekürzte Grundlagen und ausgefallene Modelle
+werden nicht als vollständig geprüft dargestellt.
 
-`agent_runs.get_agent_system_prompt(model)` ergänzt den Agent-Prompt aus `prompt_config` pro
-Nachricht um `llm/base.get_date_context()` und die ausgewählte Modellidentität.
-Datum, Wochentag, Uhrzeit bei Request-Start und die konfigurierte Referenzzeitzone
-(Default `Europe/Berlin`) mit UTC-Offset
-werden frisch berechnet und in das Kontextbudget eingerechnet. Ältere Antworten
-im Verlauf ändern dieses heutige Bezugsdatum nicht. Die Zeitzone ist ausdrücklich
-eine Anwendungsreferenz, kein Nutzerstandort; vom Nutzer genannte Bezugsdaten
-oder Zeitzonen gehen vor.
-Der Prompt überlässt die Toolwahl dem Modell, nennt direkte Antworten für Begrüßungen,
-Smalltalk und ohne Tools zuverlässig lösbare Aufgaben sowie Websuche bei Bedarf
-an aktuellen/externen Informationen oder ausdrücklichem Suchauftrag. Der Prompt
-wird vor die User-/Assistant-Historie gesetzt; Tools sind separate Request-Schemas.
+**Tokenkontingent und Kosten.** agent_quota.py ist die zentrale UTC-Tagesquote:
+AGENT_DAILY_TOKEN_LIMIT (Default 250000) pro UID. Gezählt wird ausschließlich
+Provider-Input + Provider-Output. Cached input und cache writes sind Teil des
+Inputs; reasoning ist Teil des Outputs. Provider-Gesamtkosten haben Vorrang vor
+Katalogschätzungen; sie bleiben als zusätzliche, separate Kostenkontrolle aktiv.
+Jeder Claim reserviert transaktional im selben Commit wie sein Beleg unter
+users/{uid}/chat_state/agent_tokens_YYYY-MM-DD. Settlement tauscht die Reserve
+gegen gemessene Tokens genau einmal aus. Fehlende Tokenzahlen behalten ihre
+Reserve und erscheinen separat als unknown, niemals als erfundener Verbrauch.
+Auch Abbrüche, Fehler und Judge-Wiederholungen zählen. Tageswechsel migrieren
+nur ungenutzte Prüfreserven; bereits gestartete Calls werden ihrem Claim-Tag
+zugeordnet. Andere parallele Chats können reserviertes Budget nicht ausgeben.
 
-`agent_provider_limits.py` bremst wiederholte 429 pro Modell und gehashtem API-Key:
-prozesslokale Map mit höchstens 256 Einträgen, Wartezeit aus `Retry-After` (auch
-HTTP-Datum), sonst 30 Sekunden. Prüfung vor Turn-Anlage und jedem Schritt;
-kein automatischer Transport-Retry. Andere Modelle und fertige Replays bleiben
-nutzbar. HTTP- und SSE-Fehler behalten ihren Status und liefern verständliche
-Fehlermeldungen; Logs beschränken sich auf Modell-ID, Kategorie und Wartefrist.
+Vor Vergleichen wird eine wachsende Synthese-/Judge-Reserve an Tokens und Kosten
+atomar geschützt. Vergleichsmodelle und Worker können sie nicht verbrauchen;
+Orchestrator und Judges dürfen sie nutzen. Harte Kontext-, Output-, Call-, Tool-,
+Zeit-, Parallelitäts- und Kostenlimits bleiben zusätzlich aktiv. Standardwerte
+kommen aus der bestehenden Delegationskonfiguration (32 Calls, 48 Tools,
+300 Sekunden, 3 USD Kostenreserve, 2 parallele Unteraufrufe); 120.000 Zeichen
+Kontext, bis zu 600 kB für den Review-Snapshot. Kein LLM-Kompressor.
+Konten behalten maximal zwei aktive Läufe; AGENT_MAX_CONCURRENT_RUNS begrenzt
+Produzenten pro Prozess (Default 16). Consensus behält seine Run-Limits.
 
-`app/services/agent_runtime.py` begrenzt aktive Agent-Produzenten pro Prozess
-auf 16 (`AGENT_MAX_CONCURRENT_RUNS`, 1–64); Überlast liefert vor Turn-Anlage
-503 mit `Retry-After: 5`. Zusätzlich reserviert `AgentRunStore.claim` atomar
-mit Beleg/Kostenzählern maximal zwei aktive Agent-Läufe je Nutzer in
-`users/{uid}/chat_state/agent_runs.leases`, instanzübergreifend ohne globales
-Hotspot-Dokument. Der Slot gehört zum ganzen Lauf. Owner-/Chat-Lease werden beim
-ersten Claim gemeinsam auf fünf Minuten (Delegation: Laufzeit plus 30 s) gesetzt, zwischen Schritten nicht
-verlängert und erst bei `finish_run` atomar freigegeben. Ein Owner-Limit nach Streamstart liefert
-ein SSE-Fehlerereignis und gibt den unbezahlten Turn frei.
-Der Claim erfolgt erst im gestarteten Produzenten. `AgentStreamingResponse`
-bereinigt auch Antworten, deren Iterator wegen Disconnect nie betreten wurde;
-die lokale Reservierung wird erst beim Producer-Ende freigegeben. Fertige
-Replays brauchen keine Laufkapazität. Ein Bookmark aus einem anderen Chat wird
-bereits vor Turn-Anlage/Providerstart abgewiesen.
+Damit das Tageskontingent keine unbeschränkten nativen Suchfenster reservieren
+muss, nutzt Agent den gemeinsamen engines.web_search_tool-Builder mit begrenztem
+Exa-Transport (3 Treffer, je 1.000 Zeichen, maximal eine Suche pro Modellschritt
+aus dem gemeinsamen Suchbudget). Es gibt keinen neuen Suchdienst. Provider-
+Routing/ZDR bleiben bestehen. Die Consensus-Suchkonfiguration bleibt unverändert.
+Nur bestätigte Zähler/Quellen erzeugen Suchaktivität. Kosten-/Tokenwerte bleiben
+bei unvollständiger Provider-Usage ausdrücklich unvollständig.
 
-`ChatStore` speichert Agent-Turns mit `execution_mode: agent` und eigener
-`assistant_response`; `turn_detail` liefert zusätzlich den bisherigen
-`consensus`-Leseschlüssel als Kompatibilitätsalias. Generic Create-Turn,
-Consensus-Completion und Context-Build akzeptieren keine Agent-Unterhaltung.
-Eine transaktionale Chat-Sperre verhindert gleichzeitige neue Turns; nach
-Lease-Ablauf kann ein abgestürzter Lauf durch einen **neuen** Turn abgelöst
-werden. Derselbe verbrauchte Request wird niemals erneut ausgeführt.
-`agent_settings` mit Tool-Freigaben und Policy-Snapshot entsteht atomar bei Create-Turn; `agent_activity`,
-`agent_usage`, `agent_finish_reason` und `agent_reasoning_truncated` werden
-beim Laufabschluss mit Antwort/Status gespeichert und nur im vollständigen
-Turn-Detail ausgegeben. Gespeichertes Reasoning wird nicht in Folgeprompts
-übernommen. Alte Turns ohne diese Felder bleiben darstellbar.
-Agent-Turn-GET und -Listen überspringen leere `model_answers`-Abfragen.
-
-Vor dem Providerstart entsteht pro Schritt ein deduplizierter Beleg unter
-`users/{uid}/llm_calls/{sha256(chat,turn,step)}` mit Modell-/Tarifsnapshot und
-Status `running`. IDs im direkten Loop sind `completion:0..2`; Delegation verwendet
-die oben beschriebenen Session-Schritte. Der erste Beleg enthält zusätzlich
-`run_token`, `run_status`, `last_step` und den Policy-Snapshot. Jeder weitere
-Claim prüft Besitzer, Vorgänger-Settlement, Lease und Schrittbudget transaktional.
-Schritt-Settlement und `users/{uid}.agent_usage` werden atomar
-verbucht: Input/Output, Cache-Reads/-Writes, Reasoning (bereits in Output enthalten),
-`estimated_cost_nano_usd` als Integer sowie gemessene, unbekannte und noch
-unabgeschlossene Aufrufe. `cost_source: provider | catalog | mixed` unterscheidet
-gemeldete Kosten von Schätzungen; Kontosummen führen zusätzlich
-`provider_cost_nano_usd` und `catalog_cost_nano_usd`. `incomplete_calls` und
-`agent_usage.complete=false` kennzeichnen Teilsummen. Bekannte Kosten bleiben auch ohne gemeldete
-Tokens erhalten; unbekannte Tokenfelder bleiben `null`. Getrennte Usage-Chunks
-werden pro Request zusammengeführt. Ein valides `usage.cost` hat Vorrang vor
-Tokenpreisrechnungen; der Schätzfallback nutzt ausschließlich gemeldete Tokens.
-Fehlende Usage bei Abbruch/Fehler wird nicht erfunden.
-Es gibt keinen Guthabenabzug und keinen Consensus-Usage-Write.
-Die Admin-Kontoansicht zeigt diese kumulierten Werte beim Nutzer-Lookup.
-`settle(final=False)` schließt einzelne Belege, `finish_run` anschließend den
-Turn mit aggregierter Aktivität/Usage. Ein Absturz dazwischen erlaubt keinen
-neuen Aufruf; nur bereits gespeicherte Antworten sind wiederherstellbar.
-`activity`-IDs sind mit dem Schritt präfixiert; `status.clear_response` verwirft
-Zwischenantworttext vor der nächsten Completion. Tooltexte werden als Text,
-Quellen als validierte Links mit `noopener noreferrer` gerendert.
-
-SSE-Abbruch schließt den Provider-Socket; der Producer wird explizit geschlossen
-und finalisiert seinen Beleg auch bei Disconnect. Ein Prozessabsturz kann einen
-unabgeschlossenen Beleg hinterlassen, der sichtbar bleibt und keinen erneuten
-Modellaufruf autorisiert. Chat-Löschung entfernt keine entstandenen Kosten;
-Settlement erzeugt dabei keine gelöschten Turns neu. Bookmark-Writes prüfen
-den aktiven Chat innerhalb derselben Transaktion (`transaction_guard`), und
-ältere Replays überschreiben keinen neueren Bookmark-Turn. Die bestehende
-Kontolöschung entfernt auch `llm_calls`; Tombstones sperren verspätete Writer.
-Der gemeinsame SSE-Pump puffert höchstens 64 Ereignisse. Ist der Puffer wegen
-eines langsamen Clients 30 Sekunden voll, wird der Producer abgebrochen und
-geschlossen; Queue-Wartezeiten prüfen Abbruch regelmäßig. Die Keepalive-Frequenz
-bleibt 15 Sekunden. Synchrone Persistenz-RPCs werden nicht unterbrochen, das
-gemeinsame Zeitbudget wird nach ihrer Rückkehr erneut geprüft. Diese
-Architektur ist weiterhin für begrenzte Chat-Läufe vorgesehen. Dauerhafte
-Hintergrundjobs brauchen später Worker, Checkpoints und Wiederanbindung.
-
+Validierung: test_agent_comparison.py prüft echte gemeinsame Judge-Prompts/Parser
+mit deterministischen Providern, mehrere Grundlagen, Versionen, Teilausfälle,
+fehlende Calls, Abbruch, UTC-Wechsel und atomare Kontingente. Ergänzend bestehende
+Agent-/Consensus-Tests, agent-review.test.mjs sowie die gebaute Desktop-/Mobil-
+Ansicht in test_agent_comparison_frontend.py; siehe [testing.md](testing.md).
 
 ### Browser-Run-Lifecycle und Sichtwechsel
 

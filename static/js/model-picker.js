@@ -445,6 +445,10 @@
       displayTitle = count < 2
         ? `${countLabel} selected · Choose at least 2 models to run consensus`
         : `${countLabel} · ${displayTitle}`;
+      if (select.dataset.comparisonOnly === "true") {
+        displayLabel = `Compare · ${count} · ${lastPresetDisplayLabel}`;
+        displayTitle = `${countLabel} available for independent comparisons`;
+      }
     }
 
     if (state.displayButton) {
@@ -552,6 +556,7 @@
       event.stopPropagation();
       state.view = "custom";
       renderCustomModelPicker(select);
+      state.menu.querySelector("button")?.focus();
     });
 
     state.menu.appendChild(customItem);
@@ -692,6 +697,8 @@
       state.menu.appendChild(requirement);
     }
     window.App.modelPrefs.forEach(pref => renderProviderRow(select, state, pref));
+
+    if (select.dataset.comparisonOnly === "true") return;
 
     appendSectionLabel(state.menu, "Consensus engine");
     const engine = document.createElement("button");

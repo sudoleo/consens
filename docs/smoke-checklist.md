@@ -774,7 +774,23 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       Einstellung fuer die naechste Frage bleibt an. Wechsel zu einem
       Consensus-Bookmark und zurueck zeigt keine leeren oder fremden Antworten.
 
-## Chat-Scrollen
+## Agent · Beta: Vergleiche und Prüfungen
+
+- [ ] Chatmodell und Compare-Preset getrennt wählen; Custom zeigt nur
+  Vergleichsmodelle, keine Consensus-Engine. Escape gibt den Fokus zurück.
+- [ ] Einen ausdrücklichen Vergleich und zwei Teilfragen testen: unabhängige
+  Einzelantworten in Aktivitäten öffnen, anschließend gestreamte Synthese und
+  Prüfstatus sehen. Vergleichsgrundlage wechseln und Markierungen/Details prüfen.
+- [ ] Antwort nach Prüfung überarbeiten lassen: neue Version und erneute Prüfung;
+  eine alte Markierung darf nicht auf den neuen Text wandern.
+- [ ] Während Vergleich und Judge stoppen; gesicherten Turn wieder öffnen.
+  Fehlende/teilweise/abgebrochene Prüfung bleibt erkennbar, Recovery startet
+  keinen neuen Provider-Aufruf. Ein Account-/Chatwechsel mischt keine Daten.
+- [ ] Kontingent nahe der Grenze mit zwei parallelen Chats prüfen; Chat,
+  Vergleich und Judges teilen Tokens, UTC-Reset bleibt separat zu Consensus.
+- [ ] Desktop und 390/320px, Hell/Dunkel, Tastatur und Reduced Motion prüfen.
+
+## Chat-Scrollen (beide Modi)
 
 - [ ] Im Agent- und Consensus-Chat eine Folgefrage nach einer langen Antwort senden:
   sanfter Sprung ans Ende; die wachsende Antwort folgt beim Mitlesen unten.

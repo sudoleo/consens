@@ -484,9 +484,10 @@ def load_bookmark_conversation(
             }
 
         store = _chat_store()
+        agent_history = bookmark.get("execution_mode") == "agent"
         try:
             page = store.list_turn_details(
-                uid, chat_id, cursor=cursor, limit=limit, status="completed"
+                uid, chat_id, cursor=cursor, limit=limit, status=None if agent_history else "completed"
             )
         except (ChatNotFound, InvalidChatCursor, ChatCursorUnavailable):
             raise
@@ -507,7 +508,7 @@ def load_bookmark_conversation(
                 "turns": [
                     store.get_turn(uid, chat_id, turn["id"])
                     for turn in metadata_page["turns"]
-                    if turn.get("status") == "completed"
+                    if turn.get("status") == "completed" or (agent_history and turn.get("status") == "failed")
                 ],
                 "next_cursor": metadata_page.get("next_cursor"),
                 "has_more": metadata_page.get("has_more") is True,
@@ -515,7 +516,8 @@ def load_bookmark_conversation(
         return {
             "status": "success",
             "chat_id": chat_id,
-            "turns": page["turns"],
+            "turns": [t for t in page["turns"] if t.get("status") == "completed"
+                      or (agent_history and t.get("status") == "failed" and t.get("agent_review") and t.get("consensus"))],
             "next_cursor": page.get("next_cursor"),
             "has_more": page.get("has_more") is True,
         }

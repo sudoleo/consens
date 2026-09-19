@@ -336,6 +336,7 @@
       const turnSources = Array.isArray(turnData.sources) ? turnData.sources : [];
       const answerBody = document.createElement("div");
       answerBody.className = "consensus-answer-body";
+      answerBody.dataset.markdown = turnData.consensus;
       const sourceReferences = turnData.source_verification?.check_type !== 'contradiction_evidence';
       answerBody.dataset.sourceReferences = sourceReferences ? 'legacy' : 'none';
       if (typeof window.injectMarkdown === "function") {
@@ -362,6 +363,7 @@
         const activity = document.createElement("div");
         window.App.agentActivity?.renderTurn(activity, turnData);
         answer.insertBefore(activity, answerBody);
+        window.App.agentReview?.render(answerBody, turnData.agent_review);
       }
 
       // Der Fuss eines archivierten Turns spricht dieselbe Sprache wie der
