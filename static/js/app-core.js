@@ -224,6 +224,18 @@
   // etablierten Feldnamen gebracht. Eine neue Familie erscheint damit
   // ueberall, ohne dass eine dieser Listen nachgezogen werden muss.
   const modelFamilies = Array.isArray(window.MODEL_FAMILIES) ? window.MODEL_FAMILIES : [];
+  // All model surfaces use the server registry, including newer Agent models.
+  function createModelMark(model = {}) {
+    const name = typeof model === "string" ? model : model.provider || "";
+    const family = modelFamilies.find(f => [f.provider, f.label, f.title].some(v => v?.toLowerCase() === name.toLowerCase())
+      || (f.apiPrefix && model.model?.startsWith(f.apiPrefix)));
+    const mark = document.createElement(family?.icon ? "img" : "span");
+    if (family?.icon) { mark.src = family.icon; mark.alt = ""; mark.className = family.iconClass || ""; }
+    else { mark.textContent = (model.label || name || "M").slice(0, 1).toUpperCase(); mark.className = "model-mark-fallback"; }
+    mark.setAttribute("aria-hidden", "true");
+    return mark;
+  }
+  window.App.createModelMark = createModelMark;
   const modelPrefs = modelFamilies.map(family => ({
     key: family.label,
     provider: family.provider,

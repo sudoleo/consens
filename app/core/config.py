@@ -1425,6 +1425,7 @@ def get_model_families() -> list[dict]:
             "citationLabel": provider.citation_label,
             "icon": f"/static/icons/chat_icons/{provider.icon}",
             "iconClass": provider.icon_class,
+            "apiPrefix": provider.openrouter_prefix,
             "domKey": provider.dom_key,
             "checkboxId": provider.checkbox_id,
             "selectId": provider.select_id,

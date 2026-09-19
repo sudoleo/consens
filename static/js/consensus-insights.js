@@ -1719,7 +1719,7 @@
               body: body,
               fallbackBox: fallbackBox,
               stored: true,
-              focusDifference: storedDifferenceFocus(body),
+              focusDifference: options.focusDifference || storedDifferenceFocus(body),
               // Ein archivierter Turn hat seine eigenen Quellen; die globale
               // Liste gehoert bereits dem naechsten Lauf.
               sources: Array.isArray(sources) ? sources : [],
@@ -2435,17 +2435,20 @@
                   }
 
                   // Schlichte Textlinks (Modellname) statt Pill-Buttons.
-                  if (!isStatic) {
+                  if (!isStatic || opts.answerNavigation) {
                     const links = document.createElement("div");
                     links.className = "diff-position-links";
                     pos.models.forEach(function (model) {
-                      if (!MODEL_BOX_IDS[model]) return;
+                      if (opts.answerNavigation ? !opts.answerNavigation.canOpen(model) : !MODEL_BOX_IDS[model]) return;
                       const jump = document.createElement("button");
                       jump.type = "button";
                       jump.className = "diff-jump-link";
                       jump.textContent = labelFor(model);
                       jump.title = "Jump to the full answer from " + labelFor(model);
-                      jump.addEventListener("click", function () { jumpToModelAnswer(model, pos.quote); });
+                      jump.addEventListener("click", function () {
+                        if (opts.answerNavigation) opts.answerNavigation.open(model, pos.quote, jump);
+                        else jumpToModelAnswer(model, pos.quote);
+                      });
                       links.appendChild(jump);
                     });
                     if (links.childNodes.length) posEl.appendChild(links);
@@ -2510,7 +2513,8 @@
               || 0;
             buildDifferenceCards(container, differences, modelCount, {
               static: true,
-              modelLabel: options && options.modelLabel
+              modelLabel: options && options.modelLabel,
+              answerNavigation: options && options.answerNavigation
             });
             return true;
           }

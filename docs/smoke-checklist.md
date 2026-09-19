@@ -789,6 +789,16 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
 - [ ] Kontingent nahe der Grenze mit zwei parallelen Chats prüfen; Chat,
   Vergleich und Judges teilen Tokens, UTC-Reset bleibt separat zu Consensus.
 - [ ] Desktop und 390/320px, Hell/Dunkel, Tastatur und Reduced Motion prüfen.
+- [ ] Überlappende Modell-Icons oberhalb der Antwort zeigen die richtigen Anbieter,
+  auch Kimi, GLM und Muse. Mehrere Aufrufe desselben Modells bleiben in Activity
+  einzeln sichtbar. Denkfortschritt bleibt kurz und als Zusammenfassung/Auszug
+  gekennzeichnet; Judge-JSON und technische Aufgaben erscheinen nicht als Textwand.
+- [ ] Rote Textstellen mit Maus und Enter öffnen die passende Widerspruchskarte.
+  Modelllinks öffnen formatierte Einzelantworten, Footer-Links dieselben Ansichten
+  und Quellen. Escape bringt den Fokus zurück. Activity und Antwortleser verdecken
+  sich nicht; bei 1440px liegen Chat und Composer links neben dem Leser.
+- [ ] Den gespeicherten letzten Turn und ältere Turns öffnen: gleiche Karten,
+  Markdown-Antworten und Modell-Icons; Accountwechsel schließt den Leser.
 
 ## Chat-Scrollen (beide Modi)
 

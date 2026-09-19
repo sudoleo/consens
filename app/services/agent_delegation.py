@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.services.agent_costs import aggregate_usage
 from app.services.agent_loop import AgentLoop
+from app.services.agent_progress import ReasoningProgress
 from app.services.agent_policy import supports_delegation
 from app.services.agent_provider_limits import AgentProviderCooldown, provider_cooldowns, provider_failure
 from app.services.agent_tools import ReadOnlyTool, ToolRegistry, search_tools
@@ -281,6 +282,7 @@ class DelegationLoop(AgentLoop):
         value = self.factory()
         value.step_id, value.tool_argument_limit = step, registry.argument_limit
         value.tool_call_limit = 4
+        worker_progress = ReasoningProgress() if worker else None
         status = "failed"
         try:
             claimed = self.store.claim(self.uid, self.chat_id, self.turn_id, model, step=step,
@@ -304,6 +306,10 @@ class DelegationLoop(AgentLoop):
                 try:
                     for event in source:
                         self._check(cancellation)
+                        if worker and event.get("type") == "activity":
+                            compact = worker_progress.update(event)
+                            if compact:
+                                self._publish(worker, patch={"progress_text": compact["text"], "progress_kind": compact["summary_source"]})
                         if not worker:
                             yield from self._events()
                             if event["type"] == "activity":

@@ -1678,17 +1678,34 @@ Consensus-Bookmarks bleiben auf completed beschränkt. Recovery gibt nur den
 vorhandenen Snapshot zurück, ohne erneut zu vergleichen oder zu belasten.
 assistant_response bleibt kanonisch; consensus ist der alte Lesealias.
 
-**UI-Verträge.** agent-activity.js zeigt Reasoning/Usage. agent-delegation.js
-verwendet das bestehende geordnete Activity-Journal, Modell-Icons und die
-Agent-Detailseitenleiste auch für Vergleichs- und Judge-Aufrufe (kind).
+**UI-Verträge.** agent-activity.js zeigt den jüngsten kurzen Reasoning-Fortschritt
+und Usage; auch alte Langtexte werden in der Anzeige gekürzt. agent_progress.py
+begrenzt sichtbares Reasoning serverseitig auf drei Zeilen à 180 Zeichen und
+acht Updates je Modellschritt. Provider-Zusammenfassungen haben Vorrang vor
+gekennzeichneten Satzauszügen; keine zusätzlichen LLM-Aufrufe. agent_loop.py
+speichert pro Schritt nur den letzten Kurztext, agent_delegation.py projiziert
+für Worker nur progress_text/progress_kind auf die Sitzung. Private
+Provider-Fortsetzungsdaten bleiben im bestehenden laufenden Protokoll.
+agent-delegation.js verwendet das bestehende geordnete Activity-Journal,
+überlappende Modell-Icons und die Agent-Detailseitenleiste auch für Vergleichs-
+und Judge-Aufrufe (kind). Der Stapel dedupliziert identische API-Modelle, die
+Seitenleiste behält jeden Aufruf. App.createModelMark löst Anbieter/Modelle über
+MODEL_FAMILIES inklusive apiPrefix auf; unbekannte Modelle erhalten ein Initial.
 Das Journal enthält höchstens 64 Aktivitäten; die separaten Worker-Limits
 bleiben in der Orchestrierung aktiv. agent-review.js steht in bundles.json vor
 consensus-run.js und rendert live aus review-SSE-Ereignissen oder gespeichertem
 agent_review. Vor Markierungen prüft es Text-/Versions-/Basisbindung. Pro
 Vergleich verwendet es die gemeinsamen renderStoredConsensusClaims und
-renderStoredDifferenceCards; ein Modell-Link öffnet die zugehörige Einzelantwort.
-Vergleichsgrundlagen lassen sich per Tastatur umschalten. Frühere Textversionen,
-Quellen und Teilergebnisse bleiben einsehbar. succeeded bedeutet abgeschlossene
+renderStoredDifferenceCards. Ein kompakter Footer öffnet Widersprüche, formatierte
+Einzelantworten und Quellen im gemeinsamen model-answer-reader.js. Dessen
+openContext/refreshContext verwenden explizite Vergleichs-Snapshots mit eigenem
+renderPanel/contextGroup; globale Consensus-Ziele werden nicht ausgeliehen.
+Rote Textmarkierungen öffnen über focusDifference die konkrete Karte; deren
+answerNavigation führt zur zugehörigen Originalantwort. Die Live-Aktivitätsleiste
+und der Antwortleser sind wechselseitig sichtbar. Vergleichsgrundlagen lassen
+sich über ein beschriftetes Auswahlfeld per Tastatur umschalten. Frühere
+Textversionen, Kontext und Teilergebnisse bleiben im Leser einsehbar. Archivierte
+Agent-Turns erhalten denselben Footer und einen Modellstapel. succeeded bedeutet abgeschlossene
 Modellvergleichsprüfung, ausdrücklich keine unabhängige Faktenprüfung.
 Fehlende Coverage, fehlende Sätze, gekürzte Grundlagen und ausgefallene Modelle
 werden nicht als vollständig geprüft dargestellt.

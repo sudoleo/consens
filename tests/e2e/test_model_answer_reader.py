@@ -483,7 +483,7 @@ def test_direct_comparison_shares_chat_shell_and_fits_picker(browser, phase4_ser
         assert page.locator('.input-section').evaluate("el => getComputedStyle(el).backgroundColor") == 'rgba(0, 0, 0, 0)'
         # Use the actual trigger, including the collapsed mobile composer.
         page.locator('#questionInput').click()
-        trigger = page.locator('.chat-input-container .model-picker-display')
+        trigger = page.locator('.consensus-model-inline .model-picker-display')
         trigger.click()
         menu = page.locator('.chat-input-container .model-picker-menu.is-open')
         expect(menu).to_be_visible()

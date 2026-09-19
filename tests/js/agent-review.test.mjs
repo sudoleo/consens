@@ -5,6 +5,7 @@ function setup() {
   return loadScripts(["static/js/agent-review.js"], { body: '<section><div id="answer"></div></section>', before(w) {
     w.injectMarkdown = vi.fn((el, text) => { el.textContent = text; });
     w.renderStoredConsensusClaims = vi.fn(); w.renderStoredDifferenceCards = vi.fn();
+    w.App = { answerReader: { openContext: vi.fn(), refreshContext: vi.fn() } };
   }});
 }
 function snapshot() {
@@ -19,16 +20,21 @@ it("uses the shared markers only for the exact answer and selected comparison ba
   const body = d.getElementById("answer"); body.dataset.markdown = "Exact answer.";
   w.App.agentReview.render(body, snapshot());
   expect(w.renderStoredConsensusClaims).toHaveBeenCalledTimes(1);
-  d.querySelectorAll(".agent-basis-select")[1].click();
+  const select = d.querySelector('[aria-label="Comparison basis"]');
+  select.value = 'agent-evidence:c2'; select.dispatchEvent(new w.Event('change'));
   expect(w.renderStoredConsensusClaims.mock.calls[1][1].claims[0].anchor).toBe("claim2");
-  expect(d.querySelectorAll('[aria-pressed="true"]')).toHaveLength(1);
+  expect(d.querySelectorAll('.agent-basis-select, .agent-comparison')).toHaveLength(0);
   expect(d.querySelector(".agent-review script")).toBeNull();
-  expect(d.querySelectorAll(".agent-source")).toHaveLength(2);
+  d.querySelector('[data-section="sources"]').click();
+  const context = w.App.answerReader.openContext.mock.calls[0][0];
+  expect(context.renderPanel('sources').querySelectorAll('a')).toHaveLength(1);
+  expect(context.answers[0].text).toBe('<script>unsafe</script>');
+  w.renderStoredConsensusClaims.mock.calls[1][4].focusDifference(2);
+  expect(w.App.answerReader.openContext).toHaveBeenLastCalledWith(context, expect.objectContaining({ section: 'differences', index: 2 }));
   body.dataset.markdown = "Changed answer.";
   w.App.agentReview.render(body, snapshot());
   expect(w.renderStoredConsensusClaims).toHaveBeenCalledTimes(2);
-  expect(d.body.textContent).toContain("needs a new review");
-  expect(d.querySelector(".agent-review-status").textContent).toContain("Review required");
+  expect(d.querySelector(".agent-review-status").textContent).toContain("Review pending");
   expect(w.injectMarkdown).toHaveBeenLastCalledWith(body, "Changed answer.", []);
   dom.window.close();
 });
@@ -38,16 +44,16 @@ it("rejects stale comparison bindings and distinguishes incomplete results", () 
   const review = snapshot(); review.status = "partial"; review.checks[0].basis_hash = "stale";
   w.App.agentReview.render(body, review);
   expect(w.renderStoredConsensusClaims).not.toHaveBeenCalled();
-  expect(d.body.textContent).toContain("Partial review");
-  expect(d.body.textContent).toContain("not independent fact checking");
-  d.querySelectorAll(".agent-basis-select")[1].click();
+  expect(d.body.textContent).toContain("Some checks unavailable");
+  const select = d.querySelector('[aria-label="Comparison basis"]');
+  select.value = 'agent-evidence:c2'; select.dispatchEvent(new w.Event('change'));
   expect(w.renderStoredConsensusClaims).toHaveBeenCalledTimes(1);
   w.injectMarkdown.mockClear();
-  d.querySelectorAll(".agent-basis-select")[0].click();
+  select.value = 'agent-evidence:c1'; select.dispatchEvent(new w.Event('change'));
   expect(w.injectMarkdown).toHaveBeenCalledWith(body, "Exact answer.", []);
   expect(w.renderStoredConsensusClaims).toHaveBeenCalledTimes(1);
   review.status = "succeeded";
   w.App.agentReview.render(body, review);
-  expect(d.querySelector(".agent-review-status").textContent).toContain("Review required");
+  expect(d.querySelector(".agent-review-status").textContent).toContain("Review pending");
   dom.window.close();
 });

@@ -97,6 +97,7 @@
   control(get("Close"), "close", "Back to chat", true);
   function modelMark(answer) {
     const mark = document.createElement("span"); mark.className = "answer-reader-model-mark";
+    if (App.createModelMark) { mark.append(App.createModelMark(answer)); return mark; }
     const pref = (App.modelPrefs || []).find(p => normalize(p.key) === normalize(answer.provider) || normalize(p.provider) === normalize(answer.provider));
     const original = pref && document.getElementById(pref.responseId)?.querySelector("img");
     if (original) {
@@ -309,13 +310,15 @@
     });
   }
   function openPanel(kind, trigger, turn = null, index = null, options = {}) {
-    if (inspector?.kind === kind && inspector.turn === turn && trigger && index === null && !options.reveal) { close(); return true; }
+    if (inspector?.kind === kind && inspector.turn === turn && trigger && index === null && !options.reveal
+        && (!options.snapshot || selected?.key === options.snapshot.key)) { close(); return true; }
+    rememberOpener(trigger);
     releaseInspector(); closePicker(); savePosition();
     const data = turn && stored.get(turn);
-    const snapshot = data ? fromStored(data) : (App.runRegistry?.visible?.() ? fromRun(App.runRegistry.visible()) : fromDOM());
-    const nodes = panelNodes(kind, turn);
-    selected = snapshot; if (!turn) live = snapshot;
-    open = true; direct = false; pair = false; opener = trigger || document.activeElement;
+    const snapshot = options.snapshot || (data ? fromStored(data) : (App.runRegistry?.visible?.() ? fromRun(App.runRegistry.visible()) : fromDOM()));
+    const nodes = snapshot.renderPanel ? [snapshot.renderPanel(kind)] : panelNodes(kind, turn);
+    selected = snapshot; if (!turn && !snapshot.renderPanel) live = snapshot;
+    open = true; direct = false; pair = false;
     inspector = { kind, turn, trigger, items: [], expanded: new Set(), seenClaims: new Set() };
     for (const node of nodes) {
       const placeholder = document.createComment('answer-reader-panel');
@@ -328,7 +331,8 @@
       get('Inspector').append(empty);
     }
     polishInspector(); render(); get('Scroll').scrollTop = 0;
-    trigger?.setAttribute('aria-expanded', 'true'); get('Close').focus({ preventScroll: true });
+    trigger?.setAttribute('aria-expanded', 'true');
+    if (!options.keepFocus) get('Close').focus({ preventScroll: true });
     if (index !== null) {
       const card = get('Inspector').querySelectorAll('.diff-card')[index];
       if (card) { card.open = true; card.scrollIntoView({ block: 'nearest' }); }
@@ -346,7 +350,7 @@
     const turn = inspector?.turn || selectedTurn();
     if (kind === 'answers') {
       const snapshot = selected; openSnapshot(snapshot, null, opener);
-    } else if (inspector?.kind !== kind) openPanel(kind, null, turn);
+    } else if (inspector?.kind !== kind) openPanel(kind, null, turn, null, selected.renderPanel ? { snapshot: selected } : {});
   });
   function keyFor(turn) {
     if (turn.turn_id) return `turn:${turn.turn_id}`;
@@ -400,6 +404,7 @@
     return { key: turn ? keyFor(turn) : `dom:${question}`, question, answers, runId: null };
   }
   function turns() {
+    if (selected?.contextGroup) return selected.contextGroup();
     const result = Array.from(document.querySelectorAll(".thread-history-turn"))
       .map(node => stored.get(node)).filter(Boolean).map(fromStored);
     if (live?.answers.length) result.push(live);
@@ -564,7 +569,9 @@
     modeLayout();
     if ((!open && !direct) || !selected) return;
     chooseModels();
-    const options = turns().map((turn, i) => [turn.key, `Question ${i + 1}`]);
+    const options = turns().map((turn, i) => [turn.key, turn.contextLabel || `Question ${i + 1}`]);
+    root.querySelector('.answer-reader-context-top label').textContent = selected.scopeLabel || 'Conversation';
+    get('TurnLabel').textContent = selected.scopeLabel || 'Current question';
     fillSelect(get("Turn"), options, selected.key);
     get("Turn").disabled = options.length < 2;
     get("Turn").hidden = options.length < 2;
@@ -702,12 +709,12 @@
   }
   function openSnapshot(snapshot, model, trigger, quote) {
     if (!snapshot?.answers.length) return false;
+    rememberOpener(trigger);
     releaseInspector();
     savePosition();
     selected = snapshot;
     primary = findProvider(model, snapshot) || primary;
     if (model) { pair = false; mobileSide = "a"; }
-    opener = trigger || document.activeElement;
     open = true;
     render(); restorePosition();
     if (!direct) get("Close").focus({ preventScroll: true });
@@ -724,6 +731,10 @@
       }
     }
     return true;
+  }
+  function rememberOpener(trigger) {
+    const target = trigger || document.activeElement;
+    if (!open || !root.contains(target)) opener = target;
   }
   function update(next, isDirect) {
     document.body.classList.remove("direct-comparison-preview");
@@ -751,6 +762,7 @@
     if (App.runRegistry?.visible?.()) return;
     const isDirect = document.body.classList.contains("direct-comparison-active");
     const next = isDirect && savedDirect ? savedDirect : fromDOM();
+    if (open && selected?.renderPanel) return;
     if (next.answers.length) update(next, isDirect);
     else { direct = false; close({ focus: false }); live = null; selected = null; }
   }
@@ -828,7 +840,7 @@
     const kind = inspector?.kind;
     savePosition(); selected = turns().find(turn => turn.key === get("Turn").value) || selected;
     get("Question").open = false;
-    if (kind) { openPanel(kind, null, selectedTurn()); return; }
+    if (kind) { openPanel(kind, null, selectedTurn(), null, selected.renderPanel ? { snapshot: selected } : {}); return; }
     render(); restorePosition();
   });
   get('Question').querySelector('summary').addEventListener('click', event => {
@@ -884,6 +896,30 @@
     },
     close,
     openPanel,
+    // An explicit, immutable evidence context. Never borrow global Consensus
+    // panels or model answers when inspecting another tool's result.
+    openContext(snapshot, { section = 'answers', model, quote, trigger, index = null } = {}) {
+      if (!snapshot?.renderPanel) return false;
+      document.dispatchEvent(new CustomEvent('consensio:reader-opening'));
+      direct = false;
+      return section === 'answers' ? openSnapshot(snapshot, model, trigger, quote)
+        : openPanel(section, trigger, null, index, { snapshot, reveal: true });
+    },
+    refreshContext(snapshot) {
+      if (!open || selected?.key !== snapshot.key || !selected.renderPanel) return;
+      if (inspector) {
+        const scroll = get('Scroll').scrollTop;
+        const expanded = new Set(inspector.expanded);
+        const seen = new Set(inspector.seenClaims);
+        openPanel(inspector.kind, opener, null, null, { snapshot, reveal: true, keepFocus: true });
+        inspector.expanded = expanded;
+        for (const card of get('Inspector').querySelectorAll('.diff-card')) {
+          const key = card.querySelector('.diff-card-claim')?.textContent;
+          if (seen.has(key)) card.open = expanded.has(key);
+        }
+        get('Scroll').scrollTop = scroll;
+      } else { selected = snapshot; render(); }
+    },
     project(context) { if (context) { savedDirect = null; update(fromRun(context), context.config?.agentMode === false); } },
     showDirectBookmark(bookmark) {
       const modelAnswers = {};

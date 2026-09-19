@@ -3,6 +3,14 @@
   "use strict";
   const App = window.App = window.App || {};
   const statuses = { failed: "Response failed", cancelled: "Response stopped", canceled: "Response stopped" };
+  function compactReasoning(text) {
+    const paragraphs = String(text || "").split(/\n\s*\n|\n/).filter(Boolean);
+    return paragraphs.slice(-3).map(p => {
+      const sentence = p.match(/[^.!?]+[.!?](?=\s|$)/)?.[0] || p;
+      const clean = sentence.replace(/^[#*\s]+/, "").replace(/\s+/g, " ").trim();
+      return clean.length > 180 ? clean.slice(0, 177).replace(/\s+\S*$/, "") + "…" : clean;
+    }).join("\n");
+  }
 
   function receive(events, event) {
     if (event?.version !== 1 || !["status", "reasoning", "usage", "tool"].includes(event.kind) || typeof event.id !== "string") return;
@@ -20,7 +28,7 @@
   }
 
   function render(host, { events = [], usage = null, running = false, responding = false,
-    status = "succeeded", truncated = false, finishReason = "" } = {}) {
+    status = "succeeded", truncated = false, finishReason = "", review = null } = {}) {
     if (!host) return;
     if (!host._agentActivity) {
       const details = document.createElement("details");
@@ -51,7 +59,7 @@
     }
     const view = host._agentActivity;
     const reasoning = events.filter(item => item.kind === "reasoning"
-      && ["text", "summary"].includes(item.format) && item.text);
+      && ["text", "summary"].includes(item.format) && item.text).slice(-1);
     // Older saved turns mistook a missing search counter for tool activity.
     // Preserve real client calls and searches backed by counts or citations.
     const tools = events.filter(item => item.kind === "tool" && !(item.name === "web_search"
@@ -60,7 +68,9 @@
     const activeTool = tools.findLast(item => item.status === "running");
     const latest = events.filter(item => item.kind === "status").at(-1);
     const writing = latest ? latest.status === "responding" : responding;
-    const heading = running ? (activeTool ? "Using tool…" : writing ? "Writing answer…" : reasoning.length ? "Thinking…" : "Working…")
+    const reviewStage = review?.status === "running" ? "Checking the answer…"
+      : review?.comparisons?.some(c => c.status === "running") ? "Comparing perspectives…" : null;
+    const heading = running ? (reviewStage || (activeTool ? "Using tool…" : writing ? "Writing answer…" : reasoning.length ? "Thinking…" : "Working…"))
       : statuses[status] || (finishReason === "length" ? "Response limit reached" : tools.length ? "Activity and sources" : reasoning.length ? "Reasoning" : "Response details");
     if (view.title.textContent !== heading) view.title.textContent = heading;
     view.details.classList.toggle("is-running", running);
@@ -108,14 +118,16 @@
           }
         }
       } else {
-        if (node.textContent !== item.text) node.textContent = item.text;
-        node.setAttribute("aria-label", item.format === "summary" ? "Reasoning summary" : "Model reasoning");
+        const text = compactReasoning(item.text);
+        if (node.textContent !== text) node.textContent = text;
+        node.setAttribute("aria-label", item.summary_source === "excerpt" || item.format === "text" ? "Reasoning highlights" : "Reasoning summary");
       }
     }
     for (const [id, node] of view.nodes) if (!ids.has(id)) { node.remove(); view.nodes.delete(id); }
     view.content.hidden = !reasoning.length && !tools.length;
     if (follow && view.details.open) view.content.scrollTop = view.content.scrollHeight;
-    view.note.textContent = truncated ? "Only the first part of the model’s reasoning is shown."
+    view.note.textContent = reasoning.length ? (reasoning[0].summary_source === "excerpt" || reasoning[0].format === "text"
+      ? "Short excerpts from the model’s reasoning." : "Model-provided reasoning summary.") : truncated ? "Reasoning highlights only."
       : !reasoning.length ? (running ? "Waiting for the model’s response."
         : "No visible reasoning was returned for this response.") : "";
     if (finishReason === "length") view.note.textContent += " The response reached its output limit.";

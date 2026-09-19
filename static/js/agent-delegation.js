@@ -6,8 +6,6 @@
   const labels = { waiting: "Waiting", working: "Working", question: "Question", review: "Review",
     rework: "Rework", completed: "Completed", failed: "Failed", stopped: "Stopped" };
   const activeStates = new Set(["waiting", "working", "question", "rework"]);
-  const icons = { anthropic: "claude.png", deepseek: "deepseek.png", google: "gemini-icon.png",
-    "x-ai": "grok.png", openai: "chatgpt.png", mistralai: "mistral.png" };
   let owner = "", current = null, sidebar = null, inline = null, timer = null, returnFocus = null;
   const uid = () => window.auth?.currentUser?.uid || "";
   const keyFor = (chat, turn) => `${uid()}:${chat}:${turn}`;
@@ -24,12 +22,7 @@
     return `${partial ? "At least " : ""}${usage.cost_source === "provider" ? "" : "~"}$${value.toFixed(value > 0 && value < .0001 ? 6 : 4)}${partial ? " · incomplete" : ""}`;
   }
   function mark(agent) {
-    const family = (agent.model?.model || "").split("/")[0];
-    const img = node("img");
-    img.src = `/static/icons/chat_icons/${icons[family] || "chatgpt.png"}`;
-    img.alt = "";
-    if (["openai", "x-ai"].includes(family)) img.className = "mono-logo";
-    return img;
+    return App.createModelMark?.(agent.model) || node("span", "model-mark-fallback", (agent.model?.label || "M").slice(0, 1));
   }
   function prefs(view) {
     if (current === view && sidebar) view.scroll = sidebar.scrollTop;
@@ -173,6 +166,7 @@
   }
   function show(agentId, trigger) {
     if (!current) return;
+    App.answerReader?.close({ focus: false });
     returnFocus = trigger;
     current.closed = false;
     if (agentId) current.expanded.add(agentId);
@@ -182,21 +176,35 @@
   function renderDetail(row, view, agent) {
     const detail = view.details.get(agent.id);
     if (!detail) { row.body.textContent = "Loading messages…"; return; }
-    const signature = JSON.stringify([detail.assignment, [...detail.messages.keys()], detail.error, detail.hasMore, agent.sources, agent.result_truncated]);
+    const signature = JSON.stringify([detail.assignment, [...detail.messages.keys()], detail.error, detail.hasMore, agent.sources, agent.result_truncated, agent.progress_text]);
     if (row.body.dataset.signature === signature) return;
     const scroll = row.body.scrollTop;
     const follow = row.body.scrollHeight - scroll - row.body.clientHeight < 40;
     row.body.dataset.signature = signature;
     row.body.replaceChildren();
+    if (agent.progress_text) {
+      row.body.append(node("h3", "", "Reasoning highlights"), node("p", "agent-session-progress", agent.progress_text));
+    }
     for (const [key, label] of Object.entries({ goal: "Goal", context: "Context", constraints: "Constraints", expected_output: "Expected result", acceptance_criteria: "Checks" })) {
       if (!detail.assignment?.[key]) continue;
+      if (agent.kind === "judge" && key === "context") continue;
+      if (agent.kind === "comparison" && key === "context") {
+        let context = detail.assignment[key];
+        try { const task = JSON.parse(context); context = [task.question, task.context].filter(Boolean).join("\n\n"); } catch (_) {}
+        const task = node("details", "agent-session-task"); task.append(node("summary", "", "Comparison task"), node("p", "", context)); row.body.append(task); continue;
+      }
       row.body.append(node("h3", "", label), node("p", "", detail.assignment[key]));
     }
     for (const message of [...detail.messages.values()].sort((a, b) => a.seq - b.seq)) {
+      if (agent.kind === "judge" && message.kind === "result") continue;
       const from = message.sender === "orchestrator" ? "Orchestrator" : agent.title;
       const to = message.recipient === "orchestrator" ? "Orchestrator" : agent.title;
       const item = node("div", "agent-message"); item.dataset.messageId = message.id;
-      item.append(node("h3", "", `${from} → ${to} · ${message.kind}`), node("p", "", message.text));
+      item.append(node("h3", "", `${from} → ${to} · ${message.kind}`));
+      const text = node("div", "consensus-answer-body agent-message-body");
+      if (window.injectMarkdown) window.injectMarkdown(text, message.text, agent.sources || []);
+      else text.textContent = message.text;
+      item.append(text);
       row.body.append(item);
     }
     if (agent.result_truncated) row.body.append(node("p", "", "Result shortened to the configured limit."));
@@ -233,13 +241,22 @@
     if (inline && inline.dataset.signature !== inlineSignature) {
       inline.dataset.signature = inlineSignature;
       inline.replaceChildren();
+      const stack = node("span", "agent-model-stack");
+      const models = new Map();
       for (const agent of view.agents.values()) {
-        if (!activeStates.has(agent.status)) continue;
-        const button = node("button", "agent-inline-model"); button.type = "button";
-        button.title = `${agent.model?.label || "Model"} · ${agent.title} · ${labels[agent.status]} · ${agent.id.slice(0, 8)}`;
-        button.setAttribute("aria-label", button.title); button.append(mark(agent));
-        button.addEventListener("click", () => show(agent.id, button)); inline.append(button);
+        const key = agent.model?.model || agent.id;
+        if (!models.has(key)) models.set(key, []);
+        models.get(key).push(agent);
       }
+      for (const calls of models.values()) {
+        const agent = calls.find(a => activeStates.has(a.status)) || calls[0];
+        const button = node("button", "agent-inline-model"); button.type = "button";
+        button.title = `${agent.model?.label || "Model"} · ${calls.length} ${calls.length === 1 ? "call" : "calls"} · ${labels[agent.status]}`;
+        button.dataset.status = agent.status;
+        button.setAttribute("aria-label", button.title); button.append(mark(agent));
+        button.addEventListener("click", () => show(agent.id, button)); stack.append(button);
+      }
+      inline.append(stack);
       if (view.agents.size) {
         const button = node("button", "agent-sidebar-toggle", `Activity · ${view.agents.size}`); button.type = "button";
         button.setAttribute("aria-controls", "agentSidebar"); button.setAttribute("aria-expanded", String(!view.closed));
@@ -299,5 +316,8 @@
     }, 2500);
   }
   window.addEventListener("consensio:run-registry-change", resetOwner);
+  document.addEventListener("consensio:reader-opening", () => {
+    if (current) { current.closed = true; prefs(current); hide(); render(); }
+  });
   App.agentDelegation = { receive, project, cost };
 })();

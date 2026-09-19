@@ -223,12 +223,12 @@ def test_live_reasoning_disclosure_and_stop(browser, phase4_server, width, dark)
         if width == 1280:
             expect(page.locator(".run-entry-status")).to_have_text("Thinking")
             expect(page.locator("#newRunButton")).to_have_text("New chat")
-        # A long trace must follow new blocks, but leave a reader scrolling up alone.
+        # Long legacy traces become short highlights, not a scrolling wall.
         page.evaluate("""() => window.__emitAgent({version:1, step_id:'completion:0', kind:'reasoning', id:'r2',
           format:'text', text:'A measured reasoning step.\\n'.repeat(100), append:true})""")
         content = page.locator("#agentAnswerActivity .agent-activity-content")
         expect(content).to_contain_text("A measured reasoning step.")
-        assert content.evaluate("el => el.scrollHeight > el.clientHeight && el.scrollTop > 0")
+        assert len(content.inner_text()) < 600
         content.evaluate("el => { el.scrollTop = 0; }")
         page.evaluate("""() => window.__emitAgent({version:1, step_id:'completion:0', kind:'reasoning', id:'r2',
           format:'text', text:'End of reasoning.', append:true})""")
@@ -466,7 +466,7 @@ def test_removed_preference_and_legacy_phantom_search(browser, phase4_server, wi
         details = page.locator("#agentAnswerActivity details")
         expect(details.locator("summary")).to_have_text("Reasoning")
         details.locator("summary").click()
-        expect(details.locator(".agent-activity-reasoning")).to_have_text("A casual greeting. No tool needed.")
+        expect(details.locator(".agent-activity-reasoning")).to_have_text("A casual greeting.")
         expect(details.locator(".agent-activity-tool")).to_have_count(0)
         expect(details.locator(".agent-usage")).to_have_text("862 tokens · $0.0004 provider cost")
         _snapshot(page, f"agent-greeting-without-search-{width}")

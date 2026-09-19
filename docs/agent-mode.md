@@ -50,12 +50,29 @@ Tool-Aufrufe zählen noch nicht als Syntheseversion. Jeder Teilvergleich behält
 seine eigene Prüfung: dieselben Modelle zählen nicht mehrfach als unabhängige
 Stimmen. Nicht abgedeckte Aussagen bleiben in der Coverage sichtbar.
 
-Aktivitäten verwenden die bestehende Agent-Seitenleiste mit Modell-Icons,
-Status, Usage und aufklappbaren Details. Einzelantworten, Quellen und frühere
-Antwortversionen bleiben sichtbar. Die Markierungen und Unterschiedskarten
-verwenden dieselben Renderer wie Consensus. Über die Vergleichsbuttons wird die
-konkrete Markierungsgrundlage gewählt; Modelllinks öffnen die passende Antwort.
-Live-Ansicht und gespeicherter Verlauf verwenden denselben Review-Snapshot.
+Aktivitäten verwenden die bestehende Agent-Seitenleiste mit Status, Usage und
+aufklappbaren Details. Oberhalb der Antwort steht ein überlappender Modellstapel
+mit den Icons des zentralen Katalogs; wiederholte Aufrufe desselben Modells
+belegen einen Platz, bleiben aber einzeln in der Aktivität sichtbar.
+Unter der Antwort stehen ein kompakter Prüfstatus und Links zu Widersprüchen,
+Einzelantworten und Quellen. Rote Textmarkierungen öffnen unmittelbar die
+passende Widerspruchskarte im gemeinsamen Consensus-Antwortleser. Modelllinks
+zeigen dort die formatierte Originalantwort. Bei mehreren Teilvergleichen wählt
+ein beschriftetes Auswahlfeld die konkrete Markierungsgrundlage. Kontext und
+frühere Antwortversionen stehen in den Details des Lesers. Live-Ansicht und
+gespeicherter Verlauf verwenden denselben Review-Snapshot.
+
+Die Denkphase zeigt kurze Fortschrittsauszüge: vorhandene Provider-
+Zusammenfassungen haben Vorrang, sonst werden vollständige Sätze aus sichtbarem
+Reasoning ausgewählt und ausdrücklich als Auszüge bezeichnet. `agent_progress.py`
+begrenzt sie auf drei Zeilen mit je 180 Zeichen und acht Updates pro Modellschritt;
+es entstehen keine zusätzlichen Modellaufrufe. Der Turn speichert pro Schritt
+nur den letzten Kurztext, Worker-Sitzungen nur den aktuellen Fortschritt;
+das bestehende Event-Journal enthält die begrenzten Kurztext-Updates. Der
+Antwortbereich zeigt jeweils die jüngste Zusammenfassung. Alte, ausführliche
+Aktivitäten werden beim Anzeigen ebenfalls gekürzt; bestehende Daten werden
+nicht migriert. Private Provider-Fortsetzungsdaten bleiben ausschließlich im
+laufenden Protokoll und werden nicht als sichtbare Aktivität gespeichert.
 
 ## Tageskontingent
 

@@ -2,6 +2,7 @@
 from uuid import uuid4
 
 from app.services.agent_costs import RunCosts
+from app.services.agent_progress import ReasoningProgress
 from app.services.agent_policy import AgentPolicy, supports_client_tools, tools_for_model
 from app.services.agent_provider_limits import provider_cooldowns
 from app.services.agent_tools import ToolRegistry, search_tools
@@ -28,6 +29,7 @@ class AgentLoop:
         self.costs = RunCosts(self.policy)
         self.remaining_tools = self.policy.max_tools
         self.seen_calls = set()
+        self.progress = {}
 
     def check(self, budget):
         self.cancellation.raise_if_cancelled()
@@ -43,13 +45,12 @@ class AgentLoop:
         for key in ("version", "type"):
             event.pop(key, None)
         if kind == "reasoning":
-            text = event.get("text", "")
-            available = max(0, 32_000 - self.completion.reasoning_chars)
-            self.completion.reasoning_truncated |= len(text) > available
-            event["text"] = text[:available]
-            self.completion.reasoning_chars += len(event["text"])
-            if not event["text"]:
+            progress = self.progress.setdefault(step, ReasoningProgress())
+            compact = progress.update({"kind": kind, **event})
+            if not compact:
                 return None
+            event = compact
+            event_id = "reasoning-summary"
         self.completion.step_id = step
         return self.completion.event(kind, f"{step}/{event_id}", **event)
 

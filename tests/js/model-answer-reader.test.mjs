@@ -50,6 +50,42 @@ function archive(ctx, id = "t1") {
 afterEach(() => { contexts.splice(0).forEach(ctx => ctx.dom.window.close()); });
 
 describe("model answer reader", () => {
+  it("keeps explicit tool evidence isolated across panels, bases, refresh and reset", () => {
+    const ctx = boot(); ctx.project(run());
+    const group = [1, 2].map(i => ({ key: `tool:${i}`, question: `Evidence question ${i}`, contextLabel: `Trade-off ${i}`, scopeLabel: 'Comparison focus',
+      answers: [{ provider: 'OpenAI', label: `Frozen model ${i}`, text: `Independent answer ${i}`, status: 'complete', sources: [] }],
+      contextGroup: () => group,
+      renderPanel(kind) {
+        const panel = ctx.document.createElement('div');
+        panel.innerHTML = kind === 'differences' ? `<details class="diff-card"><summary><span class="diff-card-claim">Finding ${i}</span></summary><p>Evidence ${i}</p></details>` : `<p>Sources ${i}</p>`;
+        return panel;
+      }
+    }));
+    const trigger = ctx.document.getElementById('agentModeAnswersToggle');
+    trigger.focus();
+    ctx.reader.openContext(group[0], {section: 'differences', index: 0, trigger});
+    expect(ctx.document.querySelector('#answerReaderInspector .diff-card').open).toBe(true);
+    expect(ctx.document.getElementById('answerReaderInspector').textContent).toContain('Finding 1');
+    const card = ctx.document.querySelector('#answerReaderInspector .diff-card');
+    card.open = false; card.dispatchEvent(new ctx.window.Event('toggle'));
+    ctx.reader.refreshContext(group[0]);
+    expect(ctx.document.querySelector('#answerReaderInspector .diff-card').open).toBe(false);
+    ctx.document.querySelector('#answerReaderSections [data-section="answers"]').click();
+    expect(ctx.document.getElementById('answerReaderColumns').textContent).toContain('Independent answer 1');
+    expect(ctx.document.getElementById('answerReaderColumns').textContent).not.toContain('GPT answer');
+    const select = ctx.document.getElementById('answerReaderTurn');
+    select.value = group[1].key; select.dispatchEvent(new ctx.window.Event('change'));
+    ctx.document.querySelector('#answerReaderSections [data-section="sources"]').click();
+    expect(ctx.document.getElementById('answerReaderInspector').textContent).toContain('Sources 2');
+    select.focus();
+    ctx.reader.refreshContext({...group[1], renderPanel() { const p = ctx.document.createElement('p'); p.textContent = 'Updated evidence'; return p; }});
+    expect(ctx.document.getElementById('answerReaderInspector').textContent).toContain('Updated evidence');
+    expect(ctx.document.activeElement).toBe(select);
+    ctx.reader.close();
+    expect(ctx.document.activeElement).toBe(trigger);
+    ctx.reader.reset();
+    expect(ctx.document.getElementById('modelAnswerReader').hidden).toBe(true);
+  });
   it("previews selected models without creating an answer or a loading state", () => {
     const ctx = boot();
     ctx.document.body.classList.add('is-hero');

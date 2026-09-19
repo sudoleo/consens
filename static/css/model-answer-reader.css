@@ -191,6 +191,7 @@ body.answer-reader-modal { overflow: hidden; }
   body.answer-reader-docked:has(.sidebar.collapsed) { --reader-left-rail: 0px; }
   body.answer-reader-docked .container {
     transition: none;
+    left: 0;
     width: var(--reader-chat-width);
     margin-left: calc(var(--reader-left-rail) + (100vw - var(--reader-left-rail) - var(--reader-dock-width) - var(--reader-chat-width)) / 2 - 10px);
     margin-right: 0;

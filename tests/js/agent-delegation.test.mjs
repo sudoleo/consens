@@ -48,9 +48,10 @@ describe("Agent sidebar", () => {
     const { window: w, document: d, dom } = boot();
     receive(w, agent()); receive(w, { ...agent(2, "waiting", "b".repeat(32)), title: "Check France" });
     w.App.agentDelegation.project({ chatId, turnId });
-    expect(d.querySelectorAll(".agent-inline-model")).toHaveLength(2);
+    expect(d.querySelectorAll(".agent-inline-model")).toHaveLength(1);
     expect(d.querySelectorAll(".agent-session")).toHaveLength(2);
-    expect([...d.querySelectorAll(".agent-inline-model")].map(el => el.title).join(" ")).toContain("Check France");
+    expect(d.querySelector(".agent-inline-model").title).toContain("2 calls");
+    expect(d.querySelector('.agent-session-list').textContent).toContain("Check France");
     expect(w.fetch.mock.calls.every(([url]) => url.includes("/agents"))).toBe(true);
     dom.window.close();
   });

@@ -671,7 +671,10 @@ def test_archived_difference_cards_carry_no_live_run_controls():
     )[0]
     # Sprunglinks zeigten sonst auf die Antwortboxen des NEUESTEN Laufs, und
     # eine Resolve-Runde laeuft immer gegen die Modelle des aktiven Laufs.
-    assert "if (!isStatic) {" in cards
+    # Archivierte Karten dürfen nur mit expliziter, turngebundener Navigation
+    # Sprunglinks anbieten, niemals still auf die aktuellen Antwortboxen zeigen.
+    assert "if (!isStatic || opts.answerNavigation) {" in cards
+    assert "if (opts.answerNavigation) opts.answerNavigation.open(model, pos.quote, jump);" in cards
     assert "(isStatic && !diff.resolution)" in cards
     assert 'resolveSection.querySelectorAll("button").forEach' in cards
     # Die Modellnamen kommen aus dem Turn, nicht aus den Live-Boxen.

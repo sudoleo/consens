@@ -280,6 +280,7 @@
       responding: Boolean(state.text || state.streamText),
       status: context.status, truncated: state.completedTurn?.agent_reasoning_truncated,
       finishReason: state.completedTurn?.agent_finish_reason,
+      review: state.completedTurn?.agent_review || context.metadata.agentReview,
     });
     App.agentReview?.render(document.getElementById("agentAnswerBody"), state.completedTurn?.agent_review || context.metadata.agentReview);
     App.syncSendButtonRunning?.();
