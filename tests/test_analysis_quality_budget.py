@@ -197,7 +197,7 @@ def test_coverage_worker_inherits_budget_and_disconnect_signal():
     context = engine._build_judge_context({"openai": "one", "gemini": "two"}, "A claim with enough words.")
     with runtime.analysis_budget_scope() as budget:
         cancellation = runtime.current_provider_cancellation()
-        def judge(*args):
+        def judge(*args, **kwargs):
             assert runtime.current_analysis_budget() is budget
             assert runtime.current_provider_cancellation() is cancellation
             runtime.claim_analysis_call()

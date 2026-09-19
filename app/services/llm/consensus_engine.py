@@ -1760,7 +1760,30 @@ def _fallback_judge_engine(exclude_provider: str, api_keys: dict):
     return None
 
 
-def _differences_attempts(differences_model: str, api_keys: dict):
+def _chat_judge_attempts(chat_model: str, api_keys: dict):
+    """Chat uses configured standard judges, independent of the chat model's tier.
+
+    Prefer an independent family first. Availability then takes precedence:
+    Gemini's standard judge remains the fallback even for a Gemini chat. If
+    Gemini is already primary, use OpenAI's standard judge instead. Never
+    escalate to the Pro judge table or walk into a third model family.
+    """
+    resolved = _resolve_engine(chat_model)
+    if resolved is None:
+        return None
+    families = _judge_families(resolved[0], api_keys, count=1)
+    if not families:
+        return []
+    primary_provider = families[0]
+    primary = _standard_judge_engine(primary_provider)
+    attempts = [(primary, False), (primary, True)]
+    fallback_provider = "gemini" if primary_provider != "gemini" else "openai"
+    if _provider_key_available(fallback_provider, api_keys):
+        attempts.append((_standard_judge_engine(fallback_provider), True))
+    return attempts
+
+
+def _differences_attempts(differences_model: str, api_keys: dict, *, chat_mode: bool = False):
     """Attempt-Plan für den Differences-Judge. None bei ungültiger Engine.
 
     Einträge sind ((provider, api_model, model_ref), is_retry, tier):
@@ -1768,7 +1791,11 @@ def _differences_attempts(differences_model: str, api_keys: dict):
     Fremd-Familie in derselben Stufe. Die Pro-Stufe fail-opent zuletzt auf
     einen Standard-Judge; gibt es keine zweite Fremd-Familie, ist der
     Standard-Judge der eigenen Familie die letzte Stufe — Robustheit geht
-    als letztes Mittel vor Unabhängigkeit."""
+    als letztes Mittel vor Unabhängigkeit. Chat nutzt stattdessen den expliziten
+    Standard-Plan aus _chat_judge_attempts."""
+    if chat_mode:
+        attempts = _chat_judge_attempts(differences_model, api_keys)
+        return [(engine, retry, "standard") for engine, retry in attempts] if attempts is not None else None
     resolved = _resolve_engine(differences_model)
     if resolved is None:
         return None
@@ -1841,11 +1868,14 @@ COVERAGE_TEMPERATURE = 0.0
 MAX_COVERAGE_CLAIMS = MAX_CONSENSUS_SENTENCES
 
 
-def _coverage_attempts(differences_model: str, api_keys: dict):
+def _coverage_attempts(differences_model: str, api_keys: dict, *, chat_mode: bool = False):
     """Attempt-Plan des Coverage-Judges: Fremd-Familie, Standard-Stufe.
 
     Einträge sind ((provider, api_model, model_ref), is_retry). Fail-open wie
-    beim Differences-Judge: ohne Fremd-Key bleibt der eigene Standard-Judge."""
+    beim Differences-Judge: ohne Fremd-Key bleibt der eigene Standard-Judge.
+    Chat teilt seinen Standard-/Fallback-Plan mit dem Differences-Judge."""
+    if chat_mode:
+        return _chat_judge_attempts(differences_model, api_keys)
     resolved = _resolve_engine(differences_model)
     if resolved is None:
         return None
@@ -1906,7 +1936,7 @@ def _repair_coverage(engine, api_keys, context, missing: list) -> dict:
     return coverage.parse_coverage_payload(raw, labels, ids) or {}
 
 
-def _run_coverage_judge(context: _JudgeContext, api_keys: dict, differences_model: str):
+def _run_coverage_judge(context: _JudgeContext, api_keys: dict, differences_model: str, *, chat_mode: bool = False):
     """Belegt jeden nummerierten Satz. Gibt (coverage | None, meta | None).
 
     None heisst: der Coverage-Judge hat gar nichts geliefert. Dann bleibt es
@@ -1916,7 +1946,7 @@ def _run_coverage_judge(context: _JudgeContext, api_keys: dict, differences_mode
     ids = coverage.sentence_ids(context.sentences)
     if not ids:
         return None, None
-    attempts = _coverage_attempts(differences_model, api_keys)
+    attempts = _coverage_attempts(differences_model, api_keys, chat_mode=chat_mode)
     if not attempts:
         return None, None
 
@@ -2085,7 +2115,7 @@ def _apply_coverage(data: dict, coverage_result, coverage_meta, context, consens
         return None
 
 
-def _coverage_in_background(context, api_keys, differences_model):
+def _coverage_in_background(context, api_keys, differences_model, *, chat_mode: bool = False):
     """Startet den Coverage-Judge im Nebenläufer und gibt (pool, future).
 
     Der Aufrufer muss ``pool.shutdown()`` sicherstellen. Die
@@ -2101,9 +2131,9 @@ def _coverage_in_background(context, api_keys, differences_model):
 
     def _bound_work():
         if cancellation is None:
-            return _run_coverage_judge(context, api_keys, differences_model)
+            return _run_coverage_judge(context, api_keys, differences_model, chat_mode=chat_mode)
         with bind_provider_cancellation(cancellation):
-            return _run_coverage_judge(context, api_keys, differences_model)
+            return _run_coverage_judge(context, api_keys, differences_model, chat_mode=chat_mode)
 
     pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="coverage-judge")
     try:
@@ -2140,13 +2170,17 @@ def query_differences(
     differences_model: str,
     excluded_models: list = None,
     resolved_question: str = "",
+    *,
+    chat_mode: bool = False,
 ) -> tuple:
     """
     Extrahiert die Unterschiede zwischen den Antworten der Modellfamilien,
     anonymisiert die Modellnamen und ordnet das bestbewertete Modell anschließend wieder zu.
     Läuft mit Structured Output, JSON-Repair, einem Retry und Fallback-Judge;
-    der Judge ist immer eine andere Modellfamilie als die Consensus-Engine
+    der Judge ist standardmäßig eine andere Modellfamilie als die Consensus-Engine
     (siehe _resolve_differences_engine) und wird in data["judges"] ausgewiesen.
+    Im Beta-Chat verwenden beide Judges nur die konfigurierten Standardmodelle;
+    der Gemini-Fallback darf dabei auch die Familie des Chatmodells sein.
     Parallel dazu belegt der Coverage-Judge jeden Satz der Konsensantwort.
     Gibt (legacy_text, structured_data | None) zurück.
     """
@@ -2161,12 +2195,12 @@ def query_differences(
     answers_by_model = context.answers_by_model
     sentences = list(context.sentences)
 
-    attempts = _differences_attempts(differences_model, api_keys)
+    attempts = _differences_attempts(differences_model, api_keys, chat_mode=chat_mode)
     if attempts is None:
         return "Invalid model selected for difference comparison.", None
 
     coverage_pool, coverage_future = _coverage_in_background(
-        context, api_keys, differences_model
+        context, api_keys, differences_model, chat_mode=chat_mode
     )
     try:
         prose_fallback = None

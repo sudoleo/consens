@@ -73,6 +73,15 @@ bereits sichtbaren Synthesetext mit der vorhandenen Differences-/Coverage-Pipeli
 Ein fehlender Toolcall wird erneut eingefordert, solange das Tagesbudget weitere
 Aufrufe zulässt. Das Backend lässt keinen stillen ungeprüften Abschluss zu.
 
+Differences und Coverage verwenden im Beta-Chat ausschließlich die
+Standard-Judges aus `app_config/models.judge_models`, auch bei einem teuren
+Chatmodell. Zuerst wird eine andere Modellfamilie gewählt (standardmäßig Luna,
+bei OpenAI-Chats Gemini). Nach dem begrenzten Retry folgt der konfigurierte
+Gemini-Standard-Judge, aktuell Gemini 3.5 Flash-Lite, ausdrücklich auch bei
+Gemini als Chatmodell. Ist Gemini bereits der primäre Judge, übernimmt der
+OpenAI-Standard-Judge. Beide Prüfungen behalten die niedrige Judge-Denkstufe;
+die Pro-Tabelle und weitere Modellfamilien werden nicht als Ausweichstufen genutzt.
+
 Bei eingeschaltetem „Check contradictions“ folgt das Tool `check_contradictions`.
 Es verwendet den bestehenden Contradiction Judge für große, faktisch prüfbare
 Widersprüche und bereits vorhandene Originalquellen. Abruf, validierte Zitate,

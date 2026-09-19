@@ -307,6 +307,90 @@ def test_configured_default_uses_cross_family_judges(store):
     assert review["checks"][0]["differences_data"]["judges"]["differences"]["provider"] != "DeepSeek"
 
 
+@pytest.mark.parametrize("chat_model", ["gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-3.1-pro-preview"])
+@pytest.mark.parametrize("failure", [None, "404", "timeout", "empty", "cooldown"])
+def test_gemini_chat_uses_standard_luna_then_flash_lite_for_both_judges(store, monkeypatch, chat_model, failure):
+    from app.core import config as cfg
+    from app.services.agent_provider_limits import AgentProviderCooldown
+
+    # Match the admin configuration, including the expensive Pro choice. The
+    # chat model's tier must never select that table for either review role.
+    monkeypatch.setitem(cfg.DIFFERENCES_JUDGE_MODEL_BY_PROVIDER, "openai", "gpt-5.6-luna")
+    monkeypatch.setitem(cfg.DIFFERENCES_JUDGE_MODEL_BY_PROVIDER, "gemini", "gemini-3.5-flash-lite")
+    monkeypatch.setitem(cfg.PRO_JUDGE_MODEL_BY_PROVIDER, "openai", "gpt-5.6-terra")
+    script = Script()
+    loop = make_loop(store, script)
+    loop.model = resolve_agent_model(chat_model)
+    base = type(script.factory())
+    attempts = {"differences": [], "coverage": []}
+
+    class FailingLuna(base):
+        def stream(self, **kwargs):
+            model = kwargs["model"]
+            schema = (model.request_config.get("response_format") or {}).get("json_schema", {}).get("schema")
+            if schema:
+                role = "coverage" if "sentences" in schema["properties"] else "differences"
+                attempts[role].append(model.model)
+                if failure and model.model == "openai/gpt-5.6-luna":
+                    if failure == "404":
+                        raise RuntimeError("404 Model unavailable")
+                    if failure == "timeout":
+                        raise TimeoutError("No response")
+                    if failure == "cooldown":
+                        raise AgentProviderCooldown(30)
+                    self.finish_reason = "stop"
+                    return
+                assert model.request_config.get("reasoning", {}).get("effort") == "low"
+            yield from super().stream(**kwargs)
+
+    loop.factory = FailingLuna
+    list(loop.run())
+    saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
+    review = saved["agent_review"]
+    assert saved["status"] == "completed"
+    assert review["status"] == "succeeded"
+    assert review_is_bound(review, saved["consensus"])
+    for role in attempts:
+        expected = ["openai/gpt-5.6-luna"]
+        if failure:
+            if failure != "404":
+                expected.append("openai/gpt-5.6-luna")
+            expected.append("google/gemini-3.5-flash-lite")
+        assert attempts[role] == expected
+        meta = review["checks"][0]["differences_data"]["judges"][role]
+        assert meta["model"] == expected[-1]
+        assert meta["tier"] == "standard"
+        assert meta["attempts"] == len(expected)
+
+
+@pytest.mark.parametrize("chat_model,primary,fallback", [
+    ("gemini-3.1-pro-preview", "openai/gpt-5.6-luna", "google/gemini-3.5-flash-lite"),
+    ("gpt-5.4-mini", "google/gemini-3.5-flash-lite", "openai/gpt-5.6-luna"),
+])
+def test_unavailable_chat_judges_stop_after_standard_fallback(store, monkeypatch, chat_model, primary, fallback):
+    from app.core import config as cfg
+    monkeypatch.setitem(cfg.DIFFERENCES_JUDGE_MODEL_BY_PROVIDER, "openai", "gpt-5.6-luna")
+    monkeypatch.setitem(cfg.DIFFERENCES_JUDGE_MODEL_BY_PROVIDER, "gemini", "gemini-3.5-flash-lite")
+    loop = make_loop(store, Script())
+    loop.model = resolve_agent_model(chat_model)
+    call = loop.comparison.call
+    attempts = {"Coverage judge": [], "Differences judge": []}
+
+    def unavailable(model, messages, **kwargs):
+        if kwargs["kind"] == "judge":
+            attempts[kwargs["title"]].append(model.model)
+            raise TimeoutError("No judge available")
+        return call(model, messages, **kwargs)
+
+    loop.comparison.call = unavailable
+    list(loop.run())
+    review = store.get_turn(UID, loop.chat_id, loop.turn_id)["agent_review"]
+    assert review["status"] == "failed"
+    assert all(models == [primary, primary, fallback] for models in attempts.values())
+    assert {"code": "differences_unavailable"} in review["checks"][0]["issues"]
+    assert {"code": "coverage_unavailable"} in review["checks"][0]["issues"]
+
+
 def test_midnight_moves_only_unspent_review_hold(store, monkeypatch):
     loop = make_loop(store, Script())
     args = (UID, loop.chat_id, loop.turn_id)

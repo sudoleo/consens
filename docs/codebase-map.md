@@ -1771,8 +1771,18 @@ Mindestens zwei vollständige Antworten sind eine brauchbare Prüfgrundlage.
 
 Das Chatmodell streamt die Synthese selbst und ruft danach judge_answer auf.
 Der Toolcall prüft den exakten zuletzt gestreamten Text, keinen vom Modell frei
-behaupteten Prüftext. Er nutzt unverändert query_differences samt Coverage,
-Satzindizes, Zitatprüfung, begrenzten Repairs, Judge-Auswahl und Fallbacks.
+behaupteten Prüftext. Er nutzt query_differences samt Coverage, Satzindizes,
+Zitatprüfung und begrenzten Repairs. `chat_mode=true` hält beide Judges auf den
+Standardmodellen aus `app_config/models.judge_models`, unabhängig von der
+Premium-Einstufung des Chatmodells. Primär bleibt eine andere Familie bevorzugt
+(standardmäßig Luna, für OpenAI-Chats Gemini); nach dem begrenzten Retry folgt
+der Gemini-Standard-Judge (aktuell Gemini 3.5 Flash-Lite), auch bei einem
+Gemini-Chatmodell. Ist Gemini bereits primär, folgt der OpenAI-Standard-Judge.
+Pro-Judges und dritte Familien werden im Chat nicht als Fallback eingeplant;
+die niedrige Judge-Denkstufe und die bisherigen Consensus-Pläne bleiben erhalten.
+`_chat_judge_attempts` liefert denselben Plan an Differences und den parallel
+laufenden Coverage-Judge. Die echten Agent-Tests simulieren Luna-Ausfälle,
+leere Antworten und Cooldowns mit Standard- und Pro-Gemini-Chatmodellen.
 llm/task_transport.py injiziert nur den gemessenen Providertransport via
 ContextVar; der Coverage-Thread übernimmt den Kontext. Außerhalb dieser Bindung
 bleibt der Consensus-Transport unverändert. Jeder Judge-/Retry-/Repair-Aufruf

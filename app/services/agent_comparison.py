@@ -313,7 +313,7 @@ class ComparisonTools:
                         reference = cfg.provider_label(search_family(loop.model))
                     _, data = query_differences({cfg.provider_label(a["provider"]): a["text"] for a in comparison["answers"]},
                         self.text, {"OpenRouter": loop.api_key}, differences_model=reference,
-                        resolved_question=comparison["question"])
+                        resolved_question=comparison["question"], chat_mode=True)
                 loop._check(cancellation)
                 if isinstance(data, dict):
                     check["differences_data"] = data
