@@ -15,7 +15,7 @@ const CATALOG = { token_budget: { remaining: 188878, limit: 250000, observed_at:
   { id: "gpt-4o", label: "GPT-4o", reasoning_efforts: ["default"], reasoning_available: false },
 ] };
 
-function boot({ allowed = true } = {}) {
+function boot({ allowed = true, catalog = CATALOG } = {}) {
   const setup = loadScripts(["static/js/run-registry.js", "static/js/model-picker.js", "static/js/agent-activity.js", "static/js/agent-chat.js"], {
     body: BODY,
     before(window) {
@@ -26,7 +26,7 @@ function boot({ allowed = true } = {}) {
         modelPrefs: [], getModelOptionLabel: option => option?.dataset.modelLabel || option?.textContent || "",
       };
       window.injectMarkdown = (el, markdown) => { el.textContent = markdown; };
-      window.fetch = vi.fn(async url => ({ ok: true, json: async () => url.startsWith('/agent/') ? structuredClone(CATALOG) : ({ chat: { id: "a".repeat(32) } }) }));
+      window.fetch = vi.fn(async url => ({ ok: true, json: async () => url.startsWith('/agent/') ? structuredClone(catalog) : ({ chat: { id: "a".repeat(32) } }) }));
       window.streamSSERequest = vi.fn(async (_url, _payload, _signal, handlers) => {
         handlers.delta?.append("Answer");
         return { ok: true, data: { response: "Answer", chat_id: "a".repeat(32), turn_id: "b".repeat(32),
@@ -48,6 +48,49 @@ async function selectAgent(window) {
 }
 
 describe("single-model agent chat", () => {
+  it('groups chat models by provider, supports keyboard navigation and keeps reasoning tied to the chosen model', async () => {
+    const catalog = {...CATALOG, models: CATALOG.models.map((model, i) => ({...model,
+      provider: i ? 'openai' : 'deepseek', provider_label: i ? 'OpenAI' : 'DeepSeek'}))};
+    const {window:w, document:d, dom} = boot({catalog});
+    await selectAgent(w);
+    const select = d.querySelector('#agentModelDropdown');
+    const trigger = d.querySelector('.agent-model-picker .model-picker-display');
+    const menu = d.querySelector('.agent-model-picker .model-picker-menu');
+    trigger.click();
+    expect(menu.querySelectorAll('button[data-model-group]')).toHaveLength(2);
+    expect(menu.querySelectorAll('[data-value]')).toHaveLength(0);
+    expect(menu.getAttribute('role')).toBe('menu');
+    expect(trigger.getAttribute('aria-haspopup')).toBe('menu');
+    expect(menu.querySelector('.is-current-group').dataset.modelGroup).toBe('deepseek');
+    const openai = menu.querySelector('button[data-model-group="openai"]');
+    openai.focus();
+    openai.dispatchEvent(new w.KeyboardEvent('keydown', {key:'ArrowRight',bubbles:true}));
+    expect(menu.querySelectorAll('[data-value]')).toHaveLength(2);
+    expect(trigger.getAttribute('aria-haspopup')).toBe('listbox');
+    expect(menu.querySelector('[data-value="deepseek/deepseek-v4.1-flash"]')).toBeNull();
+    expect(d.activeElement.dataset.value).toBe('gpt-5.6-sol');
+    d.activeElement.dispatchEvent(new w.KeyboardEvent('keydown', {key:'ArrowLeft',bubbles:true}));
+    expect(menu.querySelectorAll('button[data-model-group]')).toHaveLength(2);
+    menu.querySelector('button[data-model-group="openai"]').click();
+    menu.querySelector('[data-value="gpt-5.6-sol"]').click();
+    expect(select.value).toBe('gpt-5.6-sol');
+    expect(menu.classList.contains('is-open')).toBe(false);
+    expect(d.activeElement).toBe(trigger);
+    expect(JSON.parse(w.localStorage.getItem('agent_settings_owner')).model_id).toBe('gpt-5.6-sol');
+    w.App.openModelPicker(select, {secondary:true});
+    expect(menu.querySelector('[data-setting-value="medium"]')).not.toBeNull();
+    menu.querySelector('.model-picker-back-option').click();
+    expect(menu.querySelector('.is-current-group').dataset.modelGroup).toBe('openai');
+    menu.querySelector('.agent-reasoning-option').click();
+    menu.querySelector('[data-setting-value="medium"]').click();
+    expect(d.querySelector('#agentReasoningEffort').value).toBe('medium');
+    trigger.click();
+    menu.querySelector('button[data-model-group="openai"]').focus();
+    d.activeElement.dispatchEvent(new w.KeyboardEvent('keydown', {key:'Escape',bubbles:true}));
+    expect(menu.classList.contains('is-open')).toBe(false);
+    expect(d.activeElement).toBe(trigger);
+    dom.window.close();
+  });
   it('orders allowance snapshots by reset, UTC day and ledger revision despite server clock skew', async () => {
     const {window:w,dom} = boot();
     await selectAgent(w);

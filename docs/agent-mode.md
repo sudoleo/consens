@@ -13,7 +13,11 @@ Der separate Consensus-Modus behält seinen bisherigen Ablauf und seine Run-Limi
 
 Der Chatmodell-Picker und die Denkstufe gelten für die nächste Nachricht.
 Die Auswahl wird kontogebunden gespeichert und während eines Laufs eingefroren.
-GET /agent/models nutzt die Antwortmodelle aus Daily und High Quality plus AGENT_MODEL als Standard;
+Der Chatmodell-Picker gruppiert Modelle nach Anbieter; die jeweilige Modellliste
+und die Reasoning-Ebene öffnen im bestehenden Menü.
+
+GET /agent/models nutzt alle Basis-/Pro-Modelle der Anbieter, freigegebene Premium-Modelle,
+die Antwortmodelle aus Daily/High Quality und AGENT_MODEL als Standard;
 Preise, Kontextgrenzen und Reasoning-Stufen stammen aus dem bestehenden
 app/services/llm/agent_model_catalog.json. IDs, Labels und Routing kommen aus
 cfg.MODEL_CONFIGS. Der Default bleibt deepseek/deepseek-v4.1-flash.

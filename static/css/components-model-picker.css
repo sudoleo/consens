@@ -253,6 +253,13 @@
   white-space: nowrap;
 }
 
+.model-picker-group-option { min-height: 36px; gap: 12px; }
+.model-picker-group-option.is-current-group { background: var(--app-surface-hover); }
+.model-picker-group-count { color: var(--ink-3); font-size: 11px; font-variant-numeric: tabular-nums; }
+@media (pointer: coarse) {
+  .model-picker-group-option { min-height: 44px; }
+}
+
 /* --- Consensus-Preset-Ebene (Daily/Balanced/Thorough + Custom) ----------- */
 
 .model-picker-preset-option {

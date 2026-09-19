@@ -48,30 +48,41 @@ def _choose_effort(page, effort):
     page.locator(f'.agent-model-picker [data-setting-value="{effort}"]').click()
 
 
-@pytest.mark.parametrize("width", [1280, 390, 320])
-def test_high_quality_chat_models_use_the_real_catalog(browser, phase4_server, width):
+@pytest.mark.parametrize("width,dark", [(1280, False), (390, True), (320, False)])
+def test_all_pro_chat_models_are_grouped_by_provider(browser, phase4_server, width, dark):
     from app.core import config as cfg
     from app.services.llm.agent_client import agent_model_options
 
     catalog = agent_model_options()
-    quality_ids = set(cfg.CONSENSUS_PRESET_MODELS['thorough']['answers'].values())
-    quality = [model for model in catalog['models'] if model['id'] in quality_ids]
-    assert {model['id'] for model in quality} == quality_ids
-    context, page = _real_firebase_page(browser, phase4_server)
+    assert cfg.PREMIUM_MODELS <= {model['id'] for model in catalog['models']}
+    context, page = _real_firebase_page(browser, phase4_server, has_touch=width < 700)
     try:
         page.set_viewport_size({'width': width, 'height': 900})
         page.route('**/user_status', lambda r: _json(r, {'tier': 'pro', 'is_pro': True, 'agent_access': True}))
         page.route('**/agent/models', lambda r: _json(r, catalog))
         page.evaluate("async () => { await window.__switchE2EUser('account-a'); }")
+        page.evaluate("dark => { document.body.classList.toggle('dark-mode', dark); document.documentElement.classList.toggle('dark-mode', dark); }", dark)
         _choose_mode(page, 'agent')
         expect(page.locator('#agentModelDropdown')).to_be_enabled()
         expect(page.locator('#agentModelDropdown option')).to_have_count(len(catalog['models']))
-        for model in quality:
+        for provider in cfg.PROVIDERS.values():
             page.locator('.agent-model-picker .model-picker-display').click()
             menu = page.locator('.agent-model-picker .model-picker-menu').bounding_box()
             assert menu['x'] >= 0 and menu['x'] + menu['width'] <= width
             assert menu['y'] >= 0 and menu['y'] + menu['height'] <= 900
-            _snapshot(page, f'agent-quality-picker-{width}')
+            expect(page.locator('.agent-model-picker button[data-model-group]')).to_have_count(len(cfg.PROVIDERS))
+            expect(page.locator('.agent-model-picker button[data-value]')).to_have_count(0)
+            first = page.locator('.agent-model-picker button[data-model-group]').first
+            first.scroll_into_view_if_needed()
+            assert first.evaluate('el => { const r = el.getBoundingClientRect(); return el.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)); }')
+            _snapshot(page, f'agent-provider-picker-{width}')
+            group = page.locator(f'.agent-model-picker button[data-model-group="{provider.key}"]')
+            group.tap() if width < 700 else group.click()
+            options = page.locator('.agent-model-picker button[data-value]')
+            expected = {model['id'] for model in catalog['models'] if model['provider'] == provider.key}
+            assert set(options.evaluate_all('items => items.map(item => item.dataset.value)')) == expected
+            _snapshot(page, f'agent-provider-models-{provider.key}-{width}')
+            model = next(model for model in catalog['models'] if model['id'] == provider.pro_model)
             page.locator(f'#agentModelControls [data-value="{model["id"]}"]').click()
             expect(page.locator('#agentModelDropdown')).to_have_value(model['id'])
             if 'high' in model['reasoning_efforts']:

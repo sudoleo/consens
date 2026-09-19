@@ -392,9 +392,23 @@ def test_catalog_reuses_allowlist_and_restricts_reasoning(api, monkeypatch):
     assert models[cfg.GROK_NO_REASONING_MODEL]["reasoning_efforts"] == ["default"]
     expected = {model_id for preset in ("fast", "thorough")
                 for model_id in cfg.CONSENSUS_PRESET_MODELS[preset]["answers"].values()}
+    expected.update(cfg.PREMIUM_MODELS)
+    expected.update(model_id for provider in cfg.PROVIDERS.values()
+                    for model_id in (provider.base_model, provider.pro_model))
     assert set(models) == expected | {"deepseek/deepseek-v4.1-flash"}
     assert len(response.json()["models"]) == len(models)
+    assert {item['provider'] for item in models.values()} == set(cfg.PROVIDERS)
+    for provider in cfg.PROVIDERS.values():
+        assert models[provider.pro_model]['provider'] == provider.key
+        assert models[provider.pro_model]['provider_label'] == provider.label
     assert all("web_search" in item["tools_by_effort"]["default"] for item in models.values())
+    # Admin presets may contain only a subset of families; the chat catalog
+    # must still offer every configured Pro model.
+    monkeypatch.setitem(cfg.CONSENSUS_PRESET_MODELS, 'thorough', {'answers': {
+        'openai': cfg.OPENAI_SOL_MODEL, 'deepseek': cfg.DEEPSEEK_PRO_MODEL}})
+    trimmed_preset_models = {item['id'] for item in client.get('/agent/models', headers=AUTH).json()['models']}
+    assert cfg.PREMIUM_MODELS <= trimmed_preset_models
+    assert {p.pro_model for p in cfg.PROVIDERS.values()} <= trimmed_preset_models
     monkeypatch.delitem(cfg.MODEL_CONFIGS, cfg.DEFAULT_ANTHROPIC_MODEL)
     assert cfg.DEFAULT_ANTHROPIC_MODEL not in {item["id"] for item in client.get("/agent/models", headers=AUTH).json()["models"]}
     monkeypatch.setattr(agent, "is_user_pro", lambda uid: False)

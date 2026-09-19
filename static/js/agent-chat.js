@@ -141,13 +141,29 @@
     const options = ready ? catalog.models : [{ id: "", label: catalogStatus === "failed" ? "Models unavailable" : "Loading models…" }];
     const signature = JSON.stringify(options);
     if (select.dataset.options !== signature) {
-      select.replaceChildren(...options.map(model => {
+      const groups = new Map();
+      const grouped = options.some(model => model.provider);
+      const nodes = options.map(model => {
         const option = document.createElement("option");
         option.value = model.id;
         option.textContent = model.label;
         option.dataset.modelLabel = model.label;
+        if (grouped) {
+          const key = model.provider || 'other';
+          if (!groups.has(key)) {
+            const group = document.createElement('optgroup');
+            group.label = model.provider_label || 'Other models';
+            group.dataset.modelGroup = key;
+            groups.set(key, group);
+          }
+          groups.get(key).append(option);
+        }
         return option;
-      }));
+      });
+      const order = (App.modelPrefs || []).map(pref => pref.provider);
+      const rank = key => order.includes(key) ? order.indexOf(key) : order.length;
+      select.replaceChildren(...(grouped ? [...groups.values()].sort((a, b) =>
+        rank(a.dataset.modelGroup) - rank(b.dataset.modelGroup) || a.label.localeCompare(b.label)) : nodes));
       select.dataset.options = signature;
     }
     select.value = ready ? current.model_id || catalog.default_model_id : "";
@@ -172,7 +188,7 @@
     effort.dataset.available = String(ready && model?.reasoning_available);
     effort.parentElement.hidden = true;
     document.getElementById("agentModelsRetry")?.toggleAttribute("hidden", catalogStatus !== "failed");
-    App.initCustomModelPicker?.(select, { secondarySelect: effort, secondaryLabel: 'Reasoning' });
+    App.initCustomModelPicker?.(select, { grouped: true, secondarySelect: effort, secondaryLabel: 'Reasoning' });
     if (select.disabled) App.collapseExpandedModelPicker?.(select);
     if (effort.disabled || effort.parentElement.hidden) App.collapseExpandedModelPicker?.(effort);
     window.syncCustomModelPickers?.();

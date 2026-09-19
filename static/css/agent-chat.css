@@ -207,6 +207,12 @@ body.single-agent-active .consensus-model-inline { min-width: 0; max-width: 100%
 @media (max-width: 400px) {
   .agent-model-picker .model-picker-display-text::before { content: ''; }
 }
+.chat-input-container .agent-model-controls .model-picker-group-option {
+  flex-wrap: nowrap; gap: 12px; min-height: 36px; padding: 7px 8px 7px 11px;
+}
+@media (pointer: coarse) {
+  .chat-input-container .agent-model-controls .model-picker-group-option { min-height: 44px; }
+}
 
 /* One quiet disclosure. Live state uses the source-check light sweep. */
 .agent-activity { margin: 0 0 18px; color: var(--ink-3); font-size: 13px; }

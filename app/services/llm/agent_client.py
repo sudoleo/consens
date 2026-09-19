@@ -97,7 +97,7 @@ def _choices(model, metadata):
 
 
 def agent_models():
-    """Reuse Daily and High Quality answer models plus the configured default.
+    """Offer every family's base/Pro models, all premium models and preset picks.
 
     The checked-in public catalog is a versioned simulation baseline, not a
     live provider quote. No user-controlled prices or provider URLs are used.
@@ -109,6 +109,9 @@ def agent_models():
         for preset in ("fast", "thorough")
         for model_id in cfg.CONSENSUS_PRESET_MODELS[preset]["answers"].values()
     }
+    available.update(cfg.PREMIUM_MODELS)
+    available.update(model_id for provider in cfg.PROVIDERS.values()
+                     for model_id in (provider.base_model, provider.pro_model))
     for entry in sorted(cfg.MODEL_CONFIGS.values(), key=lambda x: (x.provider, x.label)):
         metadata = _CATALOG["models"].get(entry.api_model)
         if entry.internal_id not in available or not metadata or entry.api_model == default.model:
@@ -129,10 +132,18 @@ def agent_models():
     return result
 
 
+def _provider_options(model):
+    provider = next((p for p in cfg.PROVIDERS.values()
+                     if model.model.startswith(p.openrouter_prefix)), None)
+    return {"provider": provider.key if provider else "other",
+            "provider_label": provider.label if provider else "Other models"}
+
+
 def agent_model_options():
     from app.services.agent_policy import tools_for_model, supports_delegation
     return {"default_model_id": agent_model().selection_id, "models": [
-        {"id": model.selection_id, "label": model.label, "reasoning_efforts": _choices(model, metadata),
+        {"id": model.selection_id, "label": model.label, **_provider_options(model),
+         "reasoning_efforts": _choices(model, metadata),
          "default_reasoning": model.request_config.get("reasoning", metadata.get("reasoning") or {}),
          "reasoning_available": bool(metadata.get("reasoning")),
          "delegation_by_effort": {effort: supports_delegation(resolve_agent_model(model.selection_id, effort))

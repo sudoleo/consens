@@ -456,6 +456,7 @@
       state.displayButton.querySelector(".model-picker-display-text").textContent = displayLabel;
       state.displayButton.title = displayTitle;
       state.displayButton.setAttribute("aria-label", `${select.getAttribute("aria-label") || "Choose model"}: ${displayLabel}`);
+      state.displayButton.setAttribute('aria-haspopup', state.menu.getAttribute('role'));
     }
 
     if (!state.displayButton) state.host.setAttribute("aria-label", `Choose model: ${displayLabel}`);
@@ -580,6 +581,7 @@
       event.stopPropagation();
       state.view = targetView;
       renderCustomModelPicker(select);
+      if (state.grouped) focusPickerMenu(state);
     });
 
     state.menu.appendChild(back);
@@ -590,6 +592,70 @@
     label.className = "model-picker-section-label";
     label.textContent = text;
     menu.appendChild(label);
+  }
+
+  function focusPickerMenu(state) {
+    (state.menu.querySelector('.is-selected:not(:disabled), .is-current-group:not(:disabled)')
+      || state.menu.querySelector('button:not(:disabled)'))?.focus();
+  }
+
+  function navigateModelGroup(select, event) {
+    const state = getModelPickerState(select);
+    if (!state?.grouped) return false;
+    const target = event.key === 'ArrowRight' && event.target.matches('button[data-model-group]')
+      ? event.target : event.key === 'ArrowLeft' ? state.menu.querySelector('.model-picker-back-option') : null;
+    if (!target) return false;
+    target.click();
+    return true;
+  }
+
+  function renderReasoningOption(select, state) {
+    if (state.secondarySelect?.dataset.available !== 'true') return;
+    const button = document.createElement('button'); button.type = 'button';
+    button.className = 'model-picker-option agent-reasoning-option'; button.tabIndex = -1;
+    if (state.menu.getAttribute('role') === 'menu') button.setAttribute('role', 'menuitem');
+    button.textContent = `${state.secondaryLabel} · ${state.secondarySelect.selectedOptions[0]?.textContent || 'Auto'} ›`;
+    button.disabled = state.secondarySelect.disabled;
+    button.addEventListener('click', event => {
+      event.stopPropagation(); state.view = 'secondary'; renderCustomModelPicker(select);
+      focusPickerMenu(state);
+    });
+    state.menu.append(button);
+  }
+
+  function renderModelGroups(select, state, groups) {
+    state.menu.setAttribute('role', 'menu');
+    for (const group of groups) {
+      const options = Array.from(group.querySelectorAll('option'));
+      const selected = options.find(option => option.selected);
+      const button = document.createElement('button');
+      button.type = 'button'; button.tabIndex = -1;
+      button.className = 'model-picker-option model-picker-group-option';
+      button.dataset.modelGroup = group.dataset.modelGroup;
+      button.setAttribute('role', 'menuitem');
+      button.setAttribute('aria-haspopup', 'listbox');
+      button.classList.toggle('is-current-group', !!selected);
+      button.disabled = group.disabled || options.every(option => option.disabled);
+      button.setAttribute('aria-label', `${group.label}, ${options.length} models${selected ? `, selected: ${window.App.getModelOptionLabel(selected)}` : ''}`);
+      const label = document.createElement('span');
+      label.className = 'model-picker-option-label'; label.textContent = group.label;
+      const count = document.createElement('span');
+      count.className = 'model-picker-group-count'; count.textContent = String(options.length);
+      count.setAttribute('aria-hidden', 'true');
+      const chevron = document.createElement('span');
+      chevron.className = 'model-picker-option-chevron'; chevron.setAttribute('aria-hidden', 'true');
+      button.append(label, count, chevron);
+      button.addEventListener('click', event => {
+        event.preventDefault(); event.stopPropagation();
+        state.view = `group:${group.dataset.modelGroup}`;
+        renderCustomModelPicker(select);
+        // Prefer an actual model over the back button on entry.
+        (state.menu.querySelector('[data-value].is-selected:not(:disabled)')
+          || state.menu.querySelector('[data-value]:not(:disabled)'))?.focus();
+      });
+      state.menu.append(button);
+    }
+    renderReasoningOption(select, state);
   }
 
   // --- Custom: die ganze Aufstellung eines Laufs -------------------------
@@ -732,6 +798,16 @@
     if (!state) return;
 
     state.menu.innerHTML = "";
+    state.menu.setAttribute('role', 'listbox');
+
+    const groups = state.grouped ? Array.from(select.querySelectorAll('optgroup')) : [];
+    const group = groups.find(item => state.view === `group:${item.dataset.modelGroup}`);
+    if (groups.length && !group && state.view !== 'secondary') {
+      state.view = 'groups';
+      renderModelGroups(select, state, groups);
+      syncCustomModelPicker(select);
+      return;
+    }
 
     // Preset-Ebene: Daily/Balanced/High Quality + Custom statt der Modell-Liste.
     if (state.presets && state.view !== "custom" && !isModelListView(state.view)) {
@@ -762,9 +838,10 @@
     if (state.presets) {
       renderBackRow(select, state, pref ? pref.label : "Consensus engine", "custom");
     }
-    if (secondary) renderBackRow(select, state, state.secondaryLabel, 'models');
+    if (group) renderBackRow(select, state, group.label, 'groups');
+    if (secondary) renderBackRow(select, state, state.secondaryLabel, groups.length ? 'groups' : 'models');
 
-    Array.from(targetSelect.options).forEach(option => {
+    Array.from(group ? group.querySelectorAll('option') : targetSelect.options).forEach(option => {
       const item = document.createElement("button");
       item.type = "button";
       item.className = "model-picker-option";
@@ -863,17 +940,7 @@
       state.menu.appendChild(item);
     });
 
-    if (!secondary && state.secondarySelect?.dataset.available === 'true') {
-      const button = document.createElement('button'); button.type = 'button';
-      button.className = 'model-picker-option agent-reasoning-option'; button.tabIndex = -1;
-      button.textContent = `${state.secondaryLabel} · ${state.secondarySelect.selectedOptions[0]?.textContent || 'Auto'} ›`;
-      button.disabled = state.secondarySelect.disabled;
-      button.addEventListener('click', event => {
-        event.stopPropagation(); state.view = 'secondary'; renderCustomModelPicker(select);
-        (state.menu.querySelector('.is-selected:not(:disabled)') || state.menu.querySelector('button:not(:disabled)'))?.focus();
-      });
-      state.menu.append(button);
-    }
+    if (!secondary && !group) renderReasoningOption(select, state);
     syncCustomModelPicker(select);
   }
 
@@ -904,7 +971,12 @@
     if (!parent) return;
     const bounds = parent.getBoundingClientRect();
     const viewport = window.visualViewport;
-    const topEdge = (viewport?.offsetTop || 0) + 12;
+    let topEdge = (viewport?.offsetTop || 0) + 12;
+    // A tall menu must not put its first option under the fixed app navigation.
+    document.querySelectorAll('.app-mobile-header, #viewSwitch').forEach(header => {
+      const rect = header.getBoundingClientRect();
+      if (rect.width && rect.height && rect.bottom < trigger.top) topEdge = Math.max(topEdge, rect.bottom + 8);
+    });
     const bottomEdge = (viewport?.offsetTop || 0) + (viewport?.height || innerHeight) - 12;
     const leftEdge = (viewport?.offsetLeft || 0) + 12;
     const rightEdge = (viewport?.offsetLeft || 0) + (viewport?.width || innerWidth) - 12;
@@ -1020,6 +1092,7 @@
       menuWidth: options.menuWidth,
       secondarySelect: options.secondarySelect,
       secondaryLabel: options.secondaryLabel,
+      grouped: !!options.grouped,
       // Preset-Ebene nur fuer den Consensus-Picker (options.presets) und nur,
       // wenn der Server Presets liefert — sonst unveraendert die Modell-Liste.
       presets: !!options.presets && getConsensusPresets().length > 0,
@@ -1040,6 +1113,8 @@
           event.stopPropagation();
           collapseExpandedModelPicker(select);
           (displayButton || host).focus();
+        } else if (navigateModelGroup(select, event)) {
+          event.preventDefault();
         } else if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
           event.preventDefault();
           const items = Array.from(menu.querySelectorAll("button:not(:disabled)"));
@@ -1053,7 +1128,7 @@
       if (event.key === "Enter" || event.key === " " || event.key === "ArrowDown") {
         event.preventDefault();
         openModelPicker(select);
-        menu.querySelector(".is-selected:not(:disabled), button:not(:disabled)")?.focus();
+        focusPickerMenu(getModelPickerState(select));
       } else if (event.key === "Escape") {
         collapseExpandedModelPicker(select);
       }
