@@ -67,7 +67,9 @@
   }
   function receiveBudget(budget, uid) {
     if (!budget || !catalog || !canUse() || uid !== catalogOwner || uid !== window.auth?.currentUser?.uid) return;
-    if (Number.isFinite(budget.observed_at) && Number.isFinite(catalog.token_budget?.observed_at)
+    if ((budget.config_revision ?? 0) < (catalog.token_budget?.config_revision ?? 0)) return;
+    if ((budget.config_revision ?? 0) === (catalog.token_budget?.config_revision ?? 0)
+      && Number.isFinite(budget.observed_at) && Number.isFinite(catalog.token_budget?.observed_at)
       && budget.observed_at < catalog.token_budget.observed_at) return;
     catalog.token_budget = budget;
     App.sidebarQuota?.sync();
@@ -78,7 +80,7 @@
       if (!user || uid !== user.uid || !canUse()) return;
       const token = await user.getIdToken();
       if (uid !== window.auth?.currentUser?.uid) return;
-      const response = await fetch('/agent/models', { headers: { Authorization: `Bearer ${token}` } });
+      const response = await fetch('/agent/budget', { headers: { Authorization: `Bearer ${token}` } });
       if (!response.ok) return;
       receiveBudget((await response.json()).token_budget, uid);
     } catch (_) { /* Activity polling or the next run can refresh the allowance. */ }
@@ -230,7 +232,11 @@
       if (history) delete history.dataset.agentHistory;
     }
     const recover = document.getElementById("agentRecover");
-    if (recover) recover.hidden = !agent || !["failed", "canceled"].includes(context?.status) || !context?.metadata.requestSent;
+    if (recover) {
+      recover.hidden = !agent || !["failed", "canceled"].includes(context?.status) || !context?.metadata.requestSent || context.metadata.recoverable === false;
+      recover.disabled = Boolean(context?.metadata.recovering);
+      recover.textContent = context?.metadata.recovering ? 'Checking saved answer…' : 'Recover saved answer';
+    }
     if (panel) panel.hidden = !agent || (!context && !basis);
     if (agent && !context && basis) {
       renderAnswer(basis.consensus || "", "", App.agentActivity?.label(basis.currentTurn?.agent_settings) || "Agent · Beta");
@@ -299,9 +305,65 @@
   }
   function apiError(data) {
     const error = data?.error || data?.detail;
-    return typeof error === "string" ? error : error?.error || "The agent request failed.";
+    return typeof error === "string" ? error : error?.error || error?.message || "The agent request failed.";
+  }
+  function acceptAnswer(context, data) {
+    const turn = { ...data.turn, turn_id: data.turn_id };
+    context.consensus.text = context.consensus.streamText = data.response;
+    context.consensus.status = "complete";
+    context.consensus.completedTurn = turn;
+    context.consensus.error = turn.status === "failed" ? { message: "This saved answer is incomplete. Its review did not finish successfully." } : null;
+    context.bookmark.status = "succeeded";
+    context.persistence.consensusWrite = true;
+    context.metadata.recoverable = false;
+    context.phase = "done";
+    const conversation = { runId: context.runId, auth: context.auth, bookmarkId: context.bookmark.id,
+      chatId: data.chat_id, turnId: data.turn_id };
+    window.acceptPersistedConsensusBookmark?.(data.bookmark_meta, conversation);
+    if (registry.isExecuting(context.runId)) registry.setStatus(context.runId, 'succeeded');
+    else {
+      // Only an explicit server-confirmed recovery may replace terminal state.
+      registry.update(context.runId, run => { run.status = 'succeeded'; run.error = null; run.finishedAt = Date.now(); });
+    }
+    registry.setCompletedBasis(context.runId, {
+      ...conversation, executionMode: "agent", question: context.question, consensus: data.response,
+      currentTurn: turn, historyTurns: context.historyTurns, title: context.bookmark.title,
+    });
+  }
+  async function recoverAnswer(context) {
+    if (!context || !registry.isAuthCurrent(context) || !['failed', 'canceled'].includes(context.status)
+        || !context.metadata.requestSent || context.metadata.recoverable === false || context.metadata.recovering) return;
+    let action;
+    try {
+      action = registry.beginAction({ key: 'agent-recovery', ownerRunId: context.runId, bookmarkId: context.bookmark.id });
+      context.metadata.recovering = true;
+      registry.show(context.runId);
+      const token = await window.auth.currentUser.getIdToken();
+      if (!registry.isAuthCurrent(context) || action.controller.signal.aborted) return;
+      const settings = context.config.agentSettings;
+      const result = await window.streamSSERequest('/agent', {
+        chat_id: context.metadata.chatId, question: context.question, client_request_id: context.requestIdentity,
+        bookmark_id: context.bookmark.id, recover_only: true, model_id: settings.model_id,
+        reasoning_effort: settings.reasoning_effort || 'default',
+        comparison_models: Object.keys(context.config.comparisonModels || {}).length ? context.config.comparisonModels : null,
+      }, action.controller.signal, {}, { headers: { Authorization: `Bearer ${token}` } });
+      if (!registry.isAuthCurrent(context) || action.controller.signal.aborted) return;
+      receiveBudget(result.data?.token_budget, context.auth.uid);
+      const recoverable = result.data?.recoverable ?? result.data?.detail?.recoverable;
+      if (typeof recoverable === 'boolean') context.metadata.recoverable = recoverable;
+      if (!result.ok || !result.data?.turn) throw new Error(apiError(result.data));
+      acceptAnswer(context, result.data);
+    } catch (error) {
+      if (action?.controller.signal.aborted || !registry.isAuthCurrent(context)) return;
+      App.showPopup?.(error.message);
+    } finally {
+      context.metadata.recovering = false;
+      if (action) registry.finishAction(action.actionId);
+      if (registry.isAuthCurrent(context)) registry.renderVisible();
+    }
   }
   async function send(recovery = null) {
+    if (recovery) return recoverAnswer(recovery);
     if (!canUse()) { App.showPopup?.("Agent Beta is available to Pro users and admins."); return; }
     if (window.getAttachmentsPayload?.()?.length) {
       App.showPopup?.("Agent Beta currently supports text only. Remove the attachments to continue.");
@@ -421,25 +483,10 @@
       if (!registry.isAuthCurrent(context) || signal.aborted) return;
       receiveBudget(result.data?.token_budget, context.auth.uid);
       terminalBudget = Boolean(result.data?.token_budget);
+      const recoverable = result.data?.recoverable ?? result.data?.detail?.recoverable;
+      if (typeof recoverable === 'boolean') context.metadata.recoverable = recoverable;
       if (!result.ok || result.data?.error || !result.data?.turn) throw new Error(apiError(result.data));
-      const data = result.data;
-      const turn = { ...data.turn, turn_id: data.turn_id };
-      context.consensus.text = data.response;
-      context.consensus.streamText = data.response;
-      context.consensus.status = "complete";
-      context.consensus.completedTurn = turn;
-      if (turn.status === "failed") context.consensus.error = { message: "This saved answer is incomplete. Its review did not finish successfully." };
-      context.bookmark.status = "succeeded";
-      context.persistence.consensusWrite = true;
-      context.phase = "done";
-      const conversation = { runId: context.runId, auth: context.auth, bookmarkId: context.bookmark.id,
-        chatId: data.chat_id, turnId: data.turn_id };
-      window.acceptPersistedConsensusBookmark?.(data.bookmark_meta, conversation);
-      registry.setStatus(context.runId, "succeeded");
-      registry.setCompletedBasis(context.runId, {
-        ...conversation, executionMode: "agent", question, consensus: data.response,
-        currentTurn: turn, historyTurns: context.historyTurns, title: context.bookmark.title,
-      });
+      acceptAnswer(context, result.data);
     } catch (error) {
       if (signal.aborted || error.name === "AbortError" || !registry.isAuthCurrent(context)) return;
       context.consensus.status = "error";

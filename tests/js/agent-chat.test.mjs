@@ -7,7 +7,7 @@ const BODY = `<div id="chatExecutionControl" class="select-wrapper"><select id="
   <div id="agentModelControls"><div class="select-wrapper agent-model-picker"><select id="agentModelDropdown" aria-label="Agent model"></select></div>
   <div class="select-wrapper agent-effort-control"><select id="agentReasoningEffort" aria-label="Agent reasoning effort"></select></div><button id="agentModelsRetry" hidden></button></div>
   <section id="agentAnswer" hidden><div id="agentAnswerLabel"></div>
-  <div id="agentAnswerActivity"></div><div id="agentAnswerBody"></div><p id="agentAnswerError" hidden></p></section>`;
+  <div id="agentAnswerActivity"></div><div id="agentAnswerBody"></div><p id="agentAnswerError" hidden></p><button id="agentRecover" hidden></button></section>`;
 
 const CATALOG = { token_budget: { remaining: 188878, limit: 250000, observed_at: 1 }, default_model_id: "deepseek/deepseek-v4.1-flash", models: [
   { id: "deepseek/deepseek-v4.1-flash", label: "DeepSeek V4.1 Flash", reasoning_efforts: ["default", "low", "high", "max"], reasoning_available: true },
@@ -26,9 +26,9 @@ function boot({ allowed = true } = {}) {
         modelPrefs: [], getModelOptionLabel: option => option?.dataset.modelLabel || option?.textContent || "",
       };
       window.injectMarkdown = (el, markdown) => { el.textContent = markdown; };
-      window.fetch = vi.fn(async url => ({ ok: true, json: async () => url === "/agent/models" ? structuredClone(CATALOG) : ({ chat: { id: "a".repeat(32) } }) }));
+      window.fetch = vi.fn(async url => ({ ok: true, json: async () => url.startsWith('/agent/') ? structuredClone(CATALOG) : ({ chat: { id: "a".repeat(32) } }) }));
       window.streamSSERequest = vi.fn(async (_url, _payload, _signal, handlers) => {
-        handlers.delta.append("Answer");
+        handlers.delta?.append("Answer");
         return { ok: true, data: { response: "Answer", chat_id: "a".repeat(32), turn_id: "b".repeat(32),
           turn: { id: "b".repeat(32), question: "Question", consensus: "Answer", mode: "Agent", execution_mode: "agent" },
           token_budget: structuredClone(CATALOG.token_budget), bookmark_meta: { id: "saved" } } };
@@ -72,13 +72,13 @@ describe("single-model agent chat", () => {
   it('refreshes the allowance after a disconnected stream', async () => {
     const { window, document, dom } = boot();
     await selectAgent(window);
-    window.fetch.mockImplementation(async url => ({ ok: true, json: async () => url === '/agent/models'
+    window.fetch.mockImplementation(async url => ({ ok: true, json: async () => url === '/agent/budget'
       ? { ...CATALOG, token_budget: { remaining: 25000, limit: 250000, observed_at: 2 } } : { chat: { id: 'a'.repeat(32) } } }));
     window.streamSSERequest.mockRejectedValueOnce(new Error('Connection lost'));
     document.getElementById('questionInput').value = 'Question';
     await window.App.agentChat.send();
     expect(window.App.agentChat.tokenBudget().remaining).toBe(25000);
-    expect(window.fetch.mock.calls.map(call => call[0])).toEqual(['/agent/models', '/chats', '/agent/models']);
+    expect(window.fetch.mock.calls.map(call => call[0])).toEqual(['/agent/models', '/chats', '/agent/budget']);
     dom.window.close();
   });
 
@@ -383,11 +383,48 @@ describe("single-model agent chat", () => {
     const failed = window.App.runRegistry.visible();
     expect(failed.status).toBe("failed");
     await window.App.agentChat.send(failed);
-    expect(window.fetch.mock.calls.map(call => call[0])).toEqual(['/agent/models', '/chats', '/agent/models']);
+    expect(window.fetch.mock.calls.map(call => call[0])).toEqual(['/agent/models', '/chats', '/agent/budget']);
     const payload = window.streamSSERequest.mock.calls[1][1];
     expect(payload.recover_only).toBe(true);
     expect(payload.client_request_id).toBe(window.streamSSERequest.mock.calls[0][1].client_request_id);
     expect(window.App.runRegistry.visible().status).toBe("succeeded");
+    expect(window.App.runRegistry.list()).toHaveLength(1);
+    dom.window.close();
+  });
+
+  it('does not offer recovery without a saved answer and deduplicates concurrent recovery clicks', async () => {
+    const {window: w, document: d, dom} = boot();
+    await selectAgent(w);
+    w.streamSSERequest.mockResolvedValueOnce({ok: true, data: {error: 'Not enough reservation', recoverable:false, token_budget:CATALOG.token_budget}});
+    d.getElementById('questionInput').value = 'Question';
+    await w.App.agentChat.send();
+    const run = w.App.runRegistry.visible();
+    expect(d.getElementById('agentRecover').hidden).toBe(true);
+    await w.App.agentChat.send(run);
+    expect(w.streamSSERequest).toHaveBeenCalledTimes(1);
+    run.metadata.recoverable = undefined; // a transport failure has unknown server state
+    let finish;
+    w.streamSSERequest.mockImplementationOnce(() => new Promise(resolve => {finish = resolve;}));
+    const pending = w.App.agentChat.send(run);
+    await vi.waitFor(() => expect(finish).toBeTypeOf('function'));
+    expect(d.getElementById('agentRecover').disabled).toBe(true);
+    await w.App.agentChat.send(run);
+    expect(w.streamSSERequest).toHaveBeenCalledTimes(2);
+    finish({ok:false,data:{error:'This run ended without a saved answer.',recoverable:false}});
+    await pending;
+    expect(w.App.runRegistry.list()).toHaveLength(1);
+    expect(w.App.runRegistry.visible()).toBe(run);
+    expect(d.getElementById('agentRecover').hidden).toBe(true);
+    expect(run.consensus.error.message).toBe('Not enough reservation');
+    dom.window.close();
+  });
+
+  it('keeps a new budget generation when an older worker sends a later snapshot', async () => {
+    const {window:w,dom} = boot(); await selectAgent(w);
+    const budget = {...CATALOG.token_budget,remaining:250000,config_revision:2,observed_at:10};
+    w.App.agentChat.receiveBudget(budget,'owner');
+    w.App.agentChat.receiveBudget({...budget,remaining:100,config_revision:1,observed_at:20},'owner');
+    expect(w.App.agentChat.tokenBudget()).toEqual(budget);
     dom.window.close();
   });
 

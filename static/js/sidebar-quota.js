@@ -118,8 +118,12 @@
 
     var agent = window.App?.agentChat?.isSelected();
     var budget = agent && window.App.agentChat.tokenBudget();
-    var tokens = budget && Number.isFinite(budget.remaining) && Number.isFinite(budget.limit) && budget.limit > 0
-      ? { value: Math.max(0, budget.remaining), limit: budget.limit } : null;
+    // Reservations change while calls run, but are not consumption. The ring
+    // follows measured usage; the panel separately explains available capacity.
+    var unspent = Number.isFinite(budget?.used) ? budget.limit - budget.used
+      : budget?.remaining + (Number.isFinite(budget?.reserved) ? budget.reserved : 0);
+    var tokens = budget && Number.isFinite(unspent) && Number.isFinite(budget.limit) && budget.limit > 0
+      ? { value: Math.max(0, unspent), limit: budget.limit } : null;
     var remaining = tokens ? Math.max(0, Math.min(100, Math.floor(tokens.value / tokens.limit * 100))) : null;
     renderRow("quotaRowRuns", "quotaRunsValue", agent ? tokens : runs);
     var rowTitle = el('quotaRowRuns')?.querySelector('b');
@@ -162,8 +166,8 @@
       var text = agent ? (tokens ? tokens.value.toLocaleString() + ' of ' + tokens.limit.toLocaleString() + ' tokens left. Resets at 00:00 UTC. Pending calls reserve tokens.' : 'Agent allowance unavailable.')
         : countdown ? (countdown.textContent || "").trim() : "";
       if (agent && tokens && Number.isFinite(budget.reserved) && budget.reserved > 0) {
-        text = tokens.value.toLocaleString() + ' of ' + tokens.limit.toLocaleString() + ' tokens available. '
-          + budget.reserved.toLocaleString() + ' reserved for running calls, pending usage and review. Resets at 00:00 UTC.';
+        text = tokens.value.toLocaleString() + ' tokens unspent; ' + Math.max(0, budget.remaining).toLocaleString() + ' available for new calls. '
+          + budget.reserved.toLocaleString() + ' temporarily reserved for running calls, pending usage and review. Resets at 00:00 UTC.';
       }
       foot.textContent = text;
       foot.hidden = !text;

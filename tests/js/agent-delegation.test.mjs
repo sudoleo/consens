@@ -18,6 +18,28 @@ function receive(w, data) {
 }
 
 describe("Agent sidebar", () => {
+  it('uses SSE updates without polling, repairs quiet streams, and never revives a completed run', async () => {
+    const {window:w,dom} = boot();
+    let tick, now = 20000;
+    w.setInterval = fn => {tick=fn;return 1;};
+    w.Date.now = () => now;
+    receive(w,agent()); w.App.agentDelegation.project({chatId,turnId,running:true});
+    await vi.waitFor(() => expect(w.fetch).toHaveBeenCalledTimes(1));
+    await new Promise(r => setTimeout(r,5));
+    now += 9000; receive(w,agent(2)); tick();
+    expect(w.fetch).toHaveBeenCalledTimes(1);
+    now += 10000; tick();
+    await vi.waitFor(() => expect(w.fetch).toHaveBeenCalledTimes(2));
+    await new Promise(r => setTimeout(r,5));
+    Object.defineProperty(w.document,'visibilityState',{value:'hidden',configurable:true});
+    now += 10000; tick(); expect(w.fetch).toHaveBeenCalledTimes(2);
+    Object.defineProperty(w.document,'visibilityState',{value:'visible',configurable:true});
+    w.App.agentDelegation.project({chatId,turnId,running:false});
+    await vi.waitFor(() => expect(w.fetch).toHaveBeenCalledTimes(3));
+    await new Promise(r => setTimeout(r,5));
+    now += 10000; tick(); expect(w.fetch).toHaveBeenCalledTimes(3);
+    dom.window.close();
+  });
   it('shows measured input plus output tokens, with no invented zero or double-counted details', () => {
     const {window: w, document: d, dom} = boot();
     const tokens = w.App.agentDelegation.tokens;

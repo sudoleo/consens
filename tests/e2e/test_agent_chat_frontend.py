@@ -128,9 +128,7 @@ def test_single_agent_send_followup_restore_and_layout(browser, phase4_server, w
         expect(page.locator("#chatExecutionMode")).to_be_disabled()
         expect(page.locator("#agentAnswerLabel")).to_contain_text("GPT-5.6 Sol")
         assert page.locator("#threadAsk").evaluate("el => getComputedStyle(el).display") == "flex"
-        label_box = page.locator("#threadAsk .thread-ask-label").bounding_box()
-        bubble_box = page.locator("#threadAsk .thread-ask-text").bounding_box()
-        assert abs(label_box["x"] + label_box["width"] - bubble_box["x"] - bubble_box["width"]) < 2
+        expect(page.locator("#threadAsk .thread-ask-label")).to_have_count(0)
         expect(page.locator("#agentAnswerActivity .agent-activity-marker")).to_have_count(0)
         page.locator("#questionInput").fill("Now explain the next step")
         page.locator(".agent-model-picker .model-picker-display").click()
@@ -140,6 +138,7 @@ def test_single_agent_send_followup_restore_and_layout(browser, phase4_server, w
         page.wait_for_function("() => App.runRegistry.visible()?.status === 'succeeded' && App.runRegistry.visible().question.includes('next')")
         expect(page.locator("#threadHistory")).to_contain_text("Explain the first step")
         expect(page.locator("#threadHistory")).to_contain_text("GPT-5.6 Sol")
+        expect(page.locator('#threadHistory .thread-ask-label')).to_have_count(0)
         expect(page.locator("#agentAnswerLabel")).to_contain_text("DeepSeek V4.1 Flash")
         expect(page.locator("#agentAnswerActivity")).to_contain_text("I am considering")
         expect(page.locator("#agentAnswerActivity details")).not_to_have_attribute("open", "")
@@ -331,6 +330,7 @@ def test_model_catalog_retry_and_failed_stream(browser, phase4_server):
             else:
                 _json(route, CATALOG)
         page.route("**/agent/models", models)
+        page.route('**/agent/budget', lambda route: _json(route, {'token_budget': {'remaining': 250000, 'limit': 250000}}))
         page.route("**/chats", lambda route: _json(route, {"chat": {"id": "a" * 32}}))
         page.evaluate("async () => { await window.__switchE2EUser('account-a'); }")
         _choose_mode(page, "agent")
@@ -356,12 +356,13 @@ def test_model_catalog_retry_and_failed_stream(browser, phase4_server):
         expect(page.locator("#agentAnswerActivity .agent-activity-title")).to_have_text("Response failed")
         assert page.locator(".agent-activity-title").evaluate("el => getComputedStyle(el).animationName") == "none"
         page.wait_for_function("() => !App.runRegistry.visible()?.controllers.query")
-        assert len(attempts) == 3
+        assert len(attempts) == 2
         _snapshot(page, "agent-error-390")
         page.locator("#agentRecover").click()
         expect(page.locator("#agentAnswerBody")).to_have_text("Recovered saved answer.")
         expect(page.locator("#agentAnswerError")).not_to_be_visible()
         expect(page.locator("#agentRecover")).not_to_be_visible()
+        assert page.evaluate('App.runRegistry.list().length') == 1
         assert len(calls) == 2
         assert calls[1]["recover_only"] is True
         for key in ("client_request_id", "chat_id", "model_id", "reasoning_effort"):
@@ -388,18 +389,21 @@ def test_quota_stream_and_failure_update_existing_percentage(browser, phase4_ser
             const encoder = new TextEncoder();
             return new Response(new ReadableStream({start(controller) {
               window.__quotaEvent = (type, data) => controller.enqueue(encoder.encode('event: ' + type + '\\ndata: ' + JSON.stringify(data) + '\\n\\n'));
-              window.__quotaEvent('quota', {token_budget:{remaining:80000, reserved:100000, limit:250000, observed_at:2}});
+              window.__quotaEvent('quota', {token_budget:{used:61122, remaining:88878, reserved:100000, limit:250000, observed_at:2}});
             }}), {headers:{'Content-Type':'text/event-stream'}});
           };
         }""")
         page.locator('#questionInput').fill('Compare the options')
         page.locator('#sendButton').click()
-        expect(page.locator('#quotaTriggerValue')).to_have_text('32%')
+        expect(page.locator('#quotaTriggerValue')).to_have_text('75%')
         page.evaluate("""() => window.__quotaEvent('error', {
           error:'The next model call needed a reservation of 50,000 tokens; 40,000 were available at that point. The daily budget was not empty.',
-          code:'agent_token_reservation', token_budget:{remaining:40000, reserved:0, limit:250000, observed_at:3}})""")
+          code:'agent_token_reservation', recoverable:false, token_budget:{used:61122, remaining:188878, reserved:0, limit:250000, observed_at:3}})""")
         expect(page.locator('#agentAnswerError')).to_contain_text('daily budget was not empty')
-        expect(page.locator('#quotaTriggerValue')).to_have_text('16%')
+        expect(page.locator('#quotaTriggerValue')).to_have_text('75%')
+        expect(page.locator('#agentRecover')).to_be_hidden()
+        expect(page.locator('.run-status-failed')).to_have_count(1)
+        expect(page.locator('.thread-ask-label')).to_have_count(0)
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth + 1')
         _snapshot(page, f'agent-budget-failure-{width}')
     finally:

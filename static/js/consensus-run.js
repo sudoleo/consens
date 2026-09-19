@@ -298,13 +298,10 @@
 
       const question = document.createElement("div");
       question.className = "thread-history-question";
-      const questionLabel = document.createElement("div");
-      questionLabel.className = "thread-ask-label";
-      questionLabel.textContent = "Question";
       const questionText = document.createElement("div");
       questionText.className = "thread-history-question-text";
       questionText.textContent = normalizedQuestion;
-      question.append(questionLabel, questionText);
+      question.append(questionText);
 
       // Anhaenge bleiben an ihrer Nachricht, auch wenn der Turn in den
       // Verlauf rutscht.

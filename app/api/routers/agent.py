@@ -5,6 +5,7 @@ import logging
 from dataclasses import replace
 from typing import Literal
 from fastapi import APIRouter, HTTPException, Request, Query
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from firebase_admin import firestore
 
@@ -112,6 +113,15 @@ def available_agent_models(request: Request):
                         headers={"Cache-Control": "private, no-store"})
 
 
+@router.get("/agent/budget")
+@limiter.limit("60/minute")
+def available_agent_budget(request: Request):
+    uid = _chat_uid(request)
+    require_agent_access(uid)
+    return JSONResponse({"token_budget": agent_quota.snapshot(db_firestore, uid)},
+                        headers={"Cache-Control": "private, no-store"})
+
+
 @router.post("/agent")
 @limiter.limit("30/minute")
 def run_agent(request: Request, payload: AgentRequest):
@@ -144,9 +154,13 @@ def run_agent(request: Request, payload: AgentRequest):
                 return _final(uid, payload, store, existing)
             if payload.recover_only and existing["status"] == "failed" and existing.get("agent_review") and existing.get("consensus"):
                 return _final(uid, payload, store, existing)
-            raise HTTPException(status_code=409, detail="This request has already started. Reopen the saved conversation or send a new message after it finishes.")
+            failed = existing["status"] == "failed"
+            return JSONResponse({"error": "This run ended without a saved answer. Send a new message to try again." if failed
+                else "This request is still running. You can check its saved answer after it finishes.",
+                "code": "answer_unavailable" if failed else "request_running", "recoverable": not failed}, status_code=409)
         if payload.recover_only:
-            raise HTTPException(status_code=404, detail="No saved answer is available for this request yet.")
+            return JSONResponse({"error": "No saved answer is available for this request.",
+                "code": "answer_unavailable", "recoverable": False}, status_code=404)
         try:
             model = configured_model(resolve_agent_model(payload.model_id, payload.reasoning_effort))
         except ValueError as exc:
@@ -247,6 +261,8 @@ def run_agent(request: Request, payload: AgentRequest):
             for event in loop._events():
                 yield sse_pack(event["type"], event)
             interrupted = _save_interrupted(uid, payload, store, turn["id"])
+            if interrupted is not None:
+                failure["recoverable"] = bool(interrupted.get("agent_review") and interrupted.get("consensus"))
             if interrupted and interrupted.get("agent_review"):
                 yield sse_pack("review", {"review": interrupted["agent_review"]})
             yield sse_pack("activity", {"version": 1, "step_id": "run", "id": "run/usage", "kind": "usage", "usage": completion.usage})
@@ -261,7 +277,7 @@ def run_agent(request: Request, payload: AgentRequest):
             yield sse_pack("final", _final(uid, payload, store, completed))
         except Exception as exc:
             logging.warning("Agent bookmark failed category=%s", safe_exception(exc))
-            yield sse_pack("error", {"error": "The answer was saved to chat history, but its bookmark could not be saved. Retry this request to recover it."})
+            yield sse_pack("error", {"error": "The answer was saved to chat history, but its bookmark could not be saved. Recover the saved answer to reopen it.", "recoverable": True})
 
     def stream_events():
         if not lease.start():

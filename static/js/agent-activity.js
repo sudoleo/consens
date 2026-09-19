@@ -118,7 +118,7 @@
           node.dataset.signature = signature;
           node.dataset.status = item.status;
           const title = document.createElement("strong");
-          const toolStatus = { running: "Working…", succeeded: "Completed", failed: "Failed", blocked: "Not allowed", cancelled: "Stopped", unknown: "Usage unavailable" };
+          const toolStatus = { running: "Working…", succeeded: "Completed", failed: "Failed", blocked: "Skipped · budget reserve", cancelled: "Stopped", unknown: "Usage unavailable" };
           const count = Number.isInteger(item.count) && item.count > 0 ? ` · ${item.count} ${item.count === 1 ? "search" : "searches"}` : "";
           title.textContent = `${toolNames[item.name] || "Tool"} · ${toolStatus[item.status] || "Details"}${count}`;
           node.replaceChildren(title);

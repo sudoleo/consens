@@ -9,7 +9,7 @@ from uuid import uuid4
 from firebase_admin import firestore
 
 from app.services import persistence_guard
-from app.services import agent_quota
+from app.services import agent_quota, agent_budget_config
 from app.services.agent_costs import aggregate_usage, remaining_reservation
 from app.services.agent_runtime import AgentCapacityExceeded
 from app.services.chat_store import ChatNotFound, TurnStatusConflict
@@ -30,6 +30,7 @@ class AgentSessionStore:
         user_ref, active_ref = self.db.collection("users").document(uid), self.active_ref(uid)
         agent_id = step.split(":")[1] if step.startswith("agent:") else "orchestrator"
         index = int(step.split(":")[-1])
+        budget_config = agent_budget_config.get_config(self.db)
 
         def operation(tx):
             persistence_guard.ensure_account_write_allowed(uid=uid, db=self.db, transaction=tx)
@@ -70,7 +71,7 @@ class AgentSessionStore:
             if agent is not None and (not agent.exists or (agent.to_dict() or {}).get("status") in {"stopped", "failed"}):
                 raise TurnStatusConflict("Worker session is not runnable")
             tokens, cost = reservation
-            day = agent_quota.day_key()
+            day = agent_quota.period_key(budget_config)
             daily_ref = agent_quota.quota_ref(self.db, uid, day)
             daily = daily_ref.get(transaction=tx).to_dict() or {}
             # Review/synthesis can spend this run's protected budget; workers
@@ -81,12 +82,12 @@ class AgentSessionStore:
                 previous_daily_ref = agent_quota.quota_ref(self.db, uid, data["quota_day"])
                 previous_daily = previous_daily_ref.get(transaction=tx).to_dict() or {}
                 previous_daily["reserved"] = max(0, previous_daily.get("reserved", 0) - protected)
-                daily = agent_quota.reserve(daily, protected)
+                daily = agent_quota.reserve(daily, protected, limit=budget_config['daily_token_limit'])
             can_spend = agent_id == "orchestrator" or (agent and (agent.to_dict() or {}).get("kind") == "judge")
             spend = min(protected, tokens) if can_spend else 0
             cost_hold = data.get("review_cost_hold", 0)
             cost_spend = min(cost_hold, cost) if can_spend else 0
-            daily = agent_quota.reserve(daily, tokens - spend)
+            daily = agent_quota.reserve(daily, tokens - spend, limit=budget_config['daily_token_limit'])
             if (len(states) >= limits["max_calls"] or data["reserved_tokens"] + tokens > limits["max_tokens"]
                     or data["reserved_cost"] + cost + cost_hold - cost_spend > limits["max_cost_nano_usd"]):
                 raise AnalysisBudgetExceeded("The shared agent budget was reached.")
@@ -125,20 +126,32 @@ class AgentSessionStore:
     def protect_review(self, uid, chat_id, turn_id, run_token, tokens, cost=0):
         """Atomically protect synthesis/judges from all other concurrent runs."""
         ref = self.receipt_ref(uid, chat_id, turn_id)
+        budget_config = agent_budget_config.get_config(self.db)
         def operation(tx):
             persistence_guard.ensure_account_write_allowed(uid=uid, db=self.db, transaction=tx)
             root = ref.get(transaction=tx).to_dict() or {}
             if root.get("run_token") != run_token or root.get("run_status") != "running":
                 raise TurnStatusConflict("Agent run is closed")
-            daily_ref = agent_quota.quota_ref(self.db, uid, root["quota_day"])
+            day = agent_quota.period_key(budget_config)
+            daily_ref = agent_quota.quota_ref(self.db, uid, day)
             daily = daily_ref.get(transaction=tx).to_dict() or {}
-            extra = max(0, tokens - root.get("review_hold", 0))
-            daily = agent_quota.reserve(daily, extra)
+            protected = root.get("review_hold", 0)
+            previous_ref = None
+            if root["quota_day"] != day:
+                previous_ref = agent_quota.quota_ref(self.db, uid, root["quota_day"])
+                previous = previous_ref.get(transaction=tx).to_dict() or {}
+                previous["reserved"] = max(0, previous.get("reserved", 0) - protected)
+                extra = max(tokens, protected)
+            else:
+                extra = max(0, tokens - protected)
+            daily = agent_quota.reserve(daily, extra, limit=budget_config['daily_token_limit'])
             protected_cost = max(cost, root.get("review_cost_hold", 0))
             if root["reserved_cost"] + protected_cost > root["policy"]["max_cost_nano_usd"]:
                 raise AnalysisBudgetExceeded("Not enough cost budget for synthesis and review")
             tx.set(daily_ref, daily)
-            tx.update(ref, {"review_hold": root.get("review_hold", 0) + extra, "review_cost_hold": protected_cost})
+            if previous_ref:
+                tx.set(previous_ref, previous)
+            tx.update(ref, {"quota_day": day, "review_hold": max(tokens, protected), "review_cost_hold": protected_cost})
         self._transaction(operation)
 
     def save_review(self, uid, chat_id, turn_id, run_token, review, text):
@@ -235,8 +248,7 @@ class AgentSessionStore:
 
     def delegation_view(self, uid, chat_id, turn_id, *, agent_id=None, after=0, limit=50):
         turn = self.get_turn(uid, chat_id, turn_id)
-        self.reap_delegation(uid, chat_id, turn_id)
-        root = self.receipt_ref(uid, chat_id, turn_id).get().to_dict() or {}
+        root = self.reap_delegation(uid, chat_id, turn_id)
         if agent_id:
             ref = self.agent_ref(uid, chat_id, turn_id, agent_id)
             agent = ref.get()
@@ -257,7 +269,7 @@ class AgentSessionStore:
         root = ref.get().to_dict() or {}
         if (root.get("run_status") != "running" or not (root.get("policy") or {}).get("delegation")
                 or root["lease_until"] > datetime.now(timezone.utc)):
-            return
+            return root
         self.stop_delegation(uid, chat_id, turn_id)
         for step, state in root["step_states"].items():
             if state == "running":
@@ -276,3 +288,4 @@ class AgentSessionStore:
         data = ref.get().to_dict()
         value.usage = aggregate_usage(list(data.get("step_usage", {}).values()))
         self.finish_run(uid, chat_id, turn_id, completion=value, status="cancelled", run_token=root["run_token"])
+        return ref.get().to_dict() or {}

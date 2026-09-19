@@ -1606,13 +1606,19 @@ für Pro-Nutzer und Admins. Der alte Agent-Mode-Schalter gehört weiterhin zur
 unveränderten Consensus-Pipeline. POST /agent besitzt strikte owner-gebundene
 Chat-/Turn-/Request-Identitäten; recover_only startet niemals Modellaufrufe.
 Fertige Antworten sowie gespeicherte fehlgeschlagene Vergleichsantworten können
-mit exakt derselben Auswahl wiedergegeben werden. /agent/models liefert den
+mit exakt derselben Auswahl wiedergegeben werden. Recovery ist eine deduplizierte
+Registry-Aktion am bestehenden Lauf; sie erzeugt weder einen neuen lokalen
+Bookmark-Eintrag noch einen Modellaufruf. Terminale Fehler liefern recoverable;
+ohne gespeicherte Antwort verschwindet der Link. Bei unbekanntem Transportstatus
+bleibt die reine Lese-Wiederherstellung möglich. /agent/models liefert den
 bestehenden Daily-Chatmodellkatalog plus konfigurierten Standard und token_budget.
 Die Quote wird außerdem beim Start/Settlement als `quota`-SSE, in terminalen
 Fehlern und beim vorhandenen Agent-Listenpoll geliefert. `observed_at` ordnet
-Snapshots; agent-chat.js ignoriert ältere/fremde Kontenwerte und lädt nach
-Transportabbruch das Kontingent erneut. Der Sidebar-Ring bleibt dadurch auch
-nach fehlgeschlagenen Läufen aktuell, inklusive reservierter Tokens im Panel.
+Snapshots; agent-chat.js ignoriert ältere/fremde Kontenwerte und niedrigere
+Konfigurationsrevisionen. Nach Transportabbruch lädt GET /agent/budget nur das
+Kontingent neu. Der Sidebar-Ring zeigt (Limit − gemessener Verbrauch) / Limit;
+vorläufige Reservierungen ändern die Prozentzahl nicht. Im Panel stehen zusätzlich
+die tatsächlich für neue Calls verfügbaren und die reservierten Tokens.
 
 **Auswahl und Orchestrierung.** agent-chat.js trennt Chatmodell/Denkstufe vom
 bestehenden Consensus-Preset-/Model-Picker: consensusModelDropdown erhält
@@ -1716,6 +1722,11 @@ Judge-Details werden aus dem bestehenden öffentlichen Sitzungs-Snapshot sofort
 gerendert (Zweck, Fortschritt, Status, Tokenaufschlüsselung), ohne Detail- oder
 Nachrichtenabfrage. Worker-/Vergleichsdetails laden weiter nur bei Bedarf,
 zeigen sofort einen Skeleton und nutzen den vorhandenen message_seq-Cache.
+Live-SSE ersetzt regelmäßige Vollabfragen: erst nach zehn Sekunden ohne Session-
+Update wird reparierend gepollt, nur bei sichtbarem Browser-Tab. Am Laufende folgt
+ein finaler Abgleich; ein älterer Poll darf einen beendeten Lauf nicht reaktivieren.
+delegation_view verwendet den Receipt-Snapshot der Lease-Prüfung erneut und spart
+dadurch eine doppelte Dokumentabfrage.
 App.createModelMark löst Anbieter/Modelle über
 MODEL_FAMILIES inklusive apiPrefix auf; unbekannte Modelle erhalten ein Initial.
 Die Icons sind 15px groß. Im Composer öffnet das Chatmodellmenü über die
@@ -1746,12 +1757,21 @@ Fehlende Coverage, fehlende Sätze, gekürzte Grundlagen und ausgefallene Modell
 werden nicht als vollständig geprüft dargestellt.
 
 **Tokenkontingent und Kosten.** agent_quota.py ist die zentrale UTC-Tagesquote:
-AGENT_DAILY_TOKEN_LIMIT (Default 250000) pro UID. Gezählt wird ausschließlich
+app_config/agent_budget.daily_token_limit pro UID; ohne DB-Einstellung gilt
+AGENT_DAILY_TOKEN_LIMIT (Default 250000). agent_budget_config.py liest die globale
+Einstellung mit 30 Sekunden Cache je Prozess/DB. Admin → Limits verwendet
+GET/PUT /api/admin/agent-budget und POST /api/admin/agent-budget/reset mit
+Admin-Rollenprüfung, strikter Eingabe und erwarteter revision. Jede Änderung
+schreibt eine Audit-Revision. Reset wechselt reset_epoch für alle Agent-Konten,
+ohne Nutzer-Scan oder Löschung der Usage-Historie. Laufende Calls settlen in ihrer
+ursprünglichen Generation; nur ungenutzte Review-Holds wandern vor weiteren
+Claims/Prüfungen mit. Veraltete Admin-Requests scheitern mit 409, DB-Fehler werden
+nicht als erfolgreiche Änderungen ausgegeben. Gezählt wird ausschließlich
 Provider-Input + Provider-Output. Cached input und cache writes sind Teil des
 Inputs; reasoning ist Teil des Outputs. Provider-Gesamtkosten haben Vorrang vor
 Katalogschätzungen; sie bleiben als zusätzliche, separate Kostenkontrolle aktiv.
 Jeder Claim reserviert transaktional im selben Commit wie sein Beleg unter
-users/{uid}/chat_state/agent_tokens_YYYY-MM-DD. Settlement tauscht die Reserve
+users/{uid}/chat_state/agent_tokens_YYYY-MM-DD[_reset_epoch]. Settlement tauscht die Reserve
 gegen gemessene Tokens genau einmal aus. Fehlende Tokenzahlen behalten ihre
 Reserve und erscheinen separat als unknown, niemals als erfundener Verbrauch.
 Auch Abbrüche, Fehler und Judge-Wiederholungen zählen. Tageswechsel migrieren

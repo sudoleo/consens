@@ -311,6 +311,15 @@ def test_provider_error_after_usage_still_records_cost(api, monkeypatch):
     assert error["token_budget"]["used"] == 1100
     assert error["token_budget"]["reserved"] == 0
     assert error["token_budget"]["remaining"] == 248900
+    assert error['recoverable'] is False
+    count = len(store.db.documents)
+    for _ in range(3):
+        retry = client.post('/agent', json={'chat_id': chat_id, 'question': 'Hi', 'client_request_id': 'failed',
+            'bookmark_id': 'bm1', 'recover_only': True}, headers=AUTH)
+        assert retry.status_code == 409
+        assert retry.json()['recoverable'] is False
+        assert retry.json()['code'] == 'answer_unavailable'
+    assert len(store.db.documents) == count
     turn = store.list_turns(UID, chat_id)["turns"][0]
     data = client.get(f"/agent/chats/{chat_id}/turns/{turn['id']}/agents", headers=AUTH).json()
     assert data["token_budget"]["remaining"] == 248900
@@ -328,6 +337,10 @@ def test_quota_failure_returns_current_allowance_and_reservation_reason(api):
     assert error["code"] == "agent_token_reservation"
     assert error["token_budget"]["remaining"] == error["available_tokens"] == 100
     assert error["required_tokens"] > 100
+    assert error['recoverable'] is False
+    budget = client.get('/agent/budget', headers=AUTH)
+    assert budget.status_code == 200 and budget.json()['token_budget']['remaining'] == 100
+    assert budget.headers['cache-control'] == 'private, no-store'
     assert calls == []
 
 

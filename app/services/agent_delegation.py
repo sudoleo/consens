@@ -332,7 +332,7 @@ class DelegationLoop(AgentLoop):
                     yield {"type": "started", "chat_id": self.chat_id, "turn_id": self.turn_id, "delegation": True}
                 if search_limited:
                     yield self.tool_event(step + ":web_search", "web_search", "blocked",
-                        text="Continuing with existing sources; the remaining allowance cannot reserve another web search.")
+                        text="Web search was skipped for this step: available tokens do not cover the search and its follow-up response. Continuing with existing sources.")
                 yield self.status(step, "started", status="working", settings=model.settings(),
                                   clear_response=step != "completion:0" and not (self.comparison and self.comparison.text))
             if self.mock_answer is not None:

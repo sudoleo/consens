@@ -810,6 +810,12 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
   Details erscheinen sofort ohne Detailrequest; Worker zeigen beim ersten
   Laden einen Skeleton, beim erneuten Öffnen den Cache ohne weiteren Request.
 - [ ] Desktop und 390/320px, Hell/Dunkel, Tastatur und Reduced Motion prüfen.
+- [ ] Agent-Budget: Reservierung und Freigabe ohne gemessenen Verbrauch verändern
+  den Prozentwert nicht; der Kontingent-Dialog zeigt Reserven separat. Admin →
+  Limits speichert das Tageslimit und kann alle Agent-Budgets zurücksetzen.
+- [ ] Bekannter Fehler ohne gespeicherte Antwort zeigt keinen Recovery-Link.
+  Nach Transportabbruch erzeugt Recovery auch bei Mehrfachklicks keinen weiteren
+  Failed-Bookmark. „Question“ steht weder über aktuellen noch früheren Fragen.
 - [ ] Überlappende Modell-Icons oberhalb der Antwort zeigen die richtigen Anbieter,
   auch Kimi, GLM und Muse. Mehrere Aufrufe desselben Modells bleiben in Activity
   einzeln sichtbar. Denkfortschritt bleibt kurz und als Zusammenfassung/Auszug

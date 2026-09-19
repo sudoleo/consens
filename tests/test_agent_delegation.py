@@ -153,6 +153,16 @@ def test_worker_failure_reports_unknown_cost_and_orchestrator_can_finish_fallbac
     assert totals(store)["estimated_cost_nano_usd"] == (loop.costs.calls - 1) * 200_000
 
 
+def test_activity_view_reuses_the_receipt_read_for_lease_check(store):
+    loop = make_loop(store)
+    assert store.claim(UID, loop.chat_id, loop.turn_id, loop.model, run_token=loop.run_token,
+                       policy=loop.policy.snapshot(), reservation=(100, 100))
+    store.db.read_log.clear()
+    assert store.delegation_view(UID, loop.chat_id, loop.turn_id)['status'] == 'running'
+    path = store.receipt_ref(UID, loop.chat_id, loop.turn_id).path
+    assert store.db.read_log.count(path) == 1
+
+
 def test_atomic_durable_and_memory_budget_reservations(store):
     loop = make_loop(store)
     policy = replace(loop.policy, max_cost_nano_usd=100)

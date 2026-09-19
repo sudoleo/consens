@@ -20,6 +20,7 @@ from app.core.config import get_limits_config, load_models_from_db, normalize_li
 from app.services import share_snapshots as snapshots
 from app.services import (
     account_tier,
+    agent_budget_config,
     mailer,
     persistence_guard,
     publisher_config,
@@ -168,6 +169,52 @@ def _require_admin(request, data):
 
 
 _SHARE_ERROR_STATUS = {"not_found": 404, "bad_request": 400}
+
+
+class AgentBudgetRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    revision: int = Field(ge=0)
+    daily_token_limit: int = Field(ge=1, le=agent_budget_config.MAX_DAILY_TOKENS)
+
+
+class AgentBudgetResetRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    revision: int = Field(ge=0)
+
+
+@router.get("/api/admin/agent-budget")
+def admin_get_agent_budget(request: Request):
+    _require_admin(request, {})
+    try:
+        return {"config": agent_budget_config.store(db_firestore).read(force=True),
+                "cache_seconds": agent_budget_config.CACHE_SECONDS}
+    except Exception as exc:
+        logging.error("Agent budget read failed category=%s", safe_exception(exc))
+        raise HTTPException(status_code=503, detail="Agent budget could not be loaded.") from None
+
+
+def _save_agent_budget(uid, revision, **changes):
+    try:
+        return {"config": agent_budget_config.store(db_firestore).save(expected_revision=revision, updated_by=uid, **changes)}
+    except agent_budget_config.BudgetConfigConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+    except Exception as exc:
+        logging.error("Agent budget write failed category=%s", safe_exception(exc))
+        raise HTTPException(status_code=503, detail="Agent budget could not be updated. Reload to check its revision before retrying.") from None
+
+
+@router.put("/api/admin/agent-budget")
+@limiter.limit("20/minute")
+def admin_save_agent_budget(request: Request, data: AgentBudgetRequest):
+    uid = _require_admin(request, {})
+    return _save_agent_budget(uid, data.revision, daily_token_limit=data.daily_token_limit)
+
+
+@router.post("/api/admin/agent-budget/reset")
+@limiter.limit("3/minute")
+def admin_reset_agent_budgets(request: Request, data: AgentBudgetResetRequest):
+    uid = _require_admin(request, {})
+    return _save_agent_budget(uid, data.revision, reset=True)
 
 
 @router.get("/api/admin/prompt-config")

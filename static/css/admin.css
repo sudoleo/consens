@@ -488,6 +488,12 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 16px;
 }
+
+.agent-budget-controls { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 12px; }
+.agent-budget-controls label { display: grid; gap: 6px; font-size: 13px; }
+.agent-budget-controls input { width: 180px; max-width: 100%; padding: 9px 12px; border: 1px solid var(--line); border-radius: 8px; color: var(--ink); background: var(--well); }
+#agentBudgetStatus { font-size: 13px; }
+#agentBudgetStatus.is-error { color: var(--dispute); }
 .limit-row {
     display: grid;
     grid-template-columns: minmax(160px, 1fr) 130px;

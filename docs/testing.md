@@ -137,6 +137,13 @@ Agentenleiste: `agent-delegation.test.mjs` prüft gemessene Tokenzahlen (ohne
 Doppelzählung), sofortige Judge-Details ohne weitere Requests und Skeleton/
 Cache für Worker. `test_agent_delegation_frontend.py` prüft diese Abläufe mit
 gedrosseltem Detailabruf, sanfter Öffnung und Reduced Motion auf Desktop/Mobil.
+Budget/Recovery: `test_agent_budget_config.py` prüft Adminrechte, strikte Limits,
+Revisionen, Cache und Reset ohne Nutzer-Scan. `test_agent_comparison.py` prüft
+Reset während laufender Calls und Migration ungenutzter Prüfreserven;
+`agent-chat.test.mjs` prüft deduplizierte Recovery ohne neue Run-Einträge sowie
+veraltete Budgetgenerationen. Sidebar-Tests trennen Reserven vom Prozentverbrauch
+und prüfen SSE statt Vollpolling. `test_admin_agent_budget.py` prüft Speichern/
+Reset im echten Admin-Frontend auf Desktop und 390/320px.
 `test_agent_comparison.py` prüft die Zulassung ohne optionale Suche bei zu großer
 Suchreserve und verhindert dabei doppelte Calls/Belege. `test_agent_runs.py`
 prüft Quote und konkrete Reservierungsfehler in terminalen SSE-Ereignissen.

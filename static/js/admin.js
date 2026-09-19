@@ -2,11 +2,13 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebas
 import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
 import { createAdminClient } from "/static/js/admin-api.js?v=20260901-plustier1";
 import { createPromptConfigPanel } from "/static/js/admin-prompt-config.js?v=20260916-delegation1";
+import { createAgentBudgetPanel } from "/static/js/admin-agent-budget.js?v=20260919-budget1";
 
 const app = initializeApp(window.FIREBASE_CONFIG);
 const auth = getAuth(app);
 const shareAdminRequest = createAdminClient(auth);
 const promptConfigPanel = createPromptConfigPanel(shareAdminRequest);
+const agentBudgetPanel = createAgentBudgetPanel(shareAdminRequest);
 
 let providers = [];
 const limitGroups = [
@@ -96,7 +98,8 @@ activateTab((location.hash || '').replace('#', ''));
 // ==============================
 // Dirty-Tracking
 // ==============================
-function markDirty() {
+function markDirty(event) {
+    if (event?.target?.closest?.('#agentBudgetForm')) return;
     document.getElementById('adminSavebar').classList.add('is-dirty');
 }
 function clearDirty() {
@@ -3534,6 +3537,7 @@ document.getElementById('collectSeoBtn').addEventListener('click', async functio
 
 onAuthStateChanged(auth, async (user) => {
     promptConfigPanel.setUser(user?.uid || null);
+    agentBudgetPanel.setUser(user?.uid || null);
     if (user) {
         const idToken = await user.getIdToken();
         fetchModels(idToken);

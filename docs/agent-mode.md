@@ -89,11 +89,19 @@ laufenden Protokoll und werden nicht als sichtbare Aktivität gespeichert.
 
 ## Tageskontingent
 
-AGENT_DAILY_TOKEN_LIMIT ist zentral über die Umgebung konfigurierbar und beträgt
-standardmäßig 250000 Tokens pro UID und UTC-Tag (Reset um 00:00 UTC). Der bestehende
+Das Tagesbudget ist in Admin → Limits separat speicherbar und liegt in
+app_config/agent_budget. Ohne gespeicherte Einstellung gilt AGENT_DAILY_TOKEN_LIMIT,
+standardmäßig 250000 Tokens pro UID und UTC-Tag (Reset um 00:00 UTC). Der Button
+„Reset all Agent budgets“ setzt das Agent-Kontingent aller Konten über eine neue
+Budgetgeneration zurück, ohne Nutzer-Scan. Begonnene Aufrufe rechnen weiter gegen
+ihre ursprüngliche Generation ab. Einstellungen greifen spätestens beim nächsten
+Config-Refresh nach 30 Sekunden; der Admin-Client verwendet Revisionsschutz.
+Der bestehende
 Kontingent-Ring im Sidebar-Footer zeigt im Agent-Chat den verbleibenden Anteil
-als abgerundete Prozentzahl. Sein Panel enthält die exakten Tokenzahlen und
-Reset-Zeit. Consensus zeigt dort weiterhin das Run-Limit; der Composer enthält
+als abgerundete Prozentzahl des noch unverbrauchten Budgets: Limit minus
+gemessene verbrauchte Tokens. Reservierungen lassen die Anzeige nicht mehr springen.
+Sein Panel trennt unverbrauchte, für neue Calls verfügbare und reservierte Tokens
+und enthält die Reset-Zeit. Consensus zeigt dort weiterhin das Run-Limit; der Composer enthält
 keine Budgetzeile. Das Kontingent gilt gemeinsam für Chat, delegierte Worker,
 Vergleichsmodelle und alle Judge-/Repair-/Retry-Aufrufe.
 
@@ -118,6 +126,14 @@ Kann die optionale Suche nicht reserviert werden, darf derselbe Schritt vor
 jedem Provider-Aufruf ohne Suche neu zugelassen werden. Das Modell wird über
 fehlende neue Recherche informiert; reicht auch die reine Antwort nicht ins
 Budget, endet der Lauf weiterhin vor dem bezahlten Aufruf.
+Web Search bleibt nach Reasoning und Tool-Fortsetzungen erlaubt. „Skipped ·
+budget reserve“ bezeichnet eine unzureichende Reserve für Suchkontext und
+Folgeantwort, kein generelles Suchverbot nach dem Denken.
+
+„Recover saved answer“ prüft denselben Lauf mit derselben Request-Identität.
+Mehrfachklicks werden zusammengeführt; es entsteht kein weiterer Bookmark.
+Bei einem bekannten Fehler ohne gespeicherte Antwort wird Recovery ausgeblendet.
+Nach einem Transportabbruch bleibt eine reine Wiederherstellungsabfrage möglich.
 
 Toolnamen in Reasoning-Auszügen bleiben normaler Text. Nur bestätigte laufende
 Tool-Aufrufe erhalten eine dezente Statuszeile. Thinking bleibt geschlossen.
@@ -126,6 +142,10 @@ Dollarbeträgen; unbekannte/teilweise Usage bleibt erkennbar. Judge-Details
 erscheinen sofort aus bereits geladenen Sitzungsdaten, ohne zusätzlichen
 Datenbankabruf. Andere Details zeigen beim ersten Laden einen Skeleton und
 bleiben anschließend im Cache. Reduced Motion deaktiviert die Animationen.
+Während Live-Session-Ereignisse eintreffen, entfallen die früheren 2,5-Sekunden-
+Vollabfragen. Nach zehn Sekunden ohne Update wird bei sichtbarem Tab abgeglichen;
+am Ende wird der terminale Zustand noch einmal geladen. Die Lease-Prüfung teilt
+ihren Receipt-Snapshot mit der Listenansicht, statt ihn doppelt zu lesen.
 
 Vor einem Vergleich schützt der Server zusätzliche Tokens und Kosten für
 Synthese und Judges gegen andere parallele Runs und Worker. Zu wenig verfügbares

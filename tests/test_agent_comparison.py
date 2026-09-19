@@ -5,7 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
-from app.services import agent_quota
+from app.services import agent_quota, agent_budget_config
 from app.services.agent_comparison import comparison_selection, review_is_bound
 from app.services.agent_delegation import DelegationLoop
 from app.services.agent_delegation_config import defaults
@@ -165,6 +165,32 @@ def test_quota_rejection_distinguishes_empty_from_insufficient_reservation(remai
     if remaining:
         assert "not empty" in str(error.value)
     assert "reserved" not in data
+
+
+def test_admin_budget_is_enforced_and_reset_isolated_from_inflight_settlement(store):
+    config = agent_budget_config.store(store.db)
+    config.save(expected_revision=0, updated_by='admin', daily_token_limit=2000)
+    loop = make_loop(store, Script())
+    params = dict(run_token=loop.run_token, policy=loop.policy.snapshot())
+    with pytest.raises(agent_quota.AgentTokenBudgetExceeded):
+        store.claim(UID, loop.chat_id, loop.turn_id, loop.model, reservation=(2001, 100), **params)
+    assert store.claim(UID, loop.chat_id, loop.turn_id, loop.model, reservation=(1500, 100), **params)
+    store.protect_review(UID, loop.chat_id, loop.turn_id, loop.run_token, 400)
+    assert agent_quota.snapshot(store.db, UID)['remaining'] == 100
+    config.save(expected_revision=1, updated_by='admin', reset=True)
+    assert agent_quota.snapshot(store.db, UID)['remaining'] == 2000
+    store.settle(UID, loop.chat_id, loop.turn_id, completion=receipt(), status='succeeded', final=False)
+    assert agent_quota.snapshot(store.db, UID)['used'] == 0
+    # Review holds move once to the fresh generation before further work.
+    store.protect_review(UID, loop.chat_id, loop.turn_id, loop.run_token, 600)
+    assert agent_quota.snapshot(store.db, UID)['reserved'] == 600
+    old = agent_quota.quota_ref(store.db, UID, agent_quota.day_key()).get().to_dict()
+    assert old['used'] == 1100 and old['reserved'] == 0
+    assert store.claim(UID, loop.chat_id, loop.turn_id, loop.model, step='completion:1', reservation=(800, 100), **params)
+    assert agent_quota.snapshot(store.db, UID)['reserved'] == 800
+    store.settle(UID, loop.chat_id, loop.turn_id, completion=receipt(), status='succeeded', step='completion:1', final=False)
+    assert agent_quota.snapshot(store.db, UID)['used'] == 1100
+
 
 
 @pytest.mark.parametrize("remaining,succeeds,context_room", [(70000, True, None), (100, False, None), (70000, False, 0)])

@@ -53,7 +53,7 @@
       try { saved = JSON.parse(sessionStorage.getItem(`agent-view:${key}`) || "{}"); } catch (_) {}
       views.set(key, { key, uid: owner, chatId, turnId, agents: new Map(), details: new Map(),
         controller: new AbortController(), expanded: new Set(saved.expanded || []), closed: !!saved.closed,
-        scroll: saved.scroll || 0, loaded: false, loading: false, running: false, usage: null });
+        scroll: saved.scroll || 0, loaded: false, loading: false, running: false, usage: null, lastSync: 0 });
       if (views.size > 24) {
         const old = [...views.values()].find(v => v.key !== current?.key && !v.running);
         if (old) { old.controller.abort(); views.delete(old.key); }
@@ -74,6 +74,7 @@
     context.metadata.agentTurnId = event.turn_id;
     context.metadata.delegation = true;
     const view = get(event.chat_id, event.turn_id);
+    view.lastSync = Date.now();
     merge(view, event.agent);
     if (current === view) render();
   }
@@ -91,15 +92,23 @@
   async function load(view) {
     if (view.loading || !view.uid) return;
     view.loading = true;
+    view.lastSync = Date.now();
     try {
       const data = await request(view);
       for (const agent of data.agents || []) merge(view, agent);
-      view.running = data.status === "running" || data.status === "pending";
+      // A delayed poll must never revive a run ended by the authoritative SSE.
+      view.running = view.running && (data.status === "running" || data.status === "pending");
       const calls = usage => (usage?.measured_calls || 0) + (usage?.unmetered_calls || 0);
       if (calls(data.usage) >= calls(view.usage)) view.usage = data.usage;
       view.loaded = true; view.error = "";
     } catch (error) { view.error = error.message; }
-    finally { view.loading = false; if (current === view && uid() === view.uid) render(); }
+    finally {
+      view.loading = false;
+      if (current === view && uid() === view.uid) {
+        render();
+        if (view.refreshAfterLoad) { view.refreshAfterLoad = false; load(view); }
+      }
+    }
   }
   async function loadDetail(view, agentId, more = false) {
     // Judge summaries, progress and measured usage are already in the live
@@ -362,10 +371,16 @@
     view.running = !!spec.running;
     render();
     if (changed) sidebar.scrollTop = view.scroll;
-    if (!view.loaded || (wasRunning && !spec.running)) load(view);
+    if (wasRunning && !spec.running && view.loading) view.refreshAfterLoad = true;
+    else if (!view.loaded || (wasRunning && !spec.running)) load(view);
     if (!timer) timer = setInterval(() => {
       resetOwner();
-      if (current) { render(); if (current.running) load(current); }
+      if (current && document.visibilityState !== 'hidden') {
+        render();
+        // SSE already carries session updates. Poll only to repair a quiet or
+        // interrupted stream, instead of rereading every agent every 2.5s.
+        if (current.running && Date.now() - current.lastSync >= 10000) load(current);
+      }
     }, 2500);
   }
   window.addEventListener("consensio:run-registry-change", resetOwner);

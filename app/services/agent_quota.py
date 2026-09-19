@@ -3,11 +3,11 @@
 Unknown provider usage keeps its reservation until the day ends. A paid receipt
 is settled once; retries/replay cannot release or charge it again.
 """
-import os
 import time
 from datetime import datetime, timezone
 
 from app.services.llm.provider_runtime import AnalysisBudgetExceeded
+from app.services import agent_budget_config
 
 
 class AgentTokenBudgetExceeded(AnalysisBudgetExceeded):
@@ -24,19 +24,24 @@ def snapshot(db, uid):
     # Timestamp the read's start so a slower HTTP response cannot overwrite a
     # newer terminal snapshot in the browser.
     observed_at = time.time_ns() // 1_000_000
-    day = day_key()
-    return {**public(quota_ref(db, uid, day).get().to_dict(), day), "observed_at": observed_at}
+    config = agent_budget_config.get_config(db)
+    day = period_key(config)
+    return {**public(quota_ref(db, uid, day).get().to_dict(), day.split('_')[0], limit=config['daily_token_limit']),
+            "observed_at": observed_at, "config_revision": config['revision']}
 
 
 def daily_limit():
-    value = int(os.getenv("AGENT_DAILY_TOKEN_LIMIT", "250000"))
-    if value < 1:
-        raise ValueError("AGENT_DAILY_TOKEN_LIMIT must be positive")
-    return value
+    return agent_budget_config.default_limit()
 
 
 def day_key():
     return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+
+def period_key(config):
+    # Receipts retain this key, so calls started before a reset settle into the
+    # old ledger without consuming or releasing the freshly reset allowance.
+    return day_key() + ("_" + config['reset_epoch'] if config.get('reset_epoch') else "")
 
 
 def quota_ref(db, uid, day):
@@ -50,9 +55,9 @@ def measured_tokens(usage):
     return None
 
 
-def reserve(data, amount):
+def reserve(data, amount, *, limit=None):
     data = dict(data or {})
-    remaining = max(0, daily_limit() - data.get("used", 0) - data.get("reserved", 0))
+    remaining = max(0, (daily_limit() if limit is None else limit) - data.get("used", 0) - data.get("reserved", 0))
     if amount > remaining:
         raise AgentTokenBudgetExceeded(remaining, amount)
     data["reserved"] = data.get("reserved", 0) + amount
@@ -70,8 +75,9 @@ def settle(data, reserved, usage):
     return data
 
 
-def public(data, day=None):
+def public(data, day=None, *, limit=None):
     data = data or {}
-    return {"day": day or day_key(), "limit": daily_limit(), "used": data.get("used", 0),
+    limit = daily_limit() if limit is None else limit
+    return {"day": day or day_key(), "limit": limit, "used": data.get("used", 0),
             "reserved": data.get("reserved", 0), "unknown": data.get("unknown", 0),
-            "remaining": max(0, daily_limit() - data.get("used", 0) - data.get("reserved", 0))}
+            "remaining": max(0, limit - data.get("used", 0) - data.get("reserved", 0))}
