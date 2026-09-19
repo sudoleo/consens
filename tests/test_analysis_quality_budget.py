@@ -206,3 +206,18 @@ def test_coverage_worker_inherits_budget_and_disconnect_signal():
             pool, future = engine._coverage_in_background(context, {}, "OpenAI")
             assert engine._collect_coverage(pool, future) == ({}, {})
         assert budget.calls == 1
+
+
+def test_unlimited_agent_budget_waits_for_pending_coverage_without_overflow():
+    from app.services.llm.task_transport import bind_task_transport
+    gate = threading.Event()
+    result = ({"sentences": []}, {"provider": "Gemini"})
+    pool = ThreadPoolExecutor(max_workers=1)
+    future = pool.submit(lambda: (gate.wait(3), result)[1])
+    timer = threading.Timer(.05, gate.set)
+    timer.start()
+    try:
+        with runtime.bind_analysis_budget(runtime.AnalysisBudget(unlimited=True)), bind_task_transport(lambda: None):
+            assert engine._collect_coverage(pool, future) == result
+    finally:
+        gate.set(); timer.cancel(); pool.shutdown()

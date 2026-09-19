@@ -171,10 +171,15 @@ Web Search bleibt nach Reasoning und Tool-Fortsetzungen erlaubt. „Skipped ·
 budget reserve“ bezeichnet eine unzureichende Reserve für Suchkontext und
 Folgeantwort, kein generelles Suchverbot nach dem Denken.
 
-„Recover saved answer“ prüft denselben Lauf mit derselben Request-Identität.
+Die Wiederherstellungsaktion prüft denselben Lauf mit derselben Request-Identität.
+„Recover saved answer“ erscheint bei bestätigt gespeichertem Antworttext,
+„Check saved answer“ bei unbekanntem Zustand und „Check run status“ bei einem
+noch laufenden Producer. Eine abgelaufene Lease wird bei dieser Abfrage beendet.
 Mehrfachklicks werden zusammengeführt; es entsteht kein weiterer Bookmark.
 Bei einem bekannten Fehler ohne gespeicherte Antwort wird Recovery ausgeblendet.
 Nach einem Transportabbruch bleibt eine reine Wiederherstellungsabfrage möglich.
+Enthält das Fehlerereignis bereits eine gespeicherte Teilantwort samt Bookmark,
+übernimmt die Oberfläche beides sofort und zeigt den Fehler weiterhin an.
 
 Toolnamen in Reasoning-Auszügen bleiben normaler Text. Nur bestätigte laufende
 Tool-Aufrufe erhalten eine dezente Statuszeile. Thinking bleibt geschlossen.
@@ -249,6 +254,12 @@ Der Watchdog liest alle drei Sekunden statt zweimal pro Sekunde; kurze temporär
 Datenbankfehler werden bis zu 60 Sekunden toleriert. Abgelaufene, gestoppte oder
 ersetzte Producer werden nie wiederbelebt. Verbrauch bleibt bei einer Chat-Löschung
 bestehen; Account-Tombstones verhindern verspätete Writes nach Kontolöschung.
+Ein kontogebundener Lock-Pool serialisiert kurze Agent-Transaktionen im selben
+Prozess. Temporäre Abrechnungsfehler wiederholen nur die idempotente Speicherung
+der ursprünglichen Usage, niemals den Modellaufruf. Firestore sichert weiterhin
+konkurrierende Prozesse ab. Coverage wartet bei unbegrenzter Agent-Laufzeit
+ohne numerisch unendlichen Thread-Timeout auf das Ergebnis; Provider-Abbruch
+und Transportgrenzen bleiben wirksam.
 
 Abbruch schließt Provider und wartet auf die aktiven Tool-/Judge-Threads. Ein
 Prozessabsturz erlaubt kein erneutes Ausführen bereits beanspruchter Schritte;

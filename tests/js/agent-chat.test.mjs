@@ -403,6 +403,7 @@ describe("single-model agent chat", () => {
     await window.App.agentChat.send();
     const failed = window.App.runRegistry.visible();
     expect(failed.status).toBe("failed");
+    expect(document.getElementById('agentRecover').textContent).toBe('Check saved answer');
     await window.App.agentChat.send(failed);
     expect(window.fetch.mock.calls.map(call => call[0])).toEqual(['/agent/models', '/chats', '/agent/budget']);
     const payload = window.streamSSERequest.mock.calls[1][1];
@@ -410,6 +411,40 @@ describe("single-model agent chat", () => {
     expect(payload.client_request_id).toBe(window.streamSSERequest.mock.calls[0][1].client_request_id);
     expect(window.App.runRegistry.visible().status).toBe("succeeded");
     expect(window.App.runRegistry.list()).toHaveLength(1);
+    dom.window.close();
+  });
+
+  it('adopts a server-saved partial answer and bookmark while preserving its failed review', async () => {
+    const {window:w,document:d,dom} = boot();
+    await selectAgent(w);
+    const turn = {id:'b'.repeat(32),execution_mode:'agent',status:'failed',consensus:'Available answer.',
+      agent_failure:{code:'provider_timeout',error:'The provider stopped responding.'},agent_review:{status:'failed',comparisons:[]}};
+    w.streamSSERequest.mockResolvedValueOnce({ok:false,data:{error:'The provider stopped responding.',recoverable:true,recovery_state:'saved',
+      saved_answer:{chat_id:'a'.repeat(32),turn_id:turn.id,response:turn.consensus,turn,bookmark_meta:{id:'saved'}},token_budget:CATALOG.token_budget}});
+    d.getElementById('questionInput').value = 'Question';
+    await w.App.agentChat.send();
+    const run = w.App.runRegistry.visible();
+    expect(run.bookmark.status).toBe('succeeded');
+    expect(run.consensus.completedTurn.agent_review.status).toBe('failed');
+    w.App.agentChat.project(run);
+    expect(d.getElementById('agentAnswerBody').textContent).toBe('Available answer.');
+    expect(d.getElementById('agentAnswerError').textContent).toContain('provider stopped');
+    expect(d.getElementById('agentRecover').hidden).toBe(true);
+    expect(w.acceptPersistedConsensusBookmark).toHaveBeenCalledTimes(1);
+    dom.window.close();
+  });
+
+  it('offers a status check rather than claiming an unfinished server run is already saved', async () => {
+    const {window:w,document:d,dom} = boot();
+    await selectAgent(w);
+    w.streamSSERequest.mockRejectedValueOnce(new Error('Connection lost'));
+    d.getElementById('questionInput').value = 'Question';
+    await w.App.agentChat.send();
+    w.streamSSERequest.mockResolvedValueOnce({ok:false,data:{error:'The request is still running.',code:'request_running',recoverable:true,recovery_state:'running'}});
+    await w.App.agentChat.send(w.App.runRegistry.visible());
+    expect(d.getElementById('agentRecover').textContent).toBe('Check run status');
+    expect(w.App.runRegistry.list()).toHaveLength(1);
+    expect(w.streamSSERequest.mock.calls[1][1].recover_only).toBe(true);
     dom.window.close();
   });
 

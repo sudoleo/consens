@@ -1685,7 +1685,10 @@ llm/task_transport.py injiziert nur den gemessenen Providertransport via
 ContextVar; der Coverage-Thread übernimmt den Kontext. Außerhalb dieser Bindung
 bleibt der Consensus-Transport unverändert. Jeder Judge-/Retry-/Repair-Aufruf
 hat einen eigenen Agent-Schrittbeleg; der Producer wartet auch beim Abbruch
-auf die Settlement-Abschlüsse. Ein konfiguriertes Chatmodell ohne Engine-Alias
+auf die Settlement-Abschlüsse. `_collect_coverage` wartet bei unbegrenztem
+Agent-Budget ohne Timeout statt mit `float('inf')`, das Thread-Wartefunktionen
+überlaufen lässt; endliche Consensus-Deadlines bleiben begrenzt.
+Ein konfiguriertes Chatmodell ohne Engine-Alias
 verwendet seine Familie nur zur Judge-Policy-Auswahl, niemals zur Synthese.
 
 Bei `check_sources=true` ergänzt `agent_contradictions.py` das strikte Tool
@@ -1727,6 +1730,14 @@ zuerst mit compare_models eine Grundlage einholen.
 users/{uid}/llm_calls mit deduplizierten completion:N- und agent:<uuid>:N-Belegen,
 Producer-Token, Lease, Budget-/Tarifsnapshot und Status. Ein beanspruchter
 Provider-Schritt wird auch nach einem Prozessabsturz nie erneut ausgeführt.
+Kurze Agent-Transaktionen teilen innerhalb eines Prozesses einen kontogebundenen
+Lock-Pool, damit parallele Claims, Statusmeldungen und Abrechnungen nicht um
+dieselben Root-/Kontingentdokumente konkurrieren. Firestore bleibt die atomare
+Absicherung zwischen Prozessen; Modellaufrufe laufen weiterhin parallel.
+DelegationLoop wiederholt bei temporären Datenbankfehlern ausschließlich die
+idempotente Abrechnung mit den ursprünglichen Messwerten, auch bei unklarem
+Commit-Ergebnis. Offene Abrechnungen werden nach dem Join vor finish_run erneut
+abgeschlossen; ein noch laufender Beleg verhindert weiterhin den Run-Abschluss.
 SSE-Toolarbeit läuft in einem kontrollierten Thread, während der Producer
 Aktivitäten weiter ausgibt. Stop/Disconnect schließt Provider und wartet auf die
 aktiven Worker/Tools. Abgelaufene Leases werden zu terminalen unbekannten
@@ -1743,6 +1754,13 @@ laufenden Prüfstatus in cancelled/failed/missing um. Agent-Bookmarks dürfen
 zusätzlich fehlgeschlagene Turns mit gespeichertem Antwort-/Vergleichstext darstellen;
 Consensus-Bookmarks bleiben auf completed beschränkt. Recovery gibt nur den
 vorhandenen Snapshot zurück, ohne erneut zu vergleichen oder zu belasten.
+Bei pending prüft `recover_only` zuerst auf eine abgelaufene Producer-Lease und
+schließt diese wie die Sitzungsabfrage ab. Eine gültige Lease bleibt aktiv.
+Das Fehler-SSE kann `saved_answer` samt `bookmark_meta` enthalten: Die UI
+übernimmt den bestätigten Bookmark sofort und behält Fehler/Prüfstatus des Turns.
+Ohne bestätigten Bookmark steuert `recovery_state` (`running`, `saved`,
+`unavailable`) die Wiederherstellungsaktion; unbekannter Zustand heißt
+„Check saved answer“, laufender Zustand „Check run status“.
 assistant_response bleibt kanonisch; consensus ist der alte Lesealias.
 Direkte Teilantworten bleiben bei Providerfehlern erhalten. `agent_failure`
 enthält den sicheren Fehlercode und Grund auch im gespeicherten Turn; die UI

@@ -837,6 +837,10 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
 - [ ] Bekannter Fehler ohne gespeicherte Antwort zeigt keinen Recovery-Link.
   Nach Transportabbruch erzeugt Recovery auch bei Mehrfachklicks keinen weiteren
   Failed-Bookmark. „Question“ steht weder über aktuellen noch früheren Fragen.
+  Bereits gespeicherte Teilantworten erhalten sofort ihren dauerhaften Bookmark;
+  nach Reload bleiben Text und Fehler sichtbar. Bei unbekanntem Zustand steht
+  „Check saved answer“, bei laufendem Producer „Check run status“. Nach Ablauf
+  der Lease kann derselbe gespeicherte Zwischenstand ohne Modellaufruf geöffnet werden.
 - [ ] Überlappende Modell-Icons oberhalb der Antwort zeigen die richtigen Anbieter,
   auch Kimi, GLM und Muse. Mehrere Aufrufe desselben Modells bleiben in Activity
   einzeln sichtbar. Denkfortschritt bleibt kurz und als Zusammenfassung/Auszug

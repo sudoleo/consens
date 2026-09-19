@@ -5,6 +5,7 @@ import json
 import time
 import difflib
 import logging
+import math
 import random
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
@@ -2118,7 +2119,7 @@ def _collect_coverage(pool, future):
     niemals kippen."""
     try:
         budget = current_analysis_budget()
-        timeout = max(0.05, budget.deadline - time.monotonic()) + 0.2 if budget else None
+        timeout = max(0.05, budget.deadline - time.monotonic()) + 0.2 if budget and math.isfinite(budget.deadline) else None
         return future.result(timeout=timeout)
     except Exception as exc:
         logging.warning(

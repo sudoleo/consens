@@ -291,3 +291,30 @@ def test_failed_review_recovery_preserves_status_and_never_calls_provider(api):
     assert calls == []
     assert agent_quota.quota_ref(store.db, UID, agent_quota.day_key()).get().to_dict() == before
     assert client.post("/agent", json={**payload, "comparison_models": {"openai": "gpt-5.4-mini", "anthropic": "claude-haiku-4-5"}}, headers=AUTH).status_code == 409
+
+
+@pytest.mark.parametrize("committed,failures", [(False, 1), (True, 1), (False, 3)])
+def test_transient_settlement_failure_never_repeats_model_or_leaves_run_pending(store, monkeypatch, committed, failures):
+    from google.api_core.exceptions import ServiceUnavailable
+    original = store.settle
+    failed = []
+    def settle(*args, **kwargs):
+        step = kwargs.get("step", "")
+        if step.startswith("agent:") and len(failed) < failures and (not failed or step == failed[0]):
+            failed.append(step)
+            if committed:
+                original(*args, **kwargs)
+            raise ServiceUnavailable("temporary settlement failure")
+        return original(*args, **kwargs)
+    monkeypatch.setattr(store, "settle", settle)
+    script = Script()
+    loop = make_loop(store, script)
+    list(loop.run())
+    assert failed and len(script.calls) == len({step for step, model in script.calls})
+    saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
+    assert saved["status"] == "completed"
+    assert saved["agent_review"]["status"] == ("succeeded" if failures == 1 else "failed")
+    root = store.receipt_ref(UID, loop.chat_id, loop.turn_id).get().to_dict()
+    assert root["run_status"] == "succeeded" and "running" not in root["step_states"].values()
+    assert store.db.collection("users").document(UID).get().to_dict()["agent_usage"]["unsettled_calls"] == 0
+    assert saved["agent_usage"]["input_tokens"] + saved["agent_usage"]["output_tokens"] == len(script.calls) * 70

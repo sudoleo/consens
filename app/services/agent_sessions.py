@@ -5,6 +5,7 @@ There is deliberately no resume path for paid steps after process loss.
 """
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
+from threading import RLock
 
 from firebase_admin import firestore
 
@@ -19,9 +20,16 @@ from app.services.llm.provider_runtime import AnalysisBudgetExceeded, ProviderCa
 
 PRODUCER_LEASE_SECONDS = 120
 PRODUCER_RENEW_BEFORE_SECONDS = 90
+# Serialize short bookkeeping transactions per account inside each process.
+# Firestore still fences concurrent processes; providers remain fully parallel.
+_ACCOUNT_WRITES = tuple(RLock() for _ in range(128))
 
 
 class AgentSessionStore:
+    def _agent_transaction(self, uid, operation):
+        with _ACCOUNT_WRITES[hash(uid) % len(_ACCOUNT_WRITES)]:
+            return self._transaction(operation)
+
     def agent_ref(self, uid, chat_id, turn_id, agent_id):
         import re
         if not re.fullmatch(r"[a-f0-9]{32}", agent_id):
@@ -126,7 +134,7 @@ class AgentSessionStore:
             else:
                 tx.set(user_ref, {"agent_usage": totals})
             return True
-        return self._transaction(operation)
+        return self._agent_transaction(uid, operation)
 
     def protect_review(self, uid, chat_id, turn_id, run_token, tokens, cost=0):
         """Atomically protect synthesis/judges from all other concurrent runs."""
@@ -157,7 +165,7 @@ class AgentSessionStore:
             if previous_ref:
                 tx.set(previous_ref, previous)
             tx.update(ref, {"quota_day": day, "review_hold": max(tokens, protected), "review_cost_hold": protected_cost})
-        self._transaction(operation)
+        self._agent_transaction(uid, operation)
 
     def save_review(self, uid, chat_id, turn_id, run_token, review, text):
         """Checkpoint exact text and review state before expensive work."""
@@ -170,7 +178,7 @@ class AgentSessionStore:
                     or chat.get("status") != "active" or turn.get("status") != "pending"):
                 raise TurnStatusConflict("Agent review is closed")
             tx.update(turn_ref, {"agent_review": review, "assistant_response": text})
-        self._transaction(operation)
+        self._agent_transaction(uid, operation)
 
     @staticmethod
     def _delegated_settlement(data, step, status, usage):
@@ -232,7 +240,7 @@ class AgentSessionStore:
             tx.update(root_ref, {"event_seq": seq, "agent_count": data.get("agent_count", 0) + int(not agent.exists),
                                 "message_count": data.get("message_count", 0) + int(bool(message))})
             return result
-        return self._transaction(operation)
+        return self._agent_transaction(uid, operation)
 
     def check_delegation(self, uid, chat_id, turn_id, run_token):
         chat = self.get_chat(uid, chat_id)
@@ -265,7 +273,7 @@ class AgentSessionStore:
             tx.update(ref, {"lease_until": until})
             tx.update(chat_ref, {"agent_lock_until": until})
             tx.set(active_ref, {"leases": leases})
-        self._transaction(operation)
+        self._agent_transaction(uid, operation)
 
     def stop_delegation(self, uid, chat_id, turn_id):
         self.get_turn(uid, chat_id, turn_id)
@@ -275,7 +283,7 @@ class AgentSessionStore:
             root = ref.get(transaction=tx).to_dict() or {}
             if root.get("run_status") == "running":
                 tx.update(ref, {"cancel_requested": True})
-        self._transaction(operation)
+        self._agent_transaction(uid, operation)
 
     def delegation_view(self, uid, chat_id, turn_id, *, agent_id=None, after=0, limit=50):
         turn = self.get_turn(uid, chat_id, turn_id)

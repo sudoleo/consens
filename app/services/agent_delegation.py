@@ -3,6 +3,7 @@ from collections import deque
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 import json
+import logging
 import queue
 import threading
 import time
@@ -93,6 +94,7 @@ class DelegationLoop(AgentLoop):
         self.slots = threading.BoundedSemaphore(self.policy.max_parallel)
         self.outgoing = queue.Queue(maxsize=1024)
         self.live_progress = {}
+        self.unsettled = {}
         self.mailbox = deque()
         self.tools_used = 0
         self.search_remaining = self.policy.max_searches
@@ -423,7 +425,9 @@ class DelegationLoop(AgentLoop):
                 self.costs.reconcile(reservation, value.usage)
                 if worker:
                     worker.usages.append(value.usage)
-                self.store.settle(self.uid, self.chat_id, self.turn_id, completion=value, status=status, step=step, final=False)
+                with self.condition:
+                    self.unsettled[step] = (value, status)
+                self._settle_step(step, value, status)
             elif reservation is not None:
                 self.costs.release(reservation)
             count = (value.usage or {}).get("web_search_requests")
@@ -438,6 +442,26 @@ class DelegationLoop(AgentLoop):
             if value.sources or (type(count) is int and count > 0):
                 yield self.tool_event(step + ":web_search", "web_search", "succeeded", sources=value.sources, count=count, server_tool=True)
         return value
+
+    def _settle_step(self, step, value, status):
+        """Retry only the idempotent receipt write, including ambiguous commits."""
+        from google.api_core.exceptions import Aborted, DeadlineExceeded, InternalServerError, ServiceUnavailable
+        transient = (Aborted, DeadlineExceeded, InternalServerError, ServiceUnavailable)
+        for attempt in range(3):
+            try:
+                self.store.settle(self.uid, self.chat_id, self.turn_id, completion=value,
+                                  status=status, step=step, final=False)
+                with self.condition:
+                    self.unsettled.pop(step, None)
+                return
+            except Exception as exc:
+                # Firestore wraps exhausted transaction conflicts in ValueError.
+                if not isinstance(exc, transient) and not isinstance(exc.__cause__, transient):
+                    raise
+                if attempt == 2:
+                    raise
+                logging.warning("Agent receipt write retry attempt=%d", attempt + 1)
+                time.sleep(.1 * 2 ** attempt)
 
     def _work(self, worker):
         unregister = self.cancellation.register(worker.cancellation)
@@ -647,6 +671,10 @@ class DelegationLoop(AgentLoop):
             for worker in self.workers.values():
                 worker.thread.join()
             watcher.join()
+            # Provider threads are joined; retain and retry their original
+            # measurements before finalizing. Never rerun a paid model step.
+            for step, (value, step_status) in list(self.unsettled.items()):
+                self._settle_step(step, value, step_status)
             self.completion.usage = self.costs.total()
             self.status("run", "finished", status=status, finish_reason=self.completion.finish_reason)
             if self.claimed:

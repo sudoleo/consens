@@ -97,12 +97,15 @@ def _final(uid, payload, store, turn):
 def _save_interrupted(uid, payload, store, turn_id):
     try:
         turn = store.get_turn(uid, payload.chat_id, turn_id)
-        if turn.get("consensus") and turn["status"] == "failed":
-            _save_bookmark(uid, payload, store, turn)
-        return turn
     except Exception as exc:
         logging.warning("Interrupted Agent snapshot unavailable category=%s", safe_exception(exc))
         return None
+    if turn.get("consensus") and turn["status"] == "failed":
+        try:
+            turn["bookmark_meta"] = _save_bookmark(uid, payload, store, turn)
+        except Exception as exc:
+            logging.warning("Interrupted Agent bookmark unavailable category=%s", safe_exception(exc))
+    return turn
 
 
 @router.get("/agent/models")
@@ -154,6 +157,11 @@ def run_agent(request: Request, payload: AgentRequest):
                 raise TurnStatusConflict("Request identity conflicts with different comparison models")
             if existing.get("agent_settings", {}).get("check_sources", False) != payload.check_sources:
                 raise TurnStatusConflict("Request identity conflicts with different contradiction settings")
+            if payload.recover_only and existing["status"] == "pending":
+                # A lost producer has no live SSE/poller to close its lease.
+                # Reap only expired runs; this never starts a paid step.
+                store.reap_delegation(uid, payload.chat_id, existing["id"])
+                existing = store.get_turn(uid, payload.chat_id, existing["id"])
             if existing["status"] == "completed":
                 return _final(uid, payload, store, existing)
             if payload.recover_only and existing["status"] == "failed" and existing.get("consensus"):
@@ -161,7 +169,8 @@ def run_agent(request: Request, payload: AgentRequest):
             failed = existing["status"] == "failed"
             return JSONResponse({"error": "This run ended without a saved answer. Send a new message to try again." if failed
                 else "This request is still running. You can check its saved answer after it finishes.",
-                "code": "answer_unavailable" if failed else "request_running", "recoverable": not failed}, status_code=409)
+                "code": "answer_unavailable" if failed else "request_running", "recoverable": not failed,
+                "recovery_state": "unavailable" if failed else "running"}, status_code=409)
         if payload.recover_only:
             return JSONResponse({"error": "No saved answer is available for this request.",
                 "code": "answer_unavailable", "recoverable": False}, status_code=404)
@@ -270,7 +279,14 @@ def run_agent(request: Request, payload: AgentRequest):
                 yield sse_pack(event["type"], event)
             interrupted = _save_interrupted(uid, payload, store, turn["id"])
             if interrupted is not None:
-                failure["recoverable"] = bool(interrupted.get("consensus"))
+                pending = interrupted["status"] == "pending"
+                failure["recoverable"] = pending or bool(interrupted.get("consensus"))
+                failure["recovery_state"] = "running" if pending else "saved" if interrupted.get("consensus") else "unavailable"
+                if interrupted.get("bookmark_meta"):
+                    saved = dict(interrupted)
+                    bookmark_meta = saved.pop("bookmark_meta")
+                    failure["saved_answer"] = {"chat_id": payload.chat_id, "turn_id": saved["id"],
+                        "turn": saved, "response": saved["consensus"], "bookmark_meta": bookmark_meta}
             if interrupted and interrupted.get("agent_review"):
                 yield sse_pack("review", {"review": interrupted["agent_review"]})
             yield sse_pack("activity", {"version": 1, "step_id": "run", "id": "run/usage", "kind": "usage", "usage": completion.usage})
@@ -285,7 +301,7 @@ def run_agent(request: Request, payload: AgentRequest):
             yield sse_pack("final", _final(uid, payload, store, completed))
         except Exception as exc:
             logging.warning("Agent bookmark failed category=%s", safe_exception(exc))
-            yield sse_pack("error", {"error": "The answer was saved to chat history, but its bookmark could not be saved. Recover the saved answer to reopen it.", "recoverable": True})
+            yield sse_pack("error", {"error": "The answer was saved to chat history, but its bookmark could not be saved. Recover the saved answer to reopen it.", "recoverable": True, "recovery_state": "saved"})
 
     def stream_events():
         if not lease.start():

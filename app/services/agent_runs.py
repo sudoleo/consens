@@ -153,7 +153,7 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                 tx.set(user_ref, {"agent_usage": totals})
             return True
 
-        return self._transaction(operation)
+        return self._agent_transaction(uid, operation)
 
     def settle(self, uid, chat_id, turn_id, *, completion, status, step="completion:0", final=True):
         if status not in {"succeeded", "failed", "cancelled"}:
@@ -232,7 +232,7 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                                          "updated_at": firestore.SERVER_TIMESTAMP})
             return True
 
-        return self._transaction(operation)
+        return self._agent_transaction(uid, operation)
 
     def finish_run(self, uid, chat_id, turn_id, *, completion, status, run_token):
         """End the run once, independently of each paid step's settlement."""
@@ -306,7 +306,7 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                     tx.update(chat_ref, {"agent_lock_until": datetime.now(timezone.utc), "updated_at": firestore.SERVER_TIMESTAMP})
             return True
 
-        return self._transaction(operation)
+        return self._agent_transaction(uid, operation)
 
     def release_unclaimed(self, uid, chat_id, turn_id):
         """Failures before the provider claim consume neither tokens nor quota."""
@@ -322,4 +322,4 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                 return
             tx.update(turn_ref, {"status": "failed", "error_code": "agent_failed", "updated_at": firestore.SERVER_TIMESTAMP})
             tx.update(chat_ref, {"agent_lock_until": datetime.now(timezone.utc)})
-        self._transaction(operation)
+        self._agent_transaction(uid, operation)

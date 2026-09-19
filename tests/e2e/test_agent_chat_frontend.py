@@ -84,6 +84,67 @@ def test_saved_interruption_keeps_reason_and_partial_answer_visible(browser, pha
         context.close()
 
 
+@pytest.mark.parametrize("width", [1280, 390])
+def test_failed_stream_adopts_saved_bookmark_and_survives_reload(browser, phase4_server, width):
+    context, page = _real_firebase_page(browser, phase4_server)
+    errors, calls, bookmarks, turns = [], [], [], []
+    chat_id = "a" * 32
+    reason = "The model provider stopped responding. Your available answer has been saved."
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    try:
+        page.set_viewport_size({"width": width, "height": 900})
+        page.route("**/user_status", lambda r: _json(r, {"tier": "pro", "is_pro": True, "agent_access": True}))
+        page.route("**/agent/models", lambda r: _json(r, CATALOG))
+        page.route("**/agent/budget", lambda r: _json(r, {"token_budget": {"limit": 250000, "used": 1000, "remaining": 249000}}))
+        page.route("**/chats", lambda r: _json(r, {"chat": {"id": chat_id, "execution_mode": "agent"}}))
+        page.route("**/bookmarks?*", lambda r: _json(r, {"bookmarks": bookmarks, "next_cursor": None}))
+        page.route("**/bookmarks/*/conversation*", lambda r: _json(r, {"chat_id": chat_id, "turns": turns, "has_more": False}))
+        page.route("**/bookmarks/*", lambda r: _json(r, {"bookmark": bookmarks[0]}))
+
+        def answer(route):
+            body = route.request.post_data_json
+            calls.append(body)
+            turn = {"id": "b" * 32, "question": body["question"], "status": "failed", "execution_mode": "agent",
+                "consensus": "## Available result\n\nThe independent answers are preserved.",
+                "agent_settings": {"model_id": body["model_id"], "label": "DeepSeek V4.1 Flash"},
+                "agent_failure": {"code": "provider_timeout", "error": reason},
+                "agent_review": {"status": "failed", "comparisons": []}}
+            turns.append(turn)
+            bookmark = {"id": body["bookmark_id"], "chat_id": chat_id, "turn_id": turn["id"], "title": body["question"],
+                "query": body["question"], "mode": "Agent", "execution_mode": "agent", "has_consensus": True,
+                "responses": {"consensus": turn["consensus"]}}
+            bookmarks.append(bookmark)
+            failure = {"error": reason, "recoverable": True, "recovery_state": "saved",
+                "saved_answer": {"chat_id": chat_id, "turn_id": turn["id"], "turn": turn,
+                    "response": turn["consensus"], "bookmark_meta": bookmark}}
+            route.fulfill(content_type="text/event-stream", body="event: error\ndata: " + json.dumps(failure) + "\n\n")
+
+        page.route("**/agent", answer)
+        page.evaluate("async () => { await window.__switchE2EUser('account-a'); }")
+        _choose_mode(page, "agent")
+        page.locator("#questionInput").fill("Preserve this interrupted answer")
+        page.locator("#sendButton").click()
+        expect(page.locator("#agentAnswerBody h2")).to_have_text("Available result")
+        expect(page.locator("#agentAnswerError")).to_have_text(reason)
+        expect(page.locator("#agentRecover")).not_to_be_visible()
+        page.wait_for_function("() => App.runRegistry.visible()?.bookmark.uiReady === true")
+        bookmark_id = bookmarks[0]["id"]
+        expect(page.locator(f'.bookmark[data-id="{bookmark_id}"]')).to_have_count(1)
+
+        page.reload(wait_until="domcontentloaded")
+        row = page.locator(f'.bookmark[data-id="{bookmark_id}"]')
+        expect(row).to_have_count(1)
+        if width < 1100 and page.locator("#toggleSidebarButton").get_attribute("aria-expanded") != "true":
+            page.locator("#toggleSidebarButton").click()
+        row.click()
+        expect(page.locator("#agentAnswerBody h2")).to_have_text("Available result")
+        expect(page.locator("#agentAnswerError")).to_have_text(reason)
+        expect(page.locator("#agentRecover")).not_to_be_visible()
+        assert len(calls) == 1 and not errors
+    finally:
+        context.close()
+
+
 @pytest.mark.parametrize("width,dark", [(1280, False), (390, False), (390, True), (320, False)])
 def test_single_agent_send_followup_restore_and_layout(browser, phase4_server, width, dark):
     context, page = _real_firebase_page(browser, phase4_server)

@@ -224,6 +224,12 @@ def test_partial_direct_answer_recovery_is_read_only_and_preserves_failure(api, 
     payload = {"chat_id": chat, "question": "Long task", "client_request_id": "partial", "bookmark_id": "partial_answer"}
     response = client.post("/agent", json=payload, headers=AUTH)
     assert '"code": "provider_timeout"' in response.text and "private body" not in response.text
+    error = next(json.loads(line[6:]) for line in response.text.splitlines()
+                 if line.startswith('data: ') and '"saved_answer"' in line)
+    assert error["recovery_state"] == "saved"
+    assert error["saved_answer"]["turn"]["status"] == "failed"
+    assert error["saved_answer"]["bookmark_meta"]["id"] == "partial_answer"
+    assert store.db.collection("users").document(UID).collection("bookmarks").document("partial_answer").get().exists
     before = agent_quota.snapshot(store.db, UID)["used"]
     for _ in range(2):
         recovered = client.post("/agent", json={**payload, "recover_only": True}, headers=AUTH)
@@ -232,3 +238,26 @@ def test_partial_direct_answer_recovery_is_read_only_and_preserves_failure(api, 
         assert recovered.json()["turn"]["agent_failure"]["code"] == "provider_timeout"
         assert recovered.json()["turn"]["status"] == "failed"
     assert len(calls) == 1 and agent_quota.snapshot(store.db, UID)["used"] == before
+
+
+def test_recovery_reaps_expired_producer_and_restores_checkpoint_without_paid_retry(api):
+    client, store, calls = api
+    loop = chat_loop(store, AgentCompletion)
+    args = (UID, loop.chat_id, loop.turn_id)
+    store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(), reservation=(100, 100))
+    value = AgentCompletion()
+    value.usage = measured_usage({"prompt_tokens": 20, "completion_tokens": 10}, loop.model)
+    store.settle(*args, completion=value, status="succeeded", final=False)
+    store.save_review(*args, loop.run_token, {"status": "running", "comparisons": [], "versions": []}, "Checkpointed answer.")
+    payload = {"chat_id": loop.chat_id, "question": "Question one", "client_request_id": "one",
+               "bookmark_id": "expired_answer", "recover_only": True}
+    running = client.post('/agent', json=payload, headers=AUTH)
+    assert running.status_code == 409 and running.json()["recovery_state"] == "running"
+    root = store.receipt_ref(*args)
+    store._transaction(lambda tx: tx.update(root, {"lease_until": datetime.now(timezone.utc) - timedelta(seconds=1)}))
+    recovered = client.post('/agent', json=payload, headers=AUTH)
+    assert recovered.status_code == 200, recovered.text
+    assert recovered.json()["response"] == "Checkpointed answer."
+    assert recovered.json()["turn"]["status"] == "failed" and root.get().to_dict()["run_status"] == "cancelled"
+    assert store.db.collection("users").document(UID).collection("bookmarks").document("expired_answer").get().exists
+    assert calls == [] and totals(store)["input_tokens"] == 20

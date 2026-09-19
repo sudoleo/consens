@@ -155,6 +155,16 @@ Reset während laufender Calls und Migration ungenutzter Prüfreserven;
 veraltete Budgetgenerationen. Sidebar-Tests trennen Reserven vom Prozentverbrauch
 und prüfen SSE statt Vollpolling. `test_admin_agent_budget.py` prüft Speichern/
 Reset im echten Admin-Frontend auf Desktop und 390/320px.
+`test_agent_comparison.py` injiziert temporäre Speicherfehler vor und nach dem
+Abrechnungs-Commit: kein doppelter Modellaufruf, keine offenen Belege und erhaltene
+Modellantworten nach kurzem Ausfall. Bei erschöpften sofortigen Wiederholungen
+bleibt die Prüfung als fehlgeschlagen erkennbar, die Abrechnung endet sauber.
+`test_analysis_quality_budget.py`
+prüft den noch laufenden Coverage-Future bei unbegrenztem Agent-Budget.
+`test_agent_continuation.py` prüft gespeicherte Teilantworten im Fehler-SSE und
+Recovery einer abgelaufenen Lease bei unveränderter Abrechnung. Der Browserlauf
+`test_agent_chat_frontend.py` prüft die direkte Übernahme des Bookmarks aus dem
+Fehlerereignis sowie dessen Öffnen nach echtem Reload bei 1280/390 px.
 `test_agent_comparison.py` prüft die Zulassung ohne optionale Suche bei zu großer
 Suchreserve und verhindert dabei doppelte Calls/Belege. `test_agent_runs.py`
 prüft Quote und konkrete Reservierungsfehler in terminalen SSE-Ereignissen.

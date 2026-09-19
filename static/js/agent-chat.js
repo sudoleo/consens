@@ -236,7 +236,9 @@
     if (recover) {
       recover.hidden = !agent || !["failed", "canceled"].includes(context?.status) || !context?.metadata.requestSent || context.metadata.recoverable === false;
       recover.disabled = Boolean(context?.metadata.recovering);
-      recover.textContent = context?.metadata.recovering ? 'Checking saved answer…' : 'Recover saved answer';
+      recover.textContent = context?.metadata.recovering ? 'Checking saved answer…'
+        : context?.metadata.recoveryState === 'running' ? 'Check run status'
+          : context?.metadata.recoveryState === 'saved' ? 'Recover saved answer' : 'Check saved answer';
     }
     if (panel) panel.hidden = !agent || (!context && !basis);
     if (agent && !context && basis) {
@@ -353,6 +355,7 @@
       receiveBudget(result.data?.token_budget, context.auth.uid);
       const recoverable = result.data?.recoverable ?? result.data?.detail?.recoverable;
       if (typeof recoverable === 'boolean') context.metadata.recoverable = recoverable;
+      context.metadata.recoveryState = result.data?.recovery_state;
       if (!result.ok || !result.data?.turn) throw new Error(apiError(result.data));
       acceptAnswer(context, result.data);
     } catch (error) {
@@ -492,6 +495,13 @@
       terminalBudget = Boolean(result.data?.token_budget);
       const recoverable = result.data?.recoverable ?? result.data?.detail?.recoverable;
       if (typeof recoverable === 'boolean') context.metadata.recoverable = recoverable;
+      context.metadata.recoveryState = result.data?.recovery_state;
+      if (result.data?.saved_answer?.turn && result.data.saved_answer.bookmark_meta) {
+        // A failed run can still have an authoritative saved partial answer.
+        // Keep its error/review state while adopting the durable bookmark now.
+        acceptAnswer(context, result.data.saved_answer);
+        return;
+      }
       if (!result.ok || result.data?.error || !result.data?.turn) throw new Error(apiError(result.data));
       acceptAnswer(context, result.data);
     } catch (error) {
