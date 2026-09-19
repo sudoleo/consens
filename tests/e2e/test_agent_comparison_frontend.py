@@ -8,6 +8,60 @@ from test_phase4_frontend import phase4_server, _real_firebase_page, _json
 from test_agent_chat_frontend import CATALOG, _choose_mode, _snapshot
 
 
+@pytest.mark.parametrize("width", [390, 320])
+def test_mobile_agent_toolbar_taps_open_pickers_from_collapsed_composer(browser, phase4_server, width):
+    context, page = _real_firebase_page(browser, phase4_server, has_touch=True)
+    turn = {"id": "b" * 32, "execution_mode": "agent", "status": "completed", "question": "Compare plans",
+            "consensus": "A saved answer.", "agent_settings": {"model_id": CATALOG["default_model_id"]}}
+    try:
+        page.set_viewport_size({"width": width, "height": 844})
+        page.route('**/user_status', lambda r: _json(r, {"tier": "pro", "is_pro": True, "agent_access": True}))
+        page.route('**/agent/models', lambda r: _json(r, CATALOG))
+        page.evaluate("async () => { await window.__switchE2EUser('account-a'); }")
+        _choose_mode(page, 'agent')
+        page.evaluate("turn => App.runRegistry.showSavedView({type:'bookmark'}, {chatId:'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', turnId:turn.id, executionMode:'agent', question:turn.question, consensus:turn.consensus, currentTurn:turn})", turn)
+        page.evaluate('() => { window.exitHeroMode(); App.composer.collapse({force:true}); }')
+        page.wait_for_function("() => !document.body.classList.contains('composer-animating')")
+        expect(page.locator('#composerModeBar')).to_be_visible()
+        sources = page.locator('#composerSourcesToggle')
+        expect(sources).to_have_attribute('aria-checked', 'true')
+        sources.tap()
+        expect(sources).to_have_attribute('aria-checked', 'false')
+        sources.tap()
+        expect(sources).to_have_attribute('aria-checked', 'true')
+        page.locator('#composerModelPicker').tap()
+        expect(page.locator('.consensus-model-inline .model-picker-menu')).to_be_visible()
+        page.wait_for_function("() => !document.body.classList.contains('composer-animating')")
+        page.locator('.consensus-model-inline .model-picker-custom-option').tap()
+        expect(page.locator('.consensus-model-inline .model-picker-menu')).to_contain_text('Answering models')
+        _snapshot(page, f'agent-toolbar-models-touch-{width}')
+        page.keyboard.press('Escape')
+        page.evaluate('() => App.composer.collapse({force:true})')
+        page.wait_for_function("() => !document.body.classList.contains('composer-animating')")
+        page.locator('#composerDeepToggle').tap()
+        menu = page.locator('.agent-model-picker .model-picker-menu')
+        expect(menu).to_be_visible()
+        page.wait_for_function("() => !document.body.classList.contains('composer-animating')")
+        bounds = menu.bounding_box()
+        assert bounds['x'] >= 0 and bounds['x'] + bounds['width'] <= width
+        assert bounds['y'] >= 0 and bounds['y'] + bounds['height'] <= 844
+        trigger = page.locator('.agent-model-picker .model-picker-display').bounding_box()
+        assert bounds['y'] + bounds['height'] <= trigger['y'] - 7
+        # Every option must receive touches across its width, including where
+        # Send used to paint above the menu in the collapsed mobile composer.
+        assert menu.evaluate('''menu => [...menu.querySelectorAll('[data-setting-value]')].every(option => {
+            const r = option.getBoundingClientRect();
+            return [.1, .5, .9].every(f => option.contains(document.elementFromPoint(r.x + r.width * f, r.y + r.height / 2)));
+        })''')
+        _snapshot(page, f'agent-toolbar-reasoning-touch-{width}')
+        page.locator('.agent-model-picker [data-setting-value="high"]').tap()
+        expect(page.locator('#agentReasoningEffort')).to_have_value('high')
+        expect(page.locator('#composerDeepState')).to_have_text('High')
+        assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+    finally:
+        context.close()
+
+
 @pytest.mark.parametrize("width,dark", [(1440, False), (390, True), (320, False)])
 def test_comparison_review_and_saved_projection(browser, phase4_server, width, dark):
     context, page = _real_firebase_page(browser, phase4_server)

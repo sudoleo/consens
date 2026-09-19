@@ -771,6 +771,12 @@ body:not(.dark-mode) .chat-input-container::before {
   z-index: 60;
 }
 
+/* Keep picker controls above Send, including mobile's display: contents row. */
+.chat-input-container .consensus-switch-container:has(.model-picker-menu.is-open),
+.chat-input-container .custom-model-picker.is-open {
+  z-index: 2;
+}
+
 .attach-menu {
   position: absolute;
   left: 10px;

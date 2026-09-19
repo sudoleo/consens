@@ -67,6 +67,14 @@
   width: 25px; height: 25px; min-height: 25px; padding: 3px; margin-left: -6px;
   background: var(--ground); border: 2px solid var(--ground); border-radius: 50%;
 }
+.agent-model-stack .agent-inline-model {
+  animation: agent-icon-enter .24s cubic-bezier(.2, .7, .2, 1) var(--agent-icon-delay, 0ms) both;
+  transition: background-color .18s ease;
+}
+@keyframes agent-icon-enter {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 .agent-model-stack .agent-inline-model:first-child { margin-left: 0; }
 .agent-model-stack .agent-inline-model:is(:hover, :focus-visible) { z-index: 2; background: var(--raise); }
 .agent-history-models { margin: 2px 0 12px; }
@@ -92,7 +100,7 @@
   .agent-session-detail { max-height: 35dvh; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .agent-sidebar:not([hidden]), .agent-inline-models, .agent-detail-skeleton span { animation: none; transition: none; scroll-behavior: auto; }
+  .agent-sidebar:not([hidden]), .agent-inline-models, .agent-model-stack .agent-inline-model, .agent-detail-skeleton span { animation: none; transition: none; scroll-behavior: auto; }
   body.single-agent-active:not(.answer-reader-docked) .container, .agent-session > summary::after { transition: none; }
 }
 .chat-execution-control { display: inline-flex; align-items: center; flex: 0 0 auto; min-width: 0; max-width: 140px; }

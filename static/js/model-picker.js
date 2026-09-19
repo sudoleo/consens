@@ -891,6 +891,7 @@
 
     if (expandedModelPicker === select) {
       expandedModelPicker = null;
+      composerPickerResize?.disconnect();
     }
   }
 
@@ -921,6 +922,9 @@
     });
   }
   const fitOpenPicker = () => fitComposerPicker(getModelPickerState(expandedModelPicker));
+  // Expansion changes the trigger's position after the initial measurement.
+  // Observe only while a menu is open; absolute menus cannot resize this box.
+  const composerPickerResize = typeof ResizeObserver === 'function' ? new ResizeObserver(fitOpenPicker) : null;
   window.addEventListener('resize', fitOpenPicker);
   window.addEventListener('scroll', fitOpenPicker, true);
   window.visualViewport?.addEventListener('resize', fitOpenPicker);
@@ -928,6 +932,10 @@
   function openModelPicker(select, { secondary = false } = {}) {
     const state = getModelPickerState(select);
     if (!select || select.disabled || !state) return;
+
+    // Toolbar shortcuts remain visible on mobile while the picker's parent
+    // is collapsed. Reveal that parent before measuring or focusing the menu.
+    if (state.host.closest('.chat-input-container')) window.App.composer?.expand();
 
     if (expandedModelPicker && expandedModelPicker !== select) {
       collapseExpandedModelPicker(expandedModelPicker);
@@ -956,6 +964,9 @@
     }
 
     expandedModelPicker = select;
+    composerPickerResize?.disconnect();
+    const composer = state.host.closest('.input-section');
+    if (composer) composerPickerResize?.observe(composer);
     fitComposerPicker(state);
     if (secondary) (state.menu.querySelector('.is-selected:not(:disabled)') || state.menu.querySelector('button:not(:disabled)'))?.focus();
   }

@@ -1660,6 +1660,13 @@ Consensus-Agent-Schalter. `Deep Think` öffnet über
 `openModelPicker(select, {secondary: true})` die bestehende Reasoning-Auswahl;
 `Attach` bleibt bis zur Unterstützung von Anhängen deaktiviert. Vergleichsicons
 und Compare-Picker verwenden weiterhin dieselbe Modellauswahl.
+`openModelPicker` klappt einen mobilen Composer vor dem Messen und Fokussieren
+des Menüs auf. So öffnen die sichtbaren Toolbar-Shortcuts für Modelle und
+Reasoning auch dann ein bedienbares Menü, wenn dessen Elternbereich zuvor
+eingeklappt war. Ein nur bei offenem Menü aktiver ResizeObserver passt die
+Position während des Aufklappens an; die Picker-Ebene liegt auch bei einer
+mobilen `display: contents`-Zeile über Senden. Touch-Tests prüfen beide Shortcuts,
+freie Trefferflächen der Optionen und den Quellen-Schalter bei 320 und 390 px.
 `agent-chat.js` friert `checkSources` im RunContext ein und sendet es als
 `POST /agent.check_sources`, einschließlich Recovery. Alte API-Clients ohne das
 Feld bleiben bei `false`; die UI verwendet die gemeinsame gespeicherte Auswahl
@@ -1843,6 +1850,12 @@ agent-delegation.js verwendet das bestehende geordnete Activity-Journal,
 überlappende Modell-Icons und die Agent-Detailseitenleiste auch für Vergleichs-
 und Judge-Aufrufe (kind). Der Stapel dedupliziert identische API-Modelle, die
 Seitenleiste behält jeden Aufruf.
+Die Inline-Icons behalten ihre DOM-Knoten pro API-Modell: Statuswechsel,
+Tokenupdates und zusätzliche Aufrufe desselben Modells aktualisieren nur ihre
+Metadaten und das Ziel der Detailansicht. Neu hinzukommende Icons blenden sich
+einmal über 240 ms mit 4 px Versatz ein; mehrere neue Icons sind um jeweils
+24 ms (maximal 96 ms) versetzt. Dadurch bleiben Fokus und Animation bei
+laufenden Updates stabil. Reduced Motion deaktiviert die Bewegung vollständig.
 Die Leiste blendet sich mit kurzer Bewegung ein; auf Desktop weicht der Chat
 sanft aus, Reduced Motion deaktiviert beide Animationen. Modellname und Aufgabe
 stehen getrennt. Während eines Modellaufrufs schimmert die Usage-Zeile dezent:

@@ -128,9 +128,9 @@ def _json(route, payload, status=200):
 
 
 def _real_firebase_page(
-    browser, app_server, initial_uid="account-a", path="/app", init_script=None
+    browser, app_server, initial_uid="account-a", path="/app", init_script=None, *, has_touch=False
 ):
-    context = browser.new_context(viewport={"width": 1280, "height": 820})
+    context = browser.new_context(viewport={"width": 1280, "height": 820}, has_touch=has_touch)
     context.add_init_script(
         f"window.__E2E_INITIAL_UID = {json.dumps(initial_uid)};"
     )

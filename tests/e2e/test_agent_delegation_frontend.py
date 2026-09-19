@@ -55,6 +55,9 @@ def test_agent_live_counter_uses_streamed_progress_and_stops_animation(browser, 
         expect(label).to_have_text('Tokens pending')
         expect(page.locator('.agent-session-state')).to_have_text('Working · 5s')
         assert label.evaluate('el => getComputedStyle(el).animationName') == 'source-label-shine'
+        icon = page.locator('.agent-inline-model').first
+        assert icon.evaluate('el => getComputedStyle(el).animationName') == 'agent-icon-enter'
+        assert icon.evaluate('el => getComputedStyle(el).animationIterationCount') == '1'
         event = {"version": 1, "chat_id": chat, "turn_id": turn, "agent_id": aid, "session_seq": 1,
             "seq": 1, "chars": 120, "usage": None, "streaming": True, "duration_ms": 8200}
         page.evaluate("e => window.__agentPush('delegation_progress',e)", event)
@@ -66,6 +69,7 @@ def test_agent_live_counter_uses_streamed_progress_and_stops_animation(browser, 
             page.screenshot(path=str(target / f'agent-live-counter-{width}.png'))
         page.emulate_media(reduced_motion='reduce')
         assert label.evaluate('el => getComputedStyle(el).animationName') == 'none'
+        assert icon.evaluate('el => getComputedStyle(el).animationName') == 'none'
         assert label.evaluate('el => getComputedStyle(el).color') != 'rgba(0, 0, 0, 0)'
         page.emulate_media(reduced_motion='no-preference', forced_colors='active')
         assert label.evaluate('el => getComputedStyle(el).animationName') == 'none'

@@ -336,31 +336,47 @@
       inline?.remove(); inline = node("span", "agent-inline-models"); inlineHost.append(inline);
       inline.addEventListener("click", event => { event.preventDefault(); event.stopPropagation(); });
     }
-    const inlineSignature = JSON.stringify([view.key, view.closed, [...view.agents.values()].map(a => [a.id, a.title, a.status])]);
+    const inlineSignature = JSON.stringify([view.key, view.closed, [...view.agents.values()].map(a => [a.id, a.title, a.status, a.model?.model, a.model?.label])]);
     if (inline && inline.dataset.signature !== inlineSignature) {
       inline.dataset.signature = inlineSignature;
-      inline.replaceChildren();
-      const stack = node("span", "agent-model-stack");
+      if (inline._viewKey !== view.key) {
+        inline._viewKey = view.key;
+        inline._buttons = new Map();
+        inline._stack = node("span", "agent-model-stack");
+        const toggle = node("button", "agent-sidebar-toggle"); toggle.type = "button";
+        toggle.setAttribute("aria-controls", "agentSidebar");
+        toggle.addEventListener("click", () => view.closed ? show(null, toggle) : hide(true));
+        inline._toggle = toggle;
+        inline.replaceChildren(inline._stack, toggle);
+      }
       const models = new Map();
       for (const agent of view.agents.values()) {
         const key = agent.model?.model || agent.id;
         if (!models.has(key)) models.set(key, []);
         models.get(key).push(agent);
       }
-      for (const calls of models.values()) {
+      let added = 0;
+      for (const [key, calls] of models) {
         const agent = calls.find(a => activeStates.has(a.status)) || calls[0];
-        const button = node("button", "agent-inline-model"); button.type = "button";
+        let button = inline._buttons.get(key);
+        if (!button) {
+          button = node("button", "agent-inline-model"); button.type = "button";
+          button.style.setProperty('--agent-icon-delay', `${Math.min(added++, 4) * 24}ms`);
+          button.append(mark(agent));
+          button.addEventListener("click", () => show(button.dataset.agentId, button));
+          inline._buttons.set(key, button); inline._stack.append(button);
+        }
         button.title = `${agent.model?.label || "Model"} · ${calls.length} ${calls.length === 1 ? "call" : "calls"} · ${labels[agent.status]}`;
         button.dataset.status = agent.status;
-        button.setAttribute("aria-label", button.title); button.append(mark(agent));
-        button.addEventListener("click", () => show(agent.id, button)); stack.append(button);
+        button.dataset.agentId = agent.id;
+        button.setAttribute("aria-label", button.title);
       }
-      inline.append(stack);
-      if (view.agents.size) {
-        const button = node("button", "agent-sidebar-toggle", `Activity · ${view.agents.size}`); button.type = "button";
-        button.setAttribute("aria-controls", "agentSidebar"); button.setAttribute("aria-expanded", String(!view.closed));
-        button.addEventListener("click", () => view.closed ? show(null, button) : hide(true)); inline.append(button);
+      for (const [key, button] of inline._buttons) {
+        if (!models.has(key)) { button.remove(); inline._buttons.delete(key); }
       }
+      inline._toggle.hidden = !view.agents.size;
+      inline._toggle.textContent = `Activity · ${view.agents.size}`;
+      inline._toggle.setAttribute("aria-expanded", String(!view.closed));
     }
     sidebar.hidden = view.closed || !view.agents.size;
     document.body.classList.toggle("agent-sidebar-open", !sidebar.hidden);

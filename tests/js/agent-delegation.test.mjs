@@ -18,6 +18,26 @@ function receive(w, data) {
 }
 
 describe("Agent sidebar", () => {
+  it('keeps model icons and keyboard focus stable as statuses and same-model calls change', () => {
+    const {window:w,document:d,dom} = boot(async () => ({ok:true,json:async () => ({agents:[],status:'running'})}));
+    receive(w, agent()); w.App.agentDelegation.project({chatId,turnId,running:true});
+    const icon = d.querySelector('.agent-inline-model'); icon.focus();
+    receive(w, agent(2, 'completed'));
+    expect(d.querySelector('.agent-inline-model')).toBe(icon);
+    expect(d.activeElement).toBe(icon);
+    expect(icon.dataset.status).toBe('completed');
+    const next = agent(1, 'working', 'b'.repeat(32));
+    receive(w, next);
+    expect(d.querySelector('.agent-inline-model')).toBe(icon);
+    expect(d.activeElement).toBe(icon);
+    expect(icon.title).toContain('2 calls');
+    expect(icon.dataset.agentId).toBe(next.id);
+    d.querySelector('.agent-sidebar-close').click();
+    expect(d.querySelector('.agent-inline-model')).toBe(icon);
+    icon.click();
+    expect(d.querySelectorAll('.agent-session')[1].open).toBe(true);
+    dom.window.close();
+  });
   it('uses elapsed server durations with a monotonic clock and freezes terminal or recovered sessions', async () => {
     const {window:w,document:d,dom} = boot(async () => ({ok:true,json:async () => ({agents:[],status:'running'})}));
     let tick, monotonic = 100;
