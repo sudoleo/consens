@@ -46,6 +46,8 @@ def cli(tmp_path, request):
         path.touch()
     (root / "app/core").mkdir(parents=True)
     shutil.copy2(ROOT / "app/core/e2e_profile.py", root / "app/core/e2e_profile.py")
+    (root / "app/services").mkdir()
+    (root / "app/services/agent_tokens.py").write_text("def encoding(): return None\n", encoding="utf-8")
     (root / "firebase.json").write_text(json.dumps({
         "emulators": {"firestore": {"host": "127.0.0.1", "port": 9876}}
     }), encoding="utf-8")

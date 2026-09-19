@@ -244,6 +244,10 @@ def test_deep_think_counts_once_total_and_once_in_deep_quota(run_api, monkeypatc
 ])
 def test_authorization_rejections_never_start_a_second_provider(run_api, monkeypatch, changed, expected_code):
     client, _ = run_api
+    # This test compares identical operation payloads. Freeze the injected
+    # request clock so crossing a second cannot change their fingerprints.
+    prompt = chat_router.get_system_prompt()
+    monkeypatch.setattr(chat_router, "get_system_prompt", lambda: prompt)
     calls = []
     def provider(_provider, **kwargs):
         calls.append(True)

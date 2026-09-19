@@ -1,8 +1,10 @@
 # Agent · Beta
 
 Agent · Beta ist ein eigener Chatmodus für Pro-Nutzer und Admins. Das ausgewählte
-Chatmodell beantwortet einfache Fragen direkt und kann bei Abwägungen,
-Empfehlungen und plausibel unterschiedlichen Antworten selbst Vergleiche starten.
+Chatmodell bearbeitet Sachfragen standardmäßig über die Consensus-Pipeline:
+unabhängige Vergleichsantworten, eigene Synthese und anschließende Prüfung.
+Websuche darf die Frage und aktuelle Belege vorbereiten; Begrüßungen und reine
+Textbearbeitung bleiben direkt möglich.
 Eine Nutzerbestätigung ist dafür nicht nötig; Konkretisierungsfragen sind möglich.
 Der separate Consensus-Modus behält seinen bisherigen Ablauf und seine Run-Limits.
 
@@ -150,12 +152,16 @@ Gezählt wird Provider-Input plus Provider-Output. Cache-Reads/-Writes sind bere
 im Input enthalten, Reasoning bereits im Output. Diese Kategorien werden für
 Transparenz gespeichert, aber niemals zusätzlich zum Kontingent addiert.
 Provider-Gesamtkosten haben Vorrang; ohne sie berechnet die App eine gekennzeichnete
-Katalogschätzung. Die bestehende Kostenkontrolle gilt zusätzlich zur Tokenquote.
+Katalogschätzung. Kosten werden erfasst; im Agent-Chat gilt allein die zentrale
+Tokenquote als Verbrauchsgrenze.
 
-Vor jedem bezahlten Schritt reserviert der Server transaktional ein konservatives
-Budget zusammen mit dessen dedupliziertem Beleg. Settlement ersetzt es genau
-einmal durch gemessene Tokens. Bei fehlender Usage bleibt die Reservierung für
-den Tag bestehen und wird als unbekannt gekennzeichnet. Abbrüche und Fehler
+Vor jedem bezahlten Schritt reserviert der Server transaktional das erwartbare
+Inputvolumen mit Sicherheitsaufschlag und erlaubtem Output zusammen mit dessen
+dedupliziertem Beleg. Der Input wird lokal tokenisiert (tiktoken/cl100k plus
+25 % und Protokollreserve), einschließlich Tools und Antwortschemas.
+Settlement ersetzt die Reserve genau einmal durch gemessene Tokens. Bei
+fehlender finaler Usage endet die Reservierung ebenfalls; unbekannter Verbrauch
+bleibt als unbekannt gekennzeichnet und wird nicht als Schätzung abgebucht. Abbrüche und Fehler
 schenken keine bereits verbrauchten Tokens zurück. Replays führen keinen neuen
 Call aus. Beim UTC-Wechsel zählt ein Call zu seinem Starttag; nur ungenutzte
 Synthese-/Judge-Reserven wandern auf den neuen Tag.
@@ -194,7 +200,15 @@ Vollabfragen. Nach zehn Sekunden ohne Update wird bei sichtbarem Tab abgeglichen
 am Ende wird der terminale Zustand noch einmal geladen. Die Lease-Prüfung teilt
 ihren Receipt-Snapshot mit der Listenansicht, statt ihn doppelt zu lesen.
 
-Jeder tatsächlich anstehende Modellaufruf reserviert sein maximales Tokenvolumen.
+Jeder tatsächlich anstehende Modellaufruf reserviert seinen geschätzten Input
+und erlaubten Output; Suchkontext zählt erst nach der Suche. Blockieren noch
+laufende Calls das Budget, warten neue Calls abbrechbar auf deren Settlement.
+Sie erzeugen während des Wartens keine eigenen Reserven oder Provideraufrufe.
+Ohne solche Konkurrenz entfällt bei Bedarf zunächst optionale Suche; danach
+wird die tatsächliche Outputgrenze passend zu Restbudget und Kontextfenster
+gesetzt. Explizite Reasoning-Budgets behalten ihren erforderlichen Platz.
+Reicht es auch für Input und eine minimale Antwort nicht, wird vor dem Provider
+gestoppt. Eine am Outputlimit abgeschnittene Antwort bleibt als Teilantwort erhalten.
 Eine zusätzliche pauschale Reserve für zukünftige Synthese-/Judge-Aufrufe entfällt
 im Chat. Reicht das Tagesbudget für einen nächsten Aufruf nicht, bleiben vorhandene
 Ergebnisse mit ihrem tatsächlichen, gegebenenfalls unvollständigen Prüfstatus erhalten.
@@ -244,6 +258,19 @@ abgeschlossene Unterhaltung werden vom Server zusammengestellt. Toolargumente,
 Antworten und Quellen sind untrusted data, keine Berechtigungen. Strikte Schemas,
 servereigene Modellauflösung und Limits verhindern eine Änderung der Policy
 über Toolergebnisse. Dateien, Share und Watch sind weiterhin nicht freigeschaltet.
+
+Der feste Produktkontext erklärt allen beteiligten Modellen knapp ihre Rolle in
+consens.io. Für Sachfragen, Erklärungen, Empfehlungen und Bewertungen ist
+`compare_models → eigene Synthese → judge_answer` der Standard, ergänzt um
+`check_contradictions`, wenn aktiviert. Websuche darf vorher aktuelle Fakten oder
+die Fragestellung klären. Begrüßungen, Bestätigungen, notwendige Rückfragen,
+reine Textumformung/Übersetzung und ausdrücklich ohne Vergleich gewünschte
+Antworten bleiben direkt möglich. Alte allgemeine Hinweise auf direkte Antworten
+in gespeicherten Admin-Prompts werden durch diese konkrete Produktregel präzisiert.
+Liefert der Provider am Suchlimit eine Antwort ohne Vergleichs-Toolcall, folgt
+einmalig eine Orchestrierungsrunde mit den gesammelten Quellen und ohne neue
+Websuche. Sie führt die Recherche zurück in den Consensus-Ablauf; direkte
+Antwortausnahmen bleiben ausdrücklich zulässig.
 
 ## Persistenz, Stop und Recovery
 

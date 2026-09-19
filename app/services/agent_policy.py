@@ -28,7 +28,7 @@ class AgentPolicy:
         # Keep the bounded policy for legacy callers and the Consensus pipeline.
         return replace(cls.from_config({**config, "enabled": True}),
                        account_budget_only=True, context_chars=120_000,
-                       version="agent-account-budget-2026-09-19-v1")
+                       version="agent-account-budget-2026-09-19-v2")
 
     @classmethod
     def from_config(cls, config):

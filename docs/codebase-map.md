@@ -1682,7 +1682,23 @@ werden weder angezeigt noch persistiert. Weitere Details zur Worker-Kommunikatio
 stehen in [agent-delegation.md](agent-delegation.md).
 
 **Vergleich und Prüfung.** agent_comparison.py registriert compare_models und
-judge_answer mit strikten Pydantic-Argumenten. Das Modell entscheidet selbst,
+judge_answer mit strikten Pydantic-Argumenten. Der abschließend injizierte
+Produktprompt erklärt consens.io und setzt für Sachfragen, Erklärungen,
+Empfehlungen und Bewertungen standardmäßig `compare_models → Synthese →
+judge_answer` voraus; eingeschaltete Widerspruchsprüfung folgt wie bisher.
+Websuche darf die Anfrage und aktuelle Belege zuerst konkretisieren. Direkte
+Antworten sind für Begrüßungen, Bestätigungen, nötige Rückfragen, reine
+Textumformung/Übersetzung sowie ausdrücklich abgewählten Vergleich vorgesehen.
+Diese Regel konkretisiert auch ältere gespeicherte Admin-Prompts; kein zweiter
+LLM-Router und keine sprachabhängige Keyword-Klassifikation. Deaktivierte Worker
+liefern weder Worker-Katalog noch Delegationsprompt im Chatkontext. Auch
+Vergleichsmodelle, Judges und Worker erhalten eine knappe Rollen-/Produkterklärung.
+Beendet der Server-Suchloop einen Request mit recherchiertem Text ohne Client-Tool,
+führt `_consensus_search_handoff` einmalig in die Client-Tool-Orchestrierung zurück:
+Antwort und Quellen bleiben im Kontext, die nächste Runde bietet keine neue
+Suche an. So verdrängt OpenRouters Abschlussaufforderung am Suchlimit nicht den
+Consensus-Ablauf; ausdrückliche Direktantwort-Ausnahmen bleiben möglich.
+Das Modell entscheidet selbst,
 ob es die ganze Frage oder mehrere begründete Teilfragen vergleicht. Es
 liefert einen neutralen Auftrag mit nötigem Kontext; alle Vergleichsmodelle
 sehen dieselbe isolierte Aufgabe, keine Antworten anderer Vergleichsmodelle.
@@ -1938,7 +1954,31 @@ weder Modellaufrufe noch einen globalen Reset.
 Auch Abbrüche, Fehler und Judge-Wiederholungen zählen. Tageswechsel migrieren
 nur ungenutzte Prüfreserven; bereits gestartete Calls werden ihrem Claim-Tag
 zugeordnet. Andere parallele Chats können reserviertes Budget nicht ausgeben.
-Eine abgelehnte Reservierung ist von leerem Tagesbudget getrennt
+`agent_tokens.py` zählt Chatkontext, vollständige Tool-Fortsetzungen, Schemas
+und strukturierte Antwortformate lokal mit tiktoken/cl100k. Die unveränderten
+Vokabeldaten samt Lizenz liegen komprimiert in `llm/tokenizer_data/`; Laden
+prüft SHA-256 und benötigt weder Netzwerk noch einen beschreibbaren Cache.
+25 % Zuschlag plus Protokollreserve berücksichtigen abweichende Tokenizer;
+das ist eine Zulassungsschätzung, keine gemessene Usage und keine garantierte
+Provider-Obergrenze. `agent_costs.RunCosts.estimate` trennt diese Kalkulation
+von der lokalen Reservierung. Begrenzter Suchkontext zählt erst in Folgeaufrufen,
+nicht bereits vor der Suche. Legacy-Aufrufer behalten ihre konservativen Grenzen.
+
+`DelegationLoop._admit_chat_step` verwendet diesen Pfad gemeinsam für Chat,
+Worker, Vergleichsmodelle und Judges. Konkurrenz durch aktive Reservierungen
+führt zu abbrechbarem Warten mit lokalem Settlement-Signal und Poll-Backoff
+(maximal drei Sekunden), auch über getrennte Runs/Prozesse. Die vorhandene
+Lease-Recovery bereinigt verwaiste Produzenten; fehlgeschlagene idempotente
+Settlement-Schreibvorgänge werden vor weiterem Warten nachgeholt. Wartende
+Aufrufe halten keine eigene Reservierung und erzeugen keinen bezahlten Beleg.
+Wenn auch ohne Konkurrenz zu wenig Budget für die optionale Suche bleibt,
+entfällt sie mit ausdrücklichem Hinweis an das Modell. Anschließend passt sich
+`max_tokens` an Restbudget/Modellfenster an; ein Minimum für sichtbare Antwort
+und explizite Reasoning-Budgets bleibt erhalten. Derselbe angepasste Wert geht
+an Provider und Receipt. Ein echter Output-Abbruch (`length`) speichert die
+Teilantwort als fehlgeschlagen statt fälschlich als vollständige Antwort.
+
+Eine endgültig abgelehnte Reservierung ist von leerem Tagesbudget getrennt
 (`agent_token_reservation` / `agent_tokens_exhausted`); Fehler nennen benötigte
 und damals verfügbare Tokens. Scheitert vor dem Provider-Aufruf allein die
 Zulassung mit optionaler Suche, versucht DelegationLoop denselben Schritt ohne

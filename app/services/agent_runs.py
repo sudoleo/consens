@@ -105,9 +105,8 @@ class AgentRunStore(AgentSessionStore, ChatStore):
             if not cursor:
                 break
         messages.append({"role": "user", "content": target["question"]})
-        # Conservative byte bound for models with smaller windows. Actual
-        # token counting and compaction are separate follow-up work.
-        if model and sum(len(m["content"].encode("utf-8")) + 16 for m in messages) + model.max_output_tokens > model.context_length:
+        from app.services.agent_tokens import input_estimate, minimum_output
+        if model and input_estimate(messages, request_config=model.request_config) + minimum_output(model) > model.context_length:
             raise ValueError("This conversation is too long for the selected model. Choose a model with a larger context or start a new chat.")
         return messages
 

@@ -12,8 +12,9 @@ from app.services import agent_budget_config
 
 
 class AgentTokenBudgetExceeded(AnalysisBudgetExceeded):
-    def __init__(self, remaining, required):
+    def __init__(self, remaining, required, *, reserved=0):
         self.remaining, self.required = remaining, required
+        self.reserved = reserved
         self.code = "agent_token_reservation" if remaining else "agent_tokens_exhausted"
         message = (f"The next model call needed a reservation of {required:,} tokens; {remaining:,} were available at that point. "
                    "Some allowance may be reserved for active calls. Completed calls release their reservations."
@@ -82,7 +83,7 @@ def reserve(data, amount, *, limit=None):
     data = normalize(data)
     remaining = max(0, (daily_limit() if limit is None else limit) - data.get("used", 0) - data.get("reserved", 0))
     if amount > remaining:
-        raise AgentTokenBudgetExceeded(remaining, amount)
+        raise AgentTokenBudgetExceeded(remaining, amount, reserved=data.get("reserved", 0))
     data["reserved"] = data.get("reserved", 0) + amount
     data["revision"] = data.get("revision", 0) + 1
     return data

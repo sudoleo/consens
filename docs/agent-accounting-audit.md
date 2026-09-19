@@ -6,6 +6,19 @@ denselben metered Provider-Adapter und den transaktionalen Receipt-/Tagesledger.
 
 ## Gefundene und behobene Fehler
 
+- Ergänzung zur Admission: Byte-Längen wurden als Tokenzahlen behandelt; parallele
+  aktive Reservierungen führten zum Abbruch statt zum Warten. Der Chat verwendet
+  jetzt lokale Tokenisierung mit Sicherheitsaufschlag, abbrechbare Admission und
+  einen an verfügbaren Kontext/Tokens angepassten tatsächlichen Provider-Output.
+  Die atomare Quote, exakt einmaliges Settlement, Tages-/Resetzuordnung und
+  Behandlung unbekannter Usage bleiben erhalten. Suchkontext wird nicht mehr
+  bereits für die Generation vor der Suche reserviert.
+- Der Produktprompt setzt die Consensus-Pipeline als Standard für Sachfragen.
+  Eine reine Antwort aus dem Server-Suchloop führt einmalig zurück in die
+  Orchestrierung, mit vorhandenen Quellen und ohne erneute Suche.
+  Die Details und aktuelle Validierung stehen in
+  [Runtime-Admission](../artifacts/agent-runtime-admission/validation.md).
+
 - Fehlende Suchkostendetails machten auch bekannte Input-/Output-Zähler
   unvollständig. Token- und Kostenvollständigkeit werden getrennt behandelt.
 - Vor Beginn abgelehnte HTTP-Anfragen konnten das Nutzerkontingent bis zum

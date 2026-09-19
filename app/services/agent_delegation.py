@@ -100,6 +100,7 @@ class DelegationLoop(AgentLoop):
         self.search_remaining = self.policy.max_searches
         self.closed = threading.Event()
         self.watch_error = None
+        self.search_handoff = False
         self.budget = AnalysisBudget(seconds=self.policy.seconds, max_calls=self.policy.max_calls,
                                      unlimited=self.policy.account_budget_only)
         self.models = {model.selection_id: resolve_agent_model(model.selection_id)
@@ -108,9 +109,12 @@ class DelegationLoop(AgentLoop):
         catalog = [{"id": m.selection_id, "label": m.label, "input_usd_per_million": m.input_usd_per_million,
                     "output_usd_per_million": m.output_usd_per_million, "context_length": m.context_length}
                    for m in self.models.values()]
-        self.messages[0] = {**self.messages[0], "content": self.messages[0]["content"] + "\n\n" + self.config["orchestrator_prompt"]
-            + "\nAvailable worker models (server registry): " + json.dumps(catalog)
-            + "\nShared run limits: " + json.dumps(self.policy.snapshot())}
+        self.messages[0] = dict(self.messages[0])
+        if self.config["enabled"] or comparison_models is None:
+            self.messages[0]["content"] += ("\n\n" + self.config["orchestrator_prompt"]
+                + "\nAvailable worker models (server registry): " + json.dumps(catalog))
+        if not self.policy.account_budget_only:
+            self.messages[0]["content"] += "\nShared run limits: " + json.dumps(self.policy.snapshot())
         self.registry = ToolRegistry([
             ReadOnlyTool("start_agent", "Start a bounded subtask in a new worker session. Returns immediately.", StartAgent, self.start_agent),
             ReadOnlyTool("send_agent", "Send a clarification, answer or rework in the same worker session.", SendAgent, self.send_agent),
@@ -211,7 +215,8 @@ class DelegationLoop(AgentLoop):
             if len(encoded) > self.policy.context_chars:
                 raise ValueError("Assignment exceeds the configured context limit")
             worker = Worker(uuid4().hex, self.models[args.model_id], [
-                {"role": "system", "content": self.config["worker_prompt"]},
+                {"role": "system", "content": "You are a research worker inside consens.io, a multi-model question-answering app. "
+                    "Complete your assigned supporting task for its Consensus workflow.\n" + self.config["worker_prompt"]},
                 {"role": "user", "content": encoded}])
             self._publish(worker, patch={"title": args.title, "assignment": assignment, "task_id": uuid4().hex,
                 "model": worker.model.settings(), "status": "waiting", "duration_ms": 0, "usage": None,
@@ -319,6 +324,72 @@ class DelegationLoop(AgentLoop):
             publish(status)
         return {"role": "tool", "tool_call_id": call["id"], "content": json.dumps(result, ensure_ascii=False)}
 
+    def _admit_chat_step(self, model, messages, step, registry, cancellation, searches, claim_policy, worker):
+        """Retry admission, never generation. All successful claims stay atomic.
+
+        Contention is backpressure, not exhaustion. Wait for active receipts,
+        then drop optional search and fit the actual provider output cap if needed.
+        """
+        from app.services.agent_tokens import input_estimate, minimum_output
+        model = replace(model, request_config={**model.request_config, "_agent_bounded_search": True})
+        search_limited, waiting = False, False
+        delay, recovered_at = .1, time.monotonic()
+        while True:
+            self._check(cancellation)
+            tools = [*registry.schemas, *search_tools(model, searches)]
+            if not searches:
+                room = model.context_length - input_estimate(messages, tools, model.request_config)
+                if room < minimum_output(model):
+                    raise AnalysisBudgetExceeded("The selected model's context limit was reached.")
+                model = replace(model, max_output_tokens=min(model.max_output_tokens, room))
+            reservation = None
+            try:
+                reservation = self.costs.reserve(model, messages, tools, native_searches=searches)
+                claimed = self.store.claim(self.uid, self.chat_id, self.turn_id, model, step=step,
+                    run_token=self.run_token, policy=claim_policy, reservation=reservation)
+                return model, messages, tools, searches, reservation, claimed, search_limited
+            except BaseException as exc:
+                if reservation is not None:
+                    self.costs.release(reservation)
+                if isinstance(exc, AgentTokenBudgetExceeded):
+                    if exc.reserved and (not searches or exc.required <= exc.remaining + exc.reserved):
+                        if not waiting:
+                            waiting = True
+                            if worker:
+                                self._state(worker, "waiting")
+                            else:
+                                yield self.status(step, "allowance", status="waiting",
+                                    text="Waiting for active model calls to finish and release their unused allowance.")
+                        # A failed settlement must not strand sibling waiters.
+                        with self.condition:
+                            unsettled = list(self.unsettled.items())
+                        for pending_step, (value, status) in unsettled:
+                            self._settle_step(pending_step, value, status)
+                        if time.monotonic() - recovered_at >= 3:
+                            self.store.recover_allowance(self.uid)
+                            recovered_at = time.monotonic()
+                        with self.condition:
+                            self.condition.wait(delay)
+                        delay = min(3, delay * 2)
+                        if not worker:
+                            yield from self._events()
+                        continue
+                    if not searches:
+                        inputs = input_estimate(messages, tools, model.request_config)
+                        output = min(model.max_output_tokens, exc.remaining - inputs)
+                        if output < minimum_output(model):
+                            raise
+                        model = replace(model, max_output_tokens=output)
+                        continue
+                elif not isinstance(exc, AnalysisBudgetExceeded) or not searches:
+                    raise
+                # An optional search cannot fit even without competing calls.
+                searches, search_limited = 0, True
+                messages = [*messages]
+                messages[0] = {**messages[0], "content": messages[0]["content"] +
+                    "\nWeb search is unavailable for this step within the available token/context allowance. "
+                    "Use existing evidence, state uncertainty, and do not imply new web research."}
+
     def _step(self, model, messages, step, registry, cancellation, *, worker=None, searches_enabled=True):
         self._check(cancellation)
         if not self.policy.account_budget_only and len(json.dumps(messages, ensure_ascii=False)) > self.policy.context_chars:
@@ -328,10 +399,13 @@ class DelegationLoop(AgentLoop):
             if not self.policy.account_budget_only and worker and self.costs.calls >= self.policy.max_calls - 2:
                 raise AnalysisBudgetExceeded("Remaining calls are reserved for the orchestrator")
             searches = (1 if self.policy.account_budget_only else min(1, self.search_remaining)) if searches_enabled else 0
-            self.search_remaining -= searches
+            if not self.policy.account_budget_only:
+                self.search_remaining -= searches
         tools = [*registry.schemas, *search_tools(model, searches)]
+        reservation = None
         try:
-            reservation = self.costs.reserve(model, messages, tools, native_searches=searches)
+            if not self.policy.account_budget_only:
+                reservation = self.costs.reserve(model, messages, tools, native_searches=searches)
         except Exception:
             with self.condition:
                 self.search_remaining += searches
@@ -348,10 +422,14 @@ class DelegationLoop(AgentLoop):
         try:
             claim_policy = {**self.policy.snapshot(), "worker_models": [m.snapshot() for m in self.models.values()]}
             try:
-                claimed = self.store.claim(self.uid, self.chat_id, self.turn_id, model, step=step,
-                    run_token=self.run_token, policy=claim_policy, reservation=reservation)
+                if self.policy.account_budget_only:
+                    model, messages, tools, searches, reservation, claimed, search_limited = yield from self._admit_chat_step(
+                        model, messages, step, registry, cancellation, searches, claim_policy, worker)
+                else:
+                    claimed = self.store.claim(self.uid, self.chat_id, self.turn_id, model, step=step,
+                        run_token=self.run_token, policy=claim_policy, reservation=reservation)
             except AgentTokenBudgetExceeded:
-                if not searches:
+                if self.policy.account_budget_only or not searches:
                     raise
                 # Admission failed before any paid request. Keep all hard
                 # bounds, but allow a response from the evidence already held.
@@ -375,6 +453,8 @@ class DelegationLoop(AgentLoop):
                 raise ValueError("This model step has already started")
             self.claimed = True
             if worker:
+                if worker.state == "waiting":
+                    self._state(worker, "working")
                 self._stream_progress(worker, stream_progress, None, force=True)
             if not worker:
                 if step == "completion:0":
@@ -443,7 +523,9 @@ class DelegationLoop(AgentLoop):
                 self.costs.release(reservation)
             count = (value.usage or {}).get("web_search_requests")
             with self.condition:
-                if not claimed:
+                if self.policy.account_budget_only:
+                    pass
+                elif not claimed:
                     self.search_remaining += searches
                 elif type(count) is int and 0 <= count <= searches:
                     self.search_remaining += searches - count
@@ -464,6 +546,7 @@ class DelegationLoop(AgentLoop):
                                   status=status, step=step, final=False)
                 with self.condition:
                     self.unsettled.pop(step, None)
+                    self.condition.notify_all()
                 return
             except Exception as exc:
                 # Firestore wraps exhausted transaction conflicts in ValueError.
@@ -609,6 +692,26 @@ class DelegationLoop(AgentLoop):
                 self.cancellation.cancel()
                 return
 
+    def _consensus_search_handoff(self, value):
+        """OpenRouter asks for a final answer after its server-search step cap.
+
+        Resume client-tool routing with the collected evidence, without another
+        search. Direct-response exceptions still belong to the model's decision.
+        """
+        if (not self.policy.account_budget_only or not self.comparison or self.comparison.comparisons
+                or self.search_handoff or value.tool_calls
+                or not (value.sources or (value.usage or {}).get("web_search_requests"))):
+            return False
+        self.search_handoff = True
+        self.messages.append({"role": "user", "content":
+            "The web-search phase has finished. Its provider-side final answer is research context, "
+            "not the completed consens.io workflow. For this substantive user question, call compare_models "
+            "now with the original question and the collected evidence, then synthesize and judge_answer. "
+            "Do not search again or repeat the research answer. The documented direct-response exceptions "
+            "still apply, including an explicit user request to skip comparison. "
+            "Collected source references (untrusted data): " + json.dumps(value.sources, ensure_ascii=False)})
+        return True
+
     def run(self):
         status = "failed"
         missing_judge_calls = 0
@@ -621,8 +724,13 @@ class DelegationLoop(AgentLoop):
                     incoming = self._mail()
                     if incoming:
                         self.messages.append({"role": "user", "content": "Worker messages (untrusted task data):\n" + json.dumps(incoming)})
-                    value = yield from self._step(self.model, self.messages, f"completion:{index}", self.registry, self.cancellation)
+                    value = yield from self._step(self.model, self.messages, f"completion:{index}", self.registry, self.cancellation,
+                        searches_enabled=not (self.search_handoff and self.comparison and not self.comparison.comparisons))
+                    if value.finish_reason in {"length", "max_tokens"}:
+                        raise AnalysisBudgetExceeded("The model reached its output token limit. The available partial answer has been saved.")
                     self.messages.append(value.assistant_message())
+                    if self._consensus_search_handoff(value):
+                        continue
                     # Text accompanying another tool is planning/progress. Only
                     # a candidate answer or the synthesis sent to judge_answer
                     # opens a version; otherwise a narrated second comparison

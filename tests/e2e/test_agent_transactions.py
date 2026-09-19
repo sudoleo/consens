@@ -18,6 +18,66 @@ from app.services.llm.provider_runtime import AnalysisBudgetExceeded
 from app.services import agent_quota
 
 
+def test_chat_admission_waits_across_runs_then_uses_released_allowance():
+    from app.services.agent_delegation import DelegationLoop
+    from app.services.agent_tools import ToolRegistry
+    from app.services.llm.provider_runtime import ProviderCancellation
+    assert_safe_e2e_environment()
+    db = firestore.Client(project=E2E_PROJECT_ID)
+    uid = 'agent-admission-wait-' + uuid.uuid4().hex
+    store = AgentRunStore(db)
+    entered, finish, waiting = threading.Event(), threading.Event(), threading.Event()
+    calls, loops = [], []
+    model = AgentModel(max_output_tokens=2048)
+    class Completion(AgentCompletion):
+        def stream(self, *, model, **kwargs):
+            calls.append(model.max_output_tokens)
+            if len(calls) == 1:
+                entered.set()
+                assert finish.wait(10)
+            self.text, self.finish_reason = 'Verified answer.', 'stop'
+            self.usage = measured_usage({'prompt_tokens': 100, 'completion_tokens': 50}, model)
+            yield {'type': 'delta', 'text': self.text}
+    try:
+        for i in range(2):
+            chat = store.create_chat(uid, execution_mode='agent')['id']
+            turn = store.create_turn(uid, chat, question='Question', mode='Agent', deep_search=False,
+                selected_models=[model.model], consensus_model=model.model, client_request_id=str(i), execution_mode='agent')['id']
+            loop = DelegationLoop(store=store, uid=uid, chat_id=chat, turn_id=turn, model=model,
+                messages=[{'role': 'system', 'content': 'Answer.'}, {'role': 'user', 'content': 'Question'}],
+                api_key='test', cancellation=ProviderCancellation(), policy=AgentPolicy.for_chat(defaults()),
+                delegation_config=defaults(), completion_factory=Completion)
+            loop.registry = ToolRegistry()
+            loop.messages[0]['content'] = 'Answer.'
+            loops.append(loop)
+        quota = agent_quota.quota_ref(db, uid, agent_quota.day_key())
+        quota.set({'used': 246500})
+        def run(loop):
+            for event in loop.run():
+                if event and event.get('status') == 'waiting':
+                    waiting.set()
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            first = pool.submit(run, loops[0])
+            assert entered.wait(10)
+            second = pool.submit(run, loops[1])
+            try:
+                assert waiting.wait(10)
+                assert calls == [2048]
+            finally:
+                finish.set()
+            first.result(timeout=10)
+            second.result(timeout=10)
+        assert calls == [2048, 2048]
+        assert quota.get().to_dict()['used'] == 246800
+        assert quota.get().to_dict()['reserved'] == 0
+        assert all(store.get_turn(uid, loop.chat_id, loop.turn_id)['status'] == 'completed' for loop in loops)
+    finally:
+        finish.set()
+        FirestoreAccountDeletion(db)._delete_user_subcollections(uid)
+        db.collection('users').document(uid).delete()
+        db.close()
+
+
 def test_parallel_legacy_hold_repair_preserves_measured_usage_and_live_reservations():
     assert_safe_e2e_environment()
     db = firestore.Client(project=E2E_PROJECT_ID)

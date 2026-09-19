@@ -104,7 +104,7 @@ try {
         if (-not (Test-Path -LiteralPath $python)) {
             throw 'Missing venv/Scripts/python.exe. Create it with python -m venv venv; see docs/testing.md.'
         }
-        Invoke-DevStep 'Python test dependencies (setup: python -m pip install -r requirements-test.txt in venv)' $python @('-c', 'import pytest')
+        Invoke-DevStep 'Python test dependencies (setup: python -m pip install -r requirements-test.txt in venv)' $python @('-c', 'import pytest; from app.services.agent_tokens import encoding; encoding()')
         # Do not inherit an E2E run into the backend suite, or UNIT_TEST_MODE
         # into a browser run. Restore the caller's environment in finally.
         Set-DevEnvironment 'RUN_E2E' $(if ($Target -eq 'browser') { '1' } else { $null })

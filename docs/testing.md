@@ -80,6 +80,18 @@ PowerShell-Versionen; sie ersetzen keinen echten Emulatorlauf:
 
 ## Abhängigkeiten
 
+Agent-Admission benötigt `tiktoken` und `regex` aus `requirements.txt` (auch in
+`requirements-test.txt` eingebunden). Das cl100k-Vokabular ist inklusive Lizenz
+unter `app/services/llm/tokenizer_data/` eingecheckt. `dev.ps1` prüft beim
+Python-Setup auch das lokale Laden samt Hash; es gibt keinen Download beim
+ersten Chat oder Test. Fehlende Pakete wie üblich über die Requirements installieren.
+
+`tests/test_agent_admission.py` prüft realistische Promptgrößen bei 20.933 Resttokens,
+paralleles Warten/Stop, Anpassung des Provider-Outputs samt Receipt, echte Erschöpfung,
+Reasoning-Mindestplatz, Unicode/Sondertokens ohne Netzwerk, Suchreserven und
+Produktkontext. `tests/e2e/test_agent_transactions.py` prüft dasselbe Warten über
+zwei getrennte Runs gegen den isolierten Firestore-Emulator.
+
 ### Standalone Publisher
 
 Der Scheduled Publisher benötigt nur Python 3.11 und die Standardbibliothek.

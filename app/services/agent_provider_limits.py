@@ -58,8 +58,6 @@ def agent_failure(error):
     from app.services.agent_quota import AgentTokenBudgetExceeded
     from app.services.agent_runtime import AgentCapacityExceeded
     from app.services.chat_store import TurnStatusConflict
-    from app.services.agent_runtime import AgentCapacityExceeded
-    from app.services.chat_store import TurnStatusConflict
     from app.services.llm.provider_runtime import AnalysisBudgetExceeded
     import httpx
     if isinstance(error, AgentTokenBudgetExceeded):
@@ -67,8 +65,6 @@ def agent_failure(error):
                 "required_tokens": error.required, "available_tokens": error.remaining}
     if isinstance(error, AgentRunInterrupted):
         return {"code": "run_interrupted", "error": str(error)}
-    if isinstance(error, (AgentCapacityExceeded, TurnStatusConflict)):
-        return {"code": "run_state_conflict", "error": str(error)}
     if isinstance(error, (AgentCapacityExceeded, TurnStatusConflict)):
         return {"code": "run_state_conflict", "error": str(error)}
     if isinstance(error, AgentProviderCooldown):

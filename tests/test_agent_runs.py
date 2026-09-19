@@ -485,7 +485,7 @@ def test_context_check_precedes_paid_claim_for_small_model(api, monkeypatch):
     client, store, calls = api
     chat_id, turn = pending(store)
     value = receipt()
-    value.text = "Old answer " * 1600
+    value.text = "Old answer " * 10000  # Exceed the token window, not just its byte count.
     store.claim(UID, chat_id, turn["id"], AgentModel())
     store.settle(UID, chat_id, turn["id"], completion=value, status="succeeded")
     monkeypatch.setenv("AGENT_MODEL", "openai/gpt-3.5-turbo")

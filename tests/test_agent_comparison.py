@@ -194,7 +194,7 @@ def test_admin_budget_is_enforced_and_reset_isolated_from_inflight_settlement(st
 
 
 
-@pytest.mark.parametrize("remaining,succeeds,context_room", [(70000, True, None), (100, False, None), (70000, False, 0)])
+@pytest.mark.parametrize("remaining,succeeds,context_room", [(40000, True, None), (100, False, None), (40000, False, 0)])
 def test_search_reservation_can_fall_back_without_extra_paid_claim(store, remaining, succeeds, context_room):
     calls = []
     class Completion(AgentCompletion):

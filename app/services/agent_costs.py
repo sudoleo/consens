@@ -62,8 +62,21 @@ class RunCosts:
             return self._reserve(model, messages, tools, native_searches=native_searches)
 
     def _reserve(self, model, messages, tools=(), *, native_searches=0):
+        tokens, cost = self.estimate(model, messages, tools, native_searches=native_searches)
+        if not self.policy.account_budget_only and (self.calls >= self.policy.max_calls or self.tokens + tokens > self.policy.max_tokens
+                or self.cost + cost > self.policy.max_cost_nano_usd):
+            raise AnalysisBudgetExceeded("The agent's token or simulated cost budget was reached.")
+        self.tokens += tokens
+        self.cost += cost
+        self.calls += 1
+        return tokens, cost
+
+    def estimate(self, model, messages, tools=(), *, native_searches=0):
         from app.services.agent_tools import uses_native_search
-        inputs = input_bound(messages, tools)
+        from app.services.agent_tokens import input_estimate
+        inputs = (input_estimate(messages, tools, model.request_config) if self.policy.account_budget_only
+                  else input_bound(messages, tools))
+        initial_inputs = inputs
         if inputs + model.max_output_tokens > model.context_length:
             raise AnalysisBudgetExceeded("The selected model's context limit was reached.")
         # Native search injects provider-owned context that we cannot count
@@ -80,19 +93,19 @@ class RunCosts:
         # Account conservatively for native model continuations hidden behind
         # the provider API. Do not advertise max_results as a native input cap.
         segments = native_searches + 1 if native_searches else 1
-        tokens = (inputs + model.max_output_tokens) * segments
-        cost = int(((inputs * max(Decimal(model.input_usd_per_million), Decimal(model.cache_read_usd_per_million),
+        total_inputs = inputs * segments
+        if self.policy.account_budget_only and native_searches and model.request_config.get("_agent_bounded_search"):
+            # Search results do not exist in the pre-search generation. Each
+            # bounded result enters only its subsequent continuations.
+            total_inputs = initial_inputs * segments + (inputs - initial_inputs) * segments // 2
+        outputs = model.max_output_tokens * segments
+        tokens = total_inputs + outputs
+        cost = int(((total_inputs * max(Decimal(model.input_usd_per_million), Decimal(model.cache_read_usd_per_million),
                                  Decimal(model.cache_write_usd_per_million or model.input_usd_per_million))
-                     + model.max_output_tokens * Decimal(model.output_usd_per_million)) * 1000
-                    ).quantize(Decimal("1"), rounding=ROUND_CEILING)) * segments
+                     + outputs * Decimal(model.output_usd_per_million)) * 1000
+                    ).quantize(Decimal("1"), rounding=ROUND_CEILING))
         if native_searches:
             cost += native_searches * (search_cost_nanos(model) or 10_000_000)
-        if not self.policy.account_budget_only and (self.calls >= self.policy.max_calls or self.tokens + tokens > self.policy.max_tokens
-                or self.cost + cost > self.policy.max_cost_nano_usd):
-            raise AnalysisBudgetExceeded("The agent's token or simulated cost budget was reached.")
-        self.tokens += tokens
-        self.cost += cost
-        self.calls += 1
         return tokens, cost
 
     def reconcile(self, reservation, usage):
