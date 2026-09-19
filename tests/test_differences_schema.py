@@ -280,8 +280,7 @@ class JudgePolicyTests(unittest.TestCase):
     ALL_KEYS = {"OpenRouter": "sk-or"}
 
     def test_judge_family_differs_from_consensus_family(self):
-        # Gemini ist die erste Familie der Priorität; für eine Gemini-Engine
-        # muss der Judge trotzdem auf eine andere Familie ausweichen.
+        # OpenAI leads; its own engines still use an independent Gemini judge.
         (provider, api_model, _), tier = _resolve_differences_engine("Gemini", self.ALL_KEYS)
         self.assertEqual(provider, "openai")
         self.assertEqual(api_model, cfg.openrouter_model_id(cfg.DEFAULT_OPENAI_MODEL, "openai"))

@@ -346,7 +346,7 @@ class CoverageIntegrationTests(unittest.TestCase):
     """Beide Judges zusammen: der Differences-Call liefert die Widersprueche,
     der Coverage-Call die Belegliste - und der Server legt sie zusammen."""
 
-    def run_pair(self, consensus=CONSENSUS):
+    def run_pair(self, consensus=CONSENSUS, *, consensus_model="OpenAI", busy_provider=None):
         differences_payload = json.dumps({
             "differences": [{
                 "claim": "The completion year is disputed.",
@@ -363,6 +363,9 @@ class CoverageIntegrationTests(unittest.TestCase):
         })
 
         def engine(provider, api_model, model_ref, api_keys, **kwargs):
+            if provider == busy_provider:
+                from app.services.agent_provider_limits import AgentProviderCooldown
+                raise AgentProviderCooldown(30)
             prompt = kwargs["prompt"]
             if '"counter_quotes"' in prompt:
                 labels = [
@@ -388,9 +391,18 @@ class CoverageIntegrationTests(unittest.TestCase):
             return query_differences(
                 {"openai": "answer one", "mistral": "answer two"},
                 consensus, ALL_KEYS,
-                differences_model="OpenAI",
+                differences_model=consensus_model,
                 excluded_models=[],
             )
+
+    def test_busy_openai_falls_back_for_both_judges(self):
+        _text, data = self.run_pair(consensus_model="DeepSeek", busy_provider="openai")
+        self.assertIsNotNone(data)
+        for role in ('differences', 'coverage'):
+            self.assertEqual(data['judges'][role]['provider'], 'Gemini')
+            self.assertEqual(data['judges'][role]['attempts'], 3)
+        self.assertEqual(data['judges']['coverage']['missing'], 0)
+        self.assertTrue(data['claims'])
 
     def test_claims_come_from_the_coverage_judge(self):
         _text, data = self.run_pair()

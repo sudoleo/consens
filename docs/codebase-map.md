@@ -3729,9 +3729,14 @@ CLI mit `firebase deploy --only firestore:rules,firestore:indexes`):
   Denktiefe: OpenAI/Gemini `low`, Mistral wegen dessen API-Vertrag `none`).
   `judge_families` mappt Engine-Familie → bevorzugte Judge-Familie
   (`apply_judge_families`; nie die eigene Familie, ohne Eintrag/Credential Auto
-  über `JUDGE_FAMILY_PRIORITY`). Auto priorisiert Gemini, dann OpenAI; Mistral
-  steht als funktionsfähiger Notfall-Judge ganz hinten. In Serverpfaden zählt
-  in allen Familien denselben OpenRouter-Key; im Own-Key-Modus gibt es keinen
+  über `JUDGE_FAMILY_PRIORITY`). Auto priorisiert OpenAI, dann Gemini; für
+  OpenAI-Engines bleibt Gemini zuerst (keine Selbstprüfung). Danach folgen
+  unverändert DeepSeek, Grok, Anthropic, Mistral, Kimi, GLM und Meta.
+  Die Standard-/Pro-Modellzuordnung bleibt admin-konfiguriert. Differences
+  und Coverage behalten ihre Retry-/Fallback-Pläne auch bei manueller
+  Familienpräferenz; ein Provider-Rate-Limit verhindert den Wechsel zur
+  nächsten geplanten fremden Familie nicht. In Serverpfaden verwenden
+  alle Familien denselben OpenRouter-Key; im Own-Key-Modus gibt es keinen
   Fallback auf das Server-Credential.
 - `app_config/scheduled_consensus_publisher` — Admin-Steuerung für den GitHub-
   Publisher: `enabled`, Themen-Brief, automatische Indexfreigabe sowie

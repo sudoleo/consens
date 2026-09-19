@@ -1820,9 +1820,9 @@ def _judge_effort(provider: str, api_model: str, judge_tier: str) -> str | None:
     ohnehin nicht.
 
     Gilt bewusst für BEIDE Stufen: die Standard-Judges sind zwar die günstigen
-    Basis-Modelle, aber längst selbst Reasoning-Modelle (Gemini Flash, das
-    OpenAI-Mini) — und Gemini steht in JUDGE_FAMILY_PRIORITY vorn, ist also der
-    häufigste Judge überhaupt. Das Modell selbst wird dabei nie getauscht."""
+    Basis-Modelle, aber längst selbst Reasoning-Modelle (Gemini Flash und
+    OpenAI). OpenAI steht in JUDGE_FAMILY_PRIORITY vorn; OpenAI-Engines nehmen
+    Gemini als erste fremde Familie. Das Modell selbst wird dabei nie getauscht."""
     return cfg.judge_reasoning_effort(provider)
 
 

@@ -555,10 +555,10 @@ CHAT_MEMORY_MODEL_BY_PROVIDER = dict(_BASE_CHAT_MEMORY_MODEL_BY_PROVIDER)
 
 # Familien-Prioritaet der Judge-Wahl: primaerer und Fallback-Judge nehmen die
 # erste andere Familie; die gemeinsame OpenRouter-Verfügbarkeit wird davor geprüft.
-# Gemini/OpenAI remain the preferred independent judges. Mistral is a working
-# emergency fallback, but intentionally comes after every other family.
+# OpenAI is preferred; OpenAI engines skip their own family and use Gemini.
+# Keep the remaining fallback order unchanged.
 _JUDGE_FAMILY_PRIORITY_BASE = [
-    "gemini", "openai", "deepseek", "grok", "anthropic", "mistral"
+    "openai", "gemini", "deepseek", "grok", "anthropic", "mistral"
 ]
 JUDGE_FAMILY_PRIORITY = [
     *_JUDGE_FAMILY_PRIORITY_BASE,

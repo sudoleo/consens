@@ -260,8 +260,13 @@ class ExistingModelFlowTests(unittest.TestCase):
         snapshot = cfg.get_judge_families()
         all_keys = {"OpenRouter": "key"}
         try:
-            # Ohne Mapping: Prioritaetsliste (gemini zuerst, eigene Familie nie).
+            # Auto prefers OpenAI; only its own engines start with Gemini.
             cfg.apply_judge_families({})
+            for provider in cfg.PROVIDERS:
+                families = consensus_engine._judge_families(provider, all_keys, count=len(cfg.PROVIDERS))
+                self.assertEqual(families[0], 'gemini' if provider == 'openai' else 'openai')
+                self.assertNotIn(provider, families)
+                self.assertEqual(len(families), len(cfg.PROVIDERS) - 1)
             self.assertEqual(
                 consensus_engine._judge_families("openai", all_keys, count=2),
                 ["gemini", "deepseek"],
