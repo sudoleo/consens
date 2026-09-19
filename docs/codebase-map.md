@@ -1763,9 +1763,15 @@ ins Tagesbudget passen; ungeprüfte Antworten werden nie erfolgreich abgeschloss
 ist keine automatische Prüfung erforderlich. Ein ausdrücklicher Prüfwunsch kann
 zuerst mit compare_models eine Grundlage einholen.
 
-**Journal, Abbruch und Verlauf.** AgentRunStore/AgentSessionStore verwenden
-users/{uid}/llm_calls mit deduplizierten completion:N- und agent:<uuid>:N-Belegen,
-Producer-Token, Lease, Budget-/Tarifsnapshot und Status. Ein beanspruchter
+**Journal, Abbruch und Verlauf.**
+`chat_store.turn_detail` liefert für Agent-Turns `assistant_response` und den
+Kompatibilitätsalias `consensus` unverändert aus. Kein Trimmen, NFKC-Normalisieren
+oder erneutes Kürzen beim Lesen: Schon abschließende Leerzeilen gehören zum
+geprüften Hash. So bleiben Prüfungen und Markierungen nach Final-Event,
+Recovery und erneutem Öffnen des Verlaufs an denselben Text gebunden.
+AgentRunStore/AgentSessionStore verwenden users/{uid}/llm_calls mit deduplizierten
+completion:N- und agent:<uuid>:N-Belegen, Producer-Token, Lease,
+Budget-/Tarifsnapshot und Status. Ein beanspruchter
 Provider-Schritt wird auch nach einem Prozessabsturz nie erneut ausgeführt.
 Kurze Agent-Transaktionen teilen innerhalb eines Prozesses einen kontogebundenen
 Lock-Pool, damit parallele Claims, Statusmeldungen und Abrechnungen nicht um

@@ -528,16 +528,22 @@ def turn_detail(turn_id: object, data: object, model_answers: dict[str, dict]) -
         source = {**source, "consensus": source["assistant_response"]}
     result = turn_metadata(turn_id, source)
     if source.get("execution_mode") == "agent":
-        result["assistant_response"] = source.get("consensus", "")
+        text = source.get("consensus", "")
+        # Agent reviews bind to the exact provider text. The shared legacy
+        # projection trims, NFKC-normalizes and truncates Consensus prose,
+        # which would invalidate a completed review even on trailing newlines.
+        # Agent output is already bounded at generation/storage time.
+        result["assistant_response"] = result["consensus"] = text if isinstance(text, str) else ""
         for field in ("agent_settings", "agent_activity", "agent_usage", "agent_finish_reason", "agent_reasoning_truncated", "agent_review", "agent_failure"):
             if field in source:
                 result[field] = source[field]
     if "consensus" in source:
         from app.services.source_verification import stored_verification
         result["source_verification"] = stored_verification(source.get("source_verification"), source.get("consensus"))
-        result["consensus"] = _bounded_text(
-            source.get("consensus"), CONSENSUS_MAX_LENGTH, field_name="consensus"
-        )
+        if source.get("execution_mode") != "agent":
+            result["consensus"] = _bounded_text(
+                source.get("consensus"), CONSENSUS_MAX_LENGTH, field_name="consensus"
+            )
     if "differences" in source:
         result["differences"] = _bounded_text(
             source.get("differences"),

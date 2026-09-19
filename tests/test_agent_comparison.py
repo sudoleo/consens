@@ -146,6 +146,31 @@ def test_rate_limited_answer_is_distinct_from_successful_judges(store):
     assert review_is_bound(review, loop.comparison.text)
 
 
+def test_review_binding_survives_saved_turn_projection_without_normalizing_text(store):
+    script = Script()
+    base = type(script.factory())
+    text = "\n**The ﬁrst option** costs 100\u00a0€.\n\n"
+
+    class ExactText(base):
+        def stream(self, **kwargs):
+            events = list(super().stream(**kwargs))
+            if self.step_id == "completion:1":
+                self.text = text
+                yield {"type": "delta", "text": text}
+            else:
+                yield from events
+
+    loop = make_loop(store, script)
+    loop.factory = ExactText
+    list(loop.run())
+    saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
+    history = store.list_turn_details(UID, loop.chat_id)["turns"][0]
+    for projected in (saved, history):
+        assert projected["status"] == "completed"
+        assert projected["consensus"] == projected["assistant_response"] == text
+        assert review_is_bound(projected["agent_review"], projected["consensus"])
+
+
 @pytest.mark.parametrize('data,codes', [
     ({'judges': {'differences': {}, 'coverage': {}}}, ['differences_unavailable', 'coverage_unavailable']),
     ({'judges': {'differences': {'provider': 'Gemini'}, 'coverage': {'missing': 2}},

@@ -235,8 +235,10 @@ def test_saved_agent_paper_urls_are_numbered_citations(browser, phase4_server, w
 
 
 def test_green_agent_passages_hover_after_scrolling_and_reprojection(browser, phase4_server):
+    from app.services.chat_store import turn_detail
+
     context, page = _real_firebase_page(browser, phase4_server)
-    text = "**Conclusion:** The **smaller plan** includes five seats.\n\n" + "Background paragraph.\n\n" * 25 + "The **monthly price** is stable."
+    text = "\n**Conclusion:** The **smaller plan** includes five seats.\n\n" + "Background paragraph.\n\n" * 25 + "The **monthly price** is stable.\n\n"
     digest = hashlib.sha256(text.encode()).hexdigest()
     review = {"status": "succeeded", "answer_version": 1, "answer_hash": digest,
         "versions": [{"id": 1, "text": text, "hash": digest}],
@@ -245,8 +247,8 @@ def test_green_agent_passages_hover_after_scrolling_and_reprojection(browser, ph
             "differences_data": {"models_compared": ["OpenAI", "Gemini"], "differences": [], "claims": [
                 {"anchor": anchor, "agree": ["OpenAI", "Gemini"], "dissent": []}
                 for anchor in ("Conclusion: The smaller plan includes five seats.", "The monthly price is stable.")]}}]}
-    turn = {"id": "b" * 32, "execution_mode": "agent", "status": "completed", "question": "Compare plans", "consensus": text,
-            "agent_review": review, "agent_settings": {"model_id": CATALOG["default_model_id"]}}
+    turn = turn_detail("b" * 32, {"execution_mode": "agent", "status": "completed", "question": "Compare plans", "assistant_response": text,
+            "agent_review": review, "agent_settings": {"model_id": CATALOG["default_model_id"]}}, {})
     errors = []
     page.on('pageerror', lambda error: errors.append(str(error)))
     try:
@@ -254,10 +256,17 @@ def test_green_agent_passages_hover_after_scrolling_and_reprojection(browser, ph
         page.route('**/user_status', lambda r: _json(r, {"tier": "pro", "is_pro": True, "agent_access": True}))
         page.route('**/agent/models', lambda r: _json(r, CATALOG))
         page.evaluate("async () => { await window.__switchE2EUser('account-a'); }")
-        page.evaluate("() => { localStorage.setItem('consensio.consensusHighlightMode.v1', 'all'); dispatchEvent(new Event('pageshow')); }")
         for _ in range(2):
             page.evaluate("turn => App.runRegistry.showSavedView({type:'bookmark'}, {chatId:'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', turnId:turn.id, executionMode:'agent', question:turn.question, consensus:turn.consensus, currentTurn:turn})", turn)
             page.evaluate('() => window.exitHeroMode()')
+            expect(page.locator('.agent-review-status')).to_have_text('Comparison checked')
+            # Exercise the real Display control, including switching after render.
+            page.get_by_role('button', name='Settings', exact=True).click()
+            page.get_by_role('tab', name='Display', exact=True).click()
+            page.locator('#consensusHighlightsSelect').select_option('all')
+            page.get_by_role('button', name='Close settings', exact=True).click()
+            expect(page.locator('#agentAnswerBody .cx-claim.is-marker-filtered')).to_have_count(0)
+            expect(page.locator('#agentAnswerBody .cx-claim.is-unanimous').first).not_to_have_css('background-color', 'rgba(0, 0, 0, 0)')
             for index in (0, -1):
                 mark = page.locator('#agentAnswerBody .cx-claim').nth(index)
                 mark.evaluate("el => el.scrollIntoView({block: 'center'})")
