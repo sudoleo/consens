@@ -830,6 +830,8 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
   Motion. Modellzeilen zeigen gemessene Tokens statt Dollarbeträgen. Judge-
   Details erscheinen sofort ohne Detailrequest; Worker zeigen beim ersten
   Laden einen Skeleton, beim erneuten Öffnen den Cache ohne weiteren Request.
+- [ ] Bei langer Modellliste bis ans Ende scrollen: Titel, Gesamtverbrauch und
+  Stop/Schließen bleiben sichtbar und bedienbar; nur die Modellliste scrollt.
 - [ ] Desktop und 390/320px, Hell/Dunkel, Tastatur und Reduced Motion prüfen.
 - [ ] Agent-Budget: Reservierung und Freigabe ohne gemessenen Verbrauch verändern
   den Prozentwert nicht; der Kontingent-Dialog zeigt Reserven separat. Admin →

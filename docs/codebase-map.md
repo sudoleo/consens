@@ -1895,6 +1895,11 @@ agent-delegation.js verwendet das bestehende geordnete Activity-Journal,
 überlappende Modell-Icons und die Agent-Detailseitenleiste auch für Vergleichs-
 und Judge-Aufrufe (kind). Der Stapel dedupliziert identische API-Modelle, die
 Seitenleiste behält jeden Aufruf.
+Der Kopf mit Titel, Stop/Schließen und Gesamtverbrauch bleibt außerhalb des
+Scrollbereichs sichtbar. Nur `.agent-session-list` scrollt innerhalb der auf
+Desktop bzw. Mobil begrenzten Flex-Spalte; gespeicherte Scrollpositionen pro
+Turn beziehen sich auf diese Liste. Aufgeklappte Details behalten ihren eigenen
+begrenzten Scrollbereich.
 Die Inline-Icons behalten ihre DOM-Knoten pro API-Modell: Statuswechsel,
 Tokenupdates und zusätzliche Aufrufe desselben Modells aktualisieren nur ihre
 Metadaten und das Ziel der Detailansicht. Neu hinzukommende Icons blenden sich

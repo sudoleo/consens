@@ -3,7 +3,8 @@
 .agent-sidebar {
   --agent-enter-x: 18px; --agent-enter-y: 0px;
   position: fixed; z-index: 120; top: 66px; right: 16px; bottom: 24px; width: 330px;
-  box-sizing: border-box; padding: 18px; overflow-y: auto; overscroll-behavior: contain;
+  display: flex; flex-direction: column;
+  box-sizing: border-box; padding: 18px; overflow: hidden;
   border: 1px solid var(--line); border-radius: 14px; background: var(--well);
   color: var(--ink); font-size: 13px; line-height: 1.5; scrollbar-width: thin;
 }
@@ -21,6 +22,11 @@
 .agent-sidebar :is(button, summary, a, [tabindex]):focus-visible, .agent-inline-models button:focus-visible { outline: 2px solid var(--ink-2); outline-offset: 2px; }
 .agent-sidebar-usage { color: var(--ink-3); margin: 6px 0 16px; font-size: 12px; }
 .agent-sidebar-status:empty { display: none; }
+.agent-sidebar > :not(.agent-session-list) { flex: none; }
+.agent-session-list {
+  flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+  scrollbar-width: thin; padding: 4px; margin: -4px;
+}
 .agent-session { border-top: 1px solid var(--line); }
 .agent-session > summary { display: flex; align-items: flex-start; gap: 10px; list-style: none; padding: 15px 0; cursor: pointer; }
 .agent-session > summary::-webkit-details-marker { display: none; }

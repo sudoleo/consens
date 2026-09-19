@@ -110,6 +110,8 @@ def test_agent_sidebar_real_app_and_saved_view(browser, phase4_server, width, da
                "model": {"model": "anthropic/claude-haiku-4.5", "label": "Claude Haiku 4.5"},
                "duration_ms": 3200, "usage": {**usage, "estimated_cost_nano_usd": 1000000, "measured_calls": 1}}
               for i, (identity, title) in enumerate(((first, "Check Germany"), (second, "Check France")))]
+    agents.extend({**agents[0], 'id': f'{i:032x}', 'seq': i, 'kind': 'comparison',
+                   'title': 'Independent answer', 'status': 'completed'} for i in range(10, 19))
     agents.append({'id': 'e' * 32, 'seq': 3, 'message_seq': 3, 'status': 'completed', 'kind': 'judge',
                    'title': 'Coverage judge', 'model': {'model': 'openai/gpt-5.4-mini', 'label': 'GPT-5.4 Mini'},
                    'duration_ms': 2500, 'usage': usage, 'progress_text': 'Checking support for each statement.'})
@@ -150,11 +152,28 @@ def test_agent_sidebar_real_app_and_saved_view(browser, phase4_server, width, da
         page.locator("#sendButton").click()
         sidebar = page.locator("#agentSidebar")
         expect(sidebar).to_be_visible()
-        expect(page.locator(".agent-session")).to_have_count(3)
+        expect(page.locator(".agent-session")).to_have_count(len(agents))
         expect(page.locator(".agent-sidebar-usage")).to_contain_text(re.compile(r'1[.,]050 tokens'))
         expect(page.locator('.agent-session-tokens').first).to_have_text(re.compile(r'1[.,]050 tokens'))
         expect(sidebar).not_to_contain_text('$')
         assert sidebar.evaluate('el => getComputedStyle(el).animationName') == 'agent-sidebar-enter'
+        sidebar.evaluate('el => Promise.all(el.getAnimations().map(a => a.finished))')
+        header = page.locator('.agent-sidebar-header')
+        usage_row = page.locator('.agent-sidebar-usage')
+        initial_header = header.bounding_box()
+        initial_usage = usage_row.bounding_box()
+        sessions = page.locator('.agent-session-list')
+        assert sessions.evaluate('el => el.scrollHeight > el.clientHeight')
+        sessions.evaluate('el => { el.scrollTop = el.scrollHeight; }')
+        page.wait_for_function("document.querySelector('.agent-session-list').scrollTop > 0")
+        assert header.bounding_box() == initial_header
+        assert usage_row.bounding_box() == initial_usage
+        assert sidebar.evaluate('el => el.scrollTop') == 0
+        assert page.locator('.agent-sidebar-close').evaluate('el => { const r = el.getBoundingClientRect(); return el.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)); }')
+        if os.environ.get('AGENT_SCREENSHOTS'):
+            output = Path(os.environ['AGENT_SCREENSHOTS']); output.mkdir(parents=True, exist_ok=True)
+            page.screenshot(path=str(output / f'agent-fixed-header-{width}-{"dark" if dark else "light"}.png'))
+        sessions.evaluate('el => { el.scrollTop = 0; }')
         # Delay the first worker detail response while retaining real request
         # handling. The UI must acknowledge the click in the same frame.
         page.evaluate("""() => { const original = window.fetch; window.fetch = async (url, options) => {

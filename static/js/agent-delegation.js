@@ -31,7 +31,7 @@
     return App.createModelMark?.(agent.model) || node("span", "model-mark-fallback", (agent.model?.label || "M").slice(0, 1));
   }
   function prefs(view) {
-    if (current === view && sidebar) view.scroll = sidebar.scrollTop;
+    if (current === view && sidebar) view.scroll = sidebar._list.scrollTop;
     try {
       sessionStorage.setItem(`agent-view:${view.key}`, JSON.stringify({ closed: view.closed, expanded: [...view.expanded], scroll: view.scroll }));
     } catch (_) { /* Storage may be unavailable. */ }
@@ -216,9 +216,10 @@
     const usage = node("p", "agent-sidebar-usage");
     const status = node("p", "agent-sidebar-status"); status.setAttribute("role", "status");
     const list = node("div", "agent-session-list");
+    sidebar._list = list;
     sidebar.append(header, usage, status, list);
     sidebar.addEventListener("keydown", event => { if (event.key === "Escape") { event.preventDefault(); hide(true); } });
-    sidebar.addEventListener("scroll", () => { if (current) prefs(current); }, { passive: true });
+    list.addEventListener("scroll", () => { if (current) prefs(current); }, { passive: true });
     sidebar._rows = new Map();
     document.body.append(sidebar);
   }
@@ -448,7 +449,7 @@
     view.running = !!spec.running && !view.ended;
     if (!view.running) view.progress.clear();
     render();
-    if (changed) sidebar.scrollTop = view.scroll;
+    if (changed) sidebar._list.scrollTop = view.scroll;
     if (wasRunning && !spec.running && view.loading) view.refreshAfterLoad = true;
     else if (!view.loaded || (wasRunning && !spec.running)) load(view);
     if (!timer) timer = setInterval(() => {
