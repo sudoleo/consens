@@ -80,7 +80,8 @@ class Worker:
 
 
 class DelegationLoop(AgentLoop):
-    def __init__(self, *, delegation_config, worker_model_ids=None, cooldowns=None, comparison_models=None, **kwargs):
+    def __init__(self, *, delegation_config, worker_model_ids=None, cooldowns=None, comparison_models=None,
+                 check_sources=False, source_limits=None, **kwargs):
         super().__init__(**kwargs)
         self.config = dict(delegation_config)
         self.cooldowns = cooldowns or provider_cooldowns
@@ -116,8 +117,13 @@ class DelegationLoop(AgentLoop):
             from app.services.agent_comparison import ComparisonTools, PROMPT
             self.models = {key: replace(model, request_config={**model.request_config, "_agent_bounded_search": True})
                            for key, model in self.models.items()}
-            self.comparison = ComparisonTools(self, comparison_models)
+            self.comparison = ComparisonTools(self, comparison_models, check_sources=check_sources, source_limits=source_limits)
             self.messages[0]["content"] += "\n" + PROMPT
+            if check_sources:
+                from app.services.agent_contradictions import PROMPT as SOURCE_PROMPT
+                self.messages[0]["content"] += "\n" + SOURCE_PROMPT
+            else:
+                self.messages[0]["content"] += "\nCheck contradictions is OFF. No original-source adjudication tool is authorized for this message. Model agreement is still checked by judge_answer."
             if not self.policy.account_budget_only:
                 self.messages[0]["content"] += "\nAt most three comparisons and two checked answer versions per message."
             self.registry = ToolRegistry([*(self.registry.tools.values() if self.config["enabled"] else []),
@@ -551,7 +557,7 @@ class DelegationLoop(AgentLoop):
                     # opens a version; otherwise a narrated second comparison
                     # would incorrectly consume the revision limit.
                     synthesis = not value.tool_calls or any(
-                        call.get("function", {}).get("name") == "judge_answer" for call in value.tool_calls)
+                        call.get("function", {}).get("name") in {"judge_answer", "check_contradictions"} for call in value.tool_calls)
                     if self.comparison and synthesis:
                         self.comparison.capture(value.text)
                     if value.tool_calls:
@@ -573,7 +579,8 @@ class DelegationLoop(AgentLoop):
                             missing_judge_calls += 1
                             if not self.policy.account_budget_only and missing_judge_calls > 1:
                                 raise AnalysisBudgetExceeded("The model did not perform the required answer review.")
-                            self.messages.append({"role": "user", "content": "The synthesis is visible. Call judge_answer now for that exact answer; do not repeat it."})
+                            tool = "check_contradictions" if self.comparison.contradictions and self.comparison.review else "judge_answer"
+                            self.messages.append({"role": "user", "content": f"The synthesis is visible. Call {tool} now for that exact answer; do not repeat it."})
                             continue
                         self.completion.text = self.comparison.text
                         self.completion.finish_reason = "stop"

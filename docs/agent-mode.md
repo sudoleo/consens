@@ -21,6 +21,15 @@ zusätzliche Presetliste und keinen Synthese-/Consensus-Modell-Picker an. Manuel
 Familien-/Modellwahl bleibt möglich. Mindestens zwei Vergleichsmodelle müssen
 gewählt sein; ohne übergebene Auswahl gilt das zentrale Standardpreset.
 
+Die gemeinsame Bottom-Bar bleibt im Beta-Chat auf Desktop und Mobil sichtbar.
+„Agent Mode On“ ist vorerst eine Statusanzeige ohne Umschaltfunktion; sie ändert
+den bisherigen Consensus-Modus nicht. „Check contradictions“ schaltet das
+Quellenprüfungs-Tool für die nächste Nachricht frei. Der gemeinsame On/Off-Wert
+wird beim Senden eingefroren und bei Recovery wiederverwendet. „Deep Think“
+öffnet direkt die vorhandene Reasoning-Auswahl des Chatmodells und zeigt deren
+aktuelle Stufe. Modelle ohne wählbares Reasoning und laufende Nachrichten sperren
+dieses Menü. „Attach“ bleibt wegen der Textbeschränkung deaktiviert.
+
 Das Modell kann eine ganze Frage oder mehrere begründete Teilfragen
 vergleichen. Jede Vergleichsgruppe erhält denselben neutralen Auftrag samt
 notwendigem Kontext. Keine Vergleichsantwort beeinflusst die andere. Das
@@ -35,6 +44,22 @@ Nach einem Vergleich ist judge_answer verpflichtend. Das Tool prüft genau den
 bereits sichtbaren Synthesetext mit der vorhandenen Differences-/Coverage-Pipeline.
 Ein fehlender Toolcall wird erneut eingefordert, solange das Tagesbudget weitere
 Aufrufe zulässt. Das Backend lässt keinen stillen ungeprüften Abschluss zu.
+
+Bei eingeschaltetem „Check contradictions“ folgt das Tool `check_contradictions`.
+Es verwendet den bestehenden Contradiction Judge für große, faktisch prüfbare
+Widersprüche und bereits vorhandene Originalquellen. Abruf, validierte Zitate,
+Ausschlussgründe, konfigurierte Judge-Modelle und Verfügbarkeits-Fallbacks sind
+dieselben wie in Consensus. Jeder bezahlte Versuch zählt zum Agent-Tokenbudget.
+Ohne passende Widersprüche wird die Quellenprüfung ohne Abrufe oder bezahlten
+Quellen-Judge übersprungen. Ausgeschaltet ist das Tool nicht verfügbar;
+Differences und Coverage bleiben Bestandteil jedes Modellvergleichs.
+`judge_answer(finalize=true)` beendet bei eingeschalteter Quellenprüfung erst
+nach deren Abschluss; das Modell erhält `check_contradictions` als nächsten
+Tool-Schritt. Fehlerhafte oder fehlende Belege bleiben ausdrücklich ungeprüft.
+Ergebnisse und Originalbelege stehen direkt an den Widerspruchskarten, auch
+im gespeicherten Verlauf. Eine neue Antwort oder Vergleichsgrundlage braucht
+eine neue Prüfung; wiederholte Tool-Aufrufe derselben Prüfung starten keinen
+weiteren Quellen-Judge.
 
 Die Anzeige unterscheidet vollständig, teilweise, fehlgeschlagen, fehlend und
 abgebrochen. Vollständig bedeutet, dass beide Judges ihre Aufgabe abgeschlossen

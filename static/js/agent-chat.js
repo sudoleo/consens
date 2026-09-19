@@ -196,6 +196,7 @@
     renderControls(agent);
     const modeChanged = document.body.classList.contains("single-agent-active") !== agent;
     document.body.classList.toggle("single-agent-active", agent);
+    App.renderComposerMode?.();
     if (modeChanged) requestAnimationFrame(() => App.resizeQuestionInput?.());
     const chatTab = document.getElementById("viewSwitchConsensus");
     if (chatTab) chatTab.textContent = agent ? "Chat" : "Consensus";
@@ -346,6 +347,7 @@
         bookmark_id: context.bookmark.id, recover_only: true, model_id: settings.model_id,
         reasoning_effort: settings.reasoning_effort || 'default',
         comparison_models: Object.keys(context.config.comparisonModels || {}).length ? context.config.comparisonModels : null,
+        check_sources: context.config.checkSources === true,
       }, action.controller.signal, {}, { headers: { Authorization: `Bearer ${token}` } });
       if (!registry.isAuthCurrent(context) || action.controller.signal.aborted) return;
       receiveBudget(result.data?.token_budget, context.auth.uid);
@@ -394,7 +396,7 @@
         bookmarkId: recovery?.bookmark.id || basis?.bookmarkId || `b_agent_${crypto.randomUUID().replaceAll("-", "")}`,
         bookmarkTitle: basis?.title || question,
         config: { executionMode: "agent", agentMode: true, autoConsensus: false,
-          deepSearch: false, checkSources: false, useOwnKeys: false, providers: [], agentSettings: settings, comparisonModels },
+          deepSearch: false, checkSources: App.isSourceCheckEnabled?.() === true, useOwnKeys: false, providers: [], agentSettings: settings, comparisonModels },
         metadata: { agentActivity: [], agentSettings: { ...settings, label: catalog?.models.find(model => model.id === settings.model_id)?.label } },
         usage: { status: "simulation", key: null },
       });
@@ -446,6 +448,7 @@
         model_id: settings.model_id,
         reasoning_effort: settings.reasoning_effort || "default",
         comparison_models: Object.keys(comparisonModels).length ? comparisonModels : null,
+        check_sources: context.config.checkSources === true,
       }, signal, {
         quota: { receive(event) {
           if (registry.isAuthCurrent(context)) receiveBudget(event.token_budget, context.auth.uid);

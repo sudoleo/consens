@@ -1019,8 +1019,8 @@
     });
   }
   function renderContradictions(body, target, verification, options, previousCards) {
-    let cards = previousCards?.isConnected ? previousCards : body.id === 'consensusAnswerBody'
-      ? document.getElementById('differencesCards') : body.closest('.thread-history-turn')?.querySelector('.thread-history-differences');
+    let cards = options.differenceCards || (previousCards?.isConnected ? previousCards : body.id === 'consensusAnswerBody'
+      ? document.getElementById('differencesCards') : body.closest('.thread-history-turn')?.querySelector('.thread-history-differences'));
     if (!cards && body.matches('.share-md')) cards = document.getElementById('differencesView');
     const box = element('section', 'source-verification source-verification-contradictions');
     if (verification.job_id) { body.dataset.sourceCheckJob = verification.job_id; box.dataset.sourceCheckJob = verification.job_id; }

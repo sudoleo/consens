@@ -1630,6 +1630,19 @@ abgelehnt. Ohne Auswahl gilt das zentrale Default-Preset. Der öffentliche
 Metering-Snapshot deckt die gemeinsame Registry ab; neue Modelle benötigen
 weiterhin Preise/Kontextgrenzen im agent_model_catalog.json.
 
+Die gemeinsame `#composerModeBar` bleibt in Beta auch nach Chatstart auf Mobil
+sichtbar. `agent-mode.js` projiziert dabei „Agent Mode On“ als unveränderliche
+Statusanzeige und aktiviert die Quellenprüfungs-Controls unabhängig vom alten
+Consensus-Agent-Schalter. `Deep Think` öffnet über
+`openModelPicker(select, {secondary: true})` die bestehende Reasoning-Auswahl;
+`Attach` bleibt bis zur Unterstützung von Anhängen deaktiviert. Vergleichsicons
+und Compare-Picker verwenden weiterhin dieselbe Modellauswahl.
+`agent-chat.js` friert `checkSources` im RunContext ein und sendet es als
+`POST /agent.check_sources`, einschließlich Recovery. Alte API-Clients ohne das
+Feld bleiben bei `false`; die UI verwendet die gemeinsame gespeicherte Auswahl
+(Default On). Der Server speichert Einstellung und Source-Limits/Modellwahl in
+`agent_settings`; dieselbe Request-ID mit anderer Tool-Freigabe ergibt 409.
+
 POST /agent verwendet den bestehenden DelegationLoop mit `AgentPolicy.for_chat`.
 `account_budget_only` ersetzt zusätzliche Laufzeit-, Call-, Tool-, Worker-Runden-,
 Such-, Nachrichten- und Dollarlimits durch das zentrale Tages-Tokenbudget. Im
@@ -1667,6 +1680,26 @@ bleibt der Consensus-Transport unverändert. Jeder Judge-/Retry-/Repair-Aufruf
 hat einen eigenen Agent-Schrittbeleg; der Producer wartet auch beim Abbruch
 auf die Settlement-Abschlüsse. Ein konfiguriertes Chatmodell ohne Engine-Alias
 verwendet seine Familie nur zur Judge-Policy-Auswahl, niemals zur Synthese.
+
+Bei `check_sources=true` ergänzt `agent_contradictions.py` das strikte Tool
+`check_contradictions`. Nach `judge_answer` ist dessen Abschluss vor dem finalen
+Vergleichsergebnis erforderlich; ausgeschaltet wird es nicht registriert.
+Die bestehende `source_verification`-/`contradiction_verification`-Planung,
+Originaldokument-Abrufe und Belegvalidierung laufen je Vergleich auf dessen
+exakter Antwort-/Quellengrundlage. Keine neue Suche und kein separater Hintergrund-
+Job. Ein optionaler `judge_sources(..., transport=...)` injiziert ausschließlich
+für Agent den gemessenen Providertransport. Primär- und Fallback-Judge laufen
+über `ComparisonTools.call` mit eigenen Schrittbelegen, gemeinsamem Tokenbudget
+und dem lokalen Quellenprüfungs-Zeitbudget. Lokale Quellenfehler ergeben einen
+explizit unvollständigen Befund; Nutzer-Stopp beendet weiterhin den Run.
+`checks[].source_verification` speichert Schema-4-Snapshots inklusive Antwort-Hash,
+Vergleichs-ID als `run_id` und `basis_hash`. `finish_run` prüft diese Bindung;
+identische Tool-Wiederholungen verwenden das gespeicherte Ergebnis, neue
+Antworten/Vergleiche entwerten es. Bei Abbruch bleiben keine aktiven Befunde
+stehen. Recovery spielt nur den gespeicherten Snapshot ab.
+`agent-review.js` bindet diese Ergebnisse an dieselben Widerspruchskarten im
+Answer Reader; `sourceVerification.render` akzeptiert dafür explizite
+`differenceCards`. Veraltete Antwort-/Grundlagenbindungen werden nicht angezeigt.
 
 Die serverseitigen Antwortversionen enthalten Text, SHA-256, Vergleichs-IDs und
 Prüfungen; jede Prüfung bindet zusätzlich den Hash der konkreten Antworten
@@ -4498,9 +4531,9 @@ im (+)-Menü und `#sourceCheckSwitch` unter Settings → Runs. Alle drei Control
 verwenden denselben Setter, unabhängig vom angezeigten Lauf. Englischsprachige
 Hilfetexte erklären „Check contradictions against existing sources“ und die
 Produktgrenze: keine vollständige Faktenprüfung des Consensus.
-Ohne Agent Mode sind alle drei Quellenprüfungs-Controls ausgeschaltet und gesperrt.
+Im bisherigen Consensus-Modus ohne Agent Mode sind alle drei Quellenprüfungs-Controls ausgeschaltet und gesperrt.
 Die gespeicherte Auswahl bleibt erhalten und gilt wieder beim Aktivieren von Agent Mode.
-`window.App.isSourceCheckEnabled()` liefert nur bei aktivem Agent Mode die Auswahl für den nächsten Lauf;
+`window.App.isSourceCheckEnabled()` liefert bei aktivem Agent Mode oder im Beta-Chat die Auswahl für den nächsten Lauf;
 `query-send.js` friert sie als `config.checkSources` im RunContext ein.
 `/consensus` akzeptiert `check_sources: false`: keine Fetch-/Judge-Aufrufe,
 keine `sources.*`-Events, neuer Snapshot `status: disabled`. Bereits gespeicherte

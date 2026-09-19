@@ -48,6 +48,27 @@ async function selectAgent(window) {
 }
 
 describe("single-model agent chat", () => {
+  it('freezes source-check permission for sending and recovery while the next-message preference changes', async () => {
+    const {window, document, dom} = boot();
+    await selectAgent(window);
+    window.App.isSourceCheckEnabled = vi.fn(() => true);
+    window.streamSSERequest.mockImplementationOnce(async () => {
+      window.App.isSourceCheckEnabled.mockReturnValue(false);
+      throw new Error('Connection lost');
+    });
+    document.getElementById('questionInput').value = 'Compare options';
+    await window.App.agentChat.send();
+    const context = window.App.runRegistry.visible();
+    expect(context.config.checkSources).toBe(true);
+    expect(window.streamSSERequest.mock.calls[0][1].check_sources).toBe(true);
+    await window.App.agentChat.send(context);
+    expect(window.streamSSERequest.mock.calls[1][1]).toMatchObject({check_sources: true, recover_only: true});
+    document.getElementById('questionInput').value = 'Next message';
+    await window.App.agentChat.send();
+    expect(window.streamSSERequest.mock.calls[2][1].check_sources).toBe(false);
+    dom.window.close();
+  });
+
   it('updates the allowance on terminal errors and ignores older or foreign snapshots', async () => {
     const { window, document, dom } = boot();
     await selectAgent(window);

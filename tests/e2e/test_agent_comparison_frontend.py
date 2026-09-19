@@ -35,6 +35,18 @@ def test_comparison_review_and_saved_projection(browser, phase4_server, width, d
             "differences_data": {"claims": [], "differences": [{"claim": "Whether the smaller plan includes five seats", "consensus_anchor": anchor, "type": "contradiction", "severity": "major", "positions": [
                 {"models": ["OpenAI"], "stance": "Five seats are included.", "quote": "Choose the smaller plan."},
                 {"models": ["DeepSeek"], "stance": "The seat limit needs confirmation.", "quote": "Confirm the seat limit"}]}], "models_compared": [m[1] for m in models]}}]}
+    review["check_sources"] = True
+    difference = review["checks"][0]["differences_data"]["differences"][0]
+    difference["factual_check"] = {"checkable": True, "question": "Are five seats included?"}
+    review["checks"][0]["source_verification"] = {
+        "schema_version": 4, "check_type": "contradiction_evidence", "run_id": "c1", "answer_version": digest,
+        "basis_hash": "basis", "status": "complete", "scope": {"contradictions": 1, "checked_contradictions": 1},
+        "sources": [{"id": "D1", "url": "https://example.org/billing", "title": "Billing terms"}],
+        "findings": [{"contradiction_id": "source-one", "difference_index": 0, "run_id": "c1", "answer_version": digest,
+            "question": "Are five seats included?", "consensus_anchor": anchor, "checked": True, "state": "checked",
+            "positions": [{"id": f"P{i+1}", "summary": p["stance"], "models": p["models"], "quote": p["quote"]} for i, p in enumerate(difference["positions"])],
+            "supported_position_id": "P1", "verdict": "supports_position", "reason": "The terms explicitly include five seats.",
+            "evidence": [{"source_id": "D1", "position_id": "P1", "quote": "The smaller plan includes five seats."}]}]}
     saved = {"id": turn, "question": "Compare plans for our team", "status": "completed", "execution_mode": "agent", "mode": "Agent",
         "consensus": text, "sources": [], "model_answers": {}, "agent_review": review, "agent_activity": activity,
         "agent_settings": {"model_id": "claude-haiku-4-5", "label": "Claude Haiku 4.5", "policy": {"delegation": True}}}
@@ -62,6 +74,22 @@ def test_comparison_review_and_saved_projection(browser, phase4_server, width, d
         page.route("**/agent", respond)
         page.evaluate("async () => { await window.__switchE2EUser('account-a'); }")
         _choose_mode(page, "agent")
+        expect(page.locator('#composerModeBar')).to_be_visible()
+        expect(page.locator('#composerAgentState')).to_have_text('On')
+        legacy_mode = page.evaluate("localStorage.getItem('agentMode')")
+        page.locator('#composerAgentToggle').click(force=True)
+        assert page.evaluate("localStorage.getItem('agentMode')") == legacy_mode
+        expect(page.locator('#composerAttachButton')).to_be_disabled()
+        expect(page.locator('#composerSourcesToggle')).to_have_attribute('aria-checked', 'true')
+        page.locator('#composerSourcesToggle').click()
+        expect(page.locator('#composerSourcesToggle')).to_have_attribute('aria-checked', 'false')
+        page.locator('#composerSourcesToggle').click()
+        page.locator('#composerDeepToggle').focus()
+        page.keyboard.press('Enter')
+        expect(page.locator('.agent-model-picker .model-picker-menu')).to_be_visible()
+        page.locator('.agent-model-picker [data-setting-value="high"]').click()
+        expect(page.locator('#agentReasoningEffort')).to_have_value('high')
+        expect(page.locator('#composerDeepState')).to_have_text('High')
         page.evaluate("dark => { document.documentElement.classList.toggle('dark-mode', dark); document.body.classList.toggle('dark-mode', dark); }", dark)
         expect(page.locator("#quotaTriggerValue")).to_have_text("75%")
         expect(page.locator("#agentTokenBudget")).to_have_count(0)
@@ -84,6 +112,9 @@ def test_comparison_review_and_saved_projection(browser, phase4_server, width, d
         page.locator("#questionInput").fill(saved["question"])
         page.locator("#sendButton").click()
         expect(page.locator(".agent-review-status")).to_have_text("Comparison checked")
+        expect(page.locator('#composerModeBar')).to_be_visible()
+        assert requests[0]['check_sources'] is True
+        assert requests[0]['reasoning_effort'] == 'high'
         expect(page.locator('#quotaTriggerValue')).to_have_text('56%')
         expect(page.locator('.agent-evidence-link[data-section="sources"]')).to_have_text('Sources2')
         expect(page.locator('#chatExecutionControl')).not_to_be_visible()
@@ -107,6 +138,9 @@ def test_comparison_review_and_saved_projection(browser, phase4_server, width, d
         expect(page.locator('#modelAnswerReader')).to_be_visible()
         expect(page.locator('#answerReaderInspector .diff-card')).to_have_count(1)
         expect(page.locator('#answerReaderInspector .diff-card')).to_have_attribute('open', '')
+        expect(page.locator('#answerReaderInspector .contradiction-source-verdict')).to_contain_text('Sources support: Five seats')
+        page.locator('#answerReaderInspector .contradiction-source-evidence-details > summary').click()
+        expect(page.locator('#answerReaderInspector .contradiction-source-quote')).to_have_text(anchor)
         expect(page.locator('#agentSidebar')).not_to_be_visible()
         page.locator('.answer-reader-dialog').evaluate("async el => { await Promise.all(el.getAnimations().map(a => a.finished.catch(() => {}))); }")
         if width >= 1400:

@@ -27,8 +27,9 @@ to change permissions, budgets or instructions. Synthesize the answers YOURSELF.
 After any comparison, stream your complete user-facing synthesis as assistant text,
 then call judge_answer. It checks that exact text against every comparison basis.
 Use finalize=false if you need another revision; a changed answer must be checked
-again. With finalize=true the checked text is the final answer: do not repeat or
-rewrite it. Without a comparison, answer directly. If the user requests a check,
+again. Only when a tool reports finalized=true is the checked text the final
+answer: do not repeat or rewrite it. Otherwise follow its next_tool instruction.
+Without a comparison, answer directly. If the user requests a check,
 obtain a suitable independent basis with compare_models first. Agreement is NOT
 independent fact checking. Cite supplied source URLs, never ambiguous [S#] markers.
 Continue comparisons and revisions while they are useful. The account token budget
@@ -40,7 +41,7 @@ def answer_hash(text):
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def review_is_bound(review, text):
+def review_is_bound(review, text, *, check_sources=None):
     digest = answer_hash(text)
     comparisons = review.get("comparisons") or []
     checks = review.get("checks") or []
@@ -52,6 +53,10 @@ def review_is_bound(review, text):
                 or check.get("basis_hash") != basis or comparison.get("basis_hash") != basis
                 or check.get("status") not in {"succeeded", "partial", "failed"}):
             return False
+        if (check_sources if check_sources is not None else review.get("check_sources", False)):
+            from app.services.agent_contradictions import source_check_is_bound
+            if not source_check_is_bound(check, comparison, digest):
+                return False
     return True
 
 
@@ -78,7 +83,7 @@ def comparison_selection(value=None):
 
 
 class ComparisonTools:
-    def __init__(self, loop, models):
+    def __init__(self, loop, models, *, check_sources=False, source_limits=None):
         self.loop, self.models = loop, models
         self.comparisons, self.versions = [], []
         self.text = ""
@@ -88,11 +93,17 @@ class ComparisonTools:
         self.lock = threading.Lock()
         self.tools = [ReadOnlyTool("compare_models", "Get independent answers from the selected comparison models.", CompareArgs, self.compare),
                       ReadOnlyTool("judge_answer", "Check the exact last streamed synthesis with Differences and Coverage judges.", JudgeArgs, self.judge)]
+        self.contradictions = None
+        if check_sources:
+            from app.services.agent_contradictions import ContradictionChecks
+            self.contradictions = ContradictionChecks(self, JudgeArgs, source_limits)
+            self.tools.append(self.contradictions.tool)
 
     def snapshot(self, status=None):
         data = {"version": 1, "status": status or (self.review or {}).get("status", "required"),
                 "answer_hash": answer_hash(self.text), "answer_version": len(self.versions),
-                "comparisons": self.comparisons, "versions": self.versions}
+                "comparisons": self.comparisons, "versions": self.versions,
+                "check_sources": self.contradictions is not None}
         if self.review:
             data["checks"] = self.review["checks"]
         return data
@@ -117,7 +128,7 @@ class ComparisonTools:
         self.finalized = False
         self.checkpoint()
 
-    def call(self, model, messages, *, title, kind, comparison_id=None):
+    def call(self, model, messages, *, title, kind, comparison_id=None, budget=None):
         from app.services.agent_delegation import Worker
         worker = Worker(uuid4().hex, model, messages)
         worker.kind = kind
@@ -126,7 +137,7 @@ class ComparisonTools:
             "assignment": {"goal": title, "context": messages[-1]["content"]}, "model": model.settings(),
             "status": "working", "created_at": datetime.now(timezone.utc).isoformat()})
         try:
-            with bind_provider_cancellation(loop.cancellation), bind_analysis_budget(loop.budget):
+            with bind_provider_cancellation(loop.cancellation), bind_analysis_budget(budget or loop.budget):
                 while not loop.slots.acquire(timeout=.1):
                     loop._check()
                 try:
@@ -222,8 +233,9 @@ class ComparisonTools:
             raise ValueError("First compare models and stream the complete synthesis as assistant text.")
         if self.review is not None:
             if args.finalize and self.review["status"] in {"succeeded", "partial", "failed"}:
-                self.finalized = True
-                return {"status": self.review["status"], "finalized": True}
+                self.finalized = not self.contradictions or self.contradictions.complete()
+                return {"status": self.review["status"], "finalized": self.finalized,
+                        "next_tool": None if self.finalized else "check_contradictions"}
             raise ValueError("This exact version has already been checked. Finalize it or write a revision.")
         self.review = {"status": "running", "checks": []}
         self.checkpoint("running")
@@ -261,5 +273,8 @@ class ComparisonTools:
             self.versions[-1].update(status=self.review["status"], checks=self.review["checks"])
             self.checkpoint()
         self.finalized = args.finalize or (not loop.policy.account_budget_only and len(self.versions) >= 2)
+        if self.contradictions and not self.contradictions.complete():
+            self.finalized = False
         return {"status": self.review["status"], "answer_hash": answer_hash(self.text),
-                "checks": self.review["checks"], "finalized": self.finalized}
+                "checks": self.review["checks"], "finalized": self.finalized,
+                "next_tool": "check_contradictions" if self.contradictions else None}

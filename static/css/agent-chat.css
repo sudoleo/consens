@@ -154,12 +154,14 @@ body.single-agent-active .chat-input-container .consensus-switch-container { max
 #agentAnswerError { color: var(--ink-2); border-left: 2px solid var(--line); padding: 4px 0 4px 12px; font-size: 13px; line-height: 1.6; }
 #agentAnswerBody:empty { display: none; }
 body.single-agent-active :is(#consensusOutput, #consensusRun, #agentModePanel, .response-section,
-  #composerModeBar, #attachTrigger, #deepThinkInputIndicator,
+  #attachTrigger, #deepThinkInputIndicator,
   #runProvenance, .consensus-footer-actions, #composerRunNotice, #heroResponseAccess,
   .models-section, .models-section + .sidebar-separator, .demo-chip) { display: none !important; }
 body:not(.single-agent-active) #agentAnswer { display: none; }
 body.single-agent-active #agentAnswer:not([hidden]) { display: block; }
 body.single-agent-active #threadAsk:not([hidden]) { display: flex; }
+body.single-agent-active #composerAgentToggle { cursor: default; }
+body.single-agent-active #composerAgentToggle:hover { background: transparent; }
 
 .agent-model-picker .model-picker-display-text::before { content: none; }
 .agent-reasoning-option { border-top: 1px solid var(--line) !important; margin-top: 6px; padding-top: 12px !important; }

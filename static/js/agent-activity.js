@@ -4,6 +4,7 @@
   const App = window.App = window.App || {};
   const statuses = { failed: "Response failed", cancelled: "Response stopped", canceled: "Response stopped" };
   const toolNames = { web_search: 'Web search', compare_models: 'Model comparison', judge_answer: 'Answer review',
+    check_contradictions: 'Contradiction source check',
     start_agent: 'Ask a model', wait_agents: 'Wait for models', send_agent: 'Follow up',
     review_agent: 'Review a model', stop_agent: 'Stop a model', report_to_orchestrator: 'Report to the main model' };
   function compactReasoning(text) {
@@ -78,6 +79,7 @@
     view.details.classList.toggle("is-running", running);
     view.details.dataset.status = status;
     const toolLabels = { web_search: 'Searching the web…', compare_models: 'Comparing model answers…',
+      check_contradictions: 'Checking contradictions against sources…',
       judge_answer: 'Checking the answer…', start_agent: 'Asking another model…', wait_agents: 'Waiting for model responses…',
       send_agent: 'Following up with a model…', review_agent: 'Reviewing a model response…' };
     const progress = reviewStage || (activeTool ? toolLabels[activeTool.name] || 'Running a tool…' : writing ? 'Writing the answer…' : '');

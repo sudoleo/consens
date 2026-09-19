@@ -925,7 +925,7 @@
   window.addEventListener('scroll', fitOpenPicker, true);
   window.visualViewport?.addEventListener('resize', fitOpenPicker);
 
-  function openModelPicker(select) {
+  function openModelPicker(select, { secondary = false } = {}) {
     const state = getModelPickerState(select);
     if (!select || select.disabled || !state) return;
 
@@ -944,7 +944,7 @@
     if (state.presets) {
       state.view = getActiveConsensusPresetId() === "custom" ? "custom" : "presets";
     }
-    if (state.secondarySelect) state.view = 'models';
+    if (state.secondarySelect) state.view = secondary ? 'secondary' : 'models';
 
     renderCustomModelPicker(select);
     state.host.classList.add("is-expanded", "is-open");
@@ -957,6 +957,7 @@
 
     expandedModelPicker = select;
     fitComposerPicker(state);
+    if (secondary) (state.menu.querySelector('.is-selected:not(:disabled)') || state.menu.querySelector('button:not(:disabled)'))?.focus();
   }
 
   function initCustomModelPicker(select, options = {}) {

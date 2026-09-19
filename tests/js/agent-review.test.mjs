@@ -41,6 +41,28 @@ it("uses the shared markers only for the exact answer and selected comparison ba
   expect(w.injectMarkdown).toHaveBeenLastCalledWith(body, "Changed answer.", []);
   dom.window.close();
 });
+it('renders bound source evidence with the shared contradiction cards and rejects stale evidence', () => {
+  const {window: w, document: d, dom} = setup();
+  w.App.sourceVerification = {render: vi.fn()};
+  const body = d.getElementById('answer'); body.dataset.markdown = 'Exact answer.';
+  const review = snapshot(); review.check_sources = true;
+  review.checks[0].source_verification = {answer_version: 'answer-hash', run_id: 'c1', basis_hash: 'b1', status: 'complete'};
+  w.App.agentReview.render(body, review);
+  d.querySelector('[data-section="differences"]').click();
+  let context = w.App.answerReader.openContext.mock.calls.at(-1)[0];
+  const panel = context.renderPanel('differences');
+  expect(w.App.sourceVerification.render).toHaveBeenCalledWith(panel.querySelector('.agent-evidence-differences'),
+    panel.querySelector('.agent-source-check'), review.checks[0].source_verification,
+    expect.objectContaining({differenceCards: panel.querySelector('.agent-evidence-differences')}));
+  w.App.sourceVerification.render.mockClear();
+  review.checks[0].source_verification.basis_hash = 'other';
+  w.App.agentReview.render(body, review);
+  d.querySelector('[data-section="differences"]').click();
+  context = w.App.answerReader.openContext.mock.calls.at(-1)[0];
+  expect(context.renderPanel('differences').textContent).toContain('source checks pending');
+  expect(w.App.sourceVerification.render).not.toHaveBeenCalled();
+  dom.window.close();
+});
 it('collects chat search, answer links and comparison citations into one source view', () => {
   const {window: w, document: d, dom} = setup();
   const body = d.getElementById('answer'); body.dataset.markdown = 'Exact answer.';

@@ -125,6 +125,19 @@
             modelLabel: name => findAnswer(name)?.model?.label || name, answerNavigation: navigation
           });
           panel.append(cards);
+          const verification = check.source_verification;
+          if (verification?.answer_version === review.answer_hash && verification.run_id === comparison.id
+              && verification.basis_hash === comparison.basis_hash) {
+            const report = node('div', 'agent-source-check');
+            panel.insertBefore(report, cards);
+            App.sourceVerification?.render(cards, report, verification, {
+              differencesData: check.differences_data, differenceCards: cards
+            });
+          } else if (typeof review.check_sources === 'boolean') {
+            panel.append(node('p', 'agent-review-note', !review.check_sources ? 'Contradiction source checks were off for this message.'
+              : ['failed', 'cancelled', 'missing'].includes(state) ? 'Contradiction source checks did not complete.'
+              : 'Contradiction source checks pending.'));
+          }
         }
         panel.append(node("p", "agent-review-note", "Model agreement is not independent fact checking."));
         const basis = node("details", "agent-evidence-context");

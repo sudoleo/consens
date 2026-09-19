@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import replace
+from dataclasses import asdict, replace
 from typing import Literal
 from fastapi import APIRouter, HTTPException, Request, Query
 from fastapi.responses import JSONResponse
@@ -17,6 +17,7 @@ from app.api.routers.bookmarks import _bookmark_meta
 from app.services import persistence_guard, prompt_config
 from app.services import agent_quota
 from app.services.agent_comparison import comparison_selection
+from app.services.source_verification import Limits as SourceCheckLimits
 from app.services.agent_runs import AgentRunStore
 from app.services.agent_policy import AgentPolicy, supports_delegation
 from app.services.agent_delegation import DelegationLoop
@@ -49,6 +50,7 @@ class AgentRequest(BaseModel):
     model_id: str | None = Field(default=None, min_length=1, max_length=160)
     reasoning_effort: str = Field(default="default", pattern=r"^(default|none|minimal|low|medium|high|xhigh|max)$")
     comparison_models: dict[str, str] | None = Field(default=None, max_length=9)
+    check_sources: bool = False
 
     @field_validator("question")
     @classmethod
@@ -150,6 +152,8 @@ def run_agent(request: Request, payload: AgentRequest):
                 raise TurnStatusConflict("Request identity conflicts with different agent settings")
             if existing.get("agent_settings", {}).get("comparison_selection") != payload.comparison_models:
                 raise TurnStatusConflict("Request identity conflicts with different comparison models")
+            if existing.get("agent_settings", {}).get("check_sources", False) != payload.check_sources:
+                raise TurnStatusConflict("Request identity conflicts with different contradiction settings")
             if existing["status"] == "completed":
                 return _final(uid, payload, store, existing)
             if payload.recover_only and existing["status"] == "failed" and existing.get("consensus"):
@@ -180,6 +184,7 @@ def run_agent(request: Request, payload: AgentRequest):
         delegation_config = {**delegation_config, "enabled": delegation_config["enabled"] and supports_delegation(model)}
         policy = AgentPolicy.for_chat(delegation_config)
         comparisons = comparison_selection(payload.comparison_models)
+        source_limits = SourceCheckLimits.configured() if payload.check_sources else None
         model = replace(model, request_config={**model.request_config, "_agent_bounded_search": True})
         turn = store.create_turn(
             uid, payload.chat_id, question=payload.question, mode="Agent", deep_search=False,
@@ -188,6 +193,8 @@ def run_agent(request: Request, payload: AgentRequest):
             agent_settings={**model.settings(), "policy": policy.snapshot(), "config_revision": config["revision"],
                             "delegation_config": delegation_config,
                             "comparison_selection": payload.comparison_models,
+                            "check_sources": payload.check_sources,
+                            "source_check_limits": asdict(source_limits) if source_limits else None,
                             "comparison_models": {p: m.snapshot() for p, m in comparisons.items()},
                             "selection": {"model_id": payload.model_id, "reasoning_effort": payload.reasoning_effort}},
         )
@@ -220,6 +227,8 @@ def run_agent(request: Request, payload: AgentRequest):
                          completion_factory=AgentCompletion, policy=policy,
                          delegation_config=delegation_config, cooldowns=provider_cooldowns,
                          comparison_models=comparisons,
+                         check_sources=payload.check_sources,
+                         source_limits=source_limits,
                          mock_answer="Agent test answer: " + payload.question if mock_llm_enabled() else None)
         completion = loop.completion
         status = "failed"

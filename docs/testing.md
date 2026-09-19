@@ -165,6 +165,13 @@ APIs und den writerfreien Server wie die Phase-4-Suite (siehe E2E-README).
 Er prüft auch die Haiku-Wahl vor der ersten Nachricht, rechtsbündige Fragen,
 fehlende Statusstriche und Kostenanzeigen. Er benötigt keinen laufenden
 Emulator und ruft kein reales Modell auf.
+
+`tests/test_agent_contradictions.py` prüft Tool-Freigabe, Originalbelege,
+getrennte Modell-/Quellenurteile, Primär-/Fallback-Abrechnung, Versionsbindung,
+Abbruch und Wiederholung/Recovery ohne zusätzlichen Quellen-Judge. Die Agent-Frontend-Tests prüfen
+zusätzlich eingefrorene Einstellungen, die gemeinsame Bottom-Bar und die
+Reasoning-Verknüpfung. `tests/e2e/test_agent_comparison_frontend.py` deckt die
+Leiste sowie Quellenbelege an Widerspruchskarten auf Desktop und Mobil ab.
 Die Transaktionsprüfung `tests/e2e/test_agent_transactions.py` prüft mit
 `dev.ps1 check browser -TestPath tests/e2e/test_agent_transactions.py` auch
 mehrere bezahlte Schritte innerhalb desselben Owner-Slots im lokalen Emulator.

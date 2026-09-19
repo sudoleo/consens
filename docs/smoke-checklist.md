@@ -776,6 +776,17 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
 
 ## Agent · Beta: Vergleiche und Prüfungen
 
+- [ ] Bottom-Bar vor und nach dem Senden bei 1440/390/320 px: „Agent Mode On“
+      bleibt eine Statusanzeige; Klick verändert keine alte Consensus-Einstellung.
+      „Check contradictions“ schaltet die Quellenprüfung für die nächste Nachricht;
+      ein laufender Run und Recovery behalten den eingefrorenen Wert.
+      „Deep Think“ öffnet per Klick/Enter die vorhandene Reasoning-Auswahl,
+      „Attach“ ist wegen der Textbeschränkung deaktiviert. Kein horizontaler Overflow.
+- [ ] Bei aktivierter Quellenprüfung erscheinen Ergebnis und aufklappbare
+      Originalbelege direkt in den Widerspruchskarten, auch nach Öffnen des
+      gespeicherten Chats. Off lässt Modellvergleich/Coverage aktiv. Fehlende
+      oder abgelehnte Belege werden nicht als Bestätigung dargestellt.
+
 - [ ] Im Agent-Chat ersetzt der verbleibende Tokenanteil als Prozentzahl den
   Run-Zähler im Sidebar-Footer. Exakte Zahlen im Panel, keine Budgetzeile im
   Composer. Modus-/Accountwechsel zeigt keine fremden oder veralteten Zahlen.

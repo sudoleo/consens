@@ -59,6 +59,36 @@ function boot({ desktop = false, agentMode = true, checkSources = true } = {}) {
 }
 
 describe("agent mode panel projection", () => {
+  it('keeps the Beta toolbar visible and its tools independent of the legacy Agent switch', () => {
+    const {window, document, dom} = boot({agentMode: false});
+    window.App.agentChat = {isSelected: () => true};
+    window.App.openModelPicker = vi.fn();
+    document.body.insertAdjacentHTML('beforeend', '<select id="agentModelDropdown"></select><select id="agentReasoningEffort" data-available="true"><option value="high">High</option></select>');
+    document.body.classList.remove('is-hero');
+    window.App.renderComposerMode();
+    expect(document.getElementById('composerModeBar').hidden).toBe(false);
+    expect(document.getElementById('composerAgentState').textContent).toBe('On');
+    document.getElementById('composerAgentToggle').click();
+    expect(window.localStorage.getItem('agentMode')).toBe('false');
+    expect(window.App.isSourceCheckEnabled()).toBe(true);
+    document.getElementById('composerSourcesToggle').click();
+    expect(window.App.isSourceCheckEnabled()).toBe(false);
+    expect(document.getElementById('sourceCheckMenuSwitch').checked).toBe(false);
+    document.getElementById('composerSourcesToggle').click();
+    expect(window.App.isSourceCheckEnabled()).toBe(true);
+    expect(document.getElementById('composerAttachButton').disabled).toBe(true);
+    expect(document.getElementById('composerDeepState').textContent).toBe('High');
+    document.getElementById('composerDeepToggle').click();
+    expect(window.App.openModelPicker).toHaveBeenCalledWith(document.getElementById('agentModelDropdown'), {secondary: true});
+    expect(document.getElementById('deepSearchToggle').checked).toBe(false);
+    window.App.agentChat.isSelected = () => false;
+    window.App.renderComposerMode();
+    expect(document.getElementById('composerAgentToggle').getAttribute('aria-disabled')).toBe('false');
+    expect(document.getElementById('composerAttachButton').disabled).toBe(false);
+    expect(document.getElementById('composerSourcesToggle').disabled).toBe(true);
+    dom.window.close();
+  });
+
   it("persists source checks for agent runs and locks every control for direct comparisons", () => {
     const { window, document, dom } = boot();
     window.updateAgentModeUI();

@@ -20,11 +20,12 @@
   let checkSources = true;
   try { checkSources = localStorage.getItem("checkSources") !== "false"; } catch (_) {}
   // Preserve the preference, but direct comparisons have no judges.
-  window.App.isSourceCheckEnabled = () => isAgentModeEnabled() && checkSources;
+  const isBeta = () => window.App.agentChat?.isSelected?.() === true;
+  window.App.isSourceCheckEnabled = () => (isBeta() || isAgentModeEnabled()) && checkSources;
   const desktopComposer = window.matchMedia?.("(min-width: 1100px)");
 
   function setSourceCheckEnabled(enabled) {
-    if (!isAgentModeEnabled()) {
+    if (!isBeta() && !isAgentModeEnabled()) {
       renderComposerMode();
       return;
     }
@@ -305,10 +306,11 @@
   // Composer controls always describe the next question. The answer reader
   // supplies a separate, frozen summary for the direct comparison on screen.
   function renderComposerMode() {
-    const enabled = isAgentModeEnabled();
+    const beta = isBeta();
+    const enabled = beta || isAgentModeEnabled();
     const sourcesEnabled = window.App.isSourceCheckEnabled();
     const sourcesTitle = enabled
-      ? `Check contradictions ${sourcesEnabled ? "on" : "off"} · Check contradictions against existing sources for the next consensus`
+      ? `Check contradictions ${sourcesEnabled ? "on" : "off"} · Check contradictions against existing sources for the next ${beta ? "chat message" : "consensus"}`
       : "Enable Agent Mode to check contradictions";
     ["sourceCheckMenuSwitch", "sourceCheckSwitch"].forEach(id => {
       const control = document.getElementById(id);
@@ -329,26 +331,41 @@
       sourcesButton.title = sourcesTitle;
       document.getElementById("composerSourcesState").textContent = sourcesEnabled ? "On" : "Off";
     }
-    bar.hidden = !desktopComposer?.matches && enabled && !document.body.classList.contains("is-hero");
+    bar.hidden = !beta && !desktopComposer?.matches && enabled && !document.body.classList.contains("is-hero");
     window.App.attachments?.syncComposerPlacement?.();
     bar.dataset.agentMode = String(enabled);
     document.getElementById("composerAgentToggle").setAttribute("aria-checked", String(enabled));
+    document.getElementById("composerAgentToggle").setAttribute("aria-disabled", String(beta));
     document.getElementById("composerAgentState").textContent = enabled ? "On" : "Off";
-    document.getElementById("composerModeDescription").textContent = enabled
+    document.getElementById("composerModeDescription").textContent = beta
+      ? "Agent Beta is active for this chat. This status cannot be switched yet."
+      : enabled
       ? "Automatic consensus after the models answer."
       : "Direct comparison · Independent answers, no consensus.";
     document.getElementById("composerAgentToggle").title = document.getElementById("composerModeDescription").textContent;
     const models = window.App.modelPrefs.filter(pref => document.getElementById(pref.checkId)?.checked);
     const icons = document.getElementById("composerModelIcons");
-    const deep = !!document.getElementById("deepSearchToggle")?.checked;
+    const deep = !beta && !!document.getElementById("deepSearchToggle")?.checked;
     const deepButton = document.getElementById("composerDeepToggle");
     if (deepButton) {
+      const effort = document.getElementById("agentReasoningEffort");
+      deepButton.disabled = beta && (!effort || effort.disabled || effort.dataset.available !== "true");
+      deepButton.setAttribute("role", beta ? "button" : "switch");
       deepButton.setAttribute("aria-checked", String(deep));
       deepButton.title = `Deep Think ${deep ? "on" : "off"} · Stronger reasoning${window.isUserPro ? "" : " · Pro"}`;
       document.getElementById("composerDeepState").textContent = deep ? "On" : "Off";
+      if (beta) {
+        deepButton.removeAttribute("aria-checked");
+        deepButton.setAttribute("aria-haspopup", "listbox");
+        deepButton.title = deepButton.disabled ? "Reasoning is unavailable or locked during this run" : "Choose reasoning for your next chat message";
+        document.getElementById("composerDeepState").textContent = effort?.selectedOptions[0]?.textContent || "Auto";
+      } else deepButton.removeAttribute("aria-haspopup");
     }
     const attachButton = document.getElementById("composerAttachButton");
-    if (attachButton) attachButton.title = `Add attachment${window.isUserPlus ? "" : " · Plus"}`;
+    if (attachButton) {
+      attachButton.disabled = beta;
+      attachButton.title = beta ? "Agent Beta currently supports text only" : `Add attachment${window.isUserPlus ? "" : " · Plus"}`;
+    }
     const labels = models.map(pref => {
       const select = document.getElementById(pref.selectId);
       return deep ? (window.App.deepThinkModelLabels[pref.key] || pref.label)
@@ -376,7 +393,7 @@
       }));
       icons.dataset.models = key;
     }
-    const summary = window.App.answerReader?.directSummary?.();
+    const summary = beta ? null : window.App.answerReader?.directSummary?.();
     const status = document.getElementById("composerComparisonStatus");
     status.hidden = !summary;
     status.textContent = summary
@@ -729,6 +746,7 @@
   }
 
   document.getElementById("composerAgentToggle")?.addEventListener("click", function () {
+    if (isBeta()) return;
     setAgentMode(!isAgentModeEnabled(), { persist: true });
   });
   document.getElementById("composerSourcesToggle")?.addEventListener("click", function () {
@@ -740,11 +758,17 @@
     });
   });
   // Reuse the original controls, including their plan checks and file picker.
-  document.getElementById("composerDeepToggle")?.addEventListener("click", function () {
+  document.getElementById("composerDeepToggle")?.addEventListener("click", function (event) {
+    if (isBeta()) {
+      event.stopPropagation();
+      window.App.openModelPicker?.(document.getElementById("agentModelDropdown"), { secondary: true });
+      return;
+    }
     document.getElementById("deepSearchToggle")?.click();
     renderComposerMode();
   });
   document.getElementById("composerAttachButton")?.addEventListener("click", function () {
+    if (isBeta()) return;
     document.getElementById("attachUploadOption")?.click();
   });
   let composerIsHero = document.body.classList.contains("is-hero");
