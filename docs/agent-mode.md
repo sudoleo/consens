@@ -1,11 +1,12 @@
 # Agent · Beta
 
 Agent · Beta ist ein eigener Chatmodus für Pro-Nutzer und Admins. Das ausgewählte
-Chatmodell bearbeitet Sachfragen standardmäßig über die Consensus-Pipeline:
+Chatmodell schickt jede Nutzerfrage und jeden Bearbeitungsauftrag durch die Consensus-Pipeline:
 unabhängige Vergleichsantworten, eigene Synthese und anschließende Prüfung.
-Websuche darf die Frage und aktuelle Belege vorbereiten; Begrüßungen und reine
-Textbearbeitung bleiben direkt möglich.
-Eine Nutzerbestätigung ist dafür nicht nötig; Konkretisierungsfragen sind möglich.
+Websuche darf die Frage und aktuelle Belege vorbereiten. Nur reine Begrüßungen,
+Bestätigungen ohne Frage/Auftrag und unvermeidbare Rückfragen bleiben direkt möglich.
+Eine Nutzerbestätigung ist dafür nicht nötig; bei sinnvoll lösbaren Unklarheiten
+arbeitet das Modell mit begründeten Annahmen weiter.
 Der separate Consensus-Modus behält seinen bisherigen Ablauf und seine Run-Limits.
 
 ## Modelle und Bedienung
@@ -36,9 +37,8 @@ Das Modell kann eine ganze Frage oder mehrere begründete Teilfragen
 vergleichen. Jede Vergleichsgruppe erhält denselben neutralen Auftrag samt
 notwendigem Kontext. Keine Vergleichsantwort beeinflusst die andere. Das
 Chatmodell erhält Antworten, Quellen, Status und Modellmetadaten und schreibt
-die Synthese selbst. Ein ausdrücklicher Nutzerwunsch nach Vergleich oder Prüfung
-ist im Tool-Prompt vorgesehen; bei einer Prüfung wird nötigenfalls erst eine
-unabhängige Vergleichsgrundlage eingeholt.
+die Synthese selbst. Auch bei einem Prüfwunsch wird zuerst eine unabhängige
+Vergleichsgrundlage eingeholt.
 
 ## Antwortversionen und Prüfungen
 
@@ -273,17 +273,22 @@ servereigene Modellauflösung und Limits verhindern eine Änderung der Policy
 über Toolergebnisse. Dateien, Share und Watch sind weiterhin nicht freigeschaltet.
 
 Der feste Produktkontext erklärt allen beteiligten Modellen knapp ihre Rolle in
-consens.io. Für Sachfragen, Erklärungen, Empfehlungen und Bewertungen ist
-`compare_models → eigene Synthese → judge_answer` der Standard, ergänzt um
+consens.io. Jede Nutzerfrage und jeder Bearbeitungsauftrag geht durch
+`compare_models → eigene Synthese → judge_answer`, ergänzt um
 `check_contradictions`, wenn aktiviert. Websuche darf vorher aktuelle Fakten oder
-die Fragestellung klären. Begrüßungen, Bestätigungen, notwendige Rückfragen,
-reine Textumformung/Übersetzung und ausdrücklich ohne Vergleich gewünschte
-Antworten bleiben direkt möglich. Alte allgemeine Hinweise auf direkte Antworten
+die Fragestellung klären. Das gilt auch für einfache, subjektive und Folgefragen,
+Fragen zu consens.io sowie Textumformung/Übersetzung. Nur reine Begrüßungen und
+Bestätigungen ohne Frage/Auftrag sowie unvermeidbare Rückfragen dürfen direkt
+beantwortet werden. Rückfragen sind auf fehlende Angaben beschränkt, ohne die keine
+nützliche Antwort möglich ist; sonst mit begründeten Annahmen weiterarbeiten.
+Das Chatmodell soll consens.io hilfreich, klar und korrekt in der Nutzersprache
+vertreten, den Produktzweck erklären können und keine nicht erfolgten Prüfungen
+oder garantierte Wahrheit behaupten. Alte allgemeine Hinweise auf direkte Antworten
 in gespeicherten Admin-Prompts werden durch diese konkrete Produktregel präzisiert.
 Liefert der Provider am Suchlimit eine Antwort ohne Vergleichs-Toolcall, folgt
 einmalig eine Orchestrierungsrunde mit den gesammelten Quellen und ohne neue
-Websuche. Sie führt die Recherche zurück in den Consensus-Ablauf; direkte
-Antwortausnahmen bleiben ausdrücklich zulässig.
+Websuche. Sie führt die Recherche zurück in den Consensus-Ablauf; nur eine
+unvermeidbare Rückfrage kann den Vergleich aufschieben.
 
 ## Persistenz, Stop und Recovery
 

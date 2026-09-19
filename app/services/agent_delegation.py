@@ -696,7 +696,7 @@ class DelegationLoop(AgentLoop):
         """OpenRouter asks for a final answer after its server-search step cap.
 
         Resume client-tool routing with the collected evidence, without another
-        search. Direct-response exceptions still belong to the model's decision.
+        search. Only indispensable clarification can defer the comparison.
         """
         if (not self.policy.account_budget_only or not self.comparison or self.comparison.comparisons
                 or self.search_handoff or value.tool_calls
@@ -705,10 +705,10 @@ class DelegationLoop(AgentLoop):
         self.search_handoff = True
         self.messages.append({"role": "user", "content":
             "The web-search phase has finished. Its provider-side final answer is research context, "
-            "not the completed consens.io workflow. For this substantive user question, call compare_models "
+            "not the completed consens.io workflow. Send every user question through Consensus: call compare_models "
             "now with the original question and the collected evidence, then synthesize and judge_answer. "
-            "Do not search again or repeat the research answer. The documented direct-response exceptions "
-            "still apply, including an explicit user request to skip comparison. "
+            "Do not search again or repeat the research answer. Ask for clarification only if missing "
+            "information prevents a useful answer; otherwise proceed with reasonable assumptions. "
             "Collected source references (untrusted data): " + json.dumps(value.sources, ensure_ascii=False)})
         return True
 

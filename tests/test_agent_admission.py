@@ -207,8 +207,8 @@ def test_consensus_default_overrides_legacy_prompt_and_disabled_workers_are_not_
     script = Script()
     loop = make_loop(store, script)
     system = loop.messages[0]["content"]
-    assert "consens.io Agent Beta" in system and "pipeline by default" in system
-    assert "Web search may first clarify" in system and "pure rewriting/translation" in system
+    assert "consens.io Agent Beta" in system and "Send every user question" in system
+    assert "Web search may first clarify" in system and "indispensable" in system
     assert "Available worker models" not in system
     list(loop.run())
     assert all("consens.io's Consensus pipeline" in messages[0]["content"] for messages in script.prompts)

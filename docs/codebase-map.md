@@ -1683,12 +1683,17 @@ stehen in [agent-delegation.md](agent-delegation.md).
 
 **Vergleich und Prüfung.** agent_comparison.py registriert compare_models und
 judge_answer mit strikten Pydantic-Argumenten. Der abschließend injizierte
-Produktprompt erklärt consens.io und setzt für Sachfragen, Erklärungen,
-Empfehlungen und Bewertungen standardmäßig `compare_models → Synthese →
+Produktprompt erklärt consens.io und setzt für jede Nutzerfrage und jeden
+Bearbeitungsauftrag `compare_models → Synthese →
 judge_answer` voraus; eingeschaltete Widerspruchsprüfung folgt wie bisher.
 Websuche darf die Anfrage und aktuelle Belege zuerst konkretisieren. Direkte
-Antworten sind für Begrüßungen, Bestätigungen, nötige Rückfragen, reine
-Textumformung/Übersetzung sowie ausdrücklich abgewählten Vergleich vorgesehen.
+Antworten sind nur für reine Begrüßungen/Bestätigungen ohne Frage oder Auftrag
+und unvermeidbare Rückfragen vorgesehen. Einfache, subjektive und Folgefragen,
+Produktfragen sowie Textumformung/Übersetzung durchlaufen ebenfalls die Pipeline.
+Bei sinnvoll lösbaren Unklarheiten mit begründeten Annahmen weiterarbeiten.
+Das Modell vertritt consens.io hilfreich und korrekt in der Nutzersprache,
+erklärt den Produktzweck bei Bedarf und behauptet weder nicht erfolgte Prüfungen
+noch garantierte Wahrheit.
 Diese Regel konkretisiert auch ältere gespeicherte Admin-Prompts; kein zweiter
 LLM-Router und keine sprachabhängige Keyword-Klassifikation. Deaktivierte Worker
 liefern weder Worker-Katalog noch Delegationsprompt im Chatkontext. Auch
