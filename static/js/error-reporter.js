@@ -9,6 +9,25 @@
   const recentReports = new Map();
   const DEDUPE_MS = 5 * 60 * 1000;
   const MAX_RECENT = 40;
+  const STATIC_ASSETS = new Set([
+    "js/analytics-opt-out.js",
+    "vendor/marked/12.0.2/marked.min.js",
+    "vendor/dompurify/3.0.6/dist/purify.min.js",
+    "vendor/katex/0.17.0/dist/katex.min.js",
+    "vendor/katex/0.17.0/dist/katex.min.css",
+    "vendor/katex/0.17.0/dist/contrib/auto-render.min.js"
+  ]);
+
+  function criticalAssetName(target) {
+    try {
+      const url = new URL(target?.src || target?.href || "", window.location.href);
+      if (url.origin !== window.location.origin) return "";
+      const relative = url.pathname.replace(/^\/static\//, "");
+      if (STATIC_ASSETS.has(relative)) return relative;
+      if (/^dist\/(?:(?:head|auth|firebase|demo|app)\.[a-f0-9]{12}\.js|app\.[a-f0-9]{12}\.css)$/.test(relative)) return relative;
+    } catch (_) { /* Unknown resources retain only their coarse class. */ }
+    return "";
+  }
   const ERROR_NAMES = new Set([
     "Error", "TypeError", "ReferenceError", "RangeError", "SyntaxError",
     "URIError", "EvalError", "AggregateError", "SecurityError", "InvalidStateError",
@@ -74,6 +93,7 @@
       report.type,
       report.phase,
       report.resource_class,
+      report.asset,
       report.failure_kind,
       report.error_name,
       report.script,
@@ -112,6 +132,7 @@
     const details = compactDetails(value.details);
     const stack = String(value.stack || value.error?.stack || value.reason?.stack || "");
     if (resourceClass) report.resource_class = resourceClass;
+    if (value.asset) report.asset = String(value.asset);
     if (details) report.details = details;
     if (stack) report.stack = stack;
     if (!shouldSend(report)) return;
@@ -162,7 +183,8 @@
         type: "resource_load_failed",
         phase: "asset_load",
         message: `Failed to load ${event.target.tagName || "resource"}`,
-        resource_class: resourceClass
+        resource_class: resourceClass,
+        asset: criticalAssetName(event.target)
       });
       return;
     }

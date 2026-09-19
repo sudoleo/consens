@@ -341,7 +341,10 @@ der Python-Staleness-Test auch indirekte Änderungen erkennt.
   Skripte, Stylesheets und explizit mit `data-critical-resource="true"`
   markierte Elemente gelten als alarmwürdig; dekorative Bilder, Quellen- und
   Dokument-Favicons bleiben bei ihren lokalen Fallbacks. Asset-Alarme senden
-  ausschließlich eine allowgelistete Ressourcenklasse, keine URL. Erwartete
+  eine allowgelistete Ressourcenklasse und für bekannte lokale Assets zusätzlich
+  den geprüften Dateinamen (gehashte Bundles, gepinnte Vendor-Libs, Analytics-Opt-out),
+  keine URL/Query. Client und Server deduplizieren je Asset; unterschiedliche
+  Dateien derselben Klasse bleiben damit diagnostizierbar. Erwartete
   `AbortError`-Abbrüche werden ignoriert; Session-Deduplizierung verhindert
   Wiederholungen desselben Fehlers. Runtime-Alarme ergänzen einen allowgelisteten
   JS-/DOM-Fehlernamen und, sofern verfügbar, den same-origin Bundle-Dateinamen

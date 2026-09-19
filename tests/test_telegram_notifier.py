@@ -154,6 +154,25 @@ def test_runtime_locations_are_visible_and_deduplicated_separately(monkeypatch):
     assert "Location: app.012345abcdef.js:1:84" in captured[1]
 
 
+def test_asset_names_are_visible_and_deduplicated_separately(monkeypatch):
+    captured = []
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test-token")
+    monkeypatch.setenv("CRITICAL_ERROR_TELEGRAM_CHAT_ID", "456")
+    telegram_notifier._critical_seen.clear()
+    telegram_notifier._critical_sent_at.clear()
+    monkeypatch.setattr(telegram_notifier, "send_bot_message",
+        lambda chat_id, text: captured.append(text) or {"status": "sent"})
+    report = {"source": "browser", "type": "resource_load_failed", "phase": "asset_load",
+        "path": "/app", "resource_class": "app_bundle", "message": "A required resource failed.",
+        "asset": "dist/app.012345abcdef.js"}
+    assert telegram_notifier.send_critical_error_notification(report)["status"] == "sent"
+    assert telegram_notifier.send_critical_error_notification(report)["status"] == "deduplicated"
+    report["asset"] = "dist/firebase.abcdef012345.js"
+    assert telegram_notifier.send_critical_error_notification(report)["status"] == "sent"
+    assert "Asset: dist/app.012345abcdef.js" in captured[0]
+    assert "Asset: dist/firebase.abcdef012345.js" in captured[1]
+
+
 def test_new_user_registration_notification_is_pii_free(monkeypatch):
     captured = []
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test-token")

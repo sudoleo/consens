@@ -21,6 +21,35 @@ function fail(window, element) {
 }
 
 describe("critical resource reporting", () => {
+  it("identifies separate failed app assets without query strings", () => {
+    const { window, document, dom, reports } = boot();
+    for (const src of [
+      "/static/dist/app.012345abcdef.js?token=private",
+      "/static/dist/firebase.abcdef012345.js",
+      "/static/vendor/katex/0.17.0/dist/katex.min.js",
+      "/static/vendor/katex/0.17.0/dist/contrib/auto-render.min.js",
+    ]) {
+      const script = document.createElement("script");
+      script.src = src;
+      fail(window, script);
+    }
+    expect(reports.map(report => report.asset)).toEqual([
+      "dist/app.012345abcdef.js", "dist/firebase.abcdef012345.js",
+      "vendor/katex/0.17.0/dist/katex.min.js", "vendor/katex/0.17.0/dist/contrib/auto-render.min.js",
+    ]);
+    expect(JSON.stringify(reports)).not.toContain("private");
+    dom.window.close();
+  });
+
+  it("does not send unapproved resource names", () => {
+    const { window, document, dom, reports } = boot();
+    const script = document.createElement("script");
+    script.src = "/static/private-user.js";
+    fail(window, script);
+    expect(reports[0]).not.toHaveProperty("asset");
+    dom.window.close();
+  });
+
   it("keeps distinct runtime locations and strips query data from the script field", () => {
     const { window, dom, reports } = boot();
     for (const colno of [42, 84, 42]) {

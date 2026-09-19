@@ -55,6 +55,15 @@ _ALLOWED_ERROR_NAMES = {
     "IndexSizeError", "QuotaExceededError", "NetworkError", "NotSupportedError",
 }
 _BUNDLE_SCRIPT = re.compile(r"(?:head|auth|firebase|demo|app)\.[a-f0-9]{12}\.js")
+_BUNDLE_ASSET = re.compile(r"dist/(?:(?:head|auth|firebase|demo|app)\.[a-f0-9]{12}\.js|app\.[a-f0-9]{12}\.css)")
+_STATIC_ASSETS = {
+    "js/analytics-opt-out.js",
+    "vendor/marked/12.0.2/marked.min.js",
+    "vendor/dompurify/3.0.6/dist/purify.min.js",
+    "vendor/katex/0.17.0/dist/katex.min.js",
+    "vendor/katex/0.17.0/dist/katex.min.css",
+    "vendor/katex/0.17.0/dist/contrib/auto-render.min.js",
+}
 
 
 def _bounded_string(data: dict, field: str, limit: int, *, required: bool = False) -> str:
@@ -137,6 +146,10 @@ def report_client_error(
     }
     if resource_class:
         report["resource_class"] = resource_class
+    if error_type == "resource_load_failed":
+        asset = _bounded_string(data, "asset", 150)
+        if asset in _STATIC_ASSETS or _BUNDLE_ASSET.fullmatch(asset):
+            report["asset"] = asset
     raw_failure_kind = _bounded_string(data, "failure_kind", 80)
     if error_type == "consensus_failed" and raw_failure_kind in _ALLOWED_FAILURE_KINDS:
         report["failure_kind"] = raw_failure_kind

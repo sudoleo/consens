@@ -173,6 +173,9 @@ def _critical_error_message(report: Mapping) -> str:
         lines.append(f"Path: {path}")
     if resource_class:
         lines.append(f"Resource: {resource_class}")
+    asset = _scrub_alert_text(report.get("asset"), limit=150)
+    if asset:
+        lines.append(f"Asset: {asset}")
     failure_kind = _scrub_alert_text(report.get("failure_kind"), limit=80)
     if failure_kind:
         lines.append(f"Failure: {failure_kind}")
@@ -205,6 +208,7 @@ def send_critical_error_notification(report: Mapping) -> dict:
     resource_class = _scrub_alert_text(report.get("resource_class"), limit=80)
     fingerprint = "\x1f".join(
         (source, error_type, phase, path, resource_class,
+         _scrub_alert_text(report.get("asset"), limit=150),
          _scrub_alert_text(report.get("failure_kind"), limit=80),
          _scrub_alert_text(report.get("error_name"), limit=80),
          _scrub_alert_text(report.get("script"), limit=100),

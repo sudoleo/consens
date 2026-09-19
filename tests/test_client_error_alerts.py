@@ -171,6 +171,27 @@ def test_error_reporter_loads_before_app_modules():
     assert loads_before("error-reporter.js", "app-core.js")
 
 
+@pytest.mark.parametrize("asset,allowed", [
+    ("dist/app.012345abcdef.js", True),
+    ("dist/app.012345abcdef.css", True),
+    ("vendor/katex/0.17.0/dist/katex.min.js", True),
+    ("vendor/katex/0.17.0/dist/contrib/auto-render.min.js", True),
+    ("js/analytics-opt-out.js", True),
+    ("dist/app.012345abcdef.js?token=private", False),
+    ("dist/app.private.js", False),
+    ("https://example.test/static/dist/app.012345abcdef.js", False),
+    ("vendor/private@example.test", False),
+])
+def test_asset_report_keeps_only_known_file_names(monkeypatch, asset, allowed):
+    captured = []
+    response = _client(monkeypatch, captured).post("/api/client-errors", json={
+        "type": "resource_load_failed", "message": "private", "asset": asset,
+    })
+    assert response.status_code == 202
+    assert captured[0].get("asset") == (asset if allowed else None)
+    assert "private" not in str(captured)
+
+
 @pytest.mark.parametrize("error_type", ["unhandled_error", "unhandled_rejection"])
 def test_runtime_report_retains_only_safe_code_location(monkeypatch, error_type):
     captured = []
