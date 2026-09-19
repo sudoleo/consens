@@ -49,6 +49,7 @@ def test_daily_token_admission_and_idempotent_settlement_in_firestore(monkeypatc
                 status="cancelled", final=False), range(2))) == 1
         quota = agent_quota.quota_ref(db, uid, agent_quota.day_key()).get().to_dict()
         assert quota["used"] == 15 and quota["reserved"] == 0
+        assert quota['revision'] == 2  # one admitted call, one settlement despite retries
         store.finish_run(*args, completion=value, status="cancelled", run_token=args[1])
         store.delete_chat(uid, args[1])
         assert agent_quota.quota_ref(db, uid, agent_quota.day_key()).get().to_dict()["used"] == 15

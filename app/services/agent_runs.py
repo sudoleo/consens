@@ -264,7 +264,7 @@ class AgentRunStore(AgentSessionStore, ChatStore):
             daily_ref = agent_quota.quota_ref(self.db, uid, data["quota_day"]) if data.get("quota_day") else None
             daily = daily_ref.get(transaction=tx).to_dict() or {} if daily_ref else {}
             if daily_ref:
-                daily["reserved"] = max(0, daily.get("reserved", 0) - data.get("review_hold", 0))
+                daily = agent_quota.release(daily, data.get("review_hold", 0))
                 tx.set(daily_ref, daily)
             tx.update(root_ref, {"run_status": status, "finished_at": firestore.SERVER_TIMESTAMP})
             leases = dict((active.to_dict() or {}).get("leases") or {})

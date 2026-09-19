@@ -148,6 +148,9 @@ class DelegationLoop(AgentLoop):
             return self._publish_locked(worker, patch=patch, text=text, kind=kind, sender=sender, recipient=recipient)
 
     def _publish_locked(self, worker, *, patch=None, text=None, kind="message", sender="orchestrator", recipient=None):
+        patch = dict(patch or {})
+        if worker.state not in {"completed", "failed", "stopped"}:
+            patch.setdefault("duration_ms", max(0, int((time.monotonic() - worker.started) * 1000)))
         message = {"text": text, "kind": kind, "sender": sender, "recipient": recipient or worker.id} if text is not None else None
         if message and patch:
             message.update({key: patch[key] for key in ("sources", "result_truncated", "finish_reason") if key in patch})
@@ -177,11 +180,14 @@ class DelegationLoop(AgentLoop):
             # must never fill the durable-event queue with disposable counters.
             self.live_progress[worker.id] = {"type": "delegation_progress", "version": 1,
                 "chat_id": self.chat_id, "turn_id": self.turn_id, "agent_id": worker.id,
-                "session_seq": worker.session_seq, "seq": worker.progress_seq, **snapshot}
+                "session_seq": worker.session_seq, "seq": worker.progress_seq,
+                "duration_ms": max(0, int((time.monotonic() - worker.started) * 1000)), **snapshot}
 
     def _state(self, worker, status, **patch):
         with self.condition:
             worker.state = status
+            if status in {"completed", "failed", "stopped"}:
+                patch.setdefault("ended_at", datetime.now(timezone.utc).isoformat())
             self._publish(worker, patch={"status": status, "duration_ms": int((time.monotonic() - worker.started) * 1000),
                                         "usage": aggregate_usage(worker.usages), **patch})
             self.condition.notify_all()
@@ -331,6 +337,7 @@ class DelegationLoop(AgentLoop):
                 self.search_remaining += searches
             raise
         claimed = False
+        provider_attempted = False
         value = self.factory()
         value.step_id, value.tool_argument_limit = step, registry.argument_limit
         value.tool_call_limit = 4
@@ -382,6 +389,7 @@ class DelegationLoop(AgentLoop):
                 if not worker:
                     yield {"type": "delta", "text": value.text}
             else:
+                provider_attempted = True
                 source = value.stream(model=model, messages=messages, api_key=self.api_key, tools=tools,
                                       native_searches=searches, allow_tool_calls=True)
                 try:
@@ -412,6 +420,7 @@ class DelegationLoop(AgentLoop):
             status = "cancelled"
             raise
         except Exception as exc:
+            value.record_rejection(exc, model)
             self.cooldowns.record(model, self.api_key, exc)
             raise
         finally:
@@ -420,6 +429,8 @@ class DelegationLoop(AgentLoop):
                 # candidates are checkpointed separately, with their exact hash.
                 self.completion.text = value.text
             if claimed:
+                if not provider_attempted and self.mock_answer is None:
+                    value.record_unstarted(model)
                 if worker:
                     self._stream_progress(worker, stream_progress, value.usage, streaming=False, force=True)
                 self.costs.reconcile(reservation, value.usage)

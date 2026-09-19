@@ -12,7 +12,7 @@ from urllib.parse import urlsplit
 from app.core import config as cfg
 from app.services.agent_costs import provider_cost_nanos, search_cost_nanos, token_cost_nanos
 
-from app.services.llm.engines import OPENROUTER_CHAT_COMPLETIONS_URL, _ProviderResponseError, openrouter_headers
+from app.services.llm.engines import OPENROUTER_CHAT_COMPLETIONS_URL, _ProviderHTTPStatusError, _ProviderResponseError, openrouter_headers
 from app.services.llm.provider_runtime import (
     AnalysisBudget, bind_analysis_budget, cancellable_sse_lines, current_analysis_budget,
 )
@@ -201,12 +201,12 @@ def measured_usage(raw: object, model: AgentModel, *, searches_enabled=False) ->
     searches = server_use.get("web_search_requests") if isinstance(server_use, dict) else None
     searches_known = valid(searches)
     source = "provider" if cost is not None else "catalog"
-    complete = tokens_known
+    cost_complete = tokens_known
     if cost is None:
         cost = token_cost_nanos(model, prompt, completion, cached, written)
         if searches_enabled:
             price = search_cost_nanos(model)
-            complete = searches_known and (searches == 0 or price is not None)
+            cost_complete = searches_known and (searches == 0 or price is not None)
             if searches_known and price is not None:
                 cost += searches * price
     # Integer nanodollars avoid cumulative float/rounding drift. Reasoning is
@@ -216,8 +216,8 @@ def measured_usage(raw: object, model: AgentModel, *, searches_enabled=False) ->
         "cached_input_tokens": cached if tokens_known else None, "cache_write_tokens": written if tokens_known else None,
         "reasoning_tokens": reasoning if tokens_known else None,
         "web_search_requests": searches if searches_known else None,
-        "estimated_cost_nano_usd": cost, "cost_source": source, "complete": complete,
-        "cost_complete": source == "provider" or complete,
+        "estimated_cost_nano_usd": cost, "cost_source": source, "complete": tokens_known,
+        "cost_complete": source == "provider" or cost_complete,
         "pricing_version": model.pricing_version,
         "source": "provider", "billing_mode": "simulation", "currency": "USD",
     }
@@ -238,10 +238,26 @@ class AgentCompletion:
         self.sources = []
         self._tool_parts = {}
         self._raw_usage = {}
+        self._final_usage_fields = set()
         self.tool_argument_limit = 2048
         self.tool_call_limit = 1
         self._reasoning_parts = {}
         self._reasoning_text = ""
+
+    def record_rejection(self, error, model):
+        # An HTTP admission rejection never opened an SSE generation. Timeouts,
+        # 5xx and errors inside an accepted stream can still have incurred usage.
+        if (isinstance(error, _ProviderHTTPStatusError)
+                and error.status_code in {400, 401, 402, 403, 404, 413, 422, 429}
+                and self.usage is None and not self.generation_id and not self.text
+                and not self.reasoning_chars and not self._tool_parts):
+            self.record_unstarted(model)
+            self.usage["source"] = "provider_rejection"
+
+    def record_unstarted(self, model):
+        self.usage = measured_usage({"prompt_tokens": 0, "completion_tokens": 0, "cost": 0,
+                                    "server_tool_use": {"web_search_requests": 0}}, model)
+        self.usage["source"] = "not_started"
 
     def assistant_message(self):
         """Exact provider continuation data; never a public message or stored trace."""
@@ -388,8 +404,11 @@ class AgentCompletion:
                     if not isinstance(data, dict):
                         raise ValueError("Invalid provider event")
                     self.generation_id = str(data.get("id") or self.generation_id)[:200]
+                    terminal = self.finish_reason or any(choice.get("finish_reason") for choice in data.get("choices") or [])
                     reported = data.get("usage")
                     if isinstance(reported, dict):
+                        if terminal:
+                            self._final_usage_fields.update(reported)
                         for field in ("prompt_tokens", "completion_tokens", "prompt_tokens_details", "completion_tokens_details",
                                       "input_tokens", "output_tokens", "input_tokens_details", "output_tokens_details", "cost"):
                             if field in reported:
@@ -416,6 +435,15 @@ class AgentCompletion:
                                      "pricing_version": model.pricing_version, "source": "provider",
                                      "billing_mode": "simulation", "currency": "USD"}
                     if usage is not None:
+                        # Cumulative telemetry before the terminal choice is a
+                        # lower bound, not a final receipt after a disconnect.
+                        final_tokens = (bool(self._final_usage_fields & {"prompt_tokens", "input_tokens"})
+                                        and bool(self._final_usage_fields & {"completion_tokens", "output_tokens"}))
+                        if not final_tokens:
+                            usage.update(provisional=True, complete=False)
+                        if (not terminal or (usage.get("cost_source") == "provider" and "cost" not in self._final_usage_fields)
+                                or (usage.get("cost_source") == "catalog" and not final_tokens)):
+                            usage["cost_complete"] = False
                         self.usage = usage
                         yield self.event("usage", "usage", usage=usage)
                         if native_searches and known and count > native_searches:

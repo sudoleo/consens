@@ -15,7 +15,8 @@ def test_agent_live_counter_uses_streamed_progress_and_stops_animation(browser, 
     context, page = _real_firebase_page(browser, phase4_server)
     chat, turn, aid = (c * 32 for c in "abc")
     agent = {"id": aid, "seq": 1, "message_seq": 0, "status": "working", "kind": "comparison",
-        "title": "Independent answer", "model": {"model": "deepseek/deepseek-v4.1-flash", "label": "DeepSeek V4.1 Flash"}, "usage": None}
+        "title": "Independent answer", "model": {"model": "deepseek/deepseek-v4.1-flash", "label": "DeepSeek V4.1 Flash"},
+        "usage": None, "created_at": "invalid-clock", "duration_ms": 5200}
     errors = []
     page.on('pageerror', lambda error: errors.append(str(error)))
     try:
@@ -52,9 +53,10 @@ def test_agent_live_counter_uses_streamed_progress_and_stops_animation(browser, 
         page.locator('#sendButton').click()
         label = page.locator('.agent-session-tokens')
         expect(label).to_have_text('Tokens pending')
+        expect(page.locator('.agent-session-state')).to_have_text('Working · 5s')
         assert label.evaluate('el => getComputedStyle(el).animationName') == 'source-label-shine'
         event = {"version": 1, "chat_id": chat, "turn_id": turn, "agent_id": aid, "session_seq": 1,
-            "seq": 1, "chars": 120, "usage": None, "streaming": True}
+            "seq": 1, "chars": 120, "usage": None, "streaming": True, "duration_ms": 8200}
         page.evaluate("e => window.__agentPush('delegation_progress',e)", event)
         expect(label).to_have_text('120 chars')
         page.evaluate("e => window.__agentPush('delegation_progress',e)", {**event, "seq": 2, "chars": 2450})
@@ -72,11 +74,12 @@ def test_agent_live_counter_uses_streamed_progress_and_stops_animation(browser, 
         page.evaluate("e => window.__agentPush('delegation_progress',e)", {**event, "seq": 3, "chars": 2500, "usage": usage})
         expect(label).to_have_text(re.compile(r'1[.,]050 tokens'))
         assert label.evaluate('el => getComputedStyle(el).animationName') == 'source-label-shine'
-        agent.update(seq=2, status='completed', usage=usage)
+        agent.update(seq=2, status='completed', usage=usage, duration_ms=8750)
         page.evaluate("e => window.__agentPush('delegation',e)", {"version": 1, "chat_id": chat, "turn_id": turn, "agent": agent})
         expect(label).not_to_have_class(re.compile('is-loading'))
         page.evaluate('() => window.__agentFinish()')
         expect(label).to_have_text(re.compile(r'1[.,]050 tokens'))
+        expect(page.locator('.agent-session-state')).to_have_text('Completed · 8s')
         assert label.evaluate('el => getComputedStyle(el).animationName') == 'none'
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
         assert not errors

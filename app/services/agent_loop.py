@@ -86,6 +86,7 @@ class AgentLoop:
                         raise TurnStatusConflict("This agent step has already started. Reopen the saved conversation.")
                     self.claimed = True
                     step_status = "failed"
+                    provider_attempted = False
                     try:
                         self.check(budget)
                         if index == 0:
@@ -95,6 +96,7 @@ class AgentLoop:
                             value.text, value.finish_reason = self.mock_answer, "stop"
                             yield {"type": "delta", "text": value.text}
                         else:
+                            provider_attempted = True
                             provider_stream = value.stream(model=self.model, messages=self.messages, api_key=self.api_key,
                                                            tools=tools, native_searches=searches, allow_tool_calls=allow_client)
                             try:
@@ -114,7 +116,12 @@ class AgentLoop:
                     except (ProviderCancelled, GeneratorExit):
                         step_status = "cancelled"
                         raise
+                    except Exception as exc:
+                        value.record_rejection(exc, self.model)
+                        raise
                     finally:
+                        if not provider_attempted and self.mock_answer is None:
+                            value.record_unstarted(self.model)
                         self.costs.reconcile(reservation, value.usage)
                         self.completion.usage = self.costs.total()
                         self.completion.reasoning_truncated |= value.reasoning_truncated

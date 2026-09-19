@@ -1824,6 +1824,14 @@ verhindern veraltete Updates; Zeichenstände fallen innerhalb einer Sitzung nich
 zurück. Abschluss/Abbruch und gespeicherte Ansichten beenden den Schimmer.
 Reduced Motion/Forced Colors lassen die Zahl lesbar und unbewegt. Fehlende
 Endwerte bleiben unavailable, unvollständige Tokensummen tragen ein +.
+Laufzeiten verwenden serverseitig monotone Sitzungsdauern (einschließlich Warten
+und Review); Fortschrittsereignisse tragen `duration_ms`. Die Sidebar ergänzt
+nur bei laufenden Sitzungen `performance.now()` seit Empfang. Browser-Uhrzeit
+und `created_at` werden dafür nicht verrechnet. Gespeicherte/terminale Ansichten
+frieren ein, auch bei verspäteter Projektion. Der Reparatur-Poll liefert aktive
+Sitzungsdauern anhand der Serverzeit. Nach abgelaufener Prozess-Lease bleibt die
+letzte dauerhaft bestätigte Dauer als `duration_incomplete`/„≥“ erhalten; ein
+späterer Reload wird nicht als zusätzliche Modelllaufzeit gezählt.
 Judge-Details werden aus dem bestehenden öffentlichen Sitzungs-Snapshot sofort
 gerendert (Zweck, Fortschritt, Status, Tokenaufschlüsselung), ohne Detail- oder
 Nachrichtenabfrage. Worker-/Vergleichsdetails laden weiter nur bei Bedarf,
@@ -1831,6 +1839,9 @@ zeigen sofort einen Skeleton und nutzen den vorhandenen message_seq-Cache.
 Live-SSE ersetzt regelmäßige Vollabfragen: erst nach zehn Sekunden ohne Session-
 Update wird reparierend gepollt, nur bei sichtbarem Browser-Tab. Am Laufende folgt
 ein finaler Abgleich; ein älterer Poll darf einen beendeten Lauf nicht reaktivieren.
+Läuft die serverseitige Abwicklung nach lokalem Stop noch, setzt die Ansicht
+reparierende Abfragen bis zum terminalen Serverstatus fort. Timer und Schimmer
+bleiben dabei beendet; die Oberfläche benennt ausstehende Modellabschlüsse.
 delegation_view verwendet den Receipt-Snapshot der Lease-Prüfung erneut und spart
 dadurch eine doppelte Dokumentabfrage.
 App.createModelMark löst Anbieter/Modelle über
@@ -1886,6 +1897,22 @@ Jeder Claim reserviert transaktional im selben Commit wie sein Beleg unter
 users/{uid}/chat_state/agent_tokens_YYYY-MM-DD[_reset_epoch]. Settlement tauscht die Reserve
 gegen gemessene Tokens genau einmal aus. Fehlende Tokenzahlen behalten ihre
 Reserve und erscheinen separat als unknown, niemals als erfundener Verbrauch.
+Zwischenstände vor dem terminalen Stream-Chunk sind `provisional`: Sie dürfen
+als gemessene Untergrenze angezeigt werden, geben bei einem Streamabbruch aber
+keine Reserve frei. Der finale Usage-Chunk ersetzt kumulative Zwischenstände.
+`complete` beschreibt ausschließlich die Tokenmessung; fehlende Suchpreisdaten
+setzen separat `cost_complete=false` und blockieren keine bekannten Tokens.
+Explizite HTTP-Ablehnungen vor jeder Generierung (400/401/402/403/404/413/422/429)
+werden als Nullverbrauch mit `source=provider_rejection` verbucht und geben die
+Reserve frei. Ein Abbruch nach Admission, aber vor Start des Provider-Adapters,
+gibt die Reserve mit `source=not_started` ebenfalls frei. HTTP 408/5xx, Transportabbrüche und Fehler innerhalb eines
+angenommenen Streams bleiben ohne finale Usage unbekannt.
+Jede Änderung am Tagesledger erhöht dessen transaktionale `revision`. Die UI
+ordnet Budgets nach Config-Revision, UTC-Tag und Ledger-Revision, unabhängig von
+Server-Uhrabweichungen; ältere Antworten können keinen neueren Stand ersetzen.
+Bei sichtbarem Agent-Chat werden Budgets auch im Leerlauf alle 60 Sekunden sowie
+bei Fokus/Tab-Rückkehr aktualisiert. Fehlgeschlagene Aktualisierungen markieren
+den letzten bestätigten Stand; Auth-Wechsel verwerfen alte Requests/Ansichten.
 Auch Abbrüche, Fehler und Judge-Wiederholungen zählen. Tageswechsel migrieren
 nur ungenutzte Prüfreserven; bereits gestartete Calls werden ihrem Claim-Tag
 zugeordnet. Andere parallele Chats können reserviertes Budget nicht ausgeben.

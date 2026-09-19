@@ -18,6 +18,52 @@ function receive(w, data) {
 }
 
 describe("Agent sidebar", () => {
+  it('uses elapsed server durations with a monotonic clock and freezes terminal or recovered sessions', async () => {
+    const {window:w,document:d,dom} = boot(async () => ({ok:true,json:async () => ({agents:[],status:'running'})}));
+    let tick, monotonic = 100;
+    w.setInterval = fn => {tick=fn;return 1;};
+    w.performance.now = () => monotonic;
+    w.Date.now = () => 9999999999999;
+    receive(w, {...agent(), created_at:'invalid-date', duration_ms:5200});
+    w.App.agentDelegation.project({chatId,turnId,running:true});
+    const text = () => d.querySelector('.agent-session-state').textContent;
+    expect(text()).toContain('5s');
+    monotonic += 3000; tick(); expect(text()).toContain('8s');
+    w.App.agentDelegation.project({chatId,turnId,running:false});
+    monotonic += 60000; tick(); expect(text()).toContain('8s');
+    w.App.agentDelegation.receiveProgress({metadata:{chatId,agentTurnId:turnId},auth:{uid:'owner'}},
+      {version:1,chat_id:chatId,turn_id:turnId,agent_id:agentId,session_seq:1,seq:1,chars:10,streaming:true,duration_ms:100000});
+    expect(text()).toContain('8s');
+    w.App.agentDelegation.project({chatId,turnId,running:true});
+    expect(text()).toContain('8s');
+    receive(w, {...agent(2,'stopped'), duration_ms:7300, duration_incomplete:true});
+    expect(text()).toContain('≥ 7s');
+    monotonic += 60000; tick(); expect(text()).toContain('≥ 7s');
+    dom.window.close();
+  });
+  it('does not replace a newer polled total with a stale run projection', async () => {
+    const usage = {input_tokens:900,output_tokens:100,measured_calls:3,complete:true};
+    const {window:w,document:d,dom} = boot(async () => ({ok:true,json:async () => ({agents:[agent()],status:'running',usage})}));
+    w.App.agentDelegation.project({chatId,turnId,running:true});
+    await vi.waitFor(() => expect(d.querySelector('.agent-sidebar-usage').textContent).toMatch(/1[.,]000 tokens/));
+    w.App.agentDelegation.project({chatId,turnId,running:true,usage:{input_tokens:200,output_tokens:20,measured_calls:1,complete:true}});
+    expect(d.querySelector('.agent-sidebar-usage').textContent).toMatch(/1[.,]000 tokens/);
+    dom.window.close();
+  });
+  it('discards a pending old session response after the same user signs in again', async () => {
+    let resolve;
+    const {window:w,document:d,dom} = boot(() => new Promise(done => {resolve=done;}));
+    w.App.agentChat = {receiveBudget:vi.fn()};
+    w.App.agentDelegation.project({chatId,turnId,running:true});
+    await vi.waitFor(() => expect(resolve).toBeTypeOf('function'));
+    w.auth.currentUser = {...w.auth.currentUser};
+    w.dispatchEvent(new w.Event('consensio:run-registry-change'));
+    resolve({ok:true,json:async () => ({agents:[agent()],status:'running',token_budget:{remaining:1}})});
+    await new Promise(done => setTimeout(done,5));
+    expect(w.App.agentChat.receiveBudget).not.toHaveBeenCalled();
+    expect(d.querySelector('.agent-session')).toBeNull();
+    dom.window.close();
+  });
   it('shows live received characters, switches to provider tokens and stops shimmer on completion', () => {
     const {window:w,document:d,dom} = boot(async () => ({ok:true,json:async () => ({agents:[],status:'running'})}));
     receive(w, {...agent(), usage:null}); w.App.agentDelegation.project({chatId,turnId,running:true});
@@ -73,7 +119,13 @@ describe("Agent sidebar", () => {
     w.App.agentDelegation.project({chatId,turnId,running:false});
     await vi.waitFor(() => expect(w.fetch).toHaveBeenCalledTimes(3));
     await new Promise(r => setTimeout(r,5));
-    now += 10000; tick(); expect(w.fetch).toHaveBeenCalledTimes(3);
+    // Local stop precedes server settlement. Keep repairing until the server
+    // confirms completion, without reviving the run or its timer.
+    w.fetch.mockImplementationOnce(async () => ({ok:true,json:async () => ({agents:[agent(3,'stopped')],status:'cancelled'})}));
+    now += 10000; tick();
+    await vi.waitFor(() => expect(w.fetch).toHaveBeenCalledTimes(4));
+    await new Promise(r => setTimeout(r,5));
+    now += 10000; tick(); expect(w.fetch).toHaveBeenCalledTimes(4);
     dom.window.close();
   });
   it('shows measured input plus output tokens, with no invented zero or double-counted details', () => {

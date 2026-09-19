@@ -7,6 +7,7 @@
     rework: "Rework", completed: "Completed", failed: "Failed", stopped: "Stopped" };
   const activeStates = new Set(["waiting", "working", "question", "rework"]);
   let owner = "", current = null, sidebar = null, inline = null, timer = null, returnFocus = null;
+  let ownerUser = null, ownerGeneration;
   const uid = () => window.auth?.currentUser?.uid || "";
   const keyFor = (chat, turn) => `${uid()}:${chat}:${turn}`;
   function node(tag, className, text) {
@@ -36,8 +37,10 @@
     } catch (_) { /* Storage may be unavailable. */ }
   }
   function resetOwner() {
-    if (owner === uid()) return;
+    if (owner === uid() && ownerUser === window.auth?.currentUser && ownerGeneration === App.authState?.generation) return;
     owner = uid();
+    ownerUser = window.auth?.currentUser;
+    ownerGeneration = App.authState?.generation;
     for (const view of views.values()) view.controller.abort();
     views.clear(); current = null;
     if (sidebar) { sidebar.hidden = true; sidebar._rows?.clear(); sidebar.querySelector(".agent-session-list")?.replaceChildren(); }
@@ -51,9 +54,9 @@
     if (!views.has(key)) {
       let saved = {};
       try { saved = JSON.parse(sessionStorage.getItem(`agent-view:${key}`) || "{}"); } catch (_) {}
-      views.set(key, { key, uid: owner, chatId, turnId, agents: new Map(), details: new Map(), progress: new Map(),
+      views.set(key, { key, uid: owner, user: ownerUser, authGeneration: ownerGeneration, chatId, turnId, agents: new Map(), details: new Map(), progress: new Map(),
         controller: new AbortController(), expanded: new Set(saved.expanded || []), closed: !!saved.closed,
-        scroll: saved.scroll || 0, loaded: false, loading: false, running: false, usage: null, lastSync: 0 });
+        scroll: saved.scroll || 0, loaded: false, loading: false, running: false, ended: false, settling: false, usage: null, lastSync: 0 });
       if (views.size > 24) {
         const old = [...views.values()].find(v => v.key !== current?.key && !v.running);
         if (old) { old.controller.abort(); views.delete(old.key); }
@@ -65,9 +68,30 @@
     if (!agent || !/^[a-f0-9]{32}$/.test(agent.id) || !Number.isInteger(agent.seq)) return;
     const old = view.agents.get(agent.id);
     if (!old || agent.seq > old.seq) {
-      view.agents.set(agent.id, agent);
+      view.agents.set(agent.id, {...agent, runtimeAnchor: performance.now()});
       if (!activeStates.has(agent.status)) view.progress.delete(agent.id);
+    } else if (agent.seq === old.seq && Number.isFinite(agent.duration_ms) && agent.duration_ms > (old.duration_ms || 0)) {
+      old.duration_ms = agent.duration_ms;
+      old.runtimeAnchor = performance.now();
     }
+  }
+  function elapsed(view, agent) {
+    const base = Number.isFinite(agent.duration_ms) ? Math.max(0, agent.duration_ms) : 0;
+    return base + (view.running && activeStates.has(agent.status) && Number.isFinite(agent.runtimeAnchor)
+      ? Math.max(0, performance.now() - agent.runtimeAnchor) : 0);
+  }
+  function stopClock(view) {
+    for (const agent of view.agents.values()) agent.duration_ms = elapsed(view, agent);
+    view.running = false;
+    view.ended = true;
+    view.progress.clear();
+  }
+  function mergeUsage(view, usage) {
+    if (!usage) return;
+    const calls = value => (value?.measured_calls || 0) + (value?.unmetered_calls || 0);
+    if (calls(usage) < calls(view.usage)) return;
+    if (calls(usage) === calls(view.usage) && view.usage?.complete === true && usage.complete === false) return;
+    view.usage = usage;
   }
   function receive(context, event) {
     resetOwner();
@@ -86,23 +110,30 @@
     if (!App.runRegistry?.isAuthCurrent(context) || event?.version !== 1
         || event.chat_id !== context.metadata.chatId || event.turn_id !== context.metadata.agentTurnId) return;
     const view = views.get(keyFor(event.chat_id, event.turn_id));
+    if (view?.ended) return;
     const agent = view?.agents.get(event.agent_id);
     const previous = view?.progress.get(event.agent_id);
     if (!agent || !activeStates.has(agent.status) || event.session_seq !== agent.seq
         || !Number.isSafeInteger(event.seq) || event.seq <= (previous?.seq || 0)
         || !Number.isSafeInteger(event.chars) || event.chars < 0 || typeof event.streaming !== 'boolean') return;
     view.progress.set(agent.id, {...event, chars: Math.max(previous?.chars || 0, event.chars)});
+    if (Number.isFinite(event.duration_ms) && event.duration_ms >= 0) {
+      agent.duration_ms = event.duration_ms;
+      agent.runtimeAnchor = performance.now();
+    }
     view.lastSync = Date.now();
     if (current === view) render();
   }
   async function request(view, suffix = "") {
+    const authorized = () => view.user === window.auth?.currentUser && view.authGeneration === App.authState?.generation && !view.controller.signal.aborted;
+    if (!authorized()) throw new Error("Account changed");
     const token = await window.auth.currentUser.getIdToken();
-    if (uid() !== view.uid || view.controller.signal.aborted) throw new Error("Account changed");
+    if (!authorized()) throw new Error("Account changed");
     const response = await fetch(`/agent/chats/${encodeURIComponent(view.chatId)}/turns/${encodeURIComponent(view.turnId)}/agents${suffix}`,
       { headers: { Authorization: `Bearer ${token}` }, signal: view.controller.signal });
     if (!response.ok) throw new Error("Agent details could not be loaded.");
     const data = await response.json();
-    if (uid() !== view.uid || view.controller.signal.aborted) throw new Error("Account changed");
+    if (!authorized()) throw new Error("Account changed");
     App.agentChat?.receiveBudget(data.token_budget, view.uid);
     return data;
   }
@@ -114,9 +145,11 @@
       const data = await request(view);
       for (const agent of data.agents || []) merge(view, agent);
       // A delayed poll must never revive a run ended by the authoritative SSE.
-      view.running = view.running && (data.status === "running" || data.status === "pending");
-      const calls = usage => (usage?.measured_calls || 0) + (usage?.unmetered_calls || 0);
-      if (calls(data.usage) >= calls(view.usage)) view.usage = data.usage;
+      if (data.status && !["running", "pending"].includes(data.status)) {
+        stopClock(view);
+        view.settling = false;
+      } else if (data.status) view.settling = !view.running;
+      mergeUsage(view, data.usage);
       view.loaded = true; view.error = "";
     } catch (error) { view.error = error.message; }
     finally {
@@ -334,7 +367,7 @@
     sidebar.querySelector(".agent-sidebar-usage").textContent = `Total run · ${tokens(view.usage, view.running)}`;
     sidebar.querySelector(".agent-sidebar-usage").title = tokenDescription(view.usage);
     sidebar.querySelector(".agent-sidebar-stop").hidden = !view.running;
-    sidebar.querySelector(".agent-sidebar-status").textContent = view.error || "";
+    sidebar.querySelector(".agent-sidebar-status").textContent = view.error || (view.settling ? "Finishing pending model calls…" : "");
     for (const agent of view.agents.values()) {
       let row = sidebar._rows.get(agent.id);
       if (!row) {
@@ -365,8 +398,8 @@
       row.title.textContent = agent.model?.label || agent.title;
       row.role.textContent = agent.kind === 'comparison' ? 'Independent answer' : agent.title;
       row.role.hidden = row.role.textContent === row.title.textContent;
-      const elapsed = activeStates.has(agent.status) && agent.created_at ? Math.max(0, Date.now() - Date.parse(agent.created_at)) : agent.duration_ms || 0;
-      row.state.textContent = `${labels[agent.status] || "Waiting"} · ${Math.floor(elapsed / 1000)}s`;
+      row.state.textContent = `${labels[agent.status] || "Waiting"} · ${agent.duration_incomplete ? '≥ ' : ''}${Math.floor(elapsed(view, agent) / 1000)}s`;
+      row.state.title = agent.duration_incomplete ? 'Last confirmed elapsed time before the server connection ended.' : 'Elapsed session time, including waiting and review.';
       const pending = view.running && ['waiting', 'working', 'rework'].includes(agent.status);
       const progress = pending ? view.progress.get(agent.id) : null;
       const loading = pending && progress?.streaming !== false;
@@ -390,8 +423,9 @@
       if (current) prefs(current);
       current = view; ensure(); sidebar._rows.clear(); sidebar.querySelector(".agent-session-list").replaceChildren();
     }
-    if (spec.usage) view.usage = spec.usage;
-    view.running = !!spec.running;
+    mergeUsage(view, spec.usage);
+    if (wasRunning && !spec.running) { stopClock(view); view.settling = true; }
+    view.running = !!spec.running && !view.ended;
     if (!view.running) view.progress.clear();
     render();
     if (changed) sidebar.scrollTop = view.scroll;
@@ -403,7 +437,7 @@
         render();
         // SSE already carries session updates. Poll only to repair a quiet or
         // interrupted stream, instead of rereading every agent every 2.5s.
-        if (current.running && Date.now() - current.lastSync >= 10000) load(current);
+        if ((current.running || current.settling) && Date.now() - current.lastSync >= 10000) load(current);
       }
     }, 2500);
   }

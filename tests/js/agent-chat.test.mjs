@@ -48,6 +48,40 @@ async function selectAgent(window) {
 }
 
 describe("single-model agent chat", () => {
+  it('orders allowance snapshots by reset, UTC day and ledger revision despite server clock skew', async () => {
+    const {window:w,dom} = boot();
+    await selectAgent(w);
+    const chat = w.App.agentChat;
+    const budget = {limit:250000,used:100,reserved:0,remaining:249900,day:'2026-09-19',revision:10,config_revision:1,observed_at:500};
+    chat.receiveBudget(budget,'owner');
+    chat.receiveBudget({...budget,revision:9,remaining:0,observed_at:1000},'owner');
+    expect(chat.tokenBudget()).toEqual(budget);
+    const settled = {...budget,used:120,revision:11,remaining:249880,observed_at:100};
+    chat.receiveBudget(settled,'owner'); expect(chat.tokenBudget()).toEqual(settled);
+    const nextDay = {...budget,day:'2026-09-20',used:0,remaining:250000,revision:0,observed_at:50};
+    chat.receiveBudget(nextDay,'owner'); chat.receiveBudget(settled,'owner');
+    expect(chat.tokenBudget()).toEqual(nextDay);
+    const reset = {...nextDay,revision:0,config_revision:2};
+    chat.receiveBudget(reset,'owner'); chat.receiveBudget({...nextDay,revision:100},'owner');
+    expect(chat.tokenBudget()).toEqual(reset);
+    chat.receiveBudget({...reset,remaining:NaN,revision:1},'owner'); expect(chat.tokenBudget()).toEqual(reset);
+    dom.window.close();
+  });
+  it('refreshes idle allowance on focus and marks failed refreshes as stale', async () => {
+    const {window:w,dom} = boot();
+    await selectAgent(w);
+    const budget = {limit:250000,remaining:250000,observed_at:10};
+    w.fetch.mockImplementation(async () => ({ok:true,json:async () => ({token_budget:budget})}));
+    w.dispatchEvent(new w.Event('focus'));
+    await vi.waitFor(() => expect(w.App.agentChat.tokenBudget()).toEqual(budget));
+    w.fetch.mockImplementation(async () => ({ok:false}));
+    w.dispatchEvent(new w.Event('focus'));
+    await vi.waitFor(() => expect(w.App.agentChat.tokenBudget().stale).toBe(true));
+    w.fetch.mockImplementation(async () => ({ok:true,json:async () => ({token_budget:budget})}));
+    w.dispatchEvent(new w.Event('focus'));
+    await vi.waitFor(() => expect(w.App.agentChat.tokenBudget()).toEqual(budget));
+    dom.window.close();
+  });
   it('freezes source-check permission for sending and recovery while the next-message preference changes', async () => {
     const {window, document, dom} = boot();
     await selectAgent(window);

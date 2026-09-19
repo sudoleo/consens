@@ -92,7 +92,8 @@ def test_bookmark_view_and_logout_keep_run_ownership_explicit():
     assert "window.App.consensusPipeline?.detach?.()" in view
     assert "pipeline.setRunFacts?.(runFacts(context))" in view
     assert 'row.dataset.runId = context.runId' in view
-    assert 'row.addEventListener("click", () => registry.show(context.runId))' in view
+    assert 'const open = () => { registry.show(context.runId); window.App.chatScroll?.opened?.(); };' in view
+    assert 'row.addEventListener("click", open)' in view
     assert "if (registry.isVisible(context.runId))" not in view  # projector is already selected-only
 
     new_comparison = init.split('getElementById("newRunButton")', 1)[1].split(

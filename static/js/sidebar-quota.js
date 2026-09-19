@@ -169,6 +169,7 @@
         text = tokens.value.toLocaleString() + ' tokens unspent; ' + Math.max(0, budget.remaining).toLocaleString() + ' available for new calls. '
           + budget.reserved.toLocaleString() + ' temporarily reserved for running calls, pending usage and review. Resets at 00:00 UTC.';
       }
+      if (agent && budget?.stale) text += ' Last confirmed allowance; reconnect to refresh.';
       foot.textContent = text;
       foot.hidden = !text;
     }

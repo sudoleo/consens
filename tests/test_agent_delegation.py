@@ -417,4 +417,4 @@ def test_worker_429_can_use_checked_fallback_without_retrying_worker(store):
     assert loop.completion.text == "5" and len(worker_calls) == 1
     assert any(e.get("agent", {}).get("failure", {}).get("code") == "provider_rate_limited"
                for e in events if e.get("agent", {}).get("failure"))
-    assert loop.completion.usage["cost_complete"] is False
+    assert loop.completion.usage["cost_complete"] is True

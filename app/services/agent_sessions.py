@@ -94,7 +94,7 @@ class AgentSessionStore:
             if data.get("quota_day") and data["quota_day"] != day:
                 previous_daily_ref = agent_quota.quota_ref(self.db, uid, data["quota_day"])
                 previous_daily = previous_daily_ref.get(transaction=tx).to_dict() or {}
-                previous_daily["reserved"] = max(0, previous_daily.get("reserved", 0) - protected)
+                previous_daily = agent_quota.release(previous_daily, protected)
                 daily = agent_quota.reserve(daily, protected, limit=budget_config['daily_token_limit'])
             can_spend = agent_id == "orchestrator" or (agent and (agent.to_dict() or {}).get("kind") == "judge")
             spend = min(protected, tokens) if can_spend else 0
@@ -153,7 +153,7 @@ class AgentSessionStore:
             if root["quota_day"] != day:
                 previous_ref = agent_quota.quota_ref(self.db, uid, root["quota_day"])
                 previous = previous_ref.get(transaction=tx).to_dict() or {}
-                previous["reserved"] = max(0, previous.get("reserved", 0) - protected)
+                previous = agent_quota.release(previous, protected)
                 extra = max(tokens, protected)
             else:
                 extra = max(0, tokens - protected)
@@ -297,9 +297,24 @@ class AgentSessionStore:
             return {"agent": agent.to_dict(), "messages": [s.to_dict() for s in page[:limit]],
                     "has_more": len(page) > limit}
         agents = [s.to_dict() for s in self._turn_ref(uid, chat_id, turn_id).collection("agents").stream()]
+        now = datetime.now(timezone.utc)
+        if root.get("run_status") == "running":
+            for agent in agents:
+                if agent.get("status") in {"waiting", "working", "question", "rework"}:
+                    agent["duration_ms"] = max(agent.get("duration_ms", 0), self._observed_duration(agent, now))
         return {"agents": [{k: v for k, v in a.items() if k != "assignment"} for a in agents],
                 "seq": root.get("event_seq", 0), "status": root.get("run_status", turn["status"]),
                 "usage": aggregate_usage(list(root.get("step_usage", {}).values())) or turn.get("agent_usage")}
+
+    @staticmethod
+    def _observed_duration(agent, observed_at):
+        try:
+            started = datetime.fromisoformat(agent["created_at"])
+            if isinstance(observed_at, str):
+                observed_at = datetime.fromisoformat(observed_at)
+            return max(0, int((observed_at - started).total_seconds() * 1000))
+        except (KeyError, ValueError, TypeError):
+            return 0
 
     def reap_delegation(self, uid, chat_id, turn_id):
         """Expired process leases become terminal unknown receipts, never retries."""
@@ -319,8 +334,13 @@ class AgentSessionStore:
             if data["status"] not in {"completed", "failed", "stopped"}:
                 usage = aggregate_usage([value for step, value in settled.get("step_usage", {}).items()
                                          if step.startswith(f"agent:{snap.id}:")])
+                # A dead process cannot report its final monotonic duration.
+                # Preserve the last durable measurement as an explicit lower bound.
+                observed = data.get("updated_at") or data.get("created_at")
                 self.publish_agent(uid, chat_id, turn_id, run_token=root["run_token"], agent_id=snap.id,
                                    patch={"status": "stopped", "usage": usage,
+                                          "duration_ms": max(data.get("duration_ms", 0), self._observed_duration(data, observed)),
+                                          "duration_incomplete": True,
                                           "ended_at": datetime.now(timezone.utc).isoformat()},
                                    event_id="reaped-" + snap.id)
         value = AgentCompletion()

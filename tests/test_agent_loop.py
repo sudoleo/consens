@@ -215,15 +215,16 @@ def test_close_during_provider_stream_settles_cancelled_and_closes_socket(store,
     assert not any(e.get("kind") == "tool" for e in loop.completion.activity)
 
 
-def test_missing_native_usage_is_partial_and_keeps_reservation(store, monkeypatch):
+def test_missing_search_cost_keeps_only_cost_reservation(store, monkeypatch):
     raw = usage()
     raw.pop("server_tool_use")
     transport(monkeypatch, [[packet({"content": "Answer"}, finish="stop", usage=raw)]])
     loop = loop_for(store)
     events = list(loop.run())
-    assert loop.completion.usage["complete"] is False
-    assert loop.costs.tokens == 600_000
-    assert totals(store)["incomplete_calls"] == 1
+    assert loop.completion.usage["complete"] is True
+    assert loop.completion.usage["cost_complete"] is False
+    assert loop.costs.tokens == 120
+    assert totals(store).get("incomplete_calls", 0) == 0
     assert loop.remaining_tools == 0
     assert not any(e and e.get("kind") == "tool" for e in events)
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)

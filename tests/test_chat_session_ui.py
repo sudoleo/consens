@@ -257,7 +257,8 @@ def test_chat_session_script_order_consensus_payload_and_legacy_bookmarks_remain
     history_block = consensus.split("appendHistoryTurn(", 1)[1].split(
         "archiveCurrentExchange()", 1
     )[0]
-    assert "injectMarkdown(answerBody, turnData.consensus, turnSources)" in history_block
+    assert "injectMarkdown(answerBody, turnData.consensus," in history_block
+    assert 'turnData.execution_mode === "agent" || turnData.mode === "Agent" ? [] : turnSources)' in history_block
     assert "window.currentEvidenceSources =" not in history_block
     assert "turnData.model_answers" in history_block
     assert "thread-history-sources" in history_block

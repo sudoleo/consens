@@ -50,7 +50,7 @@ def quota_ref(db, uid, day):
 
 def measured_tokens(usage):
     # Cache reads/writes are subsets of input; reasoning is part of output.
-    if usage and all(type(usage.get(k)) is int and usage[k] >= 0 for k in ("input_tokens", "output_tokens")):
+    if usage and not usage.get("provisional") and all(type(usage.get(k)) is int and usage[k] >= 0 for k in ("input_tokens", "output_tokens")):
         return usage["input_tokens"] + usage["output_tokens"]
     return None
 
@@ -61,6 +61,14 @@ def reserve(data, amount, *, limit=None):
     if amount > remaining:
         raise AgentTokenBudgetExceeded(remaining, amount)
     data["reserved"] = data.get("reserved", 0) + amount
+    data["revision"] = data.get("revision", 0) + 1
+    return data
+
+
+def release(data, amount):
+    data = dict(data or {})
+    data["reserved"] = max(0, data.get("reserved", 0) - amount)
+    data["revision"] = data.get("revision", 0) + 1
     return data
 
 
@@ -72,12 +80,13 @@ def settle(data, reserved, usage):
         data["used"] = data.get("used", 0) + actual
     else:
         data["unknown"] = data.get("unknown", 0) + reserved
+    data["revision"] = data.get("revision", 0) + 1
     return data
 
 
 def public(data, day=None, *, limit=None):
     data = data or {}
     limit = daily_limit() if limit is None else limit
-    return {"day": day or day_key(), "limit": limit, "used": data.get("used", 0),
+    return {"day": day or day_key(), "revision": data.get("revision", 0), "limit": limit, "used": data.get("used", 0),
             "reserved": data.get("reserved", 0), "unknown": data.get("unknown", 0),
             "remaining": max(0, limit - data.get("used", 0) - data.get("reserved", 0))}

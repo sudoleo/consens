@@ -8,6 +8,7 @@
   let catalogOwner = "";
   let catalogStatus = "idle";
   let loadGeneration = 0;
+  let catalogUser = null, catalogAuthGeneration, budgetRefresh = null;
   const selections = new Map();
   const effortCopy = {
     default: ["Auto", "Use the model’s default reasoning"],
@@ -48,14 +49,15 @@
   async function loadModels() {
     if (!canUse() || catalogStatus !== "idle") return;
     const uid = catalogOwner;
+    const user = window.auth.currentUser;
     const generation = ++loadGeneration;
     catalogStatus = "loading";
     try {
-      const token = await window.auth.currentUser.getIdToken();
-      if (uid !== window.auth?.currentUser?.uid || generation !== loadGeneration) return;
+      const token = await user.getIdToken();
+      if (user !== window.auth?.currentUser || generation !== loadGeneration) return;
       const response = await fetch("/agent/models", { headers: { Authorization: `Bearer ${token}` } });
       const data = await response.json();
-      if (uid !== window.auth?.currentUser?.uid || generation !== loadGeneration || !canUse()) return;
+      if (user !== window.auth?.currentUser || generation !== loadGeneration || !canUse()) return;
       if (!response.ok || !Array.isArray(data.models) || !data.models.length) throw new Error("Model list unavailable");
       catalog = data;
       catalogStatus = "ready";
@@ -67,28 +69,47 @@
   }
   function receiveBudget(budget, uid) {
     if (!budget || !catalog || !canUse() || uid !== catalogOwner || uid !== window.auth?.currentUser?.uid) return;
-    if ((budget.config_revision ?? 0) < (catalog.token_budget?.config_revision ?? 0)) return;
-    if ((budget.config_revision ?? 0) === (catalog.token_budget?.config_revision ?? 0)
-      && Number.isFinite(budget.observed_at) && Number.isFinite(catalog.token_budget?.observed_at)
-      && budget.observed_at < catalog.token_budget.observed_at) return;
+    if (!Number.isSafeInteger(budget.limit) || budget.limit <= 0
+      || ['used', 'reserved', 'unknown', 'remaining', 'revision', 'config_revision'].some(key =>
+        budget[key] !== undefined && (!Number.isSafeInteger(budget[key]) || budget[key] < 0))) return;
+    const previous = catalog.token_budget;
+    if ((budget.config_revision ?? 0) < (previous?.config_revision ?? 0)) return;
+    if ((budget.config_revision ?? 0) === (previous?.config_revision ?? 0)) {
+      if (budget.day && previous?.day && budget.day < previous.day) return;
+      if (!budget.day || !previous?.day || budget.day === previous.day) {
+        if (Number.isSafeInteger(budget.revision) && Number.isSafeInteger(previous?.revision)) {
+          if (budget.revision < previous.revision) return;
+        } else if (Number.isFinite(budget.observed_at) && Number.isFinite(previous?.observed_at)
+          && budget.observed_at < previous.observed_at) return;
+      }
+    }
     catalog.token_budget = budget;
+    catalog.budgetStale = false;
     App.sidebarQuota?.sync();
   }
   async function refreshBudget(uid) {
+    const generation = loadGeneration;
+    if (budgetRefresh?.generation === generation) return;
+    const pending = budgetRefresh = {generation};
     try {
       const user = window.auth?.currentUser;
       if (!user || uid !== user.uid || !canUse()) return;
       const token = await user.getIdToken();
-      if (uid !== window.auth?.currentUser?.uid) return;
+      if (user !== window.auth?.currentUser || generation !== loadGeneration) return;
       const response = await fetch('/agent/budget', { headers: { Authorization: `Bearer ${token}` } });
-      if (!response.ok) return;
-      receiveBudget((await response.json()).token_budget, uid);
-    } catch (_) { /* Activity polling or the next run can refresh the allowance. */ }
+      if (!response.ok) throw new Error('Allowance unavailable');
+      const data = await response.json();
+      if (user === window.auth?.currentUser && generation === loadGeneration) receiveBudget(data.token_budget, uid);
+    } catch (_) {
+      if (generation === loadGeneration && catalog) { catalog.budgetStale = true; App.sidebarQuota?.sync(); }
+    } finally { if (budgetRefresh === pending) budgetRefresh = null; }
   }
   function renderControls(agent) {
     const uid = canUse() ? window.auth.currentUser.uid : "";
-    if (uid !== catalogOwner) {
+    if (uid !== catalogOwner || catalogUser !== window.auth?.currentUser || catalogAuthGeneration !== App.authState?.generation) {
       catalogOwner = uid;
+      catalogUser = window.auth?.currentUser;
+      catalogAuthGeneration = App.authState?.generation;
       catalog = null;
       catalogStatus = "idle";
       loadGeneration++;
@@ -521,7 +542,14 @@
     }
   }
   App.agentChat = { canUse, isSelected: () => selectedMode() === "agent", render, project, send,
-    tokenBudget: () => canUse() && catalogOwner === window.auth?.currentUser?.uid ? catalog?.token_budget : null, receiveBudget };
+    tokenBudget: () => canUse() && catalogOwner === window.auth?.currentUser?.uid
+      ? (catalog?.budgetStale ? {...catalog.token_budget, stale: true} : catalog?.token_budget) : null, receiveBudget };
+  function refreshVisibleBudget() {
+    if (document.visibilityState !== 'hidden' && canUse() && selectedMode() === 'agent' && catalogStatus === 'ready') refreshBudget(catalogOwner);
+  }
+  document.addEventListener('visibilitychange', refreshVisibleBudget);
+  window.addEventListener('focus', refreshVisibleBudget);
+  setInterval(refreshVisibleBudget, 60000);
   window.addEventListener("consensio:run-registry-change", render);
   document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("chatExecutionMode")?.addEventListener("change", event => {
