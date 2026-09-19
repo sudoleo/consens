@@ -65,6 +65,21 @@ describe("consensusAnchor.findRangesInText", () => {
     expect(raw.slice(range.start, range.end)).toBe("tower   is 330 m");
   });
 
+  it.each([
+    ["İstanbul", "İstanbul"],
+    ["İ İ İstanbul: son", "son"],
+    ["😀 İ ‘İklim’ değişiyor.", '‘İklim’ değişiyor.'],
+  ])("keeps valid DOM offsets after Unicode case expansion: %s", (raw, quote) => {
+    const { document, anchor } = boot();
+    const node = document.createTextNode(raw);
+    const found = anchor.findRangeInTextNode(node, anchor.normalizeForSearch(quote));
+    expect(found).toEqual({ start: raw.indexOf(quote), end: raw.indexOf(quote) + quote.length });
+    const range = document.createRange();
+    range.setStart(node, found.start);
+    range.setEnd(node, found.end);
+    expect(range.toString()).toBe(quote);
+  });
+
   it("finds every non-overlapping occurrence", () => {
     const raw = "yes and yes and yes";
 

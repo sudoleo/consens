@@ -1,5 +1,5 @@
 {
-  "sources": "5e9dd179a59b",
+  "sources": "e6874086c754",
   "inputs": [
     "package-lock.json",
     "package.json",
@@ -160,7 +160,7 @@
   "scripts": [
     {
       "name": "head",
-      "src": "/static/dist/head.6fd653d6e163.js",
+      "src": "/static/dist/head.07e418bed07f.js",
       "module": false,
       "defer": false
     },
@@ -184,7 +184,7 @@
     },
     {
       "name": "app",
-      "src": "/static/dist/app.510a61e9521a.js",
+      "src": "/static/dist/app.7ed7fee74cce.js",
       "module": false,
       "defer": true
     }

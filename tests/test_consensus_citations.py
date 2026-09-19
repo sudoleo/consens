@@ -6,9 +6,41 @@ import pytest
 
 from app.services.llm.consensus_citations import ConsensusCitationFilter, strip_consensus_source_markers
 from app.services.llm.consensus_engine import (
-    _build_consensus_prompt, _build_differences_prompt, _formatted_quote_finder,
+    _build_consensus_prompt, _build_differences_prompt, _formatted_quote_finder, _span_finder,
     parse_differences_payload, query_consensus, stream_consensus,
 )
+
+
+@pytest.mark.parametrize("original,quote,expected", [
+    ("İstanbul", "İstanbul", "İstanbul"),
+    ("İstanbul: son", "son", "son"),
+    ("İ İ İstanbul çok güzel bir şehir.", "İstanbul çok güzel bir şehir!", "İstanbul çok güzel bir şehir"),
+    ("  İ\tİ ‘şehir’  ", 'İ İ "şehir"', "İ\tİ ‘şehir’"),
+])
+def test_unicode_quote_offsets_preserve_original_spans(original, quote, expected):
+    assert _span_finder()("A", original, quote) == expected
+
+
+def test_formatted_unicode_quote_offsets_preserve_original_span():
+    original = "İstanbul: **İklim** [S1] değişiyor."
+    assert _formatted_quote_finder()("A", original, "İklim değişiyor.") == "İklim** [S1] değişiyor."
+
+
+def test_unicode_differences_payload_keeps_verified_anchors_and_quotes():
+    original = "İstanbul önemli bir şehir."
+    opposite = "İzmir önemli bir şehir."
+    payload = {"differences": [{"claim": "Şehir", "type": "contradiction",
+        "consensus_anchor": original, "positions": [
+            {"stance": "İstanbul", "models": ["Model A"], "quote": original},
+            {"stance": "İzmir", "models": ["Model B"], "quote": opposite},
+        ]}], "best_model": "Model A"}
+    data, _ = parse_differences_payload(json.dumps(payload), {"Model A": "OpenAI", "Model B": "Kimi"},
+        consensus_answer=original, model_answers={"OpenAI": original, "Kimi": opposite})
+    diff = data["differences"][0]
+    assert diff["consensus_anchor_validated"] is True
+    assert diff["consensus_anchor"] == original
+    assert [pos["quote"] for pos in diff["positions"]] == [original, opposite]
+    assert [pos["quote_models"] for pos in diff["positions"]] == [["OpenAI"], ["Kimi"]]
 
 
 @pytest.mark.parametrize("text,expected", [

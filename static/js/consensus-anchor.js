@@ -24,7 +24,9 @@
           ch = " ";
         }
         norm += ch;
-        map.push(i);
+        // Lowercasing can expand a code unit (İ -> i + combining dot).
+        // DOM ranges still address the original UTF-16 offsets.
+        for (let j = 0; j < ch.length; j++) map.push(i);
       }
       if (!normNeedle) return [];
       const ranges = [];

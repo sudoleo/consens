@@ -21,6 +21,47 @@ function fail(window, element) {
 }
 
 describe("critical resource reporting", () => {
+  it("keeps distinct runtime locations and strips query data from the script field", () => {
+    const { window, dom, reports } = boot();
+    for (const colno of [42, 84, 42]) {
+      window.dispatchEvent(new window.ErrorEvent("error", {
+        message: "private runtime message",
+        error: new window.TypeError("private runtime message"),
+        filename: window.location.origin + "/static/dist/app.012345abcdef.js?token=private",
+        lineno: 1, colno,
+      }));
+    }
+    expect(reports).toHaveLength(2);
+    expect(reports[0]).toMatchObject({ error_name: "TypeError", script: "app.012345abcdef.js", line: 1, column: 42 });
+    expect(reports[1].column).toBe(84);
+    dom.window.close();
+  });
+
+  it("extracts an app location from a rejected promise stack", () => {
+    const { window, dom, reports } = boot();
+    const event = new window.Event("unhandledrejection");
+    event.reason = { name: "RangeError", message: "private",
+      stack: `RangeError: private\n    at secret (${window.location.origin}/static/dist/firebase.abcdef012345.js:2:321)` };
+    window.dispatchEvent(event);
+    expect(reports[0]).toMatchObject({ error_name: "RangeError", script: "firebase.abcdef012345.js", line: 2, column: 321 });
+    dom.window.close();
+  });
+
+  it.each([
+    "https://foreign.example/static/dist/app.012345abcdef.js",
+    "/static/js/private-user-file.js",
+    "/static/dist/app.private.js",
+  ])("does not include unapproved runtime metadata: %s", (filename) => {
+    const { window, dom, reports } = boot();
+    window.dispatchEvent(new window.ErrorEvent("error", {
+      message: "private", error: { name: "private@example.test" }, filename, lineno: 4, colno: 8,
+    }));
+    expect(reports[0]).not.toHaveProperty("script");
+    expect(reports[0]).not.toHaveProperty("line");
+    expect(reports[0]).not.toHaveProperty("error_name");
+    dom.window.close();
+  });
+
   it("preserves distinct stream failure categories during deduplication", () => {
     const { window, dom, reports } = boot();
     for (const kind of ["stream_read_failed", "stream_handler_failed", "stream_read_failed"]) {

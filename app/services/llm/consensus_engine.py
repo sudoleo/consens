@@ -1273,8 +1273,10 @@ def _normalize_with_offsets(text: str):
             if not norm_chars or norm_chars[-1] == " ":
                 continue
             c = " "
-        norm_chars.append(c)
-        offsets.append(i)
+        # Unicode lowercasing can expand one character (İ -> i + dot).
+        # Every normalized character must retain its original source offset.
+        norm_chars.extend(c)
+        offsets.extend([i] * len(c))
     while norm_chars and norm_chars[-1] == " ":
         norm_chars.pop()
         offsets.pop()

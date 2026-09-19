@@ -1,5 +1,6 @@
 """Rate-limited intake for critical failures detected by the app shell."""
 
+import re
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, BackgroundTasks, Body, HTTPException, Request, status
@@ -48,6 +49,12 @@ _ALLOWED_FAILURE_KINDS = {
     "request_failed", "stream_read_failed", "stream_handler_failed",
     "stream_incomplete", "consensus_processing_failed",
 }
+_ALLOWED_ERROR_NAMES = {
+    "Error", "TypeError", "ReferenceError", "RangeError", "SyntaxError",
+    "URIError", "EvalError", "AggregateError", "SecurityError", "InvalidStateError",
+    "IndexSizeError", "QuotaExceededError", "NetworkError", "NotSupportedError",
+}
+_BUNDLE_SCRIPT = re.compile(r"(?:head|auth|firebase|demo|app)\.[a-f0-9]{12}\.js")
 
 
 def _bounded_string(data: dict, field: str, limit: int, *, required: bool = False) -> str:
@@ -133,5 +140,16 @@ def report_client_error(
     raw_failure_kind = _bounded_string(data, "failure_kind", 80)
     if error_type == "consensus_failed" and raw_failure_kind in _ALLOWED_FAILURE_KINDS:
         report["failure_kind"] = raw_failure_kind
+    if error_type in {"unhandled_error", "unhandled_rejection"}:
+        error_name = _bounded_string(data, "error_name", 80)
+        if error_name in _ALLOWED_ERROR_NAMES:
+            report["error_name"] = error_name
+        script = _bounded_string(data, "script", 100)
+        if _BUNDLE_SCRIPT.fullmatch(script):
+            report["script"] = script
+            for field in ("line", "column"):
+                number = data.get(field)
+                if type(number) is int and 0 < number <= 10_000_000:
+                    report[field] = number
     background_tasks.add_task(send_critical_error_notification, report)
     return {"status": "accepted"}

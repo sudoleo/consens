@@ -134,6 +134,26 @@ def test_critical_error_message_includes_safe_resource_class():
     assert "Resource: app_bundle" in text
 
 
+def test_runtime_locations_are_visible_and_deduplicated_separately(monkeypatch):
+    captured = []
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test-token")
+    monkeypatch.setenv("CRITICAL_ERROR_TELEGRAM_CHAT_ID", "456")
+    telegram_notifier._critical_seen.clear()
+    telegram_notifier._critical_sent_at.clear()
+    monkeypatch.setattr(telegram_notifier, "send_bot_message",
+        lambda chat_id, text: captured.append(text) or {"status": "sent"})
+    report = {"source": "browser", "type": "unhandled_error", "phase": "browser_runtime",
+        "path": "/app", "message": "An unhandled browser error occurred.", "error_name": "TypeError",
+        "script": "app.012345abcdef.js", "line": 1, "column": 42}
+    assert telegram_notifier.send_critical_error_notification(report)["status"] == "sent"
+    assert telegram_notifier.send_critical_error_notification(report)["status"] == "deduplicated"
+    report["column"] = 84
+    assert telegram_notifier.send_critical_error_notification(report)["status"] == "sent"
+    assert "Error: TypeError" in captured[0]
+    assert "Location: app.012345abcdef.js:1:42" in captured[0]
+    assert "Location: app.012345abcdef.js:1:84" in captured[1]
+
+
 def test_new_user_registration_notification_is_pii_free(monkeypatch):
     captured = []
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test-token")

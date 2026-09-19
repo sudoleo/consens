@@ -169,3 +169,45 @@ def test_error_reporter_loads_before_app_modules():
     # render-blocking, the app group is deferred.
     assert group_of("error-reporter.js") == "head"
     assert loads_before("error-reporter.js", "app-core.js")
+
+
+@pytest.mark.parametrize("error_type", ["unhandled_error", "unhandled_rejection"])
+def test_runtime_report_retains_only_safe_code_location(monkeypatch, error_type):
+    captured = []
+    response = _client(monkeypatch, captured).post("/api/client-errors", json={
+        "type": error_type, "phase": "browser_runtime", "path": "/app",
+        "message": "private@example.test", "stack": "private stack", "details": "private URL",
+        "error_name": "TypeError", "script": "app.012345abcdef.js", "line": 1, "column": 18420,
+    })
+    assert response.status_code == 202
+    assert captured[0]["error_name"] == "TypeError"
+    assert captured[0]["script"] == "app.012345abcdef.js"
+    assert captured[0]["line"] == 1
+    assert captured[0]["column"] == 18420
+    assert "private" not in str(captured)
+
+
+@pytest.mark.parametrize("script", [
+    "app.012345abcdef.js?token=private", "private@example.test", "app.012345abcdef.js/secret",
+    "https://example.test/static/dist/app.012345abcdef.js",
+])
+def test_runtime_report_rejects_free_form_metadata(monkeypatch, script):
+    captured = []
+    response = _client(monkeypatch, captured).post("/api/client-errors", json={
+        "type": "unhandled_error", "message": "private", "error_name": "private", "script": script,
+        "line": 1, "column": 23,
+    })
+    assert response.status_code == 202
+    assert not {"error_name", "script", "line", "column"}.intersection(captured[0])
+
+
+@pytest.mark.parametrize("number", [True, 1.5, -1, 0, 10_000_001, "private"])
+def test_runtime_report_rejects_invalid_coordinates(monkeypatch, number):
+    captured = []
+    response = _client(monkeypatch, captured).post("/api/client-errors", json={
+        "type": "unhandled_error", "message": "private", "script": "head.012345abcdef.js",
+        "line": number, "column": number,
+    })
+    assert response.status_code == 202
+    assert "line" not in captured[0]
+    assert "column" not in captured[0]

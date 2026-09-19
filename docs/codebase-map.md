@@ -343,7 +343,12 @@ der Python-Staleness-Test auch indirekte Änderungen erkennt.
   Dokument-Favicons bleiben bei ihren lokalen Fallbacks. Asset-Alarme senden
   ausschließlich eine allowgelistete Ressourcenklasse, keine URL. Erwartete
   `AbortError`-Abbrüche werden ignoriert; Session-Deduplizierung verhindert
-  Wiederholungen desselben Fehlers.
+  Wiederholungen desselben Fehlers. Runtime-Alarme ergänzen einen allowgelisteten
+  JS-/DOM-Fehlernamen und, sofern verfügbar, den same-origin Bundle-Dateinamen
+  (`head|auth|firebase|demo|app` mit zwölfstelligem Content-Hash) mit Zeile/Spalte.
+  `/api/client-errors` validiert diese Felder erneut; Telegram und beide
+  Deduplizierungsstufen erhalten die Codeposition, weiterhin keine freien
+  Meldungen, Stacktexte, URLs oder Nutzinhalte. Alte Clients bleiben kompatibel.
 - **`auth-bootstrap.js`** — kleiner same-origin Classic-Script-Watchdog vor dem
   Firebase-ES-Modul. Falls dessen gstatic-Imports nicht ausführbar sind, räumt
   er stale Auth-/Usage-/Bookmark-Skeletons ab, zeigt die Gastaktionen trotz
@@ -1376,7 +1381,9 @@ der Python-Staleness-Test auch indirekte Änderungen erkennt.
 - **`consensus-anchor.js`** — reine, deterministische Textnormalisierung,
   Satzgrenzen-, Range- und Ankersuche für Consensus-Marker. Das Modul kennt
   weder Netzwerk noch Modal-/Produkt-State und wird von `consensus-insights.js`
-  als gebundener DOM-Adapter verwendet.
+  als gebundener DOM-Adapter verwendet. Unicode-Erweiterungen beim Lowercasing
+  (`İ` → `i` + kombinierender Punkt) erhalten pro normalisierter UTF-16-Einheit
+  den ursprünglichen Offset, damit Zitatmarkierungen gültige DOM-Ranges bilden.
 - **`consensus-run.js`** — `window.getConsensus`: baut `/consensus`-Payload, fährt
   den SSE-Stream, rendert Ergebnis + Citation/Share-Meta und archiviert jeden
   abgeschlossenen Turn inklusive turnbezogener Quellen, Differences und
@@ -2509,6 +2516,10 @@ Details, Budgets und Abnahme: [source-verification.md](source-verification.md).
   das Frontend zeigt ihn als Fußnote im Verdict-Header. Außerdem:
   JSON-Truncation-Repair aus `consensus_parsing.py`, serverseitige Anchor-/Quote-Verifikation gegen
   Konsens- bzw. Modellantworten (nicht belegbare Zitate werden geleert).
+  Die Normalisierung hält auch bei Unicode-Lowercase-Erweiterungen (`İ`) einen
+  Original-Offset je Ausgabezeichen vor; exakte, fuzzy und Markdown-bereinigte
+  Zitatsuche teilen diesen Vertrag. Das verhindert verschobene Zitate und den
+  am 18.09.2026 protokollierten `IndexError` in `_locate_span`.
   Unparsbares JSON erreicht den Nutzer nie als Rohtext.
 - Coverage-Judge (`coverage_judge.py` + `consensus_engine._run_coverage_judge`,
   seit 2026-08-31): belegt JEDEN nummerierten Konsens-Satz statt der "3-6

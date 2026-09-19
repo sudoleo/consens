@@ -9,6 +9,38 @@
   const recentReports = new Map();
   const DEDUPE_MS = 5 * 60 * 1000;
   const MAX_RECENT = 40;
+  const ERROR_NAMES = new Set([
+    "Error", "TypeError", "ReferenceError", "RangeError", "SyntaxError",
+    "URIError", "EvalError", "AggregateError", "SecurityError", "InvalidStateError",
+    "IndexSizeError", "QuotaExceededError", "NetworkError", "NotSupportedError"
+  ]);
+
+  function runtimeContext(value) {
+    const context = {};
+    const error = value.error || value.reason;
+    if (ERROR_NAMES.has(error?.name)) context.error_name = error.name;
+    function locate(filename, line, column) {
+      if (!filename) return false;
+      try {
+        const url = new URL(filename, window.location.href);
+        const match = url.pathname.match(/^\/static\/dist\/((?:head|auth|firebase|demo|app)\.[a-f0-9]{12}\.js)$/);
+        if (url.origin !== window.location.origin || !match) return false;
+        context.script = match[1];
+        for (const [key, number] of [["line", line], ["column", column]]) {
+          if (Number.isInteger(number) && number > 0 && number <= 10000000) context[key] = number;
+        }
+        return true;
+      } catch (_) { return false; }
+    }
+    if (!locate(value.filename, value.line, value.column)) {
+      // Keep only an app bundle location, never stack text, URLs or function names.
+      const stack = String(value.stack || error?.stack || "").slice(0, 4000);
+      for (const match of stack.matchAll(/(https?:\/\/[^\s()]+):(\d+):(\d+)/g)) {
+        if (locate(match[1], Number(match[2]), Number(match[3]))) break;
+      }
+    }
+    return context;
+  }
 
   function isExpectedAbort(value) {
     if (!value) return false;
@@ -43,6 +75,10 @@
       report.phase,
       report.resource_class,
       report.failure_kind,
+      report.error_name,
+      report.script,
+      report.line,
+      report.column,
       report.message,
       report.path
     ].join("|");
@@ -69,6 +105,9 @@
       path: window.location.pathname
     };
     const resourceClass = String(value.resource_class || "");
+    if (report.type === "unhandled_error" || report.type === "unhandled_rejection") {
+      Object.assign(report, runtimeContext(value));
+    }
     if (value.failure_kind) report.failure_kind = String(value.failure_kind);
     const details = compactDetails(value.details);
     const stack = String(value.stack || value.error?.stack || value.reason?.stack || "");
@@ -132,6 +171,9 @@
       phase: "browser_runtime",
       message: event.message || "Unhandled browser error",
       error: event.error,
+      filename: event.filename,
+      line: event.lineno,
+      column: event.colno,
       stack: event.error?.stack || "",
       details: event.filename
         ? `${event.filename.split("?")[0]}:${event.lineno || 0}:${event.colno || 0}`
