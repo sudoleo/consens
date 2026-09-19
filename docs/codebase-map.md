@@ -1729,6 +1729,15 @@ judge_answer mit strikten Pydantic-Argumenten. Der abschließend injizierte
 Produktprompt erklärt consens.io und setzt für jede Nutzerfrage und jeden
 Bearbeitungsauftrag `compare_models → Synthese →
 judge_answer` voraus; eingeschaltete Widerspruchsprüfung folgt wie bisher.
+Der Agent wartet vor einer inhaltlichen Antwort auf `compare_models` und nutzt
+die Ergebnisse samt Belegen als Grundlage. Eine vorab geschriebene eigene Antwort
+mit bloßer nachträglicher Bestätigung ist ausgeschlossen. Der Admin-Agent-Prompt
+und sein versionierter Default in `prompt_defaults.py` übernehmen die eigenständige
+Abwägung des Consensus-Syntheseprompts: alle Beiträge berücksichtigen, Begründung,
+Belege und Aktualität statt Modellidentität oder Stimmen zählen, wichtige
+Unsicherheit sachlich erklären. Eigene Erinnerung ersetzt weder Vergleich noch
+fehlende Belege. `finalized=true` ist ein Protokollabschluss, kein Erfolgsbeleg für
+alle Teilprüfungen. Der ergänzende Produktprompt hält diese Regeln ebenfalls fest.
 Websuche darf die Anfrage und aktuelle Belege zuerst konkretisieren. Direkte
 Antworten sind nur für reine Begrüßungen/Bestätigungen ohne Frage oder Auftrag
 und unvermeidbare Rückfragen vorgesehen. Einfache, subjektive und Folgefragen,
@@ -3737,7 +3746,7 @@ CLI mit `firebase deploy --only firestore:rules,firestore:indexes`):
   `prompts.agent`, `prompts.answers`, `prompts.consensus`, `reference_timezone`,
   `delegation` (aktiviert, Rollenprompts, Laufzeit-/Kontext-/Nachrichten-/Parallelitäts-
   und Budgetlimits; Defaults/Migration in `agent_delegation_config.py`),
-  ganzzahlige `revision`, UTC-`updated_at` und Admin-UID `updated_by`.
+  ganzzahlige `revision`, UTC-`updated_at` und Admin-UID bzw. Wartungskennung `updated_by`.
   `GET /api/admin/prompt-config` (Router `admin.py`) liest frisch und liefert
   zusätzlich Defaults und Limits; es erzeugt keinen Datensatz.
   `PUT /api/admin/prompt-config` verlangt `revision` plus vollständige `config`,

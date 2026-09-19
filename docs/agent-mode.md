@@ -7,6 +7,14 @@ Websuche darf die Frage und aktuelle Belege vorbereiten. Nur reine Begrüßungen
 Bestätigungen ohne Frage/Auftrag und unvermeidbare Rückfragen bleiben direkt möglich.
 Eine Nutzerbestätigung ist dafür nicht nötig; bei sinnvoll lösbaren Unklarheiten
 arbeitet das Modell mit begründeten Annahmen weiter.
+Vor jeder inhaltlichen Antwort wartet es auf die Vergleichsergebnisse und bildet
+daraus die Synthese. Es darf keine eigene Antwort vorwegnehmen und nachträglich
+nur bestätigen lassen. Alle Antworten werden anhand ihrer Begründung, Belege und
+Aktualität abgewogen, statt nach Modellnamen oder Stimmenmehrheit. Fehlende
+Ergebnisse werden nicht durch unbelegte Erinnerungen ersetzt; verbleibende
+Unsicherheit wird inhaltlich erklärt. Der freigegebene Agent-Systemprompt steht
+in `prompt_defaults.py` und in der Admin-Konfiguration; der ergänzende
+Tool-Protokollprompt in `agent_comparison.py` konkretisiert denselben Ablauf.
 Der separate Consensus-Modus behält seinen bisherigen Ablauf und seine Run-Limits.
 
 ## Modelle und Bedienung
