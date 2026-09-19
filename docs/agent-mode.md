@@ -132,9 +132,10 @@ begrenzt sie auf drei Zeilen mit je 180 Zeichen und acht Updates pro Modellschri
 es entstehen keine zusätzlichen Modellaufrufe. Der Turn speichert pro Schritt
 nur den letzten Kurztext, Worker-Sitzungen nur den aktuellen Fortschritt;
 das bestehende Event-Journal enthält die begrenzten Kurztext-Updates. Der
-Antwortbereich zeigt während des Laufs kurze, einheitliche Absätze unterhalb
-des standardmäßig geschlossenen Thinking-Disclosures, einschließlich aktueller
-Tool-Aktivität. Nach Laufende verschwindet diese Vorschau. Nur explizites
+Antwortbereich zeigt während des Laufs kurze Reasoning-Absätze unterhalb
+des standardmäßig geschlossenen Thinking-Disclosures. Der aktuelle Arbeits-,
+Tool- oder Review-Status steht genau einmal in dessen durchgehend lesbarer
+Überschrift; eine zweite Statusbox entfällt. Nach Laufende verschwindet diese Vorschau. Nur explizites
 Aufklappen zeigt alle verfügbaren Schritt-Zusammenfassungen, Tools und Usage;
 es gibt keine automatische Expansion und keine vertikalen Zitatlinien.
 Alte, ausführliche

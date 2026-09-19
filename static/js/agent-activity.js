@@ -73,35 +73,29 @@
     const writing = latest ? latest.status === "responding" : responding;
     const reviewStage = review?.status === "running" ? "Checking the answer…"
       : review?.comparisons?.some(c => c.status === "running") ? "Comparing perspectives…" : null;
-    const heading = running ? (reviewStage || (activeTool ? "Using tool…" : writing ? "Writing answer…" : reasoning.length ? "Thinking…" : "Working…"))
+    const toolLabels = { web_search: 'Searching the web…', compare_models: 'Comparing perspectives…',
+      check_contradictions: 'Checking contradictions against sources…',
+      judge_answer: 'Checking the answer…', start_agent: 'Asking another model…', wait_agents: 'Waiting for model responses…',
+      send_agent: 'Following up with a model…', review_agent: 'Reviewing a model response…' };
+    const heading = running ? (reviewStage || (activeTool ? toolLabels[activeTool.name] || 'Running a tool…' : writing ? 'Writing answer…' : reasoning.length ? 'Thinking…' : 'Working…'))
       : statuses[status] || (finishReason === "length" ? "Response limit reached" : tools.length ? "Activity and sources" : reasoning.length ? "Reasoning" : "Response details");
     if (view.title.textContent !== heading) view.title.textContent = heading;
     view.details.classList.toggle("is-running", running);
     view.details.dataset.status = status;
-    const toolLabels = { web_search: 'Searching the web…', compare_models: 'Comparing model answers…',
-      check_contradictions: 'Checking contradictions against sources…',
-      judge_answer: 'Checking the answer…', start_agent: 'Asking another model…', wait_agents: 'Waiting for model responses…',
-      send_agent: 'Following up with a model…', review_agent: 'Reviewing a model response…' };
-    const progress = reviewStage || (activeTool ? toolLabels[activeTool.name] || 'Running a tool…' : writing ? 'Writing the answer…' : '');
+    // The disclosure heading owns the current stage; the preview adds only
+    // reasoning highlights, never a second copy of the same tool status.
     const highlights = compactReasoning(reasoning.at(-1)?.text).split('\n').filter(Boolean);
-    const paragraphs = [...new Set([progress, ...highlights].filter(Boolean))].slice(0, 3);
-    if (!paragraphs.length && running) paragraphs.push('Preparing a response…');
-    const previewSignature = running ? JSON.stringify([paragraphs, activeTool?.id, activeTool?.name]) : '';
+    const paragraphs = [...new Set(highlights)].filter(text => text !== heading).slice(0, 3);
+    const previewSignature = running ? JSON.stringify(paragraphs) : '';
     if (view.preview.dataset.signature !== previewSignature) {
       view.preview.dataset.signature = previewSignature;
       view.preview.replaceChildren(...(running ? paragraphs : []).map(text => {
         const p = document.createElement('p');
-        if (text === progress && activeTool) {
-          p.className = 'agent-progress-action'; p.dataset.status = 'running';
-          p.dataset.tool = activeTool.name;
-          const indicator = document.createElement('span'); indicator.className = 'agent-tool-indicator'; indicator.setAttribute('aria-hidden', 'true');
-          const label = document.createElement('span'); label.className = 'agent-tool-label'; label.textContent = text;
-          p.append(indicator, label);
-        } else p.textContent = text;
+        p.textContent = text;
         return p;
       }));
     }
-    view.preview.hidden = !running;
+    view.preview.hidden = !running || !paragraphs.length;
     // Expansion is always an explicit user choice.
     const follow = view.content.scrollHeight - view.content.scrollTop - view.content.clientHeight < 40;
     const ids = new Set();

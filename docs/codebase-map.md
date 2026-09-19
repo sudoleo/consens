@@ -1811,14 +1811,16 @@ enthält den sicheren Fehlercode und Grund auch im gespeicherten Turn; die UI
 zeigt ihn live und nach Reload. Provider-Timeouts sind von Kontingent-Stopp und
 Nutzerabbruch getrennt, rohe Provider-Fehler werden nicht gespeichert.
 
-**UI-Verträge.** agent-activity.js zeigt den jüngsten kurzen Reasoning-Fortschritt
-und aktuelle Tool-Aktivität als kleine Textabsätze außerhalb des standardmäßig
-geschlossenen Thinking-Disclosures. Diese Vorschau verschwindet nach Laufende;
+**UI-Verträge.** agent-activity.js zeigt den aktuellen Arbeits-/Tool-/Review-Status
+genau einmal in der Überschrift des standardmäßig geschlossenen Thinking-Disclosures.
+Der Schimmer bleibt durchgehend lesbar; er verwendet keine Hintergrundfarbe als
+Textfarbe. Darunter stehen nur die jüngsten kurzen Reasoning-Auszüge, keine zweite
+Statuszeile oder Tool-Chips. Diese Vorschau verschwindet nach Laufende;
 nur manuelles Aufklappen zeigt alle gespeicherten Schritt-Zusammenfassungen,
 Tools und Usage. Keine automatische Expansion oder Zitatlinien; auch alte
 Langtexte werden in der Anzeige gekürzt. Tool-Nennungen bleiben normaler Text.
-Nur ein bestätigtes running-Toolereignis erzeugt die dezente Aufrufanzeige;
-ein Review-Status oder bloßer Name reicht nicht. DelegationLoop meldet validierte
+Bestätigte running-Toolereignisse oder der Review-Status bestimmen die Überschrift;
+bloße Tool-Nennungen im Reasoning lösen keine Statusänderung aus. DelegationLoop meldet validierte
 Orchestrator-Tools mit running/terminal-Status. agent_progress.py
 begrenzt sichtbares Reasoning serverseitig auf drei Zeilen à 180 Zeichen und
 acht Updates je Modellschritt. Provider-Zusammenfassungen haben Vorrang vor

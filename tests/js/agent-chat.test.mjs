@@ -148,8 +148,9 @@ describe("single-model agent chat", () => {
     expect(host.querySelector('img')).toBe(null);
     events.push({id: 'tool1', kind: 'tool', name: 'compare_models', status: 'running'});
     window.App.agentActivity.render(host, { events, running: true });
-    expect(host.querySelector('.agent-progress-action').textContent).toBe('Comparing model answers…');
-    expect(host.querySelector('.agent-progress-action').dataset.tool).toBe('compare_models');
+    expect(host.querySelector('.agent-activity-title').textContent).toBe('Comparing perspectives…');
+    expect(host.querySelector('.agent-progress-action')).toBe(null);
+    expect(host.querySelector('.agent-progress').textContent).not.toContain('Comparing perspectives…');
     expect(host.querySelector('details').open).toBe(false);
     events[1].status = 'succeeded';
     window.App.agentActivity.render(host, { events, running: true });
@@ -160,7 +161,7 @@ describe("single-model agent chat", () => {
     dom.window.close();
   });
 
-  it('requires a call event even when the displayed review stage stays identical', () => {
+  it('keeps a review stage in one heading when tool events arrive', () => {
     const { window, document, dom } = boot();
     const host = document.getElementById('agentAnswerActivity');
     const state = { running: true, review: {status: 'running'}, events: [] };
@@ -168,7 +169,9 @@ describe("single-model agent chat", () => {
     expect(host.querySelector('.agent-progress-action')).toBe(null);
     state.events.push({id:'judge', kind:'tool', name:'judge_answer', status:'running'});
     window.App.agentActivity.render(host, state);
-    expect(host.querySelector('.agent-progress-action').dataset.tool).toBe('judge_answer');
+    expect(host.querySelector('.agent-activity-title').textContent).toBe('Checking the answer…');
+    expect(host.querySelector('.agent-progress').hidden).toBe(true);
+    expect(host.textContent.match(/Checking the answer…/g)).toHaveLength(1);
     state.events[0].status = 'failed';
     window.App.agentActivity.render(host, state);
     expect(host.querySelector('.agent-progress-action')).toBe(null);
@@ -712,15 +715,15 @@ describe("single-model agent chat", () => {
     handlers.activity.receive(event);
     window.App.agentChat.project(run);
     const host = document.getElementById("agentAnswerActivity");
-    expect(host.textContent).toContain("Using tool…");
+    expect(host.querySelector('.agent-activity-title').textContent).toBe("Running a tool…");
     expect(host.querySelector("details").open).toBe(false);
-    expect(host.querySelector('.agent-progress').textContent).toContain('Running a tool');
+    expect(host.querySelector('.agent-progress').hidden).toBe(true);
     handlers.activity.receive({ ...event, status: "succeeded", text: '{"result":4}' });
     handlers.activity.receive({ version: 1, step_id: "completion:1", id: "completion:1/started", kind: "status", status: "working", clear_response: true });
     expect(run.consensus.streamText).toBe("");
     handlers.delta.append("The result is 4.");
     window.App.agentChat.project(run);
-    expect(host.textContent).not.toContain("Using tool…");
+    expect(host.textContent).not.toContain("Running a tool…");
     expect(document.getElementById("agentAnswerBody").textContent).not.toContain("Let me check");
     window.App.runRegistry.cancel(run.runId);
     handlers.activity.receive({ ...event, status: "running" });
