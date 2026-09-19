@@ -53,7 +53,8 @@ def test_all_pro_chat_models_are_grouped_by_provider(browser, phase4_server, wid
     from app.core import config as cfg
     from app.services.llm.agent_client import agent_model_options
 
-    catalog = agent_model_options()
+    fixture = os.environ.get('AGENT_CATALOG_FIXTURE')
+    catalog = json.loads(Path(fixture).read_text(encoding='utf-8')) if fixture else agent_model_options()
     assert cfg.PREMIUM_MODELS <= {model['id'] for model in catalog['models']}
     context, page = _real_firebase_page(browser, phase4_server, has_touch=width < 700)
     try:
@@ -79,11 +80,20 @@ def test_all_pro_chat_models_are_grouped_by_provider(browser, phase4_server, wid
             group = page.locator(f'.agent-model-picker button[data-model-group="{provider.key}"]')
             group.tap() if width < 700 else group.click()
             options = page.locator('.agent-model-picker button[data-value]')
-            expected = {model['id'] for model in catalog['models'] if model['provider'] == provider.key}
-            assert set(options.evaluate_all('items => items.map(item => item.dataset.value)')) == expected
+            provider_models = [model for model in catalog['models'] if model['provider'] == provider.key]
+            assert options.evaluate_all('items => items.map(item => item.dataset.value)') == [model['id'] for model in provider_models]
+            for model in provider_models:
+                if model.get('available') is False:
+                    unavailable = page.locator(f'#agentModelControls [data-value="{model["id"]}"]')
+                    expect(unavailable).to_be_disabled()
+                    expect(unavailable).to_contain_text(model['unavailable_reason'])
+                    unavailable.scroll_into_view_if_needed()
+                    _snapshot(page, f'agent-unavailable-{provider.key}-{width}')
+            model = next(model for model in reversed(provider_models) if model.get('available') is not False)
+            selected = page.locator(f'#agentModelControls [data-value="{model["id"]}"]')
+            selected.scroll_into_view_if_needed()
             _snapshot(page, f'agent-provider-models-{provider.key}-{width}')
-            model = next(model for model in catalog['models'] if model['id'] == provider.pro_model)
-            page.locator(f'#agentModelControls [data-value="{model["id"]}"]').click()
+            selected.click()
             expect(page.locator('#agentModelDropdown')).to_have_value(model['id'])
             if 'high' in model['reasoning_efforts']:
                 _choose_effort(page, 'high')

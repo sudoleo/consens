@@ -210,6 +210,16 @@ Er prüft auch die Haiku-Wahl vor der ersten Nachricht, rechtsbündige Fragen,
 fehlende Statusstriche und Kostenanzeigen. Er benötigt keinen laufenden
 Emulator und ruft kein reales Modell auf.
 
+`tests/test_agent_model_catalog.py` prüft neue und entfernte Admin-DB-Einträge,
+deren Reihenfolge, dynamische Preise/Reasoning, die Annahme neuer Modell-IDs und
+Replay ohne erneuten Konfigurationsabruf. Auch Cache-Bündelung, Rückfall bei
+Providerfehlern und ungültige Metadaten sind abgedeckt. Der Picker-Browsertest
+`test_all_pro_chat_models_are_grouped_by_provider` kann über
+`AGENT_CATALOG_FIXTURE=<JSON-Pfad>` einen zuvor rein lesend erzeugten
+`agent_model_options()`-Snapshot der echten Admin-DB verwenden. Er prüft sämtliche
+Einträge in ihrer Reihenfolge und deaktivierte, nicht auflösbare IDs auf Desktop
+und Mobil. `AGENT_SCREENSHOTS=<Verzeichnis>` speichert die Ansichten.
+
 `tests/test_agent_contradictions.py` prüft Tool-Freigabe, Originalbelege,
 getrennte Modell-/Quellenurteile, Primär-/Fallback-Abrechnung, Versionsbindung,
 Abbruch und Wiederholung/Recovery ohne zusätzlichen Quellen-Judge. Die Agent-Frontend-Tests prüfen

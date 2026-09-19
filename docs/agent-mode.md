@@ -16,11 +16,20 @@ Die Auswahl wird kontogebunden gespeichert und während eines Laufs eingefroren.
 Der Chatmodell-Picker gruppiert Modelle nach Anbieter; die jeweilige Modellliste
 und die Reasoning-Ebene öffnen im bestehenden Menü.
 
-GET /agent/models nutzt alle Basis-/Pro-Modelle der Anbieter, freigegebene Premium-Modelle,
-die Antwortmodelle aus Daily/High Quality und AGENT_MODEL als Standard;
-Preise, Kontextgrenzen und Reasoning-Stufen stammen aus dem bestehenden
-app/services/llm/agent_model_catalog.json. IDs, Labels und Routing kommen aus
-cfg.MODEL_CONFIGS. Der Default bleibt deepseek/deepseek-v4.1-flash.
+GET /agent/models lädt die vollständigen Anbieterlisten samt Reihenfolge aus
+Firestore `app_config/models` über die gemeinsame Konfiguration. Presets und
+Premium-Zuordnung filtern diese Liste nicht zusätzlich. Vor einer neuen Nachricht
+wird die Konfiguration ebenfalls gelesen; gespeicherte Antworten lassen sich
+ohne diesen Abruf wiederherstellen. Beide Abrufe schreiben nichts in die DB.
+IDs, Labels und Routing kommen aus cfg.MODEL_CONFIGS; AGENT_MODEL ergänzt den
+Standard (weiterhin deepseek/deepseek-v4.1-flash).
+
+Preise, Kontextgrenzen und Reasoning-Stufen werden aus dem öffentlichen
+OpenRouter-Modellkatalog nachgeladen und fünf Minuten zwischengespeichert.
+Neue Admin-Modelle benötigen deshalb keinen zusätzlichen Codeeintrag.
+Bei Abruffehlern bleiben zuletzt geladene Metadaten und der eingecheckte
+agent_model_catalog.json als Rückfall verfügbar. Nicht auflösbare Modell-IDs
+bleiben mit einem Hinweis deaktiviert sichtbar; es werden keine Preise erfunden.
 
 Der vorhandene Consensus-Preset-/Model-Picker erscheint daneben als Compare.
 Er wählt die Vergleichsmodelle aus derselben Konfiguration; Agent bietet keine

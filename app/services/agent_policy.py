@@ -45,7 +45,7 @@ class AgentPolicy:
 
 
 def tools_for_model(model):
-    # Model admission is owned by agent_models (Daily + configured default).
+    # Model admission follows the DB-backed admin lists via agent_models.
     # OpenRouter handles both native search and the Exa fallback, including
     # the provider's internal reasoning/tool-continuation protocol.
     return ("web_search",)

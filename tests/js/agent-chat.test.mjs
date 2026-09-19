@@ -48,6 +48,26 @@ async function selectAgent(window) {
 }
 
 describe("single-model agent chat", () => {
+  it('keeps unresolved admin models visible and disabled, and repairs a saved unavailable selection', async () => {
+    const catalog = {...CATALOG, models: [...CATALOG.models,
+      {id:'future-missing', label:'Future model', available:false,
+        unavailable_reason:'Model information unavailable', reasoning_efforts:['default']}]
+      .map(model => ({...model, provider:'openai', provider_label:'OpenAI'}))};
+    const {window:w, document:d, dom} = boot({catalog});
+    w.localStorage.setItem('agent_settings_owner', JSON.stringify({model_id:'future-missing', reasoning_effort:'high'}));
+    await selectAgent(w);
+    const select = d.querySelector('#agentModelDropdown');
+    expect(select.value).toBe(CATALOG.default_model_id);
+    expect(select.querySelector('option[value="future-missing"]').disabled).toBe(true);
+    d.querySelector('.agent-model-picker .model-picker-display').click();
+    d.querySelector('button[data-model-group="openai"]').click();
+    const missing = d.querySelector('.agent-model-picker [data-value="future-missing"]');
+    expect(missing.disabled).toBe(true);
+    expect(missing.textContent).toContain('Model information unavailable');
+    missing.click();
+    expect(select.value).toBe(CATALOG.default_model_id);
+    dom.window.close();
+  });
   it('groups chat models by provider, supports keyboard navigation and keeps reasoning tied to the chosen model', async () => {
     const catalog = {...CATALOG, models: CATALOG.models.map((model, i) => ({...model,
       provider: i ? 'openai' : 'deepseek', provider_label: i ? 'OpenAI' : 'DeepSeek'}))};

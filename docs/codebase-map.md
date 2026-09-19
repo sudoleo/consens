@@ -95,7 +95,7 @@ Threadpool aus. `async def` bleibt nur für echte Await-Pfade (Mail, explizites
 
 | Router | Zweck (Auswahl an Pfaden) |
 |---|---|
-| `agent.py` | `GET /agent/models` und `POST /agent`: Admin/Pro-geschützter Modellkatalog aller Basis-/Pro-Modelle und freigegebenen Premium-Modelle plus konfigurierter Standard und begrenzter Modell-/Tool-Lauf im bestehenden Chat. Strikte Auswahl, owner-gebundene IDs, SSE mit sichtbarem Reasoning, bestätigten Tool-Ergebnissen/Quellen und aggregierter Usage. Alle angebotenen Modelle erhalten die gemeinsame Consensus-Websuche (Auto, Grok: Exa); kein eigener Suchdienst. Vorrang für gemeldete Provider-Gesamtkosten, idempotente Schrittbelege, modellgebundene 429-Wartefrist und Wiederaufnahme fertiger Antworten. Geprüfte Delegation mit eigenen Sitzungen, Mailboxen, Seitenleiste und atomarem gemeinsamen Budget; ergänzende `/agent/chats/{chat}/turns/{turn}/agents`-Detail-/Stop-Endpunkte. Kein `/prepare` oder Memory-Kompressor; dynamische Vergleichs-/Judge-Tools mit eigener Tokenquote (siehe Agent-Beta-Abschnitt). `recover_only` startet nie einen Modellaufruf. |
+| `agent.py` | `GET /agent/models` und `POST /agent`: Admin/Pro-geschützter Modellkatalog aus den vollständigen Firestore-Anbieterlisten samt Reihenfolge, aktuellen Provider-Metadaten und konfiguriertem Standard und begrenzter Modell-/Tool-Lauf im bestehenden Chat. Strikte Auswahl, owner-gebundene IDs, SSE mit sichtbarem Reasoning, bestätigten Tool-Ergebnissen/Quellen und aggregierter Usage. Alle angebotenen Modelle erhalten die gemeinsame Consensus-Websuche (Auto, Grok: Exa); kein eigener Suchdienst. Vorrang für gemeldete Provider-Gesamtkosten, idempotente Schrittbelege, modellgebundene 429-Wartefrist und Wiederaufnahme fertiger Antworten. Geprüfte Delegation mit eigenen Sitzungen, Mailboxen, Seitenleiste und atomarem gemeinsamen Budget; ergänzende `/agent/chats/{chat}/turns/{turn}/agents`-Detail-/Stop-Endpunkte. Kein `/prepare` oder Memory-Kompressor; dynamische Vergleichs-/Judge-Tools mit eigener Tokenquote (siehe Agent-Beta-Abschnitt). `recover_only` startet nie einen Modellaufruf. |
 | `source_checks.py` | Dauerhafte Quellenprüfung: owner-gebundenes `GET /api/source-checks/{job_id}` mit `cursor`, `revision` und `after_revision`; `POST .../{job_id}/resume` nimmt den eigenen OpenRouter-Key nur in den Prozessspeicher auf. `GET /api/share/{share_id}/source-check?version=...` und `GET /api/topics/{slug}/source-check?version=...` prüfen pro Paketseite aktive Ressource, Sichtbarkeit, Run- und Antwortversion. Seiten liefern `source_verification` plus `next_cursor`, bei geändertem Stand 409. API-Key-Clients verwenden den rungebundenen Endpoint in `api_v1.py`: `GET /api/v1/consensus/runs/{run_id}/source-check`, auch als `result.source_verification.status_url` ausgegeben. |
 | `pages.py` | HTML-Seiten + SEO: `/` (Landing, auch mit aktiver Session direkt erreichbar), `/model-pulse` (öffentliche, erklärte Best-answer-Rangliste), `/app` (Haupt-App), `/app/watches` (gleiche App-Shell; watch.js öffnet anhand des Pfads das Watch-Dashboard), `/admin` (inkl. Topics-Tab), `/admin/topics` (308-Kompatibilitätsredirect auf `/admin#topics`), `/admin/benchmark` (Benchmark-Run-Visualisierung), `/about`, `/ai-model-comparison`, `/consensus-engine` (nutzerfreundliche Consensus-Engine-Erklärung), `/privacy` `/imprint` `/terms`, `robots.txt`, `sitemap*.xml`. Außerdem der öffentliche, familienaggregierte Best-answer-Zähler `GET /api/model-leaderboard` (60 s Browser-/CDN-Cache; `period=all|since-2026-08-31`; alle neun Familien einschließlich Nullständen, Kimi/GLM und Meta/Muse mit eigenem Verfügbarkeitsdatum aus `_LEADERBOARD_AVAILABLE_SINCE`). Beide Zeiträume nutzen zusätzlich einen serverseitigen 60-s-Cache mit serialisiertem Refresh pro Zeitraum/Prozess. Der gemeinsame Zeitraum zählt die datierten, deduplizierten `model_votes` ab 31.08.2026 über indexierte `count()`-Abfragen pro Familie; Modellkatalog und Counts werden im selben Read-only-Transaktionssnapshot gelesen. Solange der neue `model_votes`-Index aus `firestore.indexes.json` fehlt/aufbaut, greift nur für diesen Indexfehler der gecachte Legacy-Scan. Kontolöschungen entfernen weiterhin Votes aus dem Zeitraum, ohne Lifetime-Zähler zurückzusetzen; `/feedback`, `/vote`, `/check_keys` bleiben die weiteren internen Seiten-Routen (Key-Test nur für verifizierte Logins). Feedback ist persistent pro UID auf 30 Sekunden und 10/UTC-Tag begrenzt. Ein Best-answer-Vote muss an ein noch gültiges, owner-gebundenes `result_id` gebunden sein, zum serverseitigen Gewinner passen und kann pro Lauf genau einmal zählen. |
 | `chat.py` | Kern-LLM-Flow: `/prepare`, die aus `cfg.PROVIDERS[*].ask_endpoint` erzeugten `/ask_*`-Routen (aktuell zusätzlich `/ask_kimi` und `/ask_glm`), `/consensus`, `/resolve`. `/prepare` und die `/ask_*`-Endpoints akzeptieren weiter das optionale Legacy-`context`-Feld für nicht migrierte Bookmark-Fortsetzungen. Additiv laden `/ask_*` das owner-gebundene Tripel `chat_id`/`turn_id`/`context_version_id`; Legacy- und Versionskontext zusammen werden abgewiesen. Alle `/ask_*`-Endpoints laufen über `handle_ask` + die deklarative Familien-Registry `ASK_PROVIDERS`; Transport und Credential sind für alle OpenRouter, `useOwnKeys` wählt optional `openrouter_key`. `/consensus` akzeptiert optional Chat-/Turn-IDs plus `turn_sources` und die exakt am Turn verknüpfte `context_version_id`, prüft alles owner-gebunden vor dem Judge und finalisiert nach Consensus, Differences und Share-`result_id` in Streaming- wie JSON-Pfad über `ChatStore`. Sendet der Browser die stabile `bookmarkId`, schreibt `/consensus` den autoritativen Bookmark-Snapshot vor seinem erfolgreichen Final-Event und liefert kompakte `bookmark_meta`; ein separater Browser-Request ist nur noch Fallback. Ein bereits completed Turn wird mit Consensus, Differences, Quellen und Modellantworten owner-geschützt wiedergegeben, ohne Engine-/Differences-/Share-/Statistik-/Completion- oder Usage-Write; ohne IDs bleibt der Legacy-Vertrag unverändert. |
@@ -1634,13 +1634,24 @@ Registry-Aktion am bestehenden Lauf; sie erzeugt weder einen neuen lokalen
 Bookmark-Eintrag noch einen Modellaufruf. Terminale Fehler liefern recoverable;
 ohne gespeicherte Antwort verschwindet der Link. Bei unbekanntem Transportstatus
 bleibt die reine Lese-Wiederherstellung möglich. /agent/models liefert
-alle Basis-/Pro-Modelle der Anbieter-Registry, freigegebene `PREMIUM_MODELS`,
-die Antwortmodelle aus Daily/High Quality sowie den konfigurierten Standard und
-`token_budget`. Ein auf wenige Anbieter begrenztes Admin-Preset verkleinert den
-Chatkatalog nicht. Nur aktive Registry-Einträge mit Metering-Daten werden angeboten;
-doppelte Auswahl-IDs entfallen. Preise, Kontextgrenzen und erlaubte Denkstufen
-kommen weiterhin aus dem gemeinsamen Metering-Snapshot. `provider` und
-`provider_label` ordnen jedes angebotene Modell seiner Registry-Familie zu.
+die vollständigen Anbieterlisten samt Reihenfolge aus Firestore `app_config/models`,
+den konfigurierten Standard und `token_budget`. GET und neue POST-Läufe lesen die
+gemeinsame Konfiguration mit `load_models_from_db(strict=True, persist_backfill=False)`
+neu; sie schreiben keine Backfills. Bei Lesefehlern antworten sie mit 503.
+Replay/Recovery gespeicherter Antworten benötigt keinen erneuten Konfigurationsabruf.
+Premium-Zuordnung und Presets sind keine zweite Allowlist. `provider` und
+`provider_label` ordnen jedes Modell seiner Registry-Familie zu.
+
+`llm/agent_model_metadata.py` lädt Preise, Kontextgrenzen und erlaubte Denkstufen
+vom festen öffentlichen OpenRouter-Endpunkt `/api/v1/models` ohne Authentifizierung
+oder Nutzerdaten. Der prozesslokale Cache bündelt gleichzeitige Abrufe, hält gültige
+Metadaten fünf Minuten und versucht nach Fehlern frühestens nach 30 Sekunden neu.
+Abrufe sind auf fünf Sekunden und 8 MiB begrenzt; zuletzt gültige Werte und der
+eingecheckte `agent_model_catalog.json` bleiben als Rückfall erhalten. Das Modul
+prüft Preise/Limits und versieht die Metadaten mit einer Version für Kostenbelege.
+Nicht auflösbare Admin-IDs bleiben als `available: false` mit `unavailable_reason`
+sichtbar und werden bei der Auswahl abgelehnt. Der statische Katalog hält außerdem
+die separat geprüften Delegationsfähigkeiten; er begrenzt die Chatmodellauswahl nicht.
 
 Der Chatmodell-Picker zeigt zuerst eine kompakte Anbieterübersicht mit Modellzahl.
 `agent-chat.js` erzeugt native `optgroup`-Elemente in der bestehenden Anbieterreihenfolge;
@@ -1665,8 +1676,8 @@ gibt keine zweite Presetliste, keine Auto/Immer/Aus-Einstellung und keinen
 Synthesemodell-Picker. Die eingefrorene comparison_models-Auswahl kommt als
 Provider→interne Modell-ID mit POST /agent; unbekannte Familien/Modelle werden
 abgelehnt. Ohne Auswahl gilt das zentrale Default-Preset. Der öffentliche
-Metering-Snapshot deckt die gemeinsame Registry ab; neue Modelle benötigen
-weiterhin Preise/Kontextgrenzen im agent_model_catalog.json.
+Metering-Katalog ergänzt die gemeinsame Registry automatisch um aktuelle
+Provider-Metadaten; neue Admin-Einträge benötigen keinen zusätzlichen Codeeintrag.
 
 Die gemeinsame `#composerModeBar` bleibt in Beta auch nach Chatstart auf Mobil
 sichtbar. `agent-mode.js` projiziert dabei „Agent Mode On“ als unveränderliche

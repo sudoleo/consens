@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from firebase_admin import firestore
 
 from app.core.observability import safe_exception
+from app.core import config as cfg
 from app.core.rate_limit import limiter, api_uid_limiter, ApiUidRateLimitExceeded
 from app.core.security import db_firestore, is_user_admin, is_user_pro
 from app.api.routers.chat_history import _chat_uid, _raise_store_error
@@ -108,12 +109,21 @@ def _save_interrupted(uid, payload, store, turn_id):
     return turn
 
 
+def _refresh_model_configuration():
+    try:
+        cfg.load_models_from_db(strict=True, persist_backfill=False)
+    except Exception as exc:
+        logging.warning('Agent model configuration unavailable category=%s', safe_exception(exc))
+        raise HTTPException(status_code=503, detail='Model configuration is temporarily unavailable. Please retry.') from None
+
+
 @router.get("/agent/models")
 @limiter.limit("60/minute")
 def available_agent_models(request: Request):
     from fastapi.responses import JSONResponse
     uid = _chat_uid(request)
     require_agent_access(uid)
+    _refresh_model_configuration()
     return JSONResponse({**agent_model_options(), "token_budget": agent_quota.snapshot(db_firestore, uid)},
                         headers={"Cache-Control": "private, no-store"})
 
@@ -174,6 +184,7 @@ def run_agent(request: Request, payload: AgentRequest):
         if payload.recover_only:
             return JSONResponse({"error": "No saved answer is available for this request.",
                 "code": "answer_unavailable", "recoverable": False}, status_code=404)
+        _refresh_model_configuration()
         try:
             model = configured_model(resolve_agent_model(payload.model_id, payload.reasoning_effort))
         except ValueError as exc:

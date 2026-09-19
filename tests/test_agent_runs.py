@@ -209,6 +209,7 @@ def api(monkeypatch, store):
     monkeypatch.setattr(agent, "is_user_admin", lambda uid: False)
     monkeypatch.setattr(agent, "resolve_developer_api_keys", lambda: {"OpenRouter": "test"})
     monkeypatch.setattr(agent, "mock_llm_enabled", lambda: False)
+    monkeypatch.setattr(agent, '_refresh_model_configuration', lambda: None)
     calls = []
     def stream(self, **kwargs):
         calls.append(kwargs)
@@ -390,18 +391,14 @@ def test_catalog_reuses_allowlist_and_restricts_reasoning(api, monkeypatch):
     assert models["deepseek/deepseek-v4.1-flash"]["reasoning_efforts"] == ["default", "low", "high", "max"]
     assert "none" not in models[cfg.DEFAULT_GEMINI_MODEL]["reasoning_efforts"]
     assert models[cfg.GROK_NO_REASONING_MODEL]["reasoning_efforts"] == ["default"]
-    expected = {model_id for preset in ("fast", "thorough")
-                for model_id in cfg.CONSENSUS_PRESET_MODELS[preset]["answers"].values()}
-    expected.update(cfg.PREMIUM_MODELS)
-    expected.update(model_id for provider in cfg.PROVIDERS.values()
-                    for model_id in (provider.base_model, provider.pro_model))
+    expected = set(cfg.ALL_ALLOWED_MODELS)
     assert set(models) == expected | {"deepseek/deepseek-v4.1-flash"}
     assert len(response.json()["models"]) == len(models)
     assert {item['provider'] for item in models.values()} == set(cfg.PROVIDERS)
     for provider in cfg.PROVIDERS.values():
         assert models[provider.pro_model]['provider'] == provider.key
         assert models[provider.pro_model]['provider_label'] == provider.label
-    assert all("web_search" in item["tools_by_effort"]["default"] for item in models.values())
+    assert all("web_search" in item["tools_by_effort"]["default"] for item in models.values() if item['available'])
     # Admin presets may contain only a subset of families; the chat catalog
     # must still offer every configured Pro model.
     monkeypatch.setitem(cfg.CONSENSUS_PRESET_MODELS, 'thorough', {'answers': {
@@ -409,8 +406,6 @@ def test_catalog_reuses_allowlist_and_restricts_reasoning(api, monkeypatch):
     trimmed_preset_models = {item['id'] for item in client.get('/agent/models', headers=AUTH).json()['models']}
     assert cfg.PREMIUM_MODELS <= trimmed_preset_models
     assert {p.pro_model for p in cfg.PROVIDERS.values()} <= trimmed_preset_models
-    monkeypatch.delitem(cfg.MODEL_CONFIGS, cfg.DEFAULT_ANTHROPIC_MODEL)
-    assert cfg.DEFAULT_ANTHROPIC_MODEL not in {item["id"] for item in client.get("/agent/models", headers=AUTH).json()["models"]}
     monkeypatch.setattr(agent, "is_user_pro", lambda uid: False)
     assert client.get("/agent/models", headers=AUTH).status_code == 403
     assert client.get("/agent/models").status_code == 401

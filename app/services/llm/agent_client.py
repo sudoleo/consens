@@ -6,11 +6,11 @@ from decimal import Decimal
 import json
 import os
 import re
-from pathlib import Path
 from urllib.parse import urlsplit
 
 from app.core import config as cfg
 from app.services.agent_costs import provider_cost_nanos, search_cost_nanos, token_cost_nanos
+from app.services.llm import agent_model_metadata
 
 from app.services.llm.engines import OPENROUTER_CHAT_COMPLETIONS_URL, _ProviderHTTPStatusError, _ProviderResponseError, openrouter_headers
 from app.services.llm.provider_runtime import (
@@ -47,11 +47,11 @@ class AgentModel:
                 "tools": list(tools_for_model(self))}
 
 
-def agent_model() -> AgentModel:
+def agent_model(*, _metadata=None) -> AgentModel:
     """Operator configuration is explicit; never silently substitute a model."""
     defaults = AgentModel()
     model_id = os.environ.get("AGENT_MODEL", defaults.model).strip()
-    metadata = _CATALOG["models"].get(model_id)
+    metadata = (_metadata if _metadata is not None else agent_model_metadata.snapshot()).get(model_id)
     if not metadata:
         raise ValueError("The configured agent model needs a catalog entry with prices and context limits.")
     entry = next((entry for entry in cfg.MODEL_CONFIGS.values() if entry.api_model == model_id), None)
@@ -61,7 +61,7 @@ def agent_model() -> AgentModel:
         output_usd_per_million=str(Decimal(pricing["completion"]) * 1_000_000),
         cache_read_usd_per_million=str(Decimal(pricing.get("input_cache_read", pricing["prompt"])) * 1_000_000),
         cache_write_usd_per_million=str(Decimal(pricing.get("input_cache_write", pricing["prompt"])) * 1_000_000),
-        web_search_usd_per_request=pricing.get("web_search"), pricing_version=_CATALOG["version"])
+        web_search_usd_per_request=pricing.get("web_search"), pricing_version=metadata.get('_version', _CATALOG['version']))
     values = {}
     for name in ("model", "label", "input_usd_per_million", "output_usd_per_million",
                  "cache_read_usd_per_million", "cache_write_usd_per_million", "pricing_version"):
@@ -81,7 +81,7 @@ def agent_model() -> AgentModel:
                       request_config=dict(entry.request_config or {}) if entry else {})
 
 
-_CATALOG = json.loads(Path(__file__).with_name("agent_model_catalog.json").read_text(encoding="utf-8"))
+_CATALOG = agent_model_metadata.BASELINE
 _EFFORTS = ("none", "minimal", "low", "medium", "high", "xhigh", "max")
 
 
@@ -96,25 +96,20 @@ def _choices(model, metadata):
     return ["default", *(allowed if not fixed else [])]
 
 
-def agent_models():
-    """Offer every family's base/Pro models, all premium models and preset picks.
+def _ordered_entries():
+    return [entry for provider in cfg.PROVIDERS
+            for model_id in cfg.get_ordered_models(provider)
+            if (entry := cfg.get_model_config(model_id, provider)) is not None]
 
-    The checked-in public catalog is a versioned simulation baseline, not a
-    live provider quote. No user-controlled prices or provider URLs are used.
-    """
-    default = agent_model()
-    result = [(default, _CATALOG["models"].get(default.model, {}))]
-    available = {
-        model_id
-        for preset in ("fast", "thorough")
-        for model_id in cfg.CONSENSUS_PRESET_MODELS[preset]["answers"].values()
-    }
-    available.update(cfg.PREMIUM_MODELS)
-    available.update(model_id for provider in cfg.PROVIDERS.values()
-                     for model_id in (provider.base_model, provider.pro_model))
-    for entry in sorted(cfg.MODEL_CONFIGS.values(), key=lambda x: (x.provider, x.label)):
-        metadata = _CATALOG["models"].get(entry.api_model)
-        if entry.internal_id not in available or not metadata or entry.api_model == default.model:
+
+def agent_models(*, _metadata=None):
+    """Use the DB-backed admin model lists and order, without a second allowlist."""
+    catalog = _metadata if _metadata is not None else agent_model_metadata.snapshot()
+    default = agent_model(_metadata=catalog)
+    result = [(default, catalog[default.model])]
+    for entry in _ordered_entries():
+        metadata = catalog.get(entry.api_model)
+        if not metadata or entry.internal_id == default.selection_id:
             continue
         pricing = metadata["pricing"]
         per_million = lambda key, fallback: str(Decimal(pricing.get(key, fallback)) * 1_000_000)
@@ -126,7 +121,7 @@ def agent_models():
             cache_read_usd_per_million=per_million("input_cache_read", pricing["prompt"]),
             cache_write_usd_per_million=per_million("input_cache_write", pricing["prompt"]),
             web_search_usd_per_request=pricing.get("web_search"),
-            pricing_version=_CATALOG["version"], request_config=dict(entry.request_config or {}),
+            pricing_version=metadata.get('_version', _CATALOG['version']), request_config=dict(entry.request_config or {}),
             context_length=metadata["context_length"],
         ), metadata))
     return result
@@ -141,17 +136,34 @@ def _provider_options(model):
 
 def agent_model_options():
     from app.services.agent_policy import tools_for_model, supports_delegation
-    return {"default_model_id": agent_model().selection_id, "models": [
+    catalog = agent_model_metadata.snapshot()
+    options = [
         {"id": model.selection_id, "label": model.label, **_provider_options(model),
+         "available": True,
          "reasoning_efforts": _choices(model, metadata),
          "default_reasoning": model.request_config.get("reasoning", metadata.get("reasoning") or {}),
          "reasoning_available": bool(metadata.get("reasoning")),
-         "delegation_by_effort": {effort: supports_delegation(resolve_agent_model(model.selection_id, effort))
+         "delegation_by_effort": {effort: supports_delegation(_resolve_effort(model, metadata, effort))
                                   for effort in _choices(model, metadata)},
          "tools_by_effort": {effort: list(tools_for_model(model))
                              for effort in _choices(model, metadata)}}
-        for model, metadata in agent_models()
-    ]}
+        for model, metadata in agent_models(_metadata=catalog)
+    ]
+    available = {item['id']: item for item in options}
+    default = options[0]
+    # An invalid or temporarily unresolved admin entry stays visible, with a
+    # reason, instead of silently disappearing or inheriting made-up prices.
+    models = [default]
+    for entry in _ordered_entries():
+        if entry.internal_id == default['id']:
+            continue
+        models.append(available.get(entry.internal_id) or {
+            'id': entry.internal_id, 'label': entry.label, 'provider': entry.provider,
+            'provider_label': cfg.PROVIDERS[entry.provider].label,
+            'available': False, 'unavailable_reason': 'Model information unavailable · check the model ID or retry later',
+            'reasoning_efforts': ['default'], 'reasoning_available': False,
+        })
+    return {'default_model_id': default['id'], 'models': models}
 
 
 def metered_model(model_id, *, max_tokens=2048):
@@ -159,7 +171,7 @@ def metered_model(model_id, *, max_tokens=2048):
     entry = cfg.get_model_config(model_id)
     if entry is None:
         raise ValueError("Unknown comparison or judge model")
-    metadata = _CATALOG["models"].get(entry.api_model)
+    metadata = agent_model_metadata.snapshot().get(entry.api_model)
     if not metadata:
         raise ValueError("This model has no metering catalog entry")
     pricing = metadata["pricing"]
@@ -169,28 +181,35 @@ def metered_model(model_id, *, max_tokens=2048):
         input_usd_per_million=million("prompt", "0"), output_usd_per_million=million("completion", "0"),
         cache_read_usd_per_million=million("input_cache_read", pricing["prompt"]),
         cache_write_usd_per_million=million("input_cache_write", pricing["prompt"]),
-        context_length=metadata["context_length"], pricing_version=_CATALOG["version"],
+        context_length=metadata["context_length"], pricing_version=metadata.get('_version', _CATALOG['version']),
         request_config=dict(entry.request_config or {}))
 
 
 def resolve_agent_model(model_id=None, reasoning_effort="default"):
-    for model, metadata in agent_models():
-        if model.selection_id != (model_id or agent_model().selection_id):
+    models = agent_models()
+    for model, metadata in models:
+        if model.selection_id != (model_id or models[0][0].selection_id):
             continue
-        if reasoning_effort not in _choices(model, metadata):
-            raise ValueError("This reasoning level is not supported by the selected model.")
-        config = dict(model.request_config)
-        reasoning = dict(config.get("reasoning") or {})
-        if reasoning_effort != "default":
-            reasoning = {"effort": reasoning_effort}
-        if metadata.get("reasoning"):
-            reasoning["exclude"] = False
-            if model.model.startswith("openai/") and reasoning.get("effort") != "none":
-                reasoning["summary"] = "auto"
-        if reasoning:
-            config["reasoning"] = reasoning
-        return replace(model, request_config=config, reasoning_effort=reasoning_effort)
+        return _resolve_effort(model, metadata, reasoning_effort)
+    if model_id in cfg.MODEL_CONFIGS:
+        raise ValueError('Model information is temporarily unavailable. Check the model ID or try again later.')
     raise ValueError("This model is not available in Agent Beta.")
+
+
+def _resolve_effort(model, metadata, reasoning_effort):
+    if reasoning_effort not in _choices(model, metadata):
+        raise ValueError("This reasoning level is not supported by the selected model.")
+    config = dict(model.request_config)
+    reasoning = dict(config.get("reasoning") or {})
+    if reasoning_effort != "default":
+        reasoning = {"effort": reasoning_effort}
+    if metadata.get("reasoning"):
+        reasoning["exclude"] = False
+        if model.model.startswith("openai/") and reasoning.get("effort") != "none":
+            reasoning["summary"] = "auto"
+    if reasoning:
+        config["reasoning"] = reasoning
+    return replace(model, request_config=config, reasoning_effort=reasoning_effort)
 
 
 def measured_usage(raw: object, model: AgentModel, *, searches_enabled=False) -> dict | None:

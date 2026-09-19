@@ -37,8 +37,9 @@
   }
   function selection() {
     const preferred = preferredSelection() || {};
-    const model = catalog?.models.find(item => item.id === preferred.model_id)
-      || catalog?.models.find(item => item.id === catalog.default_model_id) || catalog?.models[0];
+    const available = catalog?.models.filter(item => item.available !== false);
+    const model = available?.find(item => item.id === preferred.model_id)
+      || available?.find(item => item.id === catalog.default_model_id) || available?.[0];
     return model ? { model_id: model.id,
       reasoning_effort: model.reasoning_efforts.includes(preferred.reasoning_effort) ? preferred.reasoning_effort : "default" } : preferred;
   }
@@ -148,6 +149,8 @@
         option.value = model.id;
         option.textContent = model.label;
         option.dataset.modelLabel = model.label;
+        option.disabled = model.available === false;
+        if (model.unavailable_reason) option.dataset.description = model.unavailable_reason;
         if (grouped) {
           const key = model.provider || 'other';
           if (!groups.has(key)) {
@@ -197,7 +200,7 @@
     const select = document.getElementById("agentModelDropdown");
     const effort = document.getElementById("agentReasoningEffort");
     const model = catalog?.models.find(item => item.id === select?.value);
-    if (!model || !canUse()) return;
+    if (!model || model.available === false || !canUse()) return;
     const value = { model_id: model.id, reasoning_effort: model.reasoning_efforts.includes(effort.value) ? effort.value : "default" };
     rememberSelection(value);
     render();
