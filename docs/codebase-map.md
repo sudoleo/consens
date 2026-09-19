@@ -1608,6 +1608,11 @@ Chat-/Turn-/Request-Identitäten; recover_only startet niemals Modellaufrufe.
 Fertige Antworten sowie gespeicherte fehlgeschlagene Vergleichsantworten können
 mit exakt derselben Auswahl wiedergegeben werden. /agent/models liefert den
 bestehenden Daily-Chatmodellkatalog plus konfigurierten Standard und token_budget.
+Die Quote wird außerdem beim Start/Settlement als `quota`-SSE, in terminalen
+Fehlern und beim vorhandenen Agent-Listenpoll geliefert. `observed_at` ordnet
+Snapshots; agent-chat.js ignoriert ältere/fremde Kontenwerte und lädt nach
+Transportabbruch das Kontingent erneut. Der Sidebar-Ring bleibt dadurch auch
+nach fehlgeschlagenen Läufen aktuell, inklusive reservierter Tokens im Panel.
 
 **Auswahl und Orchestrierung.** agent-chat.js trennt Chatmodell/Denkstufe vom
 bestehenden Consensus-Preset-/Model-Picker: consensusModelDropdown erhält
@@ -1689,7 +1694,10 @@ und aktuelle Tool-Aktivität als kleine Textabsätze außerhalb des standardmä�
 geschlossenen Thinking-Disclosures. Diese Vorschau verschwindet nach Laufende;
 nur manuelles Aufklappen zeigt alle gespeicherten Schritt-Zusammenfassungen,
 Tools und Usage. Keine automatische Expansion oder Zitatlinien; auch alte
-Langtexte werden in der Anzeige gekürzt. agent_progress.py
+Langtexte werden in der Anzeige gekürzt. Toolnamen in den Auszügen werden als
+sichere Inline-Labels hervorgehoben; sie belegen keine Ausführung. DelegationLoop
+meldet validierte Orchestrator-Tools mit running/terminal-Status, aus denen die
+UI den separaten Active-Hinweis bildet. agent_progress.py
 begrenzt sichtbares Reasoning serverseitig auf drei Zeilen à 180 Zeichen und
 acht Updates je Modellschritt. Provider-Zusammenfassungen haben Vorrang vor
 gekennzeichneten Satzauszügen; keine zusätzlichen LLM-Aufrufe. agent_loop.py
@@ -1740,6 +1748,13 @@ Reserve und erscheinen separat als unknown, niemals als erfundener Verbrauch.
 Auch Abbrüche, Fehler und Judge-Wiederholungen zählen. Tageswechsel migrieren
 nur ungenutzte Prüfreserven; bereits gestartete Calls werden ihrem Claim-Tag
 zugeordnet. Andere parallele Chats können reserviertes Budget nicht ausgeben.
+Eine abgelehnte Reservierung ist von leerem Tagesbudget getrennt
+(`agent_token_reservation` / `agent_tokens_exhausted`); Fehler nennen benötigte
+und damals verfügbare Tokens. Scheitert vor dem Provider-Aufruf allein die
+Zulassung mit optionaler Suche, versucht DelegationLoop denselben Schritt ohne
+Suchreserve. Der Systemkontext macht fehlende neue Recherche ausdrücklich;
+alle Kernaufruf-, Kontext-, Kosten- und Tageslimits gelten unverändert. Der
+abgelehnte Versuch schreibt keinen Beleg und startet keinen bezahlten Aufruf.
 
 Vor Vergleichen wird eine wachsende Synthese-/Judge-Reserve an Tokens und Kosten
 atomar geschützt. Vergleichsmodelle und Worker können sie nicht verbrauchen;

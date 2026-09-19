@@ -307,6 +307,28 @@ def test_provider_error_after_usage_still_records_cost(api, monkeypatch):
     assert totals(store)["measured_calls"] == 1
     assert totals(store)["estimated_cost_nano_usd"] == 180600
     assert store.list_turns(UID, chat_id)["turns"][0]["status"] == "failed"
+    error = json.loads(response.text.split("event: error\ndata: ")[1].split("\n\n")[0])
+    assert error["token_budget"]["used"] == 1100
+    assert error["token_budget"]["reserved"] == 0
+    assert error["token_budget"]["remaining"] == 248900
+    turn = store.list_turns(UID, chat_id)["turns"][0]
+    data = client.get(f"/agent/chats/{chat_id}/turns/{turn['id']}/agents", headers=AUTH).json()
+    assert data["token_budget"]["remaining"] == 248900
+    assert data["token_budget"]["observed_at"] >= error["token_budget"]["observed_at"]
+
+
+def test_quota_failure_returns_current_allowance_and_reservation_reason(api):
+    from app.services import agent_quota
+    client, store, calls = api
+    agent_quota.quota_ref(store.db, UID, agent_quota.day_key()).set({"used": 249900})
+    chat_id = store.create_chat(UID, execution_mode="agent")["id"]
+    response = client.post("/agent", json={"chat_id": chat_id, "question": "Hi",
+        "client_request_id": "quota", "bookmark_id": "bm1"}, headers=AUTH)
+    error = json.loads(response.text.split("event: error\ndata: ")[1].split("\n\n")[0])
+    assert error["code"] == "agent_token_reservation"
+    assert error["token_budget"]["remaining"] == error["available_tokens"] == 100
+    assert error["required_tokens"] > 100
+    assert calls == []
 
 
 def test_disconnect_closes_producer_and_settles_unknown_usage(store):

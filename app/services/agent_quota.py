@@ -4,9 +4,28 @@ Unknown provider usage keeps its reservation until the day ends. A paid receipt
 is settled once; retries/replay cannot release or charge it again.
 """
 import os
+import time
 from datetime import datetime, timezone
 
 from app.services.llm.provider_runtime import AnalysisBudgetExceeded
+
+
+class AgentTokenBudgetExceeded(AnalysisBudgetExceeded):
+    def __init__(self, remaining, required):
+        self.remaining, self.required = remaining, required
+        self.code = "agent_token_reservation" if remaining else "agent_tokens_exhausted"
+        message = (f"The next model call needed a reservation of {required:,} tokens; {remaining:,} were available at that point. "
+                   "The daily budget was not empty. Unused reservations are released when the run ends."
+                   if remaining else "No Agent tokens were available for the next model call. Running calls and pending usage also reserve tokens. The daily budget resets at 00:00 UTC.")
+        super().__init__(message)
+
+
+def snapshot(db, uid):
+    # Timestamp the read's start so a slower HTTP response cannot overwrite a
+    # newer terminal snapshot in the browser.
+    observed_at = time.time_ns() // 1_000_000
+    day = day_key()
+    return {**public(quota_ref(db, uid, day).get().to_dict(), day), "observed_at": observed_at}
 
 
 def daily_limit():
@@ -33,8 +52,9 @@ def measured_tokens(usage):
 
 def reserve(data, amount):
     data = dict(data or {})
-    if data.get("used", 0) + data.get("reserved", 0) + amount > daily_limit():
-        raise AnalysisBudgetExceeded("Agent daily token budget reached. It resets at 00:00 UTC.")
+    remaining = max(0, daily_limit() - data.get("used", 0) - data.get("reserved", 0))
+    if amount > remaining:
+        raise AgentTokenBudgetExceeded(remaining, amount)
     data["reserved"] = data.get("reserved", 0) + amount
     return data
 

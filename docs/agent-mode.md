@@ -110,6 +110,18 @@ den Tag bestehen und wird als unbekannt gekennzeichnet. Abbrüche und Fehler
 schenken keine bereits verbrauchten Tokens zurück. Replays führen keinen neuen
 Call aus. Beim UTC-Wechsel zählt ein Call zu seinem Starttag; nur ungenutzte
 Synthese-/Judge-Reserven wandern auf den neuen Tag.
+Die Prozentanzeige erhält Live- und terminale Kontingent-Snapshots auch bei
+Fehlern; das Panel nennt zusätzlich reservierte Tokens. Ein Restbudget kann
+kleiner als die nötige Reserve für den nächsten Aufruf sein. Dieser Fall wird
+mit konkreten Zahlen als unzureichende Reserve erklärt, nicht als leeres Budget.
+Kann die optionale Suche nicht reserviert werden, darf derselbe Schritt vor
+jedem Provider-Aufruf ohne Suche neu zugelassen werden. Das Modell wird über
+fehlende neue Recherche informiert; reicht auch die reine Antwort nicht ins
+Budget, endet der Lauf weiterhin vor dem bezahlten Aufruf.
+
+Toolnamen in Reasoning-Auszügen erhalten dezente Inline-Labels. Ein solcher
+Hinweis bestätigt keinen Aufruf; erst ein validiertes, gestartetes Tool erhält
+den separaten Active-Status. Thinking bleibt dabei standardmäßig geschlossen.
 
 Vor einem Vergleich schützt der Server zusätzliche Tokens und Kosten für
 Synthese und Judges gegen andere parallele Runs und Worker. Zu wenig verfügbares

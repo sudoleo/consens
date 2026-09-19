@@ -221,18 +221,35 @@ def test_live_reasoning_disclosure_and_stop(browser, phase4_server, width, dark)
         expect(page.locator(".agent-model-picker .model-picker-display")).to_be_disabled()
         title = page.locator("#agentAnswerActivity .agent-activity-title")
         assert title.evaluate("el => getComputedStyle(el).animationName") == "source-label-shine"
-        _snapshot(page, f"agent-live-{width}-{'dark' if dark else 'light'}")
+        page.evaluate("""() => window.__emitAgent({version:1, step_id:'completion:0', kind:'reasoning', id:'r1',
+          format:'summary', text:'I am considering compare_models to check independent perspectives, then judge_answer.'})""")
+        expect(page.locator('.agent-progress .agent-tool-mention')).to_have_count(2)
+        expect(page.locator('.agent-progress-action')).to_have_count(0)
+        _snapshot(page, f"agent-tool-mentioned-{width}-{'dark' if dark else 'light'}")
         page.locator('#agentAnswerActivity summary').click()
         expect(page.locator('#agentAnswerActivity .agent-activity-reasoning')).to_be_visible()
         if width == 1280:
             expect(page.locator(".run-entry-status")).to_have_text("Thinking")
             expect(page.locator("#newRunButton")).to_have_text("New chat")
+        page.locator('#agentAnswerActivity summary').click()
+        page.evaluate("() => window.__emitAgent({version:1, step_id:'completion:0', kind:'tool', id:'tool1', name:'compare_models', status:'running'})")
+        expect(page.locator('.agent-progress-action')).to_contain_text('Active')
+        expect(page.locator('.agent-progress-action')).to_contain_text('Comparing model answers')
+        _snapshot(page, f"agent-tool-active-{width}-{'dark' if dark else 'light'}")
+        page.evaluate("() => window.__emitAgent({version:1, step_id:'completion:0', kind:'tool', id:'tool1', name:'compare_models', status:'succeeded'})")
+        page.locator('#agentAnswerActivity summary').click()
         # Long legacy traces become short highlights, not a scrolling wall.
         page.evaluate("""() => window.__emitAgent({version:1, step_id:'completion:0', kind:'reasoning', id:'r2',
           format:'text', text:'A measured reasoning step.\\n'.repeat(100), append:true})""")
         content = page.locator("#agentAnswerActivity .agent-activity-content")
         expect(content).to_contain_text("A measured reasoning step.")
         assert len(content.inner_text()) < 600
+        # Give the disclosure more than the 40px follow tolerance; scrolling
+        # to the top of a nearly fitting trace still counts as reading along.
+        page.evaluate("""() => { for (let i = 3; i < 7; i++) window.__emitAgent({version:1, step_id:'completion:' + i,
+          kind:'reasoning', id:'r' + i, format:'summary', text:'Comparing the supporting evidence.\\nChecking whether sources agree.\\nIdentifying remaining uncertainty.'}); }""")
+        expect(content).to_contain_text('Identifying remaining uncertainty.')
+        assert content.evaluate('el => el.scrollHeight - el.clientHeight') > 40
         content.evaluate("el => { el.scrollTop = 0; }")
         page.evaluate("""() => window.__emitAgent({version:1, step_id:'completion:0', kind:'reasoning', id:'r2',
           format:'text', text:'End of reasoning.', append:true})""")
@@ -337,7 +354,8 @@ def test_model_catalog_retry_and_failed_stream(browser, phase4_server):
         expect(page.locator("#agentRecover")).to_be_visible()
         expect(page.locator("#agentAnswerActivity .agent-activity-title")).to_have_text("Response failed")
         assert page.locator(".agent-activity-title").evaluate("el => getComputedStyle(el).animationName") == "none"
-        assert len(attempts) == 2
+        page.wait_for_function("() => !App.runRegistry.visible()?.controllers.query")
+        assert len(attempts) == 3
         _snapshot(page, "agent-error-390")
         page.locator("#agentRecover").click()
         expect(page.locator("#agentAnswerBody")).to_have_text("Recovered saved answer.")
@@ -347,6 +365,42 @@ def test_model_catalog_retry_and_failed_stream(browser, phase4_server):
         assert calls[1]["recover_only"] is True
         for key in ("client_request_id", "chat_id", "model_id", "reasoning_effort"):
             assert calls[1][key] == calls[0][key]
+    finally:
+        context.close()
+
+
+@pytest.mark.parametrize('width', [1280, 390])
+def test_quota_stream_and_failure_update_existing_percentage(browser, phase4_server, width):
+    context, page = _real_firebase_page(browser, phase4_server)
+    try:
+        page.set_viewport_size({'width': width, 'height': 900})
+        page.route('**/user_status', lambda r: _json(r, {'tier': 'pro', 'is_pro': True, 'agent_access': True}))
+        page.route('**/agent/models', lambda r: _json(r, {**CATALOG, 'token_budget': {'remaining': 188878, 'limit': 250000, 'observed_at': 1}}))
+        page.route('**/chats', lambda r: _json(r, {'chat': {'id': 'a' * 32}}))
+        page.evaluate("async () => { await window.__switchE2EUser('account-a'); }")
+        _choose_mode(page, 'agent')
+        expect(page.locator('#quotaTriggerValue')).to_have_text('75%')
+        page.evaluate("""() => {
+          const original = window.fetch;
+          window.fetch = async (url, options) => {
+            if (url !== '/agent') return original(url, options);
+            const encoder = new TextEncoder();
+            return new Response(new ReadableStream({start(controller) {
+              window.__quotaEvent = (type, data) => controller.enqueue(encoder.encode('event: ' + type + '\\ndata: ' + JSON.stringify(data) + '\\n\\n'));
+              window.__quotaEvent('quota', {token_budget:{remaining:80000, reserved:100000, limit:250000, observed_at:2}});
+            }}), {headers:{'Content-Type':'text/event-stream'}});
+          };
+        }""")
+        page.locator('#questionInput').fill('Compare the options')
+        page.locator('#sendButton').click()
+        expect(page.locator('#quotaTriggerValue')).to_have_text('32%')
+        page.evaluate("""() => window.__quotaEvent('error', {
+          error:'The next model call needed a reservation of 50,000 tokens; 40,000 were available at that point. The daily budget was not empty.',
+          code:'agent_token_reservation', token_budget:{remaining:40000, reserved:0, limit:250000, observed_at:3}})""")
+        expect(page.locator('#agentAnswerError')).to_contain_text('daily budget was not empty')
+        expect(page.locator('#quotaTriggerValue')).to_have_text('16%')
+        assert page.evaluate('document.documentElement.scrollWidth <= innerWidth + 1')
+        _snapshot(page, f'agent-budget-failure-{width}')
     finally:
         context.close()
 

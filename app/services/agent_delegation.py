@@ -12,6 +12,7 @@ from uuid import uuid4
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.services.agent_costs import aggregate_usage
+from app.services.agent_quota import AgentTokenBudgetExceeded
 from app.services.agent_loop import AgentLoop
 from app.services.agent_progress import ReasoningProgress
 from app.services.agent_policy import supports_delegation
@@ -253,12 +254,24 @@ class DelegationLoop(AgentLoop):
             self.tools_used += 1
             if self.tools_used > self.policy.max_tools:
                 raise AnalysisBudgetExceeded("Shared tool limit reached")
+        tool = None
+        status = "failed"
+        def publish(status):
+            if registry is self.registry and tool:
+                self.outgoing.put_nowait(self.tool_event(f"{value.step_id}:{call['id']}", tool.name, status))
         try:
             tool, args = registry.validate(call)
+            publish("running")
             result = tool.execute(args, cancellation=cancellation)
+            status = "succeeded"
+        except ProviderCancelled:
+            status = "cancelled"
+            raise
         except (ValueError, TypeError) as exc:
             # A schema/selection error is safe feedback, not a provider retry.
             result = {"error": str(exc)[:500]}
+        finally:
+            publish(status)
         return {"role": "tool", "tool_call_id": call["id"], "content": json.dumps(result, ensure_ascii=False)}
 
     def _step(self, model, messages, step, registry, cancellation, *, worker=None, searches_enabled=True):
@@ -284,16 +297,42 @@ class DelegationLoop(AgentLoop):
         value.tool_call_limit = 4
         worker_progress = ReasoningProgress() if worker else None
         status = "failed"
+        search_limited = False
         try:
-            claimed = self.store.claim(self.uid, self.chat_id, self.turn_id, model, step=step,
-                run_token=self.run_token, policy={**self.policy.snapshot(),
-                    "worker_models": [m.snapshot() for m in self.models.values()]}, reservation=reservation)
+            claim_policy = {**self.policy.snapshot(), "worker_models": [m.snapshot() for m in self.models.values()]}
+            try:
+                claimed = self.store.claim(self.uid, self.chat_id, self.turn_id, model, step=step,
+                    run_token=self.run_token, policy=claim_policy, reservation=reservation)
+            except AgentTokenBudgetExceeded:
+                if not searches:
+                    raise
+                # Admission failed before any paid request. Keep all hard
+                # bounds, but allow a response from the evidence already held.
+                self.costs.release(reservation)
+                reservation = None
+                with self.condition:
+                    self.search_remaining += searches
+                searches = 0
+                tools = registry.schemas
+                messages = [*messages]
+                messages[0] = {**messages[0], "content": messages[0]["content"] +
+                    "\nWeb search is unavailable for this step because its token reservation exceeds the remaining daily allowance. "
+                    "Use existing evidence, state any uncertainty, and do not imply new web research."}
+                if len(json.dumps(messages, ensure_ascii=False)) > self.policy.context_chars:
+                    raise AnalysisBudgetExceeded("Agent session context limit reached")
+                reservation = self.costs.reserve(model, messages, tools)
+                claimed = self.store.claim(self.uid, self.chat_id, self.turn_id, model, step=step,
+                    run_token=self.run_token, policy=claim_policy, reservation=reservation)
+                search_limited = True
             if not claimed:
                 raise ValueError("This model step has already started")
             self.claimed = True
             if not worker:
                 if step == "completion:0":
                     yield {"type": "started", "chat_id": self.chat_id, "turn_id": self.turn_id, "delegation": True}
+                if search_limited:
+                    yield self.tool_event(step + ":web_search", "web_search", "blocked",
+                        text="Continuing with existing sources; the remaining allowance cannot reserve another web search.")
                 yield self.status(step, "started", status="working", settings=model.settings(),
                                   clear_response=step != "completion:0" and not (self.comparison and self.comparison.text))
             if self.mock_answer is not None:
@@ -336,11 +375,13 @@ class DelegationLoop(AgentLoop):
                 if worker:
                     worker.usages.append(value.usage)
                 self.store.settle(self.uid, self.chat_id, self.turn_id, completion=value, status=status, step=step, final=False)
-            else:
+            elif reservation is not None:
                 self.costs.release(reservation)
             count = (value.usage or {}).get("web_search_requests")
             with self.condition:
-                if type(count) is int and 0 <= count <= searches:
+                if not claimed:
+                    self.search_remaining += searches
+                elif type(count) is int and 0 <= count <= searches:
                     self.search_remaining += searches - count
         self.costs.check()
         if not worker:

@@ -799,6 +799,12 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
   keinen neuen Provider-Aufruf. Ein Account-/Chatwechsel mischt keine Daten.
 - [ ] Kontingent nahe der Grenze mit zwei parallelen Chats prüfen; Chat,
   Vergleich und Judges teilen Tokens, UTC-Reset bleibt separat zu Consensus.
+- [ ] Prozentanzeige während Calls und nach Budgetfehler/Disconnect prüfen:
+  aktueller Serverwert; Panel zeigt Reserven. Eine unzureichende Reserve wird
+  nicht als leeres Budget bezeichnet. Optionale Suche darf vor dem Claim
+  entfallen, sofern der Kernaufruf weiter ins Budget passt.
+- [ ] Tool-Nennungen im eingeklappten Denkfortschritt sind dezent hervorgehoben;
+  Active erscheint erst bei bestätigtem Start. Nach Ende verschwindet die Vorschau.
 - [ ] Desktop und 390/320px, Hell/Dunkel, Tastatur und Reduced Motion prüfen.
 - [ ] Überlappende Modell-Icons oberhalb der Antwort zeigen die richtigen Anbieter,
   auch Kimi, GLM und Muse. Mehrere Aufrufe desselben Modells bleiben in Activity

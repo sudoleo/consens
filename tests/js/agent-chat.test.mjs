@@ -9,7 +9,7 @@ const BODY = `<div id="chatExecutionControl" class="select-wrapper"><select id="
   <section id="agentAnswer" hidden><div id="agentAnswerLabel"></div>
   <div id="agentAnswerActivity"></div><div id="agentAnswerBody"></div><p id="agentAnswerError" hidden></p></section>`;
 
-const CATALOG = { default_model_id: "deepseek/deepseek-v4.1-flash", models: [
+const CATALOG = { token_budget: { remaining: 188878, limit: 250000, observed_at: 1 }, default_model_id: "deepseek/deepseek-v4.1-flash", models: [
   { id: "deepseek/deepseek-v4.1-flash", label: "DeepSeek V4.1 Flash", reasoning_efforts: ["default", "low", "high", "max"], reasoning_available: true },
   { id: "gpt-5.6-sol", label: "GPT-5.6 Sol", reasoning_efforts: ["default", "low", "medium", "high"], reasoning_available: true },
   { id: "gpt-4o", label: "GPT-4o", reasoning_efforts: ["default"], reasoning_available: false },
@@ -26,12 +26,12 @@ function boot({ allowed = true } = {}) {
         modelPrefs: [], getModelOptionLabel: option => option?.dataset.modelLabel || option?.textContent || "",
       };
       window.injectMarkdown = (el, markdown) => { el.textContent = markdown; };
-      window.fetch = vi.fn(async url => ({ ok: true, json: async () => url === "/agent/models" ? CATALOG : ({ chat: { id: "a".repeat(32) } }) }));
+      window.fetch = vi.fn(async url => ({ ok: true, json: async () => url === "/agent/models" ? structuredClone(CATALOG) : ({ chat: { id: "a".repeat(32) } }) }));
       window.streamSSERequest = vi.fn(async (_url, _payload, _signal, handlers) => {
         handlers.delta.append("Answer");
         return { ok: true, data: { response: "Answer", chat_id: "a".repeat(32), turn_id: "b".repeat(32),
           turn: { id: "b".repeat(32), question: "Question", consensus: "Answer", mode: "Agent", execution_mode: "agent" },
-          bookmark_meta: { id: "saved" } } };
+          token_budget: structuredClone(CATALOG.token_budget), bookmark_meta: { id: "saved" } } };
       });
       window.acceptPersistedConsensusBookmark = vi.fn();
     },
@@ -48,6 +48,59 @@ async function selectAgent(window) {
 }
 
 describe("single-model agent chat", () => {
+  it('updates the allowance on terminal errors and ignores older or foreign snapshots', async () => {
+    const { window, document, dom } = boot();
+    await selectAgent(window);
+    const chat = window.App.agentChat;
+    const budget = { remaining: 40000, limit: 250000, observed_at: 20 };
+    window.streamSSERequest.mockImplementationOnce(async (_url, _body, _signal, handlers) => {
+      handlers.quota.receive({ token_budget: { ...budget, remaining: 80000, observed_at: 10 } });
+      expect(chat.tokenBudget().remaining).toBe(80000);
+      return { ok: true, data: { error: 'Not enough tokens for the next reservation.', token_budget: budget } };
+    });
+    document.getElementById('questionInput').value = 'Compare options';
+    await chat.send();
+    expect(window.App.runRegistry.visible().status).toBe('failed');
+    expect(chat.tokenBudget()).toEqual(budget);
+    chat.receiveBudget({ ...budget, remaining: 100000, observed_at: 10 }, 'owner');
+    chat.receiveBudget({ ...budget, remaining: 0, observed_at: 30 }, 'someone-else');
+    expect(chat.tokenBudget()).toEqual(budget);
+    expect(window.fetch.mock.calls.map(call => call[0])).toEqual(['/agent/models', '/chats']);
+    dom.window.close();
+  });
+
+  it('refreshes the allowance after a disconnected stream', async () => {
+    const { window, document, dom } = boot();
+    await selectAgent(window);
+    window.fetch.mockImplementation(async url => ({ ok: true, json: async () => url === '/agent/models'
+      ? { ...CATALOG, token_budget: { remaining: 25000, limit: 250000, observed_at: 2 } } : { chat: { id: 'a'.repeat(32) } } }));
+    window.streamSSERequest.mockRejectedValueOnce(new Error('Connection lost'));
+    document.getElementById('questionInput').value = 'Question';
+    await window.App.agentChat.send();
+    expect(window.App.agentChat.tokenBudget().remaining).toBe(25000);
+    expect(window.fetch.mock.calls.map(call => call[0])).toEqual(['/agent/models', '/chats', '/agent/models']);
+    dom.window.close();
+  });
+
+  it('highlights tool mentions safely without claiming execution, then marks a confirmed call active', () => {
+    const { window, document, dom } = boot();
+    const host = document.getElementById('agentAnswerActivity');
+    const events = [{ id: 'r', kind: 'reasoning', format: 'summary', text: 'Maybe call compare_models, then judge_answer. <img src=x onerror=alert(1)>' }];
+    window.App.agentActivity.render(host, { events, running: true });
+    expect(host.querySelector('.agent-progress .agent-tool-mention').dataset.tool).toBe('compare_models');
+    expect(host.querySelector('.agent-tool-mention').title).toContain('does not confirm');
+    expect(host.querySelector('.agent-progress-action')).toBe(null);
+    expect(host.querySelector('img')).toBe(null);
+    events.push({id: 'tool1', kind: 'tool', name: 'compare_models', status: 'running'});
+    window.App.agentActivity.render(host, { events, running: true });
+    expect(host.querySelector('.agent-progress-action').textContent).toBe('ActiveComparing model answers…');
+    expect(host.querySelector('details').open).toBe(false);
+    events[1].status = 'succeeded';
+    window.App.agentActivity.render(host, { events, running: false });
+    expect(host.querySelector('.agent-progress').hidden).toBe(true);
+    expect(host.querySelector('.agent-activity-tool strong').textContent).toBe('Model comparison · Completed');
+    dom.window.close();
+  });
   it("commits a draft model before an input-triggered projection can restore the old model", async () => {
     const { window, document, dom } = boot();
     await selectAgent(window);
@@ -312,7 +365,7 @@ describe("single-model agent chat", () => {
     const failed = window.App.runRegistry.visible();
     expect(failed.status).toBe("failed");
     await window.App.agentChat.send(failed);
-    expect(window.fetch).toHaveBeenCalledTimes(2);
+    expect(window.fetch.mock.calls.map(call => call[0])).toEqual(['/agent/models', '/chats', '/agent/models']);
     const payload = window.streamSSERequest.mock.calls[1][1];
     expect(payload.recover_only).toBe(true);
     expect(payload.client_request_id).toBe(window.streamSSERequest.mock.calls[0][1].client_request_id);

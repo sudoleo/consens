@@ -88,7 +88,7 @@ def _final(uid, payload, store, turn):
     bookmark_meta = _save_bookmark(uid, payload, store, turn)
     return {"chat_id": payload.chat_id, "turn_id": turn["id"], "turn": turn,
             "response": turn["consensus"], "execution_mode": "agent", "bookmark_meta": bookmark_meta,
-            "token_budget": agent_quota.public(agent_quota.quota_ref(store.db, uid, agent_quota.day_key()).get().to_dict())}
+            "token_budget": agent_quota.snapshot(store.db, uid)}
 
 
 def _save_interrupted(uid, payload, store, turn_id):
@@ -108,8 +108,8 @@ def available_agent_models(request: Request):
     from fastapi.responses import JSONResponse
     uid = _chat_uid(request)
     require_agent_access(uid)
-    return JSONResponse({**agent_model_options(), "token_budget": agent_quota.public(
-        agent_quota.quota_ref(db_firestore, uid, agent_quota.day_key()).get().to_dict())}, headers={"Cache-Control": "private, no-store"})
+    return JSONResponse({**agent_model_options(), "token_budget": agent_quota.snapshot(db_firestore, uid)},
+                        headers={"Cache-Control": "private, no-store"})
 
 
 @router.post("/agent")
@@ -217,6 +217,11 @@ def run_agent(request: Request, payload: AgentRequest):
                 for event in source:
                     if event:
                         yield sse_pack(event["type"], event)
+                        if event["type"] == "started" or (event["type"] == "activity" and event.get("kind") == "usage"):
+                            try:
+                                yield sse_pack("quota", {"token_budget": agent_quota.snapshot(store.db, uid)})
+                            except Exception as exc:
+                                logging.warning("Agent allowance unavailable category=%s", safe_exception(exc))
             finally:
                 source.close()
             status = "succeeded"
@@ -226,6 +231,9 @@ def run_agent(request: Request, payload: AgentRequest):
             raise
         except (AgentCapacityExceeded, TurnStatusConflict, AnalysisBudgetExceeded) as exc:
             error = str(exc)
+            if isinstance(exc, agent_quota.AgentTokenBudgetExceeded):
+                failure = {"code": exc.code, "required_tokens": exc.required, "available_tokens": exc.remaining}
+            logging.warning("Agent admission stopped category=%s model=%s reason=%s", safe_exception(exc), model.model, error)
         except AgentProviderCooldown as exc:
             error = str(exc)
             failure = {"code": "provider_rate_limited", "retry_after": exc.retry_after}
@@ -242,6 +250,10 @@ def run_agent(request: Request, payload: AgentRequest):
             if interrupted and interrupted.get("agent_review"):
                 yield sse_pack("review", {"review": interrupted["agent_review"]})
             yield sse_pack("activity", {"version": 1, "step_id": "run", "id": "run/usage", "kind": "usage", "usage": completion.usage})
+            try:
+                failure["token_budget"] = agent_quota.snapshot(store.db, uid)
+            except Exception as exc:
+                logging.warning("Agent allowance unavailable category=%s", safe_exception(exc))
             yield sse_pack("error", {"error": error, **failure})
             return
         try:
@@ -285,6 +297,8 @@ def _agent_details(request, chat_id, turn_id, **kwargs):
     require_agent_access(uid)
     try:
         data = AgentRunStore(db_firestore).delegation_view(uid, chat_id, turn_id, **kwargs)
+        if not kwargs:
+            data["token_budget"] = agent_quota.snapshot(db_firestore, uid)
         return JSONResponse(data, headers={"Cache-Control": "private, no-store"})
     except Exception as exc:
         _raise_store_error(exc, operation="read agent sessions", uid=uid)

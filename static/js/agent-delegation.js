@@ -80,6 +80,7 @@
     if (!response.ok) throw new Error("Agent details could not be loaded.");
     const data = await response.json();
     if (uid() !== view.uid || view.controller.signal.aborted) throw new Error("Account changed");
+    App.agentChat?.receiveBudget(data.token_budget, view.uid);
     return data;
   }
   async function load(view) {
@@ -301,6 +302,7 @@
     if (!spec?.chatId || !spec?.turnId || !owner) { current = null; inline?.remove(); inline = null; hide(); return; }
     const view = get(spec.chatId, spec.turnId);
     const changed = current !== view;
+    const wasRunning = view.running;
     if (changed) {
       if (current) prefs(current);
       current = view; ensure(); sidebar._rows.clear(); sidebar.querySelector(".agent-session-list").replaceChildren();
@@ -309,7 +311,7 @@
     view.running = !!spec.running;
     render();
     if (changed) sidebar.scrollTop = view.scroll;
-    if (!view.loaded) load(view);
+    if (!view.loaded || (wasRunning && !spec.running)) load(view);
     if (!timer) timer = setInterval(() => {
       resetOwner();
       if (current) { render(); if (current.running) load(current); }

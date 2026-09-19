@@ -65,6 +65,24 @@
       if (uid === catalogOwner && generation === loadGeneration) render();
     }
   }
+  function receiveBudget(budget, uid) {
+    if (!budget || !catalog || !canUse() || uid !== catalogOwner || uid !== window.auth?.currentUser?.uid) return;
+    if (Number.isFinite(budget.observed_at) && Number.isFinite(catalog.token_budget?.observed_at)
+      && budget.observed_at < catalog.token_budget.observed_at) return;
+    catalog.token_budget = budget;
+    App.sidebarQuota?.sync();
+  }
+  async function refreshBudget(uid) {
+    try {
+      const user = window.auth?.currentUser;
+      if (!user || uid !== user.uid || !canUse()) return;
+      const token = await user.getIdToken();
+      if (uid !== window.auth?.currentUser?.uid) return;
+      const response = await fetch('/agent/models', { headers: { Authorization: `Bearer ${token}` } });
+      if (!response.ok) return;
+      receiveBudget((await response.json()).token_budget, uid);
+    } catch (_) { /* Activity polling or the next run can refresh the allowance. */ }
+  }
   function renderControls(agent) {
     const uid = canUse() ? window.auth.currentUser.uid : "";
     if (uid !== catalogOwner) {
@@ -338,7 +356,7 @@
     }
     App.composer?.collapse?.({ force: true });
     if (!recovery) App.revealSentMessage?.();
-    let timer;
+    let timer, terminalBudget = false;
     try {
       const token = await window.auth.currentUser.getIdToken();
       if (!registry.isAuthCurrent(context) || signal.aborted) return;
@@ -367,6 +385,9 @@
         reasoning_effort: settings.reasoning_effort || "default",
         comparison_models: Object.keys(comparisonModels).length ? comparisonModels : null,
       }, signal, {
+        quota: { receive(event) {
+          if (registry.isAuthCurrent(context)) receiveBudget(event.token_budget, context.auth.uid);
+        } },
         started: { receive(event) {
           if (registry.isAuthCurrent(context) && event.chat_id === context.metadata.chatId) {
             context.metadata.agentTurnId = event.turn_id;
@@ -398,9 +419,10 @@
         } },
       }, { headers });
       if (!registry.isAuthCurrent(context) || signal.aborted) return;
+      receiveBudget(result.data?.token_budget, context.auth.uid);
+      terminalBudget = Boolean(result.data?.token_budget);
       if (!result.ok || result.data?.error || !result.data?.turn) throw new Error(apiError(result.data));
       const data = result.data;
-      if (data.token_budget && catalog) catalog.token_budget = data.token_budget;
       const turn = { ...data.turn, turn_id: data.turn_id };
       context.consensus.text = data.response;
       context.consensus.streamText = data.response;
@@ -429,10 +451,11 @@
       clearTimeout(timer);
       context.controllers.query = null;
       if (registry.isAuthCurrent(context)) registry.renderVisible();
+      if (!terminalBudget && context.metadata.requestSent && registry.isAuthCurrent(context)) await refreshBudget(context.auth.uid);
     }
   }
   App.agentChat = { canUse, isSelected: () => selectedMode() === "agent", render, project, send,
-    tokenBudget: () => canUse() && catalogOwner === window.auth?.currentUser?.uid ? catalog?.token_budget : null };
+    tokenBudget: () => canUse() && catalogOwner === window.auth?.currentUser?.uid ? catalog?.token_budget : null, receiveBudget };
   window.addEventListener("consensio:run-registry-change", render);
   document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("chatExecutionMode")?.addEventListener("change", event => {

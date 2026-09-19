@@ -131,6 +131,11 @@ Vergleich. `tests/js/sidebar-quota.test.mjs` prüft die Agent-Prozentprojektion
 und den Wechsel zurück zum unveränderten Consensus-Kontingent.
 `tests/js/agent-chat.test.mjs` prüft die manuelle Reasoning-Expansion, die separate
 Live-Vorschau und die Reasoning-Ebene im Chatmodell-Picker.
+Zusätzlich: aktualisierte Kontingente bei SSE-Fehlern/Disconnect, veraltete und
+fremde Snapshots sowie Tool-Nennungen gegenüber bestätigten Aufrufen.
+`test_agent_comparison.py` prüft die Zulassung ohne optionale Suche bei zu großer
+Suchreserve und verhindert dabei doppelte Calls/Belege. `test_agent_runs.py`
+prüft Quote und konkrete Reservierungsfehler in terminalen SSE-Ereignissen.
 `model-answer-reader.test.mjs` prüft isolierte Vergleichskontexte,
 Grundlagenwechsel, Aktualisierung und Fokus. `tests/e2e/test_agent_comparison_frontend.py`
 prüft die gebaute Desktop-/Mobilansicht: zentrale Modell-Icons, rote Textlinks,

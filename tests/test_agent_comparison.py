@@ -105,6 +105,8 @@ def test_real_judges_exact_versions_context_sources_and_all_usage(store, compare
     quota = agent_quota.quota_ref(store.db, UID, agent_quota.day_key()).get().to_dict()
     assert quota["used"] == len(script.calls) * 70 and quota["reserved"] == 0
     assert any(e["type"] == "review" and e["review"]["status"] == "running" for e in events)
+    tools = [e for e in events if e.get("kind") == "tool" and e.get("name") == "compare_models"]
+    assert [e["status"] for e in tools] == [s for _ in range(compares) for s in ("running", "succeeded")]
     assert sum(e["type"] == "delta" for e in events) == 1 + revise + (compares if compares > 1 else 0)
     assert all("I will compare" not in v["text"] for v in review["versions"])
     assert store.delegation_view(UID, loop.chat_id, loop.turn_id)["agents"]
@@ -151,6 +153,51 @@ def test_atomic_daily_budget_and_duplicate_settlement(store, monkeypatch):
         store.settle(UID, loop.chat_id, loop.turn_id, completion=value, status="cancelled", final=False)
     quota = agent_quota.quota_ref(store.db, UID, agent_quota.day_key()).get().to_dict()
     assert quota["used"] == 15 and quota["reserved"] == 0
+
+
+@pytest.mark.parametrize("remaining", [0, 40000])
+def test_quota_rejection_distinguishes_empty_from_insufficient_reservation(remaining):
+    data = {"used": 250000 - remaining}
+    with pytest.raises(agent_quota.AgentTokenBudgetExceeded) as error:
+        agent_quota.reserve(data, 50000)
+    assert error.value.remaining == remaining and error.value.required == 50000
+    assert error.value.code == ("agent_token_reservation" if remaining else "agent_tokens_exhausted")
+    if remaining:
+        assert "not empty" in str(error.value)
+    assert "reserved" not in data
+
+
+@pytest.mark.parametrize("remaining,succeeds,context_room", [(70000, True, None), (100, False, None), (70000, False, 0)])
+def test_search_reservation_can_fall_back_without_extra_paid_claim(store, remaining, succeeds, context_room):
+    calls = []
+    class Completion(AgentCompletion):
+        def stream(self, *, model, messages, **kwargs):
+            calls.append(kwargs)
+            assert "Web search is unavailable" in messages[0]["content"]
+            assert kwargs["native_searches"] == 0
+            self.text, self.finish_reason = "Answer from existing evidence.", "stop"
+            self.usage = measured_usage({"prompt_tokens": 50, "completion_tokens": 20}, model)
+            yield {"type": "delta", "text": self.text}
+    loop = make_loop(store, Script())
+    loop.factory = Completion
+    loop.search_remaining = 1
+    loop.model = replace(loop.model, request_config={**loop.model.request_config, "_agent_bounded_search": True})
+    if context_room is not None:
+        loop.policy = replace(loop.policy, context_chars=len(json.dumps(loop.messages, ensure_ascii=False)) + context_room)
+    ref = agent_quota.quota_ref(store.db, UID, agent_quota.day_key())
+    ref.set({"used": 250000 - remaining})
+    if succeeds:
+        events = list(loop.run())
+        assert len(calls) == 1 and loop.costs.calls == 1
+        assert any(e.get("name") == "web_search" and e.get("status") == "blocked" for e in events)
+        assert ref.get().to_dict()["used"] == 250000 - remaining + 70
+        assert ref.get().to_dict()["reserved"] == 0
+    else:
+        with pytest.raises(AnalysisBudgetExceeded, match="context limit" if context_room is not None else "reservation"):
+            list(loop.run())
+        assert calls == [] and loop.costs.calls == 0 and loop.costs.tokens == 0
+        assert ref.get().to_dict() == {"used": 250000 - remaining}
+    assert loop.search_remaining == 1
 
 
 def test_unknown_usage_keeps_admission_and_utc_day_is_separate(store, monkeypatch):

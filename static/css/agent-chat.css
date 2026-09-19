@@ -190,6 +190,9 @@ body.single-agent-active .consensus-model-inline { min-width: 0; max-width: 100%
 .agent-activity-tool { margin: 12px 0; padding: 0; color: var(--ink-2); overflow-wrap: anywhere; line-height: 1.65; }
 .agent-progress { margin: -12px 0 20px; color: var(--ink-3); font-size: 12px; line-height: 1.7; max-width: 70ch; }
 .agent-progress p { margin: 5px 0; overflow-wrap: anywhere; }
+.agent-tool-mention { display: inline-block; color: var(--ink-2); background: var(--raise); border: 1px solid var(--line); border-radius: 4px; padding: 1px 4px; font-size: .94em; font-weight: 500; line-height: 1.45; }
+.agent-progress-action { color: var(--ink-2); }
+.agent-tool-state { display: inline-block; margin-right: 7px; font-size: 10px; font-weight: 550; letter-spacing: .02em; color: var(--ink-3); }
 .agent-progress[hidden], .agent-activity[open] + .agent-progress { display: none; }
 .agent-activity-tool strong { display: block; font-size: 12px; font-weight: 500; }
 .agent-activity-tool p { white-space: pre-wrap; margin: 6px 0; font-size: 12px; }

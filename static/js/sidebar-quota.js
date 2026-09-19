@@ -161,6 +161,10 @@
     if (foot) {
       var text = agent ? (tokens ? tokens.value.toLocaleString() + ' of ' + tokens.limit.toLocaleString() + ' tokens left. Resets at 00:00 UTC. Pending calls reserve tokens.' : 'Agent allowance unavailable.')
         : countdown ? (countdown.textContent || "").trim() : "";
+      if (agent && tokens && Number.isFinite(budget.reserved) && budget.reserved > 0) {
+        text = tokens.value.toLocaleString() + ' of ' + tokens.limit.toLocaleString() + ' tokens available. '
+          + budget.reserved.toLocaleString() + ' reserved for running calls, pending usage and review. Resets at 00:00 UTC.';
+      }
       foot.textContent = text;
       foot.hidden = !text;
     }

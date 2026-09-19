@@ -3,6 +3,22 @@
   "use strict";
   const App = window.App = window.App || {};
   const statuses = { failed: "Response failed", cancelled: "Response stopped", canceled: "Response stopped" };
+  const toolNames = { web_search: 'Web search', compare_models: 'Model comparison', judge_answer: 'Answer review',
+    start_agent: 'Ask a model', wait_agents: 'Wait for models', send_agent: 'Follow up',
+    review_agent: 'Review a model', stop_agent: 'Stop a model', report_to_orchestrator: 'Report to the main model' };
+  function highlightTools(node, text) {
+    const pattern = /\b(?:web_search|compare_models|judge_answer|start_agent|wait_agents|send_agent|review_agent|stop_agent|report_to_orchestrator)\b/g;
+    const parts = []; let from = 0;
+    for (const match of text.matchAll(pattern)) {
+      parts.push(document.createTextNode(text.slice(from, match.index)));
+      const mark = document.createElement('span'); mark.className = 'agent-tool-mention';
+      mark.textContent = toolNames[match[0]]; mark.dataset.tool = match[0];
+      mark.title = 'Mentioned in reasoning; this does not confirm a tool call.';
+      parts.push(mark); from = match.index + match[0].length;
+    }
+    parts.push(document.createTextNode(text.slice(from)));
+    node.replaceChildren(...parts);
+  }
   function compactReasoning(text) {
     const paragraphs = String(text || "").split(/\n\s*\n|\n/).filter(Boolean);
     return paragraphs.slice(-3).map(p => {
@@ -85,7 +101,13 @@
     if (view.preview.dataset.text !== previewText) {
       view.preview.dataset.text = previewText;
       view.preview.replaceChildren(...(running ? paragraphs : []).map(text => {
-        const p = document.createElement('p'); p.textContent = text; return p;
+        const p = document.createElement('p');
+        if (text === progress && (activeTool || reviewStage)) {
+          p.className = 'agent-progress-action'; p.dataset.status = 'running';
+          const label = document.createElement('span'); label.className = 'agent-tool-state'; label.textContent = 'Active';
+          p.append(label, document.createTextNode(text));
+        } else highlightTools(p, text);
+        return p;
       }));
     }
     view.preview.hidden = !running;
@@ -109,7 +131,7 @@
           const title = document.createElement("strong");
           const toolStatus = { running: "Working…", succeeded: "Completed", failed: "Failed", blocked: "Not allowed", cancelled: "Stopped", unknown: "Usage unavailable" };
           const count = Number.isInteger(item.count) && item.count > 0 ? ` · ${item.count} ${item.count === 1 ? "search" : "searches"}` : "";
-          title.textContent = `${item.name === "web_search" ? "Web search" : "Tool"} · ${toolStatus[item.status] || "Details"}${count}`;
+          title.textContent = `${toolNames[item.name] || "Tool"} · ${toolStatus[item.status] || "Details"}${count}`;
           node.replaceChildren(title);
           if (item.text) {
             const text = document.createElement("p");
@@ -132,7 +154,7 @@
         }
       } else {
         const text = compactReasoning(item.text);
-        if (node.textContent !== text) node.textContent = text;
+        if (node.dataset.text !== text) { node.dataset.text = text; highlightTools(node, text); }
         node.setAttribute("aria-label", item.summary_source === "excerpt" || item.format === "text" ? "Reasoning highlights" : "Reasoning summary");
       }
     }

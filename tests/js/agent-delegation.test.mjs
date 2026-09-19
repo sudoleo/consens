@@ -18,6 +18,14 @@ function receive(w, data) {
 }
 
 describe("Agent sidebar", () => {
+  it('updates the account allowance from the existing activity request', async () => {
+    const budget = { remaining: 24000, limit: 250000, reserved: 16000, observed_at: 2 };
+    const { window: w, dom } = boot(async () => ({ ok: true, json: async () => ({ agents: [], status: 'running', token_budget: budget }) }));
+    w.App.agentChat = { receiveBudget: vi.fn() };
+    w.App.agentDelegation.project({ chatId, turnId, running: true });
+    await vi.waitFor(() => expect(w.App.agentChat.receiveBudget).toHaveBeenCalledWith(budget, 'owner'));
+    dom.window.close();
+  });
   it("opens on first start, shares state with inline icons and respects manual close and duplicate events", async () => {
     const { window: w, document: d, dom } = boot();
     receive(w, agent()); w.App.agentDelegation.project({ chatId, turnId, running: true });
