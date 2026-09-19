@@ -34,6 +34,9 @@
 .agent-session-role { font-size: 11px; color: var(--ink-2); overflow-wrap: anywhere; }
 .agent-session-meta { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 3px 8px; font-size: 11px; color: var(--ink-3); }
 .agent-session-tokens { font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* Share the Consensus track and shimmer; no percentage is implied for a live call. */
+.agent-session-track { flex: none; margin-top: 3px; opacity: .65; }
+.agent-session-track i { width: 100%; background: var(--line); }
 .agent-session-tokens.is-loading {
   background-image: linear-gradient(105deg, var(--ink-3) 36%, var(--ink) 50%, var(--ink-3) 64%);
   background-size: 250% 100%; background-clip: text; -webkit-background-clip: text;
@@ -245,6 +248,7 @@ body.single-agent-active .consensus-model-inline { min-width: 0; max-width: 100%
 .agent-activity-note, .agent-usage { margin: 8px 0 4px; font-size: 11px; line-height: 1.6; color: var(--ink-3); }
 .agent-usage { font-variant-numeric: tabular-nums; }
 @media (prefers-reduced-motion: reduce), (forced-colors: active) {
+  .agent-session-track:not([hidden]) i::after { animation: none; background: none; }
   .agent-session-tokens.is-loading { animation: none; background: none; color: var(--ink-3); }
   .agent-activity.is-running .agent-activity-title { animation: none; background: none; color: var(--ink-2); }
   .agent-activity-chevron { transition: none; }

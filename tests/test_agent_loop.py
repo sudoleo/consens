@@ -238,7 +238,9 @@ def test_greetings_offer_optional_search_without_inventing_tool_activity(store, 
     if search_count is not None:
         raw["server_tool_use"] = {"web_search_requests": search_count}
     requests, _, _ = transport(monkeypatch, [[packet({"content": "Hey!", "reasoning": "A greeting. No tool needed."}, finish="stop", usage=raw)]])
-    loop = loop_for(store)
+    # This legacy-loop protocol test needs room for premium native-search
+    # windows. Rejection limits are covered separately; chat uses its token ledger.
+    loop = loop_for(store, policy=replace(AgentPolicy(), max_cost_nano_usd=50_000_000_000))
     loop.model = resolve_agent_model(selection_id)
     loop.messages[-1]["content"] = "was geht ab"
     events = list(loop.run())
@@ -269,7 +271,7 @@ def test_every_offered_model_can_use_the_consensus_search_route(store, monkeypat
     from app.services.agent_tools import search_family
     from app.services.llm.engines import build_provider_payload
     requests, _, _ = transport(monkeypatch, [[packet({"content": "Answer"}, finish="stop", usage=usage())]])
-    loop = loop_for(store)
+    loop = loop_for(store, policy=replace(AgentPolicy(), max_cost_nano_usd=50_000_000_000))
     loop.model = resolve_agent_model(selection_id)
     list(loop.run())
     assert tools_for_model(loop.model) == ("web_search",)

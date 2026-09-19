@@ -1174,7 +1174,8 @@ body:not(.dark-mode) .chat-input-container {
 }
 
 /* Activity travels only inside the received-progress fill, never ahead of it. */
-.run-model:is([data-state="streaming"], [data-state="reasoning"]) .run-model-track i::after {
+.run-model:is([data-state="streaming"], [data-state="reasoning"]) .run-model-track i::after,
+.agent-session-track:not([hidden]) i::after {
   content: "";
   position: absolute;
   inset: 0;
@@ -1184,8 +1185,8 @@ body:not(.dark-mode) .chat-input-container {
   pointer-events: none;
 }
 
-.run-model:nth-child(3n + 2) { --model-shimmer-delay: -1.1s; }
-.run-model:nth-child(3n) { --model-shimmer-delay: -2.2s; }
+.run-model:nth-child(3n + 2), .agent-session:nth-child(3n + 2) { --model-shimmer-delay: -1.1s; }
+.run-model:nth-child(3n), .agent-session:nth-child(3n) { --model-shimmer-delay: -2.2s; }
 
 .run-model[data-state="reasoning"] .run-model-track i::after {
   animation-duration: 4.6s;

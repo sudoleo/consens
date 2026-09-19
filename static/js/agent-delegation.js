@@ -396,8 +396,11 @@
         const state = node('span', 'agent-session-state');
         const usage = node('span', 'agent-session-tokens');
         meta.append(state, usage);
+        const track = node('span', 'run-model-track agent-session-track');
+        track.setAttribute('aria-hidden', 'true');
+        track.append(node('i'));
         const body = node("div", "agent-session-detail"); body.tabIndex = 0;
-        info.append(title, role, meta); summary.append(mark(agent), info); root.append(summary, body);
+        info.append(title, role, meta, track); summary.append(mark(agent), info); root.append(summary, body);
         root.addEventListener("toggle", () => {
           if (current !== view || view.uid !== uid() || !window.document?.body || !root.isConnected) return;
           if (root.open) {
@@ -407,7 +410,7 @@
           else view.expanded.delete(agent.id);
           prefs(view);
         });
-        row = { root, summary, title, role, state, usage, body };
+        row = { root, summary, title, role, state, usage, track, body };
         sidebar._rows.set(agent.id, row); sidebar.querySelector(".agent-session-list").append(root);
       }
       row.root.dataset.status = agent.status;
@@ -424,6 +427,7 @@
       row.usage.textContent = chars ? `${progress.chars.toLocaleString()} chars` : tokens(usage, loading);
       row.usage.title = chars ? 'Received answer and visible reasoning characters. Token usage has not yet been reported for this call.' : tokenDescription(usage);
       row.usage.classList.toggle('is-loading', loading);
+      row.track.hidden = !loading;
       row.summary.title = `${agent.model?.label || "Model"} · ${agent.title} · ${labels[agent.status] || "Waiting"}`;
       row.root.open = view.expanded.has(agent.id);
       if (row.root.open) { loadDetail(view, agent.id); renderDetail(row, view, agent); }

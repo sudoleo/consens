@@ -52,7 +52,12 @@ def test_agent_live_counter_uses_streamed_progress_and_stops_animation(browser, 
         page.locator('#questionInput').fill('Check sources')
         page.locator('#sendButton').click()
         label = page.locator('.agent-session-tokens')
+        track = page.locator('.agent-session-track')
         expect(label).to_have_text('Tokens pending')
+        expect(track).to_be_visible()
+        assert track.evaluate('el => getComputedStyle(el).height') == '2px'
+        assert track.evaluate('el => getComputedStyle(el.firstElementChild, "::after").animationName') == 'runModelShimmer'
+        assert track.bounding_box()['y'] >= label.bounding_box()['y'] + label.bounding_box()['height']
         expect(page.locator('.agent-session-state')).to_have_text('Working · 5s')
         assert label.evaluate('el => getComputedStyle(el).animationName') == 'source-label-shine'
         icon = page.locator('.agent-inline-model').first
@@ -69,18 +74,22 @@ def test_agent_live_counter_uses_streamed_progress_and_stops_animation(browser, 
             page.screenshot(path=str(target / f'agent-live-counter-{width}.png'))
         page.emulate_media(reduced_motion='reduce')
         assert label.evaluate('el => getComputedStyle(el).animationName') == 'none'
+        assert track.evaluate('el => getComputedStyle(el.firstElementChild, "::after").animationName') == 'none'
         assert icon.evaluate('el => getComputedStyle(el).animationName') == 'none'
         assert label.evaluate('el => getComputedStyle(el).color') != 'rgba(0, 0, 0, 0)'
         page.emulate_media(reduced_motion='no-preference', forced_colors='active')
         assert label.evaluate('el => getComputedStyle(el).animationName') == 'none'
+        assert track.evaluate('el => getComputedStyle(el.firstElementChild, "::after").animationName') == 'none'
         page.emulate_media(forced_colors='none')
         usage = {"input_tokens": 900, "output_tokens": 150}
         page.evaluate("e => window.__agentPush('delegation_progress',e)", {**event, "seq": 3, "chars": 2500, "usage": usage})
         expect(label).to_have_text(re.compile(r'1[.,]050 tokens'))
+        expect(track).to_be_visible()
         assert label.evaluate('el => getComputedStyle(el).animationName') == 'source-label-shine'
         agent.update(seq=2, status='completed', usage=usage, duration_ms=8750)
         page.evaluate("e => window.__agentPush('delegation',e)", {"version": 1, "chat_id": chat, "turn_id": turn, "agent": agent})
         expect(label).not_to_have_class(re.compile('is-loading'))
+        expect(track).to_be_hidden()
         page.evaluate('() => window.__agentFinish()')
         expect(label).to_have_text(re.compile(r'1[.,]050 tokens'))
         expect(page.locator('.agent-session-state')).to_have_text('Completed · 8s')

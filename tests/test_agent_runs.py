@@ -390,7 +390,10 @@ def test_catalog_reuses_allowlist_and_restricts_reasoning(api, monkeypatch):
     assert models["deepseek/deepseek-v4.1-flash"]["reasoning_efforts"] == ["default", "low", "high", "max"]
     assert "none" not in models[cfg.DEFAULT_GEMINI_MODEL]["reasoning_efforts"]
     assert models[cfg.GROK_NO_REASONING_MODEL]["reasoning_efforts"] == ["default"]
-    assert set(models) == set(cfg.CONSENSUS_PRESET_MODELS["fast"]["answers"].values()) | {"deepseek/deepseek-v4.1-flash"}
+    expected = {model_id for preset in ("fast", "thorough")
+                for model_id in cfg.CONSENSUS_PRESET_MODELS[preset]["answers"].values()}
+    assert set(models) == expected | {"deepseek/deepseek-v4.1-flash"}
+    assert len(response.json()["models"]) == len(models)
     assert all("web_search" in item["tools_by_effort"]["default"] for item in models.values())
     monkeypatch.delitem(cfg.MODEL_CONFIGS, cfg.DEFAULT_ANTHROPIC_MODEL)
     assert cfg.DEFAULT_ANTHROPIC_MODEL not in {item["id"] for item in client.get("/agent/models", headers=AUTH).json()["models"]}
@@ -416,16 +419,17 @@ def test_invalid_selections_do_not_start_or_lock_a_turn(api, selection):
     assert not calls
 
 
-def test_model_effort_snapshot_switch_and_recovery_identity(api, monkeypatch):
+@pytest.mark.parametrize("model_id", ["gpt-5.6-luna", "gpt-5.6-sol"])
+def test_model_effort_snapshot_switch_and_recovery_identity(api, monkeypatch, model_id):
     client, store, calls = api
     chat_id = store.create_chat(UID, execution_mode="agent")["id"]
     payload = {"chat_id": chat_id, "question": "Hi", "client_request_id": "first", "bookmark_id": "bm1",
-        "model_id": "gpt-5.6-luna", "reasoning_effort": "low"}
+        "model_id": model_id, "reasoning_effort": "low"}
     assert "event: final" in client.post("/agent", json=payload, headers=AUTH).text
-    assert calls[0]["model"].model == "openai/gpt-5.6-luna"
+    assert calls[0]["model"].model == f"openai/{model_id}"
     assert calls[0]["model"].request_config["reasoning"] == {"effort": "low", "exclude": False, "summary": "auto"}
     saved = client.post("/agent", json=payload, headers=AUTH).json()["turn"]
-    assert saved["agent_settings"]["model_id"] == "gpt-5.6-luna"
+    assert saved["agent_settings"]["model_id"] == model_id
     assert saved["agent_settings"]["reasoning_effort"] == "low"
     assert saved["agent_activity"][-1]["status"] == "succeeded"
     assert saved["agent_usage"]["input_tokens"] == 1000

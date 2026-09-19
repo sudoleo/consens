@@ -97,17 +97,21 @@ def _choices(model, metadata):
 
 
 def agent_models():
-    """Reuse Daily's active answer models plus the configured default.
+    """Reuse Daily and High Quality answer models plus the configured default.
 
     The checked-in public catalog is a versioned simulation baseline, not a
     live provider quote. No user-controlled prices or provider URLs are used.
     """
     default = agent_model()
     result = [(default, _CATALOG["models"].get(default.model, {}))]
-    daily = set(cfg.CONSENSUS_PRESET_MODELS["fast"]["answers"].values())
+    available = {
+        model_id
+        for preset in ("fast", "thorough")
+        for model_id in cfg.CONSENSUS_PRESET_MODELS[preset]["answers"].values()
+    }
     for entry in sorted(cfg.MODEL_CONFIGS.values(), key=lambda x: (x.provider, x.label)):
         metadata = _CATALOG["models"].get(entry.api_model)
-        if entry.internal_id not in daily or not metadata or entry.api_model == default.model:
+        if entry.internal_id not in available or not metadata or entry.api_model == default.model:
             continue
         pricing = metadata["pricing"]
         per_million = lambda key, fallback: str(Decimal(pricing.get(key, fallback)) * 1_000_000)

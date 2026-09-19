@@ -88,6 +88,9 @@ describe("Agent sidebar", () => {
     const {window:w,document:d,dom} = boot(async () => ({ok:true,json:async () => ({agents:[],status:'running'})}));
     receive(w, {...agent(), usage:null}); w.App.agentDelegation.project({chatId,turnId,running:true});
     const label = d.querySelector('.agent-session-tokens');
+    const track = d.querySelector('.agent-session-track');
+    expect(track.hidden).toBe(false);
+    expect(track.previousElementSibling.contains(label)).toBe(true);
     expect(label.textContent).toBe('Tokens pending'); expect(label.classList.contains('is-loading')).toBe(true);
     const context = {metadata:{chatId,agentTurnId:turnId},auth:{uid:'owner'}};
     const progress = {version:1,chat_id:chatId,turn_id:turnId,agent_id:agentId,session_seq:1,seq:1,chars:120,streaming:true,usage:null};
@@ -99,8 +102,11 @@ describe("Agent sidebar", () => {
     expect(label.textContent).toBe('780 chars');
     update({...progress,seq:3,chars:800,usage:{input_tokens:100,output_tokens:25}});
     expect(label.textContent).toBe('125 tokens'); expect(label.title).toContain('100 input + 25 output');
+    expect(d.querySelector('.agent-session-track')).toBe(track);
+    expect(track.hidden).toBe(false);
     update({...progress,seq:4,chars:900,usage:{input_tokens:100,output_tokens:35},streaming:false});
     expect(label.textContent).toBe('135 tokens'); expect(label.classList.contains('is-loading')).toBe(false);
+    expect(track.hidden).toBe(true);
     receive(w,{...agent(2,'completed'),usage:{input_tokens:100,output_tokens:35}});
     update({...progress,seq:5,session_seq:2,chars:1000});
     expect(label.textContent).toBe('135 tokens'); expect(label.classList.contains('is-loading')).toBe(false);
@@ -114,10 +120,24 @@ describe("Agent sidebar", () => {
     w.App.agentDelegation.project({chatId,turnId,running:false});
     expect(d.querySelector('.agent-session-tokens').textContent).toBe('Tokens unavailable');
     expect(d.querySelector('.agent-session-tokens.is-loading')).toBeNull();
+    expect(d.querySelector('.agent-session-track').hidden).toBe(true);
     w.App.agentDelegation.project({chatId,turnId:'e'.repeat(32),running:true});
     expect(d.querySelector('.agent-session-tokens')).toBeNull();
     w.App.agentDelegation.project({chatId,turnId,running:false});
     expect(d.querySelector('.agent-session-tokens').textContent).toBe('Tokens unavailable');
+    expect(d.querySelector('.agent-session-track').hidden).toBe(true);
+    dom.window.close();
+  });
+  it('shows loading independently for each model and hides it for terminal or paused sessions', () => {
+    const {window:w,document:d,dom} = boot(async () => ({ok:true,json:async () => ({agents:[],status:'running'})}));
+    const states = ['waiting', 'working', 'rework', 'completed', 'failed', 'stopped', 'question', 'review'];
+    states.forEach((status, i) => receive(w, agent(1, status, i.toString(16).repeat(32))));
+    w.App.agentDelegation.project({chatId,turnId,running:true});
+    const tracks = [...d.querySelectorAll('.agent-session-track')];
+    expect(tracks).toHaveLength(states.length);
+    expect(tracks.map(track => track.hidden)).toEqual([false, false, false, true, true, true, true, true]);
+    receive(w, agent(2, 'completed', '1'.repeat(32)));
+    expect(tracks.map(track => track.hidden)).toEqual([false, true, false, true, true, true, true, true]);
     dom.window.close();
   });
   it('uses SSE updates without polling, repairs quiet streams, and never revives a completed run', async () => {
