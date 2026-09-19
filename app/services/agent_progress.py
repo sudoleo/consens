@@ -1,10 +1,45 @@
-"""Bounded, extractive progress highlights; never a second model call.
+"""Numeric stream counters and bounded highlights; never a second model call.
 
 Provider summaries are preferred. Other visible reasoning supplies short,
 verbatim sentence excerpts, explicitly identified as excerpts, not invented
 semantic summaries. Full continuation/signature data stays in agent_client.
 """
 import re
+import time
+
+
+class StreamProgress:
+    """Numeric live telemetry; no transcript, token estimate or billing mutation."""
+    def __init__(self, chars=0):
+        self.chars = chars
+        self.reasoning_lengths = {}
+        self.last_sent = None
+        self.last_at = None
+
+    def update(self, event):
+        text = event.get("text")
+        if not isinstance(text, str):
+            return
+        if event.get("type") == "delta":
+            self.chars += len(text)
+        elif event.get("kind") == "reasoning" and event.get("format") in {"text", "summary"}:
+            key = (event.get("id"), event["format"])
+            previous = self.reasoning_lengths.get(key, 0)
+            length = previous + len(text) if event.get("append") else len(text)
+            self.chars += max(0, length - previous)
+            self.reasoning_lengths[key] = max(previous, length)
+
+    def snapshot(self, usage, *, streaming=True, force=False):
+        measured = usage and all(type(usage.get(key)) is int and usage[key] >= 0
+                                 for key in ("input_tokens", "output_tokens"))
+        counts = ({key: usage.get(key) for key in ("input_tokens", "output_tokens", "complete")}
+                  if measured else None)
+        snapshot = {"chars": self.chars, "usage": counts, "streaming": streaming}
+        now = time.monotonic()
+        if not force and (snapshot == self.last_sent or self.last_at is not None and now - self.last_at < .5):
+            return None
+        self.last_sent, self.last_at = snapshot, now
+        return snapshot
 
 
 class ReasoningProgress:

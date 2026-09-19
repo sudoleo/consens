@@ -1770,8 +1770,22 @@ und Judge-Aufrufe (kind). Der Stapel dedupliziert identische API-Modelle, die
 Seitenleiste behält jeden Aufruf.
 Die Leiste blendet sich mit kurzer Bewegung ein; auf Desktop weicht der Chat
 sanft aus, Reduced Motion deaktiviert beide Animationen. Modellname und Aufgabe
-stehen getrennt, Usage zeigt ausschließlich gemessene Input+Output-Tokens;
-fehlende Werte bleiben pending/unavailable, unvollständige Summen tragen ein +.
+stehen getrennt. Während eines Modellaufrufs schimmert die Usage-Zeile dezent:
+zunächst `Tokens pending`, dann tatsächlich empfangene Antwort-/sichtbare
+Reasoning-Zeichen (`chars`), bis der Provider Input+Output-Tokens meldet.
+`StreamProgress` in `agent_progress.py` liefert höchstens alle 500 ms numerische
+`delegation_progress`-SSE-Snapshots sowie Start/Ende. Diese flüchtigen Ereignisse
+halten nur den neuesten Zwischenstand pro Sitzung neben der bestehenden Queue,
+ohne Datenbank-/Journal-Schreibvorgänge oder zusätzliche Modellaufrufe. Ein
+langsamer Leser füllt dadurch nicht die Queue für dauerhafte Ereignisse.
+Abgeschlossene frühere Schritte werden genau einmal zur aktuellen
+Provider-Messung addiert; Fortschritt verändert weder Belege noch Quoten.
+`agent-chat.js` reicht die Snapshots an `App.agentDelegation.receiveProgress`
+weiter. Account, Turn, Agent, Sitzungssequenz und eigene Fortschrittssequenz
+verhindern veraltete Updates; Zeichenstände fallen innerhalb einer Sitzung nicht
+zurück. Abschluss/Abbruch und gespeicherte Ansichten beenden den Schimmer.
+Reduced Motion/Forced Colors lassen die Zahl lesbar und unbewegt. Fehlende
+Endwerte bleiben unavailable, unvollständige Tokensummen tragen ein +.
 Judge-Details werden aus dem bestehenden öffentlichen Sitzungs-Snapshot sofort
 gerendert (Zweck, Fortschritt, Status, Tokenaufschlüsselung), ohne Detail- oder
 Nachrichtenabfrage. Worker-/Vergleichsdetails laden weiter nur bei Bedarf,

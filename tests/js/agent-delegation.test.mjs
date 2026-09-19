@@ -18,6 +18,42 @@ function receive(w, data) {
 }
 
 describe("Agent sidebar", () => {
+  it('shows live received characters, switches to provider tokens and stops shimmer on completion', () => {
+    const {window:w,document:d,dom} = boot(async () => ({ok:true,json:async () => ({agents:[],status:'running'})}));
+    receive(w, {...agent(), usage:null}); w.App.agentDelegation.project({chatId,turnId,running:true});
+    const label = d.querySelector('.agent-session-tokens');
+    expect(label.textContent).toBe('Tokens pending'); expect(label.classList.contains('is-loading')).toBe(true);
+    const context = {metadata:{chatId,agentTurnId:turnId},auth:{uid:'owner'}};
+    const progress = {version:1,chat_id:chatId,turn_id:turnId,agent_id:agentId,session_seq:1,seq:1,chars:120,streaming:true,usage:null};
+    const update = event => w.App.agentDelegation.receiveProgress(context,event);
+    update(progress); expect(label.textContent).toBe('120 chars');
+    update({...progress,seq:2,chars:780}); expect(label.textContent).toBe('780 chars');
+    update(progress); update({...progress,seq:3,session_seq:0,chars:1});
+    update({...progress,seq:3,turn_id:'e'.repeat(32),chars:1});
+    expect(label.textContent).toBe('780 chars');
+    update({...progress,seq:3,chars:800,usage:{input_tokens:100,output_tokens:25}});
+    expect(label.textContent).toBe('125 tokens'); expect(label.title).toContain('100 input + 25 output');
+    update({...progress,seq:4,chars:900,usage:{input_tokens:100,output_tokens:35},streaming:false});
+    expect(label.textContent).toBe('135 tokens'); expect(label.classList.contains('is-loading')).toBe(false);
+    receive(w,{...agent(2,'completed'),usage:{input_tokens:100,output_tokens:35}});
+    update({...progress,seq:5,session_seq:2,chars:1000});
+    expect(label.textContent).toBe('135 tokens'); expect(label.classList.contains('is-loading')).toBe(false);
+    dom.window.close();
+  });
+  it('clears transient counters on stop and turn switches and never animates saved active snapshots', () => {
+    const {window:w,document:d,dom} = boot(async () => ({ok:true,json:async () => ({agents:[],status:'running'})}));
+    receive(w,{...agent(),usage:null}); w.App.agentDelegation.project({chatId,turnId,running:true});
+    const context = {metadata:{chatId,agentTurnId:turnId},auth:{uid:'owner'}};
+    w.App.agentDelegation.receiveProgress(context,{version:1,chat_id:chatId,turn_id:turnId,agent_id:agentId,session_seq:1,seq:1,chars:120,streaming:true});
+    w.App.agentDelegation.project({chatId,turnId,running:false});
+    expect(d.querySelector('.agent-session-tokens').textContent).toBe('Tokens unavailable');
+    expect(d.querySelector('.agent-session-tokens.is-loading')).toBeNull();
+    w.App.agentDelegation.project({chatId,turnId:'e'.repeat(32),running:true});
+    expect(d.querySelector('.agent-session-tokens')).toBeNull();
+    w.App.agentDelegation.project({chatId,turnId,running:false});
+    expect(d.querySelector('.agent-session-tokens').textContent).toBe('Tokens unavailable');
+    dom.window.close();
+  });
   it('uses SSE updates without polling, repairs quiet streams, and never revives a completed run', async () => {
     const {window:w,dom} = boot();
     let tick, now = 20000;

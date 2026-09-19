@@ -141,6 +141,13 @@ Agentenleiste: `agent-delegation.test.mjs` prüft gemessene Tokenzahlen (ohne
 Doppelzählung), sofortige Judge-Details ohne weitere Requests und Skeleton/
 Cache für Worker. `test_agent_delegation_frontend.py` prüft diese Abläufe mit
 gedrosseltem Detailabruf, sanfter Öffnung und Reduced Motion auf Desktop/Mobil.
+`test_agent_progress.py` prüft außerdem den gedrosselten Unicode-Zeichenzähler,
+gemeldete Token-Snapshots, unveränderte Abrechnung und fehlende zusätzliche
+Journaleinträge. `agent-delegation.test.mjs` prüft monotone, turngebundene
+Live-Zähler und den Wechsel zu gemessenen Tokens; `agent-chat.test.mjs` verwirft
+späte Fortschrittsereignisse nach Stop. Der Browserlauf sendet die Ereignisse
+durch einen offenen SSE-Stream und prüft Schimmer, Zeichenzähler, Tokenwechsel,
+Abschluss sowie Reduced Motion/Forced Colors bei 1440/390/320 px.
 Budget/Recovery: `test_agent_budget_config.py` prüft Adminrechte, strikte Limits,
 Revisionen, Cache und Reset ohne Nutzer-Scan. `test_agent_comparison.py` prüft
 Reset während laufender Calls und Migration ungenutzter Prüfreserven;

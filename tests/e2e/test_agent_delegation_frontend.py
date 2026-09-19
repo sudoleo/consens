@@ -10,6 +10,80 @@ from test_phase4_frontend import phase4_server, _real_firebase_page, _json
 from test_agent_chat_frontend import CATALOG, _choose_mode
 
 
+@pytest.mark.parametrize("width,dark", [(1440, False), (390, True), (320, False)])
+def test_agent_live_counter_uses_streamed_progress_and_stops_animation(browser, phase4_server, width, dark):
+    context, page = _real_firebase_page(browser, phase4_server)
+    chat, turn, aid = (c * 32 for c in "abc")
+    agent = {"id": aid, "seq": 1, "message_seq": 0, "status": "working", "kind": "comparison",
+        "title": "Independent answer", "model": {"model": "deepseek/deepseek-v4.1-flash", "label": "DeepSeek V4.1 Flash"}, "usage": None}
+    errors = []
+    page.on('pageerror', lambda error: errors.append(str(error)))
+    try:
+        page.set_viewport_size({"width": width, "height": 900})
+        page.route('**/user_status', lambda r: _json(r, {"tier": "pro", "is_pro": True, "agent_access": True}))
+        page.route('**/agent/models', lambda r: _json(r, CATALOG))
+        page.route('**/chats', lambda r: _json(r, {"chat": {"id": chat, "execution_mode": "agent"}}))
+        page.route(f'**/agent/chats/{chat}/turns/{turn}/agents', lambda r: _json(r, {"agents": [agent], "status": "running"}))
+        page.evaluate("async () => { await window.__switchE2EUser('account-a'); }")
+        _choose_mode(page, 'agent')
+        page.evaluate("dark => { document.documentElement.classList.toggle('dark-mode',dark); document.body.classList.toggle('dark-mode',dark); }", dark)
+        # Keep a real ReadableStream open so the app's SSE parser and run lifecycle
+        # handle the numeric events, rather than calling the renderer directly.
+        page.evaluate("""data => {
+          const fetch = window.fetch;
+          window.fetch = (url, options) => {
+            if (String(url) !== '/agent') return fetch(url, options);
+            const request = JSON.parse(options.body);
+            return Promise.resolve(new Response(new ReadableStream({start(controller) {
+              window.__agentPush = (type, event) => controller.enqueue(new TextEncoder().encode(`event: ${type}\\ndata: ${JSON.stringify(event)}\\n\\n`));
+              window.__agentFinish = () => {
+                window.__agentPush('final', {chat_id:data.chat,turn_id:data.turn,response:'The answer is complete.',
+                  turn:{id:data.turn,execution_mode:'agent',status:'completed',consensus:'The answer is complete.',
+                    agent_settings:{policy:{delegation:true}}},
+                  bookmark_meta:{id:request.bookmark_id,title:'Check sources',query:'Check sources',mode:'Agent',has_consensus:true}});
+                controller.close();
+              };
+              window.__agentPush('started',{chat_id:data.chat,turn_id:data.turn,delegation:true});
+              window.__agentPush('delegation',{version:1,chat_id:data.chat,turn_id:data.turn,agent:data.agent});
+            }}),{headers:{'Content-Type':'text/event-stream'}}));
+          };
+        }""", {"chat": chat, "turn": turn, "agent": agent})
+        page.locator('#questionInput').fill('Check sources')
+        page.locator('#sendButton').click()
+        label = page.locator('.agent-session-tokens')
+        expect(label).to_have_text('Tokens pending')
+        assert label.evaluate('el => getComputedStyle(el).animationName') == 'source-label-shine'
+        event = {"version": 1, "chat_id": chat, "turn_id": turn, "agent_id": aid, "session_seq": 1,
+            "seq": 1, "chars": 120, "usage": None, "streaming": True}
+        page.evaluate("e => window.__agentPush('delegation_progress',e)", event)
+        expect(label).to_have_text('120 chars')
+        page.evaluate("e => window.__agentPush('delegation_progress',e)", {**event, "seq": 2, "chars": 2450})
+        expect(label).to_have_text(re.compile(r'2[.,]450 chars'))
+        if os.environ.get('AGENT_SCREENSHOTS'):
+            target = Path(os.environ['AGENT_SCREENSHOTS']); target.mkdir(parents=True, exist_ok=True)
+            page.screenshot(path=str(target / f'agent-live-counter-{width}.png'))
+        page.emulate_media(reduced_motion='reduce')
+        assert label.evaluate('el => getComputedStyle(el).animationName') == 'none'
+        assert label.evaluate('el => getComputedStyle(el).color') != 'rgba(0, 0, 0, 0)'
+        page.emulate_media(reduced_motion='no-preference', forced_colors='active')
+        assert label.evaluate('el => getComputedStyle(el).animationName') == 'none'
+        page.emulate_media(forced_colors='none')
+        usage = {"input_tokens": 900, "output_tokens": 150}
+        page.evaluate("e => window.__agentPush('delegation_progress',e)", {**event, "seq": 3, "chars": 2500, "usage": usage})
+        expect(label).to_have_text(re.compile(r'1[.,]050 tokens'))
+        assert label.evaluate('el => getComputedStyle(el).animationName') == 'source-label-shine'
+        agent.update(seq=2, status='completed', usage=usage)
+        page.evaluate("e => window.__agentPush('delegation',e)", {"version": 1, "chat_id": chat, "turn_id": turn, "agent": agent})
+        expect(label).not_to_have_class(re.compile('is-loading'))
+        page.evaluate('() => window.__agentFinish()')
+        expect(label).to_have_text(re.compile(r'1[.,]050 tokens'))
+        assert label.evaluate('el => getComputedStyle(el).animationName') == 'none'
+        assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+        assert not errors
+    finally:
+        context.close()
+
+
 @pytest.mark.parametrize("width,dark", [(1440, False), (1440, True), (390, False), (390, True), (320, False)])
 def test_agent_sidebar_real_app_and_saved_view(browser, phase4_server, width, dark):
     context, page = _real_firebase_page(browser, phase4_server)

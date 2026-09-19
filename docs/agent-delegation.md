@@ -98,6 +98,20 @@ werden ausstehende Requests verworfen. Texte werden mit `textContent` ausgegeben
 Quellen nur als validierte HTTP(S)-Links. Escape, native Details/Buttons und
 Reduced Motion werden unterstützt. Stop beendet den ganzen Run.
 
+Zusätzlich transportiert `delegation_progress` flüchtige numerische Zwischenstände
+für Worker, Vergleichsmodelle und Judges. `version`, `chat_id`, `turn_id`,
+`agent_id`, `session_seq` und eine eigene monotone `seq` binden den Stand an die
+aktive Sitzung; `chars`, optionale gemessene `usage` und `streaming` beschreiben
+den laufenden Modellaufruf. Reguläre Updates werden auf 500 ms begrenzt, Start
+und Ende sofort gemeldet. Der Zähler summiert Unicode-Codepoints aus empfangenen
+Antworten und sichtbarem Reasoning über die Schritte derselben Sitzung. Die
+Tokenmessung enthält die abgeschlossenen Schritte plus den aktuellen
+Provider-Snapshot, ohne kumulative Zwischenstände mehrfach zu addieren.
+Diese Zahlen werden weder als Nachrichten/Reasoning noch in Belegen oder dem
+Journal gespeichert. Ein separater Puffer hält nur den neuesten Zwischenstand
+pro Sitzung und belegt keine Plätze in der Queue für dauerhafte Ereignisse.
+Reload und endgültige Usage verwenden weiterhin die persistierten Sitzungen.
+
 Owner-/Pro-/Admin-geschützte Endpoints mit `private, no-store`:
 
 - `GET /agent/chats/{chat}/turns/{turn}/agents`: die kompakten Agenten des Turns,

@@ -502,6 +502,10 @@ describe("single-model agent chat", () => {
     const pending = window.App.agentChat.send();
     await vi.waitFor(() => expect(handlers).toBeDefined());
     const run = window.App.runRegistry.visible();
+    window.App.agentDelegation = {receiveProgress:vi.fn(),project:vi.fn()};
+    const progress = {version:1,chars:120};
+    handlers.delegation_progress.receive(progress);
+    expect(window.App.agentDelegation.receiveProgress).toHaveBeenCalledWith(run,progress);
     const event = { version: 1, step_id: "completion:0", kind: "reasoning", id: "r1", format: "summary", text: "First thought", append: true };
     handlers.activity.receive(event);
     window.App.agentChat.project(run);
@@ -516,6 +520,8 @@ describe("single-model agent chat", () => {
     window.App.agentChat.project(run);
     expect(details.open).toBe(true);
     window.App.runRegistry.cancel(run.runId);
+    handlers.delegation_progress.receive({...progress,chars:900});
+    expect(window.App.agentDelegation.receiveProgress).toHaveBeenCalledTimes(1);
     handlers.activity.receive({ ...event, text: " forbidden late text" });
     window.App.agentChat.project(run);
     expect(details.textContent).not.toContain("forbidden");

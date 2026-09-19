@@ -15,7 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.services.agent_costs import aggregate_usage
 from app.services.agent_quota import AgentTokenBudgetExceeded
 from app.services.agent_loop import AgentLoop
-from app.services.agent_progress import ReasoningProgress
+from app.services.agent_progress import ReasoningProgress, StreamProgress
 from app.services.agent_policy import supports_delegation
 from app.services.agent_provider_limits import AgentRunInterrupted, agent_failure, provider_cooldowns
 from app.services.agent_tools import ReadOnlyTool, ToolRegistry, search_tools
@@ -77,6 +77,9 @@ class Worker:
     calls: int = 0
     reviewed: bool = False
     started: float = field(default_factory=time.monotonic)
+    stream_chars: int = 0
+    progress_seq: int = 0
+    session_seq: int = 0
 
 
 class DelegationLoop(AgentLoop):
@@ -89,6 +92,7 @@ class DelegationLoop(AgentLoop):
         self.condition = threading.Condition(threading.RLock())
         self.slots = threading.BoundedSemaphore(self.policy.max_parallel)
         self.outgoing = queue.Queue(maxsize=1024)
+        self.live_progress = {}
         self.mailbox = deque()
         self.tools_used = 0
         self.search_remaining = self.policy.max_searches
@@ -147,12 +151,31 @@ class DelegationLoop(AgentLoop):
             message.update({key: patch[key] for key in ("sources", "result_truncated", "finish_reason") if key in patch})
         event = self.store.publish_agent(self.uid, self.chat_id, self.turn_id, run_token=self.run_token,
             agent_id=worker.id, patch=patch, message=message)
+        worker.session_seq = event["agent"]["seq"]
         self.outgoing.put_nowait(event)
         if sender == worker.id and message and getattr(worker, "kind", "worker") == "worker":
             with self.condition:
                 self.mailbox.append({**message, "agent_id": worker.id, "message_id": event["id"], "seq": event["seq"]})
                 self.condition.notify_all()
         return event
+
+    def _stream_progress(self, worker, progress, usage, *, streaming=True, force=False):
+        # Cumulative provider snapshots replace the current step's measurement;
+        # only settled earlier steps are added. Telemetry never enters receipts.
+        measured = usage and all(type(usage.get(key)) is int and usage[key] >= 0
+                                 for key in ("input_tokens", "output_tokens"))
+        snapshot = progress.snapshot(aggregate_usage([*worker.usages, usage]) if measured else None,
+                                     streaming=streaming, force=force)
+        worker.stream_chars = progress.chars
+        if snapshot is None:
+            return
+        with self.condition:
+            worker.progress_seq += 1
+            # Keep only the latest visual snapshot per session. A slow reader
+            # must never fill the durable-event queue with disposable counters.
+            self.live_progress[worker.id] = {"type": "delegation_progress", "version": 1,
+                "chat_id": self.chat_id, "turn_id": self.turn_id, "agent_id": worker.id,
+                "session_seq": worker.session_seq, "seq": worker.progress_seq, **snapshot}
 
     def _state(self, worker, status, **patch):
         with self.condition:
@@ -310,6 +333,7 @@ class DelegationLoop(AgentLoop):
         value.step_id, value.tool_argument_limit = step, registry.argument_limit
         value.tool_call_limit = 4
         worker_progress = ReasoningProgress() if worker else None
+        stream_progress = StreamProgress(worker.stream_chars) if worker else None
         status = "failed"
         search_limited = False
         try:
@@ -341,6 +365,8 @@ class DelegationLoop(AgentLoop):
             if not claimed:
                 raise ValueError("This model step has already started")
             self.claimed = True
+            if worker:
+                self._stream_progress(worker, stream_progress, None, force=True)
             if not worker:
                 if step == "completion:0":
                     yield {"type": "started", "chat_id": self.chat_id, "turn_id": self.turn_id, "delegation": True}
@@ -363,6 +389,9 @@ class DelegationLoop(AgentLoop):
                             compact = worker_progress.update(event)
                             if compact:
                                 self._publish(worker, patch={"progress_text": compact["text"], "progress_kind": compact["summary_source"]})
+                        if worker:
+                            stream_progress.update(event)
+                            self._stream_progress(worker, stream_progress, value.usage)
                         if not worker:
                             yield from self._events()
                             if event["type"] == "activity":
@@ -389,6 +418,8 @@ class DelegationLoop(AgentLoop):
                 # candidates are checkpointed separately, with their exact hash.
                 self.completion.text = value.text
             if claimed:
+                if worker:
+                    self._stream_progress(worker, stream_progress, value.usage, streaming=False, force=True)
                 self.costs.reconcile(reservation, value.usage)
                 if worker:
                     worker.usages.append(value.usage)
@@ -481,11 +512,16 @@ class DelegationLoop(AgentLoop):
             self.cancellation.cancel()
 
     def _events(self):
-        while True:
-            try:
-                yield self.outgoing.get_nowait()
-            except queue.Empty:
-                return
+        with self.condition:
+            events = []
+            while True:
+                try:
+                    events.append(self.outgoing.get_nowait())
+                except queue.Empty:
+                    break
+            events.extend(self.live_progress.values())
+            self.live_progress.clear()
+        yield from events
 
     def _execute_stream(self, value, call):
         """Keep SSE live while a tool fans out or waits for both judges."""

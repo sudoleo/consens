@@ -80,6 +80,13 @@ Aktivitäten verwenden die bestehende Agent-Seitenleiste mit Status, Usage und
 aufklappbaren Details. Oberhalb der Antwort steht ein überlappender Modellstapel
 mit den Icons des zentralen Katalogs; wiederholte Aufrufe desselben Modells
 belegen einen Platz, bleiben aber einzeln in der Aktivität sichtbar.
+In der Agent-Seitenleiste schimmert die Zählerzeile während eines Modellaufrufs.
+Solange noch keine Tokenmessung vorliegt, zählt sie empfangene Antwort- und
+sichtbare Reasoning-Zeichen als `chars`. Sobald der Anbieter Tokenzahlen liefert,
+zeigt sie die gemessene Summe aus Input und Output. Es werden keine Tokens aus
+Zeichen geschätzt. Nach Abschluss/Abbruch endet die Animation; gespeicherte
+Ansichten bleiben statisch. Reduced Motion und Forced Colors deaktivieren den
+Schimmer.
 Unter der Antwort stehen ein kompakter Prüfstatus und Links zu Widersprüchen,
 Einzelantworten und Quellen. Rote Textmarkierungen öffnen unmittelbar die
 passende Widerspruchskarte im gemeinsamen Consensus-Antwortleser. Modelllinks

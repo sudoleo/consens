@@ -464,6 +464,10 @@
           App.agentDelegation?.receive(context, event);
           if (!timer) timer = setTimeout(() => { timer = null; registry.update(context.runId, () => {}); }, 100);
         } },
+        delegation_progress: { receive(event) {
+          if (!registry.isExecuting(context.runId) || !registry.isAuthCurrent(context)) return;
+          App.agentDelegation?.receiveProgress(context, event);
+        } },
         review: { receive(event) {
           if (!registry.isExecuting(context.runId) || !registry.isAuthCurrent(context)) return;
           context.metadata.agentReview = event.review;

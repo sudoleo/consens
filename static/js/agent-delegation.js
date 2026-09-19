@@ -51,7 +51,7 @@
     if (!views.has(key)) {
       let saved = {};
       try { saved = JSON.parse(sessionStorage.getItem(`agent-view:${key}`) || "{}"); } catch (_) {}
-      views.set(key, { key, uid: owner, chatId, turnId, agents: new Map(), details: new Map(),
+      views.set(key, { key, uid: owner, chatId, turnId, agents: new Map(), details: new Map(), progress: new Map(),
         controller: new AbortController(), expanded: new Set(saved.expanded || []), closed: !!saved.closed,
         scroll: saved.scroll || 0, loaded: false, loading: false, running: false, usage: null, lastSync: 0 });
       if (views.size > 24) {
@@ -64,7 +64,10 @@
   function merge(view, agent) {
     if (!agent || !/^[a-f0-9]{32}$/.test(agent.id) || !Number.isInteger(agent.seq)) return;
     const old = view.agents.get(agent.id);
-    if (!old || agent.seq > old.seq) view.agents.set(agent.id, agent);
+    if (!old || agent.seq > old.seq) {
+      view.agents.set(agent.id, agent);
+      if (!activeStates.has(agent.status)) view.progress.delete(agent.id);
+    }
   }
   function receive(context, event) {
     resetOwner();
@@ -76,6 +79,20 @@
     const view = get(event.chat_id, event.turn_id);
     view.lastSync = Date.now();
     merge(view, event.agent);
+    if (current === view) render();
+  }
+  function receiveProgress(context, event) {
+    resetOwner();
+    if (!App.runRegistry?.isAuthCurrent(context) || event?.version !== 1
+        || event.chat_id !== context.metadata.chatId || event.turn_id !== context.metadata.agentTurnId) return;
+    const view = views.get(keyFor(event.chat_id, event.turn_id));
+    const agent = view?.agents.get(event.agent_id);
+    const previous = view?.progress.get(event.agent_id);
+    if (!agent || !activeStates.has(agent.status) || event.session_seq !== agent.seq
+        || !Number.isSafeInteger(event.seq) || event.seq <= (previous?.seq || 0)
+        || !Number.isSafeInteger(event.chars) || event.chars < 0 || typeof event.streaming !== 'boolean') return;
+    view.progress.set(agent.id, {...event, chars: Math.max(previous?.chars || 0, event.chars)});
+    view.lastSync = Date.now();
     if (current === view) render();
   }
   async function request(view, suffix = "") {
@@ -350,8 +367,14 @@
       row.role.hidden = row.role.textContent === row.title.textContent;
       const elapsed = activeStates.has(agent.status) && agent.created_at ? Math.max(0, Date.now() - Date.parse(agent.created_at)) : agent.duration_ms || 0;
       row.state.textContent = `${labels[agent.status] || "Waiting"} · ${Math.floor(elapsed / 1000)}s`;
-      row.usage.textContent = tokens(agent.usage, activeStates.has(agent.status));
-      row.usage.title = tokenDescription(agent.usage);
+      const pending = view.running && ['waiting', 'working', 'rework'].includes(agent.status);
+      const progress = pending ? view.progress.get(agent.id) : null;
+      const loading = pending && progress?.streaming !== false;
+      const usage = measured(progress?.usage) ? progress.usage : agent.usage;
+      const chars = loading && progress?.chars > 0 && !measured(progress.usage);
+      row.usage.textContent = chars ? `${progress.chars.toLocaleString()} chars` : tokens(usage, loading);
+      row.usage.title = chars ? 'Received answer and visible reasoning characters. Token usage has not yet been reported for this call.' : tokenDescription(usage);
+      row.usage.classList.toggle('is-loading', loading);
       row.summary.title = `${agent.model?.label || "Model"} · ${agent.title} · ${labels[agent.status] || "Waiting"}`;
       row.root.open = view.expanded.has(agent.id);
       if (row.root.open) { loadDetail(view, agent.id); renderDetail(row, view, agent); }
@@ -369,6 +392,7 @@
     }
     if (spec.usage) view.usage = spec.usage;
     view.running = !!spec.running;
+    if (!view.running) view.progress.clear();
     render();
     if (changed) sidebar.scrollTop = view.scroll;
     if (wasRunning && !spec.running && view.loading) view.refreshAfterLoad = true;
@@ -387,5 +411,5 @@
   document.addEventListener("consensio:reader-opening", () => {
     if (current) { current.closed = true; prefs(current); hide(); render(); }
   });
-  App.agentDelegation = { receive, project, tokens };
+  App.agentDelegation = { receive, receiveProgress, project, tokens };
 })();

@@ -100,6 +100,11 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       Hover/Fokus, passende nummerierte Quellenliste und gespeicherte/archivierte
       Antworten auch nach fehlgeschlagenem Run prüfen. Code/`[1]` bleiben Text.
       Automatisiert: `agent-citations.test.mjs`, `test_agent_comparison_frontend.py`.
+      Agent-Seitenleiste während Vergleich/Judge öffnen: `Tokens pending`
+      schimmert, empfangene Zeichen zählen als `chars` hoch, Provider-Messungen
+      ersetzen sie durch Tokens. Nach Abschluss/Stop und im gespeicherten
+      Verlauf endet die Animation; Reduced Motion/Forced Colors bleiben lesbar.
+      Automatisiert: `test_agent_delegation_frontend.py`.
 - [ ] Sources/Differences: kompakte Quellenlisten, kontrastreiche Titel und
       Aussagen, Check-details-Chevrons und kleiner Resolve-Button in Light/Dark
       bei 320/390 px sowie als Desktop-Sidebar. Disclosures per Enter bedienen;
