@@ -240,6 +240,29 @@ def test_partial_direct_answer_recovery_is_read_only_and_preserves_failure(api, 
     assert len(calls) == 1 and agent_quota.snapshot(store.db, UID)["used"] == before
 
 
+def test_failure_before_answer_preserves_question_activity_and_bookmark(api, monkeypatch):
+    client, store, calls = api
+    def stream(self, **kwargs):
+        calls.append(kwargs)
+        yield {"type": "activity", "kind": "reasoning", "id": "thinking", "step_id": self.step_id,
+               "format": "summary", "text": "Checking the available information."}
+        raise httpx.ReadTimeout("private provider body")
+    monkeypatch.setattr(AgentCompletion, "stream", stream)
+    chat = store.create_chat(UID, execution_mode="agent")["id"]
+    payload = {"chat_id": chat, "question": "Preserve this failed question", "client_request_id": "empty", "bookmark_id": "empty_answer"}
+    response = client.post('/agent', json=payload, headers=AUTH)
+    failure = json.loads(response.text.split('event: error\ndata: ')[1].split('\n\n')[0])
+    saved = failure['saved_answer']
+    assert saved['response'] == '' and saved['turn']['status'] == 'failed'
+    assert saved['turn']['agent_failure']['code'] == 'provider_timeout'
+    assert any(event.get('text') == 'Checking the available information.' for event in saved['turn']['agent_activity'])
+    bookmark = store.db.collection('users').document(UID).collection('bookmarks').document('empty_answer').get()
+    assert bookmark.exists and bookmark.to_dict()['query'] == payload['question']
+    recovered = client.post('/agent', json={**payload, 'recover_only': True}, headers=AUTH)
+    assert recovered.status_code == 200 and recovered.json()['response'] == ''
+    assert len(calls) == 1
+
+
 def test_recovery_reaps_expired_producer_and_restores_checkpoint_without_paid_retry(api):
     client, store, calls = api
     loop = chat_loop(store, AgentCompletion)

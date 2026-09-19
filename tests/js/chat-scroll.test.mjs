@@ -5,11 +5,12 @@ function boot({ reduced = false, mode = "agent" } = {}) {
   let y = 0, height = 3200, now = 0, serial = 0, resize;
   const frames = new Map();
   let visible = { runId: "one", config: { executionMode: mode, agentMode: true } };
+  let basis = null;
   const result = loadScripts(["static/js/app-core.js", "static/js/chat-scroll.js"], {
     body: '<main class="container"><div id="threadPendingAsk" hidden></div><div id="threadAsk">New question</div><section class="input-section"><textarea id="questionInput"></textarea></section></main>',
     before(window) {
       window.matchMedia = () => ({ matches: reduced });
-      window.App = { runRegistry: { visible: () => visible, isAuthCurrent: () => true } };
+      window.App = { runRegistry: { visible: () => visible, isAuthCurrent: () => true, getSelectedConversationIdentity: () => basis } };
       Object.defineProperty(window, "scrollY", { get: () => y });
       Object.defineProperty(window.document.documentElement, "scrollHeight", { get: () => height });
       window.innerHeight = 800;
@@ -27,10 +28,29 @@ function boot({ reduced = false, mode = "agent" } = {}) {
     wheel(delta = -100) { result.window.dispatchEvent(new result.window.WheelEvent("wheel", { deltaY: delta })); },
     scroll(top) { y = top; result.window.dispatchEvent(new result.window.Event("scroll")); },
     show(next) { visible = next; result.window.App.chatScroll.project(next); },
+    saved(id = 'saved') { visible = null; basis = { bookmarkId: id, executionMode: mode }; result.window.App.chatScroll.project(null); },
   };
 }
 
 describe("conversation scroll", () => {
+  it.each(['agent', 'consensus'])('opens a saved %s conversation with one cancellable smooth jump', mode => {
+    const app = boot({ mode });
+    app.saved(); app.window.App.chatScroll.opened(); app.tick(8);
+    expect(app.window.scrollY).toBeGreaterThan(0);
+    expect(app.window.scrollY).toBeLessThan(2400);
+    app.grow(500); app.tick();
+    expect(app.window.scrollY).toBe(2900);
+    app.grow(500); app.tick();
+    expect(app.window.scrollY).toBe(2900);
+    app.scroll(0); app.window.App.chatScroll.opened(); app.wheel(); app.tick();
+    expect(app.window.scrollY).toBe(0);
+    app.window.App.chatScroll.opened(); app.saved('different'); app.tick();
+    expect(app.window.scrollY).toBe(0);
+    app.window.App.chatScroll.opened(); app.window.App.runRegistry.isAuthCurrent = () => false; app.tick();
+    expect(app.window.scrollY).toBe(0);
+    app.dom.window.close();
+  });
+
   it("smoothly reaches the end and follows growing agent output despite a hidden pending bubble", () => {
     const app = boot();
     app.window.App.revealSentMessage();

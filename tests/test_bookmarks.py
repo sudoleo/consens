@@ -857,6 +857,27 @@ def test_chat_bookmark_conversation_returns_complete_owner_bound_turns():
     assert [turn["question"] for turn in response.json()["turns"]] == ["First", "Third"]
 
 
+def test_agent_bookmark_returns_failed_turn_without_synthesis():
+    bookmark_id, chat_id = "failed_agent", "c" * 32
+    fake_db = FakeBookmarkDatabase({"uid-1": {bookmark_id: {
+        "query": "Question", "chat_id": chat_id, "execution_mode": "agent"}}})
+    turn = {"id": "1" * 32, "status": "failed", "execution_mode": "agent", "question": "Question",
+            "agent_failure": {"code": "provider_timeout", "error": "The provider stopped responding."},
+            "agent_review": {"status": "failed", "comparisons": [{"answers": [{"text": "Available evidence"}]}]}}
+    class Store:
+        def list_turn_details(self, uid, requested_chat_id, **kwargs):
+            assert uid == "uid-1" and requested_chat_id == chat_id and kwargs['status'] is None
+            return {"turns": [turn, {"status": "pending"}], "has_more": False}
+    app = FastAPI()
+    app.state.limiter = limiter
+    app.include_router(bookmarks_router.router)
+    with (patch.object(bookmarks_router, "verify_user_token", return_value="uid-1"),
+          patch.object(bookmarks_router, "db_firestore", fake_db),
+          patch.object(bookmarks_router, "_chat_store", return_value=Store())):
+        response = TestClient(app).get(f"/bookmarks/{bookmark_id}/conversation", headers={"Authorization": "Bearer token"})
+    assert response.status_code == 200 and response.json()['turns'] == [turn]
+
+
 def test_chat_bookmark_conversation_falls_back_without_losing_middle_turns():
     bookmark_id = "stable_chat_bookmark"
     chat_id = "c" * 32

@@ -164,7 +164,14 @@ prüft den noch laufenden Coverage-Future bei unbegrenztem Agent-Budget.
 `test_agent_continuation.py` prüft gespeicherte Teilantworten im Fehler-SSE und
 Recovery einer abgelaufenen Lease bei unveränderter Abrechnung. Der Browserlauf
 `test_agent_chat_frontend.py` prüft die direkte Übernahme des Bookmarks aus dem
-Fehlerereignis sowie dessen Öffnen nach echtem Reload bei 1280/390 px.
+Fehlerereignis sowie dessen Öffnen nach echtem Reload bei 1280/390 px, auch ohne
+Hauptantwort, mit reinen Vergleichsantworten und als später archivierten Fehler.
+`test_bookmark_lifecycle_frontend.py` prüft verzögerte Löschungen, sofortiges
+Ausblenden, deduplizierte Klicks, Metadaten-Refresh während DELETE, Wiederherstellung
+bei 4xx/5xx sowie einmaliges Scrollen beim Öffnen von Agent-/Consensus-Bookmarks.
+Die HTTP-Antworten sind vollständig gemockt; der Server bleibt writerfrei.
+`chat-scroll.test.mjs` prüft außerdem Leseabbruch, View-/Kontowechsel und den
+einmaligen Sprung nach einer gespeicherten Ansicht.
 `test_agent_comparison.py` prüft die Zulassung ohne optionale Suche bei zu großer
 Suchreserve und verhindert dabei doppelte Calls/Belege. `test_agent_runs.py`
 prüft Quote und konkrete Reservierungsfehler in terminalen SSE-Ereignissen.

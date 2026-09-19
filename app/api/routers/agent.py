@@ -90,7 +90,7 @@ def _save_bookmark(uid, payload, store, turn):
 def _final(uid, payload, store, turn):
     bookmark_meta = _save_bookmark(uid, payload, store, turn)
     return {"chat_id": payload.chat_id, "turn_id": turn["id"], "turn": turn,
-            "response": turn["consensus"], "execution_mode": "agent", "bookmark_meta": bookmark_meta,
+            "response": turn.get("consensus", ""), "execution_mode": "agent", "bookmark_meta": bookmark_meta,
             "token_budget": agent_quota.snapshot(store.db, uid)}
 
 
@@ -100,7 +100,7 @@ def _save_interrupted(uid, payload, store, turn_id):
     except Exception as exc:
         logging.warning("Interrupted Agent snapshot unavailable category=%s", safe_exception(exc))
         return None
-    if turn.get("consensus") and turn["status"] == "failed":
+    if turn["status"] == "failed":
         try:
             turn["bookmark_meta"] = _save_bookmark(uid, payload, store, turn)
         except Exception as exc:
@@ -164,7 +164,7 @@ def run_agent(request: Request, payload: AgentRequest):
                 existing = store.get_turn(uid, payload.chat_id, existing["id"])
             if existing["status"] == "completed":
                 return _final(uid, payload, store, existing)
-            if payload.recover_only and existing["status"] == "failed" and existing.get("consensus"):
+            if payload.recover_only and existing["status"] == "failed":
                 return _final(uid, payload, store, existing)
             failed = existing["status"] == "failed"
             return JSONResponse({"error": "This run ended without a saved answer. Send a new message to try again." if failed
@@ -214,7 +214,8 @@ def run_agent(request: Request, payload: AgentRequest):
     except Exception as exc:
         try:
             if turn:
-                store.release_unclaimed(uid, payload.chat_id, turn["id"])
+                store.release_unclaimed(uid, payload.chat_id, turn["id"], failure=agent_failure(exc))
+                _save_interrupted(uid, payload, store, turn["id"])
         finally:
             if lease:
                 lease.release()
@@ -280,13 +281,13 @@ def run_agent(request: Request, payload: AgentRequest):
             interrupted = _save_interrupted(uid, payload, store, turn["id"])
             if interrupted is not None:
                 pending = interrupted["status"] == "pending"
-                failure["recoverable"] = pending or bool(interrupted.get("consensus"))
-                failure["recovery_state"] = "running" if pending else "saved" if interrupted.get("consensus") else "unavailable"
+                failure["recoverable"] = True
+                failure["recovery_state"] = "running" if pending else "saved"
                 if interrupted.get("bookmark_meta"):
                     saved = dict(interrupted)
                     bookmark_meta = saved.pop("bookmark_meta")
                     failure["saved_answer"] = {"chat_id": payload.chat_id, "turn_id": saved["id"],
-                        "turn": saved, "response": saved["consensus"], "bookmark_meta": bookmark_meta}
+                        "turn": saved, "response": saved.get("consensus", ""), "bookmark_meta": bookmark_meta}
             if interrupted and interrupted.get("agent_review"):
                 yield sse_pack("review", {"review": interrupted["agent_review"]})
             yield sse_pack("activity", {"version": 1, "step_id": "run", "id": "run/usage", "kind": "usage", "usage": completion.usage})
@@ -311,9 +312,13 @@ def run_agent(request: Request, payload: AgentRequest):
         finally:
             lease.release()
 
+    def cleanup():
+        store.release_unclaimed(uid, payload.chat_id, turn["id"])
+        _save_interrupted(uid, payload, store, turn["id"])
+
     return AgentStreamingResponse(
         iter_sse_with_keepalive(stream_events(), cancellation=cancellation), cancellation=cancellation,
-        lease=lease, cleanup=lambda: store.release_unclaimed(uid, payload.chat_id, turn["id"]),
+        lease=lease, cleanup=cleanup,
         media_type="text/event-stream", headers={**SSE_HEADERS, "Cache-Control": "private, no-store"},
     )
 

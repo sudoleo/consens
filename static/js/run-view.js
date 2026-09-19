@@ -417,7 +417,7 @@
 
   function ensureRunRow(context) {
     if (!context?.bookmark?.id || !context.auth?.uid) return;
-    if (context.bookmark.deleted) return;
+    if (context.bookmark.deleted || context.bookmark.deleting) return;
     if (context.bookmark.uiReady) return;
     const container = document.getElementById("bookmarksContainer");
     if (!container) return;
@@ -429,11 +429,12 @@
       row.dataset.id = context.bookmark.id;
       row.setAttribute("role", "button");
       row.setAttribute("tabindex", "0");
-      row.addEventListener("click", () => registry.show(context.runId));
+      const open = () => { registry.show(context.runId); window.App.chatScroll?.opened?.(); };
+      row.addEventListener("click", open);
       row.addEventListener("keydown", event => {
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
-          registry.show(context.runId);
+          open();
         }
       });
       const savedRow = document.querySelector(

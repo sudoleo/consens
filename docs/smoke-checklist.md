@@ -834,7 +834,9 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
 - [ ] Agent-Budget: Reservierung und Freigabe ohne gemessenen Verbrauch verändern
   den Prozentwert nicht; der Kontingent-Dialog zeigt Reserven separat. Admin →
   Limits speichert das Tageslimit und kann alle Agent-Budgets zurücksetzen.
-- [ ] Bekannter Fehler ohne gespeicherte Antwort zeigt keinen Recovery-Link.
+- [ ] Auch ein fehlgeschlagener Agent-Run ohne Hauptantwort bleibt als Bookmark
+  erhalten: Frage, Fehler, Aktivität und vorhandene Vergleichsantworten sind
+  nach Reload sowie später im älteren Verlauf sichtbar.
   Nach Transportabbruch erzeugt Recovery auch bei Mehrfachklicks keinen weiteren
   Failed-Bookmark. „Question“ steht weder über aktuellen noch früheren Fragen.
   Bereits gespeicherte Teilantworten erhalten sofort ihren dauerhaften Bookmark;
@@ -854,6 +856,12 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
 
 ## Chat-Scrollen (beide Modi)
 
+- [ ] Ein gespeichertes oder lokal vorhandenes Bookmark öffnen: einmaliger sanfter
+  Sprung ans Ende des geladenen Gesprächs. Hochscrollen oder ein Bookmark-/Kontowechsel
+  unterbricht ihn; Reduced Motion springt sofort. Ein Hintergrundlauf scrollt nicht mit.
+- [ ] Bookmark löschen: sofort weich ausgeblendet, ohne auf DELETE zu warten.
+  Eine verzögerte Liste darf es nicht zurückbringen; bei einem Löschfehler kommt
+  der Eintrag mit verständlicher Meldung zurück und kann erneut gelöscht werden.
 - [ ] Im Agent- und Consensus-Chat eine Folgefrage nach einer langen Antwort senden:
   sanfter Sprung ans Ende; die wachsende Antwort folgt beim Mitlesen unten.
 - [ ] Währenddessen hochscrollen, Text markieren oder einen Dialog öffnen:

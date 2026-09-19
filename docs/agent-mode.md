@@ -176,9 +176,10 @@ Die Wiederherstellungsaktion prüft denselben Lauf mit derselben Request-Identit
 „Check saved answer“ bei unbekanntem Zustand und „Check run status“ bei einem
 noch laufenden Producer. Eine abgelaufene Lease wird bei dieser Abfrage beendet.
 Mehrfachklicks werden zusammengeführt; es entsteht kein weiterer Bookmark.
-Bei einem bekannten Fehler ohne gespeicherte Antwort wird Recovery ausgeblendet.
+Fehlgeschlagene Turns bleiben auch ohne Antworttext als Bookmark erhalten;
+Frage, Fehlergrund, Aktivität und vorhandene Vergleichsantworten bleiben lesbar.
 Nach einem Transportabbruch bleibt eine reine Wiederherstellungsabfrage möglich.
-Enthält das Fehlerereignis bereits eine gespeicherte Teilantwort samt Bookmark,
+Enthält das Fehlerereignis bereits einen gespeicherten Turn samt Bookmark,
 übernimmt die Oberfläche beides sofort und zeigt den Fehler weiterhin an.
 
 Toolnamen in Reasoning-Auszügen bleiben normaler Text. Nur bestätigte laufende
@@ -269,7 +270,8 @@ Direktantworten behalten auch bereits gestreamten Teiltext. `agent_failure` spei
 einen sicheren Fehlercode und verständlichen Grund, der nach Reload sichtbar bleibt;
 rohe Provider-Fehlertexte werden nicht übernommen.
 Recover saved answer lädt ausschließlich den existierenden Snapshot. Auch eine
-fehlgeschlagene Antwort kann so mit ihrem tatsächlichen Prüfstatus gelesen werden.
+fehlgeschlagene Antwort oder ein Turn ohne Hauptantwort kann so mit seinem
+tatsächlichen Prüfstatus gelesen werden, auch später im archivierten Verlauf.
 Ein neuer Versuch ist eine neue Nachricht mit neuem Budget, kein versteckter Retry.
 
 ## Validierung

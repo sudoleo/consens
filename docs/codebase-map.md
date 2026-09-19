@@ -1115,8 +1115,15 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   die Frage, die oben noch als Kopf steht.
   `App.chatScroll` (`chat-scroll.js`, nach `app-core.js` in `bundles.json`) steuert
   das Scrollen im Agent- und Consensus-Chat. `App.revealSentMessage()` aktiviert
-  es ausschließlich beim tatsächlichen Absenden; Recovery, gespeicherte Ansichten,
-  Direktvergleich und Hintergrundläufe erzwingen keinen Sprung. Nach zwei Layout-
+  es beim tatsächlichen Absenden. `openBookmark()` ruft nach der Projektion
+  `App.chatScroll.opened()` für einen einmaligen sanften Sprung ans Gesprächsende
+  auf, auch bei noch lokal vorhandenen Runs; mobil schließt dabei die Sidebar.
+  Gespeicherte Ansichten binden die
+  Animation an Bookmark und Auth-Generation; neue Auswahl und Leseinteraktionen
+  brechen sie ab. `getSelectedConversationIdentity()` liest dafür nur ID/Modus,
+  ohne den gespeicherten Antwort-/Reviewtext pro Animationsframe zu kopieren.
+  Recovery, Direktvergleich und Hintergrundläufe erzwingen keinen
+  Sprung. Nach zwei Layout-
   Frames scrollt es sanft zum Dokumentende. Im Consensus-Chat wird das Ziel beim
   Absenden eingefroren: Streaming verschiebt weder das laufende Sprungziel noch
   die anschließende Leseposition. „Latest message“ springt dort ebenfalls nur
@@ -1544,8 +1551,16 @@ Der Configuration-Tab liegt im inkludierten Partial `partials/admin_prompt_confi
   und Consensus-Saves aktualisieren nur diese Zeile; endgültig bereit wird sie
   erst nach terminalem Erfolg, bestätigtem Consensus-Write und null offenen
   Writes.
-  Scheitert ein neuer Lauf vor dem ersten Save, verschwindet nur der lokale
-  Platzhalter; bei Follow-ups wird stattdessen das vorige Bookmark restauriert.
+  Agent-Runs speichern auch terminale Fehler ohne Hauptantwort als Bookmark:
+  Frage, Fehler, Aktivität und verfügbare Vergleiche bleiben nach Reload erhalten.
+  Beim alten Consensus-Flow ohne ersten Save verschwindet weiterhin nur der lokale
+  Platzhalter; bei dessen Follow-ups wird das vorige Bookmark restauriert.
+  Löschen setzt sofort die Mutationssperre und blendet die Zeile über 180 ms aus
+  (Reduced Motion sofort), während der DELETE in der bestehenden Write-Queue
+  läuft. Listen-Refresh und Run-Updates dürfen sie währenddessen nicht neu anlegen.
+  Fehler stellen Zeile und Metadaten wieder her; bei unklarem Ausgang bleibt
+  die Schreibsperre bis zum erneuten Löschen oder Reload bestehen. Doppelklicks
+  teilen dieselbe Löschung, alte Auth-Generationen verändern keine neue Ansicht.
   Beim Restore stammen die
   sichtbaren Namen der Einzelantworten und die Citation-Metadaten aus den
   gespeicherten `model_labels`; die aktuellen Modell-Selects und `localStorage`
@@ -1554,8 +1569,9 @@ Der Configuration-Tab liegt im inkludierten Partial `partials/admin_prompt_confi
   Modellnamen. `window.App.bookmarkSession` ist nur der Kompatibilitäts-Spiegel
   der sichtbaren Context-/Bookmark-Ansicht; die stabile ID selbst gehört dem
   jeweiligen `RunContext`. Chat-gebundene Bookmarks laden
-  beim Öffnen alle completed Transcript-Seiten, rendern alle Vorgänger per
-  `renderStoredTurns()` und stellen die letzte completed Chat-/Turn-Basis wieder
+  beim Öffnen alle completed Transcript-Seiten sowie bei Agent-Chats alle failed
+  Turns einschließlich solcher ohne Synthese, rendern alle Vorgänger per
+  `renderStoredTurns()` und stellen die letzte gespeicherte Chat-/Turn-Basis wieder
   her. Transiente 429/5xx werden einmal wiederholt; fehlende oder zyklische
   Cursor gelten nicht als vollständiger Verlauf. Scheitert nur die Anzeige des
   Transcripts, bleibt die gespeicherte Chat-/Turn-Bindung autoritative
@@ -1751,7 +1767,11 @@ entstandenen Kosten; Account-Tombstones sperren verspätete Writes.
 agent_review wird vor Vergleich/Judge und nach Änderungen zusammen mit dem
 exakten Antworttext auf dem Turn gespeichert. Terminale Abbrüche wandeln einen
 laufenden Prüfstatus in cancelled/failed/missing um. Agent-Bookmarks dürfen
-zusätzlich fehlgeschlagene Turns mit gespeichertem Antwort-/Vergleichstext darstellen;
+zusätzlich alle fehlgeschlagenen Turns darstellen, auch ohne Hauptantwort.
+`_save_interrupted` speichert deren Bookmark inklusive Chat-Bindung auch nach
+einem Fehler vor dem ersten Modellaufruf oder vor Eintritt in den SSE-Generator.
+Frage, Aktivität, Fehler und vorhandene Vergleichsantworten bleiben über den
+Turn abrufbar; API- und UI-Verlaufsfilter verlangen für failed Agent-Turns keine Synthese.
 Consensus-Bookmarks bleiben auf completed beschränkt. Recovery gibt nur den
 vorhandenen Snapshot zurück, ohne erneut zu vergleichen oder zu belasten.
 Bei pending prüft `recover_only` zuerst auf eine abgelaufene Producer-Lease und

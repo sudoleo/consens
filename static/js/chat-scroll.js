@@ -8,6 +8,7 @@
   let lastY = window.scrollY, started = null, from = 0;
   let resumeUntil = 0, touchY = null;
   let destination = null;
+  let oneShot = false;
 
   function followsOutput() { return context?.config?.executionMode === "agent"; }
 
@@ -16,7 +17,10 @@
     return Math.max(0, root.scrollHeight - window.innerHeight);
   }
   function valid() {
-    return context && App.runRegistry?.visible()?.runId === context.runId
+    const selected = context?.bookmarkId
+      ? !App.runRegistry?.visible() && App.runRegistry?.getSelectedConversationIdentity?.()?.bookmarkId === context.bookmarkId
+      : context && App.runRegistry?.visible()?.runId === context.runId;
+    return selected
       && App.runRegistry.isAuthCurrent(context) && !document.body.classList.contains("is-hero")
       && document.getElementById("watchDashboard")?.hidden !== false;
   }
@@ -51,12 +55,12 @@
     const y = window.scrollY;
     if (target - y <= 1) {
       if (target > y) write(target);
-      if (destination !== null) following = false;
+      if (oneShot) following = false;
       started = null; syncButton(); return;
     }
     if (motion.matches) {
       write(target);
-      if (destination !== null) following = false;
+      if (oneShot) following = false;
       started = null; syncButton(); return;
     }
     if (started === null) { started = now; from = y; }
@@ -67,7 +71,7 @@
     write(Math.max(y, Math.min(target, Math.round(from + (target - from) * eased))));
     if (progress < 1) frame = window.requestAnimationFrame(step);
     else {
-      if (destination !== null) following = false;
+      if (oneShot) following = false;
       started = null; syncButton();
     }
   }
@@ -99,8 +103,17 @@
     }
   }
   function project(next) {
+    if (!next && !App.runRegistry?.visible()) {
+      const basis = App.runRegistry?.getSelectedConversationIdentity?.();
+      if (basis?.bookmarkId) next = {
+        bookmarkId: basis.bookmarkId,
+        auth: { user: window.auth?.currentUser, uid: window.auth?.currentUser?.uid, generation: App.authState?.generation },
+        config: { executionMode: basis.executionMode, agentMode: !document.body.classList.contains('direct-comparison-active') }
+      };
+    }
     const eligible = next && (next.config?.executionMode === "agent" || next.config?.agentMode !== false);
-    if (context?.runId !== next?.runId || !eligible) {
+    if (context?.runId !== next?.runId || context?.bookmarkId !== next?.bookmarkId
+        || context?.auth?.generation !== next?.auth?.generation || !eligible) {
       pause();
       context = eligible ? next : null;
       lastY = window.scrollY;
@@ -114,12 +127,25 @@
     // Snapshot the current destination before fast consensus deltas arrive.
     // Even during the animation, new tokens must not move this target.
     destination = followsOutput() ? null : maxTop();
+    oneShot = !followsOutput() || !!context.bookmarkId;
     following = true;
     syncButton();
     // Let the question clamp, history append and collapsed composer settle first.
     frame = window.requestAnimationFrame(() => {
       frame = window.requestAnimationFrame(step);
     });
+  }
+  function opened() {
+    if (window.innerWidth < 1100 && document.querySelector('.sidebar.active')) {
+      document.getElementById('sidebarToggleInner')?.click();
+    }
+    project(App.runRegistry?.visible());
+    if (!valid()) return;
+    sent();
+    // Opening a conversation is one explicit jump, following layout changes
+    // during the animation without enabling ongoing output-following.
+    destination = null;
+    oneShot = true;
   }
   function interrupt(event) {
     if (event.target?.closest?.(".chat-scroll-latest")) return;
@@ -155,5 +181,5 @@
   document.addEventListener("selectionchange", () => { if (!window.getSelection()?.isCollapsed) pause(); });
   document.addEventListener("visibilitychange", () => { if (document.hidden) pause(); });
   window.addEventListener("consensio:run-registry-change", () => { if (!valid()) project(null); });
-  App.chatScroll = { project, changed, sent };
+  App.chatScroll = { project, changed, sent, opened };
 })();

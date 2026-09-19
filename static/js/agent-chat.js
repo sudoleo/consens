@@ -242,7 +242,9 @@
     }
     if (panel) panel.hidden = !agent || (!context && !basis);
     if (agent && !context && basis) {
-      renderAnswer(basis.consensus || "", basis.currentTurn?.agent_failure?.error || "", App.agentActivity?.label(basis.currentTurn?.agent_settings) || "Agent · Beta");
+      renderAnswer(basis.consensus || "", basis.currentTurn?.agent_failure?.error
+        || (basis.currentTurn?.status === 'failed' ? 'This response did not finish successfully.' : ''),
+        App.agentActivity?.label(basis.currentTurn?.agent_settings) || "Agent · Beta");
       App.agentActivity?.renderTurn(activityHost(`${basis.chatId}:${basis.turnId}`), basis.currentTurn);
       App.agentReview?.render(document.getElementById("agentAnswerBody"), basis.currentTurn?.agent_review,
         { sources: basis.currentTurn?.sources, events: basis.currentTurn?.agent_activity, key: basis.turnId, question: basis.question });

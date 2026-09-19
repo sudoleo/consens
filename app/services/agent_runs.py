@@ -308,7 +308,7 @@ class AgentRunStore(AgentSessionStore, ChatStore):
 
         return self._agent_transaction(uid, operation)
 
-    def release_unclaimed(self, uid, chat_id, turn_id):
+    def release_unclaimed(self, uid, chat_id, turn_id, *, failure=None):
         """Failures before the provider claim consume neither tokens nor quota."""
         chat_ref, turn_ref = self._chat_ref(uid, chat_id), self._turn_ref(uid, chat_id, turn_id)
         receipt_ref = self.receipt_ref(uid, chat_id, turn_id)
@@ -320,6 +320,8 @@ class AgentRunStore(AgentSessionStore, ChatStore):
             data = chat.to_dict() or {}
             if data.get("status") != "active" or data.get("agent_turn_id") != turn_id:
                 return
-            tx.update(turn_ref, {"status": "failed", "error_code": "agent_failed", "updated_at": firestore.SERVER_TIMESTAMP})
+            tx.update(turn_ref, {"status": "failed", "error_code": "agent_failed",
+                "agent_failure": failure or {"code": "agent_failed", "error": "This response ended before an answer was available."},
+                "updated_at": firestore.SERVER_TIMESTAMP})
             tx.update(chat_ref, {"agent_lock_until": datetime.now(timezone.utc)})
         self._agent_transaction(uid, operation)

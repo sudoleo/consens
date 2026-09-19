@@ -517,7 +517,7 @@ def load_bookmark_conversation(
             "status": "success",
             "chat_id": chat_id,
             "turns": [t for t in page["turns"] if t.get("status") == "completed"
-                      or (agent_history and t.get("status") == "failed" and t.get("consensus"))],
+                      or (agent_history and t.get("status") == "failed")],
             "next_cursor": page.get("next_cursor"),
             "has_more": page.get("has_more") is True,
         }

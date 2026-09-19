@@ -1143,6 +1143,7 @@ body:has(.sidebar.active) .brand-float {
 }
 .bookmarks-load-more:hover { color: var(--sidebar-text); border-color: var(--accent); }
 .bookmark.is-loading { opacity: .58; pointer-events: none; }
+.bookmark.is-deleting { pointer-events: none; overflow: hidden; }
 
 /* Ein Run reserviert seinen Sidebar-Platz sofort: gleiche schlichte Zeile wie
    ein fertiges Bookmark, nur gedaempft und mit kleinem Spinner rechts. */

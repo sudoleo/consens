@@ -131,4 +131,5 @@ def test_response_never_entered_releases_pending_turn_without_a_paid_claim(api, 
     assert not calls
     assert not (store.db.collection("users").document(UID).get().to_dict() or {}).get("agent_usage")
     assert store.list_turns(UID, chat_id)["turns"][0]["status"] == "failed"
+    assert store.db.collection("users").document(UID).collection("bookmarks").document("bm1").get().exists
     capacity.acquire().release()

@@ -681,6 +681,6 @@ class DelegationLoop(AgentLoop):
                 self.store.finish_run(self.uid, self.chat_id, self.turn_id, completion=self.completion,
                                       status=status, run_token=self.run_token)
             else:
-                self.store.release_unclaimed(self.uid, self.chat_id, self.turn_id)
+                self.store.release_unclaimed(self.uid, self.chat_id, self.turn_id, failure=getattr(self.completion, "failure", None))
         yield from self._events()
         yield self.activity({"step_id": "run", "id": "usage", "kind": "usage", "usage": self.completion.usage})

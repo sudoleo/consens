@@ -409,6 +409,12 @@
       ? { ...selectedConversationBasis, historyTurns: [] } : selectedConversationBasis);
   }
 
+  function getSelectedConversationIdentity() {
+    if (!selectedConversationBasis) return null;
+    const { bookmarkId, executionMode } = selectedConversationBasis;
+    return { bookmarkId, executionMode };
+  }
+
   function pruneSavedAgentRuns() {
     const bookmarks = new Set();
     let kept = 0;
@@ -631,6 +637,7 @@
     clearVisible,
     selectConversationBasis,
     getSelectedConversationBasis,
+    getSelectedConversationIdentity,
     setCompletedBasis,
     cancel,
     beginAction,

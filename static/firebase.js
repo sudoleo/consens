@@ -1468,6 +1468,7 @@ function upsertBookmarkMeta(bookmark, {
 let lastBookmarkSaveNotice = { key: "", shownAt: 0 };
 const bookmarkWriteChains = new Map();
 const deletedBookmarkKeys = new Set();
+const deletingBookmarks = new Map();
 
 function bookmarkMutationKey(uid, bookmarkId) {
   return `${String(uid || "")}:${String(bookmarkId || "")}`;
@@ -1934,8 +1935,10 @@ function applyBookmarkModelPresentation(bookmark) {
 
 // Diese Funktion füllt die UI mit den Daten eines Bookmarks
 function normalizeConversationTurn(turn) {
-  if (!turn || !(turn.status === "completed" || (turn.execution_mode === "agent" && turn.status === "failed")) || !turn.question || !turn.consensus) return null;
-  return { ...turn, turn_id: turn.id || turn.turn_id || "" };
+  if (!turn || !turn.question) return null;
+  if (!(turn.execution_mode === "agent" && turn.status === "failed")
+      && !(turn.status === "completed" && turn.consensus)) return null;
+  return { ...turn, consensus: turn.consensus || "", turn_id: turn.id || turn.turn_id || "" };
 }
 
 function bookmarkFallbackTurn(bookmark) {
@@ -2413,7 +2416,7 @@ function restoreRegistryRunRows() {
   const currentUid = auth.currentUser?.uid || null;
   (window.App.runRegistry?.list?.() || []).forEach(context => {
     if (!currentUid || context.auth?.uid !== currentUid) return;
-    if (context.bookmark?.deleted) return;
+    if (context.bookmark?.deleted || context.bookmark?.deleting) return;
     if (context.bookmark?.uiReady && context.bookmark?.latestMeta) {
       replacePendingBookmarkWithReady(context.bookmark.latestMeta, context.runId);
     } else {
@@ -2519,17 +2522,20 @@ async function loadBookmarkDetail(bookmarkId) {
 }
 
 window.openBookmark = async function (bookmarkId) {
+  if (!bookmarkWriteAllowed(auth.currentUser?.uid, bookmarkId)) return;
+  const requestEpoch = ++bookmarkViewEpoch;
   const liveContext = window.App.runRegistry?.findByBookmarkId?.(bookmarkId);
   if (liveContext) {
     window.App.runRegistry.show(liveContext.runId);
+    window.App.chatScroll?.opened?.();
     trackAppEvent("app_bookmark_opened", { source: "run_registry" });
     return;
   }
-  const requestEpoch = ++bookmarkViewEpoch;
   const requestUid = auth.currentUser?.uid || null;
   const requestGeneration = authState.generation;
   const viewIsCurrent = () => requestEpoch === bookmarkViewEpoch
-    && isCurrentAuthenticatedUser(requestUid, requestGeneration);
+    && isCurrentAuthenticatedUser(requestUid, requestGeneration)
+    && bookmarkWriteAllowed(requestUid, bookmarkId);
   const row = document.querySelector(`.bookmark:not(.run-entry)[data-id="${bookmarkId}"]`);
   row?.classList.add("is-loading");
   try {
@@ -2548,6 +2554,7 @@ window.openBookmark = async function (bookmarkId) {
     if (!viewIsCurrent()) return;
     openedBookmarkId = bookmarkId;
     loadSingleBookmarkUI(bookmark, conversationTurns, { conversationLoadFailed });
+    window.App.chatScroll?.opened?.();
     trackAppEvent("app_bookmark_opened");
   } catch (error) {
     if (!viewIsCurrent()) return;
@@ -2571,20 +2578,57 @@ async function deleteBookmark(bookmarkId) {
   const requestUid = requestUser.uid;
   const requestGeneration = authState.generation;
   const mutationKey = bookmarkMutationKey(requestUid, bookmarkId);
+  if (deletingBookmarks.has(mutationKey)) return deletingBookmarks.get(mutationKey);
   // Fence immediately. Earlier model/consensus/share writes drain first in
   // the same queue; anything started after this click is rejected, so no late
   // callback can recreate the document after DELETE.
   deletedBookmarkKeys.add(mutationKey);
   window.App.runRegistry?.blockBookmarkMutation?.(bookmarkId);
   window.App.runRegistry?.cancelActionsForBookmark?.(bookmarkId, "bookmark_deleted");
+  const contexts = (window.App.runRegistry?.list?.() || []).filter(item => item.bookmark?.id === bookmarkId);
+  contexts.forEach(context => { context.bookmark.deleting = true; });
+  const metaIndex = (window.bookmarksData || []).findIndex(item => item.id === bookmarkId);
+  const meta = window.bookmarksData?.[metaIndex];
+  window.bookmarksData = (window.bookmarksData || []).filter(item => item.id !== bookmarkId);
+  const rows = Array.from(document.querySelectorAll(`.bookmark[data-id="${bookmarkId}"]`)).map(row => {
+    const saved = { row, parent: row.parentNode, next: row.nextSibling, animation: null };
+    const height = row.getBoundingClientRect().height;
+    const style = getComputedStyle(row);
+    row.classList.add('is-deleting');
+    if (row.animate && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      saved.animation = row.animate([
+        { height: `${height}px`, opacity: 1, paddingTop: style.paddingTop, paddingBottom: style.paddingBottom, marginBottom: style.marginBottom, transform: 'translateX(0)' },
+        { height: '0px', opacity: 0, paddingTop: '0px', paddingBottom: '0px', marginBottom: '0px', transform: 'translateX(-8px)' }
+      ], { duration: 180, easing: 'ease-out', fill: 'forwards' });
+      saved.animation.onfinish = () => row.remove();
+    } else row.remove();
+    return saved;
+  });
+  const restore = () => {
+    if (!isCurrentAuthenticatedUser(requestUid, requestGeneration)) return;
+    contexts.forEach(context => { context.bookmark.deleting = false; });
+    if (meta && !window.bookmarksData.some(item => item.id === bookmarkId)) {
+      window.bookmarksData.splice(Math.min(metaIndex, window.bookmarksData.length), 0, meta);
+    }
+    rows.forEach(({ row, parent, next, animation }) => {
+      if (animation) { animation.onfinish = null; animation.cancel(); }
+      row.classList.remove('is-deleting');
+      if (!document.querySelector(`.bookmark[data-id="${bookmarkId}"]`) && parent?.isConnected) {
+        parent.insertBefore(row, next?.parentNode === parent ? next : null);
+      }
+    });
+    window.filterBookmarks?.(document.getElementById('chatSearch')?.value || '');
+  };
 
-  return enqueueBookmarkWrite(requestUid, requestGeneration, bookmarkId, async () => {
+  const deletion = enqueueBookmarkWrite(requestUid, requestGeneration, bookmarkId, async () => {
     let requestStarted = false;
     try {
       const id_token = await requestUser.getIdToken(false);
       if (!id_token) {
         deletedBookmarkKeys.delete(mutationKey);
         window.App.runRegistry?.unblockBookmarkMutation?.(bookmarkId);
+        restore();
+        if (isCurrentAuthenticatedUser(requestUid, requestGeneration)) window.App?.showPopup?.('Could not delete this bookmark. Please try again.');
         return;
       }
       requestStarted = true;
@@ -2596,6 +2640,7 @@ async function deleteBookmark(bookmarkId) {
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
+        restore();
         // A received 4xx proves that this request did not commit. A transport
         // failure or 5xx is ambiguous: the idempotent DELETE may already have
         // committed and only its response was lost. Keep the tombstone in that
@@ -2603,8 +2648,9 @@ async function deleteBookmark(bookmarkId) {
         if (res.status >= 400 && res.status < 500) {
           deletedBookmarkKeys.delete(mutationKey);
           window.App.runRegistry?.unblockBookmarkMutation?.(bookmarkId);
+          if (isCurrentAuthenticatedUser(requestUid, requestGeneration)) window.App?.showPopup?.('Could not delete this bookmark. Please try again.');
         } else {
-          window.App?.showPopup?.(
+          if (isCurrentAuthenticatedUser(requestUid, requestGeneration)) window.App?.showPopup?.(
             "The deletion outcome is uncertain. Retry the deletion or reload before continuing this bookmark."
           );
         }
@@ -2628,6 +2674,7 @@ async function deleteBookmark(bookmarkId) {
           }
           window.App.runRegistry.update(context.runId, current => {
             current.bookmark.deleted = true;
+            current.bookmark.deleting = false;
             current.bookmark.latestMeta = null;
             current.bookmark.uiReady = true;
           }, { render: false, eventType: "persistence" });
@@ -2641,17 +2688,21 @@ async function deleteBookmark(bookmarkId) {
       window.clearPreparedBookmarkShareResult?.();
       trackAppEvent("app_bookmark_deleted");
     } catch (error) {
+      restore();
       if (!requestStarted) {
         deletedBookmarkKeys.delete(mutationKey);
         window.App.runRegistry?.unblockBookmarkMutation?.(bookmarkId);
+        if (isCurrentAuthenticatedUser(requestUid, requestGeneration)) window.App?.showPopup?.('Could not delete this bookmark. Please try again.');
       } else {
-        window.App?.showPopup?.(
+        if (isCurrentAuthenticatedUser(requestUid, requestGeneration)) window.App?.showPopup?.(
           "The deletion outcome is uncertain. Retry the deletion or reload before continuing this bookmark."
         );
       }
       console.error("Error in deleteBookmark:", error);
     }
-  }, null, { allowStaleAuth: true });
+  }, null, { allowStaleAuth: true }).finally(() => deletingBookmarks.delete(mutationKey));
+  deletingBookmarks.set(mutationKey, deletion);
+  return deletion;
 }
 window.deleteBookmark = deleteBookmark;
 
@@ -2736,11 +2787,7 @@ function createReadyBookmarkRow(bookmark, runId = null) {
 
   // Click-Event -> Ruft jetzt die ausgelagerte Funktion auf
   div.addEventListener("click", () => {
-    const context = runId
-      ? window.App.runRegistry?.get?.(runId)
-      : window.App.runRegistry?.findByBookmarkId?.(bookmark.id);
-    if (context) window.App.runRegistry.show(context.runId);
-    else window.openBookmark(bookmark.id);
+    window.openBookmark(bookmark.id);
   });
 
   return div;

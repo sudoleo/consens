@@ -85,7 +85,8 @@ def test_saved_interruption_keeps_reason_and_partial_answer_visible(browser, pha
 
 
 @pytest.mark.parametrize("width", [1280, 390])
-def test_failed_stream_adopts_saved_bookmark_and_survives_reload(browser, phase4_server, width):
+@pytest.mark.parametrize("content", ["partial", "comparison", "empty"])
+def test_failed_stream_adopts_saved_bookmark_and_survives_reload(browser, phase4_server, width, content):
     context, page = _real_firebase_page(browser, phase4_server)
     errors, calls, bookmarks, turns = [], [], [], []
     chat_id = "a" * 32
@@ -105,10 +106,14 @@ def test_failed_stream_adopts_saved_bookmark_and_survives_reload(browser, phase4
             body = route.request.post_data_json
             calls.append(body)
             turn = {"id": "b" * 32, "question": body["question"], "status": "failed", "execution_mode": "agent",
-                "consensus": "## Available result\n\nThe independent answers are preserved.",
+                "consensus": "## Available result\n\nThe independent answers are preserved." if content == 'partial' else '',
                 "agent_settings": {"model_id": body["model_id"], "label": "DeepSeek V4.1 Flash"},
                 "agent_failure": {"code": "provider_timeout", "error": reason},
                 "agent_review": {"status": "failed", "comparisons": []}}
+            if content == 'comparison':
+                turn['agent_review']['comparisons'] = [{"id": "comparison-1", "question": "Compare options", "answers": [{
+                    "provider": "openai", "provider_label": "OpenAI", "model": {"label": "GPT", "model": "gpt"},
+                    "text": "Independent evidence remains available.", "sources": []}]}]
             turns.append(turn)
             bookmark = {"id": body["bookmark_id"], "chat_id": chat_id, "turn_id": turn["id"], "title": body["question"],
                 "query": body["question"], "mode": "Agent", "execution_mode": "agent", "has_consensus": True,
@@ -124,7 +129,10 @@ def test_failed_stream_adopts_saved_bookmark_and_survives_reload(browser, phase4
         _choose_mode(page, "agent")
         page.locator("#questionInput").fill("Preserve this interrupted answer")
         page.locator("#sendButton").click()
-        expect(page.locator("#agentAnswerBody h2")).to_have_text("Available result")
+        if content == 'partial':
+            expect(page.locator("#agentAnswerBody h2")).to_have_text("Available result")
+        else:
+            expect(page.locator("#agentAnswerBody")).to_be_empty()
         expect(page.locator("#agentAnswerError")).to_have_text(reason)
         expect(page.locator("#agentRecover")).not_to_be_visible()
         page.wait_for_function("() => App.runRegistry.visible()?.bookmark.uiReady === true")
@@ -137,9 +145,22 @@ def test_failed_stream_adopts_saved_bookmark_and_survives_reload(browser, phase4
         if width < 1100 and page.locator("#toggleSidebarButton").get_attribute("aria-expanded") != "true":
             page.locator("#toggleSidebarButton").click()
         row.click()
-        expect(page.locator("#agentAnswerBody h2")).to_have_text("Available result")
+        if content == 'partial':
+            expect(page.locator("#agentAnswerBody h2")).to_have_text("Available result")
+        else:
+            expect(page.locator("#agentAnswerBody")).to_be_empty()
         expect(page.locator("#agentAnswerError")).to_have_text(reason)
         expect(page.locator("#agentRecover")).not_to_be_visible()
+        if content == 'comparison':
+            page.locator('.agent-evidence-link[data-section="answers"]').click()
+            expect(page.locator('#modelAnswerReader')).to_contain_text('Independent evidence remains available.')
+        if content == 'empty':
+            turns.append({**turns[0], "id": "c" * 32, "position": 2, "status": "completed",
+                          "question": "Next message", "consensus": "A later successful answer.", "agent_failure": None})
+            page.reload(wait_until='domcontentloaded')
+            page.evaluate("id => window.openBookmark(id)", bookmark_id)
+            expect(page.locator('#threadHistory')).to_contain_text(reason)
+            expect(page.locator('#agentAnswerBody')).to_contain_text('A later successful answer.')
         assert len(calls) == 1 and not errors
     finally:
         context.close()

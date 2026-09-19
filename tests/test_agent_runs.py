@@ -340,7 +340,13 @@ def test_quota_failure_returns_current_allowance_and_reservation_reason(api):
     assert error["code"] == "agent_token_reservation"
     assert error["token_budget"]["remaining"] == error["available_tokens"] == 100
     assert error["required_tokens"] > 100
-    assert error['recoverable'] is False
+    assert error['recoverable'] is True
+    assert error['saved_answer']['response'] == ''
+    assert error['saved_answer']['turn']['agent_failure']['code'] == 'agent_token_reservation'
+    assert store.db.collection('users').document(UID).collection('bookmarks').document('bm1').get().exists
+    replay = client.post('/agent', json={'chat_id': chat_id, 'question': 'Hi',
+        'client_request_id': 'quota', 'bookmark_id': 'bm1', 'recover_only': True}, headers=AUTH)
+    assert replay.status_code == 200 and replay.json()['turn']['status'] == 'failed'
     budget = client.get('/agent/budget', headers=AUTH)
     assert budget.status_code == 200 and budget.json()['token_budget']['remaining'] == 100
     assert budget.headers['cache-control'] == 'private, no-store'

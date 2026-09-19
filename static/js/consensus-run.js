@@ -279,7 +279,8 @@
 
     appendHistoryTurn(turnData, liveBody = null, liveVerdict = null) {
       const history = document.getElementById("threadHistory");
-      if (!history || !turnData?.question || !turnData?.consensus) return false;
+      if (!history || !turnData?.question || (!turnData?.consensus
+          && !(turnData.execution_mode === 'agent' && turnData.status === 'failed'))) return false;
       const turnId = String(turnData.turn_id || "").trim();
       const normalizedQuestion = String(turnData.question).replace(/\s+/g, " ").trim();
       // A replay of the same completed turn is idempotent. A colliding ID with
