@@ -97,7 +97,7 @@ it("rejects stale comparison bindings and distinguishes incomplete results", () 
   const review = snapshot(); review.status = "partial"; review.checks[0].basis_hash = "stale";
   w.App.agentReview.render(body, review);
   expect(w.renderStoredConsensusClaims).not.toHaveBeenCalled();
-  expect(d.body.textContent).toContain("Some checks unavailable");
+  expect(d.body.textContent).toContain("Review pending");
   const select = d.querySelector('[aria-label="Comparison basis"]');
   select.value = 'agent-evidence:c2'; select.dispatchEvent(new w.Event('change'));
   expect(w.renderStoredConsensusClaims).toHaveBeenCalledTimes(1);
@@ -108,5 +108,55 @@ it("rejects stale comparison bindings and distinguishes incomplete results", () 
   review.status = "succeeded";
   w.App.agentReview.render(body, review);
   expect(d.querySelector(".agent-review-status").textContent).toContain("Review pending");
+  dom.window.close();
+});
+
+function partialReview() {
+  const review = snapshot();
+  review.status = 'partial'; review.comparisons = review.comparisons.slice(0, 1); review.checks = review.checks.slice(0, 1);
+  review.comparisons[0].status = 'partial';
+  review.comparisons[0].failed_models = [{label: 'GPT Luna', model: 'openai/test',
+    failure: {code: 'provider_rate_limited', error: 'This model is temporarily rate limited.'}}];
+  const check = review.checks[0]; check.status = 'partial';
+  check.differences_data.judges = {differences: {provider: 'Gemini'}, coverage: {missing: 0}};
+  return review;
+}
+it('explains a missing model without reporting a failed check, including older saved reviews', () => {
+  const {window: w, document: d, dom} = setup();
+  const body = d.getElementById('answer'); body.dataset.markdown = 'Exact answer.';
+  const review = partialReview();
+  for (const persistedIssues of [undefined, [{code: 'models_unavailable', count: 1}]]) {
+    review.checks[0].issues = persistedIssues;
+    w.App.agentReview.render(body, review);
+    expect(d.querySelector('.agent-review-status').textContent).toBe('Comparison checked · 1 model unavailable');
+    expect(d.querySelector('.agent-review-status').dataset.state).toBe('partial');
+    expect(d.querySelector('[data-section="answers"]').textContent).toBe('Answers1');
+    d.querySelector('[data-section="differences"]').click();
+    const context = w.App.answerReader.openContext.mock.calls.at(-1)[0];
+    const panel = context.renderPanel('differences');
+    expect(panel.textContent).toContain('1 of 2 models returned complete answers');
+    expect(panel.textContent).toContain('GPT Luna: This model is temporarily rate limited.');
+    expect(panel.textContent).toContain('differences and coverage checks completed');
+    expect(context.answers.at(-1).error).toContain('rate limited');
+  }
+  dom.window.close();
+});
+it.each([
+  ['coverage', 'The coverage check did not complete'],
+  ['sentences', '2 sentences could not be checked'],
+  ['sources', 'Some contradiction source checks did not complete']
+])('keeps %s failures distinct from unavailable comparison models', (kind, reason) => {
+  const {window: w, document: d, dom} = setup();
+  const body = d.getElementById('answer'); body.dataset.markdown = 'Exact answer.';
+  const review = partialReview(); const check = review.checks[0];
+  if (kind === 'coverage') delete check.differences_data.judges.coverage;
+  if (kind === 'sentences') check.differences_data.judges.coverage.missing = 2;
+  if (kind === 'sources') check.source_verification = {answer_version: 'answer-hash', run_id: 'c1', basis_hash: 'b1', status: 'partial'};
+  w.App.agentReview.render(body, review);
+  expect(d.querySelector('.agent-review-status').textContent).toBe('Review incomplete');
+  d.querySelector('[data-section="differences"]').click();
+  const panel = w.App.answerReader.openContext.mock.calls.at(-1)[0].renderPanel('differences');
+  expect(panel.textContent).toContain(reason);
+  expect(panel.textContent).not.toContain('differences and coverage checks completed');
   dom.window.close();
 });

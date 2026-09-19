@@ -1877,6 +1877,20 @@ Die Aktivitätsliste enthält auch weitere Vergleichs-/Judge-Runden über 64 Sit
 Parallelitäts- und Nachrichtengrößen bleiben begrenzt. agent-review.js steht in bundles.json vor
 consensus-run.js und rendert live aus review-SSE-Ereignissen oder gespeichertem
 agent_review. Vor Markierungen prüft es Text-/Versions-/Basisbindung.
+`agent_comparison.py::review_issues` persistiert `checks[].issues` mit getrennten
+Gründen für ausgefallene Modelle, fehlende Judge-Ergebnisse und unvollständige
+Satz-/Kontextabdeckung. `comparisons[].failed_models[].failure` enthält nur den
+sicheren Fehler aus `agent_failure`, niemals rohe Provider-Antworten. Eine
+fehlende Modellantwort hält den Gesamtstatus `partial`, bei vollständig
+vorliegenden Judges zeigt die UI jedoch `Comparison checked · N models unavailable`.
+`Answers` zählt vollständige Antworten; die Details behalten auch Fehlermodelle.
+Alte Reviews werden aus ihren vorhandenen Judge-Metadaten erklärt. Gebundene
+unvollständige Quellenprüfungen erhalten zusätzlich einen eigenen Hinweis.
+`consensus-insights.js` hält die aktive Hover-Gruppe; Scroll/Resize versteckt
+veraltete Geometrie und plant die Vorschau erneut, wenn Zeiger/Fokus noch auf
+der Passage liegt. Mausfähigkeit wird beim Eintritt über `any-hover`/`any-pointer`
+geprüft, nicht nur beim Erzeugen der Markierungen. Die gemeinsame Implementierung
+gilt für Agent, Consensus und gespeicherte Turns.
 Pro Turn vereinigt die Quellenansicht Provider-/Suchquellen, die Quellen aller
 Vergleichsgrundlagen und sichere HTTP(S)-Links aus Antworten und früheren
 Textversionen. Der gemeinsame Katalog hält die Quellenzahlen beim Wechsel der

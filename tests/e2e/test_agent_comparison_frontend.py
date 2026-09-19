@@ -232,3 +232,45 @@ def test_saved_agent_paper_urls_are_numbered_citations(browser, phase4_server, w
         assert not errors
     finally:
         context.close()
+
+
+def test_green_agent_passages_hover_after_scrolling_and_reprojection(browser, phase4_server):
+    context, page = _real_firebase_page(browser, phase4_server)
+    text = "**Conclusion:** The **smaller plan** includes five seats.\n\n" + "Background paragraph.\n\n" * 25 + "The **monthly price** is stable."
+    digest = hashlib.sha256(text.encode()).hexdigest()
+    review = {"status": "succeeded", "answer_version": 1, "answer_hash": digest,
+        "versions": [{"id": 1, "text": text, "hash": digest}],
+        "comparisons": [{"id": "c1", "basis_hash": "basis", "question": "Compare plans", "status": "succeeded", "answers": []}],
+        "checks": [{"comparison_id": "c1", "basis_hash": "basis", "answer_hash": digest, "status": "succeeded",
+            "differences_data": {"models_compared": ["OpenAI", "Gemini"], "differences": [], "claims": [
+                {"anchor": anchor, "agree": ["OpenAI", "Gemini"], "dissent": []}
+                for anchor in ("Conclusion: The smaller plan includes five seats.", "The monthly price is stable.")]}}]}
+    turn = {"id": "b" * 32, "execution_mode": "agent", "status": "completed", "question": "Compare plans", "consensus": text,
+            "agent_review": review, "agent_settings": {"model_id": CATALOG["default_model_id"]}}
+    errors = []
+    page.on('pageerror', lambda error: errors.append(str(error)))
+    try:
+        page.set_viewport_size({"width": 1440, "height": 900})
+        page.route('**/user_status', lambda r: _json(r, {"tier": "pro", "is_pro": True, "agent_access": True}))
+        page.route('**/agent/models', lambda r: _json(r, CATALOG))
+        page.evaluate("async () => { await window.__switchE2EUser('account-a'); }")
+        page.evaluate("() => { localStorage.setItem('consensio.consensusHighlightMode.v1', 'all'); dispatchEvent(new Event('pageshow')); }")
+        for _ in range(2):
+            page.evaluate("turn => App.runRegistry.showSavedView({type:'bookmark'}, {chatId:'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', turnId:turn.id, executionMode:'agent', question:turn.question, consensus:turn.consensus, currentTurn:turn})", turn)
+            page.evaluate('() => window.exitHeroMode()')
+            for index in (0, -1):
+                mark = page.locator('#agentAnswerBody .cx-claim').nth(index)
+                mark.evaluate("el => el.scrollIntoView({block: 'center'})")
+                mark.hover()
+                preview = page.locator('.insight-preview')
+                # A trailing scroll used to cancel mouseenter's timer forever.
+                page.evaluate("() => dispatchEvent(new Event('scroll'))")
+                expect(preview).to_be_visible()
+                expect(preview).to_contain_text('2/2')
+                rect = preview.bounding_box()
+                assert rect['y'] >= 0 and rect['y'] + rect['height'] <= 900
+                page.mouse.move(0, 0)
+                expect(preview).not_to_be_visible()
+        assert not errors
+    finally:
+        context.close()

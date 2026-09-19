@@ -6,7 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 
 from app.services import agent_quota, agent_budget_config
-from app.services.agent_comparison import comparison_selection, review_is_bound
+from app.services.agent_comparison import comparison_selection, review_is_bound, review_issues
 from app.services.agent_delegation import DelegationLoop
 from app.services.agent_delegation_config import defaults
 from app.services.agent_policy import AgentPolicy
@@ -120,6 +120,41 @@ def test_partial_or_failed_checks_never_certify_success(store, failure, expected
     list(loop.run())
     review = store.get_turn(UID, loop.chat_id, loop.turn_id)["agent_review"]
     assert review["status"] == expected
+    issues = review['checks'][0]['issues']
+    expected_issue = 'coverage_unavailable' if failure == 'fail_coverage' else 'insufficient_answers'
+    assert {'code': expected_issue} in issues
+
+
+def test_rate_limited_answer_is_distinct_from_successful_judges(store):
+    from app.services.agent_provider_limits import AgentProviderCooldown
+    script = Script()
+    loop = make_loop(store, script)
+    loop.comparison.models = comparison_selection({'anthropic': 'claude-haiku-4-5', 'openai': 'gpt-5.4-mini',
+                                                  'gemini': 'gemini-3.5-flash-lite'})
+    original = loop.comparison.call
+    def call(model, messages, **kwargs):
+        if kwargs['kind'] == 'comparison' and model.model.startswith('openai/'):
+            raise AgentProviderCooldown(30)
+        return original(model, messages, **kwargs)
+    loop.comparison.call = call
+    list(loop.run())
+    review = store.get_turn(UID, loop.chat_id, loop.turn_id)['agent_review']
+    assert review['status'] == 'partial'
+    assert review['checks'][0]['issues'] == [{'code': 'models_unavailable', 'count': 1}]
+    assert review['comparisons'][0]['failed_models'][0]['failure']['code'] == 'provider_rate_limited'
+    assert len(review['comparisons'][0]['answers']) == 2
+    assert review_is_bound(review, loop.comparison.text)
+
+
+@pytest.mark.parametrize('data,codes', [
+    ({'judges': {'differences': {}, 'coverage': {}}}, ['differences_unavailable', 'coverage_unavailable']),
+    ({'judges': {'differences': {'provider': 'Gemini'}, 'coverage': {'missing': 2}},
+      'evidence_coverage': {'unindexed_sentences': 3, 'truncated_answers': 1}},
+     ['sentences_unchecked', 'unindexed_sentences', 'truncated_answers']),
+])
+def test_review_issues_explain_each_missing_check(data, codes):
+    issues = review_issues({'answers': [{}, {}]}, data)
+    assert [issue['code'] for issue in issues] == codes
 
 
 def test_missing_tool_is_bounded_and_persists_unchecked_answer(store):

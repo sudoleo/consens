@@ -1203,7 +1203,7 @@
               scheduleHoverPreview(group);
               return;
             }
-            hideHoverPreview();
+            if (hoverGroup === group) hideHoverPreview();
             // Der Weg von einem Span zum naechsten (ein Satz kann in mehrere
             // Spans zerfallen) oder zum Marker feuert leave/enter nacheinander.
             // Ein Frame Verzoegerung verhindert das Flackern dazwischen.
@@ -1226,14 +1226,11 @@
           function passageGroup(spans) {
             if (spans[0].cxGroup) return spans[0].cxGroup;
             const group = { spans: spans, controls: [], hover: false };
-            const supportsHover = canHoverPassages();
             spans.forEach(function (span) {
               span.cxGroup = group;
               span.classList.add("is-interactive");
-              if (supportsHover) {
-                span.addEventListener("mouseenter", function () { setPassageHover(group, true); });
-                span.addEventListener("mouseleave", function () { setPassageHover(group, false); });
-              }
+              span.addEventListener("mouseenter", function () { if (canHoverPassages()) setPassageHover(group, true); });
+              span.addEventListener("mouseleave", function () { setPassageHover(group, false); });
               span.addEventListener("click", function (event) {
                 if (!passageIsVisible(group)) return;
                 // Quellenchips und [S1]-Links im Satz behalten Vorrang, und wer
@@ -1251,7 +1248,7 @@
           // Hover nur auf Geraeten mit echtem Zeiger. Der Klick auf die Passage
           // bleibt dagegen auch auf Touch aktiv.
           function canHoverPassages() {
-            return !!window.matchMedia?.("(hover: hover) and (pointer: fine)").matches;
+            return !!window.matchMedia?.("(any-hover: hover) and (any-pointer: fine)").matches;
           }
 
           // --- Vorschau beim Hovern -------------------------------------------
@@ -1263,6 +1260,7 @@
           const HOVER_DELAY_MS = 130;
           let hoverCard = null;
           let hoverTimer = null;
+          let hoverGroup = null;
 
           function ensureHoverCard() {
             if (hoverCard && hoverCard.isConnected) return hoverCard;
@@ -1317,16 +1315,30 @@
 
           function scheduleHoverPreview(group) {
             window.clearTimeout(hoverTimer);
+            hoverGroup = group;
             hoverTimer = window.setTimeout(function () {
-              if (group.hover) showHoverPreview(group);
+              if (group.hover && group.spans.some(span => span.isConnected)) showHoverPreview(group);
             }, HOVER_DELAY_MS);
           }
 
-          // Die Karte klebt an einer Bildschirmposition, nicht am Dokument:
-          // sobald sich darunter etwas bewegt oder der Nutzer klickt (und
-          // damit die grosse Ansicht will), verschwindet sie.
-          window.addEventListener("scroll", hideHoverPreview, true);
-          window.addEventListener("resize", hideHoverPreview);
+          // Scrolling can arrive just AFTER mouseenter and cancel its timer.
+          // Hide stale geometry immediately, then resume the preview if the
+          // pointer/focus is still on this passage when the layout settles.
+          function refreshHoverPreview() {
+            const group = hoverGroup;
+            hideHoverPreview();
+            if (!group) return;
+            requestAnimationFrame(function () {
+              if (hoverGroup && hoverGroup !== group) return;
+              const targets = [...group.spans, ...group.controls.map(control => control.el)];
+              if (targets.some(el => el.isConnected && el.matches(':hover, :focus-visible')) && passageIsVisible(group)) {
+                group.hover = true;
+                scheduleHoverPreview(group);
+              }
+            });
+          }
+          window.addEventListener("scroll", refreshHoverPreview, true);
+          window.addEventListener("resize", refreshHoverPreview);
           document.addEventListener("click", hideHoverPreview, true);
 
           function previewHead(text, sevClass) {
@@ -1439,10 +1451,8 @@
             const group = passageGroup(spans);
             const entry = { el: control, activate: activate, preview: preview };
             group.controls.push(entry);
-            if (canHoverPassages()) {
-              control.addEventListener("mouseenter", function () { setPassageHover(group, true); });
-              control.addEventListener("mouseleave", function () { setPassageHover(group, false); });
-            }
+            control.addEventListener("mouseenter", function () { if (canHoverPassages()) setPassageHover(group, true); });
+            control.addEventListener("mouseleave", function () { setPassageHover(group, false); });
             return entry;
           }
 

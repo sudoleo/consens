@@ -54,6 +54,23 @@ function renderContradiction(window) {
   }, 2);
 }
 
+it('enables passage hover for a mouse attached after rendering, while touch stays quiet', async () => {
+  const {window, document, dom} = boot('true', 'all');
+  window.renderConsensusInsights({models_compared: ['OpenAI', 'Gemini'], differences: [],
+    claims: [{anchor: CLAIM, agree: ['OpenAI', 'Gemini'], dissent: []}]}, 2);
+  const mark = document.querySelector('.cx-claim');
+  mark.dispatchEvent(new window.MouseEvent('mouseenter'));
+  await new Promise(resolve => window.setTimeout(resolve, 160));
+  expect(document.querySelector('.insight-preview:not([hidden])')).toBeNull();
+  window.matchMedia = query => ({matches: query === '(any-hover: hover) and (any-pointer: fine)'});
+  mark.dispatchEvent(new window.MouseEvent('mouseenter'));
+  await new Promise(resolve => window.setTimeout(resolve, 160));
+  expect(document.querySelector('.insight-preview:not([hidden])').textContent).toContain('2/2');
+  mark.dispatchEvent(new window.MouseEvent('mouseleave'));
+  expect(document.querySelector('.insight-preview:not([hidden])')).toBeNull();
+  dom.window.close();
+});
+
 describe("consensus sentence-check visibility", () => {
   it('keeps contradiction cards and sentence marks when advisory source hooks fail', () => {
     const {window,document}=boot('true','all');

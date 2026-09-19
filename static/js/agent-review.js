@@ -3,7 +3,52 @@
   "use strict";
   const App = window.App = window.App || {};
   const states = { required: "Review pending", running: "Checking the answer…", succeeded: "Comparison checked",
-    partial: "Some checks unavailable", failed: "Review unavailable", cancelled: "Review stopped", missing: "Answer not reviewed" };
+    partial: "Review incomplete", failed: "Review unavailable", cancelled: "Review stopped", missing: "Answer not reviewed" };
+  function checkIssues(comparison, check) {
+    if (!check) return [];
+    let issues = check.issues;
+    if (!Array.isArray(issues)) {
+      // Older saved turns already contain judge coverage, but no issue list.
+      issues = [];
+      if (comparison.failed_models?.length) issues.push({code: 'models_unavailable', count: comparison.failed_models.length});
+      const data = check.differences_data;
+      if (data?.judges) {
+        if (!data.judges.differences) issues.push({code: 'differences_unavailable'});
+        if (!data.judges.coverage) issues.push({code: 'coverage_unavailable'});
+        else if (data.judges.coverage.missing) issues.push({code: 'sentences_unchecked', count: data.judges.coverage.missing});
+        for (const code of ['unindexed_sentences', 'truncated_answers']) {
+          if (data.evidence_coverage?.[code]) issues.push({code, count: data.evidence_coverage[code]});
+        }
+      } else if (check.status === 'partial') issues.push({code: 'incomplete'});
+    }
+    issues = [...issues];
+    const sources = check.source_verification;
+    if (sources?.answer_version === check.answer_hash && sources.run_id === comparison.id
+        && sources.basis_hash === comparison.basis_hash && ['partial', 'failed'].includes(sources.status)) {
+      issues.push({code: 'sources_incomplete'});
+    }
+    return issues;
+  }
+  function issueText(issue) {
+    const n = issue.count;
+    return ({models_unavailable: `${n} comparison model${n === 1 ? '' : 's'} unavailable`,
+      insufficient_answers: 'Fewer than two complete model answers are available',
+      differences_unavailable: 'The differences check did not complete',
+      coverage_unavailable: 'The coverage check did not complete',
+      sentences_unchecked: `${n} sentence${n === 1 ? '' : 's'} could not be checked`,
+      unindexed_sentences: `${n} sentence${n === 1 ? '' : 's'} fell outside the coverage check`,
+      truncated_answers: 'Some model answers exceeded the review context',
+      sources_incomplete: 'Some contradiction source checks did not complete',
+      incomplete: 'The saved review is incomplete'})[issue.code] || 'The review is incomplete';
+  }
+  function statusText(state, issues) {
+    if (!['succeeded', 'partial'].includes(state)) return states[state] || 'Review incomplete';
+    if (issues.length && issues.every(i => i.code === 'models_unavailable')) {
+      const n = issues.reduce((total, i) => total + i.count, 0);
+      return `Comparison checked · ${n} model${n === 1 ? '' : 's'} unavailable`;
+    }
+    return issues.length ? 'Review incomplete' : states[state];
+  }
   function node(tag, cls, text) {
     const el = document.createElement(tag);
     if (cls) el.className = cls;
@@ -87,12 +132,14 @@
     host.dataset.signature = signature;
     host._hasReview = true;
     host.replaceChildren();
-    const state = review.status === "succeeded" && !review.comparisons.every(boundCheck) ? "required" : review.status;
+    const issues = review.comparisons.flatMap(c => checkIssues(c, boundCheck(c)));
+    const state = ['succeeded', 'partial'].includes(review.status) && !review.comparisons.every(boundCheck) ? 'required'
+      : review.status === 'succeeded' && issues.length ? 'partial' : review.status;
     host.hidden = !version && ["required", "running"].includes(state);
     const summary = node("div", "agent-review-summary");
-    const status = node("span", "agent-review-status", states[state] || "Review incomplete");
+    const status = node("span", "agent-review-status", statusText(state, issues));
     status.setAttribute("role", "status"); status.dataset.state = state;
-    status.title = "Model agreement compares perspectives; it is not independent fact checking.";
+    status.title = [...issues.map(issueText), "Model agreement compares perspectives; it is not independent fact checking."].join('. ');
     summary.append(status); host.append(summary);
     const tabs = node("nav", "consensus-footer-tabs agent-evidence-links");
     tabs.setAttribute("aria-label", "Explore answer evidence"); host.append(tabs);
@@ -110,7 +157,7 @@
           ...answers.map(a => ({ provider: a.provider_label || a.provider, model: a.model?.model, label: a.model?.label || a.provider,
             text: a.text, sources: safeSources([a]), sourceReferences: 'agent', status: "complete" })),
           ...(comparison.failed_models || []).map((m, i) => ({ provider: `unavailable-${i}`, model: m.model, label: m.label,
-            text: "", status: comparison.status === "cancelled" ? "canceled" : "error", error: "This model did not return a complete answer.", sources: [] }))
+            text: "", status: comparison.status === "cancelled" ? "canceled" : "error", error: m.failure?.error || "This model did not return a complete answer.", sources: [] }))
         ] };
       const open = (section, options = {}) => App.answerReader?.openContext(context, { section, ...options });
       const navigation = {
@@ -122,12 +169,21 @@
         if (kind === "sources") {
           return sourcePanel(sources);
         }
-        panel.append(node("p", "agent-evidence-status", states[check?.status || state] || "Review incomplete"));
+        const localIssues = checkIssues(comparison, check);
+        panel.append(node("p", "agent-evidence-status", statusText(check?.status || state, localIssues)));
+        if (check) {
+          const unavailable = comparison.failed_models || [];
+          panel.append(node('p', 'agent-review-note', `${answers.length} of ${answers.length + unavailable.length} models returned complete answers.`));
+          for (const model of unavailable) panel.append(node('p', 'agent-review-note', `${model.label}: ${model.failure?.error || 'No complete answer was returned.'}`));
+          for (const issue of localIssues.filter(i => i.code !== 'models_unavailable')) panel.append(node('p', 'agent-review-note', issueText(issue) + '.'));
+          if (localIssues.length && localIssues.every(i => i.code === 'models_unavailable')) {
+            panel.append(node('p', 'agent-review-note', 'The differences and coverage checks completed for the available model answers.'));
+          }
+        }
         if (!check || !check.differences_data) {
           panel.append(node("p", "agent-review-note", exact ? "The answer has no completed check for this comparison yet."
             : "The text changed. This version needs a new review."));
         } else {
-          if (check.status !== "succeeded") panel.append(node("p", "agent-review-note", "Available findings are shown below. Some models or checks did not complete; the review is incomplete."));
           const cards = node("div", "agent-evidence-differences");
           window.renderStoredDifferenceCards?.(cards, check.differences_data, {
             modelLabel: name => findAnswer(name)?.model?.label || name, answerNavigation: navigation
@@ -152,7 +208,6 @@
         basis.append(node("summary", "", "Comparison context"));
         if (comparison.reason) basis.append(node("p", "", comparison.reason));
         if (comparison.context) basis.append(node("p", "", comparison.context));
-        for (const model of comparison.failed_models || []) basis.append(node("p", "agent-review-note", `${model.label}: no completed answer`));
         panel.append(basis);
         if ((review.versions || []).length > 1) {
           const history = node("details", "agent-evidence-context"); history.append(node("summary", "", "Earlier answer version"));
@@ -178,7 +233,7 @@
         const differences = check?.differences_data?.differences || [];
         const contradictions = differences.filter(d => d.type === "contradiction").length;
         return [["differences", contradictions ? "Contradictions" : differences.length ? "Differences" : "Review", contradictions || differences.length || null],
-          ["answers", "Answers", context.answers.length], ["sources", "Sources", sources.length]];
+          ["answers", "Answers", answers.length], ["sources", "Sources", sources.length]];
       };
       return context;
     });

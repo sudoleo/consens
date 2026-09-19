@@ -96,6 +96,18 @@ zeigen dort die formatierte Originalantwort. Bei mehreren Teilvergleichen wählt
 ein beschriftetes Auswahlfeld die konkrete Markierungsgrundlage. Kontext und
 frühere Antwortversionen stehen in den Details des Lesers. Live-Ansicht und
 gespeicherter Verlauf verwenden denselben Review-Snapshot.
+Fehlt nur eine Modellantwort, während Differences und Coverage vollständig
+vorliegen, lautet der Status `Comparison checked · 1 model unavailable`.
+Der Review bleibt technisch `partial`; fehlende Stimmen werden nicht als
+Zustimmung gezählt. `Answers` zählt nur vollständige Antworten, der Leser zeigt
+auch die ausgefallenen Modelle und bei neuen Runs deren sicheren Fehlergrund
+(z. B. Provider-Rate-Limit). Fehlende Prüfer, ungeprüfte Sätze und unvollständige
+Quellenprüfungen werden separat erklärt. Alte gespeicherte Runs nutzen dafür
+ihre vorhandenen Judge-Metadaten; sie werden nicht erneut kostenpflichtig geprüft.
+Grüne Markierungen zeigen die Zustimmung per Mausvorschau oder Tastaturfokus.
+Ein nachlaufendes Scroll-/Resize-Ereignis positioniert die Vorschau neu, wenn der
+Zeiger noch auf der Passage steht; auch nachträglich angeschlossene Mäuse werden
+erkannt. Klick/Tap öffnet weiterhin die vollständigen Details.
 Die Quellenansicht vereinigt Quellen aus der Chat-Recherche, allen
 Vergleichsgrundlagen und expliziten Links in den Antwortversionen. Sie ist auch ohne
 Vergleich verfügbar. Provider-/Suchquellen werden auf dem Turn gespeichert;
