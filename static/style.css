@@ -26,7 +26,7 @@
 @import url('./css/shell.css?v=20260919-agent-comparison');
 @import url('./css/model-answer-reader.css?v=20260919-agent-evidence');
 @import url('./css/composer-attachments.css?v=20260909-attachments1');
-@import url('./css/agent-chat.css?v=20260919-agent-tools');
+@import url('./css/agent-chat.css?v=20260919-agent-sidebar');
 @import url('./css/chat-scroll.css?v=20260919-agent-comparison');
 
 /* Template-only utilities live after every component import so they preserve

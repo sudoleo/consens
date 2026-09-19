@@ -6,19 +6,6 @@
   const toolNames = { web_search: 'Web search', compare_models: 'Model comparison', judge_answer: 'Answer review',
     start_agent: 'Ask a model', wait_agents: 'Wait for models', send_agent: 'Follow up',
     review_agent: 'Review a model', stop_agent: 'Stop a model', report_to_orchestrator: 'Report to the main model' };
-  function highlightTools(node, text) {
-    const pattern = /\b(?:web_search|compare_models|judge_answer|start_agent|wait_agents|send_agent|review_agent|stop_agent|report_to_orchestrator)\b/g;
-    const parts = []; let from = 0;
-    for (const match of text.matchAll(pattern)) {
-      parts.push(document.createTextNode(text.slice(from, match.index)));
-      const mark = document.createElement('span'); mark.className = 'agent-tool-mention';
-      mark.textContent = toolNames[match[0]]; mark.dataset.tool = match[0];
-      mark.title = 'Mentioned in reasoning; this does not confirm a tool call.';
-      parts.push(mark); from = match.index + match[0].length;
-    }
-    parts.push(document.createTextNode(text.slice(from)));
-    node.replaceChildren(...parts);
-  }
   function compactReasoning(text) {
     const paragraphs = String(text || "").split(/\n\s*\n|\n/).filter(Boolean);
     return paragraphs.slice(-3).map(p => {
@@ -97,16 +84,18 @@
     const highlights = compactReasoning(reasoning.at(-1)?.text).split('\n').filter(Boolean);
     const paragraphs = [...new Set([progress, ...highlights].filter(Boolean))].slice(0, 3);
     if (!paragraphs.length && running) paragraphs.push('Preparing a response…');
-    const previewText = running ? paragraphs.join('\n') : '';
-    if (view.preview.dataset.text !== previewText) {
-      view.preview.dataset.text = previewText;
+    const previewSignature = running ? JSON.stringify([paragraphs, activeTool?.id, activeTool?.name]) : '';
+    if (view.preview.dataset.signature !== previewSignature) {
+      view.preview.dataset.signature = previewSignature;
       view.preview.replaceChildren(...(running ? paragraphs : []).map(text => {
         const p = document.createElement('p');
-        if (text === progress && (activeTool || reviewStage)) {
+        if (text === progress && activeTool) {
           p.className = 'agent-progress-action'; p.dataset.status = 'running';
-          const label = document.createElement('span'); label.className = 'agent-tool-state'; label.textContent = 'Active';
-          p.append(label, document.createTextNode(text));
-        } else highlightTools(p, text);
+          p.dataset.tool = activeTool.name;
+          const indicator = document.createElement('span'); indicator.className = 'agent-tool-indicator'; indicator.setAttribute('aria-hidden', 'true');
+          const label = document.createElement('span'); label.className = 'agent-tool-label'; label.textContent = text;
+          p.append(indicator, label);
+        } else p.textContent = text;
         return p;
       }));
     }
@@ -154,7 +143,7 @@
         }
       } else {
         const text = compactReasoning(item.text);
-        if (node.dataset.text !== text) { node.dataset.text = text; highlightTools(node, text); }
+        if (node.textContent !== text) node.textContent = text;
         node.setAttribute("aria-label", item.summary_source === "excerpt" || item.format === "text" ? "Reasoning highlights" : "Reasoning summary");
       }
     }

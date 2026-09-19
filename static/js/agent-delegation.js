@@ -15,11 +15,16 @@
     if (text !== undefined) el.textContent = text;
     return el;
   }
-  function cost(usage) {
-    if (!Number.isFinite(usage?.estimated_cost_nano_usd)) return "Cost unknown";
-    const value = usage.estimated_cost_nano_usd / 1e9;
-    const partial = usage.cost_complete === false || (usage.cost_complete === undefined && usage.complete === false);
-    return `${partial ? "At least " : ""}${usage.cost_source === "provider" ? "" : "~"}$${value.toFixed(value > 0 && value < .0001 ? 6 : 4)}${partial ? " · incomplete" : ""}`;
+  function measured(usage) {
+    return ['input_tokens', 'output_tokens'].every(key => Number.isInteger(usage?.[key]) && usage[key] >= 0);
+  }
+  function tokens(usage, pending = false) {
+    if (!measured(usage)) return pending ? 'Tokens pending' : 'Tokens unavailable';
+    return `${(usage.input_tokens + usage.output_tokens).toLocaleString()}${usage.complete === false ? '+' : ''} tokens`;
+  }
+  function tokenDescription(usage) {
+    return measured(usage) ? `${usage.input_tokens.toLocaleString()} input + ${usage.output_tokens.toLocaleString()} output tokens. Reasoning is included in output; cache tokens are included in input.${usage.complete === false ? ' Measured usage so far; some calls did not report usage.' : ''}`
+      : 'The provider has not reported token usage.';
   }
   function mark(agent) {
     return App.createModelMark?.(agent.model) || node("span", "model-mark-fallback", (agent.model?.label || "M").slice(0, 1));
@@ -97,6 +102,9 @@
     finally { view.loading = false; if (current === view && uid() === view.uid) render(); }
   }
   async function loadDetail(view, agentId, more = false) {
+    // Judge summaries, progress and measured usage are already in the live
+    // session snapshot. Their hidden prompt/JSON needs no extra DB request.
+    if (view.agents.get(agentId)?.kind === 'judge') return;
     let detail = view.details.get(agentId);
     if (!detail) { detail = { messages: new Map(), cursor: 0, loadedSeq: -1 }; view.details.set(agentId, detail); }
     if (detail.loading || ((detail.hasMore || detail.error) && !more)) return;
@@ -125,7 +133,7 @@
     sidebar.tabIndex = -1;
     const header = node("div", "agent-sidebar-header");
     const title = node("h2", "", "Agent activity"); title.id = "agentSidebarTitle";
-    const close = node("button", "agent-sidebar-close", "Close"); close.type = "button";
+    const close = node("button", "agent-sidebar-close", "×"); close.type = "button";
     const stop = node("button", "agent-sidebar-stop", "Stop run"); stop.type = "button";
     stop.addEventListener("click", async () => {
       const view = current;
@@ -175,9 +183,40 @@
     (sidebar._rows.get(agentId)?.summary || sidebar.querySelector(".agent-sidebar-close")).focus();
   }
   function renderDetail(row, view, agent) {
+    if (agent.kind === 'judge') {
+      const signature = JSON.stringify([agent.status, agent.title, agent.usage, agent.progress_text]);
+      if (row.body.dataset.signature === signature) return;
+      row.body.dataset.signature = signature;
+      row.body.setAttribute('aria-busy', 'false');
+      const purpose = agent.title === 'Coverage judge' ? 'Checks which statements are supported by the comparison answers.'
+        : agent.title === 'Differences judge' ? 'Identifies agreement and contradictions between the model answers.'
+          : 'Checks the answer against the comparison responses.';
+      row.body.replaceChildren(node('p', 'agent-judge-purpose', purpose));
+      if (agent.progress_text) row.body.append(node('p', 'agent-session-progress', agent.progress_text));
+      if (measured(agent.usage)) {
+        const usage = node('dl', 'agent-token-breakdown'); usage.title = tokenDescription(agent.usage);
+        for (const [label, count] of [['Input', agent.usage.input_tokens], ['Output', agent.usage.output_tokens]]) {
+          const item = node('div'); item.append(node('dt', '', label), node('dd', '', count.toLocaleString())); usage.append(item);
+        }
+        row.body.append(usage);
+      }
+      const state = activeStates.has(agent.status) ? 'Review in progress.' : agent.status === 'completed'
+        ? 'Model response received. See the answer review for the results.' : 'This call did not complete.';
+      row.body.append(node('p', 'agent-judge-note', state));
+      return;
+    }
     const detail = view.details.get(agent.id);
-    if (!detail) { row.body.textContent = "Loading messages…"; return; }
-    const signature = JSON.stringify([detail.assignment, [...detail.messages.keys()], detail.error, detail.hasMore, agent.sources, agent.result_truncated, agent.progress_text]);
+    const loading = !detail || (detail.loading && detail.loadedSeq < 0);
+    row.body.setAttribute('aria-busy', String(Boolean(detail?.loading || loading)));
+    if (loading) {
+      if (!row.body.querySelector('.agent-detail-skeleton')) {
+        const skeleton = node('div', 'agent-detail-skeleton'); skeleton.setAttribute('role', 'status'); skeleton.setAttribute('aria-label', 'Loading details');
+        for (let i = 0; i < 3; i++) { const bar = node('span'); bar.setAttribute('aria-hidden', 'true'); skeleton.append(bar); }
+        row.body.replaceChildren(skeleton); delete row.body.dataset.signature;
+      }
+      return;
+    }
+    const signature = JSON.stringify([detail.assignment, [...detail.messages.keys()], detail.error, detail.hasMore, detail.loading, agent.sources, agent.result_truncated, agent.progress_text]);
     if (row.body.dataset.signature === signature) return;
     const scroll = row.body.scrollTop;
     const follow = row.body.scrollHeight - scroll - row.body.clientHeight < 40;
@@ -266,7 +305,8 @@
     }
     sidebar.hidden = view.closed || !view.agents.size;
     document.body.classList.toggle("agent-sidebar-open", !sidebar.hidden);
-    sidebar.querySelector(".agent-sidebar-usage").textContent = `Total run · ${cost(view.usage)}`;
+    sidebar.querySelector(".agent-sidebar-usage").textContent = `Total run · ${tokens(view.usage, view.running)}`;
+    sidebar.querySelector(".agent-sidebar-usage").title = tokenDescription(view.usage);
     sidebar.querySelector(".agent-sidebar-stop").hidden = !view.running;
     sidebar.querySelector(".agent-sidebar-status").textContent = view.error || "";
     for (const agent of view.agents.values()) {
@@ -276,22 +316,33 @@
         const summary = node("summary");
         const info = node("span", "agent-session-info");
         const title = node("strong", "", agent.title);
+        const role = node('span', 'agent-session-role');
         const meta = node("span", "agent-session-meta");
+        const state = node('span', 'agent-session-state');
+        const usage = node('span', 'agent-session-tokens');
+        meta.append(state, usage);
         const body = node("div", "agent-session-detail"); body.tabIndex = 0;
-        info.append(title, meta); summary.append(mark(agent), info); root.append(summary, body);
+        info.append(title, role, meta); summary.append(mark(agent), info); root.append(summary, body);
         root.addEventListener("toggle", () => {
-          if (current !== view) return;
-          if (root.open) { view.expanded.add(agent.id); loadDetail(view, agent.id); }
+          if (current !== view || view.uid !== uid() || !window.document?.body || !root.isConnected) return;
+          if (root.open) {
+            view.expanded.add(agent.id); loadDetail(view, agent.id);
+            renderDetail(row, view, view.agents.get(agent.id));
+          }
           else view.expanded.delete(agent.id);
           prefs(view);
         });
-        row = { root, summary, title, meta, body };
+        row = { root, summary, title, role, state, usage, body };
         sidebar._rows.set(agent.id, row); sidebar.querySelector(".agent-session-list").append(root);
       }
       row.root.dataset.status = agent.status;
-      row.title.textContent = `${agent.title} · ${agent.id.slice(0, 6)}`;
+      row.title.textContent = agent.model?.label || agent.title;
+      row.role.textContent = agent.kind === 'comparison' ? 'Independent answer' : agent.title;
+      row.role.hidden = row.role.textContent === row.title.textContent;
       const elapsed = activeStates.has(agent.status) && agent.created_at ? Math.max(0, Date.now() - Date.parse(agent.created_at)) : agent.duration_ms || 0;
-      row.meta.textContent = `${labels[agent.status] || "Waiting"} · ${Math.floor(elapsed / 1000)}s · ${cost(agent.usage)}`;
+      row.state.textContent = `${labels[agent.status] || "Waiting"} · ${Math.floor(elapsed / 1000)}s`;
+      row.usage.textContent = tokens(agent.usage, activeStates.has(agent.status));
+      row.usage.title = tokenDescription(agent.usage);
       row.summary.title = `${agent.model?.label || "Model"} · ${agent.title} · ${labels[agent.status] || "Waiting"}`;
       row.root.open = view.expanded.has(agent.id);
       if (row.root.open) { loadDetail(view, agent.id); renderDetail(row, view, agent); }
@@ -321,5 +372,5 @@
   document.addEventListener("consensio:reader-opening", () => {
     if (current) { current.closed = true; prefs(current); hide(); render(); }
   });
-  App.agentDelegation = { receive, project, cost };
+  App.agentDelegation = { receive, project, tokens };
 })();

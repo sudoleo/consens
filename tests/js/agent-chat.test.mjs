@@ -82,23 +82,41 @@ describe("single-model agent chat", () => {
     dom.window.close();
   });
 
-  it('highlights tool mentions safely without claiming execution, then marks a confirmed call active', () => {
+  it('leaves tool mentions plain and highlights only confirmed running calls', () => {
     const { window, document, dom } = boot();
     const host = document.getElementById('agentAnswerActivity');
     const events = [{ id: 'r', kind: 'reasoning', format: 'summary', text: 'Maybe call compare_models, then judge_answer. <img src=x onerror=alert(1)>' }];
     window.App.agentActivity.render(host, { events, running: true });
-    expect(host.querySelector('.agent-progress .agent-tool-mention').dataset.tool).toBe('compare_models');
-    expect(host.querySelector('.agent-tool-mention').title).toContain('does not confirm');
+    expect(host.querySelector('.agent-tool-mention')).toBe(null);
+    expect(host.querySelector('.agent-progress').textContent).toContain('compare_models');
     expect(host.querySelector('.agent-progress-action')).toBe(null);
     expect(host.querySelector('img')).toBe(null);
     events.push({id: 'tool1', kind: 'tool', name: 'compare_models', status: 'running'});
     window.App.agentActivity.render(host, { events, running: true });
-    expect(host.querySelector('.agent-progress-action').textContent).toBe('ActiveComparing model answers…');
+    expect(host.querySelector('.agent-progress-action').textContent).toBe('Comparing model answers…');
+    expect(host.querySelector('.agent-progress-action').dataset.tool).toBe('compare_models');
     expect(host.querySelector('details').open).toBe(false);
     events[1].status = 'succeeded';
+    window.App.agentActivity.render(host, { events, running: true });
+    expect(host.querySelector('.agent-progress-action')).toBe(null);
     window.App.agentActivity.render(host, { events, running: false });
     expect(host.querySelector('.agent-progress').hidden).toBe(true);
     expect(host.querySelector('.agent-activity-tool strong').textContent).toBe('Model comparison · Completed');
+    dom.window.close();
+  });
+
+  it('requires a call event even when the displayed review stage stays identical', () => {
+    const { window, document, dom } = boot();
+    const host = document.getElementById('agentAnswerActivity');
+    const state = { running: true, review: {status: 'running'}, events: [] };
+    window.App.agentActivity.render(host, state);
+    expect(host.querySelector('.agent-progress-action')).toBe(null);
+    state.events.push({id:'judge', kind:'tool', name:'judge_answer', status:'running'});
+    window.App.agentActivity.render(host, state);
+    expect(host.querySelector('.agent-progress-action').dataset.tool).toBe('judge_answer');
+    state.events[0].status = 'failed';
+    window.App.agentActivity.render(host, state);
+    expect(host.querySelector('.agent-progress-action')).toBe(null);
     dom.window.close();
   });
   it("commits a draft model before an input-triggered projection can restore the old model", async () => {

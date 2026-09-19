@@ -1694,10 +1694,10 @@ und aktuelle Tool-Aktivität als kleine Textabsätze außerhalb des standardmä�
 geschlossenen Thinking-Disclosures. Diese Vorschau verschwindet nach Laufende;
 nur manuelles Aufklappen zeigt alle gespeicherten Schritt-Zusammenfassungen,
 Tools und Usage. Keine automatische Expansion oder Zitatlinien; auch alte
-Langtexte werden in der Anzeige gekürzt. Toolnamen in den Auszügen werden als
-sichere Inline-Labels hervorgehoben; sie belegen keine Ausführung. DelegationLoop
-meldet validierte Orchestrator-Tools mit running/terminal-Status, aus denen die
-UI den separaten Active-Hinweis bildet. agent_progress.py
+Langtexte werden in der Anzeige gekürzt. Tool-Nennungen bleiben normaler Text.
+Nur ein bestätigtes running-Toolereignis erzeugt die dezente Aufrufanzeige;
+ein Review-Status oder bloßer Name reicht nicht. DelegationLoop meldet validierte
+Orchestrator-Tools mit running/terminal-Status. agent_progress.py
 begrenzt sichtbares Reasoning serverseitig auf drei Zeilen à 180 Zeichen und
 acht Updates je Modellschritt. Provider-Zusammenfassungen haben Vorrang vor
 gekennzeichneten Satzauszügen; keine zusätzlichen LLM-Aufrufe. agent_loop.py
@@ -1707,7 +1707,16 @@ Provider-Fortsetzungsdaten bleiben im bestehenden laufenden Protokoll.
 agent-delegation.js verwendet das bestehende geordnete Activity-Journal,
 überlappende Modell-Icons und die Agent-Detailseitenleiste auch für Vergleichs-
 und Judge-Aufrufe (kind). Der Stapel dedupliziert identische API-Modelle, die
-Seitenleiste behält jeden Aufruf. App.createModelMark löst Anbieter/Modelle über
+Seitenleiste behält jeden Aufruf.
+Die Leiste blendet sich mit kurzer Bewegung ein; auf Desktop weicht der Chat
+sanft aus, Reduced Motion deaktiviert beide Animationen. Modellname und Aufgabe
+stehen getrennt, Usage zeigt ausschließlich gemessene Input+Output-Tokens;
+fehlende Werte bleiben pending/unavailable, unvollständige Summen tragen ein +.
+Judge-Details werden aus dem bestehenden öffentlichen Sitzungs-Snapshot sofort
+gerendert (Zweck, Fortschritt, Status, Tokenaufschlüsselung), ohne Detail- oder
+Nachrichtenabfrage. Worker-/Vergleichsdetails laden weiter nur bei Bedarf,
+zeigen sofort einen Skeleton und nutzen den vorhandenen message_seq-Cache.
+App.createModelMark löst Anbieter/Modelle über
 MODEL_FAMILIES inklusive apiPrefix auf; unbekannte Modelle erhalten ein Initial.
 Die Icons sind 15px groß. Im Composer öffnet das Chatmodellmenü über die
 optionale `secondarySelect`-Ebene von model-picker.js auch die Reasoning-Wahl.

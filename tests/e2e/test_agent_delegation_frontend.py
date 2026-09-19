@@ -1,6 +1,7 @@
 """Built app projection, keyboard/mobile layout and persisted message loading."""
 import json
 import os
+import re
 from pathlib import Path
 
 import pytest
@@ -19,6 +20,9 @@ def test_agent_sidebar_real_app_and_saved_view(browser, phase4_server, width, da
                "model": {"model": "anthropic/claude-haiku-4.5", "label": "Claude Haiku 4.5"},
                "duration_ms": 3200, "usage": {**usage, "estimated_cost_nano_usd": 1000000, "measured_calls": 1}}
               for i, (identity, title) in enumerate(((first, "Check Germany"), (second, "Check France")))]
+    agents.append({'id': 'e' * 32, 'seq': 3, 'message_seq': 3, 'status': 'completed', 'kind': 'judge',
+                   'title': 'Coverage judge', 'model': {'model': 'openai/gpt-5.4-mini', 'label': 'GPT-5.4 Mini'},
+                   'duration_ms': 2500, 'usage': usage, 'progress_text': 'Checking support for each statement.'})
     saved = {"id": turn, "turn_id": turn, "question": "Compare the two cases", "status": "completed", "position": 1,
              "execution_mode": "agent", "consensus": "Both checks are complete.", "sources": [], "model_answers": {},
              "agent_settings": {"model_id": "claude-haiku-4-5", "label": "Claude Haiku 4.5", "policy": {"delegation": True}},
@@ -56,12 +60,26 @@ def test_agent_sidebar_real_app_and_saved_view(browser, phase4_server, width, da
         page.locator("#sendButton").click()
         sidebar = page.locator("#agentSidebar")
         expect(sidebar).to_be_visible()
-        expect(page.locator(".agent-session")).to_have_count(2)
-        expect(page.locator(".agent-sidebar-usage")).to_contain_text("$0.0032")
+        expect(page.locator(".agent-session")).to_have_count(3)
+        expect(page.locator(".agent-sidebar-usage")).to_contain_text(re.compile(r'1[.,]050 tokens'))
+        expect(page.locator('.agent-session-tokens').first).to_have_text(re.compile(r'1[.,]050 tokens'))
+        expect(sidebar).not_to_contain_text('$')
+        assert sidebar.evaluate('el => getComputedStyle(el).animationName') == 'agent-sidebar-enter'
+        # Delay the first worker detail response while retaining real request
+        # handling. The UI must acknowledge the click in the same frame.
+        page.evaluate("""() => { const original = window.fetch; window.fetch = async (url, options) => {
+          if (String(url).includes('/agents/') && !window.__detailDelayUsed) {
+            window.__detailDelayUsed = true; await new Promise(resolve => setTimeout(resolve, 600));
+          }
+          return original(url, options);
+        }; }""")
         page.locator(".agent-session summary").first.click()
+        expect(page.locator('.agent-detail-skeleton')).to_be_visible()
+        expect(page.locator('.agent-session-detail').first).to_have_attribute('aria-busy', 'true')
         expect(sidebar).to_contain_text("Orchestrator → Check Germany")
         expect(sidebar).to_contain_text("Does the exception apply?")
         expect(sidebar).to_contain_text("Yes, apply the stated exception.")
+        expect(page.locator('.agent-session-detail').first).to_have_attribute('aria-busy', 'false')
         box = sidebar.bounding_box()
         assert box["x"] >= 0 and box["x"] + box["width"] <= width
         assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
@@ -69,6 +87,22 @@ def test_agent_sidebar_real_app_and_saved_view(browser, phase4_server, width, da
             target = Path(os.environ["AGENT_SCREENSHOTS"])
             target.mkdir(parents=True, exist_ok=True)
             page.screenshot(path=str(target / f"delegation-{width}-{'dark' if dark else 'light'}.png"))
+        page.locator('.agent-session summary').first.click()
+        cached_requests = len(requests)
+        page.locator('.agent-session summary').first.click()
+        expect(sidebar).to_contain_text('Does the exception apply?')
+        assert len(requests) == cached_requests
+        page.locator('.agent-session summary').first.click()
+        page.locator('.agent-session summary').last.click()
+        expect(page.locator('.agent-judge-purpose')).to_contain_text('supported by the comparison answers')
+        expect(page.locator('.agent-token-breakdown')).to_contain_text('900')
+        expect(page.locator('.agent-detail-skeleton')).to_have_count(0)
+        assert len(requests) == cached_requests
+        if os.environ.get('AGENT_SCREENSHOTS'):
+            page.screenshot(path=str(target / f"judge-{width}-{'dark' if dark else 'light'}.png"))
+        page.emulate_media(reduced_motion='reduce')
+        assert sidebar.evaluate('el => getComputedStyle(el).animationName') == 'none'
+        assert page.locator('.container').evaluate('el => getComputedStyle(el).transitionDuration') == '0s'
         page.locator(".agent-sidebar-close").click()
         expect(sidebar).not_to_be_visible()
         # Same turn projection respects the saved manual close preference.

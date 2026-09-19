@@ -803,8 +803,12 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
   aktueller Serverwert; Panel zeigt Reserven. Eine unzureichende Reserve wird
   nicht als leeres Budget bezeichnet. Optionale Suche darf vor dem Claim
   entfallen, sofern der Kernaufruf weiter ins Budget passt.
-- [ ] Tool-Nennungen im eingeklappten Denkfortschritt sind dezent hervorgehoben;
-  Active erscheint erst bei bestätigtem Start. Nach Ende verschwindet die Vorschau.
+- [ ] Tool-Nennungen im Denkfortschritt bleiben normaler Text; nur bestätigte
+  laufende Calls erhalten eine Statuszeile. Nach Ende verschwindet die Vorschau.
+- [ ] Agentenleiste öffnet sanft, respektiert manuelles Schließen und Reduced
+  Motion. Modellzeilen zeigen gemessene Tokens statt Dollarbeträgen. Judge-
+  Details erscheinen sofort ohne Detailrequest; Worker zeigen beim ersten
+  Laden einen Skeleton, beim erneuten Öffnen den Cache ohne weiteren Request.
 - [ ] Desktop und 390/320px, Hell/Dunkel, Tastatur und Reduced Motion prüfen.
 - [ ] Überlappende Modell-Icons oberhalb der Antwort zeigen die richtigen Anbieter,
   auch Kimi, GLM und Muse. Mehrere Aufrufe desselben Modells bleiben in Activity

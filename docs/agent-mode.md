@@ -119,9 +119,13 @@ jedem Provider-Aufruf ohne Suche neu zugelassen werden. Das Modell wird über
 fehlende neue Recherche informiert; reicht auch die reine Antwort nicht ins
 Budget, endet der Lauf weiterhin vor dem bezahlten Aufruf.
 
-Toolnamen in Reasoning-Auszügen erhalten dezente Inline-Labels. Ein solcher
-Hinweis bestätigt keinen Aufruf; erst ein validiertes, gestartetes Tool erhält
-den separaten Active-Status. Thinking bleibt dabei standardmäßig geschlossen.
+Toolnamen in Reasoning-Auszügen bleiben normaler Text. Nur bestätigte laufende
+Tool-Aufrufe erhalten eine dezente Statuszeile. Thinking bleibt geschlossen.
+Die Agentenleiste öffnet sanft und zeigt gemessene Input+Output-Tokens statt
+Dollarbeträgen; unbekannte/teilweise Usage bleibt erkennbar. Judge-Details
+erscheinen sofort aus bereits geladenen Sitzungsdaten, ohne zusätzlichen
+Datenbankabruf. Andere Details zeigen beim ersten Laden einen Skeleton und
+bleiben anschließend im Cache. Reduced Motion deaktiviert die Animationen.
 
 Vor einem Vergleich schützt der Server zusätzliche Tokens und Kosten für
 Synthese und Judges gegen andere parallele Runs und Worker. Zu wenig verfügbares

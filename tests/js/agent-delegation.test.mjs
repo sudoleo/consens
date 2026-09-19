@@ -3,7 +3,7 @@ import { loadScripts } from "./helpers/appWindow.mjs";
 
 const chatId = "c".repeat(32), turnId = "d".repeat(32), agentId = "a".repeat(32);
 const agent = (seq = 1, status = "working", id = agentId) => ({ id, seq, status, title: "Check Germany", model: { model: "anthropic/claude-haiku-4.5", label: "Haiku" },
-  message_seq: seq, usage: { estimated_cost_nano_usd: 123000, cost_source: "provider", complete: true }, duration_ms: 1200 });
+  message_seq: seq, usage: { input_tokens: 900, output_tokens: 150, reasoning_tokens: 30, cached_input_tokens: 200, estimated_cost_nano_usd: 123000, cost_source: "provider", complete: true }, duration_ms: 1200 });
 function boot(fetcher) {
   return loadScripts(["static/js/agent-delegation.js"], { body: '<div id="agentAnswerActivity"></div>', before(w) {
     w.auth = { currentUser: { uid: "owner", getIdToken: async () => "token" } };
@@ -18,6 +18,54 @@ function receive(w, data) {
 }
 
 describe("Agent sidebar", () => {
+  it('shows measured input plus output tokens, with no invented zero or double-counted details', () => {
+    const {window: w, document: d, dom} = boot();
+    const tokens = w.App.agentDelegation.tokens;
+    expect(tokens(null, true)).toBe('Tokens pending');
+    expect(tokens(null)).toBe('Tokens unavailable');
+    expect(tokens({input_tokens: 0, output_tokens: 0})).toBe('0 tokens');
+    expect(tokens({...agent().usage, complete: false})).toMatch(/^1[.,]050\+ tokens$/);
+    receive(w, agent()); w.App.agentDelegation.project({chatId, turnId});
+    expect(d.querySelector('.agent-session-tokens').textContent).toMatch(/^1[.,]050 tokens$/);
+    expect(d.querySelector('.agent-session-tokens').title).toContain('900 input + 150 output');
+    expect(d.querySelector('.agent-session summary').textContent).not.toContain('$');
+    dom.window.close();
+  });
+
+  it('opens judge details immediately from live snapshots without detail reads', async () => {
+    const {window: w, document: d, dom} = boot(async () => ({ok:true, json:async () => ({agents:[],status:'succeeded'})}));
+    const judge = {...agent(1, 'completed'), kind:'judge', title:'Coverage judge', progress_text:'Checking each statement.'};
+    receive(w, judge); w.App.agentDelegation.project({chatId, turnId});
+    d.querySelector('.agent-inline-model').click();
+    expect(d.querySelector('.agent-judge-purpose').textContent).toContain('supported');
+    expect(d.querySelector('.agent-token-breakdown').textContent).toContain('900');
+    expect(d.querySelector('.agent-detail-skeleton')).toBe(null);
+    receive(w, {...judge, seq:2, usage:{input_tokens:950,output_tokens:180}});
+    expect(d.querySelector('.agent-token-breakdown').textContent).toContain('950');
+    await new Promise(r => setTimeout(r, 5));
+    expect(w.fetch.mock.calls.every(([url]) => url.endsWith('/agents'))).toBe(true);
+    dom.window.close();
+  });
+
+  it('shows a skeleton immediately and reuses cached messages on reopening', async () => {
+    let finish;
+    const {window: w, document: d, dom} = boot(url => url.includes(agentId)
+      ? new Promise(resolve => { finish = resolve; }) : Promise.resolve({ok:true,json:async () => ({agents:[],status:'succeeded'})}));
+    receive(w, agent()); w.App.agentDelegation.project({chatId, turnId});
+    d.querySelector('.agent-inline-model').click();
+    expect(d.querySelector('.agent-detail-skeleton')).not.toBe(null);
+    expect(d.querySelector('.agent-session-detail').getAttribute('aria-busy')).toBe('true');
+    await vi.waitFor(() => expect(finish).toBeTypeOf('function'));
+    finish({ok:true, json:async () => ({agent:{assignment:{goal:'Check the premise'}},messages:[{id:'m',seq:1,text:'Verified result',kind:'result'}],has_more:false})});
+    await vi.waitFor(() => expect(d.querySelector('.agent-session-detail').textContent).toContain('Verified result'));
+    const count = w.fetch.mock.calls.length;
+    const root = d.querySelector('.agent-session');
+    root.open = false; root.dispatchEvent(new w.Event('toggle'));
+    root.open = true; root.dispatchEvent(new w.Event('toggle'));
+    expect(d.querySelector('.agent-detail-skeleton')).toBe(null);
+    expect(w.fetch.mock.calls.length).toBe(count);
+    dom.window.close();
+  });
   it('updates the account allowance from the existing activity request', async () => {
     const budget = { remaining: 24000, limit: 250000, reserved: 16000, observed_at: 2 };
     const { window: w, dom } = boot(async () => ({ ok: true, json: async () => ({ agents: [], status: 'running', token_budget: budget }) }));
@@ -91,8 +139,7 @@ describe("Agent sidebar", () => {
     await new Promise(r => setTimeout(r, 5));
     expect(w.fetch.mock.calls.length).toBe(calls);
     expect(d.querySelector("img[onerror]")).toBeNull();
-    expect(w.App.agentDelegation.cost(null)).toBe("Cost unknown");
-    expect(w.App.agentDelegation.cost({ estimated_cost_nano_usd: 1000000, cost_complete: false })).toContain("incomplete");
+    expect(w.App.agentDelegation.tokens(null)).toBe("Tokens unavailable");
     dom.window.close();
   });
 });

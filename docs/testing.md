@@ -133,6 +133,10 @@ und den Wechsel zurück zum unveränderten Consensus-Kontingent.
 Live-Vorschau und die Reasoning-Ebene im Chatmodell-Picker.
 Zusätzlich: aktualisierte Kontingente bei SSE-Fehlern/Disconnect, veraltete und
 fremde Snapshots sowie Tool-Nennungen gegenüber bestätigten Aufrufen.
+Agentenleiste: `agent-delegation.test.mjs` prüft gemessene Tokenzahlen (ohne
+Doppelzählung), sofortige Judge-Details ohne weitere Requests und Skeleton/
+Cache für Worker. `test_agent_delegation_frontend.py` prüft diese Abläufe mit
+gedrosseltem Detailabruf, sanfter Öffnung und Reduced Motion auf Desktop/Mobil.
 `test_agent_comparison.py` prüft die Zulassung ohne optionale Suche bei zu großer
 Suchreserve und verhindert dabei doppelte Calls/Belege. `test_agent_runs.py`
 prüft Quote und konkrete Reservierungsfehler in terminalen SSE-Ereignissen.
