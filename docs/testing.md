@@ -126,7 +126,12 @@ exakte Versionen, mehrere Teilgrundlagen, Ausfälle, Abbruch, UTC-Wechsel sowie
 atomare Tokenreservierungen. `tests/test_agent_progress.py` prüft begrenzte
 Fortschrittsauszüge, den Vorrang von Provider-Zusammenfassungen und kompakte
 Live-/Persistenzdaten. `tests/js/agent-review.test.mjs` prüft Bindungen und
-Markierungswechsel; `model-answer-reader.test.mjs` isolierte Vergleichskontexte,
+Quellen aus Chat-Recherche, Antwortlinks und Vergleichsmodellen, auch ohne
+Vergleich. `tests/js/sidebar-quota.test.mjs` prüft die Agent-Prozentprojektion
+und den Wechsel zurück zum unveränderten Consensus-Kontingent.
+`tests/js/agent-chat.test.mjs` prüft die manuelle Reasoning-Expansion, die separate
+Live-Vorschau und die Reasoning-Ebene im Chatmodell-Picker.
+`model-answer-reader.test.mjs` prüft isolierte Vergleichskontexte,
 Grundlagenwechsel, Aktualisierung und Fokus. `tests/e2e/test_agent_comparison_frontend.py`
 prüft die gebaute Desktop-/Mobilansicht: zentrale Modell-Icons, rote Textlinks,
 Widerspruchskarten, Markdown-Antworten, Quellen, Tastatur, kollisionsfreies

@@ -776,6 +776,17 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
 
 ## Agent · Beta: Vergleiche und Prüfungen
 
+- [ ] Im Agent-Chat ersetzt der verbleibende Tokenanteil als Prozentzahl den
+  Run-Zähler im Sidebar-Footer. Exakte Zahlen im Panel, keine Budgetzeile im
+  Composer. Modus-/Accountwechsel zeigt keine fremden oder veralteten Zahlen.
+- [ ] Thinking bleibt standardmäßig geschlossen; kurze Absätze darunter zeigen
+  Fortschritt und Tool-Aktivität ohne vertikale Linien. Manuelles Öffnen zeigt
+  Details; die Vorschau verschwindet nach Abschluss oder Stop.
+- [ ] Reasoning ist im Chatmodellmenü erreichbar (auch per Tastatur); der
+  Composer enthält im laufenden Chat nur Chatmodell und Compare-Auswahl.
+- [ ] Sources enthält Chat-Recherche und zitierte Antwortlinks, auch wenn
+  Vergleichsmodelle keine Quellenmetadaten liefern oder kein Vergleich läuft.
+
 - [ ] Chatmodell und Compare-Preset getrennt wählen; Custom zeigt nur
   Vergleichsmodelle, keine Consensus-Engine. Escape gibt den Fokus zurück.
 - [ ] Einen ausdrücklichen Vergleich und zwei Teilfragen testen: unabhängige

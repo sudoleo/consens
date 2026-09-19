@@ -7,7 +7,7 @@
     const paragraphs = String(text || "").split(/\n\s*\n|\n/).filter(Boolean);
     return paragraphs.slice(-3).map(p => {
       const sentence = p.match(/[^.!?]+[.!?](?=\s|$)/)?.[0] || p;
-      const clean = sentence.replace(/^[#*\s]+/, "").replace(/\s+/g, " ").trim();
+      const clean = sentence.replace(/^[#*>\s-]+/, "").replace(/\*\*|__|`/g, '').replace(/\s+/g, " ").trim();
       return clean.length > 180 ? clean.slice(0, 177).replace(/\s+\S*$/, "") + "…" : clean;
     }).join("\n");
   }
@@ -50,16 +50,15 @@
       note.className = "agent-activity-note";
       const usageEl = document.createElement("p");
       usageEl.className = "agent-usage";
+      const preview = document.createElement('div'); preview.className = 'agent-progress';
+      preview.setAttribute('role', 'status'); preview.setAttribute('aria-live', 'polite');
       details.append(summary, content, note, usageEl);
-      host.replaceChildren(details);
-      host._agentActivity = { details, title, content, note, usageEl, nodes: new Map(), manual: false };
-      // Native toggle events also fire for programmatic .open changes.
-      // Only an explicit user gesture overrides the automatic disclosure.
-      summary.addEventListener("click", () => { host._agentActivity.manual = true; });
+      host.replaceChildren(details, preview);
+      host._agentActivity = { details, title, content, note, usageEl, preview, nodes: new Map() };
     }
     const view = host._agentActivity;
     const reasoning = events.filter(item => item.kind === "reasoning"
-      && ["text", "summary"].includes(item.format) && item.text).slice(-1);
+      && ["text", "summary"].includes(item.format) && item.text);
     // Older saved turns mistook a missing search counter for tool activity.
     // Preserve real client calls and searches backed by counts or citations.
     const tools = events.filter(item => item.kind === "tool" && !(item.name === "web_search"
@@ -75,8 +74,22 @@
     if (view.title.textContent !== heading) view.title.textContent = heading;
     view.details.classList.toggle("is-running", running);
     view.details.dataset.status = status;
-    if (!view.manual) view.details.open = running && (reasoning.length > 0 || tools.length > 0);
-    // Follow the whole trace, with one scrollbar. Respect readers scrolling up.
+    const toolLabels = { web_search: 'Searching the web…', compare_models: 'Comparing model answers…',
+      judge_answer: 'Checking the answer…', start_agent: 'Asking another model…', wait_agents: 'Waiting for model responses…',
+      send_agent: 'Following up with a model…', review_agent: 'Reviewing a model response…' };
+    const progress = reviewStage || (activeTool ? toolLabels[activeTool.name] || 'Running a tool…' : writing ? 'Writing the answer…' : '');
+    const highlights = compactReasoning(reasoning.at(-1)?.text).split('\n').filter(Boolean);
+    const paragraphs = [...new Set([progress, ...highlights].filter(Boolean))].slice(0, 3);
+    if (!paragraphs.length && running) paragraphs.push('Preparing a response…');
+    const previewText = running ? paragraphs.join('\n') : '';
+    if (view.preview.dataset.text !== previewText) {
+      view.preview.dataset.text = previewText;
+      view.preview.replaceChildren(...(running ? paragraphs : []).map(text => {
+        const p = document.createElement('p'); p.textContent = text; return p;
+      }));
+    }
+    view.preview.hidden = !running;
+    // Expansion is always an explicit user choice.
     const follow = view.content.scrollHeight - view.content.scrollTop - view.content.clientHeight < 40;
     const ids = new Set();
     for (const item of events.filter(item => reasoning.includes(item) || tools.includes(item))) {

@@ -61,6 +61,14 @@ zeigen dort die formatierte Originalantwort. Bei mehreren Teilvergleichen wählt
 ein beschriftetes Auswahlfeld die konkrete Markierungsgrundlage. Kontext und
 frühere Antwortversionen stehen in den Details des Lesers. Live-Ansicht und
 gespeicherter Verlauf verwenden denselben Review-Snapshot.
+Die Quellenansicht vereinigt Quellen aus der Chat-Recherche, der jeweiligen
+Vergleichsgrundlage und expliziten Links in den Antworten. Sie ist auch ohne
+Vergleich verfügbar. Provider-/Suchquellen werden auf dem Turn gespeichert;
+alte Turns können sie weiterhin aus ihrem Aktivitätsjournal darstellen.
+
+Der Composer zeigt Chatmodell und Compare-Auswahl. Reasoning ist eine zweite
+Ebene im Chatmodellmenü; der während einer Unterhaltung gesperrte Modusschalter
+belegt dort keinen Platz. Der Modellstapel verwendet dezente 15-px-Icons.
 
 Die Denkphase zeigt kurze Fortschrittsauszüge: vorhandene Provider-
 Zusammenfassungen haben Vorrang, sonst werden vollständige Sätze aus sichtbarem
@@ -69,7 +77,12 @@ begrenzt sie auf drei Zeilen mit je 180 Zeichen und acht Updates pro Modellschri
 es entstehen keine zusätzlichen Modellaufrufe. Der Turn speichert pro Schritt
 nur den letzten Kurztext, Worker-Sitzungen nur den aktuellen Fortschritt;
 das bestehende Event-Journal enthält die begrenzten Kurztext-Updates. Der
-Antwortbereich zeigt jeweils die jüngste Zusammenfassung. Alte, ausführliche
+Antwortbereich zeigt während des Laufs kurze, einheitliche Absätze unterhalb
+des standardmäßig geschlossenen Thinking-Disclosures, einschließlich aktueller
+Tool-Aktivität. Nach Laufende verschwindet diese Vorschau. Nur explizites
+Aufklappen zeigt alle verfügbaren Schritt-Zusammenfassungen, Tools und Usage;
+es gibt keine automatische Expansion und keine vertikalen Zitatlinien.
+Alte, ausführliche
 Aktivitäten werden beim Anzeigen ebenfalls gekürzt; bestehende Daten werden
 nicht migriert. Private Provider-Fortsetzungsdaten bleiben ausschließlich im
 laufenden Protokoll und werden nicht als sichtbare Aktivität gespeichert.
@@ -77,8 +90,11 @@ laufenden Protokoll und werden nicht als sichtbare Aktivität gespeichert.
 ## Tageskontingent
 
 AGENT_DAILY_TOKEN_LIMIT ist zentral über die Umgebung konfigurierbar und beträgt
-standardmäßig 250000 Tokens pro UID und UTC-Tag (Reset um 00:00 UTC). Der Composer
-zeigt das verfügbare Kontingent. Es gilt gemeinsam für Chat, delegierte Worker,
+standardmäßig 250000 Tokens pro UID und UTC-Tag (Reset um 00:00 UTC). Der bestehende
+Kontingent-Ring im Sidebar-Footer zeigt im Agent-Chat den verbleibenden Anteil
+als abgerundete Prozentzahl. Sein Panel enthält die exakten Tokenzahlen und
+Reset-Zeit. Consensus zeigt dort weiterhin das Run-Limit; der Composer enthält
+keine Budgetzeile. Das Kontingent gilt gemeinsam für Chat, delegierte Worker,
 Vergleichsmodelle und alle Judge-/Repair-/Retry-Aufrufe.
 
 Gezählt wird Provider-Input plus Provider-Output. Cache-Reads/-Writes sind bereits

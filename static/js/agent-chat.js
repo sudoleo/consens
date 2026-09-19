@@ -78,8 +78,7 @@
     const select = document.getElementById("agentModelDropdown");
     const effort = document.getElementById("agentReasoningEffort");
     if (host) host.hidden = !agent;
-    const existingQuota = document.getElementById("agentTokenBudget");
-    if (existingQuota) existingQuota.hidden = !agent || !catalog?.token_budget;
+    App.sidebarQuota?.sync();
     if (!agent || !select || !effort) {
       if (select) App.collapseExpandedModelPicker?.(select);
       if (effort) App.collapseExpandedModelPicker?.(effort);
@@ -87,17 +86,6 @@
     }
     if (canUse() && catalogStatus === "idle") loadModels();
     const ready = catalogStatus === "ready" && canUse();
-    let quota = document.getElementById("agentTokenBudget");
-    if (!quota && host) {
-      quota = document.createElement("span"); quota.id = "agentTokenBudget";
-      quota.className = "agent-token-budget"; host.parentElement.append(quota);
-    }
-    if (quota) {
-      const budget = catalog?.token_budget;
-      quota.hidden = !budget;
-      quota.textContent = budget ? `${Number(budget.remaining).toLocaleString()} tokens left today` : "";
-      quota.title = "Shared by chat, agents, comparisons and judges. Resets at 00:00 UTC. Pending calls reserve tokens.";
-    }
     const running = registry.isExecuting(registry.visible()?.runId);
     const current = selection();
     const previous = preferredSelection() || {};
@@ -140,10 +128,10 @@
     }
     effort.value = efforts.includes(current.reasoning_effort) ? current.reasoning_effort : "default";
     effort.disabled = !ready || running || efforts.length < 2;
-    effort.parentElement.hidden = !ready || !model?.reasoning_available;
+    effort.dataset.available = String(ready && model?.reasoning_available);
+    effort.parentElement.hidden = true;
     document.getElementById("agentModelsRetry")?.toggleAttribute("hidden", catalogStatus !== "failed");
-    App.initCustomModelPicker?.(select);
-    App.initCustomModelPicker?.(effort, { menuWidth: 270 });
+    App.initCustomModelPicker?.(select, { secondarySelect: effort, secondaryLabel: 'Reasoning' });
     if (select.disabled) App.collapseExpandedModelPicker?.(select);
     if (effort.disabled || effort.parentElement.hidden) App.collapseExpandedModelPicker?.(effort);
     window.syncCustomModelPickers?.();
@@ -205,7 +193,7 @@
     const label = document.getElementById("chatExecutionControl");
     const select = document.getElementById("chatExecutionMode");
     const locked = Boolean(registry.visible() || registry.getSelectedConversationBasis({ includeHistory: false }));
-    if (label) label.hidden = !canUse() && !agent;
+    if (label) label.hidden = (!canUse() && !agent) || (agent && locked);
     if (select) {
       select.value = agent ? "agent" : "consensus";
       select.disabled = locked || !canUse();
@@ -229,7 +217,8 @@
     if (agent && !context && basis) {
       renderAnswer(basis.consensus || "", "", App.agentActivity?.label(basis.currentTurn?.agent_settings) || "Agent · Beta");
       App.agentActivity?.renderTurn(activityHost(`${basis.chatId}:${basis.turnId}`), basis.currentTurn);
-      App.agentReview?.render(document.getElementById("agentAnswerBody"), basis.currentTurn?.agent_review);
+      App.agentReview?.render(document.getElementById("agentAnswerBody"), basis.currentTurn?.agent_review,
+        { sources: basis.currentTurn?.sources, events: basis.currentTurn?.agent_activity, key: basis.turnId, question: basis.question });
       App.agentDelegation?.project(basis.currentTurn?.agent_settings?.policy?.delegation ? {
         chatId: basis.chatId, turnId: basis.turnId || basis.currentTurn?.id,
         usage: basis.currentTurn?.agent_usage, running: basis.currentTurn?.status === "pending" } : null);
@@ -282,7 +271,9 @@
       finishReason: state.completedTurn?.agent_finish_reason,
       review: state.completedTurn?.agent_review || context.metadata.agentReview,
     });
-    App.agentReview?.render(document.getElementById("agentAnswerBody"), state.completedTurn?.agent_review || context.metadata.agentReview);
+    App.agentReview?.render(document.getElementById("agentAnswerBody"), state.completedTurn?.agent_review || context.metadata.agentReview,
+      { sources: state.completedTurn?.sources, events: state.completedTurn?.agent_activity || context.metadata.agentActivity,
+        key: state.completedTurn?.id || context.runId, question: context.question });
     App.syncSendButtonRunning?.();
     App.agentDelegation?.project(context.metadata.delegation || state.completedTurn?.agent_settings?.policy?.delegation ? { chatId: context.metadata.chatId,
       turnId: state.completedTurn?.id || context.metadata.agentTurnId,
@@ -440,7 +431,8 @@
       if (registry.isAuthCurrent(context)) registry.renderVisible();
     }
   }
-  App.agentChat = { canUse, isSelected: () => selectedMode() === "agent", render, project, send };
+  App.agentChat = { canUse, isSelected: () => selectedMode() === "agent", render, project, send,
+    tokenBudget: () => canUse() && catalogOwner === window.auth?.currentUser?.uid ? catalog?.token_budget : null };
   window.addEventListener("consensio:run-registry-change", render);
   document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("chatExecutionMode")?.addEventListener("change", event => {

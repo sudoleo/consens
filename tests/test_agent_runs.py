@@ -101,6 +101,18 @@ def test_followups_use_all_completed_messages_without_compression(store):
     assert [message["content"] for message in messages[1:]] == ["Question one", "A helpful answer", "What next?"]
 
 
+def test_final_turn_keeps_search_sources_from_previous_steps(store):
+    chat_id, turn = pending(store)
+    assert store.claim(UID, chat_id, turn["id"], AgentModel())
+    completion = receipt()
+    completion.activity = [{"kind": "tool", "name": "web_search", "sources": [
+        {"url": "https://example.org/search", "title": "Primary source"}, {"url": "javascript:bad()"}]}]
+    completion.sources = [{"url": "https://example.org/answer", "title": "Answer citation"}]
+    store.settle(UID, chat_id, turn["id"], completion=completion, status="succeeded")
+    assert {s["url"] for s in store.get_turn(UID, chat_id, turn["id"])["sources"]} == {
+        "https://example.org/search", "https://example.org/answer"}
+
+
 def test_chat_lock_prevents_two_different_turns_running_together(store):
     chat_id, first = pending(store)
     with pytest.raises(TurnStatusConflict):

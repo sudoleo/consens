@@ -12,21 +12,56 @@
   }
   function safeSources(answers) {
     const sources = new Map();
-    for (const answer of answers || []) for (const source of answer.sources || []) {
-      try {
-        const url = new URL(source.url);
-        if (!["http:", "https:"].includes(url.protocol) || url.username || url.password) continue;
-        sources.set(url.href, { ...source, url: url.href, title: source.title || url.hostname });
-      } catch (_) { /* Invalid citation. */ }
+    for (const answer of answers || []) {
+      const citations = [...(answer.sources || [])];
+      if (answer.text && window.marked?.parse && window.DOMPurify) {
+        const template = document.createElement('template');
+        template.innerHTML = window.DOMPurify.sanitize(window.marked.parse(answer.text));
+        for (const link of template.content.querySelectorAll('a[href]')) {
+          if (!link.closest('code, pre')) citations.push({ url: link.getAttribute('href'), title: link.textContent });
+        }
+      }
+      for (const source of citations) {
+        try {
+          const url = new URL(source.url);
+          if (!["http:", "https:"].includes(url.protocol) || url.username || url.password) continue;
+          url.hash = '';
+          if (!sources.has(url.href)) sources.set(url.href, { ...source, url: url.href, title: source.title || url.hostname });
+        } catch (_) { /* Invalid citation. */ }
+      }
     }
     return [...sources.values()];
   }
-  function render(body, review) {
+  function sourcePanel(sources) {
+    const panel = node('div', 'agent-evidence-panel');
+    const list = node('ol', 'answer-reader-sources');
+    for (const source of sources) {
+      const li = node('li'); const link = node('a', '', source.title);
+      link.href = source.url; link.target = '_blank'; link.rel = 'noopener noreferrer'; li.append(link); list.append(li);
+    }
+    panel.append(sources.length ? list : node('p', 'agent-review-note', 'No source URLs were supplied for this answer.'));
+    return panel;
+  }
+  function render(body, review, evidence = {}) {
     if (!body?.parentElement) return;
+    const turnSources = safeSources([evidence, ...(evidence.events || []), { sources: [...body.querySelectorAll('a[href]')]
+      .filter(a => !a.closest('code, pre')).map(a => ({url: a.getAttribute('href'), title: a.textContent})) }]);
     let host = body._agentReview;
     if (!review?.comparisons?.length) {
-      if (host && typeof body.dataset.markdown === "string") window.injectMarkdown?.(body, body.dataset.markdown, []);
-      host?.remove(); body._agentReview = null; body._agentModels?.remove(); body._agentModels = null; return;
+      if (host?._hasReview && typeof body.dataset.markdown === "string") window.injectMarkdown?.(body, body.dataset.markdown, []);
+      body._agentModels?.remove(); body._agentModels = null;
+      if (!turnSources.length) { host?.remove(); body._agentReview = null; return; }
+      if (!host?.isConnected) { host = node('section', 'agent-review'); body.after(host); body._agentReview = host; }
+      const signature = JSON.stringify([evidence.key, evidence.question, turnSources]);
+      if (host.dataset.signature === signature) return;
+      host.dataset.signature = signature; host._hasReview = false; host.hidden = false;
+      const context = { key: `agent-sources:${evidence.key || body.id || evidence.question}`, question: evidence.question || 'Answer sources',
+        answers: [], sections: ['sources'], renderPanel: () => sourcePanel(turnSources) };
+      const nav = node('nav', 'consensus-footer-tabs agent-evidence-links');
+      const button = node('button', 'consensus-tab agent-evidence-link', `Sources ${turnSources.length}`);
+      button.type = 'button'; button.dataset.section = 'sources';
+      button.addEventListener('click', () => App.answerReader?.openContext(context, {section: 'sources', trigger: button}));
+      nav.append(button); host.replaceChildren(nav); App.answerReader?.refreshContext(context); return;
     }
     if (!host?.isConnected) {
       host = node("section", "agent-review"); body.after(host); body._agentReview = host;
@@ -39,9 +74,10 @@
       const check = review.checks?.find(c => c.comparison_id === comparison.id);
       return exact && check?.answer_hash === version.hash && check?.basis_hash === comparison.basis_hash ? check : null;
     };
-    const signature = JSON.stringify([review, exact]);
+    const signature = JSON.stringify([review, exact, turnSources]);
     if (host.dataset.signature === signature) return;
     host.dataset.signature = signature;
+    host._hasReview = true;
     host.replaceChildren();
     const state = review.status === "succeeded" && !review.comparisons.every(boundCheck) ? "required" : review.status;
     host.hidden = !version && ["required", "running"].includes(state);
@@ -57,7 +93,7 @@
     contexts = review.comparisons.map(comparison => {
       const check = boundCheck(comparison);
       const answers = comparison.answers || [];
-      const sources = safeSources(answers);
+      const sources = safeSources([{ sources: turnSources }, ...answers]);
       const findAnswer = name => answers.find(a => [a.provider, a.provider_label, a.model?.label].some(v => v?.toLowerCase() === name?.toLowerCase()));
       const context = { key: `agent-evidence:${comparison.id}`, question: comparison.question, scopeLabel: "Comparison focus",
         contextLabel: comparison.question.length > 64 ? comparison.question.slice(0, 61) + "…" : comparison.question,
@@ -76,13 +112,7 @@
       context.renderPanel = kind => {
         const panel = node("div", "agent-evidence-panel");
         if (kind === "sources") {
-          const list = node("ol", "answer-reader-sources");
-          for (const source of sources) {
-            const li = node("li"); const link = node("a", "", source.title);
-            link.href = source.url; link.target = "_blank"; link.rel = "noopener noreferrer"; li.append(link); list.append(li);
-          }
-          panel.append(sources.length ? list : node("p", "agent-review-note", "No source URLs were supplied for this comparison."));
-          return panel;
+          return sourcePanel(sources);
         }
         panel.append(node("p", "agent-evidence-status", states[check?.status || state] || "Review incomplete"));
         if (!check || !check.differences_data) {

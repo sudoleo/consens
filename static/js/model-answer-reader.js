@@ -585,7 +585,10 @@
     get('Question').querySelector('summary').tabIndex = longQuestion || get('Question').open ? 0 : -1;
     get('Question').querySelector('summary').setAttribute('aria-disabled', String(!longQuestion && !get('Question').open));
     get('Sections').hidden = direct;
-    get('Sections').querySelectorAll('button').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.section === (inspector?.kind || 'answers'))));
+    get('Sections').querySelectorAll('button').forEach(button => {
+      button.hidden = !!selected.sections && !selected.sections.includes(button.dataset.section);
+      button.setAttribute('aria-pressed', String(button.dataset.section === (inspector?.kind || 'answers')));
+    });
     root.classList.toggle('is-inspecting', !!inspector);
     get('Inspector').hidden = !inspector; get('Columns').hidden = !!inspector;
     get('Title').textContent = inspector ? (inspector.kind === 'differences' ? 'Differences' : 'Sources') : (direct ? 'Direct comparison' : 'Model answers');

@@ -36,14 +36,15 @@ def _snapshot(page, name):
 
 
 def _choose_effort(page, effort):
-    page.locator(".agent-effort-control .model-picker-display").click()
-    menu = page.locator(".agent-effort-control .model-picker-menu").bounding_box()
+    page.locator(".agent-model-picker .model-picker-display").click()
+    page.locator('.agent-reasoning-option').click()
+    menu = page.locator(".agent-model-picker .model-picker-menu").bounding_box()
     assert menu["x"] >= 0 and menu["x"] + menu["width"] <= page.viewport_size["width"]
     assert menu["y"] >= 0 and menu["y"] + menu["height"] <= page.viewport_size["height"]
     theme = page.evaluate("() => document.body.classList.contains('dark-mode') ? 'dark' : 'light'")
     position = page.evaluate("() => document.body.classList.contains('is-hero') ? 'hero' : 'thread'")
     _snapshot(page, f"agent-effort-{position}-{page.viewport_size['width']}-{theme}")
-    page.locator(f'.agent-effort-control [data-value="{effort}"]').click()
+    page.locator(f'.agent-model-picker [data-setting-value="{effort}"]').click()
 
 
 @pytest.mark.parametrize("width,dark", [(1280, False), (390, False), (390, True), (320, False)])
@@ -213,13 +214,16 @@ def test_live_reasoning_disclosure_and_stop(browser, phase4_server, width, dark)
         page.locator("#questionInput").fill("Think about this question")
         page.locator("#sendButton").click()
         expect(page.locator("#agentAnswerActivity .agent-activity-title")).to_have_text("Thinking…")
-        expect(page.locator("#agentAnswerActivity .agent-activity-reasoning")).to_be_visible()
+        expect(page.locator("#agentAnswerActivity .agent-progress")).to_be_visible()
+        expect(page.locator("#agentAnswerActivity details")).not_to_have_attribute('open', '')
         expect(page.locator("#agentAnswerBody")).to_be_empty()
         expect(page.locator("#agentModelDropdown")).to_be_disabled()
         expect(page.locator(".agent-model-picker .model-picker-display")).to_be_disabled()
         title = page.locator("#agentAnswerActivity .agent-activity-title")
         assert title.evaluate("el => getComputedStyle(el).animationName") == "source-label-shine"
         _snapshot(page, f"agent-live-{width}-{'dark' if dark else 'light'}")
+        page.locator('#agentAnswerActivity summary').click()
+        expect(page.locator('#agentAnswerActivity .agent-activity-reasoning')).to_be_visible()
         if width == 1280:
             expect(page.locator(".run-entry-status")).to_have_text("Thinking")
             expect(page.locator("#newRunButton")).to_have_text("New chat")
@@ -417,6 +421,14 @@ def test_native_search_sources_in_chat_and_saved_activity(browser, phase4_server
         box = details.bounding_box()
         assert box["x"] >= 0 and box["x"] + box["width"] <= width
         _snapshot(page, f"agent-native-search-{width}-{'dark' if dark else 'light'}")
+        sources = page.locator('.agent-evidence-link[data-section="sources"]')
+        expect(sources).to_have_text('Sources 2')
+        sources.click()
+        expect(page.locator('#answerReaderInspector a')).to_have_count(2)
+        expect(page.locator('#answerReaderSections [data-section="answers"]')).not_to_be_visible()
+        expect(page.locator('#answerReaderSections [data-section="differences"]')).not_to_be_visible()
+        page.keyboard.press('Escape')
+        expect(sources).to_be_focused()
         # The shared history renderer receives the same authoritative activity.
         page.evaluate("turn => { App.agentActivity.renderTurn(document.getElementById('agentAnswerActivity'), turn); }", turn)
         expect(details.locator("a")).to_have_count(2)

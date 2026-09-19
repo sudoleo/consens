@@ -17,7 +17,7 @@ from app.services import persistence_guard, prompt_config
 from app.services import agent_quota
 from app.services.agent_runtime import AgentCapacityExceeded
 from app.services.agent_sessions import AgentSessionStore
-from app.services.chat_store import ChatStore, ChatNotFound, TurnStatusConflict, TURN_PAGE_SIZE_MAX
+from app.services.chat_store import ChatStore, ChatNotFound, TurnStatusConflict, TURN_PAGE_SIZE_MAX, normalize_turn_sources
 from app.services.llm.agent_client import AgentModel
 from app.services.llm.base import get_date_context
 from app.services.prompt_defaults import AGENT_SYSTEM_PROMPT
@@ -26,6 +26,17 @@ from app.services.prompt_defaults import AGENT_SYSTEM_PROMPT
 CONTEXT_CHAR_LIMIT = 120_000
 OWNER_CONCURRENT_RUNS = 2
 RUN_LEASE_SECONDS = 300
+
+
+def agent_sources(completion, review=None):
+    """Keep provider/search citations on the canonical turn, across all steps."""
+    sources = list(getattr(completion, "sources", []) or [])
+    for event in completion.activity:
+        sources.extend(event.get("sources") or [])
+    for comparison in (review or {}).get("comparisons", []):
+        for answer in comparison.get("answers", []):
+            sources.extend(answer.get("sources") or [])
+    return normalize_turn_sources(sources)
 
 
 def get_agent_system_prompt(model=None, config=None):
@@ -205,12 +216,13 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                              "updated_at": firestore.SERVER_TIMESTAMP}
                     patch.update(agent_activity=completion.activity, agent_usage=usage,
                                  agent_finish_reason=completion.finish_reason,
-                                 agent_reasoning_truncated=completion.reasoning_truncated)
+                                 agent_reasoning_truncated=completion.reasoning_truncated,
+                                 sources=agent_sources(completion))
                     if status == "succeeded":
                         # Legacy history/rendering contract; execution_mode is
                         # authoritative and no consensus computation took place.
                         patch.update(assistant_response=completion.text, completed_at=firestore.SERVER_TIMESTAMP,
-                                     differences="", differences_data=None, sources=[], included_models=[])
+                                     differences="", differences_data=None, included_models=[])
                     else:
                         patch["error_code"] = "cancelled" if status == "cancelled" else "agent_failed"
                         patch["failed_at"] = firestore.SERVER_TIMESTAMP
@@ -262,10 +274,11 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                 patch = {"status": "completed" if status == "succeeded" else "failed", "updated_at": firestore.SERVER_TIMESTAMP,
                          "agent_activity": completion.activity, "agent_usage": completion.usage,
                          "agent_finish_reason": completion.finish_reason,
-                         "agent_reasoning_truncated": completion.reasoning_truncated}
+                         "agent_reasoning_truncated": completion.reasoning_truncated,
+                         "sources": agent_sources(completion, review)}
                 if status == "succeeded":
                     patch.update(assistant_response=completion.text, completed_at=firestore.SERVER_TIMESTAMP,
-                                 differences="", differences_data=None, sources=[], included_models=[])
+                                 differences="", differences_data=None, included_models=[])
                 else:
                     patch.update(error_code="cancelled" if status == "cancelled" else "agent_failed", failed_at=firestore.SERVER_TIMESTAMP)
                     if review:

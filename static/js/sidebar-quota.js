@@ -5,7 +5,9 @@
    already exists (#usageDisplay). That column stays the single source of
    truth — app-core.js (renderUsageDisplay), firebase.js and watch.js keep
    writing into it exactly as before, and a MutationObserver mirrors whatever
-   lands there into the ring and the bars.
+   lands there into the ring and the bars. In Agent chats the same surface
+   projects the account-bound Agent token budget; runs()/deep() still expose
+   the original Consensus allowances.
 
    Doing it this way means the redesign adds a surface without adding a second
    place where "how many runs do I have left" can be computed — and therefore
@@ -114,10 +116,33 @@
     var deep = parseLine(el("deepUsageDisplay"));
     var watches = parseLine(el("watchUsageDisplay"));
 
-    renderRow("quotaRowRuns", "quotaRunsValue", runs);
+    var agent = window.App?.agentChat?.isSelected();
+    var budget = agent && window.App.agentChat.tokenBudget();
+    var tokens = budget && Number.isFinite(budget.remaining) && Number.isFinite(budget.limit) && budget.limit > 0
+      ? { value: Math.max(0, budget.remaining), limit: budget.limit } : null;
+    var remaining = tokens ? Math.max(0, Math.min(100, Math.floor(tokens.value / tokens.limit * 100))) : null;
+    renderRow("quotaRowRuns", "quotaRunsValue", agent ? tokens : runs);
+    var rowTitle = el('quotaRowRuns')?.querySelector('b');
+    if (rowTitle) rowTitle.textContent = agent ? 'Agent tokens' : 'Runs';
     renderRow("quotaRowDeep", "quotaDeepValue", deep);
     renderRow("quotaRowWatch", "quotaWatchValue", watches);
-    renderRing(runs);
+    renderRing(agent ? tokens : runs);
+    var trigger = el('quotaTrigger');
+    if (trigger) trigger.dataset.allowance = agent ? 'agent' : 'runs';
+    if (agent && tokens) {
+      var percent = remaining + '%';
+      var label = percent + ' of your daily Agent token budget left';
+      if (el('quotaTriggerValue')) el('quotaTriggerValue').textContent = percent;
+      if (trigger) { trigger.title = label; trigger.setAttribute('aria-label', label); }
+      if (el('quotaRunsValue')) {
+        el('quotaRunsValue').textContent = percent;
+        el('quotaRunsValue').title = tokens.value.toLocaleString() + ' / ' + tokens.limit.toLocaleString() + ' tokens';
+      }
+    }
+    if (agent) {
+      if (el('quotaRowDeep')) el('quotaRowDeep').hidden = true;
+      if (el('quotaRowWatch')) el('quotaRowWatch').hidden = true;
+    }
 
     // Der Plan steht hier, nicht mehr neben "New comparison". Pro und Plus
     // sprechen ueber das Badge daneben (user-tier.js blendet #proBadge ein und
@@ -134,7 +159,8 @@
     var countdown = el("countdownDisplay");
     var foot = el("quotaFoot");
     if (foot) {
-      var text = countdown ? (countdown.textContent || "").trim() : "";
+      var text = agent ? (tokens ? tokens.value.toLocaleString() + ' of ' + tokens.limit.toLocaleString() + ' tokens left. Resets at 00:00 UTC. Pending calls reserve tokens.' : 'Agent allowance unavailable.')
+        : countdown ? (countdown.textContent || "").trim() : "";
       foot.textContent = text;
       foot.hidden = !text;
     }

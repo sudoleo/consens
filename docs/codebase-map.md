@@ -541,6 +541,12 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   `runs()` gibt dieselbe geparste Zeile zurück, aus der der Ring entsteht,
   damit Module wie „Run again" den Preis eines Klicks benennen können, ohne
   eine zweite Rechnung aufzumachen.
+  Im Agent-Chat projiziert derselbe Ring stattdessen den verbleibenden
+  Tokenanteil aus `App.agentChat.tokenBudget()` als Prozentzahl (0–100,
+  abgerundet). Die Quelle ist `/agent/models` bzw. der abschließende `/agent`-
+  Budget-Snapshot, strikt an den angemeldeten Account gebunden. Exakte Zahlen
+  und UTC-Reset stehen im Panel. `runs()`/`deep()` bleiben unverändert; beim
+  Wechsel zurück zu Consensus erscheinen dessen Limits wieder.
   Seit 2026-07-27 trägt der Panel-Kopf auch den **Plan**: `#quotaPlanLabel`
   („Free") bzw. `#proBadge` — das Badge sass vorher neben „New
   comparison" und konkurrierte dort mit der einzigen Aktion der Kopfzeile.
@@ -1679,7 +1685,11 @@ vorhandenen Snapshot zurück, ohne erneut zu vergleichen oder zu belasten.
 assistant_response bleibt kanonisch; consensus ist der alte Lesealias.
 
 **UI-Verträge.** agent-activity.js zeigt den jüngsten kurzen Reasoning-Fortschritt
-und Usage; auch alte Langtexte werden in der Anzeige gekürzt. agent_progress.py
+und aktuelle Tool-Aktivität als kleine Textabsätze außerhalb des standardmäßig
+geschlossenen Thinking-Disclosures. Diese Vorschau verschwindet nach Laufende;
+nur manuelles Aufklappen zeigt alle gespeicherten Schritt-Zusammenfassungen,
+Tools und Usage. Keine automatische Expansion oder Zitatlinien; auch alte
+Langtexte werden in der Anzeige gekürzt. agent_progress.py
 begrenzt sichtbares Reasoning serverseitig auf drei Zeilen à 180 Zeichen und
 acht Updates je Modellschritt. Provider-Zusammenfassungen haben Vorrang vor
 gekennzeichneten Satzauszügen; keine zusätzlichen LLM-Aufrufe. agent_loop.py
@@ -1691,11 +1701,19 @@ agent-delegation.js verwendet das bestehende geordnete Activity-Journal,
 und Judge-Aufrufe (kind). Der Stapel dedupliziert identische API-Modelle, die
 Seitenleiste behält jeden Aufruf. App.createModelMark löst Anbieter/Modelle über
 MODEL_FAMILIES inklusive apiPrefix auf; unbekannte Modelle erhalten ein Initial.
+Die Icons sind 15px groß. Im Composer öffnet das Chatmodellmenü über die
+optionale `secondarySelect`-Ebene von model-picker.js auch die Reasoning-Wahl.
+Ein gesperrter Agent-Modusschalter und die frühere Tokenzeile bleiben verborgen.
 Das Journal enthält höchstens 64 Aktivitäten; die separaten Worker-Limits
 bleiben in der Orchestrierung aktiv. agent-review.js steht in bundles.json vor
 consensus-run.js und rendert live aus review-SSE-Ereignissen oder gespeichertem
-agent_review. Vor Markierungen prüft es Text-/Versions-/Basisbindung. Pro
-Vergleich verwendet es die gemeinsamen renderStoredConsensusClaims und
+agent_review. Vor Markierungen prüft es Text-/Versions-/Basisbindung.
+Pro Turn vereinigt die Quellenansicht Provider-/Suchquellen, die Quellen der
+ausgewählten Vergleichsgrundlage und sichere HTTP(S)-Links aus gerenderten
+Antworten. agent_runs.py persistiert Provider-/Suchquellen beim Abschluss auch
+auf `turn.sources`; alte Turns nutzen weiterhin `agent_activity`. Ohne Vergleich
+öffnet der Sources-Footer einen Leser mit ausschließlich dem Quellen-Tab.
+Pro Vergleich verwendet es die gemeinsamen renderStoredConsensusClaims und
 renderStoredDifferenceCards. Ein kompakter Footer öffnet Widersprüche, formatierte
 Einzelantworten und Quellen im gemeinsamen model-answer-reader.js. Dessen
 openContext/refreshContext verwenden explizite Vergleichs-Snapshots mit eigenem

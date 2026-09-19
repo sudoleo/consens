@@ -1,11 +1,14 @@
 import { expect, it, vi } from "vitest";
 import { loadScripts } from "./helpers/appWindow.mjs";
+import { marked } from 'marked';
+import DOMPurify from 'dompurify';
 
 function setup() {
   return loadScripts(["static/js/agent-review.js"], { body: '<section><div id="answer"></div></section>', before(w) {
     w.injectMarkdown = vi.fn((el, text) => { el.textContent = text; });
     w.renderStoredConsensusClaims = vi.fn(); w.renderStoredDifferenceCards = vi.fn();
     w.App = { answerReader: { openContext: vi.fn(), refreshContext: vi.fn() } };
+    w.marked = marked; w.DOMPurify = DOMPurify(w);
   }});
 }
 function snapshot() {
@@ -36,6 +39,34 @@ it("uses the shared markers only for the exact answer and selected comparison ba
   expect(w.renderStoredConsensusClaims).toHaveBeenCalledTimes(2);
   expect(d.querySelector(".agent-review-status").textContent).toContain("Review pending");
   expect(w.injectMarkdown).toHaveBeenLastCalledWith(body, "Changed answer.", []);
+  dom.window.close();
+});
+it('collects chat search, answer links and comparison citations into one source view', () => {
+  const {window: w, document: d, dom} = setup();
+  const body = d.getElementById('answer'); body.dataset.markdown = 'Exact answer.';
+  body.innerHTML = '<a href="https://example.org/chat">Chat citation</a><a href="javascript:bad()">Bad</a>';
+  const review = snapshot();
+  review.comparisons[0].answers[0].sources = [];
+  review.comparisons[0].answers[0].text = 'Read [the comparison](https://example.org/plan).';
+  w.App.agentReview.render(body, review, {events: [{sources: [{url: 'https://example.org/search', title: 'Search result'}, {url: 'https://example.org/chat#citation'}]}]});
+  d.querySelector('[data-section="sources"]').click();
+  const context = w.App.answerReader.openContext.mock.calls[0][0];
+  expect([...context.renderPanel('sources').querySelectorAll('a')].map(a => a.href)).toEqual([
+    'https://example.org/search', 'https://example.org/chat', 'https://example.org/plan']);
+  dom.window.close();
+});
+it('makes search sources available without a comparison, including saved legacy activities', () => {
+  const {window: w, document: d, dom} = setup();
+  const body = d.getElementById('answer');
+  w.App.agentReview.render(body, null, {key: 'saved-turn', events: [{sources: [{url: 'https://example.org/search'}]}]});
+  d.querySelector('[data-section="sources"]').click();
+  const context = w.App.answerReader.openContext.mock.calls[0][0];
+  expect(context.sections).toEqual(['sources']);
+  expect(context.renderPanel('sources').querySelector('a').href).toBe('https://example.org/search');
+  expect(d.querySelector('.agent-review-status')).toBeNull();
+  w.App.agentReview.render(body, null, {key: 'another-turn', question: 'A different question', sources: [{url: 'https://example.org/search'}]});
+  d.querySelector('[data-section="sources"]').click();
+  expect(w.App.answerReader.openContext.mock.calls.at(-1)[0]).toMatchObject({ key: 'agent-sources:another-turn', question: 'A different question' });
   dom.window.close();
 });
 it("rejects stale comparison bindings and distinguishes incomplete results", () => {

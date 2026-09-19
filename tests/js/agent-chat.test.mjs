@@ -173,12 +173,13 @@ describe("single-model agent chat", () => {
   it("uses the same keyboard picker for effort and returns focus after choosing", async () => {
     const { window, document, dom } = boot();
     await selectAgent(window);
-    const trigger = document.querySelector(".agent-effort-control .model-picker-display");
+    const trigger = document.querySelector(".agent-model-picker .model-picker-display");
     trigger.focus();
     trigger.dispatchEvent(new window.KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true }));
-    expect(document.activeElement.dataset.value).toBe("default");
+    document.querySelector('.agent-reasoning-option').click();
+    expect(document.activeElement.dataset.settingValue).toBe("default");
     document.activeElement.dispatchEvent(new window.KeyboardEvent("keydown", { key: "End", bubbles: true, cancelable: true }));
-    expect(document.activeElement.dataset.value).toBe("max");
+    expect(document.activeElement.dataset.settingValue).toBe("max");
     document.activeElement.click();
     expect(document.getElementById("agentReasoningEffort").value).toBe("max");
     expect(document.activeElement).toBe(trigger);
@@ -201,9 +202,12 @@ describe("single-model agent chat", () => {
     const events = [{ id: "r1", kind: "reasoning", format: "text", text: "Consider the question" }];
     activity.render(host, { events, running: true });
     const details = host.querySelector("details");
-    expect(details.open).toBe(true);
+    expect(details.open).toBe(false);
+    expect(host.querySelector('.agent-progress').hidden).toBe(false);
+    expect(host.querySelector('.agent-progress p').textContent).toBe('Consider the question');
     activity.render(host, { events, running: false });
     expect(details.open).toBe(false);
+    expect(host.querySelector('.agent-progress').hidden).toBe(true);
     details.querySelector("summary").click();
     activity.render(host, { events, running: false });
     expect(details.open).toBe(true);
@@ -373,14 +377,15 @@ describe("single-model agent chat", () => {
     handlers.activity.receive(event);
     window.App.agentChat.project(run);
     const details = document.querySelector("#agentAnswerActivity details");
-    expect(details.open).toBe(true);
+    expect(details.open).toBe(false);
+    expect(document.querySelector('.agent-progress').textContent).toContain('First thought');
     expect(details.textContent).toContain("First thought");
     expect(document.getElementById("agentAnswerBody").textContent).not.toContain("First thought");
     expect(document.getElementById("agentModelDropdown").disabled).toBe(true);
     details.querySelector("summary").click();
     handlers.activity.receive({ ...event, text: " continued" });
     window.App.agentChat.project(run);
-    expect(details.open).toBe(false);
+    expect(details.open).toBe(true);
     window.App.runRegistry.cancel(run.runId);
     handlers.activity.receive({ ...event, text: " forbidden late text" });
     window.App.agentChat.project(run);
@@ -490,7 +495,8 @@ describe("single-model agent chat", () => {
     window.App.agentChat.project(run);
     const host = document.getElementById("agentAnswerActivity");
     expect(host.textContent).toContain("Using tool…");
-    expect(host.querySelector("details").open).toBe(true);
+    expect(host.querySelector("details").open).toBe(false);
+    expect(host.querySelector('.agent-progress').textContent).toContain('Running a tool');
     handlers.activity.receive({ ...event, status: "succeeded", text: '{"result":4}' });
     handlers.activity.receive({ version: 1, step_id: "completion:1", id: "completion:1/started", kind: "status", status: "working", clear_response: true });
     expect(run.consensus.streamText).toBe("");

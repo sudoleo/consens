@@ -750,7 +750,8 @@
     // Preset-Ebene (die Picker in den Antwortboxen) ist es unveraendert die
     // Liste des eigenen Selects.
     const pref = state.presets ? providerForView(state.view) : null;
-    const targetSelect = pref ? document.getElementById(pref.selectId) : select;
+    const secondary = state.secondarySelect && state.view === 'secondary';
+    const targetSelect = secondary ? state.secondarySelect : pref ? document.getElementById(pref.selectId) : select;
     if (!targetSelect) {
       state.view = "custom";
       renderCustomOverview(select, state);
@@ -761,6 +762,7 @@
     if (state.presets) {
       renderBackRow(select, state, pref ? pref.label : "Consensus engine", "custom");
     }
+    if (secondary) renderBackRow(select, state, state.secondaryLabel, 'models');
 
     Array.from(targetSelect.options).forEach(option => {
       const item = document.createElement("button");
@@ -770,6 +772,7 @@
       // syncCustomModelPicker). In der Liste eines fremden Provider-Selects
       // waere er eine falsche Aussage ueber die Consensus-Auswahl.
       if (targetSelect === select) item.dataset.value = option.value;
+      if (secondary) item.dataset.settingValue = option.value;
       item.setAttribute("role", "option");
       item.setAttribute("aria-selected", String(option.selected));
       item.disabled = option.disabled;
@@ -860,6 +863,17 @@
       state.menu.appendChild(item);
     });
 
+    if (!secondary && state.secondarySelect?.dataset.available === 'true') {
+      const button = document.createElement('button'); button.type = 'button';
+      button.className = 'model-picker-option agent-reasoning-option'; button.tabIndex = -1;
+      button.textContent = `${state.secondaryLabel} · ${state.secondarySelect.selectedOptions[0]?.textContent || 'Auto'} ›`;
+      button.disabled = state.secondarySelect.disabled;
+      button.addEventListener('click', event => {
+        event.stopPropagation(); state.view = 'secondary'; renderCustomModelPicker(select);
+        (state.menu.querySelector('.is-selected:not(:disabled)') || state.menu.querySelector('button:not(:disabled)'))?.focus();
+      });
+      state.menu.append(button);
+    }
     syncCustomModelPicker(select);
   }
 
@@ -930,6 +944,7 @@
     if (state.presets) {
       state.view = getActiveConsensusPresetId() === "custom" ? "custom" : "presets";
     }
+    if (state.secondarySelect) state.view = 'models';
 
     renderCustomModelPicker(select);
     state.host.classList.add("is-expanded", "is-open");
@@ -991,6 +1006,8 @@
       menu,
       displayButton,
       menuWidth: options.menuWidth,
+      secondarySelect: options.secondarySelect,
+      secondaryLabel: options.secondaryLabel,
       // Preset-Ebene nur fuer den Consensus-Picker (options.presets) und nur,
       // wenn der Server Presets liefert — sonst unveraendert die Modell-Liste.
       presets: !!options.presets && getConsensusPresets().length > 0,

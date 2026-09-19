@@ -363,7 +363,8 @@
         const activity = document.createElement("div");
         window.App.agentActivity?.renderTurn(activity, turnData);
         answer.insertBefore(activity, answerBody);
-        window.App.agentReview?.render(answerBody, turnData.agent_review);
+        window.App.agentReview?.render(answerBody, turnData.agent_review,
+          {sources: turnSources, events: turnData.agent_activity, key: turnData.id || turnData.turn_id, question: turnData.question});
       }
 
       // Der Fuss eines archivierten Turns spricht dieselbe Sprache wie der
