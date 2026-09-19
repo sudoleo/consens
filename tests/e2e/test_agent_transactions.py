@@ -1,5 +1,6 @@
 """Agent admission and accounting races against the isolated Firestore emulator."""
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta, timezone
 import threading
 import uuid
 
@@ -8,12 +9,75 @@ from google.cloud import firestore
 from app.core.e2e_profile import E2E_PROJECT_ID, assert_safe_e2e_environment
 from app.services.account_deletion import FirestoreAccountDeletion
 from app.services.agent_runs import AgentRunStore
+from app.services.agent_costs import aggregate_usage
 from app.services.agent_policy import AgentPolicy
 from app.services.agent_runtime import AgentCapacityExceeded
 from app.services.llm.agent_client import AgentModel, AgentCompletion, measured_usage
 from app.services.agent_delegation_config import defaults
 from app.services.llm.provider_runtime import AnalysisBudgetExceeded
 from app.services import agent_quota
+
+
+def test_parallel_legacy_hold_repair_preserves_measured_usage_and_live_reservations():
+    assert_safe_e2e_environment()
+    db = firestore.Client(project=E2E_PROJECT_ID)
+    uid = 'agent-hold-repair-' + uuid.uuid4().hex
+    try:
+        db.collection('users').document(uid).set({})
+        day = agent_quota.day_key()
+        ref = agent_quota.quota_ref(db, uid, day)
+        ref.set({'used':85329, 'reserved':161923, 'unknown':154521})
+        barrier = threading.Barrier(6)
+        def repair(_):
+            barrier.wait(timeout=5)
+            return AgentRunStore(db).repair_quota_period(uid, day)
+        with ThreadPoolExecutor(max_workers=6) as pool:
+            outcomes = list(pool.map(repair, range(6)))
+        assert all(value['reserved'] == 7402 and value['used'] == 85329 for value in outcomes)
+        assert ref.get().to_dict()['revision'] == 1
+        assert ref.get().to_dict()['unknown_released'] == 154521
+    finally:
+        FirestoreAccountDeletion(db)._delete_user_subcollections(uid)
+        db.collection('users').document(uid).delete()
+        db.close()
+
+
+def test_concurrent_budget_refresh_recovers_orphaned_receipt_and_saved_usage_once():
+    assert_safe_e2e_environment()
+    db = firestore.Client(project=E2E_PROJECT_ID)
+    uid = 'agent-orphan-repair-' + uuid.uuid4().hex
+    store, model = AgentRunStore(db), AgentModel()
+    try:
+        chat = store.create_chat(uid, execution_mode='agent')['id']
+        turn = store.create_turn(uid, chat, question='Orphan recovery', mode='Agent', deep_search=False,
+            selected_models=[model.model], consensus_model=model.model, client_request_id='orphan', execution_mode='agent')['id']
+        args = (uid, chat, turn)
+        config = defaults()
+        config['enabled'] = True
+        policy = AgentPolicy.from_config(config)
+        store.claim(*args, model, run_token=uid, policy=policy.snapshot(), reservation=(20, 100))
+        completion = AgentCompletion()
+        completion.usage = measured_usage({'prompt_tokens':10, 'completion_tokens':5}, model)
+        store.settle(*args, completion=completion, status='succeeded', final=False)
+        aid = uuid.uuid4().hex
+        store.publish_agent(*args, run_token=uid, agent_id=aid, patch={'status':'working', 'assignment':{'goal':'Check'}})
+        store.claim(*args, model, run_token=uid, step=f'agent:{aid}:0', reservation=(500, 100))
+        usage = aggregate_usage([measured_usage({'prompt_tokens':155, 'completion_tokens':284}, model)])
+        store.publish_agent(*args, run_token=uid, agent_id=aid, patch={'status':'failed', 'usage':usage})
+        root = store.receipt_ref(*args)
+        root.update({'lease_until':datetime.now(timezone.utc)-timedelta(seconds=60)})
+        store.active_ref(uid).set({'leases':{}})
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(lambda _: agent_quota.snapshot(db, uid), range(2)))
+        assert all(result['used'] == 454 and result['reserved'] == 0 for result in results)
+        totals = db.collection('users').document(uid).get().to_dict()['agent_usage']
+        assert totals['measured_calls'] == 2 and totals['unsettled_calls'] == 0
+        assert root.get().to_dict()['run_status'] == 'cancelled'
+        assert store.receipt_ref(*args, step=f'agent:{aid}:0').get().to_dict()['usage']['source'] == 'saved_agent'
+    finally:
+        FirestoreAccountDeletion(db)._delete_user_subcollections(uid)
+        db.collection('users').document(uid).delete()
+        db.close()
 
 
 def test_daily_token_admission_and_idempotent_settlement_in_firestore(monkeypatch):

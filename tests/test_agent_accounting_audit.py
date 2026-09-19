@@ -77,7 +77,7 @@ def test_intermediate_usage_is_lower_bound_after_interrupted_generation(store, m
     with pytest.raises(TimeoutError):
         list(loop.run())
     budget = agent_quota.snapshot(store.db, UID)
-    assert budget['used'] == 0 and budget['reserved'] == budget['unknown'] > 0
+    assert budget['used'] == budget['reserved'] == 0 and budget['unknown'] > 0
     assert loop.completion.usage['input_tokens'] == 100
     assert not loop.completion.usage['complete']
 
@@ -109,7 +109,7 @@ def test_final_cost_does_not_promote_intermediate_token_counts(store, monkeypatc
     loop = make_loop(store)
     list(loop.run())
     budget = agent_quota.snapshot(store.db, UID)
-    assert budget['used'] == 0 and budget['reserved'] == budget['unknown'] > 0
+    assert budget['used'] == budget['reserved'] == 0 and budget['unknown'] > 0
     assert not loop.completion.usage['complete']
     assert loop.completion.usage['cost_complete']
 

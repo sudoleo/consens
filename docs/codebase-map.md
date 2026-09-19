@@ -1757,7 +1757,15 @@ abgeschlossen; ein noch laufender Beleg verhindert weiterhin den Run-Abschluss.
 SSE-Toolarbeit läuft in einem kontrollierten Thread, während der Producer
 Aktivitäten weiter ausgibt. Stop/Disconnect schließt Provider und wartet auf die
 aktiven Worker/Tools. Abgelaufene Leases werden zu terminalen unbekannten
-Belegen; fehlende Usage bleibt reserviert. Aktive Chat-Producer erneuern ihre
+Belegen; terminale Belege geben auch bei fehlender Usage ihre Reserve frei.
+Budgetabruf und Run-Start suchen zusätzlich kontogebunden nach abgelaufenen
+Root-Belegen (höchstens 20 pro Abruf), auch wenn der Eintrag in der aktiven
+Lease-Liste verloren ging. Ablaufprüfung und Sperren des alten Producers
+erfolgen atomar; eine inzwischen verlängerte Lease wird nicht abgebrochen.
+Eine gespeicherte vollständige Usage eines einzelnen
+terminalen Agent-Aufrufs kann den fehlenden Beleg rekonstruieren; Aggregate
+mehrerer Aufrufe werden nicht auf einzelne Schritte verteilt. Gelöschte Chats
+werden dabei nicht wiederhergestellt. Aktive Chat-Producer erneuern ihre
 120-Sekunden-Lease etwa alle 30 Sekunden atomar mit Account-Lease und Chat-Lock.
 Der Watchdog prüft alle drei Sekunden statt zweimal pro Sekunde und toleriert
 kurze temporäre DB-Ausfälle bis 60 Sekunden. Abgelaufene oder ersetzte Producer
@@ -1895,11 +1903,18 @@ Inputs; reasoning ist Teil des Outputs. Provider-Gesamtkosten haben Vorrang vor
 Katalogschätzungen; Kosten werden erfasst, begrenzen den Agent-Chat aber nicht zusätzlich.
 Jeder Claim reserviert transaktional im selben Commit wie sein Beleg unter
 users/{uid}/chat_state/agent_tokens_YYYY-MM-DD[_reset_epoch]. Settlement tauscht die Reserve
-gegen gemessene Tokens genau einmal aus. Fehlende Tokenzahlen behalten ihre
-Reserve und erscheinen separat als unknown, niemals als erfundener Verbrauch.
+gegen gemessene Tokens genau einmal aus. Jeder terminale Beleg gibt seine
+Reserve frei, auch wenn finale Tokenzahlen fehlen. Unbekannter Verbrauch wird
+nicht als Nullmessung oder geschätzter Verbrauch verbucht. `unknown` summiert
+die Reservierungsgrenzen solcher Belege, nicht deren tatsächlichen Verbrauch.
+`unknown_released` markiert die bereits freigegebenen Grenzen kumulativ.
+Budgetabruf und Ledger-Transaktionen lösen alte unbekannte Reserven anhand der
+Differenz transaktional genau einmal auf, ohne gemessenen Verbrauch oder aktive
+Reserven zurückzusetzen. Auch ein während des Rollouts noch vom alten Server
+abgeschlossener Beleg wird dadurch nachträglich korrekt freigegeben.
 Zwischenstände vor dem terminalen Stream-Chunk sind `provisional`: Sie dürfen
-als gemessene Untergrenze angezeigt werden, geben bei einem Streamabbruch aber
-keine Reserve frei. Der finale Usage-Chunk ersetzt kumulative Zwischenstände.
+als gemessene Untergrenze angezeigt werden, gelten nach Streamabbruch aber nicht
+als finale Abrechnung. Der finale Usage-Chunk ersetzt kumulative Zwischenstände.
 `complete` beschreibt ausschließlich die Tokenmessung; fehlende Suchpreisdaten
 setzen separat `cost_complete=false` und blockieren keine bekannten Tokens.
 Explizite HTTP-Ablehnungen vor jeder Generierung (400/401/402/403/404/413/422/429)
@@ -1913,6 +1928,13 @@ Server-Uhrabweichungen; ältere Antworten können keinen neueren Stand ersetzen.
 Bei sichtbarem Agent-Chat werden Budgets auch im Leerlauf alle 60 Sekunden sowie
 bei Fokus/Tab-Rückkehr aktualisiert. Fehlgeschlagene Aktualisierungen markieren
 den letzten bestätigten Stand; Auth-Wechsel verwerfen alte Requests/Ansichten.
+Tooltip und Budgetpanel unterscheiden unverbrauchte Tokens von momentan für
+neue Calls verfügbaren Tokens. Fehlende Usage abgeschlossener Calls wird als
+unbekannt angezeigt und blockiert das verbleibende Kontingent nicht.
+`scripts/repair_agent_allowance.py --email <Konto> --project-id <Projekt>` liest
+gezielt den aktuellen Ledger; erst `--apply` führt denselben Recovery-Pfad aus.
+Das Skript prüft das Projekt, verweigert Emulator-/Unit-Test-Kontexte und startet
+weder Modellaufrufe noch einen globalen Reset.
 Auch Abbrüche, Fehler und Judge-Wiederholungen zählen. Tageswechsel migrieren
 nur ungenutzte Prüfreserven; bereits gestartete Calls werden ihrem Claim-Tag
 zugeordnet. Andere parallele Chats können reserviertes Budget nicht ausgeben.

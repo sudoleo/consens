@@ -10,12 +10,13 @@ denselben metered Provider-Adapter und den transaktionalen Receipt-/Tagesledger.
   unvollständig. Token- und Kostenvollständigkeit werden getrennt behandelt.
 - Vor Beginn abgelehnte HTTP-Anfragen konnten das Nutzerkontingent bis zum
   Tageswechsel reserviert halten. Eindeutige Ablehnungen erhalten einen
-  Nullverbrauchsbeleg; bereits angenommene, unklare Aufrufe behalten die Reserve.
+  Nullverbrauchsbeleg. Auch bereits angenommene, unklare Aufrufe geben ihre
+  Reserve beim Abschluss frei; ihr Verbrauch bleibt ausdrücklich unbekannt.
   Auch ein sofortiger Abbruch nach Admission, aber vor Start des Provider-Adapters,
   gibt die ungenutzte Reserve mit einem eigenen `not_started`-Beleg frei.
 - Kumulative Zwischenstände konnten nach Streamabbruch als finale Usage gelten.
-  Sie werden jetzt als Untergrenze markiert; nur endgültige Messungen lösen die
-  Reservierung ab. Cache-/Reasoning-Details werden niemals zusätzlich gezählt.
+  Sie werden jetzt als Untergrenze markiert; nur endgültige Messungen zählen
+  als finaler Verbrauch. Cache-/Reasoning-Details werden niemals zusätzlich gezählt.
   Ein finaler Kostenwert allein macht frühere Tokenzwischenstände nicht final.
 - Verspätete Kontingentantworten konnten bei verschiedenen Serveruhren einen
   neueren Stand überschreiben. Ledger-Version, UTC-Tag und Reset-Version ordnen
@@ -31,6 +32,21 @@ denselben metered Provider-Adapter und den transaktionalen Receipt-/Tagesledger.
   damit verzögert abgeschlossene Calls und deren Usage noch sichtbar werden.
   Verspätete Projektionen können weder den Lauf reaktivieren noch eine neuere
   Gesamtsumme durch einen früheren Zwischenstand ersetzen.
+- Eine reale Kontoprüfung zeigte zusätzlich dauerhaft blockierte Reserven:
+  abgeschlossene Calls ohne Usage und ein verwaister Run mit abgelaufener Lease,
+  dessen Eintrag in der aktiven Lease-Liste bereits fehlte. Budgetabruf und
+  Run-Start finden solche Root-Belege jetzt unabhängig von dieser Liste.
+  Vollständige gespeicherte Usage eines einzelnen terminalen Agent-Aufrufs wird
+  genau einmal nachgetragen; mehrdeutige Mehrfachaufruf-Aggregate bleiben unbekannt.
+  Terminale Reserven werden auch nach Chatlöschung freigegeben, ohne den Chat
+  wiederherzustellen. Laufende Leases werden nicht angetastet; eine nach dem
+  ersten Lesezugriff verlängerte Lease wird bei der atomaren Ablaufprüfung erkannt.
+- Die kumulative Markierung `unknown_released` löst alte unbekannte Reserven
+  transaktional auf, auch bei parallelen Refreshs und alten Servern während eines
+  Rollouts. Gemessener Verbrauch bleibt erhalten; fehlende Usage wird weder als
+  Nullverbrauch erfunden noch als geschätzte Tokenzahl vom Tagesbudget abgezogen.
+  Der Betreiber trägt damit das Risiko ungemeldeten Verbrauchs; ein terminaler
+  Providerfehler darf das Nutzerkonto nicht bis zum Tageswechsel blockieren.
 
 ## Regressionen
 
@@ -47,6 +63,14 @@ prüfen fehlerhafte Uhrzeiten, eingefrorene Ansichten, verspätete Budgets,
 Tageswechsel und fehlgeschlagene Aktualisierungen. Firestore-Emulatortests prüfen
 atomare Admission und genau einmalige Abrechnung unter konkurrierenden Requests.
 
+`tests/test_agent_quota_recovery.py` bildet den realen Kontingentstillstand nach:
+85.329 gemessene Tokens und 161.923 reservierte Tokens trotz abgeschlossener
+Calls. Nach Recovery werden 439 bereits gespeicherte Tokens genau einmal
+nachgetragen, alle terminalen Reserven freigegeben und 164.232 Tokens verfügbar.
+Weitere Fälle prüfen verlorene Lease-Listen, aktive Runs, Chatlöschung,
+Tagesisolation und die einmalige Migration alter Reserven. Der Firestore-Emulator
+prüft die Migration mit sechs konkurrierenden Reparaturaufrufen.
+
 Erfolgreiche Validierung: vollständige Backend-Suite (2.501 Tests), danach die
 gesamte Agent-Suite nach den letzten Adapterkorrekturen (269 Tests, darunter
 58 Auditfälle); vollständige Frontend-Suite (469 Tests) und erneuter Lauf der
@@ -59,13 +83,25 @@ Bottom-Bar-Änderungen wurden an das aktuelle Verhalten angepasst; öffentliche
 Share-/Topic-Seiten laden die aktuelle Quellenprüfungsdatei mit erneuertem
 Cache-Key. Es wurden keine bezahlten Live-Modellaufrufe gestartet.
 
+Nachprüfung der Kontingent-Recovery: Der Backend-Gesamtlauf bestand 2.509 Tests;
+der einzige fehlgeschlagene Build-Abgleich lief noch gegen das vorherige Bundle.
+Nach dem Neubau bestanden alle acht Buildtests. Alle elf Recovery-Fälle, die
+vollständige Frontend-Suite (471 Tests), vier Firestore-Emulatortests sowie zwei
+Desktop-/Mobilfälle für Kontingent und Fehleranzeige bestanden. Der laufende
+lokale Server liefert das neue Bundle aus. Die gezielte Reparatur des betroffenen
+Kontos verwendete denselben Recovery-Pfad, ohne globalen Reset oder neue
+Modellgenerierung; gemessener Verbrauch blieb erhalten.
+Nach dem zusätzlichen atomaren Schutz vor gleichzeitiger Lease-Verlängerung
+bestanden erneut 144 betroffene Agent-Tests, darunter jetzt zwölf Recovery-Fälle,
+und fünf Firestore-Emulatortests einschließlich paralleler kompletter Recovery.
+
 ## Grenzen der Aussage
 
 Die Tests verwenden deterministische Provider-Antworten; sie sind keine bezahlte
 Live-Prüfung aller aktuell von OpenRouter gerouteten Endpunkte. Ein Provider muss
-korrekte Usage liefern. Ohne finale Usage bleibt ein bereits gestarteter Aufruf
-konservativ reserviert und ausdrücklich unbekannt bis zum UTC-Tageswechsel bzw.
-Admin-Reset. Es wird weder eine Schätzung als Messung angezeigt noch ein
+korrekte Usage liefern. Ohne finale Usage bleibt der Verbrauch ausdrücklich
+unbekannt; die Reservierung endet mit dem Aufruf. Das Tagesbudget zählt nur
+bestätigte finale Tokens. Es wird weder eine Schätzung als Messung angezeigt noch ein
 möglicherweise bezahlter Aufruf automatisch wiederholt. Die tatsächliche
 Enddauer eines abgestürzten Prozesses kann nachträglich nicht exakt rekonstruiert
 werden. Admin-Limitänderungen haben weiterhin den dokumentierten Config-Cache

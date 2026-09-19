@@ -317,21 +317,52 @@ class AgentSessionStore:
             return 0
 
     def reap_delegation(self, uid, chat_id, turn_id):
-        """Expired process leases become terminal unknown receipts, never retries."""
+        """Close expired producers, preserving trustworthy saved usage when possible."""
         from app.services.llm.agent_client import AgentCompletion
         ref = self.receipt_ref(uid, chat_id, turn_id)
         root = ref.get().to_dict() or {}
         if (root.get("run_status") != "running" or not (root.get("policy") or {}).get("delegation")
                 or root["lease_until"] > datetime.now(timezone.utc)):
             return root
-        self.stop_delegation(uid, chat_id, turn_id)
+        def fence_expired(tx):
+            persistence_guard.ensure_account_write_allowed(uid=uid, db=self.db, transaction=tx)
+            current = ref.get(transaction=tx).to_dict() or {}
+            # A renewal can commit after the initial read. Check expiration and
+            # fence the producer atomically before recovering any of its calls.
+            if (current.get('run_status') != 'running' or not (current.get('policy') or {}).get('delegation')
+                    or current['lease_until'] > datetime.now(timezone.utc)):
+                return current, False, False
+            chat = self._chat_ref(uid, chat_id).get(transaction=tx)
+            turn = self._turn_ref(uid, chat_id, turn_id).get(transaction=tx)
+            deleted = not chat.exists or not turn.exists or (chat.to_dict() or {}).get('status') != 'active'
+            tx.update(ref, {'cancel_requested': True})
+            return current, True, deleted
+        root, expired, deleted = self._agent_transaction(uid, fence_expired)
+        if not expired:
+            return root
+        # Billing receipts survive chat deletion; never recreate the chat.
+        agents = list(self._turn_ref(uid, chat_id, turn_id).collection('agents').stream())
+        sessions = {snap.id: snap.to_dict() for snap in agents}
         for step, state in root["step_states"].items():
             if state == "running":
-                self.settle(uid, chat_id, turn_id, completion=AgentCompletion(), status="cancelled", step=step, final=False)
+                value = AgentCompletion()
+                if step.startswith('agent:') and step.endswith(':0'):
+                    aid = step.split(':')[1]
+                    session = sessions.get(aid) or {}
+                    usage = session.get('usage') or {}
+                    steps = [key for key in root['step_states'] if key.startswith(f'agent:{aid}:')]
+                    # A single terminal call's saved session is an exact receipt.
+                    # Never distribute a multi-call aggregate across missing steps.
+                    if (len(steps) == 1 and session.get('status') in {'completed', 'failed', 'stopped'}
+                            and usage.get('complete') is True and usage.get('measured_calls') == 1
+                            and not usage.get('unmetered_calls') and agent_quota.measured_tokens(usage) is not None):
+                        value.usage = {**usage, 'source': 'saved_agent'}
+                        value.finish_reason = session.get('finish_reason') or ''
+                self.settle(uid, chat_id, turn_id, completion=value, status="cancelled", step=step, final=False)
         settled = ref.get().to_dict()
-        for snap in self._turn_ref(uid, chat_id, turn_id).collection("agents").stream():
+        for snap in agents:
             data = snap.to_dict()
-            if data["status"] not in {"completed", "failed", "stopped"}:
+            if not deleted and data["status"] not in {"completed", "failed", "stopped"}:
                 usage = aggregate_usage([value for step, value in settled.get("step_usage", {}).items()
                                          if step.startswith(f"agent:{snap.id}:")])
                 # A dead process cannot report its final monotonic duration.

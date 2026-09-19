@@ -12,6 +12,7 @@ import hashlib
 import re
 
 from firebase_admin import firestore
+from google.cloud.firestore_v1.base_query import FieldFilter
 
 from app.services import persistence_guard, prompt_config
 from app.services import agent_quota
@@ -48,6 +49,30 @@ def get_agent_system_prompt(model=None, config=None):
 
 
 class AgentRunStore(AgentSessionStore, ChatStore):
+    def repair_quota_period(self, uid, day):
+        ref = agent_quota.quota_ref(self.db, uid, day)
+        def operation(tx):
+            persistence_guard.ensure_account_write_allowed(uid=uid, db=self.db, transaction=tx)
+            previous = ref.get(transaction=tx).to_dict() or {}
+            corrected = agent_quota.normalize(previous)
+            if corrected != previous:
+                tx.set(ref, corrected)
+            return corrected
+        return self._agent_transaction(uid, operation)
+
+    def recover_allowance(self, uid):
+        # Expired roots can outlive the owner's active lease map. Query their
+        # durable run state, including when the user never reopens that bookmark.
+        roots = self.db.collection('users').document(uid).collection('llm_calls').where(
+            filter=FieldFilter('run_status', '==', 'running')).limit(20).stream()
+        now = datetime.now(timezone.utc)
+        for snapshot in roots:
+            root = snapshot.to_dict() or {}
+            lease = root.get('lease_until')
+            if (isinstance(lease, datetime) and lease <= now and (root.get('policy') or {}).get('delegation')
+                    and root.get('chat_id') and root.get('turn_id')):
+                self.reap_delegation(uid, root['chat_id'], root['turn_id'])
+
     def active_ref(self, uid):
         return self.db.collection("users").document(uid).collection("chat_state").document("agent_runs")
 

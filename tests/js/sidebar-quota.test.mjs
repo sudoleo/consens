@@ -17,7 +17,7 @@ it('projects remaining Agent tokens into the existing ring without changing Cons
   w.App.sidebarQuota.sync(); expect(d.getElementById('quotaTriggerValue').textContent).toBe('2');
   agent = true; w.App.sidebarQuota.sync();
   expect(d.getElementById('quotaTriggerValue').textContent).toBe('75%');
-  expect(d.getElementById('quotaTrigger').getAttribute('aria-label')).toContain('daily Agent token budget left');
+  expect(d.getElementById('quotaTrigger').getAttribute('aria-label')).toContain('daily Agent token budget unspent');
   expect(d.getElementById('quotaRowDeep').hidden).toBe(true);
   expect(w.App.sidebarQuota.runs()).toEqual({value: 2, limit: 3});
   budget = {used: 50000, remaining: 80000, reserved: 120000, limit: 250000};
@@ -25,6 +25,10 @@ it('projects remaining Agent tokens into the existing ring without changing Cons
   expect(d.getElementById('quotaFoot').textContent).toContain('temporarily reserved');
   budget = {...budget, remaining: 200000, reserved: 0};
   w.App.sidebarQuota.sync(); expect(d.getElementById('quotaTriggerValue').textContent).toBe('80%');
+  budget = {used:85768,remaining:164232,reserved:0,unknown:158222,limit:250000};
+  w.App.sidebarQuota.sync(); expect(d.getElementById('quotaTriggerValue').textContent).toBe('65%');
+  expect(d.getElementById('quotaTrigger').title).toMatch(/164[.,]232 tokens available for new calls/);
+  expect(d.getElementById('quotaFoot').textContent).toContain('do not block the remaining allowance');
   budget = {remaining: 188878, limit: 250000};
   budget.remaining = 0; w.App.sidebarQuota.sync(); expect(d.getElementById('quotaTriggerValue').textContent).toBe('0%');
   budget.remaining = 300000; w.App.sidebarQuota.sync(); expect(d.getElementById('quotaTriggerValue').textContent).toBe('100%');

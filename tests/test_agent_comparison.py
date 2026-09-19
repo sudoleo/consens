@@ -164,7 +164,7 @@ def test_quota_rejection_distinguishes_empty_from_insufficient_reservation(remai
     assert error.value.remaining == remaining and error.value.required == 50000
     assert error.value.code == ("agent_token_reservation" if remaining else "agent_tokens_exhausted")
     if remaining:
-        assert "not empty" in str(error.value)
+        assert 'Completed calls release their reservations' in str(error.value)
     assert "reserved" not in data
 
 
@@ -227,14 +227,14 @@ def test_search_reservation_can_fall_back_without_extra_paid_claim(store, remain
     assert loop.search_remaining == 1
 
 
-def test_unknown_usage_keeps_admission_and_utc_day_is_separate(store, monkeypatch):
+def test_unknown_terminal_usage_releases_admission_and_utc_day_is_separate(store, monkeypatch):
     loop = make_loop(store, Script())
     monkeypatch.setattr(agent_quota, "day_key", lambda: "2026-09-19")
     assert store.claim(UID, loop.chat_id, loop.turn_id, loop.model, run_token=loop.run_token,
         policy=loop.policy.snapshot(), reservation=(500, 100))
     store.settle(UID, loop.chat_id, loop.turn_id, completion=receipt(measured=False), status="cancelled", final=False)
     quota = agent_quota.quota_ref(store.db, UID, "2026-09-19").get().to_dict()
-    assert quota["reserved"] == quota["unknown"] == 500
+    assert quota['reserved'] == 0 and quota['unknown'] == quota['unknown_released'] == 500
     assert agent_quota.public(agent_quota.quota_ref(store.db, UID, "2026-09-20").get().to_dict())["remaining"] == 250000
 
 
@@ -256,7 +256,8 @@ def test_midnight_moves_only_unspent_review_hold(store, monkeypatch):
     store.protect_review(*args, loop.run_token, 200)
     monkeypatch.setattr(agent_quota, "day_key", lambda: "2026-09-20")
     assert store.claim(*args, loop.model, step="completion:1", run_token=loop.run_token, reservation=(50, 100))
-    assert agent_quota.quota_ref(store.db, UID, "2026-09-19").get().to_dict()["reserved"] == 100
+    previous = agent_quota.quota_ref(store.db, UID, '2026-09-19').get().to_dict()
+    assert previous['reserved'] == 0 and previous['unknown'] == previous['unknown_released'] == 100
     assert agent_quota.quota_ref(store.db, UID, "2026-09-20").get().to_dict()["reserved"] == 200
 
 

@@ -1,7 +1,8 @@
 """UTC-day admission ledger. Measured tokens are input + output, never details.
 
-Unknown provider usage keeps its reservation until the day ends. A paid receipt
-is settled once; retries/replay cannot release or charge it again.
+Reservations protect active calls only. Missing final usage remains auditable,
+but a completed call cannot keep the account locked until the next UTC day.
+A paid receipt is settled once; retries cannot release or charge it again.
 """
 import time
 from datetime import datetime, timezone
@@ -15,18 +16,24 @@ class AgentTokenBudgetExceeded(AnalysisBudgetExceeded):
         self.remaining, self.required = remaining, required
         self.code = "agent_token_reservation" if remaining else "agent_tokens_exhausted"
         message = (f"The next model call needed a reservation of {required:,} tokens; {remaining:,} were available at that point. "
-                   "The daily budget was not empty. Unused reservations are released when the run ends."
-                   if remaining else "No Agent tokens were available for the next model call. Running calls and pending usage also reserve tokens. The daily budget resets at 00:00 UTC.")
+                   "Some allowance may be reserved for active calls. Completed calls release their reservations."
+                   if remaining else "No Agent tokens were available for the next model call. Active calls temporarily reserve tokens. The daily budget resets at 00:00 UTC.")
         super().__init__(message)
 
 
 def snapshot(db, uid):
+    from app.services.agent_runs import AgentRunStore
+    store = AgentRunStore(db)
+    store.recover_allowance(uid)
     # Timestamp the read's start so a slower HTTP response cannot overwrite a
     # newer terminal snapshot in the browser.
     observed_at = time.time_ns() // 1_000_000
     config = agent_budget_config.get_config(db)
     day = period_key(config)
-    return {**public(quota_ref(db, uid, day).get().to_dict(), day.split('_')[0], limit=config['daily_token_limit']),
+    data = quota_ref(db, uid, day).get().to_dict() or {}
+    if data.get('unknown', 0) > data.get('unknown_released', 0):
+        data = store.repair_quota_period(uid, day)
+    return {**public(data, day.split('_')[0], limit=config['daily_token_limit']),
             "observed_at": observed_at, "config_revision": config['revision']}
 
 
@@ -55,8 +62,24 @@ def measured_tokens(usage):
     return None
 
 
-def reserve(data, amount, *, limit=None):
+def normalize(data):
+    """Release legacy terminal holds, exactly once, without touching live holds.
+
+    `unknown` was only incremented when a receipt became terminal. The cumulative
+    marker also handles an old server settling another receipt during rollout.
+    These are reservation bounds, never invented measured/billed token counts.
+    """
     data = dict(data or {})
+    pending = max(0, data.get('unknown', 0) - data.get('unknown_released', 0))
+    if pending:
+        data['reserved'] = max(0, data.get('reserved', 0) - pending)
+        data['unknown_released'] = data['unknown']
+        data['revision'] = data.get('revision', 0) + 1
+    return data
+
+
+def reserve(data, amount, *, limit=None):
+    data = normalize(data)
     remaining = max(0, (daily_limit() if limit is None else limit) - data.get("used", 0) - data.get("reserved", 0))
     if amount > remaining:
         raise AgentTokenBudgetExceeded(remaining, amount)
@@ -66,26 +89,27 @@ def reserve(data, amount, *, limit=None):
 
 
 def release(data, amount):
-    data = dict(data or {})
+    data = normalize(data)
     data["reserved"] = max(0, data.get("reserved", 0) - amount)
     data["revision"] = data.get("revision", 0) + 1
     return data
 
 
 def settle(data, reserved, usage):
-    data = dict(data or {})
+    data = normalize(data)
     actual = measured_tokens(usage)
+    data['reserved'] = max(0, data.get('reserved', 0) - reserved)
     if actual is not None:
-        data["reserved"] = max(0, data.get("reserved", 0) - reserved)
         data["used"] = data.get("used", 0) + actual
     else:
         data["unknown"] = data.get("unknown", 0) + reserved
+        data['unknown_released'] = data.get('unknown_released', 0) + reserved
     data["revision"] = data.get("revision", 0) + 1
     return data
 
 
 def public(data, day=None, *, limit=None):
-    data = data or {}
+    data = normalize(data)
     limit = daily_limit() if limit is None else limit
     return {"day": day or day_key(), "revision": data.get("revision", 0), "limit": limit, "used": data.get("used", 0),
             "reserved": data.get("reserved", 0), "unknown": data.get("unknown", 0),

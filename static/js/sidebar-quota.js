@@ -135,7 +135,8 @@
     if (trigger) trigger.dataset.allowance = agent ? 'agent' : 'runs';
     if (agent && tokens) {
       var percent = remaining + '%';
-      var label = percent + ' of your daily Agent token budget left';
+      var label = percent + ' of your daily Agent token budget unspent';
+      if (Number.isFinite(budget.remaining)) label += '; ' + budget.remaining.toLocaleString() + ' tokens available for new calls';
       if (el('quotaTriggerValue')) el('quotaTriggerValue').textContent = percent;
       if (trigger) { trigger.title = label; trigger.setAttribute('aria-label', label); }
       if (el('quotaRunsValue')) {
@@ -163,12 +164,13 @@
     var countdown = el("countdownDisplay");
     var foot = el("quotaFoot");
     if (foot) {
-      var text = agent ? (tokens ? tokens.value.toLocaleString() + ' of ' + tokens.limit.toLocaleString() + ' tokens left. Resets at 00:00 UTC. Pending calls reserve tokens.' : 'Agent allowance unavailable.')
+      var text = agent ? (tokens ? tokens.value.toLocaleString() + ' of ' + tokens.limit.toLocaleString() + ' tokens unspent. Resets at 00:00 UTC. Active calls temporarily reserve tokens.' : 'Agent allowance unavailable.')
         : countdown ? (countdown.textContent || "").trim() : "";
       if (agent && tokens && Number.isFinite(budget.reserved) && budget.reserved > 0) {
         text = tokens.value.toLocaleString() + ' tokens unspent; ' + Math.max(0, budget.remaining).toLocaleString() + ' available for new calls. '
-          + budget.reserved.toLocaleString() + ' temporarily reserved for running calls, pending usage and review. Resets at 00:00 UTC.';
+          + budget.reserved.toLocaleString() + ' temporarily reserved for active calls and review. Resets at 00:00 UTC.';
       }
+      if (agent && budget?.unknown > 0) text += ' Some completed calls have unavailable usage; they do not block the remaining allowance.';
       if (agent && budget?.stale) text += ' Last confirmed allowance; reconnect to refresh.';
       foot.textContent = text;
       foot.hidden = !text;

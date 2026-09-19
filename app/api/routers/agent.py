@@ -182,6 +182,7 @@ def run_agent(request: Request, payload: AgentRequest):
         if not key and not mock_llm_enabled():
             raise HTTPException(status_code=503, detail="Agent model is not configured.")
         provider_cooldowns.check(model, key or "")
+        store.recover_allowance(uid)
         bookmark = db_firestore.collection("users").document(uid).collection("bookmarks").document(payload.bookmark_id).get()
         if bookmark.exists and (bookmark.to_dict() or {}).get("chat_id") != payload.chat_id:
             raise TurnStatusConflict("Bookmark belongs to another conversation")
