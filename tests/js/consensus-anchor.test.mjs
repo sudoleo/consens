@@ -67,6 +67,8 @@ describe("consensusAnchor.findRangesInText", () => {
 
   it.each([
     ["İstanbul", "İstanbul"],
+    ["ΟΔΟΣ", "ΟΔΟΣ"],
+    ["𐐀 test", "𐐀 test"],
     ["İ İ İstanbul: son", "son"],
     ["😀 İ ‘İklim’ değişiyor.", '‘İklim’ değişiyor.'],
   ])("keeps valid DOM offsets after Unicode case expansion: %s", (raw, quote) => {

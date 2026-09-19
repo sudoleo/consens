@@ -4,36 +4,44 @@
 
   function create(stripMarkdown) {
     function normalizeForSearch(value) {
-      return String(value || "")
-        .toLowerCase()
-        .replace(/[“”„‘’«»"]/g, '"')
-        .replace(/\s+/g, " ")
-        .trim();
+      return normalizeWithOffsets(String(value || "")).norm.trim();
     }
     
     // Sucht den normalisierten Needle in einem Rohtext und liefert die
     // Original-Offsets (für splitText/Range) zurück.
-    function findRangesInText(raw, normNeedle) {
+    function normalizeWithOffsets(raw) {
       let norm = "";
       const map = [];
-      for (let i = 0; i < raw.length; i++) {
-        let ch = raw[i].toLowerCase();
+      const ends = [];
+      let offset = 0;
+      for (const original of raw) {
+        const start = offset;
+        offset += original.length;
+        let ch = original.toLowerCase();
         if (/[“”„‘’«»"]/.test(ch)) ch = '"';
         if (/\s/.test(ch)) {
           if (norm.endsWith(" ") || norm === "") continue;
           ch = " ";
         }
         norm += ch;
-        // Lowercasing can expand a code unit (İ -> i + combining dot).
-        // DOM ranges still address the original UTF-16 offsets.
-        for (let j = 0; j < ch.length; j++) map.push(i);
+        // Normalize needle and haystack identically, including contextual
+        // casing and astral code points; DOM ranges use original UTF-16 units.
+        for (let j = 0; j < ch.length; j++) {
+          map.push(start);
+          ends.push(offset);
+        }
       }
+      return { norm, map, ends };
+    }
+
+    function findRangesInText(raw, normNeedle) {
+      const { norm, map, ends } = normalizeWithOffsets(raw);
       if (!normNeedle) return [];
       const ranges = [];
       let from = 0;
       let idx;
       while ((idx = norm.indexOf(normNeedle, from)) !== -1) {
-        ranges.push({ start: map[idx], end: map[idx + normNeedle.length - 1] + 1 });
+        ranges.push({ start: map[idx], end: ends[idx + normNeedle.length - 1] });
         from = idx + Math.max(1, normNeedle.length);
       }
       return ranges;

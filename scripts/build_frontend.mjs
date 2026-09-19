@@ -25,6 +25,7 @@ import { fileURLToPath } from "node:url";
 
 import * as esbuild from "esbuild";
 import { vendorFrontend } from "./vendor_frontend.mjs";
+import { previousAssets, publishBuild } from "./frontend-output.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const DIST = path.join(ROOT, "static", "dist");
@@ -193,6 +194,7 @@ async function sourceFingerprint(inputFiles) {
     "static/js/bundles.json",
     BUILD_SCRIPT,
     "scripts/vendor_frontend.mjs",
+    "scripts/frontend-output.mjs",
     "package.json",
     "package-lock.json",
     ...inputFiles,
@@ -201,7 +203,10 @@ async function sourceFingerprint(inputFiles) {
   for (const relative of files) {
     digest.update(relative);
     digest.update("\0");
-    digest.update(await readBytes(relative));
+    const bytes = await readBytes(relative);
+    // Git may check text out as CRLF on Windows and LF on Render/Linux.
+    // Vendored binaries and upstream assets keep their exact pinned bytes.
+    digest.update(relative.startsWith("static/vendor/") ? bytes : bytes.toString("utf8").replace(/\r\n/g, "\n"));
     digest.update("\0");
   }
   return {
@@ -254,6 +259,7 @@ async function build() {
   const fingerprint = await sourceFingerprint(sourceInputs);
   manifest.sources = fingerprint.hash;
   manifest.inputs = fingerprint.inputs;
+  manifest.previous_assets = await previousAssets(DIST, outputs);
 
   const manifestJson = `${JSON.stringify(manifest, null, 2)}\n`;
 
@@ -261,16 +267,7 @@ async function build() {
     return verify(outputs, manifestJson);
   }
 
-  await fs.mkdir(DIST, { recursive: true });
-  for (const stale of await fs.readdir(DIST).catch(() => [])) {
-    if (!outputs.has(stale) && stale !== "manifest.json") {
-      await fs.rm(path.join(DIST, stale), { force: true });
-    }
-  }
-  for (const [filename, content] of outputs) {
-    await fs.writeFile(path.join(DIST, filename), content, "utf8");
-  }
-  await fs.writeFile(MANIFEST, manifestJson, "utf8");
+  await publishBuild(DIST, outputs, manifest);
 
   report(outputs);
   return 0;

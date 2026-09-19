@@ -21,6 +21,27 @@ function fail(window, element) {
 }
 
 describe("critical resource reporting", () => {
+  it("sends a nonempty message even for a rejection without a reason", () => {
+    const { window, dom, reports } = boot();
+    window.dispatchEvent(new window.Event("unhandledrejection"));
+    expect(typeof reports[0].message).toBe("string");
+    expect(reports[0].message.length).toBeGreaterThan(0);
+    dom.window.close();
+  });
+
+  it("does not throw when the reporting transport throws synchronously", () => {
+    const { window, dom } = boot();
+    window.fetch = () => { throw new window.TypeError("blocked transport"); };
+    expect(() => window.App.reportCriticalError({ message: "Original failure" })).not.toThrow();
+    dom.window.close();
+  });
+
+  it("bounds the report before the keepalive request", () => {
+    const { window, dom, reports } = boot();
+    window.App.reportCriticalError({ message: "x".repeat(100000), stack: "s".repeat(100000), details: "d".repeat(100000) });
+    expect(JSON.stringify(reports[0]).length).toBeLessThan(8000);
+    dom.window.close();
+  });
   it("identifies separate failed app assets without query strings", () => {
     const { window, document, dom, reports } = boot();
     for (const src of [

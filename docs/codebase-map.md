@@ -297,6 +297,15 @@ In Produktion liefert `npm run build` daraus fünf inhaltsgehashte Bundles
 `docs/frontend-build.md`. Das Build-Manifest inventarisiert alle Inputs
 einschließlich Konfiguration, Build-Skript und lokaler Modulabhängigkeiten, damit
 der Python-Staleness-Test auch indirekte Änderungen erkennt.
+Der gemeinsame Node-/Python-Fingerprint normalisiert CRLF zu LF für Text-Inputs
+außerhalb `static/vendor/`; Vendor-Assets bleiben bytegenau. Dadurch ist ein
+unter Windows erstellter Commit auch nach einem Linux-Checkout aktuell.
+`scripts/frontend-output.mjs` publiziert geänderte Bundle-/Vendor-Dateien über
+atomaren Dateiersatz und schaltet das Manifest erst nach den Bundles um;
+unveränderte Dateien bleiben unangetastet. `previous_assets` hält pro JS-/CSS-
+Gruppe zwei Vorgängerversionen auch über identische Rebuilds vor. Erst nach dem
+Manifestwechsel werden ältere gehashte Bundle-Dateien entfernt. Das App-HTML
+für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
 
 **Modul-Verantwortlichkeiten** (alle in `static/js/` außer markiert):
 
@@ -352,6 +361,10 @@ der Python-Staleness-Test auch indirekte Änderungen erkennt.
   `/api/client-errors` validiert diese Felder erneut; Telegram und beide
   Deduplizierungsstufen erhalten die Codeposition, weiterhin keine freien
   Meldungen, Stacktexte, URLs oder Nutzinhalte. Alte Clients bleiben kompatibel.
+  Vor dem Keepalive-Request begrenzt der Reporter Meldung/Details/Stack und die
+  übrigen Felder auf die Intake-Limits; fehlende Fehlergründe erhalten einen
+  gültigen Fallback. Synchrone Transportfehler und Promise-Rejections des
+  Reportings dürfen selbst keinen weiteren ungefangenen Fehler auslösen.
 - **`auth-bootstrap.js`** — kleiner same-origin Classic-Script-Watchdog vor dem
   Firebase-ES-Modul. Falls dessen gstatic-Imports nicht ausführbar sind, räumt
   er stale Auth-/Usage-/Bookmark-Skeletons ab, zeigt die Gastaktionen trotz
@@ -1386,7 +1399,9 @@ der Python-Staleness-Test auch indirekte Änderungen erkennt.
   weder Netzwerk noch Modal-/Produkt-State und wird von `consensus-insights.js`
   als gebundener DOM-Adapter verwendet. Unicode-Erweiterungen beim Lowercasing
   (`İ` → `i` + kombinierender Punkt) erhalten pro normalisierter UTF-16-Einheit
-  den ursprünglichen Offset, damit Zitatmarkierungen gültige DOM-Ranges bilden.
+  ursprüngliche Start-/End-Offsets, damit Zitatmarkierungen gültige DOM-Ranges
+  bilden. Suchtext und Zitat werden identisch pro Unicode-Codepoint normalisiert
+  (auch griechisches Sigma und Zeichen außerhalb der BMP).
 - **`consensus-run.js`** — `window.getConsensus`: baut `/consensus`-Payload, fährt
   den SSE-Stream, rendert Ergebnis + Citation/Share-Meta und archiviert jeden
   abgeschlossenen Turn inklusive turnbezogener Quellen, Differences und

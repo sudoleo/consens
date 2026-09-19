@@ -15,6 +15,19 @@ import pytest
 from app.core import assets
 
 
+@pytest.mark.parametrize("path", ["/app", "/app/watches"])
+def test_app_html_cannot_cache_obsolete_bundle_urls(path):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from app.api.routers import pages
+
+    app = FastAPI()
+    app.include_router(pages.router)
+    response = TestClient(app).get(path)
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "private, no-store"
+
+
 @pytest.fixture(autouse=True)
 def clear_asset_cache():
     assets._cache.clear()

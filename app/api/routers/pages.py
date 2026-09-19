@@ -480,6 +480,9 @@ def read_root(request: Request):
         **firebase_config
     })
     response.headers["X-Robots-Tag"] = "noindex, follow"
+    # HTML embeds content-hashed asset names. Reusing it across deployments
+    # can reference bundles that are no longer part of the active release.
+    response.headers["Cache-Control"] = "private, no-store"
     return response
 
 @router.get("/admin", response_class=HTMLResponse)

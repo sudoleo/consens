@@ -1,9 +1,10 @@
 {
-  "sources": "349a18cf03b5",
+  "sources": "c5f6e076caa9",
   "inputs": [
     "package-lock.json",
     "package.json",
     "scripts/build_frontend.mjs",
+    "scripts/frontend-output.mjs",
     "scripts/vendor_frontend.mjs",
     "static/app-ui.js",
     "static/css/admin-benchmark.css",
@@ -160,7 +161,7 @@
   "scripts": [
     {
       "name": "head",
-      "src": "/static/dist/head.4ad9e855ae24.js",
+      "src": "/static/dist/head.1657f05e2da8.js",
       "module": false,
       "defer": false
     },
@@ -184,12 +185,18 @@
     },
     {
       "name": "app",
-      "src": "/static/dist/app.7ed7fee74cce.js",
+      "src": "/static/dist/app.b05b283cded0.js",
       "module": false,
       "defer": true
     }
   ],
   "styles": {
     "app": "/static/dist/app.976c961b9a22.css"
-  }
+  },
+  "previous_assets": [
+    "app.7ed7fee74cce.js",
+    "app.510a61e9521a.js",
+    "head.4ad9e855ae24.js",
+    "head.6fd653d6e163.js"
+  ]
 }

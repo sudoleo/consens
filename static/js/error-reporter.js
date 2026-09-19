@@ -71,7 +71,7 @@
     if (typeof value === "string") return value;
     if (value && typeof value.message === "string") return value.message;
     try {
-      return JSON.stringify(value);
+      return JSON.stringify(value) || fallback;
     } catch (_) {
       return fallback;
     }
@@ -116,23 +116,31 @@
   }
 
   function reportCriticalError(input) {
+    // This runs from global error handlers: even a patched fetch or an
+    // unusual error object must never create a second uncaught exception.
+    try {
+      sendCriticalError(input);
+    } catch (_) { /* Reporting is best effort. */ }
+  }
+
+  function sendCriticalError(input) {
     const value = input || {};
     if (isExpectedAbort(value.error || value.reason)) return;
     const report = {
-      type: String(value.type || "unhandled_error"),
-      phase: String(value.phase || "browser"),
-      message: asText(value.message || value.error || value.reason, "Unknown browser error"),
-      path: window.location.pathname
+      type: String(value.type || "unhandled_error").slice(0, 80),
+      phase: String(value.phase || "browser").slice(0, 80),
+      message: asText(value.message || value.error || value.reason, "Unknown browser error").trim().slice(0, 700) || "Unknown browser error",
+      path: window.location.pathname.slice(0, 300)
     };
-    const resourceClass = String(value.resource_class || "");
+    const resourceClass = String(value.resource_class || "").slice(0, 80);
     if (report.type === "unhandled_error" || report.type === "unhandled_rejection") {
       Object.assign(report, runtimeContext(value));
     }
-    if (value.failure_kind) report.failure_kind = String(value.failure_kind);
-    const details = compactDetails(value.details);
-    const stack = String(value.stack || value.error?.stack || value.reason?.stack || "");
+    if (value.failure_kind) report.failure_kind = String(value.failure_kind).slice(0, 80);
+    const details = compactDetails(value.details).slice(0, 1500);
+    const stack = String(value.stack || value.error?.stack || value.reason?.stack || "").slice(0, 4000);
     if (resourceClass) report.resource_class = resourceClass;
-    if (value.asset) report.asset = String(value.asset);
+    if (value.asset) report.asset = String(value.asset).slice(0, 150);
     if (details) report.details = details;
     if (stack) report.stack = stack;
     if (!shouldSend(report)) return;

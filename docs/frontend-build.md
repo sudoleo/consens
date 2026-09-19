@@ -84,6 +84,8 @@ Die vorherigen jsDelivr-Abhängigkeiten von `/app` (Marked, DOMPurify, KaTeX)
 werden aus `static/vendor/<paket>/<version>/` lokal ausgeliefert. Der Build
 kopiert über `scripts/vendor_frontend.mjs` die exakt in `package.json` gepinnten
 npm-Dateien samt Lizenzen und KaTeX-Fonts; `build:check` vergleicht deren Bytes.
+Unveränderte Vendor-Dateien werden nicht erneut geöffnet/überschrieben; geänderte
+Dateien werden über eine temporäre Datei im selben Verzeichnis atomar ersetzt.
 Die Dateien sind mitcommittet und im Manifest-Fingerprint enthalten, sodass
 Produktion weiterhin kein Node benötigt. Bei Versionsupdates auch die Pfade
 in `templates/index.html` anpassen. `asset_url` ergänzt Inhalts-Hashes.
@@ -109,6 +111,9 @@ Auch lokale Abhängigkeiten müssen direkt in `bundles.json` stehen. Deshalb ist
 veraltbaren ESM-Import zu liegen. Der Build schreibt außerdem seine vollständige
 Input-Liste ins Manifest; der Python-Abgleich hasht diese Liste samt
 `bundles.json`, Build-Skript und Lockfile.
+Text-Inputs außerhalb von `static/vendor/` werden für den Fingerprint auf
+LF-Zeilenenden normalisiert, damit Windows-CRLF und Linux-Checkouts denselben
+Build erkennen. Vendor-Dateien einschließlich Fonts bleiben bytegenau geprüft.
 
 ## Deploy
 
@@ -116,6 +121,16 @@ Input-Liste ins Manifest; der Python-Abgleich hasht diese Liste samt
 Nach jeder Änderung an `static/` also `npm run build` und das Ergebnis mit
 committen. Fehlt es, fällt `assets.py` automatisch auf die Einzeldateien zurück
 — die App läuft, nur eben unminifiziert.
+
+`scripts/frontend-output.mjs` veröffentlicht vollständige JS-/CSS-Dateien vor
+dem atomaren Manifestwechsel. Erst danach werden alte Bundles bereinigt;
+`previous_assets` im Manifest hält je JS-/CSS-Gruppe die letzten zwei
+Vorgängerversionen vor, auch bei identischen Rebuilds. Diese Dateien ebenfalls
+mitcommitten: Sie überbrücken verspätete Asset-Requests beim Versionswechsel.
+Das ist ein begrenztes Übergangsfenster, keine dauerhafte Archivierung alter
+Deployments. `/app` und `/app/watches` liefern ihr HTML mit `private, no-store`.
+Die Node-Regressionstests `tests/js/frontend-output.test.mjs` laufen im normalen
+`dev.ps1 check frontend`; keine zusätzlichen Voraussetzungen.
 
 Alternative, falls das Diff-Rauschen stört: `static/dist/` ignorieren und im
 Render-Build-Command `npm ci && npm run build` ergänzen.

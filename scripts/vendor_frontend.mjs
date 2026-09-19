@@ -2,6 +2,7 @@
 // font URLs and upstream licenses. Production does not need npm or a CDN.
 import fs from "node:fs/promises";
 import path from "node:path";
+import { writeAtomicIfChanged } from "./frontend-output.mjs";
 
 export async function vendorFrontend(root, checkOnly) {
   const packages = {
@@ -26,8 +27,7 @@ export async function vendorFrontend(root, checkOnly) {
         const current = await fs.readFile(target).catch(() => null);
         if (!current?.equals(bytes)) throw new Error(`${relative} is stale. Run: npm run build`);
       } else {
-        await fs.mkdir(path.dirname(target), { recursive: true });
-        await fs.writeFile(target, bytes);
+        await writeAtomicIfChanged(target, bytes);
       }
       inputs.push(relative);
     }

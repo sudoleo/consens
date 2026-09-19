@@ -23,6 +23,10 @@ PowerShell 5.1 oder neuer, aus dem Projektverzeichnis:
 | `backend` | `venv/Scripts/python.exe -m pytest tests -q` mit `UNIT_TEST_MODE=1`; geerbte E2E-Schalter werden für den Lauf entfernt. |
 | `browser` | Voraussetzungen und Build prüfen, dann Firebase `emulators:exec` mit der Playwright-Suite. Die CLI startet und beendet ihren Emulator auch bei fehlgeschlagenen Tests; die Pytest-Fixtures verwalten den App-Server und Browser. |
 
+Die Frontend-Suite prüft auch die atomare Build-Veröffentlichung, unveränderte
+Vendor-Dateien und die begrenzte Aufbewahrung voriger Bundles in temporären
+Verzeichnissen (`tests/js/frontend-output.test.mjs`), ohne den Projekt-Build zu ändern.
+
 Eine einzelne Datei oder ein Verzeichnis innerhalb der gewählten Suite:
 
 ```powershell

@@ -29,6 +29,24 @@ requires_build = pytest.mark.skipif(
 )
 
 
+def test_build_fingerprint_survives_windows_linux_checkout_but_checks_vendor_bytes(tmp_path, monkeypatch):
+    source = tmp_path / "static/js/example.js"
+    vendor = tmp_path / "static/vendor/example/font.woff2"
+    manifest = tmp_path / "manifest.json"
+    source.parent.mkdir(parents=True)
+    vendor.parent.mkdir(parents=True)
+    manifest.write_text(json.dumps({"inputs": ["static/js/example.js", "static/vendor/example/font.woff2"]}))
+    monkeypatch.setattr(assets, "ROOT", tmp_path)
+    monkeypatch.setattr(assets, "MANIFEST_FILE", manifest)
+    vendor.write_bytes(b"font\r\nbytes")
+    source.write_bytes(b"const x = 1;\r\nconst y = 2;\r\n")
+    windows_hash = assets.source_fingerprint()
+    source.write_bytes(b"const x = 1;\nconst y = 2;\n")
+    assert assets.source_fingerprint() == windows_hash
+    vendor.write_bytes(b"font\nbytes")
+    assert assets.source_fingerprint() != windows_hash
+
+
 @requires_build
 def test_dist_is_not_stale():
     manifest = json.loads(assets.MANIFEST_FILE.read_text(encoding="utf-8"))
@@ -45,7 +63,7 @@ def test_manifest_records_every_input_needed_for_python_only_staleness_checks():
     inputs = set(manifest["inputs"])
     config = json.loads(assets.BUNDLES_FILE.read_text(encoding="utf-8"))
 
-    declared = {"static/js/bundles.json", "scripts/build_frontend.mjs", "package-lock.json"}
+    declared = {"static/js/bundles.json", "scripts/build_frontend.mjs", "scripts/frontend-output.mjs", "package-lock.json"}
     for group in config["groups"]:
         if group.get("kind") == "module":
             declared.add(group["entry"])
@@ -68,6 +86,9 @@ def test_every_file_the_manifest_points_at_exists():
 
     for url in urls:
         assert (assets.ROOT / url.lstrip("/")).is_file(), url
+    for name in manifest.get("previous_assets", []):
+        assert re.fullmatch(r"[a-z][a-z0-9-]*\.[a-f0-9]{12}\.(?:js|css)", name)
+        assert (assets.STATIC_DIR / "dist" / name).is_file(), name
 
 
 @requires_build

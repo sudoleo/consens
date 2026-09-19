@@ -210,7 +210,10 @@ def source_fingerprint() -> str:
     for relative in relatives:
         digest.update(relative.encode("utf-8"))
         digest.update(b"\0")
-        digest.update((ROOT / relative).read_bytes())
+        content = (ROOT / relative).read_bytes()
+        if not relative.startswith("static/vendor/"):
+            content = content.replace(b"\r\n", b"\n")
+        digest.update(content)
         digest.update(b"\0")
     return digest.hexdigest()[:_HASH_LENGTH]
 
