@@ -814,6 +814,9 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
   Darunter wechseln sich kurze Meldungen des Steuerungsmodells in der Fragesprache
   und bestätigte Arbeitsschritte ab. Der aktuelle Status erscheint genau einmal.
   Meldungen und Schritte sind schwarz im hellen und weiß im dunklen Modus.
+  Nur aktive Arbeitsschritte tragen einen ruhigen, schmalen Lichtreflex (2,4 s),
+  auch im geöffneten Live-Verlauf. Laufzeit, Absätze und fertige Schritte bleiben
+  ohne Reflex; Reduced Motion und Forced Colors zeigen vollständig deckenden Text.
   Frühere Absätze und Arbeitsschritte bleiben erhalten;
   Reasoning-Rohtext erscheint nicht als Fortschritt. Beim Abschluss oder Stop
   verschwinden die Live-Absätze und ein geöffneter Verlauf klappt zu. Pfeil/Enter
