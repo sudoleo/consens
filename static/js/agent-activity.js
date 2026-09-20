@@ -7,6 +7,45 @@
     check_contradictions: 'Contradiction source check',
     start_agent: 'Ask a model', wait_agents: 'Wait for models', send_agent: 'Follow up',
     review_agent: 'Review a model', stop_agent: 'Stop a model', report_to_orchestrator: 'Report to the main model' };
+  const toolLabels = { web_search: 'Searching the web…', compare_models: 'Comparing perspectives…',
+    check_contradictions: 'Checking contradictions against sources…', judge_answer: 'Checking the answer…',
+    start_agent: 'Asking another model…', wait_agents: 'Waiting for model responses…',
+    send_agent: 'Following up with a model…', review_agent: 'Reviewing a model response…' };
+  const completedTools = { web_search: 'Searched the web', compare_models: 'Compared perspectives',
+    judge_answer: 'Checked the answer', check_contradictions: 'Checked contradictions against sources',
+    start_agent: 'Asked another model', wait_agents: 'Received model updates', send_agent: 'Followed up with a model',
+    review_agent: 'Reviewed a model response' };
+  function stepLabel(item) {
+    if (item.status === 'running') return toolLabels[item.name] || 'Running a tool…';
+    if (item.status === 'succeeded') return completedTools[item.name] || `${toolNames[item.name] || 'Tool'} · Completed`;
+    return `${toolNames[item.name] || 'Tool'} · ${{failed:'Failed', cancelled:'Stopped', blocked:'Skipped', unknown:'Usage unavailable'}[item.status] || 'Details'}`;
+  }
+  function savedDuration(turn) {
+    const start = Date.parse(turn?.created_at);
+    const end = Date.parse(turn?.completed_at || turn?.failed_at);
+    return Number.isFinite(start) && Number.isFinite(end) && end >= start ? end - start : null;
+  }
+  function durationLabel(ms) {
+    if (!Number.isFinite(ms)) return 'Duration unavailable';
+    const seconds = Math.floor(Math.max(0, ms) / 1000);
+    const hours = Math.floor(seconds / 3600), minutes = Math.floor(seconds / 60) % 60;
+    return `Duration: ${hours ? `${hours}h ` : ''}${minutes || hours ? `${minutes}m ` : ''}${seconds % 60}s`;
+  }
+  function updateClock(view, elapsedMs, running, status) {
+    clearInterval(view.clockTimer);
+    view.clockTimer = null;
+    const now = performance.now();
+    const previous = Number.isFinite(view.elapsedMs) ? view.elapsedMs + (view.clockRunning ? now - view.clockAt : 0) : null;
+    view.elapsedMs = Number.isFinite(elapsedMs) ? Math.max(0, elapsedMs) : previous ?? (running ? 0 : null);
+    view.clockAt = now;
+    view.clockRunning = running;
+    const tick = () => {
+      const elapsed = view.elapsedMs === null ? null : view.elapsedMs + (view.clockRunning ? performance.now() - view.clockAt : 0);
+      view.title.textContent = durationLabel(elapsed) + (!running && statuses[status] ? ` · ${statuses[status]}` : '');
+    };
+    tick();
+    if (running) view.clockTimer = setInterval(tick, 1000);
+  }
   const quietMotion = window.matchMedia?.('(prefers-reduced-motion: reduce), (forced-colors: active)');
   const activeMotion = new Set();
   function motion(element, frames, finish = () => {}, duration = 220) {
@@ -29,6 +68,9 @@
     animation.cancel();
   }
   function dispose(host) {
+    if (!host) return;
+    clearInterval(host._agentActivity?.clockTimer);
+    if (host._agentActivity) host._agentActivity.clockTimer = null;
     for (const animation of [...activeMotion]) {
       if (host.contains(animation.effect?.target)) cancelMotion(animation);
     }
@@ -106,9 +148,9 @@
       Object.assign(existing, event);
       if (event.kind === 'status') { events.splice(events.indexOf(existing), 1); events.push(existing); }
     } else {
-      // Keep the full progress history; only the auxiliary status window rotates.
-      if (event.kind !== 'progress') {
-        const auxiliary = events.filter(item => item.kind !== 'progress');
+      // Keep commentary and confirmed steps together for the full timeline.
+      if (!['progress', 'tool'].includes(event.kind)) {
+        const auxiliary = events.filter(item => !['progress', 'tool'].includes(item.kind));
         for (const item of auxiliary.slice(0, Math.max(0, auxiliary.length - 63))) events.splice(events.indexOf(item), 1);
       }
       events.push({ ...event, text: String(event.text || "").slice(0, event.kind === "progress" ? 400 : event.kind === "tool" ? 8000 : 32000) });
@@ -122,7 +164,7 @@
   }
 
   function render(host, { events = [], usage = null, running = false, responding = false,
-    status = "succeeded", truncated = false, finishReason = "", review = null } = {}) {
+    status = "succeeded", truncated = false, finishReason = "", review = null, elapsedMs = null } = {}) {
     if (!host) return;
     if (!host._agentActivity) {
       const details = document.createElement("details");
@@ -130,7 +172,8 @@
       const summary = document.createElement("summary");
       const title = document.createElement("span");
       title.className = "agent-activity-title";
-      title.setAttribute("role", "status");
+      title.setAttribute("role", "timer");
+      title.setAttribute('aria-live', 'off');
       const chevron = document.createElement("span");
       chevron.className = "agent-activity-chevron";
       chevron.setAttribute("aria-hidden", "true");
@@ -149,11 +192,14 @@
       preview.setAttribute('aria-relevant', 'additions text');
       preview.setAttribute('aria-label', 'Progress updates');
       const history = document.createElement('div'); history.className = 'agent-activity-history';
+      const currentStatus = document.createElement('div'); currentStatus.className = 'agent-current-status agent-progress-step';
+      currentStatus.setAttribute('role', 'status');
+      currentStatus.hidden = true;
       history.inert = true;
-      history.append(content, note, usageEl);
+      history.append(content, currentStatus, note, usageEl);
       details.append(summary, history);
       host.replaceChildren(details, preview);
-      host._agentActivity = { details, summary, history, title, content, note, usageEl, preview, nodes: new Map(), previewNodes: new Map() };
+      host._agentActivity = { details, summary, history, title, currentStatus, content, note, usageEl, preview, nodes: new Map(), previewNodes: new Map() };
       summary.addEventListener('click', event => {
         event.preventDefault();
         const view = host._agentActivity;
@@ -174,19 +220,10 @@
     const writing = latest ? latest.status === "responding" : responding;
     const reviewStage = review?.status === "running" ? "Checking the answer…"
       : review?.comparisons?.some(c => c.status === "running") ? "Comparing perspectives…" : null;
-    const toolLabels = { web_search: 'Searching the web…', compare_models: 'Comparing perspectives…',
-      check_contradictions: 'Checking contradictions against sources…',
-      judge_answer: 'Checking the answer…', start_agent: 'Asking another model…', wait_agents: 'Waiting for model responses…',
-      send_agent: 'Following up with a model…', review_agent: 'Reviewing a model response…' };
     const waiting = running && latest?.status === 'waiting';
-    const heading = running ? (waiting ? 'Waiting for available tokens…' : reviewStage || (activeTool ? toolLabels[activeTool.name] || 'Running a tool…' : writing ? 'Writing answer…' : reasoning.length ? 'Thinking…' : 'Working…'))
-      : statuses[status] || (finishReason === "length" ? "Response limit reached" : progress.length ? "Activity" : tools.length ? "Activity and sources" : reasoning.length ? "Reasoning" : "Response details");
-    if (view.title.textContent !== heading) {
-      const previous = view.title.textContent;
-      view.title.textContent = heading;
-      cancelMotion(view.titleMotion);
-      if (previous) view.titleMotion = motion(view.title, [{ opacity: .45 }, { opacity: 1 }], () => {}, 160);
-    }
+    const heading = waiting ? 'Waiting for available tokens…' : reviewStage
+      || (activeTool ? stepLabel(activeTool) : writing ? 'Writing answer…' : 'Thinking…');
+    updateClock(view, elapsedMs, running, status);
     view.details.classList.toggle("is-running", running);
     view.details.dataset.status = status;
     // Completion collapses even a manually opened live history. Later explicit
@@ -195,10 +232,13 @@
     view.running = running;
     // Stable paragraphs keep earlier updates readable and prevent a live region
     // from announcing the entire history again whenever a new paragraph arrives.
-    const highlights = compactReasoning(reasoning.at(-1)?.text).split('\n').filter(Boolean);
-    const paragraphs = progress.length ? progress.map(item => ({ id: item.id, text: item.text }))
-      : [...new Set(highlights)].filter(text => text !== heading).map((text, i) => ({ id: `legacy:${i}`, text }));
-    if (waiting) paragraphs.push({ id: 'waiting', text: latest.text || 'Active model calls are using the available allowance. This response will continue automatically.' });
+    const paragraphs = events.flatMap(item => progress.includes(item)
+      ? [{id:item.id, text:item.text, kind:'progress'}]
+      : reasoning.includes(item) ? [{id:item.id, text:compactReasoning(item.text), kind:'progress'}]
+        : tools.includes(item) ? [{id:`step:${item.id}`, text:stepLabel(item), kind:'step', status:item.status,
+          current:running && !waiting && item === activeTool}] : []);
+    if (running && (!activeTool || waiting)) paragraphs.push({id:'current-status', text:heading, kind:'step', current:true});
+    if (waiting) paragraphs.push({ id: 'waiting', kind:'progress', text: latest.text || 'Active model calls are using the available allowance. This response will continue automatically.' });
     const previewHeight = view.preview.getBoundingClientRect().height;
     const showPreview = running && paragraphs.length;
     let previewChanged = false;
@@ -213,12 +253,23 @@
       previewIds.add(item.id);
       let p = view.previewNodes.get(item.id);
       if (!p) {
-        p = document.createElement('p'); view.previewNodes.set(item.id, p);
+        p = document.createElement(item.kind === 'step' ? 'div' : 'p'); view.previewNodes.set(item.id, p);
         view.preview.appendChild(p);
         previewChanged = true;
         if (!view.details.open) reveal(p);
       }
-      if (p.textContent !== item.text) p.textContent = item.text;
+      p.classList.toggle('agent-progress-step', item.kind === 'step');
+      p.classList.toggle('agent-current-status', Boolean(item.current));
+      if (item.current) p.setAttribute('role', 'status'); else p.removeAttribute('role');
+      if (item.status) p.dataset.status = item.status;
+      if (p.textContent !== item.text) {
+        const previous = p.textContent;
+        p.textContent = item.text;
+        if (previous && item.kind === 'step') motion(p, [{opacity:.65}, {opacity:1}], () => {}, 160);
+      }
+      // A fallback Thinking/Writing row moves after a newly received insight.
+      const position = view.preview.children[previewIds.size - 1];
+      if (position !== p) view.preview.insertBefore(p, position || null);
     }
     if (showPreview) {
       for (const [id, node] of view.previewNodes) if (!previewIds.has(id)) {
@@ -280,6 +331,8 @@
     }
     for (const [id, node] of view.nodes) if (!ids.has(id)) { node.remove(); view.nodes.delete(id); }
     view.content.hidden = !progress.length && !reasoning.length && !tools.length;
+    view.currentStatus.textContent = heading;
+    view.currentStatus.hidden = !running || Boolean(activeTool && !waiting);
     view.note.textContent = progress.length ? '' : reasoning.length ? (reasoning[0].summary_source === "excerpt" || reasoning[0].format === "text"
       ? "Short excerpts from the model’s reasoning." : "Model-provided reasoning summary.") : truncated ? "Reasoning highlights only."
       : !reasoning.length ? (running ? "Waiting for the model’s response."
@@ -304,7 +357,7 @@
     const status = turn?.error_code === "cancelled" ? "cancelled" : terminal?.status
       || (turn?.status === "failed" ? "failed" : "succeeded");
     render(host, { events, usage: turn?.agent_usage, status, truncated: turn?.agent_reasoning_truncated,
-      finishReason: turn?.agent_finish_reason });
+      finishReason: turn?.agent_finish_reason, elapsedMs:savedDuration(turn) });
   }
-  App.agentActivity = { receive, render, renderTurn, label, reveal, dispose };
+  App.agentActivity = { receive, render, renderTurn, label, reveal, dispose, savedDuration };
 })();

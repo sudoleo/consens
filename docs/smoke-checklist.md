@@ -809,8 +809,12 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
 - [ ] Im Agent-Chat ersetzt der verbleibende Tokenanteil als Prozentzahl den
   Run-Zähler im Sidebar-Footer. Exakte Zahlen im Panel, keine Budgetzeile im
   Composer. Modus-/Accountwechsel zeigt keine fremden oder veralteten Zahlen.
-- [ ] Unter dem Status stehen kurze, konkrete Meldungen des Steuerungsmodells
-  in der Fragesprache untereinander. Frühere Absätze bleiben erhalten;
+- [ ] Oben am Pfeil steht die Laufzeit; sie zählt während Token-Warten weiter
+  und bleibt nach Abschluss/Stop sowie beim Öffnen gespeicherter Turns stehen.
+  Darunter wechseln sich kurze Meldungen des Steuerungsmodells in der Fragesprache
+  und bestätigte Arbeitsschritte ab. Der aktuelle Status erscheint genau einmal.
+  Meldungen und Schritte sind schwarz im hellen und weiß im dunklen Modus.
+  Frühere Absätze und Arbeitsschritte bleiben erhalten;
   Reasoning-Rohtext erscheint nicht als Fortschritt. Beim Abschluss oder Stop
   verschwinden die Live-Absätze und ein geöffneter Verlauf klappt zu. Pfeil/Enter
   öffnet danach alle gespeicherten Absätze und Toolschritte in ihrer Reihenfolge,

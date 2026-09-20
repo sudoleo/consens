@@ -7,9 +7,10 @@ from test_agent_chat_frontend import CATALOG, _choose_mode, _snapshot
 
 
 @pytest.mark.parametrize("width,dark,quiet", [(1280, False, "none"), (390, True, "none"),
-    (320, False, "none"), (390, True, "reduce"), (320, False, "colors")])
+    (320, False, "none"), (390, True, "reduce"), (320, False, "colors"), (390, True, "colors")])
 def test_progress_paragraphs_collapse_at_final_and_reopen_with_keyboard(browser, phase4_server, width, dark, quiet):
     context, page = _real_firebase_page(browser, phase4_server)
+    snapshot_variant = f"{width}-{'dark' if dark else 'light'}-{quiet}"
     errors = []
     page.on("pageerror", lambda error: errors.append(str(error)))
     updates = ["Ich vergleiche die Optionen mit deinem Budget von 100 Euro.",
@@ -43,12 +44,19 @@ def test_progress_paragraphs_collapse_at_final_and_reopen_with_keyboard(browser,
                 const event = {version:1, step_id:'completion:0', kind:'progress', id, text};
                 events.set(id, event); emit('activity', event);
               };
+              window.__tool = (id, name, status) => {
+                const event = {version:1, step_id:'completion:0', kind:'tool', id, name, status};
+                events.set(id, event); emit('activity', event);
+              };
               window.__progress('p1', updates[0]);
+              window.__tool('comparison', 'compare_models', 'running');
               window.__answerChunk = text => emit('delta', {text});
               window.__finishProgress = () => {
                 const response = 'Die erste Option passt zu deinem Budget.';
+                window.__tool('judge', 'judge_answer', 'succeeded');
                 emit('final', {response, chat_id:'a'.repeat(32), turn_id:'b'.repeat(32),
                   turn:{id:'b'.repeat(32), status:'completed', execution_mode:'agent', consensus:response,
+                    created_at:'2026-09-20T10:00:00Z', completed_at:'2026-09-20T10:01:13Z',
                     agent_activity:[...events.values()], agent_usage:{input_tokens:500,output_tokens:100}}});
                 controller.close();
               };
@@ -60,9 +68,24 @@ def test_progress_paragraphs_collapse_at_final_and_reopen_with_keyboard(browser,
         page.locator("#sendButton").click()
         preview = page.locator("#agentAnswerActivity .agent-progress")
         expect(preview.locator("p")).to_have_text(updates[:1])
+        expect(preview.locator('.agent-current-status')).to_have_text('Comparing perspectives…')
+        title = page.locator('#agentAnswerActivity .agent-activity-title')
+        expect(title).to_contain_text('Duration:')
+        page.wait_for_function("() => !document.querySelector('.agent-activity-title').textContent.includes('Duration: 0s')")
+        assert title.evaluate("el => getComputedStyle(el).animationName") == 'none'
         page.evaluate("() => { window.__firstProgress = document.querySelector('.agent-progress p'); }")
+        page.evaluate("() => window.__tool('comparison', 'compare_models', 'succeeded')")
         page.evaluate("text => window.__progress('p2', text)", updates[1])
+        page.evaluate("() => window.__tool('judge', 'judge_answer', 'running')")
         expect(preview.locator("p")).to_have_text(updates)
+        expect(preview.locator(':scope > *')).to_have_text([
+            updates[0], 'Compared perspectives', updates[1], 'Checking the answer…'])
+        expect(preview.locator('.agent-current-status')).to_have_count(1)
+        if quiet != 'colors':
+            colors = preview.locator(':scope > *').evaluate_all('els => els.map(el => getComputedStyle(el).color)')
+            assert colors == ['rgb(255, 255, 255)' if dark else 'rgb(0, 0, 0)'] * 4
+        else:
+            assert preview.evaluate("el => getComputedStyle(el).getPropertyValue('--agent-ink').trim()") == 'CanvasText'
         expect(preview).to_be_visible()
         first, second = [p.bounding_box() for p in preview.locator("p").all()]
         assert second["y"] >= first["y"] + first["height"] + 12
@@ -73,7 +96,7 @@ def test_progress_paragraphs_collapse_at_final_and_reopen_with_keyboard(browser,
         assert counts == ({"first": 1, "updates": 2} if quiet == "none" else {"first": 0, "updates": 0})
         page.evaluate("() => { window.__motionCount = __agentMotion.length; App.agentChat.project(App.runRegistry.visible()); }")
         assert page.evaluate("__agentMotion.length === __motionCount")
-        _snapshot(page, f"agent-progress-live-{width}")
+        _snapshot(page, f"agent-progress-live-{snapshot_variant}")
         summary = page.locator("#agentAnswerActivity summary")
         summary.focus()
         page.keyboard.press("Enter")
@@ -81,6 +104,11 @@ def test_progress_paragraphs_collapse_at_final_and_reopen_with_keyboard(browser,
         expect(details).to_have_attribute("open", "")
         expect(preview).not_to_be_visible()
         expect(details.locator(".agent-activity-update")).to_have_text(updates)
+        expect(details.locator('.agent-activity-tool strong')).to_have_text([
+            'Model comparison · Completed', 'Answer review · Working…'])
+        if quiet != 'colors':
+            assert details.locator('.agent-activity-update').first.evaluate('el => getComputedStyle(el).color') == (
+                'rgb(255, 255, 255)' if dark else 'rgb(0, 0, 0)')
         # Exercise rapid reversal without leaving a frozen height or a stale close callback.
         page.evaluate("""() => {
           const summary = document.querySelector('#agentAnswerActivity summary');
@@ -100,6 +128,10 @@ def test_progress_paragraphs_collapse_at_final_and_reopen_with_keyboard(browser,
         expect(details).not_to_have_attribute("open", "")
         expect(preview).not_to_be_visible()
         expect(preview.locator("p")).to_have_count(0)
+        expect(title).to_have_text('Duration: 1m 13s')
+        page.evaluate("() => App.agentChat.project(App.runRegistry.visible())")
+        expect(title).to_have_text('Duration: 1m 13s')
+        assert page.evaluate("document.querySelector('#agentAnswerActivity')._agentActivity.clockTimer === null")
         assert page.evaluate("__agentMotion.filter(m => m.target.id === 'agentAnswerBody').length") == (1 if quiet == "none" else 0)
         if quiet == "none":
             assert page.evaluate("__agentMotion.every(m => m.options.duration <= 220)")
@@ -107,7 +139,7 @@ def test_progress_paragraphs_collapse_at_final_and_reopen_with_keyboard(browser,
                 assert page.evaluate("__agentMotion.some(m => m.target.matches('.agent-progress') && m.frames.at(-1).opacity === 0 && m.frames.at(-1).height === '0px')")
         else:
             assert page.evaluate("__agentMotion.length") == 0
-        _snapshot(page, f"agent-progress-final-{width}")
+        _snapshot(page, f"agent-progress-final-{snapshot_variant}")
         summary.focus()
         page.keyboard.press("Enter")
         expect(details.locator(".agent-activity-update")).to_have_text(updates)
@@ -118,7 +150,7 @@ def test_progress_paragraphs_collapse_at_final_and_reopen_with_keyboard(browser,
             page.emulate_media(reduced_motion="reduce")
             page.wait_for_function("() => __agentMotion.every(m => m.animation.playState !== 'running')")
         assert page.locator('#agentAnswerActivity').evaluate("el => el.style.height") == ""
-        _snapshot(page, f"agent-progress-history-{width}")
+        _snapshot(page, f"agent-progress-history-{snapshot_variant}")
         assert not errors
     finally:
         context.close()

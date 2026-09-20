@@ -286,6 +286,7 @@
           : context?.metadata.recoveryState === 'saved' ? 'Recover saved answer' : 'Check saved answer';
     }
     if (panel) panel.hidden = !agent || (!context && !basis);
+    if (panel?.hidden) activityHost('');
     if (agent && !context && basis) {
       renderAnswer(basis.consensus || "", basis.currentTurn?.agent_failure?.error
         || (basis.currentTurn?.status === 'failed' ? 'This response did not finish successfully.' : ''));
@@ -338,6 +339,8 @@
     const state = context.consensus;
     renderAnswer(state.text || state.streamText || "", state.error?.message || state.completedTurn?.agent_failure?.error || "");
     App.agentActivity?.render(activityHost(context.runId), {
+      elapsedMs: App.agentActivity.savedDuration(state.completedTurn)
+        ?? Math.max(0, (context.finishedAt || Date.now()) - context.startedAt),
       events: state.completedTurn?.agent_activity || context.metadata.agentActivity || [],
       usage: state.completedTurn?.agent_usage || context.metadata.agentUsage, running: registry.isExecuting(context.runId),
       responding: Boolean(state.text || state.streamText),

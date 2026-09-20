@@ -157,12 +157,15 @@ Zahlennotation, nachgelieferte Metadaten, Streaming sowie unveränderte Original
 und die Reihenfolge von Prüfmarkierungen und Zitierdarstellung.
 `tests/js/sidebar-quota.test.mjs` prüft die Agent-Prozentprojektion
 und den Wechsel zurück zum unveränderten Consensus-Kontingent.
-`tests/js/agent-chat.test.mjs` prüft gestapelte Fortschrittsabsätze, stabile DOM-Knoten,
+`tests/js/agent-chat.test.mjs` prüft abwechselnde Fortschrittsabsätze und bestätigte Schritte, stabile DOM-Knoten,
 HTML-Escaping, vollständigen Verlauf über das Hilfsereignisfenster hinaus,
-automatisches Zuklappen beim Abschluss sowie erneutes manuelles Öffnen.
+automatisches Zuklappen beim Abschluss sowie erneutes manuelles Öffnen. Laufzeit-
+Tests decken Minutengrenzen, Token-Warten, Stop, Timer-Cleanup und gespeicherte
+Endzeitstempel inklusive ungültiger/fehlender Zeitangaben ab.
 Legacy-Reasoning und die Reasoning-Ebene im Chatmodell-Picker bleiben abgedeckt.
 `tests/e2e/test_agent_status_frontend.py` prüft die gebaute App mit offenem SSE-
-Stream bei 1280/390/320 px: Absatzabstände, Hell/Dunkel, Abschluss mit geöffnetem
+Stream bei 1280/390/320 px: Schritt-Reihenfolge, laufende/eingefrorene Uhr,
+Absatzabstände, Schwarz/Weiß im hellen/dunklen Modus, Abschluss mit geöffnetem
 Verlauf, Aufklappen per Tastatur und vollständigen Verlauf ohne inneren Scrollkasten.
 Der Lauf prüft zudem kurze Ein-/Ausblend- und Höhenübergänge, einmalige Animation
 pro neuem Absatz/Antwortbeginn, schnelle Richtungswechsel, Abschluss bei offenem

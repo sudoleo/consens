@@ -221,7 +221,9 @@ body.single-agent-active .consensus-model-inline { min-width: 0; max-width: 100%
   .chat-input-container .agent-model-controls .model-picker-group-option { min-height: 44px; }
 }
 
-/* One quiet disclosure. Live state uses the source-check light sweep. */
+/* Runtime in the disclosure; high-contrast progress and steps in the timeline. */
+.agent-activity, .agent-progress { --agent-ink: #000; }
+.dark-mode :is(.agent-activity, .agent-progress) { --agent-ink: #fff; }
 .agent-activity { margin: 0 0 18px; color: var(--ink-3); font-size: 13px; }
 .agent-activity > summary {
   display: flex; flex-wrap: wrap; align-items: center; gap: 9px; width: fit-content; max-width: 100%;
@@ -231,30 +233,27 @@ body.single-agent-active .consensus-model-inline { min-width: 0; max-width: 100%
 .agent-activity > summary::-webkit-details-marker { display: none; }
 .agent-activity > summary:focus-visible { outline: 2px solid var(--ink-2); outline-offset: 3px; }
 .agent-activity > summary:hover { color: var(--ink); }
-.agent-activity-title { font-weight: 500; }
+.agent-activity-title { font-weight: 500; font-variant-numeric: tabular-nums; }
 .agent-activity-chevron { width: 5px; height: 5px; margin-left: 2px; border-right: 1px solid currentColor; border-bottom: 1px solid currentColor; transform: rotate(45deg); transition: transform .18s ease; opacity: .6; }
 .agent-activity[open] .agent-activity-chevron { transform: rotate(225deg); }
 .agent-activity.is-closing .agent-activity-chevron { transform: rotate(45deg); }
 .agent-activity-history { display: flow-root; }
-.agent-activity.is-running .agent-activity-title {
-  font-weight: 600;
-  background-image: linear-gradient(105deg, var(--ink-2) 40%, var(--ink) 50%, var(--ink-2) 60%);
-  background-size: 250% 100%; animation: source-label-shine 1.6s linear infinite;
-}
-.agent-activity.is-running .agent-activity-title { background-clip: text; -webkit-background-clip: text; color: transparent; }
 .agent-activity-content {
   padding: 12px 0 0; margin: 6px 0 8px;
   border-top: 1px solid var(--line); overflow-wrap: anywhere;
 }
 .agent-activity-content[hidden] { display: none; }
 .agent-activity-content:focus-visible { outline: 1px solid var(--ink-3); outline-offset: 2px; border-radius: 3px; }
-.agent-activity-reasoning { color: var(--ink-2); white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.75; font-size: 13px; }
+.agent-activity-reasoning { color: var(--agent-ink); white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.75; font-size: 14px; }
 .agent-activity-reasoning + .agent-activity-reasoning { margin-top: 12px; }
-.agent-activity-tool { margin: 12px 0; padding: 0; color: var(--ink-2); overflow-wrap: anywhere; line-height: 1.65; }
-.agent-progress { display: flow-root; margin: -8px 0 24px; color: var(--ink-2); font-size: 14px; line-height: 1.75; }
+.agent-activity-tool { margin: 12px 0; padding: 0; color: var(--agent-ink); overflow-wrap: anywhere; line-height: 1.65; }
+.agent-progress { display: flow-root; margin: -8px 0 24px; color: var(--agent-ink); font-size: 14px; line-height: 1.75; }
 .agent-progress p, .agent-activity-update { margin: 0 0 14px; overflow-wrap: anywhere; }
-.agent-activity-update { color: var(--ink-2); font-size: 14px; line-height: 1.75; }
-.agent-progress p:last-child, .agent-activity-update:last-child { margin-bottom: 0; }
+.agent-activity-update { color: var(--agent-ink); font-size: 14px; line-height: 1.75; }
+.agent-progress-step { margin: 0 0 16px; color: var(--agent-ink); font-size: 13px; line-height: 1.65; }
+.agent-current-status { font-weight: 500; }
+.agent-progress p:last-child, .agent-progress-step:last-child, .agent-activity-update:last-child { margin-bottom: 0; }
+.agent-progress-step[hidden] { display: none; }
 .agent-progress[hidden], .agent-activity[open] + .agent-progress { display: none; }
 .agent-activity-tool strong { display: block; font-size: 12px; font-weight: 500; }
 .agent-activity-tool p { white-space: pre-wrap; margin: 6px 0; font-size: 12px; }
@@ -266,7 +265,6 @@ body.single-agent-active .consensus-model-inline { min-width: 0; max-width: 100%
 @media (prefers-reduced-motion: reduce), (forced-colors: active) {
   .agent-session-track:not([hidden]) i::after { animation: none; background: none; }
   .agent-session-tokens.is-loading { animation: none; background: none; color: var(--ink-3); }
-  .agent-activity.is-running .agent-activity-title { animation: none; background: none; color: var(--ink-2); }
   .agent-activity-chevron { transition: none; }
 }
 @media (max-width: 700px) {
@@ -291,6 +289,9 @@ body.single-agent-active .consensus-model-inline { min-width: 0; max-width: 100%
   /* The shared Consensus composer supplies the single-line follow-up layout. */
   body.single-agent-active:not(.is-hero) .agent-model-picker { max-width: 180px; }
   body.single-agent-active:not(.is-hero) .agent-effort-control .model-picker-display-text::before { content: ''; }
+}
+@media (forced-colors: active) {
+  .agent-activity, .agent-progress, .dark-mode :is(.agent-activity, .agent-progress) { --agent-ink: CanvasText; }
 }
 @media (max-width: 1099px) {
   body.single-agent-active.composer-collapsed:not(.is-hero) .chat-input-container .consensus-switch-container { display: contents; }

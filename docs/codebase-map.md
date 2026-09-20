@@ -1919,10 +1919,19 @@ enthält den sicheren Fehlercode und Grund auch im gespeicherten Turn; die UI
 zeigt ihn live und nach Reload. Provider-Timeouts sind von Kontingent-Stopp und
 Nutzerabbruch getrennt, rohe Provider-Fehler werden nicht gespeichert.
 
-**UI-Verträge.** agent-activity.js zeigt den aktuellen Arbeits-/Tool-/Review-Status
-genau einmal in der Überschrift des standardmäßig geschlossenen Disclosures.
-Darunter stehen die Fortschrittsmeldungen des Steuerungsmodells chronologisch
-als kurze Absätze. `ProgressArgs.status_update` ergänzt die bestehenden Tools
+**UI-Verträge.** agent-activity.js zeigt die Laufzeit in der Überschrift des
+standardmäßig geschlossenen Disclosures. Live zählt sie sekündlich ab dem Start
+des Runs inklusive Wartephasen; Abschluss und Stop frieren sie ein. Gespeicherte
+Turns verwenden `created_at` und `completed_at` bzw. `failed_at`, fehlende oder
+ungültige Zeitstempel ergeben „Duration unavailable“. Parallele Toollaufzeiten
+werden nicht addiert. Der Timer kündigt nicht jede Sekunde per Screenreader an
+und wird beim Verbergen/Turnwechsel aufgeräumt. Darunter wechseln sich die kurzen
+Fortschrittsabsätze des Steuerungsmodells und bestätigte Toolschritte in ihrer
+Ereignisreihenfolge ab. Laufende Schritte aktualisieren sich im selben DOM-Knoten
+zu abgeschlossenen Schritten; ohne aktives Tool steht der aktuelle Thinking-/
+Writing-/Review-Status am Ende. Fortschritt und Arbeitsschritte sind im hellen
+Modus schwarz und im dunklen weiß, in Forced Colors gilt `CanvasText`.
+`ProgressArgs.status_update` ergänzt die bestehenden Tools
 `compare_models`, `judge_answer` und `check_contradictions` um maximal 400 Zeichen;
 für ältere Aufrufer ist das Feld optional. Der injizierte Produktprompt verlangt
 es bei jedem dieser Aufrufe: ein bis zwei konkrete Sätze in der Sprache der
@@ -1938,7 +1947,8 @@ Fortsetzungsdaten bleiben im laufenden Provider-Protokoll.
 
 Die Live-Absätze verwenden stabile DOM-Knoten in einem höflich angekündigten
 `role=log`; die rotierende 64er-Grenze für Hilfsereignisse entfernt keine
-Fortschrittsmeldungen. Token-Warten ergänzt einen sichtbaren Hinweis.
+Fortschrittsmeldungen oder bestätigten Toolschritte. Token-Warten ergänzt einen
+sichtbaren Hinweis.
 Bei Abschluss, Fehler oder Stop verschwindet die Live-Anzeige und auch ein zuvor
 geöffneter Verlauf klappt zu. Anschließendes manuelles Öffnen über Pfeil/Enter
 zeigt die vollständigen Absätze, bestätigte Tools und Usage; spätere Projektionen
@@ -1954,7 +1964,7 @@ ab, `agentActivity.dispose` räumt sie beim Turnwechsel ab. Reduced Motion und
 Forced Colors überspringen Bewegung und beenden laufende Übergänge sofort;
 ohne Web Animations gilt derselbe unmittelbare Fallback.
 Tool-Nennungen bleiben Text; ausschließlich bestätigte running-Toolereignisse
-oder der Review-Status bestimmen den Status im Kopf.
+oder der Review-Status bestimmen den aktuellen Arbeitsschritt im Verlauf.
 Alte gespeicherte Reasoning-Verläufe bleiben als begrenzte Auszüge lesbar.
 `agent_progress.py`/`agent_loop.py` behalten für Legacy-Läufe und Worker drei Zeilen
 à 180 Zeichen und acht Updates je Modellschritt; Provider-Zusammenfassungen haben

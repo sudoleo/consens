@@ -390,7 +390,7 @@ def test_live_reasoning_disclosure_and_stop(browser, phase4_server, width, dark)
         }""")
         page.locator("#questionInput").fill("Think about this question")
         page.locator("#sendButton").click()
-        expect(page.locator("#agentAnswerActivity .agent-activity-title")).to_have_text("Thinking…")
+        expect(page.locator("#agentAnswerActivity .agent-progress .agent-current-status")).to_have_text("Thinking…")
         expect(page.locator("#agentAnswerActivity .agent-progress")).to_be_visible()
         expect(page.locator("#agentAnswerActivity details")).not_to_have_attribute('open', '')
         expect(page.locator("#agentAnswerBody")).to_be_empty()
@@ -398,7 +398,7 @@ def test_live_reasoning_disclosure_and_stop(browser, phase4_server, width, dark)
         expect(page.locator(".agent-model-picker .model-picker-display")).to_be_disabled()
         page.evaluate("""() => window.__emitAgent({version:1, step_id:'completion:0', kind:'status', id:'allowance',
           status:'waiting', text:'Waiting for active model calls to finish and release their unused allowance.'})""")
-        expect(page.locator('#agentAnswerActivity .agent-activity-title')).to_have_text('Waiting for available tokens…')
+        expect(page.locator('#agentAnswerActivity .agent-progress .agent-current-status')).to_have_text('Waiting for available tokens…')
         expect(page.locator('#agentAnswerActivity .agent-progress')).to_contain_text('release their unused allowance')
         expect(page.locator('#agentAnswerActivity details')).not_to_have_attribute('open', '')
         if width == 1280:
@@ -407,7 +407,7 @@ def test_live_reasoning_disclosure_and_stop(browser, phase4_server, width, dark)
         _snapshot(page, f"agent-allowance-wait-{width}-{'dark' if dark else 'light'}")
         page.evaluate("() => window.__emitAgent({version:1, step_id:'completion:0', kind:'status', id:'resumed', status:'working'})")
         title = page.locator("#agentAnswerActivity .agent-activity-title")
-        assert title.evaluate("el => getComputedStyle(el).animationName") == "source-label-shine"
+        assert title.evaluate("el => getComputedStyle(el).animationName") == "none"
         page.evaluate("""() => window.__emitAgent({version:1, step_id:'completion:0', kind:'reasoning', id:'r1',
           format:'summary', text:'I am considering compare_models to check independent perspectives, then judge_answer.'})""")
         expect(page.locator('.agent-progress .agent-tool-mention')).to_have_count(0)
@@ -421,10 +421,11 @@ def test_live_reasoning_disclosure_and_stop(browser, phase4_server, width, dark)
             expect(page.locator("#newRunButton")).to_have_text("New chat")
         page.locator('#agentAnswerActivity summary').click()
         page.evaluate("() => window.__emitAgent({version:1, step_id:'completion:0', kind:'tool', id:'tool1', name:'compare_models', status:'running'})")
-        expect(title).to_have_text('Comparing perspectives…')
+        expect(page.locator('.agent-progress .agent-current-status')).to_have_text('Comparing perspectives…')
+        expect(title).to_contain_text('Duration:')
         expect(title).to_be_visible()
         expect(page.locator('.agent-progress-action')).to_have_count(0)
-        expect(page.locator('.agent-progress')).not_to_contain_text('Comparing perspectives')
+        expect(page.locator('.agent-progress .agent-current-status')).to_have_count(1)
         _snapshot(page, f"agent-tool-active-{width}-{'dark' if dark else 'light'}")
         page.evaluate("() => window.__emitAgent({version:1, step_id:'completion:0', kind:'tool', id:'tool1', name:'compare_models', status:'succeeded'})")
         page.locator('#agentAnswerActivity summary').click()
@@ -454,7 +455,7 @@ def test_live_reasoning_disclosure_and_stop(browser, phase4_server, width, dark)
         page.wait_for_function("() => Date.now() - App.runRegistry.visible().startedAt > 800")
         page.locator("#sendButton").click()
         page.wait_for_function("() => App.runRegistry.visible()?.status === 'canceled'")
-        expect(page.locator("#agentAnswerActivity .agent-activity-title")).to_have_text("Response stopped")
+        expect(page.locator("#agentAnswerActivity .agent-activity-title")).to_contain_text("Response stopped")
         expect(page.locator("#agentAnswerError")).not_to_be_visible()
         assert title.evaluate("el => getComputedStyle(el).animationName") == "none"
     finally:
@@ -496,7 +497,7 @@ def test_small_viewport_long_model_and_missing_reasoning(browser, phase4_server)
         page.locator("#questionInput").fill("A simple question")
         page.locator("#sendButton").click()
         expect(page.locator("#agentAnswerBody")).to_have_text("A concise answer.")
-        expect(page.locator("#agentAnswerActivity .agent-activity-title")).to_have_text("Response limit reached")
+        expect(page.locator("#agentAnswerActivity .agent-activity-title")).to_contain_text("Duration:")
         page.locator("#agentAnswerActivity summary").click()
         expect(page.locator(".agent-activity-note")).to_contain_text("No visible reasoning")
         expect(page.locator(".agent-activity-note")).to_contain_text("output limit")
@@ -542,7 +543,7 @@ def test_model_catalog_retry_and_failed_stream(browser, phase4_server):
         page.locator("#sendButton").click()
         expect(page.locator("#agentAnswerError")).to_have_text("The model is temporarily unavailable.")
         expect(page.locator("#agentRecover")).to_be_visible()
-        expect(page.locator("#agentAnswerActivity .agent-activity-title")).to_have_text("Response failed")
+        expect(page.locator("#agentAnswerActivity .agent-activity-title")).to_contain_text("Response failed")
         assert page.locator(".agent-activity-title").evaluate("el => getComputedStyle(el).animationName") == "none"
         page.wait_for_function("() => !App.runRegistry.visible()?.controllers.query")
         assert len(attempts) == 2
@@ -639,6 +640,7 @@ def test_native_search_sources_in_chat_and_saved_activity(browser, phase4_server
                      "sources": [{"url": "https://example.com/report", "title": "Research report with a long descriptive source title"},
                                  {"url": "https://example.org/analysis", "title": "Analysis and methodology"}]}]
         turn = {"id": "b" * 32, "status": "completed", "execution_mode": "agent", "question": "Research the topic",
+                "created_at": "2026-09-20T10:00:00Z", "completed_at": "2026-09-20T10:00:18Z",
                 "consensus": "The current sources support this answer.", "agent_activity": activity,
                 "agent_settings": {"model_id": "claude-haiku-4-5", "label": "Claude Haiku 4.5", "reasoning_effort": "default"},
                 "agent_usage": {"input_tokens": 1200, "output_tokens": 200, "estimated_cost_nano_usd": 22200000, "complete": True}}
@@ -661,7 +663,7 @@ def test_native_search_sources_in_chat_and_saved_activity(browser, phase4_server
         page.locator("#sendButton").click()
         page.wait_for_function("() => App.runRegistry.visible()?.status === 'succeeded'")
         details = page.locator("#agentAnswerActivity details")
-        expect(details.locator("summary")).to_have_text("Activity and sources")
+        expect(details.locator("summary")).to_have_text("Duration: 18s")
         details.locator("summary").click()
         expect(details.locator(".agent-activity-tool")).to_contain_text("Web search · Completed · 2 searches")
         expect(details.locator("a")).to_have_count(2)
@@ -681,6 +683,7 @@ def test_native_search_sources_in_chat_and_saved_activity(browser, phase4_server
         expect(sources).to_be_focused()
         # The shared history renderer receives the same authoritative activity.
         page.evaluate("turn => { App.agentActivity.renderTurn(document.getElementById('agentAnswerActivity'), turn); }", turn)
+        expect(details.locator('.agent-activity-title')).to_have_text('Duration: 18s')
         expect(details.locator("a")).to_have_count(2)
         expected_tokens = page.evaluate("() => (1400).toLocaleString() + ' tokens'")
         expect(details.locator(".agent-usage")).to_contain_text(expected_tokens)
@@ -726,7 +729,7 @@ def test_removed_preference_and_legacy_phantom_search(browser, phase4_server, wi
         page.locator("#sendButton").click()
         expect(page.locator("#agentAnswerBody")).to_have_text(turn["consensus"])
         details = page.locator("#agentAnswerActivity details")
-        expect(details.locator("summary")).to_have_text("Reasoning")
+        expect(details.locator("summary")).to_contain_text("Duration:")
         details.locator("summary").click()
         expect(details.locator(".agent-activity-reasoning")).to_have_text("A casual greeting.")
         expect(details.locator(".agent-activity-tool")).to_have_count(0)

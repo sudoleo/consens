@@ -199,7 +199,7 @@ describe("single-model agent chat", () => {
     const host = d.querySelector('#agentAnswerActivity');
     const text = 'Waiting for active model calls to finish and release their unused allowance.';
     w.App.agentActivity.render(host, {running:true,events:[{kind:'status',id:'wait',status:'waiting',text}]});
-    expect(host.querySelector('summary').textContent).toContain('Waiting for available tokens');
+    expect(host.querySelector('.agent-progress .agent-current-status').textContent).toContain('Waiting for available tokens');
     expect(host.querySelector('.agent-progress').textContent).toContain(text);
     expect(host.querySelector('details').open).toBe(false);
     dom.window.close();
@@ -213,7 +213,7 @@ describe("single-model agent chat", () => {
     expect(events.at(-1).status).toBe('waiting');
     w.App.agentActivity.receive(events, {version:1,kind:'status',id:'step-99',status:'responding'});
     w.App.agentActivity.render(d.querySelector('#agentAnswerActivity'), {events,running:true});
-    expect(d.querySelector('.agent-activity-title').textContent).toBe('Writing answer…');
+    expect(d.querySelector('.agent-progress .agent-current-status').textContent).toBe('Writing answer…');
     dom.window.close();
   });
   it('freezes source-check permission for sending and recovery while the next-message preference changes', async () => {
@@ -282,9 +282,9 @@ describe("single-model agent chat", () => {
     expect(host.querySelector('img')).toBe(null);
     events.push({id: 'tool1', kind: 'tool', name: 'compare_models', status: 'running'});
     window.App.agentActivity.render(host, { events, running: true });
-    expect(host.querySelector('.agent-activity-title').textContent).toBe('Comparing perspectives…');
+    expect(host.querySelector('.agent-progress .agent-current-status').textContent).toBe('Comparing perspectives…');
     expect(host.querySelector('.agent-progress-action')).toBe(null);
-    expect(host.querySelector('.agent-progress').textContent).not.toContain('Comparing perspectives…');
+    expect(host.querySelector('.agent-progress').textContent).toContain('Comparing perspectives…');
     expect(host.querySelector('details').open).toBe(false);
     events[1].status = 'succeeded';
     window.App.agentActivity.render(host, { events, running: true });
@@ -295,7 +295,7 @@ describe("single-model agent chat", () => {
     dom.window.close();
   });
 
-  it('keeps a review stage in one heading when tool events arrive', () => {
+  it('keeps a review stage in one live row when tool events arrive', () => {
     const { window, document, dom } = boot();
     const host = document.getElementById('agentAnswerActivity');
     const state = { running: true, review: {status: 'running'}, events: [] };
@@ -303,9 +303,9 @@ describe("single-model agent chat", () => {
     expect(host.querySelector('.agent-progress-action')).toBe(null);
     state.events.push({id:'judge', kind:'tool', name:'judge_answer', status:'running'});
     window.App.agentActivity.render(host, state);
-    expect(host.querySelector('.agent-activity-title').textContent).toBe('Checking the answer…');
-    expect(host.querySelector('.agent-progress').hidden).toBe(true);
-    expect(host.textContent.match(/Checking the answer…/g)).toHaveLength(1);
+    expect(host.querySelector('.agent-progress .agent-current-status').textContent).toBe('Checking the answer…');
+    expect(host.querySelector('.agent-progress').hidden).toBe(false);
+    expect(host.querySelector('.agent-progress').textContent.match(/Checking the answer…/g)).toHaveLength(1);
     state.events[0].status = 'failed';
     window.App.agentActivity.render(host, state);
     expect(host.querySelector('.agent-progress-action')).toBe(null);
@@ -347,7 +347,7 @@ describe("single-model agent chat", () => {
     const usage = { input_tokens: 100, output_tokens: 20, estimated_cost_nano_usd: 12000000, cost_source: "provider" };
     window.App.agentActivity.render(host, { usage, status: "failed" });
     expect(host.querySelector(".agent-usage").textContent).toContain("$0.0120 provider cost");
-    expect(host.querySelector("summary").textContent).toBe("Response failed");
+    expect(host.querySelector("summary").textContent).toContain("Response failed");
     expect(host.querySelector(".agent-activity-marker")).toBe(null);
     window.App.agentActivity.render(host, { usage: { ...usage, cost_source: "catalog" } });
     expect(host.querySelector(".agent-usage").textContent).toContain("~$0.0120 estimated");
@@ -458,7 +458,7 @@ describe("single-model agent chat", () => {
     dom.window.close();
   });
 
-  it('stacks complete localized updates and collapses the open history on completion', () => {
+  it('interleaves confirmed steps with complete localized updates and preserves the finished history', () => {
     const { window, document, dom } = boot();
     const activity = window.App.agentActivity;
     const host = document.getElementById('agentAnswerActivity');
@@ -468,11 +468,19 @@ describe("single-model agent chat", () => {
     activity.receive(events, first);
     activity.render(host, {events, running:true});
     const firstNode = host.querySelector('.agent-progress p');
+    activity.receive(events, {version:1,id:'compare',kind:'tool',name:'compare_models',status:'running'});
+    activity.render(host, {events, running:true});
+    const stepNode = host.querySelector('.agent-progress-step');
+    expect(stepNode.textContent).toBe('Comparing perspectives…');
+    activity.receive(events, {version:1,id:'compare',kind:'tool',name:'compare_models',status:'succeeded'});
     activity.receive(events, second);
     activity.receive(events, second);
     activity.render(host, {events, running:true});
     expect([...host.querySelectorAll('.agent-progress p')].map(p => p.textContent)).toEqual([first.text, second.text]);
     expect(host.querySelector('.agent-progress p')).toBe(firstNode);
+    expect([...host.querySelector('.agent-progress').children].map(p => p.textContent))
+      .toEqual([first.text, 'Compared perspectives', second.text, 'Thinking…']);
+    expect(host.querySelector('.agent-progress-step')).toBe(stepNode);
     expect(host.querySelector('img')).toBe(null);
     expect(host.querySelector('.agent-progress').getAttribute('role')).toBe('log');
     const details = host.querySelector('details');
@@ -490,14 +498,61 @@ describe("single-model agent chat", () => {
     dom.window.close();
   });
 
-  it('retains every progress paragraph when the auxiliary status window rotates', () => {
+  it('ticks runtime through waiting, freezes at stop, and disposes the live timer', () => {
+    const { window, document, dom } = boot();
+    const activity = window.App.agentActivity;
+    const host = document.getElementById('agentAnswerActivity');
+    let now = 0, tick;
+    vi.spyOn(window.performance, 'now').mockImplementation(() => now);
+    vi.spyOn(window, 'setInterval').mockImplementation(callback => { tick = callback; return 123; });
+    const clear = vi.spyOn(window, 'clearInterval');
+    activity.render(host, {running:true, elapsedMs:59900});
+    const title = host.querySelector('.agent-activity-title');
+    expect(title.textContent).toBe('Duration: 59s');
+    expect(title.getAttribute('aria-live')).toBe('off');
+    now = 1100; tick();
+    expect(title.textContent).toBe('Duration: 1m 1s');
+    activity.render(host, {running:true, events:[{id:'wait',kind:'status',status:'waiting'}]});
+    now = 2100; tick();
+    expect(title.textContent).toBe('Duration: 1m 2s');
+    expect(host.querySelector('.agent-progress .agent-current-status').textContent).toContain('Waiting');
+    activity.render(host, {running:false,status:'canceled'});
+    expect(clear).toHaveBeenCalledWith(123);
+    expect(host._agentActivity.clockTimer).toBe(null);
+    now = 10000;
+    activity.render(host, {running:false,status:'canceled'});
+    expect(title.textContent).toBe('Duration: 1m 2s · Response stopped');
+    activity.render(host, {running:true,elapsedMs:2000});
+    activity.dispose(host);
+    expect(host._agentActivity.clockTimer).toBe(null);
+    expect(() => activity.dispose(null)).not.toThrow();
+    dom.window.close();
+  });
+
+  it('restores saved runtime from terminal timestamps rather than the time since creation', () => {
+    const { window, document, dom } = boot();
+    const activity = window.App.agentActivity;
+    const host = document.getElementById('agentAnswerActivity');
+    const turn = {created_at:'2026-09-20T10:00:00Z', completed_at:'2026-09-20T11:02:03Z'};
+    activity.renderTurn(host, turn);
+    expect(host.querySelector('.agent-activity-title').textContent).toBe('Duration: 1h 2m 3s');
+    expect(host._agentActivity.clockTimer).toBe(null);
+    expect(activity.savedDuration({created_at:turn.created_at, failed_at:'2026-09-20T10:00:45Z'})).toBe(45000);
+    for (const invalid of [{}, {created_at:turn.created_at}, {...turn,completed_at:'invalid'},
+      {...turn,completed_at:'2026-09-19T00:00:00Z'}]) expect(activity.savedDuration(invalid)).toBe(null);
+    dom.window.close();
+  });
+
+  it('retains progress paragraphs and confirmed steps when the auxiliary status window rotates', () => {
     const { window, dom } = boot();
     const events = [];
     for (let i = 0; i < 90; i++) {
       window.App.agentActivity.receive(events, {version:1,id:`p${i}`,kind:'progress',text:`Check ${i}`});
+      window.App.agentActivity.receive(events, {version:1,id:`t${i}`,kind:'tool',name:'compare_models',status:'succeeded'});
       window.App.agentActivity.receive(events, {version:1,id:`s${i}`,kind:'status',status:'working'});
     }
     expect(events.filter(e => e.kind === 'progress')).toHaveLength(90);
+    expect(events.filter(e => e.kind === 'tool')).toHaveLength(90);
     expect(events.filter(e => e.kind === 'status')).toHaveLength(64);
     expect(events.at(-1).id).toBe('s89');
     dom.window.close();
@@ -520,7 +575,7 @@ describe("single-model agent chat", () => {
     activity.render(host, { events, running: false });
     expect(details.open).toBe(true);
     activity.renderTurn(host, { status: "failed", error_code: "cancelled", agent_activity: events });
-    expect(host.querySelector(".agent-activity-title").textContent).toBe("Response stopped");
+    expect(host.querySelector(".agent-activity-title").textContent).toContain("Response stopped");
     expect(host.querySelector(".agent-activity").classList.contains("is-running")).toBe(false);
     activity.render(host, { usage: { input_tokens: 10, output_tokens: 3, estimated_cost_nano_usd: null } });
     expect(host.querySelector(".agent-usage").textContent).toBe("13 tokens");
@@ -840,7 +895,7 @@ describe("single-model agent chat", () => {
     ];
     window.App.agentActivity.renderTurn(host, { agent_activity: events,
       agent_usage: { input_tokens: 800, output_tokens: 62, estimated_cost_nano_usd: 400000, cost_source: "provider", complete: true } });
-    expect(host.querySelector(".agent-activity-title").textContent).toBe("Reasoning");
+    expect(host.querySelector(".agent-activity-title").textContent).toBe("Duration unavailable");
     expect(host.querySelector(".agent-activity-tool")).toBe(null);
     expect(host.querySelector(".agent-usage").textContent).toBe("862 tokens · $0.0004 provider cost");
     // A count or citations confirm use even if the response was interrupted.
@@ -867,7 +922,7 @@ describe("single-model agent chat", () => {
     expect(events).toHaveLength(1);
     window.App.agentActivity.renderTurn(host, { agent_activity: events, agent_usage: {
       input_tokens: 100, output_tokens: 20, complete: false, estimated_cost_nano_usd: 10000000 } });
-    expect(host.textContent).toContain("Activity and sources");
+    expect(host.textContent).toContain("Duration unavailable");
     expect(host.textContent).toContain("Web search · Completed · 1 search");
     expect(host.textContent).toContain("usage incomplete");
     expect(host.querySelector("img")).toBe(null);
@@ -894,9 +949,9 @@ describe("single-model agent chat", () => {
     handlers.activity.receive(event);
     window.App.agentChat.project(run);
     const host = document.getElementById("agentAnswerActivity");
-    expect(host.querySelector('.agent-activity-title').textContent).toBe("Running a tool…");
+    expect(host.querySelector('.agent-progress .agent-current-status').textContent).toBe("Running a tool…");
     expect(host.querySelector("details").open).toBe(false);
-    expect(host.querySelector('.agent-progress').hidden).toBe(true);
+    expect(host.querySelector('.agent-progress').hidden).toBe(false);
     handlers.activity.receive({ ...event, status: "succeeded", text: '{"result":4}' });
     handlers.activity.receive({ version: 1, step_id: "completion:1", id: "completion:1/started", kind: "status", status: "working", clear_response: true });
     expect(run.consensus.streamText).toBe("");
