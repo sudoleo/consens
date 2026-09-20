@@ -4,6 +4,13 @@
   const App = window.App = window.App || {};
   const states = { required: "Review pending", running: "Checking the answer…", succeeded: "Comparison checked",
     partial: "Review incomplete", failed: "Review unavailable", cancelled: "Review stopped", missing: "Answer not reviewed" };
+  const activityContexts = new WeakMap();
+  function currentCheck(review, comparison, raw) {
+    const version = review?.versions?.find(v => v.id === review.answer_version);
+    const check = review?.checks?.find(c => c.comparison_id === comparison.id);
+    return version && raw === version.text && version.hash === review.answer_hash
+      && check?.answer_hash === version.hash && check?.basis_hash === comparison.basis_hash ? check : null;
+  }
   function checkIssues(comparison, check) {
     if (!check) return [];
     let issues = check.issues;
@@ -54,6 +61,66 @@
     if (cls) el.className = cls;
     if (text !== undefined) el.textContent = text;
     return el;
+  }
+  function renderActivity(host, review, raw) {
+    const comparisons = review?.comparisons || [];
+    host.hidden = !comparisons.length;
+    const signature = JSON.stringify([review, raw]);
+    if (host.dataset.signature === signature) return;
+    host.dataset.signature = signature;
+    host.replaceChildren();
+    if (!comparisons.length) return;
+    host.append(node('h3', '', 'Comparison details'));
+    comparisons.forEach((comparison, index) => {
+      const card = node('section', 'agent-activity-insight');
+      const answers = comparison.answers || [], missing = comparison.failed_models || [];
+      card.append(node('h4', '', `Comparison ${index + 1} · ${comparison.status === 'running' ? 'Collecting answers…'
+        : `${answers.length} model ${answers.length === 1 ? 'answer' : 'answers'}`}`));
+      if (comparison.question) card.append(node('p', 'agent-activity-focus', comparison.question));
+      if (comparison.reason) card.append(node('p', '', comparison.reason));
+      const names = answers.map(a => a.model?.label || a.provider_label || a.provider).filter(Boolean);
+      if (names.length) card.append(node('p', 'agent-activity-models', `Models: ${names.join(', ')}`));
+      if (missing.length) card.append(node('p', '', `No complete answer: ${missing.map(m => m.label || m.model).join(', ')}`));
+      const check = currentCheck(review, comparison, raw);
+      const issues = checkIssues(comparison, check);
+      const state = check?.status || (['running', 'failed', 'cancelled', 'missing'].includes(review.status) ? review.status : 'required');
+      card.append(node('p', 'agent-activity-check', comparison.status === 'running' && !check
+        ? 'Waiting for independent model answers.' : statusText(state, issues)));
+      const differences = check?.differences_data?.differences || [];
+      if (differences.length) {
+        const list = node('ul', 'agent-activity-findings');
+        for (const difference of differences.slice(0, 3)) {
+          const text = difference.claim || difference.consensus_anchor;
+          if (text) list.append(node('li', '', `${difference.type === 'contradiction' ? 'Disagreement' : 'Difference'}: ${text}`));
+        }
+        if (differences.length > 3) list.append(node('li', '', `${differences.length - 3} more in the detailed review.`));
+        card.append(list);
+      } else if (check?.status === 'succeeded' && Array.isArray(check.differences_data?.differences)) {
+        card.append(node('p', '', 'The completed comparison check reported no differences.'));
+      }
+      for (const issue of issues) card.append(node('p', 'agent-activity-limitation', issueText(issue)));
+      const verification = check?.source_verification;
+      if (verification?.answer_version === check?.answer_hash && verification?.run_id === comparison.id
+          && verification?.basis_hash === comparison.basis_hash) {
+        const scope = verification.scope;
+        if (Number.isInteger(scope?.checked_contradictions) && Number.isInteger(scope?.contradictions)) {
+          card.append(node('p', '', `Source checks: ${scope.checked_contradictions} of ${scope.contradictions} disagreements checked.`));
+        }
+      } else if (review.check_sources === false) {
+        card.append(node('p', '', 'Contradiction source checks were off for this message.'));
+      }
+      const actions = node('div', 'agent-activity-insight-actions');
+      for (const [section, label] of [['answers', 'Read model answers'], ['differences', 'Explore review and sources']]) {
+        const button = node('button', 'consensus-tab', label); button.type = 'button';
+        button.disabled = section === 'answers' ? !answers.length : !check;
+        button.addEventListener('click', () => {
+          const context = activityContexts.get(review)?.find(c => c.key === `agent-evidence:${comparison.id}`);
+          if (context) App.answerReader?.openContext(context, { section, trigger: button });
+        });
+        actions.append(button);
+      }
+      card.append(actions); host.append(card);
+    });
   }
   function safeSources(answers) {
     const sources = new Map();
@@ -123,12 +190,12 @@
       host.setAttribute("aria-label", "Answer evidence");
     }
     const exact = !!version && raw === version.text && version.hash === review.answer_hash;
-    const boundCheck = comparison => {
-      const check = review.checks?.find(c => c.comparison_id === comparison.id);
-      return exact && check?.answer_hash === version.hash && check?.basis_hash === comparison.basis_hash ? check : null;
-    };
+    const boundCheck = comparison => currentCheck(review, comparison, raw);
     const signature = JSON.stringify([review, raw, exact, turnSources]);
-    if (host.dataset.signature === signature) { window.linkifyAgentSources?.(body, turnSources); return; }
+    if (host.dataset.signature === signature) {
+      activityContexts.set(review, host._contexts);
+      window.linkifyAgentSources?.(body, turnSources); return;
+    }
     host.dataset.signature = signature;
     host._hasReview = true;
     host.replaceChildren();
@@ -237,6 +304,8 @@
       };
       return context;
     });
+    host._contexts = contexts;
+    activityContexts.set(review, contexts);
     let chosen = contexts.find(c => c.key === host._selectedBasis) || contexts[0];
     function select(context) {
       chosen = context; host._selectedBasis = context.key;
@@ -277,5 +346,5 @@
     }
     contexts.forEach(c => App.answerReader?.refreshContext(c));
   }
-  App.agentReview = { render };
+  App.agentReview = { render, renderActivity };
 })();

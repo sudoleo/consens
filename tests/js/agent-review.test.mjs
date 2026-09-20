@@ -18,6 +18,69 @@ function snapshot() {
       status: "succeeded", answers: [{ provider: "openai", model: { label: "GPT" }, text: "<script>unsafe</script>", sources: [{ url: "javascript:bad()" }, { url: "https://example.org", title: "Source" }] }] })),
     checks: [1, 2].map(i => ({ comparison_id: `c${i}`, basis_hash: `b${i}`, answer_hash: "answer-hash", status: "succeeded", differences_data: { claims: [{ anchor: `claim${i}` }], differences: [] } })) };
 }
+it('explains the recorded comparison in the duration disclosure and opens its original evidence', () => {
+  const {window: w, document: d, dom} = setup();
+  const body = d.getElementById('answer'), details = d.createElement('div');
+  body.dataset.markdown = 'Exact answer.';
+  const review = snapshot();
+  review.comparisons[0].reason = '<img src=x> Compare costs';
+  review.checks[0].differences_data.differences = [{type:'contradiction',claim:'Whether five seats are included'}];
+  review.checks[0].source_verification = {answer_version:'answer-hash',run_id:'c1',basis_hash:'b1',
+    scope:{checked_contradictions:1,contradictions:1},status:'complete'};
+  // Activity renders before the answer's reader contexts are registered.
+  w.App.agentReview.renderActivity(details, review, body.dataset.markdown);
+  w.App.agentReview.render(body, review);
+  expect(details.hidden).toBe(false);
+  expect(details.textContent).toContain('Comparison 1 · 1 model answer');
+  expect(details.textContent).toContain('Models: GPT');
+  expect(details.textContent).toContain('Disagreement: Whether five seats are included');
+  expect(details.textContent).toContain('Source checks: 1 of 1 disagreements checked.');
+  expect(details.querySelector('img')).toBeNull();
+  details.querySelector('button').click();
+  expect(w.App.answerReader.openContext).toHaveBeenLastCalledWith(expect.objectContaining({key:'agent-evidence:c1'}),
+    expect.objectContaining({section:'answers'}));
+  // An equivalent saved snapshot still shares usable reader contexts.
+  const saved = structuredClone(review);
+  w.App.agentReview.renderActivity(details, saved, body.dataset.markdown);
+  w.App.agentReview.render(body, saved);
+  details.querySelectorAll('button')[1].click();
+  expect(w.App.answerReader.openContext).toHaveBeenLastCalledWith(expect.objectContaining({key:'agent-evidence:c1'}),
+    expect.objectContaining({section:'differences'}));
+  dom.window.close();
+});
+it('shows the live comparison purpose while its answers and checks are still pending', () => {
+  const {window: w, document: d, dom} = setup();
+  const host = d.createElement('div');
+  w.App.agentReview.renderActivity(host, {status:'required',comparisons:[{id:'c1',status:'running',
+    question:'Which plan fits?',reason:'Compare cost and flexibility',answers:[]}]}, '');
+  expect(host.hidden).toBe(false);
+  expect(host.textContent).toContain('Collecting answers…');
+  expect(host.textContent).toContain('Compare cost and flexibility');
+  expect([...host.querySelectorAll('button')].every(b => b.disabled)).toBe(true);
+  expect(host.textContent).not.toContain('Comparison checked');
+  dom.window.close();
+});
+it('keeps partial and stale reviews honest in activity insights and clears them for another turn', () => {
+  const {window: w, document: d, dom} = setup();
+  const details = d.createElement('div'), review = snapshot();
+  review.checks[0].status = 'partial';
+  review.checks[0].issues = [{code:'coverage_unavailable'}];
+  review.checks[0].differences_data.differences = [{type:'contradiction',claim:'A recorded disagreement'}];
+  w.App.agentReview.renderActivity(details, review, 'Exact answer.');
+  expect(details.textContent).toContain('Review incomplete');
+  expect(details.textContent).toContain('The coverage check did not complete');
+  w.App.agentReview.renderActivity(details, review, 'Changed answer.');
+  expect(details.textContent).toContain('Review pending');
+  expect(details.textContent).not.toContain('A recorded disagreement');
+  expect(details.textContent).not.toContain('Comparison checked');
+  review.comparisons[0].basis_hash = 'changed';
+  w.App.agentReview.renderActivity(details, review, 'Exact answer.');
+  expect(details.querySelector('.agent-activity-insight').textContent).not.toContain('A recorded disagreement');
+  w.App.agentReview.renderActivity(details, null, 'Another answer.');
+  expect(details.hidden).toBe(true);
+  expect(details.childElementCount).toBe(0);
+  dom.window.close();
+});
 it("uses the shared markers only for the exact answer and selected comparison basis", () => {
   const { window: w, document: d, dom } = setup();
   const body = d.getElementById("answer"); body.dataset.markdown = "Exact answer.";

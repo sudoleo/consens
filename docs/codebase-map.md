@@ -1953,6 +1953,25 @@ Bei Abschluss, Fehler oder Stop verschwindet die Live-Anzeige und auch ein zuvor
 geöffneter Verlauf klappt zu. Anschließendes manuelles Öffnen über Pfeil/Enter
 zeigt die vollständigen Absätze, bestätigte Tools und Usage; spätere Projektionen
 erhalten diese Wahl. Der Verlauf fließt ohne verschachtelten Scrollkasten im Chat.
+Schon während des Nachdenkens ergänzt der geöffnete Verlauf Chatmodell,
+Reasoning-Einstellung und aktuelle Phase, statt nur dieselben Live-Absätze mit
+einer Trennlinie erneut zu zeigen. Die Werte stammen aus den eingefrorenen
+Run-Einstellungen bzw. bestätigten Statusereignissen. Noch laufende Vergleiche
+zeigen Ziel und Begründung; Links zu Antworten/Prüfung werden erst mit den
+zugehörigen Ergebnissen bedienbar.
+Der Abschluss-Snapshot ergänzt die bereits empfangenen Aktivitäten anhand ihrer
+IDs; gespeicherte Zustände überschreiben passende Live-Einträge, ein unvollständiger
+Snapshot löscht keine vorher sichtbaren Fortschrittsmeldungen aus dem lokalen Turn.
+`agentReview.renderActivity` ergänzt im Disclosure die gespeicherten Vergleichsziele,
+Begründungen und Modellnamen sowie gebundene Prüfergebnisse, bis zu drei erkannte
+Unterschiede und den Umfang der Quellenprüfung. Dieselbe Text-/Hash-/Basisbindung
+wie im Antwortleser verhindert Aussagen aus veralteten Prüfungen. Auch ohne
+`agent_activity` bleiben vorhandene `agent_review`-Details beim Wiederöffnen sichtbar.
+Schaltflächen öffnen die zugehörigen Originalantworten bzw. die vollständige Prüfung
+im bestehenden Antwortleser. Ein WeakMap ordnet dem Review-Snapshot dessen
+Leserkontexte zu; diese werden auch bei inhaltlich gleichen neuen Snapshots gebunden.
+Wenn weder Verlauf noch Vergleichsdetails gespeichert sind, erscheint ein klarer
+Hinweis statt einer leeren Trennlinie. Zusätzliche Modellaufrufe entstehen nicht.
 `agentActivity.reveal` blendet neue Absätze und den ersten Antworttext mit 4 px
 Versatz über 220 ms ein; weitere Streaming-Chunks starten keine neue Animation.
 Statuswechsel blenden über 160 ms über. Die Live-Vorschau wächst bzw. verschwindet

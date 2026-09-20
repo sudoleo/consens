@@ -347,6 +347,8 @@
       status: context.status, truncated: state.completedTurn?.agent_reasoning_truncated,
       finishReason: state.completedTurn?.agent_finish_reason,
       review: state.completedTurn?.agent_review || context.metadata.agentReview,
+      answerText: state.text || state.streamText || '',
+      settings: state.completedTurn?.agent_settings || context.metadata.agentSettings,
     });
     App.agentReview?.render(document.getElementById("agentAnswerBody"), state.completedTurn?.agent_review || context.metadata.agentReview,
       { sources: state.completedTurn?.sources, events: state.completedTurn?.agent_activity || context.metadata.agentActivity,
@@ -362,6 +364,11 @@
   }
   function acceptAnswer(context, data) {
     const turn = { ...data.turn, turn_id: data.turn_id };
+    // A final/recovery snapshot may omit earlier progress. Keep confirmed live
+    // entries, while the saved snapshot remains authoritative for matching IDs.
+    const activity = new Map((context.metadata.agentActivity || []).map(item => [item.id, { ...item }]));
+    for (const item of turn.agent_activity || []) activity.set(item.id, { ...activity.get(item.id), ...item });
+    if (activity.size) turn.agent_activity = [...activity.values()];
     context.consensus.text = context.consensus.streamText = data.response;
     context.consensus.status = "complete";
     context.consensus.completedTurn = turn;

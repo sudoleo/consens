@@ -237,10 +237,13 @@ body.single-agent-active .consensus-model-inline { min-width: 0; max-width: 100%
 .agent-activity-chevron { width: 5px; height: 5px; margin-left: 2px; border-right: 1px solid currentColor; border-bottom: 1px solid currentColor; transform: rotate(45deg); transition: transform .18s ease; opacity: .6; }
 .agent-activity[open] .agent-activity-chevron { transform: rotate(225deg); }
 .agent-activity.is-closing .agent-activity-chevron { transform: rotate(45deg); }
-.agent-activity-history { display: flow-root; }
+.agent-activity-history { display: flow-root; border-top: 1px solid var(--line); margin-top: 6px; padding-top: 12px; }
+.agent-activity-run-details { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 16px; margin: 0 0 18px; font-size: 12px; line-height: 1.65; }
+.agent-activity-run-details[hidden] { display: none; }
+.agent-activity-run-details dt { color: var(--ink-3); }
+.agent-activity-run-details dd { margin: 0; color: var(--agent-ink); overflow-wrap: anywhere; }
 .agent-activity-content {
-  padding: 12px 0 0; margin: 6px 0 8px;
-  border-top: 1px solid var(--line); overflow-wrap: anywhere;
+  margin: 0 0 8px; overflow-wrap: anywhere;
 }
 .agent-activity-content[hidden] { display: none; }
 .agent-activity-content:focus-visible { outline: 1px solid var(--ink-3); outline-offset: 2px; border-radius: 3px; }
@@ -274,6 +277,22 @@ body.single-agent-active .consensus-model-inline { min-width: 0; max-width: 100%
 .agent-activity-tool a:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
 .agent-activity-note, .agent-usage { margin: 8px 0 4px; font-size: 11px; line-height: 1.6; color: var(--ink-3); }
 .agent-usage { font-variant-numeric: tabular-nums; }
+.agent-activity-insights { color: var(--agent-ink); border-top: 1px solid var(--line); margin-top: 16px; padding-top: 16px; overflow-wrap: anywhere; }
+.agent-activity-insights[hidden] { display: none; }
+.agent-activity-insights h3 { margin: 0 0 16px; font-size: 13px; font-weight: 600; }
+.agent-activity-insight + .agent-activity-insight { margin-top: 20px; }
+.agent-activity-insight h4 { margin: 0 0 8px; font-size: 12px; font-weight: 600; }
+.agent-activity-insight p { margin: 6px 0; font-size: 13px; line-height: 1.65; }
+.agent-activity-focus { font-weight: 500; }
+.agent-activity-insight .agent-activity-models { font-size: 12px; color: var(--ink-2); }
+.agent-activity-check { font-weight: 500; }
+.agent-activity-findings { margin: 8px 0; padding-left: 18px; line-height: 1.65; }
+.agent-activity-findings li + li { margin-top: 5px; }
+.agent-activity-insight-actions { display: flex; flex-wrap: wrap; gap: 4px 18px; margin-top: 8px; }
+.agent-activity-insight-actions button { color: var(--ink-2); background: none; border: 0; padding: 7px 0; font: inherit; font-size: 12px; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.agent-activity-insight-actions button:hover { color: var(--agent-ink); }
+.agent-activity-insight-actions button:disabled { color: var(--ink-3); text-decoration: none; cursor: default; }
+.agent-activity-insight-actions button:focus-visible { outline: 2px solid var(--ink-2); outline-offset: 3px; border-radius: 2px; }
 @media (prefers-reduced-motion: reduce), (forced-colors: active) {
   .agent-session-track:not([hidden]) i::after { animation: none; background: none; }
   .agent-session-tokens.is-loading { animation: none; background: none; color: var(--ink-3); }

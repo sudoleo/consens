@@ -163,8 +163,27 @@
     return `${settings.label}${effort && effort !== "default" ? ` · ${effort === "none" ? "Reasoning off" : effort + " reasoning"}` : ""}`;
   }
 
+  function renderRunDetails(view, settings, running, heading) {
+    const rows = [];
+    if (settings?.label) rows.push(['Chat model', settings.label]);
+    if (settings?.reasoning_effort) rows.push(['Reasoning', settings.reasoning_effort === 'default' ? 'Model default'
+      : settings.reasoning_effort === 'none' ? 'Off' : settings.reasoning_effort]);
+    if (running) rows.push(['Current step', heading]);
+    const signature = JSON.stringify(rows);
+    view.runDetails.hidden = !rows.length;
+    if (view.runDetails.dataset.signature === signature) return;
+    view.runDetails.dataset.signature = signature;
+    view.runDetails.replaceChildren();
+    for (const [label, text] of rows) {
+      const term = document.createElement('dt'), value = document.createElement('dd');
+      term.textContent = label; value.textContent = text;
+      if (label === 'Current step') value.setAttribute('role', 'status');
+      view.runDetails.append(term, value);
+    }
+  }
+
   function render(host, { events = [], usage = null, running = false, responding = false,
-    status = "succeeded", truncated = false, finishReason = "", review = null, elapsedMs = null } = {}) {
+    status = "succeeded", truncated = false, finishReason = "", review = null, answerText = '', settings = null, elapsedMs = null } = {}) {
     if (!host) return;
     if (!host._agentActivity) {
       const details = document.createElement("details");
@@ -192,14 +211,13 @@
       preview.setAttribute('aria-relevant', 'additions text');
       preview.setAttribute('aria-label', 'Progress updates');
       const history = document.createElement('div'); history.className = 'agent-activity-history';
-      const currentStatus = document.createElement('div'); currentStatus.className = 'agent-current-status agent-progress-step';
-      currentStatus.setAttribute('role', 'status');
-      currentStatus.hidden = true;
+      const runDetails = document.createElement('dl'); runDetails.className = 'agent-activity-run-details';
+      const insights = document.createElement('div'); insights.className = 'agent-activity-insights'; insights.hidden = true;
       history.inert = true;
-      history.append(content, currentStatus, note, usageEl);
+      history.append(runDetails, content, insights, note, usageEl);
       details.append(summary, history);
       host.replaceChildren(details, preview);
-      host._agentActivity = { details, summary, history, title, currentStatus, content, note, usageEl, preview, nodes: new Map(), previewNodes: new Map() };
+      host._agentActivity = { details, summary, history, title, runDetails, insights, content, note, usageEl, preview, nodes: new Map(), previewNodes: new Map() };
       summary.addEventListener('click', event => {
         event.preventDefault();
         const view = host._agentActivity;
@@ -224,6 +242,7 @@
     const heading = waiting ? 'Waiting for available tokens…' : reviewStage
       || (activeTool ? stepLabel(activeTool) : writing ? 'Writing answer…' : 'Thinking…');
     updateClock(view, elapsedMs, running, status);
+    renderRunDetails(view, settings || events.findLast(item => item.settings)?.settings, running, heading);
     view.details.classList.toggle("is-running", running);
     view.details.dataset.status = status;
     // Completion collapses even a manually opened live history. Later explicit
@@ -331,12 +350,11 @@
     }
     for (const [id, node] of view.nodes) if (!ids.has(id)) { node.remove(); view.nodes.delete(id); }
     view.content.hidden = !progress.length && !reasoning.length && !tools.length;
-    view.currentStatus.textContent = heading;
-    view.currentStatus.hidden = !running || Boolean(activeTool && !waiting);
-    view.note.textContent = progress.length ? '' : reasoning.length ? (reasoning[0].summary_source === "excerpt" || reasoning[0].format === "text"
+    App.agentReview?.renderActivity(view.insights, review, answerText);
+    view.note.textContent = progress.length || !view.insights.hidden ? '' : reasoning.length ? (reasoning[0].summary_source === "excerpt" || reasoning[0].format === "text"
       ? "Short excerpts from the model’s reasoning." : "Model-provided reasoning summary.") : truncated ? "Reasoning highlights only."
       : !reasoning.length ? (running ? "Waiting for the model’s response."
-        : "No visible reasoning was returned for this response.") : "";
+        : "No detailed progress updates were saved for this response.") : "";
     if (finishReason === "length") view.note.textContent += " The response reached its output limit.";
     view.note.hidden = !view.note.textContent;
     const measured = usage && Number.isFinite(usage.input_tokens) && Number.isFinite(usage.output_tokens);
@@ -357,7 +375,8 @@
     const status = turn?.error_code === "cancelled" ? "cancelled" : terminal?.status
       || (turn?.status === "failed" ? "failed" : "succeeded");
     render(host, { events, usage: turn?.agent_usage, status, truncated: turn?.agent_reasoning_truncated,
-      finishReason: turn?.agent_finish_reason, elapsedMs:savedDuration(turn) });
+      finishReason: turn?.agent_finish_reason, elapsedMs:savedDuration(turn),
+      review: turn?.agent_review, answerText: turn?.assistant_response ?? turn?.consensus ?? '', settings: turn?.agent_settings });
   }
   App.agentActivity = { receive, render, renderTurn, label, reveal, dispose, savedDuration };
 })();

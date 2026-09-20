@@ -822,6 +822,15 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
   verschwinden die Live-Absätze und ein geöffneter Verlauf klappt zu. Pfeil/Enter
   öffnet danach alle gespeicherten Absätze und Toolschritte in ihrer Reihenfolge,
   ohne inneren Scrollkasten. Auch bei 320/390 px keine abgeschnittenen Texte.
+- [ ] Duration-Verlauf auch direkt beim Abschluss und nach erneutem Öffnen prüfen:
+  Bereits während „Thinking…“ sind Modell, Reasoning-Einstellung und aktuelle
+  Phase sichtbar. Ein laufender Vergleich zeigt sein Ziel und seinen Zweck;
+  noch nicht verfügbare Ergebnisse öffnen keinen leeren Antwortleser.
+  vorhandene Meldungen bleiben bei unvollständigem Abschluss-Snapshot erhalten.
+  Vergleichsziel, Modelle, Unterschiede und Prüfstatus sind im aufgeklappten
+  Bereich lesbar; Originalantworten und vollständige Prüfung lassen sich öffnen.
+  Alte Turns ohne Aktivitäten nutzen vorhandene Vergleichsdetails. Veraltete
+  Prüfungen erscheinen als ausstehend, vollständig fehlende Details als Hinweis.
 - [ ] Neue Statusabsätze und der erste Antworttext blenden dezent ein; bereits
   sichtbarer Text animiert bei Streaming-Updates nicht erneut. Der Statusbereich
   zieht sich bei Abschluss weich zusammen. Schnelles Auf-/Zuklappen und Turnwechsel

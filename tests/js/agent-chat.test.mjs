@@ -498,6 +498,21 @@ describe("single-model agent chat", () => {
     dom.window.close();
   });
 
+  it('shows useful run details when opened during thinking, before any progress or tool event', () => {
+    const {window: w, document: d, dom} = boot();
+    const host = d.getElementById('agentAnswerActivity');
+    w.App.agentActivity.render(host, {running:true, settings:{label:'DeepSeek V4.1 Flash',reasoning_effort:'high'}});
+    const details = host.querySelector('details');
+    details.querySelector('summary').click();
+    expect(details.open).toBe(true);
+    expect([...details.querySelectorAll('.agent-activity-run-details dd')].map(el => el.textContent))
+      .toEqual(['DeepSeek V4.1 Flash','high','Thinking…']);
+    w.App.agentActivity.render(host, {running:true,settings:{label:'DeepSeek V4.1 Flash',reasoning_effort:'high'},responding:true});
+    expect(details.querySelector('[role="status"]').textContent).toBe('Writing answer…');
+    expect(details.open).toBe(true);
+    dom.window.close();
+  });
+
   it('ticks runtime through waiting, freezes at stop, and disposes the live timer', () => {
     const { window, document, dom } = boot();
     const activity = window.App.agentActivity;
@@ -540,6 +555,30 @@ describe("single-model agent chat", () => {
     expect(activity.savedDuration({created_at:turn.created_at, failed_at:'2026-09-20T10:00:45Z'})).toBe(45000);
     for (const invalid of [{}, {created_at:turn.created_at}, {...turn,completed_at:'invalid'},
       {...turn,completed_at:'2026-09-19T00:00:00Z'}]) expect(activity.savedDuration(invalid)).toBe(null);
+    dom.window.close();
+  });
+
+  it('retains live insights across a partial final snapshot and uses saved tool outcomes', async () => {
+    const { window: w, document: d, dom } = boot();
+    await selectAgent(w);
+    w.streamSSERequest.mockImplementationOnce(async (_url, _payload, _signal, handlers) => {
+      handlers.activity.receive({version:1,id:'p1',kind:'progress',text:'Ich prüfe die Belege.'});
+      handlers.activity.receive({version:1,id:'t1',kind:'tool',name:'judge_answer',status:'running'});
+      return {ok:true,data:{response:'Answer',chat_id:'a'.repeat(32),turn_id:'b'.repeat(32),turn:{id:'b'.repeat(32),
+        execution_mode:'agent',status:'completed',consensus:'Answer',
+        agent_activity:[{version:1,id:'t1',kind:'tool',name:'judge_answer',status:'succeeded'}]}}};
+    });
+    d.getElementById('questionInput').value = 'Question';
+    await w.App.agentChat.send();
+    const saved = w.App.runRegistry.getSelectedConversationBasis().currentTurn;
+    expect(saved.agent_activity.map(e => e.id)).toEqual(['p1','t1']);
+    expect(saved.agent_activity[1].status).toBe('succeeded');
+    w.App.runRegistry.showSavedView({type:'bookmark'}, {chatId:'a'.repeat(32),turnId:saved.id,
+      executionMode:'agent',question:'Question',consensus:'Answer',currentTurn:saved});
+    const details = d.querySelector('#agentAnswerActivity details');
+    details.querySelector('summary').click();
+    expect(details.querySelector('.agent-activity-update').textContent).toBe('Ich prüfe die Belege.');
+    expect(details.querySelector('.agent-activity-tool').textContent).toContain('Completed');
     dom.window.close();
   });
 

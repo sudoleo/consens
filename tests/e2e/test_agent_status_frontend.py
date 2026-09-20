@@ -48,16 +48,19 @@ def test_progress_paragraphs_collapse_at_final_and_reopen_with_keyboard(browser,
                 const event = {version:1, step_id:'completion:0', kind:'tool', id, name, status};
                 events.set(id, event); emit('activity', event);
               };
-              window.__progress('p1', updates[0]);
-              window.__tool('comparison', 'compare_models', 'running');
+              window.__startProgress = () => {
+                window.__progress('p1', updates[0]);
+                window.__tool('comparison', 'compare_models', 'running');
+              };
               window.__answerChunk = text => emit('delta', {text});
-              window.__finishProgress = () => {
+              window.__finishProgress = (sparse = false) => {
                 const response = 'Die erste Option passt zu deinem Budget.';
                 window.__tool('judge', 'judge_answer', 'succeeded');
                 emit('final', {response, chat_id:'a'.repeat(32), turn_id:'b'.repeat(32),
                   turn:{id:'b'.repeat(32), status:'completed', execution_mode:'agent', consensus:response,
                     created_at:'2026-09-20T10:00:00Z', completed_at:'2026-09-20T10:01:13Z',
-                    agent_activity:[...events.values()], agent_usage:{input_tokens:500,output_tokens:100}}});
+                    agent_activity:[...events.values()].filter(e => !sparse || e.kind !== 'progress'),
+                    agent_usage:{input_tokens:500,output_tokens:100}}});
                 controller.close();
               };
               options.signal.addEventListener('abort', () => controller.error(new DOMException('Stopped', 'AbortError')));
@@ -67,6 +70,23 @@ def test_progress_paragraphs_collapse_at_final_and_reopen_with_keyboard(browser,
         page.locator("#questionInput").fill("Welche Option passt zu meinem Budget von 100 Euro?")
         page.locator("#sendButton").click()
         preview = page.locator("#agentAnswerActivity .agent-progress")
+        expect(preview.locator('.agent-current-status')).to_have_text('Thinking…')
+        thinking_details = page.locator('#agentAnswerActivity details')
+        thinking_details.locator('.agent-activity-title').click()
+        expect(thinking_details.locator('.agent-activity-run-details')).to_be_visible()
+        expect(thinking_details.locator('.agent-activity-run-details')).to_contain_text('DeepSeek V4.1 Flash')
+        expect(thinking_details.locator('.agent-activity-run-details')).to_contain_text('Thinking…')
+        expect(thinking_details.locator('.agent-activity-run-details')).to_contain_text('Model default')
+        page.wait_for_function("""() => {
+          const host = document.getElementById('agentAnswerActivity');
+          return getComputedStyle(host.querySelector('.agent-activity-history')).opacity === '1'
+            && host.getAnimations().every(a => a.playState !== 'running');
+        }""")
+        _snapshot(page, f'agent-thinking-expanded-{snapshot_variant}')
+        thinking_details.locator('.agent-activity-title').click()
+        expect(thinking_details).not_to_have_attribute('open', '')
+        page.wait_for_function("() => typeof window.__startProgress === 'function'")
+        page.evaluate('() => window.__startProgress()')
         expect(preview.locator("p")).to_have_text(updates[:1])
         expect(preview.locator('.agent-current-status')).to_have_text('Comparing perspectives…')
         title = page.locator('#agentAnswerActivity .agent-activity-title')
@@ -103,9 +123,12 @@ def test_progress_paragraphs_collapse_at_final_and_reopen_with_keyboard(browser,
         details = page.locator("#agentAnswerActivity details")
         expect(details).to_have_attribute("open", "")
         expect(preview).not_to_be_visible()
+        expect(details.locator('.agent-activity-run-details')).to_contain_text('DeepSeek V4.1 Flash')
+        expect(details.locator('.agent-activity-run-details')).to_contain_text('Checking the answer…')
         expect(details.locator(".agent-activity-update")).to_have_text(updates)
         expect(details.locator('.agent-activity-tool strong')).to_have_text([
             'Model comparison · Completed', 'Answer review · Working…'])
+        _snapshot(page, f'agent-live-expanded-{snapshot_variant}')
         if quiet != 'colors':
             assert details.locator('.agent-activity-update').first.evaluate('el => getComputedStyle(el).color') == (
                 'rgb(255, 255, 255)' if dark else 'rgb(0, 0, 0)')
@@ -123,7 +146,7 @@ def test_progress_paragraphs_collapse_at_final_and_reopen_with_keyboard(browser,
         expect(page.locator("#agentAnswerBody")).to_contain_text("Die erste Option")
         page.evaluate("() => window.__answerChunk('passt zu deinem Budget.')")
         expect(page.locator("#agentAnswerBody")).to_have_text("Die erste Option passt zu deinem Budget.")
-        page.evaluate("() => window.__finishProgress()")
+        page.evaluate("sparse => window.__finishProgress(sparse)", width == 320)
         expect(page.locator("#agentAnswerBody")).to_have_text("Die erste Option passt zu deinem Budget.")
         expect(details).not_to_have_attribute("open", "")
         expect(preview).not_to_be_visible()
@@ -144,6 +167,10 @@ def test_progress_paragraphs_collapse_at_final_and_reopen_with_keyboard(browser,
         page.keyboard.press("Enter")
         expect(details.locator(".agent-activity-update")).to_have_text(updates)
         expect(details.locator(".agent-activity-update").first).to_be_visible()
+        page.wait_for_function("""() => {
+          const history = document.querySelector('.agent-activity-history');
+          return getComputedStyle(history).opacity === '1' && history.getBoundingClientRect().height > 0;
+        }""")
         assert details.locator(".agent-activity-content").evaluate("el => el.scrollHeight <= el.clientHeight + 1")
         if quiet == "none":
             # A changed OS preference also completes a transition already underway.
@@ -151,6 +178,13 @@ def test_progress_paragraphs_collapse_at_final_and_reopen_with_keyboard(browser,
             page.wait_for_function("() => __agentMotion.every(m => m.animation.playState !== 'running')")
         assert page.locator('#agentAnswerActivity').evaluate("el => el.style.height") == ""
         _snapshot(page, f"agent-progress-history-{snapshot_variant}")
+        page.evaluate("""() => {
+          const basis = App.runRegistry.getSelectedConversationBasis();
+          App.runRegistry.showSavedView({type:'bookmark'}, basis);
+        }""")
+        summary.click()
+        expect(details.locator('.agent-activity-update')).to_have_text(updates)
+        expect(details.locator('.agent-activity-update').first).to_be_visible()
         assert not errors
     finally:
         context.close()
