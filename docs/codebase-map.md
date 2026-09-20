@@ -1929,8 +1929,9 @@ und wird beim Verbergen/Turnwechsel aufgeräumt. Darunter wechseln sich die kurz
 Fortschrittsabsätze des Steuerungsmodells und bestätigte Toolschritte in ihrer
 Ereignisreihenfolge ab. Laufende Schritte aktualisieren sich im selben DOM-Knoten
 zu abgeschlossenen Schritten; ohne aktives Tool steht der aktuelle Thinking-/
-Writing-/Review-Status am Ende. Fortschritt und Arbeitsschritte sind im hellen
-Modus schwarz und im dunklen weiß, in Forced Colors gilt `CanvasText`.
+Writing-/Review-Status am Ende. Fortschrittsabsätze sind im hellen Modus dunkelgrau
+und im dunklen hellgrau, damit sie sich von der Antwort abheben. Arbeitsschritte
+bleiben schwarz bzw. weiß; in Forced Colors gilt für beide `CanvasText`.
 `ProgressArgs.status_update` ergänzt die bestehenden Tools
 `compare_models`, `judge_answer` und `check_contradictions` um maximal 400 Zeichen;
 für ältere Aufrufer ist das Feld optional. Der injizierte Produktprompt verlangt

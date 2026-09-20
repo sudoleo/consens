@@ -102,10 +102,13 @@ def test_progress_paragraphs_collapse_at_final_and_reopen_with_keyboard(browser,
             updates[0], 'Compared perspectives', updates[1], 'Checking the answer…'])
         expect(preview.locator('.agent-current-status')).to_have_count(1)
         if quiet != 'colors':
+            trace_color = 'rgb(185, 189, 195)' if dark else 'rgb(85, 88, 94)'
+            step_color = 'rgb(255, 255, 255)' if dark else 'rgb(0, 0, 0)'
             colors = preview.locator(':scope > *').evaluate_all('els => els.map(el => getComputedStyle(el).color)')
-            assert colors == ['rgb(255, 255, 255)' if dark else 'rgb(0, 0, 0)'] * 4
+            assert colors == [trace_color, step_color, trace_color, step_color]
         else:
             assert preview.evaluate("el => getComputedStyle(el).getPropertyValue('--agent-ink').trim()") == 'CanvasText'
+            assert preview.evaluate("el => getComputedStyle(el).getPropertyValue('--agent-trace-ink').trim()") == 'CanvasText'
         expect(preview).to_be_visible()
         first, second = [p.bounding_box() for p in preview.locator("p").all()]
         assert second["y"] >= first["y"] + first["height"] + 12
@@ -130,8 +133,7 @@ def test_progress_paragraphs_collapse_at_final_and_reopen_with_keyboard(browser,
             'Model comparison · Completed', 'Answer review · Working…'])
         _snapshot(page, f'agent-live-expanded-{snapshot_variant}')
         if quiet != 'colors':
-            assert details.locator('.agent-activity-update').first.evaluate('el => getComputedStyle(el).color') == (
-                'rgb(255, 255, 255)' if dark else 'rgb(0, 0, 0)')
+            assert details.locator('.agent-activity-update').first.evaluate('el => getComputedStyle(el).color') == trace_color
         # Exercise rapid reversal without leaving a frozen height or a stale close callback.
         page.evaluate("""() => {
           const summary = document.querySelector('#agentAnswerActivity summary');

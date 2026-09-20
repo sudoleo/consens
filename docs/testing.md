@@ -168,8 +168,9 @@ prüfen Vergleichszweck, Teilstatus, veraltete Prüfungen und Links zu Originala
 Legacy-Reasoning und die Reasoning-Ebene im Chatmodell-Picker bleiben abgedeckt.
 `tests/e2e/test_agent_status_frontend.py` prüft die gebaute App mit offenem SSE-
 Stream bei 1280/390/320 px: Schritt-Reihenfolge, laufende/eingefrorene Uhr,
-Absatzabstände, Schwarz/Weiß im hellen/dunklen Modus, Abschluss mit geöffnetem
-Verlauf, Aufklappen per Tastatur und vollständigen Verlauf ohne inneren Scrollkasten.
+Absatzabstände, dezente Absatzfarben und kontrastreiche Schritte im hellen/dunklen
+Modus, Abschluss mit geöffnetem Verlauf, Aufklappen per Tastatur und vollständigen
+Verlauf ohne inneren Scrollkasten.
 Sie öffnet den Verlauf auch während des ersten „Thinking…“ und lädt einen
 abgeschlossenen Turn erneut. `test_agent_comparison_frontend.py` prüft die
 zusätzlichen Details und Leser-Links live, gespeichert und in archivierten Turns,

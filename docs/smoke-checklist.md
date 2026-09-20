@@ -813,7 +813,8 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
   und bleibt nach Abschluss/Stop sowie beim Öffnen gespeicherter Turns stehen.
   Darunter wechseln sich kurze Meldungen des Steuerungsmodells in der Fragesprache
   und bestätigte Arbeitsschritte ab. Der aktuelle Status erscheint genau einmal.
-  Meldungen und Schritte sind schwarz im hellen und weiß im dunklen Modus.
+  Meldungen sind dezent dunkelgrau im hellen und hellgrau im dunklen Modus,
+  auch im geöffneten und gespeicherten Verlauf. Schritte bleiben schwarz bzw. weiß.
   Nur aktive Arbeitsschritte tragen einen ruhigen, schmalen Lichtreflex (2,4 s),
   auch im geöffneten Live-Verlauf. Laufzeit, Absätze und fertige Schritte bleiben
   ohne Reflex; Reduced Motion und Forced Colors zeigen vollständig deckenden Text.
