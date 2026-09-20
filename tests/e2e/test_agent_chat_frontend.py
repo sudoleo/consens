@@ -434,12 +434,11 @@ def test_live_reasoning_disclosure_and_stop(browser, phase4_server, width, dark)
         content = page.locator("#agentAnswerActivity .agent-activity-content")
         expect(content).to_contain_text("A measured reasoning step.")
         assert len(content.inner_text()) < 600
-        # Give the disclosure more than the 40px follow tolerance; scrolling
-        # to the top of a nearly fitting trace still counts as reading along.
+        # Expanded history flows with the conversation, without a tiny nested scroller.
         page.evaluate("""() => { for (let i = 3; i < 7; i++) window.__emitAgent({version:1, step_id:'completion:' + i,
           kind:'reasoning', id:'r' + i, format:'summary', text:'Comparing the supporting evidence.\\nChecking whether sources agree.\\nIdentifying remaining uncertainty.'}); }""")
         expect(content).to_contain_text('Identifying remaining uncertainty.')
-        assert content.evaluate('el => el.scrollHeight - el.clientHeight') > 40
+        assert content.evaluate('el => el.scrollHeight - el.clientHeight') <= 1
         content.evaluate("el => { el.scrollTop = 0; }")
         page.evaluate("""() => window.__emitAgent({version:1, step_id:'completion:0', kind:'reasoning', id:'r2',
           format:'text', text:'End of reasoning.', append:true})""")

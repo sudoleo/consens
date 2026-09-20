@@ -255,7 +255,8 @@ def test_failure_before_answer_preserves_question_activity_and_bookmark(api, mon
     saved = failure['saved_answer']
     assert saved['response'] == '' and saved['turn']['status'] == 'failed'
     assert saved['turn']['agent_failure']['code'] == 'provider_timeout'
-    assert any(event.get('text') == 'Checking the available information.' for event in saved['turn']['agent_activity'])
+    assert any(event.get('status') == 'working' for event in saved['turn']['agent_activity'])
+    assert not any(event.get('kind') == 'reasoning' for event in saved['turn']['agent_activity'])
     bookmark = store.db.collection('users').document(UID).collection('bookmarks').document('empty_answer').get()
     assert bookmark.exists and bookmark.to_dict()['query'] == payload['question']
     recovered = client.post('/agent', json={**payload, 'recover_only': True}, headers=AUTH)

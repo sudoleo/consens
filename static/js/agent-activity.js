@@ -1,4 +1,4 @@
-// Displayable provider events only. Shared by live Agent runs and saved turns.
+// User-facing progress and confirmed activity. Shared by live runs and saved turns.
 (function () {
   "use strict";
   const App = window.App = window.App || {};
@@ -17,7 +17,7 @@
   }
 
   function receive(events, event) {
-    if (event?.version !== 1 || !["status", "reasoning", "usage", "tool"].includes(event.kind) || typeof event.id !== "string") return;
+    if (event?.version !== 1 || !["status", "progress", "reasoning", "usage", "tool"].includes(event.kind) || typeof event.id !== "string") return;
     const existing = events.find(item => item.id === event.id);
     if (existing && event.append && event.kind === "reasoning") {
       existing.text = (existing.text + String(event.text || "")).slice(0, 32000);
@@ -25,8 +25,12 @@
       Object.assign(existing, event);
       if (event.kind === 'status') { events.splice(events.indexOf(existing), 1); events.push(existing); }
     } else {
-      if (events.length >= 64) events.splice(0, events.length - 63);
-      events.push({ ...event, text: String(event.text || "").slice(0, event.kind === "tool" ? 8000 : 32000) });
+      // Keep the full progress history; only the auxiliary status window rotates.
+      if (event.kind !== 'progress') {
+        const auxiliary = events.filter(item => item.kind !== 'progress');
+        for (const item of auxiliary.slice(0, Math.max(0, auxiliary.length - 63))) events.splice(events.indexOf(item), 1);
+      }
+      events.push({ ...event, text: String(event.text || "").slice(0, event.kind === "progress" ? 400 : event.kind === "tool" ? 8000 : 32000) });
     }
   }
 
@@ -60,13 +64,16 @@
       const usageEl = document.createElement("p");
       usageEl.className = "agent-usage";
       const preview = document.createElement('div'); preview.className = 'agent-progress';
-      preview.setAttribute('role', 'status'); preview.setAttribute('aria-live', 'polite');
+      preview.setAttribute('role', 'log'); preview.setAttribute('aria-live', 'polite');
+      preview.setAttribute('aria-relevant', 'additions text');
+      preview.setAttribute('aria-label', 'Progress updates');
       details.append(summary, content, note, usageEl);
       host.replaceChildren(details, preview);
-      host._agentActivity = { details, title, content, note, usageEl, preview, nodes: new Map() };
+      host._agentActivity = { details, title, content, note, usageEl, preview, nodes: new Map(), previewNodes: new Map() };
     }
     const view = host._agentActivity;
-    const reasoning = events.filter(item => item.kind === "reasoning"
+    const progress = events.filter(item => item.kind === 'progress' && item.text);
+    const reasoning = progress.length ? [] : events.filter(item => item.kind === "reasoning"
       && ["text", "summary"].includes(item.format) && item.text);
     // Older saved turns mistook a missing search counter for tool activity.
     // Preserve real client calls and searches backed by counts or citations.
@@ -84,34 +91,39 @@
       send_agent: 'Following up with a model…', review_agent: 'Reviewing a model response…' };
     const waiting = running && latest?.status === 'waiting';
     const heading = running ? (waiting ? 'Waiting for available tokens…' : reviewStage || (activeTool ? toolLabels[activeTool.name] || 'Running a tool…' : writing ? 'Writing answer…' : reasoning.length ? 'Thinking…' : 'Working…'))
-      : statuses[status] || (finishReason === "length" ? "Response limit reached" : tools.length ? "Activity and sources" : reasoning.length ? "Reasoning" : "Response details");
+      : statuses[status] || (finishReason === "length" ? "Response limit reached" : progress.length ? "Activity" : tools.length ? "Activity and sources" : reasoning.length ? "Reasoning" : "Response details");
     if (view.title.textContent !== heading) view.title.textContent = heading;
     view.details.classList.toggle("is-running", running);
     view.details.dataset.status = status;
-    // The disclosure heading owns the current stage; the preview adds only
-    // reasoning highlights, never a second copy of the same tool status.
+    // Completion collapses even a manually opened live history. Later explicit
+    // expansion is preserved across saved-turn and usage updates.
+    if (view.running && !running) view.details.open = false;
+    view.running = running;
+    // Stable paragraphs keep earlier updates readable and prevent a live region
+    // from announcing the entire history again whenever a new paragraph arrives.
     const highlights = compactReasoning(reasoning.at(-1)?.text).split('\n').filter(Boolean);
-    const paragraphs = waiting ? [latest.text || 'Active model calls are using the available allowance. This response will continue automatically.']
-      : [...new Set(highlights)].filter(text => text !== heading).slice(0, 3);
-    const previewSignature = running ? JSON.stringify(paragraphs) : '';
-    if (view.preview.dataset.signature !== previewSignature) {
-      view.preview.dataset.signature = previewSignature;
-      view.preview.replaceChildren(...(running ? paragraphs : []).map(text => {
-        const p = document.createElement('p');
-        p.textContent = text;
-        return p;
-      }));
+    const paragraphs = progress.length ? progress.map(item => ({ id: item.id, text: item.text }))
+      : [...new Set(highlights)].filter(text => text !== heading).map((text, i) => ({ id: `legacy:${i}`, text }));
+    if (waiting) paragraphs.push({ id: 'waiting', text: latest.text || 'Active model calls are using the available allowance. This response will continue automatically.' });
+    const previewIds = new Set();
+    for (const item of running ? paragraphs : []) {
+      previewIds.add(item.id);
+      let p = view.previewNodes.get(item.id);
+      if (!p) {
+        p = document.createElement('p'); view.previewNodes.set(item.id, p);
+        view.preview.appendChild(p);
+      }
+      if (p.textContent !== item.text) p.textContent = item.text;
     }
+    for (const [id, node] of view.previewNodes) if (!previewIds.has(id)) { node.remove(); view.previewNodes.delete(id); }
     view.preview.hidden = !running || !paragraphs.length;
-    // Expansion is always an explicit user choice.
-    const follow = view.content.scrollHeight - view.content.scrollTop - view.content.clientHeight < 40;
     const ids = new Set();
-    for (const item of events.filter(item => reasoning.includes(item) || tools.includes(item))) {
+    for (const item of events.filter(item => progress.includes(item) || reasoning.includes(item) || tools.includes(item))) {
       ids.add(item.id);
       let node = view.nodes.get(item.id);
       if (!node) {
-        node = document.createElement("div");
-        node.className = item.kind === "tool" ? "agent-activity-tool" : "agent-activity-reasoning";
+        node = document.createElement(item.kind === 'progress' ? 'p' : 'div');
+        node.className = item.kind === "tool" ? "agent-activity-tool" : item.kind === 'progress' ? 'agent-activity-update' : "agent-activity-reasoning";
         view.nodes.set(item.id, node);
         view.content.appendChild(node);
       }
@@ -145,15 +157,14 @@
           }
         }
       } else {
-        const text = compactReasoning(item.text);
+        const text = item.kind === 'progress' ? item.text : compactReasoning(item.text);
         if (node.textContent !== text) node.textContent = text;
-        node.setAttribute("aria-label", item.summary_source === "excerpt" || item.format === "text" ? "Reasoning highlights" : "Reasoning summary");
+        node.setAttribute("aria-label", item.kind === 'progress' ? 'Progress update' : item.summary_source === "excerpt" || item.format === "text" ? "Reasoning highlights" : "Reasoning summary");
       }
     }
     for (const [id, node] of view.nodes) if (!ids.has(id)) { node.remove(); view.nodes.delete(id); }
-    view.content.hidden = !reasoning.length && !tools.length;
-    if (follow && view.details.open) view.content.scrollTop = view.content.scrollHeight;
-    view.note.textContent = reasoning.length ? (reasoning[0].summary_source === "excerpt" || reasoning[0].format === "text"
+    view.content.hidden = !progress.length && !reasoning.length && !tools.length;
+    view.note.textContent = progress.length ? '' : reasoning.length ? (reasoning[0].summary_source === "excerpt" || reasoning[0].format === "text"
       ? "Short excerpts from the model’s reasoning." : "Model-provided reasoning summary.") : truncated ? "Reasoning highlights only."
       : !reasoning.length ? (running ? "Waiting for the model’s response."
         : "No visible reasoning was returned for this response.") : "";

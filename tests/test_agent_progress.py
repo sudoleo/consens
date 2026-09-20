@@ -1,3 +1,7 @@
+import json
+
+import pytest
+
 from app.services.agent_progress import ReasoningProgress, StreamProgress
 from test_agent_runs import store
 from test_agent_comparison import Script, make_loop
@@ -59,11 +63,68 @@ def test_live_and_saved_activity_never_contain_full_reasoning(store):
     events = list(loop.run())
     saved = store.get_turn(loop.uid, loop.chat_id, loop.turn_id)
     highlights = [e for e in saved["agent_activity"] if e["kind"] == "reasoning"]
-    assert highlights and all(len(e["text"]) <= 542 and e["format"] == "summary" for e in highlights)
-    assert all(len(e["text"]) <= 542 for e in events if e.get("kind") == "reasoning")
+    assert not highlights
+    assert not any(e.get("kind") == "reasoning" for e in events)
     sessions = store.delegation_view(loop.uid, loop.chat_id, loop.turn_id)["agents"]
     assert sessions and all(len(s["progress_text"]) <= 542 for s in sessions)
     assert all(s["progress_kind"] == "excerpt" for s in sessions)
+
+
+@pytest.mark.parametrize("updates", [
+    ["Ich vergleiche die Optionen mit deinem Budget von 100 Euro.",
+     "Die Antworten nennen dieselbe Preisgrenze. Ich prüfe, ob die Empfehlung ausreichend belegt ist."],
+    ["Je compare les options avec votre budget de 100 euros.",
+     "Les réponses indiquent le même prix. Je vérifie les preuves de la recommandation."],
+])
+def test_user_progress_is_ordered_persisted_and_does_not_add_model_calls(store, updates):
+    script = Script()
+    original = script.factory
+
+    def factory():
+        value = original()
+        stream = value.stream
+
+        def with_progress(**kwargs):
+            yield from stream(**kwargs)
+            if value.step_id.startswith("completion:"):
+                assert "language of the user's current question" in kwargs["messages"][0]["content"]
+                for call in value.tool_calls:
+                    args = json.loads(call["function"]["arguments"])
+                    args["status_update"] = updates[int(value.step_id.split(":")[-1])]
+                    call["function"]["arguments"] = json.dumps(args, ensure_ascii=False)
+        value.stream = with_progress
+        return value
+
+    script.factory = factory
+    loop = make_loop(store, script)
+    events = list(loop.run())
+    progress = [e for e in events if e.get("kind") == "progress"]
+    assert [e["text"] for e in progress] == updates
+    assert len({e["id"] for e in progress}) == 2
+    for update in progress:
+        following = events[events.index(update) + 1]
+        assert following["kind"] == "tool" and following["status"] == "running"
+    saved = store.get_turn(loop.uid, loop.chat_id, loop.turn_id)
+    assert [e["text"] for e in saved["agent_activity"] if e["kind"] == "progress"] == updates
+    assert saved["consensus"] == "The first option costs 100."
+    assert len(script.calls) == 6
+    assert saved["agent_usage"]["input_tokens"] + saved["agent_usage"]["output_tokens"] == 420
+    assert all(update not in json.dumps(script.prompts) for update in updates)
+
+
+def test_progress_arguments_are_bounded_and_published_only_after_validation(store):
+    loop = make_loop(store, Script(), check_sources=True)
+    from app.services.llm.agent_client import AgentCompletion
+    value = AgentCompletion()
+    value.step_id = "completion:0"
+    for index, name in enumerate(("compare_models", "judge_answer", "check_contradictions")):
+        args = {"status_update": "x" * 401}
+        if name == "compare_models":
+            args.update(question="Q", context="", reason="Compare")
+        call = {"id": str(index), "function": {"name": name, "arguments": json.dumps(args)}}
+        result = loop._execute(loop.registry, value, loop.cancellation, call)
+        assert "error" in json.loads(result["content"])
+    assert not any(e["kind"] == "progress" for e in loop.completion.activity)
 
 
 def test_stream_progress_counts_received_unicode_and_throttles_without_guessing_tokens(monkeypatch):

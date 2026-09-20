@@ -809,9 +809,12 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
 - [ ] Im Agent-Chat ersetzt der verbleibende Tokenanteil als Prozentzahl den
   Run-Zähler im Sidebar-Footer. Exakte Zahlen im Panel, keine Budgetzeile im
   Composer. Modus-/Accountwechsel zeigt keine fremden oder veralteten Zahlen.
-- [ ] Thinking bleibt standardmäßig geschlossen; kurze Absätze darunter zeigen
-  Fortschritt und Tool-Aktivität ohne vertikale Linien. Manuelles Öffnen zeigt
-  Details; die Vorschau verschwindet nach Abschluss oder Stop.
+- [ ] Unter dem Status stehen kurze, konkrete Meldungen des Steuerungsmodells
+  in der Fragesprache untereinander. Frühere Absätze bleiben erhalten;
+  Reasoning-Rohtext erscheint nicht als Fortschritt. Beim Abschluss oder Stop
+  verschwinden die Live-Absätze und ein geöffneter Verlauf klappt zu. Pfeil/Enter
+  öffnet danach alle gespeicherten Absätze und Toolschritte in ihrer Reihenfolge,
+  ohne inneren Scrollkasten. Auch bei 320/390 px keine abgeschnittenen Texte.
 - [ ] Reasoning ist im Chatmodellmenü erreichbar (auch per Tastatur); der
   Composer enthält im laufenden Chat nur Chatmodell und Compare-Auswahl.
 - [ ] Sources enthält Chat-Recherche und zitierte Antwortlinks, auch wenn

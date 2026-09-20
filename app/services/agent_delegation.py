@@ -311,6 +311,12 @@ class DelegationLoop(AgentLoop):
                 self.outgoing.put_nowait(self.tool_event(f"{value.step_id}:{call['id']}", tool.name, status))
         try:
             tool, args = registry.validate(call)
+            self._check(cancellation)
+            if registry is self.registry:
+                update = " ".join(getattr(args, "status_update", "").split())
+                if update:
+                    self.outgoing.put_nowait(self.activity({"step_id": value.step_id,
+                        "id": f"{call['id']}/progress", "kind": "progress", "text": update}))
             publish("running")
             result = tool.execute(args, cancellation=cancellation)
             status = "succeeded"
@@ -490,6 +496,11 @@ class DelegationLoop(AgentLoop):
                             yield from self._events()
                             if event["type"] == "activity":
                                 if event["kind"] == "usage":
+                                    continue
+                                # Chat progress is explicitly written for the user in
+                                # tool arguments. Provider reasoning remains continuation
+                                # data, never a substitute for a status update.
+                                if self.comparison and event["kind"] == "reasoning":
                                     continue
                                 event = self.activity(event)
                             if event and self.comparison and self.comparison.text and event["type"] == "delta" and not value.text[:-len(event["text"])]:

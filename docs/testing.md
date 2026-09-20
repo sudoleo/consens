@@ -145,8 +145,11 @@ Agent-Vergleiche: `tests/test_agent_comparison.py` führt den gemeinsamen
 Differences-/Coverage-Parser mit deterministischen Providern aus und prüft
 exakte Versionen, mehrere Teilgrundlagen, Ausfälle, Abbruch, UTC-Wechsel sowie
 atomare Tokenreservierungen. `tests/test_agent_progress.py` prüft begrenzte
-Fortschrittsauszüge, den Vorrang von Provider-Zusammenfassungen und kompakte
-Live-/Persistenzdaten. `tests/js/agent-review.test.mjs` prüft Bindungen und
+Fortschrittsmeldungen aus validierten Toolargumenten, Reihenfolge vor Toolstart,
+Persistenz, unveränderte Übernahme mehrsprachiger Texte und Aufruf-/Tokenabrechnung. Provider-
+Reasoning des Steuerungsmodells bleibt aus dem Chatstatus ausgeschlossen;
+Worker-/Legacy-Auszüge behalten ihre Grenzen und den Vorrang von Provider-
+Zusammenfassungen. `tests/js/agent-review.test.mjs` prüft Bindungen und
 Quellen aus Chat-Recherche, Antwortlinks und Vergleichsmodellen, auch ohne
 Vergleich. `tests/js/agent-citations.test.mjs` prüft hochgestellte Quellenzahlen,
 Paper-Titel, URL-Deduplizierung, explizite/mehrdeutige Quellen-IDs, Code- und
@@ -154,8 +157,15 @@ Zahlennotation, nachgelieferte Metadaten, Streaming sowie unveränderte Original
 und die Reihenfolge von Prüfmarkierungen und Zitierdarstellung.
 `tests/js/sidebar-quota.test.mjs` prüft die Agent-Prozentprojektion
 und den Wechsel zurück zum unveränderten Consensus-Kontingent.
-`tests/js/agent-chat.test.mjs` prüft die manuelle Reasoning-Expansion, die separate
-Live-Vorschau und die Reasoning-Ebene im Chatmodell-Picker.
+`tests/js/agent-chat.test.mjs` prüft gestapelte Fortschrittsabsätze, stabile DOM-Knoten,
+HTML-Escaping, vollständigen Verlauf über das Hilfsereignisfenster hinaus,
+automatisches Zuklappen beim Abschluss sowie erneutes manuelles Öffnen.
+Legacy-Reasoning und die Reasoning-Ebene im Chatmodell-Picker bleiben abgedeckt.
+`tests/e2e/test_agent_status_frontend.py` prüft die gebaute App mit offenem SSE-
+Stream bei 1280/390/320 px: Absatzabstände, Hell/Dunkel, Abschluss mit geöffnetem
+Verlauf, Aufklappen per Tastatur und vollständigen Verlauf ohne inneren Scrollkasten.
+Wie die Agent-Chat-Suite nutzt sie den writerfreien Phase-4-Server, gemockte APIs
+und keine bezahlten Modellaufrufe; Screenshots über `AGENT_SCREENSHOTS`.
 Zusätzlich: aktualisierte Kontingente bei SSE-Fehlern/Disconnect, veraltete und
 fremde Snapshots sowie Tool-Nennungen gegenüber bestätigten Aufrufen.
 Agentenleiste: `agent-delegation.test.mjs` prüft gemessene Tokenzahlen (ohne

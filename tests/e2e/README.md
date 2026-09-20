@@ -75,12 +75,12 @@ venv\Scripts\python.exe -m pytest tests\e2e\test_phase4_frontend.py -q
 Remove-Item Env:RUN_E2E
 ```
 
-`test_agent_chat_frontend.py` verwendet denselben writerfreien Server und
-vollständig gemockte APIs für Agent-Senden, Fortsetzung und Bookmark-Restore
+`test_agent_chat_frontend.py` und `test_agent_status_frontend.py` verwenden denselben
+writerfreien Server und vollständig gemockte APIs für Agent-Senden, Statusverlauf und Bookmark-Restore
 bei 320/390/1280 px. Der Aufruf ist analog mit diesem Dateipfad; optional
 speichert `AGENT_SCREENSHOTS=<Verzeichnis>` die geprüften Ansichten.
 
-Diese Ausnahme gilt für diese beiden Dateien. Der vollständige E2E-Lauf und
+Diese Ausnahme gilt für die genannten Frontend-Dateien. Der vollständige E2E-Lauf und
 alle echten Transaktions-/Request-Writer verlangen weiterhin den erreichbaren
 Firestore-Emulator wie oben beschrieben.
 

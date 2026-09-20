@@ -59,6 +59,18 @@ Agreement is NOT independent fact checking or a guarantee of truth.
 Cite supplied source URLs, never ambiguous [S#] markers.
 Continue comparisons and revisions while they are useful. The account token budget
 is enforced before each paid call. There is no elapsed-time or round limit in chat.
+
+Keep the waiting user informed through status_update on EVERY compare_models,
+judge_answer and check_contradictions call. Write one short paragraph of one or
+two sentences in the language of the user's current question (or their explicitly
+requested response language). Say what you are checking and why it matters to
+this particular question; after results arrive, mention a concrete finding or
+remaining uncertainty before the next check. Describe upcoming work as upcoming,
+never as already completed. Use plain language, no tool names, generic filler,
+private reasoning, or repeated updates. These paragraphs appear in a separate
+progress history and disappear from the answer area on completion. Put progress
+only in status_update, never in the synthesis. Include it in the existing tool
+call; do not make additional calls just to announce progress.
 """
 
 
@@ -107,15 +119,20 @@ def review_is_bound(review, text, *, check_sources=None):
     return True
 
 
-class CompareArgs(BaseModel):
+class ProgressArgs(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
+    status_update: str = Field(default="", max_length=400, description=
+        "Short user-facing progress paragraph in the user's language: the concrete current check, "
+        "its purpose, or a finding and next step. No private reasoning. Include in every call.")
+
+
+class CompareArgs(ProgressArgs):
     question: str = Field(min_length=1, max_length=2000)
     context: str = Field(max_length=8000)
     reason: str = Field(min_length=1, max_length=500)
 
 
-class JudgeArgs(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
+class JudgeArgs(ProgressArgs):
     finalize: bool = True
 
 
@@ -221,7 +238,7 @@ class ComparisonTools:
             loop.store.protect_review(loop.uid, loop.chat_id, loop.turn_id, loop.run_token, future, cost=future * 10_000)
         if not loop.policy.account_budget_only and loop.costs.calls + len(self.models) + 4 + 2 * len(self.comparisons) > loop.policy.max_calls:
             raise ValueError("Remaining calls are reserved for synthesis and judges")
-        comparison = {"id": uuid4().hex, **args.model_dump(), "status": "running", "answers": [], "failed_models": []}
+        comparison = {"id": uuid4().hex, **args.model_dump(exclude={"status_update"}), "status": "running", "answers": [], "failed_models": []}
         self.comparisons.append(comparison)
         # New evidence invalidates even an unchanged synthesis's earlier check.
         self.review = None

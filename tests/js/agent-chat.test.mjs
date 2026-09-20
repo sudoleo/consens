@@ -458,6 +458,51 @@ describe("single-model agent chat", () => {
     dom.window.close();
   });
 
+  it('stacks complete localized updates and collapses the open history on completion', () => {
+    const { window, document, dom } = boot();
+    const activity = window.App.agentActivity;
+    const host = document.getElementById('agentAnswerActivity');
+    const events = [];
+    const first = {version:1, id:'p1', kind:'progress', text:'Ich vergleiche die Optionen. Dabei berücksichtige ich dein Budget.'};
+    const second = {version:1, id:'p2', kind:'progress', text:'Die Antworten sind sich beim Preis einig. Ich prüfe die Belege. <img src=x>'};
+    activity.receive(events, first);
+    activity.render(host, {events, running:true});
+    const firstNode = host.querySelector('.agent-progress p');
+    activity.receive(events, second);
+    activity.receive(events, second);
+    activity.render(host, {events, running:true});
+    expect([...host.querySelectorAll('.agent-progress p')].map(p => p.textContent)).toEqual([first.text, second.text]);
+    expect(host.querySelector('.agent-progress p')).toBe(firstNode);
+    expect(host.querySelector('img')).toBe(null);
+    expect(host.querySelector('.agent-progress').getAttribute('role')).toBe('log');
+    const details = host.querySelector('details');
+    details.querySelector('summary').click();
+    expect(details.open).toBe(true);
+    activity.render(host, {events, running:false});
+    expect(details.open).toBe(false);
+    expect(host.querySelector('.agent-progress').hidden).toBe(true);
+    expect(host.querySelector('.agent-progress').childElementCount).toBe(0);
+    details.querySelector('summary').click();
+    activity.renderTurn(host, {status:'completed', agent_activity:events});
+    expect(details.open).toBe(true);
+    expect([...details.querySelectorAll('.agent-activity-update')].map(p => p.textContent)).toEqual([first.text, second.text]);
+    expect(details.querySelector('.agent-activity-note').hidden).toBe(true);
+    dom.window.close();
+  });
+
+  it('retains every progress paragraph when the auxiliary status window rotates', () => {
+    const { window, dom } = boot();
+    const events = [];
+    for (let i = 0; i < 90; i++) {
+      window.App.agentActivity.receive(events, {version:1,id:`p${i}`,kind:'progress',text:`Check ${i}`});
+      window.App.agentActivity.receive(events, {version:1,id:`s${i}`,kind:'status',status:'working'});
+    }
+    expect(events.filter(e => e.kind === 'progress')).toHaveLength(90);
+    expect(events.filter(e => e.kind === 'status')).toHaveLength(64);
+    expect(events.at(-1).id).toBe('s89');
+    dom.window.close();
+  });
+
   it("collapses finished reasoning, preserves explicit disclosure, and restores stopped status", () => {
     const { window, document, dom } = boot();
     const activity = window.App.agentActivity;

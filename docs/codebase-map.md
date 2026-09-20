@@ -1651,8 +1651,8 @@ Modulen in `bundles.json`): 15 Sekunden für Modellauswahl, Budget, Details, Sto
 Auth/Chat-Anlage und reine Recovery; der Agent-SSE-Kanal verwendet 45 Sekunden
 ohne empfangene Bytes. `markdown-stream.js` meldet dafür auch Keepalive-Chunks
 über den optionalen `onProgress`-Hook. Abbruch, Auth-Fencing und reine Recovery
-bleiben erhalten. Die Aktivitätsprojektion hält die neuesten 64 Ereignisse und
-zeigt Token-Warten samt Erklärung außerhalb der geschlossenen Details; die
+bleiben erhalten. Die Aktivitätsprojektion hält die neuesten 64 Hilfsereignisse
+sowie alle Fortschrittsabsätze und zeigt Token-Warten samt Erklärung außerhalb der geschlossenen Details; die
 Taskzeile zeigt ebenfalls „Waiting for tokens“. Siehe
 [Audit und verbleibende Grenzen](agent-reliability-audit-2026-09-20.md).
 
@@ -1920,22 +1920,35 @@ zeigt ihn live und nach Reload. Provider-Timeouts sind von Kontingent-Stopp und
 Nutzerabbruch getrennt, rohe Provider-Fehler werden nicht gespeichert.
 
 **UI-Verträge.** agent-activity.js zeigt den aktuellen Arbeits-/Tool-/Review-Status
-genau einmal in der Überschrift des standardmäßig geschlossenen Thinking-Disclosures.
-Der Schimmer bleibt durchgehend lesbar; er verwendet keine Hintergrundfarbe als
-Textfarbe. Darunter stehen nur die jüngsten kurzen Reasoning-Auszüge, keine zweite
-Statuszeile oder Tool-Chips. Diese Vorschau verschwindet nach Laufende;
-nur manuelles Aufklappen zeigt alle gespeicherten Schritt-Zusammenfassungen,
-Tools und Usage. Keine automatische Expansion oder Zitatlinien; auch alte
-Langtexte werden in der Anzeige gekürzt. Tool-Nennungen bleiben normaler Text.
-Bestätigte running-Toolereignisse oder der Review-Status bestimmen die Überschrift;
-bloße Tool-Nennungen im Reasoning lösen keine Statusänderung aus. DelegationLoop meldet validierte
-Orchestrator-Tools mit running/terminal-Status. agent_progress.py
-begrenzt sichtbares Reasoning serverseitig auf drei Zeilen à 180 Zeichen und
-acht Updates je Modellschritt. Provider-Zusammenfassungen haben Vorrang vor
-gekennzeichneten Satzauszügen; keine zusätzlichen LLM-Aufrufe. agent_loop.py
-speichert pro Schritt nur den letzten Kurztext, agent_delegation.py projiziert
-für Worker nur progress_text/progress_kind auf die Sitzung. Private
-Provider-Fortsetzungsdaten bleiben im bestehenden laufenden Protokoll.
+genau einmal in der Überschrift des standardmäßig geschlossenen Disclosures.
+Darunter stehen die Fortschrittsmeldungen des Steuerungsmodells chronologisch
+als kurze Absätze. `ProgressArgs.status_update` ergänzt die bestehenden Tools
+`compare_models`, `judge_answer` und `check_contradictions` um maximal 400 Zeichen;
+für ältere Aufrufer ist das Feld optional. Der injizierte Produktprompt verlangt
+es bei jedem dieser Aufrufe: ein bis zwei konkrete Sätze in der Sprache der
+aktuellen Frage bzw. der gewünschten Antwort, mit Arbeitszweck oder Befund und
+nächstem Prüfschritt. Keine privaten Gedankengänge, Toolnamen oder unbelegten
+Erfolgsmeldungen. Es entstehen keine zusätzlichen Status-Tools oder Modellrunden.
+`DelegationLoop._execute` veröffentlicht den validierten Text vor dem zugehörigen
+Toolstart als `activity` mit `kind: progress` und stabiler Schritt-/Toolcall-ID.
+Die Meldungen werden in `agent_activity` gespeichert, nicht in der Synthese oder
+den neutralen Vergleichsaufträgen. Provider-Reasoning des Chat-Steuerungsmodells
+wird nicht mehr als Live-Status oder Chatverlauf projiziert; vollständige private
+Fortsetzungsdaten bleiben im laufenden Provider-Protokoll.
+
+Die Live-Absätze verwenden stabile DOM-Knoten in einem höflich angekündigten
+`role=log`; die rotierende 64er-Grenze für Hilfsereignisse entfernt keine
+Fortschrittsmeldungen. Token-Warten ergänzt einen sichtbaren Hinweis.
+Bei Abschluss, Fehler oder Stop verschwindet die Live-Anzeige und auch ein zuvor
+geöffneter Verlauf klappt zu. Anschließendes manuelles Öffnen über Pfeil/Enter
+zeigt die vollständigen Absätze, bestätigte Tools und Usage; spätere Projektionen
+erhalten diese Wahl. Der Verlauf fließt ohne verschachtelten Scrollkasten im Chat.
+Tool-Nennungen bleiben Text; ausschließlich bestätigte running-Toolereignisse
+oder der Review-Status bestimmen den Status im Kopf.
+Alte gespeicherte Reasoning-Verläufe bleiben als begrenzte Auszüge lesbar.
+`agent_progress.py`/`agent_loop.py` behalten für Legacy-Läufe und Worker drei Zeilen
+à 180 Zeichen und acht Updates je Modellschritt; Provider-Zusammenfassungen haben
+Vorrang. Worker verwenden weiterhin `progress_text`/`progress_kind` in ihrer Sitzung.
 agent-delegation.js verwendet das bestehende geordnete Activity-Journal,
 überlappende Modell-Icons und die Agent-Detailseitenleiste auch für Vergleichs-
 und Judge-Aufrufe (kind). Der Stapel dedupliziert identische API-Modelle, die
