@@ -1048,7 +1048,7 @@
     padding: 14px 16px 8px;
   }
 
-  .consensus-main h2 {
+  .consensus-main > h2 {
     justify-content: flex-start;
     padding-left: 0;
     padding-right: 72px;

@@ -1082,7 +1082,7 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
   animation: none;
 }
 
-.consensus-box.is-synthesizing .consensus-main h2 {
+.consensus-box.is-synthesizing .consensus-main > h2 {
   justify-content: flex-start;
   margin-bottom: 13px;
   padding-inline: 0;
@@ -1118,7 +1118,7 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
   color: color-mix(in srgb, var(--cred-frame) 75%, var(--text-color));
 }
 
-.consensus-main h2 {
+.consensus-main > h2 {
   position: relative;
   z-index: 1;
   display: flex;
@@ -1138,7 +1138,7 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
   letter-spacing: var(--tracking-normal);
 }
 
-.consensus-main h2 img {
+.consensus-main > h2 img {
   display: inline-block !important;
   margin: 0;
   flex-shrink: 0;
@@ -1146,13 +1146,11 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
   transition: filter 0.3s ease;
 }
 
-.dark-mode .consensus-main h2 img {
+.dark-mode .consensus-main > h2 img {
   filter: invert(0);
 }
 
-/* Renderziel des Konsenstextes (#consensusAnswerBody). Erbt bewusst exakt die
-   Typografie des frueheren .consensus-main > p, damit der Container-Wechsel
-   optisch neutral bleibt. */
+/* Render target for consensus prose; shared answer typography lives in shell.css. */
 .consensus-main > .consensus-answer-body {
   margin: 0;
   color: color-mix(in srgb, var(--text-color) 92%, var(--sidebar-text-muted));
@@ -1163,12 +1161,10 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
   z-index: 1;
 }
 
-.consensus-main > .consensus-answer-body p,
 .consensus-differences > p p {
   margin: 0 0 0.8em;
 }
 
-.consensus-main > .consensus-answer-body p:last-child,
 .consensus-differences > p p:last-child {
   margin-bottom: 0;
 }

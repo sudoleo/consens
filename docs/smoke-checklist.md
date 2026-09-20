@@ -809,6 +809,11 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
 - [ ] Im Agent-Chat ersetzt der verbleibende Tokenanteil als Prozentzahl den
   Run-Zähler im Sidebar-Footer. Exakte Zahlen im Panel, keine Budgetzeile im
   Composer. Modus-/Accountwechsel zeigt keine fremden oder veralteten Zahlen.
+- [ ] Lange Agent-/Consensus-Antworten und gespeicherte Turns in beiden Themes
+  bei Desktop- und Mobilbreite lesen: 16 px Schrift mit 28 px Zeilenhöhe,
+  erkennbare Absatz- und Listenabstände, auch bei verschachtelten Listen.
+  Markdown-Überschriften bleiben linksbündig mit normaler Groß-/Kleinschreibung;
+  Tabellen, Code und Formeln erzeugen keinen horizontalen Seiten-Overflow.
 - [ ] Oben am Pfeil steht die Laufzeit; sie zählt während Token-Warten weiter
   und bleibt nach Abschluss/Stop sowie beim Öffnen gespeicherter Turns stehen.
   Darunter wechseln sich kurze Meldungen des Steuerungsmodells in der Fragesprache

@@ -268,6 +268,11 @@ definiert die verbindlichen Größen-, Gewichts-, Zeilenhöhen- und Laufweiten-T
 und lässt Formularelemente die Produktschrift erben. Google-Fonts-Links und deren
 CSP-Freigaben existieren nicht mehr; Monospace bleibt ausschließlich für Code und
 technische Identifikatoren, KaTeX behält seine eigene Mathematikschrift.
+`shell.css` gibt Agent-/Consensus-Antworten und gespeicherten Turns denselben
+Leserhythmus: 16 px mit 1,75-facher Zeilenhöhe, normale Laufweite, eigene Absatz-,
+Listen- und Überschriftenabstände. Die Regeln für den Consensus-Labelkopf gelten
+nur für direkte `h2`-Kinder, nicht für Markdown-Überschriften im Antworttext.
+Statusmeldungen, Antwortleser, Codeblöcke und Tabellen behalten ihre eigene Typografie.
 `index.html`, `admin.html` und `admin_benchmark.html` enthalten keine Inline-Skripte, Inline-Styles oder
 HTML-Eventhandler mehr. Jinja-Konfiguration liegt ausschließlich in escaped
 `data-*`-Metadaten und wird von `app-bootstrap.js` beziehungsweise

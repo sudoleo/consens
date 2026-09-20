@@ -2662,14 +2662,6 @@ body:not(.is-hero) .consensus-section::before {
   color: var(--ink-3);
 }
 
-.thread-history-answer-body {
-  max-width: none;
-  font-size: var(--font-size-base);
-  line-height: var(--line-height-reading);
-  letter-spacing: var(--tracking-tight);
-  color: var(--ink);
-}
-
 .thread-history-answer-body .claim-badge {
   pointer-events: none;
 }
@@ -2827,8 +2819,8 @@ body.agreement-verdict-hidden .thread-history-footer:not(:has(.consensus-tab)) {
   overflow: visible;
 }
 
-.consensus-main h2,
-.consensus-box.is-synthesizing .consensus-main h2 {
+.consensus-main > h2,
+.consensus-box.is-synthesizing .consensus-main > h2 {
   justify-content: flex-start;
   margin: 0 0 9px;
   padding-inline: 0;
@@ -2839,7 +2831,7 @@ body.agreement-verdict-hidden .thread-history-footer:not(:has(.consensus-tab)) {
   color: var(--ink-3);
 }
 
-.consensus-main h2 img {
+.consensus-main > h2 img {
   display: none !important;
 }
 
@@ -2847,12 +2839,53 @@ body.agreement-verdict-hidden .thread-history-footer:not(:has(.consensus-tab)) {
    gives them. The column itself (--app-container-width) is the measure that
    keeps the line length sane — a second cap inside it only left half the
    page empty while the text kept wrapping. */
-.consensus-main > .consensus-answer-body {
+.consensus-main > .consensus-answer-body,
+.agent-answer > .consensus-answer-body,
+.thread-history-answer-body {
   max-width: none;
   font-size: var(--font-size-base);
-  line-height: var(--line-height-reading);
-  letter-spacing: var(--tracking-tight);
+  font-weight: var(--font-weight-regular);
+  line-height: 1.75;
+  letter-spacing: var(--tracking-normal);
   color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+/* Shared reading rhythm for rendered answers, including saved turns.
+   Status, source controls, code and tables retain their own typography. */
+.consensus-answer-body p { margin: 0 0 1em; }
+.consensus-answer-body :is(ul, ol) { margin: 1em 0; padding-inline-start: 1.5em; }
+.consensus-answer-body li { padding-inline-start: .2em; }
+.consensus-answer-body li + li { margin-top: .375em; }
+.consensus-answer-body li > :is(ul, ol) { margin-block: .375em; }
+.consensus-answer-body li > p { margin-block: .375em; }
+.consensus-answer-body :is(h1, h2, h3, h4, h5, h6) {
+  margin: 1.5em 0 .6em;
+  padding: 0;
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.35;
+  letter-spacing: var(--tracking-normal);
+  text-align: start;
+}
+.consensus-answer-body h1 { font-size: 1.5em; }
+.consensus-answer-body h2 { font-size: 1.25em; }
+.consensus-answer-body h3 { font-size: 1.125em; }
+.consensus-answer-body :is(h4, h5, h6) { font-size: 1em; }
+.consensus-answer-body :is(strong, b) { font-weight: var(--font-weight-semibold); }
+.consensus-answer-body hr { margin-block: 1.5em; }
+.consensus-answer-body blockquote {
+  margin: 1em 0;
+  padding-inline-start: 1em;
+  border-inline-start: 3px solid var(--line);
+}
+.consensus-answer-body > :first-child,
+.consensus-answer-body li > :first-child { margin-top: 0; }
+.consensus-answer-body > :last-child,
+.consensus-answer-body li > :last-child,
+.consensus-answer-body blockquote > :last-child { margin-bottom: 0; }
+.consensus-answer-body img { max-width: 100%; height: auto; }
+.consensus-answer-body .katex-display {
+  max-width: 100%; overflow-x: auto; overflow-y: hidden;
 }
 
 .consensus-answer-body .claim-badge.is-marker-filtered,
