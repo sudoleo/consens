@@ -275,7 +275,22 @@ def claim_analysis_call():
         budget.consume()
 
 
-async def _guard_provider_io(awaitable, cancellation, budget):
+class ProviderProgressWatchdog:
+    """Bound silence, not the total duration of a productive model call."""
+
+    def __init__(self, seconds):
+        self.seconds = seconds
+        self.touch()
+
+    def touch(self):
+        self.deadline = time.monotonic() + self.seconds
+
+    def check(self):
+        if time.monotonic() >= self.deadline:
+            raise TimeoutError("Provider stream made no progress")
+
+
+async def _guard_provider_io(awaitable, cancellation, budget, progress=None):
     task = asyncio.ensure_future(awaitable)
     try:
         while True:
@@ -283,6 +298,8 @@ async def _guard_provider_io(awaitable, cancellation, budget):
                 cancellation.raise_if_cancelled()
             if budget:
                 budget.check()
+            if progress:
+                progress.check()
             done, _ = await asyncio.wait({task}, timeout=0.05)
             if done:
                 return task.result()
@@ -313,7 +330,7 @@ def cancellable_post_json(url, *, json, headers):
     return asyncio.run(request())
 
 
-def cancellable_sse_lines(url, *, json, headers):
+def cancellable_sse_lines(url, *, json, headers, progress=None):
     """Drive async socket reads on the existing synchronous SSE worker.
 
     A deadline/disconnect cancels header reads and idle body reads alike; no
@@ -327,7 +344,7 @@ def cancellable_sse_lines(url, *, json, headers):
     response = None
 
     def guarded(awaitable):
-        return _guard_provider_io(awaitable, cancellation, budget)
+        return _guard_provider_io(awaitable, cancellation, budget, progress)
 
     try:
         request = client.build_request("POST", url, json=json, headers=headers)

@@ -155,7 +155,10 @@ class FakeQuery:
             value = getattr(condition, "value", None)
             if op != "==":
                 raise AssertionError(f"unsupported fake filter operator: {op}")
-            if data.get(field) != value:
+            actual = data
+            for part in field.split('.'):
+                actual = actual.get(part) if isinstance(actual, dict) else None
+            if actual != value:
                 return False
         return True
 

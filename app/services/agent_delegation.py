@@ -352,7 +352,10 @@ class DelegationLoop(AgentLoop):
                 if reservation is not None:
                     self.costs.release(reservation)
                 if isinstance(exc, AgentTokenBudgetExceeded):
-                    if exc.reserved and (not searches or exc.required <= exc.remaining + exc.reserved):
+                    inputs = input_estimate(messages, tools, model.request_config)
+                    minimum = inputs + minimum_output(model)
+                    if exc.reserved and ((not searches and minimum <= exc.remaining + exc.reserved)
+                                         or (searches and exc.required <= exc.remaining + exc.reserved)):
                         if not waiting:
                             waiting = True
                             if worker:
@@ -469,6 +472,7 @@ class DelegationLoop(AgentLoop):
                 if not worker:
                     yield {"type": "delta", "text": value.text}
             else:
+                self._check(cancellation)
                 provider_attempted = True
                 source = value.stream(model=model, messages=messages, api_key=self.api_key, tools=tools,
                                       native_searches=searches, allow_tool_calls=True)
@@ -529,6 +533,11 @@ class DelegationLoop(AgentLoop):
                     self.search_remaining += searches
                 elif type(count) is int and 0 <= count <= searches:
                     self.search_remaining += searches - count
+            if (not worker and value.text and self.comparison and self.comparison.comparisons
+                    and not value.tool_calls and not value._tool_parts
+                    and (status != "succeeded" or value.finish_reason == "length")):
+                # Persist partial synthesis only after the mandatory settlement.
+                self.comparison.capture(value.text)
         self.costs.check()
         if not worker:
             yield self.activity({"step_id": "run", "id": "usage", "kind": "usage", "usage": self.costs.total()})

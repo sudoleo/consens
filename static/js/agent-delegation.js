@@ -127,12 +127,14 @@
   async function request(view, suffix = "") {
     const authorized = () => view.user === window.auth?.currentUser && view.authGeneration === App.authState?.generation && !view.controller.signal.aborted;
     if (!authorized()) throw new Error("Account changed");
-    const token = await window.auth.currentUser.getIdToken();
-    if (!authorized()) throw new Error("Account changed");
-    const response = await fetch(`/agent/chats/${encodeURIComponent(view.chatId)}/turns/${encodeURIComponent(view.turnId)}/agents${suffix}`,
-      { headers: { Authorization: `Bearer ${token}` }, signal: view.controller.signal });
-    if (!response.ok) throw new Error("Agent details could not be loaded.");
-    const data = await response.json();
+    const data = await App.withRequestDeadline(async signal => {
+      const token = await window.auth.currentUser.getIdToken();
+      if (!authorized() || signal.aborted) throw new Error("Account changed");
+      const response = await fetch(`/agent/chats/${encodeURIComponent(view.chatId)}/turns/${encodeURIComponent(view.turnId)}/agents${suffix}`,
+        { headers: { Authorization: `Bearer ${token}` }, signal });
+      if (!response.ok) throw new Error("Agent details could not be loaded.");
+      return response.json();
+    }, { signal: view.controller.signal });
     if (!authorized()) throw new Error("Account changed");
     App.agentChat?.receiveBudget(data.token_budget, view.uid);
     return data;
@@ -199,10 +201,13 @@
       if (!view?.running || uid() !== view.uid) return;
       stop.disabled = true;
       try {
-        const token = await window.auth.currentUser.getIdToken();
-        if (uid() !== view.uid || view.controller.signal.aborted) return;
-        const response = await fetch(`/agent/chats/${encodeURIComponent(view.chatId)}/turns/${encodeURIComponent(view.turnId)}/stop`,
-          { method: "POST", headers: { Authorization: `Bearer ${token}` }, signal: view.controller.signal });
+        const response = await App.withRequestDeadline(async signal => {
+          const token = await view.user.getIdToken();
+          if (view.user !== window.auth?.currentUser || view.authGeneration !== App.authState?.generation || signal.aborted) throw new DOMException('Account changed', 'AbortError');
+          return fetch(`/agent/chats/${encodeURIComponent(view.chatId)}/turns/${encodeURIComponent(view.turnId)}/stop`,
+            { method: "POST", headers: { Authorization: `Bearer ${token}` }, signal });
+        }, { signal: view.controller.signal });
+        if (view.user !== window.auth?.currentUser || view.authGeneration !== App.authState?.generation) return;
         if (!response.ok) throw new Error("The run could not be stopped. Try again.");
         const run = App.runRegistry?.visible?.();
         if (run?.metadata.chatId === view.chatId && run.metadata.agentTurnId === view.turnId) App.runRegistry.cancel(run.runId);

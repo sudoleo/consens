@@ -64,7 +64,8 @@ class AgentRunStore(AgentSessionStore, ChatStore):
         # Expired roots can outlive the owner's active lease map. Query their
         # durable run state, including when the user never reopens that bookmark.
         roots = self.db.collection('users').document(uid).collection('llm_calls').where(
-            filter=FieldFilter('run_status', '==', 'running')).limit(20).stream()
+            filter=FieldFilter('run_status', '==', 'running')).where(
+            filter=FieldFilter('policy.delegation', '==', True)).limit(20).stream()
         now = datetime.now(timezone.utc)
         for snapshot in roots:
             root = snapshot.to_dict() or {}
@@ -316,6 +317,9 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                         review = dict(review)
                         review["status"] = ("cancelled" if status == "cancelled" else
                                             "missing" if review.get("status") == "required" else "failed")
+                        for comparison in review.get("comparisons", []):
+                            if comparison.get("status") == "running":
+                                comparison["status"] = "cancelled" if status == "cancelled" else "failed"
                         for version in [review, *review.get("versions", [])]:
                             for check in version.get("checks", []):
                                 verification = check.get("source_verification")
@@ -332,7 +336,7 @@ class AgentRunStore(AgentSessionStore, ChatStore):
 
         return self._agent_transaction(uid, operation)
 
-    def release_unclaimed(self, uid, chat_id, turn_id, *, failure=None):
+    def release_unclaimed(self, uid, chat_id, turn_id, *, failure=None, expired_only=False):
         """Failures before the provider claim consume neither tokens nor quota."""
         chat_ref, turn_ref = self._chat_ref(uid, chat_id), self._turn_ref(uid, chat_id, turn_id)
         receipt_ref = self.receipt_ref(uid, chat_id, turn_id)
@@ -342,10 +346,17 @@ class AgentRunStore(AgentSessionStore, ChatStore):
             if receipt.exists or not chat.exists or not turn.exists:
                 return
             data = chat.to_dict() or {}
-            if data.get("status") != "active" or data.get("agent_turn_id") != turn_id:
+            turn_data = turn.to_dict() or {}
+            if (data.get("status") != "active" or turn_data.get("status") != "pending"
+                    or data.get("execution_mode") != "agent" or turn_data.get("execution_mode") != "agent"):
+                return
+            owns_lock = data.get("agent_turn_id") == turn_id
+            now = datetime.now(timezone.utc)
+            if expired_only and owns_lock and data.get("agent_lock_until", now) > now:
                 return
             tx.update(turn_ref, {"status": "failed", "error_code": "agent_failed",
                 "agent_failure": failure or {"code": "agent_failed", "error": "This response ended before an answer was available."},
                 "updated_at": firestore.SERVER_TIMESTAMP})
-            tx.update(chat_ref, {"agent_lock_until": datetime.now(timezone.utc)})
+            if owns_lock:
+                tx.update(chat_ref, {"agent_lock_until": now})
         self._agent_transaction(uid, operation)

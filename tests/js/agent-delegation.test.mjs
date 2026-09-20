@@ -5,7 +5,7 @@ const chatId = "c".repeat(32), turnId = "d".repeat(32), agentId = "a".repeat(32)
 const agent = (seq = 1, status = "working", id = agentId) => ({ id, seq, status, title: "Check Germany", model: { model: "anthropic/claude-haiku-4.5", label: "Haiku" },
   message_seq: seq, usage: { input_tokens: 900, output_tokens: 150, reasoning_tokens: 30, cached_input_tokens: 200, estimated_cost_nano_usd: 123000, cost_source: "provider", complete: true }, duration_ms: 1200 });
 function boot(fetcher) {
-  return loadScripts(["static/js/agent-delegation.js"], { body: '<div id="agentAnswerActivity"></div>', before(w) {
+  return loadScripts(["static/js/request-deadline.js", "static/js/agent-delegation.js"], { body: '<div id="agentAnswerActivity"></div>', before(w) {
     w.auth = { currentUser: { uid: "owner", getIdToken: async () => "token" } };
     w.App = { runRegistry: { isAuthCurrent: c => c.auth.uid === w.auth.currentUser.uid } };
     w.fetch = vi.fn(fetcher || (async url => ({ ok: true, json: async () => url.includes(agentId)

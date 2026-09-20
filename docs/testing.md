@@ -92,6 +92,15 @@ Reasoning-Mindestplatz, Unicode/Sondertokens ohne Netzwerk, Suchreserven und
 Produktkontext. `tests/e2e/test_agent_transactions.py` prüft dasselbe Warten über
 zwei getrennte Runs gegen den isolierten Firestore-Emulator.
 
+`tests/test_agent_reliability.py` verbindet Admission, Provider-Transport,
+Settlement und Recovery: verwaiste Starts, Stop vor Dispatch, lebende aber
+fortschrittslose SSE-Verbindungen und gespeicherte Teilantworten. Die
+Firestore-Prüfung umfasst auch gleichzeitigen Stop/Claim ohne lokalen
+Prozess-Lock sowie ältere Belegformate vor einem verwaisten Run. Kurze
+Netzwerkfristen und die sichtbare Warteanzeige werden in den Agent-JS- und
+Browsertests geprüft. Ergebnisse und Grenzen:
+[Agent-Zuverlässigkeitsaudit](agent-reliability-audit-2026-09-20.md).
+
 ### Standalone Publisher
 
 Der Scheduled Publisher benötigt nur Python 3.11 und die Standardbibliothek.

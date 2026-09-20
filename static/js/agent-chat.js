@@ -54,10 +54,12 @@
     const generation = ++loadGeneration;
     catalogStatus = "loading";
     try {
-      const token = await user.getIdToken();
-      if (user !== window.auth?.currentUser || generation !== loadGeneration) return;
-      const response = await fetch("/agent/models", { headers: { Authorization: `Bearer ${token}` } });
-      const data = await response.json();
+      const { response, data } = await App.withRequestDeadline(async signal => {
+        const token = await user.getIdToken();
+        if (user !== window.auth?.currentUser || generation !== loadGeneration || signal.aborted) throw new Error('Account changed');
+        const response = await fetch("/agent/models", { headers: { Authorization: `Bearer ${token}` }, signal });
+        return { response, data: await response.json() };
+      });
       if (user !== window.auth?.currentUser || generation !== loadGeneration || !canUse()) return;
       if (!response.ok || !Array.isArray(data.models) || !data.models.length) throw new Error("Model list unavailable");
       catalog = data;
@@ -95,11 +97,13 @@
     try {
       const user = window.auth?.currentUser;
       if (!user || uid !== user.uid || !canUse()) return;
-      const token = await user.getIdToken();
-      if (user !== window.auth?.currentUser || generation !== loadGeneration) return;
-      const response = await fetch('/agent/budget', { headers: { Authorization: `Bearer ${token}` } });
-      if (!response.ok) throw new Error('Allowance unavailable');
-      const data = await response.json();
+      const data = await App.withRequestDeadline(async signal => {
+        const token = await user.getIdToken();
+        if (user !== window.auth?.currentUser || generation !== loadGeneration || signal.aborted) throw new Error('Account changed');
+        const response = await fetch('/agent/budget', { headers: { Authorization: `Bearer ${token}` }, signal });
+        if (!response.ok) throw new Error('Allowance unavailable');
+        return response.json();
+      });
       if (user === window.auth?.currentUser && generation === loadGeneration) receiveBudget(data.token_budget, uid);
     } catch (_) {
       if (generation === loadGeneration && catalog) { catalog.budgetStale = true; App.sidebarQuota?.sync(); }
@@ -379,16 +383,18 @@
       action = registry.beginAction({ key: 'agent-recovery', ownerRunId: context.runId, bookmarkId: context.bookmark.id });
       context.metadata.recovering = true;
       registry.show(context.runId);
-      const token = await window.auth.currentUser.getIdToken();
-      if (!registry.isAuthCurrent(context) || action.controller.signal.aborted) return;
       const settings = context.config.agentSettings;
-      const result = await window.streamSSERequest('/agent', {
-        chat_id: context.metadata.chatId, question: context.question, client_request_id: context.requestIdentity,
-        bookmark_id: context.bookmark.id, recover_only: true, model_id: settings.model_id,
-        reasoning_effort: settings.reasoning_effort || 'default',
-        comparison_models: Object.keys(context.config.comparisonModels || {}).length ? context.config.comparisonModels : null,
-        check_sources: context.config.checkSources === true,
-      }, action.controller.signal, {}, { headers: { Authorization: `Bearer ${token}` } });
+      const result = await App.withRequestDeadline(async signal => {
+        const token = await window.auth.currentUser.getIdToken();
+        if (!registry.isAuthCurrent(context) || signal.aborted) throw new DOMException('Account changed', 'AbortError');
+        return window.streamSSERequest('/agent', {
+          chat_id: context.metadata.chatId, question: context.question, client_request_id: context.requestIdentity,
+          bookmark_id: context.bookmark.id, recover_only: true, model_id: settings.model_id,
+          reasoning_effort: settings.reasoning_effort || 'default',
+          comparison_models: Object.keys(context.config.comparisonModels || {}).length ? context.config.comparisonModels : null,
+          check_sources: context.config.checkSources === true,
+        }, signal, {}, { headers: { Authorization: `Bearer ${token}` } });
+      }, { signal: action.controller.signal });
       if (!registry.isAuthCurrent(context) || action.controller.signal.aborted) return;
       receiveBudget(result.data?.token_budget, context.auth.uid);
       const recoverable = result.data?.recoverable ?? result.data?.detail?.recoverable;
@@ -463,16 +469,18 @@
     if (!recovery) App.revealSentMessage?.();
     let timer, terminalBudget = false;
     try {
-      const token = await window.auth.currentUser.getIdToken();
+      const token = await App.withRequestDeadline(() => window.auth.currentUser.getIdToken(), { signal });
       if (!registry.isAuthCurrent(context) || signal.aborted) return;
       const headers = { Authorization: `Bearer ${token}` };
       let chatId = recovery?.metadata.chatId || basis?.chatId;
       if (!chatId) {
-        const response = await fetch("/chats", {
-          method: "POST", headers: { ...headers, "Content-Type": "application/json" }, signal,
-          body: JSON.stringify({ title: question.slice(0, 120), execution_mode: "agent" }),
-        });
-        const data = await response.json();
+        const { response, data } = await App.withRequestDeadline(async requestSignal => {
+          const response = await fetch("/chats", {
+            method: "POST", headers: { ...headers, "Content-Type": "application/json" }, signal: requestSignal,
+            body: JSON.stringify({ title: question.slice(0, 120), execution_mode: "agent" }),
+          });
+          return { response, data: await response.json() };
+        }, { signal });
         if (!response.ok) throw new Error(apiError(data));
         chatId = data.chat.id;
       }
@@ -482,7 +490,7 @@
       context.phase = "answers";
       context.consensus.status = "streaming";
       registry.update(context.runId, () => {});
-      const result = await window.streamSSERequest("/agent", {
+      const result = await App.withRequestDeadline((requestSignal, onProgress) => window.streamSSERequest("/agent", {
         chat_id: chatId, question, client_request_id: context.requestIdentity,
         bookmark_id: context.bookmark.id,
         recover_only: Boolean(recovery),
@@ -490,7 +498,13 @@
         reasoning_effort: settings.reasoning_effort || "default",
         comparison_models: Object.keys(comparisonModels).length ? comparisonModels : null,
         check_sources: context.config.checkSources === true,
-      }, signal, {
+      }, requestSignal, {
+        accepted: { receive(event) {
+          if (registry.isAuthCurrent(context) && event.chat_id === context.metadata.chatId) {
+            context.metadata.agentTurnId = event.turn_id;
+            context.metadata.delegation = true;
+          }
+        } },
         quota: { receive(event) {
           if (registry.isAuthCurrent(context)) receiveBudget(event.token_budget, context.auth.uid);
         } },
@@ -527,7 +541,7 @@
           context.consensus.streamText += text;
           if (!timer) timer = setTimeout(() => { timer = null; registry.update(context.runId, () => {}); }, 100);
         } },
-      }, { headers });
+      }, { headers, onProgress }), { signal, timeoutMs: 45000 });
       if (!registry.isAuthCurrent(context) || signal.aborted) return;
       receiveBudget(result.data?.token_budget, context.auth.uid);
       terminalBudget = Boolean(result.data?.token_budget);

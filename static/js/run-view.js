@@ -400,6 +400,8 @@
     if (context.status === "failed") return "Failed";
     if (context.config?.executionMode === "agent") {
       if (context.status === "canceled") return "Stopped";
+      const latest = context.metadata?.agentActivity?.filter(event => event.kind === 'status').at(-1);
+      if (latest?.status === 'waiting') return 'Waiting for tokens';
       if (context.consensus?.streamText) return "Writing answer";
       if (context.metadata?.agentActivity?.some(event => event.kind === "reasoning")) return "Thinking";
       return "Working";

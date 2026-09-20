@@ -21,8 +21,13 @@
     const existing = events.find(item => item.id === event.id);
     if (existing && event.append && event.kind === "reasoning") {
       existing.text = (existing.text + String(event.text || "")).slice(0, 32000);
-    } else if (existing) Object.assign(existing, event);
-    else if (events.length < 64) events.push({ ...event, text: String(event.text || "").slice(0, event.kind === "tool" ? 8000 : 32000) });
+    } else if (existing) {
+      Object.assign(existing, event);
+      if (event.kind === 'status') { events.splice(events.indexOf(existing), 1); events.push(existing); }
+    } else {
+      if (events.length >= 64) events.splice(0, events.length - 63);
+      events.push({ ...event, text: String(event.text || "").slice(0, event.kind === "tool" ? 8000 : 32000) });
+    }
   }
 
   function label(settings) {
@@ -77,7 +82,8 @@
       check_contradictions: 'Checking contradictions against sources…',
       judge_answer: 'Checking the answer…', start_agent: 'Asking another model…', wait_agents: 'Waiting for model responses…',
       send_agent: 'Following up with a model…', review_agent: 'Reviewing a model response…' };
-    const heading = running ? (reviewStage || (activeTool ? toolLabels[activeTool.name] || 'Running a tool…' : writing ? 'Writing answer…' : reasoning.length ? 'Thinking…' : 'Working…'))
+    const waiting = running && latest?.status === 'waiting';
+    const heading = running ? (waiting ? 'Waiting for available tokens…' : reviewStage || (activeTool ? toolLabels[activeTool.name] || 'Running a tool…' : writing ? 'Writing answer…' : reasoning.length ? 'Thinking…' : 'Working…'))
       : statuses[status] || (finishReason === "length" ? "Response limit reached" : tools.length ? "Activity and sources" : reasoning.length ? "Reasoning" : "Response details");
     if (view.title.textContent !== heading) view.title.textContent = heading;
     view.details.classList.toggle("is-running", running);
@@ -85,7 +91,8 @@
     // The disclosure heading owns the current stage; the preview adds only
     // reasoning highlights, never a second copy of the same tool status.
     const highlights = compactReasoning(reasoning.at(-1)?.text).split('\n').filter(Boolean);
-    const paragraphs = [...new Set(highlights)].filter(text => text !== heading).slice(0, 3);
+    const paragraphs = waiting ? [latest.text || 'Active model calls are using the available allowance. This response will continue automatically.']
+      : [...new Set(highlights)].filter(text => text !== heading).slice(0, 3);
     const previewSignature = running ? JSON.stringify(paragraphs) : '';
     if (view.preview.dataset.signature !== previewSignature) {
       view.preview.dataset.signature = previewSignature;

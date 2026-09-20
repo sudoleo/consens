@@ -17,7 +17,7 @@
 @import url('./css/components-misc.css?v=20260909-democta');
 @import url('./css/demo-action.css?v=20260909-democta');
 @import url('./css/components-memory-edit.css?v=20260817-quoteask1');
-@import url('./css/components-model-picker.css?v=20260901-kimiglm1');
+@import url('./css/components-model-picker.css?v=20260920-agent-audit');
 @import url('./css/components-feedback.css?v=20260731-inter1');
 @import url('./css/components-consensus-insights.css?v=20260909-claimhit1');
 @import url('./css/components-watch.css?v=20260907-readerfinish1');
@@ -26,7 +26,7 @@
 @import url('./css/shell.css?v=20260919-agent-comparison');
 @import url('./css/model-answer-reader.css?v=20260919-agent-evidence');
 @import url('./css/composer-attachments.css?v=20260909-attachments1');
-@import url('./css/agent-chat.css?v=20260919-agent-sidebar');
+@import url('./css/agent-chat.css?v=20260920-agent-audit');
 @import url('./css/chat-scroll.css?v=20260919-agent-comparison');
 
 /* Template-only utilities live after every component import so they preserve

@@ -1624,6 +1624,38 @@ laufenden Request, Consensus oder Save gelesen werden. Entfernte Controls wie
 
 ### Agent · Beta: dynamische Vergleiche und Tokenkontingent (2026-09-19)
 
+Zuverlässigkeitsprüfung (20.09.2026): `POST /agent` sendet bereits vor der
+Token-Admission `accepted` mit der dauerhaften Chat-/Turn-ID. Der Browser kann
+damit auch wartende Runs zuordnen. Stop und erster Claim konkurrieren in derselben
+Firestore-Transaktion; ohne Root-Beleg wird der pending Turn terminal gesetzt.
+Status/Recovery schließen verwaiste Turns ohne Root nach Ablauf ihrer fünfminütigen
+Chat-Reservierung, ohne eine neuere Turn-Sperre freizugeben. Loop-Initialisierung
+liegt im geschützten Vorbereitungspfad und gibt bei Fehlern Kapazität/Turn frei.
+Allowance-Recovery filtert vor dem 20er-Limit zusätzlich auf `policy.delegation`,
+damit alte Receipt-Formate ohne Producer-Lease keine aktuellen verwaisten Reserven
+verdecken. Admission wartet nur, wenn Input plus minimaler Output nach Freigabe
+der konkurrierenden Reserven überhaupt passen könnten. Die Vergleichsauswahl
+erzwingt auch serverseitig `MAX_RUN_FAMILIES` (sechs).
+
+`ProviderProgressWatchdog` begrenzt einzelne Agent-Providerstreams auf standardmäßig
+180 Sekunden **ohne Fortschritt** (`AGENT_PROVIDER_STALL_SECONDS`, 30–600).
+Text, Reasoning, Tool-Deltas und steigende Tokenzähler erneuern die Frist; bloße
+SSE-Kommentare/Leerereignisse nicht. Der Socket-Guard prüft sie auch während
+ausstehender Reads. Das ist keine Gesamtlaufzeitgrenze und kein bezahlter Retry.
+Stop direkt vor Dispatch wird als `not_started` abgerechnet. Vergleichsantworten
+werden einzeln checkpointed; abgebrochene Synthesen bleiben mit ungeprüfter
+Antwortversion erhalten. Noch laufende gespeicherte Vergleiche werden terminal.
+
+`request-deadline.js` stellt `App.withRequestDeadline` bereit (vor den Agent-
+Modulen in `bundles.json`): 15 Sekunden für Modellauswahl, Budget, Details, Stop,
+Auth/Chat-Anlage und reine Recovery; der Agent-SSE-Kanal verwendet 45 Sekunden
+ohne empfangene Bytes. `markdown-stream.js` meldet dafür auch Keepalive-Chunks
+über den optionalen `onProgress`-Hook. Abbruch, Auth-Fencing und reine Recovery
+bleiben erhalten. Die Aktivitätsprojektion hält die neuesten 64 Ereignisse und
+zeigt Token-Warten samt Erklärung außerhalb der geschlossenen Details; die
+Taskzeile zeigt ebenfalls „Waiting for tokens“. Siehe
+[Audit und verbleibende Grenzen](agent-reliability-audit-2026-09-20.md).
+
 Agent · Beta ist ein eigener, pro Unterhaltung unveränderlicher execution_mode
 für Pro-Nutzer und Admins. Der alte Agent-Mode-Schalter gehört weiterhin zur
 unveränderten Consensus-Pipeline. POST /agent besitzt strikte owner-gebundene

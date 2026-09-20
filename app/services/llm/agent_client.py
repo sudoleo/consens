@@ -423,10 +423,13 @@ class AgentCompletion:
                 payload["parallel_tool_calls"] = False
         if native_searches:
             payload["max_tool_calls"] = native_searches
+        from app.services.llm.provider_runtime import ProviderProgressWatchdog, _bounded_env_float
+        progress = ProviderProgressWatchdog(_bounded_env_float("AGENT_PROVIDER_STALL_SECONDS", 180, 30, 600))
         with bind_analysis_budget(current_analysis_budget() or AnalysisBudget(seconds=180, max_calls=1)):
             lines = cancellable_sse_lines(
                 OPENROUTER_CHAT_COMPLETIONS_URL, json=payload,
                 headers=openrouter_headers(api_key),
+                progress=progress,
             )
             try:
                 for _, encoded in _sse_pairs(lines):
@@ -437,10 +440,21 @@ class AgentCompletion:
                     data = json.loads(encoded)
                     if not isinstance(data, dict):
                         raise ValueError("Invalid provider event")
+                    # Comments, repeated counters and empty deltas prove only
+                    # that the socket is alive. They cannot renew admission forever.
+                    if any(any((choice.get("delta") or {}).get(key) for key in
+                               ("content", "reasoning", "reasoning_content", "reasoning_details", "tool_calls"))
+                           or (choice.get("finish_reason") and not self.finish_reason)
+                           for choice in data.get("choices") or []):
+                        progress.touch()
                     self.generation_id = str(data.get("id") or self.generation_id)[:200]
                     terminal = self.finish_reason or any(choice.get("finish_reason") for choice in data.get("choices") or [])
                     reported = data.get("usage")
                     if isinstance(reported, dict):
+                        if any(type(reported.get(key)) is int and reported[key] > self._raw_usage.get(key, -1)
+                               for key in ("prompt_tokens", "completion_tokens", "input_tokens", "output_tokens")
+                               if type(self._raw_usage.get(key, -1)) is int):
+                            progress.touch()
                         if terminal:
                             self._final_usage_fields.update(reported)
                         for field in ("prompt_tokens", "completion_tokens", "prompt_tokens_details", "completion_tokens_details",

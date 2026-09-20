@@ -327,6 +327,24 @@ unvermeidbare Rückfrage kann den Vergleich aufschieben.
 
 ## Persistenz, Stop und Recovery
 
+`accepted` liefert dem Browser die Turn-ID schon während der Budget-Zulassung.
+Stop ist bereits vor dem ersten bezahlten Claim wirksam. Verwaiste Starts ohne
+Receipt werden nach Ablauf ihrer fünfminütigen Chat-Reservierung bei Status/Recovery
+geschlossen; ein neuerer Turn desselben Chats bleibt gesperrt, solange er aktiv ist.
+Bereits fertige Vergleichsantworten werden sofort einzeln gespeichert. Bricht die
+anschließende Synthese ab, bleibt auch deren Teiltext als ungeprüfte Antwortversion
+erhalten. Die Oberfläche zeigt wartende Token-Zulassung ausdrücklich an und hält
+bei langen Runs die neuesten 64 Aktivitätsereignisse sichtbar.
+
+Ein einzelner Provider-Aufruf ohne Text-, Reasoning-, Tool- oder Tokenfortschritt
+endet nach standardmäßig 180 Sekunden (`AGENT_PROVIDER_STALL_SECONDS`, 30–600).
+Reine Keepalives verlängern diese Frist nicht. Lange Aufrufe mit Fortschritt
+bleiben erlaubt; Modelle mit lange verborgenem Reasoning können einen höheren
+Wert benötigen. Fehlende finale Usage bleibt unbekannt, und kein solcher Aufruf
+wird automatisch wiederholt. Der Browser erkennt einen völlig stummen SSE-Kanal
+nach 45 Sekunden; kurze Steueranfragen laufen nach 15 Sekunden in einen
+wiederholbaren Fehler statt endlos im Ladezustand zu bleiben.
+
 AgentRunStore hält einen atomaren Beleg je completion:N oder agent:<uuid>:N unter
 users/{uid}/llm_calls. Der erste Beleg bindet Producer-Token, Lease, Policy,
 Schrittzustände und Eventsequenz. Eine 120-Sekunden-Lease wird während aktiver

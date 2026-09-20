@@ -16,7 +16,7 @@ const CATALOG = { token_budget: { remaining: 188878, limit: 250000, observed_at:
 ] };
 
 function boot({ allowed = true, catalog = CATALOG } = {}) {
-  const setup = loadScripts(["static/js/run-registry.js", "static/js/model-picker.js", "static/js/agent-activity.js", "static/js/agent-chat.js"], {
+  const setup = loadScripts(["static/js/run-registry.js", "static/js/model-picker.js", "static/js/request-deadline.js", "static/js/agent-activity.js", "static/js/agent-chat.js"], {
     body: BODY,
     before(window) {
       window.auth = { currentUser: { uid: "owner", getIdToken: async () => "verified" } };
@@ -143,6 +143,77 @@ describe("single-model agent chat", () => {
     w.fetch.mockImplementation(async () => ({ok:true,json:async () => ({token_budget:budget})}));
     w.dispatchEvent(new w.Event('focus'));
     await vi.waitFor(() => expect(w.App.agentChat.tokenBudget()).toEqual(budget));
+    dom.window.close();
+  });
+  it('recovers the model picker and budget refresh after hung control requests', async () => {
+    const {window:w,document:d,dom} = boot();
+    const originalTimer = w.setTimeout.bind(w);
+    let timeout;
+    w.setTimeout = (fn, ms, ...args) => ms === 15000 ? (timeout = fn, 999) : originalTimer(fn, ms, ...args);
+    w.fetch.mockImplementationOnce(() => new Promise(() => {}));
+    d.querySelector('#chatExecutionMode').value = 'agent';
+    d.querySelector('#chatExecutionMode').dispatchEvent(new w.Event('change'));
+    await vi.waitFor(() => expect(timeout).toBeTypeOf('function'));
+    await vi.waitFor(() => expect(w.fetch).toHaveBeenCalledTimes(1));
+    timeout();
+    await vi.waitFor(() => expect(d.querySelector('#agentModelsRetry').hidden).toBe(false));
+    d.querySelector('#agentModelsRetry').click();
+    await vi.waitFor(() => expect(d.querySelector('#agentModelDropdown').disabled).toBe(false));
+    w.fetch.mockImplementationOnce(() => new Promise(() => {}));
+    const before = w.fetch.mock.calls.length;
+    w.dispatchEvent(new w.Event('focus'));
+    await vi.waitFor(() => expect(w.fetch.mock.calls.length).toBe(before + 1));
+    timeout();
+    await vi.waitFor(() => expect(w.App.agentChat.tokenBudget().stale).toBe(true));
+    w.fetch.mockResolvedValueOnce({ok:true,json:async () => ({token_budget:CATALOG.token_budget})});
+    w.dispatchEvent(new w.Event('focus'));
+    await vi.waitFor(() => expect(w.App.agentChat.tokenBudget().stale).not.toBe(true));
+    dom.window.close();
+  });
+  it('ends a silent Agent connection with recoverable partial text and a known turn identity', async () => {
+    const {window:w,document:d,dom} = boot();
+    await selectAgent(w);
+    const originalTimer = w.setTimeout.bind(w);
+    let timeout, signal;
+    w.setTimeout = (fn, ms, ...args) => ms === 45000 ? (timeout = fn, 999) : originalTimer(fn, ms, ...args);
+    w.streamSSERequest.mockImplementationOnce((_url, _body, incoming, handlers) => {
+      signal = incoming;
+      handlers.accepted.receive({chat_id:'a'.repeat(32),turn_id:'c'.repeat(32)});
+      handlers.delta.append('Available partial text.');
+      return new Promise(() => {});
+    });
+    d.querySelector('#questionInput').value = 'Question';
+    const sending = w.App.agentChat.send();
+    await vi.waitFor(() => expect(signal).toBeDefined());
+    timeout(); await sending;
+    const run = w.App.runRegistry.visible();
+    expect(signal.aborted).toBe(true);
+    expect(run.status).toBe('failed');
+    expect(run.consensus.streamText).toBe('Available partial text.');
+    expect(run.metadata.agentTurnId).toBe('c'.repeat(32));
+    expect(d.querySelector('#agentRecover').hidden).toBe(false);
+    dom.window.close();
+  });
+  it('explains allowance waiting outside the collapsed activity details', () => {
+    const {window:w,document:d,dom} = boot();
+    const host = d.querySelector('#agentAnswerActivity');
+    const text = 'Waiting for active model calls to finish and release their unused allowance.';
+    w.App.agentActivity.render(host, {running:true,events:[{kind:'status',id:'wait',status:'waiting',text}]});
+    expect(host.querySelector('summary').textContent).toContain('Waiting for available tokens');
+    expect(host.querySelector('.agent-progress').textContent).toContain(text);
+    expect(host.querySelector('details').open).toBe(false);
+    dom.window.close();
+  });
+  it('keeps the newest status and usage after long runs exceed the activity window', () => {
+    const {window:w,document:d,dom} = boot();
+    const events = [];
+    for (let i = 0; i < 100; i++) w.App.agentActivity.receive(events, {version:1,kind:'status',id:`step-${i}`,status:'working'});
+    w.App.agentActivity.receive(events, {version:1,kind:'status',id:'waiting',status:'waiting',text:'Waiting for another call.'});
+    expect(events).toHaveLength(64);
+    expect(events.at(-1).status).toBe('waiting');
+    w.App.agentActivity.receive(events, {version:1,kind:'status',id:'step-99',status:'responding'});
+    w.App.agentActivity.render(d.querySelector('#agentAnswerActivity'), {events,running:true});
+    expect(d.querySelector('.agent-activity-title').textContent).toBe('Writing answer…');
     dom.window.close();
   });
   it('freezes source-check permission for sending and recovery while the next-message preference changes', async () => {

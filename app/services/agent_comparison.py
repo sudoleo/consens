@@ -121,8 +121,8 @@ class JudgeArgs(BaseModel):
 
 def comparison_selection(value=None):
     chosen = dict(cfg.CONSENSUS_PRESET_MODELS[cfg.DEFAULT_CONSENSUS_PRESET]["answers"]) if value is None else dict(value)
-    if not 2 <= len(chosen) <= len(cfg.PROVIDERS):
-        raise ValueError("Select at least two comparison models")
+    if not 2 <= len(chosen) <= cfg.MAX_RUN_FAMILIES:
+        raise ValueError(f"Select between two and {cfg.MAX_RUN_FAMILIES} comparison models")
     for provider, model_id in chosen.items():
         if provider not in cfg.PROVIDERS or model_id not in cfg.PROVIDERS[provider].models:
             raise ValueError("Comparison model is not available")
@@ -182,7 +182,7 @@ class ComparisonTools:
         loop = self.loop
         loop._publish(worker, patch={"title": title, "kind": kind, "comparison_id": comparison_id,
             "assignment": {"goal": title, "context": messages[-1]["content"]}, "model": model.settings(),
-            "status": "working", "created_at": datetime.now(timezone.utc).isoformat()})
+            "status": "waiting", "created_at": datetime.now(timezone.utc).isoformat()})
         try:
             with bind_provider_cancellation(loop.cancellation), bind_analysis_budget(budget or loop.budget):
                 while not loop.slots.acquire(timeout=.1):
@@ -241,6 +241,15 @@ class ComparisonTools:
                                   title=f"Comparison {len(self.comparisons)} · {self.models[provider].label}", kind="comparison", comparison_id=comparison["id"])
                 if len(value.text) > 6000:
                     raise ValueError("Comparison answer exceeds context budget")
+                if not value.text.strip() or value.text.strip().lower().startswith("error"):
+                    raise ValueError("Comparison model did not return an answer")
+                # Checkpoint each completed answer while slower peers are still
+                # running. A process loss must not erase already paid evidence.
+                with self.lock:
+                    comparison["answers"].append({"provider": provider, "provider_label": cfg.provider_label(provider),
+                        "model": self.models[provider].settings(), "text": value.text.strip(),
+                        "sources": value.sources, "hash": answer_hash(value.text.strip())})
+                    self.checkpoint()
                 return {"text": value.text, "sources": value.sources}
             except Exception as exc:
                 from app.services.agent_provider_limits import agent_failure
@@ -251,6 +260,7 @@ class ComparisonTools:
             answers = fan_out_provider_answers(question=prompt,
                 provider_models={p: m.selection_id for p, m in self.models.items()}, keys={}, tier=True,
                 deep_think=False, provider_call=provider_call, log_context="Agent comparison")
+            comparison["answers"] = []
             for provider, answer in answers.items():
                 comparison["answers"].append({"provider": provider, "provider_label": cfg.provider_label(provider), "model": self.models[provider].settings(),
                     "text": answer.response, "sources": answer.sources, "hash": answer_hash(answer.response)})

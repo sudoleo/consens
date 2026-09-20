@@ -62,6 +62,8 @@ class AgentSessionStore:
             leases = {key: value for key, value in ((active.to_dict() or {}).get("leases") or {}).items()
                       if isinstance(value, datetime) and value > now}
             if not root.exists:
+                if chat_data.get("agent_lock_until", now) <= now:
+                    raise AgentRunInterrupted("The response could not start before its chat reservation expired. Send a new message to try again.")
                 if step != "completion:0" or not run_token or not policy or not policy.get("delegation"):
                     raise TurnStatusConflict("Delegation root is missing")
                 if len(leases) >= 2:
@@ -278,16 +280,29 @@ class AgentSessionStore:
     def stop_delegation(self, uid, chat_id, turn_id):
         self.get_turn(uid, chat_id, turn_id)
         ref = self.receipt_ref(uid, chat_id, turn_id)
+        chat_ref, turn_ref = self._chat_ref(uid, chat_id), self._turn_ref(uid, chat_id, turn_id)
         def operation(tx):
             persistence_guard.ensure_account_write_allowed(uid=uid, db=self.db, transaction=tx)
             root = ref.get(transaction=tx).to_dict() or {}
+            chat, turn = (r.get(transaction=tx).to_dict() or {} for r in (chat_ref, turn_ref))
             if root.get("run_status") == "running":
                 tx.update(ref, {"cancel_requested": True})
+            elif (not root and chat.get("status") == "active" and turn.get("status") == "pending"
+                    and chat.get("execution_mode") == "agent" and turn.get("execution_mode") == "agent"):
+                # Fence admission in the SAME transaction, even before the
+                # first receipt. Otherwise a claim between two writes loses Stop.
+                tx.update(turn_ref, {"status": "failed", "error_code": "cancelled",
+                    "agent_failure": {"code": "cancelled", "error": "Response stopped before a model call started."},
+                    "updated_at": firestore.SERVER_TIMESTAMP})
+                if chat.get("agent_turn_id") == turn_id:
+                    tx.update(chat_ref, {"agent_lock_until": datetime.now(timezone.utc)})
         self._agent_transaction(uid, operation)
 
     def delegation_view(self, uid, chat_id, turn_id, *, agent_id=None, after=0, limit=50):
         turn = self.get_turn(uid, chat_id, turn_id)
         root = self.reap_delegation(uid, chat_id, turn_id)
+        if not root:
+            turn = self.get_turn(uid, chat_id, turn_id)
         if agent_id:
             ref = self.agent_ref(uid, chat_id, turn_id, agent_id)
             agent = ref.get()
@@ -321,6 +336,10 @@ class AgentSessionStore:
         from app.services.llm.agent_client import AgentCompletion
         ref = self.receipt_ref(uid, chat_id, turn_id)
         root = ref.get().to_dict() or {}
+        if not root:
+            self.release_unclaimed(uid, chat_id, turn_id, expired_only=True, failure={
+                "code": "run_interrupted", "error": "The response ended before a model call started. Send a new message to try again."})
+            return root
         if (root.get("run_status") != "running" or not (root.get("policy") or {}).get("delegation")
                 or root["lease_until"] > datetime.now(timezone.utc)):
             return root

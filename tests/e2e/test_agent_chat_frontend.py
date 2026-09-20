@@ -396,6 +396,16 @@ def test_live_reasoning_disclosure_and_stop(browser, phase4_server, width, dark)
         expect(page.locator("#agentAnswerBody")).to_be_empty()
         expect(page.locator("#agentModelDropdown")).to_be_disabled()
         expect(page.locator(".agent-model-picker .model-picker-display")).to_be_disabled()
+        page.evaluate("""() => window.__emitAgent({version:1, step_id:'completion:0', kind:'status', id:'allowance',
+          status:'waiting', text:'Waiting for active model calls to finish and release their unused allowance.'})""")
+        expect(page.locator('#agentAnswerActivity .agent-activity-title')).to_have_text('Waiting for available tokens…')
+        expect(page.locator('#agentAnswerActivity .agent-progress')).to_contain_text('release their unused allowance')
+        expect(page.locator('#agentAnswerActivity details')).not_to_have_attribute('open', '')
+        if width == 1280:
+            expect(page.locator('.run-entry-status')).to_have_text('Waiting for tokens')
+        assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+        _snapshot(page, f"agent-allowance-wait-{width}-{'dark' if dark else 'light'}")
+        page.evaluate("() => window.__emitAgent({version:1, step_id:'completion:0', kind:'status', id:'resumed', status:'working'})")
         title = page.locator("#agentAnswerActivity .agent-activity-title")
         assert title.evaluate("el => getComputedStyle(el).animationName") == "source-label-shine"
         page.evaluate("""() => window.__emitAgent({version:1, step_id:'completion:0', kind:'reasoning', id:'r1',

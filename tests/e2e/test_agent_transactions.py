@@ -16,6 +16,54 @@ from app.services.llm.agent_client import AgentModel, AgentCompletion, measured_
 from app.services.agent_delegation_config import defaults
 from app.services.llm.provider_runtime import AnalysisBudgetExceeded
 from app.services import agent_quota
+from app.services.chat_store import TurnStatusConflict
+
+
+def test_stop_and_first_admission_are_atomic_without_process_lock(monkeypatch):
+    assert_safe_e2e_environment()
+    db = firestore.Client(project=E2E_PROJECT_ID)
+    uid = 'agent-stop-race-' + uuid.uuid4().hex
+    store = AgentRunStore(db)
+    model = AgentModel()
+    # Exercise Firestore contention, as on two server processes. The normal
+    # per-account Python lock would otherwise serialize these two operations.
+    monkeypatch.setattr(AgentRunStore, '_agent_transaction', lambda self, uid, op: self._transaction(op))
+    try:
+        for index in range(6):
+            chat = store.create_chat(uid, execution_mode='agent')['id']
+            turn = store.create_turn(uid, chat, question='Stop race', mode='Agent', deep_search=False,
+                selected_models=[model.model], consensus_model=model.model,
+                client_request_id=str(index), execution_mode='agent')['id']
+            gate = threading.Barrier(2)
+            def claim():
+                gate.wait(timeout=5)
+                try:
+                    return AgentRunStore(db).claim(uid, chat, turn, model, run_token='producer',
+                        policy=AgentPolicy.for_chat(defaults()).snapshot(), reservation=(1000, 1))
+                except TurnStatusConflict:
+                    return False
+            def stop():
+                gate.wait(timeout=5)
+                AgentRunStore(db).stop_delegation(uid, chat, turn)
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                admitted, stopped = pool.submit(claim), pool.submit(stop)
+                started = admitted.result(timeout=15)
+                stopped.result(timeout=15)
+            root = store.receipt_ref(uid, chat, turn).get().to_dict()
+            if started:
+                assert root['cancel_requested'] is True
+                value = AgentCompletion()
+                value.record_unstarted(model)
+                store.settle(uid, chat, turn, completion=value, status='cancelled', final=False)
+                store.finish_run(uid, chat, turn, completion=value, status='cancelled', run_token='producer')
+            else:
+                assert root is None and store.get_turn(uid, chat, turn)['agent_failure']['code'] == 'cancelled'
+            quota = agent_quota.snapshot(db, uid)
+            assert quota['used'] == quota['reserved'] == quota['unknown'] == 0
+    finally:
+        FirestoreAccountDeletion(db)._delete_user_subcollections(uid)
+        db.collection('users').document(uid).delete()
+        db.close()
 
 
 def test_chat_admission_waits_across_runs_then_uses_released_allowance():
@@ -108,6 +156,9 @@ def test_concurrent_budget_refresh_recovers_orphaned_receipt_and_saved_usage_onc
     uid = 'agent-orphan-repair-' + uuid.uuid4().hex
     store, model = AgentRunStore(db), AgentModel()
     try:
+        for index in range(25):
+            db.collection('users').document(uid).collection('llm_calls').document(f'000-legacy-{index}').set({
+                'run_status':'running', 'status':'succeeded', 'policy':{}})
         chat = store.create_chat(uid, execution_mode='agent')['id']
         turn = store.create_turn(uid, chat, question='Orphan recovery', mode='Agent', deep_search=False,
             selected_models=[model.model], consensus_model=model.model, client_request_id='orphan', execution_mode='agent')['id']

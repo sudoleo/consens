@@ -75,7 +75,8 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       Kontowechsel und kein horizontaler Overflow. Live-Protokolle und begrenzter
       Qualitäts-/Kostenvergleich siehe `agent-delegation.md`.
 - [ ] Agent Beta: als Pro und Admin auswählen, Text senden, Folgefrage und
-      gespeicherten Chat öffnen; keine Consensus-/Judge-Anzeige. Free/Plus
+      gespeicherten Chat öffnen; eingebettete Vergleiche und Prüfungen bleiben
+      dem jeweiligen Turn zugeordnet. Free/Plus
       erhalten keinen Zugang. Moduswechsel erfordert einen neuen Chat.
       Abbruch/Recover erzeugt keinen Doppelaufruf; Kosten im Admin-Lookup
       inklusive unbekannter/offener Messungen prüfen. Automatisiert durch
@@ -785,6 +786,14 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       Consensus-Bookmark und zurueck zeigt keine leeren oder fremden Antworten.
 
 ## Agent · Beta: Vergleiche und Prüfungen
+
+- [x] Zuverlässigkeitsprüfung (20.09.2026): Token-Warten bleibt bei geschlossenen
+      Aktivitätsdetails mit Erklärung sichtbar; Desktop-Taskzeile zeigt den
+      Wartezustand. Stop bleibt bedienbar, kein horizontaler Overflow bei
+      1280/390/320 px, Hell/Dunkel. Browserprüfung mit simulierten APIs und
+      visuelle Kontrolle der Screenshots unter
+      `artifacts/agent-reliability-2026-09-20/`; Details und Grenzen im
+      [Zuverlässigkeitsaudit](agent-reliability-audit-2026-09-20.md).
 
 - [ ] Bottom-Bar vor und nach dem Senden bei 1440/390/320 px: „Agent Mode On“
       bleibt eine Statusanzeige; Klick verändert keine alte Consensus-Einstellung.

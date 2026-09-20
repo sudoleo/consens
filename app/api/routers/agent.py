@@ -223,6 +223,14 @@ def run_agent(request: Request, payload: AgentRequest):
             lease.release()
             return _final(uid, payload, store, store.get_turn(uid, payload.chat_id, turn["id"]))
         messages = store.messages(uid, payload.chat_id, turn, model=model, config=config)
+        cancellation = ProviderCancellation()
+        loop = DelegationLoop(store=store, uid=uid, chat_id=payload.chat_id, turn_id=turn["id"],
+                         model=model, messages=messages, api_key=key or "", cancellation=cancellation,
+                         completion_factory=AgentCompletion, policy=policy,
+                         delegation_config=delegation_config, cooldowns=provider_cooldowns,
+                         comparison_models=comparisons, check_sources=payload.check_sources,
+                         source_limits=source_limits,
+                         mock_answer="Agent test answer: " + payload.question if mock_llm_enabled() else None)
     except Exception as exc:
         try:
             if turn:
@@ -241,22 +249,15 @@ def run_agent(request: Request, payload: AgentRequest):
             raise HTTPException(status_code=422, detail=str(exc)) from None
         _raise_store_error(exc, operation="prepare agent turn", uid=uid)
 
-    cancellation = ProviderCancellation()
-
     def events():
-        loop = DelegationLoop(store=store, uid=uid, chat_id=payload.chat_id, turn_id=turn["id"],
-                         model=model, messages=messages, api_key=key or "", cancellation=cancellation,
-                         completion_factory=AgentCompletion, policy=policy,
-                         delegation_config=delegation_config, cooldowns=provider_cooldowns,
-                         comparison_models=comparisons,
-                         check_sources=payload.check_sources,
-                         source_limits=source_limits,
-                         mock_answer="Agent test answer: " + payload.question if mock_llm_enabled() else None)
         completion = loop.completion
         status = "failed"
         error = "The agent response could not be completed. Please try a new message."
         failure = {}
         try:
+            # Give the browser a durable identity while admission is still
+            # waiting, so Stop/status do not depend on a paid call starting.
+            yield sse_pack("accepted", {"chat_id": payload.chat_id, "turn_id": turn["id"]})
             source = loop.run()
             try:
                 for event in source:
@@ -272,6 +273,9 @@ def run_agent(request: Request, payload: AgentRequest):
             status = "succeeded"
         except (ProviderCancelled, GeneratorExit):
             status = "cancelled"
+            if not loop.claimed:
+                store.release_unclaimed(uid, payload.chat_id, turn["id"], failure={
+                    "code": "cancelled", "error": "Response stopped before a model call started."})
             _save_interrupted(uid, payload, store, turn["id"])
             raise
         except (AgentCapacityExceeded, TurnStatusConflict, AnalysisBudgetExceeded) as exc:

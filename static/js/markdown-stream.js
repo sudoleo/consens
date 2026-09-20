@@ -195,7 +195,7 @@ function createStreamRenderer(outputEl, isActiveFn) {
 }
 window.createStreamRenderer = createStreamRenderer;
 
-async function readSSEStream(response, onEvent) {
+async function readSSEStream(response, onEvent, onProgress) {
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
@@ -236,6 +236,7 @@ async function readSSEStream(response, onEvent) {
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
+      onProgress?.();
       buffer += normalizeLines(decoder.decode(value, { stream: true }));
       let separatorIndex;
       while ((separatorIndex = buffer.indexOf("\n\n")) !== -1) {
@@ -321,7 +322,7 @@ async function streamSSERequest(url, payload, signal, deltaRenderers, requestOpt
       } finally {
         failureKind = "stream_read_failed";
       }
-    });
+    }, requestOptions.onProgress);
 
     if (!finalData) {
       throw Object.assign(new Error("Connection lost before the response was completed."), {
