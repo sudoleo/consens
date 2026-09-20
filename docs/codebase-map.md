@@ -1943,6 +1943,16 @@ Bei Abschluss, Fehler oder Stop verschwindet die Live-Anzeige und auch ein zuvor
 geöffneter Verlauf klappt zu. Anschließendes manuelles Öffnen über Pfeil/Enter
 zeigt die vollständigen Absätze, bestätigte Tools und Usage; spätere Projektionen
 erhalten diese Wahl. Der Verlauf fließt ohne verschachtelten Scrollkasten im Chat.
+`agentActivity.reveal` blendet neue Absätze und den ersten Antworttext mit 4 px
+Versatz über 220 ms ein; weitere Streaming-Chunks starten keine neue Animation.
+Statuswechsel blenden über 160 ms über. Die Live-Vorschau wächst bzw. verschwindet
+mit animierter Höhe und Abständen; der Verlauf öffnet/schließt mit gemessenen
+Höhen über die Web Animations API. Inhalte bleiben beim Schließen kurz sichtbar,
+sind aber sofort `inert` (Live-Vorschau zusätzlich `aria-hidden`); erst danach
+werden sie verborgen/entfernt. Schnelle Richtungswechsel brechen alte Animationen
+ab, `agentActivity.dispose` räumt sie beim Turnwechsel ab. Reduced Motion und
+Forced Colors überspringen Bewegung und beenden laufende Übergänge sofort;
+ohne Web Animations gilt derselbe unmittelbare Fallback.
 Tool-Nennungen bleiben Text; ausschließlich bestätigte running-Toolereignisse
 oder der Review-Status bestimmen den Status im Kopf.
 Alte gespeicherte Reasoning-Verläufe bleiben als begrenzte Auszüge lesbar.

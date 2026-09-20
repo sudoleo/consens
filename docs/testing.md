@@ -164,6 +164,9 @@ Legacy-Reasoning und die Reasoning-Ebene im Chatmodell-Picker bleiben abgedeckt.
 `tests/e2e/test_agent_status_frontend.py` prüft die gebaute App mit offenem SSE-
 Stream bei 1280/390/320 px: Absatzabstände, Hell/Dunkel, Abschluss mit geöffnetem
 Verlauf, Aufklappen per Tastatur und vollständigen Verlauf ohne inneren Scrollkasten.
+Der Lauf prüft zudem kurze Ein-/Ausblend- und Höhenübergänge, einmalige Animation
+pro neuem Absatz/Antwortbeginn, schnelle Richtungswechsel, Abschluss bei offenem
+und geschlossenem Verlauf sowie Reduced Motion und Forced Colors ohne Bewegung.
 Wie die Agent-Chat-Suite nutzt sie den writerfreien Phase-4-Server, gemockte APIs
 und keine bezahlten Modellaufrufe; Screenshots über `AGENT_SCREENSHOTS`.
 Zusätzlich: aktualisierte Kontingente bei SSE-Fehlern/Disconnect, veraltete und

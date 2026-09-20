@@ -7,6 +7,87 @@
     check_contradictions: 'Contradiction source check',
     start_agent: 'Ask a model', wait_agents: 'Wait for models', send_agent: 'Follow up',
     review_agent: 'Review a model', stop_agent: 'Stop a model', report_to_orchestrator: 'Report to the main model' };
+  const quietMotion = window.matchMedia?.('(prefers-reduced-motion: reduce), (forced-colors: active)');
+  const activeMotion = new Set();
+  function motion(element, frames, finish = () => {}, duration = 220) {
+    if (quietMotion?.matches || !element.animate || !element.isConnected) { finish(); return null; }
+    const animation = element.animate(frames, { duration, easing: 'cubic-bezier(.2, .7, .2, 1)', fill: 'both' });
+    activeMotion.add(animation);
+    animation.onfinish = () => { activeMotion.delete(animation); if (finish() !== false) animation.cancel(); };
+    animation.oncancel = () => activeMotion.delete(animation);
+    return animation;
+  }
+  quietMotion?.addEventListener?.('change', () => {
+    if (quietMotion.matches) for (const animation of [...activeMotion]) {
+      if (animation.playState !== 'idle') animation.finish();
+    }
+  });
+  function cancelMotion(animation) {
+    if (!animation) return;
+    activeMotion.delete(animation);
+    animation.onfinish = null;
+    animation.cancel();
+  }
+  function dispose(host) {
+    for (const animation of [...activeMotion]) {
+      if (host.contains(animation.effect?.target)) cancelMotion(animation);
+    }
+    cancelMotion(host._agentActivity?.historyMotion);
+  }
+  function reveal(element) {
+    return motion(element, [{ opacity: 0, transform: 'translateY(4px)' }, { opacity: 1, transform: 'none' }]);
+  }
+  function clearPreview(view) {
+    view.preview.hidden = true;
+    view.preview.replaceChildren();
+    view.previewNodes.clear();
+    view.previewExit = false;
+    view.previewMotion = null;
+  }
+  function hidePreview(view) {
+    if (view.previewExit) return;
+    const height = view.preview.getBoundingClientRect().height;
+    cancelMotion(view.previewMotion);
+    view.preview.setAttribute('aria-hidden', 'true');
+    view.preview.inert = true;
+    if (!height) { clearPreview(view); return; }
+    view.previewExit = true;
+    const style = getComputedStyle(view.preview);
+    view.previewMotion = motion(view.preview, [
+      { height: `${height}px`, opacity: 1, marginTop: style.marginTop, marginBottom: style.marginBottom, overflow: 'clip' },
+      { height: '0px', opacity: 0, marginTop: '0px', marginBottom: '0px', overflow: 'clip' },
+    ], () => clearPreview(view));
+  }
+  function disclosure(view, open) {
+    const host = view.details.parentElement;
+    const before = host.getBoundingClientRect().height;
+    cancelMotion(view.disclosureMotion);
+    cancelMotion(view.historyMotion);
+    view.disclosureTarget = open;
+    view.history.inert = !open;
+    if (!open && view.history.contains(document.activeElement)) view.summary.focus({ preventScroll: true });
+    // Measure the destination in normal flow, including the live preview when
+    // closing. Keep the outgoing history painted until its short fade finishes.
+    view.details.open = open;
+    const after = host.getBoundingClientRect().height;
+    if (before && after && before !== after && !quietMotion?.matches && host.animate) {
+      view.details.open = true;
+      view.details.classList.toggle('is-closing', !open);
+      view.historyMotion = motion(view.history, [{ opacity: open ? 0 : 1 }, { opacity: open ? 1 : 0 }], () => false, 160);
+      view.disclosureMotion = motion(host, [
+        { height: `${before}px`, overflow: 'clip' }, { height: `${after}px`, overflow: 'clip' },
+      ], () => {
+        view.details.open = open;
+        cancelMotion(view.historyMotion);
+        view.details.classList.remove('is-closing');
+        view.disclosureMotion = null;
+        if (!open && view.running) reveal(view.preview);
+      });
+    } else {
+      view.details.classList.remove('is-closing');
+      view.disclosureMotion = null;
+    }
+  }
   function compactReasoning(text) {
     const paragraphs = String(text || "").split(/\n\s*\n|\n/).filter(Boolean);
     return paragraphs.slice(-3).map(p => {
@@ -67,9 +148,17 @@
       preview.setAttribute('role', 'log'); preview.setAttribute('aria-live', 'polite');
       preview.setAttribute('aria-relevant', 'additions text');
       preview.setAttribute('aria-label', 'Progress updates');
-      details.append(summary, content, note, usageEl);
+      const history = document.createElement('div'); history.className = 'agent-activity-history';
+      history.inert = true;
+      history.append(content, note, usageEl);
+      details.append(summary, history);
       host.replaceChildren(details, preview);
-      host._agentActivity = { details, title, content, note, usageEl, preview, nodes: new Map(), previewNodes: new Map() };
+      host._agentActivity = { details, summary, history, title, content, note, usageEl, preview, nodes: new Map(), previewNodes: new Map() };
+      summary.addEventListener('click', event => {
+        event.preventDefault();
+        const view = host._agentActivity;
+        disclosure(view, !(view.disclosureTarget ?? details.open));
+      });
     }
     const view = host._agentActivity;
     const progress = events.filter(item => item.kind === 'progress' && item.text);
@@ -92,12 +181,17 @@
     const waiting = running && latest?.status === 'waiting';
     const heading = running ? (waiting ? 'Waiting for available tokens…' : reviewStage || (activeTool ? toolLabels[activeTool.name] || 'Running a tool…' : writing ? 'Writing answer…' : reasoning.length ? 'Thinking…' : 'Working…'))
       : statuses[status] || (finishReason === "length" ? "Response limit reached" : progress.length ? "Activity" : tools.length ? "Activity and sources" : reasoning.length ? "Reasoning" : "Response details");
-    if (view.title.textContent !== heading) view.title.textContent = heading;
+    if (view.title.textContent !== heading) {
+      const previous = view.title.textContent;
+      view.title.textContent = heading;
+      cancelMotion(view.titleMotion);
+      if (previous) view.titleMotion = motion(view.title, [{ opacity: .45 }, { opacity: 1 }], () => {}, 160);
+    }
     view.details.classList.toggle("is-running", running);
     view.details.dataset.status = status;
     // Completion collapses even a manually opened live history. Later explicit
     // expansion is preserved across saved-turn and usage updates.
-    if (view.running && !running) view.details.open = false;
+    const finished = view.running && !running;
     view.running = running;
     // Stable paragraphs keep earlier updates readable and prevent a live region
     // from announcing the entire history again whenever a new paragraph arrives.
@@ -105,18 +199,39 @@
     const paragraphs = progress.length ? progress.map(item => ({ id: item.id, text: item.text }))
       : [...new Set(highlights)].filter(text => text !== heading).map((text, i) => ({ id: `legacy:${i}`, text }));
     if (waiting) paragraphs.push({ id: 'waiting', text: latest.text || 'Active model calls are using the available allowance. This response will continue automatically.' });
+    const previewHeight = view.preview.getBoundingClientRect().height;
+    const showPreview = running && paragraphs.length;
+    let previewChanged = false;
+    if (showPreview) {
+      if (view.previewExit) { cancelMotion(view.previewMotion); view.previewExit = false; }
+      view.preview.hidden = false;
+      view.preview.removeAttribute('aria-hidden');
+      view.preview.inert = false;
+    }
     const previewIds = new Set();
-    for (const item of running ? paragraphs : []) {
+    for (const item of showPreview ? paragraphs : []) {
       previewIds.add(item.id);
       let p = view.previewNodes.get(item.id);
       if (!p) {
         p = document.createElement('p'); view.previewNodes.set(item.id, p);
         view.preview.appendChild(p);
+        previewChanged = true;
+        if (!view.details.open) reveal(p);
       }
       if (p.textContent !== item.text) p.textContent = item.text;
     }
-    for (const [id, node] of view.previewNodes) if (!previewIds.has(id)) { node.remove(); view.previewNodes.delete(id); }
-    view.preview.hidden = !running || !paragraphs.length;
+    if (showPreview) {
+      for (const [id, node] of view.previewNodes) if (!previewIds.has(id)) {
+        node.remove(); view.previewNodes.delete(id); previewChanged = true;
+      }
+      if (previewChanged && !view.details.open) {
+        cancelMotion(view.previewMotion);
+        const height = view.preview.getBoundingClientRect().height;
+        if (height !== previewHeight) view.previewMotion = motion(view.preview, [
+          { height: `${previewHeight}px`, overflow: 'clip' }, { height: `${height}px`, overflow: 'clip' },
+        ]);
+      }
+    } else hidePreview(view);
     const ids = new Set();
     for (const item of events.filter(item => progress.includes(item) || reasoning.includes(item) || tools.includes(item))) {
       ids.add(item.id);
@@ -126,6 +241,7 @@
         node.className = item.kind === "tool" ? "agent-activity-tool" : item.kind === 'progress' ? 'agent-activity-update' : "agent-activity-reasoning";
         view.nodes.set(item.id, node);
         view.content.appendChild(node);
+        if (item.kind === 'progress' && view.details.open && running) reveal(node);
       }
       if (item.kind === "tool") {
         const signature = JSON.stringify(item);
@@ -179,6 +295,7 @@
     view.usageEl.textContent = tokens + cost;
     view.usageEl.title = measured ? `${usage.input_tokens.toLocaleString()} input · ${usage.output_tokens.toLocaleString()} output tokens` : "The provider did not report token usage.";
     view.usageEl.hidden = running;
+    if (finished) disclosure(view, false);
   }
 
   function renderTurn(host, turn) {
@@ -189,5 +306,5 @@
     render(host, { events, usage: turn?.agent_usage, status, truncated: turn?.agent_reasoning_truncated,
       finishReason: turn?.agent_finish_reason });
   }
-  App.agentActivity = { receive, render, renderTurn, label };
+  App.agentActivity = { receive, render, renderTurn, label, reveal, dispose };
 })();

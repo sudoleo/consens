@@ -212,6 +212,7 @@
   function activityHost(key) {
     const host = document.getElementById("agentAnswerActivity");
     if (host && host.dataset.turn !== key) {
+      App.agentActivity?.dispose(host);
       host.replaceChildren();
       delete host._agentActivity;
       host.dataset.turn = key;
@@ -302,8 +303,12 @@
     const body = document.getElementById("agentAnswerBody");
     const errorEl = document.getElementById("agentAnswerError");
     if (body && body.dataset.markdown !== text) {
+      const entering = !body.dataset.markdown?.trim() && Boolean(text.trim());
       body.dataset.markdown = text;
       window.injectMarkdown?.(body, text, []);
+      // Animate the start of an answer once, never each streamed text chunk.
+      if (!text.trim()) body._agentReveal?.cancel();
+      else if (entering) body._agentReveal = App.agentActivity?.reveal(body);
     }
     if (errorEl) { errorEl.textContent = error; errorEl.hidden = !error; }
   }

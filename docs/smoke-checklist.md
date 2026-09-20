@@ -815,6 +815,11 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
   verschwinden die Live-Absätze und ein geöffneter Verlauf klappt zu. Pfeil/Enter
   öffnet danach alle gespeicherten Absätze und Toolschritte in ihrer Reihenfolge,
   ohne inneren Scrollkasten. Auch bei 320/390 px keine abgeschnittenen Texte.
+- [ ] Neue Statusabsätze und der erste Antworttext blenden dezent ein; bereits
+  sichtbarer Text animiert bei Streaming-Updates nicht erneut. Der Statusbereich
+  zieht sich bei Abschluss weich zusammen. Schnelles Auf-/Zuklappen und Turnwechsel
+  hinterlassen keine fixierten Höhen oder unsichtbaren Fokusziele. Reduced Motion
+  und Forced Colors zeigen alle Zustandswechsel unmittelbar ohne Animation.
 - [ ] Reasoning ist im Chatmodellmenü erreichbar (auch per Tastatur); der
   Composer enthält im laufenden Chat nur Chatmodell und Compare-Auswahl.
 - [ ] Sources enthält Chat-Recherche und zitierte Antwortlinks, auch wenn
