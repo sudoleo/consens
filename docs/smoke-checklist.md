@@ -825,6 +825,11 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
   neuer Nutzernachricht. Beim Lesen unten oder mitten in einer langen Antwort
   bleibt dieselbe Zeile stehen, wenn der Status darüber wechselt oder bei
   Abschluss einklappt; offener/geschlossener Verlauf und Reduced Motion prüfen.
+- [ ] Agent-Synthese bei einer persönlichen Empfehlungsfrage: klare, begründete
+  Empfehlung anhand der Nutzerkriterien, keine übernommenen Ich-Präferenzen oder
+  erfundenen Erlebnisse der Vergleichsmodelle. Bedingungen bleiben erhalten;
+  kein unbelegter absoluter Sieger. Aussagen sind für Coverage einzeln prüfbar,
+  echte Unterschiede werden sachlich genannt statt für grüne Markierungen verdeckt.
 - [ ] Oben am Pfeil steht die Laufzeit; sie zählt während Token-Warten weiter
   und bleibt nach Abschluss/Stop sowie beim Öffnen gespeicherter Turns stehen.
   Darunter wechseln sich kurze Meldungen des Steuerungsmodells in der Fragesprache

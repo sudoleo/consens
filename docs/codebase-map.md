@@ -1778,6 +1778,16 @@ Belege und Aktualität statt Modellidentität oder Stimmen zählen, wichtige
 Unsicherheit sachlich erklären. Eigene Erinnerung ersetzt weder Vergleich noch
 fehlende Belege. `finalized=true` ist ein Protokollabschluss, kein Erfolgsbeleg für
 alle Teilprüfungen. Der ergänzende Produktprompt hält diese Regeln ebenfalls fest.
+Die Agent-Synthese behält die eigene beratende Stimme, übernimmt aber keine
+Ich-Präferenzen, Erlebnisse oder Identität eines Vergleichsmodells. Empfehlungen
+nennen die maßgeblichen Nutzerkriterien; belegte Aussagen und daraus abgeleitete
+Abwägung bleiben unterscheidbar. Reichweite, Zeitraum und Einschränkungen werden
+erhalten, qualifizierte Vorteile nicht in unbelegte Gesamtsieger/Superlative
+verstärkt. Eigenständig bestreitbare Aussagen stehen in getrennten, konkreten
+Sätzen, mit zugehörigen Bedingungen. Das erleichtert die bestehende satzweise
+Coverage-Prüfung, ohne deren Regeln oder Widerspruchsmarkierungen zu verändern.
+Die Anleitung gilt auch bei älteren gespeicherten Agent-Prompts; sie verlangt
+weder Rollenabgabe noch künstliche Einstimmigkeit oder das Verbergen von Differenzen.
 Websuche darf die Anfrage und aktuelle Belege zuerst konkretisieren. Direkte
 Antworten sind nur für reine Begrüßungen/Bestätigungen ohne Frage oder Auftrag
 und unvermeidbare Rückfragen vorgesehen. Einfache, subjektive und Folgefragen,

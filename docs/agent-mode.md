@@ -113,6 +113,14 @@ Tool-Aufrufe zählen noch nicht als Syntheseversion. Jeder Teilvergleich behält
 seine eigene Prüfung: dieselben Modelle zählen nicht mehrfach als unabhängige
 Stimmen. Nicht abgedeckte Aussagen bleiben in der Coverage sichtbar.
 
+Die Synthese spricht als beratender Assistent und begründet Empfehlungen anhand
+der Nutzerkriterien und der verglichenen Aussagen. Persönliche Präferenzen oder
+Erlebnisse der Vergleichsmodelle werden nicht übernommen. Bedingungen und
+Unsicherheit bleiben an der jeweiligen Aussage; Fakten und daraus abgeleitete
+Empfehlung werden klar formuliert. Unbelegte Superlative und eine künstliche
+Einstimmigkeit sind nicht vorgesehen. Die Judges prüfen weiterhin auch
+Empfehlungen; tatsächliche Unterschiede bleiben sichtbar.
+
 Aktivitäten verwenden die bestehende Agent-Seitenleiste mit Status, Usage und
 aufklappbaren Details. Oberhalb der Antwort steht ein überlappender Modellstapel
 mit den Icons des zentralen Katalogs; wiederholte Aufrufe desselben Modells
