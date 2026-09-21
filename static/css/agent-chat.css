@@ -208,6 +208,17 @@ body.single-agent-active .chat-input-container .consensus-switch-container { gap
 .quota-trigger[data-allowance="agent"] .quota-trigger-value { font-size: 10px; letter-spacing: -.3px; }
 body.single-agent-active .consensus-switch-container { flex-wrap: wrap; }
 body.single-agent-active .consensus-model-inline { min-width: 0; max-width: 100%; }
+/* Keep the comparison caret attached to its button, even when the shared
+   mobile picker host is static so its menu can use the full composer width. */
+body.single-agent-active .consensus-model-inline .select-wrapper::after { display: none; }
+body.single-agent-active .consensus-model-inline .model-picker-display {
+  display: inline-flex; align-items: center; gap: 8px; padding-inline: 8px;
+}
+body.single-agent-active .consensus-model-inline .model-picker-display::after {
+  content: ''; flex: 0 0 5px; width: 5px; height: 5px; margin-top: -3px;
+  border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg); opacity: .65;
+}
 .agent-review { margin: 18px 0 8px; color: var(--ink-2); font-size: 12px; }
 .agent-review[hidden] { display: none; }
 .agent-review-summary { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px; margin-bottom: 6px; }
@@ -323,10 +334,13 @@ body.single-agent-active .consensus-model-inline { min-width: 0; max-width: 100%
 }
 @media (max-width: 700px) {
   body.single-agent-active .chat-input-container .consensus-switch-container {
-    flex: 1 1 0; flex-wrap: wrap; gap: 2px 4px;
+    flex: 1 1 0; flex-wrap: nowrap; gap: 4px;
   }
-  .agent-model-controls { flex: 0 1 auto; max-width: 100%; gap: 2px; }
-  body.single-agent-active .chat-input-container .input-actions-container { align-self: flex-end; }
+  .agent-model-controls { flex: 1 1 0; max-width: 100%; gap: 2px; }
+  body.single-agent-active .chat-input-container .input-actions-container { align-self: center; flex: 0 0 auto; }
+  body.single-agent-active .consensus-model-inline { flex: 0 1 auto; max-width: 50%; margin-left: 0; }
+  body.single-agent-active .consensus-model-inline .select-wrapper { max-width: 100%; }
+  body.single-agent-active .chat-input-container .consensus-model-inline .model-picker-display { max-width: 100%; padding-inline: 6px; }
   .agent-model-picker { max-width: 210px; }
   .agent-effort-control .model-picker-display-text::before { content: ''; }
   .chat-input-container :is(.chat-execution-control, .agent-model-controls) .model-picker-display { min-height: 38px; padding-inline: 8px; }
@@ -338,6 +352,18 @@ body.single-agent-active .consensus-model-inline { min-width: 0; max-width: 100%
   body.single-agent-active.is-hero .hero-greeting {
     opacity: 1; visibility: visible; transform: none; font-size: clamp(20px, 5vw, 24px);
   }
+}
+@media (max-width: 540px) {
+  /* Two deliberate rows keep model names readable on narrow phones.
+     The action row shares its baseline with Send outside this group. */
+  body.single-agent-active .chat-input-container .consensus-switch-container {
+    display: grid; grid-template-columns: 36px minmax(0, 1fr); gap: 0 4px;
+  }
+  body.single-agent-active .agent-model-controls { grid-row: 1; grid-column: 1 / -1; }
+  body.single-agent-active #attachTrigger { grid-row: 2; grid-column: 1; }
+  body.single-agent-active .consensus-model-inline { grid-row: 2; grid-column: 2; max-width: 100%; justify-self: start; }
+  body.single-agent-active.is-hero .consensus-model-inline { grid-column: 1 / -1; }
+  body.single-agent-active .chat-input-container .input-actions-container { align-self: flex-end; }
 }
 @media (min-width: 1100px) {
   /* The shared Consensus composer supplies the single-line follow-up layout. */

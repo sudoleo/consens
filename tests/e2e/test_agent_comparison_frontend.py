@@ -60,9 +60,10 @@ def test_comparison_selection_blocks_send_before_losing_draft(browser, phase4_se
         context.close()
 
 
-@pytest.mark.parametrize("width", [390, 320])
+@pytest.mark.parametrize("width", [390, 369, 320])
 def test_mobile_agent_plus_menu_opens_tools_from_single_line_composer(browser, phase4_server, width):
-    context, page = _real_firebase_page(browser, phase4_server, has_touch=True)
+    context, page = _real_firebase_page(browser, phase4_server, has_touch=True,
+        init_script="localStorage.setItem('theme','dark')" if width == 369 else None)
     turn = {"id": "b" * 32, "execution_mode": "agent", "status": "completed", "question": "Compare plans",
             "consensus": "A saved answer.", "agent_settings": {"model_id": CATALOG["default_model_id"]}}
     try:
@@ -77,6 +78,27 @@ def test_mobile_agent_plus_menu_opens_tools_from_single_line_composer(browser, p
         expect(page.locator('#composerModeBar')).not_to_be_visible()
         assert page.locator('.chat-input-container').bounding_box()['height'] <= 60
         _snapshot(page, f'agent-single-line-{width}')
+        # Focusing a follow-up expands the toolbar. The model has its own row
+        # above the aligned actions, even with a keyboard-sized viewport.
+        page.set_viewport_size({"width": width, "height": 450})
+        page.locator('#questionInput').tap()
+        page.wait_for_function("() => !document.body.classList.contains('composer-collapsed') && !document.body.classList.contains('composer-animating')")
+        controls = page.locator('#attachTrigger, .agent-model-picker .model-picker-display, .consensus-model-inline .model-picker-display, #sendButton')
+        bounds = controls.evaluate_all('buttons => buttons.map(b => b.getBoundingClientRect().toJSON())')
+        actions = [bounds[0], bounds[2], bounds[3]]
+        centers = [box['y'] + box['height'] / 2 for box in actions]
+        assert max(centers) - min(centers) <= 1
+        assert all(a['right'] <= b['left'] + 1 for a, b in zip(actions, actions[1:]))
+        assert bounds[1]['bottom'] <= min(box['top'] for box in actions) + 1
+        assert page.locator('.agent-model-picker .model-picker-display-text').evaluate(
+            'label => label.scrollWidth <= label.clientWidth + 1')
+        assert bounds[0]['x'] >= 0 and bounds[-1]['right'] <= width
+        assert page.locator('.consensus-model-inline .select-wrapper').evaluate(
+            "el => getComputedStyle(el, '::after').display === 'none'")
+        _snapshot(page, f'agent-expanded-keyboard-{width}')
+        page.set_viewport_size({"width": width, "height": 844})
+        page.evaluate('() => App.composer.collapse({force:true})')
+        page.wait_for_function("() => !document.body.classList.contains('composer-animating')")
         page.locator('#attachTrigger').tap()
         expect(page.locator('#attachMenu')).to_be_visible()
         assert page.evaluate("document.body.classList.contains('composer-collapsed')")

@@ -792,6 +792,11 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
 
 ## Agent · Beta: Vergleiche und Prüfungen
 
+- [ ] Mobil bei 320/369/390 px Folgefrage fokussieren, auch mit kurzer
+  Tastatur-Ansicht: Chatmodell steht in einer eigenen Zeile über Plus, Compare
+  und Senden; die drei Aktionen haben eine gemeinsame Mittellinie.
+  Lange Labels kürzen sich innerhalb ihres Buttons;
+  Dropdown-Pfeile bleiben direkt am Label. Beide Picker bleiben bedienbar.
 - [ ] Während der Chatmodellkatalog lädt oder nicht verfügbar ist: Nachricht
   tippen können, Senden gesperrt und Erklärung am Composer. Bei ungültiger
   Vergleichsauswahl öffnet „Choose models“ den Picker; nach Korrektur verschwindet
