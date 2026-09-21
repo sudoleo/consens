@@ -72,9 +72,9 @@ class Script:
         return Completion()
 
 
-def make_loop(store, script, *, check_sources=False, source_limits=None, messages=None):
+def make_loop(store, script, *, check_sources=False, source_limits=None, messages=None, delegation=False):
     chat, turn = pending(store)
-    config = {**defaults(), "enabled": False, "max_searches": 0, "context_chars": 120_000}
+    config = {**defaults(), "enabled": delegation, "max_searches": 0, "context_chars": 120_000}
     loop = DelegationLoop(store=store, uid=UID, chat_id=chat, turn_id=turn["id"],
         model=resolve_agent_model("claude-haiku-4-5"), messages=messages or [{"role": "system", "content": "Answer."}, {"role": "user", "content": "Compare options"}],
         api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy.from_config({**config, "enabled": True}),
@@ -112,7 +112,7 @@ def test_real_judges_exact_versions_context_sources_and_all_usage(store, compare
     assert any(e["type"] == "review" and e["review"]["status"] == "running" for e in events)
     tools = [e for e in events if e.get("kind") == "tool" and e.get("name") == "compare_models"]
     assert [e["status"] for e in tools] == [s for _ in range(compares) for s in ("running", "succeeded")]
-    assert sum(e["type"] == "delta" for e in events) == 1 + (1 if compares > 1 else 0)
+    assert sum(e["type"] == "delta" for e in events) == 1
     assert len([step for step, _ in script.calls if step.startswith('completion:')]) == compares + 2
     assert all("I will compare" not in v["text"] for v in review["versions"])
     assert store.delegation_view(UID, loop.chat_id, loop.turn_id)["agents"]
@@ -209,16 +209,15 @@ def test_review_issues_explain_each_missing_check(data, codes):
     assert [issue['code'] for issue in issues] == codes
 
 
-def test_missing_tool_is_bounded_and_persists_unchecked_answer(store):
+def test_missing_tool_uses_existing_review_and_persists_checked_answer(store):
     script = Script(missing=True)
     loop = make_loop(store, script)
-    with pytest.raises(AnalysisBudgetExceeded, match="required answer review"):
-        list(loop.run())
+    list(loop.run())
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
-    assert saved["status"] == "failed"
-    assert saved["agent_review"]["status"] == "missing"
+    assert saved["status"] == "completed"
+    assert saved["agent_review"]["status"] == "succeeded"
     assert saved["consensus"] == "The first option costs 100."
-    assert len(script.calls) == 6
+    assert len(script.calls) == 7  # Three root steps, two comparisons, two judges.
 
 
 def test_atomic_daily_budget_and_duplicate_settlement(store, monkeypatch):
@@ -451,6 +450,9 @@ def test_disconnect_during_review_settles_every_paid_call_and_marks_stopped(stor
 def test_failed_review_recovery_preserves_status_and_never_calls_provider(api):
     client, store, calls = api
     loop = make_loop(store, Script(missing=True))
+    def failed_review(*args, **kwargs):
+        raise AnalysisBudgetExceeded("Review admission unavailable")
+    loop.registry.tools["judge_answer"] = replace(loop.registry.tools["judge_answer"], execute=failed_review)
     with pytest.raises(AnalysisBudgetExceeded):
         list(loop.run())
     payload = {"chat_id": loop.chat_id, "question": "Question one", "client_request_id": "one",

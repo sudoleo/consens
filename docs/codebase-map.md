@@ -95,7 +95,7 @@ Threadpool aus. `async def` bleibt nur für echte Await-Pfade (Mail, explizites
 
 | Router | Zweck (Auswahl an Pfaden) |
 |---|---|
-| `agent.py` | `GET /agent/models` und `POST /agent`: Admin/Pro-geschützter Modellkatalog aus den vollständigen Firestore-Anbieterlisten samt Reihenfolge, aktuellen Provider-Metadaten und konfiguriertem Standard und begrenzter Modell-/Tool-Lauf im bestehenden Chat. Strikte Auswahl, owner-gebundene IDs, SSE mit sichtbarem Reasoning, bestätigten Tool-Ergebnissen/Quellen und aggregierter Usage. Alle angebotenen Modelle erhalten die gemeinsame Consensus-Websuche (Auto, Grok: Exa); kein eigener Suchdienst. Vorrang für gemeldete Provider-Gesamtkosten, idempotente Schrittbelege, modellgebundene 429-Wartefrist und Wiederaufnahme fertiger Antworten. Geprüfte Delegation mit eigenen Sitzungen, Mailboxen, Seitenleiste und atomarem gemeinsamen Budget; ergänzende `/agent/chats/{chat}/turns/{turn}/agents`-Detail-/Stop-Endpunkte. Kein `/prepare` oder Memory-Kompressor; dynamische Vergleichs-/Judge-Tools mit eigener Tokenquote (siehe Agent-Beta-Abschnitt). `recover_only` startet nie einen Modellaufruf. |
+| `agent.py` | `GET /agent/models` und `POST /agent`: Admin/Pro-geschützter Modellkatalog aus den vollständigen Firestore-Anbieterlisten samt Reihenfolge, aktuellen Provider-Metadaten und konfiguriertem Standard und begrenzter Modell-/Tool-Lauf im bestehenden Chat. Strikte Auswahl, owner-gebundene IDs, SSE mit bestätigten Fortschritten, Tool-Ergebnissen/Quellen und aggregierter Usage. Alle angebotenen Chatmodelle nutzen den gemeinsamen Websuch-Builder mit begrenzten Exa-Ergebnissen; kein eigener Suchdienst. Vorrang für gemeldete Provider-Gesamtkosten, idempotente Schrittbelege, modellgebundene 429-Wartefrist und Wiederaufnahme fertiger Antworten. Geprüfte Delegation mit eigenen Sitzungen, Mailboxen, Seitenleiste und atomarem gemeinsamen Budget; ergänzende `/agent/chats/{chat}/turns/{turn}/agents`-Detail-/Stop-Endpunkte. Kein `/prepare` oder Memory-Kompressor; dynamische Vergleichs-/Judge-Tools mit eigener Tokenquote (siehe Agent-Beta-Abschnitt). `recover_only` startet nie einen Modellaufruf. |
 | `source_checks.py` | Dauerhafte Quellenprüfung: owner-gebundenes `GET /api/source-checks/{job_id}` mit `cursor`, `revision` und `after_revision`; `POST .../{job_id}/resume` nimmt den eigenen OpenRouter-Key nur in den Prozessspeicher auf. `GET /api/share/{share_id}/source-check?version=...` und `GET /api/topics/{slug}/source-check?version=...` prüfen pro Paketseite aktive Ressource, Sichtbarkeit, Run- und Antwortversion. Seiten liefern `source_verification` plus `next_cursor`, bei geändertem Stand 409. API-Key-Clients verwenden den rungebundenen Endpoint in `api_v1.py`: `GET /api/v1/consensus/runs/{run_id}/source-check`, auch als `result.source_verification.status_url` ausgegeben. |
 | `pages.py` | HTML-Seiten + SEO: `/` (Landing, auch mit aktiver Session direkt erreichbar), `/model-pulse` (öffentliche, erklärte Best-answer-Rangliste), `/app` (Haupt-App), `/app/watches` (gleiche App-Shell; watch.js öffnet anhand des Pfads das Watch-Dashboard), `/admin` (inkl. Topics-Tab), `/admin/topics` (308-Kompatibilitätsredirect auf `/admin#topics`), `/admin/benchmark` (Benchmark-Run-Visualisierung), `/about`, `/ai-model-comparison`, `/consensus-engine` (nutzerfreundliche Consensus-Engine-Erklärung), `/privacy` `/imprint` `/terms`, `robots.txt`, `sitemap*.xml`. Außerdem der öffentliche, familienaggregierte Best-answer-Zähler `GET /api/model-leaderboard` (60 s Browser-/CDN-Cache; `period=all|since-2026-08-31`; alle neun Familien einschließlich Nullständen, Kimi/GLM und Meta/Muse mit eigenem Verfügbarkeitsdatum aus `_LEADERBOARD_AVAILABLE_SINCE`). Beide Zeiträume nutzen zusätzlich einen serverseitigen 60-s-Cache mit serialisiertem Refresh pro Zeitraum/Prozess. Der gemeinsame Zeitraum zählt die datierten, deduplizierten `model_votes` ab 31.08.2026 über indexierte `count()`-Abfragen pro Familie; Modellkatalog und Counts werden im selben Read-only-Transaktionssnapshot gelesen. Solange der neue `model_votes`-Index aus `firestore.indexes.json` fehlt/aufbaut, greift nur für diesen Indexfehler der gecachte Legacy-Scan. Kontolöschungen entfernen weiterhin Votes aus dem Zeitraum, ohne Lifetime-Zähler zurückzusetzen; `/feedback`, `/vote`, `/check_keys` bleiben die weiteren internen Seiten-Routen (Key-Test nur für verifizierte Logins). Feedback ist persistent pro UID auf 30 Sekunden und 10/UTC-Tag begrenzt. Ein Best-answer-Vote muss an ein noch gültiges, owner-gebundenes `result_id` gebunden sein, zum serverseitigen Gewinner passen und kann pro Lauf genau einmal zählen. |
 | `chat.py` | Kern-LLM-Flow: `/prepare`, die aus `cfg.PROVIDERS[*].ask_endpoint` erzeugten `/ask_*`-Routen (aktuell zusätzlich `/ask_kimi` und `/ask_glm`), `/consensus`, `/resolve`. `/prepare` und die `/ask_*`-Endpoints akzeptieren weiter das optionale Legacy-`context`-Feld für nicht migrierte Bookmark-Fortsetzungen. Additiv laden `/ask_*` das owner-gebundene Tripel `chat_id`/`turn_id`/`context_version_id`; Legacy- und Versionskontext zusammen werden abgewiesen. Alle `/ask_*`-Endpoints laufen über `handle_ask` + die deklarative Familien-Registry `ASK_PROVIDERS`; Transport und Credential sind für alle OpenRouter, `useOwnKeys` wählt optional `openrouter_key`. `/consensus` akzeptiert optional Chat-/Turn-IDs plus `turn_sources` und die exakt am Turn verknüpfte `context_version_id`, prüft alles owner-gebunden vor dem Judge und finalisiert nach Consensus, Differences und Share-`result_id` in Streaming- wie JSON-Pfad über `ChatStore`. Sendet der Browser die stabile `bookmarkId`, schreibt `/consensus` den autoritativen Bookmark-Snapshot vor seinem erfolgreichen Final-Event und liefert kompakte `bookmark_meta`; ein separater Browser-Request ist nur noch Fallback. Ein bereits completed Turn wird mit Consensus, Differences, Quellen und Modellantworten owner-geschützt wiedergegeben, ohne Engine-/Differences-/Share-/Statistik-/Completion- oder Usage-Write; ohne IDs bleibt der Legacy-Vertrag unverändert. |
@@ -1715,7 +1715,10 @@ comparisonOnly und zeigt im Agent-Modus ausschließlich Vergleichsmodelle. Es
 gibt keine zweite Presetliste, keine Auto/Immer/Aus-Einstellung und keinen
 Synthesemodell-Picker. Die eingefrorene comparison_models-Auswahl kommt als
 Provider→interne Modell-ID mit POST /agent; unbekannte Familien/Modelle werden
-abgelehnt. Ohne Auswahl gilt das zentrale Default-Preset. Der öffentliche
+abgelehnt. Der Browser validiert zwei bis sechs Vergleichsmodelle, sperrt Senden
+bei ungültiger Auswahl und erhält auch bei direkten Aufrufen den Entwurf vor
+Chat-Erstellung/Netzwerkzugriff. Er sendet nie `null` als Ersatz für eine leere
+Auswahl. API-Aufrufe ohne Auswahl behalten das zentrale Default-Preset. Der öffentliche
 Metering-Katalog ergänzt die gemeinsame Registry automatisch um aktuelle
 Provider-Metadaten; neue Admin-Einträge benötigen keinen zusätzlichen Codeeintrag.
 
@@ -1797,7 +1800,9 @@ Das Modell vertritt consens.io hilfreich und korrekt in der Nutzersprache,
 erklärt den Produktzweck bei Bedarf und behauptet weder nicht erfolgte Prüfungen
 noch garantierte Wahrheit.
 Diese Regel konkretisiert auch ältere gespeicherte Admin-Prompts; kein zweiter
-LLM-Router und keine sprachabhängige Keyword-Klassifikation. Deaktivierte Worker
+LLM-Router und keine sprachabhängige Keyword-Klassifikation. Die Entscheidung
+vor dem ersten Vergleich bleibt promptgesteuert, keine semantische Servergarantie.
+Deaktivierte Worker
 liefern weder Worker-Katalog noch Delegationsprompt im Chatkontext. Auch
 Vergleichsmodelle, Judges und Worker erhalten eine knappe Rollen-/Produkterklärung.
 Beendet der Server-Suchloop einen Request mit recherchiertem Text ohne Client-Tool,
@@ -1808,31 +1813,48 @@ Consensus-Ablauf; ausdrückliche Direktantwort-Ausnahmen bleiben möglich.
 Das Modell entscheidet selbst,
 ob es die ganze Frage oder mehrere begründete Teilfragen vergleicht. Es
 liefert einen neutralen Auftrag mit nötigem Kontext; alle Vergleichsmodelle
-sehen dieselbe isolierte Aufgabe, keine Antworten anderer Vergleichsmodelle.
+sehen dieselbe isolierte Aufgabe, keinen Chatverlauf und keine Antworten anderer
+Vergleichsmodelle. Der Produktprompt verpflichtet das Chatmodell ausdrücklich,
+Bezüge wie „davon“ aufzulösen und relevante frühere Anforderungen in Frage/Kontext
+zu übernehmen; unabhängige Fragen brauchen keinen unnötigen Gesprächsrückblick.
 Der vorhandene fan_out_provider_answers übernimmt Fan-out, Quellen-Normalisierung
 und Teilausfälle. Vergleichsmodelle erhalten keine Delegations-/Vergleichstools.
 Recherche und benötigte Quellen werden vom Orchestrator bereitgestellt;
-Vergleichsantworten sind auf 6.000 Zeichen und 2.048 Output-Tokens begrenzt.
-Überlange oder nicht vollständig beendete Antworten gelten als fehlgeschlagen.
+Vergleichsantworten erhalten standardmäßig 2.048 Output-Tokens und eine
+Promptvorgabe von 6.000 Zeichen. Vollständige Antworten oberhalb dieser
+Zeichenvorgabe bleiben erhalten; technische Token-, Kontext- und Snapshotgrenzen
+gelten weiter. Leere, abgebrochene oder Tool-Antworten gelten als fehlgeschlagen.
+Strukturierte Transportfehler werden am Fehlerfeld erkannt, nicht am Wort
+„Error“ im Antworttext; nur Legacy-Stringadapter behalten ihre Fehlerkonvention.
 Mindestens zwei vollständige Antworten sind eine brauchbare Prüfgrundlage.
 
 Nach den Vergleichen fordert das Chatmodell mit `judge_answer` die Antwortphase
-an. `DelegationLoop._write_synthesis` schiebt vor der Tool-Ausführung einen
+an. `DelegationLoop._write_synthesis` schiebt unmittelbar vor diesem Tool einen
 eigenen Schreibschritt desselben Chatmodells ein: leere Tool-Registry, keine
 native Suche, `allow_tool_calls=false` und ein eigener Antwortkontext
 verlangen die vollständige Antwort. Dieser Schritt wird normal als nächster
 `completion:N` reserviert und abgerechnet. Tool-Begleittext oder ein vorzeitiger
 Antwortversuch nach Vergleichen wird nicht als Synthese angezeigt/gespeichert;
 auch ein reiner Textabschluss führt erst in den dedizierten Schreibschritt.
-Erst nach dessen vollständigem, nicht leerem `stop` wird der sichtbare Text
+Vorherige Tools desselben Batches, insbesondere weitere Vergleiche und
+Worker-Prüfungen, werden zuerst ausgeführt. Alle Worker müssen geprüft sein.
+Auch vor dem ersten Vergleich bleibt Routing-Text gepuffert. Nur eine vollständig
+beendete Direktantwort ohne Toolcalls wird einmalig ausgegeben; Begrüßungen und
+notwendige Rückfragen benötigen damit keinen zusätzlichen Modellaufruf.
+Bricht diese ungeklärte Routing-Phase ab, wird ihr Text auch über Recovery nicht
+als Antwort veröffentlicht; Nutzerfrage, Fehler und Abrechnung bleiben gespeichert.
+Erst nach vollständigem, nicht leerem `stop` des Schreibschritts wird der sichtbare Text
 festgeschrieben und der angeforderte Judge ausgeführt. Bei Abbruch/Tokenlimit
 bleibt nur die ungeprüfte Teilantwort erhalten, ohne gestartete Judges.
 `ComparisonTools.synthesis_messages` verwendet die konfigurierten Consensus-
 Anweisungen, ergänzende Regeln für die beratende Stimme, Datum und Modellidentität.
 Der tatsächliche Nutzer-/Antwortverlauf wird beim Start vor allen Laufzeit-
 Ergänzungen gesichert. Hinzu kommen ausschließlich Vergleichsfragen/-kontext,
-Antworttexte mit Quellen, Anzahl fehlender Antworten und normalisierte Recherche-
-Quellen. Agent-Systemprompt, Tool-Replay, Status-/Routingfelder und private
+Antworttexte mit Quellen, Anzahl fehlender Antworten, normalisierte Recherche-
+Quellen und die zuletzt mit `review_agent` angenommenen Worker-Ergebnisse.
+Überarbeitungsaufträge entziehen alten Ergebnissen die Freigabe; bei geprüftem
+Fallback gelangt der Ersatztext statt des verworfenen Ergebnisses in die Synthese.
+Agent-Systemprompt, Tool-Replay, Status-/Routingfelder und private
 Reasoning-Fortsetzungen gelangen nicht in diesen Schreibkontext. Die originale
 Tool-Konversation bleibt für die Orchestrierung unverändert. Für den isolierten
 Schreibschritt setzt eine Modellkopie `reasoning.exclude=true` und entfernt
@@ -1899,12 +1921,23 @@ Eine gewünschte Überarbeitung beginnt mit einer neuen Nutzernachricht.
 Tool-Begleittext bleibt Planung und öffnet keine Syntheseversion; dies gilt auch
 für Einleitungen neben einem vorzeitigen Judge-Aufruf. Weitere Teilvergleiche
 bleiben vor der dedizierten Synthese möglich.
-Fehlende Judge-Toolcalls werden erneut eingefordert, solange weitere Aufrufe
-ins Tagesbudget passen; ungeprüfte Antworten werden nie erfolgreich abgeschlossen. Ohne Vergleich
+Beendet das Chatmodell die Orchestrierung ohne erforderlichen Judge-Toolcall,
+führt der Server nach der Synthese `judge_answer` und gegebenenfalls
+`check_contradictions` über dieselbe Tool-Registry aus. Abrechnung, Bindungen und
+bestehende Fallback-Judges bleiben identisch; zusätzliche Erinnerungsrunden sind
+nicht nötig. Drei aufeinanderfolgende Tool-Batches ohne einen gültig ausgeführten
+Toolcall brechen als Protokollstillstand ab; gültige Arbeit hat weiterhin kein
+pauschales Runden- oder Laufzeitlimit. Ungeprüfte Antworten werden nie erfolgreich
+abgeschlossen. Ohne Vergleich
 ist keine automatische Prüfung erforderlich. Ein ausdrücklicher Prüfwunsch kann
 zuerst mit compare_models eine Grundlage einholen.
 
 **Journal, Abbruch und Verlauf.**
+`AgentRunStore.messages` übernimmt sowohl abgeschlossene als auch fehlgeschlagene
+frühere Turns. Bei Fehlern bleiben Nutzerfrage und gespeicherte Teilantwort im
+Kontext, ausdrücklich als möglicherweise unvollständig/ungeprüft gekennzeichnet.
+Ohne gespeicherten Antworttext steht ein entsprechender Hinweis. Laufende Turns
+werden nicht als Gesprächsergebnis übernommen; die vorhandene Kontextgrenze gilt.
 `chat_store.turn_detail` liefert für Agent-Turns `assistant_response` und den
 Kompatibilitätsalias `consensus` unverändert aus. Kein Trimmen, NFKC-Normalisieren
 oder erneutes Kürzen beim Lesen: Schon abschließende Leerzeilen gehören zum

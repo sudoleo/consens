@@ -94,9 +94,14 @@ class AgentRunStore(AgentSessionStore, ChatStore):
             page = self._list_turn_snapshots(uid, chat_id, cursor=cursor, limit=TURN_PAGE_SIZE_MAX)
             for snapshot in page["snapshots"]:
                 turn = snapshot.to_dict() or {}
-                if turn["position"] >= target["position"] or turn["status"] != "completed":
+                if turn["position"] >= target["position"] or turn["status"] not in {"completed", "failed"}:
                     continue
                 question, answer = turn["question"], turn.get("assistant_response", turn.get("consensus", ""))
+                if turn["status"] == "failed":
+                    # Match the visible saved conversation without claiming that
+                    # an interrupted answer or its review completed successfully.
+                    answer = ("[This previous turn did not finish successfully. The saved response below may be incomplete or unreviewed.]\n\n" + answer
+                              if answer else "[This previous turn did not finish successfully. No assistant answer was saved.]")
                 chars += len(question) + len(answer)
                 if chars > CONTEXT_CHAR_LIMIT:
                     raise ValueError("This conversation is too long. Start a new chat.")

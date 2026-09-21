@@ -152,6 +152,12 @@ gespeicherter Wortlaut, Hash-Bindung, leere Antworten, Tokenlimit und Nutzer-Sto
 Tool-/Reasoning-Kontext, erhaltene Gesprächsinhalte und Quellen, mehrere/teilweise
 Vergleiche sowie den Provider-Payload mit unterdrücktem Reasoning bei unveränderter
 Denkstufe. Sichtbarer Stream, gespeicherter Text und Judge-Bindung bleiben identisch.
+`tests/test_agent_chat_integrity.py` prüft mit der echten Chat-Policy die Reihenfolge
+mehrerer Tools in einem Batch, automatische bestehende Prüfungen bei fehlendem
+Toolcall, Protokollstillstand und gepufferte Direktantworten. Weitere Regressionen
+decken fehlgeschlagene Turns im Folgekontext, gültige lange/mit „Error“ beginnende
+Vergleichstexte sowie tatsächliche Worker-Abläufe mit Annahme, Überarbeitung und
+geprüftem Ersatztext im Synthesekontext ab.
 `tests/test_agent_progress.py` prüft begrenzte
 Fortschrittsmeldungen aus validierten Toolargumenten, Reihenfolge vor Toolstart,
 Persistenz, unveränderte Übernahme mehrsprachiger Texte und Aufruf-/Tokenabrechnung. Provider-
@@ -169,7 +175,9 @@ und den Wechsel zurück zum unveränderten Consensus-Kontingent.
 HTML-Escaping, vollständigen Verlauf über das Hilfsereignisfenster hinaus,
 automatisches Zuklappen beim Abschluss sowie erneutes manuelles Öffnen. Laufzeit-
 Tests decken Minutengrenzen, Token-Warten, Stop, Timer-Cleanup und gespeicherte
-Endzeitstempel inklusive ungültiger/fehlender Zeitangaben ab.
+Endzeitstempel inklusive ungültiger/fehlender Zeitangaben ab. Ungültige
+Vergleichsauswahl (0/1/7 Modelle) erhält den Entwurf und startet keine Requests;
+gültige Auswahl (2/6) wird vollständig übertragen.
 Geöffnete Live-Details werden bereits vor dem ersten Fortschrittsereignis geprüft;
 unvollständige finale Snapshots erhalten vorhandene Meldungen. Die Review-Tests
 prüfen Vergleichszweck, Teilstatus, veraltete Prüfungen und Links zu Originalantworten.
@@ -182,7 +190,10 @@ Verlauf ohne inneren Scrollkasten.
 Sie öffnet den Verlauf auch während des ersten „Thinking…“ und lädt einen
 abgeschlossenen Turn erneut. `test_agent_comparison_frontend.py` prüft die
 zusätzlichen Details und Leser-Links live, gespeichert und in archivierten Turns,
-auch bei leerer `agent_activity` und vorhandenem Review.
+auch bei leerer `agent_activity` und vorhandenem Review. Auf Desktop und Mobil
+prüft sie außerdem den echten Modellpicker: 0/1 Modelle sperren Senden, Entwurf
+und Netzwerk bleiben bei Enter/direktem Aufruf unverändert; zwei Modelle geben
+Senden wieder frei.
 Der Lauf prüft zudem kurze Ein-/Ausblend- und Höhenübergänge, einmalige Animation
 pro neuem Absatz/Antwortbeginn, schnelle Richtungswechsel, Abschluss bei offenem
 und geschlossenem Verlauf sowie Reduced Motion und Forced Colors ohne Bewegung.

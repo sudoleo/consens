@@ -787,6 +787,14 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
 
 ## Agent · Beta: Vergleiche und Prüfungen
 
+- [ ] Vergleichsmodelle im Picker auf eins/keines reduzieren: Senden ist gesperrt,
+      Enter erhält den Entwurf und erstellt keinen Chat. Zwei Modelle wählen
+      gibt Senden wieder frei; Desktop und Mobil prüfen.
+- [ ] „Hi“ und notwendige Rückfragen erscheinen einmalig ohne Vergleichsaufruf.
+      Bei inhaltlichen Anfragen erscheint vor der Synthese kein kurzlebiger
+      Antwortvorspann. Eine Folgefrage zu einer gespeicherten fehlgeschlagenen
+      Antwort behält deren Kontext und behandelt sie nicht als geprüft.
+
 - [x] Zuverlässigkeitsprüfung (20.09.2026): Token-Warten bleibt bei geschlossenen
       Aktivitätsdetails mit Erklärung sichtbar; Desktop-Taskzeile zeigt den
       Wartezustand. Stop bleibt bedienbar, kein horizontaler Overflow bei

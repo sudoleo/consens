@@ -119,14 +119,13 @@ def test_disabled_tool_never_fetches_and_keeps_model_agreement_review(store, sha
     assert shared_judges == []
 
 
-def test_missing_enabled_tool_cannot_silently_finalize(store, shared_judges):
+def test_missing_enabled_tool_still_executes_existing_source_check(store, shared_judges):
     loop = make_loop(store, SourceScript(missing=True), check_sources=True)
-    with pytest.raises(AnalysisBudgetExceeded, match="required answer review"):
-        list(loop.run())
+    list(loop.run())
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
-    assert saved["status"] == "failed" and not review_is_bound(saved["agent_review"], CONSENSUS)
-    assert any("Call check_contradictions now" in m.get("content", "") for m in loop.messages if m["role"] == "user")
-    assert shared_judges == []
+    assert saved["status"] == "completed" and review_is_bound(saved["agent_review"], CONSENSUS)
+    assert not any("Call check_contradictions now" in m.get("content", "") for m in loop.messages if m["role"] == "user")
+    assert len(shared_judges) == 2
 
 
 def test_invalid_original_evidence_is_not_a_successful_source_check(store, shared_judges):

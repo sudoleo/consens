@@ -7,6 +7,21 @@ import pytest
 import requests
 
 from app.services.llm import engines, streaming
+from app.services.llm.provider_transport import fan_out_provider_answers
+
+
+@pytest.mark.parametrize("raw,accepted", [
+    ({"text": "Error 429 means too many requests.", "sources": []}, True),
+    ({"text": "Partial answer", "error": "provider_request_failed"}, False),
+    ({"text": "", "error": "provider_timeout"}, False),
+    ("Error: legacy provider failed", False),
+])
+def test_fanout_distinguishes_answer_text_from_transport_errors(raw, accepted):
+    answers = fan_out_provider_answers(question="Explain HTTP 429", provider_models={"openai": "test"},
+        keys={}, tier="pro", deep_think=False, provider_call=lambda *args: raw)
+    assert bool(answers) is accepted
+    if accepted:
+        assert answers["openai"].response == raw["text"]
 
 
 def _request(error, *, stream):

@@ -134,7 +134,10 @@ def fan_out_provider_answers(
             text = result_text(raw).strip()
             if answer_char_limit:
                 text = text[:answer_char_limit]
-            if not text or text.lower().startswith("error") or (
+            # Structured transports report errors explicitly. Their answer may
+            # legitimately explain an "Error 429" (or another error message).
+            # Retain the text convention only for legacy string-only adapters.
+            if not text or (isinstance(raw, str) and text.lower().startswith("error")) or (
                 isinstance(raw, dict) and raw.get("error")
             ):
                 outcome = (

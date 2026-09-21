@@ -44,8 +44,11 @@ bleiben mit einem Hinweis deaktiviert sichtbar; es werden keine Preise erfunden.
 Der vorhandene Consensus-Preset-/Model-Picker erscheint daneben als Compare.
 Er wählt die Vergleichsmodelle aus derselben Konfiguration; Agent bietet keine
 zusätzliche Presetliste und keinen Synthese-/Consensus-Modell-Picker an. Manuelle
-Familien-/Modellwahl bleibt möglich. Mindestens zwei Vergleichsmodelle müssen
-gewählt sein; ohne übergebene Auswahl gilt das zentrale Standardpreset.
+Familien-/Modellwahl bleibt möglich. Zwei bis sechs Vergleichsmodelle müssen
+gewählt sein. Bei ungültiger Auswahl ist Senden gesperrt; auch direkte Send-Aufrufe
+werden vor Chat-Erstellung und Leeren des Entwurfs abgefangen. Der Browser sendet
+die konkrete Auswahl, auch eine leere Auswahl wird nicht still durch Defaults
+ersetzt. API-Aufrufe ohne Auswahl behalten das zentrale Standardpreset.
 
 Die gemeinsame Bottom-Bar steht im Beta-Chat nur vor der ersten Frage. Danach
 liegen ihre Optionen im bestehenden (+)-Menü im Input; das leere Eingabefeld
@@ -61,7 +64,9 @@ dieses Menü. „Attach“ bleibt wegen der Textbeschränkung deaktiviert.
 
 Das Modell kann eine ganze Frage oder mehrere begründete Teilfragen
 vergleichen. Jede Vergleichsgruppe erhält denselben neutralen Auftrag samt
-notwendigem Kontext. Keine Vergleichsantwort beeinflusst die andere. Das
+notwendigem Kontext. Die Vergleichsmodelle kennen den Chatverlauf nicht. Das
+Chatmodell muss deshalb bei Bedarf Bezüge konkretisieren und relevante frühere
+Anforderungen mitgeben. Keine Vergleichsantwort beeinflusst die andere. Das
 Chatmodell erhält Antworten, Quellen, Status und Modellmetadaten und schreibt
 die Synthese selbst. Auch bei einem Prüfwunsch wird zuerst eine unabhängige
 Vergleichsgrundlage eingeholt.
@@ -70,20 +75,31 @@ Vergleichsgrundlage eingeholt.
 
 Nach den Vergleichen leitet `judge_answer` in die Antwortphase über. Vor seiner
 Ausführung streamt dasselbe Chatmodell die vollständige Synthese in einem eigenen
-Schritt ohne Tools und Suche. Erst wenn dieser Schritt vollständig endet, prüfen
+Schritt ohne Tools und Suche. Vorherige Tools im selben Batch werden zuerst
+ausgeführt, ebenso die Prüfung aller unterstützenden Agenten. Erst wenn dieser
+Schreibschritt vollständig endet, prüfen
 Differences und Coverage genau den bereits sichtbaren Text. Eine Einleitung neben
 einem verfrühten Judge-Aufruf zählt nicht als Antwort. Der Schreibschritt wird wie
 jeder Modellaufruf abgerechnet. Bei Abbruch oder Tokenlimit bleibt der Teiltext
 ungeprüft erhalten; die Judges starten nicht.
 Der Schreibschritt verwendet die konfigurierten Consensus-Anweisungen mit der
 eigenen beratenden Stimme des Chatmodells. Er erhält den tatsächlichen Gesprächs-
-verlauf sowie Vergleichsantworten und Quellen, keine internen Toolgespräche,
+verlauf sowie Vergleichsantworten, Quellen und zuletzt geprüfte Worker-Ergebnisse
+oder deren geprüften Ersatztext. Überarbeitung entzieht alten Ergebnissen die
+Freigabe. Er erhält keine internen Toolgespräche,
 Statusfelder oder Reasoning-Fortsetzungen. Die Agent-Anweisungen steuern weiterhin
 die Orchestrierung. Die Reasoning-Ausgabe des Providers wird für den Schreibschritt
 unterdrückt; Modell und gewählte Denkstufe bleiben erhalten. Der sichtbare Antwort-
 text wird nicht nachträglich durch Stichwortfilter verändert.
-Ein fehlender Toolcall wird erneut eingefordert, solange das Tagesbudget weitere
-Aufrufe zulässt. Das Backend lässt keinen stillen ungeprüften Abschluss zu.
+Beendet das Modell die Orchestrierung ohne nötigen Prüfaufruf, führt der Server
+die bestehenden Prüf-Tools einschließlich ihrer Fallback-Judges selbst aus.
+Zusätzliche Erinnerungsrunden entfallen. Das Backend lässt keinen stillen
+ungeprüften Abschluss zu. Routing-Text bleibt von Beginn an gepuffert, damit
+Einleitungen nicht kurz im Antwortbereich erscheinen und wieder verschwinden.
+Vollständige Direktantworten wie Begrüßungen werden einmalig ausgegeben.
+Bei Abbruch vor dieser Entscheidung wird der ungeklärte Routing-Text auch in
+Recovery nicht zur Antwort. Bereits gestreamte Synthese-Teilantworten bleiben
+wie bisher gespeichert und ungeprüft lesbar.
 
 Differences und Coverage verwenden im Beta-Chat ausschließlich die
 Standard-Judges aus `app_config/models.judge_models`, auch bei einem teuren
@@ -291,7 +307,7 @@ Technische Grenzen schützen Providerprotokoll, Speicher und Parallelität:
 |---|---|
 | Parallele Unteraufrufe | 2 |
 | Antwortmodelle pro Vergleich | vorhandene Auswahl, mindestens 2 |
-| Vergleichsantwort | 2048 Output-Tokens, maximal 6000 Zeichen |
+| Vergleichsantwort | standardmäßig 2048 Output-Tokens; 6000 Zeichen als Promptvorgabe, vollständige längere Antworten bleiben erhalten |
 | Synthese | AGENT_MAX_OUTPUT_TOKENS, standardmäßig 4096 |
 | Kontext | Modellfensterprüfung; initialer Chatverlauf maximal 120000 Zeichen |
 | Review-Snapshot | maximal 600 kB |
@@ -301,6 +317,9 @@ Technische Grenzen schützen Providerprotokoll, Speicher und Parallelität:
 Reservierungen sind Zulassungskontrollen, keine Garantie für die tatsächliche
 Provider-Rechnung. Meldet der Provider höheren Verbrauch, wird er vollständig
 verbucht und weiterer Verbrauch blockiert. Unbekannte Nutzung ist kein Nullwert.
+Drei aufeinanderfolgende Tool-Batches ohne gültig ausgeführten Aufruf stoppen
+als Protokollstillstand, statt das Tageskontingent mit derselben ungültigen
+Anfrage aufzubrauchen. Gültige Arbeit erhält dadurch kein pauschales Rundenlimit.
 
 ## Recherche, Delegation und Providerprotokoll
 
@@ -322,7 +341,9 @@ informationen intern; verschlüsselte Reasoning-Blöcke werden nie öffentlich o
 persistiert. Sichtbares Reasoning bleibt auf 32000 Zeichen begrenzt.
 
 Systemprompt, frisches Datum/Zeitzone, ausgewählte Modellidentität und
-abgeschlossene Unterhaltung werden vom Server zusammengestellt. Toolargumente,
+Unterhaltung werden vom Server zusammengestellt. Fehlgeschlagene frühere Turns
+behalten Nutzerfrage und gespeicherte Antwort, mit einem ausdrücklichen Hinweis
+auf ihren möglicherweise unvollständigen oder ungeprüften Stand. Toolargumente,
 Antworten und Quellen sind untrusted data, keine Berechtigungen. Strikte Schemas,
 servereigene Modellauflösung und Limits verhindern eine Änderung der Policy
 über Toolergebnisse. Dateien, Share und Watch sind weiterhin nicht freigeschaltet.
@@ -336,6 +357,8 @@ Fragen zu consens.io sowie Textumformung/Übersetzung. Nur reine Begrüßungen u
 Bestätigungen ohne Frage/Auftrag sowie unvermeidbare Rückfragen dürfen direkt
 beantwortet werden. Rückfragen sind auf fehlende Angaben beschränkt, ohne die keine
 nützliche Antwort möglich ist; sonst mit begründeten Annahmen weiterarbeiten.
+Diese Entscheidung bleibt promptgesteuert; ein zweiter Router oder eine
+sprachabhängige Keyword-Klassifikation erzwingt den Vergleich nicht.
 Das Chatmodell soll consens.io hilfreich, klar und korrekt in der Nutzersprache
 vertreten, den Produktzweck erklären können und keine nicht erfolgten Prüfungen
 oder garantierte Wahrheit behaupten. Alte allgemeine Hinweise auf direkte Antworten

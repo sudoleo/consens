@@ -8,6 +8,54 @@ from test_phase4_frontend import phase4_server, _real_firebase_page, _json
 from test_agent_chat_frontend import CATALOG, _choose_mode, _snapshot
 
 
+@pytest.mark.parametrize("width", [1280, 390])
+def test_comparison_selection_blocks_send_before_losing_draft(browser, phase4_server, width):
+    context, page = _real_firebase_page(browser, phase4_server)
+    requests = []
+    try:
+        page.set_viewport_size({"width": width, "height": 960})
+        page.route('**/user_status', lambda r: _json(r, {"tier": "pro", "is_pro": True, "agent_access": True}))
+        page.route('**/agent/models', lambda r: _json(r, CATALOG))
+        page.route('**/agent', lambda r: (requests.append(r.request.url), _json(r, {"error": "Unexpected request"}, 500)))
+        page.route('**/chats', lambda r: (requests.append(r.request.url), _json(r, {"error": "Unexpected request"}, 500)))
+        page.evaluate("async () => { await window.__switchE2EUser('account-a'); }")
+        _choose_mode(page, 'agent')
+        page.locator('#questionInput').fill('Keep this draft while I choose the models.')
+        expect(page.locator('#sendButton')).to_be_enabled()
+        page.locator('.consensus-model-inline .model-picker-display').click()
+        page.locator('.consensus-model-inline .model-picker-custom-option').click()
+        selected = page.locator('.consensus-model-inline .model-picker-row-toggle[aria-checked="true"]')
+        while selected.count() > 1:
+            selected.first.click()
+        expect(page.locator('#sendButton')).to_be_disabled()
+        selected.first.click()
+        expect(page.locator('#sendButton')).to_be_disabled()
+        page.keyboard.press('Escape')
+        page.locator('#questionInput').click()
+        page.locator('#questionInput').press('Control+End')
+        page.locator('#questionInput').press('Enter')
+        # Mobile Enter remains the normal paragraph key.
+        draft = 'Keep this draft while I choose the models.' + ('\n' if width == 390 else '')
+        expect(page.locator('#questionInput')).to_have_value(draft)
+        # Also guard direct callers, independent of the disabled button.
+        page.evaluate('() => App.agentChat.send()')
+        expect(page.locator('#questionInput')).to_have_value(draft)
+        assert requests == []
+        page.locator('.consensus-model-inline .model-picker-display').click()
+        expect(page.locator('.consensus-model-inline .model-picker-menu')).to_be_visible()
+        custom = page.locator('.consensus-model-inline .model-picker-custom-option')
+        if custom.is_visible():
+            custom.click()
+        excluded = page.locator('.consensus-model-inline .model-picker-row-toggle[aria-checked="false"]')
+        excluded.first.click()
+        expect(page.locator('#sendButton')).to_be_disabled()
+        excluded.first.click()
+        expect(page.locator('#sendButton')).to_be_enabled()
+        assert requests == []
+    finally:
+        context.close()
+
+
 @pytest.mark.parametrize("width", [390, 320])
 def test_mobile_agent_plus_menu_opens_tools_from_single_line_composer(browser, phase4_server, width):
     context, page = _real_firebase_page(browser, phase4_server, has_touch=True)

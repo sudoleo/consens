@@ -4,6 +4,8 @@ import { loadScripts } from "./helpers/appWindow.mjs";
 const BODY = `<div id="chatExecutionControl" class="select-wrapper"><select id="chatExecutionMode" aria-label="Chat mode">
   <option value="consensus">Consensus</option><option value="agent">Agent</option></select></div>
   <textarea id="questionInput"></textarea><div id="threadHistory"></div>
+  <input id="compareOpenAI" type="checkbox" checked><select id="compareOpenAIModel"><option value="gpt-5.4-mini">OpenAI</option></select>
+  <input id="compareClaude" type="checkbox" checked><select id="compareClaudeModel"><option value="claude-haiku-4-5">Claude</option></select>
   <div id="agentModelControls"><div class="select-wrapper agent-model-picker"><select id="agentModelDropdown" aria-label="Agent model"></select></div>
   <div class="select-wrapper agent-effort-control"><select id="agentReasoningEffort" aria-label="Agent reasoning effort"></select></div><button id="agentModelsRetry" hidden></button></div>
   <section id="agentAnswer" hidden>
@@ -23,7 +25,9 @@ function boot({ allowed = true, catalog = CATALOG } = {}) {
       window.App = {
         agentAccess: { uid: "owner", allowed }, showPopup: vi.fn(),
         followup: { renderStoredTurns: vi.fn() },
-        modelPrefs: [], getModelOptionLabel: option => option?.dataset.modelLabel || option?.textContent || "",
+        modelPrefs: [{provider:'openai',checkId:'compareOpenAI',selectId:'compareOpenAIModel'},
+          {provider:'anthropic',checkId:'compareClaude',selectId:'compareClaudeModel'}],
+        getModelOptionLabel: option => option?.dataset.modelLabel || option?.textContent || "",
       };
       window.injectMarkdown = (el, markdown) => { el.textContent = markdown; };
       window.fetch = vi.fn(async url => ({ ok: true, json: async () => url.startsWith('/agent/') ? structuredClone(catalog) : ({ chat: { id: "a".repeat(32) } }) }));
@@ -48,6 +52,30 @@ async function selectAgent(window) {
 }
 
 describe("single-model agent chat", () => {
+  it.each([0, 1, 2, 6, 7])('validates %i comparison models before clearing the draft or creating a chat', async count => {
+    const {window:w, document:d, dom} = boot();
+    await selectAgent(w);
+    w.App.modelPrefs = Array.from({length:count}, (_, i) => {
+      const check = d.createElement('input'); check.type='checkbox'; check.id=`auditCheck${i}`; check.checked=true;
+      const select = d.createElement('select'); select.id=`auditSelect${i}`;
+      select.innerHTML=`<option value="model${i}">Model ${i}</option>`;
+      d.body.append(check,select);
+      return {provider:`provider${i}`,checkId:check.id,selectId:select.id};
+    });
+    d.getElementById('questionInput').value='Please compare these options.';
+    w.fetch.mockClear();
+    await w.App.agentChat.send();
+    if (count < 2 || count > 6) {
+      expect(w.fetch).not.toHaveBeenCalled();
+      expect(w.streamSSERequest).not.toHaveBeenCalled();
+      expect(d.getElementById('questionInput').value).toBe('Please compare these options.');
+      expect(w.App.showPopup).toHaveBeenCalledWith(expect.stringContaining('comparison models'));
+    } else {
+      expect(w.streamSSERequest).toHaveBeenCalledTimes(1);
+      expect(Object.keys(w.streamSSERequest.mock.calls[0][1].comparison_models)).toHaveLength(count);
+    }
+    dom.window.close();
+  });
   it('keeps unresolved admin models visible and disabled, and repairs a saved unavailable selection', async () => {
     const catalog = {...CATALOG, models: [...CATALOG.models,
       {id:'future-missing', label:'Future model', available:false,

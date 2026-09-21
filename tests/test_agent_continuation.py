@@ -212,11 +212,11 @@ def test_brief_database_outage_does_not_cancel_a_healthy_producer(store, monkeyp
     assert len(checks) == 2 and not loop.cancellation.cancelled and loop.watch_error is None
 
 
-def test_partial_direct_answer_recovery_is_read_only_and_preserves_failure(api, monkeypatch):
+def test_interrupted_routing_recovery_preserves_failure_without_publishing_unconfirmed_text(api, monkeypatch):
     client, store, calls = api
     def stream(self, **kwargs):
         calls.append(kwargs)
-        self.text = "Available partial answer."
+        self.text = "I will compare the options."
         self.usage = measured_usage({"prompt_tokens": 50, "completion_tokens": 20}, kwargs["model"])
         yield {"type": "delta", "text": self.text}
         raise httpx.ReadTimeout("private body")
@@ -225,6 +225,7 @@ def test_partial_direct_answer_recovery_is_read_only_and_preserves_failure(api, 
     payload = {"chat_id": chat, "question": "Long task", "client_request_id": "partial", "bookmark_id": "partial_answer"}
     response = client.post("/agent", json=payload, headers=AUTH)
     assert '"code": "provider_timeout"' in response.text and "private body" not in response.text
+    assert "event: delta" not in response.text and "I will compare the options." not in response.text
     error = next(json.loads(line[6:]) for line in response.text.splitlines()
                  if line.startswith('data: ') and '"saved_answer"' in line)
     assert error["recovery_state"] == "saved"
@@ -235,7 +236,8 @@ def test_partial_direct_answer_recovery_is_read_only_and_preserves_failure(api, 
     for _ in range(2):
         recovered = client.post("/agent", json={**payload, "recover_only": True}, headers=AUTH)
         assert recovered.status_code == 200
-        assert recovered.json()["response"] == "Available partial answer."
+        # Until the request finishes, its text may still precede a toolcall.
+        assert recovered.json()["response"] == ""
         assert recovered.json()["turn"]["agent_failure"]["code"] == "provider_timeout"
         assert recovered.json()["turn"]["status"] == "failed"
     assert len(calls) == 1 and agent_quota.snapshot(store.db, UID)["used"] == before

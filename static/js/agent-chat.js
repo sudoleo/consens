@@ -426,6 +426,16 @@
       if (registry.isAuthCurrent(context)) registry.renderVisible();
     }
   }
+  function comparisonSelection() {
+    return Object.fromEntries((App.modelPrefs || [])
+      .filter(pref => document.getElementById(pref.checkId)?.checked)
+      .map(pref => [pref.provider, document.getElementById(pref.selectId)?.value]));
+  }
+  function hasValidComparisonSelection(value = comparisonSelection()) {
+    const models = Object.values(value);
+    const limit = Number(App.maxRunFamilies) > 0 ? Number(App.maxRunFamilies) : 6;
+    return models.length >= 2 && models.length <= limit && models.every(id => typeof id === 'string' && id.trim());
+  }
   async function send(recovery = null) {
     if (recovery) return recoverAnswer(recovery);
     if (!canUse()) { App.showPopup?.("Agent Beta is available to Pro users and admins."); return; }
@@ -440,9 +450,11 @@
     const settings = recovery?.config.agentSettings || {
       ...selection(), reasoning_effort: document.getElementById("agentReasoningEffort")?.value || "default",
     };
-    const comparisonModels = recovery?.config.comparisonModels || Object.fromEntries((App.modelPrefs || [])
-      .filter(pref => document.getElementById(pref.checkId)?.checked)
-      .map(pref => [pref.provider, document.getElementById(pref.selectId)?.value]));
+    const comparisonModels = comparisonSelection();
+    if (!hasValidComparisonSelection(comparisonModels)) {
+      App.showPopup?.(`Select between two and ${Number(App.maxRunFamilies) > 0 ? Number(App.maxRunFamilies) : 6} comparison models before sending.`);
+      return;
+    }
     if (!recovery && (!catalog || !catalog.models.some(model => model.id === settings.model_id))) {
       App.showPopup?.("Choose an available agent model before sending."); return;
     }
@@ -511,7 +523,7 @@
         recover_only: Boolean(recovery),
         model_id: settings.model_id,
         reasoning_effort: settings.reasoning_effort || "default",
-        comparison_models: Object.keys(comparisonModels).length ? comparisonModels : null,
+        comparison_models: comparisonModels,
         check_sources: context.config.checkSources === true,
       }, requestSignal, {
         accepted: { receive(event) {
@@ -585,7 +597,7 @@
       if (!terminalBudget && context.metadata.requestSent && registry.isAuthCurrent(context)) await refreshBudget(context.auth.uid);
     }
   }
-  App.agentChat = { canUse, isSelected: () => selectedMode() === "agent", render, project, send,
+  App.agentChat = { canUse, hasValidComparisonSelection, isSelected: () => selectedMode() === "agent", render, project, send,
     tokenBudget: () => canUse() && catalogOwner === window.auth?.currentUser?.uid
       ? (catalog?.budgetStale ? {...catalog.token_budget, stale: true} : catalog?.token_budget) : null, receiveBudget };
   function refreshVisibleBudget() {

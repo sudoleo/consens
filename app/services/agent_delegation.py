@@ -1,4 +1,6 @@
 """One-level, bidirectional agent sessions with bounded concurrent providers."""
+from __future__ import annotations
+
 from collections import deque
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
@@ -81,6 +83,8 @@ class Worker:
     stream_chars: int = 0
     progress_seq: int = 0
     session_seq: int = 0
+    result: dict | None = None
+    reviewed_evidence: dict | None = None
 
 
 class DelegationLoop(AgentLoop):
@@ -101,6 +105,7 @@ class DelegationLoop(AgentLoop):
         self.unsettled = {}
         self.mailbox = deque()
         self.tools_used = 0
+        self.invalid_tool_rounds = 0
         self.search_remaining = self.policy.max_searches
         self.closed = threading.Event()
         self.watch_error = None
@@ -168,6 +173,9 @@ class DelegationLoop(AgentLoop):
         self.outgoing.put_nowait(event)
         if sender == worker.id and message and getattr(worker, "kind", "worker") == "worker":
             with self.condition:
+                if kind == "result":
+                    worker.result = {key: message[key] for key in ("text", "sources", "result_truncated") if key in message}
+                    worker.reviewed_evidence = None
                 self.mailbox.append({**message, "agent_id": worker.id, "message_id": event["id"], "seq": event["seq"]})
                 self.condition.notify_all()
         return event
@@ -242,6 +250,7 @@ class DelegationLoop(AgentLoop):
             self._publish(worker, text=args.text, kind=args.kind)
             worker.inbox.append(args.text)
             worker.reviewed = False
+            worker.reviewed_evidence = None
             if worker.state in {"completed", "review", "question", "waiting"}:
                 self._state(worker, "rework" if args.kind == "rework" else "waiting")
             self.condition.notify_all()
@@ -263,6 +272,12 @@ class DelegationLoop(AgentLoop):
                 raise ValueError("Wait for the current result before reviewing it.")
             self._publish(worker, text=args.check, kind="review")
             worker.reviewed = args.accepted or args.use_fallback
+            if worker.reviewed:
+                replacement = args.use_fallback or worker.state in {"failed", "stopped"} or worker.result is None
+                worker.reviewed_evidence = ({"text": args.check, "sources": [], "replacement": True}
+                    if replacement else {**worker.result, "replacement": False})
+            else:
+                worker.reviewed_evidence = None
             if worker.reviewed and worker.state == "review":
                 self._state(worker, "completed", review_outcome="fallback" if args.use_fallback else "accepted",
                             ended_at=datetime.now(timezone.utc).isoformat())
@@ -288,6 +303,16 @@ class DelegationLoop(AgentLoop):
 
     def _summaries(self):
         return [{"agent_id": w.id, "status": w.state, "reviewed": w.reviewed} for w in self.workers.values()]
+
+    def worker_evidence(self):
+        """Only the accepted current result, never mailbox/protocol transcripts."""
+        with self.condition:
+            return json.loads(json.dumps([w.reviewed_evidence for w in self.workers.values()
+                if w.reviewed and not w.inbox and w.reviewed_evidence], ensure_ascii=False))
+
+    def _workers_ready(self):
+        with self.condition:
+            return all(w.reviewed and not w.inbox for w in self.workers.values())
 
     def _report(self, worker, args, *, cancellation):
         self._check(cancellation)
@@ -408,8 +433,7 @@ class DelegationLoop(AgentLoop):
         self._check(cancellation)
         # Tool-routing prose is not a completed synthesis. Only the dedicated,
         # tool-free answer step may publish text after comparisons have started.
-        publish_text = not worker and (not self.comparison or (not self.comparison.text and
-            (answer_step or not self.comparison.comparisons)))
+        publish_text = not worker and (not self.comparison or (answer_step and not self.comparison.text))
         if not self.policy.account_budget_only and len(json.dumps(messages, ensure_ascii=False)) > self.policy.context_chars:
             raise AnalysisBudgetExceeded("Agent session context limit reached")
         self.cooldowns.check(model, self.api_key)
@@ -481,7 +505,7 @@ class DelegationLoop(AgentLoop):
                     yield self.tool_event(step + ":web_search", "web_search", "blocked",
                         text="Web search was skipped for this step: available tokens do not cover the search and its follow-up response. Continuing with existing sources.")
                 yield self.status(step, "started", status="working", settings=model.settings(),
-                                  clear_response=step != "completion:0" and not (self.comparison and self.comparison.text))
+                                  clear_response=step != "completion:0" and not self.comparison)
             if self.mock_answer is not None:
                 value.text, value.finish_reason = self.mock_answer, "stop"
                 if publish_text:
@@ -763,9 +787,24 @@ class DelegationLoop(AgentLoop):
         self.comparison.capture(value.text)
         return value
 
+    def _finish_review(self, value):
+        """A completed answer needs checks, not another routing generation."""
+        names = ["judge_answer"]
+        if self.comparison.contradictions:
+            names.append("check_contradictions")
+        for name in names:
+            if self.comparison.finalized:
+                break
+            call = {"id": f"server_{name}", "type": "function",
+                    "function": {"name": name, "arguments": "{}"}}
+            result = yield from self._execute_stream(value, call)
+            if "error" in json.loads(result["content"]):
+                raise AnalysisBudgetExceeded("The required answer review could not finish. The available answer has been saved.")
+        if not self.comparison.finalized:
+            raise AnalysisBudgetExceeded("The required answer review could not finish. The available answer has been saved.")
+
     def run(self):
         status = "failed"
-        missing_judge_calls = 0
         watcher = threading.Thread(target=self._watch, name="agent-run-watch", daemon=True)
         watcher.start()
         try:
@@ -784,23 +823,23 @@ class DelegationLoop(AgentLoop):
                     if self._consensus_search_handoff(value):
                         continue
                     synthesis = None
-                    if self.comparison and self.comparison.comparisons and not self.comparison.text:
-                        ready = not value.tool_calls
+                    if value.tool_calls:
+                        accepted_tool = False
                         for call in value.tool_calls:
-                            if call.get("function", {}).get("name") in {"judge_answer", "check_contradictions"}:
+                            # Earlier comparisons/reviews of workers in this batch
+                            # must finish before the exact handoff to synthesis.
+                            if (self.comparison and self.comparison.comparisons and not self.comparison.text
+                                    and self._workers_ready()
+                                    and call.get("function", {}).get("name") in {"judge_answer", "check_contradictions"}):
                                 try:
                                     self.registry.validate(call)
                                 except ValueError:
-                                    continue  # Invalid requests must not start another paid step.
-                                ready = True
-                        if ready:
-                            # Ignore text accompanying an early judge call, even
-                            # when it claims to be the answer. The tool-free step
-                            # must finish and be visible before the call can run.
-                            synthesis = yield from self._write_synthesis(steps)
-                    if value.tool_calls:
-                        for call in value.tool_calls:
-                            self.messages.append((yield from self._execute_stream(value, call)))
+                                    pass  # Schema errors cannot start a paid answer step.
+                                else:
+                                    synthesis = yield from self._write_synthesis(steps)
+                            result = yield from self._execute_stream(value, call)
+                            self.messages.append(result)
+                            accepted_tool |= "error" not in json.loads(result["content"])
                             if self.comparison and self.comparison.finalized:
                                 # Ignore speculative extra calls in the same batch
                                 # once all required checks have reached an end state.
@@ -808,30 +847,34 @@ class DelegationLoop(AgentLoop):
                         yield from self._events()
                         if synthesis:
                             self.messages.append(synthesis.assistant_message())
+                        self.invalid_tool_rounds = 0 if accepted_tool else self.invalid_tool_rounds + 1
+                        if self.invalid_tool_rounds >= 3:
+                            raise AnalysisBudgetExceeded("The model repeated invalid tool requests without progress. The available results have been saved.")
                         if not (self.comparison and self.comparison.finalized):
                             continue
-                    elif synthesis:
-                        self.messages.append(synthesis.assistant_message())
-                    with self.condition:
-                        unfinished = any(not w.reviewed or w.inbox for w in self.workers.values())
-                    if unfinished or self.mailbox:
+                    if self.comparison and self.comparison.finalized and self._workers_ready():
+                        # All accepted results are already in the synthesis.
+                        # Old mailbox notifications cannot restart a finished run.
+                        self._mail()
+                    if not self._workers_ready() or self.mailbox:
                         # No unchecked result can silently become the final response.
                         self.messages.append({"role": "user", "content": "Before finalizing, resolve questions and verify each worker result or your own replacement with review_agent (use_fallback=true for a verified replacement). Preserve the original user's requested output format, without a workflow recap. Current sessions: " + json.dumps(self._summaries())})
                         continue
                     if self.comparison and self.comparison.comparisons:
+                        if not self.comparison.text:
+                            synthesis = yield from self._write_synthesis(steps)
+                            self.messages.append(synthesis.assistant_message())
                         if not self.comparison.finalized:
-                            # A missing call never silently becomes success;
-                            # chat can keep trying within its account budget.
-                            missing_judge_calls += 1
-                            if not self.policy.account_budget_only and missing_judge_calls > 1:
-                                raise AnalysisBudgetExceeded("The model did not perform the required answer review.")
-                            tool = "check_contradictions" if self.comparison.contradictions and self.comparison.review else "judge_answer"
-                            self.messages.append({"role": "user", "content": f"The synthesis is visible. Call {tool} now for that exact answer; do not repeat it."})
-                            continue
+                            yield from self._finish_review(value)
                         self.completion.text = self.comparison.text
                         self.completion.finish_reason = "stop"
                     else:
                         self.completion.text, self.completion.finish_reason = value.text, value.finish_reason
+                        if self.comparison and value.text:
+                            # The full response is now known to be direct, not
+                            # tool-routing prose. Greetings/clarifications stay
+                            # possible without a comparison or extra model call.
+                            yield {"type": "delta", "text": value.text}
                     status = "succeeded"
                     break
                 else:

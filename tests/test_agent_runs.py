@@ -306,6 +306,7 @@ def test_provider_error_after_usage_still_records_cost(api, monkeypatch):
     response = client.post("/agent", json={"chat_id": chat_id, "question": "Hi",
         "client_request_id": "failed", "bookmark_id": "bm1"}, headers=AUTH)
     assert "event: error" in response.text and "event: final" not in response.text
+    assert "event: delta" not in response.text
     assert totals(store)["measured_calls"] == 1
     assert totals(store)["estimated_cost_nano_usd"] == 180600
     assert store.list_turns(UID, chat_id)["turns"][0]["status"] == "failed"
@@ -319,7 +320,7 @@ def test_provider_error_after_usage_still_records_cost(api, monkeypatch):
         retry = client.post('/agent', json={'chat_id': chat_id, 'question': 'Hi', 'client_request_id': 'failed',
             'bookmark_id': 'bm1', 'recover_only': True}, headers=AUTH)
         assert retry.status_code == 200
-        assert retry.json()['response'] == 'Partial'
+        assert retry.json()['response'] == ''  # Unfinished routing text was never published.
         assert retry.json()['turn']['status'] == 'failed'
         assert retry.json()['turn']['agent_failure']['code'] == 'provider_error'
     assert len(store.db.documents) == count

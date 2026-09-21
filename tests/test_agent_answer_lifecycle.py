@@ -1,6 +1,7 @@
 """The whole visible answer must finish before any judge can review it."""
 import json
 
+import httpx
 import pytest
 
 from app.services.agent_comparison import review_is_bound
@@ -43,6 +44,8 @@ def answer_factory(script, *, no_call=False, ending="stop", chunks=CHUNKS):
                 if ending == "cancelled":
                     script.loop.cancellation.cancel()
                     raise ProviderCancelled()
+                if ending == "timeout":
+                    raise httpx.ReadTimeout("Provider interrupted the answer")
                 self.finish_reason = ending
                 return
             if self.step_id == "completion:1":
@@ -87,13 +90,13 @@ def test_early_judge_or_intro_cannot_replace_complete_streamed_answer(store, no_
     assert not any(e.get("clear_response") for e in events[first_delta + 1:])
 
 
-@pytest.mark.parametrize("ending", ["length", "max_tokens", "cancelled"])
+@pytest.mark.parametrize("ending", ["length", "max_tokens", "cancelled", "timeout"])
 def test_incomplete_answer_is_saved_without_starting_judges(store, ending):
     script = Script()
     loop = make_loop(store, script)
     loop.factory = answer_factory(script, ending=ending)
     events = []
-    with pytest.raises((AnalysisBudgetExceeded, ProviderCancelled)):
+    with pytest.raises((AnalysisBudgetExceeded, ProviderCancelled, httpx.ReadTimeout)):
         for event in loop.run():
             events.append(event)
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
