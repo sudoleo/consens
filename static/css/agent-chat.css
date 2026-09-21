@@ -174,16 +174,16 @@ body.single-agent-active .chat-input-container .consensus-switch-container { max
 .agent-composer-notice[hidden], .agent-answer-actions[hidden], .agent-answer-actions [hidden], .agent-composer-notice [hidden] { display: none; }
 .agent-composer-notice button { border: 0; padding: 4px 0; background: transparent; color: var(--ink); font: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 .agent-answer-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 12px; margin: 12px 0 0; color: var(--ink-3); font-size: 12px; }
-.agent-answer-actions button { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 6px 8px; border: 0; border-radius: 6px; background: transparent; color: var(--ink-2); font: inherit; cursor: pointer; }
+.agent-answer-actions button, .agent-evidence-links .agent-evidence-link { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 6px 8px; border: 0; border-radius: 6px; background: transparent; color: var(--ink-2); font: inherit; font-size: 12px; text-decoration: none; cursor: pointer; }
 .agent-answer-actions button:first-child { margin-left: -8px; }
-.agent-answer-actions button:hover { background: var(--raise); color: var(--ink); }
+.agent-answer-actions button:hover, .agent-evidence-links .agent-evidence-link:hover { background: var(--raise); color: var(--ink); }
 .agent-answer-actions button[aria-disabled="true"] { cursor: default; opacity: .6; }
-.agent-answer-actions svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
-.agent-answer-actions button:focus-visible, .agent-composer-notice button:focus-visible { outline: 2px solid var(--ink-2); outline-offset: 2px; }
+.agent-answer-actions svg, .agent-evidence-icon { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.agent-answer-actions button:focus-visible, .agent-composer-notice button:focus-visible, .agent-evidence-links .agent-evidence-link:focus-visible { outline: 2px solid var(--ink-2); outline-offset: 2px; }
 .agent-copy-status { overflow-wrap: anywhere; }
 .agent-copy-buffer { position: fixed; top: 0; left: -9999px; }
 @media (pointer: coarse) {
-  .agent-answer-actions button, .agent-composer-notice button { min-height: 44px; }
+  .agent-answer-actions button, .agent-composer-notice button, .agent-evidence-links .agent-evidence-link { min-height: 44px; }
 }
 body.single-agent-active :is(#consensusOutput, #consensusRun, #agentModePanel, .response-section,
   #deepThinkInputIndicator,
@@ -215,8 +215,16 @@ body.single-agent-active .consensus-model-inline { min-width: 0; max-width: 100%
 .agent-review-status::before { content: ''; display: inline-block; width: 5px; height: 5px; margin: 0 7px 2px 0; border-radius: 50%; background: var(--ink-3); }
 .agent-review-status[data-state="succeeded"]::before { background: #438b75; }
 .agent-review-status:is([data-state="partial"], [data-state="failed"], [data-state="missing"])::before { background: #b58c48; }
-.agent-evidence-links { justify-content: flex-start; gap: 4px 18px; }
-.agent-evidence-links .consensus-tab { min-height: 36px; padding: 3px 0; }
+.agent-evidence-links { justify-content: flex-start; gap: 4px 12px; margin-left: -8px; }
+.agent-evidence-link .consensus-tab-label { white-space: nowrap; }
+@media (max-width: 540px) {
+  .agent-evidence-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; margin-left: 0; }
+  .agent-evidence-grid .agent-evidence-link { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: 16px auto; gap: 5px; min-width: 0; min-height: 56px; padding: 6px 0; }
+  .agent-evidence-grid .agent-evidence-icon { grid-row: 1; grid-column: 1; justify-self: end; }
+  .agent-evidence-grid .consensus-tab-count { grid-row: 1; grid-column: 2; justify-self: start; line-height: 16px; }
+  .agent-evidence-grid .consensus-tab-label { grid-row: 2; grid-column: 1 / -1; justify-self: center; }
+  .agent-evidence-grid .agent-evidence-link:not(:has(.consensus-tab-count)) .agent-evidence-icon { grid-column: 1 / -1; justify-self: center; }
+}
 .agent-evidence-focus { display: inline-flex; gap: 8px; align-items: center; min-width: 0; max-width: 100%; color: var(--ink-3); }
 .agent-evidence-focus select { min-width: 0; max-width: 260px; background: transparent; color: var(--ink-2); border: 0; font: inherit; padding: 6px 0; }
 .agent-evidence-panel { font-size: 13px; line-height: 1.7; overflow-wrap: anywhere; }

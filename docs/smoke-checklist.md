@@ -798,8 +798,10 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
 - [ ] „Copy answer“ kopiert die aktuelle, ältere und wiederhergestellte Antwort
   ohne Prüf-/Statusanzeige. Erfolg und abgewiesener Clipboard-Zugriff sind sichtbar;
   Tastaturfokus bleibt erhalten. Keine Kopieraktion während laufender Antwort.
-- [ ] „Follow up“ öffnet und fokussiert den Composer. Schon getippter Text und
-  Zitat bleiben erhalten; die Aktion startet keinen Modellaufruf.
+- [ ] Folgefragen direkt im Composer; kein zusätzlicher „Follow up“-Button.
+  Contradictions/Review, Answers und Sources haben dezente Icons, lesbare
+  Anzahlen und öffnen weiterhin den passenden Antwortleser. Bei 320/390 px
+  stehen sie in drei gleichen Spalten ohne abgeschnittene Beschriftungen.
 
 - [ ] Vergleichsmodelle im Picker auf eins/keines reduzieren: Senden ist gesperrt,
       Enter erhält den Entwurf und erstellt keinen Chat. Zwei Modelle wählen

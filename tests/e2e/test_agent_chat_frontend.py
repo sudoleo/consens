@@ -311,7 +311,8 @@ def test_single_agent_send_followup_restore_and_layout(browser, phase4_server, w
         page.keyboard.press('Enter')
         expect(page.locator('#agentAnswer .agent-copy-status')).to_have_text('Copied')
         assert page.evaluate('navigator.clipboard.readText()').replace('\r\n', '\n') == turns[0]['consensus']
-        page.locator('#agentAnswer .agent-answer-actions').get_by_role('button', name='Follow up').click()
+        expect(page.locator('#agentAnswer').get_by_role('button', name='Follow up')).to_have_count(0)
+        page.locator('#questionInput').click()
         expect(page.locator('#questionInput')).to_be_focused()
         expect(page.locator("#agentAnswer")).to_be_visible()
         expect(page.locator("#consensusOutput")).not_to_be_visible()
@@ -321,7 +322,6 @@ def test_single_agent_send_followup_restore_and_layout(browser, phase4_server, w
         expect(page.locator("#threadAsk .thread-ask-label")).to_have_count(0)
         expect(page.locator("#agentAnswerActivity .agent-activity-marker")).to_have_count(0)
         page.locator("#questionInput").fill("Now explain the next step")
-        page.locator('#agentAnswer .agent-answer-actions').get_by_role('button', name='Follow up').click()
         expect(page.locator('#questionInput')).to_have_value('Now explain the next step')
         expect(page.locator('#questionInput')).to_be_focused()
         page.locator(".agent-model-picker .model-picker-display").click()
@@ -750,7 +750,7 @@ def test_native_search_sources_in_chat_and_saved_activity(browser, phase4_server
         assert box["x"] >= 0 and box["x"] + box["width"] <= width
         _snapshot(page, f"agent-native-search-{width}-{'dark' if dark else 'light'}")
         sources = page.locator('.agent-evidence-link[data-section="sources"]')
-        expect(sources).to_have_text('Sources 2')
+        expect(sources).to_have_accessible_name('Sources 2')
         sources.click()
         expect(page.locator('#answerReaderInspector a')).to_have_count(2)
         expect(page.locator('#answerReaderSections [data-section="answers"]')).not_to_be_visible()

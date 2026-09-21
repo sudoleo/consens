@@ -140,7 +140,7 @@ def test_mobile_agent_plus_menu_opens_tools_from_single_line_composer(browser, p
 
 @pytest.mark.parametrize("width,dark", [(1440, False), (390, True), (320, False)])
 def test_comparison_review_and_saved_projection(browser, phase4_server, width, dark):
-    context, page = _real_firebase_page(browser, phase4_server)
+    context, page = _real_firebase_page(browser, phase4_server, has_touch=width < 700)
     chat, turn = "a" * 32, "b" * 32
     anchor = "The smaller plan includes five seats."
     text = "For a team of five, start with the **smaller plan**.\n\n" + anchor + "\n\nConfirm the seat limit before purchasing: the model answers disagree on this detail.\n\nSee the [billing terms](https://example.org/billing)."
@@ -251,6 +251,23 @@ def test_comparison_review_and_saved_projection(browser, phase4_server, width, d
         assert requests[0]['reasoning_effort'] == 'high'
         expect(page.locator('#quotaTriggerValue')).to_have_text('56%')
         expect(page.locator('.agent-evidence-link[data-section="sources"]')).to_have_text('Sources2')
+        page.wait_for_function("() => App.runRegistry.visible()?.status === 'succeeded'")
+        evidence_links = page.locator('#agentAnswer .agent-evidence-link')
+        expect(evidence_links.locator('svg[aria-hidden="true"]')).to_have_count(3)
+        expect(page.locator('#agentAnswer').get_by_role('button', name='Follow up')).to_have_count(0)
+        assert evidence_links.first.evaluate('el => getComputedStyle(el).backgroundImage') == 'none'
+        if width <= 540:
+            boxes = [control.bounding_box() for control in evidence_links.all()]
+            assert max(box['width'] for box in boxes) - min(box['width'] for box in boxes) <= 1
+            assert max(box['y'] for box in boxes) - min(box['y'] for box in boxes) <= 1
+            assert all(box['height'] >= 44 for box in boxes)
+            assert evidence_links.evaluate_all('''links => links.every(link => {
+                const box = link.getBoundingClientRect();
+                return [...link.children].every(child => {
+                    const rect = child.getBoundingClientRect();
+                    return rect.left >= box.left && rect.right <= box.right;
+                });
+            })''')
         expect(page.locator('#chatExecutionControl')).not_to_be_visible()
         expect(page.locator('.agent-effort-control')).not_to_be_visible()
         expect(page.locator("#agentAnswerBody .cx-claim")).to_have_count(1)

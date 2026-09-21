@@ -6,7 +6,6 @@ function boot() {
     body: '<div id="answer"></div><textarea id="questionInput">My next question</textarea>',
     before(window) {
       Object.defineProperty(window.navigator, 'clipboard', { configurable: true, value: { writeText: vi.fn().mockResolvedValue() } });
-      window.App = { quote: { focusComposer: () => window.document.getElementById('questionInput').focus() } };
     },
   });
 }
@@ -16,7 +15,7 @@ describe('Agent answer actions', () => {
     const { window: w, document: d, dom } = boot();
     const body = d.getElementById('answer');
     body.innerHTML = '<p>Answer <button>Review badge</button></p>';
-    const state = {key: 'first', text: '**Answer** with [source](https://example.com)', followup: true};
+    const state = {key: 'first', text: '**Answer** with [source](https://example.com)'};
     w.App.agentAnswerActions.render(body, state);
     const copy = d.querySelector('.agent-answer-actions button');
     copy.focus();
@@ -26,9 +25,7 @@ describe('Agent answer actions', () => {
     w.App.agentAnswerActions.render(body, state);
     expect(d.activeElement).toBe(copy);
     expect(d.querySelector('[role="status"]').textContent).toBe('Copied');
-    d.querySelector('.agent-answer-actions button:nth-child(2)').click();
-    expect(d.activeElement.id).toBe('questionInput');
-    expect(d.activeElement.value).toBe('My next question');
+    expect(d.querySelectorAll('.agent-answer-actions button')).toHaveLength(1);
     dom.window.close();
   });
 
@@ -39,7 +36,7 @@ describe('Agent answer actions', () => {
     expect(body.nextElementSibling.hidden).toBe(true);
     w.App.agentAnswerActions.render(body, {key: 'live', text: 'Partial', running: false});
     expect(body.nextElementSibling.hidden).toBe(false);
-    expect(body.nextElementSibling.querySelector('button:nth-child(2)').hidden).toBe(true);
+    expect(body.nextElementSibling.querySelectorAll('button')).toHaveLength(1);
     w.App.agentAnswerActions.render(body, {key: 'empty', text: ''});
     expect(body.nextElementSibling.hidden).toBe(true);
     dom.window.close();

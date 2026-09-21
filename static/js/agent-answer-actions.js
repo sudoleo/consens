@@ -35,19 +35,18 @@
     }
   }
 
-  function render(body, { key = '', text = '', running = false, followup = false } = {}) {
+  function render(body, { key = '', text = '', running = false } = {}) {
     if (!body) return;
     let view = views.get(body);
     if (!view) {
       const bar = document.createElement('div');
       bar.className = 'agent-answer-actions';
       const copy = button('Copy answer', 'M9 9h11v11H9zM15 5V3H3v12h2');
-      const ask = button('Follow up', 'M9 10 4 15l5 5M4 15h10a6 6 0 0 0 0-12');
       const status = document.createElement('span');
       status.className = 'agent-copy-status';
       status.setAttribute('role', 'status');
-      bar.append(copy, ask, status);
-      view = { bar, copy, ask, status, revision: 0 };
+      bar.append(copy, status);
+      view = { bar, copy, status, revision: 0 };
       views.set(body, view);
       copy.addEventListener('click', async () => {
         if (view.copying || bar.hidden) return;
@@ -68,7 +67,6 @@
           if (revision === view.revision) { view.copying = false; copy.removeAttribute('aria-disabled'); }
         }
       });
-      ask.addEventListener('click', () => App.quote?.focusComposer?.());
     }
     const hidden = running || !text.trim();
     if (view.key !== key || view.text !== text || view.bar.hidden !== hidden) {
@@ -81,7 +79,6 @@
     view.key = key;
     view.text = text;
     view.bar.hidden = hidden;
-    view.ask.hidden = !followup || window.userCanTypeQuestions?.() === false;
     const anchor = body._agentReview?.isConnected ? body._agentReview : body;
     if (anchor.nextElementSibling !== view.bar) anchor.after(view.bar);
   }

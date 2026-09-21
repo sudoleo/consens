@@ -159,6 +159,27 @@
     panel.append(sources.length ? list : node('p', 'agent-review-note', 'No source URLs were supplied for this answer.'));
     return panel;
   }
+  function evidenceButton(section, label, count) {
+    const button = node('button', 'consensus-tab agent-evidence-link');
+    button.type = 'button';
+    button.dataset.section = section;
+    button.setAttribute('aria-controls', 'modelAnswerReader');
+    button.setAttribute('aria-label', count === null ? label : `${label} ${count}`);
+    const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    icon.classList.add('agent-evidence-icon');
+    icon.setAttribute('viewBox', '0 0 24 24');
+    icon.setAttribute('aria-hidden', 'true');
+    const path = document.createElementNS(icon.namespaceURI, 'path');
+    path.setAttribute('d', {
+      differences: 'M12 20v-7M12 13 5 6M12 13l7-7M5 11V6h5M14 6h5v5',
+      answers: 'M4 4h12v10H8l-4 4V4ZM16 8h4v12l-4-4h-4',
+      sources: 'M14 3H5v18h14V8ZM14 3v5h5M8 12h8M8 16h6',
+    }[section]);
+    icon.append(path);
+    button.append(icon, node('span', 'consensus-tab-label', label));
+    if (count !== null) button.append(node('span', 'consensus-tab-count', String(count)));
+    return button;
+  }
   function render(body, review, evidence = {}) {
     if (!body?.parentElement) return;
     const version = review?.versions?.find(v => v.id === review.answer_version);
@@ -180,8 +201,8 @@
       const context = { key: `agent-sources:${evidence.key || body.id || evidence.question}`, question: evidence.question || 'Answer sources',
         answers: [], sections: ['sources'], renderPanel: () => sourcePanel(turnSources) };
       const nav = node('nav', 'consensus-footer-tabs agent-evidence-links');
-      const button = node('button', 'consensus-tab agent-evidence-link', `Sources ${turnSources.length}`);
-      button.type = 'button'; button.dataset.section = 'sources';
+      nav.setAttribute('aria-label', 'Explore answer evidence');
+      const button = evidenceButton('sources', 'Sources', turnSources.length);
       button.addEventListener('click', () => App.answerReader?.openContext(context, {section: 'sources', trigger: button}));
       nav.append(button); host.replaceChildren(nav); App.answerReader?.refreshContext(context); return;
     }
@@ -208,7 +229,7 @@
     status.setAttribute("role", "status"); status.dataset.state = state;
     status.title = [...issues.map(issueText), "Model agreement compares perspectives; it is not independent fact checking."].join('. ');
     summary.append(status); host.append(summary);
-    const tabs = node("nav", "consensus-footer-tabs agent-evidence-links");
+    const tabs = node("nav", "consensus-footer-tabs agent-evidence-links agent-evidence-grid");
     tabs.setAttribute("aria-label", "Explore answer evidence"); host.append(tabs);
     const fallback = node("div", "consensus-claims-fallback"); fallback.hidden = true; host.append(fallback);
     let contexts;
@@ -311,10 +332,7 @@
       chosen = context; host._selectedBasis = context.key;
       context.mark(); tabs.replaceChildren();
       for (const [section, label, count] of context.links()) {
-        const button = node("button", "consensus-tab agent-evidence-link"); button.type = "button";
-        button.dataset.section = section; button.setAttribute("aria-controls", "modelAnswerReader");
-        button.append(node("span", "consensus-tab-label", label));
-        if (count !== null) button.append(node("span", "consensus-tab-count", String(count)));
+        const button = evidenceButton(section, label, count);
         button.addEventListener("click", () => App.answerReader?.openContext(context, { section, trigger: button }));
         tabs.append(button);
       }

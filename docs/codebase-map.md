@@ -2018,9 +2018,13 @@ archivierte Agent-Antworten um „Copy answer“ aus dem kanonischen Markdown,
 ohne Activity, Prüfmarkierungen oder Bedienelemente. Während Streaming sind die
 Aktionen verborgen; gestoppte Teilantworten bleiben kopierbar. Stabile Buttons,
 lokales Statusfeedback und eine Projektionsrevision verhindern Fokusverlust und
-verspätete Copy-Rückmeldungen am falschen Turn. Aktuelle fortsetzbare Antworten
-zeigen „Follow up“: derselbe Composer öffnet und fokussiert sich unter Erhalt
-des bestehenden Entwurfs und Zitats, ohne einen Request zu starten.
+verspätete Copy-Rückmeldungen am falschen Turn. Folgefragen verwenden direkt den
+Composer, ohne zusätzliche Antwortaktion. `agent-review.js::evidenceButton`
+gibt Contradictions/Review, Answers und Sources dieselbe dezente Icon-Gestaltung
+und lesbare ARIA-Namen samt Anzahl; der Antwortleser-Vertrag bleibt unverändert.
+Bis 540 px stehen die drei Vergleichsaktionen in gleich breiten Spalten mit
+Icon/Anzahl über dem Label. Einzelne Quellenaktionen ohne Vergleich bleiben
+kompakt. Die Gestaltung gilt auch für gespeicherte und archivierte Antworten.
 
 **UI-Verträge.** agent-activity.js zeigt die Laufzeit in der Überschrift des
 standardmäßig geschlossenen Disclosures. Live zählt sie sekündlich ab dem Start

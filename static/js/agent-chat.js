@@ -295,7 +295,7 @@
         { sources: basis.currentTurn?.sources, events: basis.currentTurn?.agent_activity, key: basis.turnId, question: basis.question });
       App.agentAnswerActions?.render(document.getElementById('agentAnswerBody'), {
         key: `${basis.chatId}:${basis.turnId}`, text: basis.consensus || '',
-        running: basis.currentTurn?.status === 'pending', followup: Boolean(basis.chatId && !basis.continuationUnavailable),
+        running: basis.currentTurn?.status === 'pending',
       });
       App.agentDelegation?.project(basis.currentTurn?.agent_settings?.policy?.delegation ? {
         chatId: basis.chatId, turnId: basis.turnId || basis.currentTurn?.id,
@@ -359,7 +359,6 @@
         key: state.completedTurn?.id || context.runId, question: context.question });
     App.agentAnswerActions?.render(document.getElementById('agentAnswerBody'), {
       key: context.runId, text: state.text || state.streamText || '', running: registry.isExecuting(context.runId),
-      followup: Boolean(context.completedBasis?.chatId && !context.completedBasis.continuationUnavailable),
     });
     App.syncSendButtonRunning?.();
     App.agentDelegation?.project(context.metadata.delegation || state.completedTurn?.agent_settings?.policy?.delegation ? { chatId: context.metadata.chatId,

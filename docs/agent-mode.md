@@ -40,8 +40,11 @@ als ungesendet angeboten.
 Abgeschlossene und gestoppte Antworten lassen sich über „Copy answer“ kopieren,
 auch im Verlauf und nach Wiederherstellung. Kopiert wird das ursprüngliche
 Antwort-Markdown ohne Statusanzeigen oder Prüfmarkierungen; Erfolg oder Fehler
-erscheint direkt an der Aktion. „Follow up“ an der aktuellen Antwort öffnet und
-fokussiert das Eingabefeld, ohne dort vorbereiteten Text oder Zitate zu ersetzen.
+erscheint direkt an der Aktion. Folgefragen werden direkt im Eingabefeld gestellt.
+Contradictions/Review, Answers und Sources verwenden dieselben dezenten Aktionen
+mit vorangestellten Icons. Bis 540 px stehen die drei Bereiche gleichmäßig in
+einer Zeile, mit Icon und Anzahl über der vollständigen Beschriftung. Alle drei
+bleiben auch bei null Ergebnissen erreichbar und haben ausreichende Touch-Flächen.
 
 GET /agent/models lädt die vollständigen Anbieterlisten samt Reihenfolge aus
 Firestore `app_config/models` über die gemeinsame Konfiguration. Presets und
