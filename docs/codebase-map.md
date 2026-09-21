@@ -1819,7 +1819,7 @@ Mindestens zwei vollständige Antworten sind eine brauchbare Prüfgrundlage.
 Nach den Vergleichen fordert das Chatmodell mit `judge_answer` die Antwortphase
 an. `DelegationLoop._write_synthesis` schiebt vor der Tool-Ausführung einen
 eigenen Schreibschritt desselben Chatmodells ein: leere Tool-Registry, keine
-native Suche, `allow_tool_calls=false` und ein phasenspezifischer Systemzusatz
+native Suche, `allow_tool_calls=false` und ein eigener Antwortkontext
 verlangen die vollständige Antwort. Dieser Schritt wird normal als nächster
 `completion:N` reserviert und abgerechnet. Tool-Begleittext oder ein vorzeitiger
 Antwortversuch nach Vergleichen wird nicht als Synthese angezeigt/gespeichert;
@@ -1827,7 +1827,17 @@ auch ein reiner Textabschluss führt erst in den dedizierten Schreibschritt.
 Erst nach dessen vollständigem, nicht leerem `stop` wird der sichtbare Text
 festgeschrieben und der angeforderte Judge ausgeführt. Bei Abbruch/Tokenlimit
 bleibt nur die ungeprüfte Teilantwort erhalten, ohne gestartete Judges.
-Der Synthesekontext enthält keine noch unbeantworteten Toolcalls. Die eigentliche
+`ComparisonTools.synthesis_messages` verwendet die konfigurierten Consensus-
+Anweisungen, ergänzende Regeln für die beratende Stimme, Datum und Modellidentität.
+Der tatsächliche Nutzer-/Antwortverlauf wird beim Start vor allen Laufzeit-
+Ergänzungen gesichert. Hinzu kommen ausschließlich Vergleichsfragen/-kontext,
+Antworttexte mit Quellen, Anzahl fehlender Antworten und normalisierte Recherche-
+Quellen. Agent-Systemprompt, Tool-Replay, Status-/Routingfelder und private
+Reasoning-Fortsetzungen gelangen nicht in diesen Schreibkontext. Die originale
+Tool-Konversation bleibt für die Orchestrierung unverändert. Für den isolierten
+Schreibschritt setzt eine Modellkopie `reasoning.exclude=true` und entfernt
+`reasoning.summary`, ohne Effort oder Tokenbudget zu ändern. Provider-Reasoning
+wird weiterhin nicht in Antwort, Live-Status oder Verlauf projiziert. Die eigentliche
 Synthese wird für Folgeschritte nach den Tool-Ergebnissen in den Kontext aufgenommen.
 Der Toolcall prüft diesen exakten Text, keinen vom Modell frei behaupteten
 Prüftext. Er nutzt query_differences samt Coverage, Satzindizes,

@@ -86,7 +86,7 @@ def test_user_progress_is_ordered_persisted_and_does_not_add_model_calls(store, 
 
         def with_progress(**kwargs):
             yield from stream(**kwargs)
-            if value.step_id.startswith("completion:"):
+            if value.step_id.startswith("completion:") and value.tool_calls:
                 assert "language of the user's current question" in kwargs["messages"][0]["content"]
                 for call in value.tool_calls:
                     args = json.loads(call["function"]["arguments"])

@@ -830,6 +830,9 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
   Einleitung neben einem frühen Judge-Aufruf ersetzt nie den Antwortteil.
   Nach der Prüfung bleiben Wortlaut und Leseposition erhalten. Bei Stopp während
   der Synthese bleibt der Teiltext ungeprüft; keine Judges starten dafür.
+- [ ] Agent-Synthese beginnt mit der eigentlichen Antwort, ohne interne Toolsyntax,
+  Statusparameter, Arbeitsanweisungen oder Reasoning-Vorspann. Gesprächskontext,
+  Quellen und bewusst angeforderte Codebeispiele bleiben erhalten.
 - [ ] Agent-Synthese bei einer persönlichen Empfehlungsfrage: klare, begründete
   Empfehlung anhand der Nutzerkriterien, keine übernommenen Ich-Präferenzen oder
   erfundenen Erlebnisse der Vergleichsmodelle. Bedingungen bleiben erhalten;

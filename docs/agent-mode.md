@@ -75,6 +75,13 @@ Differences und Coverage genau den bereits sichtbaren Text. Eine Einleitung nebe
 einem verfrühten Judge-Aufruf zählt nicht als Antwort. Der Schreibschritt wird wie
 jeder Modellaufruf abgerechnet. Bei Abbruch oder Tokenlimit bleibt der Teiltext
 ungeprüft erhalten; die Judges starten nicht.
+Der Schreibschritt verwendet die konfigurierten Consensus-Anweisungen mit der
+eigenen beratenden Stimme des Chatmodells. Er erhält den tatsächlichen Gesprächs-
+verlauf sowie Vergleichsantworten und Quellen, keine internen Toolgespräche,
+Statusfelder oder Reasoning-Fortsetzungen. Die Agent-Anweisungen steuern weiterhin
+die Orchestrierung. Die Reasoning-Ausgabe des Providers wird für den Schreibschritt
+unterdrückt; Modell und gewählte Denkstufe bleiben erhalten. Der sichtbare Antwort-
+text wird nicht nachträglich durch Stichwortfilter verändert.
 Ein fehlender Toolcall wird erneut eingefordert, solange das Tagesbudget weitere
 Aufrufe zulässt. Das Backend lässt keinen stillen ungeprüften Abschluss zu.
 

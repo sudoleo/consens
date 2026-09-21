@@ -72,11 +72,11 @@ class Script:
         return Completion()
 
 
-def make_loop(store, script, *, check_sources=False, source_limits=None):
+def make_loop(store, script, *, check_sources=False, source_limits=None, messages=None):
     chat, turn = pending(store)
     config = {**defaults(), "enabled": False, "max_searches": 0, "context_chars": 120_000}
     loop = DelegationLoop(store=store, uid=UID, chat_id=chat, turn_id=turn["id"],
-        model=resolve_agent_model("claude-haiku-4-5"), messages=[{"role": "system", "content": "Answer."}, {"role": "user", "content": "Compare options"}],
+        model=resolve_agent_model("claude-haiku-4-5"), messages=messages or [{"role": "system", "content": "Answer."}, {"role": "user", "content": "Compare options"}],
         api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy.from_config({**config, "enabled": True}),
         delegation_config=config, completion_factory=script.factory,
         check_sources=check_sources, source_limits=source_limits,

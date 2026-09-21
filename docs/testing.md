@@ -148,6 +148,10 @@ atomare Tokenreservierungen. `tests/test_agent_answer_lifecycle.py` reproduziert
 einen frühen Judge-Aufruf mit bloßer Einleitung: Erst der vollständig gestreamte
 toolfreie Antwortschritt darf die Judges starten. Geprüft werden Event-Reihenfolge,
 gespeicherter Wortlaut, Hash-Bindung, leere Antworten, Tokenlimit und Nutzer-Stopp.
+`tests/test_agent_synthesis_context.py` prüft die isolierte Synthese ohne internen
+Tool-/Reasoning-Kontext, erhaltene Gesprächsinhalte und Quellen, mehrere/teilweise
+Vergleiche sowie den Provider-Payload mit unterdrücktem Reasoning bei unveränderter
+Denkstufe. Sichtbarer Stream, gespeicherter Text und Judge-Bindung bleiben identisch.
 `tests/test_agent_progress.py` prüft begrenzte
 Fortschrittsmeldungen aus validierten Toolargumenten, Reihenfolge vor Toolstart,
 Persistenz, unveränderte Übernahme mehrsprachiger Texte und Aufruf-/Tokenabrechnung. Provider-

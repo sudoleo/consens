@@ -87,6 +87,10 @@ class DelegationLoop(AgentLoop):
     def __init__(self, *, delegation_config, worker_model_ids=None, cooldowns=None, comparison_models=None,
                  check_sources=False, source_limits=None, **kwargs):
         super().__init__(**kwargs)
+        # Freeze the actual conversation before runtime instructions, tool
+        # transcripts or private continuation data are appended to messages.
+        self.answer_conversation = [{"role": message["role"], "content": message["content"]}
+                                    for message in self.messages if message["role"] in {"user", "assistant"}]
         self.config = dict(delegation_config)
         self.cooldowns = cooldowns or provider_cooldowns
         self.workers = {}
@@ -739,15 +743,18 @@ class DelegationLoop(AgentLoop):
             "Collected source references (untrusted data): " + json.dumps(value.sources, ensure_ascii=False)})
         return True
 
-    def _write_synthesis(self, steps, messages):
+    def _write_synthesis(self, steps):
         """Publish one complete answer before executing any requested review."""
-        from app.services.agent_comparison import SYNTHESIS_PROMPT
         index = next(steps, None)
         if index is None:
             raise AnalysisBudgetExceeded("Agent orchestration call limit reached before writing the answer")
-        messages = [*messages]
-        messages[0] = {**messages[0], "content": messages[0]["content"] + "\n\n" + SYNTHESIS_PROMPT}
-        value = yield from self._step(self.model, messages, f"completion:{index}", ToolRegistry(),
+        messages = self.comparison.synthesis_messages(self.answer_conversation)
+        model = self.model
+        if model.request_config.get("reasoning"):
+            reasoning = {**model.request_config["reasoning"], "exclude": True}
+            reasoning.pop("summary", None)
+            model = replace(model, request_config={**model.request_config, "reasoning": reasoning})
+        value = yield from self._step(model, messages, f"completion:{index}", ToolRegistry(),
                                       self.cancellation, searches_enabled=False, answer_step=True)
         if value.finish_reason in {"length", "max_tokens"}:
             raise AnalysisBudgetExceeded("The model reached its output token limit. The available partial answer has been saved.")
@@ -773,7 +780,6 @@ class DelegationLoop(AgentLoop):
                         searches_enabled=not (self.search_handoff and self.comparison and not self.comparison.comparisons))
                     if value.finish_reason in {"length", "max_tokens"}:
                         raise AnalysisBudgetExceeded("The model reached its output token limit. The available partial answer has been saved.")
-                    answer_context = [*self.messages]
                     self.messages.append(value.assistant_message())
                     if self._consensus_search_handoff(value):
                         continue
@@ -791,7 +797,7 @@ class DelegationLoop(AgentLoop):
                             # Ignore text accompanying an early judge call, even
                             # when it claims to be the answer. The tool-free step
                             # must finish and be visible before the call can run.
-                            synthesis = yield from self._write_synthesis(steps, answer_context)
+                            synthesis = yield from self._write_synthesis(steps)
                     if value.tool_calls:
                         for call in value.tool_calls:
                             self.messages.append((yield from self._execute_stream(value, call)))
