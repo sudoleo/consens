@@ -224,7 +224,7 @@ def test_failed_stream_adopts_saved_bookmark_and_survives_reload(browser, phase4
 
 @pytest.mark.parametrize("width,dark", [(1280, False), (390, False), (390, True), (320, False)])
 def test_single_agent_send_followup_restore_and_layout(browser, phase4_server, width, dark):
-    context, page = _real_firebase_page(browser, phase4_server)
+    context, page = _real_firebase_page(browser, phase4_server, has_touch=width < 700)
     errors, requested, calls = [], [], []
     page.on("pageerror", lambda error: errors.append(str(error)))
     page.on("request", lambda request: requested.append(request.url.split("?")[0]))
@@ -300,6 +300,19 @@ def test_single_agent_send_followup_restore_and_layout(browser, phase4_server, w
         page.locator("#sendButton").click()
         expect(page.locator("#agentAnswerBody")).to_contain_text("Explain the first step")
         page.wait_for_function("() => App.runRegistry.visible()?.status === 'succeeded'")
+        expect(page.locator('#questionInput')).to_have_attribute('placeholder', 'Ask a follow-up')
+        expect(page.locator('#sendButton')).to_be_disabled()
+        context.grant_permissions(['clipboard-read', 'clipboard-write'])
+        copy = page.locator('#agentAnswer .agent-answer-actions').get_by_role('button', name='Copy answer')
+        assert copy.evaluate('el => getComputedStyle(el).backgroundImage') == 'none'
+        if width < 700:
+            assert copy.bounding_box()['height'] >= 44
+        copy.focus()
+        page.keyboard.press('Enter')
+        expect(page.locator('#agentAnswer .agent-copy-status')).to_have_text('Copied')
+        assert page.evaluate('navigator.clipboard.readText()').replace('\r\n', '\n') == turns[0]['consensus']
+        page.locator('#agentAnswer .agent-answer-actions').get_by_role('button', name='Follow up').click()
+        expect(page.locator('#questionInput')).to_be_focused()
         expect(page.locator("#agentAnswer")).to_be_visible()
         expect(page.locator("#consensusOutput")).not_to_be_visible()
         expect(page.locator("#chatExecutionMode")).to_be_disabled()
@@ -308,6 +321,9 @@ def test_single_agent_send_followup_restore_and_layout(browser, phase4_server, w
         expect(page.locator("#threadAsk .thread-ask-label")).to_have_count(0)
         expect(page.locator("#agentAnswerActivity .agent-activity-marker")).to_have_count(0)
         page.locator("#questionInput").fill("Now explain the next step")
+        page.locator('#agentAnswer .agent-answer-actions').get_by_role('button', name='Follow up').click()
+        expect(page.locator('#questionInput')).to_have_value('Now explain the next step')
+        expect(page.locator('#questionInput')).to_be_focused()
         page.locator(".agent-model-picker .model-picker-display").click()
         page.locator('#agentModelControls [data-value="deepseek/deepseek-v4.1-flash"]').click()
         _choose_effort(page, "low")
@@ -320,6 +336,13 @@ def test_single_agent_send_followup_restore_and_layout(browser, phase4_server, w
         expect(page.locator("#agentAnswerActivity")).to_contain_text("I am considering")
         expect(page.locator("#agentAnswerActivity details")).not_to_have_attribute("open", "")
         expect(page.locator("#agentAnswerBody")).to_contain_text("Now explain the next step")
+        archived_copy = page.locator('#threadHistory .agent-answer-actions').get_by_role('button', name='Copy answer')
+        archived_copy.click()
+        expect(page.locator('#threadHistory .agent-copy-status')).to_have_text('Copied')
+        assert page.evaluate('navigator.clipboard.readText()').replace('\r\n', '\n') == turns[0]['consensus']
+        page.locator('#agentAnswer .agent-answer-actions').get_by_role('button', name='Copy answer').click()
+        expect(page.locator('#agentAnswer .agent-copy-status')).to_have_text('Copied')
+        assert page.evaluate('navigator.clipboard.readText()').replace('\r\n', '\n') == turns[1]['consensus']
         assert len(calls) == 2
         assert calls[0]["chat_id"] == calls[1]["chat_id"]
         assert calls[0]["model_id"] == "gpt-5.6-sol" and calls[0]["reasoning_effort"] == "medium"
@@ -344,6 +367,9 @@ def test_single_agent_send_followup_restore_and_layout(browser, phase4_server, w
         expect(page.locator("#agentReasoningEffort")).to_have_value("low")
         if width < 1100 and page.locator("#toggleSidebarButton").get_attribute("aria-expanded") == "true":
             page.locator("#sidebarToggleInner").click()
+        page.locator('#agentAnswer .agent-answer-actions').get_by_role('button', name='Copy answer').click()
+        expect(page.locator('#agentAnswer .agent-copy-status')).to_have_text('Copied')
+        assert page.evaluate('navigator.clipboard.readText()').replace('\r\n', '\n') == turns[1]['consensus']
         page.locator("#agentAnswerActivity summary").click()
         expect(page.locator("#agentAnswerActivity .agent-activity-reasoning")).to_be_visible()
         expect(page.locator("#agentAnswerActivity .agent-usage")).to_contain_text("tokens")
@@ -525,9 +551,12 @@ def test_model_catalog_retry_and_failed_stream(browser, phase4_server):
         page.evaluate("async () => { await window.__switchE2EUser('account-a'); }")
         _choose_mode(page, "agent")
         expect(page.locator("#agentModelsRetry")).to_be_visible()
+        expect(page.locator('#agentComposerNotice')).to_contain_text('could not be loaded')
+        expect(page.locator('#sendButton')).to_be_disabled()
         expect(page.locator(".agent-model-picker .model-picker-display")).to_be_disabled()
         page.locator("#agentModelsRetry").click()
         expect(page.locator(".agent-model-picker .model-picker-display")).to_be_enabled()
+        expect(page.locator('#agentComposerNotice')).not_to_be_visible()
         calls = []
         def agent_response(route):
             request = route.request.post_data_json
@@ -557,6 +586,53 @@ def test_model_catalog_retry_and_failed_stream(browser, phase4_server):
         assert calls[1]["recover_only"] is True
         for key in ("client_request_id", "chat_id", "model_id", "reasoning_effort"):
             assert calls[1][key] == calls[0][key]
+    finally:
+        context.close()
+
+
+@pytest.mark.parametrize('width,dark', [(1280, False), (390, True), (320, False)])
+def test_model_loading_and_unsent_draft_recovery(browser, phase4_server, width, dark):
+    context, page = _real_firebase_page(browser, phase4_server, has_touch=width < 700)
+    errors, pending, calls = [], [], []
+    page.on('pageerror', lambda error: errors.append(str(error)))
+    try:
+        page.set_viewport_size({'width': width, 'height': 900})
+        page.route('**/user_status', lambda r: _json(r, {'tier': 'pro', 'is_pro': True, 'agent_access': True}))
+        page.route('**/agent/models', lambda r: pending.append(r))
+        page.route('**/agent', lambda r: (calls.append(r.request.url), _json(r, {'error': 'Unexpected request'}, 500)))
+        page.route('**/chats', lambda r: _json(r, {'detail': 'Could not start your chat. Please try again.'}, 503))
+        page.evaluate("async () => { await window.__switchE2EUser('account-a'); }")
+        page.evaluate("dark => { document.documentElement.classList.toggle('dark-mode', dark); document.body.classList.toggle('dark-mode', dark); }", dark)
+        _choose_mode(page, 'agent')
+        page.locator('#questionInput').fill('Please explain this passage.\nKeep the two-line draft.')
+        expect(page.locator('#agentComposerNotice')).to_contain_text('Loading chat models')
+        expect(page.locator('#questionInput')).to_be_enabled()
+        expect(page.locator('#sendButton')).to_be_disabled()
+        _snapshot(page, f'agent-models-loading-{width}')
+        assert len(pending) == 1
+        _json(pending[0], CATALOG)
+        expect(page.locator('#agentModelDropdown')).to_be_enabled()
+        expect(page.locator('#agentComposerNotice')).not_to_be_visible()
+        page.evaluate("() => App.quote.set('The passage that matters.')")
+        expect(page.locator('#sendButton')).to_be_enabled()
+        page.locator('#sendButton').click()
+        expect(page.locator('#agentAnswerError')).to_contain_text('Could not start your chat')
+        expect(page.locator('#questionInput')).to_have_value('Please explain this passage.\nKeep the two-line draft.')
+        expect(page.locator('#composerQuoteText')).to_have_text('The passage that matters.')
+        expect(page.locator('#composerQuote')).to_be_visible()
+        expect(page.locator('#agentRecover')).not_to_be_visible()
+        expect(page.locator('#sendButton')).to_be_enabled()
+        assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+        _snapshot(page, f'agent-unsent-draft-{width}')
+        page.locator('#questionInput').fill('')
+        page.evaluate("() => App.quote.clear()")
+        expect(page.locator('#sendButton')).to_be_disabled()
+        page.evaluate("() => App.quote.set('Send this quotation on its own.')")
+        expect(page.locator('#sendButton')).to_be_enabled()
+        page.evaluate("() => App.quote.clear()")
+        expect(page.locator('#sendButton')).to_be_disabled()
+        assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+        assert not calls and not errors
     finally:
         context.close()
 

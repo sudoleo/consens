@@ -31,6 +31,9 @@ def test_comparison_selection_blocks_send_before_losing_draft(browser, phase4_se
         selected.first.click()
         expect(page.locator('#sendButton')).to_be_disabled()
         page.keyboard.press('Escape')
+        expect(page.locator('#agentComposerNotice')).to_be_visible()
+        expect(page.locator('#agentComposerMessage')).to_contain_text('comparison models')
+        expect(page.locator('#sendButton')).to_have_attribute('title', page.locator('#agentComposerMessage').inner_text())
         page.locator('#questionInput').click()
         page.locator('#questionInput').press('Control+End')
         page.locator('#questionInput').press('Enter')
@@ -41,7 +44,7 @@ def test_comparison_selection_blocks_send_before_losing_draft(browser, phase4_se
         page.evaluate('() => App.agentChat.send()')
         expect(page.locator('#questionInput')).to_have_value(draft)
         assert requests == []
-        page.locator('.consensus-model-inline .model-picker-display').click()
+        page.locator('#agentComposerAction').click()
         expect(page.locator('.consensus-model-inline .model-picker-menu')).to_be_visible()
         custom = page.locator('.consensus-model-inline .model-picker-custom-option')
         if custom.is_visible():
@@ -51,6 +54,7 @@ def test_comparison_selection_blocks_send_before_losing_draft(browser, phase4_se
         expect(page.locator('#sendButton')).to_be_disabled()
         excluded.first.click()
         expect(page.locator('#sendButton')).to_be_enabled()
+        expect(page.locator('#agentComposerNotice')).not_to_be_visible()
         assert requests == []
     finally:
         context.close()
@@ -92,6 +96,19 @@ def test_mobile_agent_plus_menu_opens_tools_from_single_line_composer(browser, p
         page.locator('.consensus-model-inline .model-picker-custom-option').tap()
         expect(page.locator('.consensus-model-inline .model-picker-menu')).to_contain_text('Answering models')
         _snapshot(page, f'agent-toolbar-models-touch-{width}')
+        selected = page.locator('.consensus-model-inline .model-picker-row-toggle[aria-checked="true"]')
+        while selected.count() > 1:
+            selected.first.tap()
+        page.keyboard.press('Escape')
+        page.evaluate('() => App.composer.collapse({force:true})')
+        page.wait_for_function("() => !document.body.classList.contains('composer-animating')")
+        expect(page.locator('#agentComposerNotice')).to_be_visible()
+        expect(page.locator('#composerModeBar')).not_to_be_visible()
+        _snapshot(page, f'agent-followup-selection-hint-{width}')
+        page.locator('#agentComposerAction').tap()
+        expect(page.locator('.consensus-model-inline .model-picker-menu')).to_be_visible()
+        page.locator('.consensus-model-inline .model-picker-row-toggle[aria-checked="false"]').first.tap()
+        expect(page.locator('#agentComposerNotice')).not_to_be_visible()
         page.keyboard.press('Escape')
         page.evaluate('() => App.composer.collapse({force:true})')
         page.wait_for_function("() => !document.body.classList.contains('composer-animating')")

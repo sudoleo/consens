@@ -281,10 +281,13 @@
           const canAsk = window.userCanAskQuestions();
           const canType = window.userCanTypeQuestions();
           const selectedModelCount = window.App.getSelectedModelCount?.() || 0;
-          const hasMinimumModels = window.App.agentChat?.isSelected?.()
-            ? window.App.agentChat.canUse() && window.App.agentChat.hasValidComparisonSelection()
+          const agent = window.App.agentChat?.isSelected?.();
+          const agentBlocker = agent ? window.App.agentChat.sendBlocker() : null;
+          const hasMinimumModels = agent
+            ? !agentBlocker
             : selectedModelCount >= 2;
-          const canStartRun = canAsk && hasMinimumModels;
+          const hasMessage = !agent || Boolean(String(window.App.quote?.compose?.(questionInput?.value || '') ?? questionInput?.value ?? '').trim());
+          const canStartRun = canAsk && hasMinimumModels && hasMessage;
           const sendButton = document.getElementById("sendButton");
           const postDemoLoginPrompt = document.getElementById("postDemoLoginPrompt");
 
@@ -304,6 +307,8 @@
               ? canType
                 ? "Confirm your e-mail address to start this run"
                 : "Sign in to ask questions or use your own API keys"
+              : agent
+                ? agentBlocker?.message || (hasMessage ? "Send message" : "Write a message to send")
               : hasMinimumModels
                 ? "Send question"
                 : "Select at least two models to run consensus";
@@ -320,6 +325,7 @@
           // Diese Funktion laeuft nach jedem Auth-Update und wuerde ihn sonst
           // wieder mit dem Standardtext ueberschreiben.
           window.App?.followup?.syncInputLock?.();
+          window.App.agentChat?.syncComposer?.();
 
           return canStartRun;
         };

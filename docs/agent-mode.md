@@ -26,6 +26,23 @@ Die Auswahl wird kontogebunden gespeichert und während eines Laufs eingefroren.
 Der Chatmodell-Picker gruppiert Modelle nach Anbieter; die jeweilige Modellliste
 und die Reasoning-Ebene öffnen im bestehenden Menü.
 
+Der Composer erklärt Sendesperren direkt am Eingabefeld, auch in einer laufenden
+Unterhaltung. Bei fehlender Vergleichsauswahl öffnet „Choose models“ den
+vorhandenen Picker. Während der Modellkatalog lädt, darf bereits getippt werden;
+Senden wartet auf eine verfügbare Auswahl. Leere Nachrichten bleiben gesperrt,
+Zitate können wie bisher eigenständig gesendet werden. Nach der Antwort lautet
+der Platzhalter „Ask a follow-up“, während der Antwort „Write your next message…“.
+Ein vor dem Versand gescheiterter oder gestoppter Start gibt den Entwurf samt
+Zitat zurück, sofern der Nutzer inzwischen keinen anderen Entwurf begonnen oder
+Chat/Account gewechselt hat. Bereits versendete Nachrichten werden nicht erneut
+als ungesendet angeboten.
+
+Abgeschlossene und gestoppte Antworten lassen sich über „Copy answer“ kopieren,
+auch im Verlauf und nach Wiederherstellung. Kopiert wird das ursprüngliche
+Antwort-Markdown ohne Statusanzeigen oder Prüfmarkierungen; Erfolg oder Fehler
+erscheint direkt an der Aktion. „Follow up“ an der aktuellen Antwort öffnet und
+fokussiert das Eingabefeld, ohne dort vorbereiteten Text oder Zitate zu ersetzen.
+
 GET /agent/models lädt die vollständigen Anbieterlisten samt Reihenfolge aus
 Firestore `app_config/models` über die gemeinsame Konfiguration. Presets und
 Premium-Zuordnung filtern diese Liste nicht zusätzlich. Vor einer neuen Nachricht

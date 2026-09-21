@@ -52,6 +52,7 @@
     if (!box || !text) return;
     text.textContent = state.text;
     box.hidden = !state.text;
+    if (window.App.agentChat?.isSelected?.()) window.updateQuestionInputAccess?.();
   }
 
   function set(raw) {

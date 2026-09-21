@@ -174,7 +174,7 @@
       select.dataset.options = signature;
     }
     select.value = ready ? current.model_id || catalog.default_model_id : "";
-    select.disabled = !ready || running;
+    select.disabled = !ready || running || !catalog.models.some(item => item.available !== false);
     const model = catalog?.models.find(item => item.id === select.value);
     const efforts = model?.reasoning_efforts || ["default"];
     const effortSignature = JSON.stringify([model?.id, efforts]);
@@ -293,6 +293,10 @@
       App.agentActivity?.renderTurn(activityHost(`${basis.chatId}:${basis.turnId}`), basis.currentTurn);
       App.agentReview?.render(document.getElementById("agentAnswerBody"), basis.currentTurn?.agent_review,
         { sources: basis.currentTurn?.sources, events: basis.currentTurn?.agent_activity, key: basis.turnId, question: basis.question });
+      App.agentAnswerActions?.render(document.getElementById('agentAnswerBody'), {
+        key: `${basis.chatId}:${basis.turnId}`, text: basis.consensus || '',
+        running: basis.currentTurn?.status === 'pending', followup: Boolean(basis.chatId && !basis.continuationUnavailable),
+      });
       App.agentDelegation?.project(basis.currentTurn?.agent_settings?.policy?.delegation ? {
         chatId: basis.chatId, turnId: basis.turnId || basis.currentTurn?.id,
         usage: basis.currentTurn?.agent_usage, running: basis.currentTurn?.status === "pending" } : null);
@@ -353,6 +357,10 @@
     App.agentReview?.render(document.getElementById("agentAnswerBody"), state.completedTurn?.agent_review || context.metadata.agentReview,
       { sources: state.completedTurn?.sources, events: state.completedTurn?.agent_activity || context.metadata.agentActivity,
         key: state.completedTurn?.id || context.runId, question: context.question });
+    App.agentAnswerActions?.render(document.getElementById('agentAnswerBody'), {
+      key: context.runId, text: state.text || state.streamText || '', running: registry.isExecuting(context.runId),
+      followup: Boolean(context.completedBasis?.chatId && !context.completedBasis.continuationUnavailable),
+    });
     App.syncSendButtonRunning?.();
     App.agentDelegation?.project(context.metadata.delegation || state.completedTurn?.agent_settings?.policy?.delegation ? { chatId: context.metadata.chatId,
       turnId: state.completedTurn?.id || context.metadata.agentTurnId,
@@ -436,6 +444,61 @@
     const limit = Number(App.maxRunFamilies) > 0 ? Number(App.maxRunFamilies) : 6;
     return models.length >= 2 && models.length <= limit && models.every(id => typeof id === 'string' && id.trim());
   }
+  function sendBlocker() {
+    if (!canUse()) return { message: 'Agent Beta is available with Pro.' };
+    if (catalogStatus === 'failed') return { message: 'Chat models could not be loaded. Retry to continue.' };
+    if (catalogStatus !== 'ready') return { message: 'Loading chat models… You can already write your message.' };
+    if (!catalog.models.some(model => model.available !== false)) {
+      return { message: 'No chat models are available right now. Try reloading the model list.', action: 'reload', label: 'Reload models' };
+    }
+    if (!hasValidComparisonSelection()) {
+      const limit = Number(App.maxRunFamilies) > 0 ? Number(App.maxRunFamilies) : 6;
+      return { message: `Select between two and ${limit} comparison models to send your message.`, action: 'compare', label: 'Choose models' };
+    }
+    if (window.getAttachmentsPayload?.()?.length) return { message: 'Agent Beta supports text only. Remove attachments to send your message.' };
+    const basis = registry.getSelectedConversationBasis({ includeHistory: false });
+    if (basis && (!basis.chatId || basis.continuationUnavailable)) return { message: 'Reopen this saved chat before continuing.' };
+    return null;
+  }
+  function syncComposer() {
+    const agent = selectedMode() === 'agent';
+    const running = registry.isExecuting(registry.visible()?.runId);
+    const blocker = agent && !running ? sendBlocker() : null;
+    const notice = document.getElementById('agentComposerNotice');
+    const message = document.getElementById('agentComposerMessage');
+    const action = document.getElementById('agentComposerAction');
+    if (notice) notice.hidden = !blocker;
+    if (message && message.textContent !== (blocker?.message || '')) message.textContent = blocker?.message || '';
+    if (action) {
+      action.hidden = !blocker?.action;
+      action.textContent = blocker?.label || '';
+      action.dataset.action = blocker?.action || '';
+    }
+    const input = document.getElementById('questionInput');
+    if (!input) return;
+    const descriptions = new Set((input.getAttribute('aria-describedby') || '').split(/\s+/).filter(Boolean));
+    descriptions.delete('agentComposerMessage');
+    if (blocker) descriptions.add('agentComposerMessage');
+    if (descriptions.size) input.setAttribute('aria-describedby', [...descriptions].join(' '));
+    else input.removeAttribute('aria-describedby');
+    if (!agent || window.userCanAskQuestions?.() === false) return;
+    const basis = registry.getSelectedConversationBasis({ includeHistory: false });
+    input.placeholder = running ? 'Write your next message…' : basis?.chatId && !basis.continuationUnavailable
+      ? 'Ask a follow-up' : 'Message Agent';
+  }
+  function restoreUnsentDraft(context) {
+    if (context.metadata.requestSent || context.metadata.draftRestored || !registry.isAuthCurrent(context)
+        || !registry.isVisible(context.runId)) return;
+    const input = document.getElementById('questionInput');
+    // Never replace a newer draft, quotation, attachment, or another chat's composer.
+    if (!input || input.value || App.quote?.text?.() || window.getAttachmentsPayload?.()?.length) return;
+    context.metadata.draftRestored = true;
+    if (context.basis) registry.selectConversationBasis(context.basis);
+    input.value = context.metadata.draftQuestion;
+    if (context.metadata.quotedContext) App.quote?.set?.(context.metadata.quotedContext);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    App.composer?.expand?.();
+  }
   async function send(recovery = null) {
     if (recovery) return recoverAnswer(recovery);
     if (!canUse()) { App.showPopup?.("Agent Beta is available to Pro users and admins."); return; }
@@ -455,7 +518,7 @@
       App.showPopup?.(`Select between two and ${Number(App.maxRunFamilies) > 0 ? Number(App.maxRunFamilies) : 6} comparison models before sending.`);
       return;
     }
-    if (!recovery && (!catalog || !catalog.models.some(model => model.id === settings.model_id))) {
+    if (!catalog || catalogStatus !== 'ready' || !catalog.models.some(model => model.id === settings.model_id && model.available !== false)) {
       App.showPopup?.("Choose an available agent model before sending."); return;
     }
     const basis = recovery ? recovery.basis : registry.getSelectedConversationBasis();
@@ -471,7 +534,8 @@
         bookmarkTitle: basis?.title || question,
         config: { executionMode: "agent", agentMode: true, autoConsensus: false,
           deepSearch: false, checkSources: App.isSourceCheckEnabled?.() === true, useOwnKeys: false, providers: [], agentSettings: settings, comparisonModels },
-        metadata: { agentActivity: [], agentSettings: { ...settings, label: catalog?.models.find(model => model.id === settings.model_id)?.label } },
+        metadata: { draftQuestion: draft, quotedContext: App.quote?.text?.() || '',
+          agentActivity: [], agentSettings: { ...settings, label: catalog?.models.find(model => model.id === settings.model_id)?.label } },
         usage: { status: "simulation", key: null },
       });
     } catch (error) { App.showPopup?.(error.message); return; }
@@ -485,6 +549,7 @@
       context.bookmark.status = "canceled";
       if (context.metadata.agentReview) context.metadata.agentReview = { ...context.metadata.agentReview, status: "cancelled" };
       else if (context.basis && registry.visible()?.runId === context.runId) registry.selectConversationBasis(context.basis);
+      restoreUnsentDraft(context);
     };
     registry.setStatus(context.runId, "running");
     if (!recovery) {
@@ -593,11 +658,12 @@
     } finally {
       clearTimeout(timer);
       context.controllers.query = null;
+      restoreUnsentDraft(context);
       if (registry.isAuthCurrent(context)) registry.renderVisible();
       if (!terminalBudget && context.metadata.requestSent && registry.isAuthCurrent(context)) await refreshBudget(context.auth.uid);
     }
   }
-  App.agentChat = { canUse, hasValidComparisonSelection, isSelected: () => selectedMode() === "agent", render, project, send,
+  App.agentChat = { canUse, hasValidComparisonSelection, sendBlocker, syncComposer, isSelected: () => selectedMode() === "agent", render, project, send,
     tokenBudget: () => canUse() && catalogOwner === window.auth?.currentUser?.uid
       ? (catalog?.budgetStale ? {...catalog.token_budget, stale: true} : catalog?.token_budget) : null, receiveBudget };
   function refreshVisibleBudget() {
@@ -624,6 +690,15 @@
       control?.addEventListener("change", changeSelection, true);
     }
     document.getElementById("agentModelsRetry")?.addEventListener("click", () => { catalogStatus = "idle"; render(); });
+    document.getElementById('agentComposerAction')?.addEventListener('click', event => {
+      // The shared picker's outside-click handler must not close this shortcut's menu.
+      event.stopPropagation();
+      if (event.currentTarget.dataset.action === 'compare') App.openModelPicker?.(document.getElementById('consensusModelDropdown'));
+      else { catalogStatus = 'idle'; render(); }
+    });
+    document.getElementById('questionInput')?.addEventListener('input', () => {
+      if (selectedMode() === 'agent') window.updateQuestionInputAccess?.();
+    });
     render();
   });
 })();

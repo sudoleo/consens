@@ -113,6 +113,7 @@
         "static/js/request-deadline.js",
         "static/js/agent-delegation.js",
         "static/js/agent-review.js",
+        "static/js/agent-answer-actions.js",
         "static/js/consensus-run.js",
         "static/js/agent-chat.js",
         {

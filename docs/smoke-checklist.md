@@ -787,6 +787,20 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
 
 ## Agent · Beta: Vergleiche und Prüfungen
 
+- [ ] Während der Chatmodellkatalog lädt oder nicht verfügbar ist: Nachricht
+  tippen können, Senden gesperrt und Erklärung am Composer. Bei ungültiger
+  Vergleichsauswahl öffnet „Choose models“ den Picker; nach Korrektur verschwindet
+  der Hinweis. Auch im mobilen Folgefragen-Composer prüfen.
+- [ ] Leere Nachricht sperrt Senden; ein hinzugefügtes Zitat gibt es frei.
+  Während der Antwort bleibt Stop nutzbar und ein neuer Entwurf kann entstehen.
+- [ ] Ein Fehler/Stop vor dem Versand erhält Text und Zitat im Composer.
+  Ein inzwischen neu geschriebener Entwurf oder anderer Chat bleibt unverändert.
+- [ ] „Copy answer“ kopiert die aktuelle, ältere und wiederhergestellte Antwort
+  ohne Prüf-/Statusanzeige. Erfolg und abgewiesener Clipboard-Zugriff sind sichtbar;
+  Tastaturfokus bleibt erhalten. Keine Kopieraktion während laufender Antwort.
+- [ ] „Follow up“ öffnet und fokussiert den Composer. Schon getippter Text und
+  Zitat bleiben erhalten; die Aktion startet keinen Modellaufruf.
+
 - [ ] Vergleichsmodelle im Picker auf eins/keines reduzieren: Senden ist gesperrt,
       Enter erhält den Entwurf und erstellt keinen Chat. Zwei Modelle wählen
       gibt Senden wieder frei; Desktop und Mobil prüfen.

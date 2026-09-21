@@ -177,7 +177,8 @@ def test_consensus_run_requires_two_selected_models_before_starting():
     model_picker = read("static/js/model-picker.js")
 
     assert "window.App.agentChat?.isSelected?.()" in app_init
-    assert "window.App.agentChat.canUse() && window.App.agentChat.hasValidComparisonSelection()" in app_init
+    assert "window.App.agentChat.sendBlocker()" in app_init
+    assert "if (!hasValidComparisonSelection())" in read("static/js/agent-chat.js")
     assert ": selectedModelCount >= 2" in app_init
     assert "sendButton.disabled = !canStartRun" in app_init
     assert "if (selectedCount < 2)" in query_send

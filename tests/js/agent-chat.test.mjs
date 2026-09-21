@@ -52,6 +52,60 @@ async function selectAgent(window) {
 }
 
 describe("single-model agent chat", () => {
+  it('blocks sending during catalog loading/failure and when every model is unavailable', async () => {
+    const {window:w, document:d, dom} = boot();
+    let release;
+    w.fetch.mockImplementationOnce(() => new Promise(resolve => { release = resolve; }));
+    const mode = d.getElementById('chatExecutionMode');
+    mode.value = 'agent'; mode.dispatchEvent(new w.Event('change'));
+    expect(w.App.agentChat.sendBlocker().message).toContain('Loading chat models');
+    await vi.waitFor(() => expect(release).toBeTypeOf('function'));
+    release({ok:false, json:async () => ({})});
+    await vi.waitFor(() => expect(w.App.agentChat.sendBlocker().message).toContain('could not be loaded'));
+    w.fetch.mockResolvedValueOnce({ok:true, json:async () => ({...CATALOG, models: CATALOG.models.map(m => ({...m, available:false}))})});
+    d.getElementById('agentModelsRetry').click();
+    await vi.waitFor(() => expect(w.App.agentChat.sendBlocker().message).toContain('No chat models'));
+    d.getElementById('questionInput').value = 'Keep this draft';
+    await w.App.agentChat.send();
+    expect(w.streamSSERequest).not.toHaveBeenCalled();
+    expect(d.getElementById('questionInput').value).toBe('Keep this draft');
+    dom.window.close();
+  });
+
+  it.each(['empty', 'new draft', 'new quote', 'different chat', 'different account'])('restores an unsent draft without replacing newer composer ownership: %s', async newer => {
+    const {window:w, document:d, dom} = boot();
+    await selectAgent(w);
+    let quoted = 'A quoted passage';
+    w.App.quote = {text: () => quoted, compose: text => `${text}\n${quoted}`, clear: () => { quoted = ''; }, set: text => { quoted = text; }};
+    let release;
+    w.fetch.mockImplementationOnce(() => new Promise(resolve => { release = resolve; }));
+    const input = d.getElementById('questionInput');
+    input.value = 'My original question\nwith two lines';
+    const sending = w.App.agentChat.send();
+    await vi.waitFor(() => expect(release).toBeTypeOf('function'));
+    if (newer === 'new draft') input.value = 'My newer question';
+    if (newer === 'new quote') quoted = 'My newer quote';
+    if (newer === 'different chat') w.App.runRegistry.clearVisible();
+    if (newer === 'different account') w.auth.currentUser = {uid: 'other'};
+    release({ok:false, json:async () => ({detail:'Could not create chat'})});
+    await sending;
+    expect(w.streamSSERequest).not.toHaveBeenCalled();
+    expect(input.value).toBe(newer === 'empty' ? 'My original question\nwith two lines' : newer === 'new draft' ? 'My newer question' : '');
+    expect(quoted).toBe(newer === 'empty' ? 'A quoted passage' : newer === 'new quote' ? 'My newer quote' : '');
+    dom.window.close();
+  });
+
+  it('does not restore an already dispatched request as an unsent draft', async () => {
+    const {window:w, document:d, dom} = boot();
+    await selectAgent(w);
+    w.streamSSERequest.mockRejectedValueOnce(new Error('Connection lost'));
+    d.getElementById('questionInput').value = 'Sent question';
+    await w.App.agentChat.send();
+    expect(d.getElementById('questionInput').value).toBe('');
+    expect(w.App.runRegistry.visible().metadata.requestSent).toBe(true);
+    dom.window.close();
+  });
+
   it.each([0, 1, 2, 6, 7])('validates %i comparison models before clearing the draft or creating a chat', async count => {
     const {window:w, document:d, dom} = boot();
     await selectAgent(w);
@@ -434,6 +488,7 @@ describe("single-model agent chat", () => {
     const sending = window.App.agentChat.send();
     await vi.waitFor(() => expect(resolve).toBeTypeOf("function"));
     window.App.runRegistry.cancel(window.App.runRegistry.visible().runId);
+    expect(document.getElementById('questionInput').value).toBe('First');
     resolve({ ok: true, json: async () => ({ chat: { id: "a".repeat(32) } }) });
     await sending;
     expect(window.streamSSERequest).not.toHaveBeenCalled();

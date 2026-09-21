@@ -372,6 +372,7 @@
         }
         window.App.agentReview?.render(answerBody, turnData.agent_review,
           {sources: turnSources, events: turnData.agent_activity, key: turnData.id || turnData.turn_id, question: turnData.question});
+        window.App.agentAnswerActions?.render(answerBody, { key: turnId, text: turnData.consensus || '', running: turnData.status === 'pending' });
       }
 
       // Der Fuss eines archivierten Turns spricht dieselbe Sprache wie der
@@ -707,6 +708,7 @@
         : (this.continuationUnavailable
             ? UNAVAILABLE_INPUT_PLACEHOLDER
             : DEFAULT_INPUT_PLACEHOLDER);
+      window.App.agentChat?.syncComposer?.();
     }
   };
   window.App.followup = followup;

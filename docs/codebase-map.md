@@ -1996,6 +1996,32 @@ enthält den sicheren Fehlercode und Grund auch im gespeicherten Turn; die UI
 zeigt ihn live und nach Reload. Provider-Timeouts sind von Kontingent-Stopp und
 Nutzerabbruch getrennt, rohe Provider-Fehler werden nicht gespeichert.
 
+**Composer und Antwortaktionen (21.09.2026).** `agentChat.sendBlocker()` verbindet
+Zugriff, Katalogstatus, verfügbare Chatmodelle, Vergleichsauswahl, Anhänge und
+Fortsetzbarkeit mit der Sendesperre in `app-init.js`. Ein kurzer Hinweis außerhalb
+der im Chat verborgenen Modusleiste erklärt die Sperre auch mobil; „Choose models“
+öffnet den bestehenden Compare-Picker. Leere Agent-Nachrichten sperren Senden,
+ein vorhandenes Zitat zählt als Nachricht. Während eines Laufs bleibt Stop
+bedienbar. `agentChat.syncComposer()` erhält vorhandene ARIA-Beschreibungen und
+setzt nach der gemeinsamen Follow-up-Projektion den passenden Agent-Platzhalter:
+Einstieg, Entwurf während der Antwort oder Folgefrage im bestehenden Chat.
+
+Fehler/Stop vor dem ersten `/agent`-Request stellen den unveränderten Entwurf
+mit getrenntem Zitat wieder her. Dafür gelten Kontobindung, sichtbarer Run und
+ein unveränderter leerer Composer; neuere Texte/Zitate/Anhänge bleiben erhalten.
+Nach Dispatch erfolgt keine automatische Rückgabe als ungesendete Nachricht:
+die bestehende reine Recovery bleibt für unklaren Serverstatus zuständig.
+
+`agent-answer-actions.js` läuft nach `agent-review.js` und vor `consensus-run.js`.
+`App.agentAnswerActions.render` ergänzt aktuelle, wiederhergestellte und
+archivierte Agent-Antworten um „Copy answer“ aus dem kanonischen Markdown,
+ohne Activity, Prüfmarkierungen oder Bedienelemente. Während Streaming sind die
+Aktionen verborgen; gestoppte Teilantworten bleiben kopierbar. Stabile Buttons,
+lokales Statusfeedback und eine Projektionsrevision verhindern Fokusverlust und
+verspätete Copy-Rückmeldungen am falschen Turn. Aktuelle fortsetzbare Antworten
+zeigen „Follow up“: derselbe Composer öffnet und fokussiert sich unter Erhalt
+des bestehenden Entwurfs und Zitats, ohne einen Request zu starten.
+
 **UI-Verträge.** agent-activity.js zeigt die Laufzeit in der Überschrift des
 standardmäßig geschlossenen Disclosures. Live zählt sie sekündlich ab dem Start
 des Runs inklusive Wartephasen; Abschluss und Stop frieren sie ein. Gespeicherte

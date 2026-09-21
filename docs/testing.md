@@ -171,6 +171,15 @@ Zahlennotation, nachgelieferte Metadaten, Streaming sowie unveränderte Original
 und die Reihenfolge von Prüfmarkierungen und Zitierdarstellung.
 `tests/js/sidebar-quota.test.mjs` prüft die Agent-Prozentprojektion
 und den Wechsel zurück zum unveränderten Consensus-Kontingent.
+`tests/js/agent-answer-actions.test.mjs` prüft kanonischen Copy-Text ohne UI-
+Zusätze, stabile Aktionen, Clipboard-Fehler/Fallback, Fokus und verspätete
+Rückmeldungen nach Turnwechsel. Die Agent-Chat-Tests prüfen außerdem Lade-/Fehler-
+und vollständig unverfügbare Kataloge sowie die Rückgabe ungesendeter Entwürfe
+einschließlich Zitaten, ohne neuere Texte oder andere Konten/Chats zu überschreiben.
+Die gebaute Browser-Suite prüft Kopieren mit der echten Chromium-Zwischenablage,
+Folgefragen, Ladehinweise, Entwurfsrettung und die direkte Auswahlkorrektur bei
+1280/390/320 px; alle Modellaufrufe bleiben simuliert.
+
 `tests/js/agent-chat.test.mjs` prüft abwechselnde Fortschrittsabsätze und bestätigte Schritte, stabile DOM-Knoten,
 HTML-Escaping, vollständigen Verlauf über das Hilfsereignisfenster hinaus,
 automatisches Zuklappen beim Abschluss sowie erneutes manuelles Öffnen. Laufzeit-

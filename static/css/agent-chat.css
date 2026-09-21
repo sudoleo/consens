@@ -170,6 +170,21 @@ body.single-agent-active .chat-input-container .consensus-switch-container { max
 .agent-answer[hidden] { display: none; }
 #agentAnswerError { color: var(--ink-2); border-left: 2px solid var(--line); padding: 4px 0 4px 12px; font-size: 13px; line-height: 1.6; }
 #agentAnswerBody:empty { display: none; }
+.agent-composer-notice { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; padding: 8px 12px 0; color: var(--ink-2); font-size: 12px; line-height: 1.5; }
+.agent-composer-notice[hidden], .agent-answer-actions[hidden], .agent-answer-actions [hidden], .agent-composer-notice [hidden] { display: none; }
+.agent-composer-notice button { border: 0; padding: 4px 0; background: transparent; color: var(--ink); font: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.agent-answer-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 12px; margin: 12px 0 0; color: var(--ink-3); font-size: 12px; }
+.agent-answer-actions button { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 6px 8px; border: 0; border-radius: 6px; background: transparent; color: var(--ink-2); font: inherit; cursor: pointer; }
+.agent-answer-actions button:first-child { margin-left: -8px; }
+.agent-answer-actions button:hover { background: var(--raise); color: var(--ink); }
+.agent-answer-actions button[aria-disabled="true"] { cursor: default; opacity: .6; }
+.agent-answer-actions svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.agent-answer-actions button:focus-visible, .agent-composer-notice button:focus-visible { outline: 2px solid var(--ink-2); outline-offset: 2px; }
+.agent-copy-status { overflow-wrap: anywhere; }
+.agent-copy-buffer { position: fixed; top: 0; left: -9999px; }
+@media (pointer: coarse) {
+  .agent-answer-actions button, .agent-composer-notice button { min-height: 44px; }
+}
 body.single-agent-active :is(#consensusOutput, #consensusRun, #agentModePanel, .response-section,
   #deepThinkInputIndicator,
   #runProvenance, .consensus-footer-actions, #composerRunNotice, #heroResponseAccess,
