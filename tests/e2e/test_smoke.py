@@ -923,7 +923,7 @@ def test_consensus_renders_differences_and_agreement_score(app_page, get_console
     assert footer_metrics["display"] == "grid"
     assert footer_metrics["columns"] == 3
     assert footer_metrics["scrollWidth"] <= footer_metrics["clientWidth"]
-    assert all(44 <= height <= 48 for height in footer_metrics["buttonHeights"])
+    assert all(56 <= height <= 60 for height in footer_metrics["buttonHeights"])
 
     # Mobile: kompakte Aktions-Icons und Lauf-Fakten teilen die zweite
     # Werkzeugzeile ohne Kollision; die drei Tabs bleiben davor prominent.

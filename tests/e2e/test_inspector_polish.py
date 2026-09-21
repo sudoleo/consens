@@ -15,7 +15,9 @@ def test_inspector_density_disclosures_and_footer(browser, phase4_server, theme)
         page.evaluate("""() => {
           const ctx = App.runRegistry.visible();
           ctx.consensus.differencesData.differences.splice(1);
-          ctx.evidenceSources = [1,2,3,4].map(i => ({id:'S'+i,
+          ctx.consensus.differencesData.agreement = {score:64, model_count:3,
+            scored_claims:7, total_claims:10, coverage_percent:70};
+          ctx.evidenceSources = Array.from({length:10}, (_, i) => i + 1).map(i => ({id:'S'+i,
             title:'Official results and participant registration '+i,
             url:'https://results.example.invalid/report/'+i}));
           App.runRegistry.renderVisible();
@@ -32,7 +34,7 @@ def test_inspector_density_disclosures_and_footer(browser, phase4_server, theme)
           App.state.set('lastQuestion', App.runRegistry.visible().question, 'run');
           App.consensusPipeline.setRunFacts({models: 5, durationMs: 103000});
         }""")
-        for width in [390, 320, 1440]:
+        for width in [390, 320, 640, 641, 1440]:
             page.set_viewport_size({'width':width, 'height':900})
             page.evaluate('window.scrollTo(0,document.documentElement.scrollHeight)')
             footer = page.locator('.consensus-footer-source-status')
@@ -43,14 +45,34 @@ def test_inspector_density_disclosures_and_footer(browser, phase4_server, theme)
                 expect(page.locator('#consensusSourcesTab')).to_have_attribute('data-check-state', 'unknown')
                 assert page.locator('#consensusSourcesTab').evaluate("""tab => {
                   const icon = tab.querySelector('.consensus-source-check-icon').getBoundingClientRect();
-                  const label = tab.querySelector('.consensus-tab-label').getBoundingClientRect();
-                  return Math.abs(icon.y + icon.height / 2 - label.y - label.height / 2) < 4;
+                  const count = tab.querySelector('.consensus-tab-count').getBoundingClientRect();
+                  return Math.abs(icon.y + icon.height / 2 - count.y - count.height / 2) < 4;
                 }""")
             else:
                 expect(footer).to_be_visible()
                 expect(footer).to_have_css('background-color', 'rgba(0, 0, 0, 0)')
                 expect(page.locator('#runProvenanceFacts')).to_be_visible()
                 expect(page.locator('#runProvenanceFacts')).to_contain_text('103 s')
+            for row in page.locator('#consensusFooterTabs, .thread-history-tabs').all():
+                actions = row.locator('.consensus-evidence-action:visible')
+                expect(actions.locator('.consensus-evidence-icon[aria-hidden="true"]')).to_have_count(3)
+                assert actions.locator('.consensus-tab-label').evaluate_all(
+                    'labels => labels.map(label => label.dataset.short)') == ['Differences', 'Answers', 'Sources']
+                # Measure in one frame while the chat shell animates its width.
+                bounds = actions.evaluate_all('buttons => buttons.map(b => b.getBoundingClientRect().toJSON())')
+                assert all(box['height'] >= 44 for box in bounds)
+                assert max(box['y'] for box in bounds) - min(box['y'] for box in bounds) <= 1
+                if width <= 640:
+                    assert max(box['width'] for box in bounds) - min(box['width'] for box in bounds) <= 1
+                for action in actions.all():
+                    assert action.evaluate("""el => {
+                      const r = el.getBoundingClientRect();
+                      return [...el.querySelectorAll('svg, span')].filter(child => child.getClientRects().length)
+                        .every(child => {const c = child.getBoundingClientRect();
+                          return c.left >= r.left - 1 && c.right <= r.right + 1
+                            && c.top >= r.top - 1 && c.bottom <= r.bottom + 1;});
+                    }""")
+            assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
             expect(page.locator('#runReplayButton')).to_be_visible()
             expect(page.locator('.consensus-output')).to_have_css('padding-bottom', '24px')
             reader_screenshot(page, f'polished-footer-{width}-{theme}')
@@ -123,6 +145,22 @@ def test_inspector_density_disclosures_and_footer(browser, phase4_server, theme)
             expect(page.locator('#consensusSourcesTab .consensus-source-check-icon')).to_have_text(icon)
             expect(page.locator('#consensusSourcesTab .consensus-source-check-icon')).to_be_visible()
             reader_screenshot(page, f'mobile-footer-{support}-{theme}')
+        page.set_viewport_size({'width':320, 'height':844})
+        for mode in ['summary', 'off', 'full']:
+            page.evaluate("""mode => {
+              document.body.classList.toggle('agreement-score-hidden', mode === 'summary');
+              document.body.classList.toggle('agreement-verdict-hidden', mode === 'off');
+            }""", mode)
+            expect(page.locator('#consensusFooterTabs .consensus-evidence-action:visible')).to_have_count(3)
+            reader_screenshot(page, f'footer-{mode}-320-{theme}')
+        # Missing sections must collapse the existing equal-column grid, even
+        # though the visible controls now use their own internal grid.
+        for selector in ['#consensusSourcesTab', '#consensusDifferencesTab']:
+            page.locator(selector).evaluate('button => button.hidden = true')
+            expect(page.locator(selector)).to_be_hidden()
+        expect(page.locator('#consensusFooterTabs .consensus-evidence-action:visible')).to_have_count(1)
+        assert abs(page.locator('#agentModeAnswersToggle').bounding_box()['width']
+                   - page.locator('#consensusFooterTabs').bounding_box()['width']) <= 1
     finally:
         context.close()
 

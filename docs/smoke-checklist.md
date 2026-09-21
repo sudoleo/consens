@@ -200,11 +200,16 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       vollständige Differences bleiben verfügbar. Quellenmarkierungen folgen
       demselben Filter, auch nach spät eintreffenden Prüfergebnissen.
 - [ ] Antwort-Footer: Differences / Answers / Sources bei 320–1440 px und
-      Full/Summary/Hidden auf gleicher Grundlinie. Quellenstatus steht separat
-      über volle Breite, auch bei Pending/Reconnecting/Unavailable oder langen
-      Statusmeldungen. Ohne Quellen keine leere Statuszeile. Keine Legende/Hide-Aktion unter der Antwort.
+      Full/Summary/Hidden gleichmäßig ausgerichtet, auch in gespeicherten Turns.
+      Dezente Icons vor den Labels; bis 640 px Icon/Anzahl über dem Label,
+      gleiche Spalten und mindestens 56 px hohe Touch-Flächen. Quellenhinweise
+      (✓/!/?), zweistellige Anzahlen und leere/ausgeblendete Tabs verschieben
+      keine Labels. Quellenstatus steht auf Desktop separat, auch bei
+      Pending/Reconnecting/Unavailable oder langen Statusmeldungen; mobil
+      bleibt der Hinweis neben der Sources-Anzahl. Ohne Quellen keine leere
+      Statuszeile. Keine Legende/Hide-Aktion unter der Antwort.
       Share/Watch/Cite stehen auf Desktop neben der Hauptnavigation; mobil
-      nur Icons mit zugänglichen Namen. Run again bleibt erreichbar, ohne sich mit
+      im Header als Icons mit zugänglichen Namen. Run again bleibt erreichbar, ohne sich mit
       Laufzeit oder Kosten zu überlagern; Cite-Menü sitzt am neuen Host.
 - [ ] Source-check-Status anklicken: Bei v4 direkt zur Prüfbegründung in
       Differences, inklusive Gründen für ausgelassene/unverfügbare Prüfungen.

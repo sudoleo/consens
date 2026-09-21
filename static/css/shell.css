@@ -1764,12 +1764,8 @@ body.agreement-verdict-hidden .run-provenance::before {
 }
 
 /* ---- The three drawers ---------------------------------------------------
-   One row of quiet labels. No pill, no border: the mockup treats them as a
-   line of words with a count beside each, and a rectangle drawn around a
-   word is exactly the frame this shell keeps removing. What marks an open
-   drawer is weight, an underline and the chevron turning — three words in a
-   row with nothing but hover to say they open anything was a guessing game
-   for the very functions this page exists for.
+   Quiet icon actions, matching Agent evidence. The existing footer grid,
+   reader targets and mobile source-check status retain their own contracts.
    -------------------------------------------------------------------------- */
 .consensus-footer-tabs {
   display: flex;
@@ -1896,6 +1892,68 @@ body:not(.is-hero) .consensus-output {
 }
 
 .consensus-tab-count:empty {
+  display: none;
+}
+
+/* Scope this treatment to Consensus evidence, including archived turns;
+   other disclosures and the separate Agent action row keep their layout. */
+#consensusFooterTabs,
+.thread-history-tabs {
+  gap: 4px 8px;
+  margin-left: -8px;
+}
+
+.consensus-footer-tabs .consensus-tab.consensus-evidence-action {
+  padding: 6px 8px;
+  border-radius: 6px;
+  color: var(--ink-2);
+  font-size: 12px;
+  font-weight: var(--font-weight-regular);
+  text-decoration: none;
+}
+
+.consensus-footer-tabs .consensus-tab.consensus-evidence-action[hidden] { display: none; }
+
+.consensus-footer-tabs .consensus-evidence-action:hover,
+.consensus-footer-tabs .consensus-evidence-action[aria-expanded="true"] {
+  background: var(--raise);
+  color: var(--ink);
+}
+
+.consensus-footer-tabs .consensus-evidence-action:focus-visible {
+  outline: 2px solid var(--ink-2);
+  outline-offset: 2px;
+}
+
+.consensus-evidence-icon {
+  width: 15px;
+  height: 15px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.consensus-evidence-action .consensus-tab-label[data-short] {
+  font-size: 0;
+  white-space: nowrap;
+}
+
+.consensus-evidence-action .consensus-tab-label[data-short]::after {
+  content: attr(data-short);
+  font-size: 12px;
+  font-weight: var(--font-weight-regular);
+}
+
+.consensus-tab-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.consensus-tab-meta:not(:has(.consensus-tab-count:not(:empty), .consensus-source-check-icon:not(:empty))) {
   display: none;
 }
 
@@ -2136,6 +2194,33 @@ body.dark-mode .run-provenance {
     outline-offset: -2px;
     border-radius: 8px;
   }
+
+  #consensusFooterTabs,
+  .thread-history-tabs {
+    gap: 4px;
+    margin-left: 0;
+  }
+
+  /* Icon and count share the first line, so even 320px fits three labels.
+     The source-check hint stays beside its count without shifting labels. */
+  .consensus-footer-tabs .consensus-tab.consensus-evidence-action {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: 16px auto;
+    gap: 5px;
+    min-height: 56px;
+    padding: 6px 0;
+  }
+
+  .consensus-evidence-icon { grid-row: 1; grid-column: 1; justify-self: end; }
+  .consensus-tab-meta { grid-row: 1; grid-column: 2; justify-self: start; line-height: 16px; }
+  .consensus-evidence-action .consensus-tab-label { grid-row: 2; grid-column: 1 / -1; justify-self: center; }
+  .consensus-evidence-action:not(:has(.consensus-tab-count:not(:empty), .consensus-source-check-icon:not(:empty))) .consensus-evidence-icon {
+    grid-column: 1 / -1;
+    justify-self: center;
+  }
+
+  .consensus-footer-tabs .consensus-evidence-action:focus-visible { outline-offset: -2px; }
 
   .run-provenance-actions {
     margin-left: 0;

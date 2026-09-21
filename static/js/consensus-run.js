@@ -397,21 +397,20 @@
         const panelId = `threadHistoryPanel-${++panelSequence}`;
         const tab = document.createElement("button");
         tab.type = "button";
-        tab.className = "consensus-tab";
+        tab.className = "consensus-tab consensus-evidence-action";
         tab.setAttribute("aria-expanded", "false");
         tab.setAttribute("aria-controls", panelId);
-        const chevron = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-        chevron.setAttribute("class", "consensus-tab-chevron");
-        chevron.setAttribute("viewBox", "0 0 12 12");
-        chevron.setAttribute("aria-hidden", "true");
-        chevron.setAttribute("fill", "none");
-        chevron.setAttribute("stroke", "currentColor");
-        chevron.setAttribute("stroke-width", "1.6");
-        chevron.setAttribute("stroke-linecap", "round");
-        chevron.setAttribute("stroke-linejoin", "round");
-        const chevronPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
-        chevronPath.setAttribute("d", "M2.5 4.5 6 8l3.5-3.5");
-        chevron.appendChild(chevronPath);
+        const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+        icon.setAttribute("class", "consensus-evidence-icon");
+        icon.setAttribute("viewBox", "0 0 24 24");
+        icon.setAttribute("aria-hidden", "true");
+        const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        path.setAttribute("d", {
+          Differences: "M12 20v-7M12 13 5 6M12 13l7-7M5 11V6h5M14 6h5v5",
+          Answers: "M4 4h12v10H8l-4 4V4ZM16 8h4v12l-4-4h-4",
+          Sources: "M14 3H5v18h14V8ZM14 3v5h5M8 12h8M8 16h6"
+        }[shortLabel]);
+        icon.appendChild(path);
         const tabLabel = document.createElement("span");
         tabLabel.className = "consensus-tab-label";
         tabLabel.dataset.short = shortLabel;
@@ -419,7 +418,10 @@
         const tabCount = document.createElement("span");
         tabCount.className = "consensus-tab-count";
         tabCount.textContent = count > 0 ? String(count) : "";
-        tab.append(chevron, tabLabel, tabCount);
+        const meta = document.createElement("span");
+        meta.className = "consensus-tab-meta";
+        meta.appendChild(tabCount);
+        tab.append(icon, tabLabel, meta);
 
         const panel = document.createElement("div");
         panel.className = "thread-history-panel";
@@ -435,7 +437,9 @@
           panel.hidden = open;
         });
 
-        tabs.appendChild(tab);
+        tabs.insertBefore(tab, shortLabel === "Answers"
+          ? tabs.querySelector('[data-short="Sources"]')?.closest('.consensus-tab') || null
+          : null);
         panels.appendChild(panel);
       }
 

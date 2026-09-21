@@ -953,14 +953,17 @@
       const count = fromStored(turn).answers.length;
       if (!count) return;
       const button = document.createElement("button");
-      button.type = "button"; button.className = "consensus-tab answer-reader-trigger";
+      button.type = "button"; button.className = "consensus-tab consensus-evidence-action answer-reader-trigger";
       button.setAttribute("aria-controls", root.id); button.setAttribute("aria-expanded", "false");
+      button.innerHTML = '<svg class="consensus-evidence-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h12v10H8l-4 4V4ZM16 8h4v12l-4-4h-4"/></svg>';
       const label = document.createElement("span"); label.className = "consensus-tab-label";
       label.dataset.short = "Answers"; label.textContent = "Compare answers";
       const badge = document.createElement("span"); badge.className = "consensus-tab-count"; badge.textContent = String(count);
-      button.append(label, badge);
+      const meta = document.createElement("span"); meta.className = "consensus-tab-meta";
+      meta.appendChild(badge);
+      button.append(label, meta);
       button.addEventListener("click", () => openSnapshot(fromStored(turn), null, button));
-      tabs.appendChild(button);
+      tabs.insertBefore(button, tabs.querySelector('[data-short="Sources"]')?.closest('.consensus-tab') || null);
     },
     canOpenStored(node, model) { const turn = stored.get(node); return !!turn && !!findProvider(model, fromStored(turn)); },
     openStored(node, model, quote) {

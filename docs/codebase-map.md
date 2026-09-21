@@ -1004,9 +1004,15 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   `#runProvenance` unter der Antwort. Desktop: Differences / Answers / Sources
   bilden die primäre Zeile, Share / Watch / Cite stehen daneben. Eine zweite,
   zurückhaltende Zeile enthält Quellenstatus und Laufdetails. Bis 640 px
-  nutzen die drei Navigationspunkte gleichmäßig die volle Breite; Quellenstatus
-  und Laufdetails (Modellzahl/Dauer) sind mobil ausgeblendet. Darunter stehen
-  Aktions-Icons links und „Run again“ rechts. Die Icons behalten 44-px-Ziele,
+  nutzen die sichtbaren Navigationspunkte gleichmäßig die volle Breite;
+  `.consensus-evidence-action` zeigt dort Icon und Anzahl über dem Kurzlabel
+  mit mindestens 56 px hohen Touch-Flächen. Auf Desktop stehen die dezenten
+  15-px-Icons vor dem Label, mit mindestens 44 px hohen Zielen. Die Gestaltung
+  gilt auch für archivierte Turns aus `consensus-run.js` und
+  `model-answer-reader.js::registerTurn`. Quellenstatus und Laufdetails
+  (Modellzahl/Dauer) sind mobil ausgeblendet. Share/Watch/Cite wandern bis
+  1099 px mit demselben DOM in den mobilen Header (siehe `mobile-header.js`);
+  „Run again“ bleibt unten rechts. Die Header-Icons behalten 44-px-Ziele,
   aria-label und Tooltips.
   `.run-provenance` nutzt Grid mit Varianten für ausgeblendetes Verdict.
   Die stabilen Hosts `#consensusFooterTabs`, `#consensusFooterActions` und
@@ -1025,7 +1031,9 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   Sources referenziert den Status auch mobil per
   `aria-describedby`. Mobil zeigt `data-check-state` am Sources-Tab ein Häkchen
   nur bei vollständiger positiver v3-Prüfung; `!` bedeutet Quellenprobleme,
-  `?` unklare/unvollständige oder technisch nicht verfügbare Ergebnisse. Pending
+  `?` unklare/unvollständige oder technisch nicht verfügbare Ergebnisse. Der
+  Statushinweis steht in `.consensus-tab-meta` neben der Anzahl, ohne die
+  symmetrische Ausrichtung der Labels zu verschieben. Pending
   behält den Label-Schimmer. Ohne Prüfung bleibt das Icon leer; ein neuer Lauf
   setzt den Zustand zurück. Leere Statuszeilen und Status bei verstecktem Sources-Tab
   sind nicht sichtbar. Die Markierungserklärung und der Hide/Show-Button sind
