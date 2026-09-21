@@ -48,6 +48,24 @@
     lastY = top;
     window.scrollTo({ top, left: window.scrollX, behavior: "instant" });
   }
+  function preserveAbove(element, anchor = null) {
+    if (!element?.isConnected || !valid() || occupied() || window.scrollY <= 0) return null;
+    const bounds = element.getBoundingClientRect();
+    if (bounds.bottom > 0) return null;
+    // The next content edge includes collapsing margins outside the activity.
+    const position = () => (anchor?.isConnected ? anchor.getBoundingClientRect().top : element.getBoundingClientRect().bottom) + window.scrollY;
+    const y = window.scrollY, before = position(), owner = context;
+    cancelFrame();
+    return () => {
+      if (!element.isConnected || context !== owner || !valid()) return;
+      // Use document coordinates so native scroll anchoring, if it already ran,
+      // cannot double the correction. Preserve the same text in the viewport.
+      const shift = position() - before;
+      const target = Math.max(0, Math.min(maxTop(), y + shift));
+      if (Math.abs(target - window.scrollY) > .5) write(target);
+      syncButton();
+    };
+  }
   function step(now) {
     frame = 0;
     if (!valid() || !following || occupied()) { pause(); return; }
@@ -119,6 +137,12 @@
       lastY = window.scrollY;
     }
     ensure();
+    if (following && next?.finishedAt) {
+      // A fast answer may finish during the explicit Send jump. Let that jump
+      // settle once, but never follow later review/layout updates indefinitely.
+      if (frame) oneShot = true;
+      else pause();
+    }
     syncButton();
   }
   function sent() {
@@ -181,5 +205,5 @@
   document.addEventListener("selectionchange", () => { if (!window.getSelection()?.isCollapsed) pause(); });
   document.addEventListener("visibilitychange", () => { if (document.hidden) pause(); });
   window.addEventListener("consensio:run-registry-change", () => { if (!valid()) project(null); });
-  App.chatScroll = { project, changed, sent, opened };
+  App.chatScroll = { project, changed, sent, opened, preserveAbove };
 })();

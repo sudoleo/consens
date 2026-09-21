@@ -819,6 +819,12 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
   erkennbare Absatz- und Listenabstände, auch bei verschachtelten Listen.
   Markdown-Überschriften bleiben linksbündig mit normaler Groß-/Kleinschreibung;
   Tabellen, Code und Formeln erzeugen keinen horizontalen Seiten-Overflow.
+- [ ] Agent-Antwort nach der Synthese weiterlesen, während Judge und optionale
+  Quellenprüfung laufen: kein Leeren/Neuschreiben der Antwort und nur ein
+  Prüfzyklus, auch bei unvollständigen Modellantworten. Überarbeitung erst nach
+  neuer Nutzernachricht. Beim Lesen unten oder mitten in einer langen Antwort
+  bleibt dieselbe Zeile stehen, wenn der Status darüber wechselt oder bei
+  Abschluss einklappt; offener/geschlossener Verlauf und Reduced Motion prüfen.
 - [ ] Oben am Pfeil steht die Laufzeit; sie zählt während Token-Warten weiter
   und bleibt nach Abschluss/Stop sowie beim Öffnen gespeicherter Turns stehen.
   Darunter wechseln sich kurze Meldungen des Steuerungsmodells in der Fragesprache

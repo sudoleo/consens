@@ -1843,9 +1843,9 @@ und dem lokalen Quellenprüfungs-Zeitbudget. Lokale Quellenfehler ergeben einen
 explizit unvollständigen Befund; Nutzer-Stopp beendet weiterhin den Run.
 `checks[].source_verification` speichert Schema-4-Snapshots inklusive Antwort-Hash,
 Vergleichs-ID als `run_id` und `basis_hash`. `finish_run` prüft diese Bindung;
-identische Tool-Wiederholungen verwenden das gespeicherte Ergebnis, neue
-Antworten/Vergleiche entwerten es. Bei Abbruch bleiben keine aktiven Befunde
-stehen. Recovery spielt nur den gespeicherten Snapshot ab.
+identische Tool-Wiederholungen verwenden das gespeicherte Ergebnis. Die fertige
+Synthese und ihre Vergleichsgrundlagen bleiben für diesen Turn fest. Bei Abbruch
+bleiben keine aktiven Befunde stehen. Recovery spielt nur den gespeicherten Snapshot ab.
 `agent-review.js` bindet diese Ergebnisse an dieselben Widerspruchskarten im
 Answer Reader; `sourceVerification.render` akzeptiert dafür explizite
 `differenceCards`. Veraltete Antwort-/Grundlagenbindungen werden nicht angezeigt.
@@ -1854,10 +1854,16 @@ Die serverseitigen Antwortversionen enthalten Text, SHA-256, Vergleichs-IDs und
 Prüfungen; jede Prüfung bindet zusätzlich den Hash der konkreten Antworten
 inklusive Quellen/Modellmetadaten. finish_run validiert diese Bindungen erneut.
 Mehrere Teilvergleiche werden getrennt gegen dieselbe Synthese geprüft; ihre
-Stimmen werden nicht zu einem künstlich größeren Panel addiert. finalize=true
-beendet die Ausgabe mit genau dem geprüften Text. finalize=false erlaubt eine
-weitere Überarbeitungen ohne feste Versions-/Judge-Rundengrenze. Neue Vergleiche
-nach einer Prüfung entwerten die alte Bindung auch bei unverändertem Synthesetext.
+Stimmen werden nicht zu einem künstlich größeren Panel addiert. Die erste fertige
+Synthese wird serverseitig festgeschrieben: spätere Orchestrator-Deltas werden
+weder veröffentlicht noch als Teilantwort gespeichert. `capture` erhält den
+exakten Text und seine Hash-/Prüfbindung; neue Vergleiche nach der Synthese werden
+abgewiesen. Judge und optionale Quellenprüfung schließen auch bei
+`finalize=false` ab (das Feld bleibt zur Kompatibilität akzeptiert). Teilweise,
+fehlgeschlagene oder übersprungene Prüfungen bleiben ehrlich gekennzeichnet,
+lösen aber keine automatische Überarbeitung aus. Nach vollständigem Protokoll-
+Abschluss werden auch weitere Toolcalls derselben Modellantwort nicht ausgeführt.
+Eine gewünschte Überarbeitung beginnt mit einer neuen Nutzernachricht.
 Begleittext zu anderen Toolcalls bleibt Planung und öffnet keine Syntheseversion;
 so verhindert ein angekündigter zweiter Vergleich nicht dessen Ausführung.
 Fehlende Judge-Toolcalls werden erneut eingefordert, solange weitere Aufrufe
@@ -1988,6 +1994,13 @@ werden sie verborgen/entfernt. Schnelle Richtungswechsel brechen alte Animatione
 ab, `agentActivity.dispose` räumt sie beim Turnwechsel ab. Reduced Motion und
 Forced Colors überspringen Bewegung und beenden laufende Übergänge sofort;
 ohne Web Animations gilt derselbe unmittelbare Fallback.
+Liegt der Aktivitätsbereich oberhalb des Viewports, beendet die Projektion seine
+laufenden Höhenanimationen und führt Änderungen ohne Animation aus.
+`chatScroll.preserveAbove` gleicht die Änderung der Dokumentposition unmittelbar
+aus, sodass die gerade gelesene Antwortzeile stehen bleibt; bereits erfolgtes
+natives Scroll-Anchoring wird nicht doppelt verrechnet. Nach Run-Abschluss endet
+dauerhaftes Nachscrollen. Ein noch laufender bewusster Send-/Latest-Sprung darf
+einmal fertiglaufen. Sichtbare Statusbereiche behalten ihre kurzen Übergänge.
 Tool-Nennungen bleiben Text; ausschließlich bestätigte running-Toolereignisse
 oder der Review-Status bestimmen den aktuellen Arbeitsschritt im Verlauf.
 Alte gespeicherte Reasoning-Verläufe bleiben als begrenzte Auszüge lesbar.

@@ -18,8 +18,8 @@ from app.services.source_verification import (
 PROMPT = """Check contradictions is ON for this message. After judge_answer,
 call check_contradictions to examine factual disagreements using existing original
 sources. This separate tool does not change the synthesis or model agreement.
-Use finalize=true to finish with the exact checked answer; finalize=false allows
-a revision, which must go through judge_answer and check_contradictions again.
+The source check finishes the run with the exact fixed answer. It never allows
+a revision or a second review round, including when finalize=false is supplied.
 No eligible disagreements means a skipped source check, not a verified answer.
 Do not claim missing, failed or inconclusive evidence proves either position.
 """
@@ -100,7 +100,7 @@ class ContradictionChecks:
                 check["source_verification"] = snapshot
                 owner.checkpoint()
         owner.versions[-1]["checks"] = owner.review["checks"]
-        owner.finalized = args.finalize and self.complete()
+        owner.finalized = self.complete()
         owner.checkpoint()
         # Full originals are persisted for the UI, not copied back into context.
         return {"finalized": owner.finalized, "checks": [

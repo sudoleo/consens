@@ -90,7 +90,7 @@ def test_real_judges_exact_versions_context_sources_and_all_usage(store, compare
     review = saved["agent_review"]
     assert saved["status"] == "completed"
     assert review["status"] == "succeeded"
-    assert len(review["versions"]) == 1 + revise
+    assert len(review["versions"]) == 1
     assert saved["consensus"] == review["versions"][-1]["text"]
     assert len(review["checks"]) == compares
     assert review_is_bound(review, saved["consensus"])
@@ -108,9 +108,32 @@ def test_real_judges_exact_versions_context_sources_and_all_usage(store, compare
     assert any(e["type"] == "review" and e["review"]["status"] == "running" for e in events)
     tools = [e for e in events if e.get("kind") == "tool" and e.get("name") == "compare_models"]
     assert [e["status"] for e in tools] == [s for _ in range(compares) for s in ("running", "succeeded")]
-    assert sum(e["type"] == "delta" for e in events) == 1 + revise + (compares if compares > 1 else 0)
+    assert sum(e["type"] == "delta" for e in events) == 1 + (compares if compares > 1 else 0)
+    assert len([step for step, _ in script.calls if step.startswith('completion:')]) == compares + 1
     assert all("I will compare" not in v["text"] for v in review["versions"])
     assert store.delegation_view(UID, loop.chat_id, loop.turn_id)["agents"]
+
+
+@pytest.mark.parametrize('account_budget_only', [False, True])
+def test_fixed_answer_cannot_be_reopened_by_false_finalize_or_late_comparison(store, account_budget_only):
+    from app.services.agent_comparison import CompareArgs, JudgeArgs
+    script = Script(revise=True)
+    loop = make_loop(store, script)
+    loop.policy = replace(loop.policy, account_budget_only=account_budget_only)
+    events = list(loop.run())
+    saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
+    assert saved['consensus'] == 'The first option costs 100.'
+    assert len([step for step, _ in script.calls if step.startswith('completion:')]) == 2
+    original = json.dumps(loop.comparison.snapshot(), sort_keys=True)
+    loop.comparison.capture('A rewritten answer must never replace the checked one.')
+    result = loop.comparison.judge(JudgeArgs(finalize=False), cancellation=loop.cancellation)
+    assert result['finalized'] is True
+    with pytest.raises(ValueError, match='synthesis is already fixed'):
+        loop.comparison.compare(CompareArgs(question='Compare again?', context='', reason='Retry'), cancellation=loop.cancellation)
+    assert json.dumps(loop.comparison.snapshot(), sort_keys=True) == original
+    assert review_is_bound(saved['agent_review'], saved['consensus'])
+    first_answer = next(i for i, e in enumerate(events) if e['type'] == 'delta')
+    assert not any(e.get('clear_response') for e in events[first_answer + 1:])
 
 
 @pytest.mark.parametrize("failure,expected", [("fail_coverage", "partial"), ("fail_model", "failed")])

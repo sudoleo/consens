@@ -15,11 +15,12 @@ from test_contradiction_verification import CONSENSUS, ANSWERS, SOURCES, differe
 
 
 class SourceScript(Script):
-    def __init__(self, *, missing=False, invalid=False, unavailable=False, repeat=False, revise=False):
+    def __init__(self, *, missing=False, invalid=False, unavailable=False, repeat=False, revise=False, rewrite_during_check=False):
         super().__init__(missing=missing)
         self.invalid, self.unavailable = invalid, unavailable
         self.source_calls = 0
         self.repeat, self.revise = repeat, revise
+        self.rewrite_during_check = rewrite_during_check
 
     def factory(self):
         script = self
@@ -36,6 +37,9 @@ class SourceScript(Script):
                         yield {"type": "delta", "text": self.text}
                         action, args = "judge_answer", {"finalize": True}
                     else:
+                        if script.rewrite_during_check:
+                            self.text = 'Here is a completely rewritten answer.'
+                            yield {"type": "delta", "text": self.text}
                         if script.missing:
                             self.finish_reason = "stop"
                             return
@@ -168,15 +172,31 @@ def test_api_freezes_setting_and_recovery_rejects_different_tool_permission(api)
     assert len(calls) == count
 
 
-@pytest.mark.parametrize("revise,expected_calls", [(False, 1), (True, 2)])
-def test_repeat_reuses_evidence_but_changed_answer_requires_new_check(store, shared_judges, revise, expected_calls):
+@pytest.mark.parametrize("revise", [False, True])
+def test_source_check_finishes_once_even_when_model_requests_more_rounds(store, shared_judges, revise):
     script = SourceScript(repeat=not revise, revise=revise)
     loop = make_loop(store, script, check_sources=True)
     list(loop.run())
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
-    assert script.source_calls == expected_calls
+    assert script.source_calls == 1
     assert review_is_bound(saved["agent_review"], saved["consensus"])
-    assert len(saved["agent_review"]["versions"]) == expected_calls
+    assert len(saved["agent_review"]["versions"]) == 1
+    assert saved['consensus'] == CONSENSUS
+    assert len([step for step, _ in script.calls if step.startswith('completion:')]) == 3
+
+
+def test_rewrite_during_source_tool_step_never_reaches_stream_or_saved_answer(store, shared_judges):
+    script = SourceScript(rewrite_during_check=True)
+    loop = make_loop(store, script, check_sources=True)
+    events = list(loop.run())
+    saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
+    assert ''.join(e['text'] for e in events if e['type'] == 'delta') == CONSENSUS
+    assert saved['consensus'] == CONSENSUS
+    assert len(saved['agent_review']['versions']) == 1
+    assert review_is_bound(saved['agent_review'], CONSENSUS)
+    assert script.source_calls == 1
+    first_answer = next(i for i, e in enumerate(events) if e['type'] == 'delta')
+    assert not any(e.get('clear_response') for e in events[first_answer + 1:])
 
 
 def test_cancellation_during_retrieval_keeps_answer_and_terminal_check(store, shared_judges, monkeypatch):

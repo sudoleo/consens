@@ -148,7 +148,7 @@ def test_many_comparisons_use_actual_call_reservations_without_fixed_review_hold
     list(loop.run())
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
     assert saved["status"] == "completed" and len(saved["agent_review"]["comparisons"]) == 5
-    assert loop.comparison.judge_calls >= 20
+    assert loop.comparison.judge_calls == 10  # Two judges per basis, one fixed synthesis.
     assert store.receipt_ref(UID, loop.chat_id, loop.turn_id).get().to_dict()["review_hold"] == 0
 
 
@@ -159,7 +159,7 @@ def test_consensus_and_legacy_analysis_budgets_remain_bounded():
     assert not AgentPolicy.from_config(defaults()).account_budget_only
 
 
-def test_further_comparison_after_review_and_four_revisions_check_the_current_basis(store):
+def test_account_budget_does_not_allow_more_comparisons_or_revisions_after_review(store):
     from app.services.agent_comparison import review_is_bound
     script = Script()
     base = type(script.factory())
@@ -187,8 +187,9 @@ def test_further_comparison_after_review_and_four_revisions_check_the_current_ba
     list(loop.run())
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
     review = saved["agent_review"]
-    assert saved["status"] == "completed" and len(review["comparisons"]) == 2
-    assert len(review["versions"]) == 4 and len(review["checks"]) == 2
+    assert saved["status"] == "completed" and len(review["comparisons"]) == 1
+    assert len(review["versions"]) == 1 and len(review["checks"]) == 1
+    assert saved['consensus'] == 'The first option costs 100.'
     assert review_is_bound(review, saved["consensus"])
 
 

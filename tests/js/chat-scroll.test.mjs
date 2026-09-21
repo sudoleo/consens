@@ -33,6 +33,37 @@ function boot({ reduced = false, mode = "agent" } = {}) {
 }
 
 describe("conversation scroll", () => {
+  it('keeps the reading position when offscreen activity shrinks, including native anchoring', () => {
+    const app = boot();
+    app.scroll(1200);
+    const activity = app.document.querySelector('#threadAsk');
+    let bottom = 900;
+    activity.getBoundingClientRect = () => ({bottom: bottom - app.window.scrollY});
+    let restore = app.window.App.chatScroll.preserveAbove(activity);
+    bottom -= 240;
+    restore();
+    expect(app.window.scrollY).toBe(960);
+    restore = app.window.App.chatScroll.preserveAbove(activity);
+    bottom -= 180;
+    app.scroll(780); // Browser already compensated for this layout change.
+    app.window.scrollTo.mockClear();
+    restore();
+    expect(app.window.scrollY).toBe(780);
+    expect(app.window.scrollTo).not.toHaveBeenCalled();
+    app.scroll(0);
+    expect(app.window.App.chatScroll.preserveAbove(activity)).toBeNull();
+    app.dom.window.close();
+  });
+
+  it('ends automatic following when the response finishes', () => {
+    const app = boot();
+    app.window.App.revealSentMessage(); app.tick();
+    app.show({runId:'one', finishedAt:123, config:{executionMode:'agent', agentMode:true}});
+    app.window.scrollTo.mockClear(); app.grow(400); app.tick();
+    expect(app.window.scrollTo).not.toHaveBeenCalled();
+    expect(app.document.body.classList.contains('chat-scroll-following')).toBe(false);
+    app.dom.window.close();
+  });
   it.each(['agent', 'consensus'])('opens a saved %s conversation with one cancellable smooth jump', mode => {
     const app = boot({ mode });
     app.saved(); app.window.App.chatScroll.opened(); app.tick(8);

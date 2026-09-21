@@ -48,8 +48,9 @@
   }
   const quietMotion = window.matchMedia?.('(prefers-reduced-motion: reduce), (forced-colors: active)');
   const activeMotion = new Set();
+  let offscreenUpdate = false;
   function motion(element, frames, finish = () => {}, duration = 220) {
-    if (quietMotion?.matches || !element.animate || !element.isConnected) { finish(); return null; }
+    if (offscreenUpdate || quietMotion?.matches || !element.animate || !element.isConnected) { finish(); return null; }
     const animation = element.animate(frames, { duration, easing: 'cubic-bezier(.2, .7, .2, 1)', fill: 'both' });
     activeMotion.add(animation);
     animation.onfinish = () => { activeMotion.delete(animation); if (finish() !== false) animation.cancel(); };
@@ -112,7 +113,7 @@
     // closing. Keep the outgoing history painted until its short fade finishes.
     view.details.open = open;
     const after = host.getBoundingClientRect().height;
-    if (before && after && before !== after && !quietMotion?.matches && host.animate) {
+    if (before && after && before !== after && !offscreenUpdate && !quietMotion?.matches && host.animate) {
       view.details.open = true;
       view.details.classList.toggle('is-closing', !open);
       view.historyMotion = motion(view.history, [{ opacity: open ? 0 : 1 }, { opacity: open ? 1 : 0 }], () => false, 160);
@@ -182,7 +183,28 @@
     }
   }
 
-  function render(host, { events = [], usage = null, running = false, responding = false,
+  function render(host, spec) {
+    const restore = host?._agentActivity && App.chatScroll?.preserveAbove(host, host.nextElementSibling);
+    offscreenUpdate = !!restore;
+    try {
+      if (restore) {
+        // Finish a height transition that started before the reader scrolled
+        // past the status. Offscreen changes settle once, with one correction.
+        for (const animation of [...activeMotion]) {
+          if (host.contains(animation.effect?.target) && animation.effect.getKeyframes().some(frame => 'height' in frame)) {
+            const finish = animation.onfinish;
+            animation.onfinish = null;
+            finish?.();
+          }
+        }
+      }
+      renderActivity(host, spec);
+    } finally {
+      offscreenUpdate = false;
+      restore?.();
+    }
+  }
+  function renderActivity(host, { events = [], usage = null, running = false, responding = false,
     status = "succeeded", truncated = false, finishReason = "", review = null, answerText = '', settings = null, elapsedMs = null } = {}) {
     if (!host) return;
     if (!host._agentActivity) {

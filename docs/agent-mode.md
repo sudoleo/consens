@@ -105,10 +105,10 @@ keine unabhängige Faktenprüfung. Ohne Vergleich läuft keine automatische Prü
 
 Die Prüfung bindet den SHA-256 der Antwort und den Hash der konkret verwendeten
 Modellantworten samt Quellen. Nach der Prüfung wird der Text nicht umgeschrieben.
-Mit finalize=false kann das Modell weiter überarbeiten; jede neue Textversion
-muss erneut geprüft werden. Weitere Vergleiche sind auch nach einer Prüfung
-möglich und entwerten die bisherige Prüfung gegen die alte Grundlage. Es gibt
-keine feste Zahl an Vergleichs-, Antwort- oder Judge-Runden. Ankündigungen weiterer
+Die erste fertige Synthese bleibt für diesen Turn unverändert. Auch
+`finalize=false` öffnet keine weitere Schreib-/Prüfrunde; das Feld bleibt nur zur
+Kompatibilität akzeptiert. Weitere Vergleiche sind nur vor der Synthese möglich.
+Überarbeitungen erfolgen erst auf eine neue Nutzernachricht. Ankündigungen weiterer
 Tool-Aufrufe zählen noch nicht als Syntheseversion. Jeder Teilvergleich behält
 seine eigene Prüfung: dieselben Modelle zählen nicht mehrfach als unabhängige
 Stimmen. Nicht abgedeckte Aussagen bleiben in der Coverage sichtbar.

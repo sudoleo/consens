@@ -6,6 +6,86 @@ from test_phase4_frontend import phase4_server, _real_firebase_page, _json
 from test_agent_chat_frontend import CATALOG, _choose_mode
 
 
+@pytest.mark.parametrize('width,history_open,at_end,reduced', [
+    (1440, False, False, False), (1440, True, True, False),
+    (390, False, True, False), (390, True, False, False), (320, False, False, True),
+])
+def test_agent_review_and_completion_keep_visible_answer_still(browser, phase4_server, width, history_open, at_end, reduced):
+    context, page = _real_firebase_page(browser, phase4_server)
+    errors = []
+    page.on('pageerror', lambda error: errors.append(str(error)))
+    try:
+        page.set_viewport_size({'width': width, 'height': 800})
+        page.emulate_media(reduced_motion='reduce' if reduced else 'no-preference')
+        page.route('**/user_status', lambda r: _json(r, {'tier': 'pro', 'is_pro': True, 'agent_access': True}))
+        page.route('**/agent/models', lambda r: _json(r, CATALOG))
+        page.evaluate("async () => { await __switchE2EUser('account-a'); }")
+        _choose_mode(page, 'agent')
+        page.evaluate("""() => {
+          window.__fixedAnswer = Array.from({length:45}, (_, i) =>
+            `Paragraph ${i}. This is the completed answer. Its checked text must remain readable while the progress area changes.`).join('\\n\\n');
+          window.__stableRun = App.runRegistry.create({question:'Compare the alternatives', config:{executionMode:'agent'}});
+          App.runRegistry.update(__stableRun.runId, run => {
+            run.status = 'running'; run.phase = 'answers'; run.consensus.status = 'streaming';
+            run.consensus.streamText = __fixedAnswer;
+            run.metadata.agentActivity = [
+              {id:'progress', kind:'progress', text:'I compare the alternatives and examine their different assumptions.'},
+              {id:'comparison', kind:'tool', name:'compare_models', status:'succeeded'},
+              {id:'writing', kind:'status', status:'responding'},
+            ];
+          });
+          App.composer.collapse({force:true});
+        }""")
+        expect(page.locator('#agentAnswerBody p')).to_have_count(45)
+        if history_open:
+            page.locator('#agentAnswerActivity summary').click()
+        page.wait_for_timeout(400)
+        if at_end:
+            page.evaluate('() => App.chatScroll.sent()')
+            page.wait_for_function('() => document.documentElement.scrollHeight - innerHeight - scrollY < 3')
+        else:
+            page.evaluate("""() => {
+              dispatchEvent(new WheelEvent('wheel', {deltaY:-100}));
+              document.querySelectorAll('#agentAnswerBody p')[20].scrollIntoView({block:'center', behavior:'instant'});
+            }""")
+        page.wait_for_timeout(500)
+        page.evaluate("""atEnd => {
+          const paragraphs = document.querySelectorAll('#agentAnswerBody p');
+          window.__readingAnchor = atEnd ? paragraphs[paragraphs.length - 1] : paragraphs[20];
+        }""", at_end)
+        assert page.locator('#agentAnswerActivity').bounding_box()['y'] + page.locator('#agentAnswerActivity').bounding_box()['height'] < 0
+        for stage in ['review', 'checked', 'finished', 'late_usage']:
+            samples = page.evaluate("""stage => new Promise(resolve => {
+              const samples = [__readingAnchor.getBoundingClientRect().top];
+              App.runRegistry.update(__stableRun.runId, run => {
+                if (stage === 'review') run.metadata.agentActivity.push(
+                  {id:'review-progress', kind:'progress', text:'The models disagree on some assumptions. I check the answer against the available comparison results.'},
+                  {id:'judge', kind:'tool', name:'judge_answer', status:'running'});
+                if (stage === 'checked') run.metadata.agentActivity.find(e => e.id === 'judge').status = 'succeeded';
+                if (stage === 'finished') {
+                  run.consensus.text = run.consensus.streamText;
+                  run.consensus.status = 'complete'; run.phase = 'done';
+                }
+                if (stage === 'late_usage') run.metadata.agentUsage = {input_tokens:500, output_tokens:100};
+              });
+              if (stage === 'finished') App.runRegistry.setStatus(__stableRun.runId, 'succeeded');
+              const start = performance.now();
+              function sample() {
+                samples.push(__readingAnchor.getBoundingClientRect().top);
+                if (performance.now() - start < 550) requestAnimationFrame(sample);
+                else resolve(samples);
+              }
+              requestAnimationFrame(sample);
+            })""", stage)
+            assert max(samples) - min(samples) < 3, (stage, samples)
+        expect(page.locator('#agentAnswerActivity details')).not_to_have_attribute('open', '')
+        expect(page.locator('#agentAnswerActivity .agent-progress')).not_to_be_visible()
+        assert page.locator('#agentAnswerBody').inner_text() == page.evaluate('__fixedAnswer')
+        assert not errors
+    finally:
+        context.close()
+
+
 @pytest.mark.parametrize("width,reduced,dark", [(1280, False, False), (390, False, False), (320, True, True)])
 def test_consensus_stream_stays_still_and_latest_only_jumps_once(browser, phase4_server, width, reduced, dark):
     context, page = _real_firebase_page(browser, phase4_server)

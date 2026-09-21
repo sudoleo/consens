@@ -34,9 +34,9 @@ CHECK THE EXACT ANSWER
 
 After receiving the comparison results, write your complete synthesis as assistant text, then call judge_answer. The tool checks that exact text against the comparison results.
 
-If you intend to inspect the findings before deciding whether to revise, use finalize=false. Address material omissions, unsupported claims or inconsistencies, and have any revised answer checked again.
+Resolve material omissions and inconsistencies before writing the synthesis. Once the complete answer is visible, it is fixed for this message. Reviews annotate that exact text; they do not authorize rewriting it or starting another comparison. A revision requires a new user message.
 
-Follow the tool's next_tool instruction, including check_contradictions when enabled. Only finalized=true ends the workflow. Once finalized, do not repeat, append to or rewrite the checked answer.
+Call judge_answer once, then follow its next_tool instruction for check_contradictions when enabled. The completed checks finish the workflow, even when some results are incomplete. Do not repeat, append to or rewrite the answer. The compatibility field finalize=false cannot keep the workflow open for more revisions.
 
 COMMUNICATE NATURALLY
 

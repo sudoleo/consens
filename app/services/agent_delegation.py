@@ -135,7 +135,7 @@ class DelegationLoop(AgentLoop):
             else:
                 self.messages[0]["content"] += "\nCheck contradictions is OFF. No original-source adjudication tool is authorized for this message. Model agreement is still checked by judge_answer."
             if not self.policy.account_budget_only:
-                self.messages[0]["content"] += "\nAt most three comparisons and two checked answer versions per message."
+                self.messages[0]["content"] += "\nAt most three comparisons before the single checked answer per message."
             self.registry = ToolRegistry([*(self.registry.tools.values() if self.config["enabled"] else []),
                                           *self.comparison.tools], argument_limit=24_000)
 
@@ -475,7 +475,7 @@ class DelegationLoop(AgentLoop):
                                   clear_response=step != "completion:0" and not (self.comparison and self.comparison.text))
             if self.mock_answer is not None:
                 value.text, value.finish_reason = self.mock_answer, "stop"
-                if not worker:
+                if not worker and not (self.comparison and self.comparison.text):
                     yield {"type": "delta", "text": value.text}
             else:
                 self._check(cancellation)
@@ -503,8 +503,10 @@ class DelegationLoop(AgentLoop):
                                 if self.comparison and event["kind"] == "reasoning":
                                     continue
                                 event = self.activity(event)
-                            if event and self.comparison and self.comparison.text and event["type"] == "delta" and not value.text[:-len(event["text"])]:
-                                yield self.status(step, "revision", status="working", clear_response=True)
+                            if event and self.comparison and self.comparison.text and event["type"] == "delta":
+                                # A required follow-up tool step must not erase or
+                                # append to the already visible, checkpointed answer.
+                                continue
                             if event:
                                 yield event
                 finally:
@@ -519,7 +521,7 @@ class DelegationLoop(AgentLoop):
             self.cooldowns.record(model, self.api_key, exc)
             raise
         finally:
-            if not worker and value.text:
+            if not worker and value.text and not (self.comparison and self.comparison.text):
                 # Retain streamed text when a provider fails mid-answer. Reviewed
                 # candidates are checkpointed separately, with their exact hash.
                 self.completion.text = value.text
@@ -762,6 +764,10 @@ class DelegationLoop(AgentLoop):
                     if value.tool_calls:
                         for call in value.tool_calls:
                             self.messages.append((yield from self._execute_stream(value, call)))
+                            if self.comparison and self.comparison.finalized:
+                                # Ignore speculative extra calls in the same batch
+                                # once all required checks have reached an end state.
+                                break
                         yield from self._events()
                         if not (self.comparison and self.comparison.finalized):
                             continue
