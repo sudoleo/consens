@@ -396,17 +396,19 @@
         const root = node("details", "agent-session");
         const summary = node("summary");
         const info = node("span", "agent-session-info");
+        const heading = node('span', 'agent-session-heading');
         const title = node("strong", "", agent.title);
         const role = node('span', 'agent-session-role');
         const meta = node("span", "agent-session-meta");
         const state = node('span', 'agent-session-state');
         const usage = node('span', 'agent-session-tokens');
-        meta.append(state, usage);
+        heading.append(title, usage);
+        meta.append(role, state);
         const track = node('span', 'run-model-track agent-session-track');
         track.setAttribute('aria-hidden', 'true');
         track.append(node('i'));
         const body = node("div", "agent-session-detail"); body.tabIndex = 0;
-        info.append(title, role, meta, track); summary.append(mark(agent), info); root.append(summary, body);
+        info.append(heading, meta, track); summary.append(mark(agent), info); root.append(summary, body);
         root.addEventListener("toggle", () => {
           if (current !== view || view.uid !== uid() || !window.document?.body || !root.isConnected) return;
           if (root.open) {

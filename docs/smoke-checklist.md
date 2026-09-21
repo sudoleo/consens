@@ -809,6 +809,11 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
 - [ ] Im Agent-Chat ersetzt der verbleibende Tokenanteil als Prozentzahl den
   Run-Zähler im Sidebar-Footer. Exakte Zahlen im Panel, keine Budgetzeile im
   Composer. Modus-/Accountwechsel zeigt keine fremden oder veralteten Zahlen.
+- [ ] Agent-Aktivität bei 1920/1440 px mit offener und eingeklappter linker
+  Navigation öffnen/schließen: Antwort und Composer behalten Position und Breite.
+  Modellname und Tokens stehen oben, Rolle sowie Status/Laufzeit darunter.
+  Lange Namen und Metadaten bleiben auch bei 390/320 px in beiden Themes
+  vollständig lesbar; keine Überschneidungen innerhalb der Einträge.
 - [ ] Lange Agent-/Consensus-Antworten und gespeicherte Turns in beiden Themes
   bei Desktop- und Mobilbreite lesen: 16 px Schrift mit 28 px Zeilenhöhe,
   erkennbare Absatz- und Listenabstände, auch bei verschachtelten Listen.

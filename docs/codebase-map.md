@@ -2009,12 +2009,14 @@ Metadaten und das Ziel der Detailansicht. Neu hinzukommende Icons blenden sich
 einmal über 240 ms mit 4 px Versatz ein; mehrere neue Icons sind um jeweils
 24 ms (maximal 96 ms) versetzt. Dadurch bleiben Fokus und Animation bei
 laufenden Updates stabil. Reduced Motion deaktiviert die Bewegung vollständig.
-Die Leiste blendet sich mit kurzer Bewegung ein; auf Desktop weicht der Chat
-sanft aus, Reduced Motion deaktiviert beide Animationen. Modellname und Aufgabe
-stehen getrennt. Während eines Modellaufrufs schimmert die Usage-Zeile dezent:
+Die Leiste blendet sich mit kurzer Bewegung als Overlay ein; Chat und Composer
+behalten beim Öffnen und Schließen ihre Position und Breite. Reduced Motion
+deaktiviert die Einblendbewegung. Kompakte Einträge zeigen Modellname und Tokens
+in der ersten Zeile, darunter Aufgabe sowie Status/Laufzeit; lange Namen und
+Metadaten dürfen umbrechen. Während eines Modellaufrufs schimmert die Tokenzahl dezent:
 zunächst `Tokens pending`, dann tatsächlich empfangene Antwort-/sichtbare
 Reasoning-Zeichen (`chars`), bis der Provider Input+Output-Tokens meldet.
-Direkt darunter steht pro laufendem Modell ein dezenter 2-px-Ladebalken.
+Unter den Metadaten steht pro laufendem Modell ein dezenter 2-px-Ladebalken.
 `agent-session-track` nutzt den gemeinsamen `run-model-track` samt
 `runModelShimmer`-Animation und versetzten Startzeiten aus der Consensus-Pipeline.
 Der Balken zeigt Aktivität ohne geschätzte Prozentzahl, bleibt beim Wechsel zu

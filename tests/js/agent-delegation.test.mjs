@@ -90,7 +90,7 @@ describe("Agent sidebar", () => {
     const label = d.querySelector('.agent-session-tokens');
     const track = d.querySelector('.agent-session-track');
     expect(track.hidden).toBe(false);
-    expect(track.previousElementSibling.contains(label)).toBe(true);
+    expect(label.compareDocumentPosition(track) & w.Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(label.textContent).toBe('Tokens pending'); expect(label.classList.contains('is-loading')).toBe(true);
     const context = {metadata:{chatId,agentTurnId:turnId},auth:{uid:'owner'}};
     const progress = {version:1,chat_id:chatId,turn_id:turnId,agent_id:agentId,session_seq:1,seq:1,chars:120,streaming:true,usage:null};
