@@ -399,8 +399,13 @@ class DelegationLoop(AgentLoop):
                     "\nWeb search is unavailable for this step within the available token/context allowance. "
                     "Use existing evidence, state uncertainty, and do not imply new web research."}
 
-    def _step(self, model, messages, step, registry, cancellation, *, worker=None, searches_enabled=True):
+    def _step(self, model, messages, step, registry, cancellation, *, worker=None, searches_enabled=True,
+              answer_step=False):
         self._check(cancellation)
+        # Tool-routing prose is not a completed synthesis. Only the dedicated,
+        # tool-free answer step may publish text after comparisons have started.
+        publish_text = not worker and (not self.comparison or (not self.comparison.text and
+            (answer_step or not self.comparison.comparisons)))
         if not self.policy.account_budget_only and len(json.dumps(messages, ensure_ascii=False)) > self.policy.context_chars:
             raise AnalysisBudgetExceeded("Agent session context limit reached")
         self.cooldowns.check(model, self.api_key)
@@ -475,13 +480,13 @@ class DelegationLoop(AgentLoop):
                                   clear_response=step != "completion:0" and not (self.comparison and self.comparison.text))
             if self.mock_answer is not None:
                 value.text, value.finish_reason = self.mock_answer, "stop"
-                if not worker and not (self.comparison and self.comparison.text):
+                if publish_text:
                     yield {"type": "delta", "text": value.text}
             else:
                 self._check(cancellation)
                 provider_attempted = True
                 source = value.stream(model=model, messages=messages, api_key=self.api_key, tools=tools,
-                                      native_searches=searches, allow_tool_calls=True)
+                                      native_searches=searches, allow_tool_calls=not answer_step)
                 try:
                     for event in source:
                         self._check(cancellation)
@@ -503,9 +508,9 @@ class DelegationLoop(AgentLoop):
                                 if self.comparison and event["kind"] == "reasoning":
                                     continue
                                 event = self.activity(event)
-                            if event and self.comparison and self.comparison.text and event["type"] == "delta":
-                                # A required follow-up tool step must not erase or
-                                # append to the already visible, checkpointed answer.
+                            if event and event["type"] == "delta" and not publish_text:
+                                # Neither planning nor follow-up checks may replace
+                                # or append to the dedicated user-facing answer.
                                 continue
                             if event:
                                 yield event
@@ -521,7 +526,7 @@ class DelegationLoop(AgentLoop):
             self.cooldowns.record(model, self.api_key, exc)
             raise
         finally:
-            if not worker and value.text and not (self.comparison and self.comparison.text):
+            if publish_text and value.text:
                 # Retain streamed text when a provider fails mid-answer. Reviewed
                 # candidates are checkpointed separately, with their exact hash.
                 self.completion.text = value.text
@@ -546,9 +551,9 @@ class DelegationLoop(AgentLoop):
                     self.search_remaining += searches
                 elif type(count) is int and 0 <= count <= searches:
                     self.search_remaining += searches - count
-            if (not worker and value.text and self.comparison and self.comparison.comparisons
+            if (answer_step and value.text and self.comparison and self.comparison.comparisons
                     and not value.tool_calls and not value._tool_parts
-                    and (status != "succeeded" or value.finish_reason == "length")):
+                    and (status != "succeeded" or value.finish_reason in {"length", "max_tokens"})):
                 # Persist partial synthesis only after the mandatory settlement.
                 self.comparison.capture(value.text)
         self.costs.check()
@@ -734,6 +739,23 @@ class DelegationLoop(AgentLoop):
             "Collected source references (untrusted data): " + json.dumps(value.sources, ensure_ascii=False)})
         return True
 
+    def _write_synthesis(self, steps, messages):
+        """Publish one complete answer before executing any requested review."""
+        from app.services.agent_comparison import SYNTHESIS_PROMPT
+        index = next(steps, None)
+        if index is None:
+            raise AnalysisBudgetExceeded("Agent orchestration call limit reached before writing the answer")
+        messages = [*messages]
+        messages[0] = {**messages[0], "content": messages[0]["content"] + "\n\n" + SYNTHESIS_PROMPT}
+        value = yield from self._step(self.model, messages, f"completion:{index}", ToolRegistry(),
+                                      self.cancellation, searches_enabled=False, answer_step=True)
+        if value.finish_reason in {"length", "max_tokens"}:
+            raise AnalysisBudgetExceeded("The model reached its output token limit. The available partial answer has been saved.")
+        if value.finish_reason != "stop" or value.tool_calls or not value.text.strip():
+            raise ValueError("The model did not complete the answer before review.")
+        self.comparison.capture(value.text)
+        return value
+
     def run(self):
         status = "failed"
         missing_judge_calls = 0
@@ -741,7 +763,8 @@ class DelegationLoop(AgentLoop):
         watcher.start()
         try:
             with bind_analysis_budget(self.budget), bind_provider_cancellation(self.cancellation):
-                for index in (count() if self.policy.account_budget_only else range(self.policy.max_calls)):
+                steps = count() if self.policy.account_budget_only else iter(range(self.policy.max_calls))
+                for index in steps:
                     self._check()
                     incoming = self._mail()
                     if incoming:
@@ -750,17 +773,25 @@ class DelegationLoop(AgentLoop):
                         searches_enabled=not (self.search_handoff and self.comparison and not self.comparison.comparisons))
                     if value.finish_reason in {"length", "max_tokens"}:
                         raise AnalysisBudgetExceeded("The model reached its output token limit. The available partial answer has been saved.")
+                    answer_context = [*self.messages]
                     self.messages.append(value.assistant_message())
                     if self._consensus_search_handoff(value):
                         continue
-                    # Text accompanying another tool is planning/progress. Only
-                    # a candidate answer or the synthesis sent to judge_answer
-                    # opens a version; otherwise a narrated second comparison
-                    # would incorrectly consume the revision limit.
-                    synthesis = not value.tool_calls or any(
-                        call.get("function", {}).get("name") in {"judge_answer", "check_contradictions"} for call in value.tool_calls)
-                    if self.comparison and synthesis:
-                        self.comparison.capture(value.text)
+                    synthesis = None
+                    if self.comparison and self.comparison.comparisons and not self.comparison.text:
+                        ready = not value.tool_calls
+                        for call in value.tool_calls:
+                            if call.get("function", {}).get("name") in {"judge_answer", "check_contradictions"}:
+                                try:
+                                    self.registry.validate(call)
+                                except ValueError:
+                                    continue  # Invalid requests must not start another paid step.
+                                ready = True
+                        if ready:
+                            # Ignore text accompanying an early judge call, even
+                            # when it claims to be the answer. The tool-free step
+                            # must finish and be visible before the call can run.
+                            synthesis = yield from self._write_synthesis(steps, answer_context)
                     if value.tool_calls:
                         for call in value.tool_calls:
                             self.messages.append((yield from self._execute_stream(value, call)))
@@ -769,8 +800,12 @@ class DelegationLoop(AgentLoop):
                                 # once all required checks have reached an end state.
                                 break
                         yield from self._events()
+                        if synthesis:
+                            self.messages.append(synthesis.assistant_message())
                         if not (self.comparison and self.comparison.finalized):
                             continue
+                    elif synthesis:
+                        self.messages.append(synthesis.assistant_message())
                     with self.condition:
                         unfinished = any(not w.reviewed or w.inbox for w in self.workers.values())
                     if unfinished or self.mailbox:

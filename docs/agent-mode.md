@@ -68,8 +68,13 @@ Vergleichsgrundlage eingeholt.
 
 ## Antwortversionen und Prüfungen
 
-Nach einem Vergleich ist judge_answer verpflichtend. Das Tool prüft genau den
-bereits sichtbaren Synthesetext mit der vorhandenen Differences-/Coverage-Pipeline.
+Nach den Vergleichen leitet `judge_answer` in die Antwortphase über. Vor seiner
+Ausführung streamt dasselbe Chatmodell die vollständige Synthese in einem eigenen
+Schritt ohne Tools und Suche. Erst wenn dieser Schritt vollständig endet, prüfen
+Differences und Coverage genau den bereits sichtbaren Text. Eine Einleitung neben
+einem verfrühten Judge-Aufruf zählt nicht als Antwort. Der Schreibschritt wird wie
+jeder Modellaufruf abgerechnet. Bei Abbruch oder Tokenlimit bleibt der Teiltext
+ungeprüft erhalten; die Judges starten nicht.
 Ein fehlender Toolcall wird erneut eingefordert, solange das Tagesbudget weitere
 Aufrufe zulässt. Das Backend lässt keinen stillen ungeprüften Abschluss zu.
 

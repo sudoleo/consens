@@ -242,7 +242,7 @@ def test_server_search_final_answer_resumes_consensus_without_repeating_search(s
     loop.costs.policy, loop.budget, loop.factory = loop.policy, AnalysisBudget(unlimited=True), Researched
     list(loop.run())
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
-    assert root_calls == [1, 0, 1]
+    assert root_calls == [1, 0, 1, 0]
     assert saved['status'] == 'completed' and saved['agent_review']['status'] == 'succeeded'
     assert saved['consensus'] != 'Research findings.'
     assert agent_quota.snapshot(store.db, UID)['reserved'] == 0

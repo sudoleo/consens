@@ -144,7 +144,11 @@ venv\Scripts\python.exe -m playwright install chromium
 Agent-Vergleiche: `tests/test_agent_comparison.py` führt den gemeinsamen
 Differences-/Coverage-Parser mit deterministischen Providern aus und prüft
 exakte Versionen, mehrere Teilgrundlagen, Ausfälle, Abbruch, UTC-Wechsel sowie
-atomare Tokenreservierungen. `tests/test_agent_progress.py` prüft begrenzte
+atomare Tokenreservierungen. `tests/test_agent_answer_lifecycle.py` reproduziert
+einen frühen Judge-Aufruf mit bloßer Einleitung: Erst der vollständig gestreamte
+toolfreie Antwortschritt darf die Judges starten. Geprüft werden Event-Reihenfolge,
+gespeicherter Wortlaut, Hash-Bindung, leere Antworten, Tokenlimit und Nutzer-Stopp.
+`tests/test_agent_progress.py` prüft begrenzte
 Fortschrittsmeldungen aus validierten Toolargumenten, Reihenfolge vor Toolstart,
 Persistenz, unveränderte Übernahme mehrsprachiger Texte und Aufruf-/Tokenabrechnung. Provider-
 Reasoning des Steuerungsmodells bleibt aus dem Chatstatus ausgeschlossen;

@@ -116,7 +116,7 @@ def test_partial_synthesis_survives_after_comparisons(store, ending):
     base = type(script.factory())
     class Interrupted(base):
         def stream(self, **kwargs):
-            if self.step_id == "completion:1":
+            if self.step_id == "completion:2":
                 self.text = "The synthesis available so far."
                 yield {"type": "delta", "text": self.text}
                 if ending == "timeout":

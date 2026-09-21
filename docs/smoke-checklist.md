@@ -825,6 +825,11 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
   neuer Nutzernachricht. Beim Lesen unten oder mitten in einer langen Antwort
   bleibt dieselbe Zeile stehen, wenn der Status darüber wechselt oder bei
   Abschluss einklappt; offener/geschlossener Verlauf und Reduced Motion prüfen.
+- [ ] Agent-Reihenfolge: vollständige mehrteilige Antwort wird zuerst sichtbar,
+  erst danach starten Coverage-/Differences-Judges und setzen Markierungen.
+  Einleitung neben einem frühen Judge-Aufruf ersetzt nie den Antwortteil.
+  Nach der Prüfung bleiben Wortlaut und Leseposition erhalten. Bei Stopp während
+  der Synthese bleibt der Teiltext ungeprüft; keine Judges starten dafür.
 - [ ] Agent-Synthese bei einer persönlichen Empfehlungsfrage: klare, begründete
   Empfehlung anhand der Nutzerkriterien, keine übernommenen Ich-Präferenzen oder
   erfundenen Erlebnisse der Vergleichsmodelle. Bedingungen bleiben erhalten;

@@ -1816,9 +1816,21 @@ Vergleichsantworten sind auf 6.000 Zeichen und 2.048 Output-Tokens begrenzt.
 Überlange oder nicht vollständig beendete Antworten gelten als fehlgeschlagen.
 Mindestens zwei vollständige Antworten sind eine brauchbare Prüfgrundlage.
 
-Das Chatmodell streamt die Synthese selbst und ruft danach judge_answer auf.
-Der Toolcall prüft den exakten zuletzt gestreamten Text, keinen vom Modell frei
-behaupteten Prüftext. Er nutzt query_differences samt Coverage, Satzindizes,
+Nach den Vergleichen fordert das Chatmodell mit `judge_answer` die Antwortphase
+an. `DelegationLoop._write_synthesis` schiebt vor der Tool-Ausführung einen
+eigenen Schreibschritt desselben Chatmodells ein: leere Tool-Registry, keine
+native Suche, `allow_tool_calls=false` und ein phasenspezifischer Systemzusatz
+verlangen die vollständige Antwort. Dieser Schritt wird normal als nächster
+`completion:N` reserviert und abgerechnet. Tool-Begleittext oder ein vorzeitiger
+Antwortversuch nach Vergleichen wird nicht als Synthese angezeigt/gespeichert;
+auch ein reiner Textabschluss führt erst in den dedizierten Schreibschritt.
+Erst nach dessen vollständigem, nicht leerem `stop` wird der sichtbare Text
+festgeschrieben und der angeforderte Judge ausgeführt. Bei Abbruch/Tokenlimit
+bleibt nur die ungeprüfte Teilantwort erhalten, ohne gestartete Judges.
+Der Synthesekontext enthält keine noch unbeantworteten Toolcalls. Die eigentliche
+Synthese wird für Folgeschritte nach den Tool-Ergebnissen in den Kontext aufgenommen.
+Der Toolcall prüft diesen exakten Text, keinen vom Modell frei behaupteten
+Prüftext. Er nutzt query_differences samt Coverage, Satzindizes,
 Zitatprüfung und begrenzten Repairs. `chat_mode=true` hält beide Judges auf den
 Standardmodellen aus `app_config/models.judge_models`, unabhängig von der
 Premium-Einstufung des Chatmodells. Primär bleibt eine andere Familie bevorzugt
@@ -1874,8 +1886,9 @@ fehlgeschlagene oder übersprungene Prüfungen bleiben ehrlich gekennzeichnet,
 lösen aber keine automatische Überarbeitung aus. Nach vollständigem Protokoll-
 Abschluss werden auch weitere Toolcalls derselben Modellantwort nicht ausgeführt.
 Eine gewünschte Überarbeitung beginnt mit einer neuen Nutzernachricht.
-Begleittext zu anderen Toolcalls bleibt Planung und öffnet keine Syntheseversion;
-so verhindert ein angekündigter zweiter Vergleich nicht dessen Ausführung.
+Tool-Begleittext bleibt Planung und öffnet keine Syntheseversion; dies gilt auch
+für Einleitungen neben einem vorzeitigen Judge-Aufruf. Weitere Teilvergleiche
+bleiben vor der dedizierten Synthese möglich.
 Fehlende Judge-Toolcalls werden erneut eingefordert, solange weitere Aufrufe
 ins Tagesbudget passen; ungeprüfte Antworten werden nie erfolgreich abgeschlossen. Ohne Vergleich
 ist keine automatische Prüfung erforderlich. Ein ausdrücklicher Prüfwunsch kann

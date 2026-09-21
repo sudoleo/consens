@@ -107,8 +107,8 @@ def test_user_progress_is_ordered_persisted_and_does_not_add_model_calls(store, 
     saved = store.get_turn(loop.uid, loop.chat_id, loop.turn_id)
     assert [e["text"] for e in saved["agent_activity"] if e["kind"] == "progress"] == updates
     assert saved["consensus"] == "The first option costs 100."
-    assert len(script.calls) == 6
-    assert saved["agent_usage"]["input_tokens"] + saved["agent_usage"]["output_tokens"] == 420
+    assert len(script.calls) == 7
+    assert saved["agent_usage"]["input_tokens"] + saved["agent_usage"]["output_tokens"] == 490
     assert all(update not in json.dumps(script.prompts) for update in updates)
 
 

@@ -30,6 +30,10 @@ class Script:
                 self.usage = measured_usage({"prompt_tokens": 50, "completion_tokens": 20, "cost": .0001,
                     "prompt_tokens_details": {"cached_tokens": 20}, "completion_tokens_details": {"reasoning_tokens": 10}}, model)
                 if self.step_id.startswith("completion:"):
+                    if not kwargs["tools"]:
+                        self.text, self.finish_reason = "The first option costs 100.", "stop"
+                        yield {"type": "delta", "text": self.text}
+                        return
                     index = int(self.step_id.split(":")[-1])
                     if index < script.compares:
                         if script.compares > 1:
@@ -108,8 +112,8 @@ def test_real_judges_exact_versions_context_sources_and_all_usage(store, compare
     assert any(e["type"] == "review" and e["review"]["status"] == "running" for e in events)
     tools = [e for e in events if e.get("kind") == "tool" and e.get("name") == "compare_models"]
     assert [e["status"] for e in tools] == [s for _ in range(compares) for s in ("running", "succeeded")]
-    assert sum(e["type"] == "delta" for e in events) == 1 + (compares if compares > 1 else 0)
-    assert len([step for step, _ in script.calls if step.startswith('completion:')]) == compares + 1
+    assert sum(e["type"] == "delta" for e in events) == 1 + (1 if compares > 1 else 0)
+    assert len([step for step, _ in script.calls if step.startswith('completion:')]) == compares + 2
     assert all("I will compare" not in v["text"] for v in review["versions"])
     assert store.delegation_view(UID, loop.chat_id, loop.turn_id)["agents"]
 
@@ -123,7 +127,7 @@ def test_fixed_answer_cannot_be_reopened_by_false_finalize_or_late_comparison(st
     events = list(loop.run())
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
     assert saved['consensus'] == 'The first option costs 100.'
-    assert len([step for step, _ in script.calls if step.startswith('completion:')]) == 2
+    assert len([step for step, _ in script.calls if step.startswith('completion:')]) == 3
     original = json.dumps(loop.comparison.snapshot(), sort_keys=True)
     loop.comparison.capture('A rewritten answer must never replace the checked one.')
     result = loop.comparison.judge(JudgeArgs(finalize=False), cancellation=loop.cancellation)
@@ -177,7 +181,7 @@ def test_review_binding_survives_saved_turn_projection_without_normalizing_text(
     class ExactText(base):
         def stream(self, **kwargs):
             events = list(super().stream(**kwargs))
-            if self.step_id == "completion:1":
+            if self.step_id == "completion:2":
                 self.text = text
                 yield {"type": "delta", "text": text}
             else:
@@ -214,7 +218,7 @@ def test_missing_tool_is_bounded_and_persists_unchecked_answer(store):
     assert saved["status"] == "failed"
     assert saved["agent_review"]["status"] == "missing"
     assert saved["consensus"] == "The first option costs 100."
-    assert len(script.calls) == 5
+    assert len(script.calls) == 6
 
 
 def test_atomic_daily_budget_and_duplicate_settlement(store, monkeypatch):

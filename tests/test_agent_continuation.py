@@ -165,7 +165,7 @@ def test_account_budget_does_not_allow_more_comparisons_or_revisions_after_revie
     base = type(script.factory())
     class Completion(base):
         def stream(self, *, model, messages, **kwargs):
-            if not self.step_id.startswith("completion:"):
+            if not self.step_id.startswith("completion:") or not kwargs["tools"]:
                 yield from super().stream(model=model, messages=messages, **kwargs)
                 return
             index = int(self.step_id.split(":")[-1])

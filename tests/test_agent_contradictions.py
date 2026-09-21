@@ -29,11 +29,15 @@ class SourceScript(Script):
                 script.calls.append((self.step_id, model.model))
                 self.usage = measured_usage({"prompt_tokens": 50, "completion_tokens": 20, "cost": .0001}, model)
                 if self.step_id.startswith("completion:"):
+                    if not tools:
+                        self.text, self.finish_reason = CONSENSUS, "stop"
+                        yield {"type": "delta", "text": self.text}
+                        return
                     index = int(self.step_id.split(":")[-1])
                     if index == 0:
                         action, args = "compare_models", {"question": "Price?", "context": "Compare published prices.", "reason": "Conflicting prices"}
-                    elif index == 1 or (script.revise and index == 3):
-                        self.text = CONSENSUS + (" Check the applicable date." if index == 3 else "")
+                    elif index == 1 or (script.revise and index == 4):
+                        self.text = CONSENSUS + (" Check the applicable date." if index == 4 else "")
                         yield {"type": "delta", "text": self.text}
                         action, args = "judge_answer", {"finalize": True}
                     else:
@@ -43,7 +47,7 @@ class SourceScript(Script):
                         if script.missing:
                             self.finish_reason = "stop"
                             return
-                        action, args = "check_contradictions", {"finalize": not ((script.repeat or script.revise) and index == 2)}
+                        action, args = "check_contradictions", {"finalize": not ((script.repeat or script.revise) and index == 3)}
                     self.tool_calls = [{"id": f"call_{index}", "type": "function", "function": {"name": action, "arguments": json.dumps(args)}}]
                     self.finish_reason = "tool_calls"
                     return
@@ -182,7 +186,7 @@ def test_source_check_finishes_once_even_when_model_requests_more_rounds(store, 
     assert review_is_bound(saved["agent_review"], saved["consensus"])
     assert len(saved["agent_review"]["versions"]) == 1
     assert saved['consensus'] == CONSENSUS
-    assert len([step for step, _ in script.calls if step.startswith('completion:')]) == 3
+    assert len([step for step, _ in script.calls if step.startswith('completion:')]) == 4
 
 
 def test_rewrite_during_source_tool_step_never_reaches_stream_or_saved_answer(store, shared_judges):
