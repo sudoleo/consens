@@ -12,6 +12,12 @@ Zeilen-/Branch-Coverage und kein Nachweis vollständiger fachlicher Abdeckung**.
 Ein passender Testname, ein Import oder ausgeführter Code allein beweist noch
 keine wirksame Absicherung des Verhaltens.
 
+Der anschließende **[Produktcode-Abgleich und Codex-Umsetzungsplan](test-coverage/product/README.md)**
+liegt inzwischen vor: 269 Produkt-/Betriebsdateien, 77 Verhaltensverträge,
+36 gegengeprüfte Befunde und 30 geplante Arbeitspakete. Er ergänzt diesen
+historischen Testdateikatalog um tatsächliche Python-Branchmessung und gezielte
+Wirksamkeitsproben; die hier gespeicherten Laufstatus bleiben unverändert.
+
 ## Einstieg
 
 | Dokument | Inhalt |
@@ -20,6 +26,7 @@ keine wirksame Absicherung des Verhaltens.
 | [JavaScript-Suite](test-coverage/frontend.md) | 57 Dateien, überwiegend Modul-/DOMtests, zusätzlich Build-Dateisystemtests |
 | [Separate E2E-Suite](test-coverage/e2e.md) | 26 Dateien: Browserflows, isolierte Browserkomponenten und Emulatortransaktionen |
 | [Produktbereiche](test-coverage/areas.md) | Rückverweise über die drei Suiten hinweg |
+| [Produktabgleich und Arbeitspakete](test-coverage/product/README.md) | Code → Verhalten → Assertions → Lücken → konkrete Implementierungsaufträge |
 | [Befunde und Laufbedingungen](test-coverage/findings.md) | Reproduzierte Fehler, abweichender Wiederholungslauf und Ausführungsgrenzen |
 | [Vorgehen für den Folgeaudit](test-coverage/next-audit.md) | Anforderungen, Gegenprüfung, Lückenbelege und Implementierungsregeln |
 | [Maschinenlesbares Inventar](test-coverage/inventory.json) | Alle Dateien, Beschreibungen, Definitionen, Assertion-Fundstellen, expandierten Testfälle und Laufstatus |

@@ -1,0 +1,150 @@
+{
+  "review_date": "2026-09-26",
+  "reviewed_commit": "cca637b9139032aa74a44acd20b39cde710ae159",
+  "runtime": {
+    "python": "3.12.14",
+    "node": "24.19.0",
+    "npm": "11.9.0",
+    "java": "17.0.20",
+    "firebase_cli": "13.35.1",
+    "firestore_emulator": "1.19.8"
+  },
+  "coverage_version": "7.16.1",
+  "python_run": {
+    "id": "python_branch_audit",
+    "result": {
+      "passed": 2717,
+      "failed": 1,
+      "skipped": 12
+    },
+    "duration_seconds": 62.44,
+    "command": "env -u RUN_E2E UNIT_TEST_MODE=1 OPENROUTER_API_KEY=audit-placeholder-not-a-real-key python -m coverage run --branch --source=app,benchmark,scripts,main -m pytest tests -q -rs --junitxml=product-coverage-pytest.xml",
+    "report_command": "python -m coverage json -o product-coverage.json",
+    "source_report_sha256": "5c19826e75481a887396101c51bd6ab9b1d828b90cf37499d0ad01892e28493e"
+  },
+  "probes": [
+    {
+      "id": "M-01",
+      "selection": "tests/test_memory_edit.py",
+      "result": {
+        "passed": 14
+      },
+      "cases": [
+        {
+          "name": "test_model_patch_schema_is_strict_and_passage_bounded",
+          "classname": "tests.test_memory_edit",
+          "time": "0.051"
+        },
+        {
+          "name": "test_replace_is_revision_checked_and_undo_restores_exact_content",
+          "classname": "tests.test_memory_edit",
+          "time": "0.001"
+        },
+        {
+          "name": "test_non_unique_target_is_never_overwritten",
+          "classname": "tests.test_memory_edit",
+          "time": "0.001"
+        },
+        {
+          "name": "test_same_client_request_never_calls_provider_twice",
+          "classname": "tests.test_memory_edit",
+          "time": "0.001"
+        },
+        {
+          "name": "test_remember_intent_appends_when_no_related_entry_exists",
+          "classname": "tests.test_memory_edit",
+          "time": "0.000"
+        },
+        {
+          "name": "test_remember_intent_replaces_one_unique_conflicting_passage",
+          "classname": "tests.test_memory_edit",
+          "time": "0.000"
+        },
+        {
+          "name": "test_remember_intent_rejects_delete_patch",
+          "classname": "tests.test_memory_edit",
+          "time": "0.000"
+        },
+        {
+          "name": "test_smallest_replace_preserves_unrelated_details",
+          "classname": "tests.test_memory_edit",
+          "time": "0.000"
+        },
+        {
+          "name": "test_persistent_daily_budget_is_shared_by_repository_instances",
+          "classname": "tests.test_memory_edit",
+          "time": "0.000"
+        },
+        {
+          "name": "test_over_plan_memory_is_not_truncated_or_charged_by_ai_edit",
+          "classname": "tests.test_memory_edit",
+          "time": "0.000"
+        },
+        {
+          "name": "test_invalid_admin_values_fall_back_to_safe_defaults",
+          "classname": "tests.test_memory_edit",
+          "time": "0.000"
+        },
+        {
+          "name": "test_provider_call_is_schema_bound_no_reasoning_and_output_capped",
+          "classname": "tests.test_memory_edit",
+          "time": "0.000"
+        },
+        {
+          "name": "test_one_in_flight_edit_and_global_budget_are_persistent",
+          "classname": "tests.test_memory_edit",
+          "time": "0.000"
+        },
+        {
+          "name": "test_edit_endpoint_applies_explicit_feedback_without_confirmation",
+          "classname": "tests.test_memory_edit",
+          "time": "0.013"
+        }
+      ],
+      "scope": "Selected existing tests, in-process mutation only; not a suite-wide mutation score."
+    },
+    {
+      "id": "M-02",
+      "selection": "tests/test_share_feature.py -k og_card",
+      "result": {
+        "passed": 2
+      },
+      "cases": [
+        {
+          "name": "test_og_card_404_for_private_pages",
+          "classname": "tests.test_share_feature.ShareSeoEnhancementTests",
+          "time": "0.028"
+        },
+        {
+          "name": "test_og_card_route_and_meta",
+          "classname": "tests.test_share_feature.ShareSeoEnhancementTests",
+          "time": "0.079"
+        }
+      ],
+      "scope": "Selected existing tests, in-process mutation only; not a suite-wide mutation score."
+    },
+    {
+      "id": "D-01",
+      "result": {
+        "text": "2026-09-26 — Literal example text",
+        "interpreted_markup": true
+      },
+      "scope": "jsdom, actual topic module, inert markup only"
+    },
+    {
+      "id": "D-02",
+      "result": {
+        "default_fastapi": "Account was not found",
+        "main_handler": "[object Object]",
+        "string_error": "Account was not found"
+      },
+      "scope": "actual createAdminClient, synthetic fetch responses"
+    }
+  ],
+  "limitations": [
+    "Regular Python suite only; includes execution before the known assertion failure.",
+    "No per-test contexts, no Python subprocess auto-start; dynamic exec and subprocess execution may be absent or unattributed.",
+    "No JS/browser/emulator line/branch instrumentation; previous Vitest/emulator evidence is retained in ../execution.json.",
+    "No paid providers, production DB, deployment health or live LLM quality evaluated."
+  ]
+}

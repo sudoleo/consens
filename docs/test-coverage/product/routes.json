@@ -1,0 +1,2476 @@
+[
+  {
+    "path": "/openapi.json",
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "handler": "openapi",
+    "source": "framework",
+    "line": null,
+    "public_schema": false,
+    "id": "R-001",
+    "contract_ids": [],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/docs",
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "handler": "swagger_ui_html",
+    "source": "framework",
+    "line": null,
+    "public_schema": false,
+    "id": "R-002",
+    "contract_ids": [],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/docs/oauth2-redirect",
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "handler": "swagger_ui_redirect",
+    "source": "framework",
+    "line": null,
+    "public_schema": false,
+    "id": "R-003",
+    "contract_ids": [],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/redoc",
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "handler": "redoc_html",
+    "source": "framework",
+    "line": null,
+    "public_schema": false,
+    "id": "R-004",
+    "contract_ids": [],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/health/maintenance",
+    "methods": [
+      "GET"
+    ],
+    "handler": "maintenance_health",
+    "source": "main.py",
+    "line": 196,
+    "public_schema": false,
+    "id": "R-005",
+    "contract_ids": [
+      "OPS-01"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/health/metrics",
+    "methods": [
+      "GET"
+    ],
+    "handler": "operational_metrics",
+    "source": "main.py",
+    "line": 208,
+    "public_schema": false,
+    "id": "R-006",
+    "contract_ids": [
+      "OPS-03"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/agent/models",
+    "methods": [
+      "GET"
+    ],
+    "handler": "available_agent_models",
+    "source": "app/api/routers/agent.py",
+    "line": 120,
+    "public_schema": false,
+    "id": "R-007",
+    "contract_ids": [
+      "AGENT-02"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/agent/budget",
+    "methods": [
+      "GET"
+    ],
+    "handler": "available_agent_budget",
+    "source": "app/api/routers/agent.py",
+    "line": 131,
+    "public_schema": false,
+    "id": "R-008",
+    "contract_ids": [
+      "AGENT-01"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/agent",
+    "methods": [
+      "POST"
+    ],
+    "handler": "run_agent",
+    "source": "app/api/routers/agent.py",
+    "line": 140,
+    "public_schema": false,
+    "id": "R-009",
+    "contract_ids": [
+      "AGENT-01",
+      "AGENT-02",
+      "AGENT-04"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/agent/chats/{chat_id}/turns/{turn_id}/agents",
+    "methods": [
+      "GET"
+    ],
+    "handler": "list_agents",
+    "source": "app/api/routers/agent.py",
+    "line": 342,
+    "public_schema": false,
+    "id": "R-010",
+    "contract_ids": [
+      "AGENT-03",
+      "AGENT-04"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/agent/chats/{chat_id}/turns/{turn_id}/agents/{agent_id}",
+    "methods": [
+      "GET"
+    ],
+    "handler": "agent_details",
+    "source": "app/api/routers/agent.py",
+    "line": 348,
+    "public_schema": false,
+    "id": "R-011",
+    "contract_ids": [
+      "AGENT-03",
+      "AGENT-04"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/agent/chats/{chat_id}/turns/{turn_id}/stop",
+    "methods": [
+      "POST"
+    ],
+    "handler": "stop_agent_run",
+    "source": "app/api/routers/agent.py",
+    "line": 368,
+    "public_schema": false,
+    "id": "R-012",
+    "contract_ids": [
+      "AGENT-04"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/register",
+    "methods": [
+      "POST"
+    ],
+    "handler": "register_user",
+    "source": "app/api/routers/auth.py",
+    "line": 76,
+    "public_schema": false,
+    "id": "R-013",
+    "contract_ids": [
+      "AUTH-01"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/confirm-registration",
+    "methods": [
+      "POST"
+    ],
+    "handler": "confirm_registration",
+    "source": "app/api/routers/auth.py",
+    "line": 111,
+    "public_schema": false,
+    "id": "R-014",
+    "contract_ids": [
+      "AUTH-01"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/auth/session",
+    "methods": [
+      "DELETE"
+    ],
+    "handler": "clear_session",
+    "source": "app/api/routers/auth.py",
+    "line": 161,
+    "public_schema": false,
+    "id": "R-015",
+    "contract_ids": [
+      "AUTH-02"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/user_status",
+    "methods": [
+      "GET"
+    ],
+    "handler": "get_user_status",
+    "source": "app/api/routers/users.py",
+    "line": 52,
+    "public_schema": false,
+    "id": "R-016",
+    "contract_ids": [
+      "QUOTA-02",
+      "AUTH-02"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/usage",
+    "methods": [
+      "POST"
+    ],
+    "handler": "get_usage_post",
+    "source": "app/api/routers/users.py",
+    "line": 102,
+    "public_schema": false,
+    "id": "R-017",
+    "contract_ids": [
+      "QUOTA-01"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/usage/run/release",
+    "methods": [
+      "POST"
+    ],
+    "handler": "release_usage_run",
+    "source": "app/api/routers/users.py",
+    "line": 147,
+    "public_schema": false,
+    "id": "R-018",
+    "contract_ids": [
+      "QUOTA-01"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/my/memory",
+    "methods": [
+      "GET"
+    ],
+    "handler": "get_user_memory",
+    "source": "app/api/routers/users.py",
+    "line": 250,
+    "public_schema": false,
+    "id": "R-019",
+    "contract_ids": [
+      "MEM-01"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/my/memory",
+    "methods": [
+      "PUT"
+    ],
+    "handler": "put_user_memory",
+    "source": "app/api/routers/users.py",
+    "line": 268,
+    "public_schema": false,
+    "id": "R-020",
+    "contract_ids": [
+      "MEM-01"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/my/memory/edit",
+    "methods": [
+      "POST"
+    ],
+    "handler": "edit_user_memory",
+    "source": "app/api/routers/users.py",
+    "line": 313,
+    "public_schema": false,
+    "id": "R-021",
+    "contract_ids": [
+      "MEM-02"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/my/memory/undo",
+    "methods": [
+      "POST"
+    ],
+    "handler": "undo_user_memory",
+    "source": "app/api/routers/users.py",
+    "line": 338,
+    "public_schema": false,
+    "id": "R-022",
+    "contract_ids": [
+      "MEM-02"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/delete_account",
+    "methods": [
+      "POST"
+    ],
+    "handler": "delete_account",
+    "source": "app/api/routers/users.py",
+    "line": 355,
+    "public_schema": false,
+    "id": "R-023",
+    "contract_ids": [
+      "AUTH-03"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/track-interest",
+    "methods": [
+      "POST"
+    ],
+    "handler": "track_interest",
+    "source": "app/api/routers/users.py",
+    "line": 418,
+    "public_schema": false,
+    "id": "R-024",
+    "contract_ids": [
+      "OPS-03"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/bookmarks",
+    "methods": [
+      "GET"
+    ],
+    "handler": "load_bookmarks",
+    "source": "app/api/routers/bookmarks.py",
+    "line": 395,
+    "public_schema": false,
+    "id": "R-025",
+    "contract_ids": [
+      "CHAT-04"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/bookmarks/{bookmark_id}",
+    "methods": [
+      "GET"
+    ],
+    "handler": "load_bookmark_detail",
+    "source": "app/api/routers/bookmarks.py",
+    "line": 430,
+    "public_schema": false,
+    "id": "R-026",
+    "contract_ids": [
+      "CHAT-04"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/bookmarks/{bookmark_id}/conversation",
+    "methods": [
+      "GET"
+    ],
+    "handler": "load_bookmark_conversation",
+    "source": "app/api/routers/bookmarks.py",
+    "line": 453,
+    "public_schema": false,
+    "id": "R-027",
+    "contract_ids": [
+      "CHAT-04"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/bookmark",
+    "methods": [
+      "POST"
+    ],
+    "handler": "save_bookmark",
+    "source": "app/api/routers/bookmarks.py",
+    "line": 544,
+    "public_schema": false,
+    "id": "R-028",
+    "contract_ids": [
+      "CHAT-04"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/bookmark/consensus",
+    "methods": [
+      "POST"
+    ],
+    "handler": "save_bookmark_consensus",
+    "source": "app/api/routers/bookmarks.py",
+    "line": 751,
+    "public_schema": false,
+    "id": "R-029",
+    "contract_ids": [
+      "CHAT-04"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/bookmark/consensus/share-result",
+    "methods": [
+      "POST"
+    ],
+    "handler": "prepare_bookmark_share_result",
+    "source": "app/api/routers/bookmarks.py",
+    "line": 778,
+    "public_schema": false,
+    "id": "R-030",
+    "contract_ids": [
+      "SHARE-01"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/bookmark",
+    "methods": [
+      "DELETE"
+    ],
+    "handler": "delete_bookmark",
+    "source": "app/api/routers/bookmarks.py",
+    "line": 884,
+    "public_schema": false,
+    "id": "R-031",
+    "contract_ids": [
+      "CHAT-04"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/ask_openai",
+    "methods": [
+      "POST"
+    ],
+    "handler": "ask_openai_post",
+    "source": "app/api/routers/chat.py",
+    "line": 1068,
+    "public_schema": false,
+    "id": "R-032",
+    "contract_ids": [
+      "LLM-01",
+      "LLM-02",
+      "CHAT-03"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/ask_mistral",
+    "methods": [
+      "POST"
+    ],
+    "handler": "ask_mistral_post",
+    "source": "app/api/routers/chat.py",
+    "line": 1068,
+    "public_schema": false,
+    "id": "R-033",
+    "contract_ids": [
+      "LLM-01",
+      "LLM-02",
+      "CHAT-03"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/ask_claude",
+    "methods": [
+      "POST"
+    ],
+    "handler": "ask_claude_post",
+    "source": "app/api/routers/chat.py",
+    "line": 1068,
+    "public_schema": false,
+    "id": "R-034",
+    "contract_ids": [
+      "LLM-01",
+      "LLM-02",
+      "CHAT-03"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/ask_gemini",
+    "methods": [
+      "POST"
+    ],
+    "handler": "ask_gemini_post",
+    "source": "app/api/routers/chat.py",
+    "line": 1068,
+    "public_schema": false,
+    "id": "R-035",
+    "contract_ids": [
+      "LLM-01",
+      "LLM-02",
+      "CHAT-03"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/ask_deepseek",
+    "methods": [
+      "POST"
+    ],
+    "handler": "ask_deepseek_post",
+    "source": "app/api/routers/chat.py",
+    "line": 1068,
+    "public_schema": false,
+    "id": "R-036",
+    "contract_ids": [
+      "LLM-01",
+      "LLM-02",
+      "CHAT-03"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/ask_grok",
+    "methods": [
+      "POST"
+    ],
+    "handler": "ask_grok_post",
+    "source": "app/api/routers/chat.py",
+    "line": 1068,
+    "public_schema": false,
+    "id": "R-037",
+    "contract_ids": [
+      "LLM-01",
+      "LLM-02",
+      "CHAT-03"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/ask_kimi",
+    "methods": [
+      "POST"
+    ],
+    "handler": "ask_kimi_post",
+    "source": "app/api/routers/chat.py",
+    "line": 1068,
+    "public_schema": false,
+    "id": "R-038",
+    "contract_ids": [
+      "LLM-01",
+      "LLM-02",
+      "CHAT-03"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/ask_glm",
+    "methods": [
+      "POST"
+    ],
+    "handler": "ask_glm_post",
+    "source": "app/api/routers/chat.py",
+    "line": 1068,
+    "public_schema": false,
+    "id": "R-039",
+    "contract_ids": [
+      "LLM-01",
+      "LLM-02",
+      "CHAT-03"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/ask_muse",
+    "methods": [
+      "POST"
+    ],
+    "handler": "ask_muse_post",
+    "source": "app/api/routers/chat.py",
+    "line": 1068,
+    "public_schema": false,
+    "id": "R-040",
+    "contract_ids": [
+      "LLM-01",
+      "LLM-02",
+      "CHAT-03"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/prepare",
+    "methods": [
+      "POST"
+    ],
+    "handler": "prepare",
+    "source": "app/api/routers/chat.py",
+    "line": 1089,
+    "public_schema": false,
+    "id": "R-041",
+    "contract_ids": [
+      "QUOTA-01",
+      "CHAT-03"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/consensus",
+    "methods": [
+      "POST"
+    ],
+    "handler": "consensus",
+    "source": "app/api/routers/chat.py",
+    "line": 1160,
+    "public_schema": false,
+    "id": "R-042",
+    "contract_ids": [
+      "CONS-01",
+      "CONS-02",
+      "CONS-05"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/resolve",
+    "methods": [
+      "POST"
+    ],
+    "handler": "resolve",
+    "source": "app/api/routers/chat.py",
+    "line": 1996,
+    "public_schema": false,
+    "id": "R-043",
+    "contract_ids": [
+      "CONS-04"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/chats",
+    "methods": [
+      "POST"
+    ],
+    "handler": "create_chat",
+    "source": "app/api/routers/chat_history.py",
+    "line": 286,
+    "public_schema": false,
+    "id": "R-044",
+    "contract_ids": [
+      "CHAT-01"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/chats",
+    "methods": [
+      "GET"
+    ],
+    "handler": "list_chats",
+    "source": "app/api/routers/chat_history.py",
+    "line": 304,
+    "public_schema": false,
+    "id": "R-045",
+    "contract_ids": [
+      "CHAT-01"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/chats/{chat_id}",
+    "methods": [
+      "GET"
+    ],
+    "handler": "get_chat",
+    "source": "app/api/routers/chat_history.py",
+    "line": 319,
+    "public_schema": false,
+    "id": "R-046",
+    "contract_ids": [
+      "CHAT-01"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/chats/{chat_id}",
+    "methods": [
+      "DELETE"
+    ],
+    "handler": "delete_chat",
+    "source": "app/api/routers/chat_history.py",
+    "line": 329,
+    "public_schema": false,
+    "id": "R-047",
+    "contract_ids": [
+      "CHAT-01",
+      "CHAT-02"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/chats/{chat_id}/turns",
+    "methods": [
+      "POST"
+    ],
+    "handler": "create_turn",
+    "source": "app/api/routers/chat_history.py",
+    "line": 347,
+    "public_schema": false,
+    "id": "R-048",
+    "contract_ids": [
+      "CHAT-01",
+      "CHAT-02"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/chats/{chat_id}/turns/{turn_id}",
+    "methods": [
+      "GET"
+    ],
+    "handler": "get_turn",
+    "source": "app/api/routers/chat_history.py",
+    "line": 371,
+    "public_schema": false,
+    "id": "R-049",
+    "contract_ids": [
+      "CHAT-01"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/chats/{chat_id}/turns/{turn_id}/context",
+    "methods": [
+      "POST"
+    ],
+    "handler": "build_turn_context",
+    "source": "app/api/routers/chat_history.py",
+    "line": 384,
+    "public_schema": false,
+    "id": "R-050",
+    "contract_ids": [
+      "CHAT-03"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/chats/{chat_id}/turns",
+    "methods": [
+      "GET"
+    ],
+    "handler": "list_turns",
+    "source": "app/api/routers/chat_history.py",
+    "line": 448,
+    "public_schema": false,
+    "id": "R-051",
+    "contract_ids": [
+      "CHAT-01"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/client-errors",
+    "methods": [
+      "POST"
+    ],
+    "handler": "report_client_error",
+    "source": "app/api/routers/client_errors.py",
+    "line": 111,
+    "public_schema": false,
+    "id": "R-052",
+    "contract_ids": [
+      "OPS-03"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/robots.txt",
+    "methods": [
+      "GET"
+    ],
+    "handler": "robots_txt",
+    "source": "app/api/routers/pages.py",
+    "line": 93,
+    "public_schema": false,
+    "id": "R-053",
+    "contract_ids": [
+      "SEO-05"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/sitemap.xml",
+    "methods": [
+      "GET"
+    ],
+    "handler": "sitemap_xml",
+    "source": "app/api/routers/pages.py",
+    "line": 103,
+    "public_schema": false,
+    "id": "R-054",
+    "contract_ids": [
+      "SEO-05"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/sitemap-pages.xml",
+    "methods": [
+      "GET"
+    ],
+    "handler": "sitemap_pages_xml",
+    "source": "app/api/routers/pages.py",
+    "line": 121,
+    "public_schema": false,
+    "id": "R-055",
+    "contract_ids": [
+      "SEO-05"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/",
+    "methods": [
+      "GET"
+    ],
+    "handler": "landing",
+    "source": "app/api/routers/pages.py",
+    "line": 142,
+    "public_schema": false,
+    "id": "R-056",
+    "contract_ids": [
+      "SEO-05"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/privacy",
+    "methods": [
+      "GET"
+    ],
+    "handler": "privacy",
+    "source": "app/api/routers/pages.py",
+    "line": 146,
+    "public_schema": false,
+    "id": "R-057",
+    "contract_ids": [
+      "SEO-05"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/imprint",
+    "methods": [
+      "GET"
+    ],
+    "handler": "imprint",
+    "source": "app/api/routers/pages.py",
+    "line": 152,
+    "public_schema": false,
+    "id": "R-058",
+    "contract_ids": [
+      "SEO-05"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/terms",
+    "methods": [
+      "GET"
+    ],
+    "handler": "terms",
+    "source": "app/api/routers/pages.py",
+    "line": 158,
+    "public_schema": false,
+    "id": "R-059",
+    "contract_ids": [
+      "SEO-05"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/about",
+    "methods": [
+      "GET"
+    ],
+    "handler": "about",
+    "source": "app/api/routers/pages.py",
+    "line": 164,
+    "public_schema": false,
+    "id": "R-060",
+    "contract_ids": [
+      "SEO-05"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/ai-model-comparison",
+    "methods": [
+      "GET"
+    ],
+    "handler": "ai_model_comparison",
+    "source": "app/api/routers/pages.py",
+    "line": 168,
+    "public_schema": false,
+    "id": "R-061",
+    "contract_ids": [
+      "SEO-05"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/consensus-engine",
+    "methods": [
+      "GET"
+    ],
+    "handler": "consensus_engine_page",
+    "source": "app/api/routers/pages.py",
+    "line": 172,
+    "public_schema": false,
+    "id": "R-062",
+    "contract_ids": [
+      "SEO-05"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/benchmark",
+    "methods": [
+      "GET"
+    ],
+    "handler": "benchmark",
+    "source": "app/api/routers/pages.py",
+    "line": 176,
+    "public_schema": false,
+    "id": "R-063",
+    "contract_ids": [
+      "SEO-05"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/model-pulse",
+    "methods": [
+      "GET"
+    ],
+    "handler": "model_pulse",
+    "source": "app/api/routers/pages.py",
+    "line": 181,
+    "public_schema": false,
+    "id": "R-064",
+    "contract_ids": [
+      "SEO-05"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/model-leaderboard",
+    "methods": [
+      "GET"
+    ],
+    "handler": "public_model_leaderboard",
+    "source": "app/api/routers/pages.py",
+    "line": 393,
+    "public_schema": false,
+    "id": "R-065",
+    "contract_ids": [
+      "SEO-05"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/app/watches",
+    "methods": [
+      "GET"
+    ],
+    "handler": "read_root",
+    "source": "app/api/routers/pages.py",
+    "line": 423,
+    "public_schema": false,
+    "id": "R-066",
+    "contract_ids": [
+      "UI-07"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/app",
+    "methods": [
+      "GET"
+    ],
+    "handler": "read_root",
+    "source": "app/api/routers/pages.py",
+    "line": 423,
+    "public_schema": false,
+    "id": "R-067",
+    "contract_ids": [
+      "UI-07"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/admin",
+    "methods": [
+      "GET"
+    ],
+    "handler": "admin_page",
+    "source": "app/api/routers/pages.py",
+    "line": 488,
+    "public_schema": false,
+    "id": "R-068",
+    "contract_ids": [
+      "ADMIN-02"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/admin/benchmark",
+    "methods": [
+      "GET"
+    ],
+    "handler": "admin_benchmark_page",
+    "source": "app/api/routers/pages.py",
+    "line": 502,
+    "public_schema": false,
+    "id": "R-069",
+    "contract_ids": [
+      "BENCH-03"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/admin/topics",
+    "methods": [
+      "GET"
+    ],
+    "handler": "admin_topics_page",
+    "source": "app/api/routers/pages.py",
+    "line": 517,
+    "public_schema": false,
+    "id": "R-070",
+    "contract_ids": [
+      "TOPIC-01"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/feedback",
+    "methods": [
+      "POST"
+    ],
+    "handler": "submit_feedback",
+    "source": "app/api/routers/pages.py",
+    "line": 521,
+    "public_schema": false,
+    "id": "R-071",
+    "contract_ids": [
+      "DATA-01"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/vote",
+    "methods": [
+      "POST"
+    ],
+    "handler": "record_vote",
+    "source": "app/api/routers/pages.py",
+    "line": 561,
+    "public_schema": false,
+    "id": "R-072",
+    "contract_ids": [
+      "DATA-01"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/check_keys",
+    "methods": [
+      "POST"
+    ],
+    "handler": "check_keys",
+    "source": "app/api/routers/pages.py",
+    "line": 607,
+    "public_schema": false,
+    "id": "R-073",
+    "contract_ids": [
+      "LLM-01"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/admin/agent-budget",
+    "methods": [
+      "GET"
+    ],
+    "handler": "admin_get_agent_budget",
+    "source": "app/api/routers/admin.py",
+    "line": 185,
+    "public_schema": false,
+    "id": "R-074",
+    "contract_ids": [
+      "ADMIN-01"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/admin/agent-budget",
+    "methods": [
+      "PUT"
+    ],
+    "handler": "admin_save_agent_budget",
+    "source": "app/api/routers/admin.py",
+    "line": 206,
+    "public_schema": false,
+    "id": "R-075",
+    "contract_ids": [
+      "ADMIN-01"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/admin/agent-budget/reset",
+    "methods": [
+      "POST"
+    ],
+    "handler": "admin_reset_agent_budgets",
+    "source": "app/api/routers/admin.py",
+    "line": 213,
+    "public_schema": false,
+    "id": "R-076",
+    "contract_ids": [
+      "ADMIN-01"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/admin/prompt-config",
+    "methods": [
+      "GET"
+    ],
+    "handler": "admin_get_prompt_config",
+    "source": "app/api/routers/admin.py",
+    "line": 220,
+    "public_schema": false,
+    "id": "R-077",
+    "contract_ids": [
+      "ADMIN-01"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/admin/prompt-config",
+    "methods": [
+      "PUT"
+    ],
+    "handler": "admin_save_prompt_config",
+    "source": "app/api/routers/admin.py",
+    "line": 230,
+    "public_schema": false,
+    "id": "R-078",
+    "contract_ids": [
+      "ADMIN-01"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/admin/seo",
+    "methods": [
+      "GET"
+    ],
+    "handler": "admin_get_seo_overview",
+    "source": "app/api/routers/admin.py",
+    "line": 246,
+    "public_schema": false,
+    "id": "R-079",
+    "contract_ids": [
+      "SEO-01",
+      "SEO-02"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/admin/seo/check",
+    "methods": [
+      "POST"
+    ],
+    "handler": "admin_check_seo_connection",
+    "source": "app/api/routers/admin.py",
+    "line": 261,
+    "public_schema": false,
+    "id": "R-080",
+    "contract_ids": [
+      "SEO-01",
+      "SEO-02"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/admin/seo/collect",
+    "methods": [
+      "POST"
+    ],
+    "handler": "admin_collect_seo_data",
+    "source": "app/api/routers/admin.py",
+    "line": 274,
+    "public_schema": false,
+    "id": "R-081",
+    "contract_ids": [
+      "SEO-01",
+      "SEO-02"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/admin/seo/review",
+    "methods": [
+      "GET"
+    ],
+    "handler": "admin_get_seo_weekly_review",
+    "source": "app/api/routers/admin.py",
+    "line": 316,
+    "public_schema": false,
+    "id": "R-082",
+    "contract_ids": [
+      "SEO-03",
+      "SEO-04"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/admin/seo/reviews",
+    "methods": [
+      "GET"
+    ],
+    "handler": "admin_list_seo_weekly_reviews",
+    "source": "app/api/routers/admin.py",
+    "line": 328,
+    "public_schema": false,
+    "id": "R-083",
+    "contract_ids": [
+      "SEO-03",
+      "SEO-04"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/admin/seo/review/config",
+    "methods": [
+      "PUT"
+    ],
+    "handler": "admin_save_seo_weekly_review_config",
+    "source": "app/api/routers/admin.py",
+    "line": 340,
+    "public_schema": false,
+    "id": "R-084",
+    "contract_ids": [
+      "SEO-03",
+      "SEO-04"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/admin/seo/review/run",
+    "methods": [
+      "POST"
+    ],
+    "handler": "admin_run_seo_weekly_review",
+    "source": "app/api/routers/admin.py",
+    "line": 363,
+    "public_schema": false,
+    "id": "R-085",
+    "contract_ids": [
+      "SEO-03",
+      "SEO-04"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/admin/seo/reviews/{run_id}/preview",
+    "methods": [
+      "POST"
+    ],
+    "handler": "admin_preview_seo_review_actions",
+    "source": "app/api/routers/admin.py",
+    "line": 378,
+    "public_schema": false,
+    "id": "R-086",
+    "contract_ids": [
+      "SEO-03",
+      "SEO-04"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/admin/seo/reviews/{run_id}/apply",
+    "methods": [
+      "POST"
+    ],
+    "handler": "admin_apply_seo_review_actions",
+    "source": "app/api/routers/admin.py",
+    "line": 395,
+    "public_schema": false,
+    "id": "R-087",
+    "contract_ids": [
+      "SEO-03",
+      "SEO-04"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/admin/seo/reviews/{run_id}/topic-brief/accept",
+    "methods": [
+      "POST"
+    ],
+    "handler": "admin_accept_seo_review_topic_brief",
+    "source": "app/api/routers/admin.py",
+    "line": 415,
+    "public_schema": false,
+    "id": "R-088",
+    "contract_ids": [
+      "SEO-03",
+      "SEO-04"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/admin/seo/reviews/{run_id}/topic-brief/reject",
+    "methods": [
+      "POST"
+    ],
+    "handler": "admin_reject_seo_review_topic_brief",
+    "source": "app/api/routers/admin.py",
+    "line": 428,
+    "public_schema": false,
+    "id": "R-089",
+    "contract_ids": [
+      "SEO-03",
+      "SEO-04"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/admin/seo/reviews/{run_id}/editorial-decision",
+    "methods": [
+      "POST"
+    ],
+    "handler": "admin_record_seo_editorial_decision",
+    "source": "app/api/routers/admin.py",
+    "line": 441,
+    "public_schema": false,
+    "id": "R-090",
+    "contract_ids": [
+      "SEO-03",
+      "SEO-04"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/admin/seo/pages/{page_id}/recommendation",
+    "methods": [
+      "POST"
+    ],
+    "handler": "admin_generate_seo_recommendation",
+    "source": "app/api/routers/admin.py",
+    "line": 459,
+    "public_schema": false,
+    "id": "R-091",
+    "contract_ids": [
+      "SEO-03"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/admin/seo/pages/{page_id}/content-judge",
+    "methods": [
+      "POST"
+    ],
+    "handler": "admin_ask_seo_content_judge",
+    "source": "app/api/routers/admin.py",
+    "line": 476,
+    "public_schema": false,
+    "id": "R-092",
+    "contract_ids": [
+      "SEO-02"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/admin/api-keys",
+    "methods": [
+      "POST"
+    ],
+    "handler": "admin_issue_api_key",
+    "source": "app/api/routers/admin.py",
+    "line": 496,
+    "public_schema": false,
+    "id": "R-093",
+    "contract_ids": [
+      "API-01"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/admin/api-keys",
+    "methods": [
+      "GET"
+    ],
+    "handler": "admin_list_api_keys",
+    "source": "app/api/routers/admin.py",
+    "line": 533,
+    "public_schema": false,
+    "id": "R-094",
+    "contract_ids": [
+      "API-01"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/admin/api-keys/{key_id}",
+    "methods": [
+      "DELETE"
+    ],
+    "handler": "admin_revoke_api_key",
+    "source": "app/api/routers/admin.py",
+    "line": 544,
+    "public_schema": false,
+    "id": "R-095",
+    "contract_ids": [
+      "API-01"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/admin/account-tier",
+    "methods": [
+      "GET"
+    ],
+    "handler": "admin_get_account_tier",
+    "source": "app/api/routers/admin.py",
+    "line": 574,
+    "public_schema": false,
+    "id": "R-096",
+    "contract_ids": [
+      "QUOTA-02",
+      "ADMIN-02"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/admin/account-tier",
+    "methods": [
+      "PUT"
+    ],
+    "handler": "admin_set_account_tier",
+    "source": "app/api/routers/admin.py",
+    "line": 588,
+    "public_schema": false,
+    "id": "R-097",
+    "contract_ids": [
+      "QUOTA-02",
+      "ADMIN-02"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/admin/account-tiers",
+    "methods": [
+      "GET"
+    ],
+    "handler": "admin_list_account_tiers",
+    "source": "app/api/routers/admin.py",
+    "line": 613,
+    "public_schema": false,
+    "id": "R-098",
+    "contract_ids": [
+      "QUOTA-02",
+      "ADMIN-02"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/admin/publisher-config",
+    "methods": [
+      "GET"
+    ],
+    "handler": "admin_get_publisher_config",
+    "source": "app/api/routers/admin.py",
+    "line": 628,
+    "public_schema": false,
+    "id": "R-099",
+    "contract_ids": [
+      "API-04",
+      "ADMIN-01"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/admin/publisher-config",
+    "methods": [
+      "PUT"
+    ],
+    "handler": "admin_update_publisher_config",
+    "source": "app/api/routers/admin.py",
+    "line": 641,
+    "public_schema": false,
+    "id": "R-100",
+    "contract_ids": [
+      "API-04",
+      "ADMIN-01"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/admin/watches",
+    "methods": [
+      "GET"
+    ],
+    "handler": "admin_list_watches",
+    "source": "app/api/routers/admin.py",
+    "line": 660,
+    "public_schema": false,
+    "id": "R-101",
+    "contract_ids": [
+      "WATCH-02",
+      "WATCH-04"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/admin/watches/{watch_id}/run",
+    "methods": [
+      "POST"
+    ],
+    "handler": "admin_run_watch",
+    "source": "app/api/routers/admin.py",
+    "line": 683,
+    "public_schema": false,
+    "id": "R-102",
+    "contract_ids": [
+      "WATCH-02",
+      "WATCH-04"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/admin/watches/test-email",
+    "methods": [
+      "POST"
+    ],
+    "handler": "admin_send_watch_test_email",
+    "source": "app/api/routers/admin.py",
+    "line": 698,
+    "public_schema": false,
+    "id": "R-103",
+    "contract_ids": [
+      "WATCH-02",
+      "WATCH-04"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/admin/shares",
+    "methods": [
+      "GET"
+    ],
+    "handler": "admin_list_shares",
+    "source": "app/api/routers/admin.py",
+    "line": 721,
+    "public_schema": false,
+    "id": "R-104",
+    "contract_ids": [
+      "SHARE-03"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/admin/shares/{share_id}/moderate",
+    "methods": [
+      "POST"
+    ],
+    "handler": "admin_moderate_share",
+    "source": "app/api/routers/admin.py",
+    "line": 739,
+    "public_schema": false,
+    "id": "R-105",
+    "contract_ids": [
+      "SHARE-03"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/admin/shares/{share_id}",
+    "methods": [
+      "DELETE"
+    ],
+    "handler": "admin_delete_share",
+    "source": "app/api/routers/admin.py",
+    "line": 772,
+    "public_schema": false,
+    "id": "R-106",
+    "contract_ids": [
+      "SHARE-03"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/admin/benchmark/runs",
+    "methods": [
+      "GET"
+    ],
+    "handler": "admin_list_benchmark_runs",
+    "source": "app/api/routers/admin.py",
+    "line": 786,
+    "public_schema": false,
+    "id": "R-107",
+    "contract_ids": [
+      "BENCH-03"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/admin/benchmark/runs/{run_id}",
+    "methods": [
+      "GET"
+    ],
+    "handler": "admin_get_benchmark_run",
+    "source": "app/api/routers/admin.py",
+    "line": 800,
+    "public_schema": false,
+    "id": "R-108",
+    "contract_ids": [
+      "BENCH-03"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/admin/models",
+    "methods": [
+      "GET"
+    ],
+    "handler": "get_models",
+    "source": "app/api/routers/admin.py",
+    "line": 1488,
+    "public_schema": false,
+    "id": "R-109",
+    "contract_ids": [
+      "ADMIN-01"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/admin/models",
+    "methods": [
+      "POST"
+    ],
+    "handler": "update_models",
+    "source": "app/api/routers/admin.py",
+    "line": 1541,
+    "public_schema": false,
+    "id": "R-110",
+    "contract_ids": [
+      "ADMIN-01"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/share",
+    "methods": [
+      "POST"
+    ],
+    "handler": "create_share",
+    "source": "app/api/routers/share.py",
+    "line": 300,
+    "public_schema": false,
+    "id": "R-111",
+    "contract_ids": [
+      "SHARE-01"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/share/{share_id}",
+    "methods": [
+      "DELETE"
+    ],
+    "handler": "delete_share",
+    "source": "app/api/routers/share.py",
+    "line": 326,
+    "public_schema": false,
+    "id": "R-112",
+    "contract_ids": [
+      "SHARE-03"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/my/shares",
+    "methods": [
+      "GET"
+    ],
+    "handler": "my_shares",
+    "source": "app/api/routers/share.py",
+    "line": 340,
+    "public_schema": false,
+    "id": "R-113",
+    "contract_ids": [
+      "SHARE-01"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/share/{share_id}/indexing-request",
+    "methods": [
+      "POST"
+    ],
+    "handler": "request_indexing",
+    "source": "app/api/routers/share.py",
+    "line": 352,
+    "public_schema": false,
+    "id": "R-114",
+    "contract_ids": [
+      "SHARE-03"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/share/{share_id}/report",
+    "methods": [
+      "POST"
+    ],
+    "handler": "report_share",
+    "source": "app/api/routers/share.py",
+    "line": 374,
+    "public_schema": false,
+    "id": "R-115",
+    "contract_ids": [
+      "SHARE-03"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/sitemap-shares.xml",
+    "methods": [
+      "GET"
+    ],
+    "handler": "sitemap_shares",
+    "source": "app/api/routers/share.py",
+    "line": 401,
+    "public_schema": false,
+    "id": "R-116",
+    "contract_ids": [
+      "SHARE-02"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/questions",
+    "methods": [
+      "GET"
+    ],
+    "handler": "questions_hub",
+    "source": "app/api/routers/share.py",
+    "line": 433,
+    "public_schema": false,
+    "id": "R-117",
+    "contract_ids": [
+      "SHARE-02"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/s/{slug_id}/og.png",
+    "methods": [
+      "GET"
+    ],
+    "handler": "share_og_card",
+    "source": "app/api/routers/share.py",
+    "line": 486,
+    "public_schema": false,
+    "id": "R-118",
+    "contract_ids": [
+      "SHARE-04"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/s/{slug_id}",
+    "methods": [
+      "GET"
+    ],
+    "handler": "share_page",
+    "source": "app/api/routers/share.py",
+    "line": 555,
+    "public_schema": false,
+    "id": "R-119",
+    "contract_ids": [
+      "SHARE-02"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/source-checks/{job_id}",
+    "methods": [
+      "GET"
+    ],
+    "handler": "get_source_check",
+    "source": "app/api/routers/source_checks.py",
+    "line": 61,
+    "public_schema": false,
+    "id": "R-120",
+    "contract_ids": [
+      "SRC-04"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/source-checks/{job_id}/resume",
+    "methods": [
+      "POST"
+    ],
+    "handler": "resume_source_check",
+    "source": "app/api/routers/source_checks.py",
+    "line": 74,
+    "public_schema": false,
+    "id": "R-121",
+    "contract_ids": [
+      "SRC-04"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/share/{share_id}/source-check",
+    "methods": [
+      "GET"
+    ],
+    "handler": "get_shared_source_check",
+    "source": "app/api/routers/source_checks.py",
+    "line": 93,
+    "public_schema": false,
+    "id": "R-122",
+    "contract_ids": [
+      "SRC-04"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/topics/{slug}/source-check",
+    "methods": [
+      "GET"
+    ],
+    "handler": "get_topic_source_check",
+    "source": "app/api/routers/source_checks.py",
+    "line": 124,
+    "public_schema": false,
+    "id": "R-123",
+    "contract_ids": [
+      "SRC-04"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/watch",
+    "methods": [
+      "POST"
+    ],
+    "handler": "create_watch",
+    "source": "app/api/routers/watch.py",
+    "line": 41,
+    "public_schema": false,
+    "id": "R-124",
+    "contract_ids": [
+      "WATCH-01"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/my/watches",
+    "methods": [
+      "GET"
+    ],
+    "handler": "my_watches",
+    "source": "app/api/routers/watch.py",
+    "line": 74,
+    "public_schema": false,
+    "id": "R-125",
+    "contract_ids": [
+      "WATCH-01"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/watch/{watch_id}",
+    "methods": [
+      "PATCH"
+    ],
+    "handler": "patch_watch",
+    "source": "app/api/routers/watch.py",
+    "line": 103,
+    "public_schema": false,
+    "id": "R-126",
+    "contract_ids": [
+      "WATCH-01"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/my/telegram",
+    "methods": [
+      "GET"
+    ],
+    "handler": "my_telegram",
+    "source": "app/api/routers/watch.py",
+    "line": 120,
+    "public_schema": false,
+    "id": "R-127",
+    "contract_ids": [
+      "WATCH-04"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/my/telegram/link",
+    "methods": [
+      "POST"
+    ],
+    "handler": "create_telegram_link",
+    "source": "app/api/routers/watch.py",
+    "line": 131,
+    "public_schema": false,
+    "id": "R-128",
+    "contract_ids": [
+      "WATCH-04"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/my/telegram/test",
+    "methods": [
+      "POST"
+    ],
+    "handler": "test_telegram",
+    "source": "app/api/routers/watch.py",
+    "line": 147,
+    "public_schema": false,
+    "id": "R-129",
+    "contract_ids": [
+      "WATCH-04"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/my/telegram",
+    "methods": [
+      "DELETE"
+    ],
+    "handler": "disconnect_telegram",
+    "source": "app/api/routers/watch.py",
+    "line": 161,
+    "public_schema": false,
+    "id": "R-130",
+    "contract_ids": [
+      "WATCH-04"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/telegram/webhook",
+    "methods": [
+      "POST"
+    ],
+    "handler": "telegram_webhook",
+    "source": "app/api/routers/watch.py",
+    "line": 175,
+    "public_schema": false,
+    "id": "R-131",
+    "contract_ids": [
+      "WATCH-04"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/watch/{watch_id}",
+    "methods": [
+      "DELETE"
+    ],
+    "handler": "remove_watch",
+    "source": "app/api/routers/watch.py",
+    "line": 192,
+    "public_schema": false,
+    "id": "R-132",
+    "contract_ids": [
+      "WATCH-01"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/my/watch-brief",
+    "methods": [
+      "GET"
+    ],
+    "handler": "my_watch_brief",
+    "source": "app/api/routers/watch.py",
+    "line": 215,
+    "public_schema": false,
+    "id": "R-133",
+    "contract_ids": [
+      "WATCH-05"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/my/watch-brief",
+    "methods": [
+      "PATCH"
+    ],
+    "handler": "patch_watch_brief",
+    "source": "app/api/routers/watch.py",
+    "line": 230,
+    "public_schema": false,
+    "id": "R-134",
+    "contract_ids": [
+      "WATCH-05"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/share/{share_id}/follow",
+    "methods": [
+      "POST"
+    ],
+    "handler": "follow_share",
+    "source": "app/api/routers/watch.py",
+    "line": 259,
+    "public_schema": false,
+    "id": "R-135",
+    "contract_ids": [
+      "WATCH-03"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/watch/follow/confirm",
+    "methods": [
+      "GET"
+    ],
+    "handler": "follow_confirm",
+    "source": "app/api/routers/watch.py",
+    "line": 291,
+    "public_schema": false,
+    "id": "R-136",
+    "contract_ids": [
+      "WATCH-03"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/watch/follow/unsubscribe",
+    "methods": [
+      "GET"
+    ],
+    "handler": "follow_unsubscribe",
+    "source": "app/api/routers/watch.py",
+    "line": 306,
+    "public_schema": false,
+    "id": "R-137",
+    "contract_ids": [
+      "WATCH-03"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/watch/unsubscribe",
+    "methods": [
+      "GET"
+    ],
+    "handler": "unsubscribe",
+    "source": "app/api/routers/watch.py",
+    "line": 318,
+    "public_schema": false,
+    "id": "R-138",
+    "contract_ids": [
+      "WATCH-01"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/watch/brief/unsubscribe",
+    "methods": [
+      "GET"
+    ],
+    "handler": "unsubscribe_brief",
+    "source": "app/api/routers/watch.py",
+    "line": 329,
+    "public_schema": false,
+    "id": "R-139",
+    "contract_ids": [
+      "WATCH-05"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/topics",
+    "methods": [
+      "GET"
+    ],
+    "handler": "topics_hub",
+    "source": "app/api/routers/topics.py",
+    "line": 246,
+    "public_schema": false,
+    "id": "R-140",
+    "contract_ids": [
+      "TOPIC-04"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/sitemap-topics.xml",
+    "methods": [
+      "GET"
+    ],
+    "handler": "sitemap_topics",
+    "source": "app/api/routers/topics.py",
+    "line": 284,
+    "public_schema": false,
+    "id": "R-141",
+    "contract_ids": [
+      "TOPIC-04"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/topics/{slug}",
+    "methods": [
+      "GET"
+    ],
+    "handler": "topic_page",
+    "source": "app/api/routers/topics.py",
+    "line": 313,
+    "public_schema": false,
+    "id": "R-142",
+    "contract_ids": [
+      "TOPIC-04"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/topics/favicon",
+    "methods": [
+      "GET"
+    ],
+    "handler": "topic_favicon",
+    "source": "app/api/routers/topics.py",
+    "line": 476,
+    "public_schema": false,
+    "id": "R-143",
+    "contract_ids": [
+      "TOPIC-04"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/topics/{slug}/follow",
+    "methods": [
+      "POST"
+    ],
+    "handler": "follow_topic",
+    "source": "app/api/routers/topics.py",
+    "line": 524,
+    "public_schema": false,
+    "id": "R-144",
+    "contract_ids": [
+      "TOPIC-04"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/topic-follow/confirm",
+    "methods": [
+      "GET"
+    ],
+    "handler": "topic_follow_confirm",
+    "source": "app/api/routers/topics.py",
+    "line": 561,
+    "public_schema": false,
+    "id": "R-145",
+    "contract_ids": [
+      "TOPIC-04"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/topic-follow/unsubscribe",
+    "methods": [
+      "GET"
+    ],
+    "handler": "topic_follow_unsubscribe",
+    "source": "app/api/routers/topics.py",
+    "line": 578,
+    "public_schema": false,
+    "id": "R-146",
+    "contract_ids": [
+      "TOPIC-04"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/admin/topics",
+    "methods": [
+      "GET"
+    ],
+    "handler": "admin_list_topics",
+    "source": "app/api/routers/topics.py",
+    "line": 603,
+    "public_schema": false,
+    "id": "R-147",
+    "contract_ids": [
+      "TOPIC-01"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/admin/topics",
+    "methods": [
+      "POST"
+    ],
+    "handler": "admin_create_topic",
+    "source": "app/api/routers/topics.py",
+    "line": 615,
+    "public_schema": false,
+    "id": "R-148",
+    "contract_ids": [
+      "TOPIC-01"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/admin/topics/{topic_id}",
+    "methods": [
+      "GET"
+    ],
+    "handler": "admin_get_topic",
+    "source": "app/api/routers/topics.py",
+    "line": 632,
+    "public_schema": false,
+    "id": "R-149",
+    "contract_ids": [
+      "TOPIC-01"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/admin/topics/{topic_id}",
+    "methods": [
+      "PUT"
+    ],
+    "handler": "admin_update_topic",
+    "source": "app/api/routers/topics.py",
+    "line": 648,
+    "public_schema": false,
+    "id": "R-150",
+    "contract_ids": [
+      "TOPIC-01"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/admin/topics/{topic_id}/runs",
+    "methods": [
+      "POST"
+    ],
+    "handler": "admin_create_topic_run",
+    "source": "app/api/routers/topics.py",
+    "line": 667,
+    "public_schema": false,
+    "id": "R-151",
+    "contract_ids": [
+      "TOPIC-01"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/v1/publisher/config",
+    "methods": [
+      "GET"
+    ],
+    "handler": "get_api_publisher_config",
+    "source": "app/api/routers/api_v1.py",
+    "line": 188,
+    "public_schema": true,
+    "id": "R-152",
+    "contract_ids": [
+      "API-04"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/v1/consensus/runs",
+    "methods": [
+      "POST"
+    ],
+    "handler": "create_consensus_run",
+    "source": "app/api/routers/api_v1.py",
+    "line": 213,
+    "public_schema": true,
+    "id": "R-153",
+    "contract_ids": [
+      "API-02"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/v1/consensus/runs/{run_id}/source-check",
+    "methods": [
+      "GET"
+    ],
+    "handler": "get_run_source_check",
+    "source": "app/api/routers/api_v1.py",
+    "line": 370,
+    "public_schema": true,
+    "id": "R-154",
+    "contract_ids": [
+      "API-03"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/v1/consensus/runs/{run_id}",
+    "methods": [
+      "GET"
+    ],
+    "handler": "get_consensus_run",
+    "source": "app/api/routers/api_v1.py",
+    "line": 395,
+    "public_schema": true,
+    "id": "R-155",
+    "contract_ids": [
+      "API-02"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/v1/consensus/runs/{run_id}",
+    "methods": [
+      "DELETE"
+    ],
+    "handler": "delete_consensus_run",
+    "source": "app/api/routers/api_v1.py",
+    "line": 418,
+    "public_schema": true,
+    "id": "R-156",
+    "contract_ids": [
+      "API-02"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/v1/consensus/runs/{run_id}/share",
+    "methods": [
+      "POST"
+    ],
+    "handler": "publish_consensus_run",
+    "source": "app/api/routers/api_v1.py",
+    "line": 448,
+    "public_schema": true,
+    "id": "R-157",
+    "contract_ids": [
+      "API-04"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/v1/shares",
+    "methods": [
+      "GET"
+    ],
+    "handler": "list_api_shares",
+    "source": "app/api/routers/api_v1.py",
+    "line": 492,
+    "public_schema": true,
+    "id": "R-158",
+    "contract_ids": [
+      "API-04"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/v1/shares/{share_id}",
+    "methods": [
+      "GET"
+    ],
+    "handler": "get_api_share",
+    "source": "app/api/routers/api_v1.py",
+    "line": 512,
+    "public_schema": true,
+    "id": "R-159",
+    "contract_ids": [
+      "API-04"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/v1/shares/{share_id}/watch",
+    "methods": [
+      "POST"
+    ],
+    "handler": "create_api_publisher_watch",
+    "source": "app/api/routers/api_v1.py",
+    "line": 534,
+    "public_schema": true,
+    "id": "R-160",
+    "contract_ids": [
+      "API-04"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/v1/shares/{share_id}/indexing",
+    "methods": [
+      "PUT"
+    ],
+    "handler": "set_api_share_indexing",
+    "source": "app/api/routers/api_v1.py",
+    "line": 609,
+    "public_schema": true,
+    "id": "R-161",
+    "contract_ids": [
+      "API-04"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  },
+  {
+    "path": "/api/v1/shares/{share_id}",
+    "methods": [
+      "DELETE"
+    ],
+    "handler": "delete_api_share",
+    "source": "app/api/routers/api_v1.py",
+    "line": 650,
+    "public_schema": true,
+    "id": "R-162",
+    "contract_ids": [
+      "API-04"
+    ],
+    "mapping_scope": "Handler responsibility only; route inventory is not endpoint assertion evidence."
+  }
+]

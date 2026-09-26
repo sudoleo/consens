@@ -1,7 +1,10 @@
 # Folgeaudit: von vorhandenen Tests zu belegter Abdeckung
 
-[Zum Katalog](../test-coverage-map.md). Dieser Ablauf gehört zum nächsten
-Auftrag; die Bestandsaufnahme selbst implementiert keine fehlenden Tests.
+[Zum Katalog](../test-coverage-map.md). Die Vorbereitung dieses Folgeaudits ist
+inzwischen als **[Produktabgleich mit 30 Arbeitspaketen](product/README.md)**
+dokumentiert. Der folgende methodische Ablauf bleibt für die Umsetzung und
+weitere Reviews gültig. Bestandsaufnahme und Folgeaudit implementieren selbst
+keine fehlenden Regressionstests oder Produktkorrekturen.
 
 ## 1. Ausgangsstand verifizieren
 

@@ -1,0 +1,7 @@
+# Reviewed documentation snapshots despite the repository-wide *json rule.
+!audit.json
+!sources.json
+!routes.json
+!search-evidence.json
+!python-coverage.json
+!execution.json

@@ -4,6 +4,10 @@ Die vollständige [Bestandsaufnahme der Testabdeckung](test-coverage-map.md)
 beschreibt alle Testdateien, Assertionschwerpunkte, Mockgrenzen und den
 verifizierten Laufstatus. Sie enthält außerdem ein maschinenlesbares Inventar
 und das Vorgehen für den anschließenden Abgleich mit dem Produktionscode.
+Der **[Produktabgleich mit Codex-Arbeitspaketen](test-coverage/product/README.md)**
+ergänzt konkrete Lückenbelege, Verhaltensverträge, Python-Branchmessung und
+reproduzierbare Auditproben. Die Paketstatus sind geplant; historische
+Laufergebnisse sind keine aktuelle Freigabe geänderter Quellen.
 
 ## Gemeinsamer Einstieg unter Windows
 
