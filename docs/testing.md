@@ -1,5 +1,10 @@
 # Tests und sichere Ausführung
 
+Die vollständige [Bestandsaufnahme der Testabdeckung](test-coverage-map.md)
+beschreibt alle Testdateien, Assertionschwerpunkte, Mockgrenzen und den
+verifizierten Laufstatus. Sie enthält außerdem ein maschinenlesbares Inventar
+und das Vorgehen für den anschließenden Abgleich mit dem Produktionscode.
+
 ## Gemeinsamer Einstieg unter Windows
 
 Delegation: `tests/test_agent_delegation.py` prüft Kommunikation, Abbruch,
@@ -365,12 +370,17 @@ Remove-Item Env:RUN_E2E
 
 ## CI
 
-Für Tests existiert bewusst kein GitHub-Actions-Workflow. Insbesondere ist
-`.github/workflows/tests.yml` entfernt, damit Pushes keine Test-Runs oder
-Fehlermails auslösen. Reguläre Suite, JavaScript-Tests, Frontend-Build und bei
-Bedarf die Emulator-E2E-Suite werden ausschließlich lokal mit den Befehlen in
-diesem Dokument ausgeführt. Die verbliebenen GitHub-Workflows sind
-Betriebs-Automationen und keine Test-CI.
+Ein allgemeiner GitHub-Actions-Workflow für die reguläre Suite,
+JavaScript-Tests, Frontend-Build und Emulator-E2E-Suite ist nicht vorhanden;
+insbesondere ist `.github/workflows/tests.yml` entfernt. Diese Prüfungen werden
+lokal mit den Befehlen in diesem Dokument ausgeführt.
+
+Die Standalone-Publishertests bilden eine Ausnahme:
+[`publisher-tests.yml`](../.github/workflows/publisher-tests.yml) führt sie bei
+Push auf `main`, Pull Requests und manueller Auslösung aus.
+[`publish-consensus.yml`](../.github/workflows/publish-consensus.yml) führt
+dieselben Tests vor dem produktiven Publisher-Lauf aus. Sie gehören ebenfalls
+zum regulären Testbestand und sind keine zusätzliche Testdateimenge.
 
 Tests dürfen weiterhin nicht still von der lokalen `.env` abhängen; nötige
 Environment-Variablen im Test selbst setzen (`monkeypatch.setenv`) statt sie
