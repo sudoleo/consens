@@ -287,6 +287,7 @@
     }
     if (panel) panel.hidden = !agent || (!context && !basis);
     if (panel?.hidden) activityHost('');
+    App.agentGoogle?.refreshControls();
     if (!agent || (!context && !basis)) App.agentWorkspace?.refresh(null);
     if (agent && !context && basis) {
       App.agentWorkspace?.refresh(basis.chatId);
@@ -420,6 +421,8 @@
           comparison_models: Object.keys(context.config.comparisonModels || {}).length ? context.config.comparisonModels : null,
           check_sources: context.config.checkSources === true,
         file_ids: context.metadata.fileIds || [],
+        google_selection: context.config.googleSelection || null,
+        google_data_consent: context.config.googleDataConsent === true,
         }, signal, {}, { headers: { Authorization: `Bearer ${token}` } });
       }, { signal: action.controller.signal });
       if (!registry.isAuthCurrent(context) || action.controller.signal.aborted) return;
@@ -533,12 +536,14 @@
         bookmarkId: recovery?.bookmark.id || basis?.bookmarkId || `b_agent_${crypto.randomUUID().replaceAll("-", "")}`,
         bookmarkTitle: basis?.title || question,
         config: { executionMode: "agent", agentMode: true, autoConsensus: false,
-          deepSearch: false, checkSources: App.isSourceCheckEnabled?.() === true, useOwnKeys: false, providers: [], agentSettings: settings, comparisonModels },
+          deepSearch: false, checkSources: App.isSourceCheckEnabled?.() === true, useOwnKeys: false, providers: [], agentSettings: settings, comparisonModels,
+          googleSelection: App.agentGoogle?.selection() || null, googleDataConsent: App.agentGoogle?.consent() === true },
         metadata: { draftQuestion: draft, quotedContext: App.quote?.text?.() || '',
           agentActivity: [], agentSettings: { ...settings, label: catalog?.models.find(model => model.id === settings.model_id)?.label } },
         usage: { status: "simulation", key: null },
       });
     } catch (error) { App.showPopup?.(error.message); return; }
+    if (context.config.googleDataConsent) App.agentGoogle?.resetConsent();
     if (basis?.currentTurn) context.historyTurns.push(basis.currentTurn);
     context.controllers.query = new AbortController();
     const signal = context.controllers.query.signal;
@@ -594,6 +599,8 @@
         comparison_models: comparisonModels,
         check_sources: context.config.checkSources === true,
         file_ids: context.metadata.fileIds || [],
+        google_selection: context.config.googleSelection || null,
+        google_data_consent: context.config.googleDataConsent === true,
       }, requestSignal, {
         accepted: { receive(event) {
           if (registry.isAuthCurrent(context) && event.chat_id === context.metadata.chatId) {

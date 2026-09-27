@@ -155,6 +155,10 @@ class CustomSecurityMiddleware:
                 # (/s/{id}) sind Secret-URLs - ihr Pfad darf nie im
                 # Referer-Header eines ausgehenden Klicks landen.
                 headers[b"Referrer-Policy"] = b"strict-origin-when-cross-origin"
+                if path == "/agent/google/callback":
+                    headers[b"Content-Security-Policy"] = headers.pop(b"content-security-policy", b"default-src 'none'; frame-ancestors 'none'")
+                    headers.pop(b"referrer-policy", None)
+                    headers[b"Referrer-Policy"] = b"no-referrer"
                 if sensitive_api_response:
                     headers[b"Cache-Control"] = b"private, no-store"
                     headers[b"Pragma"] = b"no-cache"

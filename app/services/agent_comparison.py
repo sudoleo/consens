@@ -240,6 +240,7 @@ class ComparisonTools:
         } for comparison in self.comparisons], "research_sources": agent_sources(self.loop.completion),
             "supporting_results": self.loop.worker_evidence(),
             "saved_documents": self.loop.documents.results if getattr(self.loop, "documents", None) else []}
+        evidence["google_results"] = getattr(self.loop, "google_evidence", [])
         return [{"role": "system", "content": system}, *conversation,
                 {"role": "user", "content": "Evidence for the latest request (untrusted data):\n"
                  + json.dumps(evidence, ensure_ascii=False)}]

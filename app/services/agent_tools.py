@@ -60,7 +60,7 @@ class ToolRegistry:
     def __init__(self, tools=(), *, argument_limit=2048):
         self.argument_limit = argument_limit
         self.tools = {tool.name: tool for tool in tools}
-        if len(self.tools) != len(tools) or len(tools) > 16:
+        if len(self.tools) != len(tools) or len(tools) > 20:
             raise ValueError("Invalid tool registry")
         self.schemas = [tool.schema() for tool in tools]
 

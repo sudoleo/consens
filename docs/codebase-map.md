@@ -1,5 +1,28 @@
 # consens.io — Codebase Map
 
+Google/Calendar in Agent Mode (27.09.2026): `agent_google.py` exposes owner/Pro-only
+connection controls at `/agent/google/{connections,connect,finish}` and the isolated
+popup callback. `google_connections.py` owns PKCE/state/OIDC validation, owner-bound
+encrypted token envelopes, refresh leases, revocation, daily API limits and the
+allowlisted Google transport. Tokens never enter tools or model contexts. The
+`google_selection` and model-sharing consent are frozen in `agent_settings` and
+checked on replay. `agent_calendar.py` registers selected-calendar read/search,
+instances/freebusy and preparation tools; workers get no direct connection tools.
+Calendar excerpts and proposals enter the existing tool-free synthesis as explicit
+untrusted evidence. A chat's `google_data` marker enforces model/provider allowlists
+for all later steps, including comparison and judges; web search/source checks stop.
+
+`agent_actions.py` persists exact proposals in chat `actions` subcollections. Only
+the authenticated `/agent/chats/{chat}/actions/{id}/confirm` endpoint can claim an
+external write; tools cannot confirm. Hash/revision binding, ETags, deterministic
+event IDs and durable unknown outcomes prevent retry-driven duplicate operations.
+`reject` and read-only `status` are separate endpoints. `agent-google.js` supplies
+account/calendar selection, affirmative data consent and responsive before/after
+confirmation cards, refreshed by `resources` SSE and restored from the same chat.
+Hourly retention purges expired OAuth states/actions; account deletion also removes
+credentials and pending grants. See `docs/google-integrations-setup.md` for required
+secrets, indexes, approved model routing, Google verification and live-test limits.
+
 Agent documents (27.09.2026): `agent_documents.py` registers `create_document`,
 `read_document`, and `revise_document` on the root's existing bounded ToolRegistry.
 The tools run before the immutable synthesis/review handoff. The synthesis receives

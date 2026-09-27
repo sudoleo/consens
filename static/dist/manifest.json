@@ -1,5 +1,5 @@
 {
-  "sources": "c4b22b2e19ec",
+  "sources": "3f7fb9d82b95",
   "inputs": [
     "package-lock.json",
     "package.json",
@@ -48,6 +48,7 @@
     "static/js/agent-answer-actions.js",
     "static/js/agent-chat.js",
     "static/js/agent-delegation.js",
+    "static/js/agent-google.js",
     "static/js/agent-mode.js",
     "static/js/agent-review.js",
     "static/js/agent-workspace.js",
@@ -189,19 +190,19 @@
     },
     {
       "name": "app",
-      "src": "/static/dist/app.abcb71af4751.js",
+      "src": "/static/dist/app.8cf6f4b0c074.js",
       "module": false,
       "defer": true
     }
   ],
   "styles": {
-    "app": "/static/dist/app.2db653c6e30d.css"
+    "app": "/static/dist/app.2b3dd7f2b250.css"
   },
   "previous_assets": [
-    "app.e7fca3c6540e.css",
+    "app.b8f511a76fab.css",
     "app.a7233ef9d924.css",
-    "app.58f9f35cb1a4.js",
-    "app.0aac498e83a7.js",
+    "app.97f8f261cad8.js",
+    "app.48bdf1c65eb1.js",
     "firebase.5cc9d6fa1098.js",
     "firebase.890d650af819.js",
     "head.1657f05e2da8.js",

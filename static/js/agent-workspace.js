@@ -44,6 +44,7 @@
     setTimeout(() => URL.revokeObjectURL(url), 10000);
   }
   async function refresh(chatId, force = false) {
+    App.agentGoogle?.refreshActions(chatId, force);
     const panel = host(), uid = window.auth?.currentUser?.uid || '';
     if (!panel) return;
     if (!chatId || !uid || !App.agentChat?.isSelected()) {

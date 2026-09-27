@@ -381,8 +381,26 @@ body.single-agent-active .consensus-model-inline .model-picker-display::after {
 
 .agent-workspace { box-sizing: border-box; width: min(100%, 760px); margin: 12px auto; padding: 0 12px; color: var(--ink-2); font-size: 13px; overflow-wrap: anywhere; }
 .agent-workspace[hidden] { display: none; }
-#agentWorkspace { order: 4; }
+#agentWorkspace, #agentGoogleActions { order: 4; }
 .agent-workspace summary { cursor: pointer; padding: 8px 0; }
 .agent-file-card { padding: 12px 0; border-bottom: 1px solid var(--line, #ddd); }
 .agent-file-card p { margin: 5px 0; }
 .agent-file-card button { margin: 6px 12px 0 0; min-height: 36px; }
+.agent-google { text-align: left; }
+.agent-google select { max-width: 100%; width: 100%; margin: 10px 0; background: var(--well); color: var(--ink); }
+.agent-google label { display: flex; gap: 8px; align-items: flex-start; margin: 10px 0; }
+.agent-google input[type=checkbox] { flex: 0 0 auto; margin-top: 3px; }
+.agent-google button { min-height: 40px; margin: 5px 8px 5px 0; }
+.google-calendar-list { max-height: 240px; overflow: auto; }
+.agent-action-card { border: 1px solid var(--line); border-radius: 12px; padding: 14px; margin: 12px 0; background: var(--well); }
+.agent-action-card h3 { margin: 0 0 8px; color: var(--ink); }
+.agent-action-card table { width: 100%; table-layout: fixed; border-collapse: collapse; }
+.agent-action-card th, .agent-action-card td { text-align: left; vertical-align: top; padding: 6px; border-bottom: 1px solid var(--line); white-space: pre-wrap; overflow-wrap: anywhere; }
+.agent-action-error { color: var(--dispute); }
+@media (max-width: 600px) {
+  .agent-action-card table, .agent-action-card tbody, .agent-action-card tr, .agent-action-card th, .agent-action-card td { display: block; width: auto; }
+  .agent-action-card tr:first-child { display: none; }
+  .agent-action-card tr { border-bottom: 1px solid var(--line); padding: 6px 0; }
+  .agent-action-card th, .agent-action-card td { border: 0; padding: 4px 0; }
+  .agent-action-card td::before { content: attr(data-label); display: block; font-size: 11px; color: var(--ink-3); }
+}

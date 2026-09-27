@@ -31,6 +31,7 @@ from app.services.llm.credentials import resolve_developer_api_keys, openrouter_
 from app.services.llm.provider_runtime import AnalysisBudgetExceeded, ProviderCancellation, ProviderCancelled
 from app.services.llm.streaming import iter_sse_with_keepalive, sse_pack, SSE_HEADERS
 from app.services.llm.mock_llm import mock_llm_enabled
+from app.services.agent_calendar import GoogleSelection
 
 router = APIRouter()
 
@@ -53,6 +54,8 @@ class AgentRequest(BaseModel):
     comparison_models: dict[str, str] | None = Field(default=None, max_length=9)
     check_sources: bool = False
     file_ids: list[str] = Field(default_factory=list, max_length=5)
+    google_selection: GoogleSelection | None = None
+    google_data_consent: bool = False
 
     @field_validator("file_ids")
     @classmethod
@@ -172,6 +175,10 @@ def run_agent(request: Request, payload: AgentRequest):
             prior_selection = existing.get("agent_settings", {}).get("selection", {"model_id": None, "reasoning_effort": "default"})
             if existing.get("agent_settings", {}).get("file_ids", []) != payload.file_ids:
                 raise TurnStatusConflict("Request identity conflicts with different files")
+            if existing.get("agent_settings", {}).get("google_selection") != (payload.google_selection.model_dump() if payload.google_selection else None):
+                raise TurnStatusConflict("Request identity conflicts with different Google permissions")
+            if existing.get("agent_settings", {}).get("google_data_consent", False) != payload.google_data_consent:
+                raise TurnStatusConflict("Request identity conflicts with different Google data consent")
             if prior_selection != selection:
                 raise TurnStatusConflict("Request identity conflicts with different agent settings")
             if existing.get("agent_settings", {}).get("comparison_selection") != payload.comparison_models:
@@ -212,6 +219,21 @@ def run_agent(request: Request, payload: AgentRequest):
         files = AgentFiles(db_firestore)
         file_meta = [public_file(files.get(uid, payload.chat_id, fid)) for fid in payload.file_ids]
         file_context = FileContext(files, uid, payload.chat_id, payload.file_ids)
+        google_data = bool(payload.google_selection or (store._chat_ref(uid, payload.chat_id).get().to_dict() or {}).get("google_data"))
+        if google_data:
+            from app.services.google_connections import restricted_model
+            if not payload.google_data_consent:
+                raise HTTPException(422, "This chat contains Google information. Review and enable Google model-sharing consent before sending.")
+            model = restricted_model(model)
+            def mark_google(tx):
+                files.guard(uid, payload.chat_id, tx)
+                tx.update(store._chat_ref(uid, payload.chat_id), {"google_data": True})
+            store._transaction(mark_google)
+        if payload.google_selection:
+            from app.services.google_connections import GoogleConnections, configuration
+            configuration()
+            connections = GoogleConnections(db_firestore)
+            connections.get(uid, payload.google_selection.connection_id, "calendar_read" if payload.google_selection.calendar else None)
         lease = agent_capacity.acquire()
         config = prompt_config.get_config()
         delegation_config = config["delegation"]
@@ -220,7 +242,7 @@ def run_agent(request: Request, payload: AgentRequest):
         delegation_config = {**delegation_config, "enabled": delegation_config["enabled"] and supports_delegation(model)}
         policy = AgentPolicy.for_chat(delegation_config)
         comparisons = comparison_selection(payload.comparison_models)
-        source_limits = SourceCheckLimits.configured() if payload.check_sources else None
+        source_limits = SourceCheckLimits.configured() if payload.check_sources and not google_data else None
         model = replace(model, request_config={**model.request_config, "_agent_bounded_search": True})
         turn = store.create_turn(
             uid, payload.chat_id, question=payload.question, mode="Agent", deep_search=False,
@@ -229,6 +251,9 @@ def run_agent(request: Request, payload: AgentRequest):
             agent_settings={**model.settings(), "policy": policy.snapshot(), "config_revision": config["revision"],
                             "delegation_config": delegation_config,
                             "file_ids": payload.file_ids,
+                            "google_selection": payload.google_selection.model_dump() if payload.google_selection else None,
+                            "google_data_consent": payload.google_data_consent,
+                            "google_data": google_data,
                             "comparison_selection": payload.comparison_models,
                             "check_sources": payload.check_sources,
                             "source_check_limits": asdict(source_limits) if source_limits else None,
@@ -243,8 +268,10 @@ def run_agent(request: Request, payload: AgentRequest):
         loop = DelegationLoop(store=store, uid=uid, chat_id=payload.chat_id, turn_id=turn["id"],
                          model=model, messages=messages, api_key=key or "", cancellation=cancellation,
                          completion_factory=AgentCompletion, policy=policy, file_context=file_context,
+                         google_selection=payload.google_selection,
+                         google_data_consent=payload.google_data_consent,
                          delegation_config=delegation_config, cooldowns=provider_cooldowns,
-                         comparison_models=comparisons, check_sources=payload.check_sources,
+                         comparison_models=comparisons, check_sources=payload.check_sources and not google_data,
                          source_limits=source_limits,
                          mock_answer="Agent test answer: " + payload.question if mock_llm_enabled() else None)
     except Exception as exc:

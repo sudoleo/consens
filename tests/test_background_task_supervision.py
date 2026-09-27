@@ -135,6 +135,7 @@ def test_retention_loop_runs_cleanup_before_first_sleep(monkeypatch):
         "source_checks_deleted": 4,
         "files_deleted": 0,
         "documents_deleted": 0,
+        "google_records_deleted": 0,
     }
 
 

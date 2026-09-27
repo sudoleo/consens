@@ -42,7 +42,18 @@ class CorrelationFilter(logging.Filter):
         return True
 
 
+class OAuthAccessFilter(logging.Filter):
+    def filter(self, record):
+        # Uvicorn's access tuple contains the complete request target. Keep
+        # authorization codes/state out of access logs, even at debug level.
+        if isinstance(record.args, tuple):
+            record.args = tuple(value.split("?", 1)[0] + "?[redacted]" if isinstance(value, str)
+                and value.startswith("/agent/google/callback?") else value for value in record.args)
+        return True
+
+
 def configure_logging() -> None:
+    logging.getLogger("uvicorn.access").addFilter(OAuthAccessFilter())
     root = logging.getLogger()
     formatter = logging.Formatter(
         "%(asctime)s %(levelname)s [corr=%(correlation_id)s] %(name)s: %(message)s"
