@@ -52,6 +52,15 @@ class AgentRequest(BaseModel):
     reasoning_effort: str = Field(default="default", pattern=r"^(default|none|minimal|low|medium|high|xhigh|max)$")
     comparison_models: dict[str, str] | None = Field(default=None, max_length=9)
     check_sources: bool = False
+    file_ids: list[str] = Field(default_factory=list, max_length=5)
+
+    @field_validator("file_ids")
+    @classmethod
+    def valid_files(cls, value):
+        import re
+        if len(set(value)) != len(value) or any(not re.fullmatch(r"[a-f0-9]{32}", item) for item in value):
+            raise ValueError("Invalid file IDs")
+        return value
 
     @field_validator("question")
     @classmethod
@@ -80,7 +89,7 @@ def _save_bookmark(uid, payload, store, turn):
         "query": turn["question"], "title": chat["title"], "mode": "Agent",
         "execution_mode": "agent", "chat_id": payload.chat_id, "turn_id": turn["id"],
         "agent_turn_position": turn["position"],
-        "timestamp": firestore.SERVER_TIMESTAMP, "sources": [], "attachments": [],
+        "timestamp": firestore.SERVER_TIMESTAMP, "sources": [], "attachments": turn.get("attachments", []),
         "previous_question": "", "previous_turn": {}, "share_result_id": "",
         "consensus_model": turn["consensus_model"], "included_providers": [], "model_labels": {},
         "responses": {"consensus": turn.get("consensus", ""), "differences": "", "differences_data": None},
@@ -161,6 +170,8 @@ def run_agent(request: Request, payload: AgentRequest):
                 raise TurnStatusConflict("Request identity conflicts with another turn")
             selection = {"model_id": payload.model_id, "reasoning_effort": payload.reasoning_effort}
             prior_selection = existing.get("agent_settings", {}).get("selection", {"model_id": None, "reasoning_effort": "default"})
+            if existing.get("agent_settings", {}).get("file_ids", []) != payload.file_ids:
+                raise TurnStatusConflict("Request identity conflicts with different files")
             if prior_selection != selection:
                 raise TurnStatusConflict("Request identity conflicts with different agent settings")
             if existing.get("agent_settings", {}).get("comparison_selection") != payload.comparison_models:
@@ -197,6 +208,10 @@ def run_agent(request: Request, payload: AgentRequest):
         bookmark = db_firestore.collection("users").document(uid).collection("bookmarks").document(payload.bookmark_id).get()
         if bookmark.exists and (bookmark.to_dict() or {}).get("chat_id") != payload.chat_id:
             raise TurnStatusConflict("Bookmark belongs to another conversation")
+        from app.services.agent_files import AgentFiles, FileContext, public_file
+        files = AgentFiles(db_firestore)
+        file_meta = [public_file(files.get(uid, payload.chat_id, fid)) for fid in payload.file_ids]
+        file_context = FileContext(files, uid, payload.chat_id, payload.file_ids)
         lease = agent_capacity.acquire()
         config = prompt_config.get_config()
         delegation_config = config["delegation"]
@@ -210,9 +225,10 @@ def run_agent(request: Request, payload: AgentRequest):
         turn = store.create_turn(
             uid, payload.chat_id, question=payload.question, mode="Agent", deep_search=False,
             selected_models=[model.model], consensus_model=model.model,
-            client_request_id=payload.client_request_id, execution_mode="agent",
+            client_request_id=payload.client_request_id, execution_mode="agent", attachments=file_meta,
             agent_settings={**model.settings(), "policy": policy.snapshot(), "config_revision": config["revision"],
                             "delegation_config": delegation_config,
+                            "file_ids": payload.file_ids,
                             "comparison_selection": payload.comparison_models,
                             "check_sources": payload.check_sources,
                             "source_check_limits": asdict(source_limits) if source_limits else None,
@@ -226,7 +242,7 @@ def run_agent(request: Request, payload: AgentRequest):
         cancellation = ProviderCancellation()
         loop = DelegationLoop(store=store, uid=uid, chat_id=payload.chat_id, turn_id=turn["id"],
                          model=model, messages=messages, api_key=key or "", cancellation=cancellation,
-                         completion_factory=AgentCompletion, policy=policy,
+                         completion_factory=AgentCompletion, policy=policy, file_context=file_context,
                          delegation_config=delegation_config, cooldowns=provider_cooldowns,
                          comparison_models=comparisons, check_sources=payload.check_sources,
                          source_limits=source_limits,

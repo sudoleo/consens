@@ -41,6 +41,7 @@ class StartAgent(StrictArgs):
     expected_output: str = Field(min_length=1, max_length=1000)
     acceptance_criteria: str = Field(min_length=1, max_length=2000)
     model_id: str = Field(min_length=1, max_length=160)
+    file_ids: list[str] = Field(default_factory=list, max_length=5)
 
 
 class AgentTarget(StrictArgs):
@@ -89,12 +90,13 @@ class Worker:
 
 class DelegationLoop(AgentLoop):
     def __init__(self, *, delegation_config, worker_model_ids=None, cooldowns=None, comparison_models=None,
-                 check_sources=False, source_limits=None, **kwargs):
+                 check_sources=False, source_limits=None, file_context=None, **kwargs):
         super().__init__(**kwargs)
         # Freeze the actual conversation before runtime instructions, tool
         # transcripts or private continuation data are appended to messages.
         self.answer_conversation = [{"role": message["role"], "content": message["content"]}
                                     for message in self.messages if message["role"] in {"user", "assistant"}]
+        self.file_context = file_context
         self.config = dict(delegation_config)
         self.cooldowns = cooldowns or provider_cooldowns
         self.workers = {}
@@ -147,6 +149,13 @@ class DelegationLoop(AgentLoop):
                 self.messages[0]["content"] += "\nAt most three comparisons before the single checked answer per message."
             self.registry = ToolRegistry([*(self.registry.tools.values() if self.config["enabled"] else []),
                                           *self.comparison.tools], argument_limit=24_000)
+
+        if self.file_context:
+            from app.services.agent_files import UNTRUSTED
+            catalog = [{k: f[k] for k in ("id", "name", "mime", "status") if k in f}
+                       for f in self.file_context.catalog()]
+            self.messages[0]["content"] += "\n" + UNTRUSTED + "\nFiles available in this chat: " + json.dumps(catalog)
+            self.registry = ToolRegistry([*self.registry.tools.values(), *self.file_context.tools()], argument_limit=24_000)
 
     def _check(self, cancellation=None):
         if self.watch_error:
@@ -223,6 +232,11 @@ class DelegationLoop(AgentLoop):
             if args.model_id not in self.models:
                 raise ValueError("Model has no verified worker tool protocol. Select an offered worker model.")
             assignment = args.model_dump(exclude={"model_id", "title"})
+            if args.file_ids and not self.file_context:
+                raise ValueError("Files are not available")
+            if self.file_context:
+                for fid in args.file_ids:
+                    self.file_context.files.get(self.uid, self.chat_id, fid)
             encoded = json.dumps(assignment, ensure_ascii=False)
             if len(encoded) > self.policy.context_chars:
                 raise ValueError("Assignment exceeds the configured context limit")
@@ -233,6 +247,7 @@ class DelegationLoop(AgentLoop):
             self._publish(worker, patch={"title": args.title, "assignment": assignment, "task_id": uuid4().hex,
                 "model": worker.model.settings(), "status": "waiting", "duration_ms": 0, "usage": None,
                 "created_at": datetime.now(timezone.utc).isoformat()})
+            worker.file_ids = args.file_ids
             self.workers[worker.id] = worker
             worker.inbox.append(None)  # Initial assignment is already in the conversation.
             worker.thread = threading.Thread(target=self._work, args=(worker,), name="agent-worker", daemon=True)
@@ -443,6 +458,9 @@ class DelegationLoop(AgentLoop):
             searches = (1 if self.policy.account_budget_only else min(1, self.search_remaining)) if searches_enabled else 0
             if not self.policy.account_budget_only:
                 self.search_remaining -= searches
+        if self.file_context:
+            ids = getattr(worker, "file_ids", []) if worker else self.file_context.file_ids
+            messages = self.file_context.messages(messages, model, file_ids=ids, query=str(messages[-1].get("content", ""))[-500:])
         tools = [*registry.schemas, *search_tools(model, searches)]
         reservation = None
         try:

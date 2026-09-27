@@ -82,7 +82,7 @@ describe("agent mode panel projection", () => {
     expect(document.getElementById('sourceCheckMenuSwitch').checked).toBe(false);
     document.getElementById('composerSourcesToggle').click();
     expect(window.App.isSourceCheckEnabled()).toBe(true);
-    expect(document.getElementById('composerAttachButton').disabled).toBe(true);
+    expect(document.getElementById('composerAttachButton').disabled).toBe(false);
     expect(document.getElementById('composerDeepState').textContent).toBe('High');
     document.getElementById('composerDeepToggle').click();
     expect(window.App.openModelPicker).toHaveBeenCalledWith(document.getElementById('agentModelDropdown'), {secondary: true});

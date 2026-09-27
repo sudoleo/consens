@@ -27,9 +27,20 @@ def encoding():
 def input_estimate(messages, tools=(), request_config=None):
     # Include signed reasoning, tool arguments/results and structured-output
     # schemas. No prompt-text cache: private conversations must not be retained.
-    payload = [messages, tools, (request_config or {}).get("response_format")]
+    visual_tokens = 0
+    def without_binary(value):
+        nonlocal visual_tokens
+        if isinstance(value, dict):
+            return {key: without_binary(item) for key, item in value.items()}
+        if isinstance(value, list):
+            return [without_binary(item) for item in value]
+        if isinstance(value, str) and value.startswith("data:") and ";base64," in value:
+            visual_tokens += 200_000 if value.startswith("data:application/pdf") else 16_000
+            return "[private visual input]"
+        return value
+    payload = [without_binary(messages), tools, (request_config or {}).get("response_format")]
     count = len(encoding().encode_ordinary(json.dumps(payload, ensure_ascii=False, separators=(",", ":"))))
-    return (count * 5 + 3) // 4 + 256 + 16 * len(messages)
+    return (count * 5 + 3) // 4 + 256 + 16 * len(messages) + visual_tokens
 
 
 def minimum_output(model):

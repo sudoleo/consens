@@ -36,6 +36,7 @@ from app.core.rate_limit import limiter
 # Import routers
 from app.api.routers import (
     agent,
+    agent_files,
     admin,
     api_v1,
     auth,
@@ -281,6 +282,7 @@ async def handle_unexpected_exception(request, exc: Exception):
 # aber nicht als fertige Landkarte samt Parametern serviert werden.
 for internal_router in (
     agent.router,
+    agent_files.router,
     auth.router,
     users.router,
     bookmarks.router,

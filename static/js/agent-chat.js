@@ -287,7 +287,9 @@
     }
     if (panel) panel.hidden = !agent || (!context && !basis);
     if (panel?.hidden) activityHost('');
+    if (!agent || (!context && !basis)) App.agentWorkspace?.refresh(null);
     if (agent && !context && basis) {
+      App.agentWorkspace?.refresh(basis.chatId);
       renderAnswer(basis.consensus || "", basis.currentTurn?.agent_failure?.error
         || (basis.currentTurn?.status === 'failed' ? 'This response did not finish successfully.' : ''));
       App.agentActivity?.renderTurn(activityHost(`${basis.chatId}:${basis.turnId}`), basis.currentTurn);
@@ -325,7 +327,8 @@
     window.projectAgentModeRun?.(null);
     App.setAppTitle?.(context.question);
     App.setThreadQuestion?.(context.question);
-    App.setThreadQuestionAttachments?.([]);
+    App.setThreadQuestionAttachments?.(context.attachmentMeta || []);
+    App.agentWorkspace?.refresh(context.metadata.chatId);
     App.state?.set?.("lastQuestion", context.question, "run");
     App.state?.set?.("lastShareResultId", null, "share");
     App.state?.set?.("consensusCitationMeta", null, "consensus");
@@ -371,6 +374,7 @@
   }
   function acceptAnswer(context, data) {
     const turn = { ...data.turn, turn_id: data.turn_id };
+    App.agentWorkspace?.refresh(data.chat_id, true);
     // A final/recovery snapshot may omit earlier progress. Keep confirmed live
     // entries, while the saved snapshot remains authoritative for matching IDs.
     const activity = new Map((context.metadata.agentActivity || []).map(item => [item.id, { ...item }]));
@@ -415,6 +419,7 @@
           reasoning_effort: settings.reasoning_effort || 'default',
           comparison_models: Object.keys(context.config.comparisonModels || {}).length ? context.config.comparisonModels : null,
           check_sources: context.config.checkSources === true,
+        file_ids: context.metadata.fileIds || [],
         }, signal, {}, { headers: { Authorization: `Bearer ${token}` } });
       }, { signal: action.controller.signal });
       if (!registry.isAuthCurrent(context) || action.controller.signal.aborted) return;
@@ -454,7 +459,6 @@
       const limit = Number(App.maxRunFamilies) > 0 ? Number(App.maxRunFamilies) : 6;
       return { message: `Select between two and ${limit} comparison models to send your message.`, action: 'compare', label: 'Choose models' };
     }
-    if (window.getAttachmentsPayload?.()?.length) return { message: 'Agent Beta supports text only. Remove attachments to send your message.' };
     const basis = registry.getSelectedConversationBasis({ includeHistory: false });
     if (basis && (!basis.chatId || basis.continuationUnavailable)) return { message: 'Reopen this saved chat before continuing.' };
     return null;
@@ -501,10 +505,6 @@
   async function send(recovery = null) {
     if (recovery) return recoverAnswer(recovery);
     if (!canUse()) { App.showPopup?.("Agent Beta is available to Pro users and admins."); return; }
-    if (window.getAttachmentsPayload?.()?.length) {
-      App.showPopup?.("Agent Beta currently supports text only. Remove the attachments to continue.");
-      return;
-    }
     const input = document.getElementById("questionInput");
     const draft = input?.value || "";
     const question = recovery?.question || String(App.quote?.compose?.(draft) ?? draft).trim();
@@ -528,6 +528,7 @@
     try {
       context = registry.create({
         question, mode: "Agent", basis, followup: Boolean(basis),
+        attachments: window.getAttachmentsPayload?.() || [], attachmentMeta: App.attachments?.messageMeta?.() || [],
         requestIdentity: recovery?.requestIdentity,
         bookmarkId: recovery?.bookmark.id || basis?.bookmarkId || `b_agent_${crypto.randomUUID().replaceAll("-", "")}`,
         bookmarkTitle: basis?.title || question,
@@ -577,6 +578,9 @@
       }
       if (!registry.isAuthCurrent(context) || signal.aborted) return;
       context.metadata.chatId = chatId;
+      if (context.attachments.length && !App.agentWorkspace) throw new Error("File uploads are unavailable. Reload and retry.");
+      await App.agentWorkspace?.upload(context, headers, signal);
+      if (!registry.isAuthCurrent(context) || signal.aborted) return;
       context.metadata.requestSent = true;
       context.phase = "answers";
       context.consensus.status = "streaming";
@@ -589,6 +593,7 @@
         reasoning_effort: settings.reasoning_effort || "default",
         comparison_models: comparisonModels,
         check_sources: context.config.checkSources === true,
+        file_ids: context.metadata.fileIds || [],
       }, requestSignal, {
         accepted: { receive(event) {
           if (registry.isAuthCurrent(context) && event.chat_id === context.metadata.chatId) {
