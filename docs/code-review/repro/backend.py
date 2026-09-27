@@ -1,4 +1,4 @@
-"""Offline-Befundproben; assertiert den Review-Baselinefehler, nicht das Sollverhalten.
+"""Offline-Befundproben; assertiert den beschriebenen Ist-Zustand, nicht das Sollverhalten.
 Aus Repo-Root: python docs/code-review/repro/backend.py (Backend-Abhaengigkeiten).
 Keine Provider-/Datenbankzugriffe. Nicht als gruene Regressionstests uebernehmen.
 """
@@ -110,7 +110,7 @@ with patch.object(runner,'api_run_repository',api), patch.object(runner,'usage_r
         reserved, receipt = runner.reserve_run(run)
         runner.execute_persisted_run(run['run_id'])
         assert api.get(run['run_id'])['status']=='succeeded'
-        api._delete(run['run_id'], expected_uid='review', allowed_statuses={'succeeded'})
+        api.delete_terminal_for_uid(run['run_id'], 'review')
 assert len(executions)==2
 snap=usage.snapshot('review', UsageLimits(100,100))
 assert snap.total.consumed==1
@@ -121,4 +121,88 @@ usage.reserve('review',key,RunKind.REGULAR,UsageLimits(100,100),now=before)
 try: usage.reserve('review',key,RunKind.REGULAR,UsageLimits(100,100),now=before+timedelta(seconds=2))
 except UsageRunExpired: record('R05-midnight-receipt', after_two_seconds='expired')
 else: raise AssertionError('Expected day-bound expiry')
+# Counter-review: state changes between admission and completion. The adapter
+# supplies sequential transactions; this does not simulate Firestore retries.
+from app.services import chat_context, user_memory, memory_edit, watch_service, topics
+ref_db = DB(); ref_tx = TX(ref_db)
+ref_db.run_transaction = lambda fn: fn(ref_tx)
+ctx = chat_context.FirestoreChatContextRepository(ref_db, transaction_runner=ref_db.run_transaction)
+now = datetime(2026, 9, 27, 12, tzinfo=timezone.utc)
+ref_tx.set(ctx._chat_ref('review', 'a'*32), {'status':'active'})
+turn = ctx._turn_ref('review', 'a'*32, 'b'*32)
+ref_tx.set(turn, {'status':'pending', 'question':'Original?', 'position':2})
+_, nonce, _ = ctx.claim_version('review', 'a'*32, 'b'*32, 'c'*32, {}, now=now)
+ref_tx.update(turn, {'status':'completed', 'consensus':'Answer already saved'})
+ctx.finalize_version('review', 'a'*32, 'b'*32, 'c'*32, nonce, {'resolved_question':'Changed interpretation?'}, now=now)
+saved = turn.get().to_dict()
+assert saved['status'] == 'completed' and saved['resolved_question'] == 'Changed interpretation?'
+record('R10-late-context', turn_status=saved['status'], context_written_after_completion=True)
+
+profiles = user_memory.FirestoreUserMemoryRepository(ref_db, transaction_runner=ref_db.run_transaction)
+profiles.save('review', {'role':'Original', 'notes':'Original'})
+stale = {k:v for k,v in profiles._profile_ref('review').get().to_dict().items() if k not in {'revision','updated_at'}}
+profiles.save('review', {'role':'Newer', 'notes':'Newer'})
+profiles.save('review', stale)
+saved = profiles._profile_ref('review').get().to_dict()
+assert saved['role']=='Original' and saved['revision']==3
+record('R12-stale-memory-save', role=saved['role'], revision=saved['revision'])
+
+edits = memory_edit.FirestoreMemoryEditRepository(ref_db)
+config = {'memory_free_ai_edits_daily':10, 'memory_ai_edits_per_minute':3,
+          'memory_global_calls_daily':100, 'memory_free_chars':2000}
+args_edit = dict(client_request_id='review-request', fingerprint='same', tier='free', config=config)
+first = edits.reserve('review', **args_edit, now=now)
+late = edits.reserve('review', **args_edit, now=now+timedelta(days=1))
+assert not first['existing'] and late['existing'] and late['record']['status']=='reserved'
+record('R13-expired-memory-edit', after_one_day=late['record']['status'])
+
+watch_id = 'review-watch'
+wref = ref_db.collection(watch_service.WATCHES_COLLECTION).document(watch_id)
+claimed = {'owner_uid':'review', 'status':'active', 'current_run_id':'old-run',
+           'interval':'weekly', 'share_id':'review-share', 'model_tier':'pro'}
+ref_tx.set(wref, claimed)
+owner = watch_service._owner_state_ref(ref_db, 'review')
+ref_tx.set(owner, {'active_count':1})
+with patch.object(watch_service, '_run_transaction', side_effect=lambda db,fn:fn(ref_tx)), \
+     patch.object(watch_service, '_ensure_watch_indexes'), \
+     patch.object(watch_service.share_snapshots, 'get_share', return_value={}), \
+     patch.object(watch_service, '_serialize_watch', side_effect=lambda wid,data,share:data):
+    paused = watch_service.update_watch('review', watch_id, {'status':'paused'}, 'pro', db=ref_db)
+    assert paused['status']=='paused' and owner.get().to_dict()['active_count']==0
+    watch_service.fail_watch_run(watch_id, claimed, now=now, db=ref_db)
+assert wref.get().to_dict()['status']=='active'
+assert owner.get().to_dict()['active_count']==0
+record('R16-pause-then-failure', final_status='active', active_count=0)
+
+# Direct writes are used only by release_worker_lease / config persistence.
+Ref.update = lambda self,data: TX(self.db).update(self,data)
+Ref.set = lambda self,data,**kw: TX(self.db).set(self,data,**kw)
+Ref.delete = lambda self: TX(self.db).delete(self)
+lease = ref_db.collection(watch_service.RUNTIME_COLLECTION).document('global_worker')
+assert watch_service._worker_lease_transaction(ref_tx, lease, now)
+after_expiry = now+timedelta(minutes=watch_service.WORKER_LEASE_MINUTES, seconds=1)
+assert watch_service._worker_lease_transaction(ref_tx, lease, after_expiry)  # B
+assert not watch_service._worker_lease_transaction(ref_tx, lease, after_expiry)  # C correctly refused
+watch_service.release_worker_lease(db=ref_db)  # delayed release by A
+assert watch_service._worker_lease_transaction(ref_tx, lease, after_expiry)  # C now admitted
+record('R30-global-lease', old_release_allows_third_worker=True)
+
+cfg_ref = ref_db.collection('config').document('models')
+cfg_ref.set({'revision':'X'})
+def activation_failure():
+    cfg_ref.set({'revision':'B'})  # independent process commits after A's write
+    raise RuntimeError('Activation in A failed')
+activate = extracted('app/api/routers/admin.py', '_persist_and_activate_models', {
+    '_MODEL_CONFIG_UPDATE_LOCK':threading.Lock(),
+    'load_models_from_db':lambda **kw:activation_failure(),
+})
+try: activate(cfg_ref, {'revision':'A'})
+except RuntimeError: pass
+assert cfg_ref.get().to_dict()=={'revision':'X'}
+record('R25-config-rollback', newer_B_replaced_with='X')
+
+classified = topics.classify_evidence(source[0]['url'], source[0]['type'])
+assert classified['role']=='primary' and classified['quality']=='high'
+record('R14-public-classification', role=classified['role'], quality=classified['quality'])
+
 print(json.dumps(results, indent=2, ensure_ascii=False, default=str))
