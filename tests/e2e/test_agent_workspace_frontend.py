@@ -15,6 +15,7 @@ def test_upload_restoration_and_private_download(browser, phase4_server, width):
     try:
         page.set_viewport_size({'width':width,'height':900})
         page.route('**/user_status', lambda r: _json(r, {'tier':'pro','is_pro':True,'agent_access':True}))
+        page.route('**/usage', lambda r: _json(r, {'is_pro':True,'remaining':100,'total_limit':100,'deep_remaining':10,'deep_total_limit':10}))
         page.route('**/agent/models', lambda r: _json(r, CATALOG))
         page.route('**/agent/budget', lambda r: _json(r, {'token_budget':{'limit':250000,'remaining':249000}}))
         page.route('**/chats', lambda r: _json(r, {'chat':{'id':chat_id}}))
@@ -34,6 +35,7 @@ def test_upload_restoration_and_private_download(browser, phase4_server, width):
         page.route('**/agent', answer)
         page.evaluate("async () => { await window.__switchE2EUser('account-a'); }")
         _choose_mode(page,'agent')
+        page.wait_for_function('window.isUserPlus === true')
         page.locator('#attachFileInput').set_input_files({'name':'offer.txt','mimeType':'text/plain','buffer':b'Price 42 EUR'})
         expect(page.locator('#attachmentBar')).to_contain_text('offer.txt')
         page.locator('#questionInput').fill('Compare this offer')

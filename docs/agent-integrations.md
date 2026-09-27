@@ -108,6 +108,12 @@ Publisher standalone gate: **3 passed**. Browser flow is checked in at
 because Chromium is absent and its download returned an invalid ZIP. It remains
 an explicit verification requirement, not a passed browser/layout claim.
 
+Follow-up validation: Chromium was installed through a separate test runtime.
+The contradictory Pro/Usage browser fixture was corrected, and the private-file
+panel now uses border-box sizing and the existing thread order. The built upload,
+restoration-state and authenticated-download flows pass at 1280, 390 and 320 px
+(3 browser tests), including the no-horizontal-overflow assertion.
+
 ## PR 2 — Create and revise documents
 
 Users can create real downloadable DOCX and PDF reports, decision briefs and

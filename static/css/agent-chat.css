@@ -379,8 +379,9 @@ body.single-agent-active .consensus-model-inline .model-picker-display::after {
   body.single-agent-active.composer-collapsed:not(.is-hero) #attachTrigger { order: -1; }
 }
 
-.agent-workspace { width: min(100%, 760px); margin: 12px auto; padding: 0 12px; color: var(--ink-2); font-size: 13px; overflow-wrap: anywhere; }
+.agent-workspace { box-sizing: border-box; width: min(100%, 760px); margin: 12px auto; padding: 0 12px; color: var(--ink-2); font-size: 13px; overflow-wrap: anywhere; }
 .agent-workspace[hidden] { display: none; }
+#agentWorkspace { order: 4; }
 .agent-workspace summary { cursor: pointer; padding: 8px 0; }
 .agent-file-card { padding: 12px 0; border-bottom: 1px solid var(--line, #ddd); }
 .agent-file-card p { margin: 5px 0; }
