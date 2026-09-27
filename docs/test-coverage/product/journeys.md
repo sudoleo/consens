@@ -33,6 +33,9 @@ dagegen tatsächlich ausführen.
 - Nach Stop/Reload/Retry keinen zusätzlichen Providerdispatch oder Usage-Charge
   erlauben, wo Replay zugesagt ist. Gleichzeitig bereits angefallene reale
   Kosten nicht aus der Ledgererwartung löschen.
+  Die einmalige reguläre Runbelastung von der Agent-Abrechnung tatsächlich
+  angefallener Providersteps unterscheiden; nicht einen pauschalen Charge
+  für jede Agentausführung erwarten.
 - Reihenfolge/Verzögerung am Testserver kontrollieren; keine beliebigen Sleeps.
   Bei Fehlern Status-/ID-Abfolge, relevanten DB-Endzustand und Browsertrace
   sichern, ohne Credentials oder reale Nutzerdaten.

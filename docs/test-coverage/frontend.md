@@ -1822,9 +1822,9 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 **Lauf:** 11 bestanden.
 
-**Geprüftes Verhalten:** Finalframes bei CRLF/CR/LF über einzelne Bytes einschließlich UTF-8 erkannt; final/error beendet vor späterem Lesefehler und räumt Reader auf. consensus.final/Keepalive noch nicht endgültig, persistiertes final erforderlich. Request-, Read-, unvollständiger Stream- und Handlerfehler getrennt, Renderer gestoppt; bewusster Abbruch bleibt AbortError.
+**Geprüftes Verhalten:** Finalframes bei CRLF/CR/LF über einzelne Bytes einschließlich UTF-8 erkannt; final/error beendet vor späterem Lesefehler und räumt Reader auf. consensus.final/Keepalive noch nicht endgültig, terminales event: final erforderlich. Request-, Read-, unvollständiger Stream- und Handlerfehler getrennt, Renderer gestoppt; bewusster Abbruch bleibt AbortError.
 
-**Grenzen und Doubles:** Echtes markdown-stream-Modul, Bytechunks und Reader-/Fetch-/Cleanupfehler vorgegeben; kein Netzwerkproxy oder reale Verbindung.
+**Grenzen und Doubles:** Echtes markdown-stream-Modul, Bytechunks und Reader-/Fetch-/Cleanupfehler vorgegeben; kein Netzwerkproxy oder reale Verbindung. Der Parser verlangt kein Persistenzflag; ein final-Frame belegt keinen DB-Commit.
 
 **Prüfauftrag für den Folgeaudit:** ASGI-/Proxy-Framing und Commit-vor-final-Vertrag serverseitig zuordnen.
 

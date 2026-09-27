@@ -1,4 +1,5 @@
 """Render reviewed audit data. Does not infer coverage or refresh evidence."""
+from collections import Counter
 from pathlib import Path
 import argparse
 import json
@@ -35,11 +36,16 @@ def render():
     routes = read('routes.json')
     coverage = read('python-coverage.json')
     searches = read('search-evidence.json')
+    counts = data['counts']
+    package_status = Counter(w['status'] for w in data['work_packages'])
+    status_labels = {'planned': 'geplant', 'in_progress': 'in Arbeit', 'blocked': 'blockiert', 'completed': 'abgeschlossen'}
+    source_line_count = f'{sum(s["lines"] for s in sources):,}'.replace(',', '.')
+    status_summary = ', '.join(f'{package_status[s]} {label}' for s, label in status_labels.items() if package_status[s])
     pages = {}
     rows = ['# Produktverhalten und Testbelege\n',
       '[Einstieg](README.md) · [Dateikatalog](../backend.md) · [Lücken](gaps.md)\n',
-      '77 gruppierte Verhaltensverträge, alle 216 Testdateien verknüpft. '
-      'Ein Abschnitt bündelt mehrere Teilverträge; die 83 ausgewählten Testdefinitionen sind konkrete **Teilbelege**. '
+      f'{counts["contracts"]} gruppierte Verhaltensverträge, alle {counts["test_files_linked"]} Testdateien verknüpft. '
+      f'Ein Abschnitt bündelt mehrere Teilverträge; die {counts["representative_definitions"]} ausgewählten Testdefinitionen sind konkrete **Teilbelege**. '
       'Sie beweisen nicht jede Klausel des Abschnitts. Der vollständige Testdateikatalog bleibt maßgeblich für die übrigen Assertions. '
       'Zuordnung, Testzahl und Zeilenausführung sind keine fachliche Coveragequote.\n',
       '| Vertrag | Verhalten | Quellen | Testdateien | Befunde |\n|---|---|---:|---:|---|']
@@ -67,9 +73,11 @@ def render():
 
     rows = ['# Verifizierte Befunde und ergänzende Tests\n',
       '[Einstieg](README.md) · [Arbeitspakete](work-packages.md) · [Suchbelege](search-evidence.json)\n',
-      '36 Befunde. „Verifiziert“ bezeichnet den geprüften Code-/Testabgleich. '
-      'Nur G-018/G-019 sind hier direkt beobachtete Verhaltensfehler; '
+      f'{len(data["gaps"])} Befunde. „Verifiziert“ bezeichnet den geprüften Code-/Testabgleich. '
+      'G-018/G-019 sind durch lokale DOM-Proben beobachtete Verhaltensfehler; '
+      'G-037/G-038/G-040/G-041/G-042 durch isolierte Python-Gegenproben. '
       'G-007/G-020 zusätzlich durch überlebende gezielte Mutationen belegte Assertionslücken. '
+      'Die Aussagegrenze jeder Probe steht beim Befund und im unabhängigen Review. '
       'Die übrigen Kategorien unterscheiden fehlende Fälle/Integration, defekte Tests, Ausführungsnachweis und CI.\n',
       'P1/P2/P3 ordnen die Umsetzung nach möglichen Folgen und Voraussetzungen; sie sind keine Incident-Schweregrade. '
       'Suchtreffer allein beweisen weder Vorhandensein noch Abwesenheit eines Tests. '
@@ -101,7 +109,8 @@ def render():
     pages['gaps.md']='\n'.join(rows)+'\n'
 
     rows=['# Codex-Arbeitspakete\n','[Einstieg](README.md) · [Befunde](gaps.md) · [Nutzerreisen](journeys.md) · [Oracles](decisions.md)\n',
-      'Alle **30 Pakete sind geplant**, keines in diesem Dokumentationsauftrag implementiert. '
+      f'**{len(data["work_packages"])} Arbeitspakete · {status_summary}.** '
+      'Im ursprünglichen Dokumentationsauftrag wurde keines implementiert; der aktuelle Status steht in audit.json. '
       'Die IDs sind stabil; sie geben keine zwingende lineare Reihenfolge vor. '
       'Abhängigkeiten sind fachliche/technische Voraussetzungen. Vorarbeit ist früher möglich. '
       'WP-01 bis WP-04 klären den Ausgangsstand; WP-05 macht die allgemeine CI verbindlich. '
@@ -137,7 +146,7 @@ def render():
     pages['work-packages.md']='\n'.join(rows)+'\n'
 
     rows=['# Inventar der Produkt- und Betriebsdateien\n','[Einstieg und Scope](README.md) · [Maschinenlesbar mit Hashes und Python-Symbolen](sources.json)\n',
-      '269 Dateien, 128.351 physische Quellzeilen. Jede Datei ist mindestens einem Verhaltensbereich zugeordnet. '
+      f'{len(sources)} Dateien, {source_line_count} physische Quellzeilen. Jede Datei ist mindestens einem Verhaltensbereich zugeordnet. '
       'Das ist ein Vollständigkeitscheck der Auswahl, kein Beweis für jede Funktion/Stylesheetregel. '
       'Direkte Testreferenzen sind ausschließlich Suchkandidaten aus dem vorherigen Testinventar. '
       'Null direkte Referenzen können trotzdem indirekte Tests bedeuten. Alle positiven Testbelege stehen in der Matrix/dem Dateikatalog.\n',
@@ -153,7 +162,7 @@ def render():
     pages['sources.md']='\n'.join(rows)+'\n'
 
     rows=['# Runtime-Routeninventar\n','[Einstieg](README.md) · [Rohdaten](routes.json)\n',
-      'Aus `main.app.routes` im Unit-Test-Modus erfasst: **158 App-Routeneinträge und 4 Frameworkrouten**. '
+      f'Aus `main.app.routes` im Unit-Test-Modus erfasst: **{sum(r["source"] != "framework" for r in routes)} App-Routeneinträge und {sum(r["source"] == "framework" for r in routes)} Frameworkrouten**. '
       'Methoden werden pro registriertem Eintrag gebündelt; GET/HEAD ist deshalb ein Eintrag. '
       'Die neun dynamischen `/ask_*`-Routen wurden zur Laufzeit aufgelöst. '
       'Das `/static`-Mount ist keine App-Endpointdefinition und wird über Assets/Build im Dateiinventar behandelt. '

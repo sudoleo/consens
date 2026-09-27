@@ -376,7 +376,7 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 **Geprüftes Verhalten:** Ownerlimit über verschiedene Chats und Ownerisolation; Leaseablauf ohne Wiederholung bezahlter Receipts; lokale Admission und idempotente Freigabe; 503/Retry-After vor Turnerstellung bei voller Kapazität bei weiter möglichem Replay; Ownerlimit entsperrt fehlgeschlagenen Turn; nie gestartete Response gibt Ressourcen frei und bewahrt Bookmark ohne Modellkosten.
 
-**Grenzen und Doubles:** Threads laufen innerhalb eines Prozesses gegen gelockten Fake. Leases werden zeitlich manipuliert, kein echter Prozesscrash.
+**Grenzen und Doubles:** Threads laufen innerhalb eines Prozesses gegen gelockten Fake. Leases werden zeitlich manipuliert, kein echter Prozesscrash. HTTP-Assertions laufen in eigener FastAPI-App; main.handle_http_exception fehlt. Retry-After dort beweist deshalb nicht dessen Erhalt in main.app (G-037).
 
 **Prüfauftrag für den Folgeaudit:** Echte Mehrprozesskonkurrenz, Server-Shutdown und Ressourcenfreigabe gegen Emulator-/Betriebstests abgleichen.
 
@@ -560,7 +560,7 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 **Geprüftes Verhalten:** Zwei gleichzeitig laufende Worker mit Rückfrage, Antwort, Rework und Review; Persistenz, Sequenzdeduplizierung, Pagination/Ownerbindung und Kosten; einfache Antwort ohne Delegation/Replaycall; Workerfehler mit Unknown-Kosten; atomare lokale/persistente Budgetreservierung im Fake; Stop joint Worker; Crash-/Leaserecovery; signierte Reasoningblöcke bleiben privat; Toolbatch-Ergebnisse; eingefrorene Konfiguration; Evaluationsgate lehnt schlechte/unvollständige Vergleiche ab; Nachricht während Generierung, Remote-Stop und geprüfter 429-Fallback.
 
-**Grenzen und Doubles:** Synchronisierte In-Memory-Transaktionen ersetzen Firestore. Evaluationsgate wird mit konstruierten Ergebniszeilen geprüft, nicht die Qualität echter Delegation.
+**Grenzen und Doubles:** Synchronisierte In-Memory-Transaktionen ersetzen Firestore. Evaluationsgate wird mit konstruierten Ergebniszeilen geprüft, nicht die Qualität echter Delegation. Der HTTP-Fall prüft Liste/Auth/fremden Chat und Detail-limit=51 (422), keinen erfolgreichen Detailbody und keinen Stop-HTTP-Handler (G-039).
 
 **Prüfauftrag für den Folgeaudit:** Crash zwischen Mailbox-/Event-/Receiptwrites und echte Prozessgrenzen gegen Emulatorprüfungen abgleichen.
 
@@ -878,7 +878,7 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 **Geprüftes Verhalten:** Providerkosten haben Vorrang vor Katalog inkl. Cache/Reasoning/Suche; ungültige Kosten bleiben unbekannt, null ist gültig; Catalogfallback und geteilte Usagechunks; getrennte Token-/Kostenreservierung; sichere Retry-After-Auswertung; Cooldown pro Key/Modell und begrenzter Cache; HTTP-/SSE-429 verhindert sofortigen zweiten bezahlten Claim; 404 liefert handlungsfähigen Fehler und gibt Chatslot frei.
 
-**Grenzen und Doubles:** Providerkosten sind vorgegebene Zahlen und Preise aus dem lokalen Katalog; keine Rechnungsprüfung oder Live-Ratelimits.
+**Grenzen und Doubles:** Providerkosten sind vorgegebene Zahlen und Preise aus dem lokalen Katalog; keine Rechnungsprüfung oder Live-Ratelimits. HTTP-Assertions laufen in eigener FastAPI-App; main.handle_http_exception fehlt. Retry-After dort beweist deshalb nicht dessen Erhalt in main.app (G-037).
 
 **Prüfauftrag für den Folgeaudit:** Weitere Retry-After-Formate, Cacheauslauf und parallele Requests über mehrere Prozesse gegen den Code prüfen.
 
@@ -1693,7 +1693,7 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 **Geprüftes Verhalten:** Alle im Test verwendeten Familien teilen OpenRouter-URL, Headers, Payload, Text/Citations und Usage; gemeinsames Credentialmapping; keine alten provider-spezifischen Authfunktionen; HTTP-/Transportfehler strukturiert; Antwort ohne erwartete Felder ergibt leeren Text und Nullusage.
 
-**Grenzen und Doubles:** POST ist Fake. Der Test malformed_response akzeptiert error=None bei leerer Antwort; dies dokumentiert bestehendes Verhalten, keine positive Fehlererkennung.
+**Grenzen und Doubles:** POST ist Fake. Der Test malformed_response akzeptiert error=None bei leerer Antwort; dies dokumentiert bestehendes Verhalten, keine positive Fehlererkennung. Kein HTTP-200-Providerfehlerbody. Der malformed-response-Fall mit leeren choices erwartet error=None; das belegt keine korrekte Trennung von Protokollfehler und gültiger Antwort ohne auswertbaren Buchstaben (G-042).
 
 **Prüfauftrag für den Folgeaudit:** Prüfen, ob fehlende Usage künftig unknown statt null und malformed response als Fehler behandelt werden soll; zuerst Produktvertrag klären.
 
@@ -2108,7 +2108,7 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 **Geprüftes Verhalten:** OpenAPI-Key/Idempotency-Vertrag, Admin-Key-Management und Publisher-Konfiguration, accepted/duplicate Runs, serverseitiger Modellplan, Tier/Scope/Admin-/Account-Gates und Key-/IP-Throttling. Runner-Claim verhindert doppelte Starts/Usage, Scheduler begrenzt Arbeit, Expiry unterscheidet Reservierung/Verbrauch; Publish/List/Read/Revoke, Watch-Capacity-Skip und Direct-Index-Gates.
 
-**Grenzen und Doubles:** Auth/Firestore/LLM/Executor meist ersetzt; API-202-Duplikattest erwartet sogar zwei schedule-Aufrufe, eigentliche Deduplizierung separat geprüft. UI nur Quelltext.
+**Grenzen und Doubles:** Auth/Firestore/LLM/Executor meist ersetzt; API-202-Duplikattest erwartet sogar zwei schedule-Aufrufe, eigentliche Deduplizierung separat geprüft. UI nur Quelltext. setup_api ersetzt enforce_uid_rate_limit; reale Key-/IP-Limitfälle sind vorhanden, aber kein UID-Reject durch main.app einschließlich Retry-After (G-037).
 
 **Prüfauftrag für den Folgeaudit:** Realen Worker-Abbruch und wiederaufgenommene Runs mit Repository/Emulator abgleichen; Routenintegration ohne gestubbte Fachservices prüfen.
 
@@ -2157,7 +2157,7 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 **Lauf:** 52 bestanden.
 
-**Geprüftes Verhalten:** Kanonische Chat-/Turn-/Kontextbindung vor Engine, serverseitig aufgelöste Folgefrage, Completion-Provenienz/Quellen und Bookmark vor finalem Erfolg. Stream/JSON-Parität, Source-Job-Reihenfolge/disabled/skipped, Analysefehler bewahrt Konsens; persistenter Fehler bleibt pending. Completed-Replay ohne Engine/Usage/Writes, Tier-/Own-Key-Gates und eindeutige terminale Fehler inkl. redigierter Logs.
+**Geprüftes Verhalten:** Kanonische Chat-/Turn-/Kontextbindung vor Engine, serverseitig aufgelöste Folgefrage, Completion-Provenienz/Quellen und Bookmark vor finalem Erfolg. Stream/JSON-Parität, Source-Job-Reihenfolge/disabled/skipped, Analysefehler bewahrt Konsens; Persistenzfehler erhält die Antwort und meldet chat_persisted=false/pending. Completed-Replay ohne Engine/Usage/Writes, Tier-/Own-Key-Gates und eindeutige terminale Fehler inkl. redigierter Logs.
 
 **Grenzen und Doubles:** Store zeichnet Aufrufe auf; Engine und Job-Submission sind ersetzt. Persistenz-/Netzwerk-Atomizität wird hier nicht nachgewiesen; SSE wird über TestClient konsumiert.
 
@@ -2995,7 +2995,7 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 **Geprüftes Verhalten:** Strikter minimaler Patch, eindeutiges Replace, Append/Correct-Intent, keine Delete-Patches beim Remember, Revision/Undo, idempotenter Provideraufruf, persistente Tages-/Global-/In-flight-Limits und kein Truncation/Charge bei Übergröße. Adminfallback, schema-/tokengebundener LLM-Payload und direkter expliziter Edit-Endpunkt.
 
-**Grenzen und Doubles:** Persistence-Guard in Fixture deaktiviert, DB/LLM ersetzt; Undo nach konkurrierender Fremdänderung wird nicht durch den einfachen Roundtrip bewiesen.
+**Grenzen und Doubles:** Persistence-Guard in Fixture deaktiviert, DB/LLM ersetzt; Undo nach konkurrierender Fremdänderung wird nicht durch den einfachen Roundtrip bewiesen. Undo-Roundtrip nutzt ein kleines Profil bei unverändertem Limit; Kürzung nach Tier-/Limitabsenkung nicht geprüft (G-038). Die Undo-HTTP-Route und ihr Error-Mapping sind kein Teil dieses Erfolgsroundtrips (G-007).
 
 **Prüfauftrag für den Folgeaudit:** Tombstone-/Undo-Konflikt-/Crashfälle und echte parallele Edits im nächsten Audit abgleichen.
 
@@ -3033,7 +3033,7 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 **Geprüftes Verhalten:** Ungültiger Adminsave ohne Runtime-Mutation, Aktivierungs-/DB-Rollback und read-only Readiness; Own-/Developer-Key-Trennung. Entfernte/kanonische IDs, Presets/Free-/Pro-Gates, Provider-spezifische Search-/Reasoning-/Attachment-Policies, Errorprojektion und Eingabehelper.
 
-**Grenzen und Doubles:** Prüft gespeicherte Regeln/Payloads des Commitstands; keine Live-Verfügbarkeit oder Akzeptanz der Modell-APIs. UI-Auszüge nur statisch.
+**Grenzen und Doubles:** Prüft gespeicherte Regeln/Payloads des Commitstands; keine Live-Verfügbarkeit oder Akzeptanz der Modell-APIs. UI-Auszüge nur statisch. Rollback-Assertion sieht nur einen Writer; ein zwischenzeitlicher Write eines zweiten Prozesses fehlt (G-040).
 
 **Prüfauftrag für den Folgeaudit:** Aktualisierte Modelllisten, atomare konkurrierende Adminsaves und reale Providerverträge separat prüfen.
 
@@ -3796,9 +3796,9 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 **Lauf:** 8 bestanden.
 
-**Geprüftes Verhalten:** IP-Schlüssel aus Socket/Proxyheader/Kette, getrennte Besucher hinter Proxy und leerer Headerfallback; API-Schlüssel wird gehasht statt im Bucket offengelegt; ungültiger Key fällt auf IP zurück; UIDlimit bleibt beim Wechsel des Keys bestehen.
+**Geprüftes Verhalten:** IP-Schlüssel aus Socket/Proxyheader/Kette, getrennte Besucher hinter Proxy und leerer Headerfallback; API-Schlüssel mit cns_-Präfix wird gehasht. Fehlender oder falsch präfixierter Key fällt auf IP zurück. Zwei Aufrufe derselben UID überschreiten deren Limit; ein wirklicher Keywechsel wird nicht ausgeführt.
 
-**Grenzen und Doubles:** Künstliche Request-Scopes; kein realer vertrauenswürdiger Reverse-Proxy und kein verteilter Limiter.
+**Grenzen und Doubles:** Künstliche Request-Scopes; kein vertrauenswürdiger Reverse-Proxy oder verteilter Limiter. Präfixgültige, aber nicht authentifizierbare Keys werden hier nicht geprüft. Der separate IP-Guard der Consensus-API ist in test_consensus_api abgedeckt; daraus folgt kein vollständiger Limiter-Bypass.
 
 **Prüfauftrag für den Folgeaudit:** Proxy-Vertrauensgrenze, manipulierte Header und Mehrprozesslimitierung im Deploymentkontext prüfen.
 
@@ -4075,7 +4075,7 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 **Geprüftes Verhalten:** /check_keys verlangt Login und mindestens einen OpenRouter-Key; Own-Key-Modellrequest ohne Login liefert 401; der echte globale Validation-Handler bleibt bei Pydantic-ValueError auf 422 und entfernt ctx sowie eingesendeten Wert, lässt nur loc/type/msg zu.
 
-**Grenzen und Doubles:** Die ersten Routertests haben eine eigene App und deaktivierten Limiter. Nur der Validation-Test nutzt main.app, ohne vollständigen Deployment-Lifespan.
+**Grenzen und Doubles:** Eigene FastAPI-App mit Router und Limiterzustand in den ersten drei Tests; der Limiter wird dort nicht deaktiviert. Der letzte Test verwendet main.app für den Validation-Error-Umschlag. Keine vollständige Prüfung von main-Middleware/HTTPException-Headern oder Firebase-Authentifizierung.
 
 **Prüfauftrag für den Folgeaudit:** Weitere Fehler- und Loggingpfade für sensible Eingaben sowie positive Schlüsselprüfung separat abgleichen.
 
@@ -4227,7 +4227,7 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 **Lauf:** 20 bestanden.
 
-**Geprüftes Verhalten:** Persistente Lease/lokaler Wochenzeitplan, höchstens ein Portfolio-Judge, 100 Seiten im begrenzten Prompt und explizite Auslassung erst nach Detailreduktion. Terminale Notifications/Collection-Failure, keine doppelten Metricscans, Evidenzgate für Briefänderung, History/Statusdelta und deterministische Empfehlungen. Getrennte Watch-/Index-Aktionen mit Teilergebnissen, kein Delete bei apply-all, Publisherlineage, manuelle Entscheidung und konfliktgeprüfte Briefannahme.
+**Geprüftes Verhalten:** Persistente Lease, 7-Tage-Default und konfigurierte lokale Uhrzeit, höchstens ein Portfolio-Judge, 100 Seiten im begrenzten Prompt und explizite Auslassung erst nach Detailreduktion. Terminale Notifications/Collection-Failure, keine doppelten Metricscans, Evidenzgate für Briefänderung, History/Statusdelta und deterministische Empfehlungen. Getrennte Watch-/Index-Aktionen mit Teilergebnissen, kein Delete bei apply-all, Publisherlineage, manuelle Entscheidung und konfliktgeprüfte Briefannahme.
 
 **Grenzen und Doubles:** DB, GSC, Judge und Aktionen ersetzt; keine reale Index-/Watch-/Delete-Ausführung und kein Mehrprozesslease.
 
@@ -4994,9 +4994,9 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 **Lauf:** 58 bestanden.
 
-**Geprüftes Verhalten:** Begrenzte historische Reads inkl. Legacy-/Timestamp-/Count-Snapshot, unveränderliche Runversionen und Pointer-Atomizität/Stale-Claim. Archiv/Index/Slug-Rename/Reservierung, Quellenrollen/Canonicalisierung/100 Quellen/ID-Erhalt. Double-opt-in, Challenge-Atomizität, Delivery-Dedupe/Cleanup/Tombstones, Mockmodus ohne Publish; automatische Pipeline/Claimidentity-Fallback. Admin-CRUD, öffentliche Historie/Finding/Claimledger/Positionmap und unscored/historische noindex-Seiten.
+**Geprüftes Verhalten:** Begrenzte historische Reads inkl. Legacy-/Timestamp-/Count-Snapshot, unveränderliche Runversionen und Pointer-Atomizität/Stale-Claim. Archiv/Index/Slug-Rename/Reservierung, Quellenrollen/Canonicalisierung/100 Quellen/ID-Erhalt. Double-opt-in, Challenge-Atomizität, Delivery-Dedupe/Cleanup/Tombstones, Mockmodus ohne Publish; automatische Pipeline/Claimidentity-Fallback. Service-CRUD sowie Admin-Create/Run/Detail, öffentliche Historie/Finding/Claimledger/Positionmap und unscored/historische noindex-Seiten.
 
-**Grenzen und Doubles:** Fachlogik/SSR real, DB/LLM/Mail ersetzt. SDKfall prüft RPC-Aufbau, nicht Dienstverhalten; Quellrollen sind URLheuristiken, keine inhaltliche Qualitätsprüfung.
+**Grenzen und Doubles:** Fachlogik/SSR real, DB/LLM/Mail ersetzt. SDKfall prüft RPC-Aufbau, nicht Dienstverhalten; Quellrollen sind URLheuristiken, keine inhaltliche Qualitätsprüfung. Adminauth im HTTP-Erfolgstest ersetzt; trotz Testnamen kein PUT, Adminlist/öffentliche Hub-/Sitemap-/Follow-/Confirm-/Unsubscribe-Adapter hier nicht ausgeführt (G-014/G-041).
 
 **Prüfauftrag für den Folgeaudit:** Echte konkurrierende Slug-/Run-/Followertransaktionen und Browser-Historiennavigation abgleichen.
 

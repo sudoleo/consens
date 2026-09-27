@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import re
 import subprocess
+import xml.etree.ElementTree as ET
 from urllib.parse import unquote
 
 from render_product_audit import render
@@ -65,11 +66,13 @@ def main():
             require(e['path'] in c['test_files'],f'Evidence outside contract tests: {c["id"]}')
             ds=[d for d in testfiles[e['path']]['definitions'] if d['name']==e['name'] and d['line']==e['line']]
             require(len(ds)==1,f'Unknown evidence definition: {e["path"]}:{e["line"]}')
+            if ds: require(e['end_line']==ds[0]['end_line'],f'Evidence definition end differs: {e["path"]}:{e["line"]}')
             require(e['file_execution']==testfiles[e['path']]['execution'],f'Wrong historical execution: {c["id"]}')
             for a in e['assertions']:
                 require(e['line']<=a['line']<=e['end_line'],f'Assertion outside definition: {c["id"]}')
                 snippet='\n'.join(lines(e['path'])[a['line']-1:e['end_line']])
                 require(a['excerpt'] in snippet,f'Assertion text drift: {e["path"]}:{a["line"]}')
+                require(lines(e['path'])[a['line']-1].lstrip().startswith(a['excerpt'].splitlines()[0].lstrip()),f'Assertion starts on a different line: {e["path"]}:{a["line"]}')
     require(linked_tests==set(testfiles),'Not every inventoried test file is linked')
     require(set(searches)==set(gaps),'Search evidence gap IDs differ')
     test_search_paths=sorted(p for p in all_paths if p.startswith('tests/') and p.endswith(('.py','.js','.mjs','.json','.md')))
@@ -84,7 +87,9 @@ def main():
         for e in g['existing_evidence']:
             defs=[d for d in testfiles[e['path']]['definitions'] if d['name']==e['name'] and d['line']==e['line']]
             require(len(defs)==1,f'Invalid gap evidence: {g["id"]}')
-            if defs: require(e['assertion_lines']==[a['line'] for a in defs[0]['assertion_evidence']],f'Assertion locations differ: {g["id"]}')
+            if defs:
+                require(e['end_line']==defs[0]['end_line'],f'Gap definition end differs: {g["id"]}')
+                require(e['assertion_lines']==[a['line'] for a in defs[0]['assertion_evidence']],f'Assertion locations differ: {g["id"]}')
         for p in g['reuse_helpers']: require((ROOT/p).exists(),f'Missing reuse target: {g["id"]} {p}')
         s=searches[g['id']]
         require(s['scanned_files']==len(test_search_paths),f'Search scope drift: {g["id"]}')
@@ -96,6 +101,7 @@ def main():
                 if terms: actual.append(dict(path=p,line=n,terms=terms,text=line.strip()[:400]))
         require(actual==s['hits'],f'Search hits drift: {g["id"]}')
     route_keys=set()
+    require(len({r['id'] for r in routes})==len(routes),'Duplicate route IDs')
     for r in routes:
         key=(tuple(r['methods']),r['path']);require(key not in route_keys,f'Duplicate route: {key}');route_keys.add(key)
         if r['source']!='framework':
@@ -133,7 +139,47 @@ def main():
     for field in ('covered_lines','num_statements','missing_lines','excluded_lines','num_branches','num_partial_branches','covered_branches','missing_branches'):
         require(sum(f['summary'][field] for f in cov['files'].values())==cov['totals'][field],f'Coverage total mismatch: {field}')
     require(set(cov['files'])<=source_paths,'Coverage source outside inventory')
+    for path,f in cov['files'].items():
+        summary=f['summary']
+        for array,field in (('executed_lines','covered_lines'),('missing_lines','missing_lines'),('excluded_lines','excluded_lines'),('executed_branches','covered_branches'),('missing_branches','missing_branches')):
+            values=f[array]
+            require(len(values)==summary[field],f'Coverage detail/count mismatch: {path} {array}')
+            keys=[tuple(v) if isinstance(v,list) else v for v in values]
+            require(len(keys)==len(set(keys)),f'Duplicate coverage detail: {path} {array}')
+            if array.endswith('branches'):
+                require(all(len(v)==2 and all(isinstance(n,int) and 0<abs(n)<=len(lines(path)) for n in v) for v in values),f'Invalid branch position: {path}')
+            else:
+                require(all(isinstance(n,int) and 1<=n<=len(lines(path)) for n in values),f'Invalid coverage line: {path}')
+        require(not (set(f['executed_lines']) & set(f['missing_lines'])),f'Executed/missing lines overlap: {path}')
+        require(not ({tuple(v) for v in f['executed_branches']} & {tuple(v) for v in f['missing_branches']}),f'Executed/missing branches overlap: {path}')
+        require(summary['num_statements']==summary['covered_lines']+summary['missing_lines'],f'Statement count mismatch: {path}')
+        require(summary['num_branches']==summary['covered_branches']+summary['missing_branches'],f'Branch count mismatch: {path}')
+        require(all(1<=v['start_line']<=len(lines(path)) for v in f['unexecuted_functions']),f'Invalid unexecuted function line: {path}')
+    for probe_id,filename in (('M-01','probe-memory.xml'),('M-02','probe-og.xml')):
+        probes=[p for p in execution['probes'] if p['id']==probe_id]
+        require(len(probes)==1,f'Missing/duplicate probe metadata: {probe_id}')
+        if not probes: continue
+        cases=ET.parse(HERE/'evidence'/filename).getroot().findall('.//testcase')
+        result=Counter()
+        for case in cases:
+            status=next((s for tag,s in (('error','error'),('failure','failed'),('skipped','skipped')) if case.find(tag) is not None),'passed')
+            result[status]+=1
+        require(dict(result)==probes[0]['result'],f'Probe result differs from JUnit: {probe_id}')
+        require([dict(c.attrib) for c in cases]==probes[0]['cases'],f'Probe cases differ from JUnit: {probe_id}')
     require(execution['reviewed_commit']==data['reviewed_commit'],'Execution/review commit mismatch')
+    independent = execution['independent_review']
+    require(independent['input_commit']==data['independent_review']['input_commit'],'Independent input commit differs')
+    for artifact in independent['artifact_hashes']:
+        path = ROOT/artifact['path']
+        require(path.is_file() and hashlib.sha256(path.read_bytes()).hexdigest()==artifact['sha256'],f'Independent artifact changed: {artifact["path"]}')
+    observations = read(independent['probe_json'])
+    require([p['id'] for p in observations['observations']]==independent['probe_ids'],'Independent probe IDs differ')
+    require(observations['network_allowed'] is False and observations['product_sources_changed'] is False,'Independent probe isolation metadata differs')
+    result = Counter(passed=0,failed=0,error=0,skipped=0)
+    for case in ET.parse(HERE/independent['focused_junit']).getroot().findall('.//testcase'):
+        status=next((s for tag,s in (('error','error'),('failure','failed'),('skipped','skipped')) if case.find(tag) is not None),'passed')
+        result[status]+=1
+    require(dict(result)==independent['focused_result'],'Independent focused result differs from JUnit')
     for name,expected in render().items():
         require((HERE/name).read_text(encoding='utf-8')==expected,f'Regenerate {name}')
     for md in HERE.glob('*.md'):
@@ -154,7 +200,7 @@ def main():
         print('\n'.join(sorted(set(problems))))
         return 1
     print(f'OK: {len(sources)} sources, {len(contracts)} contracts, {len(linked_tests)} test files, {len(routes)} routes, {len(gaps)} gaps, {len(packages)} packages.')
-    print('Hashes, evidence locations, search trails, dependency DAG, local links and generated pages match. Semantic review and live execution are not renewed.')
+    print('Hashes, evidence locations, search trails, coverage details, probe JUnit, dependency DAG, local links and generated pages match. Semantic review and live execution are not renewed.')
     return 0
 
 if __name__=='__main__':

@@ -5,6 +5,7 @@ This does not update hashes or infer that old review descriptions remain correct
 """
 
 from collections import Counter
+import ast
 import hashlib
 import json
 from pathlib import Path
@@ -15,11 +16,77 @@ ROOT = Path(__file__).resolve().parents[2]
 CATALOG = Path(__file__).with_name("inventory.json")
 
 
+def read_inventory():
+    return json.loads(CATALOG.read_text(encoding="utf-8"))
+
+
+def python_definitions(source):
+    """Source anchors, not semantic assertions or newly collected runner cases."""
+    definitions = []
+
+    def visit(node, classes=()):
+        if isinstance(node, ast.ClassDef):
+            classes += (node.name,)
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name.startswith("test_"):
+            evidence = set()
+            for child in ast.walk(node):
+                if isinstance(child, ast.Assert):
+                    evidence.add((child.lineno, "assert"))
+                if isinstance(child, ast.Call):
+                    function = ast.unparse(child.func)
+                    last = function.rsplit(".", 1)[-1]
+                    if function == "expect":
+                        evidence.add((child.lineno, "playwright_expect"))
+                    elif last == "wait_for_function":
+                        evidence.add((child.lineno, "wait_for_function"))
+                    elif last == "fail":
+                        evidence.add((child.lineno, "explicit_failure"))
+                    elif last.startswith("assert") or function == "pytest.raises":
+                        evidence.add((child.lineno, "assertion_or_helper_call"))
+            definitions.append({"name": "::".join(classes + (node.name,)),
+                                "line": node.lineno, "end_line": node.end_lineno,
+                                "anchors": evidence})
+        for child in ast.iter_child_nodes(node):
+            visit(child, classes)
+
+    visit(ast.parse(source))
+    return definitions
+
+
+def check_definition_anchors(item, actual, problems):
+    expected = {(d["name"], d["line"], d["end_line"]) for d in actual}
+    recorded = {(d["name"], d["line"], d["end_line"]) for d in item["definitions"]}
+    if expected != recorded or len(recorded) != len(item["definitions"]):
+        problems.append(f"Definition identity/location differs from parsed source: {item['path']}")
+    by_key = {(d["name"], d["line"], d["end_line"]): d for d in actual}
+    for definition in item["definitions"]:
+        parsed = by_key.get((definition["name"], definition["line"], definition["end_line"]))
+        if not parsed:
+            continue
+        recorded_assertions = {(a["line"], a["kind"]) for a in definition["assertion_evidence"]}
+        if "registration" in parsed:
+            anchors = {(line, "expect") for line in parsed["assertion_lines"]}
+            if definition.get("registration") != parsed["registration"]:
+                problems.append(f"JavaScript registration differs: {item['path']}:{definition['line']}")
+        else:
+            anchors = parsed["anchors"]
+        if recorded_assertions != anchors:
+            problems.append(f"Assertion anchors differ from parsed source: {item['path']}:{definition['line']}")
+
+
 def main():
-    data = json.loads(CATALOG.read_text(encoding="utf-8"))
+    data = read_inventory()
     problems = []
     files = data["files"]
     paths = [item["path"] for item in files]
+    javascript = [p for p in paths if p.endswith(".mjs")]
+    try:
+        js_definitions = json.loads(subprocess.check_output(
+            ["node", str(CATALOG.with_name("javascript_evidence.mjs")), *javascript],
+            cwd=ROOT, text=True, stderr=subprocess.PIPE))
+    except (OSError, subprocess.CalledProcessError, ValueError):
+        js_definitions = {}
+        problems.append("Cannot parse JavaScript evidence; node and locked npm dependencies required (npm ci)")
     if len(paths) != len(set(paths)):
         problems.append("Duplicate test paths in inventory")
     actual = {
@@ -43,6 +110,10 @@ def main():
         if "definitions" not in item:
             continue
         length = len(source.decode("utf-8").splitlines())
+        if path.suffix == ".py":
+            check_definition_anchors(item, python_definitions(source.decode("utf-8-sig")), problems)
+        elif item["path"] in js_definitions:
+            check_definition_anchors(item, js_definitions[item["path"]], problems)
         if length != item["source_lines"]:
             problems.append(f"Line count changed: {item['path']}")
         for definition in item["definitions"]:
@@ -97,7 +168,7 @@ def main():
             print(problem)
         return 1
     print(f"OK: {len(files)} files, {observed_totals['static_definitions']} definitions, "
-          f"{observed_totals['runner_cases']} runner cases; snapshot hashes and locations match.")
+          f"{observed_totals['runner_cases']} historical runner cases; hashes and parsed definition/assertion anchors match.")
     print("Historical execution evidence only; semantic coverage is not revalidated by this check.")
     return 0
 
