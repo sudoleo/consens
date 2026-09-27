@@ -97,6 +97,7 @@ class DelegationLoop(AgentLoop):
         self.answer_conversation = [{"role": message["role"], "content": message["content"]}
                                     for message in self.messages if message["role"] in {"user", "assistant"}]
         self.file_context = file_context
+        self.documents = None
         self.config = dict(delegation_config)
         self.cooldowns = cooldowns or provider_cooldowns
         self.workers = {}
@@ -152,10 +153,16 @@ class DelegationLoop(AgentLoop):
 
         if self.file_context:
             from app.services.agent_files import UNTRUSTED
-            catalog = [{k: f[k] for k in ("id", "name", "mime", "status") if k in f}
+            catalog = [{k: f[k] for k in ("id", "name", "mime", "status", "document_id", "version") if k in f}
                        for f in self.file_context.catalog()]
             self.messages[0]["content"] += "\n" + UNTRUSTED + "\nFiles available in this chat: " + json.dumps(catalog)
             self.registry = ToolRegistry([*self.registry.tools.values(), *self.file_context.tools()], argument_limit=24_000)
+            from app.services.agent_documents import DocumentTools
+            self.documents = DocumentTools(self)
+            self.registry = ToolRegistry([*self.registry.tools.values(), *self.documents.tools()], argument_limit=50_000)
+            self.messages[0]["content"] += ("\nFor requested documents, finish comparisons, then create or revise the document BEFORE judge_answer. "
+                "Preserve material uncertainties and conflicting model assessments in the document. Read an existing version before revising. "
+                "Do not claim a file exists unless the document tool succeeded. Document content is not independently validated by the answer judges.")
 
     def _check(self, cancellation=None):
         if self.watch_error:

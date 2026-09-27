@@ -1,5 +1,21 @@
 # consens.io — Codebase Map
 
+Agent documents (27.09.2026): `agent_documents.py` registers `create_document`,
+`read_document`, and `revise_document` on the root's existing bounded ToolRegistry.
+The tools run before the immutable synthesis/review handoff. The synthesis receives
+saved output descriptors explicitly, and `resources` SSE refreshes the existing
+`agent-workspace.js` cards. No worker receives document-write tools. Files reuse
+the private owner/chat-bound store and authenticated download route from PR 1.
+`agent_document_render.py` renders strict structured content offline in a bounded
+subprocess using python-docx and ReportLab, then reopens both formats. Versions
+live at `users/{uid}/chats/{chat}/documents/{id}/versions/{number}`; the parent
+manifest serializes revisions and publication requires both saved, verified files.
+Each immutable version binds content hash, parent, turn, source-file hashes and
+comparison-answer hashes. The answer judges do not independently review these
+documents. The retention task removes expired version content after 30 days;
+chat/account deletion recursively removes all versions and their private files.
+See `docs/agent-integrations.md` for limits, font configuration and validation.
+
 Öffentliche Seiten (12.09.2026): `/model-pulse?period=all|since-2026-08-31`
 rendert Rangliste, Counts und familienbezogene Startdaten bereits serverseitig
 aus demselben 60-s-Cache wie die JSON-API. Das GET-Formular funktioniert ohne
