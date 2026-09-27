@@ -2375,11 +2375,60 @@
   "G-013": {
     "regexes": [
       "patch_watch|remove_watch|create_telegram_link|test_telegram\\(",
-      "/api/watch/|/api/my/telegram/(link|test)"
+      "/api/watch/|/api/my/telegram/(link|test)",
+      "disconnect_telegram|follow_unsubscribe|/watch/unsubscribe|/telegram/disconnect"
     ],
     "scope": "all tracked tests and helpers",
     "scanned_files": 224,
     "hits": [
+      {
+        "path": "tests/test_watch_feature.py",
+        "line": 1266,
+        "terms": [
+          "disconnect_telegram|follow_unsubscribe|/watch/unsubscribe|/telegram/disconnect"
+        ],
+        "text": "share_url=\"https://consens.io/s/q-id\", unsubscribe_url=\"https://consens.io/watch/unsubscribe?token=x\","
+      },
+      {
+        "path": "tests/test_watch_feature.py",
+        "line": 1278,
+        "terms": [
+          "disconnect_telegram|follow_unsubscribe|/watch/unsubscribe|/telegram/disconnect"
+        ],
+        "text": "unsubscribe_url=\"https://consens.io/watch/unsubscribe?token=x\","
+      },
+      {
+        "path": "tests/test_watch_feature.py",
+        "line": 1291,
+        "terms": [
+          "disconnect_telegram|follow_unsubscribe|/watch/unsubscribe|/telegram/disconnect"
+        ],
+        "text": "unsubscribe_url=\"https://consens.io/watch/unsubscribe?token=x\","
+      },
+      {
+        "path": "tests/test_watch_feature.py",
+        "line": 1305,
+        "terms": [
+          "disconnect_telegram|follow_unsubscribe|/watch/unsubscribe|/telegram/disconnect"
+        ],
+        "text": "unsubscribe_url=\"https://consens.io/watch/unsubscribe?token=x\","
+      },
+      {
+        "path": "tests/test_watch_feature.py",
+        "line": 1327,
+        "terms": [
+          "disconnect_telegram|follow_unsubscribe|/watch/unsubscribe|/telegram/disconnect"
+        ],
+        "text": "unsubscribe_url=\"https://consens.io/watch/unsubscribe?token=x\","
+      },
+      {
+        "path": "tests/test_watch_feature.py",
+        "line": 1342,
+        "terms": [
+          "disconnect_telegram|follow_unsubscribe|/watch/unsubscribe|/telegram/disconnect"
+        ],
+        "text": "unsubscribe_url=\"https://consens.io/watch/unsubscribe?token=x\","
+      },
       {
         "path": "tests/test_watch_feature.py",
         "line": 1925,
@@ -2387,13 +2436,30 @@
           "/api/watch/|/api/my/telegram/(link|test)"
         ],
         "text": "self.assertIn('\"/api/my/telegram/link\"', source)"
+      },
+      {
+        "path": "tests/test_watch_feature.py",
+        "line": 2675,
+        "terms": [
+          "disconnect_telegram|follow_unsubscribe|/watch/unsubscribe|/telegram/disconnect"
+        ],
+        "text": "token = watch_followers.make_follow_unsubscribe_token(self.share_id, \"visitor@example.com\")"
+      },
+      {
+        "path": "tests/test_watch_feature.py",
+        "line": 2681,
+        "terms": [
+          "disconnect_telegram|follow_unsubscribe|/watch/unsubscribe|/telegram/disconnect"
+        ],
+        "text": "unsubscribe = watch_followers.make_follow_unsubscribe_token(self.share_id, \"a@example.com\")"
       }
     ]
   },
   "G-014": {
     "regexes": [
       "admin_update_topic|topics_hub|sitemap_topics|follow_topic|_require_admin",
-      "/api/admin/topics|/sitemap-topics.xml"
+      "/api/admin/topics|/sitemap-topics.xml",
+      "confirm_topic_follow|unsubscribe_topic|admin_list_topics|/topics/follow"
     ],
     "scope": "all tracked tests and helpers",
     "scanned_files": 224,
@@ -18451,6 +18517,1019 @@
           "does not truncate or rewrite unchanged vendor"
         ],
         "text": "it(\"does not truncate or rewrite unchanged vendor and bundle files\", async () => {"
+      }
+    ]
+  },
+  "G-037": {
+    "regexes": [
+      "Retry.After|enforce_uid_rate_limit|handle_http_exception",
+      "TestClient\\(main\\.app\\)"
+    ],
+    "scope": "all tracked tests and helpers",
+    "scanned_files": 224,
+    "hits": [
+      {
+        "path": "tests/js/agent-answer-actions.test.mjs",
+        "line": 45,
+        "terms": [
+          "Retry.After|enforce_uid_rate_limit|handle_http_exception"
+        ],
+        "text": "it('does not apply late clipboard feedback to a different answer and allows retry after denial', async () => {"
+      },
+      {
+        "path": "tests/test_agent_capacity.py",
+        "line": 83,
+        "terms": [
+          "Retry.After|enforce_uid_rate_limit|handle_http_exception"
+        ],
+        "text": "assert response.status_code == 503 and response.headers[\"retry-after\"] == \"5\""
+      },
+      {
+        "path": "tests/test_agent_delegation.py",
+        "line": 398,
+        "terms": [
+          "Retry.After|enforce_uid_rate_limit|handle_http_exception"
+        ],
+        "text": "raise _ProviderHTTPStatusError(429, retry_after=10)"
+      },
+      {
+        "path": "tests/test_agent_search.py",
+        "line": 98,
+        "terms": [
+          "Retry.After|enforce_uid_rate_limit|handle_http_exception"
+        ],
+        "text": "_raise_provider_http_status(SimpleNamespace(status_code=429, headers={\"Retry-After\": header}, text=\"private provider body\"))"
+      },
+      {
+        "path": "tests/test_agent_search.py",
+        "line": 99,
+        "terms": [
+          "Retry.After|enforce_uid_rate_limit|handle_http_exception"
+        ],
+        "text": "assert caught.value.retry_after == expected"
+      },
+      {
+        "path": "tests/test_agent_search.py",
+        "line": 107,
+        "terms": [
+          "Retry.After|enforce_uid_rate_limit|handle_http_exception"
+        ],
+        "text": "gate.record(model, \"one\", _ProviderHTTPStatusError(429, retry_after=60))"
+      },
+      {
+        "path": "tests/test_agent_search.py",
+        "line": 110,
+        "terms": [
+          "Retry.After|enforce_uid_rate_limit|handle_http_exception"
+        ],
+        "text": "assert caught.value.retry_after == 60"
+      },
+      {
+        "path": "tests/test_agent_search.py",
+        "line": 131,
+        "terms": [
+          "Retry.After|enforce_uid_rate_limit|handle_http_exception"
+        ],
+        "text": "raise _ProviderHTTPStatusError(429, retry_after=60)"
+      },
+      {
+        "path": "tests/test_agent_search.py",
+        "line": 139,
+        "terms": [
+          "Retry.After|enforce_uid_rate_limit|handle_http_exception"
+        ],
+        "text": "assert second.status_code == 429 and int(second.headers[\"retry-after\"]) > 0"
+      },
+      {
+        "path": "tests/test_consensus_api.py",
+        "line": 77,
+        "terms": [
+          "Retry.After|enforce_uid_rate_limit|handle_http_exception"
+        ],
+        "text": "monkeypatch.setattr(api_v1, \"enforce_uid_rate_limit\", lambda *args: None)"
+      },
+      {
+        "path": "tests/test_consensus_api.py",
+        "line": 171,
+        "terms": [
+          "TestClient\\(main\\.app\\)"
+        ],
+        "text": "client = TestClient(main.app)"
+      },
+      {
+        "path": "tests/test_consensus_api.py",
+        "line": 222,
+        "terms": [
+          "TestClient\\(main\\.app\\)"
+        ],
+        "text": "client = TestClient(main.app)"
+      },
+      {
+        "path": "tests/test_consensus_api.py",
+        "line": 256,
+        "terms": [
+          "TestClient\\(main\\.app\\)"
+        ],
+        "text": "client = TestClient(main.app)"
+      },
+      {
+        "path": "tests/test_consensus_api.py",
+        "line": 273,
+        "terms": [
+          "TestClient\\(main\\.app\\)"
+        ],
+        "text": "client = TestClient(main.app)"
+      },
+      {
+        "path": "tests/test_consensus_api.py",
+        "line": 306,
+        "terms": [
+          "TestClient\\(main\\.app\\)"
+        ],
+        "text": "client = TestClient(main.app)"
+      },
+      {
+        "path": "tests/test_consensus_api.py",
+        "line": 326,
+        "terms": [
+          "TestClient\\(main\\.app\\)"
+        ],
+        "text": "client = TestClient(main.app)"
+      },
+      {
+        "path": "tests/test_consensus_api.py",
+        "line": 360,
+        "terms": [
+          "TestClient\\(main\\.app\\)"
+        ],
+        "text": "client = TestClient(main.app)"
+      },
+      {
+        "path": "tests/test_consensus_api.py",
+        "line": 382,
+        "terms": [
+          "TestClient\\(main\\.app\\)"
+        ],
+        "text": "client = TestClient(main.app)"
+      },
+      {
+        "path": "tests/test_consensus_api.py",
+        "line": 403,
+        "terms": [
+          "TestClient\\(main\\.app\\)"
+        ],
+        "text": "client = TestClient(main.app)"
+      },
+      {
+        "path": "tests/test_consensus_api.py",
+        "line": 415,
+        "terms": [
+          "TestClient\\(main\\.app\\)"
+        ],
+        "text": "client = TestClient(main.app)"
+      },
+      {
+        "path": "tests/test_consensus_api.py",
+        "line": 426,
+        "terms": [
+          "TestClient\\(main\\.app\\)"
+        ],
+        "text": "client = TestClient(main.app)"
+      },
+      {
+        "path": "tests/test_consensus_api.py",
+        "line": 448,
+        "terms": [
+          "TestClient\\(main\\.app\\)"
+        ],
+        "text": "client = TestClient(main.app)"
+      },
+      {
+        "path": "tests/test_consensus_api.py",
+        "line": 473,
+        "terms": [
+          "TestClient\\(main\\.app\\)"
+        ],
+        "text": "client = TestClient(main.app)"
+      },
+      {
+        "path": "tests/test_consensus_api.py",
+        "line": 811,
+        "terms": [
+          "TestClient\\(main\\.app\\)"
+        ],
+        "text": "client = TestClient(main.app)"
+      },
+      {
+        "path": "tests/test_consensus_api.py",
+        "line": 877,
+        "terms": [
+          "TestClient\\(main\\.app\\)"
+        ],
+        "text": "client = TestClient(main.app)"
+      },
+      {
+        "path": "tests/test_consensus_api.py",
+        "line": 922,
+        "terms": [
+          "TestClient\\(main\\.app\\)"
+        ],
+        "text": "response = TestClient(main.app).post("
+      },
+      {
+        "path": "tests/test_consensus_api.py",
+        "line": 960,
+        "terms": [
+          "TestClient\\(main\\.app\\)"
+        ],
+        "text": "client = TestClient(main.app)"
+      },
+      {
+        "path": "tests/test_model_leaderboard.py",
+        "line": 70,
+        "terms": [
+          "Retry.After|enforce_uid_rate_limit|handle_http_exception"
+        ],
+        "text": "assert page.headers[\"retry-after\"] == \"60\""
+      },
+      {
+        "path": "tests/test_security_controls.py",
+        "line": 69,
+        "terms": [
+          "TestClient\\(main\\.app\\)"
+        ],
+        "text": "client = TestClient(main.app)"
+      }
+    ]
+  },
+  "G-038": {
+    "regexes": [
+      "\\.undo\\(|/memory/undo",
+      "over.*limit|memory_limit"
+    ],
+    "scope": "all tracked tests and helpers",
+    "scanned_files": 224,
+    "hits": [
+      {
+        "path": "tests/e2e/test_agent_chat_frontend.py",
+        "line": 667,
+        "terms": [
+          "over.*limit|memory_limit"
+        ],
+        "text": "code:'agent_token_reservation', recoverable:false, token_budget:{used:61122, remaining:188878, reserved:0, unknown:100000, limit:250000, observed_at:3}})\"\"\")"
+      },
+      {
+        "path": "tests/e2e/test_contradiction_source_ui.py",
+        "line": 44,
+        "terms": [
+          "over.*limit|memory_limit"
+        ],
+        "text": "coverage_limited:true,"
+      },
+      {
+        "path": "tests/e2e/test_contradiction_source_ui.py",
+        "line": 85,
+        "terms": [
+          "over.*limit|memory_limit"
+        ],
+        "text": "check.findings[0]={...check.findings[0],checked:false,state:'unavailable',reason_code:'invalid_output',evidence:[],reason:'',coverage_limited:false};"
+      },
+      {
+        "path": "tests/js/consensus-coverage-verdict.test.mjs",
+        "line": 25,
+        "terms": [
+          "over.*limit|memory_limit"
+        ],
+        "text": "const verdict = render({ score: 64, coverage_status: \"limited\", coverage_percent: 50, scored_claims: 2, total_claims: 4, evidence_incomplete: true });"
+      },
+      {
+        "path": "tests/js/math-render.test.mjs",
+        "line": 62,
+        "terms": [
+          "over.*limit|memory_limit"
+        ],
+        "text": "it(\"recovers a formula once its streaming delimiter is complete\", async () => {"
+      },
+      {
+        "path": "tests/test_chat_history.py",
+        "line": 492,
+        "terms": [
+          "over.*limit|memory_limit"
+        ],
+        "text": "over_limit = client.get(\"/chats?limit=51\", headers=AUTH_OWNER)"
+      },
+      {
+        "path": "tests/test_chat_history.py",
+        "line": 501,
+        "terms": [
+          "over.*limit|memory_limit"
+        ],
+        "text": "assert over_limit.status_code == 422"
+      },
+      {
+        "path": "tests/test_chat_history.py",
+        "line": 699,
+        "terms": [
+          "over.*limit|memory_limit"
+        ],
+        "text": "over_limit = client.get(f\"/chats/{chat['id']}/turns?limit=101\", headers=AUTH_OWNER)"
+      },
+      {
+        "path": "tests/test_chat_history.py",
+        "line": 706,
+        "terms": [
+          "over.*limit|memory_limit"
+        ],
+        "text": "assert over_limit.status_code == 422"
+      },
+      {
+        "path": "tests/test_contradiction_verification.py",
+        "line": 235,
+        "terms": [
+          "over.*limit|memory_limit"
+        ],
+        "text": "fetch=lambda *_: pytest.fail('Over-budget metadata must not fetch'), judge=lambda *_: pytest.fail('Input limit'))"
+      },
+      {
+        "path": "tests/test_coverage_judge.py",
+        "line": 259,
+        "terms": [
+          "over.*limit|memory_limit"
+        ],
+        "text": "self.assertEqual(scored[\"coverage_status\"], \"limited\")"
+      },
+      {
+        "path": "tests/test_followup_context.py",
+        "line": 304,
+        "terms": [
+          "over.*limit|memory_limit"
+        ],
+        "text": "oversized_consensus = \"c\" * (cfg.get_followup_consensus_char_limit() + 10_000)"
+      },
+      {
+        "path": "tests/test_memory_edit.py",
+        "line": 140,
+        "terms": [
+          "over.*limit|memory_limit"
+        ],
+        "text": "memory_limit=12_000,"
+      },
+      {
+        "path": "tests/test_memory_edit.py",
+        "line": 150,
+        "terms": [
+          "\\.undo\\(|/memory/undo"
+        ],
+        "text": "undone = repository.undo("
+      },
+      {
+        "path": "tests/test_memory_edit.py",
+        "line": 153,
+        "terms": [
+          "over.*limit|memory_limit"
+        ],
+        "text": "memory_limit=12_000,"
+      },
+      {
+        "path": "tests/test_memory_edit.py",
+        "line": 182,
+        "terms": [
+          "over.*limit|memory_limit"
+        ],
+        "text": "memory_limit=12_000,"
+      },
+      {
+        "path": "tests/test_memory_edit.py",
+        "line": 316,
+        "terms": [
+          "over.*limit|memory_limit"
+        ],
+        "text": "memory_limit=12_000,"
+      },
+      {
+        "path": "tests/test_memory_edit.py",
+        "line": 361,
+        "terms": [
+          "over.*limit|memory_limit"
+        ],
+        "text": "assert exc.value.code == \"memory_limit\""
+      },
+      {
+        "path": "tests/test_run_usage_repository.py",
+        "line": 112,
+        "terms": [
+          "over.*limit|memory_limit"
+        ],
+        "text": "def test_parallel_unique_reservations_cannot_oversubscribe_limit(usage_repo):"
+      }
+    ]
+  },
+  "G-039": {
+    "regexes": [
+      "/agents|/stop",
+      "agent_details|stop_agent_run|stop_turn"
+    ],
+    "scope": "all tracked tests and helpers",
+    "scanned_files": 224,
+    "hits": [
+      {
+        "path": "tests/e2e/test_agent_comparison_frontend.py",
+        "line": 214,
+        "terms": [
+          "/agents|/stop"
+        ],
+        "text": "page.route(f\"**/agent/chats/{chat}/turns/{turn}/agents\", lambda r: _json(r, {\"agents\": agents, \"status\": \"succeeded\"}))"
+      },
+      {
+        "path": "tests/e2e/test_agent_comparison_frontend.py",
+        "line": 215,
+        "terms": [
+          "/agents|/stop"
+        ],
+        "text": "page.route(f\"**/agent/chats/{chat}/turns/{turn}/agents/*\", lambda r: _json(r, {\"agent\": {\"assignment\": {\"goal\": \"Compare plans\"}}, \"messages\": [], \"has_more\": False}))"
+      },
+      {
+        "path": "tests/e2e/test_agent_delegation_frontend.py",
+        "line": 27,
+        "terms": [
+          "/agents|/stop"
+        ],
+        "text": "page.route(f'**/agent/chats/{chat}/turns/{turn}/agents', lambda r: _json(r, {\"agents\": [agent], \"status\": \"running\"}))"
+      },
+      {
+        "path": "tests/e2e/test_agent_delegation_frontend.py",
+        "line": 131,
+        "terms": [
+          "/agents|/stop"
+        ],
+        "text": "page.route(f\"**/agent/chats/{chat}/turns/{turn}/agents\", lambda r: _json(r, {\"agents\": agents, \"status\": \"succeeded\", \"usage\": usage}))"
+      },
+      {
+        "path": "tests/e2e/test_agent_delegation_frontend.py",
+        "line": 138,
+        "terms": [
+          "/agents|/stop"
+        ],
+        "text": "page.route(f\"**/agent/chats/{chat}/turns/{turn}/agents/*\", details)"
+      },
+      {
+        "path": "tests/e2e/test_agent_delegation_frontend.py",
+        "line": 180,
+        "terms": [
+          "/agents|/stop"
+        ],
+        "text": "if (String(url).includes('/agents/') && !window.__detailDelayUsed) {"
+      },
+      {
+        "path": "tests/js/agent-delegation.test.mjs",
+        "line": 196,
+        "terms": [
+          "/agents|/stop"
+        ],
+        "text": "expect(w.fetch.mock.calls.every(([url]) => url.endsWith('/agents'))).toBe(true);"
+      },
+      {
+        "path": "tests/js/agent-delegation.test.mjs",
+        "line": 261,
+        "terms": [
+          "/agents|/stop"
+        ],
+        "text": "expect(w.fetch.mock.calls.every(([url]) => url.includes(\"/agents\"))).toBe(true);"
+      },
+      {
+        "path": "tests/test_agent_delegation.py",
+        "line": 266,
+        "terms": [
+          "/agents|/stop"
+        ],
+        "text": "url = f\"/agent/chats/{loop.chat_id}/turns/{loop.turn_id}/agents\""
+      },
+      {
+        "path": "tests/test_agent_runs.py",
+        "line": 329,
+        "terms": [
+          "/agents|/stop"
+        ],
+        "text": "data = client.get(f\"/agent/chats/{chat_id}/turns/{turn['id']}/agents\", headers=AUTH).json()"
+      }
+    ]
+  },
+  "G-040": {
+    "regexes": [
+      "persist_and_activate_models|activation_error",
+      "rollback|restores_persisted"
+    ],
+    "scope": "all tracked tests and helpers",
+    "scanned_files": 224,
+    "hits": [
+      {
+        "path": "tests/test_firestore_read_contracts.py",
+        "line": 28,
+        "terms": [
+          "rollback|restores_persisted"
+        ],
+        "text": "rpc = Mock(spec=[\"begin_transaction\", \"run_query\", \"run_aggregation_query\", \"commit\", \"rollback\"])"
+      },
+      {
+        "path": "tests/test_firestore_read_contracts.py",
+        "line": 55,
+        "terms": [
+          "rollback|restores_persisted"
+        ],
+        "text": "rpc.rollback.assert_not_called()"
+      },
+      {
+        "path": "tests/test_model_configuration.py",
+        "line": 71,
+        "terms": [
+          "persist_and_activate_models|activation_error"
+        ],
+        "text": "def test_runtime_reload_rolls_back_all_mutations_on_activation_error(self):"
+      },
+      {
+        "path": "tests/test_model_configuration.py",
+        "line": 97,
+        "terms": [
+          "persist_and_activate_models|activation_error",
+          "rollback|restores_persisted"
+        ],
+        "text": "def test_admin_update_restores_persisted_document_on_activation_error(self):"
+      },
+      {
+        "path": "tests/test_phase4_frontend.py",
+        "line": 154,
+        "terms": [
+          "rollback|restores_persisted"
+        ],
+        "text": "def test_watch_modal_route_and_brief_state_have_deterministic_rollback_contracts():"
+      },
+      {
+        "path": "tests/test_reasoning_policy.py",
+        "line": 93,
+        "terms": [
+          "persist_and_activate_models|activation_error"
+        ],
+        "text": "with mock.patch.object(admin, \"_require_admin\"), mock.patch.object(admin, \"_persist_and_activate_models\") as persist:"
+      },
+      {
+        "path": "tests/test_reasoning_policy.py",
+        "line": 105,
+        "terms": [
+          "persist_and_activate_models|activation_error"
+        ],
+        "text": "with mock.patch.object(admin, \"_require_admin\"), mock.patch.object(admin, \"_persist_and_activate_models\") as persist:"
+      },
+      {
+        "path": "tests/test_reasoning_policy.py",
+        "line": 110,
+        "terms": [
+          "rollback|restores_persisted"
+        ],
+        "text": "def test_reload_and_activation_rollback_include_reasoning_policy():"
+      },
+      {
+        "path": "tests/test_source_model_configuration.py",
+        "line": 53,
+        "terms": [
+          "persist_and_activate_models|activation_error"
+        ],
+        "text": "monkeypatch.setattr(admin, '_persist_and_activate_models', write)"
+      },
+      {
+        "path": "tests/test_source_model_configuration.py",
+        "line": 67,
+        "terms": [
+          "persist_and_activate_models|activation_error"
+        ],
+        "text": "monkeypatch.setattr(admin, '_persist_and_activate_models', write)"
+      },
+      {
+        "path": "tests/test_source_model_configuration.py",
+        "line": 138,
+        "terms": [
+          "persist_and_activate_models|activation_error"
+        ],
+        "text": "monkeypatch.setattr(admin, '_persist_and_activate_models', write)"
+      },
+      {
+        "path": "tests/test_source_model_configuration.py",
+        "line": 153,
+        "terms": [
+          "persist_and_activate_models|activation_error"
+        ],
+        "text": "monkeypatch.setattr(admin, '_persist_and_activate_models', write)"
+      }
+    ]
+  },
+  "G-041": {
+    "regexes": [
+      "_require_admin|check_revoked|TierStatusUnavailable",
+      "/api/admin/topics"
+    ],
+    "scope": "all tracked tests and helpers",
+    "scanned_files": 224,
+    "hits": [
+      {
+        "path": "tests/test_account_tier_admin.py",
+        "line": 255,
+        "terms": [
+          "_require_admin|check_revoked|TierStatusUnavailable"
+        ],
+        "text": "def test_endpoints_require_admin(client, db):"
+      },
+      {
+        "path": "tests/test_auth_revocation.py",
+        "line": 19,
+        "terms": [
+          "_require_admin|check_revoked|TierStatusUnavailable"
+        ],
+        "text": "assert security.verify_user_token(\"token\", check_revoked=True) == \"owner\""
+      },
+      {
+        "path": "tests/test_auth_revocation.py",
+        "line": 21,
+        "terms": [
+          "_require_admin|check_revoked|TierStatusUnavailable"
+        ],
+        "text": "assert verify.call_args.kwargs[\"check_revoked\"] is True"
+      },
+      {
+        "path": "tests/test_auth_revocation.py",
+        "line": 62,
+        "terms": [
+          "_require_admin|check_revoked|TierStatusUnavailable"
+        ],
+        "text": "side_effect=security.TierStatusUnavailable(\"outage\"),"
+      },
+      {
+        "path": "tests/test_auth_revocation.py",
+        "line": 66,
+        "terms": [
+          "_require_admin|check_revoked|TierStatusUnavailable"
+        ],
+        "text": "admin_router._require_admin(request, {})"
+      },
+      {
+        "path": "tests/test_auth_revocation.py",
+        "line": 68,
+        "terms": [
+          "_require_admin|check_revoked|TierStatusUnavailable"
+        ],
+        "text": "assert verify.call_args.kwargs[\"check_revoked\"] is True"
+      },
+      {
+        "path": "tests/test_consensus_api.py",
+        "line": 164,
+        "terms": [
+          "_require_admin|check_revoked|TierStatusUnavailable"
+        ],
+        "text": "monkeypatch.setattr(admin_router, \"_require_admin\", lambda request, data: \"admin-1\")"
+      },
+      {
+        "path": "tests/test_consensus_api.py",
+        "line": 208,
+        "terms": [
+          "_require_admin|check_revoked|TierStatusUnavailable"
+        ],
+        "text": "monkeypatch.setattr(admin_router, \"_require_admin\", lambda request, data: \"admin-1\")"
+      },
+      {
+        "path": "tests/test_consensus_api.py",
+        "line": 244,
+        "terms": [
+          "_require_admin|check_revoked|TierStatusUnavailable"
+        ],
+        "text": "monkeypatch.setattr(admin_router, \"_require_admin\", lambda request, data: \"admin-1\")"
+      },
+      {
+        "path": "tests/test_model_configuration.py",
+        "line": 61,
+        "terms": [
+          "_require_admin|check_revoked|TierStatusUnavailable"
+        ],
+        "text": "mock.patch.object(admin_router, \"_require_admin\"),"
+      },
+      {
+        "path": "tests/test_model_configuration.py",
+        "line": 113,
+        "terms": [
+          "_require_admin|check_revoked|TierStatusUnavailable"
+        ],
+        "text": "mock.patch.object(admin_router, \"_require_admin\"),"
+      },
+      {
+        "path": "tests/test_model_configuration.py",
+        "line": 214,
+        "terms": [
+          "_require_admin|check_revoked|TierStatusUnavailable"
+        ],
+        "text": "mock.patch.object(admin_router, \"_require_admin\"),"
+      },
+      {
+        "path": "tests/test_prompt_config.py",
+        "line": 72,
+        "terms": [
+          "_require_admin|check_revoked|TierStatusUnavailable"
+        ],
+        "text": "assert kwargs.get(\"check_revoked\") is True"
+      },
+      {
+        "path": "tests/test_reasoning_policy.py",
+        "line": 93,
+        "terms": [
+          "_require_admin|check_revoked|TierStatusUnavailable"
+        ],
+        "text": "with mock.patch.object(admin, \"_require_admin\"), mock.patch.object(admin, \"_persist_and_activate_models\") as persist:"
+      },
+      {
+        "path": "tests/test_reasoning_policy.py",
+        "line": 105,
+        "terms": [
+          "_require_admin|check_revoked|TierStatusUnavailable"
+        ],
+        "text": "with mock.patch.object(admin, \"_require_admin\"), mock.patch.object(admin, \"_persist_and_activate_models\") as persist:"
+      },
+      {
+        "path": "tests/test_seo_data.py",
+        "line": 448,
+        "terms": [
+          "_require_admin|check_revoked|TierStatusUnavailable"
+        ],
+        "text": "def test_admin_endpoints_require_admin(monkeypatch):"
+      },
+      {
+        "path": "tests/test_source_model_configuration.py",
+        "line": 51,
+        "terms": [
+          "_require_admin|check_revoked|TierStatusUnavailable"
+        ],
+        "text": "monkeypatch.setattr(admin, '_require_admin', lambda *_: None)"
+      },
+      {
+        "path": "tests/test_source_model_configuration.py",
+        "line": 64,
+        "terms": [
+          "_require_admin|check_revoked|TierStatusUnavailable"
+        ],
+        "text": "monkeypatch.setattr(admin, '_require_admin', lambda *_: None)"
+      },
+      {
+        "path": "tests/test_source_model_configuration.py",
+        "line": 101,
+        "terms": [
+          "_require_admin|check_revoked|TierStatusUnavailable"
+        ],
+        "text": "monkeypatch.setattr(admin, '_require_admin', lambda *_: None)"
+      },
+      {
+        "path": "tests/test_source_model_configuration.py",
+        "line": 136,
+        "terms": [
+          "_require_admin|check_revoked|TierStatusUnavailable"
+        ],
+        "text": "monkeypatch.setattr(admin, '_require_admin', lambda *_: None)"
+      },
+      {
+        "path": "tests/test_source_model_configuration.py",
+        "line": 150,
+        "terms": [
+          "_require_admin|check_revoked|TierStatusUnavailable"
+        ],
+        "text": "monkeypatch.setattr(admin, '_require_admin', lambda *_: None)"
+      },
+      {
+        "path": "tests/test_source_model_configuration.py",
+        "line": 210,
+        "terms": [
+          "_require_admin|check_revoked|TierStatusUnavailable"
+        ],
+        "text": "monkeypatch.setattr(admin, '_require_admin', lambda *_: None)"
+      },
+      {
+        "path": "tests/test_tier_cache.py",
+        "line": 104,
+        "terms": [
+          "_require_admin|check_revoked|TierStatusUnavailable"
+        ],
+        "text": "with pytest.raises(security.TierStatusUnavailable):"
+      },
+      {
+        "path": "tests/test_tier_cache.py",
+        "line": 106,
+        "terms": [
+          "_require_admin|check_revoked|TierStatusUnavailable"
+        ],
+        "text": "with pytest.raises(security.TierStatusUnavailable):"
+      },
+      {
+        "path": "tests/test_topics_feature.py",
+        "line": 1042,
+        "terms": [
+          "_require_admin|check_revoked|TierStatusUnavailable"
+        ],
+        "text": "monkeypatch.setattr(topics_router, \"_require_admin\", lambda request, data=None: \"admin\")"
+      },
+      {
+        "path": "tests/test_topics_feature.py",
+        "line": 1048,
+        "terms": [
+          "/api/admin/topics"
+        ],
+        "text": "created = client.post(\"/api/admin/topics\", json=topic_payload())"
+      },
+      {
+        "path": "tests/test_topics_feature.py",
+        "line": 1052,
+        "terms": [
+          "/api/admin/topics"
+        ],
+        "text": "f\"/api/admin/topics/{topic_id}/runs\", json=run_payload()"
+      },
+      {
+        "path": "tests/test_topics_feature.py",
+        "line": 1056,
+        "terms": [
+          "/api/admin/topics"
+        ],
+        "text": "detail = client.get(f\"/api/admin/topics/{topic_id}\")"
+      }
+    ]
+  },
+  "G-042": {
+    "regexes": [
+      "malformed_response|provider_http_error|response_parse_failed",
+      "index_existing|retry_failed|abstain"
+    ],
+    "scope": "all tracked tests and helpers",
+    "scanned_files": 224,
+    "hits": [
+      {
+        "path": "tests/test_benchmark_parse.py",
+        "line": 60,
+        "terms": [
+          "index_existing|retry_failed|abstain"
+        ],
+        "text": "def test_abstain_votes_ignored(self):"
+      },
+      {
+        "path": "tests/test_benchmark_parse.py",
+        "line": 63,
+        "terms": [
+          "index_existing|retry_failed|abstain"
+        ],
+        "text": "def test_all_abstain_is_no_majority(self):"
+      },
+      {
+        "path": "tests/test_benchmark_report_reader.py",
+        "line": 46,
+        "terms": [
+          "index_existing|retry_failed|abstain"
+        ],
+        "text": "\"provider\": \"openai\", \"extracted_letter\": \"C\", \"correct\": True, \"abstain\": False, \"error\": None},"
+      },
+      {
+        "path": "tests/test_benchmark_report_reader.py",
+        "line": 48,
+        "terms": [
+          "index_existing|retry_failed|abstain"
+        ],
+        "text": "\"provider\": \"grok\", \"extracted_letter\": \"A\", \"correct\": False, \"abstain\": False, \"error\": None},"
+      },
+      {
+        "path": "tests/test_benchmark_report_reader.py",
+        "line": 51,
+        "terms": [
+          "index_existing|retry_failed|abstain"
+        ],
+        "text": "\"provider\": \"gemini-x\", \"extracted_letter\": None, \"correct\": False, \"abstain\": False, \"error\": \"boom\"},"
+      },
+      {
+        "path": "tests/test_benchmark_report_reader.py",
+        "line": 53,
+        "terms": [
+          "index_existing|retry_failed|abstain"
+        ],
+        "text": "\"provider\": \"gemini-x\", \"extracted_letter\": \"C\", \"correct\": True, \"abstain\": False, \"error\": None},"
+      },
+      {
+        "path": "tests/test_benchmark_reports.py",
+        "line": 67,
+        "terms": [
+          "index_existing|retry_failed|abstain"
+        ],
+        "text": "\"abstain\": False,"
+      },
+      {
+        "path": "tests/test_benchmark_results.py",
+        "line": 13,
+        "terms": [
+          "index_existing|retry_failed|abstain"
+        ],
+        "text": "abstain=False, cost=0.01, latency=100.0, category=\"math\"):"
+      },
+      {
+        "path": "tests/test_benchmark_results.py",
+        "line": 20,
+        "terms": [
+          "index_existing|retry_failed|abstain"
+        ],
+        "text": "\"correct\": correct, \"abstain\": abstain,"
+      },
+      {
+        "path": "tests/test_benchmark_results.py",
+        "line": 28,
+        "terms": [
+          "index_existing|retry_failed|abstain"
+        ],
+        "text": "# Q1 (gt B): alle 6 Modelle B (Einigkeit). Q2 (gt C): C,C,C,A,error,abstain."
+      },
+      {
+        "path": "tests/test_benchmark_results.py",
+        "line": 41,
+        "terms": [
+          "index_existing|retry_failed|abstain"
+        ],
+        "text": "rows.append(cell(2, \"model\", \"grok\", None, \"C\", abstain=True, category=\"law\"))"
+      },
+      {
+        "path": "tests/test_benchmark_results.py",
+        "line": 63,
+        "terms": [
+          "index_existing|retry_failed|abstain"
+        ],
+        "text": "def test_error_abstain_and_parse_rate(self):"
+      },
+      {
+        "path": "tests/test_benchmark_results.py",
+        "line": 71,
+        "terms": [
+          "index_existing|retry_failed|abstain"
+        ],
+        "text": "self.assertEqual(grok[\"abstain\"], 1)        # Q2 ohne Buchstabe"
+      },
+      {
+        "path": "tests/test_benchmark_run.py",
+        "line": 37,
+        "terms": [
+          "malformed_response|provider_http_error|response_parse_failed"
+        ],
+        "text": "\"error\": \"boom\", \"error_code\": \"provider_http_error\","
+      },
+      {
+        "path": "tests/test_benchmark_run.py",
+        "line": 141,
+        "terms": [
+          "malformed_response|provider_http_error|response_parse_failed"
+        ],
+        "text": "self.assertEqual(mistral_err[0][\"error_code\"], \"provider_http_error\")"
+      },
+      {
+        "path": "tests/test_benchmark_run.py",
+        "line": 147,
+        "terms": [
+          "index_existing|retry_failed|abstain"
+        ],
+        "text": "# 2) Resume ohne retry_failed: mistral wird NICHT erneut versucht."
+      },
+      {
+        "path": "tests/test_benchmark_run.py",
+        "line": 150,
+        "terms": [
+          "index_existing|retry_failed|abstain"
+        ],
+        "text": "retry_failed=False)"
+      },
+      {
+        "path": "tests/test_benchmark_run.py",
+        "line": 154,
+        "terms": [
+          "index_existing|retry_failed|abstain"
+        ],
+        "text": "# 3) Resume mit retry_failed + jetzt funktionierendem Transport: mistral"
+      },
+      {
+        "path": "tests/test_benchmark_run.py",
+        "line": 159,
+        "terms": [
+          "index_existing|retry_failed|abstain"
+        ],
+        "text": "retry_failed=True)"
+      },
+      {
+        "path": "tests/test_benchmark_transport.py",
+        "line": 97,
+        "terms": [
+          "malformed_response|provider_http_error|response_parse_failed"
+        ],
+        "text": "assert result[\"error_code\"] == \"provider_http_error\""
+      },
+      {
+        "path": "tests/test_benchmark_transport.py",
+        "line": 111,
+        "terms": [
+          "malformed_response|provider_http_error|response_parse_failed"
+        ],
+        "text": "def test_malformed_response_is_structured():"
       }
     ]
   }
