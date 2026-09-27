@@ -228,7 +228,7 @@ class FirestoreAccountDeletion:
 
     def _delete_user_subcollections(self, uid: str) -> None:
         user_ref = self._db.collection("users").document(uid)
-        for name in ("bookmarks", "counters", "memory", "usage_days", "usage_runs", "llm_calls", "google_connections", "google_oauth_states"):
+        for name in ("bookmarks", "counters", "memory", "usage_days", "usage_runs", "llm_calls", "google_connections", "google_oauth_states", "google_write_intents"):
             for snap in user_ref.collection(name).stream():
                 snap.reference.delete()
 

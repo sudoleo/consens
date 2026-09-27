@@ -94,7 +94,7 @@ def extract_isolated(raw, mime):
 
 def public_file(data):
     return {key: data[key] for key in ("id", "name", "mime", "size", "sha256", "status", "warnings",
-        "created_at", "expires_at", "kind", "document_id", "version", "parent_version", "turn_id", "source_file_ids") if key in data}
+        "created_at", "expires_at", "kind", "document_id", "version", "parent_version", "turn_id", "source_file_ids", "origin") if key in data}
 
 
 class AgentFiles:
@@ -122,14 +122,14 @@ class AgentFiles:
     def quota_ref(self, uid):
         return self.db.collection("users").document(uid).collection("chat_state").document("file_quota")
 
-    def upload(self, uid, chat_id, item, *, cancellation=None):
+    def upload(self, uid, chat_id, item, *, cancellation=None, extra=None):
         self.chats.get_chat(uid, chat_id)
         parsed = parse_attachments({"attachments": [item]}, attachments_allowed=True)[0]
         extraction = extract_isolated(parsed["raw"], parsed["mime"])
         if extraction["status"] == "failed":
             raise FileUnavailable(extraction["warnings"][0])
         return self.save(uid, chat_id, raw=parsed["raw"], name=parsed["name"], mime=parsed["mime"],
-                         extraction=extraction, cancellation=cancellation)
+                         extraction=extraction, cancellation=cancellation, extra=extra)
 
     def save(self, uid, chat_id, *, raw, name, mime, extraction, extra=None, cancellation=None):
         if not raw or len(raw) > 5 * 1024 * 1024:

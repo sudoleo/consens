@@ -1,5 +1,31 @@
 # consens.io — Codebase Map
 
+Gmail in Agent Mode (27.09.2026): `agent_gmail.py` adds root-only `gmail_read`,
+`import_gmail_attachment` and `prepare_gmail_draft` to the same server registry.
+`GoogleSelection.gmail` is explicit per message; older Calendar-only frozen
+settings normalize without changing replay identity. Shared Google connections
+request `gmail.readonly` and `gmail.send` separately. Reads target queries/IDs,
+paginate complete threads and body excerpts, strip active HTML, and keep bounded
+account/header/message references under chat `google_evidence` (30 days). Selected
+MIME parts use the private file pipeline with an origin tuple; generated document
+versions can be attached by owned file ID. No bulk mailbox sync or raw body cache.
+
+Local drafts are immutable `actions` with `kind=gmail_send`; revisions supersede
+previous approval, preserve original-thread metadata and bind attachment hashes.
+The exact-preview confirmation endpoint constructs MIME and sends once; unknown
+results can only be searched by deterministic Message-ID in Sent. Per-user
+`google_write_intents` retain a minimal 30-day hash/status fence across chat deletion,
+preventing equivalent unresolved writes in other chats. Hourly expiry and account
+deletion remove these records; proposal bodies stay chat-owned. No model-visible
+send/confirm tool exists. UI cards restore exact To/Cc/Bcc, reply reference, body,
+attachments and checked status; restored/revised cards always require fresh review.
+
+The existing Google routing/consent rules apply to all Gmail-derived data, including
+comparisons, synthesis and judges. Local drafts need no compose/modify scope; public
+readonly use requires restricted-scope verification/security assessment as detailed
+in `docs/google-integrations-setup.md`. `tests/test_agent_gmail.py` includes the real
+files → two-model comparison → document → draft → synthesis/review integration.
+
 Google/Calendar in Agent Mode (27.09.2026): `agent_google.py` exposes owner/Pro-only
 connection controls at `/agent/google/{connections,connect,finish}` and the isolated
 popup callback. `google_connections.py` owns PKCE/state/OIDC validation, owner-bound

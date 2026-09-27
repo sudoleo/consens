@@ -214,3 +214,83 @@ Production build and build-consistency checks passed.
 Mobile follow-up correction: the expanded Google selector has a viewport-bounded
 scroll area so its next-message consent remains reachable in the fixed composer.
 Calendar browser cases explicitly exercise this after confirmation.
+
+## PR 4 — Gmail, message evidence and controlled sending
+
+Users can search relevant mail, read complete threads in bounded pages and prepare
+or revise replies using uploaded evidence and generated documents. Drafts remain
+saved in Consens until the user reviews the exact recipients, message, reply
+reference and attachment versions and explicitly confirms sending.
+
+Dependency: PR 3 / #9 (`feat/agent-google-calendar`), transitively PRs #7 and #8.
+The common OAuth/approval foundation stays in PR 3; Gmail adds separate readonly
+and send grants, three regular root tools and the Gmail action handler. Existing
+file extraction, private storage, document versioning, model comparison, immutable
+synthesis/review, token accounting, cancellation, SSE, follow-ups and restoration
+are reused. The model registry has no confirmation/send capability. Imported MIME
+parts keep account/message/part provenance; referenced message headers appear in
+restored chat cards. No unrelated mailboxes are copied into a model context.
+
+Decisions and configuration are in `google-integrations-setup.md`: enable Gmail API
+in the same Google project, use the existing secret configuration and approved
+model/hosting routes, and deploy the new `google_evidence`/`google_write_intents`
+expiry indexes. Existing Calendar-only turn settings are normalized for compatible
+replay; no content backfill is required. The privacy disclosure now includes Gmail
+and the 30-day content-free unresolved-write fence that survives chat deletion.
+
+Drafts are local to Consens, avoiding unnecessary compose/modify scope. Sending
+constructs real MIME only after server-side confirmation and rechecks all private
+attachment bytes/hashes. Revisions preserve prior versions and invalidate previous
+approval. Repeated or concurrent confirmations claim one operation. Ambiguous
+results are searched by the exact Message-ID in Sent, never automatically resent;
+a shared hash/status fence also blocks equivalent ambiguous operations in another
+chat. Account deletion and expiry block later writes. Provider errors expose no
+raw message/token response bodies.
+
+The targeted integration suite covers separate/partial grants, original-message
+reply headers, paged large threads/body continuations, external MIME text parts,
+HTML/charset handling, malformed data, attachment reuse/deletion/ownership,
+recipient/header injection, stale revisions, revoked permission, expiry, duplicate
+and ambiguous sends, provider 403/429/503, account deletion and cross-chat fences.
+A real Agent loop test loads offers, runs two independent model completions, saves
+openable DOCX/PDF with source and comparison hashes, prepares a draft with those
+files, and finishes the existing synthesis and review. All provider/model responses
+in these tests are simulated; actual tool processing, persistence, MIME generation,
+format parsing and orchestration execute.
+
+Remaining limits: bounded thread/message sizes, plain-text outgoing mail, no sender
+aliases or encrypted-mail decryption, no Gmail Drafts synchronization. Scanned-file
+and document rendering limits remain those of PRs 1/2. Public Gmail reading requires
+restricted-scope verification and the applicable security assessment for this
+server-based design; the installation guide identifies official requirements and
+an explicit staging procedure. Live Google credentials, consent-screen approval,
+Workspace policy, refresh issuance, real bucket/provider access and actual delivery
+still require deployment validation. No real mail or calendar invitation was sent.
+
+Final combined validation (2026-09-27):
+
+- `UNIT_TEST_MODE=1 python -m pytest tests --ignore=tests/e2e -q`:
+  **2,757 passed, 12 skipped**, seven pre-existing failures reproduced on pristine
+  main. The failures are `test_usage_limit_blocks_developer_key_path`, the archived
+  drawer source assertion, and five `test_followup_context` cases listed in the
+  earlier baseline record. No newly introduced failure remains.
+- Full `npm test`: **524 passed / 59 files**. The nine Google/workspace tests were
+  rerun successfully after the final file-provenance UI addition.
+- Ten built-browser cases passed: file upload/restore/private download and Gmail
+  revision/attachment download/restored approval at 1280/390/320 px, plus Calendar
+  selection/approval at those widths and the actual OAuth callback/CSP with mocked
+  provider endpoints. Gmail previews were inspected at 390/320 px. The additional
+  Calendar next-message consent assertions also passed in all four Calendar cases.
+- `npm run build`, `npm run build:check`, `git diff --check` and the standalone
+  publisher gate (`python -E -S -m unittest discover -s tests -p
+  test_publisher_standalone.py -v`, three tests) passed.
+- All external Google/model responses were simulated. File extraction, DOCX/PDF
+  rendering/reopening, MIME generation, persistent action claims, API ownership,
+  real orchestration and browser behavior executed locally. Real OAuth consent,
+  private bucket/model hosting and delivery remain the explicit staging gates.
+
+Stack review: #7 targets main, #8 targets the attachment branch, #9 targets the
+document branch, and Gmail targets the Calendar branch. Review the isolated diffs
+in that order. Preserve ancestry when merging, or restack/retarget each dependent
+PR after a squash merge; do not merge the final branch as a substitute for reviewing
+the four changes. No PR has been merged by this implementation task.

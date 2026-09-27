@@ -35,6 +35,7 @@ class GoogleSelection(Strict):
     connection_id: str = Field(pattern=r"^[a-f0-9]{32}$")
     calendar_ids: list[str] = Field(default_factory=list, max_length=5)
     calendar: bool = False
+    gmail: bool = False
     consent: Literal[True]
 
     @model_validator(mode="after")
