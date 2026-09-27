@@ -11,7 +11,7 @@ Pythonspalte: ausgeführte Statements/Statements und ausgeführte Branches/Branc
 | [.github/workflows/publish-consensus.yml](../../../.github/workflows/publish-consensus.yml) | 48 | [BUILD-03](matrix.md#build-03) | 0 | nicht gemessen |
 | [.github/workflows/publisher-tests.yml](../../../.github/workflows/publisher-tests.yml) | 22 | [BUILD-03](matrix.md#build-03) | 0 | nicht gemessen |
 | [.github/workflows/restart-render.yml](../../../.github/workflows/restart-render.yml) | 20 | [BUILD-03](matrix.md#build-03) | 0 | nicht gemessen |
-| [app/api/routers/admin.py](../../../app/api/routers/admin.py) | 1696 | [API-01](matrix.md#api-01), [SHARE-03](matrix.md#share-03), [SEO-03](matrix.md#seo-03), [ADMIN-01](matrix.md#admin-01) | 12 | 673/884 Statements; 195/256 Branches |
+| [app/api/routers/admin.py](../../../app/api/routers/admin.py) | 1696 | [AUTH-02](matrix.md#auth-02), [API-01](matrix.md#api-01), [SHARE-03](matrix.md#share-03), [SEO-03](matrix.md#seo-03), [ADMIN-01](matrix.md#admin-01) | 12 | 673/884 Statements; 195/256 Branches |
 | [app/api/routers/agent.py](../../../app/api/routers/agent.py) | 377 | [AGENT-02](matrix.md#agent-02), [AGENT-04](matrix.md#agent-04) | 6 | 249/287 Statements; 55/70 Branches |
 | [app/api/routers/api_v1.py](../../../app/api/routers/api_v1.py) | 783 | [API-01](matrix.md#api-01), [API-02](matrix.md#api-02), [API-03](matrix.md#api-03), [API-04](matrix.md#api-04), [SRC-04](matrix.md#src-04) | 1 | 261/356 Statements; 32/56 Branches |
 | [app/api/routers/auth.py](../../../app/api/routers/auth.py) | 166 | [AUTH-01](matrix.md#auth-01), [AUTH-02](matrix.md#auth-02) | 1 | 79/95 Statements; 13/22 Branches |
@@ -22,7 +22,7 @@ Pythonspalte: ausgeführte Statements/Statements und ausgeführte Branches/Branc
 | [app/api/routers/pages.py](../../../app/api/routers/pages.py) | 632 | [SEO-05](matrix.md#seo-05), [DATA-01](matrix.md#data-01) | 9 | 258/325 Statements; 57/70 Branches |
 | [app/api/routers/share.py](../../../app/api/routers/share.py) | 943 | [SHARE-01](matrix.md#share-01), [SHARE-02](matrix.md#share-02), [SHARE-03](matrix.md#share-03), [SHARE-04](matrix.md#share-04) | 3 | 334/415 Statements; 96/118 Branches |
 | [app/api/routers/source_checks.py](../../../app/api/routers/source_checks.py) | 150 | [API-03](matrix.md#api-03), [SRC-04](matrix.md#src-04) | 1 | 101/115 Statements; 30/38 Branches |
-| [app/api/routers/topics.py](../../../app/api/routers/topics.py) | 722 | [TOPIC-01](matrix.md#topic-01), [TOPIC-04](matrix.md#topic-04) | 3 | 229/355 Statements; 34/62 Branches |
+| [app/api/routers/topics.py](../../../app/api/routers/topics.py) | 722 | [AUTH-02](matrix.md#auth-02), [TOPIC-01](matrix.md#topic-01), [TOPIC-04](matrix.md#topic-04) | 3 | 229/355 Statements; 34/62 Branches |
 | [app/api/routers/users.py](../../../app/api/routers/users.py) | 485 | [AUTH-03](matrix.md#auth-03), [QUOTA-01](matrix.md#quota-01), [QUOTA-02](matrix.md#quota-02), [MEM-01](matrix.md#mem-01), [MEM-02](matrix.md#mem-02) | 5 | 168/234 Statements; 17/26 Branches |
 | [app/api/routers/watch.py](../../../app/api/routers/watch.py) | 337 | [WATCH-01](matrix.md#watch-01), [WATCH-03](matrix.md#watch-03), [WATCH-04](matrix.md#watch-04), [WATCH-05](matrix.md#watch-05) | 1 | 124/215 Statements; 10/16 Branches |
 | [app/core/assets.py](../../../app/core/assets.py) | 252 | [BUILD-01](matrix.md#build-01) | 3 | 111/128 Statements; 26/36 Branches |

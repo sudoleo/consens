@@ -123,7 +123,7 @@ Aus dem Repositoryverzeichnis:
 python docs/test-coverage/check_inventory.py
 ```
 
-Die Prüfung kontrolliert Dateimenge, Hashes, Zählwerte und Quellstellen. Sie
+Die Prüfung benötigt zusätzlich Node und die installierten Repoabhängigkeiten (`npm ci`). Sie kontrolliert Dateimenge, Hashes, Zählwerte sowie Definitionen und Assertionanker durch Python-/JavaScript-AST-Abgleich. Die unabhängige Gegenprüfung ergänzte 128 vorher ausgelassene JS-Assertionstellen in 74 Definitionen aus 26 Dateien; Test- und Laufzahlen bleiben unverändert. [Details](test-coverage/product/independent-review.md). Sie
 markiert auch Änderungen an erfassten Grundlagen und am Produktionscode seit
 dem geprüften Commit. Sie führt keine Tests aus und kann Beschreibungen nicht
 semantisch neu bewerten.

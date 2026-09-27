@@ -1,6 +1,9 @@
 # Produktabdeckung und Codex-Übergabe
 
-**Audit: 26.09.2026 · Repositorystand: `cca637b9139032aa74a44acd20b39cde710ae159`**
+**Unabhängige Gegenprüfung: 26.09.2026 UTC · Eingang: `c88629ee`**
+
+Historische Basismessung: `cca637b9139032aa74a44acd20b39cde710ae159`.
+Aktuelle Korrekturen und neue Gegenproben: [independent-review.md](independent-review.md).
 
 Diese Ergänzung verbindet den vorhandenen [Katalog aller 216 Testdateien](../../test-coverage-map.md)
 mit dem Produktcode. Sie enthält eine Verhaltensmatrix, suiteweit gegengeprüfte
@@ -28,11 +31,13 @@ Test-Runnern nicht gesammelt.
 | [matrix.md](matrix.md) | 77 gruppierte Verhaltensverträge, 83 konkrete exemplarische Testdefinitionen samt Assertionstellen; alle 216 Testdateien zugeordnet |
 | [sources.md](sources.md) | 269 Produkt-/Betriebsdateien mit Vertragszuordnung und gemessener Pythonausführung |
 | [routes.md](routes.md) | 158 registrierte App-Routeneinträge und 4 Frameworkrouten, einschließlich dynamischer Ask-Endpoints |
-| [gaps.md](gaps.md) | 36 Befunde mit Codebeleg, bestehenden Prüfungen, Suchspur, Given/When/Then und Negativkontrolle |
-| [work-packages.md](work-packages.md) | 30 geplante Pakete mit Abhängigkeiten, Zielstellen, Wiederverwendung und Abnahme |
+| [gaps.md](gaps.md) | 42 Befunde mit Codebeleg, bestehenden Prüfungen, Suchspur, Given/When/Then und Negativkontrolle |
+| [work-packages.md](work-packages.md) | 34 geplante Pakete mit Abhängigkeiten, Zielstellen, Wiederverwendung und Abnahme |
 | [journeys.md](journeys.md) | Acht schichtenübergreifende Abläufe, vorhandene Belege und noch getrennte Testgrenzen |
 | [decisions.md](decisions.md) | Aktuelle und veraltete Testoracles, offene Produktentscheidungen, Modellqualität und vermiedene Fehlbefunde |
 | [measurements.md](measurements.md) | Neuer Python-Branchlauf, zwei Mutations- und zwei DOM-Proben mit Wiederholungsanleitung |
+| [independent-review.md](independent-review.md) | Aktuelle unabhängige Prüfung: fünf neue Gegenproben, sechs Befunde, 374 gezielte Tests und 128 korrigierte Assertionstellen |
+| [review.md](review.md) | Historische zweite Gegenprüfung: korrigierte Testvorgaben, zusätzliche Nachweise und Grenzen |
 | [audit.json](audit.json) | Kanonische manuell bewertete Verträge, Befunde und Paketstatus |
 | [search-evidence.json](search-evidence.json) | Reproduzierbare Regex-Suchspuren über 224 versionierte Test-/Hilfsdateien |
 | [sources.json](sources.json), [routes.json](routes.json) | Dateihashes, Python-Symbolfundstellen und Runtime-Routen |
@@ -40,7 +45,7 @@ Test-Runnern nicht gesammelt.
 
 ## Wichtigste Ergebnisse
 
-Der neue reguläre Pythonlauf bestätigt den bekannten Stand: **2.717 bestanden,
+Der historische reguläre Pythonlauf ergab: **2.717 bestanden,
 1 fehlgeschlagen, 12 Windowsfälle übersprungen**. Die Messung erreicht
 **83,37 % Statements** und **74,58 % Branches** im instrumentierten Pythonumfang.
 Diese Zahlen messen Ausführung, einschließlich Code vor der bekannten
@@ -61,12 +66,16 @@ Zwei weitere lokale Proben zeigen konkrete Verhaltensfehler:
 - **G-019:** Der Adminclient zeigt den tatsächlichen strukturierten
   `error`-Umschlag der App als `[object Object]` statt als verständliche Nachricht.
 
+Die unabhängige Gegenprüfung ergänzt **G-037–G-042**: verlorene HTTPException-Header, stillen Memoryverlust bei Undo nach Limitabsenkung, fehlende Agentdetail-/Stop-HTTP-Tests, konkurrierenden Modellrollback, abweichende Topic-Adminauth und Benchmark-Fehlerklassifikation. Fünf isolierte Gegenproben reproduzieren die beschriebenen Fehlverhalten; **374 gezielte bestehende Pythonfälle bestanden**. Dies behebt keinen Produktfehler.
+
 Weitere wichtige Aufgaben betreffen regelgeprüfte Firestore-Clients, reguläre
 Usage-Transaktionen, Kontolöschung gegen späte Writes, API-Recovery und echte
 HTTP-Adapter hinter vorhandenen Service-Fakes. Die **267 Browserfälle** bleiben
 aus dem vorherigen Audit ohne Laufnachweis; sie sollen ausgeführt und bewertet,
 nicht pauschal neu geschrieben werden. Der neue Auftrag wiederholt weder den
 fehlgeschlagenen Chromium-Download noch die bisherigen Vitest-/Emulatorläufe.
+
+Die [historische zweite Gegenprüfung](review.md) und die [aktuelle Prüfung](independent-review.md) korrigieren zu starke Verhaltensbehauptungen. Die Topic-Adminabweichung ist jetzt als G-041 mit isolierter Probe P-04 dokumentiert; G-014 bleibt der Auftrag für fehlende HTTP-Adapter.
 
 ## Umfang und Methode
 
@@ -104,8 +113,7 @@ Routeersetzungen, Testhelfer und Quelltextprüfungen suiteweit abgeglichen.
 `search-evidence.json` bewahrt sämtliche passenden Zeilen zu den dokumentierten
 Suchbegriffen. Ein Nulltreffer allein wäre kein ausreichender Lückenbeleg.
 Der Pythonlauf ergänzt diese Prüfung durch tatsächlich nicht ausgeführte
-Methoden/Zweige; zwei gezielte Mutationen und zwei DOM-Proben prüfen konkrete
-Gegenbeispiele. Eine automatische semantische Bewertung aus Dateinamen,
+Methoden/Zweige; zwei gezielte Mutationen, zwei DOM-Proben und fünf neue isolierte Python-Gegenproben prüfen konkrete Gegenbeispiele. Eine automatische semantische Bewertung aus Dateinamen,
 Importgraph oder Coveragewert wurde nicht vorgenommen.
 
 ## Aktualisierung und Grenzen
@@ -122,6 +130,8 @@ python docs/test-coverage/product/check_product_audit.py
 
 Der Checker prüft Inventar, Hashes, konkrete Fundstellen, Zuordnungen,
 Suchspuren, Routen-/Paketreferenzen, Abhängigkeiten und erzeugte Seiten.
+Der Inventarchecker benötigt Node und die Repoabhängigkeiten (`npm ci`) für den AST-Abgleich der JS-Registrierungen und Assertions. Zusätzlich gleicht der Produktchecker Coverage-Detailpositionen mit den Zählern und die
+Mutationsproben mit ihren gespeicherten JUnitfällen ab.
 Er bewertet weder die fachliche Richtigkeit einer neuen Beschreibung noch die
 Qualität einer Assertion automatisch. Fehlende/grüne Laufnachweise werden
 dadurch nicht erzeugt. Pythonmessung erfasst keine JavaScript-/Browserbranches,

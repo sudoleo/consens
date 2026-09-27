@@ -2,7 +2,7 @@
 
 [Einstieg](README.md) · [Befunde](gaps.md) · [Nutzerreisen](journeys.md) · [Oracles](decisions.md)
 
-Alle **30 Pakete sind geplant**, keines in diesem Dokumentationsauftrag implementiert. Die IDs sind stabil; sie geben keine zwingende lineare Reihenfolge vor. Abhängigkeiten sind fachliche/technische Voraussetzungen. Vorarbeit ist früher möglich. WP-01 bis WP-04 klären den Ausgangsstand; WP-05 macht die allgemeine CI verbindlich. WP-06 bis WP-14 sowie WP-20 schützen besonders folgenreiche Grenzen. WP-29 folgt auf tragfähige Adapter-/Persistenztests. Die restlichen Pakete bleiben im Gesamtumfang.
+**34 Arbeitspakete · 34 geplant.** Im ursprünglichen Dokumentationsauftrag wurde keines implementiert; der aktuelle Status steht in audit.json. Die IDs sind stabil; sie geben keine zwingende lineare Reihenfolge vor. Abhängigkeiten sind fachliche/technische Voraussetzungen. Vorarbeit ist früher möglich. WP-01 bis WP-04 klären den Ausgangsstand; WP-05 macht die allgemeine CI verbindlich. WP-06 bis WP-14 sowie WP-20 schützen besonders folgenreiche Grenzen. WP-29 folgt auf tragfähige Adapter-/Persistenztests. Die restlichen Pakete bleiben im Gesamtumfang.
 
 ## Gemeinsamer Auftrag und Abnahme
 
@@ -25,13 +25,13 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 | [WP-07](#wp-07) | Reguläre Usage nativ atomar prüfen | P1 | [WP-01](work-packages.md#wp-01) | [G-002](gaps.md#g-002) | planned |
 | [WP-08](#wp-08) | Chat-Lebenszyklus gegen späte Writes absichern | P1 | [WP-01](work-packages.md#wp-01) | [G-003](gaps.md#g-003) | planned |
 | [WP-09](#wp-09) | Kontokaskade und API-Cleanup integrieren | P1 | [WP-08](work-packages.md#wp-08), [WP-11](work-packages.md#wp-11) | [G-004](gaps.md#g-004) | planned |
-| [WP-10](#wp-10) | Memory-Revision, Undo und Löschsperre stärken | P1 | [WP-01](work-packages.md#wp-01) | [G-007](gaps.md#g-007), [G-008](gaps.md#g-008) | planned |
+| [WP-10](#wp-10) | Memory-Revision, Undo und Löschsperre stärken | P1 | [WP-01](work-packages.md#wp-01) | [G-007](gaps.md#g-007), [G-008](gaps.md#g-008), [G-038](gaps.md#g-038) | planned |
 | [WP-11](#wp-11) | API-Recovery und historischen Source-Adapter prüfen | P1 | — | [G-005](gaps.md#g-005), [G-010](gaps.md#g-010) | planned |
 | [WP-12](#wp-12) | Registrierungsrace und user_status verbinden | P1 | — | [G-009](gaps.md#g-009), [G-012](gaps.md#g-012) | planned |
 | [WP-13](#wp-13) | App-Share-POST integrieren | P1 | [WP-01](work-packages.md#wp-01) | [G-011](gaps.md#g-011) | planned |
 | [WP-14](#wp-14) | Source-Queue mit nativen Leases prüfen | P1 | [WP-01](work-packages.md#wp-01) | [G-006](gaps.md#g-006) | planned |
 | [WP-15](#wp-15) | Watch- und Telegramadapter schließen | P2 | — | [G-013](gaps.md#g-013) | planned |
-| [WP-16](#wp-16) | Topic-Administration und öffentliche Adapter schließen | P1 | — | [G-014](gaps.md#g-014) | planned |
+| [WP-16](#wp-16) | Topic-Administration und öffentliche Adapter schließen | P1 | — | [G-014](gaps.md#g-014), [G-041](gaps.md#g-041) | planned |
 | [WP-17](#wp-17) | Claim-Identity-Judge validieren | P2 | — | [G-016](gaps.md#g-016) | planned |
 | [WP-18](#wp-18) | SEO-Repositoryadapter ausführen | P2 | — | [G-017](gaps.md#g-017) | planned |
 | [WP-19](#wp-19) | Schedulerqueries und persistente Claims prüfen | P2 | [WP-01](work-packages.md#wp-01) | [G-031](gaps.md#g-031) | planned |
@@ -46,6 +46,10 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 | [WP-28](#wp-28) | Unterstützte Hilfs-CLIs prüfen | P3 | — | [G-035](gaps.md#g-035) | planned |
 | [WP-29](#wp-29) | Persistierte Nutzerreisen durch alle internen Schichten prüfen | P1 | [WP-03](work-packages.md#wp-03), [WP-07](work-packages.md#wp-07), [WP-08](work-packages.md#wp-08), [WP-09](work-packages.md#wp-09), [WP-10](work-packages.md#wp-10), [WP-12](work-packages.md#wp-12), [WP-13](work-packages.md#wp-13), [WP-14](work-packages.md#wp-14) | [G-030](gaps.md#g-030) | planned |
 | [WP-30](#wp-30) | Vendorhelper mit echtem temporärem Dateisystem prüfen | P2 | — | [G-036](gaps.md#g-036) | planned |
+| [WP-31](#wp-31) | HTTPException-Header durch main bewahren | P1 | — | [G-037](gaps.md#g-037) | planned |
+| [WP-32](#wp-32) | Agentdetail und Turn-Stop durch HTTP absichern | P1 | — | [G-039](gaps.md#g-039) | planned |
+| [WP-33](#wp-33) | Modellrollback gegen fremde Writes absichern | P1 | — | [G-040](gaps.md#g-040) | planned |
+| [WP-34](#wp-34) | Benchmarkfehler von Enthaltung trennen | P1 | — | [G-042](gaps.md#g-042) | planned |
 
 <a id="wp-01"></a>
 
@@ -133,7 +137,7 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Vorgehen:** Vorhandene CLI-Doubles auf unterstütztem Windows/PowerShell ausführen; echte repräsentative dev.ps1-Aufrufe ergänzen, ohne eine zweite Suiteauswahl zu pflegen.
 
-**Abnahme zusätzlich zu den verknüpften Then-/Negativkontrollen:** Zwölf Fälle wirklich ausgeführt; Fehlercodes, Argumente, Arbeitsverzeichnis und Envwiederherstellung belegt; konkrete PowerShellversion dokumentiert.
+**Abnahme zusätzlich zu den verknüpften Then-/Negativkontrollen:** Alle 12 Varianten je verfügbarer Windows-Shell wirklich ausgeführt; Shellversionen und tatsächliche Fallzahl (derzeit 12 oder 24) dokumentiert. Fehlercodes, Argumente, Arbeitsverzeichnis und Envwiederherstellung belegt.
 
 **Produktstellen:** [dev.ps1](../../../dev.ps1)
 
@@ -256,9 +260,9 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Befunde:** [G-004](gaps.md#g-004) · **Vorher:** [WP-08](work-packages.md#wp-08), [WP-11](work-packages.md#wp-11)
 
-**Vorgehen:** Aus tatsächlichem areas-Tupel vollständiges Seedinventar bauen, Services ausführen und nur externe Firebase-Auth/Mail/Telegram-Grenzen ersetzen; Teilfehler und neue Instanz injizieren.
+**Vorgehen:** Aus tatsächlichem areas-Tupel vollständiges Seedinventar bauen, Services ausführen und nur externe Firebase-Auth/Mail/Telegram-Grenzen ersetzen; Teilfehler und neue Instanz injizieren. Bereichserfolg mit anschließendem Checkpointverlust separat vom eigentlichen Löschfehler prüfen; Wiederaufnahme aus dauerhaft gespeichertem Zustand lesen.
 
-**Abnahme zusätzlich zu den verknüpften Then-/Negativkontrollen:** Alle 14 aktuellen Bereiche mit explizitem Endzustand, kein Fremddatenverlust; pending/Retry und bereits authentifizierte Late-Writes geprüft. Änderungen des Bereichsinventars erzwingen Review.
+**Abnahme zusätzlich zu den verknüpften Then-/Negativkontrollen:** Alle 14 aktuellen Bereiche mit explizitem Endzustand, kein Fremddatenverlust; pending/Retry und bereits authentifizierte Late-Writes geprüft. Änderungen des Bereichsinventars erzwingen Review. Persistiert bestätigte Bereiche überspringen, unbestätigte Operationen idempotent wiederholen. Minimalen UID-Sperrtombstone bis zum Aufbewahrungsende erhalten und Cleanup-E-Mail bei Abschluss entfernen.
 
 **Produktstellen:** [app/services/account_deletion.py](../../../app/services/account_deletion.py), [app/services/api_account_cleanup.py](../../../app/services/api_account_cleanup.py)
 
@@ -279,13 +283,13 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Ziel:** Vorhandene Erfolgsroundtrips um konkurrierende Zustände ergänzen.
 
-**Befunde:** [G-007](gaps.md#g-007), [G-008](gaps.md#g-008) · **Vorher:** [WP-01](work-packages.md#wp-01)
+**Befunde:** [G-007](gaps.md#g-007), [G-008](gaps.md#g-008), [G-038](gaps.md#g-038) · **Vorher:** [WP-01](work-packages.md#wp-01)
 
-**Vorgehen:** Unit-/Routerfälle auf echten Revisions-/Ownerguard ausrichten; nativer Commitfall für partielle Writes. Patch/Undo-Fehler müssen gespeicherten Inhalt unverändert lassen.
+**Vorgehen:** Unit-/Routerfälle auf echten Revisions-/Ownerguard ausrichten; nativer Commitfall für partielle Writes. Patch/Undo-Fehler müssen gespeicherten Inhalt unverändert lassen. Undo auch als echte HTTP-Anfrage ausführen. Bei kleinerem Tier-/Adminlimit den kompletten Vorzustand vergleichen; die derzeitige stille Kürzung aus P-02 nicht als Sollverhalten übernehmen.
 
-**Abnahme zusätzlich zu den verknüpften Then-/Negativkontrollen:** M-01 überlebt die neuen Tests nicht; Konflikt, expiry, Fremd-ID, Retry, manueller Save und Tombstone belegt. Kostenverhalten folgt aktueller Abrechnung.
+**Abnahme zusätzlich zu den verknüpften Then-/Negativkontrollen:** M-01 überlebt die neuen Tests nicht; Konflikt, expiry, Fremd-ID, Retry, manueller Save und Tombstone belegt. Kostenverhalten folgt aktueller Abrechnung. P-02 muss regressionswirksam abgesichert werden: bei unzulässigem Vorprofil strukturierte Ablehnung ohne Writes (empfohlen), andernfalls explizit entschiedene verlustfreie Rücknahme. Kein undone bei Datenverlust. main-Status/Body für Auth, Tierausfall und MemoryEditError geprüft.
 
-**Produktstellen:** [app/services/memory_edit.py](../../../app/services/memory_edit.py)
+**Produktstellen:** [app/services/memory_edit.py](../../../app/services/memory_edit.py), [app/api/routers/users.py](../../../app/api/routers/users.py)
 
 **Test-/Dokumentziele:** ` tests/e2e/test_memory_edit_transactions.py ` (vorgeschlagen), [tests/test_memory_edit.py](../../../tests/test_memory_edit.py)
 
@@ -409,9 +413,9 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Befunde:** [G-013](gaps.md#g-013) · **Vorher:** —
 
-**Vorgehen:** PATCH/DELETE/Link/Test durch echten Router; UID/Allowlist/Entitlements/Servicefehler mit gespeicherten Kontrollzuständen und Notifierdouble prüfen.
+**Vorgehen:** PATCH/DELETE/Link/Test durch echten Router; UID/Allowlist/Entitlements/Servicefehler mit gespeicherten Kontrollzuständen und Notifierdouble prüfen. Telegram-Disconnect und beide Watch-/Follower-Unsubscribe-Routen einschließlich Tokenfehlern und escaped HTML ergänzen.
 
-**Abnahme zusätzlich zu den verknüpften Then-/Negativkontrollen:** Alle vier bisher unausgeführten Handler verhaltensbasiert geprüft; falscher Owner und nicht verbundener Versand haben keine Nebenwirkung.
+**Abnahme zusätzlich zu den verknüpften Then-/Negativkontrollen:** Alle sieben bisher unausgeführten Handler verhaltensbasiert geprüft; falscher Owner und nicht verbundener Versand haben keine Nebenwirkung. Ungültige/abgelaufene/falsch typisierte Abmeldetokens ändern keine Daten; Disconnect bleibt UID-gebunden.
 
 **Produktstellen:** [app/api/routers/watch.py](../../../app/api/routers/watch.py)
 
@@ -432,13 +436,13 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Ziel:** Echte Adminberechtigung und vollständige Routenauswahl.
 
-**Befunde:** [G-014](gaps.md#g-014) · **Vorher:** —
+**Befunde:** [G-014](gaps.md#g-014), [G-041](gaps.md#g-041) · **Vorher:** —
 
-**Vorgehen:** PUT ausdrücklich aufrufen, Adminprüfung nicht ersetzen; Hub/Sitemap/Follow mit verschiedenen Publikationszuständen und Escapingfällen.
+**Vorgehen:** PUT ausdrücklich aufrufen, Adminprüfung nicht ersetzen; Hub/Sitemap/Follow mit verschiedenen Publikationszuständen und Escapingfällen. Separate Topic-Adminprüfung gegen die zentrale Revocation-/503-Policy prüfen; nur das externe Auth-SDK ersetzen. noindex ausdrücklich von Zugriffs- und Archivzustand unterscheiden. P-04 als roten Grenztest übernehmen; gemeinsame Adminpolicy korrigieren. Adminlist/Confirm/Unsubscribe ebenso ausführen, SDK-Flags und HTTP-Umschlag getrennt prüfen.
 
-**Abnahme zusätzlich zu den verknüpften Then-/Negativkontrollen:** Nonadmin scheitert vor Mutation, Hub/Sitemap zeigen nur zulässige Daten, Follow bleibt neutral/idempotent. Testnamen entsprechen ausgeführten Methoden.
+**Abnahme zusätzlich zu den verknüpften Then-/Negativkontrollen:** Nonadmin/widerrufenes Token scheitern vor Mutation, Rollendienst-Ausfall liefert 503 gemäß zentraler Adminpolicy. Hub zeigt veröffentlichte aktive/pausierte Topics auch bei noindex; Sitemap schließt noindex aus, beide schließen Archive/unveröffentlichte Topics aus. Follow bleibt neutral/idempotent; Testnamen entsprechen ausgeführten Methoden. G-041 ist ein beobachteter Defekt, kein bloß fehlender Laufnachweis. Für Confirm/Unsubscribe gültige und ungültige Tokenzustände samt Nichtmutation und Escaping prüfen.
 
-**Produktstellen:** [app/api/routers/topics.py](../../../app/api/routers/topics.py)
+**Produktstellen:** [app/api/routers/topics.py](../../../app/api/routers/topics.py), [app/api/routers/admin.py](../../../app/api/routers/admin.py), [app/core/security.py](../../../app/core/security.py)
 
 **Test-/Dokumentziele:** [tests/test_topics_feature.py](../../../tests/test_topics_feature.py)
 
@@ -636,7 +640,7 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Vorgehen:** Originalskript in frischem jsdom ausführen, Trackerstart instrumentieren und Storageausfälle injizieren.
 
-**Abnahme zusätzlich zu den verknüpften Then-/Negativkontrollen:** 1/0/fehlend/sonstige Parameter und get/set/remove-Fehler führen zum erwarteten Flag/Seitenstart; reine Stringpräsenz genügt nicht.
+**Abnahme zusätzlich zu den verknüpften Then-/Negativkontrollen:** 1/0/fehlend/sonstige Parameter sowie setItem-/removeItem-Fehler führen zum erwarteten Flag/Seitenstart; fehlender/anderer Parameter erhält den vorhandenen Wert. Keine getItem-Verzweigung erfinden; reine Stringpräsenz genügt nicht.
 
 **Produktstellen:** [static/js/analytics-opt-out.js](../../../static/js/analytics-opt-out.js)
 
@@ -763,7 +767,7 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Vorgehen:** J-01/J-02 zuerst, dann J-03/J-04/J-05 gemäß journeys.md. Echtes AppFirebase, App-Routen und lokales Firestore; nur Identitäts-/Provider-/Nachrichtengrenzen ersetzen.
 
-**Abnahme zusätzlich zu den verknüpften Then-/Negativkontrollen:** UI und DB stimmen nach Reload/Ownerwechsel/Stop überein, kein zweiter Modellstart beim Recover, keine vermischten Turns/Charges. Bestehende Modul-/Browsertests bleiben schnelle Detailnachweise.
+**Abnahme zusätzlich zu den verknüpften Then-/Negativkontrollen:** UI und DB stimmen nach Reload/Ownerwechsel/Stop überein, kein zweiter Modellstart beim Recover, keine vermischten Turns/Charges. Bestehende Modul-/Browsertests bleiben schnelle Detailnachweise. Antworterfolg und Persistenzstatus getrennt prüfen. Einmalige reguläre Runbelastung von der Agent-Abrechnung tatsächlicher Providersteps unterscheiden; Recovery darf keine Buchung duplizieren.
 
 **Produktstellen:** [tests/e2e/conftest.py](../../../tests/e2e/conftest.py), [tests/e2e/test_phase4_frontend.py](../../../tests/e2e/test_phase4_frontend.py)
 
@@ -799,5 +803,105 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 **Befehle/Prüfauftrag nach Implementierung:**
 
 - ` npm test -- tests/js/vendor-frontend.test.mjs tests/js/frontend-output.test.mjs; python -m pytest tests/test_frontend_build.py -q `
+
+**Zu beachten:** —
+
+
+<a id="wp-31"></a>
+
+## WP-31 · HTTPException-Header durch main bewahren
+
+**Ziel:** Fehlerstatus, Body und Retry-After als zusammenhängender HTTP-Vertrag.
+
+**Befunde:** [G-037](gaps.md#g-037) · **Vorher:** —
+
+**Vorgehen:** Zuerst P-01 als roten Integrationstest an echten Routen konkretisieren; gemeinsame Fehlerbehandlung korrigieren und bestehende isolierte Routerkontrollen behalten.
+
+**Abnahme zusätzlich zu den verknüpften Then-/Negativkontrollen:** 429/503, sichere Fehlermeldung und vorgesehenes Retry-After bleiben gemeinsam erhalten; Ablehnung startet weder Provider noch unerlaubten Write. Vorgesehene Exceptionheader werden bewahrt, keine frei vom Request kopierten Header. headers-Weitergabe im main-Handler entfernen: neue main.app-Headerassertion muss scheitern, obwohl die bestehenden isolierten Routertests grün bleiben.
+
+**Produktstellen:** [main.py](../../../main.py), [app/api/routers/api_v1.py](../../../app/api/routers/api_v1.py), [app/api/routers/agent.py](../../../app/api/routers/agent.py)
+
+**Test-/Dokumentziele:** [tests/test_consensus_api.py](../../../tests/test_consensus_api.py), [tests/test_agent_capacity.py](../../../tests/test_agent_capacity.py), [tests/test_agent_search.py](../../../tests/test_agent_search.py)
+
+**Vorhandene Hilfen:** [tests/test_consensus_api.py](../../../tests/test_consensus_api.py), [tests/test_agent_capacity.py](../../../tests/test_agent_capacity.py)
+
+**Befehle/Prüfauftrag nach Implementierung:**
+
+- ` python -m pytest tests/test_consensus_api.py tests/test_agent_capacity.py tests/test_agent_search.py -q `
+
+**Zu beachten:** —
+
+
+<a id="wp-32"></a>
+
+## WP-32 · Agentdetail und Turn-Stop durch HTTP absichern
+
+**Ziel:** Servicebelege bis zur tatsächlichen HTTP-Grenze erweitern.
+
+**Befunde:** [G-039](gaps.md#g-039) · **Vorher:** —
+
+**Vorgehen:** Vorhandene echte Stores/Fakes wiederverwenden; main.app, echte Auth-/Tierpolicy mit externen SDK-Doubles, keine pauschale _agent_details- oder require_agent_access-Ersetzung.
+
+**Abnahme zusätzlich zu den verknüpften Then-/Negativkontrollen:** IDs und UID binden exakt dieselbe Ressource; fremde Daten bleiben verborgen. Pagination hat weder Lücken noch unbeschränkte Antwort; after<0, limit=0/51 werden abgewiesen. Stop wirkt nur auf den gebundenen Turn, ist bei Wiederholung sicher und beendet den Konsens nicht ungewollt. Tier-/Adminregel folgt require_agent_access; private Antwort no-store, kein bezahlter Call durch Detail/Stop. UID oder turn_id beim Store-Aufruf vertauschen beziehungsweise Stop weglassen: Ownership-/Zustandsassertionen müssen scheitern; ein reiner 422-Test genügt nicht.
+
+**Produktstellen:** [app/api/routers/agent.py](../../../app/api/routers/agent.py), [app/services/agent_sessions.py](../../../app/services/agent_sessions.py)
+
+**Test-/Dokumentziele:** [tests/test_agent_delegation.py](../../../tests/test_agent_delegation.py), [tests/test_agent_reliability.py](../../../tests/test_agent_reliability.py)
+
+**Vorhandene Hilfen:** [tests/test_agent_delegation.py](../../../tests/test_agent_delegation.py), [tests/test_agent_reliability.py](../../../tests/test_agent_reliability.py)
+
+**Befehle/Prüfauftrag nach Implementierung:**
+
+- ` python -m pytest tests/test_agent_delegation.py tests/test_agent_reliability.py -q `
+
+**Zu beachten:** —
+
+
+<a id="wp-33"></a>
+
+## WP-33 · Modellrollback gegen fremde Writes absichern
+
+**Ziel:** Kein Datenverlust durch den Fehlerpfad eines konkurrierenden Konfigwriters.
+
+**Befunde:** [G-040](gaps.md#g-040) · **Vorher:** —
+
+**Vorgehen:** P-03 zunächst als deterministische Regression übernehmen. Native Firestore-Versionsbedingung wählen; zwei unabhängige Writerinstanzen unter Barrieren im Emulator einschließlich fehlendem Vorgängerdokument und Rollbackausfall prüfen.
+
+**Abnahme zusätzlich zu den verknüpften Then-/Negativkontrollen:** Rollback löscht/überschreibt nur die eigene unveränderte Version mit nativer Precondition/Transaktion. B bleibt erhalten, auch wenn initial nichts existierte. Lokale Runtime bleibt beim eigenen letzten gültigen Stand; Fehler/Recoveryzustand ist ehrlich sichtbar. Keine globale DB-/Runtime-Atomizität behaupten. Bedingung aus Rollback entfernen: B-Erhalt muss rot werden; nur final==initial zu prüfen würde den Fehler festschreiben.
+
+**Produktstellen:** [app/api/routers/admin.py](../../../app/api/routers/admin.py), [app/core/config.py](../../../app/core/config.py)
+
+**Test-/Dokumentziele:** [tests/test_model_configuration.py](../../../tests/test_model_configuration.py), ` tests/e2e/test_model_configuration_transactions.py ` (vorgeschlagen)
+
+**Vorhandene Hilfen:** [tests/test_model_configuration.py](../../../tests/test_model_configuration.py), [tests/e2e/test_prompt_config_transactions.py](../../../tests/e2e/test_prompt_config_transactions.py)
+
+**Befehle/Prüfauftrag nach Implementierung:**
+
+- ` python -m pytest tests/test_model_configuration.py tests/test_reasoning_policy.py tests/test_source_model_configuration.py -q; zusätzlich gezielter Firestore-Emulatorfall `
+
+**Zu beachten:** —
+
+
+<a id="wp-34"></a>
+
+## WP-34 · Benchmarkfehler von Enthaltung trennen
+
+**Ziel:** Fehlerklassifikation bis zu Resume und Statistik erhalten.
+
+**Befunde:** [G-042](gaps.md#g-042) · **Vorher:** —
+
+**Vorgehen:** P-05 mit echten Record-/Resume-/Statsfunktionen in die bestehende Suite übertragen; HTTP-200-Body validieren, alte malformed-response-Sollvorgabe differenzieren und sichere Errorprojektion prüfen.
+
+**Abnahme zusätzlich zu den verknüpften Then-/Negativkontrollen:** Provider-/Protokollfehler bleiben Fehler mit sicherem Code statt Enthaltung; sie werden nicht als Erfolg dedupliziert. Explizites retry_failed folgt der vorhandenen Policy. Gültiger Antworttext ohne auswertbaren Buchstaben bleibt Enthaltung. Keine Rohcredentials/privaten Providertexte persistieren; Counts/Kostenbehauptungen aus vorliegenden Feldern ableiten. Bodyerror-Prüfung entfernen: HTTP-200-Fehler darf die kombinierte error-/abstain-/Resumeassertion nicht bestehen. Kontrolle mit gültigem Text ohne Buchstaben verhindert fälschliches Umdeuten jeder Enthaltung in einen Fehler.
+
+**Produktstellen:** [benchmark/transport.py](../../../benchmark/transport.py), [benchmark/runner.py](../../../benchmark/runner.py)
+
+**Test-/Dokumentziele:** [tests/test_benchmark_transport.py](../../../tests/test_benchmark_transport.py), [tests/test_benchmark_runner.py](../../../tests/test_benchmark_runner.py), [tests/test_benchmark_results.py](../../../tests/test_benchmark_results.py)
+
+**Vorhandene Hilfen:** [tests/test_benchmark_transport.py](../../../tests/test_benchmark_transport.py), [tests/test_benchmark_runner.py](../../../tests/test_benchmark_runner.py)
+
+**Befehle/Prüfauftrag nach Implementierung:**
+
+- ` python -m pytest tests/test_benchmark_transport.py tests/test_benchmark_runner.py tests/test_benchmark_results.py -q `
 
 **Zu beachten:** —

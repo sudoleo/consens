@@ -664,6 +664,7 @@
       "tests/test_watch_feature.py"
     ],
     "contract_ids": [
+      "AUTH-02",
       "API-01",
       "SHARE-03",
       "SEO-03",
@@ -2861,6 +2862,7 @@
       "tests/test_unscored_history.py"
     ],
     "contract_ids": [
+      "AUTH-02",
       "TOPIC-01",
       "TOPIC-04"
     ],

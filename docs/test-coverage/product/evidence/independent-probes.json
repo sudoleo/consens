@@ -1,0 +1,140 @@
+{
+  "schema_version": 1,
+  "product_sources_changed": false,
+  "network_allowed": false,
+  "observations": [
+    {
+      "id": "P-01",
+      "raised": {
+        "status": 429,
+        "headers": {
+          "Retry-After": "60"
+        }
+      },
+      "main": {
+        "status": 429,
+        "retry_after": null,
+        "body": {
+          "error": "Consensus API rate limit exceeded"
+        }
+      },
+      "stock_fastapi_control": {
+        "status": 429,
+        "retry_after": "60"
+      }
+    },
+    {
+      "id": "P-02",
+      "unchanged_limit_control": {
+        "limit": 50000,
+        "before_notes_chars": 12050,
+        "after_notes_chars": 12050,
+        "notes_equal": true,
+        "role": "Role A",
+        "revision": 6,
+        "status": "undone"
+      },
+      "reduced_limit": {
+        "limit": 12000,
+        "before_notes_chars": 12050,
+        "after_notes_chars": 12000,
+        "notes_equal": false,
+        "role": "Role A",
+        "revision": 6,
+        "status": "undone"
+      }
+    },
+    {
+      "id": "P-03",
+      "single_writer_control": {
+        "document": {
+          "writer": "initial"
+        },
+        "writes": [
+          {
+            "writer": "A"
+          },
+          {
+            "writer": "initial"
+          }
+        ]
+      },
+      "interleaved_external_write": {
+        "document": {
+          "writer": "initial"
+        },
+        "writes": [
+          {
+            "writer": "A"
+          },
+          {
+            "writer": "B"
+          },
+          {
+            "writer": "initial"
+          }
+        ]
+      }
+    },
+    {
+      "id": "P-04",
+      "revoked_token": {
+        "admin": {
+          "sdk_check_revoked": [
+            true
+          ],
+          "outcome": "HTTP 401"
+        },
+        "topics": {
+          "sdk_check_revoked": [
+            false
+          ],
+          "outcome": "accepted"
+        }
+      },
+      "role_outage": {
+        "admin": {
+          "sdk_check_revoked": [
+            true
+          ],
+          "outcome": "HTTP 503"
+        },
+        "topics": {
+          "sdk_check_revoked": [
+            false
+          ],
+          "outcome": "unmapped TierStatusUnavailable"
+        }
+      }
+    },
+    {
+      "id": "P-05",
+      "http_429_control": {
+        "http_status": 429,
+        "error": "OpenRouter HTTP 429",
+        "error_code": "provider_http_error",
+        "usage": {
+          "prompt": 0,
+          "completion": 0,
+          "total": 0
+        },
+        "abstain": false,
+        "resume_indexes_as_success": false,
+        "indexed_errors": 1
+      },
+      "http_200_error_body": {
+        "http_status": 200,
+        "error": null,
+        "error_code": null,
+        "usage": {
+          "prompt": 0,
+          "completion": 0,
+          "total": 0
+        },
+        "abstain": true,
+        "resume_indexes_as_success": true,
+        "indexed_errors": 0
+      }
+    }
+  ]
+}

@@ -2,7 +2,7 @@
 
 [Einstieg](README.md) · [Arbeitspakete](work-packages.md) · [Suchbelege](search-evidence.json)
 
-36 Befunde. „Verifiziert“ bezeichnet den geprüften Code-/Testabgleich. Nur G-018/G-019 sind hier direkt beobachtete Verhaltensfehler; G-007/G-020 zusätzlich durch überlebende gezielte Mutationen belegte Assertionslücken. Die übrigen Kategorien unterscheiden fehlende Fälle/Integration, defekte Tests, Ausführungsnachweis und CI.
+42 Befunde. „Verifiziert“ bezeichnet den geprüften Code-/Testabgleich. G-018/G-019 sind durch lokale DOM-Proben beobachtete Verhaltensfehler; G-037/G-038/G-040/G-041/G-042 durch isolierte Python-Gegenproben. G-007/G-020 zusätzlich durch überlebende gezielte Mutationen belegte Assertionslücken. Die Aussagegrenze jeder Probe steht beim Befund und im unabhängigen Review. Die übrigen Kategorien unterscheiden fehlende Fälle/Integration, defekte Tests, Ausführungsnachweis und CI.
 
 P1/P2/P3 ordnen die Umsetzung nach möglichen Folgen und Voraussetzungen; sie sind keine Incident-Schweregrade. Suchtreffer allein beweisen weder Vorhandensein noch Abwesenheit eines Tests. Die Schlussfolgerung verbindet Suche, Testkörper, Mockgrenzen und gegebenenfalls Branchlauf/Probe. Suggested paths sind Vorschläge, vorhandene passende Dateien bevorzugen.
 
@@ -14,14 +14,14 @@ P1/P2/P3 ordnen die Umsetzung nach möglichen Folgen und Voraussetzungen; sie si
 | [G-004](#g-004) | P1 / ` missing_integration ` | Vollständige Kontokaskade und API-Cleanup prüfen | [WP-09](work-packages.md#wp-09) |
 | [G-005](#g-005) | P1 / ` missing_case ` | API-Neustart-Recovery und Retention tatsächlich ausführen | [WP-11](work-packages.md#wp-11) |
 | [G-006](#g-006) | P1 / ` missing_integration ` | Source-Queue-Leases und Result-Commits im Emulator | [WP-14](work-packages.md#wp-14) |
-| [G-007](#g-007) | P1 / ` assertion_gap ` | Undo-Konflikt, Ablauf und Wiederholung | [WP-10](work-packages.md#wp-10) |
+| [G-007](#g-007) | P1 / ` assertion_gap ` | Undo-Konflikt, Ablauf, Wiederholung und HTTP-Fehlergrenze | [WP-10](work-packages.md#wp-10) |
 | [G-008](#g-008) | P1 / ` missing_case ` | Memory-Patch gegen konkurrierenden Save und Kontolöschung | [WP-10](work-packages.md#wp-10) |
 | [G-009](#g-009) | P2 / ` missing_case ` | Konkurrierende Registrierung ohne Auskunfts-/Benachrichtigungsleck | [WP-12](work-packages.md#wp-12) |
 | [G-010](#g-010) | P1 / ` missing_case ` | Historischer API-v1-Source-Check-Adapter | [WP-11](work-packages.md#wp-11) |
 | [G-011](#g-011) | P1 / ` missing_case ` | App-POST-/api/share durch den echten Router prüfen | [WP-13](work-packages.md#wp-13) |
 | [G-012](#g-012) | P1 / ` missing_case ` | user_status-Adapter einschließlich Free-Admin und Ausfällen | [WP-12](work-packages.md#wp-12) |
-| [G-013](#g-013) | P2 / ` missing_case ` | Watch-PATCH/DELETE und Telegram-Link/Test als HTTP-Vertrag | [WP-15](work-packages.md#wp-15) |
-| [G-014](#g-014) | P1 / ` missing_case ` | Topic-Admin-Auth/PUT sowie öffentliche Adapter | [WP-16](work-packages.md#wp-16) |
+| [G-013](#g-013) | P2 / ` missing_case ` | Sieben Watch-/Telegram-/Unsubscribe-HTTP-Adapter | [WP-15](work-packages.md#wp-15) |
+| [G-014](#g-014) | P1 / ` missing_case ` | Topic-PUT/List sowie öffentliche Hub-/Sitemap-/Follow-Adapter | [WP-16](work-packages.md#wp-16) |
 | [G-015](#g-015) | P2 / ` missing_case ` | Admin-Benchmark-Routen und Reportviewer | [WP-22](work-packages.md#wp-22) |
 | [G-016](#g-016) | P2 / ` missing_case ` | Claim-Identity-Judge selbst prüfen | [WP-17](work-packages.md#wp-17) |
 | [G-017](#g-017) | P2 / ` missing_case ` | SEO-Readadapter hinter den Service-Fakes | [WP-18](work-packages.md#wp-18) |
@@ -44,6 +44,12 @@ P1/P2/P3 ordnen die Umsetzung nach möglichen Folgen und Voraussetzungen; sie si
 | [G-034](#g-034) | P2 / ` missing_case ` | Feedback-Adapter und Statistik-Persistenzwrapper | [WP-27](work-packages.md#wp-27) |
 | [G-035](#g-035) | P3 / ` missing_case ` | Weitere ausführbare CLI-Einstiege | [WP-28](work-packages.md#wp-28) |
 | [G-036](#g-036) | P2 / ` missing_case ` | Vendorhelper mit Version- und Check-only-Grenzen ausführen | [WP-30](work-packages.md#wp-30) |
+| [G-037](#g-037) | P1 / ` observed_behavior_defect ` | main verwirft HTTPException-Header einschließlich Retry-After | [WP-31](work-packages.md#wp-31) |
+| [G-038](#g-038) | P1 / ` observed_behavior_defect ` | Undo kürzt früheren Inhalt nach Absenkung des Memorylimits | [WP-10](work-packages.md#wp-10) |
+| [G-039](#g-039) | P1 / ` missing_case ` | Erfolgreicher Agentdetail- und Stop-HTTP-Pfad fehlen | [WP-32](work-packages.md#wp-32) |
+| [G-040](#g-040) | P1 / ` observed_behavior_defect ` | Modellrollback überschreibt einen zwischenzeitlichen Writer | [WP-33](work-packages.md#wp-33) |
+| [G-041](#g-041) | P1 / ` observed_behavior_defect ` | Topic-Admingrenze prüft Revocation nicht und verliert Rollen-503 | [WP-16](work-packages.md#wp-16) |
+| [G-042](#g-042) | P1 / ` observed_behavior_defect ` | Benchmark zählt HTTP-200-Providerfehler als erfolgreiche Enthaltung | [WP-34](work-packages.md#wp-34) |
 
 <a id="g-001"></a>
 
@@ -161,7 +167,7 @@ Kein direkter repräsentativer Testbeleg für diese Grenze; Suchtreffer und verw
 |---|---|
 | Given | Eigene Daten in allen 14 Kaskadenbereichen plus Kontrollowner; Firebase Auth/Mail/Telegram-Transport bleiben externe Doubles. |
 | When | Löschung mit einem gezielten Bereichs-/Checkpointfehler, anschließend neuer Serviceprozess/Instanz und Retry; parallel bereits authentifizierter Write. |
-| Then | Nur fehlgeschlagene Bereiche werden wiederholt, alle eigenen Daten entfernt, fremde Daten erhalten, pending ehrlich bis Abschluss; Sperre verhindert Neubefüllung. |
+| Then | Persistiert quittierte Bereiche werden übersprungen; Operationen ohne dauerhaften Checkpoint dürfen idempotent wiederholt werden, auch wenn ihr Seiteneffekt bereits erfolgte. Zieldaten aller 14 Bereiche sind entfernt, fremde Daten erhalten und pending bleibt bis zum belegten Abschluss bestehen. Der erforderliche minimale UID-Sperrtombstone bleibt bis zum Aufbewahrungsende erhalten, die Cleanup-E-Mail wird entfernt; späte Writes dürfen nicht neu befüllen. |
 
 **Zielstellen:** [tests/test_api_account_cleanup.py](../../../tests/test_api_account_cleanup.py), ` tests/e2e/test_account_deletion_transactions.py ` (vorgeschlagen)
 
@@ -169,7 +175,7 @@ Kein direkter repräsentativer Testbeleg für diese Grenze; Suchtreffer und verw
 
 **Validierung nach Implementierung:** ` python -m pytest tests/test_api_account_cleanup.py tests/test_account_deletion_retry.py -q; anschließend neuer Emulator-Kaskadentest `
 
-**Gezielte Negativkontrolle:** Eine Kaskadenoperation durch No-op ersetzen oder pending vorzeitig löschen; Residualdaten-/Sperrassertion muss rot werden.
+**Gezielte Negativkontrolle:** Eine Kaskadenoperation durch No-op ersetzen oder die Sperre vorzeitig löschen; Residualdaten-/Sperrassertion muss rot werden. Den ausdrücklich erforderlichen UID-Tombstone nicht als unerlaubtes Residualdatum zählen.
 
 
 <a id="g-005"></a>
@@ -237,25 +243,25 @@ Kein direkter repräsentativer Testbeleg für diese Grenze; Suchtreffer und verw
 
 <a id="g-007"></a>
 
-## G-007 · Undo-Konflikt, Ablauf und Wiederholung
+## G-007 · Undo-Konflikt, Ablauf, Wiederholung und HTTP-Fehlergrenze
 
 **P1 · assertion_gap** · Verträge: [MEM-02](matrix.md#mem-02) · Paket: [WP-10](work-packages.md#wp-10)
 
-**Produktbeleg:** [app/services/memory_edit.py](../../../app/services/memory_edit.py#L523) — ` def undo( `; [app/services/memory_edit.py](../../../app/services/memory_edit.py#L557) — ` if current_revision != int(revision.get `
+**Produktbeleg:** [app/services/memory_edit.py](../../../app/services/memory_edit.py#L523) — ` def undo( `; [app/services/memory_edit.py](../../../app/services/memory_edit.py#L557) — ` if current_revision != int(revision.get `; [app/api/routers/users.py](../../../app/api/routers/users.py#L306) — ` def _raise_memory_edit_error( `; [app/api/routers/users.py](../../../app/api/routers/users.py#L340) — ` def undo_user_memory( `
 
 **Vorhandene relevante Prüfungen:**
 
 - [test_replace_is_revision_checked_and_undo_restores_exact_content](../../../tests/test_memory_edit.py#L118) — Edit-Service/Repository und Router mit DB-/LLM-Doubles. Assertionstellen: [129](../../../tests/test_memory_edit.py#L129), [143](../../../tests/test_memory_edit.py#L143), [147](../../../tests/test_memory_edit.py#L147), [148](../../../tests/test_memory_edit.py#L148), [159](../../../tests/test_memory_edit.py#L159), [160](../../../tests/test_memory_edit.py#L160), [161](../../../tests/test_memory_edit.py#L161), [162](../../../tests/test_memory_edit.py#L162).
 
-**Suiteweite Gegenprüfung:** Einziger Repository-Undo-Aufruf ist der Erfolgsroundtrip. Entfernen ausschließlich des Revisionskonflikt-Guards im Testprozess lässt alle 14 Memory-Edit-Tests bestehen (Probe M-01). Kein Test setzt vor Undo eine neuere Revision.
+**Suiteweite Gegenprüfung:** Einziger Repository-Undo-Aufruf ist der Erfolgsroundtrip. Entfernen ausschließlich des Revisionskonflikt-Guards im Testprozess lässt alle 14 Memory-Edit-Tests bestehen (Probe M-01). Kein Test setzt vor Undo eine neuere Revision. Auch die Undo-HTTP-Route und _raise_memory_edit_error sind im historischen regulären Coverage-Lauf unausgeführt; direkter Repository-Erfolg beweist nicht Auth oder HTTP-Status/Umschlag.
 
 **Suchspur:** 224 versionierte Test-/Hilfsdateien durchsucht, 1 passende Zeilen. Regexe: ` undo\(|undo_expired|revision_not_found|invalid_revision `, ` revision_conflict `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-007 `.
 
 | Szenario | Erwartung |
 |---|---|
 | Given | Angewandter Patch Revision 4→5; danach expliziter unabhängiger Save auf Revision 6. Separate Fälle: fremder Owner, ungültige/fehlende ID, abgelaufenes Fenster, bereits undone. |
-| When | Undo des alten Patches versuchen beziehungsweise identisches Undo wiederholen. |
-| Then | Neuere Daten bleiben byte-/feldgleich, Konflikt ist sichtbar und macht keine Writes; Ablauf/Ownerfehler bleiben fail-closed; legitimer Retry erhöht Revision nicht erneut. |
+| When | Undo des alten Patches versuchen beziehungsweise identisches Undo wiederholen. Dieselben Fehler zusätzlich über POST /api/my/memory/undo in main.app prüfen; nur externe SDK-/LLM-/DB-Grenzen ersetzen. |
+| Then | Neuere Daten bleiben byte-/feldgleich, Konflikt ist sichtbar und macht keine Writes; Ablauf/Ownerfehler bleiben fail-closed; legitimer Retry erhöht Revision nicht erneut. Authlos 401, Tierausfall 503, Tombstone 403 und strukturierte MemoryEditError-Codes mit dem tatsächlichen main-Umschlag; keine Writes oder bezahlten Calls bei Ablehnung. |
 
 **Zielstellen:** [tests/test_memory_edit.py](../../../tests/test_memory_edit.py)
 
@@ -424,26 +430,26 @@ Kein direkter repräsentativer Testbeleg für diese Grenze; Suchtreffer und verw
 
 <a id="g-013"></a>
 
-## G-013 · Watch-PATCH/DELETE und Telegram-Link/Test als HTTP-Vertrag
+## G-013 · Sieben Watch-/Telegram-/Unsubscribe-HTTP-Adapter
 
-**P2 · missing_case** · Verträge: [WATCH-01](matrix.md#watch-01), [WATCH-04](matrix.md#watch-04) · Paket: [WP-15](work-packages.md#wp-15)
+**P2 · missing_case** · Verträge: [WATCH-01](matrix.md#watch-01), [WATCH-04](matrix.md#watch-04), [WATCH-03](matrix.md#watch-03) · Paket: [WP-15](work-packages.md#wp-15)
 
-**Produktbeleg:** [app/api/routers/watch.py](../../../app/api/routers/watch.py#L105) — ` def patch_watch( `; [app/api/routers/watch.py](../../../app/api/routers/watch.py#L194) — ` def remove_watch( `; [app/api/routers/watch.py](../../../app/api/routers/watch.py#L133) — ` def create_telegram_link( `; [app/api/routers/watch.py](../../../app/api/routers/watch.py#L149) — ` def test_telegram( `
+**Produktbeleg:** [app/api/routers/watch.py](../../../app/api/routers/watch.py#L105) — ` def patch_watch( `; [app/api/routers/watch.py](../../../app/api/routers/watch.py#L194) — ` def remove_watch( `; [app/api/routers/watch.py](../../../app/api/routers/watch.py#L133) — ` def create_telegram_link( `; [app/api/routers/watch.py](../../../app/api/routers/watch.py#L149) — ` def test_telegram( `; [app/api/routers/watch.py](../../../app/api/routers/watch.py#L163) — ` def disconnect_telegram( `; [app/api/routers/watch.py](../../../app/api/routers/watch.py#L308) — ` def follow_unsubscribe( `; [app/api/routers/watch.py](../../../app/api/routers/watch.py#L320) — ` def unsubscribe(request: `
 
 **Vorhandene relevante Prüfungen:**
 
 - [WatchCrudTests::test_free_create_list_update_pause_delete](../../../tests/test_watch_feature.py#L174) — Große Service-/Scheduler-/Router-/Mailformat-Suite mit DB-/LLM-/Versand-Doubles plus UI-Sourceverträge. Assertionstellen: [176](../../../tests/test_watch_feature.py#L176), [177](../../../tests/test_watch_feature.py#L177), [178](../../../tests/test_watch_feature.py#L178), [179](../../../tests/test_watch_feature.py#L179), [180](../../../tests/test_watch_feature.py#L180), [181](../../../tests/test_watch_feature.py#L181), [182](../../../tests/test_watch_feature.py#L182), [185](../../../tests/test_watch_feature.py#L185), [187](../../../tests/test_watch_feature.py#L187), [189](../../../tests/test_watch_feature.py#L189).
 - [WatchRouteTests::test_telegram_connection_routes_and_webhook_secret](../../../tests/test_watch_feature.py#L2501) — Große Service-/Scheduler-/Router-/Mailformat-Suite mit DB-/LLM-/Versand-Doubles plus UI-Sourceverträge. Assertionstellen: [2509](../../../tests/test_watch_feature.py#L2509), [2510](../../../tests/test_watch_feature.py#L2510), [2514](../../../tests/test_watch_feature.py#L2514), [2522](../../../tests/test_watch_feature.py#L2522), [2523](../../../tests/test_watch_feature.py#L2523).
 
-**Suiteweite Gegenprüfung:** Service-CRUD und einzelne Connection-/Webhook-Routen sind vorhanden. Diese vier Handler sind im regulären Lauf unausgeführt; Source-/Browser-Matches ersetzen sie mit Payloads.
+**Suiteweite Gegenprüfung:** Service-CRUD, Tokenhelper und einzelne Connection-/Webhook-/Confirm-Routen sind vorhanden. Sieben Handler sind im historischen regulären Lauf unausgeführt: PATCH, DELETE, Telegram-Link, Telegram-Test, Telegram-Disconnect, Follower-Unsubscribe und Watch-Unsubscribe. Statische oder browserseitig ersetzte API-Aufrufe ersetzen keinen Adaptertest.
 
-**Suchspur:** 224 versionierte Test-/Hilfsdateien durchsucht, 1 passende Zeilen. Regexe: ` patch_watch|remove_watch|create_telegram_link|test_telegram\( `, ` /api/watch/|/api/my/telegram/(link|test) `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-013 `.
+**Suchspur:** 224 versionierte Test-/Hilfsdateien durchsucht, 9 passende Zeilen. Regexe: ` patch_watch|remove_watch|create_telegram_link|test_telegram\( `, ` /api/watch/|/api/my/telegram/(link|test) `, ` disconnect_telegram|follow_unsubscribe|/watch/unsubscribe|/telegram/disconnect `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-013 `.
 
 | Szenario | Erwartung |
 |---|---|
-| Given | Eigene/fremde Watch, verbundenes/unverbundenes Telegram, gültige/ungültige Felder, Servicefehler. |
+| Given | Eigene/fremde Watch, verbundenes/unverbundenes Telegram, gültige/ungültige Felder, Servicefehler. Gültige, manipulierte und abgelaufene Watch-/Follower-Abmeldetokens; Tokens des jeweils anderen Typs. |
 | When | Reale HTTP-Methoden mit Auth und strukturierten Fehlern durchlaufen. |
-| Then | Ownerprüfung vor Mutation, Patchallowlist/Tier/Schedule unverändert durchgereicht, Delete beendet passend Brief/Watch, Link/Test führt nicht ohne autorisierten Owner aus. |
+| Then | Ownerprüfung vor Mutation, Patchallowlist/Tier/Schedule unverändert durchgereicht, Delete beendet passend Brief/Watch, Link/Test führt nicht ohne autorisierten Owner aus. Disconnect betrifft nur die authentifizierte UID. Die beiden Abmeldeseiten setzen nur den zum Token gehörenden Zustand, liefern sichere HTML-Fehler und verändern bei ungültigem Token nichts. |
 
 **Zielstellen:** [tests/test_watch_feature.py](../../../tests/test_watch_feature.py)
 
@@ -456,25 +462,27 @@ Kein direkter repräsentativer Testbeleg für diese Grenze; Suchtreffer und verw
 
 <a id="g-014"></a>
 
-## G-014 · Topic-Admin-Auth/PUT sowie öffentliche Adapter
+## G-014 · Topic-PUT/List sowie öffentliche Hub-/Sitemap-/Follow-Adapter
 
-**P1 · missing_case** · Verträge: [TOPIC-01](matrix.md#topic-01), [TOPIC-04](matrix.md#topic-04) · Paket: [WP-16](work-packages.md#wp-16)
+**P1 · missing_case** · Verträge: [AUTH-02](matrix.md#auth-02), [TOPIC-01](matrix.md#topic-01), [TOPIC-04](matrix.md#topic-04) · Paket: [WP-16](work-packages.md#wp-16)
 
-**Produktbeleg:** [app/api/routers/topics.py](../../../app/api/routers/topics.py#L133) — ` def _require_admin( `; [app/api/routers/topics.py](../../../app/api/routers/topics.py#L650) — ` async def admin_update_topic( `; [app/api/routers/topics.py](../../../app/api/routers/topics.py#L247) — ` async def topics_hub( `; [app/api/routers/topics.py](../../../app/api/routers/topics.py#L285) — ` async def sitemap_topics( `; [app/api/routers/topics.py](../../../app/api/routers/topics.py#L526) — ` async def follow_topic( `
+**Produktbeleg:** [app/api/routers/topics.py](../../../app/api/routers/topics.py#L133) — ` def _require_admin( `; [app/api/routers/topics.py](../../../app/api/routers/topics.py#L650) — ` async def admin_update_topic( `; [app/api/routers/topics.py](../../../app/api/routers/topics.py#L247) — ` async def topics_hub( `; [app/api/routers/topics.py](../../../app/api/routers/topics.py#L285) — ` async def sitemap_topics( `; [app/api/routers/topics.py](../../../app/api/routers/topics.py#L526) — ` async def follow_topic( `; [app/api/routers/admin.py](../../../app/api/routers/admin.py#L156) — ` uid = verify_user_token(id_token, check_revoked=True) `; [app/core/security.py](../../../app/core/security.py#L250) — ` check_revoked: bool = False `; [app/api/routers/topics.py](../../../app/api/routers/topics.py#L563) — ` def topic_follow_confirm( `; [app/api/routers/topics.py](../../../app/api/routers/topics.py#L580) — ` def topic_follow_unsubscribe( `; [app/api/routers/topics.py](../../../app/api/routers/topics.py#L605) — ` def admin_list_topics( `
 
 **Vorhandene relevante Prüfungen:**
 
 - [test_admin_topic_api_creates_updates_and_versions_without_share_data](../../../tests/test_topics_feature.py#L1037) — Große Service-/Router-/SSR-Suite mit FakeFirestore; einzelner echter SDK-Queryaufbau mit RPC-Mock. Assertionstellen: [1049](../../../tests/test_topics_feature.py#L1049), [1054](../../../tests/test_topics_feature.py#L1054), [1055](../../../tests/test_topics_feature.py#L1055), [1057](../../../tests/test_topics_feature.py#L1057), [1058](../../../tests/test_topics_feature.py#L1058), [1061](../../../tests/test_topics_feature.py#L1061), [1062](../../../tests/test_topics_feature.py#L1062), [1063](../../../tests/test_topics_feature.py#L1063).
+- [test_admin_boundary_checks_revocation_and_maps_tier_outage_to_503](../../../tests/test_auth_revocation.py#L52) — Security-Funktionen mit Auth-/Datenbank-Doubles. Assertionstellen: [65](../../../tests/test_auth_revocation.py#L65), [68](../../../tests/test_auth_revocation.py#L68), [69](../../../tests/test_auth_revocation.py#L69).
+- [test_noindex_and_unpublished_topics_are_not_in_topic_sitemap](../../../tests/test_topics_feature.py#L485) — Große Service-/Router-/SSR-Suite mit FakeFirestore; einzelner echter SDK-Queryaufbau mit RPC-Mock. Assertionstellen: [504](../../../tests/test_topics_feature.py#L504), [505](../../../tests/test_topics_feature.py#L505), [506](../../../tests/test_topics_feature.py#L506).
 
-**Suiteweite Gegenprüfung:** Der Testname „creates_updates“ enthält keinen PUT; Adminprüfung ist ersetzt. Hub/Sitemap/Follow und echter topics._require_admin werden im regulären Lauf nicht ausgeführt; Servicetests sind kein Routerbeleg.
+**Suiteweite Gegenprüfung:** Der Testname creates_updates enthält keinen PUT; Adminprüfung ist ersetzt. PUT, Adminlist, Hub, Sitemap, Follow, Confirm und Unsubscribe sind im historischen regulären Lauf unausgeführt. Service-/SSR-Tests decken Teile ab, aber nicht diese Adapter. noindex ist keine Zugriffssperre: Der Servicetest listet das Topic öffentlich, schließt es jedoch aus der Sitemap aus. Die reproduzierte Abweichung der Topic-Adminauth ist separat G-041/P-04.
 
-**Suchspur:** 224 versionierte Test-/Hilfsdateien durchsucht, 23 passende Zeilen. Regexe: ` admin_update_topic|topics_hub|sitemap_topics|follow_topic|_require_admin `, ` /api/admin/topics|/sitemap-topics.xml `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-014 `.
+**Suchspur:** 224 versionierte Test-/Hilfsdateien durchsucht, 23 passende Zeilen. Regexe: ` admin_update_topic|topics_hub|sitemap_topics|follow_topic|_require_admin `, ` /api/admin/topics|/sitemap-topics.xml `, ` confirm_topic_follow|unsubscribe_topic|admin_list_topics|/topics/follow `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-014 `.
 
 | Szenario | Erwartung |
 |---|---|
-| Given | Admin, normaler Nutzer, ungültiges Token; aktive/noindex/archivierte Topics und Follow-Challenges. |
-| When | PUT /api/admin/topics/{id}, GET /topics, GET /sitemap-topics.xml und Follow-POST an echten Routern ausführen. |
-| Then | Adminprüfung vor Service, actor_uid/ID-Token-Allowlist korrekt, keine privaten/archivierten Hub-/Sitemap-Leaks; XML escaped; Follow neutral und ohne Doppelmail. |
+| Given | Admin, normaler Nutzer, ungültiges/widerrufenes Token und Rollendienst-Ausfall; aktive/pausierte Topics mit/ohne veröffentlichten Run, noindex- und archivierte Topics sowie Follow-Challenges. |
+| When | PUT /api/admin/topics/{id}, GET /topics, GET /sitemap-topics.xml und Follow-POST an echten Routern ausführen. Zusätzlich Adminlist sowie die Topic-Confirm-/Unsubscribe-GET-Routen mit gültigen, wiederverwendeten, abgelaufenen und falsch typisierten Tokens aufrufen. |
+| Then | Adminprüfung vor Service, actor_uid und ID-Token-Allowlist korrekt. Revocation und 503 bei Rollendienst-Ausfall gemäß zentraler Adminpolicy an der echten Topicgrenze absichern. Hub enthält veröffentlichte aktive/pausierte Topics einschließlich noindex; Sitemap lässt noindex aus. Archive/unveröffentlichte Topics fehlen in beiden Listen; XML ist escaped, Follow neutral und ohne Doppelmail. Tokenfehler verändern keine Follower/Deliveries und werden als escaped HTML ausgegeben; erfolgreicher Confirm/Unsubscribe folgt der vorhandenen Service-Idempotenz statt einer erfundenen generellen 200-Garantie. |
 
 **Zielstellen:** [tests/test_topics_feature.py](../../../tests/test_topics_feature.py)
 
@@ -482,7 +490,7 @@ Kein direkter repräsentativer Testbeleg für diese Grenze; Suchtreffer und verw
 
 **Validierung nach Implementierung:** ` python -m pytest tests/test_topics_feature.py tests/test_auth_revocation.py -q `
 
-**Gezielte Negativkontrolle:** Admincheck aus PUT entfernen; Nonadmin-Test muss vor Mutation rot werden.
+**Gezielte Negativkontrolle:** Admincheck aus PUT entfernen; Nonadmin-Test muss vor Mutation rot werden. Revocationflag weglassen oder 503-Abbildung entfernen; jeweilige Grenzassertion muss rot werden. noindex im Hub auszublenden muss ebenfalls auffallen.
 
 
 <a id="g-015"></a>
@@ -591,7 +599,7 @@ Kein direkter repräsentativer Testbeleg für diese Grenze; Suchtreffer und verw
 
 - [test_topic_templates_expose_timeline_evidence_follow_and_admin_controls](../../../tests/test_topics_feature.py#L825) — Große Service-/Router-/SSR-Suite mit FakeFirestore; einzelner echter SDK-Queryaufbau mit RPC-Mock. Assertionstellen: [831](../../../tests/test_topics_feature.py#L831), [832](../../../tests/test_topics_feature.py#L832), [833](../../../tests/test_topics_feature.py#L833), [834](../../../tests/test_topics_feature.py#L834), [837](../../../tests/test_topics_feature.py#L837), [838](../../../tests/test_topics_feature.py#L838), [839](../../../tests/test_topics_feature.py#L839), [842](../../../tests/test_topics_feature.py#L842), [846](../../../tests/test_topics_feature.py#L846), [847](../../../tests/test_topics_feature.py#L847), [848](../../../tests/test_topics_feature.py#L848), [850](../../../tests/test_topics_feature.py#L850), [851](../../../tests/test_topics_feature.py#L851), [852](../../../tests/test_topics_feature.py#L852), [853](../../../tests/test_topics_feature.py#L853), [854](../../../tests/test_topics_feature.py#L854), [855](../../../tests/test_topics_feature.py#L855), [856](../../../tests/test_topics_feature.py#L856), [857](../../../tests/test_topics_feature.py#L857), [858](../../../tests/test_topics_feature.py#L858), [859](../../../tests/test_topics_feature.py#L859), [860](../../../tests/test_topics_feature.py#L860).
 
-**Suiteweite Gegenprüfung:** Suite enthält nur Template-/Datenbelege. Lokale DOM-Probe D-01 mit inertem <b id=...>-Text erzeugt ein echtes Element und entfernt die literalen Tags aus dem angezeigten Text. Datenpfad: change_summary→cell.note→escaped Attribut→dataset→innerHTML. Kein externer Exploit oder produktiver XSS-Aufruf wurde ausgeführt.
+**Suiteweite Gegenprüfung:** Suite enthält nur Template-/Datenbelege. Lokale DOM-Probe D-01 mit inertem `<b id=...>`-Text erzeugt ein echtes Element und entfernt die literalen Tags aus dem angezeigten Text. Datenpfad: change_summary→cell.note→escaped Attribut→dataset→innerHTML. Kein externer Exploit oder produktiver XSS-Aufruf wurde ausgeführt.
 
 **Suchspur:** 224 versionierte Test-/Hilfsdateien durchsucht, 1 passende Zeilen. Regexe: ` topic-page|topicStripRead|topicReturn|topic-seen:|readStrip|returningReader `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-018 `.
 
@@ -691,7 +699,7 @@ Kein direkter repräsentativer Testbeleg für diese Grenze; Suchtreffer und verw
 
 | Szenario | Erwartung |
 |---|---|
-| Given | notrack=1, 0, anderer/fehlender Wert und Storage mit get/set/remove-Fehlern. |
+| Given | notrack=1, 0, anderer/fehlender Wert und Storage mit setItem-/removeItem-Fehlern. Das Skript liest Storage nicht über getItem. |
 | When | Originalskript in isoliertem DOM vor einem instrumentierten Trackerstart ausführen. |
 | Then | Flag korrekt gesetzt/entfernt/erhalten und vor Trackerbeobachtung wirksam; blockierter Storage bricht Seitenstart nicht ab. |
 
@@ -834,13 +842,13 @@ Kein direkter repräsentativer Testbeleg für diese Grenze; Suchtreffer und verw
 
 **P2 · execution_gap** · Verträge: [BUILD-02](matrix.md#build-02) · Paket: [WP-04](work-packages.md#wp-04)
 
-**Produktbeleg:** [dev.ps1](../../../dev.ps1#L12) — ` param( `
+**Produktbeleg:** [dev.ps1](../../../dev.ps1#L12) — ` param( `; [tests/test_dev_cli.py](../../../tests/test_dev_cli.py#L25) — ` @pytest.fixture(params=SHELLS or [None] `
 
 **Vorhandene relevante Prüfungen:**
 
 Kein direkter repräsentativer Testbeleg für diese Grenze; Suchtreffer und verwandte Verträge sind separat berücksichtigt.
 
-**Suiteweite Gegenprüfung:** Zwölf test_dev_cli-Fälle werden unter Linux explizit übersprungen. Sourcechecks belegen nicht Prozessargumente/Exitcodes des Windows-Einstiegs.
+**Suiteweite Gegenprüfung:** Zwölf test_dev_cli-Fälle werden unter Linux explizit übersprungen. Sourcechecks belegen nicht Prozessargumente/Exitcodes des Windows-Einstiegs. Die CLI-Fixture parametrisiert jede verfügbare Windows-Shell (pwsh/powershell): derzeit 12 Varianten je Shell, also 12 oder 24 ausgeführte Fälle bei einer oder zwei Shells.
 
 **Suchspur:** 224 versionierte Test-/Hilfsdateien durchsucht, 1 passende Zeilen. Regexe: ` Windows PowerShell entry point|win32 `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-026 `.
 
@@ -848,7 +856,7 @@ Kein direkter repräsentativer Testbeleg für diese Grenze; Suchtreffer und verw
 |---|---|
 | Given | Windowsrunner mit PowerShell und isolierten Tool-Doubles/Dependencies. |
 | When | Alle vorhandenen test_dev_cli-Fälle und repräsentative dev.ps1 check-Aufrufe ausführen. |
-| Then | Zwölf bislang übersprungene Fälle haben echten Pass/Fail-Status; Exitcodes und Pfad-/Argumentweitergabe funktionieren. |
+| Then | Alle 12 Varianten je verfügbarer Windows-Shell erhalten echten Pass/Fail-Status (derzeit 12 oder 24 Fälle bei einer oder zwei Shells); Shellversionen und gesammelte Fallzahl sind dokumentiert. Exitcodes und Pfad-/Argumentweitergabe funktionieren. |
 
 **Zielstellen:** [tests/test_dev_cli.py](../../../tests/test_dev_cli.py), ` .github/workflows/tests.yml ` (vorgeschlagen)
 
@@ -973,7 +981,7 @@ Kein direkter repräsentativer Testbeleg für diese Grenze; Suchtreffer und verw
 |---|---|
 | Given | Echter App-Bundle/Firebase-Appcode und Backend mit lokalem Demo-Firestore; nur externe Identitäts-/Providergrenzen kontrolliert ersetzt, keine Bookmark-/Chat-/Usage-Routen. |
 | When | Consensus bis Bookmark speichern, Reload und Follow-up; zweiter paralleler Run/Viewwechsel; Stop/Verbindungsverlust; Konto A→B; analog Agent-Recover. |
-| Then | DB-Endzustand und UI stimmen je Turn/Owner überein; ein Usage-Charge, kein zweiter Modellstart beim Recover, keine verlorene Zwischenantwort/fremde Projektion. Netzwerkreihenfolge gezielt kontrollieren. |
+| Then | DB-Endzustand und UI stimmen je Turn/Owner überein, einschließlich erfolgreicher Antwort mit ausdrücklich gemeldetem Persistenzfehler. Regulärer Consensus belastet den Run einmal; Agent-Settlement berücksichtigt die tatsächlich angefallenen Providersteps laut Ledger ohne Doppelbuchung bei Recovery. Kein zweiter Modellstart bei zugesagtem Replay und keine verlorene Zwischenantwort/fremde Projektion. Netzwerkreihenfolge gezielt kontrollieren. |
 
 **Zielstellen:** ` tests/e2e/test_persisted_user_journeys.py ` (vorgeschlagen)
 
@@ -1067,7 +1075,7 @@ Kein direkter repräsentativer Testbeleg für diese Grenze; Suchtreffer und verw
 |---|---|
 | Given | Header fehlt/negativ/nichtnumerisch, non-HTTP-Scope, frühzeitiger Disconnect sowie Envwerte unter/auf/über den Grenzen. |
 | When | Middleware direkt über vorhandenen ASGI-Harness ausführen. |
-| Then | Handler sieht keine abgelehnte Übergröße; Fehlerstatus ist bewusst festgelegt; gültige Grenzen passen, ungültige Konfiguration startet nicht. Protokollstatus 400 versus bestehendes 413 nicht unbegründet ändern. |
+| Then | Handler sieht keine abgelehnte Übergröße; Fehlerstatus ist bewusst festgelegt; gültige Grenzen passen, configured_max_request_body_bytes bzw. die Middlewarekonstruktion lehnt ungültige Konfiguration ab (die Konstruktion kann erst beim ersten Request erfolgen). Protokollstatus 400 versus bestehendes 413 nicht unbegründet ändern. |
 
 **Zielstellen:** [tests/test_request_body_limits.py](../../../tests/test_request_body_limits.py)
 
@@ -1169,3 +1177,192 @@ Kein direkter repräsentativer Testbeleg für diese Grenze; Suchtreffer und verw
 **Validierung nach Implementierung:** ` npm test -- tests/js/vendor-frontend.test.mjs tests/js/frontend-output.test.mjs; python -m pytest tests/test_frontend_build.py -q `
 
 **Gezielte Negativkontrolle:** Versionsvergleich überspringen oder Check-only durch Write ersetzen; Fehler- und Dateisystemassertionen müssen scheitern.
+
+
+<a id="g-037"></a>
+
+## G-037 · main verwirft HTTPException-Header einschließlich Retry-After
+
+**P1 · observed_behavior_defect** · Verträge: [OPS-02](matrix.md#ops-02), [API-01](matrix.md#api-01), [AGENT-01](matrix.md#agent-01) · Paket: [WP-31](work-packages.md#wp-31)
+
+**Produktbeleg:** [main.py](../../../main.py#L226) — ` content={"error": exc.detail} `; [app/api/routers/api_v1.py](../../../app/api/routers/api_v1.py#L166) — ` def enforce_uid_rate_limit( `; [app/api/routers/agent.py](../../../app/api/routers/agent.py#L142) — ` def run_agent( `
+
+**Vorhandene relevante Prüfungen:**
+
+- [test_local_capacity_rejects_before_creating_a_turn_and_preserves_replay](../../../tests/test_agent_capacity.py#L74) — Agent-Kapazität und API mit synchronisiertem Store-Fake. Assertionstellen: [83](../../../tests/test_agent_capacity.py#L83), [84](../../../tests/test_agent_capacity.py#L84), [85](../../../tests/test_agent_capacity.py#L85), [88](../../../tests/test_agent_capacity.py#L88), [91](../../../tests/test_agent_capacity.py#L91), [94](../../../tests/test_agent_capacity.py#L94).
+- [ClientIpKeyTests::test_uid_limiter_cannot_be_bypassed_with_another_key](../../../tests/test_rate_limit.py#L74) — Rate-Key-/UID-Limiter-Funktionen. Assertionstellen: [77](../../../tests/test_rate_limit.py#L77).
+- [test_rate_limit_blocks_immediate_resubmission_without_another_paid_claim](../../../tests/test_agent_search.py#L121) — Usage-/Cooldownlogik, Agent-API und geskripteter Transport. Assertionstellen: [137](../../../tests/test_agent_search.py#L137), [139](../../../tests/test_agent_search.py#L139), [140](../../../tests/test_agent_search.py#L140), [141](../../../tests/test_agent_search.py#L141).
+
+**Suiteweite Gegenprüfung:** P-01 ruft den echten UID-Rejecthelfer über einen synthetischen Prozess-Router in main.app auf: HTTP 429, error-Body, aber kein Retry-After; die Standard-FastAPI-Kontrolle erhält 60. Kein echter Auth-/DB-/Agent-End-to-End-Lauf. Ursache ist fehlendes headers=exc.headers in main.handle_http_exception; auch Agent-429/503 verwenden HTTPException mit Retry-After.
+
+**Suchspur:** 224 versionierte Test-/Hilfsdateien durchsucht, 29 passende Zeilen. Regexe: ` Retry.After|enforce_uid_rate_limit|handle_http_exception `, ` TestClient\(main\.app\) `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-037 `.
+
+| Szenario | Erwartung |
+|---|---|
+| Given | Reales main.app, eine ausgeschöpfte UID-Quote sowie Agent-Cooldown/volle Kapazität; gültige lokale Auth-/DB-Doubles, kein Provider. |
+| When | Tatsächliche Consensus-/Agent-Routen bis zur Ablehnung aufrufen, erfolgreiche Kontrolle ergänzen. |
+| Then | 429/503, sichere Fehlermeldung und vorgesehenes Retry-After bleiben gemeinsam erhalten; Ablehnung startet weder Provider noch unerlaubten Write. Vorgesehene Exceptionheader werden bewahrt, keine frei vom Request kopierten Header. |
+
+**Zielstellen:** [tests/test_consensus_api.py](../../../tests/test_consensus_api.py), [tests/test_agent_capacity.py](../../../tests/test_agent_capacity.py), [tests/test_agent_search.py](../../../tests/test_agent_search.py)
+
+**Wiederverwenden:** [tests/test_consensus_api.py](../../../tests/test_consensus_api.py), [tests/test_agent_capacity.py](../../../tests/test_agent_capacity.py)
+
+**Validierung nach Implementierung:** ` python -m pytest tests/test_consensus_api.py tests/test_agent_capacity.py tests/test_agent_search.py -q `
+
+**Gezielte Negativkontrolle:** headers-Weitergabe im main-Handler entfernen: neue main.app-Headerassertion muss scheitern, obwohl die bestehenden isolierten Routertests grün bleiben.
+
+
+<a id="g-038"></a>
+
+## G-038 · Undo kürzt früheren Inhalt nach Absenkung des Memorylimits
+
+**P1 · observed_behavior_defect** · Verträge: [MEM-02](matrix.md#mem-02) · Paket: [WP-10](work-packages.md#wp-10)
+
+**Produktbeleg:** [app/services/memory_edit.py](../../../app/services/memory_edit.py#L523) — ` def undo( `; [app/services/memory_edit.py](../../../app/services/memory_edit.py#L563) — ` revision.get("before") or {}, max_notes_chars=memory_limit `
+
+**Vorhandene relevante Prüfungen:**
+
+- [test_replace_is_revision_checked_and_undo_restores_exact_content](../../../tests/test_memory_edit.py#L118) — Edit-Service/Repository und Router mit DB-/LLM-Doubles. Assertionstellen: [129](../../../tests/test_memory_edit.py#L129), [143](../../../tests/test_memory_edit.py#L143), [147](../../../tests/test_memory_edit.py#L147), [148](../../../tests/test_memory_edit.py#L148), [159](../../../tests/test_memory_edit.py#L159), [160](../../../tests/test_memory_edit.py#L160), [161](../../../tests/test_memory_edit.py#L161), [162](../../../tests/test_memory_edit.py#L162).
+
+**Suiteweite Gegenprüfung:** P-02: echtes reserve/apply_patch/undo mit aktiviertem Persistenceguard und Fake-DB. 12050 Zeichen Notiz bleiben beim Rollenedit unter Limit 50000 erhalten. Undo unter 12000 meldet undone, setzt Revision 6 und kürzt auf 12000; Kontroll-Undo unter 50000 erhält alle 12050 Zeichen. Eine erfolgreiche Rücknahme stellt somit nicht den ursprünglichen Inhalt wieder her.
+
+**Suchspur:** 224 versionierte Test-/Hilfsdateien durchsucht, 19 passende Zeilen. Regexe: ` \.undo\(|/memory/undo `, ` over.*limit|memory_limit `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-038 `.
+
+| Szenario | Erwartung |
+|---|---|
+| Given | Profil über dem inzwischen abgesenkten Limit, gültige Undo-ID ohne Zwischenwrite; unverändertes Limit und exakte Grenze als Kontrollen. |
+| When | Rollenedit rückgängig machen, nachdem Tier oder Adminlimit abgesenkt wurde; HTTP-Pfad ebenso prüfen. |
+| Then | Kein stilles Truncation-Save. Empfohlen: Undo mit strukturiertem memory_limit-Fehler ohne jeglichen Write ablehnen, wenn das alte Profil nicht mehr zulässig ist. Alternativ nur nach expliziter Produktentscheidung verlustfrei wiederherstellen. Erfolgsfall vergleicht alle Profilfelder, nicht nur die editierten. |
+
+**Zielstellen:** [tests/test_memory_edit.py](../../../tests/test_memory_edit.py)
+
+**Wiederverwenden:** [tests/test_memory_edit.py](../../../tests/test_memory_edit.py)
+
+**Validierung nach Implementierung:** ` python -m pytest tests/test_memory_edit.py -q `
+
+**Gezielte Negativkontrolle:** Aktuelles sanitize_profile(before, kleineres Limit) muss die neue Datenintegritätsassertion verletzen; nicht den abgeschnittenen Text als Sollwert übernehmen.
+
+
+<a id="g-039"></a>
+
+## G-039 · Erfolgreicher Agentdetail- und Stop-HTTP-Pfad fehlen
+
+**P1 · missing_case** · Verträge: [AGENT-03](matrix.md#agent-03), [AGENT-04](matrix.md#agent-04) · Paket: [WP-32](work-packages.md#wp-32)
+
+**Produktbeleg:** [app/api/routers/agent.py](../../../app/api/routers/agent.py#L350) — ` def agent_details( `; [app/api/routers/agent.py](../../../app/api/routers/agent.py#L370) — ` def stop_agent_run( `
+
+**Vorhandene relevante Prüfungen:**
+
+- [test_delegation_endpoints_are_owner_bound_and_read_only](../../../tests/test_agent_delegation.py#L262) — Echte Workerthreads/Mailboxen mit Store- und Provider-Doubles. Assertionstellen: [267](../../../tests/test_agent_delegation.py#L267), [268](../../../tests/test_agent_delegation.py#L268), [269](../../../tests/test_agent_delegation.py#L269), [270](../../../tests/test_agent_delegation.py#L270), [271](../../../tests/test_agent_delegation.py#L271), [272](../../../tests/test_agent_delegation.py#L272).
+
+**Suiteweite Gegenprüfung:** Die bestehende API-Prüfung ruft Liste, fehlende Auth, fremden Chat und Detail mit limit=51 auf; 422 entsteht vor dem Handler. Kein erfolgreicher Detailbody und kein HTTP-Stop. Store-/Service-Stoptests sind vorhanden, aber belegen nicht UID-/Pfad-/Fehlerprojektion des Routers.
+
+**Suchspur:** 224 versionierte Test-/Hilfsdateien durchsucht, 10 passende Zeilen. Regexe: ` /agents|/stop `, ` agent_details|stop_agent_run|stop_turn `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-039 `.
+
+| Szenario | Erwartung |
+|---|---|
+| Given | Zwei Owner, verschiedene Chats/Turns/Agents; laufende und terminale Delegation, Authlosigkeit, Free/Plus/Pro/Admin sowie Tierausfall. |
+| When | GET Detail mit gültiger Seite und Grenzcursors; POST Turn-Stop einschließlich Wiederholung und verspätetem Workerwrite. |
+| Then | IDs und UID binden exakt dieselbe Ressource; fremde Daten bleiben verborgen. Pagination hat weder Lücken noch unbeschränkte Antwort; after<0, limit=0/51 werden abgewiesen. Stop wirkt nur auf den gebundenen Turn, ist bei Wiederholung sicher und beendet den Konsens nicht ungewollt. Tier-/Adminregel folgt require_agent_access; private Antwort no-store, kein bezahlter Call durch Detail/Stop. |
+
+**Zielstellen:** [tests/test_agent_delegation.py](../../../tests/test_agent_delegation.py), [tests/test_agent_reliability.py](../../../tests/test_agent_reliability.py)
+
+**Wiederverwenden:** [tests/test_agent_delegation.py](../../../tests/test_agent_delegation.py), [tests/test_agent_reliability.py](../../../tests/test_agent_reliability.py)
+
+**Validierung nach Implementierung:** ` python -m pytest tests/test_agent_delegation.py tests/test_agent_reliability.py -q `
+
+**Gezielte Negativkontrolle:** UID oder turn_id beim Store-Aufruf vertauschen beziehungsweise Stop weglassen: Ownership-/Zustandsassertionen müssen scheitern; ein reiner 422-Test genügt nicht.
+
+
+<a id="g-040"></a>
+
+## G-040 · Modellrollback überschreibt einen zwischenzeitlichen Writer
+
+**P1 · observed_behavior_defect** · Verträge: [ADMIN-01](matrix.md#admin-01) · Paket: [WP-33](work-packages.md#wp-33)
+
+**Produktbeleg:** [app/api/routers/admin.py](../../../app/api/routers/admin.py#L51) — ` def _persist_and_activate_models( `
+
+**Vorhandene relevante Prüfungen:**
+
+- [ModelConfigurationTests::test_admin_update_restores_persisted_document_on_activation_error](../../../tests/test_model_configuration.py#L97) — Konfigurations-/Payload-Unit-Tests, Admin-/DB-Doubles und UI-Sourceverträge. Assertionstellen: [120](../../../tests/test_model_configuration.py#L120), [124](../../../tests/test_model_configuration.py#L124), [125](../../../tests/test_model_configuration.py#L125), [126](../../../tests/test_model_configuration.py#L126), [127](../../../tests/test_model_configuration.py#L127).
+
+**Suiteweite Gegenprüfung:** P-03 führt den realen Save-/Rollbackhelper aus. Im Dokument-Double folgt auf A ein simulierter externer Write B, dann schlägt As Aktivierung fehl: der bedingungslose Rollback schreibt initial über B. Einzelwriter-Kontrolle stellt initial korrekt wieder her. Prozesslokales Lock schützt keinen zweiten Prozess; dies ist eine kontrollierte Interleaving-Probe, kein beobachteter produktiver Vorfall oder nativer Firestore-Racetest.
+
+**Suchspur:** 224 versionierte Test-/Hilfsdateien durchsucht, 12 passende Zeilen. Regexe: ` persist_and_activate_models|activation_error `, ` rollback|restores_persisted `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-040 `.
+
+| Szenario | Erwartung |
+|---|---|
+| Given | Zwei Konfigwriter; A liest initial und schreibt A, B schreibt B vor As Aktivierungsfehler. |
+| When | As Rollback nach Bs erfolgreichem Write auslösen; zusätzlich initial fehlendes Dokument und Rollback-RPC-Ausfall. |
+| Then | Rollback löscht/überschreibt nur die eigene unveränderte Version mit nativer Precondition/Transaktion. B bleibt erhalten, auch wenn initial nichts existierte. Lokale Runtime bleibt beim eigenen letzten gültigen Stand; Fehler/Recoveryzustand ist ehrlich sichtbar. Keine globale DB-/Runtime-Atomizität behaupten. |
+
+**Zielstellen:** [tests/test_model_configuration.py](../../../tests/test_model_configuration.py), ` tests/e2e/test_model_configuration_transactions.py ` (vorgeschlagen)
+
+**Wiederverwenden:** [tests/test_model_configuration.py](../../../tests/test_model_configuration.py), [tests/e2e/test_prompt_config_transactions.py](../../../tests/e2e/test_prompt_config_transactions.py)
+
+**Validierung nach Implementierung:** ` python -m pytest tests/test_model_configuration.py tests/test_reasoning_policy.py tests/test_source_model_configuration.py -q; zusätzlich gezielter Firestore-Emulatorfall `
+
+**Gezielte Negativkontrolle:** Bedingung aus Rollback entfernen: B-Erhalt muss rot werden; nur final==initial zu prüfen würde den Fehler festschreiben.
+
+
+<a id="g-041"></a>
+
+## G-041 · Topic-Admingrenze prüft Revocation nicht und verliert Rollen-503
+
+**P1 · observed_behavior_defect** · Verträge: [AUTH-02](matrix.md#auth-02), [TOPIC-01](matrix.md#topic-01) · Paket: [WP-16](work-packages.md#wp-16)
+
+**Produktbeleg:** [app/api/routers/topics.py](../../../app/api/routers/topics.py#L133) — ` def _require_admin( `; [app/api/routers/admin.py](../../../app/api/routers/admin.py#L151) — ` def _require_admin( `; [app/core/security.py](../../../app/core/security.py#L250) — ` check_revoked: bool = False `
+
+**Vorhandene relevante Prüfungen:**
+
+- [test_admin_boundary_checks_revocation_and_maps_tier_outage_to_503](../../../tests/test_auth_revocation.py#L52) — Security-Funktionen mit Auth-/Datenbank-Doubles. Assertionstellen: [65](../../../tests/test_auth_revocation.py#L65), [68](../../../tests/test_auth_revocation.py#L68), [69](../../../tests/test_auth_revocation.py#L69).
+- [test_admin_topic_api_creates_updates_and_versions_without_share_data](../../../tests/test_topics_feature.py#L1037) — Große Service-/Router-/SSR-Suite mit FakeFirestore; einzelner echter SDK-Queryaufbau mit RPC-Mock. Assertionstellen: [1049](../../../tests/test_topics_feature.py#L1049), [1054](../../../tests/test_topics_feature.py#L1054), [1055](../../../tests/test_topics_feature.py#L1055), [1057](../../../tests/test_topics_feature.py#L1057), [1058](../../../tests/test_topics_feature.py#L1058), [1061](../../../tests/test_topics_feature.py#L1061), [1062](../../../tests/test_topics_feature.py#L1062), [1063](../../../tests/test_topics_feature.py#L1063).
+
+**Suiteweite Gegenprüfung:** P-04 führt beide echten Adminhelfer und verify_user_token aus; nur Firebase-SDK, Tombstoneabfrage und Rollendienst sind Doubles. Synthetisches widerrufenes Token wird zentral mit check_revoked=True zu 401; Topic fordert False an und akzeptiert es. Rollenfehler wird zentral 503, bei Topics bleibt TierStatusUnavailable ungemappt. Kein echter Firebase-Revocationtest; die Flags und divergierende Kontrollflüsse sind beobachtet.
+
+**Suchspur:** 224 versionierte Test-/Hilfsdateien durchsucht, 28 passende Zeilen. Regexe: ` _require_admin|check_revoked|TierStatusUnavailable `, ` /api/admin/topics `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-041 `.
+
+| Szenario | Erwartung |
+|---|---|
+| Given | Gültiger Admin, Nichtadmin, widerrufenes/ungültiges Token und Rollendienst-Ausfall; leere Write-/Read-/Paidcall-Zähler. |
+| When | Alle Topic-Adminmethoden mit echter Adminpolicy aufrufen, nur externes SDK kontrollieren; zentrale Adminroute als Vergleich. |
+| Then | Revocation=True wird angefordert; invalid/revoked 401, Nichtadmin 403, Rollenausfall 503 vor Service/Write. Gemeinsame Policy verwenden oder deren Gleichheit explizit sichern, erlaubten Rollencache nicht als Frischegarantie darstellen. |
+
+**Zielstellen:** [tests/test_topics_feature.py](../../../tests/test_topics_feature.py), [tests/test_auth_revocation.py](../../../tests/test_auth_revocation.py)
+
+**Wiederverwenden:** [tests/test_topics_feature.py](../../../tests/test_topics_feature.py), [tests/test_auth_revocation.py](../../../tests/test_auth_revocation.py)
+
+**Validierung nach Implementierung:** ` python -m pytest tests/test_topics_feature.py tests/test_auth_revocation.py -q `
+
+**Gezielte Negativkontrolle:** check_revoked=True entfernen oder TierStatusUnavailable-Abbildung weglassen: neue echte Topicgrenztests müssen scheitern.
+
+
+<a id="g-042"></a>
+
+## G-042 · Benchmark zählt HTTP-200-Providerfehler als erfolgreiche Enthaltung
+
+**P1 · observed_behavior_defect** · Verträge: [BENCH-02](matrix.md#bench-02), [BENCH-03](matrix.md#bench-03) · Paket: [WP-34](work-packages.md#wp-34)
+
+**Produktbeleg:** [benchmark/transport.py](../../../benchmark/transport.py#L133) — ` def execute( `; [benchmark/runner.py](../../../benchmark/runner.py#L69) — ` def index_existing( `; [benchmark/runner.py](../../../benchmark/runner.py#L413) — ` def _make_cell_record( `
+
+**Vorhandene relevante Prüfungen:**
+
+- [test_malformed_response_is_structured](../../../tests/test_benchmark_transport.py#L111) — Transportfunktionen mit injiziertem POST. Assertionstellen: [114](../../../tests/test_benchmark_transport.py#L114), [115](../../../tests/test_benchmark_transport.py#L115), [116](../../../tests/test_benchmark_transport.py#L116).
+
+**Suiteweite Gegenprüfung:** P-05: realer Transport, Cellrecord und Resumeindex mit synthetischer Antwort {error:{code:429,...}}. HTTP 429 ergibt Fehler, abstain=False, kein Erfolg. Identischer Body bei HTTP 200 ergibt error=None, abstain=True und index.success; Resume behandelt die Providerablehnung dadurch als erledigte Zelle. Kein Live-Provider und keine Aussage über aktuelle Häufigkeit.
+
+**Suchspur:** 224 versionierte Test-/Hilfsdateien durchsucht, 21 passende Zeilen. Regexe: ` malformed_response|provider_http_error|response_parse_failed `, ` index_existing|retry_failed|abstain `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-042 `.
+
+| Szenario | Erwartung |
+|---|---|
+| Given | HTTP-200-Body mit provider error, leere/ungültige choices und gültige Textantwort ohne extrahierbaren FINAL_ANSWER; echte erfolgreiche Auswahl als Kontrolle. |
+| When | Transport→Cellrecord→Resume/Retry und Resultstatistik durchlaufen. |
+| Then | Provider-/Protokollfehler bleiben Fehler mit sicherem Code statt Enthaltung; sie werden nicht als Erfolg dedupliziert. Explizites retry_failed folgt der vorhandenen Policy. Gültiger Antworttext ohne auswertbaren Buchstaben bleibt Enthaltung. Keine Rohcredentials/privaten Providertexte persistieren; Counts/Kostenbehauptungen aus vorliegenden Feldern ableiten. |
+
+**Zielstellen:** [tests/test_benchmark_transport.py](../../../tests/test_benchmark_transport.py), [tests/test_benchmark_runner.py](../../../tests/test_benchmark_runner.py), [tests/test_benchmark_results.py](../../../tests/test_benchmark_results.py)
+
+**Wiederverwenden:** [tests/test_benchmark_transport.py](../../../tests/test_benchmark_transport.py), [tests/test_benchmark_runner.py](../../../tests/test_benchmark_runner.py)
+
+**Validierung nach Implementierung:** ` python -m pytest tests/test_benchmark_transport.py tests/test_benchmark_runner.py tests/test_benchmark_results.py -q `
+
+**Gezielte Negativkontrolle:** Bodyerror-Prüfung entfernen: HTTP-200-Fehler darf die kombinierte error-/abstain-/Resumeassertion nicht bestehen. Kontrolle mit gültigem Text ohne Buchstaben verhindert fälschliches Umdeuten jeder Enthaltung in einen Fehler.

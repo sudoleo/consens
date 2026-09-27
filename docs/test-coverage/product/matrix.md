@@ -7,10 +7,10 @@
 | Vertrag | Verhalten | Quellen | Testdateien | Befunde |
 |---|---|---:|---:|---|
 | [OPS-01](#ops-01) | Start, Shutdown und überwachte Jobs | 5 | 4 | — |
-| [OPS-02](#ops-02) | Requestgrenzen und Sicherheitsheader | 3 | 4 | [G-033](gaps.md#g-033) |
+| [OPS-02](#ops-02) | Requestgrenzen und Sicherheitsheader | 3 | 4 | [G-033](gaps.md#g-033), [G-037](gaps.md#g-037) |
 | [OPS-03](#ops-03) | Inhaltsfreie Fehlerdiagnostik | 5 | 6 | — |
 | [AUTH-01](#auth-01) | Registrierung ohne Kontoauskunft | 2 | 2 | [G-009](gaps.md#g-009) |
-| [AUTH-02](#auth-02) | Token, Session und Rollen | 4 | 5 | [G-012](gaps.md#g-012) |
+| [AUTH-02](#auth-02) | Token, Session und Rollen | 6 | 5 | [G-012](gaps.md#g-012), [G-014](gaps.md#g-014), [G-041](gaps.md#g-041) |
 | [AUTH-03](#auth-03) | Kontolöschung mit Wiederaufnahme | 4 | 5 | [G-004](gaps.md#g-004), [G-008](gaps.md#g-008) |
 | [AUTH-04](#auth-04) | Browser-Identität und Sitzungswechsel | 5 | 5 | [G-030](gaps.md#g-030) |
 | [QUOTA-01](#quota-01) | Ein regulärer Lauf, eine Belastung | 3 | 3 | [G-002](gaps.md#g-002) |
@@ -20,8 +20,8 @@
 | [CHAT-03](#chat-03) | Kontext und Nutzergedächtnis im Lauf | 3 | 5 | — |
 | [CHAT-04](#chat-04) | Bookmarks und vollständiger Verlauf | 3 | 7 | [G-030](gaps.md#g-030) |
 | [MEM-01](#mem-01) | Memory lesen und manuell speichern | 3 | 3 | — |
-| [MEM-02](#mem-02) | Expliziter KI-Patch und sicheres Undo | 3 | 2 | [G-007](gaps.md#g-007), [G-008](gaps.md#g-008) |
-| [API-01](#api-01) | API-Schlüssel und Scopes | 4 | 3 | — |
+| [MEM-02](#mem-02) | Expliziter KI-Patch und sicheres Undo | 3 | 2 | [G-007](gaps.md#g-007), [G-008](gaps.md#g-008), [G-038](gaps.md#g-038) |
+| [API-01](#api-01) | API-Schlüssel und Scopes | 4 | 3 | [G-037](gaps.md#g-037) |
 | [API-02](#api-02) | Dauerhafte API-Runs | 3 | 2 | [G-005](gaps.md#g-005) |
 | [API-03](#api-03) | Historische Source-Checks der API | 3 | 2 | [G-010](gaps.md#g-010) |
 | [API-04](#api-04) | API-Publish und Publisher-Watch | 3 | 3 | — |
@@ -32,10 +32,10 @@
 | [CONS-03](#cons-03) | Quellenkatalog und Zitatprovenienz | 4 | 5 | — |
 | [CONS-04](#cons-04) | Resolve als eigener Lauf | 3 | 3 | — |
 | [CONS-05](#cons-05) | Finalisierung, Replay und Browser-Recovery | 5 | 5 | [G-030](gaps.md#g-030) |
-| [AGENT-01](#agent-01) | Admission und Token-/Kostenledger | 7 | 6 | — |
+| [AGENT-01](#agent-01) | Admission und Token-/Kostenledger | 7 | 6 | [G-037](gaps.md#g-037) |
 | [AGENT-02](#agent-02) | Chatpolicy und Legacy-Toolloop | 7 | 7 | — |
-| [AGENT-03](#agent-03) | Delegierte Sitzungen und Kommunikation | 4 | 5 | — |
-| [AGENT-04](#agent-04) | Agent-Recovery und Eigentümerbindung | 4 | 5 | [G-030](gaps.md#g-030) |
+| [AGENT-03](#agent-03) | Delegierte Sitzungen und Kommunikation | 4 | 5 | [G-039](gaps.md#g-039) |
+| [AGENT-04](#agent-04) | Agent-Recovery und Eigentümerbindung | 4 | 5 | [G-030](gaps.md#g-030), [G-039](gaps.md#g-039) |
 | [AGENT-05](#agent-05) | Agent-Ansicht und bestätigter Fortschritt | 6 | 9 | — |
 | [SRC-01](#src-01) | Sicherer begrenzter Quellenabruf | 2 | 1 | [G-032](gaps.md#g-032) |
 | [SRC-02](#src-02) | Prüfplan und konservative Urteile | 3 | 4 | — |
@@ -48,11 +48,11 @@
 | [SHARE-04](#share-04) | Open-Graph-Karte | 2 | 1 | [G-020](gaps.md#g-020) |
 | [WATCH-01](#watch-01) | Watch-Erstellung und Planrechte | 2 | 3 | [G-013](gaps.md#g-013), [G-027](gaps.md#g-027) |
 | [WATCH-02](#watch-02) | Zeitplan, Claim und Ausführung | 4 | 4 | [G-031](gaps.md#g-031) |
-| [WATCH-03](#watch-03) | E-Mail-Follow mit Einwilligungsnachweis | 4 | 3 | — |
+| [WATCH-03](#watch-03) | E-Mail-Follow mit Einwilligungsnachweis | 4 | 3 | [G-013](gaps.md#g-013) |
 | [WATCH-04](#watch-04) | Telegram-Link und Zustellung | 3 | 1 | [G-013](gaps.md#g-013) |
 | [WATCH-05](#watch-05) | Morning Brief | 4 | 2 | — |
 | [WATCH-06](#watch-06) | Watch-Frontend | 3 | 6 | — |
-| [TOPIC-01](#topic-01) | Topic-Administration und versionierte Runs | 2 | 1 | [G-014](gaps.md#g-014), [G-031](gaps.md#g-031) |
+| [TOPIC-01](#topic-01) | Topic-Administration und versionierte Runs | 2 | 1 | [G-014](gaps.md#g-014), [G-031](gaps.md#g-031), [G-041](gaps.md#g-041) |
 | [TOPIC-02](#topic-02) | Topic-Pipeline und Identitätsjudge | 3 | 2 | [G-016](gaps.md#g-016) |
 | [TOPIC-03](#topic-03) | Zeitlicher Claim-/Quellenverlauf | 5 | 5 | — |
 | [TOPIC-04](#topic-04) | Öffentliche Topic-Seiten und Follow | 5 | 3 | [G-014](gaps.md#g-014) |
@@ -62,7 +62,7 @@
 | [SEO-03](#seo-03) | Konservative Empfehlungen und Aktionen | 3 | 3 | — |
 | [SEO-04](#seo-04) | Wöchentlicher Review und Publikationsdaten | 3 | 1 | [G-017](gaps.md#g-017), [G-031](gaps.md#g-031) |
 | [SEO-05](#seo-05) | Öffentliche Navigation und Suchmetadaten | 27 | 5 | — |
-| [ADMIN-01](#admin-01) | Revisionierte Konfiguration | 6 | 7 | — |
+| [ADMIN-01](#admin-01) | Konfiguration: Revisionen und Aktivierungsrollback | 6 | 7 | [G-040](gaps.md#g-040) |
 | [ADMIN-02](#admin-02) | Adminoberfläche und HTTP-Adapter | 9 | 8 | [G-019](gaps.md#g-019) |
 | [UI-01](#ui-01) | Run-State und getrennte Ansichten | 4 | 6 | — |
 | [UI-02](#ui-02) | Senden, Presets und Moduswechsel | 6 | 7 | — |
@@ -75,8 +75,8 @@
 | [UI-09](#ui-09) | Analytics-Selbstausschluss | 2 | 1 | [G-021](gaps.md#g-021) |
 | [DATA-01](#data-01) | Votes, Feedback und Modellstatistik | 3 | 4 | [G-034](gaps.md#g-034) |
 | [BENCH-01](#bench-01) | Dataset, Budget und Closed-book-Vertrag | 7 | 6 | — |
-| [BENCH-02](#bench-02) | Runner, Resume und Artefakte | 5 | 5 | [G-035](gaps.md#g-035) |
-| [BENCH-03](#bench-03) | Ergebnisberechnung und Adminberichte | 4 | 3 | [G-015](gaps.md#g-015) |
+| [BENCH-02](#bench-02) | Runner, Resume und Artefakte | 5 | 5 | [G-035](gaps.md#g-035), [G-042](gaps.md#g-042) |
+| [BENCH-03](#bench-03) | Ergebnisberechnung und Adminberichte | 4 | 3 | [G-015](gaps.md#g-015), [G-042](gaps.md#g-042) |
 | [BUILD-01](#build-01) | Reproduzierbare Frontendartefakte | 6 | 3 | [G-036](gaps.md#g-036) |
 | [BUILD-02](#build-02) | Test- und Emulator-Einstieg | 4 | 3 | [G-024](gaps.md#g-024), [G-025](gaps.md#g-025), [G-026](gaps.md#g-026) |
 | [BUILD-03](#build-03) | Scheduled Publisher und Workflows | 4 | 2 | [G-024](gaps.md#g-024) |
@@ -139,9 +139,9 @@ Readiness wartet nur auf den begrenzten Konfigurationsread; Writer starten danac
 
 **Bewertung:** Teilweise belegt. Dateien liefern Belege für die im Testkatalog beschriebenen Teilfälle. Die Zuordnung behauptet keine vollständige Assertion jeder Vertragskante.
 
-**Testgrenze:** ASGI- und Headerprüfungen, kein vorgeschalteter Proxy. Nicht jede ungültige Header-/Konfigurationskante wird ausgeführt.
+**Testgrenze:** ASGI- und Headerprüfungen, kein vorgeschalteter Proxy. Nicht jede ungültige Header-/Konfigurationskante wird ausgeführt. Die Cacheheader-Belege gelten für die tatsächlich geprüften Pfade; die sensitive-prefix-Liste ist kein flächendeckender Nachweis aller privaten Adapter. HTTPException-Headererhalt fehlt in main.app (G-037).
 
-**Befunde:** [G-033](gaps.md#g-033). Kein verknüpfter Befund bedeutet keine Vollständigkeitsfreigabe.
+**Befunde:** [G-033](gaps.md#g-033), [G-037](gaps.md#g-037). Kein verknüpfter Befund bedeutet keine Vollständigkeitsfreigabe.
 
 <details><summary>Produktdateien und zugeordnete Testdateien</summary>
 
@@ -249,15 +249,15 @@ Neue und vorhandene Adressen erhalten dieselbe öffentliche Antwort und den Mail
 
 ## AUTH-02 · Token, Session und Rollen
 
-Sensitive Aktionen prüfen Revocation, Account-Tombstone und aktuelle Rolle; Auth-/Tier-Ausfälle gewähren keine Rechte. Session-Cookie wird bei Login gesetzt und Logout gelöscht.
+Die zentrale Adminprüfung verlangt Revocationprüfung und Adminrolle; Tokenprüfung berücksichtigt Account-Tombstones. Rollen-/Tierfehler dürfen keine Rechte gewähren, Rollenwerte können aus dem vorgesehenen Cache stammen. Die Registrierungsbestätigung setzt das Session-Cookie, Logout löscht es.
 
 **Anforderungsbasis:** [docs/codebase-map.md](../../codebase-map.md) · ` documented_contract `. Die Basis ist eine Fundstelle, keine Behauptung, dass ältere Spezifikationen jede aktuelle Klausel wörtlich enthalten; [abweichende Oracles](decisions.md) beachten.
 
 **Bewertung:** Teilweise belegt. Dateien liefern Belege für die im Testkatalog beschriebenen Teilfälle. Die Zuordnung behauptet keine vollständige Assertion jeder Vertragskante.
 
-**Testgrenze:** SDK-Rückgaben und Uhr kontrolliert; kein echter Firebase-Login oder verteilter Cache.
+**Testgrenze:** SDK-Rückgaben und Uhr kontrolliert; kein echter Firebase-Login oder verteilter Cache. Der zentrale Adminbeleg gilt nicht automatisch für separate Routerhelfer: topics._require_admin fordert derzeit keine Revocationprüfung an und bildet TierStatusUnavailable nicht ausdrücklich auf 503 ab (G-014).
 
-**Befunde:** [G-012](gaps.md#g-012). Kein verknüpfter Befund bedeutet keine Vollständigkeitsfreigabe.
+**Befunde:** [G-012](gaps.md#g-012), [G-014](gaps.md#g-014), [G-041](gaps.md#g-041). Kein verknüpfter Befund bedeutet keine Vollständigkeitsfreigabe.
 
 <details><summary>Produktdateien und zugeordnete Testdateien</summary>
 
@@ -267,6 +267,8 @@ Sensitive Aktionen prüfen Revocation, Account-Tombstone und aktuelle Rolle; Aut
 - [app/core/entitlements.py](../../../app/core/entitlements.py)
 - [app/core/security.py](../../../app/core/security.py)
 - [app/services/account_tier.py](../../../app/services/account_tier.py)
+- [app/api/routers/admin.py](../../../app/api/routers/admin.py)
+- [app/api/routers/topics.py](../../../app/api/routers/topics.py)
 
 **Testdateien:**
 
@@ -289,7 +291,7 @@ Sensitive Aktionen prüfen Revocation, Account-Tombstone und aktuelle Rolle; Aut
 
 ## AUTH-03 · Kontolöschung mit Wiederaufnahme
 
-Vor dem Löschen persistiert eine Sperre. Alle eigenen Datenbereiche werden idempotent entfernt, fremde Daten bleiben erhalten; Teilfehler bleiben 202/pending und quittierte Bereiche werden nicht neu erzeugt.
+Vor dem Löschen persistiert eine Sperre. Die 14 Kaskadenbereiche werden idempotent bereinigt, fremde Daten bleiben erhalten. Persistiert quittierte Bereiche werden beim Retry übersprungen; ohne dauerhaften Checkpoint kann eine bereits erfolgreiche Operation erneut nötig sein. Teilfehler bleiben pending. Nach Abschluss bleibt der minimale UID-Sperrtombstone bis zum Ablauf seiner Aufbewahrung erhalten, die Cleanup-E-Mail wird entfernt.
 
 **Anforderungsbasis:** [docs/codebase-map.md](../../codebase-map.md) · ` documented_contract `. Die Basis ist eine Fundstelle, keine Behauptung, dass ältere Spezifikationen jede aktuelle Klausel wörtlich enthalten; [abweichende Oracles](decisions.md) beachten.
 
@@ -695,9 +697,9 @@ KI-Edit wendet nur den kleinsten erlaubten Patch gegen die reservierte Revision 
 
 **Bewertung:** Teilweise belegt. Dateien liefern Belege für die im Testkatalog beschriebenen Teilfälle. Die Zuordnung behauptet keine vollständige Assertion jeder Vertragskante.
 
-**Testgrenze:** Guard im Repository-Test deaktiviert. Undo-Erfolg belegt nicht Konflikt, Ablauf, fremden Owner oder wiederholtes Undo.
+**Testgrenze:** Guard im Repository-Test deaktiviert. Undo-Erfolg belegt nicht Konflikt, Ablauf, fremden Owner oder wiederholtes Undo. P-02 führt den realen Guard mit Fake-DB aus und reproduziert stillen Notizverlust bei Undo mit kleinerem Limit (G-038).
 
-**Befunde:** [G-007](gaps.md#g-007), [G-008](gaps.md#g-008). Kein verknüpfter Befund bedeutet keine Vollständigkeitsfreigabe.
+**Befunde:** [G-007](gaps.md#g-007), [G-008](gaps.md#g-008), [G-038](gaps.md#g-038). Kein verknüpfter Befund bedeutet keine Vollständigkeitsfreigabe.
 
 <details><summary>Produktdateien und zugeordnete Testdateien</summary>
 
@@ -738,7 +740,7 @@ Nur aktive verifizierte Konten bekommen Schlüssel; Klartext wird einmal ausgege
 
 **Testgrenze:** Hash-/Scope-/Authvertrag lokal; API-Cleanup und Listenadapter teilweise durch Doubles ersetzt.
 
-**Befunde:** —. Kein verknüpfter Befund bedeutet keine Vollständigkeitsfreigabe.
+**Befunde:** [G-037](gaps.md#g-037). Kein verknüpfter Befund bedeutet keine Vollständigkeitsfreigabe.
 
 <details><summary>Produktdateien und zugeordnete Testdateien</summary>
 
@@ -1131,11 +1133,11 @@ Resolve verwendet vorhandene Konflikte/Kontext, bleibt tier-/ownergebunden und n
 
 ## CONS-05 · Finalisierung, Replay und Browser-Recovery
 
-Erfolgsevent folgt dem autoritativen Abschluss; completed Replay ruft weder Engine noch Usage erneut auf. Unklarer Streamabbruch wird am Turnstatus reconciliert, Analysefehler vernichtet keine bereits gelieferte Antwort.
+Vor dem abschließenden Ergebnis werden angeforderte Turn-/Bookmarkwrites versucht; Antworterfolg und Persistenzerfolg bleiben getrennt. Ein Speicherfehler erhält die erfolgreiche Antwort und wird über chat_persisted/bookmark_persisted sowie den Turnstatus kenntlich. Completed-Replay ruft weder Engine noch Usage erneut auf. Ein unklarer Streamabbruch wird am Turnstatus abgeglichen, ein Analysefehler vernichtet keine bereits gelieferte Antwort.
 
 **Anforderungsbasis:** [docs/codebase-map.md](../../codebase-map.md) · ` documented_contract `. Die Basis ist eine Fundstelle, keine Behauptung, dass ältere Spezifikationen jede aktuelle Klausel wörtlich enthalten; [abweichende Oracles](decisions.md) beachten.
 
-**Bewertung:** Teilweise belegt. Dateien liefern Belege für die im Testkatalog beschriebenen Teilfälle. Die Zuordnung behauptet keine vollständige Assertion jeder Vertragskante.
+**Bewertung:** Teilweise belegt. Dateien liefern Belege für die im Testkatalog beschriebenen Teilfälle. Die Zuordnung behauptet keine vollständige Assertion jeder Vertragskante. Zusätzlich belegt test_completion_storage_failure_never_replaces_successful_consensus in tests/test_consensus_chat_history.py für JSON und SSE: Antwort bleibt erhalten, chat_persisted=false und chat_turn_state=pending. Ein terminales final-Event allein garantiert keinen DB-Commit.
 
 **Testgrenze:** SSE-Schnipsel/TestClient/Fake-Requests; keine durchgehende Socket→Server→DB→Reload-Prüfung.
 
@@ -1197,7 +1199,7 @@ Modellaufrufe benötigen atomare Admission; Tokens, Kosten, Reserven und unbekan
 
 **Testgrenze:** Reale Emulatorbelege für ausgewählte Rennen vorhanden; kein vollständiger produktiver Mehrprozess-/Providerablauf.
 
-**Befunde:** —. Kein verknüpfter Befund bedeutet keine Vollständigkeitsfreigabe.
+**Befunde:** [G-037](gaps.md#g-037). Kein verknüpfter Befund bedeutet keine Vollständigkeitsfreigabe.
 
 <details><summary>Produktdateien und zugeordnete Testdateien</summary>
 
@@ -1294,7 +1296,7 @@ Orchestrator und Worker besitzen eigene Identitäten/Verläufe, geordnete dedupl
 
 **Testgrenze:** Lokale Threads und Emulatorbudget, Browser-API ersetzt. Historische Delegation-Spezifikation ist teilweise überholt.
 
-**Befunde:** —. Kein verknüpfter Befund bedeutet keine Vollständigkeitsfreigabe.
+**Befunde:** [G-039](gaps.md#g-039). Kein verknüpfter Befund bedeutet keine Vollständigkeitsfreigabe.
 
 <details><summary>Produktdateien und zugeordnete Testdateien</summary>
 
@@ -1346,9 +1348,9 @@ Run-/Turn-/Agentdetails sind ownergebunden; recover_only startet nie Modelle. Ab
 
 **Bewertung:** Teilweise belegt. Dateien liefern Belege für die im Testkatalog beschriebenen Teilfälle. Die Zuordnung behauptet keine vollständige Assertion jeder Vertragskante.
 
-**Testgrenze:** Prozesscrash durch Zustand/IDs/Uhr simuliert; Socket-Stall-Test nutzt MockTransport.
+**Testgrenze:** Prozesscrash durch Zustand/IDs/Uhr simuliert; Socket-Stall-Test nutzt MockTransport. HTTP-Liste und ungültiges Detail-limit sind geprüft; erfolgreicher Detailbody und Stop-HTTP-Aufruf fehlen (G-039). Store-/Serviceprüfungen ersetzen diese Adapter nicht.
 
-**Befunde:** [G-030](gaps.md#g-030). Kein verknüpfter Befund bedeutet keine Vollständigkeitsfreigabe.
+**Befunde:** [G-030](gaps.md#g-030), [G-039](gaps.md#g-039). Kein verknüpfter Befund bedeutet keine Vollständigkeitsfreigabe.
 
 <details><summary>Produktdateien und zugeordnete Testdateien</summary>
 
@@ -1386,7 +1388,7 @@ Sidebar/Antworten zeigen echte Ereignisse, Reasoning getrennt vom Antworttext, b
 
 **Bewertung:** Teilweise belegt. Dateien liefern Belege für die im Testkatalog beschriebenen Teilfälle. Die Zuordnung behauptet keine vollständige Assertion jeder Vertragskante.
 
-**Testgrenze:** jsdom führt Logik aus, Geometrie/Fokusfälle ausschließlich im nicht ausgeführten Browserbestand.
+**Testgrenze:** jsdom führt Ereignis-/Darstellungslogik und logische Fokusfälle aus, etwa activeElement und Clipboard-Fallback in agent-answer-actions.test.mjs. Tatsächliche Geometrie, native Auswahl und Browserfokus benötigen den nicht ausgeführten Browserbestand.
 
 **Befunde:** —. Kein verknüpfter Befund bedeutet keine Vollständigkeitsfreigabe.
 
@@ -1751,7 +1753,7 @@ Reports zählen ohne verlorene Inkremente; Schwellwerte und Adminentscheidungen 
 
 ## SHARE-04 · Open-Graph-Karte
 
-Aktive öffentliche Shares liefern eine PNG-Karte aus dem ausgewählten Antwortstand; private/inaktive Ressourcen bleiben verborgen, Frage und Kennzahlen müssen tatsächlich im Bild ankommen.
+Aktive öffentliche Shares liefern eine PNG-Karte aus dem neuesten gültigen öffentlichen Antwortstand der OG-Route; private/inaktive Ressourcen bleiben verborgen, Frage und Kennzahlen müssen tatsächlich im Bild ankommen.
 
 **Anforderungsbasis:** [docs/codebase-map.md](../../codebase-map.md) · ` documented_and_inferred_rendering_invariant `. Die Basis ist eine Fundstelle, keine Behauptung, dass ältere Spezifikationen jede aktuelle Klausel wörtlich enthalten; [abweichende Oracles](decisions.md) beachten.
 
@@ -1872,7 +1874,7 @@ Follow wird erst nach atomar konsumierter Challenge aktiv; Rate-/Resendlimits, D
 
 **Testgrenze:** Mailtransport ersetzt, kein echter Zustellnachweis; Challenge- und Send-Effekt getrennt.
 
-**Befunde:** —. Kein verknüpfter Befund bedeutet keine Vollständigkeitsfreigabe.
+**Befunde:** [G-013](gaps.md#g-013). Kein verknüpfter Befund bedeutet keine Vollständigkeitsfreigabe.
 
 <details><summary>Produktdateien und zugeordnete Testdateien</summary>
 
@@ -1942,13 +1944,13 @@ Secret-Webhook, einmaliger Linktoken und Ownerbindung schützen Verbindung/Aktio
 
 ## WATCH-05 · Morning Brief
 
-Brief bündelt fällige Inhalte nach lokaler Zeit, hat einen persistenten Claim und deduplizierte Send-ID; Unsubscribe deaktiviert ausschließlich den passenden Brief.
+Brief bündelt fällige Inhalte nach lokaler Zeit. Der persistente Claim rückt den Zeitplan vor dem Versand vor (At-most-once-Versuch); eine separate deduplizierte Versand-ID existiert in diesem Pfad nicht. Unsubscribe deaktiviert den passenden Brief.
 
 **Anforderungsbasis:** [docs/codebase-map.md](../../codebase-map.md) · ` documented_contract `. Die Basis ist eine Fundstelle, keine Behauptung, dass ältere Spezifikationen jede aktuelle Klausel wörtlich enthalten; [abweichende Oracles](decisions.md) beachten.
 
 **Bewertung:** Teilweise belegt. Dateien liefern Belege für die im Testkatalog beschriebenen Teilfälle. Die Zuordnung behauptet keine vollständige Assertion jeder Vertragskante.
 
-**Testgrenze:** Claim-/Mailerfakes, kein Mehrprozess-Sendnachweis oder definierter Crash-nach-Zustellung-Vertrag.
+**Testgrenze:** Claim-/Mailerfakes, kein realer Zustellnachweis. Ein Crash nach dem Vorabclaim kann einen Brief auslassen; keine atomare Garantie über Datenbank und externen Mailversand (D-03).
 
 **Befunde:** —. Kein verknüpfter Befund bedeutet keine Vollständigkeitsfreigabe.
 
@@ -2029,7 +2031,7 @@ Adminrechte, Slugreservierung, Archive/Indexing und unveränderliche Runversione
 
 **Testgrenze:** CRUD/Versionen mit Fake-DB; einzelne Routeradapter und der reale Scheduler-Claim werden ersetzt.
 
-**Befunde:** [G-014](gaps.md#g-014), [G-031](gaps.md#g-031). Kein verknüpfter Befund bedeutet keine Vollständigkeitsfreigabe.
+**Befunde:** [G-014](gaps.md#g-014), [G-031](gaps.md#g-031), [G-041](gaps.md#g-041). Kein verknüpfter Befund bedeutet keine Vollständigkeitsfreigabe.
 
 <details><summary>Produktdateien und zugeordnete Testdateien</summary>
 
@@ -2133,7 +2135,7 @@ Materialänderung, Formulierungswechsel, fehlende Messung und Claim-Retirement b
 
 ## TOPIC-04 · Öffentliche Topic-Seiten und Follow
 
-Hub, Sitemap, Versionseite und Evidenz-Links respektieren Archive/Indexing; Follow benötigt Double-opt-in, Faviconabruf ist begrenzt und ersetzt keine fremde Netzwerkressource ungeprüft.
+Der öffentliche Hub enthält aktive oder pausierte Topics mit veröffentlichtem latest_run_id, auch bei noindex. Die Sitemap schließt noindex zusätzlich aus; archivierte oder unveröffentlichte Topics fehlen in beiden Listen. Versionsseiten und Evidenz-Links respektieren den jeweiligen Publikationsstand; Follow benötigt Double-opt-in, Faviconabruf ist begrenzt und prüft fremde Netzwerkziele.
 
 **Anforderungsbasis:** [docs/codebase-map.md](../../codebase-map.md) · ` documented_contract `. Die Basis ist eine Fundstelle, keine Behauptung, dass ältere Spezifikationen jede aktuelle Klausel wörtlich enthalten; [abweichende Oracles](decisions.md) beachten.
 
@@ -2330,7 +2332,7 @@ Deterministische Evidenzgates schützen Gewinner/Graceperiod; Content-Judge umge
 
 ## SEO-04 · Wöchentlicher Review und Publikationsdaten
 
-Persistente Lease erlaubt einen Review je lokaler Woche, Datenportfolio und Prompt sind begrenzt; Benachrichtigung und manuelle Entscheidungen sind nachvollziehbar und wiederholbar.
+Reviews folgen dem konfigurierten Intervall von 1–90 Tagen (Default 7) samt lokaler Uhrzeit/Zeitzone; eine persistente Lease schützt vor konkurrierenden Läufen. Manuell erzwungene Läufe umgehen die Fälligkeitsprüfung, nicht die Lease. Datenportfolio und Prompt sind begrenzt; Benachrichtigung und manuelle Entscheidungen sind nachvollziehbar und wiederholbar.
 
 **Anforderungsbasis:** [docs/codebase-map.md](../../codebase-map.md) · ` documented_contract `. Die Basis ist eine Fundstelle, keine Behauptung, dass ältere Spezifikationen jede aktuelle Klausel wörtlich enthalten; [abweichende Oracles](decisions.md) beachten.
 
@@ -2430,17 +2432,17 @@ SSR liefert Canonical, Robots/Sitemaps und konsistente Entität; App/Privat/Admi
 
 <a id="admin-01"></a>
 
-## ADMIN-01 · Revisionierte Konfiguration
+## ADMIN-01 · Konfiguration: Revisionen und Aktivierungsrollback
 
-Adminsave validiert vor Mutation, speichert mit Revision/Audit und aktiviert konsistent; DB-/Aktivierungsfehler dürfen Runtime und Persistenz nicht auseinanderziehen. Alte Clients erhalten neue Felder.
+Adminsave validiert vor Mutation. Prompt- und Agentbudget-Konfiguration speichern Revision/Audit; Modellkonfiguration nutzt einen prozesslokalen Save-/Aktivierungsrollback, Publisherkonfiguration einen eigenen Savepfad ohne dieselbe Revisionsgarantie. Fehlgeschlagene Aktivierung soll den eigenen letzten gültigen Zustand erhalten, aber keine zwischenzeitlichen Writes anderer Prozesse überschreiben. Alte Clients erhalten neue Felder.
 
 **Anforderungsbasis:** [docs/codebase-map.md](../../codebase-map.md) · ` documented_contract `. Die Basis ist eine Fundstelle, keine Behauptung, dass ältere Spezifikationen jede aktuelle Klausel wörtlich enthalten; [abweichende Oracles](decisions.md) beachten.
 
 **Bewertung:** Teilweise belegt. Dateien liefern Belege für die im Testkatalog beschriebenen Teilfälle. Die Zuordnung behauptet keine vollständige Assertion jeder Vertragskante.
 
-**Testgrenze:** Für Promptrevision echte Emulator-Konkurrenz; sonst Fakes und keine atomare Aktivierung über mehrere Prozesse.
+**Testgrenze:** Promptrevisionen haben Emulator-Konkurrenzbelege. Modellrollback ist im Einzelwriter-Fake belegt; P-03 zeigt ein Überschreiben eines simulierten externen Writers. Keine gemeinsame atomare DB-/Runtime-Aktivierung über Prozesse (G-040).
 
-**Befunde:** —. Kein verknüpfter Befund bedeutet keine Vollständigkeitsfreigabe.
+**Befunde:** [G-040](gaps.md#g-040). Kein verknüpfter Befund bedeutet keine Vollständigkeitsfreigabe.
 
 <details><summary>Produktdateien und zugeordnete Testdateien</summary>
 
@@ -2486,7 +2488,7 @@ Adminsave validiert vor Mutation, speichert mit Revision/Audit und aktiviert kon
 
 ## ADMIN-02 · Adminoberfläche und HTTP-Adapter
 
-Adminaktionen tragen den aktuellen Token, lesen/speichern die passende Ressource und zeigen verständliche Fehler; Revisionkonflikte erhalten lokale Eingaben und fordern Reload statt stiller Überschreibung.
+Adminaktionen tragen den aktuellen Token, lesen/speichern die passende Ressource und zeigen verständliche Fehler; Bei revisionierten Editoren: Revisionkonflikte erhalten lokale Eingaben und fordern Reload statt stiller Überschreibung.
 
 **Anforderungsbasis:** [docs/codebase-map.md](../../codebase-map.md) · ` documented_contract `. Die Basis ist eine Fundstelle, keine Behauptung, dass ältere Spezifikationen jede aktuelle Klausel wörtlich enthalten; [abweichende Oracles](decisions.md) beachten.
 
@@ -2899,7 +2901,7 @@ Demo bleibt lokal, startet auf bewusste Aktion, zeigt konsistente Beispielantwor
 
 **Bewertung:** Teilweise belegt. Dateien liefern Belege für die im Testkatalog beschriebenen Teilfälle. Die Zuordnung behauptet keine vollständige Assertion jeder Vertragskante.
 
-**Testgrenze:** Demo-Teilfälle belegt; eigenständige Landing-Animationslogik hat keinen gezielten dynamischen Nachweis.
+**Testgrenze:** Demo-Teilfälle belegt. test_public_composer_mockups.py enthält dynamische Scroll-/--sp-/Toolbar-/Reduced-Motion-Prüfungen der Landinganimation, wurde aber nicht im Browser ausgeführt. Für die separate landing-insights.js-Logik gibt es keinen gezielten dynamischen Beleg; nicht den gesamten Landingbereich als ungetestet bezeichnen.
 
 **Befunde:** —. Kein verknüpfter Befund bedeutet keine Vollständigkeitsfreigabe.
 
@@ -3054,9 +3056,9 @@ Runs speichern effektive Konfiguration und getrennte Modell-/Consensus-/Synthese
 
 **Bewertung:** Teilweise belegt. Dateien liefern Belege für die im Testkatalog beschriebenen Teilfälle. Die Zuordnung behauptet keine vollständige Assertion jeder Vertragskante.
 
-**Testgrenze:** Haupt-CLI belegt; alternative run_sample/run_experiment-Einstiege nicht ausgeführt. Keine Livebenchmarks.
+**Testgrenze:** Haupt-CLI belegt; alternative run_sample/run_experiment-Einstiege nicht ausgeführt. Keine Livebenchmarks. P-05: HTTP-200-Fehlerbody wird als erfolgreiche Zelle für Resume indexiert (G-042).
 
-**Befunde:** [G-035](gaps.md#g-035). Kein verknüpfter Befund bedeutet keine Vollständigkeitsfreigabe.
+**Befunde:** [G-035](gaps.md#g-035), [G-042](gaps.md#g-042). Kein verknüpfter Befund bedeutet keine Vollständigkeitsfreigabe.
 
 <details><summary>Produktdateien und zugeordnete Testdateien</summary>
 
@@ -3096,9 +3098,9 @@ Deduplizierte Zellen bestimmen Accuracy/Kosten/Fehler; Publish speichert kompakt
 
 **Bewertung:** Teilweise belegt. Dateien liefern Belege für die im Testkatalog beschriebenen Teilfälle. Die Zuordnung behauptet keine vollständige Assertion jeder Vertragskante.
 
-**Testgrenze:** Datei-/Repositoryfakes; Admin-HTTP-Adapter und Frontendbericht nicht dynamisch geprüft. Adminrollen statt Eigentümerscope schützen diese Oberfläche.
+**Testgrenze:** Datei-/Repositoryfakes; Admin-HTTP-Adapter und Frontendbericht nicht dynamisch geprüft. Adminrollen statt Eigentümerscope schützen diese Oberfläche. Der Transportfehler ohne error-Feld im internen Outcome wird als Enthaltung gezählt (P-05/G-042); gültige Antwort ohne extrahierbare Auswahl bleibt eine separate fachliche Enthaltung.
 
-**Befunde:** [G-015](gaps.md#g-015). Kein verknüpfter Befund bedeutet keine Vollständigkeitsfreigabe.
+**Befunde:** [G-015](gaps.md#g-015), [G-042](gaps.md#g-042). Kein verknüpfter Befund bedeutet keine Vollständigkeitsfreigabe.
 
 <details><summary>Produktdateien und zugeordnete Testdateien</summary>
 

@@ -146,5 +146,45 @@
     "No per-test contexts, no Python subprocess auto-start; dynamic exec and subprocess execution may be absent or unattributed.",
     "No JS/browser/emulator line/branch instrumentation; previous Vitest/emulator evidence is retained in ../execution.json.",
     "No paid providers, production DB, deployment health or live LLM quality evaluated."
-  ]
+  ],
+  "independent_review": {
+    "date": "2026-09-26",
+    "input_commit": "c88629eed4466de1b0944dd20eb441880833a89b",
+    "product_test_base_commit": "145db25bfe029ff7f50cd77595bd6b9e043c1a2f",
+    "network_in_probes": "forbidden by socket doubles",
+    "probe_command": "UNIT_TEST_MODE=1 python docs/test-coverage/product/probes/independent-probes.py",
+    "probe_ids": [
+      "P-01",
+      "P-02",
+      "P-03",
+      "P-04",
+      "P-05"
+    ],
+    "probe_result": "observations reproduced; zero exit is not a product pass",
+    "probe_json": "evidence/independent-probes.json",
+    "focused_command": "UNIT_TEST_MODE=1 python -m pytest tests/test_memory_edit.py tests/test_model_configuration.py tests/test_auth_revocation.py tests/test_agent_capacity.py tests/test_agent_search.py tests/test_agent_delegation.py tests/test_consensus_api.py tests/test_benchmark_transport.py tests/test_benchmark_runner.py tests/test_topics_feature.py tests/test_watch_feature.py -q --junitxml=independent-focused.xml",
+    "focused_junit": "evidence/independent-focused.xml",
+    "focused_result": {
+      "passed": 374,
+      "failed": 0,
+      "error": 0,
+      "skipped": 0
+    },
+    "focused_seconds": 6.52,
+    "limitations": "No full rerun, browser, Windows, live Firebase/provider or new Firestore concurrency run; known historical red tests remain open.",
+    "artifact_hashes": [
+      {
+        "path": "docs/test-coverage/product/probes/independent-probes.py",
+        "sha256": "f0cde4605a12baa918f100bc42001d290e7d2f35cf680921687a0e387f140064"
+      },
+      {
+        "path": "docs/test-coverage/product/evidence/independent-probes.json",
+        "sha256": "33a3cc91b90b1d1e9f27110b1ec8e17e61dc94474ca3f3eb1ce8951acd82f60b"
+      },
+      {
+        "path": "docs/test-coverage/product/evidence/independent-focused.xml",
+        "sha256": "d61d0813fd941f71b6c893a3dcbb9ad8f04c79858bfe266fa2997d87f09c16c4"
+      }
+    ]
+  }
 }

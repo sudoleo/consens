@@ -61,6 +61,7 @@ beachten.
 Der [Morning-Brief-Claim](../../../app/services/watch_brief.py) rückt den
 Zeitplan vor dem Versand vor und dokumentiert At-most-once. Ein Prozessabbruch
 zwischen Commit und externer Zustellung kann deshalb eine Nachricht auslassen.
+Der Briefpfad besitzt keine separate deduplizierte Versand-ID.
 Ein nachgelagerter Marker kann umgekehrt nach erfolgreichem Versand bei
 Wiederholung eine Doppelzustellung ermöglichen.
 
@@ -132,7 +133,10 @@ Prüfung freigeben; nicht jede neue Ausgabe automatisch akzeptieren.
 |---|---|---|
 | Ungültige `Content-Length` | Middleware verwendet auch hier 413 | Ablehnung/Nichtaufruf zuerst schützen; Änderung zu 400 bewusst begründen |
 | Bool-/Float-Indices im Identity-Judge | Pythonkonvertierung kann mehr Formen akzeptieren als ein strikter Indexvertrag | Gewünschte Normalisierung explizit festlegen und dann parametrisieren |
-| OG-Historie/Cache | Aktuelle Route übergibt leere `history_scores`; der Renderer besitzt zusätzliche Fähigkeiten | Keine Sparkline als aktuell garantierte Routenfunktion erfinden; Cachefrische an tatsächliche öffentliche Version binden |
+| OG-Historie/Cache | Aktuelle OG-Route wählt den neuesten gültigen öffentlichen Antwortstand und übergibt leere `history_scores`; der Renderer besitzt zusätzliche Fähigkeiten | Keine beliebige historische Versionsauswahl oder Sparkline als aktuell garantierte Routenfunktion erfinden; Cachefrische an tatsächliche öffentliche Version binden |
+| Topic `noindex` | Veröffentlichte aktive/pausierte Topics bleiben öffentlich im Hub; nur die Sitemap schließt `noindex` zusätzlich aus | Indexierung nicht mit Zugriffsschutz verwechseln; keinen erfundenen privaten Topicstatus testen |
+| Erfolgreiche Antwort bei Speicherfehler | Chatabschluss kann die Antwort mit `chat_persisted=false` und `chat_turn_state=pending` liefern | Terminales `final` nicht als DB-Commit behandeln; Antwort und Persistenzstatus getrennt prüfen |
+| Konto-Cleanup nach Checkpointverlust | Eine erfolgreiche Operation kann vor dauerhafter Quittierung abbrechen; der minimale UID-Tombstone bleibt nach Abschluss erhalten | Idempotente Wiederholung zulassen, dauerhaft quittierte Bereiche überspringen und Tombstone nicht als unerlaubten Datenrest werten |
 | Lokaler Source-Transport | Produktionspolicy lehnt Loopback/andere Ports ab | Kontrolliertes Testziel nur im Testadapter einspeisen; echte SSRF-Ablehnung separat belegen, keinen Produktguard lockern |
 
 Diese Punkte machen die klaren Konflikt-/Ownership-/Textinvarianten nicht
@@ -168,6 +172,14 @@ Ein echter Reparaturlauf ist kein Regressionstest.
 | Ein grüner isolierter Report-Race widerlegt den roten Gesamtlauf | Primärlauf und Wiederholung sind beide Evidenz, Ursache bleibt offen |
 | Browserdatei vorhanden bedeutet Browservertrag grün | 267 Fälle sind gesammelt, noch nicht ausgeführt; WP-03 |
 | Hohe Zeilenabdeckung sichert Undo/OG-Inhalt | M-01/M-02 bleiben trotz konkreter Verhaltensänderung grün |
+
+## Zusätzliche Oracle-Korrekturen der unabhängigen Prüfung
+
+- **Memory:** Erfolgreiches Undo darf keine unverändert gebliebene Notiz nach Limitabsenkung still kürzen. Empfohlen ist eine strukturierte Ablehnung ohne Write; verlustfreie Wiederherstellung über dem aktuellen Limit braucht eine explizite Produktentscheidung (G-038/WP-10).
+- **Admin:** Prompt-/Budgetrevisionierung nicht auf Modell- oder Publisherkonfiguration übertragen. Ein Rollback darf nur den eigenen Write zurücknehmen, keinen zwischenzeitlichen Writer (G-040/WP-33).
+- **Benchmark:** HTTP-200-Providerfehler sind keine Modell-Enthaltung. Gültiger Antworttext ohne extrahierbare Auswahl bleibt hingegen eine Enthaltung; diese Kontrolle muss die Fehlerkorrektur begleiten (G-042/WP-34).
+- **HTTP:** Retry-After im isolierten Router ist kein Beleg für dessen Erhalt durch main.app. Ebenso beweist Pydantic-422 keinen ausgeführten Detailhandler (G-037/G-039).
+- **UI:** Logischer Fokus ist in jsdom teilweise geprüft; Landing-Scroll-/Reduced-Motion-Browsertests existieren, sind aber nicht ausgeführt. Fehlende Tests und fehlende Laufnachweise bleiben getrennt.
 
 ## Abschluss des späteren Gesamtvorhabens
 
