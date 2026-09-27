@@ -1,5 +1,5 @@
 /* Offline review probes. Run after npm ci: node docs/code-review/repro/frontend.cjs.
- * Assertions describe baseline bugs; convert to desired behavior when fixing.
+ * Assertions describe baseline behavior; convert to desired behavior when fixing.
  */
 const fs = require('node:fs');
 const vm = require('node:vm');
@@ -50,5 +50,62 @@ function between(file, from, to) {
   assert.equal(calls[1].url,'/api/admin/topics/B');
   assert.equal(calls[1].payload.title,'Topic A');
   results.push({probe:'R20-admin-selection', save:calls[1]});
+  // Run the entire attachment module; pause only the browser FileReader.
+  const attDom = new JSDOM('<div class="chat-input-container"><button id="attachTrigger"></button><div id="attachMenu"></div><button id="attachUploadOption"></button><input id="attachFileInput" type="file"><div id="attachmentBar"></div><textarea id="questionInput"></textarea></div>', {url:'https://example.test', runScripts:'outside-only'});
+  attDom.window.App = {};
+  attDom.window.isUserPlus = true;
+  let reader;
+  attDom.window.FileReader = class { readAsDataURL() { reader = this; } };
+  attDom.window.eval(source('static/js/attachments.js'));
+  const picker = attDom.window.document.getElementById('attachFileInput');
+  Object.defineProperty(picker, 'files', {value:[new attDom.window.File(['old draft'], 'draft-a.txt', {type:'text/plain'})]});
+  picker.dispatchEvent(new attDom.window.Event('change'));
+  await new Promise(setImmediate);
+  assert(reader);
+  attDom.window.showBookmarkAttachments([]);
+  assert.equal(attDom.window.pendingAttachments.length, 0);
+  reader.result = 'data:text/plain;base64,b2xkIGRyYWZ0'; reader.onload();
+  await new Promise(setImmediate);
+  assert.equal(attDom.window.pendingAttachments[0].name, 'draft-a.txt');
+  results.push({probe:'R21-late-attachment', pending_after_bookmark_switch:'draft-a.txt'});
+  attDom.window.close();
+
+  // Full Memory edit module, actual UI events, synthetic auth + offline HTTP.
+  const memDom = new JSDOM('<textarea id="questionInput">Account A preference</textarea>', {url:'https://example.test', runScripts:'outside-only'});
+  const w = memDom.window;
+  w.requestAnimationFrame = fn => fn();
+  w.auth = {currentUser:{uid:'A', getIdToken:async()=> 'token-A'}};
+  let reloadUid; const requests=[];
+  w.App = {userMemory:{load:async()=> {reloadUid=w.auth.currentUser.uid;}}};
+  let resolveFetch;
+  w.fetch = (url, options) => {
+    requests.push({url, options});
+    return new Promise(resolve=>{resolveFetch=resolve;});
+  };
+  w.eval(source('static/js/memory-edit.js'));
+  w.document.dispatchEvent(new w.Event('DOMContentLoaded'));
+  const question = w.document.getElementById('questionInput');
+  question.setSelectionRange(0, question.value.length);
+  question.dispatchEvent(new w.KeyboardEvent('keyup', {key:'Shift', bubbles:true}));
+  w.document.querySelector('[data-memory-intent="add"]').click();
+  assert.equal(w.document.getElementById('memoryEditBackdrop').hidden, false);
+  w.auth.currentUser = {uid:'B', getIdToken:async()=> 'token-B'};
+  w.dispatchEvent(new w.CustomEvent('consensio:auth-state', {detail:{uid:'B'}}));
+  assert.equal(w.document.getElementById('memoryEditBackdrop').hidden, false);
+  w.document.querySelector('.memory-edit-submit').click();
+  await new Promise(setImmediate);
+  assert.equal(requests[0].options.headers.Authorization, 'Bearer token-B');
+  assert.equal(JSON.parse(requests[0].options.body).selected_text, 'Account A preference');
+  results.push({probe:'R23-selection-owner', selected_from:'A', sent_with_token_for:'B'});
+  // The same B request finishes after another switch to C.
+  w.auth.currentUser = {uid:'C', getIdToken:async()=> 'token-C'};
+  w.dispatchEvent(new w.CustomEvent('consensio:auth-state', {detail:{uid:'C'}}));
+  resolveFetch({ok:true, json:async()=>({status:'applied', revision_id:'revision-B'})});
+  await new Promise(setImmediate);
+  assert.equal(reloadUid, 'C');
+  assert.equal(w.document.getElementById('memoryEditToast').hidden, false);
+  results.push({probe:'R23-late-response', request_for:'B', reload_for:'C', old_undo_visible:true});
+  memDom.window.close();
+
   console.log(JSON.stringify(results,null,2));
 })().catch(e=>{console.error(e);process.exitCode=1;});

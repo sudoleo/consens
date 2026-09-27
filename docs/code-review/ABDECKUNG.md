@@ -2,6 +2,8 @@
 
 Referenz: `4d7c061036936b06bb98b2b306b2987a5844cde4`. Dieser Anhang dokumentiert die Prüftiefe, nicht Fehlerfreiheit. Der Hauptbericht ist [README.md](README.md), die isolierten Ausführungsbelege stehen in [BELEGE.md](BELEGE.md).
 
+Die [Gegenprüfung vom 27. September 2026](GEGENPRUEFUNG.md) prüft alle 33 Befunde erneut gegen den unveränderten Produktcode. Sie ist eine befundbezogene zweite Lesung mit zusätzlichen Zustandsproben, kein behaupteter zweiter vollständiger Zeile-für-Zeile-Durchlauf aller hier aufgelisteten Dateien. Pfade, Bestandszahlen und Zeilenzahlen wurden erneut maschinell abgeglichen.
+
 ## Vorgehen und Grenzen
 
 Die Produktlogik wurde modulweise in zusammenhängenden Abschnitten gelesen; Aufrufer, Persistenz, Fehlerpfade und Darstellung wurden anschließend über Modulgrenzen hinweg verbunden. Einzelne Suchtreffer dienten der Navigation und Gegenprüfung, nicht als Ersatz für die Prüfung ganzer Produktmodule. Längere Python-Kommentare/Docstrings und reine HTML-Kommentare wurden teilweise für die Lesedarstellung ausgeblendet; relevante Verträge wurden am Original gegengeprüft.

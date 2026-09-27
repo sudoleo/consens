@@ -1,6 +1,6 @@
 # Isolierte Belege zum Produktcode-Review
 
-Basis und Schweregrade stehen in [README.md](README.md). Diese Proben wurden eigens aus den Produktpfaden entwickelt, ohne die parallelen Testsuite-Findings zu lesen. **13 Proben wurden erfolgreich ausgeführt; sie belegen Teilverhalten zu 12 verschiedenen Befunden.** „Erfolgreich“ bedeutet hier, dass die Probe das dokumentierte Fehlverhalten nachweisen konnte, nicht dass das Produkt diese Prüfung im gewünschten Sinn besteht.
+Basis und Schweregrade stehen in [README.md](README.md). Diese Proben wurden eigens aus den Produktpfaden entwickelt, ohne die parallelen Testsuite-Findings zu lesen. **23 Proben wurden am 27. September 2026 erfolgreich ausgeführt; sie belegen Teilverhalten zu 20 verschiedenen Befunden.** Davon sind zehn Proben in der Gegenprüfung hinzugekommen. „Erfolgreich“ bedeutet hier, dass die Probe den dokumentierten Ist-Zustand nachweist; bei R07 ist das ein bewusstes Verhalten mit bedingtem Kostenrisiko. Es bedeutet weder Fehlerfreiheit noch 23 bestandene Sollverhaltens-Tests. Der maschinenlesbare Lauf steht in [repro/ERGEBNISSE.json](repro/ERGEBNISSE.json).
 
 ## Ausführung
 
@@ -31,7 +31,19 @@ Die API-Quote wird mit echten Repository- und Runner-Methoden geprüft. Der Fake
 | R15 | Identischer Satz mit Preiswechsel 20 → 90 | Bewegungswert 0, Label `Stable` |
 | R20 | Topic A im Formular, GET B scheitert, Save | `PUT /api/admin/topics/B` enthält A-Daten |
 | R22 | `create_run` wirft, dann erneutes Collect | Lock bleibt gehalten, zweiter Aufruf `CollectionAlreadyRunning` |
+| R10 | Pending-Context claimen → Turn auf completed setzen → echten Finalizer aufrufen | Fertiger Turn bekommt nachträglich Context-ID und neue Lesart |
+| R12 | Originalprofil → neuere Fassung → alter Formularsnapshot | Originalinhalt wiederhergestellt, Revision trotzdem 3 |
+| R13 | Edit reservieren → gleiche ID einen Tag später reservieren | Weiter `reserved` statt Terminal-/Recoveryzustand |
+| R14b | Echte öffentliche Klassifizierung nach R14 | `role=primary`, `quality=high` für die allgemeine News-URL |
+| R16 | Echtes Watch-Update auf paused → alter Run meldet Fehler | `status=active`, Owner-Zähler bleibt 0 |
+| R21 | Vollständiges Attachment-Modul, verzögerter FileReader, Reset für Bookmarkansicht | Alte Datei erscheint später wieder als Pending-Anhang |
+| R23a | Vollständiges Memory-Modul, Auswahl A, Auth-Event B, Submit | A-Auswahl wird mit B-Token geschickt |
+| R23b | Request B → Auth-Event C → verspätete Antwort B | Memory-Reload für C und alter Undo-Hinweis |
+| R25 | Echter Admin-Persist-Helfer, fremder Write B während Aktivierung A, A scheitert | Rollback ersetzt B durch Ausgangsstand X |
+| R30 | A-Lease ablaufen → B claimt → A gibt frei → C claimt | C zugelassen trotz nicht abgelaufener B-Lease |
 | R31 | `/Report?key=AbC` gegen `/report?key=abc` | Identischer Deduplizierungsschlüssel |
+
+Die zusätzlichen Backend-Proben verwenden denselben einfachen Fake. R10 setzt die anderweitige Completion gezielt als Zustand, R16 ersetzt Index-Vorbereitung, Share-Read und reine Serialisierung, R25 schiebt den Fremdwrite an der Aktivierungsgrenze ein. Sie prüfen die echten Mutationen, nicht SDK-Konfliktretries oder parallel laufende HTTP-Requests. Bei R21/R23 werden echte DOM-Handler in jsdom ausgeführt; FileReader, Firebase-Identität und Fetch sind kontrollierte Stubs.
 
 R01 beweist die HTML-Injection am Sink. Die Probe führt keine Schadfunktion aus und beweist nicht, dass ein Angreifer beliebigen Text zuverlässig durch einen echten LLM-Lauf schleusen kann. R07 beweist die Budgetarithmetik; die Voraussetzung bereits kostenpflichtiger Providerarbeit ist gesondert im Befund genannt. R05 beweist den Ablauf des Belegs, während die Folgen für interaktive und wiederhergestellte API-Runs statisch nachverfolgt wurden.
 

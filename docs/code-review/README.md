@@ -2,6 +2,8 @@
 
 **Prüfbasis:** `4d7c061036936b06bb98b2b306b2987a5844cde4`, Stand 26. September 2026. Die Zeilenangaben beziehen sich auf diesen Commit. **33 Befunde und Verbesserungsvorschläge**, getrennt nach Belegstärke; keine Produktänderungen. Die parallele Prüfung der Testsuite und deren Befunde wurden nicht als Quelle verwendet.
 
+**Gegengeprüft am 27. September 2026 gegen `a448baa7` (voller SHA im [Gegenprüfungsprotokoll](GEGENPRUEFUNG.md)).** Der Produktcode ist gegenüber der Prüfbasis unverändert. Alle 33 Einträge wurden erneut geprüft; R07 wurde als bewusste Abrechnungsentscheidung auf P2 eingeordnet. Es verbleiben **5 P1, 26 P2 und 2 P3**; 23 Offline-Proben belegen Teilverhalten zu 20 Einträgen. Das Protokoll nennt auch Gegenargumente, Einschränkungen und die vorgenommenen Korrekturen.
+
 Das größte Risiko liegt an den Übergängen zwischen Funktionen: Ein bereits bezahlter Aufruf wird erneut freigegeben, ein fertig gespeicherter Lauf verliert seine Benachrichtigung, ein alter Browserzustand schreibt in den inzwischen gewählten Datensatz. Der zweite Schwerpunkt ist die Glaubwürdigkeit des Produkts: „abgeschlossen“, „belegt“, „Primärquelle“ und „stabil“ sagen an einigen Stellen mehr aus, als der Code tatsächlich nachweist.
 
 ## Lesen und anschließend umsetzen
@@ -16,7 +18,7 @@ Jeder Eintrag beginnt mit **genau zwei verständlichen Sätzen**. Danach folgen 
 - **B = bedingtes Risiko:** Voraussetzung steht im Eintrag; kein behaupteter Produktionsvorfall.
 - **V = Verbesserung:** bestehendes Verhalten ist teilweise ausdrücklich beabsichtigt; Produktentscheidung nötig.
 
-Ein erfolgreicher Quelltextreview beweist keine Fehlerfreiheit. [ABDECKUNG.md](ABDECKUNG.md) nennt die abschnittsweise geprüften Dateien und die Grenzen: CSS wurde strukturell geprüft, nicht vollständig visuell; Infrastruktur, echte Provider und Datenbanklast wurden nicht live geprüft. Die kleinen Reproduktionen bestätigen das **heutige Fehlverhalten** und müssen beim Fix in Tests des gewünschten Verhaltens umgewandelt werden.
+Ein erfolgreicher Quelltextreview beweist keine Fehlerfreiheit. [ABDECKUNG.md](ABDECKUNG.md) nennt die abschnittsweise geprüften Dateien und die Grenzen: CSS wurde strukturell geprüft, nicht vollständig visuell; Infrastruktur, echte Provider und Datenbanklast wurden nicht live geprüft. Die kleinen Reproduktionen bestätigen das **beschriebene Ist-Verhalten** und müssen beim Fix in Tests des gewünschten Verhaltens umgewandelt werden.
 
 ## Priorisierte Übersicht
 
@@ -28,43 +30,43 @@ Ein erfolgreicher Quelltextreview beweist keine Fehlerfreiheit. [ABDECKUNG.md](A
 | R04 | P2 | R | HTTP-Fehler verlieren wichtige Header |
 | R05 | P2 | R/S | Laufberechtigung endet mitten im Lauf um UTC-Mitternacht |
 | R06 | P1 | R/S | Abgeschnittene Antworten gelten als fertig |
-| R07 | P1 | R/B | Unbekannter Agent-Verbrauch stellt das volle Budget wieder her |
+| R07 | P2 | R/B/V | Unbekannter Agent-Verbrauch stellt das volle Budget wieder her |
 | R08 | P2 | R | Unscharfe Textsuche wird als Zitatbeleg verwendet |
 | R09 | P1 | S | Modellantworten aus dem Client werden zu autoritativen Ergebnissen |
-| R10 | P2 | S | Später Kontextabschluss kann fertigen Turn verändern |
+| R10 | P2 | R/S | Später Kontextabschluss kann fertigen Turn verändern |
 | R11 | P2 | S | Chat-Löschung nach Bookmark-Löschung ohne dauerhafte Wiederholung |
-| R12 | P2 | S | Manuelles Memory-Speichern überschreibt neuere Änderungen |
-| R13 | P2 | S | Memory-Edit bleibt nach Absturz dauerhaft „processing“ |
+| R12 | P2 | R/S | Manuelles Memory-Speichern überschreibt neuere Änderungen |
+| R13 | P2 | R/S | Memory-Edit bleibt nach Absturz dauerhaft „processing“ |
 | R14 | P2 | R | Nicht erlaubte Quellen werden in erlaubte Quellen umbenannt |
 | R15 | P2 | R | Preisänderung wird als stabile Modellposition bewertet |
-| R16 | P2 | S | Laufender Watch kann manuelles Pausieren rückgängig machen |
+| R16 | P2 | R/S | Laufender Watch kann manuelles Pausieren rückgängig machen |
 | R17 | P2 | S/V | Benachrichtigungen können dauerhaft verloren gehen |
 | R18 | P2 | B | Widerruf und öffentliche Caches widersprechen sich |
 | R19 | P2 | S | Eine Person kann durch fünf Reports Noindex auslösen |
 | R20 | P2 | R | Topic-Admin speichert altes Formular unter neuer ID |
-| R21 | P2 | S | Verspäteter Dateiimport landet im nächsten Entwurf |
+| R21 | P2 | R/S | Verspäteter Dateiimport landet im nächsten Entwurf |
 | R22 | P2 | R | SEO-Collector bleibt nach frühem Datenbankfehler gesperrt |
-| R23 | P2 | S | Memory-Dialog überlebt den Kontowechsel |
+| R23 | P2 | R/S | Memory-Dialog überlebt den Kontowechsel |
 | R24 | P2 | S/B | Limit vor Filter versteckt relevante Moderations-/SEO-Einträge |
-| R25 | P2 | B | Modellkonfiguration ist nicht prozessübergreifend konsistent |
+| R25 | P2 | R/B | Modellkonfiguration ist nicht prozessübergreifend konsistent |
 | R26 | P2 | B | PDF-Extraktion ohne eigene Ressourcenbegrenzung |
 | R27 | P2 | S | Benchmark-Audits liegen außerhalb des Budgetlimits |
 | R28 | P3 | V | Memory-Undo behält vollständige alte Profile dauerhaft |
 | R29 | P2 | B | Agent-Sitzungsdokument wächst mit allen Schritten |
-| R30 | P2 | B | Alter Watch-Worker kann fremde globale Lease freigeben |
+| R30 | P2 | R/B | Alter Watch-Worker kann fremde globale Lease freigeben |
 | R31 | P2 | R | Groß-/Kleinschreibung verschiedener Quellen wird zusammengelegt |
 | R32 | P3 | S | Publisher-Admin verspricht nicht vorhandenen DeepSeek-Ausschluss |
 | R33 | P2 | S | Alte Topic-Versionen werden nach 100 Läufen unerreichbar |
 
 ## 1. Sicherheitsgrenzen und Laufabrechnung
 
-### R01 — Topic-Text wird als HTML ausgeführt
+### R01 — Topic-Text wird erneut als HTML interpretiert
 
 **In zwei Sätzen:** Ein Text aus einem Topic-Lauf wird beim Darüberfahren oder Fokussieren erneut als HTML eingesetzt. Enthält er schädliches Markup, kann daraus Code im Browser eines Besuchers werden.
 
 **P1 · R/S.** Einstieg: `app/services/topic_runner.py:180–190`, `app/services/claim_ledger.py:396–455`, `templates/topic.html:222–229`, `static/js/topic-page.js:27–37`; CSP in `app/core/security.py:96–149`.
 
-**Ursache und Ablauf:** `change_summary` stammt aus dem Pipeline-Ergebnis und wird als `cell.note` gespeichert. Jinja escaped das `data-note`-Attribut korrekt; der Browser decodiert es beim Lesen von `dataset.note` wieder. `show()` interpoliert diesen String unescaped in `read.innerHTML`. Auf `/topics/...` erlaubt die derzeitige CSP Inline-Skripte. Die Offline-Probe erzeugt über diese echte Funktion ein harmloses zusätzliches `<span>`; sie injiziert nichts in eine echte öffentliche Seite. Die erfolgreiche Unterbringung schädlicher Inhalte im Modelloutput wurde nicht live versucht.
+**Ursache und Ablauf:** `change_summary` stammt aus dem Pipeline-Ergebnis und wird als `cell.note` gespeichert. Jinja escaped das `data-note`-Attribut korrekt; der Browser decodiert es beim Lesen von `dataset.note` wieder. `show()` interpoliert diesen String unescaped in `read.innerHTML`. Die unveränderte Notiz erreicht diesen Pfad bei einem materiellen Folgelauf (`minor`/`major`); die erste Zelle und stabile Zellen verwenden feste Texte. Die Längen-/Whitespace-Normalisierung in `topics._clean_multiline` entfernt kein HTML. Auf `/topics/...` erlaubt die derzeitige CSP Inline-Skripte. Die Offline-Probe erzeugt über diese echte Funktion ein harmloses zusätzliches `<span>`; sie injiziert nichts in eine echte öffentliche Seite. Die erfolgreiche Unterbringung schädlicher Inhalte im Modelloutput wurde nicht live versucht.
 
 **Fix:** Datum, Notiz und Score mit DOM-Knoten und `textContent` aufbauen. Kein zweites HTML-Parsing von Datentext; öffentliche Inline-Skripte anschließend in externe Dateien verschieben und deren CSP härten. Die CSP ist zusätzliche Absicherung, kein Ersatz für den Sink-Fix.
 
@@ -72,11 +74,11 @@ Ein erfolgreicher Quelltextreview beweist keine Fehlerfreiheit. [ABDECKUNG.md](A
 
 ### R02 — DOMPurify 3.0.6 ist als Sicherheitskomponente überholt
 
-**In zwei Sätzen:** Die App und öffentliche Seiten liefern eine DOMPurify-Version mit veröffentlichten Sicherheitslücken aus. Damit ist die Reinigung fremder Modelltexte keine verlässliche Schutzgrenze mehr.
+**In zwei Sätzen:** Die App und öffentliche Seiten liefern eine DOMPurify-Version mit veröffentlichten Sicherheitslücken aus. Ein bekannter Sanitizer-Bypass schwächt dadurch den Schutz beim Rendern fremder Modelltexte.
 
 **P1 · S.** Einstieg: `package.json:13`, `scripts/vendor_frontend.mjs:8–18`, `templates/share.html:31`, `templates/topic.html:172`, `static/vendor/dompurify/3.0.6/`.
 
-**Beleg:** Die tatsächlich gepinnte und ausgelieferte Version ist 3.0.6. Das [Hersteller-Advisory GHSA-gx9m-whjm-85jf / CVE-2024-47875](https://github.com/cure53/DOMPurify/security/advisories/GHSA-gx9m-whjm-85jf) nennt Versionen unter 3.1.3 als betroffen; geprüft am 26. September 2026. Dies belegt die verwundbare Abhängigkeit, nicht jeden möglichen Exploit unter den zusätzlichen Sanitizer- und CSP-Regeln der Anwendung. R01 umgeht den Sanitizer vollständig und ist separat zu beheben.
+**Beleg:** Die tatsächlich gepinnte und ausgelieferte Version ist 3.0.6. Das [Hersteller-Advisory GHSA-gx9m-whjm-85jf / CVE-2024-47875](https://github.com/cure53/DOMPurify/security/advisories/GHSA-gx9m-whjm-85jf) nennt Versionen unter 3.1.3 als betroffen; erneut am 27. September 2026 am Hersteller-Advisory geprüft. Dies belegt die verwundbare Abhängigkeit, nicht jeden möglichen Exploit unter den zusätzlichen Sanitizer- und CSP-Regeln der Anwendung. R01 umgeht den Sanitizer vollständig und ist separat zu beheben.
 
 **Fix:** Eine zum Umsetzungszeitpunkt gepflegte, gegen die veröffentlichten Advisories geprüfte Version pinnen; Lockfile, vendorte Dateien, Build-Manifest und öffentliche CDN-Verweise gemeinsam aktualisieren. Nicht lediglich auf die historische Mindestversion dieses einen Advisories springen.
 
@@ -124,7 +126,7 @@ Ein erfolgreicher Quelltextreview beweist keine Fehlerfreiheit. [ABDECKUNG.md](A
 
 **P1 · R/S.** Einstieg: `app/services/llm/streaming.py:282–347`, `stream_chat_completion_text`; `app/services/llm/consensus_engine.py:stream_consensus` (u. a. 2522).
 
-**Ursache:** Sobald mindestens ein Textstück existiert, emittiert `_stream_openrouter_chat_completion` ein erfolgreiches `final`, auch ohne Finish-Ereignis oder bei `finish_reason=length`. Der reine Textadapter transportiert die Finish-Semantik nicht weiter; auch die Synthese betrachtet nichtleeren Text als Erfolg. Beide Varianten wurden mit echten Streaming-Funktionen und künstlichen Provider-Events bestätigt.
+**Ursache:** Sobald mindestens ein Textstück existiert, emittiert `_stream_openrouter_chat_completion` ein erfolgreiches `final`, auch ohne Finish-Ereignis oder bei `finish_reason=length`. Der reine Textadapter transportiert die Finish-Semantik nicht weiter; auch die Synthese betrachtet nichtleeren Text als Erfolg. Beide Varianten wurden mit echten Streaming-Funktionen und künstlichen Provider-Events bestätigt. Gemeint sind normal endende Iteratoren ohne bestätigten Abschluss beziehungsweise mit `length`; geworfene Transportfehler und ausdrücklich erkannte Cancellation haben eigene Fehlerpfade und werden hier nicht pauschal als Erfolg bezeichnet.
 
 **Fix:** Transportabschluss als typisierten Zustand durch die gesamte Pipeline reichen: vollständig, Tokenlimit, unterbrochen, Fehler, bewusst abgebrochen. Teiltext kann sichtbar bleiben, muss aber als solcher gespeichert werden; seine Verwendung für Synthese/Beurteilung benötigt eine ausdrückliche Regel. Keine stillen Retries, die sichtbare Texte verschiedener Versuche mischen.
 
@@ -134,13 +136,13 @@ Ein erfolgreicher Quelltextreview beweist keine Fehlerfreiheit. [ABDECKUNG.md](A
 
 **In zwei Sätzen:** Fehlt die endgültige Tokenabrechnung eines Agent-Aufrufs, erhält das Konto den gesamten reservierten Betrag zurück. So können bereits angefallene Modellkosten außerhalb des wirksamen Tageslimits bleiben.
 
-**P1 · R/B.** Einstieg: `app/services/agent_quota.py:59–117`; Settlement in `agent_runs.py`/`agent_sessions.py`; provisorische Usage in `app/services/llm/agent_client.py`.
+**P2 · R/B/V.** Einstieg: `app/services/agent_quota.py:59–117`; Settlement in `agent_runs.py`/`agent_sessions.py`; provisorische Usage in `app/services/llm/agent_client.py`.
 
-**Beleg und Grenze:** `settle` entfernt die Reservierung und erhöht bei unbekannter/provisorischer Usage sowohl `unknown` als auch `unknown_released`. `remaining` zieht nur `used` und `reserved` ab. Probe: Limit 100, Reservierung 100, Settlement ohne finale Usage → wieder 100 verfügbar, 0 verwendet. Kostenumgehung setzt voraus, dass der Provider bereits kostenpflichtig gearbeitet hat, bevor die finale Usage verloren geht, beispielsweise bei Abbruch. Ein echter kostenpflichtiger Abbruch wurde nicht erzeugt.
+**Beleg und Grenze:** `settle` entfernt die Reservierung und erhöht bei unbekannter/provisorischer Usage sowohl `unknown` als auch `unknown_released`. `remaining` zieht nur `used` und `reserved` ab. Probe: Limit 100, Reservierung 100, Settlement ohne finale Usage → wieder 100 verfügbar, 0 verwendet. Kostenumgehung setzt voraus, dass der Provider bereits kostenpflichtig gearbeitet hat, bevor die finale Usage verloren geht, beispielsweise bei Abbruch. Ein echter kostenpflichtiger Abbruch wurde nicht erzeugt. **Gegenbeleg und Einordnung:** Modulvertrag, `normalize` und Recovery geben unbekannte terminale Reservierungen ausdrücklich frei, damit Konten nicht bis Mitternacht blockiert bleiben. Das ist kein versehentlicher Rechenfehler, sondern ein bewusstes Verfügbarkeits-/Kostenrisiko; deshalb P2 mit Produktentscheidung statt des bisherigen P1-Fehlerurteils.
 
-**Fix:** „Unbekannt“ als eigenen, begrenzt blockierenden Abrechnungszustand behandeln; Provider-Generation-ID zur späteren Auflösung nutzen, soweit verfügbar. Vorläufige Schätzung und endgültige Belastung nachvollziehbar ausweisen. Keine ewige Reservierung bei nachweislich nie gestarteten Aufrufen; solche Fälle separat freigeben.
+**Vorschlag:** Den gewünschten Vertrag zuerst festlegen: Die bestehende Freigabe abgeschlossener Reservierungen erhalten, aber eine gesonderte, begrenzte Zulassungsregel für wiederholt unbekannten Verbrauch prüfen. Alternativ kurze Unsicherheitsfrist mit automatischer Auflösung und verständlicher Anzeige; keine stillschweigende Rückkehr zur absichtlich entfernten ganztägigen Sperre. Provider-Generation-ID zur nachträglichen Messung nutzen, soweit verfügbar, und Schätzungen strikt von gemessenen Tokens trennen. Nachweislich nie gestartete Aufrufe weiterhin freigeben.
 
-**Abnahme:** Wiederholte Abbrüche nach Providerstart stellen nicht unbegrenzt das volle Budget wieder her. Reconciliation läuft idempotent, misst nachträglich verfügbare Usage ein und belastet keinen Aufruf doppelt. Echte Vorabfehler geben Reservierungen weiterhin frei.
+**Abnahme:** Die gewählte Regel begrenzt wiederholte Aufrufe mit unbekanntem Verbrauch, ohne abgeschlossene normale Aufrufe bis Mitternacht zu sperren. Reconciliation läuft idempotent, misst nachträglich verfügbare Usage ein und belastet keinen Aufruf doppelt. Echte Vorabfehler geben Reservierungen weiterhin frei.
 
 ## 2. Bedeutung, Herkunft und Persistenz von Ergebnissen
 
@@ -172,9 +174,9 @@ Ein erfolgreicher Quelltextreview beweist keine Fehlerfreiheit. [ABDECKUNG.md](A
 
 **In zwei Sätzen:** Eine verspätete Kontextberechnung kann die gespeicherte Bedeutung einer schon fertigen Frage nachträglich ändern. Die Antwort und der ihr zugeordnete Kontext passen dann nicht mehr sicher zusammen.
 
-**P2 · S.** Einstieg: `app/services/chat_context.py:finalize_version` (704–740), Turn-Abschluss in `app/services/chat_store.py`.
+**P2 · R/S.** Einstieg: `app/services/chat_context.py:finalize_version` (704–740), Turn-Abschluss in `app/services/chat_store.py`.
 
-**Ablauf:** Eine Kontextberechnung besitzt eine gültige Lease; während sie läuft, wird der Zielturn anderweitig abgeschlossen. `finalize_version` liest zwar das Turn-Dokument, prüft aber weder dessen Pending-Status noch die erwartete Context-Bindung oder den aktiven Chat. Anschließend schreibt es `context_version_id` und `resolved_question` auf den Turn. Die Lease schützt die Kontextversion, nicht den inzwischen veränderten Zielturn.
+**Ablauf:** Eine Kontextberechnung besitzt eine gültige Lease; während sie läuft, wird der Zielturn anderweitig abgeschlossen. `finalize_version` liest zwar das Turn-Dokument, prüft aber weder dessen Pending-Status noch die erwartete Context-Bindung oder den aktiven Chat. Anschließend schreibt es `context_version_id` und `resolved_question` auf den Turn. Die Lease schützt die Kontextversion, nicht den inzwischen veränderten Zielturn. Der Service weist einen bereits beim Start fertigen Turn ohne verknüpfte Version korrekt ab; diese Vorprüfung schützt nicht gegen den späteren Zustandswechsel. Während der Build noch läuft, können beim Consensus-Start gespeicherte und gesendete Context-ID beide fehlen, sodass dessen Gleichheitsprüfung passiert. Offline bestätigt: Claim auf pending → Completion-Zustand → echter Finalizer schreibt die neue Lesart auf den fertigen Turn; keine Behauptung eines nachgebauten parallelen HTTP-/Firestore-Laufs.
 
 **Fix:** Im selben Commit aktive Chat-/Turn-Zustände und erwartete Kontextrevision prüfen. Fertige Turns unveränderlich halten; verspätete Berechnungen verwerfen oder als ungebundene Version abschließen. Den erlaubten Konfliktvertrag explizit machen.
 
@@ -196,9 +198,9 @@ Ein erfolgreicher Quelltextreview beweist keine Fehlerfreiheit. [ABDECKUNG.md](A
 
 **In zwei Sätzen:** Zwei geöffnete Memory-Editoren können ihre Änderungen gegenseitig überschreiben. Auch eine gerade erfolgreich gespeicherte KI-Korrektur kann durch ein älteres Formular wieder verschwinden.
 
-**P2 · S.** Einstieg: `app/api/routers/users.py:UserMemoryRequest`, `app/services/user_memory.py:save` (364–402), `app/services/memory_edit.py:apply` (473), `static/js/user-memory.js`.
+**P2 · R/S.** Einstieg: `app/api/routers/users.py:UserMemoryRequest`, `app/services/user_memory.py:save` (364–402), `app/services/memory_edit.py:apply` (473), `static/js/user-memory.js`.
 
-**Ursache:** Manuelles Speichern erhöht die Revision, verlangt aber keine erwartete Ausgangsrevision. Das KI-Apply prüft seine eigene Baseline, schützt also nur gegen Änderungen vor diesem Apply, nicht gegen einen anschließenden veralteten manuellen Write.
+**Ursache:** Manuelles Speichern erhöht die Revision, verlangt aber keine erwartete Ausgangsrevision. Das KI-Apply prüft seine eigene Baseline, schützt also nur gegen Änderungen vor diesem Apply, nicht gegen einen anschließenden veralteten manuellen Write. Die zusätzliche Repository-Probe speichert Original → neuere Fassung → alten Formularsnapshot: Revision steigt auf 3, Inhalt fällt auf Original zurück. Das beabsichtigte Bewahren fehlender Legacy-`notes` ist vorhanden, verhindert diesen Konflikt bei explizit gesendeten Feldern aber nicht.
 
 **Fix:** Revision mit Profil ausliefern, im Editor halten und beim Save atomar vergleichen. Konflikt mit aktuellem Profil zurückgeben; UI bietet erneutes Laden oder bewussten Merge. Legacy-Clients benötigen eine festgelegte Übergangsregel, die neue Inhalte nicht still überschreibt.
 
@@ -208,9 +210,9 @@ Ein erfolgreicher Quelltextreview beweist keine Fehlerfreiheit. [ABDECKUNG.md](A
 
 **In zwei Sätzen:** Stirbt der Server während einer Memory-Korrektur, kann derselbe Auftrag dauerhaft als laufend gelten. Wiederholen hilft dann nicht, obwohl längst kein Modell mehr daran arbeitet.
 
-**P2 · S.** Einstieg: `app/services/memory_edit.py:reserve` (313–326), Service-Dispatch (693–712), `static/js/memory-edit.js:submitEdit`.
+**P2 · R/S.** Einstieg: `app/services/memory_edit.py:reserve` (313–326), Service-Dispatch (693–712), `static/js/memory-edit.js:submitEdit`.
 
-**Ablauf:** Request-Dokument wird `reserved`, Prozess stirbt vor Apply/Fail. Beim Retry wird der vorhandene Datensatz sofort zurückgegeben, bevor die inzwischen abgelaufene In-flight-Lease geprüft wird. Diese Lease ermöglicht einen neuen Request mit anderer ID, repariert aber den alten nicht; unverändertes Feedback im Dialog verwendet dieselbe ID erneut.
+**Ablauf:** Request-Dokument wird `reserved`, Prozess stirbt vor Apply/Fail. Beim Retry wird der vorhandene Datensatz sofort zurückgegeben, bevor die inzwischen abgelaufene In-flight-Lease geprüft wird. Diese Lease ermöglicht einen neuen Request mit anderer ID, repariert aber den alten nicht; unverändertes Feedback im Dialog verwendet dieselbe ID erneut. Die neue Probe reserviert tatsächlich und wiederholt nach einem Tag: weiterhin `reserved`; die Route übersetzt das zu HTTP 202 / `processing`. Ein neuer Auftrag mit neuer ID ist davon zu unterscheiden.
 
 **Fix:** Request-Lease, Ausführungsnonce und Recovery-Status einführen. Nach Ablauf eindeutig „unterbrochen, erneut versuchbar“ oder sicherer Retry unter neuer Lease; alte Ergebnisse dürfen nicht später auf eine neue Memory-Revision schreiben. Bereits entstandene Providerkosten getrennt berücksichtigen.
 
@@ -224,7 +226,7 @@ Ein erfolgreicher Quelltextreview beweist keine Fehlerfreiheit. [ABDECKUNG.md](A
 
 **P2 · R.** Einstieg: `app/services/topic_runner.py:_source_type` (54–60), `evidence_from_sources` (63–95); Klassifizierung in `app/services/topics.py`.
 
-**Beleg:** Ist die erkannte Kategorie nicht erlaubt, wird `allowed[0]` zurückgegeben. Mit `allowed_types=['primary']` wird eine allgemeine News-URL dadurch zu `primary`; die nachfolgende Darstellung/Sortierung erhält diese falsche Kategorie. Die Regel ist keine echte Filterung.
+**Beleg:** Ist die erkannte Kategorie nicht erlaubt, wird `allowed[0]` zurückgegeben. Mit `allowed_types=['primary']` wird eine allgemeine News-URL dadurch zu `primary`; die anschließende echte Klassifizierung bestätigt für diese allgemeine URL sogar `role=primary` und `quality=high`. Bekannte Community-/Gerüchte-/Forschungsdomains können das deklarierte Etikett dagegen wieder übersteuern; nicht jede Quelle erhält dieselbe falsche Darstellung. Die Regel ist keine echte Filterung. Voraussetzung ist eine eingeschränkte gespeicherte/API-Konfiguration; der aktuelle Admin-Editor sendet stets alle erlaubten Typen.
 
 **Fix:** Erkannte Rolle unverändert speichern. Nicht erlaubte Quellen explizit ausschließen oder als nicht regelkonform kennzeichnen; Quellen-IDs und Zitatverweise dürfen dabei nicht auf eine andere Quelle springen. Falls nur ausgeschlossene Quellen vorliegen, „unzureichende geeignete Evidenz“ anzeigen.
 
@@ -246,13 +248,13 @@ Ein erfolgreicher Quelltextreview beweist keine Fehlerfreiheit. [ABDECKUNG.md](A
 
 **In zwei Sätzen:** Wenn du einen laufenden Watch pausierst, kann dessen späterer Fehler ihn wieder aktivieren. Änderungen am Zeitplan können ebenfalls durch Daten aus dem alten Lauf überschrieben werden.
 
-**P2 · S.** Einstieg: `app/services/watch_service.py:update_watch` (970–1066), `complete_watch_run` (1548 ff.), `fail_watch_run` (1630–1660); PATCH-Aufruf in `app/api/routers/watch.py`.
+**P2 · R/S.** Einstieg: `app/services/watch_service.py:update_watch` (970–1066), `complete_watch_run` (1548 ff.), `fail_watch_run` (1630–1660); PATCH-Aufruf in `app/api/routers/watch.py`.
 
-**Ablauf:** PATCH setzt `status=paused` und `claimed_until=None`, lässt aber `current_run_id` bestehen. Ein alter Worker mit derselben ID besteht den Abschluss-/Fehlercheck; `fail_watch_run` schreibt bei weniger als drei Fehlern ausdrücklich `status=active`. Terminberechnung verwendet zudem `claimed` statt den inzwischen geänderten Einstellungen. Der separate `pause_watch`-Pfad ist strenger; er beseitigt den Fehler im regulären Updatepfad nicht.
+**Ablauf:** PATCH setzt `status=paused` und `claimed_until=None`, lässt aber `current_run_id` bestehen. Ein alter Worker mit derselben ID besteht den Abschluss-/Fehlercheck; `fail_watch_run` schreibt bei weniger als drei Fehlern ausdrücklich `status=active`. Terminberechnung verwendet zudem `claimed` statt den inzwischen geänderten Einstellungen. Der separate `pause_watch`-Pfad ist strenger; er beseitigt den Fehler im regulären Updatepfad nicht. Der Heartbeat beendet bei Leaseverlust nur sich selbst, nicht den laufenden Provideraufruf. Offline mit echtem Update und Fehlerabschluss bestätigt: Watch wieder `active`, aber Owner-`active_count` weiter 0 nach dem Pausieren; die Pause wird damit zusätzlich von der Zählerlogik entkoppelt.
 
 **Fix:** Lauf- und Konfigurationsgeneration bei relevanten Änderungen erhöhen. Completion darf Resultat historisieren, aber Status, aktuellen Zeitplan und Notification-Regeln nur unter passenden Vorbedingungen verändern. Pause muss aktive Ausführungsrechte wirksam entziehen; Zählertransaktionen beibehalten.
 
-**Abnahme:** Lauf claimen → pausieren → Fehler/Erfolg liefern: Watch bleibt pausiert. Änderung von Uhrzeit/Intervall während eines Laufs bleibt bestehen. Resume startet keinen zweiten Worker für dieselbe Generation; Benachrichtigungsentscheidung berücksichtigt aktuelle Abmeldung/Pause.
+**Abnahme:** Lauf claimen → pausieren → Fehler/Erfolg liefern: Watch bleibt pausiert, und der Aktivzähler entspricht dem tatsächlichen Status. Änderung von Uhrzeit/Intervall während eines Laufs bleibt bestehen. Resume startet keinen zweiten Worker für dieselbe Generation; Benachrichtigungsentscheidung berücksichtigt aktuelle Abmeldung/Pause.
 
 ### R17 — Zustandsfortschritt und Benachrichtigung sind nicht dauerhaft gekoppelt
 
@@ -260,7 +262,7 @@ Ein erfolgreicher Quelltextreview beweist keine Fehlerfreiheit. [ABDECKUNG.md](A
 
 **P2 · S/V.** Einstieg: `app/services/watch_scheduler.py:488–570`, `app/services/telegram_watch.py:_claim_delivery` (400 ff.), `app/services/topics.py:claim_delivery` (1267 ff.), `app/services/watch_brief.py:_claim_in_transaction` (195 ff.), `app/services/topic_runner.py`.
 
-**Ablauf:** Watch-Abschluss verschiebt den Zeitplan, danach folgen Mail/Telegram/Follower-Versand. Zwischen beiden Schritten kann der Prozess sterben; Versandfehler rollen den Lauf bewusst nicht zurück. Ein vorhandener Telegram-Delivery-Marker verhindert auch bei misslungenem/abgebrochenem Versand einen erneuten Claim. Topic-Marker `sending` haben nach Absturz keine Wiederaufnahme; Morning Brief ist ausdrücklich als „at-most-once“ umgesetzt und verschiebt seine Baseline vor Versand. Das ist eine bewusste Verlust-statt-Duplikat-Entscheidung, die für Änderungswarnungen überprüft werden sollte.
+**Ablauf:** Watch-Abschluss verschiebt den Zeitplan, danach folgen Mail/Telegram/Follower-Versand. Zwischen beiden Schritten kann der Prozess sterben; Versandfehler rollen den Lauf bewusst nicht zurück. Ein vorhandener Telegram-Delivery-Marker verhindert auch bei misslungenem/abgebrochenem Versand einen erneuten Claim. Topic-Marker `sending` haben nach Absturz keine Wiederaufnahme; ein regulär gemeldeter Topic-Versandfehler entfernt seinen Marker dagegen korrekt. Das ermöglicht einen expliziten erneuten Claim, ist aber noch keine dauerhafte Retry-Queue. Telegram besitzt einen unmittelbaren Plaintext-Retry bei HTTP 400, keinen allgemeinen Neustart-Retry; Morning Brief ist ausdrücklich als „at-most-once“ umgesetzt und verschiebt seine Baseline vor Versand. Das ist eine bewusste Verlust-statt-Duplikat-Entscheidung, die für Änderungswarnungen überprüft werden sollte.
 
 **Fix:** Mit Ergebniscommit eine Outbox schreiben; Delivery-ID aus Ressource, Run, Kanal und Empfänger, mit Lease, Retry-Zeit, Versuchszähler und Terminalstatus. SMTP-Akzeptanz ist nicht Zustellung im Postfach; nach unklarem Versandabschluss sind Duplikate ohne Provider-Idempotenz nicht absolut vermeidbar. Diese Grenze ausdrücklich akzeptieren, statt „exactly once“ zu versprechen. Abmeldung vor jedem Versuch prüfen.
 
@@ -308,9 +310,9 @@ Ein erfolgreicher Quelltextreview beweist keine Fehlerfreiheit. [ABDECKUNG.md](A
 
 **In zwei Sätzen:** Eine noch eingelesene Datei kann nach dem Öffnen eines gespeicherten Gesprächs plötzlich wieder als Anhang auftauchen. Wer schnell weiterarbeitet, kann sie dadurch einer anderen Frage mitgeben als beabsichtigt.
 
-**P2 · S.** Einstieg: `static/js/attachments.js:addFiles` (618–681), `clearPendingAttachments` (486–490), `detachForMessage`; `showBookmarkAttachments` (778–781) und Aufruf in `static/firebase.js:2361–2362`.
+**P2 · R/S.** Einstieg: `static/js/attachments.js:addFiles` (618–681), `clearPendingAttachments` (486–490), `detachForMessage`; `showBookmarkAttachments` (778–781) und Aufruf in `static/firebase.js:2361–2362`.
 
-**Ursache:** Verkleinern und Base64-Lesen laufen asynchron. Deren spätere Callbacks schreiben immer in das aktuelle globale `pendingAttachments`; Clear leert lediglich schon fertige Dateien und kehrt bei leerer Liste sofort zurück. Pending-Reads besitzen keine Entwurfs- oder Auth-Generation. Bereits korrekt an eine Nachricht angehängte Dateikopien sind ein anderer Zustand und sollen erhalten bleiben.
+**Ursache:** Verkleinern und Base64-Lesen laufen asynchron. Deren spätere Callbacks schreiben immer in das aktuelle globale `pendingAttachments`; Clear leert lediglich schon fertige Dateien und kehrt bei leerer Liste sofort zurück. Pending-Reads besitzen keine Entwurfs- oder Auth-Generation. Bereits korrekt an eine Nachricht angehängte Dateikopien sind ein anderer Zustand und sollen erhalten bleiben. Die neue jsdom-Probe lädt das vollständige Modul, verzögert nur FileReader, ruft den echten `showBookmarkAttachments`-Reset auf und beobachtet danach die Datei wieder in `pendingAttachments`.
 
 **Fix:** Dateien während des Imports an Draft-ID und Owner-Generation binden. Clear/Detach/Neuer Chat invalidiert ausstehende Imports für diesen Entwurf; wenn möglich Reader abbrechen, ansonsten Completion verwerfen. Senden während des Imports bewusst sperren oder eindeutig erklären.
 
@@ -332,9 +334,9 @@ Ein erfolgreicher Quelltextreview beweist keine Fehlerfreiheit. [ABDECKUNG.md](A
 
 **In zwei Sätzen:** Eine für Konto A ausgewählte Textstelle kann nach einem Kontowechsel versehentlich im Memory von Konto B landen. Auch eine verspätete Antwort für A kann danach noch den sichtbaren Dialog und Undo-Hinweis verändern.
 
-**P2 · S.** Einstieg: `static/js/memory-edit.js:post` (342–356), `submitEdit`, `bind` (438); Auth-Generationen in `static/js/auth-session-state.js` als vorhandenes Vorbild.
+**P2 · R/S.** Einstieg: `static/js/memory-edit.js:post` (342–356), `submitEdit`, `bind` (438); Auth-Generationen in `static/js/auth-session-state.js` als vorhandenes Vorbild.
 
-**Ursache:** Auth-Events rufen lediglich `hideMenu` auf; Dialog, Auswahl, Request-ID und Undo bleiben bestehen. `post` nimmt das beim Absenden aktuelle Konto und prüft dessen UID nur nach `getIdToken`, nicht nach Fetch/JSON. Die Backend-Besitzerprüfung schützt das jeweilige Tokenkonto korrekt; der Fehler ist die Zuordnung der UI-Absicht.
+**Ursache:** Auth-Events rufen lediglich `hideMenu` auf; Dialog, Auswahl, Request-ID und Undo bleiben bestehen. `post` nimmt das beim Absenden aktuelle Konto und prüft dessen UID nur nach `getIdToken`, nicht nach Fetch/JSON. Die Backend-Besitzerprüfung schützt das jeweilige Tokenkonto korrekt; der Fehler ist die Zuordnung der UI-Absicht. Die jsdom-Gegenprobe lädt das vollständige Modul: Auswahl A → Auth-Event B → Submit verwendet Token B und Auswahl A; Antwort dieses Requests nach weiterem Wechsel zu C löst Reload für C und den alten Undo-Hinweis aus. Kontowechsel etwa über einen zweiten Tab ist ausreichend; der echte Firebase-Login selbst wurde nicht automatisiert.
 
 **Fix:** Auswahl/Dialog an UID plus Auth-Generation binden und bei jedem Auth-Wechsel schließen/leeren. Response- und Undo-Anwendung nur für die noch aktuelle Generation; laufende Fetches abbrechen, soweit sinnvoll. Vor Submit explizit die Selection-Ownership prüfen.
 
@@ -356,9 +358,9 @@ Ein erfolgreicher Quelltextreview beweist keine Fehlerfreiheit. [ABDECKUNG.md](A
 
 **In zwei Sätzen:** Bei mehreren Serverprozessen können Anfragen mit unterschiedlichen Modell- und Limitkonfigurationen laufen. Ein fehlgeschlagenes Admin-Update kann außerdem eine inzwischen erfolgreich gespeicherte Änderung eines anderen Prozesses zurückrollen.
 
-**P2 · B.** Einstieg: `app/api/routers/admin.py:_persist_and_activate_models` (51–75), `app/core/config.py:load_models_from_db` (1891 ff.), Konfigurationsreads im normalen Anfragepfad.
+**P2 · R/B.** Einstieg: `app/api/routers/admin.py:_persist_and_activate_models` (51–75), `app/core/config.py:load_models_from_db` (1891 ff.), Konfigurationsreads im normalen Anfragepfad.
 
-**Voraussetzungen und Ablauf:** Mindestens zwei Prozesse/Instanzen oder konkurrierende Konfigurationsautoren. Das Python-Lock schützt nur eine Instanz. Prozess A liest Revision X, schreibt A, B schreibt B, A-Aktivierung scheitert und A schreibt blind X zurück. Selbst ohne diesen Fehlerpfad wird nicht automatisch jede normale Chat-Instanz auf dieselbe neue Konfiguration synchronisiert. Die Agent-Route lädt explizit neu; das ist noch kein globaler Konsistenzvertrag. In-place-Änderungen mehrerer Dictionaries erschweren zudem einen atomaren Lesesnapshot.
+**Voraussetzungen und Ablauf:** Mindestens zwei Prozesse/Instanzen oder konkurrierende Konfigurationsautoren. Das Python-Lock schützt nur eine Instanz. Prozess A liest Revision X, schreibt A, B schreibt B, A-Aktivierung scheitert und A schreibt blind X zurück. Selbst ohne diesen Fehlerpfad wird nicht automatisch jede normale Chat-Instanz auf dieselbe neue Konfiguration synchronisiert. Die Agent-Route lädt explizit neu; das ist noch kein globaler Konsistenzvertrag. In-place-Änderungen mehrerer Dictionaries erschweren zudem einen atomaren Lesesnapshot. Die neue Probe führt den echten Persist-/Rollback-Helfer aus und schiebt beim Aktivieren einen zweiten DB-Write ein: B wird durch X ersetzt. Das belegt die Interleaving-Logik, nicht ein vermessenes Mehrprozess-Deployment.
 
 **Fix:** Versionierte unveränderliche Konfigurationssnapshots, transaktionaler Compare-and-swap auf erwartete Revision, Aktivierungsprüfung vor Veröffentlichung soweit möglich. Worker übernehmen eine veröffentlichte Revision atomar; jeder Run speichert seine Revision. Rollback darf nur die eigene noch aktuelle Revision ersetzen.
 
@@ -386,7 +388,7 @@ Ein erfolgreicher Quelltextreview beweist keine Fehlerfreiheit. [ABDECKUNG.md](A
 
 **Ursache:** `budget` geht nur an `run`; sobald dieser nicht `stopped` meldet, starten drei weitere Auditgruppen ohne Budgetübergabe. Besonders deutlich bei Resume eines schon fertigen Runs: übersprungene Zellen verhindern nicht erneute Auditkosten. `spent_from_index` summiert ausschließlich den letzten erfolgreichen Cell-Datensatz, keine früheren kostenpflichtigen Versuche. Fehlende Usage wird im Transport teilweise zu Null, obwohl Unbekannt nicht Kostenlos bedeutet.
 
-**Fix:** Gemeinsames Attempt-Kostenjournal für Hauptlauf, Retry und Audits; alle Calls vor Start reservieren. Budget als Schätzung kennzeichnen und unbekannte Kosten konservativ behandeln. Audits selbst resumierbar/idempotent speichern. Datensatzrevision und Frage-/Optionsdigest zusätzlich einfrieren, damit Resume keine veränderten Daten unter derselben Frage-ID mischt.
+**Fix:** Gemeinsames Attempt-Kostenjournal für Hauptlauf, Retry und Audits; alle Calls vor Start reservieren. Budget als Schätzung kennzeichnen und unbekannte Kosten konservativ behandeln. Audits selbst resumierbar/idempotent speichern. Die Budgetkorrektur auf diese tatsächlich ausgelösten Aufrufe begrenzen; eine allgemeine Neugestaltung des Benchmarks ist dafür nicht erforderlich.
 
 **Abnahme:** Enge Grenze stoppt vor dem ersten nicht gedeckten Auditcall. Resume wiederholt fertige Audits nicht und berücksichtigt bezahlte Fehlversuche. Hauptlauf und Bericht nennen tatsächliche Kostendeckung/Unbekannte; Modellantwortqualität wird nicht mit Transportfehlern verwechselt.
 
@@ -408,7 +410,7 @@ Ein erfolgreicher Quelltextreview beweist keine Fehlerfreiheit. [ABDECKUNG.md](A
 
 **P2 · B.** Einstieg: `app/services/agent_sessions.py:claim` (73–111), `_delegated_settlement` (186–195), `publish_agent`; `app/services/agent_policy.py:for_chat` und `snapshot` (26–45).
 
-**Voraussetzungen:** Lange beziehungsweise stark delegierende Sitzungen, insbesondere bei großzügigem Kontobudget. `step_states`, `step_usage` und `reservations` wachsen im zentralen Receipt-Dokument; mehrere Worker aktualisieren es transaktional. Der Chat-Modus deaktiviert mehrere ursprüngliche Run-Limits zugunsten des Kontobudgets. Es existieren an anderen Stellen Checkpoint-/Payload-Grenzen, aber kein entsprechend durchgehendes Größenbudget für diesen zentralen Schrittverlauf. Eine konkrete maximale Laufanzahl oder ein gemessener Ausfall wird nicht behauptet.
+**Voraussetzungen:** Lange beziehungsweise stark delegierende Ausführungen innerhalb **eines einzelnen Agent-Turns**, insbesondere bei großzügigem Kontobudget. Ein neuer Turn erhält ein eigenes Root-Receipt; der Befund behauptet kein unbegrenztes Wachstum eines einzigen Dokuments über sämtliche Fragen eines Chats. `step_states`, `step_usage` und `reservations` wachsen im zentralen Receipt-Dokument; mehrere Worker aktualisieren es transaktional. Der Chat-Modus deaktiviert mehrere ursprüngliche Run-Limits zugunsten des Kontobudgets. Es existieren an anderen Stellen Checkpoint-/Payload-Grenzen, aber kein entsprechend durchgehendes Größenbudget für diesen zentralen Schrittverlauf. Eine konkrete maximale Laufanzahl oder ein gemessener Ausfall wird nicht behauptet.
 
 **Fix:** Abgeschlossene Schritte als einzelne unveränderliche Dokumente speichern; Root nur Aggregate, aktuelle Leases und begrenzte Arbeitsmenge. Kompaktierung und Obergrenzen anhand serialisierter Größe einführen. Technische Sicherheitsgrenzen nicht ausschließlich aus einem Geld-/Tokenbudget ableiten; Überschreitung als resumierbaren Stopp darstellen.
 
@@ -418,9 +420,9 @@ Ein erfolgreicher Quelltextreview beweist keine Fehlerfreiheit. [ABDECKUNG.md](A
 
 **In zwei Sätzen:** Ein alter Watch-Worker kann nach Ablauf seiner eigenen Sperrzeit die Sperre eines neu gestarteten Workers löschen. Dadurch können mehr Scheduler gleichzeitig arbeiten als beabsichtigt.
 
-**P2 · B.** Einstieg: `app/services/watch_service.py:_worker_lease_transaction`, `acquire_worker_lease`, `release_worker_lease` (1418–1445); Scheduler-`finally` in `app/services/watch_scheduler.py`.
+**P2 · R/B.** Einstieg: `app/services/watch_service.py:_worker_lease_transaction`, `acquire_worker_lease`, `release_worker_lease` (1418–1445); Scheduler-`finally` in `app/services/watch_scheduler.py`.
 
-**Ablauf:** A erhält Lease, arbeitet länger als deren Dauer; B übernimmt die abgelaufene Lease. A beendet seinen Durchlauf und schreibt unabhängig von einem Owner-/Nonce-Abgleich `claimed_until=None`. C kann nun starten, obwohl B noch läuft. Die separaten Watch-Claims/Run-IDs verhindern mehrere Folgefehler; dieser Befund ist keine pauschale Behauptung doppelter Ergebniscommits. Betroffen sind globale Koordination und Lastbegrenzung.
+**Ablauf:** A erhält Lease, arbeitet länger als deren Dauer; B übernimmt die abgelaufene Lease. A beendet seinen Durchlauf und schreibt unabhängig von einem Owner-/Nonce-Abgleich `claimed_until=None`. C kann nun starten, obwohl B noch läuft. Die separaten Watch-Claims/Run-IDs verhindern mehrere Folgefehler; dieser Befund ist keine pauschale Behauptung doppelter Ergebniscommits. Betroffen sind globale Koordination und Lastbegrenzung. Die neue Probe lässt A ablaufen, B übernehmen und weist C zunächst korrekt ab; nach A-Freigabe wird C trotz B zugelassen.
 
 **Fix:** Owner-Token/Fencing-Generation in die globale Lease aufnehmen; nur Eigentümer darf erneuern oder freigeben. Heartbeat für lange Durchläufe, Stop bei Leaseverlust. Den bestehenden Schutz je Watch erhalten.
 
@@ -442,11 +444,11 @@ Ein erfolgreicher Quelltextreview beweist keine Fehlerfreiheit. [ABDECKUNG.md](A
 
 **In zwei Sätzen:** Im Publisher-Admin steht, dass DeepSeek ausgeschlossen sei. Die aktuelle Serverkonfiguration und der gespeicherte Modellplan gewährleisten diesen Ausschluss jedoch nicht.
 
-**P3 · S.** Einstieg: `templates/admin.html:294–301`, `static/js/admin.js:1669`, `app/services/publisher_config.py:233`, `app/services/api_consensus_runner.py:execute_consensus_pipeline`.
+**P3 · S.** Einstieg: `templates/admin.html:294–301`, `static/js/admin.js:1669`, `app/services/publisher_config.py:233`, `app/services/api_consensus_runner.py:execute_consensus_pipeline`; dieselbe veraltete Zusage in `docs/codebase-map.md`, Abschnitt 2.
 
 **Beleg:** `public_config` liefert `excluded_providers=[]`; die Pipeline verwendet den gespeicherten Preset-Modellplan, ausdrücklich ohne heimliches Entfernen eines Providers. Das ist kein Fehler des Modellplans: Der widersprechende UI-Text ist der Fehler. Auch innerhalb des Admin-Templates gibt es abweichende neuere Hinweise.
 
-**Fix:** Statische Ausschlussbehauptung entfernen und tatsächlich konfigurierte Familien anzeigen. Falls ein Ausschluss gewünscht wird, muss er zuerst als klare Produktregel im initialen Plan und im Watch-Rerun umgesetzt werden; diesen Auftrag nicht aus altem Text ableiten.
+**Fix:** Statische Ausschlussbehauptung in UI und Architekturkarte entfernen und tatsächlich konfigurierte Familien anzeigen. Falls ein Ausschluss gewünscht wird, muss er zuerst als klare Produktregel im initialen Plan und im Watch-Rerun umgesetzt werden; diesen Auftrag nicht aus altem Text ableiten.
 
 **Abnahme:** Admin zeigt für Initiallauf und Rerun exakt die serverseitigen Provider. Presetwechsel aktualisiert die Darstellung; keine unbelegte Zusage zu Anbieter- oder Länderbeschränkungen bleibt stehen.
 
@@ -467,7 +469,7 @@ Ein erfolgreicher Quelltextreview beweist keine Fehlerfreiheit. [ABDECKUNG.md](A
 Ein Komplettumbau ist nicht der erste Schritt. Mehrere gute Schutzmechanismen sind bereits vorhanden: Account-Lösch-Tombstones, serverseitige Besitzerprüfungen, transaktionale Quoten, Run-Tokens, sanitisiertes öffentliches Markdown, SSRF-/Netzwerkgrenzen für Quellenabrufe und isolierte Entwicklungsprofile. Diese Mechanismen sollten systematisch auf die noch offenen Übergänge ausgedehnt werden, statt parallele Sonderlösungen einzuführen.
 
 1. **Sicherheitsgrenzen zuerst:** R01 und R02 separat und klein beheben; R09 als eigener Provenienzvertrag mit Migration behandeln. Danach nicht nur HTML-Rendering, sondern auch Speicherung und öffentliche Ableitungen prüfen.
-2. **Kosten und Ausführungsidentität:** R03, R05 und R07 zusammen entwerfen; R04 als kleiner unabhängiger Fix. Gemeinsame Invariante: Jede kostenpflichtige Ausführung gehört zu genau einem nicht wiederverwendbaren Beleg, dessen Tagesabrechnung und Ausführungszustand getrennt sind.
+2. **Kosten und Ausführungsidentität:** R03 und R05 gemeinsam entwerfen, R07 mit ausdrücklicher Kosten-/Verfügbarkeitsentscheidung ergänzen; R04 als kleiner unabhängiger Fix. Gemeinsame Invariante: Jede kostenpflichtige Ausführung gehört zu genau einem nicht wiederverwendbaren Beleg, dessen Tagesabrechnung und Ausführungszustand getrennt sind.
 3. **Ehrliche Ergebniszustände:** R06, R08, R14, R15 und R31. Ein explizites Ergebnismodell für Vollständigkeit, Herkunft, Quellenbeleg und Vergleichbarkeit bis in Chat, API, Share und Watch weiterreichen; „fehlend/unklar“ darf nicht zu „erfolgreich/stabil“ werden.
 4. **Revisionen und verspätete Arbeit:** R10, R12, R13, R16, R20, R21, R23 und R25. Backend verwendet Compare-and-swap/Fencing, Frontend eine kleine gemeinsame Operation-Identität aus Auth-, Draft-/Entity- und Request-Generation. Die vorhandenen neueren Run-/Auth-Module als Vorbild nehmen; kein gleichzeitiger Austausch des gesamten `window.App`-Systems.
 5. **Dauerhafte Nebenwirkungen:** R11, R17, R18 und R30. Löschjobs, Versandoutbox und widerrufbare Veröffentlichung brauchen getrennte, wiederaufnehmbare Zustände. Erfolgreicher LLM-Run bleibt erfolgreich, auch wenn eine Nachricht noch aussteht; erfolgreicher Versand ist nicht dasselbe wie erfolgreicher Ergebniscommit.
