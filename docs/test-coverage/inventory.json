@@ -12647,6 +12647,10 @@
               "kind": "expect"
             },
             {
+              "line": 64,
+              "kind": "expect"
+            },
+            {
               "line": 65,
               "kind": "expect"
             }
@@ -12878,6 +12882,10 @@
             {
               "line": 55,
               "kind": "expect"
+            },
+            {
+              "line": 56,
+              "kind": "expect"
             }
           ]
         },
@@ -12897,6 +12905,10 @@
             },
             {
               "line": 66,
+              "kind": "expect"
+            },
+            {
+              "line": 67,
               "kind": "expect"
             }
           ]
@@ -13022,6 +13034,10 @@
             },
             {
               "line": 72,
+              "kind": "expect"
+            },
+            {
+              "line": 74,
               "kind": "expect"
             }
           ]
@@ -13244,6 +13260,10 @@
               "kind": "expect"
             },
             {
+              "line": 27,
+              "kind": "expect"
+            },
+            {
               "line": 28,
               "kind": "expect"
             }
@@ -13265,6 +13285,10 @@
             },
             {
               "line": 39,
+              "kind": "expect"
+            },
+            {
+              "line": 41,
               "kind": "expect"
             }
           ]
@@ -13502,6 +13526,10 @@
             {
               "line": 148,
               "kind": "expect"
+            },
+            {
+              "line": 150,
+              "kind": "expect"
             }
           ]
         },
@@ -13548,6 +13576,10 @@
               "kind": "expect"
             },
             {
+              "line": 175,
+              "kind": "expect"
+            },
+            {
               "line": 178,
               "kind": "expect"
             },
@@ -13574,6 +13606,14 @@
             {
               "line": 188,
               "kind": "expect"
+            },
+            {
+              "line": 192,
+              "kind": "expect"
+            },
+            {
+              "line": 193,
+              "kind": "expect"
             }
           ]
         },
@@ -13598,6 +13638,10 @@
             {
               "line": 211,
               "kind": "expect"
+            },
+            {
+              "line": 212,
+              "kind": "expect"
             }
           ]
         },
@@ -13613,6 +13657,10 @@
             },
             {
               "line": 224,
+              "kind": "expect"
+            },
+            {
+              "line": 227,
               "kind": "expect"
             }
           ]
@@ -13768,6 +13816,10 @@
               "kind": "expect"
             },
             {
+              "line": 338,
+              "kind": "expect"
+            },
+            {
               "line": 339,
               "kind": "expect"
             }
@@ -13816,11 +13868,19 @@
               "kind": "expect"
             },
             {
+              "line": 368,
+              "kind": "expect"
+            },
+            {
               "line": 369,
               "kind": "expect"
             },
             {
               "line": 370,
+              "kind": "expect"
+            },
+            {
+              "line": 373,
               "kind": "expect"
             },
             {
@@ -13854,6 +13914,10 @@
             {
               "line": 390,
               "kind": "expect"
+            },
+            {
+              "line": 393,
+              "kind": "expect"
             }
           ]
         },
@@ -13868,7 +13932,15 @@
               "kind": "expect"
             },
             {
+              "line": 405,
+              "kind": "expect"
+            },
+            {
               "line": 408,
+              "kind": "expect"
+            },
+            {
+              "line": 409,
               "kind": "expect"
             }
           ]
@@ -14000,6 +14072,10 @@
               "kind": "expect"
             },
             {
+              "line": 511,
+              "kind": "expect"
+            },
+            {
               "line": 512,
               "kind": "expect"
             },
@@ -14037,6 +14113,14 @@
             },
             {
               "line": 534,
+              "kind": "expect"
+            },
+            {
+              "line": 536,
+              "kind": "expect"
+            },
+            {
+              "line": 540,
               "kind": "expect"
             }
           ]
@@ -14092,6 +14176,10 @@
               "kind": "expect"
             },
             {
+              "line": 578,
+              "kind": "expect"
+            },
+            {
               "line": 579,
               "kind": "expect"
             },
@@ -14117,6 +14205,10 @@
             },
             {
               "line": 594,
+              "kind": "expect"
+            },
+            {
+              "line": 595,
               "kind": "expect"
             }
           ]
@@ -14157,6 +14249,10 @@
             },
             {
               "line": 622,
+              "kind": "expect"
+            },
+            {
+              "line": 625,
               "kind": "expect"
             },
             {
@@ -14253,6 +14349,10 @@
             },
             {
               "line": 692,
+              "kind": "expect"
+            },
+            {
+              "line": 694,
               "kind": "expect"
             },
             {
@@ -14560,6 +14660,10 @@
               "kind": "expect"
             },
             {
+              "line": 866,
+              "kind": "expect"
+            },
+            {
               "line": 867,
               "kind": "expect"
             }
@@ -14785,6 +14889,10 @@
             },
             {
               "line": 1026,
+              "kind": "expect"
+            },
+            {
+              "line": 1030,
               "kind": "expect"
             }
           ]
@@ -15434,11 +15542,23 @@
               "kind": "expect"
             },
             {
+              "line": 31,
+              "kind": "expect"
+            },
+            {
+              "line": 32,
+              "kind": "expect"
+            },
+            {
               "line": 33,
               "kind": "expect"
             },
             {
               "line": 34,
+              "kind": "expect"
+            },
+            {
+              "line": 36,
               "kind": "expect"
             },
             {
@@ -15462,7 +15582,23 @@
               "kind": "expect"
             },
             {
+              "line": 53,
+              "kind": "expect"
+            },
+            {
+              "line": 56,
+              "kind": "expect"
+            },
+            {
+              "line": 58,
+              "kind": "expect"
+            },
+            {
               "line": 60,
+              "kind": "expect"
+            },
+            {
+              "line": 61,
               "kind": "expect"
             }
           ]
@@ -15475,6 +15611,10 @@
           "assertion_evidence": [
             {
               "line": 68,
+              "kind": "expect"
+            },
+            {
+              "line": 70,
               "kind": "expect"
             }
           ]
@@ -15526,6 +15666,10 @@
               "kind": "expect"
             },
             {
+              "line": 102,
+              "kind": "expect"
+            },
+            {
               "line": 104,
               "kind": "expect"
             },
@@ -15534,11 +15678,19 @@
               "kind": "expect"
             },
             {
+              "line": 106,
+              "kind": "expect"
+            },
+            {
               "line": 108,
               "kind": "expect"
             },
             {
               "line": 109,
+              "kind": "expect"
+            },
+            {
+              "line": 112,
               "kind": "expect"
             }
           ]
@@ -15563,6 +15715,14 @@
             },
             {
               "line": 125,
+              "kind": "expect"
+            },
+            {
+              "line": 127,
+              "kind": "expect"
+            },
+            {
+              "line": 128,
               "kind": "expect"
             }
           ]
@@ -15598,7 +15758,15 @@
               "kind": "expect"
             },
             {
+              "line": 152,
+              "kind": "expect"
+            },
+            {
               "line": 154,
+              "kind": "expect"
+            },
+            {
+              "line": 157,
               "kind": "expect"
             },
             {
@@ -15607,6 +15775,10 @@
             },
             {
               "line": 166,
+              "kind": "expect"
+            },
+            {
+              "line": 168,
               "kind": "expect"
             }
           ]
@@ -15751,6 +15923,22 @@
             },
             {
               "line": 241,
+              "kind": "expect"
+            },
+            {
+              "line": 242,
+              "kind": "expect"
+            },
+            {
+              "line": 245,
+              "kind": "expect"
+            },
+            {
+              "line": 247,
+              "kind": "expect"
+            },
+            {
+              "line": 249,
               "kind": "expect"
             }
           ]
@@ -15989,6 +16177,10 @@
               "kind": "expect"
             },
             {
+              "line": 84,
+              "kind": "expect"
+            },
+            {
               "line": 85,
               "kind": "expect"
             },
@@ -15998,6 +16190,10 @@
             },
             {
               "line": 88,
+              "kind": "expect"
+            },
+            {
+              "line": 91,
               "kind": "expect"
             },
             {
@@ -16077,6 +16273,10 @@
               "kind": "expect"
             },
             {
+              "line": 123,
+              "kind": "expect"
+            },
+            {
               "line": 124,
               "kind": "expect"
             },
@@ -16093,11 +16293,27 @@
               "kind": "expect"
             },
             {
+              "line": 129,
+              "kind": "expect"
+            },
+            {
               "line": 131,
               "kind": "expect"
             },
             {
+              "line": 132,
+              "kind": "expect"
+            },
+            {
               "line": 133,
+              "kind": "expect"
+            },
+            {
+              "line": 135,
+              "kind": "expect"
+            },
+            {
+              "line": 136,
               "kind": "expect"
             }
           ]
@@ -16125,11 +16341,19 @@
               "kind": "expect"
             },
             {
+              "line": 150,
+              "kind": "expect"
+            },
+            {
               "line": 151,
               "kind": "expect"
             },
             {
               "line": 153,
+              "kind": "expect"
+            },
+            {
+              "line": 155,
               "kind": "expect"
             }
           ]
@@ -16145,11 +16369,23 @@
               "kind": "expect"
             },
             {
+              "line": 167,
+              "kind": "expect"
+            },
+            {
+              "line": 169,
+              "kind": "expect"
+            },
+            {
               "line": 175,
               "kind": "expect"
             },
             {
               "line": 176,
+              "kind": "expect"
+            },
+            {
+              "line": 179,
               "kind": "expect"
             }
           ]
@@ -16167,6 +16403,14 @@
             {
               "line": 191,
               "kind": "expect"
+            },
+            {
+              "line": 193,
+              "kind": "expect"
+            },
+            {
+              "line": 197,
+              "kind": "expect"
             }
           ]
         },
@@ -16182,6 +16426,14 @@
             },
             {
               "line": 209,
+              "kind": "expect"
+            },
+            {
+              "line": 212,
+              "kind": "expect"
+            },
+            {
+              "line": 213,
               "kind": "expect"
             },
             {
@@ -16233,7 +16485,15 @@
               "kind": "expect"
             },
             {
+              "line": 233,
+              "kind": "expect"
+            },
+            {
               "line": 234,
+              "kind": "expect"
+            },
+            {
+              "line": 235,
               "kind": "expect"
             }
           ]
@@ -16612,6 +16872,10 @@
             },
             {
               "line": 169,
+              "kind": "expect"
+            },
+            {
+              "line": 170,
               "kind": "expect"
             },
             {
@@ -17681,7 +17945,19 @@
               "kind": "expect"
             },
             {
+              "line": 75,
+              "kind": "expect"
+            },
+            {
               "line": 77,
+              "kind": "expect"
+            },
+            {
+              "line": 79,
+              "kind": "expect"
+            },
+            {
+              "line": 81,
               "kind": "expect"
             }
           ]
@@ -17725,11 +18001,19 @@
               "kind": "expect"
             },
             {
+              "line": 105,
+              "kind": "expect"
+            },
+            {
               "line": 107,
               "kind": "expect"
             },
             {
               "line": 110,
+              "kind": "expect"
+            },
+            {
+              "line": 111,
               "kind": "expect"
             },
             {
@@ -17741,7 +18025,15 @@
               "kind": "expect"
             },
             {
+              "line": 116,
+              "kind": "expect"
+            },
+            {
               "line": 118,
+              "kind": "expect"
+            },
+            {
+              "line": 119,
               "kind": "expect"
             }
           ]
@@ -17795,6 +18087,14 @@
             {
               "line": 148,
               "kind": "expect"
+            },
+            {
+              "line": 150,
+              "kind": "expect"
+            },
+            {
+              "line": 155,
+              "kind": "expect"
             }
           ]
         },
@@ -17846,6 +18146,14 @@
           "assertion_evidence": [
             {
               "line": 194,
+              "kind": "expect"
+            },
+            {
+              "line": 198,
+              "kind": "expect"
+            },
+            {
+              "line": 202,
               "kind": "expect"
             }
           ]
@@ -18074,6 +18382,10 @@
             {
               "line": 154,
               "kind": "expect"
+            },
+            {
+              "line": 156,
+              "kind": "expect"
             }
           ]
         },
@@ -18249,6 +18561,14 @@
             },
             {
               "line": 57,
+              "kind": "expect"
+            },
+            {
+              "line": 59,
+              "kind": "expect"
+            },
+            {
+              "line": 63,
               "kind": "expect"
             },
             {
@@ -19193,6 +19513,10 @@
             {
               "line": 68,
               "kind": "expect"
+            },
+            {
+              "line": 70,
+              "kind": "expect"
             }
           ]
         },
@@ -19260,6 +19584,10 @@
             },
             {
               "line": 101,
+              "kind": "expect"
+            },
+            {
+              "line": 102,
               "kind": "expect"
             }
           ]
@@ -19853,6 +20181,14 @@
             {
               "line": 80,
               "kind": "expect"
+            },
+            {
+              "line": 82,
+              "kind": "expect"
+            },
+            {
+              "line": 85,
+              "kind": "expect"
             }
           ]
         },
@@ -20019,6 +20355,10 @@
               "kind": "expect"
             },
             {
+              "line": 168,
+              "kind": "expect"
+            },
+            {
               "line": 171,
               "kind": "expect"
             }
@@ -20148,6 +20488,10 @@
             },
             {
               "line": 243,
+              "kind": "expect"
+            },
+            {
+              "line": 245,
               "kind": "expect"
             }
           ]
@@ -21977,6 +22321,18 @@
             {
               "line": 49,
               "kind": "expect"
+            },
+            {
+              "line": 50,
+              "kind": "expect"
+            },
+            {
+              "line": 53,
+              "kind": "expect"
+            },
+            {
+              "line": 55,
+              "kind": "expect"
             }
           ]
         },
@@ -22190,6 +22546,10 @@
               "kind": "expect"
             },
             {
+              "line": 137,
+              "kind": "expect"
+            },
+            {
               "line": 138,
               "kind": "expect"
             }
@@ -22223,6 +22583,10 @@
             },
             {
               "line": 152,
+              "kind": "expect"
+            },
+            {
+              "line": 154,
               "kind": "expect"
             }
           ]
@@ -22291,6 +22655,10 @@
             },
             {
               "line": 189,
+              "kind": "expect"
+            },
+            {
+              "line": 193,
               "kind": "expect"
             }
           ]
@@ -22994,6 +23362,10 @@
               "kind": "expect"
             },
             {
+              "line": 157,
+              "kind": "expect"
+            },
+            {
               "line": 159,
               "kind": "expect"
             }
@@ -23079,6 +23451,10 @@
             },
             {
               "line": 230,
+              "kind": "expect"
+            },
+            {
+              "line": 237,
               "kind": "expect"
             },
             {
@@ -23174,6 +23550,10 @@
               "kind": "expect"
             },
             {
+              "line": 311,
+              "kind": "expect"
+            },
+            {
               "line": 312,
               "kind": "expect"
             },
@@ -23190,7 +23570,23 @@
               "kind": "expect"
             },
             {
+              "line": 320,
+              "kind": "expect"
+            },
+            {
+              "line": 321,
+              "kind": "expect"
+            },
+            {
               "line": 322,
+              "kind": "expect"
+            },
+            {
+              "line": 325,
+              "kind": "expect"
+            },
+            {
+              "line": 326,
               "kind": "expect"
             }
           ]
@@ -23211,6 +23607,10 @@
             },
             {
               "line": 348,
+              "kind": "expect"
+            },
+            {
+              "line": 356,
               "kind": "expect"
             }
           ]
@@ -23600,6 +24000,10 @@
             {
               "line": 32,
               "kind": "expect"
+            },
+            {
+              "line": 33,
+              "kind": "expect"
             }
           ]
         }
@@ -23659,6 +24063,10 @@
               "kind": "expect"
             },
             {
+              "line": 48,
+              "kind": "expect"
+            },
+            {
               "line": 51,
               "kind": "expect"
             },
@@ -23684,6 +24092,10 @@
             },
             {
               "line": 62,
+              "kind": "expect"
+            },
+            {
+              "line": 64,
               "kind": "expect"
             }
           ]
@@ -23803,7 +24215,19 @@
               "kind": "expect"
             },
             {
+              "line": 139,
+              "kind": "expect"
+            },
+            {
+              "line": 146,
+              "kind": "expect"
+            },
+            {
               "line": 147,
+              "kind": "expect"
+            },
+            {
+              "line": 151,
               "kind": "expect"
             },
             {
@@ -23864,6 +24288,10 @@
             },
             {
               "line": 211,
+              "kind": "expect"
+            },
+            {
+              "line": 214,
               "kind": "expect"
             }
           ]
@@ -24136,6 +24564,10 @@
             {
               "line": 81,
               "kind": "expect"
+            },
+            {
+              "line": 82,
+              "kind": "expect"
             }
           ]
         },
@@ -24227,6 +24659,10 @@
             },
             {
               "line": 151,
+              "kind": "expect"
+            },
+            {
+              "line": 155,
               "kind": "expect"
             },
             {
@@ -24763,6 +25199,10 @@
               "kind": "expect"
             },
             {
+              "line": 27,
+              "kind": "expect"
+            },
+            {
               "line": 29,
               "kind": "expect"
             },
@@ -24784,6 +25224,10 @@
             },
             {
               "line": 35,
+              "kind": "expect"
+            },
+            {
+              "line": 37,
               "kind": "expect"
             },
             {
@@ -25119,6 +25563,10 @@
               "kind": "expect"
             },
             {
+              "line": 60,
+              "kind": "expect"
+            },
+            {
               "line": 61,
               "kind": "expect"
             }
@@ -25327,6 +25775,14 @@
               "kind": "expect"
             },
             {
+              "line": 61,
+              "kind": "expect"
+            },
+            {
+              "line": 62,
+              "kind": "expect"
+            },
+            {
               "line": 63,
               "kind": "expect"
             }
@@ -25372,6 +25828,10 @@
             },
             {
               "line": 99,
+              "kind": "expect"
+            },
+            {
+              "line": 101,
               "kind": "expect"
             }
           ]
@@ -25448,6 +25908,10 @@
             },
             {
               "line": 144,
+              "kind": "expect"
+            },
+            {
+              "line": 146,
               "kind": "expect"
             }
           ]
@@ -25776,6 +26240,10 @@
               "kind": "expect"
             },
             {
+              "line": 94,
+              "kind": "expect"
+            },
+            {
               "line": 96,
               "kind": "expect"
             },
@@ -25789,6 +26257,14 @@
             },
             {
               "line": 100,
+              "kind": "expect"
+            },
+            {
+              "line": 103,
+              "kind": "expect"
+            },
+            {
+              "line": 107,
               "kind": "expect"
             }
           ]
@@ -25985,6 +26461,10 @@
             },
             {
               "line": 187,
+              "kind": "expect"
+            },
+            {
+              "line": 188,
               "kind": "expect"
             }
           ]
@@ -26206,6 +26686,10 @@
             {
               "line": 292,
               "kind": "expect"
+            },
+            {
+              "line": 294,
+              "kind": "expect"
             }
           ]
         },
@@ -26250,6 +26734,14 @@
             {
               "line": 324,
               "kind": "expect"
+            },
+            {
+              "line": 325,
+              "kind": "expect"
+            },
+            {
+              "line": 327,
+              "kind": "expect"
             }
           ]
         },
@@ -26277,6 +26769,10 @@
             },
             {
               "line": 343,
+              "kind": "expect"
+            },
+            {
+              "line": 344,
               "kind": "expect"
             },
             {
@@ -26408,8 +26904,8 @@
         "Streaming und Wiederherstellung"
       ],
       "level": "JavaScript-Streamparser mit simulierten Readern",
-      "covers": "Finalframes bei CRLF/CR/LF über einzelne Bytes einschließlich UTF-8 erkannt; final/error beendet vor späterem Lesefehler und räumt Reader auf. consensus.final/Keepalive noch nicht endgültig, persistiertes final erforderlich. Request-, Read-, unvollständiger Stream- und Handlerfehler getrennt, Renderer gestoppt; bewusster Abbruch bleibt AbortError.",
-      "limits": "Echtes markdown-stream-Modul, Bytechunks und Reader-/Fetch-/Cleanupfehler vorgegeben; kein Netzwerkproxy oder reale Verbindung.",
+      "covers": "Finalframes bei CRLF/CR/LF über einzelne Bytes einschließlich UTF-8 erkannt; final/error beendet vor späterem Lesefehler und räumt Reader auf. consensus.final/Keepalive noch nicht endgültig, terminales event: final erforderlich. Request-, Read-, unvollständiger Stream- und Handlerfehler getrennt, Renderer gestoppt; bewusster Abbruch bleibt AbortError.",
+      "limits": "Echtes markdown-stream-Modul, Bytechunks und Reader-/Fetch-/Cleanupfehler vorgegeben; kein Netzwerkproxy oder reale Verbindung. Der Parser verlangt kein Persistenzflag; ein final-Frame belegt keinen DB-Commit.",
       "questions": "ASGI-/Proxy-Framing und Commit-vor-final-Vertrag serverseitig zuordnen.",
       "source_references": [
         "static/js/markdown-stream.js"
@@ -26738,7 +27234,19 @@
               "kind": "expect"
             },
             {
+              "line": 52,
+              "kind": "expect"
+            },
+            {
               "line": 53,
+              "kind": "expect"
+            },
+            {
+              "line": 54,
+              "kind": "expect"
+            },
+            {
+              "line": 55,
               "kind": "expect"
             }
           ]
@@ -26993,6 +27501,10 @@
           "assertion_evidence": [
             {
               "line": 77,
+              "kind": "expect"
+            },
+            {
+              "line": 79,
               "kind": "expect"
             },
             {
@@ -29036,7 +29548,7 @@
       ],
       "level": "Agent-Kapazität und API mit synchronisiertem Store-Fake",
       "covers": "Ownerlimit über verschiedene Chats und Ownerisolation; Leaseablauf ohne Wiederholung bezahlter Receipts; lokale Admission und idempotente Freigabe; 503/Retry-After vor Turnerstellung bei voller Kapazität bei weiter möglichem Replay; Ownerlimit entsperrt fehlgeschlagenen Turn; nie gestartete Response gibt Ressourcen frei und bewahrt Bookmark ohne Modellkosten.",
-      "limits": "Threads laufen innerhalb eines Prozesses gegen gelockten Fake. Leases werden zeitlich manipuliert, kein echter Prozesscrash.",
+      "limits": "Threads laufen innerhalb eines Prozesses gegen gelockten Fake. Leases werden zeitlich manipuliert, kein echter Prozesscrash. HTTP-Assertions laufen in eigener FastAPI-App; main.handle_http_exception fehlt. Retry-After dort beweist deshalb nicht dessen Erhalt in main.app (G-037).",
       "questions": "Echte Mehrprozesskonkurrenz, Server-Shutdown und Ressourcenfreigabe gegen Emulator-/Betriebstests abgleichen.",
       "source_references": [
         "app/api/routers/agent.py",
@@ -31424,7 +31936,7 @@
       ],
       "level": "Echte Workerthreads/Mailboxen mit Store- und Provider-Doubles",
       "covers": "Zwei gleichzeitig laufende Worker mit Rückfrage, Antwort, Rework und Review; Persistenz, Sequenzdeduplizierung, Pagination/Ownerbindung und Kosten; einfache Antwort ohne Delegation/Replaycall; Workerfehler mit Unknown-Kosten; atomare lokale/persistente Budgetreservierung im Fake; Stop joint Worker; Crash-/Leaserecovery; signierte Reasoningblöcke bleiben privat; Toolbatch-Ergebnisse; eingefrorene Konfiguration; Evaluationsgate lehnt schlechte/unvollständige Vergleiche ab; Nachricht während Generierung, Remote-Stop und geprüfter 429-Fallback.",
-      "limits": "Synchronisierte In-Memory-Transaktionen ersetzen Firestore. Evaluationsgate wird mit konstruierten Ergebniszeilen geprüft, nicht die Qualität echter Delegation.",
+      "limits": "Synchronisierte In-Memory-Transaktionen ersetzen Firestore. Evaluationsgate wird mit konstruierten Ergebniszeilen geprüft, nicht die Qualität echter Delegation. Der HTTP-Fall prüft Liste/Auth/fremden Chat und Detail-limit=51 (422), keinen erfolgreichen Detailbody und keinen Stop-HTTP-Handler (G-039).",
       "questions": "Crash zwischen Mailbox-/Event-/Receiptwrites und echte Prozessgrenzen gegen Emulatorprüfungen abgleichen.",
       "source_references": [
         "app/api/routers/agent.py",
@@ -36645,7 +37157,7 @@
       ],
       "level": "Usage-/Cooldownlogik, Agent-API und geskripteter Transport",
       "covers": "Providerkosten haben Vorrang vor Katalog inkl. Cache/Reasoning/Suche; ungültige Kosten bleiben unbekannt, null ist gültig; Catalogfallback und geteilte Usagechunks; getrennte Token-/Kostenreservierung; sichere Retry-After-Auswertung; Cooldown pro Key/Modell und begrenzter Cache; HTTP-/SSE-429 verhindert sofortigen zweiten bezahlten Claim; 404 liefert handlungsfähigen Fehler und gibt Chatslot frei.",
-      "limits": "Providerkosten sind vorgegebene Zahlen und Preise aus dem lokalen Katalog; keine Rechnungsprüfung oder Live-Ratelimits.",
+      "limits": "Providerkosten sind vorgegebene Zahlen und Preise aus dem lokalen Katalog; keine Rechnungsprüfung oder Live-Ratelimits. HTTP-Assertions laufen in eigener FastAPI-App; main.handle_http_exception fehlt. Retry-After dort beweist deshalb nicht dessen Erhalt in main.app (G-037).",
       "questions": "Weitere Retry-After-Formate, Cacheauslauf und parallele Requests über mehrere Prozesse gegen den Code prüfen.",
       "source_references": [
         "app/api/routers/agent.py",
@@ -43683,7 +44195,7 @@
       ],
       "level": "Transportfunktionen mit injiziertem POST",
       "covers": "Alle im Test verwendeten Familien teilen OpenRouter-URL, Headers, Payload, Text/Citations und Usage; gemeinsames Credentialmapping; keine alten provider-spezifischen Authfunktionen; HTTP-/Transportfehler strukturiert; Antwort ohne erwartete Felder ergibt leeren Text und Nullusage.",
-      "limits": "POST ist Fake. Der Test malformed_response akzeptiert error=None bei leerer Antwort; dies dokumentiert bestehendes Verhalten, keine positive Fehlererkennung.",
+      "limits": "POST ist Fake. Der Test malformed_response akzeptiert error=None bei leerer Antwort; dies dokumentiert bestehendes Verhalten, keine positive Fehlererkennung. Kein HTTP-200-Providerfehlerbody. Der malformed-response-Fall mit leeren choices erwartet error=None; das belegt keine korrekte Trennung von Protokollfehler und gültiger Antwort ohne auswertbaren Buchstaben (G-042).",
       "questions": "Prüfen, ob fehlende Usage künftig unknown statt null und malformed response als Fehler behandelt werden soll; zuerst Produktvertrag klären.",
       "source_references": [
         "app/services/llm/engines.py",
@@ -50290,7 +50802,7 @@
       ],
       "level": "Main-App-API und Runner mit Repository-/LLM-/Scheduler-Doubles; einzelne Quelltextverträge",
       "covers": "OpenAPI-Key/Idempotency-Vertrag, Admin-Key-Management und Publisher-Konfiguration, accepted/duplicate Runs, serverseitiger Modellplan, Tier/Scope/Admin-/Account-Gates und Key-/IP-Throttling. Runner-Claim verhindert doppelte Starts/Usage, Scheduler begrenzt Arbeit, Expiry unterscheidet Reservierung/Verbrauch; Publish/List/Read/Revoke, Watch-Capacity-Skip und Direct-Index-Gates.",
-      "limits": "Auth/Firestore/LLM/Executor meist ersetzt; API-202-Duplikattest erwartet sogar zwei schedule-Aufrufe, eigentliche Deduplizierung separat geprüft. UI nur Quelltext.",
+      "limits": "Auth/Firestore/LLM/Executor meist ersetzt; API-202-Duplikattest erwartet sogar zwei schedule-Aufrufe, eigentliche Deduplizierung separat geprüft. UI nur Quelltext. setup_api ersetzt enforce_uid_rate_limit; reale Key-/IP-Limitfälle sind vorhanden, aber kein UID-Reject durch main.app einschließlich Retry-After (G-037).",
       "questions": "Realen Worker-Abbruch und wiederaufgenommene Runs mit Repository/Emulator abgleichen; Routenintegration ohne gestubbte Fachservices prüfen.",
       "source_references": [
         "app/api/routers/admin.py",
@@ -51242,7 +51754,7 @@
         "Quellenprüfung"
       ],
       "level": "Router/SSE-Verträge mit RecordingStore und Engine-Doubles",
-      "covers": "Kanonische Chat-/Turn-/Kontextbindung vor Engine, serverseitig aufgelöste Folgefrage, Completion-Provenienz/Quellen und Bookmark vor finalem Erfolg. Stream/JSON-Parität, Source-Job-Reihenfolge/disabled/skipped, Analysefehler bewahrt Konsens; persistenter Fehler bleibt pending. Completed-Replay ohne Engine/Usage/Writes, Tier-/Own-Key-Gates und eindeutige terminale Fehler inkl. redigierter Logs.",
+      "covers": "Kanonische Chat-/Turn-/Kontextbindung vor Engine, serverseitig aufgelöste Folgefrage, Completion-Provenienz/Quellen und Bookmark vor finalem Erfolg. Stream/JSON-Parität, Source-Job-Reihenfolge/disabled/skipped, Analysefehler bewahrt Konsens; Persistenzfehler erhält die Antwort und meldet chat_persisted=false/pending. Completed-Replay ohne Engine/Usage/Writes, Tier-/Own-Key-Gates und eindeutige terminale Fehler inkl. redigierter Logs.",
       "limits": "Store zeichnet Aufrufe auf; Engine und Job-Submission sind ersetzt. Persistenz-/Netzwerk-Atomizität wird hier nicht nachgewiesen; SSE wird über TestClient konsumiert.",
       "questions": "Disconnect während Completion/Bookmark und echte Persistenzfehler mit Store-/Browsertests abgleichen.",
       "source_references": [
@@ -62162,7 +62674,7 @@
       ],
       "level": "Edit-Service/Repository und Router mit DB-/LLM-Doubles",
       "covers": "Strikter minimaler Patch, eindeutiges Replace, Append/Correct-Intent, keine Delete-Patches beim Remember, Revision/Undo, idempotenter Provideraufruf, persistente Tages-/Global-/In-flight-Limits und kein Truncation/Charge bei Übergröße. Adminfallback, schema-/tokengebundener LLM-Payload und direkter expliziter Edit-Endpunkt.",
-      "limits": "Persistence-Guard in Fixture deaktiviert, DB/LLM ersetzt; Undo nach konkurrierender Fremdänderung wird nicht durch den einfachen Roundtrip bewiesen.",
+      "limits": "Persistence-Guard in Fixture deaktiviert, DB/LLM ersetzt; Undo nach konkurrierender Fremdänderung wird nicht durch den einfachen Roundtrip bewiesen. Undo-Roundtrip nutzt ein kleines Profil bei unverändertem Limit; Kürzung nach Tier-/Limitabsenkung nicht geprüft (G-038). Die Undo-HTTP-Route und ihr Error-Mapping sind kein Teil dieses Erfolgsroundtrips (G-007).",
       "questions": "Tombstone-/Undo-Konflikt-/Crashfälle und echte parallele Edits im nächsten Audit abgleichen.",
       "source_references": [
         "app/api/routers/users.py",
@@ -62626,7 +63138,7 @@
       ],
       "level": "Konfigurations-/Payload-Unit-Tests, Admin-/DB-Doubles und UI-Sourceverträge",
       "covers": "Ungültiger Adminsave ohne Runtime-Mutation, Aktivierungs-/DB-Rollback und read-only Readiness; Own-/Developer-Key-Trennung. Entfernte/kanonische IDs, Presets/Free-/Pro-Gates, Provider-spezifische Search-/Reasoning-/Attachment-Policies, Errorprojektion und Eingabehelper.",
-      "limits": "Prüft gespeicherte Regeln/Payloads des Commitstands; keine Live-Verfügbarkeit oder Akzeptanz der Modell-APIs. UI-Auszüge nur statisch.",
+      "limits": "Prüft gespeicherte Regeln/Payloads des Commitstands; keine Live-Verfügbarkeit oder Akzeptanz der Modell-APIs. UI-Auszüge nur statisch. Rollback-Assertion sieht nur einen Writer; ein zwischenzeitlicher Write eines zweiten Prozesses fehlt (G-040).",
       "questions": "Aktualisierte Modelllisten, atomare konkurrierende Adminsaves und reale Providerverträge separat prüfen.",
       "source_references": [
         "app/api/routers/admin.py",
@@ -72911,8 +73423,8 @@
         "Sicherheit"
       ],
       "level": "Rate-Key-/UID-Limiter-Funktionen",
-      "covers": "IP-Schlüssel aus Socket/Proxyheader/Kette, getrennte Besucher hinter Proxy und leerer Headerfallback; API-Schlüssel wird gehasht statt im Bucket offengelegt; ungültiger Key fällt auf IP zurück; UIDlimit bleibt beim Wechsel des Keys bestehen.",
-      "limits": "Künstliche Request-Scopes; kein realer vertrauenswürdiger Reverse-Proxy und kein verteilter Limiter.",
+      "covers": "IP-Schlüssel aus Socket/Proxyheader/Kette, getrennte Besucher hinter Proxy und leerer Headerfallback; API-Schlüssel mit cns_-Präfix wird gehasht. Fehlender oder falsch präfixierter Key fällt auf IP zurück. Zwei Aufrufe derselben UID überschreiten deren Limit; ein wirklicher Keywechsel wird nicht ausgeführt.",
+      "limits": "Künstliche Request-Scopes; kein vertrauenswürdiger Reverse-Proxy oder verteilter Limiter. Präfixgültige, aber nicht authentifizierbare Keys werden hier nicht geprüft. Der separate IP-Guard der Consensus-API ist in test_consensus_api abgedeckt; daraus folgt kein vollständiger Limiter-Bypass.",
       "questions": "Proxy-Vertrauensgrenze, manipulierte Header und Mehrprozesslimitierung im Deploymentkontext prüfen.",
       "source_references": [
         "app/core/rate_limit.py"
@@ -75424,7 +75936,7 @@
       ],
       "level": "API-Verträge; ein Test mit main.app",
       "covers": "/check_keys verlangt Login und mindestens einen OpenRouter-Key; Own-Key-Modellrequest ohne Login liefert 401; der echte globale Validation-Handler bleibt bei Pydantic-ValueError auf 422 und entfernt ctx sowie eingesendeten Wert, lässt nur loc/type/msg zu.",
-      "limits": "Die ersten Routertests haben eine eigene App und deaktivierten Limiter. Nur der Validation-Test nutzt main.app, ohne vollständigen Deployment-Lifespan.",
+      "limits": "Eigene FastAPI-App mit Router und Limiterzustand in den ersten drei Tests; der Limiter wird dort nicht deaktiviert. Der letzte Test verwendet main.app für den Validation-Error-Umschlag. Keine vollständige Prüfung von main-Middleware/HTTPException-Headern oder Firebase-Authentifizierung.",
       "questions": "Weitere Fehler- und Loggingpfade für sensible Eingaben sowie positive Schlüsselprüfung separat abgleichen.",
       "source_references": [
         "app/api/routers/chat.py",
@@ -77525,7 +78037,7 @@
         "Watch"
       ],
       "level": "Review-Service mit Repository-/Judge-/Action-Doubles",
-      "covers": "Persistente Lease/lokaler Wochenzeitplan, höchstens ein Portfolio-Judge, 100 Seiten im begrenzten Prompt und explizite Auslassung erst nach Detailreduktion. Terminale Notifications/Collection-Failure, keine doppelten Metricscans, Evidenzgate für Briefänderung, History/Statusdelta und deterministische Empfehlungen. Getrennte Watch-/Index-Aktionen mit Teilergebnissen, kein Delete bei apply-all, Publisherlineage, manuelle Entscheidung und konfliktgeprüfte Briefannahme.",
+      "covers": "Persistente Lease, 7-Tage-Default und konfigurierte lokale Uhrzeit, höchstens ein Portfolio-Judge, 100 Seiten im begrenzten Prompt und explizite Auslassung erst nach Detailreduktion. Terminale Notifications/Collection-Failure, keine doppelten Metricscans, Evidenzgate für Briefänderung, History/Statusdelta und deterministische Empfehlungen. Getrennte Watch-/Index-Aktionen mit Teilergebnissen, kein Delete bei apply-all, Publisherlineage, manuelle Entscheidung und konfliktgeprüfte Briefannahme.",
       "limits": "DB, GSC, Judge und Aktionen ersetzt; keine reale Index-/Watch-/Delete-Ausführung und kein Mehrprozesslease.",
       "questions": "Konkurrierende Review-/Adminänderungen sowie Fehler nach Teilaktionen mit Persistenz-/APIfällen abgleichen.",
       "source_references": [
@@ -90538,8 +91050,8 @@
         "Topics"
       ],
       "level": "Große Service-/Router-/SSR-Suite mit FakeFirestore; einzelner echter SDK-Queryaufbau mit RPC-Mock",
-      "covers": "Begrenzte historische Reads inkl. Legacy-/Timestamp-/Count-Snapshot, unveränderliche Runversionen und Pointer-Atomizität/Stale-Claim. Archiv/Index/Slug-Rename/Reservierung, Quellenrollen/Canonicalisierung/100 Quellen/ID-Erhalt. Double-opt-in, Challenge-Atomizität, Delivery-Dedupe/Cleanup/Tombstones, Mockmodus ohne Publish; automatische Pipeline/Claimidentity-Fallback. Admin-CRUD, öffentliche Historie/Finding/Claimledger/Positionmap und unscored/historische noindex-Seiten.",
-      "limits": "Fachlogik/SSR real, DB/LLM/Mail ersetzt. SDKfall prüft RPC-Aufbau, nicht Dienstverhalten; Quellrollen sind URLheuristiken, keine inhaltliche Qualitätsprüfung.",
+      "covers": "Begrenzte historische Reads inkl. Legacy-/Timestamp-/Count-Snapshot, unveränderliche Runversionen und Pointer-Atomizität/Stale-Claim. Archiv/Index/Slug-Rename/Reservierung, Quellenrollen/Canonicalisierung/100 Quellen/ID-Erhalt. Double-opt-in, Challenge-Atomizität, Delivery-Dedupe/Cleanup/Tombstones, Mockmodus ohne Publish; automatische Pipeline/Claimidentity-Fallback. Service-CRUD sowie Admin-Create/Run/Detail, öffentliche Historie/Finding/Claimledger/Positionmap und unscored/historische noindex-Seiten.",
+      "limits": "Fachlogik/SSR real, DB/LLM/Mail ersetzt. SDKfall prüft RPC-Aufbau, nicht Dienstverhalten; Quellrollen sind URLheuristiken, keine inhaltliche Qualitätsprüfung. Adminauth im HTTP-Erfolgstest ersetzt; trotz Testnamen kein PUT, Adminlist/öffentliche Hub-/Sitemap-/Follow-/Confirm-/Unsubscribe-Adapter hier nicht ausgeführt (G-014/G-041).",
       "questions": "Echte konkurrierende Slug-/Run-/Followertransaktionen und Browser-Historiennavigation abgleichen.",
       "source_references": [
         "app/api/routers/pages.py",
