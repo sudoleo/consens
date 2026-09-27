@@ -52,6 +52,9 @@ def test_selected_calendar_and_exact_confirmation(browser,phase4_server,width):
         button.click()
         expect(page.locator('#agentGoogleActions')).to_contain_text('Google confirmed this action.')
         assert confirmed==[{'expected_hash':'d'*64}]
+        page.locator('#questionInput').fill('Check availability for a follow-up meeting')
+        page.get_by_label('I agree to share relevant selected Google information with my chosen models for this request.',exact=True).check()
+        assert page.evaluate('document.documentElement.scrollWidth <= innerWidth + 1')
     finally:context.close()
 
 

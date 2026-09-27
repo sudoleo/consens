@@ -210,3 +210,7 @@ seven independently reproduced baseline failures recorded above. All 521 JavaScr
 tests passed. Seven built-browser flows passed: attachment and Calendar review at
 1280/390/320 px, plus the real callback popup/CSP with simulated OAuth endpoints.
 Production build and build-consistency checks passed.
+
+Mobile follow-up correction: the expanded Google selector has a viewport-bounded
+scroll area so its next-message consent remains reachable in the fixed composer.
+Calendar browser cases explicitly exercise this after confirmation.

@@ -387,6 +387,7 @@ body.single-agent-active .consensus-model-inline .model-picker-display::after {
 .agent-file-card p { margin: 5px 0; }
 .agent-file-card button { margin: 6px 12px 0 0; min-height: 36px; }
 .agent-google { text-align: left; }
+#agentGoogleControls details[open] { max-height: min(360px, 45dvh); overflow-y: auto; overscroll-behavior: contain; }
 .agent-google select { max-width: 100%; width: 100%; margin: 10px 0; background: var(--well); color: var(--ink); }
 .agent-google label { display: flex; gap: 8px; align-items: flex-start; margin: 10px 0; }
 .agent-google input[type=checkbox] { flex: 0 0 auto; margin-top: 3px; }
