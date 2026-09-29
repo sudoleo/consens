@@ -26,9 +26,10 @@ readonly use requires restricted-scope verification/security assessment as detai
 in `docs/google-integrations-setup.md`. `tests/test_agent_gmail.py` includes the real
 files → two-model comparison → document → draft → synthesis/review integration.
 
-Google/Calendar in Agent Mode (27.09.2026): `agent_google.py` exposes owner/Pro-only
+Google/Calendar in Agent Mode (27.09.2026): `agent_google.py` exposes owner-bound
 connection controls at `/agent/google/{connections,connect,finish}` and the isolated
-popup callback. `google_connections.py` owns PKCE/state/OIDC validation, owner-bound
+popup callback; connect/finish/actions require Agent access, listing and disconnect
+only the owner. `google_connections.py` owns PKCE/state/OIDC validation, owner-bound
 encrypted token envelopes, refresh leases, revocation, daily API limits and the
 allowlisted Google transport. Tokens never enter tools or model contexts. The
 `google_selection` and model-sharing consent are frozen in `agent_settings` and
@@ -45,8 +46,11 @@ event IDs and durable unknown outcomes prevent retry-driven duplicate operations
 `reject` and read-only `status` are separate endpoints. `agent-google.js` supplies
 account/calendar selection, affirmative data consent and responsive before/after
 confirmation cards, refreshed by `resources` SSE and restored from the same chat.
-Hourly retention purges expired OAuth states/actions; account deletion also removes
-credentials and pending grants. See `docs/google-integrations-setup.md` for required
+Hourly retention purges expired OAuth states/actions (skipped without Google
+configuration); chat deletion removes `actions`; account deletion revokes stored
+grants at Google (`GoogleConnections.revoke_all`) and removes credentials and
+pending grants. `markdown-stream.js` renders model answers without auto-loading
+remote resources (no remote images/media/style), closing markup exfiltration. See `docs/google-integrations-setup.md` for required
 secrets, indexes, approved model routing, Google verification and live-test limits.
 
 Agent documents (27.09.2026): `agent_documents.py` registers `create_document`,
@@ -61,8 +65,10 @@ live at `users/{uid}/chats/{chat}/documents/{id}/versions/{number}`; the parent
 manifest serializes revisions and publication requires both saved, verified files.
 Each immutable version binds content hash, parent, turn, source-file hashes and
 comparison-answer hashes. The answer judges do not independently review these
-documents. The retention task removes expired version content after 30 days;
-chat/account deletion recursively removes all versions and their private files.
+documents. The retention task removes expired version content after 30 days and
+the manifest with its last version; `ChatStore._delete_chat_tree` removes
+`documents/*/versions/*` and the manifests, `AgentFiles.cleanup_chat` their files.
+The render subprocess imports only `agent_document_spec.py` (no Firebase).
 See `docs/agent-integrations.md` for limits, font configuration and validation.
 
 Öffentliche Seiten (12.09.2026): `/model-pulse?period=all|since-2026-08-31`
@@ -5125,16 +5131,23 @@ Auszüge unter `users/{uid}/chats/{chat}/files/{id}`. Kontoquote unter
 Upload reserviert transaktional, schreibt ein privates Objekt und finalisiert
 nur bei weiterhin aktivem Chat und Konto. Fehler/Stop räumen Reservierung und
 Objekt auf. Die Chat-Löschkaskade löscht Objekte vor Metadaten; bestehende Account-
-Löschung durchläuft dieselbe Kaskade. Die stündliche Retention räumt abgelaufene
-Dateien und verwaiste Uploads auf. Collection-group-Indizes siehe Setup.
+Löschung durchläuft dieselbe Kaskade. Ohne konfigurierten Objektspeicher
+(`StorageNotConfigured`) scheitert der Upload vor jeder Reservierung mit 503,
+und die Löschkaskade überspringt den Objektspeicher statt abzubrechen. Die
+stündliche Retention räumt abgelaufene Dateien und verwaiste Uploads seitenweise
+mit Zeitbudget auf; ein einzelner fehlschlagender Löschvorgang wird geloggt und
+im nächsten Lauf wiederholt. Collection-group-Indizes siehe Setup.
 
 `agent_file_extract.py` läuft mit 15 s Walltime und auf Linux 10 s CPU / 768 MiB
 Adressraum; höchstens 80 PDF-Seiten, 120 Auszüge / 120.000 Zeichen. DOCX-Tabellen
 behalten Zellreihenfolge, Textdateien Zeilenbereiche und PDFs Seitennummern.
 Scans ohne Text bleiben ausdrücklich als unvollständig erkennbar. Kein OCR.
 `FileContext` ergänzt `read_file`, gezielte Auszüge und native Bilder bei
-expliziter Modellfähigkeit. Delegation und Vergleiche erhalten ausgewählte
-Dateien; Judges erhalten die vorhandene Vergleichsevidenz. Private Bilddaten
+expliziter Modellfähigkeit. Von `read_file` geöffnete Bilder ergänzen die
+Nutzerauswahl (`selection()`), verdrängen sie aber nie. Native PDFs werden nur
+gesendet, wenn ihre seitenbasierte Tokenreservierung ins Kontextfenster passt.
+Vergleiche erhalten die Auswahl, Worker nur explizite `file_ids`; Judges
+erhalten die vorhandene Vergleichsevidenz. Private Bilddaten
 werden nur im flüchtigen Provider-Payload ergänzt, mit konservativer
 Tokenreservierung und tatsächlicher Usage-Abrechnung. Tool-Daten sind keine
 Berechtigungen. Anleitung, Grenzen und PR-Matrix: `docs/agent-integrations.md`.

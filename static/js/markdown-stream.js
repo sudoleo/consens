@@ -24,6 +24,41 @@ function reportMarkdownFallback(missingDependency) {
   });
 }
 
+// Model output is untrusted: an injected instruction (web page, file, mail,
+// calendar event) could make the model emit markup that loads a remote URL
+// with private data in it the moment the answer renders. Nothing in a model
+// answer may therefore trigger a request on its own: no remote images, media,
+// <style> blocks or CSS with url()/functions. Links still need a click.
+const MODEL_HTML_CONFIG = {
+  FORBID_TAGS: ["style", "video", "audio", "source", "picture", "track", "form", "input", "link", "meta"],
+  FORBID_ATTR: ["srcset", "poster", "background", "ping"]
+};
+
+function isInlineImageSource(src) {
+  return /^data:image\//i.test(src) || (src.startsWith("/") && !src.startsWith("//"));
+}
+
+function neutralizeRemoteMedia(html) {
+  if (typeof document === "undefined") return html;
+  const template = document.createElement("template");
+  template.innerHTML = html;
+  template.content.querySelectorAll("img").forEach(img => {
+    const src = (img.getAttribute("src") || "").trim();
+    if (isInlineImageSource(src)) return;
+    const note = document.createElement("span");
+    note.className = "blocked-remote-image";
+    const alt = (img.getAttribute("alt") || "").trim();
+    note.textContent = alt ? `[Image not loaded: ${alt}]` : "[External image not loaded]";
+    img.replaceWith(note);
+  });
+  template.content.querySelectorAll("[style]").forEach(el => {
+    if (/[()\\]|url|image|@import|expression/i.test(el.getAttribute("style") || "")) {
+      el.removeAttribute("style");
+    }
+  });
+  return template.innerHTML;
+}
+
 function renderMarkdownHtml(md) {
   const prepared = window.ConsensusMath
     ? window.ConsensusMath.prepareMarkdown(md)
@@ -40,7 +75,7 @@ function renderMarkdownHtml(md) {
     return escapeHtml(prepared);
   }
   try {
-    return window.DOMPurify.sanitize(window.marked.parse(prepared));
+    return neutralizeRemoteMedia(window.DOMPurify.sanitize(window.marked.parse(prepared), MODEL_HTML_CONFIG));
   } catch (error) {
     reportMarkdownFallback("render error");
     return escapeHtml(prepared);

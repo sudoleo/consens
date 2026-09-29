@@ -303,7 +303,7 @@ class ComparisonTools:
     def compare(self, args, *, cancellation):
         loop = self.loop
         loop._check(cancellation)
-        file_ids = args.file_ids or (loop.file_context.file_ids if getattr(loop, "file_context", None) else [])
+        file_ids = args.file_ids or (loop.file_context.selection() if getattr(loop, "file_context", None) else [])
         if getattr(loop, "file_context", None):
             for fid in file_ids:
                 loop.file_context.files.get(loop.uid, loop.chat_id, fid)

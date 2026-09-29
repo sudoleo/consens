@@ -46,6 +46,8 @@ class ReadOnlyTool:
     description: str
     arguments: type[BaseModel]
     execute: Callable
+    # Optional per-tool cap on raw JSON arguments; defaults to the registry's.
+    argument_limit: int | None = None
 
     def schema(self):
         if (not re.fullmatch(r"[a-z][a-z0-9_]{0,63}", self.name)
@@ -58,7 +60,10 @@ class ReadOnlyTool:
 
 class ToolRegistry:
     def __init__(self, tools=(), *, argument_limit=2048):
-        self.argument_limit = argument_limit
+        self.default_argument_limit = argument_limit
+        # The streaming client needs the largest cap any tool accepts; each
+        # tool is still validated against its own limit below.
+        self.argument_limit = max([argument_limit, *(t.argument_limit or 0 for t in tools)])
         self.tools = {tool.name: tool for tool in tools}
         if len(self.tools) != len(tools) or len(tools) > 20:
             raise ValueError("Invalid tool registry")
@@ -68,7 +73,8 @@ class ToolRegistry:
         function = call.get("function") or {}
         tool = self.tools.get(function.get("name"))
         raw = function.get("arguments")
-        if tool is None or not isinstance(raw, str) or len(raw) > self.argument_limit:
+        limit = (tool.argument_limit or self.default_argument_limit) if tool else 0
+        if tool is None or not isinstance(raw, str) or len(raw) > limit:
             raise ValueError("Tool is not authorized")
         # Reject duplicate JSON keys, rather than silently accepting the last.
         def unique(pairs):

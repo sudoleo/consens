@@ -164,3 +164,79 @@ def test_google_routing_reaches_comparison_synthesis_and_judges(google,monkeypat
     assert len(calls)>=6
     assert all(call['model'].request_config['provider']['only']==['reviewed-host'] for call in calls)
     assert all(all(tool.get('type')=='function' for tool in call['tools']) for call in calls)
+
+
+def test_api_401_keeps_sealed_grant_so_disconnect_can_revoke(google):
+    identifier=connection(google)
+    google.wire.handler=lambda *_: (_ for _ in ()).throw(GoogleError("unauthorized",401))
+    with pytest.raises(GoogleError):
+        google.api("owner",identifier,"calendar_read","GET","/calendar/v3/users/me/calendarList")
+    stored=google.ref("owner",identifier).get().to_dict()
+    assert stored["status"]=="reauthorize" and stored["credentials"]
+    with pytest.raises(GoogleError): google.access_token("owner",identifier,"calendar_read")
+    google.wire.handler=lambda *_: {}
+    assert google.disconnect("owner",identifier)["provider_revoked"] is True
+    assert google.wire.calls[-1][2]["data"]["token"]=="private-refresh"
+
+
+def test_account_deletion_revokes_google_grants_before_deleting_them(google, monkeypatch):
+    from app.services import account_deletion
+    identifier=connection(google)
+    monkeypatch.setattr("app.services.google_connections.Wire", lambda: google.wire)
+    google.db.collection("account_deletion_jobs").document("owner").set({"status":"pending"})
+    account_deletion.FirestoreAccountDeletion(google.db)._delete_user_subcollections("owner")
+    assert any(url=="https://oauth2.googleapis.com/revoke" and kwargs["data"]["token"]=="private-refresh"
+               for _,url,kwargs in google.wire.calls)
+    assert not google.ref("owner",identifier).get().exists
+
+
+def test_chat_deletion_removes_proposed_actions(google):
+    chat=google.chats.create_chat("owner",execution_mode="agent")["id"]
+    action=google.chats._chat_ref("owner",chat).collection("actions").document("a"*32)
+    action.set({"id":"a"*32,"payload":{"summary":"private meeting","attendees":["x@example.org"]}})
+    google.chats.delete_chat("owner",chat)
+    assert not action.get().exists
+
+
+def test_non_agent_users_can_list_and_disconnect_but_not_connect(google, monkeypatch):
+    from fastapi import FastAPI, HTTPException
+    from fastapi.testclient import TestClient
+    from app.api.routers import agent_google as router
+    from app.core.rate_limit import limiter
+    identifier=connection(google)
+    monkeypatch.setattr(router,"db_firestore",google.db)
+    monkeypatch.setattr(router,"_chat_uid",lambda request:"owner")
+    def denied(uid): raise HTTPException(403,"Agent requires Pro")
+    monkeypatch.setattr(router,"require_agent_access",denied)
+    monkeypatch.setattr(router,"GoogleConnections",lambda db: google)
+    monkeypatch.setattr(limiter,"enabled",False)
+    app=FastAPI(); app.include_router(router.router)
+    client=TestClient(app)
+    assert client.get("/agent/google/connections").json()["connections"][0]["id"]==identifier
+    assert client.post("/agent/google/connect",json={"capabilities":["calendar_read"]}).status_code==403
+    assert client.delete(f"/agent/google/connections/{identifier}").status_code==200
+    assert not google.ref("owner",identifier).get().exists
+
+
+def test_failed_finish_still_clears_the_oauth_cookie(google, monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from app.api.routers import agent_google as router
+    from app.core.rate_limit import limiter
+    monkeypatch.setattr(router,"db_firestore",google.db)
+    monkeypatch.setattr(router,"_chat_uid",lambda request:"owner")
+    monkeypatch.setattr(router,"require_agent_access",lambda uid:None)
+    monkeypatch.setattr(limiter,"enabled",False)
+    app=FastAPI(); app.include_router(router.router)
+    client=TestClient(app)
+    client.cookies.set("consens_google_oauth","browser-secret",path="/agent/google")
+    response=client.post("/agent/google/finish",json={"state":"s"*40,"code":"c"})
+    assert response.status_code==401
+    assert 'consens_google_oauth=""' in response.headers["set-cookie"]
+
+
+def test_httpx_request_urls_are_not_logged_at_info():
+    import logging
+    from app.core.observability import configure_logging
+    configure_logging()
+    assert not logging.getLogger("httpx").isEnabledFor(logging.INFO)
