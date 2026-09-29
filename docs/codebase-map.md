@@ -3325,7 +3325,13 @@ gebracht; serverseitig gelten zusätzlich 40 Mio. Pixel vor dem Dekodieren und
 openai/anthropic/gemini/grok/kimi/glm; PDF-Support:
 openai/anthropic/gemini. PDFs über 2 MB werden für alle Familien als einmal
 extrahierter Text verwendet; nur nicht extrahierbare Scans bleiben für
-PDF-fähige Familien nativ. **Im klassischen Consensus landen in Firestore nie Datei-Bytes**, nur
+PDF-fähige Familien nativ. Die PDF-Textextraktion (`extract_pdf_text`) läuft
+nicht im Webprozess, sondern über `agent_file_extract.run_isolated` im
+Modus `pdf-text` im selben Wegwerf-Subprozess wie Agent-Dateien (15 s Walltime,
+unter Linux 10 s CPU und 768 MiB Adressraum, höchstens 80 Seiten, Abbruch der
+Seitenschleife bei 24.000 Zeichen, keine Temp-Dateien). Timeout, Budget- oder
+Parserfehler gelten als „kein Text“ und führen zum bestehenden Hinweis bzw.
+nativen Versand. **Im klassischen Consensus landen in Firestore nie Datei-Bytes**, nur
 Metadaten (Name/Typ/Größe) — siehe `bookmarks.py::sanitize_attachment_meta`.
 Bilder können zusätzlich zum Dateiauswahldialog per Paste im `#questionInput`
 angehängt werden. Drag-and-drop auf `.chat-input-container` akzeptiert wie der
@@ -5193,6 +5199,8 @@ im nächsten Lauf wiederholt. Collection-group-Indizes siehe Setup.
 Adressraum; höchstens 80 PDF-Seiten, 120 Auszüge / 120.000 Zeichen. DOCX-Tabellen
 behalten Zellreihenfolge, Textdateien Zeilenbereiche und PDFs Seitennummern.
 Scans ohne Text bleiben ausdrücklich als unvollständig erkennbar. Kein OCR.
+`run_isolated` ist der gemeinsame Einstieg; klassische Consensus-Anhänge nutzen
+ihn im Modus `pdf-text` (siehe Attachments).
 `FileContext` ergänzt `read_file`, gezielte Auszüge und native Bilder bei
 expliziter Modellfähigkeit. Von `read_file` geöffnete Bilder ergänzen die
 Nutzerauswahl (`selection()`), verdrängen sie aber nie. Native PDFs werden nur

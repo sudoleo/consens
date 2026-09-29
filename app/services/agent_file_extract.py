@@ -1,12 +1,63 @@
 """Isolated, bounded extraction. Invoked in a disposable subprocess, never a model."""
 import io
 import json
+import subprocess
 import sys
 import zipfile
 import xml.etree.ElementTree as ET
+from pathlib import Path
 
 MAX_CHARS = 120_000
 MAX_PARTS = 120
+MAX_INPUT_BYTES = 5 * 1024 * 1024
+MAX_PDF_PAGES = 80
+# Mode for regular (non-agent) consensus attachments: plain page text up to
+# a character budget, read page by page and stopped as soon as it is reached.
+PDF_TEXT_MODE = "pdf-text"
+PROCESS_TIMEOUT_SECONDS = 15
+MAX_RESPONSE_BYTES = 800_000
+SAFETY_LIMIT_WARNING = "Processing exceeded its safety limits. Provide a smaller file or extracted text."
+
+
+def run_isolated(raw, mode, *args, timeout=PROCESS_TIMEOUT_SECONDS):
+    """Run one extraction in a disposable, resource-limited subprocess.
+
+    CPU time and address space are capped inside the child (see ``main``) and
+    the parent enforces a wall-clock timeout, so a hostile or pathological
+    file can only exhaust its own process. The child reads the bytes from
+    stdin and never writes temporary files.
+    """
+    try:
+        process = subprocess.run([sys.executable, "-m", "app.services.agent_file_extract", mode, *map(str, args)],
+            input=raw, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=timeout,
+            cwd=str(Path(__file__).resolve().parents[2]), check=True)
+        if len(process.stdout) > MAX_RESPONSE_BYTES:
+            raise ValueError("Extraction response too large")
+        return json.loads(process.stdout)
+    except (subprocess.SubprocessError, ValueError):
+        return {"status": "failed", "parts": [], "warnings": [SAFETY_LIMIT_WARNING]}
+
+
+def extract_pdf_text(raw, max_chars):
+    """Plain text of the first pages, stopping once ``max_chars`` is reached."""
+    from pypdf import PdfReader
+    reader = PdfReader(io.BytesIO(raw))
+    if reader.is_encrypted:
+        raise ValueError("Password-protected PDFs are not supported.")
+    chunks, total, warnings = [], 0, []
+    pages = len(reader.pages)
+    if pages > MAX_PDF_PAGES:
+        warnings.append(f"Only the first {MAX_PDF_PAGES} PDF pages were processed.")
+    for index in range(min(MAX_PDF_PAGES, pages)):
+        text = reader.pages[index].extract_text() or ""
+        if not text.strip():
+            continue
+        chunks.append(text)
+        total += len(text)
+        if total >= max_chars:
+            break
+    combined = "\n".join(chunks).strip()[:max_chars]
+    return {"status": "ready" if combined else "empty", "text": combined, "warnings": warnings}
 
 
 def extract(raw, mime):
@@ -92,11 +143,16 @@ def main():
         resource.setrlimit(resource.RLIMIT_AS, (768 * 1024 * 1024,) * 2)
     except ImportError:  # Windows still has the parent's hard wall timeout.
         pass
-    raw = sys.stdin.buffer.read(5 * 1024 * 1024 + 1)
-    if len(raw) > 5 * 1024 * 1024:
+    raw = sys.stdin.buffer.read(MAX_INPUT_BYTES + 1)
+    if len(raw) > MAX_INPUT_BYTES:
         raise ValueError("File exceeds the extraction limit.")
+    mode = sys.argv[1]
     try:
-        result = extract(raw, sys.argv[1])
+        if mode == PDF_TEXT_MODE:
+            limit = int(sys.argv[2]) if len(sys.argv) > 2 else 24_000
+            result = extract_pdf_text(raw, max(1, min(limit, MAX_CHARS)))
+        else:
+            result = extract(raw, mode)
     except Exception:
         result = {"parts": [], "warnings": ["File could not be safely read. Export it again or provide text."], "status": "failed"}
     sys.stdout.write(json.dumps(result, ensure_ascii=False))
