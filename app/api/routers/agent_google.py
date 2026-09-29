@@ -1,4 +1,5 @@
 """User-only connection controls and exact-content action confirmations."""
+from __future__ import annotations
 import secrets
 from urllib.parse import urlparse
 

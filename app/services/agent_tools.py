@@ -7,7 +7,7 @@ server-owned registry; tools require a strict argument model and bounded executo
 from dataclasses import dataclass
 import json
 import re
-from typing import Callable
+from typing import Callable, Optional
 
 from pydantic import BaseModel
 
@@ -47,7 +47,7 @@ class ReadOnlyTool:
     arguments: type[BaseModel]
     execute: Callable
     # Optional per-tool cap on raw JSON arguments; defaults to the registry's.
-    argument_limit: int | None = None
+    argument_limit: Optional[int] = None
 
     def schema(self):
         if (not re.fullmatch(r"[a-z][a-z0-9_]{0,63}", self.name)

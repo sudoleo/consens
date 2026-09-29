@@ -1,4 +1,5 @@
 """Targeted Gmail reading, local versioned drafts and confirmed at-most-once sends."""
+from __future__ import annotations
 import base64
 from datetime import timedelta
 from email.message import EmailMessage, Message
