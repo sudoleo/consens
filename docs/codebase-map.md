@@ -3533,6 +3533,15 @@ wird nur chunkweise bis zum Budget expandiert und DTD/Entities werden abgewiesen
   Einheit; Deep Think zusätzlich genau eine Deep-Think-Einheit. Fehler vor
   Providerstart releasen, Fehler nach Providerstart bleiben konsumiert.
   Provider- und Engine-Aufrufe liegen immer außerhalb aller Transaktionen.
+  Jeder neue Run speichert seinen eigenen, nicht wiederverwendbaren
+  Usage-Beleg `usage_key = consensus-api:run:{run_id}`; Retries desselben Runs
+  teilen ihn, ein späterer Run erbt ihn nie. Ältere Runs ohne Feld behalten den
+  historischen Schlüssel `consensus-api:{idempotency_hash}`.
+- Kann ein `accepted` Run seine Reservierung nicht mehr verwenden (Usage-Beleg
+  abgelaufen, etwa nach Absturz zwischen Usage-Reserve und `mark_reserved`),
+  gibt `fail_unrecoverable_accepted_run` einen noch reservierten Slot frei und
+  beendet den Run als `failed` mit `error.code=reservation_expired`
+  (Recovery und erneuter POST); kein Endlos-Retry, keine Providerarbeit.
 - `api_consensus_runner.py` übergibt die Ausführung an die neutrale
   `consensus_pipeline.py`: `provider_transport.py` führt den deterministischen
   parallelen Provider-Fan-out aus, danach laufen unverändert `query_consensus`
@@ -3550,7 +3559,13 @@ wird nur chunkweise bis zum Budget expandiert und DTD/Entities werden abgewiesen
 - Run-Inhalt und Idempotenz-Mapping tragen `expires_at` (30 Tage ab Annahme);
   periodischer Cleanup löscht beide, bestehende v1-Dokumente werden beim
   ersten Maintenance-Lauf nachmigriert. `DELETE /api/v1/consensus/runs/{run_id}`
-  löscht eigene terminale Runs früher. Alle v1- und Admin-Key-Antworten sind
+  löscht Inhalt eigener terminaler Runs früher: Das Run-Dokument wird durch
+  einen inhaltsfreien Tombstone (`status=deleted`, UID, Key-Hash, Zeitstempel,
+  ursprüngliches `expires_at`) ersetzt, das Idempotenz-Mapping bleibt. Derselbe
+  Key liefert danach stabil `410` mit `error.code=run_deleted` und startet nie
+  erneut kostenpflichtige Arbeit; `GET`/erneutes `DELETE` liefern 404.
+  Tombstone und Mapping verschwinden mit dem ursprünglichen Retention-Ablauf.
+  Alle v1- und Admin-Key-Antworten sind
   `private, no-store`. Limits greifen vor Auth pro IP/API-Key und danach pro UID.
 - Der maschinenlesbare Vertrag kommt aus den typisierten FastAPI-Routen unter
   `/openapi.json` (Security-Scheme `ConsensusApiKey`, Header `X-API-Key` und
@@ -3988,9 +4003,14 @@ CLI mit `firebase deploy --only firestore:rules,firestore:indexes`):
   - `usage_runs/{sha256(idempotency_key)}` — idempotenter Run je UID + Key; der
     Klartext-Key wird nicht gespeichert. Enthält `kind=regular|deep_think`, den
     UTC-Tag der Reservierung, beide serverseitigen Limits zum
-    Reservierungszeitpunkt, `request_fingerprint`, `expires_at` am nächsten
-    UTC-Tageswechsel, `operation_claims` mit Claim-Zeit/Payload-Fingerprint und
-    `status=reserved|consumed|released`. Ein für Chat-Memory verwendeter Run
+    Reservierungszeitpunkt, `request_fingerprint`, `expires_at`,
+    `operation_claims` mit Claim-Zeit/Payload-Fingerprint und
+    `status=reserved|consumed|released`. `utc_date` ist nur der Abrechnungstag;
+    `expires_at` (`execution_expiry`) ist die getrennte Ausführungs-/Retry-
+    Gültigkeit: Ende des Abrechnungstags, mindestens aber zwei Stunden
+    (`MIN_EXECUTION_WINDOW`) nach der Reservierung. Ein um 23:59 belasteter Run
+    beendet seine autorisierten Schritte nach Mitternacht ohne zweite Belastung;
+    neue Runs zählen für den neuen Tag. Ein für Chat-Memory verwendeter Run
     erhält zusätzlich ausschließlich `context_target_hash` und
     `context_bound_at`; derselbe konsumierte Key kann damit nur einen
     Chat-/Turn-Context finanzieren, ohne einen weiteren Zähler zu verändern.
@@ -3998,8 +4018,8 @@ CLI mit `firebase deploy --only firestore:rules,firestore:indexes`):
     Run-Einheit) oder
     `reserved → released` (fehlgeschlagener/abgebrochener Run gibt den Slot
     frei); beide Zielzustände sind terminal, Wiederholungen idempotent. Der Key
-    kann nicht für einen anderen Run-Typ/Request wiederverwendet oder über den
-    UTC-Tag hinaus abgespielt werden. Provider-/LLM-Aufrufe finden immer
+    kann nicht für einen anderen Run-Typ/Request wiederverwendet oder über
+    seine begrenzte Ausführungsgültigkeit hinaus abgespielt werden. Provider-/LLM-Aufrufe finden immer
     außerhalb der Transaktion und erst nach Consume plus erfolgreichem
     Operations-Claim statt. Beim Account-Löschen werden beide Subcollections entfernt.
     `/ask_*`, `/consensus` und `/resolve` bündeln Run-Bindung, gegebenenfalls
@@ -4038,11 +4058,13 @@ CLI mit `firebase deploy --only firestore:rules,firestore:indexes`):
   gelesen. Ein fehlgeschlagener Audit-Write lässt die bereits gesetzte Stufe
   stehen und wird geloggt — der Adminvorgang darf daran nicht scheitern.
 - `api_consensus_runs/{run_id}` — UID-gebundener v1-API-Run mit serverseitig
-  eingefrorenem Request/Modellplan, `idempotency_hash`, Status und Status-
+  eingefrorenem Request/Modellplan, `idempotency_hash`, eigenem `usage_key`, Status und Status-
   Zeitstempeln, einstündigem Running-Lease, der bei Annahme eingefrorenen Stufe
   (`tier_at_acceptance`, mit `is_pro_at_acceptance` als Altfeld) sowie terminal
   `result` oder sanitisiertem `error` und 30-Tage-`expires_at`. Erlaubte Hauptfolge:
-  `accepted → reserved → running → succeeded|failed`.
+  `accepted → reserved → running → succeeded|failed`; zusätzlich
+  `accepted → failed` (`reservation_expired`) und nach Owner-Löschung der
+  inhaltsfreie Tombstone `succeeded|failed → deleted` bis zum Retention-Ablauf.
 - `app_config/prompts` — globale Prompt-Konfiguration aus `prompt_config.py`:
   `prompts.agent`, `prompts.answers`, `prompts.consensus`, `reference_timezone`,
   `delegation` (aktiviert, Rollenprompts, Laufzeit-/Kontext-/Nachrichten-/Parallelitäts-

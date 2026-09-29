@@ -11,6 +11,7 @@ from app.services import persistence_guard
 from app.services.api_run_repository import (
     API_RUN_RETENTION_DAYS,
     ApiRunConflict,
+    ApiRunDeleted,
     ApiRunNotFound,
     ApiRunTransitionError,
     FirestoreApiRunRepository,
@@ -230,6 +231,6 @@ def test_only_owner_can_delete_terminal_run_and_mapping():
     with pytest.raises(ApiRunNotFound):
         repo.get(run["run_id"])
 
-    replacement, created = create(repo)
-    assert created is True
-    assert replacement["run_id"] != run["run_id"]
+    # R03: the deleted logical run keeps its Idempotency-Key fenced.
+    with pytest.raises(ApiRunDeleted):
+        create(repo)

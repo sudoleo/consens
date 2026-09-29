@@ -21,6 +21,10 @@ MAX_IDEMPOTENCY_KEY_BYTES = 256
 RUN_LEASE_SECONDS = 60 * 60
 API_RUN_RETENTION_DAYS = 30
 RUN_STATUSES = {"accepted", "reserved", "running", "succeeded", "failed"}
+# A deleted terminal run keeps only this content-free tombstone until its
+# original retention expiry. It fences the Idempotency-Key: the same logical
+# run can never start paid provider work a second time.
+DELETED_STATUS = "deleted"
 
 
 class ApiRunError(Exception):
@@ -37,6 +41,10 @@ class ApiRunConflict(ApiRunError):
 
 class ApiRunTransitionError(ApiRunError):
     pass
+
+
+class ApiRunDeleted(ApiRunError):
+    """The Idempotency-Key belongs to a run whose content was deleted."""
 
 
 T = TypeVar("T")
@@ -102,6 +110,10 @@ class FirestoreApiRunRepository:
                 existing_snap = existing_ref.get(transaction=tx)
                 if not existing_snap.exists:
                     raise ApiRunConflict("Idempotency mapping is inconsistent")
+                if (existing_snap.to_dict() or {}).get("status") == DELETED_STATUS:
+                    raise ApiRunDeleted(
+                        "The run for this Idempotency-Key was deleted"
+                    )
                 return self._with_id(existing_snap), False
 
             run_data = {
@@ -112,6 +124,9 @@ class FirestoreApiRunRepository:
                 "idempotency_hash": key_hash,
                 "request_hash": payload_hash,
                 "status": "accepted",
+                # One non-reusable usage receipt per logical run. Retries of
+                # this run share it; a later run never inherits it.
+                "usage_key": "consensus-api:run:" + run_id,
                 "request": dict(request_payload),
                 "model_plan": dict(model_plan),
                 # Beide Felder: is_pro_at_acceptance bleibt fuer bestehende
@@ -151,7 +166,26 @@ class FirestoreApiRunRepository:
             raise ApiRunConflict(
                 "Idempotency-Key is already bound to a different request"
             )
-        return self.get_for_uid(str(mapping.get("run_id") or ""), uid)
+        try:
+            run_id = _validate_run_id(str(mapping.get("run_id") or ""))
+        except ApiRunNotFound:
+            raise ApiRunConflict("Idempotency mapping is inconsistent") from None
+        snap = self._run_ref(run_id).get()
+        data = snap.to_dict() or {} if snap.exists else {}
+        if not snap.exists or data.get("uid") != uid:
+            raise ApiRunConflict("Idempotency mapping is inconsistent")
+        if data.get("status") == DELETED_STATUS:
+            raise ApiRunDeleted("The run for this Idempotency-Key was deleted")
+        return self._with_id(snap)
+
+    def fail_accepted(self, run_id: str, *, code: str, message: str) -> tuple[dict, bool]:
+        """Terminalize a run that can no longer obtain its usage authorization."""
+        return self._transition(
+            run_id,
+            "accepted",
+            "failed",
+            extra={"error": {"code": code, "message": message}},
+        )
 
     def mark_reserved(self, run_id: str) -> tuple[dict, bool]:
         return self._transition(run_id, "accepted", "reserved")
@@ -226,11 +260,19 @@ class FirestoreApiRunRepository:
         return self._delete(run_id, allowed_statuses={"accepted"})
 
     def delete_terminal_for_uid(self, run_id: str, uid: str) -> bool:
+        """Delete the content of a terminal run, but keep its idempotency fence.
+
+        The run document is overwritten with a tombstone that stores no prompt,
+        plan, result or error. The mapping stays, so repeating the original
+        request with the same Idempotency-Key can never start paid work again.
+        Both disappear with the run's original 30-day retention expiry.
+        """
         return self._delete(
             run_id,
             expected_uid=str(uid or "").strip(),
             allowed_statuses={"succeeded", "failed"},
             reject_wrong_status=True,
+            keep_tombstone=True,
         )
 
     def delete_expired(self, run_id: str, *, now: datetime | None = None) -> bool:
@@ -238,7 +280,7 @@ class FirestoreApiRunRepository:
 
     def get(self, run_id: str) -> dict:
         snap = self._run_ref(_validate_run_id(run_id)).get()
-        if not snap.exists:
+        if not snap.exists or (snap.to_dict() or {}).get("status") == DELETED_STATUS:
             raise ApiRunNotFound("Run not found")
         return self._with_id(snap)
 
@@ -291,6 +333,7 @@ class FirestoreApiRunRepository:
         allowed_statuses: set[str] | None = None,
         reject_wrong_status: bool = False,
         expired_at_or_before: datetime | None = None,
+        keep_tombstone: bool = False,
     ) -> bool:
         validated_run_id = _validate_run_id(run_id)
         run_ref = self._run_ref(validated_run_id)
@@ -302,6 +345,8 @@ class FirestoreApiRunRepository:
             data = snap.to_dict() or {}
             if expected_uid is not None and data.get("uid") != expected_uid:
                 raise ApiRunNotFound("Run not found")
+            if keep_tombstone and data.get("status") == DELETED_STATUS:
+                return False
             if allowed_statuses is not None and data.get("status") not in allowed_statuses:
                 if reject_wrong_status:
                     raise ApiRunTransitionError("Only terminal runs can be deleted")
@@ -314,6 +359,25 @@ class FirestoreApiRunRepository:
                 str(data.get("uid") or ""), str(data.get("idempotency_hash") or "")
             )
             mapping_snap = mapping_ref.get(transaction=tx)
+            if keep_tombstone:
+                now = datetime.now(timezone.utc)
+                expires_at = data.get("expires_at")
+                if not isinstance(expires_at, datetime):
+                    expires_at = now + timedelta(days=API_RUN_RETENTION_DAYS)
+                tx.set(
+                    run_ref,
+                    {
+                        "schema_version": 1,
+                        "run_id": validated_run_id,
+                        "uid": data.get("uid"),
+                        "idempotency_hash": data.get("idempotency_hash"),
+                        "status": DELETED_STATUS,
+                        "deleted_at": now,
+                        "updated_at": now,
+                        "expires_at": expires_at,
+                    },
+                )
+                return True
             if (
                 mapping_snap.exists
                 and (mapping_snap.to_dict() or {}).get("run_id") == validated_run_id

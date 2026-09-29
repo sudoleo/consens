@@ -43,6 +43,7 @@ from app.services.usage_repository import (
     RunStatus,
     UsageLimits,
     UsageRunConflict,
+    UsageRunExpired,
     UsageRunNotFound,
     UsageTransitionError,
     canonical_request_fingerprint,
@@ -128,7 +129,39 @@ def usage_limits_for_run(run: dict) -> UsageLimits:
 
 
 def usage_key_for_run(run: dict) -> str:
+    # New runs carry their own receipt key. Runs accepted before that field
+    # existed keep the historic key so in-flight work settles exactly once.
+    stored = str(run.get("usage_key") or "").strip()
+    if stored:
+        return stored
     return "consensus-api:" + str(run.get("idempotency_hash") or "")
+
+
+class AcceptedRunUnrecoverable(Exception):
+    """An accepted run can no longer obtain its usage authorization."""
+
+
+def fail_unrecoverable_accepted_run(run: dict) -> dict:
+    """Terminalize an accepted run whose usage receipt cannot be used anymore.
+
+    Accepted runs never reached ``claim_running``, so no provider started and
+    no usage was consumed. A still reserved slot is released; a released or
+    missing receipt needs nothing. The run becomes ``failed`` with a stable,
+    explainable code instead of being retried until content retention.
+    """
+    try:
+        release_run_reservation(run)
+    except (UsageRunNotFound, UsageTransitionError):
+        pass
+    failed, _changed = api_run_repository.fail_accepted(
+        str(run["run_id"]),
+        code="reservation_expired",
+        message=(
+            "The run could not be started within its reservation window. "
+            "Start a new run with a new Idempotency-Key."
+        ),
+    )
+    return failed
 
 
 def reserve_run(run: dict):
@@ -150,6 +183,15 @@ def reserve_run(run: dict):
         raise UsageRunConflict("Idempotency-Key belongs to a released usage run")
     reserved, _ = api_run_repository.mark_reserved(str(run["run_id"]))
     return reserved, result
+
+
+def reserve_or_terminalize(run: dict):
+    """Reserve an accepted run; terminalize it if its receipt has expired."""
+    try:
+        return reserve_run(run)
+    except UsageRunExpired:
+        failed = fail_unrecoverable_accepted_run(run)
+        raise AcceptedRunUnrecoverable(str(failed.get("run_id") or "")) from None
 
 
 def release_run_reservation(run: dict) -> None:
@@ -258,7 +300,12 @@ def recover_persisted_runs() -> int:
                 recovered += 1
         for run in api_run_repository.list_by_status(("accepted",)):
             try:
-                reserved, _usage = reserve_run(run)
+                reserved, _usage = reserve_or_terminalize(run)
+            except AcceptedRunUnrecoverable:
+                logging.warning(
+                    "Consensus API accepted run terminalized after reservation expiry"
+                )
+                continue
             except Exception as exc:
                 logging.error(
                     "Consensus API accepted run could not be recovered category=%s",
