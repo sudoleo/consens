@@ -3068,6 +3068,12 @@ Details, Budgets und Abnahme: [source-verification.md](source-verification.md).
   Original-Offset je Ausgabezeichen vor; exakte, fuzzy und Markdown-bereinigte
   Zitatsuche teilen diesen Vertrag. Das verhindert verschobene Zitate und den
   am 18.09.2026 protokollierten `IndexError` in `_locate_span`.
+  Belegstatus (`quote_models`, erhaltene Dissent-Zitate,
+  `consensus_anchor_validated`) setzt nur eine VOLLSTÄNDIGE normalisierte
+  Deckung; toleriert werden ausschließlich Groß-/Kleinschreibung,
+  typografische Anführungszeichen/Striche, Whitespace und Randauslassungen.
+  Fuzzy-Suche (`allow_fuzzy=True`) dient nur der Navigation (Claim-Anker,
+  nicht validierter Widerspruchs-Anker) und vergibt nie einen Belegstatus.
   Unparsbares JSON erreicht den Nutzer nie als Rohtext.
 - Coverage-Judge (`coverage_judge.py` + `consensus_engine._run_coverage_judge`,
   seit 2026-08-31): belegt JEDEN nummerierten Konsens-Satz statt der "3-6

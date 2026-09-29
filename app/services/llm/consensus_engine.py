@@ -1262,6 +1262,9 @@ def _looks_like_json(raw: str) -> bool:
 # ---------------------------------------------------------------------------
 
 _QUOTE_CHARS = set("“”„‘’«»\"")
+# Typographic variants that never change meaning: hyphen/dash forms. Numbers,
+# units, signs, negations and every word stay significant.
+_DASH_CHARS = set("‐‑‒–—−")
 _ELLIPSIS_EDGE_RE = re.compile(r"^(?:\.{3}|…)\s*|\s*(?:\.{3}|…)$")
 FUZZY_MATCH_MIN_CHARS = 15
 FUZZY_MATCH_MIN_RATIO = 0.6
@@ -1276,6 +1279,8 @@ def _normalize_with_offsets(text: str):
         c = ch.lower()
         if c in _QUOTE_CHARS:
             c = '"'
+        elif c in _DASH_CHARS:
+            c = "-"
         if c.isspace():
             if not norm_chars or norm_chars[-1] == " ":
                 continue
@@ -1295,9 +1300,20 @@ def _normalize_needle(text: str) -> str:
     return norm
 
 
-def _locate_span(haystack: str, hay_norm: str, hay_offsets: list, needle: str):
-    """Sucht ein (LLM-)Zitat im Originaltext: erst exakt auf normalisierter
-    Basis, dann fuzzy über difflib. Liefert den Original-Ausschnitt oder None."""
+def _locate_span(haystack: str, hay_norm: str, hay_offsets: list, needle: str, *, allow_fuzzy: bool = False):
+    """Sucht ein (LLM-)Zitat im Originaltext und liefert den Original-Ausschnitt.
+
+    Belegend ist ausschliesslich die VOLLSTAENDIGE normalisierte Deckung. Die
+    tolerierte Normalisierung ist abschliessend: Gross-/Kleinschreibung,
+    typografische Anfuehrungszeichen und Striche, zusammengefasster Whitespace
+    und Auslassungspunkte an den Raendern. Zahlen, Einheiten, Vorzeichen,
+    Negationen und Bedingungen muessen woertlich passen.
+
+    ``allow_fuzzy`` erlaubt danach die aehnlichste Passage (laengster
+    gemeinsamer Teilstring) -- nur zur Navigation, etwa um einen Satz im
+    Konsenstext zu markieren. Ein solcher Treffer ist nie ein Beleg: Aufrufer,
+    die einen Verified-/Support-Status vergeben, verwenden ihn nicht (R08).
+    """
     needle_norm = _normalize_needle(needle)
     if not needle_norm:
         return None
@@ -1306,7 +1322,7 @@ def _locate_span(haystack: str, hay_norm: str, hay_offsets: list, needle: str):
         start = hay_offsets[idx]
         end = hay_offsets[idx + len(needle_norm) - 1] + 1
         return haystack[start:end]
-    if len(needle_norm) >= FUZZY_MATCH_MIN_CHARS:
+    if allow_fuzzy and len(needle_norm) >= FUZZY_MATCH_MIN_CHARS:
         matcher = difflib.SequenceMatcher(None, hay_norm, needle_norm, autojunk=False)
         match = matcher.find_longest_match(0, len(hay_norm), 0, len(needle_norm))
         if match.size >= max(FUZZY_MATCH_MIN_CHARS, int(len(needle_norm) * FUZZY_MATCH_MIN_RATIO)):
@@ -1317,17 +1333,20 @@ def _locate_span(haystack: str, hay_norm: str, hay_offsets: list, needle: str):
 
 
 def _span_finder():
-    """Wiederverwendbare Zitatsuche mit Normalisierungs-Cache je Text."""
+    """Wiederverwendbare Zitatsuche mit Normalisierungs-Cache je Text.
+
+    Standard ist die exakte (normalisierte) Suche; ``allow_fuzzy=True`` nur
+    fuer reine Navigationsanker."""
     prepared = {}
 
-    def _find(key: str, text: str, needle: str):
+    def _find(key: str, text: str, needle: str, *, allow_fuzzy: bool = False):
         if not text:
             return None
         if key not in prepared:
             norm, offsets = _normalize_with_offsets(text)
             prepared[key] = (norm, offsets)
         norm, offsets = prepared[key]
-        return _locate_span(text, norm, offsets, needle)
+        return _locate_span(text, norm, offsets, needle, allow_fuzzy=allow_fuzzy)
 
     return _find
 
@@ -1401,7 +1420,10 @@ def _verify_claims(claims: list, consensus_answer: str, model_answers: dict, _fi
     _find = _find or _span_finder()
     consensus_text = str(consensus_answer or "")
     for claim in claims or []:
-        span = _find("__consensus__", consensus_text, claim.get("anchor"))
+        # The claim anchor only marks a consensus sentence (navigation), so a
+        # similar passage is acceptable there. Dissent quotes below are model
+        # evidence and need full normalized coverage.
+        span = _find("__consensus__", consensus_text, claim.get("anchor"), allow_fuzzy=True)
         if span:
             claim["anchor"] = _clip(span, MAX_DIFF_TEXT_CHARS)
         else:
@@ -1442,6 +1464,12 @@ def _verify_differences_data(data: dict, consensus_answer: str, model_answers: d
             if span:
                 diff["consensus_anchor"] = _clip(span, MAX_DIFF_TEXT_CHARS)
                 diff["consensus_anchor_validated"] = True
+            elif span := _find(
+                "__consensus__", consensus_text, diff["consensus_anchor"], allow_fuzzy=True
+            ):
+                # A similar consensus passage still helps the reader navigate,
+                # but it is not a validated anchor for evidence checks.
+                diff["consensus_anchor"] = _clip(span, MAX_DIFF_TEXT_CHARS)
             else:
                 logging.info(
                     "Difference anchor not found in consensus answer anchor_chars=%d",
