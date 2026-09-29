@@ -241,6 +241,9 @@ class FakeTransaction:
     def update(self, ref, data):
         self._stage("update", ref, data)
 
+    def delete(self, ref):
+        self._stage("delete", ref, {})
+
     def commit(self):
         paths = [ref.path for _operation, ref, _data in self.operations]
         documents_before = copy.deepcopy(self.database.documents)
@@ -248,7 +251,9 @@ class FakeTransaction:
         write_log_length = len(self.database.write_log)
         try:
             for operation, ref, data in self.operations:
-                if operation == "set":
+                if operation == "delete":
+                    ref.delete()
+                elif operation == "set":
                     self.database.apply_set(ref, data)
                 else:
                     self.database.apply_update(ref, data)

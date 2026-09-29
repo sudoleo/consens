@@ -322,11 +322,11 @@
       if (option) option.hidden = !beta;
     });
     const upload = document.getElementById("attachUploadOption");
-    if (upload) upload.disabled = beta;
+    if (upload) upload.disabled = false;
     const hint = document.getElementById("attachMenuHint");
     if (hint) {
       hint.dataset.uploadHint ||= hint.textContent;
-      hint.textContent = beta ? "Agent Beta currently supports text only." : hint.dataset.uploadHint;
+      hint.textContent = beta ? "PDF, Word, text and images · files stay available in this chat for 30 days." : hint.dataset.uploadHint;
     }
     const trigger = document.getElementById("attachTrigger");
     if (trigger) {
@@ -389,8 +389,8 @@
     }
     const attachButton = document.getElementById("composerAttachButton");
     if (attachButton) {
-      attachButton.disabled = beta;
-      attachButton.title = beta ? "Agent Beta currently supports text only" : `Add attachment${window.isUserPlus ? "" : " · Plus"}`;
+      attachButton.disabled = false;
+      attachButton.title = `Add attachment${window.isUserPlus ? "" : " · Plus"}`;
     }
     const labels = models.map(pref => {
       const select = document.getElementById(pref.selectId);

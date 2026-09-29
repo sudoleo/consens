@@ -3251,7 +3251,7 @@ gebracht; serverseitig gelten zusätzlich 40 Mio. Pixel vor dem Dekodieren und
 openai/anthropic/gemini/grok/kimi/glm; PDF-Support:
 openai/anthropic/gemini. PDFs über 2 MB werden für alle Familien als einmal
 extrahierter Text verwendet; nur nicht extrahierbare Scans bleiben für
-PDF-fähige Familien nativ. **In Firestore landen nie Datei-Bytes**, nur
+PDF-fähige Familien nativ. **Im klassischen Consensus landen in Firestore nie Datei-Bytes**, nur
 Metadaten (Name/Typ/Größe) — siehe `bookmarks.py::sanitize_attachment_meta`.
 Bilder können zusätzlich zum Dateiauswahldialog per Paste im `#questionInput`
 angehängt werden. Drag-and-drop auf `.chat-input-container` akzeptiert wie der
@@ -5044,3 +5044,39 @@ Wiederöffnen alter Antworten. „No highlights“ verbirgt über
 `consensus-markers-hidden` weiterhin deren Markierungen, ohne Links/Befunde
 zu entfernen. Sources und Differences bleiben flache Reader-Listen;
 Resolve bleibt eine unabhängige sekundäre Aktion mit erhaltenem `[hidden]`.
+
+## Agent-Dateien (2026-09-27)
+
+`agent_files.py` (Router/Service) ergänzt owner- und chat-gebundene private Dateien:
+`POST/GET /agent/chats/{chat}/files`, `GET/DELETE .../{file}`. Der bestehende
+Composer lädt vor `/agent` hoch und sendet ausschließlich validierte `file_ids`;
+die Auswahl wird in `agent_settings` eingefroren und bei Replay verglichen.
+`agent-workspace.js` zeigt Download, Status, Warnungen und Löschen auch nach Reload.
+Dateien werden nicht in Shares, Memory oder Watch-Inputs übernommen.
+
+Bytes liegen im privaten GCS-Bucket `AGENT_FILES_BUCKET`, Metadaten und begrenzte
+Auszüge unter `users/{uid}/chats/{chat}/files/{id}`. Kontoquote unter
+`chat_state/file_quota`: 100 Dateien / 100 MiB; Datei 5 MiB, Aufbewahrung 30 Tage.
+Upload reserviert transaktional, schreibt ein privates Objekt und finalisiert
+nur bei weiterhin aktivem Chat und Konto. Fehler/Stop räumen Reservierung und
+Objekt auf. Die Chat-Löschkaskade löscht Objekte vor Metadaten; bestehende Account-
+Löschung durchläuft dieselbe Kaskade. Ohne konfigurierten Objektspeicher
+(`StorageNotConfigured`) scheitert der Upload vor jeder Reservierung mit 503,
+und die Löschkaskade überspringt den Objektspeicher statt abzubrechen. Die
+stündliche Retention räumt abgelaufene Dateien und verwaiste Uploads seitenweise
+mit Zeitbudget auf; ein einzelner fehlschlagender Löschvorgang wird geloggt und
+im nächsten Lauf wiederholt. Collection-group-Indizes siehe Setup.
+
+`agent_file_extract.py` läuft mit 15 s Walltime und auf Linux 10 s CPU / 768 MiB
+Adressraum; höchstens 80 PDF-Seiten, 120 Auszüge / 120.000 Zeichen. DOCX-Tabellen
+behalten Zellreihenfolge, Textdateien Zeilenbereiche und PDFs Seitennummern.
+Scans ohne Text bleiben ausdrücklich als unvollständig erkennbar. Kein OCR.
+`FileContext` ergänzt `read_file`, gezielte Auszüge und native Bilder bei
+expliziter Modellfähigkeit. Von `read_file` geöffnete Bilder ergänzen die
+Nutzerauswahl (`selection()`), verdrängen sie aber nie. Native PDFs werden nur
+gesendet, wenn ihre seitenbasierte Tokenreservierung ins Kontextfenster passt.
+Vergleiche erhalten die Auswahl, Worker nur explizite `file_ids`; Judges
+erhalten die vorhandene Vergleichsevidenz. Private Bilddaten
+werden nur im flüchtigen Provider-Payload ergänzt, mit konservativer
+Tokenreservierung und tatsächlicher Usage-Abrechnung. Tool-Daten sind keine
+Berechtigungen. Anleitung, Grenzen und PR-Matrix: `docs/agent-integrations.md`.

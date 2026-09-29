@@ -80,7 +80,8 @@ Quellenprüfungs-Tool für die nächste Nachricht frei. Der gemeinsame On/Off-We
 wird beim Senden eingefroren und bei Recovery wiederverwendet. „Deep Think“
 öffnet direkt die vorhandene Reasoning-Auswahl des Chatmodells und zeigt deren
 aktuelle Stufe. Modelle ohne wählbares Reasoning und laufende Nachrichten sperren
-dieses Menü. „Attach“ bleibt wegen der Textbeschränkung deaktiviert.
+dieses Menü. „Attach“ lädt PDF, Word, Text und Bilder in den privaten Chat-Dateispeicher.
+Siehe [Agent integrations](agent-integrations.md) für Limits und Konfiguration.
 
 Das Modell kann eine ganze Frage oder mehrere begründete Teilfragen
 vergleichen. Jede Vergleichsgruppe erhält denselben neutralen Auftrag samt

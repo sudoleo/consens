@@ -744,15 +744,19 @@ describe("single-model agent chat", () => {
     dom.window.close();
   });
 
-  it("rejects attachments before any network call", async () => {
+  it("uploads attachments before starting the agent and freezes IDs for recovery", async () => {
     const { window, document, dom } = boot();
     await selectAgent(window);
     document.getElementById("questionInput").value = "Question";
-    window.getAttachmentsPayload = () => [{ name: "private.pdf" }];
+    window.getAttachmentsPayload = () => [{ name: "private.txt", data: "SGVsbG8=" }];
+    window.App.agentWorkspace = { refresh: vi.fn(), upload: vi.fn(async context => {
+      expect(context.metadata.requestSent).not.toBe(true);
+      expect(context.attachments[0].name).toBe("private.txt");
+      context.metadata.fileIds = ["f".repeat(32)];
+    }) };
     await window.App.agentChat.send();
-    expect(window.fetch.mock.calls.map(call => call[0])).toEqual(["/agent/models"]);
-    expect(window.streamSSERequest).not.toHaveBeenCalled();
-    expect(window.App.showPopup).toHaveBeenCalledWith(expect.stringContaining("text only"));
+    expect(window.App.agentWorkspace.upload).toHaveBeenCalledOnce();
+    expect(window.streamSSERequest.mock.calls[0][1].file_ids).toEqual(["f".repeat(32)]);
     dom.window.close();
   });
 

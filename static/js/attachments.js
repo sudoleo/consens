@@ -38,6 +38,7 @@
   const ATTACH_TYPES_LABEL = "PDF, Word (.docx), TXT, MD, CSV, PNG, JPG, WebP";
   // Familien, deren aktuell effektives Modell keine Anhaenge lesen kann.
   function attachmentBlockedFamilies() {
+    if (window.App?.agentChat?.isSelected?.()) return [];
     const deepThink = document.getElementById("deepSearchToggle")?.checked === true;
     return (window.App?.modelPrefs || []).filter(pref => {
       const model = document.getElementById(pref.selectId)?.value;
@@ -412,6 +413,7 @@
     }
 
     function detachForMessage() {
+      readGeneration++;
       const meta = messageMeta();
       if (window.pendingAttachments.length) {
         window.pendingAttachments = [];
@@ -484,6 +486,7 @@
     syncComposerPlacement();
 
     window.clearPendingAttachments = function () {
+      readGeneration++;
       if (!window.pendingAttachments.length) return;
       window.pendingAttachments = [];
       renderAttachmentChips();
@@ -615,7 +618,11 @@
       return mime.indexOf("image/") === 0 ? IMAGE_MAX_INPUT_BYTES : ATTACH_MAX_BYTES;
     }
 
+    let readGeneration = 0;
+    window.addEventListener("consensio:auth-state", () => { readGeneration++; });
     function addFiles(files, options) {
+      const generation = readGeneration;
+      const owner = window.auth?.currentUser?.uid;
       const source = options && options.source ? options.source : "picker";
       const imagesOnly = !!(options && options.imagesOnly);
       if (!files.length) return;
@@ -660,7 +667,7 @@
           const payload = shrunk ? shrunk.blob : file;
           return readAsBase64(payload).then(function (base64Data) {
             pendingFileReads = Math.max(0, pendingFileReads - 1);
-            if (!base64Data) return;
+            if (generation !== readGeneration || owner !== window.auth?.currentUser?.uid || !base64Data) return;
             if (window.pendingAttachments.length >= ATTACH_MAX_FILES) return;
             window.pendingAttachments.push({
               name: shrunk ? renameToJpeg(name) : name,

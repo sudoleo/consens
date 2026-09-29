@@ -1284,6 +1284,8 @@ class ChatStore:
             })
 
         self._transaction(mark_deleting)
+        from app.services.agent_files import AgentFiles
+        AgentFiles(self.db).cleanup_chat(uid, chat_id)
         self._delete_chat_tree(chat_ref)
 
     def _delete_chat_tree(self, chat_ref) -> None:

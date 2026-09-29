@@ -416,6 +416,8 @@ class AgentCompletion:
         # arguments, user settings or arbitrary registry configuration.
         for field in ("tools", "tool_choice", "plugins", "parallel_tool_calls", "max_tool_calls", "stop_server_tools_when"):
             payload.pop(field, None)
+        if any(isinstance(m.get("content"), list) and any(b.get("type") == "file" for b in m["content"]) for m in messages):
+            payload["plugins"] = [{"id": "file-parser", "pdf": {"engine": "native"}}]
         if tools:
             payload["tools"] = tools
             if any(tool.get("type") == "function" for tool in tools):

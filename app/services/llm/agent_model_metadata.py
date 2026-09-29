@@ -39,7 +39,7 @@ def _normalize(entry):
     efforts = reasoning.get('supported_efforts', [])
     if efforts is not None and (not isinstance(efforts, list) or not all(isinstance(x, str) for x in efforts)):
         return None
-    return {'pricing': pricing, 'context_length': context, 'top_provider': top, 'reasoning': reasoning}
+    return {'pricing': pricing, 'context_length': context, 'top_provider': top, 'reasoning': reasoning, 'architecture': entry.get('architecture') if isinstance(entry.get('architecture'), dict) else {}}
 
 
 def fetch_models():
