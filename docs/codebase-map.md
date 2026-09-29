@@ -4780,8 +4780,13 @@ Modell-Chips. Provider-Bewegungen über die Läufe bleiben als nachrangiges Deta
 verfügbar; der Kopf zeigt den gemeinsamen
 **Direction Shift**. Die Berechnung ist deterministisch aus dem ohnehin
 vorhandenen Differences-JSON plus dem Change-Judge-Ergebnis und verursacht
-keinen zusätzlichen LLM-Call. Stable-Läufe werden mit 0 gewertet; bei nicht
-vergleichbaren Dimensionssätzen zeigt die UI keinen erfundenen Voll-Shift.
+keinen zusätzlichen LLM-Call. `opinion_map.stance_changed` wertet geänderte
+Zahlen (mit Vorzeichen/Einheit/Währung), Negationen, Bedingungen und Monate
+immer als Bewegung; nur ohne solche Marker entscheidet die Wortüberlappung.
+Modellbewegung ist vom Change-Judge entkoppelt: `consensus_changed=False`
+schaltet lediglich den lexikalischen Fallback ab (Paraphrase), ein
+Einzelmodell-Wechsel bleibt sichtbar. Ohne vergleichbare Position gilt
+`movement_score=None` bzw. `shift_score=None` („Not comparable“), nie 0/Stable.
 **Morning Brief**: opt-in tägliche Digest-Mail pro Nutzer (nicht pro Watch),
 konfiguriert im Watch-Dashboard (`/api/my/watch-brief`), gespeichert in
 `watch_briefs/{uid}`; Aktivierung setzt mindestens eine vorhandene Watch voraus.

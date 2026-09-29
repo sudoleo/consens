@@ -1499,6 +1499,94 @@ class OpinionMapTests(unittest.TestCase):
         self.assertEqual(corrected["shift_score"], 0)
         self.assertEqual(corrected["shift_label"], "Stable")
 
+    @staticmethod
+    def _single(stance):
+        return {"schema_version": 1, "models": [], "dimensions": [{
+            "label": "Current annual subscription price",
+            "positions": [{"stance": stance, "models": ["OpenAI"]}],
+        }]}
+
+    def _movement(self, before, after, consensus_changed=True):
+        previous = self._single(before)
+        views, score, label = opinion_map._movement_view(
+            self._single(after)["dimensions"], previous, consensus_changed=consensus_changed,
+        )
+        return views[0], score, label
+
+    def test_numbers_units_signs_negations_and_conditions_register_as_movement(self):
+        """R15: 20 -> 90 euros was scored 0 / Stable."""
+        cases = [
+            ("The plan costs 20 euros per month", "The plan costs 90 euros per month"),
+            ("The plan costs 20 euros per month", "The plan costs 20 dollars per month"),
+            ("Growth is +3% this year", "Growth is -3% this year"),
+            ("The deadline is 15 March", "The deadline is 15 April"),
+            ("The feature is available to all users", "The feature is not available to all users"),
+            ("The feature is available to all users", "The feature is available to all users only in the EU"),
+        ]
+        for before, after in cases:
+            for consensus_changed in (True, False, None):
+                with self.subTest(before=before, after=after, consensus_changed=consensus_changed):
+                    view, score, label = self._movement(before, after, consensus_changed)
+                    self.assertTrue(view["moved"])
+                    self.assertEqual(view["movement_score"], 100)
+                    self.assertEqual(score, 100)
+                    self.assertEqual(label, "Turning")
+
+    def test_pure_paraphrase_is_not_movement(self):
+        view, score, label = self._movement(
+            "The plan costs 20 euros per month",
+            "Monthly, the plan's price is 20 EUR",
+            consensus_changed=False,
+        )
+        self.assertFalse(view["moved"])
+        self.assertEqual((score, label), (0, "Stable"))
+
+    def test_single_model_change_stays_visible_when_consensus_is_stable(self):
+        def differences(openai_stance):
+            return {"differences": [{
+                "claim": "Recommended adoption timeline",
+                "positions": [
+                    {"stance": openai_stance, "models": ["OpenAI"]},
+                    {"stance": "Adopt now", "models": ["Gemini", "Anthropic"]},
+                ],
+            }]}
+
+        baseline = opinion_map.build_opinion_map(differences("Adopt now"))
+        current = opinion_map.build_opinion_map(
+            differences("Do not adopt now"), baseline, consensus_changed=False,
+        )
+        openai = next(item for item in current["models"] if item["provider"] == "OpenAI")
+        gemini = next(item for item in current["models"] if item["provider"] == "Gemini")
+        self.assertTrue(openai["moved"])
+        self.assertEqual(openai["movement_score"], 100)
+        self.assertFalse(gemini["moved"])
+        self.assertEqual(gemini["movement_score"], 0)
+
+    def test_missing_comparison_is_not_scored_as_stable(self):
+        baseline = opinion_map.build_opinion_map(self._differences())
+        current = opinion_map.build_opinion_map({
+            "differences": [{
+                "claim": "An unrelated generated heading",
+                "positions": [
+                    {"stance": "Proceed", "models": ["OpenAI", "Gemini"]},
+                    {"stance": "Wait", "models": ["Anthropic"]},
+                ],
+            }],
+        }, baseline, consensus_changed=False)
+        self.assertIsNone(current["shift_score"])
+        self.assertEqual(current["shift_label"], "Not comparable")
+        self.assertTrue(all(item["movement_score"] is None for item in current["models"]))
+        self.assertTrue(all(not item["moved"] for item in current["models"]))
+
+    def test_sanitized_map_keeps_unknown_movement_unknown(self):
+        cleaned = opinion_map.sanitize_opinion_map({
+            "shift_score": None,
+            "dimensions": [{"label": "L", "positions": [{"stance": "S", "models": ["OpenAI"]}]}],
+            "models": [{"provider": "OpenAI", "movement_score": None, "moved": True}],
+        })
+        self.assertIsNone(cleaned["models"][0]["movement_score"])
+        self.assertFalse(cleaned["models"][0]["moved"])
+
     def test_map_is_compact_and_contains_no_raw_answers(self):
         result = opinion_map.build_opinion_map(self._differences())
         self.assertNotIn("answers", result)

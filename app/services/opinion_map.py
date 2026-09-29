@@ -57,6 +57,98 @@ def similarity(left, right) -> float:
     return len(a & b) / len(a | b)
 
 
+# Lexical threshold below which a provider's stance on a matched dimension
+# counts as moved. Word overlap alone is only a fallback: see stance_changed.
+STANCE_MOVED_BELOW = 0.24
+
+_CURRENCY_SYMBOLS = {"$": "usd", "€": "eur", "£": "gbp", "¥": "jpy"}
+_UNIT_ALIASES = {
+    "%": "%", "percent": "%", "prozent": "%", "pct": "%", "‰": "‰",
+    "eur": "eur", "euro": "eur", "euros": "eur", "usd": "usd", "dollar": "usd",
+    "dollars": "usd", "gbp": "gbp", "pound": "gbp", "pounds": "gbp", "chf": "chf",
+    "cent": "cent", "cents": "cent", "ct": "cent",
+    "k": "thousand", "thousand": "thousand", "tsd": "thousand", "tausend": "thousand",
+    "m": "million", "mio": "million", "million": "million", "millions": "million",
+    "millionen": "million", "bn": "billion", "billion": "billion", "billions": "billion",
+    "mrd": "billion", "milliarden": "billion", "trillion": "trillion",
+    "x": "x", "times": "x", "fach": "x",
+    "second": "s", "seconds": "s", "sec": "s", "s": "s", "sekunden": "s",
+    "minute": "min", "minutes": "min", "min": "min", "minuten": "min",
+    "hour": "h", "hours": "h", "h": "h", "stunde": "h", "stunden": "h",
+    "day": "day", "days": "day", "tag": "day", "tage": "day", "tagen": "day",
+    "week": "week", "weeks": "week", "woche": "week", "wochen": "week",
+    "month": "month", "months": "month", "monat": "month", "monate": "month",
+    "monaten": "month", "year": "year", "years": "year", "jahr": "year",
+    "jahre": "year", "jahren": "year",
+    "mm": "mm", "cm": "cm", "km": "km", "mg": "mg", "g": "g", "kg": "kg",
+    "t": "t", "l": "l", "ml": "ml", "kb": "kb", "mb": "mb", "gb": "gb", "tb": "tb",
+    "kw": "kw", "kwh": "kwh", "mw": "mw", "gw": "gw", "ghz": "ghz", "mhz": "mhz",
+}
+_NUMBER_RE = re.compile(
+    r"(?P<pre>[$€£¥])?\s*(?P<sign>[-+−–])?\s*(?P<pre2>[$€£¥])?"
+    r"(?P<num>\d+(?:[.,'  ]\d+)*)"
+    r"(?:\s*(?P<unit>%|‰|[$€£¥]|[^\W\d_]+))?"
+)
+_NEGATIONS = frozenset({
+    "not", "no", "never", "none", "nothing", "neither", "nor", "without", "cannot",
+    "nicht", "kein", "keine", "keinen", "keinem", "keiner", "keines", "nie",
+    "niemals", "ohne", "nichts", "weder",
+})
+_CONDITIONS = frozenset({
+    "if", "unless", "only", "except", "until", "provided", "assuming", "depends",
+    "depending", "conditional", "wenn", "falls", "nur", "außer", "ausser",
+    "sofern", "bis", "solange", "abhängig", "vorausgesetzt",
+})
+_MONTHS = frozenset({
+    "january", "february", "march", "april", "may", "june", "july", "august",
+    "september", "october", "november", "december", "januar", "februar", "märz",
+    "maerz", "juni", "juli", "oktober", "dezember",
+})
+_MARKER_WORD_RE = re.compile(r"[^\W\d_]+(?:['’][^\W\d_]+)?")
+
+
+def _numbers(text: str) -> tuple:
+    found = []
+    for match in _NUMBER_RE.finditer(text):
+        number = re.sub(r"[.,'  ]", ".", match.group("num"))
+        raw_sign = match.group("sign")
+        # "2025-2026" is a range, not a negative number.
+        sign = "-" if raw_sign in {"-", "−", "–"} and not (
+            match.start("sign") > 0 and text[match.start("sign") - 1].isalnum()
+        ) else ""
+        currency = match.group("pre") or match.group("pre2") or ""
+        unit = (match.group("unit") or "").lower()
+        unit = _CURRENCY_SYMBOLS.get(unit) or _UNIT_ALIASES.get(unit, "")
+        found.append((sign, number, _CURRENCY_SYMBOLS.get(currency, "") or unit))
+    return tuple(sorted(found))
+
+
+def significant_markers(value) -> tuple:
+    """Meaning-bearing details that word overlap must never average away.
+
+    Numbers (with sign and unit/currency), the count of negations, conditional
+    or restricting qualifiers and month names. Two stances whose markers differ
+    make a different statement even when almost every word is shared.
+    """
+    text = " ".join(str(value or "").split())
+    words = [word.lower().replace("’", "'") for word in _MARKER_WORD_RE.findall(text)]
+    negations = sum(1 for word in words if word in _NEGATIONS or word.endswith("n't"))
+    conditions = tuple(sorted({word for word in words if word in _CONDITIONS}))
+    months = tuple(sorted({word for word in words if word in _MONTHS}))
+    return _numbers(text), negations, conditions, months
+
+
+def stance_changed(previous, current, *, lexical: bool = True) -> bool:
+    """Whether one provider's stance moved between two runs.
+
+    A change in any significant marker always counts. ``lexical`` adds the
+    conservative word-overlap fallback for rewrites without such markers.
+    """
+    if significant_markers(previous) != significant_markers(current):
+        return True
+    return lexical and similarity(previous, current) < STANCE_MOVED_BELOW
+
+
 def _dimensions(differences_data: dict, *, allow_single=False) -> list[dict]:
     raw_differences = differences_data.get("differences")
     if not isinstance(raw_differences, list):
@@ -171,14 +263,15 @@ def sanitize_opinion_map(value) -> dict | None:
         provider = _provider(item.get("provider"))
         if not provider:
             continue
-        try:
-            movement_score = int(item.get("movement_score") or 0)
-        except (TypeError, ValueError):
-            movement_score = 0
+        raw_score = item.get("movement_score")
+        movement_score = None
+        if isinstance(raw_score, (int, float)) and not isinstance(raw_score, bool):
+            movement_score = max(0, min(100, int(round(raw_score))))
         models.append({
             "provider": provider,
-            "movement_score": max(0, min(100, movement_score)),
-            "moved": bool(item.get("moved")),
+            # None = no comparable position (not "stable").
+            "movement_score": movement_score,
+            "moved": bool(item.get("moved")) and movement_score is not None,
             "summary": _clip(item.get("summary"), 240),
         })
     raw_shift = value.get("shift_score")
@@ -227,6 +320,16 @@ def _match_dimensions(current: list[dict], previous: list[dict]) -> list[tuple[d
 
 
 def _movement_view(dimensions: list[dict], previous=None, *, consensus_changed=None):
+    """Per-provider movement plus the aggregate Direction Shift.
+
+    Model movement is scored independently of the Change Judge: one model can
+    change its stance while the consensus stays put, and that stays visible.
+    ``consensus_changed=False`` only narrows the evidence: a lexical rewrite
+    is then treated as paraphrase, while a changed number, unit, sign,
+    negation, condition or month still counts. No comparable position means
+    ``movement_score=None`` / ``shift_score=None`` ("Not comparable"), never
+    0 / Stable.
+    """
     providers = [
         provider for provider in PROVIDERS
         if any(_position_for(dimension, provider) for dimension in dimensions)
@@ -234,6 +337,7 @@ def _movement_view(dimensions: list[dict], previous=None, *, consensus_changed=N
     previous = sanitize_opinion_map(previous)
     previous_dimensions = previous.get("dimensions") if previous else []
     matches = _match_dimensions(dimensions, previous_dimensions)
+    lexical = consensus_changed is not False
     model_views = []
     all_movements = []
     for provider in providers:
@@ -246,16 +350,17 @@ def _movement_view(dimensions: list[dict], previous=None, *, consensus_changed=N
             if not current_position or not previous_position:
                 continue
             comparable += 1
-            stance_changed = similarity(
-                current_position.get("stance"), previous_position.get("stance")
-            ) < 0.24
-            moved = stance_changed
+            moved = stance_changed(
+                previous_position.get("stance"),
+                current_position.get("stance"),
+                lexical=lexical,
+            )
             if moved:
                 moved_count += 1
                 summaries.append(
                     f"{current_dimension['label']}: {current_position['stance']}"
                 )
-        movement_score = round(100 * moved_count / comparable) if comparable else 0
+        movement_score = round(100 * moved_count / comparable) if comparable else None
         if comparable:
             all_movements.append(movement_score)
         model_views.append({
@@ -266,16 +371,11 @@ def _movement_view(dimensions: list[dict], previous=None, *, consensus_changed=N
         })
 
     shift_score = None
-    if previous:
-        if matches and all_movements:
-            shift_score = round(sum(all_movements) / len(all_movements))
-        # A completely reframed set of generated labels is not proof that all
-        # providers reversed position. Leave it unscored instead of inventing
-        # a 100/100 shift.
-        if consensus_changed is False:
-            shift_score = 0
-            for item in model_views:
-                item.update(movement_score=0, moved=False, summary="")
+    # A completely reframed set of generated labels is not proof that all
+    # providers reversed position, and not proof of stability either. Leave
+    # it unscored instead of inventing a 100/100 or 0/100 shift.
+    if previous and matches and all_movements:
+        shift_score = round(sum(all_movements) / len(all_movements))
     if shift_score is None:
         shift_label = "Not comparable" if previous and previous_dimensions else "New baseline"
     elif shift_score <= 15:
@@ -308,10 +408,12 @@ def _map_from_dimensions(dimensions: list[dict], previous=None, *, consensus_cha
 def build_opinion_map(differences_data: dict, previous=None, *, consensus_changed=None) -> dict | None:
     """Build a multidimensional map and compare it with the previous map.
 
-    Movement uses a conservative lexical comparison of each provider's stance
-    on matched dimensions. ``consensus_changed=False`` is an explicit guard
-    from the Change Judge: a stable consensus cannot become a synthetic
-    100/100 Direction Shift because generated dimension labels were rephrased.
+    Movement compares each provider's stance on matched dimensions: changed
+    numbers, units, signs, negations, conditions or months always count;
+    otherwise a conservative word-overlap comparison decides. With
+    ``consensus_changed=False`` (Change Judge: consensus stable) the lexical
+    fallback is off, so rephrased stances cannot fabricate a Direction Shift,
+    but a single model's substantive change remains visible.
     """
     if not isinstance(differences_data, dict):
         return None
