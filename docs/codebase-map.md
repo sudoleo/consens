@@ -352,8 +352,14 @@ HTML-Eventhandler mehr. Jinja-Konfiguration liegt ausschließlich in escaped
 `data-*`-Metadaten und wird von `app-bootstrap.js` beziehungsweise
 `admin-config.js` gelesen; `app-dom-events.js` bindet die früheren Inline-
 Handler. Die routenspezifische CSP für `/app`, `/app/watches`, `/admin` und alle `/admin/*`-Unterpfade
-kommt deshalb bei `script-src` ohne `'unsafe-inline'` aus. Öffentliche Seiten
-behalten die bisherige Policy während der weiteren Style-Migration.
+kommt deshalb bei `script-src` ohne `'unsafe-inline'` aus. Seit 2026-09-29 gilt
+das auch für die öffentlichen Topic-Detailseiten `/topics/{slug}` (Review R01):
+`topic.html` lädt das Theme per `static/js/public-theme.js` und bündelt Strip,
+Rückkehrer-Band, Follow-Formular und Zitat-Chips in `static/js/topic-page.js`;
+Datentext (z. B. `change_summary` im Check-Strip) wird dort nur per
+`textContent`/DOM-Knoten eingesetzt, nie erneut als HTML geparst. Die übrigen
+öffentlichen Seiten (einschließlich des Hubs `/topics`) behalten die bisherige
+Policy während der weiteren Style-Migration.
 
 ---
 
@@ -4963,7 +4969,7 @@ ersten Check statt eines leeren Consensus-Panels.
   `#adminBootstrapConfig` + `admin-config.js`.
 - **CSP** (`CustomSecurityMiddleware` in `security.py`): neue externe Hosts (Skripte,
   `connect-src`-Ziele, Frames) müssen explizit in die Policy. Sonst blockt der
-  Browser still. `/app`, `/app/watches`, `/admin` und `/admin/*` erzwingen bei `script-src`
+  Browser still. `/app`, `/app/watches`, `/admin`, `/admin/*` und `/topics/*` erzwingen bei `script-src`
   die strict-variante ohne `'unsafe-inline'`; neue Inline-Skripte/-Handler würden
   dort deshalb nicht ausgeführt. `style-src` bleibt vorerst kompatibel.
 - **Static-Caching, zwei Regime.** Für **`/app`** kommt die Marke seit

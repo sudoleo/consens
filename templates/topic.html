@@ -157,13 +157,9 @@
   <link rel="stylesheet" href="/static/css/public-shell.css?v=20260826-cardfoot">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.17.0/dist/katex.min.css">
   <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
-  <script>
-    (function () {
-      const savedTheme = localStorage.getItem("theme");
-      const prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
-      if (savedTheme === "dark" || (!savedTheme && prefersDark)) document.documentElement.classList.add("dark-mode");
-    })();
-  </script>
+  {#- No inline scripts on this page: /topics/{slug} is served with a script
+      CSP without 'unsafe-inline' (app/core/security.py). -#}
+  <script src="/static/js/public-theme.js?v=20260929-strictcsp"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.17.0/dist/katex.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.17.0/dist/contrib/auto-render.min.js"></script>
   <script defer src="/static/js/math-render.js?v=20260911-math2"></script>
@@ -637,98 +633,6 @@
 
   {% include "partials/public_footer.html" %}
 
-  <script defer src="/static/js/topic-page.js?v=20260826-finding1"></script>
-  <script>
-    (function () {
-      const form = document.getElementById("topicFollowForm");
-      if (!form) return;
-      const status = document.getElementById("topicFollowStatus");
-      const button = form.querySelector("button");
-      form.addEventListener("submit", async function (event) {
-        event.preventDefault();
-        button.disabled = true;
-        status.textContent = "Sending confirmation…";
-        try {
-          const response = await fetch("/api/topics/" + encodeURIComponent(form.dataset.slug) + "/follow", {
-            method: "POST",
-            headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({email: form.email.value})
-          });
-          const data = await response.json();
-          if (!response.ok) throw new Error(data.error || "Could not follow this Topic.");
-          status.textContent = data.message;
-          form.reset();
-        } catch (error) {
-          status.textContent = error.message;
-          status.classList.add("is-error");
-        } finally {
-          button.disabled = false;
-        }
-      });
-      window.addEventListener("DOMContentLoaded", function () {
-        if (window.ConsensusMath) window.ConsensusMath.render(document.querySelector("[data-math-render]"));
-      });
-    })();
-  </script>
-
-  <script>
-    // Inline citations behave as chips that reveal their embedded source.
-    (function () {
-      const prose = document.querySelector(".topic-consensus");
-      if (!prose) return;
-      let timer = null;
-      function flash(target) {
-        if (!target) return;
-        const holder = target.closest("details");
-        if (holder && !holder.open) holder.open = true;
-        target.scrollIntoView({behavior: "smooth", block: "center"});
-        target.classList.add("is-cited");
-        if (timer) window.clearTimeout(timer);
-        timer = window.setTimeout(function () { target.classList.remove("is-cited"); }, 2200);
-      }
-      prose.querySelectorAll('a[href^="#src-"]').forEach(function (link) {
-        link.classList.add("source-chip");
-        const target = document.getElementById(decodeURIComponent(link.getAttribute("href").slice(1)));
-        if (target) {
-          const srcImg = target.querySelector(".src-favicon-img");
-          let url = srcImg && srcImg.getAttribute("src");
-          if (!url) {
-            // e.g. X cards carry no favicon slot: derive it from the source URL.
-            try {
-              const host = new URL(target.getAttribute("href"), window.location.href).hostname.replace(/^www\./, "");
-              if (host) url = "/api/topics/favicon?d=" + encodeURIComponent(host);
-            } catch (e) { /* keep the dot fallback */ }
-          }
-          if (url) {
-            const fav = document.createElement("img");
-            fav.className = "cite-favicon";
-            fav.setAttribute("src", url);
-            fav.setAttribute("alt", "");
-            fav.setAttribute("aria-hidden", "true");
-            fav.addEventListener("error", function () {
-              fav.remove();
-              link.classList.remove("has-favicon");
-            });
-            link.insertBefore(fav, link.firstChild);
-            link.classList.add("has-favicon");
-          }
-        }
-        link.addEventListener("click", function (event) {
-          if (!target) return;
-          event.preventDefault();
-          flash(target);
-        });
-      });
-    })();
-
-    // Drop favicons that fail to load so the monogram fallback shows through.
-    (function () {
-      document.querySelectorAll(".src-favicon-img").forEach(function (img) {
-        function fail() { img.remove(); }
-        img.addEventListener("error", fail);
-        if (img.complete && img.naturalWidth === 0) fail();
-      });
-    })();
-  </script>
+  <script defer src="/static/js/topic-page.js?v=20260929-textsink"></script>
 </body>
 </html>

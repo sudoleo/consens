@@ -190,11 +190,14 @@ def test_app_and_all_admin_pages_receive_strict_script_csp():
         return {"path": path}
 
     client = TestClient(app)
-    for path in ("/app", "/app/watches", "/admin", "/admin/benchmark", "/admin/nested/page"):
+    for path in (
+        "/app", "/app/watches", "/admin", "/admin/benchmark", "/admin/nested/page",
+        "/topics/gpt-6",
+    ):
         csp = client.get(path).headers["content-security-policy"]
         script_src = csp.split("script-src", 1)[1].split(";", 1)[0]
         assert "'unsafe-inline'" not in script_src
-    for path in ("/", "/administrator"):
+    for path in ("/", "/administrator", "/topics"):
         public_script_src = client.get(path).headers["content-security-policy"].split(
             "script-src", 1
         )[1].split(";", 1)[0]

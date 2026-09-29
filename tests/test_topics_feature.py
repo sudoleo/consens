@@ -822,6 +822,23 @@ def test_account_deletion_fences_claims_before_topic_delivery_cleanup():
     assert topics.claim_delivery("topic", "run", "follower", db=db) is False
 
 
+def test_topic_detail_page_carries_no_inline_script_for_its_strict_csp():
+    """/topics/{slug} runs without 'unsafe-inline'; an inline block would die silently."""
+    import re
+
+    detail = (ROOT / "templates" / "topic.html").read_text(encoding="utf-8")
+    partials = "".join(
+        (ROOT / "templates" / "partials" / name).read_text(encoding="utf-8")
+        for name in ("analytics.html", "public_nav.html", "public_footer.html")
+    )
+    for source in (detail, partials):
+        for tag in re.findall(r"<script\b[^>]*>", source):
+            assert "src=" in tag or 'type="application/ld+json"' in tag, tag
+        assert not re.search(r"<[a-z][^>]*\son[a-z]+\s*=", source)
+    assert "/static/js/public-theme.js?v=" in detail
+    assert "/static/js/topic-page.js?v=" in detail
+
+
 def test_topic_templates_expose_timeline_evidence_follow_and_admin_controls():
     detail = (ROOT / "templates" / "topic.html").read_text(encoding="utf-8")
     hub = (ROOT / "templates" / "topics.html").read_text(encoding="utf-8")
