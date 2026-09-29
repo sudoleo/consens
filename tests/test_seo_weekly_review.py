@@ -127,6 +127,8 @@ class RunRepo:
     def get_review(self, run_id):
         return {**self.reviews[run_id], "run_id": run_id} if run_id in self.reviews else None
     def mark_page_reviewed(self, page_id, admin_uid, now): pass
+    def mark_pages_considered(self, page_ids, now):
+        self.considered = list(page_ids)
 
 
 class DataService:

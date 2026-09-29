@@ -34,6 +34,14 @@
       ]
     },
     {
+      "collectionGroup": "shares",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "owner_uid", "order": "ASCENDING" },
+        { "fieldPath": "created_at", "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "notification_outbox",
       "queryScope": "COLLECTION",
       "fields": [

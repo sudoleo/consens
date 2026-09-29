@@ -341,12 +341,19 @@ def delete_share(request: Request, share_id: str, data: dict = Body(default={}))
 @limiter.limit("20/minute")
 def my_shares(request: Request):
     uid = _require_uid(request, {})
+    cursor = str(request.query_params.get("cursor") or "")[:64]
     try:
-        shares = snapshots.list_shares_for_owner(uid)
+        page = snapshots.list_shares_for_owner_page(uid, cursor=cursor)
     except Exception as exc:
         logging.error("my_shares failed category=%s", safe_exception(exc))
         raise HTTPException(status_code=500, detail="Error loading shares")
-    return {"status": "success", "shares": shares, "site_url": SITE_URL}
+    return {
+        "status": "success",
+        "shares": page["items"],
+        "has_more": page["has_more"],
+        "next_cursor": page["next_cursor"],
+        "site_url": SITE_URL,
+    }
 
 
 @router.post("/api/share/{share_id}/indexing-request")

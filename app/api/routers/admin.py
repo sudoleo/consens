@@ -719,14 +719,27 @@ async def admin_send_watch_test_email(request: Request, data: dict = Body(defaul
 
 
 @router.get("/api/admin/shares")
-def admin_list_shares(request: Request, filter: str = "reported"):
+def admin_list_shares(
+    request: Request,
+    filter: str = "reported",
+    cursor: str = Query(default="", max_length=64),
+    limit: int = Query(default=200, ge=1, le=500),
+):
     _require_admin(request, {})
     try:
-        shares = snapshots.list_shares_for_admin(only_reported=(filter != "all"))
+        page = snapshots.list_shares_for_admin_page(
+            only_reported=(filter != "all"), cursor=cursor, max_items=limit,
+        )
     except Exception as exc:
         logging.error("admin_list_shares failed category=%s", safe_exception(exc))
         raise HTTPException(status_code=500, detail="Failed to load shares")
-    return {"status": "success", "shares": shares, "site_url": snapshots_site_url()}
+    return {
+        "status": "success",
+        "shares": page["items"],
+        "has_more": page["has_more"],
+        "next_cursor": page["next_cursor"],
+        "site_url": snapshots_site_url(),
+    }
 
 
 def snapshots_site_url():

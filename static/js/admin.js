@@ -1510,18 +1510,33 @@ function sharesStatus(message, isError) {
     el.className = isError ? 'error' : 'success';
 }
 
-async function loadShares(filter) {
-    currentSharesFilter = filter;
+let loadedShares = [];
+let sharesNextCursor = null;
+let sharesRequestId = 0;
+
+// Paged moderation list: the server filters and orders before limiting and
+// says whether more rows exist, so nothing relevant hides behind a window.
+async function loadShares(filter, { append = false } = {}) {
+    const requestId = ++sharesRequestId;
+    if (!append) {
+        currentSharesFilter = filter;
+        loadedShares = [];
+        sharesNextCursor = null;
+    }
     sharesStatus('Loading…', false);
     let data;
+    const cursor = append && sharesNextCursor ? `&cursor=${encodeURIComponent(sharesNextCursor)}` : '';
     try {
-        data = await shareAdminRequest('GET', `/api/admin/shares?filter=${filter}`);
+        data = await shareAdminRequest('GET', `/api/admin/shares?filter=${filter}${cursor}`);
     } catch (err) {
-        sharesStatus(err.message, true);
+        if (requestId === sharesRequestId) sharesStatus(err.message, true);
         return;
     }
-    sharesStatus('', false);
-    renderShares(data.shares || [], data.site_url || '');
+    if (requestId !== sharesRequestId) return;
+    loadedShares = loadedShares.concat(data.shares || []);
+    sharesNextCursor = data.has_more ? data.next_cursor : null;
+    sharesStatus(sharesNextCursor ? `${loadedShares.length} loaded · more available` : '', false);
+    renderShares(loadedShares, data.site_url || '');
 }
 
 async function moderateShare(shareId, payload, confirmText) {
@@ -1618,6 +1633,12 @@ function renderShares(shares, siteUrl) {
 
         container.appendChild(row);
     });
+    if (sharesNextCursor) {
+        const more = actionBtn('Load more', () => loadShares(currentSharesFilter, { append: true }));
+        more.id = 'loadMoreSharesBtn';
+        more.className = 'admin-btn secondary';
+        container.appendChild(more);
+    }
 }
 
 function badge(kind, text, title) {
@@ -2633,6 +2654,15 @@ function renderSeoAlerts() {
         addSeoAlert(
             container, 'warning', 'The portfolio judge did not answer in the last review.',
             `${review.judge_error} The assessment was generated from the rules, not by the judge.`
+        );
+    }
+
+    const coverage = review.portfolio_coverage || {};
+    if (review.run_id && coverage.truncated) {
+        addSeoAlert(
+            container, 'notice',
+            `The last review considered ${coverage.considered_pages} of ${coverage.total_pages} pages.`,
+            'Reviews rotate: the pages left out come first next time, so the whole portfolio is covered over several runs.'
         );
     }
 

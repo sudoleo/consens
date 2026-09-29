@@ -220,6 +220,19 @@ def classify_status(metrics_28: list[dict], final_date: date) -> str:
     return "emerging"
 
 
+REVIEW_ROTATION_FIELD = "weekly_review_seen_at"
+_NEVER = datetime.min.replace(tzinfo=timezone.utc)
+
+
+def review_rotation_key(page: dict):
+    seen = page.get(REVIEW_ROTATION_FIELD)
+    if isinstance(seen, datetime):
+        seen = seen if seen.tzinfo else seen.replace(tzinfo=timezone.utc)
+    else:
+        seen = _NEVER
+    return (seen, not page.get("active", False), str(page.get("url") or ""))
+
+
 class SeoDataService:
     def __init__(
         self,
@@ -522,13 +535,21 @@ class SeoDataService:
         active_only: bool = True,
         max_pages: int | None = None,
         include_analysis_context: bool = False,
+        rotate: bool = False,
     ) -> dict:
         now = self.clock()
         _, final_date = date_window(now)
         start_28 = final_date - timedelta(days=27)
         start_7 = final_date - timedelta(days=6)
         pages = self.repository.list_pages(active_only=active_only)
+        total_pages = len(pages)
         if max_pages is not None:
+            if rotate:
+                # Durable rotation for bounded reviews (R24): pages that were
+                # never or least recently reviewed come first, active pages win
+                # ties, so over consecutive runs every page gets its turn and
+                # inactive pages cannot silently displace active ones.
+                pages.sort(key=review_rotation_key)
             pages = pages[:max(0, int(max_pages))]
         histories = self.repository.list_judgments(
             [page["page_id"] for page in pages], max_per_page=3
@@ -580,6 +601,8 @@ class SeoDataService:
             "last_run": self.repository.last_run(),
             "captured_urls": captured,
             "eligible_urls": len(pages),
+            "total_pages": total_pages,
+            "truncated": len(pages) < total_pages,
             "final_date": final_date.isoformat(),
             "rows": rows,
             "status_rules": STATUS_RULES,

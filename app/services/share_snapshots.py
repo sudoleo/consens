@@ -1435,48 +1435,108 @@ def request_share_indexing(share_id, uid, want=True, db=None):
     return _run_transaction(db, request)
 
 
-def list_shares_for_admin(db=None, only_reported=False, max_items=500):
-    """Moderationsliste: priorisiert needs_review, dann Report-Anzahl.
+def _ordered_page(collection, query, *, order_field, sort_key, keep, cursor, max_items):
+    """One cursor page of ``query`` ordered by ``order_field`` descending.
 
-    Bewusst ein Collection-Scan mit Limit statt Firestore-Range-Query –
-    das Share-Volumen ist klein (privates Projekt, 20/Tag/UID-Quota).
+    The filter and the order run inside Firestore, so relevant documents are
+    never cut off by an arbitrary default-order window before filtering (R24).
+    Firestore breaks ties by document id, which makes the cursor stable.
+    Lightweight test doubles without ordering fall back to the same
+    semantics in memory.
+    """
+    max_items = max(1, int(max_items))
+    try:
+        ordered = query.order_by(order_field, direction=firestore.Query.DESCENDING)
+        if cursor:
+            cursor_snapshot = collection.document(str(cursor)).get()
+            if cursor_snapshot.exists:
+                ordered = ordered.start_after(cursor_snapshot)
+        docs = list(ordered.limit(max_items + 1).stream())
+    except (AttributeError, TypeError):
+        docs = [doc for doc in collection.stream() if keep(doc.to_dict() or {})]
+        docs.sort(key=lambda doc: sort_key(doc.id, doc.to_dict() or {}))
+        if cursor:
+            ids = [doc.id for doc in docs]
+            docs = docs[ids.index(cursor) + 1:] if cursor in ids else docs
+        docs = docs[:max_items + 1]
+    has_more = len(docs) > max_items
+    page = docs[:max_items]
+    return page, has_more, (page[-1].id if has_more and page else None)
+
+
+def _positive_reports(data: dict) -> int:
+    reports = data.get("reports_count")
+    return reports if isinstance(reports, int) and reports > 0 else 0
+
+
+def _timestamp_desc_key(value) -> float:
+    return -value.timestamp() if isinstance(value, datetime) else float("inf")
+
+
+def list_shares_for_admin_page(db=None, only_reported=False, max_items=200, cursor=""):
+    """Moderation page with an explicit continuation contract.
+
+    ``reported``: ``reports_count > 0`` ordered by report count (most reported
+    first). ``all``: newest first. The result says whether more exist and how
+    to continue, instead of implying that a bounded window is complete.
     """
     db = db if db is not None else db_firestore
-    docs = db.collection(SHARES_COLLECTION).limit(max_items).stream()
-    shares = []
-    for doc in docs:
-        data = doc.to_dict() or {}
-        reports = data.get("reports_count")
-        reports = reports if isinstance(reports, int) and reports > 0 else 0
-        if only_reported and not reports:
-            continue
-        created_at = data.get("created_at")
-        last_reported = data.get("last_reported_at")
-        shares.append({
-            "share_id": doc.id,
-            "path": share_path(
-                "" if str(data.get("visibility") or "public") == "private" else data.get("slug") or "",
-                doc.id,
-            ),
-            "question": _clip(data.get("question"), 200),
-            "status": data.get("status") or "active",
-            "owner_uid": data.get("owner_uid") or "",
-            "reports_count": reports,
-            "report_reasons": data.get("report_reasons") if isinstance(data.get("report_reasons"), dict) else {},
-            "needs_review": bool(data.get("needs_review")),
-            "indexed": bool(data.get("indexed")),
-            "index_requested": bool(data.get("index_requested")),
-            "visibility": str(data.get("visibility") or "public"),
-            "index_eligible": bool(data.get("index_eligible")),
-            "created_at": created_at.isoformat() if isinstance(created_at, datetime) else "",
-            "last_reported_at": last_reported.isoformat() if isinstance(last_reported, datetime) else "",
-        })
+    collection = db.collection(SHARES_COLLECTION)
+    if only_reported:
+        page, has_more, next_cursor = _ordered_page(
+            collection, _where(collection, "reports_count", ">", 0),
+            order_field="reports_count",
+            sort_key=lambda doc_id, data: (-_positive_reports(data), doc_id),
+            keep=lambda data: _positive_reports(data) > 0,
+            cursor=cursor, max_items=max_items,
+        )
+    else:
+        page, has_more, next_cursor = _ordered_page(
+            collection, collection,
+            order_field="created_at",
+            sort_key=lambda doc_id, data: (_timestamp_desc_key(data.get("created_at")), doc_id),
+            keep=lambda data: True,
+            cursor=cursor, max_items=max_items,
+        )
+    shares = [_admin_share_row(doc.id, doc.to_dict() or {}) for doc in page]
+    # Within one page the moderation priority stays: review first, then reports.
     shares.sort(key=lambda item: (
         not item["needs_review"],
         -item["reports_count"],
         item["created_at"],
     ))
-    return shares
+    return {"items": shares, "has_more": has_more, "next_cursor": next_cursor}
+
+
+def list_shares_for_admin(db=None, only_reported=False, max_items=500):
+    """First moderation page as a plain list (see ``list_shares_for_admin_page``)."""
+    return list_shares_for_admin_page(
+        db=db, only_reported=only_reported, max_items=max_items,
+    )["items"]
+
+
+def _admin_share_row(share_id: str, data: dict) -> dict:
+    created_at = data.get("created_at")
+    last_reported = data.get("last_reported_at")
+    return {
+        "share_id": share_id,
+        "path": share_path(
+            "" if str(data.get("visibility") or "public") == "private" else data.get("slug") or "",
+            share_id,
+        ),
+        "question": _clip(data.get("question"), 200),
+        "status": data.get("status") or "active",
+        "owner_uid": data.get("owner_uid") or "",
+        "reports_count": _positive_reports(data),
+        "report_reasons": data.get("report_reasons") if isinstance(data.get("report_reasons"), dict) else {},
+        "needs_review": bool(data.get("needs_review")),
+        "indexed": bool(data.get("indexed")),
+        "index_requested": bool(data.get("index_requested")),
+        "visibility": str(data.get("visibility") or "public"),
+        "index_eligible": bool(data.get("index_eligible")),
+        "created_at": created_at.isoformat() if isinstance(created_at, datetime) else "",
+        "last_reported_at": last_reported.isoformat() if isinstance(last_reported, datetime) else "",
+    }
 
 
 def cleanup_revoked_shares(db=None, max_docs=500):
@@ -1776,31 +1836,49 @@ def report_share(share_id, reason, db=None):
     return count
 
 
-def list_shares_for_owner(uid, db=None, max_items=200):
+def list_shares_for_owner_page(uid, db=None, max_items=200, cursor=""):
+    """Newest-first page of the owner's shares with a continuation cursor.
+
+    Ordering happens in Firestore (``owner_uid`` + ``created_at`` desc,
+    composite index in ``firestore.indexes.json``), so the newest links are
+    never lost behind an arbitrary default-order window (R24).
+    """
     db = db if db is not None else db_firestore
-    docs = _where(db.collection(SHARES_COLLECTION), "owner_uid", "==", uid).stream()
-    shares = []
-    for doc in docs:
-        data = doc.to_dict() or {}
-        created_at = data.get("created_at")
-        shares.append({
-            "share_id": doc.id,
-            "path": share_path(
-                "" if str(data.get("visibility") or "public") == "private" else data.get("slug") or "",
-                doc.id,
-            ),
-            "question": _clip(data.get("question"), 200),
-            "status": data.get("status") or "active",
-            "visibility": str(data.get("visibility") or "public"),
-            "indexed": bool(data.get("indexed")),
-            "index_requested": bool(data.get("index_requested")),
-            "index_eligible": bool(data.get("index_eligible")),
-            "created_at": created_at.isoformat() if isinstance(created_at, datetime) else "",
-        })
-        if len(shares) >= max_items:
-            break
-    shares.sort(key=lambda item: item["created_at"], reverse=True)
-    return shares
+    collection = db.collection(SHARES_COLLECTION)
+    page, has_more, next_cursor = _ordered_page(
+        collection, _where(collection, "owner_uid", "==", uid),
+        order_field="created_at",
+        sort_key=lambda doc_id, data: (_timestamp_desc_key(data.get("created_at")), doc_id),
+        keep=lambda data: data.get("owner_uid") == uid,
+        cursor=cursor, max_items=max_items,
+    )
+    return {
+        "items": [_owner_share_row(doc.id, doc.to_dict() or {}) for doc in page],
+        "has_more": has_more,
+        "next_cursor": next_cursor,
+    }
+
+
+def list_shares_for_owner(uid, db=None, max_items=200):
+    return list_shares_for_owner_page(uid, db=db, max_items=max_items)["items"]
+
+
+def _owner_share_row(share_id, data):
+    created_at = data.get("created_at")
+    return {
+        "share_id": share_id,
+        "path": share_path(
+            "" if str(data.get("visibility") or "public") == "private" else data.get("slug") or "",
+            share_id,
+        ),
+        "question": _clip(data.get("question"), 200),
+        "status": data.get("status") or "active",
+        "visibility": str(data.get("visibility") or "public"),
+        "indexed": bool(data.get("indexed")),
+        "index_requested": bool(data.get("index_requested")),
+        "index_eligible": bool(data.get("index_eligible")),
+        "created_at": created_at.isoformat() if isinstance(created_at, datetime) else "",
+    }
 
 
 def list_watch_history(share_id, db=None, max_items=100):

@@ -596,6 +596,21 @@ class WeeklyReviewRepository:
             "portfolio_reviewed_by": str(admin_uid or "")[:128],
         }, merge=True)
 
+    def mark_pages_considered(self, page_ids, now: datetime) -> None:
+        """Persist the weekly-review rotation marker (bounded batches)."""
+        page_ids = list(dict.fromkeys(page_ids or []))
+        payload = {seo_data.REVIEW_ROTATION_FIELD: now}
+        collection = self.db.collection("seo_pages")
+        if hasattr(self.db, "batch"):
+            for offset in range(0, len(page_ids), 400):
+                batch = self.db.batch()
+                for page_id in page_ids[offset:offset + 400]:
+                    batch.set(collection.document(page_id), payload, merge=True)
+                batch.commit()
+            return
+        for page_id in page_ids:
+            collection.document(page_id).set(payload, merge=True)
+
 
 class SeoWeeklyReviewService:
     def __init__(
@@ -696,8 +711,24 @@ class SeoWeeklyReviewService:
                 active_only=False,
                 max_pages=MAX_REVIEW_PAGES,
                 include_analysis_context=True,
+                rotate=True,
             )
             pages = [self._build_page(item, now) for item in (overview.get("rows") or [])]
+            # Stamp the rotation marker for every page this run considered, so
+            # the next run starts with the pages that were left out (R24).
+            try:
+                self.repository.mark_pages_considered(
+                    [page["page_id"] for page in pages if page.get("page_id")], now,
+                )
+            except Exception as exc:
+                logging.warning(
+                    "SEO review rotation marker failed category=%s", safe_exception(exc)
+                )
+            coverage = {
+                "considered_pages": len(pages),
+                "total_pages": int(overview.get("total_pages") or len(pages)),
+                "truncated": bool(overview.get("truncated")),
+            }
             groups = self._group_pages(pages)
             current_config = publisher_config.get_config(db=self.db)
             judge_result = None
@@ -737,6 +768,7 @@ class SeoWeeklyReviewService:
                 },
                 "groups": groups,
                 "pages": pages,
+                "portfolio_coverage": coverage,
                 "judge_called": bool(judge_result),
                 "judge_error": judge_error,
                 "current_topic_brief": current_config["topic_brief"],

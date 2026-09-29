@@ -1176,3 +1176,41 @@ def test_content_judge_is_not_called_for_winner_status():
     except seo_recommendation.SeoRecommendationError as exc:
         assert exc.code == "content_judge_not_applicable"
     assert calls == []
+
+
+def test_weekly_review_rotation_covers_every_page_over_consecutive_runs():
+    """R24: more pages than the review bound are considered fairly over weeks,
+    and inactive pages do not silently displace active ones."""
+    from app.services import seo_weekly_review
+
+    db = FakeFirestore()
+    for index in range(7):
+        url = f"https://www.consens.io/a-inactive-{index}"
+        db.documents[("seo_pages", page_id_for_url(url))] = {
+            "url": url, "origin": "share", "active": False,
+        }
+    for index in range(5):
+        url = f"https://www.consens.io/z-active-{index}"
+        db.documents[("seo_pages", page_id_for_url(url))] = {
+            "url": url, "origin": "share", "active": True,
+        }
+    service = seo_data.SeoDataService(
+        repository=FirestoreSeoRepository(db), clock=lambda: NOW,
+    )
+    review_repo = seo_weekly_review.WeeklyReviewRepository(db)
+
+    first = service.overview(active_only=False, max_pages=5, rotate=True)
+    assert first["truncated"] is True and first["total_pages"] == 12
+    # The old alphabetical cut-off would have kept only inactive pages.
+    assert all("z-active" in row["url"] for row in first["rows"])
+
+    seen = []
+    for week in range(3):
+        overview = service.overview(active_only=False, max_pages=5, rotate=True)
+        ids = [row["page_id"] for row in overview["rows"]]
+        review_repo.mark_pages_considered(ids, NOW + timedelta(days=7 * week))
+        seen.extend(ids)
+    assert len(set(seen)) == 12
+    assert len(seen) == 15
+
+    assert service.overview(active_only=False)["truncated"] is False
