@@ -142,14 +142,21 @@ Drafts are saved **in Consens**, not in Gmail Drafts. `prepare_gmail_draft` and
 Each revision keeps the old proposal and supersedes its approval. This avoids
 requesting the restricted `gmail.compose` scope or mailbox-modifying permissions.
 The user sees the verified sender, all recipients including Bcc, original message
-and thread, complete body, and downloadable attachment versions. Authorizing send
+and thread, complete body, and downloadable attachment versions. Recipients the
+user did not name in this chat and that are not participants of the replied
+thread are highlighted (`recipient_warnings`), because an injected instruction in
+mail or file content would typically add exactly such an address. Headers are
+built when the draft is prepared: subjects with Unicode line breaks (U+2028,
+U+2029, U+0085) or other control characters are rejected before approval. Authorizing send
 later changes the connection revision: prepare and review a fresh draft afterward.
 Reply metadata is fetched from the selected original message; the MIME carries its
 thread ID, In-Reply-To and References, and a compatible subject.
 
 Before sending, private bytes are re-read and checked against the approved file
-hash, name, type and size. The durable claim prevents repeated POSTs. A network
-failure or malformed success response leaves delivery `unknown`. With read access,
+hash, name, type and size. The durable claim prevents repeated POSTs. Any failure
+while building the message locally, before the Gmail call, is `failed` (nothing was
+sent) and does not keep the write-intent fence blocking. A network failure or
+malformed success response leaves delivery `unknown`. With read access,
 Check status searches only Sent for the deterministic Message-ID and verifies the
 returned header and SENT label. No match is inconclusive (indexing may lag); it
 never triggers a resend. With send-only permission, authorize read access or inspect

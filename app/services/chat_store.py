@@ -1312,6 +1312,9 @@ class ChatStore:
         # Proposed Google actions carry event/mail payloads and recipients.
         for action_ref in _child_documents(chat_ref.collection("actions")):
             action_ref.delete()
+        # Gmail message references (account, headers) read in this chat.
+        for evidence_ref in _child_documents(chat_ref.collection("google_evidence")):
+            evidence_ref.delete()
         chat_ref.delete()
 
     def purge_abandoned_turns(self, uid: str, chat_id: str, *, now=None) -> list[str]:

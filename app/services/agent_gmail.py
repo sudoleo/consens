@@ -7,6 +7,7 @@ from email.utils import format_datetime
 from html.parser import HTMLParser
 import json
 import re
+import unicodedata
 from typing import Literal
 from urllib.parse import quote
 
@@ -140,8 +141,11 @@ class Draft(Strict):
             raise ValueError("Use at most 30 unique recipients across To, Cc and Bcc.")
         if any(not re.fullmatch(r"[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,63}", email) or len(email) > 254 for email in recipients):
             raise ValueError("Recipients must be explicit email addresses, without display names or header control characters.")
-        if any(ord(c) < 32 for c in self.subject):
-            raise ValueError("Subject contains invalid control characters.")
+        # Header values must stay on one line for every line-break notion the
+        # MIME policy applies (e.g. U+2028, U+0085), not just ASCII controls.
+        if (len(self.subject.splitlines()) != 1 or any(ord(c) < 32 or 0x7f <= ord(c) < 0xa0 for c in self.subject)
+                or any(unicodedata.category(c) in {"Zl", "Zp", "Cc"} for c in self.subject)):
+            raise ValueError("Subject contains invalid control or line-break characters.")
         if len(set(self.attachment_ids)) != len(self.attachment_ids) or any(not re.fullmatch(r"[a-f0-9]{32}", fid) for fid in self.attachment_ids):
             raise ValueError("Invalid attachment IDs.")
         return self
@@ -233,12 +237,15 @@ class GmailTools:
             message = self.full_message(identifier, cancellation)
             view = message_view(message, offset=args.body_offset if args.operation == "message" else 0,
                 limit=6000 if args.operation == "message" else max(1200, 18000 // max(1, len(ids))))
-            self.record(view)
             messages.append(view)
         result = {"messages": messages, "message_count": total, "offset": args.offset, "next_offset": next_offset,
             "account": self.connections.get(self.loop.uid, self.selection.connection_id)["email"], "trust": "untrusted"}
+        # Check the size before recording evidence, so a rejected page leaves
+        # no evidence records and uses no per-chat evidence quota.
         if len(json.dumps(result, ensure_ascii=False)) > 40_000:
             raise GoogleError("Mail result exceeds the model context limit. Read fewer messages per page.")
+        for view in messages:
+            self.record(view)
         self.loop.google_evidence = [*self.loop.google_evidence[-2:], result]
         self.loop.outgoing.put_nowait({"type": "resources", "gmail_evidence": True})
         return result
@@ -302,14 +309,62 @@ class GmailTools:
         payload = {"from": account["email"], "to": args.to, "cc": args.cc, "bcc": args.bcc, "subject": args.subject,
             "body": args.body, "attachments": attached, "reply": reply}
         payload["message_id"] = "<consens." + digest([self.loop.turn_id, payload, args.replaces])[:32] + "@consens.io>"
+        try:
+            # Build the headers now: anything the MIME policy rejects must fail
+            # the draft, never a confirmed send after the durable claim.
+            build_message(payload)
+        except (ValueError, TypeError):
+            raise GoogleError("The draft contains header values that cannot be sent. Rewrite the subject or recipients.") from None
+        participants = set()
+        if reply:
+            participants = {e.casefold() for key in ("from", "to", "cc", "reply-to")
+                            for e in EMAIL.findall(original_headers.get(key, ""))}
+        named = {e.casefold() for e in EMAIL.findall(user_text(getattr(self.loop, "answer_conversation", [])))}
+        warnings = [{"email": email, "field": field} for field in ("to", "cc", "bcc") for email in payload[field]
+                    if email.casefold() != account["email"].casefold() and email.casefold() not in participants
+                    and email.casefold() not in named]
         preview = {"operation": "Send email", "draft_location": "Saved in Consens; not sent or synchronized to Gmail Drafts",
             **{k: payload[k] for k in ("from", "to", "cc", "bcc", "subject", "body", "attachments", "reply")},
-            "send_authorized": "gmail_send" in account["capabilities"]}
+            "send_authorized": "gmail_send" in account["capabilities"],
+            # Recipients neither named by the user in this chat nor part of the
+            # replied thread: the typical target of an injected instruction.
+            "recipient_warnings": warnings}
         result = self.actions.prepare(self.loop.uid, self.loop.chat_id, self.loop.turn_id, "gmail_send", self.selection.connection_id,
             "gmail_send", payload, preview, replaces=args.replaces, require_capability=False)
         self.loop.google_evidence = [*self.loop.google_evidence[-2:], {"prepared_draft": result, "not_sent": True}]
         self.loop.outgoing.put_nowait({"type": "resources", "actions": [result]})
         return {"draft": result, "instruction": "Draft saved in Consens, NOT sent. Show the exact review card. If sending permission is missing, authorize it then prepare a fresh revision before confirmation."}
+
+
+EMAIL = re.compile(r"[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,63}")
+
+
+def user_text(conversation):
+    parts = []
+    for message in conversation or []:
+        if message.get("role") != "user":
+            continue
+        content = message.get("content")
+        if isinstance(content, str):
+            parts.append(content)
+        elif isinstance(content, list):
+            parts.extend(item.get("text", "") for item in content if isinstance(item, dict))
+    return "\n".join(parts)
+
+
+def build_message(payload):
+    message = EmailMessage(policy=policy.SMTP)
+    for key in ("from", "to", "cc", "bcc", "subject"):
+        value = payload[key]
+        if value:
+            message[key] = ", ".join(value) if isinstance(value, list) else value
+    message["Message-ID"] = payload["message_id"]
+    message["Date"] = format_datetime(now())
+    if payload["reply"]:
+        message["In-Reply-To"] = payload["reply"]["in_reply_to"]
+        message["References"] = payload["reply"]["references"]
+    message.set_content(payload["body"])
+    return message
 
 
 class GmailActions:
@@ -318,27 +373,23 @@ class GmailActions:
 
     def execute(self, uid, action, files, chat):
         payload = action["payload"]
-        message = EmailMessage(policy=policy.SMTP)
-        for key in ("from", "to", "cc", "bcc", "subject"):
-            value = payload[key]
-            if value:
-                message[key] = ", ".join(value) if isinstance(value, list) else value
-        message["Message-ID"] = payload["message_id"]
-        message["Date"] = format_datetime(now())
-        if payload["reply"]:
-            message["In-Reply-To"] = payload["reply"]["in_reply_to"]
-            message["References"] = payload["reply"]["references"]
-        message.set_content(payload["body"])
+        # Everything before the provider call is local: any failure here means
+        # nothing was sent, so it must be "failed", never "unknown".
         try:
+            message = build_message(payload)
             for attachment in payload["attachments"]:
                 file, raw = files.download(uid, chat, attachment["id"])
                 if any(file[key] != attachment[key] for key in ("sha256", "name", "mime", "size")):
                     raise FileUnavailable("The attachment changed. Prepare a new draft.")
                 main, sub = file["mime"].split("/", 1)
                 message.add_attachment(raw, maintype=main, subtype=sub, filename=file["name"])
+            body = {"raw": base64.urlsafe_b64encode(message.as_bytes()).decode()}
         except FileUnavailable as exc:
             raise GoogleError(str(exc)) from None
-        body = {"raw": base64.urlsafe_b64encode(message.as_bytes()).decode()}
+        except GoogleError:
+            raise
+        except Exception:
+            raise GoogleError("The email could not be built. Nothing was sent; prepare a new draft.") from None
         if payload["reply"]:
             body["threadId"] = payload["reply"]["thread_id"]
         result = self.connections.api(uid, action["connection_id"], "gmail_send", "POST", ROOT + "/messages/send",

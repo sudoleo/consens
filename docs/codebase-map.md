@@ -17,7 +17,10 @@ results can only be searched by deterministic Message-ID in Sent. Per-user
 `google_write_intents` retain a minimal 30-day hash/status fence across chat deletion,
 preventing equivalent unresolved writes in other chats. Hourly expiry and account
 deletion remove these records; proposal bodies stay chat-owned. No model-visible
-send/confirm tool exists. UI cards restore exact To/Cc/Bcc, reply reference, body,
+send/confirm tool exists. Headers are built at prepare time; local build errors
+after confirmation are `failed`, not `unknown`. Previews flag recipients neither
+named by the user nor in the replied thread (`recipient_warnings`). Chat deletion
+removes `actions` and `google_evidence`. UI cards restore exact To/Cc/Bcc, reply reference, body,
 attachments and checked status; restored/revised cards always require fresh review.
 
 The existing Google routing/consent rules apply to all Gmail-derived data, including

@@ -323,3 +323,63 @@ def test_saved_calendar_only_turn_replays_after_gmail_schema_extension(api):
     assert replay.status_code==200 and len(calls)==1
     changed=client.post('/agent',json={**payload,'google_selection':{**selection,'gmail':True},'google_data_consent':True,'recover_only':True},headers=AUTH)
     assert changed.status_code==409 and len(calls)==1
+
+
+@pytest.mark.parametrize('subject', ['Line break', 'Next\u0085line', 'Para graph', 'Del\x7fete'])
+def test_unicode_line_breaks_in_subject_are_rejected_before_approval(subject):
+    with pytest.raises(ValidationError, match='line-break'):
+        Draft.model_validate({'to':['buyer@example.org'],'subject':subject,'body':'x'})
+
+
+def test_local_build_failure_is_failed_not_unknown_and_does_not_fence(gmail, monkeypatch):
+    tool,actions,google,chat=gmail
+    saved=draft(tool)
+    import app.services.agent_gmail as module
+    def broken(payload):
+        raise ValueError('Header values may not contain linefeed or carriage return characters')
+    monkeypatch.setattr(module,'build_message',broken)
+    google.wire.calls.clear()
+    result=actions.confirm('owner',chat,saved['id'],saved['hash'])
+    assert result['status']=='failed' and 'Nothing was sent' in result['error']
+    assert not any('/messages/send' in url for _,url,_ in google.wire.calls)
+    monkeypatch.undo()
+    # A failed attempt must not block an equivalent fresh draft.
+    again=draft(tool,body='Please review the decision brief. ')
+    assert again['status']=='pending'
+
+
+def test_recipients_not_named_by_user_or_thread_are_flagged(gmail):
+    tool,_,_,_=gmail
+    tool.loop.answer_conversation=[{'role':'user','content':'Reply to the supplier and copy buyer@example.org please.'}]
+    saved=draft(tool,to=['supplier@example.org'],cc=['buyer@example.org'],bcc=['collector@evil.example'],
+                reply_to_message_id='m1',subject='Re: Offers')
+    assert saved['preview']['recipient_warnings']==[{'email':'collector@evil.example','field':'bcc'}]
+
+
+def test_chat_deletion_removes_actions_and_gmail_evidence(gmail):
+    tool,actions,google,chat=gmail
+    tool.read(GmailRead(operation='message',item_id='m1'),cancellation=ProviderCancellation())
+    saved=draft(tool)
+    ref=google.chats._chat_ref('owner',chat)
+    assert list(ref.collection('google_evidence').stream()) and list(ref.collection('actions').stream())
+    google.chats.delete_chat('owner',chat)
+    assert not list(ref.collection('google_evidence').stream())
+    assert not ref.collection('actions').document(saved['id']).get().exists
+
+
+def test_oversized_thread_page_records_no_evidence(gmail):
+    tool,_,google,chat=gmail
+    def wire(method,url,kwargs):
+        if '/threads/' in url:
+            return {'id':'thread1','messages':[{'id':f'm{i}'} for i in range(5)]}
+        return message(url.rsplit('/',1)[-1],body='Evidence '*5000)
+    google.wire.handler=wire
+    import app.services.agent_gmail as module
+    original=module.message_view
+    module.message_view=lambda message,offset,limit: {**original(message,offset=offset,limit=limit),'padding':'x'*20_000}
+    try:
+        with pytest.raises(GoogleError,match='context limit'):
+            tool.read(GmailRead(operation='thread',item_id='thread1',limit=5),cancellation=ProviderCancellation())
+    finally:
+        module.message_view=original
+    assert not list(google.chats._chat_ref('owner',chat).collection('google_evidence').stream())

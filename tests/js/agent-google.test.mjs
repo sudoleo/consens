@@ -69,6 +69,10 @@ describe('Google selection and approvals',()=>{
     const text=d.getElementById('agentGoogleActions').textContent;
     expect(text).toContain('private@example.org');expect(text).toContain('thread t1');expect(text).toContain('Decision.pdf');
     expect(d.querySelector('#agentGoogleActions script')).toBeNull();
+    expect(d.querySelector('.agent-recipient-warning')).toBeNull();
+    action.preview.recipient_warnings=[{email:'private@example.org',field:'bcc'}];
+    await w.App.agentGoogle.refreshActions(chat,true);
+    expect(d.querySelector('.agent-recipient-warning').textContent).toContain('private@example.org (Bcc)');
     d.getElementById('approve-'+action.id).click();
     expect([...d.querySelectorAll('button')].find(b=>b.textContent==='Confirm and execute').disabled).toBe(true);
     [...d.querySelectorAll('button')].find(b=>b.textContent==='Review attachment').click();

@@ -125,6 +125,8 @@
     if(action.kind==='gmail_send'){
       card.append(node('p',action.preview.draft_location));
       for(const field of ['from','to','cc','bcc','subject'])card.append(node('p',`${({from:'From',to:'To',cc:'Cc',bcc:'Bcc',subject:'Subject'})[field]}: ${valueText(action.preview[field])}`));
+      const unfamiliar=action.preview.recipient_warnings||[];
+      if(unfamiliar.length)card.append(node('p',`Check these recipients: you did not name them in this chat and they are not part of the replied conversation: ${unfamiliar.map(item=>`${item.email} (${({to:'To',cc:'Cc',bcc:'Bcc'})[item.field]||item.field})`).join(', ')}`,'agent-action-error agent-recipient-warning'));
       if(action.preview.reply)card.append(node('p',`Reply to: ${action.preview.reply.from} · ${action.preview.reply.subject} · message ${action.preview.reply.message_id} · thread ${action.preview.reply.thread_id}`));
       const body=node('pre',action.preview.body,'agent-mail-body');card.append(body);
       card.append(node('p',`Attachments (${action.preview.attachments.length})`));
