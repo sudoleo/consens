@@ -20,6 +20,52 @@ from app.services.llm.provider_runtime import AnalysisBudgetExceeded, ProviderCa
 
 PRODUCER_LEASE_SECONDS = 120
 PRODUCER_RENEW_BEFORE_SECONDS = 90
+# Size contract of the per-turn root receipt (R29). Running steps always stay
+# in the root maps; only settled steps beyond this window are folded into
+# `compacted_usage`/`compacted_steps`. Each step keeps its own immutable
+# llm_calls receipt, so compaction loses neither usage nor history.
+ROOT_SETTLED_STEP_WINDOW = 32
+ROOT_MAX_RUNNING_STEPS = 64
+ROOT_MAX_BYTES = 256_000
+TECHNICAL_STEP_LIMIT = ("This response reached a technical limit for one agent turn. "
+                        "The available results have been saved; send a follow-up message to continue.")
+
+
+def root_usage(root):
+    """Turn usage including compacted steps, for every reader of root maps."""
+    usages = list((root.get("step_usage") or {}).values())
+    if root.get("compacted_steps"):
+        usages.insert(0, root.get("compacted_usage"))
+    return aggregate_usage(usages)
+
+
+def _step_index(step):
+    return int(step.rsplit(":", 1)[1])
+
+
+def compact_root(patch, data):
+    """Fold the oldest settled steps out of the root maps, keeping the window."""
+    states = dict(patch.get("step_states", data.get("step_states") or {}))
+    settled = sorted((step for step, state in states.items() if state != "running"),
+                     key=lambda step: (_step_index(step), step), reverse=True)
+    evicted = settled[ROOT_SETTLED_STEP_WINDOW:]
+    if not evicted:
+        return patch
+    usage = dict(patch.get("step_usage", data.get("step_usage") or {}))
+    reservations = dict(patch.get("reservations", data.get("reservations") or {}))
+    folded = [usage.pop(step, None) for step in evicted]
+    for step in evicted:
+        states.pop(step, None)
+        reservations.pop(step, None)
+    previous = data.get("compacted_usage") if data.get("compacted_steps") else None
+    compacted = aggregate_usage([previous, *folded] if previous is not None else folded)
+    return {**patch, "step_states": states, "step_usage": usage, "reservations": reservations,
+            "compacted_usage": compacted, "compacted_steps": data.get("compacted_steps", 0) + len(evicted)}
+
+
+def _serialized_size(value):
+    import json
+    return len(json.dumps(value, default=str, ensure_ascii=False).encode("utf-8"))
 # Serialize short bookkeeping transactions per account inside each process.
 # Firestore still fences concurrent processes; providers remain fully parallel.
 _ACCOUNT_WRITES = tuple(RLock() for _ in range(128))
@@ -81,8 +127,16 @@ class AgentSessionStore:
             limits = data["policy"]
             states = dict(data["step_states"])
             prefix = "completion" if agent_id == "orchestrator" else f"agent:{agent_id}"
-            if index and states.get(f"{prefix}:{index - 1}") != "succeeded":
+            previous_step = f"{prefix}:{index - 1}"
+            previous_state = states.get(previous_step)
+            if index and previous_state is None and data.get("compacted_steps"):
+                # Compacted out of the root: its own receipt is authoritative.
+                previous_receipt = self.receipt_ref(uid, chat_id, turn_id, previous_step).get(transaction=tx)
+                previous_state = (previous_receipt.to_dict() or {}).get("status")
+            if index and previous_state != "succeeded":
                 raise TurnStatusConflict("Previous model step has not succeeded")
+            if sum(state == "running" for state in states.values()) >= ROOT_MAX_RUNNING_STEPS:
+                raise AnalysisBudgetExceeded(TECHNICAL_STEP_LIMIT)
             if agent is not None and (not agent.exists or (agent.to_dict() or {}).get("status") in {"stopped", "failed"}):
                 raise TurnStatusConflict("Worker session is not runnable")
             tokens, cost = reservation
@@ -103,7 +157,7 @@ class AgentSessionStore:
             cost_hold = data.get("review_cost_hold", 0)
             cost_spend = min(cost_hold, cost) if can_spend else 0
             daily = agent_quota.reserve(daily, tokens - spend, limit=budget_config['daily_token_limit'])
-            if not limits.get("account_budget_only") and (len(states) >= limits["max_calls"] or data["reserved_tokens"] + tokens > limits["max_tokens"]
+            if not limits.get("account_budget_only") and (len(states) + data.get("compacted_steps", 0) >= limits["max_calls"] or data["reserved_tokens"] + tokens > limits["max_tokens"]
                     or data["reserved_cost"] + cost + cost_hold - cost_spend > limits["max_cost_nano_usd"]):
                 raise AnalysisBudgetExceeded("The shared agent budget was reached.")
             states[step] = "running"
@@ -114,6 +168,9 @@ class AgentSessionStore:
                      "reserved_tokens": data["reserved_tokens"] + tokens, "reserved_cost": data["reserved_cost"] + cost}
             if agent_id == "orchestrator":
                 patch["last_step"] = step
+            patch = compact_root(patch, data)
+            if _serialized_size(patch) > ROOT_MAX_BYTES:
+                raise AnalysisBudgetExceeded(TECHNICAL_STEP_LIMIT)
             record = {"schema_version": 3, "purpose": "agent", "step": step, "agent_id": agent_id,
                       "quota_day": day, "quota_reserved": tokens,
                       "chat_id": chat_id, "turn_id": turn_id, "status": "running",
@@ -188,10 +245,10 @@ class AgentSessionStore:
             return {}
         reserved = data["reservations"][step]
         tokens, cost = remaining_reservation(reserved, usage)
-        return {"step_states": {**data["step_states"], step: status},
+        return compact_root({"step_states": {**data["step_states"], step: status},
                 "step_usage": {**data["step_usage"], step: usage},
                 "reserved_tokens": data["reserved_tokens"] + tokens - reserved[0],
-                "reserved_cost": data["reserved_cost"] + cost - reserved[1]}
+                "reserved_cost": data["reserved_cost"] + cost - reserved[1]}, data)
 
     def publish_agent(self, uid, chat_id, turn_id, *, run_token, agent_id, patch=None, message=None, event_id=None):
         """Atomically mutate a session and append one deduplicated event/message."""
@@ -319,7 +376,16 @@ class AgentSessionStore:
                     agent["duration_ms"] = max(agent.get("duration_ms", 0), self._observed_duration(agent, now))
         return {"agents": [{k: v for k, v in a.items() if k != "assignment"} for a in agents],
                 "seq": root.get("event_seq", 0), "status": root.get("run_status", turn["status"]),
-                "usage": aggregate_usage(list(root.get("step_usage", {}).values())) or turn.get("agent_usage")}
+                "usage": root_usage(root) or turn.get("agent_usage")}
+
+    def _worker_receipt_usage(self, uid, chat_id, turn_id, agent_id):
+        usages = []
+        for index in range(100_000):
+            receipt = self.receipt_ref(uid, chat_id, turn_id, f"agent:{agent_id}:{index}").get()
+            if not receipt.exists:
+                break
+            usages.append((receipt.to_dict() or {}).get("usage"))
+        return usages
 
     @staticmethod
     def _observed_duration(agent, observed_at):
@@ -384,6 +450,10 @@ class AgentSessionStore:
             if not deleted and data["status"] not in {"completed", "failed", "stopped"}:
                 usage = aggregate_usage([value for step, value in settled.get("step_usage", {}).items()
                                          if step.startswith(f"agent:{snap.id}:")])
+                if settled.get("compacted_steps"):
+                    # Earlier steps may be compacted out of the root; each
+                    # step's own immutable receipt is authoritative.
+                    usage = aggregate_usage(self._worker_receipt_usage(uid, chat_id, turn_id, snap.id))
                 # A dead process cannot report its final monotonic duration.
                 # Preserve the last durable measurement as an explicit lower bound.
                 observed = data.get("updated_at") or data.get("created_at")
@@ -396,6 +466,6 @@ class AgentSessionStore:
         value = AgentCompletion()
         value.failure = {"code": "run_interrupted", "error": "The server connection ended before the response finished. The available results have been saved."}
         data = ref.get().to_dict()
-        value.usage = aggregate_usage(list(data.get("step_usage", {}).values()))
+        value.usage = root_usage(data)
         self.finish_run(uid, chat_id, turn_id, completion=value, status="cancelled", run_token=root["run_token"])
         return ref.get().to_dict() or {}

@@ -2029,6 +2029,17 @@ AgentRunStore/AgentSessionStore verwenden users/{uid}/llm_calls mit dedupliziert
 completion:N- und agent:<uuid>:N-Belegen, Producer-Token, Lease,
 Budget-/Tarifsnapshot und Status. Ein beanspruchter
 Provider-Schritt wird auch nach einem Prozessabsturz nie erneut ausgeführt.
+Größenvertrag des Root-Belegs je Turn (R29): `step_states`, `step_usage` und
+`reservations` enthalten alle laufenden Schritte, aber höchstens
+`ROOT_SETTLED_STEP_WINDOW` (32) abgeschlossene. Ältere abgeschlossene Schritte
+faltet `compact_root` beim Claim/Settlement in `compacted_usage` (komponierbares
+`aggregate_usage`) und `compacted_steps`; ihr eigener unveränderlicher
+`llm_calls`-Beleg bleibt maßgeblich (Vorgängerprüfung, Replay-Schutz,
+Worker-Usage beim Reaping). Leser verwenden `root_usage(root)`. Mehr als
+`ROOT_MAX_RUNNING_STEPS` (64) gleichzeitig laufende Schritte oder ein serialisierter
+Root über `ROOT_MAX_BYTES` (256 kB) stoppen vor Reservierung und Claim mit
+`run_limit` und dem Hinweis, per Folgenachricht fortzusetzen; die bisherigen
+Ergebnisse bleiben gespeichert. Das gilt unabhängig vom Token-/Kontobudget.
 Kurze Agent-Transaktionen teilen innerhalb eines Prozesses einen kontogebundenen
 Lock-Pool, damit parallele Claims, Statusmeldungen und Abrechnungen nicht um
 dieselben Root-/Kontingentdokumente konkurrieren. Firestore bleibt die atomare

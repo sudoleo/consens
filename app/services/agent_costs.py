@@ -135,18 +135,32 @@ def remaining_reservation(reservation, usage):
     return tokens, cost
 
 
+def _call_counts(usage):
+    """(calls, measured calls) of one receipt or of an earlier aggregate."""
+    if usage is None:
+        return 1, 0
+    if "measured_calls" in usage:
+        measured = int(usage.get("measured_calls") or 0)
+        return measured + int(usage.get("unmetered_calls") or 0), measured
+    return 1, int(usage.get("input_tokens") is not None)
+
+
 def aggregate_usage(usages):
+    """Sum receipts. Earlier aggregates compose: they count as all their calls."""
+    usages = list(usages)
     known = [usage for usage in usages if usage is not None]
-    measured = [usage for usage in known if usage.get("input_tokens") is not None]
     if not known:
         return None
+    counts = [_call_counts(usage) for usage in usages]
+    calls = sum(total for total, _ in counts)
+    measured = sum(count for _, count in counts)
     return {**{field: (sum(u[field] for u in known if u.get(field) is not None)
                       if any(u.get(field) is not None for u in known) else None) for field in USAGE_FIELDS},
             "web_search_requests": (sum(usage.get("web_search_requests") or 0 for usage in known)
                 if any(u.get("web_search_requests") is not None for u in known) else None),
-            "complete": len(measured) == len(usages) and all(u.get("complete", True) for u in known),
+            "complete": measured == calls and all(u.get("complete", True) for u in known),
             "cost_complete": len(known) == len(usages) and all(u.get("cost_complete", u.get("complete", True)) for u in known),
-            "measured_calls": len(measured), "unmetered_calls": len(usages) - len(measured),
+            "measured_calls": measured, "unmetered_calls": calls - measured,
             "cost_source": "provider" if all(u.get("cost_source") == "provider" for u in known)
                 else "catalog" if all(u.get("cost_source", "catalog") == "catalog" for u in known) else "mixed",
             "source": "provider", "billing_mode": "simulation", "currency": "USD"}
