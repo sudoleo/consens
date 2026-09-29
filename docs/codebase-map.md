@@ -4686,7 +4686,10 @@ Pages-/Watch-Tabs nicht. `/admin/topics` redirectet auf diesen Tab.
   Auswertung akzeptiert nur die letzte `FINAL_ANSWER: X`-Zeile. Alle sechs
   Modellfamilien und die Synthese laufen über denselben OpenRouter-Chat-
   Completions-Transport mit `OPENROUTER_API_KEY`; Benchmark-Payloads bleiben
-  im `benchmark_mode` ohne Websuche.
+  im `benchmark_mode` ohne Websuche. `--budget` deckt alle bezahlten Versuche
+  ab: Hauptlauf, Fehlversuche und E4-Audits (`AuditLedger`, Journal
+  `audit_calls.jsonl`, Prüfung vor jedem Audit-Call, Resume ohne erneute
+  Audit-Kosten); fehlende Usage wird mit der Vorab-Obergrenze verbucht.
 - JS-Syntaxcheck einzelner Module:
   ```powershell
   node --check static\js\<modul>.js

@@ -241,6 +241,14 @@ def main(argv=None) -> int:
         f"Run finished: written={result.cells_written} skipped={result.cells_skipped} "
         f"failed={result.cells_failed} spent=${result.spent_usd:.4f} stopped={result.stopped}"
     )
+    print(
+        f"Cost coverage: estimated from pricing table; "
+        f"audits=${float(getattr(result, 'audit_spent_usd', 0.0)):.4f}; "
+        f"calls without reported usage charged at their upper bound="
+        f"{int(getattr(result, 'estimated_cost_cells', 0))}"
+    )
+    if result.stopped and getattr(result, "stop_reason", ""):
+        print(f"Stop reason: {result.stop_reason}")
     if summary:
         print(f"Results: {run_dir / 'results.json'} (n={summary['n_questions']}, "
               f"disagreement={summary['n_disagreement']})")
