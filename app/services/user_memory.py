@@ -82,6 +82,17 @@ class UserMemoryUnavailable(UserMemoryError):
     pass
 
 
+class MemoryRevisionConflict(UserMemoryError):
+    """The editor's baseline revision is no longer the stored one.
+
+    Carries only the current revision number; never profile content.
+    """
+
+    def __init__(self, current_revision: int):
+        super().__init__("Memory revision conflict")
+        self.current_revision = int(current_revision)
+
+
 def empty_profile() -> dict:
     return {
         "schema_version": PROFILE_SCHEMA_VERSION,
@@ -368,7 +379,33 @@ class FirestoreUserMemoryRepository:
         *,
         now: datetime | None = None,
         max_notes_chars: int = MAX_NOTES_CHARS,
+        expected_revision: int | None = None,
     ) -> dict:
+        return self.save_with_revision(
+            uid,
+            profile,
+            now=now,
+            max_notes_chars=max_notes_chars,
+            expected_revision=expected_revision,
+        )[0]
+
+    def save_with_revision(
+        self,
+        uid: str,
+        profile: object,
+        *,
+        now: datetime | None = None,
+        max_notes_chars: int = MAX_NOTES_CHARS,
+        expected_revision: int | None = None,
+    ) -> tuple[dict, int]:
+        """Write the whole profile; with ``expected_revision`` as compare-and-swap.
+
+        The editor sends the revision it loaded. If anything (another tab, an
+        AI patch, an undo) wrote in between, the transaction raises
+        ``MemoryRevisionConflict`` and nothing is written, so a stale form can
+        never silently restore older content. ``None`` is the internal,
+        unchecked path; the HTTP route requires a revision.
+        """
         raw = dict(profile) if isinstance(profile, dict) else {}
         # Ein bereits offener Browser mit der v1-UI sendet ``notes`` gar nicht.
         # Das additive Feld darf dadurch nicht verschwinden. Die aktuelle UI
@@ -388,18 +425,22 @@ class FirestoreUserMemoryRepository:
             )
             snapshot = profile_ref.get(transaction=transaction)
             previous = snapshot.to_dict() if snapshot.exists else {}
+            current_revision = max(0, int((previous or {}).get("revision") or 0))
+            if expected_revision is not None and int(expected_revision) != current_revision:
+                raise MemoryRevisionConflict(current_revision)
             if preserve_existing_notes:
                 raw[NOTES_FIELD] = (previous or {}).get(NOTES_FIELD, "")
             clean = sanitize_profile(raw, max_notes_chars=max_notes_chars)
-            revision = max(0, int((previous or {}).get("revision") or 0)) + 1
+            revision = current_revision + 1
             transaction.set(
                 profile_ref,
                 {**clean, "revision": revision, "updated_at": written},
             )
             saved["profile"] = clean
+            saved["revision"] = revision
 
         self._transaction(operation)
-        return saved["profile"]
+        return saved["profile"], saved["revision"]
 
     def delete(self, uid: str) -> None:
         self._profile_ref(uid).delete()

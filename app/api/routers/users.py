@@ -192,6 +192,11 @@ class UserMemoryRequest(BaseModel):
     # ``None`` unterscheidet alte Browser, die das additive Feld noch nicht
     # kennen, von einem bewussten Leeren durch die aktuelle UI (``""``).
     notes: Optional[str] = Field(default=None, max_length=30_000)
+    # Die Revision, die der Editor geladen hat (Compare-and-swap). Alte
+    # Browser senden sie nicht: sie bekommen 409 mit Reload-Hinweis, statt
+    # neuere Inhalte (anderer Tab, Remember/Correct, Undo) still zu
+    # ueberschreiben.
+    expected_revision: Optional[int] = Field(default=None, ge=0, le=9_007_199_254_740_991)
 
 
 class UserMemoryEditRequest(BaseModel):
@@ -232,11 +237,12 @@ def _memory_tier(uid: str) -> str:
         ) from None
 
 
-def _memory_response(profile: dict, *, tier) -> dict:
+def _memory_response(profile: dict, *, tier, revision: int) -> dict:
     notes_limit = cfg.get_memory_char_limit(tier)
     return {
         "status": "success",
         "memory": profile,
+        "revision": int(revision),
         "limits": {
             "field_chars": user_memory.MAX_FIELD_CHARS,
             "notes_chars": notes_limit,
@@ -253,38 +259,53 @@ def get_user_memory(request: Request):
     uid = _memory_uid(request)
     tier = _memory_tier(uid)
     try:
-        try:
-            profile = user_memory_repository.get(
-                uid, max_notes_chars=cfg.get_memory_char_limit(tier)
-            )
-        except TypeError:
-            profile = user_memory_repository.get(uid)
+        profile, revision = user_memory_repository.get_with_revision(
+            uid, max_notes_chars=cfg.get_memory_char_limit(tier)
+        )
     except Exception as exc:
         logging.error("user memory read failed category=%s", safe_exception(exc))
         raise HTTPException(status_code=503, detail="Memory is temporarily unavailable.") from None
-    return _memory_response(profile, tier=tier)
+    return _memory_response(profile, tier=tier, revision=revision)
 
 
 @router.put("/api/my/memory")
 @limiter.limit("20/minute")
 def put_user_memory(request: Request, payload: UserMemoryRequest):
     uid = _memory_uid(request)
+    if payload.expected_revision is None:
+        # Transition rule for a tab still running an older app version: it
+        # cannot prove which Memory it edited, so it must reload first. A plain
+        # string detail keeps that old UI's error line readable.
+        raise HTTPException(
+            status_code=409,
+            detail="Memory was updated by a newer version of consens.io. Reload the page before saving.",
+        )
     tier = _memory_tier(uid)
+    fields = payload.model_dump(exclude={"expected_revision"})
     try:
-        try:
-            profile = user_memory_repository.save(
-                uid,
-                payload.model_dump(),
-                max_notes_chars=cfg.get_memory_char_limit(tier),
-            )
-        except TypeError:
-            profile = user_memory_repository.save(uid, payload.model_dump())
+        profile, revision = user_memory_repository.save_with_revision(
+            uid,
+            fields,
+            max_notes_chars=cfg.get_memory_char_limit(tier),
+            expected_revision=payload.expected_revision,
+        )
+    except user_memory.MemoryRevisionConflict as exc:
+        # Only the revision number goes back; the editor keeps its draft and
+        # offers to load the newer Memory or to keep editing deliberately.
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error_code": "revision_conflict",
+                "message": "Memory changed in another tab or through Remember/Correct memory. Your draft was not saved.",
+                "revision": exc.current_revision,
+            },
+        ) from None
     except persistence_guard.AccountDeletionInProgress:
         raise HTTPException(status_code=403, detail="This account is being deleted.") from None
     except Exception as exc:
         logging.error("user memory write failed category=%s", safe_exception(exc))
         raise HTTPException(status_code=503, detail="Memory could not be saved.") from None
-    return _memory_response(profile, tier=tier)
+    return _memory_response(profile, tier=tier, revision=revision)
 
 
 _MEMORY_EDIT_HTTP_STATUS = {
@@ -299,6 +320,8 @@ _MEMORY_EDIT_HTTP_STATUS = {
     "idempotency_conflict": 409,
     "revision_conflict": 409,
     "undo_expired": 409,
+    "interrupted": 409,
+    "lease_lost": 409,
     "revision_not_found": 404,
 }
 

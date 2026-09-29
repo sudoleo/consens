@@ -1252,23 +1252,40 @@ def test_bookmark_detail_is_owner_scoped_and_frontend_loads_on_open():
 
 
 class DeletableBookmarkRef(FakeBookmarkRef):
-    def __init__(self, bookmark_id, data):
+    def __init__(self, bookmark_id, data, events=None):
         super().__init__(bookmark_id, data)
         self.deleted = False
+        self.events = events if events is not None else []
 
     def delete(self):
         self.deleted = True
+        self.events.append("bookmark_deleted")
 
 
 class RecordingChatStore:
-    def __init__(self, error=None):
-        self.deleted = []
-        self.error = error
+    """Double for the durable deletion contract of ChatStore.
 
-    def delete_chat(self, uid, chat_id):
+    ``request_chat_deletion`` commits tombstone + job, ``run_chat_deletion``
+    runs the cascade and reports (never raises) a failure.
+    """
+
+    def __init__(self, error=None, queue_error=None, events=None):
+        self.deleted = []
+        self.queued = []
+        self.error = error
+        self.queue_error = queue_error
+        self.events = events if events is not None else []
+
+    def request_chat_deletion(self, uid, chat_id):
+        if self.queue_error:
+            raise self.queue_error
+        self.queued.append((uid, chat_id))
+        self.events.append("queued")
+
+    def run_chat_deletion(self, uid, chat_id):
         self.deleted.append((uid, chat_id))
-        if self.error:
-            raise self.error
+        self.events.append("cascade")
+        return self.error is None
 
 
 def _delete_bookmark(bookmark_ref, chat_store):
@@ -1317,11 +1334,40 @@ def test_a_failing_chat_cascade_does_not_fail_the_bookmark_deletion():
 
     response = _delete_bookmark(bookmark_ref, chat_store)
 
-    # The bookmark is already gone; reporting a 500 would only make the user
-    # retry a deletion that already happened. The chat stays reachable for the
-    # account-level cascade.
+    # The deletion is durably committed (tombstone + job) before the handle
+    # goes away, so a failing cascade is a queued retry, not an error the user
+    # has to act on.
     assert response.status_code == 200
     assert bookmark_ref.deleted is True
+    assert chat_store.queued == [("uid-1", chat_id)]
+
+
+def test_chat_deletion_job_is_committed_before_the_bookmark_handle_is_removed():
+    chat_id = "c" * 32
+    events = []
+    bookmark_ref = DeletableBookmarkRef(
+        "chat_bookmark", {"query": "Q", "chat_id": chat_id}, events=events
+    )
+    chat_store = RecordingChatStore(events=events)
+
+    response = _delete_bookmark(bookmark_ref, chat_store)
+
+    assert response.status_code == 200
+    assert events == ["queued", "bookmark_deleted", "cascade"]
+
+
+def test_bookmark_is_kept_when_the_chat_deletion_job_cannot_be_queued():
+    chat_id = "c" * 32
+    bookmark_ref = DeletableBookmarkRef("chat_bookmark", {"query": "Q", "chat_id": chat_id})
+    chat_store = RecordingChatStore(queue_error=RuntimeError("firestore unavailable"))
+
+    response = _delete_bookmark(bookmark_ref, chat_store)
+
+    # Nothing was deleted, so the honest answer is an error the user can retry;
+    # the handle survives and the transcript is not stranded.
+    assert response.status_code == 500
+    assert bookmark_ref.deleted is False
+    assert chat_store.deleted == []
 
 
 def test_unavailable_cursor_signing_is_reported_as_a_server_error():

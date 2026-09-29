@@ -68,8 +68,9 @@
             a &ldquo;Remember&rdquo; or &ldquo;Correct memory&rdquo; action, we send the current Memory (up to your plan limit), the selected statement,
             your text, and the selected add-or-correct intent to the configured model through OpenRouter. It may return only one structured replace, append, or delete proposal;
             our server validates and applies it. A Remember action may append or replace one uniquely matching passage but cannot delete one.
-            We store an idempotency record, persistent usage counters, and the previous Memory revision
-            for Undo. The Undo time limit limits the action, not the storage lifetime of revision records; those records remain until account deletion. These records and revisions are never used for Watch, Publisher, or Topic runs and are deleted with your account.
+            We store an idempotency record, persistent usage counters, and a copy of your previous Memory
+            for Undo. Undo is available for a short time after the change; the copy of your previous Memory is deleted automatically 30 days after the change.
+            A content-free record (status, revision numbers and request reference) remains until account deletion so that a repeated request is not applied twice. These records are never used for Watch, Publisher, or Topic runs and are deleted with your account.
             Only text you enter in Memory settings or explicitly submit through Remember or Correct memory is stored and used. You can
             edit it, pause it with a single switch, or clear it at any time; it is deleted with your account. Scheduled Watch reruns do not receive your Memory profile as a separate input, and published pages do not display it as a profile field. However, generated answers or questions can reflect personal details from Memory; review content before publishing it. Please do not enter special-category data (for example
             health, beliefs, or political opinions) or other people&rsquo;s personal data.</li>

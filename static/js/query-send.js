@@ -736,6 +736,12 @@
       trackAppEvent("app_query_canceled");
       return;
     }
+    // A file still being read belongs to this draft. Sending now would either
+    // drop it silently or let it surface later next to another question.
+    if (window.App.attachments?.isImporting?.()) {
+      window.App.showPopup?.("An attachment is still being added. Send again when it appears.");
+      return;
+    }
     if (!registry.claimStartAction()) return;
 
     if (window.App.agentChat?.isSelected?.()) {

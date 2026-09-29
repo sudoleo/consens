@@ -241,6 +241,50 @@ def test_legacy_save_without_notes_preserves_an_existing_long_note(repository):
     assert cleared["notes"] == ""
 
 
+def test_stale_manual_save_cannot_restore_older_memory(repository):
+    # R12 probe turned around: original -> newer save -> stale form snapshot.
+    _, first = repository.save_with_revision(
+        UID, {"role": "Original", "notes": "Original note"}, expected_revision=0
+    )
+    _, second = repository.save_with_revision(
+        UID, {"role": "Newer", "notes": "Original note"}, expected_revision=first
+    )
+
+    with pytest.raises(user_memory.MemoryRevisionConflict) as conflict:
+        repository.save_with_revision(
+            UID, {"role": "Original", "notes": "Original note"}, expected_revision=first
+        )
+
+    assert conflict.value.current_revision == second == 2
+    profile, revision = repository.get_with_revision(UID)
+    assert profile["role"] == "Newer"
+    assert revision == 2
+
+
+def test_manual_save_after_an_ai_patch_needs_the_patched_revision(repository):
+    _, revision = repository.save_with_revision(UID, {"notes": "Lives in Berlin."}, expected_revision=0)
+    # An AI patch (or Undo) bumps the stored revision behind the open form.
+    stored = repository._profile_ref(UID).doc.data
+    repository._profile_ref(UID).doc.data = {**stored, "notes": "Lives in Hanover.", "revision": revision + 1}
+
+    with pytest.raises(user_memory.MemoryRevisionConflict):
+        repository.save_with_revision(UID, {"notes": "Lives in Berlin. Likes tea."}, expected_revision=revision)
+    assert repository.get(UID)["notes"] == "Lives in Hanover."
+
+    saved, _ = repository.save_with_revision(
+        UID, {"notes": "Lives in Hanover. Likes tea."}, expected_revision=revision + 1
+    )
+    assert saved["notes"] == "Lives in Hanover. Likes tea."
+
+
+def test_deliberate_clear_with_current_revision_still_works(repository):
+    _, revision = repository.save_with_revision(UID, {"role": "Doctor", "notes": "N"}, expected_revision=0)
+    cleared, _ = repository.save_with_revision(
+        UID, {"role": "", "notes": ""}, expected_revision=revision
+    )
+    assert cleared["role"] == "" and cleared["notes"] == ""
+
+
 def test_repository_write_is_fenced_by_the_account_tombstone(monkeypatch):
     calls = []
 
@@ -274,15 +318,22 @@ def test_load_profile_text_fails_open(monkeypatch):
 class StubRepository:
     def __init__(self, profile=None):
         self.profile = profile or empty_profile()
+        self.revision = 0
         self.saved = []
 
     def get(self, uid):
         return self.profile
 
-    def save(self, uid, payload):
+    def get_with_revision(self, uid, **_kwargs):
+        return self.profile, self.revision
+
+    def save_with_revision(self, uid, payload, *, expected_revision=None, **_kwargs):
+        if expected_revision is not None and expected_revision != self.revision:
+            raise user_memory.MemoryRevisionConflict(self.revision)
         self.profile = sanitize_profile(payload)
+        self.revision += 1
         self.saved.append((uid, self.profile))
-        return self.profile
+        return self.profile, self.revision
 
 
 @pytest.fixture
@@ -301,7 +352,9 @@ def memory_api(monkeypatch):
 def test_memory_endpoints_require_authentication(memory_api):
     client, _ = memory_api
     assert client.get("/api/my/memory").status_code == 401
-    assert client.put("/api/my/memory", json={"role": "Doctor"}).status_code == 401
+    assert client.put(
+        "/api/my/memory", json={"role": "Doctor", "expected_revision": 0}
+    ).status_code == 401
 
 
 def test_put_normalizes_and_returns_the_stored_profile(memory_api):
@@ -309,11 +362,12 @@ def test_put_normalizes_and_returns_the_stored_profile(memory_api):
     response = client.put(
         "/api/my/memory",
         headers=AUTH,
-        json={"role": "  Doctor   at   a hospital ", "enabled": True},
+        json={"role": "  Doctor   at   a hospital ", "enabled": True, "expected_revision": 0},
     )
     assert response.status_code == 200
     body = response.json()
     assert body["memory"]["role"] == "Doctor at a hospital"
+    assert body["revision"] == 1
     assert body["limits"]["field_chars"] == user_memory.MAX_FIELD_CHARS
     assert body["limits"]["notes_chars"] == user_memory.MAX_NOTES_CHARS
     assert body["limits"]["profile_chars"] == user_memory.MAX_PROFILE_CHARS
@@ -334,10 +388,45 @@ def test_get_returns_the_stored_profile(memory_api):
         "style": "Answer in German.",
         "notes": "Imported memory summary",
     })
+    stub.revision = 7
     response = client.get("/api/my/memory", headers=AUTH)
     assert response.status_code == 200
     assert response.json()["memory"]["style"] == "Answer in German."
     assert response.json()["memory"]["notes"] == "Imported memory summary"
+    assert response.json()["revision"] == 7
+
+
+def test_stale_put_gets_409_with_the_current_revision_and_writes_nothing(memory_api):
+    client, stub = memory_api
+    stub.revision = 3
+    stub.profile = sanitize_profile({"role": "Newer text from another tab"})
+
+    response = client.put(
+        "/api/my/memory",
+        headers=AUTH,
+        json={"role": "Old form snapshot", "expected_revision": 2},
+    )
+
+    assert response.status_code == 409
+    detail = response.json()["detail"]
+    assert detail["error_code"] == "revision_conflict"
+    assert detail["revision"] == 3
+    # Only the revision number goes back, never Memory content.
+    assert "Newer text" not in response.text
+    assert stub.saved == []
+    assert stub.profile["role"] == "Newer text from another tab"
+
+
+def test_put_without_a_revision_from_an_old_tab_is_refused_not_merged(memory_api):
+    client, stub = memory_api
+    stub.profile = sanitize_profile({"role": "Kept", "notes": "Kept note"})
+
+    response = client.put("/api/my/memory", headers=AUTH, json={"role": "Old tab"})
+
+    assert response.status_code == 409
+    # Plain string so the old UI still shows a readable message.
+    assert "Reload" in response.json()["detail"]
+    assert stub.saved == []
 
 
 # --- Injektion in den Lauf -------------------------------------------------

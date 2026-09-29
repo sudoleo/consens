@@ -2183,9 +2183,27 @@ document.getElementById('sendWatchTestMailBtn').addEventListener('click', async 
 
 // === Public Topic tickers ===
 let adminTopics = [];
+// Three separate facts, never one global: what the list highlights, which
+// Topic the form actually holds, and which request may still fill the form.
+// Save uses only the form's own id, so a failed or overtaken load of B can
+// never write A's form content to B.
 let selectedTopicId = '';
+let loadedTopicId = null;        // null: form holds nothing savable; '': new Topic
+let topicEditorGeneration = 0;
 let selectedTopicDetail = null;
 let topicSlugTouched = false;
+
+function beginTopicEditorChange() {
+    topicEditorGeneration += 1;
+    loadedTopicId = null;
+    syncTopicSaveButton();
+    return topicEditorGeneration;
+}
+
+function syncTopicSaveButton() {
+    const button = document.getElementById('saveAdminTopicBtn');
+    if (button) button.disabled = loadedTopicId === null;
+}
 
 function topicAdminStatus(message, isError) {
     const el = document.getElementById('topicAdminStatus');
@@ -2309,32 +2327,62 @@ function fillAdminTopic(topic, runs) {
 
 async function selectAdminTopic(topicId) {
     selectedTopicId = topicId;
+    const generation = beginTopicEditorChange();
     renderAdminTopicList();
     topicAdminStatus('Loading Topic...', false);
     try {
         const data = await shareAdminRequest('GET', `/api/admin/topics/${encodeURIComponent(topicId)}`);
+        // Only the newest selection may fill the form; a slower answer for an
+        // earlier click is dropped.
+        if (generation !== topicEditorGeneration) return false;
+        if (!data || !data.topic || data.topic.id !== topicId) {
+            throw new Error('The loaded Topic does not match the selection. Reload the list.');
+        }
         fillAdminTopic(data.topic, data.runs || []);
+        loadedTopicId = topicId;
+        syncTopicSaveButton();
+        return true;
     } catch (err) {
-        topicAdminStatus(err.message, true);
+        if (generation === topicEditorGeneration) {
+            topicAdminStatus(`${err.message} Saving stays disabled until the Topic loads.`, true);
+        }
+        return false;
     }
 }
 
 async function loadAdminTopics(selectId) {
+    const generation = topicEditorGeneration;
     topicAdminStatus('Loading Topics...', false);
     try {
         const data = await shareAdminRequest('GET', '/api/admin/topics');
         adminTopics = data.topics || [];
         renderAdminTopicList();
+        // A newer selection, "New Topic" or account change owns the editor now.
+        if (generation !== topicEditorGeneration) return;
         const target = selectId || selectedTopicId;
-        if (target) await selectAdminTopic(target);
-        topicAdminStatus('', false);
+        if (target) {
+            if (await selectAdminTopic(target)) topicAdminStatus('', false);
+        } else {
+            topicAdminStatus('', false);
+        }
     } catch (err) {
-        topicAdminStatus(err.message, true);
+        if (generation === topicEditorGeneration) topicAdminStatus(err.message, true);
     }
+}
+
+function resetAdminTopicEditor() {
+    beginTopicEditorChange();
+    selectedTopicId = '';
+    selectedTopicDetail = null;
+    adminTopics = [];
+    document.getElementById('topicAdminForm').hidden = true;
+    document.getElementById('topicEditorEmpty').hidden = false;
+    renderAdminTopicList();
 }
 
 function newAdminTopic() {
     selectedTopicId = '';
+    beginTopicEditorChange();
     renderAdminTopicList();
     fillAdminTopic({
         status: 'active',
@@ -2343,6 +2391,8 @@ function newAdminTopic() {
         run_config: { provider_models: (globalModelsData.watch_models || {}).free || {} },
         seo: {}
     }, []);
+    loadedTopicId = '';
+    syncTopicSaveButton();
     topicSlugTouched = false;
 }
 
@@ -2384,27 +2434,38 @@ function adminTopicPayload() {
 }
 
 async function saveAdminTopic() {
+    // The snapshot is bound to the Topic the form really holds, never to the
+    // list highlight: while a switch is loading or after it failed, there is
+    // nothing savable.
+    const formTopicId = loadedTopicId;
+    if (formTopicId === null || formTopicId !== selectedTopicId) {
+        topicAdminStatus('Wait until the selected Topic has loaded before saving.', true);
+        return;
+    }
+    const generation = topicEditorGeneration;
+    const payload = adminTopicPayload();
     const button = document.getElementById('saveAdminTopicBtn');
     button.disabled = true;
     topicAdminStatus('Saving Topic...', false);
     try {
         const data = await shareAdminRequest(
-            selectedTopicId ? 'PUT' : 'POST',
-            selectedTopicId ? `/api/admin/topics/${encodeURIComponent(selectedTopicId)}` : '/api/admin/topics',
-            adminTopicPayload()
+            formTopicId ? 'PUT' : 'POST',
+            formTopicId ? `/api/admin/topics/${encodeURIComponent(formTopicId)}` : '/api/admin/topics',
+            payload
         );
+        if (generation !== topicEditorGeneration) return;
         selectedTopicId = data.topic.id;
         await loadAdminTopics(selectedTopicId);
-        topicAdminStatus('Topic configuration saved.', false);
+        if (loadedTopicId === data.topic.id) topicAdminStatus('Topic configuration saved.', false);
     } catch (err) {
-        topicAdminStatus(err.message, true);
+        if (generation === topicEditorGeneration) topicAdminStatus(err.message, true);
     } finally {
-        button.disabled = false;
+        syncTopicSaveButton();
     }
 }
 
 async function runAdminTopic() {
-    if (!selectedTopicId) return;
+    if (!selectedTopicId || loadedTopicId !== selectedTopicId) return;
     if (!confirm('Run this Topic now? The selected models will research current sources and create a new immutable timeline point.')) return;
     const button = document.getElementById('runAdminTopicBtn');
     button.disabled = true;
@@ -3538,6 +3599,8 @@ document.getElementById('collectSeoBtn').addEventListener('click', async functio
 onAuthStateChanged(auth, async (user) => {
     promptConfigPanel.setUser(user?.uid || null);
     agentBudgetPanel.setUser(user?.uid || null);
+    // Any account change invalidates open Topic editor requests and the form.
+    resetAdminTopicEditor();
     if (user) {
         const idToken = await user.getIdToken();
         fetchModels(idToken);
