@@ -62,6 +62,17 @@
     }
 
     box.dataset.responseState = status === "streaming" ? "pending" : status;
+    if (status === "incomplete" && markdown) {
+      // R06: keep the partial text visible, clearly labelled as incomplete.
+      box.dataset.consensusAnswer = markdown;
+      window.injectMarkdown?.(output, markdown, context.evidenceSources);
+      const note = document.createElement("p");
+      note.className = "source-check-refresh-notice response-incomplete-notice";
+      note.setAttribute("role", "note");
+      note.textContent = result?.error || "This answer is incomplete.";
+      output.prepend(note);
+      return;
+    }
     if (status === "error" || status === "skipped" || status === "canceled") {
       box.dataset.responseError = "true";
       if (status === "skipped") box.dataset.responseSkipped = "true";
@@ -134,6 +145,15 @@
     if (text) {
       window.injectMarkdown?.(body, text, context.evidenceSources);
       if (state.status === "streaming") body.classList.add("is-streaming");
+      if (state.error?.incomplete) {
+        // R06: a stopped synthesis stays readable but is never presented as
+        // the finished consensus of this run.
+        const note = document.createElement("p");
+        note.className = "source-check-refresh-notice response-incomplete-notice";
+        note.setAttribute("role", "note");
+        note.textContent = String(state.error.message || "The consensus is incomplete.");
+        body.prepend(note);
+      }
     } else if (["pending", "streaming"].includes(state.status)) {
       body.innerHTML = window.consensusSpinnerHTML || window.spinnerHTML || "";
     } else if (state.error) {

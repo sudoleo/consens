@@ -597,7 +597,8 @@ def _sanitize_pending_model_responses(model_responses):
 
 def build_pending_result(uid, question, consensus_md, differences_data,
                          differences_text, model_sources, included_providers,
-                         model_labels, consensus_model, model_responses=None, source_verification=None):
+                         model_labels, consensus_model, model_responses=None, source_verification=None,
+                         answer_provenance=None):
     """Baut das pending_results-Dokument; None, wenn Pflichtfelder fehlen."""
     question = _clip(question, MAX_QUESTION_CHARS)
     consensus_md = str(consensus_md or "").strip()
@@ -623,6 +624,10 @@ def build_pending_result(uid, question, consensus_md, differences_data,
     sanitized_responses = _sanitize_pending_model_responses(model_responses)
     if sanitized_responses:
         payload["model_responses"] = sanitized_responses
+    if answer_provenance in {"developer", "byok"}:
+        # R09: "byok" answers came from the user's own key; such results
+        # are flagged and never count for model rankings or votes.
+        payload["answer_provenance"] = answer_provenance
     return payload
 
 
@@ -653,7 +658,7 @@ def save_pending_result(payload, db=None):
 def persist_pending_result(uid, question, consensus_md, differences_data,
                            differences_text, model_sources, included_providers,
                            model_labels, consensus_model, model_responses=None,
-                           db=None, source_verification=None):
+                           db=None, source_verification=None, answer_provenance=None):
     """Best-effort-Persistenz aus /consensus heraus: Fehler dürfen den
     Konsens-Stream nie beeinträchtigen, daher wird hier alles geschluckt."""
     try:
@@ -661,6 +666,7 @@ def persist_pending_result(uid, question, consensus_md, differences_data,
             uid, question, consensus_md, differences_data, differences_text,
             model_sources, included_providers, model_labels, consensus_model,
             model_responses, source_verification=source_verification,
+            answer_provenance=answer_provenance,
         )
         if payload is None:
             return None

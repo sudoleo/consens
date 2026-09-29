@@ -115,8 +115,8 @@ def test_failed_area_remains_pending_and_only_that_area_is_retried(monkeypatch):
         lambda uid: calls.__setitem__("source_checks", calls["source_checks"] + 1))
 
     def delete_query(collection, field, value):
-        key = "pending" if collection == "pending_results" else "watches"
-        calls[key] += 1
+        key = {"pending_results": "pending", "answer_receipts": "receipts"}.get(collection, "watches")
+        calls[key] = calls.get(key, 0) + 1
 
     monkeypatch.setattr(service, "_delete_query", delete_query)
     monkeypatch.setattr(
@@ -162,6 +162,8 @@ def test_failed_area_remains_pending_and_only_that_area_is_retried(monkeypatch):
     assert calls["subcollections"] == 1
     assert calls["chats"] == 1
     assert calls["watches"] == 1
+    # R09: stored /ask answers are owner data and go with the account.
+    assert calls["receipts"] == 1
     assert calls["watch_indexes"] == 1
     assert calls["guards"] == 1
     assert calls["follows"] == 1

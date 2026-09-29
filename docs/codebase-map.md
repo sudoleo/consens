@@ -2584,6 +2584,36 @@ Turn 3 und spätere Turns benutzen eine serverseitig autoritative Context-Versio
 
 ### Consensus & Differences
 
+**Ergebnisintegrität (2026-09-29, Review R06/R09):**
+`llm/completion.py` definiert den typisierten Abschlusszustand
+`complete | token_limit | interrupted | error | cancelled`. Nur
+`finish_reason=stop` bzw. das SSE-Ende `[DONE]` gilt als `complete`; ein EOF
+ohne Bestätigung ist `interrupted`, `length` ist `token_limit`.
+`/ask_*` liefert `completion` im finalen Payload; Teiltext bleibt sichtbar,
+wird im Frontend aber als `incomplete` markiert (`run-view.js`, Answer
+Reader), nicht per Bookmark als fertige Antwort gespeichert und nie an die
+Synthese gegeben. `stream_chat_completion_text` endet mit einem
+`completion`-Event; `stream_consensus` meldet eine abgeschnittene Synthese als
+`final` mit `error` + `completion`, ohne stillen Retry, und sendet vor einem
+Retry nach Fehler `consensus.reset` (Versuche mischen nie). `/consensus`
+liefert `consensus_completion`; eine unvollständige Synthese erzeugt weder
+Share-Result noch Chat-Completion (Turn → `failed`/`consensus_incomplete`).
+`provider_transport.fan_out_provider_answers` (API/Watch/Topics) verwirft
+unvollständige Antworten ebenso.
+**Antwortbelege (R09):** Jede erfolgreiche `/ask_*`-Antwort wird in
+`answer_receipts/{id}` gespeichert (`services/answer_receipts.py`: UID,
+Run-Bindung aus `usage_run_key` bzw. `run_id`, Frage-Hash, Familie, konkretes
+Modell, Text, SHA-256, Quellen, `completion`, `provenance`
+`developer|byok`, 24 h TTL, Retention-Sweep und Kontolöschung). Die Antwort
+enthält `answer_receipt`. `/consensus` akzeptiert Modellantworten nur als
+`answer_receipts: {familie: id}`; Freitext in `answers`/`answer_<familie>`
+wird mit 400 `answer_receipts_required` abgelehnt, fremde, abgelaufene,
+veränderte oder run-/frage-/familienfremde Belege mit 409. Text, Quellen und
+Modelllabel stammen aus dem Beleg. Enthält ein Ergebnis eine BYOK-Antwort,
+trägt `pending_results.answer_provenance="byok"`; solche (und ältere
+Ergebnisse ohne Provenienz) zählen weder für `differences_stats` noch für
+Votes/Leaderboard (`persistence_guard.record_model_vote` → `vote_not_eligible`).
+
 **SSE-Abschluss und Browserdiagnose (2026-09-12):** `markdown-stream.js`
 beendet den Reader mit dem autoritativen `final`-/`error`-Event; ein späterer
 Netzfehler beim Warten auf EOF darf ein fertiges Ergebnis nicht verwerfen.
@@ -4131,7 +4161,12 @@ CLI mit `firebase deploy --only firestore:rules,firestore:indexes`):
 - `app_config/seo_weekly_review` — `enabled`, `interval_days` (Default 7),
   lokale `run_time` + IANA-`timezone`, `last_run_at`, `next_run_at` sowie
   kurzlebiger `lease_run_id`/`lease_until`.
-- `pending_results` — kurzlebige Consensus-Ergebnisse fürs Sharing (TTL/Cleanup).
+- `pending_results` — kurzlebige Consensus-Ergebnisse fürs Sharing (TTL/Cleanup),
+  mit `answer_provenance` (`developer|byok`) für die Ranking-Berechtigung.
+- `answer_receipts/{receipt_id}` — serverseitige `/ask_*`-Antwortbelege
+  (Owner, Run-Bindung, Frage-Hash, Familie, konkretes Modell, Text, Digest,
+  Quellen, Abschlusszustand, Provenienz); 24 h `expires_at`, Retention-Sweep,
+  Kontolöschung. Einzige Quelle für Modellantworten in `/consensus`.
 - `source_check_jobs_dispatch_v1_local/{sha256}` bzw.
   `source_check_jobs_dispatch_v1_production/{sha256}` — UID-/Run-/Antwortversion-
   und Dispatch-Protokoll-/Umgebung-gebundener Jobheader; alte

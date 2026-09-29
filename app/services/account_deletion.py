@@ -97,6 +97,7 @@ class FirestoreAccountDeletion:
             ("waitlist_feedback", lambda: self._delete_uid_queries(uid)),
             ("owned_shares", lambda: self._delete_owned_shares(uid)),
             ("pending_results", lambda: self._delete_query("pending_results", "owner_uid", uid)),
+            ("answer_receipts", lambda: self._delete_query("answer_receipts", "owner_uid", uid)),
             ("source_check_jobs", lambda: self._delete_source_checks(uid)),
             ("orphan_watches", lambda: self._delete_orphan_watches(uid)),
             ("watch_indexes", lambda: self._delete_watch_indexes(uid)),

@@ -55,6 +55,8 @@ MAX_MODEL_ANSWERS = cfg.MAX_RUN_FAMILIES
 FAILED_TURN_ERROR_CODES = frozenset({
     "agent_failed",
     "consensus_failed",
+    # The synthesis stopped at the output limit or was interrupted (R06).
+    "consensus_incomplete",
     "cancelled",
     "insufficient_answers",
     "persistence_interrupted",

@@ -777,6 +777,16 @@
     return result?.status === "complete" ? String(result.text || "").trim() : "";
   }
 
+  // Server receipts of the completed answers (R09). The server resolves the
+  // exact stored text, sources and model; the browser copy is never sent.
+  function runReceipts(context) {
+    return Object.fromEntries(familyKeys()
+      .map(provider => [provider, context.modelResults?.[provider]])
+      .filter(([, result]) => result?.status === "complete" && result.receipt
+        && String(result.text || "").trim())
+      .map(([provider, result]) => [provider, result.receipt]));
+  }
+
   function runSources(context, provider) {
     const sources = context.modelResults?.[provider]?.sources;
     return Array.isArray(sources) ? sources.map(source => ({ ...source })) : [];
@@ -893,10 +903,6 @@
         provider.provider,
         provider.modelLabel || provider.modelId || provider.provider
       ]));
-      const modelSources = Object.fromEntries((context.config.providers || []).map(provider => [
-        provider.provider,
-        runSources(context, provider.provider)
-      ]));
       const payload = {
         id_token: idToken,
         useOwnKeys: context.config.useOwnKeys,
@@ -904,10 +910,8 @@
         deep_search: context.config.deepSearch,
         check_sources: context.config.checkSources !== false,
         question: context.question,
-        answers: Object.fromEntries(
-          familyKeys().map(provider => [provider, runAnswer(context, provider)])
-        ),
-        model_sources: modelSources,
+        run_id: context.runId,
+        answer_receipts: runReceipts(context),
         model_labels: modelLabels,
         consensus_model: context.config.consensusModel,
         bookmarkId: context.bookmark.id,
@@ -945,6 +949,12 @@
           if (registry.isVisible(context.runId)) registry.renderVisible();
         } },
         "consensus.delta": contextConsensusRenderer(context, "consensus"),
+        "consensus.reset": { receive() {
+          // A failed synthesis attempt is discarded before the retry streams.
+          if (!registry.isExecuting(context.runId)) return;
+          context.consensus.streamText = "";
+          if (registry.isVisible(context.runId)) registry.renderVisible();
+        } },
         "consensus.final": contextConsensusRenderer(context, "consensus-final"),
         "differences.delta": contextConsensusRenderer(context, "differences")
       }).catch(error => recoverConsensusResult(context, payload, controller.signal, error));
@@ -986,6 +996,12 @@
           : consensusErrorMessage(requestResult, data);
         context.consensus.status = "error";
         context.consensus.error = { message };
+        // Typed state of the synthesis (R06): partial text stays visible but
+        // is labelled as incomplete, never shown as a finished consensus.
+        if (["token_limit", "interrupted"].includes(data.consensus_completion)) {
+          context.consensus.completion = data.consensus_completion;
+          context.consensus.error = { message: String(data.error || message), incomplete: true };
+        }
         context.consensus.text = context.consensus.text || context.consensus.streamText;
         context.phase = "failed";
         context.bookmark.status = "failed";

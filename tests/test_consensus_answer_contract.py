@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 import app.core.config as cfg
 from app.api.routers import chat as chat_router
 from app.core.rate_limit import limiter
+import receipt_helpers
 
 UID = "user-answers"
 AUTH = {"Authorization": "Bearer token"}
@@ -46,7 +47,8 @@ def consensus_api(monkeypatch):
     app = FastAPI()
     app.state.limiter = limiter
     app.include_router(chat_router.router)
-    return TestClient(app), seen
+    receipts = receipt_helpers.install(monkeypatch, chat_router)
+    return receipt_helpers.ReceiptClient(TestClient(app), receipts, UID), seen
 
 
 def _payload(**updates):

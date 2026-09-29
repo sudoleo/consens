@@ -109,6 +109,8 @@ def test_retention_loop_runs_cleanup_before_first_sleep(monkeypatch):
         "cleanup_revoked_shares",
         lambda: calls.append("shares") or 3,
     )
+    from app.services import answer_receipts
+    monkeypatch.setattr(answer_receipts, "cleanup_expired", lambda: calls.append("receipts") or 5)
 
     from app.services import source_check_jobs
     from types import SimpleNamespace
@@ -127,10 +129,11 @@ def test_retention_loop_runs_cleanup_before_first_sleep(monkeypatch):
             pass
 
     asyncio.run(exercise())
-    assert calls == ["pending", "shares", "sources"]
+    assert calls == ["pending", "receipts", "shares", "sources"]
     health = background_tasks.task_health_snapshot()["retention-maintenance"]
     assert health["details"] == {
         "expired_pending_deleted": 2,
+        "expired_answer_receipts_deleted": 5,
         "revoked_shares_deleted": 3,
         "source_checks_deleted": 4,
         "files_deleted": 0,

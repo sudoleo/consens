@@ -35,6 +35,8 @@
     }
   ],
   "fieldOverrides": [
+    { "collectionGroup": "answer_receipts", "fieldPath": "text", "indexes": [] },
+    { "collectionGroup": "answer_receipts", "fieldPath": "sources", "indexes": [] },
     { "collectionGroup": "google_evidence", "fieldPath": "headers", "indexes": [] },
     { "collectionGroup": "google_evidence", "fieldPath": "expires_at", "indexes": [{ "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }] },
     { "collectionGroup": "google_write_intents", "fieldPath": "expires_at", "indexes": [{ "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }] },

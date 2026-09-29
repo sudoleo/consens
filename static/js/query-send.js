@@ -204,6 +204,12 @@
     return result;
   }
 
+  function incompleteMessage(completion) {
+    return completion === "token_limit"
+      ? "This answer stopped at the output limit and is incomplete. It is not used for the consensus."
+      : "This answer was interrupted and is incomplete. It is not used for the consensus.";
+  }
+
   function contextStreamRenderer(context, provider) {
     const RENDER_INTERVAL = 120;
     let timer = null;
@@ -280,7 +286,10 @@
       model: providerConfig.modelId,
       id_token: idToken,
       useOwnKeys: context.config.useOwnKeys,
-      usage_run_key: context.usage.key
+      usage_run_key: context.usage.key,
+      // Binds the server-stored answer (receipt) to this logical run, also
+      // for own-key runs that have no usage key.
+      run_id: context.runId
     });
     if (context.attachments.length) payload.attachments = context.attachments;
     if (context.config.useOwnKeys) payload.openrouter_key = context.credentials.openrouterKey || "";
@@ -302,21 +311,30 @@
         ? window.App.prepareResponseSourcesForEvidence(data.response, data.sources || [], context.evidenceSources)
         : { markdown: data.response, sources: data.sources || [], evidenceSources: context.evidenceSources };
       context.evidenceSources = prepared.evidenceSources;
-      result.status = "complete";
+      // Typed completion state (R06). Partial text stays visible, but it is
+      // labelled and never counts as a completed answer for the Consensus.
+      const completion = typeof data.completion === "string" ? data.completion : "complete";
+      result.status = completion === "complete" ? "complete" : "incomplete";
+      result.completion = completion;
       result.text = prepared.markdown;
       result.streamText = prepared.markdown;
       result.sources = prepared.sources;
       result.rawSources = Array.isArray(data.sources) ? data.sources : [];
-      result.error = null;
+      // Server receipt of exactly this answer (R09): /consensus reads the
+      // stored text, never the browser copy.
+      result.receipt = typeof data.answer_receipt === "string" ? data.answer_receipt : null;
+      result.error = completion === "complete" ? null : incompleteMessage(completion);
       context.progress.completedModels += 1;
-      context.progress.successfulModels += 1;
+      if (completion === "complete") context.progress.successfulModels += 1;
+      else context.progress.failedModels += 1;
       registry.update(context.runId, () => {});
 
       // Agent-mode provider answers are staged in the run context. Only the
       // completed consensus endpoint promotes its server-authoritative answer
       // set to the bookmark atomically. Writing each follow-up provider here
       // would temporarily mix a new failed turn with the previous consensus.
-      if (authIsCurrent(context) && context.config.agentMode !== true) {
+      // An incomplete answer is never stored as if it were a finished one (R06).
+      if (authIsCurrent(context) && context.config.agentMode !== true && completion === "complete") {
         const promise = window.saveBookmark?.(
           context.question,
           result.text,
