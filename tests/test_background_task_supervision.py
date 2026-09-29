@@ -134,6 +134,7 @@ def test_retention_loop_runs_cleanup_before_first_sleep(monkeypatch):
         "revoked_shares_deleted": 3,
         "source_checks_deleted": 4,
         "files_deleted": 0,
+        "documents_deleted": 0,
     }
 
 

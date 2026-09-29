@@ -1303,6 +1303,12 @@ class ChatStore:
             turn_ref.delete()
         for version_ref in _child_documents(chat_ref.collection("context_versions")):
             version_ref.delete()
+        # Agent document versions hold full user content; their files are
+        # already removed by AgentFiles.cleanup_chat before this cascade.
+        for document_ref in _child_documents(chat_ref.collection("documents")):
+            for version_ref in _child_documents(document_ref.collection("versions")):
+                version_ref.delete()
+            document_ref.delete()
         chat_ref.delete()
 
     def purge_abandoned_turns(self, uid: str, chat_id: str, *, now=None) -> list[str]:

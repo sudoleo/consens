@@ -619,6 +619,11 @@
           if (!registry.isExecuting(context.runId) || !registry.isAuthCurrent(context)) return;
           App.agentDelegation?.receiveProgress(context, event);
         } },
+        resources: { receive() {
+          if (registry.isExecuting(context.runId) && registry.isAuthCurrent(context)) {
+            App.agentWorkspace?.refresh(context.metadata.chatId, true);
+          }
+        } },
         review: { receive(event) {
           if (!registry.isExecuting(context.runId) || !registry.isAuthCurrent(context)) return;
           context.metadata.agentReview = event.review;

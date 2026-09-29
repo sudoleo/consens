@@ -9,6 +9,16 @@ function boot() {
   }});
 }
 describe('private Agent workspace', () => {
+  it('shows saved document versions outside the collapsed upload list', async()=>{
+    const {window,document,dom} = boot();
+    window.fetch = vi.fn(async()=>({ok:true,json:async()=>({files:[{id:'a'.repeat(32),name:'Decision-v2.pdf',kind:'document',document_id:'d'.repeat(32),version:2,parent_version:1,status:'ready'}]})}));
+    await window.App.agentWorkspace.refresh('b'.repeat(32));
+    const card = document.querySelector('.agent-document-results .agent-file-card');
+    expect(card.textContent).toContain('based on version 1');
+    expect(card.closest('details')).toBeNull();
+    expect(card.querySelector('button').textContent).toBe('Download');
+    dom.window.close();
+  });
   it('restores safe file cards and warnings and removes only the selected file', async()=>{
     const {window,document,dom} = boot();
     await window.App.agentWorkspace.refresh('b'.repeat(32));

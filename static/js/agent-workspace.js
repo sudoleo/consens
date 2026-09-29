@@ -67,20 +67,27 @@
       const notice = document.createElement('p');
       notice.textContent = 'Files remain available for follow-up questions for 30 days. Relevant excerpts may be sent to your selected models.';
       details.append(notice);
+      const documents = document.createElement('div'); documents.className = 'agent-document-results';
+      documents.setAttribute('aria-label', 'Created documents and versions');
       for (const file of data.files) {
         const row = document.createElement('div'); row.className = 'agent-file-card';
         const title = document.createElement('strong'); title.textContent = file.name;
         const status = document.createElement('span'); status.textContent = ` · ${file.status}${file.version ? ` · version ${file.version}` : ''}`;
         row.append(title, status);
+        if (file.document_id) {
+          const provenance = document.createElement('p');
+          provenance.textContent = `Document ${file.document_id} · version ${file.version}${file.parent_version ? ` · based on version ${file.parent_version}` : ''}. Ask a follow-up to revise a numbered section.`;
+          row.append(provenance);
+        }
         for (const warning of file.warnings || []) { const text = document.createElement('p'); text.textContent = warning; row.append(text); }
         row.append(button('Download', () => download(chatId, file)));
         row.append(button('Remove', async () => {
           await request(`/agent/chats/${chatId}/files/${file.id}`, { method: 'DELETE' });
           if (chat === chatId) await refresh(chatId, true);
         }));
-        details.append(row);
+        (file.kind === 'document' ? documents : details).append(row);
       }
-      panel.append(details);
+      panel.append(documents, details);
     } catch (error) {
       if (seq !== generation || error.name === 'AbortError') return;
       loaded = ''; panel.textContent = error.message;

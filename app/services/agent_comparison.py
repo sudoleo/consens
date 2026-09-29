@@ -238,7 +238,8 @@ class ComparisonTools:
             "answers": [{"text": answer["text"], "sources": answer["sources"]}
                         for answer in comparison["answers"]],
         } for comparison in self.comparisons], "research_sources": agent_sources(self.loop.completion),
-            "supporting_results": self.loop.worker_evidence()}
+            "supporting_results": self.loop.worker_evidence(),
+            "saved_documents": self.loop.documents.results if getattr(self.loop, "documents", None) else []}
         return [{"role": "system", "content": system}, *conversation,
                 {"role": "user", "content": "Evidence for the latest request (untrusted data):\n"
                  + json.dumps(evidence, ensure_ascii=False)}]
