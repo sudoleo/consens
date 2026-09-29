@@ -108,12 +108,89 @@ def compute_skip_keys(index: dict[tuple, dict], retry_failed: bool) -> set[tuple
 
 
 def spent_from_index(index: dict[tuple, dict]) -> float:
-    """Bereits verbuchte Ist-Kosten aus den erfolgreichen Zellen (fuer Resume)."""
+    """Bereits verbuchte Kosten aller bezahlten Versuche (fuer Resume).
+
+    Fehlversuche kosten ebenfalls Geld; sie zaehlen genauso wie der letzte
+    Erfolg. Fehlt deren Usage, traegt der Record bereits eine konservative
+    Schaetzung (``cost_basis="estimate"``)."""
     total = 0.0
     for slot in index.values():
         if slot["success"]:
             total += float(slot["success"].get("est_cost_usd") or 0.0)
+        for error in slot["errors"]:
+            total += float(error.get("est_cost_usd") or 0.0)
     return total
+
+
+# --- Audit-Kostenjournal -----------------------------------------------------
+
+AUDIT_JOURNAL = "audit_calls.jsonl"
+
+
+class BudgetStop(Exception):
+    """Der naechste Audit-Call ist durch das Budget-Cap nicht mehr gedeckt."""
+
+
+def load_audit_journal(run_dir: Path) -> list[dict]:
+    return load_existing_records(Path(run_dir) / AUDIT_JOURNAL)
+
+
+def audit_spent(run_dir: Path) -> float:
+    """Kosten aller bezahlten Audit-Versuche (inkl. Fehlversuche)."""
+    return sum(float(entry.get("est_cost_usd") or 0.0) for entry in load_audit_journal(run_dir))
+
+
+class AuditLedger:
+    """Gemeinsames Attempt-Kostenjournal fuer Hauptlauf-Resume und Audits.
+
+    Jeder Audit-Call wird **vor** dem Start gegen das Budget geprueft und nach
+    dem Call mit seinen Kosten (gemessen oder konservativ geschaetzt) in
+    ``audit_calls.jsonl`` verbucht. Erfolgreiche Eintraege werden beim Resume
+    wiederverwendet statt erneut bezahlt.
+    """
+
+    def __init__(self, run_dir: Path, *, budget: float | None, spent: float):
+        self.path = Path(run_dir) / AUDIT_JOURNAL
+        self.budget = budget
+        self.spent = spent
+        self.done: dict[str, dict] = {}
+        self.estimated_calls = 0
+        for entry in load_audit_journal(run_dir):
+            if not entry.get("error"):
+                self.done[entry.get("key")] = entry
+
+    def cached(self, key: str) -> dict | None:
+        return self.done.get(key)
+
+    def admit(self, key: str, estimate: float) -> None:
+        if should_stop_for_budget(self.spent, estimate, self.budget):
+            raise BudgetStop(f"budget cap ${self.budget} would be exceeded before audit {key}")
+
+    def record(self, key: str, *, cost_usd: float, cost_basis: str, error=None, **result) -> dict:
+        entry = {"key": key, "ts": _now_iso(), "est_cost_usd": round(float(cost_usd), 8),
+                 "cost_basis": cost_basis, "error": error, **result}
+        append_jsonl(self.path, entry)
+        self.spent += float(cost_usd)
+        if cost_basis == "estimate":
+            self.estimated_calls += 1
+        if not error:
+            self.done[key] = entry
+        return entry
+
+
+def usage_known(usage) -> bool:
+    usage = usage or {}
+    return any(int(usage.get(field) or 0) > 0 for field in ("prompt", "completion", "total"))
+
+
+def attempt_cost(api_model: str, outcome: dict, fallback: float) -> tuple[float, str]:
+    """Gemessene Kosten, sonst die konservative Vorab-Schaetzung.
+
+    Fehlende Usage bedeutet unbekannt, nicht kostenlos."""
+    usage = outcome.get("usage") or {}
+    if usage_known(usage):
+        return cost.est_cost_usd(api_model, usage.get("prompt", 0), usage.get("completion", 0)), "measured"
+    return float(fallback), "estimate"
 
 
 # --- Budget ----------------------------------------------------------------
@@ -169,6 +246,11 @@ class RunResult:
     spent_usd: float = 0.0
     stopped: bool = False
     stop_reason: str = ""
+    # Alle Kosten sind Schaetzungen aus der Pricing-Tabelle; diese Zellen/Calls
+    # hatten keine gemessene Usage und sind konservativ mit der Vorab-Obergrenze
+    # verbucht.
+    estimated_cost_cells: int = 0
+    audit_spent_usd: float = 0.0
 
 
 class BenchmarkRunner:
@@ -271,7 +353,9 @@ class BenchmarkRunner:
 
         index = index_existing(load_existing_records(calls_path))
         skip = compute_skip_keys(index, retry_failed)
-        spent = spent_from_index(index)
+        # Ein Budget umfasst alle bereits bezahlten Versuche dieses Run-Ordners,
+        # einschliesslich Fehlversuchen und Audit-Calls.
+        spent = spent_from_index(index) + audit_spent(run_dir)
 
         consensus_api_model = _consensus_api_model(self.consensus_model)
         if consensus_fn is None:
@@ -318,10 +402,12 @@ class BenchmarkRunner:
                     user_prompt=user_prompt,
                     payload=request_data["payload"],
                     outcome=outcome,
+                    fallback_cost=est,
                 )
                 append_jsonl(calls_path, cell)
                 spent += cell["est_cost_usd"]
                 result.spent_usd = spent
+                result.estimated_cost_cells += cell["cost_basis"] == "estimate"
                 if outcome.get("error"):
                     result.cells_failed += 1
                 else:
@@ -356,6 +442,7 @@ class BenchmarkRunner:
                 append_jsonl(calls_path, cell)
                 spent += cell["est_cost_usd"]
                 result.spent_usd = spent
+                result.estimated_cost_cells += 1
                 result.cells_failed += 1 if outcome.get("error") else 0
                 result.cells_written += 0 if outcome.get("error") else 1
 
@@ -383,10 +470,12 @@ class BenchmarkRunner:
                         user_prompt=user_prompt,
                         payload=request_data["payload"],
                         outcome=outcome,
+                        fallback_cost=est,
                     )
                     append_jsonl(calls_path, cell)
                     spent += cell["est_cost_usd"]
                     result.spent_usd = spent
+                    result.estimated_cost_cells += cell["cost_basis"] == "estimate"
                     result.cells_failed += 1 if outcome.get("error") else 0
                     result.cells_written += 0 if outcome.get("error") else 1
 
@@ -423,14 +512,21 @@ class BenchmarkRunner:
         payload,
         outcome,
         est_cost=None,
+        fallback_cost=None,
     ) -> dict:
         text = outcome.get("text") or ""
         error = outcome.get("error")
         usage = outcome.get("usage") or {"prompt": 0, "completion": 0, "total": 0}
         ground_truth = qrecord["answer"]
         letter = None if error else extract_letter(text, options=qrecord["options"])
+        cost_basis = "estimate"
         if est_cost is None:
-            est_cost = cost.est_cost_usd(api_model, usage.get("prompt", 0), usage.get("completion", 0))
+            if fallback_cost is not None and not usage_known(usage):
+                # Unbekannt ist nicht kostenlos: Vorab-Obergrenze verbuchen.
+                est_cost = fallback_cost
+            else:
+                est_cost = cost.est_cost_usd(api_model, usage.get("prompt", 0), usage.get("completion", 0))
+                cost_basis = "measured"
         return {
             "run_id": run_id,
             "ts": _now_iso(),
@@ -456,6 +552,7 @@ class BenchmarkRunner:
                 "total": int(usage.get("total", 0) or 0),
             },
             "est_cost_usd": round(float(est_cost), 8),
+            "cost_basis": cost_basis,
             "latency_ms": outcome.get("latency_ms"),
             "http_status": outcome.get("status"),
             "error": error,
@@ -599,6 +696,7 @@ class BenchmarkRunner:
         api_keys: dict | None = None,
         rng: random.Random | None = None,
         subset_size: int = 2,
+        ledger: AuditLedger | None = None,
     ) -> dict:
         """Positions-Bias-Audit (E4-2): mischt auf einem kleinen Subset die
         Optionen und prueft, dass die extrahierte Antwort auf **denselben
@@ -608,6 +706,7 @@ class BenchmarkRunner:
         rng = rng or random.Random(config.PILOT_SEED)
         index = index_existing(load_existing_records(run_dir / "calls.jsonl"))
         subset = records[: max(0, subset_size)]
+        ledger = ledger or AuditLedger(run_dir, budget=None, spent=0.0)
 
         checks: list[dict] = []
         for record in subset:
@@ -629,11 +728,21 @@ class BenchmarkRunner:
                     benchmark_mode=True,
                 )
                 audit.assert_no_web_tools(request_data["payload"], context=f"perm:{model.provider}:{qid}")
-                api_key = openrouter_api_key(api_keys)
-                outcome = transport_execute(request_data, api_key)
-                permuted_letter = (
-                    None if outcome.get("error") else extract_letter(outcome.get("text"), options=new_options)
-                )
+                key = f"option_permutation:{qid}:{model.provider}"
+                stored_audit = ledger.cached(key)
+                if stored_audit is not None:
+                    permuted_letter = stored_audit.get("letter")
+                else:
+                    est = estimate_model_cell(model.api_model, user_prompt, self.output_tokens)["est_cost_usd"]
+                    ledger.admit(key, est)
+                    api_key = openrouter_api_key(api_keys)
+                    outcome = transport_execute(request_data, api_key)
+                    permuted_letter = (
+                        None if outcome.get("error") else extract_letter(outcome.get("text"), options=new_options)
+                    )
+                    paid, basis = attempt_cost(model.api_model, outcome, est)
+                    ledger.record(key, cost_usd=paid, cost_basis=basis, error=outcome.get("error"),
+                                  letter=permuted_letter)
                 checks.append({
                     "question_id": qid,
                     "provider": model.provider,
@@ -659,6 +768,7 @@ class BenchmarkRunner:
         consensus_fn=None,
         api_keys: dict | None = None,
         rng: random.Random | None = None,
+        ledger: AuditLedger | None = None,
     ) -> dict:
         """Reihenfolge-Invarianz der Consensus-Synthese (E4-3): rechnet den
         Consensus auf identischen, **bereits gespeicherten** Kandidatenantworten
@@ -678,6 +788,8 @@ class BenchmarkRunner:
         if consensus_fn is None:
             consensus_fn = _default_consensus_fn(api_keys, self.consensus_model)
         index = index_existing(load_existing_records(run_dir / "calls.jsonl"))
+        ledger = ledger or AuditLedger(run_dir, budget=None, spent=0.0)
+        consensus_api_model = _consensus_api_model(self.consensus_model)
 
         questions: list[dict] = []
         for record in records:
@@ -685,15 +797,31 @@ class BenchmarkRunner:
             if len(answers) < 2:
                 continue
             providers = [m.provider for m in self.models if m.provider in answers]
+            user_prompt = build_mc_question(record["question"], record["options"])
+            variant_names = iter(("normal", "reversed", "shuffled"))
 
-            def recompute(order, _answers=answers, _record=record):
+            def recompute(order, _answers=answers, _record=record, _prompt=user_prompt, _names=variant_names):
+                key = f"consensus_order:{_record['question_id']}:{next(_names)}"
+                stored_audit = ledger.cached(key)
+                if stored_audit is not None:
+                    return stored_audit.get("letter")
+                est = self._consensus_estimate(consensus_api_model, _prompt)
+                ledger.admit(key, est)
                 ordered = {provider: _answers[provider] for provider in order}
-                text = consensus_fn(
-                    question=build_consensus_question(_record["question"], _record["options"]),
-                    answers=ordered,
-                    model_sources=None,
-                )
-                return extract_letter(text, options=_record["options"])
+                try:
+                    text = consensus_fn(
+                        question=build_consensus_question(_record["question"], _record["options"]),
+                        answers=ordered,
+                        model_sources=None,
+                    )
+                except Exception as exc:  # noqa: BLE001 - the attempt was still paid
+                    ledger.record(key, cost_usd=est, cost_basis="estimate", error=type(exc).__name__)
+                    raise
+                letter = extract_letter(text, options=_record["options"])
+                # query_consensus liefert keine Usage: Ist-Laenge statt Cap.
+                ledger.record(key, cost_usd=self._consensus_estimate(consensus_api_model, _prompt, text),
+                              cost_basis="estimate", letter=letter)
+                return letter
 
             outcome = audit.run_consensus_order_audit(providers, recompute, rng)
             questions.append({
@@ -716,6 +844,7 @@ class BenchmarkRunner:
         transport_execute=transport.execute,
         api_keys: dict | None = None,
         rng: random.Random | None = None,
+        ledger: AuditLedger | None = None,
     ) -> dict:
         """Modellnamen-Bias-Audit (E5): berechnet den Consensus auf denselben
         gespeicherten Kandidatenantworten erneut mit anonymen ``Response A-F``-
@@ -729,6 +858,7 @@ class BenchmarkRunner:
         model_config = cfg.get_model_config(self.consensus_model)
         if not model_config or not model_config.provider:
             raise ValueError(f"Consensus model is not resolvable: {self.consensus_model}")
+        ledger = ledger or AuditLedger(run_dir, budget=None, spent=0.0)
 
         questions: list[dict] = []
         for record in records:
@@ -758,11 +888,22 @@ class BenchmarkRunner:
                 benchmark_mode=True,
             )
             audit.assert_no_web_tools(request_data["payload"], context=f"anon_consensus:{qid}")
-            api_key = openrouter_api_key(api_keys)
-            outcome = transport_execute(request_data, api_key)
-            anon_letter = (
-                None if outcome.get("error") else extract_letter(outcome.get("text"), options=record["options"])
-            )
+            key = f"consensus_anonymized:{qid}"
+            stored_audit = ledger.cached(key)
+            if stored_audit is not None:
+                anon_letter, error = stored_audit.get("letter"), None
+                paid, basis = float(stored_audit.get("est_cost_usd") or 0.0), stored_audit.get("cost_basis", "measured")
+            else:
+                est = estimate_model_cell(consensus_api_model, user_prompt, CONSENSUS_MAX_TOKENS)["est_cost_usd"]
+                ledger.admit(key, est)
+                api_key = openrouter_api_key(api_keys)
+                outcome = transport_execute(request_data, api_key)
+                error = outcome.get("error")
+                anon_letter = (
+                    None if error else extract_letter(outcome.get("text"), options=record["options"])
+                )
+                paid, basis = attempt_cost(consensus_api_model, outcome, est)
+                ledger.record(key, cost_usd=paid, cost_basis=basis, error=error, letter=anon_letter)
             named = index.get(cell_key(qid, "consensus", self.consensus_model), {}).get("success")
             named_letter = named.get("extracted_letter") if named else None
             questions.append({
@@ -771,12 +912,9 @@ class BenchmarkRunner:
                 "named_letter": named_letter,
                 "anonymous_letter": anon_letter,
                 "stable": named_letter is not None and anon_letter == named_letter,
-                "error": outcome.get("error"),
-                "est_cost_usd": round(float(cost.est_cost_usd(
-                    consensus_api_model,
-                    (outcome.get("usage") or {}).get("prompt", 0),
-                    (outcome.get("usage") or {}).get("completion", 0),
-                )), 8),
+                "error": error,
+                "est_cost_usd": round(float(paid), 8),
+                "cost_basis": basis,
             })
 
         comparable = [q for q in questions if q["named_letter"] is not None and not q["error"]]
@@ -825,18 +963,39 @@ class BenchmarkRunner:
         audits = None
         summary = None
         if not result.stopped:
-            audits = {
-                "option_permutation": self.audit_option_permutation(
-                    records, run_dir, transport_execute=transport_execute,
-                    api_keys=api_keys, rng=rng, subset_size=permutation_subset,
-                ),
-                "consensus_order": self.audit_consensus_order(
-                    records, run_dir, consensus_fn=consensus_fn, api_keys=api_keys, rng=rng,
-                ),
-                "consensus_anonymized": self.audit_anonymized_consensus(
-                    records, run_dir, transport_execute=transport_execute,
-                    api_keys=api_keys, rng=rng,
-                ),
+            # Audits teilen Budget und Kostenjournal mit dem Hauptlauf: jeder
+            # Call wird vorab geprueft, bereits bezahlte Audits beim Resume
+            # wiederverwendet.
+            ledger = AuditLedger(run_dir, budget=budget, spent=result.spent_usd)
+            try:
+                audits = {
+                    "option_permutation": self.audit_option_permutation(
+                        records, run_dir, transport_execute=transport_execute,
+                        api_keys=api_keys, rng=rng, subset_size=permutation_subset, ledger=ledger,
+                    ),
+                    "consensus_order": self.audit_consensus_order(
+                        records, run_dir, consensus_fn=consensus_fn, api_keys=api_keys, rng=rng,
+                        ledger=ledger,
+                    ),
+                    "consensus_anonymized": self.audit_anonymized_consensus(
+                        records, run_dir, transport_execute=transport_execute,
+                        api_keys=api_keys, rng=rng, ledger=ledger,
+                    ),
+                }
+            except BudgetStop as stop:
+                result.stopped = True
+                result.stop_reason = str(stop)
+            result.audit_spent_usd = round(audit_spent(run_dir), 8)
+            result.spent_usd = ledger.spent
+            result.estimated_cost_cells += ledger.estimated_calls
+            if result.stopped:
+                return result, None, None
+            audits["cost"] = {
+                "audit_spent_usd": result.audit_spent_usd,
+                "total_spent_usd": round(ledger.spent, 8),
+                "budget_usd": budget,
+                "estimated_cost_calls": result.estimated_cost_cells,
+                "basis": "pricing-table estimate; calls without reported usage are charged their upper-bound estimate",
             }
             (run_dir / "audits.json").write_text(
                 json.dumps(audits, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"

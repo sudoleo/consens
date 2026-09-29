@@ -11,6 +11,12 @@ Firestore-Datenmodell (unter ``users/{uid}``):
   ``deep_think_consumed`` fuer den UTC-Tag der Reservierung.
 * ``usage_runs/{sha256(idempotency_key)}`` enthaelt Run-Typ, UTC-Tag, Ablauf,
   kanonischen Request-Fingerprint, Status und transaktionale Operations-Claims.
+  ``utc_date`` ist ausschliesslich der Abrechnungstag. ``expires_at`` ist die
+  davon getrennte Ausfuehrungs-/Retry-Gueltigkeit: mindestens bis zum Ende des
+  Abrechnungstags und immer mindestens ``MIN_EXECUTION_WINDOW`` nach der
+  Reservierung. Ein kurz vor Mitternacht belasteter Run darf seine bereits
+  autorisierten Schritte deshalb nach Mitternacht beenden, ohne erneut belastet
+  zu werden; neue Runs zaehlen fuer den neuen Tag.
   Der Klartext-Idempotency-Key wird nicht persistiert; die UID ist bereits Teil
   des Dokumentpfads, wodurch die Idempotenz aus UID + Key entsteht.
 
@@ -46,6 +52,16 @@ USAGE_SCHEMA_VERSION = 2
 MAX_IDEMPOTENCY_KEY_BYTES = 256
 MAX_OPERATION_NAME_BYTES = 80
 FINGERPRINT_HEX_LENGTH = 64
+# Execution validity of an already charged run, independent of its billing day.
+MIN_EXECUTION_WINDOW = timedelta(hours=2)
+
+
+def execution_expiry(now: datetime) -> datetime:
+    """Bounded execution/retry validity of a run reserved at ``now`` (UTC)."""
+    end_of_billing_day = datetime.combine(
+        now.date() + timedelta(days=1), time.min, tzinfo=timezone.utc
+    )
+    return max(end_of_billing_day, now + MIN_EXECUTION_WINDOW)
 
 
 class RunKind(str, Enum):
@@ -282,9 +298,7 @@ class FirestoreUsageRepository:
                 run_limits = _stored_limits(run_data)
             else:
                 utc_date = now.date().isoformat()
-                expires_at = datetime.combine(
-                    now.date() + timedelta(days=1), time.min, tzinfo=timezone.utc
-                )
+                expires_at = execution_expiry(now)
                 status = None
                 run_limits = limits
                 run_data = {
@@ -397,9 +411,7 @@ class FirestoreUsageRepository:
         )
         now = _as_utc(now)
         utc_date = now.date().isoformat()
-        expires_at = datetime.combine(
-            now.date() + timedelta(days=1), time.min, tzinfo=timezone.utc
-        )
+        expires_at = execution_expiry(now)
         run_ref = self._run_ref(uid, key_hash)
 
         def operation(tx):

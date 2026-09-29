@@ -224,18 +224,29 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                     totals[field] = totals.get(field, 0) + usage[field]
             totals["updated_at"] = firestore.SERVER_TIMESTAMP
             tx.update(user_ref, {"agent_usage": totals})
+            estimate = None
             if daily_ref:
                 tx.set(daily_ref, agent_quota.settle(daily, receipt_data["quota_reserved"], usage))
+                estimate = agent_quota.unknown_estimate(receipt_data["quota_reserved"], usage)
             leases = dict((active.to_dict() or {}).get("leases") or {})
             if final:
                 leases.pop(self.receipt_ref(uid, chat_id, turn_id).id, None)
                 tx.set(active_ref, {"leases": leases})
-            tx.update(receipt_ref, {
+            receipt_patch = {
                 "status": status, "usage": usage,
                 "usage_status": "unavailable" if usage is None else "measured" if usage.get("complete", True) else "partial",
                 "generation_id": completion.generation_id, "finish_reason": completion.finish_reason,
                 "settled_at": firestore.SERVER_TIMESTAMP,
-            })
+            }
+            if estimate is not None:
+                # Bounded uncertainty: the ledger now carries this estimate.
+                # Only a provider generation id makes later measurement possible.
+                receipt_patch.update(
+                    quota_estimate=estimate,
+                    quota_reconcile="pending" if completion.generation_id else "final",
+                    quota_reconcile_attempts=0,
+                )
+            tx.update(receipt_ref, receipt_patch)
             delegated = self._delegated_settlement(root_data, step, status, usage)
             if delegated:
                 tx.update(root_ref, delegated)

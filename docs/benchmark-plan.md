@@ -392,12 +392,20 @@ named/anonymous Letter, Stabilität und Kosten. Rolle `differences` entfällt (E
   geschätzte Input-Tokens (`len/4`), Output-Cap (aus `max_tokens`) × Pricing →
   projizierte Maximalkosten. Läuft `audit.assert_no_web_tools(payload)` über jeden
   Payload.
-- **Budget-Cap (`--budget USD`):** laufender Ist-Kosten-Zähler aus realer Usage;
-  vor jeder Zelle: wenn `ist + nächste_schätzung > cap` → sauberer, resumebarer
-  Stopp.
+- **Budget-Cap (`--budget USD`):** laufender Kosten-Zähler (Pricing-Tabelle,
+  also eine Schätzung) über **alle** bezahlten Versuche: Hauptlauf-Zellen,
+  Fehlversuche und E4-Audits. Vor jeder Zelle **und jedem Audit-Call**: wenn
+  `ist + nächste_schätzung > cap` → sauberer, resumebarer Stopp. Fehlt die Usage
+  eines Calls, wird seine Vorab-Obergrenze verbucht (`cost_basis="estimate"`),
+  nie null.
 - **Resume (`--resume <run_id>`):** Zelle idempotent über Key
   `(question_id, role, provider)`. Beim Start `calls.jsonl` lesen, erfolgreiche
   Zellen überspringen, fehlerhafte optional erneut versuchen. Append-only.
+  Bereits verbuchte Kosten = alle Versuche aus `calls.jsonl` plus
+  `audit_calls.jsonl`. Audits schreiben jeden Call in `audit_calls.jsonl`
+  (Journal mit Key, Kosten, Buchstabe); erfolgreiche Audit-Calls werden beim
+  Resume wiederverwendet statt erneut bezahlt. `audits.json.cost` nennt
+  Audit-/Gesamtkosten und die Zahl geschätzter Calls.
 
 ---
 
@@ -611,10 +619,11 @@ recherchepflichtiges/prüfbares Reasoning mit Web-Tools AN.
 ### FALLE — E4-Audits skalieren nicht auf große Samples
 `run_pilot` läuft nach der Kandidaten-Schleife durch `audit_option_permutation`
 (12) + `audit_consensus_order` (n×3!) + `audit_anonymized_consensus` (n) — bei 98
-Fragen **~404 Calls, nicht budget-gegated und ohne Checkpoint** (`audits.json`
-erst nach allen dreien). Vor jedem künftigen Volllauf: Audits budget-gaten +
-checkpointen ODER `consensus_order`/`anonymized` auf ein Subset (z. B. die
-Uneinigkeitsfragen) begrenzen. `results.json` braucht **keine** Audits:
+Fragen **~404 Calls**. Seit dem R27-Fix sind sie budget-gegated und über
+`audit_calls.jsonl` je Call checkpointed (Resume bezahlt fertige Audit-Calls
+nicht erneut). Die Anzahl bleibt trotzdem hoch: für Volläufe ggf.
+`consensus_order`/`anonymized` auf ein Subset (z. B. die Uneinigkeitsfragen)
+begrenzen. `results.json` braucht **keine** Audits:
 `benchmark.results.write_results(run_dir, consensus_model=config.CONSENSUS_MODEL)`.
 
 ### Phase 6 — Disagreement-Charakterisierung (gebaut, NOCH NICHT gelaufen)

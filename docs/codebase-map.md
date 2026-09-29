@@ -2035,6 +2035,17 @@ AgentRunStore/AgentSessionStore verwenden users/{uid}/llm_calls mit dedupliziert
 completion:N- und agent:<uuid>:N-Belegen, Producer-Token, Lease,
 Budget-/Tarifsnapshot und Status. Ein beanspruchter
 Provider-Schritt wird auch nach einem Prozessabsturz nie erneut ausgeführt.
+Größenvertrag des Root-Belegs je Turn (R29): `step_states`, `step_usage` und
+`reservations` enthalten alle laufenden Schritte, aber höchstens
+`ROOT_SETTLED_STEP_WINDOW` (32) abgeschlossene. Ältere abgeschlossene Schritte
+faltet `compact_root` beim Claim/Settlement in `compacted_usage` (komponierbares
+`aggregate_usage`) und `compacted_steps`; ihr eigener unveränderlicher
+`llm_calls`-Beleg bleibt maßgeblich (Vorgängerprüfung, Replay-Schutz,
+Worker-Usage beim Reaping). Leser verwenden `root_usage(root)`. Mehr als
+`ROOT_MAX_RUNNING_STEPS` (64) gleichzeitig laufende Schritte oder ein serialisierter
+Root über `ROOT_MAX_BYTES` (256 kB) stoppen vor Reservierung und Claim mit
+`run_limit` und dem Hinweis, per Folgenachricht fortzusetzen; die bisherigen
+Ergebnisse bleiben gespeichert. Das gilt unabhängig vom Token-/Kontobudget.
 Kurze Agent-Transaktionen teilen innerhalb eines Prozesses einen kontogebundenen
 Lock-Pool, damit parallele Claims, Statusmeldungen und Abrechnungen nicht um
 dieselben Root-/Kontingentdokumente konkurrieren. Firestore bleibt die atomare
@@ -2318,8 +2329,21 @@ Katalogschätzungen; Kosten werden erfasst, begrenzen den Agent-Chat aber nicht 
 Jeder Claim reserviert transaktional im selben Commit wie sein Beleg unter
 users/{uid}/chat_state/agent_tokens_YYYY-MM-DD[_reset_epoch]. Settlement tauscht die Reserve
 gegen gemessene Tokens genau einmal aus. Jeder terminale Beleg gibt seine
-Reserve frei, auch wenn finale Tokenzahlen fehlen. Unbekannter Verbrauch wird
-nicht als Nullmessung oder geschätzter Verbrauch verbucht. `unknown` summiert
+Reserve frei, auch wenn finale Tokenzahlen fehlen. „Begrenzte Unsicherheit“
+(R07): Ein gestarteter Call ohne finale Usage wird weder ganz freigegeben noch
+ganz belastet, sondern mit einer Schätzung verbucht: gemessene provisorische
+Untergrenze, mindestens `UNKNOWN_ESTIMATE_FRACTION` (50 %) der Reserve. Sie
+steht im eigenen Ledger-Feld `estimated`, strikt getrennt von gemessenem
+`used`, und zählt gegen `remaining`; die API liefert `estimated` mit. Der Beleg
+erhält `quota_estimate` und `quota_reconcile=pending` (mit Provider-
+`generation_id`) bzw. `final` (ohne). `agent_usage_reconciliation.py` fragt
+OpenRouter `GET /generation?id=…` im Hintergrund ab (angestoßen vom Budgetabruf
+bei `estimated > 0`, je UID höchstens einmal pro Minute, in Unit/E2E/Mock aus)
+und ersetzt die Schätzung transaktional durch die gemessenen Tokens; der
+Belegstatus `pending → measured|final` ist der Exactly-once-Zaun. Nach sechs
+Versuchen oder 24 Stunden bleibt die Schätzung endgültig. Nachweislich nie
+gestartete Calls (`not_started`, `provider_rejection`) bleiben freie Nullmessungen.
+Eine ganztägige Sperre gibt es weiterhin nicht. `unknown` summiert
 die Reservierungsgrenzen solcher Belege, nicht deren tatsächlichen Verbrauch.
 `unknown_released` markiert die bereits freigegebenen Grenzen kumulativ.
 Budgetabruf und Ledger-Transaktionen lösen alte unbekannte Reserven anhand der
@@ -2343,8 +2367,8 @@ Bei sichtbarem Agent-Chat werden Budgets auch im Leerlauf alle 60 Sekunden sowie
 bei Fokus/Tab-Rückkehr aktualisiert. Fehlgeschlagene Aktualisierungen markieren
 den letzten bestätigten Stand; Auth-Wechsel verwerfen alte Requests/Ansichten.
 Tooltip und Budgetpanel unterscheiden unverbrauchte Tokens von momentan für
-neue Calls verfügbaren Tokens. Fehlende Usage abgeschlossener Calls wird als
-unbekannt angezeigt und blockiert das verbleibende Kontingent nicht.
+neue Calls verfügbaren Tokens. Geschätzte Tokens (`estimated`) zählen im Ring
+als verbraucht und werden im Panel als Schätzung bis zur Messung benannt.
 `scripts/repair_agent_allowance.py --email <Konto> --project-id <Projekt>` liest
 gezielt den aktuellen Ledger; erst `--apply` führt denselben Recovery-Pfad aus.
 Das Skript prüft das Projekt, verweigert Emulator-/Unit-Test-Kontexte und startet
@@ -3539,6 +3563,15 @@ wird nur chunkweise bis zum Budget expandiert und DTD/Entities werden abgewiesen
   Einheit; Deep Think zusätzlich genau eine Deep-Think-Einheit. Fehler vor
   Providerstart releasen, Fehler nach Providerstart bleiben konsumiert.
   Provider- und Engine-Aufrufe liegen immer außerhalb aller Transaktionen.
+  Jeder neue Run speichert seinen eigenen, nicht wiederverwendbaren
+  Usage-Beleg `usage_key = consensus-api:run:{run_id}`; Retries desselben Runs
+  teilen ihn, ein späterer Run erbt ihn nie. Ältere Runs ohne Feld behalten den
+  historischen Schlüssel `consensus-api:{idempotency_hash}`.
+- Kann ein `accepted` Run seine Reservierung nicht mehr verwenden (Usage-Beleg
+  abgelaufen, etwa nach Absturz zwischen Usage-Reserve und `mark_reserved`),
+  gibt `fail_unrecoverable_accepted_run` einen noch reservierten Slot frei und
+  beendet den Run als `failed` mit `error.code=reservation_expired`
+  (Recovery und erneuter POST); kein Endlos-Retry, keine Providerarbeit.
 - `api_consensus_runner.py` übergibt die Ausführung an die neutrale
   `consensus_pipeline.py`: `provider_transport.py` führt den deterministischen
   parallelen Provider-Fan-out aus, danach laufen unverändert `query_consensus`
@@ -3556,7 +3589,13 @@ wird nur chunkweise bis zum Budget expandiert und DTD/Entities werden abgewiesen
 - Run-Inhalt und Idempotenz-Mapping tragen `expires_at` (30 Tage ab Annahme);
   periodischer Cleanup löscht beide, bestehende v1-Dokumente werden beim
   ersten Maintenance-Lauf nachmigriert. `DELETE /api/v1/consensus/runs/{run_id}`
-  löscht eigene terminale Runs früher. Alle v1- und Admin-Key-Antworten sind
+  löscht Inhalt eigener terminaler Runs früher: Das Run-Dokument wird durch
+  einen inhaltsfreien Tombstone (`status=deleted`, UID, Key-Hash, Zeitstempel,
+  ursprüngliches `expires_at`) ersetzt, das Idempotenz-Mapping bleibt. Derselbe
+  Key liefert danach stabil `410` mit `error.code=run_deleted` und startet nie
+  erneut kostenpflichtige Arbeit; `GET`/erneutes `DELETE` liefern 404.
+  Tombstone und Mapping verschwinden mit dem ursprünglichen Retention-Ablauf.
+  Alle v1- und Admin-Key-Antworten sind
   `private, no-store`. Limits greifen vor Auth pro IP/API-Key und danach pro UID.
 - Der maschinenlesbare Vertrag kommt aus den typisierten FastAPI-Routen unter
   `/openapi.json` (Security-Scheme `ConsensusApiKey`, Header `X-API-Key` und
@@ -4023,9 +4062,14 @@ CLI mit `firebase deploy --only firestore:rules,firestore:indexes`):
   - `usage_runs/{sha256(idempotency_key)}` — idempotenter Run je UID + Key; der
     Klartext-Key wird nicht gespeichert. Enthält `kind=regular|deep_think`, den
     UTC-Tag der Reservierung, beide serverseitigen Limits zum
-    Reservierungszeitpunkt, `request_fingerprint`, `expires_at` am nächsten
-    UTC-Tageswechsel, `operation_claims` mit Claim-Zeit/Payload-Fingerprint und
-    `status=reserved|consumed|released`. Ein für Chat-Memory verwendeter Run
+    Reservierungszeitpunkt, `request_fingerprint`, `expires_at`,
+    `operation_claims` mit Claim-Zeit/Payload-Fingerprint und
+    `status=reserved|consumed|released`. `utc_date` ist nur der Abrechnungstag;
+    `expires_at` (`execution_expiry`) ist die getrennte Ausführungs-/Retry-
+    Gültigkeit: Ende des Abrechnungstags, mindestens aber zwei Stunden
+    (`MIN_EXECUTION_WINDOW`) nach der Reservierung. Ein um 23:59 belasteter Run
+    beendet seine autorisierten Schritte nach Mitternacht ohne zweite Belastung;
+    neue Runs zählen für den neuen Tag. Ein für Chat-Memory verwendeter Run
     erhält zusätzlich ausschließlich `context_target_hash` und
     `context_bound_at`; derselbe konsumierte Key kann damit nur einen
     Chat-/Turn-Context finanzieren, ohne einen weiteren Zähler zu verändern.
@@ -4033,8 +4077,8 @@ CLI mit `firebase deploy --only firestore:rules,firestore:indexes`):
     Run-Einheit) oder
     `reserved → released` (fehlgeschlagener/abgebrochener Run gibt den Slot
     frei); beide Zielzustände sind terminal, Wiederholungen idempotent. Der Key
-    kann nicht für einen anderen Run-Typ/Request wiederverwendet oder über den
-    UTC-Tag hinaus abgespielt werden. Provider-/LLM-Aufrufe finden immer
+    kann nicht für einen anderen Run-Typ/Request wiederverwendet oder über
+    seine begrenzte Ausführungsgültigkeit hinaus abgespielt werden. Provider-/LLM-Aufrufe finden immer
     außerhalb der Transaktion und erst nach Consume plus erfolgreichem
     Operations-Claim statt. Beim Account-Löschen werden beide Subcollections entfernt.
     `/ask_*`, `/consensus` und `/resolve` bündeln Run-Bindung, gegebenenfalls
@@ -4073,11 +4117,13 @@ CLI mit `firebase deploy --only firestore:rules,firestore:indexes`):
   gelesen. Ein fehlgeschlagener Audit-Write lässt die bereits gesetzte Stufe
   stehen und wird geloggt — der Adminvorgang darf daran nicht scheitern.
 - `api_consensus_runs/{run_id}` — UID-gebundener v1-API-Run mit serverseitig
-  eingefrorenem Request/Modellplan, `idempotency_hash`, Status und Status-
+  eingefrorenem Request/Modellplan, `idempotency_hash`, eigenem `usage_key`, Status und Status-
   Zeitstempeln, einstündigem Running-Lease, der bei Annahme eingefrorenen Stufe
   (`tier_at_acceptance`, mit `is_pro_at_acceptance` als Altfeld) sowie terminal
   `result` oder sanitisiertem `error` und 30-Tage-`expires_at`. Erlaubte Hauptfolge:
-  `accepted → reserved → running → succeeded|failed`.
+  `accepted → reserved → running → succeeded|failed`; zusätzlich
+  `accepted → failed` (`reservation_expired`) und nach Owner-Löschung der
+  inhaltsfreie Tombstone `succeeded|failed → deleted` bis zum Retention-Ablauf.
 - `app_config/prompts` — globale Prompt-Konfiguration aus `prompt_config.py`:
   `prompts.agent`, `prompts.answers`, `prompts.consensus`, `reference_timezone`,
   `delegation` (aktiviert, Rollenprompts, Laufzeit-/Kontext-/Nachrichten-/Parallelitäts-
@@ -4675,7 +4721,10 @@ Pages-/Watch-Tabs nicht. `/admin/topics` redirectet auf diesen Tab.
   Auswertung akzeptiert nur die letzte `FINAL_ANSWER: X`-Zeile. Alle sechs
   Modellfamilien und die Synthese laufen über denselben OpenRouter-Chat-
   Completions-Transport mit `OPENROUTER_API_KEY`; Benchmark-Payloads bleiben
-  im `benchmark_mode` ohne Websuche.
+  im `benchmark_mode` ohne Websuche. `--budget` deckt alle bezahlten Versuche
+  ab: Hauptlauf, Fehlversuche und E4-Audits (`AuditLedger`, Journal
+  `audit_calls.jsonl`, Prüfung vor jedem Audit-Call, Resume ohne erneute
+  Audit-Kosten); fehlende Usage wird mit der Vorab-Obergrenze verbucht.
 - JS-Syntaxcheck einzelner Module:
   ```powershell
   node --check static\js\<modul>.js

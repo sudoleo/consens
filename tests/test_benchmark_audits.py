@@ -100,7 +100,8 @@ class RunPilotTests(unittest.TestCase):
             self.assertIn("consensus_order", audits)
             self.assertIn("consensus_anonymized", audits)
             saved = json.loads((run_dir / "audits.json").read_text(encoding="utf-8"))
-            self.assertEqual(set(saved), {"option_permutation", "consensus_order", "consensus_anonymized"})
+            self.assertEqual(set(saved), {"option_permutation", "consensus_order", "consensus_anonymized", "cost"})
+            self.assertGreater(saved["cost"]["audit_spent_usd"], 0)
             # Permutation lief ueber subset(2) x 6 Modelle.
             self.assertEqual(audits["option_permutation"]["total"], 12)
             self.assertEqual(audits["consensus_anonymized"]["total"], 2)

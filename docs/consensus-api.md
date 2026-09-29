@@ -62,7 +62,8 @@ Antwort: HTTP `202`, `Location: /api/v1/consensus/runs/{run_id}` und ein
 Run-Objekt. Der Request akzeptiert nur `question` und optional `deep_think`;
 Modelle, Modellanzahl, Kosten und Limits werden ausschließlich serverseitig
 bestimmt. Derselbe Idempotency-Key mit identischem Request liefert denselben
-Run. Mit anderem Request folgt HTTP `409`.
+Run. Mit anderem Request folgt HTTP `409`; wurde der Run dieses Keys bereits
+gelöscht, folgt HTTP `410` (`run_deleted`, siehe unten).
 
 Reguläre Consensus-API-v1-Runs verwenden die feste serverseitige
 Sechs-Provider-Auswahl OpenAI, Mistral, Anthropic, Gemini, DeepSeek und Grok.
@@ -161,8 +162,19 @@ X-API-Key: cns_live_…
 
 Erfolg liefert HTTP `204`. Noch laufende bzw. reservierte Runs liefern `409`,
 damit Usage- und Provider-Lifecycle nicht durch eine Lösch-Race entkoppelt
-werden. Nach der Löschung kann derselbe Idempotency-Key wieder für einen neuen
-logischen Run verwendet werden.
+werden. Gelöscht werden Frage, Modellplan, Ergebnis und Fehlertext; bis zum
+ursprünglichen `expires_at` bleibt nur ein inhaltsfreier Tombstone mit dem
+gehashten Idempotency-Key. Derselbe Idempotency-Key startet deshalb keinen
+neuen Run: Ein erneuter `POST` mit diesem Key liefert stabil HTTP `410` mit
+`{"error":{"code":"run_deleted",…}}`, `GET` und ein erneutes `DELETE` liefern
+`404`. Für eine neue Berechnung einen neuen Idempotency-Key verwenden; sie
+belastet das Tageskontingent als eigener Run.
+
+Ein Run, der seine Reservierung nicht mehr einlösen kann (etwa nach einem
+Serverabsturz direkt nach der Annahme), endet ohne Providerarbeit als `failed`
+mit `error.code = "reservation_expired"`; ein noch reservierter Slot wird
+freigegeben. Bereits belastete Runs dürfen nach dem UTC-Tageswechsel zu Ende
+laufen, ohne ein zweites Mal gezählt zu werden.
 
 ## Erfolgreichen Run publizieren
 

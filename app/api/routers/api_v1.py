@@ -28,6 +28,7 @@ from app.services.api_consensus_runner import (
     api_run_repository,
     build_server_model_plan,
     fail_expired_run,
+    fail_unrecoverable_accepted_run,
     reserve_run,
     schedule_run,
     validate_server_credentials,
@@ -39,13 +40,18 @@ from app.services.api_key_repository import (
 )
 from app.services.api_run_repository import (
     ApiRunConflict,
+    ApiRunDeleted,
     ApiRunNotFound,
     ApiRunTransitionError,
 )
 from app.services.llm.base import count_words
 from app.services import publisher_config, share_snapshots, watch_service
 from app.services.share_snapshots import ShareError
-from app.services.usage_repository import UsageLimitExceeded, UsageRunConflict
+from app.services.usage_repository import (
+    UsageLimitExceeded,
+    UsageRunConflict,
+    UsageRunExpired,
+)
 
 
 router = APIRouter(prefix="/api/v1", tags=["Consensus API"])
@@ -219,6 +225,7 @@ def get_api_publisher_config(
         400: {"model": ApiErrorResponse},
         403: {"model": ApiErrorResponse},
         409: {"model": ApiErrorResponse},
+        410: {"model": ApiErrorResponse},
         422: {"model": ApiErrorResponse},
         429: {"model": ApiErrorResponse},
         503: {"model": ApiErrorResponse},
@@ -254,6 +261,8 @@ def create_consensus_run(
             idempotency_key=idempotency_key.strip(),
             request_payload=request_payload,
         )
+    except ApiRunDeleted:
+        _raise_run_deleted()
     except ApiRunConflict as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from None
     except ValueError as exc:
@@ -310,6 +319,8 @@ def create_consensus_run(
                 model_plan=model_plan,
                 tier=tier,
             )
+        except ApiRunDeleted:
+            _raise_run_deleted()
         except ApiRunConflict as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from None
         except ValueError as exc:
@@ -342,6 +353,20 @@ def create_consensus_run(
         except UsageRunConflict as exc:
             api_run_repository.delete_accepted(run["run_id"])
             raise HTTPException(status_code=409, detail=str(exc)) from None
+        except UsageRunExpired:
+            # The accepted run lost its reservation window (e.g. a crash
+            # between usage reserve and mark_reserved). No provider started;
+            # end it explainably instead of retrying until content retention.
+            try:
+                run = fail_unrecoverable_accepted_run(run)
+            except Exception as exc:
+                logging.error(
+                    "Consensus API accepted run terminalization failed category=%s",
+                    safe_exception(exc),
+                )
+                raise HTTPException(
+                    status_code=503, detail="Run reservation is temporarily unavailable"
+                ) from None
         except Exception as exc:
             logging.error(
                 "Consensus API usage reservation failed category=%s",
@@ -431,7 +456,12 @@ def delete_consensus_run(
     run_id: str,
     api_key: Optional[str] = Security(api_key_header),
 ):
-    """Delete a terminal run and its idempotency mapping before TTL expiry."""
+    """Delete a terminal run's content before TTL expiry.
+
+    A content-free tombstone keeps the Idempotency-Key fenced until the
+    original retention expiry, so the deleted logical run cannot start paid
+    work again under the same key.
+    """
     identity = authenticate_api_identity(api_key)
     enforce_uid_rate_limit(identity.uid, "delete", 20)
     try:
@@ -760,6 +790,20 @@ def _raise_api_share_error(exc: ShareError):
     }
     detail = {"code": exc.code, "message": exc.message, **exc.details}
     raise HTTPException(status_code=status_by_code.get(exc.code, 400), detail=detail)
+
+
+def _raise_run_deleted():
+    """Stable contract for a key whose logical run was deleted by its owner."""
+    raise HTTPException(
+        status_code=410,
+        detail={
+            "code": "run_deleted",
+            "message": (
+                "The run for this Idempotency-Key was deleted. "
+                "Use a new Idempotency-Key to start a new run."
+            ),
+        },
+    ) from None
 
 
 def _public_run(run: dict) -> dict:

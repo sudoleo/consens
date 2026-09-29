@@ -73,7 +73,7 @@
   function receiveBudget(budget, uid) {
     if (!budget || !catalog || !canUse() || uid !== catalogOwner || uid !== window.auth?.currentUser?.uid) return;
     if (!Number.isSafeInteger(budget.limit) || budget.limit <= 0
-      || ['used', 'reserved', 'unknown', 'remaining', 'revision', 'config_revision'].some(key =>
+      || ['used', 'reserved', 'unknown', 'estimated', 'remaining', 'revision', 'config_revision'].some(key =>
         budget[key] !== undefined && (!Number.isSafeInteger(budget[key]) || budget[key] < 0))) return;
     const previous = catalog.token_budget;
     if ((budget.config_revision ?? 0) < (previous?.config_revision ?? 0)) return;

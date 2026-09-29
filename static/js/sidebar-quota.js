@@ -120,7 +120,10 @@
     var budget = agent && window.App.agentChat.tokenBudget();
     // Reservations change while calls run, but are not consumption. The ring
     // follows measured usage; the panel separately explains available capacity.
-    var unspent = Number.isFinite(budget?.used) ? budget.limit - budget.used
+    // Estimates for started calls without final usage count as spent until the
+    // provider's measurement replaces them.
+    var estimated = Number.isFinite(budget?.estimated) ? budget.estimated : 0;
+    var unspent = Number.isFinite(budget?.used) ? budget.limit - budget.used - estimated
       : budget?.remaining + (Number.isFinite(budget?.reserved) ? budget.reserved : 0);
     var tokens = budget && Number.isFinite(unspent) && Number.isFinite(budget.limit) && budget.limit > 0
       ? { value: Math.max(0, unspent), limit: budget.limit } : null;
@@ -170,7 +173,11 @@
         text = tokens.value.toLocaleString() + ' tokens unspent; ' + Math.max(0, budget.remaining).toLocaleString() + ' available for new calls. '
           + budget.reserved.toLocaleString() + ' temporarily reserved for active calls and review. Resets at 00:00 UTC.';
       }
-      if (agent && budget?.unknown > 0) text += ' Some completed calls have unavailable usage; they do not block the remaining allowance.';
+      if (agent && estimated > 0) {
+        text += ' ' + estimated.toLocaleString() + ' tokens are estimated for calls without reported final usage; measured usage replaces the estimate.';
+      } else if (agent && budget?.unknown > 0) {
+        text += ' Some completed calls have unavailable usage; they do not block the remaining allowance.';
+      }
       if (agent && budget?.stale) text += ' Last confirmed allowance; reconnect to refresh.';
       foot.textContent = text;
       foot.hidden = !text;
