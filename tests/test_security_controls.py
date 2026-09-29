@@ -90,3 +90,54 @@ def test_validation_errors_stay_422_and_never_echo_the_submitted_value():
     body = response.text
     assert "ctx" not in body
     assert "x" * 41 not in body
+
+
+def _client_with_registered_http_handler():
+    """Frische App, aber mit genau dem Handler-Objekt, das main.app registriert."""
+    import main
+    from fastapi import HTTPException
+
+    handler = main.app.exception_handlers[HTTPException]
+    app = FastAPI()
+    app.add_exception_handler(HTTPException, handler)
+
+    @app.get("/busy")
+    def busy():
+        raise HTTPException(status_code=429, detail="busy", headers={"Retry-After": "15"})
+
+    @app.get("/unavailable")
+    def unavailable():
+        raise HTTPException(status_code=503, detail="later", headers={"Retry-After": "5"})
+
+    @app.get("/auth")
+    def auth():
+        raise HTTPException(status_code=401, detail="login", headers={"WWW-Authenticate": "Bearer"})
+
+    @app.get("/plain")
+    def plain():
+        raise HTTPException(status_code=404, detail="missing")
+
+    return TestClient(app)
+
+
+def test_registered_http_exception_handler_preserves_headers():
+    """R04: Retry-After/WWW-Authenticate duerfen im JSON-Fehlerformat nicht verloren gehen."""
+    client = _client_with_registered_http_handler()
+
+    busy = client.get("/busy")
+    assert busy.status_code == 429
+    assert busy.headers["retry-after"] == "15"
+    assert busy.json() == {"error": "busy"}
+
+    unavailable = client.get("/unavailable")
+    assert unavailable.status_code == 503
+    assert unavailable.headers["retry-after"] == "5"
+
+    auth = client.get("/auth")
+    assert auth.status_code == 401
+    assert auth.headers["www-authenticate"] == "Bearer"
+
+    plain = client.get("/plain")
+    assert plain.status_code == 404
+    assert plain.json() == {"error": "missing"}
+    assert "retry-after" not in plain.headers

@@ -225,7 +225,13 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 # Exception Handlers
 @app.exception_handler(HTTPException)
 async def handle_http_exception(request, exc: HTTPException):
-    return JSONResponse(status_code=exc.status_code, content={"error": exc.detail})
+    # Routen setzen bewusst Header (Retry-After bei 429/503, WWW-Authenticate
+    # bei 401); das JSON-Fehlerformat darf sie nicht verschlucken.
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"error": exc.detail},
+        headers=dict(exc.headers) if exc.headers else None,
+    )
 
 @app.exception_handler(RequestValidationError)
 async def handle_validation_exception(request, exc: RequestValidationError):
