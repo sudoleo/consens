@@ -383,3 +383,32 @@ def test_oversized_thread_page_records_no_evidence(gmail):
     finally:
         module.message_view=original
     assert not list(google.chats._chat_ref('owner',chat).collection('google_evidence').stream())
+
+
+def test_renew_after_send_grant_and_recipient_removal_needs_fresh_review(gmail):
+    tool,actions,google,chat=gmail
+    connection(google,caps=['gmail_read'])
+    saved=draft(tool,to=['buyer@example.org'],bcc=['archive@unknown.example'])
+    assert saved['preview']['send_authorized'] is False
+    assert {w['email'] for w in saved['preview']['recipient_warnings']}=={'buyer@example.org','archive@unknown.example'}
+    google.wire.calls.clear()
+    # The user grants sending; the stored draft is prepared again without a model call.
+    connection(google,caps=['gmail_read','gmail_send'])
+    google.ref('owner',tool.selection.connection_id).update({'revision':'with-send'})
+    renewed=actions.renew('owner',chat,saved['id'],saved['hash'])
+    assert renewed['preview']['send_authorized'] is True and renewed['replaces']==saved['id']
+    assert renewed['preview']['body']==saved['preview']['body'] and renewed['hash']!=saved['hash']
+    assert actions.get('owner',chat,saved['id'])['status']=='superseded'
+    with pytest.raises(GoogleError,match='not part'):
+        actions.renew('owner',chat,renewed['id'],renewed['hash'],remove_recipients=['someone@else.example'])
+    with pytest.raises(GoogleError,match='To recipient'):
+        actions.renew('owner',chat,renewed['id'],renewed['hash'],remove_recipients=['buyer@example.org'])
+    trimmed=actions.renew('owner',chat,renewed['id'],renewed['hash'],remove_recipients=['ARCHIVE@unknown.example'])
+    assert trimmed['preview']['bcc']==[] and [w['email'] for w in trimmed['preview']['recipient_warnings']]==['buyer@example.org']
+    stored=actions.get('owner',chat,trimmed['id'])
+    assert stored['payload']['bcc']==[] and stored['payload']['message_id']!=actions.get('owner',chat,renewed['id'])['payload']['message_id']
+    assert not google.wire.calls
+    google.wire.handler=lambda method,url,kwargs:{'id':'sent1','threadId':'t'}
+    assert actions.confirm('owner',chat,trimmed['id'],trimmed['hash'])['status']=='succeeded'
+    raw=base64.urlsafe_b64decode(google.wire.calls[-1][2]['json']['raw'])
+    assert b'archive@unknown.example' not in raw

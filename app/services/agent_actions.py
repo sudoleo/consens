@@ -4,6 +4,7 @@ An external write is claimed once before I/O. Lost results remain unknown and
 can only be reconciled by reads; neither a model retry nor a browser reload sends
 again. Confirmation is a separate authenticated, user-facing API operation.
 """
+import copy
 from datetime import timedelta
 import re
 
@@ -40,8 +41,11 @@ class AgentActions:
 
     def list(self, uid, chat):
         self.files.chats.get_chat(uid, chat)
-        return [public_action(s.to_dict()) for s in self.files.chats._chat_ref(uid, chat).collection("actions").limit(100).stream()
-            if s.to_dict().get("expires_at", "") > now().isoformat()]
+        # Oldest first, so a revision never renders above its predecessor.
+        # Action IDs are hashes; only created_at carries the real order.
+        current = now().isoformat()
+        snapshots = self.files.chats._chat_ref(uid, chat).collection("actions").order_by("created_at").limit(100).stream()
+        return [public_action(data) for data in (s.to_dict() or {} for s in snapshots) if data.get("expires_at", "") > current]
 
     def prepare(self, uid, chat, turn, kind, connection_id, capability, payload, preview, *, replaces=None, require_capability=True):
         connection = self.connections.get(uid, connection_id, capability if require_capability else None)
@@ -84,6 +88,36 @@ class AgentActions:
             tx.update(chat_ref, {"agent_action_count": count + 1})
             return data
         return public_action(self.files.chats._transaction(save))
+
+    def renew(self, uid, chat, action_id, expected_hash, *, remove_recipients=()):
+        """Prepare the displayed proposal again without a model call.
+
+        Used after an approval expired, after the user granted a missing
+        permission, or to drop a flagged email recipient. The content can only
+        shrink, never grow. The result is a new action under the current
+        connection revision that supersedes the old one and needs a fresh
+        review; nothing is sent here.
+        """
+        old = self.get(uid, chat, action_id)
+        if old.get("hash") != expected_hash:
+            raise GoogleError("The action changed. Review the current version.", 409)
+        if old.get("status") not in {"pending", "rejected", "failed"}:
+            raise GoogleError("This action can no longer be prepared again. Check its status.", 409)
+        payload, preview = copy.deepcopy(old["payload"]), copy.deepcopy(old["preview"])
+        if old["kind"] == "gmail_send":
+            from app.services.agent_gmail import renew_draft
+            connection = self.connections.get(uid, old["connection_id"])
+            payload, preview = renew_draft(payload, preview, connection, remove_recipients, old["id"], old["turn_id"])
+            require_capability = False
+        elif remove_recipients:
+            raise GoogleError("Only email recipients can be removed here.")
+        else:
+            require_capability = True
+            if payload.get("update"):
+                # The stored "before" must still describe the live event.
+                self.handler(old).ensure_unchanged(uid, old)
+        return self.prepare(uid, chat, old["turn_id"], old["kind"], old["connection_id"], old["capability"], payload, preview,
+            replaces=old["id"], require_capability=require_capability)
 
     def reject(self, uid, chat, action_id, expected_hash):
         ref = self.ref(uid, chat, action_id)

@@ -32,6 +32,10 @@ class Confirm(Strict):
     expected_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
 
 
+class Renew(Confirm):
+    remove_recipients: list[str] = Field(default_factory=list, max_length=30)
+
+
 def owner(request):
     uid = _chat_uid(request)
     require_agent_access(uid)
@@ -140,9 +144,14 @@ def actions(request: Request, chat_id: str):
         service = AgentActions(db_firestore)
         actions = service.list(uid, chat_id)
         from app.services.google_connections import now
-        evidence = [s.to_dict() for s in service.files.chats._chat_ref(uid, chat_id).collection("google_evidence").limit(100).stream()
-            if s.to_dict().get("expires_at", "") > now().isoformat()]
-        return {"actions": actions, "evidence": evidence}
+        chat_ref = service.files.chats._chat_ref(uid, chat_id)
+        current = now().isoformat()
+        evidence = [data for data in (s.to_dict() or {} for s in chat_ref.collection("google_evidence").order_by("created_at").limit(100).stream())
+            if data.get("expires_at", "") > current]
+        # The browser needs this before sending: every message in a chat that
+        # already holds Google data requires fresh model-sharing consent.
+        google_data = bool((chat_ref.get().to_dict() or {}).get("google_data"))
+        return {"actions": actions, "evidence": evidence, "google_data": google_data}
     return invoke(uid, operation)
 
 
@@ -151,6 +160,19 @@ def actions(request: Request, chat_id: str):
 def confirm_action(request: Request, chat_id: str, action_id: str, payload: Confirm):
     uid = owner(request)
     return invoke(uid, lambda: {"action": AgentActions(db_firestore).confirm(uid, chat_id, action_id, payload.expected_hash)})
+
+
+@router.post("/agent/chats/{chat_id}/actions/{action_id}/renew")
+@limiter.limit("10/minute")
+def renew_action(request: Request, chat_id: str, action_id: str, payload: Renew):
+    """Prepare the stored proposal again under the current Google grant.
+
+    No model call and no new content: optionally fewer email recipients.
+    The new version supersedes the old one and needs its own review.
+    """
+    uid = owner(request)
+    return invoke(uid, lambda: {"action": AgentActions(db_firestore).renew(uid, chat_id, action_id, payload.expected_hash,
+        remove_recipients=payload.remove_recipients)})
 
 
 @router.post("/agent/chats/{chat_id}/actions/{action_id}/reject")

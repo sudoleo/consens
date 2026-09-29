@@ -102,9 +102,18 @@ def _save_bookmark(uid, payload, store, turn):
 
 def _final(uid, payload, store, turn):
     bookmark_meta = _save_bookmark(uid, payload, store, turn)
+    # Tell the browser whether the next message needs Google consent. The
+    # chat marker can be set by a tool during this turn (Gmail evidence).
+    google_data = bool((turn.get("agent_settings") or {}).get("google_data"))
+    if not google_data:
+        try:
+            google_data = bool((store._chat_ref(uid, payload.chat_id).get().to_dict() or {}).get("google_data"))
+        except Exception as exc:
+            # A hint for the composer only; the server rule still enforces consent.
+            logging.warning("Agent chat Google marker unavailable category=%s", safe_exception(exc))
     return {"chat_id": payload.chat_id, "turn_id": turn["id"], "turn": turn,
             "response": turn.get("consensus", ""), "execution_mode": "agent", "bookmark_meta": bookmark_meta,
-            "token_budget": agent_quota.snapshot(store.db, uid)}
+            "google_data": google_data, "token_budget": agent_quota.snapshot(store.db, uid)}
 
 
 def _save_interrupted(uid, payload, store, turn_id):
