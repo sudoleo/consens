@@ -56,7 +56,10 @@
       .map(item => ({
         name: String(item.name),
         mime: String(item.mime || ""),
-        size: Number(item.size) || 0
+        size: Number(item.size) || 0,
+        // Agent files carry extraction warnings (for a "Partly read" badge).
+        ...(Array.isArray(item.warnings) && item.warnings.length
+          ? { warnings: item.warnings.map(String).slice(0, 5) } : {})
       }));
     const row = document.getElementById("threadAskAttachments");
     if (!row) return;
