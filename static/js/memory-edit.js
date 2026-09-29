@@ -9,9 +9,43 @@
     undoTimer: null,
     requestId: null,
     requestFeedback: null,
-    returnFocus: null
+    returnFocus: null,
+    // Account the selection/dialog belongs to ({uid, generation}); the Undo
+    // toast keeps its own binding because it outlives the dialog.
+    binding: null,
+    undoBinding: null,
+    // Bumped on every account change; a response from an older epoch is
+    // dropped instead of reloading or toasting in the next account's UI.
+    epoch: 0,
+    controller: null
   };
   const user = () => window.auth?.currentUser?.uid ? window.auth.currentUser : null;
+
+  function authGeneration() {
+    const generation = window.App?.authState?.generation;
+    return Number.isInteger(generation) ? generation : null;
+  }
+
+  function currentBinding() {
+    const current = user();
+    return current ? { uid: current.uid, generation: authGeneration() } : null;
+  }
+
+  // Same rule as auth-session-state.js: the uid must match AND no identity
+  // change may have happened in between. A token refresh of the same account
+  // changes neither, so it keeps working.
+  function bindingIsCurrent(binding) {
+    if (!binding) return false;
+    if (user()?.uid !== binding.uid) return false;
+    const generation = authGeneration();
+    return binding.generation === null || generation === null || generation === binding.generation;
+  }
+
+  function staleError() {
+    const error = new Error("Authentication changed.");
+    error.stale = true;
+    return error;
+  }
   const icons = {
     ask: '<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M9.25 7.5h9M9.25 12h9M9.25 16.5h5.5"/><path d="M5.25 6.5v11"/></svg>',
     remember: '<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 3.75a6.25 6.25 0 0 0-3.87 11.16L7.5 19.75l4.5-2.5 4.5 2.5-.63-4.84A6.25 6.25 0 0 0 12 3.75Z"/><path d="M9.5 10.5h5M12 8v5"/></svg>',
@@ -159,6 +193,7 @@
     const rememberable = !!user();
     if (!askable && !rememberable) return hideMenu();
     state.selection = selection;
+    state.binding = currentBinding();
     const menu = document.getElementById("memorySelectionMenu");
     // A modal native reader makes body siblings inert. Keep the toolbar in
     // its dialog until an action returns to the composer or the Memory dialog.
@@ -235,6 +270,7 @@
   function openDialog(intent, trigger) {
     hideMenu();
     if (!state.selection || !user()) return;
+    if (!bindingIsCurrent(state.binding)) return resetForAuthChange();
     state.intent = intent === "add" ? "add" : "correct";
     state.returnFocus = trigger || null;
     if (state.selection.reader) {
@@ -339,54 +375,122 @@
     return fallback;
   }
 
-  async function post(path, body) {
+  // Every request is bound to the account that made the selection. The token
+  // must belong to that account, and the answer is used only while it is
+  // still the signed-in account (checked after token, fetch and JSON).
+  async function post(path, body, binding) {
+    if (!bindingIsCurrent(binding)) throw staleError();
     const authUser = user();
-    if (!authUser) throw new Error("Please log in first.");
-    const uid = authUser.uid;
     const token = await authUser.getIdToken();
-    if (user()?.uid !== uid) throw new Error("Authentication changed.");
-    const response = await fetch(path, {
-      method: "POST",
-      headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify(body)
-    });
+    if (!bindingIsCurrent(binding)) throw staleError();
+    const controller = typeof AbortController === "function" ? new AbortController() : null;
+    state.controller = controller;
+    let response;
+    try {
+      response = await fetch(path, {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        signal: controller?.signal
+      });
+    } catch (error) {
+      if (!bindingIsCurrent(binding) || controller?.signal.aborted) throw staleError();
+      throw error;
+    } finally {
+      if (state.controller === controller) state.controller = null;
+    }
     let data = {};
     try { data = await response.json(); } catch (_) { /* empty response */ }
+    if (!bindingIsCurrent(binding)) throw staleError();
     if (!response.ok) throw new Error(errorMessage(data, "Memory could not be updated."));
     return data;
   }
 
+  // Logout, login or an account switch (e.g. in another tab) closes the
+  // dialog, forgets the selection and its request id, hides the old Undo and
+  // abandons any in-flight request. Nothing from account A may reach B.
+  function resetForAuthChange() {
+    state.epoch += 1;
+    state.controller?.abort?.();
+    state.controller = null;
+    state.selection = null;
+    state.binding = null;
+    state.undoBinding = null;
+    state.requestId = null;
+    state.requestFeedback = null;
+    hideMenu();
+    const backdrop = document.getElementById("memoryEditBackdrop");
+    if (backdrop) {
+      if (state.busy) setBusy(false, "");
+      backdrop.hidden = true;
+      const textarea = document.getElementById("memoryEditCorrection");
+      if (textarea) textarea.value = "";
+      const selection = document.getElementById("memoryEditSelection");
+      if (selection) selection.textContent = "";
+    }
+    document.documentElement.classList.remove("memory-edit-open");
+    clearTimeout(state.undoTimer);
+    const toast = document.getElementById("memoryEditToast");
+    if (toast) {
+      toast.hidden = true;
+      toast.replaceChildren();
+    }
+  }
+
+  function handleAuthState(event) {
+    hideMenu();
+    const bound = state.binding || state.undoBinding;
+    if (!bound) return;
+    const uid = event?.detail?.uid || null;
+    const generation = Number.isInteger(event?.detail?.generation) ? event.detail.generation : null;
+    const same = uid === bound.uid
+      && (generation === null || bound.generation === null || generation === bound.generation);
+    if (!same) resetForAuthChange();
+  }
+
   async function submitEdit() {
     if (state.busy || !state.selection) return;
+    const binding = state.binding;
+    // Ownership check BEFORE anything leaves the browser: a selection made
+    // under account A must never be submitted with account B's token.
+    if (!bindingIsCurrent(binding)) return resetForAuthChange();
     const correction = document.getElementById("memoryEditCorrection").value.trim();
     if (!correction) return showFieldError("Enter what consens.io should remember.");
     if (state.requestFeedback !== correction) {
       state.requestId = makeRequestId();
       state.requestFeedback = correction;
     }
-    setBusy(true, dialogCopy(state.intent).progress);
+    const epoch = state.epoch;
+    const intent = state.intent;
+    setBusy(true, dialogCopy(intent).progress);
     try {
       const result = await post("/api/my/memory/edit", {
         client_request_id: state.requestId,
         source_kind: state.selection.kind,
         selected_text: state.selection.text,
         correction,
-        intent: state.intent
-      });
+        intent
+      }, binding);
+      if (epoch !== state.epoch) return;
       if (result.status === "processing") throw new Error("This Memory action is already processing.");
       document.getElementById("memoryEditBackdrop").hidden = true;
       document.documentElement.classList.remove("memory-edit-open");
-      await window.App?.userMemory?.load?.(true);
-      showUndo(result, state.intent);
-      window.App?.trackAppEvent?.("app_memory_ai_edit", { intent: state.intent, status: "updated" });
+      await window.App?.userMemory?.load?.(true, { keepDraft: true });
+      if (epoch !== state.epoch || !bindingIsCurrent(binding)) return;
+      showUndo(result, intent, binding);
+      window.App?.trackAppEvent?.("app_memory_ai_edit", { intent, status: "updated" });
     } catch (error) {
+      if (error?.stale || epoch !== state.epoch) {
+        if (epoch === state.epoch) resetForAuthChange();
+        return;
+      }
       showFieldError(error.message || "Memory could not be updated.");
     } finally {
-      setBusy(false);
+      if (epoch === state.epoch) setBusy(false);
     }
   }
 
-  function showUndo(result, intent) {
+  function showUndo(result, intent, binding) {
     const toast = document.getElementById("memoryEditToast");
     toast.replaceChildren();
     const check = document.createElement("span");
@@ -401,26 +505,34 @@
     undo.type = "button";
     undo.className = "memory-edit-undo";
     undo.textContent = "Undo";
-    undo.addEventListener("click", () => undoEdit(result.revision_id, undo));
+    undo.addEventListener("click", () => undoEdit(result.revision_id, undo, binding, intent));
     toast.append(check, content, undo);
     toast.hidden = false;
+    state.undoBinding = binding;
     clearTimeout(state.undoTimer);
     const expires = Date.parse(result.undo_expires_at || "");
     const delay = Number.isFinite(expires) ? Math.max(0, expires - Date.now()) : 60000;
     state.undoTimer = setTimeout(() => { toast.hidden = true; }, Math.min(delay, 60000));
   }
 
-  async function undoEdit(revisionId, button) {
+  async function undoEdit(revisionId, button, binding, intent) {
     button.disabled = true;
     const toast = document.getElementById("memoryEditToast");
+    const epoch = state.epoch;
     try {
-      await post("/api/my/memory/undo", { revision_id: revisionId });
-      await window.App?.userMemory?.load?.(true);
+      await post("/api/my/memory/undo", { revision_id: revisionId }, binding);
+      if (epoch !== state.epoch) return;
+      await window.App?.userMemory?.load?.(true, { keepDraft: true });
+      if (epoch !== state.epoch || !bindingIsCurrent(binding)) return;
       toast.querySelector(".memory-edit-toast-content").textContent = "Previous Memory restored";
       button.remove();
-      window.App?.trackAppEvent?.("app_memory_ai_edit", { intent: state.intent, status: "undone" });
+      window.App?.trackAppEvent?.("app_memory_ai_edit", { intent, status: "undone" });
       setTimeout(() => { toast.hidden = true; }, 2500);
     } catch (error) {
+      if (error?.stale || epoch !== state.epoch) {
+        if (epoch === state.epoch) resetForAuthChange();
+        return;
+      }
       toast.querySelector(".memory-edit-toast-content").textContent = error.message || "Memory could not be restored.";
       button.remove();
       setTimeout(() => { toast.hidden = true; }, 4000);
@@ -435,7 +547,7 @@
     });
     document.addEventListener("scroll", hideMenu, true);
     window.addEventListener("resize", hideMenu);
-    window.addEventListener("consensio:auth-state", hideMenu);
+    window.addEventListener("consensio:auth-state", handleAuthState);
   }
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", bind);

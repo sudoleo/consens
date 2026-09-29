@@ -495,7 +495,10 @@ def test_memory_selection_has_explicit_add_and_correct_flows():
     assert "Remember this" in memory_edit
     assert "Correct memory" in memory_edit
     assert "updates one clearly matching saved passage" in memory_edit
-    assert "intent: state.intent" in memory_edit
+    # The request carries the dialog's intent, frozen at submit time so a
+    # later dialog cannot change what an in-flight request claims.
+    assert "const intent = state.intent;" in memory_edit
+    assert "        intent\n      }, binding);" in memory_edit
     assert 'state.intent === "add" ? state.selection.text.slice(0, 500) : ""' in memory_edit
     assert "Firma" not in memory_edit
     assert "For example: I live in Hanover." in memory_edit

@@ -413,7 +413,7 @@
     }
 
     function detachForMessage() {
-      readGeneration++;
+      invalidateImports();
       const meta = messageMeta();
       if (window.pendingAttachments.length) {
         window.pendingAttachments = [];
@@ -478,6 +478,10 @@
     window.App = window.App || {};
     window.App.attachments = {
       detachForMessage: detachForMessage,
+      // True while a picked/pasted/dropped file of the CURRENT draft is still
+      // being read. Send paths refuse to go out then, so a file can never
+      // silently miss its question or land on the next one.
+      isImporting: function () { return pendingFileReads > 0; },
       messageMeta: messageMeta,
       renderMessageAttachments: renderMessageAttachments,
       refreshCompatibility: syncAttachmentCompatibility,
@@ -486,7 +490,7 @@
     syncComposerPlacement();
 
     window.clearPendingAttachments = function () {
-      readGeneration++;
+      invalidateImports();
       if (!window.pendingAttachments.length) return;
       window.pendingAttachments = [];
       renderAttachmentChips();
@@ -618,8 +622,16 @@
       return mime.indexOf("image/") === 0 ? IMAGE_MAX_INPUT_BYTES : ATTACH_MAX_BYTES;
     }
 
+    // Every import belongs to one draft generation. Clearing the draft (send,
+    // opening a saved chat, Agent upload) or an account change starts a new
+    // generation: late reads of the old one are discarded and no longer count
+    // against the new draft's file limit.
     let readGeneration = 0;
-    window.addEventListener("consensio:auth-state", () => { readGeneration++; });
+    function invalidateImports() {
+      readGeneration++;
+      pendingFileReads = 0;
+    }
+    window.addEventListener("consensio:auth-state", invalidateImports);
     function addFiles(files, options) {
       const generation = readGeneration;
       const owner = window.auth?.currentUser?.uid;
@@ -666,8 +678,9 @@
         shrinkImage(file, mime).then(function (shrunk) {
           const payload = shrunk ? shrunk.blob : file;
           return readAsBase64(payload).then(function (base64Data) {
+            if (generation !== readGeneration) return;
             pendingFileReads = Math.max(0, pendingFileReads - 1);
-            if (generation !== readGeneration || owner !== window.auth?.currentUser?.uid || !base64Data) return;
+            if (owner !== window.auth?.currentUser?.uid || !base64Data) return;
             if (window.pendingAttachments.length >= ATTACH_MAX_FILES) return;
             window.pendingAttachments.push({
               name: shrunk ? renameToJpeg(name) : name,
@@ -683,6 +696,8 @@
             });
           });
         }).catch(function () {
+          // A failed read of an abandoned draft is not the new draft's error.
+          if (generation !== readGeneration) return;
           pendingFileReads = Math.max(0, pendingFileReads - 1);
           alert("The file could not be read. Please try again.");
         });

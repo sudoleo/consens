@@ -24,6 +24,7 @@
 
   const state = {
     saved: null,      // letzter vom Server bestaetigter Stand
+    revision: null,   // Revision von `saved`; Basis fuer Compare-and-swap
     loaded: false,
     loading: false,
     saving: false,
@@ -63,6 +64,39 @@
     status.dataset.tone = tone || "";
   }
 
+  // Ein veralteter Save verliert nie den Entwurf. Der Nutzer entscheidet:
+  // neueren Stand laden (Entwurf verwerfen) oder den Entwurf bewusst ueber den
+  // neueren Stand speichern.
+  function showConflict(error) {
+    const { status } = els();
+    if (!status) return;
+    const uid = state.uid;
+    const latest = error.revision;
+    status.textContent = (error.message || "Memory changed elsewhere.") + " ";
+    status.dataset.tone = "error";
+    const reload = document.createElement("button");
+    reload.type = "button";
+    reload.className = "settings-inline-btn";
+    reload.dataset.memoryConflict = "reload";
+    reload.textContent = "Load latest";
+    reload.addEventListener("click", () => load(true));
+    status.append(reload);
+    if (latest !== null) {
+      const keep = document.createElement("button");
+      keep.type = "button";
+      keep.className = "settings-inline-btn";
+      keep.dataset.memoryConflict = "keep";
+      keep.textContent = "Keep my draft";
+      keep.addEventListener("click", () => {
+        if (state.uid !== uid || currentUser()?.uid !== uid) return;
+        state.revision = latest;
+        setStatus("Your draft will replace the newer Memory when you press Save.", "muted");
+        syncControls();
+      });
+      status.append(" ", keep);
+    }
+  }
+
   async function api(method, body) {
     const user = currentUser();
     if (!user) throw new Error("Please log in first.");
@@ -80,12 +114,21 @@
     if (!response.ok) {
       // FastAPI meldet Schema-Fehler als Liste von Objekten. Als Fehlertext
       // stand dort sonst "[object Object]" im Statusstreifen.
-      const detail = [data.detail, data.error].find(value => typeof value === "string" && value.trim());
+      const structured = data.detail && typeof data.detail === "object" && !Array.isArray(data.detail)
+        ? data.detail : null;
+      const detail = [data.detail, structured?.message, data.error]
+        .find(value => typeof value === "string" && value.trim());
       const error = new Error(detail || ("HTTP " + response.status));
       error.status = response.status;
+      error.code = structured?.error_code || "";
+      error.revision = Number.isInteger(structured?.revision) ? structured.revision : null;
       throw error;
     }
     return data;
+  }
+
+  function revisionOf(result) {
+    return Number.isInteger(result?.revision) ? result.revision : null;
   }
 
   function applyLimits(limits) {
@@ -105,6 +148,9 @@
     FIELDS.forEach(field => {
       body[field] = typeof profile?.[field] === "string" ? profile[field] : "";
     });
+    // Compare-and-swap: der Server speichert nur, wenn seit dem Laden nichts
+    // anderes (zweiter Tab, Remember/Correct, Undo) geschrieben hat.
+    body.expected_revision = state.revision;
     return body;
   }
 
@@ -168,7 +214,7 @@
     }
   }
 
-  async function load(force) {
+  async function load(force, options) {
     const user = currentUser();
     if (!user) {
       state.loaded = false;
@@ -183,6 +229,14 @@
       syncControls();
       return;
     }
+    // Remember/Correct/Undo laden nach. Ein ungespeicherter Entwurf bleibt
+    // dabei stehen und behaelt seine alte Revision: der naechste Save endet
+    // dann ehrlich im Konflikt, statt den KI-Stand still zu ueberschreiben.
+    if (options?.keepDraft && state.loaded && state.uid === user.uid && isDirty()) {
+      setStatus("Memory was updated elsewhere. Save to review the conflict, or load the latest version.", "muted");
+      syncControls();
+      return;
+    }
 
     state.loading = true;
     setStatus("Loading…", "muted");
@@ -192,6 +246,7 @@
       const profile = result.memory || emptyProfile();
       applyLimits(result.limits);
       state.saved = profile;
+      state.revision = revisionOf(result);
       state.uid = user.uid;
       state.loaded = true;
       writeForm(profile);
@@ -213,6 +268,7 @@
       const saved = result.memory || emptyProfile();
       applyLimits(result.limits);
       state.saved = saved;
+      state.revision = revisionOf(result);
       state.loaded = true;
       if (rewriteFields) {
         // Der Server normalisiert (Whitespace, Laenge, Rahmenmarken). Zurueck-
@@ -229,7 +285,12 @@
       window.App?.trackAppEvent?.("app_memory_saved");
       return true;
     } catch (error) {
-      setStatus(error.message || "Memory could not be saved.", "error");
+      if (error.status === 409 && error.code === "revision_conflict") {
+        // Felder bleiben unveraendert: der Entwurf gehoert dem Nutzer.
+        showConflict(error);
+      } else {
+        setStatus(error.message || "Memory could not be saved.", "error");
+      }
       return false;
     } finally {
       state.saving = false;
@@ -313,6 +374,7 @@
       if (uid === state.uid) return;
       state.loaded = false;
       state.saved = null;
+      state.revision = null;
       state.uid = null;
       // Nur den Stand verwerfen, NICHT nachladen: dieses Ereignis feuert bei
       // jedem Seitenaufruf eines eingeloggten Kontos. Ein Fetch hier haette den
