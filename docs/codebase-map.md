@@ -1,8 +1,9 @@
 # consens.io — Codebase Map
 
-Google/Calendar in Agent Mode (27.09.2026): `agent_google.py` exposes owner/Pro-only
+Google/Calendar in Agent Mode (27.09.2026): `agent_google.py` exposes owner-bound
 connection controls at `/agent/google/{connections,connect,finish}` and the isolated
-popup callback. `google_connections.py` owns PKCE/state/OIDC validation, owner-bound
+popup callback; connect/finish/actions require Agent access, listing and disconnect
+only the owner. `google_connections.py` owns PKCE/state/OIDC validation, owner-bound
 encrypted token envelopes, refresh leases, revocation, daily API limits and the
 allowlisted Google transport. Tokens never enter tools or model contexts. The
 `google_selection` and model-sharing consent are frozen in `agent_settings` and
@@ -19,8 +20,11 @@ event IDs and durable unknown outcomes prevent retry-driven duplicate operations
 `reject` and read-only `status` are separate endpoints. `agent-google.js` supplies
 account/calendar selection, affirmative data consent and responsive before/after
 confirmation cards, refreshed by `resources` SSE and restored from the same chat.
-Hourly retention purges expired OAuth states/actions; account deletion also removes
-credentials and pending grants. See `docs/google-integrations-setup.md` for required
+Hourly retention purges expired OAuth states/actions (skipped without Google
+configuration); chat deletion removes `actions`; account deletion revokes stored
+grants at Google (`GoogleConnections.revoke_all`) and removes credentials and
+pending grants. `markdown-stream.js` renders model answers without auto-loading
+remote resources (no remote images/media/style), closing markup exfiltration. See `docs/google-integrations-setup.md` for required
 secrets, indexes, approved model routing, Google verification and live-test limits.
 
 Agent documents (27.09.2026): `agent_documents.py` registers `create_document`,

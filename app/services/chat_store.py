@@ -1309,6 +1309,9 @@ class ChatStore:
             for version_ref in _child_documents(document_ref.collection("versions")):
                 version_ref.delete()
             document_ref.delete()
+        # Proposed Google actions carry event/mail payloads and recipients.
+        for action_ref in _child_documents(chat_ref.collection("actions")):
+            action_ref.delete()
         chat_ref.delete()
 
     def purge_abandoned_turns(self, uid: str, chat_id: str, *, now=None) -> list[str]:

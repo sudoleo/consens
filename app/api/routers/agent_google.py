@@ -37,6 +37,12 @@ def owner(request):
     return uid
 
 
+def account_owner(request):
+    # Seeing and removing stored Google access must keep working after a
+    # downgrade; only new connections and actions require Agent access.
+    return _chat_uid(request)
+
+
 def invoke(uid, operation):
     try:
         return JSONResponse(operation(), headers={"Cache-Control": "private, no-store"})
@@ -51,7 +57,7 @@ def invoke(uid, operation):
 @router.get("/agent/google/connections")
 @limiter.limit("30/minute")
 def connections(request: Request):
-    uid = owner(request)
+    uid = account_owner(request)
     return invoke(uid, lambda: {"configured": available(), "connections": GoogleConnections(db_firestore).list(uid)})
 
 
@@ -95,7 +101,11 @@ if (window.opener) {
 @limiter.limit("10/minute")
 def finish(request: Request, payload: Finish):
     uid = owner(request)
-    response = invoke(uid, lambda: {"connection": GoogleConnections(db_firestore).finish(uid, payload.state, payload.code, request.cookies.get("consens_google_oauth", ""))})
+    try:
+        response = invoke(uid, lambda: {"connection": GoogleConnections(db_firestore).finish(uid, payload.state, payload.code, request.cookies.get("consens_google_oauth", ""))})
+    except HTTPException as exc:
+        # The state is single use either way; never leave the browser secret behind.
+        response = JSONResponse({"detail": exc.detail}, status_code=exc.status_code, headers={"Cache-Control": "private, no-store"})
     response.delete_cookie("consens_google_oauth", path="/agent/google")
     return response
 
@@ -103,7 +113,7 @@ def finish(request: Request, payload: Finish):
 @router.delete("/agent/google/connections/{connection_id}")
 @limiter.limit("10/minute")
 def disconnect(request: Request, connection_id: str):
-    uid = owner(request)
+    uid = account_owner(request)
     return invoke(uid, lambda: GoogleConnections(db_firestore).disconnect(uid, connection_id))
 
 

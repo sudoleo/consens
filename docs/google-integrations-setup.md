@@ -13,7 +13,9 @@ Do not use production mail or invitation recipients for automated smoke tests.
    Preserve this same origin through the reverse proxy. The popup callback has no
    external assets and clears its query immediately; redact its query string in
    **proxy/load-balancer logs as well as application logs**. The application
-   redacts that route in Uvicorn access logging. Never log OAuth request bodies,
+   redacts that route in Uvicorn access logging and raises the `httpx`/`httpcore`
+   loggers to WARNING, because their INFO lines contain full Google API URLs
+   (calendar IDs, search queries, page tokens). Never log OAuth request bodies,
    Authorization headers, provider responses or tokens.
 3. Inject `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI` and
    `GOOGLE_TOKEN_KEYS` through a managed secret store. `GOOGLE_TOKEN_KEYS` is a
@@ -74,11 +76,20 @@ uploaded files, comparisons, documents and selected Google data in the chat.
 - Exact proposals expire for approval after 30 minutes; proposal content and
   results expire after 30 days. Existing hourly maintenance removes expired OAuth
   states and action records. Connection credentials remain until disconnect or
-  account deletion. Chat deletion removes proposals; account deletion removes
-  credentials, pending OAuth states and all chats/files. Disconnect deletes local
-  access first and attempts provider revocation; on failure the UI links to
-  Google's account-permissions page. Content already in saved chat answers remains
-  until users delete those chats.
+  account deletion. Chat deletion removes proposals (`ChatStore._delete_chat_tree`);
+  account deletion first asks Google to revoke every stored grant (best effort),
+  then removes credentials, pending OAuth states and all chats/files. Disconnect
+  deletes local access first and attempts provider revocation; on failure the UI
+  links to Google's account-permissions page. Listing and disconnecting accounts
+  stay available without Agent access (e.g. after a downgrade); connecting and
+  actions require it. An API 401 marks a connection for reauthorization but keeps
+  the sealed refresh token so that disconnect can still revoke it. Revocation is
+  per Google grant: if two Consens users connected the same Google account, one
+  user's disconnect also ends the other's grant. Content already in saved chat
+  answers remains until users delete those chats.
+- Model answers are rendered without any auto-loading remote resource (remote
+  images, media, `<style>`, CSS `url()`), so injected calendar or mail text
+  cannot exfiltrate data through markup that loads on render; links need a click.
 - An event proposal shows the account, calendar, before/after fields, timestamps,
   IANA zone, recurrence target and all affected invitation recipients. All-day end
   dates are exclusive. DST offsets are validated; ambiguous autumn times require

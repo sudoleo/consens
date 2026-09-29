@@ -54,6 +54,10 @@ class OAuthAccessFilter(logging.Filter):
 
 def configure_logging() -> None:
     logging.getLogger("uvicorn.access").addFilter(OAuthAccessFilter())
+    # httpx logs every request URL at INFO. Google API URLs carry calendar
+    # IDs, mail queries and page tokens, so keep them out of app logs.
+    for name in ("httpx", "httpcore"):
+        logging.getLogger(name).setLevel(logging.WARNING)
     root = logging.getLogger()
     formatter = logging.Formatter(
         "%(asctime)s %(levelname)s [corr=%(correlation_id)s] %(name)s: %(message)s"

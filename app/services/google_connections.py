@@ -328,7 +328,9 @@ class GoogleConnections:
                     ref = self.ref(uid, connection_id)
                     current = ref.get(transaction=tx).to_dict() or {}
                     if current.get("revision") == current_revision:
-                        tx.update(ref, {"status": "reauthorize", "credentials": ""})
+                        # Keep the sealed refresh token: an API 401 does not prove the
+                        # grant is dead, and disconnect must still be able to revoke it.
+                        tx.update(ref, {"status": "reauthorize"})
                 self.chats._transaction(invalidate)
             raise
         if cancellation:
@@ -359,9 +361,33 @@ class GoogleConnections:
         return {"status": "disconnected", "provider_revoked": revoked,
             "notice": "Local access removed. You can also revoke Consens in your Google Account security settings."}
 
+    def revoke_all(self, uid):
+        """Best-effort provider revocation for account deletion.
+
+        Runs while the account tombstone blocks writes, so it only reads the
+        sealed grants and asks Google to revoke them; deleting the documents
+        is left to the deletion job. Returns the number of revoked grants.
+        """
+        if not available():
+            return 0
+        revoked = 0
+        for snapshot in self.db.collection("users").document(uid).collection("google_connections").stream():
+            data = snapshot.to_dict() or {}
+            if not data.get("credentials"):
+                continue
+            try:
+                token = self.unseal(uid, snapshot.id, data["credentials"])
+                self.wire.request("POST", "https://oauth2.googleapis.com/revoke", data={"token": token["refresh_token"]})
+                revoked += 1
+            except (GoogleError, KeyError):
+                pass
+        return revoked
+
 
 def cleanup_google_data(db=None):
-    if db is None and os.getenv("UNIT_TEST_MODE") == "1" and not os.getenv("GOOGLE_CLIENT_ID"):
+    # Without Google configured nothing is written here, and the collection
+    # group indexes may not be deployed: do not fail the hourly task.
+    if db is None and not available():
         return 0
     from google.cloud.firestore_v1.base_query import FieldFilter
     if db is None:
