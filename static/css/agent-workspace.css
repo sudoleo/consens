@@ -1,0 +1,200 @@
+/* Agent files, attachments and document versions (agent-workspace.js).
+   Document cards of the displayed turn sit in #agentAnswerResources after the
+   answer text; every chat file sits in the collapsed #agentWorkspace
+   disclosure below the answer. Tokens only (variables.css). */
+
+/* Shared panel shell. agent-google.js also uses .agent-workspace and
+   .agent-file-card for its action and evidence panels. */
+.agent-workspace { box-sizing: border-box; width: min(100%, 760px); margin: 12px auto; padding: 0 12px; color: var(--ink-2); font-size: 13px; overflow-wrap: anywhere; }
+.agent-workspace[hidden] { display: none; }
+#agentWorkspace, #agentGoogleActions { order: 4; }
+.agent-workspace summary { cursor: pointer; padding: 8px 0; }
+.agent-file-card { padding: 12px 0; border-bottom: 1px solid var(--line, #ddd); }
+.agent-file-card p { margin: 5px 0; }
+.agent-file-card button { margin: 6px 12px 0 0; min-height: 36px; }
+
+.agent-files-icon { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.agent-files-icon-more { stroke-width: 2.6; }
+
+/* ---- Answer resources: this turn's documents, uploads, partial reads ---- */
+.agent-resources { display: grid; gap: 10px; margin: 16px 0 4px; min-width: 0; }
+.agent-resources[hidden], .agent-resources:empty { display: none; }
+
+.agent-doc-card {
+  position: relative; box-sizing: border-box; min-width: 0; padding: 14px 16px;
+  border: 1px solid var(--line-soft); border-radius: var(--radius-md, 14px); background: var(--raise); color: var(--ink);
+}
+.agent-doc-head { display: flex; align-items: flex-start; gap: 12px; min-width: 0; }
+.agent-doc-mark {
+  display: inline-flex; align-items: center; justify-content: center; flex: none; width: 34px; height: 34px;
+  border-radius: var(--radius-xs, 8px); background: color-mix(in srgb, var(--ink) 7%, transparent); color: var(--ink-2);
+}
+.agent-doc-mark .agent-files-icon { width: 18px; height: 18px; }
+.agent-doc-titles { flex: 1; min-width: 0; }
+.agent-doc-title { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; margin: 0; color: var(--ink); font-size: 14px; font-weight: 600; line-height: 1.4; overflow-wrap: anywhere; }
+.agent-doc-meta { margin: 2px 0 0; color: var(--ink-3); font-size: 12px; line-height: 1.5; }
+.agent-doc-downloads { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 12px 0 0 46px; }
+.agent-doc-hint { margin: 10px 0 0 46px; color: var(--ink-3); font-size: 12px; line-height: 1.5; }
+
+.agent-files-chip {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 6px 12px 6px 10px;
+  border: 1px solid var(--line); border-radius: var(--radius-pill, 999px); background: var(--well); color: var(--ink);
+  font: inherit; font-size: 12px; line-height: 1; cursor: pointer;
+}
+.agent-files-chip:hover:not(:disabled) { background: var(--ground); border-color: color-mix(in srgb, var(--ink) 28%, transparent); }
+.agent-files-chip-type { font-weight: 600; letter-spacing: .02em; }
+.agent-files-chip-size { color: var(--ink-3); }
+.agent-files-chip:disabled, .agent-files-icon-btn:disabled { opacity: .55; cursor: default; }
+
+.agent-files-badge {
+  display: inline-flex; align-items: center; gap: 4px; flex: none; padding: 2px 8px; border-radius: var(--radius-pill, 999px);
+  font-size: 11px; font-weight: 600; line-height: 1.5; white-space: nowrap;
+}
+.agent-files-badge.is-new { background: var(--agree-bg); color: color-mix(in srgb, var(--agree) 78%, var(--ink)); }
+.agent-files-badge.is-warning { padding: 0 7px 0 5px; background: var(--partial-bg); color: color-mix(in srgb, var(--partial) 70%, var(--ink)); }
+.agent-files-badge .agent-files-icon { width: 12px; height: 12px; }
+
+/* Earlier versions stay one click away and never grow the card by default. */
+.agent-doc-earlier { margin: 12px 0 0 46px; font-size: 12px; }
+.agent-doc-earlier > summary {
+  display: inline-flex; align-items: center; min-height: 32px; padding: 0 2px; color: var(--ink-2);
+  cursor: pointer; list-style: none; border-radius: 6px;
+}
+.agent-doc-earlier > summary::-webkit-details-marker { display: none; }
+.agent-doc-earlier > summary::before { content: ''; width: 6px; height: 6px; margin: 0 8px 2px 2px; border: solid currentColor; border-width: 0 1.5px 1.5px 0; transform: rotate(-45deg); transition: transform 140ms ease; }
+.agent-doc-earlier[open] > summary::before { transform: rotate(45deg); margin-bottom: 4px; }
+.agent-doc-earlier > summary:hover { color: var(--ink); }
+.agent-doc-version { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; padding: 8px 0; border-top: 1px solid var(--line-soft); }
+.agent-doc-version:first-of-type { margin-top: 6px; }
+.agent-doc-version-label { color: var(--ink-2); }
+.agent-doc-version .agent-doc-downloads { margin: 0; }
+.agent-doc-version .agent-files-chip { min-height: 32px; padding-block: 4px; }
+
+/* Compact document rows inside "Files in this chat". */
+.agent-doc-card.is-compact { padding: 12px 0; border: 0; border-bottom: 1px solid var(--line-soft); border-radius: 0; background: transparent; }
+.agent-doc-card.is-compact .agent-doc-mark { width: 30px; height: 30px; }
+.agent-doc-card.is-compact .agent-doc-title { font-size: 13px; }
+.agent-doc-card.is-compact :is(.agent-doc-downloads, .agent-doc-earlier) { margin-left: 42px; }
+.agent-doc-card.is-compact .agent-doc-downloads { margin-top: 8px; }
+
+/* Overflow menu: Remove lives here, never next to Download. */
+.agent-files-menu-wrap { position: relative; flex: none; margin: -4px -6px 0 auto; }
+.agent-doc-card.is-compact .agent-files-menu-wrap { margin-right: 0; }
+.agent-doc-version .agent-files-menu-wrap, .agent-file-actions .agent-files-menu-wrap { margin: 0; }
+.agent-files-more, .agent-files-icon-btn {
+  display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; padding: 0;
+  border: 0; border-radius: 8px; background: transparent; color: var(--ink-2); cursor: pointer;
+}
+.agent-files-more:hover, .agent-files-more[aria-expanded="true"], .agent-files-icon-btn:hover:not(:disabled) { background: color-mix(in srgb, var(--ink) 7%, transparent); color: var(--ink); }
+.agent-files-menu {
+  position: absolute; top: calc(100% + 4px); right: 0; z-index: 30; min-width: 190px; padding: 5px;
+  border: 1px solid var(--line); border-radius: 12px; background: var(--well); box-shadow: var(--lift);
+}
+.agent-files-menu[hidden] { display: none; }
+.agent-files-menu-item {
+  display: flex; align-items: center; width: 100%; min-height: 38px; padding: 8px 10px; border: 0; border-radius: 8px;
+  background: transparent; color: var(--ink); font: inherit; font-size: 13px; text-align: left; cursor: pointer;
+}
+.agent-files-menu-item:hover, .agent-files-menu-item:focus-visible { background: var(--raise); outline: none; }
+.agent-files-menu-item.is-danger { color: var(--dispute); }
+
+.agent-files-confirm {
+  margin: 12px 0 0; padding: 12px 14px; border: 1px solid color-mix(in srgb, var(--dispute) 45%, var(--line));
+  border-radius: 10px; background: var(--dispute-bg); color: var(--ink); font-size: 13px;
+}
+.agent-doc-card:not(.is-compact) > .agent-files-confirm { margin-left: 46px; }
+.agent-files-confirm p { margin: 0 0 10px; line-height: 1.5; }
+.agent-files-confirm-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.agent-files-danger, .agent-files-ghost {
+  display: inline-flex; align-items: center; min-height: 36px; padding: 6px 14px; border-radius: 8px;
+  font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.agent-files-danger { border: 1px solid var(--dispute); background: var(--dispute); color: var(--well); }
+.dark-mode .agent-files-danger { color: #1a1a1a; }
+.agent-files-danger:disabled { opacity: .7; cursor: default; }
+.agent-files-ghost { border: 1px solid var(--line); background: var(--well); color: var(--ink); font-weight: 500; }
+.agent-files-ghost:hover { background: var(--raise); }
+
+/* Per-file upload progress, above the answer while the run starts. */
+.agent-uploads { display: grid; gap: 6px; }
+.agent-upload-row, .agent-file-row { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
+.agent-upload-row { padding: 8px 10px; border-radius: var(--radius-sm, 10px); background: var(--raise); }
+.agent-file-type {
+  display: inline-flex; align-items: center; justify-content: center; flex: none; width: 30px; height: 30px;
+  border-radius: var(--radius-xs, 8px); background: color-mix(in srgb, var(--ink) 7%, transparent); color: var(--ink-2);
+  font-size: 8px; font-weight: 700; letter-spacing: .02em; overflow: hidden;
+}
+.agent-file-main { display: flex; flex: 1; flex-direction: column; gap: 2px; min-width: 0; }
+.agent-file-name { color: var(--ink); font-size: 13px; font-weight: 500; line-height: 1.4; overflow-wrap: anywhere; }
+.agent-file-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; color: var(--ink-3); font-size: 12px; line-height: 1.5; }
+.agent-file-meta .agent-files-icon { width: 14px; height: 14px; }
+.agent-file-origin { color: var(--ink-2); font-size: 12px; line-height: 1.5; }
+.agent-file-warning { color: color-mix(in srgb, var(--partial) 70%, var(--ink)); font-size: 12px; line-height: 1.5; }
+.agent-upload-spinner {
+  width: 12px; height: 12px; flex: none; border: 1.5px solid color-mix(in srgb, var(--ink) 18%, transparent);
+  border-top-color: var(--ink-2); border-radius: 50%; animation: agent-upload-spin 800ms linear infinite;
+}
+@keyframes agent-upload-spin { to { transform: rotate(360deg); } }
+.agent-upload-row.is-done .agent-file-meta { color: var(--agree); }
+
+.agent-resource-notice {
+  display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border-radius: var(--radius-sm, 10px);
+  background: var(--partial-bg); color: var(--ink); font-size: 13px; line-height: 1.5;
+}
+.agent-resource-notice > .agent-files-icon { margin-top: 2px; color: color-mix(in srgb, var(--partial) 80%, var(--ink)); }
+.agent-resource-notice-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
+.agent-resource-notice-text span { color: var(--ink-2); font-size: 12px; }
+
+/* ---- Chat-level list: "Files in this chat (n)" ---- */
+#agentWorkspace.agent-files { width: 100%; margin: 4px 0 12px; padding: 0; }
+.agent-files-disclosure > summary {
+  display: inline-flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 10px 0 8px; margin-left: -8px;
+  border-radius: 8px; color: var(--ink-2); font-size: 13px; list-style: none;
+}
+.agent-files-disclosure > summary::-webkit-details-marker { display: none; }
+.agent-files-disclosure > summary::before { content: ''; width: 6px; height: 6px; margin: 0 2px 2px 4px; border: solid currentColor; border-width: 0 1.5px 1.5px 0; transform: rotate(-45deg); transition: transform 140ms ease; }
+.agent-files-disclosure[open] > summary::before { transform: rotate(45deg); margin-bottom: 4px; }
+.agent-files-disclosure > summary:hover { background: var(--raise); color: var(--ink); }
+.agent-files-note { margin: 4px 0 6px; color: var(--ink-3); font-size: 12px; line-height: 1.5; }
+.agent-files-list { border-top: 1px solid var(--line-soft); }
+.agent-file-item { padding: 12px 0; border-bottom: 1px solid var(--line-soft); }
+.agent-file-actions { display: flex; align-items: center; gap: 2px; flex: none; margin: -3px 0 0; }
+
+.agent-files-error {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding: 10px 12px; border-radius: var(--radius-sm, 10px);
+  background: var(--raise); color: var(--ink-2); font-size: 13px; line-height: 1.5;
+}
+.agent-files-error > .agent-files-icon { color: var(--dispute); }
+.agent-files-error > span { flex: 1 1 200px; min-width: 0; }
+
+/* Composer and message chips (attachments.js). */
+.attachment-chip.has-error { border-color: color-mix(in srgb, var(--dispute) 50%, var(--line)) !important; }
+.attachment-chip.has-error .attachment-chip-size { color: var(--dispute); white-space: normal; }
+.attachment-chip-warning {
+  align-self: flex-start; margin-top: 2px; padding: 0 6px; border-radius: var(--radius-pill, 999px);
+  background: var(--partial-bg); color: color-mix(in srgb, var(--partial) 70%, var(--ink)); font-size: 10px; font-weight: 600; line-height: 1.6;
+}
+
+:is(.agent-files-chip, .agent-files-more, .agent-files-icon-btn, .agent-files-danger, .agent-files-ghost, .agent-files-disclosure > summary, .agent-doc-earlier > summary):focus-visible {
+  outline: 2px solid var(--ink-2); outline-offset: 2px;
+}
+
+@media (max-width: 540px) {
+  .agent-doc-card { padding: 12px; }
+  .agent-doc-downloads, .agent-doc-hint, .agent-doc-earlier, .agent-doc-card:not(.is-compact) > .agent-files-confirm { margin-left: 0; }
+  .agent-doc-card.is-compact :is(.agent-doc-downloads, .agent-doc-earlier) { margin-left: 0; }
+}
+@media (pointer: coarse) {
+  .agent-files-chip, .agent-files-more, .agent-files-icon-btn, .agent-files-danger, .agent-files-ghost,
+  .agent-files-menu-item, .agent-files-disclosure > summary, .agent-doc-earlier > summary { min-height: 44px; }
+  .agent-files-more, .agent-files-icon-btn { width: 44px; }
+  .agent-doc-version .agent-files-chip { min-height: 44px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .agent-upload-spinner { animation-duration: 2400ms; }
+  .agent-files-disclosure > summary::before, .agent-doc-earlier > summary::before { transition: none; }
+}
+@media (forced-colors: active) {
+  .agent-doc-card, .agent-files-chip, .agent-files-menu, .agent-files-confirm, .agent-resource-notice { border: 1px solid CanvasText; }
+  .agent-files-badge { border: 1px solid CanvasText; }
+}
