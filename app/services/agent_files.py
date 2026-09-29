@@ -19,6 +19,7 @@ from uuid import uuid4
 from google.api_core.exceptions import NotFound
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.core.observability import safe_exception
 from app.services import persistence_guard
 from app.services.chat_store import ChatStore, ChatNotFound
 from app.services.llm.attachments import parse_attachments
@@ -189,8 +190,8 @@ class AgentFiles:
             # left in "deleting" is retried by cleanup_expired_files.
             try:
                 self.delete(uid, chat_id, file_id, cleanup=True, object_key=key)
-            except Exception:
-                logger.warning("agent_file_upload_cleanup_failed", exc_info=True)
+            except Exception as cleanup_error:
+                logger.warning("agent_file_upload_cleanup_failed category=%s", safe_exception(cleanup_error))
             raise
         return public_file({**data, "status": extraction["status"]})
 
@@ -364,10 +365,10 @@ def cleanup_expired_files(db=None, *, page_size=CLEANUP_PAGE_SIZE, time_budget=C
                 try:
                     files.delete(pieces[1], pieces[3], pieces[5], cleanup=True)
                     count += 1
-                except Exception:
+                except Exception as exc:
                     # One stuck file must not stall retention for everyone; it
                     # stays behind the cursor and is retried on the next run.
-                    logger.warning("agent_file_retention_delete_failed", exc_info=True)
+                    logger.warning("agent_file_retention_delete_failed category=%s", safe_exception(exc))
             if len(batch) < page_size:
                 break
             query = query.start_after(batch[-1])
