@@ -8,7 +8,7 @@ from app.api.routers.agent import require_agent_access
 from app.api.routers.chat_history import _chat_uid, _raise_store_error
 from app.core.security import db_firestore
 from app.core.rate_limit import limiter
-from app.services.agent_files import AgentFiles, FileUnavailable
+from app.services.agent_files import AgentFiles, FileUnavailable, StorageNotConfigured
 
 router = APIRouter()
 
@@ -30,6 +30,8 @@ def invoke(operation, uid):
         return operation()
     except HTTPException:
         raise
+    except StorageNotConfigured:
+        raise HTTPException(503, "Private file storage is not available right now.") from None
     except FileUnavailable as exc:
         raise HTTPException(422, str(exc)) from None
     except Exception as exc:

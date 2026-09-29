@@ -459,7 +459,7 @@ class DelegationLoop(AgentLoop):
             if not self.policy.account_budget_only:
                 self.search_remaining -= searches
         if self.file_context:
-            ids = getattr(worker, "file_ids", []) if worker else self.file_context.file_ids
+            ids = getattr(worker, "file_ids", []) if worker else self.file_context.selection()
             messages = self.file_context.messages(messages, model, file_ids=ids, query=str(messages[-1].get("content", ""))[-500:])
         tools = [*registry.schemas, *search_tools(model, searches)]
         reservation = None
