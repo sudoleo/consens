@@ -229,8 +229,9 @@ def cleanup_expired_documents(db=None, *, page_size=200, time_budget=240, clock=
                 current = (manifest.get().to_dict() or {}).get("version", 0)
                 if current <= int(pieces[7]):
                     manifest.delete()
-            except Exception:
-                logging.getLogger(__name__).warning("agent_document_retention_delete_failed", exc_info=True)
+            except Exception as exc:
+                from app.core.observability import safe_exception
+                logging.getLogger(__name__).warning("agent_document_retention_delete_failed category=%s", safe_exception(exc))
         if len(batch) < page_size:
             break
         query = query.start_after(batch[-1])
