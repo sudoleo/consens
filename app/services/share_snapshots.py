@@ -25,6 +25,7 @@ from urllib.parse import urlsplit
 
 from cachetools import TTLCache
 from firebase_admin import firestore
+from google.api_core.exceptions import FailedPrecondition
 from google.cloud.firestore_v1.base_query import FieldFilter
 
 import app.core.config as cfg
@@ -1452,16 +1453,25 @@ def _ordered_page(collection, query, *, order_field, sort_key, keep, cursor, max
             if cursor_snapshot.exists:
                 ordered = ordered.start_after(cursor_snapshot)
         docs = list(ordered.limit(max_items + 1).stream())
+    except FailedPrecondition:
+        # Composite index not deployed (yet): keep serving the filtered query
+        # unordered and order it here, as before this change.
+        logging.warning("Share list index missing; ordering in memory")
+        docs = _sorted_fallback(query.stream(), sort_key, keep, cursor, max_items)
     except (AttributeError, TypeError):
-        docs = [doc for doc in collection.stream() if keep(doc.to_dict() or {})]
-        docs.sort(key=lambda doc: sort_key(doc.id, doc.to_dict() or {}))
-        if cursor:
-            ids = [doc.id for doc in docs]
-            docs = docs[ids.index(cursor) + 1:] if cursor in ids else docs
-        docs = docs[:max_items + 1]
+        docs = _sorted_fallback(collection.stream(), sort_key, keep, cursor, max_items)
     has_more = len(docs) > max_items
     page = docs[:max_items]
     return page, has_more, (page[-1].id if has_more and page else None)
+
+
+def _sorted_fallback(stream, sort_key, keep, cursor, max_items):
+    docs = [doc for doc in stream if keep(doc.to_dict() or {})]
+    docs.sort(key=lambda doc: sort_key(doc.id, doc.to_dict() or {}))
+    if cursor:
+        ids = [doc.id for doc in docs]
+        docs = docs[ids.index(cursor) + 1:] if cursor in ids else docs
+    return docs[:max_items + 1]
 
 
 def _positive_reports(data: dict) -> int:

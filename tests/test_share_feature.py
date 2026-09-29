@@ -1120,6 +1120,30 @@ class ModerationAndCleanupTests(unittest.TestCase):
         self.assertIn("if (data.has_more)", dialog_js)
         self.assertIn("Older links are not listed here.", dialog_js)
 
+    def test_owner_list_falls_back_to_in_memory_order_while_the_index_builds(self):
+        from google.api_core.exceptions import FailedPrecondition
+
+        base = datetime(2026, 9, 1, tzinfo=timezone.utc)
+        ids = [
+            self._make_share(created_at=base + timedelta(minutes=index))
+            for index in range(3)
+        ]
+
+        class Ordered:
+            def limit(self, _n):
+                return self
+
+            def stream(self):
+                raise FailedPrecondition("index missing")
+
+        with patch.object(
+            FakeQuery, "order_by", create=True,
+            new=lambda self, *a, **k: Ordered(),
+        ):
+            page = snapshots.list_shares_for_owner_page(self.uid, db=self.db, max_items=2)
+        self.assertEqual([row["share_id"] for row in page["items"]], ids[::-1][:2])
+        self.assertTrue(page["has_more"])
+
     def test_owner_list_is_newest_first_with_a_continuation_contract(self):
         base = datetime(2026, 9, 1, tzinfo=timezone.utc)
         ids = [
