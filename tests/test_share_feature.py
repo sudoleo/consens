@@ -1045,14 +1045,25 @@ class ModerationAndCleanupTests(unittest.TestCase):
         with self.assertRaisesRegex(ShareError, "not found"):
             snapshots.hard_delete_share(snapshots.generate_share_id(), db=self.db)
 
-    def test_auto_noindex_after_report_threshold(self):
-        share_id = self._make_share(indexed=True,
-                                    reports_count=snapshots.AUTO_NOINDEX_REPORTS - 1)
-        snapshots.report_share(share_id, "spam", db=self.db)
+    def test_repeated_anonymous_reports_flag_review_but_never_deindex(self):
+        """One visitor repeating the same report must not deindex a page (R19)."""
+        share_id = self._make_share(indexed=True)
+        for _ in range(snapshots.REPORT_REVIEW_THRESHOLD * 4):
+            snapshots.report_share(share_id, "spam", db=self.db)
         stored = self._share(share_id)
-        self.assertEqual(stored["reports_count"], snapshots.AUTO_NOINDEX_REPORTS)
-        self.assertFalse(stored["indexed"])
+        self.assertEqual(stored["reports_count"], snapshots.REPORT_REVIEW_THRESHOLD * 4)
+        self.assertEqual(stored["report_reasons"], {"spam": snapshots.REPORT_REVIEW_THRESHOLD * 4})
+        self.assertTrue(stored["indexed"])
         self.assertTrue(stored["needs_review"])
+        self.assertIn(share_id, [
+            item["share_id"] for item in snapshots.list_shares_for_admin(db=self.db, only_reported=True)
+        ])
+
+        # The reports stay actionable: a moderator can still take it out.
+        snapshots.moderate_share(share_id, indexed=False, db=self.db)
+        stored = self._share(share_id)
+        self.assertFalse(stored["indexed"])
+        self.assertFalse(stored["needs_review"])
 
     def test_reports_below_threshold_keep_indexed(self):
         share_id = self._make_share(indexed=True)
@@ -1276,6 +1287,38 @@ class ModerationAndCleanupTests(unittest.TestCase):
             first.result(timeout=5)
             invalidation.result(timeout=5)
             self.assertEqual(snapshots.list_related_shares("other", ""), [])
+
+    def test_revocation_reaches_a_second_worker_within_the_promised_delay(self):
+        """Two isolated process caches: revoke through one, read through both."""
+        from cachetools import TTLCache
+
+        share_id = self._make_share()
+        clock = [1000.0]
+        worker_a = TTLCache(maxsize=16, ttl=snapshots.SHARE_CACHE_TTL_SECONDS, timer=lambda: clock[0])
+        worker_b = TTLCache(maxsize=16, ttl=snapshots.SHARE_CACHE_TTL_SECONDS, timer=lambda: clock[0])
+
+        def read(worker):
+            with patch.object(snapshots, "_share_cache", worker):
+                return snapshots.get_share_cached(share_id, db=self.db)
+
+        self.assertEqual(read(worker_a)["status"], "active")
+        self.assertEqual(read(worker_b)["status"], "active")
+        with patch.object(snapshots, "_share_cache", worker_a):
+            snapshots.revoke_share(share_id, self.uid, db=self.db)
+
+        self.assertEqual(read(worker_a)["status"], "revoked")
+        # Worker B only learns about it from its TTL: that is the bound.
+        clock[0] += snapshots.SHARE_CACHE_TTL_SECONDS + 1
+        self.assertEqual(read(worker_b)["status"], "revoked")
+
+        header_max_age = int(share_router.SHARE_CACHE_CONTROL.split("s-maxage=")[1].split(",")[0])
+        browser_max_age = int(share_router.SHARE_CACHE_CONTROL.split("max-age=")[1].split(",")[0])
+        stale = int(share_router.SHARE_CACHE_CONTROL.split("stale-while-revalidate=")[1])
+        self.assertNotIn("immutable", share_router.SHARE_CACHE_CONTROL)
+        self.assertLessEqual(
+            snapshots.SHARE_CACHE_TTL_SECONDS + max(header_max_age, browser_max_age) + stale,
+            snapshots.PUBLIC_REVOCATION_MAX_DELAY_SECONDS,
+        )
 
     def test_share_cache_returns_cached_until_invalidated(self):
         share_id = self._make_share()
@@ -1667,6 +1710,11 @@ class SharePageRouteTests(unittest.TestCase):
         self.assertIn('<strong>71</strong>', original.text)
         self.assertIn("2026-06-11", original.text)
         self.assertIn("max-age=60", current.headers["Cache-Control"])
+        # Historical versions never change, but their publication can be
+        # revoked: no long-lived or immutable caching for them either.
+        for page in (current, original, historical):
+            self.assertEqual(page.headers["Cache-Control"], share_router.SHARE_CACHE_CONTROL)
+            self.assertNotIn("immutable", page.headers["Cache-Control"])
         self.assertEqual(doc["consensus_md"], "Original immutable answer.")
 
     def test_watch_historical_version_uses_only_its_full_snapshot_metadata(self):
@@ -1789,7 +1837,7 @@ class SharePageRouteTests(unittest.TestCase):
         self.assertIn("noindex", response.headers.get("X-Robots-Tag", ""))
         self.assertEqual(
             response.headers.get("Cache-Control"),
-            "public, max-age=300, s-maxage=86400, stale-while-revalidate=86400",
+            "public, max-age=60, s-maxage=60, stale-while-revalidate=60",
         )
         body = response.text
         self.assertIn('property="og:title"', body)
@@ -2468,6 +2516,7 @@ class ShareSeoEnhancementTests(unittest.TestCase):
         self.assertEqual(og.status_code, 200)
         self.assertEqual(og.headers["content-type"], "image/png")
         self.assertTrue(og.content.startswith(b"\x89PNG"))
+        self.assertEqual(og.headers["Cache-Control"], share_router.SHARE_CACHE_CONTROL)
 
     def test_og_card_404_for_private_pages(self):
         doc = self._share_doc(visibility="private")

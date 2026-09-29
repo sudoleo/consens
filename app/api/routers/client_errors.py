@@ -59,7 +59,7 @@ _BUNDLE_ASSET = re.compile(r"dist/(?:(?:head|auth|firebase|demo|app)\.[a-f0-9]{1
 _STATIC_ASSETS = {
     "js/analytics-opt-out.js",
     "vendor/marked/12.0.2/marked.min.js",
-    "vendor/dompurify/3.0.6/dist/purify.min.js",
+    "vendor/dompurify/3.4.16/dist/purify.min.js",
     "vendor/katex/0.17.0/dist/katex.min.js",
     "vendor/katex/0.17.0/dist/katex.min.css",
     "vendor/katex/0.17.0/dist/contrib/auto-render.min.js",

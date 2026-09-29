@@ -54,9 +54,12 @@ MAX_CONSENSUS_CHARS = 100_000
 MAX_DIFFERENCES_TEXT_CHARS = 50_000
 MAX_SOURCES = 50
 
-# Ab so vielen Reports wird ein indexierter Share automatisch auf noindex
-# gesetzt und für die Admin-Review priorisiert (kein Auto-Unpublish).
-AUTO_NOINDEX_REPORTS = 5
+# Ab so vielen anonymen Reports wird ein Share für die Admin-Review priorisiert.
+# Reports ändern nie selbst `indexed` (Review R19): anonyme Meldungen lassen sich
+# nicht als unabhängig nachweisen, eine einzelne Person könnte sonst eine Seite
+# durch wiederholtes Melden deindexieren. Deindexieren ist eine Moderations-
+# entscheidung (moderate_share).
+REPORT_REVIEW_THRESHOLD = 5
 
 # Hard-Delete-Frist für widerrufene Shares (DSGVO-Zusage in den Rechtstexten).
 REVOKED_RETENTION_DAYS = 30
@@ -779,10 +782,17 @@ def get_share(share_id, db=None):
     return snap.to_dict() or {}
 
 
-# In-Process-TTL-Cache für die öffentliche /s/-Seite (kein CDN, eine Render-
-# Instanz). Misses werden nicht gecacht, damit frisch erstellte Shares sofort
-# sichtbar sind; Revoke/Block/Auto-noindex invalidieren explizit.
-SHARE_CACHE_TTL_SECONDS = 300
+# In-Process-TTL-Cache für die öffentliche /s/-Seite. Misses werden nicht
+# gecacht, damit frisch erstellte Shares sofort sichtbar sind; Revoke/Block/
+# Moderation invalidieren explizit, aber nur im eigenen Prozess. Ein anderer
+# Worker sieht einen Widerruf deshalb erst nach Ablauf der TTL: sie ist Teil
+# der zugesagten maximalen Widerrufsverzögerung (Review R18) und muss zusammen
+# mit den HTTP-Cache-Headern in app/api/routers/share.py darunter bleiben.
+SHARE_CACHE_TTL_SECONDS = 60
+# Längste Zeit, die eine widerrufene öffentliche Seite über consens.io noch
+# ausgeliefert werden darf (Server-Cache + Browser/Proxy-Cache). Die Rechtstexte
+# sagen "within a few minutes".
+PUBLIC_REVOCATION_MAX_DELAY_SECONDS = 300
 _share_cache = TTLCache(maxsize=1024, ttl=SHARE_CACHE_TTL_SECONDS)
 # Dedup-Canonical-Lookups (question_hash -> Ziel oder None) separat cachen;
 # jede Moderation kann Canonical-Ziele ändern, daher wird er mit invalidiert.
@@ -1426,7 +1436,7 @@ def request_share_indexing(share_id, uid, want=True, db=None):
             # von der Report-Schwelle stammt.
             reports = data.get("reports_count")
             reports = reports if isinstance(reports, int) and reports > 0 else 0
-            if reports < AUTO_NOINDEX_REPORTS:
+            if reports < REPORT_REVIEW_THRESHOLD:
                 updates["needs_review"] = False
         transaction.update(share_ref, updates)
         state["index_requested"] = bool(want)
@@ -1729,7 +1739,11 @@ REPORT_REASONS = ("inaccurate", "harmful", "spam", "copyright", "other")
 
 
 def report_share(share_id, reason, db=None):
-    """Atomically aggregate one privacy-preserving visitor report."""
+    """Atomically aggregate one privacy-preserving visitor report.
+
+    Reports are counters only: they can move a page up the moderation queue
+    but never change its indexing on their own.
+    """
     db = db if db is not None else db_firestore
     if reason not in REPORT_REASONS:
         reason = "other"
@@ -1759,21 +1773,12 @@ def report_share(share_id, reason, db=None):
             "report_reasons": reasons,
             "last_reported_at": firestore.SERVER_TIMESTAMP,
         }
-        auto_noindexed = count >= AUTO_NOINDEX_REPORTS and bool(data.get("indexed"))
-        if count >= AUTO_NOINDEX_REPORTS:
+        if count >= REPORT_REVIEW_THRESHOLD:
             updates["needs_review"] = True
-            if data.get("indexed"):
-                updates["indexed"] = False
         transaction.update(ref, updates)
-        return count, auto_noindexed
+        return count
 
-    count, auto_noindexed = _run_transaction(db, aggregate)
-    if auto_noindexed:
-        logging.warning(
-            "report_share: auto-noindex for %s after %d reports", share_id, count
-        )
-        invalidate_share_cache(share_id)
-    return count
+    return _run_transaction(db, aggregate)
 
 
 def list_shares_for_owner(uid, db=None, max_items=200):

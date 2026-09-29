@@ -196,7 +196,11 @@ def classify_evidence(
     title: str = "",
     publisher: str = "",
 ) -> dict:
-    """Return a public source role and confidence tier from URL + provenance."""
+    """Return a public source role and confidence tier from URL + provenance.
+
+    Preferred domains are editorial ordering hints (``is_preferred``); they
+    do not make a source primary.
+    """
     canonical_url = canonical_evidence_url(url)
     try:
         parsed = urlsplit(canonical_url)
@@ -225,7 +229,7 @@ def classify_evidence(
         role = "research"
     elif host == "github.com" or host.endswith(".github.com") or "docs" in host or "/docs" in path or "/documentation" in path:
         role = "documentation"
-    elif _matches_domain(host, preferred) or _matches_domain(host, _PRIMARY_SOURCE_DOMAINS):
+    elif _matches_domain(host, _PRIMARY_SOURCE_DOMAINS):
         role = "primary"
     elif _matches_domain(host, _COMMUNITY_DOMAINS):
         role = "community"
@@ -249,6 +253,9 @@ def classify_evidence(
         }[quality],
         "rank": EVIDENCE_ROLE_ORDER[role] + (10 if indirect else 0),
         "is_indirect": indirect,
+        # An editorial preference orders sources within their role; it never
+        # changes what kind of source a page is (Review R14).
+        "is_preferred": bool(preferred) and _matches_domain(host, preferred),
     }
 
 
@@ -768,6 +775,12 @@ def create_run(
         raise TopicError("bad_request", "A Topic snapshot needs at least two models.")
     if any(item["type"] not in source_rules["allowed_types"] for item in evidence):
         raise TopicError("bad_request", "Snapshot evidence violates the Topic source rules.")
+    # Sources the research found but the Topic's rules do not allow. They are
+    # kept with their real role and citation ID so the record stays traceable,
+    # but are never shown as evidence (Review R14).
+    excluded_evidence = normalize_evidence(data.get("excluded_evidence") or [])
+    if any(item["type"] in source_rules["allowed_types"] for item in excluded_evidence):
+        raise TopicError("bad_request", "Excluded evidence must be disallowed by the Topic source rules.")
     run_base = {
         "topic_id": topic_id,
         "observed_at": observed_at.astimezone(timezone.utc),
@@ -784,6 +797,7 @@ def create_run(
         "headline": _clean(data.get("headline"), limit=240, label="Headline"),
         "opinion_changes": normalize_opinion_changes(data.get("opinion_changes")),
         "evidence": evidence,
+        "excluded_evidence": excluded_evidence,
         "models": models,
         "source_rules": source_rules,
         "run_mode": str(data.get("run_mode") or "manual")[:20],
@@ -907,6 +921,57 @@ def list_runs(topic_id: str, *, db=None, max_items: int = 100) -> list[dict]:
             item["id"],
         )
     )
+    return runs[-max_items:]
+
+
+def _run_order_key(run: dict):
+    """The chronology list_runs sorts by; undated legacy runs come first."""
+    observed_at = run.get("observed_at")
+    return (
+        observed_at if isinstance(observed_at, datetime)
+        else datetime.min.replace(tzinfo=timezone.utc),
+        run.get("version") or 0,
+        run["id"],
+    )
+
+
+def list_runs_until(topic_id: str, run: dict, *, db=None, max_items: int = 100) -> list[dict]:
+    """The newest ``max_items`` runs up to and including ``run``, oldest first.
+
+    This is the as-of window for a version that is older than the latest
+    ``list_runs`` page: one bounded range read ending at the selected run
+    instead of the whole history. The result may be shorter than the record
+    before it; callers compare it with the run's version to say so.
+    """
+    db = db if db is not None else db_firestore
+    ref = db.collection(TOPICS_COLLECTION).document(topic_id).collection("runs")
+    limit_key = _run_order_key(run)
+    observed_at = run.get("observed_at")
+    expected = int(run.get("version") or 0)
+
+    def full_history():
+        runs = [{"id": doc.id, **(doc.to_dict() or {})} for doc in ref.stream()]
+        runs = [item for item in runs if _run_order_key(item) <= limit_key]
+        runs.sort(key=_run_order_key)
+        return runs[-max_items:] if max_items > 0 else runs
+
+    if max_items <= 0 or not isinstance(observed_at, datetime):
+        return full_history()
+    try:
+        query = ref.where(filter=FieldFilter("observed_at", "<=", observed_at))
+    except TypeError:  # in-memory test doubles use the positional form
+        query = ref.where("observed_at", "<=", observed_at)
+    fetched = [
+        {"id": doc.id, **(doc.to_dict() or {})}
+        for doc in query.order_by("observed_at", direction="DESCENDING")
+        .limit(max_items + 1).stream()
+    ]
+    runs = [item for item in fetched if _run_order_key(item) <= limit_key]
+    runs.sort(key=_run_order_key)
+    if len(fetched) <= max_items and expected > len(runs):
+        # The range read excludes runs without a date. Only when it provably
+        # misses versions of a short window is the complete history worth it.
+        return full_history()
     return runs[-max_items:]
 
 
@@ -1075,6 +1140,8 @@ def run_public_view(run: dict) -> dict:
         "headline": str(run.get("headline") or ""),
         "opinion_changes": list(run.get("opinion_changes") or []),
         "evidence": list(run.get("evidence") or []),
+        # Only the count is public: excluded sources are not evidence.
+        "excluded_evidence_count": len(run.get("excluded_evidence") or []),
         "models": list(run.get("models") or []),
         "opinion_map": dict(run.get("opinion_map") or {}),
         "topic_state": dict(run.get("topic_state") or {}),

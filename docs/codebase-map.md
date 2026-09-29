@@ -352,8 +352,14 @@ HTML-Eventhandler mehr. Jinja-Konfiguration liegt ausschließlich in escaped
 `data-*`-Metadaten und wird von `app-bootstrap.js` beziehungsweise
 `admin-config.js` gelesen; `app-dom-events.js` bindet die früheren Inline-
 Handler. Die routenspezifische CSP für `/app`, `/app/watches`, `/admin` und alle `/admin/*`-Unterpfade
-kommt deshalb bei `script-src` ohne `'unsafe-inline'` aus. Öffentliche Seiten
-behalten die bisherige Policy während der weiteren Style-Migration.
+kommt deshalb bei `script-src` ohne `'unsafe-inline'` aus. Seit 2026-09-29 gilt
+das auch für die öffentlichen Topic-Detailseiten `/topics/{slug}` (Review R01):
+`topic.html` lädt das Theme per `static/js/public-theme.js` und bündelt Strip,
+Rückkehrer-Band, Follow-Formular und Zitat-Chips in `static/js/topic-page.js`;
+Datentext (z. B. `change_summary` im Check-Strip) wird dort nur per
+`textContent`/DOM-Knoten eingesetzt, nie erneut als HTML geparst. Die übrigen
+öffentlichen Seiten (einschließlich des Hubs `/topics`) behalten die bisherige
+Policy während der weiteren Style-Migration.
 
 ---
 
@@ -3609,8 +3615,11 @@ wird nur chunkweise bis zum Budget expandiert und DTD/Entities werden abgewiesen
   Firestore-Transaktion; parallele Retries liefern denselben aktiven Share und
   verbrauchen die Quote nur einmal. Dasselbe gilt für die deterministische
   Publikation erfolgreicher API-Runs. Besucher-Reports aktualisieren
-  Gesamtzähler, Grundaggregat und den Auto-Noindex-Übergang ab fünf Reports
-  ebenfalls transaktional, sodass parallele Meldungen keine Increments verlieren.
+  Gesamtzähler und Grundaggregat transaktional, sodass parallele Meldungen keine
+  Increments verlieren; ab `REPORT_REVIEW_THRESHOLD` (5) setzen sie nur
+  `needs_review`. Seit Review R19 ändern Reports `indexed` nie selbst, weil sich
+  anonyme Meldungen nicht als unabhängig nachweisen lassen; Deindexieren oder
+  Blocken ist eine Moderationsentscheidung (`moderate_share`).
 - **`GET /s/{slug_id}`** rendert read-only aus dem Snapshot (keine LLM-Calls).
   `public_markdown.py` erhält LaTeX-Delimiter im serverseitigen HTML; die
   Share-Seite setzt sie anschließend mit derselben KaTeX-Brücke wie die App.
@@ -3620,7 +3629,15 @@ wird nur chunkweise bis zum Budget expandiert und DTD/Entities werden abgewiesen
   Endpoint serverseitig auf die Eigentümer-Session geprüft und nie indexiert,
   gecacht, reportet oder als Related/Sitemap-Ziel ausgegeben. Public-Caching via
   `SHARE_CACHE_CONTROL` + In-Process-Cache (`get_share_cached` /
-  `invalidate_share_cache`).
+  `invalidate_share_cache`). Seit Review R18 gibt es eine feste obere Grenze für
+  die Widerrufsverzögerung (`PUBLIC_REVOCATION_MAX_DELAY_SECONDS`, 5 Minuten):
+  Der In-Process-Cache lebt 60 s (Invalidierung wirkt nur im eigenen Prozess,
+  andere Worker holen den Status spätestens nach der TTL frisch), und
+  `SHARE_CACHE_CONTROL` erlaubt Browsern/Proxies 60 s plus 60 s
+  `stale-while-revalidate`. Aktuelle Watch-Seite, historische
+  `?version=`-Ansichten und die OG-Karte nutzen denselben Header; nichts
+  Widerrufbares wird mehr `immutable` oder langlebig ausgeliefert. Terms und
+  Privacy sagen entsprechend „within a few minutes“ statt „immediately“.
   Verwandte Fragen teilen pro Prozess einen kompakten Kandidatenbestand
   (weiterhin höchstens 400 `indexed`-Dokumente pro Scan, nur `active` und
   `public`, TTL 15 Minuten). Frageausschluss und Ranking erfolgen je Seite im
@@ -3641,6 +3658,16 @@ wird nur chunkweise bis zum Budget expandiert und DTD/Entities werden abgewiesen
   bleibt der vollständige Kompatibilitätsread erhalten. Kein neuer Topic-Index
   oder Backfill nötig; der normale kurze Verlauf kostet N Dokumente plus
   die Count-Aggregation statt zweier Vollabfragen.
+- `/topics/{slug}` liest für Timeline und aktuelle Ansicht die neuesten 100 Runs
+  (`TOPIC_PAGE_RUNS`). Ein expliziter `?version=<run_id>` außerhalb dieses
+  Fensters wird direkt per `topics.get_run` unter dem bereits aufgelösten Topic
+  geladen (Review R33); fremde oder unbekannte IDs bleiben 404. Das As-of-Bild
+  einer solchen Version stammt aus `topics.list_runs_until` (ein begrenzter
+  `observed_at <= run`-Read, neueste 100 bis einschließlich der Version). Ist ein
+  Fenster abgeschnitten (`run_count` bzw. Versionsnummer größer als die
+  gelesenen Runs), nennen Zähler den gespeicherten Gesamtwert, und Texte wie
+  „since the first check“, „Every check“ oder „since {Datum}“ behaupten keine
+  Vollständigkeit mehr.
 - Topics sind bewusst **keine Shares und keine Nutzer-Watches**. `topics/{id}`
   hält redaktionelle Metadaten plus die ausführbare `run_config` mit konkretem
   `provider_models`-Mapping, `update_interval`, Quellenpräferenzen, SEO, Status
@@ -3675,10 +3702,18 @@ wird nur chunkweise bis zum Budget expandiert und DTD/Entities werden abgewiesen
   redaktionellen Beschreibungstexts. Evidence bekommt die Rollen
   `primary|research|documentation|reporting|community|rumor`, wird nach Rolle
   sortiert und trennt direkte Quellen von nachrangigen Community-/Gerüchte-/
-  Redirect-Signalen. Nur Topics mit
+  Redirect-Signalen. Seit Review R14 ändern Quellenregeln nie das Etikett:
+  `topic_runner.split_evidence_from_sources` behält die erkannte Rolle und
+  schließt Quellen mit nicht erlaubter Rolle aus (`excluded_evidence` am Run,
+  mit Original-ID/URL, öffentlich nur als Anzahl). Bleibt keine erlaubte Quelle,
+  zeigt die Seite „Insufficient eligible evidence“. `preferred_domains` sind nur
+  noch ein Sortierhinweis innerhalb einer Rolle (`is_preferred`) und machen eine
+  Quelle nicht mehr zur Primärquelle. Nur Topics mit
   Run und Status Active/Paused erscheinen im Hub; `seo.noindex` entfernt sie
   zusätzlich aus `sitemap-topics.xml`. Historische Query-Ansichten sind
-  `noindex`, aber immutable gecacht.
+  `noindex` und werden wie die aktuelle Ansicht nur kurz gecacht (max-age 60,
+  s-maxage 300), damit ein archiviertes Topic auch mit seinen Versionen
+  verschwindet (Review R18).
 - Besucher-Follows sind ein eigener Double-Opt-in-Flow in `topic_followers` und
   teilen keine Dokumente mit `watch_followers`. Minor/Major-Runs versenden bei
   konfiguriertem SMTP deduplizierte Multipart-Updates; Stable-Runs nicht.
@@ -4757,7 +4792,7 @@ der Drift-Header einen kompakten Agreement-Chart: seine Punkte besitzen Hover-
 Beschreibungen und springen in die stets sichtbare Run-Liste. Die große Kurve
 bleibt als dezentes, zunächst geschlossenes Detail aus dem Header verlinkt. Die normale Watch-URL
 rendert serverseitig die neueste Vollversion über dem unveränderten Share-Baseline-
-Dokument; `?version=<run_id>` öffnet eine immutable historische Vollversion und
+Dokument; `?version=<run_id>` öffnet eine unveränderliche (aber nur kurz gecachte, widerrufbare) historische Vollversion und
 `?version=original` den Ausgangs-Consensus. Shared Pages ohne Watch behalten ihr
 bisheriges Snapshot-Verhalten. Ein Backend-`display_version` ist die einzige
 Quelle für Consensus, Differences, Agreement, Modelle, Quellen, Answer-Zeit und
@@ -4963,7 +4998,7 @@ ersten Check statt eines leeren Consensus-Panels.
   `#adminBootstrapConfig` + `admin-config.js`.
 - **CSP** (`CustomSecurityMiddleware` in `security.py`): neue externe Hosts (Skripte,
   `connect-src`-Ziele, Frames) müssen explizit in die Policy. Sonst blockt der
-  Browser still. `/app`, `/app/watches`, `/admin` und `/admin/*` erzwingen bei `script-src`
+  Browser still. `/app`, `/app/watches`, `/admin`, `/admin/*` und `/topics/*` erzwingen bei `script-src`
   die strict-variante ohne `'unsafe-inline'`; neue Inline-Skripte/-Handler würden
   dort deshalb nicht ausgeführt. `style-src` bleibt vorerst kompatibel.
 - **Static-Caching, zwei Regime.** Für **`/app`** kommt die Marke seit

@@ -5,7 +5,7 @@ import { loadScripts } from "./helpers/appWindow.mjs";
 function boot() {
   return loadScripts([
     "static/vendor/marked/12.0.2/marked.min.js",
-    "static/vendor/dompurify/3.0.6/dist/purify.min.js",
+    "static/vendor/dompurify/3.4.16/dist/purify.min.js",
     "static/js/markdown-stream.js",
   ]);
 }

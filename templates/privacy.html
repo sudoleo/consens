@@ -162,7 +162,7 @@
           shown as a related page. Please do not include personal data in content you make public.
         </p>
         <p>
-          Visitors can report a shared page ("Report this page"). The report record contains counters per reason, without a reporter account, IP address or browser data. The HTTP request is still subject to ordinary technical processing and rate limits.
+          Visitors can report a shared page ("Report this page"). The report record contains counters per reason, without a reporter account, IP address or browser data. The HTTP request is still subject to ordinary technical processing and rate limits. Reports prioritize a page for our review; decisions about indexing or blocking are made in that review, not automatically by the counters.
         </p>
         <p>
           If you enable Consensus Watch, we periodically rerun only the original question using a limited set of
@@ -202,9 +202,10 @@
           <li>Consensus results that are eligible for sharing are kept server-side with an expiry of
             <strong>24 hours</strong> and are then removed by periodic cleanup. Saved conversations and bookmarks have their own storage lifetime.</li>
           <li>Shared pages remain online until you revoke them or delete your account.</li>
-          <li>When you revoke a shared page, it immediately becomes unavailable to the public and is
-            <strong>scheduled for permanent deletion after a 30-day retention period</strong> by periodic cleanup. Copies cached by browsers or search engines for a
-            short period are outside our control.</li>
+          <li>When you revoke a shared page, consens.io stops serving it to the public within a few minutes, and it is
+            <strong>scheduled for permanent deletion after a 30-day retention period</strong> by periodic cleanup. Public pages
+            are only cached briefly by our servers and browsers; copies kept by search engines or third parties are
+            outside our control.</li>
           <li>When you delete your account, all your watches, watch history, shared pages, pending results and Telegram
             connection/delivery metadata are deleted as part of the account-deletion process.</li>
           <li>Report counters are deleted together with the page.</li>
@@ -334,7 +335,7 @@
     </div>
   </main>
 
-  {% set public_footer_note = "Last updated: 5 September 2026" %}
+  {% set public_footer_note = "Last updated: 29 September 2026" %}
   {% include "partials/public_footer.html" %}
 
 </body>

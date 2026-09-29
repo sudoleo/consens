@@ -1,9 +1,14 @@
-/* Topic page: the check strip readout and the returning-reader band.
+/* Topic page: the check strip readout, the returning-reader band, the follow
+ * form and the inline citation chips.
  *
- * Both are progressive: the page is complete without this file. The strip is
- * rendered server-side and stays readable as a shape; the band is empty until
- * this browser proves it has been here before. Nothing is sent anywhere -- the
- * last-visit mark lives in this browser only.
+ * All of it is progressive: the page is complete without this file. The strip
+ * is rendered server-side and stays readable as a shape; the band is empty
+ * until this browser proves it has been here before. Nothing is sent anywhere
+ * by the strip or the band -- the last-visit mark lives in this browser only.
+ *
+ * This file holds every script of templates/topic.html, so the page runs under
+ * a script CSP without 'unsafe-inline' (app/core/security.py). Data text such
+ * as a change summary is only ever inserted as text.
  */
 (function () {
   "use strict";
@@ -17,19 +22,35 @@
     var cells = Array.prototype.slice.call(
       strip.querySelectorAll(".topic-strip-cell")
     );
-    var resting = read.innerHTML;
+    // The server-rendered resting line is kept as nodes, never as markup.
+    var resting = Array.prototype.map.call(read.childNodes, function (node) {
+      return node.cloneNode(true);
+    });
 
     // Without a pointer that can hover there is no way to read a cell before
     // following it, so the first tap previews and the second one opens.
     var canHover = !window.matchMedia || window.matchMedia("(hover: hover)").matches;
     var previewed = null;
 
+    // dataset values are decoded attribute text: a change summary comes from
+    // model output, so it is only ever inserted as text, never parsed as HTML.
     function show(cell) {
-      var parts = ["<b>" + cell.dataset.date + "</b> &mdash; " + cell.dataset.note];
+      var date = document.createElement("b");
+      date.textContent = cell.dataset.date || "";
+      var parts = [date, " \u2014 " + (cell.dataset.note || "")];
       if (cell.dataset.score) {
-        parts.push('<span class="topic-strip-score">' + cell.dataset.score + "/100 agreement</span>");
+        var score = document.createElement("span");
+        score.className = "topic-strip-score";
+        score.textContent = cell.dataset.score + "/100 agreement";
+        parts.push(" ", score);
       }
-      read.innerHTML = parts.join(" ");
+      read.replaceChildren.apply(read, parts);
+    }
+
+    function restore() {
+      read.replaceChildren.apply(read, resting.map(function (node) {
+        return node.cloneNode(true);
+      }));
     }
 
     cells.forEach(function (cell) {
@@ -43,7 +64,7 @@
         }
       });
     });
-    strip.addEventListener("mouseleave", function () { read.innerHTML = resting; });
+    strip.addEventListener("mouseleave", restore);
     return {strip: strip, cells: cells};
   }
 
@@ -97,16 +118,111 @@
         } else {
           line = count + " since your last visit. The answer did not move.";
         }
-        band.innerHTML =
-          '<span class="topic-return-tag">Since your last visit</span>' +
-          "<p>" + line + ' <a href="#facts">See the statements</a></p>';
+        var tag = document.createElement("span");
+        tag.className = "topic-return-tag";
+        tag.textContent = "Since your last visit";
+        var text = document.createElement("p");
+        var link = document.createElement("a");
+        link.href = "#facts";
+        link.textContent = "See the statements";
+        text.append(line + " ", link);
+        band.replaceChildren(tag, text);
         band.hidden = false;
       }
     }
     if (latest) store(key, latest);
   }
 
+  function followForm() {
+    var form = document.getElementById("topicFollowForm");
+    if (!form) return;
+    var status = document.getElementById("topicFollowStatus");
+    var button = form.querySelector("button");
+    form.addEventListener("submit", async function (event) {
+      event.preventDefault();
+      button.disabled = true;
+      status.textContent = "Sending confirmation…";
+      try {
+        var response = await fetch("/api/topics/" + encodeURIComponent(form.dataset.slug) + "/follow", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({email: form.email.value})
+        });
+        var data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Could not follow this Topic.");
+        status.textContent = data.message;
+        form.reset();
+      } catch (error) {
+        status.textContent = error.message;
+        status.classList.add("is-error");
+      } finally {
+        button.disabled = false;
+      }
+    });
+  }
+
+  // Inline citations behave as chips that reveal their embedded source.
+  function citationChips() {
+    var prose = document.querySelector(".topic-consensus");
+    if (!prose) return;
+    var timer = null;
+    function flash(target) {
+      if (!target) return;
+      var holder = target.closest("details");
+      if (holder && !holder.open) holder.open = true;
+      target.scrollIntoView({behavior: "smooth", block: "center"});
+      target.classList.add("is-cited");
+      if (timer) window.clearTimeout(timer);
+      timer = window.setTimeout(function () { target.classList.remove("is-cited"); }, 2200);
+    }
+    prose.querySelectorAll('a[href^="#src-"]').forEach(function (link) {
+      link.classList.add("source-chip");
+      var target = document.getElementById(decodeURIComponent(link.getAttribute("href").slice(1)));
+      if (target) {
+        var srcImg = target.querySelector(".src-favicon-img");
+        var url = srcImg && srcImg.getAttribute("src");
+        if (!url) {
+          // e.g. X cards carry no favicon slot: derive it from the source URL.
+          try {
+            var host = new URL(target.getAttribute("href"), window.location.href).hostname.replace(/^www\./, "");
+            if (host) url = "/api/topics/favicon?d=" + encodeURIComponent(host);
+          } catch (e) { /* keep the dot fallback */ }
+        }
+        if (url) {
+          var fav = document.createElement("img");
+          fav.className = "cite-favicon";
+          fav.setAttribute("src", url);
+          fav.setAttribute("alt", "");
+          fav.setAttribute("aria-hidden", "true");
+          fav.addEventListener("error", function () {
+            fav.remove();
+            link.classList.remove("has-favicon");
+          });
+          link.insertBefore(fav, link.firstChild);
+          link.classList.add("has-favicon");
+        }
+      }
+      link.addEventListener("click", function (event) {
+        if (!target) return;
+        event.preventDefault();
+        flash(target);
+      });
+    });
+  }
+
+  // Drop favicons that fail to load so the monogram fallback shows through.
+  function faviconFallback() {
+    document.querySelectorAll(".src-favicon-img").forEach(function (img) {
+      function fail() { img.remove(); }
+      img.addEventListener("error", fail);
+      if (img.complete && img.naturalWidth === 0) fail();
+    });
+  }
+
   function start() {
+    followForm();
+    citationChips();
+    faviconFallback();
     var found = readStrip();
     if (!found) return;
     returningReader(found.strip, found.cells);

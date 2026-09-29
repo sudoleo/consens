@@ -78,10 +78,17 @@ class FakeQuery:
     def stream(self, transaction=None):
         snapshots = self.collection._snapshots(transaction)
         for field, op, value in self.filters:
-            assert op == "=="
-            snapshots = [
-                snap for snap in snapshots if (snap.to_dict() or {}).get(field) == value
-            ]
+            assert op in {"==", "<="}
+            if op == "==":
+                snapshots = [
+                    snap for snap in snapshots if (snap.to_dict() or {}).get(field) == value
+                ]
+            else:
+                # Like Firestore, a range filter drops documents without the field.
+                snapshots = [
+                    snap for snap in snapshots
+                    if field in (snap.to_dict() or {}) and snap.to_dict()[field] <= value
+                ]
         if self.ordering:
             field, direction = self.ordering
             snapshots = [snap for snap in snapshots if field in snap.to_dict()]
@@ -822,6 +829,23 @@ def test_account_deletion_fences_claims_before_topic_delivery_cleanup():
     assert topics.claim_delivery("topic", "run", "follower", db=db) is False
 
 
+def test_topic_detail_page_carries_no_inline_script_for_its_strict_csp():
+    """/topics/{slug} runs without 'unsafe-inline'; an inline block would die silently."""
+    import re
+
+    detail = (ROOT / "templates" / "topic.html").read_text(encoding="utf-8")
+    partials = "".join(
+        (ROOT / "templates" / "partials" / name).read_text(encoding="utf-8")
+        for name in ("analytics.html", "public_nav.html", "public_footer.html")
+    )
+    for source in (detail, partials):
+        for tag in re.findall(r"<script\b[^>]*>", source):
+            assert "src=" in tag or 'type="application/ld+json"' in tag, tag
+        assert not re.search(r"<[a-z][^>]*\son[a-z]+\s*=", source)
+    assert "/static/js/public-theme.js?v=" in detail
+    assert "/static/js/topic-page.js?v=" in detail
+
+
 def test_topic_templates_expose_timeline_evidence_follow_and_admin_controls():
     detail = (ROOT / "templates" / "topic.html").read_text(encoding="utf-8")
     hub = (ROOT / "templates" / "topics.html").read_text(encoding="utf-8")
@@ -937,6 +961,80 @@ def test_automatic_topic_run_researches_sources_and_builds_timeline_point():
     assert run["evidence"][0]["url"] == "https://openai.com/index/current-update"
     assert run["evidence"][0]["type"] == "primary"
     assert topics.get_topic(topic["id"], db=db)["last_run_status"] == "success"
+
+
+def test_primary_only_rules_exclude_reporting_instead_of_relabeling_it():
+    """R14: a news report stays a report under a primary-only rule."""
+    rules = topics.normalize_source_rules({"allowed_types": ["primary"]})
+    sources = [
+        {"id": "S1", "title": "News story", "url": "https://news.example.com/gpt-6-story"},
+        {"id": "S2", "title": "Official update", "url": "https://openai.com/index/update"},
+        {"id": "S3", "title": "Market", "url": "https://kalshi.com/markets/gpt6"},
+    ]
+
+    evidence, excluded = topic_runner.split_evidence_from_sources(sources, rules)
+
+    assert [(item["id"], item["type"]) for item in evidence] == [("S2", "primary")]
+    assert [(item["id"], item["type"]) for item in excluded] == [("S1", "reporting"), ("S3", "rumor")]
+    # Identity survives exclusion: S1 still names the news URL.
+    assert {item["id"]: item["url"] for item in excluded}["S1"] == "https://news.example.com/gpt-6-story"
+    assert topic_runner.evidence_from_sources(sources, rules) == evidence
+    classified = topics.classify_evidence(excluded[0]["url"], excluded[0]["type"])
+    assert classified["role"] == "reporting"
+    assert classified["quality"] == "standard"
+
+
+def test_preferred_domain_orders_sources_without_making_them_primary():
+    rules = topics.normalize_source_rules({"preferred_domains": ["news.example.com"]})
+    sources = [
+        {"id": "S1", "title": "Other report", "url": "https://other.example.org/story"},
+        {"id": "S2", "title": "Preferred report", "url": "https://news.example.com/story"},
+    ]
+    evidence = topic_runner.evidence_from_sources(sources, rules)
+    assert [item["id"] for item in evidence] == ["S2", "S1"]
+    assert {item["type"] for item in evidence} == {"reporting"}
+    preferred = topics.classify_evidence(
+        "https://news.example.com/story", "reporting", ["news.example.com"]
+    )
+    assert preferred["role"] == "reporting" and preferred["quality"] == "standard"
+    assert preferred["is_preferred"] is True
+
+
+def test_topic_page_says_insufficient_eligible_evidence_when_all_sources_are_excluded(monkeypatch):
+    db = FakeFirestore()
+    monkeypatch.setattr(topics, "db_firestore", db)
+    topic = topics.create_topic(
+        topic_payload(evidence=[], source_rules={"allowed_types": ["primary"]}),
+        actor_uid="admin", db=db, now=NOW,
+    )
+    db.documents[("topics", topic["id"])].update({
+        "current_run_id": "automatic-run", "claimed_until": NOW, "last_run_status": "running",
+    })
+    claimed = {**topics.get_topic(topic["id"], db=db)}
+
+    def execute(question, previous_consensus, **kwargs):
+        return {
+            "consensus": "## Current consensus\n\nOnly press coverage exists [S1].",
+            "agreement_score": 60, "changed": False, "opinion_map": {},
+            "differences_data": {},
+            "sources": [{"id": "S1", "title": "News story", "url": "https://news.example.com/story"}],
+            "included_models": ["OpenAI: GPT-5.6", "Google Gemini: Gemini 3.5 Flash"],
+        }
+
+    run = topic_runner.execute_claimed_topic(
+        claimed, actor_uid="admin", db=db, now=NOW, executor=execute
+    )
+    assert run["evidence"] == []
+    assert [(item["id"], item["type"]) for item in run["excluded_evidence"]] == [("S1", "reporting")]
+
+    app = FastAPI()
+    app.state.limiter = limiter
+    app.include_router(topics_router.router)
+    page = TestClient(app).get("/topics/gpt-6")
+    assert page.status_code == 200
+    assert "Insufficient eligible evidence" in page.text
+    assert "Primary source" not in page.text
+    assert 'id="src-1"' not in page.text
 
 
 def test_topic_run_carries_the_tracked_claims_into_the_identity_judge(monkeypatch):
@@ -1129,6 +1227,100 @@ def test_topic_page_shows_the_position_map_and_agreement_history(monkeypatch):
     assert "A 2027 launch" not in historical.text
     assert "How this answer held up" not in historical.text
     assert "Return to the current consensus" in historical.text
+
+
+def _topic_with_runs(db, count, *, summary_for=None):
+    topic = topics.create_topic(topic_payload(), actor_uid="admin", db=db, now=NOW)
+    created = []
+    for index in range(count):
+        material = summary_for is not None and index in summary_for
+        created.append(topics.create_run(
+            topic["id"],
+            run_payload(
+                observed_at=(NOW + timedelta(days=index)).isoformat(),
+                agreement_score=50 + index % 40,
+                change_type="major" if material else "stable",
+                change_summary=summary_for[index] if material else "No material shift.",
+                consensus_md=f"## Check {index + 1}\n\nAnswer number {index + 1}.",
+            ),
+            actor_uid="admin", db=db, now=NOW + timedelta(days=index),
+        ))
+    return topic, created
+
+
+def test_old_topic_version_links_survive_more_than_one_page_of_runs(monkeypatch):
+    db = FakeFirestore()
+    monkeypatch.setattr(topics, "db_firestore", db)
+    topic, created = _topic_with_runs(db, 103, summary_for={0: "The record starts."})
+    app = FastAPI()
+    app.state.limiter = limiter
+    app.include_router(topics_router.router)
+    client = TestClient(app)
+
+    oldest = client.get(f"/topics/gpt-6?version={created[0]['id']}")
+    assert oldest.status_code == 200
+    # Archiving a Topic has to take its versions down too (R18).
+    assert "immutable" not in oldest.headers["Cache-Control"]
+    assert "max-age=31536000" not in oldest.headers["Cache-Control"]
+    assert "Answer number 1." in oldest.text
+    assert "Answer number 2." not in oldest.text.split('class="topic-timeline')[0]
+    assert "noindex" in oldest.headers["X-Robots-Tag"]
+
+    boundary = client.get(f"/topics/gpt-6?version={created[2]['id']}")
+    assert boundary.status_code == 200
+    assert "Answer number 3." in boundary.text
+
+    # The version is looked up under this Topic only: another Topic's run id
+    # or an unknown id stays a 404.
+    other = topics.create_topic(
+        topic_payload(title="Other", slug="other-topic"), actor_uid="admin", db=db, now=NOW
+    )
+    foreign = topics.create_run(other["id"], run_payload(), actor_uid="admin", db=db, now=NOW)
+    assert client.get(f"/topics/gpt-6?version={foreign['id']}").status_code == 404
+    assert client.get("/topics/gpt-6?version=doesnotexist").status_code == 404
+    assert client.get("/topics/gpt-6?version=bad..id").status_code == 404
+
+
+def test_topic_page_counts_do_not_claim_a_complete_history_beyond_the_window(monkeypatch):
+    db = FakeFirestore()
+    monkeypatch.setattr(topics, "db_firestore", db)
+    _topic, created = _topic_with_runs(db, 103)
+    app = FastAPI()
+    app.state.limiter = limiter
+    app.include_router(topics_router.router)
+    client = TestClient(app)
+
+    current = client.get("/topics/gpt-6")
+    assert current.status_code == 200
+    text = current.text
+    # 103 checks are stored; the page reads the newest 100 and says so.
+    assert "Browse the latest 100 of 103 saved checks" in text
+    assert "<b>103</b> checks</li>" in text
+    assert "103 checks kept in full" in text
+    assert "latest 100 read here" in text
+    assert "The latest checks, oldest first" in text
+    assert "No material change since the first check on" not in text
+    assert "Checked 103 times since" not in text
+
+    # A version in the middle reads the 100 runs ending at it.
+    middle = client.get(f"/topics/gpt-6?version={created[101]['id']}")
+    assert middle.status_code == 200
+    assert "102 checks kept in full" in middle.text
+    assert "Answer number 102." in middle.text
+
+
+def test_list_runs_until_reads_a_bounded_window_ending_at_the_run():
+    db = FakeFirestore()
+    topic, created = _topic_with_runs(db, 150)
+    db.query_reads.clear()
+
+    window = topics.list_runs_until(topic["id"], topics.get_run(topic["id"], created[119]["id"], db=db), db=db, max_items=100)
+
+    assert [run["id"] for run in window] == [run["id"] for run in created[20:120]]
+    assert db.query_reads == [((("topics", topic["id"], "runs")), ("observed_at", "DESCENDING"), 101, 101)]
+
+    first = topics.list_runs_until(topic["id"], topics.get_run(topic["id"], created[0]["id"], db=db), db=db)
+    assert [run["id"] for run in first] == [created[0]["id"]]
 
 
 def test_topic_page_keeps_unscored_latest_run_and_its_position_map(monkeypatch):

@@ -99,6 +99,9 @@ class CustomSecurityMiddleware:
             path in {"/app", "/app/watches"}
             or path == "/admin"
             or path.startswith("/admin/")
+            # Public Topic detail pages render model-derived text and carry no
+            # inline script (templates/topic.html). The /topics hub still does.
+            or path.startswith("/topics/")
         )
         sensitive_api_response = (
             path == "/chats"

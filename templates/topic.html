@@ -157,19 +157,15 @@
   <link rel="stylesheet" href="/static/css/public-shell.css?v=20260826-cardfoot">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.17.0/dist/katex.min.css">
   <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
-  <script>
-    (function () {
-      const savedTheme = localStorage.getItem("theme");
-      const prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
-      if (savedTheme === "dark" || (!savedTheme && prefersDark)) document.documentElement.classList.add("dark-mode");
-    })();
-  </script>
+  {#- No inline scripts on this page: /topics/{slug} is served with a script
+      CSP without 'unsafe-inline' (app/core/security.py). -#}
+  <script src="/static/js/public-theme.js?v=20260929-strictcsp"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.17.0/dist/katex.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.17.0/dist/contrib/auto-render.min.js"></script>
   <script defer src="/static/js/math-render.js?v=20260911-math2"></script>
   <link rel="stylesheet" href="/static/css/source-verification.css?v=20260913-check-presentation">
   <script defer src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
-  <script defer src="https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/dompurify@3.4.16/dist/purify.min.js"></script>
   <script defer src="/static/js/source-verification.js?v=20260919-agent-checks"></script>
   {% include "partials/analytics.html" %}
 </head>
@@ -202,7 +198,7 @@
           {% elif finding.steady_checks %}
           <span>Unchanged through {{ finding.steady_checks }} check{{ "s" if finding.steady_checks != 1 }}{% if finding.steady_days %}, {{ finding.steady_days }} day{{ "s" if finding.steady_days != 1 }}{% endif %}</span>
           {% endif %}
-          {% if finding.checks > 1 %}<span>Checked {{ finding.checks }} times since {{ finding.tracked_since }}</span>{% endif %}
+          {% if finding.checks > 1 %}<span>Checked {{ finding.checks }} times{% if finding.tracked_since %} since {{ finding.tracked_since }}{% endif %}</span>{% endif %}
           {% if finding.split_count %}<a class="is-split" href="#facts">{{ finding.split_count }} open disagreement{{ "s" if finding.split_count != 1 }}</a>{% endif %}
         </div>
       </section>
@@ -211,7 +207,7 @@
       {% if strip | length > 1 %}
       <section class="topic-strip-block" aria-labelledby="stripHeading">
         <div class="topic-strip-legend">
-          <span id="stripHeading">Every check, oldest first</span>
+          <span id="stripHeading">{% if record_window.truncated or record_window.shown > strip | length %}The latest checks, oldest first{% else %}Every check, oldest first{% endif %}</span>
           <span>{{ strip | length }} check{{ "s" if strip | length != 1 }}</span>
         </div>
         <div class="topic-strip" id="topicStrip" data-slug="{{ topic.slug }}">
@@ -408,6 +404,11 @@
                   </div>
                 </details>
               {% endif %}
+              {% if selected.excluded_evidence_count %}
+              <p class="topic-panel-lead">{{ selected.excluded_evidence_count }} further source{{ "s" if selected.excluded_evidence_count != 1 }} found in this check {{ "were" if selected.excluded_evidence_count != 1 else "was" }} left out because {{ "their type is" if selected.excluded_evidence_count != 1 else "its type is" }} not accepted by this Topic.</p>
+              {% endif %}
+              {% elif selected.excluded_evidence_count %}
+              <p class="topic-empty">Insufficient eligible evidence: this check found {{ selected.excluded_evidence_count }} source{{ "s" if selected.excluded_evidence_count != 1 }}, but none of a type this Topic accepts.</p>
               {% else %}
               <p class="topic-empty">No sources were attached to this check yet.</p>
               {% endif %}
@@ -495,7 +496,7 @@
             <summary>
               <span class="topic-deep-title">
                 <strong>The record behind this page</strong>
-                <small>{{ record.checks }} check{{ "s" if record.checks != 1 }} kept in full{% if record.material_count %} &middot; {{ record.material_count }} material change{{ "s" if record.material_count != 1 }}{% else %} &middot; no material change yet{% endif %}</small>
+                <small>{{ record.checks }} check{{ "s" if record.checks != 1 }} kept in full{% if record.truncated %} &middot; latest {{ record.window_checks }} read here{% endif %}{% if record.material_count %} &middot; {{ record.material_count }} material change{{ "s" if record.material_count != 1 }}{% else %} &middot; no material change yet{% endif %}</small>
               </span>
               <b aria-hidden="true">+</b>
             </summary>
@@ -512,6 +513,8 @@
                 <p class="topic-record-detail">
                   {% if record.material_count %}
                   Last material change on {{ record.anchor_display }}{% if record.anchor_run_id and record.anchor_run_id != selected.id %} (<a href="/topics/{{ topic.slug }}?version={{ record.anchor_run_id }}">open that version</a>){% endif %}.
+                  {% elif record.truncated %}
+                  No material change in the {{ record.window_checks }} checks since {{ record.first_display }} read here.
                   {% else %}
                   No material change since the first check on {{ record.first_display }}.
                   {% endif %}
@@ -526,7 +529,7 @@
                 {% if scoreboard.model_count %}<li><b>{{ scoreboard.model_count }}</b> AI models</li>{% endif %}
                 {% if scoreboard.contradiction_count %}<li class="is-contradiction"><b>{{ scoreboard.contradiction_count }}</b> contradiction{{ "s" if scoreboard.contradiction_count != 1 }}</li>{% endif %}
                 {% if scoreboard.source_count %}<li><b>{{ scoreboard.source_count }}</b> source{{ "s" if scoreboard.source_count != 1 }}</li>{% endif %}
-                {% if scoreboard.version_count > 1 %}<li><b>{{ scoreboard.version_count }}</b> checks since {{ scoreboard.tracked_since }}</li>{% endif %}
+                {% if scoreboard.version_count > 1 %}<li><b>{{ scoreboard.version_count }}</b> checks{% if scoreboard.tracked_since %} since {{ scoreboard.tracked_since }}{% endif %}</li>{% endif %}
               </ul>
               <p class="share-provenance">Not one AI's answer: {{ scoreboard.model_count or "several" }} models answered this question independently, a judge from a different model family cross-checked them, and every earlier version stays readable. <a href="/consensus-engine">How it works</a></p>
 
@@ -536,7 +539,7 @@
                   <h3>How this answer held up</h3>
                   <strong class="watch-history-latest">{% if history.latest_score is not none %}{{ history.latest_score }}<span>/100</span><small> agreement at this check</small>{% else %}<small>Insufficient evidence at this check</small>{% endif %}</strong>
                 </div>
-                <p class="topic-panel-lead">The same question, re-asked {{ history.points | length }} times. The score moves between a small set of grading levels, so read the steps as levels, not as measurements. Gaps mark checks with insufficient evidence.</p>
+                <p class="topic-panel-lead">The same question, re-asked {{ history.points | length }} times{% if record_window.truncated %} in the latest checks shown here{% endif %}. The score moves between a small set of grading levels, so read the steps as levels, not as measurements. Gaps mark checks with insufficient evidence.</p>
                 <div class="watch-chart-scroll">
                   <svg class="watch-chart" viewBox="0 0 {{ history.width }} {{ history.height }}" role="img"
                        aria-label="Agreement score from {{ history.start_date }} to {{ history.end_date }}">
@@ -600,7 +603,7 @@
         </section>
 
         <details class="legal-panel topic-timeline-card" open>
-          <summary><span><small>Timeline</small><strong>Browse {{ runs | length }} saved check{{ "s" if runs | length != 1 }}</strong></span><b aria-hidden="true">+</b></summary>
+          <summary><span><small>Timeline</small><strong>{% if timeline_total > runs | length %}Browse the latest {{ runs | length }} of {{ timeline_total }} saved checks{% else %}Browse {{ runs | length }} saved check{{ "s" if runs | length != 1 }}{% endif %}</strong></span><b aria-hidden="true">+</b></summary>
           <ol class="topic-timeline">
             {% for entry in timeline %}
             {% if entry.kind == "quiet" %}
@@ -637,98 +640,6 @@
 
   {% include "partials/public_footer.html" %}
 
-  <script defer src="/static/js/topic-page.js?v=20260826-finding1"></script>
-  <script>
-    (function () {
-      const form = document.getElementById("topicFollowForm");
-      if (!form) return;
-      const status = document.getElementById("topicFollowStatus");
-      const button = form.querySelector("button");
-      form.addEventListener("submit", async function (event) {
-        event.preventDefault();
-        button.disabled = true;
-        status.textContent = "Sending confirmation…";
-        try {
-          const response = await fetch("/api/topics/" + encodeURIComponent(form.dataset.slug) + "/follow", {
-            method: "POST",
-            headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({email: form.email.value})
-          });
-          const data = await response.json();
-          if (!response.ok) throw new Error(data.error || "Could not follow this Topic.");
-          status.textContent = data.message;
-          form.reset();
-        } catch (error) {
-          status.textContent = error.message;
-          status.classList.add("is-error");
-        } finally {
-          button.disabled = false;
-        }
-      });
-      window.addEventListener("DOMContentLoaded", function () {
-        if (window.ConsensusMath) window.ConsensusMath.render(document.querySelector("[data-math-render]"));
-      });
-    })();
-  </script>
-
-  <script>
-    // Inline citations behave as chips that reveal their embedded source.
-    (function () {
-      const prose = document.querySelector(".topic-consensus");
-      if (!prose) return;
-      let timer = null;
-      function flash(target) {
-        if (!target) return;
-        const holder = target.closest("details");
-        if (holder && !holder.open) holder.open = true;
-        target.scrollIntoView({behavior: "smooth", block: "center"});
-        target.classList.add("is-cited");
-        if (timer) window.clearTimeout(timer);
-        timer = window.setTimeout(function () { target.classList.remove("is-cited"); }, 2200);
-      }
-      prose.querySelectorAll('a[href^="#src-"]').forEach(function (link) {
-        link.classList.add("source-chip");
-        const target = document.getElementById(decodeURIComponent(link.getAttribute("href").slice(1)));
-        if (target) {
-          const srcImg = target.querySelector(".src-favicon-img");
-          let url = srcImg && srcImg.getAttribute("src");
-          if (!url) {
-            // e.g. X cards carry no favicon slot: derive it from the source URL.
-            try {
-              const host = new URL(target.getAttribute("href"), window.location.href).hostname.replace(/^www\./, "");
-              if (host) url = "/api/topics/favicon?d=" + encodeURIComponent(host);
-            } catch (e) { /* keep the dot fallback */ }
-          }
-          if (url) {
-            const fav = document.createElement("img");
-            fav.className = "cite-favicon";
-            fav.setAttribute("src", url);
-            fav.setAttribute("alt", "");
-            fav.setAttribute("aria-hidden", "true");
-            fav.addEventListener("error", function () {
-              fav.remove();
-              link.classList.remove("has-favicon");
-            });
-            link.insertBefore(fav, link.firstChild);
-            link.classList.add("has-favicon");
-          }
-        }
-        link.addEventListener("click", function (event) {
-          if (!target) return;
-          event.preventDefault();
-          flash(target);
-        });
-      });
-    })();
-
-    // Drop favicons that fail to load so the monogram fallback shows through.
-    (function () {
-      document.querySelectorAll(".src-favicon-img").forEach(function (img) {
-        function fail() { img.remove(); }
-        img.addEventListener("error", fail);
-        if (img.complete && img.naturalWidth === 0) fail();
-      });
-    })();
-  </script>
+  <script defer src="/static/js/topic-page.js?v=20260929-textsink"></script>
 </body>
 </html>

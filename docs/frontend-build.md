@@ -88,7 +88,12 @@ Unveränderte Vendor-Dateien werden nicht erneut geöffnet/überschrieben; geän
 Dateien werden über eine temporäre Datei im selben Verzeichnis atomar ersetzt.
 Die Dateien sind mitcommittet und im Manifest-Fingerprint enthalten, sodass
 Produktion weiterhin kein Node benötigt. Bei Versionsupdates auch die Pfade
-in `templates/index.html` anpassen. `asset_url` ergänzt Inhalts-Hashes.
+in `templates/index.html`, die Asset-Allowlists in `static/js/error-reporter.js`
+und `app/api/routers/client_errors.py` sowie die jsDelivr-Verweise der
+öffentlichen Seiten (`share.html`, `topic.html`) anpassen und das alte
+Vendor-Verzeichnis entfernen. `tests/js/dompurify-vendor.test.mjs` liest die
+DOMPurify-Version aus `package.json` und prüft den ausgelieferten Pfad.
+`asset_url` ergänzt Inhalts-Hashes.
 
 CSS: `style.css` ist ein `@import`-Aggregator. Der Build zieht die Kette in
 Kaskadenreihenfolge in **eine** Datei. `static/dist/` liegt neben `static/css/`,

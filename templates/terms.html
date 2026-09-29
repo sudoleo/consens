@@ -121,8 +121,9 @@
             sources, and the names of the AI models consulted as a snapshot at the time of sharing. It does not display your account profile or account ID. However, personal information that appears in your question or the generated content will also become public.</li>
           <li>By creating a shared page you confirm that the question and any content you contributed to it do not
             infringe third-party rights (including copyright and privacy rights) and are not unlawful.</li>
-          <li>You can revoke any of your shared pages at any time under "My shared links"; revoked pages immediately
-            stop being publicly available.</li>
+          <li>You can revoke any of your shared pages at any time under "My shared links"; consens.io stops serving
+            a revoked page within a few minutes (short-lived caches on our servers and in browsers may show it
+            until then).</li>
           <li>We may remove (block) shared pages that violate these terms or applicable law, and we may limit the
             number of pages a user can create per day. Search-engine indexing of shared pages is disabled by default
             and can be enabled for selected pages through operator-controlled publication and indexing settings, including the Scheduled Publisher.</li>
@@ -130,8 +131,9 @@
         <p>
           Every shared page offers a "Report this page" function that can be used without an account. Reports are
           stored only as an anonymous counter per reason (for example "inaccurate", "harmful", "spam"); we do not
-          store the reporter's IP address, browser data, or any other personal data with a report. Repeated reports
-          automatically remove a page from search-engine indexing until we have reviewed it. For a specific notice of unlawful content, email the exact URL and an explanation to <a href="mailto:contact@consens.io">contact@consens.io</a>. We assess sufficiently specific notices and take the measures required by law; the quick counters do not replace this contact route.
+          store the reporter's IP address, browser data, or any other personal data with a report. Reports move a page
+          up our review queue; they never change its search-engine indexing on their own. Only a review by us can
+          remove a page from indexing or block it. For a specific notice of unlawful content, email the exact URL and an explanation to <a href="mailto:contact@consens.io">contact@consens.io</a>. We assess sufficiently specific notices and take the measures required by law; the quick counters do not replace this contact route.
         </p>
       </section>
 
@@ -188,7 +190,7 @@
     </div>
   </main>
 
-  {% set public_footer_note = "Last updated: 5 September 2026" %}
+  {% set public_footer_note = "Last updated: 29 September 2026" %}
   {% include "partials/public_footer.html" %}
 </body>
 </html>

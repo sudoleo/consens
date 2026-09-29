@@ -435,15 +435,20 @@ function linkifyAgentSources(containerEl, sources) {
 }
 window.linkifyAgentSources = linkifyAgentSources;
 
+// Identity key for merging sources across runs. Same contract as the backend's
+// canonical_source_url (app/services/source_catalog.py): only the parts that
+// carry no meaning are normalized. The URL parser lowercases scheme and host
+// and supplies "/" for an empty path; the fragment is dropped. Path, trailing
+// slash and query stay exactly as given, because /Report?key=AbC and
+// /report?key=abc can be different documents.
 function normalizeEvidenceUrl(url) {
   if (!url) return "";
   try {
-    const u = new URL(url);
+    const u = new URL(String(url).trim());
     u.hash = "";
-    u.pathname = u.pathname.replace(/\/$/, "");
-    return u.toString().toLowerCase();
+    return u.href;
   } catch (e) {
-    return String(url).trim().toLowerCase();
+    return String(url).trim();
   }
 }
 
