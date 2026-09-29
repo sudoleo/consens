@@ -198,7 +198,7 @@
           {% elif finding.steady_checks %}
           <span>Unchanged through {{ finding.steady_checks }} check{{ "s" if finding.steady_checks != 1 }}{% if finding.steady_days %}, {{ finding.steady_days }} day{{ "s" if finding.steady_days != 1 }}{% endif %}</span>
           {% endif %}
-          {% if finding.checks > 1 %}<span>Checked {{ finding.checks }} times since {{ finding.tracked_since }}</span>{% endif %}
+          {% if finding.checks > 1 %}<span>Checked {{ finding.checks }} times{% if finding.tracked_since %} since {{ finding.tracked_since }}{% endif %}</span>{% endif %}
           {% if finding.split_count %}<a class="is-split" href="#facts">{{ finding.split_count }} open disagreement{{ "s" if finding.split_count != 1 }}</a>{% endif %}
         </div>
       </section>
@@ -207,7 +207,7 @@
       {% if strip | length > 1 %}
       <section class="topic-strip-block" aria-labelledby="stripHeading">
         <div class="topic-strip-legend">
-          <span id="stripHeading">Every check, oldest first</span>
+          <span id="stripHeading">{% if record_window.truncated or record_window.shown > strip | length %}The latest checks, oldest first{% else %}Every check, oldest first{% endif %}</span>
           <span>{{ strip | length }} check{{ "s" if strip | length != 1 }}</span>
         </div>
         <div class="topic-strip" id="topicStrip" data-slug="{{ topic.slug }}">
@@ -491,7 +491,7 @@
             <summary>
               <span class="topic-deep-title">
                 <strong>The record behind this page</strong>
-                <small>{{ record.checks }} check{{ "s" if record.checks != 1 }} kept in full{% if record.material_count %} &middot; {{ record.material_count }} material change{{ "s" if record.material_count != 1 }}{% else %} &middot; no material change yet{% endif %}</small>
+                <small>{{ record.checks }} check{{ "s" if record.checks != 1 }} kept in full{% if record.truncated %} &middot; latest {{ record.window_checks }} read here{% endif %}{% if record.material_count %} &middot; {{ record.material_count }} material change{{ "s" if record.material_count != 1 }}{% else %} &middot; no material change yet{% endif %}</small>
               </span>
               <b aria-hidden="true">+</b>
             </summary>
@@ -508,6 +508,8 @@
                 <p class="topic-record-detail">
                   {% if record.material_count %}
                   Last material change on {{ record.anchor_display }}{% if record.anchor_run_id and record.anchor_run_id != selected.id %} (<a href="/topics/{{ topic.slug }}?version={{ record.anchor_run_id }}">open that version</a>){% endif %}.
+                  {% elif record.truncated %}
+                  No material change in the {{ record.window_checks }} checks since {{ record.first_display }} read here.
                   {% else %}
                   No material change since the first check on {{ record.first_display }}.
                   {% endif %}
@@ -522,7 +524,7 @@
                 {% if scoreboard.model_count %}<li><b>{{ scoreboard.model_count }}</b> AI models</li>{% endif %}
                 {% if scoreboard.contradiction_count %}<li class="is-contradiction"><b>{{ scoreboard.contradiction_count }}</b> contradiction{{ "s" if scoreboard.contradiction_count != 1 }}</li>{% endif %}
                 {% if scoreboard.source_count %}<li><b>{{ scoreboard.source_count }}</b> source{{ "s" if scoreboard.source_count != 1 }}</li>{% endif %}
-                {% if scoreboard.version_count > 1 %}<li><b>{{ scoreboard.version_count }}</b> checks since {{ scoreboard.tracked_since }}</li>{% endif %}
+                {% if scoreboard.version_count > 1 %}<li><b>{{ scoreboard.version_count }}</b> checks{% if scoreboard.tracked_since %} since {{ scoreboard.tracked_since }}{% endif %}</li>{% endif %}
               </ul>
               <p class="share-provenance">Not one AI's answer: {{ scoreboard.model_count or "several" }} models answered this question independently, a judge from a different model family cross-checked them, and every earlier version stays readable. <a href="/consensus-engine">How it works</a></p>
 
@@ -532,7 +534,7 @@
                   <h3>How this answer held up</h3>
                   <strong class="watch-history-latest">{% if history.latest_score is not none %}{{ history.latest_score }}<span>/100</span><small> agreement at this check</small>{% else %}<small>Insufficient evidence at this check</small>{% endif %}</strong>
                 </div>
-                <p class="topic-panel-lead">The same question, re-asked {{ history.points | length }} times. The score moves between a small set of grading levels, so read the steps as levels, not as measurements. Gaps mark checks with insufficient evidence.</p>
+                <p class="topic-panel-lead">The same question, re-asked {{ history.points | length }} times{% if record_window.truncated %} in the latest checks shown here{% endif %}. The score moves between a small set of grading levels, so read the steps as levels, not as measurements. Gaps mark checks with insufficient evidence.</p>
                 <div class="watch-chart-scroll">
                   <svg class="watch-chart" viewBox="0 0 {{ history.width }} {{ history.height }}" role="img"
                        aria-label="Agreement score from {{ history.start_date }} to {{ history.end_date }}">
@@ -596,7 +598,7 @@
         </section>
 
         <details class="legal-panel topic-timeline-card" open>
-          <summary><span><small>Timeline</small><strong>Browse {{ runs | length }} saved check{{ "s" if runs | length != 1 }}</strong></span><b aria-hidden="true">+</b></summary>
+          <summary><span><small>Timeline</small><strong>{% if timeline_total > runs | length %}Browse the latest {{ runs | length }} of {{ timeline_total }} saved checks{% else %}Browse {{ runs | length }} saved check{{ "s" if runs | length != 1 }}{% endif %}</strong></span><b aria-hidden="true">+</b></summary>
           <ol class="topic-timeline">
             {% for entry in timeline %}
             {% if entry.kind == "quiet" %}

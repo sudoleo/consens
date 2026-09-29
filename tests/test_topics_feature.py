@@ -78,10 +78,17 @@ class FakeQuery:
     def stream(self, transaction=None):
         snapshots = self.collection._snapshots(transaction)
         for field, op, value in self.filters:
-            assert op == "=="
-            snapshots = [
-                snap for snap in snapshots if (snap.to_dict() or {}).get(field) == value
-            ]
+            assert op in {"==", "<="}
+            if op == "==":
+                snapshots = [
+                    snap for snap in snapshots if (snap.to_dict() or {}).get(field) == value
+                ]
+            else:
+                # Like Firestore, a range filter drops documents without the field.
+                snapshots = [
+                    snap for snap in snapshots
+                    if field in (snap.to_dict() or {}) and snap.to_dict()[field] <= value
+                ]
         if self.ordering:
             field, direction = self.ordering
             snapshots = [snap for snap in snapshots if field in snap.to_dict()]
@@ -1146,6 +1153,97 @@ def test_topic_page_shows_the_position_map_and_agreement_history(monkeypatch):
     assert "A 2027 launch" not in historical.text
     assert "How this answer held up" not in historical.text
     assert "Return to the current consensus" in historical.text
+
+
+def _topic_with_runs(db, count, *, summary_for=None):
+    topic = topics.create_topic(topic_payload(), actor_uid="admin", db=db, now=NOW)
+    created = []
+    for index in range(count):
+        material = summary_for is not None and index in summary_for
+        created.append(topics.create_run(
+            topic["id"],
+            run_payload(
+                observed_at=(NOW + timedelta(days=index)).isoformat(),
+                agreement_score=50 + index % 40,
+                change_type="major" if material else "stable",
+                change_summary=summary_for[index] if material else "No material shift.",
+                consensus_md=f"## Check {index + 1}\n\nAnswer number {index + 1}.",
+            ),
+            actor_uid="admin", db=db, now=NOW + timedelta(days=index),
+        ))
+    return topic, created
+
+
+def test_old_topic_version_links_survive_more_than_one_page_of_runs(monkeypatch):
+    db = FakeFirestore()
+    monkeypatch.setattr(topics, "db_firestore", db)
+    topic, created = _topic_with_runs(db, 103, summary_for={0: "The record starts."})
+    app = FastAPI()
+    app.state.limiter = limiter
+    app.include_router(topics_router.router)
+    client = TestClient(app)
+
+    oldest = client.get(f"/topics/gpt-6?version={created[0]['id']}")
+    assert oldest.status_code == 200
+    assert "Answer number 1." in oldest.text
+    assert "Answer number 2." not in oldest.text.split('class="topic-timeline')[0]
+    assert "noindex" in oldest.headers["X-Robots-Tag"]
+
+    boundary = client.get(f"/topics/gpt-6?version={created[2]['id']}")
+    assert boundary.status_code == 200
+    assert "Answer number 3." in boundary.text
+
+    # The version is looked up under this Topic only: another Topic's run id
+    # or an unknown id stays a 404.
+    other = topics.create_topic(
+        topic_payload(title="Other", slug="other-topic"), actor_uid="admin", db=db, now=NOW
+    )
+    foreign = topics.create_run(other["id"], run_payload(), actor_uid="admin", db=db, now=NOW)
+    assert client.get(f"/topics/gpt-6?version={foreign['id']}").status_code == 404
+    assert client.get("/topics/gpt-6?version=doesnotexist").status_code == 404
+    assert client.get("/topics/gpt-6?version=bad..id").status_code == 404
+
+
+def test_topic_page_counts_do_not_claim_a_complete_history_beyond_the_window(monkeypatch):
+    db = FakeFirestore()
+    monkeypatch.setattr(topics, "db_firestore", db)
+    _topic, created = _topic_with_runs(db, 103)
+    app = FastAPI()
+    app.state.limiter = limiter
+    app.include_router(topics_router.router)
+    client = TestClient(app)
+
+    current = client.get("/topics/gpt-6")
+    assert current.status_code == 200
+    text = current.text
+    # 103 checks are stored; the page reads the newest 100 and says so.
+    assert "Browse the latest 100 of 103 saved checks" in text
+    assert "<b>103</b> checks</li>" in text
+    assert "103 checks kept in full" in text
+    assert "latest 100 read here" in text
+    assert "The latest checks, oldest first" in text
+    assert "No material change since the first check on" not in text
+    assert "Checked 103 times since" not in text
+
+    # A version in the middle reads the 100 runs ending at it.
+    middle = client.get(f"/topics/gpt-6?version={created[101]['id']}")
+    assert middle.status_code == 200
+    assert "102 checks kept in full" in middle.text
+    assert "Answer number 102." in middle.text
+
+
+def test_list_runs_until_reads_a_bounded_window_ending_at_the_run():
+    db = FakeFirestore()
+    topic, created = _topic_with_runs(db, 150)
+    db.query_reads.clear()
+
+    window = topics.list_runs_until(topic["id"], topics.get_run(topic["id"], created[119]["id"], db=db), db=db, max_items=100)
+
+    assert [run["id"] for run in window] == [run["id"] for run in created[20:120]]
+    assert db.query_reads == [((("topics", topic["id"], "runs")), ("observed_at", "DESCENDING"), 101, 101)]
+
+    first = topics.list_runs_until(topic["id"], topics.get_run(topic["id"], created[0]["id"], db=db), db=db)
+    assert [run["id"] for run in first] == [created[0]["id"]]
 
 
 def test_topic_page_keeps_unscored_latest_run_and_its_position_map(monkeypatch):

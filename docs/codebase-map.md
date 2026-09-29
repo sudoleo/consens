@@ -3647,6 +3647,16 @@ wird nur chunkweise bis zum Budget expandiert und DTD/Entities werden abgewiesen
   bleibt der vollständige Kompatibilitätsread erhalten. Kein neuer Topic-Index
   oder Backfill nötig; der normale kurze Verlauf kostet N Dokumente plus
   die Count-Aggregation statt zweier Vollabfragen.
+- `/topics/{slug}` liest für Timeline und aktuelle Ansicht die neuesten 100 Runs
+  (`TOPIC_PAGE_RUNS`). Ein expliziter `?version=<run_id>` außerhalb dieses
+  Fensters wird direkt per `topics.get_run` unter dem bereits aufgelösten Topic
+  geladen (Review R33); fremde oder unbekannte IDs bleiben 404. Das As-of-Bild
+  einer solchen Version stammt aus `topics.list_runs_until` (ein begrenzter
+  `observed_at <= run`-Read, neueste 100 bis einschließlich der Version). Ist ein
+  Fenster abgeschnitten (`run_count` bzw. Versionsnummer größer als die
+  gelesenen Runs), nennen Zähler den gespeicherten Gesamtwert, und Texte wie
+  „since the first check“, „Every check“ oder „since {Datum}“ behaupten keine
+  Vollständigkeit mehr.
 - Topics sind bewusst **keine Shares und keine Nutzer-Watches**. `topics/{id}`
   hält redaktionelle Metadaten plus die ausführbare `run_config` mit konkretem
   `provider_models`-Mapping, `update_interval`, Quellenpräferenzen, SEO, Status

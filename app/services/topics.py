@@ -910,6 +910,57 @@ def list_runs(topic_id: str, *, db=None, max_items: int = 100) -> list[dict]:
     return runs[-max_items:]
 
 
+def _run_order_key(run: dict):
+    """The chronology list_runs sorts by; undated legacy runs come first."""
+    observed_at = run.get("observed_at")
+    return (
+        observed_at if isinstance(observed_at, datetime)
+        else datetime.min.replace(tzinfo=timezone.utc),
+        run.get("version") or 0,
+        run["id"],
+    )
+
+
+def list_runs_until(topic_id: str, run: dict, *, db=None, max_items: int = 100) -> list[dict]:
+    """The newest ``max_items`` runs up to and including ``run``, oldest first.
+
+    This is the as-of window for a version that is older than the latest
+    ``list_runs`` page: one bounded range read ending at the selected run
+    instead of the whole history. The result may be shorter than the record
+    before it; callers compare it with the run's version to say so.
+    """
+    db = db if db is not None else db_firestore
+    ref = db.collection(TOPICS_COLLECTION).document(topic_id).collection("runs")
+    limit_key = _run_order_key(run)
+    observed_at = run.get("observed_at")
+    expected = int(run.get("version") or 0)
+
+    def full_history():
+        runs = [{"id": doc.id, **(doc.to_dict() or {})} for doc in ref.stream()]
+        runs = [item for item in runs if _run_order_key(item) <= limit_key]
+        runs.sort(key=_run_order_key)
+        return runs[-max_items:] if max_items > 0 else runs
+
+    if max_items <= 0 or not isinstance(observed_at, datetime):
+        return full_history()
+    try:
+        query = ref.where(filter=FieldFilter("observed_at", "<=", observed_at))
+    except TypeError:  # in-memory test doubles use the positional form
+        query = ref.where("observed_at", "<=", observed_at)
+    fetched = [
+        {"id": doc.id, **(doc.to_dict() or {})}
+        for doc in query.order_by("observed_at", direction="DESCENDING")
+        .limit(max_items + 1).stream()
+    ]
+    runs = [item for item in fetched if _run_order_key(item) <= limit_key]
+    runs.sort(key=_run_order_key)
+    if len(fetched) <= max_items and expected > len(runs):
+        # The range read excludes runs without a date. Only when it provably
+        # misses versions of a short window is the complete history worth it.
+        return full_history()
+    return runs[-max_items:]
+
+
 def get_run(topic_id: str, run_id: str, *, db=None) -> dict | None:
     db = db if db is not None else db_firestore
     if not str(run_id or "").strip():

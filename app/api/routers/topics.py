@@ -34,6 +34,9 @@ router = APIRouter()
 _FAVICON_CONCURRENCY: Optional[asyncio.Semaphore] = None
 _FAVICON_CONCURRENCY_LOOP = None
 _FAVICON_ACQUIRE_TIMEOUT_SECONDS = 1.0
+# A public Topic page reads a bounded window of its record: the newest runs
+# for the timeline, and for an older version the runs ending at it.
+TOPIC_PAGE_RUNS = 100
 templates = Jinja2Templates(directory="templates")
 
 
@@ -341,46 +344,94 @@ async def topic_page(
         redirect.headers["Cache-Control"] = "public, max-age=3600"
         return redirect
 
-    runs_raw = await asyncio.to_thread(topics.list_runs, topic["id"])
-    runs = [topics.run_public_view(run) for run in runs_raw]
-    selected = next(
-        (run for run in runs if run["id"] == (version or topic["latest_run_id"])),
-        None,
+    # The timeline is the newest page of the record; it is navigation, not
+    # the lookup for an explicit version link.
+    recent_raw = await asyncio.to_thread(
+        topics.list_runs, topic["id"], max_items=TOPIC_PAGE_RUNS
     )
-    if not selected:
+    wanted = version or topic["latest_run_id"]
+    selected_raw = next((run for run in recent_raw if run["id"] == wanted), None)
+    if selected_raw is None and version and re.fullmatch(r"[A-Za-z0-9]{1,40}", version):
+        # An older, still stored version is loaded directly under the topic
+        # that was already resolved above, so a link never dies of old age.
+        selected_raw = await asyncio.to_thread(topics.get_run, topic["id"], version)
+    if not selected_raw:
         raise HTTPException(status_code=404, detail="Topic version not found")
-    current = selected["id"] == topic["latest_run_id"]
-    preferred_domains = (topic.get("source_rules") or {}).get("preferred_domains") or []
-    for run in runs:
-        run["date_display"] = _date_label(run["observed_at"])
-        run["consensus_excerpt"] = markdown_to_plaintext(
-            run["consensus_md"], limit=190
+    if any(run["id"] == selected_raw["id"] for run in recent_raw):
+        record_raw = [
+            run for run in recent_raw
+            if int(run.get("version") or 0) <= int(selected_raw.get("version") or 0)
+        ]
+    else:
+        record_raw = await asyncio.to_thread(
+            topics.list_runs_until, topic["id"], selected_raw,
+            max_items=TOPIC_PAGE_RUNS,
         )
-        run["is_selected"] = run["id"] == selected["id"]
-        for item in run["evidence"]:
-            _enrich_evidence(item, preferred_domains)
-        run["evidence"].sort(key=lambda item: (
-            item.get("quality_rank", 99), item.get("published_at") or "", item.get("title") or ""
-        ))
+    preferred_domains = (topic.get("source_rules") or {}).get("preferred_domains") or []
+
+    def public_runs(raw_runs):
+        views = [topics.run_public_view(run) for run in raw_runs]
+        for run in views:
+            run["date_display"] = _date_label(run["observed_at"])
+            run["consensus_excerpt"] = markdown_to_plaintext(
+                run["consensus_md"], limit=190
+            )
+            run["is_selected"] = run["id"] == selected_raw["id"]
+            for item in run["evidence"]:
+                _enrich_evidence(item, preferred_domains)
+            run["evidence"].sort(key=lambda item: (
+                item.get("quality_rank", 99), item.get("published_at") or "", item.get("title") or ""
+            ))
+        return views
+
+    runs = public_runs(recent_raw)
+    views_by_id = {run["id"]: run for run in runs}
+    views_by_id.update({
+        run["id"]: run
+        for run in public_runs([raw for raw in record_raw if raw["id"] not in views_by_id])
+    })
+    record_views = [views_by_id[raw["id"]] for raw in record_raw]
+    selected = views_by_id.get(selected_raw["id"])
+    if selected is None:
+        selected = public_runs([selected_raw])[0]
+        record_views.append(selected)
+    current = selected["id"] == topic["latest_run_id"]
     runs_desc = list(reversed(runs))
     # Everything that describes the record is built from the runs up to the
     # selected one: an older version has to show what was known then, not
     # today's picture with an older answer above it.
-    runs_upto = [
-        run for run in runs
-        if int(run.get("version") or 0) <= int(selected.get("version") or 0)
-    ]
-    history = _topic_history_view(runs_raw, int(selected.get("version") or 0))
+    runs_upto = record_views
+    # Versions are numbered 1..n per Topic, so a window that holds fewer runs
+    # than the selected version number does not reach back to the first check.
+    # Legacy runs without a version never claim more than they show.
+    record_total = max(int(selected.get("version") or 0), len(runs_upto))
+    record_truncated = record_total > len(runs_upto)
+    history = _topic_history_view(record_raw, int(selected.get("version") or 0))
     _plain_position_labels(history)
     scoreboard = _topic_scoreboard(topic, selected, runs)
+    # The timeline is the newest page; beyond it the stored count is the truth
+    # and its first date is not the first check.
+    timeline_total = max(int(topic.get("run_count") or 0), len(runs))
+    timeline_truncated = timeline_total > len(runs)
+    if timeline_truncated:
+        scoreboard["version_count"] = timeline_total
+        scoreboard["tracked_since"] = ""
     ledger = claim_ledger.build_claim_ledger(runs_upto)
     record = claim_ledger.build_record_summary(runs_upto)
+    if record and record_truncated:
+        # Checks outside the window are stored but not read here: counts use
+        # the stored total, and nothing claims to know where the record began.
+        record["checks"] = record_total
+        record["truncated"] = True
+        record["window_checks"] = len(runs_upto)
     sources = claim_ledger.apply_source_chronicle(runs_upto, selected)
     claim_ledger.attach_claim_sources(ledger, runs_upto)
     strip = claim_ledger.build_check_strip(runs_upto, ledger)
     finding = topic_finding.build_finding(
         ledger, record, selected, lead_question=topic.get("lead_question") or ""
     )
+    if finding and record_truncated:
+        finding["tracked_since"] = ""
     # The timeline stays complete even on an older version, because it is the
     # navigation between versions.
     timeline = claim_ledger.collapse_timeline(runs_desc)
@@ -412,8 +463,8 @@ async def topic_page(
     )
     if finding:
         default_description = (
-            f"{finding['line']} Checked {len(runs_upto)} time"
-            f"{'s' if len(runs_upto) != 1 else ''} across "
+            f"{finding['line']} Checked {record_total} time"
+            f"{'s' if record_total != 1 else ''} across "
             f"{scoreboard['model_count'] or 'several'} AI models, most recently "
             f"{selected['observed_at'][:10]}. {public_topic['lead_question']}"
         )[:300]
@@ -425,7 +476,10 @@ async def topic_page(
         "@type": "Article",
         "headline": title[:110],
         "description": meta_description[:300],
-        "datePublished": runs[0]["observed_at"] if runs else selected["observed_at"],
+        "datePublished": (
+            public_topic.get("created_at") or selected["observed_at"]
+            if timeline_truncated or not runs else runs[0]["observed_at"]
+        ),
         "dateModified": runs[-1]["observed_at"] if runs else selected["observed_at"],
         "mainEntityOfPage": {"@type": "WebPage", "@id": canonical_url},
         "author": seo_entity.ORG_REF,
@@ -448,6 +502,12 @@ async def topic_page(
         "record": record,
         "sources": sources,
         "timeline": timeline,
+        "timeline_total": timeline_total,
+        "record_window": {
+            "truncated": record_truncated,
+            "shown": len(runs_upto),
+            "total": record_total,
+        },
         "canonical_url": canonical_url,
         "page_url": page_url,
         "page_title": title,
