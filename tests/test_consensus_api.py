@@ -146,7 +146,7 @@ def test_admin_dashboard_exposes_safe_api_key_management_section():
     assert 'id="publisherEnabled"' in template
     assert 'id="publisherTopicBrief"' in template
     assert "Free Watch providers" in template
-    assert "DeepSeek is excluded from both" in template
+    assert "No provider is excluded" in template
     assert "'/api/admin/publisher-config'" in admin_source
 
 

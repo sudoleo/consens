@@ -60,6 +60,45 @@ def test_default_publisher_configuration_is_persisted_and_free_pinned():
     assert publisher_config.public_config(config)["excluded_providers"] == []
 
 
+def test_public_config_reports_the_real_provider_plan_instead_of_an_exclusion():
+    """R32: the Admin UI shows the server-side providers of both runs."""
+    import app.core.config as cfg
+    from app.services import api_consensus_runner
+
+    public = publisher_config.public_config(publisher_config.normalize_config({}))
+    plan = api_consensus_runner.build_server_model_plan(deep_think=False, is_pro=True)
+    assert public["initial_run_providers"] == [
+        cfg.provider_label(provider) for provider in cfg.PROVIDERS if provider in plan["providers"]
+    ]
+    assert public["watch_providers"] == [
+        cfg.provider_label(provider)
+        for provider in cfg.PROVIDERS if cfg.get_watch_models("free").get(provider)
+    ]
+    assert public["excluded_providers"] == []
+
+    original = cfg.get_watch_models("free")
+    try:
+        cfg.WATCH_MODELS_BY_TIER["free"].pop(next(iter(original)))
+        changed = publisher_config.public_config(publisher_config.normalize_config({}))
+        assert changed["watch_providers"] != public["watch_providers"]
+    finally:
+        cfg.WATCH_MODELS_BY_TIER["free"].clear()
+        cfg.WATCH_MODELS_BY_TIER["free"].update(original)
+
+
+def test_admin_publisher_ui_makes_no_static_provider_exclusion_promise():
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    template = (root / "templates" / "admin.html").read_text(encoding="utf-8")
+    script = (root / "static" / "js" / "admin.js").read_text(encoding="utf-8")
+    assert "DeepSeek excluded" not in template + script
+    assert "DeepSeek is excluded" not in template
+    assert 'id="publisherProviderPlan"' in template
+    assert "config.initial_run_providers" in script
+    assert "config.watch_providers" in script
+
+
 def test_saved_publisher_configuration_is_normalized():
     db = Db()
     data = {

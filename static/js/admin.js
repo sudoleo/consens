@@ -1652,6 +1652,18 @@ function syncPublisherWatchFields() {
         .forEach(id => { document.getElementById(id).disabled = !enabled; });
 }
 
+// The server reports the provider families it really uses; nothing here
+// promises an exclusion the model plan does not enforce.
+function renderPublisherProviders(config) {
+    const list = values => (Array.isArray(values) && values.length ? values.join(', ') : 'none configured');
+    const excluded = Array.isArray(config.excluded_providers) ? config.excluded_providers : [];
+    document.getElementById('publisherWatchProfile').textContent =
+        `${config.watch_interval || 'weekly'} · ${config.watch_model_tier || 'free'} Watch providers`
+        + (excluded.length ? ` · excluded: ${excluded.join(', ')}` : '');
+    document.getElementById('publisherProviderPlan').textContent =
+        `Initial run: ${list(config.initial_run_providers)} · Watch reruns: ${list(config.watch_providers)}`;
+}
+
 async function loadPublisherConfig() {
     publisherStatus('Loading...', false);
     try {
@@ -1665,8 +1677,7 @@ async function loadPublisherConfig() {
         document.getElementById('publisherWatchTime').value = config.watch_time || '09:00';
         document.getElementById('publisherWatchTimezone').value = config.watch_timezone || 'Europe/Berlin';
         document.getElementById('publisherWatchLimit').value = config.max_active_publisher_watches || 12;
-        document.getElementById('publisherWatchProfile').textContent =
-            `${config.watch_interval || 'weekly'} · ${config.watch_model_tier || 'free'} Watch providers · DeepSeek excluded`;
+        renderPublisherProviders(config);
         syncPublisherWatchFields();
         publisherStatus('', false);
     } catch (err) {
