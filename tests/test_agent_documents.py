@@ -185,3 +185,25 @@ def test_failed_revision_keeps_the_manifest_title(setup, monkeypatch):
     manifest = docs.ref(created["document_id"]).get().to_dict()
     assert manifest["title"] == "Decision brief" and manifest["version"] == 1
     assert "writing_until" not in manifest and "operation" not in manifest
+
+
+def test_file_list_is_chronological_and_carries_document_titles(setup):
+    files, chat = setup
+    source = upload(files, chat)
+    docs = service(files, chat)
+    created = docs.create(CreateDocument.model_validate(sample()), cancellation=ProviderCancellation())
+    service(files, chat, "followup").revise(ReviseDocument(document_id=created["document_id"], version=1, section_number=2,
+        replacement={"heading": "Revised plan", "paragraphs": ["Call vendor B."]}, change_summary="Revised"), cancellation=ProviderCancellation())
+    listed = files.list("owner", chat)
+    assert [f["created_at"] for f in listed] == sorted(f["created_at"] for f in listed)
+    assert listed[0]["id"] == source["id"] and "title" not in listed[0]
+    documents = [f for f in listed if f.get("kind") == "document"]
+    assert [f["version"] for f in documents] == [1, 1, 2, 2]
+    assert all(f["title"] == "Decision brief" for f in documents)
+    # Versions saved before titles lived on file records fall back to the manifest.
+    for f in documents:
+        record = files.ref("owner", chat, f["id"])
+        data = record.get().to_dict()
+        data.pop("title")
+        record.set(data)
+    assert all(f["title"] == "Decision brief" for f in files.list("owner", chat) if f.get("kind") == "document")
