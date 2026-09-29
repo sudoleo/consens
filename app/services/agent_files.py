@@ -8,6 +8,7 @@ import base64
 from datetime import datetime, timedelta, timezone
 import hashlib
 import json
+import logging
 import os
 from pathlib import Path
 import re
@@ -22,6 +23,9 @@ from app.services import persistence_guard
 from app.services.chat_store import ChatStore, ChatNotFound
 from app.services.llm.attachments import parse_attachments
 from app.services.agent_tools import ReadOnlyTool
+from app.services.agent_tokens import pdf_visual_tokens
+
+logger = logging.getLogger(__name__)
 
 MAX_FILES = 100
 MAX_STORAGE_BYTES = 100 * 1024 * 1024
@@ -37,19 +41,30 @@ class FileUnavailable(ValueError):
     pass
 
 
+class StorageNotConfigured(FileUnavailable):
+    """No private object store exists here, so no object bytes can exist either."""
+
+
+def storage_configured() -> bool:
+    return bool(os.getenv("AGENT_FILES_BUCKET") or os.getenv("AGENT_FILES_LOCAL_DIR"))
+
+
+PDF_CONTEXT_HEADROOM = 32_000
+
+
 class PrivateObjects:
     def __init__(self):
         self.local = os.getenv("AGENT_FILES_LOCAL_DIR", "")
         if self.local:
             if not any(os.getenv(key) == "1" for key in ("UNIT_TEST_MODE", "E2E_TEST_MODE", "AGENT_FILES_DEVELOPMENT")):
-                raise FileUnavailable("Local file storage requires explicit development mode.")
+                raise StorageNotConfigured("Local file storage requires explicit development mode.")
             self.root = Path(self.local).resolve()
             self.root.mkdir(parents=True, exist_ok=True, mode=0o700)
         else:
             from google.cloud import storage
             bucket = os.getenv("AGENT_FILES_BUCKET", "")
             if not bucket:
-                raise FileUnavailable("Private file storage is not configured.")
+                raise StorageNotConfigured("Private file storage is not configured.")
             self.bucket = storage.Client().bucket(bucket)
 
     def put(self, key, raw, mime):
@@ -124,6 +139,7 @@ class AgentFiles:
 
     def upload(self, uid, chat_id, item, *, cancellation=None):
         self.chats.get_chat(uid, chat_id)
+        self.objects
         parsed = parse_attachments({"attachments": [item]}, attachments_allowed=True)[0]
         extraction = extract_isolated(parsed["raw"], parsed["mime"])
         if extraction["status"] == "failed":
@@ -136,6 +152,9 @@ class AgentFiles:
             raise FileUnavailable("Files must be between 1 byte and 5 MB.")
         if cancellation:
             cancellation.raise_if_cancelled()
+        # Resolve the object store before any metadata or quota exists, so a
+        # missing bucket can never leave an orphaned "processing" record.
+        self.objects
         file_id = uuid4().hex
         ref, quota = self.ref(uid, chat_id, file_id), self.quota_ref(uid)
         now = datetime.now(timezone.utc)
@@ -166,8 +185,12 @@ class AgentFiles:
                 tx.update(ref, {"status": extraction["status"], "processing_until": firestore.DELETE_FIELD})
             self.chats._transaction(finish)
         except BaseException:
-            self.objects.delete(key)
-            self.delete(uid, chat_id, file_id, cleanup=True)
+            # Best effort only: the original error must surface, and a record
+            # left in "deleting" is retried by cleanup_expired_files.
+            try:
+                self.delete(uid, chat_id, file_id, cleanup=True, object_key=key)
+            except Exception:
+                logger.warning("agent_file_upload_cleanup_failed", exc_info=True)
             raise
         return public_file({**data, "status": extraction["status"]})
 
@@ -193,7 +216,14 @@ class AgentFiles:
         self.get(uid, chat_id, file_id)  # Recheck after I/O, including concurrent deletion.
         return data, raw
 
-    def delete(self, uid, chat_id, file_id, *, cleanup=False):
+    def _delete_object(self, key):
+        try:
+            objects = self.objects
+        except StorageNotConfigured:
+            return  # Nothing can have been stored without an object store.
+        objects.delete(key)
+
+    def delete(self, uid, chat_id, file_id, *, cleanup=False, object_key=None):
         ref, quota = self.ref(uid, chat_id, file_id), self.quota_ref(uid)
         def mark(tx):
             if not cleanup:
@@ -204,8 +234,10 @@ class AgentFiles:
             return data
         data = self.chats._transaction(mark)
         if not data:
+            if object_key:
+                self._delete_object(object_key)
             return
-        self.objects.delete(data["object_key"])
+        self._delete_object(data["object_key"])
         def finish(tx):
             current = ref.get(transaction=tx).to_dict()
             usage = quota.get(transaction=tx).to_dict() or {}
@@ -213,7 +245,7 @@ class AgentFiles:
                 tx.delete(ref)
                 # During account deletion do not recreate an already removed quota.
                 if usage:
-                    tx.set(quota, {"count": max(0, usage.get("count", 0) - 1), "bytes": max(0, usage.get("bytes", 0) - current["size"])})
+                    tx.set(quota, {"count": max(0, usage.get("count", 0) - 1), "bytes": max(0, usage.get("bytes", 0) - current.get("size", 0))})
         self.chats._transaction(finish)
 
     def cleanup_chat(self, uid, chat_id):
@@ -240,12 +272,15 @@ class FileContext:
     def __init__(self, files, uid, chat_id, file_ids):
         self.files, self.uid, self.chat_id = files, uid, chat_id
         self.file_ids = list(file_ids)
+        # Files the model opened itself; kept apart so they never evict the
+        # user's explicit selection from later evidence.
+        self.read_ids = []
 
     def read(self, args, *, cancellation):
         cancellation.raise_if_cancelled()
         data = self.files.get(self.uid, self.chat_id, args.file_id)
-        if data["mime"].startswith("image/") or not data["parts"]:
-            self.file_ids = list(dict.fromkeys([*self.file_ids, args.file_id]))[-5:]
+        if (data["mime"].startswith("image/") or not data["parts"]) and args.file_id not in self.file_ids:
+            self.read_ids = [fid for fid in self.read_ids if fid != args.file_id][-(4):] + [args.file_id]
         parts = list(data["parts"])
         if args.query:
             words = set(re.findall(r"\w{3,}", args.query.lower()))
@@ -261,8 +296,12 @@ class FileContext:
     def catalog(self):
         return self.files.list(self.uid, self.chat_id)
 
+    def selection(self):
+        """User selection first, then visual files the model opened, at most five."""
+        return list(dict.fromkeys([*self.file_ids, *self.read_ids]))[:5]
+
     def messages(self, messages, model, *, file_ids=None, query=""):
-        ids = self.file_ids if file_ids is None else file_ids
+        ids = self.selection() if file_ids is None else file_ids
         if not ids:
             return messages
         if len(ids) > 5:
@@ -280,7 +319,13 @@ class FileContext:
                 blocks.append({"type": "image_url", "image_url": {"url": f"data:{data['mime']};base64," + base64.b64encode(raw).decode()}})
             elif data["mime"] == "application/pdf" and not data["parts"] and ("file" in modalities or ("image" in modalities and model.model.split("/")[0] in {"openai", "anthropic", "google"})) and data["size"] <= 2 * 1024 * 1024:
                 _, raw = self.files.download(self.uid, self.chat_id, file_id)
-                blocks.append({"type": "file", "file": {"filename": data["name"], "file_data": "data:application/pdf;base64," + base64.b64encode(raw).decode()}})
+                # Only send the PDF natively when its visual allowance fits the
+                # model's window; otherwise state the limitation instead of
+                # failing the whole turn on the context budget.
+                if pdf_visual_tokens(raw) + PDF_CONTEXT_HEADROOM <= getattr(model, "context_length", 0):
+                    blocks.append({"type": "file", "file": {"filename": data["name"], "file_data": "data:application/pdf;base64," + base64.b64encode(raw).decode()}})
+                else:
+                    blocks.append({"type": "text", "text": "This PDF's scanned pages are too large for this model's context window. State this limitation; do not invent its contents."})
             elif data["mime"].startswith("image/") or not data["parts"]:
                 blocks.append({"type": "text", "text": "This model cannot read this file's visual content. State this limitation; do not invent its contents."})
         return [*messages, {"role": "user", "content": blocks}]
@@ -291,20 +336,39 @@ class _NoCancel:
         pass
 
 
-def cleanup_expired_files(db=None):
-    if not os.getenv("AGENT_FILES_BUCKET") and not os.getenv("AGENT_FILES_LOCAL_DIR"):
+CLEANUP_PAGE_SIZE = 200
+CLEANUP_TIME_BUDGET_SECONDS = 240
+
+
+def cleanup_expired_files(db=None, *, page_size=CLEANUP_PAGE_SIZE, time_budget=CLEANUP_TIME_BUDGET_SECONDS, clock=None):
+    if not storage_configured():
         return 0
+    import time
     from google.cloud.firestore_v1.base_query import FieldFilter
+    clock = clock or time.monotonic
     if db is None:
         from app.core.security import db_firestore
         db = db_firestore
     files, count = AgentFiles(db), 0
-    now = datetime.now(timezone.utc)
-    for field, threshold in (("expires_at", now.isoformat()), ("processing_until", now.isoformat())):
-        for snapshot in db.collection_group("files").where(filter=FieldFilter(field, "<=", threshold)).limit(200).stream():
-            # The collection-group name may be reused elsewhere; validate the full server path.
-            pieces = snapshot.reference.path.split("/")
-            if len(pieces) == 6 and pieces[0] == "users" and pieces[2] == "chats":
-                files.delete(pieces[1], pieces[3], pieces[5], cleanup=True)
-                count += 1
+    deadline = clock() + time_budget
+    threshold = datetime.now(timezone.utc).isoformat()
+    for field in ("expires_at", "processing_until"):
+        query = db.collection_group("files").where(filter=FieldFilter(field, "<=", threshold)).order_by(field).limit(page_size)
+        while clock() < deadline:
+            batch = list(query.stream())
+            for snapshot in batch:
+                # The collection-group name may be reused elsewhere; validate the full server path.
+                pieces = snapshot.reference.path.split("/")
+                if not (len(pieces) == 6 and pieces[0] == "users" and pieces[2] == "chats"):
+                    continue
+                try:
+                    files.delete(pieces[1], pieces[3], pieces[5], cleanup=True)
+                    count += 1
+                except Exception:
+                    # One stuck file must not stall retention for everyone; it
+                    # stays behind the cursor and is retried on the next run.
+                    logger.warning("agent_file_retention_delete_failed", exc_info=True)
+            if len(batch) < page_size:
+                break
+            query = query.start_after(batch[-1])
     return count

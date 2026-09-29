@@ -5076,16 +5076,23 @@ Auszüge unter `users/{uid}/chats/{chat}/files/{id}`. Kontoquote unter
 Upload reserviert transaktional, schreibt ein privates Objekt und finalisiert
 nur bei weiterhin aktivem Chat und Konto. Fehler/Stop räumen Reservierung und
 Objekt auf. Die Chat-Löschkaskade löscht Objekte vor Metadaten; bestehende Account-
-Löschung durchläuft dieselbe Kaskade. Die stündliche Retention räumt abgelaufene
-Dateien und verwaiste Uploads auf. Collection-group-Indizes siehe Setup.
+Löschung durchläuft dieselbe Kaskade. Ohne konfigurierten Objektspeicher
+(`StorageNotConfigured`) scheitert der Upload vor jeder Reservierung mit 503,
+und die Löschkaskade überspringt den Objektspeicher statt abzubrechen. Die
+stündliche Retention räumt abgelaufene Dateien und verwaiste Uploads seitenweise
+mit Zeitbudget auf; ein einzelner fehlschlagender Löschvorgang wird geloggt und
+im nächsten Lauf wiederholt. Collection-group-Indizes siehe Setup.
 
 `agent_file_extract.py` läuft mit 15 s Walltime und auf Linux 10 s CPU / 768 MiB
 Adressraum; höchstens 80 PDF-Seiten, 120 Auszüge / 120.000 Zeichen. DOCX-Tabellen
 behalten Zellreihenfolge, Textdateien Zeilenbereiche und PDFs Seitennummern.
 Scans ohne Text bleiben ausdrücklich als unvollständig erkennbar. Kein OCR.
 `FileContext` ergänzt `read_file`, gezielte Auszüge und native Bilder bei
-expliziter Modellfähigkeit. Delegation und Vergleiche erhalten ausgewählte
-Dateien; Judges erhalten die vorhandene Vergleichsevidenz. Private Bilddaten
+expliziter Modellfähigkeit. Von `read_file` geöffnete Bilder ergänzen die
+Nutzerauswahl (`selection()`), verdrängen sie aber nie. Native PDFs werden nur
+gesendet, wenn ihre seitenbasierte Tokenreservierung ins Kontextfenster passt.
+Vergleiche erhalten die Auswahl, Worker nur explizite `file_ids`; Judges
+erhalten die vorhandene Vergleichsevidenz. Private Bilddaten
 werden nur im flüchtigen Provider-Payload ergänzt, mit konservativer
 Tokenreservierung und tatsächlicher Usage-Abrechnung. Tool-Daten sind keine
 Berechtigungen. Anleitung, Grenzen und PR-Matrix: `docs/agent-integrations.md`.

@@ -79,11 +79,24 @@ files that cannot be read visually must be re-exported, split or transcribed.
 
 **Data sent to models.** The root receives a file catalog and bounded, relevant
 excerpts of selected files. `read_file` pages through specific additional evidence.
-Comparisons and workers receive explicit IDs or the current uploaded selection;
-ordinary judges retain their existing comparison-based input. Binary payloads
-stay in process memory, never tool journals or Firestore. The token estimator
-reserves conservative visual allowances; the existing provider receipts record
-actual usage. No file instructions can execute server operations.
+Comparisons receive explicit IDs or, without them, the current selection.
+Workers receive only the `file_ids` passed to `start_agent` (they have no
+`read_file` tool), so the orchestrator must pass files a worker needs.
+Visual files the root opens via `read_file` are added after the user's
+selection and never displace it (five files at most per call). Ordinary judges
+retain their existing comparison-based input. Binary payloads stay in process
+memory, never tool journals or Firestore. The token estimator reserves a visual
+allowance per image and about 3k tokens per PDF page (capped at 200k); a native
+PDF is only sent when that allowance plus headroom fits the model's context
+window, otherwise the model is told it cannot read the scan. The existing
+provider receipts record actual usage. No file instructions can execute server
+operations.
+
+**Storage configuration.** Without `AGENT_FILES_BUCKET` (or the explicit local
+development directory) uploads fail before any metadata or quota is written,
+and chat/account deletion skips the object store instead of failing. Retention
+pages through expired records with a time budget; a single failing delete is
+logged and retried on the next run instead of stalling the queue.
 
 **Tests.** Deterministic storage/ownership/expiry/abort tests and existing Agent
 loop/comparison tests are run without external model calls. A real production
