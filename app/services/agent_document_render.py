@@ -7,13 +7,20 @@ from pathlib import Path
 import sys
 from xml.sax.saxutils import escape
 
+FONT_DIR = Path(__file__).resolve().parent / "document_fonts"
+
+
+class UnsupportedCharacters(ValueError):
+    def __init__(self, characters):
+        super().__init__("Configured font does not cover this text.")
+        self.characters = characters
+
 
 def render_document(spec):
     from docx import Document
     from docx.shared import Inches, Pt, RGBColor
     from docx.oxml import OxmlElement
     from docx.oxml.ns import qn
-    from reportlab import rl_config
     from reportlab.lib import colors
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.pdfbase import pdfmetrics
@@ -21,21 +28,25 @@ def render_document(spec):
     from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
     from pypdf import PdfReader
 
-    regular = os.getenv("AGENT_DOCUMENT_FONT", str(Path(rl_config.TTFSearchPath[0]) / "Vera.ttf"))
-    bold = os.getenv("AGENT_DOCUMENT_FONT_BOLD", str(Path(regular).with_name("VeraBd.ttf")))
-    # ReportLab ships Vera. Deployments can opt into another licensed font pair.
-    if not Path(regular).is_file():
-        import reportlab
-        regular = str(Path(reportlab.__file__).parent / "fonts" / "Vera.ttf")
-        bold = str(Path(regular).with_name("VeraBd.ttf"))
+    # Bundled DejaVu Sans (Latin incl. Central/Eastern European, Greek,
+    # Cyrillic, arrows, check marks). Deployments can opt into another
+    # licensed font pair, e.g. a CJK font, via environment variables.
+    regular = os.getenv("AGENT_DOCUMENT_FONT", str(FONT_DIR / "DejaVuSans.ttf"))
+    bold = os.getenv("AGENT_DOCUMENT_FONT_BOLD", str(Path(regular).with_name("DejaVuSans-Bold.ttf")))
+    if not Path(regular).is_file() or not Path(bold).is_file():
+        regular, bold = str(FONT_DIR / "DejaVuSans.ttf"), str(FONT_DIR / "DejaVuSans-Bold.ttf")
     pdfmetrics.registerFont(TTFont("Consens", regular))
     pdfmetrics.registerFont(TTFont("ConsensBold", bold))
     pdfmetrics.registerFontFamily("Consens", normal="Consens", bold="ConsensBold", italic="Consens", boldItalic="ConsensBold")
+    # Only the PDF embeds this font; DOCX text is rendered by the reader's
+    # fonts. Report the exact characters so the model can rewrite them.
     content = json.dumps(spec, ensure_ascii=False)
+    missing = set()
     for font in ("Consens", "ConsensBold"):
         glyphs = pdfmetrics.getFont(font).face.charToGlyph
-        if any(ord(c) >= 32 and ord(c) not in glyphs for c in content):
-            raise ValueError("Configured font does not cover this text.")
+        missing.update(c for c in content if ord(c) >= 32 and ord(c) not in glyphs)
+    if missing:
+        raise UnsupportedCharacters("".join(sorted(missing))[:40])
 
     doc = Document()
     page = doc.sections[0]
@@ -121,9 +132,15 @@ if __name__ == "__main__":
     import resource
     resource.setrlimit(resource.RLIMIT_CPU, (20, 20))
     resource.setrlimit(resource.RLIMIT_AS, (1024 * 1024 * 1024, 1024 * 1024 * 1024))
-    from app.services.agent_documents import DocumentSpec
+    # Lightweight import only: no Firestore, Firebase Admin or credentials here.
+    from app.services.agent_document_spec import DocumentSpec
     raw = sys.stdin.buffer.read(50_001)
     if len(raw) > 50_000:
         raise ValueError("Document input too large.")
     spec = DocumentSpec.model_validate_json(raw).model_dump()
-    print(json.dumps({key: base64.b64encode(value).decode() for key, value in render_document(spec).items()}))
+    try:
+        rendered = render_document(spec)
+    except UnsupportedCharacters as exc:
+        print(json.dumps({"error": "unsupported_characters", "characters": exc.characters}))
+        sys.exit(0)
+    print(json.dumps({key: base64.b64encode(value).decode() for key, value in rendered.items()}))

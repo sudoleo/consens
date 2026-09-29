@@ -211,3 +211,122 @@ def test_native_pdf_transport_never_selects_paid_ocr(monkeypatch):
     list(value.stream(model=AgentModel(), messages=[{'role':'user','content':[{'type':'file','file':{'filename':'scan.pdf','file_data':'data:application/pdf;base64,AA=='}}]}], api_key='test'))
     assert captured['plugins'] == [{'id':'file-parser','pdf':{'engine':'native'}}]
     assert captured['provider']['zdr'] is True
+
+
+def test_missing_storage_fails_before_metadata_and_chat_deletion_still_works(setup, monkeypatch):
+    from app.services.agent_files import StorageNotConfigured
+    files, chat = setup
+    monkeypatch.delenv('AGENT_FILES_LOCAL_DIR')
+    monkeypatch.delenv('AGENT_FILES_BUCKET', raising=False)
+    bare = AgentFiles(files.db)
+    with pytest.raises(StorageNotConfigured):
+        upload(bare, chat)
+    assert not bare.list('owner', chat)
+    assert not bare.quota_ref('owner').get().exists
+    # A record left over from an environment that once had storage must not
+    # block chat (and therefore account) deletion.
+    bare.ref('owner', chat, 'a' * 32).set({'id': 'a' * 32, 'object_key': 'agent-files/x', 'size': 3, 'status': 'ready'})
+    bare.chats.delete_chat('owner', chat)
+    assert not bare.ref('owner', chat, 'a' * 32).get().exists
+
+
+def test_missing_storage_returns_503(setup, monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from app.api.routers import agent_files as router
+    from app.core.rate_limit import limiter
+    files, chat = setup
+    monkeypatch.delenv('AGENT_FILES_LOCAL_DIR')
+    monkeypatch.delenv('AGENT_FILES_BUCKET', raising=False)
+    monkeypatch.setattr(router, 'db_firestore', files.db)
+    monkeypatch.setattr(router, '_chat_uid', lambda request: 'owner')
+    monkeypatch.setattr(router, 'require_agent_access', lambda uid: None)
+    monkeypatch.setattr(limiter, "enabled", False)
+    app = FastAPI(); app.include_router(router.router)
+    response = TestClient(app).post(f'/agent/chats/{chat}/files', json={'name': 'a.txt', 'data': base64.b64encode(b'x').decode()})
+    assert response.status_code == 503
+
+
+def test_failed_upload_cleanup_surfaces_original_error(setup):
+    files, chat = setup
+    def put(*_):
+        raise RuntimeError('storage write failed')
+    def delete(*_):
+        raise RuntimeError('storage delete failed')
+    files.objects.put, files.objects.delete = put, delete
+    with pytest.raises(RuntimeError, match='write failed'):
+        upload(files, chat)
+    # The record stays in "deleting" with an elapsed deadline, so retention retries it.
+    remaining = [doc for path, doc in files.db.documents.items() if 'files' in path]
+    assert [doc['status'] for doc in remaining] == ['deleting']
+
+
+class _Snapshot:
+    def __init__(self, path):
+        self.reference = type('Ref', (), {'path': path})()
+
+
+class _PagedQuery:
+    def __init__(self, paths, page_size, start=0):
+        self.paths, self.page_size, self.start = paths, page_size, start
+
+    def where(self, filter=None):
+        return self
+
+    def order_by(self, field):
+        return self
+
+    def limit(self, value):
+        return _PagedQuery(self.paths, value, self.start)
+
+    def start_after(self, snapshot):
+        return _PagedQuery(self.paths, self.page_size, self.paths.index(snapshot.reference.path) + 1)
+
+    def stream(self):
+        return [_Snapshot(p) for p in self.paths[self.start:self.start + self.page_size]]
+
+
+def test_retention_pages_past_failures(monkeypatch):
+    from app.services import agent_files as module
+    monkeypatch.setenv('AGENT_FILES_LOCAL_DIR', '/unused')
+    paths = [f'users/u/chats/{"c" * 32}/files/{i:032x}' for i in range(7)]
+    db = type('DB', (), {'collection_group': lambda self, name: _PagedQuery(paths, 200)})()
+    deleted = []
+    def delete(self, uid, chat_id, file_id, *, cleanup=False):
+        if file_id == f'{0:032x}':
+            raise RuntimeError('transient storage error')
+        deleted.append(file_id)
+    monkeypatch.setattr(module.AgentFiles, 'delete', delete)
+    monkeypatch.setattr(module, 'ChatStore', lambda db: None)
+    # Two fields are swept; each sees the stuck first item and still reaches the rest.
+    assert module.cleanup_expired_files(db, page_size=2) == 12
+    assert len(set(deleted)) == 6
+
+
+def test_native_pdf_only_when_it_fits_the_model_window(setup, monkeypatch):
+    from app.services.agent_tokens import pdf_visual_tokens
+    files, chat = setup
+    writer = PdfWriter()
+    for _ in range(3):
+        writer.add_blank_page(600, 800)
+    out = io.BytesIO(); writer.write(out)
+    assert pdf_visual_tokens(out.getvalue()) == 9_000
+    meta = files.upload('owner', chat, {'name': 'scan.pdf', 'data': base64.b64encode(out.getvalue()).decode()})
+    ctx = FileContext(files, 'owner', chat, [meta['id']])
+    model = AgentModel()
+    monkeypatch.setattr('app.services.llm.agent_model_metadata.snapshot', lambda: {model.model: {'architecture': {'input_modalities': ['file']}}})
+    assert ctx.messages([], replace(model, context_length=200_000))[-1]['content'][-1]['type'] == 'file'
+    small = ctx.messages([], replace(model, context_length=20_000))[-1]['content'][-1]
+    assert small['type'] == 'text' and 'too large' in small['text']
+
+
+def test_model_reads_never_evict_the_user_selection(setup):
+    files, chat = setup
+    out = io.BytesIO(); Image.new('RGB', (10, 10)).save(out, 'PNG')
+    selected = [upload(files, chat, f'note {i}')['id'] for i in range(5)]
+    image = files.upload('owner', chat, {'name': 'p.png', 'data': base64.b64encode(out.getvalue()).decode()})
+    ctx = FileContext(files, 'owner', chat, selected)
+    ctx.read(ReadFileArgs(file_id=image['id']), cancellation=ProviderCancellation())
+    assert ctx.selection() == selected
+    ctx.file_ids = selected[:2]
+    assert ctx.selection() == [*selected[:2], image['id']]

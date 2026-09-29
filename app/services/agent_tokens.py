@@ -10,8 +10,32 @@ import gzip
 import hashlib
 import json
 from pathlib import Path
+import re
 
 import tiktoken
+
+
+# Conservative visual allowance for a native PDF. Scanned pages cost roughly
+# 1.5k to 3k input tokens with the providers PDFs are routed to; the cap keeps a
+# malformed page count from reserving more than a large model can hold.
+PDF_TOKENS_PER_PAGE = 3_000
+PDF_MAX_VISUAL_TOKENS = 200_000
+IMAGE_VISUAL_TOKENS = 16_000
+
+
+def pdf_visual_tokens(raw: bytes) -> int:
+    pages = len(re.findall(rb"/Type\s*/Page(?![A-Za-z])", raw))
+    return min(PDF_MAX_VISUAL_TOKENS, max(1, pages) * PDF_TOKENS_PER_PAGE)
+
+
+def _data_url_tokens(value: str) -> int:
+    if not value.startswith("data:application/pdf"):
+        return IMAGE_VISUAL_TOKENS
+    try:
+        raw = base64.b64decode(value.split(";base64,", 1)[1], validate=False)
+    except (ValueError, IndexError):
+        return PDF_MAX_VISUAL_TOKENS
+    return pdf_visual_tokens(raw)
 
 
 @lru_cache(maxsize=1)
@@ -35,7 +59,7 @@ def input_estimate(messages, tools=(), request_config=None):
         if isinstance(value, list):
             return [without_binary(item) for item in value]
         if isinstance(value, str) and value.startswith("data:") and ";base64," in value:
-            visual_tokens += 200_000 if value.startswith("data:application/pdf") else 16_000
+            visual_tokens += _data_url_tokens(value)
             return "[private visual input]"
         return value
     payload = [without_binary(messages), tools, (request_config or {}).get("response_format")]
