@@ -17,6 +17,7 @@ import app.core.config as cfg
 from app.core.observability import record_metric, safe_exception
 from app.services.llm.base import get_system_prompt
 from app.services.llm.citations import result_sources, result_text, to_plain
+from app.services.llm import completion
 from app.services.llm.credentials import openrouter_api_key, resolve_developer_api_keys
 from app.services.llm.engines import query_model
 from app.services.llm.mock_llm import mock_ask_result, mock_llm_enabled
@@ -139,6 +140,10 @@ def fan_out_provider_answers(
             # Retain the text convention only for legacy string-only adapters.
             if not text or (isinstance(raw, str) and text.lower().startswith("error")) or (
                 isinstance(raw, dict) and raw.get("error")
+            ) or (
+                # Token-limit/interrupted answers are not model positions (R06).
+                isinstance(raw, dict)
+                and raw.get("completion") not in (None, completion.COMPLETE)
             ):
                 outcome = (
                     "timeout"

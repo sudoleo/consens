@@ -26,6 +26,7 @@ from app.services.llm.attachments import (
 )
 from app.services.llm.base import get_system_prompt
 from app.services.llm.citations import coerce_text, parse_openrouter_response, result_text
+from app.services.llm import completion
 from app.services.llm.provider_runtime import PROVIDER_HTTP_TIMEOUT, managed_provider_resource
 
 logger = logging.getLogger(__name__)
@@ -282,7 +283,8 @@ def query_model(
             data = response.json()
         if data.get("error"):
             raise _ProviderResponseError(data["error"])
-        message = (((data.get("choices") or [{}])[0].get("message")) or {})
+        choice = (data.get("choices") or [{}])[0] or {}
+        message = choice.get("message") or {}
         result = parse_openrouter_response(
             coerce_text(message.get("content")),
             message.get("annotations") or data.get("citations") or [],
@@ -295,6 +297,13 @@ def query_model(
                 "error": "The model returned no answer. Please try again.",
                 "error_code": "empty_response",
             }
+        # A complete JSON body is a transport confirmation; the finish reason
+        # still decides whether the text itself was cut at the token limit.
+        result["completion"] = completion.completion_state(
+            choice.get("finish_reason"), terminated=True
+        )
+        if result["completion"] != completion.COMPLETE:
+            result["finish_reason"] = str(choice.get("finish_reason") or "")[:40]
         return result
     except Exception as exc:
         return _error(label, exc)
