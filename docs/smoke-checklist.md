@@ -135,6 +135,13 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       Dateien an der Frage. Agent-Toolbar bleibt verborgen; neue Folgefrage-
       Dateien erscheinen stattdessen im Composer. Moduswechsel/„New comparison“,
       Fehler vor dem Senden und mobile Collapse-Zustände verlieren keine Dateien.
+- [ ] Agent-Dateien/Dokumente bei 1440/390 px, Hell/Dunkel: Upload zeigt je Datei
+      eine Fortschrittszeile, ein abgelehnter Upload bleibt mit Grund am Chip.
+      Dokumentkarte (Titel, Version, DOCX/PDF) steht NACH der Antwort und nur bei
+      der Turn, die sie erzeugt hat; frühere Versionen eingeklappt; „Files in this
+      chat (n)“ eingeklappt darunter. Entfernen nur über ⋯ mit Bestätigung;
+      Screenreader hört „Download <Datei>, version n“. Teils lesbare Dateien zeigen
+      „Partly read“ an Zeile, Chip und Antwort.
 - [ ] Skeletons: Bei gedrosseltem Laden bleiben Chat-Platzhalter bis zur
       Metadatenantwort stehen; leere Liste, Fehler und Logout entfernen sie.
       Wartende Modellantworten zeigen Textzeilen bis zum ersten Token oder

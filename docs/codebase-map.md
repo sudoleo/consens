@@ -59,8 +59,8 @@ secrets, indexes, approved model routing, Google verification and live-test limi
 Agent documents (27.09.2026): `agent_documents.py` registers `create_document`,
 `read_document`, and `revise_document` on the root's existing bounded ToolRegistry.
 The tools run before the immutable synthesis/review handoff. The synthesis receives
-saved output descriptors explicitly, and `resources` SSE refreshes the existing
-`agent-workspace.js` cards. No worker receives document-write tools. Files reuse
+saved output descriptors explicitly, and `resources` SSE refreshes the
+`agent-workspace.js` document cards (one per `document_id`, after the answer). No worker receives document-write tools. Files reuse
 the private owner/chat-bound store and authenticated download route from PR 1.
 `agent_document_render.py` renders strict structured content offline in a bounded
 subprocess using python-docx and ReportLab, then reopens both formats. Versions
@@ -5385,6 +5385,43 @@ Composer lädt vor `/agent` hoch und sendet ausschließlich validierte `file_ids
 die Auswahl wird in `agent_settings` eingefroren und bei Replay verglichen.
 `agent-workspace.js` zeigt Download, Status, Warnungen und Löschen auch nach Reload.
 Dateien werden nicht in Shares, Memory oder Watch-Inputs übernommen.
+
+`GET .../files` liefert die Liste chronologisch (`created_at`, Firestore streamt in
+zufälliger ID-Reihenfolge), Dokumentversionen mit `title` (neue Versionen tragen
+ihn am Dateieintrag, ältere über einen Manifest-Read pro Dokument) und importierte
+Gmail-Anhänge mit `origin_subject`/`origin_from` nur zur Anzeige (`origin` bleibt
+der Wiederverwendungs-Schlüssel).
+
+UI-Vertrag (2026-09-30, `agent-workspace.js` + `agent-workspace.css`):
+- `App.agentWorkspace.refresh(chatId, force)`: ohne `force` projiziert es nur die
+  gecachte Liste neu (billig, darf bei jedem Render laufen, z. B. Turnwechsel).
+  Chatwechsel oder `force` holen die Liste, gebündelt auf höchstens einen Request
+  pro 300 ms (sofort plus ein nachlaufender). Ein frisch angelegter, noch nicht
+  angenommener Chat des sichtbaren Laufs gilt als leer (kein GET). Ein erster
+  Ladefehler wird einmal still wiederholt, danach „Couldn't load chat files… Retry“.
+  `refresh` lädt KEINE Google-Aktionen mehr: der Aufrufer ruft
+  `App.agentGoogle?.refreshActions?.(chatId, force)` separat
+  (`resources`-Events je nach Payload-Schlüssel `documents`/`files` bzw.
+  `actions`/`gmail_evidence`).
+- `#agentAnswerResources` (nach `#agentAnswerBody`, vor `#agentAnswerError`; wird
+  angelegt, falls das Template es nicht enthält): Upload-Fortschritt pro Datei,
+  Hinweis „n file(s) were only partly readable“ für die mit dieser Nachricht
+  gesendeten Dateien (`agent_settings.file_ids`) und je `document_id` eine
+  Dokumentkarte der angezeigten Turn (`turn_id`): Titel, aktuelle Version,
+  DOCX/PDF-Download, Badge „New/Updated in this answer“, frühere Versionen
+  eingeklappt, ein Revisionshinweis. Keine Roh-IDs in der Oberfläche.
+- `#agentWorkspace` (unter `#agentAnswer` bzw. `#agentGoogleActions`): eingeklappte
+  Disclosure „Files in this chat (n)“ mit allen Uploads, Mail-Anhängen („From
+  email: Betreff (Absender)“, Fallback `App.agentGoogle?.evidenceFor`) und
+  Dokumenten. „Partly read“-Badge bei Extraktionswarnungen.
+- Entfernen nur über das Overflow-Menü (⋯) mit expliziter Bestätigung; der Fokus
+  startet auf „Cancel“. Alle Download-/Menü-Buttons haben sprechende `aria-label`s.
+- `upload()` zeigt Fortschritt ohne die Liste zu leeren. Scheitert eine Datei,
+  bleibt sie mit Serverbegründung am Composer-Chip
+  (`App.attachments.markError(file, message)`), `context.metadata.uploadFailed`
+  wird gesetzt und der Fehler lautet „Couldn't upload <Name>. <Grund>“.
+  Nachrichten-Chips (`setThreadQuestionAttachments`) tragen optional `warnings`
+  und zeigen dann „Partly read“.
 
 Bytes liegen im privaten GCS-Bucket `AGENT_FILES_BUCKET`, Metadaten und begrenzte
 Auszüge unter `users/{uid}/chats/{chat}/files/{id}`. Kontoquote unter
