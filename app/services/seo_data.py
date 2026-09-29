@@ -245,9 +245,21 @@ class SeoDataService:
     def collect(self) -> dict:
         if not self._collection_lock.acquire(blocking=False):
             raise CollectionAlreadyRunning()
+        # The process-wide lock must be released on every exit path, including
+        # failures before a run document exists (clock, date window or the
+        # run creation itself). Otherwise a single early database error kept
+        # every later collection "already running" until the next restart.
+        try:
+            return self._collect_locked()
+        finally:
+            self._collection_lock.release()
+
+    def _collect_locked(self) -> dict:
         run_id = uuid.uuid4().hex
         started_at = self.clock()
         start_date, end_date = date_window(started_at)
+        # No run document exists before this call succeeds, so a failure here
+        # propagates without trying to terminate a non-existent run.
         self.repository.create_run(run_id, {
             "schema_version": 1,
             "status": "running",
@@ -492,8 +504,6 @@ class SeoDataService:
                 end_date,
             )
             raise
-        finally:
-            self._collection_lock.release()
 
     def _finish_non_success(self, run_id, started_at, status, message, start_date, end_date):
         result = {
