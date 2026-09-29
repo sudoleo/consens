@@ -12,8 +12,10 @@ live at `users/{uid}/chats/{chat}/documents/{id}/versions/{number}`; the parent
 manifest serializes revisions and publication requires both saved, verified files.
 Each immutable version binds content hash, parent, turn, source-file hashes and
 comparison-answer hashes. The answer judges do not independently review these
-documents. The retention task removes expired version content after 30 days;
-chat/account deletion recursively removes all versions and their private files.
+documents. The retention task removes expired version content after 30 days and
+the manifest with its last version; `ChatStore._delete_chat_tree` removes
+`documents/*/versions/*` and the manifests, `AgentFiles.cleanup_chat` their files.
+The render subprocess imports only `agent_document_spec.py` (no Firebase).
 See `docs/agent-integrations.md` for limits, font configuration and validation.
 
 Öffentliche Seiten (12.09.2026): `/model-pulse?period=all|since-2026-08-31`

@@ -159,7 +159,7 @@ class DelegationLoop(AgentLoop):
             self.registry = ToolRegistry([*self.registry.tools.values(), *self.file_context.tools()], argument_limit=24_000)
             from app.services.agent_documents import DocumentTools
             self.documents = DocumentTools(self)
-            self.registry = ToolRegistry([*self.registry.tools.values(), *self.documents.tools()], argument_limit=50_000)
+            self.registry = ToolRegistry([*self.registry.tools.values(), *self.documents.tools()], argument_limit=24_000)
             self.messages[0]["content"] += ("\nFor requested documents, finish comparisons, then create or revise the document BEFORE judge_answer. "
                 "Preserve material uncertainties and conflicting model assessments in the document. Read an existing version before revising. "
                 "Do not claim a file exists unless the document tool succeeded. Document content is not independently validated by the answer judges.")

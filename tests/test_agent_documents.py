@@ -94,7 +94,7 @@ def test_limits_unsupported_glyphs_and_cancellation(setup):
     args = sample(); args["document"]["sources"] = [{"label": "Bad", "url": "javascript:alert(1)"}]
     with pytest.raises(ValidationError): CreateDocument.model_validate(args)
     args = sample(); args["document"]["title"] = "Unsupported \U0001f999"
-    with pytest.raises(FileUnavailable, match="rendering"):
+    with pytest.raises(FileUnavailable, match="cannot display these characters"):
         service(files, chat).create(CreateDocument.model_validate(args), cancellation=ProviderCancellation())
     cancelled = ProviderCancellation(); cancelled.cancel()
     with pytest.raises(ProviderCancelled):
@@ -110,3 +110,78 @@ def test_synthesis_keeps_actual_document_results(setup):
     loop.documents = SimpleNamespace(results=[{"title": "Decision", "files": [{"id": "a" * 32}]}])
     messages = loop.comparison.synthesis_messages(loop.answer_conversation)
     assert '"saved_documents"' in messages[-1]["content"] and '"Decision"' in messages[-1]["content"]
+
+
+def test_chat_deletion_removes_document_versions_and_manifest(setup):
+    files, chat = setup
+    docs = service(files, chat)
+    created = docs.create(CreateDocument.model_validate(sample()), cancellation=ProviderCancellation())
+    manifest = docs.ref(created["document_id"])
+    assert manifest.collection("versions").document("1").get().exists
+    files.chats.delete_chat("owner", chat)
+    assert not manifest.get().exists
+    assert not manifest.collection("versions").document("1").get().exists
+    assert not any("documents" in path for path in files.db.documents)
+
+
+def test_render_subprocess_does_not_import_firebase():
+    import subprocess, sys
+    code = ("import sys, app.services.agent_document_render as r, app.services.agent_document_spec; "
+            "print('firebase_admin' in sys.modules)")
+    out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True)
+    assert out.stdout.strip() == "False"
+
+
+def test_common_symbols_and_central_european_text_render(setup):
+    files, chat = setup
+    args = sample()
+    args["document"]["sections"][0]["paragraphs"] = ["Łódź → Győr ✓ ąę Ωmega Жизнь – “quoted” …"]
+    created = service(files, chat).create(CreateDocument.model_validate(args), cancellation=ProviderCancellation())
+    pdf = next(f for f in created["files"] if f["mime"] == "application/pdf")
+    text = PdfReader(io.BytesIO(files.download("owner", chat, pdf["id"])[1])).pages[0].extract_text()
+    assert "Győr" in text and "Łódź" in text
+
+
+def test_unsupported_characters_are_named_in_the_error(setup):
+    files, chat = setup
+    args = sample()
+    args["document"]["sections"][0]["paragraphs"] = ["Chinese: 中文"]
+    with pytest.raises(FileUnavailable, match="中"):
+        service(files, chat).create(CreateDocument.model_validate(args), cancellation=ProviderCancellation())
+    assert not files.list("owner", chat)
+
+
+def test_control_characters_are_rejected_before_rendering():
+    from pydantic import ValidationError
+    args = sample()
+    args["document"]["summary"] = "bad\x0bvalue"
+    with pytest.raises(ValidationError, match="control characters"):
+        CreateDocument.model_validate(args)
+
+
+def test_document_tools_get_a_larger_argument_limit_than_other_tools():
+    from pydantic import BaseModel, ConfigDict
+    from app.services.agent_tools import ReadOnlyTool, ToolRegistry
+    class Args(BaseModel):
+        model_config = ConfigDict(extra="forbid", strict=True)
+        text: str
+    registry = ToolRegistry([ReadOnlyTool("small", "", Args, None), ReadOnlyTool("large", "", Args, None, argument_limit=50_000)],
+                            argument_limit=24_000)
+    payload = '{"text": "' + "x" * 30_000 + '"}'
+    assert registry.argument_limit == 50_000
+    assert registry.validate({"function": {"name": "large", "arguments": payload}})[0].name == "large"
+    with pytest.raises(ValueError, match="not authorized"):
+        registry.validate({"function": {"name": "small", "arguments": payload}})
+
+
+def test_failed_revision_keeps_the_manifest_title(setup, monkeypatch):
+    files, chat = setup
+    docs = service(files, chat)
+    created = docs.create(CreateDocument.model_validate(sample()), cancellation=ProviderCancellation())
+    monkeypatch.setattr("app.services.agent_documents.render", lambda spec: (_ for _ in ()).throw(FileUnavailable("render failed")))
+    with pytest.raises(FileUnavailable):
+        docs.revise(ReviseDocument(document_id=created["document_id"], version=1, section_number=1,
+            replacement={"heading": "X", "paragraphs": []}, change_summary="x"), cancellation=ProviderCancellation())
+    manifest = docs.ref(created["document_id"]).get().to_dict()
+    assert manifest["title"] == "Decision brief" and manifest["version"] == 1
+    assert "writing_until" not in manifest and "operation" not in manifest
