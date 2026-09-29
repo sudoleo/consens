@@ -335,6 +335,13 @@ def record_model_vote(
         )
         if pending.get("owner_uid") != uid or not valid_expiry:
             raise PersistenceLimitError("invalid_vote_run", "Completed result not found.")
+        # R09: only results built exclusively from server-verified developer
+        # answers may feed the model leaderboard. BYOK and legacy results
+        # without provenance stay usable, but never rank models.
+        if pending.get("answer_provenance") != "developer":
+            raise PersistenceLimitError(
+                "vote_not_eligible", "This result is not eligible for model rankings."
+            )
         best_model = str((pending.get("differences_data") or {}).get("best_model") or "")
         if best_model == "Claude":
             best_model = "Anthropic"

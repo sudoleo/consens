@@ -21,6 +21,7 @@ from app.services.llm.citations import (
     parse_openrouter_response,
     source_response,
 )
+from app.services.llm import completion
 from app.services.llm.engines import (
     OPENROUTER_CHAT_COMPLETIONS_URL,
     _ProviderResponseError,
@@ -254,6 +255,9 @@ def _iter_openrouter_chunks(*, api_key: str, payload: dict) -> Iterator[StreamEv
     for _, data_str in _openrouter_sse(api_key=api_key, request_payload=request_payload):
         raise_if_provider_cancelled()
         if data_str.strip() == "[DONE]":
+            # The only transport-level confirmation that the stream ended on
+            # purpose. A plain EOF (socket closed, proxy cut) yields nothing.
+            yield {"type": "done"}
             return
         data = _parse_json(data_str)
         if not data:
@@ -289,9 +293,12 @@ def _stream_openrouter_chat_completion(
     annotations: list = []
     annotation_keys: set[tuple] = set()
     finish_reason = None
+    terminated = False
     for event in _iter_openrouter_chunks(api_key=api_key, payload=payload):
         event_type = event.get("type")
-        if event_type == "delta":
+        if event_type == "done":
+            terminated = True
+        elif event_type == "delta":
             text_parts.append(event["text"])
             text_length += len(event["text"])
             yield event
@@ -327,6 +334,7 @@ def _stream_openrouter_chat_completion(
         elif event_type == "finish":
             finish_reason = event.get("reason")
 
+    state = completion.completion_state(finish_reason, terminated=terminated)
     answer = "".join(text_parts)
     if not answer.strip():
         message = (
@@ -340,12 +348,16 @@ def _stream_openrouter_chat_completion(
             "sources": [],
             "error": message,
             "error_code": "empty_reasoning_response",
+            "completion": state if state != completion.COMPLETE else completion.ERROR,
         }}
         return
-    yield {
-        "type": "final",
-        "result": parse_openrouter_response(answer, annotations, provider),
-    }
+    result = parse_openrouter_response(answer, annotations, provider)
+    # Partial text stays visible, but it is never a normal success: the typed
+    # state travels with the answer to /consensus, storage and the UI (R06).
+    result["completion"] = state
+    if state != completion.COMPLETE:
+        result["finish_reason"] = str(finish_reason or "")[:40]
+    yield {"type": "final", "result": result}
 
 
 def stream_model_query(
@@ -407,9 +419,23 @@ def stream_chat_completion_text(
     if reasoning_effort is not None:
         payload["reasoning"] = {"effort": reasoning_effort}
     _merge_nested_config(payload, request_config)
+    finish_reason = None
+    terminated = False
     for event in _iter_openrouter_chunks(api_key=api_key, payload=payload):
-        if event.get("type") in {"delta", "reasoning"}:
+        event_type = event.get("type")
+        if event_type in {"delta", "reasoning"}:
             yield event
+        elif event_type == "finish":
+            finish_reason = event.get("reason")
+        elif event_type == "done":
+            terminated = True
+    # Consensus/Differences decide on this terminal event: text without a
+    # confirmed normal end must not become a finished synthesis.
+    yield {
+        "type": "completion",
+        "state": completion.completion_state(finish_reason, terminated=terminated),
+        "finish_reason": str(finish_reason or "")[:40],
+    }
 
 
 def streaming_model_response(

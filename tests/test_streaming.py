@@ -448,7 +448,55 @@ class OpenRouterStreamTests(unittest.TestCase):
         ])
         with mock.patch("app.services.llm.streaming.requests.post", return_value=fake):
             events = list(_iter_openrouter_chunks(api_key="key", payload={"model": "m"}))
-        self.assertEqual(events, [{"type": "delta", "text": "Hi"}])
+        # [DONE] is surfaced as the transport's end confirmation (R06).
+        self.assertEqual(events, [{"type": "delta", "text": "Hi"}, {"type": "done"}])
+
+    def _run_without_done(self, events):
+        # Same events as FakeOpenRouterHTTP, but the body ends without [DONE].
+        fake = FakeSSEResponse("".join(f"data: {json.dumps(event)}\n\n" for event in events))
+        fake.status_code = 200
+        with mock.patch("app.services.llm.streaming.requests.post", return_value=fake):
+            return list(_stream_openrouter_chat_completion(
+                api_key="sk-or-test", payload={"model": "m"}, provider="openai",
+            ))
+
+    def test_delta_then_eof_is_interrupted_not_complete(self):
+        """R06a: a stream that just stops is never a normal success."""
+        events = self._run_without_done([{"choices": [{"delta": {"content": "Unfinished"}}]}])
+        result = events[-1]["result"]
+        self.assertEqual(result["completion"], "interrupted")
+        self.assertEqual(result["text"], "Unfinished")
+
+    def test_delta_then_length_is_token_limit_not_complete(self):
+        """R06b: finish_reason=length keeps the text but marks it incomplete."""
+        events, _, _ = self._run([
+            {"choices": [{"delta": {"content": "Unfinished"}}]},
+            {"choices": [{"delta": {}, "finish_reason": "length"}]},
+        ])
+        result = events[-1]["result"]
+        self.assertEqual(result["completion"], "token_limit")
+        self.assertEqual(result["finish_reason"], "length")
+
+    def test_stop_and_done_are_complete(self):
+        events, _, _ = self._run([
+            {"choices": [{"delta": {"content": "Done."}, "finish_reason": "stop"}]},
+        ])
+        self.assertEqual(events[-1]["result"]["completion"], "complete")
+        # [DONE] alone (no finish_reason) also confirms a normal end.
+        events, _, _ = self._run([{"choices": [{"delta": {"content": "Done."}}]}])
+        self.assertEqual(events[-1]["result"]["completion"], "complete")
+
+    def test_text_stream_reports_its_completion_state(self):
+        from app.services.llm.streaming import stream_chat_completion_text
+        fake = FakeOpenRouterHTTP([
+            {"choices": [{"delta": {"content": "Partial"}, "finish_reason": "length"}]},
+        ])
+        with mock.patch("app.services.llm.streaming.requests.post", return_value=fake):
+            events = list(stream_chat_completion_text(
+                api_key="k", model="m", messages=[], max_tokens=10,
+            ))
+        self.assertEqual(events[-1]["type"], "completion")
+        self.assertEqual(events[-1]["state"], "token_limit")
 
 
 class ConsensusStreamTests(unittest.TestCase):

@@ -224,6 +224,45 @@ class QuoteVerificationTests(unittest.TestCase):
         )
         self.assertTrue(data["claims"][0]["anchor"].startswith("The capital of France is"))
 
+    def _position_after_verification(self, quote, original):
+        from app.services.llm.consensus_engine import _verify_differences_data
+        data = {"differences": [{"positions": [{"models": ["OpenAI"], "quote": quote}]}]}
+        _verify_differences_data(data, "", {"OpenAI": original})
+        return data["differences"][0]["positions"][0]
+
+    def test_changed_number_unit_negation_or_condition_is_never_a_verified_quote(self):
+        """R08: a partial/fuzzy overlap must not grant quote_models."""
+        original = "The annual operating cost for this complete configuration is 400 euros."
+        forged = [
+            original.replace("400", "4000"),
+            original.replace("euros", "dollars"),
+            original.replace("is 400", "is not 400"),
+            original.replace(" is 400 euros.", " is 400 euros if billed monthly."),
+        ]
+        for quote in forged:
+            with self.subTest(quote=quote):
+                position = self._position_after_verification(quote, original)
+                self.assertEqual(position["quote_models"], [])
+                self.assertEqual(position["quote"], "")
+
+    def test_typographic_variants_of_a_full_quote_stay_verified(self):
+        original = "Das Modell sagt: „Die Frist endet am 1. 3. – nicht später.“"
+        quote = 'die frist endet am 1.  3. - nicht später.'
+        position = self._position_after_verification('"' + quote + '"', original)
+        self.assertEqual(position["quote_models"], ["OpenAI"])
+
+    def test_fuzzy_consensus_anchor_navigates_but_is_not_validated(self):
+        payload = valid_payload()
+        payload["differences"][0]["consensus_anchor"] = "the capital of France is certainly Paris"
+        consensus = "Well. The capital of France is Paris. End."
+        data, _ = parse_differences_payload(
+            json.dumps(payload), ANON_MAP,
+            consensus_answer=consensus, model_answers={},
+        )
+        diff = data["differences"][0]
+        self.assertTrue(diff["consensus_anchor"].startswith("The capital of France is"))
+        self.assertFalse(diff["consensus_anchor_validated"])
+
     def test_difference_consensus_anchor_is_verified_against_the_consensus(self):
         """Der Widerspruchs-Anker zeigt in die Konsensantwort (nicht in eine
         Modellantwort) und wird wie claims[].anchor auf den Originalwortlaut

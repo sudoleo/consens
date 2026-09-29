@@ -24,6 +24,8 @@ TASK_NAME = "retention-maintenance"
 async def retention_maintenance_loop() -> None:
     while True:
         pending_deleted = await asyncio.to_thread(cleanup_expired_pending)
+        from app.services.answer_receipts import cleanup_expired as cleanup_answer_receipts
+        answer_receipts_deleted = await asyncio.to_thread(cleanup_answer_receipts)
         shares_deleted = await asyncio.to_thread(cleanup_revoked_shares)
         from app.services.source_check_jobs import repository
         source_checks_deleted = await asyncio.to_thread(repository().cleanup)
@@ -49,6 +51,7 @@ async def retention_maintenance_loop() -> None:
             google_records_deleted=google_records_deleted,
             notification_outbox_deleted=outbox_deleted,
             expired_pending_deleted=pending_deleted,
+            expired_answer_receipts_deleted=answer_receipts_deleted,
             revoked_shares_deleted=shares_deleted,
             source_checks_deleted=source_checks_deleted,
         )

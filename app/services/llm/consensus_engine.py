@@ -15,6 +15,7 @@ import app.core.config as cfg
 from app.services import prompt_config
 from app.core.observability import safe_exception, safe_traceback
 from app.services.llm.citations import coerce_text
+from app.services.llm import completion
 from app.services.llm.base import get_date_context
 from app.services.llm.consensus_citations import ConsensusCitationFilter, strip_consensus_source_markers
 from app.services.llm.credentials import openrouter_api_key
@@ -86,6 +87,14 @@ def resolve_consensus_engine_model(consensus_model: str):
 # Fehler schlagen als Exception nach außen; die Aufrufer entscheiden über
 # Fehlertexte bzw. Retries.
 # ---------------------------------------------------------------------------
+
+class _IncompleteEngineOutput(Exception):
+    """The engine stopped without a confirmed normal end (R06)."""
+
+    def __init__(self, state: str):
+        super().__init__(f"engine output {state}")
+        self.state = state
+
 
 class _InvalidEngineError(Exception):
     pass
@@ -164,6 +173,7 @@ def _call_engine_text(
     json_mode: bool = False,
     effort: str | None = None,
     json_schema: dict | None = None,
+    require_complete: bool = False,
 ) -> str:
     from app.services.llm.task_transport import task_transport
     transport = task_transport.get()
@@ -204,10 +214,15 @@ def _call_engine_text(
         json=payload,
         headers=openrouter_headers(api_key),
     )
-    message = ((data.get("choices") or [{}])[0].get("message") or {})
+    choice = (data.get("choices") or [{}])[0] or {}
+    message = choice.get("message") or {}
     text = coerce_text(message.get("content")).strip()
     if not text:
         raise RuntimeError("OpenRouter: empty response payload")
+    if require_complete:
+        state = completion.completion_state(choice.get("finish_reason"), terminated=True)
+        if state != completion.COMPLETE:
+            raise _IncompleteEngineOutput(state)
     return text
 
 
@@ -269,6 +284,7 @@ def _stream_engine_text(
         # E2E-Suite: siehe _call_engine_text.
         for text in mock_engine_stream(prompt=prompt, json_mode=json_mode):
             yield {"type": "delta", "text": text}
+        yield {"type": "completion", "state": completion.COMPLETE}
         return
 
     from app.services.llm.streaming import stream_chat_completion_text
@@ -457,6 +473,11 @@ DIFFERENCES_SKIPPED_TEXT = (
 )
 
 
+CONSENSUS_INCOMPLETE_TEXT = (
+    "Consensus error: the synthesis stopped before it finished and is incomplete."
+)
+
+
 def is_consensus_error_text(text) -> bool:
     """True, wenn der Konsens-Text ein Fehler (oder leer) ist."""
     stripped = str(text or "").strip()
@@ -508,9 +529,17 @@ def query_consensus(
                 prompt=consensus_prompt,
                 max_tokens=cfg.CONSENSUS_MAX_TOKENS,
                 temperature=CONSENSUS_TEMPERATURE,
+                require_complete=True,
             )
         except (ProviderCancelled, AnalysisBudgetExceeded):
             break
+        except _IncompleteEngineOutput as e:
+            if e.state == completion.TOKEN_LIMIT:
+                # A truncated synthesis is never a finished consensus (R06).
+                # The same prompt and limit would truncate again: no retry.
+                return CONSENSUS_INCOMPLETE_TEXT
+            last_error = "provider request failed."
+            continue
         except Exception as e:
             last_error = "provider request failed."
             logging.warning(
@@ -1262,6 +1291,9 @@ def _looks_like_json(raw: str) -> bool:
 # ---------------------------------------------------------------------------
 
 _QUOTE_CHARS = set("“”„‘’«»\"")
+# Typographic variants that never change meaning: hyphen/dash forms. Numbers,
+# units, signs, negations and every word stay significant.
+_DASH_CHARS = set("‐‑‒–—−")
 _ELLIPSIS_EDGE_RE = re.compile(r"^(?:\.{3}|…)\s*|\s*(?:\.{3}|…)$")
 FUZZY_MATCH_MIN_CHARS = 15
 FUZZY_MATCH_MIN_RATIO = 0.6
@@ -1276,6 +1308,8 @@ def _normalize_with_offsets(text: str):
         c = ch.lower()
         if c in _QUOTE_CHARS:
             c = '"'
+        elif c in _DASH_CHARS:
+            c = "-"
         if c.isspace():
             if not norm_chars or norm_chars[-1] == " ":
                 continue
@@ -1295,9 +1329,20 @@ def _normalize_needle(text: str) -> str:
     return norm
 
 
-def _locate_span(haystack: str, hay_norm: str, hay_offsets: list, needle: str):
-    """Sucht ein (LLM-)Zitat im Originaltext: erst exakt auf normalisierter
-    Basis, dann fuzzy über difflib. Liefert den Original-Ausschnitt oder None."""
+def _locate_span(haystack: str, hay_norm: str, hay_offsets: list, needle: str, *, allow_fuzzy: bool = False):
+    """Sucht ein (LLM-)Zitat im Originaltext und liefert den Original-Ausschnitt.
+
+    Belegend ist ausschliesslich die VOLLSTAENDIGE normalisierte Deckung. Die
+    tolerierte Normalisierung ist abschliessend: Gross-/Kleinschreibung,
+    typografische Anfuehrungszeichen und Striche, zusammengefasster Whitespace
+    und Auslassungspunkte an den Raendern. Zahlen, Einheiten, Vorzeichen,
+    Negationen und Bedingungen muessen woertlich passen.
+
+    ``allow_fuzzy`` erlaubt danach die aehnlichste Passage (laengster
+    gemeinsamer Teilstring) -- nur zur Navigation, etwa um einen Satz im
+    Konsenstext zu markieren. Ein solcher Treffer ist nie ein Beleg: Aufrufer,
+    die einen Verified-/Support-Status vergeben, verwenden ihn nicht (R08).
+    """
     needle_norm = _normalize_needle(needle)
     if not needle_norm:
         return None
@@ -1306,7 +1351,7 @@ def _locate_span(haystack: str, hay_norm: str, hay_offsets: list, needle: str):
         start = hay_offsets[idx]
         end = hay_offsets[idx + len(needle_norm) - 1] + 1
         return haystack[start:end]
-    if len(needle_norm) >= FUZZY_MATCH_MIN_CHARS:
+    if allow_fuzzy and len(needle_norm) >= FUZZY_MATCH_MIN_CHARS:
         matcher = difflib.SequenceMatcher(None, hay_norm, needle_norm, autojunk=False)
         match = matcher.find_longest_match(0, len(hay_norm), 0, len(needle_norm))
         if match.size >= max(FUZZY_MATCH_MIN_CHARS, int(len(needle_norm) * FUZZY_MATCH_MIN_RATIO)):
@@ -1317,17 +1362,20 @@ def _locate_span(haystack: str, hay_norm: str, hay_offsets: list, needle: str):
 
 
 def _span_finder():
-    """Wiederverwendbare Zitatsuche mit Normalisierungs-Cache je Text."""
+    """Wiederverwendbare Zitatsuche mit Normalisierungs-Cache je Text.
+
+    Standard ist die exakte (normalisierte) Suche; ``allow_fuzzy=True`` nur
+    fuer reine Navigationsanker."""
     prepared = {}
 
-    def _find(key: str, text: str, needle: str):
+    def _find(key: str, text: str, needle: str, *, allow_fuzzy: bool = False):
         if not text:
             return None
         if key not in prepared:
             norm, offsets = _normalize_with_offsets(text)
             prepared[key] = (norm, offsets)
         norm, offsets = prepared[key]
-        return _locate_span(text, norm, offsets, needle)
+        return _locate_span(text, norm, offsets, needle, allow_fuzzy=allow_fuzzy)
 
     return _find
 
@@ -1401,7 +1449,10 @@ def _verify_claims(claims: list, consensus_answer: str, model_answers: dict, _fi
     _find = _find or _span_finder()
     consensus_text = str(consensus_answer or "")
     for claim in claims or []:
-        span = _find("__consensus__", consensus_text, claim.get("anchor"))
+        # The claim anchor only marks a consensus sentence (navigation), so a
+        # similar passage is acceptable there. Dissent quotes below are model
+        # evidence and need full normalized coverage.
+        span = _find("__consensus__", consensus_text, claim.get("anchor"), allow_fuzzy=True)
         if span:
             claim["anchor"] = _clip(span, MAX_DIFF_TEXT_CHARS)
         else:
@@ -1442,6 +1493,12 @@ def _verify_differences_data(data: dict, consensus_answer: str, model_answers: d
             if span:
                 diff["consensus_anchor"] = _clip(span, MAX_DIFF_TEXT_CHARS)
                 diff["consensus_anchor_validated"] = True
+            elif span := _find(
+                "__consensus__", consensus_text, diff["consensus_anchor"], allow_fuzzy=True
+            ):
+                # A similar consensus passage still helps the reader navigate,
+                # but it is not a validated anchor for evidence checks.
+                diff["consensus_anchor"] = _clip(span, MAX_DIFF_TEXT_CHARS)
             else:
                 logging.info(
                     "Difference anchor not found in consensus answer anchor_chars=%d",
@@ -2490,17 +2547,28 @@ def stream_consensus(
         engine_models.append(fallback[2])
 
     last_error = "empty response from consensus engine."
+    shown = False
     for engine_model in engine_models:
         parts = []
         citation_filter = ConsensusCitationFilter()
+        state = None
+        if shown:
+            # Deltas of a failed attempt are already visible. Clear them before
+            # the next attempt so two attempts never mix in one text (R06).
+            yield {"type": "reset"}
+            shown = False
         try:
             for event in _stream_consensus_engine(engine_model, api_keys, consensus_prompt):
                 if event.get("type") == "reasoning":
                     yield {"type": "reasoning"}
                     continue
+                if event.get("type") == "completion":
+                    state = event.get("state")
+                    continue
                 text = citation_filter.feed(event.get("text") or "")
                 parts.append(text)
                 if text:
+                    shown = True
                     yield {"type": "delta", "text": text}
         except _InvalidEngineError as e:
             yield {"type": "final", "text": str(e), "error": True}
@@ -2518,8 +2586,17 @@ def stream_consensus(
         tail = citation_filter.feed("", final=True)
         if tail:
             parts.append(tail)
+            shown = True
             yield {"type": "delta", "text": tail}
         final_text = "".join(parts).strip()
+        # Engines without a completion event (test doubles, legacy adapters)
+        # keep the former contract; the OpenRouter transport always sends one.
+        state = state or completion.COMPLETE
+        if final_text and state != completion.COMPLETE:
+            # Keep the visible partial text, but never as a finished synthesis
+            # and without a silent retry that would replace what was shown.
+            yield {"type": "final", "text": final_text, "error": True, "completion": state}
+            return
         if final_text:
             yield {"type": "final", "text": final_text}
             return
@@ -2590,6 +2667,10 @@ def stream_differences(
                         # Marker, solange der Judge noch denkt: hält die
                         # SSE-Verbindung aktiv und speist den Frontend-Indikator.
                         yield {"type": "reasoning"}
+                        continue
+                    if event.get("type") == "completion":
+                        # Truncated judge JSON is handled by the conservative
+                        # repair in parse_differences_payload.
                         continue
                     text = event.get("text") or ""
                     parts.append(text)

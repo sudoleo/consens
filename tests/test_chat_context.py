@@ -1352,3 +1352,75 @@ def test_resolved_context_cache_key_is_owner_first_and_bounded():
     assert key != resolved_context_cache_key(
         UID, CHAT_ID, TURN_2, TURN_3, long_question, "Grok"
     )
+
+
+def _claimed_build(db, turn_id=TURN_2, version_id="c" * 32):
+    repository = FirestoreChatContextRepository(db)
+    state, nonce, _ = repository.claim_version(
+        UID, CHAT_ID, turn_id, version_id, {"target_turn_id": turn_id}, now=NOW
+    )
+    assert state == "claimed" and nonce
+    return repository, nonce
+
+
+def test_late_context_build_never_rewrites_a_turn_completed_meanwhile():
+    """R10: claim -> turn completes elsewhere -> finalize must not touch it."""
+    db = FakeChatDatabase()
+    seed_chat(db, [completed(TURN_1, 1, "One", "First"), pending(TURN_2, 2, "Two")])
+    repository, nonce = _claimed_build(db)
+    db.documents[_turn_path(TURN_2)].update({"status": "completed", "consensus": "Saved"})
+    before = dict(db.documents[_turn_path(TURN_2)])
+
+    with pytest.raises(ChatContextConflict):
+        repository.finalize_version(
+            UID, CHAT_ID, TURN_2, "c" * 32, nonce,
+            {"resolved_question": "Changed interpretation?"}, now=NOW,
+        )
+
+    assert db.documents[_turn_path(TURN_2)] == before
+    assert "resolved_question" not in db.documents[_turn_path(TURN_2)]
+    assert db.documents[_version_path("c" * 32)]["status"] == "building"
+
+
+def test_late_context_build_never_revives_a_deleted_chat():
+    db = FakeChatDatabase()
+    seed_chat(db, [completed(TURN_1, 1, "One", "First"), pending(TURN_2, 2, "Two")])
+    repository, nonce = _claimed_build(db)
+    db.documents[_chat_path()]["status"] = "deleting"
+
+    with pytest.raises(ChatContextNotFound):
+        repository.finalize_version(
+            UID, CHAT_ID, TURN_2, "c" * 32, nonce, {"resolved_question": "Late"}, now=NOW,
+        )
+    assert "context_version_id" not in db.documents[_turn_path(TURN_2)]
+
+
+def test_two_builds_cannot_overwrite_each_others_turn_binding():
+    db = FakeChatDatabase()
+    seed_chat(db, [completed(TURN_1, 1, "One", "First"), pending(TURN_2, 2, "Two")])
+    repository, first_nonce = _claimed_build(db, version_id="c" * 32)
+    _, second_nonce = _claimed_build(db, version_id="d" * 32)
+    repository.finalize_version(
+        UID, CHAT_ID, TURN_2, "d" * 32, second_nonce, {"resolved_question": "Second"}, now=NOW,
+    )
+
+    with pytest.raises(ChatContextConflict):
+        repository.finalize_version(
+            UID, CHAT_ID, TURN_2, "c" * 32, first_nonce, {"resolved_question": "First"}, now=NOW,
+        )
+    turn = db.documents[_turn_path(TURN_2)]
+    assert turn["context_version_id"] == "d" * 32
+    assert turn["resolved_question"] == "Second"
+
+
+def test_bound_pending_turn_rebuild_reads_its_existing_binding():
+    db = FakeChatDatabase()
+    seed_chat(db, [completed(TURN_1, 1, "One", "First"), pending(TURN_2, 2, "Two")])
+    service = ChatContextService(FirestoreChatContextRepository(db))
+    context = service.build_for_turn(UID, CHAT_ID, TURN_2, compressor=None, now=NOW)
+    writes_before = list(db.write_log)
+
+    assert service.build_for_turn(
+        UID, CHAT_ID, TURN_2, compressor=RecordingCompressor(), now=NOW
+    ) == context
+    assert db.write_log == writes_before

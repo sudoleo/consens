@@ -18,7 +18,13 @@ from app.services.llm.consensus_engine import (
     ("  İ\tİ ‘şehir’  ", 'İ İ "şehir"', "İ\tİ ‘şehir’"),
 ])
 def test_unicode_quote_offsets_preserve_original_spans(original, quote, expected):
-    assert _span_finder()("A", original, quote) == expected
+    # Offset mapping is shared by exact search and navigation-only fuzzy search.
+    assert _span_finder()("A", original, quote, allow_fuzzy=True) == expected
+
+
+def test_fuzzy_unicode_match_is_not_evidence():
+    # R08: the fuzzy fallback above is navigation only; evidence stays exact.
+    assert _span_finder()("A", "İ İ İstanbul çok güzel bir şehir.", "İstanbul çok güzel bir şehir!") is None
 
 
 def test_formatted_unicode_quote_offsets_preserve_original_span():

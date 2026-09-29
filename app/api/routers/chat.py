@@ -43,6 +43,7 @@ from app.services.llm.streaming import (
     stream_model_query,
 )
 from app.services.llm.consensus_engine import (
+    CONSENSUS_INCOMPLETE_TEXT,
     DIFFERENCES_SKIPPED_TEXT,
     is_consensus_error_text,
     normalize_model_name,
@@ -79,7 +80,8 @@ from app.services.chat_context import (
     build_chat_context_system_prompt,
     resolved_context_cache_key,
 )
-from app.services import persistence_guard, user_memory
+from app.services import answer_receipts, persistence_guard, user_memory
+from app.services.llm import completion
 from app.services.user_memory import FirestoreUserMemoryRepository
 from app.services.differences_stats import record_differences_stats
 from app.services.usage_repository import (
@@ -107,6 +109,7 @@ MAX_SYSTEM_PROMPT_CHARS = 12_000
 MAX_SYSTEM_PROMPT_BYTES = 32_000
 run_usage_repository = FirestoreUsageRepository(db_firestore)
 chat_store = ChatStore(db_firestore)
+answer_receipt_store = answer_receipts.ReceiptStore(db_firestore)
 chat_context_service = ChatContextService(FirestoreChatContextRepository(db_firestore))
 resolved_context_cache = ResolvedContextCache()
 user_memory_repository = FirestoreUserMemoryRepository(db_firestore)
@@ -359,6 +362,24 @@ def _incoming_answers(data: dict, limit: int) -> dict:
     return answers
 
 
+def _receipt_ids(data: dict) -> Optional[dict]:
+    """``answer_receipts`` as ``{label: receipt_id}`` or None when absent."""
+    supplied = data.get("answer_receipts")
+    if supplied is None:
+        return None
+    if not isinstance(supplied, dict):
+        raise HTTPException(status_code=400, detail="answer_receipts must be an object.")
+    receipts = {}
+    for provider, label in cfg.PROVIDER_LABEL_BY_ID.items():
+        value = supplied.get(provider, supplied.get(label))
+        if value in (None, ""):
+            continue
+        if not answer_receipts.is_receipt_id(value):
+            raise HTTPException(status_code=400, detail="Invalid answer receipt.")
+        receipts[label] = value
+    return receipts
+
+
 def validate_text_size(
     value,
     *,
@@ -394,6 +415,21 @@ def validate_client_system_prompt(value) -> str:
         max_chars=MAX_SYSTEM_PROMPT_CHARS,
         max_bytes=MAX_SYSTEM_PROMPT_BYTES,
     )
+
+
+def _incomplete_consensus_fields(state: str) -> dict:
+    """Final-payload fields of a synthesis that stopped early (R06).
+
+    The partial text already reached the browser as deltas and may stay
+    visible there, labelled as incomplete. It is never returned or stored as
+    the consensus of the run.
+    """
+    return {
+        "consensus_response": "",
+        "consensus_completion": state,
+        "error": completion.incomplete_message(state, "The consensus"),
+        "error_code": "consensus_incomplete",
+    }
 
 
 def _chat_turn_ids(data: dict) -> Optional[tuple[str, str]]:
@@ -597,6 +633,7 @@ def _replay_completed_chat_turn(
 
     payload = {
         "consensus_response": consensus_text,
+        "consensus_completion": completion.COMPLETE,
         "differences": turn.get("differences")
         if isinstance(turn.get("differences"), str)
         else "",
@@ -780,18 +817,41 @@ ASK_PROVIDERS = {
 }
 
 
+def _with_receipt(result, receipt):
+    """Attach the server receipt of a delivered answer (R09) to its result."""
+    if receipt is None or not isinstance(result, dict) or result.get("error"):
+        return result
+    receipt_id = receipt(result)
+    if receipt_id:
+        return {**result, "answer_receipt": receipt_id}
+    return result
+
+
+def _receipt_stream(source, receipt):
+    for event in source:
+        if receipt is not None and isinstance(event, dict) and event.get("type") == "final":
+            event = {**event, "result": _with_receipt(event.get("result"), receipt)}
+        yield event
+
+
 def _run_ask(provider: AskProvider, *, stream_requested, question, key,
-             system_prompt, deep_search, model, max_tokens, attachments, extras):
+             system_prompt, deep_search, model, max_tokens, attachments, extras,
+             receipt=None):
     """Fuehrt den Provider-Call aus (streamend oder nicht) und verpackt das
-    Ergebnis im bisherigen Response-Format."""
+    Ergebnis im bisherigen Response-Format.
+
+    ``receipt(result) -> receipt_id`` stores the delivered answer server-side
+    so /consensus can use exactly this text (R09)."""
     if mock_llm_enabled():
         # E2E-Suite: deterministischer Fixture-Stream statt Provider-Call.
         # Auth/Limits/Validierung sind zu diesem Zeitpunkt bereits gelaufen.
         if stream_requested:
             return streaming_model_response(
-                mock_ask_stream(provider.label, question), provider.label, extras
+                _receipt_stream(mock_ask_stream(provider.label, question), receipt),
+                provider.label, extras,
             )
-        return source_response(mock_ask_result(provider.label, question), **extras)
+        result = _with_receipt(mock_ask_result(provider.label, question), receipt)
+        return source_response(result, **extras)
 
     kwargs = {
         "system_prompt": system_prompt,
@@ -801,7 +861,9 @@ def _run_ask(provider: AskProvider, *, stream_requested, question, key,
         "attachments": attachments,
     }
     if stream_requested:
-        source = stream_model_query(provider.key, question, key, **kwargs)
+        source = _receipt_stream(
+            stream_model_query(provider.key, question, key, **kwargs), receipt
+        )
 
         def observed_stream():
             started = time.monotonic()
@@ -846,7 +908,9 @@ def _run_ask(provider: AskProvider, *, stream_requested, question, key,
     started = time.monotonic()
     outcome = "success"
     try:
-        result = query_model(provider.key, question, key, **kwargs)
+        result = _with_receipt(
+            query_model(provider.key, question, key, **kwargs), receipt
+        )
         if isinstance(result, dict) and result.get("error"):
             outcome = (
                 "timeout"
@@ -990,6 +1054,32 @@ def handle_ask(provider: AskProvider, request: Request, data: dict):
 
     own_keys_requested = parse_boolean_flag(data.get("useOwnKeys", False))
 
+    def answer_receipt(provenance):
+        # R09: the server keeps the exact delivered answer. /consensus only
+        # accepts answers through these receipts, never as browser text.
+        run = answer_receipts.run_binding(uid, data.get("usage_run_key"), data.get("run_id"))
+        if not uid or not run:
+            return None
+        concrete_model = cfg.PROVIDERS[provider.key].pro_model if deep_search else (
+            model or cfg.PROVIDERS[provider.key].base_model
+        )
+
+        def store(result):
+            text = coerce_text(result.get("text") or result.get("response")) if isinstance(result, dict) else ""
+            return answer_receipt_store.store(
+                uid=uid,
+                run=run,
+                question=question,
+                provider=provider.label,
+                model=concrete_model,
+                text=text,
+                sources=result.get("sources") if isinstance(result, dict) else [],
+                state=completion.result_completion(result),
+                provenance=provenance,
+            )
+
+        return store
+
     # --- Eigener API-Key: eingeloggtes Feature, umgeht die Usage-Zaehlung ---
     if own_keys_requested and uid:
         if not api_key:
@@ -1011,6 +1101,7 @@ def handle_ask(provider: AskProvider, request: Request, data: dict):
                 "tier": tier,
                 "key_used": "User API Key",
             },
+            receipt=answer_receipt(answer_receipts.PROVENANCE_BYOK),
         )
 
     # --- Developer-Key: genau ein persistenter Slot pro Run ---
@@ -1054,6 +1145,7 @@ def handle_ask(provider: AskProvider, request: Request, data: dict):
                 "usage_run_status": usage_result.status.value,
                 "key_used": "Developer API Key",
             },
+            receipt=answer_receipt(answer_receipts.PROVENANCE_DEVELOPER),
         )
 
     # --- Kein Login: eigener Key erfordert Login, sonst Provider-No-Auth-Fehler ---
@@ -1237,15 +1329,78 @@ def consensus(request: Request, data: dict = Body(...)):
     # Client und werden serverseitig hart begrenzt: der Consensus-Prompt enthaelt
     # sonst unbegrenzte Eingaben gegen den Developer-Key (Kostenleck).
     answer_char_limit = cfg.get_consensus_answer_char_limit()
-    answers_by_model = _incoming_answers(data, answer_char_limit)
     excluded_models = data.get("excluded_models", [])
-    model_sources   = data.get("model_sources", {})
     check_sources = data.get("check_sources", True) is not False
     if not isinstance(excluded_models, list):
         excluded_models = []
     excluded_models = list({normalize_model_name(model) for model in excluded_models if model})
-    if not isinstance(model_sources, dict):
-        model_sources = {}
+
+    # R09: model answers are authoritative only as server-stored /ask results.
+    # The browser names them by receipt id; text, sources, model and
+    # provenance come from the receipt. Client-supplied answer text is never
+    # accepted as a model answer.
+    receipt_ids = _receipt_ids(data)
+    if receipt_ids is None and (
+        isinstance(data.get("answers"), dict) and any(data["answers"].values())
+        or any(data.get(LEGACY_ANSWER_FIELDS.get(provider, f"answer_{provider}"))
+               for provider in cfg.PROVIDER_LABEL_BY_ID)
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "Model answers must be submitted as answer receipts. Reload the page and run the comparison again.",
+                "error_code": "answer_receipts_required",
+            },
+        )
+    receipt_ids = {
+        label: receipt_id for label, receipt_id in (receipt_ids or {}).items()
+        if normalize_model_name(label) not in excluded_models
+    }
+    if len(receipt_ids) > cfg.MAX_RUN_FAMILIES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"A run compares at most {cfg.MAX_RUN_FAMILIES} model answers.",
+        )
+    try:
+        verified_receipts = answer_receipt_store.load(
+            uid=uid,
+            run=answer_receipts.run_binding(uid, data.get("usage_run_key"), data.get("run_id")),
+            question=question,
+            receipt_ids=receipt_ids,
+        ) if receipt_ids and question else {}
+    except answer_receipts.ReceiptError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={"error": exc.message, "error_code": exc.code},
+        ) from None
+    except Exception as exc:
+        logging.error("answer receipt read failed category=%s", safe_exception(exc))
+        raise HTTPException(status_code=503, detail="Model answers are temporarily unavailable.") from exc
+    # Incomplete answers (token limit, interrupted) stay visible in the
+    # browser but never enter a synthesis (R06).
+    usable_receipts = {
+        label: receipt for label, receipt in verified_receipts.items()
+        if receipt["completion"] == completion.COMPLETE and receipt["text"].strip()
+    }
+    answers_by_model = {
+        label: cap_engine_text(usable_receipts[label]["text"], answer_char_limit)
+        if label in usable_receipts else None
+        for label in cfg.PROVIDER_LABEL_BY_ID.values()
+    }
+    model_sources = {
+        label: receipt["sources"] for label, receipt in usable_receipts.items()
+    }
+    # The judge (best model, agreement) also runs on the request's key, so an
+    # own-key synthesis is flagged even when every answer came from the
+    # service credential.
+    result_provenance = (
+        answer_receipts.PROVENANCE_BYOK if use_own_keys
+        else answer_receipts.result_provenance(usable_receipts.values())
+    )
+    receipt_model_labels = {
+        label: cfg.get_model_label(receipt["model"]) or label
+        for label, receipt in usable_receipts.items()
+    }
 
     # Validierung der erforderlichen Parameter (nur für Modelle, die nicht ausgeschlossen wurden)
     missing = []
@@ -1292,7 +1447,10 @@ def consensus(request: Request, data: dict = Body(...)):
     # filtert leere Antworten ohnehin heraus. Deshalb hier bewusst KEINE
     # Per-Modell-Pflichtprüfung mehr (die früher den ganzen Lauf mit 400
     # abbrach, sobald ein einzelnes Modell nicht lieferte).
-    if len(included_answers) < 2:
+    # Without a question the receipts cannot be verified; the disposition of a
+    # pending turn then only distinguishes how many answers were submitted.
+    answer_count = len(included_answers) if question else len(receipt_ids)
+    if answer_count < 2:
         missing.append("at least two selected model answers")
 
     if missing:
@@ -1306,7 +1464,7 @@ def consensus(request: Request, data: dict = Body(...)):
             disposable_ids,
             error_code=(
                 "insufficient_answers"
-                if len(included_answers) < 2
+                if answer_count < 2
                 else "consensus_failed"
             ),
         )
@@ -1369,7 +1527,8 @@ def consensus(request: Request, data: dict = Body(...)):
 
     # Share-Feature: Ergebnis nur für verifizierte Nutzer persistieren.
     share_uid = uid
-    model_labels = data.get("model_labels")
+    # The concrete model comes from the /ask receipt, never from the client.
+    model_labels = receipt_model_labels
 
     allowed_model_labels = sanitize_model_labels(
         model_labels,
@@ -1421,6 +1580,10 @@ def consensus(request: Request, data: dict = Body(...)):
         # app/services/differences_stats.py). Mock-Läufe (E2E) schreiben nicht.
         if differences_data is None or mock_llm_enabled():
             return
+        if result_provenance != answer_receipts.PROVENANCE_DEVELOPER:
+            # BYOK answers are real calls, but on a key the service does not
+            # control: they never feed model statistics or rankings (R09).
+            return
         record_differences_stats(
             differences_data,
             consensus_model=consensus_model,
@@ -1448,6 +1611,7 @@ def consensus(request: Request, data: dict = Body(...)):
             consensus_model=consensus_model,
             model_responses=included_answers,
             source_verification=source_verification,
+            answer_provenance=result_provenance,
         )
 
     def persist_chat_completion(
@@ -1609,6 +1773,7 @@ def consensus(request: Request, data: dict = Body(...)):
             nonlocal source_verification
             consensus_text = ""
             consensus_failed = False
+            consensus_state = completion.COMPLETE
             differences_text = ""
             differences_data = None
             stream_failed = False
@@ -1643,9 +1808,17 @@ def consensus(request: Request, data: dict = Body(...)):
                         event = _reasoning_event("consensus.delta")
                         if event:
                             yield event
+                    elif item.get("type") == "reset":
+                        # A failed attempt's visible deltas are discarded
+                        # before a retry; attempts never mix in one text.
+                        yield sse_pack("consensus.reset", {"reset": True})
                     else:
                         consensus_text = coerce_text(item.get("text"))
                         consensus_failed = bool(item.get("error")) or is_consensus_error_text(consensus_text)
+                        consensus_state = (
+                            item["completion"] if item.get("completion") in completion.STATES
+                            else completion.ERROR if consensus_failed else completion.COMPLETE
+                        )
 
                 if consensus_failed:
                     # Ohne Konsensantwort ist der Vergleich sinnlos: der Judge
@@ -1735,6 +1908,7 @@ def consensus(request: Request, data: dict = Body(...)):
                             source_verification = _differences_check_failed(consensus_text)
                             yield sse_pack("sources.final", {"source_verification": source_verification})
             except GeneratorExit:
+                consensus_state = completion.CANCELLED
                 _fail_chat_turn_best_effort(
                     uid,
                     validated_chat_turn_ids,
@@ -1760,10 +1934,16 @@ def consensus(request: Request, data: dict = Body(...)):
 
             payload = {
                 "consensus_response": consensus_text,
+                "consensus_completion": consensus_state,
                 "differences": differences_text,
                 "differences_data": differences_data,
                 "source_verification": source_verification,
             }
+            if stream_failed and consensus_state == completion.COMPLETE:
+                payload["consensus_completion"] = completion.ERROR
+            incomplete = consensus_failed and consensus_state in completion.INCOMPLETE_STATES
+            if incomplete:
+                payload.update(_incomplete_consensus_fields(consensus_state))
             result_id = None
             chat_persisted = False
             chat_turn_state = "pending"
@@ -1784,7 +1964,7 @@ def consensus(request: Request, data: dict = Body(...)):
                 failed = _fail_chat_turn_best_effort(
                     uid,
                     validated_chat_turn_ids,
-                    error_code="consensus_failed",
+                    error_code="consensus_incomplete" if incomplete else "consensus_failed",
                 )
                 if failed:
                     chat_turn_state = "failed"
@@ -1851,12 +2031,19 @@ def consensus(request: Request, data: dict = Body(...)):
             ) from exc
         raise
 
+    incomplete = consensus_answer == CONSENSUS_INCOMPLETE_TEXT
     response = {
         "consensus_response": consensus_answer,
+        "consensus_completion": (
+            completion.TOKEN_LIMIT if incomplete
+            else completion.ERROR if consensus_failed else completion.COMPLETE
+        ),
         "differences": differences,
         "differences_data": differences_data,
         "source_verification": source_verification,
     }
+    if incomplete:
+        response.update(_incomplete_consensus_fields(completion.TOKEN_LIMIT))
     chat_persisted = False
     chat_turn_state = "pending"
     result_id = None
@@ -1877,7 +2064,7 @@ def consensus(request: Request, data: dict = Body(...)):
         failed = _fail_chat_turn_best_effort(
             uid,
             validated_chat_turn_ids,
-            error_code="consensus_failed",
+            error_code="consensus_incomplete" if incomplete else "consensus_failed",
         )
         if failed:
             chat_turn_state = "failed"

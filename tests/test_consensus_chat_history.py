@@ -12,6 +12,7 @@ from app.api.routers import bookmarks as bookmarks_router
 from app.api.routers import chat as chat_router
 from app.core.rate_limit import limiter
 from app.services.chat_store import ChatNotFound, TurnQuestionConflict
+import receipt_helpers
 
 
 UID = "chat-consensus-owner"
@@ -134,7 +135,8 @@ def chat_consensus_api(monkeypatch):
     app = FastAPI()
     app.state.limiter = limiter
     app.include_router(chat_router.router)
-    return TestClient(app), store, monkeypatch
+    receipts = receipt_helpers.install(monkeypatch, chat_router)
+    return receipt_helpers.ReceiptClient(TestClient(app), receipts, UID), store, monkeypatch
 
 
 @pytest.mark.parametrize("source_status", ["queued", "complete"])
@@ -554,7 +556,10 @@ def test_non_streaming_completion_maps_answers_labels_sources_and_result(chat_co
     ]
     assert set(completion["model_answers"]) == {"OpenAI", "Mistral"}
     model = completion["model_answers"]["OpenAI"]
-    assert (model["provider"], model["answer"], model["model_label"]) == ("OpenAI", "OpenAI answer", "gpt-test")
+    # R09: the label names the concrete model of the /ask receipt; the
+    # client-supplied "gpt-test" label is not trusted.
+    expected_label = chat_router.cfg.get_model_label(chat_router.cfg.PROVIDERS["openai"].base_model)
+    assert (model["provider"], model["answer"], model["model_label"]) == ("OpenAI", "OpenAI answer", expected_label)
     assert model["sources"][0]["id"] == "S2"
     assert model["sources"][0]["url"] == "https://openai.example/source"
     assert "own-key-secret" not in json.dumps(completion)
@@ -893,6 +898,7 @@ def test_completed_turn_replays_without_engine_writes_or_usage(
     assert response.status_code == 200
     assert body == {
         "consensus_response": "Stored consensus",
+        "consensus_completion": "complete",
         "differences": "Stored differences",
         "differences_data": {"agreement": {"score": 94}},
         "sources": [],

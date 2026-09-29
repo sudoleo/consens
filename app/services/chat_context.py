@@ -711,21 +711,37 @@ class FirestoreChatContextRepository:
 
     def finalize_version(self, uid: str, chat_id: str, turn_id: str, version_id: str, lease_nonce: str, fields: dict, *, now: datetime) -> dict:
         version_ref = self._version_ref(uid, chat_id, version_id)
+        chat_ref = self._chat_ref(uid, chat_id)
         target_ref = self._turn_ref(uid, chat_id, turn_id)
 
         def operation(transaction):
             persistence_guard.ensure_account_write_allowed(
                 uid=uid, db=self.db, transaction=transaction
             )
+            chat_snapshot = chat_ref.get(transaction=transaction)
             target_snapshot = target_ref.get(transaction=transaction)
             version_snapshot = version_ref.get(transaction=transaction)
-            if not target_snapshot.exists or not version_snapshot.exists:
+            if not chat_snapshot.exists or not target_snapshot.exists or not version_snapshot.exists:
+                raise ChatContextNotFound("Chat not found")
+            # A deleted (or deleting) chat must not be revived by a late build.
+            if (chat_snapshot.to_dict() or {}).get("status") != "active":
                 raise ChatContextNotFound("Chat not found")
             existing = version_snapshot.to_dict() or {}
             if existing.get("status") == CONTEXT_STATUS_READY:
                 return
             if existing.get("status") != CONTEXT_STATUS_BUILDING or existing.get("lease_nonce") != lease_nonce:
                 raise ChatContextConflict("Context build lease was lost")
+            # The lease protects the version, not the target turn. Re-check the
+            # turn inside this transaction: a turn that completed or failed
+            # while the build ran keeps its original context and question, and
+            # a turn already bound to another version is never re-bound. The
+            # late version stays unfinished and expires with its lease.
+            target = target_snapshot.to_dict() or {}
+            if target.get("status") != "pending":
+                raise ChatContextConflict("Target turn is no longer pending")
+            bound_version_id = target.get("context_version_id")
+            if bound_version_id and bound_version_id != version_id:
+                raise ChatContextConflict("Target turn is bound to another context version")
             transaction.update(version_ref, {
                 **fields,
                 "status": CONTEXT_STATUS_READY,
@@ -800,6 +816,16 @@ class ChatContextService:
         fixed_now = now is not None
         now = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
         target, predecessors = self.repository.load_target_and_predecessors(uid, chat_id, turn_id)
+        linked_pending_id = target.get("context_version_id")
+        if target.get("status") == "pending" and _ID_RE.fullmatch(str(linked_pending_id or "")):
+            # A pending turn keeps the first binding it received: its /ask_*
+            # calls may already have used that context. A retry reads it back.
+            linked = self.repository.get_version(uid, chat_id, linked_pending_id)
+            if (
+                linked.get("status") == CONTEXT_STATUS_READY
+                and linked.get("target_turn_id") == turn_id
+            ):
+                return context_metadata(linked)
         if target.get("status") == "completed":
             linked_version_id = target.get("context_version_id")
             if not _ID_RE.fullmatch(str(linked_version_id or "")):

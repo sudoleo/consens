@@ -482,7 +482,8 @@
   }
   function stateLabel(answer) {
     return ({ complete: "Ready", pending: "Waiting", reasoning: "Reasoning", streaming: "Writing",
-      error: "Failed", skipped: "Skipped", canceled: "Stopped", idle: "Waiting" })[answer.status] || "Waiting";
+      error: "Failed", skipped: "Skipped", canceled: "Stopped", idle: "Waiting",
+      incomplete: "Incomplete" })[answer.status] || "Waiting";
   }
   function pane(answer, side) {
     const article = document.createElement("article");
@@ -515,9 +516,12 @@
     if (answer.status === "preview") {
       body.classList.add("is-preview-placeholder");
       body.innerHTML = '<span>Answer appears here</span><div class="answer-preview-lines" aria-hidden="true"><i></i><i></i></div>';
-    } else if (answer.text && !answer.error) {
+    } else if (answer.text && (!answer.error || answer.status === "incomplete")) {
+      // An incomplete answer (R06) keeps its partial text; the header state
+      // and the title attribute say why it did not enter the consensus.
       if (window.injectMarkdown) window.injectMarkdown(body, answer.html || answer.text, answer.sourceReferences === 'agent' ? [] : answer.sources);
       else body.textContent = answer.text;
+      if (answer.status === "incomplete" && answer.error) status.title = String(answer.error);
       if (answer.sourceReferences === 'agent') window.linkifyAgentSources?.(body, answer.sources);
     } else if (!answer.error && ['pending', 'idle', 'reasoning', 'streaming'].includes(answer.status)) {
       body.classList.add("is-loading");

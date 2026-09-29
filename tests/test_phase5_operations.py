@@ -298,6 +298,7 @@ def test_account_deletion_tombstone_fences_owner_persistence(operation):
                 "owner_uid": "u1",
                 "expires_at": now + timedelta(hours=1),
                 "differences_data": {"best_model": "OpenAI"},
+                "answer_provenance": "developer",
             }
             before = dict(db.data)
             persistence_guard.record_model_vote(
@@ -339,6 +340,7 @@ def test_vote_is_run_bound_and_exactly_once():
         "owner_uid": "u1",
         "expires_at": now + timedelta(hours=1),
         "differences_data": {"best_model": "OpenAI"},
+        "answer_provenance": "developer",
     }
     assert persistence_guard.record_model_vote(
         uid="u1", result_id=result_id, model="OpenAI", vote_type="BestModel", db=db, now=now
@@ -351,6 +353,28 @@ def test_vote_is_run_bound_and_exactly_once():
         persistence_guard.record_model_vote(
             uid="u2", result_id=result_id, model="OpenAI", vote_type="BestModel", db=db, now=now
         )
+
+
+@pytest.mark.parametrize("provenance", ["byok", None])
+def test_byok_and_unverified_results_never_count_for_model_rankings(provenance):
+    """R09: only results built from server-verified developer answers vote."""
+    db = Database()
+    now = datetime(2026, 8, 11, tzinfo=timezone.utc)
+    result_id = "B" * 16
+    pending = {
+        "owner_uid": "u1",
+        "expires_at": now + timedelta(hours=1),
+        "differences_data": {"best_model": "OpenAI"},
+    }
+    if provenance:
+        pending["answer_provenance"] = provenance
+    db.data[("pending_results", result_id)] = pending
+    with pytest.raises(persistence_guard.PersistenceLimitError) as error:
+        persistence_guard.record_model_vote(
+            uid="u1", result_id=result_id, model="OpenAI", vote_type="BestModel", db=db, now=now
+        )
+    assert error.value.code == "vote_not_eligible"
+    assert ("leaderboard", "OpenAI") not in db.data
 
 
 @pytest.mark.parametrize(

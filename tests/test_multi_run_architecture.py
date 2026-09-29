@@ -51,7 +51,8 @@ def test_query_and_consensus_callbacks_use_their_bound_context_not_visible_dom()
     context_path = consensus.split(
         "window.App.executeConsensusRun = async function (context", 1
     )[1].split("window.getConsensus =", 1)[0]
-    assert "runAnswer(context" in context_path
+    # R09: the bound context sends server receipts of its own answers.
+    assert "answer_receipts: runReceipts(context)" in context_path
     assert "context.consensus.bookmarkPayload" in context_path
     assert "window.saveBookmarkConsensus?.(" in context_path
     assert 'disposition?.chat_turn_state === "failed"' in context_path

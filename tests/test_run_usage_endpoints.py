@@ -14,6 +14,7 @@ from app.api.routers import users as users_router
 from app.core.rate_limit import limiter
 from app.services.usage_repository import RunKind, UsageLimits
 from usage_test_support import make_usage_repository
+import receipt_helpers
 
 
 UID = "run-endpoint-user"
@@ -31,13 +32,15 @@ def run_api(monkeypatch):
     monkeypatch.setattr(chat_router, "get_user_tier", lambda uid: "free")
     monkeypatch.setattr(users_router, "get_user_tier", lambda uid: "free")
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    receipt_helpers.install(monkeypatch, chat_router)
 
     def fake_run_ask(provider, **kwargs):
-        return {
-            "response": f"{provider.label} answer",
-            "sources": [],
-            **kwargs["extras"],
-        }
+        # Mirrors _run_ask: the delivered answer is stored as a receipt.
+        result = chat_router._with_receipt(
+            {"text": f"{provider.label} answer", "sources": [], "completion": "complete"},
+            kwargs.get("receipt"),
+        )
+        return chat_router.source_response(result, **kwargs["extras"])
 
     monkeypatch.setattr(chat_router, "_run_ask", fake_run_ask)
     app = FastAPI()
@@ -143,15 +146,18 @@ def test_consensus_reuses_consumed_run_without_second_charge(run_api):
     client, repository = run_api
     key = "answers-plus-consensus"
     assert _prepare(client, key).status_code == 200
-    assert _ask(client, "/ask_openai", "openai", key).status_code == 200
-    assert _ask(client, "/ask_mistral", "mistral", key).status_code == 200
-
+    first = _ask(client, "/ask_openai", "openai", key)
+    second = _ask(client, "/ask_mistral", "mistral", key)
+    assert first.status_code == second.status_code == 200
+    # The real /ask path issues server receipts; the browser sends only those.
     payload = {
         "usage_run_key": key,
         "question": "What changed?",
         "consensus_model": "Gemini",
-        "answer_openai": "OpenAI answer",
-        "answer_mistral": "Mistral answer",
+        "answer_receipts": {
+            "openai": first.json()["answer_receipt"],
+            "mistral": second.json()["answer_receipt"],
+        },
     }
     with patch.object(chat_router, "query_consensus", return_value="Consensus") as consensus_mock, \
          patch.object(chat_router, "query_differences", return_value=("Differences", None)), \
@@ -164,6 +170,9 @@ def test_consensus_reuses_consumed_run_without_second_charge(run_api):
     assert repeated.status_code == 409
     assert repeated.json()["detail"]["error_code"] == "usage_operation_already_claimed"
     assert consensus_mock.call_count == 1
+    synthesized = consensus_mock.call_args.args[1]
+    assert synthesized["openai"] == "OpenAI answer"
+    assert synthesized["mistral"] == "Mistral answer"
     assert response.json()["usage_run_status"] == "consumed"
     snapshot = repository.snapshot(UID, _limits())
     assert snapshot.total.consumed == 1
