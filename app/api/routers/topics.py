@@ -199,6 +199,7 @@ def _enrich_evidence(item: dict, preferred_domains=None) -> None:
     item["quality_label"] = classification["quality_label"]
     item["quality_rank"] = classification["rank"]
     item["is_indirect"] = classification["is_indirect"]
+    item["is_preferred"] = classification["is_preferred"]
     url = item.get("url")
     item["site"] = source_site_name(url)
     item["host"] = _host_of(url)
@@ -380,7 +381,8 @@ async def topic_page(
             for item in run["evidence"]:
                 _enrich_evidence(item, preferred_domains)
             run["evidence"].sort(key=lambda item: (
-                item.get("quality_rank", 99), item.get("published_at") or "", item.get("title") or ""
+                item.get("quality_rank", 99), not item.get("is_preferred"),
+                item.get("published_at") or "", item.get("title") or ""
             ))
         return views
 

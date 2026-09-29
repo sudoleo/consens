@@ -963,6 +963,80 @@ def test_automatic_topic_run_researches_sources_and_builds_timeline_point():
     assert topics.get_topic(topic["id"], db=db)["last_run_status"] == "success"
 
 
+def test_primary_only_rules_exclude_reporting_instead_of_relabeling_it():
+    """R14: a news report stays a report under a primary-only rule."""
+    rules = topics.normalize_source_rules({"allowed_types": ["primary"]})
+    sources = [
+        {"id": "S1", "title": "News story", "url": "https://news.example.com/gpt-6-story"},
+        {"id": "S2", "title": "Official update", "url": "https://openai.com/index/update"},
+        {"id": "S3", "title": "Market", "url": "https://kalshi.com/markets/gpt6"},
+    ]
+
+    evidence, excluded = topic_runner.split_evidence_from_sources(sources, rules)
+
+    assert [(item["id"], item["type"]) for item in evidence] == [("S2", "primary")]
+    assert [(item["id"], item["type"]) for item in excluded] == [("S1", "reporting"), ("S3", "rumor")]
+    # Identity survives exclusion: S1 still names the news URL.
+    assert {item["id"]: item["url"] for item in excluded}["S1"] == "https://news.example.com/gpt-6-story"
+    assert topic_runner.evidence_from_sources(sources, rules) == evidence
+    classified = topics.classify_evidence(excluded[0]["url"], excluded[0]["type"])
+    assert classified["role"] == "reporting"
+    assert classified["quality"] == "standard"
+
+
+def test_preferred_domain_orders_sources_without_making_them_primary():
+    rules = topics.normalize_source_rules({"preferred_domains": ["news.example.com"]})
+    sources = [
+        {"id": "S1", "title": "Other report", "url": "https://other.example.org/story"},
+        {"id": "S2", "title": "Preferred report", "url": "https://news.example.com/story"},
+    ]
+    evidence = topic_runner.evidence_from_sources(sources, rules)
+    assert [item["id"] for item in evidence] == ["S2", "S1"]
+    assert {item["type"] for item in evidence} == {"reporting"}
+    preferred = topics.classify_evidence(
+        "https://news.example.com/story", "reporting", ["news.example.com"]
+    )
+    assert preferred["role"] == "reporting" and preferred["quality"] == "standard"
+    assert preferred["is_preferred"] is True
+
+
+def test_topic_page_says_insufficient_eligible_evidence_when_all_sources_are_excluded(monkeypatch):
+    db = FakeFirestore()
+    monkeypatch.setattr(topics, "db_firestore", db)
+    topic = topics.create_topic(
+        topic_payload(evidence=[], source_rules={"allowed_types": ["primary"]}),
+        actor_uid="admin", db=db, now=NOW,
+    )
+    db.documents[("topics", topic["id"])].update({
+        "current_run_id": "automatic-run", "claimed_until": NOW, "last_run_status": "running",
+    })
+    claimed = {**topics.get_topic(topic["id"], db=db)}
+
+    def execute(question, previous_consensus, **kwargs):
+        return {
+            "consensus": "## Current consensus\n\nOnly press coverage exists [S1].",
+            "agreement_score": 60, "changed": False, "opinion_map": {},
+            "differences_data": {},
+            "sources": [{"id": "S1", "title": "News story", "url": "https://news.example.com/story"}],
+            "included_models": ["OpenAI: GPT-5.6", "Google Gemini: Gemini 3.5 Flash"],
+        }
+
+    run = topic_runner.execute_claimed_topic(
+        claimed, actor_uid="admin", db=db, now=NOW, executor=execute
+    )
+    assert run["evidence"] == []
+    assert [(item["id"], item["type"]) for item in run["excluded_evidence"]] == [("S1", "reporting")]
+
+    app = FastAPI()
+    app.state.limiter = limiter
+    app.include_router(topics_router.router)
+    page = TestClient(app).get("/topics/gpt-6")
+    assert page.status_code == 200
+    assert "Insufficient eligible evidence" in page.text
+    assert "Primary source" not in page.text
+    assert 'id="src-1"' not in page.text
+
+
 def test_topic_run_carries_the_tracked_claims_into_the_identity_judge(monkeypatch):
     """A new run has to know which claims the Topic already tracks, otherwise
     every reworded claim starts a new life in the Claim Ledger."""

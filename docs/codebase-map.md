@@ -3702,7 +3702,13 @@ wird nur chunkweise bis zum Budget expandiert und DTD/Entities werden abgewiesen
   redaktionellen Beschreibungstexts. Evidence bekommt die Rollen
   `primary|research|documentation|reporting|community|rumor`, wird nach Rolle
   sortiert und trennt direkte Quellen von nachrangigen Community-/Gerüchte-/
-  Redirect-Signalen. Nur Topics mit
+  Redirect-Signalen. Seit Review R14 ändern Quellenregeln nie das Etikett:
+  `topic_runner.split_evidence_from_sources` behält die erkannte Rolle und
+  schließt Quellen mit nicht erlaubter Rolle aus (`excluded_evidence` am Run,
+  mit Original-ID/URL, öffentlich nur als Anzahl). Bleibt keine erlaubte Quelle,
+  zeigt die Seite „Insufficient eligible evidence“. `preferred_domains` sind nur
+  noch ein Sortierhinweis innerhalb einer Rolle (`is_preferred`) und machen eine
+  Quelle nicht mehr zur Primärquelle. Nur Topics mit
   Run und Status Active/Paused erscheinen im Hub; `seo.noindex` entfernt sie
   zusätzlich aus `sitemap-topics.xml`. Historische Query-Ansichten sind
   `noindex` und werden wie die aktuelle Ansicht nur kurz gecacht (max-age 60,

@@ -404,6 +404,11 @@
                   </div>
                 </details>
               {% endif %}
+              {% if selected.excluded_evidence_count %}
+              <p class="topic-panel-lead">{{ selected.excluded_evidence_count }} further source{{ "s" if selected.excluded_evidence_count != 1 }} found in this check {{ "were" if selected.excluded_evidence_count != 1 else "was" }} left out because {{ "their type is" if selected.excluded_evidence_count != 1 else "its type is" }} not accepted by this Topic.</p>
+              {% endif %}
+              {% elif selected.excluded_evidence_count %}
+              <p class="topic-empty">Insufficient eligible evidence: this check found {{ selected.excluded_evidence_count }} source{{ "s" if selected.excluded_evidence_count != 1 }}, but none of a type this Topic accepts.</p>
               {% else %}
               <p class="topic-empty">No sources were attached to this check yet.</p>
               {% endif %}

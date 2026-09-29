@@ -51,22 +51,42 @@ def _research_question(topic: dict) -> str:
     return str(topic.get("lead_question") or "").strip() + "\n\n" + "\n".join(guidance)
 
 
-def _source_type(url: str, allowed: list[str], preferred: list[str], *, title="", publisher="") -> str:
-    candidate = topics.classify_evidence(
+def _source_type(url: str, preferred: list[str], *, title="", publisher="") -> str:
+    """The detected role of a source. Source rules never relabel it."""
+    return topics.classify_evidence(
         url, preferred_domains=preferred, title=title, publisher=publisher
     )["role"]
-    if candidate in allowed:
-        return candidate
-    return allowed[0] if allowed else "reporting"
+
+
+def _evidence_order(preferred):
+    def key(item):
+        classification = topics.classify_evidence(
+            item["url"], item["type"], preferred, title=item["title"],
+            publisher=item["publisher"],
+        )
+        return classification["rank"], not classification["is_preferred"]
+    return key
 
 
 def evidence_from_sources(sources, source_rules: dict) -> list[dict]:
+    """Evidence allowed by the Topic's source rules, best first."""
+    return split_evidence_from_sources(sources, source_rules)[0]
+
+
+def split_evidence_from_sources(sources, source_rules: dict):
+    """Split sources into (allowed evidence, excluded sources).
+
+    A source whose detected role is not allowed is excluded, not relabeled:
+    a news report stays a report even under a primary-only rule. Excluded
+    sources keep their citation ID, so a reference to them never points at
+    a different source.
+    """
     allowed = list(source_rules.get("allowed_types") or topics.EVIDENCE_TYPES)
     preferred = [
         str(domain or "").lower().removeprefix("www.")
         for domain in source_rules.get("preferred_domains") or []
     ]
-    evidence = []
+    evidence, excluded = [], []
     for index, source in enumerate(sources or []):
         if not isinstance(source, dict) or not source.get("url"):
             continue
@@ -77,23 +97,19 @@ def evidence_from_sources(sources, source_rules: dict) -> list[dict]:
         raw_title = str(source.get("title") or "").strip()
         title = raw_title if raw_title and not raw_title.isdigit() else host or url
         publisher = str(source.get("provider") or host)[:120]
-        evidence.append({
+        item = {
             # Ranking affects display order, never the citation's identity.
             "id": source.get("id", source.get("source_id", f"S{index + 1}")),
-            "type": _source_type(
-                url, allowed, preferred, title=title, publisher=publisher
-            ),
+            "type": _source_type(url, preferred, title=title, publisher=publisher),
             "title": title[:240],
             "url": url,
             "publisher": publisher,
             "published_at": "",
             "excerpt": "",
-        })
-    evidence.sort(key=lambda item: topics.classify_evidence(
-        item["url"], item["type"], preferred, title=item["title"],
-        publisher=item["publisher"],
-    )["rank"])
-    return evidence
+        }
+        (evidence if item["type"] in allowed else excluded).append(item)
+    evidence.sort(key=_evidence_order(preferred))
+    return evidence, excluded
 
 
 def _model_stances(opinion_map: dict, provider: str) -> list[str]:
@@ -177,6 +193,9 @@ def execute_claimed_topic(claimed: dict, *, actor_uid: str, db=None,
         if change_type not in {"minor", "major"}:
             change_type = "minor" if changed else "stable"
         source_rules = topics.normalize_source_rules(claimed.get("source_rules") or {})
+        evidence, excluded_evidence = split_evidence_from_sources(
+            result.get("sources"), source_rules
+        )
         run = topics.create_run(
             claimed["id"],
             {
@@ -192,9 +211,8 @@ def execute_claimed_topic(claimed: dict, *, actor_uid: str, db=None,
                     result.get("opinion_map") or {},
                     previous.get("opinion_map") or {},
                 ),
-                "evidence": evidence_from_sources(
-                    result.get("sources"), source_rules
-                ),
+                "evidence": evidence,
+                "excluded_evidence": excluded_evidence,
                 "models": result.get("included_models") or topics.topic_model_labels(
                     run_config.get("provider_models") or {}
                 ),
