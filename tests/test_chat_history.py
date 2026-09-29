@@ -153,12 +153,14 @@ class FakeQuery:
             field = getattr(condition, "field_path", None)
             op = getattr(condition, "op_string", None)
             value = getattr(condition, "value", None)
-            if op != "==":
+            if op not in {"==", "<="}:
                 raise AssertionError(f"unsupported fake filter operator: {op}")
             actual = data
             for part in field.split('.'):
                 actual = actual.get(part) if isinstance(actual, dict) else None
-            if actual != value:
+            if op == "==" and actual != value:
+                return False
+            if op == "<=" and (actual is None or actual > value):
                 return False
         return True
 
@@ -1571,6 +1573,164 @@ def test_account_deletion_fences_normal_chat_delete_but_cleanup_can_continue(cha
 
     assert database.chats("owner-uid") == {}
     assert database.turns("owner-uid", chat["id"]) == {}
+
+
+# ---------------------------------------------------------------------------
+# R11: Eine bestaetigte Chat-Loeschung ist ein dauerhafter, idempotenter Auftrag.
+# Scheitert die Kaskade (auch zwischen zwei Batches) oder stirbt der Prozess,
+# beendet der stuendliche Retention-Loop sie; der Zaehler sinkt genau einmal.
+# ---------------------------------------------------------------------------
+
+
+def _deletion_jobs(database):
+    return {
+        path[-1]: data
+        for path, data in database.documents.items()
+        if path[0] == chat_store.CHAT_DELETION_JOBS_COLLECTION
+    }
+
+
+def _chat_counter(database, uid="owner-uid"):
+    return database.documents[("users", uid, "chat_state", "quota")]["active_count"]
+
+
+def _completed_chat(client, database, turns=2):
+    chat = create_chat(client)
+    store = chat_store.ChatStore(database)
+    turn_ids = []
+    for index in range(turns):
+        turn = create_turn(client, chat["id"], {**TURN_PAYLOAD, "question": f"Q{index}?"})
+        store.complete_turn(
+            "owner-uid", chat["id"], turn["id"],
+            **completion_payload(question=f"Q{index}?"),
+        )
+        turn_ids.append(turn["id"])
+    return chat, turn_ids
+
+
+def _fail_deleting(monkeypatch, *, predicate):
+    """Let one document delete fail once, like a crash between two batches."""
+    original = FakeDocumentRef.delete
+    state = {"armed": True}
+
+    def delete(self):
+        if state["armed"] and predicate(self.path):
+            state["armed"] = False
+            raise RuntimeError("simulated Firestore outage")
+        return original(self)
+
+    monkeypatch.setattr(FakeDocumentRef, "delete", delete)
+
+
+def test_interrupted_chat_cascade_is_resumed_by_retention_and_counts_once(chat_api, monkeypatch):
+    client, database = chat_api
+    chat, turn_ids = _completed_chat(client, database)
+    other = create_chat(client)
+    store = chat_store.ChatStore(database)
+    assert _chat_counter(database) == 2
+    # Fail on the SECOND turn: the first turn is already gone, i.e. the
+    # cascade stops between two batches.
+    _fail_deleting(
+        monkeypatch,
+        predicate=lambda path: len(path) == 6 and path[3] == chat["id"] and path[5] == turn_ids[1],
+    )
+
+    assert store.delete_chat("owner-uid", chat["id"]) is False
+
+    # The deletion is confirmed: invisible everywhere, counted once, queued.
+    assert _chat_counter(database) == 1
+    assert [item["id"] for item in store.list_chats("owner-uid")["chats"]] == [other["id"]]
+    with pytest.raises(chat_store.ChatNotFound):
+        store.get_chat("owner-uid", chat["id"])
+    with pytest.raises(chat_store.ChatNotFound):
+        store.list_turn_details("owner-uid", chat["id"])
+    jobs = list(_deletion_jobs(database).values())
+    assert len(jobs) == 1
+    assert jobs[0]["uid"] == "owner-uid" and jobs[0]["chat_id"] == chat["id"]
+    assert jobs[0]["status"] == "retrying" and jobs[0]["attempts"] == 1
+    assert jobs[0]["last_error"] == "RuntimeError"
+    assert turn_ids[1] in database.turns("owner-uid", chat["id"])
+
+    # Not due yet: a tick right now leaves the backoff alone.
+    assert chat_store.resume_chat_deletions(database) == 0
+    later = datetime.now(timezone.utc) + timedelta(hours=7)
+    assert chat_store.resume_chat_deletions(database, now=later) == 1
+
+    assert not any(len(path) > 3 and path[3] == chat["id"] for path in database.documents)
+    assert set(database.chats("owner-uid")) == {other["id"]}
+    assert _deletion_jobs(database) == {}
+    assert _chat_counter(database) == 1
+    # Repeating the tick is a no-op.
+    assert chat_store.resume_chat_deletions(database, now=later) == 0
+
+
+def test_chat_deletion_survives_a_crash_right_after_the_tombstone(chat_api):
+    client, database = chat_api
+    chat, _ = _completed_chat(client, database, turns=1)
+    store = chat_store.ChatStore(database)
+
+    # The request dies after committing tombstone + job (and after removing
+    # the bookmark), before any cascade batch ran.
+    store.request_chat_deletion("owner-uid", chat["id"])
+    store.request_chat_deletion("owner-uid", chat["id"])  # idempotent retry
+    assert _chat_counter(database) == 0
+    assert len(_deletion_jobs(database)) == 1
+
+    assert chat_store.resume_chat_deletions(database) == 1
+    assert database.chats("owner-uid") == {}
+    assert _deletion_jobs(database) == {}
+    assert _chat_counter(database) == 0
+
+
+def test_queued_chat_deletion_cannot_be_revived_by_late_writes(chat_api, monkeypatch):
+    client, database = chat_api
+    chat, turn_ids = _completed_chat(client, database, turns=1)
+    store = chat_store.ChatStore(database)
+    _fail_deleting(
+        monkeypatch,
+        predicate=lambda path: len(path) == 6 and path[3] == chat["id"],
+    )
+    assert store.delete_chat("owner-uid", chat["id"]) is False
+    before = copy.deepcopy(database.documents)
+
+    late = client.post(f"/chats/{chat['id']}/turns", json=TURN_PAYLOAD, headers=AUTH_OWNER)
+    assert late.status_code == 404
+    from app.services.chat_context import ChatContextNotFound, FirestoreChatContextRepository
+    with pytest.raises(ChatContextNotFound):
+        FirestoreChatContextRepository(database).claim_version(
+            "owner-uid", chat["id"], turn_ids[0], "e" * 32, {},
+            now=datetime.now(timezone.utc),
+        )
+    assert database.documents == before
+
+
+def test_adopts_a_chat_stranded_in_deleting_without_a_job(chat_api):
+    client, database = chat_api
+    chat, _ = _completed_chat(client, database, turns=1)
+    chat_path = ("users", "owner-uid", "chats", chat["id"])
+    # Legacy state from before durable jobs: tombstoned, counter already
+    # decremented, cascade never finished.
+    database.documents[chat_path]["status"] = "deleting"
+    database.documents[("users", "owner-uid", "chat_state", "quota")]["active_count"] = 0
+
+    assert client.delete(f"/chats/{chat['id']}", headers=AUTH_OWNER).status_code == 200
+
+    assert database.chats("owner-uid") == {}
+    assert _deletion_jobs(database) == {}
+    assert _chat_counter(database) == 0
+
+
+def test_account_deletion_removes_pending_chat_deletion_jobs(chat_api, monkeypatch):
+    client, database = chat_api
+    chat, _ = _completed_chat(client, database, turns=1)
+    store = chat_store.ChatStore(database)
+    store.request_chat_deletion("owner-uid", chat["id"])
+    assert len(_deletion_jobs(database)) == 1
+
+    store.delete_all_chats("owner-uid")
+
+    assert database.chats("owner-uid") == {}
+    assert _deletion_jobs(database) == {}
 
 
 # ---------------------------------------------------------------------------

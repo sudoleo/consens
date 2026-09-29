@@ -672,15 +672,23 @@ class FirestoreChatContextRepository:
     def claim_version(self, uid: str, chat_id: str, turn_id: str, version_id: str, base: dict, *, now: datetime) -> tuple[str, str | None, dict | None]:
         version_ref = self._version_ref(uid, chat_id, version_id)
         target_ref = self._turn_ref(uid, chat_id, turn_id)
+        chat_ref = self._chat_ref(uid, chat_id)
         lease_nonce = secrets.token_hex(16)
 
         def operation(transaction):
             persistence_guard.ensure_account_write_allowed(
                 uid=uid, db=self.db, transaction=transaction
             )
+            chat_snapshot = chat_ref.get(transaction=transaction)
             target_snapshot = target_ref.get(transaction=transaction)
             version_snapshot = version_ref.get(transaction=transaction)
-            if not target_snapshot.exists:
+            # A tombstoned chat (durable deletion job pending) must not gain a
+            # new context version that the cascade could miss.
+            if (
+                not chat_snapshot.exists
+                or (chat_snapshot.to_dict() or {}).get("status") == "deleting"
+                or not target_snapshot.exists
+            ):
                 raise ChatContextNotFound("Chat not found")
             if version_snapshot.exists:
                 existing = version_snapshot.to_dict() or {}

@@ -25,6 +25,7 @@ from google.cloud.firestore_v1.base_query import FieldFilter
 from google.cloud.firestore_v1.field_path import FieldPath
 
 import app.core.config as cfg
+from app.core.observability import safe_exception
 from app.services import persistence_guard
 from app.services.llm.attachments import normalize_attachment_meta
 from app.services.share_snapshots import (
@@ -109,6 +110,19 @@ TURN_PAGE_SIZE_MAX = 100
 # EINER Unterhaltung erreicht niemand versehentlich.
 MAX_CHATS_PER_OWNER = 200
 MAX_TURNS_PER_CHAT = 500
+
+CHAT_STATUS_DELETING = "deleting"
+# Durable single-chat deletion jobs. The job is written in the SAME transaction
+# that tombstones the chat (status "deleting", counter decremented once), so a
+# crash between removing the visible handle (bookmark) and finishing the
+# cascade can never strand a transcript: the hourly retention loop resumes it.
+# The document id is a hash, so neither UID nor chat id appears in the path;
+# the body holds only those two ids plus retry metadata, never content.
+CHAT_DELETION_JOBS_COLLECTION = "chat_deletion_jobs"
+CHAT_DELETION_JOB_SCHEMA_VERSION = 1
+CHAT_DELETION_RETRY_BASE_SECONDS = 60
+CHAT_DELETION_RETRY_MAX_SECONDS = 6 * 60 * 60
+CHAT_DELETION_SWEEP_LIMIT = 100
 
 _ID_RE = re.compile(r"[0-9a-f]{32}")
 _CLIENT_REQUEST_ID_RE = re.compile(
@@ -638,14 +652,14 @@ class ChatStore:
     def get_chat(self, uid: str, chat_id: str) -> dict:
         ref = self._chat_ref(uid, chat_id)
         snapshot = ref.get()
-        if not snapshot.exists:
+        if not _is_live_chat(snapshot):
             raise ChatNotFound("Chat not found")
         return chat_metadata(snapshot.id, snapshot.to_dict() or {})
 
     def get_turn(self, uid: str, chat_id: str, turn_id: str) -> dict:
         chat_ref = self._chat_ref(uid, chat_id)
         turn_ref = self._turn_ref(uid, chat_id, turn_id)
-        if not chat_ref.get().exists:
+        if not _is_live_chat(chat_ref.get()):
             raise ChatNotFound("Chat not found")
         turn_snapshot = turn_ref.get()
         if not turn_snapshot.exists:
@@ -735,9 +749,12 @@ class ChatStore:
                 owner_scope=uid,
             )
         return {
+            # A confirmed deletion is never listed again, even while its
+            # durable cascade is still pending or retrying.
             "chats": [
                 chat_metadata(snapshot.id, snapshot.to_dict() or {}, compact=True)
                 for snapshot in page
+                if _is_live_chat(snapshot)
             ],
             "next_cursor": next_cursor,
             "has_more": has_more,
@@ -1097,7 +1114,7 @@ class ChatStore:
         cursor: str,
     ) -> dict:
         chat_ref = self._chat_ref(uid, chat_id)
-        if not chat_ref.get().exists:
+        if not _is_live_chat(chat_ref.get()):
             raise ChatNotFound("Chat not found")
         turns_ref = chat_ref.collection("turns")
         query = turns_ref.order_by(
@@ -1240,41 +1257,53 @@ class ChatStore:
             self.db.collection("users").document(uid).collection("chat_state")
         ):
             state_ref.delete()
+        # Single-chat jobs of this owner are obsolete once every chat is gone;
+        # they carry the UID, so they must not outlive the account.
+        jobs = self.db.collection(CHAT_DELETION_JOBS_COLLECTION).where(
+            filter=FieldFilter("uid", "==", uid)
+        )
+        for snapshot in jobs.stream():
+            snapshot.reference.delete()
 
     def delete_chat(
         self, uid: str, chat_id: str, *, allow_account_deletion: bool = False
-    ) -> None:
-        """Delete one owner-bound chat with the same three-level cascade."""
+    ) -> bool:
+        """Delete one owner-bound chat with the same three-level cascade.
+
+        User-initiated deletion first commits a durable job together with the
+        tombstone, then runs the cascade. Returns ``True`` when the cascade
+        finished now and ``False`` when it failed and stays queued for the
+        retention loop; the deletion itself is committed either way.
+
+        The account-deletion path keeps raising: its own per-area retry is the
+        durable job there, and it must not create new UID-bearing documents.
+        """
         chat_ref = self._chat_ref(uid, chat_id)
-        self._ensure_chat_counter(uid, fence_writes=not allow_account_deletion)
+        if not allow_account_deletion:
+            self.request_chat_deletion(uid, chat_id)
+            return self.run_chat_deletion(uid, chat_id)
+
+        self._ensure_chat_counter(uid, fence_writes=False)
         counter_ref = self._chat_counter_ref(uid)
 
         def mark_deleting(transaction):
-            if not allow_account_deletion:
-                persistence_guard.ensure_account_write_allowed(
-                    uid=uid,
-                    db=self.db,
-                    transaction=transaction,
-                )
             chat_snapshot = chat_ref.get(transaction=transaction)
             counter_snapshot = counter_ref.get(transaction=transaction)
             if not chat_snapshot.exists:
-                if allow_account_deletion:
-                    # Firestore list_documents() also exposes missing parent
-                    # documents that still own subcollections.  Account
-                    # cleanup must descend into those orphan trees even though
-                    # there is no parent status/counter left to update.
-                    return
-                raise ChatNotFound("Chat not found")
+                # Firestore list_documents() also exposes missing parent
+                # documents that still own subcollections.  Account cleanup
+                # must descend into those orphan trees even though there is no
+                # parent status/counter left to update.
+                return
             data = chat_snapshot.to_dict() or {}
-            if data.get("status") == "deleting":
+            if data.get("status") == CHAT_STATUS_DELETING:
                 return
             if data.get("status") != CHAT_STATUS_ACTIVE:
                 raise ChatNotFound("Chat not found")
             counter = counter_snapshot.to_dict() if counter_snapshot.exists else {}
             count = _safe_non_negative_int((counter or {}).get("active_count"))
             transaction.update(chat_ref, {
-                "status": "deleting",
+                "status": CHAT_STATUS_DELETING,
                 "updated_at": firestore.SERVER_TIMESTAMP,
             })
             transaction.set(counter_ref, {
@@ -1284,9 +1313,115 @@ class ChatStore:
             })
 
         self._transaction(mark_deleting)
+        self._purge_chat(uid, chat_id)
+        return True
+
+    def request_chat_deletion(self, uid: str, chat_id: str) -> None:
+        """Tombstone one chat and enqueue its durable deletion job atomically.
+
+        Idempotent: a chat that is already ``deleting`` keeps its (single)
+        counter decrement and only gets a missing job re-created, which also
+        adopts chats stranded in ``deleting`` before jobs existed. The account
+        tombstone is read in the same transaction, like every owner write.
+        """
+        chat_ref = self._chat_ref(uid, chat_id)
+        self._ensure_chat_counter(uid, fence_writes=True)
+        counter_ref = self._chat_counter_ref(uid)
+        job_ref = self._deletion_job_ref(uid, chat_id)
+        now = datetime.now(timezone.utc)
+
+        def operation(transaction):
+            persistence_guard.ensure_account_write_allowed(
+                uid=uid,
+                db=self.db,
+                transaction=transaction,
+            )
+            chat_snapshot = chat_ref.get(transaction=transaction)
+            counter_snapshot = counter_ref.get(transaction=transaction)
+            job_snapshot = job_ref.get(transaction=transaction)
+            if not chat_snapshot.exists:
+                raise ChatNotFound("Chat not found")
+            status = (chat_snapshot.to_dict() or {}).get("status")
+            if status == CHAT_STATUS_DELETING:
+                if not job_snapshot.exists:
+                    transaction.set(job_ref, _new_deletion_job(uid, chat_id, now))
+                return
+            if status != CHAT_STATUS_ACTIVE:
+                raise ChatNotFound("Chat not found")
+            counter = counter_snapshot.to_dict() if counter_snapshot.exists else {}
+            count = _safe_non_negative_int((counter or {}).get("active_count"))
+            transaction.update(chat_ref, {
+                "status": CHAT_STATUS_DELETING,
+                "updated_at": firestore.SERVER_TIMESTAMP,
+            })
+            transaction.set(counter_ref, {
+                "schema_version": 1,
+                "active_count": max(0, count - 1),
+                "updated_at": firestore.SERVER_TIMESTAMP,
+            })
+            transaction.set(job_ref, _new_deletion_job(uid, chat_id, now))
+
+        self._transaction(operation)
+
+    def run_chat_deletion(self, uid: str, chat_id: str, *, now=None) -> bool:
+        """Run (or resume) one queued chat deletion; never raises on failure.
+
+        The job is acknowledged (deleted) only after the whole cascade has
+        finished. A failure is recorded on the job with a bounded backoff so the
+        retention loop retries it and operators can see attempts/category.
+        """
+        job_ref = self._deletion_job_ref(uid, chat_id)
+        try:
+            snapshot = self._chat_ref(uid, chat_id).get()
+            if snapshot.exists and (snapshot.to_dict() or {}).get("status") != CHAT_STATUS_DELETING:
+                # Defensive: a job must never delete a chat that was not
+                # tombstoned by request_chat_deletion. Drop the stale job.
+                job_ref.delete()
+                return True
+            self._purge_chat(uid, chat_id)
+            job_ref.delete()
+            return True
+        except Exception as exc:
+            category = safe_exception(exc)
+            logging.warning("chat deletion job failed category=%s", category)
+            try:
+                self._record_deletion_failure(job_ref, category, now=now)
+            except Exception as record_exc:
+                logging.error(
+                    "chat deletion job failure could not be recorded category=%s",
+                    safe_exception(record_exc),
+                )
+            return False
+
+    def _record_deletion_failure(self, job_ref, category: str, *, now=None) -> None:
+        now = now or datetime.now(timezone.utc)
+        snapshot = job_ref.get()
+        if not snapshot.exists:
+            return
+        job = snapshot.to_dict() or {}
+        attempts = _safe_non_negative_int(job.get("attempts")) + 1
+        delay = min(
+            CHAT_DELETION_RETRY_MAX_SECONDS,
+            CHAT_DELETION_RETRY_BASE_SECONDS * (2 ** min(attempts - 1, 16)),
+        )
+        job_ref.set({
+            **job,
+            "status": "retrying",
+            "attempts": attempts,
+            "last_error": str(category)[:80],
+            "last_attempt_at": now,
+            "next_attempt_at": now + timedelta(seconds=delay),
+            "updated_at": now,
+        })
+
+    def _purge_chat(self, uid: str, chat_id: str) -> None:
         from app.services.agent_files import AgentFiles
         AgentFiles(self.db).cleanup_chat(uid, chat_id)
-        self._delete_chat_tree(chat_ref)
+        self._delete_chat_tree(self._chat_ref(uid, chat_id))
+
+    def _deletion_job_ref(self, uid: str, chat_id: str):
+        key = hashlib.sha256(f"{uid}:{chat_id}".encode("utf-8")).hexdigest()[:40]
+        return self.db.collection(CHAT_DELETION_JOBS_COLLECTION).document(key)
 
     def _delete_chat_tree(self, chat_ref) -> None:
         # Deepest level first: an interrupted run can simply be repeated and
@@ -1347,6 +1482,58 @@ class ChatStore:
                 # longer pending, which is exactly the desired end state.
                 continue
         return retired
+
+
+def _is_live_chat(snapshot) -> bool:
+    if not snapshot.exists:
+        return False
+    return (snapshot.to_dict() or {}).get("status") != CHAT_STATUS_DELETING
+
+
+def _new_deletion_job(uid: str, chat_id: str, now: datetime) -> dict:
+    return {
+        "schema_version": CHAT_DELETION_JOB_SCHEMA_VERSION,
+        "uid": uid,
+        "chat_id": chat_id,
+        "status": "pending",
+        "attempts": 0,
+        "created_at": now,
+        "updated_at": now,
+        # Due immediately: the request itself runs the cascade right away, and
+        # if that process dies the next retention tick picks the job up.
+        "next_attempt_at": now,
+    }
+
+
+def resume_chat_deletions(db=None, *, now=None, limit: int = CHAT_DELETION_SWEEP_LIMIT) -> int:
+    """Retry due single-chat deletion jobs; called by the hourly retention loop.
+
+    Every job is idempotent: the cascade walks deepest level first and the
+    counter was already decremented with the tombstone, so a repeat after a
+    crash between any two batches only removes what is left. Returns the number
+    of jobs completed in this tick.
+    """
+    if db is None:
+        from app.core.security import db_firestore
+        db = db_firestore
+    now = now or datetime.now(timezone.utc)
+    store = ChatStore(db)
+    completed = 0
+    # Single-field range on one collection: served by Firestore's automatic
+    # index, no composite index to deploy.
+    due_jobs = db.collection(CHAT_DELETION_JOBS_COLLECTION).where(
+        filter=FieldFilter("next_attempt_at", "<=", now)
+    ).limit(limit)
+    for snapshot in due_jobs.stream():
+        job = snapshot.to_dict() or {}
+        uid = str(job.get("uid") or "")
+        chat_id = str(job.get("chat_id") or "")
+        if not uid or not _ID_RE.fullmatch(chat_id):
+            snapshot.reference.delete()
+            continue
+        if store.run_chat_deletion(uid, chat_id, now=now):
+            completed += 1
+    return completed
 
 
 def _child_documents(collection_ref) -> list:

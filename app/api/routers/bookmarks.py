@@ -895,33 +895,64 @@ def delete_bookmark(data: BookmarkDeleteRequest):
     except Exception as e:
         raise HTTPException(status_code=401, detail="Authentication failed")
     
+    ref = (
+        db_firestore.collection("users").document(uid)
+        .collection("bookmarks").document(bookmark_id)
+    )
+    store = _chat_store()
+    # The bookmark is the only visible handle on its chat. Commit the chat's
+    # durable deletion job (tombstone + counter + job in one transaction)
+    # BEFORE removing that handle: if the process dies anywhere after this
+    # point, the hourly retention loop still finishes the cascade.
     try:
-        ref = (
-            db_firestore.collection("users").document(uid)
-            .collection("bookmarks").document(bookmark_id)
-        )
-        # Read the chat binding BEFORE the delete: afterwards the bookmark is
-        # the only handle on that chat, and the transcript would be stranded
-        # with no way to reach or remove it.
+        snapshot = ref.get()
+        bound = (snapshot.to_dict() or {}) if snapshot.exists else {}
+    except Exception:
+        raise HTTPException(status_code=500, detail="Error deleting bookmark")
+    chat_id = str(bound.get("chat_id") or "")
+    queued = False
+    if CHAT_ID_RE.fullmatch(chat_id):
+        try:
+            store.request_chat_deletion(uid, chat_id)
+            queued = True
+        except ChatNotFound:
+            pass
+        except persistence_guard.AccountDeletionInProgress:
+            raise HTTPException(status_code=403, detail="This account is being deleted.") from None
+        except Exception as exc:
+            logging.error(
+                "Chat deletion job could not be queued category=%s",
+                safe_exception(exc),
+            )
+            # Nothing was deleted yet, so an honest error lets the user retry.
+            raise HTTPException(status_code=500, detail="Error deleting bookmark") from None
+
+    try:
         deleted = persistence_guard.delete_bookmark(
             uid=uid, doc_ref=ref, db=db_firestore
         )
-        chat_id = str((deleted or {}).get("chat_id") or "")
     except Exception:
+        # The chat is already queued for deletion; retrying the bookmark
+        # delete is safe and the job stays idempotent.
         raise HTTPException(status_code=500, detail="Error deleting bookmark")
 
-    if CHAT_ID_RE.fullmatch(chat_id):
-        # Best effort: the bookmark is already gone, so a failing cascade must
-        # not turn a successful deletion into an error the user has to retry.
-        # A leftover chat stays reachable for the account-level cascade.
+    late_chat_id = str((deleted or {}).get("chat_id") or "")
+    if not queued and late_chat_id != chat_id and CHAT_ID_RE.fullmatch(late_chat_id):
+        # The bookmark gained a chat binding between the read and the delete.
         try:
-            _chat_store().delete_chat(uid, chat_id)
+            store.request_chat_deletion(uid, late_chat_id)
+            chat_id, queued = late_chat_id, True
         except ChatNotFound:
             pass
         except Exception as exc:
             logging.error(
-                "Bookmark deleted but chat cascade failed category=%s",
+                "Chat deletion job could not be queued category=%s",
                 safe_exception(exc),
             )
+
+    if queued:
+        # Run the cascade now; a failure stays queued and observable on the job
+        # document, so the confirmed deletion is still completed later.
+        store.run_chat_deletion(uid, chat_id)
 
     return {"status": "success", "message": "Bookmark deleted."}
