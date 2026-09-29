@@ -33,8 +33,15 @@ async def retention_maintenance_loop() -> None:
         documents_deleted = await asyncio.to_thread(cleanup_expired_documents)
         from app.services.google_connections import cleanup_google_data
         google_records_deleted = await asyncio.to_thread(cleanup_google_data)
+        from app.services.chat_store import resume_chat_deletions
+        chat_deletions_completed = await asyncio.to_thread(resume_chat_deletions)
+        from app.services.memory_edit import cleanup_memory_edit_records
+        memory_edit_records = await asyncio.to_thread(cleanup_memory_edit_records)
         task_succeeded(
             TASK_NAME,
+            chat_deletions_completed=chat_deletions_completed,
+            memory_undo_snapshots_purged=memory_edit_records.get("snapshots_purged", 0),
+            memory_edits_recovered=memory_edit_records.get("edits_recovered", 0),
             files_deleted=files_deleted,
             documents_deleted=documents_deleted,
             google_records_deleted=google_records_deleted,
