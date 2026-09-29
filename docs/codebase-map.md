@@ -3615,8 +3615,11 @@ wird nur chunkweise bis zum Budget expandiert und DTD/Entities werden abgewiesen
   Firestore-Transaktion; parallele Retries liefern denselben aktiven Share und
   verbrauchen die Quote nur einmal. Dasselbe gilt für die deterministische
   Publikation erfolgreicher API-Runs. Besucher-Reports aktualisieren
-  Gesamtzähler, Grundaggregat und den Auto-Noindex-Übergang ab fünf Reports
-  ebenfalls transaktional, sodass parallele Meldungen keine Increments verlieren.
+  Gesamtzähler und Grundaggregat transaktional, sodass parallele Meldungen keine
+  Increments verlieren; ab `REPORT_REVIEW_THRESHOLD` (5) setzen sie nur
+  `needs_review`. Seit Review R19 ändern Reports `indexed` nie selbst, weil sich
+  anonyme Meldungen nicht als unabhängig nachweisen lassen; Deindexieren oder
+  Blocken ist eine Moderationsentscheidung (`moderate_share`).
 - **`GET /s/{slug_id}`** rendert read-only aus dem Snapshot (keine LLM-Calls).
   `public_markdown.py` erhält LaTeX-Delimiter im serverseitigen HTML; die
   Share-Seite setzt sie anschließend mit derselben KaTeX-Brücke wie die App.

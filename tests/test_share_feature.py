@@ -1045,14 +1045,25 @@ class ModerationAndCleanupTests(unittest.TestCase):
         with self.assertRaisesRegex(ShareError, "not found"):
             snapshots.hard_delete_share(snapshots.generate_share_id(), db=self.db)
 
-    def test_auto_noindex_after_report_threshold(self):
-        share_id = self._make_share(indexed=True,
-                                    reports_count=snapshots.AUTO_NOINDEX_REPORTS - 1)
-        snapshots.report_share(share_id, "spam", db=self.db)
+    def test_repeated_anonymous_reports_flag_review_but_never_deindex(self):
+        """One visitor repeating the same report must not deindex a page (R19)."""
+        share_id = self._make_share(indexed=True)
+        for _ in range(snapshots.REPORT_REVIEW_THRESHOLD * 4):
+            snapshots.report_share(share_id, "spam", db=self.db)
         stored = self._share(share_id)
-        self.assertEqual(stored["reports_count"], snapshots.AUTO_NOINDEX_REPORTS)
-        self.assertFalse(stored["indexed"])
+        self.assertEqual(stored["reports_count"], snapshots.REPORT_REVIEW_THRESHOLD * 4)
+        self.assertEqual(stored["report_reasons"], {"spam": snapshots.REPORT_REVIEW_THRESHOLD * 4})
+        self.assertTrue(stored["indexed"])
         self.assertTrue(stored["needs_review"])
+        self.assertIn(share_id, [
+            item["share_id"] for item in snapshots.list_shares_for_admin(db=self.db, only_reported=True)
+        ])
+
+        # The reports stay actionable: a moderator can still take it out.
+        snapshots.moderate_share(share_id, indexed=False, db=self.db)
+        stored = self._share(share_id)
+        self.assertFalse(stored["indexed"])
+        self.assertFalse(stored["needs_review"])
 
     def test_reports_below_threshold_keep_indexed(self):
         share_id = self._make_share(indexed=True)
