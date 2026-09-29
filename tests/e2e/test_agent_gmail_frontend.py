@@ -57,7 +57,7 @@ def test_gmail_draft_revision_document_download_and_restoration(browser,phase4_s
         page.locator('#questionInput').fill('Revise the plan for Monday and update the email attachment.');consent.check()
         page.locator('#sendButton').click()
         expect(page.locator('#agentGoogleActions')).to_contain_text('Decision-v2.pdf')
-        expect(page.get_by_label('Created documents and versions',exact=True)).to_contain_text('version 2')
+        expect(page.get_by_role('region',name='Files in this chat',exact=True)).to_contain_text('Version 2')
         expect(page.locator('#agentGoogleActions')).to_contain_text('superseded')
         card=page.locator('.agent-action-card').filter(has_text='revised plan for Monday')
         expect(card.get_by_role('button',name='Confirm and execute',exact=True)).to_be_disabled()
