@@ -10,7 +10,7 @@
     "test:watch": "vitest"
   },
   "devDependencies": {
-    "dompurify": "3.0.6",
+    "dompurify": "3.4.16",
     "esbuild": "^0.21.5",
     "jsdom": "^24.1.0",
     "katex": "0.17.0",
