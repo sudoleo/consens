@@ -25,6 +25,56 @@ from app.services.llm.engines import build_provider_payload
 ROOT = Path(__file__).resolve().parents[1]
 
 
+class _Snapshot:
+    def __init__(self, data):
+        self._data = None if data is None else dict(data)
+        self.exists = data is not None
+
+    def to_dict(self):
+        return dict(self._data or {})
+
+
+class _MemoryModelsDocument:
+    """One in-memory ``app_config/models`` document with sequential transactions."""
+
+    def __init__(self, data):
+        self.data = None if data is None else dict(data)
+        self.writes = []
+
+    def get(self, transaction=None, **_kwargs):
+        return _Snapshot(self.data)
+
+    def set(self, data, merge=False, **_kwargs):
+        self.writes.append(dict(data))
+        self.data = {**(self.data or {}), **data} if merge else dict(data)
+
+    def delete(self):
+        self.writes.append(None)
+        self.data = None
+
+    def database(self):
+        document = self
+
+        class Transaction:
+            def set(self, ref, data, merge=False):
+                ref.set(data, merge=merge)
+
+            def delete(self, ref):
+                ref.delete()
+
+        class Database:
+            def collection(self, _name):
+                return self
+
+            def document(self, _name):
+                return document
+
+            def run_transaction(self, operation):
+                return operation(Transaction())
+
+        return Database()
+
+
 class ModelConfigurationTests(unittest.TestCase):
     def _valid_admin_payload(self):
         return {
@@ -96,22 +146,12 @@ class ModelConfigurationTests(unittest.TestCase):
 
     def test_admin_update_restores_persisted_document_on_activation_error(self):
         payload = self._valid_admin_payload()
-        previous = {"schema_version": 7, "openai": ["previous-model"]}
-
-        class Snapshot:
-            exists = True
-
-            def to_dict(self):
-                return dict(previous)
-
-        fake_document = mock.Mock()
-        fake_document.get.return_value = Snapshot()
-        fake_db = mock.Mock()
-        fake_db.collection.return_value.document.return_value = fake_document
+        previous = {"schema_version": 7, "openai": ["previous-model"], "revision": 4}
+        doc_ref = _MemoryModelsDocument(previous)
 
         with (
             mock.patch.object(admin_router, "_require_admin"),
-            mock.patch.object(admin_router, "db_firestore", fake_db),
+            mock.patch.object(admin_router, "db_firestore", doc_ref.database()),
             mock.patch.object(
                 admin_router,
                 "load_models_from_db",
@@ -122,9 +162,71 @@ class ModelConfigurationTests(unittest.TestCase):
             admin_router.update_models(mock.Mock(), payload)
 
         self.assertEqual(exc_info.exception.status_code, 500)
-        self.assertGreaterEqual(fake_document.set.call_count, 2)
-        self.assertEqual(fake_document.set.call_args_list[-1].args[0], previous)
-        fake_document.delete.assert_not_called()
+        self.assertEqual(len(doc_ref.writes), 2)
+        restored = dict(doc_ref.data)
+        # The previous content comes back under a new revision number, so every
+        # process that already activated the failed revision reloads it.
+        self.assertEqual(restored.pop("revision"), 6)
+        self.assertEqual(restored, {k: v for k, v in previous.items() if k != "revision"})
+
+    def test_failed_activation_never_rolls_back_a_newer_foreign_revision(self):
+        """R25: A writes, B writes, A's activation fails -> B stays."""
+        doc_ref = _MemoryModelsDocument({"marker": "X", "revision": 1})
+
+        def foreign_write_then_fail(**_kwargs):
+            doc_ref.data = {"marker": "B", "revision": 3}
+            raise RuntimeError("activation in A failed")
+
+        with mock.patch.object(admin_router, "db_firestore", doc_ref.database()), \
+                mock.patch.object(admin_router, "load_models_from_db",
+                                  side_effect=foreign_write_then_fail):
+            with self.assertRaises(RuntimeError):
+                admin_router._persist_and_activate_models(
+                    doc_ref, {"marker": "A"}, expected_revision=1,
+                )
+        self.assertEqual(doc_ref.data, {"marker": "B", "revision": 3})
+
+    def test_stale_admin_save_is_refused_with_409_and_nothing_is_written(self):
+        payload = {**self._valid_admin_payload(), "revision": 2}
+        doc_ref = _MemoryModelsDocument({"openai": ["x"], "revision": 5})
+        with (
+            mock.patch.object(admin_router, "_require_admin"),
+            mock.patch.object(admin_router, "db_firestore", doc_ref.database()),
+            mock.patch.object(admin_router, "load_models_from_db") as load,
+            self.assertRaises(HTTPException) as exc_info,
+        ):
+            admin_router.update_models(mock.Mock(), payload)
+        self.assertEqual(exc_info.exception.status_code, 409)
+        self.assertEqual(doc_ref.writes, [])
+        load.assert_not_called()
+
+    def test_successful_save_increments_revision_and_get_exposes_it(self):
+        payload = {**self._valid_admin_payload(), "revision": 5}
+        doc_ref = _MemoryModelsDocument({"openai": ["x"], "revision": 5})
+        with (
+            mock.patch.object(admin_router, "_require_admin"),
+            mock.patch.object(admin_router, "db_firestore", doc_ref.database()),
+            mock.patch.object(admin_router, "load_models_from_db"),
+        ):
+            result = admin_router.update_models(mock.Mock(), payload)
+            self.assertEqual(result["revision"], 6)
+            self.assertEqual(doc_ref.data["revision"], 6)
+            self.assertEqual(get_models(mock.Mock())["revision"], 6)
+
+    def test_every_process_adopts_a_newer_published_revision(self):
+        doc_ref = _MemoryModelsDocument({"revision": 7})
+        original = cfg.ACTIVE_MODEL_CONFIG_REVISION
+        try:
+            with mock.patch("app.core.security.db_firestore", doc_ref.database()), \
+                    mock.patch.object(cfg, "load_models_from_db", return_value=True) as load:
+                cfg.ACTIVE_MODEL_CONFIG_REVISION = 7
+                self.assertFalse(cfg.refresh_models_if_changed())
+                load.assert_not_called()
+                doc_ref.data = {"revision": 8}
+                self.assertTrue(cfg.refresh_models_if_changed())
+                load.assert_called_once_with(strict=True, persist_backfill=False)
+        finally:
+            cfg.ACTIVE_MODEL_CONFIG_REVISION = original
 
     def test_readiness_config_load_never_creates_missing_document(self):
         snapshot = mock.Mock(exists=False)

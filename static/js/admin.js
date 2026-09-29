@@ -1380,6 +1380,9 @@ async function saveModels() {
     const idToken = await user.getIdToken();
 
     const data = {
+        // Compare-and-swap token: the server refuses the save with 409 if
+        // another admin or process stored a newer configuration meanwhile.
+        revision: Number.isInteger(globalModelsData.revision) ? globalModelsData.revision : 0,
         premium: [],
         reasoning_policy: globalModelsData.reasoning_policy || { profile: 'existing', models: {} },
         consensus: consensusListValues(),
@@ -1483,7 +1486,11 @@ async function saveModels() {
             setTimeout(() => setStatus('', false), 4000);
         } else {
             const resData = await response.json();
-            throw new Error(resData.detail || 'Failed to update models');
+            if (response.status === 409) {
+                throw new Error(resData.error || resData.detail
+                    || 'The configuration was changed elsewhere. Reload before saving again.');
+            }
+            throw new Error(resData.error || resData.detail || 'Failed to update models');
         }
     } catch (err) {
         setStatus(err.message, true);

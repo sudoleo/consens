@@ -4103,7 +4103,17 @@ CLI mit `firebase deploy --only firestore:rules,firestore:indexes`):
   und unter einem Runtime-Lock vollständig neu geladen; schlägt ein Apply-Schritt
   fehl, werden sowohl das vorherige Firestore-Dokument als auch alle zuvor
   aktiven Runtime-Sets/Maps/Limits restauriert und der Admin-Request schlägt
-  fehl. `consensus` steuert den App-Consensus-Picker;
+  fehl. Das Dokument trägt eine monotone `revision` (R25): `GET` liefert sie, die
+  Admin-UI sendet sie beim Speichern zurück, und `POST` schreibt per
+  Transaktion nur, wenn sie noch aktuell ist (sonst 409, nichts geschrieben).
+  Der Rollback nach fehlgeschlagener Aktivierung ersetzt nur die eigene, noch
+  gespeicherte Revision (unter neuer Revisionsnummer) und nie eine inzwischen
+  von einem anderen Prozess geschriebene. Jeder Prozess merkt sich die aktive
+  Revision und prüft sie im Lifespan-Task `model-configuration-sync` alle 60 s
+  mit einem Read; bei neuer Revision lädt er vollständig neu. Grenze: ein
+  einzelner Lauf liest weiter die prozessweiten Maps; eine Aktivierung während
+  eines laufenden Requests ist nicht als Snapshot pro Lauf eingefroren.
+  `consensus` steuert den App-Consensus-Picker;
   Fehlende Limitfelder werden beim Startup normalisiert und per Merge in das
   Admin-Dokument zurückgeschrieben (Schema-Backfill ohne Verlust vorhandener Werte).
   Werte können historische Engine-Aliase (`Gemini-Pro`) oder direkte Modell-IDs aus
