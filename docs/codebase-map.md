@@ -3626,7 +3626,15 @@ wird nur chunkweise bis zum Budget expandiert und DTD/Entities werden abgewiesen
   Endpoint serverseitig auf die Eigentümer-Session geprüft und nie indexiert,
   gecacht, reportet oder als Related/Sitemap-Ziel ausgegeben. Public-Caching via
   `SHARE_CACHE_CONTROL` + In-Process-Cache (`get_share_cached` /
-  `invalidate_share_cache`).
+  `invalidate_share_cache`). Seit Review R18 gibt es eine feste obere Grenze für
+  die Widerrufsverzögerung (`PUBLIC_REVOCATION_MAX_DELAY_SECONDS`, 5 Minuten):
+  Der In-Process-Cache lebt 60 s (Invalidierung wirkt nur im eigenen Prozess,
+  andere Worker holen den Status spätestens nach der TTL frisch), und
+  `SHARE_CACHE_CONTROL` erlaubt Browsern/Proxies 60 s plus 60 s
+  `stale-while-revalidate`. Aktuelle Watch-Seite, historische
+  `?version=`-Ansichten und die OG-Karte nutzen denselben Header; nichts
+  Widerrufbares wird mehr `immutable` oder langlebig ausgeliefert. Terms und
+  Privacy sagen entsprechend „within a few minutes“ statt „immediately“.
   Verwandte Fragen teilen pro Prozess einen kompakten Kandidatenbestand
   (weiterhin höchstens 400 `indexed`-Dokumente pro Scan, nur `active` und
   `public`, TTL 15 Minuten). Frageausschluss und Ranking erfolgen je Seite im
@@ -3694,7 +3702,9 @@ wird nur chunkweise bis zum Budget expandiert und DTD/Entities werden abgewiesen
   Redirect-Signalen. Nur Topics mit
   Run und Status Active/Paused erscheinen im Hub; `seo.noindex` entfernt sie
   zusätzlich aus `sitemap-topics.xml`. Historische Query-Ansichten sind
-  `noindex`, aber immutable gecacht.
+  `noindex` und werden wie die aktuelle Ansicht nur kurz gecacht (max-age 60,
+  s-maxage 300), damit ein archiviertes Topic auch mit seinen Versionen
+  verschwindet (Review R18).
 - Besucher-Follows sind ein eigener Double-Opt-in-Flow in `topic_followers` und
   teilen keine Dokumente mit `watch_followers`. Minor/Major-Runs versenden bei
   konfiguriertem SMTP deduplizierte Multipart-Updates; Stable-Runs nicht.
@@ -4773,7 +4783,7 @@ der Drift-Header einen kompakten Agreement-Chart: seine Punkte besitzen Hover-
 Beschreibungen und springen in die stets sichtbare Run-Liste. Die große Kurve
 bleibt als dezentes, zunächst geschlossenes Detail aus dem Header verlinkt. Die normale Watch-URL
 rendert serverseitig die neueste Vollversion über dem unveränderten Share-Baseline-
-Dokument; `?version=<run_id>` öffnet eine immutable historische Vollversion und
+Dokument; `?version=<run_id>` öffnet eine unveränderliche (aber nur kurz gecachte, widerrufbare) historische Vollversion und
 `?version=original` den Ausgangs-Consensus. Shared Pages ohne Watch behalten ihr
 bisheriges Snapshot-Verhalten. Ein Backend-`display_version` ist die einzige
 Quelle für Consensus, Differences, Agreement, Modelle, Quellen, Answer-Zeit und

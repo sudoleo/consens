@@ -1185,6 +1185,9 @@ def test_old_topic_version_links_survive_more_than_one_page_of_runs(monkeypatch)
 
     oldest = client.get(f"/topics/gpt-6?version={created[0]['id']}")
     assert oldest.status_code == 200
+    # Archiving a Topic has to take its versions down too (R18).
+    assert "immutable" not in oldest.headers["Cache-Control"]
+    assert "max-age=31536000" not in oldest.headers["Cache-Control"]
     assert "Answer number 1." in oldest.text
     assert "Answer number 2." not in oldest.text.split('class="topic-timeline')[0]
     assert "noindex" in oldest.headers["X-Robots-Tag"]

@@ -25,9 +25,12 @@ from app.services.public_markdown import (
     source_site_name,
 )
 
-# Browser 5 min, (zukünftiges) CDN 1 Tag; Invalidierung bei Revoke/Block läuft
-# über den In-Process-Cache + kurze max-age, ein CDN gibt es bewusst nicht.
-SHARE_CACHE_CONTROL = "public, max-age=300, s-maxage=86400, stale-while-revalidate=86400"
+# Widerrufbare öffentliche Inhalte (Share-Seiten, historische Watch-Versionen,
+# OG-Karten) werden nie langlebig oder `immutable` ausgeliefert: Browser und
+# Proxies dürfen sie höchstens kurz halten. Zusammen mit dem In-Process-Cache
+# (snapshots.SHARE_CACHE_TTL_SECONDS) bleibt die Verzögerung eines Widerrufs
+# unter snapshots.PUBLIC_REVOCATION_MAX_DELAY_SECONDS (Review R18).
+SHARE_CACHE_CONTROL = "public, max-age=60, s-maxage=60, stale-while-revalidate=60"
 
 templates = Jinja2Templates(directory="templates")
 
@@ -546,7 +549,8 @@ def share_og_card(request: Request, slug_id: str):
         content=png,
         media_type="image/png",
         headers={
-            "Cache-Control": "public, max-age=3600, stale-while-revalidate=86400",
+            # The card shows the question: it is revoked with its page.
+            "Cache-Control": SHARE_CACHE_CONTROL,
             "X-Robots-Tag": "noindex",
         },
     )
@@ -932,12 +936,8 @@ def share_page(request: Request, slug_id: str):
     response.headers["X-Robots-Tag"] = robots_meta
     if is_private:
         response.headers["Cache-Control"] = "private, no-store"
-    elif watch_page and requested_version:
-        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
-    elif watch_page:
-        response.headers["Cache-Control"] = (
-            "public, max-age=60, s-maxage=300, stale-while-revalidate=300"
-        )
     else:
+        # A historical Watch version never changes, but its publication can be
+        # revoked, so it gets the same short lifetime as the current page.
         response.headers["Cache-Control"] = SHARE_CACHE_CONTROL
     return response

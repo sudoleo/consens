@@ -517,9 +517,10 @@ async def topic_page(
         "is_current": current,
     })
     response.headers["X-Robots-Tag"] = robots
+    # A stored version never changes, but the Topic can be archived and then
+    # has to disappear everywhere, so no version is cached long or immutable.
     response.headers["Cache-Control"] = (
-        "public, max-age=31536000, immutable"
-        if version else "public, max-age=60, s-maxage=300, stale-while-revalidate=300"
+        "public, max-age=60, s-maxage=300, stale-while-revalidate=300"
     )
     return response
 

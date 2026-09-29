@@ -779,10 +779,17 @@ def get_share(share_id, db=None):
     return snap.to_dict() or {}
 
 
-# In-Process-TTL-Cache für die öffentliche /s/-Seite (kein CDN, eine Render-
-# Instanz). Misses werden nicht gecacht, damit frisch erstellte Shares sofort
-# sichtbar sind; Revoke/Block/Auto-noindex invalidieren explizit.
-SHARE_CACHE_TTL_SECONDS = 300
+# In-Process-TTL-Cache für die öffentliche /s/-Seite. Misses werden nicht
+# gecacht, damit frisch erstellte Shares sofort sichtbar sind; Revoke/Block/
+# Auto-noindex invalidieren explizit, aber nur im eigenen Prozess. Ein anderer
+# Worker sieht einen Widerruf deshalb erst nach Ablauf der TTL: sie ist Teil
+# der zugesagten maximalen Widerrufsverzögerung (Review R18) und muss zusammen
+# mit den HTTP-Cache-Headern in app/api/routers/share.py darunter bleiben.
+SHARE_CACHE_TTL_SECONDS = 60
+# Längste Zeit, die eine widerrufene öffentliche Seite über consens.io noch
+# ausgeliefert werden darf (Server-Cache + Browser/Proxy-Cache). Die Rechtstexte
+# sagen "within a few minutes".
+PUBLIC_REVOCATION_MAX_DELAY_SECONDS = 300
 _share_cache = TTLCache(maxsize=1024, ttl=SHARE_CACHE_TTL_SECONDS)
 # Dedup-Canonical-Lookups (question_hash -> Ziel oder None) separat cachen;
 # jede Moderation kann Canonical-Ziele ändern, daher wird er mit invalidiert.
