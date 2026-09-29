@@ -1086,6 +1086,91 @@ class ModerationAndCleanupTests(unittest.TestCase):
         self.assertNotIn("consensus_md", reported_only[0])
         self.assertEqual(reported_only[0]["reports_count"], 7)
 
+    def test_reported_share_beyond_the_first_window_is_found_by_paging(self):
+        """R24: filtering happens before the limit, and paging never skips or
+        repeats an id across page boundaries."""
+        base = datetime(2026, 9, 1, tzinfo=timezone.utc)
+        plain_ids = [
+            self._make_share(created_at=base + timedelta(minutes=index))
+            for index in range(30)
+        ]
+        late_reported = self._make_share(
+            reports_count=1, created_at=base + timedelta(days=5),
+        )
+        first = snapshots.list_shares_for_admin_page(
+            db=self.db, only_reported=True, max_items=5,
+        )
+        self.assertEqual([row["share_id"] for row in first["items"]], [late_reported])
+        self.assertFalse(first["has_more"])
+
+        seen = []
+        cursor = ""
+        while True:
+            page = snapshots.list_shares_for_admin_page(
+                db=self.db, only_reported=False, max_items=7, cursor=cursor,
+            )
+            seen.extend(row["share_id"] for row in page["items"])
+            if not page["has_more"]:
+                break
+            cursor = page["next_cursor"]
+        self.assertEqual(sorted(seen), sorted(plain_ids + [late_reported]))
+        self.assertEqual(len(seen), len(set(seen)))
+        # Newest first overall.
+        self.assertEqual(seen[0], late_reported)
+
+    def test_bounded_share_lists_make_truncation_visible_in_the_ui(self):
+        from pathlib import Path
+
+        root = Path(__file__).resolve().parents[1]
+        admin_js = (root / "static" / "js" / "admin.js").read_text(encoding="utf-8")
+        dialog_js = (root / "static" / "js" / "share-dialog.js").read_text(encoding="utf-8")
+        self.assertIn("sharesNextCursor = data.has_more ? data.next_cursor : null", admin_js)
+        self.assertIn("'Load more'", admin_js)
+        self.assertIn("&cursor=${encodeURIComponent(sharesNextCursor)}", admin_js)
+        self.assertIn("coverage.truncated", admin_js)
+        self.assertIn("if (data.has_more)", dialog_js)
+        self.assertIn("Older links are not listed here.", dialog_js)
+
+    def test_owner_list_falls_back_to_in_memory_order_while_the_index_builds(self):
+        from google.api_core.exceptions import FailedPrecondition
+
+        base = datetime(2026, 9, 1, tzinfo=timezone.utc)
+        ids = [
+            self._make_share(created_at=base + timedelta(minutes=index))
+            for index in range(3)
+        ]
+
+        class Ordered:
+            def limit(self, _n):
+                return self
+
+            def stream(self):
+                raise FailedPrecondition("index missing")
+
+        with patch.object(
+            FakeQuery, "order_by", create=True,
+            new=lambda self, *a, **k: Ordered(),
+        ):
+            page = snapshots.list_shares_for_owner_page(self.uid, db=self.db, max_items=2)
+        self.assertEqual([row["share_id"] for row in page["items"]], ids[::-1][:2])
+        self.assertTrue(page["has_more"])
+
+    def test_owner_list_is_newest_first_with_a_continuation_contract(self):
+        base = datetime(2026, 9, 1, tzinfo=timezone.utc)
+        ids = [
+            self._make_share(created_at=base + timedelta(minutes=index))
+            for index in range(5)
+        ]
+        first = snapshots.list_shares_for_owner_page(self.uid, db=self.db, max_items=2)
+        self.assertEqual([row["share_id"] for row in first["items"]], ids[::-1][:2])
+        self.assertTrue(first["has_more"])
+        second = snapshots.list_shares_for_owner_page(
+            self.uid, db=self.db, max_items=10, cursor=first["next_cursor"],
+        )
+        self.assertEqual([row["share_id"] for row in second["items"]], ids[::-1][2:])
+        self.assertFalse(second["has_more"])
+        self.assertIsNone(second["next_cursor"])
+
     def test_cleanup_revoked_shares_after_30_days(self):
         old = self._make_share(status="revoked",
                                revoked_at=datetime.now(timezone.utc) - timedelta(days=31))
@@ -1953,13 +2038,16 @@ class ShareApiRouteTests(unittest.TestCase):
                    "question": "Q?", "status": "active", "created_at": ""}]
         token_patch, verify_patch = self._auth_patches()
         with token_patch, verify_patch, \
-                patch.object(share_router.snapshots, "list_shares_for_owner",
-                             return_value=shares) as mocked:
-            response = self.client.get("/api/my/shares")
+                patch.object(share_router.snapshots, "list_shares_for_owner_page",
+                             return_value={"items": shares, "has_more": True,
+                                           "next_cursor": self.share_id}) as mocked:
+            response = self.client.get("/api/my/shares?cursor=abc")
         self.assertEqual(response.status_code, 200)
-        mocked.assert_called_once_with("user-1")
+        mocked.assert_called_once_with("user-1", cursor="abc")
         data = response.json()
         self.assertEqual(data["shares"], shares)
+        self.assertTrue(data["has_more"])
+        self.assertEqual(data["next_cursor"], self.share_id)
         self.assertEqual(data["site_url"], share_router.SITE_URL)
 
     def test_delete_share_revokes_for_owner(self):
@@ -2007,15 +2095,17 @@ class AdminShareRouteTests(unittest.TestCase):
         token_patch, verify_patch, admin_patch = self._admin_patches()
         with token_patch, verify_patch, admin_patch, \
                 patch.object(admin_router, "snapshots_site_url", return_value="https://x"), \
-                patch.object(admin_router.snapshots, "list_shares_for_admin",
-                             return_value=[]) as mocked:
+                patch.object(admin_router.snapshots, "list_shares_for_admin_page",
+                             return_value={"items": [], "has_more": False,
+                                           "next_cursor": None}) as mocked:
             response = self.client.get("/api/admin/shares")
             self.assertEqual(response.status_code, 200)
-            mocked.assert_called_with(only_reported=True)
+            mocked.assert_called_with(only_reported=True, cursor="", max_items=200)
 
-            response = self.client.get("/api/admin/shares?filter=all")
+            response = self.client.get("/api/admin/shares?filter=all&cursor=abc&limit=50")
             self.assertEqual(response.status_code, 200)
-            mocked.assert_called_with(only_reported=False)
+            mocked.assert_called_with(only_reported=False, cursor="abc", max_items=50)
+            self.assertFalse(response.json()["has_more"])
 
     def test_moderate_forwards_action_and_indexed(self):
         token_patch, verify_patch, admin_patch = self._admin_patches()

@@ -37,6 +37,8 @@ async def retention_maintenance_loop() -> None:
         chat_deletions_completed = await asyncio.to_thread(resume_chat_deletions)
         from app.services.memory_edit import cleanup_memory_edit_records
         memory_edit_records = await asyncio.to_thread(cleanup_memory_edit_records)
+        from app.services.notification_outbox import cleanup as cleanup_outbox
+        outbox_deleted = await asyncio.to_thread(cleanup_outbox)
         task_succeeded(
             TASK_NAME,
             chat_deletions_completed=chat_deletions_completed,
@@ -45,6 +47,7 @@ async def retention_maintenance_loop() -> None:
             files_deleted=files_deleted,
             documents_deleted=documents_deleted,
             google_records_deleted=google_records_deleted,
+            notification_outbox_deleted=outbox_deleted,
             expired_pending_deleted=pending_deleted,
             revoked_shares_deleted=shares_deleted,
             source_checks_deleted=source_checks_deleted,

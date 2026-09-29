@@ -533,9 +533,8 @@ def list_api_shares(
 ):
     identity = authenticate_api_identity(api_key, "share:write")
     enforce_uid_rate_limit(identity.uid, "share_list", 30)
-    # The repository sorts after its bounded Firestore scan; scan the full API
-    # maximum first so `limit=20` actually means the 20 newest rows.
-    rows = share_snapshots.list_shares_for_owner(identity.uid, max_items=200)[:limit]
+    # Newest first is ordered inside Firestore, so `limit` is exact.
+    rows = share_snapshots.list_shares_for_owner(identity.uid, max_items=limit)
     return {"shares": [_public_api_share_row(row) for row in rows]}
 
 

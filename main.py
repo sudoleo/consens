@@ -52,7 +52,7 @@ from app.api.routers import (
     users,
     watch,
 )
-from app.core.config import load_models_from_db
+from app.core.config import load_models_from_db, model_config_sync_loop
 from app.services.api_account_cleanup import FirestoreApiAccountCleanup
 from app.services.account_deletion import FirestoreAccountDeletion
 from app.services.api_consensus_runner import (
@@ -143,6 +143,11 @@ async def lifespan(app: FastAPI):
     model_config_backfill_task = _one_shot_task(
         _backfill_startup_configuration, "model-configuration-backfill"
     )
+    # Every process adopts a newly published model revision within one sync
+    # interval instead of waiting for its next restart (R25).
+    model_config_sync_task = _supervised_task(
+        model_config_sync_loop, "model-configuration-sync"
+    )
     lineage_backfill_task = _one_shot_task(
         backfill_publisher_watch_lineage, "publisher-watch-lineage-backfill"
     )
@@ -177,6 +182,7 @@ async def lifespan(app: FastAPI):
         api_account_cleanup_task,
         account_deletion_task,
         model_config_backfill_task,
+        model_config_sync_task,
         lineage_backfill_task,
         telegram_webhook_task,
     )

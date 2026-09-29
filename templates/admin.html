@@ -15,7 +15,7 @@
 <link rel="stylesheet" href="/static/style.css?v=20260927-agent-workspace">
     <link rel="stylesheet" href="/static/css/admin.css?v=20260919-continuous1">
 
-    <script type="module" src="/static/js/admin.js?v=20260929-topic-editor1"></script>
+    <script type="module" src="/static/js/admin.js?v=20260929-topic-editor-providers"></script>
 </head>
 <body class="dark-mode">
     <header class="top-bar">
@@ -291,14 +291,16 @@
                     New pages are generated Monday, Wednesday, and Friday by the scheduled workflow.
                     Every generated Watch is weekly and permanently pinned to the configured
                     <strong>Free Watch providers</strong>, regardless of the owner account tier.
-                    DeepSeek is excluded from both the initial Publisher run and every Watch rerun.
+                    No provider is excluded: the initial run uses the Balanced-preset families like every API run,
+                    and each Watch rerun uses the Free Watch providers listed below.
                 </p>
                 <div class="publisher-config-grid">
                     <div class="publisher-config-options wide">
                         <label><input id="publisherEnabled" type="checkbox"> Publisher enabled</label>
                         <label><input id="publisherAutoIndex" type="checkbox"> Index eligible pages automatically</label>
                         <label><input id="publisherWeeklyWatch" type="checkbox"> Create weekly Watch</label>
-                        <span id="publisherWatchProfile" class="section-hint">weekly · free Watch providers · DeepSeek excluded</span>
+                        <span id="publisherWatchProfile" class="section-hint">weekly · free Watch providers</span>
+                        <span id="publisherProviderPlan" class="section-hint"></span>
                     </div>
                     <div class="api-key-field wide">
                         <label for="publisherTopicBrief">Topic brief</label>

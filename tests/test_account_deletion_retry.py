@@ -82,6 +82,7 @@ def test_failed_area_remains_pending_and_only_that_area_is_retried(monkeypatch):
         "follows": 0,
         "auth": 0,
         "source_checks": 0,
+        "outbox": 0,
     }
 
     monkeypatch.setattr(
@@ -133,6 +134,11 @@ def test_failed_area_remains_pending_and_only_that_area_is_retried(monkeypatch):
     )
     monkeypatch.setattr(
         service,
+        "_delete_notification_outbox",
+        lambda uid: calls.__setitem__("outbox", calls["outbox"] + 1),
+    )
+    monkeypatch.setattr(
+        service,
         "_delete_email_follows",
         lambda email: calls.__setitem__("follows", calls["follows"] + 1),
     )
@@ -165,6 +171,7 @@ def test_failed_area_remains_pending_and_only_that_area_is_retried(monkeypatch):
     assert calls["watch_indexes"] == 1
     assert calls["guards"] == 1
     assert calls["follows"] == 1
+    assert calls["outbox"] == 1
     assert calls["auth"] == 1
     job = db.collection("account_deletion_jobs").document("owner").data
     assert job["status"] == "completed"

@@ -9,8 +9,9 @@ from urllib.parse import urlsplit
 
 from app.core.background_tasks import task_succeeded
 from app.core.observability import correlation_scope, record_metric, safe_exception
-from app.core.site import SITE_URL
-from app.services import mailer, topic_pipeline, topics
+from app.services import (
+    drift_signal, mailer, notification_delivery, notification_outbox, topic_pipeline, topics,
+)
 from app.services.llm.mock_llm import mock_llm_enabled
 
 
@@ -164,7 +165,7 @@ def known_claims_from_runs(runs) -> list[dict]:
 
 
 def execute_claimed_topic(claimed: dict, *, actor_uid: str, db=None,
-                          now=None, executor=None) -> dict:
+                          now=None, executor=None, notifications=None) -> dict:
     """Collect sources, run the selected models, and persist one immutable point."""
     _guard_mock_mode()
     db = db if db is not None else topics.db_firestore
@@ -225,6 +226,7 @@ def execute_claimed_topic(claimed: dict, *, actor_uid: str, db=None,
             now=now,
             run_id=str(claimed.get("current_run_id") or ""),
             expected_claim_id=str(claimed.get("current_run_id") or ""),
+            notifications=notifications,
         )
         return run
     except Exception as exc:
@@ -239,48 +241,59 @@ def execute_claimed_topic(claimed: dict, *, actor_uid: str, db=None,
 
 
 def run_topic_now(topic_id: str, *, actor_uid: str, db=None, now=None,
-                  executor=None) -> dict:
+                  executor=None, notifications=None) -> dict:
     _guard_mock_mode()
     db = db if db is not None else topics.db_firestore
     now = now or topics.utcnow()
     claimed = topics.claim_topic_run(topic_id, force=True, db=db, now=now)
     return execute_claimed_topic(
-        claimed, actor_uid=actor_uid, db=db, now=now, executor=executor
+        claimed, actor_uid=actor_uid, db=db, now=now, executor=executor,
+        notifications=notifications,
     )
 
 
-async def notify_topic_followers(topic: dict, run: dict, old_score) -> None:
-    if mock_llm_enabled():
-        return
-    if run.get("change_type") not in {"minor", "major"} or not mailer.is_configured():
-        return
-    for follower in await asyncio.to_thread(topics.list_followers, topic["id"]):
-        claimed = await asyncio.to_thread(
-            topics.claim_delivery, topic["id"], run["id"], follower["id"]
+def topic_notification_builder(topic_id: str, *, db=None, now=None,
+                               require_material: bool = False):
+    """Durable follower items that commit together with a Topic run (R17).
+
+    Followers are read before the run transaction; the send path re-checks
+    each follower before every attempt, so a later unsubscribe still wins.
+    ``require_material`` applies the Watch page bar that the admin route uses.
+    """
+    followers = []
+    if not mock_llm_enabled() and mailer.is_configured():
+        followers = [
+            follower["id"]
+            for follower in topics.list_followers(topic_id, db=db)
+            if follower.get("id")
+        ]
+
+    def build(topic_before: dict, run_id: str, run: dict) -> list:
+        if not followers or run.get("change_type") not in {"minor", "major"}:
+            return []
+        old_score = topic_before.get("latest_agreement_score")
+        if require_material and not drift_signal.is_material(
+            True, run.get("change_type"), run.get("agreement_score"),
+            [old_score] if isinstance(old_score, (int, float)) else [],
+        ):
+            return []
+        return notification_outbox.topic_follower_items(
+            topic_before, run_id, run, old_score, followers,
+            now=now or topics.utcnow(),
         )
-        if not claimed:
-            continue
-        unsubscribe_url = (
-            SITE_URL + "/topic-follow/unsubscribe?token="
-            + topics.make_unsubscribe_token(topic["id"], follower["email"])
-        )
-        sent = await mailer.send_message(mailer.build_topic_change_message(
-            recipient=follower["email"],
-            title=topic["title"],
-            question=topic["lead_question"],
-            old_score=old_score,
-            new_score=run["agreement_score"],
-            change_type=run["change_type"],
-            summary=run.get("change_summary") or "The Topic consensus changed.",
-            topic_url=f"{SITE_URL}/topics/{topic['slug']}",
-            unsubscribe_url=unsubscribe_url,
-        ))
-        await asyncio.to_thread(
-            topics.finish_delivery,
-            topic["id"],
-            run["id"],
-            follower["id"],
-            success=sent,
+
+    return notification_outbox.StagedIds(build)
+
+
+async def deliver_topic_notifications(item_ids) -> None:
+    """First attempt right after the run commit; the outbox pass retries."""
+    if not item_ids or mock_llm_enabled():
+        return
+    try:
+        await notification_delivery.deliver_many(item_ids)
+    except Exception as exc:
+        logging.error(
+            "Topic follower notification failed category=%s", safe_exception(exc)
         )
 
 
@@ -294,16 +307,12 @@ async def run_due_topic_tick() -> int:
             claimed = await asyncio.to_thread(
                 topics.claim_topic_run, topic_id, force=False
             )
+            staged = await asyncio.to_thread(topic_notification_builder, topic_id)
             await asyncio.to_thread(
-                execute_claimed_topic, claimed, actor_uid="topic-scheduler"
+                execute_claimed_topic, claimed, actor_uid="topic-scheduler",
+                notifications=staged,
             )
-            current = await asyncio.to_thread(topics.get_topic, topic_id)
-            run = await asyncio.to_thread(
-                topics.get_run, topic_id, str(current.get("latest_run_id") or "")
-            )
-            await notify_topic_followers(
-                current, run or {}, claimed.get("latest_agreement_score")
-            )
+            await deliver_topic_notifications(staged.ids)
             ran += 1
         except topics.TopicError as exc:
             if exc.code != "conflict":

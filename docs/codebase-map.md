@@ -178,10 +178,10 @@ Threadpool aus. `async def` bleibt nur für echte Await-Pfade (Mail, explizites
 | `auth.py` | `/register`, `/confirm-registration` (setzt nach verifiziertem Login zusätzlich eine kurzlebige HttpOnly-Session für private servergerenderte Seiten), `DELETE /auth/session` (lokales Logout-Cleanup). `/register` gibt für Neuanlage, Bestand und Create-Race exakt `{"status":"check_inbox"}` zurück, nie UID/E-Mail/Custom-Token. Unbekannte Adressen erhalten ein serverseitig zufälliges, dem anonymen Aufrufer unbekanntes Übergangspasswort; neue und bestehende Adressen durchlaufen danach denselben Firebase-Mailbox-Setup-Pfad. Der Browser versucht keinen Login mit den eingesendeten Legacy-Credentials. Nur ein tatsächlich neues Konto löst den PII-freien Telegram-Admin-Alert aus. `/confirm-registration` prüft Revocation live und erkennt damit auch gerade neu angelegte Google-Konten serverseitig. |
 | `users.py` | `/user_status`, `/usage`, `/usage/run/release`, `GET`/`PUT /api/my/memory` sowie `POST /api/my/memory/edit|undo` (User-Memory samt explizitem, revisioniertem Luna-Patch, siehe §3), `/delete_account`, `/track-interest`. `/delete_account` legt vor jeder Löschung einen persistenten, fail-closed Auftrag über `FirestoreAccountDeletion` an. Die idempotente Kaskade umfasst API-Zugang/Telegram, alle Nutzer-Subcollections, Chats, Waitlist/Feedback, Pending Results, Persistence-Guards/Votes, Watches/Briefs, Follow-Challenges/E-Mail-Follows, eigene Shares über deren bestehende Hard-Delete-Kaskade, Profil und Firebase Auth. Jeder Bereich wird separat quittiert und bei Fehlern vom fünfminütigen Maintenance-Loop erneut versucht; bis dahin lautet die Antwort ehrlich `202 cleanup_pending`, erst der vollständige Abschluss ergibt 200. Owner-gebundene Create/Update/Delete-Transaktionen lesen den Account-Tombstone als ersten Teil derselben Mutation; nur interne Cleanup-Kaskaden verwenden explizite Bypässe. Dadurch können bereits authentifizierte, verspätete Requests keinen zuvor quittierten Bereich neu befüllen. `/track-interest` ist der idempotente Pro-Beta-Zugangsrequest (ein Pending-Dokument pro UID, kein Billing); aktive Pro-Konten werden abgewiesen. **Seit 2026-07-25 ruft die App diesen Endpunkt nicht mehr auf** — es wird nichts mehr angeboten, das man anfragen könnte; der Endpunkt bleibt nur bestehen, damit vorhandene Waitlist-Dokumente nicht verwaisen. |
 | `bookmarks.py` | `GET /bookmarks` liefert ausschließlich kompakte Metadaten, standardmäßig 30 Einträge und einen opaken Cursor; `GET /bookmarks/{id}` liefert owner-geschützt den Vollinhalt. Chat-Bookmarks referenzieren additiv `chat_id`/letzte `turn_id`; `GET /bookmarks/{id}/conversation` paginiert dafür die vollständigen owner-gebundenen completed Turns aus `ChatStore`, statt den wachsenden Transcript in ein Bookmark-Dokument zu kopieren; der Normalpfad läuft über `ChatStore.list_turn_details` (Chat einmal pro Seite geprüft, Modellantworten je Turn mit **einer** Query) und benötigt damit `2 + N` SDK-Aufrufe pro Seite. Abgerechnet werden weiterhin Dokument-Reads: Chat + gelesene Turn-Dokumente (inklusive Pagination-Sentinel) + alle zurückgegebenen Antwortdokumente; eine Query ist nicht ein einzelner Dokument-Read. Scheitert nur dieser optimierte Collection-Read, fällt der Endpoint korrektheitshalber auf `list_turns` + owner-gebundene Turn-Details zurück, statt den Browser auf zwei Bookmark-Snapshots zu reduzieren. Der Endpunkt ist bewusst ein synchrones `def`, damit die blockierenden Reads im Threadpool statt auf dem Event-Loop laufen. `/bookmark` (POST/DELETE), `/bookmark/consensus` sowie `POST /bookmark/consensus/share-result` erhalten Speichern, Löschen und die sichere Share-/Watch-Rehydration. Consensus-Inhalte werden aus einem owner-gebundenen Pending Result oder completed Turn serverseitig materialisiert, nicht aus frei behaupteten Clientfeldern; die alten, ignorierten Client-Kopien bleiben für gecachte Clients im Schema, werden aber nicht mehr formvalidiert und können den autoritativen Save daher nicht mit 422 blockieren. Quellenlisten werden nicht nach Anzahl gekürzt; die bestehenden Dokument- und Request-Bytebudgets begrenzen den Save ausdrücklich. `persist_authoritative_consensus_bookmark` ist der gemeinsame Writer für den primären `/consensus`-Abschluss und den idempotenten `/bookmark/consensus`-Fallback. Der breite slowapi-IP-Schutz sitzt vor der Tokenprüfung; die eigentlichen Modell- und Consensus-Save-Budgets gelten danach pro UID, damit der interne Preset-Fan-out nicht mit fremden Nutzern an einem Proxy-/NAT-Bucket konkurriert. Persistent gelten höchstens 250 Bookmarks, 750 kB je Dokument und 25 MB geschätztes Gesamtbudget pro UID. `DELETE /bookmark` liest die Chat-Bindung und legt **vor** dem Entfernen des Bookmarks per `ChatStore.request_chat_deletion` in einer Transaktion Tombstone (`status=deleting`), einmaligen Zählerabzug und einen dauerhaften Auftrag `chat_deletion_jobs/{sha256(uid:chat)[:40]}` an; erst danach wird das Bookmark gelöscht und `run_chat_deletion` versucht die Kaskade sofort. Scheitert sie (auch zwischen zwei Batches) oder stirbt der Prozess, bleibt der Auftrag mit `attempts`, `last_error` (nur Kategorie) und Backoff (`next_attempt_at`, 1 min bis 6 h) sichtbar und `resume_chat_deletions` im stündlichen Retention-Loop beendet ihn; quittiert wird erst nach vollständiger Kaskade. Kann der Auftrag nicht angelegt werden, bleibt das Bookmark bestehen und die Antwort ist 500 (nichts gelöscht, erneut versuchbar). Saves akzeptieren eine validierte stabile `bookmarkId`, sodass alle Turns einer laufenden Unterhaltung dasselbe Sidebar-Bookmark aktualisieren; Legacy-Saves ohne ID bleiben fragebasiert. `previous_question`/`previous_turn` bleiben als kompatibler Ein-Turn-Fallback für alte Bookmarks ohne Chat-Bindung erhalten. Alle Bookmark-Antworten sind wie `/chats` `private, no-store`. Die Save-Endpunkte liefern weiterhin den zusammengeführten Datensatz zurück; der Client reduziert ihn sofort auf Listenmetadaten und hält höchstens das geöffnete Detail im Cache. Der seltene Browser-Fallback sendet nur IDs plus kleine Legacy-Texte, nutzt `keepalive`, wiederholt Netz-/408-/425-/429-/5xx-Fehler begrenzt und zeigt einen endgültigen Fehler dedupliziert verständlich an. |
-| `share.py` | `/api/share` (POST), `/api/share/{id}` (DELETE), `/api/my/shares`, `/api/share/{id}/report`, öffentliche Seite `/s/{slug_id}`, `sitemap-shares.xml`. |
+| `share.py` | `/api/share` (POST), `/api/share/{id}` (DELETE), `/api/my/shares` (neueste zuerst, in Firestore sortiert über Index `shares(owner_uid, created_at desc)`, `?cursor=`, Antwort mit `has_more`/`next_cursor`; der Dialog zeigt einen Hinweis, wenn ältere Links fehlen), `/api/share/{id}/report`, öffentliche Seite `/s/{slug_id}`, `sitemap-shares.xml`. |
 | `watch.py` | Consensus Watch: `/api/watch` (POST), `/api/my/watches` (inkl. Original-Baseline-Score, kompakter History je Watch und autoritativer Plan-/Active-Limit-Metadaten für die UI), `/api/watch/{id}` (PATCH/DELETE), Morning-Brief-Einstellungen `/api/my/watch-brief` (GET/PATCH), nutzergebundene Telegram-Verbindung `/api/my/telegram` (GET/DELETE), `/api/my/telegram/link|test` (POST) und der per Secret-Header geschützte `/api/telegram/webhook`; außerdem öffentliche, HMAC-signierte `/watch/unsubscribe`- und `/watch/brief/unsubscribe`-Links. |
 | `topics.py` | Eigenständige öffentliche Topic-Ticker: Hub `/topics`, versionierte Detailseite `/topics/{slug}` (`?version=<run_id>`, rendert Position Map + Agreement-Kurve über `services/history_view.py` — dieselbe Darstellung wie die Watch-Seiten, bewusst nur bis zum gewählten Snapshot), `sitemap-topics.xml`, Double-Opt-in-Follow unter `/api/topics/{slug}/follow` + `/topic-follow/confirm|unsubscribe`; der Versand-Claim ist persistent gehasht und besitzt Resend-, Empfänger- und globales Stundenbudget. Der Favicon-Proxy ist auf 30 Requests/Minute, acht parallele Requests, einen eigenen Vierer-Executor, zwei Sekunden Upstream-Zeit sowie einen 2.000-Einträge-LRU einschließlich 24-h-Negativcache begrenzt. Admin-CRUD liegt unter `/api/admin/topics`. Ein leeres `POST /api/admin/topics/{id}/runs` führt den konfigurierten Research-/Consensus-Run aus; ein Payload mit `consensus_md` bleibt als expliziter Legacy-Import verfügbar. |
-| `api_v1.py` | Nutzergebundene asynchrone Consensus-API: Run-Start/Status/Löschung unter `/api/v1/consensus/runs`, transaktional idempotentes Publizieren erfolgreicher Runs per `POST .../{run_id}/share`, eigene Share-Liste/-Details/-Widerruf unter `/api/v1/shares` sowie direkte Admin-Indexfreigabe per `PUT /api/v1/shares/{share_id}/indexing`. Der Admin-only Scheduled Publisher liest `GET /api/v1/publisher/config`, startet Runs per `X-Consensus-Publisher: true` ohne DeepSeek und bindet per `POST /api/v1/shares/{share_id}/watch` idempotent einen Weekly-Watch mit festem Free-Modellprofil und DeepSeek-Ausschluss; dessen globale Kapazität wird zusammen mit Watch und Publisher-Zähler in derselben Transaktion geprüft. Auth über gescopte `X-API-Key`s, Run-Idempotenz über den Pflichtheader `Idempotency-Key`; Pydantic-Modelle bilden den Vertrag in `/openapi.json` ab. |
+| `api_v1.py` | Nutzergebundene asynchrone Consensus-API: Run-Start/Status/Löschung unter `/api/v1/consensus/runs`, transaktional idempotentes Publizieren erfolgreicher Runs per `POST .../{run_id}/share`, eigene Share-Liste/-Details/-Widerruf unter `/api/v1/shares` sowie direkte Admin-Indexfreigabe per `PUT /api/v1/shares/{share_id}/indexing`. Der Admin-only Scheduled Publisher liest `GET /api/v1/publisher/config`, startet Runs per `X-Consensus-Publisher: true` mit demselben Balanced-Preset-Modellplan wie jeder API-Run (kein Provider-Ausschluss) und bindet per `POST /api/v1/shares/{share_id}/watch` idempotent einen Weekly-Watch mit festem Free-Watch-Modellprofil; `public_config` meldet die tatsächlich genutzten Familien als `initial_run_providers`/`watch_providers`, die Admin-UI zeigt genau diese Listen; dessen globale Kapazität wird zusammen mit Watch und Publisher-Zähler in derselben Transaktion geprüft. Auth über gescopte `X-API-Key`s, Run-Idempotenz über den Pflichtheader `Idempotency-Key`; Pydantic-Modelle bilden den Vertrag in `/openapi.json` ab. |
 
 Der Scheduled Publisher läuft per GitHub Actions montags, mittwochs und freitags.
 Er bleibt ein Standardbibliothek-CLI: `scripts/publish_consensus.py` ergänzt
@@ -202,7 +202,7 @@ als Auslöser, verlangen aber eine Frage, die das Ereignis überlebt: ob eine
 Behauptung hält, nicht ob etwas existiert oder wann es erscheint. Über die
 Veröffentlichung entscheidet danach der Judge: Runs, deren Modelle sich einig
 sind, werden bezahlt und trotzdem verworfen.
-| `admin.py` | `/api/admin/shares`, `/api/admin/shares/{id}/moderate`, `DELETE /api/admin/shares/{id}` (sofortiger Hard-Delete inklusive Watch/History/Followern), `/api/admin/models` (GET/POST; enthält auch die validierte `memory_edit`-Konfiguration), Publisher-Steuerung unter `/api/admin/publisher-config` (GET/PUT), API-Key-Ausgabe/-Liste/-Widerruf unter `/api/admin/api-keys`, Kontostufen unter `/api/admin/account-tier` (GET Lookup per UID/E-Mail, PUT setzen) und `/api/admin/account-tiers` (Liste + Audit), `/api/admin/watches` (cursor-paginierte Diagnose-Liste mit `limit`, `next_cursor`, `has_more`; im API-Tab zusätzlich als gefilterte Publisher-Watch-Seitenliste), `/api/admin/watches/{id}/run` (fällig stellen + Scheduler sofort wecken), `/api/admin/watches/test-email` (SMTP-Test an die verifizierte Admin-Adresse), read-only SEO-Übersicht `GET /api/admin/seo`, sanitisierten Live-Check `POST /api/admin/seo/check`, manueller Search-Console-Lauf `POST /api/admin/seo/collect` sowie speicherbare read-only Judgements per `POST /api/admin/seo/pages/{page_id}/recommendation` und optional `.../content-judge`, `/api/admin/benchmark/runs` (Liste) + `/api/admin/benchmark/runs/{run_id}` (Detail, liest Firestore-publizierte kompakte Benchmark-Reports mit lokalem Disk-Fallback über `benchmark/report_reader.py`). Alle hinter `is_user_admin`. |
+| `admin.py` | `/api/admin/shares` (Filter `reported` = `reports_count > 0` nach Report-Anzahl bzw. `all` = neueste zuerst, jeweils in der Firestore-Abfrage vor dem Limit; `cursor`/`limit`, Antwort mit `has_more`/`next_cursor`, UI mit „Load more“), `/api/admin/shares/{id}/moderate`, `DELETE /api/admin/shares/{id}` (sofortiger Hard-Delete inklusive Watch/History/Followern), `/api/admin/models` (GET/POST; enthält auch die validierte `memory_edit`-Konfiguration), Publisher-Steuerung unter `/api/admin/publisher-config` (GET/PUT), API-Key-Ausgabe/-Liste/-Widerruf unter `/api/admin/api-keys`, Kontostufen unter `/api/admin/account-tier` (GET Lookup per UID/E-Mail, PUT setzen) und `/api/admin/account-tiers` (Liste + Audit), `/api/admin/watches` (cursor-paginierte Diagnose-Liste mit `limit`, `next_cursor`, `has_more`; im API-Tab zusätzlich als gefilterte Publisher-Watch-Seitenliste), `/api/admin/watches/{id}/run` (fällig stellen + Scheduler sofort wecken), `/api/admin/watches/test-email` (SMTP-Test an die verifizierte Admin-Adresse), read-only SEO-Übersicht `GET /api/admin/seo`, sanitisierten Live-Check `POST /api/admin/seo/check`, manueller Search-Console-Lauf `POST /api/admin/seo/collect` sowie speicherbare read-only Judgements per `POST /api/admin/seo/pages/{page_id}/recommendation` und optional `.../content-judge`, `/api/admin/benchmark/runs` (Liste) + `/api/admin/benchmark/runs/{run_id}` (Detail, liest Firestore-publizierte kompakte Benchmark-Reports mit lokalem Disk-Fallback über `benchmark/report_reader.py`). Alle hinter `is_user_admin`. |
 
 Weekly-SEO-Admin-Erweiterung: `GET /api/admin/seo/review`, `PUT
 /api/admin/seo/review/config` und `POST /api/admin/seo/review/run` liefern bzw.
@@ -3392,7 +3392,13 @@ gebracht; serverseitig gelten zusätzlich 40 Mio. Pixel vor dem Dekodieren und
 openai/anthropic/gemini/grok/kimi/glm; PDF-Support:
 openai/anthropic/gemini. PDFs über 2 MB werden für alle Familien als einmal
 extrahierter Text verwendet; nur nicht extrahierbare Scans bleiben für
-PDF-fähige Familien nativ. **Im klassischen Consensus landen in Firestore nie Datei-Bytes**, nur
+PDF-fähige Familien nativ. Die PDF-Textextraktion (`extract_pdf_text`) läuft
+nicht im Webprozess, sondern über `agent_file_extract.run_isolated` im
+Modus `pdf-text` im selben Wegwerf-Subprozess wie Agent-Dateien (15 s Walltime,
+unter Linux 10 s CPU und 768 MiB Adressraum, höchstens 80 Seiten, Abbruch der
+Seitenschleife bei 24.000 Zeichen, keine Temp-Dateien). Timeout, Budget- oder
+Parserfehler gelten als „kein Text“ und führen zum bestehenden Hinweis bzw.
+nativen Versand. **Im klassischen Consensus landen in Firestore nie Datei-Bytes**, nur
 Metadaten (Name/Typ/Größe) — siehe `bookmarks.py::sanitize_attachment_meta`.
 Bilder können zusätzlich zum Dateiauswahldialog per Paste im `#questionInput`
 angehängt werden. Drag-and-drop auf `.chat-input-container` akzeptiert wie der
@@ -3791,8 +3797,10 @@ wird nur chunkweise bis zum Budget expandiert und DTD/Entities werden abgewiesen
   s-maxage 300), damit ein archiviertes Topic auch mit seinen Versionen
   verschwindet (Review R18).
 - Besucher-Follows sind ein eigener Double-Opt-in-Flow in `topic_followers` und
-  teilen keine Dokumente mit `watch_followers`. Minor/Major-Runs versenden bei
-  konfiguriertem SMTP deduplizierte Multipart-Updates; Stable-Runs nicht.
+  teilen keine Dokumente mit `watch_followers`. Minor/Major-Runs legen bei
+  konfiguriertem SMTP je Follower ein Outbox-Item im selben Commit wie den Run an
+  (`notification_outbox`, Retry und Abmeldeprüfung vor jedem Versuch);
+  Stable-Runs nicht. Der Admin-Run verwendet dieselbe Drift-Schwelle wie Watch-Seiten.
   Bestätigungs-/Abmelde-Tokens verwenden den vorhandenen HMAC-Unterbau und
   `WATCH_UNSUBSCRIBE_SECRET`, tragen aber einen eigenen Topic-Token-Typ.
 - Der Topic-Editor liegt als Tab unter `/admin#topics`; `/admin/topics` ist nur
@@ -3860,7 +3868,12 @@ wird nur chunkweise bis zum Budget expandiert und DTD/Entities werden abgewiesen
   Der Portfolio-Lauf ist vor den teuren Unterabfragen auf 100 Seiten begrenzt
   und verwendet die vom Overview bereits geladenen Seiten-, 28-Tage- und
   Query-Daten für die Recommendation erneut; pro Seite gibt es keinen zweiten
-  Firestore-Metrikscan.
+  Firestore-Metrikscan. Die Auswahl ist eine dauerhafte Rotation statt eines
+  alphabetischen Schnitts: `seo_pages.weekly_review_seen_at` (nie gesehen zuerst,
+  dann am längsten nicht gesehen, aktive Seiten vor inaktiven) bestimmt die 100
+  Seiten, jeder Lauf stempelt seine Seiten. Das Review speichert
+  `portfolio_coverage` (`considered_pages`, `total_pages`, `truncated`), und die
+  Admin-Hinweisleiste zeigt eine Teilabdeckung ausdrücklich an.
   Erst danach darf genau ein Portfolio-Judge-Call mit GPT-5.6 Terra und
   mittlerem Reasoning erfolgen, sofern der Server-OpenAI-Key gesetzt ist; bei
   vollständig fehlgeschlagener Collection gibt es keinen Call. Unvollständige Query-Daten dürfen im Bericht
@@ -3937,14 +3950,16 @@ app/services/
   seo_recommendation.py     Deterministische Regeln + optionaler strukturierter Content-Judge
   seo_weekly_review.py      Leased Terra-Portfolio-Review, Gruppen/Entscheidungen + Topic-Brief-Vorschlag
   telegram_notifier.py      Gemeinsamer Bot-API-Client + Best-effort-Statusmeldungen für SEO-Reviews
-  telegram_watch.py         User-Link-Deep-Links/Webhook, Callback-Aktionen + deduplizierte Watch-Zustellung
+  telegram_watch.py         User-Link-Deep-Links/Webhook, Callback-Aktionen + ein Watch-Nachrichtenversuch (send_watch_message)
+  notification_outbox.py     Dauerhafte Benachrichtigungs-Outbox (notification_outbox): stabile Delivery-IDs, Lease, Versuche, Terminalstatus
+  notification_delivery.py   Ein Zustellversuch je Outbox-Item mit Abmelde-/Pause-/Kanalprüfung + Retry-Pass run_outbox_tick
   share_snapshots.py         Snapshot-Lifecycle (pending→share), Quoten, Cleanups, Sitemap-Quellen
   favicons.py                Begrenzter Favicon-Fetch, Singleflight, LRU-/Negativcache
-  retention_maintenance.py   Periodischer Pending-/Revoked-Share-Cleanup
+  retention_maintenance.py   Periodischer Pending-/Revoked-Share-Cleanup + Outbox-Retention (30 Tage, nur Terminalstatus)
   watch_service.py           Watch-CRUD, Tier-/Intervall-/Conditionregeln, Share-Sichtbarkeit, Unsubscribe-Tokens
   opinion_map.py             Datenminimierte, mehrdimensionale Provider-Positionen + Direction-Shift-Berechnung
   watch_brief.py             Morning-Brief-Settings (watch_briefs), transaktionaler Claim, Digest-Aggregation, Brief-Unsubscribe-Tokens
-  watch_scheduler.py         Global-Lease, Tagesbudget, Pipeline-Adapter + run_brief_tick (Morning-Brief-Versand)
+  watch_scheduler.py         Owner-gebundener Global-Lease, Tagesbudget, Pipeline-Adapter, run_brief_tick + Outbox-Retry-Pass
   mailer.py                  Multipart-HTML/Plaintext-SMTP-Versand via Thread-Executor
   public_markdown.py         Server-Markdown-Rendering für Share-Seiten
   topics.py                  Kuratierte Topic-Konfiguration, immutable Runs, Public-Discovery und eigene Follower/Dedupe-Daten
@@ -4212,7 +4227,17 @@ CLI mit `firebase deploy --only firestore:rules,firestore:indexes`):
   und unter einem Runtime-Lock vollständig neu geladen; schlägt ein Apply-Schritt
   fehl, werden sowohl das vorherige Firestore-Dokument als auch alle zuvor
   aktiven Runtime-Sets/Maps/Limits restauriert und der Admin-Request schlägt
-  fehl. `consensus` steuert den App-Consensus-Picker;
+  fehl. Das Dokument trägt eine monotone `revision` (R25): `GET` liefert sie, die
+  Admin-UI sendet sie beim Speichern zurück, und `POST` schreibt per
+  Transaktion nur, wenn sie noch aktuell ist (sonst 409, nichts geschrieben).
+  Der Rollback nach fehlgeschlagener Aktivierung ersetzt nur die eigene, noch
+  gespeicherte Revision (unter neuer Revisionsnummer) und nie eine inzwischen
+  von einem anderen Prozess geschriebene. Jeder Prozess merkt sich die aktive
+  Revision und prüft sie im Lifespan-Task `model-configuration-sync` alle 60 s
+  mit einem Read; bei neuer Revision lädt er vollständig neu. Grenze: ein
+  einzelner Lauf liest weiter die prozessweiten Maps; eine Aktivierung während
+  eines laufenden Requests ist nicht als Snapshot pro Lauf eingefroren.
+  `consensus` steuert den App-Consensus-Picker;
   Fehlende Limitfelder werden beim Startup normalisiert und per Merge in das
   Admin-Dokument zurückgeschrieben (Schema-Backfill ohne Verlust vorhandener Werte).
   Werte können historische Engine-Aliase (`Gemini-Pro`) oder direkte Modell-IDs aus
@@ -4339,6 +4364,21 @@ CLI mit `firebase deploy --only firestore:rules,firestore:indexes`):
   wird beim Lesen sequenziell gegen den realen Vorgänger neu bewertet.
 - `watch_runtime` — globaler Worker-Lease und datumsgebundener Tageszähler;
   verhindert parallele Scheduler-Worker und begrenzt Watch-Versuche restartfest.
+  `global_worker` trägt `claimed_until`, `owner` (zufälliges Token je Tick) und
+  `acquired_at`; nur der Eigentümer darf erneuern oder freigeben (R30).
+- `notification_outbox/{sha256(kind,resource,run,channel,recipient)}` — dauerhafte
+  Benachrichtigungsaufträge für Watch-Owner (Mail/Telegram, inkl. Pause nach drei
+  Fehlern), Watch-Seiten-Follower, Topic-Follower und Morning Brief. Felder:
+  `kind`, `channel`, `uid` (Owner, leer bei Topic), `resource_id`, `run_id`,
+  `recipient_id` (UID oder Follower-Dokument-ID, keine E-Mail), `payload` (nur
+  Frage, Scores, Change-Summary, Richtung; kein Consensus-Volltext),
+  `status=pending|sent|skipped|failed`, `attempts`, `next_attempt_at` (zugleich
+  Lease-Ende), `lease_owner`, `deliver_until`, `last_error` (Kategorie).
+  Composite-Index `(status, next_attempt_at)` in `firestore.indexes.json`,
+  `payload` ist vom Einzelfeldindex ausgenommen. Terminale Items löscht die
+  Retention nach 30 Tagen; Kontolöschung entfernt alle Items der UID. Die alten
+  Marker in `telegram_watch_deliveries` und `topic_follower_deliveries` werden
+  vom Versandpfad nicht mehr geschrieben und laufen über die bestehenden Cleanups aus.
 - `watch_briefs/{uid}` — user-level Morning-Brief-Einstellungen (`enabled`,
   `send_time` `HH:MM`, IANA-`timezone`, `mode` = `always|changes_only`,
   `next_send_at`, `last_evaluated_at`, `last_sent_at`, `enabled_at`). Reine
@@ -4409,7 +4449,8 @@ CLI mit `firebase deploy --only firestore:rules,firestore:indexes`):
 
 Die drei Scheduler lesen Fälligkeit index-first statt über Collection-Scans:
 `watches(status,next_run_at)`, `topics(status,next_run_at)` und
-`watch_briefs(enabled,next_send_at)`, jeweils sortiert und mit hartem `limit`.
+`watch_briefs(enabled,next_send_at)`, jeweils sortiert und mit hartem `limit`;
+der Outbox-Retry-Pass liest `notification_outbox(status,next_attempt_at)`.
 Die benötigten Composite-Indizes stehen in `firestore.indexes.json`. Listen von
 Watches lesen Shares gesammelt per `get_all`; die kompakte Dashboard-History
 kommt aus `watches.history_points`. Kann die Detail-History nicht geladen
@@ -4813,11 +4854,23 @@ Historien-Scans gelesen.
 **Consensus Watch** läuft als eigener asyncio-Lifespan-Task alle 30 Minuten.
 Firestore-Transaktionen claimen einen globalen Worker-Lease, den einzelnen
 Watch-Lease und das globale Tagesbudget; innerhalb eines Workers laufen Watches
-strikt sequenziell. Jeder Einzel-Claim verwendet den dann aktuellen Zeitpunkt
+strikt sequenziell. Der globale Lease trägt ein Owner-Token: der Tick erneuert
+ihn per Heartbeat, bricht bei Verlust vor dem nächsten Watch ab und gibt ihn nur
+frei, solange er noch Eigentümer ist; ein abgelaufener alter Worker kann den
+Lease eines Nachfolgers damit weder freigeben noch verlängern (R30). Jeder Einzel-Claim verwendet den dann aktuellen Zeitpunkt
 (nicht den Tick-Start), erneuert seine 15-Minuten-Lease während langer Läufe
 alle fünf Minuten und fenced Completion wie Fehlerabschluss über
 `current_run_id`. History, Watch-Pointer und Share-Pointer committen gemeinsam;
-ein alter Worker kann einen neueren Claim weder leeren noch pausieren. Die Reruns ermitteln den aktuellen Pro-Status des Eigentümers und
+ein alter Worker kann einen neueren Claim weder leeren noch pausieren. Jede
+Änderung über `update_watch`/Admin-Status/Unsubscribe erhöht
+`config_generation`; ein echter Statuswechsel (Pause, Resume) entzieht
+zusätzlich den laufenden Claim (`current_run_id=None`). Ein alter Lauf kann einen
+pausierten Watch daher weder reaktivieren noch den Aktivzähler verfälschen, und
+Resume startet keinen zweiten Worker für denselben Claim. Zeitplanänderungen
+während eines Laufs bleiben erhalten: Abschluss und Fehler übernehmen dann das
+bereits neu berechnete `next_run_at`; Alert-Regel, Kanäle und Condition werden
+beim Commit aus dem aktuellen Dokument gelesen, eine während des Laufs geänderte
+Condition wird weder alarmiert noch als Status gespeichert (R16). Die Reruns ermitteln den aktuellen Pro-Status des Eigentümers und
 nutzen das entsprechende `WATCH_MODELS_BY_TIER`-Mapping aus Firestore `watch_models`;
 je konfiguriertem Provider läuft genau ein Modell (mindestens zwei), deren Antwort-Calls
 laufen innerhalb des einzelnen Watch-Runs parallel. Ein fehlender Server-Key ist
@@ -4918,19 +4971,35 @@ konfiguriert im Watch-Dashboard (`/api/my/watch-brief`), gespeichert in
 `watch_briefs/{uid}`; Aktivierung setzt mindestens eine vorhandene Watch voraus.
 Der 30-Minuten-Loop ruft nach `run_watch_tick` ein
 `run_brief_tick` auf: fällige Briefs werden über den Composite-Index begrenzt
-gelesen und transaktional geclaimt (Zeitplan rückt VOR dem Versand vor —
-at-most-once, nie doppelt), dann wird der Digest
+gelesen und transaktional geclaimt (Zeitplan rückt vor und das Outbox-Item
+entsteht im selben Commit, siehe Zustellgarantie unten), dann wird der Digest
 aus `list_watches(include_history=True)` aggregiert (Score/Delta, notable
 Changes seit dem letzten Brief = `trigger == "changed"` aus `drift_signal`) und als
 Multipart-Mail versendet. Modus `changes_only` überspringt Briefs ohne notable
 Changes. Kein LLM-Call, kein Watch-Lease nötig; unverifizierte E-Mail-Adressen
 werden übersprungen. `/watch/brief/unsubscribe` (eigener HMAC-Token-Typ,
 gleicher `WATCH_UNSUBSCRIBE_SECRET`) deaktiviert nur den Brief.
-**Bewusste Zustellgarantie (Phase 5):** Morning Brief bleibt at-most-once. Ein
-Prozessabbruch nach dem Claim kann daher einen einzelnen Brief auslassen; dafür
-gibt es bei SMTP-Timeouts/Worker-Restarts garantiert keinen Doppelversand. Ein
-Wechsel zu at-least-once würde eine persistente Outbox plus idempotente
-Provider-Zustellung benötigen und ist eine eigene Produkt-/Architekturentscheidung.
+**Zustellgarantie (R17, Produktentscheidung 2026-09):** alle Benachrichtigungen
+laufen über die dauerhafte Outbox `notification_outbox` (at-least-once mit
+stabiler Delivery-ID, **kein** exactly-once). Watch-Ergebnis und Pause nach drei
+Fehlern schreiben ihre Items in derselben Transaktion wie Ergebnis bzw.
+Fehlerstatus; der Brief-Claim rückt den Zeitplan vor und legt sein Item in
+derselben Transaktion an; Topic-Runs legen Follower-Items im Run-Commit an.
+Direkt danach folgt ein erster Zustellversuch; jeder 30-Minuten-Tick ruft
+anschließend `run_notification_outbox_tick` für alle fälligen Items auf (neu,
+nach Absturz mitten im Versuch nach Ablauf des 10-Minuten-Leases, oder im
+Backoff 15 min … 6 h). Vor **jedem** Versuch prüft `notification_delivery`
+den aktuellen Zustand: Watch aktiv/nicht gelöscht, Kanal an, Telegram nicht
+stummgeschaltet und verbunden, Follower noch vorhanden, Brief noch aktiv,
+Konto nicht in Löschung, E-Mail verifiziert; sonst wird das Item `skipped`.
+Ein Kanal- oder Empfängerfehler blockiert andere Items nicht. Nach acht
+Versuchen oder nach `deliver_until` (3 Tage, Brief 12 Stunden) wird es
+`failed` und erscheint in `/health/metrics` unter `notification:<kind>` als
+Failure. Retries lesen nur Payload und immutable Watch-Version; sie starten nie
+eine neue LLM-Pipeline. Grenze: SMTP-Annahme ist keine Postfachzustellung, und
+ein Absturz nach Provider-Annahme, aber vor dem Statuscommit, erzeugt ein
+Duplikat. `last_condition_status=met` wird jetzt mit dem Ergebnis committet,
+weil der Alarm im selben Commit dauerhaft eingeplant ist.
 Im Admin-Dashboard kann eine aktive Watch fällig gestellt und der In-Process-Scheduler
 sofort aufgeweckt werden; der HTTP-Request wartet nicht auf die Modellaufrufe.
 Der manuelle Lauf verbraucht reale Modellaufrufe, schreibt reguläre History, rückt den Zeitplan vor
@@ -5282,6 +5351,8 @@ im nächsten Lauf wiederholt. Collection-group-Indizes siehe Setup.
 Adressraum; höchstens 80 PDF-Seiten, 120 Auszüge / 120.000 Zeichen. DOCX-Tabellen
 behalten Zellreihenfolge, Textdateien Zeilenbereiche und PDFs Seitennummern.
 Scans ohne Text bleiben ausdrücklich als unvollständig erkennbar. Kein OCR.
+`run_isolated` ist der gemeinsame Einstieg; klassische Consensus-Anhänge nutzen
+ihn im Modus `pdf-text` (siehe Attachments).
 `FileContext` ergänzt `read_file`, gezielte Auszüge und native Bilder bei
 expliziter Modellfähigkeit. Von `read_file` geöffnete Bilder ergänzen die
 Nutzerauswahl (`selection()`), verdrängen sie aber nie. Native PDFs werden nur

@@ -221,6 +221,33 @@ def save_config(data: dict, *, updated_by: str, db=None) -> dict:
     return config
 
 
+def _provider_labels(models: dict) -> list[str]:
+    import app.core.config as cfg
+
+    return [
+        cfg.provider_label(provider)
+        for provider in cfg.PROVIDERS
+        if (models or {}).get(provider)
+    ]
+
+
+def configured_providers() -> dict:
+    """The provider families the server really uses (R32).
+
+    The initial Publisher run uses the same default-preset model plan as every
+    API run (``api_consensus_runner.build_server_model_plan``); Watch reruns
+    use the Admin-configured Free Watch models. The Admin UI renders these
+    lists instead of a static promise about excluded providers.
+    """
+    import app.core.config as cfg
+
+    preset = cfg.CONSENSUS_PRESET_MODELS.get(cfg.DEFAULT_CONSENSUS_PRESET) or {}
+    return {
+        "initial_run_providers": _provider_labels(preset.get("answers") or {}),
+        "watch_providers": _provider_labels(cfg.get_watch_models("free")),
+    }
+
+
 def public_config(config: dict) -> dict:
     """Add immutable execution facts that the Admin UI and publisher can display."""
     return {
@@ -231,5 +258,6 @@ def public_config(config: dict) -> dict:
         # contract so a future exclusion is an explicit, readable fact instead
         # of a rule buried in the execution path.
         "excluded_providers": [],
+        **configured_providers(),
         "search_opportunity_rules": SEARCH_OPPORTUNITY_RULES,
     }

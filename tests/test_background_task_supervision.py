@@ -120,6 +120,9 @@ def test_retention_loop_runs_cleanup_before_first_sleep(monkeypatch):
         lambda: calls.append("chat_deletions") or 5)
     monkeypatch.setattr(memory_edit, "cleanup_memory_edit_records",
         lambda: calls.append("memory") or {"snapshots_purged": 6, "edits_recovered": 7})
+    from app.services import notification_outbox
+    monkeypatch.setattr(notification_outbox, "cleanup",
+        lambda: calls.append("outbox") or 8)
 
     async def stop_after_first_tick(seconds):
         raise asyncio.CancelledError
@@ -133,7 +136,7 @@ def test_retention_loop_runs_cleanup_before_first_sleep(monkeypatch):
             pass
 
     asyncio.run(exercise())
-    assert calls == ["pending", "shares", "sources", "chat_deletions", "memory"]
+    assert calls == ["pending", "shares", "sources", "chat_deletions", "memory", "outbox"]
     health = background_tasks.task_health_snapshot()["retention-maintenance"]
     assert health["details"] == {
         "expired_pending_deleted": 2,
@@ -145,6 +148,7 @@ def test_retention_loop_runs_cleanup_before_first_sleep(monkeypatch):
         "chat_deletions_completed": 5,
         "memory_undo_snapshots_purged": 6,
         "memory_edits_recovered": 7,
+        "notification_outbox_deleted": 8,
     }
 
 

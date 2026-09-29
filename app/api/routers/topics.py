@@ -1,6 +1,7 @@
 """Public and admin routes for the independent curated Topics area."""
 
 import asyncio
+import functools
 import html
 import json
 import logging
@@ -654,9 +655,9 @@ async def topic_follow_unsubscribe(request: Request, token: str = ""):
         return _message_page("Unable to unfollow", message, code)
 
 
-async def _notify_topic_followers(topic: dict, run: dict, old_score) -> None:
+async def _deliver_topic_notifications(item_ids) -> None:
     try:
-        await topic_runner.notify_topic_followers(topic, run, old_score)
+        await topic_runner.deliver_topic_notifications(item_ids)
     except Exception as exc:
         logging.error(
             "Topic follower notification failed category=%s", safe_exception(exc)
@@ -742,30 +743,36 @@ async def admin_create_topic_run(
         if not topic_before:
             raise topics.TopicError("not_found", "Topic not found.")
         old_score = topic_before.get("latest_agreement_score")
+        # Same bar as the Watch pages: a rewritten qualification ("minor") is
+        # not what a follower subscribed to, and it is not what the page marks
+        # as movement either. Follower items commit with the run (R17).
+        staged = await asyncio.to_thread(
+            topic_runner.topic_notification_builder, topic_id, require_material=True,
+        )
         if str(payload.get("consensus_md") or "").strip():
             # Explicit legacy/editorial import. Normal admin runs send an empty
             # body and execute the configured models plus source collection.
             run = await asyncio.to_thread(
-                topics.create_run, topic_id, payload, actor_uid=actor_uid
+                functools.partial(
+                    topics.create_run, topic_id, payload, actor_uid=actor_uid,
+                    notifications=staged,
+                )
             )
         else:
             run = await asyncio.to_thread(
-                topic_runner.run_topic_now, topic_id, actor_uid=actor_uid
+                functools.partial(
+                    topic_runner.run_topic_now, topic_id, actor_uid=actor_uid,
+                    notifications=staged,
+                )
             )
-        topic_after = await asyncio.to_thread(topics.get_topic, topic_id)
-        # Same bar as the Watch pages: a rewritten qualification ("minor") is
-        # not what a follower subscribed to, and it is not what the page marks
-        # as movement either.
         is_material = drift_signal.is_material(
             run["change_type"] in {"minor", "major"}, run["change_type"],
             run.get("agreement_score"),
             [old_score] if isinstance(old_score, (int, float)) else [],
         )
         should_notify = is_material and mailer.is_configured()
-        if should_notify:
-            background_tasks.add_task(
-                _notify_topic_followers, topic_after, run, old_score
-            )
+        if staged.ids:
+            background_tasks.add_task(_deliver_topic_notifications, list(staged.ids))
         return {
             "status": "success",
             "run": topics.run_public_view(run),

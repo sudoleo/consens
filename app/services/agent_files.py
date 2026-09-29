@@ -12,15 +12,13 @@ import logging
 import os
 from pathlib import Path
 import re
-import subprocess
-import sys
 from uuid import uuid4
 
 from google.api_core.exceptions import NotFound
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.observability import safe_exception
-from app.services import persistence_guard
+from app.services import agent_file_extract, persistence_guard
 from app.services.chat_store import ChatStore, ChatNotFound
 from app.services.llm.attachments import parse_attachments
 from app.services.agent_tools import ReadOnlyTool
@@ -97,15 +95,9 @@ class PrivateObjects:
 
 
 def extract_isolated(raw, mime):
-    try:
-        process = subprocess.run([sys.executable, "-m", "app.services.agent_file_extract", mime],
-            input=raw, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=15,
-            cwd=str(Path(__file__).resolve().parents[2]), check=True)
-        if len(process.stdout) > 800_000:
-            raise ValueError("Extraction response too large")
-        return json.loads(process.stdout)
-    except (subprocess.SubprocessError, ValueError):
-        return {"status": "failed", "parts": [], "warnings": ["Processing exceeded its safety limits. Provide a smaller file or extracted text."]}
+    # Shared with regular consensus attachments (llm.attachments), so both
+    # paths parse untrusted files under the same process/CPU/memory budget.
+    return agent_file_extract.run_isolated(raw, mime)
 
 
 def public_file(data):

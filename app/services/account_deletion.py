@@ -13,6 +13,7 @@ from app.core.observability import safe_exception
 from app.core.security import invalidate_auth_tombstone_cache
 from app.services import (
     follow_challenges,
+    notification_outbox,
     persistence_guard,
     share_snapshots,
     topics,
@@ -101,6 +102,8 @@ class FirestoreAccountDeletion:
             ("orphan_watches", lambda: self._delete_orphan_watches(uid)),
             ("watch_indexes", lambda: self._delete_watch_indexes(uid)),
             ("watch_brief", lambda: self._db.collection("watch_briefs").document(uid).delete()),
+            # Pending notifications carry the owner's question/summary text.
+            ("notification_outbox", lambda: self._delete_notification_outbox(uid)),
             ("persistence_guards", lambda: self._delete_persistence_guards(uid, email)),
             ("email_follows", lambda: self._delete_email_follows(email)),
             ("profile", lambda: self._db.collection("users").document(uid).delete()),
@@ -244,6 +247,11 @@ class FirestoreAccountDeletion:
 
     def _delete_orphan_watches(self, uid: str) -> None:
         watch_service.delete_watches_for_owner(uid, db=self._db)
+
+    def _delete_notification_outbox(self, uid: str) -> None:
+        # Owner-scoped outbox items carry question and summary text. Delivery
+        # attempts are fenced by the same tombstone, so none can recreate one.
+        self._delete_query(notification_outbox.OUTBOX_COLLECTION, "uid", uid)
 
     def _delete_persistence_guards(self, uid: str, email: str) -> None:
         persistence_guard.delete_owner_data(uid, db=self._db)

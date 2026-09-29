@@ -1380,6 +1380,9 @@ async function saveModels() {
     const idToken = await user.getIdToken();
 
     const data = {
+        // Compare-and-swap token: the server refuses the save with 409 if
+        // another admin or process stored a newer configuration meanwhile.
+        revision: Number.isInteger(globalModelsData.revision) ? globalModelsData.revision : 0,
         premium: [],
         reasoning_policy: globalModelsData.reasoning_policy || { profile: 'existing', models: {} },
         consensus: consensusListValues(),
@@ -1483,7 +1486,11 @@ async function saveModels() {
             setTimeout(() => setStatus('', false), 4000);
         } else {
             const resData = await response.json();
-            throw new Error(resData.detail || 'Failed to update models');
+            if (response.status === 409) {
+                throw new Error(resData.error || resData.detail
+                    || 'The configuration was changed elsewhere. Reload before saving again.');
+            }
+            throw new Error(resData.error || resData.detail || 'Failed to update models');
         }
     } catch (err) {
         setStatus(err.message, true);
@@ -1510,18 +1517,33 @@ function sharesStatus(message, isError) {
     el.className = isError ? 'error' : 'success';
 }
 
-async function loadShares(filter) {
-    currentSharesFilter = filter;
+let loadedShares = [];
+let sharesNextCursor = null;
+let sharesRequestId = 0;
+
+// Paged moderation list: the server filters and orders before limiting and
+// says whether more rows exist, so nothing relevant hides behind a window.
+async function loadShares(filter, { append = false } = {}) {
+    const requestId = ++sharesRequestId;
+    if (!append) {
+        currentSharesFilter = filter;
+        loadedShares = [];
+        sharesNextCursor = null;
+    }
     sharesStatus('Loading…', false);
     let data;
+    const cursor = append && sharesNextCursor ? `&cursor=${encodeURIComponent(sharesNextCursor)}` : '';
     try {
-        data = await shareAdminRequest('GET', `/api/admin/shares?filter=${filter}`);
+        data = await shareAdminRequest('GET', `/api/admin/shares?filter=${filter}${cursor}`);
     } catch (err) {
-        sharesStatus(err.message, true);
+        if (requestId === sharesRequestId) sharesStatus(err.message, true);
         return;
     }
-    sharesStatus('', false);
-    renderShares(data.shares || [], data.site_url || '');
+    if (requestId !== sharesRequestId) return;
+    loadedShares = loadedShares.concat(data.shares || []);
+    sharesNextCursor = data.has_more ? data.next_cursor : null;
+    sharesStatus(sharesNextCursor ? `${loadedShares.length} loaded · more available` : '', false);
+    renderShares(loadedShares, data.site_url || '');
 }
 
 async function moderateShare(shareId, payload, confirmText) {
@@ -1618,6 +1640,12 @@ function renderShares(shares, siteUrl) {
 
         container.appendChild(row);
     });
+    if (sharesNextCursor) {
+        const more = actionBtn('Load more', () => loadShares(currentSharesFilter, { append: true }));
+        more.id = 'loadMoreSharesBtn';
+        more.className = 'admin-btn secondary';
+        container.appendChild(more);
+    }
 }
 
 function badge(kind, text, title) {
@@ -1652,6 +1680,18 @@ function syncPublisherWatchFields() {
         .forEach(id => { document.getElementById(id).disabled = !enabled; });
 }
 
+// The server reports the provider families it really uses; nothing here
+// promises an exclusion the model plan does not enforce.
+function renderPublisherProviders(config) {
+    const list = values => (Array.isArray(values) && values.length ? values.join(', ') : 'none configured');
+    const excluded = Array.isArray(config.excluded_providers) ? config.excluded_providers : [];
+    document.getElementById('publisherWatchProfile').textContent =
+        `${config.watch_interval || 'weekly'} · ${config.watch_model_tier || 'free'} Watch providers`
+        + (excluded.length ? ` · excluded: ${excluded.join(', ')}` : '');
+    document.getElementById('publisherProviderPlan').textContent =
+        `Initial run: ${list(config.initial_run_providers)} · Watch reruns: ${list(config.watch_providers)}`;
+}
+
 async function loadPublisherConfig() {
     publisherStatus('Loading...', false);
     try {
@@ -1665,8 +1705,7 @@ async function loadPublisherConfig() {
         document.getElementById('publisherWatchTime').value = config.watch_time || '09:00';
         document.getElementById('publisherWatchTimezone').value = config.watch_timezone || 'Europe/Berlin';
         document.getElementById('publisherWatchLimit').value = config.max_active_publisher_watches || 12;
-        document.getElementById('publisherWatchProfile').textContent =
-            `${config.watch_interval || 'weekly'} · ${config.watch_model_tier || 'free'} Watch providers · DeepSeek excluded`;
+        renderPublisherProviders(config);
         syncPublisherWatchFields();
         publisherStatus('', false);
     } catch (err) {
@@ -2683,6 +2722,15 @@ function renderSeoAlerts() {
         addSeoAlert(
             container, 'warning', 'The portfolio judge did not answer in the last review.',
             `${review.judge_error} The assessment was generated from the rules, not by the judge.`
+        );
+    }
+
+    const coverage = review.portfolio_coverage || {};
+    if (review.run_id && coverage.truncated) {
+        addSeoAlert(
+            container, 'notice',
+            `The last review considered ${coverage.considered_pages} of ${coverage.total_pages} pages.`,
+            'Reviews rotate: the pages left out come first next time, so the whole portfolio is covered over several runs.'
         );
     }
 

@@ -1888,8 +1888,65 @@ def _restore_runtime_config(state: dict) -> None:
     rebuild_model_configs()
 
 
+# Revision of the Firestore model document this process last activated. Admin
+# saves increment ``revision`` with a compare-and-swap (R25); every process
+# compares it periodically and reloads a newer published revision.
+ACTIVE_MODEL_CONFIG_REVISION: int | None = None
+MODEL_CONFIG_SYNC_SECONDS = 60
+
+
+def model_config_revision_of(document) -> int:
+    value = (document or {}).get("revision") if isinstance(document, dict) else None
+    return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else 0
+
+
+def active_model_config_revision():
+    return ACTIVE_MODEL_CONFIG_REVISION
+
+
+def refresh_models_if_changed() -> bool:
+    """Reload the model configuration when another process published a newer revision.
+
+    One bounded read; the full activation (with its own rollback) runs only
+    when the stored revision differs from the active one. Returns True when a
+    reload happened.
+    """
+    from app.core.security import db_firestore
+
+    snapshot = db_firestore.collection("app_config").document("models").get(
+        timeout=5.0, retry=None,
+    )
+    stored = model_config_revision_of(snapshot.to_dict() if snapshot.exists else None)
+    if ACTIVE_MODEL_CONFIG_REVISION is not None and stored == ACTIVE_MODEL_CONFIG_REVISION:
+        return False
+    return bool(load_models_from_db(strict=True, persist_backfill=False))
+
+
+async def model_config_sync_loop() -> None:
+    """Bring every process to the same published revision within one interval."""
+    import asyncio
+    import logging
+    from app.core.background_tasks import task_succeeded
+    from app.core.observability import safe_exception
+
+    while True:
+        await asyncio.sleep(MODEL_CONFIG_SYNC_SECONDS)
+        try:
+            reloaded = await asyncio.to_thread(refresh_models_if_changed)
+        except Exception as exc:
+            logging.warning(
+                "Model configuration sync failed category=%s", safe_exception(exc)
+            )
+            reloaded = False
+        task_succeeded(
+            "model-configuration-sync",
+            reloaded=bool(reloaded),
+            revision=ACTIVE_MODEL_CONFIG_REVISION,
+        )
+
+
 def load_models_from_db(*, strict: bool = False, persist_backfill: bool = True) -> bool:
-    global ALL_ALLOWED_MODELS
+    global ALL_ALLOWED_MODELS, ACTIVE_MODEL_CONFIG_REVISION
     import logging
     from app.core.observability import safe_exception
     from app.core.security import db_firestore
@@ -2035,6 +2092,7 @@ def load_models_from_db(*, strict: bool = False, persist_backfill: bool = True) 
             # Update ALL_ALLOWED_MODELS
             ALL_ALLOWED_MODELS = _all_allowed_models()
             rebuild_model_configs()
+            ACTIVE_MODEL_CONFIG_REVISION = model_config_revision_of(data)
             logging.info("Models configuration loaded from Firestore successfully.")
         elif persist_backfill:
             # If document doesn't exist, create it with default values
@@ -2063,9 +2121,11 @@ def load_models_from_db(*, strict: bool = False, persist_backfill: bool = True) 
                 "reasoning_policy": get_reasoning_policy(),
             }, timeout=5.0, retry=None)
             rebuild_model_configs()
+            ACTIVE_MODEL_CONFIG_REVISION = 0
             logging.info("Created default models configuration in Firestore.")
         else:
             apply_reasoning_policy()
+            ACTIVE_MODEL_CONFIG_REVISION = 0
             logging.info(
                 "Models configuration is missing; using code defaults until the "
                 "supervised post-readiness backfill runs."

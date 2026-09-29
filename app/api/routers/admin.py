@@ -48,23 +48,58 @@ seo_weekly_review_service = seo_weekly_review.default_service
 _MODEL_CONFIG_UPDATE_LOCK = threading.Lock()
 
 
-def _persist_and_activate_models(doc_ref, document: dict) -> None:
-    """Persist one model config and restore it if runtime activation fails."""
+class ModelConfigConflict(Exception):
+    """The stored model configuration changed since the admin loaded it."""
+
+
+def _model_config_transaction(operation):
+    return persistence_guard._run_transaction(db_firestore, operation)
+
+
+def _persist_and_activate_models(doc_ref, document: dict, expected_revision=None) -> int:
+    """Persist one model config revision and roll back only our own revision.
+
+    The write is a compare-and-swap on the monotonic ``revision`` field
+    (R25): a save from a stale admin tab is refused instead of overwriting a
+    newer configuration. If runtime activation fails, the previous document
+    is restored only while our revision is still the stored one; a revision
+    written meanwhile by another process or admin is never replaced.
+    """
     with _MODEL_CONFIG_UPDATE_LOCK:
-        previous_snapshot = doc_ref.get()
-        previous_exists = bool(previous_snapshot.exists)
-        previous_document = (
-            previous_snapshot.to_dict() or {} if previous_exists else None
-        )
-        doc_ref.set(document)
+        def write(transaction):
+            snapshot = persistence_guard._get(doc_ref, transaction)
+            previous = (snapshot.to_dict() or {}) if snapshot.exists else None
+            current_revision = cfg.model_config_revision_of(previous)
+            if expected_revision is not None and int(expected_revision) != current_revision:
+                raise ModelConfigConflict()
+            new_revision = current_revision + 1
+            persistence_guard._set(transaction, doc_ref, {**document, "revision": new_revision})
+            return previous, new_revision
+
+        previous_document, new_revision = _model_config_transaction(write)
         try:
             load_models_from_db(strict=True)
         except Exception as exc:
-            try:
-                if previous_exists:
-                    doc_ref.set(previous_document)
+            def rollback(transaction):
+                snapshot = persistence_guard._get(doc_ref, transaction)
+                current = (snapshot.to_dict() or {}) if snapshot.exists else None
+                if cfg.model_config_revision_of(current) != new_revision:
+                    return False
+                if previous_document is None:
+                    persistence_guard._delete(transaction, doc_ref)
                 else:
-                    doc_ref.delete()
+                    # A new revision number makes every process reload it.
+                    persistence_guard._set(
+                        transaction, doc_ref,
+                        {**previous_document, "revision": new_revision + 1},
+                    )
+                return True
+
+            try:
+                if not _model_config_transaction(rollback):
+                    logging.warning(
+                        "Model configuration rollback skipped: a newer revision was stored meanwhile"
+                    )
             except Exception as rollback_exc:
                 logging.critical(
                     "Model configuration activation and persistence rollback both failed "
@@ -73,6 +108,7 @@ def _persist_and_activate_models(doc_ref, document: dict) -> None:
                     safe_exception(rollback_exc),
                 )
             raise
+        return new_revision
 
 
 class AdminIssueApiKeyRequest(BaseModel):
@@ -719,14 +755,27 @@ async def admin_send_watch_test_email(request: Request, data: dict = Body(defaul
 
 
 @router.get("/api/admin/shares")
-def admin_list_shares(request: Request, filter: str = "reported"):
+def admin_list_shares(
+    request: Request,
+    filter: str = "reported",
+    cursor: str = Query(default="", max_length=64),
+    limit: int = Query(default=200, ge=1, le=500),
+):
     _require_admin(request, {})
     try:
-        shares = snapshots.list_shares_for_admin(only_reported=(filter != "all"))
+        page = snapshots.list_shares_for_admin_page(
+            only_reported=(filter != "all"), cursor=cursor, max_items=limit,
+        )
     except Exception as exc:
         logging.error("admin_list_shares failed category=%s", safe_exception(exc))
         raise HTTPException(status_code=500, detail="Failed to load shares")
-    return {"status": "success", "shares": shares, "site_url": snapshots_site_url()}
+    return {
+        "status": "success",
+        "shares": page["items"],
+        "has_more": page["has_more"],
+        "next_cursor": page["next_cursor"],
+        "site_url": snapshots_site_url(),
+    }
 
 
 def snapshots_site_url():
@@ -1530,6 +1579,8 @@ def get_models(request: Request):
                 "memory_edit": cfg.get_memory_edit_config(),
                 "reasoning_policy": cfg.get_reasoning_policy(),
             }
+        # The stored revision is the compare-and-swap token the save sends back.
+        data["revision"] = cfg.model_config_revision_of(raw_data if doc.exists else None)
         # Der Umschlag-Key darf nie wie ein Provider heissen: die Familie
         # "meta" (Muse) haette sonst ihre Modell-Liste verloren.
         data[ADMIN_META_KEY] = _admin_meta(data)
@@ -1686,9 +1737,26 @@ def update_models(request: Request, data: dict = Body(...)):
             "memory_edit": normalized["memory_edit"],
             "reasoning_policy": normalized["reasoning_policy"],
         }
-        _persist_and_activate_models(doc_ref, models_document)
+        expected_revision = data.get("revision")
+        if expected_revision is not None and (
+            isinstance(expected_revision, bool) or not isinstance(expected_revision, int)
+            or expected_revision < 0
+        ):
+            raise HTTPException(status_code=400, detail="revision must be a non-negative integer")
+        revision = _persist_and_activate_models(
+            doc_ref, models_document, expected_revision=expected_revision,
+        )
 
-        return {"status": "success", "message": "Configuration updated successfully."}
+        return {
+            "status": "success",
+            "message": "Configuration updated successfully.",
+            "revision": revision,
+        }
+    except ModelConfigConflict:
+        raise HTTPException(
+            status_code=409,
+            detail="The model configuration was changed elsewhere. Reload to see the saved revision before saving again.",
+        )
     except HTTPException:
         raise
     except Exception as exc:

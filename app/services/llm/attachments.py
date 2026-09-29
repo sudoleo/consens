@@ -452,34 +452,28 @@ def parse_attachments(data: dict, attachments_allowed: bool) -> list[dict]:
 
 
 def extract_pdf_text(raw: bytes) -> str | None:
-    """Serverseitige Textextraktion als Fallback für Provider ohne natives PDF-Verständnis."""
-    try:
-        from pypdf import PdfReader
-    except ImportError:
-        logger.warning("pypdf is not installed; PDF text extraction unavailable.")
-        return None
+    """Serverseitige Textextraktion als Fallback für Provider ohne natives PDF-Verständnis.
 
-    try:
-        reader = PdfReader(io.BytesIO(raw))
-        chunks = []
-        total = 0
-        for page in reader.pages:
-            text = page.extract_text() or ""
-            if not text.strip():
-                continue
-            chunks.append(text)
-            total += len(text)
-            if total >= MAX_PDF_EXTRACT_CHARS:
-                break
-        combined = "\n".join(chunks).strip()
-        if not combined:
-            return None
-        return combined[:MAX_PDF_EXTRACT_CHARS]
-    except Exception as exc:
-        logger.warning(
-            "PDF text extraction failed category=%s", safe_exception(exc)
-        )
+    pypdf laeuft nicht im Webprozess, sondern im selben begrenzten
+    Wegwerf-Prozess wie die Agent-Dateien (``agent_file_extract``): CPU-Zeit,
+    Adressraum, Wall-Clock-Timeout und Seitenzahl sind gedeckelt, und das
+    Textlimit bricht die Seitenschleife ab. Ein kleines, aber teures PDF kann
+    damit nur seinen eigenen Prozess erschoepfen (R26). Kein Text (Scan, leer,
+    Budget ueberschritten) liefert ``None``; der Aufrufer schickt das PDF dann
+    nativ bzw. sagt dem Modell, dass der Text nicht lesbar war.
+    """
+    if not raw:
         return None
+    from app.services import agent_file_extract
+
+    result = agent_file_extract.run_isolated(
+        raw, agent_file_extract.PDF_TEXT_MODE, MAX_PDF_EXTRACT_CHARS,
+    )
+    if result.get("status") == "failed":
+        logger.warning("PDF text extraction failed or exceeded its safety limits")
+        return None
+    text = str(result.get("text") or "").strip()
+    return text[:MAX_PDF_EXTRACT_CHARS] or None
 
 
 def extract_docx_text(raw: bytes) -> str | None:

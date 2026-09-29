@@ -349,6 +349,13 @@
       list.appendChild(item);
     });
     body.appendChild(list);
+    if (data.has_more) {
+      // The list is bounded; say so instead of implying it is complete.
+      const more = document.createElement("p");
+      more.className = "share-list-truncated";
+      more.textContent = "Showing your most recent shared links. Older links are not listed here.";
+      body.appendChild(more);
+    }
   }
 
   // Global verfügbar machen, damit z.B. das User-Icon-Menü (firebase.js)

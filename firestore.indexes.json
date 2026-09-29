@@ -32,9 +32,26 @@
         { "fieldPath": "enabled", "order": "ASCENDING" },
         { "fieldPath": "next_send_at", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "shares",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "owner_uid", "order": "ASCENDING" },
+        { "fieldPath": "created_at", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "notification_outbox",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "next_attempt_at", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": [
+    { "collectionGroup": "notification_outbox", "fieldPath": "payload", "indexes": [] },
     { "collectionGroup": "google_evidence", "fieldPath": "headers", "indexes": [] },
     { "collectionGroup": "google_evidence", "fieldPath": "expires_at", "indexes": [{ "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }] },
     { "collectionGroup": "google_write_intents", "fieldPath": "expires_at", "indexes": [{ "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }] },

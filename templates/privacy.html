@@ -176,6 +176,14 @@
           changes to “met”, not repeatedly while it remains met. Result notifications may include the generated consensus text.
           Repeated failures may also trigger a one-time pause notice. Every watch e-mail includes a signed link that
           pauses the watch without requiring login.
+          Notifications (including follower and Topic updates and the Morning Brief) are first stored as a delivery
+          job containing the recipient reference, the question, scores and the change summary, but not the full
+          consensus text, so a temporary delivery failure can be retried for a limited time. Before every attempt we
+          check again whether the watch is still active and the subscription or channel is still enabled; a
+          cancelled subscription is never delivered late. Finished delivery jobs are removed by regular maintenance
+          about 30 days after they were created, and a watch owner's jobs immediately when the account is deleted.
+          Jobs for page or Topic followers reference the subscription only by a pseudonymous identifier, not by
+          e-mail address.
         </p>
         <p>
           <strong>Optional Telegram delivery:</strong> Signed-in users may voluntarily connect a private Telegram chat

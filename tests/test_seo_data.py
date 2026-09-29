@@ -309,6 +309,103 @@ def test_not_configured_collection_records_safe_result():
     assert runs[0].to_dict()["message"] == "GSC configuration is missing."
 
 
+def _isolated_lock_service(**kwargs):
+    import threading
+
+    service = seo_data.SeoDataService(**kwargs)
+    # A private lock keeps these regressions independent of the shared
+    # process-wide collector lock used by the other tests.
+    service._collection_lock = threading.Lock()
+    return service
+
+
+def test_collector_lock_is_released_when_run_creation_fails():
+    """R22: an early database error must not leave the collector locked."""
+
+    class BrokenRunRepository(FirestoreSeoRepository):
+        def create_run(self, run_id, data):
+            raise RuntimeError("simulated database outage")
+
+    db = FakeFirestore()
+    service = _isolated_lock_service(
+        repository=BrokenRunRepository(db),
+        client_factory=lambda: FakeSearchConsoleClient(),
+        page_discovery=lambda: [],
+        clock=lambda: NOW,
+    )
+    for _ in range(2):
+        try:
+            service.collect()
+        except RuntimeError:
+            pass
+        else:  # pragma: no cover - the simulated outage must propagate
+            raise AssertionError("expected the simulated outage")
+        assert not service._collection_lock.locked()
+    # No run document was invented for the failed creation.
+    assert db.collection("seo_collection_runs").stream() == []
+
+
+def test_collector_lock_is_released_when_clock_or_window_fails():
+    def broken_clock():
+        raise RuntimeError("clock unavailable")
+
+    service = _isolated_lock_service(
+        repository=FirestoreSeoRepository(FakeFirestore()),
+        client_factory=lambda: FakeSearchConsoleClient(),
+        page_discovery=lambda: [],
+        clock=broken_clock,
+    )
+    try:
+        service.collect()
+    except RuntimeError:
+        pass
+    assert not service._collection_lock.locked()
+
+    service.clock = lambda: "not-a-datetime"
+    try:
+        service.collect()
+    except Exception:
+        pass
+    assert not service._collection_lock.locked()
+
+
+def test_running_collector_still_blocks_a_second_one_and_recovers_afterwards():
+    db = FakeFirestore()
+    service = _isolated_lock_service(
+        repository=FirestoreSeoRepository(db),
+        client_factory=lambda: FakeSearchConsoleClient(),
+        page_discovery=lambda: [
+            {"url": PAGE_URL, "origin": "static_page", "share_id": None}
+        ],
+        clock=lambda: NOW,
+    )
+    service._collection_lock.acquire()
+    try:
+        try:
+            service.collect()
+        except seo_data.CollectionAlreadyRunning:
+            pass
+        else:  # pragma: no cover
+            raise AssertionError("a running collector must block a second one")
+    finally:
+        service._collection_lock.release()
+
+    assert service.collect()["status"] == "success"
+    assert not service._collection_lock.locked()
+
+    def failing_sync(*_args, **_kwargs):
+        raise RuntimeError("late failure")
+
+    service.repository.sync_pages = failing_sync
+    try:
+        service.collect()
+    except RuntimeError:
+        pass
+    assert not service._collection_lock.locked()
+    del service.repository.sync_pages
+    assert service.collect()["status"] == "success"
+
+
 def test_search_console_http_pagination_and_final_data_state():
     class Response:
         status_code = 200
@@ -1079,3 +1176,41 @@ def test_content_judge_is_not_called_for_winner_status():
     except seo_recommendation.SeoRecommendationError as exc:
         assert exc.code == "content_judge_not_applicable"
     assert calls == []
+
+
+def test_weekly_review_rotation_covers_every_page_over_consecutive_runs():
+    """R24: more pages than the review bound are considered fairly over weeks,
+    and inactive pages do not silently displace active ones."""
+    from app.services import seo_weekly_review
+
+    db = FakeFirestore()
+    for index in range(7):
+        url = f"https://www.consens.io/a-inactive-{index}"
+        db.documents[("seo_pages", page_id_for_url(url))] = {
+            "url": url, "origin": "share", "active": False,
+        }
+    for index in range(5):
+        url = f"https://www.consens.io/z-active-{index}"
+        db.documents[("seo_pages", page_id_for_url(url))] = {
+            "url": url, "origin": "share", "active": True,
+        }
+    service = seo_data.SeoDataService(
+        repository=FirestoreSeoRepository(db), clock=lambda: NOW,
+    )
+    review_repo = seo_weekly_review.WeeklyReviewRepository(db)
+
+    first = service.overview(active_only=False, max_pages=5, rotate=True)
+    assert first["truncated"] is True and first["total_pages"] == 12
+    # The old alphabetical cut-off would have kept only inactive pages.
+    assert all("z-active" in row["url"] for row in first["rows"])
+
+    seen = []
+    for week in range(3):
+        overview = service.overview(active_only=False, max_pages=5, rotate=True)
+        ids = [row["page_id"] for row in overview["rows"]]
+        review_repo.mark_pages_considered(ids, NOW + timedelta(days=7 * week))
+        seen.extend(ids)
+    assert len(set(seen)) == 12
+    assert len(seen) == 15
+
+    assert service.overview(active_only=False)["truncated"] is False
