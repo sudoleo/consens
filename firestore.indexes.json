@@ -35,6 +35,12 @@
     }
   ],
   "fieldOverrides": [
+    { "collectionGroup": "google_connections", "fieldPath": "credentials", "indexes": [] },
+    { "collectionGroup": "google_oauth_states", "fieldPath": "secret", "indexes": [] },
+    { "collectionGroup": "google_oauth_states", "fieldPath": "expires_at", "indexes": [{ "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }] },
+    { "collectionGroup": "actions", "fieldPath": "payload", "indexes": [] },
+    { "collectionGroup": "actions", "fieldPath": "preview", "indexes": [] },
+    { "collectionGroup": "actions", "fieldPath": "expires_at", "indexes": [{ "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }] },
     { "collectionGroup": "versions", "fieldPath": "content", "indexes": [] },
     { "collectionGroup": "versions", "fieldPath": "expires_at", "indexes": [{ "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }] },
     { "collectionGroup": "files", "fieldPath": "parts", "indexes": [] },

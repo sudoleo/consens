@@ -186,3 +186,53 @@ verify table content, immutable versions, source provenance, stale edits, cross-
 and cross-chat denial, cancellation, unsupported glyphs, and rollback after a partial
 storage failure. The production build and build consistency check passed. Live
 bucket/provider behavior remains a deployment smoke test.
+
+## PR 3 — Google accounts and Calendar
+
+Users can connect their own Google accounts, select calendars and compare events
+or availability with uploaded evidence and model results. The agent can prepare
+new or changed events, while users review the exact content and invitation
+recipients before any Google write.
+
+This PR extends the existing root ToolRegistry, authentication/Pro gate, immutable
+turn settings and replay, synthesis evidence, SSE, restoration, private file/chat
+lifecycle, account deletion and maintenance. Google tools are root-only and bound
+to the selected account/calendars. Model tokens remain on the existing usage ledger;
+API operations have an additional 500-request daily quota. The ToolRegistry allows
+20 server-defined tools while retaining the existing per-run execution budget.
+
+The common connection/approval foundation lives here for Gmail to reuse. OAuth
+grants are incremental; state, PKCE, signed identity, refresh races, token encryption
+and disconnect are enforced server-side. Actions are immutable hash-bound proposals.
+Only the separate authenticated confirmation endpoint can execute them. Repeated
+confirmations cannot repeat a write; ambiguous results use read-only reconciliation.
+Calendar updates preserve omitted fields and private metadata and use ETags.
+Time-zone offsets, DST transitions, all-day exclusive ends, recurrence rules and
+series/instance selection are explicit. No cancellation/delete/series-split tool is
+advertised. Search reads are bounded and paginated, with no background synchronization.
+
+Google-data chats require explicit model-sharing consent and an operator-configured
+model/hosting-provider allowlist, including review models. Web search and external
+source checking are disabled for these chats, including later follow-ups. Relevant
+excerpts are used instead of uploading whole calendars. External content cannot
+call the user-only confirmation API or select another account.
+
+Setup, index changes, key rotation, public-operation prerequisites, official source
+references, retention and recovery semantics are detailed in
+[`google-integrations-setup.md`](google-integrations-setup.md). Google credentials
+are not required for the deterministic integration tests. Live OAuth/Workspace
+policies, real token issuance and invitation delivery still need an explicitly
+authorized staging account; no real invitation was sent.
+
+Dependency: PR 2 / #8 (`feat/agent-documents`), transitively PR 1 / #7.
+Validation: 125 focused backend integration/regression tests passed, including
+nine OAuth/token/model-routing tests and the real comparison → synthesis → judges
+routing path. The full backend run passed 2,745 tests (12 skipped), with only the
+seven independently reproduced baseline failures recorded above. All 521 JavaScript
+tests passed. Seven built-browser flows passed: attachment and Calendar review at
+1280/390/320 px, plus the real callback popup/CSP with simulated OAuth endpoints.
+Production build and build-consistency checks passed.
+
+Mobile follow-up correction: the expanded Google selector has a viewport-bounded
+scroll area so its next-message consent remains reachable in the fixed composer.
+Calendar browser cases explicitly exercise this after confirmation.

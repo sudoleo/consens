@@ -37,6 +37,7 @@ from app.core.rate_limit import limiter
 from app.api.routers import (
     agent,
     agent_files,
+    agent_google,
     admin,
     api_v1,
     auth,
@@ -283,6 +284,7 @@ async def handle_unexpected_exception(request, exc: Exception):
 for internal_router in (
     agent.router,
     agent_files.router,
+    agent_google.router,
     auth.router,
     users.router,
     bookmarks.router,

@@ -65,7 +65,7 @@ class ToolRegistry:
         # tool is still validated against its own limit below.
         self.argument_limit = max([argument_limit, *(t.argument_limit or 0 for t in tools)])
         self.tools = {tool.name: tool for tool in tools}
-        if len(self.tools) != len(tools) or len(tools) > 16:
+        if len(self.tools) != len(tools) or len(tools) > 20:
             raise ValueError("Invalid tool registry")
         self.schemas = [tool.schema() for tool in tools]
 
