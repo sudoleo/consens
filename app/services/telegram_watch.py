@@ -397,64 +397,28 @@ def _watch_keyboard(watch_id: str, watch: dict) -> dict:
     ]}
 
 
-def _claim_delivery(delivery_id: str, data: dict, db) -> bool:
-    ref = db.collection(DELIVERIES_COLLECTION).document(delivery_id)
+def send_watch_message(chat_id, watch_id: str, kind: str, watch: dict,
+                       result: dict) -> dict:
+    """Send one Watch alert and return Telegram's structured status.
 
-    def claim(transaction):
-        persistence_guard.ensure_account_write_allowed(
-            uid=str(data.get("uid") or ""), db=db, transaction=transaction
-        )
-        snap = ref.get(transaction=transaction)
-        if snap.exists:
-            return False
-        transaction.set(ref, data)
-        return True
-
-    return bool(watch_service._run_transaction(db, claim))
-
-
-def send_watch_notification(watch_id: str, run_id: str, kind: str, watch: dict,
-                            result: dict, *, now=None, db=None) -> bool:
-    db = db if db is not None else db_firestore
-    now = now or utcnow()
-    if not watch.get("telegram_enabled"):
-        return False
-    muted_until = watch.get("telegram_muted_until")
-    if isinstance(muted_until, datetime) and muted_until > now:
-        return False
-    connection_ref = db.collection(CONNECTIONS_COLLECTION).document(watch["owner_uid"])
-    connection_snap = connection_ref.get()
-    connection = connection_snap.to_dict() if connection_snap.exists else None
-    if not connection or not connection.get("enabled") or not connection.get("chat_id"):
-        return False
-    delivery_id = _digest(f"{watch_id}:{run_id}:{kind}")
-    if not _claim_delivery(delivery_id, {
-        "uid": watch["owner_uid"], "watch_id": watch_id, "run_id": run_id,
-        "kind": kind, "status": "sending", "created_at": now,
-    }, db):
-        return False
+    Delivery identity, retries and the unsubscribe/mute/connection checks
+    live in the durable notification outbox (``notification_delivery``);
+    this function is one attempt. ``DELIVERIES_COLLECTION`` only holds legacy
+    markers that the metadata cleanup removes.
+    """
     text = _notification_text(kind, watch, result)
     keyboard = _watch_keyboard(watch_id, watch)
-    result_status = telegram_notifier.send_bot_message(
-        connection["chat_id"], text, reply_markup=keyboard, parse_mode="HTML",
+    status = telegram_notifier.send_bot_message(
+        chat_id, text, reply_markup=keyboard, parse_mode="HTML",
     )
     # A rejected entity must never cost the user the alert itself: resend the
     # same message as plain text if Telegram refuses the markup.
-    if result_status.get("http_status") == 400 or result_status.get("error_code") == 400:
+    if status.get("http_status") == 400 or status.get("error_code") == 400:
         logging.warning("Telegram Watch message rejected as HTML; retrying as plain text")
-        result_status = telegram_notifier.send_bot_message(
-            connection["chat_id"], _strip_markup(text), reply_markup=keyboard,
+        status = telegram_notifier.send_bot_message(
+            chat_id, _strip_markup(text), reply_markup=keyboard,
         )
-    updates = {
-        "status": result_status.get("status") or "failed",
-        "attempted_at": now,
-    }
-    if result_status.get("status") == "sent":
-        updates["sent_at"] = utcnow()
-    db.collection(DELIVERIES_COLLECTION).document(delivery_id).update(updates)
-    if result_status.get("http_status") == 403 or result_status.get("error_code") == 403:
-        connection_ref.update({"enabled": False, "blocked_at": utcnow()})
-    return result_status.get("status") == "sent"
+    return status
 
 
 def send_test(uid: str, db=None) -> dict:

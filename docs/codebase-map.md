@@ -3680,8 +3680,10 @@ wird nur chunkweise bis zum Budget expandiert und DTD/Entities werden abgewiesen
   zusätzlich aus `sitemap-topics.xml`. Historische Query-Ansichten sind
   `noindex`, aber immutable gecacht.
 - Besucher-Follows sind ein eigener Double-Opt-in-Flow in `topic_followers` und
-  teilen keine Dokumente mit `watch_followers`. Minor/Major-Runs versenden bei
-  konfiguriertem SMTP deduplizierte Multipart-Updates; Stable-Runs nicht.
+  teilen keine Dokumente mit `watch_followers`. Minor/Major-Runs legen bei
+  konfiguriertem SMTP je Follower ein Outbox-Item im selben Commit wie den Run an
+  (`notification_outbox`, Retry und Abmeldeprüfung vor jedem Versuch);
+  Stable-Runs nicht. Der Admin-Run verwendet dieselbe Drift-Schwelle wie Watch-Seiten.
   Bestätigungs-/Abmelde-Tokens verwenden den vorhandenen HMAC-Unterbau und
   `WATCH_UNSUBSCRIBE_SECRET`, tragen aber einen eigenen Topic-Token-Typ.
 - Der Topic-Editor liegt als Tab unter `/admin#topics`; `/admin/topics` ist nur
@@ -3820,14 +3822,16 @@ app/services/
   seo_recommendation.py     Deterministische Regeln + optionaler strukturierter Content-Judge
   seo_weekly_review.py      Leased Terra-Portfolio-Review, Gruppen/Entscheidungen + Topic-Brief-Vorschlag
   telegram_notifier.py      Gemeinsamer Bot-API-Client + Best-effort-Statusmeldungen für SEO-Reviews
-  telegram_watch.py         User-Link-Deep-Links/Webhook, Callback-Aktionen + deduplizierte Watch-Zustellung
+  telegram_watch.py         User-Link-Deep-Links/Webhook, Callback-Aktionen + ein Watch-Nachrichtenversuch (send_watch_message)
+  notification_outbox.py     Dauerhafte Benachrichtigungs-Outbox (notification_outbox): stabile Delivery-IDs, Lease, Versuche, Terminalstatus
+  notification_delivery.py   Ein Zustellversuch je Outbox-Item mit Abmelde-/Pause-/Kanalprüfung + Retry-Pass run_outbox_tick
   share_snapshots.py         Snapshot-Lifecycle (pending→share), Quoten, Cleanups, Sitemap-Quellen
   favicons.py                Begrenzter Favicon-Fetch, Singleflight, LRU-/Negativcache
-  retention_maintenance.py   Periodischer Pending-/Revoked-Share-Cleanup
+  retention_maintenance.py   Periodischer Pending-/Revoked-Share-Cleanup + Outbox-Retention (30 Tage, nur Terminalstatus)
   watch_service.py           Watch-CRUD, Tier-/Intervall-/Conditionregeln, Share-Sichtbarkeit, Unsubscribe-Tokens
   opinion_map.py             Datenminimierte, mehrdimensionale Provider-Positionen + Direction-Shift-Berechnung
   watch_brief.py             Morning-Brief-Settings (watch_briefs), transaktionaler Claim, Digest-Aggregation, Brief-Unsubscribe-Tokens
-  watch_scheduler.py         Global-Lease, Tagesbudget, Pipeline-Adapter + run_brief_tick (Morning-Brief-Versand)
+  watch_scheduler.py         Owner-gebundener Global-Lease, Tagesbudget, Pipeline-Adapter, run_brief_tick + Outbox-Retry-Pass
   mailer.py                  Multipart-HTML/Plaintext-SMTP-Versand via Thread-Executor
   public_markdown.py         Server-Markdown-Rendering für Share-Seiten
   topics.py                  Kuratierte Topic-Konfiguration, immutable Runs, Public-Discovery und eigene Follower/Dedupe-Daten
@@ -4208,6 +4212,21 @@ CLI mit `firebase deploy --only firestore:rules,firestore:indexes`):
   wird beim Lesen sequenziell gegen den realen Vorgänger neu bewertet.
 - `watch_runtime` — globaler Worker-Lease und datumsgebundener Tageszähler;
   verhindert parallele Scheduler-Worker und begrenzt Watch-Versuche restartfest.
+  `global_worker` trägt `claimed_until`, `owner` (zufälliges Token je Tick) und
+  `acquired_at`; nur der Eigentümer darf erneuern oder freigeben (R30).
+- `notification_outbox/{sha256(kind,resource,run,channel,recipient)}` — dauerhafte
+  Benachrichtigungsaufträge für Watch-Owner (Mail/Telegram, inkl. Pause nach drei
+  Fehlern), Watch-Seiten-Follower, Topic-Follower und Morning Brief. Felder:
+  `kind`, `channel`, `uid` (Owner, leer bei Topic), `resource_id`, `run_id`,
+  `recipient_id` (UID oder Follower-Dokument-ID, keine E-Mail), `payload` (nur
+  Frage, Scores, Change-Summary, Richtung; kein Consensus-Volltext),
+  `status=pending|sent|skipped|failed`, `attempts`, `next_attempt_at` (zugleich
+  Lease-Ende), `lease_owner`, `deliver_until`, `last_error` (Kategorie).
+  Composite-Index `(status, next_attempt_at)` in `firestore.indexes.json`,
+  `payload` ist vom Einzelfeldindex ausgenommen. Terminale Items löscht die
+  Retention nach 30 Tagen; Kontolöschung entfernt alle Items der UID. Die alten
+  Marker in `telegram_watch_deliveries` und `topic_follower_deliveries` werden
+  vom Versandpfad nicht mehr geschrieben und laufen über die bestehenden Cleanups aus.
 - `watch_briefs/{uid}` — user-level Morning-Brief-Einstellungen (`enabled`,
   `send_time` `HH:MM`, IANA-`timezone`, `mode` = `always|changes_only`,
   `next_send_at`, `last_evaluated_at`, `last_sent_at`, `enabled_at`). Reine
@@ -4278,7 +4297,8 @@ CLI mit `firebase deploy --only firestore:rules,firestore:indexes`):
 
 Die drei Scheduler lesen Fälligkeit index-first statt über Collection-Scans:
 `watches(status,next_run_at)`, `topics(status,next_run_at)` und
-`watch_briefs(enabled,next_send_at)`, jeweils sortiert und mit hartem `limit`.
+`watch_briefs(enabled,next_send_at)`, jeweils sortiert und mit hartem `limit`;
+der Outbox-Retry-Pass liest `notification_outbox(status,next_attempt_at)`.
 Die benötigten Composite-Indizes stehen in `firestore.indexes.json`. Listen von
 Watches lesen Shares gesammelt per `get_all`; die kompakte Dashboard-History
 kommt aus `watches.history_points`. Kann die Detail-History nicht geladen
@@ -4676,11 +4696,23 @@ Historien-Scans gelesen.
 **Consensus Watch** läuft als eigener asyncio-Lifespan-Task alle 30 Minuten.
 Firestore-Transaktionen claimen einen globalen Worker-Lease, den einzelnen
 Watch-Lease und das globale Tagesbudget; innerhalb eines Workers laufen Watches
-strikt sequenziell. Jeder Einzel-Claim verwendet den dann aktuellen Zeitpunkt
+strikt sequenziell. Der globale Lease trägt ein Owner-Token: der Tick erneuert
+ihn per Heartbeat, bricht bei Verlust vor dem nächsten Watch ab und gibt ihn nur
+frei, solange er noch Eigentümer ist; ein abgelaufener alter Worker kann den
+Lease eines Nachfolgers damit weder freigeben noch verlängern (R30). Jeder Einzel-Claim verwendet den dann aktuellen Zeitpunkt
 (nicht den Tick-Start), erneuert seine 15-Minuten-Lease während langer Läufe
 alle fünf Minuten und fenced Completion wie Fehlerabschluss über
 `current_run_id`. History, Watch-Pointer und Share-Pointer committen gemeinsam;
-ein alter Worker kann einen neueren Claim weder leeren noch pausieren. Die Reruns ermitteln den aktuellen Pro-Status des Eigentümers und
+ein alter Worker kann einen neueren Claim weder leeren noch pausieren. Jede
+Änderung über `update_watch`/Admin-Status/Unsubscribe erhöht
+`config_generation`; ein echter Statuswechsel (Pause, Resume) entzieht
+zusätzlich den laufenden Claim (`current_run_id=None`). Ein alter Lauf kann einen
+pausierten Watch daher weder reaktivieren noch den Aktivzähler verfälschen, und
+Resume startet keinen zweiten Worker für denselben Claim. Zeitplanänderungen
+während eines Laufs bleiben erhalten: Abschluss und Fehler übernehmen dann das
+bereits neu berechnete `next_run_at`; Alert-Regel, Kanäle und Condition werden
+beim Commit aus dem aktuellen Dokument gelesen, eine während des Laufs geänderte
+Condition wird weder alarmiert noch als Status gespeichert (R16). Die Reruns ermitteln den aktuellen Pro-Status des Eigentümers und
 nutzen das entsprechende `WATCH_MODELS_BY_TIER`-Mapping aus Firestore `watch_models`;
 je konfiguriertem Provider läuft genau ein Modell (mindestens zwei), deren Antwort-Calls
 laufen innerhalb des einzelnen Watch-Runs parallel. Ein fehlender Server-Key ist
@@ -4781,19 +4813,35 @@ konfiguriert im Watch-Dashboard (`/api/my/watch-brief`), gespeichert in
 `watch_briefs/{uid}`; Aktivierung setzt mindestens eine vorhandene Watch voraus.
 Der 30-Minuten-Loop ruft nach `run_watch_tick` ein
 `run_brief_tick` auf: fällige Briefs werden über den Composite-Index begrenzt
-gelesen und transaktional geclaimt (Zeitplan rückt VOR dem Versand vor —
-at-most-once, nie doppelt), dann wird der Digest
+gelesen und transaktional geclaimt (Zeitplan rückt vor und das Outbox-Item
+entsteht im selben Commit, siehe Zustellgarantie unten), dann wird der Digest
 aus `list_watches(include_history=True)` aggregiert (Score/Delta, notable
 Changes seit dem letzten Brief = `trigger == "changed"` aus `drift_signal`) und als
 Multipart-Mail versendet. Modus `changes_only` überspringt Briefs ohne notable
 Changes. Kein LLM-Call, kein Watch-Lease nötig; unverifizierte E-Mail-Adressen
 werden übersprungen. `/watch/brief/unsubscribe` (eigener HMAC-Token-Typ,
 gleicher `WATCH_UNSUBSCRIBE_SECRET`) deaktiviert nur den Brief.
-**Bewusste Zustellgarantie (Phase 5):** Morning Brief bleibt at-most-once. Ein
-Prozessabbruch nach dem Claim kann daher einen einzelnen Brief auslassen; dafür
-gibt es bei SMTP-Timeouts/Worker-Restarts garantiert keinen Doppelversand. Ein
-Wechsel zu at-least-once würde eine persistente Outbox plus idempotente
-Provider-Zustellung benötigen und ist eine eigene Produkt-/Architekturentscheidung.
+**Zustellgarantie (R17, Produktentscheidung 2026-09):** alle Benachrichtigungen
+laufen über die dauerhafte Outbox `notification_outbox` (at-least-once mit
+stabiler Delivery-ID, **kein** exactly-once). Watch-Ergebnis und Pause nach drei
+Fehlern schreiben ihre Items in derselben Transaktion wie Ergebnis bzw.
+Fehlerstatus; der Brief-Claim rückt den Zeitplan vor und legt sein Item in
+derselben Transaktion an; Topic-Runs legen Follower-Items im Run-Commit an.
+Direkt danach folgt ein erster Zustellversuch; jeder 30-Minuten-Tick ruft
+anschließend `run_notification_outbox_tick` für alle fälligen Items auf (neu,
+nach Absturz mitten im Versuch nach Ablauf des 10-Minuten-Leases, oder im
+Backoff 15 min … 6 h). Vor **jedem** Versuch prüft `notification_delivery`
+den aktuellen Zustand: Watch aktiv/nicht gelöscht, Kanal an, Telegram nicht
+stummgeschaltet und verbunden, Follower noch vorhanden, Brief noch aktiv,
+Konto nicht in Löschung, E-Mail verifiziert; sonst wird das Item `skipped`.
+Ein Kanal- oder Empfängerfehler blockiert andere Items nicht. Nach acht
+Versuchen oder nach `deliver_until` (3 Tage, Brief 12 Stunden) wird es
+`failed` und erscheint in `/health/metrics` unter `notification:<kind>` als
+Failure. Retries lesen nur Payload und immutable Watch-Version; sie starten nie
+eine neue LLM-Pipeline. Grenze: SMTP-Annahme ist keine Postfachzustellung, und
+ein Absturz nach Provider-Annahme, aber vor dem Statuscommit, erzeugt ein
+Duplikat. `last_condition_status=met` wird jetzt mit dem Ergebnis committet,
+weil der Alarm im selben Commit dauerhaft eingeplant ist.
 Im Admin-Dashboard kann eine aktive Watch fällig gestellt und der In-Process-Scheduler
 sofort aufgeweckt werden; der HTTP-Request wartet nicht auf die Modellaufrufe.
 Der manuelle Lauf verbraucht reale Modellaufrufe, schreibt reguläre History, rückt den Zeitplan vor

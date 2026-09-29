@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import os
 import unittest
 from types import SimpleNamespace
@@ -1535,84 +1536,110 @@ class SchedulerLoopTests(unittest.IsolatedAsyncioTestCase):
         with (
             patch.object(watch_scheduler, "run_watch_tick", side_effect=tick),
             patch.object(watch_scheduler, "run_brief_tick", new_callable=AsyncMock, return_value=0),
+            patch.object(
+                watch_scheduler, "run_notification_outbox_tick",
+                new_callable=AsyncMock, return_value={},
+            ),
         ):
             with self.assertRaises(asyncio.CancelledError):
                 await watch_scheduler.watch_scheduler_loop()
         self.assertEqual(calls, 2)
 
-    async def test_every_run_mail_targets_verified_watch_owner(self):
-        watch = {
-            "owner_uid": "u1", "share_id": "A" * 16, "share_slug": "question",
-            "visibility": "public", "question": "Q",
-        }
-        result = {
-            "consensus": "New consensus", "agreement_score": 72,
-            "changed": False, "severity": "minor", "change_summary": "",
-        }
-        user = SimpleNamespace(email="owner@example.test", email_verified=True)
-        with (
-            patch.object(watch_scheduler.mailer, "is_configured", return_value=True),
-            patch.object(watch_scheduler.auth, "get_user", return_value=user),
-            patch.object(watch_service, "make_unsubscribe_token", return_value="token"),
-            patch.object(watch_scheduler.mailer, "send_message", new_callable=AsyncMock, return_value=True) as send,
-        ):
-            await watch_scheduler._send_run_mail("w1", watch, result)
-        message = send.await_args.args[0]
-        self.assertEqual(message["To"], "owner@example.test")
-        self.assertIn("New consensus", message.as_string())
-
-    async def test_pause_mail_emitted_exactly_on_third_failure(self):
-        claimed = {
-            "owner_uid": "u1", "share_id": "A" * 16, "share_slug": "q",
-            "question": "Q", "interval": "weekly", "consecutive_failures": 0,
-        }
-        with (
-            patch.object(watch_service, "acquire_worker_lease", return_value=True),
-            patch.object(watch_service, "release_worker_lease"),
+    def _tick_patches(self, claimed, result=None, *, execute=None, db=None):
+        """Common patches for one scheduler tick against a FakeDb outbox."""
+        share_data = {"status": "active", "slug": "q", "question": "Q", "consensus_md": "Old"}
+        patches = [
+            patch.object(watch_service, "acquire_worker_lease", return_value="owner-token"),
+            patch.object(watch_service, "release_worker_lease", return_value=True),
             patch.object(watch_service, "list_due_watch_ids", return_value=["w1"]),
             patch.object(watch_service, "claim_watch", return_value=(claimed, "claimed")),
             patch.object(watch_scheduler.security, "get_user_tier", return_value="free"),
-            patch.object(watch_scheduler.share_snapshots, "get_share", return_value={
-                "status": "active", "slug": "q", "question": "Q", "consensus_md": "Old",
-            }),
+            patch.object(watch_scheduler.share_snapshots, "get_share", return_value=share_data),
             patch.object(watch_scheduler.share_snapshots, "list_watch_history", return_value=[]),
-            patch.object(watch_scheduler, "execute_watch", side_effect=RuntimeError("provider failed")),
-            patch.object(watch_service, "fail_watch_run", side_effect=[False, False, True]),
-            patch.object(watch_scheduler, "_send_paused_mail", new_callable=AsyncMock) as send_paused,
-        ):
-            await watch_scheduler.run_watch_tick()
-            await watch_scheduler.run_watch_tick()
-            await watch_scheduler.run_watch_tick()
-        send_paused.assert_awaited_once_with("w1", claimed)
+            patch.object(watch_scheduler.mailer, "is_configured", return_value=True),
+            patch.object(
+                watch_scheduler.notification_delivery, "deliver_many",
+                new_callable=AsyncMock, return_value={},
+            ),
+        ]
+        if execute is not None:
+            patches.append(patch.object(watch_scheduler, "execute_watch", side_effect=execute))
+        else:
+            patches.append(patch.object(watch_scheduler, "execute_watch", return_value=result))
+        return patches
 
-    async def test_every_run_mode_sends_full_result_mail_without_change(self):
-        claimed = {
-            "owner_uid": "u1", "share_id": "A" * 16, "interval": "weekly",
-            "email_mode": "every_run", "last_agreement_score": 60,
+    async def test_pause_notification_is_queued_exactly_on_third_failure(self):
+        db = FakeDb()
+        db.stores["watches"]["w1"] = {
+            "owner_uid": "u1", "share_id": "A" * 16, "status": "active",
+            "interval": "weekly", "consecutive_failures": 0,
+            "current_run_id": "run-1", "email_enabled": True,
         }
+        queued = []
+        for attempt in range(3):
+            claimed = {**db.stores["watches"]["w1"], "current_run_id": f"run-{attempt}"}
+            db.stores["watches"]["w1"]["current_run_id"] = f"run-{attempt}"
+            real_fail = watch_service.fail_watch_run
+            with contextlib.ExitStack() as stack:
+                for item in self._tick_patches(
+                    claimed, execute=RuntimeError("provider failed"),
+                ):
+                    stack.enter_context(item)
+                stack.enter_context(patch.object(
+                    watch_service, "fail_watch_run",
+                    side_effect=lambda wid, c, **kw: real_fail(wid, c, db=db, **kw),
+                ))
+                await watch_scheduler.run_watch_tick()
+            queued.append(len(db.stores["notification_outbox"]))
+        self.assertEqual(queued, [0, 0, 1])
+        item = next(iter(db.stores["notification_outbox"].values()))
+        self.assertEqual(item["kind"], "watch_paused")
+        self.assertEqual(item["status"], "pending")
+        self.assertEqual(db.stores["watches"]["w1"]["status"], "paused_error")
+
+    async def test_successful_run_commits_result_and_outbox_items_together(self):
+        db = FakeDb()
+        share_id = "A" * 16
+        db.stores["shares"][share_id] = share()
+        db.stores["watches"]["w1"] = {
+            "owner_uid": "u1", "share_id": share_id, "status": "active",
+            "interval": "weekly", "email_mode": "every_run", "email_enabled": True,
+            "telegram_enabled": True, "last_agreement_score": 60,
+            "current_run_id": "run1",
+        }
+        claimed = dict(db.stores["watches"]["w1"])
         result = {
             "consensus": "New consensus content", "agreement_score": 61,
             "changed": False, "severity": "minor", "change_summary": "",
         }
-        share_data = {"status": "active", "slug": "q", "question": "Q", "consensus_md": "Old"}
-        with (
-            patch.object(watch_service, "acquire_worker_lease", return_value=True),
-            patch.object(watch_service, "release_worker_lease"),
-            patch.object(watch_service, "list_due_watch_ids", return_value=["w1"]),
-            patch.object(watch_service, "claim_watch", return_value=(claimed, "claimed")),
-            patch.object(watch_scheduler.security, "get_user_tier", return_value="pro") as pro_check,
-            patch.object(watch_scheduler.share_snapshots, "get_share", return_value=share_data),
-            patch.object(watch_scheduler.share_snapshots, "list_watch_history", return_value=[]),
-            patch.object(watch_scheduler, "execute_watch", return_value=result),
-            patch.object(watch_service, "complete_watch_run"),
-            patch.object(watch_scheduler, "_send_run_mail", new_callable=AsyncMock) as send_run,
-            patch.object(watch_scheduler, "_send_change_mail", new_callable=AsyncMock) as send_change,
-        ):
+        real_complete = watch_service.complete_watch_run
+        with contextlib.ExitStack() as stack:
+            for item in self._tick_patches(claimed, result):
+                stack.enter_context(item)
+            stack.enter_context(patch.object(
+                watch_service, "complete_watch_run",
+                side_effect=lambda wid, c, r, **kw: real_complete(wid, c, r, db=db, **kw),
+            ))
+            stack.enter_context(patch.object(watch_service.share_snapshots, "invalidate_share_cache"))
+            stack.enter_context(patch.object(
+                watch_scheduler.watch_followers, "list_followers", return_value=[],
+            ))
             completed = await watch_scheduler.run_watch_tick()
+            deliver_many = watch_scheduler.notification_delivery.deliver_many
+            staged_ids = deliver_many.await_args.args[0]
         self.assertEqual(completed, 1)
-        pro_check.assert_called_once_with("u1")
-        send_run.assert_awaited_once_with("w1", claimed, result)
-        send_change.assert_not_awaited()
+        items = db.stores["notification_outbox"]
+        self.assertEqual(set(staged_ids), set(items))
+        self.assertEqual(
+            sorted(item["channel"] for item in items.values()), ["email", "telegram"],
+        )
+        for item in items.values():
+            self.assertEqual(item["kind"], "watch_alert")
+            self.assertEqual(item["payload"]["alert"], "every_run")
+            self.assertEqual(item["run_id"], "run1")
+            # Consensus text is read from the immutable version at send time.
+            self.assertNotIn("consensus", item["payload"])
+        self.assertIn("run1", db.stores[f"shares/{share_id}/watch_history"])
 
     async def test_telegram_only_watch_reuses_notification_rule_without_mail(self):
         claimed = {
@@ -1625,25 +1652,24 @@ class SchedulerLoopTests(unittest.IsolatedAsyncioTestCase):
             "consensus": "New consensus", "agreement_score": 30,
             "changed": True, "severity": "major", "change_summary": "Conclusion changed.",
         }
-        share_data = {"status": "active", "slug": "q", "question": "Q", "consensus_md": "Old"}
-        with (
-            patch.object(watch_service, "acquire_worker_lease", return_value=True),
-            patch.object(watch_service, "release_worker_lease"),
-            patch.object(watch_service, "list_due_watch_ids", return_value=["w1"]),
-            patch.object(watch_service, "claim_watch", return_value=(claimed, "claimed")),
-            patch.object(watch_scheduler.security, "get_user_tier", return_value="free"),
-            patch.object(watch_scheduler.share_snapshots, "get_share", return_value=share_data),
-            patch.object(watch_scheduler.share_snapshots, "list_watch_history", return_value=[]),
-            patch.object(watch_scheduler, "execute_watch", return_value=result),
-            patch.object(watch_service, "complete_watch_run"),
-            patch.object(watch_scheduler, "_send_change_mail", new_callable=AsyncMock) as send_mail,
-            patch.object(watch_scheduler.telegram_watch, "send_watch_notification", return_value=True) as send_telegram,
-        ):
+        captured = {}
+
+        def complete(wid, c, r, **kwargs):
+            captured["items"] = kwargs["notifications"](dict(c))
+            return {}
+
+        with contextlib.ExitStack() as stack:
+            for item in self._tick_patches(claimed, result):
+                stack.enter_context(item)
+            stack.enter_context(
+                patch.object(watch_service, "complete_watch_run", side_effect=complete)
+            )
             completed = await watch_scheduler.run_watch_tick()
         self.assertEqual(completed, 1)
-        send_mail.assert_not_awaited()
-        send_telegram.assert_called_once_with(
-            "w1", "run1", "change", claimed, result,
+        self.assertEqual(
+            [(item["data"]["channel"], item["data"]["payload"]["alert"])
+             for item in captured["items"]],
+            [("telegram", "change")],
         )
 
     async def test_each_watch_run_uses_the_owners_current_tier(self):
@@ -1762,13 +1788,6 @@ class TelegramWatchTests(unittest.TestCase):
         self.assertEqual(self.db.stores[telegram_watch.CONNECTIONS_COLLECTION], {})
         self.assertEqual(self.db.stores[telegram_watch.CHATS_COLLECTION], {})
 
-        with self.assertRaises(persistence_guard.AccountDeletionInProgress):
-            telegram_watch._claim_delivery(
-                "delivery-1",
-                {"uid": "u1", "watch_id": "w1", "status": "sending"},
-                self.db,
-            )
-        self.assertEqual(self.db.stores[telegram_watch.DELIVERIES_COLLECTION], {})
 
     def test_startup_registers_secret_header_webhook(self):
         with patch.object(
@@ -1782,10 +1801,7 @@ class TelegramWatchTests(unittest.TestCase):
         self.assertEqual(payload["url"], "https://www.consens.io/api/telegram/webhook")
         self.assertEqual(payload["secret_token"], "test-webhook-secret")
 
-    def test_watch_delivery_is_deduplicated_and_contains_actions(self):
-        self.db.stores[telegram_watch.CONNECTIONS_COLLECTION]["u1"] = {
-            "uid": "u1", "chat_id": "123", "telegram_user_id": "123", "enabled": True,
-        }
+    def test_watch_message_contains_actions(self):
         watch = {
             "owner_uid": "u1", "share_id": "A" * 16, "share_slug": "question",
             "visibility": "public", "question": "Will this change?",
@@ -1796,18 +1812,13 @@ class TelegramWatchTests(unittest.TestCase):
             telegram_watch.telegram_notifier, "send_bot_message",
             return_value={"status": "sent"},
         ) as send:
-            self.assertTrue(telegram_watch.send_watch_notification(
-                "w1", "run1", "change", watch, result, now=self.now, db=self.db,
-            ))
-            self.assertFalse(telegram_watch.send_watch_notification(
-                "w1", "run1", "change", watch, result, now=self.now, db=self.db,
-            ))
+            status = telegram_watch.send_watch_message("123", "w1", "change", watch, result)
+        self.assertEqual(status["status"], "sent")
         send.assert_called_once()
         markup = send.call_args.kwargs["reply_markup"]
         callbacks = [button.get("callback_data") for row in markup["inline_keyboard"] for button in row]
         self.assertIn("wm:w1", callbacks)
         self.assertIn("wp:w1", callbacks)
-        self.assertEqual(len(self.db.stores[telegram_watch.DELIVERIES_COLLECTION]), 1)
 
     def test_notification_text_leads_with_the_change_and_folds_the_question(self):
         """Telegram bekommt dieselbe Reihenfolge wie die Mail; die lange Frage
@@ -1848,9 +1859,10 @@ class TelegramWatchTests(unittest.TestCase):
             telegram_watch.telegram_notifier, "send_bot_message",
             side_effect=[{"status": "failed_http", "http_status": 400}, {"status": "sent"}],
         ) as send:
-            self.assertTrue(telegram_watch.send_watch_notification(
-                "w1", "run1", "change", watch, result, now=self.now, db=self.db,
-            ))
+            self.assertEqual(
+                telegram_watch.send_watch_message("123", "w1", "change", watch, result)["status"],
+                "sent",
+            )
         self.assertEqual(send.call_count, 2)
         self.assertEqual(send.call_args_list[0].kwargs.get("parse_mode"), "HTML")
         retry_text = send.call_args_list[1].args[1]
@@ -2236,6 +2248,18 @@ class BriefClaimTests(unittest.TestCase):
         self.assertEqual(self.store["u1"]["last_evaluated_at"], self.now)
         self.assertIsNone(watch_brief._claim_in_transaction(FakeTransaction(), self.ref, self.now))
 
+    def test_claim_stages_one_outbox_item_in_the_same_transaction(self):
+        db = FakeDb()
+        db.stores["watch_briefs"]["u1"] = dict(self.store["u1"])
+        claimed = watch_brief.claim_brief("u1", now=self.now, db=db)
+        self.assertIn(claimed["outbox_id"], db.stores["notification_outbox"])
+        item = db.stores["notification_outbox"][claimed["outbox_id"]]
+        self.assertEqual(item["kind"], "watch_brief")
+        self.assertEqual(item["payload"]["baseline"], self.now - timedelta(days=3))
+        # A second claim in the same slot is refused: no duplicate item.
+        self.assertIsNone(watch_brief.claim_brief("u1", now=self.now, db=db))
+        self.assertEqual(len(db.stores["notification_outbox"]), 1)
+
     def test_disabled_or_not_due_is_not_claimed(self):
         self.store["u1"]["enabled"] = False
         self.assertIsNone(watch_brief._claim_in_transaction(FakeTransaction(), self.ref, self.now))
@@ -2356,65 +2380,35 @@ class BriefTokenTests(unittest.TestCase):
 
 
 class BriefTickTests(unittest.IsolatedAsyncioTestCase):
-    def _claimed(self, mode="always"):
-        return {
-            "enabled": True, "send_time": "07:00", "timezone": "Europe/Berlin",
-            "mode": mode, "baseline": datetime(2026, 7, 12, 5, tzinfo=timezone.utc),
-        }
-
-    async def test_due_brief_is_sent_and_marked(self):
-        user = SimpleNamespace(email="owner@example.test", email_verified=True)
-        items = [{"question": "Q", "share_path": "/s/q-a", "status": "active",
-                  "interval": "weekly", "run_time": "", "timezone": "",
-                  "score": 70, "previous_score": None, "new_points": [],
-                  "next_run_at": "", "last_run_at": ""}]
+    async def test_due_brief_is_claimed_and_delivered_through_the_outbox(self):
         with (
             patch.object(watch_scheduler.mailer, "is_configured", return_value=True),
             patch.object(watch_scheduler.watch_brief, "list_due_brief_uids", return_value=["u1"]),
-            patch.object(watch_scheduler.watch_brief, "claim_brief", return_value=self._claimed()),
-            patch.object(watch_scheduler.auth, "get_user", return_value=user),
-            patch.object(watch_scheduler.watch_brief, "collect_brief_items", return_value=(items, 0)),
-            patch.object(watch_scheduler.watch_brief, "make_brief_unsubscribe_token", return_value="token"),
-            patch.object(watch_scheduler.mailer, "send_message", new_callable=AsyncMock, return_value=True) as send,
-            patch.object(watch_scheduler.watch_brief, "mark_brief_sent") as mark,
+            patch.object(
+                watch_scheduler.watch_brief, "claim_brief",
+                return_value={"outbox_id": "brief-item"},
+            ),
+            patch.object(
+                watch_scheduler.notification_delivery, "deliver",
+                new_callable=AsyncMock, return_value="sent",
+            ) as deliver,
         ):
             sent = await watch_scheduler.run_brief_tick()
         self.assertEqual(sent, 1)
-        send.assert_awaited_once()
-        mark.assert_called_once()
-        message = send.await_args.args[0]
-        self.assertEqual(message["To"], "owner@example.test")
+        deliver.assert_awaited_once_with("brief-item")
 
-    async def test_changes_only_brief_is_skipped_without_changes(self):
-        user = SimpleNamespace(email="owner@example.test", email_verified=True)
-        items = [{"question": "Q", "share_path": "/s/q-a", "status": "active",
-                  "interval": "weekly", "run_time": "", "timezone": "",
-                  "score": 70, "previous_score": None, "new_points": [],
-                  "next_run_at": "", "last_run_at": ""}]
+    async def test_unclaimed_brief_is_not_delivered(self):
         with (
             patch.object(watch_scheduler.mailer, "is_configured", return_value=True),
             patch.object(watch_scheduler.watch_brief, "list_due_brief_uids", return_value=["u1"]),
-            patch.object(watch_scheduler.watch_brief, "claim_brief", return_value=self._claimed("changes_only")),
-            patch.object(watch_scheduler.auth, "get_user", return_value=user),
-            patch.object(watch_scheduler.watch_brief, "collect_brief_items", return_value=(items, 0)),
-            patch.object(watch_scheduler.mailer, "send_message", new_callable=AsyncMock) as send,
+            patch.object(watch_scheduler.watch_brief, "claim_brief", return_value=None),
+            patch.object(
+                watch_scheduler.notification_delivery, "deliver", new_callable=AsyncMock,
+            ) as deliver,
         ):
             sent = await watch_scheduler.run_brief_tick()
         self.assertEqual(sent, 0)
-        send.assert_not_awaited()
-
-    async def test_unverified_owner_never_receives_a_brief(self):
-        user = SimpleNamespace(email="owner@example.test", email_verified=False)
-        with (
-            patch.object(watch_scheduler.mailer, "is_configured", return_value=True),
-            patch.object(watch_scheduler.watch_brief, "list_due_brief_uids", return_value=["u1"]),
-            patch.object(watch_scheduler.watch_brief, "claim_brief", return_value=self._claimed()),
-            patch.object(watch_scheduler.auth, "get_user", return_value=user),
-            patch.object(watch_scheduler.mailer, "send_message", new_callable=AsyncMock) as send,
-        ):
-            sent = await watch_scheduler.run_brief_tick()
-        self.assertEqual(sent, 0)
-        send.assert_not_awaited()
+        deliver.assert_not_awaited()
 
 
 class WatchRouteTests(unittest.TestCase):
@@ -2703,7 +2697,7 @@ class FollowerTests(unittest.TestCase):
         self.assertEqual(watch_followers.delete_followers_for_share(self.share_id, db=self.db), 2)
         self.assertEqual(watch_followers.list_followers(self.share_id, db=self.db), [])
 
-    def test_follower_mails_only_on_material_change(self):
+    def test_follower_items_only_on_material_change(self):
         pending = watch_followers.request_follow(
             self.share_id, "a@example.com", db=self.db
         )
@@ -2711,34 +2705,38 @@ class FollowerTests(unittest.TestCase):
         watch = {
             "share_id": self.share_id, "share_slug": "follow-me",
             "visibility": "public", "question": "Q",
-            "last_agreement_score": 60,
+            "last_agreement_score": 60, "current_run_id": "run1",
+            "owner_uid": "u1",
         }
         original_list_followers = watch_followers.list_followers
         list_patch = patch.object(
             watch_scheduler.watch_followers, "list_followers",
             side_effect=lambda sid: original_list_followers(sid, db=self.db),
         )
-        with patch.object(watch_scheduler.mailer, "is_configured", return_value=True), \
-                patch.object(watch_scheduler.mailer, "send_message", new_callable=AsyncMock, return_value=True) as send, \
-                list_patch:
-            sent = asyncio.run(watch_scheduler._send_follower_mails(
-                "w1", watch, {"agreement_score": 30, "changed": True, "severity": "major", "change_summary": "Flip."},
-            ))
-            self.assertEqual(sent, 1)
-            send.assert_awaited_once()
-            send.reset_mock()
-            # Kleine Bewegung ohne materiellen Change: keine Mail.
-            sent = asyncio.run(watch_scheduler._send_follower_mails(
-                "w1", watch, {"agreement_score": 62, "changed": False, "severity": "minor"},
-            ))
-            self.assertEqual(sent, 0)
-            send.assert_not_awaited()
+        now = datetime(2026, 7, 18, tzinfo=timezone.utc)
+        material = {"agreement_score": 30, "changed": True, "severity": "major", "change_summary": "Flip."}
+        with list_patch:
+            ids = asyncio.run(watch_scheduler._follower_ids(watch, material, True))
+            self.assertEqual(len(ids), 1)
+            items = watch_scheduler.run_notification_builder(
+                "w1", material, ids, now=now, mail_ready=True,
+            )(watch)
+            followers = [item for item in items if item["data"]["kind"] == "watch_follower"]
+            self.assertEqual(len(followers), 1)
+            # Kleine Bewegung ohne materiellen Change: kein Follower-Auftrag.
+            small = {"agreement_score": 62, "changed": False, "severity": "minor"}
+            self.assertEqual(asyncio.run(watch_scheduler._follower_ids(watch, small, True)), [])
             # Private Seiten benachrichtigen nie Follower.
-            sent = asyncio.run(watch_scheduler._send_follower_mails(
-                "w1", dict(watch, visibility="private"),
-                {"agreement_score": 5, "changed": True, "severity": "major"},
-            ))
-            self.assertEqual(sent, 0)
+            self.assertEqual(asyncio.run(watch_scheduler._follower_ids(
+                dict(watch, visibility="private"), material, True,
+            )), [])
+            self.assertEqual(
+                [item for item in watch_scheduler.run_notification_builder(
+                    "w1", material, ids, now=now, mail_ready=True,
+                )(dict(watch, visibility="private"))
+                 if item["data"]["kind"] == "watch_follower"],
+                [],
+            )
 
     def test_cleanup_or_removed_watch_invalidates_outstanding_confirm_link(self):
         email = "cleanup@example.com"

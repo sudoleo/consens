@@ -17,7 +17,7 @@ from zoneinfo import ZoneInfo
 from google.cloud.firestore_v1.base_query import FieldFilter
 
 from app.core.security import db_firestore
-from app.services import drift_signal, persistence_guard, watch_service
+from app.services import drift_signal, notification_outbox, persistence_guard, watch_service
 from app.services.watch_service import WatchError
 
 
@@ -192,8 +192,13 @@ def list_due_brief_uids(*, now=None, db=None, max_items=200) -> list[str]:
     return [doc.id for doc in query.stream()]
 
 
-def _claim_in_transaction(tx, ref, now: datetime):
-    """Advance the schedule atomically BEFORE sending: at-most-once delivery."""
+def _claim_in_transaction(tx, ref, now: datetime, db=None):
+    """Advance the schedule and stage the Brief's durable outbox item.
+
+    Both writes commit together, so a crash after the claim no longer skips
+    the digest: the outbox retries it (at-least-once, deduplicated by the
+    scheduled slot). Without ``db`` only the schedule advances (legacy use).
+    """
     snap = ref.get(transaction=tx)
     data = snap.to_dict() if snap.exists else None
     if not data or not data.get("enabled"):
@@ -214,22 +219,24 @@ def _claim_in_transaction(tx, ref, now: datetime):
     baseline = data.get("last_evaluated_at") or data.get("enabled_at")
     claimed = dict(data)
     claimed["baseline"] = baseline if isinstance(baseline, datetime) else now - FIRST_BRIEF_WINDOW
+    if db is not None:
+        item = notification_outbox.brief_item(
+            ref.id, scheduled_at=next_send, baseline=claimed["baseline"],
+            mode=str(data.get("mode") or "always"),
+            timezone_name=str(data.get("timezone") or "UTC"), now=now,
+        )
+        notification_outbox.stage(tx, db, item)
+        claimed["outbox_id"] = item["id"]
     return claimed
 
 
 def claim_brief(uid: str, *, now=None, db=None):
-    from firebase_admin import firestore
-
     db = db if db is not None else db_firestore
     now = now or utcnow()
     ref = db.collection(BRIEFS_COLLECTION).document(uid)
-    tx = db.transaction()
-
-    @firestore.transactional
-    def consume(transaction):
-        return _claim_in_transaction(transaction, ref, now)
-
-    return consume(tx)
+    return watch_service._run_transaction(
+        db, lambda transaction: _claim_in_transaction(transaction, ref, now, db)
+    )
 
 
 def mark_brief_sent(uid: str, *, now=None, db=None):

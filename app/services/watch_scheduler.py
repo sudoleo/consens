@@ -5,20 +5,16 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
-
-from firebase_admin import auth
 
 import app.core.config as cfg
 from app.core import security
 from app.core.background_tasks import task_succeeded
 from app.core.entitlements import TIER_FREE
 from app.core.observability import correlation_scope, record_metric, safe_exception
-from app.core.site import SITE_URL
 from app.services.consensus_pipeline import run_consensus_pipeline
 from app.services import (
-    drift_signal, mailer, opinion_map, share_snapshots, telegram_watch,
-    watch_brief, watch_followers, watch_service,
+    drift_signal, mailer, notification_delivery, notification_outbox, opinion_map,
+    share_snapshots, watch_brief, watch_followers, watch_service,
 )
 from app.services.llm import provider_transport
 from app.services.llm.consensus_engine import (
@@ -31,6 +27,9 @@ from app.services.llm.mock_llm import mock_llm_enabled
 
 TICK_SECONDS = 30 * 60
 WATCH_LEASE_HEARTBEAT_SECONDS = 5 * 60
+# The global worker lease lasts WORKER_LEASE_MINUTES; renew well before that
+# between watches so a long tick keeps it, and stop when it was taken over.
+WORKER_LEASE_RENEW_SECONDS = 5 * 60
 _scheduler_wake_event: asyncio.Event | None = None
 # Preserve the established Watch engine preference. Topic/API use the shared
 # canonical display order, while Watch historically preferred Gemini before
@@ -236,142 +235,87 @@ def notification_kind(watch: dict, result: dict) -> str | None:
     return None
 
 
-def _notification_context(watch_id: str, watch: dict):
-    slug = "" if watch.get("visibility") == "private" else watch.get("share_slug") or ""
-    share_path = share_snapshots.share_path(slug, watch["share_id"])
-    share_url = SITE_URL + share_path
-    token = watch_service.make_unsubscribe_token(watch_id)
-    return share_url, SITE_URL + "/watch/unsubscribe?token=" + token
+def run_notification_builder(watch_id: str, result: dict, follower_ids, *,
+                             now, mail_ready: bool, evaluated_condition: str = ""):
+    """Outbox items for one successful run, evaluated against the CURRENT watch.
 
-
-async def _send_change_mail(watch_id: str, watch: dict, result: dict):
-    if not mailer.is_configured():
-        logging.info("Consensus Watch mail skipped: SMTP_HOST/MAIL_FROM not configured")
-        return False
-    user = await asyncio.to_thread(auth.get_user, watch["owner_uid"])
-    if not getattr(user, "email_verified", False) or not getattr(user, "email", None):
-        logging.warning("Watch %s owner has no verified e-mail; notification skipped", watch_id)
-        return False
-    share_url, unsubscribe_url = _notification_context(watch_id, watch)
-    summary = result.get("change_summary") or "The agreement score changed materially."
-    message = mailer.build_change_message(
-        recipient=user.email, question=watch.get("question") or "",
-        old_score=watch.get("last_agreement_score"), new_score=result["agreement_score"],
-        summary=summary, share_url=share_url, unsubscribe_url=unsubscribe_url,
-        severity=result.get("severity") or "major",
-        direction=result.get("opinion_map"),
-    )
-    return await mailer.send_message(message)
-
-
-async def _send_run_mail(watch_id: str, watch: dict, result: dict):
-    if not mailer.is_configured():
-        logging.info("Consensus Watch mail skipped: SMTP_HOST/MAIL_FROM not configured")
-        return False
-    user = await asyncio.to_thread(auth.get_user, watch["owner_uid"])
-    if not getattr(user, "email_verified", False) or not getattr(user, "email", None):
-        logging.warning("Watch %s owner has no verified e-mail; notification skipped", watch_id)
-        return False
-    share_url, unsubscribe_url = _notification_context(watch_id, watch)
-    return await mailer.send_message(mailer.build_run_message(
-        recipient=user.email,
-        question=watch.get("question") or "",
-        agreement_score=result["agreement_score"],
-        consensus=result.get("consensus") or "",
-        changed=bool(result.get("changed")),
-        severity=result.get("severity") or "minor",
-        summary=result.get("change_summary") or "",
-        share_url=share_url,
-        unsubscribe_url=unsubscribe_url,
-        old_score=watch.get("last_agreement_score"),
-        direction=result.get("opinion_map"),
-    ))
-
-
-async def _send_condition_mail(watch_id: str, watch: dict, result: dict):
-    if not mailer.is_configured():
-        logging.info("Consensus Watch mail skipped: SMTP_HOST/MAIL_FROM not configured")
-        return False
-    user = await asyncio.to_thread(auth.get_user, watch["owner_uid"])
-    if not getattr(user, "email_verified", False) or not getattr(user, "email", None):
-        logging.warning("Watch %s owner has no verified e-mail; notification skipped", watch_id)
-        return False
-    share_url, unsubscribe_url = _notification_context(watch_id, watch)
-    return await mailer.send_message(mailer.build_condition_message(
-        recipient=user.email,
-        question=watch.get("question") or "",
-        condition=watch.get("condition") or "",
-        reason=result.get("condition_reason") or "The condition is met by the new consensus.",
-        agreement_score=result["agreement_score"],
-        consensus=result.get("consensus") or "",
-        share_url=share_url,
-        unsubscribe_url=unsubscribe_url,
-        old_score=watch.get("last_agreement_score"),
-        direction=result.get("opinion_map"),
-    ))
-
-
-async def _send_follower_mails(watch_id: str, watch: dict, result: dict) -> int:
-    """Bestätigte Seiten-Follower bei materiellen Änderungen benachrichtigen.
-
-    Unabhängig vom email_mode des Owners; Schwelle ist dieselbe wie bei
-    "changes_only". Best-effort – Fehler je Empfänger brechen nichts ab.
+    ``complete_watch_run`` calls the builder inside its result transaction
+    with the claim merged with the current configuration, so alert rule,
+    channels and condition edited during the run are honoured (R16) and the
+    items commit atomically with the result (R17).
     """
-    if str(watch.get("visibility") or "public") == "private":
-        return 0
-    if not mailer.is_configured():
-        return 0
-    if not should_notify(
-        watch.get("last_agreement_score"), result.get("agreement_score"),
-        bool(result.get("changed")), result.get("severity") or "minor",
-        _recent_scores(watch) or None,
-    ):
-        return 0
-    followers = await asyncio.to_thread(watch_followers.list_followers, watch["share_id"])
-    if not followers:
-        return 0
-    share_url = SITE_URL + share_snapshots.share_path(
-        watch.get("share_slug") or "", watch["share_id"],
+    evaluated_hash = watch_service.condition_hash(evaluated_condition or "")
+
+    def build(effective: dict) -> list:
+        items = []
+        alert = notification_kind(effective, result)
+        if alert == "condition" and (
+            watch_service.condition_hash(effective.get("condition") or "") != evaluated_hash
+        ):
+            # The run judged a condition the owner has replaced meanwhile.
+            alert = None
+        if alert:
+            items.extend(notification_outbox.watch_alert_items(
+                watch_id, effective, result, alert, now=now, email=mail_ready,
+            ))
+        if follower_ids and should_notify(
+            effective.get("last_agreement_score"), result.get("agreement_score"),
+            bool(result.get("changed")), result.get("severity") or "minor",
+            _recent_scores(effective) or None,
+        ):
+            items.extend(notification_outbox.watch_follower_items(
+                watch_id, effective, result, follower_ids, now=now,
+            ))
+        return items
+
+    return notification_outbox.StagedIds(build)
+
+
+def paused_notification_builder(watch_id: str, *, now, mail_ready: bool):
+    return notification_outbox.StagedIds(
+        lambda effective: notification_outbox.watch_paused_items(
+            watch_id, effective, now=now, email=mail_ready,
+        )
     )
-    summary = result.get("change_summary") or "The agreement score changed materially."
-    sent = 0
-    for follower in followers:
+
+
+async def _follower_ids(claimed: dict, result: dict, mail_ready: bool) -> list:
+    """Confirmed page followers, read only when a follower mail is possible."""
+    if not mail_ready or str(claimed.get("visibility") or "public") == "private":
+        return []
+    if not should_notify(
+        claimed.get("last_agreement_score"), result.get("agreement_score"),
+        bool(result.get("changed")), result.get("severity") or "minor",
+        _recent_scores(claimed) or None,
+    ):
+        return []
+    followers = await asyncio.to_thread(watch_followers.list_followers, claimed["share_id"])
+    return [follower["id"] for follower in followers if follower.get("id")]
+
+
+async def _renew_worker_lease_until_stopped(
+    owner: str, stop: asyncio.Event, lost: asyncio.Event
+) -> None:
+    """Keep the global lease while this worker owns it; flag its loss."""
+    while True:
         try:
-            token = watch_followers.make_follow_unsubscribe_token(
-                watch["share_id"], follower["email"],
-            )
-            message = mailer.build_follower_change_message(
-                recipient=follower["email"], question=watch.get("question") or "",
-                old_score=watch.get("last_agreement_score"),
-                new_score=result["agreement_score"], summary=summary,
-                share_url=share_url,
-                unsubscribe_url=SITE_URL + "/watch/follow/unsubscribe?token=" + token,
-                severity=result.get("severity") or "major",
-                direction=result.get("opinion_map"),
-            )
-            if await mailer.send_message(message):
-                sent += 1
-        except Exception as exc:
-            logging.error(
-                "Consensus Watch follower mail failed for %s category=%s",
-                watch_id,
-                safe_exception(exc),
-            )
-    return sent
-
-
-async def _send_paused_mail(watch_id: str, watch: dict):
-    if not mailer.is_configured():
-        logging.info("Consensus Watch mail skipped: SMTP_HOST/MAIL_FROM not configured")
-        return False
-    user = await asyncio.to_thread(auth.get_user, watch["owner_uid"])
-    if not getattr(user, "email_verified", False) or not getattr(user, "email", None):
-        return False
-    share_url, unsubscribe_url = _notification_context(watch_id, watch)
-    return await mailer.send_message(mailer.build_paused_message(
-        recipient=user.email, question=watch.get("question") or "",
-        share_url=share_url, unsubscribe_url=unsubscribe_url,
-    ))
+            await asyncio.wait_for(stop.wait(), timeout=WORKER_LEASE_RENEW_SECONDS)
+            return
+        except asyncio.TimeoutError:
+            try:
+                renewed = await asyncio.to_thread(
+                    watch_service.renew_worker_lease, owner,
+                    now=watch_service.utcnow(),
+                )
+            except Exception as exc:
+                logging.warning(
+                    "Consensus Watch worker lease renewal failed category=%s",
+                    safe_exception(exc),
+                )
+                continue
+            if not renewed:
+                lost.set()
+                return
 
 
 async def _renew_watch_lease_until_stopped(
@@ -395,6 +339,19 @@ async def _renew_watch_lease_until_stopped(
                 return
 
 
+async def _deliver_now(item_ids) -> None:
+    """First attempt right after the commit; the outbox pass retries the rest."""
+    if not item_ids:
+        return
+    try:
+        await notification_delivery.deliver_many(item_ids)
+    except Exception as exc:
+        logging.error(
+            "Consensus Watch notification delivery failed category=%s",
+            safe_exception(exc),
+        )
+
+
 async def run_watch_tick() -> int:
     # MOCK_LLM instances share the production Firestore: a mock tick would take
     # the worker lease from the live deployment and persist fixture answers as
@@ -402,12 +359,23 @@ async def run_watch_tick() -> int:
     if mock_llm_enabled():
         return 0
     now = watch_service.utcnow()
-    if not await asyncio.to_thread(watch_service.acquire_worker_lease, now=now):
+    lease_owner = await asyncio.to_thread(watch_service.acquire_worker_lease, now=now)
+    if not lease_owner:
         return 0
+    worker_stop = asyncio.Event()
+    worker_lost = asyncio.Event()
+    worker_heartbeat = asyncio.create_task(
+        _renew_worker_lease_until_stopped(lease_owner, worker_stop, worker_lost)
+    )
     completed = 0
     try:
         due_ids = await asyncio.to_thread(watch_service.list_due_watch_ids, now=now)
         for watch_id in due_ids:
+            if worker_lost.is_set():
+                # Another worker owns the global lease now; running on would
+                # put two schedulers side by side (R30).
+                logging.warning("Consensus Watch worker lease lost; stopping tick")
+                break
             claimed, reason = await asyncio.to_thread(
                 watch_service.claim_watch,
                 watch_id,
@@ -425,6 +393,7 @@ async def run_watch_tick() -> int:
                     lease_stop,
                 )
             )
+            staged_ids = []
             try:
                 share = await asyncio.to_thread(share_snapshots.get_share, claimed["share_id"])
                 if not share or share.get("status") != "active":
@@ -483,98 +452,68 @@ async def run_watch_tick() -> int:
                     tier,
                     baseline_consensus=original_consensus,
                 )
-                mail_kind = notification_kind(claimed, result)
-                run_id = str(claimed.get("current_run_id") or "")
+                mail_ready = mailer.is_configured()
+                follower_ids = await _follower_ids(claimed, result, mail_ready)
+                completed_at = watch_service.utcnow()
+                staged = run_notification_builder(
+                    watch_id, result, follower_ids, now=completed_at, mail_ready=mail_ready,
+                    evaluated_condition=(
+                        claimed.get("condition") or ""
+                        if claimed.get("email_mode") == "condition" else ""
+                    ),
+                )
+                # Result, schedule, condition state and the outbox items
+                # commit in one transaction; a crash after it loses nothing.
                 persisted = await asyncio.to_thread(
                     watch_service.complete_watch_run, watch_id, claimed, result,
-                    now=watch_service.utcnow(),
-                    defer_condition_status=mail_kind == "condition",
+                    now=completed_at, notifications=staged,
                 )
                 if persisted is None:
                     logging.warning(
                         "Consensus Watch completion fenced out for %s", watch_id
                     )
                     continue
+                staged_ids = list(staged.ids)
             except Exception as exc:
                 logging.error(
                     "Consensus Watch run failed for %s category=%s",
                     watch_id,
                     safe_exception(exc),
                 )
-                paused = await asyncio.to_thread(watch_service.fail_watch_run, watch_id, claimed, now=watch_service.utcnow())
+                paused_staged = paused_notification_builder(
+                    watch_id, now=watch_service.utcnow(), mail_ready=mailer.is_configured(),
+                )
+                try:
+                    paused = await asyncio.to_thread(
+                        watch_service.fail_watch_run, watch_id, claimed,
+                        now=watch_service.utcnow(), notifications=paused_staged,
+                    )
+                except Exception as fail_exc:
+                    logging.error(
+                        "Consensus Watch failure bookkeeping failed for %s category=%s",
+                        watch_id,
+                        safe_exception(fail_exc),
+                    )
+                    paused = None
                 if paused:
-                    try:
-                        if claimed.get("email_enabled") is not False:
-                            await _send_paused_mail(watch_id, claimed)
-                        await asyncio.to_thread(
-                            telegram_watch.send_watch_notification,
-                            watch_id, str(claimed.get("current_run_id") or "failed"),
-                            "paused_error", claimed, {},
-                        )
-                    except Exception as exc:
-                        logging.error(
-                            "Consensus Watch pause notification failed for %s category=%s",
-                            watch_id,
-                            safe_exception(exc),
-                        )
+                    staged_ids = list(paused_staged.ids)
             else:
                 completed += 1
-                if mail_kind:
-                    notification_sent = False
-                    try:
-                        if claimed.get("email_enabled") is not False:
-                            if mail_kind == "every_run":
-                                notification_sent = bool(
-                                    await _send_run_mail(watch_id, claimed, result)
-                                )
-                            elif mail_kind == "condition":
-                                notification_sent = bool(
-                                    await _send_condition_mail(watch_id, claimed, result)
-                                )
-                            else:
-                                notification_sent = bool(
-                                    await _send_change_mail(watch_id, claimed, result)
-                                )
-                    except Exception as exc:
-                        # Mail is best-effort and must never turn a completed
-                        # LLM run into a scheduler failure/history rollback.
-                        logging.error(
-                            "Consensus Watch result mail failed for %s category=%s",
-                            watch_id,
-                            safe_exception(exc),
-                        )
-                    try:
-                        telegram_sent = await asyncio.to_thread(
-                            telegram_watch.send_watch_notification,
-                            watch_id, run_id, mail_kind, claimed, result,
-                        )
-                        notification_sent = notification_sent or telegram_sent
-                    except Exception as exc:
-                        logging.error(
-                            "Consensus Watch Telegram delivery failed for %s category=%s",
-                            watch_id,
-                            safe_exception(exc),
-                        )
-                    if mail_kind == "condition" and notification_sent:
-                        await asyncio.to_thread(
-                            watch_service.set_condition_status, watch_id, "met",
-                            claimed.get("condition") or "",
-                            expected_run_id=run_id,
-                        )
-                try:
-                    await _send_follower_mails(watch_id, claimed, result)
-                except Exception as exc:
-                    logging.error(
-                        "Consensus Watch follower mails failed for %s category=%s",
-                        watch_id,
-                        safe_exception(exc),
-                    )
             finally:
                 lease_stop.set()
                 await lease_heartbeat
+            await _deliver_now(staged_ids)
     finally:
+        worker_stop.set()
+        await worker_heartbeat
         try:
-            await asyncio.to_thread(watch_service.release_worker_lease)
+            released = await asyncio.to_thread(
+                watch_service.release_worker_lease, lease_owner
+            )
+            if not released:
+                logging.warning(
+                    "Consensus Watch worker lease was already taken over; not released"
+                )
         except Exception as exc:
             logging.error(
                 "Consensus Watch worker lease release failed category=%s",
@@ -584,12 +523,16 @@ async def run_watch_tick() -> int:
 
 
 async def run_brief_tick() -> int:
-    """Deliver due Morning Briefs. Claim-advance happens transactionally per
-    brief BEFORE sending, so a crash can skip one digest but never double-send."""
+    """Claim due Morning Briefs and deliver them through the durable outbox.
+
+    The claim advances the schedule and stages the Brief's outbox item in the
+    same transaction. A crash after the claim no longer skips the digest: the
+    outbox pass retries it (within ``BRIEF_DELIVER_WITHIN``), re-checking the
+    Brief subscription before every attempt. At-least-once, not exactly-once.
+    """
     if mock_llm_enabled() or not mailer.is_configured():
         return 0
     now = watch_brief.utcnow()
-    sent = 0
     try:
         due_uids = await asyncio.to_thread(watch_brief.list_due_brief_uids, now=now)
     except Exception as exc:
@@ -597,41 +540,33 @@ async def run_brief_tick() -> int:
             "Morning brief due-scan failed category=%s", safe_exception(exc)
         )
         return 0
+    sent = 0
     for uid in due_uids:
         try:
             claimed = await asyncio.to_thread(watch_brief.claim_brief, uid, now=now)
-            if not claimed:
+            item_id = (claimed or {}).get("outbox_id")
+            if not item_id:
                 continue
-            user = await asyncio.to_thread(auth.get_user, uid)
-            if not getattr(user, "email_verified", False) or not getattr(user, "email", None):
-                logging.warning("Morning brief skipped: no verified e-mail")
-                continue
-            items, changes = await asyncio.to_thread(
-                watch_brief.collect_brief_items, uid, since=claimed["baseline"],
-            )
-            if not items:
-                continue
-            if claimed.get("mode") == "changes_only" and changes == 0:
-                continue
-            timezone_name = str(claimed.get("timezone") or "UTC")
-            try:
-                date_label = now.astimezone(ZoneInfo(timezone_name)).strftime("%A, %d %B %Y")
-            except (ZoneInfoNotFoundError, ValueError):
-                date_label = now.strftime("%A, %d %B %Y")
-            message = mailer.build_brief_message(
-                recipient=user.email, date_label=date_label, items=items,
-                changes_count=changes, site_url=SITE_URL,
-                unsubscribe_url=SITE_URL + "/watch/brief/unsubscribe?token="
-                + watch_brief.make_brief_unsubscribe_token(uid),
-            )
-            if await mailer.send_message(message):
-                await asyncio.to_thread(watch_brief.mark_brief_sent, uid, now=now)
-                sent += 1
+            status = await notification_delivery.deliver(item_id)
+            sent += int(status == notification_outbox.SENT)
         except Exception as exc:
             logging.error(
                 "Morning brief delivery failed category=%s", safe_exception(exc)
             )
     return sent
+
+
+async def run_notification_outbox_tick() -> dict:
+    """Retry pass for every due outbox item (Watch, follower, Topic, Brief)."""
+    if mock_llm_enabled():
+        return {}
+    try:
+        return await notification_delivery.run_outbox_tick()
+    except Exception as exc:
+        logging.error(
+            "Notification outbox pass failed category=%s", safe_exception(exc)
+        )
+        return {}
 
 
 def wake_watch_scheduler():
@@ -654,6 +589,7 @@ async def watch_scheduler_loop():
                 try:
                     watches_ran = await run_watch_tick()
                     briefs_sent = await run_brief_tick()
+                    outbox_counts = await run_notification_outbox_tick()
                 except Exception:
                     record_metric(
                         "scheduler", "consensus-watch",
@@ -670,6 +606,7 @@ async def watch_scheduler_loop():
                 "consensus-watch-scheduler",
                 watches_ran=watches_ran,
                 briefs_sent=briefs_sent,
+                notifications=outbox_counts,
             )
             try:
                 await asyncio.wait_for(wake_event.wait(), timeout=TICK_SECONDS)

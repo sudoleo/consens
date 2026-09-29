@@ -721,8 +721,13 @@ def create_run(
     now=None,
     run_id: str = "",
     expected_claim_id: str = "",
+    notifications=None,
 ) -> dict:
-    """Create one immutable snapshot and advance only the topic's latest pointer."""
+    """Create one immutable snapshot and advance only the topic's latest pointer.
+
+    ``notifications`` optionally maps ``(topic_before, run_id, run)`` to
+    durable outbox items that commit in the same transaction as the run.
+    """
     db = db if db is not None else db_firestore
     now = now or utcnow()
     topic = get_topic(topic_id, db=db)
@@ -847,6 +852,12 @@ def create_run(
             "updated_at": now,
             "updated_by": actor_uid,
         }, merge=True)
+        if notifications is not None:
+            from app.services import notification_outbox
+
+            topic_before = {**current, "id": topic_id}
+            for item in notifications(topic_before, run_id, run) or []:
+                notification_outbox.stage(transaction, db, item)
         return {"id": run_id, **run}
 
     return _run_transaction(db, publish)
@@ -1265,7 +1276,12 @@ def delivery_id(topic_id: str, run_id: str, follower_doc_id: str) -> str:
 
 
 def claim_delivery(topic_id: str, run_id: str, follower_doc_id: str, *, db=None) -> bool:
-    """Claim a delivery only while its topic-bound follower still exists."""
+    """Legacy per-follower marker (no longer used by the send path).
+
+    Topic follower mails go through the durable ``notification_outbox`` since
+    R17; these markers stay only so existing documents are still cleaned up
+    by ``delete_follower_and_deliveries``.
+    """
     db = db if db is not None else db_firestore
     follower_ref = db.collection(FOLLOWERS_COLLECTION).document(follower_doc_id)
     ref = db.collection(DELIVERIES_COLLECTION).document(

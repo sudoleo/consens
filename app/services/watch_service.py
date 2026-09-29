@@ -18,7 +18,9 @@ from google.cloud.firestore_v1.base_query import FieldFilter
 import app.core.config as cfg
 from app.core.entitlements import TIER_PRO
 from app.core.security import db_firestore
-from app.services import drift_signal, opinion_map, persistence_guard, share_snapshots
+from app.services import (
+    drift_signal, notification_outbox, opinion_map, persistence_guard, share_snapshots,
+)
 
 
 WATCHES_COLLECTION = "watches"
@@ -835,7 +837,7 @@ def set_watch_status_admin(watch_id: str, status: str, *, db=None) -> dict:
     if data.get("status") == requested:
         share = share_snapshots.get_share(str(data.get("share_id") or ""), db=db) or {}
         return _serialize_watch(watch_id, data, share)
-    updates = {"status": requested, "claimed_until": None}
+    updates = {"status": requested}
     if requested == "active":
         now = utcnow()
         updates.update(
@@ -942,7 +944,21 @@ def _apply_watch_updates(
         ):
             raise WatchError("limit_reached", "Active watch limit reached.")
         delta = int(new_active) - int(old_active)
-        transaction.update(initial_ref, updates)
+        # Every owner/admin configuration change starts a new configuration
+        # generation. A run claimed under an older generation may still
+        # historize its result, but its schedule and alert rules are then
+        # taken from the current document instead of the stale claim (R16).
+        committed = dict(updates)
+        committed["config_generation"] = (
+            _safe_count(current.get("config_generation")) + 1
+        )
+        if updates.get("status", current.get("status")) != current.get("status"):
+            # A status transition always revokes the running claim. The old
+            # worker's completion/failure is then fenced by current_run_id and
+            # can neither reactivate a paused watch nor move its schedule.
+            committed["claimed_until"] = None
+            committed["current_run_id"] = None
+        transaction.update(initial_ref, committed)
         if delta:
             transaction.set(owner_ref, {
                 "schema_version": 1,
@@ -962,7 +978,7 @@ def _apply_watch_updates(
                     "active_count": max(0, publisher_count + delta),
                     "updated_at": utcnow(),
                 })
-        return {**current, **updates}
+        return {**current, **committed}
 
     return _run_transaction(db, mutate)
 
@@ -1056,7 +1072,10 @@ def update_watch(uid: str, watch_id: str, changes: dict, tier, db=None) -> dict:
                 ),
                 consecutive_failures=0,
             )
-        updates.update(status=status, claimed_until=None)
+        # The claim is revoked inside the transaction only when the status
+        # really changes; re-sending the current status must not free the
+        # lease of a running check and let a second worker start it.
+        updates["status"] = status
     data = _apply_watch_updates(
         uid,
         watch_id,
@@ -1415,39 +1434,144 @@ def list_due_watch_ids(*, now=None, db=None, max_items=200) -> list[str]:
     return [doc.id for doc in query.stream()]
 
 
-def _worker_lease_transaction(tx, ref, now: datetime):
+def _worker_lease_ref(db):
+    return db.collection(RUNTIME_COLLECTION).document("global_worker")
+
+
+def _worker_lease_transaction(tx, ref, now: datetime, owner: str = ""):
+    """Grant the global scheduler lease to ``owner`` when it is free.
+
+    The owner token is the fencing value: only the process that holds it may
+    renew or release the lease (R30). A legacy document without an owner is
+    treated like any other holder and simply expires.
+    """
     snap = ref.get(transaction=tx)
     data = snap.to_dict() if snap.exists else {}
-    until = data.get("claimed_until")
+    until = (data or {}).get("claimed_until")
     if isinstance(until, datetime) and until > now:
         return False
-    tx.set(ref, {"claimed_until": now + timedelta(minutes=WORKER_LEASE_MINUTES)})
+    tx.set(ref, {
+        "claimed_until": now + timedelta(minutes=WORKER_LEASE_MINUTES),
+        "owner": str(owner or ""),
+        "acquired_at": now,
+    })
     return True
 
 
-def acquire_worker_lease(*, now=None, db=None) -> bool:
-    from firebase_admin import firestore
-
+def acquire_worker_lease(*, now=None, db=None) -> str:
+    """Return a fresh owner token on success, ``""`` when another worker holds it."""
     db = db if db is not None else db_firestore
     now = now or utcnow()
-    ref = db.collection(RUNTIME_COLLECTION).document("global_worker")
-    tx = db.transaction()
+    ref = _worker_lease_ref(db)
+    owner = secrets.token_hex(16)
 
-    @firestore.transactional
     def acquire(transaction):
-        return _worker_lease_transaction(transaction, ref, now)
+        return _worker_lease_transaction(transaction, ref, now, owner)
 
-    return acquire(tx)
+    return owner if _run_transaction(db, acquire) else ""
 
 
-def release_worker_lease(*, db=None):
+def renew_worker_lease(owner: str, *, now=None, db=None) -> bool:
+    """Extend the global lease only while ``owner`` still holds it."""
     db = db if db is not None else db_firestore
-    db.collection(RUNTIME_COLLECTION).document("global_worker").update({"claimed_until": None})
+    now = now or utcnow()
+    ref = _worker_lease_ref(db)
+    owner = str(owner or "")
+
+    def renew(transaction):
+        snap = ref.get(transaction=transaction)
+        data = snap.to_dict() if snap.exists else None
+        until = (data or {}).get("claimed_until")
+        if (
+            not owner
+            or not data
+            or str(data.get("owner") or "") != owner
+            or not isinstance(until, datetime)
+            or until <= now
+        ):
+            return False
+        transaction.update(ref, {
+            "claimed_until": now + timedelta(minutes=WORKER_LEASE_MINUTES),
+        })
+        return True
+
+    return bool(_run_transaction(db, renew))
+
+
+def release_worker_lease(owner: str = "", *, db=None) -> bool:
+    """Release the global lease only if ``owner`` still holds it.
+
+    A worker whose lease expired and was taken over must never clear the new
+    holder's lease; otherwise a third worker could start next to the second.
+    """
+    db = db if db is not None else db_firestore
+    ref = _worker_lease_ref(db)
+    owner = str(owner or "")
+
+    def release(transaction):
+        snap = ref.get(transaction=transaction)
+        data = snap.to_dict() if snap.exists else None
+        if not owner or not data or str(data.get("owner") or "") != owner:
+            return False
+        transaction.update(ref, {"claimed_until": None, "owner": ""})
+        return True
+
+    return bool(_run_transaction(db, release))
+
+
+# Owner-editable fields that a run must read from the current document when it
+# commits, instead of from the (possibly stale) snapshot taken at claim time.
+WATCH_CONFIG_FIELDS = (
+    "status", "interval", "run_weekday", "run_time", "timezone", "email_mode",
+    "email_enabled", "telegram_enabled", "telegram_muted_until", "condition",
+    "last_condition_status", "last_condition_hash", "config_generation",
+)
+WATCH_SCHEDULE_FIELDS = ("interval", "run_weekday", "run_time", "timezone")
+
+
+def effective_watch(claimed: dict, current: dict) -> dict:
+    """The claim merged with the current configuration (current wins)."""
+    effective = dict(claimed)
+    for key in WATCH_CONFIG_FIELDS:
+        if key in (current or {}):
+            effective[key] = current[key]
+    return effective
+
+
+def _next_run_after(claimed: dict, current: dict, now: datetime) -> datetime:
+    """Advance the schedule without overwriting a change made during the run."""
+    schedule_changed = any(
+        str((current or {}).get(key) or "") != str(claimed.get(key) or "")
+        for key in WATCH_SCHEDULE_FIELDS
+    )
+    if schedule_changed:
+        # update_watch already computed next_run_at from the new settings.
+        current_next = (current or {}).get("next_run_at")
+        if isinstance(current_next, datetime) and current_next > now:
+            return current_next
+        interval = current.get("interval") if current.get("interval") in WATCH_INTERVALS else "weekly"
+        return next_scheduled_run(
+            interval, current.get("run_time") or "", current.get("timezone") or "",
+            current.get("run_weekday") or "", now=now,
+        )
+    interval = claimed.get("interval") if claimed.get("interval") in WATCH_INTERVALS else "weekly"
+    return next_scheduled_run(
+        interval, claimed.get("run_time") or "", claimed.get("timezone") or "",
+        claimed.get("run_weekday") or "",
+        now=now, previous_scheduled=claimed.get("next_run_at"),
+    )
 
 
 def complete_watch_run(watch_id: str, claimed: dict, result: dict, *, now=None,
-                       db=None, defer_condition_status=False):
-    """Persist one immutable Watch version, then advance the live pointer."""
+                       db=None, defer_condition_status=False, notifications=None):
+    """Persist one immutable Watch version, then advance the live pointer.
+
+    ``notifications`` is an optional callable ``(effective_watch) -> items``
+    whose outbox items are staged in the same transaction as the result.
+    Completion is fenced by ``current_run_id``: a pause, resume or newer claim
+    revokes the run, so a stale worker can neither reactivate a paused watch
+    nor overwrite a schedule changed during the run (R16).
+    """
     db = db if db is not None else db_firestore
     now = now or utcnow()
     interval = claimed.get("interval") if claimed.get("interval") in WATCH_INTERVALS else "weekly"
@@ -1545,6 +1669,8 @@ def complete_watch_run(watch_id: str, claimed: dict, result: dict, *, now=None,
                 history["consensus_md"], history["sources"], history["included_models"],
             ),
         })
+    evaluated_condition_hash = condition_hash(claimed.get("condition") or "")
+
     def persist(transaction):
         current_snapshot = watch_ref.get(transaction=transaction)
         current = current_snapshot.to_dict() if current_snapshot.exists else None
@@ -1554,6 +1680,27 @@ def complete_watch_run(watch_id: str, claimed: dict, result: dict, *, now=None,
             != str(claimed.get("current_run_id") or "")
         ):
             return False
+        effective = effective_watch(claimed, current)
+        updates = dict(watch_updates)
+        updates["next_run_at"] = _next_run_after(claimed, current, now)
+        if (
+            "last_condition_status" in updates
+            and condition_hash(current.get("condition") or "") != evaluated_condition_hash
+        ):
+            # The condition was edited while this run evaluated the old one.
+            updates.pop("last_condition_status", None)
+            updates.pop("last_condition_hash", None)
+        elif (
+            updates.get("last_condition_status") == "met"
+            and effective.get("email_mode") == "condition"
+            and (
+                current.get("last_condition_status") != "met"
+                or current.get("last_condition_hash") != evaluated_condition_hash
+            )
+        ):
+            # The transition alert is now durably queued with this commit, so
+            # the state no longer waits for a send acknowledgement.
+            updates["last_event_type"] = WATCH_EVENT_CONDITION_MET
         existing_points = current.get("history_points")
         existing_points = existing_points if isinstance(existing_points, list) else []
         compact_history = {
@@ -1564,11 +1711,14 @@ def complete_watch_run(watch_id: str, claimed: dict, result: dict, *, now=None,
                 "baseline_summary", "opinion_map",
             }
         }
-        updates = dict(watch_updates)
         updates["history_points"] = (existing_points + [compact_history])[-WATCH_HISTORY_POINTS:]
         transaction.set(history_ref, history)
         transaction.update(watch_ref, updates)
         transaction.update(share_ref, share_updates)
+        # Durable outbox items commit together with the result (R17). The
+        # builder sees the CURRENT alert rules and channels, not the claim.
+        for item in (notifications(effective) if notifications else []) or []:
+            notification_outbox.stage(transaction, db, item)
         return True
 
     if not _run_transaction(db, persist):
@@ -1609,11 +1759,16 @@ def set_condition_status(
     return _run_transaction(db, persist)
 
 
-def fail_watch_run(watch_id: str, claimed: dict, *, now=None, db=None) -> bool | None:
-    """Record no history; pause after the third consecutive failure."""
+def fail_watch_run(watch_id: str, claimed: dict, *, now=None, db=None,
+                   notifications=None) -> bool | None:
+    """Record no history; pause after the third consecutive failure.
+
+    Returns None when the run was fenced out (paused, resumed or reclaimed
+    meanwhile), True when this failure paused the watch. ``notifications``
+    optionally builds the "paused" outbox items, staged atomically.
+    """
     db = db if db is not None else db_firestore
     now = now or utcnow()
-    interval = claimed.get("interval") if claimed.get("interval") in WATCH_INTERVALS else "weekly"
     ref = db.collection(WATCHES_COLLECTION).document(watch_id)
     uid = str(claimed.get("owner_uid") or "")
     include_publisher = claimed.get("model_tier") == "free"
@@ -1643,21 +1798,28 @@ def fail_watch_run(watch_id: str, claimed: dict, *, now=None, db=None) -> bool |
         ):
             return None
         failures = _safe_count(current.get("consecutive_failures")) + 1
-        paused = failures >= 3
+        was_active = current.get("status") == "active"
+        paused = failures >= 3 and was_active
+        # Only an active watch can be moved by a failure. Any other status is
+        # an owner/admin decision this worker must never overwrite (R16); the
+        # counter transaction below then stays consistent with the status.
+        if paused:
+            status = "paused_error"
+        else:
+            status = current.get("status") or "active"
         transaction.update(ref, {
-            "status": "paused_error" if paused else "active",
-            "next_run_at": next_scheduled_run(
-                interval, claimed.get("run_time") or "", claimed.get("timezone") or "",
-                claimed.get("run_weekday") or "",
-                now=now, previous_scheduled=claimed.get("next_run_at"),
-            ),
+            "status": status,
+            "next_run_at": _next_run_after(claimed, current, now),
             "claimed_until": None,
             "current_run_id": None,
             "consecutive_failures": failures,
             "last_run_at": now,
             "last_event_type": WATCH_EVENT_RUN_FAILED,
         })
-        if paused and current.get("status") == "active" and owner_ref is not None:
+        if paused and notifications is not None:
+            for item in notifications(effective_watch(claimed, current)) or []:
+                notification_outbox.stage(transaction, db, item)
+        if paused and owner_ref is not None:
             owner_state = (
                 owner_snapshot.to_dict() if owner_snapshot and owner_snapshot.exists else {}
             )
