@@ -39,6 +39,7 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
+from google.api_core.exceptions import FailedPrecondition
 from google.cloud.firestore_v1.base_query import FieldFilter
 
 from app.core.observability import record_metric
@@ -337,8 +338,22 @@ def list_due_ids(*, now=None, db=None, max_items: int = 50) -> list[str]:
         ]
         docs.sort(key=lambda doc: (doc.to_dict() or {})["next_attempt_at"])
         return [doc.id for doc in docs[:max_items]]
-    query = query.order_by("next_attempt_at").limit(max(1, min(200, int(max_items))))
-    return [doc.id for doc in query.stream()]
+    limit = max(1, min(200, int(max_items)))
+    try:
+        return [doc.id for doc in query.order_by("next_attempt_at").limit(limit).stream()]
+    except FailedPrecondition:
+        # Composite (status, next_attempt_at) index not deployed yet: use the
+        # automatic single-field index on status and order a bounded window
+        # here, so retries keep working during the index build.
+        logging.warning("Notification outbox index missing; ordering in memory")
+        window = collection.where(filter=FieldFilter("status", "==", STATUS_PENDING)).limit(1000).stream()
+        due = []
+        for doc in window:
+            at = (doc.to_dict() or {}).get("next_attempt_at")
+            if isinstance(at, datetime) and at <= now:
+                due.append((at, doc.id))
+        due.sort()
+        return [doc_id for _, doc_id in due[:limit]]
 
 
 def _terminal_update(status: str, now: datetime, error: str = "") -> dict:

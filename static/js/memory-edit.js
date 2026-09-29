@@ -370,8 +370,11 @@
   }
 
   function errorMessage(data, fallback) {
-    if (typeof data?.detail === "string") return data.detail;
-    if (typeof data?.detail?.message === "string") return data.detail.message;
+    // main.py rewrites HTTPException.detail to {"error": ...}; accept both.
+    for (const value of [data?.detail, data?.error]) {
+      if (typeof value === "string" && value.trim()) return value;
+      if (typeof value?.message === "string" && value.message.trim()) return value.message;
+    }
     return fallback;
   }
 

@@ -132,3 +132,16 @@ def test_attachment_fallback_explains_unreadable_pdfs(monkeypatch, status):
     attachment = {"name": "scan.pdf", "mime": "application/pdf", "raw": b"%PDF-1.7"}
     text = attachments.attachment_fallback_text(attachment)
     assert "could not be extracted" in text
+
+
+def test_extractor_output_is_utf8_even_with_a_legacy_console_encoding():
+    # Windows pipes default to the console code page (e.g. cp1252); the child
+    # must still hand back UTF-8 JSON for non-ASCII text such as Danish letters.
+    import json, os, subprocess, sys
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1]
+    env = {**os.environ, "PYTHONIOENCODING": "cp1252"}
+    out = subprocess.run([sys.executable, "-m", "app.services.agent_file_extract", "text/plain"],
+        input="Søndag – blåbær → ✓".encode("utf-8"), stdout=subprocess.PIPE, cwd=str(root), env=env, check=True, timeout=30)
+    text = json.loads(out.stdout)["parts"][0]["text"]
+    assert "Søndag" in text and "✓" in text

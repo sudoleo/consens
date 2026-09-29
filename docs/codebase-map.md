@@ -2656,17 +2656,23 @@ Turn 3 und spätere Turns benutzen eine serverseitig autoritative Context-Versio
 `complete | token_limit | interrupted | error | cancelled`. Nur
 `finish_reason=stop` bzw. das SSE-Ende `[DONE]` gilt als `complete`; ein EOF
 ohne Bestätigung ist `interrupted`, `length` ist `token_limit`.
-`/ask_*` liefert `completion` im finalen Payload; Teiltext bleibt sichtbar,
-wird im Frontend aber als `incomplete` markiert (`run-view.js`, Answer
-Reader), nicht per Bookmark als fertige Antwort gespeichert und nie an die
-Synthese gegeben. `stream_chat_completion_text` endet mit einem
+`/ask_*` liefert `completion` im finalen Payload. Eingaberegel für die
+Synthese (`completion.usable_as_input`): `complete` wird normal verwendet,
+`token_limit` als deutlich markierte gekürzte Antwort (`TRUNCATION_NOTE`,
+häufig bei Reasoning-Modellen am 4096-Token-Budget), `interrupted`/`error`/
+`cancelled` nie; das Frontend kennzeichnet gekürzte Antworten sichtbar und
+unterbrochene als `incomplete` (`run-view.js`, Answer Reader), speichert
+diese nicht per Bookmark als fertig und gibt sie nie an die Synthese. Eine
+`/ask`-Antwort ohne gespeicherten Beleg wird im Browser sofort als nicht
+verwendbar markiert. Lehnt `/consensus` Belege ab (400/409/503), wird der
+wartende Chat-Turn auf `failed` gesetzt. `stream_chat_completion_text` endet mit einem
 `completion`-Event; `stream_consensus` meldet eine abgeschnittene Synthese als
 `final` mit `error` + `completion`, ohne stillen Retry, und sendet vor einem
 Retry nach Fehler `consensus.reset` (Versuche mischen nie). `/consensus`
 liefert `consensus_completion`; eine unvollständige Synthese erzeugt weder
 Share-Result noch Chat-Completion (Turn → `failed`/`consensus_incomplete`).
-`provider_transport.fan_out_provider_answers` (API/Watch/Topics) verwirft
-unvollständige Antworten ebenso.
+`provider_transport.fan_out_provider_answers` (API/Watch/Topics) wendet
+dieselbe Regel an.
 **Antwortbelege (R09):** Jede erfolgreiche `/ask_*`-Antwort wird in
 `answer_receipts/{id}` gespeichert (`services/answer_receipts.py`: UID,
 Run-Bindung aus `usage_run_key` bzw. `run_id`, Frage-Hash, Familie, konkretes

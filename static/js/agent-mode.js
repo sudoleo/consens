@@ -65,7 +65,7 @@
   // dasselbe. Was bleibt, ist die gemessene Zeit pro Modell.
 
   function isTerminalResponseState(state) {
-    return state === "complete" || state === "error";
+    return state === "complete" || state === "error" || state === "incomplete";
   }
 
   // ---- Einzelantworten als Vorschau statt als Scroll-Schacht --------------

@@ -141,9 +141,10 @@ def fan_out_provider_answers(
             if not text or (isinstance(raw, str) and text.lower().startswith("error")) or (
                 isinstance(raw, dict) and raw.get("error")
             ) or (
-                # Token-limit/interrupted answers are not model positions (R06).
+                # Interrupted/errored answers are not model positions (R06);
+                # token-limit answers are used as marked truncated answers.
                 isinstance(raw, dict)
-                and raw.get("completion") not in (None, completion.COMPLETE)
+                and not completion.usable_as_input(raw.get("completion"))
             ):
                 outcome = (
                     "timeout"
@@ -157,7 +158,9 @@ def fan_out_provider_answers(
             answers[provider] = ProviderAnswer(
                 provider=PROVIDER_LABELS[provider],
                 model=provider_models[provider],
-                response=text,
+                response=completion.consensus_input_text(
+                    text, raw.get("completion") if isinstance(raw, dict) else None
+                ),
                 sources=to_plain(result_sources(raw)),
             )
     return normalize_provider_answers(answers)

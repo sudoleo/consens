@@ -99,6 +99,9 @@ _CONDITIONS = frozenset({
     "depending", "conditional", "wenn", "falls", "nur", "außer", "ausser",
     "sofern", "bis", "solange", "abhängig", "vorausgesetzt",
 })
+# "may" and "march" are also a modal verb / a verb; they only count as a month
+# next to a day or year number (see _months).
+_AMBIGUOUS_MONTHS = frozenset({"may", "march"})
 _MONTHS = frozenset({
     "january", "february", "march", "april", "may", "june", "july", "august",
     "september", "october", "november", "december", "januar", "februar", "märz",
@@ -107,10 +110,38 @@ _MONTHS = frozenset({
 _MARKER_WORD_RE = re.compile(r"[^\W\d_]+(?:['’][^\W\d_]+)?")
 
 
+def _canonical_number(raw: str) -> str:
+    """Formatting-independent value: "1,000" == "1000" == "1.000,0" == "1000.0"."""
+    groups = re.split(r"[.,'  ]", raw)
+    if len(groups) > 1 and all(len(group) == 3 for group in groups[1:]):
+        integer, fraction = "".join(groups), ""
+    elif len(groups) > 1:
+        integer, fraction = "".join(groups[:-1]), groups[-1]
+    else:
+        integer, fraction = raw, ""
+    integer = integer.lstrip("0") or "0"
+    fraction = fraction.rstrip("0")
+    return integer + ("." + fraction if fraction else "")
+
+
+def _months(text: str) -> tuple:
+    found = set()
+    tokens = re.findall(r"[^\W_]+", text.lower())
+    for index, word in enumerate(tokens):
+        if word not in _MONTHS:
+            continue
+        if word in _AMBIGUOUS_MONTHS:
+            neighbours = tokens[max(0, index - 1):index] + tokens[index + 1:index + 2]
+            if not any(neighbour.isdigit() for neighbour in neighbours):
+                continue
+        found.add(word)
+    return tuple(sorted(found))
+
+
 def _numbers(text: str) -> tuple:
     found = []
     for match in _NUMBER_RE.finditer(text):
-        number = re.sub(r"[.,'  ]", ".", match.group("num"))
+        number = _canonical_number(match.group("num"))
         raw_sign = match.group("sign")
         # "2025-2026" is a range, not a negative number.
         sign = "-" if raw_sign in {"-", "−", "–"} and not (
@@ -134,7 +165,7 @@ def significant_markers(value) -> tuple:
     words = [word.lower().replace("’", "'") for word in _MARKER_WORD_RE.findall(text)]
     negations = sum(1 for word in words if word in _NEGATIONS or word.endswith("n't"))
     conditions = tuple(sorted({word for word in words if word in _CONDITIONS}))
-    months = tuple(sorted({word for word in words if word in _MONTHS}))
+    months = _months(text)
     return _numbers(text), negations, conditions, months
 
 

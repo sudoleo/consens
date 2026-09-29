@@ -189,3 +189,33 @@ def test_startup_configuration_write_runs_through_one_shot_wrapper(monkeypatch):
     main._backfill_startup_configuration()
 
     assert calls == [{"strict": True, "persist_backfill": True}]
+
+
+def test_retention_step_failure_does_not_stop_later_steps(monkeypatch):
+    calls = []
+
+    def missing_index():
+        raise RuntimeError("FailedPrecondition: index missing")
+
+    steps = (
+        ("first_deleted", lambda: calls.append("first") or 1),
+        ("broken_deleted", missing_index),
+        ("last_deleted", lambda: calls.append("last") or 3),
+    )
+    monkeypatch.setattr(retention_maintenance, "_cleanup_steps", lambda: steps)
+
+    async def stop_after_first_tick(seconds):
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(retention_maintenance.asyncio, "sleep", stop_after_first_tick)
+
+    async def exercise():
+        try:
+            await retention_maintenance.retention_maintenance_loop()
+        except asyncio.CancelledError:
+            pass
+
+    asyncio.run(exercise())
+    assert calls == ["first", "last"]
+    details = background_tasks.task_health_snapshot()["retention-maintenance"]["details"]
+    assert details == {"first_deleted": 1, "last_deleted": 3, "failed_steps": ["broken_deleted"]}

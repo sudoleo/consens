@@ -173,3 +173,20 @@ def test_reaping_after_compaction_keeps_every_worker_step_usage(store):
     assert turn["status"] == "failed"
     # All worker steps plus the reaped, unmeasured orchestrator step.
     assert turn["agent_usage"]["measured_calls"] == steps and turn["agent_usage"]["unmetered_calls"] == 1
+
+
+def test_unmetered_first_fold_keeps_its_call_count():
+    from app.services.agent_sessions import ROOT_SETTLED_STEP_WINDOW, compact_root, root_usage
+    total = ROOT_SETTLED_STEP_WINDOW + 3
+    data = {"step_states": {f"completion:{i}": "succeeded" for i in range(total)},
+            "step_usage": {f"completion:{i}": None for i in range(total)}, "reservations": {}}
+    first = compact_root({}, data)
+    assert first["compacted_usage"]["unmetered_calls"] == 3
+    # A later fold with a measured step must still count the unmetered ones.
+    data = {**first, "step_states": {**first["step_states"], **{f"completion:{i}": "succeeded" for i in range(total, total + 2)}},
+            "step_usage": {**first["step_usage"], f"completion:{total}": {"input_tokens": 10, "output_tokens": 2},
+                           f"completion:{total + 1}": None}}
+    second = compact_root({}, data)
+    usage = root_usage(second)
+    assert usage["complete"] is False
+    assert usage["measured_calls"] + usage["unmetered_calls"] == total + 2

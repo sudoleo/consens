@@ -1439,7 +1439,8 @@ def _formatted_quote_finder():
     return find
 
 
-def _verify_claims(claims: list, consensus_answer: str, model_answers: dict, _find=None) -> None:
+def _verify_claims(claims: list, consensus_answer: str, model_answers: dict, _find=None,
+                   _find_formatted_quote=None) -> None:
     """Anchors gegen die Konsensantwort, Dissens-Zitate gegen die jeweilige
     Modellantwort. Ein Zitat, das dort nicht auffindbar ist, wird geleert -
     halluzinierte Zitate erreichen die Oberflaeche nie.
@@ -1447,6 +1448,7 @@ def _verify_claims(claims: list, consensus_answer: str, model_answers: dict, _fi
     Laeuft fuer Claims aus BEIDEN Quellen: dem Coverage-Judge (Regelfall) und
     aelteren Differences-Payloads."""
     _find = _find or _span_finder()
+    _find_formatted_quote = _find_formatted_quote or _formatted_quote_finder()
     consensus_text = str(consensus_answer or "")
     for claim in claims or []:
         # The claim anchor only marks a consensus sentence (navigation), so a
@@ -1463,7 +1465,11 @@ def _verify_claims(claims: list, consensus_answer: str, model_answers: dict, _fi
         for item in claim.get("dissent") or []:
             if not item.get("quote"):
                 continue
-            span = _find(item["model"], model_answers.get(item["model"]) or "", item["quote"])
+            model_text = model_answers.get(item["model"]) or ""
+            # Same exact-coverage rule as positions: the judge may drop
+            # Markdown emphasis or [S#] tags, but not change the words.
+            span = (_find(item["model"], model_text, item["quote"])
+                    or _find_formatted_quote(item["model"], model_text, item["quote"]))
             if span:
                 item["quote"] = _clip(span, MAX_DIFF_QUOTE_CHARS)
             else:
@@ -1481,7 +1487,7 @@ def _verify_differences_data(data: dict, consensus_answer: str, model_answers: d
     _find = _span_finder()
     _find_formatted_quote = _formatted_quote_finder()
     consensus_text = str(consensus_answer or "")
-    _verify_claims(data.get("claims") or [], consensus_text, model_answers, _find)
+    _verify_claims(data.get("claims") or [], consensus_text, model_answers, _find, _find_formatted_quote)
 
     for diff in data.get("differences") or []:
         diff["consensus_anchor_validated"] = False

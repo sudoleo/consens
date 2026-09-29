@@ -105,17 +105,21 @@ def _source_labels(sources):
     return labels
 
 
-def _link_source_tags(md_text, labels):
+def _link_source_tags(md_text, labels, dropped=frozenset()):
     def replace_run(match):
         tokens = [token.strip() for token in match.group(1).split(",")]
         numbers = []
         for token in tokens:
             number = token[1:] if token[:1] in ("s", "S") else token
             number = number.lstrip("0") or "0"
+            if number in dropped:
+                continue  # source excluded by the topic's source rules
             if number not in labels:
                 return match.group(0)  # unbekannte Referenz: Lauf unverändert lassen
             if number not in numbers:
                 numbers.append(number)
+        if not numbers:
+            return ""
         return " ".join(
             "[[%s]](#src-%s)" % (n, n) for n in numbers
         )
@@ -153,12 +157,17 @@ def _preserve_math_delimiters(md_text):
     )
 
 
-def render_public_markdown(md_text, sources=None):
-    """Markdown → sanitisiertes HTML (sicher für `| safe` im Template)."""
+def render_public_markdown(md_text, sources=None, excluded_sources=None):
+    """Markdown → sanitisiertes HTML (sicher für `| safe` im Template).
+
+    ``excluded_sources`` are sources removed by source rules: citations to
+    them are dropped instead of showing as raw ``[S3]`` text.
+    """
     text = str(md_text or "")
     labels = _source_labels(sources)
-    if labels:
-        text = _link_source_tags(text, labels)
+    dropped = frozenset(_source_labels(excluded_sources)) - frozenset(labels)
+    if labels or dropped:
+        text = _link_source_tags(text, labels, dropped)
     text = _preserve_math_delimiters(text)
     tokens = _MD.parse(text)
     _normalize_citation_links(tokens, sources)

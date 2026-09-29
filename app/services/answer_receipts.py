@@ -159,10 +159,18 @@ def load_receipts(
     now = now or _utcnow()
     expected_question = question_digest(question)
     receipts = {}
-    for provider, receipt_id in receipt_ids.items():
+    for receipt_id in receipt_ids.values():
         if not is_receipt_id(receipt_id):
             raise ReceiptError("invalid_answer_receipt", "Invalid answer receipt.")
-        snapshot = db.collection(COLLECTION).document(receipt_id).get()
+    refs = {provider: db.collection(COLLECTION).document(receipt_id) for provider, receipt_id in receipt_ids.items()}
+    snapshots = {}
+    get_all = getattr(db, "get_all", None)
+    if callable(get_all) and refs:
+        # One batched read instead of one round trip per model before streaming.
+        by_path = {snapshot.reference.path: snapshot for snapshot in get_all(list(refs.values()))}
+        snapshots = {provider: by_path.get(ref.path) for provider, ref in refs.items()}
+    for provider, receipt_id in receipt_ids.items():
+        snapshot = snapshots.get(provider) or refs[provider].get()
         data = snapshot.to_dict() if getattr(snapshot, "exists", False) else None
         data = data or {}
         expires_at = data.get("expires_at")

@@ -439,7 +439,8 @@ async def topic_page(
     # navigation between versions.
     timeline = claim_ledger.collapse_timeline(runs_desc)
     selected["consensus_html"] = render_public_markdown(
-        selected["consensus_md"], selected["evidence"]
+        selected["consensus_md"], selected["evidence"],
+        excluded_sources=selected.get("excluded_evidence") or [],
     )
     for change in selected["opinion_changes"]:
         change["summary_html"] = render_public_markdown(change.get("summary"))

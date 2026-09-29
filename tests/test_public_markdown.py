@@ -1,0 +1,9 @@
+
+
+def test_citations_to_excluded_sources_are_dropped_not_shown_raw():
+    from app.services.public_markdown import render_public_markdown
+    sources = [{"id": "S1", "url": "https://agency.example/report", "title": "Agency"}]
+    excluded = [{"id": "S3", "url": "https://news.example/story", "title": "News"}]
+    html = render_public_markdown("Prices rose [S1, S3]. Also reported [S3].", sources, excluded_sources=excluded)
+    assert "S3" not in html and "[3]" not in html
+    assert "#src-1" in html

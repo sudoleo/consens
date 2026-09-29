@@ -155,7 +155,10 @@ def main():
             result = extract(raw, mode)
     except Exception:
         result = {"parts": [], "warnings": ["File could not be safely read. Export it again or provide text."], "status": "failed"}
-    sys.stdout.write(json.dumps(result, ensure_ascii=False))
+    # Write UTF-8 bytes: text-mode stdout uses the console code page on
+    # Windows (e.g. cp1252) and would corrupt or crash on non-ASCII text.
+    sys.stdout.buffer.write(json.dumps(result, ensure_ascii=False).encode("utf-8"))
+    sys.stdout.buffer.flush()
 
 
 if __name__ == "__main__":

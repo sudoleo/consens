@@ -1339,18 +1339,27 @@ def consensus(request: Request, data: dict = Body(...)):
     # The browser names them by receipt id; text, sources, model and
     # provenance come from the receipt. Client-supplied answer text is never
     # accepted as a model answer.
+    def receipt_failure(status_code: int, message: str, error_code: str) -> HTTPException:
+        # A rejected answer set can never complete this turn: fail it so the
+        # browser does not keep the conversation locked on a pending turn.
+        disposable_ids = validated_chat_turn_ids or chat_turn_ids
+        failed = _fail_chat_turn_best_effort(uid, disposable_ids, error_code=error_code)
+        detail = {"error": message, "error_code": error_code}
+        if disposable_ids is not None:
+            detail = {**_chat_turn_error_detail(message, disposable_ids, "failed" if failed else "pending",
+                                                persisted=False), "error_code": error_code}
+        return HTTPException(status_code=status_code, detail=detail)
+
     receipt_ids = _receipt_ids(data)
     if receipt_ids is None and (
         isinstance(data.get("answers"), dict) and any(data["answers"].values())
         or any(data.get(LEGACY_ANSWER_FIELDS.get(provider, f"answer_{provider}"))
                for provider in cfg.PROVIDER_LABEL_BY_ID)
     ):
-        raise HTTPException(
-            status_code=400,
-            detail={
-                "error": "Model answers must be submitted as answer receipts. Reload the page and run the comparison again.",
-                "error_code": "answer_receipts_required",
-            },
+        raise receipt_failure(
+            400,
+            "Model answers must be submitted as answer receipts. Reload the page and run the comparison again.",
+            "answer_receipts_required",
         )
     receipt_ids = {
         label: receipt_id for label, receipt_id in (receipt_ids or {}).items()
@@ -1369,21 +1378,24 @@ def consensus(request: Request, data: dict = Body(...)):
             receipt_ids=receipt_ids,
         ) if receipt_ids and question else {}
     except answer_receipts.ReceiptError as exc:
-        raise HTTPException(
-            status_code=409,
-            detail={"error": exc.message, "error_code": exc.code},
-        ) from None
+        raise receipt_failure(409, exc.message, exc.code) from None
     except Exception as exc:
         logging.error("answer receipt read failed category=%s", safe_exception(exc))
-        raise HTTPException(status_code=503, detail="Model answers are temporarily unavailable.") from exc
+        raise receipt_failure(
+            503, "Model answers are temporarily unavailable. Run the question again.",
+            "answer_receipts_unavailable",
+        ) from exc
     # Incomplete answers (token limit, interrupted) stay visible in the
     # browser but never enter a synthesis (R06).
     usable_receipts = {
         label: receipt for label, receipt in verified_receipts.items()
-        if receipt["completion"] == completion.COMPLETE and receipt["text"].strip()
+        if completion.usable_as_input(receipt["completion"]) and receipt["text"].strip()
     }
     answers_by_model = {
-        label: cap_engine_text(usable_receipts[label]["text"], answer_char_limit)
+        label: completion.consensus_input_text(
+            cap_engine_text(usable_receipts[label]["text"], answer_char_limit),
+            usable_receipts[label]["completion"],
+        )
         if label in usable_receipts else None
         for label in cfg.PROVIDER_LABEL_BY_ID.values()
     }

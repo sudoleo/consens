@@ -1429,6 +1429,15 @@ class HistoryViewTests(unittest.TestCase):
 
 
 class OpinionMapTests(unittest.TestCase):
+
+    def test_modal_may_and_number_formatting_are_not_movement(self):
+        from app.services.opinion_map import stance_changed
+        self.assertFalse(stance_changed("Prices may rise to 20 euros", "Prices will likely rise to 20 euros", lexical=False))
+        self.assertFalse(stance_changed("Adoption will grow", "Adoption may grow", lexical=False))
+        self.assertFalse(stance_changed("1,000 USD", "1000 USD", lexical=False))
+        self.assertFalse(stance_changed("3.5% growth", "3,5% growth", lexical=False))
+        self.assertTrue(stance_changed("Launch in May 2027", "Launch in June 2027", lexical=False))
+        self.assertTrue(stance_changed("costs 1,000 USD", "costs 1,500 USD", lexical=False))
     def _differences(self, openai_stance="Adopt now", openai_with="Gemini"):
         first_models = ["OpenAI", openai_with] if openai_with else ["OpenAI"]
         second_models = [provider for provider in ("Gemini", "Anthropic") if provider not in first_models]

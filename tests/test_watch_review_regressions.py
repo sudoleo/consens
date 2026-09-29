@@ -541,3 +541,44 @@ def test_topic_run_stages_follower_items_in_the_run_transaction():
     assert stored["kind"] == "topic_follower"
     assert stored["run_id"] == run["id"]
     assert stored["recipient_id"] == "f1"
+
+
+def test_outbox_retry_scan_survives_a_missing_composite_index():
+    from datetime import datetime, timedelta, timezone
+    from google.api_core.exceptions import FailedPrecondition
+    from app.services import notification_outbox as outbox
+
+    now = datetime(2026, 9, 29, 12, tzinfo=timezone.utc)
+    rows = {
+        "late": {"status": "pending", "next_attempt_at": now - timedelta(minutes=5)},
+        "early": {"status": "pending", "next_attempt_at": now - timedelta(hours=1)},
+        "future": {"status": "pending", "next_attempt_at": now + timedelta(hours=1)},
+    }
+
+    class Doc:
+        def __init__(self, doc_id):
+            self.id = doc_id
+        def to_dict(self):
+            return rows[self.id]
+
+    class Ordered:
+        def limit(self, _):
+            return self
+        def stream(self):
+            raise FailedPrecondition("The query requires an index.")
+
+    class Query:
+        def where(self, filter=None):
+            return self
+        def order_by(self, _):
+            return Ordered()
+        def limit(self, _):
+            return self
+        def stream(self):
+            return [Doc(doc_id) for doc_id in rows]
+
+    class Db:
+        def collection(self, _):
+            return Query()
+
+    assert outbox.list_due_ids(now=now, db=Db()) == ["early", "late"]

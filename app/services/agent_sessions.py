@@ -11,7 +11,7 @@ from firebase_admin import firestore
 
 from app.services import persistence_guard
 from app.services import agent_quota, agent_budget_config
-from app.services.agent_costs import aggregate_usage, remaining_reservation
+from app.services.agent_costs import USAGE_FIELDS, aggregate_usage, remaining_reservation
 from app.services.agent_runtime import AgentCapacityExceeded
 from app.services.agent_provider_limits import AgentRunInterrupted
 from app.services.chat_store import ChatNotFound, TurnStatusConflict
@@ -59,6 +59,13 @@ def compact_root(patch, data):
         reservations.pop(step, None)
     previous = data.get("compacted_usage") if data.get("compacted_steps") else None
     compacted = aggregate_usage([previous, *folded] if previous is not None else folded)
+    if compacted is None:
+        # Every folded step was unmetered: keep a count-only aggregate, or the
+        # next fold would drop these calls and report a complete usage.
+        compacted = {**{field: None for field in USAGE_FIELDS}, "web_search_requests": None,
+                     "complete": False, "cost_complete": False, "measured_calls": 0,
+                     "unmetered_calls": len(folded), "cost_source": "catalog", "source": "provider",
+                     "billing_mode": "simulation", "currency": "USD"}
     return {**patch, "step_states": states, "step_usage": usage, "reservations": reservations,
             "compacted_usage": compacted, "compacted_steps": data.get("compacted_steps", 0) + len(evicted)}
 

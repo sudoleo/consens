@@ -221,13 +221,22 @@ def test_ask_issues_a_receipt_bound_to_owner_run_question_and_model(monkeypatch)
 
 # --------------------------------------------------------------------- R06 --
 
-def test_incomplete_answers_never_enter_the_synthesis(api):
+def test_interrupted_answers_never_enter_the_synthesis(api):
     client, receipts, _, seen = api
-    ids = {"openai": _issue(receipts, "OpenAI", "Cut off", state="token_limit"),
+    ids = {"openai": _issue(receipts, "OpenAI", "Cut off", state="interrupted"),
            "mistral": _issue(receipts, "Mistral", "Two"),
            "grok": _issue(receipts, "Grok", "Three")}
     assert client.post("/consensus", headers=AUTH, json=_payload(ids)).status_code == 200
     assert seen["synthesized"] == [{"mistral": "Two", "grok": "Three"}]
+
+
+def test_token_limit_answers_enter_the_synthesis_marked_as_truncated(api):
+    from app.services.llm.completion import TRUNCATION_NOTE
+    client, receipts, _, seen = api
+    ids = {"openai": _issue(receipts, "OpenAI", "Long answer", state="token_limit"),
+           "mistral": _issue(receipts, "Mistral", "Two")}
+    assert client.post("/consensus", headers=AUTH, json=_payload(ids)).status_code == 200
+    assert seen["synthesized"] == [{"openai": "Long answer" + TRUNCATION_NOTE, "mistral": "Two"}]
 
 
 def _final(response):
@@ -323,16 +332,19 @@ def test_non_streaming_query_model_reports_token_limit():
     assert result["completion"] == completion.TOKEN_LIMIT
 
 
-def test_provider_fan_out_drops_incomplete_answers():
+def test_provider_fan_out_drops_interrupted_and_marks_truncated_answers():
+    from app.services.llm.completion import TRUNCATION_NOTE
     from app.services.llm.provider_transport import fan_out_provider_answers
+    states = {"openai": "interrupted", "mistral": "complete", "grok": "token_limit"}
 
     def call(provider, *args):
-        state = "token_limit" if provider == "openai" else "complete"
-        return {"text": f"{provider} text", "sources": [], "completion": state}
+        return {"text": f"{provider} text", "sources": [], "completion": states[provider]}
 
-    answers = fan_out_provider_answers(question="Q", provider_models={"openai": "m", "mistral": "m"},
+    answers = fan_out_provider_answers(question="Q", provider_models={p: "m" for p in states},
                                        keys={}, tier="free", deep_think=False, provider_call=call)
-    assert list(answers) == ["mistral"]
+    assert sorted(answers) == ["grok", "mistral"]
+    assert answers["grok"].response == "grok text" + TRUNCATION_NOTE
+    assert answers["mistral"].response == "mistral text"
 
 
 def test_browser_flow_carries_receipts_and_completion_state():
@@ -343,7 +355,27 @@ def test_browser_flow_carries_receipts_and_completion_state():
     consensus = (root / "consensus-run.js").read_text(encoding="utf-8")
     assert "run_id: context.runId" in query_send
     assert "result.receipt = typeof data.answer_receipt" in query_send
-    assert 'result.status = completion === "complete" ? "complete" : "incomplete"' in query_send
+    assert 'const usable = completion === "complete" || completion === "token_limit";' in query_send
+    assert 'result.status = usable ? "complete" : "incomplete";' in query_send
     run_path = consensus.split("window.App.executeConsensusRun =", 1)[1].split("window.getConsensus =", 1)[0]
     assert "answer_receipts: runReceipts(context)" in run_path
     assert "answers: Object.fromEntries" not in run_path
+
+
+@pytest.mark.parametrize("body", ["tampered", "legacy_text"])
+def test_rejected_answer_sets_fail_the_pending_turn(api, body):
+    client, receipts, store, seen = api
+    good = _issue(receipts, "Mistral", "Two")
+    if body == "tampered":
+        payload = _payload({"openai": "f" * 40, "mistral": good}, chat_id=CHAT_ID, turn_id=TURN_ID)
+        expected = 409
+    else:
+        payload = _payload({}, chat_id=CHAT_ID, turn_id=TURN_ID, answers={"OpenAI": "free text", "Mistral": "x"})
+        payload.pop("answer_receipts")
+        expected = 400
+    response = client.post("/consensus", headers=AUTH, json=payload)
+    assert response.status_code == expected
+    detail = response.json()["detail"]
+    assert detail["chat_turn_state"] == "failed" and detail["turn_id"] == TURN_ID
+    assert store.failures == [detail["error_code"]]
+    assert seen["synthesized"] == []

@@ -11,7 +11,11 @@ these states from the transport up to storage and UI:
 - ``error``        the provider reported an error / content filter stop
 - ``cancelled``    the request was cancelled deliberately
 
-Only ``complete`` text may become a Consensus input or a completed result.
+Explicit input rule for the Consensus: ``complete`` answers are used as they
+are; ``token_limit`` answers are used as clearly marked truncated answers (the
+model finished a long answer and hit the output budget, which is common for
+reasoning models); ``interrupted``/``error``/``cancelled`` answers are never
+used. A synthesis is only a completed result when it is ``complete`` itself.
 Partial text may stay visible, but it is always labelled with its state.
 """
 
@@ -30,6 +34,20 @@ INCOMPLETE_STATES = frozenset({TOKEN_LIMIT, INTERRUPTED})
 _COMPLETE_REASONS = frozenset({"stop", "end_turn", "stop_sequence", "eos"})
 _TOKEN_LIMIT_REASONS = frozenset({"length", "max_tokens", "max_output_tokens"})
 _ERROR_REASONS = frozenset({"error", "content_filter"})
+
+
+INPUT_STATES = frozenset({COMPLETE, TOKEN_LIMIT})
+TRUNCATION_NOTE = "\n\n[Note: this answer was cut off at the model's output limit; its end is missing.]"
+
+
+def usable_as_input(state: Optional[str]) -> bool:
+    """Whether a model answer in this state may feed a Consensus synthesis."""
+    return (state or COMPLETE) in INPUT_STATES
+
+
+def consensus_input_text(text: str, state: Optional[str]) -> str:
+    """Answer text as the synthesis sees it: truncated answers say so."""
+    return str(text or "") + (TRUNCATION_NOTE if state == TOKEN_LIMIT else "")
 
 
 def completion_state(finish_reason: Any, *, terminated: bool) -> str:

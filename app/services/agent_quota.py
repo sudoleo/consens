@@ -15,7 +15,7 @@ settled as a measured zero and release everything. There is no day-long lock.
 """
 import math
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from app.services.llm.provider_runtime import AnalysisBudgetExceeded
 from app.services import agent_budget_config
@@ -44,13 +44,28 @@ def snapshot(db, uid):
     data = quota_ref(db, uid, day).get().to_dict() or {}
     if data.get('unknown', 0) > data.get('unknown_released', 0):
         data = store.repair_quota_period(uid, day)
-    if data.get('estimated', 0) > 0:
+    if data.get('estimated', 0) > 0 or _previous_day_has_estimates(db, uid, day):
         # Provider usage lookups run off the request thread; a later snapshot
         # shows the measured result. This read never waits or fails for it.
+        # Yesterday is checked too, so a call estimated just before midnight
+        # is still measured instead of silently becoming final.
         from app.services import agent_usage_reconciliation
         agent_usage_reconciliation.schedule(db, uid)
     return {**public(data, day.split('_')[0], limit=config['daily_token_limit']),
             "observed_at": observed_at, "config_revision": config['revision']}
+
+
+def _previous_day_has_estimates(db, uid, day):
+    try:
+        today = datetime.strptime(day.split('_')[0], "%Y-%m-%d")
+    except ValueError:
+        return False
+    suffix = day[len(day.split('_')[0]):]
+    previous = (today - timedelta(days=1)).strftime("%Y-%m-%d") + suffix
+    try:
+        return (quota_ref(db, uid, previous).get().to_dict() or {}).get('estimated', 0) > 0
+    except Exception:
+        return False
 
 
 def daily_limit():

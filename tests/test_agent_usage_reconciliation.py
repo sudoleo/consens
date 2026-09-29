@@ -140,3 +140,18 @@ def test_generation_stats_prefer_native_counts_and_reject_garbage():
 
 def test_background_scheduling_is_disabled_in_unit_test_mode(store):
     assert reconciliation.schedule(store.db, UID) is False
+
+
+def test_snapshot_schedules_reconciliation_for_yesterdays_estimates(store, monkeypatch):
+    from datetime import datetime, timezone
+    scheduled = []
+    monkeypatch.setattr(reconciliation, "schedule", lambda db, uid: scheduled.append(uid) or True)
+    config = agent_quota.agent_budget_config.get_config(store.db)
+    today = agent_quota.period_key(config)
+    day = datetime.strptime(today.split("_")[0], "%Y-%m-%d")
+    yesterday = (day - timedelta(days=1)).strftime("%Y-%m-%d") + today[len(today.split("_")[0]):]
+    agent_quota.snapshot(store.db, UID)
+    assert scheduled == []
+    agent_quota.quota_ref(store.db, UID, yesterday).set({"estimated": 250})
+    agent_quota.snapshot(store.db, UID)
+    assert scheduled == [UID]

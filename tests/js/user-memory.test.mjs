@@ -150,8 +150,9 @@ describe("memory save conflicts", () => {
               return {
                 ok: false,
                 status: 409,
+                // Production envelope: main.py wraps HTTPException.detail as "error".
                 json: async () => ({
-                  detail: {
+                  error: {
                     error_code: "revision_conflict",
                     message: "Memory changed in another tab or through Remember/Correct memory. Your draft was not saved.",
                     revision: server.revision

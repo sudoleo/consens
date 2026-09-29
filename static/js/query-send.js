@@ -206,7 +206,7 @@
 
   function incompleteMessage(completion) {
     return completion === "token_limit"
-      ? "This answer stopped at the output limit and is incomplete. It is not used for the consensus."
+      ? "This answer stopped at the output limit; its end is missing. It is used for the consensus as a truncated answer."
       : "This answer was interrupted and is incomplete. It is not used for the consensus.";
   }
 
@@ -314,7 +314,10 @@
       // Typed completion state (R06). Partial text stays visible, but it is
       // labelled and never counts as a completed answer for the Consensus.
       const completion = typeof data.completion === "string" ? data.completion : "complete";
-      result.status = completion === "complete" ? "complete" : "incomplete";
+      // A token-limit answer is still used, marked as truncated; only
+      // interrupted answers are excluded from the Consensus.
+      const usable = completion === "complete" || completion === "token_limit";
+      result.status = usable ? "complete" : "incomplete";
       result.completion = completion;
       result.text = prepared.markdown;
       result.streamText = prepared.markdown;
@@ -323,9 +326,16 @@
       // Server receipt of exactly this answer (R09): /consensus reads the
       // stored text, never the browser copy.
       result.receipt = typeof data.answer_receipt === "string" ? data.answer_receipt : null;
-      result.error = completion === "complete" ? null : incompleteMessage(completion);
+      if (usable && !result.receipt) {
+        // The server could not store this answer, so it cannot be verified
+        // for the Consensus. Say so instead of failing later with a vague error.
+        result.status = "incomplete";
+        result.error = "This answer could not be saved for the comparison. It is not used for the consensus; run the question again to include it.";
+      } else {
+        result.error = completion === "complete" ? null : incompleteMessage(completion);
+      }
       context.progress.completedModels += 1;
-      if (completion === "complete") context.progress.successfulModels += 1;
+      if (result.status === "complete") context.progress.successfulModels += 1;
       else context.progress.failedModels += 1;
       registry.update(context.runId, () => {});
 

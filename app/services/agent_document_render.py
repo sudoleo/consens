@@ -129,9 +129,12 @@ def render_document(spec):
 
 
 if __name__ == "__main__":
-    import resource
-    resource.setrlimit(resource.RLIMIT_CPU, (20, 20))
-    resource.setrlimit(resource.RLIMIT_AS, (1024 * 1024 * 1024, 1024 * 1024 * 1024))
+    try:
+        import resource
+        resource.setrlimit(resource.RLIMIT_CPU, (20, 20))
+        resource.setrlimit(resource.RLIMIT_AS, (1024 * 1024 * 1024, 1024 * 1024 * 1024))
+    except ImportError:  # Windows: the parent's wall-clock timeout still applies.
+        pass
     # Lightweight import only: no Firestore, Firebase Admin or credentials here.
     from app.services.agent_document_spec import DocumentSpec
     raw = sys.stdin.buffer.read(50_001)

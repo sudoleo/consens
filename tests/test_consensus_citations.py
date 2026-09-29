@@ -247,3 +247,13 @@ def test_source_check_eligibility_never_filters_differences_or_claims(factual):
     assert data["agreement"]["minor_contradictions"] == 1
     assert data["agreement"]["emphases"] == 1
     assert all(len(diff["positions"]) == 2 for diff in data["differences"])
+
+
+def test_dissent_quotes_tolerate_dropped_markdown_but_not_changed_numbers():
+    from app.services.llm.consensus_engine import _verify_claims
+    answers = {"OpenAI": "The plan costs **400 euros** per month [S1] for most users."}
+    claims = [{"anchor": "", "dissent": [{"model": "OpenAI", "quote": "costs 400 euros per month for most users"}]},
+              {"anchor": "", "dissent": [{"model": "OpenAI", "quote": "costs 4000 euros per month"}]}]
+    _verify_claims(claims, "", answers)
+    assert claims[0]["dissent"][0]["quote"]
+    assert claims[1]["dissent"][0]["quote"] == ""
