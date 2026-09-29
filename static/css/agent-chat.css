@@ -398,6 +398,7 @@ body.single-agent-active .consensus-model-inline .model-picker-display::after {
 .agent-action-card table { width: 100%; table-layout: fixed; border-collapse: collapse; }
 .agent-action-card th, .agent-action-card td { text-align: left; vertical-align: top; padding: 6px; border-bottom: 1px solid var(--line); white-space: pre-wrap; overflow-wrap: anywhere; }
 .agent-action-error { color: var(--dispute); }
+.agent-mail-body { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; padding: 12px; border: 1px solid var(--line); border-radius: 6px; }
 @media (max-width: 600px) {
   .agent-action-card table, .agent-action-card tbody, .agent-action-card tr, .agent-action-card th, .agent-action-card td { display: block; width: auto; }
   .agent-action-card tr:first-child { display: none; }

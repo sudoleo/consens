@@ -80,6 +80,11 @@
           provenance.textContent = `Document ${file.document_id} · version ${file.version}${file.parent_version ? ` · based on version ${file.parent_version}` : ''}. Ask a follow-up to revise a numbered section.`;
           row.append(provenance);
         }
+        if (file.origin?.message_id) {
+          const origin = document.createElement('p');
+          origin.textContent = `Gmail message ${file.origin.message_id} · part ${file.origin.part_id}. Account and message headers appear under Referenced Google messages.`;
+          row.append(origin);
+        }
         for (const warning of file.warnings || []) { const text = document.createElement('p'); text.textContent = warning; row.append(text); }
         row.append(button('Download', () => download(chatId, file)));
         row.append(button('Remove', async () => {

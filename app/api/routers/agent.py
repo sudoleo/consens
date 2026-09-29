@@ -175,7 +175,8 @@ def run_agent(request: Request, payload: AgentRequest):
             prior_selection = existing.get("agent_settings", {}).get("selection", {"model_id": None, "reasoning_effort": "default"})
             if existing.get("agent_settings", {}).get("file_ids", []) != payload.file_ids:
                 raise TurnStatusConflict("Request identity conflicts with different files")
-            if existing.get("agent_settings", {}).get("google_selection") != (payload.google_selection.model_dump() if payload.google_selection else None):
+            previous_google = existing.get("agent_settings", {}).get("google_selection")
+            if (GoogleSelection.model_validate(previous_google).model_dump() if previous_google else None) != (payload.google_selection.model_dump() if payload.google_selection else None):
                 raise TurnStatusConflict("Request identity conflicts with different Google permissions")
             if existing.get("agent_settings", {}).get("google_data_consent", False) != payload.google_data_consent:
                 raise TurnStatusConflict("Request identity conflicts with different Google data consent")
@@ -234,6 +235,8 @@ def run_agent(request: Request, payload: AgentRequest):
             configuration()
             connections = GoogleConnections(db_firestore)
             connections.get(uid, payload.google_selection.connection_id, "calendar_read" if payload.google_selection.calendar else None)
+            if payload.google_selection.gmail and not {"gmail_read", "gmail_send"} & set(connections.get(uid, payload.google_selection.connection_id)["capabilities"]):
+                raise HTTPException(403, "Authorize Gmail for the selected account first.")
         lease = agent_capacity.acquire()
         config = prompt_config.get_config()
         delegation_config = config["delegation"]

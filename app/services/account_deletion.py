@@ -232,7 +232,7 @@ class FirestoreAccountDeletion:
         # otherwise the refresh tokens would stay valid for a deleted user.
         from app.services.google_connections import GoogleConnections
         GoogleConnections(self._db).revoke_all(uid)
-        for name in ("bookmarks", "counters", "memory", "usage_days", "usage_runs", "llm_calls", "google_connections", "google_oauth_states"):
+        for name in ("bookmarks", "counters", "memory", "usage_days", "usage_runs", "llm_calls", "google_connections", "google_oauth_states", "google_write_intents"):
             for snap in user_ref.collection(name).stream():
                 snap.reference.delete()
 

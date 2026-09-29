@@ -23,6 +23,8 @@ from app.services.chat_store import ChatStore
 SCOPES = {
     "calendar_read": ["https://www.googleapis.com/auth/calendar.readonly"],
     "calendar_write": ["https://www.googleapis.com/auth/calendar.events"],
+    "gmail_read": ["https://www.googleapis.com/auth/gmail.readonly"],
+    "gmail_send": ["https://www.googleapis.com/auth/gmail.send"],
 }
 IDENTITY_SCOPES = ["openid", "email"]
 TOKEN_URL = "https://oauth2.googleapis.com/token"
@@ -203,7 +205,8 @@ class GoogleConnections:
             key = next(k for k in keys if k["kid"] == header.get("kid"))
             data = jwt.decode(token, jwt.PyJWK(key).key, algorithms=["RS256"], audience=configuration()["CLIENT_ID"],
                 issuer=["accounts.google.com", "https://accounts.google.com"], options={"require": ["exp", "iss", "aud", "sub", "nonce"]})
-            if data["nonce"] != nonce or not data.get("email_verified") or not data.get("email"):
+            if (data["nonce"] != nonce or not data.get("email_verified") or not data.get("email")
+                or data.get("azp", configuration()["CLIENT_ID"]) != configuration()["CLIENT_ID"]):
                 raise ValueError()
             return data
         except (ValueError, KeyError, StopIteration, jwt.PyJWTError):
@@ -320,7 +323,8 @@ class GoogleConnections:
         if self.get(uid, connection_id, capability)["revision"] != current_revision:
             raise GoogleError("The Google connection changed.", 409)
         try:
-            result = self.wire.request(method, "https://www.googleapis.com" + path, headers=headers, **kwargs)
+            origin = "https://gmail.googleapis.com" if path.startswith("/gmail/") else "https://www.googleapis.com"
+            result = self.wire.request(method, origin + path, headers=headers, **kwargs)
         except GoogleError as exc:
             if exc.status == 401:
                 def invalidate(tx):
@@ -394,7 +398,7 @@ def cleanup_google_data(db=None):
         from app.core.security import db_firestore
         db = db_firestore
     count = 0
-    for collection, length in (("google_oauth_states", 4), ("actions", 6)):
+    for collection, length in (("google_oauth_states", 4), ("actions", 6), ("google_evidence", 6), ("google_write_intents", 4)):
         for snapshot in db.collection_group(collection).where(filter=FieldFilter("expires_at", "<=", now().isoformat())).limit(200).stream():
             pieces = snapshot.reference.path.split("/")
             if len(pieces) == length and pieces[0] == "users" and (length == 4 or pieces[2] == "chats"):

@@ -135,7 +135,14 @@ def calendars(request: Request, connection_id: str, page_token: str = Query(defa
 @limiter.limit("60/minute")
 def actions(request: Request, chat_id: str):
     uid = owner(request)
-    return invoke(uid, lambda: {"actions": AgentActions(db_firestore).list(uid, chat_id)})
+    def operation():
+        service = AgentActions(db_firestore)
+        actions = service.list(uid, chat_id)
+        from app.services.google_connections import now
+        evidence = [s.to_dict() for s in service.files.chats._chat_ref(uid, chat_id).collection("google_evidence").limit(100).stream()
+            if s.to_dict().get("expires_at", "") > now().isoformat()]
+        return {"actions": actions, "evidence": evidence}
+    return invoke(uid, operation)
 
 
 @router.post("/agent/chats/{chat_id}/actions/{action_id}/confirm")

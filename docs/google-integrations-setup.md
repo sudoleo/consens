@@ -6,7 +6,7 @@ Do not use production mail or invitation recipients for automated smoke tests.
 
 ## Configuration
 
-1. In a dedicated Google Cloud project, enable Calendar API. Configure an OAuth
+1. In a dedicated Google Cloud project, enable Calendar API and Gmail API. Configure an OAuth
    web application and its consent screen, verified domain, support contact, home
    page and privacy-policy URL. Use test users while verification is pending.
 2. Register exactly `https://YOUR_HOST/agent/google/callback` as the redirect URI.
@@ -34,7 +34,7 @@ Do not use production mail or invitation recipients for automated smoke tests.
    and ZDR, and fails closed if no approved route exists. Model/router logging and
    provider contracts must also prohibit general-purpose training and secondary
    use. These flags alone are not a compliance attestation.
-5. Deploy `firestore.indexes.json`. OAuth state/action expiry use collection-group
+5. Deploy `firestore.indexes.json`. OAuth state/action/evidence/intent expiry use collection-group
    indexes; credentials, OAuth secrets, proposal bodies and previews are excluded
    from indexes. Keep the existing deny-all browser Firestore rules. Production
    Firestore and private GCS encryption at rest remain required for Google-derived
@@ -51,6 +51,8 @@ Do not use production mail or invitation recipients for automated smoke tests.
 | Google account identity | `openid email` | Verified subject and account label; no profile scope |
 | Calendar reading | `https://www.googleapis.com/auth/calendar.readonly` | Calendar selection, event search/read/instances and free/busy |
 | Calendar changes (separate request) | `https://www.googleapis.com/auth/calendar.events` | Create and patch events after exact confirmation |
+| Gmail reading (restricted) | `https://www.googleapis.com/auth/gmail.readonly` | Targeted search, messages, complete paged threads, selected attachments and read-only send reconciliation |
+| Gmail sending (sensitive; separate request) | `https://www.googleapis.com/auth/gmail.send` | Send the exact locally reviewed MIME message |
 
 The token response determines actual capabilities; a partial OAuth grant does not
 imply a missing permission. Connections are selected per message. A separate,
@@ -75,18 +77,22 @@ uploaded files, comparisons, documents and selected Google data in the chat.
   refresh or OAuth callback from restoring disconnected access.
 - Exact proposals expire for approval after 30 minutes; proposal content and
   results expire after 30 days. Existing hourly maintenance removes expired OAuth
-  states and action records. Connection credentials remain until disconnect or
-  account deletion. Chat deletion removes proposals (`ChatStore._delete_chat_tree`);
-  account deletion first asks Google to revoke every stored grant (best effort),
-  then removes credentials, pending OAuth states and all chats/files. Disconnect
-  deletes local access first and attempts provider revocation; on failure the UI
-  links to Google's account-permissions page. Listing and disconnecting accounts
-  stay available without Agent access (e.g. after a downgrade); connecting and
-  actions require it. An API 401 marks a connection for reauthorization but keeps
-  the sealed refresh token so that disconnect can still revoke it. Revocation is
-  per Google grant: if two Consens users connected the same Google account, one
-  user's disconnect also ends the other's grant. Content already in saved chat
-  answers remains until users delete those chats.
+  states, action records and bounded message-evidence headers. A minimal per-user
+  write-intent fence (hash, action/chat IDs and status, no message content) is also
+  retained for 30 days, including after chat deletion, to block equivalent ambiguous
+  writes from another chat. Account deletion removes it. Connection credentials
+  remain until disconnect or account deletion. Chat deletion removes proposals and
+  message evidence (`ChatStore._delete_chat_tree`); account deletion first asks
+  Google to revoke every stored grant (best effort), then removes credentials,
+  pending OAuth states and all chats/files. Disconnect deletes local access first
+  and attempts provider revocation; on failure the UI links to Google's
+  account-permissions page. Listing and disconnecting accounts stay available
+  without Agent access (e.g. after a downgrade); connecting and actions require
+  it. An API 401 marks a connection for reauthorization but keeps the sealed
+  refresh token so that disconnect can still revoke it. Revocation is per Google
+  grant: if two Consens users connected the same Google account, one user's
+  disconnect also ends the other's grant. Content already in saved chat answers
+  remains until users delete those chats.
 - Model answers are rendered without any auto-loading remote resource (remote
   images, media, `<style>`, CSS `url()`), so injected calendar or mail text
   cannot exfiltrate data through markup that loads on render; links need a click.
@@ -108,9 +114,67 @@ uploaded files, comparisons, documents and selected Google data in the chat.
   remain available for review and can be rejected. Once a user confirms an action,
   that action has an independent durable lifecycle; Stop cannot retract an invitation.
 
+## Gmail behavior and limits
+
+Gmail is selected explicitly for each message; Calendar permission is independent.
+Search requires a query and returns at most ten IDs plus a next-page token. Reading
+a thread retrieves only its ID inventory, then up to ten chosen full messages per
+page; the default is three. Body excerpts have explicit continuation offsets.
+Models must not claim a whole thread was read while pages or body excerpts remain.
+Up to 100 distinct message references can be retained per chat; start another chat
+for more. Inventories over 20,000 messages or bodies over 2 MB fail clearly. MIME
+parsing caps depth (20), parts (1,000) and external text parts (10). HTML is reduced
+to text without loading remote images or executing scripts; unsupported encodings
+and conversion are disclosed. No background inbox synchronization or unread-state
+changes occur.
+
+`import_gmail_attachment` loads one selected MIME part through the shared private
+file validator/extractor (5 MiB), preserving its account/message/part provenance.
+Repeated imports reuse the saved file. Attachments must belong to the same user
+and chat; encrypted/unsupported content follows normal file errors. Document
+outputs from PR 2 are ordinary eligible private attachments. An email has at most
+five attachments and 10 MiB total, 30 unique explicit To/Cc/Bcc addresses, a 500-char
+subject and 20,000-char plain-text body. Inline CID rendering, aliases, S/MIME and
+PGP decryption are not supported; inspect those messages in Gmail.
+
+Drafts are saved **in Consens**, not in Gmail Drafts. `prepare_gmail_draft` and
+`gmail_read(operation=draft)` support follow-up revisions and restored cards.
+Each revision keeps the old proposal and supersedes its approval. This avoids
+requesting the restricted `gmail.compose` scope or mailbox-modifying permissions.
+The user sees the verified sender, all recipients including Bcc, original message
+and thread, complete body, and downloadable attachment versions. Recipients the
+user did not name in this chat and that are not participants of the replied
+thread are highlighted (`recipient_warnings`), because an injected instruction in
+mail or file content would typically add exactly such an address. Headers are
+built when the draft is prepared: subjects with Unicode line breaks (U+2028,
+U+2029, U+0085) or other control characters are rejected before approval. Authorizing send
+later changes the connection revision: prepare and review a fresh draft afterward.
+Reply metadata is fetched from the selected original message; the MIME carries its
+thread ID, In-Reply-To and References, and a compatible subject.
+
+Before sending, private bytes are re-read and checked against the approved file
+hash, name, type and size. The durable claim prevents repeated POSTs. Any failure
+while building the message locally, before the Gmail call, is `failed` (nothing was
+sent) and does not keep the write-intent fence blocking. A network failure or
+malformed success response leaves delivery `unknown`. With read access,
+Check status searches only Sent for the deterministic Message-ID and verifies the
+returned header and SENT label. No match is inconclusive (indexing may lag); it
+never triggers a resend. With send-only permission, authorize read access or inspect
+Sent manually. Google does **not** promise idempotency based on Message-ID, so the
+implementation never relies on an automatic resend being deduplicated.
+
+Google enforces separate project/user quota units and Gmail sending limits; the
+Consens 500-request daily limit is an additional bound, not a substitute. The
+current official quota page distinguishes projects created after May 1, 2026 from
+grandfathered projects. Check the deployed project's console and current billing
+terms, set monitoring/budgets and respect returned 403/429 errors. The transport
+surfaces them without automatic retries; ambiguous writes use reconciliation.
+Google API charges, if applicable to the deployed project, are operator costs and
+are not silently added to the existing model-token ledger.
+
 ## Public-operation prerequisites
 
-Sensitive Calendar scopes require the applicable OAuth app verification before a
+Sensitive Calendar and Gmail send scopes require the applicable OAuth app verification before a
 public rollout (unless a documented Google exception applies). Complete Google's
 domain/branding/privacy disclosures and show the in-product data notice before
 consent. Workspace admins may require allowlisting. Confirm Limited Use compliance
@@ -118,6 +182,20 @@ for every processor receiving raw or derived Google data; do not use such data f
 ads, resale, general model training or unrelated human review. The privacy page
 contains the Limited Use statement and deletion guidance. Review its accuracy for
 the actual deployment before enabling external users.
+
+Gmail readonly is a **restricted** scope. This server-based architecture stores
+and transmits restricted data, so plan for restricted-scope verification and the
+required security assessment under Google's published rules unless Google confirms
+an applicable exception. Submit the exact scopes, a working demonstration of
+account connection, selection, in-product disclosure, recipient/content approval
+and deletion, and evidence of the permitted user-facing productivity use case.
+Complete the applicable CASA assessment/renewal process with the approved assessor;
+this code or its tests do not constitute that assessment. Maintain incident-response,
+access-control and encryption procedures and processor agreements for both raw and
+derived data, including excerpts, documents and summaries. No general-purpose model
+training, ads, resale or unrelated human access is allowed. Limit staging access to
+listed test users until the relevant approval is complete. Workspace administrators
+may independently block the application.
 
 Credentials and provider contracts are external prerequisites. Offline tests do
 not prove Google consent-screen approval, Workspace admin policy, production
@@ -137,3 +215,33 @@ Official references checked 2026-09-27:
 - https://developers.google.com/workspace/workspace-api-user-data-developer-policy
 - https://developers.google.com/identity/protocols/oauth2/production-readiness/restricted-scope-verification
 - https://openrouter.ai/docs/guides/routing/provider-selection
+
+Gmail references (official, checked 2026-09-27):
+
+- https://developers.google.com/workspace/gmail/api/auth/scopes
+- https://developers.google.com/workspace/gmail/api/auth/web-server
+- https://developers.google.com/workspace/gmail/api/guides/sending
+- https://developers.google.com/workspace/gmail/api/guides/threads
+- https://developers.google.com/workspace/gmail/api/reference/rest/v1/users.messages/get
+- https://developers.google.com/workspace/gmail/api/reference/rest/v1/users.threads/get
+- https://developers.google.com/workspace/gmail/api/reference/rest/v1/users.messages.attachments/get
+- https://developers.google.com/workspace/gmail/api/reference/quota
+
+### Explicitly authorized staging verification
+
+1. Use a dedicated test user/account and the deployed private bucket/indexes. Check
+   incremental read-only grants first, reconnect with missing/denied scopes, token
+   refresh, external revocation, disconnect, and deletion. Confirm that no token or
+   authorization code appears in application/proxy logs.
+2. Seed messages and threads manually in that account. Test a large paged thread,
+   HTML-only and external-text bodies, a supported attachment and an oversized one.
+   Confirm read excerpts and account/message references in a restored chat.
+3. Compare two uploaded offers, create and revise a decision brief, and prepare a
+   reply with the chosen DOCX/PDF version. Check both download formats and all
+   addresses, original-message references, content and attachments in the card.
+4. Only after explicit authorization of the **actual test recipients and exact
+   message/invitation**, confirm one send/event. Repeat the confirmation and verify
+   one provider operation. Simulate a lost response in an isolated adapter test;
+   use read-only status reconciliation. Never induce duplicate production sends.
+5. Check the consent-screen publishing state, Workspace admin policy, scope
+   verification/security assessment and processor terms before public enablement.

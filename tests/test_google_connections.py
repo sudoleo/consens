@@ -110,6 +110,9 @@ def test_real_signed_identity_rejects_wrong_nonce_and_audience(google):
     encoded=jwt.encode(claims,key,algorithm="RS256",headers={"kid":"test"})
     assert google.identity(encoded,"expected")["sub"]=="user"
     with pytest.raises(GoogleError): google.identity(encoded,"wrong")
+    claims["azp"]="other-client"
+    with pytest.raises(GoogleError): google.identity(jwt.encode(claims,key,algorithm="RS256",headers={"kid":"test"}),"expected")
+    del claims["azp"]
     claims["aud"]="other-app"
     with pytest.raises(GoogleError): google.identity(jwt.encode(claims,key,algorithm="RS256",headers={"kid":"test"}),"expected")
 

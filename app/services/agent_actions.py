@@ -28,6 +28,9 @@ class AgentActions:
             raise GoogleError("Invalid action ID.")
         return self.files.chats._chat_ref(uid, chat).collection("actions").document(action_id)
 
+    def intent_ref(self, uid, data):
+        return self.db.collection("users").document(uid).collection("google_write_intents").document(data.get("intent_hash") or data["hash"])
+
     def get(self, uid, chat, action_id):
         self.files.chats.get_chat(uid, chat)
         data = self.ref(uid, chat, action_id).get().to_dict()
@@ -40,10 +43,11 @@ class AgentActions:
         return [public_action(s.to_dict()) for s in self.files.chats._chat_ref(uid, chat).collection("actions").limit(100).stream()
             if s.to_dict().get("expires_at", "") > now().isoformat()]
 
-    def prepare(self, uid, chat, turn, kind, connection_id, capability, payload, preview, *, replaces=None):
-        connection = self.connections.get(uid, connection_id, capability)
+    def prepare(self, uid, chat, turn, kind, connection_id, capability, payload, preview, *, replaces=None, require_capability=True):
+        connection = self.connections.get(uid, connection_id, capability if require_capability else None)
         hashed = digest({"kind": kind, "connection": connection_id, "revision": connection["revision"], "payload": payload, "preview": preview})
-        intent = digest([kind, connection_id, {k: v for k, v in payload.items() if k not in {"event_id", "message_id"}}])
+        excluded = {"message_id"} if kind == "gmail_send" else ({"event_id"} if not payload.get("update") else set())
+        intent = digest([kind, connection_id, {k: v for k, v in payload.items() if k not in excluded}])
         action_id = digest([turn, hashed, replaces])[:32]
         ref = self.ref(uid, chat, action_id)
         data = {"id": action_id, "kind": kind, "status": "pending", "hash": hashed, "payload": payload, "preview": preview,
@@ -58,7 +62,7 @@ class AgentActions:
                 raise GoogleError("An equivalent action has an unknown or pending provider result. Check its status before preparing another.", 409)
         def save(tx):
             self.files.guard(uid, chat, tx)
-            current_connection = self.connections.get(uid, connection_id, capability, tx)
+            current_connection = self.connections.get(uid, connection_id, capability if require_capability else None, tx)
             existing = ref.get(transaction=tx).to_dict()
             chat_ref = self.files.chats._chat_ref(uid, chat)
             chat_data = chat_ref.get(transaction=tx).to_dict() or {}
@@ -72,6 +76,8 @@ class AgentActions:
                 raise GoogleError("Action history is full. Start a new chat.")
             if replaces and (not old or old.get("status") not in {"pending", "rejected", "failed"}):
                 raise GoogleError("That action can no longer be revised. Check its status.", 409)
+            if replaces and (old.get("kind") != kind or old.get("connection_id") != connection_id):
+                raise GoogleError("A revision must use the same action type and Google account.", 409)
             if replaces:
                 tx.update(self.ref(uid, chat, replaces), {"status": "superseded"})
             tx.set(ref, data)
@@ -94,6 +100,9 @@ class AgentActions:
         if data["kind"] == "calendar_event":
             from app.services.agent_calendar import CalendarActions
             return CalendarActions(self.connections)
+        if data["kind"] == "gmail_send":
+            from app.services.agent_gmail import GmailActions
+            return GmailActions(self.connections)
         raise GoogleError("This action is not supported.")
 
     def confirm(self, uid, chat, action_id, expected_hash):
@@ -103,6 +112,8 @@ class AgentActions:
             data = ref.get(transaction=tx).to_dict() or {}
             if data.get("hash") != expected_hash:
                 raise GoogleError("The action content changed. Review the current preview.", 409)
+            if data.get("expires_at", "") <= now().isoformat():
+                raise GoogleError("Action not found or expired.", 404)
             if data.get("status") in {"succeeded", "executing", "unknown"}:
                 return data, False
             if data.get("status") != "pending" or data["approval_until"] <= now().isoformat():
@@ -113,14 +124,19 @@ class AgentActions:
             if digest({"kind": data["kind"], "connection": data["connection_id"], "revision": data["connection_revision"],
                 "payload": data["payload"], "preview": data["preview"]}) != expected_hash:
                 raise GoogleError("Action integrity check failed.", 409)
+            intent_ref = self.intent_ref(uid, data)
+            intent = intent_ref.get(transaction=tx).to_dict() or {}
+            if intent.get("status") in {"executing", "unknown"} and intent.get("action_id") != action_id and intent.get("expires_at", "") > now().isoformat():
+                raise GoogleError("An equivalent action has an unresolved result in another chat. Check it before sending again.", 409)
             tx.update(ref, {"status": "executing", "confirmed_at": now().isoformat()})
+            tx.set(intent_ref, {"action_id": action_id, "chat_id": chat, "status": "executing", "expires_at": data["expires_at"]})
             return {**data, "status": "executing"}, True
         data, claimed = self.files.chats._transaction(claim)
         if not claimed:
             return public_action(data)
         try:
             result = self.handler(data).execute(uid, data, self.files, chat)
-            patch = {"status": "succeeded", "result": result}
+            patch = {"status": "succeeded", "result": result, "error": None}
         except GoogleError as exc:
             patch = {"status": "unknown" if exc.uncertain else "failed", "error": str(exc)}
         except Exception:
@@ -133,8 +149,12 @@ class AgentActions:
         def finish(tx):
             self.files.guard(uid, chat, tx)
             current = ref.get(transaction=tx).to_dict() or {}
+            intent_ref = self.intent_ref(uid, current) if current else None
+            intent = intent_ref.get(transaction=tx).to_dict() if intent_ref else None
             if current.get("hash") == expected_hash and current.get("status") in {"executing", "unknown"}:
                 tx.update(ref, patch)
+                if intent and intent.get("action_id") == current["id"]:
+                    tx.update(intent_ref, {"status": patch["status"]})
         self.files.chats._transaction(finish)
 
     def reconcile(self, uid, chat, action_id):
@@ -144,6 +164,6 @@ class AgentActions:
         if data["status"] == "executing" and data.get("confirmed_at", "") > (now() - timedelta(seconds=60)).isoformat():
             return public_action(data)
         result = self.handler(data).reconcile(uid, data)
-        patch = {"status": "succeeded", "result": result} if result else {"status": "unknown", "error": "No conclusive provider result yet. Nothing was sent again."}
+        patch = {"status": "succeeded", "result": result, "error": None} if result else {"status": "unknown", "error": "No conclusive provider result yet. Nothing was sent again."}
         self.finish(uid, chat, self.ref(uid, chat, action_id), data["hash"], patch)
         return public_action(self.get(uid, chat, action_id))
