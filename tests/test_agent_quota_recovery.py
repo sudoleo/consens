@@ -36,7 +36,10 @@ def test_terminal_unknown_usage_releases_admission_without_inventing_zero_usage(
     store.settle(*args, completion=receipt(measured=False), status='failed', final=False)
     budget = agent_quota.snapshot(store.db, UID)
     assert budget['used'] == budget['reserved'] == 0
-    assert budget['unknown'] == 500 and budget['remaining'] == budget['limit']
+    # R07 bounded uncertainty: the reservation is released, but a bounded
+    # estimate (never a measured zero, never the full hold) stays charged.
+    assert budget['unknown'] == 500 and budget['estimated'] == 250
+    assert budget['remaining'] == budget['limit'] - 250
     assert store.receipt_ref(*args).get().to_dict()['usage'] is None
     assert totals(store)['unmetered_calls'] == 1
     before = dict(budget)
@@ -63,7 +66,9 @@ def test_reload_reaps_lost_lease_map_and_recovers_exact_saved_single_call_usage(
     store.active_ref(UID).set({'leases':{}})
     original_totals = totals(store)
     budget = agent_quota.snapshot(store.db, UID)
-    assert budget['used'] == 85768 and budget['reserved'] == 0 and budget['remaining'] == 164232
+    # The unmeasured 3701-token step keeps a bounded 1851-token estimate.
+    assert budget['used'] == 85768 and budget['reserved'] == 0 and budget['estimated'] == 1851
+    assert budget['remaining'] == 164232 - 1851
     assert budget['unknown'] == 158222
     assert totals(store)['input_tokens'] == original_totals['input_tokens'] + 155
     assert totals(store)['output_tokens'] == original_totals['output_tokens'] + 284
@@ -143,7 +148,9 @@ def test_deleted_chat_cannot_leave_an_expired_receipt_blocking_the_account(store
     root = store.receipt_ref(*args)
     store.delete_chat(UID, loop.chat_id)
     store._transaction(lambda tx: tx.update(root, {'lease_until':datetime.now(timezone.utc)-timedelta(seconds=60)}))
-    assert agent_quota.snapshot(store.db, UID)['remaining'] == 250000
+    budget = agent_quota.snapshot(store.db, UID)
+    # The hold is released; only the bounded estimate for the unproven call stays.
+    assert budget['reserved'] == 0 and budget['remaining'] == 250000 - 250
     assert root.get().to_dict()['run_status'] == 'cancelled'
     assert not store._chat_ref(UID, loop.chat_id).get().exists
 

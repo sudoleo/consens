@@ -2312,8 +2312,21 @@ Katalogschätzungen; Kosten werden erfasst, begrenzen den Agent-Chat aber nicht 
 Jeder Claim reserviert transaktional im selben Commit wie sein Beleg unter
 users/{uid}/chat_state/agent_tokens_YYYY-MM-DD[_reset_epoch]. Settlement tauscht die Reserve
 gegen gemessene Tokens genau einmal aus. Jeder terminale Beleg gibt seine
-Reserve frei, auch wenn finale Tokenzahlen fehlen. Unbekannter Verbrauch wird
-nicht als Nullmessung oder geschätzter Verbrauch verbucht. `unknown` summiert
+Reserve frei, auch wenn finale Tokenzahlen fehlen. „Begrenzte Unsicherheit“
+(R07): Ein gestarteter Call ohne finale Usage wird weder ganz freigegeben noch
+ganz belastet, sondern mit einer Schätzung verbucht: gemessene provisorische
+Untergrenze, mindestens `UNKNOWN_ESTIMATE_FRACTION` (50 %) der Reserve. Sie
+steht im eigenen Ledger-Feld `estimated`, strikt getrennt von gemessenem
+`used`, und zählt gegen `remaining`; die API liefert `estimated` mit. Der Beleg
+erhält `quota_estimate` und `quota_reconcile=pending` (mit Provider-
+`generation_id`) bzw. `final` (ohne). `agent_usage_reconciliation.py` fragt
+OpenRouter `GET /generation?id=…` im Hintergrund ab (angestoßen vom Budgetabruf
+bei `estimated > 0`, je UID höchstens einmal pro Minute, in Unit/E2E/Mock aus)
+und ersetzt die Schätzung transaktional durch die gemessenen Tokens; der
+Belegstatus `pending → measured|final` ist der Exactly-once-Zaun. Nach sechs
+Versuchen oder 24 Stunden bleibt die Schätzung endgültig. Nachweislich nie
+gestartete Calls (`not_started`, `provider_rejection`) bleiben freie Nullmessungen.
+Eine ganztägige Sperre gibt es weiterhin nicht. `unknown` summiert
 die Reservierungsgrenzen solcher Belege, nicht deren tatsächlichen Verbrauch.
 `unknown_released` markiert die bereits freigegebenen Grenzen kumulativ.
 Budgetabruf und Ledger-Transaktionen lösen alte unbekannte Reserven anhand der
@@ -2337,8 +2350,8 @@ Bei sichtbarem Agent-Chat werden Budgets auch im Leerlauf alle 60 Sekunden sowie
 bei Fokus/Tab-Rückkehr aktualisiert. Fehlgeschlagene Aktualisierungen markieren
 den letzten bestätigten Stand; Auth-Wechsel verwerfen alte Requests/Ansichten.
 Tooltip und Budgetpanel unterscheiden unverbrauchte Tokens von momentan für
-neue Calls verfügbaren Tokens. Fehlende Usage abgeschlossener Calls wird als
-unbekannt angezeigt und blockiert das verbleibende Kontingent nicht.
+neue Calls verfügbaren Tokens. Geschätzte Tokens (`estimated`) zählen im Ring
+als verbraucht und werden im Panel als Schätzung bis zur Messung benannt.
 `scripts/repair_agent_allowance.py --email <Konto> --project-id <Projekt>` liest
 gezielt den aktuellen Ledger; erst `--apply` führt denselben Recovery-Pfad aus.
 Das Skript prüft das Projekt, verweigert Emulator-/Unit-Test-Kontexte und startet

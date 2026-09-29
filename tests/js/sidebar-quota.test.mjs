@@ -29,6 +29,11 @@ it('projects remaining Agent tokens into the existing ring without changing Cons
   w.App.sidebarQuota.sync(); expect(d.getElementById('quotaTriggerValue').textContent).toBe('65%');
   expect(d.getElementById('quotaTrigger').title).toMatch(/164[.,]232 tokens available for new calls/);
   expect(d.getElementById('quotaFoot').textContent).toContain('do not block the remaining allowance');
+  // R07: bounded estimates for unmeasured calls count as spent until measured.
+  budget = {used:85768,remaining:162381,reserved:0,unknown:158222,estimated:1851,limit:250000};
+  w.App.sidebarQuota.sync(); expect(d.getElementById('quotaTriggerValue').textContent).toBe('64%');
+  expect(d.getElementById('quotaFoot').textContent).toMatch(/1[.,]851 tokens are estimated/);
+  expect(d.getElementById('quotaFoot').textContent).not.toContain('do not block');
   budget = {remaining: 188878, limit: 250000};
   budget.remaining = 0; w.App.sidebarQuota.sync(); expect(d.getElementById('quotaTriggerValue').textContent).toBe('0%');
   budget.remaining = 300000; w.App.sidebarQuota.sync(); expect(d.getElementById('quotaTriggerValue').textContent).toBe('100%');
