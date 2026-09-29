@@ -1,5 +1,5 @@
 {
-  "sources": "384c1d42e47e",
+  "sources": "bf2a455e712c",
   "inputs": [
     "package-lock.json",
     "package.json",
@@ -94,8 +94,8 @@
     "static/js/watch-state.js",
     "static/js/watch.js",
     "static/style.css",
-    "static/vendor/dompurify/3.0.6/LICENSE",
-    "static/vendor/dompurify/3.0.6/dist/purify.min.js",
+    "static/vendor/dompurify/3.4.16/LICENSE",
+    "static/vendor/dompurify/3.4.16/dist/purify.min.js",
     "static/vendor/katex/0.17.0/LICENSE",
     "static/vendor/katex/0.17.0/dist/contrib/auto-render.min.js",
     "static/vendor/katex/0.17.0/dist/fonts/KaTeX_AMS-Regular.ttf",
@@ -166,7 +166,7 @@
   "scripts": [
     {
       "name": "head",
-      "src": "/static/dist/head.a7a5f459de29.js",
+      "src": "/static/dist/head.dcc72251ba36.js",
       "module": false,
       "defer": false
     },
@@ -190,7 +190,7 @@
     },
     {
       "name": "app",
-      "src": "/static/dist/app.963557ca2827.js",
+      "src": "/static/dist/app.3db7d0622efa.js",
       "module": false,
       "defer": true
     }
@@ -200,11 +200,11 @@
   },
   "previous_assets": [
     "app.2b3dd7f2b250.css",
+    "app.963557ca2827.js",
     "app.0251e875e682.js",
-    "app.8cf6f4b0c074.js",
     "firebase.5cc9d6fa1098.js",
     "firebase.890d650af819.js",
-    "head.1657f05e2da8.js",
-    "head.4ad9e855ae24.js"
+    "head.a7a5f459de29.js",
+    "head.1657f05e2da8.js"
   ]
 }
