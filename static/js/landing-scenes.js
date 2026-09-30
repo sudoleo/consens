@@ -10,9 +10,9 @@
 // through the section you are.
 //
 // Both scenes render the real /app surfaces (the composer well, the
-// guided run block from consensus-progress.js). The phase names, the
-// "Next:" lines and the handover to the provenance footer are the same
-// ones the product uses, so the page cannot quietly drift away from it.
+// guided run block from consensus-progress.js). The steps, the status
+// words and the handover to the provenance footer are the same ones the
+// product uses, so the page cannot quietly drift away from it.
 //
 // Reduced motion (or no IntersectionObserver): every scene is rendered
 // at its end state once and never touched again.
@@ -125,29 +125,30 @@
   const ANSWERS_SECONDS = 17.4;
   const RUN_SECONDS = 24;
 
-  const NEXT_LINES = {
-    prepare: "Next: <b>Ask the models</b> · <b>Write the consensus</b> · <b>Check for contradictions</b>",
-    answers: "Next: <b>Write the consensus</b> · <b>Check for contradictions</b>",
-    consensus: "Next: <b>Check for contradictions</b>",
-    differences: "An uninvolved model compares all answers. It does not get a vote.",
-    done: ""
-  };
+  // Same steps, words and states as the stepper in consensus-progress.js.
+  const STEP_ORDER = ["prepare", "answers", "consensus", "differences"];
 
-  // Every step the run checks off, in order. render() takes a prefix of this
-  // by phase; remeasure() uses the whole list to find the tallest state.
-  const ALL_PAST = [
-    "Question prepared · Balanced · 6 models",
-    "6 answers in " + ANSWERS_SECONDS.toFixed(1) + " s",
-    "Consensus written"
-  ];
-
-  const LABELS = {
-    prepare: "Preparing the question",
-    answers: "Models are answering",
+  const COMPACT = {
+    prepare: "Preparing",
+    answers: "Answering",
     consensus: "Writing the consensus",
     differences: "Checking for contradictions",
     done: "Done"
   };
+
+  const NEXT_LINES = {
+    prepare: "Next: answers, consensus, contradiction check",
+    answers: "Next: consensus, then contradiction check",
+    consensus: "Next: contradiction check",
+    differences: "",
+    done: ""
+  };
+
+  const NOTES = {
+    differences: "An uninvolved model compares all answers. It does not get a vote."
+  };
+
+  const RUN_META = "Balanced · 6 models";
 
   function clockText(seconds) {
     const total = Math.floor(Math.max(0, seconds));
@@ -158,49 +159,47 @@
     const run = scene.querySelector("[data-run]");
     if (!run) return null;
 
-    const past = scene.querySelector("[data-run-past]");
-    const label = scene.querySelector("[data-run-label]");
+    const steps = Array.from(scene.querySelectorAll("[data-step]"));
+    const compact = scene.querySelector("[data-run-compact]");
+    const compactCount = scene.querySelector("[data-run-compact-count]");
     const count = scene.querySelector("[data-run-count]");
+    const meta = scene.querySelector("[data-run-meta]");
+    const next = scene.querySelector("[data-run-next]");
     const time = scene.querySelector("[data-run-time]");
     const track = scene.querySelector("[data-run-track]");
     const bar = track && track.querySelector("i");
-    const next = scene.querySelector("[data-run-next]");
+    const note = scene.querySelector("[data-run-note]");
     const detail = scene.querySelector("[data-run-detail]");
     const result = scene.querySelector("[data-run-result]");
     const rows = Array.from(scene.querySelectorAll("[data-model]"));
     const stack = scene.querySelector("[data-run-stack]");
 
     let lastStage = "";
-    let lastPastCount = -1;
 
     // The panel must not change size while the run plays. The per-model rows
     // still collapse when the models are done — that is the app's behaviour —
-    // but they now collapse INSIDE a stack locked to its tallest state, so
+    // but they collapse INSIDE a stack locked to its tallest state, so
     // nothing below the mock moves and the scroll progress has a fixed
     // reference. Measured rather than hardcoded, because the tallest state
-    // depends on how the labels wrap at the current width.
+    // depends on how the head wraps at the current width.
     function remeasureRun() {
       if (!stack) return;
       stack.style.minHeight = "";
 
-      // The tallest state is not the one the run happens to be in right now:
-      // it is every check line present, the longest phase label, the longest
-      // "Next:" line and the model rows still on screen. Build that, measure
-      // it, then let the next paint put the real state back — render() is a
-      // pure function of progress, so nothing has to be saved and restored.
+      // Tallest state: model rows on screen, the note line shown, the
+      // longest narrow label and the longest "Next" line. render() is a pure
+      // function of progress, so nothing has to be saved and restored.
       const wasGone = run.classList.contains("is-gone");
       run.classList.add("is-measuring");
       run.classList.remove("is-gone");
       if (detail) detail.classList.remove("is-hidden");
-      if (past) {
-        past.classList.remove("is-hidden");
-        past.innerHTML = ALL_PAST.map(t => "<span>" + t + "</span>").join("");
-      }
-      if (label) label.textContent = LABELS.differences;
-      if (count) count.textContent = "6 of 6";
-      if (next) {
-        next.classList.remove("is-hidden");
-        next.innerHTML = NEXT_LINES.prepare;
+      if (compact) compact.textContent = COMPACT.differences;
+      if (count) count.textContent = "6/6";
+      if (meta) meta.textContent = RUN_META;
+      if (next) next.textContent = NEXT_LINES.prepare;
+      if (note) {
+        note.classList.remove("is-hidden");
+        note.textContent = NOTES.differences;
       }
 
       const tallest = Math.max(run.offsetHeight, result ? result.offsetHeight : 0);
@@ -211,7 +210,6 @@
 
       // Force the next paint to rewrite everything this just overwrote.
       lastStage = "";
-      lastPastCount = -1;
     }
 
     remeasureRun();
@@ -239,7 +237,9 @@
         const isDone = share >= 1;
         if (isDone) done += 1;
 
-        row.dataset.state = isDone ? "done" : "running";
+        // Before the first text a model is thinking, then it writes.
+        const state = isDone ? "done" : (share > 0 ? "writing" : "thinking");
+        if (row.dataset.state !== state) row.dataset.state = state;
         const rowBar = row.querySelector(".lp-run-model-track i");
         if (rowBar) rowBar.style.setProperty("--p", (share * 100).toFixed(1) + "%");
 
@@ -247,15 +247,28 @@
         if (rowTime) {
           rowTime.textContent = isDone
             ? (to * ANSWERS_SECONDS).toFixed(1) + "s"
-            : "·";
+            : (state === "writing" ? "Writing" : "Thinking");
         }
       });
       if (stage !== "prepare" && stage !== "answers") done = rows.length;
 
-      // ---- the single active line ----
+      // ---- stepper: done, active, still to come ----
       run.dataset.stage = stage;
-      if (label) label.textContent = LABELS[stage];
-      if (count) count.textContent = stage === "answers" ? done + " of " + rows.length : "";
+      const current = STEP_ORDER.indexOf(stage);
+      steps.forEach((item, i) => {
+        const status = stage === "done" || i < current ? "done"
+          : (i === current ? "active" : "pending");
+        if (item.dataset.status !== status) item.dataset.status = status;
+        if (item.dataset.step === "prepare") {
+          const label = item.querySelector("[data-step-label]");
+          const text = status === "active" ? "Preparing" : "Prepared";
+          if (label && label.textContent !== text) label.textContent = text;
+        }
+      });
+
+      const counted = stage === "answers" ? done + "/" + rows.length : "";
+      if (count) count.textContent = counted;
+      if (compactCount) compactCount.textContent = counted;
       if (time) {
         time.textContent = clockText(
           stage === "done" ? RUN_SECONDS : p * RUN_SECONDS
@@ -277,20 +290,14 @@
         bar.style.setProperty("--p", pct.toFixed(1) + "%");
       }
 
-      if (next && stage !== lastStage) {
-        next.innerHTML = NEXT_LINES[stage];
-        next.classList.toggle("is-hidden", !NEXT_LINES[stage]);
-      }
-
-      // ---- finished steps shrink to a grey check line ----
-      const doneSteps = stage === "prepare" ? 0
-        : (stage === "answers" ? 1
-        : (stage === "consensus" ? 2 : 3));
-      const pastItems = ALL_PAST.slice(0, doneSteps);
-      if (past && pastItems.length !== lastPastCount) {
-        past.innerHTML = pastItems.map(t => "<span>" + t + "</span>").join("");
-        past.classList.toggle("is-hidden", pastItems.length === 0);
-        lastPastCount = pastItems.length;
+      if (stage !== lastStage) {
+        if (compact) compact.textContent = COMPACT[stage];
+        if (meta) meta.textContent = stage === "prepare" ? "" : RUN_META;
+        if (next) next.textContent = NEXT_LINES[stage];
+        if (note) {
+          note.textContent = NOTES[stage] || "";
+          note.classList.toggle("is-hidden", !NOTES[stage]);
+        }
       }
 
       // ---- handover: the run collapses, the answer takes over ----

@@ -289,7 +289,7 @@
   const CONSENSUS_PRESET_STORAGE_KEY = "pref_consensus_preset";
 
   // Zuletzt angezeigtes Preset-/Modell-Label OHNE die Modellanzahl davor.
-  // Der gefuehrte Lauf nennt es in seiner "Question prepared"-Zeile; die Zahl
+  // Der gefuehrte Lauf nennt es rechts im Kopf ("Daily · 6 models"); die Zahl
   // steht dort schon separat, sie wuerde sich sonst doppeln.
   let lastPresetDisplayLabel = "";
 

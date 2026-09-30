@@ -12,15 +12,20 @@ const BODY = `
   <p id="composerRunNotice" hidden></p>
   <section id="consensusRun" class="run" data-stage="idle" hidden>
     <span id="runStatus"></span>
-    <div class="run-past" id="runPast"></div>
-    <div class="run-now">
-      <span class="run-label" id="runLabel"></span>
-      <span class="run-count" id="runCount"></span>
+    <div class="run-head">
+      <span id="runCompactLabel"></span><span id="runCompactCount"></span>
+      <ol id="runSteps">
+        <li class="run-step" data-step="prepare"><span class="run-step-label"></span></li>
+        <li class="run-step" data-step="answers"><span class="run-step-label">Answers</span><span id="runCount"></span></li>
+        <li class="run-step" data-step="consensus"><span class="run-step-label">Consensus</span></li>
+        <li class="run-step" data-step="differences"><span class="run-step-label">Contradiction check</span></li>
+      </ol>
+      <p><span id="runMeta"></span><span id="runMetaNext"></span></p>
       <span class="run-time" id="runTime"></span>
     </div>
     <div class="run-track" id="runTrack"><i id="runBar"></i></div>
-    <p class="run-next" id="runNext"></p>
     <div class="run-detail" id="runDetail" hidden></div>
+    <p id="runNote" hidden><span id="runNoteText"></span></p>
   </section>
   <section class="response-section">
     <span id="openaiModelText"></span>
@@ -60,8 +65,6 @@ function boot() {
     {
       body: BODY,
       before(window) {
-        // These state tests use immediate counters. Motion has a controlled
-        // requestAnimationFrame clock in run-progress-animation.test.mjs.
         window.matchMedia = () => ({ matches: true });
         window.auth = { currentUser: user };
         window.App = {
@@ -103,6 +106,10 @@ function boot() {
   return { ...harness, registry: harness.window.App.runRegistry };
 }
 
+function activeStep(document) {
+  return document.querySelector('.run-step[data-status="active"]')?.dataset.step;
+}
+
 function startRun(registry, question, startedAt = Date.now()) {
   const context = registry.create({
     question,
@@ -126,7 +133,7 @@ describe("guided-run block belongs to the visible run", () => {
     const block = document.getElementById("consensusRun");
 
     expect(block.hidden).toBe(false);
-    expect(document.getElementById("runLabel").textContent).toBe("Models are answering");
+    expect(activeStep(document)).toBe("answers");
 
     // Opening a saved bookmark: firebase.js hands the registry a saved view.
     registry.showSavedView({ type: "bookmark", bookmarkId: "other" }, { bookmarkId: "other" });
@@ -149,7 +156,8 @@ describe("guided-run block belongs to the visible run", () => {
 
     registry.show(run.runId);
     expect(block.hidden).toBe(false);
-    expect(document.getElementById("runLabel").textContent).toBe("Writing the consensus");
+    expect(activeStep(document)).toBe("consensus");
+    expect(document.getElementById("runCompactLabel").textContent).toBe("Writing the consensus");
     dom.window.close();
   });
 
@@ -226,7 +234,8 @@ describe("guided-run block belongs to the visible run", () => {
     await new Promise(resolve => setTimeout(resolve, 220));
     const row = document.querySelector(".run-model");
     const status = row.querySelector(".run-model-time");
-    expect(status.textContent).toBe("1,235 chars");
+    expect(status.textContent).toBe("Writing");
+    expect(status.title).toBe("1,235 characters received so far");
     expect(row.dataset.state).toBe("streaming");
     const bar = row.querySelector("i");
     const previous = parseFloat(bar.style.getPropertyValue("--p"));
@@ -234,7 +243,7 @@ describe("guided-run block belongs to the visible run", () => {
       context.modelResults.OpenAI.streamText += "abc";
     });
     await new Promise(resolve => setTimeout(resolve, 220));
-    expect(status.textContent).toBe("1,238 chars");
+    expect(status.title).toBe("1,238 characters received so far");
     expect(parseFloat(bar.style.getPropertyValue("--p"))).toBeGreaterThanOrEqual(previous);
     expect(parseFloat(bar.style.getPropertyValue("--p"))).toBeLessThan(100);
     dom.window.close();
@@ -243,7 +252,7 @@ describe("guided-run block belongs to the visible run", () => {
   it("does not count waiting or reasoning placeholders", async () => {
     const { registry, document, dom } = boot();
     const run = startRun(registry, "waiting");
-    for (const [state, label] of [["pending", "Waiting"], ["reasoning", "Reasoning"]]) {
+    for (const [state, label] of [["pending", "Waiting"], ["reasoning", "Thinking"]]) {
       registry.update(run.runId, context => {
         context.modelResults.OpenAI = { status: state };
       });
@@ -254,7 +263,7 @@ describe("guided-run block belongs to the visible run", () => {
     dom.window.close();
   });
 
-  it.each([["error", "Failed"], ["skipped", "Skipped"], ["canceled", "Canceled"]])(
+  it.each([["error", "No answer"], ["skipped", "Skipped"], ["canceled", "Canceled"]])(
     "shows %s as a terminal outcome, never a successful answer or character count",
     async (state, label) => {
       const { registry, document, dom } = boot();
@@ -265,7 +274,7 @@ describe("guided-run block belongs to the visible run", () => {
       await new Promise(resolve => setTimeout(resolve, 220));
       expect(document.querySelector(".run-model-time").textContent).toBe(label);
       expect(document.querySelector(".run-model").dataset.state).not.toBe("done");
-      expect(document.getElementById("runCount").textContent).toBe("1 of 1 finished");
+      expect(document.getElementById("runCount").textContent).toBe("1/1");
       dom.window.close();
     }
   );
@@ -275,13 +284,13 @@ describe("guided-run block belongs to the visible run", () => {
     const a = startRun(registry, "A");
     await new Promise(resolve => setTimeout(resolve, 220));
     const aStatus = document.querySelector(".run-model-time");
-    expect(aStatus.textContent).toBe("4 chars");
+    expect(aStatus.title).toBe("4 characters received so far");
     registry.update(a.runId, context => {
       context.modelResults.OpenAI = { status: "complete", text: "finished" };
     });
     await new Promise(resolve => setTimeout(resolve, 220));
     const completion = aStatus.textContent;
-    expect(completion).toMatch(/^✓ Done · \d+\.\ds$/);
+    expect(completion).toMatch(/^\d+\.\ds$/);
     expect(aStatus.title).toBe("8 characters received");
     await new Promise(resolve => setTimeout(resolve, 220));
     expect(aStatus.textContent).toBe(completion);
@@ -289,10 +298,10 @@ describe("guided-run block belongs to the visible run", () => {
     const b = startRun(registry, "B");
     registry.update(b.runId, context => { context.modelResults.OpenAI.streamText = "different"; });
     await new Promise(resolve => setTimeout(resolve, 220));
-    expect(document.querySelector(".run-model-time").textContent).toBe("9 chars");
+    expect(document.querySelector(".run-model-time").title).toBe("9 characters received so far");
     registry.show(a.runId);
     await new Promise(resolve => setTimeout(resolve, 220));
-    expect(document.querySelector(".run-model-time").textContent).toMatch(/^✓ Done/);
+    expect(document.querySelector(".run-model-time").textContent).toMatch(/^\d+\.\ds$/);
     expect(document.querySelector(".run-model-time").title).toBe("8 characters received");
     dom.window.close();
   });

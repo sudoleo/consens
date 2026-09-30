@@ -1128,9 +1128,8 @@ img { display: block; max-width: 100%; }
 /* --------------------------------------------------------------------------
    The guided run — a rebuild of #consensusRun
 
-   One active step at a time: what is finished is a grey check line, what is
-   running is one label with one bar, and what comes next is named so the wait
-   has a shape. When the run ends the block collapses upward and the answer
+   A stepper over all four steps (done, active, still to come) with preset
+   and clock, one row per model while they answer, one calm note line. When the run ends the block collapses upward and the answer
    below it takes over. Driven by static/js/landing-scenes.js, which maps the
    same four phases the product uses onto scroll position.
    -------------------------------------------------------------------------- */
@@ -1166,10 +1165,16 @@ img { display: block; max-width: 100%; }
 }
 
 .lp-run {
+  --lp-run-rail: color-mix(in srgb, var(--ink) 9%, transparent);
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 16px 20px 18px;
+  gap: 14px;
+  margin: 16px 20px 20px;
+  padding: 14px 18px 16px;
+  border: 1px solid var(--line-soft);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--ink) 2.5%, transparent);
+  container-type: inline-size;
   transition:
     opacity 0.32s ease,
     transform 0.4s cubic-bezier(0.2, 0, 0, 1);
@@ -1181,64 +1186,134 @@ img { display: block; max-width: 100%; }
   pointer-events: none;
 }
 
-.lp-run-past {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 3px 12px;
-  font-size: var(--font-size-xs);
-  color: var(--ink-3);
+.lp-run-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  column-gap: 14px;
+  min-height: 24px;
 }
 
-.lp-run-past.is-hidden { display: none; }
-.lp-run-past span::before { content: "✓ "; color: var(--agree); }
+.lp-run-compact { display: none; }
 
-.lp-run-now {
+.lp-run-steps {
   display: flex;
   align-items: center;
-  gap: 9px;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--font-size-xs);
+  line-height: 20px;
 }
 
-.lp-run-pulse {
+.lp-run-step {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+
+.lp-run-step + .lp-run-step::before {
+  content: "";
+  width: 14px;
+  height: 1px;
+  margin-right: 3px;
+  background: var(--line);
+}
+
+.lp-run-step[data-status="done"] { color: var(--ink-2); }
+.lp-run-step[data-status="active"] { color: var(--ink); font-weight: var(--font-weight-medium); }
+
+.lp-run-mark {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+
+.lp-run-mark svg {
+  display: none;
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: var(--agree);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.lp-run-mark::before,
+.lp-run-dot {
+  content: "";
+  box-sizing: border-box;
   width: 7px;
   height: 7px;
-  flex: none;
   border-radius: 50%;
-  background: var(--agree);
-  animation: lpRunPulse 1.5s ease-in-out infinite;
+  border: 1px solid color-mix(in srgb, var(--ink-3) 70%, transparent);
 }
 
-.lp-run[data-stage="done"] .lp-run-pulse { animation: none; }
+.lp-run-step[data-status="done"] .lp-run-mark::before { content: none; }
+.lp-run-step[data-status="done"] .lp-run-mark svg { display: block; }
+
+.lp-run-step[data-status="active"] .lp-run-mark::before,
+.lp-run-dot {
+  width: 8px;
+  height: 8px;
+  border: 0;
+  background: var(--agree);
+  animation: lpRunPulse 1.8s ease-out infinite;
+}
+
+.lp-run[data-stage="done"] .lp-run-dot { animation: none; }
 
 @keyframes lpRunPulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.3; transform: scale(0.72); }
-}
-
-.lp-run-label {
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-semibold);
-  letter-spacing: var(--tracking-tight);
-  color: var(--ink);
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--agree) 45%, transparent); }
+  70%, 100% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--agree) 0%, transparent); }
 }
 
 .lp-run-count {
+  color: var(--ink-2);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+
+.lp-run-count:empty { display: none; }
+
+.lp-run-meta {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
   font-size: var(--font-size-xs);
+  color: var(--ink-3);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.lp-run-meta-next { display: none; }
+
+.lp-run-time {
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  font-size: var(--font-size-micro);
+  line-height: 16px;
   color: var(--ink-2);
   font-variant-numeric: tabular-nums;
 }
 
-.lp-run-time {
-  margin-left: auto;
-  font-size: var(--font-size-micro);
-  color: var(--ink-3);
-  font-variant-numeric: tabular-nums;
-}
+/* Each model has its own track during the fan-out. */
+.lp-run[data-stage="answers"] > .lp-run-track { display: none; }
 
 .lp-run-track {
   position: relative;
   height: 2px;
   border-radius: 2px;
-  background: var(--line-soft);
+  background: var(--lp-run-rail);
   overflow: hidden;
 }
 
@@ -1247,7 +1322,7 @@ img { display: block; max-width: 100%; }
   height: 100%;
   width: var(--p, 0%);
   border-radius: inherit;
-  background: var(--ink);
+  background: var(--ink-2);
   transition: width 0.25s cubic-bezier(0.22, 0.61, 0.36, 1);
 }
 
@@ -1264,29 +1339,33 @@ img { display: block; max-width: 100%; }
   100% { transform: translateX(330%); }
 }
 
-.lp-run-next {
+.lp-run-note {
   margin: 0;
   font-size: var(--font-size-xs);
+  line-height: 1.45;
   color: var(--ink-3);
 }
 
-.lp-run-next.is-hidden { display: none; }
-.lp-run-next b { color: var(--ink-2); font-weight: var(--font-weight-medium); }
+.lp-run-note.is-hidden { display: none; }
 
 /* Per-model rows: present only while the models are actually answering. */
 .lp-run-detail {
   display: flex;
   flex-direction: column;
-  gap: 5px;
-  margin-top: 2px;
-  max-height: 160px;
+  gap: 4px;
+  max-height: 340px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line-soft);
   overflow: hidden;
-  transition: max-height 0.35s ease, opacity 0.25s ease, margin-top 0.35s ease;
+  transition: max-height 0.35s ease, opacity 0.25s ease, padding-top 0.35s ease, margin-top 0.35s ease;
 }
 
+/* Collapsed rows give their flex gap back too, so the card closes up. */
 .lp-run-detail.is-hidden {
   max-height: 0;
-  margin-top: 0;
+  margin-top: -14px;
+  padding-top: 0;
+  border-top-width: 0;
   opacity: 0;
 }
 
@@ -1302,31 +1381,62 @@ img { display: block; max-width: 100%; }
 
 .lp-run.is-measuring .lp-run-detail {
   max-height: none;
-  margin-top: 2px;
+  padding-top: 12px;
+  border-top-width: 1px;
   opacity: 1;
 }
 
 .lp-run-model {
   display: grid;
-  grid-template-columns: minmax(76px, 116px) minmax(0, 1fr) 40px;
-  gap: 10px;
+  grid-template-columns: minmax(84px, 132px) minmax(0, 1fr) 64px;
+  gap: 12px;
   align-items: center;
+  min-height: 28px;
 }
 
 .lp-run-model-name {
-  font-size: var(--font-size-micro);
-  color: var(--ink-3);
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  font-size: var(--font-size-sm);
+  color: var(--ink);
   white-space: nowrap;
+}
+
+.lp-run-model-name > span {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.lp-run-model[data-state="done"] .lp-run-model-name { color: var(--ink-2); }
+.lp-run-icon {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.lp-run-icon-ring { stroke: var(--lp-run-rail); }
+.lp-run-icon-arc { stroke: var(--ink-2); }
+.lp-run-icon-check { display: none; }
+.lp-run-model:not([data-state="done"]) .lp-run-icon { animation: lpRunSpin 1s linear infinite; }
+.lp-run-model[data-state="thinking"] .lp-run-icon-arc { stroke: var(--ink-3); }
+.lp-run-model[data-state="done"] .lp-run-icon-ring { stroke: var(--agree); }
+.lp-run-model[data-state="done"] .lp-run-icon-arc { display: none; }
+.lp-run-model[data-state="done"] .lp-run-icon-check { display: inline; stroke: var(--agree); }
+
+@keyframes lpRunSpin {
+  to { transform: rotate(360deg); }
+}
 
 .lp-run-model-track {
-  height: 2px;
+  height: 4px;
   border-radius: 2px;
-  background: var(--line-soft);
+  background: var(--lp-run-rail);
   overflow: hidden;
 }
 
@@ -1334,17 +1444,112 @@ img { display: block; max-width: 100%; }
   display: block;
   height: 100%;
   width: var(--p, 0%);
-  background: var(--ink-3);
+  border-radius: inherit;
+  background: var(--ink-2);
   transition: width 0.18s linear;
+}
+
+/* No text yet: a short segment travels instead of a fill that would guess. */
+.lp-run-model[data-state="thinking"] .lp-run-model-track i {
+  width: 22%;
+  background: color-mix(in srgb, var(--ink-3) 70%, transparent);
+  transition: none;
+  animation: lpRunRowSweep 1.6s cubic-bezier(0.45, 0, 0.35, 1) infinite;
+}
+
+.lp-run-model:nth-child(3n + 2) .lp-run-model-track i { animation-delay: -0.5s; }
+.lp-run-model:nth-child(3n) .lp-run-model-track i { animation-delay: -1s; }
+
+@keyframes lpRunRowSweep {
+  0% { transform: translateX(-110%); }
+  100% { transform: translateX(460%); }
 }
 
 .lp-run-model[data-state="done"] .lp-run-model-track i { background: var(--agree); }
 
 .lp-run-model-time {
-  font-size: var(--font-size-micro);
-  color: var(--ink-3);
+  font-size: var(--font-size-xs);
+  color: var(--ink-2);
   text-align: right;
+  white-space: nowrap;
   font-variant-numeric: tabular-nums;
+}
+
+.lp-run-model[data-state="thinking"] .lp-run-model-time { color: var(--ink-3); }
+.lp-run-model[data-state="done"] .lp-run-model-time { color: var(--ink); }
+
+/* Medium: the preset moves under the steps so the steps stay on one line. */
+@container (min-width: 521px) and (max-width: 680px) {
+  .lp-run-head {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: "steps time" "meta meta";
+    row-gap: 4px;
+  }
+  .lp-run-steps { grid-area: steps; column-gap: 7px; }
+  .lp-run-step { gap: 6px; }
+  .lp-run-step + .lp-run-step::before { width: 8px; margin-right: 1px; }
+  .lp-run-time { grid-area: time; }
+  .lp-run-meta { grid-area: meta; }
+}
+
+/* Narrow: the stepper folds into one line plus four segments, as in /app. */
+@container (max-width: 520px) {
+  .lp-run-head {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: "compact time" "steps steps" "meta meta";
+    row-gap: 10px;
+  }
+
+  .lp-run-compact {
+    grid-area: compact;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    min-width: 0;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-medium);
+    color: var(--ink);
+    white-space: nowrap;
+  }
+
+  .lp-run-compact .lp-run-count { font-size: var(--font-size-xs); }
+  .lp-run-time { grid-area: time; }
+
+  .lp-run-steps {
+    grid-area: steps;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 4px;
+  }
+
+  .lp-run-step > *,
+  .lp-run-step + .lp-run-step::before { display: none; }
+
+  .lp-run-step {
+    height: 3px;
+    border-radius: 2px;
+    background: var(--lp-run-rail);
+  }
+
+  .lp-run-step[data-status="done"] { background: var(--agree); }
+  .lp-run-step[data-status="active"] {
+    background: linear-gradient(90deg, var(--agree) 0 34%, var(--lp-run-rail) 34%);
+  }
+
+  .lp-run-meta { grid-area: meta; white-space: normal; }
+  .lp-run-meta-next { display: inline; }
+  [data-run-meta]:not(:empty) + .lp-run-meta-next:not(:empty)::before { content: " · "; }
+
+  .lp-run-detail { gap: 10px; }
+
+  .lp-run-model {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: 24px 4px;
+    gap: 6px;
+    min-height: 34px;
+  }
+
+  .lp-run-model-track { grid-column: 1 / -1; grid-row: 2; }
 }
 
 /* What the run hands over to: the answer, and the provenance line under it. */
@@ -1582,7 +1787,10 @@ img { display: block; max-width: 100%; }
 
   .lp-scene-rail { display: none; }
 
-  .lp-run-pulse,
+  .lp-run-dot,
+  .lp-run-mark::before,
+  .lp-run-icon,
+  .lp-run-model-track i,
   .lp-run-track.is-indeterminate i,
   .lp-prompt-text.is-typing::after,
   .lp-composer-text.is-typing::after { animation: none; }
@@ -2789,9 +2997,8 @@ img { display: block; max-width: 100%; }
 
   .lp-thread-ask { padding: 15px 16px 0; }
   .lp-thread-ask-text { max-width: 100%; }
-  .lp-run { padding: 14px 16px 16px; }
+  .lp-run { margin: 14px 12px 16px; padding: 14px 14px 16px; }
   .lp-run-result { padding-inline: 16px; }
-  .lp-run-model { grid-template-columns: minmax(58px, 84px) minmax(0, 1fr) 36px; gap: 8px; }
   .lp-run-provenance-tabs { margin-left: 0; gap: 4px 12px; }
 }
 

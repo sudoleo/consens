@@ -22,17 +22,20 @@ def test_consensus_result_precedes_model_answers_and_run_block_is_loaded():
 
 
 def test_run_block_shows_one_step_at_a_time():
-    """The guided run's whole point is that exactly one step is active. The
-    markup therefore has ONE label, ONE count, ONE bar and ONE next line —
-    if a second set ever appears here, the reduction has been undone."""
+    """The stepper names all four steps, but exactly one is active: ONE
+    stepper, ONE count, ONE bar and ONE note line. If a second set ever
+    appears here, the reduction has been undone."""
     template = read("templates/index.html")
+    progress = read("static/js/consensus-progress.js")
 
-    for single in ('id="runLabel"', 'id="runCount"', 'id="runBar"', 'id="runNext"'):
+    for single in ('id="runSteps"', 'id="runCount"', 'id="runBar"', 'id="runNote"'):
         assert template.count(single) == 1, f"expected exactly one {single}"
+    for step in ("prepare", "answers", "consensus", "differences"):
+        assert template.count(f'data-step="{step}"') == 1, step
+    assert 'if (step === stage) return "active";' in progress
 
-    # Finished steps collapse into the past line; per-model rows live in the
-    # detail container and are only shown while the models answer.
-    assert 'id="runPast"' in template
+    # Per-model rows live in the detail container and are only shown while
+    # the models answer.
     assert 'id="runDetail"' in template
 
 

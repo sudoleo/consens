@@ -12,12 +12,13 @@
 // automatically, individual answers hidden until asked for) and gives up
 // its second opinion about how a run should look.
 //
-// One active step is visible: an animated label, a count, a timer and
-// a "Next" line. Finished steps shrink to a grey check line, the per-model
-// rows exist only while the models are actually answering, and when the run
-// ends the whole block folds away and hands over to the provenance line
-// under the answer. The point is that a reader is never asked to hold four
-// progress indicators in their head to know what the machine is doing.
+// A stepper names all four steps at once (done, active, still to come),
+// with the preset and a clock on the right. The per-model rows exist only
+// while the models are actually answering: an icon, a bar and one word of
+// status each. When the run ends the whole block folds away and hands over
+// to the provenance line under the answer. The point is that a reader is
+// never asked to hold four progress indicators in their head to know what
+// the machine is doing.
 // =====================================================================
 
 (function () {
@@ -28,30 +29,38 @@
   // sharing one, so "the answer is written" does not look like "done".
   const ANSWERS_END = 100;
 
+  // The four steps, in order. The stepper names all of them at once, so the
+  // wait has a shape: what is done, what is running, what is still to come.
+  // `compact` is the one line narrow screens show instead of the stepper,
+  // `next` the rest of the way in words for that same narrow line.
+  const STEP_ORDER = ["prepare", "answers", "consensus", "differences"];
+
   const STEPS = {
     prepare: {
-      label: "Preparing the question",
-      next: ["Ask the models", "Write the consensus", "Check for contradictions"]
+      compact: "Preparing",
+      next: "Next: answers, consensus, contradiction check"
     },
     answers: {
-      label: "Models are answering",
-      next: ["Write the consensus", "Check for contradictions"]
+      compact: "Answering",
+      next: "Next: consensus, then contradiction check"
     },
     consensus: {
-      label: "Writing the consensus",
-      next: ["Check for contradictions"]
+      compact: "Writing the consensus",
+      next: "Next: contradiction check"
     },
     differences: {
-      label: "Checking for contradictions",
+      compact: "Checking for contradictions",
       // Not a step list: at this point the useful thing to say is who is
       // doing the checking, because it is not one of the six.
       note: "An uninvolved model compares all answers. It does not get a vote."
     },
-    done: { label: "Done" }
+    done: { compact: "Done" }
   };
 
   let stage = "idle";
-  let past = [];
+  let reached = new Set();
+  let runMeta = "";
+  let answersSummary = "";
   let hideTimer = null;
   let handoffTimer = null;
   let ticker = null;
@@ -104,62 +113,43 @@
     return { done: boxes.filter(isBoxDone).length, total: boxes.length };
   }
 
+  function modelName(box, fallback = "Model") {
+    return box.dataset.shortLabel || box.dataset.model || fallback;
+  }
+
   // ---- Per-model rows ------------------------------------------------
-  // Only rendered while the models are answering. Each row combines the
-  // visible activity from the live stream with the measured completion time.
-  // The fill stays monotone and only reaches 100% once the model is done.
+  // Only rendered while the models are answering. Each row is an icon, a
+  // bar from the live stream and one word of status; a finished row shows
+  // its measured time instead. The fill stays monotone and only reaches
+  // 100% once the model is done. How much text arrived is still available
+  // as a tooltip, it just no longer ticks up in the row itself: a counter
+  // per model was six numbers moving at once and said less than the bar.
   const rowTimes = new Map();
   const rowProgress = new Map();
   const rowTextCounts = new Map();
   const characterFormat = new Intl.NumberFormat(document.documentElement.lang || "en");
-  const counterMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)");
-  const rowCounters = new Map();
-  const COUNTER_DURATION_MS = 260;
-  let counterFrame = null;
 
-  function writeCharacters(element, value) {
-    const label = characterFormat.format(Math.floor(value)) + " chars";
-    if (element.textContent !== label) element.textContent = label;
-  }
+  // A model that is out of the run. Those rows sink to the bottom, so the
+  // models still working stay together at the top.
+  const DROPPED = new Set(["error", "skipped", "canceled"]);
 
-  function animateCounters() {
-    counterFrame = null;
-    const now = performance.now();
-    let moving = false;
-    rowCounters.forEach(counter => {
-      if (counter.value === counter.target) return;
-      const fraction = counterMotion?.matches ? 1
-        : Math.min(1, Math.max(0, (now - counter.started) / COUNTER_DURATION_MS));
-      counter.value = fraction === 1 ? counter.target
-        : counter.from + (counter.target - counter.from) * (1 - Math.pow(1 - fraction, 3));
-      writeCharacters(counter.element, counter.value);
-      moving ||= fraction < 1;
-    });
-    if (moving) counterFrame = requestAnimationFrame(animateCounters);
-  }
+  const STATUS_TEXT = {
+    streaming: "Writing",
+    reasoning: "Thinking",
+    waiting: "Waiting",
+    error: "No answer",
+    skipped: "Skipped",
+    canceled: "Canceled"
+  };
 
-  function showCharacters(boxId, element, target) {
-    let counter = rowCounters.get(boxId);
-    // A reopened run starts at its real snapshot. Only new chunks count up.
-    if (!counter || counter.element !== element || counterMotion?.matches || target < counter.value) {
-      counter = { element, value: target, from: target, target, started: performance.now() };
-      rowCounters.set(boxId, counter);
-      writeCharacters(element, target);
-      return;
-    }
-    if (counter.target !== target) {
-      counter.from = counter.value;
-      counter.target = target;
-      counter.started = performance.now();
-      if (counterFrame === null) counterFrame = requestAnimationFrame(animateCounters);
-    }
-  }
-
-  function stopCounters() {
-    if (counterFrame !== null) cancelAnimationFrame(counterFrame);
-    counterFrame = null;
-    rowCounters.clear();
-  }
+  // One icon per row: a spinner while the model works, a check when it is
+  // done, a dashed circle when it is out. CSS picks the parts by data-state.
+  const ROW_ICON = '<svg class="run-model-icon" viewBox="0 0 16 16" aria-hidden="true">'
+    + '<circle class="run-icon-ring" cx="8" cy="8" r="6.5"/>'
+    + '<path class="run-icon-arc" d="M8 1.5a6.5 6.5 0 0 1 6.5 6.5"/>'
+    + '<path class="run-icon-check" d="M5 8.2l2 2 4-4.2"/>'
+    + '<path class="run-icon-minus" d="M5.5 8h5"/>'
+    + "</svg>";
 
   function answerCharacters(box) {
     // The projected raw answer excludes loader labels, source controls and
@@ -178,6 +168,15 @@
     const count = Array.from(text).length;
     rowTextCounts.set(box.id, { text, count });
     return count;
+  }
+
+  function rowState(box, done, chars) {
+    if (box.dataset.responseSkipped === "true" || box.dataset.responseState === "skipped") return "skipped";
+    if (box.dataset.responseState === "canceled") return "canceled";
+    if (box.dataset.responseError === "true" || box.dataset.responseState === "error") return "error";
+    if (done) return "done";
+    if (chars) return "streaming";
+    return box.dataset.responseState === "reasoning" ? "reasoning" : "waiting";
   }
 
   // A run is only as fast as its slowest model. Once enough models have
@@ -199,12 +198,12 @@
     if (!detail) return;
     const boxes = getIncludedBoxes();
     detail.innerHTML = boxes.map(box => {
-      const name = box.dataset.shortLabel || box.dataset.model || "Model";
-      return '<span class="run-model" data-box="' + box.id + '">'
-        + '<span class="run-model-name">' + name + "</span>"
+      return '<span class="run-model" data-box="' + box.id + '" data-state="waiting">'
+        + '<span class="run-model-name">' + ROW_ICON
+        + '<span class="run-model-label">' + modelName(box) + "</span></span>"
         + '<span class="run-model-track" aria-hidden="true"><i></i></span>'
         + '<span class="run-model-skip"></span>'
-        + '<span class="run-model-time">·</span>'
+        + '<span class="run-model-time">Waiting</span>'
         + "</span>";
     }).join("");
     detail.hidden = boxes.length === 0;
@@ -224,7 +223,7 @@
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "run-model-skip-btn";
-    const name = box.dataset.shortLabel || box.dataset.model || "this model";
+    const name = modelName(box, "this model");
     btn.textContent = "Skip";
     btn.title = "Go on without " + name + ". Its answer is dropped from this run.";
     btn.setAttribute("aria-label", "Skip " + name + ", it is taking longer than expected");
@@ -264,35 +263,36 @@
       rowProgress.set(box.id, progress);
 
       const chars = answerCharacters(box);
-      const state = box.dataset.responseSkipped === "true" || box.dataset.responseState === "skipped"
-        ? "skipped" : box.dataset.responseState === "canceled"
-          ? "canceled" : box.dataset.responseError === "true" || box.dataset.responseState === "error"
-            ? "error" : done ? "done" : chars ? "streaming"
-              : box.dataset.responseState === "reasoning" ? "reasoning" : "waiting";
-      row.dataset.state = state;
+      const state = rowState(box, done, chars);
+      if (row.dataset.state !== state) row.dataset.state = state;
+      const order = DROPPED.has(state) ? "1" : "";
+      if (row.style.order !== order) row.style.order = order;
 
       const bar = row.querySelector(".run-model-track i");
       if (bar) bar.style.setProperty("--p", (progress * 100).toFixed(1) + "%");
 
       const time = row.querySelector(".run-model-time");
       if (time) {
-        if (done) {
-          rowCounters.delete(box.id);
+        let text;
+        let title;
+        if (state === "done") {
           if (!rowTimes.has(box.id)) rowTimes.set(box.id, Date.now() - startedAt);
-          time.textContent = state === "done"
-            ? "✓ Done · " + seconds(rowTimes.get(box.id)).toFixed(1) + "s"
-            : { error: "Failed", skipped: "Skipped", canceled: "Canceled" }[state];
-          time.title = state === "done" ? characterFormat.format(chars) + " characters received" : "";
+          text = seconds(rowTimes.get(box.id)).toFixed(1) + "s";
+          title = characterFormat.format(chars) + " characters received";
         } else {
-          if (chars) showCharacters(box.id, time, chars);
-          else {
-            rowCounters.delete(box.id);
-            time.textContent = state === "reasoning" ? "Reasoning" : "Waiting";
-          }
-          time.title = chars ? "Characters received; answer is still streaming"
-            : state === "reasoning" ? "The model is reasoning; no answer text yet"
-              : "Waiting for the first answer text";
+          if (done && !rowTimes.has(box.id)) rowTimes.set(box.id, Date.now() - startedAt);
+          text = STATUS_TEXT[state];
+          title = {
+            streaming: characterFormat.format(chars) + " characters received so far",
+            reasoning: "The model is reasoning; no answer text yet",
+            waiting: "Waiting for the first answer text",
+            error: "This model returned no answer. The run goes on without it.",
+            skipped: "Skipped. Its answer is not part of this run.",
+            canceled: "Canceled before it answered."
+          }[state];
         }
+        if (time.textContent !== text) time.textContent = text;
+        if (time.title !== title) time.title = title;
       }
 
       renderSkipOffer(row, box, done);
@@ -325,11 +325,60 @@
     return "";
   }
 
-  function renderPast() {
-    const el = $("runPast");
-    if (!el) return;
-    el.innerHTML = past.map(text => "<span>" + text + "</span>").join("");
-    el.hidden = past.length === 0;
+  function stepStatus(step) {
+    if (step === stage) return "active";
+    if (!reached.has(step)) return "pending";
+    return stage === "done" || STEP_ORDER.indexOf(step) < STEP_ORDER.indexOf(stage)
+      ? "done" : "pending";
+  }
+
+  function renderSteps(el) {
+    el.querySelectorAll(".run-step").forEach(item => {
+      const status = stepStatus(item.dataset.step);
+      if (item.dataset.status !== status) item.dataset.status = status;
+      if (status === "active") item.setAttribute("aria-current", "step");
+      else item.removeAttribute("aria-current");
+
+      if (item.dataset.step === "prepare") {
+        const label = item.querySelector(".run-step-label");
+        const text = status === "active" ? "Preparing" : status === "done" ? "Prepared" : "Prepare";
+        if (label && label.textContent !== text) label.textContent = text;
+      }
+      if (item.dataset.step === "answers") {
+        const title = status === "done" ? answersSummary : "";
+        if (item.title !== title) item.title = title;
+      }
+    });
+  }
+
+  function listNames(names) {
+    if (names.length <= 1) return names.join("");
+    return names.slice(0, -1).join(", ") + " and " + names[names.length - 1];
+  }
+
+  // Said once, calmly, under the rows: who is out and what that means for
+  // the answer. A failed call is not an alarm when the run goes on without
+  // it, and a reader does not need to know why it failed to trust the rest.
+  function droppedNote() {
+    if (stage !== "answers" && stage !== "consensus") return "";
+    const boxes = getIncludedBoxes();
+    const out = boxes.filter(box => DROPPED.has(rowState(box, isBoxDone(box), 0)));
+    if (!out.length) return "";
+    const rest = boxes.length - out.length;
+    if (rest < 1) return "";
+    const failed = out.filter(box => rowState(box, true, 0) === "error").map(box => modelName(box));
+    const parts = [];
+    if (failed.length) parts.push(listNames(failed) + " didn't answer.");
+    parts.push(rest === 1
+      ? "The consensus uses the one remaining answer."
+      : "The consensus uses the other " + rest + " answers.");
+    return parts.join(" ");
+  }
+
+  function setText(id, text) {
+    const el = $(id);
+    if (el && el.textContent !== text) el.textContent = text;
+    return el;
   }
 
   function render() {
@@ -340,15 +389,14 @@
     const step = STEPS[stage];
     el.dataset.stage = stage;
 
-    const label = $("runLabel");
-    if (label && step) label.textContent = step.label;
+    renderSteps(el);
 
-    const count = $("runCount");
-    if (count) {
-      count.textContent = stage === "answers" && counts.total
-        ? `${counts.done} of ${counts.total} finished`
-        : "";
-    }
+    const count = stage === "answers" && counts.total ? `${counts.done}/${counts.total}` : "";
+    setText("runCount", count);
+    setText("runCompactCount", count);
+    setText("runCompactLabel", step ? step.compact : "");
+    setText("runMeta", runMeta);
+    setText("runMetaNext", step?.next || "");
 
     const track = $("runTrack");
     // Indeterminate while a phase cannot report a share of itself.
@@ -362,17 +410,10 @@
     const bar = $("runBar");
     if (bar) bar.style.setProperty("--p", progressFor(stage, counts) + "%");
 
-    const next = $("runNext");
-    if (next && step) {
-      if (step.note) {
-        next.textContent = step.note;
-      } else if (step.next) {
-        next.innerHTML = "Next: " + step.next.map(t => "<b>" + t + "</b>").join(" → ");
-      } else {
-        next.textContent = "";
-      }
-      next.hidden = !next.textContent.trim();
-    }
+    const noteText = step?.note || droppedNote();
+    const note = $("runNote");
+    setText("runNoteText", noteText);
+    if (note && note.hidden !== !noteText) note.hidden = !noteText;
 
     const status = $("runStatus");
     const announcement = accessibleStatus(stage, counts);
@@ -456,13 +497,14 @@
   }
 
   function resetState() {
-    stopCounters();
     stopTicker();
     if (handoffTimer) {
       clearTimeout(handoffTimer);
       handoffTimer = null;
     }
-    past = [];
+    reached = new Set();
+    runMeta = "";
+    answersSummary = "";
     rowTimes.clear();
     rowProgress.clear();
     rowTextCounts.clear();
@@ -474,17 +516,11 @@
       detail.hidden = true;
       detail.innerHTML = "";
     }
-    renderPast();
-  }
-
-  function addPast(text) {
-    past.push(text);
-    renderPast();
   }
 
   function enter(nextStage) {
-    if (nextStage !== "answers") stopCounters();
     stage = nextStage;
+    if (STEP_ORDER.includes(nextStage)) reached.add(nextStage);
     render();
   }
 
@@ -718,11 +754,13 @@
         startedAt = Date.now();
         show();
         startTicker();
-      } else if (stage === "prepare") {
-        const preset = window.App?.currentPresetLabel?.();
-        const total = getIncludedBoxes().length;
-        addPast("Question prepared" + (preset ? " · " + preset : "") + " · " + total + " models");
       }
+      // A run that skipped /prepare still prepared its question somewhere;
+      // the stepper should not show that step as never reached.
+      reached.add("prepare");
+      const preset = window.App?.currentPresetLabel?.();
+      const total = getIncludedBoxes().length;
+      runMeta = (preset ? preset + " · " : "") + total + " models";
       buildDetail();
       enter("answers");
       return;
@@ -740,10 +778,8 @@
       const counts = getAnswerCounts();
       const detail = $("runDetail");
       if (detail) detail.hidden = true;
-      addPast(
-        counts.done + " answers in "
-        + seconds(answersFinishedAt - startedAt).toFixed(1) + " s"
-      );
+      answersSummary = counts.done + " answers in "
+        + seconds(answersFinishedAt - startedAt).toFixed(1) + " s";
 
       if (autoConsensus && canGenerate) {
         enter("consensus");
@@ -788,7 +824,6 @@
   // The differences judge starts once the consensus text is complete.
   function onDifferencesStart() {
     if (stage !== "consensus") return;
-    addPast("Consensus written");
     enter("differences");
   }
 

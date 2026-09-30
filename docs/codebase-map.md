@@ -1102,47 +1102,50 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   Pipeline bei `agentMode === false` gar nicht erst, und `isDirectComparison()`
   (Body-Klasse `direct-comparison-active`) haelt `show()`/`onPrepare`/
   `onQueryStatus` auch gegen fremde Aufrufer zu (Lifecycle, Demo, Replay).
-  Sichtbar ist immer nur EIN aktiver Schritt — vier Phasen in dieser Reihenfolge:
-  `prepare → answers → consensus → differences`. Erledigte Schritte schrumpfen
-  auf graue Haken-Zeilen (`#runPast`), die Modell-Zeilen (`#runDetail`:
-  Name links, Live-Balken aus dem Antwortstream, **gemessene** Zeit rechts)
-  existieren nur waehrend der Antwortphase, und Phasen ohne ehrlichen
-  Prozentwert laufen
-  indeterminiert (`.run-track.is-indeterminate`) statt einen zu erfinden.
-  Seit **2026-09-11** zeigt jede laufende Modellzeile rechts die empfangenen
-  Zeichen (`1,234 chars`): Unicode-Codepoints aus dem projizierten rohen
-  `dataset.consensusAnswer`, ohne Lade-/Fehlertexte oder Markdown-Bedienelemente.
-  Ohne Antworttext steht dort `Waiting` bzw. `Reasoning`, beim Abschluss
-  `✓ Done · 12.3s`; Fehler, Skip und Cancel bleiben eigene terminale Labels.
-  Der Zaehlcache wird mit dem projizierten Lauf zurueckgesetzt. Die aktive
-  Taetigkeitszeile hat drei sanft atmende Striche und einen Textschimmer;
-  waehrend des Fan-outs genuegen die Modellbalken, der Gesamtbalken ist dort
-  ausgeblendet. `Next: … → …` steht unter den Modellzeilen. Reduced Motion
-  deaktiviert Schimmer, Striche, Sweep und Uebergaenge. Nur `#runStatus` ist
-  eine Live-Region und wird bei Phasen-/Abschlusswechsel aktualisiert, damit
-  Zeichenzahlen nicht fortlaufend vorgelesen werden; Skip bleibt zugaenglich.
-  Die verfeinerte Animation begrenzt den viersekündigen Schimmer auf die
-  Textbreite. Zwischen abgeschlossenen Schritten und aktivem Status liegen
-  18 px; Modellzeilen sind 26 px hoch (Touch: 44 px). Ein gemeinsamer
-  requestAnimationFrame-Loop interpoliert neue Zeichenzahlen ueber 260 ms
-  ohne den empfangenen Zielwert zu ueberschreiten. Neue Chunks setzen am
-  aktuellen Anzeigewert an, ein wiedergeoeffneter Lauf startet direkt bei
-  seinem Snapshot. Terminalstatus, Phasenwechsel und Reset stoppen die
-  Animation; Reduced Motion zeigt sofort den echten Wert. `Skip` erscheint
-  in einer von Anfang an reservierten Aktionsspalte ohne Layoutsprung,
-  vor den rechtsbuendigen Zeichen-/Statusangaben. Deren rechte Kante stimmt
-  mit der Gesamtzeit in der aktiven Statuszeile ueberein.
-  Laufende Modellbalken tragen einen versetzten, 3,2-sekuendigen Lichtstreifen
-  innerhalb ihrer Fuellung; Reasoning schimmert langsamer und dezenter.
-  Wartende und terminale Modelle bleiben ruhig. Reduced Motion und Forced
-  Colors deaktivieren den dekorativen Balkenschimmer.
-  Bis 640 px stehen Modellname, Skip und Status ueber einem durchgehenden
-  Balken ueber die volle Zeilenbreite. Die kompakten Eintraege sind 40 px
-  hoch (Touch: 44 px inklusive unsichtbar erweitertem Skip-Trefferbereich).
-  Skip sitzt mobil als rahmenlose Textaktion direkt neben dem Modellnamen;
-  die Statusangabe bleibt am rechten Rand. Der reservierte Platz verhindert
-  Verschiebungen beim Einblenden.
-  Desktop nutzt schmalere Namens-/Statusspalten fuer laengere Balken.
+  Vier Phasen in dieser Reihenfolge: `prepare → answers → consensus →
+  differences`, genau eine aktiv. Seit **2026-09-30** ist der Block eine
+  ruhige Karte mit Stepper-Kopf (`#runSteps`, je `li.run-step[data-step]`
+  mit `data-status="done|active|pending"`; erledigt = Haken, aktiv =
+  pulsierender Punkt, offen = leerer Kreis), rechts `#runMeta`
+  (`Preset · N models`, gesetzt beim Fan-out) und die Uhr `#runTime`. Die
+  frueheren grauen Haken-Zeilen (`#runPast`), die Taetigkeitszeile
+  (`#runLabel`, drei Striche, Textschimmer) und die `Next: … → …`-Zeile sind
+  entfallen: der Stepper nennt alle Schritte zugleich. Die Dauer der
+  Antwortphase steht als Tooltip am erledigten Schritt `answers`. Schmale
+  Karten (Container-Query bis 600 px) zeigen statt des Steppers eine Zeile
+  (`#runCompactLabel` + `#runCompactCount`) ueber vier Segmenten und darunter
+  `#runMeta` plus `#runMetaNext`; 601–680 px ruecken das Preset unter die
+  Schritte. Die Modell-Zeilen (`#runDetail`) existieren nur waehrend der
+  Antwortphase: Status-Icon (Spinner/Haken/gestrichelter Kreis, ein SVG,
+  CSS waehlt per `data-state`), Name, 4-px-Balken, reservierte Skip-Spalte
+  und ein Wort Status rechts: `Writing`, `Thinking`, `Waiting`, bei Abschluss
+  nur die **gemessene** Zeit (`12.3s`), terminal `No answer` (Fehler),
+  `Skipped`, `Canceled`. Die Zeichenzahl pro Modell (seit 2026-09-11 samt
+  260-ms-Zaehlanimation) ist wieder aus der Zeile entfernt und steht nur noch
+  im Tooltip (`1,234 characters received so far`); gezaehlt wird weiter in
+  Unicode-Codepoints aus dem projizierten rohen `dataset.consensusAnswer`,
+  der Wert treibt ausserdem die Balkenschaetzung. Ohne Antworttext laufen
+  `Thinking`/`Waiting` als wandernder Kurzbalken statt einer geratenen
+  Fuellung; `Writing` fuellt monoton mit Lichtstreifen, erst der terminale
+  Status setzt 100 %. Ausgefallene Modelle (`error|skipped|canceled`) sinken
+  per `order` ans Ende, bekommen eine leere gestrichelte Schiene, und
+  `#runNote` sagt es einmal ruhig: `Claude didn't answer. The consensus uses
+  the other 5 answers.` (nur in Antwort- und Consensus-Phase; in
+  `differences` steht dort der Hinweis auf das unbeteiligte Pruefmodell).
+  Phasen ohne ehrlichen Prozentwert laufen indeterminiert
+  (`.run-track.is-indeterminate`); waehrend des Fan-outs ist der Gesamtbalken
+  ausgeblendet. Nur `#runStatus` ist eine Live-Region und wird bei Phasen-/
+  Abschlusswechsel aktualisiert. `Skip` erscheint in der von Anfang an
+  reservierten Aktionsspalte ohne Layoutsprung; die rechte Kante der
+  Statusangaben stimmt mit der Uhr im Kopf ueberein. Bis 640 px stehen
+  Icon+Name, Skip und Status ueber einem durchgehenden Balken (Touch: 44 px
+  Zeilen- und Skip-Hoehe). Reduced Motion stoppt Puls, Spinner, Sweeps,
+  Lichtstreifen und Uebergaenge; Forced Colors blendet den Balkenschimmer aus.
+  `.run-model-track` teilt sich die Grundform mit `.agent-session-track` in
+  der Agent-Sidebar, die ihre 2-px-Schiene in `agent-chat.css` selbst setzt.
+  Die Landingpage (Szene 02, `landing-scenes.js` + `.lp-run*` in
+  `landing.css`) spiegelt diesen Aufbau mit denselben Schritten, Wörtern und
+  Zustaenden.
   Am Ende klappt der Block zusammen und uebergibt an den **Provenance-Fuss**
   `#runProvenance` unter der Antwort. Desktop: Differences / Answers / Sources
   bilden die primäre Zeile, Share / Watch / Cite stehen daneben. Eine zweite,

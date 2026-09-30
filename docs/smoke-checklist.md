@@ -113,12 +113,14 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       aus. Source Checks stehen mobil mittig unter den Tabs; nach dem letzten
       Ergebnis bleiben 24 px Luft vor dem Composer. Automatisiert:
       `tests/e2e/test_inspector_polish.py`.
-- [ ] Agent-Run: Modellzeilen zeigen echte empfangene Zeichen, vor dem ersten
-      Text `Waiting`/`Reasoning`, danach `Done · Zeit` bzw. getrennte
-      Fehler-/Skip-/Cancel-Labels. Modellbalken bleiben monoton, neue oder
-      gewechselte Runs zeigen keine fremden Zeichenzahlen. Strich-Animation
-      und Textschimmer passen in Light/Dark bei 320 px; Reduced Motion bleibt
-      statisch. Screenreader lesen nur Phasen-/Abschlusswechsel vor, Skip ist
+- [ ] Agent-Run: Stepper-Kopf zeigt erledigte/aktive/offene Schritte, Preset
+      und Uhr; schmal (320/390 px) eine Zeile mit vier Segmenten. Modellzeilen
+      zeigen Icon, Balken und `Writing`/`Thinking`/`Waiting`, danach nur die
+      Zeit bzw. `No answer`/`Skipped`/`Canceled`; ausgefallene Modelle sinken
+      nach unten und der Hinweis darunter nennt sie einmal. Empfangene Zeichen
+      stehen im Tooltip, Balken bleiben monoton, neue oder gewechselte Runs
+      zeigen keine fremden Werte. Light/Dark passen; Reduced Motion bleibt
+      statisch. Landingpage-Szene 02 zeigt denselben Aufbau. Screenreader lesen nur Phasen-/Abschlusswechsel vor, Skip ist
       per Tastatur erreichbar. Automatisiert: `test_consensus_live_progress.py`
       (isolierte Browser-Komponente) und `run-progress-scope.test.mjs`.
       Neue Chunks zaehlen ruhig hoch, bleiben hoechstens beim empfangenen

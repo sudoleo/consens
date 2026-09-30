@@ -23,7 +23,7 @@
   <meta name="twitter:image" content="https://www.consens.io/static/og-home-v2.png?v=20260802">
   <meta name="twitter:image:alt" content="The risk of one perspective | consens.io">
   <title>Track Where AI Answers Disagree and Change | consens.io</title>
-  <link rel="stylesheet" href="/static/css/landing.css?v=20260909-source-toggle">
+  <link rel="stylesheet" href="/static/css/landing.css?v=20260930-run-stepper">
   <link rel="stylesheet" href="/static/css/benchmark.css?v=20260731-inter1">
   <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260621-logo2" sizes="any" type="image/png">
@@ -200,50 +200,60 @@
                      animation chase itself. landing-scenes.js locks the stack
                      to its tallest state on top of this. -->
                 <div class="lp-run-stack" data-run-stack>
-                <!-- Mirrors #consensusRun in /app: finished steps as a grey check
-                     line, one active label + bar, the next steps named. -->
+                <!-- Mirrors #consensusRun in /app: a stepper over all four
+                     steps with preset and clock, one row per model while
+                     they answer, one calm note line. Narrow: one line plus
+                     four segments, exactly as in /app. -->
                 <div class="lp-run" data-run data-stage="prepare">
-                  <div class="lp-run-past" data-run-past></div>
-                  <div class="lp-run-now">
-                    <span class="lp-run-pulse" aria-hidden="true"></span>
-                    <span class="lp-run-label" data-run-label>Preparing the question</span>
-                    <span class="lp-run-count" data-run-count></span>
+                  <div class="lp-run-head">
+                    <div class="lp-run-compact" aria-hidden="true">
+                      <span class="lp-run-dot"></span>
+                      <span data-run-compact>Preparing</span>
+                      <span class="lp-run-count" data-run-compact-count></span>
+                    </div>
+                    <ol class="lp-run-steps">
+                      <li class="lp-run-step" data-step="prepare" data-status="active"><span class="lp-run-mark" aria-hidden="true"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="7"/><path d="M5 8.2l2 2 4-4.2"/></svg></span><span data-step-label>Preparing</span></li>
+                      <li class="lp-run-step" data-step="answers" data-status="pending"><span class="lp-run-mark" aria-hidden="true"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="7"/><path d="M5 8.2l2 2 4-4.2"/></svg></span><span data-step-label>Answers</span><span class="lp-run-count" data-run-count></span></li>
+                      <li class="lp-run-step" data-step="consensus" data-status="pending"><span class="lp-run-mark" aria-hidden="true"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="7"/><path d="M5 8.2l2 2 4-4.2"/></svg></span><span data-step-label>Consensus</span></li>
+                      <li class="lp-run-step" data-step="differences" data-status="pending"><span class="lp-run-mark" aria-hidden="true"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="7"/><path d="M5 8.2l2 2 4-4.2"/></svg></span><span data-step-label>Contradiction check</span></li>
+                    </ol>
+                    <p class="lp-run-meta"><span data-run-meta></span><span class="lp-run-meta-next" data-run-next></span></p>
                     <span class="lp-run-time" data-run-time>0:00</span>
                   </div>
                   <div class="lp-run-track" data-run-track><i></i></div>
-                  <p class="lp-run-next" data-run-next></p>
                   <div class="lp-run-detail" data-run-detail>
-                    <span class="lp-run-model" data-model="0">
-                      <span class="lp-run-model-name">ChatGPT</span>
+                    <span class="lp-run-model" data-model="0" data-state="thinking">
+                      <span class="lp-run-model-name"><svg class="lp-run-icon" viewBox="0 0 16 16" aria-hidden="true"><circle class="lp-run-icon-ring" cx="8" cy="8" r="6.5"/><path class="lp-run-icon-arc" d="M8 1.5a6.5 6.5 0 0 1 6.5 6.5"/><path class="lp-run-icon-check" d="M5 8.2l2 2 4-4.2"/></svg><span>ChatGPT</span></span>
                       <span class="lp-run-model-track"><i></i></span>
-                      <span class="lp-run-model-time">·</span>
+                      <span class="lp-run-model-time">Thinking</span>
                     </span>
-                    <span class="lp-run-model" data-model="1">
-                      <span class="lp-run-model-name">Claude</span>
+                    <span class="lp-run-model" data-model="1" data-state="thinking">
+                      <span class="lp-run-model-name"><svg class="lp-run-icon" viewBox="0 0 16 16" aria-hidden="true"><circle class="lp-run-icon-ring" cx="8" cy="8" r="6.5"/><path class="lp-run-icon-arc" d="M8 1.5a6.5 6.5 0 0 1 6.5 6.5"/><path class="lp-run-icon-check" d="M5 8.2l2 2 4-4.2"/></svg><span>Claude</span></span>
                       <span class="lp-run-model-track"><i></i></span>
-                      <span class="lp-run-model-time">·</span>
+                      <span class="lp-run-model-time">Thinking</span>
                     </span>
-                    <span class="lp-run-model" data-model="2">
-                      <span class="lp-run-model-name">Gemini</span>
+                    <span class="lp-run-model" data-model="2" data-state="thinking">
+                      <span class="lp-run-model-name"><svg class="lp-run-icon" viewBox="0 0 16 16" aria-hidden="true"><circle class="lp-run-icon-ring" cx="8" cy="8" r="6.5"/><path class="lp-run-icon-arc" d="M8 1.5a6.5 6.5 0 0 1 6.5 6.5"/><path class="lp-run-icon-check" d="M5 8.2l2 2 4-4.2"/></svg><span>Gemini</span></span>
                       <span class="lp-run-model-track"><i></i></span>
-                      <span class="lp-run-model-time">·</span>
+                      <span class="lp-run-model-time">Thinking</span>
                     </span>
-                    <span class="lp-run-model" data-model="3">
-                      <span class="lp-run-model-name">Mistral</span>
+                    <span class="lp-run-model" data-model="3" data-state="thinking">
+                      <span class="lp-run-model-name"><svg class="lp-run-icon" viewBox="0 0 16 16" aria-hidden="true"><circle class="lp-run-icon-ring" cx="8" cy="8" r="6.5"/><path class="lp-run-icon-arc" d="M8 1.5a6.5 6.5 0 0 1 6.5 6.5"/><path class="lp-run-icon-check" d="M5 8.2l2 2 4-4.2"/></svg><span>Mistral</span></span>
                       <span class="lp-run-model-track"><i></i></span>
-                      <span class="lp-run-model-time">·</span>
+                      <span class="lp-run-model-time">Thinking</span>
                     </span>
-                    <span class="lp-run-model" data-model="4">
-                      <span class="lp-run-model-name">DeepSeek</span>
+                    <span class="lp-run-model" data-model="4" data-state="thinking">
+                      <span class="lp-run-model-name"><svg class="lp-run-icon" viewBox="0 0 16 16" aria-hidden="true"><circle class="lp-run-icon-ring" cx="8" cy="8" r="6.5"/><path class="lp-run-icon-arc" d="M8 1.5a6.5 6.5 0 0 1 6.5 6.5"/><path class="lp-run-icon-check" d="M5 8.2l2 2 4-4.2"/></svg><span>DeepSeek</span></span>
                       <span class="lp-run-model-track"><i></i></span>
-                      <span class="lp-run-model-time">·</span>
+                      <span class="lp-run-model-time">Thinking</span>
                     </span>
-                    <span class="lp-run-model" data-model="5">
-                      <span class="lp-run-model-name">Grok</span>
+                    <span class="lp-run-model" data-model="5" data-state="thinking">
+                      <span class="lp-run-model-name"><svg class="lp-run-icon" viewBox="0 0 16 16" aria-hidden="true"><circle class="lp-run-icon-ring" cx="8" cy="8" r="6.5"/><path class="lp-run-icon-arc" d="M8 1.5a6.5 6.5 0 0 1 6.5 6.5"/><path class="lp-run-icon-check" d="M5 8.2l2 2 4-4.2"/></svg><span>Grok</span></span>
                       <span class="lp-run-model-track"><i></i></span>
-                      <span class="lp-run-model-time">·</span>
+                      <span class="lp-run-model-time">Thinking</span>
                     </span>
                   </div>
+                  <p class="lp-run-note is-hidden" data-run-note></p>
                 </div>
                 <!-- What the run hands over to once it collapses. -->
                 <div class="lp-run-result" data-run-result>
@@ -631,7 +641,7 @@
 
   {% include "partials/public_footer.html" %}
 
-  <script defer src="/static/js/landing-scenes.js?v=20260908-composerbar"></script>
+  <script defer src="/static/js/landing-scenes.js?v=20260930-run-stepper"></script>
   <script defer src="/static/js/landing-insights.js?v=20260815-claimmark1"></script>
   <script>
     document.addEventListener("DOMContentLoaded", () => {

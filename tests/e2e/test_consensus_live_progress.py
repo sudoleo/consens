@@ -72,7 +72,8 @@ def progress_page(browser, request):
       progressFixture(3, 'Answer two', 'complete');
       progressFixture(4, '', 'reasoning');
     }''')
-    expect(page.locator('[data-box="model-0"] .run-model-time')).to_have_text("1,234 chars")
+    expect(page.locator('[data-box="model-0"] .run-model-time')).to_have_text("Writing")
+    expect(page.locator('[data-box="model-0"] .run-model-time')).to_have_attribute("title", "1,234 characters received so far")
     page.evaluate("() => document.fonts.ready")
     page.wait_for_function("getComputedStyle(document.getElementById('consensusRun')).transform === 'none'")
     yield page
@@ -86,18 +87,32 @@ def test_model_status_layout_and_phase_handoff(progress_page, width, dark):
     page = progress_page
     page.set_viewport_size({"width": width, "height": 850})
     page.evaluate("dark => document.body.classList.toggle('dark-mode', dark)", dark)
-    expect(page.locator('[data-box="model-4"] .run-model-time')).to_have_text("Reasoning")
+    expect(page.locator('[data-box="model-4"] .run-model-time')).to_have_text("Thinking")
     expect(page.locator('[data-box="model-5"] .run-model-time')).to_have_text("Waiting")
-    expect(page.locator('[data-box="model-2"] .run-model-time')).to_contain_text("✓ Done ·")
-    expect(page.locator("#runNext")).to_have_text("Next: Write the consensus → Check for contradictions")
+    expect(page.locator('[data-box="model-2"] .run-model-time')).to_have_text(re.compile(r"^\d+\.\ds$"))
+    expect(page.locator('.run-step[data-step="prepare"]')).to_have_attribute("data-status", "done")
+    expect(page.locator('.run-step[data-step="answers"]')).to_have_attribute("data-status", "active")
+    expect(page.locator('.run-step[data-step="consensus"]')).to_have_attribute("data-status", "pending")
+    expect(page.locator("#runCount")).to_have_text("2/6")
+    expect(page.locator("#runMeta")).to_have_text("6 models")
     expect(page.locator("#runTrack")).not_to_be_visible()
-    assert page.locator(".run-now").bounding_box()["y"] - (
-        page.locator("#runPast").bounding_box()["y"] + page.locator("#runPast").bounding_box()["height"]
-    ) >= 16
-    assert page.locator("#runLabel").bounding_box()["width"] < 220
+    expect(page.locator("#runNote")).not_to_be_visible()
+    # Wide: the stepper names every step. Narrow: one line plus segments.
+    if width <= 640:
+        expect(page.locator(".run-compact")).to_be_visible()
+        expect(page.locator("#runCompactLabel")).to_have_text("Answering")
+        expect(page.locator("#runMetaNext")).to_have_text("Next: consensus, then contradiction check")
+        expect(page.locator(".run-step-label").first).not_to_be_visible()
+    else:
+        expect(page.locator(".run-compact")).not_to_be_visible()
+        expect(page.locator(".run-step-label")).to_have_text(["Prepared", "Answers", "Consensus", "Contradiction check"])
+        expect(page.locator("#runMetaNext")).not_to_be_visible()
+    head = page.locator(".run-head").bounding_box()
+    assert head["y"] + head["height"] <= page.locator("#runDetail").bounding_box()["y"]
     assert page.locator(".run-model").first.bounding_box()["height"] <= (40 if width <= 640 else 28)
     page.evaluate("() => progressFixture(0, 'A'.repeat(987654))")
-    expect(page.locator('[data-box="model-0"] .run-model-time')).to_have_text("987,654 chars")
+    expect(page.locator('[data-box="model-0"] .run-model-time')).to_have_attribute("title", "987,654 characters received so far")
+    expect(page.locator('[data-box="model-0"] .run-model-time')).to_have_text("Writing")
     assert page.evaluate('''() => {
       const rows = [...document.querySelectorAll('.run-model')];
       const timer = document.querySelector('#runTime').getBoundingClientRect();
@@ -118,16 +133,19 @@ def test_model_status_layout_and_phase_handoff(progress_page, width, dark):
     screenshot_dir = os.environ.get("PROGRESS_SCREENSHOTS")
     if screenshot_dir and width in (390, 1280):
         page.evaluate("() => progressFixture(0, 'A'.repeat(1234))")
-        expect(page.locator('[data-box="model-0"] .run-model-time')).to_have_text("1,234 chars")
         path = Path(screenshot_dir)
         path.mkdir(parents=True, exist_ok=True)
         page.screenshot(path=str(path / f"progress-{width}-{'dark' if dark else 'light'}.png"))
     page.evaluate("() => App.consensusPipeline.onConsensusStart()")
-    expect(page.locator("#runLabel")).to_have_text("Writing the consensus")
+    expect(page.locator('.run-step[data-step="answers"]')).to_have_attribute("data-status", "done")
+    expect(page.locator('.run-step[data-step="consensus"]')).to_have_attribute("data-status", "active")
+    expect(page.locator("#runCompactLabel")).to_have_text("Writing the consensus")
     expect(page.locator("#runDetail")).not_to_be_visible()
     expect(page.locator("#runTrack")).to_be_visible()
     page.evaluate("() => App.consensusPipeline.onDifferencesStart()")
-    expect(page.locator("#runLabel")).to_have_text("Checking for contradictions")
+    expect(page.locator('.run-step[data-step="differences"]')).to_have_attribute("data-status", "active")
+    expect(page.locator("#runCompactLabel")).to_have_text("Checking for contradictions")
+    expect(page.locator("#runNoteText")).to_have_text("An uninvolved model compares all answers. It does not get a vote.")
     page.evaluate("() => App.consensusPipeline.dismiss()")
     expect(page.locator("#consensusRun")).not_to_be_visible()
 
@@ -135,14 +153,34 @@ def test_model_status_layout_and_phase_handoff(progress_page, width, dark):
 def test_reduced_motion_keeps_status_readable_and_static(progress_page):
     page = progress_page
     page.emulate_media(reduced_motion="reduce")
-    assert page.locator(".run-pulse i").first.evaluate("el => getComputedStyle(el).animationName") == "none"
-    assert page.locator("#runLabel").evaluate("el => getComputedStyle(el).animationName") == "none"
+    mark = page.locator('.run-step[data-status="active"] .run-step-mark')
+    assert mark.evaluate("el => getComputedStyle(el, '::before').animationName") == "none"
+    for icon in page.locator(".run-model-icon").all():
+        assert icon.evaluate("el => getComputedStyle(el).animationName") == "none"
     for bar in page.locator(".run-model-track i").all():
+        assert bar.evaluate("el => getComputedStyle(el).animationName") == "none"
         assert bar.evaluate("el => getComputedStyle(el, '::after').animationName") == "none"
         assert bar.evaluate("el => getComputedStyle(el, '::after').content") == "none"
-    assert page.locator("#runLabel").evaluate("el => getComputedStyle(el).color") != "rgba(0, 0, 0, 0)"
     page.evaluate("() => App.consensusPipeline.onConsensusStart()")
     assert page.locator("#runBar").evaluate("el => getComputedStyle(el).animationName") == "none"
+
+
+@pytest.mark.parametrize("width", [390, 1280])
+def test_a_dropped_model_sinks_and_is_explained_once(progress_page, width):
+    page = progress_page
+    page.set_viewport_size({"width": width, "height": 850})
+    page.evaluate("() => progressFixture(1, '', 'error')")
+    row = page.locator('[data-box="model-1"]')
+    expect(row).to_have_attribute("data-state", "error")
+    expect(row.locator(".run-model-time")).to_have_text("No answer")
+    expect(page.locator("#runNoteText")).to_have_text("Claude didn't answer. The consensus uses the other 5 answers.")
+    rows = page.locator(".run-model").all()
+    assert max(r.bounding_box()["y"] for r in rows) == row.bounding_box()["y"]
+    # A dropped model counts as finished, it just has nothing to add.
+    expect(page.locator("#runCount")).to_have_text("3/6")
+    screenshot_dir = os.environ.get("PROGRESS_SCREENSHOTS")
+    if screenshot_dir:
+        page.screenshot(path=str(Path(screenshot_dir) / f"dropped-{width}.png"))
 
 
 @pytest.mark.parametrize("width", [320, 1280])

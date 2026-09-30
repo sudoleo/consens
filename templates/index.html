@@ -359,25 +359,34 @@
       <div class="attachment-bar message-attachments" id="threadPendingAskAttachments" hidden></div>
       <button type="button" class="thread-ask-more">Show full question</button>
     </div>
-    <!-- Gefuehrter Lauf. Sichtbar ist immer nur EIN aktiver Schritt: eine
-         Zeile, ein Balken, eine "Next"-Zeile. Erledigte Schritte schrumpfen
-         auf eine graue Haken-Zeile, die Modell-Zeilen erscheinen nur,
-         solange die Modelle antworten. Nach dem Lauf blendet der Block sich
-         weich aus und uebergibt an die Provenance-Zeile unter der Antwort.
-         Lebt im Thread (unter der Frage, wo gleich die Antwort steht), nicht
-         am Composer. Gesteuert von static/js/consensus-progress.js. -->
+    <!-- Gefuehrter Lauf. Oben die vier Schritte als Stepper (erledigt,
+         aktiv, offen), rechts Preset und Uhr. Die Modell-Zeilen erscheinen
+         nur, solange die Modelle antworten, jede mit Status-Icon, Balken und
+         einem Wort Status. Auf schmalen Breiten wird der Stepper zu einer
+         Zeile plus Segmentbalken. Nach dem Lauf blendet der Block sich weich
+         aus und uebergibt an die Provenance-Zeile unter der Antwort. Lebt im
+         Thread (unter der Frage, wo gleich die Antwort steht), nicht am
+         Composer. Gesteuert von static/js/consensus-progress.js. -->
     <section id="consensusRun" class="run" data-stage="idle" aria-label="Consensus progress" hidden>
       <span id="runStatus" class="visually-hidden" role="status" aria-live="polite" aria-atomic="true"></span>
-      <div class="run-past" id="runPast"></div>
-      <div class="run-now">
-        <span class="run-pulse" aria-hidden="true"><i></i><i></i><i></i></span>
-        <span class="run-label" id="runLabel"></span>
-        <span class="run-count" id="runCount"></span>
+      <div class="run-head">
+        <div class="run-compact" aria-hidden="true">
+          <span class="run-compact-dot"></span>
+          <span class="run-compact-label" id="runCompactLabel"></span>
+          <span class="run-compact-count" id="runCompactCount"></span>
+        </div>
+        <ol class="run-steps" id="runSteps" aria-label="Run steps">
+          <li class="run-step" data-step="prepare" data-status="pending"><span class="run-step-mark" aria-hidden="true"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="7"/><path d="M5 8.2l2 2 4-4.2"/></svg></span><span class="run-step-label">Prepare</span></li>
+          <li class="run-step" data-step="answers" data-status="pending"><span class="run-step-mark" aria-hidden="true"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="7"/><path d="M5 8.2l2 2 4-4.2"/></svg></span><span class="run-step-label">Answers</span><span class="run-count" id="runCount"></span></li>
+          <li class="run-step" data-step="consensus" data-status="pending"><span class="run-step-mark" aria-hidden="true"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="7"/><path d="M5 8.2l2 2 4-4.2"/></svg></span><span class="run-step-label">Consensus</span></li>
+          <li class="run-step" data-step="differences" data-status="pending"><span class="run-step-mark" aria-hidden="true"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="7"/><path d="M5 8.2l2 2 4-4.2"/></svg></span><span class="run-step-label">Contradiction check</span></li>
+        </ol>
+        <p class="run-meta"><span class="run-meta-text" id="runMeta"></span><span class="run-meta-next" id="runMetaNext"></span></p>
         <span class="run-time" id="runTime"></span>
       </div>
       <div class="run-track" id="runTrack" aria-hidden="true"><i id="runBar"></i></div>
       <div class="run-detail" id="runDetail" hidden></div>
-      <p class="run-next" id="runNext"></p>
+      <p class="run-note" id="runNote" hidden><svg class="run-note-icon" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7"/><path d="M8 7.2v4"/><circle class="run-note-dot" cx="8" cy="4.9" r=".9"/></svg><span id="runNoteText"></span></p>
     </section>
     <!-- Der Lauf hat NICHT stattgefunden. Das ist ein eigener Zustand, kein
          Zwischenschritt: der gefuehrte Lauf oben blendet sich bei "error"

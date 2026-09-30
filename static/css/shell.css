@@ -967,18 +967,26 @@ body:not(.dark-mode) .chat-input-container {
 }
 
 /* ---- The guided run ------------------------------------------------------
-   One active step at a time. What is finished is a grey check line, what is
-   running is one label with one bar, and what comes next is named so the
-   wait has a shape. When it ends the whole block collapses upward and the
-   provenance line under the answer takes over.
+   One quiet card. A stepper names all four steps (done, active, still to
+   come) with the preset and the clock on the right; while the models answer,
+   one row per model with an icon, a bar and one word of status. When it ends
+   the whole block collapses upward and the provenance line under the answer
+   takes over.
    -------------------------------------------------------------------------- */
 .run {
+  --run-accent: var(--agree);
+  --run-rail: color-mix(in srgb, var(--ink) 9%, transparent);
+  --run-busy: var(--ink-2);
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  /* The bars run the full width of the thread column. A progress bar that
-     stops halfway looks like it is reporting half a run. */
-  margin: 2px 6px 14px;
+  gap: 14px;
+  box-sizing: border-box;
+  margin: 2px 0 16px;
+  padding: 14px 18px 16px;
+  border: 1px solid var(--line-soft);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--ink) 2.5%, transparent);
+  container-type: inline-size;
   overflow: hidden;
   opacity: 0;
   transform: translateY(-3px);
@@ -999,113 +1007,153 @@ body:not(.dark-mode) .chat-input-container {
   transform: translateY(-6px);
   max-height: 0 !important;
   margin-bottom: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  border-width: 0;
   pointer-events: none;
   transition:
     opacity 0.36s ease,
     transform 0.42s ease,
     max-height 0.48s ease,
-    margin-bottom 0.48s ease;
+    margin-bottom 0.48s ease,
+    padding 0.48s ease,
+    border-width 0.48s ease;
 }
 
-/* Finished steps: one grey line, checked off. */
-.run-past {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 3px 12px;
-  margin-bottom: 10px;
-  font-size: var(--font-size-xs);
-  color: var(--ink-3);
+/* Head: steps left, preset and clock right. */
+.run-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  column-gap: 14px;
+  min-height: 24px;
 }
 
-.run-past[hidden] {
+.run-compact {
   display: none;
 }
 
-.run-past span::before {
-  content: "✓ ";
-  color: var(--agree);
-}
-
-.run-now {
-  display: grid;
-  grid-template-columns: 19px minmax(0, 1fr) auto auto;
-  align-items: center;
-  gap: 9px;
-}
-
-.run-pulse {
-  width: 19px;
-  height: 20px;
+.run-steps {
   display: flex;
   align-items: center;
-  gap: 3px;
-}
-
-.run-pulse i {
-  width: 3px;
-  height: 12px;
-  border-radius: 3px;
-  background: var(--ink-2);
-  animation: runActivity 3s ease-in-out infinite;
-}
-
-.run-pulse i:nth-child(2) { height: 18px; animation-delay: 0.2s; }
-.run-pulse i:nth-child(3) { height: 9px; animation-delay: 0.4s; }
-
-@keyframes runActivity {
-  0%, 100% { opacity: 0.6; transform: scaleY(0.85); }
-  50% { opacity: 0.95; transform: scaleY(1); }
-}
-
-.run[data-stage="done"] .run-pulse i {
-  animation: none;
-  background: var(--agree);
-}
-
-.run-label {
-  width: fit-content;
-  max-width: 100%;
-  justify-self: start;
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
-  letter-spacing: var(--tracking-tight);
-  color: var(--ink-2);
-}
-
-/* Only the active work label shimmers. The answer remains still and readable. */
-@supports (background-clip: text) {
-  .run:not([data-stage="idle"]):not([data-stage="done"]) .run-label {
-    --run-sheen: color-mix(in srgb, var(--ink-2) 40%, var(--ground));
-    background: linear-gradient(108deg, var(--ink-2) 35%, var(--run-sheen) 48%, var(--run-sheen) 52%, var(--ink-2) 65%);
-    background-size: 280% 100%;
-    background-clip: text;
-    -webkit-background-clip: text;
-    color: transparent;
-    animation: runTextShimmer 4s linear infinite;
-  }
-  body.dark-mode .run:not([data-stage="idle"]):not([data-stage="done"]) .run-label { --run-sheen: var(--ink); }
-}
-
-@keyframes runTextShimmer {
-  0% { background-position: 140% 0; }
-  85%, 100% { background-position: -40% 0; }
-}
-
-.run-count {
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
   font-size: var(--font-size-xs);
+  line-height: 20px;
+}
+
+.run-step {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+
+/* The line between two steps belongs to the later one. */
+.run-step + .run-step::before {
+  content: "";
+  width: 14px;
+  height: 1px;
+  margin-right: 3px;
+  background: var(--line);
+}
+
+.run-step[data-status="done"] { color: var(--ink-2); }
+
+.run-step[data-status="active"] {
+  color: var(--ink);
+  font-weight: var(--font-weight-medium);
+}
+
+.run-step-mark {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+
+.run-step-mark svg {
+  display: none;
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: var(--run-accent);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.run-step-mark::before,
+.run-compact-dot {
+  content: "";
+  box-sizing: border-box;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--ink-3) 70%, transparent);
+}
+
+.run-step[data-status="done"] .run-step-mark::before { content: none; }
+.run-step[data-status="done"] .run-step-mark svg { display: block; }
+
+.run-step[data-status="active"] .run-step-mark::before,
+.run-compact-dot {
+  width: 8px;
+  height: 8px;
+  border: 0;
+  background: var(--run-accent);
+  animation: runPulse 1.8s ease-out infinite;
+}
+
+.run[data-stage="done"] .run-compact-dot { animation: none; }
+
+@keyframes runPulse {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--run-accent) 45%, transparent); }
+  70%, 100% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--run-accent) 0%, transparent); }
+}
+
+.run-count,
+.run-compact-count {
   color: var(--ink-2);
+  font-weight: 400;
   font-variant-numeric: tabular-nums;
 }
 
-.run-count:empty { display: none; }
+.run-count:empty,
+.run-compact-count:empty { display: none; }
+
+.run-meta {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  font-size: var(--font-size-xs);
+  color: var(--ink-3);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.run-meta-next { display: none; }
 
 .run-time {
-  grid-column: 4;
-  margin-left: auto;
+  justify-self: end;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
   font-size: var(--font-size-micro);
-  color: var(--ink-3);
+  line-height: 16px;
+  color: var(--ink-2);
   font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
 }
+
+.run-time:empty { display: none; }
 
 /* Each model already has its own live track during the fan-out. */
 .run[data-stage="answers"] > .run-track { display: none; }
@@ -1114,7 +1162,7 @@ body:not(.dark-mode) .chat-input-container {
   position: relative;
   height: 2px;
   border-radius: 2px;
-  background: var(--line-soft);
+  background: var(--run-rail);
   overflow: hidden;
 }
 
@@ -1123,7 +1171,7 @@ body:not(.dark-mode) .chat-input-container {
   height: 100%;
   width: var(--p, 0%);
   border-radius: inherit;
-  background: var(--ink);
+  background: var(--ink-2);
   transition: width 0.4s cubic-bezier(0.22, 0.61, 0.36, 1);
 }
 
@@ -1140,27 +1188,44 @@ body:not(.dark-mode) .chat-input-container {
   100% { transform: translateX(330%); }
 }
 
-.run-next {
-  margin: 5px 0 0 28px;
+/* Said once, under everything: who is out, or who is checking. */
+.run-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
   font-size: var(--font-size-xs);
+  line-height: 1.45;
   color: var(--ink-3);
 }
 
-.run-next[hidden] {
+.run-note[hidden] {
   display: none;
 }
 
-.run-next b {
-  color: var(--ink-2);
-  font-weight: var(--font-weight-medium);
+.run-note-icon {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin-top: 1px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.3;
+  stroke-linecap: round;
+}
+
+.run-note-icon .run-note-dot {
+  fill: currentColor;
+  stroke: none;
 }
 
 /* Per-model rows: present only while the models are actually answering. */
 .run-detail {
   display: flex;
   flex-direction: column;
-  gap: 0;
-  margin: 2px 0 0 28px;
+  gap: 4px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line-soft);
 }
 
 .run-detail[hidden] {
@@ -1170,14 +1235,68 @@ body:not(.dark-mode) .chat-input-container {
 /* A reserved action column keeps every track and row stable when Skip appears. */
 .run-model {
   display: grid;
-  grid-template-columns: minmax(68px, 88px) minmax(24px, 1fr) 44px 102px;
+  grid-template-columns: minmax(84px, 132px) minmax(24px, 1fr) 44px 76px;
   align-items: center;
-  min-height: 26px;
-  gap: 8px;
+  min-height: 28px;
+  gap: 12px;
 }
 
 .run-model-name {
   grid-column: 1;
+  grid-row: 1;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  font-size: var(--font-size-sm);
+  color: var(--ink);
+}
+
+.run-model-label {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.run-model-icon {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  overflow: visible;
+}
+
+.run-icon-ring { stroke: var(--run-rail); }
+.run-icon-arc { stroke: var(--run-busy); }
+.run-icon-check,
+.run-icon-minus { display: none; }
+
+.run-model:is([data-state="streaming"], [data-state="reasoning"], [data-state="waiting"]) .run-model-icon {
+  animation: runSpin 1s linear infinite;
+}
+
+.run-model:is([data-state="reasoning"], [data-state="waiting"]) .run-icon-arc { stroke: var(--ink-3); }
+
+.run-model[data-state="done"] .run-icon-ring { stroke: var(--run-accent); }
+.run-model[data-state="done"] .run-icon-check { display: inline; stroke: var(--run-accent); }
+.run-model:is([data-state="done"], [data-state="error"], [data-state="skipped"], [data-state="canceled"]) .run-icon-arc { display: none; }
+
+.run-model:is([data-state="error"], [data-state="skipped"], [data-state="canceled"]) .run-model-name { color: var(--ink-3); }
+.run-model:is([data-state="error"], [data-state="skipped"], [data-state="canceled"]) .run-icon-ring {
+  stroke: var(--ink-3);
+  stroke-dasharray: 2.2 2.2;
+}
+.run-model:is([data-state="error"], [data-state="skipped"], [data-state="canceled"]) .run-icon-minus {
+  display: inline;
+  stroke: var(--ink-3);
+}
+
+@keyframes runSpin {
+  to { transform: rotate(360deg); }
 }
 
 .run-model-skip {
@@ -1229,24 +1348,13 @@ body:not(.dark-mode) .chat-input-container {
   .run-model-skip-btn { min-height: 44px; }
 }
 
-.run-model-name {
-  font-size: var(--font-size-xs);
-  color: var(--ink-2);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.run-model[data-state="done"] .run-model-name {
-  color: var(--ink-2);
-}
-
 .run-model-track {
+  position: relative;
   grid-column: 2;
   grid-row: 1;
-  height: 2px;
+  height: 4px;
   border-radius: 2px;
-  background: var(--line-soft);
+  background: var(--run-rail);
   overflow: hidden;
 }
 
@@ -1257,12 +1365,29 @@ body:not(.dark-mode) .chat-input-container {
   width: var(--p, 0%);
   overflow: hidden;
   border-radius: inherit;
-  background: var(--ink-2);
+  background: var(--run-busy);
   transition: width 0.3s linear;
 }
 
+/* No answer text yet: the request is alive, but how far along it is cannot
+   be known. A short segment travels instead of a fill that would guess. */
+.run-model:is([data-state="reasoning"], [data-state="waiting"]) .run-model-track i {
+  width: 22%;
+  background: color-mix(in srgb, var(--ink-3) 70%, transparent);
+  transition: none;
+  animation: runRowSweep 1.6s cubic-bezier(0.45, 0, 0.35, 1) infinite;
+  animation-delay: var(--model-shimmer-delay, 0s);
+}
+
+.run-model[data-state="waiting"] .run-model-track i { opacity: 0.6; }
+
+@keyframes runRowSweep {
+  0% { transform: translateX(-110%); }
+  100% { transform: translateX(460%); }
+}
+
 /* Activity travels only inside the received-progress fill, never ahead of it. */
-.run-model:is([data-state="streaming"], [data-state="reasoning"]) .run-model-track i::after,
+.run-model[data-state="streaming"] .run-model-track i::after,
 .agent-session-track:not([hidden]) i::after {
   content: "";
   position: absolute;
@@ -1276,24 +1401,28 @@ body:not(.dark-mode) .chat-input-container {
 .run-model:nth-child(3n + 2), .agent-session:nth-child(3n + 2) { --model-shimmer-delay: -1.1s; }
 .run-model:nth-child(3n), .agent-session:nth-child(3n) { --model-shimmer-delay: -2.2s; }
 
-.run-model[data-state="reasoning"] .run-model-track i::after {
-  animation-duration: 4.6s;
-  opacity: 0.65;
-}
-
 @keyframes runModelShimmer {
   0%, 12% { transform: translateX(-100%); }
   88%, 100% { transform: translateX(100%); }
 }
 
 .run-model[data-state="done"] .run-model-track i {
-  background: var(--agree);
+  background: var(--run-accent);
+}
+
+/* Out of the run: an empty, dashed rail. A grey full bar read as finished. */
+.run-model:is([data-state="error"], [data-state="skipped"], [data-state="canceled"]) .run-model-track {
+  background: repeating-linear-gradient(90deg, var(--run-rail) 0 6px, transparent 6px 10px);
+}
+
+.run-model:is([data-state="error"], [data-state="skipped"], [data-state="canceled"]) .run-model-track i {
+  display: none;
 }
 
 .run-model-time {
   grid-column: 4;
   grid-row: 1;
-  font-size: var(--font-size-micro);
+  font-size: var(--font-size-xs);
   color: var(--ink-2);
   text-align: right;
   white-space: nowrap;
@@ -1301,33 +1430,97 @@ body:not(.dark-mode) .chat-input-container {
   font-feature-settings: "tnum";
 }
 
-.run-model[data-state="done"] .run-model-time {
-  color: var(--agree);
+.run-model[data-state="done"] .run-model-time { color: var(--ink); }
+.run-model:is([data-state="reasoning"], [data-state="waiting"], [data-state="error"], [data-state="skipped"], [data-state="canceled"]) .run-model-time {
+  color: var(--ink-3);
 }
 
-.run-model:is([data-state="error"], [data-state="skipped"], [data-state="canceled"]) .run-model-track i {
-  background: var(--ink-3);
-  opacity: 0.35;
+/* Medium: the preset moves under the steps so the steps stay on one line. */
+@container (min-width: 601px) and (max-width: 680px) {
+  .run-head {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: "steps time" "meta meta";
+    row-gap: 4px;
+  }
+  .run-steps { grid-area: steps; column-gap: 7px; }
+  .run-step { gap: 6px; }
+  .run-step + .run-step::before { width: 8px; margin-right: 1px; }
+  .run-time { grid-area: time; }
+  .run-meta { grid-area: meta; }
+}
+
+/* Narrow: the stepper folds into one line plus four segments. */
+@container (max-width: 600px) {
+  .run-head {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: "compact time" "steps steps" "meta meta";
+    row-gap: 10px;
+  }
+
+  .run-compact {
+    grid-area: compact;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    min-width: 0;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-medium);
+    color: var(--ink);
+    white-space: nowrap;
+  }
+
+  .run-compact-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .run-compact-count { font-size: var(--font-size-xs); }
+
+  .run-time { grid-area: time; }
+
+  .run-steps {
+    grid-area: steps;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 4px;
+  }
+
+  .run-step > *,
+  .run-step + .run-step::before { display: none; }
+
+  .run-step {
+    height: 3px;
+    border-radius: 2px;
+    background: var(--run-rail);
+    overflow: hidden;
+  }
+
+  .run-step[data-status="done"] { background: var(--run-accent); }
+  .run-step[data-status="active"] {
+    background: linear-gradient(90deg, var(--run-accent) 0 34%, var(--run-rail) 34%);
+  }
+
+  .run-meta {
+    grid-area: meta;
+    white-space: normal;
+  }
+
+  .run-meta-next { display: inline; }
+  .run-meta-text:not(:empty) + .run-meta-next:not(:empty)::before { content: " · "; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .run-model .run-model-track i::after { content: none !important; animation: none !important; }
   .run, .run.is-gone, .run-model-track i, .run-track i { transition: none; }
-  .run-pulse i, .run-track.is-indeterminate i, .run-model-skip-btn { animation: none; }
+  .run-track.is-indeterminate i, .run-model-skip-btn, .run-model-icon,
+  .run-model-track i, .run-step-mark::before, .run-compact-dot { animation: none !important; }
   .run-model-skip-btn { transition: none; }
-  .run:not([data-stage="idle"]):not([data-stage="done"]) .run-label {
-    animation: none;
-    background: none;
-    color: var(--ink-2);
-  }
 }
 
 @media (forced-colors: active) {
   .run-model .run-model-track i::after { content: none !important; animation: none !important; }
-  .run:not([data-stage="idle"]):not([data-stage="done"]) .run-label {
-    background: none;
-    color: CanvasText;
-  }
+  .run { border-color: CanvasText; }
 }
 
 /* ---- The run that did not happen -----------------------------------------
@@ -2123,13 +2316,14 @@ body.dark-mode .run-provenance {
 }
 
 @media (max-width: 640px) {
+  .run { padding: 14px 14px 16px; }
+  .run-detail { gap: 10px; }
   .run-model {
     box-sizing: border-box;
-    grid-template-columns: minmax(0, max-content) 44px minmax(102px, 1fr);
-    grid-template-rows: 28px 2px;
-    gap: 4px 6px;
-    min-height: 40px;
-    padding-bottom: 6px;
+    grid-template-columns: minmax(0, max-content) 44px minmax(84px, 1fr);
+    grid-template-rows: 24px 4px;
+    gap: 6px 6px;
+    min-height: 34px;
   }
 
   .run-model-name { grid-row: 1; }
@@ -2148,14 +2342,9 @@ body.dark-mode .run-provenance {
   }
   .run-model-time { grid-column: 3; }
   .run-model-track { grid-column: 1 / -1; grid-row: 2; }
-  .run-detail { margin-left: 0; }
-  .run-next { margin-left: 0; margin-top: 8px; }
-  .run-now { grid-template-columns: 19px minmax(0, 1fr) auto; }
-  .run-time { grid-column: 3; grid-row: 1; }
-  .run-count { grid-column: 2 / -1; grid-row: 2; }
 
   @media (pointer: coarse) {
-    .run-model { grid-template-rows: 32px 2px; min-height: 44px; }
+    .run-model { grid-template-rows: 34px 4px; min-height: 44px; }
     /* The quiet text action retains a full touch target without a visible box. */
     .run-model-skip-btn {
       height: 44px;
