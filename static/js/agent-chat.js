@@ -426,14 +426,15 @@
   // A brand-new chat has no files or actions until the run reports resources
   // or finishes; its first lists need no request.
   function knownEmptyChat(context) {
-    return !context.basis && registry.isExecuting(context.runId) && !context.metadata.resourcesSeen;
+    return !context.basis && registry.isExecuting(context.runId) && !context.metadata.resourcesSeen
+      && !(context.metadata.fileIds || []).length;
   }
   // Everything that describes which run is on screen, not how far it got.
   // It changes once per run/view, so a streamed chunk never repeats it.
   function projectFrame(context) {
     const knownEmpty = knownEmptyChat(context);
     const key = JSON.stringify([context.runId, viewEpoch, context.metadata.chatId, context.metadata.agentTurnId,
-      (context.attachmentMeta || []).length, knownEmpty, context.historyTurns.length]);
+      (context.attachmentMeta || []).length, (context.metadata.fileIds || []).length, knownEmpty, context.historyTurns.length]);
     if (frameKey === key) return false;
     frameKey = key;
     window.exitHeroMode?.();
@@ -443,11 +444,12 @@
     App.setAppTitle?.(context.question);
     App.setThreadQuestion?.(context.question);
     App.setThreadQuestionAttachments?.(context.attachmentMeta || []);
-    // The workspace re-projects its cached list without a request; a new
-    // chat's first list is known to be empty (agent-workspace.js knownEmpty).
-    App.agentWorkspace?.refresh(context.metadata.chatId);
-    if (knownEmpty) App.agentGoogle?.refreshActions?.(null);
-    else App.agentGoogle?.refreshActions?.(context.metadata.chatId);
+    // A new chat's lists are known to be empty until the run reports
+    // resources, its own uploads refresh the workspace, or it finishes; no
+    // GET is needed for them. Otherwise both re-project their cached lists.
+    const listChat = knownEmpty ? null : context.metadata.chatId;
+    App.agentWorkspace?.refresh(listChat);
+    App.agentGoogle?.refreshActions?.(listChat);
     App.state?.set?.("lastQuestion", context.question, "run");
     App.state?.set?.("lastShareResultId", null, "share");
     App.state?.set?.("consensusCitationMeta", null, "consensus");

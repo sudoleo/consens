@@ -197,12 +197,14 @@ body.single-agent-active .chat-input-container .consensus-switch-container { max
 .agent-answer-error-actions button:focus-visible, .agent-progress-review-jump:focus-visible { outline: 2px solid var(--ink-2); outline-offset: 2px; }
 #agentAnswerResources:empty { display: none; }
 /* The one "waiting on you" signal: a compact notice above the composer. */
-.agent-review-notice { align-items: center; gap: 8px 10px; padding: 8px 12px; margin: 0 0 8px; border: 1px solid color-mix(in srgb, var(--partial) 40%, var(--line));
+.agent-review-notice { align-items: center; gap: 8px 10px; padding: 6px 6px 6px 12px; margin: 0 0 6px; text-align: left; box-sizing: border-box; border: 1px solid color-mix(in srgb, var(--partial) 40%, var(--line));
   border-radius: 10px; background: var(--partial-bg); color: var(--ink); }
 .agent-review-notice[hidden] { display: none; }
 .agent-review-notice-dot { width: 7px; height: 7px; flex: none; border-radius: 50%; background: var(--partial); }
 .agent-review-notice #agentReviewMessage { flex: 1 1 auto; min-width: 0; font-weight: 500; }
-.agent-composer-notice.agent-review-notice button { text-decoration: none; padding: 4px 12px; min-height: 32px; }
+.agent-composer-notice.agent-review-notice button { text-decoration: none; padding: 4px 12px; min-height: 32px; border: 1px solid color-mix(in srgb, var(--partial) 45%, var(--line));
+  border-radius: 7px; background: var(--ground); color: var(--ink); font-weight: 500; }
+.agent-composer-notice.agent-review-notice button:hover { background: var(--raise); }
 .agent-progress-review { margin: -6px 0 16px; }
 .agent-progress-review-jump { gap: 7px; color: var(--agent-ink, var(--ink)); border-color: color-mix(in srgb, var(--partial) 45%, var(--line)); background: var(--partial-bg); }
 .agent-progress-review-jump::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--partial); flex: none; }
@@ -231,7 +233,7 @@ body.single-agent-active :is(#consensusOutput, #consensusRun, #agentModePanel, .
   #deepThinkInputIndicator,
   #runProvenance, .consensus-footer-actions, #composerRunNotice, #heroResponseAccess,
   .models-section, .models-section + .sidebar-separator, .demo-chip) { display: none !important; }
-body:not(.single-agent-active) #agentAnswer { display: none; }
+body:not(.single-agent-active) #agentAnswer, body:not(.single-agent-active) #agentReviewNotice { display: none; }
 body.single-agent-active #agentAnswer:not([hidden]) { display: block; }
 body.single-agent-active #threadAsk:not([hidden]) { display: flex; }
 body.single-agent-active #composerAgentToggle { cursor: default; }

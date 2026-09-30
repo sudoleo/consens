@@ -408,6 +408,12 @@
     <div class="input-section">
       <!-- Nur im Agent-Mode-Hero und nur bei ausreichender Viewport-Fläche sichtbar. -->
       <p class="hero-greeting">What should the models cross-check?</p>
+      <!-- Agent Beta: external writes wait for the user's review (agent-chat.js). -->
+      <div id="agentReviewNotice" class="agent-composer-notice agent-review-notice" hidden>
+        <span class="agent-review-notice-dot" aria-hidden="true"></span>
+        <span id="agentReviewMessage" role="status" aria-live="polite"></span>
+        <button id="agentReviewAction" type="button">Review</button>
+      </div>
       <div class="chat-input-container u-position-relative">
         <!-- Fallback fuer die im Agent-Chat verborgene Toolbar. attachments.js
              verschiebt dieselbe Leiste im Hero/Direktvergleich unter das Feld.
@@ -585,11 +591,6 @@
         </div>
         <p id="composerModeDescription" class="composer-mode-description">Automatic consensus after the models answer.</p>
         <p id="composerComparisonStatus" class="composer-comparison-status" role="status" aria-live="polite" hidden></p>
-      </div>
-      <div id="agentReviewNotice" class="agent-composer-notice agent-review-notice" hidden>
-        <span class="agent-review-notice-dot" aria-hidden="true"></span>
-        <span id="agentReviewMessage" role="status" aria-live="polite"></span>
-        <button id="agentReviewAction" type="button">Review</button>
       </div>
       <div id="agentComposerNotice" class="agent-composer-notice" hidden>
         <span id="agentComposerMessage" role="status" aria-live="polite"></span>
