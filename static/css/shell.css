@@ -606,6 +606,12 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
   gap: 5px;
 }
 
+/* display:flex above must not override the hidden attribute (Agent mode hides
+   the Deep Think and Watches rows). */
+.quota-row[hidden] {
+  display: none;
+}
+
 .quota-top {
   display: flex;
   justify-content: space-between;

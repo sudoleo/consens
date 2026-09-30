@@ -953,6 +953,10 @@
               !watchIsOpen()
               && consensusOutput
               && !consensusOutput.classList.contains("is-hidden")
+              // Agent chats hide the Consensus output with CSS while an older
+              // answer may still sit in it; hidden text is not being read.
+              && !document.body.classList.contains("single-agent-active")
+              && consensusOutput.getClientRects().length > 0
               && document.getElementById("consensusAnswerBody")?.textContent?.trim()
             );
           }

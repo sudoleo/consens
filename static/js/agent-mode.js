@@ -794,8 +794,10 @@
     document.getElementById("deepSearchToggle")?.click();
     renderComposerMode();
   });
+  // Both modes share the upload path: in Agent Beta attachments.js keeps the
+  // file in the composer and agent-workspace.js uploads it to the private
+  // chat store on send. The upload option carries the Plus check.
   document.getElementById("composerAttachButton")?.addEventListener("click", function () {
-    if (isBeta()) return;
     document.getElementById("attachUploadOption")?.click();
   });
   document.getElementById("agentReasoningMenuOption")?.addEventListener("click", function (event) {

@@ -51,6 +51,12 @@ def test_agent_live_counter_uses_streamed_progress_and_stops_animation(browser, 
         }""", {"chat": chat, "turn": turn, "agent": agent})
         page.locator('#questionInput').fill('Check sources')
         page.locator('#sendButton').click()
+        if width < 1200:
+            # Narrow screens never cover the chat by themselves: the chip opens the sheet.
+            expect(page.locator('.agent-sidebar-toggle')).to_be_visible()
+            expect(page.locator('#agentSidebar')).to_be_hidden()
+            page.locator('.agent-sidebar-toggle').click()
+            expect(page.locator('.agent-sidebar-scrim')).to_be_visible()
         label = page.locator('.agent-session-tokens')
         track = page.locator('.agent-session-track')
         expect(label).to_have_text('Tokens pending')
@@ -151,6 +157,10 @@ def test_agent_sidebar_real_app_and_saved_view(browser, phase4_server, width, da
         page.locator("#questionInput").fill(saved["question"])
         page.locator("#sendButton").click()
         sidebar = page.locator("#agentSidebar")
+        if width < 1200:
+            expect(page.locator(".agent-sidebar-toggle")).to_have_attribute("aria-expanded", "false")
+            expect(sidebar).to_be_hidden()
+            page.locator(".agent-sidebar-toggle").click()
         expect(sidebar).to_be_visible()
         expect(page.locator(".agent-session")).to_have_count(len(agents))
         expect(page.locator(".agent-sidebar-usage")).to_contain_text(re.compile(r'1[.,]050 tokens'))
@@ -158,6 +168,11 @@ def test_agent_sidebar_real_app_and_saved_view(browser, phase4_server, width, da
         expect(sidebar).not_to_contain_text('$')
         assert sidebar.evaluate('el => getComputedStyle(el).animationName') == 'agent-sidebar-enter'
         sidebar.evaluate('el => Promise.all(el.getAnimations().map(a => a.finished))')
+        if width >= 1200:
+            # A wide screen opens the panel beside the column, which moves aside.
+            page.locator(".container").evaluate('el => Promise.all(el.getAnimations().map(a => a.finished))')
+            column = page.locator(".container").bounding_box()
+            assert column["x"] + column["width"] <= sidebar.bounding_box()["x"] + 1
         header = page.locator('.agent-sidebar-header')
         usage_row = page.locator('.agent-sidebar-usage')
         initial_header = header.bounding_box()

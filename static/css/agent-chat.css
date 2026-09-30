@@ -1,5 +1,5 @@
 /* Agent chat shares the shell's surfaces, picker and mobile composer. */
-.agent-sidebar[hidden], .agent-sidebar [hidden], .agent-inline-models:empty { display: none; }
+.agent-sidebar[hidden], .agent-sidebar [hidden], .agent-inline-models:empty, .agent-inline-models [hidden] { display: none; }
 .agent-sidebar {
   --agent-enter-x: 18px; --agent-enter-y: 0px;
   position: fixed; z-index: 120; top: 66px; right: 16px; bottom: 24px; width: 330px;
@@ -104,9 +104,23 @@
     margin-left: calc(var(--app-sidebar-offset) + (100vw - var(--app-sidebar-offset) - var(--agent-chat-width)) / 2); margin-right: 0;
   }
 }
+@media (min-width: 1200px) {
+  /* The open panel takes its own lane: the column narrows and re-centres in
+     the space left of it instead of running underneath. */
+  body.single-agent-active.agent-sidebar-open:not(.answer-reader-docked) .container {
+    --agent-chat-width: min(var(--app-container-width), calc(100vw - var(--app-sidebar-offset) - 346px - 48px));
+    margin-left: calc(var(--app-sidebar-offset) + (100vw - var(--app-sidebar-offset) - 346px - var(--agent-chat-width)) / 2);
+  }
+}
+.agent-sidebar-scrim { position: fixed; inset: 0; z-index: 1290; background: color-mix(in srgb, var(--ink) 28%, transparent); }
+.agent-sidebar-scrim[hidden] { display: none; }
 @media (max-width: 1199px) {
   .agent-sidebar { --agent-enter-x: 0px; --agent-enter-y: 16px; top: auto; right: 12px; left: 12px; bottom: 12px; width: auto; max-height: min(64dvh, 620px); z-index: 1300; background: var(--well); box-shadow: var(--lift); }
   .agent-session-detail { max-height: 35dvh; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .agent-sidebar-scrim:not([hidden]) { animation: agent-scrim-enter .2s ease both; }
+  @keyframes agent-scrim-enter { from { opacity: 0; } }
 }
 @media (prefers-reduced-motion: reduce) {
   .agent-sidebar:not([hidden]), .agent-inline-models, .agent-model-stack .agent-inline-model, .agent-detail-skeleton span { animation: none; transition: none; scroll-behavior: auto; }
@@ -169,6 +183,36 @@ body.single-agent-active .chat-input-container .consensus-switch-container { max
 .agent-answer { width: 100%; min-width: 0; padding: 22px 0; order: 4; }
 .agent-answer[hidden] { display: none; }
 #agentAnswerError { color: var(--ink-2); border-left: 2px solid var(--line); padding: 4px 0 4px 12px; font-size: 13px; line-height: 1.6; }
+#agentAnswerError:has(+ .agent-answer-error-actions:not([hidden])) { margin-bottom: 4px; }
+.agent-answer-error-actions { display: flex; flex-wrap: wrap; gap: 4px 12px; padding-left: 14px; margin: 0 0 12px; }
+.agent-answer-error-actions[hidden] { display: none; }
+.agent-answer-error-actions button, .agent-review-notice button, .agent-progress-review-jump {
+  display: inline-flex; align-items: center; min-height: 36px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px;
+  background: var(--ground); color: var(--ink); font: inherit; font-size: 12px; font-weight: 500; cursor: pointer;
+  transition: background-color .15s ease, border-color .15s ease;
+}
+.agent-answer-error-actions button:first-child { background: var(--button-bg, var(--ink)); border-color: var(--button-bg, var(--ink)); color: var(--button-text, var(--ground)); }
+.agent-answer-error-actions button:hover, .agent-review-notice button:hover, .agent-progress-review-jump:hover { background: var(--raise); }
+.agent-answer-error-actions button:first-child:hover { background: color-mix(in srgb, var(--button-bg, var(--ink)) 88%, var(--ground)); }
+.agent-answer-error-actions button:focus-visible, .agent-progress-review-jump:focus-visible { outline: 2px solid var(--ink-2); outline-offset: 2px; }
+#agentAnswerResources:empty { display: none; }
+/* The one "waiting on you" signal: a compact notice above the composer. */
+.agent-review-notice { align-items: center; gap: 8px 10px; padding: 6px 6px 6px 12px; margin: 0 0 6px; text-align: left; box-sizing: border-box; border: 1px solid color-mix(in srgb, var(--partial) 40%, var(--line));
+  border-radius: 10px; background: var(--partial-bg); color: var(--ink); }
+.agent-review-notice[hidden] { display: none; }
+.agent-review-notice-dot { width: 7px; height: 7px; flex: none; border-radius: 50%; background: var(--partial); }
+.agent-review-notice #agentReviewMessage { flex: 1 1 auto; min-width: 0; font-weight: 500; }
+.agent-composer-notice.agent-review-notice button { text-decoration: none; padding: 4px 12px; min-height: 32px; border: 1px solid color-mix(in srgb, var(--partial) 45%, var(--line));
+  border-radius: 7px; background: var(--ground); color: var(--ink); font-weight: 500; }
+.agent-composer-notice.agent-review-notice button:hover { background: var(--raise); }
+.agent-progress-review { margin: -6px 0 16px; }
+.agent-progress-review-jump { gap: 7px; color: var(--agent-ink, var(--ink)); border-color: color-mix(in srgb, var(--partial) 45%, var(--line)); background: var(--partial-bg); }
+.agent-progress-review-jump::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--partial); flex: none; }
+/* Leading dot, so it never collides with the row's hover/touch delete control. */
+.sidebar .bookmark.needs-review p::before { content: ''; display: inline-block; width: 6px; height: 6px; margin: 0 7px 1px 0; border-radius: 50%; background: var(--partial); vertical-align: middle; }
+@media (pointer: coarse) {
+  .agent-answer-error-actions button, .agent-progress-review-jump, .agent-composer-notice.agent-review-notice button { min-height: 44px; }
+}
 #agentAnswerBody:empty { display: none; }
 .agent-composer-notice { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; padding: 8px 12px 0; color: var(--ink-2); font-size: 12px; line-height: 1.5; }
 .agent-composer-notice[hidden], .agent-answer-actions[hidden], .agent-answer-actions [hidden], .agent-composer-notice [hidden] { display: none; }
@@ -189,7 +233,7 @@ body.single-agent-active :is(#consensusOutput, #consensusRun, #agentModePanel, .
   #deepThinkInputIndicator,
   #runProvenance, .consensus-footer-actions, #composerRunNotice, #heroResponseAccess,
   .models-section, .models-section + .sidebar-separator, .demo-chip) { display: none !important; }
-body:not(.single-agent-active) #agentAnswer { display: none; }
+body:not(.single-agent-active) #agentAnswer, body:not(.single-agent-active) #agentReviewNotice { display: none; }
 body.single-agent-active #agentAnswer:not([hidden]) { display: block; }
 body.single-agent-active #threadAsk:not([hidden]) { display: flex; }
 body.single-agent-active #composerAgentToggle { cursor: default; }
@@ -359,9 +403,12 @@ body.single-agent-active .consensus-model-inline .model-picker-display::after {
   body.single-agent-active .chat-input-container .consensus-switch-container {
     display: grid; grid-template-columns: 36px minmax(0, 1fr); gap: 0 4px;
   }
-  body.single-agent-active .agent-model-controls { grid-row: 1; grid-column: 1 / -1; }
-  body.single-agent-active #attachTrigger { grid-row: 2; grid-column: 1; }
-  body.single-agent-active .consensus-model-inline { grid-row: 2; grid-column: 2; max-width: 100%; justify-self: start; }
+  /* The chat mode picker (start screen only) gets its own first row, so it
+     shows its full label instead of a clipped "A". */
+  body.single-agent-active #chatExecutionControl { grid-row: 1; grid-column: 1 / -1; max-width: 100%; justify-self: start; }
+  body.single-agent-active .agent-model-controls { grid-row: 2; grid-column: 1 / -1; }
+  body.single-agent-active #attachTrigger { grid-row: 3; grid-column: 1; }
+  body.single-agent-active .consensus-model-inline { grid-row: 3; grid-column: 2; max-width: 100%; justify-self: start; }
   body.single-agent-active.is-hero .consensus-model-inline { grid-column: 1 / -1; }
   body.single-agent-active .chat-input-container .input-actions-container { align-self: flex-end; }
 }

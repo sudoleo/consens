@@ -35,7 +35,14 @@ it('projects remaining Agent tokens into the existing ring without changing Cons
   expect(d.getElementById('quotaFoot').textContent).toMatch(/1[.,]851 tokens are estimated/);
   expect(d.getElementById('quotaFoot').textContent).not.toContain('do not block');
   budget = {remaining: 188878, limit: 250000};
+  w.App.sidebarQuota.sync();
+  expect(d.getElementById('quotaRunsValue').textContent).toMatch(/^188[.,]878 of 250[.,]000$/);
+  expect(d.getElementById('quotaFoot').textContent).toMatch(/Resets at .+ your time \(00:00 UTC\)/);
+  // A small remainder is not rounded down to an empty allowance.
+  budget.remaining = 2300; w.App.sidebarQuota.sync(); expect(d.getElementById('quotaTriggerValue').textContent).toBe('<1%');
+  expect(d.getElementById('quotaRingArc').getAttribute('stroke')).toBe('var(--partial)');
   budget.remaining = 0; w.App.sidebarQuota.sync(); expect(d.getElementById('quotaTriggerValue').textContent).toBe('0%');
+  expect(d.getElementById('quotaRingArc').getAttribute('stroke')).toBe('var(--dispute)');
   budget.remaining = 300000; w.App.sidebarQuota.sync(); expect(d.getElementById('quotaTriggerValue').textContent).toBe('100%');
   budget = null; w.App.sidebarQuota.sync(); expect(d.getElementById('quotaTrigger').hidden).toBe(true);
   agent = false; w.App.sidebarQuota.sync();

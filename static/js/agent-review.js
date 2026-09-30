@@ -5,6 +5,9 @@
   const states = { required: "Review pending", running: "Checking the answer…", succeeded: "Comparison checked",
     partial: "Review incomplete", failed: "Review unavailable", cancelled: "Review stopped", missing: "Answer not reviewed" };
   const activityContexts = new WeakMap();
+  // The live run renders evidence only once, from its final review object; an
+  // activity card built from the streamed review finds its context by key.
+  const contextsByKey = new Map();
   function currentCheck(review, comparison, raw) {
     const version = review?.versions?.find(v => v.id === review.answer_version);
     const check = review?.checks?.find(c => c.comparison_id === comparison.id);
@@ -114,7 +117,8 @@
         const button = node('button', 'consensus-tab', label); button.type = 'button';
         button.disabled = section === 'answers' ? !answers.length : !check;
         button.addEventListener('click', () => {
-          const context = activityContexts.get(review)?.find(c => c.key === `agent-evidence:${comparison.id}`);
+          const key = `agent-evidence:${comparison.id}`;
+          const context = activityContexts.get(review)?.find(c => c.key === key) || contextsByKey.get(key);
           if (context) App.answerReader?.openContext(context, { section, trigger: button });
         });
         actions.append(button);
@@ -326,6 +330,8 @@
       return context;
     });
     host._contexts = contexts;
+    contextsByKey.clear();
+    for (const context of contexts) contextsByKey.set(context.key, context);
     activityContexts.set(review, contexts);
     let chosen = contexts.find(c => c.key === host._selectedBasis) || contexts[0];
     function select(context) {

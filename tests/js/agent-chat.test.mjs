@@ -589,7 +589,7 @@ describe("single-model agent chat", () => {
     details.querySelector('summary').click();
     expect(details.open).toBe(true);
     expect([...details.querySelectorAll('.agent-activity-run-details dd')].map(el => el.textContent))
-      .toEqual(['DeepSeek V4.1 Flash','high','Thinking…']);
+      .toEqual(['DeepSeek V4.1 Flash','High','Thinking…']);
     w.App.agentActivity.render(host, {running:true,settings:{label:'DeepSeek V4.1 Flash',reasoning_effort:'high'},responding:true});
     expect(details.querySelector('[role="status"]').textContent).toBe('Writing answer…');
     expect(details.open).toBe(true);
@@ -1021,7 +1021,7 @@ describe("single-model agent chat", () => {
     ];
     window.App.agentActivity.renderTurn(host, { agent_activity: events,
       agent_usage: { input_tokens: 800, output_tokens: 62, estimated_cost_nano_usd: 400000, cost_source: "provider", complete: true } });
-    expect(host.querySelector(".agent-activity-title").textContent).toBe("Duration unavailable");
+    expect(host.querySelector(".agent-activity-title").textContent).toBe("Details");
     expect(host.querySelector(".agent-activity-tool")).toBe(null);
     expect(host.querySelector(".agent-usage").textContent).toBe("862 tokens · $0.0004 provider cost");
     // A count or citations confirm use even if the response was interrupted.
@@ -1048,7 +1048,7 @@ describe("single-model agent chat", () => {
     expect(events).toHaveLength(1);
     window.App.agentActivity.renderTurn(host, { agent_activity: events, agent_usage: {
       input_tokens: 100, output_tokens: 20, complete: false, estimated_cost_nano_usd: 10000000 } });
-    expect(host.textContent).toContain("Duration unavailable");
+    expect(host.textContent).toContain("Details");
     expect(host.textContent).toContain("Web search · Completed · 1 search");
     expect(host.textContent).toContain("usage incomplete");
     expect(host.querySelector("img")).toBe(null);
@@ -1075,7 +1075,7 @@ describe("single-model agent chat", () => {
     handlers.activity.receive(event);
     window.App.agentChat.project(run);
     const host = document.getElementById("agentAnswerActivity");
-    expect(host.querySelector('.agent-progress .agent-current-status').textContent).toBe("Running a tool…");
+    expect(host.querySelector('.agent-progress .agent-current-status').textContent).toBe("Working on a step…");
     expect(host.querySelector("details").open).toBe(false);
     expect(host.querySelector('.agent-progress').hidden).toBe(false);
     handlers.activity.receive({ ...event, status: "succeeded", text: '{"result":4}' });
@@ -1083,13 +1083,168 @@ describe("single-model agent chat", () => {
     expect(run.consensus.streamText).toBe("");
     handlers.delta.append("The result is 4.");
     window.App.agentChat.project(run);
-    expect(host.textContent).not.toContain("Running a tool…");
+    expect(host.textContent).not.toContain("Working on a step…");
     expect(document.getElementById("agentAnswerBody").textContent).not.toContain("Let me check");
     window.App.runRegistry.cancel(run.runId);
     handlers.activity.receive({ ...event, status: "running" });
     expect(run.metadata.agentActivity.find(item => item.id === event.id).status).toBe("succeeded");
     resolve({ ok: true, data: { response: "Late", turn: {} } });
     await pending;
+    dom.window.close();
+  });
+
+  it('routes resources events to the list they name and refreshes both when unsure', async () => {
+    const { window: w, document: d, dom } = boot();
+    await selectAgent(w);
+    w.App.agentWorkspace = { refresh: vi.fn(), upload: vi.fn(async () => []) };
+    w.App.agentGoogle = { refreshActions: vi.fn(), selection: () => null, consent: () => false, resetConsent: vi.fn() };
+    let handlers, resolve;
+    w.streamSSERequest = vi.fn((_u, _p, _s, received) => { handlers = received; return new Promise(r => { resolve = r; }); });
+    d.getElementById('questionInput').value = 'Question';
+    const pending = w.App.agentChat.send();
+    await vi.waitFor(() => expect(handlers).toBeDefined());
+    const chat = 'a'.repeat(32);
+    // A brand-new chat never asks for its (empty) actions list before resources.
+    expect(w.App.agentGoogle.refreshActions.mock.calls.some(([id]) => id === chat)).toBe(false);
+    w.App.agentWorkspace.refresh.mockClear(); w.App.agentGoogle.refreshActions.mockClear();
+    handlers.resources.receive({ documents: [{ id: 'x' }] });
+    expect(w.App.agentWorkspace.refresh).toHaveBeenCalledWith(chat, true);
+    expect(w.App.agentGoogle.refreshActions).not.toHaveBeenCalled();
+    w.App.agentWorkspace.refresh.mockClear();
+    handlers.resources.receive({ gmail_evidence: [] });
+    expect(w.App.agentGoogle.refreshActions).toHaveBeenCalledWith(chat, true);
+    expect(w.App.agentWorkspace.refresh).not.toHaveBeenCalled();
+    w.App.agentGoogle.refreshActions.mockClear();
+    handlers.resources.receive({});
+    expect(w.App.agentWorkspace.refresh).toHaveBeenCalledWith(chat, true);
+    expect(w.App.agentGoogle.refreshActions).toHaveBeenCalledWith(chat, true);
+    resolve({ ok: true, data: { response: 'Answer', chat_id: chat, turn_id: 'b'.repeat(32),
+      turn: { id: 'b'.repeat(32), consensus: 'Answer', execution_mode: 'agent' }, bookmark_meta: { id: 'saved' } } });
+    await pending;
+    dom.window.close();
+  });
+
+  it('never re-renders the composer shell or the full answer for a streamed chunk', async () => {
+    const { window: w, document: d, dom } = boot();
+    await selectAgent(w);
+    w.renderMarkdownStream = vi.fn((el, md) => { el.textContent = md; });
+    w.resetMarkdownStream = vi.fn();
+    const full = vi.fn((el, md) => { el.textContent = md; });
+    w.injectMarkdown = full;
+    w.App.agentReview = { render: vi.fn(), renderActivity: vi.fn() };
+    w.App.agentAnswerActions = { render: vi.fn() };
+    const pickers = vi.fn();
+    w.App.initCustomModelPicker = pickers;
+    let handlers, resolve;
+    w.streamSSERequest = vi.fn((_u, _p, _s, received) => { handlers = received; return new Promise(r => { resolve = r; }); });
+    d.getElementById('questionInput').value = 'Question';
+    const pending = w.App.agentChat.send();
+    await vi.waitFor(() => expect(handlers).toBeDefined());
+    const run = w.App.runRegistry.visible();
+    handlers.delta.append('First part.');
+    w.App.agentChat.project(run);
+    pickers.mockClear(); full.mockClear(); w.App.agentReview.render.mockClear(); w.App.agentAnswerActions.render.mockClear();
+    for (const chunk of [' More.', ' Even more.', ' Last.']) {
+      handlers.delta.append(chunk);
+      w.App.agentChat.project(run);
+      w.dispatchEvent(new w.CustomEvent('consensio:run-registry-change', { detail: { context: run } }));
+    }
+    expect(pickers).not.toHaveBeenCalled();
+    expect(full).not.toHaveBeenCalled();
+    expect(w.renderMarkdownStream).toHaveBeenLastCalledWith(d.getElementById('agentAnswerBody'), 'First part. More. Even more. Last.');
+    expect(w.App.agentReview.render).not.toHaveBeenCalled();
+    expect(w.App.agentAnswerActions.render).not.toHaveBeenCalled();
+    resolve({ ok: true, data: { response: 'Final answer.', chat_id: 'a'.repeat(32), turn_id: 'b'.repeat(32),
+      turn: { id: 'b'.repeat(32), consensus: 'Final answer.', execution_mode: 'agent' }, bookmark_meta: { id: 'saved' } } });
+    await pending;
+    w.App.agentChat.project(run);
+    // The final answer is rendered once in full, and review/Copy appear with it.
+    expect(full).toHaveBeenCalledWith(d.getElementById('agentAnswerBody'), 'Final answer.', []);
+    expect(w.App.agentReview.render).toHaveBeenCalled();
+    expect(w.App.agentAnswerActions.render).toHaveBeenLastCalledWith(d.getElementById('agentAnswerBody'), expect.objectContaining({ running: false }));
+    dom.window.close();
+  });
+
+  it('restores the draft without a recovery or failed row when the server refuses before starting', async () => {
+    const { window: w, document: d, dom } = boot();
+    await selectAgent(w);
+    w.streamSSERequest = vi.fn(async () => ({ ok: false, status: 422, streamed: false,
+      data: { detail: 'This chat contains Google information. Allow sharing it for this message.' } }));
+    d.body.insertAdjacentHTML('beforeend', '<div id="bookmarksContainer"></div>');
+    d.getElementById('questionInput').value = 'Follow-up with Google data';
+    await w.App.agentChat.send();
+    const run = w.App.runRegistry.visible();
+    w.App.agentChat.project(run); w.App.agentChat.render();
+    expect(d.getElementById('questionInput').value).toBe('Follow-up with Google data');
+    expect(run.metadata.requestSent).toBe(false);
+    expect(run.metadata.recoverable).toBe(false);
+    expect(d.getElementById('agentRecover').hidden).toBe(true);
+    expect(d.getElementById('agentAnswerError').textContent).toContain('Message not sent.');
+    expect(d.querySelector('.bookmark.run-entry')).toBeNull();
+    dom.window.close();
+  });
+
+  it('explains a token reservation refusal in plain words with next steps', async () => {
+    const { window: w, document: d, dom } = boot();
+    d.body.insertAdjacentHTML('beforeend', '<div id="agentAnswerErrorActions" hidden></div>');
+    await selectAgent(w);
+    w.streamSSERequest = vi.fn(async (_u, _p, _s, handlers) => {
+      handlers.accepted?.receive({ chat_id: 'a'.repeat(32), turn_id: 'b'.repeat(32) });
+      return { ok: false, status: 200, streamed: true, data: { error: 'The next model call needed a reservation of 18,400 tokens; 1,200 were available at that point.',
+        code: 'agent_token_reservation', required_tokens: 18400, available_tokens: 1200, recoverable: false } };
+    });
+    d.getElementById('questionInput').value = 'Long question';
+    await w.App.agentChat.send();
+    w.App.agentChat.project(w.App.runRegistry.visible());
+    const error = d.getElementById('agentAnswerError').textContent;
+    expect(error).toContain('Not enough Agent tokens left for this step (needs about 18k, 1.2k left)');
+    expect(error).not.toContain('reservation');
+    expect([...d.querySelectorAll('#agentAnswerErrorActions button')].map(b => b.textContent)).toEqual(['Try a smaller model', 'Choose models']);
+    expect(d.getElementById('questionInput').value).toBe('Long question');
+    w.App.openModelPicker = vi.fn();
+    d.querySelector('#agentAnswerErrorActions button[data-action="compare"]').click();
+    expect(w.App.openModelPicker).toHaveBeenCalledWith(d.getElementById('consensusModelDropdown'));
+    dom.window.close();
+  });
+
+  it('blocks Send with the Google blocker and runs its action', async () => {
+    const { window: w, document: d, dom } = boot();
+    d.body.insertAdjacentHTML('beforeend', '<div id="agentComposerNotice" hidden><span id="agentComposerMessage"></span><button id="agentComposerAction" hidden></button></div>');
+    const consent = vi.fn();
+    w.App.agentGoogle = { blocker: () => ({ message: 'Allow sharing the selected Google data with your models for this message.', action: 'google-consent', label: 'Allow for this message' }),
+      consent, open: vi.fn(), selection: () => null, resetConsent: vi.fn() };
+    // DOMContentLoaded already bound the notice button before it existed; bind again.
+    d.dispatchEvent(new w.Event('DOMContentLoaded'));
+    await selectAgent(w);
+    expect(w.App.agentChat.sendBlocker().action).toBe('google-consent');
+    w.App.agentChat.syncComposer();
+    expect(d.getElementById('agentComposerNotice').hidden).toBe(false);
+    d.getElementById('agentComposerAction').click();
+    expect(consent).toHaveBeenCalledWith(true);
+    w.App.agentGoogle.blocker = () => { throw new Error('broken'); };
+    expect(w.App.agentChat.sendBlocker()).toBeNull();
+    dom.window.close();
+  });
+
+  it('shows a pending-review notice, bookmark dot and tab count after a run', async () => {
+    const { window: w, document: d, dom } = boot();
+    d.body.insertAdjacentHTML('beforeend', `<div id="agentReviewNotice" hidden><span id="agentReviewMessage"></span><button id="agentReviewAction">Review</button></div>
+      <div class="bookmark" data-id="b_saved"><p>Saved</p></div>`);
+    let pending = 2;
+    w.App.agentGoogle = { pendingCount: vi.fn(() => pending), selection: () => null, resetConsent: vi.fn() };
+    await selectAgent(w);
+    w.App.runRegistry.showSavedView({ type: 'bookmark', id: 'b_saved' }, { chatId: 'a'.repeat(32), turnId: 'b'.repeat(32), bookmarkId: 'b_saved',
+      executionMode: 'agent', question: 'Q', consensus: 'A', currentTurn: { id: 'b'.repeat(32), status: 'completed' } });
+    w.App.agentChat.syncPendingReview();
+    expect(d.getElementById('agentReviewNotice').hidden).toBe(false);
+    expect(d.getElementById('agentReviewMessage').textContent).toBe('2 items need your review');
+    expect(d.querySelector('.bookmark[data-id="b_saved"]').classList.contains('needs-review')).toBe(true);
+    expect(d.title).toMatch(/^\(2\) /);
+    pending = 0;
+    w.dispatchEvent(new w.CustomEvent('consensio:agent-actions-change'));
+    expect(d.getElementById('agentReviewNotice').hidden).toBe(true);
+    expect(d.querySelector('.bookmark.needs-review')).toBeNull();
+    expect(d.title).not.toMatch(/^\(\d+\) /);
     dom.window.close();
   });
 });

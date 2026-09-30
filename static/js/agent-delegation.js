@@ -6,9 +6,24 @@
   const labels = { waiting: "Waiting", working: "Working", question: "Question", review: "Review",
     rework: "Rework", completed: "Completed", failed: "Failed", stopped: "Stopped" };
   const activeStates = new Set(["waiting", "working", "question", "rework"]);
-  let owner = "", current = null, sidebar = null, inline = null, timer = null, returnFocus = null;
+  let owner = "", current = null, sidebar = null, inline = null, timer = null, returnFocus = null, scrim = null;
   let ownerUser = null, ownerGeneration;
   const uid = () => window.auth?.currentUser?.uid || "";
+  // Beside the column only on wide screens. Narrower viewports keep the inline
+  // "Activity · n" chip and open the sheet on request, never on their own.
+  const wideQuery = window.matchMedia?.('(min-width: 1200px)');
+  const wide = () => !wideQuery || wideQuery.matches;
+  // On a wide screen the reading column moves aside for the panel
+  // (agent-chat.css). It opens by itself only while that column keeps a
+  // comfortable measure; otherwise the chip opens it on request.
+  const PANEL_SPACE = 346 + 48, MIN_COLUMN = 600;
+  function roomBeside() {
+    if (!wide()) return false;
+    const offset = parseFloat(getComputedStyle(document.body).getPropertyValue('--app-sidebar-offset')) || 0;
+    return window.innerWidth - offset - PANEL_SPACE >= MIN_COLUMN;
+  }
+  function setText(el, value) { if (el.textContent !== value) el.textContent = value; }
+  function setTitle(el, value) { if (el.title !== value) el.title = value; }
   const keyFor = (chat, turn) => `${uid()}:${chat}:${turn}`;
   function node(tag, className, text) {
     const el = document.createElement(tag);
@@ -33,7 +48,9 @@
   function prefs(view) {
     if (current === view && sidebar) view.scroll = sidebar._list.scrollTop;
     try {
-      sessionStorage.setItem(`agent-view:${view.key}`, JSON.stringify({ closed: view.closed, expanded: [...view.expanded], scroll: view.scroll }));
+      // Only an explicit open/close is remembered; the default follows the viewport.
+      sessionStorage.setItem(`agent-view:${view.key}`, JSON.stringify({ closed: view.manual ? view.closed : undefined,
+        expanded: [...view.expanded], scroll: view.scroll }));
     } catch (_) { /* Storage may be unavailable. */ }
   }
   function resetOwner() {
@@ -44,9 +61,10 @@
     for (const view of views.values()) view.controller.abort();
     views.clear(); current = null;
     if (sidebar) { sidebar.hidden = true; sidebar._rows?.clear(); sidebar.querySelector(".agent-session-list")?.replaceChildren(); }
+    if (scrim) scrim.hidden = true;
     if (inline) inline.remove();
     inline = null;
-    document.body.classList.remove("agent-sidebar-open");
+    document.body.classList.remove("agent-sidebar-open", "agent-sidebar-sheet");
   }
   function get(chatId, turnId) {
     resetOwner();
@@ -55,7 +73,8 @@
       let saved = {};
       try { saved = JSON.parse(sessionStorage.getItem(`agent-view:${key}`) || "{}"); } catch (_) {}
       views.set(key, { key, uid: owner, user: ownerUser, authGeneration: ownerGeneration, chatId, turnId, agents: new Map(), details: new Map(), progress: new Map(),
-        controller: new AbortController(), expanded: new Set(saved.expanded || []), closed: !!saved.closed,
+        controller: new AbortController(), expanded: new Set(saved.expanded || []),
+        closed: typeof saved.closed === 'boolean' ? saved.closed : !roomBeside(), manual: typeof saved.closed === 'boolean',
         scroll: saved.scroll || 0, loaded: false, loading: false, running: false, ended: false, settling: false, usage: null, lastSync: 0 });
       if (views.size > 24) {
         const old = [...views.values()].find(v => v.key !== current?.key && !v.running);
@@ -158,6 +177,7 @@
       view.loading = false;
       if (current === view && uid() === view.uid) {
         render();
+        syncTimer();
         if (view.refreshAfterLoad) { view.refreshAfterLoad = false; load(view); }
       }
     }
@@ -223,15 +243,32 @@
     const list = node("div", "agent-session-list");
     sidebar._list = list;
     sidebar.append(header, usage, status, list);
-    sidebar.addEventListener("keydown", event => { if (event.key === "Escape") { event.preventDefault(); hide(true); } });
+    sidebar.setAttribute('role', 'complementary');
+    sidebar.addEventListener("keydown", event => {
+      if (event.key === "Escape") { event.preventDefault(); hide(true); return; }
+      // As a sheet over the chat, keyboard focus stays inside until it closes.
+      if (event.key !== 'Tab' || wide()) return;
+      const focusable = [...sidebar.querySelectorAll('button, summary, a[href], [tabindex]:not([tabindex="-1"])')]
+        .filter(el => !el.hidden && !el.closest('[hidden]') && el.getClientRects().length);
+      if (!focusable.length) return;
+      const first = focusable[0], last = focusable.at(-1);
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    });
+    scrim = node('div', 'agent-sidebar-scrim'); scrim.hidden = true;
+    scrim.setAttribute('aria-hidden', 'true');
+    scrim.addEventListener('click', () => hide(true));
+    document.body.append(scrim);
+    wideQuery?.addEventListener?.('change', () => render());
     list.addEventListener("scroll", () => { if (current) prefs(current); }, { passive: true });
     sidebar._rows = new Map();
     document.body.append(sidebar);
   }
   function hide(manual = false) {
-    if (manual && current) { current.closed = true; prefs(current); }
+    if (manual && current) { current.closed = true; current.manual = true; prefs(current); }
     if (sidebar) sidebar.hidden = true;
-    document.body.classList.remove("agent-sidebar-open");
+    if (scrim) scrim.hidden = true;
+    document.body.classList.remove("agent-sidebar-open", "agent-sidebar-sheet");
     if (manual) {
       render();
       const trigger = returnFocus?.isConnected ? returnFocus : inline?.querySelector(".agent-sidebar-toggle");
@@ -243,6 +280,7 @@
     App.answerReader?.close({ focus: false });
     returnFocus = trigger;
     current.closed = false;
+    current.manual = true;
     if (agentId) current.expanded.add(agentId);
     prefs(current); render();
     (sidebar._rows.get(agentId)?.summary || sidebar.querySelector(".agent-sidebar-close")).focus();
@@ -336,6 +374,8 @@
     ensure();
     if (!current || current.uid !== uid()) { hide(); return; }
     const view = current;
+    // Crossing into the sheet width closes a panel that opened by itself.
+    if (!view.manual && !view.closed && !roomBeside()) view.closed = true;
     const activity = document.getElementById("agentAnswerActivity");
     const inlineHost = activity?.querySelector("summary") || activity;
     if (inlineHost && (!inline || inline.parentElement !== inlineHost)) {
@@ -385,11 +425,17 @@
       inline._toggle.setAttribute("aria-expanded", String(!view.closed));
     }
     sidebar.hidden = view.closed || !view.agents.size;
+    const sheet = !sidebar.hidden && !wide();
+    scrim.hidden = !sheet;
+    if (sheet) sidebar.setAttribute('aria-modal', 'true'); else sidebar.removeAttribute('aria-modal');
+    sidebar.setAttribute('role', sheet ? 'dialog' : 'complementary');
     document.body.classList.toggle("agent-sidebar-open", !sidebar.hidden);
-    sidebar.querySelector(".agent-sidebar-usage").textContent = `Total run · ${tokens(view.usage, view.running)}`;
-    sidebar.querySelector(".agent-sidebar-usage").title = tokenDescription(view.usage);
+    document.body.classList.toggle("agent-sidebar-sheet", sheet);
+    const usageEl = sidebar.querySelector(".agent-sidebar-usage");
+    setText(usageEl, `Total run · ${tokens(view.usage, view.running)}`);
+    setTitle(usageEl, tokenDescription(view.usage));
     sidebar.querySelector(".agent-sidebar-stop").hidden = !view.running;
-    sidebar.querySelector(".agent-sidebar-status").textContent = view.error || (view.settling ? "Finishing pending model calls…" : "");
+    setText(sidebar.querySelector(".agent-sidebar-status"), view.error || (view.settling ? "Finishing pending model calls…" : ""));
     for (const agent of view.agents.values()) {
       let row = sidebar._rows.get(agent.id);
       if (!row) {
@@ -401,6 +447,7 @@
         const role = node('span', 'agent-session-role');
         const meta = node("span", "agent-session-meta");
         const state = node('span', 'agent-session-state');
+        state.id = `agent-session-state-${agent.id}`;
         const usage = node('span', 'agent-session-tokens');
         heading.append(title, usage);
         meta.append(role, state);
@@ -409,6 +456,7 @@
         track.append(node('i'));
         const body = node("div", "agent-session-detail"); body.tabIndex = 0;
         info.append(heading, meta, track); summary.append(mark(agent), info); root.append(summary, body);
+        summary.setAttribute('aria-describedby', state.id);
         root.addEventListener("toggle", () => {
           if (current !== view || view.uid !== uid() || !window.document?.body || !root.isConnected) return;
           if (root.open) {
@@ -422,28 +470,27 @@
         sidebar._rows.set(agent.id, row); sidebar.querySelector(".agent-session-list").append(root);
       }
       row.root.dataset.status = agent.status;
-      row.title.textContent = agent.model?.label || agent.title;
-      row.role.textContent = agent.kind === 'comparison' ? 'Independent answer' : agent.title;
+      setText(row.title, agent.model?.label || agent.title);
+      setText(row.role, agent.kind === 'comparison' ? 'Independent answer' : agent.title);
       row.role.hidden = row.role.textContent === row.title.textContent;
-      row.state.textContent = `${labels[agent.status] || "Waiting"} · ${agent.duration_incomplete ? '≥ ' : ''}${Math.floor(elapsed(view, agent) / 1000)}s`;
-      row.state.title = agent.duration_incomplete ? 'Last confirmed elapsed time before the server connection ended.' : 'Elapsed session time, including waiting and review.';
+      setText(row.state, `${labels[agent.status] || "Waiting"} · ${agent.duration_incomplete ? '≥ ' : ''}${Math.floor(elapsed(view, agent) / 1000)}s`);
+      setTitle(row.state, agent.duration_incomplete ? 'Last confirmed elapsed time before the server connection ended.' : 'Elapsed session time, including waiting and review.');
       const pending = view.running && ['waiting', 'working', 'rework'].includes(agent.status);
       const progress = pending ? view.progress.get(agent.id) : null;
       const loading = pending && progress?.streaming !== false;
       const usage = measured(progress?.usage) ? progress.usage : agent.usage;
       const chars = loading && progress?.chars > 0 && !measured(progress.usage);
-      row.usage.textContent = chars ? `${progress.chars.toLocaleString()} chars` : tokens(usage, loading);
-      row.usage.title = chars ? 'Received answer and visible reasoning characters. Token usage has not yet been reported for this call.' : tokenDescription(usage);
+      setText(row.usage, chars ? `${progress.chars.toLocaleString()} chars` : tokens(usage, loading));
+      setTitle(row.usage, chars ? 'Received answer and visible reasoning characters. Token usage has not yet been reported for this call.' : tokenDescription(usage));
       row.usage.classList.toggle('is-loading', loading);
       row.track.hidden = !loading;
-      row.summary.title = `${agent.model?.label || "Model"} · ${agent.title} · ${labels[agent.status] || "Waiting"}`;
       row.root.open = view.expanded.has(agent.id);
       if (row.root.open) { loadDetail(view, agent.id); renderDetail(row, view, agent); }
     }
   }
   function project(spec) {
     resetOwner();
-    if (!spec?.chatId || !spec?.turnId || !owner) { current = null; inline?.remove(); inline = null; hide(); return; }
+    if (!spec?.chatId || !spec?.turnId || !owner) { current = null; inline?.remove(); inline = null; hide(); syncTimer(); return; }
     const view = get(spec.chatId, spec.turnId);
     const changed = current !== view;
     const wasRunning = view.running;
@@ -459,19 +506,27 @@
     if (changed) sidebar._list.scrollTop = view.scroll;
     if (wasRunning && !spec.running && view.loading) view.refreshAfterLoad = true;
     else if (!view.loaded || (wasRunning && !spec.running)) load(view);
-    if (!timer) timer = setInterval(() => {
+    syncTimer();
+  }
+  // Ticks elapsed labels and repairs a quiet stream while something runs; a
+  // saved or finished turn keeps no timer at all.
+  function syncTimer() {
+    const live = Boolean(current && (current.running || current.settling));
+    if (!live) { clearInterval(timer); timer = null; return; }
+    if (timer) return;
+    timer = setInterval(() => {
       resetOwner();
-      if (current && document.visibilityState !== 'hidden') {
-        render();
-        // SSE already carries session updates. Poll only to repair a quiet or
-        // interrupted stream, instead of rereading every agent every 2.5s.
-        if ((current.running || current.settling) && Date.now() - current.lastSync >= 10000) load(current);
-      }
+      if (!current || !(current.running || current.settling)) { clearInterval(timer); timer = null; return; }
+      if (document.visibilityState === 'hidden') return;
+      if (current.running && [...current.agents.values()].some(agent => activeStates.has(agent.status))) render();
+      // SSE already carries session updates. Poll only to repair a quiet or
+      // interrupted stream, instead of rereading every agent every 2.5s.
+      if (Date.now() - current.lastSync >= 10000) load(current);
     }, 2500);
   }
   window.addEventListener("consensio:run-registry-change", resetOwner);
   document.addEventListener("consensio:reader-opening", () => {
     if (current) { current.closed = true; prefs(current); hide(); render(); }
   });
-  App.agentDelegation = { receive, receiveProgress, project, tokens };
+  App.agentDelegation = { receive, receiveProgress, project, tokens, isTicking: () => Boolean(timer) };
 })();

@@ -664,8 +664,14 @@ def test_quota_stream_and_failure_update_existing_percentage(browser, phase4_ser
         expect(page.locator('#quotaTriggerValue')).to_have_text('75%')
         page.evaluate("""() => window.__quotaEvent('error', {
           error:'The next model call needed a reservation of 50,000 tokens; 40,000 were available at that point. Completed calls release their reservations.',
-          code:'agent_token_reservation', recoverable:false, token_budget:{used:61122, remaining:188878, reserved:0, unknown:100000, limit:250000, observed_at:3}})""")
-        expect(page.locator('#agentAnswerError')).to_contain_text('Completed calls release their reservations')
+          code:'agent_token_reservation', required_tokens:50000, available_tokens:40000, recoverable:false,
+          token_budget:{used:61122, remaining:188878, reserved:0, unknown:100000, limit:250000, observed_at:3}})""")
+        # Plain copy with a next step instead of the ledger wording.
+        expect(page.locator('#agentAnswerError')).to_contain_text('Not enough Agent tokens left for this step (needs about 50k, 40k left)')
+        expect(page.locator('#agentAnswerError')).not_to_contain_text('reservation')
+        expect(page.locator('#agentAnswerErrorActions button')).to_have_text(['Try a smaller model', 'Choose models'])
+        # Nothing was answered, so the question returns to the composer.
+        expect(page.locator('#questionInput')).to_have_value('Compare the options')
         expect(page.locator('#quotaTriggerValue')).to_have_text('75%')
         expect(page.locator('#quotaTrigger')).to_have_attribute('title', re.compile('188.878 tokens available for new calls'))
         expect(page.locator('#quotaFoot')).to_contain_text('unavailable usage; they do not block the remaining allowance')
