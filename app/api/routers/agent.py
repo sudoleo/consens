@@ -17,7 +17,7 @@ from app.api.routers.chat_history import _chat_uid, _raise_store_error
 from app.api.routers.bookmarks import _bookmark_meta
 from app.services import persistence_guard, prompt_config
 from app.services import agent_quota
-from app.services.agent_comparison import comparison_selection
+from app.services.agent_comparison import AgentPreferences, comparison_selection
 from app.services.source_verification import Limits as SourceCheckLimits
 from app.services.agent_runs import AgentRunStore
 from app.services.agent_policy import AgentPolicy, supports_delegation
@@ -56,6 +56,7 @@ class AgentRequest(BaseModel):
     file_ids: list[str] = Field(default_factory=list, max_length=5)
     google_selection: GoogleSelection | None = None
     google_data_consent: bool = False
+    agent_preferences: AgentPreferences = Field(default_factory=AgentPreferences)
 
     @field_validator("file_ids")
     @classmethod
@@ -195,6 +196,9 @@ def run_agent(request: Request, payload: AgentRequest):
                 raise TurnStatusConflict("Request identity conflicts with different comparison models")
             if existing.get("agent_settings", {}).get("check_sources", False) != payload.check_sources:
                 raise TurnStatusConflict("Request identity conflicts with different contradiction settings")
+            if (existing.get("agent_settings", {}).get("agent_preferences") or AgentPreferences().model_dump()) \
+                    != payload.agent_preferences.model_dump():
+                raise TurnStatusConflict("Request identity conflicts with different Agent settings")
             if payload.recover_only and existing["status"] == "pending":
                 # A lost producer has no live SSE/poller to close its lease.
                 # Reap only expired runs; this never starts a paid step.
@@ -268,6 +272,7 @@ def run_agent(request: Request, payload: AgentRequest):
                             "google_data": google_data,
                             "comparison_selection": payload.comparison_models,
                             "check_sources": payload.check_sources,
+                            "agent_preferences": payload.agent_preferences.model_dump(),
                             "source_check_limits": asdict(source_limits) if source_limits else None,
                             "comparison_models": {p: m.snapshot() for p, m in comparisons.items()},
                             "selection": {"model_id": payload.model_id, "reasoning_effort": payload.reasoning_effort}},
@@ -284,7 +289,7 @@ def run_agent(request: Request, payload: AgentRequest):
                          google_data_consent=payload.google_data_consent,
                          delegation_config=delegation_config, cooldowns=provider_cooldowns,
                          comparison_models=comparisons, check_sources=payload.check_sources and not google_data,
-                         source_limits=source_limits,
+                         source_limits=source_limits, agent_preferences=payload.agent_preferences,
                          mock_answer="Agent test answer: " + payload.question if mock_llm_enabled() else None)
     except Exception as exc:
         try:

@@ -254,6 +254,7 @@
   // `force` it returns at once when nothing it shows has changed, so the
   // registry listener and the run projector can call it on every update.
   function renderShell(force = false) {
+    App.agentPreferences?.sync?.();
     const visibleRun = registry.visible()?.runId || null;
     if (visibleRun !== framedRunId) { framedRunId = visibleRun; viewEpoch++; frameKey = ''; }
     const signature = shellInputs();
@@ -572,6 +573,7 @@
           reasoning_effort: settings.reasoning_effort || 'default',
           comparison_models: Object.keys(context.config.comparisonModels || {}).length ? context.config.comparisonModels : null,
           check_sources: context.config.checkSources === true,
+          agent_preferences: context.config.agentPreferences || { depth: "auto", quorum: "balanced" },
         file_ids: context.metadata.fileIds || [],
         google_selection: context.config.googleSelection || null,
         google_data_consent: context.config.googleDataConsent === true,
@@ -776,6 +778,7 @@
         bookmarkTitle: basis?.title || question,
         config: { executionMode: "agent", agentMode: true, autoConsensus: false,
           deepSearch: false, checkSources: App.isSourceCheckEnabled?.() === true, useOwnKeys: false, providers: [], agentSettings: settings, comparisonModels,
+          agentPreferences: recovery?.config.agentPreferences || App.agentPreferences?.get?.() || { depth: "auto", quorum: "balanced" },
           googleSelection: App.agentGoogle?.selection() || null, googleDataConsent: App.agentGoogle?.consent() === true },
         metadata: { draftQuestion: draft, quotedContext: App.quote?.text?.() || '',
           agentActivity: [], agentSettings: { ...settings, label: catalog?.models.find(model => model.id === settings.model_id)?.label } },
@@ -837,6 +840,7 @@
         reasoning_effort: settings.reasoning_effort || "default",
         comparison_models: comparisonModels,
         check_sources: context.config.checkSources === true,
+        agent_preferences: context.config.agentPreferences || { depth: "auto", quorum: "balanced" },
         file_ids: context.metadata.fileIds || [],
         google_selection: context.config.googleSelection || null,
         google_data_consent: context.config.googleDataConsent === true,

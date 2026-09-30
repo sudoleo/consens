@@ -345,3 +345,24 @@ it('shows marks without animation for saved answers and reduced motion', () => {
   expect(body.classList.contains('is-marks-revealing')).toBe(false);
   dom.window.close();
 });
+it('leaves marks hidden by the highlight setting out of the reveal', () => {
+  const {window: w, document: d, dom} = setup();
+  const body = d.getElementById('answer');
+  body.dataset.markdown = 'Exact answer.';
+  w.matchMedia = () => ({ matches: false });
+  w.renderStoredConsensusClaims = vi.fn(el => {
+    el.innerHTML = '<span class="cx-claim is-unanimous is-marker-filtered">Green.</span> <span class="cx-claim is-major">Red.</span>';
+  });
+  w.App.agentReview.render(body, snapshot(), { reveal: true });
+  const [green, red] = body.querySelectorAll('.cx-claim');
+  expect(green.style.getPropertyValue('--cx-reveal-delay')).toBe('');
+  expect(red.style.getPropertyValue('--cx-reveal-delay')).toBe('0ms');
+  // With all highlights off nothing animates at all.
+  const other = snapshot(); other.answer_hash = other.versions[0].hash = 'hidden-hash';
+  other.checks.forEach(c => { c.answer_hash = 'hidden-hash'; });
+  body.classList.remove('is-marks-revealing');
+  d.body.classList.add('consensus-markers-hidden');
+  w.App.agentReview.render(body, other, { reveal: true });
+  expect(body.classList.contains('is-marks-revealing')).toBe(false);
+  dom.window.close();
+});

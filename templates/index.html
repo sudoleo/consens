@@ -1019,6 +1019,9 @@
               data-settings-tab="behaviorSettingsSection" aria-controls="behaviorSettingsSection">Model behavior</button>
             <button type="button" class="settings-nav-item" role="tab" id="settingsTabRuns"
               data-settings-tab="runsSettingsSection" aria-controls="runsSettingsSection">Runs</button>
+            <!-- Nur fuer Konten mit Agent · Beta; agent-preferences.js gibt den Reiter frei. -->
+            <button type="button" class="settings-nav-item" role="tab" id="settingsTabAgent"
+              data-settings-tab="agentSettingsSection" aria-controls="agentSettingsSection" hidden>Agent · Beta</button>
             <button type="button" class="settings-nav-item" role="tab" id="settingsTabDisplay"
               data-settings-tab="displaySettingsSection" aria-controls="displaySettingsSection">Display</button>
             <button type="button" class="settings-nav-item" role="tab" id="settingsTabConnections"
@@ -1165,6 +1168,46 @@
                     <small>Follows Agent Mode: on for guided runs, off for direct comparisons.</small>
                   </span>
                   <input type="checkbox" id="autoConsensusToggle">
+                </label>
+              </div>
+            </div>
+          </section>
+
+          <section id="agentSettingsSection" class="settings-category" role="tabpanel"
+            aria-labelledby="settingsAgentTitle" hidden>
+            <div class="settings-category-heading">
+              <h3 id="settingsAgentTitle">Agent · Beta</h3>
+              <p>How Agent compares and checks your questions. Saved in this browser; applies from your next message.</p>
+            </div>
+            <div class="settings-group">
+              <div class="settings-section">
+                <label for="agentDepthSelect" class="settings-switch-row settings-choice-row">
+                  <span>
+                    <strong>Answer depth</strong>
+                    <small>How thoroughly the comparison models answer. Automatic lets Agent choose per question: brief for quick facts and rewrites, thorough for analysis and decisions.</small>
+                  </span>
+                  <span class="settings-select">
+                    <select id="agentDepthSelect">
+                      <option value="auto" selected>Automatic</option>
+                      <option value="quick">Always brief</option>
+                      <option value="full">Always thorough</option>
+                    </select>
+                  </span>
+                </label>
+              </div>
+              <div class="settings-section">
+                <label for="agentQuorumSelect" class="settings-switch-row settings-choice-row">
+                  <span>
+                    <strong>Answer start</strong>
+                    <small>When Agent writes the answer. Models that answer later still take part in the check, and are marked as such; waiting for every model is slowest.</small>
+                  </span>
+                  <span class="settings-select">
+                    <select id="agentQuorumSelect">
+                      <option value="balanced" selected>When most models answered</option>
+                      <option value="fast">As soon as half answered</option>
+                      <option value="all">After every model</option>
+                    </select>
+                  </span>
                 </label>
               </div>
             </div>

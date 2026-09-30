@@ -94,6 +94,16 @@ Vergleichsgrundlage eingeholt.
 
 ### Tiefe, Parallelität und Quorum
 
+Einstellungen → **Agent · Beta** (nur für Konten mit Agent-Zugang, gespeichert im
+Browser unter `consensio.agentPreferences.v1`) legt zwei Werte fest, die jede
+Nachricht als `agent_preferences` mitschickt und der Turn in `agent_settings`
+einfriert (Teil der Request-Identität bei Recovery): **Answer depth**
+(`auto` lässt das Chatmodell wählen, `quick`/`full` überschreiben seine Wahl; der
+Orchestrierungsprompt nennt die feste Tiefe) und **Answer start**
+(`balanced` wie unten beschrieben, `fast` ab der Hälfte der Antworten mit 1,1-facher
+Nachfrist und mindestens einer Sekunde, `all` wartet auf jedes Modell). „Check
+contradictions“ bleibt im Reiter Runs und im Composer.
+
 `compare_models` hat zwei Entscheidungsfelder. `depth` (Standard `full`) steuert
 die Längenvorgabe der Vergleichsmodelle: `quick` für kurze Sachfragen, kleine
 Folgefragen, Umformulierungen und Alltagsrat (etwa 1500 Zeichen, falls die Aufgabe

@@ -2205,6 +2205,12 @@ Nach Dispatch erfolgt keine automatische Rückgabe als ungesendete Nachricht:
 die bestehende reine Recovery bleibt für unklaren Serverstatus zuständig.
 
 `agent-answer-actions.js` läuft nach `agent-review.js` und vor `consensus-run.js`.
+`agent-preferences.js` (nach `agent-review.js`) speichert Tiefe und Quorum der
+Einstellungen im Browser, gibt den Reiter `agentSettingsSection` über
+`App.settingsTabs.setTabAvailable` nur bei `agentChat.canUse()` frei (Aufruf aus
+`agentChat.renderShell`) und liefert `App.agentPreferences.get()` für das Feld
+`agent_preferences` von POST `/agent` (`AgentPreferences` in `agent_comparison.py`,
+Werte in `agent_settings.agent_preferences`).
 `App.agentAnswerActions.render` ergänzt aktuelle, wiederhergestellte und
 archivierte Agent-Antworten um „Copy answer“ aus dem kanonischen Markdown,
 ohne Activity, Prüfmarkierungen oder Bedienelemente. Während Streaming sind die

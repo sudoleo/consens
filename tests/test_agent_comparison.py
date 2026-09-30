@@ -83,7 +83,8 @@ class Script:
         return Completion()
 
 
-def make_loop(store, script, *, check_sources=False, source_limits=None, messages=None, delegation=False, models=None):
+def make_loop(store, script, *, check_sources=False, source_limits=None, messages=None, delegation=False, models=None,
+              preferences=None):
     chat, turn = pending(store)
     config = {**defaults(), "enabled": delegation, "max_searches": 0, "context_chars": 120_000}
     loop = DelegationLoop(store=store, uid=UID, chat_id=chat, turn_id=turn["id"],
@@ -91,7 +92,8 @@ def make_loop(store, script, *, check_sources=False, source_limits=None, message
         api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy.from_config({**config, "enabled": True}),
         delegation_config=config, completion_factory=script.factory,
         check_sources=check_sources, source_limits=source_limits,
-        comparison_models=comparison_selection(models or {"anthropic": "claude-haiku-4-5", "openai": "gpt-5.4-mini"}))
+        comparison_models=comparison_selection(models or {"anthropic": "claude-haiku-4-5", "openai": "gpt-5.4-mini"}),
+        agent_preferences=preferences)
     script.loop = loop
     return loop
 
@@ -497,6 +499,10 @@ def test_failed_review_recovery_preserves_status_and_never_calls_provider(api):
     assert calls == []
     assert agent_quota.quota_ref(store.db, UID, agent_quota.day_key()).get().to_dict() == before
     assert client.post("/agent", json={**payload, "comparison_models": {"openai": "gpt-5.4-mini", "anthropic": "claude-haiku-4-5"}}, headers=AUTH).status_code == 409
+    # Settings are part of the request identity; the defaults equal "not sent".
+    assert client.post("/agent", json={**payload, "agent_preferences": {"depth": "auto", "quorum": "balanced"}}, headers=AUTH).status_code == 200
+    assert client.post("/agent", json={**payload, "agent_preferences": {"depth": "full", "quorum": "all"}}, headers=AUTH).status_code == 409
+    assert client.post("/agent", json={**payload, "agent_preferences": {"depth": "deep"}}, headers=AUTH).status_code == 422
 
 
 @pytest.mark.parametrize("committed,failures", [(False, 1), (True, 1), (False, 3)])
@@ -753,3 +759,33 @@ def test_only_an_accepted_last_comparison_skips_the_routing_round(store):
     assert not loop._answer_ready(value, False)
     loop.google_actions = True
     assert not loop._answer_ready(value, True)
+
+
+def test_a_depth_fixed_in_settings_overrides_the_orchestrator(store):
+    from app.services.agent_comparison import AgentPreferences
+    script = Script(direct=True, depth="quick")
+    loop = make_loop(store, script, preferences=AgentPreferences(depth="full"))
+    assert 'fixed the comparison depth to "full"' in loop.messages[0]["content"]
+    list(loop.run())
+    assert all("as thoroughly as the task needs" in prompt[0]["content"] for prompt in script.prompts)
+    assert store.get_turn(UID, loop.chat_id, loop.turn_id)["agent_review"]["comparisons"][0]["depth"] == "full"
+
+
+def test_waiting_for_every_model_puts_a_slow_answer_into_the_text(store, quick_quorum):
+    import threading
+    from app.services.agent_comparison import AgentPreferences
+    script = Straggler(release_on_answer=False)
+    threading.Timer(.4, script.release.set).start()
+    loop = make_loop(store, script, models=THREE, preferences=AgentPreferences(quorum="all"))
+    list(loop.run())
+    comparison = store.get_turn(UID, loop.chat_id, loop.turn_id)["agent_review"]["comparisons"][0]
+    assert "second option is cheaper" in script.synthesis_evidence
+    assert sorted(comparison["synthesis_providers"]) == ["anthropic", "gemini", "openai"]
+    assert not any(a.get("late") for a in comparison["answers"])
+
+
+def test_quorum_modes():
+    from app.services.agent_comparison import quorum_size
+    assert [quorum_size(6, d, "all") for d in ("quick", "full")] == [6, 6]
+    assert [quorum_size(6, d, "fast") for d in ("quick", "full")] == [3, 3]
+    assert [quorum_size(6, d, "balanced") for d in ("quick", "full")] == [3, 5]

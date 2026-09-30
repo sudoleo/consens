@@ -471,13 +471,15 @@ body.single-agent-active .consensus-model-inline .model-picker-display::after {
   }
   #agentAnswerBody.is-answer-check-done::after { opacity: 0; }
   /* The marks stroke on in reading order; badges settle in behind them. */
-  #agentAnswerBody.is-marks-revealing .cx-claim:is(.is-thin, .is-unanimous, .is-minor, .is-split, .is-major) {
+  /* Only marks the reader's highlight setting shows take part. */
+  body:not(.consensus-markers-hidden) #agentAnswerBody.is-marks-revealing
+    .cx-claim:is(.is-thin, .is-unanimous, .is-minor, .is-split, .is-major):not(.is-marker-filtered) {
     background-color: transparent;
     background-image: linear-gradient(var(--cx-mark), var(--cx-mark));
     background-repeat: no-repeat;
     animation: agent-mark-stroke .62s cubic-bezier(.25, .75, .3, 1) var(--cx-reveal-delay, 0ms) backwards;
   }
-  #agentAnswerBody.is-marks-revealing .claim-badge {
+  body:not(.consensus-markers-hidden) #agentAnswerBody.is-marks-revealing .claim-badge:not(.is-marker-filtered) {
     animation: agent-mark-badge .34s ease-out var(--cx-reveal-delay, 0ms) backwards;
   }
 }

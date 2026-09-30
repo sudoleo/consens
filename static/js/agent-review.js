@@ -235,7 +235,11 @@
   // A re-render during the reveal (a fresh DOM when the run ends) continues
   // the stroke where it was, through negative delays, instead of restarting.
   function revealMarks(body, hash) {
-    const marks = [...body.querySelectorAll(MARKS)];
+    // Marks hidden by the highlight setting (all markers off, or e.g. green
+    // ones filtered out) neither animate nor take a place in the sequence.
+    const visible = el => !el.classList.contains('is-marker-filtered');
+    const marks = document.body.classList.contains('consensus-markers-hidden') ? []
+      : [...body.querySelectorAll(MARKS)].filter(visible);
     if (!marks.length) return;
     const now = performance.now();
     if (body._revealedMarks !== hash) {
@@ -248,7 +252,7 @@
     const elapsed = now - body._revealStart;
     const step = Math.min(38, 900 / marks.length);
     let delay = 0, index = 0;
-    for (const el of body.querySelectorAll(`${MARKS}, .claim-badge`)) {
+    for (const el of [...body.querySelectorAll(`${MARKS}, .claim-badge`)].filter(visible)) {
       const mark = el.matches(MARKS);
       if (mark) delay = Math.round(index++ * step);
       el.style.setProperty('--cx-reveal-delay', `${Math.round((mark ? delay : delay + 260) - elapsed)}ms`);

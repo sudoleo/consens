@@ -91,7 +91,8 @@ class Worker:
 
 class DelegationLoop(AgentLoop):
     def __init__(self, *, delegation_config, worker_model_ids=None, cooldowns=None, comparison_models=None,
-                 check_sources=False, source_limits=None, file_context=None, google_selection=None, google_data_consent=False, **kwargs):
+                 check_sources=False, source_limits=None, file_context=None, google_selection=None, google_data_consent=False,
+                 agent_preferences=None, **kwargs):
         super().__init__(**kwargs)
         # Freeze the actual conversation before runtime instructions, tool
         # transcripts or private continuation data are appended to messages.
@@ -139,11 +140,12 @@ class DelegationLoop(AgentLoop):
         ], argument_limit=24_000)
         self.comparison = None
         if comparison_models is not None:
-            from app.services.agent_comparison import ComparisonTools, PROMPT
+            from app.services.agent_comparison import ComparisonTools, PROMPT, preference_prompt
             self.models = {key: replace(model, request_config={**model.request_config, "_agent_bounded_search": True})
                            for key, model in self.models.items()}
-            self.comparison = ComparisonTools(self, comparison_models, check_sources=check_sources, source_limits=source_limits)
-            self.messages[0]["content"] += "\n" + PROMPT
+            self.comparison = ComparisonTools(self, comparison_models, check_sources=check_sources, source_limits=source_limits,
+                                              preferences=agent_preferences)
+            self.messages[0]["content"] += "\n" + PROMPT + preference_prompt(self.comparison.preferences)
             if check_sources:
                 from app.services.agent_contradictions import PROMPT as SOURCE_PROMPT
                 self.messages[0]["content"] += "\n" + SOURCE_PROMPT
