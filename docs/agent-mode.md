@@ -462,7 +462,10 @@ Der feste Produktkontext erklärt allen beteiligten Modellen knapp ihre Rolle in
 consens.io. Jede Nutzerfrage und jeder Bearbeitungsauftrag geht durch
 `compare_models → eigene Synthese → judge_answer`, ergänzt um
 `check_contradictions`, wenn aktiviert. Websuche darf vorher aktuelle Fakten oder
-die Fragestellung klären. Das gilt auch für einfache, subjektive und Folgefragen,
+die Fragestellung klären. Jedes Vergleichsmodell kennt das aktuelle Datum und darf
+selbst einmal suchen (begrenzte Exa-Suche, keine Deep Search), wenn sich die Antwort
+seit seinem Trainingsstand geändert haben kann; sonst einigen sich die Modelle auf
+denselben veralteten Stand und der Consensus sieht trotzdem belastbar aus. Das gilt auch für einfache, subjektive und Folgefragen,
 Fragen zu consens.io sowie Textumformung/Übersetzung. Nur reine Begrüßungen und
 Bestätigungen ohne Frage/Auftrag sowie unvermeidbare Rückfragen dürfen direkt
 beantwortet werden. Rückfragen sind auf fehlende Angaben beschränkt, ohne die keine

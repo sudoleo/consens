@@ -1993,8 +1993,12 @@ gestopptes oder mitten im Stream ausgefallenes Modell bis dahin geschrieben hat
 `answers`/`basis_hash`, Judges oder dem Tool-Ergebnis an den Orchestrator.
 Die Agent-Sitzung bekommt dazu eine Nachricht `kind: "partial"` und `partial: true`.
 Würde der Review-Snapshot 600 KB überschreiten, fallen zuerst diese Teiltexte weg. Vergleichsmodelle
-erhalten keine Delegations-/Vergleichstools. Recherche und benötigte Quellen werden
-vom Orchestrator bereitgestellt; die Output-Grenze ist die Completion-Grenze des
+erhalten keine Delegations-/Vergleichstools, aber eine begrenzte Suchrunde
+(`call(..., kind="comparison")` → `_step(searches_enabled=True)`, im Chatpfad die
+Exa-Suche aus `_admit_chat_step`: 3 Treffer à 1000 Zeichen; passt die Reservierung
+nicht ins Kontingent, fällt nur die Suche weg) und das aktuelle Datum samt Hinweis,
+bei zeitabhängigen Fakten einmal zu suchen. Ohne beides einigten sich die Modelle
+auf denselben veralteten Trainingsstand. Judges suchen nie. Die Output-Grenze ist die Completion-Grenze des
 Modells, begrenzt durch `_output_share` (fairer Anteil am freien Tageskontingent
 über `agent_quota.remaining_tokens`). `depth=quick` gibt eine kurze Längenvorgabe,
 `full` keine. Technische Token-, Kontext- und Snapshotgrenzen gelten weiter. Leere, abgebrochene oder Tool-Antworten gelten als fehlgeschlagen.

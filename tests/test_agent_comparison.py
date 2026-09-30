@@ -294,6 +294,35 @@ def test_admin_budget_is_enforced_and_reset_isolated_from_inflight_settlement(st
 
 
 
+def test_comparison_answers_know_the_date_and_may_search_once_judges_never(store):
+    script = Script(direct=True)
+    seen = []
+    base = script.factory
+    def factory():
+        completion = base()
+        stream = completion.stream
+        def recording(*, model, messages, **kwargs):
+            schema = (model.request_config.get("response_format") or {}).get("json_schema")
+            kind = "orchestrator" if completion.step_id.startswith("completion:") else "judge" if schema else "comparison"
+            seen.append((kind, kwargs["native_searches"], messages[0]["content"]))
+            yield from stream(model=model, messages=messages, **kwargs)
+        completion.stream = recording
+        return completion
+    script.factory = factory
+    from app.services.llm.provider_runtime import AnalysisBudget
+    loop = make_loop(store, script)
+    # The chat path: one account budget, bounded Exa search per step.
+    loop.policy = AgentPolicy.for_chat(loop.config)
+    loop.costs.policy = loop.policy
+    loop.budget = AnalysisBudget(unlimited=True)
+    list(loop.run())
+    comparisons = [(n, text) for kind, n, text in seen if kind == "comparison"]
+    assert len(comparisons) == 2 and all(n == 1 for n, _ in comparisons)
+    assert all("Current date:" in text and "use web search once" in text for _, text in comparisons)
+    assert [n for kind, n, _ in seen if kind == "judge"] and all(n == 0 for kind, n, _ in seen if kind == "judge")
+    assert store.get_turn(UID, loop.chat_id, loop.turn_id)["status"] == "completed"
+
+
 @pytest.mark.parametrize("remaining,succeeds,context_room", [(40000, True, None), (100, False, None), (40000, False, 0)])
 def test_search_reservation_can_fall_back_without_extra_paid_claim(store, remaining, succeeds, context_room):
     calls = []
