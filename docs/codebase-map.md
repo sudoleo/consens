@@ -1986,7 +1986,13 @@ bis Quorum plus Nachfrist (`quorum_size`, `QUORUM_GRACE`, `MIN_GRACE_SECONDS`).
 Consensus-Modus unverändert nutzt) und führt `pending_models`, `failed_models` und
 `late`. `freeze_for_synthesis` legt `synthesis_providers` fest,
 `finish_comparisons` stoppt vor den Judges verbliebene Nachzügler (`late_cutoff`)
-und fixiert `basis_hash`; `close` beendet sie am Laufende. Vergleichsmodelle
+und fixiert `basis_hash`; `close` beendet sie am Laufende (`stopped`). Was ein
+gestopptes oder mitten im Stream ausgefallenes Modell bis dahin geschrieben hat
+(`Worker.partial_text` aus `_step`), bleibt als
+`failed_models[].partial_text` erhalten: nur für den Leser, nie in Synthese,
+`answers`/`basis_hash`, Judges oder dem Tool-Ergebnis an den Orchestrator.
+Die Agent-Sitzung bekommt dazu eine Nachricht `kind: "partial"` und `partial: true`.
+Würde der Review-Snapshot 600 KB überschreiten, fallen zuerst diese Teiltexte weg. Vergleichsmodelle
 erhalten keine Delegations-/Vergleichstools. Recherche und benötigte Quellen werden
 vom Orchestrator bereitgestellt; die Output-Grenze ist die Completion-Grenze des
 Modells, begrenzt durch `_output_share` (fairer Anteil am freien Tageskontingent
@@ -2395,7 +2401,12 @@ agent_review. Vor Markierungen prüft es Text-/Versions-/Basisbindung.
 Gründen für ausgefallene Modelle, fehlende Judge-Ergebnisse und unvollständige
 Satz-/Kontextabdeckung. `comparisons[].failed_models[].failure` enthält nur den
 sicheren Fehler aus `agent_failure`, niemals rohe Provider-Antworten. Eine
-fehlende Modellantwort hält den Gesamtstatus `partial`. Die Zeile unter der Antwort
+fehlende Modellantwort hält den Gesamtstatus `partial`. Im Leser erscheint ein
+Modell mit `partial_text` als `status: "incomplete"` (Chip „Incomplete“, eine
+sichtbare Begründungszeile `.answer-reader-note`, Kopieren erlaubt), eine am
+Output-Limit abgeschnittene Antwort (`answers[].truncated`) als fertige Antwort
+mit `badge: "Cut off"` und `note`; die Agent-Leiste zeigt „Incomplete“ statt
+„No answer“ und die Überschrift „Incomplete answer · not used“. Die Zeile unter der Antwort
 (`summaryText`) bleibt bei einer fertigen Prüfung leer und spricht nur, wenn die
 Prüfung selbst eingeschränkt ist: `Not compared · fewer than two models answered`,
 `Disagreements not checked` oder `Partly checked` (Coverage fehlt). Fehlende

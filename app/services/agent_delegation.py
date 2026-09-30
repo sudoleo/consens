@@ -83,6 +83,8 @@ class Worker:
     reviewed: bool = False
     started: float = field(default_factory=time.monotonic)
     stream_chars: int = 0
+    # Text the latest step streamed, also when it ended early.
+    partial_text: str = ""
     progress_seq: int = 0
     session_seq: int = 0
     result: dict | None = None
@@ -623,6 +625,8 @@ class DelegationLoop(AgentLoop):
             self.cooldowns.record(model, self.api_key, exc)
             raise
         finally:
+            if worker is not None:
+                worker.partial_text = value.text or ""
             if publish_text and value.text:
                 # Retain streamed text when a provider fails mid-answer. Reviewed
                 # candidates are checkpointed separately, with their exact hash.

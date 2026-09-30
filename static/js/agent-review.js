@@ -9,7 +9,7 @@
   const reasons = { provider_rate_limited: 'the provider was busy', provider_timeout: 'the provider stopped responding',
     provider_unavailable: 'the model was unavailable at its provider', provider_access: 'the provider declined the request',
     output_limit: 'it used its whole output allowance before finishing',
-    late_cutoff: 'it was still writing when the answer was checked' };
+    late_cutoff: 'it was still writing when the answer was checked', stopped: 'the run was stopped' };
   function failureReason(failure) {
     return reasons[failure?.code] || 'no complete answer arrived';
   }
@@ -125,7 +125,9 @@
       if (comparison.reason) card.append(node('p', '', comparison.reason));
       const names = answers.map(a => a.model?.label || a.provider_label || a.provider).filter(Boolean);
       if (names.length) card.append(node('p', 'agent-activity-models', `Models: ${names.join(', ')}`));
-      if (missing.length) card.append(node('p', '', `Did not respond: ${missing.map(m => m.label || m.model).join(', ')}`));
+      const unfinished = missing.filter(m => m.partial_text), silent = missing.filter(m => !m.partial_text);
+      if (silent.length) card.append(node('p', '', `Did not respond: ${silent.map(m => m.label || m.model).join(', ')}`));
+      if (unfinished.length) card.append(node('p', '', `Stopped before finishing: ${unfinished.map(m => m.label || m.model).join(', ')} (kept as incomplete)`));
       const pending = comparison.pending_models || [];
       if (pending.length) card.append(node('p', '', `Still answering: ${pending.map(m => m.label || m.model).join(', ')}`));
       const check = currentCheck(review, comparison, raw);
@@ -336,10 +338,17 @@
         contextGroup: () => contexts,
         answers: [
           ...answers.map(a => ({ provider: a.provider_label || a.provider, model: a.model?.model, label: a.model?.label || a.provider,
-            text: a.text, sources: safeSources([a]), sourceReferences: 'agent', status: "complete" })),
-          ...(comparison.failed_models || []).map((m, i) => ({ provider: `unavailable-${i}`, model: m.model, label: m.label,
+            text: a.text, sources: safeSources([a]), sourceReferences: 'agent', status: "complete",
+            ...(a.truncated ? { badge: 'Cut off', note: 'Stopped at its output limit, so its end is missing. It is used as a shortened answer.' } : {}) })),
+          // Text a model wrote before it stopped stays readable, marked, and
+          // outside the answer and its check.
+          ...(comparison.failed_models || []).map((m, i) => m.partial_text
+            ? { provider: `unavailable-${i}`, model: m.model, label: m.label, text: m.partial_text, status: "incomplete",
+                sources: safeSources([{ text: m.partial_text }]), sourceReferences: 'agent',
+                error: `Stopped before it finished: ${failureReason(m.failure)}. Not used for the answer or its check.` }
+            : { provider: `unavailable-${i}`, model: m.model, label: m.label,
             text: "", status: comparison.status === "cancelled" ? "canceled" : "error",
-            error: `No answer from this model: ${failureReason(m.failure)}. The comparison uses the other answers.`, sources: [] }))
+            error: `No answer from this model: ${failureReason(m.failure)}. The comparison uses the other answers.`, sources: [] })
         ] };
       const open = (section, options = {}) => App.answerReader?.openContext(context, { section, ...options });
       const navigation = {
@@ -356,7 +365,9 @@
         if (check) {
           const unavailable = comparison.failed_models || [];
           panel.append(node('p', 'agent-review-note', `${answers.length} of ${answers.length + unavailable.length} models returned complete answers.`));
-          for (const model of unavailable) panel.append(node('p', 'agent-review-note', `${model.label}: no answer, ${failureReason(model.failure)}.`));
+          for (const model of unavailable) panel.append(node('p', 'agent-review-note', model.partial_text
+            ? `${model.label}: stopped before it finished, ${failureReason(model.failure)}. Its partial answer is under Answers, not in the check.`
+            : `${model.label}: no answer, ${failureReason(model.failure)}.`));
           // Arrived after the answer was written: part of the check, not of the text.
           const late = answers.filter(a => a.late).map(a => a.model?.label || a.provider_label || a.provider);
           if (late.length) panel.append(node('p', 'agent-review-note', `${late.join(', ')} answered after the answer was written. ${late.length === 1 ? 'Its answer is' : 'Their answers are'} part of the check, not of the answer text.`));

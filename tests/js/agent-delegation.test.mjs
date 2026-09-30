@@ -395,6 +395,24 @@ describe("Agent sidebar", () => {
     dom.window.close();
   });
 
+  it("keeps the text of a comparison model stopped mid-answer, marked as incomplete", async () => {
+    const stopped = { ...agent(1, "stopped"), kind: "comparison", title: "Comparison 1 · Haiku", partial: true };
+    const note = "It was still writing when the answer was checked. The answer and its check use the other answers.";
+    const { window: w, document: d, dom } = boot(async url => ({ ok: true, json: async () => url.includes(agentId)
+      ? { agent: { assignment: { goal: "Comparison 1 · Haiku" } }, messages: [
+          { id: "m1", seq: 1, sender: agentId, recipient: "orchestrator", kind: "partial", text: "First half of an answer" },
+          { id: "m2", seq: 2, sender: agentId, recipient: "orchestrator", kind: "failure", text: note }] }
+      : { agents: [stopped], status: "succeeded" } }));
+    receive(w, stopped);
+    w.App.agentDelegation.project({ chatId, turnId });
+    expect(d.querySelector(".agent-session-state").textContent).toMatch(/^Incomplete · /);
+    d.querySelector(".agent-inline-model").click();
+    await vi.waitFor(() => expect(d.querySelector(".agent-session-detail").textContent).toContain("First half of an answer"));
+    expect(d.querySelector(".agent-session-detail h3").textContent).toBe("Incomplete answer · not used");
+    expect(d.querySelector(".agent-session-detail .agent-judge-note").textContent).toBe(note);
+    dom.window.close();
+  });
+
   it("renders untrusted text safely, labels unknown totals and retries details only on demand", async () => {
     const { window: w, document: d, dom } = boot(async url => ({ ok: !url.includes(agentId), json: async () => ({ agents: [], status: "succeeded" }) }));
     receive(w, { ...agent(), title: '<img src=x onerror="alert(1)">' });

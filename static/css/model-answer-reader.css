@@ -160,6 +160,9 @@ body.answer-reader-ready:not(.is-hero) .response-section > .response-box {
 .answer-reader-answer-header h3 { margin: 0; font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); }
 .answer-reader-state { color: var(--ink-2); font-size: 11px; padding: 4px 8px; border-radius: var(--radius-pill); background: var(--raise); }
 .answer-reader-state[data-state="error"] { color: var(--dispute); background: var(--dispute-bg); }
+/* Partial or cut-off text: shown, but marked, with its reason in one quiet line. */
+.answer-reader-state:is([data-state="incomplete"], [data-state="complete"]) { color: var(--partial); background: var(--partial-bg); }
+.answer-reader-note { margin: -8px 0 14px; font-size: 12px; line-height: 1.55; color: var(--ink-3); }
 .model-answer-reader .answer-reader-body { font: 15px/1.8 var(--font-sans); letter-spacing: -.006em; }
 .model-answer-reader .answer-reader-body :is(h1,h2,h3,h4) { line-height: 1.4; letter-spacing: -.02em; margin: 1.8em 0 .65em; font-weight: 600; text-align: left; }
 .model-answer-reader .answer-reader-body h1 { font-size: 23px; }

@@ -41,6 +41,8 @@
     return id === CHECK_ID ? checkRow(view) : view.agents.get(id);
   }
   function stateLabel(agent) {
+    // Ended mid-answer: its text is kept and shown, marked incomplete.
+    if (agent.kind === "comparison" && agent.partial && ended.has(agent.status)) return "Incomplete";
     if (agent.kind === "comparison" && agent.status === "failed") return "No answer";
     return labels[agent.status] || "Waiting";
   }
@@ -407,6 +409,7 @@
       if (agent.kind === "comparison") {
         if (message.kind === "failure") { row.body.append(node("p", "agent-judge-note", message.text)); continue; }
         if (message.kind === "result") item.append(node("h3", "", "Answer"));
+        if (message.kind === "partial") item.append(node("h3", "", "Incomplete answer · not used"));
       } else item.append(node("h3", "", `${from} → ${to} · ${message.kind}`));
       const text = node("div", "consensus-answer-body agent-message-body");
       if (window.injectMarkdown) window.injectMarkdown(text, message.text, agent.sources || []);

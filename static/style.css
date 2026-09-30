@@ -24,9 +24,9 @@
 /* Shell layer — loaded LAST so the frameless redesign wins on equal
    specificity. Elevation, sidebar, topbar, composer and thread material. */
 @import url('./css/shell.css?v=20260930-composer');
-@import url('./css/model-answer-reader.css?v=20260919-agent-evidence');
+@import url('./css/model-answer-reader.css?v=20260930-partial-answers');
 @import url('./css/composer-attachments.css?v=20260930-composer');
-@import url('./css/agent-chat.css?v=20260930-agent-panel');
+@import url('./css/agent-chat.css?v=20260930-partial-answers');
 @import url('./css/agent-google.css?v=20260930-composer');
 @import url('./css/agent-workspace.css?v=20260930-agent-ux');
 /* The composer row's layout, for every mode (see its header). */

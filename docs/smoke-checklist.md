@@ -106,6 +106,11 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       ersetzen sie durch Tokens. Nach Abschluss/Stop und im gespeicherten
       Verlauf endet die Animation; Reduced Motion/Forced Colors bleiben lesbar.
       Automatisiert: `test_agent_delegation_frontend.py`.
+      Ein Modell, das beim Check noch schreibt: unter Answers mit Chip
+      „Incomplete“, Begründungszeile und Teiltext; in der Leiste „Incomplete ·
+      n s“ mit „Incomplete answer · not used“. Nicht in Antwort oder Check.
+      Automatisiert: `test_agent_comparison.py`, `agent-review.test.mjs`,
+      `model-answer-reader.test.mjs`, `agent-delegation.test.mjs`.
 - [ ] Sources/Differences: kompakte Quellenlisten, kontrastreiche Titel und
       Aussagen, Check-details-Chevrons und kleiner Resolve-Button in Light/Dark
       bei 320/390 px sowie als Desktop-Sidebar. Disclosures per Enter bedienen;

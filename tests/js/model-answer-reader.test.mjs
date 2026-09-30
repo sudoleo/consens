@@ -281,6 +281,24 @@ describe("model answer reader", () => {
     expect(ctx.document.activeElement).toBe(saved.button);
   });
 
+  it("shows partial and cut-off answers with their text, a small mark and one visible reason", () => {
+    const ctx = boot(); ctx.project(run());
+    const context = { key: 'tool:partial', question: 'Evidence question', renderPanel: () => ctx.document.createElement('div'), answers: [
+      { provider: 'OpenAI', label: 'GPT', text: 'Whole answer', status: 'complete', badge: 'Cut off', note: 'Its end is missing.', sources: [] },
+      { provider: 'Anthropic', label: 'Claude', text: 'First half', status: 'incomplete', error: 'Stopped before it finished.', sources: [] }] };
+    ctx.reader.openContext(context, { section: 'answers', model: 'Anthropic' });
+    const pane = ctx.document.querySelector('.answer-reader-answer');
+    expect(pane.querySelector('.answer-reader-state').hidden).toBe(false);
+    expect(pane.querySelector('.answer-reader-state').textContent).toBe('Incomplete');
+    expect(pane.querySelector('.answer-reader-note').textContent).toBe('Stopped before it finished.');
+    expect(pane.querySelector('.answer-reader-body').textContent).toBe('First half');
+    expect(pane.querySelector('.answer-reader-answer-actions button').disabled).toBe(false);
+    expect(ctx.document.getElementById('answerReaderStatus').textContent).toBe('1 of 2 ready · 1 incomplete');
+    ctx.reader.openContext(context, { section: 'answers', model: 'OpenAI' });
+    const cut = ctx.document.querySelector('.answer-reader-answer');
+    expect(cut.querySelector('.answer-reader-state').textContent).toBe('Cut off');
+    expect(cut.querySelector('.answer-reader-note').textContent).toBe('Its end is missing.');
+  });
   it("renders model names as text and never creates unsafe source links", () => {
     const ctx = boot(); const state = run(); state.config.providers[0].modelLabel = '<img src=x onerror="alert(1)">';
     state.modelResults.OpenAI.sources = [{url: "javascript:alert(1)", title: "Bad link"}]; ctx.project(state); ctx.reader.openLive();

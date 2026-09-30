@@ -145,7 +145,12 @@ Antworten (`synthesis_providers`). Laufende Modelle stehen bis dahin als
 wird mit `late: true` markiert: Sie gehört zur Prüfbasis von Differences und
 Coverage, nie zum Antworttext. Wer beim Start der Judges noch schreibt, wird
 gestoppt und als fehlend mit `late_cutoff` geführt; die Prüfung nutzt die
-übrigen Antworten. Der Antworttext bleibt in jedem Fall unverändert.
+übrigen Antworten. Der Antworttext bleibt in jedem Fall unverändert. Was ein so
+gestopptes (oder mitten in der Antwort ausgefallenes) Modell schon geschrieben
+hatte, bleibt als `failed_models[].partial_text` gespeichert und steht unter
+Answers als „Incomplete“ — lesbar, aber weder in der Antwort noch in ihrer
+Prüfung, weil ein halber Text beim Differences-Judge falsche Auslassungen
+erzeugen würde (wie unterbrochene Antworten im Consensus-Modus).
 
 ## Antwortversionen und Prüfungen
 

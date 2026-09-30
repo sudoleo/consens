@@ -622,11 +622,12 @@ def test_comparison_models_answer_at_the_same_time(store):
 class Straggler(Script):
     """The Gemini answer only arrives once `release` is set (or never)."""
 
-    def __init__(self, *, release_on_answer, **kwargs):
+    def __init__(self, *, release_on_answer, partial="", **kwargs):
         import threading
         super().__init__(direct=True, **kwargs)
         self.release = threading.Event()
         self.release_on_answer = release_on_answer
+        self.partial = partial
         self.synthesis_evidence = None
 
     def factory(self):
@@ -648,6 +649,9 @@ class Straggler(Script):
                 elif not self.step_id.startswith("completion:") and model.model.startswith("google") \
                         and not model.request_config.get("response_format"):
                     cancellation = current_provider_cancellation()
+                    if script.partial:
+                        self.text = script.partial
+                        yield {"type": "delta", "text": script.partial}
                     while not script.release.wait(.02):
                         cancellation.raise_if_cancelled()
                     self.text, self.finish_reason = "Gemini: the second option is cheaper.", "stop"
@@ -694,6 +698,45 @@ def test_a_model_still_writing_at_the_check_is_stopped_and_reported(store, quick
     assert review["status"] == "partial" and review_is_bound(review, saved["consensus"])
     assert {"code": "models_unavailable", "count": 1} in review["checks"][0]["issues"]
     assert not any(t.is_alive() for t, _ in loop.comparison._running[comparison["id"]].values())
+
+
+def test_text_of_a_model_stopped_mid_answer_is_kept_as_incomplete_but_never_checked(store, quick_quorum):
+    script = Straggler(release_on_answer=False, partial="Gemini: the first half of an answer")
+    loop = make_loop(store, script, models=THREE)
+    list(loop.run())
+    saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
+    review = saved["agent_review"]
+    comparison = review["comparisons"][0]
+    [stopped] = comparison["failed_models"]
+    assert stopped["failure"]["code"] == "late_cutoff"
+    assert stopped["partial_text"] == "Gemini: the first half of an answer"
+    # Neither the synthesis nor the checked basis sees unfinished text.
+    assert "first half" not in script.synthesis_evidence
+    assert all("first half" not in a["text"] for a in comparison["answers"])
+    assert review["status"] == "partial" and review_is_bound(review, saved["consensus"])
+    view = store.delegation_view(UID, loop.chat_id, loop.turn_id)
+    [session] = [a for a in view["agents"] if a.get("partial")]
+    assert session["status"] == "stopped"
+    messages = store.delegation_view(UID, loop.chat_id, loop.turn_id, agent_id=session["id"])["messages"]
+    assert [m["kind"] for m in messages if m["kind"] == "partial"] == ["partial"]
+
+
+def test_partial_text_gives_way_before_the_review_exceeds_its_storage(store):
+    from app.services.agent_comparison import ComparisonTools
+    saved = []
+    class Loop:
+        class store:
+            @staticmethod
+            def save_review(*args):
+                saved.append(args[4])
+        uid = chat_id = turn_id = run_token = "x"
+        outgoing = type("Q", (), {"put_nowait": staticmethod(lambda item: None)})
+    tools = ComparisonTools(Loop(), {})
+    tools.comparisons = [{"id": "c", "answers": [], "failed_models": [
+        {"model": "m", "failure": {"code": "late_cutoff"}, "partial_text": "x" * 700_000}]}]
+    tools.checkpoint()
+    assert "partial_text" not in saved[0]["comparisons"][0]["failed_models"][0]
+    assert saved[0]["comparisons"][0]["failed_models"][0]["model"] == "m"
 
 
 def test_quorum_sizes():

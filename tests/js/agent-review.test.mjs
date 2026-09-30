@@ -268,6 +268,25 @@ it('names an output limit as the reason a comparison model gave no answer', () =
   expect(context.answers.at(-1).error).not.toContain('did not respond');
   dom.window.close();
 });
+it('shows a model stopped mid-answer as a marked, readable incomplete answer, and a cut-off one as marked', () => {
+  const {window: w, document: d, dom} = setup();
+  const body = d.getElementById('answer'); body.dataset.markdown = 'Exact answer.';
+  const review = partialReview();
+  review.comparisons[0].failed_models[0] = {...review.comparisons[0].failed_models[0],
+    failure: {code: 'late_cutoff'}, partial_text: 'First half of an answer'};
+  review.comparisons[0].answers[0].truncated = true;
+  w.App.agentReview.render(body, review);
+  d.querySelector('[data-section="differences"]').click();
+  const context = w.App.answerReader.openContext.mock.calls.at(-1)[0];
+  const stopped = context.answers.at(-1);
+  expect(stopped.status).toBe('incomplete');
+  expect(stopped.text).toBe('First half of an answer');
+  expect(stopped.error).toContain('Not used for the answer or its check');
+  expect(context.answers[0]).toMatchObject({status: 'complete', badge: 'Cut off'});
+  const panel = context.renderPanel('differences');
+  expect(panel.textContent).toContain('GPT Luna: stopped before it finished, it was still writing when the answer was checked.');
+  dom.window.close();
+});
 it('keeps Copy in the evidence row across re-renders and hands it back when the row goes away', async () => {
   const {window: w, document: d, dom} = setup();
   // Load the actions module into the same window.
