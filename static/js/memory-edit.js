@@ -56,7 +56,7 @@
 
   function sourceForNode(node) {
     const el = node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement;
-    if (el?.closest("#consensusAnswerBody, .thread-history-answer")) return "consensus";
+    if (el?.closest("#consensusAnswerBody, #agentAnswerBody, .thread-history-answer")) return "consensus";
     if (el?.closest(".response-box .collapsible-content, .answer-reader-body")) return "model_answer";
     if (el?.closest(".thread-ask-text, .thread-history-question")) return "question";
     return null;

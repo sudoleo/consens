@@ -137,23 +137,12 @@
   box-shadow: inset 0 1px 0 var(--glass-highlight);
 }
 
+/* Nur-Icon: runder Button; Farben und Zustaende stehen in shell.css. */
 .input-actions-container .input-action-btn-primary {
-  background:
-    linear-gradient(180deg, color-mix(in srgb, #ffffff 13%, transparent), transparent),
-    var(--button-bg);
-  color: var(--button-text);
-  border: 1px solid color-mix(in srgb, var(--button-bg) 70%, var(--glass-border));
-  /* Nur-Icon: runder Button, ohne breites Padding für Text */
   width: 36px;
   height: 36px;
   padding: 0;
   border-radius: 50%;
-  box-shadow: 0 10px 22px color-mix(in srgb, var(--button-bg) 18%, transparent), inset 0 1px 0 color-mix(in srgb, #ffffff 32%, transparent);
-}
-
-.input-action-btn-primary:hover {
-  opacity: 0.9;
-  transform: translateY(-1px);
 }
 
 .mode-explainer-trigger {
@@ -374,28 +363,5 @@
   min-width: 36px;
   padding: 0;
   border-radius: 50%;
-  background: #eeeeee;
-  color: #111111;
-  border-color: transparent;
-}
-
-.input-action-btn-primary.is-cancel-action:hover {
-  background: #e4e4e4;
-  opacity: 1;
-  transform: none;
-}
-
-.input-action-btn-primary.is-cancel-action svg {
-  width: 14px;
-  height: 14px;
-}
-
-.dark-mode .input-action-btn-primary.is-cancel-action {
-  background: #25272c;
-  color: #ffffff;
-}
-
-.dark-mode .input-action-btn-primary.is-cancel-action:hover {
-  background: #2e2e2e;
 }
 

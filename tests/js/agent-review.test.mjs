@@ -301,21 +301,31 @@ it('strokes the marks on once, in reading order, when a live answer is first che
     el.innerHTML = '<span class="cx-claim is-unanimous">One.</span> <span class="claim-badge">2/2</span>'
       + ' <span class="cx-claim is-major">Two.</span>';
   });
+  let now = 1000;
+  w.performance.now = () => now;
   const review = snapshot();
   w.App.agentReview.render(body, review, { reveal: true });
   expect(body.classList.contains('is-marks-revealing')).toBe(true);
+  // A live update with the same text and check keeps the marked DOM.
+  const span = body.querySelector('.cx-claim');
+  w.App.agentReview.render(body, { ...review, comparisons: review.comparisons.map(c => ({ ...c })) }, { reveal: true, events: [{}] });
+  expect(body.querySelector('.cx-claim')).toBe(span);
+  // A fresh DOM mid-reveal continues the stroke instead of restarting it.
+  now = 1400; body._agentRenderSerial = 1;
+  w.App.agentReview.render(body, review, { reveal: true });
+  expect(parseInt(body.querySelector('.cx-claim').style.getPropertyValue('--cx-reveal-delay'))).toBe(-400);
   const [first, badge, second] = body.querySelectorAll('.cx-claim, .claim-badge');
-  expect(first.style.getPropertyValue('--cx-reveal-delay')).toBe('0ms');
-  expect(parseInt(badge.style.getPropertyValue('--cx-reveal-delay'))).toBeGreaterThan(0);
-  expect(parseInt(second.style.getPropertyValue('--cx-reveal-delay'))).toBeGreaterThan(0);
+  const delay = el => parseInt(el.style.getPropertyValue('--cx-reveal-delay'));
+  expect(delay(first)).toBe(-400);
+  expect(delay(badge)).toBeGreaterThan(delay(first));
+  expect(delay(second)).toBeGreaterThan(delay(first));
   vi.runAllTimers();
   expect(body.classList.contains('is-marks-revealing')).toBe(false);
-  expect(first.getAttribute('style') || '').not.toContain('--cx-reveal-delay');
-  // The same answer re-rendered (fresh DOM at the end of the run) shows its
-  // marks at once instead of replaying the reveal.
-  body._agentRenderSerial = 1;
+  expect(body.querySelector('.cx-claim').getAttribute('style') || '').not.toContain('--cx-reveal-delay');
+  // After the reveal a re-rendered answer shows its marks at once.
+  now = 9000; body._agentRenderSerial = 2;
   w.App.agentReview.render(body, review, { reveal: true });
-  expect(w.renderStoredConsensusClaims).toHaveBeenCalledTimes(2);
+  expect(w.renderStoredConsensusClaims).toHaveBeenCalledTimes(3);
   expect(body.classList.contains('is-marks-revealing')).toBe(false);
   vi.useRealTimers();
   dom.window.close();

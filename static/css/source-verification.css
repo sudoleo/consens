@@ -79,9 +79,12 @@
   color: transparent;
   animation: source-label-shine 1.6s linear infinite;
 }
+/* One period moves the repeating 250% gradient by exactly one tile, so the
+   loop is seamless: the old end point left a second band half-way in view
+   that vanished at every restart. */
 @keyframes source-label-shine {
   from { background-position: 150% 0; }
-  to { background-position: -100% 0; }
+  to { background-position: -16.667% 0; }
 }
 @media (prefers-reduced-motion: reduce), (forced-colors: active) {
   #consensusSourcesTab .source-check-loading,

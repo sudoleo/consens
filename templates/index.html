@@ -557,13 +557,10 @@
         </div>
         <!-- Actions bottom right -->
         <div class="input-actions-container">
-          <!-- Ein gefuellter Pfeil im gefuellten Kreis (wie im Mockup): der
-               Senden-Knopf ist das einzige massive Element im Composer, also
-               traegt er auch ein massives Zeichen statt einer Kontur. -->
-          <button id="sendButton" class="input-action-btn-primary" title="Send question" aria-label="Send question">
-            <svg class="icon-13" viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M3.4 3.6 21 12 3.4 20.4 7 12z" fill="currentColor"></path>
-            </svg>
+          <!-- Pfeil nach oben im gefuellten Kreis: der Senden-Knopf ist das
+               einzige massive Element im Composer (Stil in shell.css). -->
+          <button id="sendButton" class="input-action-btn-primary" data-icon="send" title="Send question" aria-label="Send question">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5.5M6 11.5l6-6 6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>
           </button>
         </div>
       </div>

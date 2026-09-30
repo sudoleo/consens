@@ -232,23 +232,34 @@
   // order, like a marker pen going over the text (the landing page's gesture).
   // Later re-renders of the same answer show them at once.
   const MARKS = '.cx-claim:is(.is-thin, .is-unanimous, .is-minor, .is-split, .is-major)';
+  // A re-render during the reveal (a fresh DOM when the run ends) continues
+  // the stroke where it was, through negative delays, instead of restarting.
   function revealMarks(body, hash) {
     const marks = [...body.querySelectorAll(MARKS)];
-    if (!marks.length || body._revealedMarks === hash) return;
-    body._revealedMarks = hash;
-    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+    if (!marks.length) return;
+    const now = performance.now();
+    if (body._revealedMarks !== hash) {
+      body._revealedMarks = hash;
+      body._revealStart = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? null : now;
+    } else if (marks[0].style.getPropertyValue('--cx-reveal-delay')) {
+      return; // Same spans, animation already running.
+    }
+    if (body._revealStart == null || now - body._revealStart > body._revealTotal) return;
+    const elapsed = now - body._revealStart;
     const step = Math.min(38, 900 / marks.length);
     let delay = 0, index = 0;
     for (const el of body.querySelectorAll(`${MARKS}, .claim-badge`)) {
-      if (el.matches(MARKS)) delay = Math.round(index++ * step);
-      el.style.setProperty('--cx-reveal-delay', `${el.matches(MARKS) ? delay : delay + 260}ms`);
+      const mark = el.matches(MARKS);
+      if (mark) delay = Math.round(index++ * step);
+      el.style.setProperty('--cx-reveal-delay', `${Math.round((mark ? delay : delay + 260) - elapsed)}ms`);
     }
+    body._revealTotal = delay + 900;
     body.classList.add('is-marks-revealing');
     clearTimeout(body._revealTimer);
     body._revealTimer = setTimeout(() => {
       body.classList.remove('is-marks-revealing');
       for (const el of body.querySelectorAll('[style*="--cx-reveal-delay"]')) el.style.removeProperty('--cx-reveal-delay');
-    }, delay + 900);
+    }, Math.max(0, body._revealTotal - elapsed));
   }
   function render(body, review, evidence = {}) {
     if (!body?.parentElement) return;
@@ -391,6 +402,19 @@
         return panel;
       };
       context.mark = () => {
+        // Same text, check, sources and DOM: keep the marked DOM. Rebuilding
+        // it on every live update restarted the reveal and hover state.
+        const markSignature = JSON.stringify([raw, context.key, check?.differences_data || null, sources,
+          body._agentRenderSerial || 0]);
+        if (body._markSignature === markSignature && body.querySelector('.cx-claim')) {
+          // The evidence row was rebuilt: its key-claims list moves along.
+          const previous = body._markFallback;
+          if (previous && previous !== fallback) { fallback.replaceChildren(...previous.childNodes); fallback.hidden = previous.hidden; }
+          body._markFallback = fallback;
+          return;
+        }
+        body._markSignature = markSignature;
+        body._markFallback = fallback;
         fallback.replaceChildren(); fallback.hidden = true;
         if (typeof raw === "string") window.injectMarkdown?.(body, raw, []);
         if (check?.differences_data) window.renderStoredConsensusClaims?.(body, check.differences_data, fallback, sources, {

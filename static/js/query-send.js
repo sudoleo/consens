@@ -857,16 +857,31 @@
     return Boolean(context && registry.isExecuting(context.runId));
   }
 
+  const SEND_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5.5M6 11.5l6-6 6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>';
+  const STOP_ICON = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="8" y="8" width="8" height="8" rx="1.6"></rect></svg>';
+
   function setSendButtonRunning(running) {
     const button = document.getElementById("sendButton");
     if (!button) return;
+    const state = running ? "stop" : "send";
+    // Many projections call this per second; only a real change swaps the
+    // icon, so its entry animation plays once instead of on every update.
+    if (button.dataset.icon !== state) {
+      if (running && button.dataset.icon === "send") {
+        // The question fans out: three arcs leave the button (shell.css).
+        button.classList.remove("is-launching");
+        void button.offsetWidth;
+        button.classList.add("is-launching");
+        clearTimeout(button._launchTimer);
+        button._launchTimer = setTimeout(() => button.classList.remove("is-launching"), 800);
+      }
+      button.dataset.icon = state;
+      button.innerHTML = running ? STOP_ICON : SEND_ICON;
+    }
     button.disabled = false;
     button.classList.toggle("is-cancel-action", running);
     button.title = running ? "Cancel this run" : "Send question";
     button.setAttribute("aria-label", button.title);
-    button.innerHTML = running
-      ? '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="8" y="8" width="8" height="8" rx="1.3"></rect></svg>'
-      : '<svg viewBox="0 0 24 24" aria-hidden="true" style="width:13px;height:13px"><path d="M3.4 3.6 21 12 3.4 20.4 7 12z" fill="currentColor"></path></svg>';
     if (!running) window.updateQuestionInputAccess?.();
   }
 

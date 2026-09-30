@@ -231,6 +231,10 @@ auch wenn eine Quellenprüfung noch läuft, und streichen sich beim ersten Mal i
 Lesereihenfolge an wie ein Textmarker (höchstens etwa 0,9 s Versatz, Badges
 folgen). Erneutes Rendern derselben Antwort und gespeicherte Chats zeigen sie ohne
 Animation; Reduced Motion und Forced Colors verzichten auf beides.
+Rund um die Antwort gilt ein Farbsystem: Antworttext `--ink`; Thinking samt
+Verlauf und Tools, Aktionen und Evidenzlinks `--ink-2` (Hover `--ink`, Aktionen
+einheitlich Gewicht 500); Zähler und Metatext `--ink-3`. Es gibt kein separates
+Schwarz mehr.
 Unter der Antwort stehen ein kompakter Prüfstatus und Links zu Widersprüchen,
 Einzelantworten und Quellen. Rote Textmarkierungen öffnen unmittelbar die
 passende Widerspruchskarte im gemeinsamen Consensus-Antwortleser. Modelllinks

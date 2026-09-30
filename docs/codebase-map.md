@@ -873,7 +873,8 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   Kontos). Sonst hinge an jedem Seitenaufruf ein Firestore-Read für ein Panel,
   das die meisten nie öffnen.
   `memory-edit.js` bietet nach einer Textauswahl in aktiver/archivierter
-  Frage, Consensus oder Modellantwort das app-native Kontextmenü **Ask about
+  Frage, Consensus (`#consensusAnswerBody`, `#agentAnswerBody`,
+  `.thread-history-answer`) oder Modellantwort das app-native Kontextmenü **Ask about
   this | Remember | Correct memory** an (die erste Aktion gehört
   `composer-quote.js` und braucht kein Konto; ohne Konto bleiben die beiden
   Memory-Aktionen samt Trenner weg). Der Dialog besitzt Quellvorschau, Fokusfalle,
@@ -2064,7 +2065,12 @@ identische Tool-Wiederholungen verwenden das gespeicherte Ergebnis. Die fertige
 Synthese und ihre Vergleichsgrundlagen bleiben für diesen Turn fest. Bei Abbruch
 bleiben keine aktiven Befunde stehen. Recovery spielt nur den gespeicherten Snapshot ab.
 `agent-review.js` bindet diese Ergebnisse an dieselben Widerspruchskarten im
-Answer Reader. `agent-chat.js::project` rendert den Review schon während des
+Answer Reader. `context.mark` baut das markierte DOM nur bei geändertem Text,
+Check, Quellen oder `_agentRenderSerial` neu (sonst würde jede Live-Aktualisierung
+die Animation neu starten); `revealMarks` setzt eine laufende Animation nach einem
+neuen DOM über negative Verzögerungen fort. `query-send.js::setSendButtonRunning`
+tauscht das Icon nur bei echtem Zustandswechsel (`data-icon`) und setzt beim Start
+eines Laufs einmal `is-launching` (drei Bögen fächern aus, `shell.css`). `agent-chat.js::project` rendert den Review schon während des
 Laufs, sobald er `succeeded`/`partial` ist (Quellenprüfung darf weiterlaufen);
 davor setzt `setAnswerChecking` `.is-answer-checking` (Schimmer) auf
 `#agentAnswerBody`. `renderAnswer` zählt `_agentRenderSerial` hoch, damit ein

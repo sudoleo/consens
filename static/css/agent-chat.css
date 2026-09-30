@@ -224,7 +224,8 @@ body.single-agent-active .chat-input-container .consensus-switch-container { max
 .agent-composer-notice[hidden], .agent-answer-actions[hidden], .agent-answer-actions [hidden], .agent-composer-notice [hidden] { display: none; }
 .agent-composer-notice button { border: 0; padding: 4px 0; background: transparent; color: var(--ink); font: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 .agent-answer-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 12px; margin: 12px 0 0; color: var(--ink-3); font-size: 12px; }
-.agent-answer-actions button, .agent-evidence-links .agent-evidence-link { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 6px 8px; border: 0; border-radius: 6px; background: transparent; color: var(--ink-2); font: inherit; font-size: 12px; text-decoration: none; cursor: pointer; }
+.agent-answer-actions button, .agent-evidence-links .agent-evidence-link { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 6px 8px; border: 0; border-radius: 6px; background: transparent; color: var(--ink-2); font: inherit; font-size: 12px; font-weight: 500; text-decoration: none; cursor: pointer; transition: background-color .15s ease, color .15s ease; }
+.agent-evidence-links .consensus-tab-count { color: var(--ink-3); font-weight: 400; }
 .agent-answer-actions button:first-child { margin-left: -8px; }
 .agent-answer-actions button:hover, .agent-evidence-links .agent-evidence-link:hover { background: var(--raise); color: var(--ink); }
 .agent-answer-actions button[aria-disabled="true"] { cursor: default; opacity: .6; }
@@ -284,7 +285,7 @@ body.single-agent-active .consensus-model-inline .model-picker-display::after {
 .agent-review .claims-fallback-row .claim-badge { margin: 0; }
 .thread-history-footer[hidden] { display: none; }
 .agent-review-summary { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px; margin-bottom: 6px; }
-.agent-review-status { color: var(--ink-3); font-weight: 400; }
+.agent-review-status { color: var(--ink-2); font-weight: 400; }
 .agent-review-status::before { content: ''; display: inline-block; width: 5px; height: 5px; margin: 0 7px 2px 0; border-radius: 50%; background: var(--ink-3); }
 .agent-review-status[data-state="succeeded"]::before { background: #438b75; }
 .agent-review-status:is([data-state="partial"], [data-state="failed"], [data-state="missing"])::before { background: #b58c48; }
@@ -320,9 +321,13 @@ body.single-agent-active .consensus-model-inline .model-picker-display::after {
 }
 
 /* Softer trace paragraphs; high-contrast steps carry the active reflection. */
-.agent-activity, .agent-progress { --agent-ink: #000; --agent-trace-ink: #55585e; }
-.dark-mode :is(.agent-activity, .agent-progress) { --agent-ink: #fff; --agent-trace-ink: #b9bdc3; }
-.agent-activity { margin: 0 0 18px; color: var(--ink-3); font-size: 13px; }
+/* One colour system around the answer: the answer itself is --ink; everything
+   that frames it (Thinking, its trace and tools, the actions and evidence
+   links underneath) is --ink-2 and turns --ink on hover; counts and small
+   meta text are --ink-3. Hierarchy inside comes from weight and size, never
+   from a second black. Tokens carry light and dark mode. */
+.agent-activity, .agent-progress { --agent-ink: var(--ink-2); --agent-trace-ink: var(--ink-2); }
+.agent-activity { margin: 0 0 18px; color: var(--ink-2); font-size: 13px; }
 .agent-activity > summary {
   display: flex; flex-wrap: wrap; align-items: center; gap: 9px; width: fit-content; max-width: 100%;
   min-height: 36px; padding: 4px 4px 4px 0; box-sizing: border-box; list-style: none;
@@ -358,7 +363,8 @@ body.single-agent-active .consensus-model-inline .model-picker-display::after {
     .agent-current-status,
     .agent-activity.is-running .agent-activity-tool[data-status="running"] > strong {
       width: fit-content; max-width: 100%;
-      background-image: linear-gradient(105deg, var(--agent-ink) 43%, #767676 50%, var(--agent-ink) 57%);
+      background-image: linear-gradient(105deg, var(--agent-ink) 43%,
+        color-mix(in srgb, var(--agent-ink) 45%, var(--bg-color, #fff)) 50%, var(--agent-ink) 57%);
       background-size: 250% 100%; background-clip: text; -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
       animation: source-label-shine 2.4s linear infinite;
@@ -457,10 +463,10 @@ body.single-agent-active .consensus-model-inline .model-picker-display::after {
 @media (prefers-reduced-motion: no-preference) and (forced-colors: none) {
   #agentAnswerBody:is(.is-answer-checking, .is-answer-check-done)::after {
     content: ''; position: absolute; inset: -2px -6px; pointer-events: none; border-radius: 6px;
-    background-image: linear-gradient(105deg, transparent 40%,
-      color-mix(in srgb, var(--bg-color, #fff) 58%, transparent) 50%, transparent 60%);
+    background-image: linear-gradient(105deg, transparent 38%,
+      color-mix(in srgb, var(--bg-color, #fff) 40%, transparent) 50%, transparent 62%);
     background-size: 250% 100%;
-    animation: source-label-shine 2.4s linear infinite, agent-answer-sheen-in .5s ease backwards;
+    animation: source-label-shine 2.8s linear infinite, agent-answer-sheen-in .5s ease backwards;
     transition: opacity .45s ease;
   }
   #agentAnswerBody.is-answer-check-done::after { opacity: 0; }
