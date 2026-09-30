@@ -308,7 +308,8 @@ def test_comparison_review_and_saved_projection(browser, phase4_server, width, d
         assert any('kimi.svg' in src for src in icons)
         assert any('zai.svg' in src for src in icons)
         assert any('meta.svg' in src for src in icons)
-        page.locator('.agent-sidebar-close').click()
+        if page.locator('#agentSidebar').is_visible():
+            page.locator('.agent-sidebar-close').click()
         page.mouse.move(0, 0)
         details = page.locator('#agentAnswerActivity details')
         details.locator('.agent-activity-title').click()

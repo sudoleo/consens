@@ -13,11 +13,70 @@ function boot(fetcher) {
       : { agents: [agent()], status: "running", usage: { estimated_cost_nano_usd: 900000, cost_source: "provider", complete: true } } })));
   } });
 }
+function bootNarrow(fetcher) {
+  return loadScripts(["static/js/request-deadline.js", "static/js/agent-delegation.js"], { body: '<div id="agentAnswerActivity"><details><summary></summary></details></div>', before(w) {
+    w.matchMedia = query => ({ matches: false, media: query, addEventListener() {}, removeEventListener() {} });
+    w.auth = { currentUser: { uid: "owner", getIdToken: async () => "token" } };
+    w.App = { runRegistry: { isAuthCurrent: c => c.auth.uid === w.auth.currentUser.uid } };
+    w.fetch = vi.fn(fetcher || (async () => ({ ok: true, json: async () => ({ agents: [agent()], status: "running" }) })));
+  } });
+}
 function receive(w, data) {
   w.App.agentDelegation.receive({ metadata: { chatId }, auth: { uid: "owner" } }, { version: 1, chat_id: chatId, turn_id: turnId, agent: data });
 }
 
 describe("Agent sidebar", () => {
+  it('stops its 2.5 s tick once nothing runs and never starts one for a saved turn', async () => {
+    const {window:w,dom} = boot(async () => ({ok:true,json:async () => ({agents:[agent(1,'completed')],status:'succeeded'})}));
+    receive(w, agent());
+    w.App.agentDelegation.project({chatId,turnId,running:true});
+    expect(w.App.agentDelegation.isTicking()).toBe(true);
+    w.App.agentDelegation.project({chatId,turnId,running:false});
+    // Settling keeps one repair load; its terminal status ends the timer.
+    await vi.waitFor(() => expect(w.App.agentDelegation.isTicking()).toBe(false));
+    w.App.agentDelegation.project({chatId:'e'.repeat(32),turnId,running:false});
+    await vi.waitFor(() => expect(w.fetch).toHaveBeenCalledTimes(2));
+    expect(w.App.agentDelegation.isTicking()).toBe(false);
+    w.App.agentDelegation.project(null);
+    expect(w.App.agentDelegation.isTicking()).toBe(false);
+    dom.window.close();
+  });
+  it('opens as a sheet only on request under 1200 px, with a scrim and a focus trap', () => {
+    const {window:w,document:d,dom} = bootNarrow();
+    receive(w, agent());
+    w.App.agentDelegation.project({chatId,turnId,running:true});
+    const sidebar = d.getElementById('agentSidebar');
+    const toggle = d.querySelector('.agent-sidebar-toggle');
+    expect(sidebar.hidden).toBe(true);
+    expect(toggle.hidden).toBe(false);
+    expect(toggle.getAttribute('aria-controls')).toBe('agentSidebar');
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    toggle.click();
+    expect(sidebar.hidden).toBe(false);
+    expect(sidebar.getAttribute('role')).toBe('dialog');
+    expect(sidebar.getAttribute('aria-modal')).toBe('true');
+    const scrim = d.querySelector('.agent-sidebar-scrim');
+    expect(scrim.hidden).toBe(false);
+    scrim.click();
+    expect(sidebar.hidden).toBe(true);
+    expect(scrim.hidden).toBe(true);
+    expect(d.activeElement).toBe(toggle);
+    dom.window.close();
+  });
+  it('does not rewrite row titles or status text when nothing changed', () => {
+    const {window:w,document:d,dom} = boot(async () => ({ok:true,json:async () => ({agents:[],status:'running'})}));
+    receive(w, agent());
+    w.App.agentDelegation.project({chatId,turnId,running:true});
+    const tokens = d.querySelector('.agent-session-tokens');
+    const summary = d.querySelector('.agent-session summary');
+    expect(summary.getAttribute('aria-describedby')).toBe(d.querySelector('.agent-session-state').id);
+    expect(summary.hasAttribute('title')).toBe(false);
+    const writes = [];
+    new w.MutationObserver(records => writes.push(...records)).observe(tokens, {attributes:true, childList:true, characterData:true, subtree:true});
+    receive(w, agent());
+    w.App.agentDelegation.project({chatId,turnId,running:true});
+    return Promise.resolve().then(() => { expect(writes).toHaveLength(0); dom.window.close(); });
+  });
   it('keeps model icons and keyboard focus stable as statuses and same-model calls change', () => {
     const {window:w,document:d,dom} = boot(async () => ({ok:true,json:async () => ({agents:[],status:'running'})}));
     receive(w, agent()); w.App.agentDelegation.project({chatId,turnId,running:true});

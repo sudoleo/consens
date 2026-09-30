@@ -629,12 +629,14 @@
     const basis = registry.getSelectedConversationBasis({ includeHistory: false });
     const bookmarkId = context?.bookmark.id || basis?.bookmarkId;
     document.querySelectorAll('.bookmark.needs-review').forEach(row => {
-      if (!count || row.dataset.id !== bookmarkId) row.classList.remove('needs-review');
+      if (count && row.dataset.id === bookmarkId) return;
+      row.classList.remove('needs-review');
+      if (row.title === 'Needs review') row.removeAttribute('title');
     });
     if (count && bookmarkId) {
       document.querySelectorAll(`.bookmark[data-id="${cssId(bookmarkId)}"]`).forEach(row => {
         row.classList.add('needs-review');
-        row.dataset.reviewLabel = 'Needs review';
+        if (!row.title) row.title = 'Needs review';
       });
     }
     const title = document.title.replace(/^\(\d+\) /, '');
