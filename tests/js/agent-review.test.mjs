@@ -291,3 +291,47 @@ it('keeps Copy in the evidence row across re-renders and hands it back when the 
   expect(body.nextElementSibling).toBe(bar);
   dom.window.close();
 });
+it('strokes the marks on once, in reading order, when a live answer is first checked', () => {
+  vi.useFakeTimers();
+  const {window: w, document: d, dom} = setup();
+  const body = d.getElementById('answer');
+  body.dataset.markdown = 'Exact answer.';
+  w.matchMedia = () => ({ matches: false });
+  w.renderStoredConsensusClaims = vi.fn(el => {
+    el.innerHTML = '<span class="cx-claim is-unanimous">One.</span> <span class="claim-badge">2/2</span>'
+      + ' <span class="cx-claim is-major">Two.</span>';
+  });
+  const review = snapshot();
+  w.App.agentReview.render(body, review, { reveal: true });
+  expect(body.classList.contains('is-marks-revealing')).toBe(true);
+  const [first, badge, second] = body.querySelectorAll('.cx-claim, .claim-badge');
+  expect(first.style.getPropertyValue('--cx-reveal-delay')).toBe('0ms');
+  expect(parseInt(badge.style.getPropertyValue('--cx-reveal-delay'))).toBeGreaterThan(0);
+  expect(parseInt(second.style.getPropertyValue('--cx-reveal-delay'))).toBeGreaterThan(0);
+  vi.runAllTimers();
+  expect(body.classList.contains('is-marks-revealing')).toBe(false);
+  expect(first.getAttribute('style') || '').not.toContain('--cx-reveal-delay');
+  // The same answer re-rendered (fresh DOM at the end of the run) shows its
+  // marks at once instead of replaying the reveal.
+  body._agentRenderSerial = 1;
+  w.App.agentReview.render(body, review, { reveal: true });
+  expect(w.renderStoredConsensusClaims).toHaveBeenCalledTimes(2);
+  expect(body.classList.contains('is-marks-revealing')).toBe(false);
+  vi.useRealTimers();
+  dom.window.close();
+});
+it('shows marks without animation for saved answers and reduced motion', () => {
+  const {window: w, document: d, dom} = setup();
+  const body = d.getElementById('answer');
+  body.dataset.markdown = 'Exact answer.';
+  w.renderStoredConsensusClaims = vi.fn(el => { el.innerHTML = '<span class="cx-claim is-unanimous">One.</span>'; });
+  w.App.agentReview.render(body, snapshot());
+  expect(body.classList.contains('is-marks-revealing')).toBe(false);
+  const other = snapshot(); other.answer_hash = other.versions[0].hash = 'other-hash';
+  other.checks.forEach(c => { c.answer_hash = 'other-hash'; });
+  w.matchMedia = () => ({ matches: true });
+  w.App.agentReview.render(body, other, { reveal: true });
+  expect(body.querySelector('.cx-claim')).not.toBeNull();
+  expect(body.classList.contains('is-marks-revealing')).toBe(false);
+  dom.window.close();
+});

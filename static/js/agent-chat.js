@@ -333,6 +333,7 @@
       App.agentWorkspace?.refresh(basis.chatId);
       App.agentGoogle?.refreshActions?.(basis.chatId);
       const failure = basis.currentTurn?.agent_failure;
+      setAnswerChecking(document.getElementById("agentAnswerBody"), false, { fade: false });
       renderAnswer(basis.consensus || "", failure?.error ? failureNotice(failure, basis.currentTurn?.agent_review, basis.consensus || "")
         : (basis.currentTurn?.status === 'failed' ? 'This response did not finish successfully.' : ''));
       App.agentActivity?.renderTurn(activityHost(`${basis.chatId}:${basis.turnId}`), basis.currentTurn);
@@ -365,11 +366,23 @@
         window.resetMarkdownStream?.(body);
         window.injectMarkdown?.(body, text, []);
       }
+      // A fresh DOM has no claim marks; the review renderer re-applies them.
+      body._agentRenderSerial = (body._agentRenderSerial || 0) + 1;
       // Animate the start of an answer once, never each streamed text chunk.
       if (!text.trim()) body._agentReveal?.cancel();
       else if (entering) body._agentReveal = App.agentActivity?.reveal(body);
     }
     renderError(typeof error === 'string' ? { text: error } : error);
+  }
+  // While the judges check the fixed answer a quiet sheen passes over it, so
+  // the reader sees below the fold that something is still happening. It
+  // fades out instead of switching off when the marks arrive.
+  function setAnswerChecking(body, checking, { fade = true } = {}) {
+    if (!body || body.classList.contains('is-answer-checking') === checking) return;
+    body.classList.toggle('is-answer-checking', checking);
+    clearTimeout(body._answerCheckFade);
+    body.classList.toggle('is-answer-check-done', !checking && fade);
+    if (!checking && fade) body._answerCheckFade = setTimeout(() => body.classList.remove('is-answer-check-done'), 450);
   }
   function renderError(error) {
     const errorEl = document.getElementById("agentAnswerError");
@@ -481,10 +494,20 @@
     });
     // Evidence links and Copy belong to a finished answer. While the run
     // streams they are only cleared once, when this run takes over the view.
-    if (!running || framed) {
-      App.agentReview?.render(document.getElementById("agentAnswerBody"), running ? null : state.completedTurn?.agent_review || context.metadata.agentReview,
-        { sources: state.completedTurn?.sources, events: running ? [] : state.completedTurn?.agent_activity || context.metadata.agentActivity,
-          key: state.completedTurn?.id || context.runId, question: context.question });
+    // A checked answer shows its marks at once, even while a source check
+    // still runs: waiting for the end of the run made them appear late.
+    const answerBody = document.getElementById("agentAnswerBody");
+    const liveReview = context.metadata.agentReview;
+    const fixed = running && Boolean((state.text || state.streamText || '').trim()) && Boolean(liveReview?.versions?.length);
+    const checking = fixed && ['required', 'running'].includes(liveReview.status);
+    const checked = fixed && ['succeeded', 'partial'].includes(liveReview.status);
+    setAnswerChecking(answerBody, checking);
+    if (checking) context.metadata.revealMarks = true;
+    if (!running || framed || checked) {
+      const live = running && !checked;
+      App.agentReview?.render(answerBody, live ? null : state.completedTurn?.agent_review || liveReview,
+        { sources: state.completedTurn?.sources, events: live ? [] : state.completedTurn?.agent_activity || context.metadata.agentActivity,
+          key: state.completedTurn?.id || context.runId, question: context.question, reveal: Boolean(context.metadata.revealMarks) });
       App.agentAnswerActions?.render(document.getElementById('agentAnswerBody'), {
         key: context.runId, text: state.text || state.streamText || '', running,
       });

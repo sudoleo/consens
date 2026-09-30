@@ -228,6 +228,28 @@
     if (count !== null) button.append(node('span', 'consensus-tab-count', String(count)));
     return button;
   }
+  // The first time a live answer receives its marks they stroke on in reading
+  // order, like a marker pen going over the text (the landing page's gesture).
+  // Later re-renders of the same answer show them at once.
+  const MARKS = '.cx-claim:is(.is-thin, .is-unanimous, .is-minor, .is-split, .is-major)';
+  function revealMarks(body, hash) {
+    const marks = [...body.querySelectorAll(MARKS)];
+    if (!marks.length || body._revealedMarks === hash) return;
+    body._revealedMarks = hash;
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+    const step = Math.min(38, 900 / marks.length);
+    let delay = 0, index = 0;
+    for (const el of body.querySelectorAll(`${MARKS}, .claim-badge`)) {
+      if (el.matches(MARKS)) delay = Math.round(index++ * step);
+      el.style.setProperty('--cx-reveal-delay', `${el.matches(MARKS) ? delay : delay + 260}ms`);
+    }
+    body.classList.add('is-marks-revealing');
+    clearTimeout(body._revealTimer);
+    body._revealTimer = setTimeout(() => {
+      body.classList.remove('is-marks-revealing');
+      for (const el of body.querySelectorAll('[style*="--cx-reveal-delay"]')) el.style.removeProperty('--cx-reveal-delay');
+    }, delay + 900);
+  }
   function render(body, review, evidence = {}) {
     if (!body?.parentElement) return;
     const version = review?.versions?.find(v => v.id === review.answer_version);
@@ -266,7 +288,7 @@
     }
     const exact = !!version && raw === version.text && version.hash === review.answer_hash;
     const boundCheck = comparison => currentCheck(review, comparison, raw);
-    const signature = JSON.stringify([review, raw, exact, turnSources]);
+    const signature = JSON.stringify([review, raw, exact, turnSources, body._agentRenderSerial || 0]);
     if (host.dataset.signature === signature) {
       activityContexts.set(review, host._contexts);
       window.linkifyAgentSources?.(body, turnSources); return;
@@ -407,6 +429,7 @@
       label.append(picker); summary.append(label);
     }
     select(chosen);
+    if (evidence.reveal) revealMarks(body, review.answer_hash);
     summary.hidden = [...summary.children].every(child => child.hidden);
     keepActions(host, actions);
     if (body.classList.contains('thread-history-answer-body')) {

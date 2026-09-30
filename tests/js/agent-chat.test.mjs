@@ -1204,6 +1204,44 @@ describe("single-model agent chat", () => {
     dom.window.close();
   });
 
+  it('lets the fixed answer shimmer while it is checked and shows its marks as soon as the check ends', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const { window: w, document: d, dom } = boot();
+    await selectAgent(w);
+    w.renderMarkdownStream = vi.fn((el, md) => { el.textContent = md; });
+    w.resetMarkdownStream = vi.fn();
+    w.injectMarkdown = vi.fn((el, md) => { el.textContent = md; });
+    w.App.agentReview = { render: vi.fn(), renderActivity: vi.fn() };
+    w.App.agentAnswerActions = { render: vi.fn() };
+    let handlers, resolve;
+    w.streamSSERequest = vi.fn((_u, _p, _s, received) => { handlers = received; return new Promise(r => { resolve = r; }); });
+    d.getElementById('questionInput').value = 'Question';
+    const pending = w.App.agentChat.send();
+    await vi.waitFor(() => expect(handlers).toBeDefined());
+    const run = w.App.runRegistry.visible();
+    const body = d.getElementById('agentAnswerBody');
+    handlers.delta.append('Answer.');
+    const version = { id: 1, text: 'Answer.', hash: 'h' };
+    handlers.review.receive({ review: { status: 'running', answer_version: 1, answer_hash: 'h', versions: [version], comparisons: [{ id: 'c' }] } });
+    w.App.agentChat.project(run);
+    expect(body.classList.contains('is-answer-checking')).toBe(true);
+    expect(w.App.agentReview.render).not.toHaveBeenCalledWith(body, expect.objectContaining({ status: 'running' }), expect.anything());
+    // Checks done while a source check still runs: marks now, with the reveal.
+    handlers.review.receive({ review: { status: 'succeeded', answer_version: 1, answer_hash: 'h', versions: [version], comparisons: [{ id: 'c' }] } });
+    w.App.agentChat.project(run);
+    expect(body.classList.contains('is-answer-checking')).toBe(false);
+    expect(body.classList.contains('is-answer-check-done')).toBe(true);
+    expect(w.App.agentReview.render).toHaveBeenLastCalledWith(body, expect.objectContaining({ status: 'succeeded' }),
+      expect.objectContaining({ reveal: true }));
+    vi.advanceTimersByTime(500);
+    expect(body.classList.contains('is-answer-check-done')).toBe(false);
+    resolve({ ok: true, data: { response: 'Answer.', chat_id: 'a'.repeat(32), turn_id: 'b'.repeat(32),
+      turn: { id: 'b'.repeat(32), consensus: 'Answer.', execution_mode: 'agent' }, bookmark_meta: { id: 'saved' } } });
+    await pending;
+    vi.useRealTimers();
+    dom.window.close();
+  });
+
   it('restores the draft without a recovery or failed row when the server refuses before starting', async () => {
     const { window: w, document: d, dom } = boot();
     await selectAgent(w);

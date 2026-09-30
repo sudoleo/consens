@@ -2064,7 +2064,12 @@ identische Tool-Wiederholungen verwenden das gespeicherte Ergebnis. Die fertige
 Synthese und ihre Vergleichsgrundlagen bleiben für diesen Turn fest. Bei Abbruch
 bleiben keine aktiven Befunde stehen. Recovery spielt nur den gespeicherten Snapshot ab.
 `agent-review.js` bindet diese Ergebnisse an dieselben Widerspruchskarten im
-Answer Reader; `sourceVerification.render` akzeptiert dafür explizite
+Answer Reader. `agent-chat.js::project` rendert den Review schon während des
+Laufs, sobald er `succeeded`/`partial` ist (Quellenprüfung darf weiterlaufen);
+davor setzt `setAnswerChecking` `.is-answer-checking` (Schimmer) auf
+`#agentAnswerBody`. `renderAnswer` zählt `_agentRenderSerial` hoch, damit ein
+neu injizierter Text seine Marken wieder erhält; `revealMarks` animiert sie nur
+beim ersten Auftreten je `answer_hash` (`evidence.reveal`); `sourceVerification.render` akzeptiert dafür explizite
 `differenceCards`. Veraltete Antwort-/Grundlagenbindungen werden nicht angezeigt.
 
 Die serverseitigen Antwortversionen enthalten Text, SHA-256, Vergleichs-IDs und

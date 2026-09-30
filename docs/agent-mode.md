@@ -223,6 +223,14 @@ zeigt sie die gemessene Summe aus Input und Output. Es werden keine Tokens aus
 Zeichen geschätzt. Nach Abschluss/Abbruch endet die Animation; gespeicherte
 Ansichten bleiben statisch. Reduced Motion und Forced Colors deaktivieren den
 Schimmer.
+Während Differences und Coverage die feste Antwort prüfen, läuft ein leichter
+Lichtschimmer im Takt der Thinking-Überschrift über die Antwort (Overlay in
+Seitenfarbe, kein Textverlauf, damit Tabellen, Code und Links lesbar bleiben);
+er blendet aus, sobald die Prüfung endet. Die Markierungen erscheinen dann sofort,
+auch wenn eine Quellenprüfung noch läuft, und streichen sich beim ersten Mal in
+Lesereihenfolge an wie ein Textmarker (höchstens etwa 0,9 s Versatz, Badges
+folgen). Erneutes Rendern derselben Antwort und gespeicherte Chats zeigen sie ohne
+Animation; Reduced Motion und Forced Colors verzichten auf beides.
 Unter der Antwort stehen ein kompakter Prüfstatus und Links zu Widersprüchen,
 Einzelantworten und Quellen. Rote Textmarkierungen öffnen unmittelbar die
 passende Widerspruchskarte im gemeinsamen Consensus-Antwortleser. Modelllinks

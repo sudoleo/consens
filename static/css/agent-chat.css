@@ -448,3 +448,33 @@ body.single-agent-active .consensus-model-inline .model-picker-display::after {
 
 /* Files, attachments and document versions: agent-workspace.css. */
 /* Google connection, consent and action cards: agent-google.css. */
+
+/* Answer check: a quiet light band passes over the fixed answer while the
+   judges run, in the rhythm of the Thinking header. It is an overlay in the
+   page colour, not a text gradient, so tables, code and links stay readable.
+   It fades out as the marks arrive. */
+#agentAnswerBody:is(.is-answer-checking, .is-answer-check-done) { position: relative; }
+@media (prefers-reduced-motion: no-preference) and (forced-colors: none) {
+  #agentAnswerBody:is(.is-answer-checking, .is-answer-check-done)::after {
+    content: ''; position: absolute; inset: -2px -6px; pointer-events: none; border-radius: 6px;
+    background-image: linear-gradient(105deg, transparent 40%,
+      color-mix(in srgb, var(--bg-color, #fff) 58%, transparent) 50%, transparent 60%);
+    background-size: 250% 100%;
+    animation: source-label-shine 2.4s linear infinite, agent-answer-sheen-in .5s ease backwards;
+    transition: opacity .45s ease;
+  }
+  #agentAnswerBody.is-answer-check-done::after { opacity: 0; }
+  /* The marks stroke on in reading order; badges settle in behind them. */
+  #agentAnswerBody.is-marks-revealing .cx-claim:is(.is-thin, .is-unanimous, .is-minor, .is-split, .is-major) {
+    background-color: transparent;
+    background-image: linear-gradient(var(--cx-mark), var(--cx-mark));
+    background-repeat: no-repeat;
+    animation: agent-mark-stroke .62s cubic-bezier(.25, .75, .3, 1) var(--cx-reveal-delay, 0ms) backwards;
+  }
+  #agentAnswerBody.is-marks-revealing .claim-badge {
+    animation: agent-mark-badge .34s ease-out var(--cx-reveal-delay, 0ms) backwards;
+  }
+}
+@keyframes agent-answer-sheen-in { from { opacity: 0; } }
+@keyframes agent-mark-stroke { from { background-size: 0% 100%; } to { background-size: 100% 100%; } }
+@keyframes agent-mark-badge { from { opacity: 0; transform: translateY(2px) scale(.9); } }
