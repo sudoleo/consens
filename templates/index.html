@@ -493,19 +493,6 @@
               </span>
             </span>
           </label>
-          <!-- Agent Mode nutzt dieselbe Zeile und denselben Switch-Look wie
-               Deep Think, ist aber bewusst kein Pro-Feature. -->
-          <label class="attach-menu-toggle" for="agentModeMenuSwitch" title="Agent Mode">
-            <span class="attach-menu-toggle-icon" aria-hidden="true"></span>
-            <span class="attach-menu-toggle-text">
-              <span class="search-mode-label deep-switch-label">Agent Mode</span>
-              <span class="attach-menu-toggle-sub">Build consensus, differences and claims after all models answer.</span>
-            </span>
-            <span class="switch deep-switch attach-menu-switch">
-              <input type="checkbox" id="agentModeMenuSwitch">
-              <span class="slider"></span>
-            </span>
-          </label>
           <label class="attach-menu-toggle" for="sourceCheckMenuSwitch" title="Check contradictions">
             <svg class="attach-menu-source-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H5v18h14V8Z M14 3v5h5 M8 14l3 3 5-6"/></svg>
             <span class="attach-menu-toggle-text">
@@ -519,16 +506,16 @@
           </label>
         </div>
         <input type="file" id="attachFileInput" accept=".pdf,.docx,.txt,.md,.csv,.png,.jpg,.jpeg,.webp,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown,text/csv,image/png,image/jpeg,image/webp" multiple hidden>
-        <!-- Composer-Zeile: Anhang, EIN Lauf-Schalter ("N models · Preset"),
-             Senden. Agent Mode ist im (+)-Menue und in den Settings erreichbar,
-             der Trash-Button in "New comparison" — der gefuehrte
-             Lauf sagt jetzt selbst, was passiert, statt es hier anzukuendigen.
+        <!-- Composer-Zeile: EIN Modus-Waehler (Compare / Consensus / Agent),
+             Anhang, Lauf-Schalter ("N models · Preset"), Senden. Der Modus
+             gehoert App.runMode (run-mode.js); agent-mode.js rendert Optionen,
+             Sperren je Chat und die Agent-Option nur mit Zugang.
              .consensus-switch-container bleibt als Selektor-Vertrag bestehen. -->
         <div class="consensus-switch-container">
-          <div id="chatExecutionControl" class="chat-execution-control select-wrapper" hidden>
-            <select id="chatExecutionMode" aria-label="Chat mode">
-              <option value="consensus" data-description="Compare perspectives from multiple models">Consensus</option>
-              <option value="agent" data-description="Chat directly with the model you choose">Agent · Beta</option>
+          <div id="runModeControl" class="run-mode-control select-wrapper">
+            <select id="runModeSelect" aria-label="Mode" aria-describedby="composerModeDescription">
+              <option value="compare" data-description="Answers side by side, no consensus.">Compare</option>
+              <option value="consensus" data-description="One answer with its differences and checks." selected>Consensus</option>
             </select>
           </div>
           <button type="button" id="attachTrigger" class="attach-trigger" aria-haspopup="true" aria-expanded="false" aria-controls="attachMenu" title="Add attachment" aria-label="Add attachment">
@@ -575,9 +562,10 @@
       </div>
       <div id="composerModeBar" class="composer-mode-bar" aria-label="Question options and attachments" hidden>
         <div class="composer-mode-controls">
-          <button type="button" id="composerAgentToggle" class="composer-agent-toggle" role="switch" aria-checked="true" aria-label="Agent Mode" aria-describedby="composerModeDescription">
-            <span class="composer-mode-dot" aria-hidden="true"></span>
-            <span class="composer-agent-label">Agent Mode</span><span id="composerAgentState" class="composer-agent-state">On</span>
+          <!-- Only while the phone composer is collapsed (its row with the
+               selector is hidden): shows the mode and opens the same selector. -->
+          <button type="button" id="composerModeChip" class="composer-agent-toggle composer-mode-chip" aria-haspopup="listbox" aria-describedby="composerModeDescription" title="Change mode">
+            <span id="composerModeChipLabel">Consensus</span>
           </button>
           <button type="button" id="composerSourcesToggle" class="composer-agent-toggle composer-tool" role="switch" aria-checked="true" aria-label="Check contradictions" title="Check contradictions · Check contradictions against existing sources for the next consensus">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H5v18h14V8Z M14 3v5h5 M8 14l3 3 5-6"/></svg>
@@ -595,7 +583,7 @@
             <span id="composerModelIcons" class="composer-model-icons"></span>
           </button>
         </div>
-        <p id="composerModeDescription" class="composer-mode-description">Automatic consensus after the models answer.</p>
+        <p id="composerModeDescription" class="composer-mode-description">One answer with its differences and checks.</p>
         <p id="composerComparisonStatus" class="composer-comparison-status" role="status" aria-live="polite" hidden></p>
       </div>
       <div id="agentComposerNotice" class="agent-composer-notice" hidden>
@@ -747,7 +735,7 @@
       <div id="agentModePanel" class="agent-mode-panel" aria-live="polite" aria-hidden="true">
         <div class="agent-mode-header">
           <div class="agent-mode-heading">
-            <span class="agent-mode-kicker">Agent Mode</span>
+            <span class="agent-mode-kicker">Consensus</span>
             <h2 id="agentModeTitle">Selected models</h2>
             <span id="agentModeCollapsedHint" class="agent-mode-collapsed-hint" hidden>expand to configure</span>
           </div>
@@ -755,7 +743,7 @@
             <div id="agentModeTimer" class="agent-mode-timer" aria-live="polite">Elapsed 00:00</div>
             <span id="agentModeAnswered" class="agent-mode-answered" hidden>0/0 answered</span>
             <span id="agentModeCount" class="agent-mode-count">0 models</span>
-            <button type="button" id="agentModeCollapseBtn" class="agent-mode-collapse-btn" aria-expanded="true" title="Collapse Agent Mode panel" aria-label="Collapse Agent Mode panel">
+            <button type="button" id="agentModeCollapseBtn" class="agent-mode-collapse-btn" aria-expanded="true" title="Collapse models panel" aria-label="Collapse models panel">
               <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 7.5 6 4l3.5 3.5"/></svg>
             </button>
           </div>
@@ -1147,16 +1135,21 @@
             aria-labelledby="settingsRunsTitle">
             <div class="settings-category-heading">
               <h3 id="settingsRunsTitle">Runs</h3>
-              <p>What happens after the six models answer.</p>
+              <p>How consens answers your next message.</p>
             </div>
             <div class="settings-group">
               <div class="settings-section">
-                <label for="agentModeSwitch" class="custom-checkbox-label settings-switch-row settings-agent-mode-row">
+                <label for="runModeSetting" class="settings-switch-row settings-choice-row">
                   <span>
-                    <strong>Agent Mode</strong>
-                    <small>Build consensus, differences and claims after the model answers. Turn off for six direct answers only.</small>
+                    <strong>Mode</strong>
+                    <small>What consens does with a new message. Compare shows the answers side by side, Consensus writes one answer with its differences and checks. An open chat keeps its kind; the composer offers the same choice.</small>
                   </span>
-                  <input type="checkbox" id="agentModeSwitch">
+                  <span class="settings-select">
+                    <select id="runModeSetting">
+                      <option value="compare">Compare</option>
+                      <option value="consensus" selected>Consensus</option>
+                    </select>
+                  </span>
                 </label>
               </div>
 
@@ -1167,16 +1160,6 @@
                     <small>Check factual contradictions against existing sources. Saved for the next consensus; results appear in Differences.</small>
                   </span>
                   <input type="checkbox" id="sourceCheckSwitch" checked>
-                </label>
-              </div>
-
-              <div class="settings-section">
-                <label for="autoConsensusToggle" class="custom-checkbox-label settings-switch-row">
-                  <span>
-                    <strong>Auto Consensus</strong>
-                    <small>Follows Agent Mode: on for guided runs, off for direct comparisons.</small>
-                  </span>
-                  <input type="checkbox" id="autoConsensusToggle">
                 </label>
               </div>
             </div>

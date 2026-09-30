@@ -973,7 +973,7 @@ def test_two_runs_keep_payloads_views_and_cancel_controllers_isolated(
         )
         page.evaluate(
             """() => {
-              window.setAgentMode(true, {persist: true});
+              window.App.runMode.set('consensus');
               const included = new Set(["OpenAI", "Mistral"]);
               window.App.modelPrefs.forEach(pref => {
                 window.App.setModelSelectionState(
@@ -1392,7 +1392,7 @@ def test_two_runs_finish_reverse_order_behind_a_saved_bookmark(
         )
         page.evaluate(
             """() => {
-              window.setAgentMode(true, {persist: true});
+              window.App.runMode.set('consensus');
               const included = new Set(["OpenAI", "Mistral"]);
               window.App.modelPrefs.forEach(pref => {
                 window.App.setModelSelectionState(
@@ -1788,16 +1788,12 @@ def test_disabled_agent_mode_is_six_answers_only(browser, phase4_server):
             }),
         )
         page.route("**/bookmark", model_bookmark_route)
-        page.click("#attachTrigger")
-        menu_toggle = page.locator("#agentModeMenuSwitch")
-        menu_toggle_row = page.locator('label[for="agentModeMenuSwitch"]')
-        expect(menu_toggle_row).to_be_visible()
-        expect(menu_toggle).to_be_enabled()
-        expect(menu_toggle).to_be_checked()
-        menu_toggle_row.click()
-        expect(menu_toggle).not_to_be_checked()
-        expect(page.locator("#agentModeSwitch")).not_to_be_checked()
-        expect(page.locator("#autoConsensusToggle")).not_to_be_checked()
+        mode = page.locator("#runModeSelect")
+        expect(mode).to_have_value("consensus")
+        page.locator("#runModeControl .model-picker-display").click()
+        page.locator('#runModeControl [data-value="compare"]').click()
+        expect(mode).to_have_value("compare")
+        expect(page.locator("#runModeSetting")).to_have_value("compare")
         page.fill("#questionInput", "Give me six direct answers only.")
         page.evaluate("() => window.sendQuestion()")
 
@@ -1843,9 +1839,8 @@ def test_disabled_agent_mode_is_six_answers_only(browser, phase4_server):
         expect(page.locator("#consensusOutput")).to_be_hidden()
         expect(page.locator("#consensusAnswerBody .cx-claim")).to_have_count(0)
         expect(page.locator("#differencesCards")).to_be_hidden()
-        auto_toggle = page.locator("#autoConsensusToggle")
-        expect(auto_toggle).not_to_be_checked()
-        expect(auto_toggle).to_be_disabled()
+        # The Compare run itself records that no consensus was asked for.
+        assert page.evaluate("App.runRegistry.visible().config.autoConsensus") is False
         expected_labels = page.evaluate("""() => Object.fromEntries(
             App.runRegistry.visible().config.providers.map(p => [p.provider, p.modelLabel]))""")
         assert bookmark_labels == expected_labels
@@ -1945,7 +1940,7 @@ def test_cancel_during_token_resolution_keeps_followup_and_creates_no_usage_run(
               document.getElementById("selectOpenAI").checked = true;
               document.getElementById("selectMistral").checked = true;
               document.getElementById("questionInput").value = "What changed since yesterday?";
-              window.setAgentMode(true, {persist: true});
+              window.App.runMode.set('consensus');
               window.App.runRegistry.selectConversationBasis({
                 bookmarkId: "followup-bookmark",
                 chatId: "a".repeat(32),

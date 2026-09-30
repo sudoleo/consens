@@ -41,18 +41,17 @@
   };
 
   try {
-    if (localStorage.getItem("agentMode") === null) localStorage.setItem("agentMode", "true");
     if (localStorage.getItem("agentModePanelCollapsed") === null) {
       localStorage.setItem("agentModePanelCollapsed", "false");
     }
   } catch (_) { /* storage unavailable */ }
 
   document.addEventListener("DOMContentLoaded", () => {
-    try {
-      if (localStorage.getItem("agentMode") === "true") {
-        document.body.classList.add("agent-mode-enabled");
-      }
-    } catch (_) { /* storage unavailable */ }
+    // The consensus view is painted before auth resolves; run-mode.js
+    // (earlier in this bundle) owns the stored choice.
+    if (window.App?.runMode?.preference() !== "compare") {
+      document.body.classList.add("agent-mode-enabled");
+    }
     const authTopActions = document.getElementById("authTopActions");
     const authState = window.__consensioAuthState;
     if (authTopActions && !(authState?.known && authState.uid)) {

@@ -93,8 +93,7 @@
     if (consensusRequestRunning) return true;
 
     const agentModeWaitingForResponses =
-      typeof window.isAgentModeEnabled === "function"
-      && window.isAgentModeEnabled()
+      window.App.runMode?.pipeline?.() === true
       && window.isAgentModeRunning();
 
     if (agentModeWaitingForResponses) return false;
@@ -218,27 +217,6 @@
     trackAppEvent("app_consensus_canceled");
   }
 
-  function initAutoConsensusToggle() {
-    const autoConsensusToggle = document.getElementById("autoConsensusToggle");
-    if (!autoConsensusToggle) return;
-
-    const storedAutoConsensus = localStorage.getItem("autoConsensus");
-    if (storedAutoConsensus === null) {
-      autoConsensusToggle.checked = true;
-      localStorage.setItem("autoConsensus", "true");
-    } else {
-      autoConsensusToggle.checked = storedAutoConsensus === "true";
-    }
-
-    autoConsensusToggle.addEventListener("change", function () {
-      localStorage.setItem("autoConsensus", this.checked);
-      trackAppEvent("app_auto_consensus_changed", { enabled: this.checked });
-      if (typeof window.showMobileInfoPopup === "function") {
-        window.showMobileInfoPopup("Auto Consensus automatically generates a consensus after the model responses.");
-      }
-    });
-  }
-
   window.revealConsensusOutput = revealConsensusOutput;
   window.hideConsensusOutput = hideConsensusOutput;
   window.canGenerateConsensus = canGenerateConsensus;
@@ -246,7 +224,6 @@
   window.cancelCurrentConsensus = cancelCurrentConsensus;
 
   window.App.consensusLifecycle = {
-    initAutoConsensusToggle,
     startRun,
     isActiveRun,
     finishRun,

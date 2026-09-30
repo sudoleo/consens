@@ -3,8 +3,7 @@
 // Extrahiert aus templates/index.html (zweiter Inline-Script-Block).
 // Credibility-Frames, Consensus-Insights-Popover, Spalten-Balancer.
 // Kommuniziert ausschliesslich ueber window.* (siehe Exporte am Ende).
-// Abhaengigkeiten (call-time): window.isAgentModeEnabled, window.setAgentMode,
-// window.trackUmamiEvent.
+// Abhaengigkeiten (call-time): window.trackUmamiEvent.
 // =====================================================================
         (function () {
           const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)

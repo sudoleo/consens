@@ -769,7 +769,8 @@
     if (stage === "idle") return;
 
     if (status === "complete") {
-      const autoConsensus = document.getElementById("autoConsensusToggle")?.checked !== false;
+      // What this run asked for, not the choice for the next message.
+      const autoConsensus = window.App?.runRegistry?.visible?.()?.config?.autoConsensus !== false;
       const canGenerate = typeof window.canGenerateConsensus === "function"
         ? window.canGenerateConsensus()
         : true;

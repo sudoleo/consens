@@ -444,7 +444,7 @@ def test_direct_comparison_shares_chat_shell_and_fits_picker(browser, phase4_ser
         init_script=f"localStorage.setItem('theme','{theme}')")
     try:
         page.set_viewport_size({'width':width, 'height':900})
-        page.evaluate('setAgentMode(false, {persist:true})')
+        page.evaluate("App.runMode.set('compare')")
         expect(page.locator('.response-section')).to_be_visible()
         expect(page.locator('#answerReaderPreviewIntro')).to_be_visible()
         assert not page.locator('.response-section').evaluate('el => el.inert')
@@ -508,7 +508,7 @@ def test_direct_comparison_shares_chat_shell_and_fits_picker(browser, phase4_ser
 def test_fresh_agent_mode_session_opens_saved_direct_answers(browser, phase4_server, width, theme):
     import json
     context, page = _real_firebase_page(browser, phase4_server,
-        init_script=f"localStorage.setItem('theme','{theme}');localStorage.setItem('agentMode','true');")
+        init_script=f"localStorage.setItem('theme','{theme}');localStorage.setItem('runMode','consensus');")
     try:
         page.set_viewport_size({'width':width, 'height':900})
         page.route('**/bookmarks/direct-saved', lambda route: route.fulfill(content_type='application/json', body=json.dumps({
@@ -531,8 +531,9 @@ def test_fresh_agent_mode_session_opens_saved_direct_answers(browser, phase4_ser
         expect(page.locator('.answer-reader-body[data-provider="Meta"]')).to_have_text('Define success criteria with the team first.')
         expect(page.locator('#answerReaderTitle')).to_have_text('Direct comparison')
         expect(page.locator('#answerReaderMode')).to_be_hidden()
-        assert page.evaluate("localStorage.getItem('agentMode')") == 'true'
-        expect(page.locator('#agentModeSwitch')).to_be_checked()
+        # Opening a saved direct comparison never changes the choice for the next message.
+        assert page.evaluate("localStorage.getItem('runMode')") == 'consensus'
+        expect(page.locator('#runModeSetting')).to_have_value('consensus')
         page.wait_for_timeout(200)
         expect(page.locator('.is-direct .answer-reader-answer')).to_have_count(3)
         reader_screenshot(page, f'saved-direct-{width}-{theme}')
@@ -550,7 +551,7 @@ def test_fresh_agent_mode_session_opens_saved_direct_answers(browser, phase4_ser
 @pytest.mark.parametrize('agent_mode', [False, True])
 def test_demo_uses_all_balanced_models_and_never_displays_spinner_markup(browser, phase4_server, agent_mode):
     context, page = _real_firebase_page(browser, phase4_server,
-        init_script=f"localStorage.setItem('agentMode','{str(agent_mode).lower()}');")
+        init_script=f"localStorage.setItem('runMode','{'consensus' if agent_mode else 'compare'}');")
     try:
         page.set_viewport_size({'width':1440, 'height':900})
         cdn_dir = os.environ.get('READER_CDN_DIR')
@@ -616,7 +617,7 @@ def test_demo_uses_all_balanced_models_and_never_displays_spinner_markup(browser
                 expect(page.locator('.is-direct .answer-reader-body ul ul')).to_have_count(0)
 
             expect(page.locator('#consensusOutput')).not_to_be_visible()
-        assert page.evaluate("localStorage.getItem('agentMode')") == str(agent_mode).lower()
+        assert page.evaluate("localStorage.getItem('runMode')") == ('consensus' if agent_mode else 'compare')
         reader_screenshot(page, f'demo-balanced-{agent_mode}')
     finally:
         context.close()

@@ -93,7 +93,7 @@ def test_model_rows_restart_empty_on_a_second_run(app_page):
     Zeiten zeigen. Vorher hing hier ein geschaetzter Balken, der das
     "complete" des Vorlaufs las und sofort auf 100 % einrastete."""
     app_page.set_viewport_size({"width": 390, "height": 844})
-    app_page.evaluate("() => window.setAgentMode(true, { persist: true })")
+    app_page.evaluate("() => window.App.runMode.set('consensus')")
 
     _send_question(app_page)
     _wait_for_all_final_answers(app_page)

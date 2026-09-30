@@ -1,9 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { loadScripts } from "./helpers/appWindow.mjs";
 
-const BODY = `<div id="chatExecutionControl" class="select-wrapper"><select id="chatExecutionMode" aria-label="Chat mode">
-  <option value="consensus">Consensus</option><option value="agent">Agent</option></select></div>
-  <textarea id="questionInput"></textarea><div id="threadHistory"></div>
+const BODY = `<textarea id="questionInput"></textarea><div id="threadHistory"></div>
   <input id="compareOpenAI" type="checkbox" checked><select id="compareOpenAIModel"><option value="gpt-5.4-mini">OpenAI</option></select>
   <input id="compareClaude" type="checkbox" checked><select id="compareClaudeModel"><option value="claude-haiku-4-5">Claude</option></select>
   <div id="agentModelControls"><div class="select-wrapper agent-model-picker"><select id="agentModelDropdown" aria-label="Agent model"></select></div>
@@ -18,7 +16,7 @@ const CATALOG = { token_budget: { remaining: 188878, limit: 250000, observed_at:
 ] };
 
 function boot({ allowed = true, catalog = CATALOG } = {}) {
-  const setup = loadScripts(["static/js/run-registry.js", "static/js/model-picker.js", "static/js/request-deadline.js", "static/js/agent-activity.js", "static/js/agent-chat.js"], {
+  const setup = loadScripts(["static/js/run-mode.js", "static/js/run-registry.js", "static/js/model-picker.js", "static/js/request-deadline.js", "static/js/agent-activity.js", "static/js/agent-chat.js"], {
     body: BODY,
     before(window) {
       window.auth = { currentUser: { uid: "owner", getIdToken: async () => "verified" } };
@@ -45,9 +43,9 @@ function boot({ allowed = true, catalog = CATALOG } = {}) {
 }
 
 async function selectAgent(window) {
-  const select = window.document.getElementById("chatExecutionMode");
-  select.value = "agent";
-  select.dispatchEvent(new window.Event("change"));
+  // The one mode choice (run-mode.js); agent-chat.js re-renders on its event.
+  window.App.runMode.set("consensus");
+  window.App.runMode.set("agent");
   if (window.App.agentChat.canUse()) await vi.waitFor(() => expect(window.document.getElementById("agentModelDropdown").disabled).toBe(false));
 }
 
@@ -56,8 +54,7 @@ describe("single-model agent chat", () => {
     const {window:w, document:d, dom} = boot();
     let release;
     w.fetch.mockImplementationOnce(() => new Promise(resolve => { release = resolve; }));
-    const mode = d.getElementById('chatExecutionMode');
-    mode.value = 'agent'; mode.dispatchEvent(new w.Event('change'));
+    w.App.runMode.set('agent');
     expect(w.App.agentChat.sendBlocker().message).toContain('Loading chat models');
     await vi.waitFor(() => expect(release).toBeTypeOf('function'));
     release({ok:false, json:async () => ({})});
@@ -233,8 +230,7 @@ describe("single-model agent chat", () => {
     let timeout;
     w.setTimeout = (fn, ms, ...args) => ms === 15000 ? (timeout = fn, 999) : originalTimer(fn, ms, ...args);
     w.fetch.mockImplementationOnce(() => new Promise(() => {}));
-    d.querySelector('#chatExecutionMode').value = 'agent';
-    d.querySelector('#chatExecutionMode').dispatchEvent(new w.Event('change'));
+    w.App.runMode.set('agent');
     await vi.waitFor(() => expect(timeout).toBeTypeOf('function'));
     await vi.waitFor(() => expect(w.fetch).toHaveBeenCalledTimes(1));
     timeout();
@@ -747,7 +743,8 @@ describe("single-model agent chat", () => {
     const { window, document, dom } = boot({ allowed: false });
     await selectAgent(window);
     expect(window.App.agentChat.isSelected()).toBe(false);
-    expect(document.getElementById("chatExecutionControl").hidden).toBe(true);
+    expect(window.App.runMode.availability().agent.visible).toBe(false);
+    expect(window.App.runMode.effective()).toBe("consensus");
     window.App.agentAccess.allowed = true;
     await selectAgent(window);
     expect(window.App.agentChat.isSelected()).toBe(true);
@@ -773,7 +770,9 @@ describe("single-model agent chat", () => {
     expect(payload).not.toHaveProperty("usage_run_key");
     expect(window.App.runRegistry.visible().status).toBe("succeeded");
     expect(window.App.runRegistry.getSelectedConversationBasis().executionMode).toBe("agent");
-    expect(document.getElementById("chatExecutionMode").disabled).toBe(true);
+    // An open Agent chat keeps its family: Compare and Consensus need a new chat.
+    expect(window.App.runMode.availability().consensus.enabled).toBe(false);
+    expect(window.App.runMode.availability().compare.reason).toBe("Available in a new chat");
     document.getElementById("questionInput").value = "Follow-up";
     await window.App.agentChat.send();
     expect(window.fetch).toHaveBeenCalledTimes(2);
@@ -810,7 +809,8 @@ describe("single-model agent chat", () => {
     await vi.waitFor(() => expect(document.getElementById("agentModelDropdown").disabled).toBe(false));
     window.App.runRegistry.clearVisible();
     expect(window.App.agentChat.isSelected()).toBe(false);
-    expect(document.getElementById("chatExecutionMode").disabled).toBe(false);
+    expect(window.App.runMode.availability().consensus.enabled).toBe(true);
+    expect(window.App.runMode.availability().agent.enabled).toBe(true);
     dom.window.close();
   });
 

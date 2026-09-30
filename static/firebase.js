@@ -410,6 +410,14 @@ async function checkUserStatusOnLoad(user, token, generation) {
   } catch (error) {
     console.error("Fehler beim User-Status Check:", error);
   }
+  // A failed status check must not leave Agent access "pending": the send
+  // guard for a stored Agent choice would block this account for the whole
+  // session. Without a verified answer Agent is unavailable; the mode
+  // selector then shows Consensus, so nothing is sent differently unseen.
+  if (isCurrentAuthenticatedUser(user.uid, generation) && window.App?.agentAccess?.uid !== user.uid) {
+    window.App.agentAccess = { uid: user.uid, allowed: false };
+    window.App.agentChat?.render?.();
+  }
 }
 
 onIdTokenChanged(auth, async (user) => {

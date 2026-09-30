@@ -4270,12 +4270,15 @@ body #loginModalContent .oauth-button:is(:hover, :focus-visible):not(:disabled) 
 .composer-tool svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
 .composer-tool[aria-checked="true"], .composer-tool[aria-checked="true"] .composer-agent-state { color: var(--mode-active); }
 .input-section:has(> .composer-mode-bar:not([hidden])) #deepThinkInputIndicator { display: none; }
-.composer-mode-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ink-3); }
 .composer-agent-state { color: var(--ink-3); font-size: 11px; font-weight: 500; }
+/* The mode chip stands in for the selector only while the phone composer is
+   collapsed; everywhere else the selector itself is in the input row. */
+.composer-mode-chip { display: none; color: var(--mode-active); font-weight: 500; }
+@media (max-width: 1099px) {
+  body.composer-collapsed:not(.is-hero) .composer-mode-chip { display: inline-flex; }
+}
 .composer-mode-bar { --mode-active: #24814b; }
 .dark-mode .composer-mode-bar { --mode-active: #84cc9e; }
-.composer-mode-bar[data-agent-mode="true"] .composer-mode-dot { background: var(--mode-active); box-shadow: 0 0 0 3px color-mix(in srgb, var(--mode-active) 12%, transparent); }
-.composer-mode-bar[data-agent-mode="true"] #composerAgentState { color: var(--mode-active); }
 .composer-mode-models { display: flex; align-items: center; gap: 8px; margin-left: 0; padding: 3px 0; color: var(--ink-3); }
 .composer-model-icons { display: flex; align-items: center; padding-left: 8px; }
 .composer-model-icon {
@@ -4326,8 +4329,6 @@ body #loginModalContent .oauth-button:is(:hover, :focus-visible):not(:disabled) 
   .composer-mode-bar { padding: 0 8px; gap: 8px; font-size: 11px; }
   .composer-mode-controls { gap: 6px; }
   .composer-agent-toggle { gap: 4px; }
-  .composer-agent-label { font-size: 0; }
-  .composer-agent-label::after { content: "Agent"; font-size: 11px; }
   .composer-model-icon { width: 22px; height: 22px; margin-left: -10px; }
   .composer-model-icons { padding-left: 10px; }
   .composer-mode-models { gap: 5px; }

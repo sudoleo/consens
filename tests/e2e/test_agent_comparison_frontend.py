@@ -102,8 +102,9 @@ def test_mobile_agent_plus_menu_opens_tools_from_single_line_composer(browser, p
         page.locator('#attachTrigger').tap()
         expect(page.locator('#attachMenu')).to_be_visible()
         assert page.evaluate("document.body.classList.contains('composer-collapsed')")
-        expect(page.locator('#agentModeMenuSwitch')).to_be_checked()
-        expect(page.locator('#agentModeMenuSwitch')).to_be_disabled()
+        # The (+) menu no longer carries a mode switch; the mode stays Agent.
+        expect(page.locator('#attachMenu .attach-menu-toggle[for="agentModeMenuSwitch"]')).to_have_count(0)
+        expect(page.locator('#runModeSelect')).to_have_value('agent')
         # Agent Beta uploads into the private chat store, so upload stays available.
         expect(page.locator('#attachUploadOption')).to_be_enabled()
         source_label = page.locator('label[for="sourceCheckMenuSwitch"]')
@@ -228,10 +229,8 @@ def test_comparison_review_and_saved_projection(browser, phase4_server, width, d
         page.evaluate("async () => { await window.__switchE2EUser('account-a'); }")
         _choose_mode(page, "agent")
         expect(page.locator('#composerModeBar')).to_be_visible()
-        expect(page.locator('#composerAgentState')).to_have_text('On')
-        legacy_mode = page.evaluate("localStorage.getItem('agentMode')")
-        page.locator('#composerAgentToggle').click(force=True)
-        assert page.evaluate("localStorage.getItem('agentMode')") == legacy_mode
+        assert page.evaluate("App.runMode.preference()") == 'agent'
+        assert page.evaluate("localStorage.getItem('agentMode')") is None
         # The toolbar Attach opens the same file picker as the (+) menu upload.
         expect(page.locator('#composerAttachButton')).to_be_enabled()
         with page.expect_file_chooser():
@@ -294,7 +293,7 @@ def test_comparison_review_and_saved_projection(browser, phase4_server, width, d
                     return rect.left >= box.left && rect.right <= box.right;
                 });
             })''')
-        expect(page.locator('#chatExecutionControl')).not_to_be_visible()
+        expect(page.locator('#runModeSelect')).to_have_value('agent')
         expect(page.locator('.agent-effort-control')).not_to_be_visible()
         expect(page.locator("#agentAnswerBody .cx-claim")).to_have_count(1)
         expect(page.locator('#agentAnswerBody .src-ref[href="https://example.org/billing"]')).to_have_count(1)

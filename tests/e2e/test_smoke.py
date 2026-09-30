@@ -796,22 +796,11 @@ def test_disabled_agent_mode_stays_in_direct_six_answer_comparison(app_page):
         else None,
     )
     app_page.set_viewport_size({"width": 1280, "height": 800})
-    app_page.click("#attachTrigger")
-    menu_toggle = app_page.locator("#agentModeMenuSwitch")
-    menu_toggle_row = app_page.locator('label[for="agentModeMenuSwitch"]')
-    expect(menu_toggle_row).to_be_visible()
-    expect(menu_toggle).to_be_enabled()
-    menu_toggle_row.click()
-    expect(menu_toggle).not_to_be_checked()
-    expect(app_page.locator("#agentModeSwitch")).not_to_be_checked()
-
-    auto_state = app_page.evaluate(
-        """() => {
-          const toggle = document.getElementById('autoConsensusToggle');
-          return { checked: toggle.checked, disabled: toggle.disabled };
-        }"""
-    )
-    assert auto_state == {"checked": False, "disabled": True}
+    app_page.locator("#runModeControl .model-picker-display").click()
+    app_page.locator('#runModeControl [data-value="compare"]').click()
+    expect(app_page.locator("#runModeSelect")).to_have_value("compare")
+    expect(app_page.locator("#runModeSetting")).to_have_value("compare")
+    assert app_page.evaluate("App.runMode.pipeline()") is False
 
     _send_question(app_page)
     _wait_for_all_final_answers(app_page)
@@ -846,7 +835,7 @@ def test_consensus_renders_differences_and_agreement_score(app_page, get_console
     Claim-Badges, Widerspruchs-Karte und Agreement-Score. Einen manuellen
     Consensus-Button gibt es im aktuellen UI nicht mehr."""
     app_page.set_viewport_size({"width": 390, "height": 844})
-    app_page.evaluate("() => window.setAgentMode(true, { persist: true })")
+    app_page.evaluate("() => window.App.runMode.set('consensus')")
     # Passage-Interaktion explizit unter Touch-Bedingungen pruefen. Die alte
     # Implementierung brach bei genau diesem Media Query vor dem Binding ab.
     app_page.evaluate(
@@ -1225,7 +1214,7 @@ def test_consensus_renders_differences_and_agreement_score(app_page, get_console
 def test_followup_keeps_the_previous_answer_and_appends_the_new_question(app_page):
     """Ein Follow-up darf den fertigen Turn nicht visuell recyceln: die alte
     Frage/Antwort bleibt stehen, die neue User-Frage beginnt darunter."""
-    app_page.evaluate("() => window.setAgentMode(false, { persist: true })")
+    app_page.evaluate("() => window.App.runMode.set('compare')")
     _send_question(app_page)
     _wait_for_all_final_answers(app_page)
     expect(app_page.locator("#questionInput")).to_have_attribute(
@@ -1705,7 +1694,7 @@ def test_agent_mode_can_reveal_hidden_model_answers_on_mobile(app_page):
     app_page.evaluate(
         """() => {
           localStorage.setItem("agentModePanelCollapsed", "true");
-          window.setAgentMode(true, { persist: true });
+          window.App.runMode.set('consensus');
         }"""
     )
     _send_question(app_page)

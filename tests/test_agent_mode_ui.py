@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 import pytest
@@ -27,15 +28,18 @@ def test_answer_disclosure_is_agent_mode_only():
     assert ".agent-mode-answers-row[hidden]" in css
 
 
-def test_disabled_agent_mode_is_a_direct_six_answer_flow():
+def test_compare_mode_is_a_direct_six_answer_flow():
     query = (ROOT / "static" / "js" / "query-send.js").read_text(encoding="utf-8")
     view = (ROOT / "static" / "js" / "run-view.js").read_text(encoding="utf-8")
     agent = (ROOT / "static" / "js" / "agent-mode.js").read_text(encoding="utf-8")
     core = (ROOT / "static" / "js" / "app-core.js").read_text(encoding="utf-8")
     input_css = (ROOT / "static" / "css" / "components-input.css").read_text(encoding="utf-8")
 
-    assert 'const agentMode = window.isAgentModeEnabled?.() === true;' in query
+    # config.agentMode is the persisted run field "the consensus pipeline
+    # ran"; it now comes from the one mode choice (run-mode.js).
+    assert 'const agentMode = window.App.runMode.pipeline();' in query
     assert "const config = {\n      agentMode," in query
+    assert "autoConsensus: agentMode," in query
     # Die Vergleichsansicht wird an EINER Stelle aufgebaut, damit ein frisch
     # gesendeter und ein aus einem Bookmark geladener Direktvergleich nicht
     # auseinanderlaufen.
@@ -51,29 +55,36 @@ def test_disabled_agent_mode_is_a_direct_six_answer_flow():
     assert 'window.App.chatSession?.reset?.();' in view
     assert 'pipeline.dismiss?.();' in view
     assert 'if (context.config.agentMode && context.config.autoConsensus)' in query
-    assert 'autoToggle.checked = !!enabled;' in agent
-    assert 'autoToggle.disabled = true;' in agent
-    assert 'if (isAgentModeEnabled()) {' in agent
+    # Auto Consensus was only a read-only mirror of the old switch.
+    assert 'autoConsensusToggle' not in agent
+    assert 'if (pipelineEnabled()) {' in agent
     assert 'const hiddenInHero = document.body.classList.contains("is-hero")' in core
     assert 'body.is-hero .response-section,' in input_css
     assert 'body.is-hero .consensus-section { display: none; }' in input_css
 
 
-def test_plus_menu_agent_mode_switch_is_free_and_synchronized():
+def test_one_mode_selector_replaces_every_old_switch():
+    """Compare / Consensus / Agent is ONE choice with one owner (run-mode.js).
+    Before 2026-10 six controls and two storage keys decided it: a composer
+    chip, a (+) menu switch, a Settings switch, a Pro-only dropdown, a
+    read-only Auto Consensus mirror and a keyboard helper."""
     template = (ROOT / "templates" / "index.html").read_text(encoding="utf-8")
-    script = (ROOT / "static" / "js" / "agent-mode.js").read_text(encoding="utf-8")
+    bundles = (ROOT / "static" / "js" / "bundles.json").read_text(encoding="utf-8")
+    # run-mode.js itself reads the legacy key exactly once, to migrate it.
+    sources = [*(ROOT / "static" / "js").glob("*.js"), *(ROOT / "static").glob("*.js")]
+    scripts = "\n".join(p.read_text(encoding="utf-8") for p in sources if p.name != "run-mode.js")
 
-    assert 'for="agentModeMenuSwitch"' in template
-    assert 'id="agentModeMenuSwitch"' in template
-    assert 'class="attach-menu-toggle"' in template
-    assert 'class="switch deep-switch attach-menu-switch"' in template
-    agent_row = template.split('for="agentModeMenuSwitch"', 1)[1].split("</label>", 1)[0]
-    assert "Agent Mode" in agent_row
-    assert "pro-badge" not in agent_row
-    assert 'const menuSwitchEl = document.getElementById("agentModeMenuSwitch");' in script
-    assert 'if (menuSwitchEl) menuSwitchEl.checked = preference;' in script
-    assert 'agentModeMenuSwitch.addEventListener("change"' in script
-    assert 'setAgentMode(this.checked, { persist: true });' in script
+    assert 'id="runModeSelect"' in template
+    assert 'id="runModeSetting"' in template
+    for gone in ("agentModeMenuSwitch", "agentModeSwitch", "autoConsensusToggle",
+                 "composerAgentToggle", "chatExecutionMode", "chatExecutionControl"):
+        assert gone not in template, gone
+        assert gone not in scripts, gone
+    for gone in (r"\bsetAgentMode\b", r"\bisAgentModeEnabled\b", r"\btoggleAllResponses\b",
+                 r'localStorage\.(get|set)Item\("agentMode"'):
+        assert not re.search(gone, scripts), gone
+    # The head bundle paints the stored mode before first paint.
+    assert bundles.index("static/js/run-mode.js") < bundles.index("static/js/app-bootstrap.js")
 
 
 def test_the_switch_shows_the_setting_not_the_run_on_screen():
@@ -86,11 +97,12 @@ def test_the_switch_shows_the_setting_not_the_run_on_screen():
     script = (ROOT / "static" / "js" / "agent-mode.js").read_text(encoding="utf-8")
     ui = script.split("function updateAgentModeUI()", 1)[1]
 
-    assert "const preference = isAgentModeEnabled();" in ui
-    assert "if (switchEl) switchEl.checked = preference;" in ui
-    assert "if (menuSwitchEl) menuSwitchEl.checked = preference;" in ui
-    assert "setAutoConsensusForAgentMode(preference);" in ui
+    assert "projectedRunContext.config?.agentMode !== false" in ui
+    assert "renderComposerMode();" in ui
     assert 'document.body.classList.toggle("agent-mode-enabled", enabled);' in ui
+    # The selector itself renders App.runMode, never the run on screen.
+    render = script.split("function renderRunModeControl()", 1)[1].split("\n  }\n", 1)[0]
+    assert "const mode = runMode();" in render
 
 
 def test_direct_comparison_keeps_compact_copy_and_an_accurate_placeholder():
@@ -101,9 +113,10 @@ def test_direct_comparison_keeps_compact_copy_and_an_accurate_placeholder():
 
     assert 'id="modeNotice"' not in template
     assert "Follow-up questions need Agent Mode." not in script
-    assert "Independent answers, no consensus." in script
+    mode = (ROOT / "static" / "js" / "run-mode.js").read_text(encoding="utf-8")
+    assert "Answers side by side, no consensus." in mode
     # ... und der Platzhalter verspricht kein Follow-up, das es nicht gibt.
-    assert "window.isAgentModeEnabled?.() === true" in run
+    assert "window.App.runMode?.pipeline?.() === true" in run
     assert "window.App?.followup?.render?.();" in script
 
 

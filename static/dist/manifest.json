@@ -1,5 +1,5 @@
 {
-  "sources": "3097d11f48cb",
+  "sources": "51a0da0fcc1e",
   "inputs": [
     "package-lock.json",
     "package.json",
@@ -85,6 +85,7 @@
     "static/js/model-picker.js",
     "static/js/query-send.js",
     "static/js/request-deadline.js",
+    "static/js/run-mode.js",
     "static/js/run-registry.js",
     "static/js/run-view.js",
     "static/js/share-dialog.js",
@@ -169,7 +170,7 @@
   "scripts": [
     {
       "name": "head",
-      "src": "/static/dist/head.dcc72251ba36.js",
+      "src": "/static/dist/head.fadc4d2b6d78.js",
       "module": false,
       "defer": false
     },
@@ -181,34 +182,35 @@
     },
     {
       "name": "firebase",
-      "src": "/static/dist/firebase.325b77abcde6.js",
+      "src": "/static/dist/firebase.7720e6a47517.js",
       "module": true,
       "defer": false
     },
     {
       "name": "demo",
-      "src": "/static/dist/demo.639b5a1996da.js",
+      "src": "/static/dist/demo.50c2b785aabd.js",
       "module": true,
       "defer": false
     },
     {
       "name": "app",
-      "src": "/static/dist/app.265a5d003ef4.js",
+      "src": "/static/dist/app.2a91fb2af9dd.js",
       "module": false,
       "defer": true
     }
   ],
   "styles": {
-    "app": "/static/dist/app.6d2bba5af7ca.css"
+    "app": "/static/dist/app.9396f67cd328.css"
   },
   "previous_assets": [
+    "app.6d2bba5af7ca.css",
     "app.c9b82c8ad556.css",
-    "app.333b24620cf0.css",
+    "app.265a5d003ef4.js",
     "app.2bd26caf932a.js",
-    "app.5b99e7301f94.js",
+    "demo.639b5a1996da.js",
+    "firebase.325b77abcde6.js",
     "firebase.5cc9d6fa1098.js",
-    "firebase.890d650af819.js",
-    "head.a7a5f459de29.js",
-    "head.1657f05e2da8.js"
+    "head.dcc72251ba36.js",
+    "head.a7a5f459de29.js"
   ]
 }

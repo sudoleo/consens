@@ -3,7 +3,6 @@
   "use strict";
   const App = window.App = window.App || {};
   const registry = App.runRegistry;
-  let preference = "consensus";
   let catalog = null;
   let catalogOwner = "";
   let catalogStatus = "idle";
@@ -231,18 +230,32 @@
     const access = App.agentAccess;
     return Boolean(window.auth?.currentUser?.uid && access?.uid === window.auth.currentUser.uid && access.allowed);
   }
-  function selectedMode() {
+  // The open chat's family. Agent chats and Consensus chats are separate on
+  // the server, so an open chat keeps its family; null means a new chat.
+  function chatFamily() {
     const context = registry.visible();
-    if (context) return context.config.executionMode || "consensus";
+    if (context) return context.config.executionMode === "agent" ? "agent" : "consensus";
     const basis = registry.getSelectedConversationBasis({ includeHistory: false });
-    if (basis) return basis.executionMode || "consensus";
-    return canUse() ? preference : "consensus";
+    if (basis) return basis.executionMode === "agent" ? "agent" : "consensus";
+    return null;
+  }
+  // A signed-in account whose Agent access is still loading. A stored Agent
+  // choice must not silently send as Consensus in that moment.
+  function accessPending() {
+    const uid = window.auth?.currentUser?.uid;
+    return Boolean(uid && App.agentAccess?.uid !== uid);
+  }
+  function modeState() {
+    return { family: chatFamily(), canUse: canUse(), pending: accessPending() };
+  }
+  function selectedMode() {
+    return (App.runMode?.effective?.() === "agent") ? "agent" : (chatFamily() || "consensus");
   }
   function shellInputs() {
     const context = registry.visible();
     const basis = registry.getSelectedConversationBasis({ includeHistory: false });
     const picked = catalogStatus === 'ready' ? selection() : null;
-    return JSON.stringify([selectedMode(), preference, canUse(), window.auth?.currentUser?.uid || '', App.authState?.generation,
+    return JSON.stringify([selectedMode(), App.runMode?.preference?.(), canUse(), window.auth?.currentUser?.uid || '', App.authState?.generation,
       catalogStatus, catalogOwner, loadGeneration, catalog?.models?.length, picked?.model_id, picked?.reasoning_effort,
       context?.runId, context?.status, registry.isExecuting(context?.runId),
       context?.metadata.recovering, context?.metadata.recoveryState, context?.metadata.recoverable, context?.metadata.requestSent,
@@ -293,20 +306,6 @@
     if (greeting) {
       if (!greeting.dataset.consensusGreeting) greeting.dataset.consensusGreeting = greeting.textContent;
       greeting.textContent = agent ? "What can I help you with?" : greeting.dataset.consensusGreeting;
-    }
-    const label = document.getElementById("chatExecutionControl");
-    const select = document.getElementById("chatExecutionMode");
-    const locked = Boolean(registry.visible() || registry.getSelectedConversationBasis({ includeHistory: false }));
-    if (label) label.hidden = (!canUse() && !agent) || (agent && locked);
-    if (select) {
-      select.value = agent ? "agent" : "consensus";
-      select.disabled = locked || !canUse();
-      select.title = locked ? "Start a new chat to change mode" : "Chat mode";
-      App.initCustomModelPicker?.(select, { menuWidth: 290 });
-      if (select.disabled) App.collapseExpandedModelPicker?.(select);
-      window.syncCustomModelPickers?.();
-      const button = select._customModelPicker?.displayButton;
-      if (button && locked) button.title = "Start a new chat to change mode";
     }
     const panel = document.getElementById("agentAnswer");
     const context = registry.visible();
@@ -950,7 +949,7 @@
       if (!terminalBudget && context.metadata.requestSent && registry.isAuthCurrent(context)) await refreshBudget(context.auth.uid);
     }
   }
-  App.agentChat = { canUse, hasValidComparisonSelection, sendBlocker, syncComposer, isSelected: () => selectedMode() === "agent",
+  App.agentChat = { canUse, modeState, hasValidComparisonSelection, sendBlocker, syncComposer, isSelected: () => selectedMode() === "agent",
     render: () => renderShell(), renderShell, project, send, revealPendingReview, syncPendingReview,
     tokenBudget: () => canUse() && catalogOwner === window.auth?.currentUser?.uid
       ? (catalog?.budgetStale ? {...catalog.token_budget, stale: true} : catalog?.token_budget) : null, receiveBudget };
@@ -963,15 +962,12 @@
   // change; this listener only catches changes without a projection, and is
   // a no-op when nothing the shell shows has changed.
   window.addEventListener("consensio:run-registry-change", () => renderShell());
+  window.addEventListener("consensio:run-mode-change", () => renderShell());
   window.addEventListener('consensio:agent-actions-change', () => { syncPendingReview(); window.updateQuestionInputAccess?.(); });
   // Google selection/consent changes (chips, sheet, consent box) change the
   // send blocker, so the notice and Send state must follow immediately.
   window.addEventListener('consensio:agent-google-change', () => { syncComposer(); window.updateQuestionInputAccess?.(); });
   document.addEventListener("DOMContentLoaded", () => {
-    document.getElementById("chatExecutionMode")?.addEventListener("change", event => {
-      preference = canUse() && event.target.value === "agent" ? "agent" : "consensus";
-      render();
-    });
     document.getElementById("agentRecover")?.addEventListener("click", () => {
       const context = registry.visible();
       if (["failed", "canceled"].includes(context?.status) && context.metadata.requestSent) send(context);

@@ -13,8 +13,12 @@
       "name": "head",
       "kind": "classic",
       "defer": false,
-      "note": "Render-blocking on purpose: seeds state (agent mode, theme, auth) before the first paint.",
+      "note": "Render-blocking on purpose: seeds state (run mode, theme, auth) before the first paint.",
       "files": [
+        {
+          "file": "static/js/run-mode.js",
+          "note": "Single source of truth for Compare / Consensus / Agent. Must precede app-bootstrap.js, which paints the stored mode."
+        },
         "static/js/app-bootstrap.js",
         "static/js/app-state.js",
         {

@@ -702,8 +702,8 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   die Modelle über dich wissen → was du ihnen sagst → wie ein Lauf abläuft →
   wie das Ergebnis aussieht → Technik → Konto". Die bestehenden Control-IDs
   bleiben der JavaScript-Vertrag; nur die frühere Sammelkategorie Experience
-  ist in Runs (`#agentModeSwitch`, `#autoConsensusToggle`) und Display (Theme,
-  `#agreementDisplaySelect`) aufgeteilt.
+  ist in Runs (`#runModeSetting`, seit 2026-09-30 statt `#agentModeSwitch`/
+  `#autoConsensusToggle`) und Display (Theme, `#agreementDisplaySelect`) aufgeteilt.
   Die Reiter tragen die Sprache der Sidebar-Listen: flache Zeile, transparent
   im Ruhezustand, mindestens 44 px hoch, Hover und Auswahl sind ein Tint. **`.settings-nav-item`
   muss in der `button:not(...)`-Kette in `components-input.css` stehen** —
@@ -1020,10 +1020,17 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   stattfindet, gibt Text UND Anhänge unveraendert zurueck. Solange sie schwebt,
   blendet `body.thread-message-pending` den Composer-`#attachmentBar` aus,
   damit dieselben Chips nicht zweimal dastehen.
-- **`agent-mode.js`** — Agent-Mode-**Zustand**, Status-Hub und Timer.
-  Composer-Modusleiste `#composerModeBar` direkt unter dem Input: erreichbarer
-  Agent-/Deep-Think-Schalter, Upload-Shortcut und Anbieter-Favicons der nächsten Frage.
-  Im Consensus erscheint die Leiste ab 1100px immer; darunter im Hero und nach Chatstart nur bei ausgeschaltetem Agent Mode,
+- **`run-mode.js`** (Head-Bundle, vor `app-bootstrap.js`) — **einzige Quelle**
+  der Moduswahl Compare / Consensus / Agent; siehe „Modus: Compare, Consensus,
+  Agent". Kein DOM; `agent-mode.js` rendert den Wähler.
+- **`agent-mode.js`** — gruppiertes Lauf-Panel (Status-Hub, Timer; die Namen
+  „agent-mode" sind historisch und meinen den Consensus-Lauf, nicht Agent Beta),
+  der Moduswähler `#runModeSelect` samt Settings-Spiegel `#runModeSetting` und
+  die Composer-Werkzeugleiste `#composerModeBar` direkt unter dem Input:
+  Quellenprüfung (nur Consensus/Agent), Deep Think, Upload-Shortcut und
+  Anbieter-Favicons der nächsten Frage; `#composerModeChip` zeigt den Modus
+  nur im eingeklappten Handy-Composer.
+  Im Consensus erscheint die Leiste ab 1100px immer; darunter im Hero und nach Chatstart nur in Compare,
   schließt ohne Abstand unter dem Input an und ist seitlich um 12 px eingerückt.
   Sie bleibt auf Desktop und Mobile eine einzelne 36-px-Zeile. Die Erklärung
   ist am Modusschalter als Tooltip/Screenreader-Beschreibung verfügbar;
@@ -1084,15 +1091,12 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   `consensus-progress.js` berechnet die visuellen Modell-Balken stattdessen
   lokal aus dem sichtbaren Antwortstream, haelt sie innerhalb eines Laufs
   monoton und setzt sie erst beim terminalen Modellstatus auf 100 Prozent.
-  Ebenfalls seit 2026-08-31 zeigen die beiden
-  Agent-Mode-Schalter (`#agentModeSwitch`, `#agentModeMenuSwitch`) **immer die
-  Einstellung** (`isAgentModeEnabled()`), nie den projizierten Lauf — sie
-  beschreiben den NAECHSTEN Lauf. Vorher sprangen sie nach jeder Antwort in
-  die alte Stellung zurueck, obwohl `localStorage` laengst umgestellt war.
+  Seit 2026-08-31 zeigt die Moduswahl **immer die Einstellung fuer die
+  naechste Nachricht** (heute `App.runMode`), nie den projizierten Lauf.
   Die Body-Klassen (`agent-mode-enabled` &c.) folgen weiterhin dem Lauf auf
-  dem Schirm. Ohne Agent Mode gibt es keinen Folgeturn, jede Frage ist ein
-  eigener Lauf — `isArmed()` in `consensus-run.js` prueft dieselbe Bedingung,
-  damit der Platzhalter kein Follow-up verspricht, das nicht kommt.
+  dem Schirm. In Compare gibt es keinen Folgeturn, jede Frage ist ein
+  eigener Lauf — `isArmed()` in `consensus-run.js` prueft
+  `App.runMode.pipeline()`, damit der Platzhalter kein Follow-up verspricht.
 - **`consensus-progress.js`** — der **gefuehrte Lauf** `#consensusRun` unter dem
   Input, seit 2026-07-27 die **einzige** Fortschrittsanzeige (auch im Agent
   Mode; dessen Panel ist als Progress-Flaeche stillgelegt, siehe unten) — und
@@ -1341,9 +1345,7 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
 - **Composer-Reduktion (2026-07-27)** — die Eingabezeile ist auf Anhang (+),
   EINEN Lauf-Schalter („N models · Preset", der bestehende Consensus-Picker mit
   vorangestellter Modellanzahl) und Senden reduziert. Entfallen sind dort
-  `#toggleAllButton` (Agent Mode → Settings `#agentModeSwitch` und seit
-  2026-08-14 zusätzlich der Free-verfügbare `#agentModeMenuSwitch` direkt unter
-  Deep Think im (+)-Menü),
+  `#toggleAllButton` (heute: der eine Moduswähler `#runModeSelect`),
   `#modeExplainerTrigger` samt `#modeExplainer`-Section (Modi werden dort
   erklaert, wo man sie schaltet) und `#clearButton` (→ „New comparison").
   Alle betroffenen JS-Stellen waren bereits null-gesichert.
@@ -1885,9 +1887,9 @@ Die gemeinsame einzeilige Consensus-Optik gilt für leere Folgefragen; längerer
 wächst wie zuvor. Mobil bleibt `#attachTrigger` auch bei `composer-collapsed` sichtbar.
 `composer-collapse.js` lässt Pointer/Fokus auf Plus und dessen Menü direkt durch,
 ohne das Layout zwischen Touch und Klick zu verschieben. Ein neuer Chat zeigt die
-Startleiste wieder. `agent-mode.js` projiziert dabei „Agent Mode On“ als unveränderliche
-Statusanzeige und aktiviert die Quellenprüfungs-Controls unabhängig vom alten
-Consensus-Agent-Schalter. `Deep Think` öffnet über
+Startleiste wieder. In einem offenen Agent-Chat tritt der Moduswähler zurück
+(Compare und Consensus brauchen einen neuen Chat), die Quellenprüfungs-Controls
+bleiben aktiv. `Deep Think` öffnet über
 `openModelPicker(select, {secondary: true})` die bestehende Reasoning-Auswahl;
 `Attach` bleibt bis zur Unterstützung von Anhängen deaktiviert. Vergleichsicons
 und Compare-Picker verwenden weiterhin dieselbe Modellauswahl.
@@ -3340,14 +3342,47 @@ mutiert nur die Differences dieses Contexts, rendert nur bei weiterhin
 sichtbarer Run-ID und schreibt eine optionale Bookmark-Aktualisierung explizit
 an dessen Bookmark statt an die inzwischen geöffnete Ansicht.
 
-### Agent Mode
-`agent-mode.js` koppelt Auto-Consensus: nach Abschluss aller Modellantworten löst
+### Modus: Compare, Consensus, Agent (seit 2026-09-30)
+Eine Wahl, ein Besitzer: `static/js/run-mode.js` (`App.runMode`) haelt
+`localStorage.runMode` ∈ {`compare`, `consensus`, `agent`}. `DEFAULT_MODE`
+steht dort als eine Konstante (heute `consensus`; wird `agent`, sobald Agent
+die Beta verlaesst). Beim ersten Laden migriert das Modul die Altschluessel
+(`agentMode=false` → compare, sonst consensus) und loescht `agentMode` und
+`autoConsensus`; andere Tabs folgen ueber das `storage`-Event.
+- `preference()` ist die Wahl fuer neue Nachrichten, `effective()` das, was die
+  naechste Nachricht tatsaechlich tut: ein offener Agent-Chat bleibt Agent, ein
+  offener Consensus-Chat kann nur zwischen Compare und Consensus wechseln
+  (serverseitig getrennte Chat-Familien, `agent-chat.js` meldet sie ueber
+  `App.agentChat.modeState()`), und ohne Agent-Zugang laeuft eine Agent-Wahl
+  als Consensus. `pipeline()` (= nicht Compare) ersetzt das fruehere
+  `isAgentModeEnabled()` und fuellt das persistierte Laufsfeld
+  `config.agentMode`/`autoConsensus` (Feldname historisch).
+- `availability()` liefert je Modus `enabled`/`reason`; der Wähler zeigt
+  gesperrte Modi mit Grund statt sie zu verstecken, Agent nur mit Zugang. In
+  einem offenen Agent-Chat gibt es nichts zu wählen: dort tritt `#runModeControl`
+  zurück (der einzeilige Composer braucht die Breite fürs Feld).
+- Aenderungen laufen nur ueber `set(mode, {source})`, feuern
+  `consensio:run-mode-change` und `app_run_mode_changed` (mode, previous, source).
+- Solange eine gespeicherte Agent-Wahl auf den Agent-Zugang des Kontos wartet,
+  sperrt `updateQuestionInputAccess()` das Senden, statt still als Consensus
+  zu senden. Scheitert `/user_status`, setzt `firebase.js` den Zugang auf
+  „nicht erlaubt“; der Wähler zeigt dann sichtbar Consensus.
+- UI: `#runModeSelect` in der Composer-Zeile (Custom-Picker), `#runModeSetting`
+  in Settings → Runs, `#composerModeChip` im eingeklappten Handy-Composer.
+  Werkzeuge folgen dem Modus: Compare blendet die Quellenprüfung in Leiste und
+  (+)-Menue aus. Entfernt: `#composerAgentToggle`, `#agentModeMenuSwitch`,
+  `#agentModeSwitch`, `#autoConsensusToggle`, `#chatExecutionMode`,
+  `window.setAgentMode`, `window.isAgentModeEnabled`, `window.toggleAllResponses`.
+
+### Consensus-Lauf (historisch „Agent Mode“)
+Wo dieses Dokument „Agent Mode an/aus“ sagt, ist heute Consensus bzw. Compare
+gemeint. `agent-mode.js` koppelt Auto-Consensus: nach Abschluss aller Modellantworten löst
 `query-send.js` automatisch `executeConsensusRun(context)` aus. Run-State/Gating
 läuft für Registry-Runs über deren Status/Controller und die kompatible
 `consensus-lifecycle.js`-Brücke (`isActiveRun`, `finishRun`, `setSynthesizing`,
-`cancelCurrentConsensus(runId)`). Agent Mode ist die **einzige** Stelle,
-die den Auto-Consensus-Toggle erzwingt/sperrt: aktiv = an, inaktiv = aus; der
-gekoppelte Settings-Schalter ist in beiden Zustaenden read-only. Standardmäßig
+`cancelCurrentConsensus(runId)`). Auto-Consensus ist keine eigene Einstellung
+mehr: `config.autoConsensus` = `App.runMode.pipeline()` beim Start des Laufs,
+und `consensus-progress.js` liest den Wert des sichtbaren Laufs. Standardmäßig
 bleiben die Einzelantwortboxen verborgen; `#agentModeAnswersToggle` oeffnet den
 gemeinsamen `window.App.answerReader`, ohne Agent Mode oder dessen
 Auto-Consensus-Kopplung zu deaktivieren. Die bisherige Body-Klasse
@@ -3373,7 +3408,7 @@ dekorative Quellen-Favicons nutzen den bestehenden `/api/topics/favicon?d=`-Prox
 beim Direktvergleich, sonst in einem nativen `dialog` ausserhalb `.container`.
 Der Direktvergleich zeigt alle Modelle ohne Auswahl-Tabs und ohne aeusseren Rahmen.
 Der Ergebnis-Kopf bleibt verborgen; der Composer zeigt den Bereitschaftsstatus
-und bei abweichender naechster Einstellung „Agent Mode was off“. Nur die leere
+und bei abweichender naechster Einstellung „Shown: Compare result“. Nur die leere
 Vorschau zeigt die Einleitung „One question. Individual answers.“. Der gespeicherte
 Ergebnismodus bleibt getrennt von der Einstellung fuer die naechste Frage.
 Die Agent-Mode-Ausblendregel in `shell.css` nimmt
@@ -3481,18 +3516,13 @@ beziehungsweise resetten den Leser. Modellwechsel merken lokale Lesepositionen
 (maximal 100 Eintraege), ein Stream wechselt weder Modell noch Leseposition.
 Die bisherigen Schubladen sind nur der Fallback ohne geladenes Reader-Modul.
 
-Der Agent Mode ist an zwei Stellen schaltbar: `#agentModeSwitch` in den Settings
-und `#agentModeMenuSwitch` direkt unter Deep Think im (+)-Menü. Beide Controls
-schreiben ausschließlich über `setAgentMode(..., {persist:true})` denselben
-`localStorage.agentMode`-Zustand und werden von `updateAgentModeUI()` in beide
-Richtungen synchronisiert. Der Menü-Schalter trägt kein Pro-Badge und kein
-Tier-Gate; er ist auch für Free-Nutzer bedienbar.
+Die Moduswahl steht im Abschnitt „Modus: Compare, Consensus, Agent". Compare und
+Consensus sind fuer alle Stufen frei; Agent erscheint nur mit Agent-Zugang.
 
-**Default fuer neue Nutzer** (seit 2026-07-27 auf allen Geraeten, vorher nur
-mobil): `agentMode = "true"` und `agentModePanelCollapsed = "false"` werden beim
-Laden von `agent-mode.js` gesetzt, solange die localStorage-Keys fehlen. Der
-Einstieg zeigt im Agent Mode den zentrierten Composer. Bei ausgeschaltetem
-Agent Mode zeigt `answerReader.syncPreview(enabled, models)` sofort das echte
+**Default fuer neue Nutzer**: `run-mode.js` setzt `DEFAULT_MODE` (consensus),
+`agent-mode.js` `agentModePanelCollapsed = "false"`, solange die Keys fehlen. Der
+Einstieg zeigt in Consensus den zentrierten Composer. In Compare
+zeigt `answerReader.syncPreview(enabled, models)` sofort das echte
 Direktvergleichsraster mit den aktuell ausgewaehlten Modellnamen und statischen
 Antwortplatzhaltern. `direct-comparison-preview` markiert diesen Leerzustand;
 er nutzt die Thread-Shell (`direct-comparison-active`, ohne `is-hero`) mit
@@ -3504,13 +3534,13 @@ Ergebnisse bleiben unveraendert. Run-/Bookmark-Projektionen entfernen die
 Vorschaumarke und ersetzen die Platzhalter. Der Composer animiert beim Wechsel
 seine Positionsdifferenz in 300 ms; Reduced Motion bleibt unmittelbar. Mobil
 steht das Raster einspaltig, mit derselben fixierten Eingabe und Scrollreserve
-wie die Antworten. Eine explizite Nutzerentscheidung (`setAgentMode(…,
-{persist:true})`) ueberschreibt den Default dauerhaft.
+wie die Antworten. Eine explizite Wahl (`App.runMode.set`) ueberschreibt den
+Default dauerhaft.
 
 ### Attachments (ab Plus)
 Noch nicht gesendete Dateien stehen als kompakte Vorschau-/Entfernen-Chips in
 der Leiste unter dem Eingabefeld. `attachments.js` verschiebt dieselbe
-`#attachmentBar` in die sichtbare `#composerModeBar`; verbirgt Agent Mode die
+`#attachmentBar` in die sichtbare `#composerModeBar`; verbirgt Consensus die
 Toolbar auf Mobile nach dem Hero, kehrt sie an ihren Composer-Anker oberhalb des Felds
 zurueck. `App.attachments.syncComposerPlacement()` wird beim Toolbar-Rendering
 und Attachment-Rendering aufgerufen; Fokus, Datei-Bytes und Listener bleiben

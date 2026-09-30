@@ -132,19 +132,19 @@
   .agent-sidebar:not([hidden]), .agent-inline-models, .agent-model-stack .agent-inline-model, .agent-detail-skeleton span { animation: none; transition: none; scroll-behavior: auto; }
   body.single-agent-active:not(.answer-reader-docked) .container, .agent-session > summary::after { transition: none; }
 }
-.chat-execution-control { display: inline-flex; align-items: center; flex: 0 0 auto; min-width: 0; max-width: 140px; }
-.chat-execution-control[hidden], .agent-model-controls[hidden], .agent-effort-control[hidden] { display: none; }
+.run-mode-control { display: inline-flex; align-items: center; flex: 0 0 auto; min-width: 0; max-width: 140px; }
+.run-mode-control[hidden], .agent-model-controls[hidden], .agent-effort-control[hidden] { display: none; }
 .agent-model-controls { display: flex; align-items: center; gap: 4px; min-width: 0; margin: 0; }
 .agent-model-picker { display: flex; justify-content: flex-start; min-width: 0; max-width: 220px; flex: 1 1 auto; }
 .agent-effort-control { display: flex; min-width: 0; flex: 0 0 auto; }
 /* Agent only needs room for Send, not the Consensus action group. */
 body.single-agent-active .chat-input-container .consensus-switch-container { max-width: calc(100% - 46px); }
-.chat-input-container :is(.chat-execution-control, .agent-model-controls .select-wrapper) { position: relative; }
-.chat-input-container :is(.chat-execution-control, .agent-model-controls .select-wrapper)::after { display: none; }
-.chat-input-container :is(.chat-execution-control, .agent-model-controls) .native-model-picker {
+.chat-input-container :is(.run-mode-control, .agent-model-controls .select-wrapper) { position: relative; }
+.chat-input-container :is(.run-mode-control, .agent-model-controls .select-wrapper)::after { display: none; }
+.chat-input-container :is(.run-mode-control, .agent-model-controls) .native-model-picker {
   position: absolute; width: 1px; height: 1px; padding: 0; margin: 0; opacity: 0; pointer-events: none;
 }
-.chat-input-container :is(.chat-execution-control, .agent-model-controls) .model-picker-display {
+.chat-input-container :is(.run-mode-control, .agent-model-controls) .model-picker-display {
   display: inline-flex; align-items: center; justify-content: flex-start; gap: 8px;
   min-width: 0; max-width: 100%; min-height: 36px; padding: 7px 10px;
   border: 1px solid transparent; border-radius: 9px; background: transparent; box-shadow: none;
@@ -152,34 +152,48 @@ body.single-agent-active .chat-input-container .consensus-switch-container { max
   cursor: pointer; transition: background .15s ease, color .15s ease;
 }
 .chat-input-container .agent-model-picker .model-picker-display { color: var(--ink); }
-.chat-input-container .chat-execution-control .model-picker-display { background: var(--raise); }
-.chat-input-container :is(.chat-execution-control, .agent-model-controls) .model-picker-display::after {
+.chat-input-container .run-mode-control .model-picker-display { background: var(--raise); }
+/* Phones: the mode selector joins (+) and the model chip in the left group.
+   The onboarding Demo button gives up its word (the play mark and its aria
+   name stay), which returns enough of the row for all three. */
+@media (max-width: 480px) {
+  .chat-input-container .run-mode-control .model-picker-display { gap: 5px; padding-inline: 8px; font-size: var(--font-size-micro, 11px); }
+  .chat-input-container .demo-chip-label-short { display: none; }
+  .chat-input-container .demo-chip.demo-action { padding: 0 9px; }
+  .chat-input-container .consensus-switch-container { max-width: calc(100% - 128px); }
+  .chat-input-container .consensus-switch-container .consensus-model-inline { flex: 0 1 auto; min-width: 36px; overflow: hidden; }
+  .chat-input-container .consensus-switch-container .consensus-model-inline .select-wrapper { min-width: 0; max-width: 100%; }
+  /* A 36 px chip cannot hold a caret and text; the count reads, the tap opens. */
+  .chat-input-container .consensus-switch-container .consensus-model-inline .select-wrapper .model-picker-display { padding: 6px 8px; }
+  .chat-input-container .consensus-switch-container .consensus-model-inline .select-wrapper::after { display: none; }
+}
+.chat-input-container :is(.run-mode-control, .agent-model-controls) .model-picker-display::after {
   content: ''; flex: 0 0 5px; width: 5px; height: 5px; margin-top: -3px;
   border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor;
   transform: rotate(45deg); opacity: .65;
 }
-.chat-input-container :is(.chat-execution-control, .agent-model-controls) .model-picker-display:hover:not(:disabled),
-.chat-input-container :is(.chat-execution-control, .agent-model-controls) .model-picker-display[aria-expanded="true"] {
+.chat-input-container :is(.run-mode-control, .agent-model-controls) .model-picker-display:hover:not(:disabled),
+.chat-input-container :is(.run-mode-control, .agent-model-controls) .model-picker-display[aria-expanded="true"] {
   background: var(--raise); color: var(--ink);
 }
-.chat-input-container :is(.chat-execution-control, .agent-model-controls) .model-picker-display:focus-visible {
+.chat-input-container :is(.run-mode-control, .agent-model-controls) .model-picker-display:focus-visible {
   outline: 2px solid var(--ink-2); outline-offset: 2px;
 }
-.chat-input-container :is(.chat-execution-control, .agent-model-controls) .model-picker-display:disabled { opacity: .6; cursor: default; }
-.chat-input-container .chat-execution-control .model-picker-display:disabled { background: transparent; }
-.chat-input-container .chat-execution-control .model-picker-display:disabled::after { display: none; }
+.chat-input-container :is(.run-mode-control, .agent-model-controls) .model-picker-display:disabled { opacity: .6; cursor: default; }
+.chat-input-container .run-mode-control .model-picker-display:disabled { background: transparent; }
+.chat-input-container .run-mode-control .model-picker-display:disabled::after { display: none; }
 .agent-effort-control .model-picker-display-text::before { content: 'Reasoning · '; color: var(--ink-3); font-weight: 400; }
-.chat-input-container :is(.chat-execution-control, .agent-model-controls) .model-picker-menu {
+.chat-input-container :is(.run-mode-control, .agent-model-controls) .model-picker-menu {
   border: 1px solid var(--line); background: var(--well); border-radius: 14px; padding: 6px; box-shadow: var(--lift);
   overscroll-behavior: contain; scrollbar-width: thin; z-index: 1600;
 }
-.chat-input-container :is(.chat-execution-control, .agent-model-controls) .model-picker-option {
+.chat-input-container :is(.run-mode-control, .agent-model-controls) .model-picker-option {
   display: flex; flex-wrap: wrap; gap: 3px; min-height: 42px; padding: 10px 30px 10px 11px;
   color: var(--ink); font-size: 13px; line-height: 1.4; border-radius: 8px;
 }
-.chat-input-container :is(.chat-execution-control, .agent-model-controls) .model-picker-option:is(:hover, .is-selected) { background: var(--raise); }
-.chat-input-container :is(.chat-execution-control, .agent-model-controls) .model-picker-option:focus-visible { outline: 2px solid var(--ink-3); outline-offset: -2px; background: var(--raise); }
-.chat-input-container :is(.chat-execution-control, .agent-model-controls) .model-picker-option-label { white-space: normal; overflow-wrap: anywhere; }
+.chat-input-container :is(.run-mode-control, .agent-model-controls) .model-picker-option:is(:hover, .is-selected) { background: var(--raise); }
+.chat-input-container :is(.run-mode-control, .agent-model-controls) .model-picker-option:focus-visible { outline: 2px solid var(--ink-3); outline-offset: -2px; background: var(--raise); }
+.chat-input-container :is(.run-mode-control, .agent-model-controls) .model-picker-option-label { white-space: normal; overflow-wrap: anywhere; }
 .model-picker-option-description { flex-basis: 100%; font-size: 11px; color: var(--ink-3); font-weight: 400; line-height: 1.5; }
 :is(#agentModelsRetry, #agentRecover):not([hidden]) {
   display: inline-flex; align-items: center; min-height: 38px; padding: 4px 8px;
@@ -431,7 +445,7 @@ body.single-agent-active .consensus-model-inline .model-picker-display::after {
   body.single-agent-active .chat-input-container .consensus-model-inline .model-picker-display { max-width: 100%; padding-inline: 6px; }
   .agent-model-picker { max-width: 210px; }
   .agent-effort-control .model-picker-display-text::before { content: ''; }
-  .chat-input-container :is(.chat-execution-control, .agent-model-controls) .model-picker-display { min-height: 38px; padding-inline: 8px; }
+  .chat-input-container :is(.run-mode-control, .agent-model-controls) .model-picker-display { min-height: 38px; padding-inline: 8px; }
   .agent-activity > summary { min-height: 44px; }
   .agent-evidence-focus { flex: 1 1 100%; }
   .agent-evidence-focus select { flex: 1; max-width: 100%; }
@@ -445,15 +459,16 @@ body.single-agent-active .consensus-model-inline .model-picker-display::after {
   /* Two deliberate rows keep model names readable on narrow phones.
      The action row shares its baseline with Send outside this group. */
   body.single-agent-active .chat-input-container .consensus-switch-container {
-    display: grid; grid-template-columns: 36px minmax(0, 1fr); gap: 0 4px;
+    display: grid; grid-template-columns: 36px auto minmax(0, 1fr); gap: 0 4px;
   }
-  /* The chat mode picker (start screen only) gets its own first row, so it
-     shows its full label instead of a clipped "A". */
-  body.single-agent-active #chatExecutionControl { grid-row: 1; grid-column: 1 / -1; max-width: 100%; justify-self: start; }
-  body.single-agent-active .agent-model-controls { grid-row: 2; grid-column: 1 / -1; }
-  body.single-agent-active #attachTrigger { grid-row: 3; grid-column: 1; }
-  body.single-agent-active .consensus-model-inline { grid-row: 3; grid-column: 2; max-width: 100%; justify-self: start; }
-  body.single-agent-active.is-hero .consensus-model-inline { grid-column: 1 / -1; }
+  /* Row 1 keeps the Agent model name whole. Row 2: (+), the mode with its
+     full word, and the comparison chip, which yields first. */
+  body.single-agent-active .agent-model-controls { grid-row: 1; grid-column: 1 / -1; }
+  body.single-agent-active #attachTrigger { grid-row: 2; grid-column: 1; }
+  body.single-agent-active #runModeControl { grid-row: 2; grid-column: 2; max-width: 100%; justify-self: start; }
+  body.single-agent-active .consensus-model-inline { grid-row: 2; grid-column: 3; max-width: 100%; justify-self: start; min-width: 0; }
+  /* The start screen has no (+) in this row, so the mode starts flush. */
+  body.single-agent-active.is-hero #runModeControl { grid-column: 1 / 3; }
   body.single-agent-active .chat-input-container .input-actions-container { align-self: flex-end; }
 }
 @media (min-width: 1100px) {

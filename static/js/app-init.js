@@ -54,10 +54,8 @@
           showPopup
         } = window.App;
 
-        // Agent Mode ist nach static/js/agent-mode.js ausgelagert; lokale Aliase
-        // für die bestehenden Aufrufstellen in initApp (Übergangsbus).
-        const isAgentModeEnabled = window.isAgentModeEnabled;
-        const setAgentMode = window.setAgentMode;
+        // Grouped run panel lives in static/js/agent-mode.js; the mode choice
+        // (Compare / Consensus / Agent) in static/js/run-mode.js.
         const setAgentModeStatus = window.setAgentModeStatus;
         const updateAgentModeUI = window.updateAgentModeUI;
 
@@ -189,7 +187,6 @@
 
         window.addEventListener("pageshow", restoreAgreementDisplayPreference);
 
-        window.App.consensusLifecycle.initAutoConsensusToggle();
 
         const questionInput = document.getElementById("questionInput");
         const defaultQuestionPlaceholder = "Enter your question";
@@ -287,7 +284,11 @@
             ? !agentBlocker
             : selectedModelCount >= 2;
           const hasMessage = !agent || Boolean(String(window.App.quote?.compose?.(questionInput?.value || '') ?? questionInput?.value ?? '').trim());
-          const canStartRun = canAsk && hasMinimumModels && hasMessage;
+          // A stored Agent choice waits for the account's Agent access instead
+          // of sending as Consensus in the moment before it arrives.
+          const mode = window.App.agentChat?.modeState?.();
+          const modePending = window.App.runMode?.preference?.() === "agent" && !mode?.family && mode?.pending === true;
+          const canStartRun = canAsk && hasMinimumModels && hasMessage && !modePending;
           const sendButton = document.getElementById("sendButton");
           const postDemoLoginPrompt = document.getElementById("postDemoLoginPrompt");
 
@@ -1204,10 +1205,6 @@
           });
         });
 
-        window.toggleAllResponses = function () {
-          setAgentMode(!isAgentModeEnabled(), { persist: true });
-        };
-
         // Collapse/Expand einer Antwort-Box
         window.toggleCollapse = function (responseId) {
           const responseBox = document.getElementById(responseId);
@@ -1252,10 +1249,9 @@
         // animateResponseReorder, setModelSelectionState und restoreModelSelections
         // sind nach static/js/model-picker.js ausgelagert. Aliase siehe oben.
 
-        // Agent Mode (Status, Timer, gruppierter Lauf) ist nach
-        // static/js/agent-mode.js ausgelagert. Exporte: window.setAgentModeStatus,
-        // window.updateAgentModeUI, window.isAgentModeEnabled, window.setAgentMode,
-        // window.isAgentModeRunning. Lokale Aliase + Picker-Bruecke siehe oben.
+        // Grouped run panel: static/js/agent-mode.js (window.setAgentModeStatus,
+        // window.updateAgentModeUI, window.isAgentModeRunning). Mode choice:
+        // App.runMode (static/js/run-mode.js).
 
         // 1. Initialer Aufruf beim Laden der Seite
         window.restoreModelSelections();
@@ -1300,12 +1296,6 @@
           }
         });
 
-        const agentModeSwitch = document.getElementById("agentModeSwitch");
-        if (agentModeSwitch) {
-          agentModeSwitch.addEventListener("change", function () {
-            setAgentMode(this.checked, { persist: true });
-          });
-        }
 
 
         // --- NEU: Event Listener für Consensus Dropdown ---

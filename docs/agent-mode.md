@@ -74,8 +74,9 @@ Die gemeinsame Bottom-Bar steht im Beta-Chat nur vor der ersten Frage. Danach
 liegen ihre Optionen im bestehenden (+)-Menü im Input; das leere Eingabefeld
 ist wie beim Consensus einzeilig und wächst beim Schreiben. Auf Mobil bleibt
 das (+) auch eingeklappt direkt erreichbar. Ein neuer Chat zeigt die Startleiste wieder.
-„Agent Mode On“ ist vorerst eine Statusanzeige ohne Umschaltfunktion; sie ändert
-den bisherigen Consensus-Modus nicht. „Check contradictions“ schaltet das
+Der Moduswähler (Compare / Consensus / Agent, `run-mode.js`) tritt in einem
+offenen Agent-Chat zurück: Compare und Consensus brauchen einen neuen Chat,
+weil die Chat-Familien serverseitig getrennt sind. „Check contradictions“ schaltet das
 Quellenprüfungs-Tool für die nächste Nachricht frei. Der gemeinsame On/Off-Wert
 wird beim Senden eingefroren und bei Recovery wiederverwendet. „Deep Think“
 öffnet direkt die vorhandene Reasoning-Auswahl des Chatmodells und zeigt deren

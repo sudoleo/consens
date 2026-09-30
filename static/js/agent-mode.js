@@ -1,31 +1,33 @@
 // =====================================================================
 // agent-mode.js
-// Agent Mode: gruppierter Modell-Lauf mit Timer, Status und erzwungenem
-// Auto-Consensus. Ausgeschaltet bleibt die App im direkten Sechs-Antworten-
-// Vergleich und startet keine Consensus-Pipeline. In eigene IIFE gekapselt.
-// State (Status/Timer) ist
-// modul-privat; agentModeStatus wird extern via window.isAgentModeRunning()
-// gelesen.
-// Extrahiert aus templates/index.html (initApp-Closure).
+// Grouped model run panel (timer, status, answer previews) and the composer
+// controls for the next message. Which mode runs (Compare, Consensus, Agent)
+// is owned by run-mode.js; this module renders the one selector for it and
+// the tools that apply to the chosen mode. The "agent-mode" names here are
+// historical and describe the grouped run panel, not Agent (Beta).
+// State (Status/Timer) ist modul-privat; agentModeStatus wird extern via
+// window.isAgentModeRunning() gelesen.
 // Exporte: window.setAgentModeStatus, window.updateAgentModeUI,
-// window.isAgentModeEnabled, window.setAgentMode, window.isAgentModeRunning.
+// window.projectAgentModeRun, window.isAgentModeRunning.
 // Abhaengigkeiten: window.App.{modelPrefs,deepThinkModelLabels,
 // getModelOptionLabel,getSelectedModelCount,trackAppEvent,initCustomModelPicker},
 // window.updateConsensusButtonAvailability.
 // =====================================================================
 
 (function () {
-  const AGENT_MODE_STORAGE_KEY = "agentMode";
   const AGENT_PANEL_COLLAPSED_KEY = "agentModePanelCollapsed";
   let checkSources = true;
   try { checkSources = localStorage.getItem("checkSources") !== "false"; } catch (_) {}
   // Preserve the preference, but direct comparisons have no judges.
   const isBeta = () => window.App.agentChat?.isSelected?.() === true;
-  window.App.isSourceCheckEnabled = () => (isBeta() || isAgentModeEnabled()) && checkSources;
+  const runMode = () => window.App.runMode.effective();
+  // The consensus pipeline runs unless the next message is a Compare.
+  const pipelineEnabled = () => window.App.runMode.pipeline();
+  window.App.isSourceCheckEnabled = () => pipelineEnabled() && checkSources;
   const desktopComposer = window.matchMedia?.("(min-width: 1100px)");
 
   function setSourceCheckEnabled(enabled) {
-    if (!isBeta() && !isAgentModeEnabled()) {
+    if (!pipelineEnabled()) {
       renderComposerMode();
       return;
     }
@@ -34,15 +36,9 @@
     renderComposerMode();
   }
 
-  // Default fuer neue Nutzer (seit 2026-07-27 auf ALLEN Geraeten, vorher nur
-  // mobil): Agent Mode aktiv und Panel AUSGEKLAPPT — die Modellnamen sind
-  // sofort sichtbar, die einzelnen Antwort-Boxen bleiben zu. Greift nur,
-  // solange der Nutzer nie selbst gewaehlt hat (localStorage-Keys fehlen);
-  // eine explizite Entscheidung (an/aus, auf/zu) bleibt erhalten.
+  // Panel defaults to expanded so model names are visible at once. Applies
+  // only until the person collapses it; that choice is kept.
   try {
-    if (localStorage.getItem(AGENT_MODE_STORAGE_KEY) === null) {
-      localStorage.setItem(AGENT_MODE_STORAGE_KEY, "true");
-    }
     if (localStorage.getItem(AGENT_PANEL_COLLAPSED_KEY) === null) {
       localStorage.setItem(AGENT_PANEL_COLLAPSED_KEY, "false");
     }
@@ -161,10 +157,6 @@
     window.clearTimeout(answerPreviewResizeTimer);
     answerPreviewResizeTimer = window.setTimeout(syncAnswerPreviews, 150);
   });
-
-  function isAgentModeEnabled() {
-    return localStorage.getItem(AGENT_MODE_STORAGE_KEY) === "true";
-  }
 
   function isAgentPanelCollapsed() {
     return localStorage.getItem(AGENT_PANEL_COLLAPSED_KEY) === "true";
@@ -286,35 +278,80 @@
     return "Ready for a grouped model run.";
   }
 
-  function setAutoConsensusForAgentMode(enabled) {
-    // Auto Consensus ist eine Eigenschaft des Agent Mode, kein zweiter Modus.
-    // Der gekoppelte Settings-Schalter zeigt den Zustand read-only:
-    // an bedeutet Consensus, aus bedeutet ausschliesslich Modellantworten.
-    const autoToggle = document.getElementById("autoConsensusToggle");
-    if (!autoToggle) return;
-    const autoWrap = autoToggle.closest(".settings-section");
+  // The one mode selector (composer) and its mirror in Settings. Both are
+  // views of App.runMode: options the open chat cannot switch to stay
+  // visible but disabled with the reason, Agent only for accounts with access.
+  // renderComposerMode runs on every run status tick; the selector only
+  // changes when the mode, the open chat's family or the account changes.
+  let runModeSignature = "";
+  function renderRunModeControl() {
+    const mode = runMode();
+    const available = window.App.runMode.availability();
+    const select = document.getElementById("runModeSelect");
+    const setting = document.getElementById("runModeSetting");
+    // The displayed values belong to the signature: a refused choice (Compare
+    // in an Agent chat) must snap the control back to the real mode.
+    const signature = JSON.stringify([mode, window.App.runMode.preference(), available,
+      select?.value, setting?.value]);
+    if (signature === runModeSignature) return;
+    // An open Agent chat offers nothing to switch to (its family is fixed on
+    // the server), so the selector steps aside instead of costing the single
+    // line composer its width. Settings still holds the choice for new chats.
+    const control = document.getElementById("runModeControl");
+    if (control) control.hidden = !available.compare.enabled && !available.consensus.enabled;
+    if (select) {
+      for (const option of Array.from(select.options)) {
+        const rule = available[option.value];
+        const copy = window.App.runMode.copy(option.value);
+        if (option.value === "agent" && !rule.visible) { option.remove(); continue; }
+        option.disabled = !rule.enabled;
+        option.dataset.description = rule.enabled ? copy.description : rule.reason;
+      }
+      if (available.agent.visible && !select.querySelector('option[value="agent"]')) {
+        const option = document.createElement("option");
+        const copy = window.App.runMode.copy("agent");
+        option.value = "agent";
+        option.textContent = copy.label;
+        option.dataset.modelBadge = copy.badge;
+        option.dataset.description = available.agent.enabled ? copy.description : available.agent.reason;
+        option.disabled = !available.agent.enabled;
+        select.appendChild(option);
+      }
+      if (select.value !== mode) select.value = mode;
+      select.title = `Mode: ${window.App.runMode.copy(mode).label}`;
+      window.App.initCustomModelPicker?.(select, { menuWidth: 290 });
+      window.syncCustomModelPickers?.();
+    }
+    // Settings holds the choice for new chats, so no per-chat locks apply.
+    if (setting) {
+      const agentOption = setting.querySelector('option[value="agent"]');
+      if (available.agent.visible && !agentOption) {
+        const option = document.createElement("option");
+        option.value = "agent";
+        option.textContent = "Agent · Beta";
+        setting.appendChild(option);
+      } else if (!available.agent.visible && agentOption) agentOption.remove();
+      const preference = window.App.runMode.preference();
+      const shown = setting.querySelector(`option[value="${preference}"]`) ? preference : "consensus";
+      if (setting.value !== shown) setting.value = shown;
+    }
+    runModeSignature = JSON.stringify([mode, window.App.runMode.preference(), available,
+      select?.value, setting?.value]);
+  }
 
-    autoToggle.checked = !!enabled;
-    localStorage.setItem("autoConsensus", String(!!enabled));
-    autoToggle.disabled = true;
-    autoWrap?.classList.add("is-agent-locked");
-    autoToggle.title = enabled
-      ? "Auto Consensus is always on in Agent Mode"
-      : "Auto Consensus is available only in Agent Mode";
+  function onRunModeChoice(mode, source) {
+    const available = window.App.runMode.availability()[mode];
+    if (!available?.enabled) { renderComposerMode(); return; }
+    window.App.runMode.set(mode, { source });
   }
 
   // Composer controls always describe the next question. The answer reader
   // supplies a separate, frozen summary for the direct comparison on screen.
   function renderComposerMode() {
     const beta = isBeta();
-    const enabled = beta || isAgentModeEnabled();
-    const menuMode = document.getElementById("agentModeMenuSwitch");
-    if (menuMode) { menuMode.checked = enabled; menuMode.disabled = beta; }
-    const menuModeCopy = menuMode?.closest("label")?.querySelector(".attach-menu-toggle-sub");
-    if (menuModeCopy) {
-      menuModeCopy.dataset.consensusCopy ||= menuModeCopy.textContent;
-      menuModeCopy.textContent = beta ? "Agent Beta is active for this chat." : menuModeCopy.dataset.consensusCopy;
-    }
+    const mode = runMode();
+    const enabled = mode !== "compare";
+    renderRunModeControl();
     const legacyDeep = document.getElementById("deepSearchToggle")?.closest("label");
     if (legacyDeep) legacyDeep.hidden = beta;
     ["agentReasoningMenuOption", "agentComparisonMenuOption"].forEach(id => {
@@ -336,7 +373,7 @@
     const sourcesEnabled = window.App.isSourceCheckEnabled();
     const sourcesTitle = enabled
       ? `Check contradictions ${sourcesEnabled ? "on" : "off"} · Check contradictions against existing sources for the next ${beta ? "chat message" : "consensus"}`
-      : "Enable Agent Mode to check contradictions";
+      : "Compare has no consensus to check. Choose Consensus or Agent.";
     ["sourceCheckMenuSwitch", "sourceCheckSwitch"].forEach(id => {
       const control = document.getElementById(id);
       if (control) {
@@ -347,10 +384,15 @@
         if (label) label.title = sourcesTitle;
       }
     });
+    // Tools follow the mode: Compare has nothing to check, so the (+) menu
+    // and the toolbar drop the control instead of showing a dead switch.
+    const menuSourcesRow = document.getElementById("sourceCheckMenuSwitch")?.closest("label");
+    if (menuSourcesRow) menuSourcesRow.hidden = !enabled;
     const bar = document.getElementById("composerModeBar");
     if (!bar) return;
     const sourcesButton = document.getElementById("composerSourcesToggle");
     if (sourcesButton) {
+      sourcesButton.hidden = !enabled;
       sourcesButton.setAttribute("aria-checked", String(sourcesEnabled));
       sourcesButton.disabled = !enabled;
       sourcesButton.title = sourcesTitle;
@@ -358,16 +400,10 @@
     }
     bar.hidden = !document.body.classList.contains("is-hero") && (beta || (!desktopComposer?.matches && enabled));
     window.App.attachments?.syncComposerPlacement?.();
-    bar.dataset.agentMode = String(enabled);
-    document.getElementById("composerAgentToggle").setAttribute("aria-checked", String(enabled));
-    document.getElementById("composerAgentToggle").setAttribute("aria-disabled", String(beta));
-    document.getElementById("composerAgentState").textContent = enabled ? "On" : "Off";
-    document.getElementById("composerModeDescription").textContent = beta
-      ? "Agent Beta is active for this chat. This status cannot be switched yet."
-      : enabled
-      ? "Automatic consensus after the models answer."
-      : "Direct comparison · Independent answers, no consensus.";
-    document.getElementById("composerAgentToggle").title = document.getElementById("composerModeDescription").textContent;
+    bar.dataset.runMode = mode;
+    const chipLabel = document.getElementById("composerModeChipLabel");
+    if (chipLabel) chipLabel.textContent = window.App.runMode.copy(mode).label;
+    document.getElementById("composerModeDescription").textContent = window.App.runMode.copy(mode).description;
     const models = window.App.modelPrefs.filter(pref => document.getElementById(pref.checkId)?.checked);
     const icons = document.getElementById("composerModelIcons");
     const deep = !beta && !!document.getElementById("deepSearchToggle")?.checked;
@@ -422,21 +458,22 @@
     const summary = beta ? null : window.App.answerReader?.directSummary?.();
     const status = document.getElementById("composerComparisonStatus");
     status.hidden = !summary;
+    // The result on screen keeps its own mode; say so when the next
+    // message will run differently.
     status.textContent = summary
-      ? `${enabled ? "Current result: direct comparison · " : ""}${summary}. ${enabled ? "Agent Mode was off for this comparison." : ""}`.trim()
+      ? `${enabled ? "Shown: Compare result · " : ""}${summary}.`
       : "";
     status.title = status.textContent;
     status.dataset.compact = summary ? summary.replace(/^(\d+) of (\d+) ready/, "$1/$2").replace(/ unavailable$/, "!") : "";
   }
 
   function updateAgentModeUI() {
+    // config.agentMode is the persisted run field for "the consensus
+    // pipeline ran"; the name predates the Compare/Consensus/Agent choice.
     const enabled = projectedRunContext
       ? projectedRunContext.config?.agentMode !== false
-      : isAgentModeEnabled();
+      : pipelineEnabled();
     const panel = document.getElementById("agentModePanel");
-    const switchEl = document.getElementById("agentModeSwitch");
-    const menuSwitchEl = document.getElementById("agentModeMenuSwitch");
-    const toggleSwitch = document.querySelector(".agent-mode-switch");
     const modelsEl = document.getElementById("agentModeModels");
     const statusEl = document.getElementById("agentModeStatus");
     const countEl = document.getElementById("agentModeCount");
@@ -458,7 +495,7 @@
 
     document.body.classList.toggle("agent-mode-enabled", enabled);
     document.body.classList.toggle("agent-mode-running", enabled && agentModeStatus === "running");
-    window.App.answerReader?.syncPreview?.(isAgentModeEnabled(), activeModels);
+    window.App.answerReader?.syncPreview?.(pipelineEnabled(), activeModels);
     // "direct-comparison-active" beschreibt, was GERADE AUF DEM SCHIRM steht,
     // der Agent-Mode-Schalter dagegen, was der NAECHSTE Lauf tut. Umschalten
     // behaelt das angezeigte Ergebnis; erst eine neue Projektion wechselt es.
@@ -491,20 +528,8 @@
       }
     }
 
-    // Der Schalter beschreibt den NAECHSTEN Lauf, `enabled` oben den, der
-    // gerade auf dem Schirm steht. Beides derselbe Wert zu geben hiess: wer
-    // den Schalter nach einer Antwort umlegte, sah ihn sofort zurueck-
-    // springen, obwohl die Einstellung laengst umgestellt war — die Wirkung
-    // zeigte sich erst in einer neuen Sitzung. Bedienelemente folgen deshalb
-    // immer der Einstellung, Ansicht und Body-Klassen dem Lauf.
-    const preference = isAgentModeEnabled();
-    if (switchEl) switchEl.checked = preference;
-    if (menuSwitchEl) menuSwitchEl.checked = preference;
-    if (toggleSwitch) {
-      toggleSwitch.title = preference ? "Disable Agent Mode" : "Enable Agent Mode";
-      toggleSwitch.setAttribute("aria-label", toggleSwitch.title);
-    }
-    setAutoConsensusForAgentMode(preference);
+    // The mode selector describes the NEXT message, `enabled` above the run
+    // on screen. Controls follow the choice; view and body classes the run.
     renderComposerMode();
     if (panel) panel.setAttribute("aria-hidden", String(!enabled));
 
@@ -515,7 +540,7 @@
     const collapseBtn = document.getElementById("agentModeCollapseBtn");
     if (collapseBtn) {
       collapseBtn.setAttribute("aria-expanded", String(!collapsed));
-      collapseBtn.title = collapsed ? "Expand to configure models" : "Collapse Agent Mode panel";
+      collapseBtn.title = collapsed ? "Expand to configure models" : "Collapse models panel";
       collapseBtn.setAttribute("aria-label", collapseBtn.title);
     }
     const answeredEl = document.getElementById("agentModeAnswered");
@@ -595,35 +620,27 @@
     scheduleAnswerPreviewSync();
   }
 
-  function setAgentMode(enabled, options = {}) {
-    const { persist = false } = options;
-    const nextEnabled = !!enabled;
-    const wasEnabled = isAgentModeEnabled();
-    if (persist) {
-      localStorage.setItem(AGENT_MODE_STORAGE_KEY, String(nextEnabled));
-    }
-    if (wasEnabled !== nextEnabled) {
+  // Every change of the mode (selector, Settings, another tab) arrives here.
+  // Switching between Compare and Consensus keeps the result on screen,
+  // including a saved direct comparison; only the next message changes.
+  function onRunModeChange(event) {
+    const previous = event?.detail?.previous;
+    const next = event?.detail?.mode;
+    if ((previous === "compare") !== (next === "compare")) {
       modelAnswersVisible = false;
-      // Keep the displayed result, including saved direct comparisons. The
-      // composer labels its original mode separately from the next-run setting.
       document.body.classList.add("agent-mode-transitioning");
       window.setTimeout(() => {
         document.body.classList.remove("agent-mode-transitioning");
       }, 340);
-      if (persist) {
-        window.App.trackAppEvent("app_agent_mode_changed", {
-          enabled: nextEnabled,
-          selected_models: window.App.getSelectedModelCount()
-        });
-      }
     }
     updateAgentModeUI();
-    // Der Platzhalter im Composer verspricht ein Follow-up nur, solange es
-    // eines gibt (consensus-run.js, isArmed) — der Schalter entscheidet das.
+    // The composer placeholder promises a follow-up only while one exists
+    // (consensus-run.js, isArmed); Compare has none.
     window.App?.followup?.render?.();
     if (window.App.runRegistry?.visible?.()) {
       window.App.runRegistry.renderVisible();
     }
+    window.App.attachments?.refreshCompatibility?.();
   }
 
   function setAgentModeStatus(status, message = "") {
@@ -654,9 +671,9 @@
     if (typeof window.updateConsensusButtonAvailability === "function") {
       window.updateConsensusButtonAvailability();
     }
-    // Der Modellstatus bleibt fuer jeden Lauf zentral. Nur Agent Mode reicht
+    // Der Modellstatus bleibt fuer jeden Lauf zentral. Nur Consensus reicht
     // ihn an die gefuehrte Pipeline weiter; der Direktvergleich raeumt sie ab.
-    if (isAgentModeEnabled()) {
+    if (pipelineEnabled()) {
       window.App?.consensusPipeline?.onQueryStatus?.(status);
     } else {
       window.App?.consensusPipeline?.dismiss?.();
@@ -764,18 +781,29 @@
     });
   }
 
-  const agentModeMenuSwitch = document.getElementById("agentModeMenuSwitch");
-  if (agentModeMenuSwitch) {
-    agentModeMenuSwitch.addEventListener("change", function () {
-      if (isBeta()) { renderComposerMode(); return; }
-      setAgentMode(this.checked, { persist: true });
-    });
-  }
-
-  document.getElementById("composerAgentToggle")?.addEventListener("click", function () {
-    if (isBeta()) return;
-    setAgentMode(!isAgentModeEnabled(), { persist: true });
+  document.getElementById("runModeSelect")?.addEventListener("change", function () {
+    onRunModeChoice(this.value, "composer");
   });
+  // The collapsed phone composer hides the selector row; the chip opens the
+  // composer and then the very same selector.
+  document.getElementById("composerModeChip")?.addEventListener("click", function (event) {
+    event.stopPropagation();
+    const open = () => window.App.openModelPicker?.(document.getElementById("runModeSelect"));
+    if (!window.App.composer?.isCollapsed?.()) { open(); return; }
+    window.App.composer.expand();
+    // Open once the row has its final position; a menu placed mid-animation
+    // would be measured against the collapsed composer.
+    const started = Date.now();
+    (function whenSettled() {
+      if (document.body.classList.contains("composer-animating") && Date.now() - started < 1000) {
+        window.requestAnimationFrame(whenSettled);
+      } else open();
+    })();
+  });
+  document.getElementById("runModeSetting")?.addEventListener("change", function () {
+    window.App.runMode.set(this.value, { source: "settings" });
+  });
+  window.addEventListener("consensio:run-mode-change", onRunModeChange);
   document.getElementById("composerSourcesToggle")?.addEventListener("click", function () {
     setSourceCheckEnabled(!checkSources);
   });
@@ -822,8 +850,6 @@
   window.setAgentModeStatus = setAgentModeStatus;
   window.projectAgentModeRun = projectAgentModeRun;
   window.updateAgentModeUI = updateAgentModeUI;
-  window.isAgentModeEnabled = isAgentModeEnabled;
-  window.setAgentMode = setAgentMode;
 
   // Getter fuer den (modul-privaten) Status, damit Query-/Consensus-Code
   // weiterhin auf den "running"-Zustand pruefen kann.

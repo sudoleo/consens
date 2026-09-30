@@ -163,12 +163,13 @@ def test_the_composer_carries_no_followup_affordance_at_all():
     assert "followup-newrun" not in run
     assert 'id="newRunButton"' in template
 
-    # Der Kontext geht mit, solange es einen gibt — und den gibt es nur im
-    # Agent Mode (query-send bindet ihn genau dort). Der Platzhalter darf
-    # deshalb kein Follow-up versprechen, das der naechste Lauf nicht gibt.
+    # Der Kontext geht mit, solange es einen gibt — und den gibt es nur,
+    # wenn die Consensus-Pipeline laeuft (query-send bindet ihn genau dort),
+    # nie in Compare. Der Platzhalter verspricht kein Follow-up, das der
+    # naechste Lauf nicht gibt.
     assert (
         "isArmed() {\n"
-        "      return !!this.lastExchange && window.isAgentModeEnabled?.() === true;\n"
+        "      return !!this.lastExchange && window.App.runMode?.pipeline?.() === true;\n"
         "    }"
     ) in run
 
@@ -349,11 +350,12 @@ def test_archived_turns_use_the_same_drawer_row_as_the_live_answer():
 
 
 def test_composer_row_is_reduced_to_attach_run_switch_and_send():
-    """Agent Mode, the mode explainer and the clear button left the composer.
-    Their functions live in Settings, the (+) menu and 'New comparison'."""
+    """The mode explainer and the clear button left the composer; the one
+    mode selector (Compare / Consensus / Agent) is its only mode control."""
     template = read("templates/index.html")
 
     assert 'id="attachTrigger"' in template
+    assert 'id="runModeSelect"' in template
     assert 'id="consensusModelDropdown"' in template
     assert 'id="sendButton"' in template
 
@@ -362,8 +364,7 @@ def test_composer_row_is_reduced_to_attach_run_switch_and_send():
     assert 'id="clearButton"' not in template
 
     # ...but the functions are still reachable.
-    assert 'id="agentModeSwitch"' in template
-    assert 'id="autoConsensusToggle"' in template
+    assert 'id="runModeSetting"' in template
     assert 'id="deepSearchToggle"' in template
     assert 'id="newRunButton"' in template
 

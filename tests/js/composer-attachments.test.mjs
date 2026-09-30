@@ -9,23 +9,21 @@ const BODY = `<div class="input-section">
     <div id="attachMenu" hidden><button id="attachUploadOption"></button></div>
     <input id="attachFileInput" type="file">
   </div>
-  <div id="composerModeBar" hidden><button id="composerAgentToggle"></button>
-    <span id="composerAgentState"></span><p id="composerModeDescription"></p>
+  <div id="composerModeBar" hidden><p id="composerModeDescription"></p>
     <span id="composerModelIcons"></span><p id="composerComparisonStatus"></p>
     <button id="composerAttachButton"></button></div>
   </div>
-  <input id="agentModeSwitch" type="checkbox"><input id="agentModeMenuSwitch" type="checkbox">
-  <input id="autoConsensusToggle" type="checkbox"><input id="deepSearchToggle" type="checkbox">
+  <input id="deepSearchToggle" type="checkbox">
   <div id="threadAskAttachments"></div>
   <div id="attachmentViewerModal" hidden><span id="attachmentViewerTitle"></span>
     <div id="attachmentViewerBody"></div><button id="attachmentViewerClose"></button></div>`;
 
 function boot() {
-  const ctx = loadScripts(["static/js/attachments.js", "static/js/agent-mode.js"], {
+  const ctx = loadScripts(["static/js/run-mode.js", "static/js/attachments.js", "static/js/agent-mode.js"], {
     body: BODY,
     before(window) {
       window.document.body.classList.add("is-hero");
-      window.localStorage.setItem("agentMode", "true");
+      window.localStorage.setItem("runMode", "consensus");
       window.App = { modelPrefs: [], deepThinkModelLabels: {},
         getModelOptionLabel: () => "", getSelectedModelCount: () => 0,
         initCustomModelPicker: vi.fn(), trackAppEvent: vi.fn(), composer: {expand: vi.fn()} };
@@ -55,9 +53,9 @@ describe("composer attachment tray", () => {
     expect(tray.parentNode).toBe(document.querySelector(".chat-input-container"));
     expect(tray.hidden).toBe(false);
     expect(document.activeElement).toBe(preview);
-    window.setAgentMode(false, {persist: true});
+    window.App.runMode.set('compare');
     expect(tray.parentNode).toBe(toolbar);
-    window.setAgentMode(true, {persist: true});
+    window.App.runMode.set('consensus');
     document.body.classList.add("is-hero");
     await Promise.resolve();
     expect(tray.parentNode).toBe(toolbar);

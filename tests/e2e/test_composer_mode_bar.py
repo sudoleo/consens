@@ -5,40 +5,39 @@ import pytest
 from playwright.sync_api import expect
 
 from test_phase4_frontend import _real_firebase_page, phase4_server  # noqa: F401
+from test_run_mode_selector import choose
 
 
 @pytest.mark.parametrize("width,dark", [(1440, False), (1440, True), (390, False), (320, True)])
 def test_composer_mode_bar(browser, phase4_server, width, dark):
     context, page = _real_firebase_page(browser, phase4_server,
-        init_script="localStorage.setItem('agentMode', 'true');")
+        init_script="localStorage.setItem('runMode', 'consensus');")
     errors = []
     page.on('pageerror', lambda error: errors.append(str(error)))
     try:
         page.set_viewport_size({"width": width, "height": 900})
         page.evaluate("dark => document.body.classList.toggle('dark-mode', dark)", dark)
         bar = page.locator('#composerModeBar')
-        toggle = page.locator('#composerAgentToggle')
+        mode = page.locator('#runModeSelect')
+        chip = page.locator('#composerModeChip')
         expect(bar).to_be_visible()
-        expect(toggle).to_have_attribute('aria-checked', 'true')
+        expect(mode).to_have_value('consensus')
         expect(page.locator('#composerModelIcons img')).to_have_count(6)
         expect(page.locator('#composerModelCount')).to_have_count(0)
         expect(page.locator('#composerDeepToggle')).to_be_visible()
         expect(page.locator('#composerAttachButton')).to_be_visible()
-        expect(page.locator('#composerModeDescription')).to_contain_text('Automatic consensus')
+        expect(page.locator('#composerModeDescription')).to_contain_text('differences and checks')
         output = Path('test-results/composer-mode-bar')
         output.mkdir(parents=True, exist_ok=True)
         page.screenshot(path=str(output / f'{width}-{"dark" if dark else "light"}-hero.png'))
-        page.locator('#attachTrigger').click()
-        page.locator('label[for="agentModeMenuSwitch"]').click()
-        page.locator('#attachTrigger').click()
+        choose(page, 'compare')
         expect(bar).to_be_visible()
-        expect(toggle).to_have_attribute('aria-checked', 'false')
+        expect(page.locator('#composerSourcesToggle')).to_be_hidden()
         expect(page.locator('#composerSourcesToggle')).to_be_disabled()
         expect(page.locator('#composerSourcesToggle')).to_have_attribute('aria-checked', 'false')
         expect(page.locator('#sourceCheckSwitch')).to_be_disabled()
         expect(page.locator('#sourceCheckMenuSwitch')).to_be_disabled()
         assert page.evaluate('App.isSourceCheckEnabled()') is False
-        expect(page.locator('#agentModeMenuSwitch')).not_to_be_checked()
         expect(page.locator('#composerModeDescription')).to_contain_text('no consensus')
         expect(page.locator('#modeNotice')).to_have_count(0)
         assert bar.evaluate("el => getComputedStyle(el).animationName") == 'composer-mode-reveal'
@@ -56,9 +55,14 @@ def test_composer_mode_bar(browser, phase4_server, width, dark):
         expect(page.locator('.answer-reader-header')).to_be_hidden()
         expect(page.locator('#answerReaderMode')).to_be_hidden()
         expect(page.locator('.is-direct .answer-reader-answer')).to_have_count(6)
-        # The mode remains visible even when the phone composer is collapsed.
+        # The mode remains visible even when the phone composer is collapsed:
+        # the chip stands in for the hidden selector row.
         page.evaluate("document.body.classList.add('composer-collapsed')")
-        expect(toggle).to_be_visible()
+        if width < 1100:
+            expect(chip).to_be_visible()
+            expect(chip).to_have_text('Compare')
+        else:
+            expect(mode.locator('xpath=..')).to_be_visible()
         # Collapsing can restart the reveal; measure its final position.
         page.wait_for_function("() => !document.body.classList.contains('composer-animating')")
         bar.evaluate("el => Promise.all(el.getAnimations().map(animation => animation.finished))")
@@ -75,8 +79,8 @@ def test_composer_mode_bar(browser, phase4_server, width, dark):
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
         page.locator('.input-section').screenshot(path=str(output / f'{width}-{"dark" if dark else "light"}-dock.png'))
         page.screenshot(path=str(output / f'{width}-{"dark" if dark else "light"}-direct.png'))
-        toggle.click()
-        expect(toggle).to_have_attribute('aria-checked', 'true')
+        page.evaluate("document.body.classList.remove('composer-collapsed')")
+        choose(page, 'consensus')
         if width >= 1100:
             expect(bar).to_be_visible()
         else:
@@ -84,14 +88,14 @@ def test_composer_mode_bar(browser, phase4_server, width, dark):
         expect(page.locator('#composerSourcesToggle')).to_be_enabled()
         expect(page.locator('#composerSourcesToggle')).to_have_attribute('aria-checked', 'true')
         # Bookmark provenance does not change when the next question changes mode.
-        expect(page.locator('#composerComparisonStatus')).to_contain_text('Agent Mode was off')
+        expect(page.locator('#composerComparisonStatus')).to_contain_text('Shown: Compare result')
         expect(page.locator('.is-direct .answer-reader-answer')).to_have_count(6)
         page.screenshot(path=str(output / f'{width}-{"dark" if dark else "light"}-agent.png'))
         page.evaluate('App.answerReader.reset()')
         expect(page.locator('#composerComparisonStatus')).to_be_hidden()
         page.evaluate("document.getElementById('newRunButton').click()")
         expect(bar).to_be_visible()
-        expect(toggle).to_have_attribute('aria-checked', 'true')
+        expect(mode).to_have_value('consensus')
         assert errors == []
     finally:
         context.close()
@@ -100,7 +104,7 @@ def test_composer_mode_bar(browser, phase4_server, width, dark):
 @pytest.mark.parametrize("width,dark", [(1440, False), (390, False), (320, True)])
 def test_toolbar_deep_think_and_upload_reuse_plan_gates(browser, phase4_server, width, dark):
     context, page = _real_firebase_page(browser, phase4_server,
-        init_script="localStorage.setItem('agentMode', 'true');")
+        init_script="localStorage.setItem('runMode', 'consensus');")
     try:
         page.set_viewport_size({'width': width, 'height': 844})
         page.evaluate("dark => document.body.classList.toggle('dark-mode', dark)", dark)

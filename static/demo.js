@@ -679,9 +679,9 @@ async function runDemoFlow() {
   const balanced = window.CONSENSUS_PRESETS?.find(preset => preset.id === 'balanced');
   activeDemoModels = window.App.modelPrefs.filter(pref => balanced?.models?.[pref.provider]).map(pref => pref.key);
   activeDemoData = buildDemoDataForModels(activeDemoModels);
-  const agentModeEnabled = window.isAgentModeEnabled?.() === true;
-  // Auch die lokale Demo respektiert den Produktmodus: Agent Mode baut den
-  // Thread auf, der Direktvergleich bleibt bei den sechs Antwortfenstern.
+  const agentModeEnabled = window.App?.runMode?.pipeline?.() === true;
+  // Auch die lokale Demo respektiert den Modus: Consensus baut den Thread
+  // auf, Compare bleibt bei den sechs Antwortfenstern.
   if (agentModeEnabled) {
     window.exitHeroMode?.();
   } else {
@@ -758,10 +758,9 @@ async function runDemoFlow() {
   const consensusDiv = document.getElementById("consensusResponse");
   const mainP = window.App.consensusBodyEl(consensusDiv);
   const diffP = consensusDiv?.querySelector(".consensus-differences p");
-  // Consensus/Differences sind Teil des Agent Mode. Im Direktvergleich endet
-  // die Demo nach den sechs Modellantworten.
-  const auto = window.isAgentModeEnabled?.() === true
-    && document.getElementById("autoConsensusToggle")?.checked !== false;
+  // Consensus/Differences gehoeren zum Consensus-Modus. In Compare endet die
+  // Demo nach den sechs Modellantworten.
+  const auto = window.App?.runMode?.pipeline?.() === true;
 
   if (auto) {
     window.resetConsensusInsights?.();

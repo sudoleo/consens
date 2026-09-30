@@ -37,7 +37,7 @@
   root.innerHTML = `
     <div class="answer-reader-preview-intro" id="answerReaderPreviewIntro" hidden>
       <h2>One question. Individual answers.</h2>
-      <p id="answerReaderPreviewDescription">Send a question to see each model’s answer here, side by side. Agent Mode is off, so answers stay separate.</p>
+      <p id="answerReaderPreviewDescription">Send a question to see each model’s answer here, side by side. Compare keeps the answers separate.</p>
     </div>
     <header class="answer-reader-header">
       <div class="answer-reader-heading"><h2 id="answerReaderTitle">Model answers</h2><span id="answerReaderStatus" role="status" aria-live="polite"></span></div>
@@ -46,7 +46,7 @@
         <button type="button" id="answerReaderClose" class="answer-reader-icon-button" aria-label="Back to chat" title="Back to chat"></button>
       </div>
     </header>
-    <p id="answerReaderMode" class="answer-reader-mode" hidden>Agent Mode is off for this comparison. Each model answers independently.</p>
+    <p id="answerReaderMode" class="answer-reader-mode" hidden>Compare result. Each model answered independently.</p>
     <div class="answer-reader-context">
       <div class="answer-reader-context-top"><label for="answerReaderTurn">Conversation</label><select id="answerReaderTurn" aria-label="Question in this conversation"></select><span id="answerReaderTurnLabel">Current question</span></div>
       <details id="answerReaderQuestion"><summary><span></span></summary></details>
@@ -808,7 +808,7 @@
       classes.remove("is-hero", "composer-collapsed");
       classes.add("direct-comparison-preview", "direct-comparison-active");
       get("PreviewDescription").textContent = models.length
-        ? "Send a question to see each model’s answer here, side by side. Agent Mode is off, so answers stay separate."
+        ? "Send a question to see each model’s answer here, side by side. Compare keeps the answers separate."
         : "Choose at least one model in the model picker below, then send your question.";
     }
     window.syncHeroResponseAccess?.();

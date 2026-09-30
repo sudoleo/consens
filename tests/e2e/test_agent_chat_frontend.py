@@ -23,9 +23,9 @@ CATALOG = {"default_model_id": "deepseek/deepseek-v4.1-flash", "models": [
 
 
 def _choose_mode(page, mode):
-    page.locator("#chatExecutionControl .model-picker-display").click()
-    page.locator(f'#chatExecutionControl [data-value="{mode}"]').click()
-    expect(page.locator("#chatExecutionMode")).to_have_value(mode)
+    page.locator("#runModeControl .model-picker-display").click()
+    page.locator(f'#runModeControl [data-value="{mode}"]').click()
+    expect(page.locator("#runModeSelect")).to_have_value(mode)
 
 
 def _snapshot(page, name):
@@ -268,7 +268,7 @@ def test_single_agent_send_followup_restore_and_layout(browser, phase4_server, w
         page.route("**/bookmarks/*/conversation*", lambda route: _json(route, {"chat_id": chat_id, "turns": turns, "next_cursor": None, "has_more": False}))
         page.route("**/bookmarks/*", lambda route: _json(route, {"bookmark": bookmark}))
         page.evaluate("async () => { await window.__switchE2EUser('account-a'); }")
-        expect(page.locator("#chatExecutionMode")).to_be_visible()
+        expect(page.locator("#runModeControl")).to_be_visible()
         page.evaluate("dark => { document.documentElement.classList.toggle('dark-mode', dark); document.body.classList.toggle('dark-mode', dark); }", dark)
         _choose_mode(page, "agent")
         assert not errors
@@ -293,9 +293,7 @@ def test_single_agent_send_followup_restore_and_layout(browser, phase4_server, w
             page.locator('#agentModelControls [data-value="gpt-5.6-sol"]').click()
         _choose_effort(page, "medium")
         _snapshot(page, f"agent-composer-{width}-{'dark' if dark else 'light'}")
-        expect(page.locator("#composerAgentToggle")).to_be_visible()
-        expect(page.locator("#composerAgentToggle")).to_have_attribute("aria-disabled", "true")
-        expect(page.locator("#composerAgentToggle")).to_have_attribute("aria-checked", "true")
+        expect(page.locator("#runModeSelect")).to_have_value("agent")
         page.locator("#questionInput").fill("Explain the first step")
         page.locator("#sendButton").click()
         expect(page.locator("#agentAnswerBody")).to_contain_text("Explain the first step")
@@ -316,7 +314,9 @@ def test_single_agent_send_followup_restore_and_layout(browser, phase4_server, w
         expect(page.locator('#questionInput')).to_be_focused()
         expect(page.locator("#agentAnswer")).to_be_visible()
         expect(page.locator("#consensusOutput")).not_to_be_visible()
-        expect(page.locator("#chatExecutionMode")).to_be_disabled()
+        # An open Agent chat keeps its family; the other modes need a new chat.
+        expect(page.locator('#runModeSelect option[value="consensus"]')).to_be_disabled()
+        expect(page.locator('#runModeSelect option[value="compare"]')).to_be_disabled()
         expect(page.locator("#agentAnswerLabel")).to_have_count(0)
         assert page.locator("#threadAsk").evaluate("el => getComputedStyle(el).display") == "flex"
         expect(page.locator("#threadAsk .thread-ask-label")).to_have_count(0)
@@ -379,7 +379,7 @@ def test_single_agent_send_followup_restore_and_layout(browser, phase4_server, w
         page.locator("#newRunButton").click()
         if width < 1100 and page.locator("#toggleSidebarButton").get_attribute("aria-expanded") == "true":
             page.locator("#sidebarToggleInner").click()
-        expect(page.locator("#chatExecutionMode")).to_be_enabled()
+        expect(page.locator('#runModeSelect option[value="consensus"]')).to_be_enabled()
         _choose_mode(page, "consensus")
         expect(page.locator("#agentAnswer")).not_to_be_visible()
         expect(page.locator("#viewSwitchConsensus")).to_have_text("Consensus")

@@ -602,7 +602,9 @@
   }
 
   function beginContext(question, draftQuestion, quotedContext) {
-    const agentMode = window.isAgentModeEnabled?.() === true;
+    // Persisted run field: "the consensus pipeline runs" (Consensus or an
+    // Agent choice this chat or account cannot honour). Compare skips it.
+    const agentMode = window.App.runMode.pipeline();
     const basis = registry.getSelectedConversationBasis();
     const followup = Boolean(agentMode && basis && basis.question && basis.consensus && !basis.continuationUnavailable);
     const deepSearch = document.getElementById("deepSearchToggle")?.checked === true;
@@ -648,7 +650,7 @@
     const config = {
       agentMode,
       checkSources: agentMode && window.App.isSourceCheckEnabled?.() !== false,
-      autoConsensus: agentMode && document.getElementById("autoConsensusToggle")?.checked !== false,
+      autoConsensus: agentMode,
       deepSearch,
       useOwnKeys,
       providers: providers.map(provider => ({ ...provider })),

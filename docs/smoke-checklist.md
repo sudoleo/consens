@@ -239,22 +239,30 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       numerische Score-Anzeige im aktuellen Consensus und in archivierten Turns
       aus; die qualitative Einordnung/Widerspruchswarnung bleibt sichtbar. Nach
       Reload bleibt die Auswahl erhalten.
-- [ ] Das (+)-Menü zeigt Agent Mode direkt unter Deep Think im identischen
-      Zeilen-/Switch-Stil. Der Agent-Schalter hat kein Pro-Badge, ist für
-      Free-Nutzer bedienbar und bleibt in beide Richtungen mit dem
-      Settings-Schalter synchron.
+- [ ] EIN Moduswähler in der Composer-Zeile (Compare / Consensus / Agent · Beta)
+      bei 1440/390/320 px, hell und dunkel: jede Option mit einer Zeile
+      Erklärung, Compare und Consensus für alle Stufen, Agent nur mit
+      Agent-Zugang. Settings → Runs → Mode zeigt dieselbe Wahl und bleibt
+      synchron; die Wahl übersteht ein Neuladen und folgt in einem zweiten Tab.
+      Kein Agent-Mode-Schalter mehr im (+)-Menü, in Settings oder unter dem
+      Input. In einem offenen Consensus-Chat ist Agent deaktiviert („Available
+      in a new chat“); in einem Agent-Chat verschwindet der Wähler, „New chat“
+      bringt ihn zurück. Eingeklappter
+      Handy-Composer: der Modus-Chip unter dem Feld zeigt den Modus und öffnet
+      dieselbe Auswahl. Direkt nach dem Laden mit gespeicherter Agent-Wahl
+      sendet nichts als Consensus, solange der Agent-Zugang noch lädt.
 - [ ] Frage eingeben + senden → alle ausgewählten Modelle streamen Antworten.
 - [ ] Bei null oder einem ausgewählten Modell ist Senden deaktiviert; Sidebar-
       Zähler und Custom-Picker nennen „choose at least 2“. Ab zwei Modellen startet
-      der Lauf; nur Agent Mode endet in Consensus + Differences, der
-      Direktvergleich endet nach den Modellantworten. Mit Anhang und genau
+      der Lauf; nur Consensus endet in Consensus + Differences, Compare
+      endet nach den Modellantworten. Mit Anhang und genau
       OpenAI + stale DeepSeek wird nach dem Attachment-Filter erneut geprüft:
       kein Usage-Run, kein `/prepare`, kein Ein-Modell-Fan-out.
 - [ ] Antworten alle ausgewählten `/ask_*` mit HTTP-/Netzfehler, endet der Lauf
       sichtbar und in Analytics als Fehler; kein Consensus startet. Nach dem
       ersten echten Lauf bleiben die in Settings gewählten Markierungsfilter
       aktiv; Antworttext und Quellenlinks bleiben bei „No highlights“ lesbar.
-- [ ] Ohne Agent Mode bleibt die Oberfläche im direkten Vergleich: Frage und
+- [ ] In Compare bleibt die Oberfläche im direkten Vergleich: Frage und
       Antwortleser, kein Pipeline-Block und kein `/consensus`-Request. Alle
       Modellantworten und Status sind gleichzeitig sichtbar: zwei offene Spalten,
       mobil untereinander, ohne aeusseren Rahmen und Copy-Schaltflaechen.
@@ -444,9 +452,10 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       Herunterscrollen; Aufwärtsscrollen, Seitenanfang oder Tastatur-Navigation
       bringen beide ohne Flackern zurück. Dasselbe gilt im scrollenden
       Watch-Dashboard für den View-Schalter.
-- [ ] Auto-Consensus ist an Agent Mode gekoppelt: Agent Mode an triggert ihn
-      nach Abschluss; Agent Mode aus hält den read-only Toggle aus und sendet
-      keinen `/consensus`-Request.
+- [ ] Auto-Consensus folgt dem Modus: Consensus triggert ihn nach Abschluss;
+      Compare sendet keinen `/consensus`-Request und blendet „Check
+      contradictions“ in Leiste und (+)-Menü aus. Die Demo (`?demo=1`) zeigt
+      in Consensus Konsens und Differences, in Compare nur die Antworten.
 - [ ] Credibility-Frame-Farbe (cred-very … cred-not) wird gesetzt.
 - [ ] Consensus-Insights: Claim-Badges, Difference-Karten, Klick öffnet Popover,
       „Jump to model answer" highlightet die Originalantwort.
@@ -474,9 +483,9 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       versucht und erst der bestätigte Serverstand markiert den neuen Tag. Ein transienter `/user_status`-Fehler wird durch ein
       erfolgreiches Pro-`/usage` inklusive Badge/Features geheilt.
 
-## Agent Mode
-- [ ] Agent-Mode an/aus, Timer läuft, Status-Text korrekt, Auto-Consensus-Kopplung;
-      ausgeschaltet bleiben sechs direkte Antworten sichtbar und der
+## Consensus-Lauf (früher „Agent Mode“)
+- [ ] Consensus/Compare wechseln, Timer läuft, Status-Text korrekt;
+      in Compare bleiben sechs direkte Antworten sichtbar und der
       Consensus-/Differences-/Claims-Pfad unberührt.
 - [ ] Nach der ersten fertigen Modellantwort erscheint dezent „Compare answers“
       (auch im eingeklappten Mobile-Panel); der Toggle zeigt/versteckt die
@@ -793,10 +802,10 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       Quellenstatus bleibt sichtbar, Badges und Originalpassagen umbrechen ohne
       horizontales Scrollen; reduzierte Bewegung deaktiviert Ladeanimationen.
 
-- [ ] Frische Sitzung mit Agent Mode an: gespeicherten Direktvergleich oeffnen.
+- [ ] Frische Sitzung in Consensus: gespeicherten Direktvergleich oeffnen.
       Alle gespeicherten Modelle sind sichtbar, auch aktuell ausgeschlossene.
-      „Direct comparison“ erklaert Agent Mode fuer dieses Ergebnis; die
-      Einstellung fuer die naechste Frage bleibt an. Wechsel zu einem
+      „Direct comparison“ erklaert das Ergebnis; die Wahl fuer die naechste
+      Frage bleibt Consensus. Wechsel zu einem
       Consensus-Bookmark und zurueck zeigt keine leeren oder fremden Antworten.
 
 ## Agent · Beta: Vergleiche und Prüfungen
@@ -838,8 +847,9 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       `artifacts/agent-reliability-2026-09-20/`; Details und Grenzen im
       [Zuverlässigkeitsaudit](agent-reliability-audit-2026-09-20.md).
 
-- [ ] Bottom-Bar vor und nach dem Senden bei 1440/390/320 px: „Agent Mode On“
-      bleibt eine Statusanzeige; Klick verändert keine alte Consensus-Einstellung.
+- [ ] Bottom-Bar vor und nach dem Senden bei 1440/390/320 px: vor dem Senden
+      zeigt der Moduswähler „Agent“, im offenen Agent-Chat tritt er zurück und
+      das Eingabefeld behält seine Breite.
       „Check contradictions“ schaltet die Quellenprüfung für die nächste Nachricht;
       ein laufender Run und Recovery behalten den eingefrorenen Wert.
       „Deep Think“ öffnet per Klick/Enter die vorhandene Reasoning-Auswahl,

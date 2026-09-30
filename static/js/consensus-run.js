@@ -192,7 +192,7 @@
     // diese Bedingung; ohne sie versprach der Platzhalter "Ask a follow-up
     // question" eine Fortsetzung, die der naechste Lauf nicht mehr gab.
     isArmed() {
-      return !!this.lastExchange && window.isAgentModeEnabled?.() === true;
+      return !!this.lastExchange && window.App.runMode?.pipeline?.() === true;
     },
 
     hasContinuableExchange() {
@@ -1195,8 +1195,7 @@
     }
 
     if (
-      typeof window.isAgentModeEnabled === "function"
-      && window.isAgentModeEnabled()
+      window.App.runMode?.pipeline?.() === true
       && window.isAgentModeRunning()
     ) {
       if (typeof window.updateConsensusButtonAvailability === "function") {
@@ -1858,7 +1857,7 @@
           ? window.App.usageLimit.isLimitError(consensusErrorDetail || data, consensusErrorMessage)
           : false;
         if (consensusHitUsageLimit) {
-          if (typeof window.setAgentModeStatus === "function" && window.isAgentModeEnabled?.()) {
+          if (typeof window.setAgentModeStatus === "function" && window.App.runMode?.pipeline?.()) {
             window.setAgentModeStatus("error", consensusErrorMessage);
           }
           // Die Antworten der Modelle stehen schon da; was fehlt, ist die

@@ -324,8 +324,7 @@ def test_settings_are_grouped_without_changing_control_ids():
 
     for control_id in (
         "mobileModeToggle",
-        "agentModeSwitch",
-        "autoConsensusToggle",
+        "runModeSetting",
         "useOwnKeysSwitch",
         "apiSettingsArea",
         "systemPromptInput",

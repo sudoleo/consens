@@ -62,7 +62,7 @@
             "name": "Why is there a separate judge model?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "The Differences Judge finds substantive disagreements; the Coverage Judge checks which models support, contradict, or never addressed each sentence. In Consensus Chat with Agent Mode and Check contradictions on, an additional judge checks major factual disagreements against existing sources from both positions. Results and original evidence appear beside each contradiction. This optional source check does not change the agreement score."
+              "text": "The Differences Judge finds substantive disagreements; the Coverage Judge checks which models support, contradict, or never addressed each sentence. In Consensus mode with Check contradictions on, an additional judge checks major factual disagreements against existing sources from both positions. Results and original evidence appear beside each contradiction. This optional source check does not change the agreement score."
             }
           },
           {
@@ -121,7 +121,7 @@
           <h2 class="lp-h2">The engine runs in four readable steps.</h2>
           <p class="lp-lead">
             The answer models respond independently, your selected Consensus Engine writes the synthesis,
-            and two judges analyze differences and sentence coverage. In Agent Mode, an optional
+            and two judges analyze differences and sentence coverage. In Consensus mode, an optional
             source check then examines eligible factual contradictions in Consensus Chat.
           </p>
         </div>
@@ -252,7 +252,7 @@
             <p class="lp-eyebrow">Analysis layer</p>
             <h3>Two analysis judges, plus an optional source check</h3>
             <p>The Differences Judge works out the contradictions; the Coverage Judge belongs to the same pass but has one narrow job, and therefore runs on a cheaper model: a verdict for every sentence, with none allowed to be skipped. For independence, consens.io prefers a different model family from the Consensus Engine for both.</p>
-            <p>In Consensus Chat with Agent Mode and Check contradictions on, an additional judge checks major factual disagreements against sources already supplied by both model positions. Results appear beside each contradiction, with original passages, source links and relevant dates and conditions. Background checks have explicit budgets; unavailable and omitted checks are identified. This is not a complete fact-check of the consensus. The answer, model positions and agreement score stay unchanged.</p>
+            <p>In Consensus mode with Check contradictions on, an additional judge checks major factual disagreements against sources already supplied by both model positions. Results appear beside each contradiction, with original passages, source links and relevant dates and conditions. Background checks have explicit budgets; unavailable and omitted checks are identified. This is not a complete fact-check of the consensus. The answer, model positions and agreement score stay unchanged.</p>
           </article>
         </div>
       </div>
@@ -470,7 +470,7 @@
         <div class="ce-faq-list">
           <article>
             <h3>Can I turn the source check off?</h3>
-            <p>Yes. Check contradictions starts on in Agent Mode. Without Agent Mode, the control is disabled; your saved choice returns when you enable Agent Mode again. Switch it off beside Agent Mode under the input, directly below Agent Mode in the (+) menu, or in Settings → Runs. Your choice is saved for the next chat run. Watches, Topics and API runs do not perform this optional check. The check uses existing sources from both sides of major factual disagreements. Results distinguish support for a position, different conditions, conflicting sources and insufficient evidence. Preferences and recommendations are excluded. Inaccessible documents and budget omissions get explicit statuses. This does not verify the entire answer. Consensus, claims and differences still run when it is off.</p>
+            <p>Yes. Check contradictions starts on in Consensus mode. Compare has no consensus to check, so the control is hidden there; your saved choice returns when you choose Consensus again. Switch it off under the input, in the (+) menu, or in Settings → Runs. Your choice is saved for the next chat run. Watches, Topics and API runs do not perform this optional check. The check uses existing sources from both sides of major factual disagreements. Results distinguish support for a position, different conditions, conflicting sources and insufficient evidence. Preferences and recommendations are excluded. Inaccessible documents and budget omissions get explicit statuses. This does not verify the entire answer. Consensus, claims and differences still run when it is off.</p>
           </article>
           <article>
             <h3>Is the consensus just the majority answer?</h3>

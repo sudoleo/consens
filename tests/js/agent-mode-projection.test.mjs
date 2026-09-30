@@ -6,17 +6,18 @@ import { loadScripts } from "./helpers/appWindow.mjs";
 // a saved bookmark was opened while a run keeps going -- it has to fall back
 // to the controls instead of reading a run that is not there.
 const BODY = `
+  <div class="select-wrapper" id="runModeControl"><select id="runModeSelect">
+    <option value="compare">Compare</option><option value="consensus">Consensus</option></select></div>
+  <select id="runModeSetting"><option value="compare">Compare</option><option value="consensus">Consensus</option></select>
   <div id="composerModeBar">
-    <button id="composerAgentToggle"></button><span id="composerAgentState"></span>
+    <button id="composerModeChip"><span id="composerModeChipLabel"></span></button>
     <button id="composerSourcesToggle"></button><span id="composerSourcesState"></span>
     <p id="composerModeDescription"></p><span id="composerModelIcons"></span>
     <p id="composerComparisonStatus"></p>
     <button id="composerDeepToggle"></button><span id="composerDeepState"></span>
     <button id="composerAttachButton"></button>
   </div>
-  <input id="agentModeMenuSwitch" type="checkbox"><input id="agentModeSwitch" type="checkbox">
-  <input id="sourceCheckMenuSwitch" type="checkbox"><input id="sourceCheckSwitch" type="checkbox">
-  <input id="autoConsensusToggle" type="checkbox">
+  <label><input id="sourceCheckMenuSwitch" type="checkbox"></label><input id="sourceCheckSwitch" type="checkbox">
   <label><input id="deepSearchToggle" type="checkbox"></label><button id="attachUploadOption"></button>
   <button id="agentReasoningMenuOption" hidden></button><span id="agentReasoningMenuState"></span>
   <button id="agentComparisonMenuOption" hidden></button>
@@ -33,8 +34,8 @@ const BODY = `
   <div id="openaiResponse" class="response-box"><div class="collapsible-content"></div></div>
 `;
 
-function boot({ desktop = false, agentMode = true, checkSources = true } = {}) {
-  return loadScripts(["static/js/agent-mode.js"], {
+function boot({ desktop = false, mode = "consensus", checkSources = true } = {}) {
+  return loadScripts(["static/js/run-mode.js", "static/js/agent-mode.js"], {
     body: BODY,
     before(window) {
       const media = {matches: desktop, addEventListener: vi.fn()};
@@ -54,7 +55,7 @@ function boot({ desktop = false, agentMode = true, checkSources = true } = {}) {
         initCustomModelPicker: vi.fn(),
         trackAppEvent: vi.fn()
       };
-      window.localStorage.setItem("agentMode", String(agentMode));
+      window.localStorage.setItem("runMode", mode);
       window.localStorage.setItem("checkSources", String(checkSources));
     }
   });
@@ -62,20 +63,26 @@ function boot({ desktop = false, agentMode = true, checkSources = true } = {}) {
 
 describe("agent mode panel projection", () => {
   it.each([false, true])('moves Beta tools into the plus menu after chat start (desktop: %s)', async desktop => {
-    const {window, document, dom} = boot({agentMode: false, desktop});
-    window.App.agentChat = {isSelected: () => true};
+    const {window, document, dom} = boot({mode: "compare", desktop});
+    window.App.agentChat = {isSelected: () => true, modeState: () => ({family: 'agent', canUse: true, pending: false})};
     window.App.openModelPicker = vi.fn();
     document.body.insertAdjacentHTML('beforeend', '<select id="agentModelDropdown"></select><select id="agentReasoningEffort" data-available="true"><option value="high">High</option></select>');
     document.body.classList.remove('is-hero');
     window.App.renderComposerMode();
     expect(document.getElementById('composerModeBar').hidden).toBe(true);
-    expect(document.getElementById('agentModeMenuSwitch').disabled).toBe(true);
-    expect(document.getElementById('agentModeMenuSwitch').checked).toBe(true);
+    // An open Agent chat shows Agent; Compare/Consensus need a new chat.
+    const select = document.getElementById('runModeSelect');
+    expect(select.value).toBe('agent');
+    expect(select.querySelector('[value="compare"]').disabled).toBe(true);
+    expect(select.querySelector('[value="compare"]').dataset.description).toBe('Available in a new chat');
+    expect(document.getElementById('composerModeChipLabel').textContent).toBe('Agent');
+    expect(document.getElementById('runModeControl').hidden).toBe(true);
     expect(document.getElementById('agentReasoningMenuOption').hidden).toBe(false);
     expect(document.getElementById('deepSearchToggle').closest('label').hidden).toBe(true);
-    expect(document.getElementById('composerAgentState').textContent).toBe('On');
-    document.getElementById('composerAgentToggle').click();
-    expect(window.localStorage.getItem('agentMode')).toBe('false');
+    select.value = 'compare';
+    select.dispatchEvent(new window.Event('change'));
+    expect(window.localStorage.getItem('runMode')).toBe('compare');
+    expect(select.value).toBe('agent');
     expect(window.App.isSourceCheckEnabled()).toBe(true);
     document.getElementById('composerSourcesToggle').click();
     expect(window.App.isSourceCheckEnabled()).toBe(false);
@@ -94,11 +101,15 @@ describe("agent mode panel projection", () => {
     await vi.waitFor(() => expect(document.getElementById('composerModeBar').hidden).toBe(false));
     expect(document.getElementById('deepSearchToggle').checked).toBe(false);
     window.App.agentChat.isSelected = () => false;
+    window.App.agentChat.modeState = () => ({family: null, canUse: true, pending: false});
     window.App.renderComposerMode();
-    expect(document.getElementById('composerAgentToggle').getAttribute('aria-disabled')).toBe('false');
+    expect(document.getElementById('runModeSelect').value).toBe('compare');
+    expect(document.getElementById('runModeControl').hidden).toBe(false);
     expect(document.getElementById('composerAttachButton').disabled).toBe(false);
+    // Compare has nothing to check: the tool leaves the toolbar and (+) menu.
     expect(document.getElementById('composerSourcesToggle').disabled).toBe(true);
-    expect(document.getElementById('agentModeMenuSwitch').disabled).toBe(false);
+    expect(document.getElementById('composerSourcesToggle').hidden).toBe(true);
+    expect(document.getElementById('sourceCheckMenuSwitch').closest('label').hidden).toBe(true);
     expect(document.getElementById('agentReasoningMenuOption').hidden).toBe(true);
     expect(document.getElementById('deepSearchToggle').closest('label').hidden).toBe(false);
     dom.window.close();
@@ -116,7 +127,7 @@ describe("agent mode panel projection", () => {
     expect(document.getElementById('sourceCheckMenuSwitch').checked).toBe(false);
     expect(document.getElementById('sourceCheckSwitch').checked).toBe(false);
     expect(document.getElementById('composerSourcesState').textContent).toBe('Off');
-    window.setAgentMode(false, { persist: true });
+    window.App.runMode.set('compare');
     window.projectAgentModeRun({runId: 'old', config: {agentMode: false, checkSources: true}});
     expect(toggle.getAttribute('aria-checked')).toBe('false');
     document.getElementById('sourceCheckMenuSwitch').click();
@@ -124,7 +135,7 @@ describe("agent mode panel projection", () => {
     expect(toggle.disabled).toBe(true);
     expect(document.getElementById('sourceCheckMenuSwitch').disabled).toBe(true);
     expect(document.getElementById('sourceCheckSwitch').disabled).toBe(true);
-    window.setAgentMode(true, { persist: true });
+    window.App.runMode.set('consensus');
     expect(toggle.disabled).toBe(false);
     expect(window.App.isSourceCheckEnabled()).toBe(false);
     document.getElementById('sourceCheckMenuSwitch').click();
@@ -138,7 +149,7 @@ describe("agent mode panel projection", () => {
   });
 
   it.each([true, false])("gates the saved source preference %s on reload without changing it", checkSources => {
-    const { window, document, dom } = boot({ agentMode: false, checkSources });
+    const { window, document, dom } = boot({ mode: "compare", checkSources });
     window.updateAgentModeUI();
     expect(window.App.isSourceCheckEnabled()).toBe(false);
     expect(document.getElementById('composerSourcesState').textContent).toBe('Off');
@@ -149,9 +160,9 @@ describe("agent mode panel projection", () => {
     setting.dispatchEvent(new window.Event('change'));
     expect(setting.checked).toBe(false);
     expect(window.localStorage.getItem('checkSources')).toBe(String(checkSources));
-    window.setAgentMode(true, { persist: true });
+    window.App.runMode.set('consensus');
     expect(window.App.isSourceCheckEnabled()).toBe(checkSources);
-    window.setAgentMode(false, { persist: true });
+    window.App.runMode.set('compare');
     expect(window.App.isSourceCheckEnabled()).toBe(false);
     dom.window.close();
   });
@@ -163,9 +174,9 @@ describe("agent mode panel projection", () => {
     window.updateAgentModeUI();
     const bar = document.getElementById('composerModeBar');
     expect(bar.hidden).toBe(false);
-    window.setAgentMode(false, { persist: true });
+    window.App.runMode.set('compare');
     expect(bar.hidden).toBe(false);
-    window.setAgentMode(true, { persist: true });
+    window.App.runMode.set('consensus');
     expect(bar.hidden).toBe(false);
     const media = window.matchMedia();
     const onChange = media.addEventListener.mock.calls[0][1];
@@ -189,9 +200,9 @@ describe("agent mode panel projection", () => {
     document.body.classList.remove('is-hero');
     await Promise.resolve();
     expect(bar.hidden).toBe(true);
-    window.setAgentMode(false, {persist: true});
+    window.App.runMode.set('compare');
     expect(bar.hidden).toBe(false);
-    window.setAgentMode(true, {persist: true});
+    window.App.runMode.set('consensus');
     document.body.classList.add('is-hero');
     await Promise.resolve();
     expect(bar.hidden).toBe(false);
@@ -215,23 +226,25 @@ describe("agent mode panel projection", () => {
     expect(upload).toHaveBeenCalledOnce();
     dom.window.close();
   });
-  it("keeps the composer setting independent of a frozen run and synchronizes all switches", () => {
+  it("keeps the mode choice independent of a frozen run and synchronizes selector and settings", () => {
     const { window, document, dom } = boot();
     window.projectAgentModeRun({runId: 'direct', config: {agentMode: false}});
-    const toggle = document.getElementById('composerAgentToggle');
-    expect(toggle.getAttribute('aria-checked')).toBe('true');
+    const select = document.getElementById('runModeSelect');
+    const setting = document.getElementById('runModeSetting');
+    expect(select.value).toBe('consensus');
     expect(document.getElementById('composerModeBar').hidden).toBe(true);
-    expect(document.getElementById('composerModeDescription').textContent).toContain('Automatic consensus');
-    toggle.click();
-    expect(window.localStorage.getItem('agentMode')).toBe('false');
-    expect(toggle.getAttribute('aria-checked')).toBe('false');
+    expect(document.getElementById('composerModeDescription').textContent).toContain('differences and checks');
+    select.value = 'compare';
+    select.dispatchEvent(new window.Event('change'));
+    expect(window.localStorage.getItem('runMode')).toBe('compare');
+    expect(window.App.trackAppEvent).toHaveBeenCalledWith('app_run_mode_changed', {mode: 'compare', previous: 'consensus', source: 'composer'});
+    expect(setting.value).toBe('compare');
     expect(document.getElementById('composerModeBar').hidden).toBe(false);
-    expect(document.getElementById('agentModeMenuSwitch').checked).toBe(false);
-    expect(document.getElementById('autoConsensusToggle').checked).toBe(false);
     expect(document.getElementById('composerModeDescription').textContent).toContain('no consensus');
-    document.getElementById('agentModeMenuSwitch').click();
-    expect(toggle.getAttribute('aria-checked')).toBe('true');
-    expect(document.getElementById('agentModeSwitch').checked).toBe(true);
+    expect(document.getElementById('composerModeChipLabel').textContent).toBe('Compare');
+    setting.value = 'consensus';
+    setting.dispatchEvent(new window.Event('change'));
+    expect(select.value).toBe('consensus');
     expect(document.getElementById('composerModeBar').hidden).toBe(true);
     dom.window.close();
   });
@@ -240,7 +253,7 @@ describe("agent mode panel projection", () => {
     const {window, document, dom} = boot();
     window.App.answerReader = {directSummary: () => '1 of 2 ready · 1 unavailable'};
     window.updateAgentModeUI();
-    expect(document.getElementById('composerComparisonStatus').textContent).toContain('Agent Mode was off');
+    expect(document.getElementById('composerComparisonStatus').textContent).toBe('Shown: Compare result · 1 of 2 ready · 1 unavailable.');
     expect(document.querySelector('.composer-model-icon').getAttribute('aria-label')).toContain('GPT');
     document.getElementById('openaiCheck').checked = false;
     window.App.answerReader.directSummary = () => null;

@@ -6,6 +6,7 @@ from playwright.sync_api import expect
 
 from test_phase4_frontend import _real_firebase_page, phase4_server  # noqa: F401
 from test_model_answer_reader import seed_reader
+from test_run_mode_selector import choose
 
 
 def settle(page):
@@ -20,7 +21,7 @@ def settle(page):
     (320, 568, 'dark'), (844, 390, 'light')])
 def test_preview_toggle_layout_and_real_result(browser, phase4_server, width, height, theme):
     context, page = _real_firebase_page(browser, phase4_server,
-        init_script=f"localStorage.setItem('agentMode','true'); localStorage.setItem('theme','{theme}');")
+        init_script=f"localStorage.setItem('runMode','consensus'); localStorage.setItem('theme','{theme}');")
     errors, requests = [], []
     page.on('pageerror', lambda error: errors.append(str(error)))
     page.on('request', lambda request: requests.append(request.url)
@@ -29,8 +30,7 @@ def test_preview_toggle_layout_and_real_result(browser, phase4_server, width, he
         page.set_viewport_size({'width': width, 'height': height})
         draft = page.locator('#questionInput')
         draft.fill('Compare the alternatives for my next project.')
-        toggle = page.locator('#composerAgentToggle')
-        toggle.click()
+        choose(page, 'compare')
         intro = page.locator('#answerReaderPreviewIntro')
         cards = page.locator('.is-preview .answer-reader-answer')
         expect(intro).to_be_visible()
@@ -59,15 +59,18 @@ def test_preview_toggle_layout_and_real_result(browser, phase4_server, width, he
         cards.last.scroll_into_view_if_needed()
         page.evaluate('window.scrollTo(0, document.documentElement.scrollHeight)')
         assert cards.last.bounding_box()['y'] + cards.last.bounding_box()['height'] <= page.locator('.input-section').bounding_box()['y'] + 1
-        toggle.click()
+        choose(page, 'consensus')
         expect(intro).to_be_hidden()
         expect(draft).to_have_value('Compare the alternatives for my next project.')
         settle(page)
         assert page.evaluate("document.body.classList.contains('is-hero')")
         # Keyboard activation works and reduced motion makes the switch instant.
         page.emulate_media(reduced_motion='reduce')
-        toggle.focus()
+        page.locator('#runModeControl .model-picker-display').focus()
         page.keyboard.press('Space')
+        page.keyboard.press('Home')
+        page.keyboard.press('Enter')
+        expect(page.locator('#runModeSelect')).to_have_value('compare')
         expect(intro).to_be_visible()
         assert page.locator('#modelAnswerReader').evaluate('el => getComputedStyle(el).animationName') == 'none'
         assert not page.evaluate("document.body.classList.contains('comparison-layout-changing')")
@@ -76,7 +79,7 @@ def test_preview_toggle_layout_and_real_result(browser, phase4_server, width, he
         expect(intro).to_be_hidden()
         expect(page.locator('.is-direct .answer-reader-answer')).to_have_count(3)
         expect(page.locator('#answerReaderColumns')).to_contain_text('Original answer')
-        toggle.click()
+        choose(page, 'consensus')
         expect(page.locator('#answerReaderColumns')).to_contain_text('Original answer')
         assert errors == []
     finally:
@@ -85,7 +88,7 @@ def test_preview_toggle_layout_and_real_result(browser, phase4_server, width, he
 
 def test_persisted_off_new_comparison_and_model_selection(browser, phase4_server):
     context, page = _real_firebase_page(browser, phase4_server,
-        init_script="localStorage.setItem('agentMode','false');")
+        init_script="localStorage.setItem('runMode','compare');")
     try:
         intro = page.locator('#answerReaderPreviewIntro')
         cards = page.locator('.is-preview .answer-reader-answer')
@@ -100,7 +103,7 @@ def test_persisted_off_new_comparison_and_model_selection(browser, phase4_server
         expect(intro).to_be_visible()
         expect(cards).to_have_count(5)
         page.evaluate("""() => {
-          for (let i = 0; i < 8; i++) setAgentMode(i % 2 === 0, {persist:true});
+          for (let i = 0; i < 8; i++) App.runMode.set(i % 2 === 0 ? 'consensus' : 'compare');
         }""")
         expect(intro).to_be_visible()
         settle(page)
