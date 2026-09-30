@@ -2822,8 +2822,14 @@ ursprünglichen Modellpositionen werden durch Quellenbefunde nicht verändert.
 
 `source_verification.py` dispatcht neue Pläne nach
 `contradiction_verification.py`: Schema 4, `check_type: contradiction_evidence`,
-`prompt_version: contradiction-evidence-v3`. Nur `contradiction` + `major`,
-faktisch prüfbare Frage und gültige Consensus-/Modellanker werden aufgenommen.
+`prompt_version: contradiction-evidence-v4`. Nur `contradiction` + `major`,
+faktisch prüfbare Frage, gültiger Consensus-Anker und je Seite eine Haltung mit
+mindestens einem antwortenden Modell werden aufgenommen. Das Modellzitat
+verortet eine Seite nur und ist kein Beleg: Eine Seite ohne wörtlich
+auffindbares Zitat (`located_by: stance`, leeres `quote`) blockiert die
+Prüfung nicht mehr, sondern nutzt den gekennzeichneten Katalog-Fallback der
+eigenen Modellquellen. `unverified_model_positions` bleibt für Seiten ohne
+Haltung oder ohne antwortendes Modell.
 Jeder Befund trägt stabile `contradiction_id`, `difference_index`, `run_id`,
 `answer_version` und `positions_version`; Positionen heißen innerhalb eines
 Streitpunkts P1, P2 usw. Die vorhandenen Quellen werden anhand der jeweiligen
@@ -3258,7 +3264,14 @@ Details, Budgets und Abnahme: [source-verification.md](source-verification.md).
   Belegstatus (`quote_models`, erhaltene Dissent-Zitate,
   `consensus_anchor_validated`) setzt nur eine VOLLSTÄNDIGE normalisierte
   Deckung; toleriert werden ausschließlich Groß-/Kleinschreibung,
-  typografische Anführungszeichen/Striche, Whitespace und Randauslassungen.
+  typografische Anführungszeichen/Striche (inklusive ASCII-Apostroph, ‚ ‹ ›),
+  Whitespace, unsichtbare Zeichen (weiches Trennzeichen, Zero-Width),
+  Randauslassungen sowie Markdown-Layout: Fett, Kursiv, Durchstreichung,
+  `[S#]`/Links und Zeilenmarker (Aufzählung, kurze Ordnungszahl, Überschrift,
+  Blockzitat). Wörter, Zahlen, Negationen, Code und `snake_case` bleiben
+  wörtlich; eine Auslassung in der Mitte zählt nie. Ein verworfenes
+  Positionszitat trägt `positions[].quote_rejection = {reason, matched_share}`
+  (`no_answer`, `internal_ellipsis`, `reworded`, `not_found`) ohne Textinhalt.
   Fuzzy-Suche (`allow_fuzzy=True`) dient nur der Navigation (Claim-Anker,
   nicht validierter Widerspruchs-Anker) und vergibt nie einen Belegstatus.
   Unparsbares JSON erreicht den Nutzer nie als Rohtext.

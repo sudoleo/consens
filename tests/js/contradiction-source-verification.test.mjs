@@ -159,6 +159,17 @@ describe('contradiction evidence presentation', () => {
       expect(document.querySelector('.contradiction-source-check')).toBeNull();
     }
   });
+  it('binds a side located by its stance to its card, but never a changed stance', () => {
+    const {window,document}=boot();
+    const located=[positions[0],{...positions[1],quote:'',quote_models:[],located_by:'stance'}];
+    const stanceSnapshot={...snapshot,findings:[{...finding,positions:located}]};
+    // Differences may still show a quote the plan could not match verbatim.
+    window.App.sourceVerification.renderCurrent(stanceSnapshot,options);
+    expect(document.querySelector('.diff-card .contradiction-source-check')?.textContent).toContain('Different conditions explain');
+    window.App.sourceVerification.renderCurrent(stanceSnapshot,{differencesData:{differences:[
+      {...diff,positions:[diff.positions[0],{...diff.positions[1],stance:'Everyone pays 30 euros'}]}]}});
+    expect(document.querySelector('.contradiction-source-check')).toBeNull();
+  });
   it('reattaches after streamed Differences rendering, and clears old results on run changes', () => {
     const {window,document}=boot(); const cards=document.querySelector('#differencesCards'); const markup=cards.innerHTML;
     cards.replaceChildren(); window.App.sourceVerification.renderCurrent(snapshot,options);

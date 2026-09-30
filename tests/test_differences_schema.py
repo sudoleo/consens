@@ -251,6 +251,54 @@ class QuoteVerificationTests(unittest.TestCase):
         position = self._position_after_verification('"' + quote + '"', original)
         self.assertEqual(position["quote_models"], ["OpenAI"])
 
+    def test_harmless_formatting_keeps_a_full_quote_verified(self):
+        """Layout and typography never decide whether a model wrote a passage."""
+        cases = [
+            ("Er gilt als *einflussreiche* Figur.", "Er gilt als einflussreiche Figur."),
+            ("Er gilt als _einflussreiche_ Figur.", "Er gilt als einflussreiche Figur."),
+            ("Bobby ’the Chair’ Mee gilt als Präsident.", "Bobby 'the Chair' Mee gilt als Präsident."),
+            ("Er heißt ‚Capo‘ im Milieu.", "Er heißt 'Capo' im Milieu."),
+            ("Rocker\u00admilieu in Hannover.", "Rockermilieu in Hannover."),
+            ("Punkte:\n- Er wurde freigesprochen.\n- Er lebt in Hannover.",
+             "Er wurde freigesprochen. Er lebt in Hannover."),
+            ("1. Er wurde freigesprochen.\n2. Er lebt in Hannover.",
+             "Er wurde freigesprochen. Er lebt in Hannover."),
+        ]
+        for original, quote in cases:
+            with self.subTest(quote=quote):
+                position = self._position_after_verification(quote, original)
+                self.assertEqual(position["quote_models"], ["OpenAI"])
+                self.assertIn(position["quote"], original)
+                self.assertNotIn("quote_rejection", position)
+
+    def test_formatting_tolerance_keeps_words_and_identifiers_strict(self):
+        for original, quote in [
+            ("Setze max_tokens auf 10.", "Setze maxtokens auf 10."),
+            ("Er wurde 2023 in Spanien freigesprochen.", "Er wurde 2023 ... freigesprochen."),
+            ("Er wurde nicht verurteilt.", "Er wurde verurteilt."),
+        ]:
+            with self.subTest(quote=quote):
+                self.assertEqual(self._position_after_verification(quote, original)["quote_models"], [])
+
+    def test_rejected_quote_records_a_content_free_reason(self):
+        original = "Er wurde 2023 in Spanien von den Vorwürfen freigesprochen."
+        cases = {
+            "Er wurde 2023 ... freigesprochen.": {"reason": "internal_ellipsis"},
+            "Er wurde 2023 in Spanien von den Vorwürfen vollständig freigesprochen.": "reworded",
+            "There is no single leader of the club.": "not_found",
+        }
+        for quote, expected in cases.items():
+            with self.subTest(quote=quote):
+                rejection = self._position_after_verification(quote, original)["quote_rejection"]
+                if isinstance(expected, dict):
+                    self.assertEqual(rejection, expected)
+                else:
+                    self.assertEqual(rejection["reason"], expected)
+                    self.assertTrue(0 <= rejection["matched_share"] <= 1)
+                # Never a copy of the rejected text.
+                self.assertTrue(all(not isinstance(v, str) or len(v) < 20 for v in rejection.values()))
+        self.assertEqual(self._position_after_verification("Irgendein Satz.", "")["quote_rejection"], {"reason": "no_answer"})
+
     def test_fuzzy_consensus_anchor_navigates_but_is_not_validated(self):
         payload = valid_payload()
         payload["differences"][0]["consensus_anchor"] = "the capital of France is certainly Paris"

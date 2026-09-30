@@ -844,7 +844,10 @@
     return Array.isArray(item.positions) && item.positions.length === diff.positions?.length
       && item.positions.every((position, index) => {
         const displayed = diff.positions[index];
-        return position.summary === displayed.stance && position.quote === displayed.quote
+        // A side located by its stance carries no verified model quote; the
+        // card may still show the analysis quote, so only stance and models bind.
+        return position.summary === displayed.stance
+          && (position.located_by === 'stance' || position.quote === displayed.quote)
           && models(position.models) === models(displayed.models);
       });
   }
@@ -1041,7 +1044,8 @@
         card.append(element('h3', 'diff-card-claim', diff.claim));
         (diff.positions || []).forEach(pos => {
           const position = element('div', 'diff-position');
-          position.append(element('p', '', (pos.models || []).join(', ')), element('p', '', pos.stance), element('blockquote', '', pos.quote));
+          position.append(element('p', '', (pos.models || []).join(', ')), element('p', '', pos.stance));
+          if (pos.quote) position.append(element('blockquote', '', pos.quote));
           card.append(position);
         });
         cards.append(card);

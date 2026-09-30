@@ -30,7 +30,12 @@ in Legacy-Differences werden nicht als Freigabe interpretiert. Ein separater
 Klassifizierungsaufruf wird nicht verwendet.
 
 Nur `type: contradiction`, `severity: major`, `checkable: true`, eine nichtleere
-Streitfrage und validierte Anker aller Positionen ergeben einen Prüfauftrag.
+Streitfrage, ein validierter Consensus-Anker und je Position eine Haltung mit
+mindestens einem antwortenden Modell ergeben einen Prüfauftrag. Das Modellzitat
+verortet eine Position nur und ist nie Beleg. Ist es nicht wörtlich auffindbar,
+läuft die Position mit `located_by: stance` und leerem `quote` weiter und nutzt
+den gekennzeichneten Katalog-Fallback der eigenen Modellquellen; der Grund des
+verworfenen Zitats steht inhaltsfrei in `positions[].quote_rejection`.
 Die Quellenprüfung startet nach erfolgreichem Differences-Abschluss in
 `consensus_pipeline.py` und im separaten SSE-Pfad von `chat.py`. Der Browser
 bekommt `consensus.final` schon davor, dann `differences.final`, anschließend den
@@ -46,7 +51,7 @@ als `cancelled` mit `reason_code: chat_only` beendet.
 ## Modus, Identität und Ergebnisse
 
 `schema_version: 4`, `check_type: contradiction_evidence` und
-`prompt_version: contradiction-evidence-v3` unterscheiden neue Prüfungen.
+`prompt_version: contradiction-evidence-v4` unterscheiden neue Prüfungen.
 `source_verification.py` bleibt der gemeinsame Entry Point und dispatcht
 `plan_source_verification`, `execute_source_package`, `merge_source_verification`
 und `verify_sources` in den neuen Modus von `contradiction_verification.py`.
@@ -68,8 +73,8 @@ Vor der Quellenprüfung ausgeschlossene große Widersprüche stehen separat in
 `exclusions[]`: `exclusion_id`, Run-/Antwortbindung, Difference-Index, Anker,
 ursprüngliche Positionen, `positions_version`, Streitfrage und alle `reason_codes`.
 `not_factual` protokolliert die Klassifizierung, `missing_checkability`,
-`invalid_consensus_anchor` und `unverified_model_positions` die fehlenden
-Prüfvoraussetzungen. `scope.detected_contradictions` und
+`invalid_consensus_anchor` und `unverified_model_positions` (Position ohne
+Haltung oder ohne antwortendes Modell) die fehlenden Prüfvoraussetzungen. `scope.detected_contradictions` und
 `scope.excluded_contradictions` erhalten die erkannten bzw. ausgeschlossenen
 Streitpunkte auch dann, wenn kein Judge-Auftrag entstehen konnte. Ohne Auftrag,
 aber mit technischen Ausschlüssen lautet der Grund

@@ -76,16 +76,47 @@ def test_ineligible_differences_never_schedule(path, value):
     assert result['snapshot']['reason_code'] == expected
 
 
-def test_unverified_model_position_never_drops_one_side_into_judge():
-    data = differences()
-    data['differences'][0]['positions'][1]['quote_models'] = []
-    assert not plan(differences_data=data)['packages']
-    assert not plan(model_answers={'OpenAI': ANSWERS['OpenAI'], 'Anthropic': 'Other text'})['packages']
-
-
-def test_missing_original_quotes_are_explicit_exclusions_not_absent_contradictions():
+def test_unmatched_quote_keeps_both_sides_and_locates_by_stance():
+    # A model quote only locates a side; it is not evidence. A quote the
+    # analysis could not match must not block the dispute or drop that side.
     data = differences()
     data['differences'][0]['positions'][1].update(quote='', quote_models=[])
+    for result in (plan(differences_data=data),
+                   plan(model_answers={'OpenAI': ANSWERS['OpenAI'], 'Anthropic': 'The plan is 30 euros monthly. [S2]'})):
+        positions = result['packages'][0]['pairs'][0]['positions']
+        assert [p['summary'] for p in positions] == ['20 euros', '30 euros']
+        assert positions[0]['located_by'] == 'quote' and positions[0]['quote'] == 'The plan costs 20 euros.'
+        assert positions[1]['located_by'] == 'stance' and positions[1]['quote'] == '' and positions[1]['quote_models'] == []
+        # The side uses its own model's sources, labelled as catalog fallback.
+        source_id = positions[1]['sources'][0]['source_id']
+        source = next(s for s in result['packages'][0]['sources'] if s['id'] == source_id)
+        assert source['url'] == 'https://example.com/b' and positions[1]['sources'][0]['origin'] == 'catalog_fallback'
+
+
+def test_stance_located_side_is_checked_end_to_end():
+    data = differences()
+    data['differences'][0]['positions'][1].update(quote='', quote_models=[])
+    seen = []
+    def recording_judge(payload, *args):
+        seen.append(payload)
+        return judge(payload, *args)
+    result = run(differences_data=data, judge=recording_judge)
+    assert result['status'] == 'complete'
+    assert result['findings'][0]['verdict'] == 'sources_conflict'
+    assert [p['located_by'] for p in seen[0]['disputes'][0]['positions']] == ['quote', 'stance']
+    assert 'An empty quote means the position is' in cv.SYSTEM
+
+
+@pytest.mark.parametrize('change', [{'stance': ''}, {'models': ['Mistral']}])
+def test_side_without_stance_or_answering_model_never_drops_into_judge(change):
+    data = differences()
+    data['differences'][0]['positions'][1].update(quote='', quote_models=[], **change)
+    assert not plan(differences_data=data)['packages']
+
+
+def test_unusable_sides_are_explicit_exclusions_not_absent_contradictions():
+    data = differences()
+    data['differences'][0]['positions'][1].update(quote='', quote_models=[], models=['Mistral'])
     result = plan(differences_data=data)
     snapshot = result['snapshot']
     assert result['packages'] == []
@@ -105,7 +136,7 @@ def test_mixed_checks_keep_excluded_dispute_and_all_exclusion_causes():
     data = differences()
     excluded = copy.deepcopy(data['differences'][0])
     excluded['factual_check'] = {'checkable': False, 'question': 'Has the event happened?', 'reason': 'The analysis assumed fiction.'}
-    excluded['positions'][0].update(quote='', quote_models=[])
+    excluded['positions'][0].update(quote='', quote_models=[], stance='')
     data['differences'].append(excluded)
     result = run(differences_data=data)
     assert result['scope']['checked_contradictions'] == 1

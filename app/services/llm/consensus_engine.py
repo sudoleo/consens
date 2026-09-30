@@ -1319,7 +1319,12 @@ def _looks_like_json(raw: str) -> bool:
 # vereinheitlichen, Ellipsen an den Rändern ignorieren.
 # ---------------------------------------------------------------------------
 
-_QUOTE_CHARS = set("“”„‘’«»\"")
+# Apostrophe and single-quote forms (including ASCII, ‚ ‹ › and the acute
+# accent models use as an apostrophe) are typography, never wording.
+_QUOTE_CHARS = set("“”„‘’«»\"'‚‛‹›´")
+# Invisible formatting characters carry no text. They vanish in matching so a
+# soft hyphen or zero-width space never splits a verbatim quote.
+_INVISIBLE_CHARS = set("\u00ad\u200b\u200c\u200d\u2060\ufeff")
 # Typographic variants that never change meaning: hyphen/dash forms. Numbers,
 # units, signs, negations and every word stay significant.
 _DASH_CHARS = set("‐‑‒–—−")
@@ -1334,6 +1339,8 @@ def _normalize_with_offsets(text: str):
     norm_chars = []
     offsets = []
     for i, ch in enumerate(str(text or "")):
+        if ch in _INVISIBLE_CHARS:
+            continue
         c = ch.lower()
         if c in _QUOTE_CHARS:
             c = '"'
@@ -1448,6 +1455,24 @@ def _formatted_quote_finder():
                 continue
             masked.update(range(match.start(), match.start(2)))
             masked.update(range(match.end(2), match.end()))
+        # Single emphasis and strikethrough keep their words; only
+        # the delimiters go. Underscores count only at word edges (snake_case
+        # and URLs stay literal).
+        for pattern in (r"(?<![*\w])\*(?=[^\s*])([^*\n]+?)(?<=[^\s*])\*(?![*\w])",
+                        r"(?<![_\w])_(?=[^\s_])([^_\n]+?)(?<=[^\s_])_(?![_\w])",
+                        r"~~(?=\S)([^~\n]+?)(?<=\S)~~"):
+            for match in re.finditer(pattern, text):
+                span = range(match.start(), match.end())
+                if protected.intersection(span) or masked.intersection(span):
+                    continue
+                masked.update(range(match.start(), match.start(1)))
+                masked.update(range(match.end(1), match.end()))
+        # Structural line markers (list bullets, short ordinals, headings,
+        # blockquotes) are layout. A quote may run across them; the words and
+        # their order still have to match exactly.
+        for match in re.finditer(r"(?m)^[ \t]*(?:[-*+•]|\d{1,2}[.)]|#{1,6}|>)[ \t]+", text):
+            if not protected.intersection(range(match.start(), match.end())):
+                masked.update(range(match.start(), match.end()))
         offsets = [i for i in range(len(text)) if i not in masked]
         visible = "".join(text[i] for i in offsets)
         normalized, normalized_offsets = _normalize_with_offsets(visible)
@@ -1509,6 +1534,32 @@ def _verify_claims(claims: list, consensus_answer: str, model_answers: dict, _fi
                 item["quote"] = ""
 
 
+def _quote_miss(needle: str, texts: list) -> dict:
+    """Why a position quote was rejected, without storing any of its text.
+
+    The share of the quote that matched before the first deviation tells a
+    shortened or reworded passage apart from one the model never wrote."""
+    texts = [t for t in texts if t]
+    if not texts:
+        return {"reason": "no_answer"}
+    raw = _ELLIPSIS_EDGE_RE.sub("", str(needle or ""))
+    if "…" in raw or "..." in raw:
+        return {"reason": "internal_ellipsis"}
+    norm = _normalize_needle(needle)
+    if not norm:
+        return {"reason": "empty"}
+    hays = [_normalize_with_offsets(t)[0] for t in texts]
+    low, high = 0, len(norm)
+    while low < high:
+        mid = (low + high + 1) // 2
+        if any(norm[:mid] in hay for hay in hays):
+            low = mid
+        else:
+            high = mid - 1
+    share = round(low / len(norm), 2)
+    return {"reason": "reworded" if share >= 0.5 else "not_found", "matched_share": share}
+
+
 def _verify_differences_data(data: dict, consensus_answer: str, model_answers: dict) -> None:
     """Ersetzt gefundene Anchors/Quotes durch den Originaltext (hilft dem
     Frontend-Matching) und leert Quotes, die in der jeweiligen Modellantwort
@@ -1556,10 +1607,14 @@ def _verify_differences_data(data: dict, consensus_answer: str, model_answers: d
             if span:
                 position["quote"] = _clip(span, MAX_DIFF_QUOTE_CHARS)
             else:
+                miss = _quote_miss(position["quote"], [model_answers.get(m) or "" for m in position.get("models") or []])
                 logging.info(
-                    "Dropping unverifiable position quote models=%s quote_chars=%d",
+                    "Dropping unverifiable position quote models=%s quote_chars=%d reason=%s matched_share=%s",
                     position.get("models"), len(str(position.get("quote") or "")),
+                    miss["reason"], miss.get("matched_share"),
                 )
+                # Content-free diagnosis, persisted with the analysis.
+                position["quote_rejection"] = miss
                 position["quote"] = ""
 
 
