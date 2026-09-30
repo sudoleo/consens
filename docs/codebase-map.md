@@ -5581,7 +5581,10 @@ UI-Vertrag (2026-09-30, `agent-workspace.js` + `agent-workspace.css`):
   Nachrichten-Chips (`setThreadQuestionAttachments`) tragen optional `warnings`
   und zeigen dann „Partly read“.
 
-Bytes liegen im privaten GCS-Bucket `AGENT_FILES_BUCKET`, Metadaten und begrenzte
+Bytes liegen im privaten GCS-Bucket `AGENT_FILES_BUCKET`; auf einem lokalen Checkout
+ohne Bucket automatisch unter `%LOCALAPPDATA%/consens/agent-files` (sonst
+`~/.local/share/consens/agent-files`), nie auf einem Deploy (`RENDER_SERVICE_NAME`
+oder `ENVIRONMENT=production`) und nie in Tests. Metadaten und begrenzte
 Auszüge unter `users/{uid}/chats/{chat}/files/{id}`. Kontoquote unter
 `chat_state/file_quota`: 100 Dateien / 100 MiB; Datei 5 MiB, Aufbewahrung 30 Tage.
 Upload reserviert transaktional, schreibt ein privates Objekt und finalisiert

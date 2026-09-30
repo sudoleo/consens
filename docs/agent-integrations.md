@@ -54,8 +54,11 @@ lifecycle deletion rule after 30 days as a second bound on orphan object retenti
 disable object versioning and configure soft-delete retention according to the
 published deletion policy. Deploy the `files` collection-group field indexes in
 `firestore.indexes.json` before enabling uploads. No existing data migration.
-Development only: `AGENT_FILES_DEVELOPMENT=1` and `AGENT_FILES_LOCAL_DIR` on a private,
-persistent volume. Test profiles permit that adapter automatically.
+Local development needs no setup: without a bucket, a local checkout stores files in
+`%LOCALAPPDATA%/consens/agent-files` (or `~/.local/share/consens/agent-files`), outside
+the repository. A hosted deploy (`RENDER_SERVICE_NAME` or `ENVIRONMENT=production`)
+never falls back to local disk. An explicit `AGENT_FILES_LOCAL_DIR` still requires
+`AGENT_FILES_DEVELOPMENT=1`; test profiles permit that adapter automatically.
 
 **Limits and lifecycle.** The existing composer accepts two files per upload batch
 (5 MiB each); a model call can explicitly select up to five stored files. Maximum
@@ -92,7 +95,7 @@ window, otherwise the model is told it cannot read the scan. The existing
 provider receipts record actual usage. No file instructions can execute server
 operations.
 
-**Storage configuration.** Without `AGENT_FILES_BUCKET` (or the explicit local
+**Storage configuration.** On a hosted deploy without `AGENT_FILES_BUCKET` (or the explicit local
 development directory) uploads fail before any metadata or quota is written,
 and chat/account deletion skips the object store instead of failing. Retention
 pages through expired records with a time budget; a single failing delete is

@@ -44,8 +44,34 @@ class StorageNotConfigured(FileUnavailable):
     """No private object store exists here, so no object bytes can exist either."""
 
 
+def _is_hosted() -> bool:
+    # Same host detection as security._is_production, without initializing auth.
+    # Render sets RENDER_SERVICE_NAME on every deploy.
+    return bool(os.getenv("RENDER_SERVICE_NAME")) or (
+        os.getenv("ENVIRONMENT", "").strip().lower() in {"production", "prod"})
+
+
+def _automatic_local_dir() -> str:
+    """Zero-setup storage for a developer machine, never for a deploy or a test.
+
+    A hosted deploy must use the private bucket (or fail closed), and tests pass
+    their own temporary directory. Everything else is a local checkout, which gets
+    a private folder outside the repository so uploads can never be committed.
+    """
+    if os.getenv("AGENT_FILES_BUCKET") or _is_hosted():
+        return ""
+    if any(os.getenv(key) == "1" for key in ("UNIT_TEST_MODE", "E2E_TEST_MODE")):
+        return ""
+    base = os.getenv("LOCALAPPDATA") or os.path.join(Path.home(), ".local", "share")
+    return str(Path(base) / "consens" / "agent-files")
+
+
+def _local_dir() -> str:
+    return os.getenv("AGENT_FILES_LOCAL_DIR", "") or _automatic_local_dir()
+
+
 def storage_configured() -> bool:
-    return bool(os.getenv("AGENT_FILES_BUCKET") or os.getenv("AGENT_FILES_LOCAL_DIR"))
+    return bool(os.getenv("AGENT_FILES_BUCKET") or _local_dir())
 
 
 PDF_CONTEXT_HEADROOM = 32_000
@@ -53,9 +79,10 @@ PDF_CONTEXT_HEADROOM = 32_000
 
 class PrivateObjects:
     def __init__(self):
-        self.local = os.getenv("AGENT_FILES_LOCAL_DIR", "")
+        explicit = os.getenv("AGENT_FILES_LOCAL_DIR", "")
+        self.local = _local_dir()
         if self.local:
-            if not any(os.getenv(key) == "1" for key in ("UNIT_TEST_MODE", "E2E_TEST_MODE", "AGENT_FILES_DEVELOPMENT")):
+            if explicit and not any(os.getenv(key) == "1" for key in ("UNIT_TEST_MODE", "E2E_TEST_MODE", "AGENT_FILES_DEVELOPMENT")):
                 raise StorageNotConfigured("Local file storage requires explicit development mode.")
             self.root = Path(self.local).resolve()
             self.root.mkdir(parents=True, exist_ok=True, mode=0o700)

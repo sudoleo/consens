@@ -330,3 +330,38 @@ def test_model_reads_never_evict_the_user_selection(setup):
     assert ctx.selection() == selected
     ctx.file_ids = selected[:2]
     assert ctx.selection() == [*selected[:2], image['id']]
+
+
+def _local_machine(monkeypatch, tmp_path):
+    for key in ('AGENT_FILES_LOCAL_DIR', 'AGENT_FILES_BUCKET', 'AGENT_FILES_DEVELOPMENT', 'UNIT_TEST_MODE',
+                'E2E_TEST_MODE', 'RENDER_SERVICE_NAME', 'ENVIRONMENT'):
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setenv('LOCALAPPDATA', str(tmp_path))
+
+
+def test_local_checkout_gets_private_storage_without_setup(tmp_path, monkeypatch):
+    from app.services.agent_files import PrivateObjects, storage_configured
+    _local_machine(monkeypatch, tmp_path)
+    assert storage_configured()
+    objects = PrivateObjects()
+    objects.put('agent-files/x', b'abc', 'text/plain')
+    assert objects.get('agent-files/x') == b'abc'
+    assert (tmp_path / 'consens' / 'agent-files' / 'agent-files' / 'x').exists()
+
+
+@pytest.mark.parametrize('key,value', [('RENDER_SERVICE_NAME', 'consens'), ('ENVIRONMENT', 'production')])
+def test_hosted_deploy_never_falls_back_to_local_disk(tmp_path, monkeypatch, key, value):
+    from app.services.agent_files import PrivateObjects, StorageNotConfigured, storage_configured
+    _local_machine(monkeypatch, tmp_path)
+    monkeypatch.setenv(key, value)
+    assert not storage_configured()
+    with pytest.raises(StorageNotConfigured):
+        PrivateObjects()
+    assert not (tmp_path / 'consens').exists()
+
+
+def test_configured_bucket_wins_over_automatic_local_storage(tmp_path, monkeypatch):
+    from app.services import agent_files as module
+    _local_machine(monkeypatch, tmp_path)
+    monkeypatch.setenv('AGENT_FILES_BUCKET', 'private-bucket')
+    assert module._local_dir() == ''
