@@ -324,7 +324,6 @@
     }
     if (panel) panel.hidden = !agent || (!context && !basis);
     if (panel?.hidden) activityHost('');
-    placeLegacyGoogleControls();
     // With the Google sheet (Package A) this only re-projects cached state; the
     // connections list loads when the Google entry is first opened.
     App.agentGoogle?.refreshControls?.();
@@ -350,14 +349,6 @@
     if (!agent || (!context && !basis)) App.agentDelegation?.project(null);
     window.updateQuestionInputAccess?.();
     syncPendingReview();
-  }
-  // Until the Google controls leave the composer (Package A), keep a legacy
-  // in-composer panel out of the toolbar grid: in the mobile two-row toolbar
-  // it was auto-placed beside the actions and pushed Send out of line.
-  function placeLegacyGoogleControls() {
-    const legacy = document.getElementById('agentGoogleControls');
-    const notice = document.getElementById('agentComposerNotice');
-    if (legacy && notice && legacy.parentElement?.classList.contains('consensus-switch-container')) notice.before(legacy);
   }
   // While a run streams, only the growing last Markdown block is parsed again
   // (markdown-stream.js). The final text is rendered once in full, like a
@@ -944,6 +935,9 @@
   // a no-op when nothing the shell shows has changed.
   window.addEventListener("consensio:run-registry-change", () => renderShell());
   window.addEventListener('consensio:agent-actions-change', () => { syncPendingReview(); window.updateQuestionInputAccess?.(); });
+  // Google selection/consent changes (chips, sheet, consent box) change the
+  // send blocker, so the notice and Send state must follow immediately.
+  window.addEventListener('consensio:agent-google-change', () => { syncComposer(); window.updateQuestionInputAccess?.(); });
   document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("chatExecutionMode")?.addEventListener("change", event => {
       preference = canUse() && event.target.value === "agent" ? "agent" : "consensus";
