@@ -328,6 +328,7 @@
 
       const answer = document.createElement("div");
       answer.className = "thread-history-answer";
+      let agentResources = null;
       if (turnData.execution_mode !== "agent" && turnData.mode !== "Agent") {
         const answerLabel = document.createElement("div");
         answerLabel.className = "thread-history-answer-label";
@@ -375,6 +376,12 @@
         window.App.agentReview?.render(answerBody, turnData.agent_review,
           {sources: turnSources, events: turnData.agent_activity, key: turnData.id || turnData.turn_id, question: turnData.question});
         window.App.agentAnswerActions?.render(answerBody, { key: turnId, text: turnData.consensus || '', running: turnData.status === 'pending' });
+        // Documents and mail attachments of this turn stay with its answer;
+        // agent-workspace.js fills the row from the chat's file list.
+        if (turnId) {
+          agentResources = document.createElement("div");
+          answer.appendChild(agentResources);
+        }
       }
 
       // Der Fuss eines archivierten Turns spricht dieselbe Sprache wie der
@@ -551,6 +558,7 @@
       turn.append(question, answer);
       history.appendChild(turn);
       history.hidden = false;
+      if (agentResources) window.App.agentWorkspace?.renderTurnResources?.(agentResources, turnId);
       if (sourceReport && turnData.source_verification?.job_id) {
         const user = window.auth?.currentUser;
         const jobId = turnData.source_verification.job_id;

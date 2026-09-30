@@ -276,7 +276,7 @@ class GmailTools:
         extensions = {"image/png": "png", "image/jpeg": "jpg", "image/webp": "webp", "text/plain": "txt", "application/pdf": "pdf"}
         filename = part.get("filename") or "attachment." + extensions.get(part.get("mimeType"), "bin")
         meta = self.files.upload(self.loop.uid, self.loop.chat_id, {"name": filename[:200], "data": base64.b64encode(raw).decode()},
-            cancellation=cancellation, extra={"kind": "mail_attachment", "origin": origin,
+            cancellation=cancellation, extra={"kind": "mail_attachment", "origin": origin, "turn_id": self.loop.turn_id,
                 # Display-only provenance for the file list; origin stays the reuse key.
                 "origin_subject": message_headers.get("subject", "")[:300], "origin_from": message_headers.get("from", "")[:300]})
         self.loop.outgoing.put_nowait({"type": "resources", "files": [meta]})

@@ -1003,7 +1003,9 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   mit dem Turn in `#threadHistory`. Eine Folgefrage schickt die Datei damit
   NICHT erneut mit — wer sie wieder braucht, hängt sie wieder an. Bookmark-
   Anhänge (`showBookmarkAttachments`) landen aus demselben Grund an der
-  wiederhergestellten Frage statt im Eingabefeld.
+  wiederhergestellten Frage statt im Eingabefeld. Im Agent-Modus bleibt die
+  Datei im Chat gespeichert: Chips mit Datei-`id` sind klickbar und öffnen die
+  Vorschau mit Download/Entfernen (siehe Abschnitt Agent-Dateien).
   Jeder Import gehört zu einer Entwurfs-Generation: `clearPendingAttachments`,
   `detachForMessage` und `consensio:auth-state` beginnen eine neue, verwerfen
   verspätete FileReader-/Verkleinerungsergebnisse und setzen den
@@ -5542,6 +5544,10 @@ Resolve bleibt eine unabhängige sekundäre Aktion mit erhaltenem `[hidden]`.
 Composer lädt vor `/agent` hoch und sendet ausschließlich validierte `file_ids`;
 die Auswahl wird in `agent_settings` eingefroren und bei Replay verglichen.
 `agent-workspace.js` zeigt Download, Status, Warnungen und Löschen auch nach Reload.
+Die Anhangs-Metadaten des Turns (`attachments`, `normalize_attachment_meta`)
+behalten bei Agent-Uploads die Datei-`id` (32 Hex) und `warnings`, damit der
+Chip an der Nachricht die Datei später wieder öffnen kann; Consensus-Anhänge
+bleiben reine Metadaten. Gmail-Importe tragen die `turn_id` des holenden Turns.
 Dateien werden nicht in Shares, Memory oder Watch-Inputs übernommen.
 
 `GET .../files` liefert die Liste chronologisch (`created_at`, Firestore streamt in
@@ -5550,7 +5556,9 @@ ihn am Dateieintrag, ältere über einen Manifest-Read pro Dokument) und importi
 Gmail-Anhänge mit `origin_subject`/`origin_from` nur zur Anzeige (`origin` bleibt
 der Wiederverwendungs-Schlüssel).
 
-UI-Vertrag (2026-09-30, `agent-workspace.js` + `agent-workspace.css`):
+UI-Vertrag (2026-09-30, `agent-workspace.js` + `agent-workspace.css`). Jede Datei
+steht an der Nachricht oder Antwort, zu der sie gehört; es gibt keine chatweite
+Dateiliste unter der Antwort mehr:
 - `App.agentWorkspace.refresh(chatId, force)`: ohne `force` projiziert es nur die
   gecachte Liste neu (billig, darf bei jedem Render laufen, z. B. Turnwechsel).
   Chatwechsel oder `force` holen die Liste, gebündelt auf höchstens einen Request
@@ -5567,11 +5575,20 @@ UI-Vertrag (2026-09-30, `agent-workspace.js` + `agent-workspace.css`):
   gesendeten Dateien (`agent_settings.file_ids`) und je `document_id` eine
   Dokumentkarte der angezeigten Turn (`turn_id`): Titel, aktuelle Version,
   DOCX/PDF-Download, Badge „New/Updated in this answer“, frühere Versionen
-  eingeklappt, ein Revisionshinweis. Keine Roh-IDs in der Oberfläche.
-- `#agentWorkspace` (unter `#agentAnswer` bzw. `#agentGoogleActions`): eingeklappte
-  Disclosure „Files in this chat (n)“ mit allen Uploads, Mail-Anhängen („From
-  email: Betreff (Absender)“, Fallback `App.agentGoogle?.evidenceFor`) und
-  Dokumenten. „Partly read“-Badge bei Extraktionswarnungen.
+  eingeklappt, ein Revisionshinweis. Dazu die in dieser Turn geholten
+  Mail-Anhänge („From email: Betreff (Absender)“, Fallback
+  `App.agentGoogle?.evidenceFor`). Keine Roh-IDs in der Oberfläche.
+- Archivierte Agent-Turns (`appendHistoryTurn` in `consensus-run.js`) bekommen
+  eine eigene Ressourcenzeile: `App.agentWorkspace.renderTurnResources(row, turnId)`
+  registriert sie (`data-agent-turn-resources`), jede Projektion füllt sie aus der
+  gecachten Liste mit den Dokumentversionen bis zu dieser Turn (kompakt) und
+  ihren Mail-Anhängen.
+- Uploads sind Chips an der Nachricht (`#threadAskAttachments` bzw. im Verlauf).
+  Ein Chip mit Datei-`id` öffnet den gemeinsamen Viewer (`attachments.js`), der
+  die Datei über `App.agentWorkspace.openFile(id)` lädt (Bild als Data-URL, PDF
+  und Text im Frame, sonst Hinweis) und darunter „Download“ sowie „Remove from
+  chat“ mit Inline-Bestätigung anbietet (`App.agentWorkspace.removeFile(id)`).
+  Der Chat ist der sichtbare; der Server prüft Owner und Chat bei jedem Request.
 - Entfernen nur über das Overflow-Menü (⋯) mit expliziter Bestätigung; der Fokus
   startet auf „Cancel“. Alle Download-/Menü-Buttons haben sprechende `aria-label`s.
 - `upload()` zeigt Fortschritt ohne die Liste zu leeren. Scheitert eine Datei,

@@ -110,6 +110,8 @@ def test_import_attachment_reuses_private_processing_and_respects_cancel_and_own
     args=ImportAttachment(message_id='m1',part_id='1')
     meta=tool.import_attachment(args,cancellation=ProviderCancellation())['file']
     assert meta['kind']=='mail_attachment' and meta['origin']['message_id']=='m1'
+    # The file shows with the answer of the turn that fetched it.
+    assert meta['turn_id']=='first'
     listed=tool.files.list('owner',chat)[0]
     assert listed['origin_subject']=='Offers' and listed['origin_from']=='Supplier <supplier@example.org>'
     assert tool.files.get('owner',chat,meta['id'])['parts'][0]['text'].startswith('Price: 42')

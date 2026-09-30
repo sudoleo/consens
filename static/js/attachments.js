@@ -213,9 +213,13 @@
     const viewerBody = document.getElementById("attachmentViewerBody");
     const viewerClose = document.getElementById("attachmentViewerClose");
     let viewerObjectUrl = null;
+    // Stored Agent files load asynchronously; a newer open or a close makes
+    // an older response stale so it can never paint into the wrong preview.
+    let viewerToken = 0;
 
     function closeAttachmentViewer() {
       if (!viewerOverlay) return;
+      viewerToken++;
       viewerOverlay.hidden = true;
       if (viewerBody) viewerBody.innerHTML = "";
       if (viewerObjectUrl) {
@@ -231,13 +235,131 @@
       return new Blob([bytes], { type: mime });
     }
 
+    function viewerNotice(label, message) {
+      const notice = document.createElement("div");
+      notice.className = "attachment-viewer-notice";
+      const icon = document.createElement("span");
+      icon.className = "attachment-chip-icon";
+      icon.textContent = label;
+      const text = document.createElement("p");
+      text.textContent = message;
+      notice.appendChild(icon);
+      notice.appendChild(text);
+      return notice;
+    }
+
+    function readDataUrl(blob) {
+      return new Promise(function (resolve, reject) {
+        const reader = new FileReader();
+        reader.onload = function () { resolve(String(reader.result || "")); };
+        reader.onerror = function () { reject(new Error("Preview is not available in this browser.")); };
+        reader.readAsDataURL(blob);
+      });
+    }
+
+    // Download and removal for a stored Agent file. Removal asks once more
+    // inline: it is permanent and the agent loses access to the file.
+    function storedFileActions(att, blob) {
+      const row = document.createElement("div");
+      row.className = "attachment-viewer-actions";
+      const download = document.createElement("button");
+      download.type = "button";
+      download.className = "attachment-viewer-action";
+      download.textContent = "Download";
+      download.addEventListener("click", function () {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = att.name;
+        link.click();
+        setTimeout(function () { URL.revokeObjectURL(url); }, 10000);
+      });
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "attachment-viewer-action is-quiet";
+      remove.textContent = "Remove from chat";
+      remove.addEventListener("click", function () {
+        row.replaceChildren();
+        const question = document.createElement("span");
+        question.className = "attachment-viewer-confirm";
+        question.textContent = "Remove " + att.name + "? The agent can no longer use it in this chat.";
+        const confirm = document.createElement("button");
+        confirm.type = "button";
+        confirm.className = "attachment-viewer-action is-danger";
+        confirm.textContent = "Remove";
+        const cancel = document.createElement("button");
+        cancel.type = "button";
+        cancel.className = "attachment-viewer-action is-quiet";
+        cancel.textContent = "Cancel";
+        cancel.addEventListener("click", function () {
+          row.replaceWith(storedFileActions(att, blob));
+        });
+        confirm.addEventListener("click", async function () {
+          confirm.disabled = cancel.disabled = true;
+          confirm.textContent = "Removing…";
+          try {
+            await window.App.agentWorkspace.removeFile(att.fileId);
+            closeAttachmentViewer();
+          } catch (failure) {
+            window.App?.showPopup?.(failure.message);
+            confirm.disabled = cancel.disabled = false;
+            confirm.textContent = "Remove";
+          }
+        });
+        row.append(question, confirm, cancel);
+        cancel.focus();
+      });
+      row.append(download, remove);
+      return row;
+    }
+
+    function showStoredAttachment(att) {
+      const token = viewerToken;
+      const loading = document.createElement("p");
+      loading.className = "attachment-viewer-loading";
+      loading.textContent = "Loading preview…";
+      viewerBody.appendChild(loading);
+      window.App.agentWorkspace.openFile(att.fileId).then(async function (file) {
+        const mime = file.mime || att.mime;
+        const image = mime.indexOf("image/") === 0 ? await readDataUrl(file.blob) : "";
+        if (token !== viewerToken) return;
+        viewerBody.innerHTML = "";
+        if (image) {
+          const img = document.createElement("img");
+          img.className = "attachment-viewer-image";
+          img.alt = att.name;
+          img.src = image;
+          viewerBody.appendChild(img);
+        } else if (mime === "application/pdf" || mime.indexOf("text/") === 0) {
+          viewerObjectUrl = URL.createObjectURL(mime.indexOf("text/") === 0
+            ? new Blob([file.blob], { type: "text/plain;charset=utf-8" }) : file.blob);
+          const frame = document.createElement("iframe");
+          frame.className = "attachment-viewer-frame";
+          frame.title = att.name;
+          frame.src = viewerObjectUrl;
+          viewerBody.appendChild(frame);
+        } else {
+          viewerBody.appendChild(viewerNotice(chipIconLabel(mime),
+            "This file type cannot be previewed here. Download it to open it."));
+        }
+        viewerBody.appendChild(storedFileActions(att, file.blob));
+      }).catch(function (failure) {
+        if (token !== viewerToken) return;
+        viewerBody.innerHTML = "";
+        viewerBody.appendChild(viewerNotice(chipIconLabel(att.mime),
+          (failure && failure.message) || "This file could not be loaded. Please retry."));
+      });
+    }
+
     function openAttachmentViewer(att) {
       if (!viewerOverlay || !viewerBody) return;
       closeAttachmentViewer();
       viewerTitle.textContent = att.name;
       viewerBody.innerHTML = "";
 
-      if (att.previewOnly || !att.data) {
+      if (att.fileId && window.App?.agentWorkspace?.openFile) {
+        showStoredAttachment(att);
+      } else if (att.previewOnly || !att.data) {
         const notice = document.createElement("div");
         notice.className = "attachment-viewer-notice";
         const icon = document.createElement("span");
@@ -283,7 +405,7 @@
       }
 
       viewerOverlay.hidden = false;
-      trackAppEvent("app_attachment_viewed", { mime: att.mime, preview_only: !!att.previewOnly });
+      trackAppEvent("app_attachment_viewed", { mime: att.mime, preview_only: !!att.previewOnly, stored: !!att.fileId });
     }
 
     if (viewerClose) viewerClose.addEventListener("click", closeAttachmentViewer);
@@ -381,14 +503,20 @@
         chip.setAttribute("role", "group");
       }
 
-      if (readonly) return chip;
+      // A sent message's file can only be opened again when it was stored
+      // (Agent chats); other sent chips are plain labels.
+      if (readonly && !att.fileId) return chip;
+      if (readonly) chip.removeAttribute("role");
 
       // Preview and removal are sibling buttons, never nested controls.
       const preview = document.createElement("button");
       preview.type = "button";
       preview.className = "attachment-chip-preview";
       preview.title = "Preview " + att.name;
-      preview.setAttribute("aria-label", "Preview " + att.name + ", " + formatFileSize(att.size));
+      preview.setAttribute("aria-label", chip.getAttribute("aria-label")
+        ? "Preview " + chip.getAttribute("aria-label")
+        : "Preview " + att.name + (att.size ? ", " + formatFileSize(att.size) : ""));
+      chip.removeAttribute("aria-label");
       preview.append(...chip.childNodes);
       chip.appendChild(preview);
       preview.addEventListener("click", function () {
@@ -411,6 +539,8 @@
           mime: String(item.mime || ""),
           size: Number(item.size) || 0,
           warnings: Array.isArray(item.warnings) ? item.warnings.map(String).slice(0, 5) : [],
+          // Agent uploads stay in their chat, so the chip can open them again.
+          fileId: /^[a-f0-9]{32}$/.test(String(item.id || "")) ? String(item.id) : "",
           data: null
         }, { readonly: true }));
       });

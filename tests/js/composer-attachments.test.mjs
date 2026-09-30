@@ -122,4 +122,43 @@ describe("composer attachment tray", () => {
     expect(chips[0].getAttribute("aria-label")).toContain("only partly readable: No extractable text on pages 4.");
     expect(chips[1].querySelector(".attachment-chip-warning")).toBeNull();
   });
+
+  it("opens a stored Agent file from its sent message with download and a confirmed removal", async () => {
+    const { window, document } = boot();
+    const id = "a".repeat(32);
+    const blob = new window.Blob(["hello"], { type: "text/plain" });
+    window.App.agentWorkspace = { openFile: vi.fn(async () => ({ blob, mime: "text/plain" })), removeFile: vi.fn(async () => {}) };
+    const row = document.getElementById("threadAskAttachments");
+    window.App.attachments.renderMessageAttachments(row, [
+      { name: "notes.txt", mime: "text/plain", size: 5, id },
+      { name: "old.txt", mime: "text/plain", size: 5 }
+    ]);
+    const chips = row.querySelectorAll(".attachment-chip");
+    // Only the stored file can be opened again.
+    expect(chips[1].querySelector(".attachment-chip-preview")).toBeNull();
+    chips[0].querySelector(".attachment-chip-preview").click();
+    expect(window.App.agentWorkspace.openFile).toHaveBeenCalledWith(id);
+    const body = document.getElementById("attachmentViewerBody");
+    expect(body.textContent).toContain("Loading preview");
+    await vi.waitFor(() => expect(body.querySelector("iframe")).not.toBeNull());
+    const actions = body.querySelector(".attachment-viewer-actions");
+    expect([...actions.querySelectorAll("button")].map(b => b.textContent)).toEqual(["Download", "Remove from chat"]);
+    actions.querySelectorAll("button")[1].click();
+    expect(window.App.agentWorkspace.removeFile).not.toHaveBeenCalled();
+    expect(body.textContent).toContain("Remove notes.txt? The agent can no longer use it in this chat.");
+    [...body.querySelectorAll(".attachment-viewer-actions button")].find(b => b.textContent === "Remove").click();
+    await vi.waitFor(() => expect(document.getElementById("attachmentViewerModal").hidden).toBe(true));
+    expect(window.App.agentWorkspace.removeFile).toHaveBeenCalledWith(id);
+  });
+
+  it("shows why a stored file could not be opened", async () => {
+    const { window, document } = boot();
+    window.App.agentWorkspace = { openFile: vi.fn(async () => { throw new Error("The file has expired or is no longer available."); }) };
+    const row = document.getElementById("threadAskAttachments");
+    window.App.attachments.renderMessageAttachments(row, [{ name: "scan.png", mime: "image/png", size: 5, id: "b".repeat(32) }]);
+    row.querySelector(".attachment-chip-preview").click();
+    const body = document.getElementById("attachmentViewerBody");
+    await vi.waitFor(() => expect(body.textContent).toContain("The file has expired or is no longer available."));
+    expect(body.querySelector(".attachment-viewer-actions")).toBeNull();
+  });
 });

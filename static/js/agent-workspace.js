@@ -1,12 +1,16 @@
 // Private chat files and document versions. Everything belongs to the current
 // authenticated chat and lives in memory only, never in localStorage.
 //
-// Two places show it:
-// - #agentAnswerResources (after the answer text): the documents created or
-//   revised in the displayed turn (one card per document_id), per-file upload
-//   progress and a note when a file of this turn was only partly readable.
-// - #agentWorkspace (below the answer): the collapsed chat-level disclosure
-//   "Files in this chat (n)" with every upload, mail attachment and document.
+// Every file belongs to the message or answer it came with; there is no
+// chat-wide list under each answer:
+// - Uploads sit as chips on the user message they were sent with
+//   (attachments.js). A chip opens the stored file through openFile(), with
+//   download and removal in the preview.
+// - #agentAnswerResources (after the live answer) and one resources row per
+//   archived Agent turn (renderTurnResources) show the documents created or
+//   revised in that turn (one card per document_id), mail attachments the
+//   agent fetched in it, per-file upload progress, and a note when a file of
+//   the turn was only partly readable.
 //
 // refresh(chatId, force) is cheap to call on every render: without force it
 // only re-projects the cached list (for example when the turn changes). A
@@ -28,7 +32,7 @@
   let lastStart = -Infinity, timer = null, retryTimer = null, inflight = null, waiting = null, rendered = '';
   let revision = 0, retried = false;
   const uploads = new Map(); // chatId -> [{name, mime, size, state, message}]
-  const openState = { files: new Set(), versions: new Set() };
+  const openState = { versions: new Set() };
   let confirmKey = '';
 
   function node(tag, className, text) {
@@ -60,19 +64,9 @@
     resources.classList.add('agent-resources');
     return resources;
   }
-  function filesPanel() {
-    let panel = document.getElementById('agentWorkspace');
-    const answer = document.getElementById('agentAnswer');
-    if (!panel) {
-      if (!answer) return null;
-      panel = node('section', 'agent-workspace agent-files'); panel.id = 'agentWorkspace';
-      panel.setAttribute('aria-label', 'Files in this chat');
-      panel.hidden = true;
-    }
-    // Below the answer and any Google action cards, which need attention first.
-    const anchor = document.getElementById('agentGoogleActions') || answer;
-    if (anchor && anchor.parentElement && anchor.nextElementSibling !== panel) anchor.after(panel);
-    return panel;
+  // Resource rows of archived turns in the thread history, keyed by turn.
+  function historyRows() {
+    return [...document.querySelectorAll('#threadHistory [data-agent-turn-resources]')];
   }
 
   async function request(path, options = {}) {
@@ -347,8 +341,8 @@
     }
     return card;
   }
-  function fileRow(chatId, file) {
-    const key = `files:file:${file.id}`;
+  function fileRow(chatId, file, scope) {
+    const key = `${scope}:file:${file.id}`;
     const row = node('div', `agent-file-row${partial(file) ? ' has-warning' : ''}`);
     row.dataset.filesKey = key;
     const type = node('span', 'agent-file-type', file.origin?.message_id ? '' : extension(file));
@@ -411,18 +405,40 @@
   function signature(turnInfo) {
     const origins = (data?.files || []).filter(file => file.origin?.message_id).map(mailOrigin);
     return JSON.stringify([chat, revision, turnInfo.id, turnInfo.fileIds, error, confirmKey, origins,
-      (uploads.get(chat) || []).map(item => [item.name, item.state])]);
+      (uploads.get(chat) || []).map(item => [item.name, item.state]), historyRows().map(row => row.dataset.agentTurnResources)]);
   }
   function hideAll() {
     const resources = document.getElementById('agentAnswerResources');
     if (resources) { resources.replaceChildren(); resources.hidden = true; }
-    const panel = document.getElementById('agentWorkspace');
-    if (panel) { panel.replaceChildren(); panel.hidden = true; }
+    for (const row of historyRows()) { row.replaceChildren(); row.hidden = true; }
     rendered = '';
+  }
+  // What one turn produced: its documents (versions up to this turn) and the
+  // mail attachments the agent fetched in it. Uploads are on the message.
+  function turnResources(box, chatId, files, turnId, scope, live) {
+    if (!turnId) return;
+    for (const group of groupDocuments(files)) {
+      const mine = group.list.filter(version => version.turn === turnId);
+      if (!mine.length) continue;
+      const card = documentCard(chatId, group, { upTo: mine[0].number, turnId: live ? turnId : '', compact: !live, scope });
+      if (card) box.append(card);
+    }
+    const mail = files.filter(file => file.kind === 'mail_attachment' && file.turn_id === turnId);
+    if (mail.length) {
+      const list = node('div', 'agent-files-list');
+      for (const file of mail) list.append(fileRow(chatId, file, scope));
+      box.append(list);
+    }
+  }
+  function fillHistoryRow(row) {
+    row.replaceChildren();
+    const turnId = row.dataset.agentTurnResources;
+    if (chat && data) turnResources(row, chat, data.files || [], turnId, `turn:${turnId}`, false);
+    row.hidden = !row.childElementCount;
   }
   function project() {
     if (!chat) { hideAll(); return; }
-    const resources = answerResources(), panel = filesPanel();
+    const resources = answerResources();
     const turnInfo = currentTurn();
     const key = signature(turnInfo);
     if (key === rendered && (!resources || resources.isConnected)) return;
@@ -436,42 +452,19 @@
       const selected = new Set(turnInfo.fileIds || []);
       const readable = files.filter(file => selected.has(file.id) && partial(file));
       if (readable.length) resources.append(partialNotice(readable));
-      if (turnInfo.id) {
-        for (const group of groupDocuments(files)) {
-          const mine = group.list.filter(version => version.turn === turnInfo.id);
-          if (!mine.length) continue;
-          const card = documentCard(chatId, group, { upTo: mine[0].number, turnId: turnInfo.id, scope: 'answer' });
-          if (card) resources.append(card);
-        }
+      if (error) {
+        // Only worth a line when this answer's own files are missing.
+        const notice = node('div', 'agent-files-error');
+        notice.append(icon('warning'), node('span', '', `Couldn't load this chat's files. ${error}`));
+        const retry = node('button', 'agent-files-ghost', 'Retry'); retry.type = 'button';
+        retry.addEventListener('click', () => refresh(chatId, true));
+        notice.append(retry);
+        resources.append(notice);
       }
+      turnResources(resources, chatId, files, turnInfo.id, 'answer', true);
       resources.hidden = !resources.childElementCount;
     }
-    if (!panel) return;
-    panel.replaceChildren();
-    if (error) {
-      const notice = node('div', 'agent-files-error');
-      notice.append(icon('warning'), node('span', '', `Couldn't load chat files. ${error}`));
-      const retry = node('button', 'agent-files-ghost', 'Retry'); retry.type = 'button';
-      retry.addEventListener('click', () => refresh(chatId, true));
-      notice.append(retry);
-      panel.append(notice); panel.hidden = false; return;
-    }
-    const groups = groupDocuments(files);
-    const plain = files.filter(file => !(file.kind === 'document' && file.document_id));
-    const count = groups.length + plain.length;
-    panel.hidden = !count;
-    if (!count) return;
-    const details = node('details', 'agent-files-disclosure');
-    details.open = openState.files.has(chatId);
-    details.addEventListener('toggle', () => { if (details.open) openState.files.add(chatId); else openState.files.delete(chatId); });
-    const summary = node('summary', '', `Files in this chat (${count})`);
-    details.append(summary);
-    details.append(node('p', 'agent-files-note', 'Files stay available to this chat for 30 days. Relevant excerpts may be sent to your selected models.'));
-    const list = node('div', 'agent-files-list');
-    for (const group of groups) list.append(documentCard(chatId, group, { compact: true, scope: 'files' }));
-    for (const file of plain) list.append(fileRow(chatId, file));
-    details.append(list);
-    panel.append(details);
+    for (const row of historyRows()) fillHistoryRow(row);
   }
 
   // ---- loading --------------------------------------------------------------------
@@ -593,8 +586,42 @@
     return result;
   }
 
+  // ---- files attached to a message --------------------------------------------------
+  // The chip on a sent message knows only its file ID; the chat is the one
+  // on screen. The server rechecks owner and chat on every request.
+  function chatOnScreen() {
+    if (chat) return chat;
+    // A brand-new chat skips the list GET until its run reports files.
+    const context = App.runRegistry?.visible?.();
+    return context?.config?.executionMode === 'agent' ? context.metadata?.chatId || '' : '';
+  }
+  async function openFile(fileId) {
+    const chatId = chatOnScreen();
+    if (!chatId) throw new Error('Open this chat to preview the file.');
+    const response = await request(`/agent/chats/${chatId}/files/${fileId}`);
+    const blob = await response.blob();
+    if (chatOnScreen() !== chatId) throw new Error('The chat changed. Open the file again.');
+    return { blob, mime: blob.type || '' };
+  }
+  async function removeFile(fileId) {
+    const chatId = chatOnScreen();
+    if (!chatId) throw new Error('Open this chat to remove the file.');
+    await request(`/agent/chats/${chatId}/files/${fileId}`, { method: 'DELETE' });
+    if (chat === chatId) await refresh(chatId, true);
+  }
+  // Archived turns ask for their resources row while the thread renders; it
+  // fills from the cached list now and again whenever the list changes.
+  function renderTurnResources(row, turnId) {
+    if (!row || !/^[a-f0-9]{32}$/.test(String(turnId || ''))) return;
+    row.classList.add('agent-resources', 'agent-turn-resources');
+    row.dataset.agentTurnResources = turnId;
+    row.hidden = true;
+    if (row.isConnected) fillHistoryRow(row);
+    rendered = '';
+  }
+
   window.addEventListener('consensio:auth-state', () => {
-    reset(); chat = ''; owner = ''; uploads.clear(); openState.files.clear(); openState.versions.clear(); hideAll();
+    reset(); chat = ''; owner = ''; uploads.clear(); openState.versions.clear(); hideAll();
   });
-  App.agentWorkspace = { refresh, upload, request, button, download };
+  App.agentWorkspace = { refresh, upload, request, button, download, openFile, removeFile, renderTurnResources };
 })();

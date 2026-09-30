@@ -1,7 +1,8 @@
 /* Agent files, attachments and document versions (agent-workspace.js).
-   Document cards of the displayed turn sit in #agentAnswerResources after the
-   answer text; every chat file sits in the collapsed #agentWorkspace
-   disclosure below the answer. Tokens only (variables.css). */
+   Document cards and mail attachments of a turn sit after its answer: in
+   #agentAnswerResources for the live answer, in .agent-turn-resources for
+   archived turns. Uploads are chips on their message. Tokens only
+   (variables.css). */
 
 /* Shared panel shell. agent-google.js also uses .agent-workspace and
    .agent-file-card for its action and evidence panels. */
@@ -145,17 +146,7 @@
 .agent-resource-notice-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
 .agent-resource-notice-text span { color: var(--ink-2); font-size: 12px; }
 
-/* ---- Chat-level list: "Files in this chat (n)" ---- */
-#agentWorkspace.agent-files { width: 100%; margin: 4px 0 12px; padding: 0; }
-.agent-files-disclosure > summary {
-  display: inline-flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 10px 0 8px; margin-left: -8px;
-  border-radius: 8px; color: var(--ink-2); font-size: 13px; list-style: none;
-}
-.agent-files-disclosure > summary::-webkit-details-marker { display: none; }
-.agent-files-disclosure > summary::before { content: ''; width: 6px; height: 6px; margin: 0 2px 2px 4px; border: solid currentColor; border-width: 0 1.5px 1.5px 0; transform: rotate(-45deg); transition: transform 140ms ease; }
-.agent-files-disclosure[open] > summary::before { transform: rotate(45deg); margin-bottom: 4px; }
-.agent-files-disclosure > summary:hover { background: var(--raise); color: var(--ink); }
-.agent-files-note { margin: 4px 0 6px; color: var(--ink-3); font-size: 12px; line-height: 1.5; }
+/* ---- Mail attachments of a turn ---- */
 .agent-files-list { border-top: 1px solid var(--line-soft); }
 .agent-file-item { padding: 12px 0; border-bottom: 1px solid var(--line-soft); }
 .agent-file-actions { display: flex; align-items: center; gap: 2px; flex: none; margin: -3px 0 0; }
@@ -175,7 +166,7 @@
   background: var(--partial-bg); color: color-mix(in srgb, var(--partial) 70%, var(--ink)); font-size: 10px; font-weight: 600; line-height: 1.6;
 }
 
-:is(.agent-files-chip, .agent-files-more, .agent-files-icon-btn, .agent-files-danger, .agent-files-ghost, .agent-files-disclosure > summary, .agent-doc-earlier > summary):focus-visible {
+:is(.agent-files-chip, .agent-files-more, .agent-files-icon-btn, .agent-files-danger, .agent-files-ghost, .agent-doc-earlier > summary):focus-visible {
   outline: 2px solid var(--ink-2); outline-offset: 2px;
 }
 
@@ -186,13 +177,13 @@
 }
 @media (pointer: coarse) {
   .agent-files-chip, .agent-files-more, .agent-files-icon-btn, .agent-files-danger, .agent-files-ghost,
-  .agent-files-menu-item, .agent-files-disclosure > summary, .agent-doc-earlier > summary { min-height: 44px; }
+  .agent-files-menu-item, .agent-doc-earlier > summary { min-height: 44px; }
   .agent-files-more, .agent-files-icon-btn { width: 44px; }
   .agent-doc-version .agent-files-chip { min-height: 44px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .agent-upload-spinner { animation-duration: 2400ms; }
-  .agent-files-disclosure > summary::before, .agent-doc-earlier > summary::before { transition: none; }
+  .agent-doc-earlier > summary::before { transition: none; }
 }
 @media (forced-colors: active) {
   .agent-doc-card, .agent-files-chip, .agent-files-menu, .agent-files-confirm, .agent-resource-notice { border: 1px solid CanvasText; }

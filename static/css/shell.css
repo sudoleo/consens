@@ -2762,8 +2762,10 @@ body:not(.is-hero) .consensus-section::before {
    Ein Anhang gehoert zu der Frage, mit der er rausgegangen ist. Er steht
    deshalb unter ihr — rechtsbuendig wie die Frage selbst — und nicht mehr
    ueber dem leeren Eingabefeld, wo er die naechste Frage zu meinen schien.
-   Die Datei selbst wird nicht aufbewahrt: die Chips sind Metadaten und
-   deshalb bewusst ohne Vorschau und ohne Entfernen-Knopf. */
+   Im Consensus-Modus wird die Datei nicht aufbewahrt: die Chips sind
+   Metadaten, ohne Vorschau und ohne Entfernen-Knopf. Agent-Chats speichern
+   ihre Dateien; dort oeffnet der Chip die Vorschau (mit Download und
+   Entfernen im Viewer). */
 .message-attachments {
   flex: 0 0 auto;
   justify-content: flex-end;
@@ -2782,6 +2784,22 @@ body:not(.is-hero) .consensus-section::before {
 .message-attachments .attachment-chip {
   cursor: default;
   background: var(--raise);
+}
+
+.message-attachments .attachment-chip:has(> .attachment-chip-preview) {
+  padding: 0;
+}
+
+.message-attachments .attachment-chip-preview {
+  gap: 9px;
+  min-height: 0;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+}
+
+.message-attachments .attachment-chip-preview:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 
 .thread-ask-more {

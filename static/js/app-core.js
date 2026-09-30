@@ -57,6 +57,8 @@
         name: String(item.name),
         mime: String(item.mime || ""),
         size: Number(item.size) || 0,
+        // Agent files are stored per chat; their ID opens the preview.
+        ...(/^[a-f0-9]{32}$/.test(String(item.id || "")) ? { id: String(item.id) } : {}),
         // Agent files carry extraction warnings (for a "Partly read" badge).
         ...(Array.isArray(item.warnings) && item.warnings.length
           ? { warnings: item.warnings.map(String).slice(0, 5) } : {})

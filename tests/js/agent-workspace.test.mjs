@@ -25,6 +25,9 @@ const version = (id, number, turn, ext, extra = {}) => ({ id: id.repeat(32), nam
   mime: ext === 'pdf' ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   size: 41000, created_at: `2026-09-2${number}T10:00:00Z`, expires_at: '2099-10-29T10:00:00Z', ...extra });
 const DOCS = [version('3', 1, TURN_ONE, 'docx'), version('4', 1, TURN_ONE, 'pdf'), version('5', 2, TURN_TWO, 'docx'), version('6', 2, TURN_TWO, 'pdf')];
+const MAIL = { id: 'c'.repeat(32), name: 'invoice.pdf', mime: 'application/pdf', size: 51000, status: 'ready', kind: 'mail_attachment',
+  turn_id: TURN_TWO, expires_at: '2099-10-29T10:00:00Z',
+  origin: { message_id: '18c2f0a1b2c3d4e5', part_id: '1.2' }, origin_subject: 'Offer 2026', origin_from: 'Jens <jens@vendor.example>' };
 const UPLOAD = { id: 'a'.repeat(32), name: 'offer.pdf', mime: 'application/pdf', size: 182000, status: 'partial', created_at: '2026-09-20T09:00:00Z',
   expires_at: '2099-10-29T10:00:00Z', warnings: ['No extractable text on pages 4. Scans require visual reading; OCR is not available.'] };
 
@@ -48,11 +51,10 @@ describe('private Agent workspace', () => {
     expect(labels.slice(0, 2)).toEqual(['Download Decision brief-v2.docx, version 2', 'Download Decision brief-v2.pdf, version 2']);
     // Remove never sits next to Download: it lives behind the overflow menu.
     expect([...card.querySelectorAll('button')].some(b => /^Remove/.test(b.textContent) && !b.closest('[role=menu]'))).toBe(false);
-    // Chat-level disclosure lives below the answer and stays collapsed.
-    const panel = document.getElementById('agentWorkspace');
-    expect(panel.previousElementSibling.id).toBe('agentAnswer');
-    expect(panel.querySelector('summary').textContent).toBe('Files in this chat (2)');
-    expect(panel.querySelector('details').open).toBe(false);
+    // No chat-wide list under the answer: uploads live on their message.
+    expect(document.getElementById('agentWorkspace')).toBeNull();
+    expect(document.body.textContent).not.toContain('Files in this chat');
+    expect(resources.textContent).not.toContain('offer.pdf');
     dom.window.close();
   });
 
@@ -66,33 +68,33 @@ describe('private Agent workspace', () => {
     const other = boot({ files: DOCS, turn: 'f'.repeat(32) });
     await other.window.App.agentWorkspace.refresh(CHAT);
     expect(other.document.getElementById('agentAnswerResources').hidden).toBe(true);
-    expect(other.document.querySelector('#agentWorkspace summary').textContent).toBe('Files in this chat (1)');
+    expect(other.document.getElementById('agentWorkspace')).toBeNull();
     other.dom.window.close();
     dom.window.close();
   });
 
   it('removes only after an explicit confirmation from the overflow menu', async () => {
-    const { window, document, dom } = boot({ files: [UPLOAD] });
+    const { window, document, dom } = boot({ files: [MAIL] });
     await window.App.agentWorkspace.refresh(CHAT);
-    const more = document.querySelector('#agentWorkspace .agent-files-more');
-    expect(more.getAttribute('aria-label')).toBe('More actions for offer.pdf');
-    expect(document.querySelector('#agentWorkspace .agent-files-icon-btn').getAttribute('aria-label')).toBe('Download offer.pdf');
+    const more = document.querySelector('#agentAnswerResources .agent-files-more');
+    expect(more.getAttribute('aria-label')).toBe('More actions for invoice.pdf');
+    expect(document.querySelector('#agentAnswerResources .agent-files-icon-btn').getAttribute('aria-label')).toBe('Download invoice.pdf');
     more.click();
     expect(more.getAttribute('aria-expanded')).toBe('true');
-    document.querySelector('#agentWorkspace [role=menuitem]').click();
+    document.querySelector('#agentAnswerResources [role=menuitem]').click();
     expect(window.fetch).toHaveBeenCalledTimes(1);
     const confirm = document.querySelector('.agent-files-confirm');
-    expect(confirm.textContent).toContain('Remove offer.pdf? The agent can no longer use it in this chat.');
+    expect(confirm.textContent).toContain('Remove invoice.pdf? The agent can no longer use it in this chat.');
     expect(document.activeElement.textContent).toBe('Cancel');
     confirm.querySelector('.agent-files-ghost').click();
     expect(document.querySelector('.agent-files-confirm')).toBeNull();
     expect(window.fetch).toHaveBeenCalledTimes(1);
-    document.querySelector('#agentWorkspace .agent-files-more').click();
-    document.querySelector('#agentWorkspace [role=menuitem]').click();
+    document.querySelector('#agentAnswerResources .agent-files-more').click();
+    document.querySelector('#agentAnswerResources [role=menuitem]').click();
     document.querySelector('.agent-files-danger').click();
     await vi.waitFor(() => expect(window.fetch.mock.calls.some(([, o]) => o?.method === 'DELETE')).toBe(true));
     const call = window.fetch.mock.calls.find(([, o]) => o?.method === 'DELETE');
-    expect(call[0]).toBe(`/agent/chats/${CHAT}/files/${UPLOAD.id}`);
+    expect(call[0]).toBe(`/agent/chats/${CHAT}/files/${MAIL.id}`);
     dom.window.close();
   });
 
@@ -102,21 +104,21 @@ describe('private Agent workspace', () => {
     window.App.runRegistry.getSelectedConversationBasis = () => ({ chatId: CHAT, turnId: TURN_TWO,
       currentTurn: { id: TURN_TWO, agent_settings: { file_ids: [UPLOAD.id] } } });
     await window.App.agentWorkspace.refresh(CHAT);
-    expect(document.querySelector('#agentWorkspace img')).toBeNull();
-    expect(document.querySelector('#agentWorkspace .agent-files-badge.is-warning').textContent).toBe('Partly read');
-    expect(document.querySelector('#agentWorkspace').textContent).toContain('OCR is not available');
-    expect(document.querySelector('#agentAnswerResources .agent-resource-notice').textContent).toContain('1 file was only partly readable');
+    expect(document.querySelector('img')).toBeNull();
+    const notice = document.querySelector('#agentAnswerResources .agent-resource-notice');
+    expect(notice.textContent).toContain('1 file was only partly readable');
+    expect(notice.textContent).toContain('OCR is not available');
+    expect(notice.textContent).toContain('<img src=x onerror=alert(1)>.txt');
     dom.window.close();
   });
 
-  it('describes Gmail imports by subject and sender instead of message IDs', async () => {
-    const mail = { id: 'c'.repeat(32), name: 'invoice.pdf', mime: 'application/pdf', size: 51000, status: 'ready', kind: 'mail_attachment',
-      origin: { message_id: '18c2f0a1b2c3d4e5', part_id: '1.2' }, origin_subject: 'Offer 2026', origin_from: 'Jens <jens@vendor.example>' };
-    const { window, document, dom } = boot({ files: [mail, { ...mail, id: 'e'.repeat(32), origin_subject: undefined, origin_from: undefined,
-      origin: { message_id: 'ff', part_id: '1' } }] });
+  it('describes Gmail imports of the turn by subject and sender instead of message IDs', async () => {
+    const { window, document, dom } = boot({ files: [MAIL, { ...MAIL, id: 'e'.repeat(32), origin_subject: undefined, origin_from: undefined,
+      origin: { message_id: 'ff', part_id: '1' } }, { ...MAIL, id: '9'.repeat(32), name: 'older.pdf', turn_id: TURN_ONE }] });
     window.App.agentGoogle.evidenceFor = id => id === 'ff' ? { subject: 'Contract', from: 'Legal <legal@example.org>' } : null;
     await window.App.agentWorkspace.refresh(CHAT);
-    const text = document.getElementById('agentWorkspace').textContent;
+    const text = document.getElementById('agentAnswerResources').textContent;
+    expect(text).not.toContain('older.pdf');
     expect(text).toContain('From email: Offer 2026 (Jens)');
     expect(text).toContain('From email: Contract (Legal)');
     expect(text).not.toContain('18c2f0a1b2c3d4e5');
@@ -158,7 +160,6 @@ describe('private Agent workspace', () => {
     await vi.waitFor(() => expect(typeof release).toBe('function'));
     expect(document.querySelector('#agentAnswerResources .agent-upload-row').textContent).toContain('new.pdf');
     expect(document.querySelector('#agentAnswerResources .agent-upload-row').textContent).toContain('Uploading');
-    expect(document.querySelector('#agentWorkspace summary').textContent).toBe('Files in this chat (1)');
     release();
     await pending;
     expect(context.metadata.fileIds).toEqual(['f'.repeat(32)]);
@@ -192,6 +193,43 @@ describe('private Agent workspace', () => {
     release(reply([{ ...UPLOAD, name: 'private owner file' }]));
     await loading;
     expect(document.body.textContent).not.toContain('private owner file');
+    dom.window.close();
+  });
+
+  it('keeps each archived turn\'s documents with its own answer', async () => {
+    const history = '<div id="threadHistory"><article><div id="old"></div></article></div>';
+    const { window, document, dom } = boot({ files: DOCS, body: history + ANSWER });
+    const row = document.getElementById('old');
+    window.App.agentWorkspace.renderTurnResources(row, TURN_ONE);
+    await window.App.agentWorkspace.refresh(CHAT);
+    expect(row.hidden).toBe(false);
+    expect(row.querySelector('.agent-doc-card').textContent).toContain('Version 1');
+    expect(row.textContent).not.toContain('Version 2');
+    expect(row.querySelector('.agent-files-badge')).toBeNull();
+    const live = document.querySelector('#agentAnswerResources .agent-doc-card');
+    expect(live.textContent).toContain('Version 2');
+    // A turn without files keeps an empty, hidden row.
+    const empty = document.createElement('div'); document.getElementById('threadHistory').append(empty);
+    window.App.agentWorkspace.renderTurnResources(empty, 'f'.repeat(32));
+    expect(empty.hidden).toBe(true);
+    dom.window.close();
+  });
+
+  it('opens and removes a message attachment in the chat on screen', async () => {
+    const { window, dom } = boot({ files: [UPLOAD] });
+    await expect(window.App.agentWorkspace.openFile(UPLOAD.id)).rejects.toThrow('Open this chat to preview the file.');
+    await window.App.agentWorkspace.refresh(CHAT);
+    const blob = new window.Blob(['%PDF'], { type: 'application/pdf' });
+    window.fetch = vi.fn(async (path, options) => options?.method === 'DELETE' ? { ok: true, json: async () => ({}) }
+      : path.endsWith(UPLOAD.id) ? { ok: true, blob: async () => blob } : reply([]));
+    const file = await window.App.agentWorkspace.openFile(UPLOAD.id);
+    expect(file.mime).toBe('application/pdf');
+    expect(window.fetch.mock.calls[0][0]).toBe(`/agent/chats/${CHAT}/files/${UPLOAD.id}`);
+    expect(window.fetch.mock.calls[0][1].headers.Authorization).toBe('Bearer token');
+    await window.App.agentWorkspace.removeFile(UPLOAD.id);
+    expect(window.fetch.mock.calls.some(([path, o]) => o?.method === 'DELETE' && path === `/agent/chats/${CHAT}/files/${UPLOAD.id}`)).toBe(true);
+    // The list refreshes afterwards.
+    expect(window.fetch.mock.calls.at(-1)[0]).toBe(`/agent/chats/${CHAT}/files`);
     dom.window.close();
   });
 });

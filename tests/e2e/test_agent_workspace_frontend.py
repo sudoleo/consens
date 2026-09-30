@@ -58,14 +58,15 @@ def test_upload_restoration_and_private_download(browser, phase4_server, width):
         page.locator('#questionInput').fill('Compare this offer')
         page.locator('#sendButton').click()
         expect(page.locator('#agentAnswerBody')).to_contain_text('42 EUR')
-        summary = page.locator('#agentWorkspace summary')
-        expect(summary).to_contain_text('Files in this chat (1)')
-        # The files list sits below the answer, never above it.
-        assert page.locator('#agentWorkspace').bounding_box()['y'] > page.locator('#agentAnswerBody').bounding_box()['y']
-        summary.click()
-        expect(page.locator('#agentWorkspace')).to_contain_text('offer.txt')
+        # The file stays on the message it was sent with; no chat-wide list.
+        expect(page.locator('#agentWorkspace')).to_have_count(0)
+        chip = page.locator('#threadAskAttachments .attachment-chip-preview')
+        expect(chip).to_contain_text('offer.txt')
+        chip.click()
+        viewer = page.locator('#attachmentViewerModal')
+        expect(viewer.locator('iframe')).to_have_count(1)
         with page.expect_download() as pending:
-            page.get_by_role('button',name='Download offer.txt',exact=True).click()
+            viewer.get_by_role('button',name='Download',exact=True).click()
         assert pending.value.suggested_filename == 'offer.txt'
         assert calls[0]['file_ids'] == [file_id] and 'attachments' not in calls[0]
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth + 1')
@@ -85,7 +86,7 @@ SAVED = [
      'warnings': ['No extractable text on pages 4. Scans require visual reading; OCR is not available.'],
      'created_at': '2026-09-20T10:00:00Z', 'expires_at': '2099-10-29T10:00:00Z'},
     _version('3', 1, TURN_ONE, 'docx'), _version('4', 1, TURN_ONE, 'pdf'), _version('5', 2, TURN_TWO, 'docx'), _version('6', 2, TURN_TWO, 'pdf'),
-    {'id': '8' * 32, 'name': 'invoice-attachment.pdf', 'mime': 'application/pdf', 'size': 51000, 'status': 'ready', 'kind': 'mail_attachment',
+    {'id': '8' * 32, 'name': 'invoice-attachment.pdf', 'mime': 'application/pdf', 'size': 51000, 'status': 'ready', 'kind': 'mail_attachment', 'turn_id': TURN_TWO,
      'origin': {'message_id': '18c2f0a1b2c3d4e5', 'part_id': '1.2'}, 'origin_subject': 'Offer 2026', 'origin_from': 'Jens <jens@vendor.example>',
      'created_at': '2026-09-23T10:00:00Z', 'expires_at': '2099-10-29T10:00:00Z', 'warnings': []},
 ]
@@ -130,16 +131,13 @@ def test_saved_document_versions_follow_the_answer_and_remove_needs_confirmation
         expect(card.get_by_role('button', name='Download Decision brief-v2.pdf, version 2')).to_be_visible()
         expect(card.locator('.agent-doc-earlier')).not_to_have_attribute('open', '')
         _shot(page, f'workspace-saved-{width}-{"dark" if dark else "light"}')
-        panel = page.locator('#agentWorkspace')
-        expect(panel.locator('summary').first).to_have_text('Files in this chat (3)')
-        panel.locator('summary').first.click()
+        expect(page.locator('#agentWorkspace')).to_have_count(0)
+        panel = page.locator('#agentAnswerResources')
+        # The mail attachment fetched in this turn follows its answer.
         expect(panel).to_contain_text('From email: Offer 2026 (Jens)')
         expect(panel).not_to_contain_text('18c2f0a1b2c3d4e5')
-        expect(panel.locator('.agent-files-badge.is-warning')).to_have_text('Partly read')
-        panel.scroll_into_view_if_needed()
-        _shot(page, f'workspace-files-{width}-{"dark" if dark else "light"}')
         # Remove sits behind the overflow menu and needs an explicit confirmation.
-        more = panel.get_by_role('button', name='More actions for Supplier offer 2026 (final).pdf')
+        more = panel.get_by_role('button', name='More actions for invoice-attachment.pdf')
         more.click()
         page.get_by_role('menuitem', name='Remove…').click()
         expect(page.locator('.agent-files-confirm')).to_contain_text('The agent can no longer use it in this chat.')
@@ -149,8 +147,8 @@ def test_saved_document_versions_follow_the_answer_and_remove_needs_confirmation
         more.click()
         page.get_by_role('menuitem', name='Remove…').click()
         page.get_by_role('button', name='Remove file').click()
-        expect(panel.locator('summary').first).to_have_text('Files in this chat (2)')
-        assert deleted == ['7' * 32]
+        expect(panel).not_to_contain_text('invoice-attachment.pdf')
+        assert deleted == ['8' * 32]
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth + 1')
         # Re-rendering the saved view does not refetch the list.
         before = len(gets)

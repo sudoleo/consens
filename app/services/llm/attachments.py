@@ -4,6 +4,7 @@ from __future__ import annotations
 import base64
 import io
 import logging
+import re
 import xml.etree.ElementTree as ET
 import zipfile
 from fastapi import HTTPException
@@ -73,6 +74,9 @@ def normalize_attachment_mime(raw) -> str | None:
     return mime if mime in ALLOWED_ATTACHMENT_MIMES else None
 
 
+_AGENT_FILE_ID = re.compile(r"[a-f0-9]{32}")
+
+
 def normalize_attachment_meta(raw) -> list[dict]:
     """Anhang-Angaben auf reine Metadaten reduzieren (Name/Typ/Größe).
 
@@ -97,7 +101,18 @@ def normalize_attachment_meta(raw) -> list[dict]:
             size = max(0, int(item.get("size") or 0))
         except (TypeError, ValueError):
             size = 0
-        normalized.append({"name": name, "mime": mime, "size": size})
+        entry = {"name": name, "mime": mime, "size": size}
+        # Agent uploads are stored per chat, so their message keeps the private
+        # file ID (owner-bound on every request) for preview and download.
+        file_id = item.get("id")
+        if isinstance(file_id, str) and _AGENT_FILE_ID.fullmatch(file_id):
+            entry["id"] = file_id
+        warnings = item.get("warnings")
+        if isinstance(warnings, list):
+            kept = [str(w)[:300] for w in warnings if isinstance(w, str) and w.strip()][:5]
+            if kept:
+                entry["warnings"] = kept
+        normalized.append(entry)
     return normalized
 
 # Provider, die Bilder bzw. PDFs nativ als Content-Block verarbeiten können.

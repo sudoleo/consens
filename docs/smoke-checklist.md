@@ -140,10 +140,13 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
 - [ ] Agent-Dateien/Dokumente bei 1440/390 px, Hell/Dunkel: Upload zeigt je Datei
       eine Fortschrittszeile, ein abgelehnter Upload bleibt mit Grund am Chip.
       Dokumentkarte (Titel, Version, DOCX/PDF) steht NACH der Antwort und nur bei
-      der Turn, die sie erzeugt hat; frühere Versionen eingeklappt; „Files in this
-      chat (n)“ eingeklappt darunter. Entfernen nur über ⋯ mit Bestätigung;
+      der Turn, die sie erzeugt hat (auch bei archivierten Turns im Verlauf);
+      frühere Versionen eingeklappt; keine chatweite Dateiliste unter der
+      Antwort. Hochgeladene Dateien stehen als Chip an ihrer Nachricht; Klick
+      öffnet die Vorschau (Bild, PDF, Text) mit „Download“ und „Remove from
+      chat“ samt Bestätigung. Entfernen an Karten nur über ⋯ mit Bestätigung;
       Screenreader hört „Download <Datei>, version n“. Teils lesbare Dateien zeigen
-      „Partly read“ an Zeile, Chip und Antwort.
+      „Partly read“ an Chip und Antwort.
 - [ ] Skeletons: Bei gedrosseltem Laden bleiben Chat-Platzhalter bis zur
       Metadatenantwort stehen; leere Liste, Fehler und Logout entfernen sie.
       Wartende Modellantworten zeigen Textzeilen bis zum ersten Token oder
