@@ -17,14 +17,13 @@
     return Boolean(version && typeof raw === 'string' && raw.trim() && raw === version.text
       && version.hash === review.answer_hash && ['succeeded', 'partial'].includes(review.status));
   }
-  // One sentence for the end of a run that did not finish cleanly. It says
-  // what the reader can rely on first, then what happened, without alarm.
+  // The note under an answer whose run did not finish cleanly. A complete,
+  // checked answer needs none: whatever failed afterwards changes nothing the
+  // reader relies on. Otherwise one calm sentence, never a provider message.
   function failureNote(failure, review, raw) {
     const message = failure?.error || failure?.message || '';
     if (typeof raw !== 'string' || !raw.trim()) return message;
-    if (reviewedAnswer(review, raw)) {
-      return 'The answer above is complete and has been checked. A final step of this run did not finish; this does not change the answer.';
-    }
+    if (reviewedAnswer(review, raw)) return '';
     return 'This answer may be incomplete because the run ended early. Everything received has been saved, and you can ask again at any time.';
   }
   const activityContexts = new WeakMap();

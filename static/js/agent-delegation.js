@@ -5,62 +5,44 @@
   const views = new Map();
   const labels = { waiting: "Waiting", working: "Working", question: "Question", review: "Review",
     rework: "Rework", completed: "Completed", failed: "Not finished", stopped: "Stopped" };
-  // A judge or answer call that ends without a result is routine: judges fall
-  // back to another model, comparisons continue with the other answers. The
-  // panel says what happened and what it means, never just "Failed".
+  // Judge calls are plumbing: retries and backup models are routine and say
+  // nothing about the answer. The panel shows them as ONE row, "Answer check",
+  // whose state is the outcome of the checks, not of individual attempts.
   const ended = new Set(["failed", "stopped"]);
+  const CHECK_ID = "answer-check";
   const checkNames = { "Differences judge": "differences", "Coverage judge": "coverage" };
-  const reasons = { provider_rate_limited: "was busy at its provider", provider_timeout: "did not respond in time",
-    provider_unavailable: "was unavailable at its provider", provider_access: "was declined by its provider" };
-  const reason = agent => reasons[agent.failure?.code] || "did not return a usable result";
-  function ordered(view) {
-    return [...view.agents.values()].map((agent, index) => ({ agent, index }))
-      .sort((a, b) => String(a.agent.created_at || "").localeCompare(String(b.agent.created_at || "")) || a.index - b.index)
-      .map(item => item.agent);
-  }
-  // For each judge call that ended without a result: the later call for the
-  // same check that took over (completed or still running), if any.
-  function outcomes(view) {
-    const list = ordered(view), result = new Map();
-    list.forEach((agent, index) => {
-      if (agent.kind !== "judge" || !ended.has(agent.status)) return;
-      result.set(agent.id, list.slice(index + 1).find(next => next.kind === "judge" && next.title === agent.title && !ended.has(next.status)) || null);
-    });
-    return result;
-  }
-  function outcomeLabel(agent, next) {
-    if (agent.kind === "comparison" && agent.status === "failed") return "No answer";
-    if (next) return next.status === "completed" ? "Replaced" : "Retrying";
-    return labels[agent.status] || "Waiting";
-  }
   function joinNames(names) {
     return names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names.at(-1)}` : names[0];
   }
-  // One calm sentence per kind of interruption, only once the run has ended.
-  function summary(view) {
-    if (view.running) return "";
-    const results = outcomes(view), replaced = new Set(), open = new Set();
-    for (const agent of view.agents.values()) {
-      if (!results.has(agent.id)) continue;
-      const name = checkNames[agent.title] || "answer";
-      (results.get(agent.id)?.status === "completed" ? replaced : open).add(name);
-    }
-    for (const name of replaced) open.delete(name);
-    const parts = [];
-    if (replaced.size) {
-      const names = [...replaced];
-      parts.push(`The ${joinNames(names)} ${names.length === 1 ? "check" : "checks"} moved to a backup model because the first model did not respond. ${names.length === 1 ? "It" : names.length === 2 ? "Both" : "All"} completed normally.`);
-    }
-    if (open.size) {
-      const names = [...open];
-      parts.push(`The ${joinNames(names)} ${names.length === 1 ? "check" : "checks"} could not run with any available model. The answer is shown without ${names.length === 1 ? "it" : "them"}.`);
-    }
-    const answers = [...view.agents.values()].filter(agent => agent.kind === "comparison");
-    const silent = answers.filter(agent => agent.status === "failed").length;
-    if (silent && silent < answers.length) {
-      parts.push(`${silent} of ${answers.length} answer models did not respond. The comparison uses the other ${answers.length - silent}.`);
-    }
-    return parts.join(" ");
+  function checkRow(view) {
+    const judges = [...view.agents.values()].filter(agent => agent.kind === "judge");
+    if (!judges.length) return null;
+    const titles = [...new Set(judges.map(agent => agent.title))];
+    const done = new Set(titles.filter(title => judges.some(agent => agent.title === title && agent.status === "completed")));
+    const busy = judges.filter(agent => activeStates.has(agent.status));
+    const status = view.running && (busy.length || done.size < titles.length) ? "working"
+      : done.size === titles.length ? "completed" : "failed";
+    const metered = judges.filter(agent => measured(agent.usage));
+    const usage = metered.length ? { input_tokens: metered.reduce((n, a) => n + a.usage.input_tokens, 0),
+      output_tokens: metered.reduce((n, a) => n + a.usage.output_tokens, 0),
+      complete: metered.every(a => a.usage.complete !== false) } : null;
+    // Attempts of one check run one after another; the checks run side by side.
+    const duration = Math.max(...titles.map(title => judges.filter(a => a.title === title)
+      .reduce((ms, a) => ms + elapsed(view, a), 0)));
+    return { id: CHECK_ID, kind: "check", title: "Answer check", status, usage, duration_ms: duration,
+      progress_text: busy.find(agent => agent.progress_text)?.progress_text || "",
+      missing: status === "failed" ? titles.filter(title => !done.has(title)).map(title => checkNames[title] || "answer") : [] };
+  }
+  function rowsFor(view) {
+    const check = checkRow(view);
+    return [...[...view.agents.values()].filter(agent => agent.kind !== "judge"), ...(check ? [check] : [])];
+  }
+  function findRow(view, id) {
+    return id === CHECK_ID ? checkRow(view) : view.agents.get(id);
+  }
+  function stateLabel(agent) {
+    if (agent.kind === "comparison" && agent.status === "failed") return "No answer";
+    return labels[agent.status] || "Waiting";
   }
   const activeStates = new Set(["waiting", "working", "question", "rework"]);
   let owner = "", current = null, sidebar = null, inline = null, timer = null, returnFocus = null, scrim = null;
@@ -100,6 +82,15 @@
       : 'The provider has not reported token usage.';
   }
   function mark(agent) {
+    if (agent.kind === "check") {
+      const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      icon.setAttribute("viewBox", "0 0 16 16"); icon.setAttribute("aria-hidden", "true");
+      icon.classList.add("agent-check-mark");
+      const path = document.createElementNS(icon.namespaceURI, "path");
+      path.setAttribute("d", "M8 1.5 13.5 4v4c0 3-2.3 5.6-5.5 6.5C4.8 13.6 2.5 11 2.5 8V4L8 1.5ZM5.5 8l1.8 1.8L10.8 6.3");
+      icon.append(path);
+      return icon;
+    }
     return App.createModelMark?.(agent.model) || node("span", "model-mark-fallback", (agent.model?.label || "M").slice(0, 1));
   }
   function prefs(view) {
@@ -343,16 +334,13 @@
     (sidebar._rows.get(agentId)?.summary || sidebar.querySelector(".agent-sidebar-close")).focus();
   }
   function renderDetail(row, view, agent) {
-    if (agent.kind === 'judge') {
-      const signature = JSON.stringify([agent.status, agent.title, agent.usage, agent.progress_text,
-      outcomes(view).get(agent.id)?.status, view.running]);
+    if (agent.kind === 'check') {
+      const signature = JSON.stringify([agent.status, agent.usage, agent.progress_text, agent.missing]);
       if (row.body.dataset.signature === signature) return;
       row.body.dataset.signature = signature;
       row.body.setAttribute('aria-busy', 'false');
-      const purpose = agent.title === 'Coverage judge' ? 'Checks which statements are supported by the comparison answers.'
-        : agent.title === 'Differences judge' ? 'Identifies agreement and contradictions between the model answers.'
-          : 'Checks the answer against the comparison responses.';
-      row.body.replaceChildren(node('p', 'agent-judge-purpose', purpose));
+      row.body.replaceChildren(node('p', 'agent-judge-purpose',
+        'Checks which statements are supported by the comparison answers and where those answers disagree.'));
       if (agent.progress_text) row.body.append(node('p', 'agent-session-progress', agent.progress_text));
       if (measured(agent.usage)) {
         const usage = node('dl', 'agent-token-breakdown'); usage.title = tokenDescription(agent.usage);
@@ -361,15 +349,10 @@
         }
         row.body.append(usage);
       }
-      const next = outcomes(view).get(agent.id);
-      const name = agent.model?.label || 'This model';
-      const state = activeStates.has(agent.status) ? 'Review in progress.' : agent.status === 'completed'
-        ? 'Model response received. See the answer review for the results.'
-        : next?.status === 'completed' ? `${name} ${reason(agent)}, so consens.io ran the same check with ${next.model?.label || 'a backup model'}. That check completed; this attempt does not affect the result.`
-        : next ? `${name} ${reason(agent)}. consens.io is running the same check with ${next.model?.label || 'a backup model'}.`
-        : view.running ? `${name} ${reason(agent)}. consens.io tries a backup model next.`
-        : `${name} ${reason(agent)}, and no backup model could complete this check. The answer is still shown; the review notes what could not be checked.`;
-      row.body.append(node('p', 'agent-judge-note', state));
+      const names = agent.missing;
+      row.body.append(node('p', 'agent-judge-note', agent.status === 'working' ? 'Check in progress.'
+        : names.length ? `The ${joinNames(names)} ${names.length === 1 ? 'check' : 'checks'} could not run. The answer is shown without ${names.length === 1 ? 'it' : 'them'}.`
+          : 'Results are marked in the answer and listed under Review.'));
       return;
     }
     const detail = view.details.get(agent.id);
@@ -461,6 +444,7 @@
       }
       const models = new Map();
       for (const agent of view.agents.values()) {
+        if (agent.kind === "judge") continue;
         const key = agent.model?.model || agent.id;
         if (!models.has(key)) models.set(key, []);
         models.get(key).push(agent);
@@ -485,7 +469,7 @@
         if (!models.has(key)) { button.remove(); inline._buttons.delete(key); }
       }
       inline._toggle.hidden = !view.agents.size;
-      inline._toggle.textContent = `Activity · ${view.agents.size}`;
+      inline._toggle.textContent = `Activity · ${rowsFor(view).length}`;
       inline._toggle.setAttribute("aria-expanded", String(!view.closed));
     }
     sidebar.hidden = view.closed || !view.agents.size;
@@ -499,9 +483,12 @@
     setText(usageEl, `Total run · ${tokens(view.usage, view.running)}`);
     setTitle(usageEl, tokenDescription(view.usage));
     sidebar.querySelector(".agent-sidebar-stop").hidden = !view.running;
-    setText(sidebar.querySelector(".agent-sidebar-status"), view.error || (view.settling ? "Finishing pending model calls…" : summary(view)));
-    const results = outcomes(view);
-    for (const agent of view.agents.values()) {
+    setText(sidebar.querySelector(".agent-sidebar-status"), view.error || (view.settling ? "Finishing pending model calls…" : ""));
+    const visible = rowsFor(view);
+    for (const [id, row] of sidebar._rows) {
+      if (!visible.some(agent => agent.id === id)) { row.root.remove(); sidebar._rows.delete(id); }
+    }
+    for (const agent of visible) {
       let row = sidebar._rows.get(agent.id);
       if (!row) {
         const root = node("details", "agent-session");
@@ -525,8 +512,9 @@
         root.addEventListener("toggle", () => {
           if (current !== view || view.uid !== uid() || !window.document?.body || !root.isConnected) return;
           if (root.open) {
-            view.expanded.add(agent.id); loadDetail(view, agent.id);
-            renderDetail(row, view, view.agents.get(agent.id));
+            view.expanded.add(agent.id);
+            if (agent.kind !== "check") loadDetail(view, agent.id);
+            renderDetail(row, view, findRow(view, agent.id));
           }
           else view.expanded.delete(agent.id);
           prefs(view);
@@ -535,13 +523,12 @@
         sidebar._rows.set(agent.id, row); sidebar.querySelector(".agent-session-list").append(root);
       }
       row.root.dataset.status = agent.status;
-      const next = results.get(agent.id);
-      if (next) row.root.dataset.outcome = next.status === "completed" ? "replaced" : "retrying";
-      else delete row.root.dataset.outcome;
+      // The check row belongs at the end; answer rows that arrive later go above it.
+      if (agent.kind === "check" && row.root.nextElementSibling) row.root.parentElement.append(row.root);
       setText(row.title, agent.model?.label || agent.title);
-      setText(row.role, agent.kind === 'comparison' ? 'Independent answer' : agent.title);
+      setText(row.role, agent.kind === 'comparison' ? 'Independent answer' : agent.kind === 'check' ? 'Differences and coverage' : agent.title);
       row.role.hidden = row.role.textContent === row.title.textContent;
-      setText(row.state, `${outcomeLabel(agent, next)} · ${agent.duration_incomplete ? '≥ ' : ''}${Math.floor(elapsed(view, agent) / 1000)}s`);
+      setText(row.state, `${stateLabel(agent)} · ${agent.duration_incomplete ? '≥ ' : ''}${Math.floor(elapsed(view, agent) / 1000)}s`);
       setTitle(row.state, agent.duration_incomplete ? 'Last confirmed elapsed time before the server connection ended.' : 'Elapsed session time, including waiting and review.');
       const pending = view.running && ['waiting', 'working', 'rework'].includes(agent.status);
       const progress = pending ? view.progress.get(agent.id) : null;
@@ -557,7 +544,7 @@
       row.usage.classList.toggle('is-loading', loading);
       row.track.hidden = !loading;
       row.root.open = view.expanded.has(agent.id);
-      if (row.root.open) { loadDetail(view, agent.id); renderDetail(row, view, agent); }
+      if (row.root.open) { if (agent.kind !== "check") loadDetail(view, agent.id); renderDetail(row, view, agent); }
     }
   }
   function project(spec) {

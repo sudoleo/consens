@@ -441,7 +441,11 @@ def test_disconnect_during_review_settles_every_paid_call_and_marks_stopped(stor
     source.close()
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
     assert saved["status"] == "failed"
-    assert saved["agent_review"]["status"] == "cancelled"
+    # A stop that lands after the judges already finished keeps their result;
+    # a review still running when the stop arrives is marked stopped.
+    review = saved["agent_review"]
+    finished = all(check.get("differences_data") for check in review.get("checks", [])) and review.get("checks")
+    assert review["status"] == ("succeeded" if finished else "cancelled")
     root = store.receipt_ref(UID, loop.chat_id, loop.turn_id).get().to_dict()
     assert "running" not in root["step_states"].values()
     assert root["run_status"] == "cancelled"

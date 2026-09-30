@@ -245,7 +245,8 @@ describe("Agent sidebar", () => {
     const {window: w, document: d, dom} = boot(async () => ({ok:true, json:async () => ({agents:[],status:'succeeded'})}));
     const judge = {...agent(1, 'completed'), kind:'judge', title:'Coverage judge', progress_text:'Checking each statement.'};
     receive(w, judge); w.App.agentDelegation.project({chatId, turnId});
-    d.querySelector('.agent-inline-model').click();
+    d.querySelector('.agent-sidebar-toggle').click();
+    const row = d.querySelector('.agent-session'); row.open = true; row.dispatchEvent(new w.Event('toggle'));
     expect(d.querySelector('.agent-judge-purpose').textContent).toContain('supported');
     expect(d.querySelector('.agent-token-breakdown').textContent).toContain('900');
     expect(d.querySelector('.agent-detail-skeleton')).toBe(null);
@@ -337,37 +338,42 @@ describe("Agent sidebar", () => {
     dom.window.close();
   });
 
-  it("explains a judge that a backup model replaced instead of reporting a failure", async () => {
-    const judge = (id, seq, status, label, extra = {}) => ({ ...agent(seq, status, id), kind: "judge", title: "Coverage judge",
-      model: { model: `m/${label}`, label }, usage: null, created_at: `2026-09-30T08:00:0${seq}Z`, ...extra });
-    const failed = judge("b".repeat(32), 1, "failed", "GPT Luna", { failure: { code: "provider_timeout" } });
-    const backup = judge("e".repeat(32), 2, "completed", "Gemini Lite", { usage: { input_tokens: 2000, output_tokens: 700 } });
-    const { window: w, document: d, dom } = boot(async () => ({ ok: true, json: async () => ({ agents: [failed, backup], status: "succeeded" }) }));
-    receive(w, failed); receive(w, backup);
+  it("folds judge attempts, retries and backups into one quiet Answer check row", async () => {
+    const judge = (id, seq, status, title, extra = {}) => ({ ...agent(seq, status, id), kind: "judge", title,
+      model: { model: `m/${seq}`, label: `Judge ${seq}` }, usage: null, ...extra });
+    const answer = { ...agent(1, "completed"), kind: "comparison", title: "Comparison 1 · Haiku" };
+    const judges = [judge("b".repeat(32), 2, "failed", "Coverage judge"), judge("e".repeat(32), 3, "failed", "Differences judge"),
+      judge("f".repeat(32), 4, "completed", "Coverage judge", { usage: { input_tokens: 1500, output_tokens: 400 } }),
+      judge("9".repeat(32), 5, "completed", "Differences judge", { usage: { input_tokens: 600, output_tokens: 200 } })];
+    const { window: w, document: d, dom } = boot(async () => ({ ok: true, json: async () => ({ agents: [answer, ...judges], status: "succeeded" }) }));
+    for (const item of [answer, ...judges]) receive(w, item);
     w.App.agentDelegation.project({ chatId, turnId, running: false });
-    d.querySelector(".agent-sidebar-toggle").click();
+    expect(d.querySelector(".agent-sidebar-toggle").textContent).toBe("Activity · 2");
+    expect(d.querySelectorAll(".agent-inline-model")).toHaveLength(1);
     const rows = [...d.querySelectorAll(".agent-session")];
-    expect(rows[0].dataset.outcome).toBe("replaced");
-    expect(rows[0].querySelector(".agent-session-state").textContent).toMatch(/^Replaced · /);
-    expect(rows[0].querySelector(".agent-session-tokens").hidden).toBe(true);
-    expect(rows[1].querySelector(".agent-session-tokens").textContent).toBe("2,700 tokens");
-    expect(d.querySelector(".agent-sidebar-status").textContent)
-      .toBe("The coverage check moved to a backup model because the first model did not respond. It completed normally.");
-    expect(d.querySelector(".agent-session-list").textContent).not.toMatch(/Failed|Tokens unavailable/);
-    rows[0].open = true; rows[0].dispatchEvent(new w.Event("toggle"));
-    expect(rows[0].querySelector(".agent-judge-note").textContent)
-      .toBe("GPT Luna did not respond in time, so consens.io ran the same check with Gemini Lite. That check completed; this attempt does not affect the result.");
+    expect(rows).toHaveLength(2);
+    const check = rows[1];
+    expect(check.querySelector("strong").textContent).toBe("Answer check");
+    expect(check.querySelector(".agent-session-state").textContent).toMatch(/^Completed · /);
+    expect(check.querySelector(".agent-session-tokens").textContent).toBe("2,700 tokens");
+    expect(d.querySelector(".agent-sidebar-status").textContent).toBe("");
+    expect(d.querySelector(".agent-session-list").textContent).not.toMatch(/Failed|Not finished|Replaced|Tokens unavailable|Judge/);
+    check.open = true; check.dispatchEvent(new w.Event("toggle"));
+    expect(check.querySelector(".agent-judge-note").textContent).toBe("Results are marked in the answer and listed under Review.");
+    expect(w.fetch.mock.calls.every(([url]) => url.endsWith("/agents"))).toBe(true);
     dom.window.close();
   });
 
-  it("says plainly when no model could run a check", () => {
+  it("names a check that no model could run, once, in the Answer check row", () => {
     const failed = { ...agent(1, "failed"), kind: "judge", title: "Differences judge", usage: null };
     const { window: w, document: d, dom } = boot(async () => ({ ok: true, json: async () => ({ agents: [failed], status: "failed" }) }));
     receive(w, failed);
     w.App.agentDelegation.project({ chatId, turnId, running: false });
-    expect(d.querySelector(".agent-session-state").textContent).toMatch(/^Not finished · /);
-    expect(d.querySelector(".agent-sidebar-status").textContent)
-      .toBe("The differences check could not run with any available model. The answer is shown without it.");
+    d.querySelector(".agent-sidebar-toggle").click();
+    const row = d.querySelector(".agent-session");
+    expect(row.querySelector(".agent-session-state").textContent).toMatch(/^Not finished · /);
+    row.open = true; row.dispatchEvent(new w.Event("toggle"));
+    expect(row.querySelector(".agent-judge-note").textContent).toBe("The differences check could not run. The answer is shown without it.");
     dom.window.close();
   });
 

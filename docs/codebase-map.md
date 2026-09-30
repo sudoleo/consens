@@ -2159,9 +2159,9 @@ Nutzerabbruch getrennt, rohe Provider-Fehler werden nicht gespeichert.
 Scheitert ein Lauf erst nach abgeschlossenem Review, behält
 `AgentRunStore.finish` den Review-Status `succeeded`/`partial`; nur laufende
 bzw. ausstehende Reviews werden zu `failed`/`missing`/`cancelled`.
-`agentReview.failureNote` formuliert den Hinweis unter der Antwort ruhig und
-kontextbezogen: geprüfte Antwort („complete and has been checked“), sonst
-möglicherweise unvollständige Antwort, ohne Antwort der sichere Fehlertext.
+`agentReview.failureNote` entscheidet über den Hinweis unter der Antwort: unter
+einer vollständigen, geprüften Antwort keiner, sonst ein ruhiger Satz zur
+möglicherweise unvollständigen Antwort, ohne Antwort der sichere Fehlertext.
 Live-Ansicht, gespeicherter Turn und Verlauf (`consensus-run.js`) nutzen ihn.
 
 **Composer und Antwortaktionen (21.09.2026).** `agentChat.sendBlocker()` verbindet
@@ -5550,13 +5550,14 @@ nach links (`body.agent-sidebar-open`), statt unter der Leiste zu liegen. Nur
 explizites Öffnen/Schließen wird pro Turn gemerkt. Der 2,5-s-Takt existiert nur
 während eines laufenden bzw. abschließenden Laufs und endet danach.
 Zeilenstatus hängt per `aria-describedby` am Eintrag; Texte/Titel werden nur bei
-Änderung geschrieben. Ausfälle werden eingeordnet statt als Fehler gemeldet:
-Ein Judge-Versuch, den ein späterer Versuch desselben Checks (gleicher `title`,
-Reihenfolge nach `created_at`) übernimmt, heißt `Replaced`/`Retrying`
-(`data-outcome`), eine ausgefallene Vergleichsantwort `No answer`, sonst
-`Not finished`. Beendete Aufrufe ohne gemessene Tokens zeigen keine Tokenzeile.
-Nach dem Lauf fasst `.agent-sidebar-status` Backup-Judges, nicht ausführbare
-Checks und stumme Antwortmodelle in je einem Satz zusammen.
+Änderung geschrieben. Judge-Aufrufe (`kind: "judge"`) erscheinen nicht einzeln:
+`checkRow` fasst alle Versuche, Wiederholungen und Backup-Judges zu einer Zeile
+„Answer check“ (`id: answer-check`, ohne Detail-Request) zusammen. Ihr Status
+ist das Ergebnis der Checks (`completed`, sobald jeder Check einmal fertig ist;
+`failed` nennt die nicht ausführbaren Checks), Tokens sind die Summe der
+gemessenen Judge-Aufrufe. Chip-Zähler und Modell-Icons zählen Judges nicht mit.
+Eine ausgefallene Vergleichsantwort heißt `No answer`; beendete Aufrufe ohne
+gemessene Tokens zeigen keine Tokenzeile.
 
 **Kontingent.** `.quota-row[hidden]` blendet Deep-Think/Watches im Agent-Modus
 aus; ein Rest unter 1 % zeigt „<1%“ (Ring `--partial`, erst bei 0 `--dispute`),

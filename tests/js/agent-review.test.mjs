@@ -224,12 +224,12 @@ it.each([
   dom.window.close();
 });
 
-it('leads a failed run with what the reader can rely on', () => {
+it('adds no note under a checked answer and one calm sentence otherwise', () => {
   const {window: w, dom} = setup();
   const note = w.App.agentReview.failureNote;
   const failure = {code: 'provider_error', error: 'The model provider could not finish this request. Trying again in a moment usually works.'};
   const review = {status: 'succeeded', answer_version: 1, answer_hash: 'h', versions: [{id: 1, text: 'Checked answer.', hash: 'h'}]};
-  expect(note(failure, review, 'Checked answer.')).toBe('The answer above is complete and has been checked. A final step of this run did not finish; this does not change the answer.');
+  expect(note(failure, review, 'Checked answer.')).toBe('');
   expect(note(failure, {...review, status: 'failed'}, 'Checked answer.')).toMatch(/^This answer may be incomplete/);
   expect(note(failure, review, 'Another text.')).toMatch(/^This answer may be incomplete/);
   expect(note(failure, null, '')).toBe(failure.error);
