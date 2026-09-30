@@ -104,7 +104,8 @@ def test_mobile_agent_plus_menu_opens_tools_from_single_line_composer(browser, p
         assert page.evaluate("document.body.classList.contains('composer-collapsed')")
         expect(page.locator('#agentModeMenuSwitch')).to_be_checked()
         expect(page.locator('#agentModeMenuSwitch')).to_be_disabled()
-        expect(page.locator('#attachUploadOption')).to_be_disabled()
+        # Agent Beta uploads into the private chat store, so upload stays available.
+        expect(page.locator('#attachUploadOption')).to_be_enabled()
         source_label = page.locator('label[for="sourceCheckMenuSwitch"]')
         source_label.tap()
         expect(page.locator('#sourceCheckMenuSwitch')).not_to_be_checked()
@@ -231,7 +232,10 @@ def test_comparison_review_and_saved_projection(browser, phase4_server, width, d
         legacy_mode = page.evaluate("localStorage.getItem('agentMode')")
         page.locator('#composerAgentToggle').click(force=True)
         assert page.evaluate("localStorage.getItem('agentMode')") == legacy_mode
-        expect(page.locator('#composerAttachButton')).to_be_disabled()
+        # The toolbar Attach opens the same file picker as the (+) menu upload.
+        expect(page.locator('#composerAttachButton')).to_be_enabled()
+        with page.expect_file_chooser():
+            page.locator('#composerAttachButton').click()
         expect(page.locator('#composerSourcesToggle')).to_have_attribute('aria-checked', 'true')
         page.locator('#composerSourcesToggle').click()
         expect(page.locator('#composerSourcesToggle')).to_have_attribute('aria-checked', 'false')
