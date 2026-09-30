@@ -81,7 +81,8 @@
     view.bar.hidden = hidden;
     // Inside the evidence row when there is one, so Copy and the evidence
     // links read as one line; otherwise directly under the answer.
-    const review = body._agentReview?.isConnected ? body._agentReview : null;
+    // History turns are built detached, so "same parent" rather than isConnected.
+    const review = body._agentReview?.parentNode && body._agentReview.parentNode === body.parentNode ? body._agentReview : null;
     if (review) { if (view.bar.parentElement !== review) review.append(view.bar); }
     else if (body.nextElementSibling !== view.bar) body.after(view.bar);
   }

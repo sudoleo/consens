@@ -390,6 +390,9 @@
       const panels = document.createElement("div");
       panels.className = "thread-history-panels";
       footer.append(tabs, panels);
+      // An Agent turn carries its own evidence row (Differences, Answers,
+      // Sources) from agent-review.js; a second footer showed Sources twice.
+      footer.hidden = turnData.execution_mode === "agent" || turnData.mode === "Agent";
       answer.appendChild(footer);
 
       // Chip + Schublade als Paar: gleiche Klassen wie im Live-Fuss, damit

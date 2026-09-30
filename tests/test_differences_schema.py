@@ -836,6 +836,22 @@ class ConsensusSentenceSplitTests(unittest.TestCase):
         self.assertIn("[1] Der Turm", numbered)
         self.assertIn("[2] Er wurde", numbered)
 
+    def test_german_ordinal_dates_do_not_split(self):
+        """"am 10. Oktober" ist ein Satz, auch in Fettdruck."""
+        _numbered, sentences = self.sentences(
+            "Das Rennen ist für den **10. Oktober 2026** angesetzt, sodass der Sieger "
+            "erst am Wettkampftag feststeht. Sie wurde Ende des 19. Jahrhunderts gegründet."
+        )
+        self.assertEqual(len(sentences), 2)
+        self.assertTrue(sentences[0].startswith("Das Rennen ist für den"))
+        self.assertIn("Oktober 2026", sentences[0])
+
+    def test_number_before_a_capitalized_sentence_still_splits(self):
+        _numbered, sentences = self.sentences(
+            "Der Kurs endete bei 42. Danach stieg die Nachfrage deutlich an."
+        )
+        self.assertEqual(len(sentences), 2)
+
     def test_abbreviations_and_initials_do_not_split(self):
         _numbered, sentences = self.sentences(
             "Laut J. R. R. Tolkien ist das anders und u.a. deshalb umstritten."

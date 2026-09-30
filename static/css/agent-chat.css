@@ -276,7 +276,13 @@ body.single-agent-active .consensus-model-inline .model-picker-display::after {
 .agent-review > :not(.agent-evidence-links, .agent-answer-actions) { flex: 1 0 100%; }
 .agent-review > .agent-answer-actions { order: 1; margin: 0; }
 .agent-review > .agent-evidence-links { order: 2; margin-left: 0; }
-.agent-review > .consensus-claims-fallback { order: 3; }
+/* Key claims (claims no inline mark could hold) read before the buttons, as
+   a quiet list: text first, its model ratio right behind it. */
+.agent-review > .consensus-claims-fallback { order: 0; margin: 0 0 10px; padding-top: 0; border-top: 0; }
+.agent-review .claims-fallback-title { margin-bottom: 4px; font-size: 12px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--ink-3); }
+.agent-review .claims-fallback-row { justify-content: flex-start; gap: 8px; padding: 2px 0; font-size: 13px; line-height: 1.5; color: var(--ink-2); }
+.agent-review .claims-fallback-row .claim-badge { margin: 0; }
+.thread-history-footer[hidden] { display: none; }
 .agent-review-summary { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px; margin-bottom: 6px; }
 .agent-review-status { color: var(--ink-3); font-weight: 400; }
 .agent-review-status::before { content: ''; display: inline-block; width: 5px; height: 5px; margin: 0 7px 2px 0; border-radius: 50%; background: var(--ink-3); }

@@ -627,6 +627,29 @@ _CURRENCY_AFTER_QUANTITY_RE = re.compile(
 
 _SENTENCE_TAIL_TOKEN_RE = re.compile(r"[^\s]+$")
 
+# Deutsche Ordinalzahlen tragen einen Punkt: "am 10. Oktober", "der 3. Platz".
+# Folgt auf eine kurze Zahl mit Punkt eines dieser Woerter, ist der Punkt kein
+# Satzende. Sonst zerfiel "Das Rennen ist fuer den **10. Oktober 2026**
+# angesetzt" in zwei Claims, die sich nicht mehr verankern liessen.
+# Spiegel: ORDINAL_FOLLOWERS in static/js/consensus-anchor.js.
+_ORDINAL_FOLLOWERS = {
+    "januar", "jänner", "februar", "märz", "marts", "april", "mai", "maj", "juni",
+    "juli", "august", "september", "oktober", "november", "dezember", "december",
+    "jan", "feb", "mär", "mrz", "apr", "jun", "jul", "aug", "sep", "sept", "okt", "nov", "dez",
+    "jahrhundert", "jahrhunderts", "jahrtausend", "platz", "rang", "stelle", "mal",
+    "klasse", "liga", "runde", "etappe", "spieltag", "tag", "woche", "quartal",
+    "auflage", "stock", "stockwerk", "etage", "geburtstag", "jahrestag", "lauf",
+}
+_ORDINAL_NEXT_WORD_RE = re.compile(r"^[\s*_~]*([^\W\d_]+)")
+
+
+def _ordinal_before_dot(token: str, following: str) -> bool:
+    digits = token.strip("*_~")
+    if not (digits.isdigit() and len(digits) <= 3):
+        return False
+    word = _ORDINAL_NEXT_WORD_RE.match(str(following or ""))
+    return bool(word) and word.group(1).lower() in _ORDINAL_FOLLOWERS
+
 
 def _continues_after_dot(fragment: str, following: str = "") -> bool:
     """True, wenn der Punkt am Ende des Fragments kein Satzende ist -
@@ -649,6 +672,8 @@ def _continues_after_dot(fragment: str, following: str = "") -> bool:
         return True
     normalized = token.strip(".")
     if normalized in _SENTENCE_ABBREVIATIONS:
+        return True
+    if _ordinal_before_dot(normalized, following):
         return True
     # Mengenabkuerzungen sind kontextabhaengig: "6,7 Mrd. $ in Q1" ist ein
     # Satz, "Der Umsatz liegt bei 6,7 Mrd. Danach ..." sind zwei. Nur ein

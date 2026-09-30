@@ -2352,12 +2352,20 @@ Prüfung selbst eingeschränkt ist: `Not compared · fewer than two models answe
 Modelle, ungeprüfte Sätze und Quellenlücken stehen nur im Leser
 (`statusText`, dort `Comparison checked · N models without an answer`).
 Copy und die Evidenz-Links teilen eine Zeile: `agent-answer-actions.js` hängt die
-Leiste in `.agent-review`, `agent-review.js` erhält sie beim Neuaufbau.
+Leiste in `.agent-review` (auch bei noch nicht eingehängten Verlaufs-Turns),
+`agent-review.js` erhält sie beim Neuaufbau. Key claims (Claims ohne Inline-Marke)
+stehen vor dieser Zeile. Archivierte Agent-Turns blenden den Consensus-Fuß
+(`.thread-history-footer`) aus, weil `.agent-review` dieselben Links trägt.
+Schlägt ein Lauf erst nach einer vollständigen, geprüften Antwort fehl, zeigt die
+Kopfzeile `Thought for …` (dieselbe Regel wie `failureNote`).
 Statuslabels: `Partly checked`, `Check could not run`, `Answer not checked`;
 Ausfallgründe erscheinen nur als kurze Code-Phrase (`failureReason`).
 `Answers` zählt vollständige Antworten; die Details behalten auch Fehlermodelle.
 Alte Reviews werden aus ihren vorhandenen Judge-Metadaten erklärt. Gebundene
 unvollständige Quellenprüfungen erhalten zusätzlich einen eigenen Hinweis.
+Deutsche Ordinalzahlen vor Monaten und Ordnungswörtern („10. Oktober“, „19.
+Jahrhundert“) sind kein Satzende: `_ORDINAL_FOLLOWERS` in `consensus_engine.py`
+und `ORDINAL_FOLLOWERS` in `consensus-anchor.js` müssen gleich bleiben.
 `wrapFlatRange` markiert Satzteile, die Fett/Kursiv/Links trennen, mit
 `cx-join-start`/`cx-join-end`; nur die äußeren Enden tragen Innenabstand und
 Rundung, sonst entstünde an jeder Elementgrenze ein sichtbarer Zusatzabstand.

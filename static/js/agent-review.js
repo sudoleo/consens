@@ -95,7 +95,9 @@
   }
   // Copy and evidence share one row: the actions bar lives inside the host.
   function keepActions(host, previous) {
-    const bar = previous || (host.nextElementSibling?.classList.contains('agent-answer-actions') ? host.nextElementSibling : null);
+    const sibling = [host.previousElementSibling, host.nextElementSibling]
+      .find(el => el?.classList.contains('agent-answer-actions'));
+    const bar = previous || sibling;
     if (bar) host.append(bar);
   }
   function node(tag, cls, text) {

@@ -581,6 +581,18 @@ describe("single-model agent chat", () => {
     dom.window.close();
   });
 
+  it('reads a complete, checked answer as done even when the run failed afterwards', () => {
+    const {window: w, document: d, dom} = boot();
+    const host = d.getElementById('agentAnswerActivity');
+    w.App.agentReview = {...w.App.agentReview, renderActivity: w.App.agentReview?.renderActivity || (() => {}),
+      failureNote: (failure, review, raw) => review?.status === 'succeeded' && raw ? '' : 'incomplete'};
+    w.App.agentActivity.render(host, {running:false, status:'failed', elapsedMs:103000, answerText:'Answer.', review:{status:'succeeded'}});
+    expect(host.querySelector('.agent-activity-title').textContent).toBe('Thought for 1m 43s');
+    w.App.agentActivity.render(host, {running:false, status:'failed', elapsedMs:103000, answerText:'Answer.', review:null});
+    expect(host.querySelector('.agent-activity-title').textContent).toBe('Response failed after 1m 43s');
+    dom.window.close();
+  });
+
   it('names the sources a web search found instead of the bare verb', () => {
     const {window: w, document: d, dom} = boot();
     const host = d.getElementById('agentAnswerActivity');

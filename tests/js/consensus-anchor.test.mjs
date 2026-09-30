@@ -232,6 +232,14 @@ describe("consensusAnchor.sentenceBounds", () => {
     );
   });
 
+  it("keeps a German ordinal date inside its sentence", () => {
+    const { anchor } = boot();
+    const text = "Die WM ist vorbei. Das Rennen ist für den 10. Oktober 2026 angesetzt. Danach folgt die Saisonpause.";
+    const start = text.indexOf("Rennen");
+    const bounds = anchor.sentenceBounds(text, start, start + 6);
+    expect(text.slice(bounds.start, bounds.end)).toBe("Das Rennen ist für den 10. Oktober 2026 angesetzt.");
+  });
+
   it("still recognizes a quantity abbreviation at a real sentence end", () => {
     const { anchor } = boot();
     const text = "Der Umsatz liegt bei 40 Mio. Danach steigt die Prognose weiter.";

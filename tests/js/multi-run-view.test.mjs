@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { loadScripts } from "./helpers/appWindow.mjs";
+import { createRequire } from "node:module";
+const require = createRequire(import.meta.url);
 
 const BODY = `
   <div id="threadHistory" hidden></div>
@@ -176,6 +178,28 @@ describe("selected RunContext projection", () => {
     expect(render.mock.calls.at(-1)[2]).toBe(hydrated);
     document.querySelector('.thread-history-turn').remove();
     expect(binding.isActive()).toBe(false);
+    dom.window.close();
+  });
+  it('gives an archived Agent turn one evidence row with Copy inside and no second Sources footer', () => {
+    const {window, document, dom} = boot({realHistory: true});
+    for (const src of ['static/js/agent-review.js', 'static/js/agent-answer-actions.js']) {
+      const script = document.createElement('script');
+      script.textContent = require('node:fs').readFileSync(src, 'utf8');
+      document.body.append(script);
+    }
+    window.App.answerReader = {openContext: vi.fn(), refreshContext: vi.fn(), registerTurn: vi.fn()};
+    window.App.sourceVerification = {observe: vi.fn(() => vi.fn()), render: vi.fn()};
+    const text = 'Checked answer.';
+    window.App.followup.renderStoredTurn({turn_id: 'agent-old', question: 'Q', consensus: text, execution_mode: 'agent',
+      sources: [{url: 'https://example.org/a', title: 'A'}],
+      agent_review: {status: 'succeeded', answer_version: 1, answer_hash: 'h', versions: [{id: 1, text, hash: 'h'}],
+        comparisons: [{id: 'c1', basis_hash: 'b', question: 'Q', status: 'succeeded', answers: [{provider: 'openai', model: {label: 'GPT'}, text: 'x', sources: []}]}],
+        checks: [{comparison_id: 'c1', basis_hash: 'b', answer_hash: 'h', status: 'succeeded', differences_data: {differences: []}}]}});
+    const turn = document.querySelector('.thread-history-turn');
+    const review = turn.querySelector('.agent-review');
+    expect(review.querySelector(':scope > .agent-answer-actions')).not.toBeNull();
+    expect(turn.querySelectorAll('.agent-answer-actions')).toHaveLength(1);
+    expect(turn.querySelector('.thread-history-footer').hidden).toBe(true);
     dom.window.close();
   });
   it("preserves completed history, open drawers and waiting model animations during follow-up streaming", () => {

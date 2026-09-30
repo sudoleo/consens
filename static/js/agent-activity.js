@@ -313,7 +313,11 @@
     const waiting = running && latest?.status === 'waiting';
     const heading = waiting ? 'Waiting for available tokens…' : reviewStage
       || (activeTool ? stepLabel(activeTool) : writing ? 'Writing answer…' : 'Thinking…');
-    updateClock(view, elapsedMs, running, status);
+    // A complete, checked answer whose run failed afterwards (for example in
+    // a late source check) reads as done: the same rule as failureNote.
+    const settled = status === 'failed' && !running && answerText
+      && App.agentReview?.failureNote?.({error: 'failed'}, review, answerText) === '';
+    updateClock(view, elapsedMs, running, settled ? 'succeeded' : status);
     renderRunDetails(view, settings || events.findLast(item => item.settings)?.settings, running, heading);
     view.details.classList.toggle("is-running", running);
     view.details.dataset.status = status;

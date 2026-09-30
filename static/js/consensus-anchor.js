@@ -157,7 +157,25 @@
       return (before.match(/[a-zäöüß.]+$/) || [""])[0];
     }
 
+    // Deutsche Ordinalzahl mit Punkt ("am 10. Oktober", "der 3. Platz"):
+    // kein Satzende. Spiegel von _ORDINAL_FOLLOWERS in consensus_engine.py.
+    const ORDINAL_FOLLOWERS = new Set([
+      "januar", "jänner", "februar", "märz", "marts", "april", "mai", "maj", "juni",
+      "juli", "august", "september", "oktober", "november", "dezember", "december",
+      "jan", "feb", "mär", "mrz", "apr", "jun", "jul", "aug", "sep", "sept", "okt", "nov", "dez",
+      "jahrhundert", "jahrhunderts", "jahrtausend", "platz", "rang", "stelle", "mal",
+      "klasse", "liga", "runde", "etappe", "spieltag", "tag", "woche", "quartal",
+      "auflage", "stock", "stockwerk", "etage", "geburtstag", "jahrestag", "lauf"
+    ]);
+    function isOrdinalBefore(text, dotIndex) {
+      const number = text.slice(Math.max(0, dotIndex - 4), dotIndex).match(/(?:^|[^\p{L}\p{N}])(\p{N}{1,3})$/u);
+      if (!number) return false;
+      const word = text.slice(dotIndex + 1).match(/^\s+(\p{L}+)/u);
+      return Boolean(word) && ORDINAL_FOLLOWERS.has(word[1].toLowerCase());
+    }
+
     function isAbbreviationBefore(text, dotIndex) {
+      if (isOrdinalBefore(text, dotIndex)) return true;
       const word = wordBeforeDot(text, dotIndex);
       if (ABBREVIATIONS.includes(word)) return true;
       if (!QUANTITY_ABBREVIATIONS.includes(word)) return false;
