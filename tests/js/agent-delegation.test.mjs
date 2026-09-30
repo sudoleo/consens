@@ -356,7 +356,7 @@ describe("Agent sidebar", () => {
     const check = rows[1];
     expect(check.querySelector("strong").textContent).toBe("Answer check");
     expect(check.querySelector(".agent-session-state").textContent).toMatch(/^Completed · /);
-    expect(check.querySelector(".agent-session-tokens").textContent).toBe("2,700 tokens");
+    expect(check.querySelector(".agent-session-tokens").textContent).toMatch(/^2[.,]700 tokens$/);
     expect(d.querySelector(".agent-sidebar-status").textContent).toBe("");
     expect(d.querySelector(".agent-session-list").textContent).not.toMatch(/Failed|Not finished|Replaced|Tokens unavailable|Judge/);
     check.open = true; check.dispatchEvent(new w.Event("toggle"));
@@ -407,6 +407,24 @@ describe("Agent sidebar", () => {
     expect(w.fetch.mock.calls.length).toBe(calls);
     expect(d.querySelector("img[onerror]")).toBeNull();
     expect(w.App.agentDelegation.tokens(null)).toBe("Tokens unavailable");
+    dom.window.close();
+  });
+  it("sums the run up in one overview and keeps opened details in the single scrolling list", async () => {
+    const answer = (id, seq, status) => ({ ...agent(seq, status, id), kind: "comparison", title: "Independent answer" });
+    const rows = [answer("a".repeat(32), 1, "completed"), answer("b".repeat(32), 2, "working"), answer("e".repeat(32), 3, "failed")];
+    const { window: w, document: d, dom } = boot(async () => ({ ok: true, json: async () => ({ agents: rows, status: "running" }) }));
+    for (const item of rows) receive(w, item);
+    w.App.agentDelegation.project({ chatId, turnId, running: true });
+    expect(d.querySelector(".agent-sidebar-progress").textContent).toBe("2 of 3 done · 1 without result");
+    const segments = [...d.querySelectorAll(".agent-sidebar-segments i")];
+    expect(segments.map(s => s.dataset.state)).toEqual(["done", "busy", "out"]);
+    expect(d.querySelector(".agent-sidebar-segments").getAttribute("aria-hidden")).toBe("true");
+    // The detail is no focusable scroll region of its own any more.
+    expect(d.querySelector(".agent-session-detail").hasAttribute("tabindex")).toBe(false);
+    receive(w, answer("b".repeat(32), 4, "completed"));
+    expect(d.querySelector(".agent-sidebar-progress").textContent).toBe("3 of 3 done · 1 without result");
+    expect([...d.querySelectorAll(".agent-sidebar-segments i")]).toEqual(segments);
+    expect(segments[1].dataset.state).toBe("done");
     dom.window.close();
   });
 });

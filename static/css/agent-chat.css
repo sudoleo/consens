@@ -1,11 +1,14 @@
 /* Agent chat shares the shell's surfaces, picker and mobile composer. */
 .agent-sidebar[hidden], .agent-sidebar [hidden], .agent-inline-models:empty, .agent-inline-models [hidden] { display: none; }
 .agent-sidebar {
-  --agent-enter-x: 18px; --agent-enter-y: 0px;
-  position: fixed; z-index: 120; top: 66px; right: 16px; bottom: 24px; width: 330px;
+  --agent-enter-x: 18px; --agent-enter-y: 0px; --agent-panel-bg: var(--ground);
+  /* The panel hugs its rows up to the viewport instead of standing as a
+     full-height frame with an empty lower half. */
+  position: fixed; z-index: 120; top: 66px; right: 16px; width: 330px; max-height: calc(100dvh - 90px);
   display: flex; flex-direction: column;
-  box-sizing: border-box; padding: 16px; overflow: hidden;
-  border: 1px solid var(--line); border-radius: 12px; background: var(--ground);
+  box-sizing: border-box; padding: 14px 16px 8px; overflow: hidden;
+  border: 1px solid var(--line); border-radius: 12px; background: var(--agent-panel-bg);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--ink) 5%, transparent), 0 12px 32px -18px color-mix(in srgb, var(--ink) 30%, transparent);
   color: var(--ink); font-size: 13px; line-height: 1.5; scrollbar-width: thin;
 }
 .agent-sidebar:not([hidden]) { animation: agent-sidebar-enter .24s cubic-bezier(.2, .7, .2, 1) both; }
@@ -13,25 +16,65 @@
   from { opacity: 0; transform: translate(var(--agent-enter-x), var(--agent-enter-y)); }
   to { opacity: 1; transform: translate(0, 0); }
 }
-.agent-sidebar-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
-.agent-sidebar-header h2 { margin: 0; font-size: 13px; font-weight: 550; }
+.agent-sidebar-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; min-height: 32px; }
+.agent-sidebar-header h2 { margin: 0; font-size: 13px; font-weight: 600; }
+.agent-sidebar-actions { display: flex; align-items: center; gap: 2px; margin-right: -8px; }
 .agent-sidebar button, .agent-inline-models button {
   border: 0; border-radius: 6px; background: transparent; color: var(--ink-2); font: inherit; cursor: pointer; min-height: 36px;
 }
 .agent-sidebar button:hover, .agent-inline-models button:hover { background: var(--raise); color: var(--ink); }
 .agent-sidebar :is(button, summary, a, [tabindex]):focus-visible, .agent-inline-models button:focus-visible { outline: 2px solid var(--ink-2); outline-offset: 2px; }
-.agent-sidebar-usage { color: var(--ink-3); margin: 2px 0 10px; font-size: 11px; }
+.agent-sidebar .agent-sidebar-stop:not([hidden]) {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 28px; padding: 3px 10px;
+  border: 1px solid var(--line); border-radius: 999px; font-size: 12px; font-weight: 500;
+}
+.agent-sidebar-stop-glyph { width: 7px; height: 7px; border-radius: 1.5px; background: currentColor; }
+.agent-sidebar-stop:disabled { opacity: .55; cursor: default; }
+.agent-sidebar-overview { padding: 8px 0 12px; }
+.agent-sidebar-counts { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; font-size: 11px; color: var(--ink-3); }
+.agent-sidebar-progress { color: var(--ink-2); }
+.agent-sidebar-usage { font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* One segment per row, in the Consensus pipeline's language: green = done,
+   a sweep = running, a dashed rail = out of the run. */
+.agent-sidebar-segments { display: flex; gap: 3px; margin-top: 8px; }
+.agent-sidebar-segments i {
+  position: relative; flex: 1; height: 3px; border-radius: 2px; overflow: hidden;
+  background: color-mix(in srgb, var(--ink) 9%, transparent); transition: background-color .3s ease;
+}
+.agent-sidebar-segments i[data-state="done"] { background: var(--agree); }
+.agent-sidebar-segments i[data-state="out"] {
+  background: repeating-linear-gradient(90deg, color-mix(in srgb, var(--ink) 16%, transparent) 0 4px, transparent 4px 7px);
+}
+.agent-sidebar-segments i[data-state="busy"]::after {
+  content: ""; position: absolute; inset: 0; width: 45%;
+  background: color-mix(in srgb, var(--ink-3) 80%, transparent); border-radius: inherit;
+  animation: runRowSweep 1.6s cubic-bezier(.45, 0, .35, 1) infinite;
+}
 .agent-sidebar-status:empty { display: none; }
 /* Error/settling notes: calm ink, not an alert. */
 .agent-sidebar-status { margin: 0 0 12px; color: var(--ink-2); font-size: 12px; line-height: 1.55; }
 .agent-check-mark { width: 15px; height: 15px; flex-shrink: 0; margin-top: 2px; fill: none; stroke: var(--ink-2); stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; }
 .agent-sidebar > :not(.agent-session-list) { flex: none; }
+/* The only scroll area. Rows and their opened details share it. */
 .agent-session-list {
   flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
-  scrollbar-width: thin; padding: 4px; margin: -4px;
+  scrollbar-width: thin; padding: 0 8px 4px; margin: 0 -8px; overflow-x: hidden;
 }
-.agent-session { border-top: 1px solid var(--line); border-color: color-mix(in srgb, var(--line) 65%, transparent); }
-.agent-session > summary { display: flex; align-items: flex-start; gap: 8px; list-style: none; padding: 11px 0; cursor: pointer; }
+.agent-session { border-top: 1px solid color-mix(in srgb, var(--line) 65%, transparent); }
+.agent-session > summary {
+  display: flex; align-items: flex-start; gap: 8px; list-style: none; cursor: pointer;
+  padding: 10px 8px; margin: 0 -8px; border-radius: 8px; background: var(--agent-panel-bg);
+  transition: background-color .15s ease;
+}
+.agent-session > summary:hover { background-color: color-mix(in srgb, var(--raise) 70%, var(--agent-panel-bg)); }
+/* An open row keeps its heading in view while its answer scrolls past, so
+   the reader knows whose answer it is and can fold it from anywhere. */
+.agent-session[open] > summary {
+  position: sticky; top: 0; z-index: 1; border-radius: 0;
+  /* Hairline under the stuck heading, as wide as the row lines. */
+  background-image: linear-gradient(color-mix(in srgb, var(--line) 65%, transparent), color-mix(in srgb, var(--line) 65%, transparent));
+  background-size: calc(100% - 16px) 1px; background-position: center bottom; background-repeat: no-repeat;
+}
 .agent-session > summary::-webkit-details-marker { display: none; }
 .agent-session > summary::after { content: ''; width: 5px; height: 5px; flex: 0 0 5px; color: var(--ink-3); margin: 6px 2px 0 0;
   border-right: 1px solid currentColor; border-bottom: 1px solid currentColor; transform: rotate(45deg); transition: transform .18s ease; }
@@ -44,7 +87,7 @@
 .agent-session-heading strong { min-width: 0; }
 .agent-session-role { overflow-wrap: anywhere; }
 .agent-session-meta { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 3px 8px; font-size: 11px; color: var(--ink-3); }
-.agent-session-state { white-space: nowrap; }
+.agent-session-state { white-space: nowrap; font-variant-numeric: tabular-nums; }
 .agent-session-tokens { flex-shrink: 0; font-size: 11px; font-weight: 400; color: var(--ink-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
 /* Share the Consensus track and shimmer; no percentage is implied for a live call. */
 .agent-session-track { flex: none; height: 2px; margin-top: 3px; background: var(--line-soft); opacity: .65; }
@@ -55,8 +98,12 @@
   color: transparent; animation: source-label-shine 2.2s linear infinite;
 }
 .agent-session[data-status="question"] .agent-session-state { color: var(--ink); font-weight: 600; }
-.agent-session-detail { max-height: 52vh; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; padding: 0 5px 12px 0; overflow-wrap: anywhere; }
-.agent-session-detail h3 { margin: 10px 0 4px; color: var(--ink-3); font-size: 11px; font-weight: 600; }
+/* Aligned with the model name above it; no scroll area of its own. */
+.agent-session-detail { padding: 2px 0 14px 23px; overflow-wrap: anywhere; }
+.agent-session[open] .agent-session-detail { animation: agent-detail-enter .2s ease both; }
+@keyframes agent-detail-enter { from { opacity: 0; transform: translateY(-3px); } }
+.agent-session-detail h3 { margin: 12px 0 4px; color: var(--ink-3); font-size: 11px; font-weight: 600; }
+.agent-session-detail > :first-child, .agent-session-detail > :first-child h3 { margin-top: 6px; }
 .agent-session-detail p { margin: 0 0 8px; white-space: pre-wrap; font-size: 12px; }
 .agent-session-detail .agent-judge-purpose { color: var(--ink-2); line-height: 1.7; }
 .agent-session-detail .agent-judge-note { color: var(--ink-3); font-size: 11px; line-height: 1.6; }
@@ -68,7 +115,7 @@
 .agent-detail-skeleton span:nth-child(2) { width: 87%; }
 .agent-detail-skeleton span:nth-child(3) { width: 64%; }
 @keyframes agent-detail-pulse { 50% { opacity: .4; } }
-.agent-message { border-left: 1px solid var(--line); padding-left: 10px; margin-top: 14px; }
+.agent-message + .agent-message { margin-top: 14px; padding-top: 12px; border-top: 1px solid color-mix(in srgb, var(--line) 65%, transparent); }
 .agent-source { display: block; color: var(--ink-2); font-size: 12px; margin: 6px 0; }
 .agent-inline-models { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; max-width: 100%; vertical-align: top; }
 .agent-inline-models button { display: inline-flex; align-items: center; justify-content: center; padding: 4px 7px; font-size: 12px; }
@@ -121,16 +168,16 @@
 .agent-sidebar-scrim { position: fixed; inset: 0; z-index: 1290; background: color-mix(in srgb, var(--ink) 28%, transparent); }
 .agent-sidebar-scrim[hidden] { display: none; }
 @media (max-width: 1199px) {
-  .agent-sidebar { --agent-enter-x: 0px; --agent-enter-y: 16px; top: auto; right: 12px; left: 12px; bottom: 12px; width: auto; max-height: min(64dvh, 620px); z-index: 1300; background: var(--well); box-shadow: var(--lift); }
-  .agent-session-detail { max-height: 35dvh; }
+  .agent-sidebar { --agent-enter-x: 0px; --agent-enter-y: 16px; --agent-panel-bg: var(--well); top: auto; right: 12px; left: 12px; bottom: 12px; width: auto; max-height: min(80dvh, 720px); z-index: 1300; box-shadow: var(--lift); }
 }
 @media (prefers-reduced-motion: no-preference) {
   .agent-sidebar-scrim:not([hidden]) { animation: agent-scrim-enter .2s ease both; }
   @keyframes agent-scrim-enter { from { opacity: 0; } }
 }
 @media (prefers-reduced-motion: reduce) {
-  .agent-sidebar:not([hidden]), .agent-inline-models, .agent-model-stack .agent-inline-model, .agent-detail-skeleton span { animation: none; transition: none; scroll-behavior: auto; }
-  body.single-agent-active:not(.answer-reader-docked) .container, .agent-session > summary::after { transition: none; }
+  .agent-sidebar:not([hidden]), .agent-inline-models, .agent-model-stack .agent-inline-model, .agent-detail-skeleton span,
+  .agent-session[open] .agent-session-detail, .agent-sidebar-segments i::after { animation: none; transition: none; scroll-behavior: auto; }
+  body.single-agent-active:not(.answer-reader-docked) .container, .agent-session > summary, .agent-session > summary::after, .agent-sidebar-segments i { transition: none; }
 }
 .agent-effort-control .model-picker-display-text::before { content: 'Reasoning · '; color: var(--ink-3); font-weight: 400; }
 :is(#agentModelsRetry, #agentRecover):not([hidden]) {

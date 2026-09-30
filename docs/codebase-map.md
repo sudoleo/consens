@@ -2316,11 +2316,20 @@ agent-delegation.js verwendet das bestehende geordnete Activity-Journal,
 überlappende Modell-Icons und die Agent-Detailseitenleiste auch für Vergleichs-
 und Judge-Aufrufe (kind). Der Stapel dedupliziert identische API-Modelle, die
 Seitenleiste behält jeden Aufruf.
-Der Kopf mit Titel, Stop/Schließen und Gesamtverbrauch bleibt außerhalb des
-Scrollbereichs sichtbar. Nur `.agent-session-list` scrollt innerhalb der auf
-Desktop bzw. Mobil begrenzten Flex-Spalte; gespeicherte Scrollpositionen pro
-Turn beziehen sich auf diese Liste. Aufgeklappte Details behalten ihren eigenen
-begrenzten Scrollbereich.
+Der Kopf mit Titel, Stop/Schließen und die Übersicht bleiben außerhalb des
+Scrollbereichs sichtbar. Die Übersicht (`.agent-sidebar-overview`) nennt
+`n of m done` (plus `· k without result` für `failed`/`stopped`) und rechts den
+Gesamtverbrauch (`.agent-sidebar-usage`); darunter ein Segment pro Zeile
+(`.agent-sidebar-segments i[data-state=done|busy|out|idle]`) in der Bildsprache
+der Consensus-Pipeline: grün fertig, Sweep laufend, gestrichelt raus. Die Leiste
+wächst mit ihren Zeilen bis zur Viewporthöhe (`max-height` statt fester Höhe),
+statt als leerer Vollhöhenrahmen zu stehen. Nur `.agent-session-list` scrollt;
+gespeicherte Scrollpositionen pro Turn beziehen sich auf diese Liste.
+Aufgeklappte Details haben bewusst keinen eigenen Scrollbereich mehr (zwei
+Scrollbalken nebeneinander): sie fließen in der Liste, der Kopf einer offenen
+Zeile klebt (`position: sticky`) oben, und ein vom Nutzer geöffneter Eintrag
+(Fokus auf dem `summary`, also Klick, Taste oder Modell-Icon) wird per
+`reveal()` in Sicht gescrollt — höher als die Liste: Anfang oben.
 Die Inline-Icons behalten ihre DOM-Knoten pro API-Modell: Statuswechsel,
 Tokenupdates und zusätzliche Aufrufe desselben Modells aktualisieren nur ihre
 Metadaten und das Ziel der Detailansicht. Neu hinzukommende Icons blenden sich
