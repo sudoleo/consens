@@ -334,7 +334,9 @@ body.agent-google-sheet-open { overflow: hidden; }
 }
 @media (max-width: 540px) {
   .agent-google-chips { gap: 4px 10px; }
-  .agent-google-chip-list { flex-wrap: nowrap; max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+  /* The list spans the row, so the chip's 78 % refers to the row width and
+     not to the list's own content width (which would truncate every chip). */
+  .agent-google-chip-list { flex: 1 1 100%; flex-wrap: nowrap; max-width: 100%; overflow-x: auto; scrollbar-width: none; }
   .agent-google-chip-list::-webkit-scrollbar { display: none; }
   .agent-google-chip { flex: none; max-width: 78%; }
 }
