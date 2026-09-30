@@ -134,6 +134,12 @@ Framework-Parsing greifende `RequestBodyLimitMiddleware`,
 `CustomSecurityMiddleware` (CSP etc.), `CorrelationMiddleware` + slowapi-Limiter
 hinzu, mountet
 `/static`, registriert globale Exception-Handler und inkludiert alle Router.
+Äußerste Schicht ist `StaticDeliveryMiddleware` (`app/core/static_delivery.py`):
+content-gehashte Bundles `static/dist/<gruppe>.<12 hex>.js|css` erhalten
+`Cache-Control: public, max-age=31536000, immutable`, statische Textassets und
+HTML ab 1 KiB gzip bei passendem `Accept-Encoding`. API-JSON und
+`text/event-stream` laufen unverändert Frame für Frame durch (SSE wird nie
+komprimiert oder gepuffert); `tests/test_static_delivery.py` sichert beides ab.
 Jeder Request erhält eine PII-freie `req-*`-Correlation-ID (auch als
 `X-Correlation-ID` in der Response); `GET /health/metrics` liefert nur
 prozesslokale, aggregierte Provider-/Scheduler-Zähler und Laufzeiten ohne
@@ -2166,7 +2172,7 @@ kompakt. Die Gestaltung gilt auch für gespeicherte und archivierte Antworten.
 standardmäßig geschlossenen Disclosures. Live zählt sie sekündlich ab dem Start
 des Runs inklusive Wartephasen; Abschluss und Stop frieren sie ein. Gespeicherte
 Turns verwenden `created_at` und `completed_at` bzw. `failed_at`, fehlende oder
-ungültige Zeitstempel ergeben „Duration unavailable“. Parallele Toollaufzeiten
+ungültige Zeitstempel ergeben „Details“. Parallele Toollaufzeiten
 werden nicht addiert. Der Timer kündigt nicht jede Sekunde per Screenreader an
 und wird beim Verbergen/Turnwechsel aufgeräumt. Darunter wechseln sich die kurzen
 Fortschrittsabsätze des Steuerungsmodells und bestätigte Toolschritte in ihrer
@@ -5414,3 +5420,76 @@ erhalten die vorhandene Vergleichsevidenz. Private Bilddaten
 werden nur im flüchtigen Provider-Payload ergänzt, mit konservativer
 Tokenreservierung und tatsächlicher Usage-Abrechnung. Tool-Daten sind keine
 Berechtigungen. Anleitung, Grenzen und PR-Matrix: `docs/agent-integrations.md`.
+
+## Agent-Laufoberfläche: Rendering, Aktivität, Composer (2026-09-30)
+
+**Shell/Run-Trennung.** `agent-chat.js` teilt das Rendern: `renderShell()`
+(Modus, Picker, Google-Einstieg, gespeicherte Projektion) läuft nur, wenn sich
+eine seiner Eingaben ändert (Signatur aus Modus, Konto, Katalog, Auswahl,
+sichtbarem Run/Status, Basis); `App.agentChat.render()` ohne Argument ist daher
+billig, `render()` aus eigenen Aktionen erzwingt es. `project(context)` ruft
+`projectFrame()` einmal pro Run/Sicht (Titel, Frage, Anhänge, Verlauf, Listen)
+und danach nur noch den Lauf: Antwort, Aktivität, Delegation. Der
+Registry-Listener rendert keinen zweiten Durchgang. Evidence-Links
+(`agentReview.render`) und „Copy answer“ entstehen erst am Ende eines Laufs.
+
+**Streaming-Markdown.** `markdown-stream.js::renderMarkdownStream(el, md)`
+zerlegt die wachsende Antwort an Leerzeilen außerhalb von Code-/Mathe-Blöcken in
+Top-Level-Blöcke; fertige Blöcke werden genau einmal geparst, nur der letzte
+offene neu. Listen/Zitate über Leerzeilen bleiben zusammen, eine Grenze gilt erst
+mit vollständiger Folgezeile. Fremde Schreibzugriffe oder nicht nur wachsender
+Text starten neu. Die finale Antwort rendert einmal vollständig mit
+`injectMarkdown` (gleiche Sanitisierung). `resetMarkdownStream(el)` verwirft den
+Zustand.
+
+**Ressourcen-Refresh.** Ein `resources`-SSE-Ereignis ruft
+`App.agentWorkspace?.refresh(chatId, true)` nur bei Schlüsseln
+`documents`/`files` und `App.agentGoogle?.refreshActions?.(chatId, true)` nur
+bei `actions`/`gmail_evidence`; ohne erkennbare Schlüssel beide. Beide Seiten
+entprellen selbst (300 ms). Ein neuer Chat ohne Uploads projiziert leere Listen
+(`refresh(null)`), bis Ressourcen gemeldet werden oder der Lauf endet; vor
+`/agent` entstehen keine Listen-GETs mehr.
+
+**Composer und Fehler.** `sendBlocker()` hängt nach den Modellprüfungen
+`App.agentGoogle?.blocker?.()` an (Fehler darin blockieren nie). Aktionen der
+Composer-Notiz und der Antwortfehler (`#agentAnswerErrorActions`) laufen über
+einen Handler: `compare`, `choose-model`, `reload`, `google-consent`
+(`App.agentGoogle.consent(true)`), `google-open` (`App.agentGoogle.open()`).
+Eine Nicht-SSE-4xx-Antwort von `POST /agent` ohne angenommenen Turn gilt als
+nicht gesendet: Entwurf/Zitat kommen zurück, keine Recovery, kein „Failed“-
+Sidebar-Eintrag (Folgefrage: Zeile kehrt zum gespeicherten Chat zurück).
+`agent_token_reservation`/`agent_tokens_exhausted` erhalten Klartext mit
+Rücksetzzeit in Ortszeit und Aktionen; ohne Antworttext kehrt die Frage in den
+Composer zurück. Budget-Polling (60 s) läuft nur im Agent-Modus.
+
+**Wartet auf Nutzer.** Nach Laufende zeigt `#agentReviewNotice` über dem
+Composer „n items need your review“ aus `App.agentGoogle?.pendingCount?.(chatId)`
+(aktualisiert auch über `consensio:agent-actions-change`), markiert das
+Bookmark mit `.needs-review` und stellt dem Tab-Titel „(n)“ voran. „Review“ und
+die Aktivitätszeile „Waiting for your confirmation below“ (nach erfolgreichem
+`prepare_calendar_event`/`prepare_gmail_draft`) rufen
+`App.agentChat.revealPendingReview()` (scrollt zur ersten offenen Karte und
+fokussiert deren erste Bedienung). Alle Integrations-Tools haben Lauf-/Fertig-
+Texte in `agent-activity.js`; unbekannte Tools zeigen neutrale Texte.
+
+**DOM-Haken.** `templates/index.html`: `#agentAnswerResources` direkt nach
+`#agentAnswerBody` (Paket B rendert Dokumentkarten hinein),
+`#agentAnswerErrorActions` nach `#agentAnswerError`, `#agentReviewNotice` vor
+`.chat-input-container`.
+
+**Aktivitätsleiste.** Unter 1200 px öffnet `agent-delegation.js` die Leiste nie
+selbst; der Chip „Activity · n“ (`aria-controls="agentSidebar"`) öffnet ein
+Sheet mit Scrim, Fokusfalle und Escape. Ab 1200 px öffnet sie automatisch nur,
+wenn die Lesespalte daneben mindestens 600 px behält; offen rückt die Spalte
+nach links (`body.agent-sidebar-open`), statt unter der Leiste zu liegen. Nur
+explizites Öffnen/Schließen wird pro Turn gemerkt. Der 2,5-s-Takt existiert nur
+während eines laufenden bzw. abschließenden Laufs und endet danach.
+Zeilenstatus hängt per `aria-describedby` am Eintrag; Texte/Titel werden nur bei
+Änderung geschrieben.
+
+**Kontingent.** `.quota-row[hidden]` blendet Deep-Think/Watches im Agent-Modus
+aus; ein Rest unter 1 % zeigt „<1%“ (Ring `--partial`, erst bei 0 `--dispute`),
+die Zeile absolute Tokens, der Fuß die Rücksetzzeit in Ortszeit und UTC.
+
+Folgeaufgabe: Agent-Module als eigene, nur bei `agentAccess.allowed` geladene
+Bundle-Gruppe ausliefern (bewusst nicht Teil dieser Änderung).

@@ -834,17 +834,30 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       „Check contradictions“ schaltet die Quellenprüfung für die nächste Nachricht;
       ein laufender Run und Recovery behalten den eingefrorenen Wert.
       „Deep Think“ öffnet per Klick/Enter die vorhandene Reasoning-Auswahl,
-      „Attach“ ist wegen der Textbeschränkung deaktiviert. Kein horizontaler Overflow.
+      „Attach“ öffnet wie das (+)-Menü die Dateiauswahl (Upload in den privaten
+      Chatspeicher). Kein horizontaler Overflow.
 - [ ] Bei aktivierter Quellenprüfung erscheinen Ergebnis und aufklappbare
       Originalbelege direkt in den Widerspruchskarten, auch nach Öffnen des
       gespeicherten Chats. Off lässt Modellvergleich/Coverage aktiv. Fehlende
       oder abgelehnte Belege werden nicht als Bestätigung dargestellt.
 
 - [ ] Im Agent-Chat ersetzt der verbleibende Tokenanteil als Prozentzahl den
-  Run-Zähler im Sidebar-Footer. Exakte Zahlen im Panel, keine Budgetzeile im
-  Composer. Modus-/Accountwechsel zeigt keine fremden oder veralteten Zahlen.
+  Run-Zähler im Sidebar-Footer (Rest unter 1 % als „<1%“). Panel: absolute
+  Tokens, Rücksetzzeit in Ortszeit und UTC, keine Deep-Think-/Watches-Zeilen.
+  Keine Budgetzeile im Composer. Modus-/Accountwechsel zeigt keine fremden oder
+  veralteten Zahlen.
 - [ ] Agent-Aktivität bei 1920/1440 px mit offener und eingeklappter linker
-  Navigation öffnen/schließen: Antwort und Composer behalten Position und Breite.
+  Navigation öffnen/schließen: die Spalte rückt neben die Leiste, nichts liegt
+  darunter. Unter 1200 px öffnet sie nie selbst; „Activity · n“ öffnet ein Sheet
+  mit Scrim, Escape/Scrim schließt und gibt den Fokus zurück.
+- [ ] Lauf mit Mail-Entwurf/Kalenderänderung: Aktivität zeigt „Email draft ready
+  for review“ und „Waiting for your confirmation below“; nach dem Lauf steht über
+  dem Composer „n items need your review · Review“, das Bookmark trägt einen
+  Punkt, der Tab-Titel „(n)“. Review springt zur ersten offenen Karte.
+- [ ] Tokenreservierung abgelehnt: Klartext mit Bedarf/Rest und Rücksetzzeit,
+  Aktionen „Try a smaller model“/„Choose models“, Frage steht wieder im Composer.
+  Ein vor dem Start abgelehnter Request (z. B. fehlende Google-Zustimmung) zeigt
+  „Message not sent“, keine Recovery und keinen „Failed“-Eintrag.
   Modellname und Tokens stehen oben, Rolle sowie Status/Laufzeit darunter.
   Lange Namen und Metadaten bleiben auch bei 390/320 px in beiden Themes
   vollständig lesbar; keine Überschneidungen innerhalb der Einträge.
