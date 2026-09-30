@@ -330,6 +330,15 @@ def cancellable_post_json(url, *, json, headers):
     return asyncio.run(request())
 
 
+async def _bounded_error_body(response, limit=16_384):
+    body = b""
+    async for chunk in response.aiter_bytes():
+        body += chunk
+        if len(body) >= limit:
+            break
+    return body[:limit]
+
+
 def cancellable_sse_lines(url, *, json, headers, progress=None):
     """Drive async socket reads on the existing synchronous SSE worker.
 
@@ -351,7 +360,13 @@ def cancellable_sse_lines(url, *, json, headers, progress=None):
         response = loop.run_until_complete(guarded(client.send(request, stream=True)))
         if response.status_code >= 400:
             from app.services.llm.engines import _raise_provider_http_status
-            _raise_provider_http_status(response)
+            body = None
+            try:
+                # Small error bodies only feed a content-free diagnostic.
+                body = loop.run_until_complete(guarded(_bounded_error_body(response)))
+            except (httpx.HTTPError, UnicodeError, ValueError):
+                body = None
+            _raise_provider_http_status(response, body=body)
         lines = response.aiter_lines()
         while True:
             try:

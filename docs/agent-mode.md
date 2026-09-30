@@ -361,6 +361,16 @@ unabhängig. Der gemeinsame Tool-Loop erhält die kompletten Provider-Fortsetzun
 informationen intern; verschlüsselte Reasoning-Blöcke werden nie öffentlich oder
 persistiert. Sichtbares Reasoning bleibt auf 32000 Zeichen begrenzt.
 
+Gestreamte `reasoning_details` werden wie im OpenRouter-SDK zusammengesetzt:
+Text- und Summary-Fragmente verlängern den vorherigen Block derselben Art (gleicher
+`type`, keine abweichende `index`/`id`/`format`/`signature`). `reasoning.encrypted`
+bleibt immer ein eigener, unveränderter Eintrag. `index` allein ist keine
+Identität: Gemini 3.x sendet Gedankentext und Thought-Signatur beide mit `index: 0`.
+Beim Zurückspielen entfällt unsignierter `reasoning.text` in den Formaten
+`google-gemini-v1` und `anthropic-claude-v1`, weil beide Anbieter unsignierte
+Gedanken ablehnen; Geminis Signatur im verschlüsselten Block trägt die Fortsetzung.
+Fehlerhafte Einzelfragmente werden übersprungen statt den Lauf zu beenden.
+
 Systemprompt, frisches Datum/Zeitzone, ausgewählte Modellidentität und
 Unterhaltung werden vom Server zusammengestellt. Fehlgeschlagene frühere Turns
 behalten Nutzerfrage und gespeicherte Antwort, mit einem ausdrücklichen Hinweis

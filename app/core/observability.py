@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextvars
+import json
 import logging
 import os
 import re
@@ -118,6 +119,70 @@ def safe_exception(exc: BaseException) -> str:
     # may populate them with upstream text or identifiers.
     suffix = f":{status}" if isinstance(status, int) else ""
     return f"{type(exc).__name__}{suffix}"
+
+
+# Upstream failure classes recognised in an OpenRouter error. Only the class
+# name on the left ever reaches a log, never the matched provider text.
+_PROVIDER_REASONS = (
+    ("thought_signature", ("thought signature", "thought_signature", "thoughtsignature")),
+    ("reasoning_replay", ("thinking block", "reasoning_details", "reasoning item", "encrypted_content", "signature")),
+    ("context_length", ("context length", "context window", "context_length", "maximum context",
+                        "too many tokens", "token limit", "input is too long", "prompt is too long")),
+    ("tool_protocol", ("function call", "function response", "function_call", "functioncall",
+                       "tool_call", "tool call", "tool_use", "tool result", "tool_result")),
+    ("tool_schema", ("function declaration", "function_declaration", "functiondeclaration", "tools[", "schema")),
+    ("content_policy", ("safety", "content policy", "moderation", "prohibited")),
+    ("provider_routing", ("no endpoints", "no allowed providers", "zero data retention", "data policy")),
+)
+_PROVIDER_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9 .()_-]{0,39}")
+_UPSTREAM_STATUS = re.compile(r"[A-Z][A-Z_]{2,39}")
+_DIAGNOSTIC = re.compile(r"[A-Za-z0-9 =._()-]{1,200}")
+
+
+def _upstream_error(raw):
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw[:16_000])
+        except ValueError:
+            return None
+    if isinstance(raw, list) and raw:
+        raw = raw[0]
+    error = raw.get("error") if isinstance(raw, dict) else None
+    return error if isinstance(error, dict) else None
+
+
+def provider_error_diagnostic(error) -> str | None:
+    """Content-free summary of an OpenRouter error object.
+
+    Emits only allowlisted tokens: the routing provider's name, the upstream
+    status enum (e.g. ``INVALID_ARGUMENT``) and a fixed failure class. The
+    provider's message is matched against known classes but never copied, so
+    question text, model output or tool arguments cannot leak into logs.
+    """
+    if not isinstance(error, dict):
+        return None
+    metadata = error.get("metadata") if isinstance(error.get("metadata"), dict) else {}
+    parts = []
+    name = metadata.get("provider_name")
+    if isinstance(name, str) and _PROVIDER_NAME.fullmatch(name):
+        parts.append("provider=" + name.replace(" ", "_"))
+    upstream = _upstream_error(metadata.get("raw"))
+    status = upstream.get("status") if upstream else None
+    if isinstance(status, str) and _UPSTREAM_STATUS.fullmatch(status):
+        parts.append("upstream=" + status)
+    raw = metadata.get("raw")
+    haystack = " ".join(value for value in (error.get("message"), raw if isinstance(raw, str) else None,
+                                            upstream.get("message") if upstream else None)
+                        if isinstance(value, str))[:16_000].lower()
+    reason = next((label for label, needles in _PROVIDER_REASONS if any(n in haystack for n in needles)), None)
+    parts.append("reason=" + (reason or ("unclassified" if haystack else "none")))
+    return " ".join(parts)
+
+
+def provider_diagnostic(exc: BaseException) -> str:
+    """Log projection of ``safe_diagnostic``; revalidated so no text slips through."""
+    value = getattr(exc, "safe_diagnostic", None)
+    return value if isinstance(value, str) and _DIAGNOSTIC.fullmatch(value) else "-"
 
 
 SAFE_TRACEBACK_FRAMES = 12

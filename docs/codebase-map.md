@@ -5291,6 +5291,13 @@ ersten Check statt eines leeren Consensus-Panels.
   Dasselbe gilt für globale Exception-Handler und Browser-Alerts: geloggt und
   alarmiert werden nur `safe_exception`-/Typkategorien, Route-Templates und
   allowgelistete Phasen, niemals Stacktraces, Exceptiontexte oder konkrete URLs.
+  Für Provider-Fehler gibt es zusätzlich `provider_diagnostic(exc)`: Aus dem
+  OpenRouter-Fehlerobjekt (auch aus dem begrenzt gelesenen Body einer HTTP-4xx/5xx-
+  Streaming-Antwort) werden nur allowgelistete Tokens abgeleitet, also Providername,
+  Upstream-Statusenum (z. B. `INVALID_ARGUMENT`) und eine feste Fehlerklasse
+  (`thought_signature`, `context_length`, `tool_protocol` …). Der Providertext
+  wird nur klassifiziert, nie kopiert. „Agent completion failed“ loggt dazu
+  `detail=` und `where=` (`safe_traceback`).
 - **Account-Deletion-Fence:** Jede neue owner-gebundene Firestore-Mutation liest
   `account_deletion_jobs/{uid}` in derselben Transaktion vor ihrem Write. Ein
   separater Vorcheck ist wegen TOCTOU nicht ausreichend. Nur idempotente interne

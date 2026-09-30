@@ -32,7 +32,7 @@ def test_synthesis_receives_original_conversation_and_evidence_without_tool_prot
             yield from super().stream(**kwargs)
             if self.step_id == "completion:0":
                 self.text = "INTERNAL_TOOL_PREAMBLE"
-                self._reasoning_parts = {0: {"type": "reasoning.text", "text": "PRIVATE_CONTINUATION"}}
+                self._reasoning_parts = [{"type": "reasoning.text", "text": "PRIVATE_CONTINUATION"}]
                 self._reasoning_text = "PRIVATE_REASONING"
 
     loop = make_loop(store, script, messages=history)

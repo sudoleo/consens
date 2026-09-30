@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
@@ -18,7 +19,7 @@ from app.core.openrouter_contract import (
     OPENROUTER_TITLE,
     openrouter_headers,
 )
-from app.core.observability import safe_exception
+from app.core.observability import provider_error_diagnostic, safe_exception
 from app.services.llm.attachments import (
     IMAGE_MIMES,
     build_attachment_question_suffix,
@@ -67,10 +68,12 @@ def web_search_tool(provider: str, *, max_uses: int, **limits) -> dict:
 class _ProviderHTTPStatusError(RuntimeError):
     """Content-free upstream status error for metrics and retry policy."""
 
-    def __init__(self, status_code: int, *, retry_after=None):
+    def __init__(self, status_code: int, *, retry_after=None, diagnostic=None):
         super().__init__("upstream provider returned an HTTP error")
         self.status_code = int(status_code)
         self.retry_after = retry_after
+        # Allowlisted tokens only (see provider_error_diagnostic), never body text.
+        self.safe_diagnostic = diagnostic
 
 
 class _ProviderResponseError(RuntimeError):
@@ -83,12 +86,20 @@ class _ProviderResponseError(RuntimeError):
             code = int(code)
         # Retain only HTTP error status metadata, never raw provider details.
         self.status_code = code if type(code) is int and 400 <= code <= 599 else None
+        self.safe_diagnostic = provider_error_diagnostic(error)
 
 
-def _raise_provider_http_status(response) -> None:
+def _raise_provider_http_status(response, *, body: bytes | None = None) -> None:
     headers = getattr(response, "headers", {})
     delay = _retry_after_seconds(headers.get("Retry-After"))
-    raise _ProviderHTTPStatusError(int(response.status_code), retry_after=delay)
+    diagnostic = None
+    if body:
+        try:
+            parsed = json.loads(body.decode("utf-8", errors="replace"))
+        except ValueError:
+            parsed = None
+        diagnostic = provider_error_diagnostic(parsed.get("error") if isinstance(parsed, dict) else None)
+    raise _ProviderHTTPStatusError(int(response.status_code), retry_after=delay, diagnostic=diagnostic)
 
 
 def _retry_after_seconds(value):

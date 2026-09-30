@@ -257,6 +257,30 @@ def measured_usage(raw: object, model: AgentModel, *, searches_enabled=False) ->
     }
 
 
+_READABLE_FIELDS = {"text": "reasoning.text", "summary": "reasoning.summary"}
+# Providers that sign their thinking reject replayed thought text without a
+# signature. Gemini never signs reasoning.text (its reasoning.encrypted block
+# carries the thought signature), so its text is shown live but not replayed.
+_SIGNED_TEXT_FORMATS = {"google-gemini-v1", "anthropic-claude-v1"}
+
+
+def _continues(last, detail):
+    """Whether a streamed fragment extends the previous reasoning block."""
+    kind = detail["type"]
+    if kind != last.get("type") or kind not in _READABLE_FIELDS.values():
+        return False
+    for name in ("index", "id", "format", "signature"):
+        mine, theirs = last.get(name), detail.get(name)
+        if mine not in (None, "") and theirs not in (None, "") and mine != theirs:
+            return False
+    return True
+
+
+def _replayable(detail):
+    return not (detail.get("type") == "reasoning.text" and detail.get("format") in _SIGNED_TEXT_FORMATS
+                and not detail.get("signature"))
+
+
 class AgentCompletion:
     """Mutable receipt survives cancellation/errors after any streamed event."""
     def __init__(self):
@@ -275,7 +299,7 @@ class AgentCompletion:
         self._final_usage_fields = set()
         self.tool_argument_limit = 2048
         self.tool_call_limit = 1
-        self._reasoning_parts = {}
+        self._reasoning_parts = []
         self._reasoning_text = ""
 
     def record_rejection(self, error, model):
@@ -299,24 +323,34 @@ class AgentCompletion:
         if self.tool_calls:
             message["tool_calls"] = self.tool_calls
         if self._reasoning_parts:
-            message["reasoning_details"] = list(self._reasoning_parts.values())
+            details = [detail for detail in self._reasoning_parts if _replayable(detail)]
+            if details:
+                message["reasoning_details"] = details
         elif self._reasoning_text:
             message["reasoning"] = self._reasoning_text
         return message
 
     def _preserve_reasoning(self, delta):
+        """Rebuild provider reasoning blocks from streamed fragments.
+
+        Mirrors OpenRouter's own SDK: readable text/summary fragments extend
+        the previous block of the same kind; opaque ``reasoning.encrypted``
+        blocks (Gemini thought signatures, OpenAI encrypted reasoning) are
+        discrete and kept byte for byte, never joined. ``index`` alone is not
+        an identity: Gemini sends text and its signature both at index 0.
+        """
         for detail in delta.get("reasoning_details") or []:
-            if not isinstance(detail, dict) or type(detail.get("index", 0)) is not int:
-                raise ValueError("Invalid reasoning continuation")
-            key = detail.get("index", 0)
-            target = self._reasoning_parts.setdefault(key, {})
-            for field, value in detail.items():
-                if field in {"text", "summary", "data", "signature"} and isinstance(value, str):
-                    target[field] = target.get(field, "") + value
-                elif field in target and target[field] != value:
-                    raise ValueError("Reasoning identity changed during a stream")
-                else:
-                    target[field] = value
+            if not isinstance(detail, dict) or not isinstance(detail.get("type"), str):
+                continue  # Provider noise must not end an otherwise valid step.
+            last = self._reasoning_parts[-1] if self._reasoning_parts else None
+            if last is not None and _continues(last, detail):
+                for name, value in detail.items():
+                    if name in _READABLE_FIELDS and isinstance(value, str):
+                        last[name] = last.get(name, "") + value
+                    elif value not in (None, "") and last.get(name) in (None, ""):
+                        last[name] = value
+            else:
+                self._reasoning_parts.append(dict(detail))
         text = delta.get("reasoning") or delta.get("reasoning_content")
         if isinstance(text, str):
             self._reasoning_text += text

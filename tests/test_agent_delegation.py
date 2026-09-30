@@ -232,9 +232,12 @@ def test_crashed_process_never_restarts_paid_steps_and_deduplicates_events(store
 
 
 def test_reasoning_continuation_preserves_signed_blocks_without_public_exposure(store, monkeypatch):
-    encrypted = {"type": "reasoning.encrypted", "index": 0, "id": "signed", "data": "private-"}
+    # Gemini shape: readable thought and its signature share index 0; the
+    # signature is discrete and replayed byte for byte, never joined or dropped.
+    thought = {"type": "reasoning.text", "index": 0, "format": "google-gemini-v1", "text": "private-thought"}
+    encrypted = {"type": "reasoning.encrypted", "index": 0, "id": "wait", "format": "google-gemini-v1", "data": "private-token"}
     requests, _, _ = transport(monkeypatch, [
-        [packet({"reasoning_details": [encrypted]}), packet({"reasoning_details": [{**encrypted, "data": "token"}],
+        [packet({"reasoning_details": [thought]}), packet({"reasoning_details": [encrypted],
           "tool_calls": [{"index": 0, "id": "wait", "function": {"name": "wait_agents", "arguments": '{"seconds":0}'}}]},
           finish="tool_calls", usage={"prompt_tokens": 10, "completion_tokens": 2, "cost": .001})],
         [packet({"content": "Done"}, finish="stop", usage={"prompt_tokens": 10, "completion_tokens": 2, "cost": .001})],
@@ -242,7 +245,7 @@ def test_reasoning_continuation_preserves_signed_blocks_without_public_exposure(
     loop = make_loop(store)
     events = list(loop.run())
     continuation = requests[1]["messages"][2]
-    assert continuation["reasoning_details"][0]["data"] == "private-token"
+    assert continuation["reasoning_details"] == [encrypted]
     assert "private-token" not in json.dumps(events)
     assert "private-token" not in json.dumps(store.get_turn(UID, loop.chat_id, loop.turn_id), default=str)
     assert requests[0]["parallel_tool_calls"] is False

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import json
 import asyncio
 import logging
 from pathlib import Path
@@ -30,11 +31,12 @@ def _is_logging_call(node: ast.AST) -> bool:
 
 
 # Die einzigen erlaubten Projektionen einer gefangenen Exception in ein Log:
-# die Kategorie (safe_exception/type) und die Herkunftsframes
-# (safe_traceback). Alles andere - str(exc), repr, exc_info, format_exc -
+# die Kategorie (safe_exception/type), die Herkunftsframes
+# (safe_traceback) und die allowlist-basierte Provider-Diagnose
+# (provider_diagnostic). Alles andere - str(exc), repr, exc_info, format_exc -
 # transportiert die Message und damit potenziell Frage-, Modell- oder
 # Provider-Text.
-_SAFE_EXCEPTION_PROJECTIONS = {"safe_exception", "safe_traceback", "type"}
+_SAFE_EXCEPTION_PROJECTIONS = {"safe_exception", "safe_traceback", "provider_diagnostic", "type"}
 
 
 def _is_safe_exception_projection(node: ast.AST, exception_name: str) -> bool:
@@ -222,3 +224,52 @@ def test_mail_delivery_error_log_redacts_recipient_credentials_and_provider_body
         "Private HTML body",
     ):
         assert secret not in logged
+
+
+def test_provider_diagnostic_classifies_upstream_errors_without_copying_text():
+    from app.core.observability import provider_diagnostic, provider_error_diagnostic
+    from app.services.llm.engines import _ProviderHTTPStatusError, _ProviderResponseError
+
+    secret = "private-question about my salary"
+    raw = json.dumps({"error": {"code": 400, "status": "INVALID_ARGUMENT",
+                                "message": f"Corrupted thought signature. {secret}"}})
+    error = {"code": 400, "message": "Provider returned error",
+             "metadata": {"provider_name": "Google AI Studio", "raw": raw}}
+
+    diagnostic = provider_error_diagnostic(error)
+    assert diagnostic == "provider=Google_AI_Studio upstream=INVALID_ARGUMENT reason=thought_signature"
+    assert provider_diagnostic(_ProviderResponseError(error)) == diagnostic
+    assert secret not in provider_diagnostic(_ProviderHTTPStatusError(400, diagnostic=diagnostic))
+
+    # Free text never passes: unknown message, hostile provider name, forged attribute.
+    assert provider_error_diagnostic({"message": secret}) == "reason=unclassified"
+    hostile = provider_error_diagnostic({"metadata": {"provider_name": secret + "!" * 50, "raw": "{}"}})
+    assert secret not in hostile
+    forged = RuntimeError("x")
+    forged.safe_diagnostic = f"reason=x\n{secret}; token=sk-secret"
+    assert provider_diagnostic(forged) == "-"
+    assert provider_diagnostic(RuntimeError(secret)) == "-"
+
+
+def test_streaming_http_error_carries_diagnostic_but_no_body(monkeypatch):
+    import httpx
+    import pytest
+    from app.core.observability import provider_diagnostic
+    from app.services.llm import provider_runtime
+    from app.services.llm.engines import _ProviderHTTPStatusError
+
+    secret = "private prompt text"
+    body = {"error": {"code": 400, "message": "Provider returned error", "metadata": {
+        "provider_name": "Google Vertex",
+        "raw": json.dumps({"error": {"status": "INVALID_ARGUMENT", "message": f"Function call is missing a thought_signature {secret}"}})}}}
+    transport = httpx.MockTransport(lambda request: httpx.Response(400, json=body))
+    real_client = httpx.AsyncClient
+    monkeypatch.setattr(provider_runtime.httpx, "AsyncClient",
+                        lambda **kwargs: real_client(transport=transport, **kwargs))
+
+    with pytest.raises(_ProviderHTTPStatusError) as caught:
+        list(provider_runtime.cancellable_sse_lines("https://openrouter.test/v1/chat", json={}, headers={}))
+
+    assert caught.value.status_code == 400
+    assert provider_diagnostic(caught.value) == "provider=Google_Vertex upstream=INVALID_ARGUMENT reason=thought_signature"
+    assert secret not in str(caught.value) and secret not in repr(vars(caught.value))
