@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.core import config as cfg
 from app.services.agent_tools import ReadOnlyTool, ToolRegistry
+from app.services.agent_provider_limits import ModelOutputLimit
 from app.services.llm.agent_client import metered_model
 from app.services.llm.provider_runtime import bind_analysis_budget, bind_provider_cancellation, ProviderCancelled
 from app.services.llm.provider_transport import fan_out_provider_answers
@@ -168,6 +169,16 @@ def review_is_bound(review, text, *, check_sources=None):
     return True
 
 
+COMPARISON_FAILURES = {
+    "output_limit": "The model used its whole output allowance before it finished an answer.",
+    "provider_timeout": "The provider stopped responding.",
+    "provider_rate_limited": "The provider was busy.",
+    "provider_unavailable": "The model is unavailable at its provider right now.",
+    "provider_access": "The provider declined the request.",
+    "provider_error": "The provider did not finish this answer.",
+}
+
+
 class ProgressArgs(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     status_update: str = Field(default="", max_length=400, description=
@@ -194,7 +205,9 @@ def comparison_selection(value=None):
     for provider, model_id in chosen.items():
         if provider not in cfg.PROVIDERS or model_id not in cfg.PROVIDERS[provider].models:
             raise ValueError("Comparison model is not available")
-    return {key: metered_model(value) for key, value in chosen.items()}
+    # Same answer allowance as a Consensus run. Reasoning models spend part of
+    # it before the first visible word; the old 2048 cap cut them off mid-answer.
+    return {key: metered_model(value, max_tokens=cfg.MAX_TOKENS) for key, value in chosen.items()}
 
 
 class ComparisonTools:
@@ -288,8 +301,14 @@ class ComparisonTools:
                         value = done.value
                 finally:
                     loop.slots.release()
-            if value.tool_calls or not value.text.strip() or value.finish_reason != "stop":
-                raise ValueError("Model response did not complete")
+            # A comparison answer that reached its output limit is still paid,
+            # usable evidence: keep it and mark it. Judges return JSON, which is
+            # worthless when cut off, so they still need a clean stop.
+            truncated = kind == "comparison" and value.finish_reason in {"length", "max_tokens"}
+            if value.tool_calls or not value.text.strip() or (value.finish_reason != "stop" and not truncated):
+                raise ModelOutputLimit() if value.finish_reason in {"length", "max_tokens"} and not value.tool_calls \
+                    else ValueError("Model response did not complete")
+            value.truncated = truncated
             loop._state(worker, "completed", sources=value.sources, finish_reason=value.finish_reason)
             loop._publish(worker, text=value.text[:loop.policy.result_chars], kind="result", sender=worker.id,
                           recipient="orchestrator", patch={"result_truncated": len(value.text) > loop.policy.result_chars})
@@ -297,7 +316,12 @@ class ComparisonTools:
         except BaseException as exc:
             from app.services.agent_provider_limits import agent_failure
             failure = agent_failure(exc) if not isinstance(exc, ProviderCancelled) else {"error": "Call stopped."}
-            loop._terminal(worker, "stopped" if isinstance(exc, ProviderCancelled) else "failed", failure["error"], failure)
+            message = failure["error"]
+            if kind == "comparison" and not isinstance(exc, ProviderCancelled):
+                # One model inside a comparison cannot be retried on its own, so
+                # its note says what happened and that the run went on without it.
+                message = f"{COMPARISON_FAILURES.get(failure.get('code'), 'No complete answer arrived.')} The comparison uses the other answers."
+            loop._terminal(worker, "stopped" if isinstance(exc, ProviderCancelled) else "failed", message, failure)
             raise
 
     def compare(self, args, *, cancellation):
@@ -347,7 +371,8 @@ class ComparisonTools:
                 with self.lock:
                     comparison["answers"].append({"provider": provider, "provider_label": cfg.provider_label(provider),
                         "model": self.models[provider].settings(), "text": value.text.strip(),
-                        "sources": value.sources, "hash": answer_hash(value.text.strip())})
+                        "sources": value.sources, "hash": answer_hash(value.text.strip()),
+                        **({"truncated": True} if getattr(value, "truncated", False) else {})})
                     self.checkpoint()
                 return {"text": value.text, "sources": value.sources}
             except Exception as exc:
@@ -359,10 +384,12 @@ class ComparisonTools:
             answers = fan_out_provider_answers(question=prompt,
                 provider_models={p: m.selection_id for p, m in self.models.items()}, keys={}, tier=True,
                 deep_think=False, provider_call=provider_call, log_context="Agent comparison")
+            streamed = {a["provider"]: a for a in comparison["answers"]}
             comparison["answers"] = []
             for provider, answer in answers.items():
                 comparison["answers"].append({"provider": provider, "provider_label": cfg.provider_label(provider), "model": self.models[provider].settings(),
-                    "text": answer.response, "sources": answer.sources, "hash": answer_hash(answer.response)})
+                    "text": answer.response, "sources": answer.sources, "hash": answer_hash(answer.response),
+                    **({"truncated": True} if streamed.get(provider, {}).get("truncated") else {})})
             comparison["failed_models"] = [{**m.settings(), "failure": failures.get(p)}
                                            for p, m in self.models.items() if p not in answers]
             comparison["basis_hash"] = answer_hash(json.dumps(comparison["answers"], sort_keys=True, ensure_ascii=False))

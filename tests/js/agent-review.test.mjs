@@ -191,7 +191,11 @@ it('explains a missing model without reporting a failed check, including older s
   for (const persistedIssues of [undefined, [{code: 'models_unavailable', count: 1}]]) {
     review.checks[0].issues = persistedIssues;
     w.App.agentReview.render(body, review);
-    expect(d.querySelector('.agent-review-status').textContent).toBe('Comparison checked · 1 model did not respond');
+    // A missing model does not change how far the marks can be trusted, so
+    // the line under the answer stays silent; the reader panel explains it.
+    expect(d.querySelector('.agent-review-status').textContent).toBe('');
+    expect(d.querySelector('.agent-review-status').hidden).toBe(true);
+    expect(d.querySelector('.agent-review-summary').hidden).toBe(true);
     expect(d.querySelector('.agent-review-status').dataset.state).toBe('partial');
     expect(d.querySelector('[data-section="answers"]').textContent).toBe('Answers1');
     d.querySelector('[data-section="differences"]').click();
@@ -205,10 +209,10 @@ it('explains a missing model without reporting a failed check, including older s
   dom.window.close();
 });
 it.each([
-  ['coverage', 'The coverage check could not run'],
-  ['sentences', '2 sentences could not be checked'],
-  ['sources', 'Some contradiction source checks did not finish']
-])('keeps %s failures distinct from unavailable comparison models', (kind, reason) => {
+  ['coverage', 'The coverage check could not run', 'Partly checked'],
+  ['sentences', '2 sentences could not be checked', ''],
+  ['sources', 'Some contradiction source checks did not finish', '']
+])('keeps %s failures distinct from unavailable comparison models', (kind, reason, line) => {
   const {window: w, document: d, dom} = setup();
   const body = d.getElementById('answer'); body.dataset.markdown = 'Exact answer.';
   const review = partialReview(); const check = review.checks[0];
@@ -216,7 +220,8 @@ it.each([
   if (kind === 'sentences') check.differences_data.judges.coverage.missing = 2;
   if (kind === 'sources') check.source_verification = {answer_version: 'answer-hash', run_id: 'c1', basis_hash: 'b1', status: 'partial'};
   w.App.agentReview.render(body, review);
-  expect(d.querySelector('.agent-review-status').textContent).toBe('Partly checked');
+  // Only a missing check speaks under the answer; minor gaps stay in the panel.
+  expect(d.querySelector('.agent-review-status').textContent).toBe(line);
   d.querySelector('[data-section="differences"]').click();
   const panel = w.App.answerReader.openContext.mock.calls.at(-1)[0].renderPanel('differences');
   expect(panel.textContent).toContain(reason);
@@ -233,5 +238,56 @@ it('adds no note under a checked answer and one calm sentence otherwise', () => 
   expect(note(failure, {...review, status: 'failed'}, 'Checked answer.')).toMatch(/^This answer may be incomplete/);
   expect(note(failure, review, 'Another text.')).toMatch(/^This answer may be incomplete/);
   expect(note(failure, null, '')).toBe(failure.error);
+  dom.window.close();
+});
+
+it.each([
+  [[{code: 'insufficient_answers'}], 'Not compared · fewer than two models answered'],
+  [[{code: 'differences_unavailable'}], 'Disagreements not checked'],
+  [[{code: 'models_unavailable', count: 2}, {code: 'truncated_answers', count: 1}], ''],
+])('speaks under the answer only when the check itself is limited (%j)', (issues, text) => {
+  const {window: w, document: d, dom} = setup();
+  const body = d.getElementById('answer'); body.dataset.markdown = 'Exact answer.';
+  const review = partialReview();
+  review.checks[0].issues = issues;
+  w.App.agentReview.render(body, review);
+  const status = d.querySelector('.agent-review-status');
+  expect(status.textContent).toBe(text);
+  expect(status.hidden).toBe(!text);
+  dom.window.close();
+});
+it('names an output limit as the reason a comparison model gave no answer', () => {
+  const {window: w, document: d, dom} = setup();
+  const body = d.getElementById('answer'); body.dataset.markdown = 'Exact answer.';
+  const review = partialReview();
+  review.comparisons[0].failed_models[0].failure = {code: 'output_limit'};
+  w.App.agentReview.render(body, review);
+  d.querySelector('[data-section="differences"]').click();
+  const context = w.App.answerReader.openContext.mock.calls.at(-1)[0];
+  expect(context.answers.at(-1).error).toContain('whole output allowance');
+  expect(context.answers.at(-1).error).not.toContain('did not respond');
+  dom.window.close();
+});
+it('keeps Copy in the evidence row across re-renders and hands it back when the row goes away', async () => {
+  const {window: w, document: d, dom} = setup();
+  // Load the actions module into the same window.
+  const script = d.createElement('script');
+  script.textContent = (await import('node:fs')).readFileSync('static/js/agent-answer-actions.js', 'utf8');
+  d.body.append(script);
+  const body = d.getElementById('answer'); body.dataset.markdown = 'Exact answer.';
+  const review = snapshot();
+  w.App.agentReview.render(body, review);
+  w.App.agentAnswerActions.render(body, {key: 'k', text: 'Exact answer.'});
+  const host = body._agentReview;
+  const bar = d.querySelector('.agent-answer-actions');
+  expect(bar.parentElement).toBe(host);
+  review.checks[1].differences_data.differences = [{type: 'contradiction', claim: 'Changed'}];
+  w.App.agentReview.render(body, review);
+  expect(d.querySelectorAll('.agent-answer-actions')).toHaveLength(1);
+  expect(d.querySelector('.agent-answer-actions').parentElement).toBe(body._agentReview);
+  body.dataset.markdown = 'Plain answer.';
+  w.App.agentReview.render(body, null, {});
+  expect(body._agentReview).toBe(null);
+  expect(body.nextElementSibling).toBe(bar);
   dom.window.close();
 });

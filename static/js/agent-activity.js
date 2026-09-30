@@ -29,8 +29,29 @@
   // Tools whose success leaves an external write waiting for the user.
   const reviewTools = new Set(['prepare_calendar_event', 'prepare_gmail_draft']);
   const toolName = name => tools[name]?.[0] || 'Tool';
+  // "Searched the web · 3 sources: skat.dk, virk.dk, borger.dk" says what the
+  // answer now rests on; the bare verb said nothing a reader could check.
+  function searchSummary(item) {
+    const urls = new Set(), hosts = [];
+    for (const source of Array.isArray(item.sources) ? item.sources : []) {
+      try {
+        const url = new URL(source?.url);
+        if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || urls.has(url.href)) continue;
+        urls.add(url.href);
+        const host = url.hostname.replace(/^www\./, '');
+        if (!hosts.includes(host)) hosts.push(host);
+      } catch (_) { /* Invalid provider URL. */ }
+    }
+    if (hosts.length) {
+      const more = hosts.length > 3 ? `, +${hosts.length - 3}` : '';
+      return `Searched the web · ${urls.size} ${urls.size === 1 ? 'source' : 'sources'}: ${hosts.slice(0, 3).join(', ')}${more}`;
+    }
+    const count = Number.isInteger(item.count) && item.count > 0 ? item.count : 0;
+    return count ? `Searched the web · ${count} ${count === 1 ? 'search' : 'searches'}` : 'Searched the web';
+  }
   function stepLabel(item) {
     if (item.status === 'running') return tools[item.name]?.[1] || 'Working on a step…';
+    if (item.status === 'succeeded' && item.name === 'web_search') return searchSummary(item);
     if (item.status === 'succeeded') return tools[item.name]?.[2] || `${toolName(item.name)} · Completed`;
     return `${toolName(item.name)} · ${{failed:'Failed', cancelled:'Stopped', blocked:'Skipped', unknown:'Usage unavailable'}[item.status] || 'Details'}`;
   }
@@ -39,11 +60,19 @@
     const end = Date.parse(turn?.completed_at || turn?.failed_at);
     return Number.isFinite(start) && Number.isFinite(end) && end >= start ? end - start : null;
   }
-  function durationLabel(ms) {
-    if (!Number.isFinite(ms)) return 'Details';
+  function durationText(ms) {
     const seconds = Math.floor(Math.max(0, ms) / 1000);
     const hours = Math.floor(seconds / 3600), minutes = Math.floor(seconds / 60) % 60;
-    return `Duration: ${hours ? `${hours}h ` : ''}${minutes || hours ? `${minutes}m ` : ''}${seconds % 60}s`;
+    return `${hours ? `${hours}h ` : ''}${minutes || hours ? `${minutes}m ` : ''}${seconds % 60}s`;
+  }
+  // "Working for 12s" while it runs, "Thought for 3m 7s" once it is done.
+  function durationLabel(ms, running, status) {
+    if (!Number.isFinite(ms)) return running ? 'Working' : statuses[status] || 'Activity';
+    const time = durationText(ms);
+    if (running) return `Working for ${time}`;
+    if (status === 'failed') return `Response failed after ${time}`;
+    if (statuses[status] === statuses.cancelled) return `Stopped after ${time}`;
+    return `Thought for ${time}`;
   }
   function updateClock(view, elapsedMs, running, status) {
     clearInterval(view.clockTimer);
@@ -55,7 +84,7 @@
     view.clockRunning = running;
     const tick = () => {
       const elapsed = view.elapsedMs === null ? null : view.elapsedMs + (view.clockRunning ? performance.now() - view.clockAt : 0);
-      view.title.textContent = durationLabel(elapsed) + (!running && statuses[status] ? ` · ${statuses[status]}` : '');
+      view.title.textContent = durationLabel(elapsed, running, status);
     };
     tick();
     if (running) view.clockTimer = setInterval(tick, 1000);
@@ -274,7 +303,11 @@
       && !(Number.isInteger(item.count) && item.count > 0) && !item.sources?.length));
     const activeTool = tools.findLast(item => item.status === "running");
     const latest = events.filter(item => item.kind === "status").at(-1);
-    const writing = latest ? latest.status === "responding" : responding;
+    // Text the model writes before a tool call is a preamble, not the answer.
+    // Once a later step (search, comparison) has run, "Writing answer…" only
+    // returns with a new responding status after it.
+    const afterLatest = latest ? events.slice(events.indexOf(latest) + 1) : [];
+    const writing = latest ? latest.status === "responding" && !afterLatest.some(item => item.kind === "tool") : responding;
     const reviewStage = review?.status === "running" ? "Checking the answer…"
       : review?.comparisons?.some(c => c.status === "running") ? "Comparing perspectives…" : null;
     const waiting = running && latest?.status === 'waiting';

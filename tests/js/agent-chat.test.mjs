@@ -581,6 +581,33 @@ describe("single-model agent chat", () => {
     dom.window.close();
   });
 
+  it('names the sources a web search found instead of the bare verb', () => {
+    const {window: w, document: d, dom} = boot();
+    const host = d.getElementById('agentAnswerActivity');
+    const search = {id:'s', kind:'tool', name:'web_search', status:'succeeded', count:2, sources:[
+      {url:'https://www.skat.dk/a'}, {url:'https://virk.dk/b'}, {url:'https://virk.dk/c'},
+      {url:'https://borger.dk/d'}, {url:'https://example.org/e'}, {url:'javascript:alert(1)'}, {url:'https://u:p@evil.test/'}]};
+    w.App.agentActivity.render(host, {running:true, events:[search]});
+    const step = [...host.querySelectorAll('.agent-progress-step')].map(p => p.textContent);
+    expect(step[0]).toBe('Searched the web · 5 sources: skat.dk, virk.dk, borger.dk, +1');
+    w.App.agentActivity.render(host, {running:true, events:[{...search, sources:[]}]});
+    expect(host.querySelector('.agent-progress-step').textContent).toBe('Searched the web · 2 searches');
+    dom.window.close();
+  });
+
+  it('does not claim to write the answer while a preamble led into a tool step', () => {
+    const {window: w, document: d, dom} = boot();
+    const host = d.getElementById('agentAnswerActivity');
+    const events = [{id:'c0', kind:'status', status:'responding'},
+      {id:'s', kind:'tool', name:'web_search', status:'succeeded', count:1}];
+    w.App.agentActivity.render(host, {running:true, events});
+    expect(host.querySelector('.agent-current-status').textContent).toBe('Thinking…');
+    events.push({id:'c1', kind:'status', status:'responding'});
+    w.App.agentActivity.render(host, {running:true, events});
+    expect(host.querySelector('.agent-current-status').textContent).toBe('Writing answer…');
+    dom.window.close();
+  });
+
   it('shows useful run details when opened during thinking, before any progress or tool event', () => {
     const {window: w, document: d, dom} = boot();
     const host = d.getElementById('agentAnswerActivity');
@@ -606,20 +633,20 @@ describe("single-model agent chat", () => {
     const clear = vi.spyOn(window, 'clearInterval');
     activity.render(host, {running:true, elapsedMs:59900});
     const title = host.querySelector('.agent-activity-title');
-    expect(title.textContent).toBe('Duration: 59s');
+    expect(title.textContent).toBe('Working for 59s');
     expect(title.getAttribute('aria-live')).toBe('off');
     now = 1100; tick();
-    expect(title.textContent).toBe('Duration: 1m 1s');
+    expect(title.textContent).toBe('Working for 1m 1s');
     activity.render(host, {running:true, events:[{id:'wait',kind:'status',status:'waiting'}]});
     now = 2100; tick();
-    expect(title.textContent).toBe('Duration: 1m 2s');
+    expect(title.textContent).toBe('Working for 1m 2s');
     expect(host.querySelector('.agent-progress .agent-current-status').textContent).toContain('Waiting');
     activity.render(host, {running:false,status:'canceled'});
     expect(clear).toHaveBeenCalledWith(123);
     expect(host._agentActivity.clockTimer).toBe(null);
     now = 10000;
     activity.render(host, {running:false,status:'canceled'});
-    expect(title.textContent).toBe('Duration: 1m 2s · Response stopped');
+    expect(title.textContent).toBe('Stopped after 1m 2s');
     activity.render(host, {running:true,elapsedMs:2000});
     activity.dispose(host);
     expect(host._agentActivity.clockTimer).toBe(null);
@@ -633,7 +660,7 @@ describe("single-model agent chat", () => {
     const host = document.getElementById('agentAnswerActivity');
     const turn = {created_at:'2026-09-20T10:00:00Z', completed_at:'2026-09-20T11:02:03Z'};
     activity.renderTurn(host, turn);
-    expect(host.querySelector('.agent-activity-title').textContent).toBe('Duration: 1h 2m 3s');
+    expect(host.querySelector('.agent-activity-title').textContent).toBe('Thought for 1h 2m 3s');
     expect(host._agentActivity.clockTimer).toBe(null);
     expect(activity.savedDuration({created_at:turn.created_at, failed_at:'2026-09-20T10:00:45Z'})).toBe(45000);
     for (const invalid of [{}, {created_at:turn.created_at}, {...turn,completed_at:'invalid'},
@@ -697,7 +724,7 @@ describe("single-model agent chat", () => {
     activity.render(host, { events, running: false });
     expect(details.open).toBe(true);
     activity.renderTurn(host, { status: "failed", error_code: "cancelled", agent_activity: events });
-    expect(host.querySelector(".agent-activity-title").textContent).toContain("Response stopped");
+    expect(host.querySelector(".agent-activity-title").textContent).toMatch(/^Stopped after \d+s$/);
     expect(host.querySelector(".agent-activity").classList.contains("is-running")).toBe(false);
     activity.render(host, { usage: { input_tokens: 10, output_tokens: 3, estimated_cost_nano_usd: null } });
     expect(host.querySelector(".agent-usage").textContent).toBe("13 tokens");
@@ -957,7 +984,7 @@ describe("single-model agent chat", () => {
     handlers.activity.receive({ ...event, text: " forbidden late text" });
     window.App.agentChat.project(run);
     expect(details.textContent).not.toContain("forbidden");
-    expect(details.textContent).toContain("Response stopped");
+    expect(details.textContent).toMatch(/Stopped after \d+s/);
     resolve({ ok: true, data: { response: "Late", turn: {} } });
     await pending;
     expect(window.acceptPersistedConsensusBookmark).not.toHaveBeenCalled();
@@ -1021,7 +1048,7 @@ describe("single-model agent chat", () => {
     ];
     window.App.agentActivity.renderTurn(host, { agent_activity: events,
       agent_usage: { input_tokens: 800, output_tokens: 62, estimated_cost_nano_usd: 400000, cost_source: "provider", complete: true } });
-    expect(host.querySelector(".agent-activity-title").textContent).toBe("Details");
+    expect(host.querySelector(".agent-activity-title").textContent).toBe("Activity");
     expect(host.querySelector(".agent-activity-tool")).toBe(null);
     expect(host.querySelector(".agent-usage").textContent).toBe("862 tokens · $0.0004 provider cost");
     // A count or citations confirm use even if the response was interrupted.
@@ -1048,7 +1075,7 @@ describe("single-model agent chat", () => {
     expect(events).toHaveLength(1);
     window.App.agentActivity.renderTurn(host, { agent_activity: events, agent_usage: {
       input_tokens: 100, output_tokens: 20, complete: false, estimated_cost_nano_usd: 10000000 } });
-    expect(host.textContent).toContain("Details");
+    expect(host.textContent).toContain("Activity");
     expect(host.textContent).toContain("Web search · Completed · 1 search");
     expect(host.textContent).toContain("usage incomplete");
     expect(host.querySelector("img")).toBe(null);

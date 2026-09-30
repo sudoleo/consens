@@ -49,6 +49,12 @@ class ProviderCooldowns:
 provider_cooldowns = ProviderCooldowns()
 
 
+class ModelOutputLimit(RuntimeError):
+    """The model used its whole output allowance before any usable answer."""
+    def __init__(self):
+        super().__init__("This model used its whole output allowance before it finished an answer.")
+
+
 class AgentRunInterrupted(RuntimeError):
     """Content-free infrastructure failure, distinct from a user cancellation."""
 
@@ -67,6 +73,8 @@ def agent_failure(error):
         return {"code": "run_interrupted", "error": str(error)}
     if isinstance(error, (AgentCapacityExceeded, TurnStatusConflict)):
         return {"code": "run_state_conflict", "error": str(error)}
+    if isinstance(error, ModelOutputLimit):
+        return {"code": "output_limit", "error": str(error)}
     if isinstance(error, AgentProviderCooldown):
         return {"code": "provider_rate_limited", "error": str(error), "retry_after": error.retry_after}
     if isinstance(error, AnalysisBudgetExceeded):

@@ -2345,13 +2345,22 @@ agent_review. Vor Markierungen prüft es Text-/Versions-/Basisbindung.
 Gründen für ausgefallene Modelle, fehlende Judge-Ergebnisse und unvollständige
 Satz-/Kontextabdeckung. `comparisons[].failed_models[].failure` enthält nur den
 sicheren Fehler aus `agent_failure`, niemals rohe Provider-Antworten. Eine
-fehlende Modellantwort hält den Gesamtstatus `partial`, bei vollständig
-vorliegenden Judges zeigt die UI jedoch `Comparison checked · N models did not respond`.
+fehlende Modellantwort hält den Gesamtstatus `partial`. Die Zeile unter der Antwort
+(`summaryText`) bleibt bei einer fertigen Prüfung leer und spricht nur, wenn die
+Prüfung selbst eingeschränkt ist: `Not compared · fewer than two models answered`,
+`Disagreements not checked` oder `Partly checked` (Coverage fehlt). Fehlende
+Modelle, ungeprüfte Sätze und Quellenlücken stehen nur im Leser
+(`statusText`, dort `Comparison checked · N models without an answer`).
+Copy und die Evidenz-Links teilen eine Zeile: `agent-answer-actions.js` hängt die
+Leiste in `.agent-review`, `agent-review.js` erhält sie beim Neuaufbau.
 Statuslabels: `Partly checked`, `Check could not run`, `Answer not checked`;
 Ausfallgründe erscheinen nur als kurze Code-Phrase (`failureReason`).
 `Answers` zählt vollständige Antworten; die Details behalten auch Fehlermodelle.
 Alte Reviews werden aus ihren vorhandenen Judge-Metadaten erklärt. Gebundene
 unvollständige Quellenprüfungen erhalten zusätzlich einen eigenen Hinweis.
+`wrapFlatRange` markiert Satzteile, die Fett/Kursiv/Links trennen, mit
+`cx-join-start`/`cx-join-end`; nur die äußeren Enden tragen Innenabstand und
+Rundung, sonst entstünde an jeder Elementgrenze ein sichtbarer Zusatzabstand.
 `consensus-insights.js` hält die aktive Hover-Gruppe; Scroll/Resize versteckt
 veraltete Geometrie und plant die Vorschau erneut, wenn Zeiger/Fokus noch auf
 der Passage liegt. Mausfähigkeit wird beim Eintritt über `any-hover`/`any-pointer`
@@ -5542,7 +5551,12 @@ die Aktivitätszeile „Waiting for your confirmation below“ (nach erfolgreich
 `prepare_calendar_event`/`prepare_gmail_draft`) rufen
 `App.agentChat.revealPendingReview()` (scrollt zur ersten offenen Karte und
 fokussiert deren erste Bedienung). Alle Integrations-Tools haben Lauf-/Fertig-
-Texte in `agent-activity.js`; unbekannte Tools zeigen neutrale Texte.
+Texte in `agent-activity.js`; unbekannte Tools zeigen neutrale Texte. Die
+Websuche nennt Anzahl und Domains ihrer Quellen (`Searched the web · 3 sources:
+skat.dk, virk.dk, borger.dk`). Die Kopfzeile lautet `Working for 12s` während des
+Laufs und `Thought for 3m 7s` danach (`Stopped after`/`Response failed after`).
+`Writing answer…` erscheint nur, wenn nach dem letzten `responding`-Status kein
+Tool-Schritt mehr kam; Text vor einem Tool-Aufruf ist Vorrede, nicht Antwort.
 
 **DOM-Haken.** `templates/index.html`: `#agentAnswerResources` direkt nach
 `#agentAnswerBody` (Paket B rendert Dokumentkarten hinein),
@@ -5550,7 +5564,8 @@ Texte in `agent-activity.js`; unbekannte Tools zeigen neutrale Texte.
 `.chat-input-container`.
 
 **Aktivitätsleiste.** Unter 1200 px öffnet `agent-delegation.js` die Leiste nie
-selbst; der Chip „Activity · n“ (`aria-controls="agentSidebar"`) öffnet ein
+selbst; das Panel-Symbol neben den Modell-Icons (`.agent-sidebar-toggle`,
+`aria-label` „Activity · n“, `aria-controls="agentSidebar"`) öffnet ein
 Sheet mit Scrim, Fokusfalle und Escape. Ab 1200 px öffnet sie automatisch nur,
 wenn die Lesespalte daneben mindestens 600 px behält; offen rückt die Spalte
 nach links (`body.agent-sidebar-open`), statt unter der Leiste zu liegen. Nur

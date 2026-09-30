@@ -855,7 +855,8 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
   veralteten Zahlen.
 - [ ] Agent-Aktivität bei 1920/1440 px mit offener und eingeklappter linker
   Navigation öffnen/schließen: die Spalte rückt neben die Leiste, nichts liegt
-  darunter. Unter 1200 px öffnet sie nie selbst; „Activity · n“ öffnet ein Sheet
+  darunter. Unter 1200 px öffnet sie nie selbst; das Panel-Symbol neben den
+  Modell-Icons öffnet ein Sheet
   mit Scrim, Escape/Scrim schließt und gibt den Fokus zurück.
 - [ ] Lauf mit Mail-Entwurf/Kalenderänderung: Aktivität zeigt „Email draft ready
   for review“ und „Waiting for your confirmation below“; nach dem Lauf steht über

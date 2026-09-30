@@ -16,7 +16,8 @@ from test_agent_runs import UID, AUTH, api, pending, receipt, store
 
 
 class Script:
-    def __init__(self, *, compares=1, revise=False, missing=False, fail_coverage=False, fail_model=False):
+    def __init__(self, *, compares=1, revise=False, missing=False, fail_coverage=False, fail_model=False, length_model=None):
+        self.length_model = length_model
         self.compares, self.revise, self.missing = compares, revise, missing
         self.fail_coverage, self.fail_model = fail_coverage, fail_model
         self.calls, self.prompts = [], []
@@ -67,6 +68,11 @@ class Script:
                     if script.fail_model and model.model.startswith("anthropic"):
                         raise RuntimeError("Comparison unavailable")
                     self.text = "The first option costs 100. The constraint matters."
+                    if script.length_model is not None and model.model.startswith("openai"):
+                        self.text, self.finish_reason = script.length_model, "length"
+                        if self.text:
+                            yield {"type": "delta", "text": self.text}
+                        return
                 self.finish_reason = "stop"
                 yield {"type": "delta", "text": self.text}
         return Completion()
@@ -512,3 +518,41 @@ def test_transient_settlement_failure_never_repeats_model_or_leaves_run_pending(
     assert root["run_status"] == "succeeded" and "running" not in root["step_states"].values()
     assert store.db.collection("users").document(UID).get().to_dict()["agent_usage"]["unsettled_calls"] == 0
     assert saved["agent_usage"]["input_tokens"] + saved["agent_usage"]["output_tokens"] == len(script.calls) * 70
+
+
+def test_comparison_models_get_the_consensus_answer_allowance():
+    from app.core import config as cfg
+    models = comparison_selection({"anthropic": "claude-haiku-4-5", "openai": "gpt-5.4-mini"})
+    assert all(m.max_output_tokens > 2048 for m in models.values())
+    assert all(m.max_output_tokens <= cfg.MAX_TOKENS for m in models.values())
+
+
+def test_answer_cut_off_at_the_output_limit_is_kept_as_marked_evidence(store):
+    script = Script(length_model="The first option costs 100. It also")
+    loop = make_loop(store, script)
+    list(loop.run())
+    review = store.get_turn(UID, loop.chat_id, loop.turn_id)["agent_review"]
+    comparison = review["comparisons"][0]
+    assert comparison["failed_models"] == []
+    assert len(comparison["answers"]) == 2
+    cut = [a for a in comparison["answers"] if a["provider"] == "openai"][0]
+    assert cut["truncated"] is True and cut["text"] == "The first option costs 100. It also"
+    assert not any(a.get("truncated") for a in comparison["answers"] if a["provider"] != "openai")
+
+
+def test_output_limit_without_text_names_the_cause_without_retry_advice(store, monkeypatch):
+    notes = []
+    publish = store.publish_agent
+    def capture(*args, message=None, **kwargs):
+        if message and message.get("kind") == "failure":
+            notes.append(message["text"])
+        return publish(*args, message=message, **kwargs)
+    monkeypatch.setattr(store, "publish_agent", capture)
+    script = Script(length_model="")
+    loop = make_loop(store, script)
+    list(loop.run())
+    review = store.get_turn(UID, loop.chat_id, loop.turn_id)["agent_review"]
+    failed = review["comparisons"][0]["failed_models"]
+    assert [f["failure"]["code"] for f in failed] == ["output_limit"]
+    assert notes == ["The model used its whole output allowance before it finished an answer. "
+                     "The comparison uses the other answers."]

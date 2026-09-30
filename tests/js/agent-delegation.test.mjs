@@ -348,7 +348,8 @@ describe("Agent sidebar", () => {
     const { window: w, document: d, dom } = boot(async () => ({ ok: true, json: async () => ({ agents: [answer, ...judges], status: "succeeded" }) }));
     for (const item of [answer, ...judges]) receive(w, item);
     w.App.agentDelegation.project({ chatId, turnId, running: false });
-    expect(d.querySelector(".agent-sidebar-toggle").textContent).toBe("Activity · 2");
+    expect(d.querySelector(".agent-sidebar-toggle").textContent).toBe("");
+    expect(d.querySelector(".agent-sidebar-toggle").getAttribute("aria-label")).toBe("Activity · 2");
     expect(d.querySelectorAll(".agent-inline-model")).toHaveLength(1);
     const rows = [...d.querySelectorAll(".agent-session")];
     expect(rows).toHaveLength(2);
@@ -374,6 +375,23 @@ describe("Agent sidebar", () => {
     expect(row.querySelector(".agent-session-state").textContent).toMatch(/^Not finished · /);
     row.open = true; row.dispatchEvent(new w.Event("toggle"));
     expect(row.querySelector(".agent-judge-note").textContent).toBe("The differences check could not run. The answer is shown without it.");
+    dom.window.close();
+  });
+
+  it("shows a failed comparison model's reason as a plain note without routing labels", async () => {
+    const failed = { ...agent(1, "failed"), kind: "comparison", title: "Comparison 1 · Haiku" };
+    const note = "The provider did not finish this answer. The comparison uses the other answers.";
+    const { window: w, document: d, dom } = boot(async url => ({ ok: true, json: async () => url.includes(agentId)
+      ? { agent: { assignment: { goal: "Comparison 1 · Haiku", context: '{"question":"Q","context":"C"}' } },
+          messages: [{ id: "m1", seq: 1, sender: agentId, recipient: "orchestrator", kind: "failure", text: note }] }
+      : { agents: [failed], status: "succeeded" } }));
+    receive(w, failed);
+    w.App.agentDelegation.project({ chatId, turnId });
+    d.querySelector(".agent-inline-model").click();
+    await vi.waitFor(() => expect(d.querySelector(".agent-session-detail .agent-judge-note")?.textContent).toBe(note));
+    const detail = d.querySelector(".agent-session-detail").textContent;
+    expect(detail).not.toMatch(/→|Orchestrator|Goal|Trying again/);
+    expect(d.querySelector(".agent-session-state").textContent).toMatch(/^No answer · /);
     dom.window.close();
   });
 

@@ -377,6 +377,8 @@
     }
     for (const [key, label] of Object.entries({ goal: "Goal", context: "Context", constraints: "Constraints", expected_output: "Expected result", acceptance_criteria: "Checks" })) {
       if (!detail.assignment?.[key]) continue;
+      // A comparison answer's goal only repeats its row title.
+      if (agent.kind === "comparison" && key === "goal") continue;
       if (agent.kind === "judge" && key === "context") continue;
       if (agent.kind === "comparison" && key === "context") {
         let context = detail.assignment[key];
@@ -390,7 +392,12 @@
       const from = message.sender === "orchestrator" ? "Orchestrator" : agent.title;
       const to = message.recipient === "orchestrator" ? "Orchestrator" : agent.title;
       const item = node("div", "agent-message"); item.dataset.messageId = message.id;
-      item.append(node("h3", "", `${from} → ${to} · ${message.kind}`));
+      // A comparison model has one reply: its answer, or why none arrived.
+      // Routing labels ("→ Orchestrator · failure") are plumbing there.
+      if (agent.kind === "comparison") {
+        if (message.kind === "failure") { row.body.append(node("p", "agent-judge-note", message.text)); continue; }
+        if (message.kind === "result") item.append(node("h3", "", "Answer"));
+      } else item.append(node("h3", "", `${from} → ${to} · ${message.kind}`));
       const text = node("div", "consensus-answer-body agent-message-body");
       if (window.injectMarkdown) window.injectMarkdown(text, message.text, agent.sources || []);
       else text.textContent = message.text;
@@ -436,8 +443,14 @@
         inline._viewKey = view.key;
         inline._buttons = new Map();
         inline._stack = node("span", "agent-model-stack");
+        // A quiet panel glyph beside the model icons instead of a text chip.
         const toggle = node("button", "agent-sidebar-toggle"); toggle.type = "button";
         toggle.setAttribute("aria-controls", "agentSidebar");
+        const glyph = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+        glyph.setAttribute("viewBox", "0 0 16 16"); glyph.setAttribute("aria-hidden", "true");
+        const frame = document.createElementNS(glyph.namespaceURI, "path");
+        frame.setAttribute("d", "M2.5 3.5h11v9h-11zM10 3.5v9");
+        glyph.append(frame); toggle.append(glyph);
         toggle.addEventListener("click", () => view.closed ? show(null, toggle) : hide(true));
         inline._toggle = toggle;
         inline.replaceChildren(inline._stack, toggle);
@@ -469,7 +482,9 @@
         if (!models.has(key)) { button.remove(); inline._buttons.delete(key); }
       }
       inline._toggle.hidden = !view.agents.size;
-      inline._toggle.textContent = `Activity · ${rowsFor(view).length}`;
+      const activityLabel = `Activity · ${rowsFor(view).length}`;
+      inline._toggle.setAttribute("aria-label", activityLabel);
+      inline._toggle.title = activityLabel;
       inline._toggle.setAttribute("aria-expanded", String(!view.closed));
     }
     sidebar.hidden = view.closed || !view.agents.size;

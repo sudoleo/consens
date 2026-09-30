@@ -268,7 +268,7 @@ def test_comparison_review_and_saved_projection(browser, phase4_server, width, d
         _snapshot(page, f"comparison-composer-{width}")
         page.locator("#questionInput").fill(saved["question"])
         page.locator("#sendButton").click()
-        expect(page.locator(".agent-review-status")).to_have_text("Comparison checked")
+        expect(page.locator(".agent-review-status")).to_be_hidden()
         expect(page.locator('#composerModeBar')).not_to_be_visible()
         page.wait_for_function("() => !document.body.classList.contains('composer-animating')")
         assert page.locator('.chat-input-container').bounding_box()['height'] <= 60
@@ -374,7 +374,7 @@ def test_comparison_review_and_saved_projection(browser, phase4_server, width, d
         saved['agent_activity'] = []
         page.evaluate("data => window.App.runRegistry.showSavedView({type:'bookmark'}, data)", {
             "chatId": chat, "turnId": turn, "executionMode": "agent", "question": saved["question"], "consensus": text, "currentTurn": saved})
-        expect(page.locator(".agent-review-status")).to_have_text("Comparison checked")
+        expect(page.locator(".agent-review-status")).to_be_hidden()
         expect(page.locator("#agentAnswerBody .cx-claim")).to_have_count(1)
         expect(page.locator('#agentAnswerBody .src-ref[href="https://example.org/billing"]')).to_have_count(1)
         details.locator('.agent-activity-title').click()
@@ -472,7 +472,7 @@ def test_green_agent_passages_hover_after_scrolling_and_reprojection(browser, ph
         for _ in range(2):
             page.evaluate("turn => App.runRegistry.showSavedView({type:'bookmark'}, {chatId:'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', turnId:turn.id, executionMode:'agent', question:turn.question, consensus:turn.consensus, currentTurn:turn})", turn)
             page.evaluate('() => window.exitHeroMode()')
-            expect(page.locator('.agent-review-status')).to_have_text('Comparison checked')
+            expect(page.locator('.agent-review-status')).to_be_hidden()
             # Exercise the real Display control, including switching after render.
             page.get_by_role('button', name='Settings', exact=True).click()
             page.get_by_role('tab', name='Display', exact=True).click()

@@ -412,6 +412,14 @@
               span.appendChild(node);
               spans.push(span);
             });
+            // Bold, italics or links split one sentence into several spans. Only
+            // the outer ends get padding and rounded corners; inner joins stay
+            // flush, otherwise every <em>/<strong> edge reads as an extra space
+            // ("( Årsrapport )", "omdannelse , das").
+            spans.forEach(function (span, index) {
+              if (index > 0) span.classList.add("cx-join-start");
+              if (index < spans.length - 1) span.classList.add("cx-join-end");
+            });
             return spans;
           }
 

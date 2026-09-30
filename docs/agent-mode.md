@@ -189,7 +189,10 @@ ein beschriftetes Auswahlfeld die konkrete Markierungsgrundlage. Kontext und
 frühere Antwortversionen stehen in den Details des Lesers. Live-Ansicht und
 gespeicherter Verlauf verwenden denselben Review-Snapshot.
 Fehlt nur eine Modellantwort, während Differences und Coverage vollständig
-vorliegen, lautet der Status `Comparison checked · 1 model unavailable`.
+vorliegen, bleibt die Zeile unter der Antwort leer; der Leser nennt das Modell
+und den Grund. Unter der Antwort steht nur etwas, wenn die Prüfung selbst
+eingeschränkt ist (weniger als zwei Antworten, fehlender Differences- oder
+Coverage-Judge).
 Der Review bleibt technisch `partial`; fehlende Stimmen werden nicht als
 Zustimmung gezählt. `Answers` zählt nur vollständige Antworten, der Leser zeigt
 auch die ausgefallenen Modelle und bei neuen Runs deren sicheren Fehlergrund
@@ -328,7 +331,7 @@ Technische Grenzen schützen Providerprotokoll, Speicher und Parallelität:
 |---|---|
 | Parallele Unteraufrufe | 2 |
 | Antwortmodelle pro Vergleich | vorhandene Auswahl, mindestens 2 |
-| Vergleichsantwort | standardmäßig 2048 Output-Tokens; 6000 Zeichen als Promptvorgabe, vollständige längere Antworten bleiben erhalten |
+| Vergleichsantwort | `MAX_TOKENS` wie im Consensus-Modus (4096 Output-Tokens); 6000 Zeichen als Promptvorgabe. Eine am Output-Limit abgeschnittene Antwort bleibt als Evidenz erhalten (`answers[].truncated`); ohne Text gilt sie als `output_limit` |
 | Synthese | AGENT_MAX_OUTPUT_TOKENS, standardmäßig 4096 |
 | Kontext | Modellfensterprüfung; initialer Chatverlauf maximal 120000 Zeichen |
 | Review-Snapshot | maximal 600 kB |

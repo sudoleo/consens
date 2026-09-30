@@ -94,7 +94,8 @@ it('applies citations after review markers without changing the checked answer o
   expect(w.renderStoredConsensusClaims).toHaveBeenCalledTimes(1);
   expect(body.querySelector('.src-ref').textContent).toBe('1');
   expect(body.dataset.markdown).toBe(review.versions[0].text);
-  expect(w.document.querySelector('.agent-review-status').textContent).toBe('Comparison checked');
+  // A clean check needs no words under the answer.
+  expect(w.document.querySelector('.agent-review-status').hidden).toBe(true);
   w.injectMarkdown(body, markdown, []);
   w.App.agentReview.render(body, review);
   expect(body.querySelectorAll('.src-ref')).toHaveLength(1);

@@ -90,8 +90,8 @@ def test_progress_paragraphs_collapse_at_final_and_reopen_with_keyboard(browser,
         expect(preview.locator("p")).to_have_text(updates[:1])
         expect(preview.locator('.agent-current-status')).to_have_text('Comparing perspectives…')
         title = page.locator('#agentAnswerActivity .agent-activity-title')
-        expect(title).to_contain_text('Duration:')
-        page.wait_for_function("() => !document.querySelector('.agent-activity-title').textContent.includes('Duration: 0s')")
+        expect(title).to_contain_text('Working for')
+        page.wait_for_function("() => !document.querySelector('.agent-activity-title').textContent.includes('Working for 0s')")
         assert title.evaluate("el => getComputedStyle(el).animationName") == 'none'
         page.evaluate("() => { window.__firstProgress = document.querySelector('.agent-progress p'); }")
         page.evaluate("() => window.__tool('comparison', 'compare_models', 'succeeded')")
@@ -153,9 +153,9 @@ def test_progress_paragraphs_collapse_at_final_and_reopen_with_keyboard(browser,
         expect(details).not_to_have_attribute("open", "")
         expect(preview).not_to_be_visible()
         expect(preview.locator("p")).to_have_count(0)
-        expect(title).to_have_text('Duration: 1m 13s')
+        expect(title).to_have_text('Thought for 1m 13s')
         page.evaluate("() => App.agentChat.project(App.runRegistry.visible())")
-        expect(title).to_have_text('Duration: 1m 13s')
+        expect(title).to_have_text('Thought for 1m 13s')
         assert page.evaluate("document.querySelector('#agentAnswerActivity')._agentActivity.clockTimer === null")
         assert page.evaluate("__agentMotion.filter(m => m.target.id === 'agentAnswerBody').length") == (1 if quiet == "none" else 0)
         if quiet == "none":

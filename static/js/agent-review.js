@@ -7,7 +7,8 @@
   // Short, calm reasons for one model call that ended without a result. The
   // provider's own error text never reaches the page (see provider_failure).
   const reasons = { provider_rate_limited: 'the provider was busy', provider_timeout: 'the provider stopped responding',
-    provider_unavailable: 'the model was unavailable at its provider', provider_access: 'the provider declined the request' };
+    provider_unavailable: 'the model was unavailable at its provider', provider_access: 'the provider declined the request',
+    output_limit: 'it used its whole output allowance before finishing' };
   function failureReason(failure) {
     return reasons[failure?.code] || 'no complete answer arrived';
   }
@@ -63,7 +64,7 @@
   }
   function issueText(issue) {
     const n = issue.count;
-    return ({models_unavailable: `${n} comparison model${n === 1 ? '' : 's'} did not respond; the check uses the remaining answers`,
+    return ({models_unavailable: `${n} comparison model${n === 1 ? '' : 's'} returned no usable answer; the check uses the remaining answers`,
       insufficient_answers: 'Fewer than two complete model answers arrived, so no comparison was possible',
       differences_unavailable: 'The differences check could not run, so disagreements are not marked',
       coverage_unavailable: 'The coverage check could not run, so sentences are not marked as supported',
@@ -77,9 +78,25 @@
     if (!['succeeded', 'partial'].includes(state)) return states[state] || states.partial;
     if (issues.length && issues.every(i => i.code === 'models_unavailable')) {
       const n = issues.reduce((total, i) => total + i.count, 0);
-      return `Comparison checked · ${n} model${n === 1 ? '' : 's'} did not respond`;
+      return `Comparison checked · ${n} model${n === 1 ? '' : 's'} without an answer`;
     }
     return issues.length ? states.partial : states[state];
+  }
+  // The line under the answer speaks only when it changes how far the reader
+  // can rely on the marks. A finished check, or one that simply had fewer
+  // answers to work with, needs no words: the marks and counts say enough.
+  const decisive = new Set(['insufficient_answers', 'differences_unavailable', 'coverage_unavailable']);
+  function summaryText(state, issues) {
+    if (!['succeeded', 'partial'].includes(state)) return states[state] || states.partial;
+    const codes = new Set(issues.map(i => i.code).filter(code => decisive.has(code)));
+    if (codes.has('insufficient_answers')) return 'Not compared · fewer than two models answered';
+    if (codes.has('differences_unavailable')) return 'Disagreements not checked';
+    return codes.size ? states.partial : '';
+  }
+  // Copy and evidence share one row: the actions bar lives inside the host.
+  function keepActions(host, previous) {
+    const bar = previous || (host.nextElementSibling?.classList.contains('agent-answer-actions') ? host.nextElementSibling : null);
+    if (bar) host.append(bar);
   }
   function node(tag, cls, text) {
     const el = document.createElement(tag);
@@ -219,18 +236,24 @@
       if (host?._hasReview && typeof body.dataset.markdown === "string") window.injectMarkdown?.(body, body.dataset.markdown, []);
       window.linkifyAgentSources?.(body, turnSources);
       body._agentModels?.remove(); body._agentModels = null;
-      if (!turnSources.length) { host?.remove(); body._agentReview = null; return; }
+      if (!turnSources.length) {
+        // Copy lives inside the evidence row; hand it back to the answer first.
+        const bar = host?.querySelector(':scope > .agent-answer-actions');
+        if (bar) body.after(bar);
+        host?.remove(); body._agentReview = null; return;
+      }
       if (!host?.isConnected) { host = node('section', 'agent-review'); body.after(host); body._agentReview = host; }
       const signature = JSON.stringify([evidence.key, evidence.question, turnSources]);
       if (host.dataset.signature === signature) return;
       host.dataset.signature = signature; host._hasReview = false; host.hidden = false;
+      const actions = host.querySelector(':scope > .agent-answer-actions');
       const context = { key: `agent-sources:${evidence.key || body.id || evidence.question}`, question: evidence.question || 'Answer sources',
         answers: [], sections: ['sources'], renderPanel: () => sourcePanel(turnSources) };
       const nav = node('nav', 'consensus-footer-tabs agent-evidence-links');
       nav.setAttribute('aria-label', 'Explore answer evidence');
       const button = evidenceButton('sources', 'Sources', turnSources.length);
       button.addEventListener('click', () => App.answerReader?.openContext(context, {section: 'sources', trigger: button}));
-      nav.append(button); host.replaceChildren(nav); App.answerReader?.refreshContext(context); return;
+      nav.append(button); host.replaceChildren(nav); keepActions(host, actions); App.answerReader?.refreshContext(context); return;
     }
     if (!host?.isConnected) {
       host = node("section", "agent-review"); body.after(host); body._agentReview = host;
@@ -245,14 +268,16 @@
     }
     host.dataset.signature = signature;
     host._hasReview = true;
+    const actions = host.querySelector(':scope > .agent-answer-actions');
     host.replaceChildren();
     const issues = review.comparisons.flatMap(c => checkIssues(c, boundCheck(c)));
     const state = ['succeeded', 'partial'].includes(review.status) && !review.comparisons.every(boundCheck) ? 'required'
       : review.status === 'succeeded' && issues.length ? 'partial' : review.status;
     host.hidden = !version && ["required", "running"].includes(state);
     const summary = node("div", "agent-review-summary");
-    const status = node("span", "agent-review-status", statusText(state, issues));
+    const status = node("span", "agent-review-status", summaryText(state, issues));
     status.setAttribute("role", "status"); status.dataset.state = state;
+    status.hidden = !status.textContent;
     status.title = [...issues.map(issueText), "Model agreement compares perspectives; it is not independent fact checking."].join('. ');
     summary.append(status); host.append(summary);
     const tabs = node("nav", "consensus-footer-tabs agent-evidence-links agent-evidence-grid");
@@ -374,6 +399,8 @@
       label.append(picker); summary.append(label);
     }
     select(chosen);
+    summary.hidden = [...summary.children].every(child => child.hidden);
+    keepActions(host, actions);
     if (body.classList.contains('thread-history-answer-body')) {
       body._agentModels?.remove();
       const models = node('div', 'agent-inline-models agent-history-models');

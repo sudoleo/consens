@@ -363,6 +363,24 @@
   box-decoration-break: clone;
 }
 
+/* Ein Satz, den Fettdruck, Kursiv oder Links in mehrere Spans teilen, bleibt
+   eine durchgehende Marke: nur die aeusseren Enden tragen Innenabstand und
+   Rundung. Sonst stand an jeder Elementgrenze ein sichtbarer Zusatzabstand
+   vor Satzzeichen und Klammern. */
+.cx-claim.cx-join-start {
+  padding-left: 0;
+  margin-left: 0;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+.cx-claim.cx-join-end {
+  padding-right: 0;
+  margin-right: 0;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
 /* Tastaturfokus auf der Passage: der Ring liegt aussen um die Marke, damit er
    nicht mit ihr verschmilzt. */
 .cx-claim:focus-visible {
