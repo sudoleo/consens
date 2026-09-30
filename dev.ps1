@@ -8,9 +8,11 @@ Run the project's existing local checks. See docs/testing.md for setup.
 .\dev.ps1 check backend -TestPath tests/test_streaming.py
 .EXAMPLE
 .\dev.ps1 check browser
+.EXAMPLE
+.\dev.ps1 update
 #>
 param(
-    [ValidateSet('check', 'help')]
+    [ValidateSet('check', 'update', 'help')]
     [string]$Command = 'help',
     [ValidateSet('frontend', 'backend', 'browser')]
     [string]$Target,
@@ -19,6 +21,8 @@ param(
 
 if ($Command -eq 'help') {
     Write-Host 'Usage: .\dev.ps1 check <frontend|backend|browser> [-TestPath <test file or directory>]'
+    Write-Host '       .\dev.ps1 update'
+    Write-Host 'update:   bring main up to date with origin/main (fast-forward only) and install changed dependencies'
     Write-Host 'frontend: JavaScript tests + build:check (run npm run build to rebuild)'
     Write-Host 'backend:  isolated pytest suite; browser tests excluded'
     Write-Host 'Publisher only (no dependencies): python -E -S -m unittest discover -s tests -p test_publisher_standalone.py -v'
@@ -61,6 +65,74 @@ function Invoke-DevStep([string]$Label, [string]$Executable, [string[]]$Argument
         $script:devExitCode = $LASTEXITCODE
         throw "$Label failed (exit $LASTEXITCODE)."
     }
+}
+
+# Bring the local main checkout up to date with origin/main. Dependencies
+# that changed are installed BEFORE the new code lands, because a running
+# "uvicorn --reload" server restarts as soon as the pulled files change.
+function Update-DevCheckout {
+    $git = Find-DevCommand 'git' 'Install Git and add it to PATH.'
+    $branch = "$(& $git rev-parse --abbrev-ref HEAD)".Trim()
+    if ($LASTEXITCODE -ne 0) { throw 'This folder is not a Git checkout.' }
+    if ($branch -ne 'main') { throw "The checked out branch is $branch. Switch to main first: git checkout main" }
+    $dirty = & $git status --porcelain --untracked-files=no
+    if ($dirty) { throw 'Local changes found. Commit or stash them first (git stash), then run .\dev.ps1 update again.' }
+    Invoke-DevStep 'Fetch origin/main' $git @('fetch', 'origin', 'main')
+    $before = "$(& $git rev-parse HEAD)".Trim()
+    $after = "$(& $git rev-parse FETCH_HEAD)".Trim()
+    if ($before -eq $after) {
+        Write-Host '[dev] Already up to date.'
+        return
+    }
+    & $git merge-base --is-ancestor $before $after
+    if ($LASTEXITCODE -ne 0) { throw 'Local main has commits that are not on origin/main. Push or rebase them first.' }
+    $changed = @(& $git diff --name-only $before $after)
+
+    if ($changed -contains 'requirements.txt') {
+        $python = Join-Path $PSScriptRoot 'venv/Scripts/python.exe'
+        if (-not (Test-Path -LiteralPath $python)) { throw 'Missing venv/Scripts/python.exe. Create it with python -m venv venv; see docs/testing.md.' }
+        $temporary = Join-Path ([IO.Path]::GetTempPath()) 'consens-requirements.txt'
+        [IO.File]::WriteAllLines($temporary, [string[]](& $git show "${after}:requirements.txt"))
+        try {
+            Invoke-DevStep 'Python dependencies (requirements.txt)' $python @('-m', 'pip', 'install', '--disable-pip-version-check', '-q', '-r', $temporary)
+        }
+        finally { Remove-Item -LiteralPath $temporary -ErrorAction SilentlyContinue }
+    }
+
+    Invoke-DevStep 'Fast-forward to origin/main' $git @('merge', '--ff-only', '--quiet', $after)
+
+    if ($changed -contains 'package-lock.json') {
+        if (Test-Path -LiteralPath 'node_modules') {
+            $npm = Find-DevCommand 'npm.cmd' 'Install Node.js including npm.'
+            Invoke-DevStep 'Frontend dependencies (npm ci)' $npm @('ci', '--no-audit', '--no-fund')
+        }
+        else {
+            Write-Host '[dev] Frontend dependencies changed. Run npm ci before running frontend tests or builds.'
+        }
+    }
+    foreach ($file in @('requirements-test.txt', 'requirements-e2e.txt')) {
+        if ($changed -contains $file) { Write-Host "[dev] $file changed. For local tests run: venv\Scripts\python.exe -m pip install -r $file" }
+    }
+    Write-Host "[dev] Updated $($before.Substring(0, 7)) -> $($after.Substring(0, 7)):"
+    & $git log --oneline --no-decorate "$before..$after"
+    Write-Host '[dev] A running "uvicorn --reload" server restarts by itself. Reload the browser with Ctrl+Shift+R.'
+}
+
+if ($Command -eq 'update') {
+    try {
+        Push-Location -LiteralPath $PSScriptRoot
+        $locationPushed = $true
+        Update-DevCheckout
+        Write-Host '[dev] OK: update'
+    }
+    catch {
+        if ($devExitCode -eq 0) { $devExitCode = 1 }
+        [Console]::Error.WriteLine("[dev] ERROR: $($_.Exception.Message)")
+    }
+    finally {
+        if ($locationPushed) { Pop-Location }
+    }
+    exit $devExitCode
 }
 
 try {

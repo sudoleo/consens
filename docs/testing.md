@@ -50,8 +50,16 @@ einem anderen Arbeitsverzeichnis aufgerufen wird. `-TestPath` akzeptiert die
 für weitere Runner-Optionen oder Pytest-Selektoren die direkten Befehle unten
 verwenden. `backend` lehnt explizite `tests/e2e`-Pfade ab.
 
-`.\dev.ps1 help` zeigt die Kurzreferenz. Das Skript installiert keine Pakete
-und verändert keine Builds. Fehlende Voraussetzungen werden mit einem Setup-Hinweis
+`.\dev.ps1 help` zeigt die Kurzreferenz. Die `check`-Befehle installieren keine Pakete
+und verändern keine Builds.
+
+`.\dev.ps1 update` bringt den lokalen `main`-Checkout auf den Stand von `origin/main`:
+nur Fast-Forward, bricht bei lokalen Änderungen, anderem Branch oder lokalen Commits
+mit Hinweis ab. Geänderte `requirements.txt` wird **vor** dem Einspielen des neuen
+Codes in die venv installiert, weil ein laufender `uvicorn --reload` sofort neu lädt;
+geänderte `package-lock.json` führt `npm ci` aus, sofern `node_modules` existiert.
+Geänderte Test-Anforderungen werden nur gemeldet. Ein laufender Server mit `--reload`
+übernimmt den neuen Stand selbst; danach den Browser hart neu laden. Fehlende Voraussetzungen werden mit einem Setup-Hinweis
 gemeldet. Für Browserprüfungen braucht es zusätzlich die unten beschriebenen
 E2E-Abhängigkeiten, Chromium, Firebase CLI und Java 21+ auf `PATH` oder unter
 `JAVA_HOME`. Der erste Emulatorstart kann den von der CLI benötigten Emulator

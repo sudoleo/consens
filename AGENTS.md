@@ -36,6 +36,11 @@
   einer wesentlichen ungeklärten Produktentscheidung den Nutzer einbeziehen.
   Abschluss mit tatsächlicher Validierung und gegebenenfalls PR-/Merge-Status berichten;
   unvollständige Integration ausdrücklich benennen.
+- Nach jedem Merge auf `main` den lokalen Checkout des Nutzers aktualisieren:
+  steht eine Shell auf seinem Rechner zur Verfügung, dort `.\dev.ps1 update`
+  selbst ausführen und das Ergebnis berichten; sonst den Befehl als einzigen
+  nötigen Schritt nennen (installiert geänderte Abhängigkeiten, ein laufender
+  `uvicorn --reload` lädt neu).
 
 ## Codebase
 
