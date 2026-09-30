@@ -82,6 +82,20 @@ def agent_model(*, _metadata=None) -> AgentModel:
 
 
 _CATALOG = agent_model_metadata.BASELINE
+# The answer the user reads has no product length cap: it may use the chat
+# model's own completion limit (bounded here and by its context window).
+ANSWER_OUTPUT_CEILING = 32_768  # about 130 kB of text; the saved turn is limited
+ANSWER_OUTPUT_FALLBACK = 32_768
+
+
+def answer_output_limit(model):
+    """Completion allowance of the chat model's dedicated answer step."""
+    try:
+        metadata = agent_model_metadata.snapshot().get(model.model) or {}
+    except Exception:
+        metadata = {}
+    limit = (metadata.get("top_provider") or {}).get("max_completion_tokens") or ANSWER_OUTPUT_FALLBACK
+    return max(model.max_output_tokens, min(int(limit), ANSWER_OUTPUT_CEILING))
 _EFFORTS = ("none", "minimal", "low", "medium", "high", "xhigh", "max")
 
 

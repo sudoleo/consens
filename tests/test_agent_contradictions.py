@@ -35,7 +35,7 @@ class SourceScript(Script):
                         return
                     index = int(self.step_id.split(":")[-1])
                     if index == 0:
-                        action, args = "compare_models", {"question": "Price?", "context": "Compare published prices.", "reason": "Conflicting prices"}
+                        action, args = "compare_models", {"question": "Price?", "context": "Compare published prices.", "reason": "Conflicting prices", "next_step": "more_work"}
                     elif index == 1 or (script.revise and index == 4):
                         self.text = CONSENSUS + (" Check the applicable date." if index == 4 else "")
                         yield {"type": "delta", "text": self.text}

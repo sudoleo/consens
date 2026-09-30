@@ -55,6 +55,13 @@ def snapshot(db, uid):
             "observed_at": observed_at, "config_revision": config['revision']}
 
 
+def remaining_tokens(db, uid):
+    """Plain read of today's unreserved allowance, without snapshot repairs."""
+    config = agent_budget_config.get_config(db)
+    data = quota_ref(db, uid, period_key(config)).get().to_dict() or {}
+    return _remaining(data, config['daily_token_limit'])
+
+
 def _previous_day_has_estimates(db, uid, day):
     try:
         today = datetime.strptime(day.split('_')[0], "%Y-%m-%d")

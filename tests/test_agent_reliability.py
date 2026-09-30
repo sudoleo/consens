@@ -231,3 +231,25 @@ def test_productive_stream_can_outlive_the_stall_interval(monkeypatch):
     with runtime.bind_analysis_budget(runtime.AnalysisBudget(unlimited=True)):
         list(value.stream(model=AgentModel(), messages=[], api_key="test"))
     assert value.text == "Long answer with progress." and agent_quota.measured_tokens(value.usage) == 14
+
+
+@pytest.mark.parametrize("answer_step", [True, False])
+def test_answer_step_starts_with_a_smaller_allowance_instead_of_queueing(store, monkeypatch, answer_step):
+    from dataclasses import replace
+    loop = chat_loop(store, Completion)
+    ref = agent_quota.quota_ref(store.db, UID, agent_quota.day_key())
+    ref.set({"used": 130000, "reserved": 100000})  # 20k free, 100k held by sibling calls
+    waited = []
+    def wait(*_):
+        waited.append(True)
+        raise RuntimeError("queued")
+    monkeypatch.setattr(loop.condition, "wait", wait)
+    model = replace(loop.model, max_output_tokens=60000)
+    step = loop._step(model, loop.messages, "completion:0", ToolRegistry(), loop.cancellation,
+                      searches_enabled=False, answer_step=answer_step)
+    if answer_step:
+        exhaust(step)
+        assert not waited
+    else:
+        with pytest.raises(RuntimeError, match="queued"):
+            exhaust(step)

@@ -120,7 +120,7 @@ def test_progress_arguments_are_bounded_and_published_only_after_validation(stor
     for index, name in enumerate(("compare_models", "judge_answer", "check_contradictions")):
         args = {"status_update": "x" * 401}
         if name == "compare_models":
-            args.update(question="Q", context="", reason="Compare")
+            args.update(question="Q", context="", reason="Compare", next_step="more_work")
         call = {"id": str(index), "function": {"name": name, "arguments": json.dumps(args)}}
         result = loop._execute(loop.registry, value, loop.cancellation, call)
         assert "error" in json.loads(result["content"])

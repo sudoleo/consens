@@ -172,7 +172,7 @@ def test_account_budget_does_not_allow_more_comparisons_or_revisions_after_revie
             self.usage = measured_usage({"prompt_tokens": 50, "completion_tokens": 20, "cost": .0001}, model)
             if index in {0, 2}:
                 action = "compare_models"
-                args = {"question": f"Check option {index}", "context": "Budget is 100.", "reason": "New perspective"}
+                args = {"question": f"Check option {index}", "context": "Budget is 100.", "reason": "New perspective", "next_step": "more_work"}
             else:
                 self.text = "The first option costs 100." + (f" Revision {index - 2}." if index >= 4 else "")
                 yield {"type": "delta", "text": self.text}

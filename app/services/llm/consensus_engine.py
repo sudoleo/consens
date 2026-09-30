@@ -573,6 +573,9 @@ def query_consensus(
 # ---------------------------------------------------------------------------
 
 MAX_CONSENSUS_SENTENCES = 80
+# Agent answers are not length-capped by the pipeline; their judges index
+# more sentences and Coverage splits them into windows (see COVERAGE_WINDOW).
+CHAT_MAX_CONSENSUS_SENTENCES = 320
 # Kuerzere Fragmente sind Abkuerzungsreste ("Kosten: ca.") oder Stummel
 # ("Kurz."), keine pruefbare Aussage - sie gehoeren an den Satz daneben.
 # Bewusst nach Woertern statt nach Zeichen: "Es wurde 1889 fertiggestellt." ist
@@ -919,6 +922,7 @@ def _build_judge_context(
     consensus_answer: str,
     excluded_models: list = None,
     resolved_question: str = "",
+    sentence_limit: int = MAX_CONSENSUS_SENTENCES,
 ) -> _JudgeContext | None:
     """Anonymisierte Antworten + nummerierte Konsensantwort. None, wenn keine
     Modellantwort vorliegt."""
@@ -943,7 +947,7 @@ def _build_judge_context(
         labels.append(anon_label)
         lines.append(f"- {anon_label}: {answers_by_model[name]}")
 
-    numbered_answer, sentences = _enumerate_consensus_sentences(consensus_answer)
+    numbered_answer, sentences = _enumerate_consensus_sentences(consensus_answer, limit=sentence_limit)
     _, all_sentences = _enumerate_consensus_sentences(consensus_answer, limit=None)
 
     return _JudgeContext(
@@ -1954,6 +1958,8 @@ def _judge_effort(provider: str, api_model: str, judge_tier: str) -> str | None:
 COVERAGE_TEMPERATURE = 0.0
 # Ein Satz pro Konsens-Satz; mehr kann die Zerlegung gar nicht liefern.
 MAX_COVERAGE_CLAIMS = MAX_CONSENSUS_SENTENCES
+# Longer answers are covered in parallel windows of this many sentences.
+COVERAGE_WINDOW = MAX_CONSENSUS_SENTENCES
 
 
 def _coverage_attempts(differences_model: str, api_keys: dict, *, chat_mode: bool = False):
@@ -2037,7 +2043,61 @@ def _run_coverage_judge(context: _JudgeContext, api_keys: dict, differences_mode
     attempts = _coverage_attempts(differences_model, api_keys, chat_mode=chat_mode)
     if not attempts:
         return None, None
+    if len(ids) <= COVERAGE_WINDOW:
+        return _run_coverage_window(context, api_keys, attempts, ids)
+    return _run_coverage_windows(context, api_keys, attempts, ids)
 
+
+def _run_coverage_windows(context, api_keys, attempts, ids):
+    """Long answers: one Coverage call per window of COVERAGE_WINDOW ids.
+
+    Every window sees the whole numbered answer as context but covers only its
+    own binding id list, so each call stays as large as a normal answer. The
+    windows run in parallel; a failed window leaves its ids missing (grey),
+    it never discards the windows that did return."""
+    windows = [ids[start:start + COVERAGE_WINDOW] for start in range(0, len(ids), COVERAGE_WINDOW)]
+    cancellation = current_provider_cancellation()
+    budget = current_analysis_budget()
+    from contextvars import copy_context
+
+    def work(window):
+        with bind_analysis_budget(budget):
+            if cancellation is None:
+                return _run_coverage_window(context, api_keys, attempts, window)
+            with bind_provider_cancellation(cancellation):
+                return _run_coverage_window(context, api_keys, attempts, window)
+
+    with ThreadPoolExecutor(max_workers=len(windows), thread_name_prefix="coverage-window") as pool:
+        futures = [pool.submit(copy_context().run, work, window) for window in windows]
+        results = []
+        for future in futures:
+            try:
+                results.append(future.result())
+            except Exception as exc:
+                logging.warning("Coverage window failed category=%s", safe_exception(exc))
+                results.append((None, None))
+    parsed, metas = {}, []
+    for part, meta in results:
+        if part:
+            parsed.update(part)
+        if meta:
+            metas.append(meta)
+    if not metas:
+        return None, None
+    meta = dict(metas[0])
+    meta.update({
+        "attempts": sum(m.get("attempts", 0) for m in metas),
+        "duration_ms": max(m.get("duration_ms", 0) for m in metas),
+        "sentences": len(ids),
+        "covered": len(parsed),
+        "repaired": sum(m.get("repaired", 0) for m in metas),
+        "missing": len(coverage.missing_sentence_ids(parsed, ids)),
+        "windows": len(windows),
+    })
+    return parsed, meta
+
+
+def _run_coverage_window(context, api_keys, attempts, ids):
     labels = list(context.labels)
     schema = coverage.build_coverage_schema(labels, ids)
     prompt = coverage.build_coverage_prompt(
@@ -2165,7 +2225,7 @@ def _coverage_claims(coverage_result: dict, context: _JudgeContext) -> list:
             claim["sentence_id"] = sentence_id
             claim["anchor_occurrence"] = occurrence
         claims.append(claim)
-        if len(claims) >= MAX_COVERAGE_CLAIMS:
+        if len(claims) >= max(MAX_COVERAGE_CLAIMS, len(sentences)):
             break
     return claims
 
@@ -2273,7 +2333,8 @@ def query_differences(
     Gibt (legacy_text, structured_data | None) zurück.
     """
     context = _build_judge_context(
-        answers, consensus_answer, excluded_models, resolved_question
+        answers, consensus_answer, excluded_models, resolved_question,
+        sentence_limit=CHAT_MAX_CONSENSUS_SENTENCES if chat_mode else MAX_CONSENSUS_SENTENCES,
     )
     if context is None:
         return "Error in comparison: no model responses available.", None

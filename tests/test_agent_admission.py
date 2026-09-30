@@ -233,7 +233,7 @@ def test_server_search_final_answer_resumes_consensus_without_repeating_search(s
                 assert 'https://example.org/current' in messages[-1]['content']
                 self.usage = measured_usage({'prompt_tokens': 100, 'completion_tokens': 20}, model)
                 self.tool_calls = [{'id': 'compare', 'type': 'function', 'function': {'name': 'compare_models',
-                    'arguments': json.dumps({'question': 'Evaluate option', 'context': 'Research findings. https://example.org/current', 'reason': 'Answer the question'})}}]
+                    'arguments': json.dumps({'question': 'Evaluate option', 'context': 'Research findings. https://example.org/current', 'reason': 'Answer the question', 'next_step': 'more_work'})}}]
                 self.finish_reason = 'tool_calls'
                 return
             yield from super().stream(model=model, messages=messages, **kwargs)

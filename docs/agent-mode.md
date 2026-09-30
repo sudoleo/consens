@@ -92,6 +92,48 @@ Chatmodell erhält Antworten, Quellen, Status und Modellmetadaten und schreibt
 die Synthese selbst. Auch bei einem Prüfwunsch wird zuerst eine unabhängige
 Vergleichsgrundlage eingeholt.
 
+### Tiefe, Parallelität und Quorum
+
+`compare_models` hat zwei Entscheidungsfelder. `depth` (Standard `full`) steuert
+die Längenvorgabe der Vergleichsmodelle: `quick` für kurze Sachfragen, kleine
+Folgefragen, Umformulierungen und Alltagsrat (etwa 1500 Zeichen, falls die Aufgabe
+nicht mehr braucht), `full` für Analysen, Entscheidungen, Gesundheit, Recht, Geld
+und ausführliche Ausgaben (keine Längenvorgabe). Alle gewählten Vergleichsmodelle
+antworten in beiden Stufen; die Auswahl im Compare-Picker wird nicht still verkleinert.
+`next_step` ist Pflicht: `answer` beim letzten Vergleich lässt den Server direkt
+Synthese und Prüfung ausführen, ohne weitere Orchestrierungsrunde, die nur
+`judge_answer` aufrufen würde. `more_work` gilt, wenn noch ein Vergleich, ein
+Dokument oder eine Aktionsvorbereitung folgt; danach ruft das Chatmodell wie
+bisher `judge_answer` auf. Der direkte Weg gilt nur, wenn der letzte Toolaufruf
+ein angenommener Vergleich war, alle Worker geprüft sind und für die Nachricht
+kein Google-Zugriff freigegeben ist.
+
+Alle Vergleichsmodelle laufen gleichzeitig (eigener Semaphore je Vergleich,
+unabhängig von `max_parallel` der Worker-Delegation); Differences und Coverage
+haben eigene Plätze. Damit gleichzeitige Reservierungen sich nicht gegenseitig
+blockieren, erhält jede Vergleichsantwort als Output-Grenze einen fairen Anteil
+(60 % des freien Tageskontingents geteilt durch die Modellanzahl), höchstens die
+Completion-Grenze des Modells. Weil der gespeicherte Review (600 kB) alle
+Antworttexte enthält, teilen sich die Vergleichsantworten eines Turns zusätzlich
+300000 Zeichen (etwa vier Zeichen je Token); die Grenze fällt nie unter
+`MAX_TOKENS`. Das Chatmodell erhält für seine Planung je Antwort höchstens
+`result_chars` Zeichen (`text_shortened_for_routing`), die Synthese immer den
+vollständigen Text. Vergleichsantworten
+und der Antwortschritt starten bei Konkurrenz mit einer kleineren, noch
+passenden Grenze (mindestens `MAX_TOKENS`), statt auf das Settlement anderer
+Aufrufe zu warten.
+
+Die Synthese wartet nicht auf das langsamste Modell. Sobald das Quorum vorliegt
+(`full`: alle bis auf eines, `quick`: die Hälfte, jeweils mindestens zwei),
+bekommen Nachzügler noch das 1,5-fache (`quick`: 1,25-fache) der Zeit bis zum
+Quorum, mindestens zwei Sekunden. Danach beginnt die Synthese mit den vorhandenen
+Antworten (`synthesis_providers`). Laufende Modelle stehen bis dahin als
+`pending_models` im Review. Eine Antwort, die während der Synthese eintrifft,
+wird mit `late: true` markiert: Sie gehört zur Prüfbasis von Differences und
+Coverage, nie zum Antworttext. Wer beim Start der Judges noch schreibt, wird
+gestoppt und als fehlend mit `late_cutoff` geführt; die Prüfung nutzt die
+übrigen Antworten. Der Antworttext bleibt in jedem Fall unverändert.
+
 ## Antwortversionen und Prüfungen
 
 Nach den Vergleichen leitet `judge_answer` in die Antwortphase über. Vor seiner
@@ -329,10 +371,14 @@ Technische Grenzen schützen Providerprotokoll, Speicher und Parallelität:
 
 | Grenze | Standard |
 |---|---|
-| Parallele Unteraufrufe | 2 |
+| Parallele Worker-Unteraufrufe | 2 (`max_parallel`, nur Delegation) |
+| Parallele Vergleichsantworten | alle gewählten Modelle eines Vergleichs |
+| Parallele Judge-Aufrufe | 6 |
 | Antwortmodelle pro Vergleich | vorhandene Auswahl, mindestens 2 |
-| Vergleichsantwort | `MAX_TOKENS` wie im Consensus-Modus (4096 Output-Tokens); 6000 Zeichen als Promptvorgabe. Eine am Output-Limit abgeschnittene Antwort bleibt als Evidenz erhalten (`answers[].truncated`); ohne Text gilt sie als `output_limit` |
-| Synthese | AGENT_MAX_OUTPUT_TOKENS, standardmäßig 4096 |
+| Vergleichsantwort | Completion-Grenze des Modells (höchstens 65536), begrenzt durch fairen Budgetanteil und Reviewgröße; Längenvorgabe nur bei `depth=quick`. Eine am Output-Limit abgeschnittene Antwort bleibt als Evidenz erhalten (`answers[].truncated`); ohne Text gilt sie als `output_limit` |
+| Synthese | Completion-Grenze des Chatmodells (höchstens 32768), begrenzt durch Kontextfenster und Restbudget |
+| Orchestrierungsschritte | AGENT_MAX_OUTPUT_TOKENS, standardmäßig 4096 |
+| Geprüfte Antwortsätze | 320; Coverage prüft in parallelen Fenstern zu 80 Sätzen |
 | Kontext | Modellfensterprüfung; initialer Chatverlauf maximal 120000 Zeichen |
 | Review-Snapshot | maximal 600 kB |
 | Gleichzeitige Runs je UID | 2 |

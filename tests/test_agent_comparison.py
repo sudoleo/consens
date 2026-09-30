@@ -1,6 +1,7 @@
 """Paid-step accounting and exact-version review through the real shared judges."""
 from dataclasses import replace
 import json
+import time
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
@@ -16,8 +17,10 @@ from test_agent_runs import UID, AUTH, api, pending, receipt, store
 
 
 class Script:
-    def __init__(self, *, compares=1, revise=False, missing=False, fail_coverage=False, fail_model=False, length_model=None):
+    def __init__(self, *, compares=1, revise=False, missing=False, fail_coverage=False, fail_model=False, length_model=None,
+                 direct=False, depth=None):
         self.length_model = length_model
+        self.direct, self.depth = direct, depth
         self.compares, self.revise, self.missing = compares, revise, missing
         self.fail_coverage, self.fail_model = fail_coverage, fail_model
         self.calls, self.prompts = [], []
@@ -40,7 +43,9 @@ class Script:
                         if script.compares > 1:
                             self.text = f"I will compare perspective {index + 1}."
                             yield {"type": "delta", "text": self.text}
-                        args = {"question": f"Evaluate option {index + 1}", "context": "Budget is 100. Source: https://example.org/report", "reason": "Compare trade-offs"}
+                        args = {"question": f"Evaluate option {index + 1}", "context": "Budget is 100. Source: https://example.org/report", "reason": "Compare trade-offs",
+                                "next_step": "answer" if script.direct and index == script.compares - 1 else "more_work",
+                                **({"depth": script.depth} if script.depth else {})}
                         action = "compare_models"
                     else:
                         self.text = "The first option costs 100."
@@ -78,7 +83,7 @@ class Script:
         return Completion()
 
 
-def make_loop(store, script, *, check_sources=False, source_limits=None, messages=None, delegation=False):
+def make_loop(store, script, *, check_sources=False, source_limits=None, messages=None, delegation=False, models=None):
     chat, turn = pending(store)
     config = {**defaults(), "enabled": delegation, "max_searches": 0, "context_chars": 120_000}
     loop = DelegationLoop(store=store, uid=UID, chat_id=chat, turn_id=turn["id"],
@@ -86,7 +91,7 @@ def make_loop(store, script, *, check_sources=False, source_limits=None, message
         api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy.from_config({**config, "enabled": True}),
         delegation_config=config, completion_factory=script.factory,
         check_sources=check_sources, source_limits=source_limits,
-        comparison_models=comparison_selection({"anthropic": "claude-haiku-4-5", "openai": "gpt-5.4-mini"}))
+        comparison_models=comparison_selection(models or {"anthropic": "claude-haiku-4-5", "openai": "gpt-5.4-mini"}))
     script.loop = loop
     return loop
 
@@ -139,7 +144,8 @@ def test_fixed_answer_cannot_be_reopened_by_false_finalize_or_late_comparison(st
     result = loop.comparison.judge(JudgeArgs(finalize=False), cancellation=loop.cancellation)
     assert result['finalized'] is True
     with pytest.raises(ValueError, match='synthesis is already fixed'):
-        loop.comparison.compare(CompareArgs(question='Compare again?', context='', reason='Retry'), cancellation=loop.cancellation)
+        loop.comparison.compare(CompareArgs(question='Compare again?', context='', reason='Retry', next_step='answer'),
+                                cancellation=loop.cancellation)
     assert json.dumps(loop.comparison.snapshot(), sort_keys=True) == original
     assert review_is_bound(saved['agent_review'], saved['consensus'])
     first_answer = next(i for i, e in enumerate(events) if e['type'] == 'delta')
@@ -520,11 +526,16 @@ def test_transient_settlement_failure_never_repeats_model_or_leaves_run_pending(
     assert saved["agent_usage"]["input_tokens"] + saved["agent_usage"]["output_tokens"] == len(script.calls) * 70
 
 
-def test_comparison_models_get_the_consensus_answer_allowance():
+def test_comparison_models_get_their_own_completion_limit():
     from app.core import config as cfg
-    models = comparison_selection({"anthropic": "claude-haiku-4-5", "openai": "gpt-5.4-mini"})
-    assert all(m.max_output_tokens > 2048 for m in models.values())
-    assert all(m.max_output_tokens <= cfg.MAX_TOKENS for m in models.values())
+    from app.services.agent_comparison import COMPARISON_OUTPUT_CEILING
+    from app.services.llm.agent_client import _CATALOG
+    chosen = {"anthropic": "claude-haiku-4-5", "openai": "gpt-5.4-mini"}
+    models = comparison_selection(chosen)
+    for provider, model in models.items():
+        catalog = _CATALOG["models"][model.model]["top_provider"].get("max_completion_tokens") or COMPARISON_OUTPUT_CEILING
+        assert model.max_output_tokens == min(COMPARISON_OUTPUT_CEILING, catalog)
+        assert model.max_output_tokens > cfg.MAX_TOKENS
 
 
 def test_answer_cut_off_at_the_output_limit_is_kept_as_marked_evidence(store):
@@ -556,3 +567,189 @@ def test_output_limit_without_text_names_the_cause_without_retry_advice(store, m
     assert [f["failure"]["code"] for f in failed] == ["output_limit"]
     assert notes == ["The model used its whole output allowance before it finished an answer. "
                      "The comparison uses the other answers."]
+
+
+THREE = {"anthropic": "claude-haiku-4-5", "openai": "gpt-5.4-mini", "gemini": "gemini-3.5-flash-lite"}
+
+
+def comparison_texts(messages):
+    return json.dumps(messages)
+
+
+def test_last_comparison_goes_straight_to_the_checked_answer(store):
+    script = Script(direct=True)
+    loop = make_loop(store, script)
+    list(loop.run())
+    saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
+    assert saved["status"] == "completed"
+    assert saved["agent_review"]["status"] == "succeeded"
+    assert review_is_bound(saved["agent_review"], saved["consensus"])
+    # compare_models, then the tool-free answer step: no routing round that
+    # would only have emitted judge_answer.
+    assert [step for step, _ in script.calls if step.startswith("completion:")] == ["completion:0", "completion:1"]
+
+
+def test_comparison_models_answer_at_the_same_time(store):
+    import threading
+    barrier = threading.Barrier(3, timeout=5)
+
+    class Parallel(Script):
+        def factory(self):
+            base = type(super().factory())
+            script = self
+            class Completion(base):
+                def stream(self, *, model, messages, **kwargs):
+                    if not self.step_id.startswith("completion:") and not model.request_config.get("response_format"):
+                        barrier.wait()  # breaks unless all three answer models run at once
+                    yield from super().stream(model=model, messages=messages, **kwargs)
+            return Completion()
+
+    script = Parallel(direct=True)
+    loop = make_loop(store, script, models=THREE)
+    assert loop.policy.max_parallel == 2
+    list(loop.run())
+    review = store.get_turn(UID, loop.chat_id, loop.turn_id)["agent_review"]
+    assert [len(c["answers"]) for c in review["comparisons"]] == [3]
+    assert review["status"] == "succeeded"
+
+
+class Straggler(Script):
+    """The Gemini answer only arrives once `release` is set (or never)."""
+
+    def __init__(self, *, release_on_answer, **kwargs):
+        import threading
+        super().__init__(direct=True, **kwargs)
+        self.release = threading.Event()
+        self.release_on_answer = release_on_answer
+        self.synthesis_evidence = None
+
+    def factory(self):
+        from app.services.llm.provider_runtime import current_provider_cancellation
+        base = type(super().factory())
+        script = self
+        class Completion(base):
+            def stream(self, *, model, messages, **kwargs):
+                if self.step_id.startswith("completion:") and not kwargs["tools"]:
+                    script.synthesis_evidence = json.dumps(messages)
+                    if script.release_on_answer:
+                        script.release.set()
+                        comparison = script.loop.comparison
+                        cid = comparison.comparisons[-1]["id"]
+                        for _ in range(200):
+                            if "gemini" in comparison._raw[cid]:
+                                break
+                            time.sleep(.02)
+                elif not self.step_id.startswith("completion:") and model.model.startswith("google") \
+                        and not model.request_config.get("response_format"):
+                    cancellation = current_provider_cancellation()
+                    while not script.release.wait(.02):
+                        cancellation.raise_if_cancelled()
+                    self.text, self.finish_reason = "Gemini: the second option is cheaper.", "stop"
+                    self.usage = measured_usage({"prompt_tokens": 50, "completion_tokens": 20}, model)
+                    yield {"type": "delta", "text": self.text}
+                    return
+                yield from super().stream(model=model, messages=messages, **kwargs)
+        return Completion()
+
+
+@pytest.fixture
+def quick_quorum(monkeypatch):
+    from app.services import agent_comparison
+    monkeypatch.setattr(agent_comparison, "MIN_GRACE_SECONDS", .05)
+    monkeypatch.setattr(agent_comparison, "QUORUM_GRACE", {"quick": 1.0, "full": 1.0})
+
+
+def test_answer_starts_at_quorum_and_a_late_answer_still_feeds_the_check(store, quick_quorum):
+    script = Straggler(release_on_answer=True)
+    loop = make_loop(store, script, models=THREE)
+    list(loop.run())
+    saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
+    review = saved["agent_review"]
+    comparison = review["comparisons"][0]
+    assert "second option is cheaper" not in script.synthesis_evidence
+    assert sorted(comparison["synthesis_providers"]) == ["anthropic", "openai"]
+    late = [a["provider"] for a in comparison["answers"] if a.get("late")]
+    assert late == ["gemini"] and len(comparison["answers"]) == 3
+    assert comparison["status"] == "succeeded" and not comparison["failed_models"]
+    assert review["status"] == "succeeded" and review_is_bound(review, saved["consensus"])
+    assert "pending_models" not in comparison
+
+
+def test_a_model_still_writing_at_the_check_is_stopped_and_reported(store, quick_quorum):
+    script = Straggler(release_on_answer=False)
+    loop = make_loop(store, script, models=THREE)
+    list(loop.run())
+    saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
+    review = saved["agent_review"]
+    comparison = review["comparisons"][0]
+    assert saved["status"] == "completed"
+    assert [m["failure"]["code"] for m in comparison["failed_models"]] == ["late_cutoff"]
+    assert len(comparison["answers"]) == 2 and comparison["status"] == "partial"
+    assert review["status"] == "partial" and review_is_bound(review, saved["consensus"])
+    assert {"code": "models_unavailable", "count": 1} in review["checks"][0]["issues"]
+    assert not any(t.is_alive() for t, _ in loop.comparison._running[comparison["id"]].values())
+
+
+def test_quorum_sizes():
+    from app.services.agent_comparison import quorum_size
+    assert [quorum_size(n, "full") for n in (2, 3, 4, 6)] == [2, 2, 3, 5]
+    assert [quorum_size(n, "quick") for n in (2, 3, 4, 6)] == [2, 2, 2, 3]
+
+
+@pytest.mark.parametrize("depth,expected", [("quick", "Answer briefly"), ("full", "as thoroughly as the task needs"),
+                                             (None, "as thoroughly as the task needs")])
+def test_depth_sets_the_answer_models_length_guidance(store, depth, expected):
+    script = Script(direct=True, depth=depth)
+    loop = make_loop(store, script)
+    list(loop.run())
+    assert script.prompts and all(expected in prompt[0]["content"] for prompt in script.prompts)
+    assert "6000 characters" not in json.dumps(script.prompts)
+    review = store.get_turn(UID, loop.chat_id, loop.turn_id)["agent_review"]
+    assert review["comparisons"][0]["depth"] == (depth or "full")
+
+
+def test_next_step_is_a_required_decision():
+    from pydantic import ValidationError
+    from app.services.agent_comparison import CompareArgs
+    with pytest.raises(ValidationError):
+        CompareArgs(question="Q?", context="", reason="R")
+
+
+def test_a_failed_run_does_not_leave_a_model_shown_as_still_answering(store, quick_quorum):
+    class Failing(Straggler):
+        def factory(self):
+            base = type(super().factory())
+            class Completion(base):
+                def stream(self, *, model, messages, **kwargs):
+                    if self.step_id.startswith("completion:") and not kwargs["tools"]:
+                        raise RuntimeError("answer step failed")
+                    yield from super().stream(model=model, messages=messages, **kwargs)
+            return Completion()
+
+    script = Failing(release_on_answer=False)
+    loop = make_loop(store, script, models=THREE)
+    with pytest.raises(Exception):
+        list(loop.run())
+    comparison = store.get_turn(UID, loop.chat_id, loop.turn_id)["agent_review"]["comparisons"][0]
+    assert "pending_models" not in comparison
+    assert [m["model"] for m in comparison["failed_models"]] == ["google/gemini-3.5-flash-lite"]
+    assert not any(t.is_alive() for t, _ in loop.comparison._running[comparison["id"]].values())
+
+
+def test_answer_allowance_respects_the_saved_review_size(store):
+    from app.services.agent_comparison import REVIEW_ANSWER_CHARS, CHARS_PER_TOKEN
+    loop = make_loop(store, Script())
+    share = loop.comparison._output_share(6)
+    assert share <= REVIEW_ANSWER_CHARS // 6 // CHARS_PER_TOKEN
+
+
+def test_only_an_accepted_last_comparison_skips_the_routing_round(store):
+    from app.services.llm.agent_client import AgentCompletion
+    loop = make_loop(store, Script())
+    loop.comparison.ready_to_answer = True
+    value = AgentCompletion()
+    value.tool_calls = [{"id": "1", "type": "function", "function": {"name": "compare_models", "arguments": "{}"}}]
+    assert loop._answer_ready(value, True)
+    assert not loop._answer_ready(value, False)
+    loop.google_actions = True
+    assert not loop._answer_ready(value, True)

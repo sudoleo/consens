@@ -8,7 +8,8 @@
   // provider's own error text never reaches the page (see provider_failure).
   const reasons = { provider_rate_limited: 'the provider was busy', provider_timeout: 'the provider stopped responding',
     provider_unavailable: 'the model was unavailable at its provider', provider_access: 'the provider declined the request',
-    output_limit: 'it used its whole output allowance before finishing' };
+    output_limit: 'it used its whole output allowance before finishing',
+    late_cutoff: 'it was still writing when the answer was checked' };
   function failureReason(failure) {
     return reasons[failure?.code] || 'no complete answer arrived';
   }
@@ -125,6 +126,8 @@
       const names = answers.map(a => a.model?.label || a.provider_label || a.provider).filter(Boolean);
       if (names.length) card.append(node('p', 'agent-activity-models', `Models: ${names.join(', ')}`));
       if (missing.length) card.append(node('p', '', `Did not respond: ${missing.map(m => m.label || m.model).join(', ')}`));
+      const pending = comparison.pending_models || [];
+      if (pending.length) card.append(node('p', '', `Still answering: ${pending.map(m => m.label || m.model).join(', ')}`));
       const check = currentCheck(review, comparison, raw);
       const issues = checkIssues(comparison, check);
       const state = check?.status || (['running', 'failed', 'cancelled', 'missing'].includes(review.status) ? review.status : 'required');
@@ -317,6 +320,9 @@
           const unavailable = comparison.failed_models || [];
           panel.append(node('p', 'agent-review-note', `${answers.length} of ${answers.length + unavailable.length} models returned complete answers.`));
           for (const model of unavailable) panel.append(node('p', 'agent-review-note', `${model.label}: no answer, ${failureReason(model.failure)}.`));
+          // Arrived after the answer was written: part of the check, not of the text.
+          const late = answers.filter(a => a.late).map(a => a.model?.label || a.provider_label || a.provider);
+          if (late.length) panel.append(node('p', 'agent-review-note', `${late.join(', ')} answered after the answer was written. ${late.length === 1 ? 'Its answer is' : 'Their answers are'} part of the check, not of the answer text.`));
           for (const issue of localIssues.filter(i => i.code !== 'models_unavailable')) panel.append(node('p', 'agent-review-note', issueText(issue) + '.'));
           if (localIssues.length && localIssues.every(i => i.code === 'models_unavailable')) {
             panel.append(node('p', 'agent-review-note', 'The differences and coverage checks completed for the available model answers.'));

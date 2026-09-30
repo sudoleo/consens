@@ -436,3 +436,65 @@ class CoverageIntegrationTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CoverageWindowTests(unittest.TestCase):
+    """Agent answers have no length cap: long ones are covered in windows."""
+
+    def long_context(self, count):
+        from app.services.llm.consensus_engine import CHAT_MAX_CONSENSUS_SENTENCES
+        consensus = " ".join(f"Fact number {n} holds." for n in range(1, count + 1))
+        return _build_judge_context(
+            {"openai": "answer one", "mistral": "answer two"}, consensus, [], "",
+            sentence_limit=CHAT_MAX_CONSENSUS_SENTENCES,
+        )
+
+    def test_long_answer_is_covered_in_parallel_windows(self):
+        from app.services.llm.consensus_engine import COVERAGE_WINDOW
+        import threading
+        context = self.long_context(200)
+        self.assertEqual(len(context.sentences), 200)
+        self.assertEqual(context.unindexed_sentences, 0)
+        seen, lock = [], threading.Lock()
+
+        def engine(provider, api_model, model_ref, api_keys, **kwargs):
+            ids = kwargs["json_schema"]["properties"]["sentences"]["items"]["properties"]["id"]["enum"]
+            with lock:
+                seen.append(list(ids))
+            return json.dumps({"sentences": [{
+                "id": key, "classification": "claim",
+                "models": {label: "supports" for label in context.labels}, "counter_quotes": [],
+            } for key in ids]})
+
+        with mock.patch("app.services.llm.consensus_engine._call_engine_text", side_effect=engine):
+            result, meta = _run_coverage_judge(context, ALL_KEYS, "OpenAI")
+        self.assertEqual(len(seen), 3)
+        self.assertTrue(all(len(ids) <= COVERAGE_WINDOW for ids in seen))
+        self.assertEqual(sorted(sum(seen, []), key=lambda k: int(k[1:])), coverage.sentence_ids(context.sentences))
+        self.assertEqual(len(result), 200)
+        self.assertEqual((meta["sentences"], meta["covered"], meta["missing"], meta["windows"]), (200, 200, 0, 3))
+        self.assertEqual(len(_coverage_claims(result, context)), 200)
+
+    def test_a_failed_window_leaves_only_its_sentences_unchecked(self):
+        context = self.long_context(120)
+
+        def engine(provider, api_model, model_ref, api_keys, **kwargs):
+            ids = kwargs["json_schema"]["properties"]["sentences"]["items"]["properties"]["id"]["enum"]
+            if "s1" in ids:
+                raise RuntimeError("503")
+            return json.dumps({"sentences": [{
+                "id": key, "classification": "claim",
+                "models": {label: "supports" for label in context.labels}, "counter_quotes": [],
+            } for key in ids]})
+
+        with mock.patch("app.services.llm.consensus_engine._call_engine_text", side_effect=engine):
+            result, meta = _run_coverage_judge(context, ALL_KEYS, "OpenAI")
+        self.assertEqual(len(result), 40)
+        self.assertEqual((meta["covered"], meta["missing"]), (40, 80))
+
+    def test_consensus_runs_keep_their_sentence_index(self):
+        from app.services.llm.consensus_engine import MAX_CONSENSUS_SENTENCES
+        consensus = " ".join(f"Fact number {n} holds." for n in range(1, 101))
+        context = _build_judge_context({"openai": "a", "mistral": "b"}, consensus, [], "")
+        self.assertEqual(len(context.sentences), MAX_CONSENSUS_SENTENCES)
+        self.assertEqual(context.unindexed_sentences, 100 - MAX_CONSENSUS_SENTENCES)

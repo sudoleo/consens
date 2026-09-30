@@ -35,7 +35,7 @@ def test_comparisons_in_a_batch_finish_before_its_judge_and_synthesis(store, bef
                 self.usage = measured_usage({"prompt_tokens": 50, "completion_tokens": 20}, model)
                 self.text = "INTERNAL_PREVIEW_DO_NOT_PUBLISH"
                 yield {"type": "delta", "text": self.text}
-                self.tool_calls = [tool("compare_models", {"question": "Additional constraint", "context": "Budget is 100", "reason": "Complete evidence"}, "additional"),
+                self.tool_calls = [tool("compare_models", {"question": "Additional constraint", "context": "Budget is 100", "reason": "Complete evidence", "next_step": "more_work"}, "additional"),
                                    tool("judge_answer", {}, "review")]
                 self.finish_reason = "tool_calls"
                 return

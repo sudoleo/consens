@@ -1967,19 +1967,32 @@ sehen dieselbe isolierte Aufgabe, keinen Chatverlauf und keine Antworten anderer
 Vergleichsmodelle. Der Produktprompt verpflichtet das Chatmodell ausdrücklich,
 Bezüge wie „davon“ aufzulösen und relevante frühere Anforderungen in Frage/Kontext
 zu übernehmen; unabhängige Fragen brauchen keinen unnötigen Gesprächsrückblick.
-Der vorhandene fan_out_provider_answers übernimmt Fan-out, Quellen-Normalisierung
-und Teilausfälle. Vergleichsmodelle erhalten keine Delegations-/Vergleichstools.
-Recherche und benötigte Quellen werden vom Orchestrator bereitgestellt;
-Vergleichsantworten erhalten standardmäßig 2.048 Output-Tokens und eine
-Promptvorgabe von 6.000 Zeichen. Vollständige Antworten oberhalb dieser
-Zeichenvorgabe bleiben erhalten; technische Token-, Kontext- und Snapshotgrenzen
-gelten weiter. Leere, abgebrochene oder Tool-Antworten gelten als fehlgeschlagen.
+`ComparisonTools.compare` startet alle Vergleichsmodelle gleichzeitig in eigenen
+Threads (`compare_slots`, je Aufruf eine `ComparisonCancellation`) und wartet nur
+bis Quorum plus Nachfrist (`quorum_size`, `QUORUM_GRACE`, `MIN_GRACE_SECONDS`).
+`_rebuild` normalisiert Quellen wie zuvor `fan_out_provider_answers` (das der
+Consensus-Modus unverändert nutzt) und führt `pending_models`, `failed_models` und
+`late`. `freeze_for_synthesis` legt `synthesis_providers` fest,
+`finish_comparisons` stoppt vor den Judges verbliebene Nachzügler (`late_cutoff`)
+und fixiert `basis_hash`; `close` beendet sie am Laufende. Vergleichsmodelle
+erhalten keine Delegations-/Vergleichstools. Recherche und benötigte Quellen werden
+vom Orchestrator bereitgestellt; die Output-Grenze ist die Completion-Grenze des
+Modells, begrenzt durch `_output_share` (fairer Anteil am freien Tageskontingent
+über `agent_quota.remaining_tokens`). `depth=quick` gibt eine kurze Längenvorgabe,
+`full` keine. Technische Token-, Kontext- und Snapshotgrenzen gelten weiter. Leere, abgebrochene oder Tool-Antworten gelten als fehlgeschlagen.
 Strukturierte Transportfehler werden am Fehlerfeld erkannt, nicht am Wort
 „Error“ im Antworttext; nur Legacy-Stringadapter behalten ihre Fehlerkonvention.
 Mindestens zwei vollständige Antworten sind eine brauchbare Prüfgrundlage.
 
 Nach den Vergleichen fordert das Chatmodell mit `judge_answer` die Antwortphase
-an. `DelegationLoop._write_synthesis` schiebt unmittelbar vor diesem Tool einen
+an; nach `compare_models(next_step="answer")` erkennt `DelegationLoop._answer_ready`
+das Ende der Vergleiche und springt ohne weitere Orchestrierungsrunde direkt in
+Schreibschritt und `_finish_review`. Der Schreibschritt nutzt
+`answer_output_limit` (Completion-Grenze des Chatmodells). `_admit_chat_step`
+kürzt für Vergleichsantworten und Antwortschritt bei Konkurrenz die Output-Grenze
+(`clamp_floor`), statt zu warten. Die Judges indexieren im Chat bis zu
+`CHAT_MAX_CONSENSUS_SENTENCES` Sätze; `_run_coverage_windows` teilt Coverage in
+parallele Fenster (`COVERAGE_WINDOW`). `DelegationLoop._write_synthesis` schiebt unmittelbar vor diesem Tool einen
 eigenen Schreibschritt desselben Chatmodells ein: leere Tool-Registry, keine
 native Suche, `allow_tool_calls=false` und ein eigener Antwortkontext
 verlangen die vollständige Antwort. Dieser Schritt wird normal als nächster
