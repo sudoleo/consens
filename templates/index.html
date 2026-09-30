@@ -586,6 +586,11 @@
         <p id="composerModeDescription" class="composer-mode-description">Automatic consensus after the models answer.</p>
         <p id="composerComparisonStatus" class="composer-comparison-status" role="status" aria-live="polite" hidden></p>
       </div>
+      <div id="agentReviewNotice" class="agent-composer-notice agent-review-notice" hidden>
+        <span class="agent-review-notice-dot" aria-hidden="true"></span>
+        <span id="agentReviewMessage" role="status" aria-live="polite"></span>
+        <button id="agentReviewAction" type="button">Review</button>
+      </div>
       <div id="agentComposerNotice" class="agent-composer-notice" hidden>
         <span id="agentComposerMessage" role="status" aria-live="polite"></span>
         <button id="agentComposerAction" type="button" hidden></button>
@@ -726,7 +731,9 @@
     <section id="agentAnswer" class="agent-answer" aria-label="Agent answer" hidden>
         <div id="agentAnswerActivity"></div>
         <div id="agentAnswerBody" class="consensus-answer-body markdown-content"></div>
+        <div id="agentAnswerResources"></div>
         <p id="agentAnswerError" role="alert" hidden></p>
+        <div id="agentAnswerErrorActions" class="agent-answer-error-actions" hidden></div>
         <button id="agentRecover" type="button" class="thread-ask-more" hidden>Recover saved answer</button>
     </section>
     <div class="response-section" inert aria-hidden="true">

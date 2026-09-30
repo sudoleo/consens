@@ -653,6 +653,18 @@
     target.focus({ preventScroll: true });
     return true;
   }
+  // Shortcuts named by a composer notice or an answer error. Google actions
+  // belong to agent-google.js (Package A) and stay optional.
+  function runNoticeAction(action) {
+    if (action === 'compare') App.openModelPicker?.(document.getElementById('consensusModelDropdown'));
+    else if (action === 'choose-model') {
+      App.composer?.expand?.();
+      App.openModelPicker?.(document.getElementById('agentModelDropdown'));
+    } else if (action === 'google-consent') App.agentGoogle?.consent?.(true);
+    else if (action === 'google-open') App.agentGoogle?.open?.();
+    else if (action === 'reload') { catalogStatus = 'idle'; render(); }
+    window.updateQuestionInputAccess?.();
+  }
   function syncComposer() {
     const agent = selectedMode() === 'agent';
     const running = registry.isExecuting(registry.visible()?.runId);
@@ -948,9 +960,15 @@
     document.getElementById('agentComposerAction')?.addEventListener('click', event => {
       // The shared picker's outside-click handler must not close this shortcut's menu.
       event.stopPropagation();
-      if (event.currentTarget.dataset.action === 'compare') App.openModelPicker?.(document.getElementById('consensusModelDropdown'));
-      else { catalogStatus = 'idle'; render(); }
+      runNoticeAction(event.currentTarget.dataset.action);
     });
+    document.getElementById('agentAnswerErrorActions')?.addEventListener('click', event => {
+      const button = event.target.closest('button[data-action]');
+      if (!button) return;
+      event.stopPropagation();
+      runNoticeAction(button.dataset.action);
+    });
+    document.getElementById('agentReviewAction')?.addEventListener('click', () => revealPendingReview());
     document.getElementById('questionInput')?.addEventListener('input', () => {
       if (selectedMode() === 'agent') window.updateQuestionInputAccess?.();
     });
