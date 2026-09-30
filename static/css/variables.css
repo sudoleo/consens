@@ -138,6 +138,8 @@
 
 /* Colors - Dark Mode */
 .dark-mode {
+  /* Native controls (checkboxes, selects, scrollbars) follow the theme. */
+  color-scheme: dark;
   /* Only the five surface values + the traffic light flip; everything
      downstream is already expressed in terms of them. */
   --ground: #191a1c;

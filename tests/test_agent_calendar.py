@@ -30,6 +30,11 @@ def event(**overrides):
         "attendees":["reviewer@example.org"]}, **overrides}
 
 
+def writes(google):
+    # Preparation may read (calendar name, current event); it never writes.
+    return [call for call in google.wire.calls if call[0]!="GET"]
+
+
 def prepare(tool, value=None):
     return tool.prepare(PrepareCalendar.model_validate(value or event()),cancellation=ProviderCancellation())["action"]
 
@@ -37,26 +42,26 @@ def prepare(tool, value=None):
 def test_prepare_does_not_write_and_confirmation_is_exact_once(calendar):
     tool,actions,google,chat=calendar
     prepared=prepare(tool)
-    assert not google.wire.calls and prepared["status"]=="pending"
+    assert writes(google)==[] and prepared["status"]=="pending"
     assert "reviewer@example.org" in prepared["preview"]["attendees"]
     repeated=prepare(tool)
     assert repeated["id"]==prepared["id"]
     with pytest.raises(GoogleError,match="changed"):
         actions.confirm("owner",chat,prepared["id"],"f"*64)
-    assert not google.wire.calls
+    assert writes(google)==[]
     google.wire.handler=lambda method,url,kwargs:{"id":kwargs["json"]["id"],"htmlLink":"https://calendar.google.com/event"}
     with ThreadPoolExecutor(max_workers=2) as pool:
         results=list(pool.map(lambda _:actions.confirm("owner",chat,prepared["id"],prepared["hash"]),range(2)))
     assert any(result["status"]=="succeeded" for result in results)
-    assert len(google.wire.calls)==1
-    assert google.wire.calls[0][2]["params"]["sendUpdates"]=="all"
+    assert len(writes(google))==1
+    assert writes(google)[0][2]["params"]["sendUpdates"]=="all"
     assert actions.confirm("owner",chat,prepared["id"],prepared["hash"])["status"]=="succeeded"
-    assert len(google.wire.calls)==1
+    assert len(writes(google))==1
 
 
 def test_unreliable_result_and_process_crash_are_never_resent(calendar):
     tool,actions,google,chat=calendar
-    prepared=prepare(tool);received=[]
+    prepared=prepare(tool);received=[];google.wire.calls.clear()
     def send(method,url,kwargs):
         received.append(kwargs["json"])
         raise GoogleError("connection lost after write",503,uncertain=True)
@@ -89,7 +94,7 @@ def test_stale_revised_and_foreign_actions_cannot_execute(calendar):
     google.ref("owner",tool.selection.connection_id).update({"revision":"reconnected"})
     with pytest.raises(GoogleError,match="authorization changed"):
         actions.confirm("owner",chat,second["id"],second["hash"])
-    assert not google.wire.calls
+    assert writes(google)==[]
 
 
 def test_update_etag_series_instance_and_invitation_preview(calendar):
@@ -159,4 +164,73 @@ def test_action_api_requires_owner_hash_and_displays_saved_result(calendar,monke
     assert client.post(path+'/confirm',json={"expected_hash":"f"*64}).status_code==409
     assert client.post(path+'/reject',json={"expected_hash":prepared["hash"]}).json()["action"]["status"]=="rejected"
     assert client.post(path+'/confirm',json={"expected_hash":prepared["hash"]}).status_code==409
-    assert not google.wire.calls
+    assert writes(google)==[]
+
+
+def test_actions_are_ordered_carry_google_data_and_calendar_name(calendar,monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from app.api.routers import agent_google as router
+    from app.core.rate_limit import limiter
+    tool,actions,google,chat=calendar
+    google.wire.handler=lambda method,url,kwargs:{"id":"primary","summary":"Personal calendar"} if "calendarList" in url else {}
+    ids=[]
+    for index in range(4):
+        tool.loop.turn_id=f"turn-{index}"
+        ids.append(prepare(tool,event(fields={**event()["fields"],"summary":f"Meeting {index}"}))["id"])
+    assert [a["id"] for a in actions.list("owner",chat)]==ids
+    assert actions.list("owner",chat)[0]["preview"]["calendar_name"]=="Personal calendar"
+    # One calendar-list read per turn's tool instance, never per preparation.
+    assert sum("calendarList" in call[1] for call in google.wire.calls)==1
+    monkeypatch.setattr(router,"_chat_uid",lambda request:"owner")
+    monkeypatch.setattr(router,"require_agent_access",lambda uid:None)
+    monkeypatch.setattr(router,"AgentActions",lambda db:actions)
+    monkeypatch.setattr(limiter,"enabled",False)
+    app=FastAPI();app.include_router(router.router);client=TestClient(app)
+    body=client.get(f'/agent/chats/{chat}/actions').json()
+    assert [a["id"] for a in body["actions"]]==ids and body["google_data"] is False
+    actions.files.chats._chat_ref("owner",chat).update({"google_data":True})
+    assert client.get(f'/agent/chats/{chat}/actions').json()["google_data"] is True
+
+
+def test_renew_reprepares_stored_payload_without_model_or_write(calendar,monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from app.api.routers import agent_google as router
+    from app.core.rate_limit import limiter
+    tool,actions,google,chat=calendar
+    prepared=prepare(tool)
+    # Expired approval: renewing binds the same content under the current grant.
+    actions.ref("owner",chat,prepared["id"]).update({"approval_until":(now()-timedelta(minutes=1)).isoformat()})
+    with pytest.raises(GoogleError,match="changed"):
+        actions.renew("owner",chat,prepared["id"],"f"*64)
+    google.ref("owner",tool.selection.connection_id).update({"revision":"reconnected"})
+    renewed=actions.renew("owner",chat,prepared["id"],prepared["hash"])
+    assert renewed["id"]!=prepared["id"] and renewed["hash"]!=prepared["hash"] and renewed["replaces"]==prepared["id"]
+    assert renewed["preview"]==prepared["preview"] and renewed["status"]=="pending"
+    assert actions.get("owner",chat,prepared["id"])["status"]=="superseded"
+    with pytest.raises(GoogleError,match="no longer"):
+        actions.renew("owner",chat,prepared["id"],prepared["hash"])
+    with pytest.raises(GoogleError,match="email recipients"):
+        actions.renew("owner",chat,renewed["id"],renewed["hash"],remove_recipients=["reviewer@example.org"])
+    assert writes(google)==[]
+    monkeypatch.setattr(router,"_chat_uid",lambda request: request.headers.get("X-User","owner"))
+    monkeypatch.setattr(router,"require_agent_access",lambda uid:None)
+    monkeypatch.setattr(router,"AgentActions",lambda db:actions)
+    monkeypatch.setattr(limiter,"enabled",False)
+    app=FastAPI();app.include_router(router.router);client=TestClient(app)
+    path=f'/agent/chats/{chat}/actions/{renewed["id"]}/renew'
+    assert client.post(path,json={"expected_hash":renewed["hash"]},headers={"X-User":"other"}).status_code==404
+    again=client.post(path,json={"expected_hash":renewed["hash"]}).json()["action"]
+    assert again["replaces"]==renewed["id"] and again["status"]=="pending"
+    assert writes(google)==[]
+    # An update is only renewed while its "before" still matches Google.
+    original={"id":"existing","etag":"etag-v1", **event()["fields"], "attendees":[{"email":"old@example.org"}]}
+    google.wire.handler=lambda *_: original
+    update=prepare(tool,{"calendar_id":"primary","event_id":"existing","fields":{"summary":"New title"}})
+    assert actions.renew("owner",chat,update["id"],update["hash"])["replaces"]==update["id"]
+    latest=actions.list("owner",chat)[-1]
+    google.wire.handler=lambda *_: {**original,"etag":"etag-v2"}
+    with pytest.raises(GoogleError,match="changed in Google Calendar"):
+        actions.renew("owner",chat,latest["id"],latest["hash"])
+    assert writes(google)==[]

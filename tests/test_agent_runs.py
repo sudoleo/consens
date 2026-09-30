@@ -240,6 +240,9 @@ def test_endpoint_single_call_replay_and_cumulative_costs(api, monkeypatch):
     payload = {"chat_id": chat_id, "question": "Hi", "client_request_id": "first", "bookmark_id": "agent_test"}
     response = client.post("/agent", json=payload, headers=AUTH)
     assert response.status_code == 200 and "event: final" in response.text, response.text
+    final = json.loads(response.text.split("event: final\ndata: ", 1)[1].split("\n", 1)[0])
+    # The composer learns from the final event whether the next message needs Google consent.
+    assert final["google_data"] is False
     assert len(calls) == 1
     monkeypatch.setattr(agent, "agent_model", lambda: pytest.fail("Replay must not consult new model config"))
     replay = client.post("/agent", json=payload, headers=AUTH)

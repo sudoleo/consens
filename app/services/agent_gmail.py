@@ -337,6 +337,33 @@ class GmailTools:
         return {"draft": result, "instruction": "Draft saved in Consens, NOT sent. Show the exact review card. If sending permission is missing, authorize it then prepare a fresh revision before confirmation."}
 
 
+def renew_draft(payload, preview, connection, remove_recipients, previous_id, turn_id):
+    """Rebuild a saved draft for a fresh review without new model content.
+
+    Only removal of existing recipients is allowed. Warnings stay the ones
+    the server computed at preparation, minus removed addresses.
+    """
+    removed = {e.casefold() for e in remove_recipients}
+    present = {e.casefold() for key in ("to", "cc", "bcc") for e in payload[key]}
+    if not removed <= present:
+        raise GoogleError("That recipient is not part of this draft.")
+    for key in ("to", "cc", "bcc"):
+        payload[key] = [e for e in payload[key] if e.casefold() not in removed]
+    if not payload["to"]:
+        raise GoogleError("An email needs at least one To recipient. Ask the agent to revise the draft instead.")
+    payload.pop("message_id", None)
+    payload["message_id"] = "<consens." + digest([turn_id, payload, previous_id])[:32] + "@consens.io>"
+    try:
+        build_message(payload)
+    except (ValueError, TypeError):
+        raise GoogleError("The draft contains header values that cannot be sent.") from None
+    for key in ("to", "cc", "bcc"):
+        preview[key] = list(payload[key])
+    preview["send_authorized"] = "gmail_send" in connection.get("capabilities", [])
+    preview["recipient_warnings"] = [w for w in preview.get("recipient_warnings", []) if w.get("email", "").casefold() not in removed]
+    return payload, preview
+
+
 EMAIL = re.compile(r"[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,63}")
 
 
