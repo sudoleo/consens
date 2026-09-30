@@ -46,9 +46,28 @@ for all later steps, including comparison and judges; web search/source checks s
 the authenticated `/agent/chats/{chat}/actions/{id}/confirm` endpoint can claim an
 external write; tools cannot confirm. Hash/revision binding, ETags, deterministic
 event IDs and durable unknown outcomes prevent retry-driven duplicate operations.
-`reject` and read-only `status` are separate endpoints. `agent-google.js` supplies
-account/calendar selection, affirmative data consent and responsive before/after
-confirmation cards, refreshed by `resources` SSE and restored from the same chat.
+`reject` and read-only `status` are separate endpoints. `renew` re-prepares a
+stored proposal without a model call (expired approval, newly granted Gmail send
+permission, or removing a flagged recipient; content may only shrink); the new
+version supersedes the old one and needs its own review. `GET .../actions` lists
+actions and Gmail evidence by `created_at` and returns the chat's `google_data`
+marker, which the `/agent` `final` event also carries.
+`agent-google.js` (+ `agent-google.css`) supplies the Google data dialog (opened
+from the (+) menu `#agentGoogleMenuOption` or the hero toolbar
+`#composerGoogleButton`; connections load on first use), removable composer chips
+`#agentGoogleChips` with the per-message consent `#googleDataConsent`, and the
+action cards in `#agentGoogleActions` (after `#agentAnswer`): verb title, status
+badge, per-address acknowledgement of flagged recipients, calendar diff with
+changed rows, "Earlier versions" per `replaces` chain, expiry rechecked every 30 s.
+Contract on `App.agentGoogle`: `blocker()` → `{message, action:'google-consent'|
+'google-open', label}|null` (incomplete or unconsented selection, or a chat whose
+`google_data` is set; `selection()` throws instead of dropping a visible choice),
+`consent(bool?)`, `resetConsent()`, `open()`, `pendingCount(chatId)`,
+`evidenceFor(messageId)` → `{subject, from}|null`, `refreshActions(chatId, force)`
+(one request per 300 ms per chat; the module also projects the current chat from
+`refreshControls()` and reloads after a finished Agent run), `noteGoogleData`.
+It dispatches `consensio:agent-google-change` and `consensio:agent-actions-change`
+(`{chatId, pending, googleData}`).
 Hourly retention purges expired OAuth states/actions (skipped without Google
 configuration); chat deletion removes `actions`; account deletion revokes stored
 grants at Google (`GoogleConnections.revoke_all`) and removes credentials and

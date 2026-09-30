@@ -353,15 +353,18 @@
     if (box && (!show || consentChat !== null && consentChat !== chatId) && box.checked) box.checked = false;
     consentChat = chatId;
   }
-  // Cheap re-projection; never loads connections by itself.
+  // Cheap re-projection; never loads connections by itself. A changed chat
+  // (switch, restore, new chat) also projects that chat's action cards, so
+  // this module does not depend on other modules to load them.
   function refreshControls(force = false) {
     ensureDom();
-    const agent = agentActive();
-    const key = `${agent}:${uid()}:${currentChatId()}`;
+    const agent = agentActive(), chatId = currentChatId();
+    const key = `${agent}:${uid()}:${chatId}`;
     if (key !== controlsKey || force) {
       controlsKey = key;
       if (!agent && sheet && !sheet.hidden) closeSheet();
       syncEntry(); syncChips();
+      if (chatId !== shownChat || !agent) refreshActions(agent ? chatId : '');
     }
     if (force && connections.status !== 'idle') loadConnections(true);
   }
@@ -1070,6 +1073,13 @@
       schedules.clear();
       if (panel) { panel.replaceChildren(); panel.hidden = true; }
       if (chats.has(chatId)) { shownChat = chatId; renderActions(chatId); }
+      // A chat created by the running first message is known to be empty:
+      // resources events and the finish refresh load it when that changes.
+      else if (!force && running && !visible.basis) {
+        chats.set(chatId, {actions: [], evidence: []});
+        loadedKey = key; shownChat = chatId; emitActions(chatId);
+        return Promise.resolve();
+      }
     }
     loadedKey = key; shownChat = chatId;
     return schedule(chatId);
@@ -1094,6 +1104,14 @@
     if (document.getElementById('agentGoogleActions')) document.getElementById('agentGoogleActions').hidden = true;
     armExpiryTimer();
     syncChips(); syncEntry();
+  });
+  // A finished Agent run may have prepared actions or read mail even when no
+  // resources event reached this module: reload that chat's list once.
+  window.addEventListener('consensio:run-registry-change', event => {
+    const context = event.detail?.context;
+    if (event.detail?.type !== 'finished' || context?.config?.executionMode !== 'agent') return;
+    const chatId = context.metadata?.chatId;
+    if (chatId && chatId === shownChat && uid()) refreshActions(chatId, true);
   });
   // Connections load on first use, never on page open: opening the (+) menu
   // that holds the Google entry is the earliest point they can matter.

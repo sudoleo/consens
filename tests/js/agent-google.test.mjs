@@ -163,6 +163,22 @@ describe('Action cards',()=>{
     resolve({ok:true,json:async()=>({actions:[action]})});await read;
     expect(d.getElementById('agentGoogleActions').textContent).toBe('');
   });
+  it('projects the current chat on its own, skips a new chat while it starts and reloads when the run finishes',async()=>{
+    const chat='b'.repeat(32);
+    const {window:w,document:d}=boot({chatId:chat});
+    w.App.agentGoogle.refreshControls();
+    await vi.waitFor(()=>expect(d.querySelector('.agent-action-card')).not.toBeNull());
+    expect(w.fetch.mock.calls.filter(([url])=>url.endsWith('/actions'))).toHaveLength(1);
+    // A first message creates a new chat: nothing to read until it finishes.
+    const fresh='9'.repeat(32),run={runId:'r1',basis:null,config:{executionMode:'agent'},metadata:{chatId:fresh}};
+    w.App.runRegistry={visible:()=>run,isExecuting:()=>true,getSelectedConversationBasis:()=>null};
+    w.fetch.mockClear();
+    w.App.agentGoogle.refreshControls();
+    expect(d.querySelector('.agent-action-card')).toBeNull();
+    await flush();expect(w.fetch).not.toHaveBeenCalled();
+    w.dispatchEvent(new w.CustomEvent('consensio:run-registry-change',{detail:{type:'finished',context:run}}));
+    await vi.waitFor(()=>expect(w.fetch.mock.calls.some(([url])=>url.endsWith(`/chats/${fresh}/actions`))).toBe(true));
+  });
   it('stays hidden when actions fail in a chat without Google data',async()=>{
     const {window:w,document:d,chat}=boot();
     w.fetch=vi.fn(async()=>({ok:false,status:500,json:async()=>({detail:'boom'})}));
