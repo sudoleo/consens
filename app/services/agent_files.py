@@ -101,8 +101,9 @@ def extract_isolated(raw, mime):
 
 
 def public_file(data):
-    return {key: data[key] for key in ("id", "name", "mime", "size", "sha256", "status", "warnings",
-        "created_at", "expires_at", "kind", "document_id", "version", "parent_version", "turn_id", "source_file_ids", "origin") if key in data}
+    return {key: data[key] for key in ("id", "name", "title", "mime", "size", "sha256", "status", "warnings",
+        "created_at", "expires_at", "kind", "document_id", "version", "parent_version", "turn_id", "source_file_ids",
+        "origin", "origin_subject", "origin_from") if key in data}
 
 
 class AgentFiles:
@@ -188,9 +189,24 @@ class AgentFiles:
         return public_file({**data, "status": extraction["status"]})
 
     def list(self, uid, chat_id):
+        """Files of one chat, oldest first, with document titles for grouping."""
         self.chats.get_chat(uid, chat_id)
-        snapshots = self.chats._chat_ref(uid, chat_id).collection("files").limit(MAX_FILES + 1).stream()
-        return [public_file(s.to_dict()) for s in snapshots]
+        chat = self.chats._chat_ref(uid, chat_id)
+        records = [s.to_dict() for s in chat.collection("files").limit(MAX_FILES + 1).stream()]
+        # Versions saved before titles were stored on file records fall back to
+        # their manifest: one read per such document, never per file.
+        legacy = sorted({r["document_id"] for r in records
+                         if r.get("kind") == "document" and r.get("document_id") and not r.get("title")})
+        titles = {}
+        for document_id in legacy:
+            title = (chat.collection("documents").document(document_id).get().to_dict() or {}).get("title")
+            if title:
+                titles[document_id] = title
+        # Firestore streams in document-ID order (random hex), so sort here;
+        # at most MAX_FILES + 1 records exist per chat.
+        records.sort(key=lambda r: (r.get("created_at") or "", r.get("id") or ""))
+        return [public_file({**r, "title": titles[r["document_id"]]} if r.get("document_id") in titles else r)
+                for r in records]
 
     def get(self, uid, chat_id, file_id):
         self.chats.get_chat(uid, chat_id)

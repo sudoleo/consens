@@ -102,4 +102,25 @@ describe("composer attachment tray", () => {
     expect(document.getElementById("attachmentBar").hidden).toBe(true);
     expect(document.activeElement).toBe(document.getElementById("composerAttachButton"));
   });
+
+  it("shows an Agent upload failure on the pending chip and clears it again", () => {
+    const { window, document } = boot();
+    expect(window.App.attachments.markError({ ...FILE }, "Page limit: 80 pages.")).toBe(true);
+    const chip = document.querySelector("#attachmentBar .attachment-chip");
+    expect(chip.classList.contains("has-error")).toBe(true);
+    expect(chip.querySelector(".attachment-chip-size").textContent).toBe("Couldn't upload · Page limit: 80 pages.");
+    expect(window.getAttachmentsPayload()[0].data).toBe(FILE.data);
+    window.App.attachments.markError({ ...FILE }, "");
+    expect(document.querySelector("#attachmentBar .attachment-chip").classList.contains("has-error")).toBe(false);
+  });
+
+  it("marks sent Agent files that were only partly readable", () => {
+    const { window, document } = boot();
+    const row = document.getElementById("threadAskAttachments");
+    window.App.attachments.renderMessageAttachments(row, [{ ...FILE, warnings: ["No extractable text on pages 4."] }, FILE]);
+    const chips = row.querySelectorAll(".attachment-chip");
+    expect(chips[0].querySelector(".attachment-chip-warning").textContent).toBe("Partly read");
+    expect(chips[0].getAttribute("aria-label")).toContain("only partly readable: No extractable text on pages 4.");
+    expect(chips[1].querySelector(".attachment-chip-warning")).toBeNull();
+  });
 });

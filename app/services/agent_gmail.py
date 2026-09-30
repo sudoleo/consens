@@ -270,13 +270,15 @@ class GmailTools:
         if body.get("attachmentId"):
             body = self.api("GET", "/messages/" + args.message_id + "/attachments/" + quote(body["attachmentId"], safe=""), cancellation)
         raw = decode(body.get("data", ""))
-        self.record({"message_id": message["id"], "thread_id": message.get("threadId"),
-            "headers": {key: value[:2000] for key, value in headers(message.get("payload", {})).items() if key != "content-type"}})
+        message_headers = {key: value[:2000] for key, value in headers(message.get("payload", {})).items() if key != "content-type"}
+        self.record({"message_id": message["id"], "thread_id": message.get("threadId"), "headers": message_headers})
         self.files.expire(self.loop.uid, self.loop.chat_id)
         extensions = {"image/png": "png", "image/jpeg": "jpg", "image/webp": "webp", "text/plain": "txt", "application/pdf": "pdf"}
         filename = part.get("filename") or "attachment." + extensions.get(part.get("mimeType"), "bin")
         meta = self.files.upload(self.loop.uid, self.loop.chat_id, {"name": filename[:200], "data": base64.b64encode(raw).decode()},
-            cancellation=cancellation, extra={"kind": "mail_attachment", "origin": origin})
+            cancellation=cancellation, extra={"kind": "mail_attachment", "origin": origin,
+                # Display-only provenance for the file list; origin stays the reuse key.
+                "origin_subject": message_headers.get("subject", "")[:300], "origin_from": message_headers.get("from", "")[:300]})
         self.loop.outgoing.put_nowait({"type": "resources", "files": [meta]})
         return {"file": meta, "trust": "untrusted"}
 

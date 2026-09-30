@@ -147,7 +147,7 @@ class DocumentTools:
                     for i, section in enumerate(spec["sections"])]
                 output = self.files.save(self.uid, self.chat, raw=rendered[extension], name=f"{spec['title'][:100]}-v{version}.{extension}", mime=mime,
                     extraction={"status": "ready", "parts": parts, "warnings": []}, cancellation=cancellation,
-                    extra={"kind": "document", "document_id": document_id, "version": version, "parent_version": parent,
+                    extra={"kind": "document", "document_id": document_id, "title": spec["title"][:200], "version": version, "parent_version": parent,
                         "turn_id": self.loop.turn_id, "source_file_ids": [s["file_id"] for s in sources if s["file_id"]]})
                 outputs.append(output)
                 self.files.download(self.uid, self.chat, output["id"])

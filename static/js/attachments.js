@@ -348,7 +348,13 @@
       nameEl.title = att.name;
       const sizeEl = document.createElement("span");
       sizeEl.className = "attachment-chip-size";
-      if (readonly) {
+      if (att.error) {
+        // Agent uploads keep a rejected file in the composer with the server's
+        // reason, so the user can remove or replace it and send again.
+        chip.classList.add("has-error");
+        sizeEl.textContent = "Couldn't upload · " + att.error;
+        sizeEl.title = att.error;
+      } else if (readonly) {
         sizeEl.textContent = att.size ? formatFileSize(att.size) : "";
       } else {
         sizeEl.textContent = att.previewOnly
@@ -358,6 +364,20 @@
       meta.appendChild(nameEl);
       meta.appendChild(sizeEl);
       chip.appendChild(meta);
+
+      const warnings = Array.isArray(att.warnings) ? att.warnings.filter(Boolean) : [];
+      if (readonly && warnings.length) {
+        // Agent files that were only partly readable (scans, limits) say so
+        // on the message they were sent with, not only in the files list.
+        chip.classList.add("has-warning");
+        const badge = document.createElement("span");
+        badge.className = "attachment-chip-warning";
+        badge.textContent = "Partly read";
+        badge.title = warnings.join(" ");
+        meta.appendChild(badge);
+        chip.setAttribute("aria-label", att.name + ", only partly readable: " + warnings.join(" "));
+        chip.setAttribute("role", "group");
+      }
 
       if (readonly) return chip;
 
@@ -388,6 +408,7 @@
           name: String(item.name),
           mime: String(item.mime || ""),
           size: Number(item.size) || 0,
+          warnings: Array.isArray(item.warnings) ? item.warnings.map(String).slice(0, 5) : [],
           data: null
         }, { readonly: true }));
       });
@@ -474,6 +495,19 @@
       if (items.length) window.App?.composer?.expand?.();
     }
 
+    // Agent uploads report a per-file failure (or clear it with an empty
+    // message). The payload copy is matched back to its pending attachment.
+    function markError(file, message) {
+      const target = (window.pendingAttachments || []).find(function (att) {
+        return att.name === file?.name && (att.size || 0) === (file?.size || 0) && (!file?.data || att.data === file.data);
+      });
+      if (!target || (target.error || "") === (message || "")) return false;
+      if (message) target.error = String(message).slice(0, 300);
+      else delete target.error;
+      renderAttachmentChips();
+      return true;
+    }
+
     window.renderAttachmentChips = renderAttachmentChips;
     window.App = window.App || {};
     window.App.attachments = {
@@ -484,6 +518,7 @@
       isImporting: function () { return pendingFileReads > 0; },
       messageMeta: messageMeta,
       renderMessageAttachments: renderMessageAttachments,
+      markError: markError,
       refreshCompatibility: syncAttachmentCompatibility,
       syncComposerPlacement: syncComposerPlacement
     };
