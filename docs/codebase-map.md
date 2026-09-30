@@ -2156,6 +2156,13 @@ Direkte Teilantworten bleiben bei Providerfehlern erhalten. `agent_failure`
 enthält den sicheren Fehlercode und Grund auch im gespeicherten Turn; die UI
 zeigt ihn live und nach Reload. Provider-Timeouts sind von Kontingent-Stopp und
 Nutzerabbruch getrennt, rohe Provider-Fehler werden nicht gespeichert.
+Scheitert ein Lauf erst nach abgeschlossenem Review, behält
+`AgentRunStore.finish` den Review-Status `succeeded`/`partial`; nur laufende
+bzw. ausstehende Reviews werden zu `failed`/`missing`/`cancelled`.
+`agentReview.failureNote` formuliert den Hinweis unter der Antwort ruhig und
+kontextbezogen: geprüfte Antwort („complete and has been checked“), sonst
+möglicherweise unvollständige Antwort, ohne Antwort der sichere Fehlertext.
+Live-Ansicht, gespeicherter Turn und Verlauf (`consensus-run.js`) nutzen ihn.
 
 **Composer und Antwortaktionen (21.09.2026).** `agentChat.sendBlocker()` verbindet
 Zugriff, Katalogstatus, verfügbare Chatmodelle, Vergleichsauswahl, Anhänge und
@@ -2339,7 +2346,9 @@ Gründen für ausgefallene Modelle, fehlende Judge-Ergebnisse und unvollständig
 Satz-/Kontextabdeckung. `comparisons[].failed_models[].failure` enthält nur den
 sicheren Fehler aus `agent_failure`, niemals rohe Provider-Antworten. Eine
 fehlende Modellantwort hält den Gesamtstatus `partial`, bei vollständig
-vorliegenden Judges zeigt die UI jedoch `Comparison checked · N models unavailable`.
+vorliegenden Judges zeigt die UI jedoch `Comparison checked · N models did not respond`.
+Statuslabels: `Partly checked`, `Check could not run`, `Answer not checked`;
+Ausfallgründe erscheinen nur als kurze Code-Phrase (`failureReason`).
 `Answers` zählt vollständige Antworten; die Details behalten auch Fehlermodelle.
 Alte Reviews werden aus ihren vorhandenen Judge-Metadaten erklärt. Gebundene
 unvollständige Quellenprüfungen erhalten zusätzlich einen eigenen Hinweis.
@@ -5541,7 +5550,13 @@ nach links (`body.agent-sidebar-open`), statt unter der Leiste zu liegen. Nur
 explizites Öffnen/Schließen wird pro Turn gemerkt. Der 2,5-s-Takt existiert nur
 während eines laufenden bzw. abschließenden Laufs und endet danach.
 Zeilenstatus hängt per `aria-describedby` am Eintrag; Texte/Titel werden nur bei
-Änderung geschrieben.
+Änderung geschrieben. Ausfälle werden eingeordnet statt als Fehler gemeldet:
+Ein Judge-Versuch, den ein späterer Versuch desselben Checks (gleicher `title`,
+Reihenfolge nach `created_at`) übernimmt, heißt `Replaced`/`Retrying`
+(`data-outcome`), eine ausgefallene Vergleichsantwort `No answer`, sonst
+`Not finished`. Beendete Aufrufe ohne gemessene Tokens zeigen keine Tokenzeile.
+Nach dem Lauf fasst `.agent-sidebar-status` Backup-Judges, nicht ausführbare
+Checks und stumme Antwortmodelle in je einem Satz zusammen.
 
 **Kontingent.** `.quota-row[hidden]` blendet Deep-Think/Watches im Agent-Modus
 aus; ein Rest unter 1 % zeigt „<1%“ (Ring `--partial`, erst bei 0 `--dispute`),

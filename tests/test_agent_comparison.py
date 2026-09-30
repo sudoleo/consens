@@ -447,6 +447,22 @@ def test_disconnect_during_review_settles_every_paid_call_and_marks_stopped(stor
     assert root["run_status"] == "cancelled"
 
 
+def test_later_run_failure_keeps_finished_review_result(store):
+    """A failure after the judges finished must not relabel the checked answer."""
+    loop = make_loop(store, Script())
+    judge = loop.registry.tools["judge_answer"]
+    def judge_then_fail(*args, **kwargs):
+        judge.execute(*args, **kwargs)
+        raise RuntimeError("late provider failure")
+    loop.registry.tools["judge_answer"] = replace(judge, execute=judge_then_fail)
+    with pytest.raises(RuntimeError):
+        list(loop.run())
+    saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
+    assert saved["status"] == "failed"
+    assert saved["agent_review"]["status"] == "succeeded"
+    assert saved["agent_review"]["checks"][0]["differences_data"] is not None
+
+
 def test_failed_review_recovery_preserves_status_and_never_calls_provider(api):
     client, store, calls = api
     loop = make_loop(store, Script(missing=True))

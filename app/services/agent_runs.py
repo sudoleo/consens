@@ -330,9 +330,13 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                         patch["assistant_response"] = completion.text
                     if review:
                         # A crash/stop cannot leave a saved review looking live.
+                        # A review that had already finished keeps its result:
+                        # a later failure (a final bookkeeping or provider step)
+                        # must not relabel a checked answer as unreviewed.
                         review = dict(review)
-                        review["status"] = ("cancelled" if status == "cancelled" else
-                                            "missing" if review.get("status") == "required" else "failed")
+                        if review.get("status") not in {"succeeded", "partial"}:
+                            review["status"] = ("cancelled" if status == "cancelled" else
+                                                "missing" if review.get("status") == "required" else "failed")
                         for comparison in review.get("comparisons", []):
                             if comparison.get("status") == "running":
                                 comparison["status"] = "cancelled" if status == "cancelled" else "failed"

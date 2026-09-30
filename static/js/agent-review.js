@@ -3,7 +3,30 @@
   "use strict";
   const App = window.App = window.App || {};
   const states = { required: "Review pending", running: "Checking the answer…", succeeded: "Comparison checked",
-    partial: "Review incomplete", failed: "Review unavailable", cancelled: "Review stopped", missing: "Answer not reviewed" };
+    partial: "Partly checked", failed: "Check could not run", cancelled: "Check stopped", missing: "Answer not checked" };
+  // Short, calm reasons for one model call that ended without a result. The
+  // provider's own error text never reaches the page (see provider_failure).
+  const reasons = { provider_rate_limited: 'the provider was busy', provider_timeout: 'the provider stopped responding',
+    provider_unavailable: 'the model was unavailable at its provider', provider_access: 'the provider declined the request' };
+  function failureReason(failure) {
+    return reasons[failure?.code] || 'no complete answer arrived';
+  }
+  // The answer text is fixed and its review finished before the run ended.
+  function reviewedAnswer(review, raw) {
+    const version = review?.versions?.find(v => v.id === review.answer_version);
+    return Boolean(version && typeof raw === 'string' && raw.trim() && raw === version.text
+      && version.hash === review.answer_hash && ['succeeded', 'partial'].includes(review.status));
+  }
+  // One sentence for the end of a run that did not finish cleanly. It says
+  // what the reader can rely on first, then what happened, without alarm.
+  function failureNote(failure, review, raw) {
+    const message = failure?.error || failure?.message || '';
+    if (typeof raw !== 'string' || !raw.trim()) return message;
+    if (reviewedAnswer(review, raw)) {
+      return 'The answer above is complete and has been checked. A final step of this run did not finish; this does not change the answer.';
+    }
+    return 'This answer may be incomplete because the run ended early. Everything received has been saved, and you can ask again at any time.';
+  }
   const activityContexts = new WeakMap();
   // The live run renders evidence only once, from its final review object; an
   // activity card built from the streamed review finds its context by key.
@@ -41,23 +64,23 @@
   }
   function issueText(issue) {
     const n = issue.count;
-    return ({models_unavailable: `${n} comparison model${n === 1 ? '' : 's'} unavailable`,
-      insufficient_answers: 'Fewer than two complete model answers are available',
-      differences_unavailable: 'The differences check did not complete',
-      coverage_unavailable: 'The coverage check did not complete',
+    return ({models_unavailable: `${n} comparison model${n === 1 ? '' : 's'} did not respond; the check uses the remaining answers`,
+      insufficient_answers: 'Fewer than two complete model answers arrived, so no comparison was possible',
+      differences_unavailable: 'The differences check could not run, so disagreements are not marked',
+      coverage_unavailable: 'The coverage check could not run, so sentences are not marked as supported',
       sentences_unchecked: `${n} sentence${n === 1 ? '' : 's'} could not be checked`,
       unindexed_sentences: `${n} sentence${n === 1 ? '' : 's'} fell outside the coverage check`,
-      truncated_answers: 'Some model answers exceeded the review context',
-      sources_incomplete: 'Some contradiction source checks did not complete',
-      incomplete: 'The saved review is incomplete'})[issue.code] || 'The review is incomplete';
+      truncated_answers: 'Some model answers were too long to check in full',
+      sources_incomplete: 'Some contradiction source checks did not finish',
+      incomplete: 'The saved check is incomplete'})[issue.code] || 'The check is incomplete';
   }
   function statusText(state, issues) {
-    if (!['succeeded', 'partial'].includes(state)) return states[state] || 'Review incomplete';
+    if (!['succeeded', 'partial'].includes(state)) return states[state] || states.partial;
     if (issues.length && issues.every(i => i.code === 'models_unavailable')) {
       const n = issues.reduce((total, i) => total + i.count, 0);
-      return `Comparison checked · ${n} model${n === 1 ? '' : 's'} unavailable`;
+      return `Comparison checked · ${n} model${n === 1 ? '' : 's'} did not respond`;
     }
-    return issues.length ? 'Review incomplete' : states[state];
+    return issues.length ? states.partial : states[state];
   }
   function node(tag, cls, text) {
     const el = document.createElement(tag);
@@ -83,7 +106,7 @@
       if (comparison.reason) card.append(node('p', '', comparison.reason));
       const names = answers.map(a => a.model?.label || a.provider_label || a.provider).filter(Boolean);
       if (names.length) card.append(node('p', 'agent-activity-models', `Models: ${names.join(', ')}`));
-      if (missing.length) card.append(node('p', '', `No complete answer: ${missing.map(m => m.label || m.model).join(', ')}`));
+      if (missing.length) card.append(node('p', '', `Did not respond: ${missing.map(m => m.label || m.model).join(', ')}`));
       const check = currentCheck(review, comparison, raw);
       const issues = checkIssues(comparison, check);
       const state = check?.status || (['running', 'failed', 'cancelled', 'missing'].includes(review.status) ? review.status : 'required');
@@ -249,7 +272,8 @@
           ...answers.map(a => ({ provider: a.provider_label || a.provider, model: a.model?.model, label: a.model?.label || a.provider,
             text: a.text, sources: safeSources([a]), sourceReferences: 'agent', status: "complete" })),
           ...(comparison.failed_models || []).map((m, i) => ({ provider: `unavailable-${i}`, model: m.model, label: m.label,
-            text: "", status: comparison.status === "cancelled" ? "canceled" : "error", error: m.failure?.error || "This model did not return a complete answer.", sources: [] }))
+            text: "", status: comparison.status === "cancelled" ? "canceled" : "error",
+            error: `No answer from this model: ${failureReason(m.failure)}. The comparison uses the other answers.`, sources: [] }))
         ] };
       const open = (section, options = {}) => App.answerReader?.openContext(context, { section, ...options });
       const navigation = {
@@ -266,7 +290,7 @@
         if (check) {
           const unavailable = comparison.failed_models || [];
           panel.append(node('p', 'agent-review-note', `${answers.length} of ${answers.length + unavailable.length} models returned complete answers.`));
-          for (const model of unavailable) panel.append(node('p', 'agent-review-note', `${model.label}: ${model.failure?.error || 'No complete answer was returned.'}`));
+          for (const model of unavailable) panel.append(node('p', 'agent-review-note', `${model.label}: no answer, ${failureReason(model.failure)}.`));
           for (const issue of localIssues.filter(i => i.code !== 'models_unavailable')) panel.append(node('p', 'agent-review-note', issueText(issue) + '.'));
           if (localIssues.length && localIssues.every(i => i.code === 'models_unavailable')) {
             panel.append(node('p', 'agent-review-note', 'The differences and coverage checks completed for the available model answers.'));
@@ -370,5 +394,5 @@
     }
     contexts.forEach(c => App.answerReader?.refreshContext(c));
   }
-  App.agentReview = { render, renderActivity };
+  App.agentReview = { render, renderActivity, failureNote, failureReason };
 })();

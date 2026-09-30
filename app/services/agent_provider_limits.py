@@ -14,7 +14,7 @@ from time import monotonic
 class AgentProviderCooldown(Exception):
     def __init__(self, seconds):
         self.retry_after = seconds
-        super().__init__(f"This model is temporarily rate limited. Wait {seconds} seconds or choose another model.")
+        super().__init__(f"This model is busy at its provider right now. It is available again in about {seconds} seconds, or you can choose another model.")
 
 
 class ProviderCooldowns:
@@ -72,7 +72,7 @@ def agent_failure(error):
     if isinstance(error, AnalysisBudgetExceeded):
         return {"code": "model_context_limit" if "context" in str(error).lower() else "run_limit", "error": str(error)}
     if isinstance(error, (httpx.TimeoutException, TimeoutError)):
-        return {"code": "provider_timeout", "error": "The model provider stopped responding. Your available answer has been saved."}
+        return {"code": "provider_timeout", "error": "The model provider stopped responding. Everything received up to that point has been saved."}
     return provider_failure(error)
 
 
@@ -84,7 +84,7 @@ def provider_failure(error):
         return {"code": "provider_rate_limited", "retry_after": seconds,
                 "error": str(AgentProviderCooldown(seconds))}
     if status in {404, 503}:
-        return {"code": "provider_unavailable", "error": "No provider is currently available for this model. Choose another model or try again later."}
+        return {"code": "provider_unavailable", "error": "This model is currently unavailable at its provider. Choose another model or try again later."}
     if status in {401, 402, 403}:
-        return {"code": "provider_access", "error": "The model provider rejected access. The server API key, credits or provider permissions need to be checked."}
-    return {"code": "provider_error", "error": "The model provider could not complete the response. Try a new message later."}
+        return {"code": "provider_access", "error": "The model provider declined the request. This needs a check of the provider settings on our side."}
+    return {"code": "provider_error", "error": "The model provider could not finish this request. Trying again in a moment usually works."}

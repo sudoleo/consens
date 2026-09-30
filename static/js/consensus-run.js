@@ -367,7 +367,8 @@
         if (turnData.agent_failure?.error) {
           const failure = document.createElement("p");
           failure.className = "agent-review-note";
-          failure.textContent = turnData.agent_failure.error;
+          failure.textContent = window.App.agentReview?.failureNote?.(turnData.agent_failure, turnData.agent_review,
+            turnData.consensus || '') ?? turnData.agent_failure.error;
           answer.append(failure);
         }
         window.App.agentReview?.render(answerBody, turnData.agent_review,

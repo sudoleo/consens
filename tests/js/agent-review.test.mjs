@@ -67,8 +67,8 @@ it('keeps partial and stale reviews honest in activity insights and clears them 
   review.checks[0].issues = [{code:'coverage_unavailable'}];
   review.checks[0].differences_data.differences = [{type:'contradiction',claim:'A recorded disagreement'}];
   w.App.agentReview.renderActivity(details, review, 'Exact answer.');
-  expect(details.textContent).toContain('Review incomplete');
-  expect(details.textContent).toContain('The coverage check did not complete');
+  expect(details.textContent).toContain('Partly checked');
+  expect(details.textContent).toContain('The coverage check could not run');
   w.App.agentReview.renderActivity(details, review, 'Changed answer.');
   expect(details.textContent).toContain('Review pending');
   expect(details.textContent).not.toContain('A recorded disagreement');
@@ -191,23 +191,23 @@ it('explains a missing model without reporting a failed check, including older s
   for (const persistedIssues of [undefined, [{code: 'models_unavailable', count: 1}]]) {
     review.checks[0].issues = persistedIssues;
     w.App.agentReview.render(body, review);
-    expect(d.querySelector('.agent-review-status').textContent).toBe('Comparison checked · 1 model unavailable');
+    expect(d.querySelector('.agent-review-status').textContent).toBe('Comparison checked · 1 model did not respond');
     expect(d.querySelector('.agent-review-status').dataset.state).toBe('partial');
     expect(d.querySelector('[data-section="answers"]').textContent).toBe('Answers1');
     d.querySelector('[data-section="differences"]').click();
     const context = w.App.answerReader.openContext.mock.calls.at(-1)[0];
     const panel = context.renderPanel('differences');
     expect(panel.textContent).toContain('1 of 2 models returned complete answers');
-    expect(panel.textContent).toContain('GPT Luna: This model is temporarily rate limited.');
+    expect(panel.textContent).toContain('GPT Luna: no answer, the provider was busy.');
     expect(panel.textContent).toContain('differences and coverage checks completed');
-    expect(context.answers.at(-1).error).toContain('rate limited');
+    expect(context.answers.at(-1).error).toContain('the provider was busy');
   }
   dom.window.close();
 });
 it.each([
-  ['coverage', 'The coverage check did not complete'],
+  ['coverage', 'The coverage check could not run'],
   ['sentences', '2 sentences could not be checked'],
-  ['sources', 'Some contradiction source checks did not complete']
+  ['sources', 'Some contradiction source checks did not finish']
 ])('keeps %s failures distinct from unavailable comparison models', (kind, reason) => {
   const {window: w, document: d, dom} = setup();
   const body = d.getElementById('answer'); body.dataset.markdown = 'Exact answer.';
@@ -216,10 +216,22 @@ it.each([
   if (kind === 'sentences') check.differences_data.judges.coverage.missing = 2;
   if (kind === 'sources') check.source_verification = {answer_version: 'answer-hash', run_id: 'c1', basis_hash: 'b1', status: 'partial'};
   w.App.agentReview.render(body, review);
-  expect(d.querySelector('.agent-review-status').textContent).toBe('Review incomplete');
+  expect(d.querySelector('.agent-review-status').textContent).toBe('Partly checked');
   d.querySelector('[data-section="differences"]').click();
   const panel = w.App.answerReader.openContext.mock.calls.at(-1)[0].renderPanel('differences');
   expect(panel.textContent).toContain(reason);
   expect(panel.textContent).not.toContain('differences and coverage checks completed');
+  dom.window.close();
+});
+
+it('leads a failed run with what the reader can rely on', () => {
+  const {window: w, dom} = setup();
+  const note = w.App.agentReview.failureNote;
+  const failure = {code: 'provider_error', error: 'The model provider could not finish this request. Trying again in a moment usually works.'};
+  const review = {status: 'succeeded', answer_version: 1, answer_hash: 'h', versions: [{id: 1, text: 'Checked answer.', hash: 'h'}]};
+  expect(note(failure, review, 'Checked answer.')).toBe('The answer above is complete and has been checked. A final step of this run did not finish; this does not change the answer.');
+  expect(note(failure, {...review, status: 'failed'}, 'Checked answer.')).toMatch(/^This answer may be incomplete/);
+  expect(note(failure, review, 'Another text.')).toMatch(/^This answer may be incomplete/);
+  expect(note(failure, null, '')).toBe(failure.error);
   dom.window.close();
 });

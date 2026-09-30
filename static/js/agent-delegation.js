@@ -4,7 +4,64 @@
   const App = window.App = window.App || {};
   const views = new Map();
   const labels = { waiting: "Waiting", working: "Working", question: "Question", review: "Review",
-    rework: "Rework", completed: "Completed", failed: "Failed", stopped: "Stopped" };
+    rework: "Rework", completed: "Completed", failed: "Not finished", stopped: "Stopped" };
+  // A judge or answer call that ends without a result is routine: judges fall
+  // back to another model, comparisons continue with the other answers. The
+  // panel says what happened and what it means, never just "Failed".
+  const ended = new Set(["failed", "stopped"]);
+  const checkNames = { "Differences judge": "differences", "Coverage judge": "coverage" };
+  const reasons = { provider_rate_limited: "was busy at its provider", provider_timeout: "did not respond in time",
+    provider_unavailable: "was unavailable at its provider", provider_access: "was declined by its provider" };
+  const reason = agent => reasons[agent.failure?.code] || "did not return a usable result";
+  function ordered(view) {
+    return [...view.agents.values()].map((agent, index) => ({ agent, index }))
+      .sort((a, b) => String(a.agent.created_at || "").localeCompare(String(b.agent.created_at || "")) || a.index - b.index)
+      .map(item => item.agent);
+  }
+  // For each judge call that ended without a result: the later call for the
+  // same check that took over (completed or still running), if any.
+  function outcomes(view) {
+    const list = ordered(view), result = new Map();
+    list.forEach((agent, index) => {
+      if (agent.kind !== "judge" || !ended.has(agent.status)) return;
+      result.set(agent.id, list.slice(index + 1).find(next => next.kind === "judge" && next.title === agent.title && !ended.has(next.status)) || null);
+    });
+    return result;
+  }
+  function outcomeLabel(agent, next) {
+    if (agent.kind === "comparison" && agent.status === "failed") return "No answer";
+    if (next) return next.status === "completed" ? "Replaced" : "Retrying";
+    return labels[agent.status] || "Waiting";
+  }
+  function joinNames(names) {
+    return names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names.at(-1)}` : names[0];
+  }
+  // One calm sentence per kind of interruption, only once the run has ended.
+  function summary(view) {
+    if (view.running) return "";
+    const results = outcomes(view), replaced = new Set(), open = new Set();
+    for (const agent of view.agents.values()) {
+      if (!results.has(agent.id)) continue;
+      const name = checkNames[agent.title] || "answer";
+      (results.get(agent.id)?.status === "completed" ? replaced : open).add(name);
+    }
+    for (const name of replaced) open.delete(name);
+    const parts = [];
+    if (replaced.size) {
+      const names = [...replaced];
+      parts.push(`The ${joinNames(names)} ${names.length === 1 ? "check" : "checks"} moved to a backup model because the first model did not respond. ${names.length === 1 ? "It" : names.length === 2 ? "Both" : "All"} completed normally.`);
+    }
+    if (open.size) {
+      const names = [...open];
+      parts.push(`The ${joinNames(names)} ${names.length === 1 ? "check" : "checks"} could not run with any available model. The answer is shown without ${names.length === 1 ? "it" : "them"}.`);
+    }
+    const answers = [...view.agents.values()].filter(agent => agent.kind === "comparison");
+    const silent = answers.filter(agent => agent.status === "failed").length;
+    if (silent && silent < answers.length) {
+      parts.push(`${silent} of ${answers.length} answer models did not respond. The comparison uses the other ${answers.length - silent}.`);
+    }
+    return parts.join(" ");
+  }
   const activeStates = new Set(["waiting", "working", "question", "rework"]);
   let owner = "", current = null, sidebar = null, inline = null, timer = null, returnFocus = null, scrim = null;
   let ownerUser = null, ownerGeneration;
@@ -287,7 +344,8 @@
   }
   function renderDetail(row, view, agent) {
     if (agent.kind === 'judge') {
-      const signature = JSON.stringify([agent.status, agent.title, agent.usage, agent.progress_text]);
+      const signature = JSON.stringify([agent.status, agent.title, agent.usage, agent.progress_text,
+      outcomes(view).get(agent.id)?.status, view.running]);
       if (row.body.dataset.signature === signature) return;
       row.body.dataset.signature = signature;
       row.body.setAttribute('aria-busy', 'false');
@@ -303,8 +361,14 @@
         }
         row.body.append(usage);
       }
+      const next = outcomes(view).get(agent.id);
+      const name = agent.model?.label || 'This model';
       const state = activeStates.has(agent.status) ? 'Review in progress.' : agent.status === 'completed'
-        ? 'Model response received. See the answer review for the results.' : 'This call did not complete.';
+        ? 'Model response received. See the answer review for the results.'
+        : next?.status === 'completed' ? `${name} ${reason(agent)}, so consens.io ran the same check with ${next.model?.label || 'a backup model'}. That check completed; this attempt does not affect the result.`
+        : next ? `${name} ${reason(agent)}. consens.io is running the same check with ${next.model?.label || 'a backup model'}.`
+        : view.running ? `${name} ${reason(agent)}. consens.io tries a backup model next.`
+        : `${name} ${reason(agent)}, and no backup model could complete this check. The answer is still shown; the review notes what could not be checked.`;
       row.body.append(node('p', 'agent-judge-note', state));
       return;
     }
@@ -412,7 +476,7 @@
           button.addEventListener("click", () => show(button.dataset.agentId, button));
           inline._buttons.set(key, button); inline._stack.append(button);
         }
-        button.title = `${agent.model?.label || "Model"} · ${calls.length} ${calls.length === 1 ? "call" : "calls"} · ${labels[agent.status]}`;
+        button.title = `${agent.model?.label || "Model"} · ${calls.length} ${calls.length === 1 ? "call" : "calls"} · ${labels[agent.status] || "Waiting"}`;
         button.dataset.status = agent.status;
         button.dataset.agentId = agent.id;
         button.setAttribute("aria-label", button.title);
@@ -435,7 +499,8 @@
     setText(usageEl, `Total run · ${tokens(view.usage, view.running)}`);
     setTitle(usageEl, tokenDescription(view.usage));
     sidebar.querySelector(".agent-sidebar-stop").hidden = !view.running;
-    setText(sidebar.querySelector(".agent-sidebar-status"), view.error || (view.settling ? "Finishing pending model calls…" : ""));
+    setText(sidebar.querySelector(".agent-sidebar-status"), view.error || (view.settling ? "Finishing pending model calls…" : summary(view)));
+    const results = outcomes(view);
     for (const agent of view.agents.values()) {
       let row = sidebar._rows.get(agent.id);
       if (!row) {
@@ -470,17 +535,24 @@
         sidebar._rows.set(agent.id, row); sidebar.querySelector(".agent-session-list").append(root);
       }
       row.root.dataset.status = agent.status;
+      const next = results.get(agent.id);
+      if (next) row.root.dataset.outcome = next.status === "completed" ? "replaced" : "retrying";
+      else delete row.root.dataset.outcome;
       setText(row.title, agent.model?.label || agent.title);
       setText(row.role, agent.kind === 'comparison' ? 'Independent answer' : agent.title);
       row.role.hidden = row.role.textContent === row.title.textContent;
-      setText(row.state, `${labels[agent.status] || "Waiting"} · ${agent.duration_incomplete ? '≥ ' : ''}${Math.floor(elapsed(view, agent) / 1000)}s`);
+      setText(row.state, `${outcomeLabel(agent, next)} · ${agent.duration_incomplete ? '≥ ' : ''}${Math.floor(elapsed(view, agent) / 1000)}s`);
       setTitle(row.state, agent.duration_incomplete ? 'Last confirmed elapsed time before the server connection ended.' : 'Elapsed session time, including waiting and review.');
       const pending = view.running && ['waiting', 'working', 'rework'].includes(agent.status);
       const progress = pending ? view.progress.get(agent.id) : null;
       const loading = pending && progress?.streaming !== false;
       const usage = measured(progress?.usage) ? progress.usage : agent.usage;
       const chars = loading && progress?.chars > 0 && !measured(progress.usage);
-      setText(row.usage, chars ? `${progress.chars.toLocaleString()} chars` : tokens(usage, loading));
+      // A call that ended without a result and without reported usage has no
+      // number worth showing; "Tokens unavailable" there only reads as a fault.
+      const silent = ended.has(agent.status) && !measured(usage);
+      setText(row.usage, silent ? '' : chars ? `${progress.chars.toLocaleString()} chars` : tokens(usage, loading));
+      row.usage.hidden = silent;
       setTitle(row.usage, chars ? 'Received answer and visible reasoning characters. Token usage has not yet been reported for this call.' : tokenDescription(usage));
       row.usage.classList.toggle('is-loading', loading);
       row.track.hidden = !loading;

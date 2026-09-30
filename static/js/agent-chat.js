@@ -333,7 +333,7 @@
       App.agentWorkspace?.refresh(basis.chatId);
       App.agentGoogle?.refreshActions?.(basis.chatId);
       const failure = basis.currentTurn?.agent_failure;
-      renderAnswer(basis.consensus || "", failure?.error ? failureNotice(failure)
+      renderAnswer(basis.consensus || "", failure?.error ? failureNotice(failure, basis.currentTurn?.agent_review, basis.consensus || "")
         : (basis.currentTurn?.status === 'failed' ? 'This response did not finish successfully.' : ''));
       App.agentActivity?.renderTurn(activityHost(`${basis.chatId}:${basis.turnId}`), basis.currentTurn);
       App.agentReview?.render(document.getElementById("agentAnswerBody"), basis.currentTurn?.agent_review,
@@ -403,7 +403,7 @@
       : value.toLocaleString();
   }
   // Budget refusals carry a stable code; show a plain next step, not ledger terms.
-  function failureNotice(failure) {
+  function failureNotice(failure, review, text) {
     const code = failure?.code || failure?.error_code;
     if (code === 'agent_token_reservation') {
       const needs = compactTokens(failure.required_tokens), left = compactTokens(failure.available_tokens);
@@ -412,7 +412,8 @@
       actions: [['choose-model', 'Try a smaller model'], ['compare', 'Choose models']] };
     }
     if (code === 'agent_tokens_exhausted') return { text: `You've used today's Agent tokens. They reset at ${resetTime()}.` };
-    return { text: failure?.error || failure?.message || '' };
+    const note = App.agentReview?.failureNote?.(failure, review, text);
+    return { text: note ?? (failure?.error || failure?.message || '') };
   }
   // A brand-new chat has no files or actions until the run reports resources
   // or finishes; its first lists need no request.
@@ -463,7 +464,8 @@
     const state = context.consensus;
     const running = registry.isExecuting(context.runId);
     const failure = state.error || state.completedTurn?.agent_failure;
-    renderAnswer(state.text || state.streamText || "", failure ? failureNotice(failure) : "",
+    renderAnswer(state.text || state.streamText || "", failure ? failureNotice(failure,
+      state.completedTurn?.agent_review || context.metadata.agentReview, running ? "" : state.text || state.streamText || "") : "",
       { streaming: running && !state.text });
     App.agentActivity?.render(activityHost(context.runId), {
       elapsedMs: App.agentActivity.savedDuration(state.completedTurn)

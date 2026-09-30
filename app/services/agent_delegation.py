@@ -851,9 +851,9 @@ class DelegationLoop(AgentLoop):
                     "function": {"name": name, "arguments": "{}"}}
             result = yield from self._execute_stream(value, call)
             if "error" in json.loads(result["content"]):
-                raise AnalysisBudgetExceeded("The required answer review could not finish. The available answer has been saved.")
+                raise AnalysisBudgetExceeded("The answer check could not finish. The answer itself has been saved.")
         if not self.comparison.finalized:
-            raise AnalysisBudgetExceeded("The required answer review could not finish. The available answer has been saved.")
+            raise AnalysisBudgetExceeded("The answer check could not finish. The answer itself has been saved.")
 
     def run(self):
         status = "failed"

@@ -337,6 +337,40 @@ describe("Agent sidebar", () => {
     dom.window.close();
   });
 
+  it("explains a judge that a backup model replaced instead of reporting a failure", async () => {
+    const judge = (id, seq, status, label, extra = {}) => ({ ...agent(seq, status, id), kind: "judge", title: "Coverage judge",
+      model: { model: `m/${label}`, label }, usage: null, created_at: `2026-09-30T08:00:0${seq}Z`, ...extra });
+    const failed = judge("b".repeat(32), 1, "failed", "GPT Luna", { failure: { code: "provider_timeout" } });
+    const backup = judge("e".repeat(32), 2, "completed", "Gemini Lite", { usage: { input_tokens: 2000, output_tokens: 700 } });
+    const { window: w, document: d, dom } = boot(async () => ({ ok: true, json: async () => ({ agents: [failed, backup], status: "succeeded" }) }));
+    receive(w, failed); receive(w, backup);
+    w.App.agentDelegation.project({ chatId, turnId, running: false });
+    d.querySelector(".agent-sidebar-toggle").click();
+    const rows = [...d.querySelectorAll(".agent-session")];
+    expect(rows[0].dataset.outcome).toBe("replaced");
+    expect(rows[0].querySelector(".agent-session-state").textContent).toMatch(/^Replaced · /);
+    expect(rows[0].querySelector(".agent-session-tokens").hidden).toBe(true);
+    expect(rows[1].querySelector(".agent-session-tokens").textContent).toBe("2,700 tokens");
+    expect(d.querySelector(".agent-sidebar-status").textContent)
+      .toBe("The coverage check moved to a backup model because the first model did not respond. It completed normally.");
+    expect(d.querySelector(".agent-session-list").textContent).not.toMatch(/Failed|Tokens unavailable/);
+    rows[0].open = true; rows[0].dispatchEvent(new w.Event("toggle"));
+    expect(rows[0].querySelector(".agent-judge-note").textContent)
+      .toBe("GPT Luna did not respond in time, so consens.io ran the same check with Gemini Lite. That check completed; this attempt does not affect the result.");
+    dom.window.close();
+  });
+
+  it("says plainly when no model could run a check", () => {
+    const failed = { ...agent(1, "failed"), kind: "judge", title: "Differences judge", usage: null };
+    const { window: w, document: d, dom } = boot(async () => ({ ok: true, json: async () => ({ agents: [failed], status: "failed" }) }));
+    receive(w, failed);
+    w.App.agentDelegation.project({ chatId, turnId, running: false });
+    expect(d.querySelector(".agent-session-state").textContent).toMatch(/^Not finished · /);
+    expect(d.querySelector(".agent-sidebar-status").textContent)
+      .toBe("The differences check could not run with any available model. The answer is shown without it.");
+    dom.window.close();
+  });
+
   it("renders untrusted text safely, labels unknown totals and retries details only on demand", async () => {
     const { window: w, document: d, dom } = boot(async url => ({ ok: !url.includes(agentId), json: async () => ({ agents: [], status: "succeeded" }) }));
     receive(w, { ...agent(), title: '<img src=x onerror="alert(1)">' });
