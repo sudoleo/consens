@@ -3,22 +3,36 @@
   "use strict";
   const App = window.App = window.App || {};
   const statuses = { failed: "Response failed", cancelled: "Response stopped", canceled: "Response stopped" };
-  const toolNames = { web_search: 'Web search', compare_models: 'Model comparison', judge_answer: 'Answer review',
-    check_contradictions: 'Contradiction source check',
-    start_agent: 'Ask a model', wait_agents: 'Wait for models', send_agent: 'Follow up',
-    review_agent: 'Review a model', stop_agent: 'Stop a model', report_to_orchestrator: 'Report to the main model' };
-  const toolLabels = { web_search: 'Searching the web…', compare_models: 'Comparing perspectives…',
-    check_contradictions: 'Checking contradictions against sources…', judge_answer: 'Checking the answer…',
-    start_agent: 'Asking another model…', wait_agents: 'Waiting for model responses…',
-    send_agent: 'Following up with a model…', review_agent: 'Reviewing a model response…' };
-  const completedTools = { web_search: 'Searched the web', compare_models: 'Compared perspectives',
-    judge_answer: 'Checked the answer', check_contradictions: 'Checked contradictions against sources',
-    start_agent: 'Asked another model', wait_agents: 'Received model updates', send_agent: 'Followed up with a model',
-    review_agent: 'Reviewed a model response' };
+  // One table per tool: noun (history/failure rows), running and completed copy.
+  // Unknown future tools fall back to a neutral label instead of a raw name.
+  const tools = {
+    web_search: ['Web search', 'Searching the web…', 'Searched the web'],
+    compare_models: ['Model comparison', 'Comparing perspectives…', 'Compared perspectives'],
+    judge_answer: ['Answer review', 'Checking the answer…', 'Checked the answer'],
+    check_contradictions: ['Contradiction source check', 'Checking contradictions against sources…', 'Checked contradictions against sources'],
+    start_agent: ['Ask a model', 'Asking another model…', 'Asked another model'],
+    wait_agents: ['Wait for models', 'Waiting for model responses…', 'Received model updates'],
+    send_agent: ['Follow up', 'Following up with a model…', 'Followed up with a model'],
+    review_agent: ['Review a model', 'Reviewing a model response…', 'Reviewed a model response'],
+    stop_agent: ['Stop a model', 'Stopping a model…', 'Stopped a model'],
+    report_to_orchestrator: ['Report to the main model', 'Reporting to the main model…', 'Reported to the main model'],
+    read_file: ['Read files', 'Reading your files…', 'Read your files'],
+    read_document: ['Open document', 'Opening the document…', 'Opened the document'],
+    create_document: ['Create document', 'Writing the document…', 'Created a document'],
+    revise_document: ['Revise document', 'Revising the document…', 'Revised the document'],
+    calendar_read: ['Calendar', 'Checking your calendar…', 'Checked your calendar'],
+    prepare_calendar_event: ['Calendar change', 'Preparing a calendar change for your review…', 'Calendar change ready for review'],
+    gmail_read: ['Gmail', 'Reading relevant emails…', 'Read relevant emails'],
+    import_gmail_attachment: ['Email attachment', 'Importing an email attachment…', 'Imported an email attachment'],
+    prepare_gmail_draft: ['Email draft', 'Drafting an email for your review…', 'Email draft ready for review'],
+  };
+  // Tools whose success leaves an external write waiting for the user.
+  const reviewTools = new Set(['prepare_calendar_event', 'prepare_gmail_draft']);
+  const toolName = name => tools[name]?.[0] || 'Tool';
   function stepLabel(item) {
-    if (item.status === 'running') return toolLabels[item.name] || 'Running a tool…';
-    if (item.status === 'succeeded') return completedTools[item.name] || `${toolNames[item.name] || 'Tool'} · Completed`;
-    return `${toolNames[item.name] || 'Tool'} · ${{failed:'Failed', cancelled:'Stopped', blocked:'Skipped', unknown:'Usage unavailable'}[item.status] || 'Details'}`;
+    if (item.status === 'running') return tools[item.name]?.[1] || 'Working on a step…';
+    if (item.status === 'succeeded') return tools[item.name]?.[2] || `${toolName(item.name)} · Completed`;
+    return `${toolName(item.name)} · ${{failed:'Failed', cancelled:'Stopped', blocked:'Skipped', unknown:'Usage unavailable'}[item.status] || 'Details'}`;
   }
   function savedDuration(turn) {
     const start = Date.parse(turn?.created_at);
@@ -26,7 +40,7 @@
     return Number.isFinite(start) && Number.isFinite(end) && end >= start ? end - start : null;
   }
   function durationLabel(ms) {
-    if (!Number.isFinite(ms)) return 'Duration unavailable';
+    if (!Number.isFinite(ms)) return 'Details';
     const seconds = Math.floor(Math.max(0, ms) / 1000);
     const hours = Math.floor(seconds / 3600), minutes = Math.floor(seconds / 60) % 60;
     return `Duration: ${hours ? `${hours}h ` : ''}${minutes || hours ? `${minutes}m ` : ''}${seconds % 60}s`;
@@ -158,17 +172,20 @@
     }
   }
 
+  // Same wording as the reasoning picker (agent-chat.js effortCopy).
+  const effortNames = { default: 'Model default', none: 'Off', minimal: 'Minimal', low: 'Low', medium: 'Medium',
+    high: 'High', xhigh: 'Extra high', max: 'Max' };
+  const effortName = effort => effortNames[effort] || String(effort || '');
   function label(settings) {
     if (!settings?.label) return "Agent answer";
     const effort = settings.reasoning_effort;
-    return `${settings.label}${effort && effort !== "default" ? ` · ${effort === "none" ? "Reasoning off" : effort + " reasoning"}` : ""}`;
+    return `${settings.label}${effort && effort !== "default" ? ` · ${effort === "none" ? "Reasoning off" : `${effortName(effort)} reasoning`}` : ""}`;
   }
 
   function renderRunDetails(view, settings, running, heading) {
     const rows = [];
     if (settings?.label) rows.push(['Chat model', settings.label]);
-    if (settings?.reasoning_effort) rows.push(['Reasoning', settings.reasoning_effort === 'default' ? 'Model default'
-      : settings.reasoning_effort === 'none' ? 'Off' : settings.reasoning_effort]);
+    if (settings?.reasoning_effort) rows.push(['Reasoning', effortName(settings.reasoning_effort)]);
     if (running) rows.push(['Current step', heading]);
     const signature = JSON.stringify(rows);
     view.runDetails.hidden = !rows.length;
@@ -277,7 +294,10 @@
       ? [{id:item.id, text:item.text, kind:'progress'}]
       : reasoning.includes(item) ? [{id:item.id, text:compactReasoning(item.text), kind:'progress'}]
         : tools.includes(item) ? [{id:`step:${item.id}`, text:stepLabel(item), kind:'step', status:item.status,
-          current:running && !waiting && item === activeTool}] : []);
+          current:running && !waiting && item === activeTool},
+          // The one place where the run waits on the user: say so, and link to the card.
+          ...(item.status === 'succeeded' && reviewTools.has(item.name)
+            ? [{id:`review:${item.id}`, text:'Waiting for your confirmation below', kind:'review'}] : [])] : []);
     if (running && (!activeTool || waiting)) paragraphs.push({id:'current-status', text:heading, kind:'step', current:true});
     if (waiting) paragraphs.push({ id: 'waiting', kind:'progress', text: latest.text || 'Active model calls are using the available allowance. This response will continue automatically.' });
     const previewHeight = view.preview.getBoundingClientRect().height;
@@ -294,10 +314,23 @@
       previewIds.add(item.id);
       let p = view.previewNodes.get(item.id);
       if (!p) {
-        p = document.createElement(item.kind === 'step' ? 'div' : 'p'); view.previewNodes.set(item.id, p);
+        p = document.createElement(item.kind === 'progress' ? 'p' : 'div'); view.previewNodes.set(item.id, p);
+        if (item.kind === 'review') {
+          const jump = document.createElement('button');
+          jump.type = 'button'; jump.className = 'agent-progress-review-jump';
+          jump.textContent = item.text;
+          jump.addEventListener('click', () => App.agentChat?.revealPendingReview?.());
+          p.className = 'agent-progress-review';
+          p.append(jump);
+        }
         view.preview.appendChild(p);
         previewChanged = true;
         if (!view.details.open) reveal(p);
+      }
+      if (item.kind === 'review') {
+        const position = view.preview.children[previewIds.size - 1];
+        if (position !== p) view.preview.insertBefore(p, position || null);
+        continue;
       }
       p.classList.toggle('agent-progress-step', item.kind === 'step');
       p.classList.toggle('agent-current-status', Boolean(item.current));
@@ -343,7 +376,7 @@
           const title = document.createElement("strong");
           const toolStatus = { running: "Working…", succeeded: "Completed", failed: "Failed", blocked: "Skipped · budget reserve", cancelled: "Stopped", unknown: "Usage unavailable" };
           const count = Number.isInteger(item.count) && item.count > 0 ? ` · ${item.count} ${item.count === 1 ? "search" : "searches"}` : "";
-          title.textContent = `${toolNames[item.name] || "Tool"} · ${toolStatus[item.status] || "Details"}${count}`;
+          title.textContent = `${toolName(item.name)} · ${toolStatus[item.status] || "Details"}${count}`;
           node.replaceChildren(title);
           if (item.text) {
             const text = document.createElement("p");

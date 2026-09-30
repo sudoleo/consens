@@ -589,7 +589,7 @@ describe("single-model agent chat", () => {
     details.querySelector('summary').click();
     expect(details.open).toBe(true);
     expect([...details.querySelectorAll('.agent-activity-run-details dd')].map(el => el.textContent))
-      .toEqual(['DeepSeek V4.1 Flash','high','Thinking…']);
+      .toEqual(['DeepSeek V4.1 Flash','High','Thinking…']);
     w.App.agentActivity.render(host, {running:true,settings:{label:'DeepSeek V4.1 Flash',reasoning_effort:'high'},responding:true});
     expect(details.querySelector('[role="status"]').textContent).toBe('Writing answer…');
     expect(details.open).toBe(true);
@@ -1021,7 +1021,7 @@ describe("single-model agent chat", () => {
     ];
     window.App.agentActivity.renderTurn(host, { agent_activity: events,
       agent_usage: { input_tokens: 800, output_tokens: 62, estimated_cost_nano_usd: 400000, cost_source: "provider", complete: true } });
-    expect(host.querySelector(".agent-activity-title").textContent).toBe("Duration unavailable");
+    expect(host.querySelector(".agent-activity-title").textContent).toBe("Details");
     expect(host.querySelector(".agent-activity-tool")).toBe(null);
     expect(host.querySelector(".agent-usage").textContent).toBe("862 tokens · $0.0004 provider cost");
     // A count or citations confirm use even if the response was interrupted.
@@ -1048,7 +1048,7 @@ describe("single-model agent chat", () => {
     expect(events).toHaveLength(1);
     window.App.agentActivity.renderTurn(host, { agent_activity: events, agent_usage: {
       input_tokens: 100, output_tokens: 20, complete: false, estimated_cost_nano_usd: 10000000 } });
-    expect(host.textContent).toContain("Duration unavailable");
+    expect(host.textContent).toContain("Details");
     expect(host.textContent).toContain("Web search · Completed · 1 search");
     expect(host.textContent).toContain("usage incomplete");
     expect(host.querySelector("img")).toBe(null);
@@ -1075,7 +1075,7 @@ describe("single-model agent chat", () => {
     handlers.activity.receive(event);
     window.App.agentChat.project(run);
     const host = document.getElementById("agentAnswerActivity");
-    expect(host.querySelector('.agent-progress .agent-current-status').textContent).toBe("Running a tool…");
+    expect(host.querySelector('.agent-progress .agent-current-status').textContent).toBe("Working on a step…");
     expect(host.querySelector("details").open).toBe(false);
     expect(host.querySelector('.agent-progress').hidden).toBe(false);
     handlers.activity.receive({ ...event, status: "succeeded", text: '{"result":4}' });
@@ -1083,7 +1083,7 @@ describe("single-model agent chat", () => {
     expect(run.consensus.streamText).toBe("");
     handlers.delta.append("The result is 4.");
     window.App.agentChat.project(run);
-    expect(host.textContent).not.toContain("Running a tool…");
+    expect(host.textContent).not.toContain("Working on a step…");
     expect(document.getElementById("agentAnswerBody").textContent).not.toContain("Let me check");
     window.App.runRegistry.cancel(run.runId);
     handlers.activity.receive({ ...event, status: "running" });
