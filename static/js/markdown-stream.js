@@ -157,6 +157,106 @@ function injectMarkdown(el, md, evidenceSources = window.currentEvidenceSources)
 
 window.injectMarkdown = injectMarkdown;
 
+// --- Incremental Markdown for a growing answer -------------------------
+// Re-parsing the whole answer on every streamed chunk makes the total work
+// quadratic in its length. A streamed answer only ever grows at its end, so
+// the text is cut into top-level blocks at blank lines outside code fences
+// and display math. Finished blocks are parsed exactly once; only the last,
+// still growing block is rendered again. A block boundary is committed only
+// once the line after the blank line is complete, so a list or paragraph that
+// continues across a blank line is never split early. Loose lists and
+// indented continuations stay in one block. The caller renders the complete
+// text once with injectMarkdown() when the stream ends, so constructs that
+// span blocks (reference links, footnotes) are exact in the final answer.
+const LIST_OR_INDENT = /^(?:\s|[-*+]\s|\d{1,9}[.)]\s|>)/;
+const FENCE_LINE = /^\s{0,3}(```|~~~)/;
+
+function nextStreamBlockEnd(text, from) {
+  let fence = "";
+  let math = false;
+  let position = from;
+  let sawContent = false;
+  while (position < text.length) {
+    const newline = text.indexOf("\n", position);
+    if (newline === -1) return -1;
+    const line = text.slice(position, newline);
+    const fenceMatch = line.match(FENCE_LINE);
+    if (fence) {
+      if (fenceMatch && fenceMatch[1] === fence) fence = "";
+    } else if (math) {
+      if (line.trim().endsWith("$$")) math = false;
+    } else if (fenceMatch) {
+      fence = fenceMatch[1];
+    } else if (line.trim().startsWith("$$") && !(line.trim().length > 2 && line.trim().endsWith("$$"))) {
+      math = true;
+    } else if (!line.trim() && sawContent) {
+      // Blank line: a boundary only when the next line is complete and starts
+      // a new top-level block rather than continuing a list or quote.
+      let next = newline + 1;
+      while (next < text.length && text[next] === "\n") next += 1;
+      const nextEnd = text.indexOf("\n", next);
+      if (nextEnd === -1) return -1;
+      if (!LIST_OR_INDENT.test(text.slice(next, nextEnd))) return next;
+    }
+    if (line.trim()) sawContent = true;
+    position = newline + 1;
+  }
+  return -1;
+}
+
+function renderStreamFragment(md) {
+  const template = document.createElement("template");
+  template.innerHTML = renderMarkdownHtml(md);
+  const holder = document.createElement("div");
+  holder.append(template.content);
+  enhanceMarkdownTables(holder);
+  if (window.ConsensusMath) window.ConsensusMath.render(holder);
+  return Array.from(holder.childNodes);
+}
+
+// Renders `md` into `el`, reusing the blocks of the previous call when `md`
+// only grew. Returns the number of characters that were parsed.
+function renderMarkdownStream(el, md) {
+  md = String(md || "");
+  let state = el._markdownStream;
+  // Anyone else writing into the element (a full injectMarkdown, a review
+  // re-render) invalidates the reuse; so does text that did not only grow.
+  if (!state || !md.startsWith(state.committedText) || el.childNodes.length !== state.nodeCount) {
+    el.replaceChildren();
+    state = el._markdownStream = { committedText: "", committed: 0, tail: [], tailText: "", nodeCount: 0 };
+  }
+  let parsed = 0;
+  let end;
+  while ((end = nextStreamBlockEnd(md, state.committed)) !== -1) {
+    const block = md.slice(state.committed, end);
+    state.tail.forEach(node => node.remove());
+    state.tail = [];
+    el.append(...renderStreamFragment(block));
+    parsed += block.length;
+    state.committed = end;
+    state.committedText = md.slice(0, end);
+  }
+  const tailText = md.slice(state.committed);
+  if (tailText !== state.tailText) {
+    state.tail.forEach(node => node.remove());
+    state.tail = tailText.trim() ? renderStreamFragment(tailText) : [];
+    el.append(...state.tail);
+    state.tailText = tailText;
+    parsed += tailText.length;
+  }
+  state.nodeCount = el.childNodes.length;
+  return parsed;
+}
+
+// Drop the incremental state so the next render starts from scratch.
+function resetMarkdownStream(el) {
+  if (!el) return;
+  delete el._markdownStream;
+}
+
+window.renderMarkdownStream = renderMarkdownStream;
+window.resetMarkdownStream = resetMarkdownStream;
+
 // === Streaming (SSE) Helpers ===
 function coerceStreamText(value) {
   if (typeof value === "string") return value;
