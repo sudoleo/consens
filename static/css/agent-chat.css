@@ -358,9 +358,27 @@ body.single-agent-active .consensus-model-inline .model-picker-display::after {
 .agent-activity-update { color: var(--agent-trace-ink); font-size: 14px; line-height: 1.75; }
 .agent-progress-step { margin: 0 0 16px; color: var(--agent-ink); font-size: 13px; line-height: 1.65; }
 .agent-current-status { font-weight: 500; }
+/* The live status row starts with the consens mark, drawn as a mask in the
+   row's ink. One sheen crosses mark and label in a single stroke: it is an
+   overlay in the page colour, 55% at its centre, so over the ink it lands on
+   exactly the tone of the text shine it replaces (ink at 45%). */
+.agent-current-status::before {
+  content: ''; display: inline-block; width: calc(.86em * 1.395); height: .86em;
+  margin-right: .55em; vertical-align: -.12em; background: currentColor; forced-color-adjust: none;
+  -webkit-mask: var(--agent-mark) center / contain no-repeat; mask: var(--agent-mark) center / contain no-repeat;
+}
+.agent-progress {
+  --agent-mark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 279 200'%3E%3Cpath d='M77.1 115.3C69.2 109.7 45.6 91.5 37.2 84.5C31.4 79.6 30.8 79.1 28.9 77.4C13.1 63.5 4.1 53.4 1.4 46.6C1.1 45.8.6 45 .4 44.7C.1 44.3 0 43.6 0 41.3C0 33.5 11.9 30.1 31.5 32.2C32.7 32.4 34.8 32.6 36.1 32.7C46.9 33.9 68.4 38 84.8 41.9C96.4 44.7 95.6 44 92.9 48.4C81.6 67.1 76.2 92.7 79.4 112.9C79.8 115.2 79.8 115.8 79.5 116.1C79.1 116.7 79 116.6 77.1 115.3Z'/%3E%3Cpath d='M263.2 94.9C242.5 88 225.4 82.5 212.1 78.3C194.5 72.7 188 70.7 180.9 68.5C169.8 65.2 165.6 63.9 162.1 62.9C159.9 62.2 156.9 61.3 155.4 60.9C152.9 60.1 132.6 54.3 126.1 52.5C120 50.8 113.4 49.1 104.9 46.9C101.8 46.1 98.8 45.3 98 45.1C95.6 44.5 95.6 44.2 97.6 41.4C112.7 20.4 136.4 5.7 161.5 1.5C163.4 1.2 165.6.8 166.4.6C168.5 0 188.6-.2 189.7.3C190.1.5 191.1.8 191.9.9C227.3 5.1 259.4 30.7 272.2 64.9C273.5 68.5 274.1 70.3 275.3 74.8C276.1 77.4 276.9 81.9 277.5 85.8C277.8 87.9 278.2 90.7 278.4 92C279 95.4 279.1 99 278.7 99.3C278 99.7 276.8 99.4 263.2 94.9Z'/%3E%3Cpath d='M167.5 199.6C167.2 199.5 165.9 199.2 164.6 199C132.3 194.6 103.9 174.1 89 144.5C85.7 138 82.6 129.1 81 122C80 117.3 79.5 117.1 91.4 125.7C93.7 127.4 96.4 129.4 97.2 130C98.1 130.6 101 132.7 103.5 134.5C106 136.3 112.2 140.8 117.2 144.4C122.3 148 128 152.1 130 153.5C132 155 134.6 156.9 135.9 157.8C138.1 159.4 140.8 161.3 148.5 167C174.3 186.1 183.7 195.1 181.8 199.1C181.4 200.1 169.2 200.5 167.5 199.6Z'/%3E%3C/svg%3E");
+}
 @media (prefers-reduced-motion: no-preference) and (forced-colors: none) {
+  .agent-current-status { position: relative; width: fit-content; max-width: 100%; }
+  .agent-current-status::after {
+    content: ''; position: absolute; inset: 0; pointer-events: none;
+    background-image: linear-gradient(105deg, transparent 43%,
+      color-mix(in srgb, var(--bg-color, #fff) 55%, transparent) 50%, transparent 57%);
+    background-size: 250% 100%; animation: source-label-shine 2.4s linear infinite;
+  }
   @supports (background-clip: text) or (-webkit-background-clip: text) {
-    .agent-current-status,
     .agent-activity.is-running .agent-activity-tool[data-status="running"] > strong {
       width: fit-content; max-width: 100%;
       background-image: linear-gradient(105deg, var(--agent-ink) 43%,
