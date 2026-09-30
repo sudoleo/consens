@@ -240,7 +240,7 @@ def _composer_state(page):
           height: document.querySelector(".input-section").getBoundingClientRect().height,
           collapsed: document.body.classList.contains("composer-collapsed"),
           switchVisible: !!document.querySelector(
-            ".chat-input-container .consensus-switch-container"
+            ".chat-input-container .composer-models"
           ).offsetParent,
           footerVisible: !!document.querySelector(".app-footer").offsetParent,
           inputVisible: !!document.getElementById("questionInput").offsetParent,
@@ -1000,7 +1000,7 @@ def test_consensus_renders_differences_and_agreement_score(app_page, get_console
     )
     expect(app_page.locator("#questionInput")).to_be_visible()
     expect(app_page.locator("#questionInput")).to_be_enabled()
-    expect(app_page.locator(".chat-input-container .consensus-switch-container")).to_be_hidden()
+    expect(app_page.locator(".chat-input-container .composer-models")).to_be_hidden()
 
     # Inline-Confidence: der Widerspruch wird im Antworttext selbst markiert
     # (farbiger Textmarker), nicht nur in einer Karte daneben.

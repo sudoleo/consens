@@ -6,7 +6,7 @@
    Buttons & Inputs
    -------------------------------------------------------------------------- */
 .button,
-button:not(.close):not(.sidebar-toggle):not(.collapse-btn):not(.bookmark):not(.bookmarks-toggle):not(.sidebar-toggle-btn):not(.sidebar-search-trigger):not(#clearButton):not(.consensus-actions-toggle):not(.consensus-copy-icon-btn):not(.consensus-share-pill):not(.consensus-marker-toggle):not(.help-button):not(.btn-free):not(.btn-pro):not(.link-btn):not(.input-action-btn-subtle):not(.input-action-btn-primary):not(.auth-primary-action):not(.oauth-button):not(.theme-toggle):not(.model-picker-display):not(.model-picker-option):not(.mode-explainer-trigger):not(.mode-explainer-dismiss):not(.attach-trigger):not(.attach-menu-item):not(.attachment-chip-remove):not(.attachment-chip-preview):not(.attachment-viewer-close):not(.claim-badge):not(.claim-jump-link):not(.diff-jump-link):not(.claim-popover-close):not(.diff-resolve-btn):not(.resolve-model-toggle):not(.resolve-prompt-toggle):not(.agent-mode-collapse-btn):not(.agent-mode-answers-toggle):not(.response-code-copy):not(.post-demo-login-action):not(.exclude-btn):not(.delete-bookmark):not(#editSystemPromptBtn):not(.share-primary-btn):not(.share-secondary-btn):not(.share-danger-btn):not(.share-link-btn):not(.watch-page-back):not(.view-switch-btn):not(.watch-filter):not(.watch-example-chip):not(.watch-limit-upgrade):not(.watch-setup-edit):not(.watch-setup-chip):not(.watch-card-toggle):not(.sidebar-rail-btn):not(.auth-top-login):not(.auth-top-signup):not(.settings-danger-btn):not(.settings-inline-btn):not(.settings-nav-item):not(.sidebar-new-run):not(.sidebar-model-entry):not(.quota-trigger):not(.run-replay-btn):not(.thread-ask-more):not(.run-model-skip-btn):not(.consensus-tab):not(.consensus-footer-source-status):not(.model-picker-row-toggle):not(.response-answer-more):not(.demo-chip):not(.run-blocked-btn):not(.run-blocked-close):not(.verify-banner-btn):not(.verify-banner-link):not(.watch-nudge-btn):not(.watch-nudge-skip):not(.watch-feature-nudge-close):not(.memory-selection-action):not(.memory-edit-close):not(.memory-edit-cancel):not(.memory-edit-submit):not(.memory-edit-undo):not(.composer-quote-remove):not(.model-answer-reader button):not(.composer-agent-toggle):not(.agent-sidebar button):not(.agent-inline-models button):not(.chat-scroll-latest):not(.agent-basis-select):not(.agent-answer-actions button):not(.agent-composer-notice button):not(.agent-answer-error-actions button):not(.agent-progress-review-jump):not(.agent-resources button):not(.agent-files button) {
+button:not(.close):not(.sidebar-toggle):not(.collapse-btn):not(.bookmark):not(.bookmarks-toggle):not(.sidebar-toggle-btn):not(.sidebar-search-trigger):not(#clearButton):not(.consensus-actions-toggle):not(.consensus-copy-icon-btn):not(.consensus-share-pill):not(.consensus-marker-toggle):not(.help-button):not(.btn-free):not(.btn-pro):not(.link-btn):not(.input-action-btn-subtle):not(.input-action-btn-primary):not(.auth-primary-action):not(.oauth-button):not(.theme-toggle):not(.model-picker-display):not(.model-picker-option):not(.attach-trigger):not(.attach-menu-item):not(.attachment-chip-remove):not(.attachment-chip-preview):not(.attachment-viewer-close):not(.claim-badge):not(.claim-jump-link):not(.diff-jump-link):not(.claim-popover-close):not(.diff-resolve-btn):not(.resolve-model-toggle):not(.resolve-prompt-toggle):not(.agent-mode-collapse-btn):not(.agent-mode-answers-toggle):not(.response-code-copy):not(.post-demo-login-action):not(.exclude-btn):not(.delete-bookmark):not(#editSystemPromptBtn):not(.share-primary-btn):not(.share-secondary-btn):not(.share-danger-btn):not(.share-link-btn):not(.watch-page-back):not(.view-switch-btn):not(.watch-filter):not(.watch-example-chip):not(.watch-limit-upgrade):not(.watch-setup-edit):not(.watch-setup-chip):not(.watch-card-toggle):not(.sidebar-rail-btn):not(.auth-top-login):not(.auth-top-signup):not(.settings-danger-btn):not(.settings-inline-btn):not(.settings-nav-item):not(.sidebar-new-run):not(.sidebar-model-entry):not(.quota-trigger):not(.run-replay-btn):not(.thread-ask-more):not(.run-model-skip-btn):not(.consensus-tab):not(.consensus-footer-source-status):not(.model-picker-row-toggle):not(.response-answer-more):not(.demo-chip):not(.run-blocked-btn):not(.run-blocked-close):not(.verify-banner-btn):not(.verify-banner-link):not(.watch-nudge-btn):not(.watch-nudge-skip):not(.watch-feature-nudge-close):not(.memory-selection-action):not(.memory-edit-close):not(.memory-edit-cancel):not(.memory-edit-submit):not(.memory-edit-undo):not(.composer-quote-remove):not(.model-answer-reader button):not(.composer-agent-toggle):not(.agent-sidebar button):not(.agent-inline-models button):not(.chat-scroll-latest):not(.agent-basis-select):not(.agent-answer-actions button):not(.agent-composer-notice button):not(.agent-answer-error-actions button):not(.agent-progress-review-jump):not(.agent-resources button):not(.agent-files button) {
   padding: 10px 16px;
   font-size: var(--font-size-base);
   background:
@@ -585,17 +585,8 @@ body:not(.dark-mode) .chat-input-container::before {
 }
 
 /* --------------------------------------------------------------------------
-   Input Actions Container (Send / Clear)
+   Input Actions (Send); where the group sits is composer.css's job.
    -------------------------------------------------------------------------- */
-.input-actions-container {
-  position: absolute;
-  bottom: 10px;
-  right: 10px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
 /* Aktiver Deep-Think-Modus: ruhiger Status-Chip in der unteren Action-Zeile,
    direkt neben dem Consensus-Picker. Alle Farben verwenden Theme-Tokens. */
 .deep-think-input-indicator {
@@ -646,74 +637,6 @@ body:not(.dark-mode) .chat-input-container::before {
   cursor: pointer;
   transition: all 0.2s ease;
   font-family: inherit;
-}
-
-/* Consensus-Modell-Picker kompakt in der Aktionszeile (links der Buttons).
-   Mit .input-actions-container-Präfix, um die breiteren Basis-Picker-Regeln
-   zu überschreiben. */
-.input-actions-container .consensus-model-inline {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  margin: 0 2px 0 0;
-  min-width: 0;
-}
-
-.input-actions-container .consensus-model-inline .consensus-label {
-  display: inline-flex;
-  align-items: center;
-  align-self: stretch;
-  font-size: var(--font-size-micro);
-  line-height: var(--line-height-solid);
-  letter-spacing: var(--tracking-wide);
-}
-
-.input-actions-container .consensus-model-inline .select-wrapper select,
-.input-actions-container .consensus-model-inline .select-wrapper .model-picker-display {
-  width: auto;
-  max-width: 160px;
-  min-height: 32px;
-  padding: 6px 28px 6px 11px;
-  font-size: var(--font-size-xs);
-  border-radius: var(--radius-md);
-  /* Liquid Glass */
-  border: 1px solid color-mix(in srgb, var(--glass-border) 66%, var(--sidebar-border));
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--glass-highlight) 50%, transparent), transparent 62%),
-    color-mix(in srgb, var(--glass-bg-strong) 80%, transparent);
-  box-shadow: var(--chip-shadow), inset 0 1px 0 var(--glass-highlight);
-  backdrop-filter: blur(calc(var(--glass-blur) * 0.6)) saturate(1.2);
-  -webkit-backdrop-filter: blur(calc(var(--glass-blur) * 0.6)) saturate(1.2);
-}
-
-.input-actions-container .consensus-model-inline .select-wrapper .model-picker-display:hover,
-.input-actions-container .consensus-model-inline .select-wrapper .model-picker-display:focus-visible {
-  border-color: color-mix(in srgb, var(--accent) 34%, var(--glass-border));
-  box-shadow: var(--chip-shadow-active), inset 0 1px 0 var(--glass-highlight);
-}
-
-.input-actions-container .consensus-model-inline .select-wrapper::after {
-  right: 11px;
-}
-
-/* Popover des Consensus-Pickers: rechtsbündig, öffnet nach unten (Container darf
-   jetzt überlaufen, daher nicht mehr abgeschnitten) und bleibt im Viewport. */
-.input-actions-container .consensus-model-inline .select-wrapper .model-picker-menu {
-  top: calc(100% + 8px);
-  bottom: auto;
-  right: 0;
-  left: auto;
-  box-sizing: border-box;
-  /* rechtsbündig am kompakten Picker: schmal genug halten, damit das Popover
-     auf schmalen Screens nicht links aus dem Viewport ragt. */
-  width: min(258px, calc(100vw - 24px));
-}
-
-.consensus-switch-container {
-  right: 280px;
-  max-width: calc(100% - 300px);
-  min-width: 0;
-  overflow: hidden;
 }
 
 /* --------------------------------------------------------------------------
@@ -771,8 +694,7 @@ body:not(.dark-mode) .chat-input-container::before {
   z-index: 60;
 }
 
-/* Keep picker controls above Send, including mobile's display: contents row. */
-.chat-input-container .consensus-switch-container:has(.model-picker-menu.is-open),
+/* Keep an open picker above its neighbours in the row. */
 .chat-input-container .custom-model-picker.is-open {
   z-index: 2;
 }

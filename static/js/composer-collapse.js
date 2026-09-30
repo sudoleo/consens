@@ -58,8 +58,16 @@
     return document.getElementById("questionInput");
   }
 
+  // The start screen: the centred hero, or the Compare start with its empty
+  // answer cards. The composer shows everything there, in every mode, and
+  // never collapses (layout: composer.css).
+  function isStartScreen() {
+    const classes = document.body.classList;
+    return classes.contains("is-hero") || classes.contains("direct-comparison-preview");
+  }
+
   function isCollapsible() {
-    return mediaQuery.matches && !document.body.classList.contains("is-hero");
+    return mediaQuery.matches && !isStartScreen();
   }
 
   function isCollapsed() {
@@ -308,12 +316,12 @@
   // Ein geladenes Bookmark und der Demo-Lauf verlassen den Hero-Zustand, ohne
   // durch sendQuestion() zu gehen. Auch dann steht ab jetzt eine Antwort auf
   // dem Schirm, und der Composer ist die kleine Zeile darunter.
-  let wasHero = document.body.classList.contains("is-hero");
+  let wasStart = isStartScreen();
   new MutationObserver(function () {
-    const nowHero = document.body.classList.contains("is-hero");
-    if (nowHero === wasHero) return;
-    wasHero = nowHero;
-    if (nowHero) expand();
+    const nowStart = isStartScreen();
+    if (nowStart === wasStart) return;
+    wasStart = nowStart;
+    if (nowStart) expand();
     else collapse();
     // Die Hero-Grenze ist zugleich eine Feldhoehen-Grenze: auf dem Desktop
     // faellt die min-height des Feldes hier von 52 auf 34 px, ohne dass eine
@@ -333,12 +341,13 @@
   window.App.composer = {
     collapse: collapse,
     expand: expand,
-    isCollapsed: isCollapsed
+    isCollapsed: isCollapsed,
+    isStartScreen: isStartScreen
   };
 
   // "New comparison" und der Hero-Zustand starten immer offen.
   window.addEventListener("pageshow", function () {
-    if (document.body.classList.contains("is-hero")) expand();
+    if (isStartScreen()) expand();
   });
   document.getElementById("newRunButton")?.addEventListener("click", expand);
 })();

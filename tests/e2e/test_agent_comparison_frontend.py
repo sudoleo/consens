@@ -1,6 +1,7 @@
 """Built Agent comparison controls, markers and saved projection without providers."""
 import hashlib
 import json
+import re
 
 import pytest
 from playwright.sync_api import expect
@@ -78,18 +79,24 @@ def test_mobile_agent_plus_menu_opens_tools_from_single_line_composer(browser, p
         expect(page.locator('#composerModeBar')).not_to_be_visible()
         assert page.locator('.chat-input-container').bounding_box()['height'] <= 60
         _snapshot(page, f'agent-single-line-{width}')
-        # Focusing a follow-up expands the toolbar. The model has its own row
-        # above the aligned actions, even with a keyboard-sized viewport.
+        # Focusing a follow-up expands the composer into the same anatomy as
+        # every mode: the models on their own row, below them (+) and Send
+        # (an open Agent chat has no mode to choose), even with a
+        # keyboard-sized viewport.
         page.set_viewport_size({"width": width, "height": 450})
         page.locator('#questionInput').tap()
         page.wait_for_function("() => !document.body.classList.contains('composer-collapsed') && !document.body.classList.contains('composer-animating')")
-        controls = page.locator('#attachTrigger, .agent-model-picker .model-picker-display, .consensus-model-inline .model-picker-display, #sendButton')
-        bounds = controls.evaluate_all('buttons => buttons.map(b => b.getBoundingClientRect().toJSON())')
-        actions = [bounds[0], bounds[2], bounds[3]]
-        centers = [box['y'] + box['height'] / 2 for box in actions]
+        def box(selector):
+            return page.locator(selector).evaluate('el => el.getBoundingClientRect().toJSON()')
+        agent_model = box('.agent-model-picker .model-picker-display')
+        comparison = box('.consensus-model-inline .model-picker-display')
+        expect(page.locator('#runModeControl')).to_be_hidden()
+        actions = [box('#attachTrigger'), box('#sendButton')]
+        bounds = [actions[0], agent_model, comparison, actions[-1]]
+        centers = [b['y'] + b['height'] / 2 for b in actions]
         assert max(centers) - min(centers) <= 1
         assert all(a['right'] <= b['left'] + 1 for a, b in zip(actions, actions[1:]))
-        assert bounds[1]['bottom'] <= min(box['top'] for box in actions) + 1
+        assert max(agent_model['bottom'], comparison['bottom']) <= min(b['top'] for b in actions) + 1
         assert page.locator('.agent-model-picker .model-picker-display-text').evaluate(
             'label => label.scrollWidth <= label.clientWidth + 1')
         assert bounds[0]['x'] >= 0 and bounds[-1]['right'] <= width
@@ -258,7 +265,7 @@ def test_comparison_review_and_saved_projection(browser, phase4_server, width, d
                 label = page.locator(".agent-model-picker .model-picker-display-text").bounding_box()
                 assert label["width"] >= 90
         picker = page.locator(".consensus-model-inline .model-picker-display")
-        expect(picker).to_contain_text("Compare")
+        expect(picker).to_have_text(re.compile(r"^\s*\d+ models?\s*$"))
         picker.click()
         page.locator(".consensus-model-inline .model-picker-custom-option").click()
         expect(page.locator(".consensus-model-inline .model-picker-menu")).not_to_contain_text("Consensus engine")

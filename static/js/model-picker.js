@@ -445,9 +445,15 @@
       displayTitle = count < 2
         ? `${countLabel} selected · Choose at least 2 models to run consensus`
         : `${countLabel} · ${displayTitle}`;
+      // Without a consensus (Compare, or the comparisons next to an Agent
+      // answer) no preset writes anything, so the chip says only who answers.
+      // It never says "Compare": that word is the mode.
       if (select.dataset.comparisonOnly === "true") {
-        displayLabel = `Compare · ${count} · ${lastPresetDisplayLabel}`;
+        displayLabel = countLabel;
         displayTitle = `${countLabel} available for independent comparisons`;
+      } else if (window.App.runMode?.pipeline?.() === false) {
+        displayLabel = countLabel;
+        displayTitle = `${countLabel} answer side by side`;
       }
     }
 

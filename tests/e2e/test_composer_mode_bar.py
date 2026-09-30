@@ -19,7 +19,6 @@ def test_composer_mode_bar(browser, phase4_server, width, dark):
         page.evaluate("dark => document.body.classList.toggle('dark-mode', dark)", dark)
         bar = page.locator('#composerModeBar')
         mode = page.locator('#runModeSelect')
-        chip = page.locator('#composerModeChip')
         expect(bar).to_be_visible()
         expect(mode).to_have_value('consensus')
         expect(page.locator('#composerModelIcons img')).to_have_count(6)
@@ -30,6 +29,10 @@ def test_composer_mode_bar(browser, phase4_server, width, dark):
         output = Path('test-results/composer-mode-bar')
         output.mkdir(parents=True, exist_ok=True)
         page.screenshot(path=str(output / f'{width}-{"dark" if dark else "light"}-hero.png'))
+        # The model marks of the start toolbar overlap into one small stack.
+        marks = page.locator('.composer-model-icon')
+        first, second = marks.nth(0).bounding_box(), marks.nth(1).bounding_box()
+        assert second['x'] < first['x'] + first['width']
         choose(page, 'compare')
         expect(bar).to_be_visible()
         expect(page.locator('#composerSourcesToggle')).to_be_hidden()
@@ -55,12 +58,17 @@ def test_composer_mode_bar(browser, phase4_server, width, dark):
         expect(page.locator('.answer-reader-header')).to_be_hidden()
         expect(page.locator('#answerReaderMode')).to_be_hidden()
         expect(page.locator('.is-direct .answer-reader-answer')).to_have_count(6)
-        # The mode remains visible even when the phone composer is collapsed:
-        # the chip stands in for the hidden selector row.
+        # In a chat the bar is docked: the status of the comparison on
+        # screen, no tools (those are in the (+) menu).
+        expect(bar).to_have_attribute('data-docked', 'true')
+        expect(page.locator('#composerDeepToggle')).to_be_hidden()
+        expect(page.locator('#composerAttachButton')).to_be_hidden()
+        # The collapsed phone composer is (+), the field and Send in every
+        # mode; the selector comes back at its own place when it opens.
         page.evaluate("document.body.classList.add('composer-collapsed')")
         if width < 1100:
-            expect(chip).to_be_visible()
-            expect(chip).to_have_text('Compare')
+            expect(page.locator('#attachTrigger')).to_be_visible()
+            expect(mode.locator('xpath=..')).to_be_hidden()
         else:
             expect(mode.locator('xpath=..')).to_be_visible()
         # Collapsing can restart the reveal; measure its final position.
@@ -72,19 +80,14 @@ def test_composer_mode_bar(browser, phase4_server, width, dark):
         assert abs(rect['y'] - input_rect['y'] - input_rect['height']) <= 1
         assert abs(rect['x'] - input_rect['x'] - 12) <= 1
         assert abs(input_rect['width'] - rect['width'] - 24) <= 1
-        marks = page.locator('.composer-model-icon')
-        first, second = marks.nth(0).bounding_box(), marks.nth(1).bounding_box()
-        assert second['x'] < first['x'] + first['width']
         assert rect['x'] >= 0 and rect['x'] + rect['width'] <= width + 1
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
         page.locator('.input-section').screenshot(path=str(output / f'{width}-{"dark" if dark else "light"}-dock.png'))
         page.screenshot(path=str(output / f'{width}-{"dark" if dark else "light"}-direct.png'))
         page.evaluate("document.body.classList.remove('composer-collapsed')")
         choose(page, 'consensus')
-        if width >= 1100:
-            expect(bar).to_be_visible()
-        else:
-            expect(bar).to_be_hidden()
+        # The status line stays with the result on screen at every width.
+        expect(bar).to_be_visible()
         expect(page.locator('#composerSourcesToggle')).to_be_enabled()
         expect(page.locator('#composerSourcesToggle')).to_have_attribute('aria-checked', 'true')
         # Bookmark provenance does not change when the next question changes mode.
@@ -93,6 +96,7 @@ def test_composer_mode_bar(browser, phase4_server, width, dark):
         page.screenshot(path=str(output / f'{width}-{"dark" if dark else "light"}-agent.png'))
         page.evaluate('App.answerReader.reset()')
         expect(page.locator('#composerComparisonStatus')).to_be_hidden()
+        expect(bar).to_be_hidden()
         page.evaluate("document.getElementById('newRunButton').click()")
         expect(bar).to_be_visible()
         expect(mode).to_have_value('consensus')
@@ -167,15 +171,14 @@ def test_toolbar_deep_think_and_upload_reuse_plan_gates(browser, phase4_server, 
             page.locator('#composerAttachButton').click()
         chooser.value.set_files({'name': 'toolbar.txt', 'mimeType': 'text/plain', 'buffer': b'A local attachment.'})
         expect(page.locator('#attachmentBar')).to_contain_text('toolbar.txt')
-        page.set_viewport_size({'width': 1440, 'height': 900})
+        # On the start screen the files sit in the toolbar; in a chat, at
+        # every width, above the question in the composer.
+        expect(page.locator('#composerModeBar #attachmentBar')).to_contain_text('toolbar.txt')
         page.evaluate('window.exitHeroMode()')
-        expect(page.locator('#composerModeBar')).to_be_visible()
-        expect(page.locator('#composerModeBar #attachmentBar')).to_contain_text('toolbar.txt')
-        page.set_viewport_size({'width': 390, 'height': 844})
-        expect(page.locator('#composerModeBar')).to_be_hidden()
-        expect(page.locator('.chat-input-container #attachmentBar')).to_contain_text('toolbar.txt')
-        page.set_viewport_size({'width': 1440, 'height': 900})
-        expect(page.locator('#composerModeBar')).to_be_visible()
-        expect(page.locator('#composerModeBar #attachmentBar')).to_contain_text('toolbar.txt')
+        for viewport in ({'width': 1440, 'height': 900}, {'width': 390, 'height': 844}):
+            page.set_viewport_size(viewport)
+            expect(page.locator('#composerModeBar')).to_be_hidden()
+            expect(page.locator('.chat-input-container > #attachmentBar')).to_contain_text('toolbar.txt')
+            expect(page.locator('.chat-input-container > #attachmentBar')).to_be_visible()
     finally:
         context.close()

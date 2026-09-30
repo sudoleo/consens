@@ -1,5 +1,5 @@
 {
-  "sources": "51a0da0fcc1e",
+  "sources": "b2d89129afa3",
   "inputs": [
     "package-lock.json",
     "package.json",
@@ -28,6 +28,7 @@
     "static/css/components-model-picker.css",
     "static/css/components-watch.css",
     "static/css/composer-attachments.css",
+    "static/css/composer.css",
     "static/css/consensus-engine.css",
     "static/css/demo-action.css",
     "static/css/landing.css",
@@ -194,19 +195,19 @@
     },
     {
       "name": "app",
-      "src": "/static/dist/app.2a91fb2af9dd.js",
+      "src": "/static/dist/app.0e6b21d3d4ea.js",
       "module": false,
       "defer": true
     }
   ],
   "styles": {
-    "app": "/static/dist/app.9396f67cd328.css"
+    "app": "/static/dist/app.6595de711ace.css"
   },
   "previous_assets": [
+    "app.9396f67cd328.css",
     "app.6d2bba5af7ca.css",
-    "app.c9b82c8ad556.css",
+    "app.2a91fb2af9dd.js",
     "app.265a5d003ef4.js",
-    "app.2bd26caf932a.js",
     "demo.639b5a1996da.js",
     "firebase.325b77abcde6.js",
     "firebase.5cc9d6fa1098.js",

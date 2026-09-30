@@ -71,9 +71,11 @@ die konkrete Auswahl, auch eine leere Auswahl wird nicht still durch Defaults
 ersetzt. API-Aufrufe ohne Auswahl behalten das zentrale Standardpreset.
 
 Die gemeinsame Bottom-Bar steht im Beta-Chat nur vor der ersten Frage. Danach
-liegen ihre Optionen im bestehenden (+)-Menü im Input; das leere Eingabefeld
-ist wie beim Consensus einzeilig und wächst beim Schreiben. Auf Mobil bleibt
-das (+) auch eingeklappt direkt erreichbar. Ein neuer Chat zeigt die Startleiste wieder.
+liegen ihre Optionen im bestehenden (+)-Menü im Input. Der Composer selbst ist
+derselbe wie in Compare und Consensus (`static/css/composer.css`): (+) und Modus
+links, Chatmodell, Compare-Auswahl und Senden rechts; auf dem Desktop im Chat
+eine Zeile, auf dem Handy eingeklappt (+), Feld und Senden. Ein neuer Chat zeigt
+die Startleiste wieder.
 Der Moduswähler (Compare / Consensus / Agent, `run-mode.js`) tritt in einem
 offenen Agent-Chat zurück: Compare und Consensus brauchen einen neuen Chat,
 weil die Chat-Familien serverseitig getrennt sind. „Check contradictions“ schaltet das

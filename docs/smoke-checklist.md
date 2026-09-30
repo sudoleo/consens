@@ -247,9 +247,11 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       Kein Agent-Mode-Schalter mehr im (+)-Menü, in Settings oder unter dem
       Input. In einem offenen Consensus-Chat ist Agent deaktiviert („Available
       in a new chat“); in einem Agent-Chat verschwindet der Wähler, „New chat“
-      bringt ihn zurück. Eingeklappter
-      Handy-Composer: der Modus-Chip unter dem Feld zeigt den Modus und öffnet
-      dieselbe Auswahl. Direkt nach dem Laden mit gespeicherter Agent-Wahl
+      bringt ihn zurück. Der Composer ist in allen drei Modi derselbe: (+) und
+      Modus links (auf dem Startbildschirm unter dem Feld, im Desktop-Chat vor
+      dem Feld), Modelle und Senden rechts; auch der Compare-Start mit den
+      leeren Antwortkarten zeigt ihn so, samt Werkzeugleiste. Der Modell-Chip
+      sagt nur, wer antwortet („6 models“), nie „Compare“. Direkt nach dem Laden mit gespeicherter Agent-Wahl
       sendet nichts als Consensus, solange der Agent-Zugang noch lädt.
 - [ ] Frage eingeben + senden → alle ausgewählten Modelle streamen Antworten.
 - [ ] Bei null oder einem ausgewählten Modell ist Senden deaktiviert; Sidebar-
@@ -517,8 +519,10 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       Frage (auch nach dem Archivieren im Verlauf und beim Bookmark-Restore).
       Eine Folgefrage schickt die Datei nicht erneut mit.
 - [ ] Handy: nach dem Absenden und beim Scrollen nach unten schrumpft der
-      Composer auf eine Zeile (Feld + Senden); (+), Lauf-Schalter und Fuß
-      kommen beim Antippen oder Hochscrollen zurück. Desktop bleibt unverändert.
+      Composer in jedem Modus auf eine Zeile ((+), Feld, Senden); Modus,
+      Modelle und Fuß kommen beim Antippen oder Hochscrollen an ihrem Platz
+      zurück. Anhänge und ein Zitat bleiben eingeklappt sichtbar. Desktop und
+      Startbildschirm klappen nie ein.
 
 ## Consensus Watch
 - [ ] Nach erfolgreichem Consensus erscheint „Watch“ neben Share; Aktivierung

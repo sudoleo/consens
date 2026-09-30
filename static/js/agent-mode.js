@@ -24,7 +24,6 @@
   // The consensus pipeline runs unless the next message is a Compare.
   const pipelineEnabled = () => window.App.runMode.pipeline();
   window.App.isSourceCheckEnabled = () => pipelineEnabled() && checkSources;
-  const desktopComposer = window.matchMedia?.("(min-width: 1100px)");
 
   function setSourceCheckEnabled(enabled) {
     if (!pipelineEnabled()) {
@@ -398,11 +397,16 @@
       sourcesButton.title = sourcesTitle;
       document.getElementById("composerSourcesState").textContent = sourcesEnabled ? "On" : "Off";
     }
-    bar.hidden = !document.body.classList.contains("is-hero") && (beta || (!desktopComposer?.matches && enabled));
+    // One rule for every mode and width: the tools belong to the start
+    // screen (the hero, or the Compare start); in a chat they live in the
+    // (+) menu. A docked bar only carries the status of a direct comparison
+    // on screen, never tools.
+    const start = window.App.composer?.isStartScreen?.() ?? document.body.classList.contains("is-hero");
+    const summary = beta ? null : window.App.answerReader?.directSummary?.();
+    bar.hidden = !start && !summary;
+    bar.dataset.docked = String(!start);
     window.App.attachments?.syncComposerPlacement?.();
     bar.dataset.runMode = mode;
-    const chipLabel = document.getElementById("composerModeChipLabel");
-    if (chipLabel) chipLabel.textContent = window.App.runMode.copy(mode).label;
     document.getElementById("composerModeDescription").textContent = window.App.runMode.copy(mode).description;
     const models = window.App.modelPrefs.filter(pref => document.getElementById(pref.checkId)?.checked);
     const icons = document.getElementById("composerModelIcons");
@@ -455,7 +459,6 @@
       }));
       icons.dataset.models = key;
     }
-    const summary = beta ? null : window.App.answerReader?.directSummary?.();
     const status = document.getElementById("composerComparisonStatus");
     status.hidden = !summary;
     // The result on screen keeps its own mode; say so when the next
@@ -784,22 +787,6 @@
   document.getElementById("runModeSelect")?.addEventListener("change", function () {
     onRunModeChoice(this.value, "composer");
   });
-  // The collapsed phone composer hides the selector row; the chip opens the
-  // composer and then the very same selector.
-  document.getElementById("composerModeChip")?.addEventListener("click", function (event) {
-    event.stopPropagation();
-    const open = () => window.App.openModelPicker?.(document.getElementById("runModeSelect"));
-    if (!window.App.composer?.isCollapsed?.()) { open(); return; }
-    window.App.composer.expand();
-    // Open once the row has its final position; a menu placed mid-animation
-    // would be measured against the collapsed composer.
-    const started = Date.now();
-    (function whenSettled() {
-      if (document.body.classList.contains("composer-animating") && Date.now() - started < 1000) {
-        window.requestAnimationFrame(whenSettled);
-      } else open();
-    })();
-  });
   document.getElementById("runModeSetting")?.addEventListener("change", function () {
     window.App.runMode.set(this.value, { source: "settings" });
   });
@@ -845,7 +832,6 @@
     updateAgentModeUI();
   }).observe(document.body, { attributes: true, attributeFilter: ["class"] });
   window.App.renderComposerMode = renderComposerMode;
-  desktopComposer?.addEventListener("change", renderComposerMode);
 
   window.setAgentModeStatus = setAgentModeStatus;
   window.projectAgentModeRun = projectAgentModeRun;

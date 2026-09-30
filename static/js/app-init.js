@@ -245,6 +245,13 @@
         window.App.resizeQuestionInput = resizeQuestionInput;
         questionInput?.addEventListener("input", resizeQuestionInput);
         window.addEventListener("resize", resizeQuestionInput, { passive: true });
+        // An empty field is as tall as its placeholder (scrollHeight counts
+        // it). Several modules swap the placeholder (sign-in, Agent, a run
+        // in progress); a long one measured on a phone would otherwise keep
+        // the field at full height after a short one replaced it.
+        if (questionInput && typeof MutationObserver === "function") {
+          new MutationObserver(resizeQuestionInput).observe(questionInput, { attributes: true, attributeFilter: ["placeholder"] });
+        }
         requestAnimationFrame(resizeQuestionInput);
 
         function hasVerifiedSession() {

@@ -584,9 +584,13 @@ def test_demo_uses_all_balanced_models_and_never_displays_spinner_markup(browser
         expect(page.locator('#threadAskText')).to_contain_text('client', timeout=30000)
         if not agent_mode:
             expect(page.locator('#modelAnswerReader')).to_be_visible(timeout=30000)
-            expect(page.locator('#answerReaderStatus')).to_have_text('0 of 6 ready')
-            expect(page.locator('.is-direct .answer-reader-answer')).to_have_count(6)
-            expect(page.locator('.is-direct .answer-reader-body[aria-busy="true"] .answer-skeleton')).to_have_count(6)
+            # The first demo answer starts 500 ms after the question; check the
+            # waiting state in one atomic poll instead of four round trips.
+            page.wait_for_function("""() =>
+              document.getElementById('answerReaderStatus')?.textContent.trim() === '0 of 6 ready'
+              && document.querySelectorAll('.is-direct .answer-reader-answer').length === 6
+              && document.querySelectorAll('.is-direct .answer-reader-body[aria-busy="true"] .answer-skeleton').length === 6
+            """, polling=16, timeout=5000)
             reader_screenshot(page, 'demo-balanced-waiting')
         page.wait_for_function('() => window.__demoFinished === true', timeout=60000)
         result = page.evaluate("""() => App.modelPrefs.filter(p => !document.getElementById(p.responseId).classList.contains('excluded')).map(p => {

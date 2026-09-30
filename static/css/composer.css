@@ -1,0 +1,234 @@
+/* =========================================================================
+   composer.css
+   The one owner of the composer row, for Compare, Consensus and Agent
+   alike: where each part sits in every state, and one look for the pickers
+   in it. The box itself (surface, edge, shadow) stays in shell.css.
+
+     start screen                [ field .......................................... ]
+     (hero, or the Compare       [ (+) Mode ]                 [ models ] [ Demo Send ]
+     start with its empty cards)
+
+     desktop thread, one line    [ (+) Mode ][ field ........ ][ models ] [ Demo Send ]
+     (field grows to two rows)   → same as the start screen
+
+     phones, expanded            [ field ........................ ]
+                                 [ models ....................... ]
+                                 [ (+) Mode ]          [ Demo Send ]
+
+     phones, collapsed           [ (+) ][ field ........ ][ Send ]
+
+   (+) and the mode are always the first two controls on the left, Send is
+   always last on the right; nothing changes sides between states or modes.
+   The groups come from the markup (templates/index.html):
+     .composer-lead            (+), the mode selector (App.runMode)
+     .composer-models          who answers: Agent model and reasoning, the
+                               comparison or consensus models, Deep Think hint
+     .input-actions-container  Demo (onboarding only), Send
+   Everything above the field (files, quote, run notice, Google chips) is a
+   full-width row of its own.
+   ========================================================================= */
+
+.chat-input-container {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 6px;
+  row-gap: 8px;
+}
+
+.chat-input-container > :is(.attachment-bar, .composer-quote, .composer-run-notice, .agent-google-chips) {
+  order: 0;
+  flex: 1 1 100%;
+  min-width: 0;
+}
+
+.chat-input-container > .input-field {
+  order: 1;
+  flex: 1 1 100%;
+  min-width: 0;
+}
+
+.composer-lead {
+  order: 2;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.composer-models {
+  order: 4;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 1 auto;
+  min-width: 0;
+  /* Takes the free space, so models and Send stand on the right. */
+  margin-left: auto;
+}
+
+.chat-input-container > .input-actions-container {
+  order: 5;
+  position: static;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  margin-left: 0;
+}
+
+.agent-model-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  margin: 0;
+}
+
+.run-mode-control { display: inline-flex; align-items: center; flex: 0 0 auto; min-width: 0; max-width: 140px; }
+.agent-model-picker { display: flex; justify-content: flex-start; min-width: 0; max-width: 230px; flex: 1 1 auto; }
+.agent-effort-control { display: flex; min-width: 0; flex: 0 0 auto; }
+.consensus-model { min-width: 0; margin: 0; }
+:is(.run-mode-control, .agent-model-controls, .agent-effort-control)[hidden] { display: none; }
+
+/* ---- One look for every picker in the row -------------------------------
+   The mode, the Agent model, reasoning and the models chip are the same kind
+   of control: a quiet label with a chevron that fills on hover. The mode is
+   the first choice, so it keeps a light fill at rest. */
+.chat-input-container :is(.composer-lead, .composer-models) .select-wrapper { position: relative; min-width: 0; max-width: 100%; }
+.chat-input-container :is(.composer-lead, .composer-models) .select-wrapper::after { display: none; }
+.chat-input-container :is(.composer-lead, .composer-models) .native-model-picker {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: 0; opacity: 0; pointer-events: none;
+}
+.chat-input-container :is(.composer-lead, .composer-models) .model-picker-display {
+  display: inline-flex; align-items: center; justify-content: flex-start; gap: 8px;
+  width: auto; min-width: 0; max-width: 100%; min-height: 36px; padding: 7px 10px;
+  border: 1px solid transparent; border-radius: 9px; background: transparent; box-shadow: none;
+  color: var(--ink-2); font: inherit; font-size: 12px; font-weight: 500; line-height: 20px;
+  backdrop-filter: none; -webkit-backdrop-filter: none;
+  cursor: pointer; transition: background .15s ease, color .15s ease;
+}
+.chat-input-container :is(.composer-lead, .composer-models) .model-picker-display-text {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.chat-input-container .run-mode-control .model-picker-display { background: var(--raise); }
+.chat-input-container .agent-model-picker .model-picker-display { color: var(--ink); }
+.chat-input-container :is(.composer-lead, .composer-models) .model-picker-display::after {
+  content: ''; flex: 0 0 5px; width: 5px; height: 5px; margin-top: -3px;
+  border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg); opacity: .65;
+}
+.chat-input-container :is(.composer-lead, .composer-models) .model-picker-display:hover:not(:disabled),
+.chat-input-container :is(.composer-lead, .composer-models) .model-picker-display[aria-expanded="true"] {
+  background: var(--raise); color: var(--ink); border-color: transparent; box-shadow: none;
+}
+.chat-input-container :is(.composer-lead, .composer-models) .model-picker-display:focus-visible { outline: 2px solid var(--ink-2); outline-offset: 2px; }
+.chat-input-container :is(.composer-lead, .composer-models) .model-picker-display:disabled { opacity: .6; cursor: default; }
+.chat-input-container .run-mode-control .model-picker-display:disabled { background: transparent; }
+.chat-input-container .run-mode-control .model-picker-display:disabled::after { display: none; }
+
+/* (+) and Send are the two round ends of the row, as tall as a picker. */
+.chat-input-container .attach-trigger,
+.chat-input-container .input-action-btn-primary { width: 36px; height: 36px; min-width: 36px; min-height: 36px; border-radius: 50%; }
+
+/* The mode and Agent menus: a short list, one line of help per choice. The
+   models menu keeps its own panel (model rows, presets). */
+.chat-input-container :is(.run-mode-control, .agent-model-controls) .model-picker-menu {
+  border: 1px solid var(--line); background: var(--well); border-radius: 14px; padding: 6px; box-shadow: var(--lift);
+  overscroll-behavior: contain; scrollbar-width: thin; z-index: 1600;
+}
+.chat-input-container :is(.run-mode-control, .agent-model-controls) .model-picker-option {
+  display: flex; flex-wrap: wrap; gap: 3px; min-height: 42px; padding: 10px 30px 10px 11px;
+  color: var(--ink); font-size: 13px; line-height: 1.4; border-radius: 8px;
+}
+.chat-input-container :is(.run-mode-control, .agent-model-controls) .model-picker-option:is(:hover, .is-selected) { background: var(--raise); }
+.chat-input-container :is(.run-mode-control, .agent-model-controls) .model-picker-option:focus-visible { outline: 2px solid var(--ink-3); outline-offset: -2px; background: var(--raise); }
+.chat-input-container :is(.run-mode-control, .agent-model-controls) .model-picker-option-label { white-space: normal; overflow-wrap: anywhere; }
+.model-picker-option-description { flex-basis: 100%; font-size: 11px; color: var(--ink-3); font-weight: 400; line-height: 1.5; }
+
+/* An open menu must not be clipped by the row or covered by its neighbours. */
+.chat-input-container :is(.composer-lead, .composer-models):has(.model-picker-menu.is-open) { position: relative; z-index: 2; overflow: visible; }
+
+/* The Deep Think hint repeats the toolbar; it shows only while that is gone. */
+.input-section:has(> .composer-mode-bar:not([hidden]):not([data-docked="true"])) #deepThinkInputIndicator { display: none; }
+/* A docked bar carries only the status of a comparison on screen. */
+.composer-mode-bar[data-docked="true"] .composer-mode-controls { display: none; }
+
+/* ---- Desktop thread: one line while the question fits -------------------
+   The field takes the place between the two groups; a second line of text
+   (`.is-multiline`, set by the autosizer in app-init.js) returns to the
+   start-screen layout. min-/max-height feed that autosizer: min-height must
+   not be 0 (`parseFloat(minHeight) || 52` would fall back to 52). */
+@media (min-width: 1100px) {
+  body:not(.is-hero, .direct-comparison-preview) .chat-input-container:not(.is-multiline) > .input-field {
+    order: 3;
+    flex: 1 1 0;
+  }
+  body:not(.is-hero, .direct-comparison-preview) .chat-input-container > .input-field {
+    min-height: 34px;
+    max-height: 180px;
+    padding-top: 6px;
+    padding-bottom: 6px;
+  }
+  body:not(.is-hero, .direct-comparison-preview) .chat-input-container:not(.is-multiline) .composer-models { margin-left: 0; }
+  body:not(.is-hero, .direct-comparison-preview) .chat-input-container {
+    align-items: center;
+    padding: 6px 8px;
+    margin: 0;
+  }
+  /* In a chat the Agent picker yields width to the question. */
+  body.single-agent-active:not(.is-hero) .agent-model-picker { max-width: 180px; }
+  body.single-agent-active:not(.is-hero) .agent-effort-control .model-picker-display-text::before { content: ''; }
+}
+
+/* ---- Phones: models get a row of their own -------------------------------
+   (+), the mode and Send share the bottom row; a model name stays whole. */
+@media (max-width: 640px) {
+  .composer-models {
+    order: 2;
+    flex: 1 1 100%;
+    flex-wrap: wrap;
+    margin-left: 0;
+  }
+  .composer-lead { order: 3; }
+  .chat-input-container > .input-actions-container { order: 4; margin-left: auto; }
+  .agent-model-controls { flex-wrap: wrap; }
+  .chat-input-container :is(.composer-lead, .composer-models) .model-picker-display { padding-inline: 8px; }
+}
+/* The narrowest phones: the onboarding Demo button keeps its play mark and
+   its accessible name but gives up the word, so the bottom row stays one. */
+@media (max-width: 360px) {
+  .chat-input-container .demo-chip-label-short { display: none; }
+  .chat-input-container .demo-chip.demo-action { padding: 0 9px; }
+}
+
+/* ---- Phones in a thread: collapsed to (+), the field and Send ------------
+   The same three in every mode. Files and a quote that go with the next
+   question stay visible above them, so nothing is sent unseen. The Demo
+   button is an onboarding nudge and gives the field its room.
+   composer-collapse.js owns the state and its motion (COLLAPSE_QUERY must
+   match this breakpoint); tapping the field brings the full row back. */
+@media (max-width: 1099px) {
+  body.composer-collapsed:not(.is-hero, .direct-comparison-preview) .chat-input-container {
+    align-items: center;
+    padding: 6px 8px;
+    margin: 0;
+  }
+  body.composer-collapsed:not(.is-hero, .direct-comparison-preview) .chat-input-container > :is(.composer-run-notice, .agent-google-chips),
+  body.composer-collapsed:not(.is-hero, .direct-comparison-preview) .composer-models,
+  body.composer-collapsed:not(.is-hero, .direct-comparison-preview) #runModeControl,
+  body.composer-collapsed:not(.is-hero, .direct-comparison-preview) .demo-chip {
+    display: none;
+  }
+  body.composer-collapsed:not(.is-hero, .direct-comparison-preview) .composer-lead { order: 1; }
+  body.composer-collapsed:not(.is-hero, .direct-comparison-preview) .chat-input-container > .input-field {
+    order: 2;
+    flex: 1 1 0;
+    min-height: 34px;
+    max-height: 34px;
+    padding-top: 6px;
+    padding-bottom: 6px;
+  }
+  body.composer-collapsed:not(.is-hero, .direct-comparison-preview) .chat-input-container > .input-actions-container { order: 3; margin-left: 0; }
+}

@@ -10,7 +10,6 @@ const BODY = `
     <option value="compare">Compare</option><option value="consensus">Consensus</option></select></div>
   <select id="runModeSetting"><option value="compare">Compare</option><option value="consensus">Consensus</option></select>
   <div id="composerModeBar">
-    <button id="composerModeChip"><span id="composerModeChipLabel"></span></button>
     <button id="composerSourcesToggle"></button><span id="composerSourcesState"></span>
     <p id="composerModeDescription"></p><span id="composerModelIcons"></span>
     <p id="composerComparisonStatus"></p>
@@ -34,12 +33,10 @@ const BODY = `
   <div id="openaiResponse" class="response-box"><div class="collapsible-content"></div></div>
 `;
 
-function boot({ desktop = false, mode = "consensus", checkSources = true } = {}) {
+function boot({ mode = "consensus", checkSources = true } = {}) {
   return loadScripts(["static/js/run-mode.js", "static/js/agent-mode.js"], {
     body: BODY,
     before(window) {
-      const media = {matches: desktop, addEventListener: vi.fn()};
-      window.matchMedia = () => media;
       window.App = {
         modelPrefs: [{
           key: "OpenAI",
@@ -62,8 +59,8 @@ function boot({ desktop = false, mode = "consensus", checkSources = true } = {})
 }
 
 describe("agent mode panel projection", () => {
-  it.each([false, true])('moves Beta tools into the plus menu after chat start (desktop: %s)', async desktop => {
-    const {window, document, dom} = boot({mode: "compare", desktop});
+  it('moves Beta tools into the plus menu after chat start', async () => {
+    const {window, document, dom} = boot({mode: "compare"});
     window.App.agentChat = {isSelected: () => true, modeState: () => ({family: 'agent', canUse: true, pending: false})};
     window.App.openModelPicker = vi.fn();
     document.body.insertAdjacentHTML('beforeend', '<select id="agentModelDropdown"></select><select id="agentReasoningEffort" data-available="true"><option value="high">High</option></select>');
@@ -75,7 +72,6 @@ describe("agent mode panel projection", () => {
     expect(select.value).toBe('agent');
     expect(select.querySelector('[value="compare"]').disabled).toBe(true);
     expect(select.querySelector('[value="compare"]').dataset.description).toBe('Available in a new chat');
-    expect(document.getElementById('composerModeChipLabel').textContent).toBe('Agent');
     expect(document.getElementById('runModeControl').hidden).toBe(true);
     expect(document.getElementById('agentReasoningMenuOption').hidden).toBe(false);
     expect(document.getElementById('deepSearchToggle').closest('label').hidden).toBe(true);
@@ -167,31 +163,37 @@ describe("agent mode panel projection", () => {
     dom.window.close();
   });
 
-  it("keeps the desktop toolbar visible and resyncs attachments at the mobile breakpoint", () => {
-    const { window, document, dom } = boot({ desktop: true });
+  it("uses one toolbar rule for every mode: tools on the start screen, a docked status line in a chat", async () => {
+    const { window, document, dom } = boot();
     const sync = vi.fn();
     window.App.attachments = { syncComposerPlacement: sync };
-    window.updateAgentModeUI();
     const bar = document.getElementById('composerModeBar');
+    document.body.classList.add('is-hero');
+    await Promise.resolve();
     expect(bar.hidden).toBe(false);
-    window.App.runMode.set('compare');
-    expect(bar.hidden).toBe(false);
-    window.App.runMode.set('consensus');
-    expect(bar.hidden).toBe(false);
-    const media = window.matchMedia();
-    const onChange = media.addEventListener.mock.calls[0][1];
-    media.matches = false;
+    expect(bar.dataset.docked).toBe('false');
+    for (const mode of ['compare', 'consensus']) {
+      window.App.runMode.set(mode);
+      expect(bar.hidden).toBe(false);
+    }
+    document.body.classList.remove('is-hero');
+    await Promise.resolve();
+    for (const mode of ['compare', 'consensus']) {
+      window.App.runMode.set(mode);
+      expect(bar.hidden).toBe(true);
+    }
+    // A comparison on screen keeps its status line, docked without tools;
+    // attachments follow the bar on every render.
+    window.App.answerReader = {directSummary: () => '2 of 2 ready'};
     sync.mockClear();
-    onChange();
-    expect(bar.hidden).toBe(true);
-    expect(sync).toHaveBeenCalledOnce();
-    media.matches = true;
-    onChange();
+    window.updateAgentModeUI();
     expect(bar.hidden).toBe(false);
+    expect(bar.dataset.docked).toBe('true');
+    expect(sync).toHaveBeenCalled();
     dom.window.close();
   });
 
-  it("shows the starting toolbar, hides it in an agent chat and restores it for a new comparison", async () => {
+  it("shows the starting toolbar, hides it in a chat in every mode and restores it on the start screen", async () => {
     const { window, document, dom } = boot();
     const bar = document.getElementById('composerModeBar');
     document.body.classList.add('is-hero');
@@ -201,7 +203,7 @@ describe("agent mode panel projection", () => {
     await Promise.resolve();
     expect(bar.hidden).toBe(true);
     window.App.runMode.set('compare');
-    expect(bar.hidden).toBe(false);
+    expect(bar.hidden).toBe(true);
     window.App.runMode.set('consensus');
     document.body.classList.add('is-hero');
     await Promise.resolve();
@@ -239,9 +241,8 @@ describe("agent mode panel projection", () => {
     expect(window.localStorage.getItem('runMode')).toBe('compare');
     expect(window.App.trackAppEvent).toHaveBeenCalledWith('app_run_mode_changed', {mode: 'compare', previous: 'consensus', source: 'composer'});
     expect(setting.value).toBe('compare');
-    expect(document.getElementById('composerModeBar').hidden).toBe(false);
+    expect(document.getElementById('composerModeBar').hidden).toBe(true);
     expect(document.getElementById('composerModeDescription').textContent).toContain('no consensus');
-    expect(document.getElementById('composerModeChipLabel').textContent).toBe('Compare');
     setting.value = 'consensus';
     setting.dispatchEvent(new window.Event('change'));
     expect(select.value).toBe('consensus');

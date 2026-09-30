@@ -319,7 +319,7 @@ def test_composer_source_check_toggle_persists_and_freezes_run_payload(browser, 
         toggle = page.locator("#composerSourcesToggle")
         expect(toggle).to_be_visible()
         expect(toggle).to_have_attribute("aria-checked", "true")
-        assert page.locator(".composer-mode-controls > button").nth(1).get_attribute("id") == "composerSourcesToggle"
+        assert page.locator(".composer-mode-controls > button").first.get_attribute("id") == "composerSourcesToggle"
         toggle.click()
         page.reload()
         expect(toggle).to_have_attribute("aria-checked", "false")

@@ -72,14 +72,7 @@
 }
 .agent-google-chips:has(.agent-google-chip.is-incomplete) .agent-google-consent { color: var(--ink-2); }
 
-/* Thread composer on desktop is one row: the chips belong above it. */
-@media (min-width: 1100px) {
-  body:not(.is-hero) .chat-input-container .agent-google-chips { order: -2; padding: 2px 4px 0; }
-}
-/* The collapsed phone composer is only the field and Send. */
-@media (max-width: 1099px) {
-  body.composer-collapsed:not(.is-hero) .chat-input-container .agent-google-chips { display: none; }
-}
+/* Where the chips sit in the composer (above the question): composer.css. */
 
 /* ---- Sheet: dialog on desktop, bottom sheet on phones ------------------- */
 .agent-google-overlay {

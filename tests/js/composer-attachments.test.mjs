@@ -40,7 +40,7 @@ function boot() {
 afterEach(() => contexts.splice(0).forEach(ctx => ctx.window.close()));
 
 describe("composer attachment tray", () => {
-  it("moves the same tray and focused control between toolbar, agent chat and new comparison", async () => {
+  it("moves the same tray and focused control between the start toolbar, a chat in any mode and a new comparison", async () => {
     const { window, document } = boot();
     const tray = document.getElementById("attachmentBar");
     const toolbar = document.getElementById("composerModeBar");
@@ -53,8 +53,9 @@ describe("composer attachment tray", () => {
     expect(tray.parentNode).toBe(document.querySelector(".chat-input-container"));
     expect(tray.hidden).toBe(false);
     expect(document.activeElement).toBe(preview);
+    // In a chat the tray stays above the question in every mode.
     window.App.runMode.set('compare');
-    expect(tray.parentNode).toBe(toolbar);
+    expect(tray.parentNode).toBe(document.querySelector(".chat-input-container"));
     window.App.runMode.set('consensus');
     document.body.classList.add("is-hero");
     await Promise.resolve();

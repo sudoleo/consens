@@ -1028,17 +1028,20 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   der Moduswähler `#runModeSelect` samt Settings-Spiegel `#runModeSetting` und
   die Composer-Werkzeugleiste `#composerModeBar` direkt unter dem Input:
   Quellenprüfung (nur Consensus/Agent), Deep Think, Upload-Shortcut und
-  Anbieter-Favicons der nächsten Frage; `#composerModeChip` zeigt den Modus
-  nur im eingeklappten Handy-Composer.
-  Im Consensus erscheint die Leiste ab 1100px immer; darunter im Hero und nach Chatstart nur in Compare,
+  Anbieter-Favicons der nächsten Frage.
+  Die Leiste gehört in jedem Modus und jeder Breite zum Startbildschirm (Hero
+  oder Compare-Start mit leeren Antwortkarten, `App.composer.isStartScreen()`).
+  In einem Chat stehen die Werkzeuge im (+)-Menü; nur solange ein Direktvergleich
+  auf dem Schirm steht, bleibt die Leiste angedockt (`data-docked="true"`) als
+  reine Statuszeile ohne Werkzeuge. Sie
   schließt ohne Abstand unter dem Input an und ist seitlich um 12 px eingerückt.
   Sie bleibt auf Desktop und Mobile eine einzelne 36-px-Zeile. Die Erklärung
   ist am Modusschalter als Tooltip/Screenreader-Beschreibung verfügbar;
   die doppelte Modellzahl entfällt und mobil zeigt der Bereitschaftsstatus die Kurzform.
   Deep Think und Upload nutzen per Klick die bestehenden Controls und deren
   Pro-/Plus-Gates. Mobil sind beide reine Icon-Buttons. Ein auf Hero-Wechsel
-  begrenzter Body-Observer synchronisiert Chatstart und „New comparison“;
-  ein Media-Query-Listener synchronisiert den Desktop-Wechsel samt Anhangsplatzierung.
+  begrenzter Body-Observer synchronisiert Chatstart und „New comparison“
+  samt Anhangsplatzierung.
   Unter 700px tatsächlicher Leistenbreite kürzt eine Container-Query die Werkzeuglabels,
   auch neben dem angedockten Reader auf Desktop;
   der bestehende Deep-Think-Indikator im Input ist bei sichtbarer Leiste verborgen.
@@ -1332,12 +1335,12 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   220 px auf Desktop bzw. 180 px auf Mobile; danach scrollt nur noch die
   Textarea. Programmatische Leerungen/Füllungen lösen dafür ein `input`-Event
   aus. Der vorhandene `ResizeObserver` zieht die mobile Thread-Reserve bei
-  jeder Höhenänderung mit. Der mobile
-  Consensus-Picker richtet sich an `.consensus-switch-container` aus und ist
-  auf `100vw - 48px` begrenzt, damit er keinen horizontalen Dokument-Scroll
-  erzeugt. Auf ≤640 px werden der alte relative `bottom`-/`left`-Offset
-  explizit zurueckgesetzt und Plus, Picker sowie Send auf eine gemeinsame
-  36-px-Zeile gesetzt. Verborgene `.response-section`-Platzhalter sind im
+  jeder Höhenänderung mit. Menüs der Composer-Picker setzt
+  `fitComposerPicker()` in den sichtbaren Viewport, ohne horizontalen
+  Dokument-Scroll. Wo die Teile des Composers stehen, regelt allein
+  `css/composer.css` (siehe „Composer: eine Anatomie für alle Modi“). Ein
+  Platzhalterwechsel misst das leere Feld neu (MutationObserver in `app-init.js`),
+  sonst bliebe es nach einem langen Platzhalter zu hoch. Verborgene `.response-section`-Platzhalter sind im
   mobilen Hero und im fertigen Thread bei geschlossenem „Compare answers"
   `display:none`; ebenso nimmt das geschlossene Differences-`<details>` keinen
   Restplatz ein. Dadurch reservieren weder leere Wrapper noch Flex-Resthoehe
@@ -1640,11 +1643,13 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   der Cancel-Button bis zum fertigen Consensus/Differences stehen bleibt
   (ein Klick bricht dann via `cancelCurrentConsensus` ab).
 - **`composer-collapse.js`** — der Composer klappt auf dem Handy (bis 1099 px,
-  `COLLAPSE_QUERY` muss zur Grenze in `shell.css` passen) auf EINE Zeile ein:
-  beim Absenden (`window.App.composer.collapse()` aus `query-send.js`) und beim
-  Scrollen nach unten. Antippen, Fokus oder Hochscrollen holt (+), Lauf-Schalter
-  und Fuß zurück; getippter Text wird nie unter den Fingern weggeräumt. Zustand
-  ist allein `body.composer-collapsed`; Desktop ist bewusst ausgenommen. Ein
+  `COLLAPSE_QUERY` muss zur Grenze in `composer.css` passen) in jedem Modus auf
+  (+), Feld und Senden ein: beim Absenden (`window.App.composer.collapse()` aus
+  `query-send.js`) und beim Scrollen nach unten. Antippen, Fokus oder
+  Hochscrollen holt Modus, Modelle und Fuß zurück; getippter Text wird nie unter
+  den Fingern weggeräumt. Zustand ist allein `body.composer-collapsed`; Desktop
+  und der Startbildschirm (`App.composer.isStartScreen()`: Hero oder
+  Compare-Start) sind bewusst ausgenommen. Ein
   stehendes Zitat (`#composerQuote`) zählt wie ein Anhang als „Angefangenes“
   und verhindert das automatische Zuklappen.
 - **`composer-quote.js`** (seit 2026-08-17) — **„Ask about this"**: der in einer
@@ -1878,13 +1883,13 @@ Auswahl. API-Aufrufe ohne Auswahl behalten das zentrale Default-Preset. Der öff
 Metering-Katalog ergänzt die gemeinsame Registry automatisch um aktuelle
 Provider-Metadaten; neue Admin-Einträge benötigen keinen zusätzlichen Codeeintrag.
 
-Die gemeinsame `#composerModeBar` ist in Beta nur im Hero sichtbar. Nach Chatstart
-nutzt Beta das vorhandene `#attachMenu`: Quellenprüfung und Agent-Status verwenden
+Die gemeinsame `#composerModeBar` ist wie in jedem Modus nur auf dem Startbildschirm
+sichtbar. Nach Chatstart nutzt Beta das vorhandene `#attachMenu`: Quellenprüfung und Agent-Status verwenden
 dieselben Controls, `#agentReasoningMenuOption` öffnet die Denkstufe des Chatmodells
 und `#agentComparisonMenuOption` den bestehenden Compare-Picker. Der Upload bleibt
 deaktiviert; der separate Consensus-Deep-Think-Schalter ist in Beta verborgen.
-Die gemeinsame einzeilige Consensus-Optik gilt für leere Folgefragen; längerer Text
-wächst wie zuvor. Mobil bleibt `#attachTrigger` auch bei `composer-collapsed` sichtbar.
+Der Composer ist derselbe wie in Compare und Consensus (`composer.css`), auch
+das (+) auf dem Startbildschirm und im eingeklappten Handy-Composer.
 `composer-collapse.js` lässt Pointer/Fokus auf Plus und dessen Menü direkt durch,
 ohne das Layout zwischen Touch und Klick zu verschieben. Ein neuer Chat zeigt die
 Startleiste wieder. In einem offenen Agent-Chat tritt der Moduswähler zurück
@@ -1899,8 +1904,7 @@ Reasoning auch dann ein bedienbares Menü, wenn dessen Elternbereich zuvor
 eingeklappt war. Ein nur bei offenem Menü aktiver ResizeObserver passt die
 Position während des Aufklappens an. Beim Einpassen begrenzen die sichtbare
 Kopfleiste und der View-Schalter den oberen Menüraum, damit kein Eintrag darunter
-verdeckt wird; die Picker-Ebene liegt auch bei einer
-mobilen `display: contents`-Zeile über Senden. Touch-Tests prüfen beide Shortcuts,
+verdeckt wird; ein offenes Picker-Menü liegt über seinen Nachbarn in der Zeile. Touch-Tests prüfen beide Shortcuts,
 freie Trefferflächen der Optionen und den Quellen-Schalter bei 320 und 390 px.
 `agent-chat.js` friert `checkSources` im RunContext ein und sendet es als
 `POST /agent.check_sources`, einschließlich Recovery. Alte API-Clients ohne das
@@ -3367,12 +3371,32 @@ die Beta verlaesst). Beim ersten Laden migriert das Modul die Altschluessel
   sperrt `updateQuestionInputAccess()` das Senden, statt still als Consensus
   zu senden. Scheitert `/user_status`, setzt `firebase.js` den Zugang auf
   „nicht erlaubt“; der Wähler zeigt dann sichtbar Consensus.
-- UI: `#runModeSelect` in der Composer-Zeile (Custom-Picker), `#runModeSetting`
-  in Settings → Runs, `#composerModeChip` im eingeklappten Handy-Composer.
+- UI: `#runModeSelect` in der Composer-Zeile direkt rechts vom (+), in jedem
+  Modus an derselben Stelle (Custom-Picker), `#runModeSetting` in Settings →
+  Runs. Der eingeklappte Handy-Composer zeigt nur (+), Feld und Senden;
+  Antippen holt den Wähler an seinem Platz zurück.
   Werkzeuge folgen dem Modus: Compare blendet die Quellenprüfung in Leiste und
   (+)-Menue aus. Entfernt: `#composerAgentToggle`, `#agentModeMenuSwitch`,
   `#agentModeSwitch`, `#autoConsensusToggle`, `#chatExecutionMode`,
   `window.setAgentMode`, `window.isAgentModeEnabled`, `window.toggleAllResponses`.
+
+### Composer: eine Anatomie für alle Modi
+`templates/index.html` gliedert die Composer-Zeile in drei Gruppen, für Compare,
+Consensus und Agent dieselben: `.composer-lead` ((+) `#attachTrigger` und der
+Moduswähler `#runModeControl`), `.composer-models` (wer antwortet:
+`#agentModelControls`, der Modell-Chip `#consensusModelDropdown`, der
+Deep-Think-Hinweis) und `.input-actions-container` (Demo, Senden). Wo sie
+stehen, entscheidet allein `static/css/composer.css`; `shell.css` gestaltet nur
+die Box. Zustände: Startbildschirm (Hero oder Compare-Start) und aufgeklappt =
+Feld oben, darunter (+) und Modus links, Modelle und Senden rechts; Desktop im
+Chat = eine Zeile [(+) Modus][Feld][Modelle][Senden], ab der zweiten Textzeile
+(`.is-multiline`) wie der Startbildschirm; Handy = Modelle in eigener Zeile
+über [(+) Modus … Senden]; Handy eingeklappt = [(+)][Feld][Senden], Anhänge
+und Zitat bleiben darüber sichtbar. (+) und Modus stehen nie woanders, Senden
+immer rechts außen. Alle Picker der Zeile teilen eine Optik (ruhiges Label mit
+Chevron, der Modus mit leichter Fläche). Der Modell-Chip nennt nur, wer
+antwortet („6 models · Balanced“ mit Consensus, sonst „6 models“), nie den
+Modusnamen.
 
 ### Consensus-Lauf (historisch „Agent Mode“)
 Wo dieses Dokument „Agent Mode an/aus“ sagt, ist heute Consensus bzw. Compare
@@ -3540,9 +3564,9 @@ Default dauerhaft.
 ### Attachments (ab Plus)
 Noch nicht gesendete Dateien stehen als kompakte Vorschau-/Entfernen-Chips in
 der Leiste unter dem Eingabefeld. `attachments.js` verschiebt dieselbe
-`#attachmentBar` in die sichtbare `#composerModeBar`; verbirgt Consensus die
-Toolbar auf Mobile nach dem Hero, kehrt sie an ihren Composer-Anker oberhalb des Felds
-zurueck. `App.attachments.syncComposerPlacement()` wird beim Toolbar-Rendering
+`#attachmentBar` auf dem Startbildschirm in die `#composerModeBar`; in einem Chat
+(Leiste verborgen oder nur angedockt) steht sie in jedem Modus an ihrem
+Composer-Anker oberhalb des Felds, auch im eingeklappten Handy-Composer. `App.attachments.syncComposerPlacement()` wird beim Toolbar-Rendering
 und Attachment-Rendering aufgerufen; Fokus, Datei-Bytes und Listener bleiben
 erhalten. Neue Dateien oeffnen einen eingeklappten mobilen Composer. Beim Senden
 geht die vorhandene Metadaten-Uebergabe weiterhin an die jeweilige Frage; leere

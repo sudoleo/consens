@@ -81,10 +81,8 @@
   font-size: 11px;
   font-weight: 400;
 }
-/* When Agent Mode hides the toolbar, the same compact files sit above the
-   draft. They cannot disappear just because the mobile composer collapsed. */
+/* In a chat the files sit above the question (row: composer.css). */
 .chat-input-container > #attachmentBar:not([hidden]) {
-  flex: 1 0 100%;
   padding-bottom: 8px;
 }
 @media (max-width: 640px) {

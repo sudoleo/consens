@@ -673,168 +673,14 @@
 }
 
 @media (max-width: 900px) {
-  .chat-input-container {
-    min-height: 124px;
-    padding-bottom: 58px;
-  }
-
-  .mode-explainer {
-    grid-template-columns: 1fr;
-    align-items: stretch;
-    gap: 12px;
-    padding: 12px;
-  }
-
-  .mode-explainer-items {
-    grid-template-columns: 1fr;
-    gap: 9px;
-  }
-
-  .mode-explainer-dismiss {
-    justify-self: stretch;
-  }
-
-  .mode-explainer-footer {
-    justify-items: start;
-    width: 100%;
-  }
-
-  .consensus-switch-container {
-    left: 10px !important;
-    right: auto !important;
-    bottom: 10px !important;
-    gap: 8px !important;
-    max-width: calc(100% - 224px);
-    flex-wrap: nowrap;
-    overflow: visible;
-  }
-
-  /* Konsens-Picker auf schmalen Screens kompakter, Label entfällt */
-  .input-actions-container .consensus-model-inline .consensus-label {
-    display: none;
-  }
-
-  /* Die globale Mobile-Regel versteckt Modus-Labels in der unteren Leiste;
-     im geöffneten (+)-Menü muss "Deep Think" weiterhin lesbar bleiben. */
-  .attach-menu-toggle .search-mode-label {
-    display: inline !important;
-  }
-
-  .input-actions-container .consensus-model-inline .select-wrapper select,
-  .input-actions-container .consensus-model-inline .select-wrapper .model-picker-display {
-    max-width: 116px;
-    font-size: var(--font-size-micro);
-  }
-
-  .agent-mode-control {
-    gap: 0;
-    min-height: 38px;
-    flex: 0 0 auto;
-  }
-
-  .agent-mode-label,
-  .search-mode-label,
-  .consensus-switch-container .slider,
   .deepthink-disclaimer {
     display: none !important;
-  }
-
-  .consensus-switch-container label.switch,
-  .agent-mode-control label.switch {
-    width: 38px;
-    height: 38px;
-    box-sizing: border-box;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border: 1px solid var(--sidebar-border);
-    border-radius: var(--radius-xs);
-    background: var(--response-bg);
-    color: var(--sidebar-text-muted);
-    box-shadow: var(--box-shadow);
-    cursor: pointer;
-    transition: background-color .15s ease, border-color .15s ease, color .15s ease, box-shadow .15s ease, transform .12s ease;
-  }
-
-  .attach-trigger {
-    width: 38px;
-    height: 38px;
-    border-radius: var(--radius-xs);
-    background: var(--response-bg);
-    box-shadow: var(--box-shadow);
   }
 
   .attach-menu {
     top: calc(100% + 8px);
     bottom: auto;
   }
-
-  .mode-explainer-trigger {
-    width: 38px;
-    height: 38px;
-    border-radius: var(--radius-xs);
-    font-size: var(--font-size-sm);
-    background: var(--response-bg);
-    box-shadow: var(--box-shadow);
-  }
-
-  .consensus-switch-container label.switch:hover,
-  .consensus-switch-container label.switch:focus-within,
-  .agent-mode-control label.switch:hover,
-  .agent-mode-control label.switch:focus-within {
-    color: var(--text-color);
-    border-color: color-mix(in srgb, var(--accent) 28%, var(--sidebar-border));
-    background: var(--sidebar-hover);
-  }
-
-  .consensus-switch-container label.switch:active,
-  .agent-mode-control label.switch:active {
-    transform: translateY(1px);
-  }
-
-  .consensus-switch-container label.switch:has(input:checked),
-  .agent-mode-control label.switch:has(input:checked) {
-    color: var(--button-bg);
-    border-color: var(--button-bg);
-    background: color-mix(in srgb, var(--button-bg) 14%, var(--response-bg));
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--button-bg) 12%, transparent);
-  }
-
-  .agent-mode-control .slider {
-    display: none;
-  }
-
-  .consensus-switch-container label.switch:has(input:focus-visible) {
-    outline: 2px solid color-mix(in srgb, var(--button-bg) 50%, transparent);
-    outline-offset: 2px;
-  }
-
-  .consensus-switch-container label.switch.locked {
-    opacity: .72;
-  }
-
-  .consensus-switch-container label.switch::before,
-  .agent-mode-control label.switch::before {
-    content: "";
-    width: 18px;
-    height: 18px;
-    background: currentColor;
-    -webkit-mask-repeat: no-repeat;
-    mask-repeat: no-repeat;
-    -webkit-mask-position: center;
-    mask-position: center;
-    -webkit-mask-size: contain;
-    mask-size: contain;
-  }
-
-  .agent-mode-control label.switch::before {
-    width: 21px;
-    height: 18px;
-    background: currentColor;
-    -webkit-mask: url("../favicon.png") center / contain no-repeat;
-    mask: url("../favicon.png") center / contain no-repeat;
-  }
-
 }
 
 @media (max-width: 640px) {
@@ -852,104 +698,13 @@
 }
 
 @media (max-width: 420px) {
-  .consensus-switch-container {
-    gap: 5px !important;
-    max-width: calc(100% - 154px);
-  }
-
-  .consensus-switch-container label.switch {
-    width: 36px;
-    height: 36px;
-  }
-
-  .mode-explainer-trigger {
-    width: 36px;
-    height: 36px;
-  }
-
-  .attach-trigger {
-    width: 36px;
-    height: 36px;
-  }
-
-  .input-actions-container {
-    gap: 6px;
-  }
-
   .deep-think-input-indicator {
     min-height: 28px;
     padding-inline: 6px;
   }
 
-  .input-actions-container .consensus-model-inline {
-    flex: 0 0 auto;
-    margin-right: 0;
-  }
-
-  .input-actions-container .consensus-model-inline .select-wrapper select,
-  .input-actions-container .consensus-model-inline .select-wrapper .model-picker-display {
-    width: 58px;
-    max-width: 58px;
-    min-width: 58px;
-    padding-inline: 8px 20px;
-    color: transparent;
-  }
-
-  .input-actions-container .consensus-model-inline .select-wrapper .model-picker-display-text {
-    max-width: 0;
-    overflow: hidden;
-  }
-
-  .input-actions-container .consensus-model-inline .select-wrapper::before {
-    content: "AI";
-    position: absolute;
-    left: 10px;
-    top: 50%;
-    z-index: 2;
-    color: var(--text-color);
-    font-size: var(--font-size-micro);
-    font-weight: var(--font-weight-bold);
-    line-height: var(--line-height-solid);
-    letter-spacing: var(--tracking-normal);
-    transform: translateY(-50%);
-    pointer-events: none;
-  }
-
-  .input-actions-container .consensus-model-inline .select-wrapper::after {
-    right: 8px;
-    border-left-width: 3px;
-    border-right-width: 3px;
-    border-top-width: 4px;
-  }
-
-  .input-actions-container .input-action-btn-primary {
-    width: 34px;
-    height: 34px;
-    padding: 0;
-  }
-
   .attachment-chip-name {
     max-width: 120px;
-  }
-}
-
-/* Sehr kleine Displays: Info-Trigger ausblenden, damit die Bottom-Row
-   einzeilig bleibt und nichts abgeschnitten wird. */
-@media (max-width: 374px) {
-  .mode-explainer-trigger {
-    display: none;
-  }
-}
-
-@media (max-width: 360px) {
-  .consensus-switch-container {
-    gap: 4px !important;
-  }
-
-  .consensus-switch-container label.switch,
-  .attach-trigger {
-    width: 33px;
-    height: 33px;
   }
 }
 

@@ -72,13 +72,15 @@
     const questionInput = document.getElementById("questionInput");
     if (!trigger || !menu || !uploadOption || !fileInput || !bar) return;
 
-    // One tray, two homes: the starting toolbar and the agent-chat composer.
+    // One tray, two homes: the toolbar on the start screen, the composer in a chat.
     // Move the actual nodes so previews/removal keep their state and handlers.
     const composerHome = document.createComment("composer-attachments-home");
     bar.before(composerHome);
     function syncComposerPlacement() {
       const toolbar = document.getElementById("composerModeBar");
-      const inToolbar = toolbar && !toolbar.hidden;
+      // A docked toolbar (in a chat) carries only a status line; files then
+      // belong above the question in the composer itself.
+      const inToolbar = toolbar && !toolbar.hidden && toolbar.dataset.docked !== "true";
       const parent = inToolbar ? toolbar : composerHome.parentNode;
       if (!parent || bar.parentNode === parent) return;
       const focus = bar.contains(document.activeElement) ? document.activeElement : null;
@@ -469,7 +471,7 @@
           renderAttachmentChips();
           const next = bar.querySelectorAll(".attachment-chip-remove")[Math.min(index, window.pendingAttachments.length - 1)];
           const toolbar = document.getElementById("composerModeBar");
-          (next || (!toolbar?.hidden && document.getElementById("composerAttachButton")) || trigger).focus({ preventScroll: true });
+          (next || (!toolbar?.hidden && toolbar.dataset.docked !== "true" && document.getElementById("composerAttachButton")) || trigger).focus({ preventScroll: true });
         });
         chip.appendChild(removeBtn);
 

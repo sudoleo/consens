@@ -1,10 +1,13 @@
 """One mode selector: Compare / Consensus / Agent (run-mode.js + agent-mode.js).
 
+The composer around it is the same in every mode (composer.css).
+
 Covers the migration from the old Agent Mode switch, the per-chat family
 locks, entitlement, the settings mirror, contextual tools and layout from
 320 px to desktop in both themes.
 """
 import os
+import re
 from pathlib import Path
 
 import pytest
@@ -88,34 +91,40 @@ def test_one_selector_drives_mode_tools_and_settings(browser, phase4_server, wid
         expect(page.locator("#composerSourcesToggle")).to_be_hidden()
         expect(page.locator("#composerModeDescription")).to_contain_text("no consensus")
         _shot(page, f"{width}-{'dark' if dark else 'light'}-compare")
-        chip = page.locator("#composerModeChip")
-        if width < 1100:
-            # The collapsed phone composer hides the selector row; the chip
-            # keeps the mode visible and opens the same selector.
-            page.evaluate("App.composer.collapse({force: true})")
-            page.wait_for_function("() => !document.body.classList.contains('composer-animating')")
-            expect(chip).to_be_visible()
-            expect(chip).to_have_text("Compare")
-            chip.click()
-            expect(page.locator("#runModeControl .model-picker-menu")).to_be_visible()
-            page.wait_for_function("() => !document.body.classList.contains('composer-animating')")
-            menu = page.locator("#runModeControl .model-picker-menu").bounding_box()
-            assert menu["y"] >= 0 and menu["y"] + menu["height"] <= 900
-            _shot(page, f"{width}-{'dark' if dark else 'light'}-chip-menu")
-            page.keyboard.press("Escape")
-        else:
-            expect(chip).to_be_hidden()
+        # The chip for the models says who answers, never the mode's name.
+        models_chip = page.locator(".consensus-model-inline .model-picker-display-text")
+        expect(models_chip).to_have_text(re.compile(r"^\d+ models?$"))
+        # The Compare start is a start screen like the hero: the composer
+        # keeps the selector where it was and never collapses there.
+        assert page.evaluate("App.composer.isStartScreen()") is True
+        page.evaluate("App.composer.collapse({force: true})")
+        expect(control).to_be_visible()
         page.evaluate("App.composer.expand()")
         page.wait_for_function("() => !document.body.classList.contains('composer-animating')")
         page.locator("#attachTrigger").click()
         expect(page.locator('label[for="sourceCheckMenuSwitch"]')).to_be_hidden()
         page.locator("#attachTrigger").click()
 
+        # (+) and the mode keep their place whichever mode is chosen.
+        def lead():
+            # One measurement once motion has settled (switching modes moves
+            # the whole composer).
+            return page.evaluate("""async () => {
+              await Promise.all(document.getAnimations().map(a => a.finished.catch(() => null)));
+              const box = document.querySelector('.chat-input-container').getBoundingClientRect();
+              const plus = document.getElementById('attachTrigger').getBoundingClientRect();
+              const mode = document.getElementById('runModeControl').getBoundingClientRect();
+              return [Math.round(plus.x - box.x), Math.round(mode.x - box.x), Math.round(mode.y - plus.y)];
+            }""")
+        compare_lead = lead()
         # Agent: the shell switches, and the choice survives a reload.
         choose(page, "agent")
-        expect(page.locator("body")).to_have_class(__import__("re").compile(r"single-agent-active"))
+        expect(page.locator("body")).to_have_class(re.compile(r"single-agent-active"))
         expect(page.locator("#agentModelControls")).to_be_visible()
         assert page.evaluate("App.agentChat.isSelected()") is True
+        expect(page.locator("#attachTrigger")).to_be_visible()
+        assert lead() == compare_lead
+        expect(models_chip).to_have_text(re.compile(r"^\d+ models?$"))
         _shot(page, f"{width}-{'dark' if dark else 'light'}-agent")
         page.reload()
         _signed_in(page, agent_access=True)
