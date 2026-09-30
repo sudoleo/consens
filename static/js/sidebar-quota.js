@@ -111,6 +111,14 @@
     trigger.setAttribute("aria-label", label);
   }
 
+  // The Agent allowance resets at the start of the UTC day; say when that is here.
+  function agentResetTime() {
+    var next = new Date();
+    next.setUTCHours(24, 0, 0, 0);
+    try { return next.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }); }
+    catch (_) { return "00:00 UTC"; }
+  }
+
   function sync() {
     var runs = parseLine(el("freeUsageDisplay"));
     var deep = parseLine(el("deepUsageDisplay"));
@@ -128,6 +136,9 @@
     var tokens = budget && Number.isFinite(unspent) && Number.isFinite(budget.limit) && budget.limit > 0
       ? { value: Math.max(0, unspent), limit: budget.limit } : null;
     var remaining = tokens ? Math.max(0, Math.min(100, Math.floor(tokens.value / tokens.limit * 100))) : null;
+    // 2,300 of 250,000 tokens is not "0%": anything left but under one
+    // percent reads "<1%"; only an empty allowance shows 0%.
+    var percent = remaining === 0 && tokens && tokens.value > 0 ? '<1%' : remaining + '%';
     renderRow("quotaRowRuns", "quotaRunsValue", agent ? tokens : runs);
     var rowTitle = el('quotaRowRuns')?.querySelector('b');
     if (rowTitle) rowTitle.textContent = agent ? 'Agent tokens' : 'Runs';
@@ -137,14 +148,13 @@
     var trigger = el('quotaTrigger');
     if (trigger) trigger.dataset.allowance = agent ? 'agent' : 'runs';
     if (agent && tokens) {
-      var percent = remaining + '%';
       var label = percent + ' of your daily Agent token budget unspent';
       if (Number.isFinite(budget.remaining)) label += '; ' + budget.remaining.toLocaleString() + ' tokens available for new calls';
       if (el('quotaTriggerValue')) el('quotaTriggerValue').textContent = percent;
       if (trigger) { trigger.title = label; trigger.setAttribute('aria-label', label); }
       if (el('quotaRunsValue')) {
-        el('quotaRunsValue').textContent = percent;
-        el('quotaRunsValue').title = tokens.value.toLocaleString() + ' / ' + tokens.limit.toLocaleString() + ' tokens';
+        el('quotaRunsValue').textContent = tokens.value.toLocaleString() + ' of ' + tokens.limit.toLocaleString();
+        el('quotaRunsValue').title = percent + ' of today\u2019s Agent tokens left';
       }
     }
     if (agent) {
@@ -167,11 +177,12 @@
     var countdown = el("countdownDisplay");
     var foot = el("quotaFoot");
     if (foot) {
-      var text = agent ? (tokens ? tokens.value.toLocaleString() + ' of ' + tokens.limit.toLocaleString() + ' tokens unspent. Resets at 00:00 UTC. Active calls temporarily reserve tokens.' : 'Agent allowance unavailable.')
+      var resets = 'Resets at ' + agentResetTime() + ' your time (00:00 UTC).';
+      var text = agent ? (tokens ? tokens.value.toLocaleString() + ' of ' + tokens.limit.toLocaleString() + ' tokens left. ' + resets + ' Active calls temporarily reserve tokens.' : 'Agent allowance unavailable.')
         : countdown ? (countdown.textContent || "").trim() : "";
       if (agent && tokens && Number.isFinite(budget.reserved) && budget.reserved > 0) {
         text = tokens.value.toLocaleString() + ' tokens unspent; ' + Math.max(0, budget.remaining).toLocaleString() + ' available for new calls. '
-          + budget.reserved.toLocaleString() + ' temporarily reserved for active calls and review. Resets at 00:00 UTC.';
+          + budget.reserved.toLocaleString() + ' temporarily reserved for active calls and review. ' + resets;
       }
       if (agent && estimated > 0) {
         text += ' ' + estimated.toLocaleString() + ' tokens are estimated for calls without reported final usage; measured usage replaces the estimate.';
