@@ -8,8 +8,15 @@
   let catalogOwner = "";
   let catalogStatus = "idle";
   let loadGeneration = 0;
-  let catalogUser = null, catalogAuthGeneration, budgetRefresh = null;
+  let catalogUser = null, catalogAuthGeneration, budgetRefresh = null, budgetTimer = null;
+  // Shell/run split: the composer shell renders only when one of its inputs
+  // changes, never for a streamed text chunk.
+  let shellSignature = '';
+  // projectFrame() runs once per run on screen; viewEpoch changes whenever
+  // the view leaves that run, so returning to it frames it again.
+  let frameKey = '', viewEpoch = 0, framedRunId = null;
   const selections = new Map();
+  const cssId = value => (window.CSS?.escape ? CSS.escape(value) : String(value).replace(/["\\]/g, '\\$&'));
   const effortCopy = {
     default: ["Auto", "Use the model’s default reasoning"],
     none: ["Off", "Answer without extended reasoning"],
@@ -231,7 +238,37 @@
     if (basis) return basis.executionMode || "consensus";
     return canUse() ? preference : "consensus";
   }
-  function render() {
+  function shellInputs() {
+    const context = registry.visible();
+    const basis = registry.getSelectedConversationBasis({ includeHistory: false });
+    const picked = catalogStatus === 'ready' ? selection() : null;
+    return JSON.stringify([selectedMode(), preference, canUse(), window.auth?.currentUser?.uid || '', App.authState?.generation,
+      catalogStatus, catalogOwner, loadGeneration, catalog?.models?.length, picked?.model_id, picked?.reasoning_effort,
+      context?.runId, context?.status, registry.isExecuting(context?.runId),
+      context?.metadata.recovering, context?.metadata.recoveryState, context?.metadata.recoverable, context?.metadata.requestSent,
+      basis && [basis.key, basis.chatId, basis.turnId, basis.bookmarkId, basis.continuationUnavailable,
+        basis.consensus?.length, basis.currentTurn?.id, basis.currentTurn?.status, basis.currentTurn?.agent_review?.status,
+        basis.currentTurn?.completed_at]]);
+  }
+  // Composer controls, mode chrome and a saved (non-run) projection. Without
+  // `force` it returns at once when nothing it shows has changed, so the
+  // registry listener and the run projector can call it on every update.
+  function renderShell(force = false) {
+    const visibleRun = registry.visible()?.runId || null;
+    if (visibleRun !== framedRunId) { framedRunId = visibleRun; viewEpoch++; frameKey = ''; }
+    const signature = shellInputs();
+    if (!force && signature === shellSignature) return false;
+    shellSignature = signature;
+    renderShellNow();
+    return true;
+  }
+  function render() { renderShell(true); }
+  // The 60 s allowance refresh only runs while Agent mode is on screen.
+  function syncBudgetPolling(agent) {
+    if (agent && canUse() && !budgetTimer) budgetTimer = setInterval(refreshVisibleBudget, 60000);
+    else if ((!agent || !canUse()) && budgetTimer) { clearInterval(budgetTimer); budgetTimer = null; }
+  }
+  function renderShellNow() {
     const agent = selectedMode() === "agent";
     const comparisonPicker = document.getElementById("consensusModelDropdown");
     if (comparisonPicker) {
@@ -287,12 +324,18 @@
     }
     if (panel) panel.hidden = !agent || (!context && !basis);
     if (panel?.hidden) activityHost('');
-    App.agentGoogle?.refreshControls();
-    if (!agent || (!context && !basis)) App.agentWorkspace?.refresh(null);
+    placeLegacyGoogleControls();
+    // With the Google sheet (Package A) this only re-projects cached state; the
+    // connections list loads when the Google entry is first opened.
+    App.agentGoogle?.refreshControls?.();
+    if (!agent || (!context && !basis)) { App.agentWorkspace?.refresh(null); App.agentGoogle?.refreshActions?.(null); }
+    syncBudgetPolling(agent);
     if (agent && !context && basis) {
       App.agentWorkspace?.refresh(basis.chatId);
-      renderAnswer(basis.consensus || "", basis.currentTurn?.agent_failure?.error
-        || (basis.currentTurn?.status === 'failed' ? 'This response did not finish successfully.' : ''));
+      App.agentGoogle?.refreshActions?.(basis.chatId);
+      const failure = basis.currentTurn?.agent_failure;
+      renderAnswer(basis.consensus || "", failure?.error ? failureNotice(failure)
+        : (basis.currentTurn?.status === 'failed' ? 'This response did not finish successfully.' : ''));
       App.agentActivity?.renderTurn(activityHost(`${basis.chatId}:${basis.turnId}`), basis.currentTurn);
       App.agentReview?.render(document.getElementById("agentAnswerBody"), basis.currentTurn?.agent_review,
         { sources: basis.currentTurn?.sources, events: basis.currentTurn?.agent_activity, key: basis.turnId, question: basis.question });
@@ -306,22 +349,93 @@
     }
     if (!agent || (!context && !basis)) App.agentDelegation?.project(null);
     window.updateQuestionInputAccess?.();
+    syncPendingReview();
   }
-  function renderAnswer(text, error) {
+  // Until the Google controls leave the composer (Package A), keep a legacy
+  // in-composer panel out of the toolbar grid: in the mobile two-row toolbar
+  // it was auto-placed beside the actions and pushed Send out of line.
+  function placeLegacyGoogleControls() {
+    const legacy = document.getElementById('agentGoogleControls');
+    const notice = document.getElementById('agentComposerNotice');
+    if (legacy && notice && legacy.parentElement?.classList.contains('consensus-switch-container')) notice.before(legacy);
+  }
+  // While a run streams, only the growing last Markdown block is parsed again
+  // (markdown-stream.js). The final text is rendered once in full, like a
+  // saved answer, so review markers and cross-block Markdown are exact.
+  function renderAnswer(text, error, { streaming = false } = {}) {
     const body = document.getElementById("agentAnswerBody");
-    const errorEl = document.getElementById("agentAnswerError");
-    if (body && body.dataset.markdown !== text) {
+    const mode = streaming && window.renderMarkdownStream ? 'stream' : 'full';
+    if (body && (body.dataset.markdown !== text || body.dataset.renderMode !== mode)) {
       const entering = !body.dataset.markdown?.trim() && Boolean(text.trim());
       body.dataset.markdown = text;
-      window.injectMarkdown?.(body, text, []);
+      body.dataset.renderMode = mode;
+      if (mode === 'stream') window.renderMarkdownStream(body, text);
+      else {
+        window.resetMarkdownStream?.(body);
+        window.injectMarkdown?.(body, text, []);
+      }
       // Animate the start of an answer once, never each streamed text chunk.
       if (!text.trim()) body._agentReveal?.cancel();
       else if (entering) body._agentReveal = App.agentActivity?.reveal(body);
     }
-    if (errorEl) { errorEl.textContent = error; errorEl.hidden = !error; }
+    renderError(typeof error === 'string' ? { text: error } : error);
   }
-  function project(context) {
-    render();
+  function renderError(error) {
+    const errorEl = document.getElementById("agentAnswerError");
+    const actionsEl = document.getElementById('agentAnswerErrorActions');
+    const text = error?.text || '';
+    if (errorEl) {
+      if (errorEl.textContent !== text) errorEl.textContent = text;
+      errorEl.hidden = !text;
+    }
+    if (!actionsEl) return;
+    const actions = text ? error.actions || [] : [];
+    const signature = JSON.stringify(actions);
+    if (actionsEl.dataset.signature !== signature) {
+      actionsEl.dataset.signature = signature;
+      actionsEl.replaceChildren(...actions.map(([action, label]) => {
+        const button = document.createElement('button');
+        button.type = 'button'; button.dataset.action = action; button.textContent = label;
+        return button;
+      }));
+    }
+    actionsEl.hidden = !actions.length;
+  }
+  // Local reset time for the UTC-day Agent allowance, e.g. "02:00".
+  function resetTime() {
+    const next = new Date(); next.setUTCHours(24, 0, 0, 0);
+    return next.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+  function compactTokens(value) {
+    if (!Number.isFinite(value)) return '';
+    return value >= 10000 ? `${Math.round(value / 1000)}k` : value >= 1000 ? `${(value / 1000).toFixed(1).replace(/\.0$/, '')}k`
+      : value.toLocaleString();
+  }
+  // Budget refusals carry a stable code; show a plain next step, not ledger terms.
+  function failureNotice(failure) {
+    const code = failure?.code || failure?.error_code;
+    if (code === 'agent_token_reservation') {
+      const needs = compactTokens(failure.required_tokens), left = compactTokens(failure.available_tokens);
+      return { text: `Not enough Agent tokens left for this step${needs ? ` (needs about ${needs}, ${left || 0} left)` : ''}. `
+        + `Try a smaller model or fewer comparison models, or wait for the reset at ${resetTime()}.`,
+      actions: [['choose-model', 'Try a smaller model'], ['compare', 'Choose models']] };
+    }
+    if (code === 'agent_tokens_exhausted') return { text: `You've used today's Agent tokens. They reset at ${resetTime()}.` };
+    return { text: failure?.error || failure?.message || '' };
+  }
+  // A brand-new chat has no files or actions until the run reports resources
+  // or finishes; its first lists need no request.
+  function knownEmptyChat(context) {
+    return !context.basis && registry.isExecuting(context.runId) && !context.metadata.resourcesSeen;
+  }
+  // Everything that describes which run is on screen, not how far it got.
+  // It changes once per run/view, so a streamed chunk never repeats it.
+  function projectFrame(context) {
+    const knownEmpty = knownEmptyChat(context);
+    const key = JSON.stringify([context.runId, viewEpoch, context.metadata.chatId, context.metadata.agentTurnId,
+      (context.attachmentMeta || []).length, knownEmpty, context.historyTurns.length]);
+    if (frameKey === key) return false;
+    frameKey = key;
     window.exitHeroMode?.();
     document.body.classList.remove("direct-comparison-active", "thread-message-pending");
     App.consensusPipeline?.dismiss?.();
@@ -329,7 +443,11 @@
     App.setAppTitle?.(context.question);
     App.setThreadQuestion?.(context.question);
     App.setThreadQuestionAttachments?.(context.attachmentMeta || []);
+    // The workspace re-projects its cached list without a request; a new
+    // chat's first list is known to be empty (agent-workspace.js knownEmpty).
     App.agentWorkspace?.refresh(context.metadata.chatId);
+    if (knownEmpty) App.agentGoogle?.refreshActions?.(null);
+    else App.agentGoogle?.refreshActions?.(context.metadata.chatId);
     App.state?.set?.("lastQuestion", context.question, "run");
     App.state?.set?.("lastShareResultId", null, "share");
     App.state?.set?.("consensusCitationMeta", null, "consensus");
@@ -344,8 +462,16 @@
       App.followup?.renderStoredTurns?.(context.historyTurns);
       history.dataset.agentHistory = signature;
     }
+    return true;
+  }
+  function project(context) {
+    renderShell();
+    const framed = projectFrame(context);
     const state = context.consensus;
-    renderAnswer(state.text || state.streamText || "", state.error?.message || state.completedTurn?.agent_failure?.error || "");
+    const running = registry.isExecuting(context.runId);
+    const failure = state.error || state.completedTurn?.agent_failure;
+    renderAnswer(state.text || state.streamText || "", failure ? failureNotice(failure) : "",
+      { streaming: running && !state.text });
     App.agentActivity?.render(activityHost(context.runId), {
       elapsedMs: App.agentActivity.savedDuration(state.completedTurn)
         ?? Math.max(0, (context.finishedAt || Date.now()) - context.startedAt),
@@ -358,13 +484,18 @@
       answerText: state.text || state.streamText || '',
       settings: state.completedTurn?.agent_settings || context.metadata.agentSettings,
     });
-    App.agentReview?.render(document.getElementById("agentAnswerBody"), state.completedTurn?.agent_review || context.metadata.agentReview,
-      { sources: state.completedTurn?.sources, events: state.completedTurn?.agent_activity || context.metadata.agentActivity,
-        key: state.completedTurn?.id || context.runId, question: context.question });
-    App.agentAnswerActions?.render(document.getElementById('agentAnswerBody'), {
-      key: context.runId, text: state.text || state.streamText || '', running: registry.isExecuting(context.runId),
-    });
+    // Evidence links and Copy belong to a finished answer. While the run
+    // streams they are only cleared once, when this run takes over the view.
+    if (!running || framed) {
+      App.agentReview?.render(document.getElementById("agentAnswerBody"), running ? null : state.completedTurn?.agent_review || context.metadata.agentReview,
+        { sources: state.completedTurn?.sources, events: running ? [] : state.completedTurn?.agent_activity || context.metadata.agentActivity,
+          key: state.completedTurn?.id || context.runId, question: context.question });
+      App.agentAnswerActions?.render(document.getElementById('agentAnswerBody'), {
+        key: context.runId, text: state.text || state.streamText || '', running,
+      });
+    }
     App.syncSendButtonRunning?.();
+    if (!running) syncPendingReview();
     App.agentDelegation?.project(context.metadata.delegation || state.completedTurn?.agent_settings?.policy?.delegation ? { chatId: context.metadata.chatId,
       turnId: state.completedTurn?.id || context.metadata.agentTurnId,
       usage: state.completedTurn?.agent_usage || context.metadata.agentUsage, running: registry.isExecuting(context.runId) } : null);
@@ -375,7 +506,10 @@
   }
   function acceptAnswer(context, data) {
     const turn = { ...data.turn, turn_id: data.turn_id };
+    context.metadata.resourcesSeen = true;
     App.agentWorkspace?.refresh(data.chat_id, true);
+    App.agentGoogle?.noteGoogleData?.(data.chat_id, data.google_data === true);
+    App.agentGoogle?.refreshActions?.(data.chat_id, true);
     // A final/recovery snapshot may omit earlier progress. Keep confirmed live
     // entries, while the saved snapshot remains authoritative for matching IDs.
     const activity = new Map((context.metadata.agentActivity || []).map(item => [item.id, { ...item }]));
@@ -384,7 +518,7 @@
     context.consensus.text = context.consensus.streamText = data.response;
     context.consensus.status = "complete";
     context.consensus.completedTurn = turn;
-    context.consensus.error = turn.status === "failed" ? { message: turn.agent_failure?.error || "This saved answer is incomplete. The response did not finish successfully." } : null;
+    context.consensus.error = turn.status === "failed" ? { ...turn.agent_failure, message: turn.agent_failure?.error || "This saved answer is incomplete. The response did not finish successfully." } : null;
     context.bookmark.status = "succeeded";
     context.persistence.consensusWrite = true;
     context.metadata.recoverable = false;
@@ -464,7 +598,60 @@
     }
     const basis = registry.getSelectedConversationBasis({ includeHistory: false });
     if (basis && (!basis.chatId || basis.continuationUnavailable)) return { message: 'Reopen this saved chat before continuing.' };
+    // Google data needs consent for every message (Package A owns the rules).
+    try {
+      const google = App.agentGoogle?.blocker?.();
+      if (google?.message) return google;
+    } catch (_) { /* A Google state error never blocks a non-Google message. */ }
     return null;
+  }
+  // "2 items need your review" after a run left external writes waiting.
+  function pendingReviewCount() {
+    const context = registry.visible();
+    const basis = registry.getSelectedConversationBasis({ includeHistory: false });
+    const chatId = context?.metadata.chatId || basis?.chatId;
+    if (!chatId || selectedMode() !== 'agent' || (context && registry.isExecuting(context.runId))) return 0;
+    const count = Number(App.agentGoogle?.pendingCount?.(chatId));
+    return Number.isInteger(count) && count > 0 ? count : 0;
+  }
+  let pendingTitle = 0;
+  function syncPendingReview() {
+    const count = pendingReviewCount();
+    const notice = document.getElementById('agentReviewNotice');
+    if (notice) {
+      notice.hidden = !count;
+      const text = count ? `${count} ${count === 1 ? 'item needs' : 'items need'} your review` : '';
+      const message = document.getElementById('agentReviewMessage');
+      if (message && message.textContent !== text) message.textContent = text;
+    }
+    // Bookmark dot and tab title follow the conversation on screen.
+    const context = registry.visible();
+    const basis = registry.getSelectedConversationBasis({ includeHistory: false });
+    const bookmarkId = context?.bookmark.id || basis?.bookmarkId;
+    document.querySelectorAll('.bookmark.needs-review').forEach(row => {
+      if (!count || row.dataset.id !== bookmarkId) row.classList.remove('needs-review');
+    });
+    if (count && bookmarkId) {
+      document.querySelectorAll(`.bookmark[data-id="${cssId(bookmarkId)}"]`).forEach(row => {
+        row.classList.add('needs-review');
+        row.dataset.reviewLabel = 'Needs review';
+      });
+    }
+    const title = document.title.replace(/^\(\d+\) /, '');
+    if (count !== pendingTitle || /^\(\d+\) /.test(document.title) !== Boolean(count)) {
+      document.title = count ? `(${count}) ${title}` : title;
+      pendingTitle = count;
+    }
+  }
+  function revealPendingReview() {
+    const card = document.querySelector('.agent-action-card[data-status="pending"]') || document.querySelector('.agent-action-card');
+    if (!card) return false;
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    card.scrollIntoView({ block: 'start', behavior: reduce ? 'auto' : 'smooth' });
+    const target = card.querySelector('input[type=checkbox]:not(:disabled), button:not(:disabled)') || card;
+    if (target === card && !card.hasAttribute('tabindex')) card.tabIndex = -1;
+    target.focus({ preventScroll: true });
+    return true;
   }
   function syncComposer() {
     const agent = selectedMode() === 'agent';
@@ -492,12 +679,32 @@
     input.placeholder = running ? 'Write your next message…' : basis?.chatId && !basis.continuationUnavailable
       ? 'Ask a follow-up' : 'Message Agent';
   }
+  // Attachments still in the composer are this run's own when an upload
+  // failed (agent-workspace keeps the chips and marks the run).
+  function ownAttachmentsRemain(context) {
+    const pending = window.getAttachmentsPayload?.() || [];
+    if (!pending.length) return true;
+    if (context.metadata.uploadFailed === true) return true;
+    const own = (context.attachmentMeta || []).map(item => `${item.name}:${item.size || 0}`).sort().join('|');
+    return own === pending.map(item => `${item.name}:${item.size || 0}`).sort().join('|');
+  }
+  // A message the server refused before starting leaves no sidebar entry:
+  // a new chat's run row disappears, a follow-up's row returns to its saved chat.
+  function releaseRunRow(context) {
+    context.bookmark.uiReady = true; // run-view.ensureRunRow must not recreate the row
+    const row = document.querySelector(`.bookmark.run-entry[data-run-id="${cssId(context.runId)}"]`);
+    if (!row) return;
+    if (context.basis?.bookmarkId && App.bookmarkUi?.replacePendingBookmarkWithReady) {
+      App.bookmarkUi.replacePendingBookmarkWithReady(context.basis.bookmarkMeta?.id ? context.basis.bookmarkMeta
+        : { id: context.basis.bookmarkId, title: context.basis.title || context.basis.question }, context.runId);
+    } else row.remove();
+  }
   function restoreUnsentDraft(context) {
-    if (context.metadata.requestSent || context.metadata.draftRestored || !registry.isAuthCurrent(context)
+    if ((context.metadata.requestSent && !context.metadata.restoreDraft) || context.metadata.draftRestored || !registry.isAuthCurrent(context)
         || !registry.isVisible(context.runId)) return;
     const input = document.getElementById('questionInput');
     // Never replace a newer draft, quotation, attachment, or another chat's composer.
-    if (!input || input.value || App.quote?.text?.() || window.getAttachmentsPayload?.()?.length) return;
+    if (!input || input.value || App.quote?.text?.() || !ownAttachmentsRemain(context)) return;
     context.metadata.draftRestored = true;
     if (context.basis) registry.selectConversationBasis(context.basis);
     input.value = context.metadata.draftQuestion;
@@ -626,10 +833,16 @@
           if (!registry.isExecuting(context.runId) || !registry.isAuthCurrent(context)) return;
           App.agentDelegation?.receiveProgress(context, event);
         } },
-        resources: { receive() {
-          if (registry.isExecuting(context.runId) && registry.isAuthCurrent(context)) {
-            App.agentWorkspace?.refresh(context.metadata.chatId, true);
-          }
+        resources: { receive(event) {
+          if (!registry.isExecuting(context.runId) || !registry.isAuthCurrent(context)) return;
+          context.metadata.resourcesSeen = true;
+          // Refresh only the list the event names; both when it names neither.
+          // Each side debounces its own GET per chat (300 ms).
+          const keys = event && typeof event === 'object' ? event : {};
+          const files = 'documents' in keys || 'files' in keys;
+          const actions = 'actions' in keys || 'gmail_evidence' in keys;
+          if (files || !actions) App.agentWorkspace?.refresh(context.metadata.chatId, true);
+          if (actions || !files) App.agentGoogle?.refreshActions?.(context.metadata.chatId, true);
         } },
         review: { receive(event) {
           if (!registry.isExecuting(context.runId) || !registry.isAuthCurrent(context)) return;
@@ -662,12 +875,34 @@
         acceptAnswer(context, result.data.saved_answer);
         return;
       }
-      if (!result.ok || result.data?.error || !result.data?.turn) throw new Error(apiError(result.data));
+      if (!result.ok || result.data?.error || !result.data?.turn) {
+        // A plain (non-SSE) 4xx refusal happens before the server accepted a
+        // turn: nothing was dispatched, so the message goes back to the composer.
+        const data = result.data || {};
+        const refused = result.streamed === false && result.status >= 400 && result.status < 500
+          && !context.metadata.agentTurnId && data.recoverable !== true && !data.recovery_state;
+        throw Object.assign(new Error(apiError(data)), { failure: data, notDispatched: refused });
+      }
       acceptAnswer(context, result.data);
     } catch (error) {
       if (signal.aborted || error.name === "AbortError" || !registry.isAuthCurrent(context)) return;
+      const failure = error.failure || {};
+      const code = failure.code || failure.error_code || failure.detail?.code;
       context.consensus.status = "error";
-      context.consensus.error = { message: error.message };
+      context.consensus.error = { message: error.message, code,
+        required_tokens: failure.required_tokens, available_tokens: failure.available_tokens };
+      if (error.notDispatched || !context.metadata.requestSent) {
+        // Never offer "Check saved answer" or keep a Failed sidebar row for a
+        // message that the server refused before starting it.
+        context.metadata.requestSent = false;
+        context.metadata.recoverable = false;
+        context.consensus.error.message = `Message not sent. ${error.message}`;
+        releaseRunRow(context);
+      } else if (['agent_token_reservation', 'agent_tokens_exhausted'].includes(code) && !context.consensus.streamText) {
+        // An admission refusal produced no answer: offer the question again.
+        context.metadata.recoverable = false;
+        context.metadata.restoreDraft = true;
+      }
       context.bookmark.status = "failed";
       registry.setStatus(context.runId, "failed", { message: error.message });
       if (!context.metadata.agentReview && context.basis && registry.visible()?.runId === context.runId) registry.selectConversationBasis(context.basis);
@@ -679,7 +914,8 @@
       if (!terminalBudget && context.metadata.requestSent && registry.isAuthCurrent(context)) await refreshBudget(context.auth.uid);
     }
   }
-  App.agentChat = { canUse, hasValidComparisonSelection, sendBlocker, syncComposer, isSelected: () => selectedMode() === "agent", render, project, send,
+  App.agentChat = { canUse, hasValidComparisonSelection, sendBlocker, syncComposer, isSelected: () => selectedMode() === "agent",
+    render: () => renderShell(), renderShell, project, send, revealPendingReview, syncPendingReview,
     tokenBudget: () => canUse() && catalogOwner === window.auth?.currentUser?.uid
       ? (catalog?.budgetStale ? {...catalog.token_budget, stale: true} : catalog?.token_budget) : null, receiveBudget };
   function refreshVisibleBudget() {
@@ -687,8 +923,11 @@
   }
   document.addEventListener('visibilitychange', refreshVisibleBudget);
   window.addEventListener('focus', refreshVisibleBudget);
-  setInterval(refreshVisibleBudget, 60000);
-  window.addEventListener("consensio:run-registry-change", render);
+  // The run projector (run-view.js) renders the shell for every registry
+  // change; this listener only catches changes without a projection, and is
+  // a no-op when nothing the shell shows has changed.
+  window.addEventListener("consensio:run-registry-change", () => renderShell());
+  window.addEventListener('consensio:agent-actions-change', () => { syncPendingReview(); window.updateQuestionInputAccess?.(); });
   document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("chatExecutionMode")?.addEventListener("change", event => {
       preference = canUse() && event.target.value === "agent" ? "agent" : "consensus";
