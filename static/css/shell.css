@@ -889,6 +889,30 @@ body:not(.dark-mode) .chat-input-container {
   height: 15px;
 }
 
+/* The light below Send (send-glow.css) is off while nothing can go and comes
+   on with the question. While the models work it moves to the pale stop
+   button and travels once round the rim every few seconds: something is
+   running, without a spinner. */
+.input-action-btn-primary.send-glow:disabled::before {
+  opacity: 0;
+}
+
+.input-action-btn-primary.send-glow.is-cancel-action {
+  --glow-wash: 13%;
+  --glow-rim: 40%;
+}
+
+.dark-mode .input-action-btn-primary.send-glow.is-cancel-action {
+  --glow-wash: 22%;
+  --glow-rim: 55%;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .input-action-btn-primary.send-glow.is-cancel-action::before {
+    animation: send-glow-orbit 5s linear infinite;
+  }
+}
+
 .input-action-btn-primary::after {
   content: "";
   position: absolute;

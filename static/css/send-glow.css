@@ -1,0 +1,85 @@
+/* ==========================================================================
+   Send glow — light from below on the controls that send a question
+
+   The filled send control keeps its fill (ink) and gets one quiet detail: a
+   soft light that rises from its lower edge, strongest a little left of
+   centre, with a lit hairline where the light meets the rim. The light is
+   the house green (--agree), mixed so thin that it reads as a reflection
+   on the material, not as a coloured button.
+
+   It belongs to the controls that send a question to the models: the /app
+   Send button, the Send of the landing mockups and "Try the demo" (the
+   first such control a guest sees). Nothing else carries it.
+
+   Layer: ::before on a negative z-index inside the control's own stacking
+   context (isolation), so it sits on the fill and under the icon/label.
+   States live with the control: shell.css (/app), landing.css (mockups).
+   ========================================================================== */
+
+/* Registered so the light can rise smoothly on hover; browsers without
+   @property simply jump. */
+@property --glow-lift {
+  syntax: "<percentage>";
+  inherits: false;
+  initial-value: 0%;
+}
+
+.send-glow {
+  position: relative;
+  isolation: isolate;
+  --glow: var(--agree);
+  /* Strength of the wash and of the lit rim. Light fills (dark mode, the
+     pale stop button) take less: green on a light surface reads as a tint
+     long before it reads as light. */
+  --glow-wash: 22%;
+  --glow-rim: 55%;
+}
+
+.dark-mode .send-glow {
+  --glow-wash: 13%;
+  --glow-rim: 40%;
+}
+
+.send-glow::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  background: radial-gradient(120% 90% at 35% calc(115% - var(--glow-lift)),
+    color-mix(in srgb, var(--glow) var(--glow-wash), transparent), transparent 62%);
+  box-shadow:
+    inset 0 -1px 0.5px color-mix(in srgb, var(--glow) var(--glow-rim), transparent),
+    inset 2px -5px 9px -5px color-mix(in srgb, var(--glow) var(--glow-rim), transparent);
+  /* The light has a source: brightest just left of the bottom, gone by the
+     top and the far right. On a circle this is the crescent; on a wide pill
+     it keeps the rim from becoming a coloured bottom border. Sized in px so
+     a 36px circle and a 160px pill get the same patch of light. */
+  -webkit-mask: radial-gradient(48px 36px at 35% 100%, #000 30%, transparent 100%);
+  mask: radial-gradient(48px 36px at 35% 100%, #000 30%, transparent 100%);
+  transition: opacity 0.35s ease;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .send-glow::before {
+    transition: opacity 0.35s ease, --glow-lift 0.6s cubic-bezier(0.2, 0.7, 0.2, 1);
+  }
+
+  /* Hover: the light climbs a little higher into the control. */
+  .send-glow:not(:disabled):hover::before,
+  .lp-hero-prompt:hover .send-glow::before {
+    --glow-lift: 14%;
+  }
+}
+
+/* A host can let the light travel round the rim (the /app stop button does
+   while the models work, see shell.css). */
+@keyframes send-glow-orbit {
+  to { transform: rotate(360deg); }
+}
+
+/* High-contrast themes: no light, the control stays a plain button. */
+@media (forced-colors: active) {
+  .send-glow::before { display: none; }
+}
