@@ -129,6 +129,11 @@
           consens.io is built around major model providers and supporting search tools. The exact line-up may
           change over time as models are added, updated, or removed.
         </p>
+        <p>
+          Every model call is sent with zero data retention routing: requests go only to provider endpoints that
+          don't keep your prompts or answers. Web search is a separate service with its own terms;
+          <a href="/privacy#zdr">the privacy policy</a> explains what the routing does and does not cover.
+        </p>
         <div class="model-grid" style="margin-top:16px;">
           <article class="model-card">
             <img src="/static/icons/chatgpt.png" alt="OpenAI logo">

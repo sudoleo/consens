@@ -132,7 +132,7 @@
           dispute resolution, context preparation and explicit Memory edits can involve additional configured
           models beyond the comparison models. Scheduled Watches and API runs use server-configured models.
           Deselecting a comparison model therefore does not exclude every possible processing endpoint.</p>
-        <p>Our inference requests set OpenRouter's Zero Data Retention routing option. According to
+        <p id="zdr">Our inference requests set OpenRouter's Zero Data Retention routing option. According to
           <a href="https://openrouter.ai/docs/guides/features/zdr">OpenRouter's ZDR documentation</a>, this
           limits inference routing to endpoints with a non-retention policy. It is not a promise that every
           service keeps no data: temporary in-memory prompt caching is permitted, operational metadata is

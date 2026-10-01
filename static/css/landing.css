@@ -2880,6 +2880,37 @@ img { display: block; max-width: 100%; }
 
 .lp-logo span { color: var(--text-secondary); font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); }
 
+/* ZDR-Zeile unter den Logos: eine Eigenschaft, kein Siegel. Kein Badge, keine
+   Flaeche, keine Akzentfarbe -- nur das Schloss als leises Glyph und der Satz
+   in der Lesefarbe, damit er wie eine Tatsache klingt und nicht wie Werbung. */
+.lp-zdr {
+  max-width: 600px;
+  margin: clamp(28px, 4vw, 44px) auto 0;
+  color: var(--text-secondary);
+  font-size: var(--font-size-base);
+  line-height: 1.6;
+  text-align: center;
+  text-wrap: balance;
+}
+.lp-zdr strong { color: var(--text-primary); font-weight: var(--font-weight-semibold); }
+.lp-zdr-mark {
+  display: inline-block;
+  width: 15px;
+  height: 15px;
+  margin-right: 6px;
+  vertical-align: -2px;
+  color: var(--text-primary);
+}
+.lp-zdr a {
+  margin-left: 6px;
+  color: var(--text-primary);
+  white-space: nowrap;
+  text-decoration: underline;
+  text-decoration-color: var(--line);
+  text-underline-offset: 3px;
+}
+.lp-zdr a:hover { text-decoration-color: currentColor; }
+
 /* Inline-Links im Fliesstext einer Karte (z. B. die Kontaktadresse im
    Kosten-Abschnitt) muessen als Link lesbar sein; global gilt hier
    "a { color: inherit; text-decoration: none; }". */
