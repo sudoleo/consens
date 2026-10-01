@@ -94,6 +94,38 @@
     if (codes.has('differences_unavailable')) return 'Disagreements not checked';
     return codes.size ? states.partial : '';
   }
+  // The reader's status is one quiet line: how many models answered and how
+  // far the check got. Missing models, late answers and minor gaps sit behind
+  // it as a disclosure instead of five stacked sentences.
+  function checkWord(state, issues) {
+    if (!['succeeded', 'partial'].includes(state)) return states[state] || states.partial;
+    if (!issues.length) return state === 'succeeded' ? 'Checked' : states.partial;
+    return issues.every(i => i.code === 'models_unavailable') ? 'Checked' : states.partial;
+  }
+  function evidenceStatus(comparison, answers, check, state, issues) {
+    const unavailable = check ? comparison.failed_models || [] : [];
+    const total = answers.length + unavailable.length;
+    const count = !check ? '' : unavailable.length ? `${answers.length} of ${total} models answered`
+      : `${total} model${total === 1 ? '' : 's'} answered`;
+    const line = [count, checkWord(check?.status || state, issues)].filter(Boolean).join(' · ');
+    const details = [];
+    for (const model of unavailable) details.push(model.partial_text
+      ? `${model.label}: stopped before it finished, ${failureReason(model.failure)}. Its partial answer is under Answers, not in the check.`
+      : `${model.label}: no answer, ${failureReason(model.failure)}.`);
+    // Arrived after the answer was written: part of the check, not of the text.
+    const late = check ? answers.filter(a => a.late).map(a => a.model?.label || a.provider_label || a.provider) : [];
+    if (late.length) details.push(`${late.join(', ')} answered after the answer was written. ${late.length === 1 ? 'Its answer is' : 'Their answers are'} part of the check, not of the answer text.`);
+    if (check) for (const issue of issues) {
+      if (issue.code !== 'models_unavailable' && !decisive.has(issue.code)) details.push(issueText(issue) + '.');
+    }
+    if (!details.length) return node('p', 'agent-evidence-status', line);
+    const box = node('details', 'agent-evidence-status');
+    box.append(node('summary', '', line));
+    const list = node('ul', 'agent-evidence-status-detail');
+    for (const text of details) list.append(node('li', '', text));
+    box.append(list);
+    return box;
+  }
   // Copy and evidence share one row: the actions bar lives inside the host.
   function keepActions(host, previous) {
     const sibling = [host.previousElementSibling, host.nextElementSibling]
@@ -363,21 +395,14 @@
           return sourcePanel(sources);
         }
         const localIssues = checkIssues(comparison, check);
-        panel.append(node("p", "agent-evidence-status", statusText(check?.status || state, localIssues)));
-        if (check) {
-          const unavailable = comparison.failed_models || [];
-          panel.append(node('p', 'agent-review-note', `${answers.length} of ${answers.length + unavailable.length} models returned complete answers.`));
-          for (const model of unavailable) panel.append(node('p', 'agent-review-note', model.partial_text
-            ? `${model.label}: stopped before it finished, ${failureReason(model.failure)}. Its partial answer is under Answers, not in the check.`
-            : `${model.label}: no answer, ${failureReason(model.failure)}.`));
-          // Arrived after the answer was written: part of the check, not of the text.
-          const late = answers.filter(a => a.late).map(a => a.model?.label || a.provider_label || a.provider);
-          if (late.length) panel.append(node('p', 'agent-review-note', `${late.join(', ')} answered after the answer was written. ${late.length === 1 ? 'Its answer is' : 'Their answers are'} part of the check, not of the answer text.`));
-          for (const issue of localIssues.filter(i => i.code !== 'models_unavailable')) panel.append(node('p', 'agent-review-note', issueText(issue) + '.'));
-          if (localIssues.length && localIssues.every(i => i.code === 'models_unavailable')) {
-            panel.append(node('p', 'agent-review-note', 'The differences and coverage checks completed for the available model answers.'));
-          }
+        panel.append(evidenceStatus(comparison, answers, check, state, localIssues));
+        for (const issue of localIssues.filter(i => decisive.has(i.code))) {
+          // These change how the panel reads (no marks at all), so they stay visible.
+          panel.append(node('p', 'agent-review-note agent-evidence-limit', issueText(issue) + '.'));
         }
+        // Everything after the cards is supporting detail: one quiet footer
+        // below a hairline instead of notes and reports above the findings.
+        const footer = node("div", "agent-evidence-footer");
         if (!check || !check.differences_data) {
           panel.append(node("p", "agent-review-note", exact ? "The answer has no completed check for this comparison yet."
             : "The text changed. This version needs a new review."));
@@ -390,23 +415,25 @@
           const verification = check.source_verification;
           if (verification?.answer_version === review.answer_hash && verification.run_id === comparison.id
               && verification.basis_hash === comparison.basis_hash) {
+            // The per-card results sit in the cards; the overall report is
+            // supporting detail and follows them instead of preceding them.
             const report = node('div', 'agent-source-check');
-            panel.insertBefore(report, cards);
+            footer.append(report);
             App.sourceVerification?.render(cards, report, verification, {
               differencesData: check.differences_data, differenceCards: cards
             });
           } else if (typeof review.check_sources === 'boolean') {
-            panel.append(node('p', 'agent-review-note', !review.check_sources ? 'Contradiction source checks were off for this message.'
+            footer.append(node('p', 'agent-review-note', !review.check_sources ? 'Contradiction source checks were off for this message.'
               : ['failed', 'cancelled', 'missing'].includes(state) ? 'Contradiction source checks did not complete.'
               : 'Contradiction source checks pending.'));
           }
         }
-        panel.append(node("p", "agent-review-note", "Model agreement is not independent fact checking."));
+        footer.append(node("p", "agent-review-note", "Model agreement is not independent fact checking."));
         const basis = node("details", "agent-evidence-context");
         basis.append(node("summary", "", "Comparison context"));
         if (comparison.reason) basis.append(node("p", "", comparison.reason));
         if (comparison.context) basis.append(node("p", "", comparison.context));
-        panel.append(basis);
+        footer.append(basis);
         if ((review.versions || []).length > 1) {
           const history = node("details", "agent-evidence-context"); history.append(node("summary", "", "Earlier answer version"));
           for (const prior of review.versions.slice(0, -1)) {
@@ -414,8 +441,9 @@
             const text = node("div", "consensus-answer-body"); window.injectMarkdown?.(text, prior.text, []); history.append(text);
             window.linkifyAgentSources?.(text, safeSources([{sources}, {text: prior.text}]));
           }
-          panel.append(history);
+          footer.append(history);
         }
+        panel.append(footer);
         return panel;
       };
       context.mark = () => {

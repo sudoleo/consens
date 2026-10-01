@@ -461,6 +461,110 @@ def test_saved_agent_paper_urls_become_source_pills(browser, phase4_server, widt
         context.close()
 
 
+@pytest.mark.parametrize("width,dark", [(1440, False), (1440, True), (390, False), (390, True)])
+def test_differences_reader_stays_calm_with_missing_models(browser, phase4_server, width, dark):
+    """One status line, severity-first findings, one open finding at a time."""
+    from app.services.chat_store import turn_detail
+
+    context, page = _real_firebase_page(browser, phase4_server, has_touch=width < 700,
+        init_script=f"localStorage.setItem('theme', '{'dark' if dark else 'light'}');")
+    critical, minor = "The smaller plan includes five seats.", "Billing is monthly."
+    text = "For a team of five, start with the **smaller plan**.\n\n" + critical + "\n\n" + minor + "\n\nConfirm the seat limit before purchasing."
+    digest = hashlib.sha256(text.encode()).hexdigest()
+    models = [("openai", "OpenAI", "openai/gpt-5.4-mini", "GPT-5.4 Mini"),
+              ("gemini", "Gemini", "google/gemini-3.5-flash-lite", "Gemini 3.5 Flash-Lite"),
+              ("kimi", "Kimi", "moonshotai/kimi-k2.6", "Kimi K2.6"),
+              ("glm", "GLM", "z-ai/glm-5.3-flash", "GLM 5.3 Flash")]
+    answers = [{"provider": p, "provider_label": label, "model": {"model": model, "label": name},
+        "text": f"### {name}\n\nChoose the **smaller plan**. Confirm the seat limit.", "sources": []} for p, label, model, name in models]
+    failed = [{"label": "GPT-5.6 Luna", "model": "openai/gpt-5.6-luna", "failure": {"code": "late_cutoff"}},
+              {"label": "DeepSeek V4 Flash", "model": "deepseek/deepseek-v4-flash", "failure": {}}]
+    differences = [
+        {"claim": "Whether billing is monthly or annual", "consensus_anchor": minor, "type": "contradiction", "severity": "minor",
+         "positions": [{"models": ["OpenAI", "Gemini"], "stance": "Billing is monthly.", "quote": "Confirm the seat limit."},
+                       {"models": ["Kimi"], "stance": "Annual billing is cheaper.", "quote": "Choose the smaller plan."}]},
+        {"claim": "Whether the smaller plan includes five seats", "consensus_anchor": critical, "type": "contradiction", "severity": "major",
+         "positions": [{"models": ["OpenAI", "Gemini", "Kimi"], "stance": "Five seats are included.", "quote": "Choose the smaller plan."},
+                       {"models": ["GLM"], "stance": "The seat limit needs confirmation.", "quote": "Confirm the seat limit."}]},
+        {"claim": "What matters most when the team grows", "type": "emphasis",
+         "positions": [{"models": ["Gemini"], "stance": "Upgrade flexibility."}, {"models": ["GLM"], "stance": "Monthly cost."}]}]
+    question = ("Which plan suits a team of five that needs monthly billing, expects to grow to eight people next year "
+                "and wants to avoid paying for seats it does not use?")
+    review = {"status": "succeeded", "answer_version": 1, "answer_hash": digest,
+        "versions": [{"id": 1, "text": text, "hash": digest, "status": "succeeded"}],
+        "comparisons": [{"id": "c1", "basis_hash": "basis", "question": question, "reason": "Compare cost and flexibility",
+            "status": "partial", "answers": answers, "failed_models": failed}],
+        "checks": [{"comparison_id": "c1", "basis_hash": "basis", "answer_hash": digest, "status": "succeeded",
+            "issues": [{"code": "models_unavailable", "count": 2}],
+            "differences_data": {"claims": [], "differences": differences, "models_compared": [m[1] for m in models]}}]}
+    turn = turn_detail("b" * 32, {"execution_mode": "agent", "status": "completed", "question": "Compare plans for our team",
+        "assistant_response": text, "agent_review": review, "agent_settings": {"model_id": CATALOG["default_model_id"]}}, {})
+    errors = []
+    page.on('pageerror', lambda error: errors.append(str(error)))
+    theme = 'dark' if dark else 'light'
+    try:
+        page.set_viewport_size({"width": width, "height": 900})
+        page.route('**/user_status', lambda r: _json(r, {"tier": "pro", "is_pro": True, "agent_access": True}))
+        page.route('**/agent/models', lambda r: _json(r, CATALOG))
+        page.evaluate("async () => { await window.__switchE2EUser('account-a'); }")
+        page.evaluate("turn => App.runRegistry.showSavedView({type:'bookmark'}, {chatId:'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', turnId:turn.id, executionMode:'agent', question:turn.question, consensus:turn.consensus, currentTurn:turn})", turn)
+        page.evaluate('() => window.exitHeroMode()')
+        page.locator('.agent-evidence-link[data-section="differences"]').click()
+        reader = page.locator('#modelAnswerReader')
+        expect(reader).to_be_visible()
+        page.locator('.answer-reader-dialog').evaluate("async el => { await Promise.all(el.getAnimations().map(a => a.finished.catch(() => {}))); }")
+        # No subtitle, no "Comparison focus" label; the question is one line.
+        expect(page.locator('#answerReaderStatus')).to_be_hidden()
+        expect(page.locator('.answer-reader-context-top')).to_be_hidden()
+        line_box = page.locator('#answerReaderQuestion summary span').bounding_box()
+        assert line_box['height'] <= 24, line_box
+        # One quiet status line; the missing models wait behind it.
+        status = page.locator('#answerReaderInspector details.agent-evidence-status')
+        expect(status.locator('summary')).to_have_text('4 of 6 models answered · Checked')
+        expect(status.locator('.agent-evidence-status-detail')).to_be_hidden()
+        expect(page.locator('#answerReaderInspector')).not_to_contain_text('Comparison checked')
+        cards = page.locator('#answerReaderInspector .diff-card')
+        expect(cards).to_have_count(3)
+        expect(cards.locator('.diff-type-tag')).to_have_text(['Critical', 'Minor', 'Emphasis'])
+        expect(page.locator('#answerReaderInspector')).not_to_contain_text('positions')
+        for index in range(3):
+            expect(cards.nth(index)).not_to_have_attribute('open', '')
+        claim_weight = cards.first.locator('.diff-card-claim').evaluate('el => getComputedStyle(el).fontWeight')
+        assert claim_weight == '400'
+        tag_color = cards.first.locator('.diff-type-tag').evaluate('el => getComputedStyle(el).color')
+        status_color = status.evaluate('el => getComputedStyle(el).color')
+        assert tag_color == status_color  # the dot carries the colour, not the word
+        _snapshot(page, f'differences-calm-overview-{width}-{theme}')
+        status.locator('summary').click()
+        detail = status.locator('.agent-evidence-status-detail')
+        expect(detail).to_be_visible()
+        expect(detail).to_contain_text('GPT-5.6 Luna: no answer, it was still writing when the answer was checked.')
+        expect(detail).to_contain_text('DeepSeek V4 Flash: no answer, no complete answer arrived.')
+        status.locator('summary').click()
+        cards.first.locator('summary').click()
+        expect(cards.first).to_have_attribute('open', '')
+        heads = cards.first.locator('.diff-position-label')
+        expect(heads).to_have_count(2)
+        expect(heads.first.locator('.diff-position-name')).to_have_text(['GPT-5.4 Mini', 'Gemini 3.5 Flash-Lite', 'Kimi K2.6'])
+        expect(heads.first.locator('.diff-jump-link')).to_have_count(3)
+        expect(cards.first.locator('.diff-position-links')).to_have_count(0)
+        if width >= 760:
+            # Icons and names share a single line per position.
+            assert heads.first.bounding_box()['height'] <= 30
+        expect(cards.first.locator('.diff-position-quote').first).to_be_visible()
+        _snapshot(page, f'differences-calm-detail-{width}-{theme}')
+        cards.nth(1).locator('summary').click()
+        expect(cards.nth(1)).to_have_attribute('open', '')
+        expect(cards.first).not_to_have_attribute('open', '')
+        assert page.evaluate("() => { const s = document.getElementById('answerReaderScroll'); return s.scrollWidth <= s.clientWidth + 1; }")
+        assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+        cards.nth(1).locator('.diff-jump-link').last.click()
+        expect(page.locator('#answerReaderColumns h3').last).to_have_text('Kimi K2.6')
+        assert not errors
+    finally:
+        context.close()
+
+
 def test_green_agent_passages_hover_after_scrolling_and_reprojection(browser, phase4_server):
     from app.services.chat_store import turn_detail
 

@@ -298,30 +298,13 @@
 .dark-mode .sev-dot.is-warn { background: #e8b968; }
 .dark-mode .sev-dot.is-ok { background: #6fcf9a; }
 
+/* Ein Wort, neutral gesetzt: die Ampelfarbe traegt allein der Punkt davor. */
 .diff-type-tag {
-  font-size: var(--font-size-micro);
-  font-weight: var(--font-weight-semibold);
-  letter-spacing: var(--tracking-wide);
-  text-transform: uppercase;
-  color: var(--sidebar-text-muted);
-}
-
-.diff-card.is-contradiction .diff-type-tag {
-  color: color-mix(in srgb, #8a5a10 70%, var(--text-color));
-}
-
-.dark-mode .diff-card.is-contradiction .diff-type-tag {
-  color: color-mix(in srgb, #f3c66f 78%, var(--text-color));
-}
-
-/* Kritische Widersprüche (severity=major): rotes Label statt Bernstein.
-   Karten ohne Severity (alte Bookmarks/Snapshots) behalten den Bernstein-Ton. */
-.diff-card.is-contradiction.is-major .diff-type-tag {
-  color: color-mix(in srgb, #96352a 72%, var(--text-color));
-}
-
-.dark-mode .diff-card.is-contradiction.is-major .diff-type-tag {
-  color: color-mix(in srgb, #f3a08f 80%, var(--text-color));
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-regular, 400);
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--ink-2);
 }
 
 /* Kopfzeile: Punkt + Typ-Label + (nach Resolve) rechtsbündiger Status-Text */
@@ -366,9 +349,9 @@
 
 .diff-card-claim {
   font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-regular, 400);
   line-height: var(--line-height-ui);
-  color: color-mix(in srgb, var(--text-color) 92%, var(--sidebar-text-muted));
+  color: var(--ink);
   overflow-wrap: anywhere;
 }
 
@@ -384,92 +367,94 @@
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 2px 14px;
   font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-semibold);
-  color: color-mix(in srgb, var(--text-color) 84%, var(--sidebar-text-muted));
-  margin-bottom: 8px;
+  font-weight: var(--font-weight-regular, 400);
+  color: var(--ink-2);
+  margin-bottom: 4px;
 }
 
+/* Eine Kopfzeile pro Position: Icon + Modellname. Erreichbare Antworten
+   machen genau dieses Paar zum Sprunglink (.diff-jump-link) — leise im
+   Ruhezustand, unterstrichen bei Hover/Fokus; keine Pillen, keine Pfeile. */
 .diff-position-model {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  flex: 0 0 22px;
+  gap: 6px;
+  min-width: 0;
+  color: inherit;
 }
 
-.diff-position-model img {
+.diff-position-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  font-size: 10px;
+  font-weight: var(--font-weight-semibold);
+}
+
+.diff-position-icon img {
   display: block;
   width: 100%;
   height: 100%;
   object-fit: contain;
 }
 
+.diff-position-name {
+  overflow-wrap: anywhere;
+}
+
 .diff-position-stance {
-  font-size: var(--font-size-xs);
-  line-height: var(--line-height-ui);
-  color: color-mix(in srgb, var(--text-color) 88%, var(--sidebar-text-muted));
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+  color: var(--ink);
   overflow-wrap: anywhere;
 }
 
 .diff-position-quote {
-  margin: 5px 0 0;
-  padding: 1px 0 1px 10px;
-  border-left: 2px solid color-mix(in srgb, var(--sidebar-text-muted) 38%, transparent);
-  color: var(--sidebar-text-muted);
+  margin: 6px 0 0;
+  padding: 0 0 0 10px;
+  border-left: 1px solid var(--line);
+  color: var(--ink-2);
   font-size: var(--font-size-xs);
-  font-style: italic;
-  line-height: var(--line-height-ui);
+  font-style: normal;
+  line-height: 1.6;
   overflow-wrap: anywhere;
 }
 
-.diff-position-links {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 14px;
-  margin-top: 4px;
-}
-
-/* Kompakte Sprung-Buttons: neutral im Ruhezustand, Akzent erst bei Interaktion.
-   Der Pfeil macht klar, dass die zugehörige Modellantwort weiter oben liegt. */
 .diff-jump-link {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  min-height: 26px;
-  padding: 3px 8px;
-  border: 1px solid color-mix(in srgb, var(--sidebar-border) 82%, transparent);
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--text-color) 4%, transparent);
-  color: color-mix(in srgb, var(--text-color) 82%, var(--sidebar-text-muted));
-  font-size: var(--font-size-micro);
-  font-weight: var(--font-weight-semibold);
-  font-family: inherit;
-  line-height: var(--line-height-heading);
+  gap: 6px;
+  padding: 2px 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--ink-2);
+  font: inherit;
   cursor: pointer;
-  white-space: nowrap;
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--glass-highlight) 55%, transparent);
-  transition: color 0.15s ease, border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
-}
-
-.diff-jump-link::after {
-  content: "\2191";
-  font-size: var(--font-size-micro);
-  font-weight: var(--font-weight-bold);
-  line-height: var(--line-height-solid);
-  color: var(--sidebar-text-muted);
-  opacity: 0.75;
+  text-align: left;
+  transition: color 0.15s ease;
 }
 
 .diff-jump-link:hover,
 .diff-jump-link:focus-visible {
-  border-color: color-mix(in srgb, var(--accent) 42%, var(--sidebar-border));
-  background: color-mix(in srgb, var(--accent) 7%, transparent);
-  color: color-mix(in srgb, var(--accent) 72%, var(--text-color));
-  box-shadow: var(--liquid-focus-ring);
-  outline: none;
+  color: var(--ink);
+}
+
+.diff-jump-link:hover .diff-position-name,
+.diff-jump-link:focus-visible .diff-position-name {
+  text-decoration: underline;
+  text-decoration-color: var(--line);
+  text-underline-offset: 3px;
+}
+
+.diff-jump-link:focus-visible {
+  outline: 2px solid var(--ink-2);
+  outline-offset: 2px;
 }
 
 /* Rail-Notiz statt gefüllter Hinweis-Box. */
@@ -890,7 +875,7 @@ mark.quote-flash {
   }
 
   .diff-jump-link {
-    min-height: 30px;
+    min-height: 32px;
   }
 
   .claims-fallback-row {

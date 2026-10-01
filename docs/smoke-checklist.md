@@ -128,6 +128,16 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       aus. Source Checks stehen mobil mittig unter den Tabs; nach dem letzten
       Ergebnis bleiben 24 px Luft vor dem Composer. Automatisiert:
       `tests/e2e/test_inspector_polish.py`.
+- [ ] Differences-Panel (Agent- und Consensus-Chat, Light/Dark, Desktop-Dock
+      und 390 px): kein Untertitel, Frage als eine abgeschnittene Zeile ohne
+      Label; im Agent-Chat eine Statuszeile `N of M models answered · Checked`,
+      fehlende Modelle erst nach Aufklappen. Karten: Punkt + `Critical`/
+      `Minor`/`Emphasis`, kritische zuerst, Titel in normalem Gewicht, keine
+      Positionszahl; nur eine Karte gleichzeitig offen. Pro Position eine Zeile
+      Icon + Modellname (Klick öffnet die Originalantwort), Zitat leiser.
+      Inline-Marker und Source-check-Status öffnen weiterhin die richtige
+      Karte. Automatisiert: `tests/e2e/test_agent_comparison_frontend.py`
+      (`test_differences_reader_stays_calm_with_missing_models`).
 - [ ] Agent-Run: Stepper-Kopf zeigt erledigte/aktive/offene Schritte, Preset
       und Uhr; schmal (320/390 px) eine Zeile mit vier Segmenten. Modellzeilen
       zeigen Icon, Balken und `Writing`/`Thinking`/`Waiting`, danach nur die
