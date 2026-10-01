@@ -465,7 +465,13 @@ consens.io. Jede Nutzerfrage und jeder Bearbeitungsauftrag geht durch
 die Fragestellung klären. Jedes Vergleichsmodell kennt das aktuelle Datum und darf
 selbst einmal suchen (begrenzte Exa-Suche, keine Deep Search), wenn sich die Antwort
 seit seinem Trainingsstand geändert haben kann; sonst einigen sich die Modelle auf
-denselben veralteten Stand und der Consensus sieht trotzdem belastbar aus. Das gilt auch für einfache, subjektive und Folgefragen,
+denselben veralteten Stand und der Consensus sieht trotzdem belastbar aus.
+`quick` sucht knapp (3 × 1000 Zeichen), `full` ausführlicher (5 × 2000). Vor dem
+ersten Vergleich darf der Orchestrator bis zu drei Runden recherchieren und gibt
+die Funde allen Modellen mit; reicht das Kontingent nicht, wird die Suche
+schrittweise kleiner statt die Antworten aufzuhalten. Grenze: Für Fragen wie
+„was ist aktuell das beste X“ liefert die Exa-Suche oft ältere Übersichtsartikel;
+die Antworten bleiben dann trotz Suche teils veraltet. Das gilt auch für einfache, subjektive und Folgefragen,
 Fragen zu consens.io sowie Textumformung/Übersetzung. Nur reine Begrüßungen und
 Bestätigungen ohne Frage/Auftrag sowie unvermeidbare Rückfragen dürfen direkt
 beantwortet werden. Rückfragen sind auf fehlende Angaben beschränkt, ohne die keine

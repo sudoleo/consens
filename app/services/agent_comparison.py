@@ -117,7 +117,12 @@ reports. A faithful synthesis matters more than favorable review colors: never h
 material disagreement or imply unanimity to obtain agreement. This synthesis guidance
 also applies when an older saved agent prompt describes a more personal answer style.
 Web search may first clarify the question, establish current facts or collect
-sources; pass that evidence into compare_models, then complete the pipeline.
+sources. When the answer depends on facts that may have changed since training
+(products, models, prices, versions, laws, office holders, events), research first
+with up to three searches (put the current month and year into their queries) and
+put the key findings with their source URLs into the
+compare_models context, so every answer model starts from the same current facts.
+Do not search for stable knowledge, rewriting or translation. Then complete the pipeline.
 Do not replace Consensus with web search alone or a panel of start_agent workers.
 Only greetings or acknowledgements without a question or task, and indispensable
 clarification questions, may be answered directly. Ask for clarification only if
@@ -127,7 +132,11 @@ to use Consensus. Choose the full question or focused subquestions; formulate on
 NEUTRAL task and include all needed
 context (constraints, relevant history, evidence and source URLs). Every comparison
 model receives exactly that task, without other models' responses or access to the
-chat history. Resolve references such as "that option" or "make it shorter" from
+chat history. The context carries what the user and the conversation supplied and
+what your searches found, with source URLs. Never add your own recollection of
+products, models, versions, prices, candidates or recent events: it may be outdated
+and would steer every answer model toward the same stale view. Each answer model
+knows the date and can search on its own. Resolve references such as "that option" or "make it shorter" from
 the conversation when needed, and carry forward the user's relevant constraints.
 Do not include unrelated history or assume a comparison model remembers an earlier
 call. Do not use
@@ -385,7 +394,7 @@ class ComparisonTools:
             self.checkpoint()
 
     def call(self, model, messages, *, title, kind, comparison_id=None, budget=None, file_ids=None, cancellation=None,
-             slots=None, partial=None):
+             slots=None, partial=None, rich_search=False):
         from app.services.agent_delegation import Worker
         worker = Worker(uuid4().hex, model, messages)
         worker.kind = kind
@@ -405,7 +414,8 @@ class ComparisonTools:
                     # current world knowledge, independent answers agree on the
                     # same outdated facts. Judges only read the answers.
                     generator = loop._step(model, messages, f"agent:{worker.id}:0", ToolRegistry(), cancellation,
-                                           worker=worker, searches_enabled=kind == "comparison")
+                                           worker=worker, searches_enabled=kind == "comparison",
+                                           rich_search=rich_search)
                     try:
                         while True:
                             next(generator)
@@ -487,7 +497,10 @@ class ComparisonTools:
             + get_date_context(prompt_config.get_config()["reference_timezone"])
             + "\nYour training data ends before this date. If the answer may have changed since then (products, "
             "models, prices, versions, laws, office holders, events, recent research), use web search once before "
-            "answering and prefer what it finds. Do not search for stable knowledge."
+            "answering and prefer what it finds. Do not search for stable knowledge. Names, versions, prices and "
+            "'current' claims in the context without a source URL are unverified assumptions, not facts: check "
+            "them with your search instead of repeating them. Put the current month and year into such search "
+            "queries so that you find recent sources."
             + DEPTH_GUIDANCE[depth])
         cid = comparison["id"]
         self._raw[cid], self._failures[cid], self._running[cid], self._partials[cid] = {}, {}, {}, {}
@@ -509,7 +522,9 @@ class ComparisonTools:
             try:
                 value = self.call(models[provider], [{"role": "system", "content": system}, {"role": "user", "content": prompt}],
                                   title=f"{title} · {models[provider].label}", kind="comparison",
-                                  comparison_id=cid, file_ids=file_ids, cancellation=child, slots=slots, partial=partial)
+                                  comparison_id=cid, file_ids=file_ids, cancellation=child, slots=slots, partial=partial,
+                                  # full: one round of fuller results; quick: three short ones.
+                                  rich_search=depth == "full")
                 text = value.text.strip()
                 # call() validated completion and nonempty text. A cut-off
                 # answer is paid, marked evidence (see answers[].truncated).

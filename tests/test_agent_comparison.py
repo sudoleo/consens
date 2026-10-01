@@ -294,8 +294,18 @@ def test_admin_budget_is_enforced_and_reset_isolated_from_inflight_settlement(st
 
 
 
-def test_comparison_answers_know_the_date_and_may_search_once_judges_never(store):
-    script = Script(direct=True)
+def _search(kwargs):
+    return next((t["parameters"] for t in kwargs.get("tools") or [] if t.get("type") == "openrouter:web_search"), None)
+
+
+@pytest.mark.parametrize("depth,results,characters,limit,orchestrator_rounds", [
+    ("quick", 3, 1000, 10_000_000, 3), ("full", 5, 2000, 10_000_000, 3),
+    # The default allowance cannot hold every full reservation at once: the
+    # orchestrator and the parallel answers take smaller searches, none waits.
+    ("full", None, None, 250_000, 1)])
+def test_search_depth_follows_the_comparison_depth_and_judges_never_search(store, depth, results, characters, limit,
+                                                                         orchestrator_rounds):
+    script = Script(direct=True, depth=depth)
     seen = []
     base = script.factory
     def factory():
@@ -303,24 +313,58 @@ def test_comparison_answers_know_the_date_and_may_search_once_judges_never(store
         stream = completion.stream
         def recording(*, model, messages, **kwargs):
             schema = (model.request_config.get("response_format") or {}).get("json_schema")
-            kind = "orchestrator" if completion.step_id.startswith("completion:") else "judge" if schema else "comparison"
-            seen.append((kind, kwargs["native_searches"], messages[0]["content"]))
+            kind = ("orchestrator" if completion.step_id == "completion:0" else "answer" if completion.step_id.startswith("completion:")
+                    else "judge" if schema else "comparison")
+            seen.append((kind, kwargs["native_searches"], _search(kwargs), messages[0]["content"]))
             yield from stream(model=model, messages=messages, **kwargs)
         completion.stream = recording
         return completion
     script.factory = factory
     from app.services.llm.provider_runtime import AnalysisBudget
+    # Room for every reservation at once; tight budgets step search down instead.
+    agent_budget_config.store(store.db).save(expected_revision=0, updated_by="admin", daily_token_limit=limit)
     loop = make_loop(store, script)
     # The chat path: one account budget, bounded Exa search per step.
     loop.policy = AgentPolicy.for_chat(loop.config)
     loop.costs.policy = loop.policy
     loop.budget = AnalysisBudget(unlimited=True)
     list(loop.run())
-    comparisons = [(n, text) for kind, n, text in seen if kind == "comparison"]
-    assert len(comparisons) == 2 and all(n == 1 for n, _ in comparisons)
-    assert all("Current date:" in text and "use web search once" in text for _, text in comparisons)
-    assert [n for kind, n, _ in seen if kind == "judge"] and all(n == 0 for kind, n, _ in seen if kind == "judge")
+    comparisons = [row for row in seen if row[0] == "comparison"]
+    assert len(comparisons) == 2
+    sizes = []
+    for _, rounds, tool, prompt in comparisons:
+        assert rounds == 1 and tool["engine"] == "exa" and tool["max_uses"] == 1
+        sizes.append((tool["max_results"], tool["max_characters"]))
+        assert "Current date:" in prompt and "use web search once" in prompt
+    if results:
+        assert sizes == [(results, characters)] * 2
+    else:
+        # Each answer still searches, at the size that fits when it starts.
+        assert set(sizes) <= {(3, 1000), (5, 2000)}
+    # The orchestrator researches once for every answer model before comparing.
+    [(_, rounds, tool, _)] = [row for row in seen if row[0] == "orchestrator"]
+    assert rounds == orchestrator_rounds and tool["max_uses"] == orchestrator_rounds
+    assert tool["max_results"] == 5 and tool["max_characters"] == 2000
+    assert all(rounds == 0 for kind, rounds, _, _ in seen if kind in {"judge", "answer"})
+    assert any(kind == "judge" for kind, *_ in seen)
     assert store.get_turn(UID, loop.chat_id, loop.turn_id)["status"] == "completed"
+
+
+def test_search_steps_down_before_it_is_dropped():
+    from app.services.agent_delegation import smaller_search
+    from app.services.agent_costs import RunCosts
+    model = resolve_agent_model("claude-haiku-4-5")
+    rich = replace(model, request_config={**model.request_config, "_agent_bounded_search": True, "_agent_rich_search": True})
+    tiers, current, rounds = [], rich, 3
+    while rounds:
+        tiers.append((rounds, bool(current.request_config.get("_agent_rich_search"))))
+        current, rounds = smaller_search(current, rounds)
+    assert tiers == [(3, True), (1, True), (1, False)]
+    costs = RunCosts(AgentPolicy.for_chat({**defaults(), "enabled": True}))
+    messages = [{"role": "user", "content": "Q"}]
+    estimate = lambda m, n: costs.estimate(m, messages, native_searches=n)[0]
+    bounded = replace(rich, request_config={k: v for k, v in rich.request_config.items() if k != "_agent_rich_search"})
+    assert estimate(rich, 3) > estimate(rich, 1) > estimate(bounded, 1) > estimate(bounded, 0)
 
 
 @pytest.mark.parametrize("remaining,succeeds,context_room", [(40000, True, None), (100, False, None), (40000, False, 0)])

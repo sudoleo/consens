@@ -246,3 +246,47 @@ def test_server_search_final_answer_resumes_consensus_without_repeating_search(s
     assert saved['status'] == 'completed' and saved['agent_review']['status'] == 'succeeded'
     assert saved['consensus'] != 'Research findings.'
     assert agent_quota.snapshot(store.db, UID)['reserved'] == 0
+
+
+def test_parallel_comparison_takes_a_smaller_search_instead_of_waiting(store):
+    from app.services.agent_tools import search_tools
+    entered, finish, waiting = threading.Event(), threading.Event(), threading.Event()
+    searches = []
+    class Slow(Completion):
+        def stream(self, **kwargs):
+            searches.append(kwargs["native_searches"])
+            if len(searches) == 1:
+                entered.set()
+                assert finish.wait(5)
+            yield from super().stream(**kwargs)
+    loop = make_loop(store, Script())
+    loop.policy = AgentPolicy.for_chat(loop.config)
+    loop.costs.policy, loop.budget, loop.factory = loop.policy, AnalysisBudget(unlimited=True), Slow
+    root(loop)
+    model = next(iter(loop.comparison.models.values()))
+    searching = replace(model, request_config={**model.request_config, "_agent_bounded_search": True})
+    messages = [{"role": "system", "content": "Answer"}, {"role": "user", "content": "Which option?"}]
+    with_search = loop.costs.estimate(searching, messages, search_tools(searching, 1), native_searches=1)[0]
+    without = loop.costs.estimate(model, messages)[0]
+    # Room for one searching answer plus one without search, not for two searching.
+    ref = quota(store, with_search + without + 300)
+    original = loop._state
+    def state(worker, status, **patch):
+        if status == "waiting":
+            waiting.set()
+        return original(worker, status, **patch)
+    loop._state = state
+    def call():
+        return loop.comparison.call(model, messages, title="Compare", kind="comparison")
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first = pool.submit(call)
+        assert entered.wait(5)
+        second = pool.submit(call)
+        try:
+            # The sibling starts at once, without search, while the first still runs.
+            second.result(timeout=5)
+            assert searches == [1, 0] and not waiting.is_set()
+        finally:
+            finish.set()
+        first.result(timeout=5)
+    assert ref.get().to_dict()["reserved"] == 0

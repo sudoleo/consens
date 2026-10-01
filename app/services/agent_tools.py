@@ -28,8 +28,11 @@ def search_family(model):
 
 def search_tools(model, searches):
     if model.request_config.get("_agent_bounded_search"):
+        # Rich: five longer results per round, for full answers and research.
+        rich = model.request_config.get("_agent_rich_search")
+        results, characters = (5, 2000) if rich else (3, 1000)
         return [web_search_tool(search_family(model), max_uses=searches, engine="exa",
-                max_results=3, max_total_results=3 * searches, max_characters=1000)] if searches else []
+                max_results=results, max_total_results=results * searches, max_characters=characters)] if searches else []
     return [web_search_tool(search_family(model), max_uses=searches,
                            max_results=5, max_total_results=5 * searches, max_characters=2000)] if searches else []
 

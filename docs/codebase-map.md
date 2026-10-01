@@ -1998,7 +1998,17 @@ erhalten keine Delegations-/Vergleichstools, aber eine begrenzte Suchrunde
 Exa-Suche aus `_admit_chat_step`: 3 Treffer à 1000 Zeichen; passt die Reservierung
 nicht ins Kontingent, fällt nur die Suche weg) und das aktuelle Datum samt Hinweis,
 bei zeitabhängigen Fakten einmal zu suchen. Ohne beides einigten sich die Modelle
-auf denselben veralteten Trainingsstand. Judges suchen nie. Die Output-Grenze ist die Completion-Grenze des
+auf denselben veralteten Trainingsstand. Judges suchen nie. Suchtiefe nach
+`depth`: `quick` 3 Treffer à 1000 Zeichen, `full` 5 à 2000 (`_agent_rich_search`,
+`search_tools`, Reservierung in `agent_costs`), je eine Runde. Mehrere Runden
+recherchiert nur der Orchestrator vor dem ersten Vergleich
+(`ORCHESTRATOR_SEARCH_ROUNDS = 3`, reiche Treffer) und gibt die Funde mit URLs
+im `context` weiter; eigene Erinnerung an Produkte/Versionen/Preise gehört nicht
+hinein, und Vergleichsmodelle behandeln solche Angaben ohne Quelle als ungeprüft.
+Passt eine Suchreservierung nicht, stuft `smaller_search` ab (weniger Runden →
+kürzere Treffer → keine Suche); parallele Vergleichsantworten stufen ab, statt auf
+Geschwister zu warten. Sechs volle Antworten mit je zwei reichen Runden würden
+bei 750k Tageskontingent (≈ 220k Reservierung pro Modell) nur nacheinander laufen. Die Output-Grenze ist die Completion-Grenze des
 Modells, begrenzt durch `_output_share` (fairer Anteil am freien Tageskontingent
 über `agent_quota.remaining_tokens`). `depth=quick` gibt eine kurze Längenvorgabe,
 `full` keine. Technische Token-, Kontext- und Snapshotgrenzen gelten weiter. Leere, abgebrochene oder Tool-Antworten gelten als fehlgeschlagen.
