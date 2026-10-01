@@ -485,9 +485,10 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   (zentrales Mapping Provider→DOM-IDs), `deepThinkModelLabels`, gemeinsame Helfer
   (`getModelOptionLabel`, `getSelectedModelCount`, `setAppTitle`, `showPopup`,
   `trackAppEvent`, `exitHeroMode`) sowie den zentralen
-  `window.App.renderUsageDisplay`-Renderer. Dieser ignoriert fehlende Usage-Felder
-  aus parallelen Antworten und bewahrt den DOM-/Layout-Vertrag (Label links,
-  fetter Wert rechts). Jeder `RunContext.usage` hält seinen logischen
+  `window.App.renderUsageDisplay(data, owner)`-Eingang: reicht das
+  `token_budget` einer API-Antwort (auch aus Fehler-Details) an
+  `App.tokenBudget` weiter; Antworten ohne das Feld (eigene Keys) ändern nichts.
+  Jeder `RunContext.usage` hält seinen logischen
   Idempotency-Key, geteilt von `/prepare`, allen `/ask_*` und `/consensus` genau
   dieses Laufs; `window.App.usageRun` ist nur die Legacy-/UI-Brücke.
   `setAppTitle` setzt den Standardtitel oder
@@ -642,21 +643,37 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   aus/ein; eine offene Overlay-Sidebar blendet sie ebenfalls aus. Auf Desktop
   bleibt der Wrapper `display: contents` und die bestehende Float-Anordnung
   erhalten. Reader-Dialoge bleiben oberhalb der Kopfleiste.
-- **`sidebar-quota.js`** — Kontingent-Ring im Sidebar-Footer (`#quotaTrigger`)
-  + Panel `#sidebarQuota` (Runs / Deep Think / Watches + Reset-Zeit). Rechnet
-  **nichts** selbst: ein MutationObserver spiegelt die weiterhin von
-  `app-core.js::renderUsageDisplay`, `firebase.js` und `watch.js` beschriebene
-  Usage-Spalte `#usageDisplay`, die nur noch `visually-hidden` ist und die
-  einzige Quelle bleibt. Bus: `window.App.sidebarQuota.{sync,setOpen,runs}` —
-  `runs()` gibt dieselbe geparste Zeile zurück, aus der der Ring entsteht,
-  damit Module wie „Run again" den Preis eines Klicks benennen können, ohne
-  eine zweite Rechnung aufzumachen.
-  Im Agent-Chat projiziert derselbe Ring stattdessen den verbleibenden
-  Tokenanteil aus `App.agentChat.tokenBudget()` als Prozentzahl (0–100,
-  abgerundet). Die Quelle ist `/agent/models` bzw. der abschließende `/agent`-
-  Budget-Snapshot, strikt an den angemeldeten Account gebunden. Exakte Zahlen
-  und UTC-Reset stehen im Panel. `runs()`/`deep()` bleiben unverändert; beim
-  Wechsel zurück zu Consensus erscheinen dessen Limits wieder.
+- **`token-budget.js`** (head-Bundle, vor `firebase.js`) — `App.tokenBudget`,
+  der einzige Browser-Besitzer des gemeinsamen Tokenkontos (Compare,
+  Consensus, Deep Think, Agent; siehe §4 „Ein Tokenkonto für alle Modi").
+  `apply(snapshot, {uid, authoritative})` validiert, bindet an den angemeldeten
+  Account und ordnet parallele Snapshots (Konfigurationsrevision → UTC-Tag →
+  Ledger-`revision` → `observed_at`); `/usage` und `/user_status` sind
+  autoritativ (Reset darf den Wert erhöhen). `fromResponse(data)` liest
+  `token_budget` auch aus `{detail: …}`. `view()` liefert Prozent übrig
+  (`(limit − used − estimated) / limit`, abgerundet, `<1%` statt 0 bei Rest),
+  verfügbar für neue Arbeit (`remaining`, also ohne Holds/Reservierungen),
+  Zustand `ok|low|out` (≤ 25 % bzw. ≤ 0) und die Reset-Zeit.
+  `canStart(mode)` ist dieselbe Regel wie die Server-Admission (verfügbar ≥
+  erwartete Tokens des Modus, `null` = unbekannt), `runShare(mode)` der
+  ungefähre Anteil eines typischen Laufs („≈ 8 %"). Feuert
+  `consensio:token-budget`. Agent (`agent-chat.js::receiveBudget`) speist
+  dasselbe Objekt; `App.agentChat.tokenBudget()` liest es nur noch.
+- **`sidebar-quota.js`** — Ring im Sidebar-Footer (`#quotaTrigger`) + Panel
+  `#sidebarQuota`, für alle Modi dieselbe Ansicht von `App.tokenBudget`
+  (seit 2026-10-01). Der Ring ist ein ruhiges 20-px-Glyph mit 2-px-Strich und
+  **ohne Zahl im Inneren** (`pathLength=100`, Offset = verbrauchter Anteil);
+  Prozentwert und Reset stehen im `title`/`aria-label` und im Panel. Panel:
+  Kopf „Today's allowance" + Plan, eine Hauptzahl (`#quotaPercent` „62 %
+  left today"), dünner Balken `#quotaTrack` (`role=meter`), Reset-Zeile, eine
+  Detailzeile (`#quotaDetail`: „409k of 660k tokens · a Consensus run uses
+  about 8 %" bzw. in Agent „Agent books each model call"), Watches als
+  eigene kleine Zeile (aus `#watchUsageDisplay`, eigenes Kontingent) und nur
+  bei Bedarf eine Fußnote (Holds laufender Arbeit, Schätzungen, leeres Konto,
+  veralteter Stand). Ampelfarbe nur auf Ring-Bogen und Balkenfüllung
+  (`--partial` ≤ 25 %, `--dispute` leer), nie auf einer Fläche. Bus:
+  `window.App.sidebarQuota.{sync,setOpen}`; `runs()`/`deep()` und die
+  Run-/Deep-Think-Zeilen gibt es nicht mehr.
   Seit 2026-07-27 trägt der Panel-Kopf auch den **Plan**: `#quotaPlanLabel`
   („Free") bzw. `#proBadge` — das Badge sass vorher neben „New
   comparison" und konkurrierte dort mit der einzigen Aktion der Kopfzeile.
@@ -1197,13 +1214,12 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   Ausgangszustand zurück und füllt die letzte Frage vor, sendet aber nicht
   automatisch. Eine Wiederholung ist ein
   **vollstaendiger zweiter Lauf** und kostet entsprechend Kontingent; seit
-  2026-07-28 steht der Preis deshalb am Knopf (`#runReplayCost`, „· uses 1
-  run", bei unbegrenztem Plan leer) und nach dem Klick bis zum Absenden ueber
-  dem Eingabefeld (`#composerRunNotice`). Beides liest `labelRunAgain` /
-  `prepareRunAgain` in `consensus-progress.js` aus `window.App.sidebarQuota
-  .runs()` — derselben Quelle wie der Kontingent-Ring, damit hier nie ein
-  zweiter, falscher Preis entsteht; ein MutationObserver auf `#usageDisplay`
-  zieht das Label nach, wenn das Kontingent spaeter eintrifft.
+  2026-07-28 steht der Preis deshalb am Knopf (`#runReplayCost`, seit
+  2026-10-01 „· about 8 % of today" statt „uses 1 run", ohne bekanntes Konto
+  leer) und nach dem Klick bis zum Absenden ueber dem Eingabefeld
+  (`#composerRunNotice`). Beides liest `labelRunAgain` / `prepareRunAgain` in
+  `consensus-progress.js` aus `App.tokenBudget.runShare/canStart` — derselben
+  Quelle wie der Ring; `consensio:token-budget` zieht das Label nach.
   Das Verdict bleibt unter der Antwort: Ampelfarbe auf der Agreement-Zahl,
   Headline mit dem schwerwiegendsten Thema, eine Meta-Zeile. Der Gauge
   (`.verdict-gauge`, Zahl /100 und Messbalken) ist weiterhin zentral in
@@ -1762,7 +1778,7 @@ Der Configuration-Tab liegt im inkludierten Partial `partials/admin_prompt_confi
   relevanten Await Usage sowie Bookmark-List/Detail/Conversation/Save/Delete;
   eine zusätzliche Bookmark-View-Epoch macht die letzte Auswahl autoritativ.
   Listenfehler zeigen einen eigenen Retry-Zustand statt einer scheinbar leeren
-  Liste. `/usage` synchronisiert neben Zahlen auch den Tierstatus und kann so
+  Liste. `/usage` synchronisiert neben dem Tokenkonto auch den Tierstatus und kann so
   einen transient fehlgeschlagenen `/user_status`-Startcheck in derselben
   Sitzung heilen. Der dynamische Account-Menü-Außenklick-Listener wird bei
   jedem Token-Callback entfernt, bevor ein neuer gebunden wird.
@@ -1868,7 +1884,7 @@ Die Quote wird außerdem beim Start/Settlement als `quota`-SSE, in terminalen
 Fehlern und beim vorhandenen Agent-Listenpoll geliefert. `observed_at` ordnet
 Snapshots; agent-chat.js ignoriert ältere/fremde Kontenwerte und niedrigere
 Konfigurationsrevisionen. Nach Transportabbruch lädt GET /agent/budget nur das
-Kontingent neu. Der Sidebar-Ring zeigt (Limit − gemessener Verbrauch) / Limit;
+Kontingent neu; es landet in `App.tokenBudget`, dem gemeinsamen Konto aller Modi. Der Sidebar-Ring zeigt (Limit − gemessener − geschätzter Verbrauch) / Limit;
 vorläufige Reservierungen ändern die Prozentzahl nicht. Im Panel stehen zusätzlich
 die tatsächlich für neue Calls verfügbaren und die reservierten Tokens.
 
@@ -2441,10 +2457,15 @@ Modellvergleichsprüfung, ausdrücklich keine unabhängige Faktenprüfung.
 Fehlende Coverage, fehlende Sätze, gekürzte Grundlagen und ausgefallene Modelle
 werden nicht als vollständig geprüft dargestellt.
 
-**Tokenkontingent und Kosten.** agent_quota.py ist die zentrale UTC-Tagesquote:
-app_config/agent_budget.daily_token_limit pro UID; ohne DB-Einstellung gilt
-AGENT_DAILY_TOKEN_LIMIT (Default 250000). agent_budget_config.py liest die globale
-Einstellung mit 30 Sekunden Cache je Prozess/DB. Admin → Limits verwendet
+**Tokenkontingent und Kosten.** agent_quota.py ist das zentrale UTC-Tageskonto,
+seit 2026-10-01 gemeinsam mit Compare/Consensus/Deep Think (§4 „Ein Tokenkonto
+für alle Modi"). Das Limit kommt aus der Kontostufe
+(`app_config/agent_budget.tier_limits[free|plus|pro|admin]`, `account_tier`:
+Admin-Rolle vor gespeicherter Stufe); das frühere globale
+`daily_token_limit`/`AGENT_DAILY_TOKEN_LIMIT` gibt es nicht mehr. Agent bleibt
+Pro/Admin (`require_agent_access`), das Konto selbst ist für jede Stufe da.
+agent_budget_config.py liest die Einstellung mit 30 Sekunden Cache je Prozess/DB.
+Admin → Limits verwendet
 GET/PUT /api/admin/agent-budget und POST /api/admin/agent-budget/reset mit
 Admin-Rollenprüfung, strikter Eingabe und erwarteter revision. Jede Änderung
 schreibt eine Audit-Revision. Reset wechselt reset_epoch für alle Agent-Konten,
@@ -2606,9 +2627,11 @@ Prompt ergänzt der Browser wie bisher sein lokales Datum. Dieser persönliche
 Client-Prompt behält Vorrang in `/prepare` und im Fan-out.
 
 1. Frontend `sendQuestion` (`query-send.js`) ruft zuerst **`POST /prepare`**:
-   Auth sowie transaktionale Usage-Reservierung und sofortiger
-   Verbrauch anhand des vom Client erzeugten, kostenfreien `usage_run_key`; Antwort: finaler
-   `system_prompt` + persistenter UTC-Tagesstand.
+   Auth sowie transaktionale Admission auf dem Tokenkonto (`run_mode`
+   `compare|consensus`, Deep Think aus `deep_search`) und sofortiger Consume
+   des vom Client erzeugten, kostenfreien `usage_run_key`; Antwort: finaler
+   `system_prompt`, `token_budget` und `run_estimate`. Vorher blockt
+   `usageLimit.blockIfExhausted` clientseitig mit derselben Regel.
    Echtzeitdaten holen sich die Modelle über das gemeinsame OpenRouter-Web-Tool
    in jedem Modell-Call (`engines.py`), daher kein Intent-Router mehr.
    Bei `usage_storage_busy` wiederholt der Client `/prepare` kurz mit demselben
@@ -2625,7 +2648,8 @@ Client-Prompt behält Vorrang in `/prepare` und im Fan-out.
    die Usage-Zählung, aber nicht Auth/Pro-Gates.
 3. **SSE-Protokoll Modellantwort** (`streaming_model_response` in `streaming.py`):
    `event: delta {text}` … dann `event: final {response, sources,
-   free_usage_remaining, deep_remaining, is_pro_user, key_used}`. Bei Fehler kommt
+   token_budget, is_pro_user, tier, key_used}` (`token_budget` = Konto nach der
+   Buchung dieser Antwort; eigene Keys: `usage: "own_keys"`). Bei Fehler kommt
    ein `final` mit `error`. Provider-SDK-Content-Blöcke werden an dieser Grenze
    rekursiv zu Text normalisiert; Objektwerte gelangen weder als Delta noch als
    `[object Object]` ins Frontend. `sse_pack` führt außerdem jeden Event-Payload
@@ -3607,6 +3631,111 @@ akzeptiert nur sichere Word-Pfade und höchstens 256 ZIP-Einträge; Einzeldatei,
 Gesamtexpansion und Kompressionsverhältnis besitzen feste Budgets. `document.xml`
 wird nur chunkweise bis zum Budget expandiert und DTD/Entities werden abgewiesen.
 
+### Ein Tokenkonto für alle Modi (seit 2026-10-01)
+
+Compare, Consensus, Deep Think und Agent · Beta buchen auf **dasselbe**
+Tageskonto pro Nutzer (`users/{uid}/chat_state/agent_tokens_{periode}`,
+`app/services/agent_quota.py`). Die Nutzerin sieht eine Zahl, wo immer sie
+fragt (Ring, Panel, Agent, Absage-Karte). Reset (00:00 UTC bzw. Admin-Reset
+über `reset_epoch`), Revisionen und Admin-Steuerung sind dieselben wie zuvor bei
+Agent.
+
+- **Konfiguration** (`app/services/agent_budget_config.py`, Dokument
+  `app_config/agent_budget`, revisioniert mit Audit-Kopien unter
+  `revisions/`): `tier_limits{free,plus,pro,admin}` und
+  `run_estimates{tier}{compare,consensus,deep_think}`. Fehlende Felder
+  erhalten ihren Default, vorhandene ungültige Werte schlagen geschlossen fehl
+  (503). Das alte Einzelfeld `daily_token_limit` wird ignoriert und beim
+  nächsten Speichern entfernt. Admin → Limits zeigt eine Tabelle Stufe ×
+  (Tokens/Tag, Compare-, Consensus-, Deep-Think-Lauf); `PUT
+  /api/admin/agent-budget` nimmt `{revision, tier_limits?, run_estimates?}`
+  (strikt, Teilwerte werden mit dem Stand gemischt), `GET` liefert zusätzlich
+  `defaults`. Stufe: `agent_quota.account_tier(uid, tier)` = `admin` bei
+  Admin-Rolle, sonst `free|plus|pro`. Agent für weitere Stufen zu öffnen ist
+  damit nur eine Zugangsentscheidung, keine Ledger-Änderung.
+- **Agent** bleibt bei strikter Einzelabrechnung (Reserve vor jedem Call,
+  Settlement mit Messwerten, Schätzung + Reconciliation bei fehlender Usage);
+  nur das Limit kommt aus der Stufe.
+- **Pipeline: messen und danach buchen.**
+  - *Admission* (`/prepare`, Legacy-Direktaufrufe in `authorize_operation`,
+    API v1 beim Annehmen): ein Lauf startet nur, wenn `remaining` (Limit −
+    gemessen − geschätzt − Agent-Reservierungen − aktive Pipeline-Holds) die
+    erwarteten Tokens eines typischen Laufs von Modus und Stufe deckt
+    (`run_mode`: `compare`, sonst `consensus`; Deep Think aus `deep_search`;
+    Resolve gegen die Compare-Schätzung). Der Lauf legt diese Schätzung als
+    Hold (`pipeline_holds`, zehn Minuten) ins Konto, damit parallele Tabs das
+    Puffer nicht doppelt nutzen; es gibt **keine** Reservierung pro Call.
+    Absage: 403 `token_budget_exhausted` mit `token_budget` und
+    `required_tokens`; zu viele junge Läufe: 429 `usage_run_capacity`.
+  - *Messen* (`app/services/llm/usage_meter.py`, Transportschicht): jeder
+    OpenRouter-Request über `_iter_openrouter_chunks` (gestreamte Antworten
+    und Engines, mit `stream_options.include_usage`), `cancellable_post_json`
+    (Judges, Repairs, Resolve) und `engines.query_model` meldet
+    `prompt_tokens + completion_tokens` an den per ContextVar gebundenen
+    Meter. Threads über `copy_context().run` (Coverage-Judge, Provider-Fan-out,
+    Resolve) melden in denselben Meter. Fehlt die finale Usage (Abbruch,
+    Timeout, Tab zu), gilt dieselbe begrenzte Schätzung wie bei Agent: 50 %
+    der Call-Grenze (Input-Schätzung + Output-Cap); eine HTTP-Ablehnung kostet
+    nichts. Ohne gebundenen Meter (Watch, Topics, Agent-Client) sind alle Hooks
+    No-ops. MOCK_LLM bucht kleine synthetische Messwerte. Nicht gemessen
+    werden die beratende Quellenprüfung (eigener Hintergrundjob mit eigenem
+    Budget) und spätere Arbeit nach der Buchung einer Operation.
+  - *Buchen* (`app/services/run_metering.py::OperationBooking`): jede
+    abgeschlossene Operation (`ask:<familie>`, `consensus`, `resolve`, API
+    `pipeline`, Chat-Memory `context:<turn>` nur wenn ein Call lief) bucht
+    ihre Summe genau einmal über
+    `usage_repository.book_operation` (`booked_operations` als Zaun) in die
+    Kontoperiode ihrer Admission; `final=True` (Consensus, Resolve, API) gibt
+    den Rest-Hold frei. Gebucht wird vor dem `final`-Event (das das gebuchte
+    `token_budget` trägt) bzw. beim Schließen des Streams. Ein Buchungsfehler
+    bricht die Antwort nie ab, sondern wird als `Token booking failed` geloggt.
+  - *Überziehen*: eine laufende Operation darf das Konto unter null drücken;
+    danach scheitert die nächste Admission. Begrenzt, weil nur Läufe mit
+    ausreichendem Puffer starten und jeder junge Lauf seine Schätzung hält.
+  - `usage_run_key` bleibt Idempotenz und Bindung; Run-Zähler, Run-Limits und
+    Deep-Think-Kontingent sind entfernt. API v1 hängt am selben Pfad. Watches,
+    Topics und Publisher-Watches behalten ihre eigenen globalen Budgets.
+- **Anzeige**: ein Prozent-Ring für alle Modi (`token-budget.js`,
+  `sidebar-quota.js`, §3). „Uses 1 run" ist ein ungefährer Anteil („about 8 %
+  of today"). Die Absage-Karte (`usage-limit.js`, `#runBlocked`) nennt den
+  Rest in Prozent, den Bedarf des Modus und die Reset-Zeit; reicht nur Deep
+  Think nicht, bietet sie den normalen Lauf an.
+
+**Herleitung der Defaults** (Prinzip: ein typischer Nutzer behält ungefähr
+seine bisherige Tageskapazität; Limit ≈ bisheriges Run-Limit × Tokens eines
+typischen Laufs). Bisherige Produktionswerte (2026-10-01, nur gelesen):
+Free 12, Plus 30, Pro 50 Runs/Tag (davon 5 Deep Think), Agent 750 000 Tokens
+(Pro/Admin); Output-Caps Free/Plus 4 096 (500 Wörter), Pro 8 192 (1 000
+Wörter), Deep Think 16 384, Consensus 16 384, Differences 8 192, Coverage
+12 288.
+
+| Baustein (Free/Plus) | Input | Output | Summe |
+|---|---|---|---|
+| Antwort (Systemprompt ~130, Frage, Websuche ~4 000; gemessen Exa ≈ 4 800 Prompt-Tokens) | ~4 300 | ~850 (Agent-Belege günstiger Vergleichsmodelle: Ø 760–1 100) | ~5 200 × 6 ≈ 31 000 |
+| Synthese (Prompt mit 6 Antworten gemessen 4 400 + Quellen) | ~6 200 | ~1 000 | ~7 200 |
+| Differences-Judge (Prompt gemessen 5 300) | ~5 400 | ~2 000 | ~7 400 |
+| Coverage-Judge | ~5 000 | ~2 500 | ~7 500 |
+| **Consensus-Lauf** | | | **≈ 53 000 → 55 000** |
+| **Compare-Lauf** (nur Antworten) | | | **≈ 31 000 → 32 000** |
+
+Pro (1 000 Wörter, längere Antworten und Judge-Prompts): Antwort ~6 100 × 6
+≈ 37 000, Synthese ~11 500, Judges je ~12 000 → Consensus ≈ 75 000, Compare
+≈ 40 000. Deep Think (16 384-Cap, bis zu fünf Suchrunden, Reasoning):
+Antworten ~16 500 × 6 ≈ 99 000 + Synthese ~16 000 + Judges ~28 000 →
+≈ 150 000.
+
+| Stufe | Rechnung | Default `tier_limits` |
+|---|---|---|
+| Free | 12 × 55 000 | 660 000 |
+| Plus | 30 × 55 000 | 1 650 000 |
+| Pro | 50 × 75 000 + 5 × (150 000 − 75 000) Deep-Think-Aufschlag + 750 000 bisheriges Agent-Konto ≈ 4,9 Mio. | 5 000 000 |
+| Admin | wie Pro | 5 000 000 |
+
+Nachjustieren: Admin → Limits. Belastbare Werte liefern die gebuchten
+Operationen (`usage_runs.booked_operations`, `pipeline_used` im Kontodokument)
+nach einigen Tagen Betrieb; die Schätzung pro Lauf sollte etwa dem Median eines
+vollständigen Laufs entsprechen, das Limit dem gewünschten Tagesvolumen.
+
 ### Auth / Usage / Tier
 - **Early-Access-Hinweise:** `static/js/feature-access.js` lädt im App-Bundle
   nach `app-core.js`. Der bestehende Aufruf `App.showProFeatureModal(feature)`
@@ -3669,15 +3798,16 @@ wird nur chunkweise bis zum Budget expandiert und DTD/Entities werden abgewiesen
   `free`, `plus` oder `pro`; der historische Tag `premium` bedeutet weiterhin
   Pro, alles Unbekannte fällt auf Free. Admin bleibt `users/{uid}.role == admin`.
 
-  | | Frontier-Modelle | Deep Think | Anhänge | Resolve | Run-Kontingent |
+  | | Frontier-Modelle | Deep Think | Anhänge | Resolve | Tokenkonto/Tag (Default) |
   |---|---|---|---|---|---|
-  | Free | – | – | – | – | klein |
-  | Plus | – | – | ✓ | ✓ | **größtes** |
-  | Pro | ✓ | ✓ | ✓ | ✓ | mittel |
+  | Free | – | – | – | – | 660 000 |
+  | Plus | – | – | ✓ | ✓ | 1 650 000 |
+  | Pro | ✓ | ✓ | ✓ | ✓ | 5 000 000 |
+  | Admin (Rolle) | wie Stufe | wie Stufe | wie Stufe | wie Stufe | 5 000 000 |
 
   Plus existiert für Tester, die Funktionen ausprobieren sollen, **ohne einen
-  Frontier-Lauf auslösen zu können**. Weil Plus dieselbe günstige Modellauswahl
-  fährt wie Free, darf sein Tageskontingent größer sein als das von Pro.
+  Frontier-Lauf auslösen zu können**. Herleitung der Tokenkonten: §4 „Ein
+  Tokenkonto für alle Modi".
 - **Zwei Flags, eine Regel:** `is_user_pro(uid)` behält überall seine alte
   Bedeutung „darf teure Modelle und Deep Think" und ist für Plus **False**;
   `is_user_plus(uid)`/`entitlements.attachments|resolve` decken die
@@ -3711,46 +3841,25 @@ wird nur chunkweise bis zum Budget expandiert und DTD/Entities werden abgewiesen
   `account_tier_audit`; anschließend wird der Tier-Cache verworfen, damit die
   Stufe sofort statt erst nach ≤60 s greift. Ein Konto in Löschung bekommt
   keine neue Stufe (`persistence_guard`). UI: Admin-Tab **Accounts**.
-- **Usage ist persistent und run-basiert:**
-  `app/services/usage_repository.py` definiert `UsageRepository` und die
-  Firestore-Implementierung `FirestoreUsageRepository`. Ein kompletter
-  Consensus-Run reserviert genau **einen Integer-Slot**, unabhängig von
-  Modellanzahl oder Provider-Fan-out. Deep Think zählt ebenfalls genau einmal
-  gegen dieses Total und zusätzlich gegen ein separates Deep-Think-Kontingent.
-  `reserve` bindet den Key an einen kanonischen Request-Fingerprint und den
-  nächsten UTC-Tageswechsel, führt Idempotenz-, Ablauf- und Limitprüfung
-  gemeinsam in einer Firestore-Transaktion aus; `consume` und `release`
-  wechseln den Status ebenfalls transaktional, `snapshot` liest das einzelne
-  UTC-Tagesaggregat. Nach `consume` claimt jede kostenpflichtige logische
-  Operation transaktional genau einen Slot (`ask:<provider>`, `consensus`,
-  `resolve`) mit eigenem Payload-Fingerprint. Gleiche/konkurrierende Retries
-  werden eindeutig mit 409 abgelehnt, bevor Provider- oder Judge-Arbeit startet;
-  verschiedene Operations-Slots desselben Laufs bleiben unabhängig.
-  Die Transaktionen verwenden 12 Retry-Versuche, weil der parallele Provider-
-  Fan-out denselben Run gleichzeitig konsumiert. Sind die Retries dennoch
-  ausgeschöpft, antwortet `/ask_*` strukturiert mit HTTP 503 statt mit einem
-  unlesbaren generischen 500er.
-  Der Free-Default ist seit 2026-08-04 **12** reguläre Runs pro UTC-Tag
-  (`free_consensus_run_limit`, vorher 3: drei Runs erlaubten einen Test, keine
-  Gewohnheit — und mit freigeschalteten Follow-ups wäre drei sofort wieder die
-  alte Sackgasse); Plus liegt per Default bei **750**
-  (`plus_consensus_run_limit`). Alle Run-, Wort-, Token-, Memory- und
-  Watch-Limits je Stufe sind eigene `app_config/models.limits`-Felder
-  (`plus_*` bzw. `watch_plus_*`/`memory_plus_*`) und im Admin-Tab **Limits**
-  bedienbar. Deep Think hat bewusst **kein** Plus-Feld: die Capability-Prüfung
-  blockiert Plus ohnehin, ein Kontingent wäre ein toter Schalter. `/prepare`
-  reserviert und konsumiert den Slot sofort; Provider-Fan-out und `/consensus`
-  bestätigen denselben Consume danach nur noch idempotent und claimen dann ihre
-  Operation. `/resolve` erzeugt einen eigenen Run und Claim. `/usage` und
-  `/user_status` lesen die Firestore-Tagesbasis;
-  `/usage/run/release` gibt nur noch nicht konsumierte Reservierungen frei.
+- **Usage ist persistent und tokenbasiert (seit 2026-10-01):** siehe §4 „Ein
+  Tokenkonto für alle Modi". `app/services/usage_repository.py`
+  (`FirestoreUsageRepository`) hält weiterhin genau einen Beleg pro logischem
+  Lauf (`usage_run_key`: Idempotenz, Request-Fingerprint, Operations-Claims
+  `ask:<provider>`/`consensus`/`resolve`, Chat-Kontext-Bindung, 12
+  Transaktions-Retries, strukturierte 503 bei Erschöpfung). Run-Zähler,
+  Run-Limits und das Deep-Think-Teilkontingent sind entfallen. `/prepare`
+  admittiert und konsumiert sofort; Fan-out und `/consensus` bestätigen den
+  Consume nur noch und claimen ihre Operation. `/resolve` erzeugt einen eigenen
+  Lauf. `/usage` und `/user_status` liefern `token_budget`;
+  `/usage/run/release` gibt nur nicht konsumierte Läufe (samt Hold) frei.
   Bookmark-, Feedback- und Vote-Grenzen liegen ebenfalls persistent in
   Firestore (`persistence_guard.py`); es gibt keinen prozesslokalen Abuse-
   Counter mehr.
-- Limits/Defaults kommen aus `app/core/config.py` (`get_consensus_run_limit`,
-  `get_deep_think_run_limit`, `get_word_limit`, `get_output_token_limit`, …)
-  und können per Firestore
-  (`app_config/models.limits`) überschrieben werden.
+- Wort-, Output-, Memory- und Watch-Limits kommen aus `app/core/config.py`
+  (`get_word_limit`, `get_output_token_limit`, …) und können per Firestore
+  (`app_config/models.limits`) überschrieben werden; veraltete Schlüssel wie
+  `*_consensus_run_limit` fallen bei der Normalisierung weg. Das Tokenkonto
+  lebt getrennt in `app_config/agent_budget`.
 - Die Antwortmodell-Picker wenden bei einem Tier-Wechsel die Free-/Pro-
   Defaults erneut an, solange der Nutzer für den jeweiligen Provider keine
   explizite Auswahl (`pref_select_*`) gespeichert hat. Explizite Picker-Werte
@@ -3796,10 +3905,17 @@ wird nur chunkweise bis zum Budget expandiert und DTD/Entities werden abgewiesen
   `reserved→running`-Claim ist die einzige Berechtigung zum Providerstart.
   Doppelte HTTP-Requests/Worker können deshalb weder doppelt konsumieren noch
   den Provider-Fan-out doppelt starten.
-- Die Usage-Reservierung nutzt unverändert `FirestoreUsageRepository`: ein
-  vollständiger Run konsumiert beim Übergang zu `running` genau eine Total-
-  Einheit; Deep Think zusätzlich genau eine Deep-Think-Einheit. Fehler vor
-  Providerstart releasen, Fehler nach Providerstart bleiben konsumiert.
+- Die Usage-Reservierung nutzt `FirestoreUsageRepository` auf demselben
+  Tokenkonto wie App und Agent: beim Annehmen wird der Lauf gegen die
+  Consensus- bzw. Deep-Think-Schätzung der Stufe admittiert
+  (`token_admission_for_run`, Admin-Rolle zählt), beim Übergang zu `running`
+  konsumiert, und nach der Pipeline bucht `OperationBooking("pipeline",
+  final=True)` die gemessenen Tokens aller Antworten und Judges, auch bei
+  Fehlern. Kein Konto mehr → 429 („daily token allowance does not cover another
+  run"). Fehler vor Providerstart releasen (Hold frei), Fehler nach
+  Providerstart bleiben konsumiert. Watches, Topics und Publisher-Watches
+  behalten ihre eigenen globalen Budgets; der Publisher-Run selbst läuft über
+  API v1 und bucht damit auf das Konto der Admin-UID.
   Provider- und Engine-Aufrufe liegen immer außerhalb aller Transaktionen.
   Jeder neue Run speichert seinen eigenen, nicht wiederverwendbaren
   Usage-Beleg `usage_key = consensus-api:run:{run_id}`; Retries desselben Runs
@@ -4124,11 +4240,15 @@ app/services/llm/
   resolve_engine.py          Resolve-Runde (run_resolve_round, normalize_resolve_positions)
   citations.py               Antwort-Parsing + Quellen (source_response, make_llm_result)
   attachments.py             Attachment-Validierung/Aufbereitung
+  usage_meter.py             Token-Meter der Transportschicht (ContextVar; Usage je OpenRouter-Request, Schaetzung bei fehlender Usage)
 app/services/
   consensus_pipeline.py      Neutraler Fan-out→Synthese→Differences→Score-Vertrag für alle Produkte
   chat_store.py              Firestore-Pfade, Turn-Lifecycle/Antwortdokumente, atomare Finalisierung, Idempotenz, Cursor + Allowlists, Loesch-Kaskade
   chat_context.py            Owner-gebundene Context-Versionen, strukturierte Memory, Frage-Auflösung vor dem Fan-out, Budgets, Lease/Idempotenz, Fallback-Rendering + Provider-Cache
-  usage_repository.py        Firestore-Usage fuer logische Runs (authorize_operation/reserve/consume/release/get_run/context-target-binding/snapshot)
+  usage_repository.py        Run-Belege auf dem Tokenkonto (admission/authorize_operation/reserve/consume/release/book_operation/get_run/context-target-binding)
+  run_metering.py            OperationBooking: Meter um eine Pipeline-Operation binden, Summe genau einmal buchen
+  agent_quota.py             Gemeinsames UTC-Tokenkonto (Agent-Reserve/Settle, Pipeline-Admission/Holds/Buchung, account_tier)
+  agent_budget_config.py     Admin-Konfiguration des Kontos: tier_limits, run_estimates, Revision/Reset
   api_account_cleanup.py     Fail-closed Account-Blocks + retrybare API-Datenlöschung
   account_deletion.py         Persistenter Vollkonto-Tombstone + bereichsweise Retry-Kaskade
   persistence_guard.py       Transaktionale Bookmark-/Feedback-Budgets + run-gebundene Votes
@@ -4306,16 +4426,16 @@ CLI mit `firebase deploy --only firestore:rules,firestore:indexes`):
     bleiben bis zur autoritativen Disposition separat; `/ask_*` schreiben nicht
     direkt. Legacy-Follow-ups ohne aktive Chat-Zuordnung bleiben ausschließlich
     im Bookmark-Flow. Bookmarks werden vorübergehend parallel weitergeschrieben.
-  - `usage_days/{YYYY-MM-DD}` — UTC-Tagesaggregat mit Schema-Version und den
-    Integer-Zählern `total_reserved`, `total_consumed`,
-    `deep_think_reserved`, `deep_think_consumed`. Reservierte und verbrauchte
-    Slots zählen gegen das jeweilige Tageslimit; jeder Run belegt das Total,
-    Deep Think zusätzlich den Deep-Bucket. Je Bucket gilt `remaining = limit -
-    reserved - consumed` (mindestens 0).
+  - `usage_days/{YYYY-MM-DD}` — **seit 2026-10-01 nicht mehr geschrieben**
+    (frühere Run-Zähler). Alte Dokumente bleiben unverändert liegen und werden
+    beim Account-Löschen mit entfernt.
   - `usage_runs/{sha256(idempotency_key)}` — idempotenter Run je UID + Key; der
-    Klartext-Key wird nicht gespeichert. Enthält `kind=regular|deep_think`, den
-    UTC-Tag der Reservierung, beide serverseitigen Limits zum
-    Reservierungszeitpunkt, `request_fingerprint`, `expires_at`,
+    Klartext-Key wird nicht gespeichert. Enthält (Schema 3)
+    `kind=regular|deep_think`, den UTC-Tag der Admission, `quota_day`
+    (Kontoperiode inkl. Reset-Generation), `token_tier`, `admission_mode`,
+    `admission_estimate`, `token_limit_at_admission`, `booked_operations`
+    (`{operation: {measured, estimated, booked_at}}`, Exactly-once-Zaun der
+    Buchung), `request_fingerprint`, `expires_at`,
     `operation_claims` mit Claim-Zeit/Payload-Fingerprint und
     `status=reserved|consumed|released`. `utc_date` ist nur der Abrechnungstag;
     `expires_at` (`execution_expiry`) ist die getrennte Ausführungs-/Retry-
@@ -4326,21 +4446,26 @@ CLI mit `firebase deploy --only firestore:rules,firestore:indexes`):
     erhält zusätzlich ausschließlich `context_target_hash` und
     `context_bound_at`; derselbe konsumierte Key kann damit nur einen
     Chat-/Turn-Context finanzieren, ohne einen weiteren Zähler zu verändern.
-    Erlaubte Übergänge: `reserved → consumed` (`/prepare` kostet genau eine
-    Run-Einheit) oder
-    `reserved → released` (fehlgeschlagener/abgebrochener Run gibt den Slot
+    Erlaubte Übergänge: `reserved → consumed` (Admission bei `/prepare`) oder
+    `reserved → released` (fehlgeschlagener/abgebrochener Run gibt seinen Hold
     frei); beide Zielzustände sind terminal, Wiederholungen idempotent. Der Key
     kann nicht für einen anderen Run-Typ/Request wiederverwendet oder über
     seine begrenzte Ausführungsgültigkeit hinaus abgespielt werden. Provider-/LLM-Aufrufe finden immer
     außerhalb der Transaktion und erst nach Consume plus erfolgreichem
     Operations-Claim statt. Beim Account-Löschen werden beide Subcollections entfernt.
     `/ask_*`, `/consensus` und `/resolve` bündeln Run-Bindung, gegebenenfalls
-    Reserve/Consume und Operations-Claim in `authorize_operation`: drei
-    Dokument-Reads (Account-Tombstone, Run, Tagesstand) pro Versuch statt acht.
-    Bereits konsumierte Runs schreiben nur den neuen Claim; Tageszähler werden
-    frisch gelesen. Legacy-Direktaufrufe können weiterhin einen Run anlegen,
-    vorbereitete Reservierungen werden atomar konsumiert. `/prepare` und die
-    externe Consensus-API behalten ihren bisherigen Reserve-/Consume-Vertrag.
+    Admission/Consume und Operations-Claim in `authorize_operation`: zwei
+    Dokument-Reads (Account-Tombstone, Run) für vorbereitete Läufe; nur ein
+    Legacy-Direktaufruf ohne `/prepare` liest zusätzlich das Kontodokument und
+    wird dort admittiert. `/prepare` und die externe Consensus-API behalten
+    ihren Reserve-/Consume-Vertrag.
+  - `chat_state/agent_tokens_{YYYY-MM-DD}[_{reset_epoch}]` — das gemeinsame
+    Tokenkonto (Agent + Pipeline): `used` (gemessen, beide Modi), `reserved`
+    (Agent-Reservierungen), `estimated` (Agent-Schätzungen, später
+    reconciled), `pipeline_used` (Anteil der Pipeline an `used`),
+    `pipeline_estimated` (Schätzungen für Pipeline-Calls ohne finale Usage),
+    `pipeline_holds` (`{run_hash: {tokens, expires_at}}`, max. 32 aktive,
+    zehn Minuten), `pipeline_runs`, `unknown`/`unknown_released`, `revision`.
   - `api_consensus_idempotency/{sha256(idempotency_key)}` — Mapping von UID +
     gehashtem HTTP-Idempotency-Key auf `run_id` und kanonischen `request_hash`;
     verhindert auch bei parallelen POSTs doppelte Runs. Kein Klartext-Key.
