@@ -177,7 +177,18 @@ def test_developer_results_keep_rankings(api, monkeypatch):
     client, receipts, _, seen = api
     ids = {"openai": _issue(receipts, "OpenAI", "One", provenance="developer"),
            "mistral": _issue(receipts, "Mistral", "Two", provenance="developer")}
-    monkeypatch.setattr(chat_router, "authorize_usage_operation", lambda *a, **k: None)
+    from types import SimpleNamespace
+    from app.services.run_metering import OperationBooking
+    from app.services.usage_repository import RunStatus
+
+    class NoAccount:
+        def book_operation(self, *args, **kwargs):
+            return None
+
+    monkeypatch.setattr(chat_router, "authorize_usage_operation", lambda *a, **k: (
+        SimpleNamespace(status=RunStatus.CONSUMED, token_budget=None), None))
+    monkeypatch.setattr(chat_router, "operation_booking", lambda uid, data, operation, **k: OperationBooking(
+        NoAccount(), uid, "run-key", operation, **k))
     monkeypatch.setattr(chat_router, "build_engine_api_keys", lambda *a: {"OpenRouter": "server-key"})
     response = client.post("/consensus", headers=AUTH, json=_payload(
         ids, useOwnKeys=False, openrouter_key=""))

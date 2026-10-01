@@ -1,4 +1,5 @@
 ﻿import os
+import contextlib
 import time
 import logging
 import re
@@ -84,12 +85,15 @@ from app.services import answer_receipts, persistence_guard, user_memory
 from app.services.llm import completion
 from app.services.user_memory import FirestoreUserMemoryRepository
 from app.services.differences_stats import record_differences_stats
+from app.services import agent_quota
+from app.services.run_metering import OperationBooking, metered_events
 from app.services.usage_repository import (
     FirestoreUsageRepository,
     RunKind,
     RunStatus,
+    TokenAdmission,
+    UsageCapacityExceeded,
     UsageLimitExceeded,
-    UsageLimits,
     UsageRunExpired,
     UsageRunConflict,
     UsageOperationConflict,
@@ -116,11 +120,28 @@ user_memory_repository = FirestoreUserMemoryRepository(db_firestore)
 _CHAT_DOCUMENT_ID_RE = re.compile(r"[0-9a-f]{32}")
 
 
-def get_run_usage_limits(tier) -> UsageLimits:
-    return UsageLimits(
-        total=cfg.get_consensus_run_limit(tier),
-        deep_think=cfg.get_deep_think_run_limit(tier),
-    )
+def ledger_tier(uid: str, tier) -> str:
+    """Tier key of the shared token account (admin role first)."""
+    try:
+        return agent_quota.account_tier(uid, tier)
+    except TierStatusUnavailable:
+        raise HTTPException(
+            status_code=503,
+            detail="Account tier is temporarily unavailable. Please retry.",
+        ) from None
+
+
+def token_admission_for(uid: str, tier, *, deep_think: bool, mode=None) -> TokenAdmission:
+    try:
+        return run_usage_repository.admission(ledger_tier(uid, tier), mode=mode, deep_think=deep_think)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logging.error("Token budget configuration unavailable category=%s", safe_exception(exc))
+        raise HTTPException(status_code=503, detail={
+            "error": "Usage accounting is temporarily unavailable. Please retry this run.",
+            "error_code": "usage_storage_busy",
+        }) from None
 
 
 def get_usage_run_key(data: dict) -> str:
@@ -154,18 +175,42 @@ def usage_run_fingerprint(
     return canonical_request_fingerprint(fingerprint_input)
 
 
-def usage_response_fields(snapshot, tier) -> dict:
+def usage_response_fields(token_budget, tier) -> dict:
     entitlements = entitlements_for(tier)
-    return {
-        "free_usage_remaining": snapshot.total.remaining,
-        "deep_remaining": snapshot.deep_think.remaining,
-        "limit": snapshot.total.limit,
-        "deep_limit": snapshot.deep_think.limit,
+    fields = {
         # is_pro_user bleibt das Modell-/Deep-Think-Flag (Plus -> False);
         # "tier" ist die vollstaendige Stufe fuer die UI.
         "is_pro_user": entitlements.is_pro,
         "tier": entitlements.tier,
     }
+    if token_budget:
+        fields["token_budget"] = token_budget
+    return fields
+
+
+def own_key_usage_fields(tier) -> dict:
+    """Own keys are paid by the user: no account, no token_budget."""
+    entitlements = entitlements_for(tier)
+    return {"is_pro_user": entitlements.is_pro, "tier": entitlements.tier, "usage": "own_keys"}
+
+
+def _token_limit_detail(exc: UsageLimitExceeded, tier) -> dict:
+    detail = usage_response_fields(exc.token_budget, tier)
+    detail.update({
+        "error": (
+            "Today's token allowance does not cover another run. "
+            "It resets at 00:00 UTC."
+        ),
+        "error_code": "token_budget_exhausted",
+        "required_tokens": exc.required,
+    })
+    return detail
+
+
+def _usage_storage_busy(message="Usage accounting is temporarily busy. Please retry this run."):
+    return HTTPException(status_code=503, detail={
+        "error": message, "error_code": "usage_storage_busy",
+    })
 
 
 def reserve_usage_run(
@@ -175,15 +220,17 @@ def reserve_usage_run(
     tier,
     deep_think: bool,
     purpose: Optional[str] = None,
+    mode=None,
 ):
     key = get_usage_run_key(data)
     kind = RunKind.DEEP_THINK if deep_think else RunKind.REGULAR
+    admission = token_admission_for(uid, tier, deep_think=deep_think, mode=mode)
     try:
         result = run_usage_repository.reserve(
             uid,
             key,
             kind,
-            get_run_usage_limits(tier),
+            admission,
             request_fingerprint=usage_run_fingerprint(
                 data,
                 question=str(data.get("question") or "").strip(),
@@ -192,18 +239,12 @@ def reserve_usage_run(
             ),
         )
     except UsageLimitExceeded as exc:
-        detail = usage_response_fields(exc.snapshot, tier)
-        detail.update(
-            {
-                "error": (
-                    "Your Deep Think quota is exhausted for this UTC day."
-                    if exc.limiting_bucket == "deep_think"
-                    else "Your run quota is exhausted for this UTC day."
-                ),
-                "error_code": f"{exc.limiting_bucket}_usage_limit_exceeded",
-            }
-        )
-        raise HTTPException(status_code=403, detail=detail) from None
+        raise HTTPException(status_code=403, detail=_token_limit_detail(exc, tier)) from None
+    except UsageCapacityExceeded:
+        raise HTTPException(status_code=429, detail={
+            "error": "Too many runs are starting at once. Please wait for one to finish.",
+            "error_code": "usage_run_capacity",
+        }) from None
     except UsageRunConflict as exc:
         raise HTTPException(
             status_code=409,
@@ -215,13 +256,7 @@ def reserve_usage_run(
             detail={"error": str(exc), "error_code": "usage_run_expired"},
         ) from None
     except FirestoreAborted:
-        raise HTTPException(
-            status_code=503,
-            detail={
-                "error": "Usage accounting is temporarily busy. Please retry this run.",
-                "error_code": "usage_storage_busy",
-            },
-        ) from None
+        raise _usage_storage_busy() from None
     if result.status is RunStatus.RELEASED:
         raise HTTPException(
             status_code=409,
@@ -230,7 +265,7 @@ def reserve_usage_run(
                 "error_code": "usage_run_released",
             },
         )
-    return key, result
+    return key, result, admission
 
 
 def consume_usage_run(uid: str, key: str):
@@ -242,25 +277,36 @@ def consume_usage_run(uid: str, key: str):
             detail={"error": str(exc), "error_code": "usage_run_transition"},
         ) from None
     except FirestoreAborted:
-        raise HTTPException(
-            status_code=503,
-            detail={
-                "error": "Usage accounting is temporarily busy. Please retry this run.",
-                "error_code": "usage_storage_busy",
-            },
-        ) from None
+        raise _usage_storage_busy() from None
+
+
+def current_token_budget(uid: str, result, admission) -> Optional[dict]:
+    """The account after an authorization: from the transaction if it admitted
+    a run, else one plain read. A failed read only omits the field."""
+    if result is not None and result.token_budget:
+        return result.token_budget
+    try:
+        return run_usage_repository.token_budget(uid, admission)
+    except Exception as exc:
+        logging.warning("Token budget read failed category=%s", safe_exception(exc))
+        return None
 
 
 def authorize_usage_operation(
     uid: str, data: dict, operation: str, request_payload: dict,
-    *, tier, deep_think: bool, purpose: Optional[str] = None,
+    *, tier, deep_think: bool, purpose: Optional[str] = None, mode=None,
 ):
-    """Keep quota, run binding and execution claim in one transaction."""
+    """Keep admission, run binding and execution claim in one transaction.
+
+    Returns ``(result, admission)``; a run that skipped /prepare is admitted
+    here like any other.
+    """
     key = get_usage_run_key(data)
+    admission = token_admission_for(uid, tier, deep_think=deep_think, mode=mode)
     try:
         result, claim = run_usage_repository.authorize_operation(
             uid, key, RunKind.DEEP_THINK if deep_think else RunKind.REGULAR,
-            get_run_usage_limits(tier), operation,
+            admission, operation,
             canonical_request_fingerprint(request_payload),
             request_fingerprint=usage_run_fingerprint(
                 data, question=str(data.get("question") or "").strip(),
@@ -268,16 +314,12 @@ def authorize_usage_operation(
             ),
         )
     except UsageLimitExceeded as exc:
-        detail = usage_response_fields(exc.snapshot, tier)
-        detail.update({
-            "error": (
-                "Your Deep Think quota is exhausted for this UTC day."
-                if exc.limiting_bucket == "deep_think"
-                else "Your run quota is exhausted for this UTC day."
-            ),
-            "error_code": f"{exc.limiting_bucket}_usage_limit_exceeded",
-        })
-        raise HTTPException(status_code=403, detail=detail) from None
+        raise HTTPException(status_code=403, detail=_token_limit_detail(exc, tier)) from None
+    except UsageCapacityExceeded:
+        raise HTTPException(status_code=429, detail={
+            "error": "Too many runs are starting at once. Please wait for one to finish.",
+            "error_code": "usage_run_capacity",
+        }) from None
     except (UsageRunConflict, UsageRunExpired, UsageRunReleased, UsageTransitionError) as exc:
         code = (
             "usage_operation_conflict" if isinstance(exc, UsageOperationConflict) else
@@ -290,16 +332,18 @@ def authorize_usage_operation(
             status_code=409, detail={"error": str(exc), "error_code": code},
         ) from None
     except FirestoreAborted:
-        raise HTTPException(status_code=503, detail={
-            "error": "Usage authorization is temporarily busy. Please retry.",
-            "error_code": "usage_storage_busy",
-        }) from None
+        raise _usage_storage_busy("Usage authorization is temporarily busy. Please retry.") from None
     if claim.idempotent:
         raise HTTPException(status_code=409, detail={
             "error": "This logical operation was already started.",
             "error_code": "usage_operation_already_claimed",
         })
-    return result
+    return result, admission
+
+
+def operation_booking(uid: str, data: dict, operation: str, *, final: bool = False) -> OperationBooking:
+    """Meter one authorized operation; its tokens are booked when it ends."""
+    return OperationBooking(run_usage_repository, uid, get_usage_run_key(data), operation, final=final)
 
 
 def parse_boolean_flag(value) -> bool:
@@ -836,7 +880,7 @@ def _receipt_stream(source, receipt):
 
 def _run_ask(provider: AskProvider, *, stream_requested, question, key,
              system_prompt, deep_search, model, max_tokens, attachments, extras,
-             receipt=None):
+             receipt=None, booking: Optional[OperationBooking] = None):
     """Fuehrt den Provider-Call aus (streamend oder nicht) und verpackt das
     Ergebnis im bisherigen Response-Format.
 
@@ -846,12 +890,16 @@ def _run_ask(provider: AskProvider, *, stream_requested, question, key,
         # E2E-Suite: deterministischer Fixture-Stream statt Provider-Call.
         # Auth/Limits/Validierung sind zu diesem Zeitpunkt bereits gelaufen.
         if stream_requested:
+            source = _receipt_stream(mock_ask_stream(provider.label, question), receipt)
             return streaming_model_response(
-                _receipt_stream(mock_ask_stream(provider.label, question), receipt),
+                metered_events(source, booking) if booking else source,
                 provider.label, extras,
             )
-        result = _with_receipt(mock_ask_result(provider.label, question), receipt)
-        return source_response(result, **extras)
+        if booking is None:
+            return source_response(_with_receipt(mock_ask_result(provider.label, question), receipt), **extras)
+        with booking.metering():
+            result = _with_receipt(mock_ask_result(provider.label, question), receipt)
+        return source_response(result, **extras, **booking.extras())
 
     kwargs = {
         "system_prompt": system_prompt,
@@ -904,13 +952,25 @@ def _run_ask(provider: AskProvider, *, stream_requested, question, key,
                     outcome=outcome,
                 )
 
-        return streaming_model_response(observed_stream(), provider.label, extras)
+        events = observed_stream()
+        return streaming_model_response(
+            metered_events(events, booking) if booking else events, provider.label, extras
+        )
     started = time.monotonic()
     outcome = "success"
     try:
-        result = _with_receipt(
-            query_model(provider.key, question, key, **kwargs), receipt
-        )
+        if booking is None:
+            result = _with_receipt(
+                query_model(provider.key, question, key, **kwargs), receipt
+            )
+        else:
+            try:
+                with booking.metering():
+                    result = _with_receipt(
+                        query_model(provider.key, question, key, **kwargs), receipt
+                    )
+            finally:
+                extras = {**extras, **booking.extras()}
         if isinstance(result, dict) and result.get("error"):
             outcome = (
                 "timeout"
@@ -1095,10 +1155,7 @@ def handle_ask(provider: AskProvider, request: Request, data: dict):
             max_tokens=max_tokens,
             attachments=attachments,
             extras={
-                "free_usage_remaining": "Unlimited",
-                "deep_remaining": "Unlimited",
-                "is_pro_user": is_pro_user,
-                "tier": tier,
+                **own_key_usage_fields(tier),
                 "key_used": "User API Key",
             },
             receipt=answer_receipt(answer_receipts.PROVENANCE_BYOK),
@@ -1110,10 +1167,11 @@ def handle_ask(provider: AskProvider, request: Request, data: dict):
         if not developer_key:
             raise HTTPException(status_code=500, detail="Server error: API key missing")
 
-        usage_result = authorize_usage_operation(
+        operation = f"ask:{provider.label.lower()}"
+        usage_result, admission = authorize_usage_operation(
             uid,
             data,
-            f"ask:{provider.label.lower()}",
+            operation,
             {
                 "schema": 1,
                 "provider": provider.label,
@@ -1127,9 +1185,11 @@ def handle_ask(provider: AskProvider, request: Request, data: dict):
                 "turn_id": data.get("turn_id"),
                 "context_version_id": data.get("context_version_id"),
             },
-            tier=tier, deep_think=deep_search,
+            tier=tier, deep_think=deep_search, mode=data.get("run_mode"),
         )
 
+        # The answer's tokens are measured in the transport and booked on the
+        # account when it ends; the final event carries the booked snapshot.
         return _run_ask(
             provider,
             stream_requested=stream_requested,
@@ -1141,11 +1201,12 @@ def handle_ask(provider: AskProvider, request: Request, data: dict):
             max_tokens=max_tokens,
             attachments=attachments,
             extras={
-                **usage_response_fields(usage_result.snapshot, tier),
+                **usage_response_fields(None, tier),
                 "usage_run_status": usage_result.status.value,
                 "key_used": "Developer API Key",
             },
             receipt=answer_receipt(answer_receipts.PROVENANCE_DEVELOPER),
+            booking=operation_booking(uid, data, operation),
         )
 
     # --- Kein Login: eigener Key erfordert Login, sonst Provider-No-Auth-Fehler ---
@@ -1237,15 +1298,19 @@ def prepare(request: Request, data: dict = Body(...)):
         "sources": []
     }
     if not use_own_keys:
-        usage_key, _ = reserve_usage_run(
-            uid, data, tier=tier, deep_think=deep_think
+        # Admission: the run starts only if the account covers the expected
+        # cost of a typical run of this mode (compare/consensus/deep think).
+        usage_key, reserved, admission = reserve_usage_run(
+            uid, data, tier=tier, deep_think=deep_think, mode=data.get("run_mode")
         )
         # Consume once before fan-out so later authorization only reads the
-        # daily counters and writes the operation claim. The combined authorize
-        # path also consumes a leftover reservation if prepare was interrupted.
+        # run and writes the operation claim. The combined authorize path also
+        # consumes a leftover reservation if prepare was interrupted.
         usage_result = consume_usage_run(uid, usage_key)
-        response.update(usage_response_fields(usage_result.snapshot, tier))
+        response.update(usage_response_fields(
+            current_token_budget(uid, reserved, admission), tier))
         response["usage_run_status"] = usage_result.status.value
+        response["run_estimate"] = admission.estimate
     return response
 
 
@@ -1516,8 +1581,9 @@ def consensus(request: Request, data: dict = Body(...)):
         raise HTTPException(status_code=400, detail="Missing OpenRouter API key.")
 
     usage_result = None
+    booking = None
     if not use_own_keys:
-        usage_result = authorize_usage_operation(
+        usage_result, _admission = authorize_usage_operation(
             uid,
             data,
             "consensus",
@@ -1534,8 +1600,12 @@ def consensus(request: Request, data: dict = Body(...)):
                 "turn_id": data.get("turn_id"),
                 "context_version_id": context_version_id,
             },
-            tier=tier, deep_think=deep_think,
+            tier=tier, deep_think=deep_think, mode="consensus",
         )
+        # Synthesis, Differences and Coverage judges (and their repairs) are
+        # measured in the transport; the final operation of a run also drops
+        # what is left of its admission hold.
+        booking = operation_booking(uid, data, "consensus", final=True)
 
     # Share-Feature: Ergebnis nur für verifizierte Nutzer persistieren.
     share_uid = uid
@@ -1770,15 +1840,10 @@ def consensus(request: Request, data: dict = Body(...)):
     if stream_requested:
         extra_fields = {}
         if usage_result is not None:
-            extra_fields = usage_response_fields(usage_result.snapshot, tier)
+            extra_fields = usage_response_fields(None, tier)
             extra_fields["usage_run_status"] = usage_result.status.value
         elif use_own_keys:
-            extra_fields = {
-                "free_usage_remaining": "Unlimited",
-                "deep_remaining": "Unlimited",
-                "is_pro_user": is_pro,
-                "tier": tier,
-            }
+            extra_fields = own_key_usage_fields(tier)
 
         @analysis_budgeted
         def consensus_event_source():
@@ -1995,37 +2060,47 @@ def consensus(request: Request, data: dict = Body(...)):
                     chat_persisted=chat_persisted,
                 )
             payload.update(extra_fields)
+            if booking is not None:
+                payload.update(booking.extras())
             yield sse_pack("final", payload)
 
         # Keepalive-Wrapper: schiebt SSE-Kommentare ein, wenn die Engines
         # (z. B. ein denkender Reasoning-Judge) länger keine Bytes liefern —
         # sonst trennt Cloudflare idle Verbindungen und das final-Event geht
-        # verloren (Spinner bliebe für immer stehen).
-        return keepalive_streaming_response(consensus_event_source())
+        # verloren (Spinner bliebe für immer stehen). metered_events bindet den
+        # Token-Zaehler im Pump-Thread und bucht auch bei Abbruch.
+        events = consensus_event_source()
+        return keepalive_streaming_response(
+            metered_events(events, booking) if booking is not None else events
+        )
 
     try:
-        analysis = analyze_provider_answers(
-            question=question,
-            answers=included_by_provider,
-            consensus_model=consensus_model,
-            keys=api_keys,
-            model_sources=model_sources,
-            resolved_question=resolved_question,
-            synthesize=query_consensus,
-            judge=query_differences,
-            allow_consensus_error=True,
-            skipped_differences_text=DIFFERENCES_SKIPPED_TEXT,
-            require_differences_data=False,
-            verification_sources=verification_sources,
-            check_sources=check_sources,
-            verification_submit=enqueue_verification,
-        )
+        with (booking.metering() if booking is not None else contextlib.nullcontext()):
+            analysis = analyze_provider_answers(
+                question=question,
+                answers=included_by_provider,
+                consensus_model=consensus_model,
+                keys=api_keys,
+                model_sources=model_sources,
+                resolved_question=resolved_question,
+                synthesize=query_consensus,
+                judge=query_differences,
+                allow_consensus_error=True,
+                skipped_differences_text=DIFFERENCES_SKIPPED_TEXT,
+                require_differences_data=False,
+                verification_sources=verification_sources,
+                check_sources=check_sources,
+                verification_submit=enqueue_verification,
+            )
         consensus_answer = analysis.consensus
         consensus_failed = is_consensus_error_text(consensus_answer)
         differences = analysis.differences_text
         differences_data = analysis.differences_data
         source_verification = analysis.source_verification
     except Exception as exc:
+        if booking is not None:
+            # Calls that already ran are spent even though the analysis failed.
+            booking.finish()
         failed = _fail_chat_turn_best_effort(
             uid,
             validated_chat_turn_ids,
@@ -2095,15 +2170,11 @@ def consensus(request: Request, data: dict = Body(...)):
             chat_persisted=chat_persisted,
         )
     if usage_result is not None:
-        response.update(usage_response_fields(usage_result.snapshot, tier))
+        response.update(usage_response_fields(None, tier))
         response["usage_run_status"] = usage_result.status.value
+        response.update(booking.extras())
     elif use_own_keys:
-        response.update({
-            "free_usage_remaining": "Unlimited",
-            "deep_remaining": "Unlimited",
-            "is_pro_user": is_pro,
-            "tier": tier,
-        })
+        response.update(own_key_usage_fields(tier))
     return response
 
 
@@ -2197,7 +2268,7 @@ def _persist_resolve_bookmark(uid: str, data: dict, claim: str, positions: list,
 def resolve(request: Request, data: dict = Body(...)):
     """Resolve-Runde: konfrontiert die dissentierenden Modelle eines
     Widerspruchs (aus differences_data) gezielt mit der Gegenposition.
-    Kostet einen regulaeren Usage-Punkt; bei exakter Bookmark-Bindung wird das
+    Bucht ihre gemessenen Tokens auf das Tageskonto; bei exakter Bookmark-Bindung wird das
     serverseitige Ergebnis versionsgeschuetzt persistiert."""
     id_token = extract_id_token(request, data)
     use_own_keys = parse_boolean_flag(data.get("useOwnKeys", False))
@@ -2219,7 +2290,6 @@ def resolve(request: Request, data: dict = Body(...)):
             detail="Account tier is temporarily unavailable. Please retry.",
         ) from None
     entitlements = entitlements_for(tier)
-    is_pro = entitlements.is_pro
 
     # Resolve ist ab Plus freigeschaltet; Free-Nutzer sehen den Button nur als
     # Teaser. Die Runde laeuft auf dem Standard-Judge, kostet also keinen
@@ -2250,8 +2320,11 @@ def resolve(request: Request, data: dict = Body(...)):
         raise HTTPException(status_code=400, detail=str(exc))
 
     usage_result = None
+    booking = None
     if not use_own_keys:
-        usage_result = authorize_usage_operation(
+        # A Resolve round is a few judge calls: it is admitted against the
+        # smaller Compare estimate and booked with its measured tokens.
+        usage_result, _admission = authorize_usage_operation(
             uid,
             data,
             "resolve",
@@ -2261,23 +2334,24 @@ def resolve(request: Request, data: dict = Body(...)):
                 "claim": claim,
                 "positions": positions,
             },
-            tier=tier, deep_think=False, purpose="resolve",
+            tier=tier, deep_think=False, purpose="resolve", mode="compare",
         )
+        booking = operation_booking(uid, data, "resolve", final=True)
 
     api_keys = build_engine_api_keys(data, use_own_keys)
 
-    result = run_resolve_round(question, claim, positions, api_keys)
+    try:
+        with (booking.metering() if booking is not None else contextlib.nullcontext()):
+            result = run_resolve_round(question, claim, positions, api_keys)
+    finally:
+        if booking is not None:
+            booking.finish()
     result["bookmark_persisted"] = _persist_resolve_bookmark(
         uid, data, claim, positions, result
     )
     if usage_result is not None:
-        result.update(usage_response_fields(usage_result.snapshot, tier))
+        result.update(usage_response_fields(booking.token_budget, tier))
         result["usage_run_status"] = usage_result.status.value
     else:
-        result.update({
-            "free_usage_remaining": "Unlimited",
-            "deep_remaining": "Unlimited",
-            "is_pro_user": is_pro,
-            "tier": tier,
-        })
+        result.update(own_key_usage_fields(tier))
     return result

@@ -651,6 +651,10 @@ def test_deep_think_reservation_uses_separate_usage_kind(monkeypatch):
     captured = {}
 
     class UsageRepo:
+        def admission(self, tier, *, mode=None, deep_think=False):
+            captured.update(tier=tier, mode=mode, deep_think=deep_think)
+            return "deep-think-admission"
+
         def reserve(self, uid, key, kind, limits, **kwargs):
             captured.update(uid=uid, key=key, kind=kind, limits=limits, **kwargs)
             return SimpleNamespace(status=RunStatus.RESERVED)
@@ -672,6 +676,9 @@ def test_deep_think_reservation_uses_separate_usage_kind(monkeypatch):
     api_consensus_runner.reserve_run(run)
 
     assert captured["kind"] is RunKind.DEEP_THINK
+    # Admitted on the shared token account against the Deep Think estimate.
+    assert captured["deep_think"] is True and captured["tier"] == "pro"
+    assert captured["limits"] == "deep-think-admission"
     assert captured["key"] == "consensus-api:" + "b" * 64
     assert len(captured["request_fingerprint"]) == 64
 

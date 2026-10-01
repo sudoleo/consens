@@ -235,7 +235,7 @@ def test_missing_tool_uses_existing_review_and_persists_checked_answer(store):
 
 
 def test_atomic_daily_budget_and_duplicate_settlement(store, monkeypatch):
-    monkeypatch.setenv("AGENT_DAILY_TOKEN_LIMIT", "100")
+    monkeypatch.setitem(agent_budget_config.DEFAULT_TIER_LIMITS, "pro", 100)
     loops = [make_loop(store, Script()) for _ in range(2)]
     def claim(loop):
         try:
@@ -270,7 +270,7 @@ def test_quota_rejection_distinguishes_empty_from_insufficient_reservation(remai
 
 def test_admin_budget_is_enforced_and_reset_isolated_from_inflight_settlement(store):
     config = agent_budget_config.store(store.db)
-    config.save(expected_revision=0, updated_by='admin', daily_token_limit=2000)
+    config.save(expected_revision=0, updated_by='admin', tier_limits={'pro': 2000})
     loop = make_loop(store, Script())
     params = dict(run_token=loop.run_token, policy=loop.policy.snapshot())
     with pytest.raises(agent_quota.AgentTokenBudgetExceeded):

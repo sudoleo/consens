@@ -205,30 +205,6 @@ describe("App.runRegistry", () => {
     dom.window.close();
   });
 
-  it("fences out-of-order account usage snapshots but accepts an authoritative refresh", () => {
-    const { registry, dom } = bootRegistry();
-    const runA = registry.create(spec("Usage A"));
-    const runB = registry.create(spec("Usage B"));
-
-    expect(registry.reconcileUsageSnapshot(runA, {
-      free_usage_remaining: 4,
-      deep_remaining: 2
-    })).toMatchObject({ remaining: 4, deepRemaining: 2 });
-    expect(registry.reconcileUsageSnapshot(runB, {
-      free_usage_remaining: 2,
-      deep_remaining: 1
-    })).toMatchObject({ remaining: 2, deepRemaining: 1 });
-    expect(registry.reconcileUsageSnapshot(runA, {
-      free_usage_remaining: 3,
-      deep_remaining: 2
-    })).toMatchObject({ remaining: 2, deepRemaining: 1 });
-    expect(registry.reconcileUsageSnapshot(runA, {
-      remaining: 5,
-      deep_remaining: 3
-    }, { authoritative: true })).toMatchObject({ remaining: 5, deepRemaining: 3 });
-    dom.window.close();
-  });
-
   it("owns costly post-actions under the same admission and logout boundary", () => {
     const { registry, window, dom } = bootRegistry();
     const runA = registry.create(spec("Action A"));

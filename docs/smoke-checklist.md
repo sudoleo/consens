@@ -538,8 +538,8 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       „Copy consensus“ liefert Domains in Klammern statt „uci.org+2“.
 - [ ] „Run again“ kehrt zum normalen Composer zurück, übernimmt die vorige
       Frage, startet aber erst nach einem bewussten Klick auf Senden. Der Knopf
-      beziffert vorher den Preis („Run again · uses 1 run“, Tooltip mit Rest-
-      Kontingent); bei unbegrenztem Plan entfällt der Zusatz. Nach dem Klick
+      beziffert vorher den ungefähren Preis („Run again · about 8% of today“,
+      Tooltip mit Rest in Prozent); ohne bekanntes Konto entfällt der Zusatz. Nach dem Klick
       steht über dem Eingabefeld, dass Senden einen vollständigen neuen Lauf
       startet — der Hinweis verschwindet mit dem Absenden oder mit
       „New comparison“.
@@ -986,7 +986,8 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
   Fehlende/teilweise/abgebrochene Prüfung bleibt erkennbar, Recovery startet
   keinen neuen Provider-Aufruf. Ein Account-/Chatwechsel mischt keine Daten.
 - [ ] Kontingent nahe der Grenze mit zwei parallelen Chats prüfen; Chat,
-  Vergleich und Judges teilen Tokens, UTC-Reset bleibt separat zu Consensus.
+  Vergleich und Judges teilen Tokens — seit 2026-10-01 auch mit Compare und
+  Consensus (ein Konto, ein UTC-Reset).
 - [ ] Prozentanzeige während Calls und nach Budgetfehler/Disconnect prüfen:
   aktueller Serverwert; Panel zeigt Reserven. Eine unzureichende Reserve wird
   nicht als leeres Budget bezeichnet. Optionale Suche darf vor dem Claim
@@ -1002,7 +1003,18 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
 - [ ] Desktop und 390/320px, Hell/Dunkel, Tastatur und Reduced Motion prüfen.
 - [ ] Agent-Budget: Reservierung und Freigabe ohne gemessenen Verbrauch verändern
   den Prozentwert nicht; der Kontingent-Dialog zeigt Reserven separat. Admin →
-  Limits speichert das Tageslimit und kann alle Agent-Budgets zurücksetzen.
+  Limits speichert Tageslimit je Stufe und Laufschätzungen je Stufe/Modus und
+  kann alle Konten zurücksetzen.
+- [ ] Ein Tokenkonto für alle Modi: Ring im Sidebar-Fuß ist ein ruhiges
+  20-px-Glyph ohne Zahl; Hover/Screenreader nennen „62% of today's allowance
+  left · resets …“. Panel: eine Hauptzahl, dünner Balken, Reset-Zeile,
+  Detailzeile („409k of 660k tokens · a Consensus run uses about 8%“), Watches
+  separat. Hell/Dunkel, Desktop und 320/390 px; bei ≤ 25 % färben sich nur
+  Bogen und Balken amber, leer rot. Ein Compare- oder Consensus-Lauf senkt den
+  Prozentwert nach seinen Antworten bzw. dem Consensus; Agent zeigt dieselbe
+  Zahl. Reicht das Konto nicht für einen typischen Lauf des Modus, erscheint
+  die Absage-Karte vor dem Senden (Deep Think: Angebot „Send without Deep
+  Think“, wenn ein normaler Lauf noch passt).
 - [ ] Auch ein fehlgeschlagener Agent-Run ohne Hauptantwort bleibt als Bookmark
   erhalten: Frage, Fehler, Aktivität und vorhandene Vergleichsantworten sind
   nach Reload sowie später im älteren Verlauf sichtbar.

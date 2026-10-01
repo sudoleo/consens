@@ -15,7 +15,7 @@ from app.services.agent_runtime import AgentCapacityExceeded
 from app.services.llm.agent_client import AgentModel, AgentCompletion, measured_usage
 from app.services.agent_delegation_config import defaults
 from app.services.llm.provider_runtime import AnalysisBudgetExceeded
-from app.services import agent_quota
+from app.services import agent_budget_config, agent_quota
 from app.services.chat_store import TurnStatusConflict
 
 
@@ -193,7 +193,7 @@ def test_concurrent_budget_refresh_recovers_orphaned_receipt_and_saved_usage_onc
 
 def test_daily_token_admission_and_idempotent_settlement_in_firestore(monkeypatch):
     assert_safe_e2e_environment()
-    monkeypatch.setenv("AGENT_DAILY_TOKEN_LIMIT", "100")
+    monkeypatch.setitem(agent_budget_config.DEFAULT_TIER_LIMITS, "pro", 100)
     db = firestore.Client(project=E2E_PROJECT_ID)
     uid = "agent-token-race-" + uuid.uuid4().hex
     store, model = AgentRunStore(db), AgentModel()

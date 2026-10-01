@@ -676,7 +676,7 @@ def test_quota_stream_and_failure_update_existing_percentage(browser, phase4_ser
         page.route('**/chats', lambda r: _json(r, {'chat': {'id': 'a' * 32}}))
         page.evaluate("async () => { await window.__switchE2EUser('account-a'); }")
         _choose_mode(page, 'agent')
-        expect(page.locator('#quotaTriggerValue')).to_have_text('75%')
+        expect(page.locator('#quotaTrigger')).to_have_attribute('aria-label', re.compile(r'^75% of today'))
         page.evaluate("""() => {
           const original = window.fetch;
           window.fetch = async (url, options) => {
@@ -690,7 +690,7 @@ def test_quota_stream_and_failure_update_existing_percentage(browser, phase4_ser
         }""")
         page.locator('#questionInput').fill('Compare the options')
         page.locator('#sendButton').click()
-        expect(page.locator('#quotaTriggerValue')).to_have_text('75%')
+        expect(page.locator('#quotaTrigger')).to_have_attribute('aria-label', re.compile(r'^75% of today'))
         page.evaluate("""() => window.__quotaEvent('error', {
           error:'The next model call needed a reservation of 50,000 tokens; 40,000 were available at that point. Completed calls release their reservations.',
           code:'agent_token_reservation', required_tokens:50000, available_tokens:40000, recoverable:false,
@@ -701,9 +701,7 @@ def test_quota_stream_and_failure_update_existing_percentage(browser, phase4_ser
         expect(page.locator('#agentAnswerErrorActions button')).to_have_text(['Try a smaller model', 'Choose models'])
         # Nothing was answered, so the question returns to the composer.
         expect(page.locator('#questionInput')).to_have_value('Compare the options')
-        expect(page.locator('#quotaTriggerValue')).to_have_text('75%')
-        expect(page.locator('#quotaTrigger')).to_have_attribute('title', re.compile('188.878 tokens available for new calls'))
-        expect(page.locator('#quotaFoot')).to_contain_text('unavailable usage; they do not block the remaining allowance')
+        expect(page.locator('#quotaTrigger')).to_have_attribute('aria-label', re.compile(r'^75% of today'))
         expect(page.locator('#agentRecover')).to_be_hidden()
         expect(page.locator('.run-status-failed')).to_have_count(1)
         expect(page.locator('.thread-ask-label')).to_have_count(0)

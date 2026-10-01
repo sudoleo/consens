@@ -252,7 +252,6 @@ body.single-agent-active #composerAgentToggle:hover { background: transparent; }
 
 .agent-model-picker .model-picker-display-text::before { content: none; }
 .agent-reasoning-option { border-top: 1px solid var(--line) !important; margin-top: 6px; padding-top: 12px !important; }
-.quota-trigger[data-allowance="agent"] .quota-trigger-value { font-size: 10px; letter-spacing: -.3px; }
 .agent-review { display: flex; flex-wrap: wrap; align-items: center; gap: 0 12px; margin: 18px 0 8px; color: var(--ink-2); font-size: 12px; }
 .agent-review[hidden], .agent-review-summary[hidden], .agent-review-status[hidden] { display: none; }
 /* One quiet row: Copy first, the evidence links after it. The summary line

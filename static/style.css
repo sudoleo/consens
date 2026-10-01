@@ -23,10 +23,10 @@
 @import url('./css/components-watch.css?v=20260907-readerfinish1');
 /* Shell layer — loaded LAST so the frameless redesign wins on equal
    specificity. Elevation, sidebar, topbar, composer and thread material. */
-@import url('./css/shell.css?v=20260930-composer');
+@import url('./css/shell.css?v=20261001-integrated');
 @import url('./css/model-answer-reader.css?v=20261001-differences');
 @import url('./css/composer-attachments.css?v=20260930-composer');
-@import url('./css/agent-chat.css?v=20260930-partial-answers');
+@import url('./css/agent-chat.css?v=20261001-integrated');
 @import url('./css/agent-google.css?v=20260930-composer');
 @import url('./css/agent-workspace.css?v=20260930-agent-ux');
 /* The composer row's layout, for every mode (see its header). */

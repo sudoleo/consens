@@ -312,11 +312,14 @@ laufenden Protokoll und werden nicht als sichtbare Aktivität gespeichert.
 
 ## Tageskontingent
 
-Das Tagesbudget ist in Admin → Limits separat speicherbar und liegt in
-app_config/agent_budget. Ohne gespeicherte Einstellung gilt AGENT_DAILY_TOKEN_LIMIT,
-standardmäßig 250000 Tokens pro UID und UTC-Tag (Reset um 00:00 UTC). Der Button
-„Reset all Agent budgets“ setzt das Agent-Kontingent aller Konten über eine neue
-Budgetgeneration zurück, ohne Nutzer-Scan. Begonnene Aufrufe rechnen weiter gegen
+Seit 2026-10-01 teilt Agent das Tageskonto mit Compare, Consensus und Deep
+Think (siehe codebase-map, „Ein Tokenkonto für alle Modi“). Das Limit pro
+Stufe (Free/Plus/Pro/Admin) und die erwarteten Tokens eines typischen Laufs
+liegen in app_config/agent_budget und sind in Admin → Limits speicherbar
+(Defaults: Pro/Admin 5 000 000 Tokens pro UID und UTC-Tag, Reset um 00:00 UTC).
+`AGENT_DAILY_TOKEN_LIMIT` gibt es nicht mehr. Der Button „Reset all
+allowances“ setzt das Konto aller Nutzer über eine neue Budgetgeneration
+zurück, ohne Nutzer-Scan. Begonnene Aufrufe rechnen weiter gegen
 ihre ursprüngliche Generation ab. Einstellungen greifen spätestens beim nächsten
 Config-Refresh nach 30 Sekunden; der Admin-Client verwendet Revisionsschutz.
 Der bestehende

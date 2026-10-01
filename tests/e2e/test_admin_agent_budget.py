@@ -19,7 +19,10 @@ def test_admin_agent_budget_save_and_reset(browser, phase4_server, width):
     page = context.new_page()
     errors, writes = [], []
     page.on('pageerror', lambda error: errors.append(str(error)))
-    state = {'daily_token_limit': 250000, 'revision': 0, 'reset_epoch': ''}
+    estimates = {'compare': 32000, 'consensus': 55000, 'deep_think': 150000}
+    state = {'tier_limits': {'free': 660000, 'plus': 1650000, 'pro': 5000000, 'admin': 5000000},
+             'run_estimates': {tier: dict(estimates) for tier in ('free', 'plus', 'pro', 'admin')},
+             'revision': 0, 'reset_epoch': ''}
     def handle(route):
         assert route.request.headers['authorization'] == 'Bearer token-admin'
         if route.request.method != 'GET':
@@ -28,7 +31,8 @@ def test_admin_agent_budget_save_and_reset(browser, phase4_server, width):
             assert body['revision'] == state['revision']
             state['revision'] += 1
             if route.request.method == 'PUT':
-                state['daily_token_limit'] = body['daily_token_limit']
+                state['tier_limits'] = body['tier_limits']
+                state['run_estimates'] = body['run_estimates']
             else:
                 state.update(reset_epoch='a' * 32, reset_at='2026-09-19T12:00:00Z')
         _json(route, {'config': state, 'cache_seconds': 30})
@@ -37,8 +41,9 @@ def test_admin_agent_budget_save_and_reset(browser, phase4_server, width):
     page.route('**/api/admin/agent-budget/reset', handle)
     try:
         page.goto(phase4_server + '/admin#limits', wait_until='domcontentloaded')
-        field = page.locator('#agentDailyTokenLimit')
-        expect(field).to_have_value('250000')
+        field = page.locator('#budgetLimit-free')
+        expect(field).to_have_value('660000')
+        expect(page.locator('#budgetEstimate-pro-deep_think')).to_have_value('150000')
         field.fill('500000')
         expect(page.locator('#adminSavebar')).not_to_have_class('is-dirty')
         page.locator('#saveAgentBudget').click()
@@ -48,9 +53,11 @@ def test_admin_agent_budget_save_and_reset(browser, phase4_server, width):
         assert len(writes) == 1
         page.once('dialog', lambda dialog: dialog.accept())
         page.locator('#resetAgentBudgets').click()
-        expect(page.locator('#agentBudgetStatus')).to_contain_text('All Agent budgets reset')
+        expect(page.locator('#agentBudgetStatus')).to_contain_text('All allowances reset')
         expect(field).to_have_value('500000')
-        assert writes == [('PUT', {'revision': 0, 'daily_token_limit': 500000}), ('POST', {'revision': 1})]
+        assert [method for method, _ in writes] == ['PUT', 'POST']
+        assert writes[0][1]['revision'] == 0 and writes[0][1]['tier_limits']['free'] == 500000
+        assert writes[1][1] == {'revision': 1}
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
         if os.environ.get('AGENT_SCREENSHOTS'):
             target = Path(os.environ['AGENT_SCREENSHOTS']); target.mkdir(parents=True, exist_ok=True)

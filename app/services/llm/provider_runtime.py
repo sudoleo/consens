@@ -315,9 +315,13 @@ def cancellable_post_json(url, *, json, headers):
     Runs only in synchronous provider workers, never on FastAPI's event loop.
     No transport retries. Polling monitors cancellation, not provider results.
     """
+    from app.services.llm import usage_meter
+    from app.services.llm.engines import _ProviderHTTPStatusError
+
     cancellation = current_provider_cancellation()
     budget = current_analysis_budget()
     connect, read = analysis_http_timeout()
+    metered = usage_meter.start_call(json)
 
     async def request():
         async with httpx.AsyncClient(timeout=httpx.Timeout(read, connect=connect)) as client:
@@ -327,7 +331,17 @@ def cancellable_post_json(url, *, json, headers):
                 from app.services.llm.engines import _raise_provider_http_status
                 _raise_provider_http_status(response)
             return response.json()
-    return asyncio.run(request())
+    try:
+        data = asyncio.run(request())
+    except _ProviderHTTPStatusError:
+        metered.rejected()
+        raise
+    except BaseException:
+        # Timeout/cancellation after the request left: bounded estimate.
+        metered.finish()
+        raise
+    metered.finish(data.get("usage") if isinstance(data, dict) else None)
+    return data
 
 
 async def _bounded_error_body(response, limit=16_384):

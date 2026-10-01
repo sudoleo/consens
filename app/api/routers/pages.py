@@ -458,7 +458,6 @@ def read_root(request: Request):
     ]
 
     response = templates.TemplateResponse(request=request, name="index.html", context={
-        "free_limit": cfg.get_consensus_run_limit(False),
         "limits": cfg.get_limits_config(),
         "models": models,
         "model_families": model_families,

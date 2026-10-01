@@ -194,10 +194,13 @@ def run_resolve_round(question: str, claim: str, positions: list, api_keys: dict
         for model_label in position["models"]:
             jobs.append((model_label, position, opposing))
 
+    from contextvars import copy_context
+
+    # copy_context: every model call reports into the run's usage meter.
     with ThreadPoolExecutor(max_workers=min(len(jobs), MAX_RESOLVE_MODELS)) as pool:
         futures = [
             pool.submit(
-                _query_resolve_model,
+                copy_context().run, _query_resolve_model,
                 model_label, question, claim, position, opposing, api_keys,
             )
             for model_label, position, opposing in jobs

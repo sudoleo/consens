@@ -16,7 +16,7 @@ const CATALOG = { token_budget: { remaining: 188878, limit: 250000, observed_at:
 ] };
 
 function boot({ allowed = true, catalog = CATALOG, body = BODY, setup: prepare } = {}) {
-  const setup = loadScripts(["static/js/run-mode.js", "static/js/run-registry.js", "static/js/model-picker.js", "static/js/request-deadline.js", "static/js/agent-activity.js", "static/js/agent-chat.js"], {
+  const setup = loadScripts(["static/js/run-mode.js", "static/js/run-registry.js", "static/js/token-budget.js", "static/js/model-picker.js", "static/js/request-deadline.js", "static/js/agent-activity.js", "static/js/agent-chat.js"], {
     body,
     before(window) {
       window.auth = { currentUser: { uid: "owner", getIdToken: async () => "verified" } };

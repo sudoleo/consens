@@ -672,38 +672,25 @@ def test_consensus_citations_follow_terminal_punctuation(app_page):
 
 
 def test_usage_display_is_stable_and_updates_visible_quota_panel(app_page):
-    """Leere Usage-Updates behalten den letzten Wert; das sichtbare
-    Sidebar-Panel spiegelt die versteckte Kompatibilitaetsquelle."""
-    metrics = app_page.evaluate(
+    """Antworten ohne Kontostand behalten den letzten Wert; Ring und Panel
+    zeigen das eine Tokenkonto, der Ring ohne Zahl im Inneren."""
+    app_page.evaluate(
         """() => {
-          window.App.renderUsageDisplay({
-            remaining: 2,
-            deepRemaining: 0,
-            totalLimit: 3,
-            deepLimit: 0,
-          });
+          window.App.renderUsageDisplay({token_budget: {
+            limit: 660000, used: 250800, estimated: 0, reserved: 0, remaining: 409200,
+            revision: 3, day: '2099-01-01',
+            run_estimates: {compare: 32000, consensus: 55000, deep_think: 150000}}});
           window.App.renderUsageDisplay({});
-
-          const line = document.getElementById('freeUsageDisplay');
-          const value = line.querySelector('strong');
-          return {
-            text: line.textContent,
-            deepText: document.getElementById('deepUsageDisplay').textContent,
-            valueTag: value.tagName,
-            valueWeight: Number.parseInt(getComputedStyle(value).fontWeight, 10),
-          };
+          window.App.sidebarQuota.setOpen(true);
         }"""
     )
-    app_page.wait_for_function(
-        "() => document.getElementById('quotaRunsValue').textContent.trim() === '2 / 3'"
-    )
-
-    assert metrics["text"] == "Runs: 2 / 3"
-    assert metrics["deepText"] == "Deep Think: 0 / 0"
-    assert metrics["valueTag"] == "STRONG"
-    assert metrics["valueWeight"] >= 600
-    assert app_page.locator("#quotaRowRuns").evaluate("element => element.hidden") is False
-    expect(app_page.locator("#quotaRunsValue")).to_have_text("2 / 3")
+    trigger = app_page.locator("#quotaTrigger")
+    expect(trigger).to_have_attribute("aria-label", re.compile(r"^62% of today’s allowance left"))
+    assert trigger.evaluate("element => element.textContent.trim()") == ""
+    box = app_page.locator("#quotaTrigger .quota-ring").bounding_box()
+    assert box is not None and box["width"] <= 20.5
+    expect(app_page.locator("#quotaPercent")).to_have_text("62%")
+    expect(app_page.locator("#quotaDetail")).to_contain_text("409k of 660k tokens")
 
 
 def test_empty_app_and_consensus_picker_do_not_scroll_unnecessarily(app_page):
@@ -1193,12 +1180,12 @@ def test_consensus_renders_differences_and_agreement_score(app_page, get_console
     expect(run_again.locator(".run-replay-label")).to_have_text("Run again")
     # Ein Wiederholen ist ein voller zweiter Lauf. Am Knopf muss stehen, was er
     # kostet, und am Eingabefeld muss es stehen bleiben, bis abgeschickt wird.
-    # Der Mock-Nutzer laeuft ohne Limit; der Preis gehoert an den Zaehler, also
-    # bekommt er hier einen.
+    # Seit dem Tokenkonto ist der Preis ein ungefaehrer Anteil am Tag.
     app_page.evaluate(
-        "() => window.App.renderUsageDisplay({remaining: 2, totalLimit: 3, deepRemaining: 0, deepLimit: 0})"
+        """() => window.App.renderUsageDisplay({token_budget: {limit: 660000, used: 0, remaining: 660000,
+          revision: 99, day: '2099-01-01', run_estimates: {compare: 32000, consensus: 55000, deep_think: 150000}}})"""
     )
-    expect(run_again).to_contain_text("uses 1 run")
+    expect(run_again).to_contain_text("about 8% of today")
     run_again.click()
     expect(app_page.locator("body.is-hero")).to_have_count(1)
     expect(app_page.locator("#questionInput")).to_be_visible()

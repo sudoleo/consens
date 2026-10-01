@@ -6,7 +6,7 @@
 // Exporte: window.updateUserTierUI, window.updatePremiumModelsState,
 // window.App.accountTier ({set, render}) fuer die Marke am Konto-Kuerzel.
 // window.App.normalizeTier kommt aus app-state.js (head-Bundle).
-// Abhaengigkeiten: window.setCurrentUsageLimits (optional waehrend Init), window.restoreModelSelections,
+// Abhaengigkeiten: window.restoreModelSelections,
 // window.syncCustomModelPickers, window.App.updateDeepThinkText,
 // window.App.applyTierDefaultModels, window.isUserPro (State).
 //
@@ -54,9 +54,6 @@
       if (badge) badge.style.display = "none";
       if (upgradeLink) upgradeLink.style.display = "none";
 
-      // Optional: Standard-Limits (Free) oder ganz sperren
-      window.setCurrentUsageLimits?.(TIER_FREE);
-
       if (typeof updatePremiumModelsState === "function") updatePremiumModelsState(false);
 
       // Deep Search sperren (wie bei Free User)
@@ -77,9 +74,6 @@
     }
     // Der Link ist ein Flex-Container (Glyph + Text), nicht inline-block.
     if (upgradeLink) upgradeLink.style.display = tier === TIER_FREE ? "inline-flex" : "none";
-
-    // Limits: die Stufe selbst, nicht mehr nur "Pro ja/nein".
-    window.setCurrentUsageLimits?.(tier);
 
     if (isPro) {
       const proModal = document.getElementById("proFeatureModal");

@@ -30,18 +30,11 @@ class ModelConfig:
     request_config: dict[str, Any] = field(default_factory=dict)
 
 DEFAULT_LIMITS = {
-    # Persistente, run-basierte UTC-Tageslimits. Das Total zaehlt jeden
-    # serverfinanzierten logischen Run genau einmal (Follow-ups eingeschlossen);
-    # Deep Think fuehrt zusaetzlich ein separates Teilkontingent.
-    # Drei Runs erlaubten einen Test, keine Gewohnheit — seit 2026-08-04 zwoelf.
-    "free_consensus_run_limit": 12,
-    # Plus laeuft auf denselben guenstigen Modellen wie Free und darf deshalb
-    # das groesste Kontingent haben - mehr als Pro, dessen Runs ein Vielfaches
-    # kosten koennen.
-    "plus_consensus_run_limit": 750,
-    "pro_consensus_run_limit": 500,
-    "free_deep_think_run_limit": 0,
-    "pro_deep_think_run_limit": 50,
+    # Die frueheren Run-Kontingente (free/plus/pro_consensus_run_limit,
+    # *_deep_think_run_limit) gibt es seit 2026-10-01 nicht mehr: Compare,
+    # Consensus, Deep Think und Agent teilen ein Tokenkonto pro Stufe
+    # (app/services/agent_budget_config.py, Admin-Tab Limits). Gespeicherte
+    # Altwerte faellt normalize_limits_config beim naechsten Backfill weg.
     "free_max_words": 500,
     "plus_max_words": 500,
     "pro_max_words": 500,
@@ -1722,23 +1715,6 @@ def get_memory_ai_edit_limit(tier) -> int:
     }
     resolved = normalize_tier(tier)
     return int(MEMORY_EDIT_CONFIG[keys[resolved]])
-
-
-def get_consensus_run_limit(tier) -> int:
-    return _tier_limit(tier, {
-        TIER_FREE: "free_consensus_run_limit",
-        TIER_PLUS: "plus_consensus_run_limit",
-        TIER_PRO: "pro_consensus_run_limit",
-    })
-
-
-def get_deep_think_run_limit(tier) -> int:
-    """Deep Think faehrt Frontier-Modelle und bleibt deshalb Pro vorbehalten.
-    Plus bekommt hier bewusst kein eigenes Admin-Feld: ein Kontingent, das die
-    Capability-Pruefung ohnehin blockiert, waere ein toter Schalter."""
-    if normalize_tier(tier) == TIER_PRO:
-        return LIMITS["pro_deep_think_run_limit"]
-    return LIMITS["free_deep_think_run_limit"]
 
 
 def get_word_limit(tier, deep_search: bool = False) -> int:

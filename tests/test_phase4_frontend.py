@@ -135,7 +135,8 @@ def test_usage_snapshot_can_recover_pro_tier_after_status_failure():
     # verschwunden.
     assert "const tier = data.tier ?? isPro" in usage
     assert "window.updateUserTierUI(tier, true)" in usage
-    assert "window.setCurrentUsageLimits(tier, data)" in usage
+    # The daily token account is authoritative here (resets may raise it).
+    assert "window.App.tokenBudget?.apply?.(data.token_budget, { uid, authoritative: true })" in usage
     assert 'window.App?.accountTier?.set?.(tier)' in usage
 
 
