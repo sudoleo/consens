@@ -266,19 +266,6 @@ body.answer-reader-modal { overflow: hidden; }
 .answer-reader-sections button[aria-pressed="true"] { background: var(--well); color: var(--ink); }
 .model-answer-reader.is-inspecting :is(.answer-reader-toolbar,.answer-reader-models,.answer-reader-single,.answer-reader-pair,.answer-reader-mobile-tabs) { display: none !important; }
 .answer-reader-inspector { padding-top: 20px; max-width: 760px; margin: 0 auto; font-size: 14px; line-height: 1.7; }
-.answer-reader-inspector .differences-cards { display: grid; gap: 12px; }
-.answer-reader-inspector .diff-card { border: 1px solid var(--line-soft); border-radius: var(--radius-sm); background: var(--raise); margin: 0; padding: 0; }
-.answer-reader-inspector .diff-card-summary { display: flex; flex-direction: column; gap: 9px; padding: 16px 38px 16px 16px; position: relative; list-style: none; }
-.answer-reader-inspector .diff-card-summary::after { content: ''; position: absolute; right: 18px; top: 22px; width: 7px; height: 7px; border-right: 1.5px solid var(--ink-2); border-bottom: 1.5px solid var(--ink-2); transform: rotate(45deg); }
-.answer-reader-inspector .diff-card[open] > summary::after { transform: rotate(225deg); top: 26px; }
-.answer-reader-inspector .diff-card-tags { font-size: 11px; line-height: 1.4; }
-.answer-reader-inspector .diff-card-claim { font-size: 14px; line-height: 1.6; font-weight: 600; color: var(--ink); }
-.answer-reader-inspector .diff-card-body { border-top: 1px solid var(--line-soft); padding: 4px 16px 16px; }
-.answer-reader-inspector .diff-position { padding: 16px 0; margin: 0; border-bottom: 1px solid var(--line-soft); }
-.answer-reader-inspector .diff-position-label { color: var(--ink); font-size: 12px; font-weight: 600; margin-bottom: 8px; }
-.answer-reader-inspector .diff-position-stance { font-size: 14px; line-height: 1.75; }
-.answer-reader-inspector .diff-position-quote { font-size: 13px; line-height: 1.7; color: var(--ink-2); margin: 12px 0 0; padding: 0 0 0 12px; border-left: 2px solid var(--line); }
-.answer-reader-inspector .diff-verify { padding: 12px; background: var(--well); border-radius: var(--radius-xs); font-size: 13px; line-height: 1.7; margin-top: 14px; }
 .answer-reader-inspector :is(.consensus-sources-list,.thread-history-sources) { list-style: none; margin: 0; padding: 0; counter-reset: reader-source; }
 .answer-reader-inspector :is(.consensus-sources-list,.thread-history-sources) > li { padding: 16px 0; border-bottom: 1px solid var(--line-soft); margin: 0; }
 .answer-reader-inspector .consensus-source-item { display: flex; gap: 14px; align-items: flex-start; }
@@ -294,7 +281,6 @@ body.answer-reader-modal { overflow: hidden; }
 .answer-reader-inspector .consensus-source-snippet { margin-top: 8px; font-size: 13px; line-height: 1.75; }
 .answer-reader-inspector .thread-history-sources > li { display: flex; align-items: baseline; gap: 14px; }
 .answer-reader-inspector .thread-history-sources > li::before { counter-increment: reader-source; content: counter(reader-source); font-size: 11px; color: var(--ink-2); }
-.answer-reader-inspector .diff-card > .diff-card-summary { padding: 16px 38px 16px 16px; }
 .answer-reader-inspector-empty { color: var(--ink-2); padding: 16px 0; }
 .answer-reader-context details[open] summary span { display: block; max-height: 22dvh; overflow-y: auto; }
 /* Final reading surface: shared measures and restrained, useful hierarchy. */
@@ -310,22 +296,6 @@ body.answer-reader-modal { overflow: hidden; }
 .answer-reader-sections button:hover { background: transparent; color: var(--ink); }
 .answer-reader-toolbar { margin-top: 14px; }
 .answer-reader-inspector { max-width: 840px; padding-top: 24px; padding-bottom: 16px; }
-.answer-reader-inspector .differences-cards { gap: 16px; counter-reset: reader-difference; }
-.answer-reader-inspector .diff-card { background: var(--well); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
-.answer-reader-inspector .diff-card > .diff-card-summary { padding: 22px 48px 20px 22px; gap: 12px; }
-.answer-reader-inspector .diff-card-summary::after { right: 23px; top: 27px; }
-.answer-reader-inspector .diff-card[open] > .diff-card-summary::after { top: 31px; }
-.answer-reader-inspector .diff-card-tags { align-items: center; gap: 7px; }
-.answer-reader-inspector .diff-type-tag { text-transform: none; letter-spacing: 0; font-size: 12px; font-weight: 500; }
-.answer-reader-inspector .diff-card-claim { font-size: 16px; line-height: 1.65; font-weight: 500; letter-spacing: -.015em; }
-.answer-reader-diff-meta { font-size: 11px; color: var(--ink-2); font-weight: 400; }
-.answer-reader-inspector .diff-card-body { background: var(--ground); padding: 0 22px 22px; }
-.answer-reader-inspector .diff-position { padding: 20px 0; }
-.answer-reader-inspector .diff-position-label { font-size: 12px; letter-spacing: .005em; }
-.answer-reader-inspector .diff-position-quote { background: transparent; font-style: normal; padding-left: 14px; }
-.answer-reader-inspector .diff-position-links { margin-top: 10px; }
-.answer-reader-inspector .diff-jump-link { padding: 4px 0; font-size: 12px; color: var(--ink-2); }
-.answer-reader-inspector .diff-verify { border: 1px solid var(--line-soft); border-left: 2px solid var(--partial); padding: 14px 16px; margin-top: 18px; }
 .answer-reader-inspector :is(.consensus-sources-list,.thread-history-sources),
 .answer-reader-sources ol { display: grid; gap: 12px; padding: 0; margin: 0; }
 .model-answer-reader li.answer-reader-source-card { position: relative; display: flex; align-items: flex-start; gap: 14px; margin: 0; padding: 20px 48px 20px 20px; background: var(--well); border: 1px solid var(--line-soft); border-radius: 12px; list-style: none; }
@@ -349,9 +319,6 @@ body.answer-reader-modal { overflow: hidden; }
   .answer-reader-context { padding: 8px 0 12px; margin-top: 12px; }
   .answer-reader-sections { gap: 22px; }
   .answer-reader-inspector { padding-top: 18px; }
-  .answer-reader-inspector .diff-card > .diff-card-summary { padding: 18px 40px 18px 18px; }
-  .answer-reader-inspector .diff-card-claim { font-size: 15px; }
-  .answer-reader-inspector .diff-card-body { padding: 0 18px 18px; }
   .model-answer-reader li.answer-reader-source-card { padding: 16px 34px 16px 14px; gap: 10px; }
   .answer-reader-site-icon { width: 30px; height: 30px; flex-basis: 30px; border-radius: 8px; }
   .model-answer-reader li.answer-reader-source-card .consensus-source-index { right: 13px; top: 14px; }
@@ -418,47 +385,6 @@ body.answer-reader-modal { overflow: hidden; }
   padding-top: 16px;
   line-height: 1.65;
   overflow-wrap: anywhere;
-}
-.answer-reader-dialog .answer-reader-inspector .differences-cards { gap: 12px; }
-.answer-reader-dialog .answer-reader-inspector .diff-card {
-  border: 0;
-  border-bottom: 1px solid var(--line-soft);
-  border-radius: 0;
-  background: transparent;
-  overflow: visible;
-}
-.answer-reader-dialog .answer-reader-inspector .diff-card > .diff-card-summary {
-  padding: 12px 28px 12px 0;
-  gap: 6px;
-}
-.answer-reader-dialog .answer-reader-inspector .diff-card-summary::after {
-  right: 6px;
-  top: 17px;
-}
-.answer-reader-dialog .answer-reader-inspector .diff-card[open] > .diff-card-summary::after {
-  top: 21px;
-}
-.answer-reader-dialog .answer-reader-inspector .diff-card-claim {
-  font-size: var(--font-size-sm);
-  line-height: 1.6;
-  font-weight: var(--font-weight-semibold);
-  letter-spacing: normal;
-}
-.answer-reader-dialog .answer-reader-inspector .diff-card-body {
-  padding: 0 0 16px;
-  border-top: 0;
-  background: transparent;
-}
-.answer-reader-dialog .answer-reader-inspector .diff-position { padding-block: 12px; }
-.answer-reader-dialog .answer-reader-inspector .diff-position-stance { line-height: 1.65; }
-.answer-reader-dialog .answer-reader-inspector .diff-position-quote { margin-top: 10px; }
-.answer-reader-dialog .answer-reader-inspector .diff-verify {
-  padding: 2px 0 2px 12px;
-  margin-top: 12px;
-  border: 0;
-  border-left: 2px solid var(--line);
-  border-radius: 0;
-  background: transparent;
 }
 .answer-reader-dialog .answer-reader-answer-header { padding-block: 12px; margin-bottom: 0; }
 .answer-reader-dialog .answer-reader-identity { gap: 8px; }
@@ -688,4 +614,179 @@ body.comparison-layout-changing .input-section { transition: none; }
   .is-preview .answer-reader-columns.is-grid { gap: 20px; }
   .is-preview .answer-reader-answer-header { padding: 14px 0 12px; }
   .answer-preview-lines { display: none; }
+}
+
+/* Differences, calm (2026-10-01). One rhythm for the detail panel: 4/8/12/16px
+   steps, two text sizes (14px content, 12px meta) plus 13px for quotes,
+   regular weight throughout, hairlines between findings instead of boxes.
+   Colour stays on the severity dot; everything else is ink, ink-2, ink-3. */
+.answer-reader-heading > span:empty { display: none; }
+.answer-reader-dialog .answer-reader-context {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 2px 0 8px;
+}
+.answer-reader-dialog .answer-reader-context > details {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin-top: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+.answer-reader-dialog .answer-reader-context-top { order: 1; flex: 0 0 auto; }
+.answer-reader-dialog .answer-reader-context-top > :is(label, #answerReaderTurnLabel) { display: none; }
+.answer-reader-dialog .answer-reader-context details:not([open]) summary span { -webkit-line-clamp: 1; }
+.answer-reader-dialog .answer-reader-context summary::after { margin-top: 6px; }
+/* Phones: the question picker sits above the question instead of squeezing it. */
+@media (max-width: 759px) {
+  .answer-reader-dialog .answer-reader-context { flex-wrap: wrap; row-gap: 0; }
+  .answer-reader-dialog .answer-reader-context-top { order: -1; flex-basis: 100%; }
+  .answer-reader-dialog .answer-reader-context-top .answer-reader-picker { margin-left: -10px; }
+}
+
+.answer-reader-inspector :is(.differences-cards, .agent-evidence-differences) { display: grid; gap: 0; }
+.answer-reader-inspector .diff-card {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-bottom: 1px solid var(--line-soft);
+  border-radius: 0;
+  background: transparent;
+  overflow: visible;
+}
+.answer-reader-inspector .diff-card > .diff-card-summary {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 28px 12px 0;
+  list-style: none;
+}
+.answer-reader-inspector .diff-card-summary::after {
+  content: '';
+  position: absolute;
+  right: 6px;
+  top: 18px;
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid var(--ink-3);
+  border-bottom: 1.5px solid var(--ink-3);
+  transform: rotate(45deg);
+}
+.answer-reader-inspector .diff-card[open] > .diff-card-summary::after { transform: rotate(225deg); top: 21px; }
+.answer-reader-inspector .diff-card-summary:hover::after { border-color: var(--ink-2); }
+.answer-reader-inspector .diff-card-tags { gap: 6px; font-size: 12px; line-height: 1.4; }
+.answer-reader-inspector .sev-dot { width: 6px; height: 6px; }
+.answer-reader-inspector .diff-card .diff-card-tags .diff-type-tag {
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--ink-2);
+}
+.answer-reader-inspector .diff-card-claim {
+  font-size: var(--font-size-sm);
+  line-height: 1.55;
+  font-weight: 400;
+  letter-spacing: normal;
+  color: var(--ink);
+}
+.answer-reader-inspector .diff-card-body { padding: 0 0 16px; border: 0; background: transparent; }
+.answer-reader-inspector .diff-position { margin: 0; padding: 8px 0 0; border: 0; }
+.answer-reader-inspector .diff-position + .diff-position { padding-top: 12px; }
+.answer-reader-inspector .diff-position-label { gap: 0 14px; margin-bottom: 4px; font-size: 12px; font-weight: 400; color: var(--ink-2); }
+.answer-reader-inspector .diff-position-stance { font-size: var(--font-size-sm); line-height: 1.6; color: var(--ink); }
+.answer-reader-inspector .diff-position-quote {
+  margin: 6px 0 0;
+  padding: 0 0 0 10px;
+  border-left: 1px solid var(--line);
+  background: transparent;
+  font-size: 13px;
+  font-style: normal;
+  line-height: 1.6;
+  color: var(--ink-2);
+}
+/* Model names are the jump links: no pill, no arrow, no hover surface. */
+.model-answer-reader .answer-reader-inspector .diff-jump-link {
+  min-height: 0;
+  padding: 2px 0;
+  gap: 6px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  box-shadow: none;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--ink-2);
+}
+.model-answer-reader .answer-reader-inspector .diff-jump-link:is(:hover, :focus-visible) { background: transparent; color: var(--ink); }
+.answer-reader-inspector .diff-card-body > :is(.diff-resolve, .contradiction-source-check) { margin-top: 12px; }
+
+/* Agent comparisons: one status line, the findings, then a quiet footer. */
+.answer-reader-inspector .agent-evidence-panel { font-size: 12px; line-height: 1.6; }
+.answer-reader-inspector .agent-evidence-status {
+  margin: 0 0 4px;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+.answer-reader-inspector details.agent-evidence-status > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  cursor: pointer;
+  list-style: none;
+}
+.answer-reader-inspector details.agent-evidence-status > summary::-webkit-details-marker { display: none; }
+.answer-reader-inspector details.agent-evidence-status > summary::after {
+  content: '';
+  width: 5px;
+  height: 5px;
+  margin-top: -3px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg);
+}
+.answer-reader-inspector details.agent-evidence-status[open] > summary::after { transform: rotate(225deg); margin-top: 3px; }
+.answer-reader-inspector details.agent-evidence-status > summary:hover { color: var(--ink); }
+.answer-reader-inspector .agent-evidence-status-detail { display: grid; gap: 4px; margin: 0 0 8px; padding: 0; list-style: none; color: var(--ink-2); }
+.answer-reader-inspector .agent-evidence-panel > .agent-review-note { margin: 0 0 4px; font-size: 12px; color: var(--ink-2); }
+.answer-reader-inspector .agent-evidence-footer {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+  padding-top: 4px;
+  color: var(--ink-3);
+}
+.answer-reader-inspector .agent-evidence-footer .agent-review-note { margin: 0; font-size: 12px; color: var(--ink-3); }
+.answer-reader-inspector .agent-evidence-footer .agent-evidence-context { margin: 0; padding: 0; border: 0; color: var(--ink-3); }
+.answer-reader-inspector .agent-evidence-footer .agent-evidence-context > summary { display: flex; align-items: center; gap: 8px; width: fit-content; min-height: 28px; font-size: 12px; list-style: none; }
+.answer-reader-inspector .agent-evidence-footer .agent-evidence-context > summary::-webkit-details-marker { display: none; }
+.answer-reader-inspector .agent-evidence-footer .agent-evidence-context > summary::after {
+  content: '';
+  width: 5px;
+  height: 5px;
+  margin-top: -3px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg);
+}
+.answer-reader-inspector .agent-evidence-footer .agent-evidence-context[open] > summary::after { transform: rotate(225deg); margin-top: 3px; }
+.answer-reader-inspector .agent-evidence-footer .agent-evidence-context > summary:hover { color: var(--ink-2); }
+.answer-reader-inspector .agent-evidence-footer .agent-evidence-context > p { margin: 4px 0 0; font-size: 12px; color: var(--ink-2); }
+.answer-reader-inspector .agent-evidence-footer .source-verification { margin: 0; padding: 0; border: 0; background: transparent; }
+.answer-reader-inspector .agent-evidence-footer .source-verification-status { margin: 0; font-size: 12px; font-weight: 400; color: var(--ink-2); }
+.answer-reader-inspector .agent-evidence-footer .source-check-coverage { margin: 2px 0 0; font-size: 12px; color: var(--ink-3); }
+/* Inside Differences, "results appear with each contradiction in Differences"
+   points at the panel the reader is already in. */
+.answer-reader-inspector .agent-source-check .source-verification-explanation { display: none; }
+
+@media (pointer: coarse) {
+  .answer-reader-inspector details.agent-evidence-status > summary,
+  .answer-reader-inspector .agent-evidence-footer .agent-evidence-context > summary { min-height: 44px; }
+  .model-answer-reader .answer-reader-inspector .diff-jump-link { min-height: 44px; }
 }

@@ -193,7 +193,10 @@
     const kind = result ? 'differences' : 'sources';
     const node = result || report?.querySelector('.source-verification');
     if (!node) return false;
-    const index = result ? [...cards.querySelectorAll('.diff-card')].indexOf(result.closest('.diff-card')) : null;
+    // Cards are ordered by severity; the reader addresses them by data index.
+    const resultCard = result?.closest('.diff-card');
+    const index = !resultCard ? null : resultCard.dataset.differenceIndex !== undefined
+      ? Number(resultCard.dataset.differenceIndex) : [...cards.querySelectorAll('.diff-card')].indexOf(resultCard);
     if (!window.App.answerReader?.openPanel(kind, trigger, null, index, {reveal: true})) {
       const panel = document.getElementById(kind === 'differences' ? 'consensusDifferencesPanel' : 'consensusSourcesPanel');
       if (!panel) return false;

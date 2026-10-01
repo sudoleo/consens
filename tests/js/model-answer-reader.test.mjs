@@ -86,6 +86,35 @@ describe("model answer reader", () => {
     ctx.reader.reset();
     expect(ctx.document.getElementById('modelAnswerReader').hidden).toBe(true);
   });
+  it("keeps the differences panel to one open finding, without subtitle or question label", async () => {
+    const ctx = boot(); ctx.project(run());
+    const snapshot = { key: 'tool:calm', question: 'Which plan suits a team of five?', scopeLabel: 'Comparison focus',
+      answers: [{ provider: 'OpenAI', label: 'GPT', text: 'Answer', status: 'complete', sources: [] }],
+      contextGroup: () => [snapshot],
+      renderPanel() {
+        const panel = ctx.document.createElement('div');
+        // Cards arrive ordered by severity; data-difference-index keeps the
+        // index the inline markers use.
+        panel.innerHTML = [2, 0, 1].map(i => `<details class="diff-card" data-difference-index="${i}"><summary>`
+          + `<span class="diff-card-claim">Finding ${i}</span></summary><p>Evidence ${i}</p></details>`).join('');
+        return panel;
+      } };
+    ctx.reader.openContext(snapshot, { section: 'differences', index: 0 });
+    const cards = [...ctx.document.querySelectorAll('#answerReaderInspector .diff-card')];
+    expect(cards.map(card => card.open)).toEqual([false, true, false]);
+    expect(ctx.document.getElementById('answerReaderStatus').textContent).toBe('');
+    expect(ctx.document.querySelector('.answer-reader-context-top').hidden).toBe(true);
+    expect(ctx.document.querySelector('#answerReaderInspector').textContent).not.toMatch(/positions?\b/);
+    const wait = () => new Promise(resolve => setTimeout(resolve, 0));
+    await wait();
+    cards[0].open = true; await wait();
+    expect(cards.map(card => card.open)).toEqual([true, false, false]);
+    cards[2].open = true; await wait();
+    expect(cards.map(card => card.open)).toEqual([false, false, true]);
+    ctx.reader.refreshContext(snapshot);
+    expect([...ctx.document.querySelectorAll('#answerReaderInspector .diff-card')].map(card => card.open))
+      .toEqual([false, false, true]);
+  });
   it("previews selected models without creating an answer or a loading state", () => {
     const ctx = boot();
     ctx.document.body.classList.add('is-hero');

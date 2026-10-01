@@ -257,10 +257,6 @@
       if (!inspector.seenClaims.has(key) && allCards.length === 1) inspector.expanded.add(key);
       inspector.seenClaims.add(key);
       card.dataset.readerReady = 'true'; card.open = inspector.expanded.has(key);
-      const meta = document.createElement('span'); meta.className = 'answer-reader-diff-meta';
-      const count = card.querySelectorAll('.diff-position').length;
-      meta.textContent = `${count} ${count === 1 ? 'position' : 'positions'}`;
-      card.querySelector('summary')?.append(meta);
     });
     get('Inspector').querySelectorAll('.consensus-source-snippet:not([data-reader-ready])').forEach(snippet => {
       snippet.dataset.readerReady = 'true';
@@ -334,7 +330,9 @@
     trigger?.setAttribute('aria-expanded', 'true');
     if (!options.keepFocus) get('Close').focus({ preventScroll: true });
     if (index !== null) {
-      const card = get('Inspector').querySelectorAll('.diff-card')[index];
+      // Cards are ordered by severity; markers address them by data index.
+      const card = get('Inspector').querySelector(`.diff-card[data-difference-index="${Number(index)}"]`)
+        || get('Inspector').querySelectorAll('.diff-card')[index];
       if (card) { card.open = true; card.scrollIntoView({ block: 'nearest' }); }
     }
     return true;
@@ -343,7 +341,10 @@
   get('Inspector').addEventListener('toggle', event => {
     if (!inspector || !event.target.matches('.diff-card') || !get('Inspector').contains(event.target)) return;
     const key = event.target.querySelector('.diff-card-claim')?.textContent;
-    if (event.target.open) inspector.expanded.add(key); else inspector.expanded.delete(key);
+    if (!event.target.open) { inspector.expanded.delete(key); return; }
+    // One difference at a time: opening a card closes the one read before.
+    inspector.expanded.clear(); inspector.expanded.add(key);
+    get('Inspector').querySelectorAll('.diff-card[open]').forEach(card => { if (card !== event.target) card.open = false; });
   }, true);
   get('Sections').addEventListener('click', event => {
     const kind = event.target.closest('[data-section]')?.dataset.section; if (!kind) return;
@@ -583,10 +584,14 @@
     get("TurnLabel").hidden = options.length > 1;
     root.querySelector('.answer-reader-context-top label').hidden = options.length < 2;
     get("Question").querySelector("summary span").textContent = selected.question || "Question";
+    // The question is already in the chat: one line, no label, unless a
+    // picker is needed to switch between several questions or comparisons.
+    root.querySelector('.answer-reader-context-top').hidden = options.length < 2;
     const questionText = get('Question').querySelector('summary span');
     const longQuestion = questionText.scrollHeight > questionText.clientHeight + 1;
     // Measure the collapsed text; expanded questions retain their close control.
     get('Question').classList.toggle('is-truncated', longQuestion || get('Question').open);
+    get('Question').querySelector('summary').title = longQuestion ? selected.question : '';
     get('Question').querySelector('summary').tabIndex = longQuestion || get('Question').open ? 0 : -1;
     get('Question').querySelector('summary').setAttribute('aria-disabled', String(!longQuestion && !get('Question').open));
     get('Sections').hidden = direct;
@@ -601,7 +606,8 @@
     root.querySelector('.answer-reader-header').hidden = direct;
     if (inspector) {
       inspector.trigger?.setAttribute('aria-expanded', 'true');
-      get('Status').textContent = inspector.kind === 'differences' ? 'Compare claims, then explore the detail' : 'References for this answer';
+      // The tab already names the section; a subtitle only repeated it.
+      get('Status').textContent = '';
       fillSelect(get('Turn'), options, selected.key);
       updatePicker(get('Turn'), turns().map(turn => turn.question));
       syncTriggers();

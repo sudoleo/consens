@@ -1576,6 +1576,19 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   Das Claim-Detail ist mobil ein echtes modales Dialogfenster (`aria-modal`,
   Fokuswechsel/-falle/-rückgabe, inerter Hintergrund); Desktop bleibt ein
   nichtmodaler Popover am Badge.
+  Seit **2026-10-01** sortiert `buildDifferenceCards` die Karten nach Schwere
+  (kritischer Widerspruch → Detail-Widerspruch → andere Gewichtung, stabil
+  innerhalb einer Stufe) und schreibt den Index in der übergebenen Liste als
+  `data-difference-index` an jede Karte. Inline-Marker, `focusDifferenceCard`,
+  `storedDifferenceFocus`, `answerReader.openPanel(…, index)` und
+  `sourceVerification.openResults` adressieren Karten über diesen Datenindex
+  (`App.differenceCardAt`), nie über die Kartenposition. Der Kartenkopf nennt
+  die Schwere in einem Wort (`Critical`/`Minor`/`Emphasis`, alte Daten ohne
+  Severity `Contradiction`; volle Bedeutung im Tooltip und als
+  `.visually-hidden`-Text), farbig ist nur der `.sev-dot`. Jede Position hat
+  eine Kopfzeile mit Icon + Modellname je Modell; ist die Originalantwort
+  erreichbar, ist genau dieses Paar der `.diff-jump-link` (keine separate
+  `.diff-position-links`-Zeile, kein Pfeil, keine Pille).
   `.diff-card.is-focused` markiert die geöffnete Karte mit einem verblassenden
   Bernstein-Wash (`diffCardFlash`), nicht mehr mit einem 2px-Ring: der Ring
   las sich über die volle Listenbreite wie ein grauer Rahmen um den ganzen
@@ -2390,8 +2403,16 @@ fehlende Modellantwort hält den Gesamtstatus `partial`. Die Zeile unter der Ant
 (`summaryText`) bleibt bei einer fertigen Prüfung leer und spricht nur, wenn die
 Prüfung selbst eingeschränkt ist: `Not compared · fewer than two models answered`,
 `Disagreements not checked` oder `Partly checked` (Coverage fehlt). Fehlende
-Modelle, ungeprüfte Sätze und Quellenlücken stehen nur im Leser
-(`statusText`, dort `Comparison checked · N models without an answer`).
+Modelle, ungeprüfte Sätze und Quellenlücken stehen nur im Leser: seit
+2026-10-01 als **eine** leise Zeile `evidenceStatus` (`4 of 6 models answered ·
+Checked` bzw. `· Partly checked`), hinter der ein `<details>` die fehlenden
+Modelle mit Grund, späte Antworten und kleinere Prüflücken auflistet. Nur
+entscheidende Lücken (`decisive`: keine Differences-/Coverage-Prüfung, zu wenige
+Antworten) stehen sichtbar darunter. Danach folgen die Karten; Quellenprüfbericht
+(`.agent-source-check`), Quellenprüf-Hinweise, „Model agreement is not
+independent fact checking.“ und die Kontext-Disclosures stehen in
+`.agent-evidence-footer` unter den Karten. `statusText` (`Comparison checked · N
+models without an answer`) bleibt nur für die Aktivitätsdetails.
 Copy und die Evidenz-Links teilen eine Zeile: `agent-answer-actions.js` hängt die
 Leiste in `.agent-review` (auch bei noch nicht eingehängten Verlaufs-Turns),
 `agent-review.js` erhält sie beim Neuaufbau. Key claims (Claims ohne Inline-Marke)
@@ -3487,8 +3508,12 @@ Im erweiterten Popup teilen Frage, Tabs, Modellauswahl und Inhalt dieselbe
 volle Innenbreite statt separater 840-/720px-Spalten. Desktop-Popups verwenden
 32px Seitenabstand und 16px Fliesstext fuer Einzelantworten; Zweiervergleich
 und angedockter Leser behalten ihre eigene Typografie.
-Die Frage steht in einer aufklappbaren Kontextkarte; erst mehrere Turns blenden
-die Frageauswahl ein. Modellnavigation und Antwortkopf nutzen die vorhandenen
+Die Frage steht im Dialog als **eine** abgeschnittene, aufklappbare Zeile ohne
+Label (sie steht bereits im Chat); erst mehrere Turns bzw. Vergleichsgrundlagen
+blenden `.answer-reader-context-top` mit der Frageauswahl ein (Desktop rechts
+neben der Frage, bis 759px darüber). In Differences/Sources bleibt der
+Untertitel `#answerReaderStatus` leer und verborgen; der aktive Tab benennt den
+Abschnitt. Modellnavigation und Antwortkopf nutzen die vorhandenen
 Provider-Icons. Fertige Antworten zeigen keinen redundanten Status-Badge;
 laufende und fehlgeschlagene Modelle behalten ihren sichtbaren Status.
 Frage- und Modellauswahl verwenden eigene Listbox-Popovers mit App-Tokens,
@@ -3504,9 +3529,15 @@ Archiv-Footer sowie Difference-Marker oeffnen diese Ansicht. Die bestehenden
 Karten/Quellenlisten werden mit Platzhaltern in den Leser verschoben und beim
 Schliessen/Wechsel zurueckgesetzt; IDs und Event-Handler bleiben erhalten. Der
 Legacy-Differences-Text bleibt als Streaming-Ziel an Ort und Stelle (Lesekopie).
-Differences starten als aufklappbarer Ueberblick mit Typ und Kernaussage; ihre
-Positionen, Zitate, Pruefhinweise und Resolve-Aktionen bleiben erhalten.
+Differences starten als aufklappbarer Ueberblick: Schwere-Punkt + ein Wort,
+darunter die Kernaussage in normalem Gewicht, Haarlinien statt Kartenrahmen,
+keine Positionszahl. Kritische Funde stehen oben. Ihre Positionen, Zitate,
+Pruefhinweise und Resolve-Aktionen bleiben erhalten.
 Ein einzelner Unterschied wird direkt geoeffnet; mehrere starten als Ueberblick.
+Seit 2026-10-01 ist die Liste ein Akkordeon: der `toggle`-Listener im Inspector
+schliesst beim Oeffnen einer Karte die zuvor offene (auch bei Marker-Spruengen
+und `refreshContext`). Typografie im Inspector: 14px Inhalt, 12px Meta, 13px
+Zitate, durchgehend regulaeres Gewicht.
 In der erweiterten Desktopansicht stehen Modellpositionen zweispaltig.
 Quellenkarten zeigen Favicon, Domain, Titel und unveraenderte Referenznummer;
 Auszuege werden separat aufgeklappt. Archivdaten bleiben turn-lokal.
