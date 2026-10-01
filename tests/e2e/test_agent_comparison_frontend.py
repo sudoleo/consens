@@ -6,7 +6,7 @@ import re
 import pytest
 from playwright.sync_api import expect
 from test_phase4_frontend import phase4_server, _real_firebase_page, _json
-from test_agent_chat_frontend import CATALOG, _choose_mode, _snapshot
+from test_agent_chat_frontend import CATALOG, _choose_mode, _open_agent_level, _snapshot
 
 
 @pytest.mark.parametrize("width", [1280, 390])
@@ -23,9 +23,11 @@ def test_comparison_selection_blocks_send_before_losing_draft(browser, phase4_se
         _choose_mode(page, 'agent')
         page.locator('#questionInput').fill('Keep this draft while I choose the models.')
         expect(page.locator('#sendButton')).to_be_enabled()
-        page.locator('.consensus-model-inline .model-picker-display').click()
-        page.locator('.consensus-model-inline .model-picker-custom-option').click()
-        selected = page.locator('.consensus-model-inline .model-picker-row-toggle[aria-checked="true"]')
+        # One chip in Agent: the comparison models are a section of its menu.
+        expect(page.locator('.consensus-model-inline')).to_be_hidden()
+        _open_agent_level(page, 'companion')
+        page.locator('.agent-model-picker .model-picker-custom-option').click()
+        selected = page.locator('.agent-model-picker .model-picker-row-toggle[aria-checked="true"]')
         while selected.count() > 1:
             selected.first.click()
         expect(page.locator('#sendButton')).to_be_disabled()
@@ -46,11 +48,11 @@ def test_comparison_selection_blocks_send_before_losing_draft(browser, phase4_se
         expect(page.locator('#questionInput')).to_have_value(draft)
         assert requests == []
         page.locator('#agentComposerAction').click()
-        expect(page.locator('.consensus-model-inline .model-picker-menu')).to_be_visible()
-        custom = page.locator('.consensus-model-inline .model-picker-custom-option')
+        expect(page.locator('.agent-model-picker .model-picker-menu')).to_be_visible()
+        custom = page.locator('.agent-model-picker .model-picker-custom-option')
         if custom.is_visible():
             custom.click()
-        excluded = page.locator('.consensus-model-inline .model-picker-row-toggle[aria-checked="false"]')
+        excluded = page.locator('.agent-model-picker .model-picker-row-toggle[aria-checked="false"]')
         excluded.first.click()
         expect(page.locator('#sendButton')).to_be_disabled()
         excluded.first.click()
@@ -88,19 +90,23 @@ def test_mobile_agent_plus_menu_opens_tools_from_single_line_composer(browser, p
         page.wait_for_function("() => !document.body.classList.contains('composer-collapsed') && !document.body.classList.contains('composer-animating')")
         def box(selector):
             return page.locator(selector).evaluate('el => el.getBoundingClientRect().toJSON()')
+        # One models chip (the chat model and how many it is compared with),
+        # never a second comparison chip next to it.
         agent_model = box('.agent-model-picker .model-picker-display')
-        comparison = box('.consensus-model-inline .model-picker-display')
+        expect(page.locator('.consensus-model-inline')).to_be_hidden()
+        expect(page.locator('.composer-models .model-picker-display:visible')).to_have_count(1)
+        expect(page.locator('.agent-model-picker .model-picker-display-count')).to_have_text(re.compile(r'^\+\d$'))
         expect(page.locator('#runModeControl')).to_be_hidden()
         actions = [box('#attachTrigger'), box('#sendButton')]
-        bounds = [actions[0], agent_model, comparison, actions[-1]]
+        bounds = [actions[0], agent_model, actions[-1]]
         centers = [b['y'] + b['height'] / 2 for b in actions]
         assert max(centers) - min(centers) <= 1
         assert all(a['right'] <= b['left'] + 1 for a, b in zip(actions, actions[1:]))
-        assert max(agent_model['bottom'], comparison['bottom']) <= min(b['top'] for b in actions) + 1
+        assert agent_model['bottom'] <= min(b['top'] for b in actions) + 1
         assert page.locator('.agent-model-picker .model-picker-display-text').evaluate(
             'label => label.scrollWidth <= label.clientWidth + 1')
-        assert bounds[0]['x'] >= 0 and bounds[-1]['right'] <= width
-        assert page.locator('.consensus-model-inline .select-wrapper').evaluate(
+        assert bounds[0]['x'] >= 0 and bounds[-1]['right'] <= width and agent_model['right'] <= width
+        assert page.locator('.agent-model-picker').evaluate(
             "el => getComputedStyle(el, '::after').display === 'none'")
         _snapshot(page, f'agent-expanded-keyboard-{width}')
         page.set_viewport_size({"width": width, "height": 844})
@@ -122,12 +128,12 @@ def test_mobile_agent_plus_menu_opens_tools_from_single_line_composer(browser, p
         _snapshot(page, f'agent-plus-options-{width}')
         page.locator('#agentComparisonMenuOption').tap()
         expect(page.locator('#attachMenu')).not_to_be_visible()
-        expect(page.locator('.consensus-model-inline .model-picker-menu')).to_be_visible()
+        expect(page.locator('.agent-model-picker .model-picker-menu')).to_be_visible()
         page.wait_for_function("() => !document.body.classList.contains('composer-animating')")
-        page.locator('.consensus-model-inline .model-picker-custom-option').tap()
-        expect(page.locator('.consensus-model-inline .model-picker-menu')).to_contain_text('Answering models')
+        page.locator('.agent-model-picker .model-picker-custom-option').tap()
+        expect(page.locator('.agent-model-picker .model-picker-menu')).to_contain_text('Comparison models')
         _snapshot(page, f'agent-toolbar-models-touch-{width}')
-        selected = page.locator('.consensus-model-inline .model-picker-row-toggle[aria-checked="true"]')
+        selected = page.locator('.agent-model-picker .model-picker-row-toggle[aria-checked="true"]')
         while selected.count() > 1:
             selected.first.tap()
         page.keyboard.press('Escape')
@@ -137,8 +143,8 @@ def test_mobile_agent_plus_menu_opens_tools_from_single_line_composer(browser, p
         expect(page.locator('#composerModeBar')).not_to_be_visible()
         _snapshot(page, f'agent-followup-selection-hint-{width}')
         page.locator('#agentComposerAction').tap()
-        expect(page.locator('.consensus-model-inline .model-picker-menu')).to_be_visible()
-        page.locator('.consensus-model-inline .model-picker-row-toggle[aria-checked="false"]').first.tap()
+        expect(page.locator('.agent-model-picker .model-picker-menu')).to_be_visible()
+        page.locator('.agent-model-picker .model-picker-row-toggle[aria-checked="false"]').first.tap()
         expect(page.locator('#agentComposerNotice')).not_to_be_visible()
         page.keyboard.press('Escape')
         page.evaluate('() => App.composer.collapse({force:true})')
@@ -264,11 +270,11 @@ def test_comparison_review_and_saved_projection(browser, phase4_server, width, d
             if page.locator("#agentModelControls").is_visible():
                 label = page.locator(".agent-model-picker .model-picker-display-text").bounding_box()
                 assert label["width"] >= 90
-        picker = page.locator(".consensus-model-inline .model-picker-display")
-        expect(picker).to_have_text(re.compile(r"^\s*\d+ models?\s*$"))
-        picker.click()
-        page.locator(".consensus-model-inline .model-picker-custom-option").click()
-        expect(page.locator(".consensus-model-inline .model-picker-menu")).not_to_contain_text("Consensus engine")
+        expect(page.locator(".consensus-model-inline")).to_be_hidden()
+        expect(page.locator(".agent-model-picker .model-picker-display-count")).to_have_text(re.compile(r"^\+\d+$"))
+        _open_agent_level(page, "companion")
+        page.locator(".agent-model-picker .model-picker-custom-option").click()
+        expect(page.locator(".agent-model-picker .model-picker-menu")).not_to_contain_text("Consensus engine")
         page.keyboard.press("Escape")
         assert_composer_layout()
         _snapshot(page, f"comparison-composer-{width}")

@@ -517,6 +517,23 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   Uebersicht zurueck statt das Menue zu schliessen. Vorher waren die sechs
   Antwortmodelle vom Composer aus gar nicht erreichbar (im Agent Mode sind
   die Antwortboxen verborgen).
+  **Verknüpfte Picker (seit 2026-10-01):** `App.linkModelPicker(primary,
+  companion | null, {ownLabel, companionLabel, ariaLabel})` legt zwei Selects
+  in einen Chip und ein Menü. Der Companion behält Select, Persistenz und
+  Regeln, zeichnet aber in das Menü des Primary (`state.parent`/`ownMenu`,
+  `menu.dataset.owner` = wer gerade zeichnet; nur der darf `[data-value]`
+  markieren). Einstieg ist die View `overview` mit je einem Abschnitt und
+  `[data-picker-level]`-Zeilen (`models`, `secondary`, `companion`), die in die
+  bestehenden Ebenen führen; deren Rückwege enden wieder in `overview`.
+  `openModelPicker(companion)` öffnet den Primary auf der Companion-Ebene,
+  `collapseExpandedModelPicker(companion)` schließt den Primary;
+  `openModelPicker(select, {secondary | level: "models"})` springt direkt in
+  eine eigene Ebene, `collapseExpandedModelPicker(select, {ownLevelsOnly})`
+  schließt nur, wenn eine eigene Ebene offen ist. Ist ein Link angefragt,
+  bevor beide Picker existieren, holt `initCustomModelPicker` ihn nach. Jede
+  Ebene behält den Fokus im Menü (`data-focus-key`: dieselbe Zeile, sonst die
+  gewählte/erste). Rechts betritt Gruppen-, Abschnitts-, Custom-,
+  Provider- und Reasoning-Zeilen, Links nimmt die Rückweg-Zeile.
 - **Rahmenlose Shell (seit 2026-07-27)** — `static/css/shell.css` wird als
   **letztes** `@import` in `static/style.css` geladen und gewinnt damit bei
   gleicher Spezifität. Es trägt die Material-Ebene des Redesigns: Elevation
@@ -1876,14 +1893,25 @@ Nicht auflösbare Admin-IDs bleiben als `available: false` mit `unavailable_reas
 sichtbar und werden bei der Auswahl abgelehnt. Der statische Katalog hält außerdem
 die separat geprüften Delegationsfähigkeiten; er begrenzt die Chatmodellauswahl nicht.
 
-Der Chatmodell-Picker zeigt zuerst eine kompakte Anbieterübersicht mit Modellzahl.
+Chatmodell und Vergleichsmodelle teilen sich seit 2026-10-01 EINEN Chip in
+`.composer-models` (`.agent-model-picker`, Label „Gemini 3.8 Flash +6“: Name
+kürzt, `.model-picker-display-count` bleibt ganz). `renderControls` verknüpft
+`#consensusModelDropdown` über `App.linkModelPicker` in dessen Menü; der
+Consensus-Chip (`.consensus-model`) ist im Agent-Modus `hidden` und kehrt außerhalb
+unverknüpft zurück. Das Menü öffnet mit „Agent“ (Chatmodell, Reasoning) und
+„Compare with“ (n Modelle · Preset, Familienliste). Der Chip bleibt aktiv,
+solange der Companion es ist: Während eines Laufs ist nur die Chatmodell-Zeile
+gesperrt, die Vergleichsmodelle für die nächste Nachricht bleiben änderbar.
+Die Chatmodell-Ebene zeigt zuerst eine kompakte Anbieterübersicht mit Modellzahl.
 Agent-Antworten haben keine Modellüberschrift über der Nachricht: weder die
 aktive bzw. wiederhergestellte Antwort in `agent-chat.js` noch archivierte
 Agent-Turns in `consensus-run.js`. Die Überschrift normaler Consensus-Turns bleibt bestehen.
 `agent-chat.js` erzeugt native `optgroup`-Elemente in der bestehenden Anbieterreihenfolge;
 `model-picker.js` aktiviert sie über `grouped: true` als `groups` → `group:<key>`
-mit Rückweg. Nur Modelle der geöffneten Familie stehen in der Liste. Reasoning
-bleibt eine separate Ebene für das ausgewählte Modell; Deep Think öffnet sie direkt.
+mit Rückweg (verknüpft: `overview` → `groups` → `group:<key>`). Nur Modelle der
+geöffneten Familie stehen in der Liste. Reasoning bleibt eine separate Ebene für
+das ausgewählte Modell (verknüpft eine Zeile der Übersicht statt am Listenende);
+Deep Think öffnet sie direkt.
 Auswahl/Persistenz laufen weiter über dasselbe native Select. Tastatur unterstützt
 Pfeile, Home/End, Enter, Escape sowie Links/Rechts für den Ebenenwechsel.
 Kataloge ohne Anbietermetadaten behalten die flache Auswahlliste.
@@ -1897,7 +1925,9 @@ die tatsächlich für neue Calls verfügbaren und die reservierten Tokens.
 
 **Auswahl und Orchestrierung.** agent-chat.js trennt Chatmodell/Denkstufe vom
 bestehenden Consensus-Preset-/Model-Picker: consensusModelDropdown erhält
-comparisonOnly und zeigt im Agent-Modus ausschließlich Vergleichsmodelle. Es
+comparisonOnly und zeigt im Agent-Modus ausschließlich Vergleichsmodelle
+(Custom: Abschnitt „Comparison models“, ohne Consensus-Engine) — als Abschnitt
+„Compare with“ im Menü des einen Agent-Chips, nicht als eigener Chip. Es
 gibt keine zweite Presetliste, keine Auto/Immer/Aus-Einstellung und keinen
 Synthesemodell-Picker. Die eingefrorene comparison_models-Auswahl kommt als
 Provider→interne Modell-ID mit POST /agent; unbekannte Familien/Modelle werden
@@ -1911,7 +1941,10 @@ Provider-Metadaten; neue Admin-Einträge benötigen keinen zusätzlichen Codeein
 Die gemeinsame `#composerModeBar` ist wie in jedem Modus nur auf dem Startbildschirm
 sichtbar. Nach Chatstart nutzt Beta das vorhandene `#attachMenu`: Quellenprüfung und Agent-Status verwenden
 dieselben Controls, `#agentReasoningMenuOption` öffnet die Denkstufe des Chatmodells
-und `#agentComparisonMenuOption` den bestehenden Compare-Picker. Der Upload bleibt
+und `#agentComparisonMenuOption` die Vergleichsebene, beide im selben Menü des
+Agent-Chips (ebenso die Composer-Notiz `compare`/`choose-model`; ihre Notizen
+`.agent-composer-notice` lässt `composer-collapse.js` wie das (+) durch, sonst
+schluckte der eingeklappte Handy-Composer den Tap). Der Upload bleibt
 deaktiviert; der separate Consensus-Deep-Think-Schalter ist in Beta verborgen.
 Der Composer ist derselbe wie in Compare und Consensus (`composer.css`), auch
 das (+) auf dem Startbildschirm und im eingeklappten Handy-Composer.
@@ -3432,9 +3465,9 @@ die Beta verlaesst). Beim ersten Laden migriert das Modul die Altschluessel
 ### Composer: eine Anatomie für alle Modi
 `templates/index.html` gliedert die Composer-Zeile in drei Gruppen, für Compare,
 Consensus und Agent dieselben: `.composer-lead` ((+) `#attachTrigger` und der
-Moduswähler `#runModeControl`), `.composer-models` (wer antwortet:
-`#agentModelControls`, der Modell-Chip `#consensusModelDropdown`, der
-Deep-Think-Hinweis) und `.input-actions-container` (Demo, Senden). Wo sie
+Moduswähler `#runModeControl`), `.composer-models` (wer antwortet: in Agent
+nur `#agentModelControls`, sonst der Modell-Chip `#consensusModelDropdown`,
+dazu der Deep-Think-Hinweis) und `.input-actions-container` (Demo, Senden). Wo sie
 stehen, entscheidet allein `static/css/composer.css`; `shell.css` gestaltet nur
 die Box. Zustände: Startbildschirm (Hero oder Compare-Start) und aufgeklappt =
 Feld oben, darunter (+) und Modus links, Modelle und Senden rechts; Desktop im
@@ -3443,9 +3476,10 @@ Chat = eine Zeile [(+) Modus][Feld][Modelle][Senden], ab der zweiten Textzeile
 über [(+) Modus … Senden]; Handy eingeklappt = [(+)][Feld][Senden], Anhänge
 und Zitat bleiben darüber sichtbar. (+) und Modus stehen nie woanders, Senden
 immer rechts außen. Alle Picker der Zeile teilen eine Optik (ruhiges Label mit
-Chevron, der Modus mit leichter Fläche). Der Modell-Chip nennt nur, wer
-antwortet („6 models · Balanced“ mit Consensus, sonst „6 models“), nie den
-Modusnamen.
+Chevron, der Modus mit leichter Fläche). Pro Modus gibt es genau EINEN
+Modell-Chip; er nennt nur, wer antwortet („6 models · Balanced“ mit Consensus,
+„6 models“ in Compare, „Gemini 3.8 Flash +6“ in Agent: Chatmodell plus Zahl
+der Vergleichsmodelle, deren Menü beide Abschnitte trägt), nie den Modusnamen.
 
 ### Consensus-Lauf (historisch „Agent Mode“)
 Wo dieses Dokument „Agent Mode an/aus“ sagt, ist heute Consensus bzw. Compare

@@ -124,7 +124,11 @@ def test_one_selector_drives_mode_tools_and_settings(browser, phase4_server, wid
         assert page.evaluate("App.agentChat.isSelected()") is True
         expect(page.locator("#attachTrigger")).to_be_visible()
         assert lead() == compare_lead
-        expect(models_chip).to_have_text(re.compile(r"^\d+ models?$"))
+        # Agent has ONE models chip: the chat model and how many models it is
+        # compared with. The comparison chip steps back into its menu.
+        expect(page.locator(".consensus-model-inline")).to_be_hidden()
+        expect(page.locator(".agent-model-picker .model-picker-display-count")).to_have_text(re.compile(r"^\+\d+$"))
+        expect(page.locator(".composer-models .model-picker-display:visible")).to_have_count(1)
         _shot(page, f"{width}-{'dark' if dark else 'light'}-agent")
         page.reload()
         _signed_in(page, agent_access=True)
@@ -135,6 +139,7 @@ def test_one_selector_drives_mode_tools_and_settings(browser, phase4_server, wid
         page.evaluate("document.getElementById('runModeSetting').value = 'consensus'; document.getElementById('runModeSetting').dispatchEvent(new Event('change'))")
         expect(page.locator("#runModeSelect")).to_have_value("consensus")
         assert page.evaluate("App.agentChat.isSelected()") is False
+        expect(models_chip).to_have_text(re.compile(r"^\d+ models? · "))
 
         assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
         assert errors == []

@@ -11,11 +11,15 @@
 //      Daily/Balanced/High Quality (window.CONSENSUS_PRESETS) plus "Custom" fuer
 //      die volle Modell-Liste. Ein Preset setzt die sechs Antwortmodelle und
 //      die Consensus-Engine gemeinsam. High Quality bleibt Pro-only.
+//   4) Verknuepfte Picker (linkModelPicker): ein Chip, ein Menue fuer zwei
+//      Selects. Agent nutzt es fuer Chatmodell + Vergleichsmodelle: Uebersicht
+//      mit Abschnitten, jede Zeile fuehrt in die Ebenen ihres eigenen Pickers.
 // Extrahiert aus templates/index.html (initApp-Closure), verhaltenserhaltend.
 // Exporte:
 //   window.restoreModelSelections, window.syncCustomModelPickers,
 //   window.App.{applyTierDefaultModels, setModelSelectionState,
-//   openModelPicker, collapseExpandedModelPicker, initCustomModelPicker}.
+//   openModelPicker, collapseExpandedModelPicker, initCustomModelPicker,
+//   linkModelPicker}.
 // Abhaengigkeiten: window.App.{modelPrefs, getModelOptionLabel,
 //   getSelectedModelCount, trackAppEvent}, window.updateAgentModeUI,
 //   window.updateConsensusButtonAvailability,
@@ -416,6 +420,9 @@
   function syncCustomModelPicker(select) {
     const state = getModelPickerState(select);
     if (!state) return;
+    // A linked companion draws into its parent's menu and has no chip of its
+    // own on screen: its count is part of the parent's label.
+    if (state.parent) syncCustomModelPicker(state.parent);
 
     const selectedOption = select.options[select.selectedIndex] || select.options[0];
     const selectedLabel = window.App.getModelOptionLabel(selectedOption);
@@ -457,15 +464,47 @@
       }
     }
 
+    // One chip for two choices (Agent): the chat model by name, then how many
+    // models it is compared with ("Gemini 3.8 Flash +6"). The count stays
+    // whole while a long model name gives way.
+    let countLabel = "";
+    let ariaLabel = `${select.getAttribute("aria-label") || "Choose model"}: ${displayLabel}`;
+    if (state.companion) {
+      const count = window.App.getSelectedModelCount?.() || 0;
+      const models = `${count} ${count === 1 ? "model" : "models"}`;
+      countLabel = `+${count}`;
+      displayTitle = count < 2
+        ? `${selectedLabel} · choose at least 2 models to compare with`
+        : `${selectedLabel} · compared with ${models}`;
+      ariaLabel = `${state.linkedAriaLabel}: ${selectedLabel}, compared with ${models}`;
+    }
+
     if (state.displayButton) {
-      state.displayButton.disabled = select.disabled;
+      // The comparison models stay open to change while the chat model is
+      // locked (a running message); only both locked disable the chip.
+      state.displayButton.disabled = select.disabled
+        && !(state.companion && !state.companion.disabled);
       state.displayButton.querySelector(".model-picker-display-text").textContent = displayLabel;
+      let count = state.displayButton.querySelector(".model-picker-display-count");
+      if (countLabel && !count) {
+        count = document.createElement("span");
+        count.className = "model-picker-display-count";
+        count.setAttribute("aria-hidden", "true");
+        state.displayButton.appendChild(count);
+      }
+      if (count) {
+        count.textContent = countLabel;
+        count.hidden = !countLabel;
+      }
       state.displayButton.title = displayTitle;
-      state.displayButton.setAttribute("aria-label", `${select.getAttribute("aria-label") || "Choose model"}: ${displayLabel}`);
+      state.displayButton.setAttribute("aria-label", ariaLabel);
       state.displayButton.setAttribute('aria-haspopup', state.menu.getAttribute('role'));
     }
 
     if (!state.displayButton) state.host.setAttribute("aria-label", `Choose model: ${displayLabel}`);
+    // A shared menu shows one picker's level at a time; only that picker may
+    // mark its options.
+    if (state.menu.dataset.owner && state.menu.dataset.owner !== select.id) return;
     state.menu.querySelectorAll(".model-picker-option[data-value]").forEach(item => {
       const isSelected = item.dataset.value === select.value;
       item.classList.toggle("is-selected", isSelected);
@@ -475,6 +514,10 @@
 
   function renderConsensusPresetMenu(select, state) {
     const activePresetId = getActiveConsensusPresetId();
+    // Inside a linked menu the presets are one level below the overview.
+    if (state.parent) {
+      renderBackRow(select, state, getModelPickerState(state.parent).companionLabel, "overview", state.parent);
+    }
 
     getConsensusPresets().forEach(preset => {
       const resolved = resolveConsensusPresetValue(select, preset.id);
@@ -482,6 +525,7 @@
       item.type = "button";
       item.className = "model-picker-option model-picker-preset-option";
       item.dataset.preset = preset.id;
+      item.dataset.focusKey = `preset:${preset.id}`;
       item.setAttribute("role", "option");
       const isProLocked = !!preset.pro_only && window.isUserPro !== true;
       item.disabled = !resolved && !isProLocked;
@@ -532,6 +576,7 @@
     const customItem = document.createElement("button");
     customItem.type = "button";
     customItem.className = "model-picker-option model-picker-preset-option model-picker-custom-option";
+    customItem.dataset.focusKey = "custom";
     customItem.setAttribute("role", "option");
     const customActive = activePresetId === "custom";
     customItem.classList.toggle("is-selected", customActive);
@@ -569,10 +614,13 @@
     state.menu.appendChild(customItem);
   }
 
-  function renderBackRow(select, state, label, targetView) {
+  // A back row returns to `targetView` of `targetSelect`: its own picker, or
+  // the parent whose menu a linked companion draws into.
+  function renderBackRow(select, state, label, targetView, targetSelect = select) {
     const back = document.createElement("button");
     back.type = "button";
     back.className = "model-picker-option model-picker-back-option";
+    back.dataset.focusKey = `back:${targetView}`;
     const chevron = document.createElement("span");
     chevron.className = "model-picker-option-chevron is-back";
     chevron.setAttribute("aria-hidden", "true");
@@ -585,9 +633,10 @@
     back.addEventListener("click", event => {
       event.preventDefault();
       event.stopPropagation();
-      state.view = targetView;
-      renderCustomModelPicker(select);
-      if (state.grouped) focusPickerMenu(state);
+      const target = getModelPickerState(targetSelect);
+      target.view = targetView;
+      renderCustomModelPicker(targetSelect);
+      if (target.grouped) focusPickerMenu(target);
     });
 
     state.menu.appendChild(back);
@@ -605,17 +654,23 @@
       || state.menu.querySelector('button:not(:disabled)'))?.focus();
   }
 
+  // Left/Right change the level: Right enters the focused row's level (a
+  // provider, a linked section, Custom, a provider's models), Left takes the
+  // menu's back row.
+  const LEVEL_ROW = 'button[data-model-group], button[data-picker-level], .model-picker-custom-option, .model-picker-row-open, .agent-reasoning-option';
   function navigateModelGroup(select, event) {
     const state = getModelPickerState(select);
-    if (!state?.grouped) return false;
-    const target = event.key === 'ArrowRight' && event.target.matches('button[data-model-group]')
+    if (!state?.grouped && !state?.companion) return false;
+    const target = event.key === 'ArrowRight' && event.target.matches(LEVEL_ROW)
       ? event.target : event.key === 'ArrowLeft' ? state.menu.querySelector('.model-picker-back-option') : null;
-    if (!target) return false;
+    if (!target || target.disabled) return false;
     target.click();
     return true;
   }
 
   function renderReasoningOption(select, state) {
+    // Linked, the overview carries the reasoning row; one place is enough.
+    if (state.companion) return;
     if (state.secondarySelect?.dataset.available !== 'true') return;
     const button = document.createElement('button'); button.type = 'button';
     button.className = 'model-picker-option agent-reasoning-option'; button.tabIndex = -1;
@@ -651,6 +706,7 @@
       const chevron = document.createElement('span');
       chevron.className = 'model-picker-option-chevron'; chevron.setAttribute('aria-hidden', 'true');
       button.append(label, count, chevron);
+      button.dataset.focusKey = `group:${group.dataset.modelGroup}`;
       button.addEventListener('click', event => {
         event.preventDefault(); event.stopPropagation();
         state.view = `group:${group.dataset.modelGroup}`;
@@ -662,6 +718,109 @@
       state.menu.append(button);
     }
     renderReasoningOption(select, state);
+  }
+
+  // --- Linked pickers: one chip, one menu for two choices -----------------
+  // Agent answers with one chat model and compares it with other models.
+  // Both are the same question ("who answers?"), so the Agent chip carries
+  // both: its menu opens on an overview with one section per choice, and
+  // each row leads into that picker's own levels (provider -> model and
+  // reasoning for the chat model; presets/Custom -> provider rows for the
+  // comparison models). The companion keeps its select, persistence and
+  // rules; it only draws into the parent's menu while linked.
+
+  function renderLevelRow(state, { name, hint, level, disabled = false, title = "", onEnter }) {
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "model-picker-option model-picker-row-open model-picker-level-option";
+    row.dataset.pickerLevel = level;
+    row.dataset.focusKey = `level:${level}`;
+    row.tabIndex = -1;
+    row.setAttribute("role", "menuitem");
+    row.setAttribute("aria-haspopup", "listbox");
+    row.disabled = disabled;
+    if (title) row.title = title;
+    const label = document.createElement("span");
+    label.className = "model-picker-option-label model-picker-preset-label";
+    const nameEl = document.createElement("span");
+    nameEl.className = "model-picker-preset-name";
+    nameEl.textContent = name;
+    label.appendChild(nameEl);
+    if (hint) {
+      const hintEl = document.createElement("span");
+      hintEl.className = "model-picker-preset-hint";
+      hintEl.textContent = hint;
+      label.appendChild(hintEl);
+    }
+    const chevron = document.createElement("span");
+    chevron.className = "model-picker-option-chevron";
+    chevron.setAttribute("aria-hidden", "true");
+    row.append(label, chevron);
+    row.addEventListener("click", event => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (!row.disabled) onEnter();
+    });
+    state.menu.appendChild(row);
+    return row;
+  }
+
+  // The level a linked companion opens on: the way its own chip would open.
+  function enterCompanion(state) {
+    const companion = state.companion;
+    const companionState = getModelPickerState(companion);
+    if (!companionState) return;
+    companionState.view = companionState.presets && getActiveConsensusPresetId() === "custom" ? "custom" : "presets";
+    renderCustomModelPicker(companion);
+  }
+
+  function enterOwnLevel(select, state, view) {
+    state.view = view;
+    renderCustomModelPicker(select);
+  }
+
+  function renderLinkedOverview(select, state) {
+    state.menu.setAttribute("role", "menu");
+    const groups = state.grouped ? Array.from(select.querySelectorAll("optgroup")) : [];
+    const selected = select.options[select.selectedIndex];
+    const group = selected?.parentElement?.tagName === "OPTGROUP" ? selected.parentElement : null;
+    const locked = select.disabled;
+
+    appendSectionLabel(state.menu, state.ownLabel);
+    renderLevelRow(state, {
+      name: selected ? window.App.getModelOptionLabel(selected) : "Choose a model",
+      hint: group?.label || "",
+      level: "models",
+      disabled: locked,
+      title: locked ? "The chat model is fixed while it loads or answers" : "",
+      onEnter: () => enterOwnLevel(select, state, groups.length ? "groups" : "models")
+    });
+    const effort = state.secondarySelect;
+    if (effort?.dataset.available === "true") {
+      renderLevelRow(state, {
+        name: state.secondaryLabel,
+        hint: effort.selectedOptions[0]?.textContent || "Auto",
+        level: "secondary",
+        disabled: effort.disabled,
+        onEnter: () => enterOwnLevel(select, state, "secondary")
+      });
+    }
+
+    appendSectionLabel(state.menu, state.companionLabel);
+    const count = window.App.getSelectedModelCount?.() || 0;
+    const presetId = getActiveConsensusPresetId();
+    const preset = presetId === "custom" ? null : getConsensusPresets().find(entry => entry.id === presetId);
+    const families = window.App.modelPrefs
+      .filter(pref => document.getElementById(pref.checkId)?.checked)
+      .map(pref => pref.label || pref.key);
+    const models = `${count} ${count === 1 ? "model" : "models"}`;
+    renderLevelRow(state, {
+      name: `${models} · ${preset ? preset.label : "Custom"}`,
+      hint: count < 2 ? "Choose at least 2" : families.join(", "),
+      level: "companion",
+      disabled: state.companion.disabled,
+      onEnter: () => enterCompanion(state)
+    });
   }
 
   // --- Custom: die ganze Aufstellung eines Laufs -------------------------
@@ -705,6 +864,7 @@
     const toggle = document.createElement("button");
     toggle.type = "button";
     toggle.className = "model-picker-row-toggle";
+    toggle.dataset.focusKey = `toggle:${pref.key}`;
     toggle.setAttribute("role", "checkbox");
     toggle.setAttribute("aria-checked", String(included));
     toggle.setAttribute(
@@ -731,6 +891,7 @@
     const open = document.createElement("button");
     open.type = "button";
     open.className = "model-picker-option model-picker-row-open";
+    open.dataset.focusKey = `open:${pref.key}`;
     const label = document.createElement("span");
     label.className = "model-picker-option-label model-picker-preset-label";
     const name = document.createElement("span");
@@ -759,13 +920,15 @@
   function renderCustomOverview(select, state) {
     renderBackRow(select, state, "Presets", "presets");
 
-    appendSectionLabel(state.menu, "Answering models");
+    // Next to an Agent answer these models compare, they do not answer.
+    const comparisonOnly = select.dataset.comparisonOnly === "true";
+    appendSectionLabel(state.menu, comparisonOnly ? "Comparison models" : "Answering models");
     const selectedCount = window.App.getSelectedModelCount?.() || 0;
     if (selectedCount < 2) {
       const requirement = document.createElement("p");
       requirement.className = "model-picker-requirement";
       requirement.setAttribute("role", "status");
-      requirement.textContent = `Select at least 2 models to run consensus · ${selectedCount} selected`;
+      requirement.textContent = `Select at least 2 models to ${comparisonOnly ? "compare with" : "run consensus"} · ${selectedCount} selected`;
       state.menu.appendChild(requirement);
     }
     window.App.modelPrefs.forEach(pref => renderProviderRow(select, state, pref));
@@ -799,17 +962,44 @@
     state.menu.appendChild(engine);
   }
 
+  // Every level change redraws the menu. Focus that was inside stays inside:
+  // on the same row when the new level has it (a toggled provider), else on
+  // the level's selected or first row, never on <body>.
   function renderCustomModelPicker(select) {
     const state = getModelPickerState(select);
     if (!state) return;
+    const active = document.activeElement;
+    const hadFocus = !!active && state.menu.contains(active);
+    const focusKey = hadFocus ? active.dataset?.focusKey : null;
+    drawModelPickerLevel(select, state);
+    if (hadFocus && !state.menu.contains(document.activeElement)) {
+      const same = focusKey
+        ? Array.from(state.menu.querySelectorAll("[data-focus-key]")).find(el => el.dataset.focusKey === focusKey && !el.disabled)
+        : null;
+      if (same) same.focus();
+      else focusPickerMenu(state);
+    }
+  }
 
+  function drawModelPickerLevel(select, state) {
     state.menu.innerHTML = "";
     state.menu.setAttribute('role', 'listbox');
+    state.menu.dataset.owner = select.id;
+
+    if (state.companion && state.view === "overview") {
+      renderLinkedOverview(select, state);
+      syncCustomModelPicker(select);
+      return;
+    }
 
     const groups = state.grouped ? Array.from(select.querySelectorAll('optgroup')) : [];
     const group = groups.find(item => state.view === `group:${item.dataset.modelGroup}`);
     if (groups.length && !group && state.view !== 'secondary') {
       state.view = 'groups';
+      if (state.companion) {
+        state.menu.setAttribute('role', 'menu');
+        renderBackRow(select, state, state.ownLabel, 'overview');
+      }
       renderModelGroups(select, state, groups);
       syncCustomModelPicker(select);
       return;
@@ -845,7 +1035,9 @@
       renderBackRow(select, state, pref ? pref.label : "Consensus engine", "custom");
     }
     if (group) renderBackRow(select, state, group.label, 'groups');
-    if (secondary) renderBackRow(select, state, state.secondaryLabel, groups.length ? 'groups' : 'models');
+    // Linked, reasoning and the flat model list hang off the overview.
+    if (secondary) renderBackRow(select, state, state.secondaryLabel, state.companion ? 'overview' : groups.length ? 'groups' : 'models');
+    else if (state.companion && !group && !state.presets) renderBackRow(select, state, state.ownLabel, 'overview');
 
     Array.from(group ? group.querySelectorAll('option') : targetSelect.options).forEach(option => {
       const item = document.createElement("button");
@@ -950,9 +1142,24 @@
     syncCustomModelPicker(select);
   }
 
-  function collapseExpandedModelPicker(select = expandedModelPicker) {
-    const state = getModelPickerState(select);
+  // `ownLevelsOnly`: close only if the select's own levels are on screen. A
+  // linked menu showing the overview redraws instead (its row turns locked),
+  // and one showing the companion's level stays as it is.
+  function collapseExpandedModelPicker(select = expandedModelPicker, { ownLevelsOnly = false } = {}) {
+    let state = getModelPickerState(select);
     if (!state) return;
+    // A linked companion's menu is its parent's: closing it closes that.
+    if (state.parent) {
+      select = state.parent;
+      state = getModelPickerState(select);
+    }
+    if (ownLevelsOnly && state.companion && expandedModelPicker === select) {
+      if (state.menu.dataset.owner !== select.id) return;
+      if (state.view === "overview") {
+        renderCustomModelPicker(select);
+        return;
+      }
+    }
 
     state.menu.classList.remove("is-open");
     state.host.classList.remove("is-expanded", "is-open");
@@ -1007,9 +1214,19 @@
   window.addEventListener('scroll', fitOpenPicker, true);
   window.visualViewport?.addEventListener('resize', fitOpenPicker);
 
-  function openModelPicker(select, { secondary = false } = {}) {
-    const state = getModelPickerState(select);
-    if (!select || select.disabled || !state) return;
+  // `secondary` opens the reasoning level, `level: "models"` the chat model
+  // list. A linked companion opens inside its parent's menu, on its own level.
+  function openModelPicker(select, { secondary = false, level = secondary ? "secondary" : null } = {}) {
+    let state = getModelPickerState(select);
+    if (state?.parent) {
+      if (select.disabled) return;
+      select = state.parent;
+      state = getModelPickerState(select);
+      level = "companion";
+    }
+    const companionOpen = !!state?.companion && !state.companion.disabled;
+    if (!select || !state) return;
+    if (select.disabled && !(companionOpen && (level === null || level === "companion"))) return;
 
     // Toolbar shortcuts remain visible on mobile while the picker's parent
     // is collapsed. Reveal that parent before measuring or focusing the menu.
@@ -1030,9 +1247,13 @@
     if (state.presets) {
       state.view = getActiveConsensusPresetId() === "custom" ? "custom" : "presets";
     }
-    if (state.secondarySelect) state.view = secondary ? 'secondary' : 'models';
+    if (state.secondarySelect) state.view = level === "secondary" ? 'secondary' : 'models';
+    if (state.companion) {
+      state.view = level === "secondary" ? "secondary" : level === "models" ? "models" : "overview";
+    }
 
-    renderCustomModelPicker(select);
+    if (state.companion && level === "companion") enterCompanion(state);
+    else renderCustomModelPicker(select);
     state.host.classList.add("is-expanded", "is-open");
     state.host.setAttribute("aria-expanded", "true");
     state.menu.classList.add("is-open");
@@ -1046,7 +1267,62 @@
     const composer = state.host.closest('.input-section');
     if (composer) composerPickerResize?.observe(composer);
     fitComposerPicker(state);
-    if (secondary) (state.menu.querySelector('.is-selected:not(:disabled)') || state.menu.querySelector('button:not(:disabled)'))?.focus();
+    // A shortcut (Deep Think, Comparison models, a notice) lands inside the
+    // level it named, ready for the keyboard.
+    if (level) focusPickerMenu(state);
+  }
+
+  // Link `companion` into `primary`'s chip and menu, or unlink with null.
+  // Either picker may not exist yet (the Agent picker is built once its
+  // catalog loads); the link waits and applies when both do.
+  const pendingLinks = new Map();
+  function linkModelPicker(primary, companion, { ownLabel = "Agent", companionLabel = "Compare with", ariaLabel = "Models" } = {}) {
+    if (!primary) return;
+    const state = getModelPickerState(primary);
+    const current = state?.companion || null;
+    if (companion && (!state || !getModelPickerState(companion))) {
+      pendingLinks.set(primary, { companion, options: { ownLabel, companionLabel, ariaLabel } });
+      return;
+    }
+    pendingLinks.delete(primary);
+    if (!state) return;
+    if (current === companion) {
+      if (companion) syncCustomModelPicker(primary);
+      return;
+    }
+    if (expandedModelPicker === primary || expandedModelPicker === current || expandedModelPicker === companion) {
+      collapseExpandedModelPicker(expandedModelPicker);
+    }
+    if (current) {
+      const old = getModelPickerState(current);
+      old.menu = old.ownMenu;
+      old.parent = null;
+      old.view = "presets";
+      state.companion = null;
+      state.host.classList.remove("has-linked-picker");
+      state.menu.setAttribute("aria-label", state.ownAriaLabel);
+      state.view = state.grouped ? "groups" : "models";
+    }
+    if (companion) {
+      const next = getModelPickerState(companion);
+      next.ownMenu ||= next.menu;
+      next.menu = state.menu;
+      next.parent = primary;
+      state.companion = companion;
+      state.ownLabel = ownLabel;
+      state.companionLabel = companionLabel;
+      state.linkedAriaLabel = ariaLabel;
+      state.ownAriaLabel ||= state.menu.getAttribute("aria-label");
+      state.menu.setAttribute("aria-label", ariaLabel);
+      state.host.classList.add("has-linked-picker");
+      state.view = "overview";
+    }
+    window.syncCustomModelPickers?.();
+  }
+  function applyPendingLinks(select) {
+    for (const [primary, link] of [...pendingLinks]) {
+      if (primary === select || link.companion === select) linkModelPicker(primary, link.companion, link.options);
+    }
   }
 
   function initCustomModelPicker(select, options = {}) {
@@ -1147,6 +1423,7 @@
     });
     select.addEventListener("change", () => syncCustomModelPicker(select));
     renderCustomModelPicker(select);
+    applyPendingLinks(select);
   }
 
   window.syncCustomModelPickers = function () {
@@ -1172,6 +1449,7 @@
   window.App.openModelPicker = openModelPicker;
   window.App.collapseExpandedModelPicker = collapseExpandedModelPicker;
   window.App.initCustomModelPicker = initCustomModelPicker;
+  window.App.linkModelPicker = linkModelPicker;
   window.App.markConsensusPresetCustom = markConsensusPresetCustom;
   window.App.currentPresetLabel = () => lastPresetDisplayLabel;
 })();
