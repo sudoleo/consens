@@ -11,7 +11,7 @@ from app.services.agent_comparison import comparison_selection, review_is_bound,
 from app.services.agent_delegation import DelegationLoop
 from app.services.agent_delegation_config import defaults
 from app.services.agent_policy import AgentPolicy
-from app.services.llm.agent_client import AgentCompletion, measured_usage, resolve_agent_model
+from app.services.llm.agent_client import AgentCompletion, measured_usage, metered_model, resolve_agent_model
 from app.services.llm.provider_runtime import ProviderCancellation, ProviderCancelled, AnalysisBudgetExceeded
 from test_agent_runs import UID, AUTH, api, pending, receipt, store
 
@@ -301,10 +301,10 @@ def _search(kwargs):
 @pytest.mark.parametrize("depth,results,characters,limit,orchestrator_rounds", [
     ("quick", 3, 1000, 10_000_000, 3), ("full", 5, 2000, 10_000_000, 3),
     # The default allowance cannot hold every full reservation at once: the
-    # orchestrator and the parallel answers take smaller searches, none waits.
-    ("full", None, None, 250_000, 1)])
-def test_search_depth_follows_the_comparison_depth_and_judges_never_search(store, depth, results, characters, limit,
-                                                                         orchestrator_rounds):
+    # parallel answers take a smaller search when needed, none waits.
+    ("full", None, None, 250_000, 3)])
+def test_search_follows_family_and_depth_and_judges_never_search(store, depth, results, characters, limit,
+                                                                orchestrator_rounds):
     script = Script(direct=True, depth=depth)
     seen = []
     base = script.factory
@@ -315,44 +315,42 @@ def test_search_depth_follows_the_comparison_depth_and_judges_never_search(store
             schema = (model.request_config.get("response_format") or {}).get("json_schema")
             kind = ("orchestrator" if completion.step_id == "completion:0" else "answer" if completion.step_id.startswith("completion:")
                     else "judge" if schema else "comparison")
-            seen.append((kind, kwargs["native_searches"], _search(kwargs), messages[0]["content"]))
+            seen.append((kind, model.model, kwargs["native_searches"], _search(kwargs), messages[0]["content"]))
             yield from stream(model=model, messages=messages, **kwargs)
         completion.stream = recording
         return completion
     script.factory = factory
     from app.services.llm.provider_runtime import AnalysisBudget
-    # Room for every reservation at once; tight budgets step search down instead.
     agent_budget_config.store(store.db).save(expected_revision=0, updated_by="admin", daily_token_limit=limit)
-    loop = make_loop(store, script)
-    # The chat path: one account budget, bounded Exa search per step.
+    # Claude has its own search; DeepSeek searches through Exa.
+    loop = make_loop(store, script, models={"anthropic": "claude-haiku-4-5", "deepseek": "deepseek-v4-flash"})
+    # The chat path: one account budget, bounded search accounting per step.
     loop.policy = AgentPolicy.for_chat(loop.config)
     loop.costs.policy = loop.policy
     loop.budget = AnalysisBudget(unlimited=True)
     list(loop.run())
-    comparisons = [row for row in seen if row[0] == "comparison"]
-    assert len(comparisons) == 2
-    sizes = []
-    for _, rounds, tool, prompt in comparisons:
-        assert rounds == 1 and tool["engine"] == "exa" and tool["max_uses"] == 1
-        sizes.append((tool["max_results"], tool["max_characters"]))
+    comparisons = {model: (rounds, tool, prompt) for kind, model, rounds, tool, prompt in seen if kind == "comparison"}
+    assert set(comparisons) == {"anthropic/claude-haiku-4.5", "deepseek/deepseek-v4-flash"}
+    for rounds, tool, prompt in comparisons.values():
+        assert rounds == 1 and tool["max_uses"] == 1
         assert "Current date:" in prompt and "use web search once" in prompt
-    if results:
-        assert sizes == [(results, characters)] * 2
-    else:
-        # Each answer still searches, at the size that fits when it starts.
-        assert set(sizes) <= {(3, 1000), (5, 2000)}
+    # The publisher's own search, not Exa.
+    assert comparisons["anthropic/claude-haiku-4.5"][1]["engine"] == "auto"
+    exa = comparisons["deepseek/deepseek-v4-flash"][1]
+    assert exa["engine"] == "exa"
+    size = (exa["max_results"], exa["max_characters"])
+    assert size == (results, characters) if results else size in {(3, 1000), (5, 2000)}
     # The orchestrator researches once for every answer model before comparing.
-    [(_, rounds, tool, _)] = [row for row in seen if row[0] == "orchestrator"]
-    assert rounds == orchestrator_rounds and tool["max_uses"] == orchestrator_rounds
-    assert tool["max_results"] == 5 and tool["max_characters"] == 2000
-    assert all(rounds == 0 for kind, rounds, _, _ in seen if kind in {"judge", "answer"})
+    [(_, _, rounds, tool, _)] = [row for row in seen if row[0] == "orchestrator"]
+    assert rounds == orchestrator_rounds and tool["max_uses"] == orchestrator_rounds and tool["engine"] == "auto"
+    assert all(rounds == 0 for kind, _, rounds, _, _ in seen if kind in {"judge", "answer"})
     assert any(kind == "judge" for kind, *_ in seen)
     assert store.get_turn(UID, loop.chat_id, loop.turn_id)["status"] == "completed"
 
 
 def test_search_steps_down_before_it_is_dropped():
     from app.services.agent_delegation import smaller_search
-    from app.services.agent_costs import RunCosts
+    from app.services.agent_costs import RunCosts, NATIVE_SEARCH_INPUT_TOKENS
     model = resolve_agent_model("claude-haiku-4-5")
     rich = replace(model, request_config={**model.request_config, "_agent_bounded_search": True, "_agent_rich_search": True})
     tiers, current, rounds = [], rich, 3
@@ -363,8 +361,15 @@ def test_search_steps_down_before_it_is_dropped():
     costs = RunCosts(AgentPolicy.for_chat({**defaults(), "enabled": True}))
     messages = [{"role": "user", "content": "Q"}]
     estimate = lambda m, n: costs.estimate(m, messages, native_searches=n)[0]
-    bounded = replace(rich, request_config={k: v for k, v in rich.request_config.items() if k != "_agent_rich_search"})
-    assert estimate(rich, 3) > estimate(rich, 1) > estimate(bounded, 1) > estimate(bounded, 0)
+    # Exa (DeepSeek): fewer rounds and shorter results reserve less.
+    exa = metered_model("deepseek-v4-flash")
+    exa_rich = replace(exa, request_config={**exa.request_config, "_agent_bounded_search": True, "_agent_rich_search": True})
+    exa_short = replace(exa, request_config={**exa.request_config, "_agent_bounded_search": True})
+    assert estimate(exa_rich, 3) > estimate(exa_rich, 1) > estimate(exa_short, 1) > estimate(exa_short, 0)
+    # Native (Claude): a measured bound per round, not the whole context window.
+    one, none = estimate(rich, 1), estimate(rich, 0)
+    assert none < one < none * 2 + 2 * NATIVE_SEARCH_INPUT_TOKENS + 10_000
+    assert one < model.context_length // 2
 
 
 @pytest.mark.parametrize("remaining,succeeds,context_room", [(40000, True, None), (100, False, None), (40000, False, 0)])

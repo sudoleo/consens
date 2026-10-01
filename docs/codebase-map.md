@@ -1998,9 +1998,17 @@ erhalten keine Delegations-/Vergleichstools, aber eine begrenzte Suchrunde
 Exa-Suche aus `_admit_chat_step`: 3 Treffer à 1000 Zeichen; passt die Reservierung
 nicht ins Kontingent, fällt nur die Suche weg) und das aktuelle Datum samt Hinweis,
 bei zeitabhängigen Fakten einmal zu suchen. Ohne beides einigten sich die Modelle
-auf denselben veralteten Trainingsstand. Judges suchen nie. Suchtiefe nach
-`depth`: `quick` 3 Treffer à 1000 Zeichen, `full` 5 à 2000 (`_agent_rich_search`,
-`search_tools`, Reservierung in `agent_costs`), je eine Runde. Mehrere Runden
+auf denselben veralteten Trainingsstand. Judges suchen nie. Suchweg nach Familie
+(`agent_tools.NATIVE_SEARCH_FAMILIES`): Gemini, OpenAI und Anthropic nutzen ihre
+eigene Suche (Engine `auto` → Google-Grounding bzw. Provider-Suche), alle anderen
+Exa, Grok fest Exa. Gemessen 2026-10-01: bei Faktenfragen gleich gut, bei offenen
+„was ist aktuell am besten“-Fragen nannte die native Suche deutlich öfter aktuelle
+Modelle; Google-Grounding kostet ≈ 2–3 ct pro Anfrage statt ≈ 0,8 ct. Native
+Suche reserviert im Chatpfad `NATIVE_SEARCH_INPUT_TOKENS` (32k) pro Runde statt
+des ganzen Kontextfensters; die Abrechnung bucht den echten Verbrauch (ein
+Überschreiten des Tageslimits ist dadurch selten, aber möglich). Exa-Suchtiefe
+nach `depth`: `quick` 3 Treffer à 1000 Zeichen, `full` 5 à 2000
+(`_agent_rich_search`), je eine Runde. Mehrere Runden
 recherchiert nur der Orchestrator vor dem ersten Vergleich
 (`ORCHESTRATOR_SEARCH_ROUNDS = 3`, reiche Treffer) und gibt die Funde mit URLs
 im `context` weiter; eigene Erinnerung an Produkte/Versionen/Preise gehört nicht

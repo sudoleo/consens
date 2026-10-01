@@ -30,6 +30,12 @@ def provider_cost_nanos(raw):
     return None
 
 
+# Input a native search round adds, as reserved. Measured 2026-10-01 per round:
+# OpenAI up to ~11k tokens, Anthropic ~2k, Google grounding ~0 (billed per
+# request instead). About three times the largest observation.
+NATIVE_SEARCH_INPUT_TOKENS = 32_000
+
+
 def search_cost_nanos(model):
     from app.services.agent_tools import uses_native_search
     return (provider_cost_nanos(model.web_search_usd_per_request)
@@ -80,8 +86,14 @@ class RunCosts:
         if inputs + model.max_output_tokens > model.context_length:
             raise AnalysisBudgetExceeded("The selected model's context limit was reached.")
         # Native search injects provider-owned context that we cannot count
-        # before dispatch. Reserve its entire model window, then reconcile.
-        if native_searches and uses_native_search(model):
+        # before dispatch. The chat path reserves a measured bound per round
+        # (the whole window never fits a daily allowance); legacy callers keep
+        # reserving the entire window. Settlement charges the actual usage.
+        if native_searches and uses_native_search(model) and model.request_config.get("_agent_bounded_search"):
+            inputs += native_searches * NATIVE_SEARCH_INPUT_TOKENS
+            if inputs + model.max_output_tokens > model.context_length:
+                raise AnalysisBudgetExceeded("The selected model's search context limit was reached.")
+        elif native_searches and uses_native_search(model):
             inputs = model.context_length - model.max_output_tokens
         elif native_searches:
             # Exa: five results with 2,000 characters each. Include worst-case
