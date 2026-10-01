@@ -583,14 +583,17 @@ def test_logout_clears_the_loaded_run_and_aborts_active_streams():
 
 
 def test_watch_change_surfaces_use_tint_without_a_left_rail():
-    shell = read("static/css/shell.css")
-    drift_rule = shell.split(".watch-dash-stat.is-drift,", 1)[1].split("}", 1)[0]
-    limit_rule = shell.split(".watch-dash-heading-row .watch-limit-summary {", 1)[1].split("}", 1)[0]
+    """A watch card is a tinted surface; movement is the dot and the label,
+    never a coloured rail down the card's edge."""
+    watch = read("static/css/components-watch.css")
+    item_rule = watch.split(".wd-item {", 1)[1].split("}", 1)[0]
+    limit_rule = watch.split(".watch-limit-summary.is-compact {", 1)[1].split("}", 1)[0]
 
-    assert "border-left" not in drift_rule
-    assert "border-radius: var(--radius-md)" in drift_rule
-    assert "border-radius: var(--radius-sm)" in limit_rule
-    assert "padding: 8px 10px" in limit_rule
+    assert "border-left" not in item_rule
+    assert "border-radius: var(--radius-lg)" in item_rule
+    assert "background: var(--raise)" in item_rule
+    assert "background: transparent" in limit_rule
+    assert ".watch-dash-stat" not in read("static/css/shell.css")
 
 
 def test_watch_requests_cannot_repopulate_account_state_after_logout():

@@ -161,9 +161,10 @@ def test_watch_modal_route_and_brief_state_have_deterministic_rollback_contracts
     assert "renderWatchLoginHint" in reset
     assert 'replaceState(null, "", APP_PATH)' not in reset
     assert 'window.addEventListener("consensio:auth-state"' in watch
-    assert "persistedSendTime" in watch and "persistedMode" in watch
-    assert "timeInput.value = persistedSendTime" in watch
-    assert "modeSelect.value = persistedMode" in watch
+    dashboard = read("static/js/watch-dashboard.js")
+    assert "let persisted = {" in dashboard
+    assert "time.value = persisted.time" in dashboard
+    assert "mode.value = persisted.mode" in dashboard
     assert "watchModalIntentIsCurrent" in watch
     assert "window.App.sharedModal.isCurrent(intent)" in watch
 

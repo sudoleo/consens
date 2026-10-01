@@ -153,8 +153,8 @@ def test_watch_nudge_starts_a_watch_directly_and_says_when_it_writes():
     assert ":not(.watch-feature-nudge-close)" in read("static/css/components-input.css")
     assert "Watch this question" in nudge
     # Der Knopf verspricht Stille, solange sich nichts aendert.
-    assert "when the models change their mind" in nudge
-    assert "only on a material change" in nudge
+    assert "write only when a source moves the answer" in nudge
+    assert "only on evidence" in nudge
 
     # Der Hinweis bittet um eine wiederkehrende Verpflichtung. Er darf deshalb
     # erst erscheinen, wenn die Nutzung belegt ist -- nicht nach der ersten
