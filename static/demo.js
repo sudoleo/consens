@@ -788,7 +788,7 @@ function createStartDemoChip() {
   const questionInput = document.getElementById("questionInput");
 
   const btn = document.createElement("button");
-  btn.className = "demo-chip demo-action";
+  btn.className = "demo-chip demo-action send-glow";
   btn.type = "button";
   btn.setAttribute("aria-label", "Start interactive demo");
   // Zwei Beschriftungen, immer genau eine sichtbar. Auf einem 375er Schirm
@@ -797,7 +797,7 @@ function createStartDemoChip() {
   // Welche Beschriftung gilt, entscheidet
   // components-misc.css; der aria-Name bleibt in beiden Faellen derselbe.
   btn.innerHTML =
-    '<span class="demo-action-icon rosette rosette-bezel" aria-hidden="true"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M5 3.5v9l7-4.5z"></path></svg></span>' +
+    '<span class="demo-action-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M5 3.5v9l7-4.5z"></path></svg></span>' +
     '<span class="demo-chip-label demo-chip-label-full">Try the demo</span>' +
     '<span class="demo-chip-label demo-chip-label-short">Demo</span>';
 

@@ -906,21 +906,27 @@ body:not(.dark-mode) .chat-input-container {
   height: 15px;
 }
 
-/* The rosette (rosette.css) follows the fill: engraved into the ink while
-   the question can go, half as present on the grey of "not yet", and
-   drawn in ink on the pale stop button, where it turns once a minute for
-   as long as the models are working. */
-.input-action-btn-primary.rosette:disabled {
-  --rosette-ink: color-mix(in srgb, var(--bg-color) 12%, transparent);
+/* The light below Send (send-glow.css) is off while nothing can go and comes
+   on with the question. While the models work it moves to the pale stop
+   button and travels once round the rim every few seconds: something is
+   running, without a spinner. */
+.input-action-btn-primary.send-glow:disabled::before {
+  opacity: 0;
 }
 
-.input-action-btn-primary.rosette.is-cancel-action {
-  --rosette-ink: color-mix(in srgb, var(--ink) 11%, transparent);
+.input-action-btn-primary.send-glow.is-cancel-action {
+  --glow-wash: 13%;
+  --glow-rim: 40%;
+}
+
+.dark-mode .input-action-btn-primary.send-glow.is-cancel-action {
+  --glow-wash: 22%;
+  --glow-rim: 55%;
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .input-action-btn-primary.rosette.is-cancel-action::before {
-    animation: rosette-turn 60s linear infinite;
+  .input-action-btn-primary.send-glow.is-cancel-action::before {
+    animation: send-glow-orbit 5s linear infinite;
   }
 }
 

@@ -278,15 +278,15 @@ kontrastreiche Theme-Farben, abgerundetes Rechteck, identisches Play-Symbol,
 Hover-/Druck-/Fokuszustände und mindestens 44 px Höhe auf Touch-Geräten.
 Die App zeigt ebenfalls „Try the demo“, bis 640 px platzsparend „Demo“;
 der zugängliche Name und der Startablauf bleiben unverändert.
-Seit 2026-10-01 trägt jede Bedienung, die eine Frage an die Modelle schickt,
-die Rosette aus `static/css/rosette.css` (ebenfalls in `landing.css` und
-`static/style.css` importiert): eine Guilloché-Figur aus sechs verschlungenen
-Kurven (eine pro Modell eines Laufs) als Maske in `::before`, Farbe über
-`--rosette-ink`. Klasse `rosette` auf `#sendButton` und `.lp-send`,
-`rosette rosette-bezel` als Ring um das Play-Symbol von „Try the demo“
-(Markup in `landing.html` und `static/demo.js`). Zustandsfarben und die
-langsame Drehung des Stopp-Knopfs stehen in `shell.css`. Die Figur ist
-diesen Bedienelementen vorbehalten.
+Seit 2026-10-01 tragen die Bedienelemente, die eine Frage an die Modelle
+schicken, ein Licht von unten aus `static/css/send-glow.css` (ebenfalls in
+`landing.css` und `static/style.css` importiert): ein `::before` mit
+Hausgrün (`--agree`) als Schimmer und beleuchteter Unterkante, links unten am
+hellsten. Klasse `send-glow` auf `#sendButton`, `.lp-send` und „Try the
+demo“ (Markup in `landing.html` und `static/demo.js`). Zustände stehen beim
+Bedienelement: in `shell.css` aus, solange nichts gesendet werden kann, beim
+Stopp-Knopf wandert es langsam um den Rand; in `landing.css` geht es an,
+sobald die Mockup-Frage fertig ist. Das Licht ist diesen Elementen vorbehalten.
 `static/demo.js` erkennt den Parameter und startet die Demo automatisch in der
 echten App. Dabei wird zuerst die vollständige Frage in den Composer getippt;
 beim simulierten Absenden wandert sie in den Thread-Kopf, der Composer wird

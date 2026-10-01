@@ -44,15 +44,6 @@ button.demo-action {
   transform: translateX(.5px);
 }
 
-/* The rosette bezel (rosette.css) turns one step when the whole control is
-   hovered, not only the 22px mark. */
-@media (prefers-reduced-motion: no-preference) {
-  .demo-action:hover .rosette::before,
-  .lp-hero-prompt:hover .demo-action .rosette::before {
-    transform: rotate(12deg);
-  }
-}
-
 .demo-action:hover,
 .lp-hero-prompt:hover .demo-action {
   opacity: 1;
