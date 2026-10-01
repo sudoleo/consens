@@ -56,7 +56,7 @@
     }
     
     // Quellentags im Ankertext. Im Konsens-MARKDOWN steht "…330 m.[S1]",
-    // im gerenderten DOM ist daraus ein .src-ref-Chip mit dem Text "1"
+    // im gerenderten DOM ist daraus eine .src-ref-Pille (Favicon + Domain)
     // geworden — und der wird beim Markieren uebersprungen. Ein Anker mit
     // Tag fand deshalb nie seine Stelle, obwohl der Consensus-Prompt die
     // Tags ausgerechnet an die ZENTRALEN Faktenaussagen haengt. Eine
@@ -123,10 +123,10 @@
     // werden: die Quoten-Badges und die [S1]-Quellenchips sind UI (ihr Text
     // wuerde die Offsets verschieben), Code und KaTeX duerfen nicht
     // angefasst werden.
-    // `.src-ref` sind die hochgestellten Quellenzahlen im Konsens. Ohne
-    // sie hier wurde die Zahl selbst als Satzteil gewrappt und trug dann
-    // die Unterstreichung der Passage — eine bernsteinfarbene "3" sieht
-    // aus wie ein Fehler, nicht wie eine Fussnote.
+    // `.src-ref` sind die Quellen-Pillen im Konsens (frueher hochgestellte
+    // Zahlen). Ohne sie hier wurde ihr Text als Satzteil gewrappt und trug
+    // dann die Unterstreichung der Passage — eine bernsteinfarbene Domain
+    // sieht aus wie ein Fehler, nicht wie eine Quellenangabe.
     const MARK_SKIP_SELECTOR =
       ".claim-badge, .source-link, .src-ref, .src-ref-sep, code, pre, .katex";
     const BLOCK_SELECTOR = "p, li, td, th, h1, h2, h3, h4, h5, h6, blockquote, dd, dt";

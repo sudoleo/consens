@@ -58,7 +58,38 @@ describe('source teaser check disclosure', () => {
     expect(popup.textContent).toContain('has not been checked');
     expect(popup.textContent).not.toContain('contradicts');
     expect(env.ref.hasAttribute('title')).toBe(false);
-    expect(env.ref.getAttribute('aria-label')).toBe('Source 1: Plan prices');
+    expect(env.ref.getAttribute('aria-label')).toBe('Source: prices.example');
+    env.dom.window.close();
+  });
+
+  it('binds one verdict per source to a grouped pill and shows the most severe one', () => {
+    const env = loadScripts(['static/js/sources.js', 'static/js/consensus-anchor.js', 'static/js/source-verification.js'], {
+      body: '<div id="consensusAnswerBody"></div><div id="report"></div>'
+    });
+    const body = env.document.getElementById('consensusAnswerBody');
+    const sources = [source, {id: 'S2', title: 'Second list', url: 'https://second.example'}];
+    body.textContent = `${claim} [S1, S2]`;
+    env.window.linkifySourceTags(body, sources);
+    const pills = body.querySelectorAll('.src-ref');
+    expect(pills).toHaveLength(1);
+    const pill = pills[0];
+    expect(pill.dataset.sourceNumbers).toBe('1 2');
+    expect(pill.querySelector('.src-ref-more').textContent).toBe('+1');
+    const finding = {sentence_id: 1, claim, anchor_occurrence: 0, checked: true, topical: 'relevant', temporal: 'suitable'};
+    env.window.App.sourceVerification.render(body, env.document.getElementById('report'), {
+      schema_version: 3, status: 'complete', scope: {pairs: 2, checked_pairs: 2},
+      findings: [{...finding, source_id: 'S1', support: 'supported'}, {...finding, source_id: 'S2', support: 'contradicted'}]
+    });
+    expect(pill.dataset.sourceCheck).toBe('contradicted');
+    expect(pill.getAttribute('aria-label')).toBe('Source: prices.example (and 1 more). Source checked: contradicts this statement.');
+    pill.dispatchEvent(new env.window.Event('pointerover', {bubbles: true}));
+    const rows = env.document.querySelectorAll('#sourceTeaser .source-teaser-item');
+    expect(rows).toHaveLength(2);
+    expect(rows[0].querySelector('.source-teaser-check').textContent).toContain('supports this statement');
+    expect(rows[1].querySelector('.source-teaser-check').textContent).toContain('contradicts this statement');
+    env.window.App.sourceVerification.clear(body, env.document.getElementById('report'));
+    expect(pill.hasAttribute('data-source-check')).toBe(false);
+    expect(pill.getAttribute('aria-label')).toBe('Source: prices.example (and 1 more)');
     env.dom.window.close();
   });
 

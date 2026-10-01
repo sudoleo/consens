@@ -954,26 +954,49 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   Quellen; ohne dritten Parameter gilt weiter `window.currentEvidenceSources`.
 - **`sources.js`** — Quellen/Evidence-Mapping; nutzt DOM-Datasets
   `dataset.consensusAnswer` / `dataset.consensusSources`; `window.currentEvidenceSources`.
-  Seit 2026-07-27 zwei Darstellungen: **im Konsenstext** (Container ist bzw.
-  liegt in `#consensusAnswerBody`) werden `[S3]`-Tags zu hochgestellten Zahlen
-  `.src-ref` — die Nummer stammt aus der expliziten Quellen-ID (`S3` → `3`),
-  unabhängig von Sortierung oder Lücken in `window.currentEvidenceSources`.
-  Nur alte Einträge ohne ID verwenden den Positions-Fallback; fehlende oder
-  mehrdeutige explizite IDs erhalten keinen Link. Dieselben IDs stehen in
+  Zwei Darstellungen: **im Chat-Fliesstext** (Container ist bzw. liegt in
+  `#consensusAnswerBody`, `.consensus-answer-body` oder der Kernaussagen-Liste)
+  werden `[S3]`-Tags seit 2026-10-01 zu **Quellen-Pillen** `.src-ref` statt
+  hochgestellter Zahlen (User-Entscheidung): Favicon (14 px, über den eigenen
+  Proxy `/api/topics/favicon`, kein Drittanbieter im Browser) + kurze Domain
+  ohne `www.` auf der Grundlinie, `--well`-Fläche, Radius voll, lange Domains
+  mit Ellipse. Scheitert das Favicon, ersetzt ein neutrales Monogramm
+  `.src-ref-glyph` das Bild. Benachbarte Tags (`[S1, S2]`, `[S1][S2]`) werden
+  **eine** Pille „uci.org +2“ (`.is-group`, `data-source-numbers="1 2 3"`);
+  `aria-label` lautet „Source: uci.org (and 2 more)“. Steht die Domain direkt
+  vor dem Tag schon im Text, zeigt die Pille nur das Favicon (`.is-compact`) —
+  der Prosatext selbst bleibt unverändert, weil Anker und Claim-Marken ihn
+  wörtlich suchen. Die Nummer bleibt am Element (`data-source-number`, aus der
+  expliziten Quellen-ID `S3` → `3`, unabhängig von Sortierung oder Lücken in
+  `window.currentEvidenceSources`); `sourceData`/`sourceGroup` tragen die
+  aufgelösten Quellen des Turns. Nur alte Einträge ohne ID verwenden den
+  Positions-Fallback; fehlende oder mehrdeutige explizite IDs erhalten keine
+  Domain (Pille „Source 9“ ohne Link). Dieselben IDs stehen in
   `#consensusSourcesList`
   (`app-init.js::renderEvidenceSources`, geoeffnet ueber den Quellen-Chip).
   In den Modellantworten bleiben es die Favicon-Chips `.source-link`.
   Agent-Antworten verwenden separat `window.linkifyAgentSources`: sichere
   HTTP(S)-Links und eindeutig auflösbare `[S#]`-Tags werden zu denselben
-  hochgestellten `.src-ref` mit Quellenvorschau. Die Nummern entsprechen der
-  deduplizierten Quellenliste des jeweiligen Turns bzw. der Einzelantwort.
-  Benannte Links behalten ihren Text; ausgeschriebene URLs samt umgebender
-  Klammer entfallen. Code, Formeln und reine Zahlennotation wie `[1]` bleiben
-  unberührt. Die Umwandlung betrifft nur den DOM, nicht Markdown oder Review-Hash.
-  Ein Hover auf `.src-ref` oeffnet `#sourceTeaser` (Favicon, Host, Titel,
-  Snippet); auf Touch/Keyboard traegt das `title`-Attribut dieselbe Info.
+  Pillen mit Quellenvorschau; nebeneinanderstehende Pillen (nur Leerraum,
+  Komma, Semikolon dazwischen) fasst `mergeAdjacentSourceRefs` zusammen. Die
+  Nummern entsprechen der deduplizierten Quellenliste des jeweiligen Turns
+  bzw. der Einzelantwort. Benannte Links behalten ihren Text; ein Linktext,
+  der nur die eigene Domain wiederholt (`[njaped.no](https://njaped.no/)`),
+  wird durch die Pille ersetzt statt verdoppelt. Ausgeschriebene URLs und
+  reine Zitat-Klammern („(url1, url2)“) entfallen samt Klammer. Code, Formeln
+  und reine Zahlennotation wie `[1]` bleiben unberührt. Die Umwandlung betrifft
+  nur den DOM, nicht Markdown oder Review-Hash; `agent-review.js` liest die
+  Quellen einer Pille über `sourceGroup` zurück.
+  Hover/Fokus auf `.src-ref` oeffnet `#sourceTeaser` (Favicon, Host, Titel,
+  Snippet, Prüfstatus); bei einer Gruppen-Pille eine Zeile je Quelle. Klick
+  öffnet wie bisher die (erste) Quelle bzw. bei geprüften Zitaten die
+  Prüfergebnisse. Quellenprüfung (`source-verification.js::mark`) bindet an
+  eine Gruppen-Pille je Nummer ein Urteil (`checks`-Map) und färbt sie nach
+  dem schwersten. Copy consensus/Copy citation lesen Pillen über
+  `window.App.sourceRefs.plainText/urls` („ (uci.org, pcs.com)“). Share- und
+  Topic-Seiten rendern serverseitig aus Markdown und sind nicht betroffen.
   `normalizeTerminalSourceTagOrder` korrigiert Modell-Output der Form
-  `Aussage [S1].` zu `Aussage.[S1]`, damit die hochgestellte Fussnote nach
+  `Aussage [S1].` zu `Aussage.[S1]`, damit die Quellen-Pille nach
   Satzendzeichen (und ggf. schliessendem Anfuehrungszeichen) steht. Der
   DOM-Linkifier besitzt denselben Fallback fuer alte Bookmarks; das
   serverseitige Pendant liegt in `app/services/public_markdown.py`. Fuer alte
@@ -1506,8 +1529,8 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   behandelt haben; „Not addressed“ bleibt separat. Dünne Abdeckung zeigt keine Quote.
   Das optionale `.claim-badge` daneben zeigt die scanbare Quote
   „4/6", jetzt als ruhige Mikro-Marke mit tabellarischen Ziffern, transparenter
-  Flaeche und feiner Kontur. Sie ist damit klar von hochgestellten
-  Quellenzahlen unterschieden; Neutral = Einigkeit, Bernstein
+  Flaeche und feiner Kontur. Sie ist damit klar von den Quellen-Pillen
+  (Favicon + Domain) unterschieden; Neutral = Einigkeit, Bernstein
   (`has-dissent`) = Abweichung. Wenn Claim und Difference denselben Satz
   belegen, bleibt genau EIN Steuerelement sichtbar — welches, entscheidet seit
   2026-08-07 die Schwere: bei **Widerspruch** gewinnt die Passage selbst und das
@@ -2445,7 +2468,7 @@ Pro Turn vereinigt die Quellenansicht Provider-/Suchquellen, die Quellen aller
 Vergleichsgrundlagen und sichere HTTP(S)-Links aus Antworten und früheren
 Textversionen. Der gemeinsame Katalog hält die Quellenzahlen beim Wechsel der
 Vergleichsgrundlage konsistent. `agent-review.js` setzt zuerst die gebundenen
-Prüfmarkierungen und danach die hochgestellten Quellenverweise; Live-, gespeicherte,
+Prüfmarkierungen und danach die Quellen-Pillen (Favicon + Domain); Live-, gespeicherte,
 abgebrochene und archivierte Antworten verwenden dieselbe Darstellung. Frühere
 Textversionen im Leser erhalten ebenfalls Quellenverweise. Vergleichsantworten
 aktivieren über `sourceReferences: 'agent'` in `model-answer-reader.js` dieselbe

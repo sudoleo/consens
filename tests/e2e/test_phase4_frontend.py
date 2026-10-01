@@ -544,11 +544,18 @@ def test_source_judge_stream_keeps_completed_claims_and_differences(browser, pha
         toggle.evaluate("el => {el.value='none'; el.dispatchEvent(new Event('change',{bubbles:true}));}")
         expect(toggle).to_have_value('none')
         hidden_style = ref.evaluate("el => [getComputedStyle(el).color, getComputedStyle(el).backgroundColor]")
-        assert hidden_style[1] == 'rgba(0, 0, 0, 0)'
+        # A hidden verdict leaves the source pill in its neutral look, not bare text.
+        neutral_bg = page.evaluate("""() => {
+            const pill = document.createElement('span'); pill.className = 'src-ref';
+            document.getElementById('consensusAnswerBody').append(pill);
+            const bg = getComputedStyle(pill).backgroundColor; pill.remove(); return bg;
+        }""")
+        assert neutral_bg != 'rgba(0, 0, 0, 0)'
+        assert hidden_style[1] == neutral_bg
         assert hidden_style != checked_style
         expect(ref).to_have_attribute('data-source-check', 'supported')
         page.evaluate('window.App.sourceVerification.renderCurrent(window.__judgeFinished)')
-        assert ref.evaluate("el => getComputedStyle(el).backgroundColor") == 'rgba(0, 0, 0, 0)'
+        assert ref.evaluate("el => getComputedStyle(el).backgroundColor") == neutral_bg
         toggle.evaluate("(el,value) => {el.value=value; el.dispatchEvent(new Event('change',{bubbles:true}));}", original_mode)
         expect(toggle).to_have_value(original_mode)
         page.wait_for_function("style => { const el = document.querySelector('#consensusAnswerBody .src-ref[data-source-number=\"1\"]'); return getComputedStyle(el).color === style[0] && getComputedStyle(el).backgroundColor === style[1]; }", arg=checked_style)

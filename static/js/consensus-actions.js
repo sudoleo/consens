@@ -105,6 +105,10 @@
         if (href.startsWith("#")) return;
         hrefSet.add(href);
       });
+      // Eine gruppierte Quellen-Pille verlinkt nur ihre erste Quelle.
+      mainPara.querySelectorAll(".src-ref").forEach(ref => {
+        (window.App.sourceRefs?.urls(ref) || []).forEach(url => hrefSet.add(url));
+      });
     }
 
     const links = Array.from(hrefSet);
@@ -187,6 +191,15 @@
       if (mainPara) {
         const clone = mainPara.cloneNode(true);
         clone.querySelectorAll(".claim-badge, .copy-btn, .response-code-copy").forEach(el => el.remove());
+        // Quellen-Pillen lesen sich im DOM als "uci.org+2". Im kopierten
+        // Text stehen stattdessen die Domains in Klammern. Der Klon traegt
+        // die Quellen nicht mit (JS-Eigenschaften), daher die Originale.
+        const originalRefs = Array.from(mainPara.querySelectorAll(".src-ref"));
+        clone.querySelectorAll(".src-ref").forEach((ref, index) => {
+          const text = window.App.sourceRefs?.plainText(originalRefs[index]) || "";
+          ref.replaceWith(document.createTextNode(text));
+        });
+        clone.querySelectorAll(".src-ref-sep").forEach(el => el.remove());
         clone.style.position = "absolute";
         clone.style.left = "-99999px";
         clone.style.top = "0";

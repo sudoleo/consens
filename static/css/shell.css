@@ -3350,40 +3350,125 @@ body.agent-mode-enabled .agent-mode-panel,
   display: none;
 }
 
-/* ---- Numbered citations --------------------------------------------------
-   Inside the consensus a citation is a raised number, the way printed prose
-   does it: it points at the list in the sources drawer without interrupting
-   the sentence. The favicon chips stay in the model answers, where the text
-   is evidence to scan rather than prose to read.
+/* ---- Source pills ----------------------------------------------------------
+   In chat prose (Consensus and Agent answers, saved turns, the key-claims
+   list) a citation is a quiet pill on the text baseline: favicon + short
+   domain, so the reader sees WHICH source backs the sentence without decoding
+   a footnote number. It replaced the raised numbers on 2026-10-01 (user
+   decision). Adjacent citations share one pill ("uci.org +2"); the teaser
+   lists them all. When the domain is already written right before the
+   citation, the pill shrinks to its favicon (.is-compact) instead of
+   repeating it. The `.source-link` chips stay in the raw model answers.
    -------------------------------------------------------------------------- */
 .src-ref {
-  display: inline-block;
-  vertical-align: super;
-  margin-left: 1px;
-  padding: 0 1px;
+  --src-ref-bg: var(--well);
+  display: inline-flex;
+  /* The label carries the baseline, so the pill sits on the line of text
+     instead of floating above it; the icon centres itself. */
+  align-items: baseline;
+  gap: 4px;
+  box-sizing: border-box;
+  max-width: min(15em, 100%);
+  margin-inline: 0.25em 0;
+  padding: 1px 7px 1px 3px;
+  border-radius: var(--radius-pill);
+  background: var(--src-ref-bg);
+  box-shadow: inset 0 0 0 1px var(--line-soft);
   font-size: var(--font-size-micro);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   font-variant-numeric: tabular-nums;
-  line-height: var(--line-height-solid);
+  line-height: 1.45;
   letter-spacing: var(--tracking-normal);
-  color: var(--ink-3);
+  color: var(--ink-2);
   text-decoration: none;
+  white-space: nowrap;
+  vertical-align: baseline;
   cursor: pointer;
-  transition: color 0.14s ease;
+  transition: background-color 0.14s ease, color 0.14s ease, box-shadow 0.14s ease;
 }
 
 .src-ref:hover,
 .src-ref:focus-visible {
+  --src-ref-bg: color-mix(in srgb, var(--ink) 7%, var(--well));
   color: var(--ink);
-  text-decoration: underline;
-  text-underline-offset: 2px;
-  outline: none;
+  text-decoration: none;
+  box-shadow: inset 0 0 0 1px var(--line);
 }
 
-.src-ref-sep {
-  vertical-align: super;
-  font-size: var(--font-size-micro);
+.src-ref:focus-visible {
+  outline: 2px solid var(--ink-3);
+  outline-offset: 1px;
+}
+
+.src-ref-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.src-ref-more {
+  flex: 0 0 auto;
   color: var(--ink-3);
+}
+
+.src-ref:is(:hover, :focus-visible) .src-ref-more {
+  color: var(--ink-2);
+}
+
+.src-ref-favicon,
+.src-ref-glyph {
+  flex: 0 0 auto;
+  align-self: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+}
+
+.src-ref-favicon {
+  object-fit: contain;
+  /* White backing keeps dark/transparent logos legible in both themes. */
+  background: #fff;
+  box-shadow: 0 0 0 1px var(--line-soft);
+}
+
+/* Missing or failed favicon: a neutral monogram, never a broken image. */
+.src-ref-glyph {
+  display: inline-grid;
+  place-items: center;
+  background: var(--line);
+  color: var(--ink-2);
+  font-size: 8.5px;
+  font-weight: var(--font-weight-semibold);
+  line-height: 1;
+}
+
+/* The domain is already in the sentence: favicon only (plus "+N"). */
+.src-ref.is-compact {
+  /* Without a label there is no text baseline to sit on; centre the icon
+     on the x-height instead of letting it ride above the line. */
+  vertical-align: -0.3em;
+  margin-inline-start: 0.1em;
+  padding-inline: 2px;
+}
+
+.src-ref.is-compact.is-group {
+  padding-inline-end: 6px;
+}
+
+.src-ref.is-compact .src-ref-label {
+  display: none;
+}
+
+/* Legacy separator from saved HTML; pills need no comma between them. */
+.src-ref-sep {
+  display: none;
+}
+
+/* Verdict colours from source-verification.css tint the pill; its dotted
+   underline was made for bare numbers and is dropped on the pill. */
+.src-ref[data-source-check] {
+  border-radius: var(--radius-pill);
+  text-decoration: none;
 }
 
 /* Hover teaser: enough of the source to decide whether to leave the page. */
@@ -3475,6 +3560,40 @@ body.agent-mode-enabled .agent-mode-panel,
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
   overflow: hidden;
+}
+
+/* Grouped pill: one row per source behind the "+N". */
+.source-teaser-list {
+  display: grid;
+  gap: 7px;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.source-teaser-item-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--ink-3);
+  font-size: var(--font-size-micro);
+}
+
+.source-teaser-item .source-teaser-check {
+  margin-top: 2px;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.source-teaser-title.is-single-line {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.source-teaser .src-ref-glyph {
+  border-radius: 3px;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -4146,6 +4265,22 @@ body:is([data-consensus-highlight-mode="contradictions"], [data-consensus-highli
 
 body[data-consensus-highlight-mode] :is(.src-ref, .source-link)[data-source-check]:is(:hover, :focus-visible) {
   text-decoration: underline;
+}
+
+/* A source pill whose verdict is filtered or hidden falls back to its
+   neutral look — still a pill, never bare text. Same selectors as above and
+   in source-verification.css, so this later layer wins. */
+body[data-consensus-highlight-mode="concerns"] .src-ref[data-source-check]:not([data-source-check="contradicted"]):not([data-source-check="issue"]):not([data-source-check="unknown"]),
+body:is([data-consensus-highlight-mode="contradictions"], [data-consensus-highlight-mode="critical"]) .src-ref[data-source-check]:not([data-source-check="contradicted"]),
+body.consensus-markers-hidden .src-ref[data-source-check] {
+  color: var(--ink-2);
+  background: var(--src-ref-bg);
+}
+
+body[data-consensus-highlight-mode] .src-ref[data-source-check]:is(:hover, :focus-visible),
+body.consensus-markers-hidden .src-ref[data-source-check]:hover,
+body.consensus-markers-hidden .src-ref[data-source-check]:focus-visible {
+  text-decoration: none;
 }
 
 /* Mobile navigation has its own opaque surface above the reading area.
