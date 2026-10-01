@@ -19,6 +19,8 @@ from app.api.routers import watch as watch_router
 from app.core.rate_limit import limiter
 from app.services import persistence_guard, share_snapshots, telegram_watch, watch_service
 from app.services import mailer, opinion_map, watch_brief, watch_followers, watch_scheduler
+from app.services import drift_signal
+from app.services.llm import consensus_engine
 from app.services.watch_service import WatchError
 
 
@@ -793,52 +795,21 @@ class SchedulerSafetyTests(unittest.TestCase):
         self.assertEqual(db.stores["watches"]["w1"]["status"], "paused_error")
 
     def test_notification_threshold(self):
-        self.assertTrue(watch_scheduler.should_notify(60, 61, True, "major"))
-        self.assertTrue(watch_scheduler.should_notify(60, 75, False, "minor"))
-        self.assertFalse(watch_scheduler.should_notify(60, 74, True, "minor"))
-        # Same band rule as the page badge: a score that keeps swinging back to
-        # a level it just held is not a new event.
-        self.assertFalse(
-            watch_scheduler.should_notify(84, 64, False, "minor", [84, 64, 84])
-        )
-        unchanged = {"agreement_score": 61, "changed": False, "severity": "minor"}
-        self.assertEqual(
-            watch_scheduler.notification_kind(
-                {"email_mode": "every_run", "last_agreement_score": 60}, unchanged
-            ),
-            "every_run",
-        )
-        self.assertIsNone(
-            watch_scheduler.notification_kind(
-                {"email_mode": "changes_only", "last_agreement_score": 60}, unchanged
+        """One outcome decides every alert (docs/watch-evidence-model.md)."""
+        moved = {"signal": "moved", "resolved": False}
+        held = {"signal": "held", "resolved": False}
+        resolved = {"signal": "stable", "resolved": True}
+        self.assertEqual(watch_scheduler.notification_kind({"email_mode": "changes_only"}, moved), "change")
+        self.assertIsNone(watch_scheduler.notification_kind({"email_mode": "changes_only"}, held))
+        self.assertIsNone(watch_scheduler.notification_kind(
+            {"email_mode": "changes_only"}, {"signal": "confirming", "resolved": False},
+        ))
+        self.assertEqual(watch_scheduler.notification_kind({"email_mode": "every_run"}, held), "every_run")
+        self.assertIsNone(watch_scheduler.notification_kind({"email_mode": "condition"}, moved))
+        for mode in ("changes_only", "condition", "every_run"):
+            self.assertEqual(
+                watch_scheduler.notification_kind({"email_mode": mode}, resolved), "condition",
             )
-        )
-        condition_result = {"agreement_score": 61, "condition_status": "met"}
-        condition = "An official date is announced"
-        condition_hash = watch_service.condition_hash(condition)
-        self.assertEqual(
-            watch_scheduler.notification_kind(
-                {"email_mode": "condition", "condition": condition,
-                 "last_condition_status": "not_met", "last_condition_hash": condition_hash},
-                condition_result,
-            ),
-            "condition",
-        )
-        self.assertIsNone(watch_scheduler.notification_kind(
-            {"email_mode": "condition", "condition": condition,
-             "last_condition_status": "met", "last_condition_hash": condition_hash},
-            condition_result,
-        ))
-        self.assertEqual(watch_scheduler.notification_kind(
-            {"email_mode": "condition", "condition": "A different condition",
-             "last_condition_status": "met", "last_condition_hash": condition_hash},
-            condition_result,
-        ), "condition")
-        self.assertIsNone(watch_scheduler.notification_kind(
-            {"email_mode": "condition", "condition": condition,
-             "last_condition_status": "not_met", "last_condition_hash": condition_hash},
-            {"agreement_score": 61, "condition_status": "unknown"},
-        ))
 
     def test_mock_llm_scheduler_ticks_never_touch_the_shared_database(self):
         """execute_watch stays mockable for tests, but the scheduler ticks must
@@ -854,65 +825,79 @@ class SchedulerSafetyTests(unittest.TestCase):
     def test_mock_llm_watch_pipeline(self):
         with patch.dict(os.environ, {"MOCK_LLM": "1"}):
             result = watch_scheduler.execute_watch(
-                "When was the Eiffel Tower completed?", "An older consensus answer."
+                "When was the Eiffel Tower completed?",
+                {"consensus_md": "An older consensus answer."},
             )
         self.assertIn("Mock consensus", result["consensus"])
         self.assertIsInstance(result["agreement_score"], int)
         self.assertFalse(result["changed"])
+        self.assertEqual(result["cause"], "none")
         self.assertIsInstance(result["differences_data"], dict)
         self.assertGreaterEqual(len(result["included_models"]), 2)
 
     def test_watch_pipeline_tracks_previous_and_original_baseline_separately(self):
         comparisons = []
 
-        def compare(old, new, keys, engine, condition=""):
-            comparisons.append((old, new, condition))
+        def compare(old, new, keys, engine, condition="", **kwargs):
+            comparisons.append((old, new, condition, kwargs))
             return {
                 "changed": old == "Original baseline",
                 "severity": "major" if old == "Original baseline" else "minor",
+                "cause": "reassessment" if old == "Original baseline" else "none",
                 "change_summary": "Moved since tracking began." if old == "Original baseline" else "Stable now.",
             }
 
+        standing = {
+            "consensus_md": "Standing version",
+            "sources": [{"id": "S1", "url": "https://example.com/a", "title": "A"}],
+        }
         with patch.dict(os.environ, {"MOCK_LLM": "1"}), \
-                patch.object(watch_scheduler, "query_consensus_change", side_effect=compare):
+                patch.object(consensus_engine, "query_consensus_change", side_effect=compare):
             result = watch_scheduler.execute_watch(
                 "When was the Eiffel Tower completed?",
-                "Previous version",
-                baseline_consensus="Original baseline",
+                standing,
+                baseline={"consensus_md": "Original baseline"},
             )
-        self.assertEqual([item[0] for item in comparisons], ["Previous version", "Original baseline"])
+        self.assertEqual([item[0] for item in comparisons], ["Standing version", "Original baseline"])
+        # The Judge sees the standing answer's sources, not just its text.
+        self.assertEqual(comparisons[0][3]["old_sources"], standing["sources"])
         self.assertFalse(result["changed"])
         self.assertTrue(result["baseline_changed"])
         self.assertEqual(result["baseline_summary"], "Moved since tracking began.")
 
     def test_query_first_pipeline_establishes_baseline_without_change_alert(self):
         with patch.dict(os.environ, {"MOCK_LLM": "1"}), \
-                patch.object(watch_scheduler, "query_consensus_change") as compare:
+                patch.object(consensus_engine, "query_consensus_change") as compare:
             result = watch_scheduler.execute_watch(
-                "Has the EU AI Act guidance changed?", "",
+                "Has the EU AI Act guidance changed?", None,
             )
         compare.assert_not_called()
         self.assertFalse(result["changed"])
+        self.assertEqual(result["cause"], "none")
         self.assertEqual(result["change_summary"], "First consensus established.")
 
     def test_query_first_condition_is_evaluated_against_first_consensus(self):
         condition_result = {
             "changed": False,
             "severity": "minor",
+            "cause": "none",
             "change_summary": "",
             "condition_status": "met",
             "condition_reason": "An official date is present.",
+            "condition_evidence": [],
         }
         with patch.dict(os.environ, {"MOCK_LLM": "1"}), \
                 patch.object(
-                    watch_scheduler, "query_consensus_change", return_value=condition_result,
+                    consensus_engine, "query_consensus_change", return_value=condition_result,
                 ) as compare:
             result = watch_scheduler.execute_watch(
-                "Has a date been announced?", "", condition="An official date is announced",
+                "Has a date been announced?", None, condition="An official date is announced",
             )
         self.assertEqual(compare.call_count, 1)
         self.assertEqual(compare.call_args.args[0], compare.call_args.args[1])
         self.assertEqual(result["condition_status"], "met")
+        # Met without a cited source: the goal still needs a confirming check.
+        self.assertFalse(result["condition_verified"])
 
     def test_complete_run_persists_full_version_and_simple_event_type(self):
         db = FakeDb()
@@ -931,7 +916,10 @@ class SchedulerSafetyTests(unittest.TestCase):
             "agreement_score": 68,
             "changed": True,
             "severity": "major",
+            "cause": "new_evidence",
+            "evidence_sources": [{"id": "S2", "title": "Launch post", "url": "https://example.com/launch"}],
             "change_summary": "The recommendation flipped.",
+            "held_summary": "The price is unchanged.",
             "differences_data": {"agreement": {"score": 68}},
             "included_models": ["OpenAI", "Google Gemini"],
             "consensus_model": "OpenAI",
@@ -944,8 +932,17 @@ class SchedulerSafetyTests(unittest.TestCase):
         self.assertEqual(history["consensus_md"], "The current consensus.")
         self.assertEqual(history["event_type"], "watch.changed")
         self.assertEqual(history["trigger"], "changed")
+        self.assertEqual(history["outcome"]["signal"], "moved")
         stored = db.stores[f"shares/{'A' * 16}/watch_history"]["run12345678"]
-        self.assertEqual(stored, history)
+        self.assertEqual(
+            stored,
+            {key: value for key, value in history.items() if key not in {"outcome", "run_id"}},
+        )
+        self.assertEqual(stored["cause"], "new_evidence")
+        self.assertEqual(stored["held_summary"], "The price is unchanged.")
+        watch = db.stores["watches"]["w1"]
+        self.assertEqual(watch["accepted_run_id"], "run12345678")
+        self.assertEqual(watch["history_points"][-1]["cause"], "new_evidence")
         self.assertEqual(
             db.stores["shares"]["A" * 16]["latest_watch_run_id"],
             "run12345678",
@@ -986,48 +983,109 @@ class SchedulerSafetyTests(unittest.TestCase):
         self.assertEqual(history["change_summary"], "A qualification was added.")
         self.assertTrue(history["changed"])
 
-    def test_a_score_bouncing_between_cap_steps_reports_one_event(self):
-        """The agreement score is quantised by the scoring caps, so a single
-        difference labelled major once moves it a whole step. Only leaving the
-        band of the recent checks counts."""
+    def _complete(self, db, watch_id, result, *, points=(), condition="", status="active"):
+        db.stores["watches"][watch_id] = {
+            "status": status, "current_run_id": f"run-{watch_id}",
+            "owner_uid": "u1", "history_points": list(points), "condition": condition,
+            "interval": "weekly",
+        }
+        with patch.object(watch_service.share_snapshots, "invalidate_share_cache"):
+            return watch_service.complete_watch_run(
+                watch_id,
+                {
+                    "share_id": "A" * 16, "owner_uid": "u1", "interval": "weekly",
+                    "current_run_id": f"run-{watch_id}", "condition": condition,
+                    "last_successful_run_id": "run-previous",
+                },
+                {
+                    "consensus": "The current consensus.", "agreement_score": 64,
+                    "differences_data": {}, "included_models": ["OpenAI"],
+                    "consensus_model": "OpenAI", **result,
+                },
+                now=datetime(2026, 7, 21, tzinfo=timezone.utc), db=db,
+            )
+
+    def test_a_held_answer_keeps_the_standing_version_and_its_schedule(self):
+        """The GPT-6 failure: the search did not surface the evidence again."""
         db = FakeDb()
         db.stores["shares"]["A" * 16] = share()
-        base_claim = {
-            "share_id": "A" * 16,
-            "interval": "weekly",
-            "history_points": [
-                {"agreement_score": 84}, {"agreement_score": 64}, {"agreement_score": 84},
-            ],
-            "last_agreement_score": 84,
-        }
-        result = {
-            "consensus": "The current consensus.",
-            "agreement_score": 64,
-            "changed": False,
-            "severity": "minor",
-            "change_summary": "",
-            "differences_data": {"agreement": {"score": 64}},
-            "included_models": ["OpenAI", "Google Gemini"],
-            "consensus_model": "OpenAI",
-        }
-        db.stores["watches"]["w1"] = {"status": "active", "current_run_id": "run1"}
-        with patch.object(watch_service.share_snapshots, "invalidate_share_cache"):
-            bounced = watch_service.complete_watch_run(
-                "w1", {**base_claim, "current_run_id": "run1"}, result,
-                now=datetime(2026, 7, 21, tzinfo=timezone.utc), db=db,
-            )
-        self.assertEqual(bounced["trigger"], "stable")
+        held = self._complete(db, "w1", {
+            "changed": True, "severity": "major", "cause": "evidence_missing",
+            "change_summary": "The release is no longer confirmed.",
+        })
+        self.assertEqual(held["trigger"], "stable")
+        self.assertEqual(held["outcome"]["signal"], "held")
+        watch = db.stores["watches"]["w1"]
+        self.assertNotIn("accepted_run_id", watch)
+        self.assertGreater(watch["next_run_at"], datetime(2026, 7, 22, tzinfo=timezone.utc))
 
-        db.stores["watches"]["w2"] = {"status": "active", "current_run_id": "run2"}
-        with patch.object(watch_service.share_snapshots, "invalidate_share_cache"):
-            left_band = watch_service.complete_watch_run(
-                "w2",
-                {**base_claim, "current_run_id": "run2",
-                 "history_points": [{"agreement_score": 84}] * 3},
-                result,
-                now=datetime(2026, 7, 21, tzinfo=timezone.utc), db=db,
-            )
-        self.assertEqual(left_band["trigger"], "changed")
+    def test_a_reassessment_is_rechecked_before_it_counts(self):
+        db = FakeDb()
+        db.stores["shares"]["A" * 16] = share()
+        pending = self._complete(db, "w1", {
+            "changed": True, "severity": "major", "cause": "reassessment",
+            "change_summary": "The models read the benchmark differently.",
+        })
+        self.assertEqual(pending["outcome"]["signal"], "confirming")
+        self.assertEqual(pending["event_type"], "watch.confirming")
+        watch = db.stores["watches"]["w1"]
+        self.assertEqual(
+            watch["next_run_at"],
+            datetime(2026, 7, 21, tzinfo=timezone.utc) + drift_signal.CONFIRMATION_DELAY,
+        )
+        confirmed = self._complete(db, "w2", {
+            "changed": True, "severity": "major", "cause": "reassessment",
+            "change_summary": "Still read differently.",
+        }, points=watch["history_points"])
+        self.assertEqual(confirmed["outcome"]["signal"], "moved")
+        self.assertEqual(confirmed["trigger"], "changed")
+
+    def test_a_score_drop_alone_is_no_longer_movement(self):
+        db = FakeDb()
+        db.stores["shares"]["A" * 16] = share()
+        points = [{"agreement_score": 84, "cause": "none"}] * 3
+        dropped = self._complete(db, "w1", {
+            "changed": False, "severity": "minor", "cause": "none", "agreement_score": 39,
+        }, points=points)
+        self.assertEqual(dropped["trigger"], "stable")
+
+    def test_a_goal_met_with_a_source_resolves_the_watch_and_frees_its_slot(self):
+        db = FakeDb()
+        db.stores["shares"]["A" * 16] = share()
+        db.stores["users/u1/watch_state"]["quota"] = {"active_count": 1}
+        goal = "GPT-6 is officially released"
+        resolved = self._complete(db, "w1", {
+            "changed": True, "severity": "major", "cause": "new_evidence",
+            "evidence_sources": [{"id": "S1", "title": "Launch", "url": "https://openai.com/gpt-6"}],
+            "condition_status": "met", "condition_verified": True,
+            "condition_reason": "OpenAI announced GPT-6.",
+            "condition_sources": [{"id": "S1", "title": "Launch", "url": "https://openai.com/gpt-6"}],
+        }, condition=goal)
+        self.assertTrue(resolved["outcome"]["resolved"])
+        watch = db.stores["watches"]["w1"]
+        self.assertEqual(watch["status"], "resolved")
+        self.assertIsNone(watch["next_run_at"])
+        self.assertEqual(watch["resolution"]["condition"], goal)
+        self.assertEqual(watch["resolution"]["sources"][0]["url"], "https://openai.com/gpt-6")
+        self.assertEqual(db.stores["users/u1/watch_state"]["quota"]["active_count"], 0)
+
+    def test_an_unsourced_goal_needs_a_second_met_check(self):
+        db = FakeDb()
+        db.stores["shares"]["A" * 16] = share()
+        goal = "A firm date is published"
+        first = self._complete(db, "w1", {
+            "changed": False, "severity": "minor", "cause": "none",
+            "condition_status": "met", "condition_verified": False,
+        }, condition=goal)
+        self.assertFalse(first["outcome"]["resolved"])
+        self.assertTrue(first["outcome"]["recheck"])
+        self.assertEqual(db.stores["watches"]["w1"]["status"], "active")
+        second = self._complete(db, "w2", {
+            "changed": False, "severity": "minor", "cause": "none",
+            "condition_status": "met", "condition_verified": False,
+        }, points=db.stores["watches"]["w1"]["history_points"], condition=goal)
+        self.assertTrue(second["outcome"]["resolved"])
+        self.assertEqual(db.stores["watches"]["w2"]["status"], "resolved")
 
     def test_first_query_watch_run_promotes_result_to_share_baseline(self):
         db = FakeDb()
@@ -1260,73 +1318,81 @@ class SchedulerSafetyTests(unittest.TestCase):
 
 
 class MailerTests(unittest.TestCase):
-    def test_change_mail_is_multipart_with_unsubscribe(self):
-        message = mailer.build_change_message(
-            recipient="owner@example.test", question="A question", old_score=50,
-            new_score=70, summary="A central conclusion changed.",
-            share_url="https://consens.io/s/q-id", unsubscribe_url="https://consens.io/watch/unsubscribe?token=x",
+    DELTA = {
+        "summary": "Two models flipped. The rest stayed put.",
+        "held": "The release window is unchanged.",
+        "cause": "new_evidence",
+        "sources": [{"title": "Launch post", "url": "https://openai.com/index/gpt-6"}],
+        "goal": "GPT-6 is officially released",
+        "goal_status": "not_met",
+        "goal_reason": "Only a preview was announced.",
+    }
+
+    def _change(self, question="A question", delta=None):
+        return mailer.build_change_message(
+            recipient="owner@example.test", question=question, delta=delta or self.DELTA,
+            share_url="https://consens.io/s/q-id",
+            unsubscribe_url="https://consens.io/watch/unsubscribe?token=x",
         )
+
+    def test_change_mail_is_multipart_with_unsubscribe(self):
+        message = self._change()
         self.assertTrue(message.is_multipart())
         self.assertIn("text/plain", [part.get_content_type() for part in message.walk()])
         self.assertIn("text/html", [part.get_content_type() for part in message.walk()])
         self.assertIn("unsubscribe?token=x", message.as_string())
+        self.assertTrue(message["Subject"].startswith("Moved: "))
 
-    def test_every_run_mail_contains_new_consensus(self):
-        message = mailer.build_run_message(
-            recipient="owner@example.test", question="A question", agreement_score=71,
-            consensus="## New answer\n\nThe updated consensus content.", changed=False,
-            severity="minor", summary="", share_url="https://consens.io/s/q-id",
-            unsubscribe_url="https://consens.io/watch/unsubscribe?token=x",
-        )
-        rendered = message.as_string()
-        self.assertIn("New consensus:", rendered)
-        self.assertIn("The updated consensus content.", rendered)
-        self.assertIn("71/100", rendered)
-
-    def test_condition_mail_explains_trigger(self):
-        message = mailer.build_condition_message(
-            recipient="owner@example.test", question="A question",
-            condition="An official date is announced", reason="The date is 15 September.",
-            agreement_score=82, consensus="The launch is scheduled.",
-            share_url="https://consens.io/s/q-id",
-            unsubscribe_url="https://consens.io/watch/unsubscribe?token=x",
-        )
-        rendered = message.as_string()
-        self.assertIn("Watch condition met", rendered)
-        self.assertIn("15 September", rendered)
-        self.assertIn("The launch is scheduled", rendered)
-
-    def test_change_mail_leads_with_the_change_not_with_prose(self):
-        """Die Aenderung ist die Nachricht: sie steht vor Zahlen und Frage,
-        die Zahlen stehen als Fakten daneben statt im Fliesstext."""
-        message = mailer.build_change_message(
-            recipient="owner@example.test", question="A question", old_score=54,
-            new_score=78, summary="Two models flipped. The rest stayed put.",
-            share_url="https://consens.io/s/q-id",
-            unsubscribe_url="https://consens.io/watch/unsubscribe?token=x",
-            severity="major", direction={"shift_label": "Turning", "shift_score": 58},
-        )
+    def test_change_mail_is_a_change_log_without_a_score(self):
+        """What changed, why (with the source), what held, the goal -- in that
+        order, and no agreement score: it is not a reason to write."""
+        message = self._change()
         plain = message.get_body(preferencelist=("plain",)).get_content()
         body = message.get_body(preferencelist=("html",)).get_content()
 
-        self.assertLess(plain.index("WHAT CHANGED"), plain.index("Agreement:"))
-        self.assertLess(plain.index("Agreement:"), plain.index("QUESTION"))
-        self.assertIn("Agreement: 54 -> 78 (+24 points)", plain)
-        self.assertIn("Model positions: Turning (58/100 movement)", plain)
-        # Erster Satz traegt die Nachricht und wird hervorgehoben.
+        order = ["WHAT CHANGED", "WHY", "WHAT HELD", "WAITING FOR", "QUESTION"]
+        positions = [plain.index(label) for label in order]
+        self.assertEqual(positions, sorted(positions))
+        self.assertIn("New evidence: a source the earlier answer did not have.", plain)
+        self.assertIn("https://openai.com/index/gpt-6", plain)
+        self.assertIn("Not yet. Only a preview was announced.", plain)
+        self.assertNotIn("Agreement", plain)
+        self.assertNotIn("/100", body)
+        self.assertIn("openai.com", body)
         self.assertIn("font-weight:600;line-height:1.45", body)
-        self.assertIn("Two models flipped.", body)
-        # Preheader: die Inbox-Vorschau zeigt die Aenderung, nicht den Footer.
         self.assertLess(body.index("Two models flipped."), body.index("What changed"))
 
-    def test_long_question_is_collapsed_and_links_to_the_page(self):
-        long_question = "Will " + ("this very specific policy question " * 12) + "change?"
-        message = mailer.build_change_message(
-            recipient="owner@example.test", question=long_question, old_score=54,
-            new_score=78, summary="A central conclusion changed.",
+    def test_every_run_mail_contains_the_answer(self):
+        message = mailer.build_run_message(
+            recipient="owner@example.test", question="A question", delta={"summary": ""},
+            moved=False, consensus="## New answer\n\nThe updated consensus content.",
             share_url="https://consens.io/s/q-id",
             unsubscribe_url="https://consens.io/watch/unsubscribe?token=x",
         )
+        rendered = message.as_string()
+        self.assertIn("New check:", rendered)
+        self.assertIn("The updated consensus content.", rendered)
+        self.assertIn("Nothing moved on evidence", rendered)
+
+    def test_condition_mail_says_the_watch_is_complete(self):
+        message = mailer.build_condition_message(
+            recipient="owner@example.test", question="A question",
+            goal="An official date is announced", reason="The date is 15 September.",
+            sources=[{"title": "Press release", "url": "https://example.com/press"}],
+            consensus="The launch is scheduled.",
+            share_url="https://consens.io/s/q-id",
+            unsubscribe_url="https://consens.io/watch/unsubscribe?token=x",
+        )
+        rendered = message.as_string()
+        self.assertTrue(message["Subject"].startswith("Resolved: "))
+        self.assertIn("15 September", rendered)
+        self.assertIn("https://example.com/press", rendered)
+        self.assertIn("The launch is scheduled", rendered)
+        self.assertIn("The watch is complete", rendered)
+
+    def test_long_question_is_collapsed_and_links_to_the_page(self):
+        long_question = "Will " + ("this very specific policy question " * 12) + "change?"
+        message = self._change(question=long_question)
         plain = message.get_body(preferencelist=("plain",)).get_content()
         body = message.get_body(preferencelist=("html",)).get_content()
 
@@ -1336,21 +1402,16 @@ class MailerTests(unittest.TestCase):
         self.assertIn("...", plain)
 
     def test_short_question_stays_whole_and_without_a_link(self):
-        message = mailer.build_change_message(
-            recipient="owner@example.test", question="Will the guidance change?",
-            old_score=54, new_score=78, summary="A central conclusion changed.",
-            share_url="https://consens.io/s/q-id",
-            unsubscribe_url="https://consens.io/watch/unsubscribe?token=x",
-        )
+        message = self._change(question="Will the guidance change?")
         body = message.get_body(preferencelist=("html",)).get_content()
         self.assertIn("Will the guidance change?", body)
         self.assertNotIn("Read the full question", body)
 
     def test_brief_puts_changed_watches_first(self):
         quiet = {"question": "Quiet watch", "share_path": "/s/a", "status": "active",
-                 "score": 61, "previous_score": 61, "interval": "weekly", "new_points": []}
+                 "goal": "", "interval": "weekly", "new_points": []}
         moved = {"question": "Moved watch", "share_path": "/s/b", "status": "active",
-                 "score": 78, "previous_score": 54, "interval": "daily",
+                 "goal": "A date is announced", "interval": "daily",
                  "new_points": [{"notable": True, "change_summary": "A date was announced."}]}
         message = mailer.build_brief_message(
             recipient="owner@example.test", date_label="Monday, 13 July 2026",
@@ -1360,6 +1421,7 @@ class MailerTests(unittest.TestCase):
         plain = message.get_body(preferencelist=("plain",)).get_content()
         self.assertLess(plain.index("Moved watch"), plain.index("Quiet watch"))
         self.assertIn("CHANGED: A date was announced.", plain)
+        self.assertIn("Waiting for: A date is announced", plain)
         # Die URLs muessen im Text-Teil klickbar bleiben: keine Base64-Wand.
         self.assertIn("https://consens.io/s/b", plain)
 
@@ -1649,6 +1711,7 @@ class SchedulerLoopTests(unittest.IsolatedAsyncioTestCase):
             patch.object(watch_service, "acquire_worker_lease", return_value="owner-token"),
             patch.object(watch_service, "release_worker_lease", return_value=True),
             patch.object(watch_service, "list_due_watch_ids", return_value=["w1"]),
+            patch.object(watch_scheduler.watch_probe, "list_due_probe_ids", return_value=[]),
             patch.object(watch_service, "claim_watch", return_value=(claimed, "claimed")),
             patch.object(watch_scheduler.security, "get_user_tier", return_value="free"),
             patch.object(watch_scheduler.share_snapshots, "get_share", return_value=share_data),
@@ -1752,7 +1815,7 @@ class SchedulerLoopTests(unittest.IsolatedAsyncioTestCase):
         captured = {}
 
         def complete(wid, c, r, **kwargs):
-            captured["items"] = kwargs["notifications"](dict(c))
+            captured["items"] = kwargs["notifications"](dict(c), {"signal": "moved", "resolved": False})
             return {}
 
         with contextlib.ExitStack() as stack:
@@ -1783,6 +1846,7 @@ class SchedulerLoopTests(unittest.IsolatedAsyncioTestCase):
             patch.object(watch_service, "acquire_worker_lease", return_value=True),
             patch.object(watch_service, "release_worker_lease"),
             patch.object(watch_service, "list_due_watch_ids", return_value=["w1"]),
+            patch.object(watch_scheduler.watch_probe, "list_due_probe_ids", return_value=[]),
             patch.object(watch_service, "claim_watch", return_value=(dict(claimed), "claimed")),
             patch.object(watch_scheduler.security, "get_user_tier", side_effect=["free", "pro"]),
             patch.object(watch_scheduler.share_snapshots, "get_share", return_value=share_data),
@@ -1814,6 +1878,7 @@ class SchedulerLoopTests(unittest.IsolatedAsyncioTestCase):
             patch.object(watch_service, "acquire_worker_lease", return_value=True),
             patch.object(watch_service, "release_worker_lease"),
             patch.object(watch_service, "list_due_watch_ids", return_value=["w1"]),
+            patch.object(watch_scheduler.watch_probe, "list_due_probe_ids", return_value=[]),
             patch.object(watch_service, "claim_watch", return_value=(claimed, "claimed")),
             patch.object(watch_scheduler.security, "get_user_tier", return_value="pro"),
             patch.object(watch_scheduler.share_snapshots, "get_share", return_value=share_data),
@@ -1921,17 +1986,21 @@ class TelegramWatchTests(unittest.TestCase):
         """Telegram bekommt dieselbe Reihenfolge wie die Mail; die lange Frage
         steht unten in einem aufklappbaren Zitat statt vor der Nachricht."""
         long_question = "Will " + ("this very specific policy question " * 12) + "change?"
-        watch = {"question": long_question, "last_agreement_score": 54}
-        result = {
-            "agreement_score": 78,
-            "change_summary": "Two models flipped.",
-            "opinion_map": {"shift_label": "Turning", "shift_score": 58},
-        }
+        watch = {"question": long_question}
+        result = {"delta": {
+            "summary": "Two models flipped.",
+            "cause": "new_evidence",
+            "sources": [{"title": "Launch post", "url": "https://openai.com/gpt-6"}],
+            "held": "Pricing is unchanged.",
+            "goal": "GPT-6 is officially released",
+        }}
         text = telegram_watch._notification_text("change", watch, result)
 
-        self.assertLess(text.index("What changed"), text.index("Agreement 54 → 78 (+24)"))
-        self.assertLess(text.index("Agreement 54 → 78 (+24)"), text.index("<b>Question</b>"))
-        self.assertIn("Positions Turning (58/100)", text)
+        order = ["What changed", "<b>Why</b>", "What held", "Waiting for", "<b>Question</b>"]
+        positions = [text.index(label) for label in order]
+        self.assertEqual(positions, sorted(positions))
+        self.assertIn('href="https://openai.com/gpt-6"', text)
+        self.assertNotIn("Agreement", text)
         self.assertIn("<blockquote expandable>", text)
 
         short = telegram_watch._notification_text(
@@ -1942,6 +2011,16 @@ class TelegramWatchTests(unittest.TestCase):
         self.assertIn("Will it change?", telegram_watch._strip_markup(short))
         self.assertNotIn("<b>", telegram_watch._strip_markup(short))
 
+    def test_resolved_text_names_the_goal(self):
+        text = telegram_watch._notification_text(
+            "condition",
+            {"question": "Q?", "condition": "A date is set"},
+            {"condition_reason": "The date is 15 September."},
+        )
+        self.assertIn("Resolved", text)
+        self.assertIn("A date is set", text)
+        self.assertIn("15 September", text)
+
     def test_html_rejection_falls_back_to_plain_text(self):
         self.db.stores[telegram_watch.CONNECTIONS_COLLECTION]["u1"] = {
             "uid": "u1", "chat_id": "123", "telegram_user_id": "123", "enabled": True,
@@ -1949,9 +2028,9 @@ class TelegramWatchTests(unittest.TestCase):
         watch = {
             "owner_uid": "u1", "share_id": "A" * 16, "share_slug": "question",
             "visibility": "public", "question": "Will this change?",
-            "last_agreement_score": 60, "telegram_enabled": True,
+            "telegram_enabled": True,
         }
-        result = {"agreement_score": 40, "change_summary": "The conclusion flipped."}
+        result = {"delta": {"summary": "The conclusion flipped."}}
         with patch.object(
             telegram_watch.telegram_notifier, "send_bot_message",
             side_effect=[{"status": "failed_http", "http_status": 400}, {"status": "sent"}],
@@ -2409,7 +2488,8 @@ class BriefCollectTests(unittest.TestCase):
         self.assertEqual(changes, 2)
         self.assertEqual(len(items), 1)
         self.assertEqual(len(items[0]["new_points"]), 3)
-        self.assertEqual(items[0]["previous_score"], 80)
+        self.assertEqual(items[0]["goal"], "")
+        self.assertIsNone(items[0]["resolution"])
 
 
 class BriefMailTests(unittest.TestCase):
@@ -2417,7 +2497,7 @@ class BriefMailTests(unittest.TestCase):
         return [{
             "question": "Will the launch happen in 2026?", "share_path": "/s/launch-a",
             "status": "active", "interval": "daily", "run_time": "09:00",
-            "timezone": "Europe/Berlin", "score": 78, "previous_score": 60,
+            "timezone": "Europe/Berlin", "goal": "A launch date is announced",
             "new_points": [{"notable": True, "change_summary": "A date was announced."}],
             "next_run_at": "2026-07-14T07:00:00+00:00", "last_run_at": "",
         }]
@@ -2433,7 +2513,8 @@ class BriefMailTests(unittest.TestCase):
         self.assertIn("Morning brief: 1 change across 1 watch", message["Subject"])
         self.assertIn("Will the launch happen in 2026?", rendered)
         self.assertIn("A date was announced.", rendered)
-        self.assertIn("78/100 agreement", rendered)
+        self.assertIn("Waiting for: A launch date is announced", rendered)
+        self.assertNotIn("/100", rendered)
         self.assertIn("brief/unsubscribe", rendered)
 
     def test_brief_mail_without_changes_uses_calm_subject(self):
@@ -2572,8 +2653,34 @@ class WatchRouteTests(unittest.TestCase):
             "active_limit": 1,
             "remaining": 0,
             "paused_count": 1,
+            "resolved_count": 0,
             "daily_available": False,
         })
+
+    def test_goal_suggestions_are_offered_and_never_block_the_dialog(self):
+        auth = (
+            patch.object(watch_router, "extract_id_token", return_value="tok"),
+            patch.object(watch_router, "verify_user_token", return_value="u1"),
+            patch.object(watch_router, "get_user_tier", return_value="free"),
+        )
+        with auth[0], auth[1], auth[2], patch.dict(os.environ, {"MOCK_LLM": "1"}):
+            response = self.client.post(
+                "/api/watch/goal-suggestions", json={"question": "When will GPT-6 ship?"},
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["goals"], [
+            "It is officially announced", "A firm date is published",
+        ])
+        with auth[0], auth[1], auth[2], patch.object(
+            watch_router.watch_scheduler, "suggest_goals", side_effect=RuntimeError("down"),
+        ):
+            failed = self.client.post(
+                "/api/watch/goal-suggestions", json={"question": "When will GPT-6 ship?"},
+            )
+        self.assertEqual(failed.json()["goals"], [])
+        with auth[0], auth[1], auth[2]:
+            short = self.client.post("/api/watch/goal-suggestions", json={"question": "GPT"})
+        self.assertEqual(short.status_code, 400)
 
     def test_telegram_must_be_connected_before_enabling_watch_channel(self):
         with (
@@ -2811,17 +2918,25 @@ class FollowerTests(unittest.TestCase):
             side_effect=lambda sid: original_list_followers(sid, db=self.db),
         )
         now = datetime(2026, 7, 18, tzinfo=timezone.utc)
-        material = {"agreement_score": 30, "changed": True, "severity": "major", "change_summary": "Flip."}
+        material = {
+            "agreement_score": 30, "changed": True, "severity": "major",
+            "cause": "new_evidence", "change_summary": "Flip.",
+        }
+        moved = {"signal": "moved", "resolved": False}
         with list_patch:
             ids = asyncio.run(watch_scheduler._follower_ids(watch, material, True))
             self.assertEqual(len(ids), 1)
             items = watch_scheduler.run_notification_builder(
                 "w1", material, ids, now=now, mail_ready=True,
-            )(watch)
+            )(watch, moved)
             followers = [item for item in items if item["data"]["kind"] == "watch_follower"]
             self.assertEqual(len(followers), 1)
             # Kleine Bewegung ohne materiellen Change: kein Follower-Auftrag.
-            small = {"agreement_score": 62, "changed": False, "severity": "minor"}
+            small = {"agreement_score": 62, "changed": False, "severity": "minor", "cause": "none"}
+            self.assertEqual(asyncio.run(watch_scheduler._follower_ids(watch, small, True)), [])
+            # Eine Antwort, deren Quellen nur nicht wiedergefunden wurden, auch nicht.
+            held = {**material, "cause": "evidence_missing"}
+            self.assertEqual(asyncio.run(watch_scheduler._follower_ids(watch, held, True)), [])
             self.assertEqual(asyncio.run(watch_scheduler._follower_ids(watch, small, True)), [])
             # Private Seiten benachrichtigen nie Follower.
             self.assertEqual(asyncio.run(watch_scheduler._follower_ids(
@@ -2830,7 +2945,7 @@ class FollowerTests(unittest.TestCase):
             self.assertEqual(
                 [item for item in watch_scheduler.run_notification_builder(
                     "w1", material, ids, now=now, mail_ready=True,
-                )(dict(watch, visibility="private"))
+                )(dict(watch, visibility="private"), moved)
                  if item["data"]["kind"] == "watch_follower"],
                 [],
             )

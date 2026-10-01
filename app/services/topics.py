@@ -18,7 +18,7 @@ from urllib.parse import parse_qs, urlsplit
 import app.core.config as cfg
 from google.cloud.firestore_v1.base_query import FieldFilter
 from app.core.security import db_firestore
-from app.services import follow_challenges
+from app.services import drift_signal, follow_challenges
 from app.services.watch_service import WatchError, parse_token_payload, sign_token_payload
 
 
@@ -719,6 +719,23 @@ def _normalize_score(value) -> int | None:
     return score
 
 
+def normalize_evidence_sources(value) -> list[dict]:
+    """The sources that carry a change, as verified by ``evidence_change``."""
+    items = []
+    for item in value or []:
+        if not isinstance(item, dict):
+            continue
+        url = str(item.get("url") or "")
+        if not url.startswith(("http://", "https://")):
+            continue
+        items.append({
+            "id": str(item.get("id") or "")[:10],
+            "title": str(item.get("title") or "")[:240],
+            "url": url[:2000],
+        })
+    return items[:4]
+
+
 def create_run(
     topic_id: str,
     data: dict,
@@ -729,11 +746,16 @@ def create_run(
     run_id: str = "",
     expected_claim_id: str = "",
     notifications=None,
+    outcome: dict | None = None,
 ) -> dict:
-    """Create one immutable snapshot and advance only the topic's latest pointer.
+    """Create one immutable snapshot and advance the topic's pointers.
 
-    ``notifications`` optionally maps ``(topic_before, run_id, run)`` to
-    durable outbox items that commit in the same transaction as the run.
+    ``outcome`` is the drift verdict of an automatic run (``signal``,
+    ``accepted``, ``recheck``; docs/watch-evidence-model.md). A manual import
+    carries no cause, so it is read with the legacy rule: its answer stands
+    and a "major" grade is movement. ``notifications`` optionally maps
+    ``(topic_before, run_id, run, outcome)`` to durable outbox items that
+    commit in the same transaction as the run.
     """
     db = db if db is not None else db_firestore
     now = now or utcnow()
@@ -786,6 +808,16 @@ def create_run(
     excluded_evidence = normalize_evidence(data.get("excluded_evidence") or [])
     if any(item["type"] in source_rules["allowed_types"] for item in excluded_evidence):
         raise TopicError("bad_request", "Excluded evidence must be disallowed by the Topic source rules.")
+    if outcome is None:
+        outcome = {
+            "signal": (
+                drift_signal.SIGNAL_MOVED if change_type == "major"
+                else drift_signal.SIGNAL_RESTATED if change_type == "minor"
+                else drift_signal.SIGNAL_STABLE
+            ),
+            "accepted": True,
+            "recheck": False,
+        }
     run_base = {
         "topic_id": topic_id,
         "observed_at": observed_at.astimezone(timezone.utc),
@@ -796,6 +828,9 @@ def create_run(
         "agreement_score": _normalize_score(data.get("agreement_score")),
         "change_type": change_type,
         "change_summary": change_summary,
+        "cause": drift_signal.normalize_cause(data.get("cause")),
+        "held_summary": _clean(data.get("held_summary"), limit=240, label="Held summary"),
+        "evidence_sources": normalize_evidence_sources(data.get("evidence_sources")),
         # Optional editorial one-liner. When empty -- which it is for every run
         # published so far -- the page derives the finding from the claim
         # record instead, so this field never has to be backfilled.
@@ -838,7 +873,7 @@ def create_run(
         if existing_snapshot.exists:
             existing = existing_snapshot.to_dict() or {}
             if str(current.get("latest_run_id") or "") == run_id:
-                return {"id": run_id, **existing}
+                return {"id": run_id, **existing, "outcome": outcome}
             raise TopicError("conflict", "Topic run ID is already in use.")
 
         try:
@@ -847,17 +882,31 @@ def create_run(
             version = 1
         run = {**run_base, "version": version}
         transaction.set(run_ref, run)
-        transaction.set(topic_ref, {
+        pointers = {
             "latest_run_id": run_id,
             "latest_run_at": run["observed_at"],
             "latest_agreement_score": run["agreement_score"],
             "latest_change_type": change_type,
             "latest_change_summary": run["change_summary"],
+            "latest_signal": outcome["signal"],
+        }
+        if outcome.get("accepted"):
+            pointers.update({
+                "accepted_run_id": run_id,
+                "accepted_run_at": run["observed_at"],
+                "accepted_agreement_score": run["agreement_score"],
+                "accepted_change_summary": run["change_summary"],
+            })
+        if current.get("status") != "active":
+            scheduled = None
+        elif outcome.get("recheck"):
+            scheduled = now + drift_signal.CONFIRMATION_DELAY
+        else:
+            scheduled = next_run_at(current.get("update_interval") or "manual", now=now)
+        transaction.set(topic_ref, {
+            **pointers,
             "run_count": version,
-            "next_run_at": (
-                next_run_at(current.get("update_interval") or "manual", now=now)
-                if current.get("status") == "active" else None
-            ),
+            "next_run_at": scheduled,
             "claimed_until": None,
             "current_run_id": "",
             "last_run_status": "success",
@@ -870,9 +919,9 @@ def create_run(
             from app.services import notification_outbox
 
             topic_before = {**current, "id": topic_id}
-            for item in notifications(topic_before, run_id, run) or []:
+            for item in notifications(topic_before, run_id, run, outcome) or []:
                 notification_outbox.stage(transaction, db, item)
-        return {"id": run_id, **run}
+        return {"id": run_id, **run, "outcome": outcome}
 
     return _run_transaction(db, publish)
 
@@ -1128,6 +1177,10 @@ def topic_public_view(topic: dict) -> dict:
         "seo": dict(topic.get("seo") or {}),
         "latest_run_id": str(topic.get("latest_run_id") or ""),
         "latest_run_at": _public_datetime(topic.get("latest_run_at")),
+        # The run whose answer stands; Topics before the evidence model have
+        # none, and there the newest run stands.
+        "accepted_run_id": str(topic.get("accepted_run_id") or topic.get("latest_run_id") or ""),
+        "latest_signal": str(topic.get("latest_signal") or ""),
         # The page promises a next check, so it has to know when that is.
         "next_run_at": _public_datetime(topic.get("next_run_at")),
         "latest_agreement_score": topic.get("latest_agreement_score"),
@@ -1148,6 +1201,12 @@ def run_public_view(run: dict) -> dict:
         "agreement_score": run.get("agreement_score"),
         "change_type": str(run.get("change_type") or "stable"),
         "change_summary": str(run.get("change_summary") or ""),
+        "cause": str(run.get("cause") or ""),
+        "held_summary": str(run.get("held_summary") or ""),
+        "evidence_sources": normalize_evidence_sources(run.get("evidence_sources")),
+        # Present when the caller read the run as part of its record.
+        "signal": str(run.get("signal") or ""),
+        "accepted": run.get("accepted", True) is not False,
         "headline": str(run.get("headline") or ""),
         "opinion_changes": list(run.get("opinion_changes") or []),
         "evidence": list(run.get("evidence") or []),

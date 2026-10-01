@@ -11,7 +11,9 @@ from app.core.rate_limit import limiter
 from app.core.entitlements import entitlements_for
 from app.core.security import extract_id_token, get_user_tier, verify_user_token
 from app.core.site import SITE_URL
-from app.services import mailer, telegram_watch, watch_brief, watch_followers, watch_service
+from app.services import (
+    mailer, telegram_watch, watch_brief, watch_followers, watch_scheduler, watch_service,
+)
 
 
 router = APIRouter()
@@ -21,6 +23,7 @@ _STATUS_BY_CODE = {
     "expired_token": 410, "invalid_email": 400, "not_watched": 404,
     "telegram_not_configured": 503, "telegram_not_linked": 409,
     "telegram_already_linked": 409, "telegram_delivery_failed": 502,
+    "goal_reached": 409,
 }
 
 
@@ -71,6 +74,23 @@ def create_watch(request: Request, data: dict = Body(...)):
     return {"status": "success", "watch": watch}
 
 
+@router.post("/api/watch/goal-suggestions")
+@limiter.limit("6/minute")
+def goal_suggestions(request: Request, data: dict = Body(...)):
+    """Concrete goals for "What are you waiting for?" in the create flow."""
+    uid = _uid(request, data)
+    question = " ".join(str(data.get("question") or "").split())
+    if len(question) < watch_service.WATCH_QUESTION_MIN_CHARS:
+        raise HTTPException(status_code=400, detail="Enter a complete question first.")
+    try:
+        goals = watch_scheduler.suggest_goals(question[:1_000], get_user_tier(uid))
+    except Exception as exc:
+        # Suggestions are a convenience: the field stays usable without them.
+        logging.warning("goal_suggestions failed category=%s", safe_exception(exc))
+        goals = []
+    return {"status": "success", "goals": goals}
+
+
 @router.get("/api/my/watches")
 @limiter.limit("20/minute")
 def my_watches(request: Request):
@@ -79,6 +99,9 @@ def my_watches(request: Request):
         watches = watch_service.list_watches(uid, include_history=True)
         tier = get_user_tier(uid)
         active_count = sum(1 for watch in watches if watch.get("status") == "active")
+        resolved_count = sum(
+            1 for watch in watches if watch.get("status") == watch_service.WATCH_STATUS_RESOLVED
+        )
         active_limit = cfg.get_watch_active_limit(tier)
         return {
             "status": "success",
@@ -91,7 +114,8 @@ def my_watches(request: Request):
                 "active_count": active_count,
                 "active_limit": active_limit,
                 "remaining": max(0, active_limit - active_count),
-                "paused_count": len(watches) - active_count,
+                "paused_count": len(watches) - active_count - resolved_count,
+                "resolved_count": resolved_count,
                 "daily_available": cfg.is_watch_daily_allowed(tier),
             },
         }

@@ -13,14 +13,12 @@ from app.core.entitlements import TIER_FREE
 from app.core.observability import correlation_scope, record_metric, safe_exception
 from app.services.consensus_pipeline import run_consensus_pipeline
 from app.services import (
-    drift_signal, mailer, notification_delivery, notification_outbox, opinion_map,
-    share_snapshots, watch_brief, watch_followers, watch_service,
+    drift_signal, evidence_change, mailer, notification_delivery, notification_outbox, opinion_map,
+    share_snapshots, watch_brief, watch_followers, watch_probe, watch_service,
 )
 from app.services.llm import provider_transport
 from app.services.llm.consensus_engine import (
-    query_consensus,
-    query_consensus_change,
-    query_differences,
+    query_consensus, query_differences, suggest_watch_goals,
 )
 from app.services.llm.mock_llm import mock_llm_enabled
 
@@ -90,11 +88,16 @@ def _configured_consensus_engine(keys: dict, tier) -> str | None:
     return chosen
 
 
-def execute_watch(question: str, previous_consensus: str, condition: str = "",
-                  previous_opinion_map=None, tier=TIER_FREE,
-                  baseline_consensus: str = "",
+def execute_watch(question: str, standing=None, condition: str = "",
+                  previous_opinion_map=None, tier=TIER_FREE, baseline=None,
                   model_overrides=None) -> dict:
-    """Run the configured tier models; never touches usage counters."""
+    """Run the configured tier models; never touches usage counters.
+
+    ``standing`` is the version whose answer currently stands (consensus_md,
+    sources, included_models) and ``baseline`` the original page. Both are
+    compared with sources, so a fact the new search merely missed is not
+    reported as retracted (docs/watch-evidence-model.md).
+    """
     keys = _developer_keys()
     selected_models = _selected_models(
         keys, tier, model_overrides=model_overrides
@@ -137,35 +140,39 @@ def execute_watch(question: str, previous_consensus: str, condition: str = "",
     differences = pipeline["differences_data"]
     agreement = pipeline["agreement"]
     model_answers = pipeline["model_answers"]
-    model_sources = {
+    sources = share_snapshots.sanitize_sources({
         item["provider"]: item.get("sources") or []
         for item in model_answers if item.get("sources")
-    }
-    if str(previous_consensus or "").strip():
-        change = query_consensus_change(
-            previous_consensus, consensus, keys, engine, condition=condition,
+    })
+    included_models = share_snapshots.build_included_models(
+        [item["provider"] for item in model_answers],
+        {item["provider"]: item["model"] for item in model_answers},
+    )
+    standing = standing or {}
+    standing_text = str(standing.get("consensus_md") or "")
+    if standing_text.strip():
+        change = evidence_change.assess(
+            standing_text, consensus, keys, engine, condition=condition,
+            previous_sources=standing.get("sources") or [], new_sources=sources,
+            previous_models=standing.get("included_models") or [],
+            new_models=included_models,
         )
     else:
         # A query-first Watch intentionally has no manual Consensus baseline.
         # Its first scheduled result establishes that baseline and must not be
         # reported as a material change merely because the old text was empty.
-        change = {
-            "changed": False,
-            "severity": "minor",
-            "change_summary": "First consensus established.",
-        }
-        if condition:
-            condition_result = query_consensus_change(
-                consensus, consensus, keys, engine, condition=condition,
-            )
-            change.update({
-                key: condition_result[key]
-                for key in ("condition_status", "condition_reason")
-                if key in condition_result
-            })
-    baseline = str(baseline_consensus or previous_consensus or "")
-    if baseline.strip() and baseline.strip() != str(previous_consensus or "").strip():
-        baseline_change = query_consensus_change(baseline, consensus, keys, engine)
+        change = evidence_change.first_check(
+            consensus, keys, engine, condition=condition, new_sources=sources,
+        )
+    baseline = baseline or {}
+    baseline_text = str(baseline.get("consensus_md") or "")
+    if baseline_text.strip() and baseline_text.strip() != standing_text.strip():
+        baseline_change = evidence_change.assess(
+            baseline_text, consensus, keys, engine,
+            previous_sources=baseline.get("sources") or [], new_sources=sources,
+            previous_models=baseline.get("included_models") or [],
+            new_models=included_models,
+        )
     else:
         baseline_change = change
     position_map = opinion_map.build_opinion_map(
@@ -173,10 +180,6 @@ def execute_watch(question: str, previous_consensus: str, condition: str = "",
         previous_opinion_map,
         consensus_changed=bool(change.get("changed")),
     )
-    included_providers = [item["provider"] for item in model_answers]
-    model_labels = {
-        item["provider"]: item["model"] for item in model_answers
-    }
     return {
         "consensus": consensus,
         "agreement_score": agreement["score"],
@@ -184,10 +187,8 @@ def execute_watch(question: str, previous_consensus: str, condition: str = "",
         "opinion_map": position_map,
         "differences_data": differences,
         "differences_text": pipeline["differences"],
-        "sources": share_snapshots.sanitize_sources(model_sources),
-        "included_models": share_snapshots.build_included_models(
-            included_providers, model_labels,
-        ),
+        "sources": sources,
+        "included_models": included_models,
         "consensus_model": engine,
         "baseline_changed": bool(baseline_change.get("changed")),
         "baseline_severity": baseline_change.get("severity") or "minor",
@@ -196,73 +197,53 @@ def execute_watch(question: str, previous_consensus: str, condition: str = "",
     }
 
 
-def should_notify(old_score, new_score, changed: bool, severity: str,
-                  previous_scores=None) -> bool:
-    """The mail bar, and since the drift rule was unified, the page bar too.
+def suggest_goals(question: str, tier=TIER_FREE) -> list[str]:
+    """Goals for the create flow ("What are you waiting for?"); one Judge call."""
+    keys = _developer_keys()
+    engine = _configured_consensus_engine(keys, tier) or "OpenAI"
+    if mock_llm_enabled():
+        provider = cfg.get_consensus_model_config(engine).provider
+        keys[PROVIDER_LABELS[provider]] = "mock"
+    return suggest_watch_goals(question, keys, engine)
 
-    ``previous_scores`` is the band of the recent checks; without it the
-    predecessor alone forms the band, which is what a two-point history means
-    anyway.
+
+def notification_kind(watch: dict, outcome: dict) -> str | None:
+    """Which owner alert one check earns, given its committed ``outcome``.
+
+    A resolved goal always reports. Otherwise ``changes_only`` reports what
+    moved on evidence, ``every_run`` every check and ``condition`` nothing
+    but the resolution.
     """
-    if previous_scores is None:
-        previous_scores = [old_score] if isinstance(old_score, (int, float)) else []
-    return drift_signal.is_material(changed, severity, new_score, previous_scores)
-
-
-def _recent_scores(watch: dict) -> list:
-    points = watch.get("history_points")
-    return drift_signal.recent_scores(points if isinstance(points, list) else [])
-
-
-def notification_kind(watch: dict, result: dict) -> str | None:
+    if outcome.get("resolved"):
+        return "condition"
     email_mode = watch.get("email_mode") or "changes_only"
     if email_mode == "every_run":
         return "every_run"
-    if email_mode == "condition":
-        current_hash = watch_service.condition_hash(watch.get("condition") or "")
-        previous_is_same_condition = watch.get("last_condition_hash") == current_hash
-        if (result.get("condition_status") == "met"
-                and (watch.get("last_condition_status") != "met"
-                     or not previous_is_same_condition)):
-            return "condition"
-        return None
-    if should_notify(
-        watch.get("last_agreement_score"), result.get("agreement_score"),
-        bool(result.get("changed")), result.get("severity") or "minor",
-        _recent_scores(watch) or None,
-    ):
+    if email_mode == "changes_only" and outcome.get("signal") == drift_signal.SIGNAL_MOVED:
         return "change"
     return None
 
 
 def run_notification_builder(watch_id: str, result: dict, follower_ids, *,
-                             now, mail_ready: bool, evaluated_condition: str = ""):
+                             now, mail_ready: bool):
     """Outbox items for one successful run, evaluated against the CURRENT watch.
 
     ``complete_watch_run`` calls the builder inside its result transaction
-    with the claim merged with the current configuration, so alert rule,
-    channels and condition edited during the run are honoured (R16) and the
-    items commit atomically with the result (R17).
+    with the claim merged with the current configuration and the outcome the
+    drift rule assigned to this check, so alert rule, channels and goal edited
+    during the run are honoured (R16) and the items commit atomically with the
+    result (R17).
     """
-    evaluated_hash = watch_service.condition_hash(evaluated_condition or "")
 
-    def build(effective: dict) -> list:
+    def build(effective: dict, outcome: dict) -> list:
         items = []
-        alert = notification_kind(effective, result)
-        if alert == "condition" and (
-            watch_service.condition_hash(effective.get("condition") or "") != evaluated_hash
-        ):
-            # The run judged a condition the owner has replaced meanwhile.
-            alert = None
+        alert = notification_kind(effective, outcome)
         if alert:
             items.extend(notification_outbox.watch_alert_items(
                 watch_id, effective, result, alert, now=now, email=mail_ready,
+                moved=outcome.get("signal") == drift_signal.SIGNAL_MOVED,
             ))
-        if follower_ids and should_notify(
-            effective.get("last_agreement_score"), result.get("agreement_score"),
-            bool(result.get("changed")), result.get("severity") or "minor",
-            _recent_scores(effective) or None,
-        ):
+        if follower_ids and outcome.get("signal") == drift_signal.SIGNAL_MOVED:
             items.extend(notification_outbox.watch_follower_items(
                 watch_id, effective, result, follower_ids, now=now,
             ))
@@ -283,11 +264,8 @@ async def _follower_ids(claimed: dict, result: dict, mail_ready: bool) -> list:
     """Confirmed page followers, read only when a follower mail is possible."""
     if not mail_ready or str(claimed.get("visibility") or "public") == "private":
         return []
-    if not should_notify(
-        claimed.get("last_agreement_score"), result.get("agreement_score"),
-        bool(result.get("changed")), result.get("severity") or "minor",
-        _recent_scores(claimed) or None,
-    ):
+    predicted = watch_service.run_outcome(claimed, result)
+    if predicted["signal"] != drift_signal.SIGNAL_MOVED:
         return []
     followers = await asyncio.to_thread(watch_followers.list_followers, claimed["share_id"])
     return [follower["id"] for follower in followers if follower.get("id")]
@@ -350,6 +328,34 @@ async def _deliver_now(item_ids) -> None:
             "Consensus Watch notification delivery failed category=%s",
             safe_exception(exc),
         )
+
+
+async def _run_probes(worker_lost: asyncio.Event) -> int:
+    """Daily evidence probes; a probe that finds a new source wakes the tick."""
+    if cfg.get_watch_probe_max_per_day() <= 0:
+        return 0
+    try:
+        due = await asyncio.to_thread(watch_probe.list_due_probe_ids)
+    except Exception as exc:
+        logging.warning("Watch probe due-scan failed category=%s", safe_exception(exc))
+        return 0
+    pulled = 0
+    for watch_id in due:
+        if worker_lost.is_set():
+            break
+        try:
+            outcome = await asyncio.to_thread(watch_probe.run_probe, watch_id)
+        except Exception as exc:
+            logging.warning("Watch probe failed category=%s", safe_exception(exc))
+            continue
+        if outcome == "budget":
+            break
+        pulled += int(outcome == "pulled")
+    if pulled:
+        record_metric("scheduler", "watch-probe", processed=pulled)
+        # The pulled-forward checks run right after this tick, not in 30 min.
+        wake_watch_scheduler()
+    return pulled
 
 
 async def run_watch_tick() -> int:
@@ -427,40 +433,36 @@ async def run_watch_tick() -> int:
                     history[-1].get("opinion_map") if history
                     else opinion_map.build_opinion_map(share.get("differences_data") or {})
                 )
-                previous_version = None
-                previous_run_id = str(claimed.get("last_successful_run_id") or "")
+                standing_version = None
+                standing_run_id = watch_service.standing_run_id(claimed)
                 try:
-                    if previous_run_id:
-                        previous_version = await asyncio.to_thread(
+                    if standing_run_id:
+                        standing_version = await asyncio.to_thread(
                             share_snapshots.get_watch_version,
-                            claimed["share_id"], previous_run_id,
+                            claimed["share_id"], standing_run_id,
                         )
                 except Exception as exc:
                     logging.warning(
                         "Consensus Watch text baseline unavailable category=%s",
                         safe_exception(exc),
                     )
-                original_consensus = share.get("consensus_md") or ""
-                previous_consensus = (
-                    previous_version.get("consensus_md")
-                    if previous_version else original_consensus
-                )
+                original = {
+                    "consensus_md": share.get("consensus_md") or "",
+                    "sources": share.get("sources") or [],
+                    "included_models": share.get("included_models") or [],
+                }
                 result = await asyncio.to_thread(
-                    execute_watch, claimed["question"], previous_consensus,
-                    claimed.get("condition") if claimed.get("email_mode") == "condition" else "",
+                    execute_watch, claimed["question"], standing_version or original,
+                    claimed.get("condition") or "",
                     previous_position_map,
                     tier,
-                    baseline_consensus=original_consensus,
+                    baseline=original,
                 )
                 mail_ready = mailer.is_configured()
                 follower_ids = await _follower_ids(claimed, result, mail_ready)
                 completed_at = watch_service.utcnow()
                 staged = run_notification_builder(
                     watch_id, result, follower_ids, now=completed_at, mail_ready=mail_ready,
-                    evaluated_condition=(
-                        claimed.get("condition") or ""
-                        if claimed.get("email_mode") == "condition" else ""
-                    ),
                 )
                 # Result, schedule, condition state and the outbox items
                 # commit in one transaction; a crash after it loses nothing.
@@ -503,6 +505,8 @@ async def run_watch_tick() -> int:
                 lease_stop.set()
                 await lease_heartbeat
             await _deliver_now(staged_ids)
+        if not worker_lost.is_set():
+            await _run_probes(worker_lost)
     finally:
         worker_stop.set()
         await worker_heartbeat

@@ -28,7 +28,9 @@ def test_product_runs_keep_consensus_and_differences_without_source_work(monkeyp
     # Even an accidentally inherited owner context must not opt a product in.
     with jobs.source_check_context('owner', product + ':run', origin=product):
         if product == 'watch':
-            result = watch_scheduler.execute_watch('Question?', 'Previous answer', model_overrides=models)
+            result = watch_scheduler.execute_watch(
+                'Question?', {'consensus_md': 'Previous answer'}, model_overrides=models,
+            )
         elif product == 'topic':
             result = topic_pipeline.execute_topic('Question?', 'Previous answer', model_overrides=models)
         else:

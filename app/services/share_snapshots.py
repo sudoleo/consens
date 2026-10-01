@@ -1902,6 +1902,26 @@ def _owner_share_row(share_id, data):
     }
 
 
+def _evidence_fields(data):
+    """The evidence-model fields of one check (docs/watch-evidence-model.md)."""
+    sources = []
+    for item in data.get("evidence_sources") or []:
+        if isinstance(item, dict) and str(item.get("url") or "").startswith(("http://", "https://")):
+            sources.append({
+                "id": _clip(item.get("id"), 10),
+                "title": _clip(item.get("title"), 300),
+                "url": _clip(item.get("url"), 2000),
+            })
+    return {
+        "cause": _clip(data.get("cause"), 20),
+        "held_summary": _clip(data.get("held_summary"), 240),
+        "evidence_sources": sources[:4],
+        "condition_status": _clip(data.get("condition_status"), 10),
+        "condition_verified": bool(data.get("condition_verified")),
+        "condition_hash": _clip(data.get("condition_hash"), 64),
+    }
+
+
 def list_watch_history(share_id, db=None, max_items=100):
     """Whitelist compact public history; never expose rerun consensus or raw answers.
 
@@ -1928,6 +1948,7 @@ def list_watch_history(share_id, db=None, max_items=100):
             "changed": bool(data.get("changed")),
             "severity": _clip(data.get("severity"), 10),
             "change_summary": _clip(data.get("change_summary"), 400),
+            **_evidence_fields(data),
             "event_type": _clip(data.get("event_type"), 40),
             "baseline_changed": bool(data.get("baseline_changed")),
             "baseline_severity": _clip(data.get("baseline_severity"), 10),
@@ -1973,6 +1994,7 @@ def _watch_version_payload(run_id, data):
         "changed": bool(data.get("changed")),
         "severity": _clip(data.get("severity"), 10),
         "change_summary": _clip(data.get("change_summary"), 400),
+        **_evidence_fields(data),
         "trigger": "changed" if data.get("trigger") == "changed" else "stable",
         "event_type": _clip(data.get("event_type"), 40),
         "baseline_changed": bool(data.get("baseline_changed")),

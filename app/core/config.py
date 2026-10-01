@@ -74,6 +74,9 @@ DEFAULT_LIMITS = {
     "watch_plus_active_limit": 3,
     "watch_pro_active_limit": 5,
     "watch_max_runs_per_day": 50,
+    # Daily evidence probes between two full checks (one cheap model with web
+    # search each, see app/services/watch_probe.py). 0 switches them off.
+    "watch_probe_max_per_day": 100,
     # 1 = taegliches Intervall bleibt Pro vorbehalten, 0 = auch Free darf
     # taeglich pruefen lassen (Boolean als 0/1, damit es ins numerische
     # Admin-Limits-Raster passt).
@@ -1758,6 +1761,10 @@ def get_watch_active_limit(tier) -> int:
 
 def get_watch_max_runs_per_day() -> int:
     return max(0, int(LIMITS["watch_max_runs_per_day"]))
+
+
+def get_watch_probe_max_per_day() -> int:
+    return max(0, int(LIMITS["watch_probe_max_per_day"]))
 
 
 def watch_daily_requires_pro() -> bool:

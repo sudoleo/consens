@@ -764,18 +764,20 @@ def test_topic_notification_delivery_is_deduplicated_and_multipart():
         recipient="reader@example.com",
         title="GPT-6",
         question="What changed?",
-        old_score=58,
-        new_score=76,
-        change_type="major",
-        summary="Primary evidence changed the consensus.",
+        delta={
+            "summary": "Primary evidence changed the consensus.",
+            "cause": "new_evidence",
+            "sources": [{"title": "Release notes", "url": "https://openai.com/gpt-6"}],
+        },
         topic_url="https://www.consens.io/topics/gpt-6",
         unsubscribe_url="https://www.consens.io/topic-follow/unsubscribe?token=x",
     )
     assert message.is_multipart()
     assert "Topic update: GPT-6" == message["Subject"]
-    assert "Primary evidence changed the consensus." in message.get_body(
-        preferencelist=("plain",)
-    ).get_content()
+    plain = message.get_body(preferencelist=("plain",)).get_content()
+    assert "Primary evidence changed the consensus." in plain
+    assert "https://openai.com/gpt-6" in plain
+    assert "/100" not in plain
 
 
 def test_topic_delivery_claim_requires_a_live_topic_bound_follower():

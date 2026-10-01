@@ -191,8 +191,23 @@ def _build_mock_differences_json(prompt: str) -> str:
 
 def _mock_engine_output(prompt: str, json_mode: bool) -> str:
     if json_mode:
-        if "Compare the OLD and NEW consensus answers" in prompt:
-            return json.dumps({"changed": False, "severity": "minor", "change_summary": "No material change."})
+        if "You compare the STANDING answer" in prompt:
+            change = {
+                "changed": False, "severity": "minor", "cause": "none", "evidence": [],
+                "change_summary": "No material change.",
+                "held_summary": "The core answer is unchanged.",
+            }
+            if "<USER_GOAL_JSON>" in prompt:
+                change.update({
+                    "condition_status": "unknown",
+                    "condition_reason": "The answer does not settle the goal yet.",
+                    "condition_evidence": [],
+                })
+            return json.dumps(change)
+        if '"goal_suggestions"' in prompt:
+            return json.dumps({"goal_suggestions": [
+                "It is officially announced", "A firm date is published",
+            ]})
         if '"current_question"' in prompt:
             # Frage-Aufloesung vor dem Fan-out (chat_context.ChatMemoryCompressor).
             return json.dumps({

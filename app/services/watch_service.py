@@ -29,7 +29,10 @@ WATCH_INTERVALS = {
     "weekly": timedelta(days=7),
     "monthly": timedelta(days=30),
 }
+# Statuses an owner can set. "paused_error" (three failed runs) and
+# "resolved" (the goal was met on evidence) are set by the scheduler only.
 WATCH_STATUSES = {"active", "paused"}
+WATCH_STATUS_RESOLVED = "resolved"
 WATCH_EMAIL_MODES = {"changes_only", "condition", "every_run"}
 WATCH_WEEKDAYS = (
     "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
@@ -45,6 +48,7 @@ WATCH_HISTORY_POINTS = 16
 WATCH_EVENT_CHECKED = "watch.checked"
 WATCH_EVENT_CHANGED = "watch.changed"
 WATCH_EVENT_CONDITION_MET = "watch.condition_met"
+WATCH_EVENT_CONFIRMING = "watch.confirming"
 WATCH_EVENT_RUN_FAILED = "watch.run_failed"
 PUBLISHER_SOURCE = "scheduled_publisher"
 API_RUNS_COLLECTION = "api_consensus_runs"
@@ -224,6 +228,30 @@ def next_scheduled_run(interval: str, run_time: str, timezone_name: str, run_wee
         candidate_date += step
 
 
+def _serialize_resolution(value) -> dict | None:
+    if not isinstance(value, dict) or not value.get("run_id"):
+        return None
+    at = value.get("at")
+    return {
+        "run_id": str(value.get("run_id") or ""),
+        "at": at.isoformat() if isinstance(at, datetime) else "",
+        "condition": str(value.get("condition") or "")[:WATCH_CONDITION_MAX_CHARS],
+        "reason": str(value.get("reason") or "")[:400],
+        "sources": _evidence_list(value.get("sources")),
+    }
+
+
+def _serialize_probe(value) -> dict | None:
+    if not isinstance(value, dict) or not isinstance(value.get("at"), datetime):
+        return None
+    return {
+        "at": value["at"].isoformat(),
+        "outcome": str(value.get("outcome") or "")[:20],
+        "summary": str(value.get("summary") or "")[:300],
+        "sources": _evidence_list(value.get("sources")),
+    }
+
+
 def _serialize_watch(watch_id: str, data: dict, share: dict | None = None) -> dict:
     def iso(value):
         return value.isoformat() if isinstance(value, datetime) else ""
@@ -269,9 +297,13 @@ def _serialize_watch(watch_id: str, data: dict, share: dict | None = None) -> di
         ),
         "last_successful_run_id": str(data.get("last_successful_run_id") or ""),
         "last_trigger": "changed" if data.get("last_trigger") == "changed" else "stable",
+        "last_signal": str(data.get("last_signal") or ""),
+        "accepted_run_id": standing_run_id(data),
         "last_change_summary": str(data.get("last_change_summary") or "")[:400],
         "last_drift_score": data.get("last_drift_score"),
         "last_event_type": str(data.get("last_event_type") or ""),
+        "resolution": _serialize_resolution(data.get("resolution")),
+        "last_probe": _serialize_probe(data.get("last_probe")),
         "query_first": data.get("query_first") is True,
         "awaiting_first_run": bool(
             share.get("awaiting_first_watch_run")
@@ -492,6 +524,9 @@ def create_watch(uid: str, *, interval, tier, email_mode="changes_only",
         "last_event_type": "",
         "query_first": created_query_share,
     }
+    from app.services import watch_probe
+
+    doc["next_probe_at"] = watch_probe.next_probe_after(doc, now)
     question_hash = str(doc.get("question_hash") or "")
     uniqueness_key = (
         f"question:{question_hash}" if created_query_share else f"share:{share_id}"
@@ -616,6 +651,13 @@ def serialize_history_points(points, max_items=WATCH_HISTORY_POINTS) -> list[dic
             "severity": str(point.get("severity") or ""),
             "change_summary": str(point.get("change_summary") or ""),
             "trigger": point.get("trigger") if point.get("trigger") in {"changed", "stable"} else "stable",
+            "signal": str(point.get("signal") or ""),
+            "accepted": bool(point.get("accepted")),
+            "confirmed_by_recheck": bool(point.get("confirmed_by_recheck")),
+            "cause": str(point.get("cause") or ""),
+            "held_summary": str(point.get("held_summary") or ""),
+            "evidence_sources": _evidence_list(point.get("evidence_sources")),
+            "condition_status": str(point.get("condition_status") or ""),
             "restated": bool(point.get("restated")),
             "event_type": str(point.get("event_type") or ""),
             "baseline_changed": bool(point.get("baseline_changed")),
@@ -1072,10 +1114,27 @@ def update_watch(uid: str, watch_id: str, changes: dict, tier, db=None) -> dict:
                 ),
                 consecutive_failures=0,
             )
+        if status == "active" and data.get("status") == WATCH_STATUS_RESOLVED:
+            # Watching on after a goal was reached needs a new goal (or none):
+            # the old one would resolve again on the very next check.
+            reached = condition_hash(
+                (data.get("resolution") or {}).get("condition") or data.get("condition") or ""
+            )
+            next_goal = condition_hash(updates.get("condition", data.get("condition") or ""))
+            if reached and next_goal == reached:
+                raise WatchError(
+                    "goal_reached",
+                    "This goal was already reached. Set a new goal or clear it to keep watching.",
+                )
+            updates.update(resolution=None, last_condition_status=None, last_condition_hash=None)
         # The claim is revoked inside the transaction only when the status
         # really changes; re-sending the current status must not free the
         # lease of a running check and let a second worker start it.
         updates["status"] = status
+    if schedule_changed or "status" in updates:
+        from app.services import watch_probe
+
+        updates["next_probe_at"] = watch_probe.next_probe_after({**data, **updates}, now)
     data = _apply_watch_updates(
         uid,
         watch_id,
@@ -1308,7 +1367,7 @@ def get_public_watch_meta(share_id: str, db=None) -> dict | None:
     candidates = []
     for doc in _where_equal(db.collection(WATCHES_COLLECTION), "share_id", share_id).stream():
         data = doc.to_dict() or {}
-        if data.get("status") not in {"active", "paused", "paused_error"}:
+        if data.get("status") not in {"active", "paused", "paused_error", WATCH_STATUS_RESOLVED}:
             continue
         candidates.append(data)
     if not candidates:
@@ -1328,10 +1387,15 @@ def get_public_watch_meta(share_id: str, db=None) -> dict | None:
         "next_run_at": data.get("next_run_at"),
         "created_at": data.get("created_at"),
         "last_successful_run_id": str(data.get("last_successful_run_id") or ""),
+        "accepted_run_id": standing_run_id(data),
         "last_trigger": "changed" if data.get("last_trigger") == "changed" else "stable",
         "last_change_summary": str(data.get("last_change_summary") or "")[:400],
         "last_drift_score": data.get("last_drift_score"),
         "last_event_type": str(data.get("last_event_type") or ""),
+        # The goal is part of the page the owner chose to publish; private
+        # pages are never rendered for anyone else.
+        "condition": str(data.get("condition") or "")[:WATCH_CONDITION_MAX_CHARS],
+        "resolution": data.get("resolution") if isinstance(data.get("resolution"), dict) else None,
     }
 
 
@@ -1562,49 +1626,121 @@ def _next_run_after(claimed: dict, current: dict, now: datetime) -> datetime:
     )
 
 
-def complete_watch_run(watch_id: str, claimed: dict, result: dict, *, now=None,
-                       db=None, defer_condition_status=False, notifications=None):
-    """Persist one immutable Watch version, then advance the live pointer.
+def standing_run_id(watch: dict) -> str:
+    """The run whose answer currently stands; the next check is compared with it.
 
-    ``notifications`` is an optional callable ``(effective_watch) -> items``
+    Watches written before the evidence model have no pointer: their newest
+    successful run stands, which is what every comparison used until then.
+    """
+    return str(watch.get("accepted_run_id") or watch.get("last_successful_run_id") or "")
+
+
+_SOURCE_FIELDS = ("id", "title", "url")
+
+
+def _evidence_list(value) -> list[dict]:
+    items = []
+    for item in value or []:
+        if isinstance(item, dict) and str(item.get("url") or "").startswith(("http://", "https://")):
+            items.append({key: str(item.get(key) or "")[:300] for key in _SOURCE_FIELDS})
+    return items[:4]
+
+
+def run_point(result: dict, *, condition: str = "", run_id: str = "", ts=None) -> dict:
+    """The fields of one check that the drift rule and the goal rule read."""
+    score = result.get("agreement_score")
+    goal_hash = condition_hash(condition or "")
+    status = str(result.get("condition_status") or "") if goal_hash else ""
+    status = status if status in {"met", "not_met", "unknown"} else ""
+    return {
+        "run_id": str(run_id or ""),
+        "ts": ts,
+        "agreement_score": int(score) if isinstance(score, (int, float)) else None,
+        "changed": bool(result.get("changed")),
+        "severity": str(result.get("severity") or "minor")[:10],
+        "cause": drift_signal.normalize_cause(result.get("cause")),
+        "change_summary": str(result.get("change_summary") or "")[:400],
+        "held_summary": str(result.get("held_summary") or "")[:240],
+        "evidence_sources": _evidence_list(result.get("evidence_sources")),
+        "condition_status": status,
+        "condition_verified": bool(result.get("condition_verified")) and status == "met",
+        "condition_hash": goal_hash,
+    }
+
+
+def run_outcome(watch: dict, result: dict, *, condition: str | None = None) -> dict:
+    """What one check means for its watch: drift signal, goal and re-check.
+
+    A goal resolves when the check says it was met and either cites a source
+    for it or repeats a "met" for the same goal from the check before. A first
+    unsourced "met" and a reassessment that still needs confirming ask for a
+    prompt re-check instead of the regular schedule.
+    """
+    points = watch.get("history_points")
+    points = points if isinstance(points, list) else []
+    condition = str(watch.get("condition") or "") if condition is None else condition
+    point = run_point(result, condition=condition)
+    latest = drift_signal.classify_latest(points, point)
+    met = point["condition_status"] == "met"
+    previous = points[-1] if points else {}
+    resolved = met and (
+        point["condition_verified"]
+        or (
+            previous.get("condition_status") == "met"
+            and previous.get("condition_hash") == point["condition_hash"]
+        )
+    )
+    return {
+        "signal": latest["signal"],
+        "trigger": latest["trigger"],
+        "accepted": latest["accepted"],
+        "resolved": resolved,
+        "recheck": not resolved and (
+            latest["signal"] in drift_signal.RECHECK_SIGNALS or met
+        ),
+    }
+
+
+_COMPACT_HISTORY_FIELDS = {
+    "run_id", "ts", "agreement_score", "changed", "severity", "cause",
+    "change_summary", "held_summary", "evidence_sources", "condition_status",
+    "condition_verified", "condition_hash", "trigger", "event_type",
+    "baseline_changed", "baseline_severity", "baseline_summary", "opinion_map",
+}
+
+
+def complete_watch_run(watch_id: str, claimed: dict, result: dict, *, now=None,
+                       db=None, notifications=None):
+    """Persist one immutable Watch version, then advance the live pointers.
+
+    ``notifications`` is an optional callable ``(effective_watch, outcome)``
     whose outbox items are staged in the same transaction as the result.
     Completion is fenced by ``current_run_id``: a pause, resume or newer claim
     revokes the run, so a stale worker can neither reactivate a paused watch
     nor overwrite a schedule changed during the run (R16).
+
+    Returns the persisted history entry with its ``outcome``, or None when the
+    run was fenced out.
     """
     db = db if db is not None else db_firestore
     now = now or utcnow()
-    interval = claimed.get("interval") if claimed.get("interval") in WATCH_INTERVALS else "weekly"
-    previous_score = claimed.get("last_agreement_score")
-    previous_points = claimed.get("history_points")
-    previous_points = previous_points if isinstance(previous_points, list) else []
-    # The band the recent checks held, so a score bouncing between two cap
-    # steps is not announced as movement on every bounce.
-    previous_scores = drift_signal.recent_scores(previous_points) or (
-        [previous_score] if isinstance(previous_score, (int, float)) else []
-    )
-    trigger = drift_signal.classify(
-        result.get("changed"), result.get("severity"),
-        result.get("agreement_score"), previous_scores,
-    )
+    run_id = str(claimed["current_run_id"])
+    evaluated_condition = str(claimed.get("condition") or "")
+    evaluated_condition_hash = condition_hash(evaluated_condition)
+    point = run_point(result, condition=evaluated_condition, run_id=run_id, ts=now)
     history = {
-        "schema_version": 2,
-        "ts": now,
-        "agreement_score": (int(result["agreement_score"])
-                            if isinstance(result.get("agreement_score"), (int, float)) else None),
+        key: value for key, value in point.items() if key != "run_id"
+    }
+    history.update({
+        "schema_version": 3,
         "verdict": str(result.get("verdict") or "")[:80],
-        "changed": bool(result.get("changed")),
-        "severity": str(result.get("severity") or "minor")[:10],
-        "change_summary": str(result.get("change_summary") or "")[:400],
-        # Wenige, eindeutige Trigger fuer spaetere Webhooks: ein erfolgreicher
-        # Lauf ist entweder stable oder changed. Bedingungen/Fehler bleiben
-        # getrennte Delivery-Ereignisse und werden nicht semantisch ausgedeutet.
-        "trigger": trigger,
-        "event_type": WATCH_EVENT_CHANGED if trigger == "changed" else WATCH_EVENT_CHECKED,
+        "condition_reason": str(result.get("condition_reason") or "")[:400],
+        "condition_sources": _evidence_list(result.get("condition_sources")),
         "baseline_changed": bool(result.get("baseline_changed")),
         "baseline_severity": str(result.get("baseline_severity") or "minor")[:10],
         "baseline_summary": str(result.get("baseline_summary") or "")[:400],
         "previous_run_id": str(claimed.get("last_successful_run_id") or ""),
+        "standing_run_id": standing_run_id(claimed),
         "consensus_md": str(result.get("consensus") or "")[:share_snapshots.MAX_CONSENSUS_CHARS],
         "differences_data": share_snapshots.sanitize_differences_data(
             result.get("differences_data")
@@ -1615,41 +1751,19 @@ def complete_watch_run(watch_id: str, claimed: dict, result: dict, *, now=None,
         "sources": share_snapshots.sanitize_sources(result.get("sources")),
         "included_models": list(result.get("included_models") or [])[:6],
         "consensus_model": str(result.get("consensus_model") or "")[:80],
-    }
+    })
     position_map = opinion_map.sanitize_opinion_map(result.get("opinion_map"))
     if position_map:
         history["opinion_map"] = position_map
     share_ref = db.collection("shares").document(claimed["share_id"])
-    history_ref = share_ref.collection("watch_history").document(claimed["current_run_id"])
+    history_ref = share_ref.collection("watch_history").document(run_id)
     watch_ref = db.collection(WATCHES_COLLECTION).document(watch_id)
-    watch_updates = {
-        "next_run_at": next_scheduled_run(
-            interval, claimed.get("run_time") or "", claimed.get("timezone") or "",
-            claimed.get("run_weekday") or "",
-            now=now, previous_scheduled=claimed.get("next_run_at"),
-        ),
-        "claimed_until": None,
-        "current_run_id": None,
-        "consecutive_failures": 0,
-        "last_run_at": now,
-        "last_agreement_score": history["agreement_score"],
-        "last_successful_run_id": str(claimed["current_run_id"]),
-        "last_trigger": trigger,
-        "last_drift_score": (
-            position_map.get("shift_score") if isinstance(position_map, dict) else None
-        ),
-        "last_event_type": WATCH_EVENT_CHANGED if trigger == "changed" else WATCH_EVENT_CHECKED,
-    }
-    if trigger == "changed":
-        watch_updates["last_change_summary"] = history["change_summary"]
-    condition_status = str(result.get("condition_status") or "unknown")
-    if condition_status in {"met", "not_met"} and not defer_condition_status:
-        watch_updates["last_condition_status"] = condition_status
-        watch_updates["last_condition_hash"] = condition_hash(claimed.get("condition") or "")
+    uid = str(claimed.get("owner_uid") or "")
+    owner_ref = _owner_state_ref(db, uid) if uid else None
     # Frische-Signal für SEO (dateModified/sitemap-lastmod) direkt am Share.
     share_updates = {
         "last_watch_run_at": now,
-        "latest_watch_run_id": str(claimed["current_run_id"]),
+        "latest_watch_run_id": run_id,
     }
     if claimed.get("initial_watch_run"):
         # A query-first Watch has no manual Consensus snapshot.  Its first
@@ -1669,94 +1783,111 @@ def complete_watch_run(watch_id: str, claimed: dict, result: dict, *, now=None,
                 history["consensus_md"], history["sources"], history["included_models"],
             ),
         })
-    evaluated_condition_hash = condition_hash(claimed.get("condition") or "")
 
     def persist(transaction):
         current_snapshot = watch_ref.get(transaction=transaction)
+        owner_snapshot = (
+            owner_ref.get(transaction=transaction) if owner_ref is not None else None
+        )
         current = current_snapshot.to_dict() if current_snapshot.exists else None
         if (
             not current
             or str(current.get("current_run_id") or "")
             != str(claimed.get("current_run_id") or "")
         ):
-            return False
+            return None
         effective = effective_watch(claimed, current)
-        updates = dict(watch_updates)
-        updates["next_run_at"] = _next_run_after(claimed, current, now)
-        if (
-            "last_condition_status" in updates
-            and condition_hash(current.get("condition") or "") != evaluated_condition_hash
-        ):
-            # The condition was edited while this run evaluated the old one.
-            updates.pop("last_condition_status", None)
-            updates.pop("last_condition_hash", None)
-        elif (
-            updates.get("last_condition_status") == "met"
-            and effective.get("email_mode") == "condition"
-            and (
-                current.get("last_condition_status") != "met"
-                or current.get("last_condition_hash") != evaluated_condition_hash
-            )
-        ):
-            # The transition alert is now durably queued with this commit, so
-            # the state no longer waits for a send acknowledgement.
-            updates["last_event_type"] = WATCH_EVENT_CONDITION_MET
         existing_points = current.get("history_points")
         existing_points = existing_points if isinstance(existing_points, list) else []
-        compact_history = {
-            key: value for key, value in history.items()
-            if key in {
-                "ts", "agreement_score", "changed", "severity", "change_summary",
-                "trigger", "event_type", "baseline_changed", "baseline_severity",
-                "baseline_summary", "opinion_map",
-            }
+        # A goal edited while this run judged the old one is not judged at all.
+        goal_current = (
+            condition_hash(current.get("condition") or "") == evaluated_condition_hash
+        )
+        outcome = run_outcome(
+            {"history_points": existing_points}, result,
+            condition=evaluated_condition if goal_current else "",
+        )
+        trigger = outcome["trigger"]
+        if outcome["resolved"]:
+            event_type = WATCH_EVENT_CONDITION_MET
+        elif outcome["recheck"]:
+            event_type = WATCH_EVENT_CONFIRMING
+        else:
+            event_type = WATCH_EVENT_CHANGED if trigger == "changed" else WATCH_EVENT_CHECKED
+        updates = {
+            "claimed_until": None,
+            "current_run_id": None,
+            "consecutive_failures": 0,
+            "last_run_at": now,
+            "last_agreement_score": history["agreement_score"],
+            "last_successful_run_id": run_id,
+            "last_trigger": trigger,
+            "last_signal": outcome["signal"],
+            "last_drift_score": (
+                position_map.get("shift_score") if isinstance(position_map, dict) else None
+            ),
+            "last_event_type": event_type,
+            "next_run_at": (
+                now + drift_signal.CONFIRMATION_DELAY if outcome["recheck"]
+                else _next_run_after(claimed, current, now)
+            ),
         }
-        updates["history_points"] = (existing_points + [compact_history])[-WATCH_HISTORY_POINTS:]
-        transaction.set(history_ref, history)
+        if outcome["accepted"]:
+            updates["accepted_run_id"] = run_id
+        from app.services import watch_probe
+
+        updates["next_probe_at"] = watch_probe.next_probe_after(effective, now)
+        if trigger == "changed":
+            updates["last_change_summary"] = history["change_summary"]
+        if goal_current and point["condition_status"] in {"met", "not_met"}:
+            updates["last_condition_status"] = point["condition_status"]
+            updates["last_condition_hash"] = evaluated_condition_hash
+        resolves = outcome["resolved"] and current.get("status") == "active"
+        if resolves:
+            updates.update({
+                "status": WATCH_STATUS_RESOLVED,
+                "next_run_at": None,
+                "next_probe_at": None,
+                "resolution": {
+                    "run_id": run_id,
+                    "at": now,
+                    "condition": evaluated_condition,
+                    "reason": history["condition_reason"],
+                    "sources": history["condition_sources"],
+                },
+            })
+        compact = {
+            key: value
+            for key, value in {
+                **history, "run_id": run_id, "trigger": trigger, "event_type": event_type,
+            }.items()
+            if key in _COMPACT_HISTORY_FIELDS
+        }
+        updates["history_points"] = (existing_points + [compact])[-WATCH_HISTORY_POINTS:]
+        transaction.set(history_ref, {**history, "trigger": trigger, "event_type": event_type})
         transaction.update(watch_ref, updates)
         transaction.update(share_ref, share_updates)
+        if resolves and owner_snapshot is not None and owner_snapshot.exists:
+            # A resolved watch no longer runs, so it frees its active slot.
+            # Publisher watches never reach this: they carry no goal.
+            transaction.set(owner_ref, {
+                "schema_version": 1,
+                "active_count": max(
+                    0, _safe_count((owner_snapshot.to_dict() or {}).get("active_count")) - 1
+                ),
+                "updated_at": now,
+            })
         # Durable outbox items commit together with the result (R17). The
         # builder sees the CURRENT alert rules and channels, not the claim.
-        for item in (notifications(effective) if notifications else []) or []:
+        for item in (notifications(effective, outcome) if notifications else []) or []:
             notification_outbox.stage(transaction, db, item)
-        return True
+        return {"outcome": outcome, "trigger": trigger, "event_type": event_type}
 
-    if not _run_transaction(db, persist):
+    committed = _run_transaction(db, persist)
+    if not committed:
         return None
     share_snapshots.invalidate_share_cache(claimed["share_id"])
-    return history
-
-
-def set_condition_status(
-    watch_id: str,
-    status: str,
-    condition: str,
-    db=None,
-    expected_run_id: str = "",
-):
-    """Persist a known condition state after its transition mail was accepted."""
-    if status not in {"met", "not_met"}:
-        raise ValueError("invalid condition status")
-    db = db if db is not None else db_firestore
-    ref = db.collection(WATCHES_COLLECTION).document(watch_id)
-
-    def persist(transaction):
-        snapshot = ref.get(transaction=transaction)
-        data = snapshot.to_dict() if snapshot.exists else None
-        if not data:
-            return False
-        if expected_run_id and str(data.get("last_successful_run_id") or "") != expected_run_id:
-            return False
-        transaction.update(ref, {
-            "last_condition_status": status,
-            "last_condition_hash": condition_hash(condition),
-            "last_event_type": (
-                WATCH_EVENT_CONDITION_MET if status == "met" else WATCH_EVENT_CHECKED
-            ),
-        })
-        return True
-
-    return _run_transaction(db, persist)
+    return {**history, **committed, "run_id": run_id}
 
 
 def fail_watch_run(watch_id: str, claimed: dict, *, now=None, db=None,

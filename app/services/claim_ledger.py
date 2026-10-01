@@ -44,8 +44,27 @@ MAX_CLAIM_SOURCES = 4
 # app.services.drift_signal grades as material: the Change Judge's "major".
 # A "minor" grade is the Judge saying the answer was restated, not moved, and
 # a record that anchors on it reports a change after every single check.
-MATERIAL_CHANGE_TYPES = {drift_signal.MATERIAL_SEVERITY}
-RESTATED_CHANGE_TYPES = {"minor"}
+# Since the evidence model (docs/watch-evidence-model.md) the grade alone is
+# no longer enough: a major difference the search merely failed to support
+# again is "held", and a reassessment needs a re-check. Every function below
+# therefore reads the run's drift signal, never its raw ``change_type``.
+
+
+def _material(run) -> bool:
+    return run.get("signal") == drift_signal.SIGNAL_MOVED
+
+
+# How a check that did not move the record, but did not simply repeat it
+# either, reads in the record strip and the timeline.
+SIGNAL_NOTES = {
+    drift_signal.SIGNAL_HELD: (
+        "The sources behind the answer did not come up this time and nothing "
+        "contradicted them, so the answer stands."
+    ),
+    drift_signal.SIGNAL_CONFIRMING: "A different reading is being re-checked before it counts.",
+    drift_signal.SIGNAL_PRELIMINARY: "First seen here; the next check confirmed it.",
+    drift_signal.SIGNAL_REVERTED: "A re-check did not repeat this reading, so it was set aside.",
+}
 # A run only counts as an inventory of the answer when the cross-check
 # produced more than one claim. Runs below that line say nothing about the
 # claims they omit, so they must not be read as an absence.
@@ -173,6 +192,10 @@ def _chain_claims(runs) -> tuple[list[dict], list[bool]]:
     entries: list[dict] = []
     enumerating: list[bool] = []
     for index, run in enumerate(runs):
+        if run.get("signal") in drift_signal.NON_RECORD_SIGNALS:
+            # Its answer does not stand: a gap, never an absence.
+            enumerating.append(False)
+            continue
         dimensions = (run.get("opinion_map") or {}).get("dimensions") or []
         appearances = [
             _appearance(run, dimension) for dimension in dimensions
@@ -313,7 +336,7 @@ def build_claim_ledger(runs) -> dict | None:
     Returns ``None`` when no run carries a usable Position Map, which is the
     case for manually seeded Topics and for the very first automatic runs.
     """
-    runs = list(runs or [])
+    runs = drift_signal.annotate_runs(runs)
     if not runs:
         return None
     entries, enumerating = _chain_claims(runs)
@@ -401,7 +424,7 @@ def build_check_strip(runs, ledger=None) -> list[dict]:
     moved in weeks" before reading a single sentence, and see it again, one
     cell longer, on the next visit.
     """
-    runs = list(runs or [])
+    runs = drift_signal.annotate_runs(runs)
     if not runs:
         return []
     # Only inventory changes that stuck are marked. Wording churn produces a
@@ -423,14 +446,15 @@ def build_check_strip(runs, ledger=None) -> list[dict]:
     latest_index = len(runs) - 1
     cells = []
     for index, run in enumerate(runs):
-        change_type = str(run.get("change_type") or "stable")
-        material = change_type in MATERIAL_CHANGE_TYPES
+        signal = run.get("signal")
         came, went = entered.get(index, 0), left.get(index, 0)
         if index == 0:
             kind, note = "first", "First check. The record starts here."
-        elif material:
+        elif _material(run):
             kind = "material"
             note = str(run.get("change_summary") or "") or "The answer moved."
+        elif signal in SIGNAL_NOTES:
+            kind, note = signal, SIGNAL_NOTES[signal]
         elif came or went:
             kind = "event"
             parts = []
@@ -439,7 +463,7 @@ def build_check_strip(runs, ledger=None) -> list[dict]:
             if went:
                 parts.append(f"{went} dropped out")
             note = ", ".join(parts).capitalize() + "."
-        elif change_type in RESTATED_CHANGE_TYPES:
+        elif signal == drift_signal.SIGNAL_RESTATED:
             kind, note = "restated", "Same answer, different wording."
         else:
             kind, note = "stable", "No change."
@@ -464,13 +488,13 @@ def build_record_summary(runs) -> dict | None:
     is a wording difference, not a shift in substance. A "minor" grade is not
     an anchor either — that is the Judge saying the answer was restated.
     """
-    runs = list(runs or [])
+    runs = drift_signal.annotate_runs(runs)
     if not runs:
         return None
     latest = runs[-1]
     anchor_index = 0
     for index, run in enumerate(runs):
-        if str(run.get("change_type") or "stable") in MATERIAL_CHANGE_TYPES:
+        if _material(run):
             anchor_index = index
     anchor = runs[anchor_index]
     material = [
@@ -483,7 +507,7 @@ def build_record_summary(runs) -> dict | None:
             "agreement_score": run.get("agreement_score"),
         }
         for run in reversed(runs)
-        if str(run.get("change_type") or "stable") in MATERIAL_CHANGE_TYPES
+        if _material(run)
     ]
     return {
         "checks": len(runs),
@@ -511,7 +535,8 @@ def collapse_timeline(runs) -> list[dict]:
     single line "14 checks, no material change" does not, and they hide the
     entries that do. The runs stay reachable inside the folded entry.
     """
-    runs = list(runs or [])
+    # Newest first here; the drift rule reads a record oldest first.
+    runs = list(reversed(drift_signal.annotate_runs(reversed(list(runs or [])))))
     entries: list[dict] = []
     quiet: list[dict] = []
 
@@ -531,10 +556,11 @@ def collapse_timeline(runs) -> list[dict]:
         quiet.clear()
 
     for index, run in enumerate(runs):
-        material = str(run.get("change_type") or "stable") in MATERIAL_CHANGE_TYPES
-        # The newest and oldest check always stay visible: they are the ends of
-        # the record, and the selected one has to stay findable.
-        if material or run.get("is_selected") or index in {0, len(runs) - 1}:
+        # Movement and every check whose answer did not stand stay visible; so
+        # do the newest and oldest check (the ends of the record) and the
+        # selected one, which has to stay findable.
+        loud = _material(run) or run.get("signal") in SIGNAL_NOTES
+        if loud or run.get("is_selected") or index in {0, len(runs) - 1}:
             flush()
             entries.append({"kind": "run", "run": run})
         else:

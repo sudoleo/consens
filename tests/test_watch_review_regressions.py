@@ -196,7 +196,6 @@ def test_condition_edited_during_run_neither_alerts_nor_records_the_old_state():
     result = {**RESULT, "condition_status": "met", "condition_reason": "It is."}
     builder = watch_scheduler.run_notification_builder(
         watch_id, result, [], now=NOW, mail_ready=True,
-        evaluated_condition="Price above 100",
     )
     with patch.object(watch_service.share_snapshots, "invalidate_share_cache"):
         watch_service.complete_watch_run(
@@ -204,6 +203,8 @@ def test_condition_edited_during_run_neither_alerts_nor_records_the_old_state():
         )
     stored = db.stores["watches"][watch_id]
     assert stored["last_condition_status"] is None
+    # The old goal was met, but the owner no longer waits for it: no resolution.
+    assert stored["status"] == "active"
     assert db.stores["notification_outbox"] == {}
 
 
@@ -264,6 +265,7 @@ def test_scheduler_stops_when_its_worker_lease_was_taken_over():
         patch.object(watch_service, "acquire_worker_lease", return_value="owner-a"),
         patch.object(watch_service, "release_worker_lease", return_value=False) as release,
         patch.object(watch_service, "list_due_watch_ids", return_value=["w1", "w2"]),
+        patch.object(watch_scheduler.watch_probe, "list_due_probe_ids", return_value=[]),
         patch.object(
             watch_service, "claim_watch",
             side_effect=lambda wid, **kw: started.append(wid) or (None, "not_due"),

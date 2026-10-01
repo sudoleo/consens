@@ -10,9 +10,9 @@ import logging
 
 from app.core.entitlements import TIER_FREE
 from app.core.observability import safe_exception
-from app.services import opinion_map, share_snapshots
+from app.services import evidence_change, opinion_map, share_snapshots
 from app.services.consensus_pipeline import run_consensus_pipeline
-from app.services.llm.consensus_engine import query_claim_identity, query_consensus_change
+from app.services.llm.consensus_engine import query_claim_identity
 from app.services.llm.mock_llm import mock_llm_enabled
 from app.services.llm import provider_transport
 
@@ -52,7 +52,10 @@ def execute_topic(
     model_overrides=None,
     known_claims=None,
     claim_key_prefix: str = "",
+    previous_sources=None,
+    previous_models=None,
 ) -> dict:
+    """One Topic check, compared with the standing answer and its sources."""
     keys = provider_transport.developer_keys()
     configured = dict(model_overrides or {})
     provider_models = {
@@ -84,16 +87,25 @@ def execute_topic(
         next(name for name in provider_models if provider_transport.PROVIDER_LABELS[name] in included)
     ]
     consensus = pipeline["consensus_response"]
+    model_answers = pipeline["model_answers"]
+    sources = share_snapshots.sanitize_sources({
+        item["provider"]: item.get("sources") or []
+        for item in model_answers if item.get("sources")
+    })
+    included_models = share_snapshots.build_included_models(
+        [item["provider"] for item in model_answers],
+        {item["provider"]: item["model"] for item in model_answers},
+    )
     if str(previous_consensus or "").strip():
-        change = query_consensus_change(
-            previous_consensus, consensus, keys, engine, condition=condition
+        change = evidence_change.assess(
+            previous_consensus, consensus, keys, engine, condition=condition,
+            previous_sources=previous_sources or [], new_sources=sources,
+            previous_models=previous_models or [], new_models=included_models,
         )
     else:
-        change = {
-            "changed": False,
-            "severity": "minor",
-            "change_summary": "First consensus established.",
-        }
+        change = evidence_change.first_check(
+            consensus, keys, engine, condition=condition, new_sources=sources,
+        )
     differences = pipeline["differences_data"]
     position_map = opinion_map.build_opinion_map(
         differences,
@@ -101,11 +113,6 @@ def execute_topic(
         consensus_changed=bool(change.get("changed")),
     )
     _stamp_claim_keys(position_map, known_claims, keys, engine, claim_key_prefix)
-    model_answers = pipeline["model_answers"]
-    model_sources = {
-        item["provider"]: item.get("sources") or []
-        for item in model_answers if item.get("sources")
-    }
     return {
         "consensus": consensus,
         "agreement_score": pipeline["agreement"]["score"],
@@ -113,11 +120,8 @@ def execute_topic(
         "opinion_map": position_map,
         "differences_data": differences,
         "differences_text": pipeline["differences"],
-        "sources": share_snapshots.sanitize_sources(model_sources),
-        "included_models": share_snapshots.build_included_models(
-            [item["provider"] for item in model_answers],
-            {item["provider"]: item["model"] for item in model_answers},
-        ),
+        "sources": sources,
+        "included_models": included_models,
         "consensus_model": engine,
         **change,
     }

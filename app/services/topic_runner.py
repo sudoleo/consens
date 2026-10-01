@@ -164,6 +164,18 @@ def known_claims_from_runs(runs) -> list[dict]:
     return list(claims.values())
 
 
+def run_outcome(recent_runs, change_type: str, cause) -> dict:
+    """The drift verdict for a new Topic run on top of its recent record."""
+    latest = drift_signal.annotate_runs(
+        list(recent_runs or []) + [{"change_type": change_type, "cause": cause}]
+    )[-1]
+    return {
+        "signal": latest["signal"],
+        "accepted": latest["accepted"],
+        "recheck": latest["signal"] in drift_signal.RECHECK_SIGNALS,
+    }
+
+
 def execute_claimed_topic(claimed: dict, *, actor_uid: str, db=None,
                           now=None, executor=None, notifications=None) -> dict:
     """Collect sources, run the selected models, and persist one immutable point."""
@@ -171,20 +183,27 @@ def execute_claimed_topic(claimed: dict, *, actor_uid: str, db=None,
     db = db if db is not None else topics.db_firestore
     now = now or topics.utcnow()
     executor = executor or topic_pipeline.execute_topic
-    previous = (
-        topics.get_run(claimed["id"], str(claimed.get("latest_run_id") or ""), db=db)
-        or {}
-    )
+    # The next check is compared with the answer that stands, not with the
+    # newest run: a run whose search missed the evidence must not become the
+    # yardstick (docs/watch-evidence-model.md).
+    standing_id = str(claimed.get("accepted_run_id") or claimed.get("latest_run_id") or "")
+    standing = topics.get_run(claimed["id"], standing_id, db=db) or {}
     recent = topics.list_runs(claimed["id"], db=db, max_items=KNOWN_CLAIM_RUNS)
+    latest = recent[-1] if recent else standing
     run_config = claimed.get("run_config") or {}
     try:
         result = executor(
             _research_question(claimed),
-            str(previous.get("consensus_md") or ""),
-            previous_opinion_map=previous.get("opinion_map"),
+            str(standing.get("consensus_md") or ""),
+            previous_opinion_map=latest.get("opinion_map"),
             model_overrides=run_config.get("provider_models"),
             known_claims=known_claims_from_runs(recent),
             claim_key_prefix=str(claimed.get("current_run_id") or ""),
+            previous_sources=(
+                list(standing.get("evidence") or [])
+                + list(standing.get("excluded_evidence") or [])
+            ),
+            previous_models=standing.get("models") or [],
         )
         changed = bool(result.get("changed"))
         change_type = (
@@ -206,11 +225,14 @@ def execute_claimed_topic(claimed: dict, *, actor_uid: str, db=None,
                 "change_type": change_type,
                 "change_summary": (
                     result.get("change_summary")
-                    or ("First consensus established." if not previous else "No material shift.")
+                    or ("First consensus established." if not standing else "No material shift.")
                 ),
+                "cause": result.get("cause"),
+                "held_summary": result.get("held_summary"),
+                "evidence_sources": result.get("evidence_sources"),
                 "opinion_changes": opinion_changes_from_maps(
                     result.get("opinion_map") or {},
-                    previous.get("opinion_map") or {},
+                    latest.get("opinion_map") or {},
                 ),
                 "evidence": evidence,
                 "excluded_evidence": excluded_evidence,
@@ -227,6 +249,7 @@ def execute_claimed_topic(claimed: dict, *, actor_uid: str, db=None,
             run_id=str(claimed.get("current_run_id") or ""),
             expected_claim_id=str(claimed.get("current_run_id") or ""),
             notifications=notifications,
+            outcome=run_outcome(recent, change_type, result.get("cause")),
         )
         return run
     except Exception as exc:
@@ -252,13 +275,11 @@ def run_topic_now(topic_id: str, *, actor_uid: str, db=None, now=None,
     )
 
 
-def topic_notification_builder(topic_id: str, *, db=None, now=None,
-                               require_material: bool = False):
+def topic_notification_builder(topic_id: str, *, db=None, now=None):
     """Durable follower items that commit together with a Topic run (R17).
 
     Followers are read before the run transaction; the send path re-checks
     each follower before every attempt, so a later unsubscribe still wins.
-    ``require_material`` applies the Watch page bar that the admin route uses.
     """
     followers = []
     if not mock_llm_enabled() and mailer.is_configured():
@@ -268,18 +289,12 @@ def topic_notification_builder(topic_id: str, *, db=None, now=None,
             if follower.get("id")
         ]
 
-    def build(topic_before: dict, run_id: str, run: dict) -> list:
-        if not followers or run.get("change_type") not in {"minor", "major"}:
-            return []
-        old_score = topic_before.get("latest_agreement_score")
-        if require_material and not drift_signal.is_material(
-            True, run.get("change_type"), run.get("agreement_score"),
-            [old_score] if isinstance(old_score, (int, float)) else [],
-        ):
+    def build(topic_before: dict, run_id: str, run: dict, outcome: dict) -> list:
+        # Followers hear about what moved on evidence, nothing else.
+        if not followers or outcome.get("signal") != drift_signal.SIGNAL_MOVED:
             return []
         return notification_outbox.topic_follower_items(
-            topic_before, run_id, run, old_score, followers,
-            now=now or topics.utcnow(),
+            topic_before, run_id, run, followers, now=now or topics.utcnow(),
         )
 
     return notification_outbox.StagedIds(build)

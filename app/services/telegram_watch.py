@@ -321,26 +321,29 @@ def _quote_block(text: str, *, limit: int = 1_200) -> str:
     return f"<blockquote{expandable}>{escaped}</blockquote>"
 
 
-def _facts_line(watch: dict, result: dict) -> str:
-    """One line of numbers: agreement movement and how far models moved."""
-    score = result.get("agreement_score")
-    old_score = watch.get("last_agreement_score")
-    parts = []
-    if isinstance(score, (int, float)) and isinstance(old_score, (int, float)):
-        delta = int(score) - int(old_score)
-        movement = "unchanged" if not delta else f"{'+' if delta > 0 else '−'}{abs(delta)}"
-        parts.append(f"Agreement {int(old_score)} → {int(score)} ({movement})")
-    elif isinstance(score, (int, float)):
-        parts.append(f"Agreement {int(score)}/100")
-    position = result.get("opinion_map") or {}
-    label = " ".join(str(position.get("shift_label") or "").split())
-    shift = position.get("shift_score")
-    if label:
-        parts.append(
-            f"Positions {label}"
-            + (f" ({int(shift)}/100)" if isinstance(shift, (int, float)) else "")
-        )
-    return " · ".join(parts)
+# Same sentences as the e-mails (mailer._CAUSE_SENTENCES), shortened for chat.
+_CAUSE_LINES = {
+    "new_evidence": "New evidence the earlier answer did not have.",
+    "reassessment": "Same evidence read differently, confirmed by a second check.",
+    "model_change": "The answering models changed, confirmed by a second check.",
+}
+
+
+def _why_block(delta: dict) -> str:
+    line = _CAUSE_LINES.get(str(delta.get("cause") or ""), "")
+    sources = [
+        item for item in delta.get("sources") or []
+        if isinstance(item, dict) and str(item.get("url") or "").startswith(("http://", "https://"))
+    ][:3]
+    if not line and not sources:
+        return ""
+    rows = [_escape(line)] if line else []
+    rows += [
+        f'• <a href="{html.escape(item["url"], quote=True)}">'
+        f'{_escape(item.get("title") or item["url"], limit=120)}</a>'
+        for item in sources
+    ]
+    return "<b>Why</b>\n" + "\n".join(rows)
 
 
 def _strip_markup(text: str) -> str:
@@ -348,41 +351,42 @@ def _strip_markup(text: str) -> str:
 
 
 def _notification_text(kind: str, watch: dict, result: dict) -> str:
-    """Headline, then what changed, then the numbers, then the question.
+    """Headline, what changed, why, what held, the goal, then the question.
 
-    Same order as the e-mails: the first two lines carry the news, the
-    question sits at the bottom in a quote that Telegram folds when long.
+    Same order as the e-mails: the first lines carry the news, the question
+    sits at the bottom in a quote that Telegram folds when long. No agreement
+    score: it is not a reason to message anyone.
     """
     question = str(watch.get("question") or "Consensus Watch")
+    delta = result.get("delta") or {}
+    blocks = []
     if kind == "condition":
-        title = "🎯 Watch condition met"
-        change_label = "Why it triggered"
-        detail = str(result.get("condition_reason") or result.get("change_summary")
-                     or "The condition is now met.")
-    elif kind == "every_run":
-        title = "🧭 Consensus Watch updated"
-        change_label = "What changed"
-        detail = str(
-            result.get("change_summary")
-            or ("This check found a material change." if result.get("changed")
-                else "No material change since the last check.")
-        )
+        blocks.append("<b>🎯 Resolved: what you were waiting for happened</b>")
+        blocks.append("<b>Goal</b>\n" + _escape(watch.get("condition") or ""))
+        blocks.append("<b>Why</b>\n" + _escape(
+            result.get("condition_reason") or "The new answer reports the goal as met."
+        ))
     elif kind == "paused_error":
-        title = "⚠️ Consensus Watch paused"
-        change_label = "What happened"
-        detail = "Three consecutive checks failed. Open the dashboard to review or resume this watch."
+        blocks.append("<b>⚠️ Consensus Watch paused</b>")
+        blocks.append(
+            "<b>What happened</b>\nThree consecutive checks failed. Open the "
+            "dashboard to review or resume this watch."
+        )
     else:
-        title = "🔄 Consensus changed"
-        change_label = "What changed"
-        detail = str(result.get("change_summary") or "The consensus changed materially.")
-
-    blocks = [f"<b>{title}</b>", f"<b>{change_label}</b>\n{_escape(detail)}"]
-    # A failed run has no numbers worth quoting — they would be the old ones.
-    facts = "" if kind == "paused_error" else _facts_line(watch, result)
-    if facts:
-        blocks.append(_escape(facts))
+        moved = kind == "change" or bool(result.get("moved"))
+        blocks.append("<b>🔄 The answer moved</b>" if moved else "<b>🧭 Checked again</b>")
+        blocks.append("<b>What changed</b>\n" + _escape(
+            delta.get("summary") if moved else "Nothing moved on evidence in this check."
+        ))
+        why = _why_block(delta) if moved else ""
+        if why:
+            blocks.append(why)
+        if delta.get("held"):
+            blocks.append("<b>What held</b>\n" + _escape(delta["held"], limit=400))
+        if delta.get("goal"):
+            blocks.append("<b>Waiting for</b>\n" + _escape(delta["goal"], limit=400))
     if kind == "every_run" and str(result.get("consensus") or "").strip():
-        blocks.append("<b>New consensus</b>\n" + _quote_block(result["consensus"]))
+        blocks.append("<b>The answer</b>\n" + _quote_block(result["consensus"]))
     blocks.append("<b>Question</b>\n" + _quote_block(question, limit=900))
     return "\n\n".join(blocks)
 

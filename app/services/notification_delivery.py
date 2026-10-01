@@ -83,14 +83,26 @@ def _watch_gate(item: dict, watch: dict | None, *, channel_field: str):
     if item.get("kind") == outbox.KIND_WATCH_PAUSED:
         if watch.get("status") != "paused_error":
             return outbox.SKIPPED, "resumed"
-    elif watch.get("status") != "active":
+    elif watch.get("status") != "active" and not (
+        watch.get("status") == watch_service.WATCH_STATUS_RESOLVED
+        and (item.get("payload") or {}).get("alert") == "condition"
+    ):
         # The unsubscribe link, the Telegram pause and the dashboard all pause.
+        # The resolving check is the one alert a resolved watch still sends.
         return outbox.SKIPPED, "paused"
     if channel_field == "email_enabled" and watch.get("email_enabled") is False:
         return outbox.SKIPPED, "channel_disabled"
     if channel_field == "telegram_enabled" and watch.get("telegram_enabled") is not True:
         return outbox.SKIPPED, "channel_disabled"
     return None
+
+
+def _delta(payload: dict) -> dict:
+    """The change log of an item; items queued before it existed (bounded by
+    their ``deliver_until``) only carry the summary."""
+    return payload.get("delta") or {
+        "summary": payload.get("change_summary") or payload.get("summary") or "",
+    }
 
 
 def _owner_message(item: dict, payload: dict, recipient: str, consensus: str):
@@ -106,34 +118,24 @@ def _owner_message(item: dict, payload: dict, recipient: str, consensus: str):
             share_url=share_url, unsubscribe_url=unsubscribe_url,
         )
     alert = payload.get("alert")
-    old_score = payload.get("old_score")
-    score = payload.get("agreement_score")
-    direction = payload.get("direction") or None
+    delta = _delta(payload)
     if alert == "every_run":
         return mailer.build_run_message(
-            recipient=recipient, question=question, agreement_score=score,
-            consensus=consensus, changed=bool(payload.get("changed")),
-            severity=payload.get("severity") or "minor",
-            summary=payload.get("change_summary") or "",
+            recipient=recipient, question=question, delta=delta,
+            moved=bool(payload.get("moved")), consensus=consensus,
             share_url=share_url, unsubscribe_url=unsubscribe_url,
-            old_score=old_score, direction=direction,
         )
     if alert == "condition":
         return mailer.build_condition_message(
             recipient=recipient, question=question,
-            condition=payload.get("condition") or "",
-            reason=payload.get("condition_reason")
-            or "The condition is met by the new consensus.",
-            agreement_score=score, consensus=consensus,
-            share_url=share_url, unsubscribe_url=unsubscribe_url,
-            old_score=old_score, direction=direction,
+            goal=payload.get("condition") or "",
+            reason=payload.get("condition_reason") or "The goal is met by the new answer.",
+            sources=payload.get("condition_sources") or [],
+            consensus=consensus, share_url=share_url, unsubscribe_url=unsubscribe_url,
         )
     return mailer.build_change_message(
-        recipient=recipient, question=question, old_score=old_score,
-        new_score=score,
-        summary=payload.get("change_summary") or "The agreement score changed materially.",
+        recipient=recipient, question=question, delta=delta,
         share_url=share_url, unsubscribe_url=unsubscribe_url,
-        severity=payload.get("severity") or "major", direction=direction,
     )
 
 
@@ -193,17 +195,15 @@ def _deliver_watch_telegram_sync(item: dict, db, now: datetime) -> tuple:
     kind = "paused_error" if item["kind"] == outbox.KIND_WATCH_PAUSED else payload.get("alert")
     view = {
         "question": payload.get("question") or "",
-        "last_agreement_score": payload.get("old_score"),
         "share_id": payload.get("share_id") or "",
         "share_slug": payload.get("share_slug") or "",
         "visibility": payload.get("visibility") or "public",
+        "condition": payload.get("condition") or "",
     }
     result = {
-        "agreement_score": payload.get("agreement_score"),
-        "changed": payload.get("changed"),
-        "change_summary": payload.get("change_summary") or "",
+        "delta": _delta(payload),
+        "moved": bool(payload.get("moved")),
         "condition_reason": payload.get("condition_reason") or "",
-        "opinion_map": payload.get("direction") or {},
     }
     if kind == "every_run":
         result["consensus"] = _watch_version_consensus(payload, item.get("run_id") or "", db)
@@ -244,12 +244,9 @@ async def _deliver_watch_follower(item: dict, db) -> tuple:
     token = watch_followers.make_follow_unsubscribe_token(share_id, email)
     message = mailer.build_follower_change_message(
         recipient=email, question=payload.get("question") or "",
-        old_score=payload.get("old_score"), new_score=payload.get("agreement_score"),
-        summary=payload.get("change_summary") or "The agreement score changed materially.",
+        delta=_delta(payload),
         share_url=SITE_URL + _share_path(payload, private_aware=False),
         unsubscribe_url=SITE_URL + "/watch/follow/unsubscribe?token=" + token,
-        severity=payload.get("severity") or "major",
-        direction=payload.get("direction") or None,
     )
     return await _send_mail(message)
 
@@ -272,10 +269,7 @@ async def _deliver_topic_follower(item: dict, db) -> tuple:
         recipient=email,
         title=payload.get("title") or topic.get("title") or "",
         question=payload.get("question") or "",
-        old_score=payload.get("old_score"),
-        new_score=payload.get("new_score"),
-        change_type=payload.get("change_type") or "major",
-        summary=payload.get("summary") or "The Topic consensus changed.",
+        delta=_delta(payload),
         topic_url=f"{SITE_URL}/topics/{payload.get('slug') or topic.get('slug') or ''}",
         unsubscribe_url=(
             SITE_URL + "/topic-follow/unsubscribe?token="

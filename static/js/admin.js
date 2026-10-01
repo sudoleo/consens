@@ -47,6 +47,7 @@ const limitGroups = [
             ['watch_plus_active_limit', 'Plus active watches'],
             ['watch_pro_active_limit', 'Pro active watches'],
             ['watch_max_runs_per_day', 'Global runs per day'],
+            ['watch_probe_max_per_day', 'Evidence probes per day (0 = off)'],
             ['watch_daily_interval_requires_pro', 'Daily interval Pro-only (1 = yes, 0 = Free too)'],
             ['watch_plus_daily_interval_allowed', 'Plus may use the daily interval (1 = yes)']
         ]
