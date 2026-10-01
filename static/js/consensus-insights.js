@@ -860,6 +860,7 @@
           // --- Verdict-Balken --------------------------------------------------
           // Neutraler Glas-Balken: Score-Ring links (Farbe = Semantik),
           // Headline + Detailzeile daneben, Judge-Attribution rechts.
+          const settledAgreements = new WeakSet();
           function renderVerdictHeader(differences, modelCount, agreement, judge) {
             const verdict = $("consensusVerdict");
             if (!verdict) return;
@@ -923,6 +924,17 @@
               meter.appendChild(fill);
               gauge.append(score, meter);
               verdict.appendChild(gauge);
+              // Die Zahl zaehlt einmal pro Ergebnis hoch (CSS, siehe
+              // components-consensus-visuals.css). Gemerkt wird das
+              // agreement-Objekt: erneutes Rendern desselben Laufs (Run-View,
+              // Projektionen) spielt es nicht noch einmal ab.
+              const target = Number(agreement.score);
+              if (Number.isInteger(target) && !settledAgreements.has(agreement)) {
+                settledAgreements.add(agreement);
+                num.style.setProperty("--score-target", String(target));
+                gauge.classList.add("is-settling");
+                setTimeout(() => gauge.classList.remove("is-settling"), 1000);
+              }
             } else {
               const icon = document.createElement("span");
               icon.className = "verdict-icon";

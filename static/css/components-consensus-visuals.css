@@ -102,6 +102,67 @@
   background: var(--verdict-ring, var(--accent));
 }
 
+/* Graduated: the track is cut at the two band borders, 40 and 65, where the
+   colour and the headline change. Three segments say "this scale has
+   zones" without a legend, and the fill crosses a notch exactly where the
+   reading changes its word. 1.5px: a cut at 2x, a soft step at 1x. The
+   gradient lays the notches in the meter's own width, so the 72px gauge in
+   the app and every mockup get them in the same place. */
+.verdict-meter {
+  --notch: 0.75px;
+  -webkit-mask: linear-gradient(90deg,
+    #000 calc(40% - var(--notch)), transparent 0 calc(40% + var(--notch)),
+    #000 0 calc(65% - var(--notch)), transparent 0 calc(65% + var(--notch)),
+    #000 0);
+  mask: linear-gradient(90deg,
+    #000 calc(40% - var(--notch)), transparent 0 calc(40% + var(--notch)),
+    #000 0 calc(65% - var(--notch)), transparent 0 calc(65% + var(--notch)),
+    #000 0);
+}
+
+/* The reading settles once: when a result arrives the number counts up to
+   its value while the bar fills, then both stand still. The count is a CSS
+   counter on an overlay, so the DOM text (and the aria-live verdict) holds
+   the final score the whole time and a screen reader hears it once. The
+   class comes from consensus-insights.js, once per result. */
+@property --score-shown {
+  syntax: "<integer>";
+  inherits: false;
+  initial-value: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .verdict-gauge.is-settling .verdict-score-num {
+    position: relative;
+    color: transparent;
+  }
+
+  .verdict-gauge.is-settling .verdict-score-num::after {
+    content: counter(verdict-score);
+    counter-reset: verdict-score var(--score-shown);
+    /* Right-aligned: the digits grow leftwards like an odometer, so the
+       "/100" beside them never sees a gap while the count has fewer digits. */
+    position: absolute;
+    top: 0;
+    right: 0;
+    color: var(--verdict-ring, var(--text-color));
+    animation: verdict-count 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  }
+
+  .verdict-gauge.is-settling .verdict-meter-fill {
+    animation: verdict-fill 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  }
+}
+
+@keyframes verdict-count {
+  from { --score-shown: 0; }
+  to { --score-shown: var(--score-target, 0); }
+}
+
+@keyframes verdict-fill {
+  from { width: 0; }
+}
+
 /* Fallback ohne Score (alte Bookmarks/Snapshots): kleiner Status-Punkt. */
 .consensus-verdict .verdict-icon {
   flex-shrink: 0;
