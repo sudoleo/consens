@@ -96,8 +96,12 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       Abschluss automatisch zu, manuelle Wahl beibehalten. Reduced Motion
       deaktiviert den Lichtlauf. Katalogfehler mit Reload, entfernte Modellwahl,
       fehlendes Reasoning/Usage, Output-Limit und Fehler nach Streamstart prüfen.
-      Quellen im Fließtext als hochgestellte Nummern anzeigen, inklusive
-      benannter Markdown-Links und „Paper (https://…)“. Quellenvorschau per
+      Quellen im Fließtext als Pillen (Favicon + Domain, auf der Grundlinie)
+      anzeigen, inklusive benannter Markdown-Links und „Paper (https://…)“;
+      ein Linktext, der nur die Domain nennt, erscheint nicht doppelt,
+      benachbarte Quellen bilden eine Pille „domain +N“, lange Domains enden
+      mit Ellipse, ein fehlendes Favicon zeigt ein neutrales Monogramm (hell,
+      dunkel, 390 px). Quellenvorschau per
       Hover/Fokus, passende nummerierte Quellenliste und gespeicherte/archivierte
       Antworten auch nach fehlgeschlagenem Run prüfen. Code/`[1]` bleiben Text.
       Automatisiert: `agent-citations.test.mjs`, `test_agent_comparison_frontend.py`.
@@ -507,8 +511,10 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       Handy-Tastatur fügt einen Absatz ein und sendet nicht.
       Am vollständigen Scrollende liegen die geschlossenen Detail-Tabs direkt
       darüber, ohne Leerraum oder verdeckten Inhalt.
-- [ ] Quellen-Fussnoten im Consensus stehen hinter Punkt, Frage- oder
-      Ausrufezeichen; dasselbe gilt auf öffentlichen Share-Seiten.
+- [ ] Quellen-Pillen im Consensus stehen hinter Punkt, Frage- oder
+      Ausrufezeichen (Favicon-only-Pillen bleiben an ihrer Domain); dasselbe
+      gilt für die Quellenverweise auf öffentlichen Share-Seiten.
+      „Copy consensus“ liefert Domains in Klammern statt „uci.org+2“.
 - [ ] „Run again“ kehrt zum normalen Composer zurück, übernimmt die vorige
       Frage, startet aber erst nach einem bewussten Klick auf Senden. Der Knopf
       beziffert vorher den Preis („Run again · uses 1 run“, Tooltip mit Rest-

@@ -269,9 +269,11 @@
     if (!body?.parentElement) return;
     const version = review?.versions?.find(v => v.id === review.answer_version);
     const raw = body.dataset.markdown ?? version?.text;
+    // A source pill carries a favicon and may stand for several sources.
     const turnSources = safeSources([evidence, ...(evidence.events || []), {text: raw}, { sources: [...body.querySelectorAll('a[href]')]
-      .filter(a => !a.closest('code, pre') && !a.querySelector('img, svg'))
-      .map(a => a.sourceData || {url: a.getAttribute('href'), title: a.textContent}) },
+      .filter(a => !a.closest('code, pre') && (a.matches('.src-ref') || !a.querySelector('img, svg')))
+      .flatMap(a => a.sourceGroup?.length ? a.sourceGroup.map(entry => entry.src).filter(Boolean)
+        : [a.sourceData || {url: a.getAttribute('href'), title: a.textContent}]) },
       ...(review?.comparisons || []).flatMap(c => c.answers || []), ...(review?.versions || [])]);
     let host = body._agentReview;
     if (!review?.comparisons?.length) {

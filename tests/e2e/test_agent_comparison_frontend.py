@@ -410,7 +410,7 @@ def test_comparison_review_and_saved_projection(browser, phase4_server, width, d
 
 
 @pytest.mark.parametrize("width", [1280, 390])
-def test_saved_agent_paper_urls_are_numbered_citations(browser, phase4_server, width):
+def test_saved_agent_paper_urls_become_source_pills(browser, phase4_server, width):
     context, page = _real_firebase_page(browser, phase4_server)
     text = ("## Kurzfassung\n\nMehrere unabhängige Perspektiven können helfen.\n\n"
         "Verwandte Arbeiten: Self-Consistency (https://arxiv.org/abs/2203.07186), "
@@ -434,7 +434,9 @@ def test_saved_agent_paper_urls_are_numbered_citations(browser, phase4_server, w
         refs = page.locator('#agentAnswerBody .src-ref')
         expect(refs).to_have_count(3)
         expect(page.locator('#agentAnswerBody')).not_to_contain_text('https://')
-        assert refs.first.evaluate('el => getComputedStyle(el).verticalAlign') == 'super'
+        # Source pills sit on the text baseline (favicon + domain), no raised numbers.
+        assert refs.first.evaluate('el => getComputedStyle(el).verticalAlign') == 'baseline'
+        expect(refs.first.locator('.src-ref-label')).to_have_text('arxiv.org')
         assert page.locator('#agentAnswerBody').get_attribute('data-markdown') == text
         refs.first.focus()
         expect(page.locator('#sourceTeaser')).to_be_visible()

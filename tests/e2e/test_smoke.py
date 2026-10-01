@@ -667,7 +667,7 @@ def test_consensus_citations_follow_terminal_punctuation(app_page):
           };
         }"""
     )
-    assert result["text"].strip() == 'Fact.1 Question?1 "Quote."1'
+    assert result["text"].strip() == 'Fact.example.org Question?example.org "Quote."example.org'
     assert result["previous"] == [".", "?", '."']
 
 
@@ -1523,11 +1523,12 @@ def test_key_claim_fallback_renders_source_tags_as_citations(app_page):
     assert fallback.get_attribute("hidden") is None
     assert "[S2]" not in fallback.inner_text()
 
-    # Dieselbe Form wie im Konsenstext: die hochgestellte Ziffer, verlinkt auf
-    # die Quelle hinter GENAU dieser Nummer.
+    # Dieselbe Form wie im Konsenstext: die Quellen-Pille, verlinkt auf die
+    # Quelle hinter GENAU dieser Nummer.
     ref = fallback.locator(".src-ref")
     expect(ref).to_have_count(1)
-    expect(ref).to_have_text("2")
+    expect(ref).to_have_attribute("data-source-number", "2")
+    expect(ref).to_have_text("example.net")
     assert ref.get_attribute("href") == "https://example.net/two"
 
 
