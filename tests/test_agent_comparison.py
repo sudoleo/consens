@@ -317,7 +317,7 @@ def test_every_model_searches_with_one_configuration_and_judges_never_search(sto
         return completion
     script.factory = factory
     from app.services.llm.provider_runtime import AnalysisBudget
-    agent_budget_config.store(store.db).save(expected_revision=0, updated_by="admin", daily_token_limit=limit)
+    agent_budget_config.store(store.db).save(expected_revision=0, updated_by="admin", tier_limits={"pro": limit})
     # One family with its own search, one without.
     loop = make_loop(store, script, models={"anthropic": "claude-haiku-4-5", "deepseek": "deepseek-v4-flash"})
     loop.policy = AgentPolicy.for_chat(loop.config)

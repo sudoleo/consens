@@ -1,5 +1,5 @@
 {
-  "sources": "44120614005e",
+  "sources": "5edb84636109",
   "inputs": [
     "package-lock.json",
     "package.json",
@@ -93,6 +93,7 @@
     "static/js/sidebar-quota.js",
     "static/js/source-verification.js",
     "static/js/sources.js",
+    "static/js/token-budget.js",
     "static/js/usage-limit.js",
     "static/js/user-memory.js",
     "static/js/user-tier.js",
@@ -171,19 +172,19 @@
   "scripts": [
     {
       "name": "head",
-      "src": "/static/dist/head.fadc4d2b6d78.js",
+      "src": "/static/dist/head.5782a8b77cb8.js",
       "module": false,
       "defer": false
     },
     {
       "name": "auth",
-      "src": "/static/dist/auth.5e487d1e2570.js",
+      "src": "/static/dist/auth.5c8ab3c866cb.js",
       "module": false,
       "defer": true
     },
     {
       "name": "firebase",
-      "src": "/static/dist/firebase.7720e6a47517.js",
+      "src": "/static/dist/firebase.dfaa008e9688.js",
       "module": true,
       "defer": false
     },
@@ -195,23 +196,24 @@
     },
     {
       "name": "app",
-      "src": "/static/dist/app.800609d36bf6.js",
+      "src": "/static/dist/app.3b6228aa7ea8.js",
       "module": false,
       "defer": true
     }
   ],
   "styles": {
-    "app": "/static/dist/app.baab225e0320.css"
+    "app": "/static/dist/app.5497a8883666.css"
   },
   "previous_assets": [
+    "app.baab225e0320.css",
     "app.3b1b0a05aa01.css",
-    "app.559bafc03a8b.css",
+    "app.800609d36bf6.js",
     "app.6d03b0e2955d.js",
-    "app.11fd100e83ef.js",
+    "auth.5e487d1e2570.js",
     "demo.639b5a1996da.js",
+    "firebase.7720e6a47517.js",
     "firebase.325b77abcde6.js",
-    "firebase.5cc9d6fa1098.js",
-    "head.dcc72251ba36.js",
-    "head.a7a5f459de29.js"
+    "head.fadc4d2b6d78.js",
+    "head.dcc72251ba36.js"
   ]
 }
