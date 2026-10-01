@@ -83,15 +83,19 @@ def test_free_gets_nothing_and_pro_gets_everything():
 
 # --- Limits ----------------------------------------------------------------
 
-def test_plus_has_the_largest_run_quota():
-    # Plus faehrt die guenstigen Modelle und darf deshalb mehr laufen als Pro.
-    assert cfg.get_consensus_run_limit(TIER_PLUS) > cfg.get_consensus_run_limit(TIER_PRO)
-    assert cfg.get_consensus_run_limit(TIER_PLUS) > cfg.get_consensus_run_limit(TIER_FREE)
+def test_plus_has_a_larger_token_allowance_than_free():
+    # Seit 2026-10-01 teilen alle Modi ein Tokenkonto pro Stufe; Plus faehrt
+    # die guenstigen Modelle und bekommt mehr als Free.
+    from app.services import agent_budget_config
+    limits = agent_budget_config.snapshot({})["tier_limits"]
+    assert limits["plus"] > limits["free"]
+    assert agent_budget_config.tier_key(TIER_PLUS) == "plus"
 
 
-def test_plus_has_no_deep_think_quota():
-    assert cfg.get_deep_think_run_limit(TIER_PLUS) == cfg.get_deep_think_run_limit(TIER_FREE)
-    assert cfg.get_deep_think_run_limit(TIER_PLUS) == 0
+def test_plus_has_no_deep_think_entitlement():
+    # Ohne eigenes Deep-Think-Kontingent sperrt allein die Capability.
+    from app.core.entitlements import entitlements_for
+    assert entitlements_for(TIER_PLUS).deep_think is False
 
 
 def test_plus_deep_search_limits_fall_back_to_free():
@@ -141,19 +145,22 @@ def test_plus_daily_watch_interval_follows_the_admin_switch():
 def test_a_plus_limit_missing_from_the_config_falls_back_to_free_not_pro():
     limits = dict(cfg.LIMITS)
     try:
-        del cfg.LIMITS["plus_consensus_run_limit"]
-        assert cfg.get_consensus_run_limit(TIER_PLUS) == cfg.get_consensus_run_limit(TIER_FREE)
+        del cfg.LIMITS["plus_max_tokens"]
+        assert cfg.get_output_token_limit(TIER_PLUS) == cfg.get_output_token_limit(TIER_FREE)
     finally:
         cfg.LIMITS.clear()
         cfg.LIMITS.update(limits)
 
 
 def test_plus_limits_are_admin_configurable():
-    normalized = cfg.normalize_limits_config({"plus_consensus_run_limit": 1234})
-    assert normalized["plus_consensus_run_limit"] == 1234
+    normalized = cfg.normalize_limits_config({"plus_max_words": 1234})
+    assert normalized["plus_max_words"] == 1234
     # Und sie stehen im Admin-GET, sonst waere der Wert nicht bedienbar.
-    assert "plus_consensus_run_limit" in cfg.get_limits_config()
+    assert "plus_max_words" in cfg.get_limits_config()
     assert "memory_plus_chars" in cfg.get_memory_edit_config()
+    # Das Tokenkonto der Stufe ist im eigenen Admin-Dokument bedienbar.
+    from app.services import agent_budget_config
+    assert agent_budget_config.snapshot({"tier_limits": {"plus": 1234}})["tier_limits"]["plus"] == 1234
 
 
 def test_memory_plus_chars_is_clamped_between_free_and_pro():

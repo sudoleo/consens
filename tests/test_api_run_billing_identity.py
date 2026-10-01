@@ -29,15 +29,17 @@ from app.services.usage_repository import (
     FirestoreUsageRepository,
     RunKind,
     RunStatus,
-    UsageLimits,
+    TokenAdmission,
     UsageRunExpired,
     canonical_request_fingerprint,
 )
+from app.services import agent_budget_config
 from test_api_run_repository import FakeDb
 
 
 UID = "review"
-LIMITS = UsageLimits(total=100, deep_think=100)
+LIMITS = TokenAdmission(tier="free", mode="consensus", limit=10_000_000, estimate=1_000,
+                        period="2026-09-26", config=agent_budget_config.snapshot({}))
 ARGS = dict(
     uid=UID,
     api_key_id="k" * 64,
@@ -62,7 +64,7 @@ def env(monkeypatch):
         "execute_consensus_pipeline",
         lambda run: executions.append(run["run_id"]) or {"consensus_response": "offline"},
     )
-    monkeypatch.setattr(runner, "usage_limits_for_run", lambda run: LIMITS)
+    monkeypatch.setattr(runner, "token_admission_for_run", lambda run: LIMITS)
 
     def runs():
         return [
@@ -87,8 +89,18 @@ def complete_run(env, **overrides):
     return run
 
 
+def usage_runs(env, status, utc_date=None):
+    return sum(1 for path, data in env.db.documents.items()
+               if path[:3] == ("users", UID, "usage_runs") and data.get("status") == status
+               and (utc_date is None or data.get("utc_date") == utc_date))
+
+
 def consumed(env):
-    return env.usage.snapshot(UID, LIMITS).total.consumed
+    return usage_runs(env, RunStatus.CONSUMED.value)
+
+
+def reserved(env):
+    return usage_runs(env, RunStatus.RESERVED.value)
 
 
 def test_deleted_run_cannot_start_paid_work_again_under_the_same_key(env):
@@ -235,15 +247,19 @@ def test_run_charged_before_midnight_finishes_after_midnight_without_second_char
 
     assert first.utc_date == retry.utc_date == result.utc_date == "2026-09-26"
     assert retry.idempotent and result.idempotent and not claim.idempotent
-    old_day = env.usage.snapshot(UID, LIMITS, now=BEFORE_MIDNIGHT)
-    new_day = env.usage.snapshot(UID, LIMITS, now=BEFORE_MIDNIGHT + timedelta(hours=1))
-    assert (old_day.total.consumed, old_day.total.reserved) == (1, 0)
-    assert (new_day.total.consumed, new_day.total.reserved) == (0, 0)
+    assert usage_runs(env, "consumed", "2026-09-26") == 1
+    assert usage_runs(env, "consumed", "2026-09-27") == 0
+    # Its tokens book into the account period it was admitted in.
+    env.usage.book_operation(UID, "late", "consensus", measured=500, estimated=0,
+                             now=BEFORE_MIDNIGHT + timedelta(minutes=10))
+    assert env.db.documents[("users", UID, "chat_state", "agent_tokens_2026-09-26")]["used"] == 500
 
-    # A new run on the following day is charged to that day.
-    env.usage.reserve(UID, "next", RunKind.REGULAR, LIMITS,
+    # A new run on the following day is admitted on that day.
+    next_day = TokenAdmission(tier="free", mode="consensus", limit=10_000_000, estimate=1_000,
+                              period="2026-09-27", config=LIMITS.config)
+    env.usage.reserve(UID, "next", RunKind.REGULAR, next_day,
                       now=BEFORE_MIDNIGHT + timedelta(hours=1))
-    assert env.usage.snapshot(UID, LIMITS, now=BEFORE_MIDNIGHT + timedelta(hours=1)).total.reserved == 1
+    assert usage_runs(env, "reserved", "2026-09-27") == 1
 
 
 def test_execution_validity_stays_bounded(env):
@@ -281,7 +297,7 @@ def test_crash_between_reserve_and_mark_reserved_is_terminalized_once(env, monke
     with pytest.raises(RuntimeError):
         runner.reserve_run(run)
     monkeypatch.setattr(env.api, "mark_reserved", original_mark)
-    assert env.usage.snapshot(UID, LIMITS).total.reserved == 1
+    assert reserved(env) == 1
     usage_path = expire_usage_receipt(env, run)
     monkeypatch.setattr(runner, "mock_llm_enabled", lambda: False)
     monkeypatch.setattr(runner, "_retention_backfilled", True)
@@ -292,7 +308,7 @@ def test_crash_between_reserve_and_mark_reserved_is_terminalized_once(env, monke
     assert failed["status"] == "failed"
     assert failed["error"]["code"] == "reservation_expired"
     assert env.db.documents[usage_path]["status"] == RunStatus.RELEASED.value
-    assert env.usage.snapshot(UID, LIMITS).total.reserved == 0
+    assert reserved(env) == 0
     assert env.executions == []
     # Nothing is left for later recovery passes to retry forever.
     assert env.api.list_by_status(("accepted",)) == []
@@ -323,5 +339,5 @@ def test_route_terminalizes_an_accepted_run_whose_reservation_expired(env, monke
     assert response.status_code == 202
     assert response.json()["status"] == "failed"
     assert response.json()["error"]["code"] == "reservation_expired"
-    assert env.usage.snapshot(UID, LIMITS).total.reserved == 0
+    assert reserved(env) == 0
     assert env.executions == []

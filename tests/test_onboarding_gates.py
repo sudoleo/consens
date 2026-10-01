@@ -131,8 +131,11 @@ def test_followups_are_no_longer_pro_gated():
 
 def test_free_daily_runs_allow_more_than_a_single_try():
     # Drei Runs waren ein Test, keine Gewohnheit - und mit freien Follow-ups
-    # waere ein Limit von drei sofort wieder die alte Sackgasse.
-    assert cfg.get_consensus_run_limit(False) >= 10
+    # waere ein Limit von drei sofort wieder die alte Sackgasse. Seit dem
+    # Tokenkonto: das Free-Konto deckt mindestens zehn typische Laeufe.
+    from app.services import agent_budget_config
+    config = agent_budget_config.snapshot({})
+    assert config["tier_limits"]["free"] >= 10 * config["run_estimates"]["free"]["consensus"]
 
 
 # ---------------------------------------------------------------------------

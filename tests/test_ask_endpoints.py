@@ -13,7 +13,8 @@ from fastapi.testclient import TestClient
 import app.core.config as cfg
 from app.api.routers import chat as chat_router
 from app.core.rate_limit import limiter
-from app.services.usage_repository import RunKind, UsageLimits
+from app.services import agent_budget_config, agent_quota
+from app.services.usage_repository import RunKind
 from usage_test_support import make_usage_repository
 
 
@@ -277,14 +278,20 @@ def test_multibyte_question_and_system_prompt_obey_utf8_byte_caps():
     provider_call.assert_not_called()
 
 
+def _ledger(repository, uid):
+    config = agent_budget_config.get_config(repository._db)
+    period = agent_quota.period_key(config)
+    return repository._db.documents.get(("users", uid, "chat_state", "agent_tokens_" + period)) or {}
+
+
 def test_usage_limit_blocks_developer_key_path(reset_rate_limiter):
     client = make_client()
     uid = "uid-limit-reached"
-    limits = UsageLimits(total=cfg.get_consensus_run_limit(False), deep_think=0)
-    for index in range(limits.total):
-        key = f"used-{index}"
-        reset_rate_limiter.reserve(uid, key, RunKind.REGULAR, limits)
-        reset_rate_limiter.consume(uid, key)
+    # The day's tokens are spent: a run that skipped /prepare is not admitted.
+    admission = reset_rate_limiter.admission("free")
+    reset_rate_limiter.reserve(uid, "spent", RunKind.REGULAR, admission)
+    reset_rate_limiter.consume(uid, "spent")
+    reset_rate_limiter.book_operation(uid, "spent", "ask:openai", measured=admission.limit, estimated=0)
     p1, p2 = auth_patches(uid=uid)
     with p1, p2:
         response = client.post(
@@ -294,8 +301,8 @@ def test_usage_limit_blocks_developer_key_path(reset_rate_limiter):
         )
     assert response.status_code == 403
     body = response.json()["detail"]
-    assert body["error_code"] == "total_usage_limit_exceeded"
-    assert body["free_usage_remaining"] == 0
+    assert body["error_code"] == "token_budget_exhausted"
+    assert body["token_budget"]["remaining"] == 0
 
 
 def test_gemini_developer_path_uses_openrouter_and_counts_usage(reset_rate_limiter):
@@ -322,15 +329,10 @@ def test_gemini_developer_path_uses_openrouter_and_counts_usage(reset_rate_limit
         assert captured["provider"].label == "Gemini"
         assert captured["key"] == "server-key"
         assert captured["extras"]["key_used"] == "Developer API Key"
-        snapshot = reset_rate_limiter.snapshot(
-            uid,
-            UsageLimits(
-                total=cfg.get_consensus_run_limit(False),
-                deep_think=cfg.get_deep_think_run_limit(False),
-            ),
-        )
-        assert snapshot.total.consumed == 1
-        assert isinstance(snapshot.total.consumed, int)
+        # A run that skipped /prepare is admitted here, once; its answer is
+        # metered and booked through the booking handed to _run_ask.
+        assert captured["booking"].operation == "ask:gemini"
+        assert _ledger(reset_rate_limiter, uid)["pipeline_runs"] == 1
     finally:
         pass
 
@@ -359,16 +361,11 @@ def test_own_key_path_bypasses_usage_counting(reset_rate_limiter):
             )
         assert response.status_code == 200
         assert captured["key"] == "sk-user-key"
-        assert captured["extras"]["free_usage_remaining"] == "Unlimited"
+        assert captured["extras"]["usage"] == "own_keys"
+        assert "token_budget" not in captured["extras"]
         assert captured["extras"]["key_used"] == "User API Key"
-        snapshot = reset_rate_limiter.snapshot(
-            uid,
-            UsageLimits(
-                total=cfg.get_consensus_run_limit(False),
-                deep_think=cfg.get_deep_think_run_limit(False),
-            ),
-        )
-        assert snapshot.total.consumed == 0
+        assert captured.get("booking") is None
+        assert _ledger(reset_rate_limiter, uid) == {}
     finally:
         pass
 

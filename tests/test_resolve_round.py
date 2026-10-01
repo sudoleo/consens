@@ -11,7 +11,8 @@ import app.core.config as cfg
 from app.api.routers import bookmarks as bookmarks_router
 from app.api.routers import chat as chat_router
 from app.core.rate_limit import limiter
-from app.services.usage_repository import RunKind, UsageLimits
+from app.services import agent_budget_config, agent_quota
+from app.services.usage_repository import RunKind
 from app.services.llm.resolve_engine import (
     InvalidResolvePayload,
     normalize_resolve_positions,
@@ -30,6 +31,11 @@ def fake_run_usage(monkeypatch):
         lambda data: str(data.get("usage_run_key") or "test-resolve-run"),
     )
     yield repository
+
+
+def ledger(repository, uid):
+    period = agent_quota.period_key(agent_budget_config.get_config(repository._db))
+    return repository._db.documents.get(("users", uid, "chat_state", "agent_tokens_" + period)) or {}
 
 
 def make_positions():
@@ -251,7 +257,7 @@ def test_resolve_is_open_to_plus(fake_run_usage):
     assert body["tier"] == "plus"
     # is_pro_user bleibt das Modell-/Deep-Think-Flag und ist fuer Plus falsch.
     assert body["is_pro_user"] is False
-    assert body["limit"] == cfg.get_consensus_run_limit("plus")
+    assert body["token_budget"]["limit"] == agent_budget_config.DEFAULT_TIER_LIMITS["plus"]
 
 
 def test_resolve_rejects_invalid_positions():
@@ -277,14 +283,10 @@ def test_resolve_counts_usage_and_returns_result(fake_run_usage):
     body = response.json()
     assert body["outcome"] == "standoff"
     assert body["is_pro_user"] is True
-    snapshot = fake_run_usage.snapshot(
-        uid,
-        UsageLimits(
-            total=cfg.get_consensus_run_limit(True),
-            deep_think=cfg.get_deep_think_run_limit(True),
-        ),
-    )
-    assert snapshot.total.consumed == 1
+    # Admitted once (against the smaller Compare estimate) and booked as a
+    # final operation, which also drops the admission hold.
+    assert ledger(fake_run_usage, uid)["pipeline_runs"] == 1
+    assert body["token_budget"]["reserved"] == 0
     # Positionen kommen normalisiert bei der Engine an.
     args = round_mock.call_args.args
     assert args[1] == "Opening year"
@@ -294,15 +296,12 @@ def test_resolve_rejects_a_key_reserved_for_a_normal_consensus(fake_run_usage):
     client = make_client()
     uid = "uid-resolve-key-purpose"
     payload = {**resolve_payload(), "usage_run_key": "normal-consensus-key"}
-    limits = UsageLimits(
-        total=cfg.get_consensus_run_limit(True),
-        deep_think=cfg.get_deep_think_run_limit(True),
-    )
+    admission = fake_run_usage.admission("pro")
     fake_run_usage.reserve(
         uid,
         payload["usage_run_key"],
         RunKind.REGULAR,
-        limits,
+        admission,
         request_fingerprint=chat_router.usage_run_fingerprint(
             payload,
             question=payload["question"],
@@ -318,27 +317,22 @@ def test_resolve_rejects_a_key_reserved_for_a_normal_consensus(fake_run_usage):
     assert response.status_code == 409
     assert response.json()["detail"]["error_code"] == "usage_run_conflict"
     round_mock.assert_not_called()
-    snapshot = fake_run_usage.snapshot(uid, limits)
-    assert snapshot.total.reserved == 1
-    assert snapshot.total.consumed == 0
+    assert ledger(fake_run_usage, uid)["pipeline_runs"] == 1
+    assert ledger(fake_run_usage, uid).get("used", 0) == 0
 
 
 def test_resolve_blocks_when_usage_limit_reached(fake_run_usage):
     client = make_client()
     uid = "uid-resolve-limit"
-    limits = UsageLimits(
-        total=cfg.get_consensus_run_limit(True),
-        deep_think=cfg.get_deep_think_run_limit(True),
-    )
-    for index in range(limits.total):
-        key = f"used-{index}"
-        fake_run_usage.reserve(uid, key, RunKind.REGULAR, limits)
-        fake_run_usage.consume(uid, key)
+    admission = fake_run_usage.admission("pro")
+    fake_run_usage.reserve(uid, "spent", RunKind.REGULAR, admission)
+    fake_run_usage.consume(uid, "spent")
+    fake_run_usage.book_operation(uid, "spent", "ask:openai", measured=admission.limit, estimated=0)
     with patch.object(chat_router, "verify_user_token", return_value=uid), \
          patch.object(chat_router, "get_user_tier", return_value="pro"):
         response = client.post("/resolve", headers=AUTH_HEADER, json=resolve_payload())
     assert response.status_code == 403
-    assert response.json()["detail"]["error_code"] == "total_usage_limit_exceeded"
+    assert response.json()["detail"]["error_code"] == "token_budget_exhausted"
 
 
 def test_resolve_persists_only_the_server_result_on_the_bound_bookmark_revision():

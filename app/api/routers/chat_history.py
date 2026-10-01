@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import logging
 from typing import Literal
 
@@ -51,6 +52,7 @@ from app.services.llm.credentials import (
     openrouter_api_key,
     resolve_developer_api_keys,
 )
+from app.services.run_metering import OperationBooking
 from app.services.usage_repository import (
     FirestoreUsageRepository,
     RunStatus,
@@ -413,15 +415,25 @@ def build_turn_context(
             chat_id=chat_id,
             turn_id=turn_id,
         )
-        context = service.build_for_turn(
-            uid,
-            chat_id,
-            turn_id,
-            compressor=compressor,
-            degraded_reason=degraded_reason,
-            engine_provider=provider,
-            engine_model=engine_model,
-        )
+        # The memory call is part of the run that funds it: measured in the
+        # transport and booked on the shared token account (own keys: never).
+        booking = (OperationBooking(FirestoreUsageRepository(db_firestore), uid, payload.usage_run_key,
+                                    f"context:{turn_id[:32]}", skip_empty=True)
+                   if compressor is not None and not payload.useOwnKeys and payload.usage_run_key else None)
+        try:
+            with (booking.metering() if booking is not None else contextlib.nullcontext()):
+                context = service.build_for_turn(
+                    uid,
+                    chat_id,
+                    turn_id,
+                    compressor=compressor,
+                    degraded_reason=degraded_reason,
+                    engine_provider=provider,
+                    engine_model=engine_model,
+                )
+        finally:
+            if booking is not None:
+                booking.finish()
         return {"status": "success", "context": context}
     except ChatContextBuildInProgress:
         return JSONResponse(

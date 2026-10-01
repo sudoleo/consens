@@ -37,11 +37,13 @@ from app.services.llm.credentials import (
 from app.services.llm.mock_llm import mock_llm_enabled
 from app.services.llm import provider_transport
 from app.services.llm.provider_transport import PROVIDER_LABELS, PROVIDER_ORDER
+from app.services import agent_quota
+from app.services.run_metering import OperationBooking
 from app.services.usage_repository import (
     FirestoreUsageRepository,
     RunKind,
     RunStatus,
-    UsageLimits,
+    TokenAdmission,
     UsageRunConflict,
     UsageRunExpired,
     UsageRunNotFound,
@@ -120,12 +122,12 @@ def run_tier(run: dict):
     return TIER_PRO if run.get("is_pro_at_acceptance") else TIER_FREE
 
 
-def usage_limits_for_run(run: dict) -> UsageLimits:
-    tier = run_tier(run)
-    return UsageLimits(
-        total=cfg.get_consensus_run_limit(tier),
-        deep_think=cfg.get_deep_think_run_limit(tier),
-    )
+def token_admission_for_run(run: dict) -> TokenAdmission:
+    """API runs share the account's daily tokens with app and Agent: one
+    Consensus (or Deep Think) run must fit before it is accepted."""
+    deep_think = bool((run.get("request") or {}).get("deep_think"))
+    tier = agent_quota.account_tier(str(run["uid"]), run_tier(run))
+    return usage_repository.admission(tier, mode="consensus", deep_think=deep_think)
 
 
 def usage_key_for_run(run: dict) -> str:
@@ -170,7 +172,7 @@ def reserve_run(run: dict):
         str(run["uid"]),
         usage_key_for_run(run),
         RunKind.DEEP_THINK if deep_think else RunKind.REGULAR,
-        usage_limits_for_run(run),
+        token_admission_for_run(run),
         request_fingerprint=canonical_request_fingerprint(
             {
                 "schema": 1,
@@ -363,7 +365,15 @@ def execute_persisted_run(run_id: str) -> None:
         # The usage transaction is separate from the API-run claim transaction.
         usage_repository.consume(run["uid"], usage_key_for_run(run))
         usage_consumed = True
-        result = execute_consensus_pipeline(run)
+        # Every answer and judge call is measured in the transport and booked
+        # once on the account, also when the pipeline fails half-way.
+        booking = OperationBooking(usage_repository, str(run["uid"]), usage_key_for_run(run),
+                                   "pipeline", final=True)
+        try:
+            with booking.metering():
+                result = execute_consensus_pipeline(run)
+        finally:
+            booking.finish()
         api_run_repository.succeed(run_id, result)
     except Exception as exc:
         logging.error("Consensus API run failed category=%s", safe_exception(exc))

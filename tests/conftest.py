@@ -33,6 +33,27 @@ def _default_prompt_configuration(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _default_token_account_tier(monkeypatch):
+    """The shared token account reads tier and admin role per account.
+
+    Unit fakes have no users/{uid} document; without this seam every ledger
+    read would wait for the closed loopback endpoint. Agent tests run as Pro
+    (Agent is Pro/Admin only); tier-specific tests patch these themselves.
+    Routes pass their already resolved tier, so only the role is read there.
+    """
+    from app.services import agent_budget_config, agent_quota
+
+    monkeypatch.setattr(agent_quota, "_stored_tier", lambda uid: "pro")
+    monkeypatch.setattr(agent_quota, "_admin_role", lambda uid: False)
+    # The Agent suites were calibrated against the historic 250,000-token
+    # Agent allowance; the shared account's production defaults are larger
+    # (agent_budget_config.DEFAULT_TIER_LIMITS). Tests that care about the
+    # real defaults read them from the module, not from this value.
+    for tier in ("pro", "admin"):
+        monkeypatch.setitem(agent_budget_config.DEFAULT_TIER_LIMITS, tier, 250_000)
+
+
+@pytest.fixture(autouse=True)
 def _neutral_user_memory_profile():
     """Jeder authentifizierte /ask_* liest jetzt das User-Memory-Profil.
 
