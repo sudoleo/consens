@@ -253,7 +253,7 @@ def test_comparison_review_and_saved_projection(browser, phase4_server, width, d
         expect(page.locator('#agentReasoningEffort')).to_have_value('high')
         expect(page.locator('#composerDeepState')).to_have_text('High')
         page.evaluate("dark => { document.documentElement.classList.toggle('dark-mode', dark); document.body.classList.toggle('dark-mode', dark); }", dark)
-        expect(page.locator("#quotaTriggerValue")).to_have_text("75%")
+        expect(page.locator('#quotaTrigger')).to_have_attribute('aria-label', re.compile(r'^75% of today'))
         expect(page.locator("#agentTokenBudget")).to_have_count(0)
         def assert_composer_layout():
             input_box = page.locator("#questionInput").bounding_box()
@@ -281,7 +281,7 @@ def test_comparison_review_and_saved_projection(browser, phase4_server, width, d
         expect(page.locator('#attachTrigger')).to_be_visible()
         assert requests[0]['check_sources'] is True
         assert requests[0]['reasoning_effort'] == 'high'
-        expect(page.locator('#quotaTriggerValue')).to_have_text('56%')
+        expect(page.locator('#quotaTrigger')).to_have_attribute('aria-label', re.compile(r'^56% of today'))
         expect(page.locator('.agent-evidence-link[data-section="sources"]')).to_have_text('Sources2')
         page.wait_for_function("() => App.runRegistry.visible()?.status === 'succeeded'")
         evidence_links = page.locator('#agentAnswer .agent-evidence-link')

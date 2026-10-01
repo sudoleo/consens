@@ -26,6 +26,12 @@
     return error?.name === "AbortError";
   }
 
+  // Compare = answers only, otherwise the full Consensus pipeline. Deep Think
+  // is derived server-side from deep_search.
+  function runModeOf(context) {
+    return context?.config?.agentMode ? "consensus" : "compare";
+  }
+
   function getActiveMode() {
     return document.getElementById("deepSearchToggle")?.checked ? "Deep Think" : "Standard";
   }
@@ -158,18 +164,7 @@
     // Usage is account-level rather than view-level. The auth fence prevents
     // a late response from a previous login from repainting the next account.
     if (authIsCurrent(context)) {
-      const usageView = registry.reconcileUsageSnapshot?.(context, {
-        remaining: normalized.free_usage_remaining,
-        deepRemaining: normalized.deep_remaining,
-        totalLimit: normalized.limit ?? window.currentMaxLimit,
-        deepLimit: normalized.deep_limit ?? window.currentDeepLimit
-      }) || {
-        remaining: normalized.free_usage_remaining,
-        deepRemaining: normalized.deep_remaining,
-        totalLimit: normalized.limit ?? window.currentMaxLimit,
-        deepLimit: normalized.deep_limit ?? window.currentDeepLimit
-      };
-      window.App.renderUsageDisplay?.(usageView);
+      window.App.renderUsageDisplay?.(normalized, context);
       const noSavedViewSelected = !registry.visible()
         && !registry.getSelectedConversationBasis?.();
       // Wie in run-view.js: ein blosses "is_pro_user: false" ohne "tier" ist
@@ -283,6 +278,7 @@
       deep_search: context.config.deepSearch,
       system_prompt: systemPrompt,
       mode: context.mode,
+      run_mode: runModeOf(context),
       model: providerConfig.modelId,
       id_token: idToken,
       useOwnKeys: context.config.useOwnKeys,
@@ -385,11 +381,9 @@
         body: JSON.stringify({ id_token: token, usage_run_key: key }),
         keepalive: true
       });
-      const data = await response.json().catch(() => ({}));
-      if (response.ok && authIsCurrent(context)) {
-        const usageView = registry.reconcileUsageSnapshot?.(context, data, { authoritative: true });
-        if (usageView) window.App.renderUsageDisplay?.(usageView);
-      }
+      // The release drops the run's admission hold; spent tokens never
+      // change, so there is no account snapshot to repaint.
+      await response.json().catch(() => ({}));
     } catch (_) {}
   }
 
@@ -457,6 +451,8 @@
         system_prompt: context.config.systemPrompt,
         deep_search: context.config.deepSearch,
         mode: context.mode,
+        // Admission: the expected tokens of a typical run of this mode.
+        run_mode: runModeOf(context),
         useOwnKeys: context.config.useOwnKeys,
         id_token: idToken
       };
@@ -803,7 +799,8 @@
 
     const useOwnKeys = document.getElementById("useOwnKeysSwitch")?.checked === true;
     const deepThink = document.getElementById("deepSearchToggle")?.checked === true;
-    if (window.App.usageLimit?.blockIfExhausted?.({ useOwnKeys, deepThink, source: "send" })) {
+    const runMode = deepThink ? "deep_think" : (window.App.runMode?.pipeline?.() === false ? "compare" : "consensus");
+    if (window.App.usageLimit?.blockIfExhausted?.({ useOwnKeys, deepThink, mode: runMode, source: "send" })) {
       trackAppEvent("app_query_blocked", { reason: "usage_limit" });
       return;
     }

@@ -26,8 +26,6 @@
     accountTier: { owner: "userTier", initial: "free" },
     isUserPro: { owner: "userTier", initial: false },
     isUserPlus: { owner: "userTier", initial: false },
-    currentMaxLimit: { owner: "userTier", initial: null },
-    currentDeepLimit: { owner: "userTier", initial: null },
     spinnerHTML: { owner: "runUi", initial: "" }
   });
   Object.values(definitions).forEach(Object.freeze);

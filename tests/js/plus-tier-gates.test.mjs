@@ -154,7 +154,9 @@ describe("firebase.js feeds the tier, not the pro flag", () => {
     "utf8"
   );
 
-  const TIER_SINKS = ["updateUserTierUI", "setCurrentUsageLimits"];
+  // setCurrentUsageLimits gibt es seit dem gemeinsamen Tokenkonto nicht
+  // mehr: das Konto kommt fertig als token_budget vom Server.
+  const TIER_SINKS = ["updateUserTierUI"];
 
   // Das erste Argument jedes Aufrufs. Die Pruefungen auf die Existenz der
   // Funktion (`typeof window.x === "function"`) haben keine oeffnende Klammer

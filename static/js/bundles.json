@@ -22,6 +22,10 @@
         "static/js/app-bootstrap.js",
         "static/js/app-state.js",
         {
+          "file": "static/js/token-budget.js",
+          "note": "The one daily token account (Compare, Consensus, Agent). Before firebase.js and every run module, which feed it."
+        },
+        {
           "file": "static/js/email-verify.js",
           "note": "Defines window.App.emailVerification before the Firebase module consumes it. It is listed directly so source-mode cache busting covers it."
         },

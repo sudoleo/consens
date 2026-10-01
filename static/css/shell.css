@@ -548,9 +548,10 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
 }
 
 /* ---- Account + quota -----------------------------------------------------
-   The footer row carries a progress ring around the avatar; clicking it opens
-   the quota panel upward. The ring is the only place in the shell where a
-   number about *your* account is always visible.
+   The footer row carries a quiet 20 px ring for today's token account (all
+   modes share it); clicking it opens the allowance panel upward. The ring
+   holds no number: the exact value is in its tooltip and in the panel.
+   Semantic colour only on the arc and the bar fill when it runs low.
    -------------------------------------------------------------------------- */
 /* The footer used to be position:fixed with an 80px margin reserved above it
    — that reserve is exactly the dead band that sat between the bookmark list
@@ -582,10 +583,10 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
   z-index: var(--z-dropdown);
   display: none;
   flex-direction: column;
-  gap: 11px;
+  gap: 10px;
   background: var(--raise);
   border-radius: var(--radius-md);
-  padding: 13px 14px;
+  padding: 14px 16px 14px;
 }
 
 .sidebar-quota.is-open {
@@ -596,41 +597,47 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: var(--font-size-micro);
-  color: var(--ink);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--ink-2);
 }
 
-.quota-row {
+/* One primary figure: "62% left today", a thin bar, the reset time. */
+.quota-primary {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 8px;
 }
 
-/* display:flex above must not override the hidden attribute (Agent mode hides
-   the Deep Think and Watches rows). */
-.quota-row[hidden] {
+.quota-primary[hidden],
+.quota-detail[hidden],
+.sidebar-quota-foot[hidden] {
   display: none;
 }
 
-.quota-top {
+.quota-figure {
+  margin: 0;
   display: flex;
-  justify-content: space-between;
-  font-size: var(--font-size-xs);
+  align-items: baseline;
+  gap: 6px;
+  color: var(--ink);
+  line-height: var(--line-height-solid);
 }
 
-.quota-top b {
-  font-weight: var(--font-weight-medium);
-  color: var(--ink);
-}
-
-.quota-top span {
-  color: var(--ink);
+.quota-figure-value {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
   font-variant-numeric: tabular-nums;
-  font-size: var(--font-size-micro);
+  letter-spacing: -0.01em;
+}
+
+.quota-figure-unit {
+  font-size: var(--font-size-xs);
+  color: var(--ink-2);
 }
 
 .quota-track {
-  height: 3px;
+  height: 4px;
   border-radius: 2px;
   background: var(--line-soft);
   overflow: hidden;
@@ -641,22 +648,54 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
   height: 100%;
   width: var(--p, 0%);
   background: var(--ink-2);
+  border-radius: inherit;
   transition: width 0.3s ease;
 }
 
 /* Nearly spent reads amber — the same amber the answer uses for "contested",
    so one colour never means two things. */
-.quota-track.is-low i {
+.quota-track[data-state="low"] i {
   background: var(--partial);
 }
 
-.quota-track.is-out i {
+.quota-track[data-state="out"] i {
   background: var(--dispute);
 }
 
+.quota-reset,
+.quota-detail,
 .sidebar-quota-foot {
+  margin: 0;
   font-size: var(--font-size-micro);
-  color: var(--ink);
+  line-height: 1.45;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.quota-reset {
+  color: var(--ink-2);
+}
+
+.quota-detail {
+  padding-top: 10px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.quota-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: var(--font-size-micro);
+  color: var(--ink-3);
+}
+
+.quota-row[hidden] {
+  display: none;
+}
+
+.quota-row-value {
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
 }
 
 .quota-trigger {
@@ -677,29 +716,29 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
   display: none;
 }
 
-.quota-trigger:hover {
+.quota-trigger:hover,
+.quota-trigger[aria-expanded="true"] {
   background: var(--raise);
 }
 
+.quota-trigger:focus-visible {
+  outline: 2px solid var(--ink-2);
+  outline-offset: 1px;
+}
+
+/* A glyph, not a gauge: 20 px, 2 px stroke, nothing inside. */
 .quota-ring {
-  position: absolute;
-  inset: 0;
-  width: 32px;
-  height: 32px;
-  transform: rotate(-90deg);
+  width: 20px;
+  height: 20px;
+  display: block;
 }
 
-.quota-ring circle {
+.quota-ring-track {
+  stroke: var(--line);
+}
+
+.quota-ring-arc {
   transition: stroke-dashoffset 0.4s ease, stroke 0.3s ease;
-}
-
-.quota-trigger-value {
-  position: relative;
-  color: var(--ink);
-  font-size: var(--font-size-micro);
-  font-weight: var(--font-weight-semibold);
-  font-variant-numeric: tabular-nums;
-  line-height: var(--line-height-solid);
 }
 
 /* --------------------------------------------------------------------------
@@ -3883,6 +3922,7 @@ body:not(.claim-counts-visible) .consensus-answer-body .claim-badge {
 
 @media (prefers-reduced-motion: reduce) {
   .quota-track i,
+  .quota-ring-arc,
   .sidebar-new-run,
   .sidebar-toggle-square {
     transition: none;

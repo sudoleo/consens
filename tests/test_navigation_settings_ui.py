@@ -555,7 +555,9 @@ def test_logout_clears_the_loaded_run_and_aborts_active_streams():
     )[0]
     assert logout.index('cancelAll?.("logout")') < logout.index("await signOut(auth)")
     assert "function clearAuthenticatedUiState()" in firebase
-    assert '["freeUsageDisplay", "deepUsageDisplay", "watchUsageDisplay", "countdownDisplay"]' in firebase
+    assert '["watchUsageDisplay", "countdownDisplay"]' in firebase
+    # The token account belongs to the account: logout forgets it.
+    assert "window.App.tokenBudget?.clear?.();" in firebase
     assert "window.App?.sidebarQuota?.setOpen?.(false);" in firebase
     assert "window.App?.sharedModal?.close?.();" in firebase
     assert "function clearLegacyProviderKeys()" in firebase

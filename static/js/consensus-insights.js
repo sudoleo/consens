@@ -2123,18 +2123,7 @@
                 throw new Error(message);
               }
 
-              const usageView = window.App.runRegistry?.reconcileUsageSnapshot?.(binding.auth, {
-                remaining: data.free_usage_remaining,
-                deepRemaining: data.deep_remaining,
-                totalLimit: data.limit ?? window.currentMaxLimit,
-                deepLimit: data.deep_limit ?? window.currentDeepLimit
-              }) || {
-                remaining: data.free_usage_remaining,
-                deepRemaining: data.deep_remaining,
-                totalLimit: data.limit ?? window.currentMaxLimit,
-                deepLimit: data.deep_limit ?? window.currentDeepLimit
-              };
-              window.App.renderUsageDisplay(usageView);
+              window.App.renderUsageDisplay(data, binding.auth);
 
               // Ergebnis am Widerspruch merken und Karte kennzeichnen; über
               // das Bookmark persistieren, damit es beim Wiederöffnen bleibt.

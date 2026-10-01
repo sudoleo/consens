@@ -490,9 +490,16 @@
     gap: 16px;
 }
 
-.agent-budget-controls { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 12px; }
-.agent-budget-controls label { display: grid; gap: 6px; font-size: 13px; }
-.agent-budget-controls input { width: 180px; max-width: 100%; padding: 9px 12px; border: 1px solid var(--line); border-radius: 8px; color: var(--ink); background: var(--well); }
+.agent-budget-controls { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 12px; margin-top: 14px; }
+/* Tier x (limit, run estimates). Scrolls inside its own box on phones so the
+   page never scrolls sideways. */
+.token-budget-table { max-width: 100%; overflow-x: auto; }
+.token-budget-grid { border-collapse: collapse; min-width: 560px; font-size: 13px; }
+.token-budget-grid th, .token-budget-grid td { padding: 6px 10px 6px 0; text-align: left; }
+.token-budget-grid thead th { color: var(--ink-3); font-weight: var(--font-weight-medium); font-size: 12px; white-space: nowrap; }
+.token-budget-grid tbody th { font-weight: var(--font-weight-medium); color: var(--ink); padding-right: 16px; }
+.token-budget-grid input { width: 120px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; color: var(--ink); background: var(--well); font-variant-numeric: tabular-nums; }
+.token-budget-grid td:nth-child(2) input { width: 136px; }
 #agentBudgetStatus { font-size: 13px; }
 #agentBudgetStatus.is-error { color: var(--dispute); }
 .limit-row {

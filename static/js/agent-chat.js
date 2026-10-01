@@ -70,31 +70,19 @@
       if (!response.ok || !Array.isArray(data.models) || !data.models.length) throw new Error("Model list unavailable");
       catalog = data;
       catalogStatus = "ready";
+      receiveBudget(data.token_budget, uid);
     } catch (_) {
       if (uid === catalogOwner && generation === loadGeneration) catalogStatus = "failed";
     } finally {
       if (uid === catalogOwner && generation === loadGeneration) render();
     }
   }
+  // Agent and the pipeline share one daily token account. Validation,
+  // ordering of concurrent snapshots and the account owner fence live in
+  // App.tokenBudget (token-budget.js); Agent only feeds it.
   function receiveBudget(budget, uid) {
-    if (!budget || !catalog || !canUse() || uid !== catalogOwner || uid !== window.auth?.currentUser?.uid) return;
-    if (!Number.isSafeInteger(budget.limit) || budget.limit <= 0
-      || ['used', 'reserved', 'unknown', 'estimated', 'remaining', 'revision', 'config_revision'].some(key =>
-        budget[key] !== undefined && (!Number.isSafeInteger(budget[key]) || budget[key] < 0))) return;
-    const previous = catalog.token_budget;
-    if ((budget.config_revision ?? 0) < (previous?.config_revision ?? 0)) return;
-    if ((budget.config_revision ?? 0) === (previous?.config_revision ?? 0)) {
-      if (budget.day && previous?.day && budget.day < previous.day) return;
-      if (!budget.day || !previous?.day || budget.day === previous.day) {
-        if (Number.isSafeInteger(budget.revision) && Number.isSafeInteger(previous?.revision)) {
-          if (budget.revision < previous.revision) return;
-        } else if (Number.isFinite(budget.observed_at) && Number.isFinite(previous?.observed_at)
-          && budget.observed_at < previous.observed_at) return;
-      }
-    }
-    catalog.token_budget = budget;
-    catalog.budgetStale = false;
-    App.sidebarQuota?.sync();
+    if (!budget || !canUse() || uid !== window.auth?.currentUser?.uid) return;
+    App.tokenBudget?.apply?.(budget, { uid });
   }
   async function refreshBudget(uid) {
     const generation = loadGeneration;
@@ -112,7 +100,7 @@
       });
       if (user === window.auth?.currentUser && generation === loadGeneration) receiveBudget(data.token_budget, uid);
     } catch (_) {
-      if (generation === loadGeneration && catalog) { catalog.budgetStale = true; App.sidebarQuota?.sync(); }
+      if (generation === loadGeneration && catalog) App.tokenBudget?.markStale?.();
     } finally { if (budgetRefresh === pending) budgetRefresh = null; }
   }
   function renderControls(agent) {
@@ -951,8 +939,7 @@
   }
   App.agentChat = { canUse, modeState, hasValidComparisonSelection, sendBlocker, syncComposer, isSelected: () => selectedMode() === "agent",
     render: () => renderShell(), renderShell, project, send, revealPendingReview, syncPendingReview,
-    tokenBudget: () => canUse() && catalogOwner === window.auth?.currentUser?.uid
-      ? (catalog?.budgetStale ? {...catalog.token_budget, stale: true} : catalog?.token_budget) : null, receiveBudget };
+    tokenBudget: () => App.tokenBudget?.current?.() || null, receiveBudget };
   function refreshVisibleBudget() {
     if (document.visibilityState !== 'hidden' && canUse() && selectedMode() === 'agent' && catalogStatus === 'ready') refreshBudget(catalogOwner);
   }

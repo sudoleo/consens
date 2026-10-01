@@ -12,10 +12,10 @@
           data-firebase-messaging-sender-id="{{ firebase_messaging_sender_id | e }}"
           data-firebase-app-id="{{ firebase_app_id | e }}">
     <script src="/static/js/admin-config.js?v=20260811-phase6"></script>
-<link rel="stylesheet" href="/static/style.css?v=20260930-agent-ux">
-    <link rel="stylesheet" href="/static/css/admin.css?v=20260919-continuous1">
+<link rel="stylesheet" href="/static/style.css?v=20261001-tokens">
+    <link rel="stylesheet" href="/static/css/admin.css?v=20261001-tokens1">
 
-    <script type="module" src="/static/js/admin.js?v=20260929-topic-editor-providers"></script>
+    <script type="module" src="/static/js/admin.js?v=20261001-tokens1"></script>
 </head>
 <body class="dark-mode">
     <header class="top-bar">
@@ -211,23 +211,40 @@
 
         <section id="tab-limits" class="admin-tab-panel" role="tabpanel" hidden>
             <form id="agentBudgetForm" class="admin-section">
-                <h3>Agent token budget</h3>
-                <p class="section-hint">Daily input + output tokens per account. Resets at 00:00 UTC. Changes apply within 30 seconds.</p>
+                <h3>Daily token allowance</h3>
+                <p class="section-hint">
+                    One account per user and UTC day for Compare, Consensus, Deep Think and Agent
+                    (input + output tokens, reasoning included). A run starts only when the tokens left
+                    cover its <strong>expected run</strong> cost below; it then books what it measured and
+                    may end slightly below zero. Agent reserves before every call. Who may use Agent is
+                    unchanged (Pro and Admin). Changes apply within 30 seconds.
+                </p>
+                <div class="token-budget-table">
+                    <table class="token-budget-grid">
+                        <caption class="visually-hidden">Daily token allowance and expected run cost per tier</caption>
+                        <thead>
+                            <tr>
+                                <th scope="col">Tier</th>
+                                <th scope="col">Tokens per day</th>
+                                <th scope="col">Compare run</th>
+                                <th scope="col">Consensus run</th>
+                                <th scope="col">Deep Think run</th>
+                            </tr>
+                        </thead>
+                        <tbody id="agentBudgetRows"></tbody>
+                    </table>
+                </div>
                 <div class="agent-budget-controls">
-                    <label for="agentDailyTokenLimit">Tokens per day
-                        <input id="agentDailyTokenLimit" type="number" min="1" max="100000000" step="1" required disabled>
-                    </label>
-                    <button id="saveAgentBudget" type="submit" class="admin-btn" disabled>Save budget</button>
-                    <button id="resetAgentBudgets" type="button" class="admin-btn secondary" disabled>Reset all Agent budgets</button>
+                    <button id="saveAgentBudget" type="submit" class="admin-btn" disabled>Save allowance</button>
+                    <button id="resetAgentBudgets" type="button" class="admin-btn secondary" disabled>Reset all allowances</button>
                     <button id="reloadAgentBudget" type="button" class="admin-btn secondary" disabled>Reload</button>
                 </div>
                 <p id="agentBudgetMeta" class="section-hint"></p>
                 <p id="agentBudgetStatus" role="status" aria-live="polite"></p>
             </form>
             <p class="section-hint section-hint-compact">
-                Request, input, and token limits per account tier. Limits apply after the daily reset.
-                <strong>Plus</strong> runs on the same models as Free, so its run quota is deliberately the
-                largest one; Deep Think stays Pro-only and has no Plus field.
+                Input, output and Watch limits per account tier. Limits apply after the daily reset.
+                Deep Think stays Pro-only.
             </p>
             <div id="limitsContainer" class="limits-grid">
                 <!-- Populated by JavaScript -->
@@ -342,7 +359,7 @@
                 <h3>Consensus API keys</h3>
                 <p class="section-hint">
                     Issue a key for an active, e-mail-verified Firebase user. The key inherits that
-                    UID's tier and run limits. All v1 runs use the six server-selected Balanced-preset
+                    UID's tier and its daily token allowance (shared with the app). All v1 runs use the six server-selected Balanced-preset
                     families, including DeepSeek processing in China; the Scheduled Publisher is no exception.
                     Run content expires after 30 days.
                     Only a SHA-256 hash is stored; the full key is shown exactly once and should be copied directly

@@ -600,33 +600,34 @@
 
   // "Run again" ist kein Zurueckspulen, sondern ein kompletter zweiter Lauf:
   // alle Modelle antworten erneut, der Consensus wird neu geschrieben. Das
-  // kostet dasselbe wie die erste Frage, und genau das muss am Knopf stehen,
-  // bevor er geklickt wird — nicht erst im Zaehler danach.
-  function quotaRuns() {
+  // kostet ungefaehr so viel wie die erste Frage, und genau das muss am Knopf
+  // stehen, bevor er geklickt wird — nicht erst im Ring danach. Seit dem
+  // gemeinsamen Tokenkonto ist der Preis ein ungefaehrer Anteil am Tag.
+  function replayMode() {
+    return document.getElementById("deepSearchToggle")?.checked ? "deep_think" : "consensus";
+  }
+
+  function replayCost() {
     try {
-      return window.App?.sidebarQuota?.runs?.() || null;
+      const budget = window.App?.tokenBudget;
+      const mode = replayMode();
+      return budget ? { share: budget.runShare(mode), canStart: budget.canStart(mode), view: budget.view() } : null;
     } catch (err) {
       return null;
     }
   }
 
   function labelRunAgain(button) {
-    const runs = quotaRuns();
-    const cost = $("runReplayCost");
-    const unlimited = !!runs?.unlimited;
-
-    if (cost) cost.textContent = unlimited ? "" : " · uses 1 run";
+    const cost = replayCost();
+    const costLabel = $("runReplayCost");
+    if (costLabel) costLabel.textContent = cost?.share ? " · about " + cost.share + " of today" : "";
 
     const detail = ["Runs every model again and writes a new consensus."];
-    if (unlimited) {
-      detail.push("Your plan has unlimited runs.");
-    } else {
-      detail.push("It costs one run from your quota.");
-      if (runs) {
-        detail.push(runs.value > 0
-          ? runs.value + " of " + runs.limit + " left today."
-          : "No runs left today.");
-      }
+    if (cost?.share) detail.push("A run like this uses about " + cost.share + " of today’s allowance.");
+    if (cost?.view) {
+      detail.push(cost.canStart === false
+        ? "Not enough of today’s allowance left for another run."
+        : cost.view.percent + " left today.");
     }
     button.title = detail.join(" ");
   }
@@ -895,15 +896,13 @@
     input.dispatchEvent(new Event("input", { bubbles: true }));
     input.focus();
 
-    const runs = quotaRuns();
-    if (runs?.unlimited) {
-      setComposerRunNotice("Same question, ready to send. Sending starts a complete new run — every model answers again.");
-    } else if (runs && runs.value <= 0) {
-      setComposerRunNotice("Same question, ready to send. A repeat is a complete new run, and you have no runs left today.");
+    const cost = replayCost();
+    if (cost?.canStart === false) {
+      setComposerRunNotice("Same question, ready to send. A repeat is a complete new run, and today’s allowance does not cover another one.");
     } else {
       setComposerRunNotice(
-        "Same question, ready to send. A repeat is a complete new run and uses 1 run"
-        + (runs ? " — " + runs.value + " left today." : " from your quota.")
+        "Same question, ready to send. A repeat is a complete new run"
+        + (cost?.share ? " and uses about " + cost.share + " of today’s allowance." : " — every model answers again.")
       );
     }
   }
@@ -911,13 +910,10 @@
   // Das Kontingent kommt asynchron (Login, Antwort eines Laufs) und aendert
   // sich waehrend die Antwort schon dasteht. Der Preis am Knopf haengt daran,
   // also wird er nachgezogen statt einmal beim Rendern eingefroren.
-  const usageSource = document.getElementById("usageDisplay");
-  if (usageSource && typeof MutationObserver === "function") {
-    new MutationObserver(() => {
-      const button = $("runReplayButton");
-      if (button && !button.hidden) labelRunAgain(button);
-    }).observe(usageSource, { childList: true, subtree: true, characterData: true });
-  }
+  window.addEventListener("consensio:token-budget", () => {
+    const button = $("runReplayButton");
+    if (button && !button.hidden) labelRunAgain(button);
+  });
 
   const responseSection = document.querySelector(".response-section");
   if (responseSection && typeof MutationObserver === "function") {

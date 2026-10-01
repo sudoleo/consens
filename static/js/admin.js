@@ -2,7 +2,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebas
 import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
 import { createAdminClient } from "/static/js/admin-api.js?v=20260901-plustier1";
 import { createPromptConfigPanel } from "/static/js/admin-prompt-config.js?v=20260919-continuous1";
-import { createAgentBudgetPanel } from "/static/js/admin-agent-budget.js?v=20260919-budget1";
+import { createAgentBudgetPanel } from "/static/js/admin-agent-budget.js?v=20261001-tokens1";
 
 const app = initializeApp(window.FIREBASE_CONFIG);
 const auth = getAuth(app);
@@ -12,16 +12,6 @@ const agentBudgetPanel = createAgentBudgetPanel(shareAdminRequest);
 
 let providers = [];
 const limitGroups = [
-    {
-        title: 'Run Usage Limits (UTC day)',
-        fields: [
-            ['free_consensus_run_limit', 'Free consensus runs'],
-            ['plus_consensus_run_limit', 'Plus consensus runs'],
-            ['pro_consensus_run_limit', 'Pro consensus runs'],
-            ['free_deep_think_run_limit', 'Free Deep Think runs'],
-            ['pro_deep_think_run_limit', 'Pro Deep Think runs (Plus has none)']
-        ]
-    },
     {
         title: 'Input / Context Limits',
         fields: [

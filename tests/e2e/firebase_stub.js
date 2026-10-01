@@ -19,23 +19,6 @@ window.auth = {
   },
 };
 
-function configuredLimit(key, fallback) {
-  const value = Number((window.APP_LIMITS || {})[key]);
-  return Number.isFinite(value) ? value : fallback;
-}
-
-window.LIMITS = {
-  FREE: {
-    NORMAL: configuredLimit("free_consensus_run_limit", 3),
-    DEEP: configuredLimit("free_deep_think_run_limit", 0),
-  },
-  PRO: {
-    NORMAL: configuredLimit("pro_consensus_run_limit", 500),
-    DEEP: configuredLimit("pro_deep_think_run_limit", 50),
-  },
-};
-window.currentMaxLimit = window.LIMITS.FREE.NORMAL;
-window.currentDeepLimit = window.LIMITS.FREE.DEEP;
 window.isUserPro = false;
 window.bookmarksData = [];
 
