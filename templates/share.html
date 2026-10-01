@@ -25,7 +25,7 @@
   <meta name="twitter:description" content="{{ meta_description }}">
   {% if og_is_card %}<meta name="twitter:image" content="{{ og_image }}">{% endif %}
   <script type="application/ld+json">{{ jsonld | safe }}</script>
-<link rel="stylesheet" href="/static/css/public-pages.css?v=20260906-palette1">
+<link rel="stylesheet" href="/static/css/public-pages.css?v=20261001-evidence">
   <link rel="stylesheet" href="/static/css/source-verification.css?v=20260930-source-check">
   <script defer src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/dompurify@3.4.16/dist/purify.min.js"></script>
@@ -119,6 +119,26 @@
         <span>{{ watch_selected_version.fallback_notice }}</span>
       </div>
       {% endif %}
+      {% if watch_page and (watch_page.resolution or watch_page.goal) %}
+      <!-- What the owner is waiting for, and -- once a source confirmed it --
+           that the watch is complete (docs/watch-evidence-model.md). -->
+      <section class="watch-goal-banner{% if watch_page.resolution %} is-resolved{% endif %}" aria-label="Watch goal">
+        {% if watch_page.resolution %}
+        <p class="eyebrow">Resolved{% if watch_page.resolution.at.display %} &middot; <time datetime="{{ watch_page.resolution.at.iso }}">{{ watch_page.resolution.at.display }}</time>{% endif %}</p>
+        <strong class="watch-goal-banner-goal">{{ watch_page.resolution.goal or watch_page.goal }}</strong>
+        {% if watch_page.resolution.reason %}<p class="watch-goal-banner-reason">{{ watch_page.resolution.reason }}</p>{% endif %}
+        {% if watch_page.resolution.sources %}
+        <ul class="watch-evidence-list">
+          {% for item in watch_page.resolution.sources %}<li><a href="{{ item.url }}" rel="nofollow noopener" target="_blank">{{ item.title or item.url }}</a></li>{% endfor %}
+        </ul>
+        {% endif %}
+        {% else %}
+        <p class="eyebrow">Waiting for</p>
+        <strong class="watch-goal-banner-goal">{{ watch_page.goal }}</strong>
+        <p class="watch-goal-banner-reason">The watch closes when a source confirms it.</p>
+        {% endif %}
+      </section>
+      {% endif %}
       {% if watch_page and watch_drift and not watch_awaiting_first_run %}
       {% if watch_has_comparison %}
       <section class="watch-drift-hero is-{{ watch_drift.trigger }}" aria-labelledby="watchDriftHeading">
@@ -132,6 +152,17 @@
               </div>
             </div>
             <p class="watch-drift-summary">{{ watch_drift.summary }}</p>
+            {% if watch_drift.evidence_sources %}
+            <ul class="watch-evidence-list" aria-label="Sources behind this change">
+              {% for item in watch_drift.evidence_sources %}<li><a href="{{ item.url }}" rel="nofollow noopener" target="_blank">{{ item.title or item.url }}</a></li>{% endfor %}
+            </ul>
+            {% endif %}
+            {% if watch_drift.pending_check %}
+            <p class="watch-pending-check is-{{ watch_drift.pending_check.signal }}">
+              <strong>Latest check{% if watch_drift.pending_check.checked_at %} &middot; {{ watch_drift.pending_check.checked_at.strftime('%b %d, %Y') }}{% endif %}:</strong>
+              {{ watch_drift.pending_check.note }}
+            </p>
+            {% endif %}
             <!-- Zwei Belegzahlen als eine ruhige Zeile. Der Vergleichsbezug
                  steckt im Wert, nicht in einer dritten Beschriftung, und der
                  Absatz "Since tracking began" steht jetzt bei der Historie:

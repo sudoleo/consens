@@ -18,8 +18,8 @@
   <meta name="twitter:image" content="https://www.consens.io/static/favicon-square.png">
   <title>AI Consensus Topics | consens.io</title>
   <script type="application/ld+json">{{ jsonld | safe }}</script>
-<link rel="stylesheet" href="/static/css/public-pages.css?v=20260906-palette1">
-  <link rel="stylesheet" href="/static/css/topics.css?v=20260906-palette1">
+<link rel="stylesheet" href="/static/css/public-pages.css?v=20261001-evidence">
+  <link rel="stylesheet" href="/static/css/topics.css?v=20261001-evidence">
   <link rel="stylesheet" href="/static/css/public-shell.css?v=20260826-cardfoot">
   <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
   <script>
@@ -74,25 +74,26 @@
             <span class="topic-card-title">{{ entry.title }}</span>
             <span class="topic-card-question">{{ entry.lead_question }}</span>
             <span class="topic-card-summary">
-              {% if entry.latest_change_type in ('minor', 'major') and entry.latest_change_summary %}
-                {{ entry.latest_change_summary }}
+              {% if entry.standing_moved and entry.standing_change_summary %}
+                {{ entry.standing_change_summary }}
               {% elif entry.run_count > 1 %}
-                No material shift in the latest evidence review.
+                No material shift in the evidence.
               {% else %}
                 First evidence-backed snapshot. Open the timeline to see what is confirmed and what remains uncertain.
               {% endif %}
             </span>
             <span class="topic-card-data">
-              <span class="topic-score{% if entry.latest_agreement_score is not none and entry.latest_agreement_score >= 75 %} is-high{% elif entry.latest_agreement_score is not none and entry.latest_agreement_score >= 50 %} is-mid{% else %} is-low{% endif %}">
-                {% if entry.latest_agreement_score is not none %}<strong>{{ entry.latest_agreement_score }}</strong><small>/100 agreement</small>{% else %}<small>Insufficient evidence</small>{% endif %}
+              <span class="topic-score{% if entry.standing_agreement_score is not none and entry.standing_agreement_score >= 75 %} is-high{% elif entry.standing_agreement_score is not none and entry.standing_agreement_score >= 50 %} is-mid{% else %} is-low{% endif %}">
+                {% if entry.standing_agreement_score is not none %}<strong>{{ entry.standing_agreement_score }}</strong><small>/100 agreement</small>{% else %}<small>Insufficient evidence</small>{% endif %}
               </span>
               <span class="topic-run-meta">
                 <strong>{{ entry.run_count }} snapshot{{ "s" if entry.run_count != 1 }}</strong>
                 <small>Updated {{ entry.latest_run_at[:10] }}</small>
               </span>
             </span>
-            <span class="topic-change is-{{ entry.latest_change_type or 'stable' }}">
-              <i></i>{{ entry.latest_change_summary or "No material shift in the latest review." }}
+            {#- One status line; the summary above already carries what moved. -#}
+            <span class="topic-change is-{{ 'major' if entry.standing_moved else 'stable' }}">
+              <i></i>{% if entry.latest_held %}The latest check did not re-find the evidence; the answer stands.{% elif entry.standing_moved %}Moved in the latest review.{% else %}Steady in the latest review.{% endif %}
             </span>
             <span class="topic-card-link">Open timeline <b aria-hidden="true">&rarr;</b></span>
           </a>

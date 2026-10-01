@@ -2100,9 +2100,12 @@ class WatchFrontendContractTests(unittest.TestCase):
         self.assertIn('window.openWatchDialog("list")', source)
 
     def test_watch_ui_exposes_every_run_email_mode(self):
-        source = Path("static/js/watch.js").read_text(encoding="utf-8")
+        source = Path("static/js/watch.js").read_text(encoding="utf-8") + Path(
+            "static/js/watch-dashboard.js"
+        ).read_text(encoding="utf-8")
         self.assertIn('value="every_run"', source)
-        self.assertIn("Every new consensus (with content)", source)
+        self.assertIn("After every check", source)
+        self.assertIn("Only when it resolves", source)
         self.assertIn('value="condition"', source)
         self.assertIn('id="watchVisibility"', source)
         self.assertIn('id="watchRunTime"', source)
@@ -2117,20 +2120,24 @@ class WatchFrontendContractTests(unittest.TestCase):
         source = Path("static/js/watch.js").read_text(encoding="utf-8")
         html_source = Path("templates/index.html").read_text(encoding="utf-8")
         share_source = Path("templates/share.html").read_text(encoding="utf-8")
-        self.assertIn('renderQuestionStep(options?.question, modalIntent)', source)
+        self.assertIn('renderQuestionStep(options?.question, modalIntent, options?.goal)', source)
         self.assertIn('payload.question = directQuestion', source)
         self.assertIn('No model run starts until the Watch reaches its scheduled check.', source)
         self.assertIn('id="watchDashCreate"', html_source)
         self.assertIn("watch_awaiting_first_run", share_source)
 
-    def test_watch_empty_state_and_mobile_create_button_alignment(self):
-        source = Path("static/js/watch.js").read_text(encoding="utf-8")
+    def test_watch_empty_state_explains_the_difference_to_a_scheduled_prompt(self):
+        """The empty page is where the mental model is set: a Watch waits for
+        something, moves only on evidence and closes when it happens."""
+        source = Path("static/js/watch-dashboard.js").read_text(encoding="utf-8")
         css = Path("static/css/components-watch.css").read_text(encoding="utf-8")
-        self.assertIn('<strong>Keep changing answers current.</strong>', source)
-        self.assertIn('"watch-example-chip"', source)
-        self.assertIn(".watch-empty-actions", css)
-        self.assertIn("grid-template-columns: minmax(0, 1fr) auto;", css)
-        self.assertIn(".watch-dash-heading-row .watch-limit-summary", css)
+        self.assertIn("Tell us what you are waiting for.", source)
+        self.assertIn("Why a Watch, not a scheduled prompt", source)
+        self.assertIn("A scheduled prompt", source)
+        self.assertIn('"wd-example"', source)
+        self.assertIn("goal: example.goal", source)
+        self.assertIn(".wd-empty-actions", css)
+        self.assertIn(".wd-compare", css)
 
     def test_watch_setup_offers_editing_next_to_the_defaults_it_describes(self):
         """Die Defaults lasen sich wie feste Fakten: das Aufklapp-Feld stand als
@@ -2152,9 +2159,15 @@ class WatchFrontendContractTests(unittest.TestCase):
         self.assertIn('.watch-setup-chip', css)
         self.assertIn('<option value="private" selected>', source)
         self.assertIn('class="watch-advanced-settings"', source)
-        self.assertIn('Ready with smart defaults', source)
-        self.assertIn('/100 movement', source)
+        self.assertIn('Schedule and alerts', source)
         self.assertIn('weekdayOptions(browserTomorrowWeekday())', source)
+        # "What are you waiting for?" leads the dialog, with suggested goals.
+        self.assertLess(source.index('id="watchGoal"'), source.index('id="watchAdvancedSettings"'))
+        self.assertIn('"/api/watch/goal-suggestions"', source)
+        self.assertIn("condition: goal", source)
+        dashboard = Path("static/js/watch-dashboard.js").read_text(encoding="utf-8")
+        # The agreement score is not what a watch reports.
+        self.assertNotIn("/100", dashboard)
 
     def test_watch_dialog_ignores_backdrop_click_and_view_switch_hint_is_finite(self):
         watch_source = Path("static/js/watch.js").read_text(encoding="utf-8")
@@ -2208,11 +2221,16 @@ class WatchFrontendContractTests(unittest.TestCase):
         self.assertIn("pushState", js_source)
         self.assertIn("popstate", js_source)
         self.assertIn("setViewSwitchState", js_source)
+        # One sliding thumb under the active option.
+        self.assertIn('class="view-switch-thumb"', html_source)
+        self.assertIn('setAttribute("data-active"', js_source)
+        dashboard = Path("static/js/watch-dashboard.js").read_text(encoding="utf-8")
         # Morning-Brief-Toggle nutzt denselben switch/slider wie das Input-Feld.
-        self.assertIn('class="switch watch-brief-switch"', js_source)
-        self.assertIn('<span class="slider">', js_source)
-        self.assertIn("renderNotificationsPanel", js_source)
-        self.assertIn('className = "watch-notifications"', js_source)
+        self.assertIn('class="switch wd-switch"', dashboard)
+        self.assertIn('<span class="slider">', dashboard)
+        self.assertIn("renderDelivery", dashboard)
+        bundles = Path("static/js/bundles.json").read_text(encoding="utf-8")
+        self.assertLess(bundles.index("static/js/watch.js"), bundles.index("static/js/watch-dashboard.js"))
         # Der View-Switch ist immer sichtbar (auch ausgeloggt): kein hidden im
         # Markup, firebase.js blendet ihn nicht mehr um.
         self.assertNotIn('id="viewSwitch" class="view-switch" hidden', html_source)
@@ -2237,22 +2255,18 @@ class WatchFrontendContractTests(unittest.TestCase):
         self.assertIn("Collapse question", share_html)
         self.assertIn(".share-question.is-clamped", public_css)
         self.assertIn("-webkit-line-clamp: 3", public_css)
-        self.assertIn(".watch-card.is-collapsed .watch-card-question a", watch_css)
+        self.assertIn(".wd-question a", watch_css)
+        self.assertIn("-webkit-line-clamp: 3", watch_css.split(".wd-question a {", 1)[1].split("}", 1)[0])
 
-    def test_collapsed_watch_cards_keep_a_centered_themed_toggle_and_summary(self):
-        watch_source = Path("static/js/watch.js").read_text(encoding="utf-8")
-        watch_css = Path("static/css/components-watch.css").read_text(encoding="utf-8")
+    def test_watch_cards_open_their_settings_in_place_and_keep_their_styles(self):
+        dashboard = Path("static/js/watch-dashboard.js").read_text(encoding="utf-8")
         input_css = Path("static/css/components-input.css").read_text(encoding="utf-8")
-
-        self.assertIn('compactSummary.className = "watch-card-summary"', watch_source)
-        self.assertIn("agreement", watch_source)
-        self.assertIn("Last checked", watch_source)
-        self.assertIn("Next ", watch_source)
-        self.assertIn("setCollapsed", watch_source)
-        self.assertIn('d="m7 10 5 5 5-5"', watch_source)
-        self.assertIn("place-items: center", watch_css)
-        self.assertIn(".watch-card.is-collapsed .watch-card-summary", watch_css)
-        self.assertIn(":not(.watch-card-toggle)", input_css)
+        self.assertIn('"wd-action wd-action-toggle"', dashboard)
+        self.assertIn('toggle.setAttribute("aria-expanded"', dashboard)
+        self.assertIn("Watch for something new", dashboard)
+        # The global button rule must not repaint any button on the page.
+        self.assertIn(":not(.watch-page button)", input_css)
+        self.assertIn(":not(.watch-goal-chip)", input_css)
 
 
 class WatchPageRouteTests(unittest.TestCase):

@@ -860,7 +860,7 @@ def test_logged_out_watch_deep_link_survives_and_late_login_renders(browser, pha
 
         page.evaluate("() => window.__switchE2EUser('account-b')")
         expect(page.locator("#watchDashCreate")).to_be_visible(timeout=5000)
-        expect(page.locator("#watchDashBody")).to_contain_text("Keep changing answers current")
+        expect(page.locator("#watchDashBody")).to_contain_text("Tell us what you are waiting for.")
         assert page.url.endswith("/app/watches")
     finally:
         context.close()

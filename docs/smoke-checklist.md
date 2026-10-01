@@ -561,7 +561,7 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       watching“ markiert fehlende Pflichtangaben direkt am jeweiligen Feld und scrollt
       zum ersten Fehler. Der Dialog bleibt auf iPhone-Größen vollständig im sichtbaren
       Bereich. Private Seiten sind in einem fremden oder ausgeloggten Browser nicht lesbar.
-- [ ] „Ready with smart defaults“ trägt rechts einen „Edit“-Schalter, die drei
+- [ ] „Schedule and alerts“ trägt rechts einen „Edit“-Schalter, die drei
       Werte-Chips öffnen selbst ihr Feld (Fokus liegt danach darin), und
       „Customize schedule and alerts“ steht direkt darunter — über den
       Zustellkanälen, nicht am Dialogende.
@@ -578,31 +578,29 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       (Pro) ist die Erstellung bereits vor dem Request gesperrt. Pro: Daily und
       bis zu fünf aktive Watches funktionieren.
 - [ ] Das Watch-Dashboard ist eine eigene Seite `/app/watches`: erreichbar über
-      den schwebenden View-Switch „Consensus | Watches“ (nur eingeloggt, Watches
-      auf Mobile icon-only) und „Watched“ im Nutzericon-Menü; aktiver Pill-Zustand,
-      Browser-Back/Forward
-      und Deep-Link/Reload auf `/app/watches` funktionieren (vor dem Login
-      erscheint ein Hinweis statt Daten). Logout lässt URL und Hinweis stehen;
-      ein später Login rendert ohne Reload das Dashboard. „Watched“ aus einem
-      Share-Dialog schließt das Modal vor dem Ansichtswechsel. Ohne Watch zeigt die Seite statt Null-
-      KPIs einen Ask→Check→Alert-Empty-State mit optionalen Beispielfragen; der
-      Query-first-Dialog nutzt private/wöchentliche/Changes-only-Defaults, hält
-      E-Mail und Telegram sichtbar und legt Zeitplan/Sichtbarkeit/Condition unter
-      „Customize schedule and alerts“. Die Vorschlags-Chips bleiben optisch sekundär;
-      Empty-State und Überschrift haben auf Desktop und Mobile ausreichend Luft. Ein
-      Klick auf den Dialog-Backdrop schließt den Watch-Dialog nicht, X/Cancel/Back
-      und Escape weiterhin schon. KPI-Karten zeigen sonst aktive Watches,
-      Checks/Änderungen der letzten sieben Tage und den nächsten Lauf; ein
-      „Recent movement“-Feed bündelt die neuesten Changes. All/Changed/Stable/Paused
-      filtern die Karten. Pro Watch zeigt die Karte Driftstatus/-Summary,
-      Direction Shift, Agreement-Score + Delta, History-Sparkline und nächsten Lauf.
-      Der Notifications-Bereich klappt Telegram und Morning Brief gemeinsam ein und
-      aus; sein Zustand bleibt beim erneuten Öffnen des Dashboards erhalten.
-      „Settings“ klappt
-      Intervall/Uhrzeit/Alert-Regel/Condition sowie E-Mail-/Telegram-Kanäle auf;
-      Pause/Resume und Delete
-      funktionieren. Delete lässt bereits vorhandene Share-History bestehen.
-      „← Back to app“ und ESC führen zurück. Light/Dark und Mobile ohne Overflow.
+      den schwebenden View-Switch „Chat/Consensus | Watches“ (gleitender Thumb,
+      beide Segmente mit Icon; Agent-Modus beschriftet das erste Segment „Chat“)
+      und „Watched“ im Nutzericon-Menü; Browser-Back/Forward und Deep-Link/Reload
+      auf `/app/watches` funktionieren (vor dem Login erscheint ein Hinweis statt
+      Daten). Logout lässt URL und Hinweis stehen; ein später Login rendert ohne
+      Reload das Dashboard. „Watched“ aus einem Share-Dialog schließt das Modal vor
+      dem Ansichtswechsel. Ohne Watch zeigt die Seite „Tell us what you are waiting
+      for.“, drei Beispielkarten (Frage + Ziel, öffnen den Dialog vorbefüllt) und die
+      offene Erklärung „Why a Watch, not a scheduled prompt“ samt Vergleichstabelle.
+      Mit Watches: Kennzahlenzeile (watching / moved / resolved this week / next
+      check), eingeklappte Erklärung, Abschnitte Watching / Resolved / Paused und
+      Delivery. Karten zeigen Status (Moved, Re-checking, Answer stands, Watching,
+      Resolved, Paused), Frage, „Waiting for“ + Zielstatus, den Satz des Zustands,
+      tragende Quellen, die Check-Leiste und rechts nächsten Check + Tages-Scan;
+      **kein** Agreement-Score. „Settings“ klappt Ziel, Intervall/Tag/Uhrzeit,
+      Alerts, Kanäle, Google-Listing, Pause/Resume und Delete in der Karte auf.
+      Eine abgeschlossene Watch bietet „Watch for something new“; dasselbe Ziel
+      wird abgelehnt, ein neues oder leeres Ziel reaktiviert sie. ESC führt zurück.
+      Light/Dark und Mobile ohne Overflow.
+- [ ] Create-Dialog: nach der Frage steht „What are you waiting for?“ ganz oben;
+      Zielvorschläge laden als Chips (Platzhalter während des Ladens, Klick füllt
+      bzw. leert das Feld, Ausfall blendet sie nur aus). „Only when it resolves“
+      ohne Ziel zeigt den Fehler am Zielfeld. „Back“ behält Frage und Ziel.
 - [ ] Der Watches-Schalter pulsiert als neuer, unbestätigter Einstieg nur zweimal
       dezent, stoppt nach dem ersten Öffnen dauerhaft und ist bei reduzierter Bewegung
       still. Er konkurriert nicht mit dem resultatspezifischen Watch-Hinweis.
@@ -610,8 +608,8 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       Digest-Mail mit Uhrzeit (Browser-Zeitzone) und Modus „Every morning“ /
       „Only when something changed“; Einstellungen überleben ein erneutes
       Öffnen. Schlägt PATCH für Uhrzeit oder Modus fehl, springen die Controls
-      auf den letzten serverbestätigten Wert zurück. Mit Test-SMTP: Brief-Mail listet alle Watches mit Score/Delta und
-      Änderungs-Summaries; der Abmelde-Link deaktiviert nur den Brief, nicht
+      auf den letzten serverbestätigten Wert zurück. Mit Test-SMTP: Brief-Mail listet alle Watches mit Ziel,
+      Bewegungen und Abschlüssen (kein Score); der Abmelde-Link deaktiviert nur den Brief, nicht
       die Watch-Mails.
 - [ ] Ohne Watch ist der Morning-Brief-Toggle deaktiviert und erklärt „Create a
       watch first“; ein direkter Aktivierungs-Request wird abgelehnt. Nach dem
@@ -633,17 +631,23 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       Shift; Provider-Trajektorien sind nachrangig aufklappbar. Alte
       Punkte ohne `opinion_map` degradieren auf den Agreement-Chart.
 - [ ] Fehlende SMTP-Konfiguration blockiert Watch-Läufe nicht. Mit Test-SMTP:
-      Major Change bzw. Score-Delta ≥15 sendet genau eine Multipart-Mail; Minor
-      Change darunter sendet im Modus „changes only“ keine. „Every new consensus“
-      sendet bei jedem erfolgreichen Lauf genau eine Mail mit Consensus-Inhalt.
-      Eine Condition sendet nur bei `not met -> met` (bzw. beim ersten `met`), nicht
-      erneut bei weiter bestehendem `met`; `unknown` löst nicht aus. Die Mail enthält
-      Condition, Begründung und neuen Consensus.
-      Abmelde-Link pausiert ohne Login.
-- [ ] Zwei aufeinanderfolgende Watch-Runs vergleichen Previous → Current für
-      Benachrichtigungen; Original → Current bleibt als langfristiger Baseline-
-      Drift erhalten. Persistierte Ereignisse bleiben grob und eindeutig:
-      `watch.checked`, `watch.changed`, `watch.condition_met`, `watch.run_failed`.
+      ein Check mit `moved` sendet genau eine Multipart-Mail „Moved: …“ als
+      Änderungsprotokoll (What changed → Why mit Quellen → What held → Waiting
+      for → Question, keine Agreement-Zeile); `held`, `confirming`, `restated`
+      senden im Modus „When it moves“ nichts. „After every check“ sendet bei
+      jedem Lauf genau eine Mail mit der Antwort. Ein belegt erreichtes Ziel
+      sendet genau eine „Resolved: …“-Mail, die Watch steht danach auf
+      „Resolved“ und läuft nicht mehr. Abmelde-Link pausiert ohne Login.
+- [ ] Belegmodell (`docs/watch-evidence-model.md`): ein Check, dessen Suche die
+      Quellen der geltenden Antwort nur nicht wiederfindet, steht als „Answer
+      stands“; die öffentliche Seite zeigt weiter die geltende Version plus
+      „Latest check: …“. Eine Neubewertung ohne neue Quelle steht als
+      „Re-checking“, der nächste Lauf ist rund 20 Minuten später fällig.
+      Persistierte Ereignisse: `watch.checked`, `watch.changed`,
+      `watch.confirming`, `watch.condition_met`, `watch.run_failed`.
+- [ ] Tages-Scan: eine weekly/monthly-Watch zeigt im Dashboard „Daily scan:
+      nothing new (…)“; findet der Scan eine neue Quelle, ist der volle Check
+      sofort fällig. Admin-Limit „Evidence probes per day“ = 0 schaltet ihn ab.
 - [ ] Mit gesetztem `TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_USERNAME` und
       `TELEGRAM_WEBHOOK_SECRET`: „Connect Telegram“ öffnet den Bot, `/start`
       verbindet ausschließlich den eingeloggten Account und das Dashboard zeigt
@@ -651,12 +655,17 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       verwendete Deep-Links werden abgelehnt.
 - [ ] Telegram lässt sich beim Erstellen und je Watch an-/abschalten; mindestens
       E-Mail oder Telegram bleibt aktiv. Ein materieller Change erzeugt genau
-      eine Telegram-Nachricht mit Score/Änderung und Buttons. „Mute 24h“
+      eine Telegram-Nachricht als Änderungsprotokoll (mit Quellen-Links, ohne Score) und Buttons. „Mute 24h“
       unterdrückt weitere Telegram-Alerts, „Pause“ verlangt eine zweite
       Bestätigung und pausiert nur die eigene Watch. Ein erneuter Scheduler-
       Versuch für dieselbe Run-ID verschickt kein Duplikat.
 
 ## Curated Topics
+- [ ] Belegmodell auf Topics: ohne `?version` zeigt die Seite den geltenden Run
+      (`accepted_run_id`); ein neuester Check mit „held“/„confirming“ erscheint als
+      „Latest check: …“-Hinweis, in Timeline und Check-Streifen als eigener,
+      nicht-materieller Zustand, und seine Claims zählen im Claim Ledger als Lücke.
+      Der Hub zeigt Score und Satz des geltenden Runs.
 - [ ] `/topics` zeigt nur Topics mit mindestens einem veröffentlichten Snapshot;
       Suche und Kategorie-Filter funktionieren ohne Reload. Navigation, Footer,
       Light/Dark, Focus States und Mobile-Layout bleiben ohne horizontalen

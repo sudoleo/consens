@@ -95,7 +95,11 @@
         "static/js/consensus-actions.js",
         {
           "file": "static/js/watch.js",
-          "note": "Needs consensus-actions.js and the share modal."
+          "note": "Needs consensus-actions.js and the share modal. Publishes window.App.watchUi."
+        },
+        {
+          "file": "static/js/watch-dashboard.js",
+          "note": "Renders /app/watches with window.App.watchUi; watch.js calls App.watchDashboard.render at view time."
         },
         {
           "file": "static/js/mobile-header.js",

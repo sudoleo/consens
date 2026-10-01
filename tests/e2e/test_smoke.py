@@ -1707,9 +1707,10 @@ def test_agent_mode_can_reveal_hidden_model_answers_on_mobile(app_page):
     expect(app_page.locator("#openaiResponse")).to_be_hidden()
 
 
-def test_watch_dialog_uses_safe_defaults_keeps_telegram_visible_and_reveals_condition(app_page):
-    """Watch-Erstellung startet kompakt mit sicheren Defaults, hält Telegram
-    sichtbar und blendet erweiterte Felder nur bei Bedarf ein."""
+def test_watch_dialog_uses_safe_defaults_keeps_telegram_visible_and_asks_for_a_goal(app_page):
+    """Watch-Erstellung startet kompakt mit sicheren Defaults, fragt zuerst,
+    worauf der Nutzer wartet, haelt Telegram sichtbar und blendet erweiterte
+    Felder nur bei Bedarf ein."""
     _send_question(app_page)
     _wait_for_all_final_answers(app_page)
     expect(app_page.locator("#consensusResponse")).to_contain_text("Mock consensus", timeout=30000)
@@ -1727,6 +1728,13 @@ def test_watch_dialog_uses_safe_defaults_keeps_telegram_visible_and_reveals_cond
     app_page.click("#consensusWatchButton")
     app_page.locator("#shareModal").click(position={"x": 2, "y": 2})
     expect(app_page.locator("#watchConfirmBtn")).to_be_visible()
+    # "What are you waiting for?" leads the dialog, above the defaults.
+    expect(app_page.locator("#watchGoal")).to_be_visible()
+    expect(app_page.locator("#watchGoal")).to_have_attribute("maxlength", "500")
+    goal_box = app_page.locator("#watchGoal").bounding_box()
+    defaults_box = app_page.locator(".watch-setup-summary").bounding_box()
+    assert goal_box is not None and defaults_box is not None
+    assert goal_box["y"] < defaults_box["y"]
     expect(app_page.locator(".watch-delivery-field")).to_be_visible()
     expect(app_page.locator("#watchTelegramEnabled")).to_be_visible()
     expect(app_page.locator("#watchTelegramConnect")).to_be_visible()
@@ -1779,7 +1787,6 @@ def test_watch_dialog_uses_safe_defaults_keeps_telegram_visible_and_reveals_cond
     expect(app_page.locator("#watchWeekdayWrap")).to_be_visible()
     expect(app_page.locator("#watchWeekday")).to_have_value("friday")
     assert app_page.locator("#watchTimezoneLabel").text_content()
-    expect(app_page.locator("#watchConditionWrap")).to_be_hidden()
 
     app_page.select_option("#watchVisibility", "public")
     expect(app_page.locator("#watchVisibilitySummary")).to_have_text("Public page")
@@ -1792,14 +1799,15 @@ def test_watch_dialog_uses_safe_defaults_keeps_telegram_visible_and_reveals_cond
     expect(app_page.locator("#watchRunTime")).to_have_attribute("aria-invalid", "true")
     app_page.fill("#watchRunTime", "09:00")
 
+    # "Only when it resolves" needs a goal to resolve on.
     app_page.select_option("#watchEmailMode", "condition")
-    expect(app_page.locator("#watchConditionWrap")).to_be_visible()
-    expect(app_page.locator("#watchCondition")).to_have_attribute("maxlength", "500")
     app_page.click("#watchConfirmBtn")
-    expect(app_page.locator("#watchConditionError")).to_have_text(
-        "Enter the condition you want to monitor."
+    expect(app_page.locator("#watchGoalError")).to_have_text(
+        "Name the goal, or choose a different alert rule."
     )
-    expect(app_page.locator("#watchCondition")).to_have_attribute("aria-invalid", "true")
+    expect(app_page.locator("#watchGoal")).to_have_attribute("aria-invalid", "true")
+    app_page.fill("#watchGoal", "An official date is announced")
+    expect(app_page.locator("#watchAlertSummary")).to_have_text("Only when it resolves")
 
 
 def test_query_first_watch_guides_question_then_configuration(app_page):
@@ -1833,35 +1841,35 @@ def test_query_first_watch_guides_question_then_configuration(app_page):
     expect(app_page.locator("#watchDashLimit")).to_contain_text("0 of 1 active")
     expect(app_page.locator("#watchDashLimit")).to_contain_text("Paused Watches do not count")
 
-    empty_box = app_page.locator(".watch-dash-empty").bounding_box()
-    empty_copy_box = app_page.locator(".watch-dash-empty > p").bounding_box()
-    empty_cta_box = app_page.locator(".watch-empty-actions > .share-primary-btn").bounding_box()
+    expect(app_page.locator(".wd-empty")).to_contain_text("Tell us what you are waiting for.")
+    expect(app_page.locator(".wd-explainer")).to_contain_text("Why a Watch, not a scheduled prompt")
+    expect(app_page.locator(".wd-compare")).to_be_visible()
+    empty_box = app_page.locator(".wd-empty").bounding_box()
+    empty_copy_box = app_page.locator(".wd-empty-lead").bounding_box()
+    empty_cta_box = app_page.locator(".wd-empty-actions > .wd-button").bounding_box()
     assert empty_box is not None and empty_copy_box is not None and empty_cta_box is not None
     assert empty_cta_box["y"] >= empty_copy_box["y"] + empty_copy_box["height"] + 8
     assert abs(
         (empty_cta_box["x"] + empty_cta_box["width"] / 2)
         - (empty_box["x"] + empty_box["width"] / 2)
     ) < 2
-    example_chips = app_page.locator(".watch-example-chip")
-    assert example_chips.count() == 3
-    first_example_box = example_chips.first.bounding_box()
-    assert first_example_box is not None and first_example_box["height"] <= 27
+    assert app_page.locator(".wd-example").count() == 3
 
     app_page.set_viewport_size({"width": 390, "height": 844})
     title_box = app_page.locator("#watchDashTitle").bounding_box()
     header_cta_box = app_page.locator("#watchDashCreate").bounding_box()
-    mobile_subtitle_box = app_page.locator(".watch-dash-subtitle").bounding_box()
-    mobile_empty_box = app_page.locator(".watch-dash-empty").bounding_box()
+    mobile_lead_box = app_page.locator(".wd-head-lead").bounding_box()
+    mobile_empty_box = app_page.locator(".wd-empty").bounding_box()
     assert title_box is not None and header_cta_box is not None
-    assert mobile_subtitle_box is not None and mobile_empty_box is not None
+    assert mobile_lead_box is not None and mobile_empty_box is not None
     assert header_cta_box["y"] > title_box["y"]
     assert header_cta_box["x"] + header_cta_box["width"] <= 378.5
-    assert mobile_empty_box["y"] >= mobile_subtitle_box["y"] + mobile_subtitle_box["height"] + 20
+    assert mobile_empty_box["y"] >= mobile_lead_box["y"] + mobile_lead_box["height"] + 20
 
     app_page.click("#watchDashCreate")
     expect(app_page.locator("#watchQuestion")).to_be_visible()
     expect(app_page.locator("#watchDialogLimit")).to_contain_text("1 slot available")
-    expect(app_page.locator("#watchQuestionNext")).to_have_text("Continue to schedule")
+    expect(app_page.locator("#watchQuestionNext")).to_have_text("Continue")
     expect(app_page.locator("#shareModalBody")).to_contain_text(
         "No model run starts until the Watch reaches its scheduled check."
     )

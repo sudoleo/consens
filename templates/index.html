@@ -90,11 +90,18 @@
   <!-- Ansichts-Umschalter oben mittig (Consensus | Watches), auf Start-/Watch-Ansicht —
        ausgeloggt bittet der Watches-Klick per Popup um Login (watch.js
        verdrahtet Klicks + aktiven Zustand). -->
-  <nav id="viewSwitch" class="view-switch" aria-label="Switch view">
-    <button type="button" id="viewSwitchConsensus" class="view-switch-btn is-active" aria-pressed="true">Consensus</button>
+  <nav id="viewSwitch" class="view-switch" aria-label="Switch view" data-active="chat">
+    <span class="view-switch-thumb" aria-hidden="true"></span>
+    <button type="button" id="viewSwitchConsensus" class="view-switch-btn is-active" aria-pressed="true"
+      title="Ask several AI models at once">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M20 12a8 8 0 0 1-11.6 7.1L4 20l1-4.2A8 8 0 1 1 20 12Z"></path>
+      </svg>
+      <span>Chat</span>
+    </button>
     <button type="button" id="viewSwitchWatches" class="view-switch-btn" aria-pressed="false"
-      title="Consensus Watch: your watched questions">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+      title="Consensus Watch: questions you are waiting on">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <path d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6Z"></path>
         <circle cx="12" cy="12" r="2.5"></circle>
       </svg>
@@ -918,19 +925,19 @@
        Übersicht aller Watches + Morning Brief. URL-Sync in watch.js. -->
   <div id="watchDashboard" class="watch-page" hidden>
     <div class="watch-page-inner">
-      <div class="watch-dash-header">
-        <button type="button" id="watchDashClose" class="watch-page-back">
-          <span aria-hidden="true">&larr;</span> Back to app
-        </button>
-        <div class="watch-dash-heading-row">
-          <div>
-            <h1 id="watchDashTitle">Your Watches</h1>
-            <p class="watch-dash-subtitle">See what changed, what stayed stable, and what will be checked next.</p>
-            <div id="watchDashLimit" class="watch-limit-summary" aria-live="polite" hidden></div>
-          </div>
-          <button type="button" id="watchDashCreate" class="share-primary-btn">New Watch</button>
+      <header class="wd-head">
+        <div class="wd-head-copy">
+          <h1 id="watchDashTitle">Watches</h1>
+          <p class="wd-head-lead">Questions you are waiting on. Checked across AI model families, reported only when the evidence moves.</p>
+          <div id="watchDashLimit" class="watch-limit-summary is-compact" aria-live="polite" hidden></div>
         </div>
-      </div>
+        <div class="wd-head-actions">
+          <button type="button" id="watchDashCreate" class="wd-button is-primary">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>
+            New watch
+          </button>
+        </div>
+      </header>
       <div id="watchDashBody"></div>
     </div>
   </div>

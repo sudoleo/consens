@@ -204,7 +204,7 @@ Threadpool aus. `async def` bleibt nur für echte Await-Pfade (Mail, explizites
 | `users.py` | `/user_status`, `/usage`, `/usage/run/release`, `GET`/`PUT /api/my/memory` sowie `POST /api/my/memory/edit|undo` (User-Memory samt explizitem, revisioniertem Luna-Patch, siehe §3), `/delete_account`, `/track-interest`. `/delete_account` legt vor jeder Löschung einen persistenten, fail-closed Auftrag über `FirestoreAccountDeletion` an. Die idempotente Kaskade umfasst API-Zugang/Telegram, alle Nutzer-Subcollections, Chats, Waitlist/Feedback, Pending Results, Persistence-Guards/Votes, Watches/Briefs, Follow-Challenges/E-Mail-Follows, eigene Shares über deren bestehende Hard-Delete-Kaskade, Profil und Firebase Auth. Jeder Bereich wird separat quittiert und bei Fehlern vom fünfminütigen Maintenance-Loop erneut versucht; bis dahin lautet die Antwort ehrlich `202 cleanup_pending`, erst der vollständige Abschluss ergibt 200. Owner-gebundene Create/Update/Delete-Transaktionen lesen den Account-Tombstone als ersten Teil derselben Mutation; nur interne Cleanup-Kaskaden verwenden explizite Bypässe. Dadurch können bereits authentifizierte, verspätete Requests keinen zuvor quittierten Bereich neu befüllen. `/track-interest` ist der idempotente Pro-Beta-Zugangsrequest (ein Pending-Dokument pro UID, kein Billing); aktive Pro-Konten werden abgewiesen. **Seit 2026-07-25 ruft die App diesen Endpunkt nicht mehr auf** — es wird nichts mehr angeboten, das man anfragen könnte; der Endpunkt bleibt nur bestehen, damit vorhandene Waitlist-Dokumente nicht verwaisen. |
 | `bookmarks.py` | `GET /bookmarks` liefert ausschließlich kompakte Metadaten, standardmäßig 30 Einträge und einen opaken Cursor; `GET /bookmarks/{id}` liefert owner-geschützt den Vollinhalt. Chat-Bookmarks referenzieren additiv `chat_id`/letzte `turn_id`; `GET /bookmarks/{id}/conversation` paginiert dafür die vollständigen owner-gebundenen completed Turns aus `ChatStore`, statt den wachsenden Transcript in ein Bookmark-Dokument zu kopieren; der Normalpfad läuft über `ChatStore.list_turn_details` (Chat einmal pro Seite geprüft, Modellantworten je Turn mit **einer** Query) und benötigt damit `2 + N` SDK-Aufrufe pro Seite. Abgerechnet werden weiterhin Dokument-Reads: Chat + gelesene Turn-Dokumente (inklusive Pagination-Sentinel) + alle zurückgegebenen Antwortdokumente; eine Query ist nicht ein einzelner Dokument-Read. Scheitert nur dieser optimierte Collection-Read, fällt der Endpoint korrektheitshalber auf `list_turns` + owner-gebundene Turn-Details zurück, statt den Browser auf zwei Bookmark-Snapshots zu reduzieren. Der Endpunkt ist bewusst ein synchrones `def`, damit die blockierenden Reads im Threadpool statt auf dem Event-Loop laufen. `/bookmark` (POST/DELETE), `/bookmark/consensus` sowie `POST /bookmark/consensus/share-result` erhalten Speichern, Löschen und die sichere Share-/Watch-Rehydration. Consensus-Inhalte werden aus einem owner-gebundenen Pending Result oder completed Turn serverseitig materialisiert, nicht aus frei behaupteten Clientfeldern; die alten, ignorierten Client-Kopien bleiben für gecachte Clients im Schema, werden aber nicht mehr formvalidiert und können den autoritativen Save daher nicht mit 422 blockieren. Quellenlisten werden nicht nach Anzahl gekürzt; die bestehenden Dokument- und Request-Bytebudgets begrenzen den Save ausdrücklich. `persist_authoritative_consensus_bookmark` ist der gemeinsame Writer für den primären `/consensus`-Abschluss und den idempotenten `/bookmark/consensus`-Fallback. Der breite slowapi-IP-Schutz sitzt vor der Tokenprüfung; die eigentlichen Modell- und Consensus-Save-Budgets gelten danach pro UID, damit der interne Preset-Fan-out nicht mit fremden Nutzern an einem Proxy-/NAT-Bucket konkurriert. Persistent gelten höchstens 250 Bookmarks, 750 kB je Dokument und 25 MB geschätztes Gesamtbudget pro UID. `DELETE /bookmark` liest die Chat-Bindung und legt **vor** dem Entfernen des Bookmarks per `ChatStore.request_chat_deletion` in einer Transaktion Tombstone (`status=deleting`), einmaligen Zählerabzug und einen dauerhaften Auftrag `chat_deletion_jobs/{sha256(uid:chat)[:40]}` an; erst danach wird das Bookmark gelöscht und `run_chat_deletion` versucht die Kaskade sofort. Scheitert sie (auch zwischen zwei Batches) oder stirbt der Prozess, bleibt der Auftrag mit `attempts`, `last_error` (nur Kategorie) und Backoff (`next_attempt_at`, 1 min bis 6 h) sichtbar und `resume_chat_deletions` im stündlichen Retention-Loop beendet ihn; quittiert wird erst nach vollständiger Kaskade. Kann der Auftrag nicht angelegt werden, bleibt das Bookmark bestehen und die Antwort ist 500 (nichts gelöscht, erneut versuchbar). Saves akzeptieren eine validierte stabile `bookmarkId`, sodass alle Turns einer laufenden Unterhaltung dasselbe Sidebar-Bookmark aktualisieren; Legacy-Saves ohne ID bleiben fragebasiert. `previous_question`/`previous_turn` bleiben als kompatibler Ein-Turn-Fallback für alte Bookmarks ohne Chat-Bindung erhalten. Alle Bookmark-Antworten sind wie `/chats` `private, no-store`. Die Save-Endpunkte liefern weiterhin den zusammengeführten Datensatz zurück; der Client reduziert ihn sofort auf Listenmetadaten und hält höchstens das geöffnete Detail im Cache. Der seltene Browser-Fallback sendet nur IDs plus kleine Legacy-Texte, nutzt `keepalive`, wiederholt Netz-/408-/425-/429-/5xx-Fehler begrenzt und zeigt einen endgültigen Fehler dedupliziert verständlich an. |
 | `share.py` | `/api/share` (POST), `/api/share/{id}` (DELETE), `/api/my/shares` (neueste zuerst, in Firestore sortiert über Index `shares(owner_uid, created_at desc)`, `?cursor=`, Antwort mit `has_more`/`next_cursor`; der Dialog zeigt einen Hinweis, wenn ältere Links fehlen), `/api/share/{id}/report`, öffentliche Seite `/s/{slug_id}`, `sitemap-shares.xml`. |
-| `watch.py` | Consensus Watch: `/api/watch` (POST), `/api/my/watches` (inkl. Original-Baseline-Score, kompakter History je Watch und autoritativer Plan-/Active-Limit-Metadaten für die UI), `/api/watch/{id}` (PATCH/DELETE), Morning-Brief-Einstellungen `/api/my/watch-brief` (GET/PATCH), nutzergebundene Telegram-Verbindung `/api/my/telegram` (GET/DELETE), `/api/my/telegram/link|test` (POST) und der per Secret-Header geschützte `/api/telegram/webhook`; außerdem öffentliche, HMAC-signierte `/watch/unsubscribe`- und `/watch/brief/unsubscribe`-Links. |
+| `watch.py` | Consensus Watch: `/api/watch` (POST), `/api/watch/goal-suggestions` (POST, bis zu drei beobachtbare Ziele zur Frage über einen Judge-Call, 6/min; ein Fehler liefert eine leere Liste), `/api/my/watches` (inkl. Original-Baseline-Score, kompakter History mit Drift-Signal je Watch, `resolution`, `last_probe` und autoritativer Plan-/Active-/Resolved-Metadaten für die UI), `/api/watch/{id}` (PATCH/DELETE; `status=active` auf einer abgeschlossenen Watch braucht ein neues oder leeres Ziel), Morning-Brief-Einstellungen `/api/my/watch-brief` (GET/PATCH), nutzergebundene Telegram-Verbindung `/api/my/telegram` (GET/DELETE), `/api/my/telegram/link|test` (POST) und der per Secret-Header geschützte `/api/telegram/webhook`; außerdem öffentliche, HMAC-signierte `/watch/unsubscribe`- und `/watch/brief/unsubscribe`-Links. |
 | `topics.py` | Eigenständige öffentliche Topic-Ticker: Hub `/topics`, versionierte Detailseite `/topics/{slug}` (`?version=<run_id>`, rendert Position Map + Agreement-Kurve über `services/history_view.py` — dieselbe Darstellung wie die Watch-Seiten, bewusst nur bis zum gewählten Snapshot), `sitemap-topics.xml`, Double-Opt-in-Follow unter `/api/topics/{slug}/follow` + `/topic-follow/confirm|unsubscribe`; der Versand-Claim ist persistent gehasht und besitzt Resend-, Empfänger- und globales Stundenbudget. Der Favicon-Proxy ist auf 30 Requests/Minute, acht parallele Requests, einen eigenen Vierer-Executor, zwei Sekunden Upstream-Zeit sowie einen 2.000-Einträge-LRU einschließlich 24-h-Negativcache begrenzt. Admin-CRUD liegt unter `/api/admin/topics`. Ein leeres `POST /api/admin/topics/{id}/runs` führt den konfigurierten Research-/Consensus-Run aus; ein Payload mit `consensus_md` bleibt als expliziter Legacy-Import verfügbar. |
 | `api_v1.py` | Nutzergebundene asynchrone Consensus-API: Run-Start/Status/Löschung unter `/api/v1/consensus/runs`, transaktional idempotentes Publizieren erfolgreicher Runs per `POST .../{run_id}/share`, eigene Share-Liste/-Details/-Widerruf unter `/api/v1/shares` sowie direkte Admin-Indexfreigabe per `PUT /api/v1/shares/{share_id}/indexing`. Der Admin-only Scheduled Publisher liest `GET /api/v1/publisher/config`, startet Runs per `X-Consensus-Publisher: true` mit demselben Balanced-Preset-Modellplan wie jeder API-Run (kein Provider-Ausschluss) und bindet per `POST /api/v1/shares/{share_id}/watch` idempotent einen Weekly-Watch mit festem Free-Watch-Modellprofil; `public_config` meldet die tatsächlich genutzten Familien als `initial_run_providers`/`watch_providers`, die Admin-UI zeigt genau diese Listen; dessen globale Kapazität wird zusammen mit Watch und Publisher-Zähler in derselben Transaktion geprüft. Auth über gescopte `X-API-Key`s, Run-Idempotenz über den Pflichtheader `Idempotency-Key`; Pydantic-Modelle bilden den Vertrag in `/openapi.json` ab. |
 
@@ -1422,80 +1422,65 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   Logout und Schließen aborten laufende Fetches, späte Antworten dürfen den
   gemeinsam mit Watch genutzten DOM-Knoten nicht mehr überschreiben.
 - **`consensus-actions.js`** — Copy/Citation/Share-Buttons am Consensus.
-- **`watch.js`** — `window.openWatchDialog` (Create-Dialog im Share-Modal) und
-  `window.openWatchDashboard` (eigene Seite `/app/watches`: Vollbild-View
-  `#watchDashboard` unter dem fixen View-Switch, Styles in
-  `static/css/components-watch.css`; URL-Sync via pushState/popstate, Deep-Link
-  wartet auf den asynchronen Firebase-Auth-Status): Bei vorhandenen Watches
-  Dashboard-KPIs für aktive Watches, Checks/Changes der letzten sieben Tage und nächsten Lauf, ein
-  Recent-Movement-Feed, All/Changed/Stable/Paused-Filter sowie Karten je Watch mit
-  Driftstatus/-Summary, Movement-Score, Score/Delta und eine stets platzhaltende
-  History-Sparkline (bei bestehenden Consensus-Watches ab Original-Baseline) sowie
-  Inline-Settings (Intervall/Uhrzeit/Alert-Regel/Condition, E-Mail-/Telegram-
-  Kanäle, Pause/Delete). Bei mehr als zwei Watches starten die Karten als
-  kompakte, einzeln per zentriertem Pfeil aufklappbare Zusammenfassungen mit
-  Agreement-Score, Driftstatus, letzter Prüfung und nächstem Lauf; bei ein bis zwei
-  Watches bleibt die Detailansicht offen. Telegram-Verbindungskarte mit Deep-Link/Test und
-  Morning-Brief-Karte (`/api/my/watch-brief`, Toggle im selben
-  `.switch`/`.slider`-Stil wie das Input-Feld). Ohne vorhandene Watch ist der
-  Toggle erklärend deaktiviert; das Backend erzwingt dasselbe Gate und schaltet
-  den Brief beim Löschen der letzten Watch ab. `openWatchDialog("list")`
-  leitet auf die Seite um; Einstieg zusätzlich über den login-gated,
-  schwebenden View-Switch `#viewSwitch` (Consensus/Watches; `firebase.js`
-  blendet ihn ein/aus, `watch.js` synchronisiert URL und aktiven Zustand). Ein
-  kurzer, auf zwei Zyklen begrenzter Puls weist dort dezent auf Watches hin,
-  verschwindet beim ersten Öffnen lokal dauerhaft und respektiert
-  `prefers-reduced-motion`. Nach dem
-  ersten erfolgreichen, speicherbaren Consensus zeigt `window.App.watch.*`
-  einmalig einen dezenten Hinweis am Watch-Button; Schließen oder Öffnen des
-  Features persistiert die Bestätigung in `localStorage`. Der Hinweis wird als
-  eigener, dem Watch-Knopf folgender Viewport-Layer unter `<body>` gerendert;
-  nur dieser Layer liegt über dem fixierten Composer, die Consensus-Sektion
-  selbst bleibt darunter und kann deshalb nie das Eingabefeld übermalen.
-  Seit 2026-08-04
-  enthält dieser Hinweis die **Aktion selbst**: „Watch this question"
-  (`#watchNudgeStart`) legt den Watch mit einem Klick über
-  `nudgeWatchDefaults()` an (wöchentlich, morgiger Wochentag, 09:00 lokal,
-  privat, E-Mail nur bei materieller Änderung) und ersetzt den Hinweis durch
-  eine Bestätigung mit dem ersten Prüftermin. Daneben steht ausdrücklich, wann
-  überhaupt eine Nachricht kommt („no change, no message"); „Pick a different
-  schedule" öffnet weiterhin den vollen Dialog, ein 429 ebenfalls. Die
-  Browser-IANA-Zeitzone wird zusammen mit `HH:MM` an das Backend gesendet.
-  Weekly-Watches senden zusätzlich den gewählten lokalen Wochentag
-  (`run_weekday`) und können ihn im Dashboard nachträglich ändern.
-  Der gemeinsame Notifications-Bereich ist ein einklappbares `<details>`-Panel;
-  dessen lokaler Offen-/Zu-Zustand liegt in `consensus_watch_notifications_open`.
-  `window.App.watch.resetAfterLogout()` leert das bereits geladene Dashboard
-  beim Session-Ende; auf einem direkten `/app/watches`-Deep-Link bleiben URL
-  und Seite stehen und wechseln deterministisch zum Login-Hinweis. Das globale
-  `consensio:auth-state`-Event rendert nach einem späteren Login sofort neu. Ein
-  Session-Epoch verwirft danach eintreffende Watch-/Telegram-/Limit-Antworten
-  und verhindert accountübergreifende Caches. Ein Wechsel aus dem gemeinsamen
-  Share-Modal zu „Watched“ schließt das Modal vor der Seitennavigation;
-  fehlgeschlagene Morning-Brief-Zeit-/Modusänderungen rollen auf die letzte
-  serverbestätigte Einstellung zurück.
-  Das Dashboard bietet zusätzlich einen professionell geführten Query-first-
-  Einstieg: Ohne Watch ersetzen ein dreistufiger Empty State und optionale
-  Beispielfragen die leeren KPI-/Notification-Flächen. Nach der Frage verwendet
-  der Dialog sichere Defaults (privat, wöchentlich mit dem morgigen Wochentag als
-  erstem Check, Material-Changes, E-Mail);
-  Telegram-Verbindung und Kanalauswahl bleiben als zentrale Konfiguration offen
-  sichtbar, während Zeitplan, Sichtbarkeit und erweiterte Alert-Regeln in einem
-  optionalen Details-Panel liegen. Dieses Panel `#watchAdvancedSettings` stand
-  bis 2026-07-28 als LETZTES Element im Dialog und wurde schlicht übersehen
-  („man kann ja nichts verstellen"). Es liegt jetzt direkt unter der Defaults-
-  Zusammenfassung, also **über** den Zustellkanälen, und die Zusammenfassung
-  selbst trägt den Weg dorthin: `#watchEditDefaults` („Edit"/„Done") rechts
-  neben „Ready with smart defaults", plus drei `.watch-setup-chip`-Buttons, die
-  per `data-edit-field` das Panel öffnen und ihr Feld fokussieren.
-  Dieser Pfad startet keinen
-  normalen App-Consensus; `POST /api/watch` akzeptiert dafür alternativ zu
-  `result_id`/`share_id` ein exklusives `question`-Feld. Dashboard und beide
-  Create-Schritte zeigen vor der Aktion kompakt den serverseitigen Plan, aktive
-  Watches/Limit und freie Plätze. Pausierte Watches werden ausdrücklich als
-  nicht limitrelevant erklärt; Free kommuniziert zusätzlich 5 aktive Watches
-  plus Daily als Pro-Unterschied. Am Limit wird die Create-Aktion vor dem Request
-  deaktiviert.
+- **`watch.js`** — `window.openWatchDialog` (Create-Dialog im Share-Modal),
+  `window.openWatchDashboard` und das Routing der eigenen Seite `/app/watches`
+  (Vollbild-View `#watchDashboard` unter dem fixen View-Switch, URL-Sync via
+  pushState/popstate, Deep-Link wartet auf den asynchronen Firebase-Auth-Status).
+  Gerendert wird das Dashboard von `watch-dashboard.js`; `watch.js` stellt dafür
+  `window.App.watchUi` bereit (API-Helfer mit Session-Epoch, Popup, Schedule-/
+  Intervall-/Alert-Optionen, Telegram-Connect, Limit-Rendering) und ruft
+  `window.App.watchDashboard.render()`. Der View-Switch `#viewSwitch`
+  (Chat/Consensus | Watches) ist ein Segment mit gleitendem Thumb
+  (`.view-switch-thumb`, `data-active="chat|watches"` aus `setViewSwitchState`);
+  `agent-chat.js` setzt nur das Label im ersten Segment (Agent = „Chat“,
+  sonst „Consensus“), Icon und Thumb bleiben. Ein kurzer, auf zwei Zyklen
+  begrenzter Puls weist dort dezent auf Watches hin, verschwindet beim ersten
+  Öffnen lokal dauerhaft und respektiert `prefers-reduced-motion`.
+  **Create-Dialog**: Schritt 1 die Frage (Query-first) bzw. direkt Schritt 2 für
+  einen fertigen Consensus. Schritt 2 beginnt mit **„What are you waiting
+  for?“** (`#watchGoal`, ≤ 500 Zeichen, gespeichert als `condition`): bis zu drei
+  Zielvorschläge kommen asynchron von `POST /api/watch/goal-suggestions` als
+  `.watch-goal-chip` (Klick füllt/leert das Feld, ein Fehler blendet sie nur aus).
+  Darunter die Defaults-Zusammenfassung mit `#watchEditDefaults` und den drei
+  `.watch-setup-chip`-Buttons, die per `data-edit-field` das Panel
+  `#watchAdvancedSettings` öffnen (liegt bewusst **über** den Zustellkanälen),
+  dann Kanäle und „Start watching“. Alert-Regeln: „When it moves (or resolves)“
+  (`changes_only`), „Only when it resolves“ (`condition`, braucht ein Ziel),
+  „After every check“ (`every_run`). `POST /api/watch` akzeptiert alternativ zu
+  `result_id`/`share_id` ein exklusives `question`-Feld; der Pfad startet keinen
+  App-Consensus. Dashboard und Dialog zeigen vor der Aktion den serverseitigen
+  Plan, aktive Watches/Limit und freie Plätze; am Limit wird die Create-Aktion
+  vor dem Request deaktiviert. Nach dem dritten speicherbaren Consensus zeigt
+  `window.App.watch.*` einmalig einen Hinweis am Watch-Button mit der **Aktion
+  selbst** („Watch this question“, `nudgeWatchDefaults()`: wöchentlich, morgiger
+  Wochentag, 09:00 lokal, privat, E-Mail nur auf Belege); „Add a goal or change
+  the schedule“ öffnet den vollen Dialog, ein 429 ebenfalls. Der Hinweis ist ein
+  eigener Viewport-Layer unter `<body>` und übermalt nie den Composer.
+  `window.App.watch.resetAfterLogout()` leert das Dashboard beim Session-Ende;
+  auf einem direkten `/app/watches`-Deep-Link wechselt die Seite deterministisch
+  zum Login-Hinweis, `consensio:auth-state` rendert nach späterem Login neu.
+- **`watch-dashboard.js`** — rendert `/app/watches` in `#watchDashBody`
+  (`window.App.watchDashboard.{render, cardState}`, Styles mit `wd-`-Präfix in
+  `static/css/components-watch.css`). Es präsentiert nur das Server-Signal aus
+  `drift_signal` (siehe `docs/watch-evidence-model.md`), leitet nichts selbst ab:
+  `cardState` liefert pro Watch Ton/Label/Satz/Quellen — *Moved* (mit
+  `evidence_sources` und „Held: …“), *Re-checking* (`confirming`), *Answer
+  stands* (`held`), *Watching* (letzte Bewegung oder „No change on evidence in
+  N checks“), *Resolved* (Grund + Quellen aus `resolution`), *Paused*, *First
+  check pending*. Aufbau: ruhige Kennzahlenzeile (watching / moved / resolved
+  this week / next check), einklappbares „Why a Watch, not a scheduled prompt“
+  (`.wd-explainer`, Offen-Zustand in `consensio.watchExplainer.open.v1`; im
+  Leerzustand offen mit Vergleichstabelle `.wd-compare`), Abschnitte
+  *Watching* (Moved → Re-checking → Held → Watching → Pending, dann nach nächstem
+  Check) / *Resolved* / *Paused*, am Ende *Delivery* (Telegram-Verbindung und
+  Morning Brief im `.switch`/`.slider`-Stil des Input-Felds). Jede Karte zeigt
+  Status, Frage (3 Zeilen geklemmt), „Waiting for“ + Zielstatus, den Satz des
+  Zustands, tragende Quellen, eine Check-Leiste (ein Strich je Check, Form nach
+  Signal) und rechts nächsten Check + Tages-Scan (`last_probe`). „Settings“
+  klappt in der Karte Ziel-Editor, Intervall/Tag/Uhrzeit, Alerts, Kanäle,
+  Google-Listing, Pause/Delete auf; eine abgeschlossene Watch bietet „Watch for
+  something new“ (PATCH `status=active` + neues oder leeres Ziel). Kein
+  Agreement-Score im Dashboard.
 - **`user-tier.js`** — Free/Pro-UI, Premium-Modellstatus (`updateUserTierUI`,
   `updatePremiumModelsState`) und Plan-Label im Sidebar-Account-Footer.
 - **`email-verify.js`** (klassisches Head-Skript,
@@ -4183,7 +4168,9 @@ vollständigen Laufs entsprechen, das Limit dem gewünschten Tagesvolumen.
   der neutralen Provider-/Consensus-/Differences-Pipeline und importiert keine
   Watch-Services. Die pro Topic gespeicherte Modellauswahl bleibt maßgeblich. Jeder Lauf
   recherchiert aktuelle Webquellen neu, dedupliziert sie zu Evidence, vergleicht
-  Consensus und Opinion Map mit dem Vorgänger und schreibt einen unveränderlichen
+  Consensus (über `evidence_change.assess`, mit Quellen) mit dem **geltenden**
+  Run (`accepted_run_id`, Altbestand `latest_run_id`) und die Opinion Map mit dem
+  Vorgänger und schreibt einen unveränderlichen
   Vollsnapshot nach
   `topics/{id}/runs/{run_id}`: Consensus-Markdown, Agreement, Change-Typ/
   -Summary, wichtige Modellbewegungen, Differences/Opinion Map, Modelle,
@@ -4383,7 +4370,9 @@ app/services/
   share_snapshots.py         Snapshot-Lifecycle (pending→share), Quoten, Cleanups, Sitemap-Quellen
   favicons.py                Begrenzter Favicon-Fetch, Singleflight, LRU-/Negativcache
   retention_maintenance.py   Periodischer Pending-/Revoked-Share-Cleanup + Outbox-Retention (30 Tage, nur Terminalstatus)
-  watch_service.py           Watch-CRUD, Tier-/Intervall-/Conditionregeln, Share-Sichtbarkeit, Unsubscribe-Tokens
+  watch_service.py           Watch-CRUD, Tier-/Intervall-/Zielregeln, Lauf-Abschluss (Signal, geltende Antwort, Abschluss), Unsubscribe-Tokens
+  evidence_change.py         Change-Judge mit Quellen + serverseitige Belegprüfung (Ursache, tragende Quellen), geteilt von Watch und Topic
+  watch_probe.py             Täglicher Beleg-Scan zwischen zwei Checks: Claim, ein günstiger Such-Call, Vorziehen des vollen Checks
   opinion_map.py             Datenminimierte, mehrdimensionale Provider-Positionen + Direction-Shift-Berechnung
   watch_brief.py             Morning-Brief-Settings (watch_briefs), transaktionaler Claim, Digest-Aggregation, Brief-Unsubscribe-Tokens
   watch_scheduler.py         Owner-gebundener Global-Lease, Tagesbudget, Pipeline-Adapter, run_brief_tick + Outbox-Retry-Pass
@@ -5322,29 +5311,52 @@ In-Memory-Usage-Zähler. Jeder erfolgreiche Lauf schreibt unter
 kompakte Drift-/Score-Felder plus aktuellen Consensus, Differences, Quellen- und
 Modellmetadaten. Das Share-Dokument bleibt der unveränderliche Original-Baseline-
 Snapshot und erhält nur `latest_watch_run_id`/`last_watch_run_at`; nach drei
-Fehlern pausiert die Watch. Alerts vergleichen Previous → Current, während ein
-zweiter Change-Judge-Vergleich Original → Current den kumulativen Baseline-Drift
-liefert. Alte kompakte History bleibt lesbar; beim nächsten erfolgreichen Lauf
-wechselt eine Legacy-Watch automatisch in den versionierten Flow. Die bewusst
-groben Event-Typen für spätere Webhooks sind `watch.checked`, `watch.changed`,
-`watch.condition_met` und `watch.run_failed`.
-Ob ein Lauf `changed` oder nur `checked` ist, entscheidet ausschließlich
-`app/services/drift_signal.py` — eine Regel für Badge, Kurve, Dashboard,
-Morning Brief, Mail und Telegram. Material ist ein Lauf, wenn der Change-Judge
-`severity == "major"` vergibt ODER der Agreement-Score mindestens 15 Punkte von
-JEDEM der letzten drei Scores entfernt liegt (Bandregel statt Vorgänger-Delta:
-der Score springt zwischen den Caps 90/84/64/39, ein Pendeln 84↔64 ist damit
-genau ein Ereignis statt eines pro Lauf). Ein `changed=true` mit `severity ==
-"minor"` ist eine Umformulierung: es bleibt als `restated` samt Judge-Satz auf
-der Seite sichtbar, hebt aber kein Badge. Lesepfade rechnen den Trigger aus der
-Serie neu (`drift_signal.annotate_points`) und trauen dem gespeicherten Feld
-nicht — Altläufe wurden unter der lockeren Regel geschrieben.
-Die kanalneutrale Alert-Regel ist pro Watch änderbar (persistiert weiterhin im
-Legacy-Feld `email_mode`): `changes_only` nutzt die bestehende
-Major-/Score-Delta-Schwelle, `condition` lässt den bestehenden Change-Judge eine
-max. 500 Zeichen lange Nutzerbedingung gegen den neuen Consensus als
-`met|not_met|unknown` bewerten und alarmiert nur beim Übergang zu `met`,
-`every_run` sendet nach jedem erfolgreichen Lauf den neuen Consensus-Inhalt.
+Fehlern pausiert die Watch. **Belegmodell (seit 2026-10-01, Vertrag:
+`docs/watch-evidence-model.md`):** jeder Check vergleicht mit der *geltenden*
+Antwort (`watch.accepted_run_id`, Altbestand: letzter Lauf) statt mit dem
+letzten Lauf, und zwar über `evidence_change.assess`: der Change-Judge
+(`query_consensus_change`, Structured Output) bekommt beide Antworten **und**
+beide Quellenlisten (neue mit `seen_before`) und nennt `cause`
+(`new_evidence` / `evidence_missing` / `reassessment`), tragende Quellen,
+`change_summary` und `held_summary`; der Server prüft die zitierten IDs, stuft
+`new_evidence` ohne neue URL zu `reassessment` und eine Neubewertung nach
+Modellwechsel zu `model_change` um. Ein zweiter Vergleich Original → Current
+liefert weiter den kumulativen Baseline-Drift. Alte kompakte History bleibt
+lesbar. Event-Typen für spätere Webhooks: `watch.checked`, `watch.changed`,
+`watch.confirming`, `watch.condition_met` (= Abschluss) und `watch.run_failed`.
+Was ein Check bedeutet, entscheidet ausschließlich
+`app/services/drift_signal.py` (`annotate_points` für Watch-Punkte,
+`annotate_runs` für Topic-Runs) — eine Regel für Badge, Kurve, Dashboard,
+Morning Brief, Mail, Telegram, Follower und Topic-Record. Signale: `moved`
+(major + neue Belege, oder eine Neubewertung, die der direkt folgende Check
+wiederholt), `confirming` → `preliminary`/`reverted`, `held` (major +
+`evidence_missing`: die geltende Antwort bleibt), `restated`, `stable`;
+`trigger == "changed"` ⇔ `moved`. Der Agreement-Score löst kein Ereignis mehr
+aus (nur noch `score_event` als Kurvenmarke). History ohne `cause` behält die
+alte Regel (major oder Score-Band) und wird beim Lesen neu bewertet, kein
+Backfill. Ein `confirming`-Check zieht den nächsten Lauf um
+`drift_signal.CONFIRMATION_DELAY` (20 min) vor; höchstens eine Nachprüfung pro
+Ereignis.
+**Ziel und Abschluss:** die Alert-Regel bleibt im Legacy-Feld `email_mode`,
+das Ziel im Feld `condition` (UI: „What are you waiting for?“). Das Ziel wird bei
+jedem Check bewertet (`condition_status`, `condition_reason`, zitierte
+`condition_evidence`). Belegt ein Check `met` mit einer Quelle dieses Laufs —
+oder wiederholt er ein `met` für dasselbe Ziel —, setzt `complete_watch_run`
+`status = "resolved"`, `resolution = {run_id, at, condition, reason, sources}`,
+`next_run_at = None` und gibt den Aktiv-Slot frei; ein erstes unbelegtes `met`
+löst eine Nachprüfung aus. Weiterbeobachten (`PATCH status=active`) verlangt ein
+neues oder leeres Ziel (`goal_reached`, 409). `changes_only` meldet `moved` oder
+den Abschluss, `condition` nur den Abschluss, `every_run` jeden Check. Ein Ziel,
+das während des Laufs geändert wurde, wird weder bewertet noch gespeichert (R16).
+**Tages-Scan (`watch_probe.py`):** aktive Owner-Watches mit Intervall weekly/
+monthly tragen `next_probe_at` (Index `status`+`next_probe_at`). Im Watch-Tick
+claimt `run_probe` at-most-once (Termin rückt vor, Tagesdeckel
+`watch_probe_max_per_day` aus den Admin-Limits, 0 = aus) und fragt ein
+günstiges Free-Watch-Modell mit Websuche (`NEW: yes|no`) nach Neuem seit dem
+letzten Check. Nur ein „yes“ mit einer Quelle, die die geltende Antwort nicht
+zitiert, zieht `next_run_at` auf jetzt und weckt den Scheduler; das Ergebnis
+steht als `last_probe` am Watch. Ist der volle Check < 30 h entfernt, entfällt
+der Scan.
 E-Mail und Telegram sind getrennte, pro Watch aktivierbare Kanäle; mindestens
 einer muss aktiv bleiben. Legacy-Watches bleiben E-Mail-only. Telegram nutzt
 denselben fertigen Run ohne zusätzlichen LLM-Call, dedupliziert über
@@ -5360,13 +5372,18 @@ Neu angelegte Watches bekommen eine lokale Ausführungszeit; das Backend berechn
 Fehler-Retries und Resume bei. Weekly-Watches können einen lokalen Wochentag wählen;
 Legacy-Watches ohne Wochentag bzw. Zeitfelder nutzen weiter die bisherige reine
 Intervalladdition.
-Alle Benachrichtigungen (Change, Every-run, Condition, Follower, Topic, Morning
-Brief, Telegram) folgen derselben Reihenfolge: **was sich geändert hat** (erster
-Satz hervorgehoben) → **Zahlenstreifen** (Agreement alt → neu inkl. Delta,
-Direction-Shift-Label aus der Position Map, Major/Minor) → **Frage** → Button.
-Bausteine dafür liegen zentral in `mailer.py` (`_change_block_html`,
-`_facts_html`, `_question_html`, `_shell_html` inkl. Preheader für die
-Inbox-Vorschau); lange Fragen werden auf ~200 Zeichen gekürzt und verlinken auf
+Alle Benachrichtigungen (Change, Every-run, Resolved, Follower, Topic, Telegram)
+sind ein **Änderungsprotokoll** in fester Reihenfolge: **was sich geändert hat**
+(erster Satz hervorgehoben) → **warum** (Ursachensatz + tragende Quellen) →
+**was gleich blieb** (`held_summary`) → **Ziel** und sein Stand → **Frage** →
+Button. Es gibt bewusst keine Agreement-Zeile mehr. Die Outbox trägt dafür
+`payload.delta` (`notification_outbox.delta_view`: summary, held, cause,
+sources, goal, goal_status, goal_reason); Items ohne `delta` (vor 2026-10-01
+eingereiht, durch `deliver_until` begrenzt) rendern nur den Summary. Bausteine
+liegen zentral in `mailer.py` (`_delta_parts`, `_change_block_html`,
+`_why_html`, `_question_html`, `_shell_html` inkl. Preheader für die
+Inbox-Vorschau); eine abgeschlossene Watch schickt genau eine „Resolved“-Mail
+(sie passiert das Pause-Gate der Zustellung als einzige); lange Fragen werden auf ~200 Zeichen gekürzt und verlinken auf
 die Seite. Der Textteil bleibt bewusst ASCII (`_ascii`), sonst landet die
 komplette Plaintext-Hälfte in Base64 und URLs sind nicht mehr klickbar.
 Telegram sendet dieselbe Struktur als HTML (`parse_mode=HTML`), Frage und langer
@@ -5375,16 +5392,19 @@ Consensus stehen in `<blockquote expandable>`; wird die Auszeichnung abgelehnt
 Watch-Seiten erklären nur vor dem ersten Vergleich die Baseline; bei vorhandener
 History beginnt der Inhalt direkt mit Status und Zeitplan. Lange Fragen klappen im Seitenkopf auf drei Zeilen
 ein (`#shareQuestion` + `#shareQuestionMore`, gleiche Geste wie `#threadAsk` in
-/app; ohne JS bleibt der volle Text stehen), in der eingeklappten Dashboard-Karte
-auf zwei. Zeitplan und Check-Daten stehen im Kopf stets
+/app; ohne JS bleibt der volle Text stehen), in der Dashboard-Karte auf drei. Zeitplan und Check-Daten stehen im Kopf stets
 sichtbar; nur Direction-/Agreement-Metriken liegen in einklappbaren
 Expertendetails. Vor der ersten echten Vergleichsstufe
 werden keine Entwicklungsmetriken suggeriert. Bei vorhandener History integriert
 der Drift-Header einen kompakten Agreement-Chart: seine Punkte besitzen Hover-
 Beschreibungen und springen in die stets sichtbare Run-Liste. Die große Kurve
 bleibt als dezentes, zunächst geschlossenes Detail aus dem Header verlinkt. Die normale Watch-URL
-rendert serverseitig die neueste Vollversion über dem unveränderten Share-Baseline-
-Dokument; `?version=<run_id>` öffnet eine unveränderliche (aber nur kurz gecachte, widerrufbare) historische Vollversion und
+rendert serverseitig die **geltende** Vollversion (`accepted_run_id`, sonst die
+neueste) über dem unveränderten Share-Baseline-Dokument; steht der neueste Check
+nicht (`held`/`confirming`), nennt die Seite ihn als „Latest check: …“ über der
+geltenden Antwort. Ein Ziel bzw. ein Abschluss steht als `.watch-goal-banner`
+im Kopf (öffentliche Seiten zeigen das Ziel), die Quellen hinter einer Bewegung
+als `.watch-evidence-list`; `?version=<run_id>` öffnet eine unveränderliche (aber nur kurz gecachte, widerrufbare) historische Vollversion und
 `?version=original` den Ausgangs-Consensus. Shared Pages ohne Watch behalten ihr
 bisheriges Snapshot-Verhalten. Ein Backend-`display_version` ist die einzige
 Quelle für Consensus, Differences, Agreement, Modelle, Quellen, Answer-Zeit und
@@ -5415,8 +5435,9 @@ Der 30-Minuten-Loop ruft nach `run_watch_tick` ein
 `run_brief_tick` auf: fällige Briefs werden über den Composite-Index begrenzt
 gelesen und transaktional geclaimt (Zeitplan rückt vor und das Outbox-Item
 entsteht im selben Commit, siehe Zustellgarantie unten), dann wird der Digest
-aus `list_watches(include_history=True)` aggregiert (Score/Delta, notable
-Changes seit dem letzten Brief = `trigger == "changed"` aus `drift_signal`) und als
+aus `list_watches(include_history=True)` aggregiert (Ziel statt Score, notable
+Events seit dem letzten Brief = `trigger == "changed"` aus `drift_signal` oder
+ein Abschluss) und als
 Multipart-Mail versendet. Modus `changes_only` überspringt Briefs ohne notable
 Changes. Kein LLM-Call, kein Watch-Lease nötig; unverifizierte E-Mail-Adressen
 werden übersprungen. `/watch/brief/unsubscribe` (eigener HMAC-Token-Typ,

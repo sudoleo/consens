@@ -896,6 +896,7 @@ def create_run(
                 "accepted_run_at": run["observed_at"],
                 "accepted_agreement_score": run["agreement_score"],
                 "accepted_change_summary": run["change_summary"],
+                "accepted_signal": outcome["signal"],
             })
         if current.get("status") != "active":
             scheduled = None
@@ -1163,6 +1164,28 @@ def fail_topic_run(
     return _run_transaction(db, fail)
 
 
+def _standing_view(topic: dict) -> dict:
+    """What the hub shows: the run whose answer stands, not the newest one.
+
+    Topics written before the evidence model have no standing pointer; for
+    them the newest run stands and its grade decides movement.
+    """
+    if topic.get("accepted_run_id"):
+        score = topic.get("accepted_agreement_score")
+        summary = topic.get("accepted_change_summary")
+        moved = topic.get("accepted_signal") == drift_signal.SIGNAL_MOVED
+    else:
+        score = topic.get("latest_agreement_score")
+        summary = topic.get("latest_change_summary")
+        moved = topic.get("latest_change_type") == drift_signal.MATERIAL_SEVERITY
+    return {
+        "standing_agreement_score": score,
+        "standing_change_summary": str(summary or ""),
+        "standing_moved": bool(moved),
+        "latest_held": topic.get("latest_signal") in drift_signal.NON_RECORD_SIGNALS,
+    }
+
+
 def topic_public_view(topic: dict) -> dict:
     return {
         "id": topic["id"],
@@ -1181,6 +1204,7 @@ def topic_public_view(topic: dict) -> dict:
         # none, and there the newest run stands.
         "accepted_run_id": str(topic.get("accepted_run_id") or topic.get("latest_run_id") or ""),
         "latest_signal": str(topic.get("latest_signal") or ""),
+        **_standing_view(topic),
         # The page promises a next check, so it has to know when that is.
         "next_run_at": _public_datetime(topic.get("next_run_at")),
         "latest_agreement_score": topic.get("latest_agreement_score"),

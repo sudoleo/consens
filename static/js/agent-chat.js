@@ -294,8 +294,9 @@
     document.body.classList.toggle("single-agent-active", agent);
     App.renderComposerMode?.();
     if (modeChanged) requestAnimationFrame(() => App.resizeQuestionInput?.());
-    const chatTab = document.getElementById("viewSwitchConsensus");
-    if (chatTab) chatTab.textContent = agent ? "Chat" : "Consensus";
+    // Only the label follows the mode; the icon and the switch's thumb stay.
+    const chatTabLabel = document.querySelector("#viewSwitchConsensus > span");
+    if (chatTabLabel) chatTabLabel.textContent = agent ? "Chat" : "Consensus";
     const greeting = document.querySelector(".hero-greeting");
     const newChat = document.getElementById("newRunButton");
     if (newChat) {

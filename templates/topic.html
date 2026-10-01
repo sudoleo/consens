@@ -117,13 +117,16 @@
   </div>
 </details>
 {%- endmacro %}
-{% macro timeline_row(run, slug, latest_run_id) -%}
-<li class="is-{{ run.change_type }}{% if run.is_selected %} is-selected{% endif %}">
-  <a href="/topics/{{ slug }}{% if run.id != latest_run_id %}?version={{ run.id }}{% endif %}">
+{% macro timeline_row(run, slug, standing_run_id, signal_notes) -%}
+{#- Movement is the drift signal, not the raw grade: a major difference the
+    search merely failed to support again is "held" (docs/watch-evidence-model.md). -#}
+{%- set tone = "major" if run.signal == "moved" else (run.signal if run.signal in signal_notes else ("minor" if run.change_type == "minor" else "stable")) -%}
+<li class="is-{{ tone }}{% if run.is_selected %} is-selected{% endif %}">
+  <a href="/topics/{{ slug }}{% if run.id != standing_run_id %}?version={{ run.id }}{% endif %}">
     <span class="timeline-dot"></span>
     <span class="timeline-copy">
       <strong>{{ run.date_display }}</strong>
-      <small>{{ run.change_summary or "No material change" }}</small>
+      <small>{% if run.signal in signal_notes %}{{ signal_notes[run.signal] }}{% else %}{{ run.change_summary or "No material change" }}{% endif %}</small>
       {% if run.opinion_changes %}<em>{{ run.opinion_changes | length }} opinion change{{ "s" if run.opinion_changes | length != 1 }}</em>{% endif %}
     </span>
     <span class="timeline-score">
@@ -152,8 +155,8 @@
   <meta name="twitter:description" content="{{ meta_description }}">
   <title>{{ page_title }} | consens.io</title>
   <script type="application/ld+json">{{ jsonld | safe }}</script>
-<link rel="stylesheet" href="/static/css/public-pages.css?v=20260906-palette1">
-  <link rel="stylesheet" href="/static/css/topics.css?v=20260906-palette1">
+<link rel="stylesheet" href="/static/css/public-pages.css?v=20261001-evidence">
+  <link rel="stylesheet" href="/static/css/topics.css?v=20261001-evidence">
   <link rel="stylesheet" href="/static/css/public-shell.css?v=20260826-cardfoot">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.17.0/dist/katex.min.css">
   <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
@@ -204,6 +207,13 @@
       </section>
       {% endif %}
 
+      {% if pending_check %}
+      <p class="topic-pending-check is-{{ pending_check.signal }}" role="note">
+        <strong>Latest check &middot; {{ pending_check.date_display }}:</strong>
+        {{ signal_notes[pending_check.signal] }} The answer below is the one that stands.
+      </p>
+      {% endif %}
+
       {% if strip | length > 1 %}
       <section class="topic-strip-block" aria-labelledby="stripHeading">
         <div class="topic-strip-legend">
@@ -216,7 +226,7 @@
               middle-clicked and tabbed to like any other link. Hovering it
               only previews what happened in that check. -#}
           <a class="topic-strip-cell is-{{ cell.kind }}{% if cell.is_latest %} is-latest{% endif %}"
-             href="/topics/{{ topic.slug }}{% if cell.run_id and cell.run_id != topic.latest_run_id %}?version={{ cell.run_id }}{% endif %}"
+             href="/topics/{{ topic.slug }}{% if cell.run_id and cell.run_id != topic.accepted_run_id %}?version={{ cell.run_id }}{% endif %}"
              data-date="{{ cell.date }}" data-iso="{{ cell.iso }}" data-kind="{{ cell.kind }}"
              data-note="{{ cell.note }}"{% if cell.score is not none %} data-score="{{ cell.score }}"{% endif %}
              {% if cell.run_id %}data-run="{{ cell.run_id }}"{% endif %}
@@ -330,7 +340,8 @@
             <div class="topic-deep-body">
               <div class="topic-panel-head is-inner">
                 <h3>{% if is_current %}What the models say now{% else %}What the models said then{% endif %}</h3>
-                <span class="topic-change-badge is-{{ selected.change_type }}">{{ selected.change_type }}</span>
+                {%- set badge = "moved" if selected.signal == "moved" else ("restated" if selected.change_type == "minor" else "stable") %}
+                <span class="topic-change-badge is-{{ "major" if badge == "moved" else ("minor" if badge == "restated" else "stable") }}">{{ badge }}</span>
               </div>
               {% if selected.change_summary %}
               <div class="topic-change-summary is-{{ selected.change_type }}">
@@ -618,12 +629,12 @@
                   <b aria-hidden="true">+</b>
                 </summary>
                 <ol class="topic-timeline is-nested">
-                  {% for run in entry.runs %}{{ timeline_row(run, topic.slug, topic.latest_run_id) }}{% endfor %}
+                  {% for run in entry.runs %}{{ timeline_row(run, topic.slug, topic.accepted_run_id, signal_notes) }}{% endfor %}
                 </ol>
               </details>
             </li>
             {% else %}
-            {{ timeline_row(entry.run, topic.slug, topic.latest_run_id) }}
+            {{ timeline_row(entry.run, topic.slug, topic.accepted_run_id, signal_notes) }}
             {% endif %}
             {% endfor %}
           </ol>

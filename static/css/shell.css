@@ -747,30 +747,13 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
 .app-mobile-header { display: contents; }
 .mobile-conversation-actions, .mobile-sidebar-views { display: none; }
 
-.view-switch {
-  background: var(--raise);
-  border: 0;
-  box-shadow: none;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-}
-
-.view-switch-btn {
-  color: var(--ink-2);
-}
-
+/* The view switch draws its own surface and sliding thumb
+   (components-watch.css); nothing here may paint the active button. */
 /* Conversations (including direct comparisons) keep the header clear.
    Watches retains its navigation even when a conversation is underneath. */
 body:not(.is-hero):not(:has(#watchDashboard:not([hidden]))) .view-switch,
 body.direct-comparison-active:not(:has(#watchDashboard:not([hidden]))) .view-switch {
   display: none;
-}
-
-.view-switch-btn.is-active {
-  background: var(--ground);
-  color: var(--ink);
-  font-weight: var(--font-weight-semibold);
-  box-shadow: none;
 }
 
 /* --------------------------------------------------------------------------
@@ -3783,19 +3766,13 @@ body.is-hero .consensus-section::before {
 }
 
 /* --------------------------------------------------------------------------
-   6. Watch dashboard
+   6. Watch dialog surfaces
 
-   Same treatment as the thread: the KPI tiles, cards and feeds are tinted
-   surfaces rather than bordered boxes, and the status colours come from the
-   shared traffic light instead of a private amber.
+   The dashboard itself (components-watch.css, `wd-`) is built on the
+   surface scale from the start; these are the dialog parts that predate it.
    -------------------------------------------------------------------------- */
-.watch-dash-stat,
-.watch-card,
-.watch-brief-card,
-.watch-telegram-card,
 .watch-success-card,
 .watch-limit-summary,
-.watch-notifications,
 .watch-question-preview,
 .watch-setup-summary {
   border: 0;
@@ -3805,49 +3782,17 @@ body.is-hero .consensus-section::before {
   -webkit-backdrop-filter: none;
 }
 
-/* Drift is the one thing on this page worth a colour. The tint carries that
-   meaning without the generic leading-edge accent rail. */
-.watch-dash-stat.is-drift,
-.watch-drift-feed {
-  border: 0;
-  border-radius: var(--radius-md);
-  background: var(--partial-bg);
-  box-shadow: none;
-}
-
-.watch-dash-heading-row .watch-limit-summary {
-  box-sizing: border-box;
-  width: fit-content;
-  padding: 8px 10px;
-  border-radius: var(--radius-sm);
-}
-
-.watch-card-drift-dot,
-.watch-drift-feed-dot {
-  background: var(--partial);
-}
-
 /* The rest of the watch surfaces: the plan pill, the dialog, the per-card
    disclosure, the setup fields. They were the last things on this page still
    drawing a rectangle (several of them an accent-tinted one) around content
    that the tone already separates. */
 .watch-limit-plan,
 .watch-limit-summary.is-dialog,
-.watch-card-toggle,
-.watch-empty-flow b,
-.watch-example-chip,
 .watch-advanced-settings {
   border: 0;
   background: var(--raise);
   color: var(--ink-2);
   box-shadow: none;
-}
-
-.watch-card-toggle:hover,
-.watch-example-chip:hover {
-  border: 0;
-  background: var(--app-surface-hover);
-  color: var(--ink);
 }
 
 /* The defaults block is the one place a reader decides whether this dialog is
@@ -3879,19 +3824,6 @@ body.is-hero .consensus-section::before {
 .watch-delivery-field:focus {
   outline: none;
   box-shadow: 0 0 0 1px var(--line);
-}
-
-.watch-filter {
-  background: transparent;
-  border: 0;
-  color: var(--ink-2);
-}
-
-.watch-filter:hover,
-.watch-filter.is-active,
-.watch-filter[aria-pressed="true"] {
-  background: var(--raise);
-  color: var(--ink);
 }
 
 .watch-page {
@@ -4138,15 +4070,6 @@ body.dark-mode .model-picker-option:is(:hover, :focus-visible):not(:disabled):no
 
 body .model-picker-option.is-selected,
 body.dark-mode .model-picker-option.is-selected,
-body .view-switch-btn.is-active {
-  background: var(--app-surface-selected);
-}
-
-body:not(.dark-mode) .view-switch-btn.is-active {
-  background: #fff;
-  box-shadow: 0 0 0 1px rgba(34, 36, 40, 0.07), 0 1px 3px rgba(34, 36, 40, 0.06);
-}
-
 /* Match controls nested inside the new opaque panels. */
 body .theme-toggle,
 body .theme-toggle.is-dark {
