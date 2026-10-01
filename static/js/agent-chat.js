@@ -132,6 +132,8 @@
     if (host) host.hidden = !agent;
     App.sidebarQuota?.sync();
     if (!agent || !select || !effort) {
+      // Outside Agent the comparison chip is the Consensus/Compare chip again.
+      App.linkModelPicker?.(select, null);
       if (select) App.collapseExpandedModelPicker?.(select);
       if (effort) App.collapseExpandedModelPicker?.(effort);
       return;
@@ -202,7 +204,14 @@
     effort.parentElement.hidden = true;
     document.getElementById("agentModelsRetry")?.toggleAttribute("hidden", catalogStatus !== "failed");
     App.initCustomModelPicker?.(select, { grouped: true, secondarySelect: effort, secondaryLabel: 'Reasoning' });
-    if (select.disabled) App.collapseExpandedModelPicker?.(select);
+    // One chip, one menu: the chat model above, the models it is compared
+    // with below (model-picker.js, linked pickers). The comparison chip of
+    // Consensus/Compare steps back while linked.
+    const comparison = document.getElementById("consensusModelDropdown");
+    App.linkModelPicker?.(select, comparison, { ownLabel: "Agent", companionLabel: "Compare with", ariaLabel: "Agent and comparison models" });
+    // A locked chat model (loading, a message running) closes only its own
+    // levels; the comparison models stay open to change for the next message.
+    if (select.disabled) App.collapseExpandedModelPicker?.(select, { ownLevelsOnly: true });
     if (effort.disabled || effort.parentElement.hidden) App.collapseExpandedModelPicker?.(effort);
     window.syncCustomModelPickers?.();
   }
@@ -288,6 +297,9 @@
     if (comparisonPicker) {
       comparisonPicker.dataset.comparisonOnly = String(agent);
       comparisonPicker.setAttribute("aria-label", agent ? "Comparison models" : "Models and consensus engine");
+      // Agent shows one chip: the comparison models live in the Agent menu.
+      const chip = comparisonPicker.closest(".consensus-model");
+      if (chip) chip.hidden = agent;
     }
     renderControls(agent);
     const modeChanged = document.body.classList.contains("single-agent-active") !== agent;
@@ -680,7 +692,7 @@
     if (action === 'compare') App.openModelPicker?.(document.getElementById('consensusModelDropdown'));
     else if (action === 'choose-model') {
       App.composer?.expand?.();
-      App.openModelPicker?.(document.getElementById('agentModelDropdown'));
+      App.openModelPicker?.(document.getElementById('agentModelDropdown'), { level: 'models' });
     } else if (action === 'google-consent') App.agentGoogle?.consent?.(true);
     else if (action === 'google-open') App.agentGoogle?.open?.();
     else if (action === 'reload') { catalogStatus = 'idle'; render(); }

@@ -15,9 +15,9 @@ const CATALOG = { token_budget: { remaining: 188878, limit: 250000, observed_at:
   { id: "gpt-4o", label: "GPT-4o", reasoning_efforts: ["default"], reasoning_available: false },
 ] };
 
-function boot({ allowed = true, catalog = CATALOG } = {}) {
+function boot({ allowed = true, catalog = CATALOG, body = BODY, setup: prepare } = {}) {
   const setup = loadScripts(["static/js/run-mode.js", "static/js/run-registry.js", "static/js/model-picker.js", "static/js/request-deadline.js", "static/js/agent-activity.js", "static/js/agent-chat.js"], {
-    body: BODY,
+    body,
     before(window) {
       window.auth = { currentUser: { uid: "owner", getIdToken: async () => "verified" } };
       window.App = {
@@ -36,6 +36,7 @@ function boot({ allowed = true, catalog = CATALOG } = {}) {
           token_budget: structuredClone(CATALOG.token_budget), bookmark_meta: { id: "saved" } } };
       });
       window.acceptPersistedConsensusBookmark = vi.fn();
+      prepare?.(window);
     },
   });
   setup.document.dispatchEvent(new setup.window.Event("DOMContentLoaded"));
@@ -1322,6 +1323,146 @@ describe("single-model agent chat", () => {
     expect(d.getElementById('agentReviewNotice').hidden).toBe(true);
     expect(d.querySelector('.bookmark.needs-review')).toBeNull();
     expect(d.title).not.toMatch(/^\(\d+\) /);
+    dom.window.close();
+  });
+});
+
+// Agent shows ONE chip for the chat model and the models it is compared with
+// (model-picker.js, linked pickers). The comparison select keeps its rules
+// and persistence; it only draws into the Agent menu while Agent is on.
+const LINKED_BODY = BODY + `<div class="consensus-model consensus-model-inline"><div class="select-wrapper">
+  <select id="consensusModelDropdown" aria-label="Models and consensus engine"><option value="engine">Engine</option></select></div></div>
+  <input id="compareGemini" type="checkbox"><select id="compareGeminiModel"><option value="gemini-flash">Gemini Flash</option></select>`;
+
+function bootLinked({ initComparison = true, ...options } = {}) {
+  const harness = boot({ ...options, body: LINKED_BODY, setup(window) {
+    window.App.modelPrefs = [
+      { key: 'OpenAI', label: 'ChatGPT', provider: 'openai', checkId: 'compareOpenAI', selectId: 'compareOpenAIModel', responseId: 'openaiResponse' },
+      { key: 'Anthropic', label: 'Claude', provider: 'anthropic', checkId: 'compareClaude', selectId: 'compareClaudeModel', responseId: 'claudeResponse' },
+      { key: 'Gemini', label: 'Gemini', provider: 'gemini', checkId: 'compareGemini', selectId: 'compareGeminiModel', responseId: 'geminiResponse' }];
+    window.App.getSelectedModelCount = () => window.App.modelPrefs.filter(pref => window.document.getElementById(pref.checkId).checked).length;
+    window.App.trackAppEvent = vi.fn();
+    window.updateAgentModeUI = vi.fn();
+    window.CONSENSUS_PRESETS = [{ id: 'daily', label: 'Daily', hint: 'Quick answers', consensus_model: 'engine',
+      models: { openai: 'gpt-5.4-mini', anthropic: 'claude-haiku-4-5' } }];
+    window.DEFAULT_CONSENSUS_PRESET = 'daily';
+  } });
+  if (initComparison) harness.window.App.initCustomModelPicker(harness.document.getElementById('consensusModelDropdown'), { presets: true });
+  return harness;
+}
+
+describe('one Agent chip for the chat model and its comparison models', () => {
+  const key = (w, el, name) => el.dispatchEvent(new w.KeyboardEvent('keydown', { key: name, bubbles: true }));
+
+  it('carries both choices in one menu and gives the comparison chip back outside Agent', async () => {
+    const { window: w, document: d, dom } = bootLinked();
+    await selectAgent(w);
+    const consensus = d.getElementById('consensusModelDropdown');
+    const trigger = d.querySelector('.agent-model-picker .model-picker-display');
+    const menu = d.querySelector('.agent-model-picker .model-picker-menu');
+    expect(d.querySelector('.consensus-model').hidden).toBe(true);
+    expect(trigger.querySelector('.model-picker-display-text').textContent).toBe('DeepSeek V4.1 Flash');
+    expect(trigger.querySelector('.model-picker-display-count').textContent).toBe('+2');
+    expect(trigger.getAttribute('aria-label')).toBe('Agent and comparison models: DeepSeek V4.1 Flash, compared with 2 models');
+    expect(trigger.textContent).not.toMatch(/Agent|Compare/);
+
+    trigger.click();
+    expect([...menu.querySelectorAll('.model-picker-section-label')].map(el => el.textContent)).toEqual(['Agent', 'Compare with']);
+    expect([...menu.querySelectorAll('[data-picker-level]')].map(el => el.dataset.pickerLevel)).toEqual(['models', 'secondary', 'companion']);
+    expect(menu.querySelector('[data-picker-level="models"]').textContent).toContain('DeepSeek V4.1 Flash');
+    expect(menu.querySelector('[data-picker-level="companion"]').textContent).toContain('2 models · Daily');
+    expect(menu.getAttribute('aria-label')).toBe('Agent and comparison models');
+
+    // Right enters a section's level, Left returns to the overview.
+    const compare = menu.querySelector('[data-picker-level="companion"]');
+    compare.focus();
+    key(w, compare, 'ArrowRight');
+    expect(menu.querySelector('[data-preset="daily"]')).not.toBeNull();
+    expect(menu.querySelector('.model-picker-back-option').textContent).toBe('Compare with');
+    expect(menu.contains(d.activeElement)).toBe(true);
+    key(w, d.activeElement, 'ArrowLeft');
+    expect(menu.querySelector('[data-picker-level="companion"]')).not.toBeNull();
+    expect(menu.contains(d.activeElement)).toBe(true);
+
+    // Custom: the comparison rows, no consensus engine. A toggle keeps focus
+    // on its row and the chip counts along.
+    menu.querySelector('[data-picker-level="companion"]').click();
+    menu.querySelector('.model-picker-custom-option').click();
+    expect(menu.textContent).toContain('Comparison models');
+    expect(menu.textContent).not.toContain('Consensus engine');
+    const gemini = menu.querySelector('[data-focus-key="toggle:Gemini"]');
+    gemini.focus();
+    gemini.click();
+    expect(d.getElementById('compareGemini').checked).toBe(true);
+    expect(d.activeElement.dataset.focusKey).toBe('toggle:Gemini');
+    expect(trigger.querySelector('.model-picker-display-count').textContent).toBe('+3');
+    expect(w.localStorage.getItem('pref_consensus_preset')).toBe('custom');
+
+    // Escape closes the one menu and returns to the one chip.
+    key(w, d.activeElement, 'Escape');
+    expect(menu.classList.contains('is-open')).toBe(false);
+    expect(d.activeElement).toBe(trigger);
+
+    // Outside Agent the comparison chip is its own picker again.
+    w.App.runMode.set('consensus');
+    expect(d.querySelector('.consensus-model').hidden).toBe(false);
+    w.App.openModelPicker(consensus);
+    const own = d.querySelector('.consensus-model .model-picker-menu');
+    expect(own.classList.contains('is-open')).toBe(true);
+    expect(own.querySelector('[data-focus-key="toggle:Gemini"]')).not.toBeNull();
+    expect(menu.classList.contains('is-open')).toBe(false);
+    dom.window.close();
+  });
+
+  it('opens the named level from shortcuts and keeps the comparisons open while the chat model is locked', async () => {
+    const { window: w, document: d, dom } = bootLinked();
+    await selectAgent(w);
+    const agentSelect = d.getElementById('agentModelDropdown');
+    const consensus = d.getElementById('consensusModelDropdown');
+    const trigger = d.querySelector('.agent-model-picker .model-picker-display');
+    const menu = d.querySelector('.agent-model-picker .model-picker-menu');
+
+    // (+) "Comparison models" and the composer notice open the comparison level.
+    w.App.openModelPicker(consensus);
+    expect(menu.classList.contains('is-open')).toBe(true);
+    expect(menu.querySelector('[data-preset="daily"]')).not.toBeNull();
+    expect(d.querySelector('.consensus-model .model-picker-menu').classList.contains('is-open')).toBe(false);
+    expect(menu.contains(d.activeElement)).toBe(true);
+    // Choosing a preset closes the one menu, not a hidden one.
+    menu.querySelector('[data-preset="daily"]').click();
+    expect(menu.classList.contains('is-open')).toBe(false);
+    expect(trigger.getAttribute('aria-expanded')).toBe('false');
+
+    // (+) "Deep Think" opens reasoning; its way back is the overview.
+    w.App.openModelPicker(agentSelect, { secondary: true });
+    expect(menu.querySelector('[data-setting-value="high"]')).not.toBeNull();
+    menu.querySelector('.model-picker-back-option').click();
+    expect(menu.querySelector('[data-picker-level="secondary"]')).not.toBeNull();
+    expect(menu.querySelector('.agent-reasoning-option')).toBeNull();
+
+    // A running message locks the chat model, not the comparison models.
+    agentSelect.disabled = true;
+    w.syncCustomModelPickers();
+    expect(trigger.disabled).toBe(false);
+    w.App.collapseExpandedModelPicker(agentSelect, { ownLevelsOnly: true });
+    expect(menu.classList.contains('is-open')).toBe(true);
+    expect(menu.querySelector('[data-picker-level="models"]').disabled).toBe(true);
+    expect(menu.querySelector('[data-picker-level="companion"]').disabled).toBe(false);
+    dom.window.close();
+  });
+
+  it('links once the comparison picker exists, whichever picker comes first', async () => {
+    const { window: w, document: d, dom } = bootLinked({ initComparison: false });
+    await selectAgent(w);
+    const trigger = d.querySelector('.agent-model-picker .model-picker-display');
+    expect(trigger.querySelector('.model-picker-display-count')).toBeNull();
+    w.App.initCustomModelPicker(d.getElementById('consensusModelDropdown'), { presets: true });
+    expect(trigger.querySelector('.model-picker-display-count').textContent).toBe('+2');
+    trigger.click();
+    expect(d.querySelector('.agent-model-picker [data-picker-level="companion"]')).not.toBeNull();
+    // Unlinking a link that never applied is a no-op, not an error.
+    w.App.linkModelPicker(d.getElementById('agentModelDropdown'), null);
+    expect(trigger.querySelector('.model-picker-display-count').hidden).toBe(true);
     dom.window.close();
   });
 });
