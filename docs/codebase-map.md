@@ -1993,30 +1993,14 @@ gestopptes oder mitten im Stream ausgefallenes Modell bis dahin geschrieben hat
 `answers`/`basis_hash`, Judges oder dem Tool-Ergebnis an den Orchestrator.
 Die Agent-Sitzung bekommt dazu eine Nachricht `kind: "partial"` und `partial: true`.
 Würde der Review-Snapshot 600 KB überschreiten, fallen zuerst diese Teiltexte weg. Vergleichsmodelle
-erhalten keine Delegations-/Vergleichstools, aber eine begrenzte Suchrunde
-(`call(..., kind="comparison")` → `_step(searches_enabled=True)`, im Chatpfad die
-Exa-Suche aus `_admit_chat_step`: 3 Treffer à 1000 Zeichen; passt die Reservierung
-nicht ins Kontingent, fällt nur die Suche weg) und das aktuelle Datum samt Hinweis,
-bei zeitabhängigen Fakten einmal zu suchen. Ohne beides einigten sich die Modelle
-auf denselben veralteten Trainingsstand. Judges suchen nie. Suchweg nach Familie
-(`agent_tools.NATIVE_SEARCH_FAMILIES`): Gemini, OpenAI und Anthropic nutzen ihre
-eigene Suche (Engine `auto` → Google-Grounding bzw. Provider-Suche), alle anderen
-Exa, Grok fest Exa. Gemessen 2026-10-01: bei Faktenfragen gleich gut, bei offenen
-„was ist aktuell am besten“-Fragen nannte die native Suche deutlich öfter aktuelle
-Modelle; Google-Grounding kostet ≈ 2–3 ct pro Anfrage statt ≈ 0,8 ct. Native
-Suche reserviert im Chatpfad `NATIVE_SEARCH_INPUT_TOKENS` (32k) pro Runde statt
-des ganzen Kontextfensters; die Abrechnung bucht den echten Verbrauch (ein
-Überschreiten des Tageslimits ist dadurch selten, aber möglich). Exa-Suchtiefe
-nach `depth`: `quick` 3 Treffer à 1000 Zeichen, `full` 5 à 2000
-(`_agent_rich_search`), je eine Runde. Mehrere Runden
-recherchiert nur der Orchestrator vor dem ersten Vergleich
-(`ORCHESTRATOR_SEARCH_ROUNDS = 3`, reiche Treffer) und gibt die Funde mit URLs
-im `context` weiter; eigene Erinnerung an Produkte/Versionen/Preise gehört nicht
-hinein, und Vergleichsmodelle behandeln solche Angaben ohne Quelle als ungeprüft.
-Passt eine Suchreservierung nicht, stuft `smaller_search` ab (weniger Runden →
-kürzere Treffer → keine Suche); parallele Vergleichsantworten stufen ab, statt auf
-Geschwister zu warten. Sechs volle Antworten mit je zwei reichen Runden würden
-bei 750k Tageskontingent (≈ 220k Reservierung pro Modell) nur nacheinander laufen. Die Output-Grenze ist die Completion-Grenze des
+erhalten keine Delegations-/Vergleichstools, aber eine Suchrunde
+(`call(..., kind="comparison")` → `_step(searches_enabled=True)`) und mit
+`comparison_system_prompt` das aktuelle Datum. Judges suchen nie; der
+Orchestrator recherchiert vor dem ersten Vergleich bis zu drei Runden
+(`ORCHESTRATOR_SEARCH_ROUNDS`). Suchkonfiguration (`search_tools`: eine für alle
+Modelle, Engine `auto`, nur Grok fest Exa), Reservierung
+(`SEARCH_INPUT_TOKENS` pro Runde, `smaller_search`) und Messwerte stehen
+ausschließlich in [agent-mode.md](agent-mode.md), Abschnitt „Websuche“. Die Output-Grenze ist die Completion-Grenze des
 Modells, begrenzt durch `_output_share` (fairer Anteil am freien Tageskontingent
 über `agent_quota.remaining_tokens`). `depth=quick` gibt eine kurze Längenvorgabe,
 `full` keine. Technische Token-, Kontext- und Snapshotgrenzen gelten weiter. Leere, abgebrochene oder Tool-Antworten gelten als fehlgeschlagen.
@@ -2590,11 +2574,9 @@ das zentrale Tagesbudget; alte Config-Felder bleiben beim Speichern erhalten.
 Konten behalten maximal zwei aktive Läufe; AGENT_MAX_CONCURRENT_RUNS begrenzt
 Produzenten pro Prozess (Default 16). Consensus behält seine Run-Limits.
 
-Damit das Tageskontingent keine unbeschränkten nativen Suchfenster reservieren
-muss, nutzt Agent den gemeinsamen engines.web_search_tool-Builder mit begrenztem
-Exa-Transport (3 Treffer, je 1.000 Zeichen, maximal eine Suche pro Modellschritt
-ohne zusätzliche Suchanzahl pro Lauf). Es gibt keinen neuen Suchdienst. Provider-
-Routing/ZDR bleiben bestehen. Die Consensus-Suchkonfiguration bleibt unverändert.
+Agent nutzt den gemeinsamen `engines.web_search_tool`-Builder mit derselben
+Engine-Wahl wie Consensus (Details: [agent-mode.md](agent-mode.md), „Websuche“).
+Es gibt keinen neuen Suchdienst. Provider-Routing/ZDR bleiben bestehen.
 Nur bestätigte Zähler/Quellen erzeugen Suchaktivität. Kosten-/Tokenwerte bleiben
 bei unvollständiger Provider-Usage ausdrücklich unvollständig.
 

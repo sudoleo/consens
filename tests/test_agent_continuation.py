@@ -23,7 +23,6 @@ def chat_loop(store, factory):
     config = {**defaults(), "max_calls": 1, "max_tools": 1, "seconds": 1,
               "max_tokens": 1, "max_cost_nano_usd": 1, "worker_calls": 1, "max_searches": 0}
     model = resolve_agent_model("claude-haiku-4-5")
-    model = replace(model, request_config={**model.request_config, "_agent_bounded_search": True})
     return DelegationLoop(store=store, uid=UID, chat_id=chat, turn_id=turn["id"], model=model,
         messages=[{"role": "system", "content": "Answer."}, {"role": "user", "content": "Work through the task."}],
         api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy.for_chat(config),

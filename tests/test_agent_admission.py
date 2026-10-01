@@ -97,7 +97,7 @@ def test_small_remaining_budget_sets_provider_and_receipt_output_cap(store):
     assert totals(store)["calls"] == loop.costs.calls == 1
 
 
-def test_bounded_search_does_not_reserve_its_results_before_the_search(store):
+def test_search_does_not_reserve_its_results_before_the_search(store):
     observed = []
     class Capture(Completion):
         def stream(self, **kwargs):
@@ -266,7 +266,7 @@ def test_parallel_comparison_takes_a_smaller_search_instead_of_waiting(store):
     loop.costs.policy, loop.budget, loop.factory = loop.policy, AnalysisBudget(unlimited=True), Slow
     root(loop)
     model = next(iter(loop.comparison.models.values()))
-    searching = replace(model, request_config={**model.request_config, "_agent_bounded_search": True})
+    searching = model
     messages = [{"role": "system", "content": "Answer"}, {"role": "user", "content": "Which option?"}]
     with_search = loop.costs.estimate(searching, messages, search_tools(searching, 1), native_searches=1)[0]
     without = loop.costs.estimate(model, messages)[0]

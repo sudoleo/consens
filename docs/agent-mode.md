@@ -423,15 +423,72 @@ Anfrage aufzubrauchen. Gültige Arbeit erhält dadurch kein pauschales Rundenlim
 
 ## Recherche, Delegation und Providerprotokoll
 
-Recherche nutzt den vorhandenen OpenRouter-Websuch-Builder. Agent begrenzt ihn
-auf Exa mit drei Treffern à maximal 1000 Zeichen pro Suche; maximal eine Suche
-pro Modellrequest, erneut verfügbar in weiteren Runden. Damit kann das Tageskontingent
-begrenzt reservieren, ohne komplette native Modellfenster zu blockieren. Kein
-neuer Suchdienst und kein zusätzliches Suchmodell. Consensus bleibt bei seiner
-bisherigen Suchkonfiguration. Nur tatsächliche Quellenannotationen oder gemeldete
-Suchzähler erzeugen eine Suchaktivität; Startzeiten/Queries werden nicht erfunden.
-Vergleichsmodelle recherchieren nicht selbst, sondern nutzen den vom Chatmodell
-bereitgestellten Kontext und Quellen. Sie sehen keine anderen Vergleichsantworten.
+### Websuche
+
+Einzige Quelle für das Suchverhalten im Agent-Modus; Code und Kommentare
+verweisen hierher.
+
+**Eine Konfiguration für alle Modelle.** `agent_tools.search_tools` baut für
+jedes Modell dasselbe Tool wie der Consensus-Modus (`engines.web_search_tool`,
+Engine `auto`), begrenzt auf 5 Treffer à 2000 Zeichen pro Runde. Welcher
+Suchweg greift, entscheidet OpenRouter, nicht unser Code:
+
+| Familie | Suchweg unter `auto` |
+|---|---|
+| Gemini | Google-Grounding (eigene Suche) |
+| OpenAI | OpenAI-Websuche (eigene Suche) |
+| Anthropic | Anthropic-Websuche (eigene Suche) |
+| DeepSeek, Kimi, GLM, Mistral, Meta | Exa (keine eigene Suche auf OpenRouter) |
+| Grok | **Exa, fest** — einzige Ausnahme im Code (`engines._SEARCH_ENGINE_BY_PROVIDER`) |
+
+Grok ist ausgenommen, weil xAIs eigene Suche jede Begrenzung ignoriert
+(gemessen 2026-08-31: 66k Prompt-Tokens, ≈ 0,10 $, 20 s bis zum ersten Token;
+im Betrieb bis zu 55 Quellen für eine Wetterfrage). Die Trefferbegrenzung wirkt
+sicher nur auf Exa; ob die eigene Suche der Anbieter sie beachtet, ist nicht garantiert.
+
+**Wer wie oft sucht.** Das ist die einzige Stellschraube, und sie ist eine
+Produktentscheidung, keine Modell-Sonderlösung:
+
+- Vergleichsmodelle: eine Runde, unabhängig von `quick`/`full`. Ihr Prompt
+  (`agent_comparison.comparison_system_prompt`) nennt das Datum, verlangt bei
+  zeitabhängigen Fakten eine Suche mit Monat und Jahr in der Anfrage und
+  erklärt Angaben im `context` ohne Quelle für ungeprüft.
+- Orchestrator: vor dem ersten Vergleich bis zu drei Runden
+  (`ORCHESTRATOR_SEARCH_ROUNDS`); die Funde gehen mit URLs als `context` an alle
+  Vergleichsmodelle, eigene Erinnerung an Produkte, Versionen oder Preise nicht.
+  Danach höchstens eine Runde pro Schritt.
+- Judges und der Antwortschritt suchen nie.
+
+Ohne Datum und Suche hatten sich fünf Vergleichsmodelle auf denselben
+veralteten Trainingsstand geeinigt („Claude 3.5 Sonnet, GPT-4o“ als neueste
+Modelle) — ein Scheinkonsens, den die Prüfung nicht erkennen kann.
+
+**Reservierung.** Jede Suchrunde reserviert für jedes Modell gleich
+`agent_costs.SEARCH_INPUT_TOKENS` (32k), höchstens so viel, wie das
+Kontextfenster noch fasst. Grundlage, gemessen 2026-10-01 pro Runde: eigene
+OpenAI-Suche bis ≈ 11k Tokens, Exa (5 × 2000 Zeichen) ≈ 2,5k, Anthropic ≈ 2k,
+Google ≈ 0 (pro Anfrage abgerechnet). Die Abrechnung bucht den echten Verbrauch;
+eine ungewöhnlich große Runde kann das Tageslimit deshalb leicht überschreiten
+(weiche Grenze, kein Abbruch). Die Suchgebühr kommt aus dem Katalogpreis des
+Modells, sonst gilt die Exa-Pauschale. Passt eine Reservierung nicht, stuft
+`smaller_search` ab (mehrere Runden → eine → keine); parallele
+Vergleichsantworten stufen ab, statt auf Geschwister zu warten.
+
+**Messung 2026-10-01** (echter Vergleichs-Prompt, ZDR, Exa gegen eigene Suche):
+Faktenfragen („neuestes Modell von X“, Preise) beantworteten Gemini 3.5
+Flash-Lite, Gemini 3.8 Flash und Claude Haiku 4.5 mit beiden Wegen zu 100 %
+richtig, GPT-5.6 Luna mit Exa zu 75 %, mit eigener Suche zu 90 %. Bei offenen
+„was ist aktuell am besten“-Fragen nannte die eigene Suche deutlich öfter
+aktuelle Modelle (Anteil aktueller Namen: Gemini 3.5 Flash-Lite 83 → 100 %,
+Gemini 3.8 Flash 7 → 48 %, GPT-5.6 Luna 41 → 100 %, Haiku gemischt). Kosten pro
+Aufruf: Google-Grounding ≈ 2,9 ct statt ≈ 0,8 ct mit Exa, OpenAI 1,2 statt 0,8 ct,
+Anthropic gleich. Grenze: Familien ohne eigene Suche bleiben bei offenen Fragen
+auf die Exa-Treffer angewiesen, die oft ältere Übersichtsartikel sind.
+
+Nur tatsächliche Quellenannotationen oder gemeldete Suchzähler erzeugen eine
+Suchaktivität; Startzeiten/Queries werden nicht erfunden. Vergleichsmodelle
+sehen keine anderen Vergleichsantworten. Kein eigener Suchdienst, kein
+zusätzliches Suchmodell; Provider-Routing/ZDR bleiben bestehen.
 
 Worker-Delegation bleibt standardmäßig deaktiviert und verwendet weiter die
 geprüften Modell-/Reasoning-Kombinationen und die bestehende Admin-Konfiguration;
@@ -462,18 +519,8 @@ Der feste Produktkontext erklärt allen beteiligten Modellen knapp ihre Rolle in
 consens.io. Jede Nutzerfrage und jeder Bearbeitungsauftrag geht durch
 `compare_models → eigene Synthese → judge_answer`, ergänzt um
 `check_contradictions`, wenn aktiviert. Websuche darf vorher aktuelle Fakten oder
-die Fragestellung klären. Jedes Vergleichsmodell kennt das aktuelle Datum und darf
-selbst einmal suchen (begrenzte Exa-Suche, keine Deep Search), wenn sich die Antwort
-seit seinem Trainingsstand geändert haben kann; sonst einigen sich die Modelle auf
-denselben veralteten Stand und der Consensus sieht trotzdem belastbar aus.
-Gemini, OpenAI und Claude suchen mit ihrer eigenen Suche (Google-Grounding bzw.
-Provider-Suche), die übrigen Familien über Exa; dort sucht `quick` knapp
-(3 × 1000 Zeichen), `full` ausführlicher (5 × 2000). Vor dem
-ersten Vergleich darf der Orchestrator bis zu drei Runden recherchieren und gibt
-die Funde allen Modellen mit; reicht das Kontingent nicht, wird die Suche
-schrittweise kleiner statt die Antworten aufzuhalten. Für Fragen wie „was ist
-aktuell das beste X“ lieferte Exa oft ältere Übersichtsartikel; deshalb die native
-Suche für die drei Familien, die eine haben. Das gilt auch für einfache, subjektive und Folgefragen,
+die Fragestellung klären; jedes Vergleichsmodell kennt das Datum und sucht bei
+zeitabhängigen Fakten selbst einmal (siehe „Websuche“). Das gilt auch für einfache, subjektive und Folgefragen,
 Fragen zu consens.io sowie Textumformung/Übersetzung. Nur reine Begrüßungen und
 Bestätigungen ohne Frage/Auftrag sowie unvermeidbare Rückfragen dürfen direkt
 beantwortet werden. Rückfragen sind auf fehlende Angaben beschränkt, ohne die keine

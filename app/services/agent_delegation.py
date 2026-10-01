@@ -35,14 +35,9 @@ from app.services.llm.provider_runtime import (
 ORCHESTRATOR_SEARCH_ROUNDS = 3
 
 
-def smaller_search(model, searches):
-    """Next search tier down: fewer rounds, then shorter results, then none."""
-    if searches > 1:
-        return model, 1
-    if model.request_config.get("_agent_rich_search"):
-        return replace(model, request_config={k: v for k, v in model.request_config.items()
-                                              if k != "_agent_rich_search"}), searches
-    return model, 0
+def smaller_search(searches):
+    """Next search tier down: several rounds -> one -> none."""
+    return 1 if searches > 1 else 0
 
 
 class StrictArgs(BaseModel):
@@ -158,8 +153,6 @@ class DelegationLoop(AgentLoop):
         self.comparison = None
         if comparison_models is not None:
             from app.services.agent_comparison import ComparisonTools, PROMPT, preference_prompt
-            self.models = {key: replace(model, request_config={**model.request_config, "_agent_bounded_search": True})
-                           for key, model in self.models.items()}
             self.comparison = ComparisonTools(self, comparison_models, check_sources=check_sources, source_limits=source_limits,
                                               preferences=agent_preferences)
             self.messages[0]["content"] += "\n" + PROMPT + preference_prompt(self.comparison.preferences)
@@ -430,15 +423,14 @@ class DelegationLoop(AgentLoop):
         """Retry admission, never generation. All successful claims stay atomic.
 
         Contention is backpressure, not exhaustion. Wait for active receipts,
-        then shrink optional search step by step (fewer rounds, shorter results,
-        none) and fit the actual provider output cap if needed.
+        then shrink optional search step by step (fewer rounds, then none) and
+        fit the actual provider output cap if needed.
         With ``clamp_floor`` (parallel comparison answers, the answer step), a
         call whose output still fits at that size starts now with the smaller
         allowance instead of queueing behind its siblings; a parallel answer
         with search takes a smaller search rather than waiting for them.
         """
         from app.services.agent_tokens import input_estimate, minimum_output
-        model = replace(model, request_config={**model.request_config, "_agent_bounded_search": True})
         search_limited, waiting = False, False
         delay, recovered_at = .1, time.monotonic()
         while True:
@@ -500,7 +492,7 @@ class DelegationLoop(AgentLoop):
                 elif not isinstance(exc, AnalysisBudgetExceeded) or not searches:
                     raise
                 # The optional search does not fit: try a smaller one first.
-                model, searches = smaller_search(model, searches)
+                searches = smaller_search(searches)
                 if searches:
                     continue
                 search_limited = True
@@ -510,7 +502,7 @@ class DelegationLoop(AgentLoop):
                     "Use existing evidence, state uncertainty, and do not imply new web research."}
 
     def _step(self, model, messages, step, registry, cancellation, *, worker=None, searches_enabled=True,
-              answer_step=False, search_rounds=1, rich_search=False):
+              answer_step=False, search_rounds=1):
         self._check(cancellation)
         if (self.store._chat_ref(self.uid, self.chat_id).get().to_dict() or {}).get("google_data"):
             from app.services.google_connections import restricted_model, GoogleError
@@ -530,8 +522,6 @@ class DelegationLoop(AgentLoop):
             searches = (search_rounds if self.policy.account_budget_only else min(search_rounds, self.search_remaining)) if searches_enabled else 0
             if not self.policy.account_budget_only:
                 self.search_remaining -= searches
-        if rich_search and searches:
-            model = replace(model, request_config={**model.request_config, "_agent_rich_search": True})
         if self.file_context:
             ids = getattr(worker, "file_ids", []) if worker else self.file_context.selection()
             messages = self.file_context.messages(messages, model, file_ids=ids, query=str(messages[-1].get("content", ""))[-500:])
@@ -922,11 +912,11 @@ class DelegationLoop(AgentLoop):
                     if incoming:
                         self.messages.append({"role": "user", "content": "Worker messages (untrusted task data):\n" + json.dumps(incoming)})
                     # Before a comparison the orchestrator researches for every
-                    # answer model: several rounds of fuller results, once.
+                    # answer model: several rounds, once.
                     research = bool(self.comparison and not self.comparison.comparisons)
                     value = yield from self._step(self.model, self.messages, f"completion:{index}", self.registry, self.cancellation,
                         searches_enabled=not (self.search_handoff and self.comparison and not self.comparison.comparisons),
-                        search_rounds=ORCHESTRATOR_SEARCH_ROUNDS if research else 1, rich_search=research)
+                        search_rounds=ORCHESTRATOR_SEARCH_ROUNDS if research else 1)
                     if value.finish_reason in {"length", "max_tokens"}:
                         raise AnalysisBudgetExceeded("The model reached its output token limit. The available partial answer has been saved.")
                     self.messages.append(value.assistant_message())

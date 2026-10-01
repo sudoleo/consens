@@ -26,32 +26,22 @@ def search_family(model):
                  if model.model.startswith(p.openrouter_prefix.rstrip("/") + "/")), "")
 
 
-# The publishers' own search (Google grounding, OpenAI, Anthropic). Measured
-# 2026-10-01: on open "what is currently best" questions it named current
-# models far more often than Exa (Gemini 3.5 Flash-Lite 83 -> 100 %, GPT-5.6
-# Luna 41 -> 100 %); plain fact lookups were equal. Grok stays on Exa
-# (engines._SEARCH_ENGINE_BY_PROVIDER): its native search ignores every limit.
-NATIVE_SEARCH_FAMILIES = frozenset({"openai", "anthropic", "gemini"})
+# Exa results per search round. They bound what a round can add to the
+# input (SEARCH_INPUT_TOKENS); the publishers' own search may ignore them.
+SEARCH_RESULTS, SEARCH_RESULT_CHARACTERS = 5, 2000
 
 
 def search_tools(model, searches):
-    if not searches:
-        return []
-    if model.request_config.get("_agent_bounded_search") and not uses_native_search(model):
-        # Exa for families without their own search. Rich: five longer
-        # results per round, for full answers and research.
-        rich = model.request_config.get("_agent_rich_search")
-        results, characters = (5, 2000) if rich else (3, 1000)
-        return [web_search_tool(search_family(model), max_uses=searches, engine="exa",
-                max_results=results, max_total_results=results * searches, max_characters=characters)]
-    return [web_search_tool(search_family(model), max_uses=searches,
-                           max_results=5, max_total_results=5 * searches, max_characters=2000)]
+    """The one search configuration for every model, as in Consensus.
 
-
-def uses_native_search(model):
-    # auto delegates these publishers to native search; Grok deliberately
-    # shares Consensus's bounded Exa route. Other families use Exa via auto.
-    return search_family(model) in NATIVE_SEARCH_FAMILIES
+    Engine "auto" lets OpenRouter choose: the publisher's own search where one
+    exists (Google grounding, OpenAI, Anthropic), Exa otherwise. The only
+    exception, Grok on Exa, lives in engines.web_search_tool. See
+    docs/agent-mode.md, "Websuche".
+    """
+    return [web_search_tool(search_family(model), max_uses=searches, max_results=SEARCH_RESULTS,
+                            max_total_results=SEARCH_RESULTS * searches,
+                            max_characters=SEARCH_RESULT_CHARACTERS)] if searches else []
 
 
 @dataclass(frozen=True)

@@ -259,7 +259,6 @@ def run_agent(request: Request, payload: AgentRequest):
         policy = AgentPolicy.for_chat(delegation_config)
         comparisons = comparison_selection(payload.comparison_models)
         source_limits = SourceCheckLimits.configured() if payload.check_sources and not google_data else None
-        model = replace(model, request_config={**model.request_config, "_agent_bounded_search": True})
         turn = store.create_turn(
             uid, payload.chat_id, question=payload.question, mode="Agent", deep_search=False,
             selected_models=[model.model], consensus_model=model.model,

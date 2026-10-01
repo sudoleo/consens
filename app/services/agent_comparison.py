@@ -411,7 +411,7 @@ class ComparisonTools:
             self.checkpoint()
 
     def call(self, model, messages, *, title, kind, comparison_id=None, budget=None, file_ids=None, cancellation=None,
-             slots=None, partial=None, rich_search=False):
+             slots=None, partial=None):
         from app.services.agent_delegation import Worker
         worker = Worker(uuid4().hex, model, messages)
         worker.kind = kind
@@ -431,8 +431,7 @@ class ComparisonTools:
                     # current world knowledge, independent answers agree on the
                     # same outdated facts. Judges only read the answers.
                     generator = loop._step(model, messages, f"agent:{worker.id}:0", ToolRegistry(), cancellation,
-                                           worker=worker, searches_enabled=kind == "comparison",
-                                           rich_search=rich_search)
+                                           worker=worker, searches_enabled=kind == "comparison")
                     try:
                         while True:
                             next(generator)
@@ -527,9 +526,7 @@ class ComparisonTools:
             try:
                 value = self.call(models[provider], [{"role": "system", "content": system}, {"role": "user", "content": prompt}],
                                   title=f"{title} · {models[provider].label}", kind="comparison",
-                                  comparison_id=cid, file_ids=file_ids, cancellation=child, slots=slots, partial=partial,
-                                  # full: one round of fuller results; quick: three short ones.
-                                  rich_search=depth == "full")
+                                  comparison_id=cid, file_ids=file_ids, cancellation=child, slots=slots, partial=partial)
                 text = value.text.strip()
                 # call() validated completion and nonempty text. A cut-off
                 # answer is paid, marked evidence (see answers[].truncated).
