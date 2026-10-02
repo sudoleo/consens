@@ -38,6 +38,30 @@ def digest(value):
     return hashlib.sha256(json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 
+def _storage_record(data):
+    """Firestore forbids arrays directly inside arrays (document table rows)."""
+    stored = copy.deepcopy(data)
+    stored["storage_schema_version"] = 2
+    for section in stored["content"]["sections"]:
+        table = section.get("table")
+        if table:
+            table["rows"] = [{"cells": row} for row in table["rows"]]
+    return stored
+
+
+def _read_record(data):
+    """Restore the public DocumentSpec without changing its content identity."""
+    if not data or data.get("storage_schema_version") != 2:
+        return data
+    decoded = copy.deepcopy(data)
+    for section in decoded["content"]["sections"]:
+        table = section.get("table")
+        if table:
+            table["rows"] = [row["cells"] for row in table["rows"]]
+    decoded.pop("storage_schema_version", None)
+    return decoded
+
+
 def render(spec):
     try:
         result = subprocess.run([sys.executable, "-m", "app.services.agent_document_render"],
@@ -78,7 +102,7 @@ class DocumentTools:
         ref = self.ref(args.document_id)
         manifest = ref.get().to_dict() or {}
         version = args.version or manifest.get("version", 0)
-        data = ref.collection("versions").document(str(version)).get().to_dict()
+        data = _read_record(ref.collection("versions").document(str(version)).get().to_dict())
         if not data or data.get("expires_at", "") <= datetime.now(timezone.utc).isoformat():
             raise FileUnavailable("Document version is unavailable or expired.")
         for file in data["files"]:
@@ -165,7 +189,7 @@ class DocumentTools:
                 states = [self.files.ref(self.uid, self.chat, file["id"]).get(transaction=tx).to_dict() for file in outputs]
                 if any(not state or state.get("status") != "ready" for state in states):
                     raise FileUnavailable("Document output was removed while saving.")
-                tx.set(ref.collection("versions").document(str(version)), data)
+                tx.set(ref.collection("versions").document(str(version)), _storage_record(data))
                 tx.set(ref, {"id": document_id, "title": spec["title"], "version": version, "updated_at": now.isoformat()})
             self.files.chats._transaction(commit)
         except BaseException:

@@ -514,12 +514,8 @@ class WeeklyReviewRepository:
     def finish_lease(
         self, run_id: str, finished_at: datetime, interval_days: int,
         run_time=DEFAULT_RUN_TIME, timezone_name=DEFAULT_TIMEZONE,
-    ) -> None:
-        snap = self.config_ref.get()
-        data = snap.to_dict() if snap.exists else {}
-        if (data or {}).get("lease_run_id") not in {"", run_id}:
-            return
-        self.config_ref.set({
+    ) -> bool:
+        updates = {
             "lease_until": None,
             "lease_run_id": "",
             "last_run_at": finished_at,
@@ -531,7 +527,22 @@ class WeeklyReviewRepository:
                 last_run_at=finished_at,
             ),
             "updated_at": finished_at,
-        }, merge=True)
+        }
+        def finish(transaction):
+            snap = self.config_ref.get(transaction=transaction)
+            data = snap.to_dict() if snap.exists else {}
+            if (data or {}).get("lease_run_id") != run_id:
+                return False
+            transaction.set(self.config_ref, updates, merge=True)
+            return True
+        if hasattr(self.db, "transaction"):
+            return bool(firestore.transactional(finish)(self.db.transaction()))
+        # Small unit doubles do not expose native transaction objects.
+        data = self.config_ref.get().to_dict() or {}
+        if data.get("lease_run_id") == run_id:
+            self.config_ref.set(updates, merge=True)
+            return True
+        return False
 
     def create_review(self, run_id: str, data: dict) -> None:
         self.db.collection(REVIEWS_COLLECTION).document(run_id).set(data)

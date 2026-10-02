@@ -1,19 +1,24 @@
 """Phase-2 race regressions against the isolated Firestore emulator."""
 
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta, timezone
 import os
+import threading
 import uuid
 
 from google.cloud import firestore as google_firestore
+from google.auth.credentials import AnonymousCredentials
 from google.cloud.firestore_v1.base_query import FieldFilter
+from google.api_core.exceptions import Aborted
 
 from app.core.e2e_profile import E2E_PROJECT_ID, assert_safe_e2e_environment
 from app.services import chat_store, share_snapshots, watch_service
 
 
 def _emulator_db():
+    assert os.environ.get("E2E_TEST_MODE") == "1", "Native tests require the explicit demo profile"
     assert_safe_e2e_environment(os.environ)
-    return google_firestore.Client(project=E2E_PROJECT_ID)
+    return google_firestore.Client(project=E2E_PROJECT_ID, credentials=AnonymousCredentials())
 
 
 def _delete_collection(collection):
@@ -44,7 +49,7 @@ def test_two_workers_cannot_exceed_owner_watch_limit(monkeypatch):
     monkeypatch.setattr(
         watch_service.cfg,
         "get_watch_active_limit",
-        lambda _is_pro: 1,
+        lambda _tier: 1,
     )
 
     def create(share_id):
@@ -53,7 +58,7 @@ def test_two_workers_cannot_exceed_owner_watch_limit(monkeypatch):
                 uid,
                 share_id=share_id,
                 interval="weekly",
-                is_pro=False,
+                tier="free",
                 db=db,
             )
             return "created", watch["id"]
@@ -104,6 +109,7 @@ def test_two_workers_publish_one_pending_share_and_consume_one_quota():
         "sources": [],
         "included_models": ["OpenAI", "Anthropic"],
         "consensus_model": "OpenAI",
+        "expires_at": datetime.now(timezone.utc) + timedelta(hours=1),
     })
 
     def publish(_worker):
@@ -158,7 +164,7 @@ def test_two_workers_cannot_exceed_owner_chat_limit(monkeypatch):
         db.collection("users").document(uid).delete()
 
 
-def test_parallel_reports_never_lose_increments_or_noindex_transition():
+def test_parallel_reports_never_lose_increments_or_change_indexing():
     db = _emulator_db()
     share_id = share_snapshots.generate_share_id()
     ref = db.collection("shares").document(share_id)
@@ -170,20 +176,35 @@ def test_parallel_reports_never_lose_increments_or_noindex_transition():
     })
 
     try:
+        gate = threading.Barrier(8)
+        def report(_worker):
+            gate.wait(timeout=10)
+            try:
+                return share_snapshots.report_share(share_id, "spam", db=db)
+            except ValueError as exc:
+                if not isinstance(exc.__cause__, Aborted):
+                    raise
+                # Explicitly failed transactions are not successful reports.
+                # Check their lack of side effects before one separate retry.
+                return None
         with ThreadPoolExecutor(max_workers=8) as pool:
             counts = list(
                 pool.map(
-                    lambda _worker: share_snapshots.report_share(
-                        share_id, "spam", db=db
-                    ),
+                    report,
                     range(8),
                 )
             )
+        successful = [count for count in counts if count is not None]
+        partial = ref.get().to_dict()
+        assert partial["reports_count"] == len(successful)
+        assert sorted(successful) == list(range(1, len(successful) + 1))
+        counts = successful + [share_snapshots.report_share(share_id, "spam", db=db)
+                               for count in counts if count is None]
         stored = ref.get().to_dict()
         assert sorted(counts) == list(range(1, 9))
         assert stored["reports_count"] == 8
         assert stored["report_reasons"] == {"spam": 8}
         assert stored["needs_review"] is True
-        assert stored["indexed"] is False
+        assert stored["indexed"] is True  # Reports queue review; only admin changes indexing.
     finally:
         ref.delete()
