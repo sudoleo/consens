@@ -119,6 +119,11 @@ Input-Liste ins Manifest; der Python-Abgleich hasht diese Liste samt
 Text-Inputs außerhalb von `static/vendor/` werden für den Fingerprint auf
 LF-Zeilenenden normalisiert, damit Windows-CRLF und Linux-Checkouts denselben
 Build erkennen. Vendor-Dateien einschließlich Fonts bleiben bytegenau geprüft.
+Die erzeugten Dateien unter `static/dist/` einschließlich `manifest.json`
+werden über `.gitattributes` mit `-text` ebenfalls bytegenau ein- und ausgecheckt.
+Git darf ihre Zeilenenden auch bei `core.autocrlf=true` nicht verändern: Sonst
+weichen die ausgelieferten Bytes vom Dateinamen-Hash und vom Build-Abgleich ab.
+Bereits konvertierte lokale Artefakte lassen sich mit `npm run build` neu erzeugen.
 
 ## Deploy
 
@@ -135,7 +140,10 @@ mitcommitten: Sie überbrücken verspätete Asset-Requests beim Versionswechsel.
 Das ist ein begrenztes Übergangsfenster, keine dauerhafte Archivierung alter
 Deployments. `/app` und `/app/watches` liefern ihr HTML mit `private, no-store`.
 Die Node-Regressionstests `tests/js/frontend-output.test.mjs` laufen im normalen
-`dev.ps1 check frontend`; keine zusätzlichen Voraussetzungen.
+`dev.ps1 check frontend`. Der Checkoutfall benötigt das im Projekt ohnehin
+verwendete Git: Ein temporäres Repository prüft mit `core.autocrlf=true`
+Manifestbytes, JS-/CSS-Bytes und deren Dateinamen-Hashes. Eine ungeschützte
+Textdatei dient als CRLF-Gegenkontrolle; globale Git-Einstellungen bleiben unberührt.
 
 Alternative, falls das Diff-Rauschen stört: `static/dist/` ignorieren und im
 Render-Build-Command `npm ci && npm run build` ergänzen.
