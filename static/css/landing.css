@@ -2903,3 +2903,11 @@ img { display: block; max-width: 100%; }
 @media (prefers-reduced-motion: reduce) {
   .lp-composer-tools { animation: none; transition: none; }
 }
+
+/* Phones: like the /app composer, the models chip takes its own line above
+   [(+) mode … Send], so the row never runs past a 320px field. */
+@media (max-width: 420px) {
+  .lp-composer-row { flex-wrap: wrap; row-gap: 4px; }
+  .lp-composer-row .lp-run-chip { order: -1; flex: 1 0 100%; justify-content: flex-end; margin-left: 0; }
+  .lp-composer-row .lp-send { margin-left: auto; }
+}

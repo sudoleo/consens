@@ -31,7 +31,7 @@
 @import url('./css/agent-google.css?v=20260930-composer');
 @import url('./css/agent-workspace.css?v=20260930-agent-ux');
 /* The composer row's layout, for every mode (see its header). */
-@import url('./css/composer.css?v=20261002-plusmenu');
+@import url('./css/composer.css?v=20261002-plusmenu2');
 @import url('./css/chat-scroll.css?v=20260919-agent-comparison');
 /* Native selects: chevron and open list, after every component's box. */
 @import url('./css/select.css?v=20261002-select');

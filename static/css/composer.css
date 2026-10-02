@@ -283,6 +283,8 @@
   line-height: 1.35;
   text-align: left;
 }
+/* The grid above must not bring back a row the mode has hidden. */
+.chat-input-container .attach-menu :is(.attach-menu-item, .attach-menu-toggle)[hidden] { display: none; }
 .chat-input-container .attach-menu :is(.attach-menu-item, .attach-menu-toggle):is(:hover, :focus-visible, :focus-within) {
   background: var(--raise);
   border-color: transparent;
