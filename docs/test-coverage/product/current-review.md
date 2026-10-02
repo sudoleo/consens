@@ -1,61 +1,37 @@
-# Aktualisierung vom 02.10.2026
+# Umsetzung und erneute Abnahme vom 02.10.2026
 
-[Einstieg](README.md) · [Katalog](../../test-coverage-map.md) · [Laufbericht](../findings.md)
+[Einstieg](README.md) · [Laufbericht](../findings.md) · [Arbeitspakete](work-packages.md)
 
-Quellstand `2860844a`, Ausgangspunkt `145db25b`. 40 neue und zwei entfernte
-Testdateien ergeben 254 Dateien. Definitionen/Assertionanker und Runnerfälle
-wurden neu erfasst, Produktzuordnung auf 301 Dateien/87 Vertragsgruppen erweitert.
+Integrierter Quellstand `ffaca3df`. 38 der 38 Arbeitspakete sind vollständig abgenommen. Die in den Berichten benannten Betriebsgrenzen bleiben ausdrücklich bestehen.
+Das Inventar enthält 291 Testdateien; jede neue/geänderte Datei
+wurde nach Assertions und ersetzten Grenzen eingeordnet. Produktquellen,
+Routenanker, Suchspuren und repräsentative Belege wurden neu abgeglichen.
 
-## Neue Funktionen und Grenzen
-
-| Bereich | Aktuelle Belege | Verbleibende Grenze |
-|---|---|---|
-| AGENT-06 Dateien | Upload/Download, Parserlimits, Auswahl, Löschfences, Nachrichtenbindung | Cloud-Bucket/IAM und native Kaskade; G-044 |
-| AGENT-07 Dokumente | Echte DOCX/PDF-Inhalte, Versionen, Quellenhashes, Fehlerpfade | Keine vollständige visuelle Seitenprüfung |
-| GOOGLE-01 Verbindung | PKCE/State/Owner, Verschlüsselung, Widerruf, Scopes, Modellrouting, Zustimmung | Live-OAuth/Deployment |
-| GOOGLE-02/03 Aktionen | Exakter Hash, ETag, Empfänger/Reply/Anhänge, unklare Writes nur reconciled | Native Claims und reale Zustellung; G-043 |
-| CONS-06 Integrität | Serverreceipts, BYOK-Rankinggrenze, typisierter Abschluss | Browser/DB noch getrennt |
-| QUOTA-03 Konto | Alle Modi, Holds, Meter, Schätzungen/Nachmessung, begrenzte Rootreceipts | Native Admission/Buchung; G-002 |
-| WATCH-07/08 | Outbox, Leasefencing, Belege/Recheck, Zielabschluss, Probes | Native Claims/SDK und Live-Evidenzqualität; G-045 |
-| UI-02/04 | Modusselektor, Agentpicker, Quellenpillen, Markdown, Differencesreader | Browserlauf enthält rote Fälle |
-| BUILD-04 | Immutable/gzip, unkomprimierte SSE-Frames | Kein realer Proxy-/CDN-/Socketnachweis |
-
-Entfernte Dateien: `run-progress-animation.test.mjs` und
-`watch-drift-state.test.mjs`. Der neue Stepper und das Watch-Dashboard haben
-aktuelle Verträge; alte Fallzahlen werden nicht übernommen.
-
-## Alte Befunde neu bewertet
-
-| Befund | Aktueller Stand |
+| Bereich | Änderung / Nachweis |
 |---|---|
-| G-018 | Behoben in `76e4873e`; Textknoten und externe Skripte/CSP, aktuelle jsdom-/Pythonregressionen grün |
-| G-037 | Behoben in `c929e343`; registrierter main-Handler bewahrt Retry-After/WWW-Authenticate |
-| G-040 | CAS-/Revisionsrollback bewahrt simulierten fremden Writer (`6b80daa6`); nativer Lauf fehlt |
-| G-003/G-004 | Dauerhafte Chatlöschjobs/erweiterte Kontokaskade; keine vollständige native Integration |
-| G-005 | API-Recovery abgelaufener Reservierungen und Lösch-/Replaypfade ergänzt; Retention/Backfill/Restart offen |
-| G-007/G-008 | Memory-CAS, Edit-Leasen und Undoablauf ergänzt; Undo-HTTP/Owner/Conflict/Limitwechsel nicht vollständig |
-| G-038 | Undo sanitisiert weiter mit abgesenktem Limit; statischer Befund bleibt, alte Probe scheitert am neuen Leasevertrag |
-| G-041 | Erneut beobachtet: Topichelper prüft Widerruf nicht und behandelt Rollenausfall abweichend |
-| G-042 | Erneut beobachtet: HTTP-200-Fehlerbody wird als erfolgreiche Enthaltung indiziert |
-| G-025/G-026 | Windows-/Chromiumresultate ergänzt; Emulator und rote Fälle bleiben offen |
+| Memory | Limitabsenkung lehnt verlustbehaftete Patch-/Undovorprofile ohne Write ab; native CAS/Lease/Commitfehler und echte main-HTTP-Fehlermatrix |
+| Native Persistenz | Usage-Atomarität, Löschung während deleting, alle 16 Kontokaskadenbereiche, Sourceclaims/Own-Key-Affinität, Googleclaims und Datei-/Dokumentkaskade |
+| Dokumente | Echter DOCX/PDF-Fall entdeckte Firestore-Fehler 400 durch Zeilenarrays; Schema-2-Codec speichert Maps und liest verlustfrei |
+| Scheduler/Modelle | Aktueller Leaseowner atomar, Probe-Einmalclaim/Drift-/Kontofences, echte Loops/Cancellation, fremder Writer und Rollback-RPCfehler |
+| HTTP-/Serviceadapter | Topicrevocation/Tier503, Agentdetail/Stop/no-store, Appshare, historische Sources, Watch/Telegram/Tokenformen, Feedback-/Statistikgrenzen |
+| Identität/Retention/SEO | Strikte JSON-Integer und reservierte Claimkeys, transaktionale Runbindung im Backfill, BatchGet nach Dokumentidentität |
+| Benchmark/Transport | Sichere Fehler statt falscher Enthaltung, Zeit-/DST-stabiles Manifest, echte TCP/TLS-/Disconnectgrenzen und sichere CLIargumente |
+| Frontend | Inerte Topics, verständlicher main-Fehlerumschlag, stale Benchmarkauswahl geschützt, Archivdrawer, Analytics-/Vendorverhalten, behobener Resize-Scrollsprung und Textareahöhe nach tatsächlicher Breitenänderung |
+| Agentabbruch | Producerclose hinter Kontotombstone bewahrt GeneratorExit und gibt keine unzulässigen weiteren Frames aus |
 
-Alle 46 Bewertungen: [gaps.md](gaps.md). Vier neue Aufgaben G-043–G-046 sind
-WP-35–WP-38 zugeordnet. Ein Kernfehler kann behoben sein, während zur vollständigen
-Paketabnahme noch native Integration oder erneute Negativkontrolle fehlt.
+Die unabhängige Prüfung fand zunächst zu enge Tests trotz grüner Detailfälle.
+Deshalb wurden echter Löschzwischenzustand, echte entfernte Atomarität,
+vollständige Memory-HTTP-Guards, Own-Key-Worker, Schedulerloops und Rollback-
+Transportfehler vor Abschluss ergänzt. Ein isoliertes Statusguard-Double
+ersetzt diese Nachweise nicht.
 
-## Ausführung und Grenzen
+Die Paketberichte enthalten die konkrete Zuordnung von Mutation zu Assertion.
+Historische M-/D-/P-Proben und Coverage bleiben unverändert; neue Mutationen
+stehen bei den aktuellen Implementierungsnachweisen. Laufdaten enthalten nur
+tatsächlich ausgeführte Runnerfälle, keine aus Namen oder AST erfundenen Passes.
 
-Aktuelle Ergebnisse mit Originalfallnamen/Status/Meldungen:
-[execution.json](../execution.json). Keine kostenpflichtigen Modelle oder
-produktiven Konten dienten als Testziel.
-
-Fünf historische unabhängige Proben wurden isoliert versucht. Topic-Auth und
-Benchmarkklassifikation lieferten erneut Beobachtungen. Headerprobe
-(Windows-Eventloop/Socketguard), Memoryprobe (neuer Leasenonce) und Rollbackprobe
-(geänderter Transaktionsvertrag) scheiterten im alten Harness. Das belegt weder
-korrektes noch falsches Produktverhalten.
-[Beobachtungen](../evidence/probes-2026-10-02.json).
-
-Die historischen Coverage-/Mutationsdaten wurden nicht neu erzeugt. Ihre
-Positionen gehören zum damaligen Gitstand; neue Quellen erhalten keinen
-erfundenen Coveragewert.
+Verbleibend sind ausdrücklich produktive IAM/Verfügbarkeit, Live-Modellqualität,
+externe Zustellung und umfassende visuelle/Accessibility-Abdeckung. Browser-
+Detailfälle mit API-Doubles und native Repositories werden nicht pauschal als
+durchgehende Nutzerreise bezeichnet; deren eigener Bericht benennt die
+wirklich durchlaufenen Schichten.

@@ -1,8 +1,8 @@
 # Reguläre Python-Suite: Abdeckung pro Testdatei
 
-Stand: **2026-10-02**, Quellstand `2860844af9dcba2087551af1697408e87e5fe928`. [Methodik und Gesamtbefund](../test-coverage-map.md).
+Stand: **2026-10-02**, Quellstand `ffaca3df7c8bbb02d850fb8f31d90107f26e9293`. [Methodik und Gesamtbefund](../test-coverage-map.md).
 
-**152 Dateien · 2355 statische Testdefinitionen · 3081 Runner-Fälle.**
+**169 Dateien · 2445 statische Testdefinitionen · 3303 Runner-Fälle.**
 
 „Geprüftes Verhalten“ beschreibt die vorhandenen Assertions. Der Laufstatus steht separat: bei Fehlern ist der beschriebene Vertrag nicht als bestanden belegt. Prüfaufträge sind offene Fragen, keine pauschal festgestellten Lücken der gesamten Suite. Aktuelle Befundbewertungen stehen im [Produktabgleich](product/README.md).
 
@@ -12,13 +12,13 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 |---|---:|---:|---|
 | [test_account_deletion_chats.py](#test-account-deletion-chats-py) | 3 | 3 | 3 bestanden |
 | [test_account_deletion_retry.py](#test-account-deletion-retry-py) | 1 | 1 | 1 bestanden |
-| [test_account_tier_admin.py](#test-account-tier-admin-py) | 12 | 12 | 12 bestanden |
+| [test_account_tier_admin.py](#test-account-tier-admin-py) | 13 | 13 | 13 bestanden |
 | [test_agent_accounting_audit.py](#test-agent-accounting-audit-py) | 11 | 58 | 58 bestanden |
 | [test_agent_admission.py](#test-agent-admission-py) | 12 | 16 | 16 bestanden |
 | [test_agent_answer_lifecycle.py](#test-agent-answer-lifecycle-py) | 3 | 7 | 7 bestanden |
 | [test_agent_budget_config.py](#test-agent-budget-config-py) | 5 | 5 | 5 bestanden |
 | [test_agent_calendar.py](#test-agent-calendar-py) | 9 | 9 | 9 bestanden |
-| [test_agent_capacity.py](#test-agent-capacity-py) | 6 | 6 | 6 bestanden |
+| [test_agent_capacity.py](#test-agent-capacity-py) | 7 | 7 | 7 bestanden |
 | [test_agent_chat_integrity.py](#test-agent-chat-integrity-py) | 8 | 15 | 15 bestanden |
 | [test_agent_comparison.py](#test-agent-comparison-py) | 40 | 69 | 69 bestanden |
 | [test_agent_continuation.py](#test-agent-continuation-py) | 11 | 13 | 13 bestanden |
@@ -27,6 +27,7 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 | [test_agent_documents.py](#test-agent-documents-py) | 12 | 12 | 12 bestanden |
 | [test_agent_files.py](#test-agent-files-py) | 23 | 24 | 24 bestanden |
 | [test_agent_gmail.py](#test-agent-gmail-py) | 18 | 21 | 21 bestanden |
+| [test_agent_http_contract.py](#test-agent-http-contract-py) | 6 | 9 | 9 bestanden |
 | [test_agent_loop.py](#test-agent-loop-py) | 24 | 152 | 152 bestanden |
 | [test_agent_mode_ui.py](#test-agent-mode-ui-py) | 9 | 9 | 9 bestanden |
 | [test_agent_model_catalog.py](#test-agent-model-catalog-py) | 5 | 11 | 11 bestanden |
@@ -45,20 +46,25 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 | [test_api_account_cleanup.py](#test-api-account-cleanup-py) | 3 | 4 | 4 bestanden |
 | [test_api_key_repository.py](#test-api-key-repository-py) | 5 | 5 | 5 bestanden |
 | [test_api_run_billing_identity.py](#test-api-run-billing-identity-py) | 11 | 11 | 11 bestanden |
+| [test_api_run_recovery.py](#test-api-run-recovery-py) | 4 | 4 | 4 bestanden |
 | [test_api_run_repository.py](#test-api-run-repository-py) | 8 | 8 | 8 bestanden |
+| [test_api_source_history.py](#test-api-source-history-py) | 2 | 9 | 9 bestanden |
 | [test_ask_endpoints.py](#test-ask-endpoints-py) | 14 | 14 | 14 bestanden |
 | [test_attachment_meta.py](#test-attachment-meta-py) | 2 | 2 | 2 bestanden |
 | [test_attachments.py](#test-attachments-py) | 37 | 37 | 37 bestanden |
 | [test_auth_revocation.py](#test-auth-revocation-py) | 4 | 4 | 4 bestanden |
 | [test_auth_session.py](#test-auth-session-py) | 8 | 8 | 8 bestanden |
+| [test_auxiliary_cli.py](#test-auxiliary-cli-py) | 5 | 21 | 21 bestanden |
 | [test_background_task_supervision.py](#test-background-task-supervision-py) | 8 | 8 | 8 bestanden |
 | [test_benchmark_audits.py](#test-benchmark-audits-py) | 9 | 9 | 9 bestanden |
-| [test_benchmark_budget.py](#test-benchmark-budget-py) | 4 | 4 | 3 bestanden, 1 fehlgeschlagen |
+| [test_benchmark_budget.py](#test-benchmark-budget-py) | 4 | 4 | 4 bestanden |
 | [test_benchmark_cli.py](#test-benchmark-cli-py) | 20 | 20 | 20 bestanden |
 | [test_benchmark_credentials.py](#test-benchmark-credentials-py) | 4 | 4 | 4 bestanden |
 | [test_benchmark_dataset.py](#test-benchmark-dataset-py) | 7 | 7 | 7 bestanden |
+| [test_benchmark_manifest_clock.py](#test-benchmark-manifest-clock-py) | 3 | 5 | 5 bestanden |
 | [test_benchmark_mode.py](#test-benchmark-mode-py) | 5 | 5 | 5 bestanden |
 | [test_benchmark_parse.py](#test-benchmark-parse-py) | 12 | 12 | 12 bestanden |
+| [test_benchmark_protocol.py](#test-benchmark-protocol-py) | 4 | 15 | 15 bestanden |
 | [test_benchmark_redaction.py](#test-benchmark-redaction-py) | 3 | 3 | 3 bestanden |
 | [test_benchmark_report_reader.py](#test-benchmark-report-reader-py) | 4 | 4 | 4 bestanden |
 | [test_benchmark_reports.py](#test-benchmark-reports-py) | 2 | 2 | 2 bestanden |
@@ -71,6 +77,7 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 | [test_chat_history.py](#test-chat-history-py) | 66 | 77 | 77 bestanden |
 | [test_chat_session_ui.py](#test-chat-session-ui-py) | 11 | 11 | 11 bestanden |
 | [test_citations.py](#test-citations-py) | 7 | 7 | 7 bestanden |
+| [test_claim_identity_judge.py](#test-claim-identity-judge-py) | 5 | 14 | 14 bestanden |
 | [test_claim_ledger.py](#test-claim-ledger-py) | 21 | 21 | 21 bestanden |
 | [test_client_error_alerts.py](#test-client-error-alerts-py) | 12 | 34 | 34 bestanden |
 | [test_consensus_answer_contract.py](#test-consensus-answer-contract-py) | 5 | 5 | 5 bestanden |
@@ -79,30 +86,36 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 | [test_consensus_citations.py](#test-consensus-citations-py) | 17 | 46 | 46 bestanden |
 | [test_consensus_engine.py](#test-consensus-engine-py) | 19 | 19 | 19 bestanden |
 | [test_consensus_input_caps.py](#test-consensus-input-caps-py) | 8 | 8 | 8 bestanden |
-| [test_consensus_progress_ui.py](#test-consensus-progress-ui-py) | 18 | 18 | 17 bestanden, 1 fehlgeschlagen |
+| [test_consensus_progress_ui.py](#test-consensus-progress-ui-py) | 18 | 18 | 18 bestanden |
 | [test_contradiction_jobs.py](#test-contradiction-jobs-py) | 15 | 19 | 19 bestanden |
 | [test_contradiction_verification.py](#test-contradiction-verification-py) | 31 | 67 | 67 bestanden |
 | [test_coverage_judge.py](#test-coverage-judge-py) | 30 | 30 | 30 bestanden |
 | [test_deepseek_web_search.py](#test-deepseek-web-search-py) | 3 | 3 | 3 bestanden |
 | [test_demo_login_prompt.py](#test-demo-login-prompt-py) | 5 | 5 | 5 bestanden |
-| [test_dev_cli.py](#test-dev-cli-py) | 8 | 24 | 24 bestanden |
+| [test_dev_cli.py](#test-dev-cli-py) | 9 | 28 | 28 bestanden |
 | [test_differences_schema.py](#test-differences-schema-py) | 83 | 83 | 83 bestanden |
 | [test_differences_stats.py](#test-differences-stats-py) | 4 | 4 | 4 bestanden |
 | [test_drift_signal.py](#test-drift-signal-py) | 15 | 15 | 15 bestanden |
 | [test_e2e_safety.py](#test-e2e-safety-py) | 6 | 10 | 10 bestanden |
+| [test_feedback.py](#test-feedback-py) | 5 | 8 | 8 bestanden |
 | [test_firestore_read_contracts.py](#test-firestore-read-contracts-py) | 1 | 2 | 2 bestanden |
 | [test_followup_context.py](#test-followup-context-py) | 16 | 18 | 18 bestanden |
 | [test_frontend_assets.py](#test-frontend-assets-py) | 13 | 14 | 14 bestanden |
 | [test_frontend_build.py](#test-frontend-build-py) | 8 | 8 | 8 bestanden |
 | [test_frontend_resilience.py](#test-frontend-resilience-py) | 4 | 4 | 4 bestanden |
 | [test_google_connections.py](#test-google-connections-py) | 15 | 15 | 15 bestanden |
+| [test_http_adapter_auth.py](#test-http-adapter-auth-py) | 7 | 38 | 38 bestanden |
+| [test_local_transport.py](#test-local-transport-py) | 6 | 10 | 10 bestanden |
 | [test_logging_redaction_contract.py](#test-logging-redaction-contract-py) | 8 | 8 | 8 bestanden |
-| [test_memory_edit.py](#test-memory-edit-py) | 20 | 20 | 20 bestanden |
+| [test_maintenance_scripts.py](#test-maintenance-scripts-py) | 10 | 13 | 13 bestanden |
+| [test_memory_edit.py](#test-memory-edit-py) | 21 | 22 | 22 bestanden |
+| [test_memory_http_contract.py](#test-memory-http-contract-py) | 3 | 12 | 12 bestanden |
 | [test_model_configuration.py](#test-model-configuration-py) | 31 | 31 | 31 bestanden |
 | [test_model_configuration_regressions.py](#test-model-configuration-regressions-py) | 33 | 33 | 33 bestanden |
 | [test_model_leaderboard.py](#test-model-leaderboard-py) | 14 | 18 | 18 bestanden |
 | [test_multi_run_architecture.py](#test-multi-run-architecture-py) | 3 | 3 | 3 bestanden |
 | [test_navigation_settings_ui.py](#test-navigation-settings-ui-py) | 27 | 27 | 27 bestanden |
+| [test_og_image.py](#test-og-image-py) | 4 | 4 | 4 bestanden |
 | [test_onboarding_gates.py](#test-onboarding-gates-py) | 7 | 7 | 7 bestanden |
 | [test_pdf_extraction_isolation.py](#test-pdf-extraction-isolation-py) | 9 | 10 | 10 bestanden |
 | [test_phase4_frontend.py](#test-phase4-frontend-py) | 14 | 14 | 14 bestanden |
@@ -120,11 +133,11 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 | [test_public_markdown.py](#test-public-markdown-py) | 1 | 1 | 1 bestanden |
 | [test_publish_consensus_script.py](#test-publish-consensus-script-py) | 13 | 13 | 13 bestanden |
 | [test_publisher_config.py](#test-publisher-config-py) | 6 | 6 | 6 bestanden |
-| [test_publisher_standalone.py](#test-publisher-standalone-py) | 3 | 3 | 2 bestanden, 1 fehlgeschlagen |
+| [test_publisher_standalone.py](#test-publisher-standalone-py) | 3 | 3 | 3 bestanden |
 | [test_rate_limit.py](#test-rate-limit-py) | 8 | 8 | 8 bestanden |
 | [test_reasoning_policy.py](#test-reasoning-policy-py) | 7 | 18 | 18 bestanden |
 | [test_registration_security.py](#test-registration-security-py) | 4 | 4 | 4 bestanden |
-| [test_request_body_limits.py](#test-request-body-limits-py) | 4 | 4 | 4 bestanden |
+| [test_request_body_limits.py](#test-request-body-limits-py) | 9 | 22 | 22 bestanden |
 | [test_resolve_round.py](#test-resolve-round-py) | 23 | 23 | 23 bestanden |
 | [test_result_integrity.py](#test-result-integrity-py) | 19 | 27 | 27 bestanden |
 | [test_router_event_loop_contract.py](#test-router-event-loop-contract-py) | 2 | 2 | 2 bestanden |
@@ -134,8 +147,10 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 | [test_seo_basics.py](#test-seo-basics-py) | 13 | 13 | 13 bestanden |
 | [test_seo_data.py](#test-seo-data-py) | 39 | 39 | 39 bestanden |
 | [test_seo_entity.py](#test-seo-entity-py) | 6 | 6 | 6 bestanden |
+| [test_seo_repository.py](#test-seo-repository-py) | 3 | 3 | 3 bestanden |
 | [test_seo_weekly_review.py](#test-seo-weekly-review-py) | 20 | 20 | 20 bestanden |
 | [test_share_feature.py](#test-share-feature-py) | 156 | 156 | 156 bestanden |
+| [test_share_http_contract.py](#test-share-http-contract-py) | 4 | 7 | 7 bestanden |
 | [test_source_catalog.py](#test-source-catalog-py) | 19 | 19 | 19 bestanden |
 | [test_source_check_api.py](#test-source-check-api-py) | 9 | 14 | 14 bestanden |
 | [test_source_check_jobs.py](#test-source-check-jobs-py) | 22 | 23 | 23 bestanden |
@@ -151,6 +166,7 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 | [test_telegram_notifier.py](#test-telegram-notifier-py) | 9 | 9 | 9 bestanden |
 | [test_tier_cache.py](#test-tier-cache-py) | 7 | 7 | 7 bestanden |
 | [test_topic_finding.py](#test-topic-finding-py) | 14 | 14 | 14 bestanden |
+| [test_topic_public_http.py](#test-topic-public-http-py) | 3 | 10 | 10 bestanden |
 | [test_topics_feature.py](#test-topics-feature-py) | 52 | 65 | 65 bestanden |
 | [test_unscored_history.py](#test-unscored-history-py) | 3 | 3 | 3 bestanden |
 | [test_usage_authorization.py](#test-usage-authorization-py) | 10 | 15 | 15 bestanden |
@@ -158,8 +174,9 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 | [test_usage_meter.py](#test-usage-meter-py) | 8 | 8 | 8 bestanden |
 | [test_user_memory.py](#test-user-memory-py) | 34 | 34 | 34 bestanden |
 | [test_user_memory_run_cache.py](#test-user-memory-run-cache-py) | 11 | 15 | 15 bestanden |
-| [test_watch_evidence_model.py](#test-watch-evidence-model-py) | 12 | 12 | 12 bestanden |
+| [test_watch_evidence_model.py](#test-watch-evidence-model-py) | 13 | 13 | 13 bestanden |
 | [test_watch_feature.py](#test-watch-feature-py) | 157 | 157 | 157 bestanden |
+| [test_watch_http_contract.py](#test-watch-http-contract-py) | 6 | 13 | 13 bestanden |
 | [test_watch_review_regressions.py](#test-watch-review-regressions-py) | 24 | 24 | 24 bestanden |
 | [test_worker_thread_budget.py](#test-worker-thread-budget-py) | 5 | 9 | 9 bestanden |
 
@@ -219,35 +236,36 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 ## test_account_tier_admin.py
 
-**Quelle:** [tests/test_account_tier_admin.py](../../tests/test_account_tier_admin.py) · **Bereiche:** Admin, Authentifizierung.
+**Quelle:** [tests/test_account_tier_admin.py](../../tests/test_account_tier_admin.py) · **Bereiche:** Authentifizierung, Admin.
 
-**Ebene:** Service und API mit Datenbank-/Auth-Doubles.
+**Ebene:** Registrierte main.app mit echten Middleware-, Auth-/Owner- und Serviceguards.
 
-**Lauf:** 12 bestanden.
+**Lauf:** 13 bestanden.
 
-**Geprüftes Verhalten:** Tier setzen inklusive Audit, Zeitstempel, Cache-Invalidierung, Featureflags und Erhalt anderer Profilfelder; ungültige Stufe und Kontolöschungs-Sperre; Prüfung der Sperre innerhalb der übergebenen Transaktion; E-Mail-Lookup, Legacy-premium, Änderungsverlauf sowie Admin-403, erfolgreicher PUT, Schema-422 und Lookup-404.
+**Geprüftes Verhalten:** Tarif-/Adminänderungen und Cacheinvalidierung; unbekanntes Konto liefert im echten main-Handler404 mit error.error_code=not_found und lesbarer error.message ohne SDK-Diagnose.
 
-**Grenzen und Doubles:** Firebase-Nutzer, Adminentscheidung und Firestore sind ersetzt; die Transaktionsprüfung belegt die Übergabe des Transaktionsobjekts, keine echte Konfliktauflösung.
+**Grenzen und Doubles:** Firebase-SDK-Authentifizierung und DB ersetzt; externe Modell-, Mail- und Telegramgrenzen kontrolliert. Kein Live-OAuth oder produktiver Versand.
 
-**Prüfauftrag für den Folgeaudit:** Atomarität von Profiländerung/Audit/Cache bei Teilfehlern und parallelem Tierwechsel gegen ergänzende Transaktionstests prüfen.
+**Prüfauftrag für den Folgeaudit:** Die benannten Betriebs- und Testgrenzen bei künftigen Änderungen erneut prüfen; konkrete Paketnachweise stehen im Produktabgleich.
 
 **Direkte Codeverweise:** [app/api/routers/admin.py](../../app/api/routers/admin.py), [app/core/rate_limit.py](../../app/core/rate_limit.py), [app/services/account_tier.py](../../app/services/account_tier.py).
 
 <details>
-<summary>12 Testdefinitionen und ihre Quellstellen</summary>
+<summary>13 Testdefinitionen und ihre Quellstellen</summary>
 
-- [test_set_tier_writes_the_field_audits_it_and_drops_the_cache](../../tests/test_account_tier_admin.py#L143) (Zeile 143)
-- [test_set_tier_keeps_unrelated_profile_fields](../../tests/test_account_tier_admin.py#L168) (Zeile 168)
-- [test_set_tier_rejects_an_unknown_tier](../../tests/test_account_tier_admin.py#L176) (Zeile 176)
-- [test_an_account_being_deleted_gets_no_tier](../../tests/test_account_tier_admin.py#L183) (Zeile 183)
-- [test_set_tier_checks_deletion_fence_inside_profile_transaction](../../tests/test_account_tier_admin.py#L197) (Zeile 197)
-- [test_lookup_accepts_an_email](../../tests/test_account_tier_admin.py#L220) (Zeile 220)
-- [test_listing_covers_the_legacy_premium_tag](../../tests/test_account_tier_admin.py#L229) (Zeile 229)
-- [test_recent_changes_are_readable](../../tests/test_account_tier_admin.py#L242) (Zeile 242)
-- [test_endpoints_require_admin](../../tests/test_account_tier_admin.py#L255) (Zeile 255)
-- [test_put_sets_the_tier](../../tests/test_account_tier_admin.py#L267) (Zeile 267)
-- [test_put_rejects_a_tier_outside_the_three](../../tests/test_account_tier_admin.py#L278) (Zeile 278)
-- [test_lookup_of_an_unknown_account_is_a_404](../../tests/test_account_tier_admin.py#L288) (Zeile 288)
+- [test_set_tier_writes_the_field_audits_it_and_drops_the_cache](../../tests/test_account_tier_admin.py#L144) (Zeile 144)
+- [test_set_tier_keeps_unrelated_profile_fields](../../tests/test_account_tier_admin.py#L169) (Zeile 169)
+- [test_set_tier_rejects_an_unknown_tier](../../tests/test_account_tier_admin.py#L177) (Zeile 177)
+- [test_an_account_being_deleted_gets_no_tier](../../tests/test_account_tier_admin.py#L184) (Zeile 184)
+- [test_set_tier_checks_deletion_fence_inside_profile_transaction](../../tests/test_account_tier_admin.py#L198) (Zeile 198)
+- [test_lookup_accepts_an_email](../../tests/test_account_tier_admin.py#L221) (Zeile 221)
+- [test_listing_covers_the_legacy_premium_tag](../../tests/test_account_tier_admin.py#L230) (Zeile 230)
+- [test_recent_changes_are_readable](../../tests/test_account_tier_admin.py#L243) (Zeile 243)
+- [test_endpoints_require_admin](../../tests/test_account_tier_admin.py#L256) (Zeile 256)
+- [test_put_sets_the_tier](../../tests/test_account_tier_admin.py#L268) (Zeile 268)
+- [test_put_rejects_a_tier_outside_the_three](../../tests/test_account_tier_admin.py#L279) (Zeile 279)
+- [test_lookup_of_an_unknown_account_is_a_404](../../tests/test_account_tier_admin.py#L289) (Zeile 289)
+- [test_unknown_account_has_structured_error_in_real_main_app](../../tests/test_account_tier_admin.py#L300) (Zeile 300)
 
 </details>
 
@@ -423,31 +441,32 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 ## test_agent_capacity.py
 
-**Quelle:** [tests/test_agent_capacity.py](../../tests/test_agent_capacity.py) · **Bereiche:** Streaming und Wiederherstellung.
+**Quelle:** [tests/test_agent_capacity.py](../../tests/test_agent_capacity.py) · **Bereiche:** Agent, Konten und Tarife.
 
-**Ebene:** Agent-Kapazität und API mit synchronisiertem Store-Fake.
+**Ebene:** Agentkapazität, Routerstream und lokale Worker mit kontrolliertem Loop.
 
-**Lauf:** 6 bestanden.
+**Lauf:** 7 bestanden.
 
-**Geprüftes Verhalten:** Ownerlimit über verschiedene Chats und Ownerisolation; Leaseablauf ohne Wiederholung bezahlter Receipts; lokale Admission und idempotente Freigabe; 503/Retry-After vor Turnerstellung bei voller Kapazität bei weiter möglichem Replay; Ownerlimit entsperrt fehlgeschlagenen Turn; nie gestartete Response gibt Ressourcen frei und bewahrt Bookmark ohne Modellkosten.
+**Geprüftes Verhalten:** Prozess-/Ownerkapazität und Freigabe bei Fehler/Disconnect. Verweigert ein Kontotombstone Cleanup während Producerclose, bleibt GeneratorExit erhalten, kein Fehlerframe wird danach ausgegeben, Diagnose bleibt inhaltsfrei und Kapazität wird freigegeben.
 
-**Grenzen und Doubles:** Threads laufen innerhalb eines Prozesses gegen gelockten Fake. Leases werden zeitlich manipuliert, kein echter Prozesscrash. HTTP-Assertions laufen in eigener FastAPI-App; main.handle_http_exception fehlt. Retry-After dort beweist deshalb nicht dessen Erhalt in main.app (G-037).
+**Grenzen und Doubles:** Loop-/Providergrenzen kontrolliert; native Browserreise ergänzt die tatsächliche Kontolöschung während Stream.
 
-**Prüfauftrag für den Folgeaudit:** Echte Mehrprozesskonkurrenz, Server-Shutdown und Ressourcenfreigabe gegen Emulator-/Betriebstests abgleichen.
+**Prüfauftrag für den Folgeaudit:** Die benannten Betriebs- und Testgrenzen bei künftigen Änderungen erneut prüfen; konkrete Paketnachweise stehen im Produktabgleich.
 
-**Direkte Codeverweise:** [app/api/routers/agent.py](../../app/api/routers/agent.py), [app/services/agent_runtime.py](../../app/services/agent_runtime.py), [app/services/llm/agent_client.py](../../app/services/llm/agent_client.py).
+**Direkte Codeverweise:** [app/api/routers/agent.py](../../app/api/routers/agent.py), [app/services/agent_runtime.py](../../app/services/agent_runtime.py), [app/services/llm/agent_client.py](../../app/services/llm/agent_client.py), [app/services/persistence_guard.py](../../app/services/persistence_guard.py).
 
 **Direkte Testhelfer:** [tests/test_agent_runs.py](../../tests/test_agent_runs.py).
 
 <details>
-<summary>6 Testdefinitionen und ihre Quellstellen</summary>
+<summary>7 Testdefinitionen und ihre Quellstellen</summary>
 
-- [test_owner_limit_is_atomic_across_different_chats](../../tests/test_agent_capacity.py#L15) (Zeile 15)
-- [test_crashed_owner_lease_expires_without_retrying_the_paid_receipt](../../tests/test_agent_capacity.py#L45) (Zeile 45)
-- [test_local_admission_is_bounded_and_release_is_idempotent](../../tests/test_agent_capacity.py#L60) (Zeile 60)
-- [test_local_capacity_rejects_before_creating_a_turn_and_preserves_replay](../../tests/test_agent_capacity.py#L74) (Zeile 74)
-- [test_owner_capacity_failure_unlocks_unclaimed_turn_and_does_not_call_model](../../tests/test_agent_capacity.py#L97) (Zeile 97)
-- [test_response_never_entered_releases_pending_turn_without_a_paid_claim](../../tests/test_agent_capacity.py#L111) (Zeile 111)
+- [test_disconnect_preserves_generator_exit_when_deleted_account_blocks_cleanup](../../tests/test_agent_capacity.py#L16) (Zeile 16)
+- [test_owner_limit_is_atomic_across_different_chats](../../tests/test_agent_capacity.py#L45) (Zeile 45)
+- [test_crashed_owner_lease_expires_without_retrying_the_paid_receipt](../../tests/test_agent_capacity.py#L75) (Zeile 75)
+- [test_local_admission_is_bounded_and_release_is_idempotent](../../tests/test_agent_capacity.py#L90) (Zeile 90)
+- [test_local_capacity_rejects_before_creating_a_turn_and_preserves_replay](../../tests/test_agent_capacity.py#L104) (Zeile 104)
+- [test_owner_capacity_failure_unlocks_unclaimed_turn_and_does_not_call_model](../../tests/test_agent_capacity.py#L127) (Zeile 127)
+- [test_response_never_entered_releases_pending_turn_without_a_paid_claim](../../tests/test_agent_capacity.py#L141) (Zeile 141)
 
 </details>
 
@@ -788,6 +807,36 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 - [test_chat_deletion_removes_actions_and_gmail_evidence](../../tests/test_agent_gmail.py#L363) (Zeile 363)
 - [test_oversized_thread_page_records_no_evidence](../../tests/test_agent_gmail.py#L374) (Zeile 374)
 - [test_renew_after_send_grant_and_recipient_removal_needs_fresh_review](../../tests/test_agent_gmail.py#L392) (Zeile 392)
+
+</details>
+
+<a id="test-agent-http-contract-py"></a>
+
+## test_agent_http_contract.py
+
+**Quelle:** [tests/test_agent_http_contract.py](../../tests/test_agent_http_contract.py) · **Bereiche:** Agent, Authentifizierung, Konten und Tarife.
+
+**Ebene:** Registrierte main.app mit echten Middleware-, Auth-/Owner- und Serviceguards.
+
+**Lauf:** 9 bestanden.
+
+**Geprüftes Verhalten:** Reale Kapazitätsablehnung503 und API-UID-Limit429 bewahren serverseitiges Retry-After, sicheren Body und Nichtwrite. Agentdetails paginieren vollständig und binden UID/Chat/Turn; Pro-/Admin-/Tierausfallregeln und Parametergrenzen. Wiederholter Stop sperrt nur Zielturn, später Publish scheitert, private Antworten no-store.
+
+**Grenzen und Doubles:** Firebase-SDK-Authentifizierung und DB ersetzt; externe Modell-, Mail- und Telegramgrenzen kontrolliert. Kein Live-OAuth oder produktiver Versand.
+
+**Prüfauftrag für den Folgeaudit:** Die benannten Betriebs- und Testgrenzen bei künftigen Änderungen erneut prüfen; konkrete Paketnachweise stehen im Produktabgleich.
+
+**Direkte Codeverweise:** [app/api/routers/agent.py](../../app/api/routers/agent.py), [app/api/routers/chat_history.py](../../app/api/routers/chat_history.py), [app/core/rate_limit.py](../../app/core/rate_limit.py), [app/core/security.py](../../app/core/security.py), [app/services/agent_policy.py](../../app/services/agent_policy.py), [app/services/agent_runs.py](../../app/services/agent_runs.py), [app/services/agent_runtime.py](../../app/services/agent_runtime.py), [app/services/llm/agent_client.py](../../app/services/llm/agent_client.py), [app/services/llm/provider_runtime.py](../../app/services/llm/provider_runtime.py).
+
+<details>
+<summary>6 Testdefinitionen und ihre Quellstellen</summary>
+
+- [test_detail_pages_are_owner_bound_and_never_start_provider](../../tests/test_agent_http_contract.py#L56) (Zeile 56)
+- [test_stop_fences_only_bound_turn_repeatedly_and_rejects_late_worker](../../tests/test_agent_http_contract.py#L97) (Zeile 97)
+- [test_detail_and_stop_use_real_tier_policy](../../tests/test_agent_http_contract.py#L154) (Zeile 154)
+- [test_agent_role_outage_is_retryable_without_private_data_or_write](../../tests/test_agent_http_contract.py#L172) (Zeile 172)
+- [test_actual_agent_capacity_through_main_preserves_retry_header](../../tests/test_agent_http_contract.py#L187) (Zeile 187)
+- [test_actual_api_uid_limit_through_main_preserves_only_server_retry_header](../../tests/test_agent_http_contract.py#L232) (Zeile 232)
 
 </details>
 
@@ -1398,7 +1447,7 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 **Prüfauftrag für den Folgeaudit:** Die benannten Mock-/Integrationsgrenzen am realen Adapter prüfen; Zuordnung und offene Aufgaben stehen in der Produktmatrix.
 
-**Direkte Codeverweise:** [app/api/routers/api_v1.py](../../app/api/routers/api_v1.py), [app/services/agent_budget_config.py](../../app/services/agent_budget_config.py), [app/services/api_consensus_runner.py](../../app/services/api_consensus_runner.py), [app/services/api_run_repository.py](../../app/services/api_run_repository.py), [app/services/usage_repository.py](../../app/services/usage_repository.py).
+**Direkte Codeverweise:** [app/api/routers/api_v1.py](../../app/api/routers/api_v1.py), [app/services/agent_budget_config.py](../../app/services/agent_budget_config.py), [app/services/api_consensus_runner.py](../../app/services/api_consensus_runner.py), [app/services/api_run_repository.py](../../app/services/api_run_repository.py), [app/services/usage_repository.py](../../app/services/usage_repository.py), [main.py](../../main.py).
 
 <details>
 <summary>11 Testdefinitionen und ihre Quellstellen</summary>
@@ -1414,6 +1463,34 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 - [test_execution_validity_stays_bounded](../../tests/test_api_run_billing_identity.py#L265) (Zeile 265)
 - [test_crash_between_reserve_and_mark_reserved_is_terminalized_once](../../tests/test_api_run_billing_identity.py#L292) (Zeile 292)
 - [test_route_terminalizes_an_accepted_run_whose_reservation_expired](../../tests/test_api_run_billing_identity.py#L318) (Zeile 318)
+
+</details>
+
+<a id="test-api-run-recovery-py"></a>
+
+## test_api_run_recovery.py
+
+**Quelle:** [tests/test_api_run_recovery.py](../../tests/test_api_run_recovery.py) · **Bereiche:** API, Konten und Tarife.
+
+**Ebene:** Recoveryorchestrierung mit echten Run-/Quota-/Cleanup-Repositories.
+
+**Lauf:** 4 bestanden.
+
+**Geprüftes Verhalten:** Accepted/reserved Recovery, lebende/abgelaufene Leases und ausgeführte Backgroundaufträge; kein zweiter Providerstart oder Verbrauch. Retention/Backfill respektiert andere Runbindungen und lässt sich nach Fehler wiederholen.
+
+**Grenzen und Doubles:** Transaktionsfähige DB-Doubles; Providerantwort und Executoraufnahme kontrolliert, gespeicherte Funktionen tatsächlich ausgeführt.
+
+**Prüfauftrag für den Folgeaudit:** Die benannten Betriebs- und Testgrenzen bei künftigen Änderungen erneut prüfen; konkrete Paketnachweise stehen im Produktabgleich.
+
+**Direkte Codeverweise:** [app/core/security.py](../../app/core/security.py), [app/services/api_account_cleanup.py](../../app/services/api_account_cleanup.py), [app/services/api_consensus_runner.py](../../app/services/api_consensus_runner.py), [app/services/api_run_repository.py](../../app/services/api_run_repository.py), [app/services/llm/provider_transport.py](../../app/services/llm/provider_transport.py), [app/services/usage_repository.py](../../app/services/usage_repository.py).
+
+<details>
+<summary>4 Testdefinitionen und ihre Quellstellen</summary>
+
+- [test_restart_requeues_only_pre_provider_work_and_deduplicates_schedule](../../tests/test_api_run_recovery.py#L104) (Zeile 104)
+- [test_retention_rechecks_expiry_and_preserves_rebound_idempotency](../../tests/test_api_run_recovery.py#L148) (Zeile 148)
+- [test_backfill_preserves_existing_expiry_and_rebound_mapping](../../tests/test_api_run_recovery.py#L173) (Zeile 173)
+- [test_recovery_backfill_failure_is_retryable_and_queue_submission_unwinds](../../tests/test_api_run_recovery.py#L198) (Zeile 198)
 
 </details>
 
@@ -1446,6 +1523,32 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 - [test_full_state_sequence_and_terminal_idempotency](../../tests/test_api_run_repository.py#L186) (Zeile 186)
 - [test_expired_running_lease_fails_without_requeueing](../../tests/test_api_run_repository.py#L200) (Zeile 200)
 - [test_only_owner_can_delete_terminal_run_and_mapping](../../tests/test_api_run_repository.py#L217) (Zeile 217)
+
+</details>
+
+<a id="test-api-source-history-py"></a>
+
+## test_api_source_history.py
+
+**Quelle:** [tests/test_api_source_history.py](../../tests/test_api_source_history.py) · **Bereiche:** API, Quellen.
+
+**Ebene:** Registrierte main.app mit echten Middleware-, Auth-/Owner- und Serviceguards.
+
+**Lauf:** 9 bestanden.
+
+**Geprüftes Verhalten:** Historischer Source-GET bindet UID, Run, Job, Antwort und Promptversion. Alle Seiten, negative Cursor, Revisionskonflikt und unveränderte Polls werden geprüft, ohne neue Sourcearbeit zu starten.
+
+**Grenzen und Doubles:** Firebase-SDK-Authentifizierung und DB ersetzt; externe Modell-, Mail- und Telegramgrenzen kontrolliert. Kein Live-OAuth oder produktiver Versand.
+
+**Prüfauftrag für den Folgeaudit:** Die benannten Betriebs- und Testgrenzen bei künftigen Änderungen erneut prüfen; konkrete Paketnachweise stehen im Produktabgleich.
+
+**Direkte Codeverweise:** [app/services/api_run_repository.py](../../app/services/api_run_repository.py), [app/services/source_check_jobs.py](../../app/services/source_check_jobs.py), [app/services/source_check_repository.py](../../app/services/source_check_repository.py).
+
+<details>
+<summary>2 Testdefinitionen und ihre Quellstellen</summary>
+
+- [test_historic_api_source_pages_owner_cursor_revision_and_cache](../../tests/test_api_source_history.py#L43) (Zeile 43)
+- [test_historic_api_rejects_mismatched_snapshot_on_full_and_unchanged_polls](../../tests/test_api_source_history.py#L87) (Zeile 87)
 
 </details>
 
@@ -1636,6 +1739,33 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 </details>
 
+<a id="test-auxiliary-cli-py"></a>
+
+## test_auxiliary_cli.py
+
+**Quelle:** [tests/test_auxiliary_cli.py](../../tests/test_auxiliary_cli.py) · **Bereiche:** Benchmark, Werkzeuge.
+
+**Ebene:** Echte CLIs und Runner in netzwerkgesperrten Subprozessen.
+
+**Lauf:** 21 bestanden.
+
+**Geprüftes Verhalten:** run_sample/run_experiment validieren Argumente vor Daten-/Providerarbeit, begrenzen Run-ID und endliches Budget; Dry-run, Live mit synthetischem Transport und Resume schreiben reale Manifest-/Record-/Resultdateien ohne Doppelcalls. Fehlende Credentials und entfernte Budgetguard als Negativkontrolle.
+
+**Grenzen und Doubles:** Dataset und Providerantworten kontrolliert; keine kostenpflichtigen Modelle oder Livequalitätsmessung.
+
+**Prüfauftrag für den Folgeaudit:** Die benannten Betriebs- und Testgrenzen bei künftigen Änderungen erneut prüfen; konkrete Paketnachweise stehen im Produktabgleich.
+
+<details>
+<summary>5 Testdefinitionen und ihre Quellstellen</summary>
+
+- [test_invalid_execution_args_stop_before_dataset_or_provider](../../tests/test_auxiliary_cli.py#L77) (Zeile 77)
+- [test_sample_run_id_cannot_escape_output_root](../../tests/test_auxiliary_cli.py#L84) (Zeile 84)
+- [test_dry_run_then_live_then_resume_uses_real_runner_without_duplicate_calls](../../tests/test_auxiliary_cli.py#L90) (Zeile 90)
+- [test_missing_credential_never_starts_provider](../../tests/test_auxiliary_cli.py#L105) (Zeile 105)
+- [test_argument_boundary_oracle_detects_removed_finite_budget_guard](../../tests/test_auxiliary_cli.py#L111) (Zeile 111)
+
+</details>
+
 <a id="test-background-task-supervision-py"></a>
 
 ## test_background_task_supervision.py
@@ -1652,7 +1782,7 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 **Prüfauftrag für den Folgeaudit:** Backoffgrenzen, dauerhafter Alarmversand und reale Lifespan-/Shutdown-Reihenfolge gegen Betriebsprüfungen abgleichen.
 
-**Direkte Codeverweise:** [app/core/background_tasks.py](../../app/core/background_tasks.py), [app/services/answer_receipts.py](../../app/services/answer_receipts.py), [app/services/chat_store.py](../../app/services/chat_store.py), [app/services/memory_edit.py](../../app/services/memory_edit.py), [app/services/notification_outbox.py](../../app/services/notification_outbox.py), [app/services/retention_maintenance.py](../../app/services/retention_maintenance.py), [app/services/source_check_jobs.py](../../app/services/source_check_jobs.py).
+**Direkte Codeverweise:** [app/core/background_tasks.py](../../app/core/background_tasks.py), [app/services/answer_receipts.py](../../app/services/answer_receipts.py), [app/services/chat_store.py](../../app/services/chat_store.py), [app/services/memory_edit.py](../../app/services/memory_edit.py), [app/services/notification_outbox.py](../../app/services/notification_outbox.py), [app/services/retention_maintenance.py](../../app/services/retention_maintenance.py), [app/services/source_check_jobs.py](../../app/services/source_check_jobs.py), [main.py](../../main.py).
 
 <details>
 <summary>8 Testdefinitionen und ihre Quellstellen</summary>
@@ -1709,15 +1839,13 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 **Ebene:** Benchmarkrunner mit deterministischem Transport und temporären Artefakten.
 
-**Lauf:** 3 bestanden, 1 fehlgeschlagen.
+**Lauf:** 4 bestanden.
 
-- `test_resume_of_a_finished_pilot_does_not_pay_for_audits_again`: RuntimeError: Run config drifted from frozen manifest C:\Users\maxlp\AppData\Local\Temp\tmp7qtu227_\run\manifest.json in: consensus_prompt_template
+**Geprüftes Verhalten:** Auditaufrufe und bereits bezahlte Fehler zählen zum Budget; enges Budget stoppt vor dem nächsten Audit. Resume fertiger Piloten bezahlt fertige Audits nicht erneut; fehlende Usage wird konservativ geschätzt. Der zuvor beobachtete zeitabhängige Manifestfehler ist durch die getrennte Clockkorrektur behoben.
 
-**Geprüftes Verhalten:** Auditaufrufe und bereits bezahlte Fehler zählen zum Budget; enges Budget stoppt vor dem nächsten Audit, Resume soll fertige Audits nicht nochmals bezahlen; Kosten ohne Usage werden konservativ geschätzt.
+**Grenzen und Doubles:** Keine bezahlten Modelle; aktuelle Runnerergebnisse gelten für die integrierte Konfiguration, nicht für Livepreise/-qualität.
 
-**Grenzen und Doubles:** Keine bezahlten Modelle; der aktuelle Resume-Test scheitert im Gesamtlauf an Prompt-Manifestdrift, daher kein grüner Nachweis dieses Teilvertrags.
-
-**Prüfauftrag für den Folgeaudit:** Die benannten Mock-/Integrationsgrenzen am realen Adapter prüfen; Zuordnung und offene Aufgaben stehen in der Produktmatrix.
+**Prüfauftrag für den Folgeaudit:** Die benannten Betriebs- und Testgrenzen bei künftigen Änderungen erneut prüfen; konkrete Paketnachweise stehen im Produktabgleich.
 
 **Direkte Codeverweise:** [benchmark/runner.py](../../benchmark/runner.py).
 
@@ -1834,6 +1962,33 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 </details>
 
+<a id="test-benchmark-manifest-clock-py"></a>
+
+## test_benchmark_manifest_clock.py
+
+**Quelle:** [tests/test_benchmark_manifest_clock.py](../../tests/test_benchmark_manifest_clock.py) · **Bereiche:** Benchmark.
+
+**Ebene:** Echter Manifestvergleich mit kontrollierter Uhr.
+
+**Lauf:** 5 bestanden.
+
+**Geprüftes Verhalten:** Sekunden, Tageswechsel und DST dürfen Resume nicht als Promptdrift ablehnen. Zeitzone, Instruktion und Modell-/Tokenkonfiguration bleiben bindend; alte Timestamp-Manifeste werden unverändert akzeptiert.
+
+**Grenzen und Doubles:** Lokale Dateien und kontrollierte Zeitkontexte; kein Provideraufruf.
+
+**Prüfauftrag für den Folgeaudit:** Die benannten Betriebs- und Testgrenzen bei künftigen Änderungen erneut prüfen; konkrete Paketnachweise stehen im Produktabgleich.
+
+**Direkte Codeverweise:** [app/services/llm/consensus_engine.py](../../app/services/llm/consensus_engine.py), [benchmark/runner.py](../../benchmark/runner.py).
+
+<details>
+<summary>3 Testdefinitionen und ihre Quellstellen</summary>
+
+- [test_resume_across_seconds_days_and_dst_keeps_manifest](../../tests/test_benchmark_manifest_clock.py#L15) (Zeile 15)
+- [test_actual_configuration_drift_still_rejects_resume](../../tests/test_benchmark_manifest_clock.py#L26) (Zeile 26)
+- [test_timestamped_legacy_manifest_resumes_without_rewriting_it](../../tests/test_benchmark_manifest_clock.py#L40) (Zeile 40)
+
+</details>
+
 <a id="test-benchmark-mode-py"></a>
 
 ## test_benchmark_mode.py
@@ -1896,6 +2051,34 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 - [GradeTests::test_correct](../../tests/test_benchmark_parse.py#L69) (Zeile 69)
 - [GradeTests::test_incorrect](../../tests/test_benchmark_parse.py#L73) (Zeile 73)
 - [GradeTests::test_no_majority_and_none_never_correct](../../tests/test_benchmark_parse.py#L76) (Zeile 76)
+
+</details>
+
+<a id="test-benchmark-protocol-py"></a>
+
+## test_benchmark_protocol.py
+
+**Quelle:** [tests/test_benchmark_protocol.py](../../tests/test_benchmark_protocol.py) · **Bereiche:** Benchmark, Provider.
+
+**Ebene:** Transport-, Record-, Resume- und Statistikpipeline mit HTTP-Response-Double.
+
+**Lauf:** 15 bestanden.
+
+**Geprüftes Verhalten:** HTTP-200-Fehlerobjekte und ungültige Responseformen bleiben Fehler, werden nicht als Enthaltung/Erfolg dedupliziert und folgen retry_failed. Gültiger Text ohne Buchstaben bleibt Enthaltung; private Fehlertexte/Credentials gelangen nicht in Records, auch bei Consensusfehlern.
+
+**Grenzen und Doubles:** Synthetische HTTP-Antworten; keine Häufigkeitsmessung realer Providerfehler.
+
+**Prüfauftrag für den Folgeaudit:** Die benannten Betriebs- und Testgrenzen bei künftigen Änderungen erneut prüfen; konkrete Paketnachweise stehen im Produktabgleich.
+
+**Direkte Codeverweise:** [benchmark/results.py](../../benchmark/results.py), [benchmark/runner.py](../../benchmark/runner.py), [benchmark/transport.py](../../benchmark/transport.py).
+
+<details>
+<summary>4 Testdefinitionen und ihre Quellstellen</summary>
+
+- [test_protocol_failures_are_not_successful_abstentions](../../tests/test_benchmark_protocol.py#L46) (Zeile 46)
+- [test_valid_text_preserves_selection_and_abstention](../../tests/test_benchmark_protocol.py#L71) (Zeile 71)
+- [test_exception_messages_cannot_leak_credentials_into_records](../../tests/test_benchmark_protocol.py#L84) (Zeile 84)
+- [test_consensus_error_projection_never_persists_private_provider_details](../../tests/test_benchmark_protocol.py#L93) (Zeile 93)
 
 </details>
 
@@ -2079,17 +2262,17 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 ## test_benchmark_transport.py
 
-**Quelle:** [tests/test_benchmark_transport.py](../../tests/test_benchmark_transport.py) · **Bereiche:** Benchmarks.
+**Quelle:** [tests/test_benchmark_transport.py](../../tests/test_benchmark_transport.py) · **Bereiche:** Benchmark, Provider.
 
-**Ebene:** Transportfunktionen mit injiziertem POST.
+**Ebene:** Benchmarktransport mit HTTP-Doubles.
 
 **Lauf:** 6 bestanden.
 
-**Geprüftes Verhalten:** Alle im Test verwendeten Familien teilen OpenRouter-URL, Headers, Payload, Text/Citations und Usage; gemeinsames Credentialmapping; keine alten provider-spezifischen Authfunktionen; HTTP-/Transportfehler strukturiert; Antwort ohne erwartete Felder ergibt leeren Text und Nullusage.
+**Geprüftes Verhalten:** Payload/Timeout, Fehler und Usage werden normalisiert. Provider-/Protokollfehler tragen sichere Fehlercodes; private Transporttexte werden nicht ungefiltert weitergegeben.
 
-**Grenzen und Doubles:** POST ist Fake. Der Test malformed_response akzeptiert error=None bei leerer Antwort; dies dokumentiert bestehendes Verhalten, keine positive Fehlererkennung. Kein HTTP-200-Providerfehlerbody. Der malformed-response-Fall mit leeren choices erwartet error=None; das belegt keine korrekte Trennung von Protokollfehler und gültiger Antwort ohne auswertbaren Buchstaben (G-042).
+**Grenzen und Doubles:** Kein Liveprovider; Record-/Resume-/Abstentionvertrag separat in test_benchmark_protocol.py.
 
-**Prüfauftrag für den Folgeaudit:** Prüfen, ob fehlende Usage künftig unknown statt null und malformed response als Fehler behandelt werden soll; zuerst Produktvertrag klären.
+**Prüfauftrag für den Folgeaudit:** Die benannten Betriebs- und Testgrenzen bei künftigen Änderungen erneut prüfen; konkrete Paketnachweise stehen im Produktabgleich.
 
 **Direkte Codeverweise:** [app/services/llm/engines.py](../../app/services/llm/engines.py), [benchmark/transport.py](../../benchmark/transport.py).
 
@@ -2389,6 +2572,35 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 </details>
 
+<a id="test-claim-identity-judge-py"></a>
+
+## test_claim_identity_judge.py
+
+**Quelle:** [tests/test_claim_identity_judge.py](../../tests/test_claim_identity_judge.py) · **Bereiche:** Topics, Quellen.
+
+**Ebene:** Echter Identityhelper, Parser und Retryplan mit Transportdouble.
+
+**Lauf:** 14 bestanden.
+
+**Geprüftes Verhalten:** Nur bekannte eindeutige Keys und echte JSON-Integer dürfen binden; unbekannt, doppelt, Bool, Float, String und Bereichsfehler werden verworfen. Promptfenster/Text/Tokens begrenzt, Modell-/Transport-/JSONfehler sicher behandelt, Logs ohne Modellinhalte.
+
+**Grenzen und Doubles:** Synthetische Modellantworten; keine semantische Qualitätsmessung echter Claims.
+
+**Prüfauftrag für den Folgeaudit:** Die benannten Betriebs- und Testgrenzen bei künftigen Änderungen erneut prüfen; konkrete Paketnachweise stehen im Produktabgleich.
+
+**Direkte Codeverweise:** [app/services/llm/consensus_engine.py](../../app/services/llm/consensus_engine.py).
+
+<details>
+<summary>5 Testdefinitionen und ihre Quellstellen</summary>
+
+- [test_known_unique_bindings_only](../../tests/test_claim_identity_judge.py#L19) (Zeile 19)
+- [test_only_json_integer_indices_are_accepted](../../tests/test_claim_identity_judge.py#L38) (Zeile 38)
+- [test_bounded_prompt_and_unmapped_outside_window](../../tests/test_claim_identity_judge.py#L42) (Zeile 42)
+- [test_retry_fallback_is_bounded_and_logs_no_provider_content](../../tests/test_claim_identity_judge.py#L66) (Zeile 66)
+- [test_empty_or_invalid_engine_returns_unmapped_without_transport](../../tests/test_claim_identity_judge.py#L93) (Zeile 93)
+
+</details>
+
 <a id="test-claim-ledger-py"></a>
 
 ## test_claim_ledger.py
@@ -2517,7 +2729,7 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 **Prüfauftrag für den Folgeaudit:** Realen Worker-Abbruch und wiederaufgenommene Runs mit Repository/Emulator abgleichen; Routenintegration ohne gestubbte Fachservices prüfen.
 
-**Direkte Codeverweise:** [app/api/routers/admin.py](../../app/api/routers/admin.py), [app/api/routers/api_v1.py](../../app/api/routers/api_v1.py), [app/core/config.py](../../app/core/config.py), [app/services/api_account_cleanup.py](../../app/services/api_account_cleanup.py), [app/services/api_consensus_runner.py](../../app/services/api_consensus_runner.py), [app/services/api_key_repository.py](../../app/services/api_key_repository.py), [app/services/api_run_repository.py](../../app/services/api_run_repository.py), [app/services/usage_repository.py](../../app/services/usage_repository.py), [static/js/admin.js](../../static/js/admin.js), [templates/admin.html](../../templates/admin.html).
+**Direkte Codeverweise:** [app/api/routers/admin.py](../../app/api/routers/admin.py), [app/api/routers/api_v1.py](../../app/api/routers/api_v1.py), [app/core/config.py](../../app/core/config.py), [app/services/api_account_cleanup.py](../../app/services/api_account_cleanup.py), [app/services/api_consensus_runner.py](../../app/services/api_consensus_runner.py), [app/services/api_key_repository.py](../../app/services/api_key_repository.py), [app/services/api_run_repository.py](../../app/services/api_run_repository.py), [app/services/usage_repository.py](../../app/services/usage_repository.py), [main.py](../../main.py), [static/js/admin.js](../../static/js/admin.js), [templates/admin.html](../../templates/admin.html).
 
 <details>
 <summary>27 Testdefinitionen und ihre Quellstellen</summary>
@@ -2735,19 +2947,17 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 ## test_consensus_progress_ui.py
 
-**Quelle:** [tests/test_consensus_progress_ui.py](../../tests/test_consensus_progress_ui.py) · **Bereiche:** Frontend, Konsens und Unterschiede.
+**Quelle:** [tests/test_consensus_progress_ui.py](../../tests/test_consensus_progress_ui.py) · **Bereiche:** Consensus, Frontend.
 
-**Ebene:** Quelltextverträge.
+**Ebene:** Statische DOM-/CSS-/JS-Verträge.
 
-**Lauf:** 17 bestanden, 1 fehlgeschlagen.
+**Lauf:** 18 bestanden.
 
-- `test_archived_turns_use_the_same_drawer_row_as_the_live_answer`: assert 'tab.className = "consensus-tab"' in 'turnData, liveBody = null, liveVerdict = null) {\n      const history = document.getElementById("threadHistory");\n  ...dabei zu reinen Anzeigeelementen;\n    // doppelte IDs oder tote Buttons duerfen nicht in den Live-DOM gelangen.\n
+**Geprüftes Verhalten:** Consensusfortschritt, Footer- und Drawerstruktur einschließlich Archivturns. Klassenmitgliedschaft ersetzt veralteten exakten String; dynamisches Zielturn-/ARIA-Verhalten separat im DOMtest.
 
-**Geprüftes Verhalten:** Einheitliche Fortschrittsanzeige, Direct-Modus, Modellzeiten, Phasen/Terminal-Hooks, Erhalt des Konsenses bei Differences-Fehler, reduzierte Bewegung, Provenienz/Replay, Thread-Archiv/Drawer, sofortiger Composer-Handoff sowie sichere Draft-/Quote-Restaurierung. Aktualisierung 02.10.2026: Aktueller Modusselektor und Stepper-Stufen; der historische exakte Drawer-Klassenstring bleibt ein reproduzierter Fehler.
+**Grenzen und Doubles:** Quelltextpräsenz allein beweist weder Layout noch Klick-/Fokuswirkung.
 
-**Grenzen und Doubles:** Substring-/Reihenfolgeprüfungen ohne Browserausführung. Ein Archiv-Drawer-Quelltextvertrag schlägt im Auditlauf fehl.
-
-**Prüfauftrag für den Folgeaudit:** Fehlgeschlagenen Drawer-Vertrag auf veraltete Syntaxannahme versus Verhaltensregression prüfen; Laufzeitbelege für Zeit-/Restore-Rennen abgleichen.
+**Prüfauftrag für den Folgeaudit:** Die benannten Betriebs- und Testgrenzen bei künftigen Änderungen erneut prüfen; konkrete Paketnachweise stehen im Produktabgleich.
 
 **Direkte Codeverweise:** [app/api/routers/chat.py](../../app/api/routers/chat.py), [static/css/components-consensus.css](../../static/css/components-consensus.css), [static/css/components-feedback.css](../../static/css/components-feedback.css), [static/css/shell.css](../../static/css/shell.css), [static/demo.js](../../static/demo.js), [static/js/app-core.js](../../static/js/app-core.js), [static/js/app-init.js](../../static/js/app-init.js), [static/js/consensus-insights.js](../../static/js/consensus-insights.js), [static/js/consensus-lifecycle.js](../../static/js/consensus-lifecycle.js), [static/js/consensus-progress.js](../../static/js/consensus-progress.js), [static/js/consensus-run.js](../../static/js/consensus-run.js), [static/js/query-send.js](../../static/js/query-send.js), [static/js/run-view.js](../../static/js/run-view.js), [templates/index.html](../../templates/index.html).
 
@@ -2771,9 +2981,9 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 - [test_a_run_that_never_happens_gives_the_message_back](../../tests/test_consensus_progress_ui.py#L273) (Zeile 273)
 - [test_archived_questions_clamp_like_the_active_one](../../tests/test_consensus_progress_ui.py#L300) (Zeile 300)
 - [test_archived_turns_use_the_same_drawer_row_as_the_live_answer](../../tests/test_consensus_progress_ui.py#L326) (Zeile 326)
-- [test_composer_row_is_reduced_to_attach_run_switch_and_send](../../tests/test_consensus_progress_ui.py#L352) (Zeile 352)
-- [test_sidebar_header_groups_brand_and_toggle_before_new_comparison](../../tests/test_consensus_progress_ui.py#L372) (Zeile 372)
-- [test_consensus_loader_matches_the_run_visual_language](../../tests/test_consensus_progress_ui.py#L387) (Zeile 387)
+- [test_composer_row_is_reduced_to_attach_run_switch_and_send](../../tests/test_consensus_progress_ui.py#L357) (Zeile 357)
+- [test_sidebar_header_groups_brand_and_toggle_before_new_comparison](../../tests/test_consensus_progress_ui.py#L377) (Zeile 377)
+- [test_consensus_loader_matches_the_run_visual_language](../../tests/test_consensus_progress_ui.py#L392) (Zeile 392)
 
 </details>
 
@@ -2985,31 +3195,32 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 ## test_dev_cli.py
 
-**Quelle:** [tests/test_dev_cli.py](../../tests/test_dev_cli.py) · **Bereiche:** Testinfrastruktur.
+**Quelle:** [tests/test_dev_cli.py](../../tests/test_dev_cli.py) · **Bereiche:** Betrieb, Frontend-Build.
 
-**Ebene:** Windows-Prozessintegration mit Fake-CLI-Werkzeugen.
+**Ebene:** Windows-PowerShell-/pwsh-Subprozesse mit instrumentierten Runnern.
 
-**Lauf:** 24 bestanden.
+**Lauf:** 28 bestanden.
 
-**Geprüftes Verhalten:** Führt dev.ps1 im Pfad mit Leerzeichen aus; prüft Test-/Build-Reihenfolge, Exitcodes/Abbruch, Suite-Pfadvalidierung, Dependency-Hinweise, Isolation/Wiederherstellung von Umgebungsvariablen und Firebase-Lifecycle samt Loopback-Gate.
+**Geprüftes Verhalten:** Backend-, Frontend-, Browser-/Emulator-, Rules- und Buildauswahl, Fehlercodes, Argumente, Arbeitsverzeichnis und vollständige Envwiederherstellung einschließlich UTF-8. Tatsächliche Shellverfügbarkeit bestimmt die expandierte Fallzahl.
 
-**Grenzen und Doubles:** Nur unter Windows mit PowerShell; im Linux-Audit alle 12 Fälle übersprungen. npm/pytest/Firebase/Java sind Wegwerf-Doubles, kein echter Emulatorstart.
+**Grenzen und Doubles:** Runnerinstrumentierung prüft Orchestrierung; reale Python/JS/Emulatorausführung ist zusätzlich im integrierten Lauf dokumentiert.
 
-**Prüfauftrag für den Folgeaudit:** Auf Windows beide verfügbaren PowerShell-Versionen ausführen und echten Browser-Einstieg separat prüfen.
+**Prüfauftrag für den Folgeaudit:** Die benannten Betriebs- und Testgrenzen bei künftigen Änderungen erneut prüfen; konkrete Paketnachweise stehen im Produktabgleich.
 
-**Direkte Codeverweise:** [app/core/e2e_profile.py](../../app/core/e2e_profile.py), [app/services/agent_tokens.py](../../app/services/agent_tokens.py).
+**Direkte Codeverweise:** [app/core/e2e_profile.py](../../app/core/e2e_profile.py), [app/services/agent_tokens.py](../../app/services/agent_tokens.py), [dev.ps1](../../dev.ps1), [firebase.json](../../firebase.json), [firestore.rules](../../firestore.rules), [package.json](../../package.json).
 
 <details>
-<summary>8 Testdefinitionen und ihre Quellstellen</summary>
+<summary>9 Testdefinitionen und ihre Quellstellen</summary>
 
 - [test_frontend_runs_tests_then_build_check_from_repository_root](../../tests/test_dev_cli.py#L153) (Zeile 153)
 - [test_frontend_preserves_failure_and_stops](../../tests/test_dev_cli.py#L164) (Zeile 164)
 - [test_backend_isolates_inherited_e2e_flags_and_restores_caller](../../tests/test_dev_cli.py#L173) (Zeile 173)
 - [test_browser_delegates_lifecycle_and_failure_to_firebase](../../tests/test_dev_cli.py#L185) (Zeile 185)
-- [test_browser_rejects_nonlocal_emulator_before_start](../../tests/test_dev_cli.py#L206) (Zeile 206)
-- [test_browser_failure_restores_initially_absent_environment_entries](../../tests/test_dev_cli.py#L216) (Zeile 216)
-- [test_rejects_tests_outside_selected_suite](../../tests/test_dev_cli.py#L224) (Zeile 224)
-- [test_missing_dependencies_have_actionable_error](../../tests/test_dev_cli.py#L232) (Zeile 232)
+- [test_rules_uses_client_runner_with_emulator_lifecycle_and_restores_environment](../../tests/test_dev_cli.py#L208) (Zeile 208)
+- [test_browser_rejects_nonlocal_emulator_before_start](../../tests/test_dev_cli.py#L219) (Zeile 219)
+- [test_browser_failure_restores_initially_absent_environment_entries](../../tests/test_dev_cli.py#L229) (Zeile 229)
+- [test_rejects_tests_outside_selected_suite](../../tests/test_dev_cli.py#L237) (Zeile 237)
+- [test_missing_dependencies_have_actionable_error](../../tests/test_dev_cli.py#L245) (Zeile 245)
 
 </details>
 
@@ -3203,7 +3414,7 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 **Prüfauftrag für den Folgeaudit:** Profilübergänge mit dev.ps1 und Emulator-Tests zusammen betrachten.
 
-**Direkte Codeverweise:** [app/core/e2e_profile.py](../../app/core/e2e_profile.py).
+**Direkte Codeverweise:** [app/core/e2e_profile.py](../../app/core/e2e_profile.py), [main.py](../../main.py).
 
 <details>
 <summary>6 Testdefinitionen und ihre Quellstellen</summary>
@@ -3214,6 +3425,35 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 - [test_real_security_import_refuses_a_production_project_before_firebase_init](../../tests/test_e2e_safety.py#L51) (Zeile 51)
 - [test_unit_profile_import_needs_no_service_account_file](../../tests/test_e2e_safety.py#L65) (Zeile 65)
 - [test_e2e_lifespan_starts_no_maintenance_or_background_tasks](../../tests/test_e2e_safety.py#L80) (Zeile 80)
+
+</details>
+
+<a id="test-feedback-py"></a>
+
+## test_feedback.py
+
+**Quelle:** [tests/test_feedback.py](../../tests/test_feedback.py) · **Bereiche:** Feedback, Statistiken.
+
+**Ebene:** Registrierte main.app mit echten Middleware-, Auth-/Owner- und Serviceguards.
+
+**Lauf:** 8 bestanden.
+
+**Geprüftes Verhalten:** Feedback prüft UID, Allowlist, persistierten Cooldown trotz lokalem Limiterreset, Tageslimit und Storefehler. Statistik schreibt Zähler/Modellmetadaten ohne Frage, Antwort, UID oder Run-ID; Fehler bleiben nichtfatal.
+
+**Grenzen und Doubles:** Firebase-SDK-Authentifizierung und DB ersetzt; externe Modell-, Mail- und Telegramgrenzen kontrolliert. Kein Live-OAuth oder produktiver Versand. Absichtlich eingegebene Feedbacknachricht darf gespeichert werden.
+
+**Prüfauftrag für den Folgeaudit:** Die benannten Betriebs- und Testgrenzen bei künftigen Änderungen erneut prüfen; konkrete Paketnachweise stehen im Produktabgleich.
+
+**Direkte Codeverweise:** [app/api/routers/pages.py](../../app/api/routers/pages.py), [app/core/rate_limit.py](../../app/core/rate_limit.py), [app/services/differences_stats.py](../../app/services/differences_stats.py), [app/services/persistence_guard.py](../../app/services/persistence_guard.py).
+
+<details>
+<summary>5 Testdefinitionen und ihre Quellstellen</summary>
+
+- [test_feedback_auth_payload_and_persisted_cooldown](../../tests/test_feedback.py#L23) (Zeile 23)
+- [test_feedback_daily_limit_and_storage_failure_are_safe](../../tests/test_feedback.py#L53) (Zeile 53)
+- [test_feedback_rejects_invalid_fields_before_storage](../../tests/test_feedback.py#L93) (Zeile 93)
+- [test_stats_wrapper_persists_only_counts_and_safe_model_metadata](../../tests/test_feedback.py#L102) (Zeile 102)
+- [test_stats_failure_never_aborts_answer_or_logs_content](../../tests/test_feedback.py#L133) (Zeile 133)
 
 </details>
 
@@ -3233,7 +3473,7 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 **Prüfauftrag für den Folgeaudit:** Emulator-/Deployment-Indexvalidierung und Skalierung der Provider-Aliase abgleichen.
 
-**Direkte Codeverweise:** [app/api/routers/pages.py](../../app/api/routers/pages.py).
+**Direkte Codeverweise:** [app/api/routers/pages.py](../../app/api/routers/pages.py), [firestore.indexes.json](../../firestore.indexes.json).
 
 <details>
 <summary>1 Testdefinitionen und ihre Quellstellen</summary>
@@ -3337,7 +3577,7 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 **Prüfauftrag für den Folgeaudit:** Browser-Tests ausdrücklich gegen Build- und Source-Modus abgleichen.
 
-**Direkte Codeverweise:** [app/core/assets.py](../../app/core/assets.py), [scripts/build_frontend.mjs](../../scripts/build_frontend.mjs), [scripts/frontend-output.mjs](../../scripts/frontend-output.mjs), [templates/index.html](../../templates/index.html).
+**Direkte Codeverweise:** [app/core/assets.py](../../app/core/assets.py), [package.json](../../package.json), [scripts/build_frontend.mjs](../../scripts/build_frontend.mjs), [scripts/frontend-output.mjs](../../scripts/frontend-output.mjs), [templates/index.html](../../templates/index.html).
 
 <details>
 <summary>8 Testdefinitionen und ihre Quellstellen</summary>
@@ -3420,6 +3660,67 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 </details>
 
+<a id="test-http-adapter-auth-py"></a>
+
+## test_http_adapter_auth.py
+
+**Quelle:** [tests/test_http_adapter_auth.py](../../tests/test_http_adapter_auth.py) · **Bereiche:** Authentifizierung, Topics, Admin, Benchmark.
+
+**Ebene:** Registrierte main.app mit echten Middleware-, Auth-/Owner- und Serviceguards.
+
+**Lauf:** 38 bestanden.
+
+**Geprüftes Verhalten:** Registrierung liefert neutral dieselbe Antwort bei neu/bestehend/Lookup-Create-Race und benachrichtigt einmal. user_status führt die echte Free-/Plus-/Pro-/Adminmatrix aus. Alle Topicadminmethoden prüfen widerrufene Tokens und Tierausfall; Benchmarkliste/-detail lehnen Nichtadmin vor Reportread ab, liefern nur kompakte Reports und korrekte 404.
+
+**Grenzen und Doubles:** Firebase-SDK-Authentifizierung und DB ersetzt; externe Modell-, Mail- und Telegramgrenzen kontrolliert. Kein Live-OAuth oder produktiver Versand.
+
+**Prüfauftrag für den Folgeaudit:** Die benannten Betriebs- und Testgrenzen bei künftigen Änderungen erneut prüfen; konkrete Paketnachweise stehen im Produktabgleich.
+
+**Direkte Codeverweise:** [app/api/routers/auth.py](../../app/api/routers/auth.py), [app/api/routers/users.py](../../app/api/routers/users.py), [app/services/benchmark_reports.py](../../app/services/benchmark_reports.py), [app/services/registration.py](../../app/services/registration.py), [app/services/topics.py](../../app/services/topics.py), [app/services/usage_repository.py](../../app/services/usage_repository.py), [benchmark/report_reader.py](../../benchmark/report_reader.py).
+
+<details>
+<summary>7 Testdefinitionen und ihre Quellstellen</summary>
+
+- [test_every_topic_admin_method_enforces_real_policy_before_service](../../tests/test_http_adapter_auth.py#L29) (Zeile 29)
+- [test_real_topic_admin_put_list_and_version_have_persisted_results](../../tests/test_http_adapter_auth.py#L50) (Zeile 50)
+- [test_user_status_uses_real_tier_and_role_payload](../../tests/test_http_adapter_auth.py#L90) (Zeile 90)
+- [test_user_status_rejects_auth_and_tier_outage](../../tests/test_http_adapter_auth.py#L112) (Zeile 112)
+- [test_registration_create_race_has_same_public_response_and_no_duplicate_notification](../../tests/test_http_adapter_auth.py#L120) (Zeile 120)
+- [test_benchmark_admin_denies_before_read](../../tests/test_http_adapter_auth.py#L159) (Zeile 159)
+- [test_benchmark_admin_reads_compact_report_and_handles_missing_ids](../../tests/test_http_adapter_auth.py#L172) (Zeile 172)
+
+</details>
+
+<a id="test-local-transport-py"></a>
+
+## test_local_transport.py
+
+**Quelle:** [tests/test_local_transport.py](../../tests/test_local_transport.py) · **Bereiche:** Provider, Quellen, Betrieb.
+
+**Ebene:** Echte lokale TCP-/TLS-Server durch HTTP-/SDK-Adapter.
+
+**Lauf:** 10 bestanden.
+
+**Geprüftes Verhalten:** Abbruch vor Headern und im SSE-Body schließt echte Sockets; SDK-Deadline und 503 verursachen keinen zweiten Request. Host/SNI bleiben korrekt, Redirect wird neu validiert, gzip-Ausgabe begrenzt. Aktivierte SDK-Retries werden über zwei Serverrequests erkannt.
+
+**Grenzen und Doubles:** Ausschließlich Loopbackserver und eigene Zertifikate; Zielpinning wird für den Testserver ersetzt, echte Host-/Redirectpolicy separat geprüft. Keine Proxy-/CDN-/Internetmessung.
+
+**Prüfauftrag für den Folgeaudit:** Die benannten Betriebs- und Testgrenzen bei künftigen Änderungen erneut prüfen; konkrete Paketnachweise stehen im Produktabgleich.
+
+**Direkte Codeverweise:** [app/services/llm/provider_runtime.py](../../app/services/llm/provider_runtime.py), [app/services/source_documents.py](../../app/services/source_documents.py).
+
+<details>
+<summary>6 Testdefinitionen und ihre Quellstellen</summary>
+
+- [test_cancellation_closes_real_idle_provider_socket_without_retry](../../tests/test_local_transport.py#L64) (Zeile 64)
+- [test_sdk_read_deadline_closes_real_socket_and_does_not_retry](../../tests/test_local_transport.py#L97) (Zeile 97)
+- [test_http_failure_has_one_attempt_and_oracle_detects_enabled_sdk_retry](../../tests/test_local_transport.py#L114) (Zeile 114)
+- [test_source_tls_preserves_host_sni_redirect_and_bounds_gzip](../../tests/test_local_transport.py#L162) (Zeile 162)
+- [test_source_revalidates_redirect_before_connecting_private_target](../../tests/test_local_transport.py#L178) (Zeile 178)
+- [test_real_source_policy_keeps_loopback_and_credentials_forbidden](../../tests/test_local_transport.py#L189) (Zeile 189)
+
+</details>
+
 <a id="test-logging-redaction-contract-py"></a>
 
 ## test_logging_redaction_contract.py
@@ -3436,7 +3737,7 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 **Prüfauftrag für den Folgeaudit:** Strukturierte/nicht standardisierte Logs und weitere Secret-Felder gegen produktive Sink-Pfade abgleichen.
 
-**Direkte Codeverweise:** [app/core/observability.py](../../app/core/observability.py), [app/services/llm/engines.py](../../app/services/llm/engines.py), [app/services/llm/provider_runtime.py](../../app/services/llm/provider_runtime.py), [app/services/mailer.py](../../app/services/mailer.py).
+**Direkte Codeverweise:** [app/core/observability.py](../../app/core/observability.py), [app/services/llm/engines.py](../../app/services/llm/engines.py), [app/services/llm/provider_runtime.py](../../app/services/llm/provider_runtime.py), [app/services/mailer.py](../../app/services/mailer.py), [main.py](../../main.py).
 
 <details>
 <summary>8 Testdefinitionen und ihre Quellstellen</summary>
@@ -3452,47 +3753,109 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 </details>
 
+<a id="test-maintenance-scripts-py"></a>
+
+## test_maintenance_scripts.py
+
+**Quelle:** [tests/test_maintenance_scripts.py](../../tests/test_maintenance_scripts.py) · **Bereiche:** Wartung, Werkzeuge.
+
+**Ebene:** Echte Entry-Points in isolierten Subprozessen.
+
+**Lauf:** 13 bestanden.
+
+**Geprüftes Verhalten:** Inspect/Dry-run ohne Writes, Projekt-/Apply-/Emulatorguards, gezielter Account und Idempotenz. Claim-Backfill bewahrt vorhandene Teilkeys und Reservierungen, verhindert Fallbackkollisionen und zählt Vorschauänderungen korrekt. Entfernte Applyguard wird entdeckt.
+
+**Grenzen und Doubles:** SDK-, Judge- und Recoverygrenzen kontrolliert, Netzwerk gesperrt. Ein echter Backfill-Dry-run kann den kostenpflichtigen Judge aufrufen.
+
+**Prüfauftrag für den Folgeaudit:** Die benannten Betriebs- und Testgrenzen bei künftigen Änderungen erneut prüfen; konkrete Paketnachweise stehen im Produktabgleich.
+
+**Direkte Codeverweise:** [scripts/backfill_claim_keys.py](../../scripts/backfill_claim_keys.py), [scripts/repair_agent_allowance.py](../../scripts/repair_agent_allowance.py).
+
+<details>
+<summary>10 Testdefinitionen und ihre Quellstellen</summary>
+
+- [test_repair_inspect_does_not_apply_but_selected_account_recovery_does](../../tests/test_maintenance_scripts.py#L114) (Zeile 114)
+- [test_repair_refuses_test_or_emulator_before_lookup_or_write](../../tests/test_maintenance_scripts.py#L124) (Zeile 124)
+- [test_repair_refuses_project_mismatch_before_account_lookup](../../tests/test_maintenance_scripts.py#L130) (Zeile 130)
+- [test_repair_inspection_oracle_detects_removed_apply_guard](../../tests/test_maintenance_scripts.py#L136) (Zeile 136)
+- [test_backfill_dry_run_counts_changes_without_writes_but_runs_judge](../../tests/test_maintenance_scripts.py#L154) (Zeile 154)
+- [test_backfill_preserves_partial_keys_and_other_fields_and_is_idempotent](../../tests/test_maintenance_scripts.py#L163) (Zeile 163)
+- [test_force_can_rekey_existing_dimensions_explicitly](../../tests/test_maintenance_scripts.py#L176) (Zeile 176)
+- [test_backfill_reserves_retained_keys_and_avoids_fallback_collisions](../../tests/test_maintenance_scripts.py#L182) (Zeile 182)
+- [test_force_assigns_valid_judge_keys_before_generating_fallbacks](../../tests/test_maintenance_scripts.py#L203) (Zeile 203)
+- [test_backfill_requires_selection_and_refuses_fixture_identity_mode](../../tests/test_maintenance_scripts.py#L220) (Zeile 220)
+
+</details>
+
 <a id="test-memory-edit-py"></a>
 
 ## test_memory_edit.py
 
-**Quelle:** [tests/test_memory_edit.py](../../tests/test_memory_edit.py) · **Bereiche:** Admin, Konten und Tarife, Nutzergedächtnis.
+**Quelle:** [tests/test_memory_edit.py](../../tests/test_memory_edit.py) · **Bereiche:** Memory.
 
-**Ebene:** Edit-Service/Repository und Router mit DB-/LLM-Doubles.
+**Ebene:** Memory-Repository mit Transaktionsdouble.
 
-**Lauf:** 20 bestanden.
+**Lauf:** 22 bestanden.
 
-**Geprüftes Verhalten:** Strikter minimaler Patch, eindeutiges Replace, Append/Correct-Intent, keine Delete-Patches beim Remember, Revision/Undo, idempotenter Provideraufruf, persistente Tages-/Global-/In-flight-Limits und kein Truncation/Charge bei Übergröße. Adminfallback, schema-/tokengebundener LLM-Payload und direkter expliziter Edit-Endpunkt. Aktualisierung 02.10.2026: Edit-Leasen erlauben begrenzte Recovery nach Crash, fencing verhindert veralteten Commit; erneuter Absturz wird terminal. Undo-Vorzustände verfallen nach 30 Tagen, Idempotenzbelege bleiben erhalten. Limitabsenkung beim Undo ist weiterhin eine eigene offene Grenze.
+**Geprüftes Verhalten:** Patch/Undo, Idempotenz, Quoten, Lease-Recovery und sichere Revisionen. Bei abgesenktem Notizlimit lehnen Patch und Undo den verlustbehafteten Vorzustand ab; sämtliche Profil-/Request-/Quotenwerte bleiben unverändert.
 
-**Grenzen und Doubles:** Persistence-Guard in Fixture deaktiviert, DB/LLM ersetzt; Undo nach konkurrierender Fremdänderung wird nicht durch den einfachen Roundtrip bewiesen. Undo-Roundtrip nutzt ein kleines Profil bei unverändertem Limit; Kürzung nach Tier-/Limitabsenkung nicht geprüft (G-038). Die Undo-HTTP-Route und ihr Error-Mapping sind kein Teil dieses Erfolgsroundtrips (G-007).
+**Grenzen und Doubles:** DB-Double; nativer Wettbewerb und echter main-Fehlerumschlag sind separat belegt.
 
-**Prüfauftrag für den Folgeaudit:** Tombstone-/Undo-Konflikt-/Crashfälle und echte parallele Edits im nächsten Audit abgleichen.
+**Prüfauftrag für den Folgeaudit:** Die benannten Betriebs- und Testgrenzen bei künftigen Änderungen erneut prüfen; konkrete Paketnachweise stehen im Produktabgleich.
 
 **Direkte Codeverweise:** [app/api/routers/users.py](../../app/api/routers/users.py), [app/core/config.py](../../app/core/config.py), [app/core/rate_limit.py](../../app/core/rate_limit.py), [app/services/memory_edit.py](../../app/services/memory_edit.py), [app/services/user_memory.py](../../app/services/user_memory.py).
 
 <details>
-<summary>20 Testdefinitionen und ihre Quellstellen</summary>
+<summary>21 Testdefinitionen und ihre Quellstellen</summary>
 
 - [test_model_patch_schema_is_strict_and_passage_bounded](../../tests/test_memory_edit.py#L157) (Zeile 157)
 - [test_replace_is_revision_checked_and_undo_restores_exact_content](../../tests/test_memory_edit.py#L178) (Zeile 178)
 - [test_non_unique_target_is_never_overwritten](../../tests/test_memory_edit.py#L226) (Zeile 226)
-- [test_same_client_request_never_calls_provider_twice](../../tests/test_memory_edit.py#L251) (Zeile 251)
-- [test_remember_intent_appends_when_no_related_entry_exists](../../tests/test_memory_edit.py#L277) (Zeile 277)
-- [test_remember_intent_replaces_one_unique_conflicting_passage](../../tests/test_memory_edit.py#L308) (Zeile 308)
-- [test_remember_intent_rejects_delete_patch](../../tests/test_memory_edit.py#L335) (Zeile 335)
-- [test_smallest_replace_preserves_unrelated_details](../../tests/test_memory_edit.py#L358) (Zeile 358)
-- [test_persistent_daily_budget_is_shared_by_repository_instances](../../tests/test_memory_edit.py#L389) (Zeile 389)
-- [test_over_plan_memory_is_not_truncated_or_charged_by_ai_edit](../../tests/test_memory_edit.py#L412) (Zeile 412)
-- [test_invalid_admin_values_fall_back_to_safe_defaults](../../tests/test_memory_edit.py#L432) (Zeile 432)
-- [test_provider_call_is_schema_bound_no_reasoning_and_output_capped](../../tests/test_memory_edit.py#L443) (Zeile 443)
-- [test_one_in_flight_edit_and_global_budget_are_persistent](../../tests/test_memory_edit.py#L486) (Zeile 486)
-- [test_edit_endpoint_applies_explicit_feedback_without_confirmation](../../tests/test_memory_edit.py#L519) (Zeile 519)
-- [test_same_request_is_recovered_under_a_new_lease_after_a_crash](../../tests/test_memory_edit.py#L591) (Zeile 591)
-- [test_a_second_crash_ends_the_request_as_interrupted](../../tests/test_memory_edit.py#L637) (Zeile 637)
-- [test_crash_after_provider_answer_is_recovered_through_the_service](../../tests/test_memory_edit.py#L648) (Zeile 648)
-- [test_retention_moves_abandoned_reservations_to_a_terminal_state](../../tests/test_memory_edit.py#L681) (Zeile 681)
-- [test_interrupted_edit_endpoint_answers_with_a_retryable_409](../../tests/test_memory_edit.py#L702) (Zeile 702)
-- [test_undo_snapshots_expire_after_thirty_days_but_idempotency_remains](../../tests/test_memory_edit.py#L734) (Zeile 734)
+- [test_lowered_limit_never_truncates_existing_memory](../../tests/test_memory_edit.py#L252) (Zeile 252)
+- [test_same_client_request_never_calls_provider_twice](../../tests/test_memory_edit.py#L281) (Zeile 281)
+- [test_remember_intent_appends_when_no_related_entry_exists](../../tests/test_memory_edit.py#L307) (Zeile 307)
+- [test_remember_intent_replaces_one_unique_conflicting_passage](../../tests/test_memory_edit.py#L338) (Zeile 338)
+- [test_remember_intent_rejects_delete_patch](../../tests/test_memory_edit.py#L365) (Zeile 365)
+- [test_smallest_replace_preserves_unrelated_details](../../tests/test_memory_edit.py#L388) (Zeile 388)
+- [test_persistent_daily_budget_is_shared_by_repository_instances](../../tests/test_memory_edit.py#L419) (Zeile 419)
+- [test_over_plan_memory_is_not_truncated_or_charged_by_ai_edit](../../tests/test_memory_edit.py#L442) (Zeile 442)
+- [test_invalid_admin_values_fall_back_to_safe_defaults](../../tests/test_memory_edit.py#L462) (Zeile 462)
+- [test_provider_call_is_schema_bound_no_reasoning_and_output_capped](../../tests/test_memory_edit.py#L473) (Zeile 473)
+- [test_one_in_flight_edit_and_global_budget_are_persistent](../../tests/test_memory_edit.py#L516) (Zeile 516)
+- [test_edit_endpoint_applies_explicit_feedback_without_confirmation](../../tests/test_memory_edit.py#L549) (Zeile 549)
+- [test_same_request_is_recovered_under_a_new_lease_after_a_crash](../../tests/test_memory_edit.py#L621) (Zeile 621)
+- [test_a_second_crash_ends_the_request_as_interrupted](../../tests/test_memory_edit.py#L667) (Zeile 667)
+- [test_crash_after_provider_answer_is_recovered_through_the_service](../../tests/test_memory_edit.py#L678) (Zeile 678)
+- [test_retention_moves_abandoned_reservations_to_a_terminal_state](../../tests/test_memory_edit.py#L711) (Zeile 711)
+- [test_interrupted_edit_endpoint_answers_with_a_retryable_409](../../tests/test_memory_edit.py#L732) (Zeile 732)
+- [test_undo_snapshots_expire_after_thirty_days_but_idempotency_remains](../../tests/test_memory_edit.py#L764) (Zeile 764)
+
+</details>
+
+<a id="test-memory-http-contract-py"></a>
+
+## test_memory_http_contract.py
+
+**Quelle:** [tests/test_memory_http_contract.py](../../tests/test_memory_http_contract.py) · **Bereiche:** Memory, Authentifizierung.
+
+**Ebene:** Registrierte main.app mit echten Middleware-, Auth-/Owner- und Serviceguards.
+
+**Lauf:** 12 bestanden.
+
+**Geprüftes Verhalten:** Echtes Undo durch main mit fehlendem/ungültigem Token, Tierausfall, fremder/fehlender/ungültiger Revision, Ablauf, Konflikt und Limitabsenkung: exakter Status/Body, vollständige Nichtmutation und kein Providercall. Vorher authentifizierter Edit/Undo bleibt hinter Tombstone gesperrt; erfolgreicher Repeat stellt jedes Profilfeld ohne neue Revision/Buchung wieder her.
+
+**Grenzen und Doubles:** SDKidentität und Datenbankzugang ersetzt; Auth-/Tier-/Owner-/Revision-/Löschguards und main-Fehlerprojektion bleiben echt.
+
+**Prüfauftrag für den Folgeaudit:** Die benannten Betriebs- und Testgrenzen bei künftigen Änderungen erneut prüfen; konkrete Paketnachweise stehen im Produktabgleich.
+
+**Direkte Codeverweise:** [app/api/routers/users.py](../../app/api/routers/users.py), [app/core/config.py](../../app/core/config.py), [app/core/security.py](../../app/core/security.py), [app/services/memory_edit.py](../../app/services/memory_edit.py), [app/services/persistence_guard.py](../../app/services/persistence_guard.py), [app/services/user_memory.py](../../app/services/user_memory.py).
+
+<details>
+<summary>3 Testdefinitionen und ihre Quellstellen</summary>
+
+- [test_main_undo_errors_preserve_all_state_and_never_call_provider](../../tests/test_memory_http_contract.py#L75) (Zeile 75)
+- [test_main_previously_authenticated_memory_write_is_fenced_by_tombstone](../../tests/test_memory_http_contract.py#L120) (Zeile 120)
+- [test_main_undo_retry_restores_every_profile_field_without_second_revision_or_charge](../../tests/test_memory_http_contract.py#L151) (Zeile 151)
 
 </details>
 
@@ -3500,17 +3863,17 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 ## test_model_configuration.py
 
-**Quelle:** [tests/test_model_configuration.py](../../tests/test_model_configuration.py) · **Bereiche:** Admin, Modelle und Provider.
+**Quelle:** [tests/test_model_configuration.py](../../tests/test_model_configuration.py) · **Bereiche:** Admin, Modelle.
 
-**Ebene:** Konfigurations-/Payload-Unit-Tests, Admin-/DB-Doubles und UI-Sourceverträge.
+**Ebene:** Modellkonfiguration mit Repository-/Aktivierungsdoubles und statischen UIverträgen.
 
 **Lauf:** 31 bestanden.
 
-**Geprüftes Verhalten:** Ungültiger Adminsave ohne Runtime-Mutation, Aktivierungs-/DB-Rollback und read-only Readiness; Own-/Developer-Key-Trennung. Entfernte/kanonische IDs, Presets/Free-/Pro-Gates, Provider-spezifische Search-/Reasoning-/Attachment-Policies, Errorprojektion und Eingabehelper. Aktualisierung 02.10.2026: CAS-Revisionsprüfung lehnt stale Save mit 409 ohne Write ab; Rollback überschreibt keine fremde neuere Revision und andere Prozesse übernehmen veröffentlichte Revisionen. Konkurrenz bleibt im Document-Double simuliert.
+**Geprüftes Verhalten:** Gespeicherte Regeln/Payloads, CAS-Revisionskonflikt, eigener Rollback und Übernahme neuer Revisionen; konkurrierender Write im Double bleibt erhalten, Runtimeaktivierungsfehler sind sichtbar. Native Writer-/Rollback-RPCfälle stehen separat im E2E-Katalog.
 
-**Grenzen und Doubles:** Prüft gespeicherte Regeln/Payloads des Commitstands; keine Live-Verfügbarkeit oder Akzeptanz der Modell-APIs. UI-Auszüge nur statisch. Rollback-Assertion sieht nur einen Writer; ein zwischenzeitlicher Write eines zweiten Prozesses fehlt (G-040).
+**Grenzen und Doubles:** Keine Liveverfügbarkeit/Akzeptanz der Modell-APIs; UIauszüge statisch und lokale DBkonkurrenz simuliert.
 
-**Prüfauftrag für den Folgeaudit:** Aktualisierte Modelllisten, atomare konkurrierende Adminsaves und reale Providerverträge separat prüfen.
+**Prüfauftrag für den Folgeaudit:** Die benannten Betriebs- und Testgrenzen bei künftigen Änderungen erneut prüfen; konkrete Paketnachweise stehen im Produktabgleich.
 
 **Direkte Codeverweise:** [app/api/routers/admin.py](../../app/api/routers/admin.py), [app/api/routers/chat.py](../../app/api/routers/chat.py), [app/core/config.py](../../app/core/config.py), [app/services/llm/base.py](../../app/services/llm/base.py), [app/services/llm/citations.py](../../app/services/llm/citations.py), [app/services/llm/engines.py](../../app/services/llm/engines.py).
 
@@ -3683,13 +4046,13 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 **Lauf:** 27 bestanden.
 
-**Geprüftes Verhalten:** Sidebar/Bookmark-Suche/Modellpicker, öffentliche Navigation und Provider-Surfaces, Mindestmodellauswahl, Demo ohne Usage-Signale, responsive Composer-/Reading-Chrome-Regeln. Settings-Tabs und Memory zuerst, Lazy-Load, explizites Remember/Correct/Ask-about-this, Logout-Abbruch/Secret-Cleanup und Watch-Session-Fencing. Aktualisierung 02.10.2026: Memory-Binding, gemeinsames Tokenkonto und aktuelle Dashboard-/Settingsverträge.
+**Geprüftes Verhalten:** Sidebar/Bookmarksuche/Modellpicker, öffentliche Navigation und Providerflächen, Mindestmodellauswahl, Demo ohne Usage-Signale sowie responsive Composer-/Leseregeln. Settings-Tabs, Memory zuerst, Lazy-Load, explizites Remember/Correct/Ask-about-this, Logout-Abbruch/Secret-Cleanup und Watch-Session-Fencing. Gemeinsames Tokenkonto und heutige Dashboardverträge. Das Autosize-Modul wird vor app-init geladen; App.initComposerAutosize und der öffentliche Resize-Trigger bleiben korrekt verbunden.
 
-**Grenzen und Doubles:** 27 Tests prüfen Text/CSS/DOM-Strukturen im Source, keine tatsächlichen Klicks, Layouts oder Race-Ausführung.
+**Grenzen und Doubles:** Text-/CSS-/DOM-Strukturen im Source; tatsächliche Klicks, Geometrie und Raceausführung werden in eigenen DOM-/Chromiumfällen geprüft.
 
-**Prüfauftrag für den Folgeaudit:** Jede kritische Nutzeraktion gegen ausführbare JS-/Browserdateien abgleichen; harte Pixel-/Copy-Verträge auf unnötige Fragilität prüfen.
+**Prüfauftrag für den Folgeaudit:** Die benannten Betriebs- und Testgrenzen bei künftigen Änderungen erneut prüfen; konkrete Paketnachweise stehen im Produktabgleich.
 
-**Direkte Codeverweise:** [static/app-ui.js](../../static/app-ui.js), [static/css/components-input.css](../../static/css/components-input.css), [static/css/components-memory-edit.css](../../static/css/components-memory-edit.css), [static/css/components-misc.css](../../static/css/components-misc.css), [static/css/components-modals.css](../../static/css/components-modals.css), [static/css/components-watch.css](../../static/css/components-watch.css), [static/css/landing.css](../../static/css/landing.css), [static/css/layout.css](../../static/css/layout.css), [static/css/model-pulse.css](../../static/css/model-pulse.css), [static/css/shell.css](../../static/css/shell.css), [static/demo.js](../../static/demo.js), [static/firebase.js](../../static/firebase.js), [static/js/agent-chat.js](../../static/js/agent-chat.js), [static/js/app-init.js](../../static/js/app-init.js), [static/js/composer-quote.js](../../static/js/composer-quote.js), [static/js/memory-edit.js](../../static/js/memory-edit.js), [static/js/model-picker.js](../../static/js/model-picker.js), [static/js/model-pulse.js](../../static/js/model-pulse.js), [static/js/query-send.js](../../static/js/query-send.js), [static/js/user-memory.js](../../static/js/user-memory.js), [static/js/watch-state.js](../../static/js/watch-state.js), [static/js/watch.js](../../static/js/watch.js), [templates/about.html](../../templates/about.html), [templates/ai-model-comparison.html](../../templates/ai-model-comparison.html), [templates/consensus-engine.html](../../templates/consensus-engine.html), [templates/index.html](../../templates/index.html), [templates/landing.html](../../templates/landing.html), [templates/model-pulse.html](../../templates/model-pulse.html), [templates/partials/public_footer.html](../../templates/partials/public_footer.html), [templates/partials/public_nav.html](../../templates/partials/public_nav.html), [templates/share.html](../../templates/share.html).
+**Direkte Codeverweise:** [static/app-ui.js](../../static/app-ui.js), [static/css/components-input.css](../../static/css/components-input.css), [static/css/components-memory-edit.css](../../static/css/components-memory-edit.css), [static/css/components-misc.css](../../static/css/components-misc.css), [static/css/components-modals.css](../../static/css/components-modals.css), [static/css/components-watch.css](../../static/css/components-watch.css), [static/css/landing.css](../../static/css/landing.css), [static/css/layout.css](../../static/css/layout.css), [static/css/model-pulse.css](../../static/css/model-pulse.css), [static/css/shell.css](../../static/css/shell.css), [static/demo.js](../../static/demo.js), [static/firebase.js](../../static/firebase.js), [static/js/agent-chat.js](../../static/js/agent-chat.js), [static/js/app-init.js](../../static/js/app-init.js), [static/js/composer-autosize.js](../../static/js/composer-autosize.js), [static/js/composer-quote.js](../../static/js/composer-quote.js), [static/js/memory-edit.js](../../static/js/memory-edit.js), [static/js/model-picker.js](../../static/js/model-picker.js), [static/js/model-pulse.js](../../static/js/model-pulse.js), [static/js/query-send.js](../../static/js/query-send.js), [static/js/user-memory.js](../../static/js/user-memory.js), [static/js/watch-state.js](../../static/js/watch-state.js), [static/js/watch.js](../../static/js/watch.js), [templates/about.html](../../templates/about.html), [templates/ai-model-comparison.html](../../templates/ai-model-comparison.html), [templates/consensus-engine.html](../../templates/consensus-engine.html), [templates/index.html](../../templates/index.html), [templates/landing.html](../../templates/landing.html), [templates/model-pulse.html](../../templates/model-pulse.html), [templates/partials/public_footer.html](../../templates/partials/public_footer.html), [templates/partials/public_nav.html](../../templates/partials/public_nav.html), [templates/share.html](../../templates/share.html).
 
 **Direkte Testhelfer:** [tests/frontend_order.py](../../tests/frontend_order.py).
 
@@ -3711,18 +4074,46 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 - [test_light_input_is_white_and_account_popup_uses_opaque_surfaces](../../tests/test_navigation_settings_ui.py#L257) (Zeile 257)
 - [test_chat_textarea_does_not_keep_the_generic_inset_frame](../../tests/test_navigation_settings_ui.py#L272) (Zeile 272)
 - [test_chat_textarea_grows_until_responsive_height_limit](../../tests/test_navigation_settings_ui.py#L280) (Zeile 280)
-- [test_hero_greeting_requires_agent_mode_and_available_space](../../tests/test_navigation_settings_ui.py#L296) (Zeile 296)
-- [test_settings_are_grouped_without_changing_control_ids](../../tests/test_navigation_settings_ui.py#L312) (Zeile 312)
-- [test_every_settings_category_is_a_tab_panel_with_a_nav_item](../../tests/test_navigation_settings_ui.py#L338) (Zeile 338)
-- [test_settings_tabs_read_as_navigation_not_as_buttons](../../tests/test_navigation_settings_ui.py#L367) (Zeile 367)
-- [test_settings_visibility_is_owned_by_the_tab_controller](../../tests/test_navigation_settings_ui.py#L393) (Zeile 393)
-- [test_memory_is_the_first_settings_category](../../tests/test_navigation_settings_ui.py#L408) (Zeile 408)
-- [test_the_memory_profile_is_only_fetched_when_the_settings_open](../../tests/test_navigation_settings_ui.py#L470) (Zeile 470)
-- [test_memory_selection_has_explicit_add_and_correct_flows](../../tests/test_navigation_settings_ui.py#L488) (Zeile 488)
-- [test_selecting_answer_text_offers_asking_about_it](../../tests/test_navigation_settings_ui.py#L512) (Zeile 512)
-- [test_logout_clears_the_loaded_run_and_aborts_active_streams](../../tests/test_navigation_settings_ui.py#L544) (Zeile 544)
-- [test_watch_change_surfaces_use_tint_without_a_left_rail](../../tests/test_navigation_settings_ui.py#L585) (Zeile 585)
-- [test_watch_requests_cannot_repopulate_account_state_after_logout](../../tests/test_navigation_settings_ui.py#L599) (Zeile 599)
+- [test_hero_greeting_requires_agent_mode_and_available_space](../../tests/test_navigation_settings_ui.py#L298) (Zeile 298)
+- [test_settings_are_grouped_without_changing_control_ids](../../tests/test_navigation_settings_ui.py#L314) (Zeile 314)
+- [test_every_settings_category_is_a_tab_panel_with_a_nav_item](../../tests/test_navigation_settings_ui.py#L340) (Zeile 340)
+- [test_settings_tabs_read_as_navigation_not_as_buttons](../../tests/test_navigation_settings_ui.py#L369) (Zeile 369)
+- [test_settings_visibility_is_owned_by_the_tab_controller](../../tests/test_navigation_settings_ui.py#L395) (Zeile 395)
+- [test_memory_is_the_first_settings_category](../../tests/test_navigation_settings_ui.py#L410) (Zeile 410)
+- [test_the_memory_profile_is_only_fetched_when_the_settings_open](../../tests/test_navigation_settings_ui.py#L472) (Zeile 472)
+- [test_memory_selection_has_explicit_add_and_correct_flows](../../tests/test_navigation_settings_ui.py#L490) (Zeile 490)
+- [test_selecting_answer_text_offers_asking_about_it](../../tests/test_navigation_settings_ui.py#L514) (Zeile 514)
+- [test_logout_clears_the_loaded_run_and_aborts_active_streams](../../tests/test_navigation_settings_ui.py#L546) (Zeile 546)
+- [test_watch_change_surfaces_use_tint_without_a_left_rail](../../tests/test_navigation_settings_ui.py#L587) (Zeile 587)
+- [test_watch_requests_cannot_repopulate_account_state_after_logout](../../tests/test_navigation_settings_ui.py#L601) (Zeile 601)
+
+</details>
+
+<a id="test-og-image-py"></a>
+
+## test_og_image.py
+
+**Quelle:** [tests/test_og_image.py](../../tests/test_og_image.py) · **Bereiche:** Shares, Frontend.
+
+**Ebene:** Echter Pillowrenderer und kontrollierter Imagecache.
+
+**Lauf:** 4 bestanden.
+
+**Geprüftes Verhalten:** Dekodierbare Karte mit mehreren gezeichneten Bildregionen, Fragepixeländerung, Score, Modelle/Konflikte und unscored. Weißes gültiges PNG wird erkannt. Alle sichtbaren Inputs/Historienwerte beeinflussen Cache, Renderfehler kann erneut versucht werden.
+
+**Grenzen und Doubles:** Keine pixelgenauen plattformabhängigen Hashes; Route bietet weiterhin nur neuesten öffentlichen Stand, keine neue historische Auswahl.
+
+**Prüfauftrag für den Folgeaudit:** Die benannten Betriebs- und Testgrenzen bei künftigen Änderungen erneut prüfen; konkrete Paketnachweise stehen im Produktabgleich.
+
+**Direkte Codeverweise:** [app/services/og_image.py](../../app/services/og_image.py).
+
+<details>
+<summary>4 Testdefinitionen und ihre Quellstellen</summary>
+
+- [test_renderer_draws_question_score_and_model_facts](../../tests/test_og_image.py#L31) (Zeile 31)
+- [test_unscored_card_keeps_conflicts_without_inventing_agreement](../../tests/test_og_image.py#L58) (Zeile 58)
+- [test_cache_tracks_all_rendered_content](../../tests/test_og_image.py#L72) (Zeile 72)
+- [test_render_failure_is_safe_and_not_cached](../../tests/test_og_image.py#L89) (Zeile 89)
 
 </details>
 
@@ -3846,7 +4237,7 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 **Prüfauftrag für den Folgeaudit:** Mehrprozess-Budgets, globale Cachegrenzen und tatsächliche Worker-/Transportabbrüche abgleichen.
 
-**Direkte Codeverweise:** [app/api/routers/chat.py](../../app/api/routers/chat.py), [app/api/routers/pages.py](../../app/api/routers/pages.py), [app/api/routers/topics.py](../../app/api/routers/topics.py), [app/core/observability.py](../../app/core/observability.py), [app/core/rate_limit.py](../../app/core/rate_limit.py), [app/services/favicons.py](../../app/services/favicons.py), [app/services/follow_challenges.py](../../app/services/follow_challenges.py), [app/services/llm/consensus_engine.py](../../app/services/llm/consensus_engine.py), [app/services/llm/engines.py](../../app/services/llm/engines.py), [app/services/llm/provider_runtime.py](../../app/services/llm/provider_runtime.py), [app/services/llm/provider_transport.py](../../app/services/llm/provider_transport.py), [app/services/persistence_guard.py](../../app/services/persistence_guard.py), [app/services/watch_brief.py](../../app/services/watch_brief.py).
+**Direkte Codeverweise:** [app/api/routers/chat.py](../../app/api/routers/chat.py), [app/api/routers/pages.py](../../app/api/routers/pages.py), [app/api/routers/topics.py](../../app/api/routers/topics.py), [app/core/observability.py](../../app/core/observability.py), [app/core/rate_limit.py](../../app/core/rate_limit.py), [app/services/favicons.py](../../app/services/favicons.py), [app/services/follow_challenges.py](../../app/services/follow_challenges.py), [app/services/llm/consensus_engine.py](../../app/services/llm/consensus_engine.py), [app/services/llm/engines.py](../../app/services/llm/engines.py), [app/services/llm/provider_runtime.py](../../app/services/llm/provider_runtime.py), [app/services/llm/provider_transport.py](../../app/services/llm/provider_transport.py), [app/services/persistence_guard.py](../../app/services/persistence_guard.py), [app/services/watch_brief.py](../../app/services/watch_brief.py), [firebase.json](../../firebase.json), [firestore.indexes.json](../../firestore.indexes.json).
 
 <details>
 <summary>26 Testdefinitionen und ihre Quellstellen</summary>
@@ -3884,19 +4275,19 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 ## test_phase6_architecture.py
 
-**Quelle:** [tests/test_phase6_architecture.py](../../tests/test_phase6_architecture.py) · **Bereiche:** Architektur, Frontend, Konsens und Unterschiede, Sicherheit.
+**Quelle:** [tests/test_phase6_architecture.py](../../tests/test_phase6_architecture.py) · **Bereiche:** Betrieb, Frontend-Build.
 
-**Ebene:** Gemischt: Pipeline-/CSP-Runtime und Quelltextarchitektur.
+**Ebene:** Statische Architektur-, Routing- und Assetverträge.
 
 **Lauf:** 8 bestanden.
 
-**Geprüftes Verhalten:** Validierte öffentliche Origin; neutrale Pipeline führt injizierten Fan-out/Synthese/Analyse aus und wählt ersten erfolgreichen Provider. Source-Verträge erzwingen Delegation/Frontend-State-Owner, externe Admin-Skripte, gemeinsame Visuals und entfernte alte DOM-IDs. Middleware prüft striktes Script-CSP für App/Admin. Der aktuelle Diff passt Fixtures, Payloads oder Bezeichnungen an; die unten neu extrahierten Definitionen und Assertionstellen sind maßgeblich.
+**Geprüftes Verhalten:** Modulgrenzen, Endpointregistrierung, Template-/Skriptstruktur und versioniertes Assetformat. Kein fest verdrahteter alter Cache-Key; Resilienzsuite prüft Aktualität/Konsistenz gegen Git separat.
 
-**Grenzen und Doubles:** Pipelinefunktionen injiziert; Architektur-Scans sind Syntaxmuster. CSP-Header alleine beweisen keinen XSS-Schutz im Browser.
+**Grenzen und Doubles:** Quelltextverträge beweisen keine tatsächliche Ausführung aller Routen oder Bundles.
 
-**Prüfauftrag für den Folgeaudit:** Tatsächliche Frontend-State-Schreibverstöße und CSP-Verhalten der gebauten App abgleichen.
+**Prüfauftrag für den Folgeaudit:** Die benannten Betriebs- und Testgrenzen bei künftigen Änderungen erneut prüfen; konkrete Paketnachweise stehen im Produktabgleich.
 
-**Direkte Codeverweise:** [app/api/routers/chat.py](../../app/api/routers/chat.py), [app/core/security.py](../../app/core/security.py), [app/core/site.py](../../app/core/site.py), [app/services/api_consensus_runner.py](../../app/services/api_consensus_runner.py), [app/services/consensus_pipeline.py](../../app/services/consensus_pipeline.py), [app/services/llm/consensus_engine.py](../../app/services/llm/consensus_engine.py), [app/services/topic_pipeline.py](../../app/services/topic_pipeline.py), [app/services/topic_runner.py](../../app/services/topic_runner.py), [app/services/watch_scheduler.py](../../app/services/watch_scheduler.py), [static/css/admin-benchmark.css](../../static/css/admin-benchmark.css), [static/css/components-consensus-insights.css](../../static/css/components-consensus-insights.css), [static/css/components-consensus-visuals.css](../../static/css/components-consensus-visuals.css), [static/css/landing.css](../../static/css/landing.css), [static/js/admin-benchmark.js](../../static/js/admin-benchmark.js), [static/js/admin-config.js](../../static/js/admin-config.js), [static/js/admin.js](../../static/js/admin.js), [static/js/app-state.js](../../static/js/app-state.js), [templates/admin.html](../../templates/admin.html), [templates/admin_benchmark.html](../../templates/admin_benchmark.html), [templates/index.html](../../templates/index.html), [templates/partials/admin_prompt_config.html](../../templates/partials/admin_prompt_config.html).
+**Direkte Codeverweise:** [app/api/routers/chat.py](../../app/api/routers/chat.py), [app/core/security.py](../../app/core/security.py), [app/core/site.py](../../app/core/site.py), [app/services/api_consensus_runner.py](../../app/services/api_consensus_runner.py), [app/services/consensus_pipeline.py](../../app/services/consensus_pipeline.py), [app/services/llm/consensus_engine.py](../../app/services/llm/consensus_engine.py), [app/services/topic_pipeline.py](../../app/services/topic_pipeline.py), [app/services/topic_runner.py](../../app/services/topic_runner.py), [app/services/watch_scheduler.py](../../app/services/watch_scheduler.py), [static/css/components-consensus-insights.css](../../static/css/components-consensus-insights.css), [static/css/components-consensus-visuals.css](../../static/css/components-consensus-visuals.css), [static/css/landing.css](../../static/css/landing.css), [static/js/admin-benchmark.js](../../static/js/admin-benchmark.js), [static/js/admin-config.js](../../static/js/admin-config.js), [static/js/admin.js](../../static/js/admin.js), [static/js/app-state.js](../../static/js/app-state.js), [templates/admin.html](../../templates/admin.html), [templates/admin_benchmark.html](../../templates/admin_benchmark.html), [templates/index.html](../../templates/index.html), [templates/partials/admin_prompt_config.html](../../templates/partials/admin_prompt_config.html).
 
 **Direkte Testhelfer:** [tests/frontend_order.py](../../tests/frontend_order.py).
 
@@ -4303,19 +4694,17 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 ## test_publisher_standalone.py
 
-**Quelle:** [tests/test_publisher_standalone.py](../../tests/test_publisher_standalone.py) · **Bereiche:** Publisher, Testinfrastruktur.
+**Quelle:** [tests/test_publisher_standalone.py](../../tests/test_publisher_standalone.py) · **Bereiche:** Publisher, Betrieb.
 
-**Ebene:** Echte Python-Subprozesse ohne Site-Packages mit HTTP-Doubles.
+**Ebene:** Isolierter Python-Subprozess ohne optionale Pakete oder externe Services.
 
-**Lauf:** 2 bestanden, 1 fehlgeschlagen.
+**Lauf:** 3 bestanden.
 
-- `test_scheduled_flow_without_packages_or_external_services`: TypeError: unsupported operand type(s) for +: 'NoneType' and 'str'
+**Geprüftes Verhalten:** Scheduled Publisher läuft mit kontrollierten Diensten und unverändertem fachlichem Ergebnis auch unter Windows; explizites UTF-8 verhindert fehlerhafte Ergebnisdekodierung im -E/-S-Prozess.
 
-**Geprüftes Verhalten:** CLI als relativer/absoluter Pfad und Modul erreicht Konfigvalidierung ohne Backendpakete. Eingebettete Skripte prüfen Modell-/Keynormalisierung, OpenRouter-Header/Search/Reasoning/ZDR und direkten Question-Bypass. Echter __main__ durchläuft publish/skip/disabled, HTTP-Serialisierung, Idempotency-Key, Watch/Index und Summarydatei.
+**Grenzen und Doubles:** Provider/DB kontrolliert; kein geplanter Produktivlauf.
 
-**Grenzen und Doubles:** Socket.connect explizit verboten, urlopen/http_json ersetzt. Interne Schleifen/subTests expandieren nicht zu zusätzlichen Pytestfällen; kein veröffentlichter Share.
-
-**Prüfauftrag für den Folgeaudit:** Workflow-Umgebung und Fehler-/Pollingvarianten mit Publish-Script-/API-Dateien abgleichen.
+**Prüfauftrag für den Folgeaudit:** Die benannten Betriebs- und Testgrenzen bei künftigen Änderungen erneut prüfen; konkrete Paketnachweise stehen im Produktabgleich.
 
 **Direkte Codeverweise:** [scripts/publish_consensus.py](../../scripts/publish_consensus.py).
 
@@ -4423,27 +4812,32 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 ## test_request_body_limits.py
 
-**Quelle:** [tests/test_request_body_limits.py](../../tests/test_request_body_limits.py) · **Bereiche:** Sicherheit, Streaming und Wiederherstellung.
+**Quelle:** [tests/test_request_body_limits.py](../../tests/test_request_body_limits.py) · **Bereiche:** Betrieb, Sicherheit.
 
-**Ebene:** ASGI-Middleware mit kontrollierten Receive-/Send-Funktionen.
+**Ebene:** Registrierte Bodylimit-Middleware mit ASGI-Ereignissen.
 
-**Lauf:** 4 bestanden.
+**Lauf:** 22 bestanden.
 
-**Geprüftes Verhalten:** Zu große deklarierte und chunked Requests werden mit 413 vor der inneren App abgewiesen; exakt erlaubte Bytes werden einmal gesammelt wiedergegeben; ein verzögertes StreamingResponse liefert sein finales SSE-Ereignis ohne künstlichen Disconnect.
+**Geprüftes Verhalten:** Deklarierte und tatsächliche Bodygrößen werden begrenzt, gültige Größen akzeptiert. Früher Disconnect wird nicht als vollständiger Request weitergereicht, auch wenn das Präfix gültiges JSON enthält; kein unbegrenztes Lesen.
 
-**Grenzen und Doubles:** Direkter ASGI-Aufruf ohne echten HTTP-Server/Proxy. Die gesammelte received-Liste dokumentiert die innere App; nicht pauschal mit sämtlichen Transport-Reads gleichsetzen.
+**Grenzen und Doubles:** Lokaler ASGI-Transport; reale Socketgrenzen werden separat geprüft.
 
-**Prüfauftrag für den Folgeaudit:** Fehlende/ungültige Content-Length, Clientabbruch während Upload und reale Proxy-/Servergrenzen gegen weitere Tests abgleichen.
+**Prüfauftrag für den Folgeaudit:** Die benannten Betriebs- und Testgrenzen bei künftigen Änderungen erneut prüfen; konkrete Paketnachweise stehen im Produktabgleich.
 
 **Direkte Codeverweise:** [app/core/request_limits.py](../../app/core/request_limits.py).
 
 <details>
-<summary>4 Testdefinitionen und ihre Quellstellen</summary>
+<summary>9 Testdefinitionen und ihre Quellstellen</summary>
 
-- [test_declared_oversized_body_is_rejected_without_reading_or_parsing](../../tests/test_request_body_limits.py#L39) (Zeile 39)
-- [test_chunked_body_is_counted_across_receive_messages](../../tests/test_request_body_limits.py#L49) (Zeile 49)
-- [test_exact_limit_body_is_replayed_once_to_the_application](../../tests/test_request_body_limits.py#L61) (Zeile 61)
-- [test_replayed_body_does_not_synthesize_disconnect_for_delayed_stream](../../tests/test_request_body_limits.py#L75) (Zeile 75)
+- [test_declared_oversized_body_is_rejected_without_reading_or_parsing](../../tests/test_request_body_limits.py#L41) (Zeile 41)
+- [test_chunked_body_is_counted_across_receive_messages](../../tests/test_request_body_limits.py#L51) (Zeile 51)
+- [test_exact_limit_body_is_replayed_once_to_the_application](../../tests/test_request_body_limits.py#L63) (Zeile 63)
+- [test_invalid_or_oversized_length_never_reaches_handler](../../tests/test_request_body_limits.py#L78) (Zeile 78)
+- [test_request_limit_configuration_boundaries](../../tests/test_request_body_limits.py#L86) (Zeile 86)
+- [test_invalid_configuration_fails_before_serving](../../tests/test_request_body_limits.py#L96) (Zeile 96)
+- [test_early_disconnect_does_not_replay_partial_body_as_complete](../../tests/test_request_body_limits.py#L103) (Zeile 103)
+- [test_non_http_scope_passes_through_without_reading_body](../../tests/test_request_body_limits.py#L109) (Zeile 109)
+- [test_replayed_body_does_not_synthesize_disconnect_for_delayed_stream](../../tests/test_request_body_limits.py#L122) (Zeile 122)
 
 </details>
 
@@ -4463,7 +4857,7 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 **Prüfauftrag für den Folgeaudit:** In-flight Bookmarkwechsel/Logout mit Frontendtests sowie konkurrierende Persistenz abgleichen.
 
-**Direkte Codeverweise:** [app/api/routers/bookmarks.py](../../app/api/routers/bookmarks.py), [app/api/routers/chat.py](../../app/api/routers/chat.py), [app/core/config.py](../../app/core/config.py), [app/core/rate_limit.py](../../app/core/rate_limit.py), [app/services/agent_budget_config.py](../../app/services/agent_budget_config.py), [app/services/agent_quota.py](../../app/services/agent_quota.py), [app/services/llm/resolve_engine.py](../../app/services/llm/resolve_engine.py), [app/services/usage_repository.py](../../app/services/usage_repository.py).
+**Direkte Codeverweise:** [app/api/routers/bookmarks.py](../../app/api/routers/bookmarks.py), [app/api/routers/chat.py](../../app/api/routers/chat.py), [app/core/config.py](../../app/core/config.py), [app/core/rate_limit.py](../../app/core/rate_limit.py), [app/services/agent_budget_config.py](../../app/services/agent_budget_config.py), [app/services/agent_quota.py](../../app/services/agent_quota.py), [app/services/llm/resolve_engine.py](../../app/services/llm/resolve_engine.py), [app/services/usage_repository.py](../../app/services/usage_repository.py), [main.py](../../main.py).
 
 **Direkte Testhelfer:** [tests/usage_test_support.py](../../tests/usage_test_support.py).
 
@@ -4555,7 +4949,7 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 **Prüfauftrag für den Folgeaudit:** Weitere Router mit blockierenden SDK-Aufrufen und tatsächliche Belastung des Threadpools prüfen.
 
-**Direkte Codeverweise:** [app/api/routers/chat.py](../../app/api/routers/chat.py).
+**Direkte Codeverweise:** [app/api/routers/chat.py](../../app/api/routers/chat.py), [main.py](../../main.py).
 
 <details>
 <summary>2 Testdefinitionen und ihre Quellstellen</summary>
@@ -4670,7 +5064,7 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 **Prüfauftrag für den Folgeaudit:** Weitere Fehler- und Loggingpfade für sensible Eingaben sowie positive Schlüsselprüfung separat abgleichen.
 
-**Direkte Codeverweise:** [app/api/routers/chat.py](../../app/api/routers/chat.py), [app/api/routers/pages.py](../../app/api/routers/pages.py), [app/core/rate_limit.py](../../app/core/rate_limit.py).
+**Direkte Codeverweise:** [app/api/routers/chat.py](../../app/api/routers/chat.py), [app/api/routers/pages.py](../../app/api/routers/pages.py), [app/core/rate_limit.py](../../app/core/rate_limit.py), [main.py](../../main.py).
 
 <details>
 <summary>5 Testdefinitionen und ihre Quellstellen</summary>
@@ -4736,7 +5130,7 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 **Prüfauftrag für den Folgeaudit:** Datenlücken/Quota-/APIänderungen und gerenderte Admin-Aktionen mit JS-Alerts/Weeklyreview abgleichen.
 
-**Direkte Codeverweise:** [app/api/routers/admin.py](../../app/api/routers/admin.py), [app/services/google_search_console.py](../../app/services/google_search_console.py), [app/services/seo_data.py](../../app/services/seo_data.py), [app/services/seo_dossier.py](../../app/services/seo_dossier.py), [app/services/seo_recommendation.py](../../app/services/seo_recommendation.py), [app/services/seo_repository.py](../../app/services/seo_repository.py), [app/services/seo_weekly_review.py](../../app/services/seo_weekly_review.py).
+**Direkte Codeverweise:** [app/api/routers/admin.py](../../app/api/routers/admin.py), [app/services/google_search_console.py](../../app/services/google_search_console.py), [app/services/seo_data.py](../../app/services/seo_data.py), [app/services/seo_dossier.py](../../app/services/seo_dossier.py), [app/services/seo_recommendation.py](../../app/services/seo_recommendation.py), [app/services/seo_repository.py](../../app/services/seo_repository.py), [app/services/seo_weekly_review.py](../../app/services/seo_weekly_review.py), [main.py](../../main.py).
 
 <details>
 <summary>39 Testdefinitionen und ihre Quellstellen</summary>
@@ -4810,6 +5204,33 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 - [SeoEntityTests::test_same_as_holds_only_absolute_urls](../../tests/test_seo_entity.py#L74) (Zeile 74)
 - [SeoEntityTests::test_founder_stays_out_of_structured_data](../../tests/test_seo_entity.py#L81) (Zeile 81)
 - [SeoEntityTests::test_page_graph_embeds_the_entity_next_to_the_page_node](../../tests/test_seo_entity.py#L86) (Zeile 86)
+
+</details>
+
+<a id="test-seo-repository-py"></a>
+
+## test_seo_repository.py
+
+**Quelle:** [tests/test_seo_repository.py](../../tests/test_seo_repository.py) · **Bereiche:** SEO.
+
+**Ebene:** Echter Repositoryadapter mit kontrollierten SDK-Snapshots.
+
+**Lauf:** 3 bestanden.
+
+**Geprüftes Verhalten:** 615 Referenzen werden in 400/215 gelesen; ungeordnete/fehlende Snapshots und falsche Payloadidentität werden anhand des Dokumentpfads zugeordnet. Latest-/Judgmentquery und Datumsformen begrenzt, fehlende Messung bleibt fehlend.
+
+**Grenzen und Doubles:** SDK-Double; ergänzende native BatchGet-/Queryfälle separat.
+
+**Prüfauftrag für den Folgeaudit:** Die benannten Betriebs- und Testgrenzen bei künftigen Änderungen erneut prüfen; konkrete Paketnachweise stehen im Produktabgleich.
+
+**Direkte Codeverweise:** [app/services/seo_repository.py](../../app/services/seo_repository.py).
+
+<details>
+<summary>3 Testdefinitionen und ihre Quellstellen</summary>
+
+- [test_batch_get_binds_document_identity_and_dates_not_position_or_payload](../../tests/test_seo_repository.py#L9) (Zeile 9)
+- [test_latest_and_judgment_query_shapes_bound_reads_and_return_document_ids](../../tests/test_seo_repository.py#L36) (Zeile 36)
+- [test_fallback_dates_are_ordered_with_naive_aware_and_missing_values](../../tests/test_seo_repository.py#L84) (Zeile 84)
 
 </details>
 
@@ -5034,6 +5455,34 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 - [ShareSeoEnhancementTests::test_follow_form_only_on_active_public_watch_pages](../../tests/test_share_feature.py#L2581) (Zeile 2581)
 - [ShareSeoEnhancementTests::test_og_card_route_and_meta](../../tests/test_share_feature.py#L2597) (Zeile 2597)
 - [ShareSeoEnhancementTests::test_og_card_404_for_private_pages](../../tests/test_share_feature.py#L2611) (Zeile 2611)
+
+</details>
+
+<a id="test-share-http-contract-py"></a>
+
+## test_share_http_contract.py
+
+**Quelle:** [tests/test_share_http_contract.py](../../tests/test_share_http_contract.py) · **Bereiche:** Shares.
+
+**Ebene:** Registrierte main.app mit echten Middleware-, Auth-/Owner- und Serviceguards.
+
+**Lauf:** 7 bestanden.
+
+**Geprüftes Verhalten:** App-Share-POST nutzt autoritatives Pendingergebnis statt gefälschter Inhalte/Owner/Visibility, prüft Quote/Ablauf und Transaktionsfehler, bleibt idempotent. Antwort und DB stimmen überein. OG-Route nutzt gespeicherte Werte; private/widerrufene Shares bleiben verborgen.
+
+**Grenzen und Doubles:** Firebase-SDK-Authentifizierung und DB ersetzt; externe Modell-, Mail- und Telegramgrenzen kontrolliert. Kein Live-OAuth oder produktiver Versand.
+
+**Prüfauftrag für den Folgeaudit:** Die benannten Betriebs- und Testgrenzen bei künftigen Änderungen erneut prüfen; konkrete Paketnachweise stehen im Produktabgleich.
+
+**Direkte Codeverweise:** [app/services/og_image.py](../../app/services/og_image.py), [app/services/share_snapshots.py](../../app/services/share_snapshots.py), [app/services/watch_service.py](../../app/services/watch_service.py).
+
+<details>
+<summary>4 Testdefinitionen und ihre Quellstellen</summary>
+
+- [test_app_share_publishes_authoritative_content_and_retry_does_not_charge_twice](../../tests/test_share_http_contract.py#L36) (Zeile 36)
+- [test_app_share_rejects_unauthorized_or_missing_result](../../tests/test_share_http_contract.py#L73) (Zeile 73)
+- [test_app_share_expiry_quota_and_transaction_failure_never_publish](../../tests/test_share_http_contract.py#L91) (Zeile 91)
+- [test_og_http_route_renders_stored_question_score_and_private_revocation](../../tests/test_share_http_contract.py#L123) (Zeile 123)
 
 </details>
 
@@ -5448,7 +5897,7 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 **Prüfauftrag für den Folgeaudit:** Die benannten Mock-/Integrationsgrenzen am realen Adapter prüfen; Zuordnung und offene Aufgaben stehen in der Produktmatrix.
 
-**Direkte Codeverweise:** [app/core/static_delivery.py](../../app/core/static_delivery.py), [static/js/agent-chat.js](../../static/js/agent-chat.js), [static/style.css](../../static/style.css).
+**Direkte Codeverweise:** [app/core/static_delivery.py](../../app/core/static_delivery.py), [main.py](../../main.py), [static/js/agent-chat.js](../../static/js/agent-chat.js), [static/style.css](../../static/style.css).
 
 <details>
 <summary>8 Testdefinitionen und ihre Quellstellen</summary>
@@ -5645,6 +6094,33 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 - [test_a_mid_sentence_fragment_is_never_the_finding_or_a_supporting_line](../../tests/test_topic_finding.py#L203) (Zeile 203)
 - [test_a_claim_that_held_through_a_fraction_of_the_record_is_not_settled](../../tests/test_topic_finding.py#L218) (Zeile 218)
 - [test_a_statement_that_ends_inside_a_quotation_keeps_one_full_stop](../../tests/test_topic_finding.py#L238) (Zeile 238)
+
+</details>
+
+<a id="test-topic-public-http-py"></a>
+
+## test_topic_public_http.py
+
+**Quelle:** [tests/test_topic_public_http.py](../../tests/test_topic_public_http.py) · **Bereiche:** Topics.
+
+**Ebene:** Registrierte main.app mit echten Middleware-, Auth-/Owner- und Serviceguards.
+
+**Lauf:** 10 bestanden.
+
+**Geprüftes Verhalten:** Hub/Sitemap unterscheiden aktiv, pausiert, noindex, archiviert und unveröffentlicht. Neutraler wiederholter Follow und tatsächlicher erzeugter E-Mail-Link führen durch Confirm/Unsubscribe; ungültige Tokens schreiben nicht, Titel bleibt escaped.
+
+**Grenzen und Doubles:** Firebase-SDK-Authentifizierung und DB ersetzt; externe Modell-, Mail- und Telegramgrenzen kontrolliert. Kein Live-OAuth oder produktiver Versand.
+
+**Prüfauftrag für den Folgeaudit:** Die benannten Betriebs- und Testgrenzen bei künftigen Änderungen erneut prüfen; konkrete Paketnachweise stehen im Produktabgleich.
+
+**Direkte Codeverweise:** [app/services/mailer.py](../../app/services/mailer.py), [app/services/topics.py](../../app/services/topics.py), [app/services/watch_service.py](../../app/services/watch_service.py).
+
+<details>
+<summary>3 Testdefinitionen und ihre Quellstellen</summary>
+
+- [test_hub_and_sitemap_distinguish_noindex_from_archive_or_unpublished](../../tests/test_topic_public_http.py#L34) (Zeile 34)
+- [test_follow_neutral_response_confirmation_escaping_and_unsubscribe](../../tests/test_topic_public_http.py#L64) (Zeile 64)
+- [test_topic_tokens_reject_without_writes](../../tests/test_topic_public_http.py#L109) (Zeile 109)
 
 </details>
 
@@ -5960,18 +6436,18 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 **Ebene:** Evidence-/Probe-/Ledgerdienste mit Fake-DB.
 
-**Lauf:** 12 bestanden.
+**Lauf:** 13 bestanden.
 
-**Geprüftes Verhalten:** Neue Belege müssen neue gültige Quellen nennen; Wiederbewertung und Modellwechsel werden getrennt. Held-Runs widerrufen keine alten Aussagen, Rechecks bestätigen Änderungen, erreichte Ziele geben Slots frei; Probeclaims beachten Tagesbudget/Terminabstand und ziehen nur bei neuen Belegen vor.
+**Geprüftes Verhalten:** Gültige neue Quellen, Wiederbewertung/Modellwechsel, Held-Runs, Rechecks und Zielabschluss. Probeclaims beachten Tagesbudget und Terminabstand; geändertes Ziel oder neuer Claimtoken macht das alte Resultat ohne Writes ungültig.
 
-**Grenzen und Doubles:** Synthetische Quellen und Judgeergebnisse, keine fachliche Bewertung echter Neuigkeiten und kein Emulator-Probeclaim.
+**Grenzen und Doubles:** Synthetische Quellen/Judgeergebnisse; keine fachliche Bewertung echter Neuigkeiten.
 
-**Prüfauftrag für den Folgeaudit:** Die benannten Mock-/Integrationsgrenzen am realen Adapter prüfen; Zuordnung und offene Aufgaben stehen in der Produktmatrix.
+**Prüfauftrag für den Folgeaudit:** Die benannten Betriebs- und Testgrenzen bei künftigen Änderungen erneut prüfen; konkrete Paketnachweise stehen im Produktabgleich.
 
 **Direkte Codeverweise:** [app/services/claim_ledger.py](../../app/services/claim_ledger.py), [app/services/evidence_change.py](../../app/services/evidence_change.py), [app/services/topic_runner.py](../../app/services/topic_runner.py), [app/services/watch_probe.py](../../app/services/watch_probe.py), [app/services/watch_service.py](../../app/services/watch_service.py).
 
 <details>
-<summary>12 Testdefinitionen und ihre Quellstellen</summary>
+<summary>13 Testdefinitionen und ihre Quellstellen</summary>
 
 - [test_new_evidence_must_cite_a_source_the_standing_answer_did_not_have](../../tests/test_watch_evidence_model.py#L31) (Zeile 31)
 - [test_invented_source_ids_are_dropped](../../tests/test_watch_evidence_model.py#L49) (Zeile 49)
@@ -5985,6 +6461,7 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 - [test_probe_claim_advances_first_and_respects_the_daily_cap](../../tests/test_watch_evidence_model.py#L188) (Zeile 188)
 - [test_probe_is_skipped_when_the_full_check_is_close_or_the_watch_is_daily](../../tests/test_watch_evidence_model.py#L199) (Zeile 199)
 - [test_new_evidence_pulls_the_full_check_forward](../../tests/test_watch_evidence_model.py#L208) (Zeile 208)
+- [test_claimed_probe_cannot_record_for_changed_goal_or_superseded_claim](../../tests/test_watch_evidence_model.py#L223) (Zeile 223)
 
 </details>
 
@@ -6169,6 +6646,36 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 </details>
 
+<a id="test-watch-http-contract-py"></a>
+
+## test_watch_http_contract.py
+
+**Quelle:** [tests/test_watch_http_contract.py](../../tests/test_watch_http_contract.py) · **Bereiche:** Watches, Authentifizierung.
+
+**Ebene:** Registrierte main.app mit echten Middleware-, Auth-/Owner- und Serviceguards.
+
+**Lauf:** 13 bestanden.
+
+**Geprüftes Verhalten:** Watch PATCH/DELETE und Telegram Link/Test/Disconnect prüfen Owner, Allowlist, Tarif, Verbindung und Store-/Providerfehler. Gültige, ungültige, abgelaufene und falsche Tokentypen bewirken nur die erlaubte Änderung; Bestätigungs-HTML escaped Nutztext.
+
+**Grenzen und Doubles:** Firebase-SDK-Authentifizierung und DB ersetzt; externe Modell-, Mail- und Telegramgrenzen kontrolliert. Kein Live-OAuth oder produktiver Versand.
+
+**Prüfauftrag für den Folgeaudit:** Die benannten Betriebs- und Testgrenzen bei künftigen Änderungen erneut prüfen; konkrete Paketnachweise stehen im Produktabgleich.
+
+**Direkte Codeverweise:** [app/core/rate_limit.py](../../app/core/rate_limit.py), [app/services/share_snapshots.py](../../app/services/share_snapshots.py), [app/services/telegram_watch.py](../../app/services/telegram_watch.py), [app/services/watch_brief.py](../../app/services/watch_brief.py), [app/services/watch_followers.py](../../app/services/watch_followers.py), [app/services/watch_service.py](../../app/services/watch_service.py).
+
+<details>
+<summary>6 Testdefinitionen und ihre Quellstellen</summary>
+
+- [test_watch_patch_delete_entitlement_owner_and_allowlist](../../tests/test_watch_http_contract.py#L42) (Zeile 42)
+- [test_telegram_link_test_disconnect_are_bound_to_authenticated_owner](../../tests/test_watch_http_contract.py#L71) (Zeile 71)
+- [test_unsubscribe_invalid_expired_and_wrong_type_never_mutate](../../tests/test_watch_http_contract.py#L129) (Zeile 129)
+- [test_watch_and_follower_unsubscribe_change_only_the_bound_resource](../../tests/test_watch_http_contract.py#L157) (Zeile 157)
+- [test_follower_confirmation_escapes_stored_question](../../tests/test_watch_http_contract.py#L183) (Zeile 183)
+- [test_watch_adapters_project_storage_failure_safely](../../tests/test_watch_http_contract.py#L199) (Zeile 199)
+
+</details>
+
 <a id="test-watch-review-regressions-py"></a>
 
 ## test_watch_review_regressions.py
@@ -6233,7 +6740,7 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 **Prüfauftrag für den Folgeaudit:** Tatsächlichen Threadbedarf, Speicher-/CPU-Verhalten und Plattformdefaults unter realistischer Last prüfen.
 
-**Direkte Codeverweise:** [app/core/concurrency.py](../../app/core/concurrency.py).
+**Direkte Codeverweise:** [app/core/concurrency.py](../../app/core/concurrency.py), [main.py](../../main.py).
 
 <details>
 <summary>5 Testdefinitionen und ihre Quellstellen</summary>

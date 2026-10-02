@@ -1,8 +1,8 @@
 # JavaScript-Suite: Abdeckung pro Testdatei
 
-Stand: **2026-10-02**, Quellstand `2860844af9dcba2087551af1697408e87e5fe928`. [Methodik und Gesamtbefund](../test-coverage-map.md).
+Stand: **2026-10-02**, Quellstand `ffaca3df7c8bbb02d850fb8f31d90107f26e9293`. [Methodik und Gesamtbefund](../test-coverage-map.md).
 
-**72 Dateien · 556 statische Testdefinitionen · 664 Runner-Fälle.**
+**77 Dateien · 579 statische Testdefinitionen · 705 Runner-Fälle.**
 
 „Geprüftes Verhalten“ beschreibt die vorhandenen Assertions. Der Laufstatus steht separat: bei Fehlern ist der beschriebene Vertrag nicht als bestanden belegt. Prüfaufträge sind offene Fragen, keine pauschal festgestellten Lücken der gesamten Suite. Aktuelle Befundbewertungen stehen im [Produktabgleich](product/README.md).
 
@@ -12,7 +12,9 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 |---|---:|---:|---|
 | [account-tier-mark.test.mjs](#account-tier-mark-test-mjs) | 5 | 5 | 5 bestanden |
 | [admin-agent-budget.test.mjs](#admin-agent-budget-test-mjs) | 2 | 2 | 2 bestanden |
-| [admin-prompt-config.test.mjs](#admin-prompt-config-test-mjs) | 7 | 10 | 10 bestanden |
+| [admin-api.test.mjs](#admin-api-test-mjs) | 3 | 9 | 9 bestanden |
+| [admin-benchmark.test.mjs](#admin-benchmark-test-mjs) | 4 | 7 | 7 bestanden |
+| [admin-prompt-config.test.mjs](#admin-prompt-config-test-mjs) | 8 | 11 | 11 bestanden |
 | [admin-reasoning-policy.test.mjs](#admin-reasoning-policy-test-mjs) | 2 | 2 | 2 bestanden |
 | [admin-source-model.test.mjs](#admin-source-model-test-mjs) | 5 | 5 | 5 bestanden |
 | [admin-topic-editor.test.mjs](#admin-topic-editor-test-mjs) | 4 | 4 | 4 bestanden |
@@ -26,17 +28,19 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 | [agent-preferences.test.mjs](#agent-preferences-test-mjs) | 2 | 2 | 2 bestanden |
 | [agent-review.test.mjs](#agent-review-test-mjs) | 19 | 23 | 23 bestanden |
 | [agent-workspace.test.mjs](#agent-workspace-test-mjs) | 11 | 11 | 11 bestanden |
+| [analytics-opt-out.test.mjs](#analytics-opt-out-test-mjs) | 2 | 9 | 9 bestanden |
 | [app-state.test.mjs](#app-state-test-mjs) | 8 | 8 | 8 bestanden |
 | [attachment-compression.test.mjs](#attachment-compression-test-mjs) | 5 | 5 | 5 bestanden |
 | [attachment-draft-generation.test.mjs](#attachment-draft-generation-test-mjs) | 5 | 5 | 5 bestanden |
 | [bookmark-attachments.test.mjs](#bookmark-attachments-test-mjs) | 6 | 6 | 6 bestanden |
-| [bookmark-pending-state.test.mjs](#bookmark-pending-state-test-mjs) | 4 | 4 | 4 bestanden |
+| [bookmark-pending-state.test.mjs](#bookmark-pending-state-test-mjs) | 5 | 5 | 5 bestanden |
 | [bookmark-source-check.test.mjs](#bookmark-source-check-test-mjs) | 2 | 2 | 2 bestanden |
 | [bookmark-write-queue.test.mjs](#bookmark-write-queue-test-mjs) | 3 | 3 | 3 bestanden |
-| [chat-scroll.test.mjs](#chat-scroll-test-mjs) | 10 | 12 | 12 bestanden |
+| [chat-scroll.test.mjs](#chat-scroll-test-mjs) | 13 | 16 | 16 bestanden |
 | [claim-coverage-states.test.mjs](#claim-coverage-states-test-mjs) | 9 | 9 | 9 bestanden |
 | [claim-mark-joins.test.mjs](#claim-mark-joins-test-mjs) | 1 | 1 | 1 bestanden |
 | [composer-attachments.test.mjs](#composer-attachments-test-mjs) | 7 | 7 | 7 bestanden |
+| [composer-autosize.test.mjs](#composer-autosize-test-mjs) | 4 | 4 | 4 bestanden |
 | [composer-quote.test.mjs](#composer-quote-test-mjs) | 11 | 11 | 11 bestanden |
 | [consensus-anchor.test.mjs](#consensus-anchor-test-mjs) | 21 | 25 | 25 bestanden |
 | [consensus-coverage-verdict.test.mjs](#consensus-coverage-verdict-test-mjs) | 3 | 3 | 3 bestanden |
@@ -46,7 +50,7 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 | [demo-claim-coverage.test.mjs](#demo-claim-coverage-test-mjs) | 2 | 2 | 2 bestanden |
 | [dompurify-vendor.test.mjs](#dompurify-vendor-test-mjs) | 4 | 26 | 26 bestanden |
 | [error-reporter.test.mjs](#error-reporter-test-mjs) | 13 | 15 | 15 bestanden |
-| [frontend-output.test.mjs](#frontend-output-test-mjs) | 4 | 4 | 4 bestanden |
+| [frontend-output.test.mjs](#frontend-output-test-mjs) | 5 | 5 | 5 bestanden |
 | [judge-stream-events.test.mjs](#judge-stream-events-test-mjs) | 1 | 1 | 1 bestanden |
 | [markdown-remote-media.test.mjs](#markdown-remote-media-test-mjs) | 3 | 3 | 3 bestanden |
 | [markdown-stream-incremental.test.mjs](#markdown-stream-incremental-test-mjs) | 4 | 7 | 7 bestanden |
@@ -76,10 +80,11 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 | [source-verification-watch.test.mjs](#source-verification-watch-test-mjs) | 12 | 13 | 13 bestanden |
 | [source-verification.test.mjs](#source-verification-test-mjs) | 21 | 21 | 21 bestanden |
 | [sse-completion.test.mjs](#sse-completion-test-mjs) | 5 | 11 | 11 bestanden |
-| [stored-turn-markers.test.mjs](#stored-turn-markers-test-mjs) | 7 | 7 | 7 bestanden |
+| [stored-turn-markers.test.mjs](#stored-turn-markers-test-mjs) | 8 | 8 | 8 bestanden |
 | [thread-question-disclosure.test.mjs](#thread-question-disclosure-test-mjs) | 2 | 2 | 2 bestanden |
 | [topic-page.test.mjs](#topic-page-test-mjs) | 5 | 7 | 7 bestanden |
 | [user-memory.test.mjs](#user-memory-test-mjs) | 6 | 6 | 6 bestanden |
+| [vendor-frontend.test.mjs](#vendor-frontend-test-mjs) | 3 | 4 | 4 bestanden |
 | [watch-dashboard-state.test.mjs](#watch-dashboard-state-test-mjs) | 5 | 5 | 5 bestanden |
 | [watch-feature-nudge.test.mjs](#watch-feature-nudge-test-mjs) | 3 | 3 | 3 bestanden |
 
@@ -142,36 +147,92 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 </details>
 
+<a id="admin-api-test-mjs"></a>
+
+## admin-api.test.mjs
+
+**Quelle:** [tests/js/admin-api.test.mjs](../../tests/js/admin-api.test.mjs) · **Bereiche:** Admin, Frontend.
+
+**Ebene:** Originaler Adminclient mit kontrolliertem Fetch.
+
+**Lauf:** 9 bestanden.
+
+**Geprüftes Verhalten:** Beide Fehlerumschläge error/detail erlauben nur lesbare Strings; unbekannte Objekte, Listen und Nicht-JSON fallen auf HTTPstatus zurück. Auth wird gebunden, ausgeloggt kein Request, Schreibfehler kein automatischer Retry.
+
+**Grenzen und Doubles:** Fetch/Auth-Doubles; serverseitiger main-Umschlag separat durch HTTP-Test geprüft.
+
+**Prüfauftrag für den Folgeaudit:** Die benannten Betriebs- und Testgrenzen bei künftigen Änderungen erneut prüfen; konkrete Paketnachweise stehen im Produktabgleich.
+
+**Direkte Codeverweise:** [static/js/admin-api.js](../../static/js/admin-api.js).
+
+<details>
+<summary>3 Testdefinitionen und ihre Quellstellen</summary>
+
+- [unpacks only allowed strings from %j](../../tests/js/admin-api.test.mjs#L8) (Zeile 8)
+- [preserves non-JSON status and never retries a write](../../tests/js/admin-api.test.mjs#L25) (Zeile 25)
+- [does not request when logged out and returns a successful compact response](../../tests/js/admin-api.test.mjs#L32) (Zeile 32)
+
+</details>
+
+<a id="admin-benchmark-test-mjs"></a>
+
+## admin-benchmark.test.mjs
+
+**Quelle:** [tests/js/admin-benchmark.test.mjs](../../tests/js/admin-benchmark.test.mjs) · **Bereiche:** Admin, Benchmark, Frontend.
+
+**Ebene:** Originaler Viewer und Adminclient im jsdom.
+
+**Lauf:** 7 bestanden.
+
+**Geprüftes Verhalten:** Kompakte Reports mit inertem Nutztext und ohne Rohprompts/-antworten. Neue Auswahl verdrängt späten Erfolg/Fehler der alten; 403/404, falsche Run-ID und leere Refreshliste entfernen Staledaten.
+
+**Grenzen und Doubles:** Firebase-/Fetchgrenzen kontrolliert; kein echtes Browserlayout oder serverseitiger Rollenbeweis.
+
+**Prüfauftrag für den Folgeaudit:** Die benannten Betriebs- und Testgrenzen bei künftigen Änderungen erneut prüfen; konkrete Paketnachweise stehen im Produktabgleich.
+
+**Direkte Codeverweise:** [static/js/admin-api.js](../../static/js/admin-api.js), [static/js/admin-benchmark.js](../../static/js/admin-benchmark.js).
+
+<details>
+<summary>4 Testdefinitionen und ihre Quellstellen</summary>
+
+- [renders compact data, safely quotes labels and excludes raw prompts/answers](../../tests/js/admin-benchmark.test.mjs#L25) (Zeile 25)
+- [ignores an older selection response (success=%s)](../../tests/js/admin-benchmark.test.mjs#L41) (Zeile 41)
+- [clears old data for a failed or mismatched selection: %s](../../tests/js/admin-benchmark.test.mjs#L56) (Zeile 56)
+- [invalidates pending detail when refresh finds no runs](../../tests/js/admin-benchmark.test.mjs#L67) (Zeile 67)
+
+</details>
+
 <a id="admin-prompt-config-test-mjs"></a>
 
 ## admin-prompt-config.test.mjs
 
-**Quelle:** [tests/js/admin-prompt-config.test.mjs](../../tests/js/admin-prompt-config.test.mjs) · **Bereiche:** Admin, Prompts.
+**Quelle:** [tests/js/admin-prompt-config.test.mjs](../../tests/js/admin-prompt-config.test.mjs) · **Bereiche:** Admin, Frontend.
 
-**Ebene:** JavaScript-Modultest und ausgeführte Quellcodeausschnitte mit jsdom.
+**Ebene:** Prompteditor im jsdom mit echtem Adminclient.
 
-**Lauf:** 10 bestanden.
+**Lauf:** 11 bestanden.
 
-**Geprüftes Verhalten:** Laden, Bearbeiten, revisionsgebundenes Speichern, Sperre während Requests; Prompttext als Text statt HTML; Standard wiederherstellen als Entwurf; versteckte Legacy-Felder erhalten; Konflikt, Ladefehler, verspätete fremde Antwort und leeres Pflichtfeld. Standard-/Legacy-Nutzerprompts überlassen die Wahl dem Server, individuelle Prompts bleiben gespeichert und erhalten Datum.
+**Geprüftes Verhalten:** Revisionsgebundene Promptkonfiguration, Validierung und sichere Fehlerdarstellung. Echter Client verarbeitet main-error-Umschlag bei409; Konfliktdraft bleibt erhalten und es folgt kein zweiter Write.
 
-**Grenzen und Doubles:** Admin-Modul mit entfernter Export-Syntax und gemocktem Request; persönliche Promptwahl aus Ausschnitten von app-ui.js und query-send.js. Keine vollständige Admin-/Sendekette.
+**Grenzen und Doubles:** Fetch/Auth kontrolliert; keine Firestore- oder Mehrserveraktivierung.
 
-**Prüfauftrag für den Folgeaudit:** Gemeinsamen Vertrag zwischen gespeicherter Konfiguration, Promptauflösung und Provideraufruf abgleichen.
+**Prüfauftrag für den Folgeaudit:** Die benannten Betriebs- und Testgrenzen bei künftigen Änderungen erneut prüfen; konkrete Paketnachweise stehen im Produktabgleich.
 
-**Direkte Codeverweise:** [static/app-ui.js](../../static/app-ui.js), [static/js/admin-prompt-config.js](../../static/js/admin-prompt-config.js), [static/js/query-send.js](../../static/js/query-send.js), [templates/admin.html](../../templates/admin.html), [templates/partials/admin_prompt_config.html](../../templates/partials/admin_prompt_config.html).
+**Direkte Codeverweise:** [static/app-ui.js](../../static/app-ui.js), [static/js/admin-api.js](../../static/js/admin-api.js), [static/js/admin-prompt-config.js](../../static/js/admin-prompt-config.js), [static/js/query-send.js](../../static/js/query-send.js), [templates/admin.html](../../templates/admin.html), [templates/partials/admin_prompt_config.html](../../templates/partials/admin_prompt_config.html).
 
 **Direkte Testhelfer:** [tests/js/helpers/appWindow.mjs](../../tests/js/helpers/appWindow.mjs).
 
 <details>
-<summary>7 Testdefinitionen und ihre Quellstellen</summary>
+<summary>8 Testdefinitionen und ihre Quellstellen</summary>
 
-- [hides retired chat caps while preserving legacy values when saving current settings](../../tests/js/admin-prompt-config.test.mjs#L30) (Zeile 30)
-- [loads, edits, saves exactly one config with its revision, and restores defaults as a draft](../../tests/js/admin-prompt-config.test.mjs#L47) (Zeile 47)
-- [keeps the draft after conflict or failure and allows explicit reload](../../tests/js/admin-prompt-config.test.mjs#L69) (Zeile 69)
-- [does not enable saving after a failed load or apply a stale login response](../../tests/js/admin-prompt-config.test.mjs#L84) (Zeile 84)
-- [opens a collapsed editor when its required prompt is empty](../../tests/js/admin-prompt-config.test.mjs#L100) (Zeile 100)
-- [lets the server choose the central default for %s](../../tests/js/admin-prompt-config.test.mjs#L118) (Zeile 118)
-- [preserves an explicitly customized personal prompt](../../tests/js/admin-prompt-config.test.mjs#L128) (Zeile 128)
+- [shows the real main error envelope while retaining a conflicting draft without a second write](../../tests/js/admin-prompt-config.test.mjs#L31) (Zeile 31)
+- [hides retired chat caps while preserving legacy values when saving current settings](../../tests/js/admin-prompt-config.test.mjs#L47) (Zeile 47)
+- [loads, edits, saves exactly one config with its revision, and restores defaults as a draft](../../tests/js/admin-prompt-config.test.mjs#L64) (Zeile 64)
+- [keeps the draft after conflict or failure and allows explicit reload](../../tests/js/admin-prompt-config.test.mjs#L86) (Zeile 86)
+- [does not enable saving after a failed load or apply a stale login response](../../tests/js/admin-prompt-config.test.mjs#L101) (Zeile 101)
+- [opens a collapsed editor when its required prompt is empty](../../tests/js/admin-prompt-config.test.mjs#L117) (Zeile 117)
+- [lets the server choose the central default for %s](../../tests/js/admin-prompt-config.test.mjs#L135) (Zeile 135)
+- [preserves an explicitly customized personal prompt](../../tests/js/admin-prompt-config.test.mjs#L145) (Zeile 145)
 
 </details>
 
@@ -672,6 +733,32 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 </details>
 
+<a id="analytics-opt-out-test-mjs"></a>
+
+## analytics-opt-out.test.mjs
+
+**Quelle:** [tests/js/analytics-opt-out.test.mjs](../../tests/js/analytics-opt-out.test.mjs) · **Bereiche:** Analytics, Frontend.
+
+**Ebene:** Originales Skript in frischem jsdom vor instrumentiertem Trackerstart.
+
+**Lauf:** 9 bestanden.
+
+**Geprüftes Verhalten:** notrack=1/0 setzt/löscht das Flag; fehlender, leerer oder anderer Parameter bewahrt vorhandene Werte. setItem-/removeItem-Fehler verhindern Seitenstart nicht; kein erfundener getItem-Zweig.
+
+**Grenzen und Doubles:** Lokaler Storage und Trackerstartmarker; keine echten Analyticsevents.
+
+**Prüfauftrag für den Folgeaudit:** Die benannten Betriebs- und Testgrenzen bei künftigen Änderungen erneut prüfen; konkrete Paketnachweise stehen im Produktabgleich.
+
+**Direkte Codeverweise:** [static/js/analytics-opt-out.js](../../static/js/analytics-opt-out.js).
+
+<details>
+<summary>2 Testdefinitionen und ihre Quellstellen</summary>
+
+- [applies %s to %s before the next script runs](../../tests/js/analytics-opt-out.test.mjs#L9) (Zeile 9)
+- [allows page/tracker initialization when storage write for notrack=%s throws](../../tests/js/analytics-opt-out.test.mjs#L24) (Zeile 24)
+
+</details>
+
 <a id="app-state-test-mjs"></a>
 
 ## app-state.test.mjs
@@ -802,29 +889,30 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 ## bookmark-pending-state.test.mjs
 
-**Quelle:** [tests/js/bookmark-pending-state.test.mjs](../../tests/js/bookmark-pending-state.test.mjs) · **Bereiche:** Bookmarks und Verlauf, Frontend-Zustand.
+**Quelle:** [tests/js/bookmark-pending-state.test.mjs](../../tests/js/bookmark-pending-state.test.mjs) · **Bereiche:** Frontend, Chats.
 
-**Ebene:** Ausgeführte Firebase-Ausschnitte mit Funktions-Doubles/jsdom.
+**Ebene:** Originale Bookmarkhelfer und Markup im jsdom mit kontrolliertem Speichern.
 
-**Lauf:** 4 bestanden.
+**Lauf:** 5 bestanden.
 
-**Geprüftes Verhalten:** Bookmark bleibt bis Laufende und Abschluss aller Writes gesperrt; kein kurzzeitiger Readyzustand zwischen Modellfanout und Autokonsens; vorhandener Bookmark nach Followup ohne neue Speicherung wiederhergestellt; Pendingzeile mit aria-disabled, Spinner und ohne Löschaktion.
+**Geprüftes Verhalten:** Pendingzustand, zugängliche Ladezeile und persistierter Bookmarkstatus. Explizite boolesche Servermetadaten erhalten has_consensus; truthy Strings erzeugen keinen Erfolg, vorhandene vollständige Antwortdaten haben Vorrang vor Metadaten.
 
-**Grenzen und Doubles:** Session- und DOM-Funktionen ausgeschnitten; Auth, Schreiben und Renderübergänge simuliert, keine vollständige Firebase-Modulinitialisierung.
+**Grenzen und Doubles:** Einzelne Quellfunktionen extrahiert, Persistenzdouble; native Browserreise prüft denselben Metadatenvertrag nach echtem Save.
 
-**Prüfauftrag für den Folgeaudit:** Netzwerkfehler und Kontenwechsel zusammen mit realer Schreibqueue prüfen.
+**Prüfauftrag für den Folgeaudit:** Die benannten Betriebs- und Testgrenzen bei künftigen Änderungen erneut prüfen; konkrete Paketnachweise stehen im Produktabgleich.
 
 **Direkte Codeverweise:** [static/firebase.js](../../static/firebase.js).
 
 **Direkte Testhelfer:** [tests/js/helpers/appWindow.mjs](../../tests/js/helpers/appWindow.mjs).
 
 <details>
-<summary>4 Testdefinitionen und ihre Quellstellen</summary>
+<summary>5 Testdefinitionen und ihre Quellstellen</summary>
 
 - [stays disabled until both the run and its persistence write finish](../../tests/js/bookmark-pending-state.test.mjs#L45) (Zeile 45)
 - [does not flash ready between model fan-out and auto-consensus](../../tests/js/bookmark-pending-state.test.mjs#L64) (Zeile 64)
 - [restores an existing conversation bookmark if a follow-up saves nothing](../../tests/js/bookmark-pending-state.test.mjs#L82) (Zeile 82)
-- [renders an inaccessible loading row with a bookmark-frame spinner](../../tests/js/bookmark-pending-state.test.mjs#L95) (Zeile 95)
+- [preserves server metadata and never invents a consensus from truthy strings](../../tests/js/bookmark-pending-state.test.mjs#L95) (Zeile 95)
+- [renders an inaccessible loading row with a bookmark-frame spinner](../../tests/js/bookmark-pending-state.test.mjs#L105) (Zeile 105)
 
 </details>
 
@@ -889,35 +977,38 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 ## chat-scroll.test.mjs
 
-**Quelle:** [tests/js/chat-scroll.test.mjs](../../tests/js/chat-scroll.test.mjs) · **Bereiche:** Scrollen und Navigation, Streaming und Wiederherstellung.
+**Quelle:** [tests/js/chat-scroll.test.mjs](../../tests/js/chat-scroll.test.mjs) · **Bereiche:** Frontend, Chats.
 
-**Ebene:** JavaScript-Modulintegration mit simulierten Scrollmaßen und jsdom.
+**Ebene:** Originale Scrollsteuerung mit kontrollierten DOMmaßen und Frames.
 
-**Lauf:** 12 bestanden.
+**Lauf:** 16 bestanden.
 
-**Geprüftes Verhalten:** Leseposition bei schrumpfender Aktivität erhalten; Follow endet mit Antwort; gespeicherte Agent-/Konsensgespräche mit abbrechbarem Sprung; Agent folgt Wachstum, Konsens bleibt nach einmaligem Sprung stehen. Leserinteraktion, Tastaturrückkehr, Touchgeste, Run-/Ansichts-/Kontenwechsel, Textauswahl/Dialog/Vergleich stoppen Automatik; Reduced Motion und Viewport-/Composeränderungen.
+**Geprüftes Verhalten:** Send-/Latest-Anker, Followmodus, Antwortabschluss, sehr schnelle erste Antwort und Reduced Motion. Ein ausstehender passiver Resizeframe darf nach Abschluss keinen Scrollsprung erzeugen.
 
-**Grenzen und Doubles:** scrollTo, Scrollposition, Geometrie und Frames im Harness simuliert; kein Nachweis nativen Scrollanchorings oder tatsächlicher Mobilgeometrie.
+**Grenzen und Doubles:** DOMgeometrie/Frames simuliert; realer Browser prüft denselben Absatzinhalt nach Markdown-Neurender.
 
-**Prüfauftrag für den Folgeaudit:** Dieselben Verträge mit realen Layoutänderungen, Touch und langen Antworten abgleichen.
+**Prüfauftrag für den Folgeaudit:** Die benannten Betriebs- und Testgrenzen bei künftigen Änderungen erneut prüfen; konkrete Paketnachweise stehen im Produktabgleich.
 
 **Direkte Codeverweise:** [static/js/app-core.js](../../static/js/app-core.js), [static/js/chat-scroll.js](../../static/js/chat-scroll.js).
 
 **Direkte Testhelfer:** [tests/js/helpers/appWindow.mjs](../../tests/js/helpers/appWindow.mjs).
 
 <details>
-<summary>10 Testdefinitionen und ihre Quellstellen</summary>
+<summary>13 Testdefinitionen und ihre Quellstellen</summary>
 
-- [keeps the reading position when offscreen activity shrinks, including native anchoring](../../tests/js/chat-scroll.test.mjs#L36) (Zeile 36)
-- [ends automatic following when the response finishes](../../tests/js/chat-scroll.test.mjs#L58) (Zeile 58)
-- [opens a saved %s conversation with one cancellable smooth jump](../../tests/js/chat-scroll.test.mjs#L67) (Zeile 67)
-- [smoothly reaches the end and follows growing agent output despite a hidden pending bubble](../../tests/js/chat-scroll.test.mjs#L85) (Zeile 85)
-- [keeps consensus still after a single jump, including fast deltas and reduced motion: %s](../../tests/js/chat-scroll.test.mjs#L99) (Zeile 99)
-- [gives the reader control even before the first frame, then offers a keyboard usable return](../../tests/js/chat-scroll.test.mjs#L123) (Zeile 123)
-- [never resumes from layout scrolls and cancels on a different run, saved view or account](../../tests/js/chat-scroll.test.mjs#L142) (Zeile 142)
-- [interrupts a finger gesture and resumes only when swiping back to the end](../../tests/js/chat-scroll.test.mjs#L159) (Zeile 159)
-- [respects reduced motion and viewport/composer changes without scrolling upwards](../../tests/js/chat-scroll.test.mjs#L176) (Zeile 176)
-- [stops for text selection, dialogs and direct comparison](../../tests/js/chat-scroll.test.mjs#L189) (Zeile 189)
+- [keeps the reading position when offscreen activity shrinks, including native anchoring](../../tests/js/chat-scroll.test.mjs#L37) (Zeile 37)
+- [ends automatic following when the response finishes](../../tests/js/chat-scroll.test.mjs#L59) (Zeile 59)
+- [cancels a queued resize-follow frame at completion without moving past the answer](../../tests/js/chat-scroll.test.mjs#L68) (Zeile 68)
+- [still completes an explicit send jump when a very fast answer finishes mid-animation](../../tests/js/chat-scroll.test.mjs#L80) (Zeile 80)
+- [retains a Send that reached the empty shell until the first completed answer exists (reduced=%s)](../../tests/js/chat-scroll.test.mjs#L92) (Zeile 92)
+- [opens a saved %s conversation with one cancellable smooth jump](../../tests/js/chat-scroll.test.mjs#L103) (Zeile 103)
+- [smoothly reaches the end and follows growing agent output despite a hidden pending bubble](../../tests/js/chat-scroll.test.mjs#L121) (Zeile 121)
+- [keeps consensus still after a single jump, including fast deltas and reduced motion: %s](../../tests/js/chat-scroll.test.mjs#L135) (Zeile 135)
+- [gives the reader control even before the first frame, then offers a keyboard usable return](../../tests/js/chat-scroll.test.mjs#L159) (Zeile 159)
+- [never resumes from layout scrolls and cancels on a different run, saved view or account](../../tests/js/chat-scroll.test.mjs#L178) (Zeile 178)
+- [interrupts a finger gesture and resumes only when swiping back to the end](../../tests/js/chat-scroll.test.mjs#L195) (Zeile 195)
+- [respects reduced motion and viewport/composer changes without scrolling upwards](../../tests/js/chat-scroll.test.mjs#L212) (Zeile 212)
+- [stops for text selection, dialogs and direct comparison](../../tests/js/chat-scroll.test.mjs#L225) (Zeile 225)
 
 </details>
 
@@ -1011,6 +1102,34 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 - [marks sent Agent files that were only partly readable](../../tests/js/composer-attachments.test.mjs#L116) (Zeile 116)
 - [opens a stored Agent file from its sent message with download and a confirmed removal](../../tests/js/composer-attachments.test.mjs#L126) (Zeile 126)
 - [shows why a stored file could not be opened](../../tests/js/composer-attachments.test.mjs#L154) (Zeile 154)
+
+</details>
+
+<a id="composer-autosize-test-mjs"></a>
+
+## composer-autosize.test.mjs
+
+**Quelle:** [tests/js/composer-autosize.test.mjs](../../tests/js/composer-autosize.test.mjs) · **Bereiche:** Composer, Frontend, Responsive UI.
+
+**Ebene:** Originales Autosize-Modul in jsdom mit kontrollierter Geometrie und Frames.
+
+**Lauf:** 4 bestanden.
+
+**Geprüftes Verhalten:** Nach tatsächlicher Breitenänderung schrumpft der umgebrochene Placeholder ohne weiteres Viewportereignis. Mehrere Breitenmeldungen ergeben einen Frame; eigene reine Höhenänderungen starten keine Schleife. Mehrzeilenform bleibt beim Editieren stabil und endet beim Leeren. Placeholder-/Viewportänderungen beachten responsive Min-/Maxhöhe und Overflow.
+
+**Grenzen und Doubles:** scrollHeight, Breite und ResizeObserver werden kontrolliert; reale CSS-Transition und Browsergeometrie ergänzt der Smokefall. Keine vollständige Browser-/Viewportmatrix.
+
+**Prüfauftrag für den Folgeaudit:** Die benannten Betriebs- und Testgrenzen bei künftigen Änderungen erneut prüfen; konkrete Paketnachweise stehen im Produktabgleich.
+
+**Direkte Codeverweise:** [static/js/composer-autosize.js](../../static/js/composer-autosize.js).
+
+<details>
+<summary>4 Testdefinitionen und ihre Quellstellen</summary>
+
+- [shrinks a wrapped placeholder when the actual width finishes changing without another viewport event](../../tests/js/composer-autosize.test.mjs#L31) (Zeile 31)
+- [coalesces width observations and ignores height-only notifications from its own writes](../../tests/js/composer-autosize.test.mjs#L44) (Zeile 44)
+- [keeps the multiline form while editing and resets it only when empty](../../tests/js/composer-autosize.test.mjs#L57) (Zeile 57)
+- [still responds to placeholder changes and explicit viewport changes](../../tests/js/composer-autosize.test.mjs#L73) (Zeile 73)
 
 </details>
 
@@ -1298,7 +1417,7 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 **Prüfauftrag für den Folgeaudit:** Die benannten Mock-/Integrationsgrenzen am realen Adapter prüfen; Zuordnung und offene Aufgaben stehen in der Produktmatrix.
 
-**Direkte Codeverweise:** [static/js/markdown-stream.js](../../static/js/markdown-stream.js), [static/js/math-render.js](../../static/js/math-render.js), [static/js/sources.js](../../static/js/sources.js), [static/vendor/marked/12.0.2/marked.min.js](../../static/vendor/marked/12.0.2/marked.min.js).
+**Direkte Codeverweise:** [package.json](../../package.json), [static/js/markdown-stream.js](../../static/js/markdown-stream.js), [static/js/math-render.js](../../static/js/math-render.js), [static/js/sources.js](../../static/js/sources.js), [static/vendor/marked/12.0.2/marked.min.js](../../static/vendor/marked/12.0.2/marked.min.js).
 
 <details>
 <summary>4 Testdefinitionen und ihre Quellstellen</summary>
@@ -1353,27 +1472,28 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 ## frontend-output.test.mjs
 
-**Quelle:** [tests/js/frontend-output.test.mjs](../../tests/js/frontend-output.test.mjs) · **Bereiche:** Build und Betrieb.
+**Quelle:** [tests/js/frontend-output.test.mjs](../../tests/js/frontend-output.test.mjs) · **Bereiche:** Frontend-Build.
 
-**Ebene:** Node-Integration mit echtem temporärem Dateisystem.
+**Ebene:** Echter Buildoutput und temporärer Gitcheckout.
 
-**Lauf:** 4 bestanden.
+**Lauf:** 5 bestanden.
 
-**Geprüftes Verhalten:** Behält zwei vorherige Assetversionen, identische Builds altern sie nicht; unveränderte Dateien behalten mtime, Änderungen atomar ersetzt ohne Restdateien. Fehlgeschlagene Veröffentlichung lässt altes Manifest/Assets lesbar; fremde Dateien bleiben, unsichere Retentionspfade ignoriert.
+**Geprüftes Verhalten:** Zwei vorherige Assetversionen bleiben, identische Builds altern sie nicht und erhalten Mtime. Atomare Veröffentlichung bewahrt alte lesbare Artefakte bei Fehlern, unsichere Retentionspfade werden ignoriert. Ein echter temporärer Windows-Gitcheckout mit core.autocrlf=true bewahrt sämtliche dist-Bytes und deren Hashnamen durch -text.
 
-**Grenzen und Doubles:** Direkte Hilfsfunktionen mit kleinen künstlichen Assets; kein vollständiger Bundler, laufender Webserver oder Prozessabsturz während Veröffentlichung.
+**Grenzen und Doubles:** Lokales Dateisystem/Git ohne Netzwerk; Browserausführung jedes Assetstands ist kein Bestandteil.
 
-**Prüfauftrag für den Folgeaudit:** Deployment-/Cachevertrag und Leser während Veröffentlichung abgleichen.
+**Prüfauftrag für den Folgeaudit:** Die benannten Betriebs- und Testgrenzen bei künftigen Änderungen erneut prüfen; konkrete Paketnachweise stehen im Produktabgleich.
 
 **Direkte Codeverweise:** [scripts/frontend-output.mjs](../../scripts/frontend-output.mjs).
 
 <details>
-<summary>4 Testdefinitionen und ihre Quellstellen</summary>
+<summary>5 Testdefinitionen und ihre Quellstellen</summary>
 
-- [preserves two previous versions and does not age them out on identical rebuilds](../../tests/js/frontend-output.test.mjs#L27) (Zeile 27)
-- [does not truncate or rewrite unchanged vendor and bundle files](../../tests/js/frontend-output.test.mjs#L43) (Zeile 43)
-- [leaves the old manifest and assets readable when publication fails](../../tests/js/frontend-output.test.mjs#L56) (Zeile 56)
-- [never prunes unrelated files and ignores untrusted retention paths](../../tests/js/frontend-output.test.mjs#L64) (Zeile 64)
+- [preserves manifest and content-hashed asset bytes in an autocrlf checkout](../../tests/js/frontend-output.test.mjs#L31) (Zeile 31)
+- [preserves two previous versions and does not age them out on identical rebuilds](../../tests/js/frontend-output.test.mjs#L70) (Zeile 70)
+- [does not truncate or rewrite unchanged vendor and bundle files](../../tests/js/frontend-output.test.mjs#L86) (Zeile 86)
+- [leaves the old manifest and assets readable when publication fails](../../tests/js/frontend-output.test.mjs#L99) (Zeile 99)
+- [never prunes unrelated files and ignores untrusted retention paths](../../tests/js/frontend-output.test.mjs#L107) (Zeile 107)
 
 </details>
 
@@ -2299,32 +2419,33 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 ## stored-turn-markers.test.mjs
 
-**Quelle:** [tests/js/stored-turn-markers.test.mjs](../../tests/js/stored-turn-markers.test.mjs) · **Bereiche:** Bookmarks und Verlauf, Konsens und Unterschiede.
+**Quelle:** [tests/js/stored-turn-markers.test.mjs](../../tests/js/stored-turn-markers.test.mjs) · **Bereiche:** Frontend, Chats.
 
-**Ebene:** JavaScript-Modulintegration mit jsdom.
+**Ebene:** Echte DOMrenderfunktionen im jsdom.
 
-**Lauf:** 7 bestanden.
+**Lauf:** 8 bestanden.
 
-**Geprüftes Verhalten:** Widerspruch bleibt an richtiger historischer Aussage und wird nicht zur bloßen Supportquote; Aktivierung öffnet Unterschiedskarte desselben Turns, nicht aktuellen Footer. Bloß geteilter Claim behält Verhältnis und zugängliches Label. Aktualisierung 02.10.2026: Schweregrad zuerst, einwortige Labels und stabile Differenceindizes; Modelllinks nur bei erreichbarer Antwort, Markerklick öffnet über Datenindex.
+**Geprüftes Verhalten:** Gespeicherte Turnmarker und zwei archivierte Turns mit Sources/Differences/Models in einer Drawerzeile. IDs eindeutig, ARIA und Öffnen/Schließen korrekt, fremder Turn und Livefooter unverändert.
 
-**Grenzen und Doubles:** Vorgegebener historischer DOM und Analysedaten; keine Bookmarkpersistenz oder tatsächlicher Reload.
+**Grenzen und Doubles:** jsdom misst keine tatsächliche Geometrie; API/gespeicherte Daten kontrolliert.
 
-**Prüfauftrag für den Folgeaudit:** Mehrere gespeicherte Turns und echte Quellen-/Readerintegration abgleichen.
+**Prüfauftrag für den Folgeaudit:** Die benannten Betriebs- und Testgrenzen bei künftigen Änderungen erneut prüfen; konkrete Paketnachweise stehen im Produktabgleich.
 
-**Direkte Codeverweise:** [static/js/consensus-anchor.js](../../static/js/consensus-anchor.js), [static/js/consensus-insights.js](../../static/js/consensus-insights.js).
+**Direkte Codeverweise:** [static/js/consensus-anchor.js](../../static/js/consensus-anchor.js), [static/js/consensus-insights.js](../../static/js/consensus-insights.js), [static/js/consensus-run.js](../../static/js/consensus-run.js).
 
 **Direkte Testhelfer:** [tests/js/helpers/appWindow.mjs](../../tests/js/helpers/appWindow.mjs).
 
 <details>
-<summary>7 Testdefinitionen und ihre Quellstellen</summary>
+<summary>8 Testdefinitionen und ihre Quellstellen</summary>
 
 - [keeps the contradiction line on the disputed sentence](../../tests/js/stored-turn-markers.test.mjs#L92) (Zeile 92)
 - [does not downgrade the contradiction to a support ratio](../../tests/js/stored-turn-markers.test.mjs#L99) (Zeile 99)
 - [opens the difference card of its own turn, not the live footer](../../tests/js/stored-turn-markers.test.mjs#L106) (Zeile 106)
-- [still shows the support ratio for a merely split claim](../../tests/js/stored-turn-markers.test.mjs#L121) (Zeile 121)
-- [orders critical first, names severity in one word and keeps the data index](../../tests/js/stored-turn-markers.test.mjs#L152) (Zeile 152)
-- [puts each position's models on one line, as jump links only when an answer is reachable](../../tests/js/stored-turn-markers.test.mjs#L166) (Zeile 166)
-- [opens the card of the clicked marker by data index, not by card position](../../tests/js/stored-turn-markers.test.mjs#L190) (Zeile 190)
+- [keeps all drawers in one row, toggles only its own panel and allocates unique IDs](../../tests/js/stored-turn-markers.test.mjs#L121) (Zeile 121)
+- [still shows the support ratio for a merely split claim](../../tests/js/stored-turn-markers.test.mjs#L158) (Zeile 158)
+- [orders critical first, names severity in one word and keeps the data index](../../tests/js/stored-turn-markers.test.mjs#L189) (Zeile 189)
+- [puts each position's models on one line, as jump links only when an answer is reachable](../../tests/js/stored-turn-markers.test.mjs#L203) (Zeile 203)
+- [opens the card of the clicked marker by data index, not by card position](../../tests/js/stored-turn-markers.test.mjs#L227) (Zeile 227)
 
 </details>
 
@@ -2401,7 +2522,7 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 **Prüfauftrag für den Folgeaudit:** Kontenwechsel, Speicherkonflikte/-fehler und tatsächliche Promptverwendung abgleichen.
 
-**Direkte Codeverweise:** [static/js/user-memory.js](../../static/js/user-memory.js).
+**Direkte Codeverweise:** [main.py](../../main.py), [static/js/user-memory.js](../../static/js/user-memory.js).
 
 **Direkte Testhelfer:** [tests/js/helpers/appWindow.mjs](../../tests/js/helpers/appWindow.mjs).
 
@@ -2414,6 +2535,33 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 - [keeps the draft and offers reload when another writer won](../../tests/js/user-memory.test.mjs#L187) (Zeile 187)
 - [can deliberately overwrite the newer Memory with the kept draft](../../tests/js/user-memory.test.mjs#L210) (Zeile 210)
 - [an AI edit reload does not wipe an unsaved settings draft](../../tests/js/user-memory.test.mjs#L226) (Zeile 226)
+
+</details>
+
+<a id="vendor-frontend-test-mjs"></a>
+
+## vendor-frontend.test.mjs
+
+**Quelle:** [tests/js/vendor-frontend.test.mjs](../../tests/js/vendor-frontend.test.mjs) · **Bereiche:** Frontend-Build.
+
+**Ebene:** Echter Vendorhelper mit temporärem Dateisystem und synthetischen Paketen.
+
+**Lauf:** 4 bestanden.
+
+**Geprüftes Verhalten:** Versionspins, Lizenz-/Fontbytes, Fontreihenfolge und Erhalt fremder alter Versionen. Fehlende/veraltete Zielbytes werden erkannt, Check-only schreibt nichts, identische Inputs bewahren Mtime.
+
+**Grenzen und Doubles:** Keine Paketdownloads; synthetische Minimalpakete prüfen Kopier-/Pinvertrag, nicht fremde Bibliotheksqualität.
+
+**Prüfauftrag für den Folgeaudit:** Die benannten Betriebs- und Testgrenzen bei künftigen Änderungen erneut prüfen; konkrete Paketnachweise stehen im Produktabgleich.
+
+**Direkte Codeverweise:** [package.json](../../package.json), [scripts/vendor_frontend.mjs](../../scripts/vendor_frontend.mjs).
+
+<details>
+<summary>3 Testdefinitionen und ihre Quellstellen</summary>
+
+- [copies every pinned library, license and font byte and retains unrelated old versions](../../tests/js/vendor-frontend.test.mjs#L25) (Zeile 25)
+- [rejects %s target bytes without writing in check-only mode](../../tests/js/vendor-frontend.test.mjs#L41) (Zeile 41)
+- [rejects version drift before creating any output](../../tests/js/vendor-frontend.test.mjs#L50) (Zeile 50)
 
 </details>
 

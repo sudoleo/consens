@@ -92,7 +92,7 @@
     ],
     "handler": "available_agent_models",
     "source": "app/api/routers/agent.py",
-    "line": 142,
+    "line": 148,
     "public_schema": false,
     "id": "R-007",
     "contract_ids": [
@@ -107,7 +107,7 @@
     ],
     "handler": "available_agent_budget",
     "source": "app/api/routers/agent.py",
-    "line": 153,
+    "line": 159,
     "public_schema": false,
     "id": "R-008",
     "contract_ids": [
@@ -122,7 +122,7 @@
     ],
     "handler": "run_agent",
     "source": "app/api/routers/agent.py",
-    "line": 162,
+    "line": 168,
     "public_schema": false,
     "id": "R-009",
     "contract_ids": [
@@ -139,7 +139,7 @@
     ],
     "handler": "list_agents",
     "source": "app/api/routers/agent.py",
-    "line": 402,
+    "line": 420,
     "public_schema": false,
     "id": "R-010",
     "contract_ids": [
@@ -155,7 +155,7 @@
     ],
     "handler": "agent_details",
     "source": "app/api/routers/agent.py",
-    "line": 408,
+    "line": 426,
     "public_schema": false,
     "id": "R-011",
     "contract_ids": [
@@ -171,7 +171,7 @@
     ],
     "handler": "stop_agent_run",
     "source": "app/api/routers/agent.py",
-    "line": 428,
+    "line": 446,
     "public_schema": false,
     "id": "R-012",
     "contract_ids": [
@@ -2400,7 +2400,7 @@
     ],
     "handler": "topics_hub",
     "source": "app/api/routers/topics.py",
-    "line": 252,
+    "line": 259,
     "public_schema": false,
     "id": "R-140",
     "contract_ids": [
@@ -2415,7 +2415,7 @@
     ],
     "handler": "sitemap_topics",
     "source": "app/api/routers/topics.py",
-    "line": 290,
+    "line": 297,
     "public_schema": false,
     "id": "R-141",
     "contract_ids": [
@@ -2430,7 +2430,7 @@
     ],
     "handler": "topic_page",
     "source": "app/api/routers/topics.py",
-    "line": 319,
+    "line": 326,
     "public_schema": false,
     "id": "R-142",
     "contract_ids": [
@@ -2445,7 +2445,7 @@
     ],
     "handler": "topic_favicon",
     "source": "app/api/routers/topics.py",
-    "line": 554,
+    "line": 561,
     "public_schema": false,
     "id": "R-143",
     "contract_ids": [
@@ -2460,7 +2460,7 @@
     ],
     "handler": "follow_topic",
     "source": "app/api/routers/topics.py",
-    "line": 602,
+    "line": 609,
     "public_schema": false,
     "id": "R-144",
     "contract_ids": [
@@ -2475,7 +2475,7 @@
     ],
     "handler": "topic_follow_confirm",
     "source": "app/api/routers/topics.py",
-    "line": 639,
+    "line": 646,
     "public_schema": false,
     "id": "R-145",
     "contract_ids": [
@@ -2490,7 +2490,7 @@
     ],
     "handler": "topic_follow_unsubscribe",
     "source": "app/api/routers/topics.py",
-    "line": 656,
+    "line": 663,
     "public_schema": false,
     "id": "R-146",
     "contract_ids": [
@@ -2505,7 +2505,7 @@
     ],
     "handler": "admin_list_topics",
     "source": "app/api/routers/topics.py",
-    "line": 681,
+    "line": 688,
     "public_schema": false,
     "id": "R-147",
     "contract_ids": [
@@ -2520,7 +2520,7 @@
     ],
     "handler": "admin_create_topic",
     "source": "app/api/routers/topics.py",
-    "line": 693,
+    "line": 700,
     "public_schema": false,
     "id": "R-148",
     "contract_ids": [
@@ -2535,7 +2535,7 @@
     ],
     "handler": "admin_get_topic",
     "source": "app/api/routers/topics.py",
-    "line": 710,
+    "line": 717,
     "public_schema": false,
     "id": "R-149",
     "contract_ids": [
@@ -2550,7 +2550,7 @@
     ],
     "handler": "admin_update_topic",
     "source": "app/api/routers/topics.py",
-    "line": 726,
+    "line": 733,
     "public_schema": false,
     "id": "R-150",
     "contract_ids": [
@@ -2565,7 +2565,7 @@
     ],
     "handler": "admin_create_topic_run",
     "source": "app/api/routers/topics.py",
-    "line": 745,
+    "line": 752,
     "public_schema": false,
     "id": "R-151",
     "contract_ids": [

@@ -2,7 +2,7 @@
 
 [Einstieg](README.md) · [Befunde](gaps.md) · [Nutzerreisen](journeys.md) · [Oracles](decisions.md)
 
-**38 Arbeitspakete · 26 geplant, 12 in Arbeit.** Im ursprünglichen Dokumentationsauftrag wurde keines implementiert; der aktuelle Status steht in audit.json. Die IDs sind stabil; sie geben keine zwingende lineare Reihenfolge vor. Abhängigkeiten sind fachliche/technische Voraussetzungen. Vorarbeit ist früher möglich. WP-01 bis WP-04 klären den Ausgangsstand; WP-05 macht die allgemeine CI verbindlich. WP-06 bis WP-14 sowie WP-20 schützen besonders folgenreiche Grenzen. WP-29 folgt auf tragfähige Adapter-/Persistenztests. Die restlichen Pakete bleiben im Gesamtumfang.
+**38 Arbeitspakete · 38 abgeschlossen.** Im ursprünglichen Dokumentationsauftrag wurde keines implementiert; der aktuelle Status steht in audit.json. Die IDs sind stabil; sie geben keine zwingende lineare Reihenfolge vor. Abhängigkeiten sind fachliche/technische Voraussetzungen. Vorarbeit ist früher möglich. WP-01 bis WP-04 klären den Ausgangsstand; WP-05 macht die allgemeine CI verbindlich. WP-06 bis WP-14 sowie WP-20 schützen besonders folgenreiche Grenzen. WP-29 folgt auf tragfähige Adapter-/Persistenztests. Die restlichen Pakete bleiben im Gesamtumfang.
 
 ## Gemeinsamer Auftrag und Abnahme
 
@@ -16,44 +16,44 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 | Paket | Ziel | Priorität | Vorher | Befunde | Status |
 |---|---|---|---|---|---|
-| [WP-01](#wp-01) | Bekannte Fixture- und Stringfehler bereinigen | P1 | — | [G-027](gaps.md#g-027), [G-028](gaps.md#g-028) | planned |
-| [WP-02](#wp-02) | Report-Race unter kontrollierter Emulatorumgebung klären | P1 | [WP-01](work-packages.md#wp-01) | [G-029](gaps.md#g-029) | planned |
-| [WP-03](#wp-03) | Aktuelle Browserfälle ausführen und Fehler einordnen | P1 | [WP-01](work-packages.md#wp-01) | [G-025](gaps.md#g-025) | in_progress |
-| [WP-04](#wp-04) | Windows-Einstieg verifizieren | P2 | — | [G-026](gaps.md#g-026) | in_progress |
-| [WP-05](#wp-05) | Allgemeine Regression-CI einrichten | P1 | [WP-01](work-packages.md#wp-01), [WP-02](work-packages.md#wp-02), [WP-03](work-packages.md#wp-03), [WP-04](work-packages.md#wp-04) | [G-024](gaps.md#g-024) | planned |
-| [WP-06](#wp-06) | Firestore-Regeln durch echte Clientoperationen schützen | P1 | [WP-01](work-packages.md#wp-01) | [G-001](gaps.md#g-001) | planned |
-| [WP-07](#wp-07) | Reguläre Usage nativ atomar prüfen | P1 | [WP-01](work-packages.md#wp-01) | [G-002](gaps.md#g-002) | planned |
-| [WP-08](#wp-08) | Chat-Lebenszyklus gegen späte Writes absichern | P1 | [WP-01](work-packages.md#wp-01) | [G-003](gaps.md#g-003) | in_progress |
-| [WP-09](#wp-09) | Kontokaskade und API-Cleanup integrieren | P1 | [WP-08](work-packages.md#wp-08), [WP-11](work-packages.md#wp-11) | [G-004](gaps.md#g-004) | in_progress |
-| [WP-10](#wp-10) | Memory-Revision, Undo und Löschsperre stärken | P1 | [WP-01](work-packages.md#wp-01) | [G-007](gaps.md#g-007), [G-008](gaps.md#g-008), [G-038](gaps.md#g-038) | in_progress |
-| [WP-11](#wp-11) | API-Recovery und historischen Source-Adapter prüfen | P1 | — | [G-005](gaps.md#g-005), [G-010](gaps.md#g-010) | in_progress |
-| [WP-12](#wp-12) | Registrierungsrace und user_status verbinden | P1 | — | [G-009](gaps.md#g-009), [G-012](gaps.md#g-012) | planned |
-| [WP-13](#wp-13) | App-Share-POST integrieren | P1 | [WP-01](work-packages.md#wp-01) | [G-011](gaps.md#g-011) | planned |
-| [WP-14](#wp-14) | Source-Queue mit nativen Leases prüfen | P1 | [WP-01](work-packages.md#wp-01) | [G-006](gaps.md#g-006) | planned |
-| [WP-15](#wp-15) | Watch- und Telegramadapter schließen | P2 | — | [G-013](gaps.md#g-013) | planned |
-| [WP-16](#wp-16) | Topic-Administration und öffentliche Adapter schließen | P1 | — | [G-014](gaps.md#g-014), [G-041](gaps.md#g-041) | planned |
-| [WP-17](#wp-17) | Claim-Identity-Judge validieren | P2 | — | [G-016](gaps.md#g-016) | planned |
-| [WP-18](#wp-18) | SEO-Repositoryadapter ausführen | P2 | — | [G-017](gaps.md#g-017) | planned |
-| [WP-19](#wp-19) | Schedulerqueries und persistente Claims prüfen | P2 | [WP-01](work-packages.md#wp-01) | [G-031](gaps.md#g-031) | in_progress |
-| [WP-20](#wp-20) | Topic-Notizen als Text absichern | P1 | — | [G-018](gaps.md#g-018) | in_progress |
-| [WP-21](#wp-21) | Adminfehler aus dem echten Appumschlag anzeigen | P2 | — | [G-019](gaps.md#g-019) | planned |
-| [WP-22](#wp-22) | Benchmark-Adminadapter und Viewer prüfen | P2 | — | [G-015](gaps.md#g-015) | planned |
-| [WP-23](#wp-23) | Inhalt der OG-Karte wirksam prüfen | P2 | — | [G-020](gaps.md#g-020) | planned |
-| [WP-24](#wp-24) | Analytics-Opt-out dynamisch prüfen | P2 | — | [G-021](gaps.md#g-021) | planned |
-| [WP-25](#wp-25) | Wartungsskripte isoliert absichern | P1 | — | [G-022](gaps.md#g-022), [G-023](gaps.md#g-023) | planned |
-| [WP-26](#wp-26) | HTTP-Body- und lokale Transportgrenzen ergänzen | P2 | — | [G-032](gaps.md#g-032), [G-033](gaps.md#g-033) | in_progress |
-| [WP-27](#wp-27) | Feedback und Statistikwrites verbinden | P2 | — | [G-034](gaps.md#g-034) | planned |
-| [WP-28](#wp-28) | Unterstützte Hilfs-CLIs prüfen | P3 | — | [G-035](gaps.md#g-035) | planned |
-| [WP-29](#wp-29) | Persistierte Nutzerreisen durch alle internen Schichten prüfen | P1 | [WP-03](work-packages.md#wp-03), [WP-07](work-packages.md#wp-07), [WP-08](work-packages.md#wp-08), [WP-09](work-packages.md#wp-09), [WP-10](work-packages.md#wp-10), [WP-12](work-packages.md#wp-12), [WP-13](work-packages.md#wp-13), [WP-14](work-packages.md#wp-14) | [G-030](gaps.md#g-030) | in_progress |
-| [WP-30](#wp-30) | Vendorhelper mit echtem temporärem Dateisystem prüfen | P2 | — | [G-036](gaps.md#g-036) | planned |
-| [WP-31](#wp-31) | HTTPException-Header durch main bewahren | P1 | — | [G-037](gaps.md#g-037) | in_progress |
-| [WP-32](#wp-32) | Agentdetail und Turn-Stop durch HTTP absichern | P1 | — | [G-039](gaps.md#g-039) | planned |
-| [WP-33](#wp-33) | Modellrollback gegen fremde Writes absichern | P1 | — | [G-040](gaps.md#g-040) | in_progress |
-| [WP-34](#wp-34) | Benchmarkfehler von Enthaltung trennen | P1 | — | [G-042](gaps.md#g-042) | planned |
-| [WP-35](#wp-35) | Google-Aktionsclaims mit nativen Transaktionen prüfen | P1 | — | [G-043](gaps.md#g-043) | planned |
-| [WP-36](#wp-36) | Cloud-Dateiablage und verteilte Löschkaskade integrieren | P2 | — | [G-044](gaps.md#g-044) | planned |
-| [WP-37](#wp-37) | Outbox-/Probeclaims mit nativer SDK-Konkurrenz absichern | P1 | — | [G-045](gaps.md#g-045) | planned |
-| [WP-38](#wp-38) | Aktuelle Testfehler und abweichenden Benchmark-Wiederholungslauf klären | P2 | — | [G-046](gaps.md#g-046) | planned |
+| [WP-01](#wp-01) | Bekannte Fixture- und Stringfehler bereinigen | P1 | — | [G-027](gaps.md#g-027), [G-028](gaps.md#g-028) | completed |
+| [WP-02](#wp-02) | Report-Race unter kontrollierter Emulatorumgebung klären | P1 | [WP-01](work-packages.md#wp-01) | [G-029](gaps.md#g-029) | completed |
+| [WP-03](#wp-03) | Aktuelle Browserfälle ausführen und Fehler einordnen | P1 | [WP-01](work-packages.md#wp-01) | [G-025](gaps.md#g-025) | completed |
+| [WP-04](#wp-04) | Windows-Einstieg verifizieren | P2 | — | [G-026](gaps.md#g-026) | completed |
+| [WP-05](#wp-05) | Allgemeine Regression-CI einrichten | P1 | [WP-01](work-packages.md#wp-01), [WP-02](work-packages.md#wp-02), [WP-03](work-packages.md#wp-03), [WP-04](work-packages.md#wp-04) | [G-024](gaps.md#g-024) | completed |
+| [WP-06](#wp-06) | Firestore-Regeln durch echte Clientoperationen schützen | P1 | [WP-01](work-packages.md#wp-01) | [G-001](gaps.md#g-001) | completed |
+| [WP-07](#wp-07) | Reguläre Usage nativ atomar prüfen | P1 | [WP-01](work-packages.md#wp-01) | [G-002](gaps.md#g-002) | completed |
+| [WP-08](#wp-08) | Chat-Lebenszyklus gegen späte Writes absichern | P1 | [WP-01](work-packages.md#wp-01) | [G-003](gaps.md#g-003) | completed |
+| [WP-09](#wp-09) | Kontokaskade und API-Cleanup integrieren | P1 | [WP-08](work-packages.md#wp-08), [WP-11](work-packages.md#wp-11) | [G-004](gaps.md#g-004) | completed |
+| [WP-10](#wp-10) | Memory-Revision, Undo und Löschsperre stärken | P1 | [WP-01](work-packages.md#wp-01) | [G-007](gaps.md#g-007), [G-008](gaps.md#g-008), [G-038](gaps.md#g-038) | completed |
+| [WP-11](#wp-11) | API-Recovery und historischen Source-Adapter prüfen | P1 | — | [G-005](gaps.md#g-005), [G-010](gaps.md#g-010) | completed |
+| [WP-12](#wp-12) | Registrierungsrace und user_status verbinden | P1 | — | [G-009](gaps.md#g-009), [G-012](gaps.md#g-012) | completed |
+| [WP-13](#wp-13) | App-Share-POST integrieren | P1 | [WP-01](work-packages.md#wp-01) | [G-011](gaps.md#g-011) | completed |
+| [WP-14](#wp-14) | Source-Queue mit nativen Leases prüfen | P1 | [WP-01](work-packages.md#wp-01) | [G-006](gaps.md#g-006) | completed |
+| [WP-15](#wp-15) | Watch- und Telegramadapter schließen | P2 | — | [G-013](gaps.md#g-013) | completed |
+| [WP-16](#wp-16) | Topic-Administration und öffentliche Adapter schließen | P1 | — | [G-014](gaps.md#g-014), [G-041](gaps.md#g-041) | completed |
+| [WP-17](#wp-17) | Claim-Identity-Judge validieren | P2 | — | [G-016](gaps.md#g-016) | completed |
+| [WP-18](#wp-18) | SEO-Repositoryadapter ausführen | P2 | — | [G-017](gaps.md#g-017) | completed |
+| [WP-19](#wp-19) | Schedulerqueries und persistente Claims prüfen | P2 | [WP-01](work-packages.md#wp-01) | [G-031](gaps.md#g-031) | completed |
+| [WP-20](#wp-20) | Topic-Notizen als Text absichern | P1 | — | [G-018](gaps.md#g-018) | completed |
+| [WP-21](#wp-21) | Adminfehler aus dem echten Appumschlag anzeigen | P2 | — | [G-019](gaps.md#g-019) | completed |
+| [WP-22](#wp-22) | Benchmark-Adminadapter und Viewer prüfen | P2 | — | [G-015](gaps.md#g-015) | completed |
+| [WP-23](#wp-23) | Inhalt der OG-Karte wirksam prüfen | P2 | — | [G-020](gaps.md#g-020) | completed |
+| [WP-24](#wp-24) | Analytics-Opt-out dynamisch prüfen | P2 | — | [G-021](gaps.md#g-021) | completed |
+| [WP-25](#wp-25) | Wartungsskripte isoliert absichern | P1 | — | [G-022](gaps.md#g-022), [G-023](gaps.md#g-023) | completed |
+| [WP-26](#wp-26) | HTTP-Body- und lokale Transportgrenzen ergänzen | P2 | — | [G-032](gaps.md#g-032), [G-033](gaps.md#g-033) | completed |
+| [WP-27](#wp-27) | Feedback und Statistikwrites verbinden | P2 | — | [G-034](gaps.md#g-034) | completed |
+| [WP-28](#wp-28) | Unterstützte Hilfs-CLIs prüfen | P3 | — | [G-035](gaps.md#g-035) | completed |
+| [WP-29](#wp-29) | Persistierte Nutzerreisen durch alle internen Schichten prüfen | P1 | [WP-03](work-packages.md#wp-03), [WP-07](work-packages.md#wp-07), [WP-08](work-packages.md#wp-08), [WP-09](work-packages.md#wp-09), [WP-10](work-packages.md#wp-10), [WP-12](work-packages.md#wp-12), [WP-13](work-packages.md#wp-13), [WP-14](work-packages.md#wp-14) | [G-030](gaps.md#g-030) | completed |
+| [WP-30](#wp-30) | Vendorhelper mit echtem temporärem Dateisystem prüfen | P2 | — | [G-036](gaps.md#g-036) | completed |
+| [WP-31](#wp-31) | HTTPException-Header durch main bewahren | P1 | — | [G-037](gaps.md#g-037) | completed |
+| [WP-32](#wp-32) | Agentdetail und Turn-Stop durch HTTP absichern | P1 | — | [G-039](gaps.md#g-039) | completed |
+| [WP-33](#wp-33) | Modellrollback gegen fremde Writes absichern | P1 | — | [G-040](gaps.md#g-040) | completed |
+| [WP-34](#wp-34) | Benchmarkfehler von Enthaltung trennen | P1 | — | [G-042](gaps.md#g-042) | completed |
+| [WP-35](#wp-35) | Google-Aktionsclaims mit nativen Transaktionen prüfen | P1 | — | [G-043](gaps.md#g-043) | completed |
+| [WP-36](#wp-36) | Cloud-Dateiablage und verteilte Löschkaskade integrieren | P2 | — | [G-044](gaps.md#g-044) | completed |
+| [WP-37](#wp-37) | Outbox-/Probeclaims mit nativer SDK-Konkurrenz absichern | P1 | — | [G-045](gaps.md#g-045) | completed |
+| [WP-38](#wp-38) | Aktuelle Testfehler und abweichenden Benchmark-Wiederholungslauf klären | P2 | — | [G-046](gaps.md#g-046) | completed |
 
 <a id="wp-01"></a>
 
@@ -63,7 +63,7 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Befunde:** [G-027](gaps.md#g-027), [G-028](gaps.md#g-028) · **Vorher:** —
 
-**Stand:** planned. G-027: Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung. G-028: Erneut fehlgeschlagen: test_archived_turns_use_the_same_drawer_row_as_the_live_answer erwartet weiterhin den exakten alten Klassenstring.
+**Stand:** completed. Veraltete Watch-/Pendingfixtures und Footerstring ersetzt; heutige Limits, Idempotenz und echte archivierte Drawerknoten geprüft.
 
 **Vorgehen:** Aktuelle Produktionsvalidierung lesen; gültige Pending-/Watchdaten herstellen, Footer fachlich statt über exakten Klassenstring prüfen. Erst fehlschlagende Ausgangsläufe festhalten.
 
@@ -82,6 +82,14 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Zu beachten:** —
 
+**Implementierungsnachweis:** ` acdadb91 ` · [docs/test-coverage/product/implementation-persistence.md](implementation-persistence.md) · [docs/test-coverage/execution.json](../execution.json)
+
+**Ausgeführte Testbereiche:** [tests/e2e/test_phase2_transactions.py](../../../tests/e2e/test_phase2_transactions.py), [tests/test_consensus_progress_ui.py](../../../tests/test_consensus_progress_ui.py), [tests/js/stored-turn-markers.test.mjs](../../../tests/js/stored-turn-markers.test.mjs)
+
+**Beobachtete Negativkontrolle:** Watchquotaguard entfernt; DOM prüft Zielturn und unveränderten Fremdturn.
+
+**Verbleibende Grenze:** Keine pauschalen Snapshots oder gelockerten Produktguards.
+
 
 <a id="wp-02"></a>
 
@@ -91,7 +99,7 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Befunde:** [G-029](gaps.md#g-029) · **Vorher:** [WP-01](work-packages.md#wp-01)
 
-**Stand:** planned. G-029: Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
+**Stand:** completed. Reportzähler und Gründe verlieren keine erfolgreichen Inkremente. Indexstatus bleibt gemäß R19 unverändert; konkrete ABORTED-Fälle werden vor gesondertem Replay gezählt.
 
 **Vorgehen:** Java21/Emulator dokumentieren, Kontamination zwischen Fällen ausschließen; isolierten und vollständigen Transaktionslauf mit gleichen IDs-/Zeitregeln vergleichen. Nur gezielte begrenzte Wiederholungen.
 
@@ -109,24 +117,32 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Zu beachten:** —
 
+**Implementierungsnachweis:** ` acdadb91 ` · [docs/test-coverage/product/implementation-persistence.md](implementation-persistence.md) · [docs/test-coverage/execution.json](../execution.json)
+
+**Ausgeführte Testbereiche:** [tests/e2e/test_phase2_transactions.py](../../../tests/e2e/test_phase2_transactions.py)
+
+**Beobachtete Negativkontrolle:** Konstanter Zähler1 statt Inkrement wird erkannt.
+
+**Verbleibende Grenze:** SDK-Retryerschöpfung ist kein Erfolg; keine Ausfallfreiheit unter Last zugesagt.
+
 
 <a id="wp-03"></a>
 
 ## WP-03 · Aktuelle Browserfälle ausführen und Fehler einordnen
 
-**Ziel:** Gesammelte 308 E2E-Fälle nach writerfreiem Browser, Emulatortransaktion und integriertem Smoke getrennt belegen.
+**Ziel:** Alle 368 aktuellen E2E-Fälle mit Browser-/Native-/Smoke-Grenzen und tatsächlichen Runnerresultaten belegen.
 
 **Befunde:** [G-025](gaps.md#g-025) · **Vorher:** [WP-01](work-packages.md#wp-01)
 
-**Stand:** in_progress. G-025: Aktuell 308 E2E-Fälle gesammelt. Der writerfreie Chromiumlauf wird in execution.json dokumentiert; Transaktions-/Smoke-Fälle bleiben getrennt. Alte Zahl 267 ist ein historischer Laufumfang.
+**Stand:** completed. Der vollständige integrierte E2E-Lauf umfasst 368 bestandene Fälle ohne Fehler oder Skips: native SDK-Transaktionen, writerfreie Browserdetails, 43 aktuelle Smoke-Fälle und sechs persistierte Reisen. App-/Browserversion, ursprüngliche Runneridentitäten und neue/entfallene IDs gegenüber dem früheren Inventar sind archiviert.
 
 **Vorgehen:** Chromium passend zu Playwright installieren, Build und sichere E2E-Voraussetzungen prüfen. Vollständige Suite ausführen, echte Produkt-/Fixture-/Infrastrukturfehler getrennt bearbeiten.
 
-**Abnahme zusätzlich zu den verknüpften Then-/Negativkontrollen:** 267 Fälle zugeordnet, kein unbemerkter Collect-/Skipverlust; Browser- und Appversion, JUnit und gezielte Fehlerscreenshots/Traces vorhanden. Neue Fälle separat zählen.
+**Abnahme zusätzlich zu den verknüpften Then-/Negativkontrollen:** Alle 368 aktuellen E2E-Fälle zugeordnet, kein unbemerkter Collect-/Skipverlust; Browser- und Appversion, JUnit und gezielte Fehlerscreenshots/Traces vorhanden. Neue Fälle separat zählen.
 
 **Produktstellen:** [tests/e2e/conftest.py](../../../tests/e2e/conftest.py)
 
-**Test-/Dokumentziele:** [docs/test-coverage/execution.json](../execution.json), [tests/e2e](../../../tests/e2e)
+**Test-/Dokumentziele:** [docs/test-coverage/execution.json](../execution.json), [tests/e2e](../../../tests/e2e), [tests/e2e/test_phase4_frontend.py](../../../tests/e2e/test_phase4_frontend.py), [tests/e2e/test_smoke.py](../../../tests/e2e/test_smoke.py), [tests/e2e/test_topic_frontend.py](../../../tests/e2e/test_topic_frontend.py)
 
 **Vorhandene Hilfen:** [docs/testing.md](../../testing.md), [tests/e2e/README.md](../../../tests/e2e/README.md)
 
@@ -135,6 +151,14 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 - ` python -m playwright install chromium; RUN_E2E=1 python -m pytest tests/e2e -q (sicheres vollständiges Emulatorprofil) `
 
 **Zu beachten:** [D-05](decisions.md#d-05)
+
+**Implementierungsnachweis:** ` ffaca3df ` · [docs/test-coverage/product/implementation-browser.md](implementation-browser.md) · [docs/test-coverage/execution.json](../execution.json)
+
+**Ausgeführte Testbereiche:** [tests/e2e/test_phase4_frontend.py](../../../tests/e2e/test_phase4_frontend.py), [tests/e2e/test_topic_frontend.py](../../../tests/e2e/test_topic_frontend.py), [tests/e2e/test_smoke.py](../../../tests/e2e/test_smoke.py)
+
+**Beobachtete Negativkontrolle:** Alte Admin-/Scrollquellen gegen neue Tests liefern gezielte Fehler, belegter Port wird abgewiesen.
+
+**Verbleibende Grenze:** GitHubjob 110800783463 auf ffaca3df mit Chromium 148.0.7778.96/Playwright 1.60.0 bestanden; konkrete Mockgrenzen bleiben je Datei erhalten. Keine Behauptung einer flächigen visuellen oder Liveanbieter-Abnahme.
 
 
 <a id="wp-04"></a>
@@ -145,15 +169,15 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Befunde:** [G-026](gaps.md#g-026) · **Vorher:** —
 
-**Stand:** in_progress. G-026: Aktuelle Tests laufen unter Windows; test_dev_cli.py wird nicht mehr wegen fehlender PowerShell übersprungen. Tatsächlicher Gesamtstart mit Java/Firebase-Emulator über dev.ps1 bleibt gesondert.
+**Stand:** completed. Alle 28 CLI-Vertragsfälle in Windows PowerShell und pwsh sowie reale dev.ps1-Aufrufe für Backend, Frontend/Build, 49 Rulesfälle und vier native Phase2-Fälle liefen im Windows-CI-Job erfolgreich.
 
 **Vorgehen:** Vorhandene CLI-Doubles auf unterstütztem Windows/PowerShell ausführen; echte repräsentative dev.ps1-Aufrufe ergänzen, ohne eine zweite Suiteauswahl zu pflegen.
 
-**Abnahme zusätzlich zu den verknüpften Then-/Negativkontrollen:** Alle 12 Varianten je verfügbarer Windows-Shell wirklich ausgeführt; Shellversionen und tatsächliche Fallzahl (derzeit 12 oder 24) dokumentiert. Fehlercodes, Argumente, Arbeitsverzeichnis und Envwiederherstellung belegt.
+**Abnahme zusätzlich zu den verknüpften Then-/Negativkontrollen:** Alle 14 Varianten je verfügbarer Windows-Shell wirklich ausgeführt; Shellversionen und tatsächliche Fallzahl (derzeit 14 oder 28) dokumentiert. Fehlercodes, Argumente, Arbeitsverzeichnis und Envwiederherstellung belegt.
 
 **Produktstellen:** [dev.ps1](../../../dev.ps1)
 
-**Test-/Dokumentziele:** ` .github/workflows/tests.yml ` (vorgeschlagen), [tests/test_dev_cli.py](../../../tests/test_dev_cli.py)
+**Test-/Dokumentziele:** [.github/workflows/tests.yml](../../../.github/workflows/tests.yml), [tests/test_dev_cli.py](../../../tests/test_dev_cli.py)
 
 **Vorhandene Hilfen:** [dev.ps1](../../../dev.ps1), [docs/testing.md](../../testing.md)
 
@@ -162,6 +186,14 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 - ` Windows: python -m pytest tests/test_dev_cli.py -q `
 
 **Zu beachten:** —
+
+**Implementierungsnachweis:** ` ffaca3df ` · [docs/test-coverage/product/implementation-runtime.md](implementation-runtime.md) · [docs/test-coverage/execution.json](../execution.json)
+
+**Ausgeführte Testbereiche:** [tests/test_dev_cli.py](../../../tests/test_dev_cli.py)
+
+**Beobachtete Negativkontrolle:** Fehlercode/Env/Emulatorteardown und fehlende Auswahl werden beobachtet.
+
+**Verbleibende Grenze:** Windows-GitHubjob 110800783247 auf integriertem Code ffaca3df erfolgreich: https://github.com/sudoleo/consens/actions/runs/36995379657/job/110800783247 . Native Windowsfälle ergänzen die ausdrücklich erhaltenen Linux-Plattformskips. Keine produktiven Credentials oder Cloudwrites.
 
 
 <a id="wp-05"></a>
@@ -172,15 +204,15 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Befunde:** [G-024](gaps.md#g-024) · **Vorher:** [WP-01](work-packages.md#wp-01), [WP-02](work-packages.md#wp-02), [WP-03](work-packages.md#wp-03), [WP-04](work-packages.md#wp-04)
 
-**Stand:** planned. G-024: Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
+**Stand:** completed. Nutzerkonforme schnelle Auswahl und vollständige Auswahl sind belegt. ReadyForReview auf ffaca3df startete alle vier Jobs; Backend, Frontend/Build, Browser/Rules und Windows schlossen erfolgreich ab. Linux-Plattformskips bleiben separat sichtbar; der primäre lokale Windows-Backendlauf enthält sämtliche 3303 Fälle bestanden.
 
-**Vorgehen:** Vorbereitungen können früher erfolgen; verpflichtende Jobs erst nach geklärter Ausgangsbasis aktivieren. Python, JS/Build, Emulator/Browser und Windows unterscheiden; bestehende Publisher-CI behalten.
+**Vorgehen:** Vier getrennte Jobs mit unveränderter Fehlerpropagation. Nutzerentscheidung caa7bac6: normale Push-/PR-Ereignisse starten Backend und Frontend; ReadyForReview oder manuelles full startet zusätzlich Browser/Rules und Windows. Dokumentänderungen allein lösen den Workflow nicht aus; Publisher-CI bleibt eigenständig.
 
-**Abnahme zusätzlich zu den verknüpften Then-/Negativkontrollen:** Jobs auf integriertem SHA grün, keine versteckten Skips/continue-on-error; Fehlerartefakte und leere Auswahl erkennbar. Branchpflichten nur entsprechend Repo-Regeln setzen.
+**Abnahme zusätzlich zu den verknüpften Then-/Negativkontrollen:** Schnelle und ausdrücklich vollständige Auswahl auf dem integrierten Code belegen. Bewusste ereignisabhängige Skips sind transparent, kein Nachweis einer gelaufenen Vollsuite. Kein continue-on-error; echte Assertionfehler müssen den jeweiligen Job rot machen, Fehlerartefakte und leere Auswahl erkennbar. Branchpflichten nur nach Repo-Regeln.
 
-**Produktstellen:** [.github/workflows/publisher-tests.yml](../../../.github/workflows/publisher-tests.yml), [package.json](../../../package.json)
+**Produktstellen:** [.github/workflows/publisher-tests.yml](../../../.github/workflows/publisher-tests.yml), [.github/workflows/tests.yml](../../../.github/workflows/tests.yml), [dev.ps1](../../../dev.ps1), [package.json](../../../package.json)
 
-**Test-/Dokumentziele:** ` .github/workflows/tests.yml ` (vorgeschlagen), [docs/testing.md](../../testing.md)
+**Test-/Dokumentziele:** [.github/workflows/tests.yml](../../../.github/workflows/tests.yml), [docs/testing.md](../../testing.md), [tests/test_dev_cli.py](../../../tests/test_dev_cli.py)
 
 **Vorhandene Hilfen:** [.github/workflows/publisher-tests.yml](../../../.github/workflows/publisher-tests.yml), [dev.ps1](../../../dev.ps1), [tests/e2e/README.md](../../../tests/e2e/README.md)
 
@@ -189,6 +221,14 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 - ` Neue Jobs auf genau dem integrierten Commit prüfen; kein einzelner Publisher-Erfolg als Gesamtsuite-Erfolg werten. `
 
 **Zu beachten:** —
+
+**Implementierungsnachweis:** ` ffaca3df ` · [docs/test-coverage/product/implementation-runtime.md](implementation-runtime.md) · [docs/test-coverage/execution.json](../execution.json)
+
+**Ausgeführte Testbereiche:** [tests/test_dev_cli.py](../../../tests/test_dev_cli.py)
+
+**Beobachtete Negativkontrolle:** Realer CI-Lauf auf 2afe0cf1: 25 fehlgeschlagene Fälle, 343 bestanden; Exit 1 führt zum roten Job110781068840 und trotzdem archiviertem Artefakt11218892950. Tatsächlicher Fehlerpropagationsbeleg, kein absichtlich injizierter Mutant.
+
+**Verbleibende Grenze:** Voll-CI https://github.com/sudoleo/consens/actions/runs/36995379657 auf ffaca3df erfolgreich. Gewöhnliche Push-/PR-Läufe bleiben nach ausdrücklicher Nutzerentscheidung schnell; reine Dokumentänderungen lösen keine weitere Vollsuite aus.
 
 
 <a id="wp-06"></a>
@@ -199,7 +239,7 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Befunde:** [G-001](gaps.md#g-001) · **Vorher:** [WP-01](work-packages.md#wp-01)
 
-**Stand:** planned. G-001: Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
+**Stand:** completed. 49 echte Clientfälle: zwölf tatsächliche private Servicepfade mit vier Identitäten und Denial-Negativkontrolle.
 
 **Vorgehen:** Isolierten Rules-Testharness verwenden, Regeln aus Repository laden, Admin nur fürs Seed/Teardown. Anonym/Owner/Fremdidentität und Untercollections prüfen.
 
@@ -207,7 +247,7 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Produktstellen:** [firestore.rules](../../../firestore.rules), [tests/e2e/test_agent_transactions.py](../../../tests/e2e/test_agent_transactions.py)
 
-**Test-/Dokumentziele:** ` tests/rules/firestore.rules.test.mjs ` (vorgeschlagen)
+**Test-/Dokumentziele:** [tests/rules/firestore.rules.test.mjs](../../../tests/rules/firestore.rules.test.mjs)
 
 **Vorhandene Hilfen:** [firebase.json](../../../firebase.json), [tests/e2e/README.md](../../../tests/e2e/README.md)
 
@@ -216,6 +256,14 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 - ` Separaten Rules-Runner mit dem lokalen Demo-Emulator einrichten; nicht den bestehenden Vitest-Glob oder Admin-SDK als Rules-Test verwenden. `
 
 **Zu beachten:** —
+
+**Implementierungsnachweis:** ` c4710a97 ` · [docs/test-coverage/product/implementation-runtime.md](implementation-runtime.md) · [docs/test-coverage/execution.json](../execution.json)
+
+**Ausgeführte Testbereiche:** [tests/rules/firestore.rules.test.mjs](../../../tests/rules/firestore.rules.test.mjs)
+
+**Beobachtete Negativkontrolle:** Temporärer erlaubter Ownerwrite lässt dieselbe Denialassertion scheitern; Regeln im finally wiederhergestellt.
+
+**Verbleibende Grenze:** Emulator, keine produktive Rules-/IAMfreigabe.
 
 
 <a id="wp-07"></a>
@@ -226,7 +274,7 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Befunde:** [G-002](gaps.md#g-002) · **Vorher:** [WP-01](work-packages.md#wp-01)
 
-**Stand:** planned. G-002: Runzählquoten durch gemeinsames Tokenkonto ersetzt. Umfangreiche parallele Fake-Tests und Usage-Meter vorhanden; native Firestore-Admission/Buchung/Freigabe weiterhin offen.
+**Stand:** completed. Admission, letzter Betrag, Buchung, Release/Consume, UTC-Tage und Kontrollowner nativ belegt.
 
 **Vorgehen:** Bestehende Usage-Regeln als Oracle verwenden; Firestoreemulator und explizite Barrieren statt Thread-Lock-Fake für die entscheidende Transaktion.
 
@@ -234,7 +282,7 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Produktstellen:** [app/services/usage_repository.py](../../../app/services/usage_repository.py)
 
-**Test-/Dokumentziele:** ` tests/e2e/test_usage_transactions.py ` (vorgeschlagen)
+**Test-/Dokumentziele:** [tests/e2e/test_usage_transactions.py](../../../tests/e2e/test_usage_transactions.py)
 
 **Vorhandene Hilfen:** [app/core/e2e_profile.py](../../../app/core/e2e_profile.py), [tests/e2e/test_agent_transactions.py](../../../tests/e2e/test_agent_transactions.py), [tests/usage_test_support.py](../../../tests/usage_test_support.py)
 
@@ -243,6 +291,14 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 - ` RUN_E2E=1 python -m pytest tests/e2e/test_usage_transactions.py -q (mit sicherem Demo-Emulatorprofil) `
 
 **Zu beachten:** —
+
+**Implementierungsnachweis:** ` 1d574233 ` · [docs/test-coverage/product/implementation-persistence.md](implementation-persistence.md) · [docs/test-coverage/execution.json](../execution.json)
+
+**Ausgeführte Testbereiche:** [tests/e2e/test_usage_transactions.py](../../../tests/e2e/test_usage_transactions.py)
+
+**Beobachtete Negativkontrolle:** Dedupguard entfernt: Doppelabbuchung; zusätzlich echte SDK-Reads/Writes aus Transaktion verlagert: zwei Admissions bzw. verlorene unabhängige Buchung erkannt.
+
+**Verbleibende Grenze:** Lokaler Emulator mit anonymen Credentials; kein Produktkonto, keine produktive IAM-/Lastgarantie. Nur eigene Dokumentwurzeln werden aufgeräumt.
 
 
 <a id="wp-08"></a>
@@ -253,7 +309,7 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Befunde:** [G-003](gaps.md#g-003) · **Vorher:** [WP-01](work-packages.md#wp-01)
 
-**Stand:** in_progress. G-003: Dauerhafte Löschjobs und spätes Turn-/Kontextfencing ergänzt (test_chat_history.py, test_chat_context.py). Ein nativer Emulatorrace mit Completion bleibt erforderlich.
+**Stand:** completed. Echter Deleteprozess pausiert nach Tombstonecommit vor Purge; Completion/Create/Failure verändern weder vorhandene Nachfahren noch Löschjob. Beide finalen Commitreihenfolgen, Contextfence und vollständige Kaskade bleiben belegt.
 
 **Vorgehen:** Beide zulässigen Commitreihenfolgen deterministisch herstellen, Antwort-/Context-/Turn-Dokumente direkt prüfen; bestehendes Create-Chat-Limit weiterlaufen lassen.
 
@@ -261,7 +317,7 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Produktstellen:** [app/services/chat_store.py](../../../app/services/chat_store.py)
 
-**Test-/Dokumentziele:** ` tests/e2e/test_chat_lifecycle_transactions.py ` (vorgeschlagen)
+**Test-/Dokumentziele:** [tests/e2e/test_chat_lifecycle_transactions.py](../../../tests/e2e/test_chat_lifecycle_transactions.py)
 
 **Vorhandene Hilfen:** [tests/e2e/test_phase2_transactions.py](../../../tests/e2e/test_phase2_transactions.py), [tests/test_chat_history.py](../../../tests/test_chat_history.py)
 
@@ -270,6 +326,14 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 - ` RUN_E2E=1 python -m pytest tests/e2e/test_chat_lifecycle_transactions.py -q (Demo-Emulator) `
 
 **Zu beachten:** —
+
+**Implementierungsnachweis:** ` 1d574233 ` · [docs/test-coverage/product/implementation-persistence.md](implementation-persistence.md) · [docs/test-coverage/execution.json](../execution.json)
+
+**Ausgeführte Testbereiche:** [tests/e2e/test_chat_lifecycle_transactions.py](../../../tests/e2e/test_chat_lifecycle_transactions.py)
+
+**Beobachtete Negativkontrolle:** Exakter Active-/Deleting-Guard entfernt: unerlaubter Write im Zwischenzustand erkannt; terminaler Statusguard zusätzlich separat mutiert.
+
+**Verbleibende Grenze:** Lokaler Emulator mit anonymen Credentials; kein Produktkonto, keine produktive IAM-/Lastgarantie. Nur eigene Dokumentwurzeln werden aufgeräumt.
 
 
 <a id="wp-09"></a>
@@ -280,15 +344,15 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Befunde:** [G-004](gaps.md#g-004) · **Vorher:** [WP-08](work-packages.md#wp-08), [WP-11](work-packages.md#wp-11)
 
-**Stand:** in_progress. G-004: Kaskade berücksichtigt Googlegrants, Aktionen, Dokumentversionen, Antwortreceipts und Outbox. Einzelne Fake-Nachweise sind vorhanden; komplette Kaskade samt Retrygrenzen noch nicht als eine integrierte Reise belegt.
+**Stand:** completed. Alle16 aktuellen Bereiche mit expliziter Inventarassertion; Retry, fehlende Parentdokumente, verlorene Checkpoints, Kontrollowner und minimaler Tombstone belegt.
 
 **Vorgehen:** Aus tatsächlichem areas-Tupel vollständiges Seedinventar bauen, Services ausführen und nur externe Firebase-Auth/Mail/Telegram-Grenzen ersetzen; Teilfehler und neue Instanz injizieren. Bereichserfolg mit anschließendem Checkpointverlust separat vom eigentlichen Löschfehler prüfen; Wiederaufnahme aus dauerhaft gespeichertem Zustand lesen.
 
-**Abnahme zusätzlich zu den verknüpften Then-/Negativkontrollen:** Alle 14 aktuellen Bereiche mit explizitem Endzustand, kein Fremddatenverlust; pending/Retry und bereits authentifizierte Late-Writes geprüft. Änderungen des Bereichsinventars erzwingen Review. Persistiert bestätigte Bereiche überspringen, unbestätigte Operationen idempotent wiederholen. Minimalen UID-Sperrtombstone bis zum Aufbewahrungsende erhalten und Cleanup-E-Mail bei Abschluss entfernen.
+**Abnahme zusätzlich zu den verknüpften Then-/Negativkontrollen:** Alle 16 aktuellen Bereiche mit explizitem Endzustand, kein Fremddatenverlust; pending/Retry und bereits authentifizierte Late-Writes geprüft. Änderungen des Bereichsinventars erzwingen Review. Persistiert bestätigte Bereiche überspringen, unbestätigte Operationen idempotent wiederholen. Minimalen UID-Sperrtombstone bis zum Aufbewahrungsende erhalten und Cleanup-E-Mail bei Abschluss entfernen.
 
 **Produktstellen:** [app/services/account_deletion.py](../../../app/services/account_deletion.py), [app/services/api_account_cleanup.py](../../../app/services/api_account_cleanup.py)
 
-**Test-/Dokumentziele:** ` tests/e2e/test_account_deletion_transactions.py ` (vorgeschlagen), [tests/test_api_account_cleanup.py](../../../tests/test_api_account_cleanup.py)
+**Test-/Dokumentziele:** [tests/e2e/test_account_deletion_transactions.py](../../../tests/e2e/test_account_deletion_transactions.py), [tests/test_api_account_cleanup.py](../../../tests/test_api_account_cleanup.py)
 
 **Vorhandene Hilfen:** [tests/test_account_deletion_retry.py](../../../tests/test_account_deletion_retry.py), [tests/test_chat_history.py](../../../tests/test_chat_history.py)
 
@@ -297,6 +361,14 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 - ` python -m pytest tests/test_api_account_cleanup.py tests/test_account_deletion_retry.py -q; anschließend neuer Emulator-Kaskadentest `
 
 **Zu beachten:** —
+
+**Implementierungsnachweis:** ` acdadb91 ` · [docs/test-coverage/product/implementation-persistence.md](implementation-persistence.md) · [docs/test-coverage/execution.json](../execution.json)
+
+**Ausgeführte Testbereiche:** [tests/e2e/test_account_deletion_transactions.py](../../../tests/e2e/test_account_deletion_transactions.py)
+
+**Beobachtete Negativkontrolle:** Receiptcleanup ausgelassen: verbleibende persönliche Daten erkannt.
+
+**Verbleibende Grenze:** Auth- und Cloudobjektgrenzen ersetzt; keine produktive Lösch-/IAMfreigabe.
 
 
 <a id="wp-10"></a>
@@ -307,7 +379,7 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Befunde:** [G-007](gaps.md#g-007), [G-008](gaps.md#g-008), [G-038](gaps.md#g-038) · **Vorher:** [WP-01](work-packages.md#wp-01)
 
-**Stand:** in_progress. G-007: Undo-Ablauf nach 30 Tagen ist nun im Repository getestet; Konflikt, fremder Owner, Repeat und echte Undo-HTTP-Fehlergrenze bleiben zusätzlich zu G-038 offen. Alte Mutationsprobe ist historisch, nicht erneut ausgeführt. G-008: Manuelles PUT benutzt Revision-CAS, KI-Edit nutzt Leasefencing; stale Save und Save nach KI-Patch werden geprüft. Direkter konkurrierender Patch/Save/Löschtombstone im nativen Speicher bleibt offen. G-038: Undo sanitisiert den Vorzustand weiterhin mit dem aktuellen memory_limit; nach Limitabsenkung bleibt stilles Kürzen möglich. Lease-/CAS-/Retentionkorrekturen lösen diese Grenze nicht.
+**Stand:** completed. Datenverlust bei Limitabsenkung behoben. Native Revision/Lease/Tombstone/Commitfehler und volle echte main-HTTP-Matrix mit Auth/Tier/Owner/Expiry/Konflikt/Repeat ohne Providerarbeit belegt.
 
 **Vorgehen:** Unit-/Routerfälle auf echten Revisions-/Ownerguard ausrichten; nativer Commitfall für partielle Writes. Patch/Undo-Fehler müssen gespeicherten Inhalt unverändert lassen. Undo auch als echte HTTP-Anfrage ausführen. Bei kleinerem Tier-/Adminlimit den kompletten Vorzustand vergleichen; die derzeitige stille Kürzung aus P-02 nicht als Sollverhalten übernehmen.
 
@@ -315,7 +387,7 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Produktstellen:** [app/services/memory_edit.py](../../../app/services/memory_edit.py), [app/api/routers/users.py](../../../app/api/routers/users.py)
 
-**Test-/Dokumentziele:** ` tests/e2e/test_memory_edit_transactions.py ` (vorgeschlagen), [tests/test_memory_edit.py](../../../tests/test_memory_edit.py)
+**Test-/Dokumentziele:** [tests/e2e/test_memory_edit_transactions.py](../../../tests/e2e/test_memory_edit_transactions.py), [tests/test_memory_edit.py](../../../tests/test_memory_edit.py), [tests/test_memory_http_contract.py](../../../tests/test_memory_http_contract.py)
 
 **Vorhandene Hilfen:** [app/services/persistence_guard.py](../../../app/services/persistence_guard.py), [tests/test_memory_edit.py](../../../tests/test_memory_edit.py)
 
@@ -326,6 +398,14 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Zu beachten:** —
 
+**Implementierungsnachweis:** ` b517b3f5 ` · [docs/test-coverage/product/implementation-persistence.md](implementation-persistence.md) · [docs/test-coverage/execution.json](../execution.json)
+
+**Ausgeführte Testbereiche:** [tests/test_memory_edit.py](../../../tests/test_memory_edit.py), [tests/e2e/test_memory_edit_transactions.py](../../../tests/e2e/test_memory_edit_transactions.py), [tests/test_memory_http_contract.py](../../../tests/test_memory_http_contract.py)
+
+**Beobachtete Negativkontrolle:** Verlustschutz entfernt: Undo kürzt; zusätzlich Undo-Revisionsguard im isolierten Prozess entfernt: echter HTTPfall liefert200 statt409.
+
+**Verbleibende Grenze:** Synthetische Profile; keine Live-Modellqualität.
+
 
 <a id="wp-11"></a>
 
@@ -335,7 +415,7 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Befunde:** [G-005](gaps.md#g-005), [G-010](gaps.md#g-010) · **Vorher:** —
 
-**Stand:** in_progress. G-005: test_api_run_billing_identity.py führt Recovery abgelaufener Reservierungen und Lösch-/Replaypfade aus. Vollständige Retention/Backfill-/Restartorchestrierung bleibt offen; die alte Behauptung keiner ausgeführten Recovery ist überholt. G-010: Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
+**Stand:** completed. Ausgeführte Recoveryaufträge, lebende/abgelaufene Leases, kein zweiter Providerstart/Verbrauch; historischer Sourceadapter bindet alle Identitäten/Versionen, Pagination und Pollrevision. Backfill liest Run und Mapping transaktional neu.
 
 **Vorgehen:** Vorhandene Recovery-/Billing-Identity-Tests anerkennen; fehlende Retention-/Backfill-/Restartfälle und historischen Source-Adapter ergänzen.
 
@@ -343,7 +423,7 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Produktstellen:** [app/api/routers/api_v1.py](../../../app/api/routers/api_v1.py), [app/services/api_consensus_runner.py](../../../app/services/api_consensus_runner.py), [app/services/api_run_repository.py](../../../app/services/api_run_repository.py)
 
-**Test-/Dokumentziele:** ` tests/test_api_run_recovery.py ` (vorgeschlagen), [tests/test_api_run_repository.py](../../../tests/test_api_run_repository.py), [tests/test_consensus_api.py](../../../tests/test_consensus_api.py), [tests/test_source_check_api.py](../../../tests/test_source_check_api.py)
+**Test-/Dokumentziele:** [tests/e2e/test_api_retention_transactions.py](../../../tests/e2e/test_api_retention_transactions.py), [tests/test_api_run_recovery.py](../../../tests/test_api_run_recovery.py), [tests/test_api_run_repository.py](../../../tests/test_api_run_repository.py), [tests/test_api_source_history.py](../../../tests/test_api_source_history.py), [tests/test_consensus_api.py](../../../tests/test_consensus_api.py), [tests/test_source_check_api.py](../../../tests/test_source_check_api.py)
 
 **Vorhandene Hilfen:** [tests/test_api_run_repository.py](../../../tests/test_api_run_repository.py), [tests/test_consensus_api.py](../../../tests/test_consensus_api.py), [tests/test_source_check_repository.py](../../../tests/test_source_check_repository.py), [tests/usage_test_support.py](../../../tests/usage_test_support.py)
 
@@ -354,6 +434,14 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Zu beachten:** [D-01](decisions.md#d-01)
 
+**Implementierungsnachweis:** ` c723e42b ` · [docs/test-coverage/product/implementation-adapters.md](implementation-adapters.md) · [docs/test-coverage/execution.json](../execution.json)
+
+**Ausgeführte Testbereiche:** [tests/test_api_run_recovery.py](../../../tests/test_api_run_recovery.py), [tests/test_api_source_history.py](../../../tests/test_api_source_history.py), [tests/e2e/test_api_retention_transactions.py](../../../tests/e2e/test_api_retention_transactions.py)
+
+**Beobachtete Negativkontrolle:** Run-ID-Bindung vor Mappingupdate entfernt: fremde Ablaufdaten ändern sich.
+
+**Verbleibende Grenze:** Infrastruktur/Providergrenzen kontrolliert; keine produktive Restart-/Lastfreigabe.
+
 
 <a id="wp-12"></a>
 
@@ -363,7 +451,7 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Befunde:** [G-009](gaps.md#g-009), [G-012](gaps.md#g-012) · **Vorher:** —
 
-**Stand:** planned. G-009: Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung. G-012: Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
+**Stand:** completed. Echter Registrierungsservice behandelt Lookup/Create-Race neutral ohne doppelte Neunutzerbenachrichtigung. user_status führt reale Rollen-/Tarifmatrix und Tierausfall aus.
 
 **Vorgehen:** Lookup/Create-Race gezielt vom Firebase-SDK-Double auslösen; echten Provisioner/Statushandler verwenden. Free-Admin separat von Pro modellieren.
 
@@ -371,7 +459,7 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Produktstellen:** [app/api/routers/users.py](../../../app/api/routers/users.py), [app/services/registration.py](../../../app/services/registration.py)
 
-**Test-/Dokumentziele:** [tests/test_auth_session.py](../../../tests/test_auth_session.py), [tests/test_registration_security.py](../../../tests/test_registration_security.py), ` tests/test_user_status.py ` (vorgeschlagen)
+**Test-/Dokumentziele:** [tests/test_auth_session.py](../../../tests/test_auth_session.py), [tests/test_http_adapter_auth.py](../../../tests/test_http_adapter_auth.py), [tests/test_registration_security.py](../../../tests/test_registration_security.py), ` tests/test_user_status.py ` (vorgeschlagen)
 
 **Vorhandene Hilfen:** [tests/js/plus-tier-gates.test.mjs](../../../tests/js/plus-tier-gates.test.mjs), [tests/test_account_tier_admin.py](../../../tests/test_account_tier_admin.py), [tests/test_auth_session.py](../../../tests/test_auth_session.py), [tests/test_tier_cache.py](../../../tests/test_tier_cache.py)
 
@@ -382,6 +470,14 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Zu beachten:** —
 
+**Implementierungsnachweis:** ` c723e42b ` · [docs/test-coverage/product/implementation-adapters.md](implementation-adapters.md) · [docs/test-coverage/execution.json](../execution.json)
+
+**Ausgeführte Testbereiche:** [tests/test_http_adapter_auth.py](../../../tests/test_http_adapter_auth.py)
+
+**Beobachtete Negativkontrolle:** Create-Racebehandlung entfernt: neutrale Antworten stimmen nicht mehr überein.
+
+**Verbleibende Grenze:** Firebase-SDK-Authentifizierung und DB ersetzt; externe Modell-, Mail- und Telegramgrenzen kontrolliert. Kein Live-OAuth oder produktiver Versand.
+
 
 <a id="wp-13"></a>
 
@@ -391,7 +487,7 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Befunde:** [G-011](gaps.md#g-011) · **Vorher:** [WP-01](work-packages.md#wp-01)
 
-**Stand:** planned. G-011: Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
+**Stand:** completed. App-POST schreibt das autoritative Pendingergebnis, verwirft gefälschte Inhalts-/Owner-/Visibilityfelder und prüft Quota/Ablauf/Retry. Antwort und persistierter Share stimmen überein.
 
 **Vorgehen:** Route plus Snapshotservice ausführen, gültigen Pending-Datensatz nutzen; main-Fehlerumschlag und Owner/Visibility/Quota/Retry prüfen.
 
@@ -399,7 +495,7 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Produktstellen:** [app/api/routers/share.py](../../../app/api/routers/share.py)
 
-**Test-/Dokumentziele:** [tests/test_share_feature.py](../../../tests/test_share_feature.py)
+**Test-/Dokumentziele:** [tests/test_share_feature.py](../../../tests/test_share_feature.py), [tests/test_share_http_contract.py](../../../tests/test_share_http_contract.py)
 
 **Vorhandene Hilfen:** [tests/test_bookmarks.py](../../../tests/test_bookmarks.py), [tests/test_share_feature.py](../../../tests/test_share_feature.py)
 
@@ -408,6 +504,14 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 - ` python -m pytest tests/test_share_feature.py -q `
 
 **Zu beachten:** —
+
+**Implementierungsnachweis:** ` c723e42b ` · [docs/test-coverage/product/implementation-adapters.md](implementation-adapters.md) · [docs/test-coverage/execution.json](../execution.json)
+
+**Ausgeführte Testbereiche:** [tests/test_share_http_contract.py](../../../tests/test_share_http_contract.py)
+
+**Beobachtete Negativkontrolle:** Private statt autoritativer public-Visibility geschrieben: Storeassertion wird rot.
+
+**Verbleibende Grenze:** Firebase-SDK-Authentifizierung und DB ersetzt; externe Modell-, Mail- und Telegramgrenzen kontrolliert. Kein Live-OAuth oder produktiver Versand.
 
 
 <a id="wp-14"></a>
@@ -418,7 +522,7 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Befunde:** [G-006](gaps.md#g-006) · **Vorher:** [WP-01](work-packages.md#wp-01)
 
-**Stand:** planned. G-006: Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
+**Stand:** completed. Native Claims/Takeover/Paketabschluss/Delete/Pagination/Revision plus tatsächlicher Own-Key-Workerpfad. Fremder Worker und Fremdowner bleiben gesperrt; nur gebundener Judge erhält flüchtigen Dummykey, kein Key in entpackter DB/Cache/Workerlogs, kein zweiter Providercall.
 
 **Vorgehen:** Claim-/Finish-/Delete-Reihenfolgen im Emulator mit getrennten Repositoryinstanzen; Credentialprovider bleibt außerhalb der DB.
 
@@ -426,7 +530,7 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Produktstellen:** [app/services/source_check_repository.py](../../../app/services/source_check_repository.py)
 
-**Test-/Dokumentziele:** ` tests/e2e/test_source_check_transactions.py ` (vorgeschlagen)
+**Test-/Dokumentziele:** [tests/e2e/test_source_check_transactions.py](../../../tests/e2e/test_source_check_transactions.py)
 
 **Vorhandene Hilfen:** [tests/e2e/test_prompt_config_transactions.py](../../../tests/e2e/test_prompt_config_transactions.py), [tests/test_source_check_jobs.py](../../../tests/test_source_check_jobs.py), [tests/test_source_check_repository.py](../../../tests/test_source_check_repository.py)
 
@@ -435,6 +539,14 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 - ` RUN_E2E=1 python -m pytest tests/e2e/test_source_check_transactions.py -q (Demo-Emulator) `
 
 **Zu beachten:** —
+
+**Implementierungsnachweis:** ` b517b3f5 ` · [docs/test-coverage/product/implementation-persistence.md](implementation-persistence.md) · [docs/test-coverage/execution.json](../execution.json)
+
+**Ausgeführte Testbereiche:** [tests/e2e/test_source_check_transactions.py](../../../tests/e2e/test_source_check_transactions.py)
+
+**Beobachtete Negativkontrolle:** Leasevergleich entfernt: alter Commit; Own-Key-Affinitätsguard separat entfernt: fremder Worker verarbeitet das native Jobdokument.
+
+**Verbleibende Grenze:** Transiente SDK-Abbrüche werden explizit erfasst; externer Provider ist kein Testziel.
 
 
 <a id="wp-15"></a>
@@ -445,7 +557,7 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Befunde:** [G-013](gaps.md#g-013) · **Vorher:** —
 
-**Stand:** planned. G-013: Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
+**Stand:** completed. Watch-/Telegramhandler und Abmelde-/Followeradapter prüfen UID/Owner/Tarif, Verbindung, Fehler und Tokenzustände vor Write; Disconnect ist UID-gebunden.
 
 **Vorgehen:** PATCH/DELETE/Link/Test durch echten Router; UID/Allowlist/Entitlements/Servicefehler mit gespeicherten Kontrollzuständen und Notifierdouble prüfen. Telegram-Disconnect und beide Watch-/Follower-Unsubscribe-Routen einschließlich Tokenfehlern und escaped HTML ergänzen.
 
@@ -453,7 +565,7 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Produktstellen:** [app/api/routers/watch.py](../../../app/api/routers/watch.py)
 
-**Test-/Dokumentziele:** [tests/test_watch_feature.py](../../../tests/test_watch_feature.py)
+**Test-/Dokumentziele:** [tests/test_watch_feature.py](../../../tests/test_watch_feature.py), [tests/test_watch_http_contract.py](../../../tests/test_watch_http_contract.py)
 
 **Vorhandene Hilfen:** [tests/test_watch_feature.py](../../../tests/test_watch_feature.py)
 
@@ -462,6 +574,14 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 - ` python -m pytest tests/test_watch_feature.py -q `
 
 **Zu beachten:** [D-03](decisions.md#d-03)
+
+**Implementierungsnachweis:** ` c723e42b ` · [docs/test-coverage/product/implementation-adapters.md](implementation-adapters.md) · [docs/test-coverage/execution.json](../execution.json)
+
+**Ausgeführte Testbereiche:** [tests/test_watch_http_contract.py](../../../tests/test_watch_http_contract.py)
+
+**Beobachtete Negativkontrolle:** WatchPATCH verwendet fremde UID: Fremdrequest/Nichtmutation schlägt fehl.
+
+**Verbleibende Grenze:** Firebase-SDK-Authentifizierung und DB ersetzt; externe Modell-, Mail- und Telegramgrenzen kontrolliert. Kein Live-OAuth oder produktiver Versand.
 
 
 <a id="wp-16"></a>
@@ -472,7 +592,7 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Befunde:** [G-014](gaps.md#g-014), [G-041](gaps.md#g-041) · **Vorher:** —
 
-**Stand:** planned. G-014: Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung. G-041: Topichelper ruft verify_user_token weiterhin ohne check_revoked=True auf; Abweichung zum zentralen Adminhelper bleibt bestehen.
+**Stand:** completed. Alle Topicadminmethoden prüfen Revocation und projizieren Tierausfall503. Hub/Sitemap unterscheiden Status/noindex korrekt. Neutraler Follow, tatsächlicher Confirm-/Unsubscribe-Link und Escaping ausgeführt.
 
 **Vorgehen:** PUT ausdrücklich aufrufen, Adminprüfung nicht ersetzen; Hub/Sitemap/Follow mit verschiedenen Publikationszuständen und Escapingfällen. Separate Topic-Adminprüfung gegen die zentrale Revocation-/503-Policy prüfen; nur das externe Auth-SDK ersetzen. noindex ausdrücklich von Zugriffs- und Archivzustand unterscheiden. P-04 als roten Grenztest übernehmen; gemeinsame Adminpolicy korrigieren. Adminlist/Confirm/Unsubscribe ebenso ausführen, SDK-Flags und HTTP-Umschlag getrennt prüfen.
 
@@ -480,7 +600,7 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Produktstellen:** [app/api/routers/topics.py](../../../app/api/routers/topics.py), [app/api/routers/admin.py](../../../app/api/routers/admin.py), [app/core/security.py](../../../app/core/security.py)
 
-**Test-/Dokumentziele:** [tests/test_topics_feature.py](../../../tests/test_topics_feature.py)
+**Test-/Dokumentziele:** [tests/test_http_adapter_auth.py](../../../tests/test_http_adapter_auth.py), [tests/test_topic_public_http.py](../../../tests/test_topic_public_http.py), [tests/test_topics_feature.py](../../../tests/test_topics_feature.py)
 
 **Vorhandene Hilfen:** [tests/test_auth_revocation.py](../../../tests/test_auth_revocation.py), [tests/test_topics_feature.py](../../../tests/test_topics_feature.py)
 
@@ -489,6 +609,14 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 - ` python -m pytest tests/test_topics_feature.py tests/test_auth_revocation.py -q `
 
 **Zu beachten:** —
+
+**Implementierungsnachweis:** ` c723e42b ` · [docs/test-coverage/product/implementation-adapters.md](implementation-adapters.md) · [docs/test-coverage/execution.json](../execution.json)
+
+**Ausgeführte Testbereiche:** [tests/test_http_adapter_auth.py](../../../tests/test_http_adapter_auth.py), [tests/test_topic_public_http.py](../../../tests/test_topic_public_http.py)
+
+**Beobachtete Negativkontrolle:** check_revoked entfernt: widerrufener Request/SDK-Flag wird erkannt.
+
+**Verbleibende Grenze:** Firebase-SDK-Authentifizierung und DB ersetzt; externe Modell-, Mail- und Telegramgrenzen kontrolliert. Kein Live-OAuth oder produktiver Versand.
 
 
 <a id="wp-17"></a>
@@ -499,7 +627,7 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Befunde:** [G-016](gaps.md#g-016) · **Vorher:** —
 
-**Stand:** planned. G-016: Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
+**Stand:** completed. Identityhelper/Parser/Retryplan prüft bekannte eindeutige Keys und ausschließlich echte JSON-Integer, begrenzte Inputs/Versuche, sichere Fehlerdiagnose. Fallback bewahrt schon reservierte Keys.
 
 **Vorgehen:** Transportantworten einspeisen, query_claim_identity ausführen. Bekannte/neue/duplizierte Keys und Indexformen systematisch kombinieren.
 
@@ -507,7 +635,7 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Produktstellen:** [app/services/llm/consensus_engine.py](../../../app/services/llm/consensus_engine.py)
 
-**Test-/Dokumentziele:** ` tests/test_claim_identity_judge.py ` (vorgeschlagen)
+**Test-/Dokumentziele:** [tests/test_claim_identity_judge.py](../../../tests/test_claim_identity_judge.py), [tests/test_maintenance_scripts.py](../../../tests/test_maintenance_scripts.py)
 
 **Vorhandene Hilfen:** [tests/test_consensus_engine.py](../../../tests/test_consensus_engine.py), [tests/test_topics_feature.py](../../../tests/test_topics_feature.py)
 
@@ -516,6 +644,14 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 - ` python -m pytest tests/test_claim_identity_judge.py tests/test_topics_feature.py tests/test_claim_ledger.py -q `
 
 **Zu beachten:** [D-06](decisions.md#d-06)
+
+**Implementierungsnachweis:** ` d3500c0c ` · [docs/test-coverage/product/implementation-adapters.md](implementation-adapters.md) · [docs/test-coverage/execution.json](../execution.json)
+
+**Ausgeführte Testbereiche:** [tests/test_claim_identity_judge.py](../../../tests/test_claim_identity_judge.py), [tests/test_maintenance_scripts.py](../../../tests/test_maintenance_scripts.py)
+
+**Beobachtete Negativkontrolle:** Key-/Eindeutigkeitsguard entfernt: unerlaubte Zuordnung erkannt.
+
+**Verbleibende Grenze:** Synthetische Modellantworten; neue Integerpräzisierung in D06/Implementierungsbericht dokumentiert.
 
 
 <a id="wp-18"></a>
@@ -526,7 +662,7 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Befunde:** [G-017](gaps.md#g-017) · **Vorher:** —
 
-**Stand:** planned. G-017: Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
+**Stand:** completed. BatchGet ordnet anhand Dokumentidentität zu, begrenzt 615 Referenzen auf400/215; fehlende Snapshots/Messungen, Datumsformen und neueste Queries mit echten SDK-Fällen.
 
 **Vorgehen:** Ungeordnete/missing BatchGet-Snapshots und Grenzgrößen, Datumsmischung und Latest-/Judgmentqueries prüfen; kleiner Emulatorfall für reale Queryform.
 
@@ -534,7 +670,7 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Produktstellen:** [app/services/seo_repository.py](../../../app/services/seo_repository.py)
 
-**Test-/Dokumentziele:** ` tests/test_seo_repository.py ` (vorgeschlagen)
+**Test-/Dokumentziele:** [tests/e2e/test_seo_repository_queries.py](../../../tests/e2e/test_seo_repository_queries.py), [tests/test_seo_repository.py](../../../tests/test_seo_repository.py)
 
 **Vorhandene Hilfen:** [tests/test_seo_data.py](../../../tests/test_seo_data.py), [tests/test_seo_weekly_review.py](../../../tests/test_seo_weekly_review.py)
 
@@ -543,6 +679,14 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 - ` python -m pytest tests/test_seo_repository.py tests/test_seo_data.py tests/test_seo_weekly_review.py -q `
 
 **Zu beachten:** —
+
+**Implementierungsnachweis:** ` c723e42b ` · [docs/test-coverage/product/implementation-adapters.md](implementation-adapters.md) · [docs/test-coverage/execution.json](../execution.json)
+
+**Ausgeführte Testbereiche:** [tests/test_seo_repository.py](../../../tests/test_seo_repository.py), [tests/e2e/test_seo_repository_queries.py](../../../tests/e2e/test_seo_repository_queries.py)
+
+**Beobachtete Negativkontrolle:** Payload-page_id bevorzugt: falsche Zuordnung erkannt.
+
+**Verbleibende Grenze:** Lokaler Emulator mit anonymen Credentials; kein Produktkonto, keine produktive IAM-/Lastgarantie. Nur eigene Dokumentwurzeln werden aufgeräumt.
 
 
 <a id="wp-19"></a>
@@ -553,7 +697,7 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Befunde:** [G-031](gaps.md#g-031) · **Vorher:** [WP-01](work-packages.md#wp-01)
 
-**Stand:** in_progress. G-031: Workerleaseowner, verlorene Lease und stale Watchcompletion haben neue Fake-Nachweise. Native SDK-Queries/Transaktionskonflikte samt Probe-/Outboxclaims bleiben offen.
+**Stand:** completed. Native Duequeries/Claims/Budget/Stale-Fences plus wirkliche Topic-/SEOloops: Erfolgs- und Fehlerabschluss, gespeicherter Benachrichtigungsstatus, Leasefreigabe und Cancellation ohne nächsten Dispatch.
 
 **Vorgehen:** Einzelnen Tick mit kontrollierter Uhr/Pipeline ausführen, native Claimkonkurrenz und Shutdown. Vorhandene DST-/Supervisortests wiederverwenden.
 
@@ -561,7 +705,7 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Produktstellen:** [app/services/seo_weekly_review.py](../../../app/services/seo_weekly_review.py), [app/services/topics.py](../../../app/services/topics.py), [app/services/watch_service.py](../../../app/services/watch_service.py)
 
-**Test-/Dokumentziele:** ` tests/e2e/test_scheduler_transactions.py ` (vorgeschlagen), [tests/test_background_task_supervision.py](../../../tests/test_background_task_supervision.py)
+**Test-/Dokumentziele:** [tests/e2e/test_scheduler_transactions.py](../../../tests/e2e/test_scheduler_transactions.py), [tests/test_background_task_supervision.py](../../../tests/test_background_task_supervision.py)
 
 **Vorhandene Hilfen:** [tests/test_seo_weekly_review.py](../../../tests/test_seo_weekly_review.py), [tests/test_topics_feature.py](../../../tests/test_topics_feature.py), [tests/test_watch_feature.py](../../../tests/test_watch_feature.py)
 
@@ -570,6 +714,14 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 - ` RUN_E2E=1 python -m pytest tests/e2e/test_scheduler_transactions.py -q; python -m pytest tests/test_background_task_supervision.py -q `
 
 **Zu beachten:** [D-03](decisions.md#d-03)
+
+**Implementierungsnachweis:** ` a19134b0 ` · [docs/test-coverage/product/implementation-persistence.md](implementation-persistence.md) · [docs/test-coverage/execution.json](../execution.json)
+
+**Ausgeführte Testbereiche:** [tests/e2e/test_scheduler_transactions.py](../../../tests/e2e/test_scheduler_transactions.py), [tests/test_background_task_supervision.py](../../../tests/test_background_task_supervision.py)
+
+**Beobachtete Negativkontrolle:** SEO-Ownerguard entfernt: Nachfolgerzustand wird überschrieben.
+
+**Verbleibende Grenze:** Erneuter Scheduler-Tick nach Infrastrukturfehler kann erforderlich sein.
 
 
 <a id="wp-20"></a>
@@ -580,7 +732,7 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Befunde:** [G-018](gaps.md#g-018) · **Vorher:** —
 
-**Stand:** in_progress. G-018: Behoben in 76e4873e: Checkstrip nutzt Text-/DOMknoten, Topicseite externe Skripte/strikte CSP. topic-page.test.mjs prüft inerte Notizen/Datumswerte, test_topics_feature.py CSP und aktuelle Quellenregeln. Beide Dateien im aktuellen Unitlauf grün.
+**Stand:** completed. Originales Topicskript hält Notizen inert und Sonderzeichen lesbar; Focus/Enter, Touchpreview/Navigation, Seenmarker, historische Ansicht und blockierter Storage ausgeführt.
 
 **Vorgehen:** DOM-Test mit inertem Markup und Interaktionen; gezielten Browserfall für Touch/Focus/Navigation ergänzen. Textknoten und konstante UI-Struktur getrennt aufbauen.
 
@@ -588,7 +740,7 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Produktstellen:** [app/services/claim_ledger.py](../../../app/services/claim_ledger.py), [static/js/topic-page.js](../../../static/js/topic-page.js), [templates/topic.html](../../../templates/topic.html)
 
-**Test-/Dokumentziele:** ` tests/e2e/test_topic_frontend.py ` (vorgeschlagen), [tests/js/topic-page.test.mjs](../../../tests/js/topic-page.test.mjs)
+**Test-/Dokumentziele:** [tests/e2e/test_topic_frontend.py](../../../tests/e2e/test_topic_frontend.py), [tests/js/topic-page.test.mjs](../../../tests/js/topic-page.test.mjs)
 
 **Vorhandene Hilfen:** [tests/js/helpers/appWindow.mjs](../../../tests/js/helpers/appWindow.mjs), [tests/test_claim_ledger.py](../../../tests/test_claim_ledger.py)
 
@@ -597,6 +749,14 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 - ` npm test -- tests/js/topic-page.test.mjs; ergänzend gezielter Topic-Browserfall `
 
 **Zu beachten:** —
+
+**Implementierungsnachweis:** ` 0cd497d9 ` · [docs/test-coverage/product/implementation-browser.md](implementation-browser.md) · [docs/test-coverage/execution.json](../execution.json)
+
+**Ausgeführte Testbereiche:** [tests/e2e/test_topic_frontend.py](../../../tests/e2e/test_topic_frontend.py), [tests/js/topic-page.test.mjs](../../../tests/js/topic-page.test.mjs)
+
+**Beobachtete Negativkontrolle:** Feindlicher Text erzeugt kein Element/Handler; erster Touch navigiert nicht, historischer Besuch schreibt keinen Seenmarker.
+
+**Verbleibende Grenze:** Kontrollierte SSRfixture, kein vollständiger visueller Seitenaudit.
 
 
 <a id="wp-21"></a>
@@ -607,7 +767,7 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Befunde:** [G-019](gaps.md#g-019) · **Vorher:** —
 
-**Stand:** planned. G-019: Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
+**Stand:** completed. Echter main-error-Umschlag ist serverseitig belegt und wird vom tatsächlichen Adminclient lesbar projiziert; unbekannte Objekte fallen sicher zurück,409 behält Draft ohne Retry.
 
 **Vorgehen:** createAdminClient mit tatsächlichen error-/detail-Objekten, Strings, Listen und nicht-JSON testen; AccountTier-HTTP-Response als Vertragsfixture nutzen.
 
@@ -615,7 +775,7 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Produktstellen:** [app/api/routers/admin.py](../../../app/api/routers/admin.py), [main.py](../../../main.py), [static/js/admin-api.js](../../../static/js/admin-api.js)
 
-**Test-/Dokumentziele:** ` tests/js/admin-api.test.mjs ` (vorgeschlagen), [tests/test_account_tier_admin.py](../../../tests/test_account_tier_admin.py)
+**Test-/Dokumentziele:** [tests/js/admin-api.test.mjs](../../../tests/js/admin-api.test.mjs), [tests/js/admin-prompt-config.test.mjs](../../../tests/js/admin-prompt-config.test.mjs), [tests/test_account_tier_admin.py](../../../tests/test_account_tier_admin.py)
 
 **Vorhandene Hilfen:** [tests/e2e/test_admin_prompt_config.py](../../../tests/e2e/test_admin_prompt_config.py), [tests/js/admin-prompt-config.test.mjs](../../../tests/js/admin-prompt-config.test.mjs)
 
@@ -624,6 +784,14 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 - ` npm test -- tests/js/admin-api.test.mjs tests/js/admin-prompt-config.test.mjs; python -m pytest tests/test_account_tier_admin.py -q `
 
 **Zu beachten:** —
+
+**Implementierungsnachweis:** ` 0cd497d9 ` · [docs/test-coverage/product/implementation-browser.md](implementation-browser.md) · [docs/test-coverage/execution.json](../execution.json)
+
+**Ausgeführte Testbereiche:** [tests/js/admin-api.test.mjs](../../../tests/js/admin-api.test.mjs), [tests/js/admin-prompt-config.test.mjs](../../../tests/js/admin-prompt-config.test.mjs), [tests/test_account_tier_admin.py](../../../tests/test_account_tier_admin.py)
+
+**Beobachtete Negativkontrolle:** Alte Adminclientquelle gegen neuen Test erzeugt Fehler; Writezähler bleibt1.
+
+**Verbleibende Grenze:** Fetch/Auth kontrolliert, keine gemeinsame Firestore-/Browsertransaktion.
 
 
 <a id="wp-22"></a>
@@ -634,7 +802,7 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Befunde:** [G-015](gaps.md#g-015) · **Vorher:** —
 
-**Stand:** planned. G-015: Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
+**Stand:** completed. Echter Adminrollen-/Reportadapter plus dynamischer Viewer: kompakte Daten, keine Rohprompts, passende Run-ID, stale Antwort/Fehler ignoriert und alte Daten bei Auswahlfehler entfernt.
 
 **Vorgehen:** Admin-Listen/Detailroute mit Auth, danach Viewer mit kontrolliert verspäteten Antworten. Kein Rohreport mit Prompts/Antworten als Fixture im Adminvertrag.
 
@@ -642,7 +810,7 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Produktstellen:** [app/api/routers/admin.py](../../../app/api/routers/admin.py), [static/js/admin-benchmark.js](../../../static/js/admin-benchmark.js)
 
-**Test-/Dokumentziele:** ` tests/js/admin-benchmark.test.mjs ` (vorgeschlagen), [tests/test_benchmark_reports.py](../../../tests/test_benchmark_reports.py)
+**Test-/Dokumentziele:** [tests/js/admin-benchmark.test.mjs](../../../tests/js/admin-benchmark.test.mjs), [tests/test_benchmark_reports.py](../../../tests/test_benchmark_reports.py), [tests/test_http_adapter_auth.py](../../../tests/test_http_adapter_auth.py)
 
 **Vorhandene Hilfen:** [tests/js/helpers/appWindow.mjs](../../../tests/js/helpers/appWindow.mjs), [tests/test_benchmark_report_reader.py](../../../tests/test_benchmark_report_reader.py), [tests/test_benchmark_reports.py](../../../tests/test_benchmark_reports.py)
 
@@ -651,6 +819,14 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 - ` python -m pytest tests/test_benchmark_reports.py tests/test_benchmark_report_reader.py -q; npm test -- tests/js/admin-benchmark.test.mjs `
 
 **Zu beachten:** —
+
+**Implementierungsnachweis:** ` 0cd497d9 ` · [docs/test-coverage/product/implementation-browser.md](implementation-browser.md) · [docs/test-coverage/execution.json](../execution.json)
+
+**Ausgeführte Testbereiche:** [tests/test_http_adapter_auth.py](../../../tests/test_http_adapter_auth.py), [tests/js/admin-benchmark.test.mjs](../../../tests/js/admin-benchmark.test.mjs)
+
+**Beobachtete Negativkontrolle:** Adminguard entfernt: unerlaubter Read; alte Viewerquelle: Race-/Staleassertionen schlagen fehl.
+
+**Verbleibende Grenze:** Reportdateien/Netzwerk lokal kontrolliert, kein Livebenchmark.
 
 
 <a id="wp-23"></a>
@@ -661,7 +837,7 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Befunde:** [G-020](gaps.md#g-020) · **Vorher:** —
 
-**Stand:** planned. G-020: Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
+**Stand:** completed. Echtes PNG mit gezeichneten Bildregionen, Fragepixel, Score/Modelle/Konflikte/unscored und privater Route. Cache berücksichtigt alle sichtbaren Inhalte und Renderfehlerretry.
 
 **Vorgehen:** Realen Renderer mit deterministischen Fonts/Inputs prüfen; Dekodierung, stabile Bildregionen und semantische Renderinputs kombinieren. Route muss richtige Inputs liefern.
 
@@ -669,7 +845,7 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Produktstellen:** [app/api/routers/share.py](../../../app/api/routers/share.py), [app/services/og_image.py](../../../app/services/og_image.py)
 
-**Test-/Dokumentziele:** ` tests/test_og_image.py ` (vorgeschlagen), [tests/test_share_feature.py](../../../tests/test_share_feature.py)
+**Test-/Dokumentziele:** [tests/test_og_image.py](../../../tests/test_og_image.py), [tests/test_share_feature.py](../../../tests/test_share_feature.py), [tests/test_share_http_contract.py](../../../tests/test_share_http_contract.py)
 
 **Vorhandene Hilfen:** [tests/test_share_feature.py](../../../tests/test_share_feature.py)
 
@@ -678,6 +854,14 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 - ` python -m pytest tests/test_og_image.py tests/test_share_feature.py -q `
 
 **Zu beachten:** [D-06](decisions.md#d-06)
+
+**Implementierungsnachweis:** ` c723e42b ` · [docs/test-coverage/product/implementation-adapters.md](implementation-adapters.md) · [docs/test-coverage/execution.json](../execution.json)
+
+**Ausgeführte Testbereiche:** [tests/test_og_image.py](../../../tests/test_og_image.py), [tests/test_share_http_contract.py](../../../tests/test_share_http_contract.py)
+
+**Beobachtete Negativkontrolle:** Gültiges weißes PNG statt Renderer: Inhaltsassertionen werden rot.
+
+**Verbleibende Grenze:** Keine pixelgenauen Hashes, keine neue historische OG-Versionsauswahl.
 
 
 <a id="wp-24"></a>
@@ -688,7 +872,7 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Befunde:** [G-021](gaps.md#g-021) · **Vorher:** —
 
-**Stand:** planned. G-021: Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
+**Stand:** completed. Originales Skript läuft vor instrumentiertem Seitenstart für1/0/fehlend/leer/anders und Storagefehler. Vorhandener Wert bleibt bei anderen Parametern erhalten.
 
 **Vorgehen:** Originalskript in frischem jsdom ausführen, Trackerstart instrumentieren und Storageausfälle injizieren.
 
@@ -696,7 +880,7 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Produktstellen:** [static/js/analytics-opt-out.js](../../../static/js/analytics-opt-out.js)
 
-**Test-/Dokumentziele:** ` tests/js/analytics-opt-out.test.mjs ` (vorgeschlagen)
+**Test-/Dokumentziele:** [tests/js/analytics-opt-out.test.mjs](../../../tests/js/analytics-opt-out.test.mjs)
 
 **Vorhandene Hilfen:** [tests/js/helpers/appWindow.mjs](../../../tests/js/helpers/appWindow.mjs), [tests/test_analytics_partial.py](../../../tests/test_analytics_partial.py)
 
@@ -705,6 +889,14 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 - ` npm test -- tests/js/analytics-opt-out.test.mjs; python -m pytest tests/test_analytics_partial.py -q `
 
 **Zu beachten:** —
+
+**Implementierungsnachweis:** ` 0cd497d9 ` · [docs/test-coverage/product/implementation-browser.md](implementation-browser.md) · [docs/test-coverage/execution.json](../execution.json)
+
+**Ausgeführte Testbereiche:** [tests/js/analytics-opt-out.test.mjs](../../../tests/js/analytics-opt-out.test.mjs)
+
+**Beobachtete Negativkontrolle:** Unzulässige Storageoperation würde exakte Aufruf-/Flagausgabe verändern; Fehler darf Seitenstart nicht stoppen.
+
+**Verbleibende Grenze:** Kein echter Tracker oder Analyticseventversand.
 
 
 <a id="wp-25"></a>
@@ -715,7 +907,7 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Befunde:** [G-022](gaps.md#g-022), [G-023](gaps.md#g-023) · **Vorher:** —
 
-**Stand:** planned. G-022: Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung. G-023: Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
+**Stand:** completed. Wartungseinstiege in netzwerkgesperrten Subprozessen, Account-/Apply-/Projektguards, Dry-run und wiederholbarer Backfill. Bestehende Claimkeys werden reserviert; Fallbackkollisionen verhindert.
 
 **Vorgehen:** Subprozesse mit synthetischen Modulen/DB/Provider und explizitem Netzwerkverbot. Reparatur-Projektguard nicht für Tests deaktivieren; Fakeumgebung muss kontrollierten Vertrag abbilden.
 
@@ -723,7 +915,7 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Produktstellen:** [scripts/backfill_claim_keys.py](../../../scripts/backfill_claim_keys.py), [scripts/repair_agent_allowance.py](../../../scripts/repair_agent_allowance.py)
 
-**Test-/Dokumentziele:** ` tests/test_backfill_claim_keys.py ` (vorgeschlagen), ` tests/test_repair_agent_allowance_script.py ` (vorgeschlagen)
+**Test-/Dokumentziele:** ` tests/test_backfill_claim_keys.py ` (vorgeschlagen), [tests/test_maintenance_scripts.py](../../../tests/test_maintenance_scripts.py), ` tests/test_repair_agent_allowance_script.py ` (vorgeschlagen)
 
 **Vorhandene Hilfen:** [tests/test_agent_quota_recovery.py](../../../tests/test_agent_quota_recovery.py), [tests/test_claim_ledger.py](../../../tests/test_claim_ledger.py), [tests/test_publisher_standalone.py](../../../tests/test_publisher_standalone.py), [tests/test_topics_feature.py](../../../tests/test_topics_feature.py)
 
@@ -734,6 +926,14 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Zu beachten:** [D-07](decisions.md#d-07)
 
+**Implementierungsnachweis:** ` d3500c0c ` · [docs/test-coverage/product/implementation-runtime.md](implementation-runtime.md) · [docs/test-coverage/execution.json](../execution.json)
+
+**Ausgeführte Testbereiche:** [tests/test_maintenance_scripts.py](../../../tests/test_maintenance_scripts.py)
+
+**Beobachtete Negativkontrolle:** Entfernte Applyguard bewirkt unerlaubten Recoveryaufruf; rote Regressionen für Keyverlust, Vorschauzählung und Kollision.
+
+**Verbleibende Grenze:** Backfill-Dry-run kann in echter Umgebung einen Judgeaufruf kosten; Tests ersetzen ihn.
+
 
 <a id="wp-26"></a>
 
@@ -743,7 +943,7 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Befunde:** [G-032](gaps.md#g-032), [G-033](gaps.md#g-033) · **Vorher:** —
 
-**Stand:** in_progress. G-032: ASGI-Test für unveränderte SSE-Frames hinzugekommen. Das ersetzt keine echten Socket-/Proxytests für Disconnect, Chunking und Providergrenzen. G-033: Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
+**Stand:** completed. Bodylimit und vorzeitiger Disconnect, reale TCP-/TLS-Sockets mit Abbruch/Deadline, Host/SNI, Redirectvalidierung und gzip-Budget belegt.
 
 **Vorgehen:** Header/Env-Grenzen im vorhandenen ASGI-Harness; lokaler HTTP/TLS-Server für Stream/Cancel/Close/gzip. Testziel explizit einspeisen; SSRF-Policy separat real prüfen, keine Produktionsallowlist erweitern.
 
@@ -751,7 +951,7 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Produktstellen:** [app/core/request_limits.py](../../../app/core/request_limits.py), [app/services/llm/provider_runtime.py](../../../app/services/llm/provider_runtime.py), [app/services/source_documents.py](../../../app/services/source_documents.py)
 
-**Test-/Dokumentziele:** ` tests/test_provider_local_transport.py ` (vorgeschlagen), [tests/test_request_body_limits.py](../../../tests/test_request_body_limits.py), ` tests/test_source_documents_local_transport.py ` (vorgeschlagen)
+**Test-/Dokumentziele:** [tests/test_local_transport.py](../../../tests/test_local_transport.py), ` tests/test_provider_local_transport.py ` (vorgeschlagen), [tests/test_request_body_limits.py](../../../tests/test_request_body_limits.py), ` tests/test_source_documents_local_transport.py ` (vorgeschlagen)
 
 **Vorhandene Hilfen:** [tests/test_provider_timeouts.py](../../../tests/test_provider_timeouts.py), [tests/test_request_body_limits.py](../../../tests/test_request_body_limits.py), [tests/test_source_verification.py](../../../tests/test_source_verification.py)
 
@@ -762,6 +962,14 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Zu beachten:** [D-06](decisions.md#d-06)
 
+**Implementierungsnachweis:** ` bad07367 ` · [docs/test-coverage/product/implementation-runtime.md](implementation-runtime.md) · [docs/test-coverage/execution.json](../execution.json)
+
+**Ausgeführte Testbereiche:** [tests/test_local_transport.py](../../../tests/test_local_transport.py), [tests/test_request_body_limits.py](../../../tests/test_request_body_limits.py)
+
+**Beobachtete Negativkontrolle:** Aktivierte SDK-Retries führen nachweislich zu zwei Requests; Disconnect-Regression vor Fix rot.
+
+**Verbleibende Grenze:** Lokale Server, keine Deploymentproxy-/Internetmessung.
+
 
 <a id="wp-27"></a>
 
@@ -771,7 +979,7 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Befunde:** [G-034](gaps.md#g-034) · **Vorher:** —
 
-**Stand:** planned. G-034: Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
+**Stand:** completed. Feedbackhandler/Persistenzguard prüft Auth, Allowlist, Cooldown, Tageslimit und Storefehler. Statistik speichert nur erlaubte Zähler/Metadaten, Fehler bleiben nichtfatal.
 
 **Vorgehen:** Auth, Tages-/Cooldown-Limits und Storefehler durch realen Handler; Statistikwrapper mit inhaltshaltigen Eingaben ausführen und gespeicherte Felder prüfen.
 
@@ -779,7 +987,7 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Produktstellen:** [app/api/routers/pages.py](../../../app/api/routers/pages.py), [app/services/differences_stats.py](../../../app/services/differences_stats.py)
 
-**Test-/Dokumentziele:** [tests/test_differences_stats.py](../../../tests/test_differences_stats.py), ` tests/test_feedback.py ` (vorgeschlagen)
+**Test-/Dokumentziele:** [tests/test_differences_stats.py](../../../tests/test_differences_stats.py), [tests/test_feedback.py](../../../tests/test_feedback.py)
 
 **Vorhandene Hilfen:** [tests/test_differences_stats.py](../../../tests/test_differences_stats.py), [tests/test_phase5_operations.py](../../../tests/test_phase5_operations.py)
 
@@ -788,6 +996,14 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 - ` python -m pytest tests/test_feedback.py tests/test_differences_stats.py -q `
 
 **Zu beachten:** —
+
+**Implementierungsnachweis:** ` c723e42b ` · [docs/test-coverage/product/implementation-adapters.md](implementation-adapters.md) · [docs/test-coverage/execution.json](../execution.json)
+
+**Ausgeführte Testbereiche:** [tests/test_feedback.py](../../../tests/test_feedback.py)
+
+**Beobachtete Negativkontrolle:** Unbearbeitete Statistikinputs schreiben: private Inhalts-/ID-Marker werden erkannt.
+
+**Verbleibende Grenze:** Bewusst eingegebene Feedbacknachricht darf gespeichert werden; keine produktiven Accounts.
 
 
 <a id="wp-28"></a>
@@ -798,7 +1014,7 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Befunde:** [G-035](gaps.md#g-035) · **Vorher:** —
 
-**Stand:** planned. G-035: Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
+**Stand:** completed. Unterstützte sample/experiment-Einstiege validieren Scope/Budget vor Arbeit und durchlaufen echte Runner-/Manifest-/Record-/Resume-/Resultpfade.
 
 **Vorgehen:** Aktuelle Supportentscheidung je Einstieg festhalten; unterstützte CLIs per Subprozess mit temporären Outputs und Fakeprovider prüfen. Veraltete Modi nicht als neue Produktanforderung behandeln.
 
@@ -806,7 +1022,7 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Produktstellen:** [benchmark/run_experiment.py](../../../benchmark/run_experiment.py), [benchmark/run_sample.py](../../../benchmark/run_sample.py)
 
-**Test-/Dokumentziele:** ` tests/test_auxiliary_cli.py ` (vorgeschlagen)
+**Test-/Dokumentziele:** [tests/test_auxiliary_cli.py](../../../tests/test_auxiliary_cli.py)
 
 **Vorhandene Hilfen:** [tests/test_benchmark_cli.py](../../../tests/test_benchmark_cli.py), [tests/test_publisher_standalone.py](../../../tests/test_publisher_standalone.py)
 
@@ -815,6 +1031,14 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 - ` python -m pytest tests/test_auxiliary_cli.py -q `
 
 **Zu beachten:** [D-04](decisions.md#d-04), [D-07](decisions.md#d-07)
+
+**Implementierungsnachweis:** ` bad07367 ` · [docs/test-coverage/product/implementation-runtime.md](implementation-runtime.md) · [docs/test-coverage/execution.json](../execution.json)
+
+**Ausgeführte Testbereiche:** [tests/test_auxiliary_cli.py](../../../tests/test_auxiliary_cli.py)
+
+**Beobachtete Negativkontrolle:** Entfernte endliche Budgetvalidierung startet unerlaubte synthetische Providerarbeit.
+
+**Verbleibende Grenze:** Keine bezahlten Modelle, keine Livequalitätsmessung.
 
 
 <a id="wp-29"></a>
@@ -825,7 +1049,7 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Befunde:** [G-030](gaps.md#g-030) · **Vorher:** [WP-03](work-packages.md#wp-03), [WP-07](work-packages.md#wp-07), [WP-08](work-packages.md#wp-08), [WP-09](work-packages.md#wp-09), [WP-10](work-packages.md#wp-10), [WP-12](work-packages.md#wp-12), [WP-13](work-packages.md#wp-13), [WP-14](work-packages.md#wp-14)
 
-**Stand:** in_progress. G-030: Ein neuer Agentloop verbindet Datei, Angebote, Vergleich, Dokument und Gmailentwurf; Browserfälle sind weiterhin an API-Doubles getrennt. Keine zusätzliche vollständige persistierte Browserreise belegt.
+**Stand:** completed. Sechs Chromiumreisen verbinden originales gebautes AppFirebase, echte HTTP-/Serviceguards und nativen Speicher für J01–J05 sowie echten Bookmark-Speicherfehler. J03 führt den echten Own-Key-Worker aus; J05 prüft Daten erst nach beobachtetem Producer-/Settlementabschluss. Identitäten, Context/Turns, Messbuchungen, Stop/Recover und Kontowechsel werden anhand gespeicherter Daten geprüft. Alle sechs Reisen bestanden auch im vollständigen integrierten CI-Lauf mit 368 Fällen.
 
 **Vorgehen:** J-01/J-02 zuerst, dann J-03/J-04/J-05 gemäß journeys.md. Echtes AppFirebase, App-Routen und lokales Firestore; nur Identitäts-/Provider-/Nachrichtengrenzen ersetzen.
 
@@ -833,7 +1057,7 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Produktstellen:** [tests/e2e/conftest.py](../../../tests/e2e/conftest.py), [tests/e2e/test_phase4_frontend.py](../../../tests/e2e/test_phase4_frontend.py)
 
-**Test-/Dokumentziele:** ` tests/e2e/test_persisted_user_journeys.py ` (vorgeschlagen)
+**Test-/Dokumentziele:** [tests/e2e/test_persisted_journeys.py](../../../tests/e2e/test_persisted_journeys.py), ` tests/e2e/test_persisted_user_journeys.py ` (vorgeschlagen), [tests/js/bookmark-pending-state.test.mjs](../../../tests/js/bookmark-pending-state.test.mjs)
 
 **Vorhandene Hilfen:** [tests/e2e/conftest.py](../../../tests/e2e/conftest.py), [tests/e2e/test_phase4_frontend.py](../../../tests/e2e/test_phase4_frontend.py), [tests/test_consensus_chat_history.py](../../../tests/test_consensus_chat_history.py)
 
@@ -842,6 +1066,14 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 - ` RUN_E2E=1 python -m pytest tests/e2e/test_persisted_user_journeys.py -q (Demo-Emulator) `
 
 **Zu beachten:** [D-02](decisions.md#d-02)
+
+**Implementierungsnachweis:** ` ffaca3df ` · [docs/test-coverage/product/implementation-browser.md](implementation-browser.md) · [docs/test-coverage/execution.json](../execution.json)
+
+**Ausgeführte Testbereiche:** [tests/e2e/test_persisted_journeys.py](../../../tests/e2e/test_persisted_journeys.py), [tests/js/bookmark-pending-state.test.mjs](../../../tests/js/bookmark-pending-state.test.mjs)
+
+**Beobachtete Negativkontrolle:** Fremdowner/Revisionskonflikt, neun stale Packagecommits ohne Revisionsänderung, Fremdworker ohne Claim, kein zweiter Modellstart/Buchung beim Recover, tatsächlicher Speicherquotafehler ohne erfundenen Savedstatus; Bookmarkmetadatenregression vor Fix rot.
+
+**Verbleibende Grenze:** Externe Identität/Modelle/Mail kontrolliert; historischer V3-Import und gezielt getriebener ownergebundener Watchpfad sind ausdrücklich gekennzeichnet. J05 beobachtet echte Responsebeendigung und Leasefreigabe vor dem nativen Late-Write-Oracle.
 
 
 <a id="wp-30"></a>
@@ -852,7 +1084,7 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Befunde:** [G-036](gaps.md#g-036) · **Vorher:** —
 
-**Stand:** planned. G-036: DOMPurify-Pin und Sanitizerpayloads werden nun geprüft; das führt vendorFrontend mit temporärem Dateisystem/check-only noch nicht aus.
+**Stand:** completed. vendorFrontend auf echtem temporärem Dateisystem, Pins/Lizenzen/Fontbytes/Sortierung, stale Assets, Check-only und unveränderte Mtime belegt.
 
 **Vorgehen:** Winzige synthetische Pakete statt realer Paketdownloads verwenden; helper direkt aufrufen, alte Assets und Mtime kontrollieren.
 
@@ -860,7 +1092,7 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Produktstellen:** [scripts/vendor_frontend.mjs](../../../scripts/vendor_frontend.mjs)
 
-**Test-/Dokumentziele:** ` tests/js/vendor-frontend.test.mjs ` (vorgeschlagen)
+**Test-/Dokumentziele:** [tests/js/vendor-frontend.test.mjs](../../../tests/js/vendor-frontend.test.mjs)
 
 **Vorhandene Hilfen:** [tests/js/frontend-output.test.mjs](../../../tests/js/frontend-output.test.mjs), [tests/test_frontend_build.py](../../../tests/test_frontend_build.py)
 
@@ -869,6 +1101,14 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 - ` npm test -- tests/js/vendor-frontend.test.mjs tests/js/frontend-output.test.mjs; python -m pytest tests/test_frontend_build.py -q `
 
 **Zu beachten:** —
+
+**Implementierungsnachweis:** ` 0cd497d9 ` · [docs/test-coverage/product/implementation-browser.md](implementation-browser.md) · [docs/test-coverage/execution.json](../execution.json)
+
+**Ausgeführte Testbereiche:** [tests/js/vendor-frontend.test.mjs](../../../tests/js/vendor-frontend.test.mjs)
+
+**Beobachtete Negativkontrolle:** Abweichender Pin oder stale/fehlende Bytes müssen erkannt werden; Check-onlybytes bleiben identisch.
+
+**Verbleibende Grenze:** Synthetische Pakete, kein Download oder Bibliotheksqualitätsbeweis.
 
 
 <a id="wp-31"></a>
@@ -879,7 +1119,7 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Befunde:** [G-037](gaps.md#g-037) · **Vorher:** —
 
-**Stand:** in_progress. G-037: Behoben in c929e343: main übernimmt exc.headers. test_registered_http_exception_handler_preserves_headers prüft 429/503 Retry-After und 401 WWW-Authenticate durch den registrierten Handler; aktuelle Pythondatei grün. Echte Ablehnungspfade bleiben zusätzliche Integration.
+**Stand:** completed. Reale Agent503/API429 gehen durch main mit sicherem Body und serverseitigem Retry-After, ohne unerlaubte Arbeit; Requestheader werden nicht reflektiert.
 
 **Vorgehen:** Zuerst P-01 als roten Integrationstest an echten Routen konkretisieren; gemeinsame Fehlerbehandlung korrigieren und bestehende isolierte Routerkontrollen behalten.
 
@@ -887,7 +1127,7 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Produktstellen:** [main.py](../../../main.py), [app/api/routers/api_v1.py](../../../app/api/routers/api_v1.py), [app/api/routers/agent.py](../../../app/api/routers/agent.py)
 
-**Test-/Dokumentziele:** [tests/test_consensus_api.py](../../../tests/test_consensus_api.py), [tests/test_agent_capacity.py](../../../tests/test_agent_capacity.py), [tests/test_agent_search.py](../../../tests/test_agent_search.py)
+**Test-/Dokumentziele:** [tests/test_agent_capacity.py](../../../tests/test_agent_capacity.py), [tests/test_agent_http_contract.py](../../../tests/test_agent_http_contract.py), [tests/test_agent_search.py](../../../tests/test_agent_search.py), [tests/test_consensus_api.py](../../../tests/test_consensus_api.py)
 
 **Vorhandene Hilfen:** [tests/test_consensus_api.py](../../../tests/test_consensus_api.py), [tests/test_agent_capacity.py](../../../tests/test_agent_capacity.py)
 
@@ -896,6 +1136,14 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 - ` python -m pytest tests/test_consensus_api.py tests/test_agent_capacity.py tests/test_agent_search.py -q `
 
 **Zu beachten:** —
+
+**Implementierungsnachweis:** ` c723e42b ` · [docs/test-coverage/product/implementation-adapters.md](implementation-adapters.md) · [docs/test-coverage/execution.json](../execution.json)
+
+**Ausgeführte Testbereiche:** [tests/test_agent_http_contract.py](../../../tests/test_agent_http_contract.py)
+
+**Beobachtete Negativkontrolle:** Exceptionheader im main-Handler verworfen: Retry-After60-Assertion schlägt fehl.
+
+**Verbleibende Grenze:** Firebase-SDK-Authentifizierung und DB ersetzt; externe Modell-, Mail- und Telegramgrenzen kontrolliert. Kein Live-OAuth oder produktiver Versand.
 
 
 <a id="wp-32"></a>
@@ -906,7 +1154,7 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Befunde:** [G-039](gaps.md#g-039) · **Vorher:** —
 
-**Stand:** planned. G-039: Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
+**Stand:** completed. Agentdetail/Stop binden UID, Chat und Turn, paginieren vollständig und prüfen Parameter/Pro-/Admin-/Tierausfall. Wiederholter Stop sperrt nur Zielturn und späten Publish; Antworten private/no-store.
 
 **Vorgehen:** Vorhandene echte Stores/Fakes wiederverwenden; main.app, echte Auth-/Tierpolicy mit externen SDK-Doubles, keine pauschale _agent_details- oder require_agent_access-Ersetzung.
 
@@ -914,7 +1162,7 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Produktstellen:** [app/api/routers/agent.py](../../../app/api/routers/agent.py), [app/services/agent_sessions.py](../../../app/services/agent_sessions.py)
 
-**Test-/Dokumentziele:** [tests/test_agent_delegation.py](../../../tests/test_agent_delegation.py), [tests/test_agent_reliability.py](../../../tests/test_agent_reliability.py)
+**Test-/Dokumentziele:** [tests/test_agent_delegation.py](../../../tests/test_agent_delegation.py), [tests/test_agent_http_contract.py](../../../tests/test_agent_http_contract.py), [tests/test_agent_reliability.py](../../../tests/test_agent_reliability.py)
 
 **Vorhandene Hilfen:** [tests/test_agent_delegation.py](../../../tests/test_agent_delegation.py), [tests/test_agent_reliability.py](../../../tests/test_agent_reliability.py)
 
@@ -923,6 +1171,14 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 - ` python -m pytest tests/test_agent_delegation.py tests/test_agent_reliability.py -q `
 
 **Zu beachten:** —
+
+**Implementierungsnachweis:** ` c723e42b ` · [docs/test-coverage/product/implementation-adapters.md](implementation-adapters.md) · [docs/test-coverage/execution.json](../execution.json)
+
+**Ausgeführte Testbereiche:** [tests/test_agent_http_contract.py](../../../tests/test_agent_http_contract.py)
+
+**Beobachtete Negativkontrolle:** Stopaufruf am Store entfernt: Zielturn bleibt ungesperrt.
+
+**Verbleibende Grenze:** Firebase-SDK-Authentifizierung und DB ersetzt; externe Modell-, Mail- und Telegramgrenzen kontrolliert. Kein Live-OAuth oder produktiver Versand.
 
 
 <a id="wp-33"></a>
@@ -933,7 +1189,7 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Befunde:** [G-040](gaps.md#g-040) · **Vorher:** —
 
-**Stand:** in_progress. G-040: Behobenes Überschreiben in 6b80daa6: CAS und eigener Revisionsrollback bewahren simulierten fremden Writer. test_model_configuration.py grün; nativer konkurrierender Firestore-/Mehrprozesslauf noch offen.
+**Stand:** completed. Unabhängiger nativer Writer B bleibt trotz Aktivierungsfehler/Rollback A erhalten, auch ohne Vorgänger. Zusätzlich abgewiesener nativer Rollback-RPC: ursprünglicher Fehler/Diagnose ehrlich sichtbar, DB nicht fälschlich restored, lokaler Snapshot bewahrt.
 
 **Vorgehen:** P-03 zunächst als deterministische Regression übernehmen. Native Firestore-Versionsbedingung wählen; zwei unabhängige Writerinstanzen unter Barrieren im Emulator einschließlich fehlendem Vorgängerdokument und Rollbackausfall prüfen.
 
@@ -941,7 +1197,7 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Produktstellen:** [app/api/routers/admin.py](../../../app/api/routers/admin.py), [app/core/config.py](../../../app/core/config.py)
 
-**Test-/Dokumentziele:** [tests/test_model_configuration.py](../../../tests/test_model_configuration.py), ` tests/e2e/test_model_configuration_transactions.py ` (vorgeschlagen)
+**Test-/Dokumentziele:** [tests/e2e/test_model_configuration_transactions.py](../../../tests/e2e/test_model_configuration_transactions.py), [tests/test_model_configuration.py](../../../tests/test_model_configuration.py)
 
 **Vorhandene Hilfen:** [tests/test_model_configuration.py](../../../tests/test_model_configuration.py), [tests/e2e/test_prompt_config_transactions.py](../../../tests/e2e/test_prompt_config_transactions.py)
 
@@ -950,6 +1206,14 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 - ` python -m pytest tests/test_model_configuration.py tests/test_reasoning_policy.py tests/test_source_model_configuration.py -q; zusätzlich gezielter Firestore-Emulatorfall `
 
 **Zu beachten:** —
+
+**Implementierungsnachweis:** ` a19134b0 ` · [docs/test-coverage/product/implementation-persistence.md](implementation-persistence.md) · [docs/test-coverage/execution.json](../execution.json)
+
+**Ausgeführte Testbereiche:** [tests/e2e/test_model_configuration_transactions.py](../../../tests/e2e/test_model_configuration_transactions.py), [tests/test_model_configuration.py](../../../tests/test_model_configuration.py)
+
+**Beobachtete Negativkontrolle:** Rollbackrevision entfernt: B-Erhalt wird rot.
+
+**Verbleibende Grenze:** Keine gemeinsame Atomizität zwischen Firestore und mehreren Serverruntimes.
 
 
 <a id="wp-34"></a>
@@ -960,7 +1224,7 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Befunde:** [G-042](gaps.md#g-042) · **Vorher:** —
 
-**Stand:** planned. G-042: Budgetkorrekturen ändern nicht die HTTP-200-Protokollfehlerklassifikation; diesen Befund weiterhin gesondert prüfen.
+**Stand:** completed. HTTP200-Fehlerobjekte und ungültige Responseformen bleiben sichere Fehler bis Record/Resume/Statistik. Gültiger Text ohne Auswahl bleibt Enthaltung, private Fehlermeldungen werden entfernt.
 
 **Vorgehen:** P-05 mit echten Record-/Resume-/Statsfunktionen in die bestehende Suite übertragen; HTTP-200-Body validieren, alte malformed-response-Sollvorgabe differenzieren und sichere Errorprojektion prüfen.
 
@@ -968,7 +1232,7 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Produktstellen:** [benchmark/transport.py](../../../benchmark/transport.py), [benchmark/runner.py](../../../benchmark/runner.py)
 
-**Test-/Dokumentziele:** [tests/test_benchmark_transport.py](../../../tests/test_benchmark_transport.py), [tests/test_benchmark_runner.py](../../../tests/test_benchmark_runner.py), [tests/test_benchmark_results.py](../../../tests/test_benchmark_results.py)
+**Test-/Dokumentziele:** [tests/test_benchmark_protocol.py](../../../tests/test_benchmark_protocol.py), [tests/test_benchmark_results.py](../../../tests/test_benchmark_results.py), [tests/test_benchmark_runner.py](../../../tests/test_benchmark_runner.py), [tests/test_benchmark_transport.py](../../../tests/test_benchmark_transport.py)
 
 **Vorhandene Hilfen:** [tests/test_benchmark_transport.py](../../../tests/test_benchmark_transport.py), [tests/test_benchmark_runner.py](../../../tests/test_benchmark_runner.py)
 
@@ -977,6 +1241,14 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 - ` python -m pytest tests/test_benchmark_transport.py tests/test_benchmark_runner.py tests/test_benchmark_results.py -q `
 
 **Zu beachten:** —
+
+**Implementierungsnachweis:** ` bad07367 ` · [docs/test-coverage/product/implementation-runtime.md](implementation-runtime.md) · [docs/test-coverage/execution.json](../execution.json)
+
+**Ausgeführte Testbereiche:** [tests/test_benchmark_protocol.py](../../../tests/test_benchmark_protocol.py), [tests/test_benchmark_transport.py](../../../tests/test_benchmark_transport.py)
+
+**Beobachtete Negativkontrolle:** Neun Regressionen vor Fix rot, Auswahl/echte Enthaltung als Gegenkontrollen.
+
+**Verbleibende Grenze:** Keine Häufigkeitsmessung produktiver Providerfehler.
 
 
 <a id="wp-35"></a>
@@ -987,7 +1259,7 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Befunde:** [G-043](gaps.md#g-043) · **Vorher:** —
 
-**Stand:** planned. G-043: Fake-Parallelität ist belegt; neue Aktionsclaims fehlen im bestehenden Transaktionsharness.
+**Stand:** completed. Gmail/Kalenderclaims nativ, maximal ein Writeversuch, Unknownreplay und Lese-Reconciliation sowie Owner/Revision/Approval/Hash/Supersession geprüft.
 
 **Vorgehen:** Bestätigen, Leaseablauf und unklaren Transportausgang im lokalen Emulator steuern.
 
@@ -995,7 +1267,7 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Produktstellen:** [app/services/agent_actions.py](../../../app/services/agent_actions.py)
 
-**Test-/Dokumentziele:** [tests/test_agent_calendar.py](../../../tests/test_agent_calendar.py), [tests/test_agent_gmail.py](../../../tests/test_agent_gmail.py)
+**Test-/Dokumentziele:** [tests/e2e/test_google_action_transactions.py](../../../tests/e2e/test_google_action_transactions.py), [tests/test_agent_calendar.py](../../../tests/test_agent_calendar.py), [tests/test_agent_gmail.py](../../../tests/test_agent_gmail.py)
 
 **Vorhandene Hilfen:** [tests/test_agent_calendar.py](../../../tests/test_agent_calendar.py), [tests/test_agent_gmail.py](../../../tests/test_agent_gmail.py)
 
@@ -1004,6 +1276,14 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 - ` Gezielte Dateien, dann kombinierter Lauf; native Transaktionen nur mit demo-consensio-e2e. `
 
 **Zu beachten:** —
+
+**Implementierungsnachweis:** ` acdadb91 ` · [docs/test-coverage/product/implementation-persistence.md](implementation-persistence.md) · [docs/test-coverage/execution.json](../execution.json)
+
+**Ausgeführte Testbereiche:** [tests/e2e/test_google_action_transactions.py](../../../tests/e2e/test_google_action_transactions.py)
+
+**Beobachtete Negativkontrolle:** Replay-/Statusguards entfernt: zweiter externer Writeversuch erkannt.
+
+**Verbleibende Grenze:** Google-HTTP an Wiregrenze ersetzt; keine echte Zustellgarantie.
 
 
 <a id="wp-36"></a>
@@ -1014,7 +1294,7 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Befunde:** [G-044](gaps.md#g-044) · **Vorher:** —
 
-**Stand:** planned. G-044: Lokale Objektablage/Parser sind geprüft; daraus folgt kein produktiver Bucket-/IAM- oder verteilter Kaskadennachweis.
+**Stand:** completed. Native Dateiquote, strenger privater Cloudadapter, Fehler-/Kaskadenretry und echter Dokumentrenderer mit immutable Vorversionen. Zusätzlich Firestore-Fehler 400 für Tabellen durch verlustfreien Codec behoben.
 
 **Vorgehen:** Cloudadapter mit kontrolliertem Storage-Double und native Metadaten-/Quotatransaktionen samt Wiederaufnahme ausführen.
 
@@ -1022,7 +1302,7 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Produktstellen:** [app/services/agent_files.py](../../../app/services/agent_files.py)
 
-**Test-/Dokumentziele:** [tests/test_agent_files.py](../../../tests/test_agent_files.py), [tests/test_agent_documents.py](../../../tests/test_agent_documents.py)
+**Test-/Dokumentziele:** [tests/e2e/test_file_storage_transactions.py](../../../tests/e2e/test_file_storage_transactions.py), [tests/test_agent_documents.py](../../../tests/test_agent_documents.py), [tests/test_agent_files.py](../../../tests/test_agent_files.py)
 
 **Vorhandene Hilfen:** [tests/test_agent_files.py](../../../tests/test_agent_files.py), [tests/test_agent_documents.py](../../../tests/test_agent_documents.py)
 
@@ -1031,6 +1311,14 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 - ` Gezielte Dateien, dann kombinierter Lauf; native Transaktionen nur mit demo-consensio-e2e. `
 
 **Zu beachten:** —
+
+**Implementierungsnachweis:** ` acdadb91 ` · [docs/test-coverage/product/implementation-persistence.md](implementation-persistence.md) · [docs/test-coverage/execution.json](../execution.json)
+
+**Ausgeführte Testbereiche:** [tests/e2e/test_file_storage_transactions.py](../../../tests/e2e/test_file_storage_transactions.py)
+
+**Beobachtete Negativkontrolle:** Dateiquotaguard entfernt: zweiter Upload bei Limit1 erkannt.
+
+**Verbleibende Grenze:** Bucketdouble prüft Adaptervertrag, keine produktive IAM.
 
 
 <a id="wp-37"></a>
@@ -1041,7 +1329,7 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Befunde:** [G-045](gaps.md#g-045) · **Vorher:** —
 
-**Stand:** planned. G-045: Fake-Claims und Versanddoubles belegen Logik, keine echten SDK-Retries. Externe Exactly-once-Zustellung ist ausdrücklich nicht versprochen.
+**Stand:** completed. Resultat/History/Outbox atomar; Vorcommitfehler, neuer Worker, stale Ack, Probe-Tagesbudget/Konfig/Einmalclaim und Tombstone belegt.
 
 **Vorgehen:** Nativen Emulatorcommit, Crash nach Commit, Leaseübernahme und spätes Ack kontrollieren.
 
@@ -1049,7 +1337,7 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Produktstellen:** [app/services/notification_outbox.py](../../../app/services/notification_outbox.py)
 
-**Test-/Dokumentziele:** [tests/test_watch_review_regressions.py](../../../tests/test_watch_review_regressions.py), [tests/test_watch_evidence_model.py](../../../tests/test_watch_evidence_model.py)
+**Test-/Dokumentziele:** [tests/e2e/test_watch_delivery_transactions.py](../../../tests/e2e/test_watch_delivery_transactions.py), [tests/test_watch_evidence_model.py](../../../tests/test_watch_evidence_model.py), [tests/test_watch_review_regressions.py](../../../tests/test_watch_review_regressions.py)
 
 **Vorhandene Hilfen:** [tests/test_watch_review_regressions.py](../../../tests/test_watch_review_regressions.py), [tests/test_watch_evidence_model.py](../../../tests/test_watch_evidence_model.py)
 
@@ -1058,6 +1346,14 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 - ` Gezielte Dateien, dann kombinierter Lauf; native Transaktionen nur mit demo-consensio-e2e. `
 
 **Zu beachten:** —
+
+**Implementierungsnachweis:** ` acdadb91 ` · [docs/test-coverage/product/implementation-persistence.md](implementation-persistence.md) · [docs/test-coverage/execution.json](../execution.json)
+
+**Ausgeführte Testbereiche:** [tests/e2e/test_watch_delivery_transactions.py](../../../tests/e2e/test_watch_delivery_transactions.py)
+
+**Beobachtete Negativkontrolle:** Outboxownerguard und Probekonfigvergleich getrennt entfernt, unerlaubte Writes erkannt.
+
+**Verbleibende Grenze:** Externe Benachrichtigungen bleiben at-least-once.
 
 
 <a id="wp-38"></a>
@@ -1068,7 +1364,7 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Befunde:** [G-046](gaps.md#g-046) · **Vorher:** —
 
-**Stand:** planned. G-046: Benchmark-Resume scheitert im Primärlauf und besteht isoliert. Publisher-Ergebnisprüfung scheitert in beiden Läufen trotz Subprozessreturncode 0. Browserergebnisse werden im Laufbericht ergänzt.
+**Stand:** completed. Manifestzeit-/DST-Drift, UTF8-Subprozess, Fixture-/UI-Erwartungen, Resize-Scrollsprung und echter Composer-Autosizefehler nach CSS-Breitenanimation behoben. Playwright/native Scheduler teilen keinen Eventloop mehr; konkrete SDK-Aborted-Aufrufe werden vor einem gesonderten nächsten Tick als Fehlversuche dokumentiert. Vollständig integriert: 3303 Python-, 705 JavaScript-, 368 E2E- und 49 Rulesfälle bestanden.
 
 **Vorgehen:** Prompt-/Mockzustand sowie Publisher-Subprozessresultat kontrolliert reproduzieren; aktuelle Browserfehler laut Laufbericht zuordnen.
 
@@ -1076,7 +1372,7 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Produktstellen:** [tests/test_benchmark_budget.py](../../../tests/test_benchmark_budget.py)
 
-**Test-/Dokumentziele:** [tests/test_benchmark_budget.py](../../../tests/test_benchmark_budget.py), [tests/test_publisher_standalone.py](../../../tests/test_publisher_standalone.py)
+**Test-/Dokumentziele:** [tests/e2e/test_scheduler_transactions.py](../../../tests/e2e/test_scheduler_transactions.py), [tests/e2e/test_smoke.py](../../../tests/e2e/test_smoke.py), [tests/js/chat-scroll.test.mjs](../../../tests/js/chat-scroll.test.mjs), [tests/js/composer-autosize.test.mjs](../../../tests/js/composer-autosize.test.mjs), [tests/js/frontend-output.test.mjs](../../../tests/js/frontend-output.test.mjs), [tests/test_benchmark_budget.py](../../../tests/test_benchmark_budget.py), [tests/test_benchmark_manifest_clock.py](../../../tests/test_benchmark_manifest_clock.py), [tests/test_navigation_settings_ui.py](../../../tests/test_navigation_settings_ui.py), [tests/test_publisher_standalone.py](../../../tests/test_publisher_standalone.py)
 
 **Vorhandene Hilfen:** [tests/test_benchmark_budget.py](../../../tests/test_benchmark_budget.py), [tests/test_publisher_standalone.py](../../../tests/test_publisher_standalone.py)
 
@@ -1085,3 +1381,11 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 - ` Gezielte Dateien, dann kombinierter Lauf; native Transaktionen nur mit demo-consensio-e2e. `
 
 **Zu beachten:** —
+
+**Implementierungsnachweis:** ` ffaca3df ` · [docs/test-coverage/product/implementation-runtime.md](implementation-runtime.md) · [docs/test-coverage/execution.json](../execution.json)
+
+**Ausgeführte Testbereiche:** [tests/test_benchmark_manifest_clock.py](../../../tests/test_benchmark_manifest_clock.py), [tests/test_benchmark_budget.py](../../../tests/test_benchmark_budget.py), [tests/test_publisher_standalone.py](../../../tests/test_publisher_standalone.py), [tests/js/composer-autosize.test.mjs](../../../tests/js/composer-autosize.test.mjs), [tests/test_navigation_settings_ui.py](../../../tests/test_navigation_settings_ui.py), [tests/e2e/test_smoke.py](../../../tests/e2e/test_smoke.py), [tests/js/chat-scroll.test.mjs](../../../tests/js/chat-scroll.test.mjs), [tests/js/frontend-output.test.mjs](../../../tests/js/frontend-output.test.mjs), [tests/e2e/test_scheduler_transactions.py](../../../tests/e2e/test_scheduler_transactions.py)
+
+**Beobachtete Negativkontrolle:** Clockregressionen, alter Scrollcontroller und Composer ohne Breitenbeobachtung liefern echte rote Assertions. Der alte Composer bleibt nach real beendeter CSS-Transition 180 px statt 52 px hoch. Historischer roter CI-Lauf bleibt erhalten; ursprünglicher unvollständiger Phase2-Verdacht wird nicht als nachgewiesene Flakebehebung ausgegeben.
+
+**Verbleibende Grenze:** Grüne integrierte Runner gelten für ffaca3df. Keine neue Branch-Coverage oder flächige visuelle Prüfung; alte Fehlerbelege und alternative Plattformskips bleiben sichtbar.

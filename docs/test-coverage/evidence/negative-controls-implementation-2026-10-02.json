@@ -1,0 +1,1297 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-02",
+  "scope": "Targeted negative controls; not a mutation score or complete coverage measurement.",
+  "provenance": "Implementation commits identify the later committed change, not an unrecorded working-tree runner HEAD. Null values mean unknown. Embedded controls are passing tests that prove a deliberately broken contract is detected.",
+  "records": [
+    {
+      "id": "WP-01-native",
+      "packages": [
+        "WP-01"
+      ],
+      "kind": "isolated-process mutation",
+      "implementation_commit": "acdadb91",
+      "run_source_commit": null,
+      "process_exit_code": null,
+      "reported_process_exit_code": 1,
+      "exit_evidence": "The executed native_mutations harness accepts only child exit 1 plus a contract assertion. Raw stdout does not serialize the exit code; the implementation report records successful detection.",
+      "source": "app/services/watch_service.py",
+      "target": "create_watch",
+      "mutation": [
+        [
+          "if not bypass_active_limit and active_count >= cfg.get_watch_active_limit(tier):",
+          "if False:"
+        ]
+      ],
+      "test": "tests/e2e/test_phase2_transactions.py::test_two_workers_cannot_exceed_owner_watch_limit",
+      "observed": {
+        "origin": "persistence/test-results/native-mutations/WP-01.txt",
+        "raw_sha256": "1640464270949eef8d11878fc0ea86e3c4485a9e22719617c9ad41ea850b607e",
+        "assertion_excerpt": [
+          "    assert sorted(code for code, _watch_id in outcomes) == [",
+          "E   AssertionError: assert ['created', 'created'] == ['created', 'limit_reached']",
+          "E     ",
+          "E     At index 1 diff: 'created' != 'limit_reached'"
+        ],
+        "failed_cases": [
+          "tests/e2e/test_phase2_transactions.py::test_two_workers_cannot_exceed_owner_watch_limit"
+        ],
+        "runner_summary": [
+          "1 failed in 4.72s"
+        ]
+      }
+    },
+    {
+      "id": "WP-02-native",
+      "packages": [
+        "WP-02"
+      ],
+      "kind": "isolated-process mutation",
+      "implementation_commit": "acdadb91",
+      "run_source_commit": null,
+      "process_exit_code": null,
+      "reported_process_exit_code": 1,
+      "exit_evidence": "The executed native_mutations harness accepts only child exit 1 plus a contract assertion. Raw stdout does not serialize the exit code; the implementation report records successful detection.",
+      "source": "app/services/share_snapshots.py",
+      "target": "report_share",
+      "mutation": [
+        [
+          "count = old_count + 1 if isinstance(old_count, int) and old_count >= 0 else 1",
+          "count = 1"
+        ]
+      ],
+      "test": "tests/e2e/test_phase2_transactions.py::test_parallel_reports_never_lose_increments_or_change_indexing",
+      "observed": {
+        "origin": "persistence/test-results/native-mutations/WP-02.txt",
+        "raw_sha256": "e753c32dc98754092e2014a39a3a33e701fff9616ad589f11651cf04440ae02f",
+        "assertion_excerpt": [
+          "    assert partial[\"reports_count\"] == len(successful)",
+          "E   assert 1 == 8",
+          "E    +  where 8 = len([1, 1, 1, 1, 1, 1, ...])",
+          "=========================== short test summary info ==========================="
+        ],
+        "failed_cases": [
+          "tests/e2e/test_phase2_transactions.py::test_parallel_reports_never_lose_increments_or_change_indexing"
+        ],
+        "runner_summary": [
+          "1 failed in 20.72s"
+        ]
+      }
+    },
+    {
+      "id": "WP-07-atomicity-charge-native",
+      "packages": [
+        "WP-07"
+      ],
+      "kind": "isolated-process mutation",
+      "implementation_commit": "1d574233",
+      "run_source_commit": null,
+      "process_exit_code": null,
+      "reported_process_exit_code": 1,
+      "exit_evidence": "The executed native_mutations harness accepts only child exit 1 plus a contract assertion. Raw stdout does not serialize the exit code; the implementation report records successful detection.",
+      "source": "app/services/usage_repository.py",
+      "target": "FirestoreUsageRepository._transaction",
+      "mutation": [
+        [
+          "return run(transaction)",
+          "return _audit_unprotected_operation(self, uid, operation)"
+        ]
+      ],
+      "test": "tests/e2e/test_usage_transactions.py::test_native_distinct_bookings_preserve_both_charges",
+      "observed": {
+        "origin": "persistence/test-results/native-mutations/WP-07-atomicity-charge.txt",
+        "raw_sha256": "49e45dfd45a0ebc76146974c34d5c6322298913413adc75410001bb8afeac13a",
+        "assertion_excerpt": [
+          "    assert ledger[\"used\"] == 28",
+          "E   assert 17 == 28",
+          "=========================== short test summary info ===========================",
+          "FAILED tests/e2e/test_usage_transactions.py::test_native_distinct_bookings_preserve_both_charges"
+        ],
+        "failed_cases": [
+          "tests/e2e/test_usage_transactions.py::test_native_distinct_bookings_preserve_both_charges"
+        ],
+        "runner_summary": [
+          "1 failed in 3.65s"
+        ]
+      }
+    },
+    {
+      "id": "WP-07-atomicity-native",
+      "packages": [
+        "WP-07"
+      ],
+      "kind": "isolated-process mutation",
+      "implementation_commit": "1d574233",
+      "run_source_commit": null,
+      "process_exit_code": null,
+      "reported_process_exit_code": 1,
+      "exit_evidence": "The executed native_mutations harness accepts only child exit 1 plus a contract assertion. Raw stdout does not serialize the exit code; the implementation report records successful detection.",
+      "source": "app/services/usage_repository.py",
+      "target": "FirestoreUsageRepository._transaction",
+      "mutation": [
+        [
+          "return run(transaction)",
+          "return _audit_unprotected_operation(self, uid, operation)"
+        ]
+      ],
+      "test": "tests/e2e/test_usage_transactions.py::test_native_last_allowance_release_and_utc_period",
+      "observed": {
+        "origin": "persistence/test-results/native-mutations/WP-07-atomicity.txt",
+        "raw_sha256": "3d695c02ebac7ff6e02fc692da1bec566fb506596d8b9d441927acc3a02f2f4a",
+        "assertion_excerpt": [
+          "    assert len(winners) == 1",
+          "E   AssertionError: assert 2 == 1",
+          "E    +  where 2 = len(['first', 'second'])",
+          "=========================== short test summary info ==========================="
+        ],
+        "failed_cases": [
+          "tests/e2e/test_usage_transactions.py::test_native_last_allowance_release_and_utc_period"
+        ],
+        "runner_summary": [
+          "1 failed in 1.86s"
+        ]
+      }
+    },
+    {
+      "id": "WP-07-native",
+      "packages": [
+        "WP-07"
+      ],
+      "kind": "isolated-process mutation",
+      "implementation_commit": "acdadb91",
+      "run_source_commit": null,
+      "process_exit_code": null,
+      "reported_process_exit_code": 1,
+      "exit_evidence": "The executed native_mutations harness accepts only child exit 1 plus a contract assertion. Raw stdout does not serialize the exit code; the implementation report records successful detection.",
+      "source": "app/services/usage_repository.py",
+      "target": "FirestoreUsageRepository.book_operation",
+      "mutation": [
+        [
+          "if operation in booked:",
+          "if False:"
+        ]
+      ],
+      "test": "tests/e2e/test_usage_transactions.py::test_native_identical_key_and_booking_are_exactly_once",
+      "observed": {
+        "origin": "persistence/test-results/native-mutations/WP-07.txt",
+        "raw_sha256": "89bf1cc3b5e27a601fcf530a8b25fdba6657977a8b20ac3a61ea9fa1a4aee9f8",
+        "assertion_excerpt": [
+          "    assert ledger[\"used\"] == 25 and ledger[\"pipeline_estimated\"] == 5 and ledger[\"pipeline_holds\"] == {}",
+          "E   assert (50 == 25)",
+          "=========================== short test summary info ===========================",
+          "FAILED tests/e2e/test_usage_transactions.py::test_native_identical_key_and_booking_are_exactly_once"
+        ],
+        "failed_cases": [
+          "tests/e2e/test_usage_transactions.py::test_native_identical_key_and_booking_are_exactly_once"
+        ],
+        "runner_summary": [
+          "1 failed in 12.24s"
+        ]
+      }
+    },
+    {
+      "id": "WP-08-native",
+      "packages": [
+        "WP-08"
+      ],
+      "kind": "isolated-process mutation",
+      "implementation_commit": "1d574233",
+      "run_source_commit": null,
+      "process_exit_code": null,
+      "reported_process_exit_code": 1,
+      "exit_evidence": "The executed native_mutations harness accepts only child exit 1 plus a contract assertion. Raw stdout does not serialize the exit code; the implementation report records successful detection.",
+      "source": "app/services/chat_store.py",
+      "target": "ChatStore.complete_turn",
+      "mutation": [
+        [
+          "if (chat_snapshot.to_dict() or {}).get(\"status\") != CHAT_STATUS_ACTIVE:",
+          "if False:"
+        ]
+      ],
+      "test": "tests/e2e/test_chat_lifecycle_transactions.py::test_native_deleting_tombstone_fences_writes_before_physical_purge",
+      "observed": {
+        "origin": "persistence/test-results/native-mutations/WP-08.txt",
+        "raw_sha256": "8c49b76ef9873ea957394c9114dafb7b28f517ff7e2db76e9322b8fd4961ed95",
+        "assertion_excerpt": [
+          "    assert tree(chat_ref) == before",
+          "E   AssertionError: assert {'users/nativ...d401c1', ...}} == {'users/nativ...: False, ...}}",
+          "E     ",
+          "E     Omitting 1 identical items, use -vv to show"
+        ],
+        "failed_cases": [
+          "tests/e2e/test_chat_lifecycle_transactions.py::test_native_deleting_tombstone_fences_writes_before_physical_purge"
+        ],
+        "runner_summary": [
+          "1 failed in 5.21s"
+        ]
+      }
+    },
+    {
+      "id": "WP-09-native",
+      "packages": [
+        "WP-09"
+      ],
+      "kind": "isolated-process mutation",
+      "implementation_commit": "acdadb91",
+      "run_source_commit": null,
+      "process_exit_code": null,
+      "reported_process_exit_code": 1,
+      "exit_evidence": "The executed native_mutations harness accepts only child exit 1 plus a contract assertion. Raw stdout does not serialize the exit code; the implementation report records successful detection.",
+      "source": "app/services/account_deletion.py",
+      "target": "FirestoreAccountDeletion.cleanup_uid",
+      "mutation": [
+        [
+          "(\"answer_receipts\", lambda: self._delete_query(\"answer_receipts\", \"owner_uid\", uid))",
+          "(\"answer_receipts\", lambda: None)"
+        ]
+      ],
+      "test": "tests/e2e/test_account_deletion_transactions.py::test_native_account_repeats_success_after_lost_checkpoint",
+      "observed": {
+        "origin": "persistence/test-results/native-mutations/WP-09.txt",
+        "raw_sha256": "78c5b3d28a1a394bed8c49538d42cc2d6cd1922ed9b6f2f79fed9be45dc72fec",
+        "assertion_excerpt": [
+          "    assert all(tree(ref) == {} for ref in refs)",
+          "E   assert False",
+          "E    +  where False = all(<generator object test_native_account_repeats_success_after_lost_checkpoint.<locals>.<genexpr> at 0x000001BC16E61C10>)",
+          "------------------------------ Captured log call ------------------------------"
+        ],
+        "failed_cases": [
+          "tests/e2e/test_account_deletion_transactions.py::test_native_account_repeats_success_after_lost_checkpoint"
+        ],
+        "runner_summary": [
+          "1 failed, 1 warning in 3.25s"
+        ]
+      }
+    },
+    {
+      "id": "WP-10-native",
+      "packages": [
+        "WP-10"
+      ],
+      "kind": "isolated-process mutation",
+      "implementation_commit": "acdadb91",
+      "run_source_commit": null,
+      "process_exit_code": null,
+      "reported_process_exit_code": 1,
+      "exit_evidence": "The executed native_mutations harness accepts only child exit 1 plus a contract assertion. Raw stdout does not serialize the exit code; the implementation report records successful detection.",
+      "source": "app/services/memory_edit.py",
+      "target": "_lossless_profile",
+      "mutation": [
+        [
+          "if isinstance(notes, str) and len(notes) > max(0, int(memory_limit)):",
+          "if False:"
+        ]
+      ],
+      "test": "tests/e2e/test_memory_edit_transactions.py::test_native_undo_is_lossless_owner_bound_idempotent_and_revision_checked",
+      "observed": {
+        "origin": "persistence/test-results/native-mutations/WP-10.txt",
+        "raw_sha256": "e47bfb070cb1d5f3810afb9a62131816f694ff99ac9892077ea1b5fd079b434e",
+        "assertion_excerpt": [
+          "    repo.undo(owner, revision, memory_limit=limit, now=at)",
+          "E   Failed: DID NOT RAISE <class 'app.services.memory_edit.MemoryEditError'>",
+          "=========================== short test summary info ===========================",
+          "FAILED tests/e2e/test_memory_edit_transactions.py::test_native_undo_is_lossless_owner_bound_idempotent_and_revision_checked"
+        ],
+        "failed_cases": [
+          "tests/e2e/test_memory_edit_transactions.py::test_native_undo_is_lossless_owner_bound_idempotent_and_revision_checked"
+        ],
+        "runner_summary": [
+          "1 failed in 1.63s"
+        ]
+      }
+    },
+    {
+      "id": "WP-14-native",
+      "packages": [
+        "WP-14"
+      ],
+      "kind": "isolated-process mutation",
+      "implementation_commit": "acdadb91",
+      "run_source_commit": null,
+      "process_exit_code": null,
+      "reported_process_exit_code": 1,
+      "exit_evidence": "The executed native_mutations harness accepts only child exit 1 plus a contract assertion. Raw stdout does not serialize the exit code; the implementation report records successful detection.",
+      "source": "app/services/source_check_repository.py",
+      "target": "SourceCheckRepository.finish_package",
+      "mutation": [
+        [
+          "or job.get('lease_token') != claimed['lease_token']",
+          "or False"
+        ]
+      ],
+      "test": "tests/e2e/test_source_check_transactions.py::test_native_source_claim_takeover_and_exactly_once_package",
+      "observed": {
+        "origin": "persistence/test-results/native-mutations/WP-14.txt",
+        "raw_sha256": "8c0936b75c7736aa7f26fc3112651fb41fdf8fcc424790a0fb14a2fb24ca0003",
+        "assertion_excerpt": [
+          "    assert repos[0].finish_package(old, package_result(plan, 0)) is False",
+          "E   AssertionError: assert True is False",
+          "E    +  where True = finish_package({'attempts': 1, 'cleanup_at': DatetimeWithNanoseconds(2026, 11, 1, 8, 5, 35, 763365, tzinfo=datetime.timezone.utc), 'c..._packages': 0, 'created_at': DatetimeWithNanoseconds(2026, 10, 2, 8, 5, 35, 763365, tzinfo=datetime.timezone.utc), ...}, {'answer_version': 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'documents': [{'source_id': 'S1...: True, 'claim': 'Claim 1.', 'quotes': ['Exact evidence.'], 'reason_code': None, ...}], 'package_id': 'package-0', ...})",
+          "E    +    where finish_package = <app.services.source_check_repository.SourceCheckRepository object at 0x000002256059B0D0>.finish_package"
+        ],
+        "failed_cases": [
+          "tests/e2e/test_source_check_transactions.py::test_native_source_claim_takeover_and_exactly_once_package"
+        ],
+        "runner_summary": [
+          "1 failed in 5.45s"
+        ]
+      }
+    },
+    {
+      "id": "WP-19-native",
+      "packages": [
+        "WP-19"
+      ],
+      "kind": "isolated-process mutation",
+      "implementation_commit": "acdadb91",
+      "run_source_commit": null,
+      "process_exit_code": null,
+      "reported_process_exit_code": 1,
+      "exit_evidence": "The executed native_mutations harness accepts only child exit 1 plus a contract assertion. Raw stdout does not serialize the exit code; the implementation report records successful detection.",
+      "source": "app/services/seo_weekly_review.py",
+      "target": "WeeklyReviewRepository.finish_lease",
+      "mutation": [
+        [
+          "if (data or {}).get(\"lease_run_id\") != run_id:",
+          "if False:"
+        ]
+      ],
+      "test": "tests/e2e/test_scheduler_transactions.py::test_native_seo_claim_and_finish_require_current_owner",
+      "observed": {
+        "origin": "persistence/test-results/native-mutations/WP-19.txt",
+        "raw_sha256": "fa4b0eec45eb6370f7ce9465f3e6100d0b0d23c193b37657bc1f3bbde57ec627",
+        "assertion_excerpt": [
+          "    assert Repository(db).finish_lease(old, later, 7) is False",
+          "E   AssertionError: assert True is False",
+          "E    +  where True = finish_lease('first', datetime.datetime(2026, 10, 2, 8, 51, 44, 549115, tzinfo=datetime.timezone.utc), 7)",
+          "E    +    where finish_lease = <test_scheduler_transactions.test_native_seo_claim_and_finish_require_current_owner.<locals>.Repository object at 0x0000022664697BE0>.finish_lease"
+        ],
+        "failed_cases": [
+          "tests/e2e/test_scheduler_transactions.py::test_native_seo_claim_and_finish_require_current_owner"
+        ],
+        "runner_summary": [
+          "1 failed in 4.05s"
+        ]
+      }
+    },
+    {
+      "id": "WP-33-native",
+      "packages": [
+        "WP-33"
+      ],
+      "kind": "isolated-process mutation",
+      "implementation_commit": "acdadb91",
+      "run_source_commit": null,
+      "process_exit_code": null,
+      "reported_process_exit_code": 1,
+      "exit_evidence": "The executed native_mutations harness accepts only child exit 1 plus a contract assertion. Raw stdout does not serialize the exit code; the implementation report records successful detection.",
+      "source": "app/api/routers/admin.py",
+      "target": "_persist_and_activate_models",
+      "mutation": [
+        [
+          "if cfg.model_config_revision_of(current) != new_revision:",
+          "if False:"
+        ]
+      ],
+      "test": "tests/e2e/test_model_configuration_transactions.py::test_native_failed_model_activation_preserves_other_writer",
+      "observed": {
+        "origin": "persistence/test-results/native-mutations/WP-33.txt",
+        "raw_sha256": "a195b0d40cad57fb038693f2613e93a66f8c99b70d9971baf40edadb2d3afc5d",
+        "assertion_excerpt": [
+          "    admin._persist_and_activate_models(ref, {\"label\": \"A\"}, expected_revision=initial_revision)",
+          "E   Failed: DID NOT RAISE <class 'RuntimeError'>",
+          "______ test_native_failed_model_activation_preserves_other_writer[True] _______",
+          "tests\\e2e\\test_model_configuration_transactions.py:42: in test_native_failed_model_activation_preserves_other_writer",
+          "=========================== short test summary info ===========================",
+          "FAILED tests/e2e/test_model_configuration_transactions.py::test_native_failed_model_activation_preserves_other_writer[False]"
+        ],
+        "failed_cases": [
+          "tests/e2e/test_model_configuration_transactions.py::test_native_failed_model_activation_preserves_other_writer[False]",
+          "tests/e2e/test_model_configuration_transactions.py::test_native_failed_model_activation_preserves_other_writer[True]"
+        ],
+        "runner_summary": [
+          "2 failed in 40.97s"
+        ]
+      }
+    },
+    {
+      "id": "WP-35-native",
+      "packages": [
+        "WP-35"
+      ],
+      "kind": "isolated-process mutation",
+      "implementation_commit": "acdadb91",
+      "run_source_commit": null,
+      "process_exit_code": null,
+      "reported_process_exit_code": 1,
+      "exit_evidence": "The executed native_mutations harness accepts only child exit 1 plus a contract assertion. Raw stdout does not serialize the exit code; the implementation report records successful detection.",
+      "source": "app/services/agent_actions.py",
+      "target": "AgentActions.confirm",
+      "mutation": [
+        [
+          "if data.get(\"status\") in {\"succeeded\", \"executing\", \"unknown\"}:",
+          "if False:"
+        ],
+        [
+          "if data.get(\"status\") != \"pending\" or data[\"approval_until\"] <= now().isoformat():",
+          "if data[\"approval_until\"] <= now().isoformat():"
+        ]
+      ],
+      "test": "tests/e2e/test_google_action_transactions.py::test_native_google_confirmation_one_attempt_and_unknown_never_retries",
+      "observed": {
+        "origin": "persistence/test-results/native-mutations/WP-35.txt",
+        "raw_sha256": "3f6c111a9843d9e38ca0a737fb76aefccf7fcc5993108b1de3a02fbf90b24661",
+        "assertion_excerpt": [
+          "    assert len(attempts) == 1",
+          "E   AssertionError: assert 2 == 1",
+          "E    +  where 2 = len([('POST', 'https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {'headers': {'Authorization': 'Bearer dummy-...YtOCINCkNvbnRlbnQtVHJhbnNmZXItRW5jb2Rpbmc6IDdiaXQNCk1JTUUtVmVyc2lvbjogMS4wDQoNCkV4cGxpY2l0bHkgYXBwcm92ZWQgdGV4dA0K'}})])",
+          "_ test_native_google_confirmation_one_attempt_and_unknown_never_retries[calendar_event-calendar_write] _",
+          "E    +  where 2 = len([('POST', 'https://www.googleapis.com/calendar/v3/calendars/primary/events', {'headers': {'Authorization': 'Bearer dum...b7fa63c76383b563995a3d8e'}}, 'id': 'nativefixture', 'summary': 'Approved fixture'}, 'params': {'sendUpdates': 'all'}})])",
+          "=========================== short test summary info ==========================="
+        ],
+        "failed_cases": [
+          "tests/e2e/test_google_action_transactions.py::test_native_google_confirmation_one_attempt_and_unknown_never_retries[gmail_send-gmail_send]",
+          "tests/e2e/test_google_action_transactions.py::test_native_google_confirmation_one_attempt_and_unknown_never_retries[calendar_event-calendar_write]"
+        ],
+        "runner_summary": [
+          "2 failed in 13.82s"
+        ]
+      }
+    },
+    {
+      "id": "WP-36-native",
+      "packages": [
+        "WP-36"
+      ],
+      "kind": "isolated-process mutation",
+      "implementation_commit": "acdadb91",
+      "run_source_commit": null,
+      "process_exit_code": null,
+      "reported_process_exit_code": 1,
+      "exit_evidence": "The executed native_mutations harness accepts only child exit 1 plus a contract assertion. Raw stdout does not serialize the exit code; the implementation report records successful detection.",
+      "source": "app/services/agent_files.py",
+      "target": "AgentFiles.save",
+      "mutation": [
+        [
+          "if usage.get(\"count\", 0) >= MAX_FILES or usage.get(\"bytes\", 0) + len(raw) > MAX_STORAGE_BYTES:",
+          "if False:"
+        ]
+      ],
+      "test": "tests/e2e/test_file_storage_transactions.py::test_native_cloud_upload_quota_foreign_download_and_delete_retry",
+      "observed": {
+        "origin": "persistence/test-results/native-mutations/WP-36.txt",
+        "raw_sha256": "150f235f26aac01de85a3a9219df1083d85e18b6ff01cb87bae106b8e3aff88f",
+        "assertion_excerpt": [
+          "    assert sum(value is not None for value in outcomes) == 1",
+          "E   assert 2 == 1",
+          "E    +  where 2 = sum(<generator object test_native_cloud_upload_quota_foreign_download_and_delete_retry.<locals>.<genexpr> at 0x000001F569038200>)",
+          "=========================== short test summary info ==========================="
+        ],
+        "failed_cases": [
+          "tests/e2e/test_file_storage_transactions.py::test_native_cloud_upload_quota_foreign_download_and_delete_retry"
+        ],
+        "runner_summary": [
+          "1 failed in 3.30s"
+        ]
+      }
+    },
+    {
+      "id": "WP-37-probe-native",
+      "packages": [
+        "WP-37"
+      ],
+      "kind": "isolated-process mutation",
+      "implementation_commit": "acdadb91",
+      "run_source_commit": null,
+      "process_exit_code": null,
+      "reported_process_exit_code": 1,
+      "exit_evidence": "The executed native_mutations harness accepts only child exit 1 plus a contract assertion. Raw stdout does not serialize the exit code; the implementation report records successful detection.",
+      "source": "app/services/watch_probe.py",
+      "target": "record_probe",
+      "mutation": [
+        [
+          "if any(data.get(field) != expected_claim.get(field) for field in fields):",
+          "if False:"
+        ]
+      ],
+      "test": "tests/e2e/test_watch_delivery_transactions.py::test_native_probe_budget_is_atomic_and_old_configuration_cannot_schedule",
+      "observed": {
+        "origin": "persistence/test-results/native-mutations/WP-37-probe.txt",
+        "raw_sha256": "0443d27dbab8581cc361f1ad965427110ba1aee4897d2c9d6ca3ef094b1df5d8",
+        "assertion_excerpt": [
+          "    assert not watch_probe.record_probe(ref.id, {\"outcome\": watch_probe.OUTCOME_NEW}, now=now,",
+          "E   AssertionError: assert not True",
+          "E    +  where True = <function record_probe at 0x000001E0B8649C10>('e98a0d3158e0410fa25ebe1993cdded1', {'outcome': 'new_evidence'}, now=datetime.datetime(2088, 2, 3, 0, 0, tzinfo=datetime.timezone.utc), db=<google.cloud.firestore_v1.client.Client object at 0x000001E0B8AEED30>, expected_claim={'condition': 'original', 'interval': 'weekly', 'model_tier': 'pro', 'next_probe_at': DatetimeWithNanoseconds(2088, 2, 3, 0, 0, tzinfo=datetime.timezone.utc), ...})",
+          "E    +    where <function record_probe at 0x000001E0B8649C10> = watch_probe.record_probe"
+        ],
+        "failed_cases": [
+          "tests/e2e/test_watch_delivery_transactions.py::test_native_probe_budget_is_atomic_and_old_configuration_cannot_schedule"
+        ],
+        "runner_summary": [
+          "1 failed in 3.29s"
+        ]
+      }
+    },
+    {
+      "id": "WP-37-native",
+      "packages": [
+        "WP-37"
+      ],
+      "kind": "isolated-process mutation",
+      "implementation_commit": "acdadb91",
+      "run_source_commit": null,
+      "process_exit_code": null,
+      "reported_process_exit_code": 1,
+      "exit_evidence": "The executed native_mutations harness accepts only child exit 1 plus a contract assertion. Raw stdout does not serialize the exit code; the implementation report records successful detection.",
+      "source": "app/services/notification_outbox.py",
+      "target": "finish",
+      "mutation": [
+        [
+          "or str(data.get(\"lease_owner\") or \"\") != str(lease_owner)",
+          "or False"
+        ]
+      ],
+      "test": "tests/e2e/test_watch_delivery_transactions.py::test_native_outbox_claim_takeover_rejects_stale_ack_and_terminal_replay",
+      "observed": {
+        "origin": "persistence/test-results/native-mutations/WP-37.txt",
+        "raw_sha256": "5ee337d96c7c478f5135200ceec5f04941b9292cbb7abe04dc7cca88ceb4a800",
+        "assertion_excerpt": [
+          "    assert not outbox.finish(ref.id, old[\"lease_owner\"], outbox.SENT, now=later, db=db)",
+          "E   AssertionError: assert not True",
+          "E    +  where True = <function finish at 0x00000251409EA1F0>('3261efee27eb7d574536be1037bb1b8ce9ac46b5f7ce85cecf571922347f5f47', 'af4b0d08fa62acf556df7b88', 'sent', now=datetime.datetime(2026, 10, 2, 8, 18, 14, 786658, tzinfo=datetime.timezone.utc), db=<google.cloud.firestore_v1.client.Client object at 0x0000025141ACC7C0>)",
+          "E    +    where <function finish at 0x00000251409EA1F0> = outbox.finish"
+        ],
+        "failed_cases": [
+          "tests/e2e/test_watch_delivery_transactions.py::test_native_outbox_claim_takeover_rejects_stale_ack_and_terminal_replay"
+        ],
+        "runner_summary": [
+          "1 failed in 8.55s"
+        ]
+      }
+    },
+    {
+      "id": "WP-11-adapter",
+      "packages": [
+        "WP-11"
+      ],
+      "kind": "isolated-process mutation",
+      "implementation_commit": "c723e42b",
+      "run_source_commit": null,
+      "process_exit_code": 1,
+      "exit_evidence": "adapter-mutation-results.json",
+      "source": "app/services/api_run_repository.py",
+      "test": "tests/test_api_run_recovery.py::test_backfill_preserves_existing_expiry_and_rebound_mapping",
+      "observed": {
+        "origin": "adapters/test-results/mutation-WP-11.log",
+        "raw_sha256": "27dcda06326577aded5c8152d9b8ac72305b281f563a5f512e1a4f3a3104d134",
+        "assertion_excerpt": [
+          "    assert mapping.get().to_dict() == before",
+          "E   AssertionError: assert {'created_at'...b923c53', ...} == {'created_at'...b923c53', ...}",
+          "E     ",
+          "E     Omitting 4 identical items, use -vv to show"
+        ],
+        "failed_cases": [
+          "tests/test_api_run_recovery.py::test_backfill_preserves_existing_expiry_and_rebound_mapping"
+        ],
+        "runner_summary": [
+          "1 failed in 4.94s"
+        ]
+      }
+    },
+    {
+      "id": "WP-12-adapter",
+      "packages": [
+        "WP-12"
+      ],
+      "kind": "isolated-process mutation",
+      "implementation_commit": "c723e42b",
+      "run_source_commit": null,
+      "process_exit_code": 1,
+      "exit_evidence": "adapter-mutation-results.json",
+      "source": "app/services/registration.py",
+      "test": "tests/test_http_adapter_auth.py::test_registration_create_race_has_same_public_response_and_no_duplicate_notification",
+      "observed": {
+        "origin": "adapters/test-results/mutation-WP-12.log",
+        "raw_sha256": "78779c31e75f8bdfa1f002688ed6b6adde72f0dbdfc642bcc19d03391643dcf0",
+        "assertion_excerpt": [
+          "    assert [r.status_code for r in responses] == [200]*3",
+          "E   assert [200, 200, 503] == [200, 200, 200]",
+          "E     ",
+          "E     At index 2 diff: 503 != 200"
+        ],
+        "failed_cases": [
+          "tests/test_http_adapter_auth.py::test_registration_create_race_has_same_public_response_and_no_duplicate_notification"
+        ],
+        "runner_summary": [
+          "1 failed in 7.48s"
+        ]
+      }
+    },
+    {
+      "id": "WP-13-adapter",
+      "packages": [
+        "WP-13"
+      ],
+      "kind": "isolated-process mutation",
+      "implementation_commit": "c723e42b",
+      "run_source_commit": null,
+      "process_exit_code": 1,
+      "exit_evidence": "adapter-mutation-results.json",
+      "source": "app/api/routers/share.py",
+      "test": "tests/test_share_http_contract.py::test_app_share_publishes_authoritative_content_and_retry_does_not_charge_twice",
+      "observed": {
+        "origin": "adapters/test-results/mutation-WP-13.log",
+        "raw_sha256": "bbd2979200c1fb0ad5fa33984353fa5697ef365220ea4d8b333c95e050fbdbda",
+        "assertion_excerpt": [
+          "    assert stored[\"owner_uid\"] == \"owner\" and stored[\"visibility\"] == \"public\"",
+          "E   AssertionError: assert ('owner' == 'owner'",
+          "E     ",
+          "E       owner and 'private' == 'public'"
+        ],
+        "failed_cases": [
+          "tests/test_share_http_contract.py::test_app_share_publishes_authoritative_content_and_retry_does_not_charge_twice"
+        ],
+        "runner_summary": [
+          "1 failed in 4.85s"
+        ]
+      }
+    },
+    {
+      "id": "WP-15-adapter",
+      "packages": [
+        "WP-15"
+      ],
+      "kind": "isolated-process mutation",
+      "implementation_commit": "c723e42b",
+      "run_source_commit": null,
+      "process_exit_code": 1,
+      "exit_evidence": "adapter-mutation-results.json",
+      "source": "app/api/routers/watch.py",
+      "test": "tests/test_watch_http_contract.py::test_watch_patch_delete_entitlement_owner_and_allowlist",
+      "observed": {
+        "origin": "adapters/test-results/mutation-WP-15.log",
+        "raw_sha256": "09e1bd6f1ce579738f0e7cf66fa893221b8919b89b01a35655ca3fddfbcd009c",
+        "assertion_excerpt": [
+          "    assert response.status_code == status,response.text",
+          "E   AssertionError: {\"status\":\"success\",\"watch\":{\"indexed\":false,\"index_requested\":false,\"index_eligible\":false,\"id\":\"OUOfrmB9Bp3HKjrOfr7kzJIr\",\"share_id\":\"WWWWWWWWWWWWWWWW\",\"share_path\":\"/s/question-WWWWWWWWWWWWWWWW\",\"question\":\"Will this consensus change?\",\"interval\":\"weekly\",\"model_tier\":\"account\",\"publication_source\":\"\",\"run_weekday\":\"\",\"run_time\":\"\",\"timezone\":\"\",\"email_mode\":\"changes_only\",\"email_enabled\":true,\"telegram_enabled\":false,\"telegram_muted_until\":\"\",\"condition\":\"\",\"last_condition_status\":null,\"visibility\":\"public\",\"status\":\"paused\",\"next_run_at\":\"2026-10-09T08:07:18.628071+00:00\",\"last_run_at\":\"\",\"last_agreement_score\":60,\"baseline_agreement_score\":60,\"last_successful_run_id\":\"\",\"last_trigger\":\"stable\",\"last_signal\":\"\",\"accepted_run_id\":\"\",\"last_change_summary\":\"\",\"last_drift_score\":null,\"last_event_type\":\"\",\"resolution\":null,\"last_probe\":null,\"query_first\":false,\"awaiting_first_run\":false,\"created_at\":\"2026-10-02T08:07:18.628071+00:00\"}}",
+          "E   assert 200 == 403",
+          "E    +  where 200 = <Response [200 OK]>.status_code",
+          "=========================== short test summary info ==========================="
+        ],
+        "failed_cases": [
+          "tests/test_watch_http_contract.py::test_watch_patch_delete_entitlement_owner_and_allowlist"
+        ],
+        "runner_summary": [
+          "1 failed in 4.42s"
+        ]
+      }
+    },
+    {
+      "id": "WP-16-adapter",
+      "packages": [
+        "WP-16"
+      ],
+      "kind": "isolated-process mutation",
+      "implementation_commit": "c723e42b",
+      "run_source_commit": null,
+      "process_exit_code": 1,
+      "exit_evidence": "adapter-mutation-results.json",
+      "source": "app/api/routers/topics.py",
+      "test": "tests/test_http_adapter_auth.py::test_every_topic_admin_method_enforces_real_policy_before_service",
+      "observed": {
+        "origin": "adapters/test-results/mutation-WP-16.log",
+        "raw_sha256": "d07ac2a3442949b909609f506957e98d21cefd443fce31a52becf87cab773bf3",
+        "assertion_excerpt": [
+          "    assert response.status_code == expected, response.text",
+          "E   AssertionError: {\"status\":\"success\",\"topics\":[]}",
+          "E   assert 200 == 401",
+          "E    +  where 200 = <Response [200 OK]>.status_code",
+          "_ test_every_topic_admin_method_enforces_real_policy_before_service[revoked-401-POST-/api/admin/topics] _",
+          "E   AssertionError: {\"status\":\"success\",\"topic\":{\"id\":\"1NEJRLva8qPVd2U9mt\",\"title\":\"GPT-6\",\"slug\":\"gpt-6\",\"lead_question\":\"What is the current evidence about GPT-6?\",\"category\":\"Model releases\",\"summary\":\"A curated record of claims, releases, and model consensus.\",\"status\":\"active\",\"update_interval\":\"weekly\",\"run_config\":{\"provider_models\":{\"openai\":\"gpt-5.4-mini\",\"mistral\":\"mistral-small-latest\",\"gemini\":\"gemini-3.5-flash-lite\"},\"collect_sources\":true},\"models\":[\"OpenAI · GPT-5.4 mini\",\"Mistral · Mistral Small 4\",\"Google Gemini · Gemini 3.5 Flash-Lite\"],\"source_rules\":{\"allowed_types\":[\"primary\",\"community\",\"reporting\"],\"preferred_domains\":[\"openai.com\"],\"notes\":\"Prefer primary sources.\"},\"evidence\":[{\"id\":\"S1\",\"type\":\"primary\",\"title\":\"Official product update\",\"url\":\"https://openai.com/index/example\",\"publisher\":\"OpenAI\",\"published_at\":\"2026-07-22\",\"excerpt\":\"Primary evidence.\"}],\"seo\":{\"title\":\"GPT-6 Consensus Timeline\",\"description\":\"Track the evidence and model consensus around GPT-6.\",\"noindex\":false},\"created_at\":\"2026-10-02T08:07:25.924358+00:00\",\"updated_at\":\"2026-10-02T08:07:25.924358+00:00\",\"created_by\":\"revoked\",\"updated_by\":\"revoked\",\"latest_run_id\":\"\",\"latest_run_at\":null,\"latest_agreement_score\":null,\"latest_change_type\":\"\",\"latest_change_summary\":\"\",\"run_count\":0,\"next_run_at\":\"2026-10-09T08:07:25.924358+00:00\",\"claimed_until\":null,\"current_run_id\":\"\",\"last_run_status\":\"never\",\"last_run_error\":\"\",\"consecutive_failures\":0}}"
+        ],
+        "failed_cases": [
+          "tests/test_http_adapter_auth.py::test_every_topic_admin_method_enforces_real_policy_before_service[revoked-401-GET-/api/admin/topics]",
+          "tests/test_http_adapter_auth.py::test_every_topic_admin_method_enforces_real_policy_before_service[revoked-401-POST-/api/admin/topics]",
+          "tests/test_http_adapter_auth.py::test_every_topic_admin_method_enforces_real_policy_before_service[revoked-401-GET-/api/admin/topics/unknown]",
+          "tests/test_http_adapter_auth.py::test_every_topic_admin_method_enforces_real_policy_before_service[revoked-401-PUT-/api/admin/topics/unknown]",
+          "tests/test_http_adapter_auth.py::test_every_topic_admin_method_enforces_real_policy_before_service[revoked-401-POST-/api/admin/topics/unknown/runs]",
+          "tests/test_http_adapter_auth.py::test_every_topic_admin_method_enforces_real_policy_before_service[reader-403-GET-/api/admin/topics]",
+          "tests/test_http_adapter_auth.py::test_every_topic_admin_method_enforces_real_policy_before_service[reader-403-POST-/api/admin/topics]",
+          "tests/test_http_adapter_auth.py::test_every_topic_admin_method_enforces_real_policy_before_service[reader-403-GET-/api/admin/topics/unknown]",
+          "tests/test_http_adapter_auth.py::test_every_topic_admin_method_enforces_real_policy_before_service[reader-403-PUT-/api/admin/topics/unknown]",
+          "tests/test_http_adapter_auth.py::test_every_topic_admin_method_enforces_real_policy_before_service[reader-403-POST-/api/admin/topics/unknown/runs]",
+          "tests/test_http_adapter_auth.py::test_every_topic_admin_method_enforces_real_policy_before_service[outage-503-GET-/api/admin/topics]",
+          "tests/test_http_adapter_auth.py::test_every_topic_admin_method_enforces_real_policy_before_service[outage-503-POST-/api/admin/topics]",
+          "tests/test_http_adapter_auth.py::test_every_topic_admin_method_enforces_real_policy_before_service[outage-503-GET-/api/admin/topics/unknown]",
+          "tests/test_http_adapter_auth.py::test_every_topic_admin_method_enforces_real_policy_before_service[outage-503-PUT-/api/admin/topics/unknown]",
+          "tests/test_http_adapter_auth.py::test_every_topic_admin_method_enforces_real_policy_before_service[outage-503-POST-/api/admin/topics/unknown/runs]"
+        ],
+        "runner_summary": [
+          "15 failed, 10 passed in 5.29s"
+        ]
+      }
+    },
+    {
+      "id": "WP-17-adapter",
+      "packages": [
+        "WP-17"
+      ],
+      "kind": "isolated-process mutation",
+      "implementation_commit": "c723e42b",
+      "run_source_commit": null,
+      "process_exit_code": 1,
+      "exit_evidence": "adapter-mutation-results.json",
+      "source": "app/services/llm/consensus_engine.py",
+      "test": "tests/test_claim_identity_judge.py::test_known_unique_bindings_only",
+      "observed": {
+        "origin": "adapters/test-results/mutation-WP-17.log",
+        "raw_sha256": "55ce62260d3fd4db8abeb2b2a911857f0e88e8ab7ba39037b12ab8719a9d613a",
+        "assertion_excerpt": [
+          "    assert result == {0: \"k1\", 1: \"k2\"}",
+          "E   AssertionError: assert {0: 'invented', 1: 'k1'} == {0: 'k1', 1: 'k2'}",
+          "E     ",
+          "E     Differing items:"
+        ],
+        "failed_cases": [
+          "tests/test_claim_identity_judge.py::test_known_unique_bindings_only - ..."
+        ],
+        "runner_summary": [
+          "1 failed in 3.19s"
+        ]
+      }
+    },
+    {
+      "id": "WP-18-adapter",
+      "packages": [
+        "WP-18"
+      ],
+      "kind": "isolated-process mutation",
+      "implementation_commit": "c723e42b",
+      "run_source_commit": null,
+      "process_exit_code": 1,
+      "exit_evidence": "adapter-mutation-results.json",
+      "source": "app/services/seo_repository.py",
+      "test": "tests/test_seo_repository.py::test_batch_get_binds_document_identity_and_dates_not_position_or_payload",
+      "observed": {
+        "origin": "adapters/test-results/mutation-WP-18.log",
+        "raw_sha256": "c42faffdf5133ccfc02b3121d7f65f300d3691375364c1c848a2ec83fbb4ecc6",
+        "assertion_excerpt": [
+          "    assert len(result[\"a\"]) == 204 and len(result[\"b\"]) == 205 and result[\"missing\"] == []",
+          "E   assert (0 == 204)",
+          "E    +  where 0 = len([])",
+          "=========================== short test summary info ==========================="
+        ],
+        "failed_cases": [
+          "tests/test_seo_repository.py::test_batch_get_binds_document_identity_and_dates_not_position_or_payload"
+        ],
+        "runner_summary": [
+          "1 failed in 4.12s"
+        ]
+      }
+    },
+    {
+      "id": "WP-22-adapter",
+      "packages": [
+        "WP-22"
+      ],
+      "kind": "isolated-process mutation",
+      "implementation_commit": "c723e42b",
+      "run_source_commit": null,
+      "process_exit_code": 1,
+      "exit_evidence": "adapter-mutation-results.json",
+      "source": "app/api/routers/admin.py",
+      "test": "tests/test_http_adapter_auth.py::test_benchmark_admin_denies_before_read",
+      "observed": {
+        "origin": "adapters/test-results/mutation-WP-22.log",
+        "raw_sha256": "20e0ff5f20c4bd6f30d7d29249b1abebb159ed3aa50cd194aad52e1a2d03c382",
+        "assertion_excerpt": [
+          "    assert response.status_code == expected",
+          "E   assert 500 == 401",
+          "E    +  where 500 = <Response [500 Internal Server Error]>.status_code",
+          "------------------------------ Captured log call ------------------------------",
+          "2026-10-02 10:07:40,876 ERROR [corr=req-77b4e0cd6fe7356f] root: admin_list_benchmark_runs failed category=AssertionError",
+          "_____________ test_benchmark_admin_denies_before_read[reader-403] _____________",
+          "tests\\test_http_adapter_auth.py:98: in test_benchmark_admin_denies_before_read",
+          "E   assert 500 == 403"
+        ],
+        "failed_cases": [
+          "tests/test_http_adapter_auth.py::test_benchmark_admin_denies_before_read[None-401]",
+          "tests/test_http_adapter_auth.py::test_benchmark_admin_denies_before_read[reader-403]",
+          "tests/test_http_adapter_auth.py::test_benchmark_admin_denies_before_read[revoked-401]"
+        ],
+        "runner_summary": [
+          "3 failed in 4.93s"
+        ]
+      }
+    },
+    {
+      "id": "WP-23-adapter",
+      "packages": [
+        "WP-23"
+      ],
+      "kind": "isolated-process mutation",
+      "implementation_commit": "c723e42b",
+      "run_source_commit": null,
+      "process_exit_code": 1,
+      "exit_evidence": "adapter-mutation-results.json",
+      "source": "app/services/og_image.py",
+      "test": "tests/test_og_image.py::test_renderer_draws_question_score_and_model_facts",
+      "observed": {
+        "origin": "adapters/test-results/mutation-WP-23.log",
+        "raw_sha256": "7691e25a8765e554aca600886758c7c9a0b6c3f38a399db2018f291da0b1847c",
+        "assertion_excerpt": [
+          "    assert len(image.crop(box).getcolors(1_000_000)) > 20",
+          "E   assert 1 > 20",
+          "E    +  where 1 = len([(295680, (255, 255, 255))])",
+          "E    +    where [(295680, (255, 255, 255))] = getcolors(1000000)"
+        ],
+        "failed_cases": [
+          "tests/test_og_image.py::test_renderer_draws_question_score_and_model_facts"
+        ],
+        "runner_summary": [
+          "1 failed in 3.27s"
+        ]
+      }
+    },
+    {
+      "id": "WP-27-adapter",
+      "packages": [
+        "WP-27"
+      ],
+      "kind": "isolated-process mutation",
+      "implementation_commit": "c723e42b",
+      "run_source_commit": null,
+      "process_exit_code": 1,
+      "exit_evidence": "adapter-mutation-results.json",
+      "source": "app/services/differences_stats.py",
+      "test": "tests/test_feedback.py::test_stats_wrapper_persists_only_counts_and_safe_model_metadata",
+      "observed": {
+        "origin": "adapters/test-results/mutation-WP-27.log",
+        "raw_sha256": "90f92863f213c4c5e83f44ca62d9db344c82b4b81c4b2af3e58a321638f6a0ff",
+        "assertion_excerpt": [
+          "    assert all(marker not in serialized for marker in (\"PRIVATE_\",\"The sky is blue\",\"Water boils\",\"Disagreement about\",\"depends on\",\"Check a physics\"))",
+          "E   assert False",
+          "E    +  where False = all(<generator object test_stats_wrapper_persists_only_counts_and_safe_model_metadata.<locals>.<genexpr> at 0x000001955A1BF510>)",
+          "=========================== short test summary info ==========================="
+        ],
+        "failed_cases": [
+          "tests/test_feedback.py::test_stats_wrapper_persists_only_counts_and_safe_model_metadata"
+        ],
+        "runner_summary": [
+          "1 failed in 4.92s"
+        ]
+      }
+    },
+    {
+      "id": "WP-31-adapter",
+      "packages": [
+        "WP-31"
+      ],
+      "kind": "isolated-process mutation",
+      "implementation_commit": "c723e42b",
+      "run_source_commit": null,
+      "process_exit_code": 1,
+      "exit_evidence": "adapter-mutation-results.json",
+      "source": "main.py",
+      "test": "tests/test_agent_http_contract.py::test_actual_api_uid_limit_through_main_preserves_only_server_retry_header",
+      "observed": {
+        "origin": "adapters/test-results/mutation-WP-31.log",
+        "raw_sha256": "80676b3a1716cb671ff905dae6eb2c536fd11042486c45a9754383cc64fe697a",
+        "assertion_excerpt": [
+          "================================== FAILURES ===================================",
+          "FAILED tests/test_agent_http_contract.py::test_actual_api_uid_limit_through_main_preserves_only_server_retry_header",
+          "1 failed in 7.32s"
+        ],
+        "failed_cases": [
+          "tests/test_agent_http_contract.py::test_actual_api_uid_limit_through_main_preserves_only_server_retry_header"
+        ],
+        "runner_summary": [
+          "1 failed in 7.32s"
+        ]
+      }
+    },
+    {
+      "id": "WP-32-adapter",
+      "packages": [
+        "WP-32"
+      ],
+      "kind": "isolated-process mutation",
+      "implementation_commit": "c723e42b",
+      "run_source_commit": null,
+      "process_exit_code": 1,
+      "exit_evidence": "adapter-mutation-results.json",
+      "source": "app/api/routers/agent.py",
+      "test": "tests/test_agent_http_contract.py::test_stop_fences_only_bound_turn_repeatedly_and_rejects_late_worker",
+      "observed": {
+        "origin": "adapters/test-results/mutation-WP-32.log",
+        "raw_sha256": "1d81346debe53687fa17028a86e0f70f01f67f0577ee6f88d913edc8db222e3d",
+        "assertion_excerpt": [
+          "    assert h.client.post(h.base+\"/stop\",headers=login(\"stranger\")).status_code == 404",
+          "E   AssertionError: assert 200 == 404",
+          "E    +  where 200 = <Response [200 OK]>.status_code",
+          "E    +    where <Response [200 OK]> = post(('/agent/chats/59e00d712f9f240441b006dbd96e8282/turns/074c171c5805c0b0f5db063336530033' + '/stop'), headers={'Authorization': 'Bearer stranger'})"
+        ],
+        "failed_cases": [
+          "tests/test_agent_http_contract.py::test_stop_fences_only_bound_turn_repeatedly_and_rejects_late_worker"
+        ],
+        "runner_summary": [
+          "1 failed in 4.76s"
+        ]
+      }
+    },
+    {
+      "id": "followup-memory",
+      "packages": [
+        "WP-10"
+      ],
+      "kind": "isolated-process mutation",
+      "implementation_commit": "b517b3f5",
+      "run_source_commit": null,
+      "process_exit_code": 1,
+      "exit_evidence": "followup-mutation-results.json",
+      "mutation": "Undo revision guard removed",
+      "observed": {
+        "origin": "adapters/test-results/followup-mutation-memory.log",
+        "raw_sha256": "760d186dc4f6dbe3ea1dbd84f32986acf236efa3e4d868f43de01d7c7e7d9802",
+        "assertion_excerpt": [
+          "    assert response.status_code == status, response.text",
+          "E   AssertionError: {\"status\":\"undone\",\"revision_id\":\"06f319e1a111caaa2c27457d5fa3371a\",\"revision\":7}",
+          "E   assert 200 == 409",
+          "E    +  where 200 = <Response [200 OK]>.status_code",
+          "=========================== short test summary info ==========================="
+        ],
+        "failed_cases": [
+          "tests/test_memory_http_contract.py::test_main_undo_errors_preserve_all_state_and_never_call_provider[conflict-409-revision_conflict]"
+        ],
+        "runner_summary": [
+          "1 failed, 11 deselected in 1.73s"
+        ]
+      }
+    },
+    {
+      "id": "followup-affinity",
+      "packages": [
+        "WP-14"
+      ],
+      "kind": "isolated-process mutation",
+      "implementation_commit": "b517b3f5",
+      "run_source_commit": null,
+      "process_exit_code": 1,
+      "exit_evidence": "followup-mutation-results.json",
+      "mutation": "Own-key worker affinity guard removed",
+      "observed": {
+        "origin": "adapters/test-results/followup-mutation-affinity.log",
+        "raw_sha256": "6abf40b785a63b755affda62d4676441bc4aadafb3a4aac545dfd669ad630553",
+        "assertion_excerpt": [
+          "    assert not jobs.process_one(repos[1])",
+          "E   AssertionError: assert not True",
+          "E    +  where True = <function process_one at 0x000001B79153E5E0>(<app.services.source_check_repository.SourceCheckRepository object at 0x000001B790C020A0>)",
+          "E    +    where <function process_one at 0x000001B79153E5E0> = <module 'app.services.source_check_jobs' from 'C:\\\\Users\\\\maxlp\\\\OneDrive\\\\Dokumente\\\\typeonai\\\\test-results\\\\audit-implementation\\\\adapters\\\\app\\\\services\\\\source_check_jobs.py'>.process_one"
+        ],
+        "failed_cases": [
+          "tests/e2e/test_source_check_transactions.py::test_native_own_key_affinity_uses_only_the_bound_workers_memory"
+        ],
+        "runner_summary": [
+          "1 failed, 2 deselected in 2.33s"
+        ]
+      }
+    },
+    {
+      "id": "admin-old-source",
+      "packages": [
+        "WP-21",
+        "WP-22"
+      ],
+      "kind": "new assertions against old production source",
+      "implementation_commit": "0cd497d9",
+      "run_source_commit": null,
+      "process_exit_code": null,
+      "exit_evidence": "Raw Vitest log records failed assertions and counters; no process-exit or run-HEAD metadata was retained.",
+      "observed": {
+        "origin": "browser/test-results/admin-before-fix.log",
+        "raw_sha256": "f6efc6db272dacff1123d69d0dcd7f2e44b5edbaad0f1e73f3d2e3f394de0f9b",
+        "assertion_excerpt": [
+          "   ❯ tests/js/admin-api.test.mjs > Admin HTTP error contracts > unpacks only allowed strings from {\"error\":{\"error_code\":\"not_found\",\"message\":\"No account found.\"}}",
+          "     → expected [Function] to throw error including 'No account found.' but got '[object Object]'",
+          "   ❯ tests/js/admin-api.test.mjs > Admin HTTP error contracts > unpacks only allowed strings from {\"error\":{\"message\":{\"raw\":\"private-submitted-text\"}}}",
+          "     → expected [Function] to throw error including 'HTTP 409' but got '[object Object]'",
+          "   ❯ tests/js/admin-api.test.mjs > Admin HTTP error contracts > unpacks only allowed strings from null",
+          "     → expected [Function] to throw error including 'HTTP 409' but got 'Cannot read properties of null (readi…'",
+          " ❯ tests/js/admin-benchmark.test.mjs  (7 tests | 7 failed) 1986ms",
+          "   ❯ tests/js/admin-benchmark.test.mjs > Benchmark compact report viewer > renders compact data, safely quotes labels and excludes raw prompts/answers"
+        ],
+        "failed_cases": [],
+        "runner_summary": [
+          "Test Files  3 failed (3)",
+          "Tests  11 failed | 16 passed (27)"
+        ]
+      }
+    },
+    {
+      "id": "scroll-old-source",
+      "packages": [
+        "WP-38"
+      ],
+      "kind": "new assertions against old production source",
+      "implementation_commit": "0fdf0468",
+      "run_source_commit": null,
+      "process_exit_code": null,
+      "exit_evidence": "Raw Vitest log records failed assertions and counters; no process-exit or run-HEAD metadata was retained.",
+      "observed": {
+        "origin": "browser/test-results/scroll-before-fix.log",
+        "raw_sha256": "44e48445e204cce6af49b6e9cc7932406e5cea75de9cae8d4b4397d5f6ec3d92",
+        "assertion_excerpt": [
+          "   ❯ tests/js/chat-scroll.test.mjs > conversation scroll > cancels a queued resize-follow frame at completion without moving past the answer",
+          "     → expected 2448 to be 2400 // Object.is equality",
+          "",
+          "⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯",
+          " FAIL  tests/js/chat-scroll.test.mjs > conversation scroll > cancels a queued resize-follow frame at completion without moving past the answer",
+          "AssertionError: expected 2448 to be 2400 // Object.is equality",
+          "- Expected"
+        ],
+        "failed_cases": [],
+        "runner_summary": [
+          "Test Files  1 failed (1)",
+          "Tests  1 failed | 13 passed (14)"
+        ]
+      }
+    },
+    {
+      "id": "composer-width-old-source",
+      "packages": [
+        "WP-03",
+        "WP-38"
+      ],
+      "kind": "new browser assertion against old production source",
+      "implementation_commit": "130728c274b95672cd09da677806e8a0095a24b1",
+      "run_source_commit": null,
+      "observed_run_head": "caa7bac606800e60dc683365d500e06b60425787",
+      "working_tree_test_changes": true,
+      "process_exit_code": null,
+      "exit_evidence": "JUnit and pytest stdout retain 1 failed / 1 passed; the surrounding PowerShell invocation did not retain the pytest process exit separately.",
+      "mutation": "After a real CSS width transition, the old composer remains at 180px instead of shrinking to 52px within the explicit eventual assertion.",
+      "observed": {
+        "origin": "browser/test-results/smoke-width-negative.log",
+        "raw_sha256": "8832f6c7955aa94e8dc304cd649976e2080446aaf99d2f5562f5dee9b1d1cb57",
+        "assertion_excerpt": [
+          ">       expect(input_box).to_have_css(\"height\", f\"{round(base_height)}px\")",
+          "E       AssertionError: Locator expected to have CSS '52px'",
+          "E       Actual value: 180px ",
+          "E       Call log:",
+          "",
+          "tests\\e2e\\test_smoke.py:212: AssertionError",
+          "---------------------------- Captured stderr setup ----------------------------",
+          "2026-10-02 12:04:03,369 WARNING [corr=-] root: MOCK_AUTH=1 aktiv - Firebase-Auth ist fuer das E2E-Sentinel-Token gemockt. NIE in Produktion setzen."
+        ],
+        "failed_cases": [
+          "tests/e2e/test_smoke.py::test_question_input_grows_and_caps_on_desktop_and_mobile"
+        ],
+        "runner_summary": [
+          "1 failed, 1 passed, 41 deselected, 1 warning in 18.97s"
+        ]
+      }
+    },
+    {
+      "id": "WP-25-embedded",
+      "packages": [
+        "WP-25"
+      ],
+      "kind": "negative control embedded in passing test",
+      "implementation_commit": "bad07367",
+      "run_source_commit": "ffaca3df7c8bbb02d850fb8f31d90107f26e9293",
+      "process_exit_code": 0,
+      "exit_evidence": "Final full backend process passed; the test deliberately catches the failed contract oracle and verifies the forbidden side effect.",
+      "test": "tests/test_maintenance_scripts.py::test_repair_inspection_oracle_detects_removed_apply_guard",
+      "mutation": "Remove apply guard: read-only inspection invokes recovery",
+      "observed": {
+        "runner": "backend-implementation-2026-10-02.xml",
+        "status": "passed"
+      }
+    },
+    {
+      "id": "WP-26-embedded",
+      "packages": [
+        "WP-26"
+      ],
+      "kind": "negative control embedded in passing test",
+      "implementation_commit": "bad07367",
+      "run_source_commit": "ffaca3df7c8bbb02d850fb8f31d90107f26e9293",
+      "process_exit_code": 0,
+      "exit_evidence": "Final full backend process passed; the test deliberately catches the failed contract oracle and verifies the forbidden side effect.",
+      "test": "tests/test_local_transport.py::test_http_failure_has_one_attempt_and_oracle_detects_enabled_sdk_retry[True]",
+      "mutation": "Enable SDK retry: local server observes two real requests",
+      "observed": {
+        "runner": "backend-implementation-2026-10-02.xml",
+        "status": "passed"
+      }
+    },
+    {
+      "id": "WP-28-embedded",
+      "packages": [
+        "WP-28"
+      ],
+      "kind": "negative control embedded in passing test",
+      "implementation_commit": "bad07367",
+      "run_source_commit": "ffaca3df7c8bbb02d850fb8f31d90107f26e9293",
+      "process_exit_code": 0,
+      "exit_evidence": "Final full backend process passed; the test deliberately catches the failed contract oracle and verifies the forbidden side effect.",
+      "test": "tests/test_auxiliary_cli.py::test_argument_boundary_oracle_detects_removed_finite_budget_guard",
+      "mutation": "Remove finite budget guard: invalid budget starts synthetic provider work",
+      "observed": {
+        "runner": "backend-implementation-2026-10-02.xml",
+        "status": "passed"
+      }
+    },
+    {
+      "id": "WP-06-embedded",
+      "packages": [
+        "WP-06"
+      ],
+      "kind": "negative control embedded in passing test",
+      "implementation_commit": "c4710a97",
+      "run_source_commit": "1ab80feed4edcd7d864b69194b4b9added3ffca5",
+      "process_exit_code": 0,
+      "exit_evidence": "Rules suite succeeded; assert.rejects verifies that the same assertFails rejects a permitted owner write.",
+      "test": "the same denial oracle detects an accidentally permitted owner write",
+      "mutation": "Permit authenticated owner write temporarily, then restore original rules in finally.",
+      "observed": {
+        "runner": "rules-implementation-2026-10-02.xml",
+        "status": "passed"
+      }
+    },
+    {
+      "id": "WP-05-ci-failure-propagation",
+      "packages": [
+        "WP-05"
+      ],
+      "kind": "actual CI regression failure, not an intentional mutation",
+      "implementation_commit": "b971394a",
+      "run_source_commit": "2afe0cf1e75c221e2cf086e224b3615481d493a8",
+      "process_exit_code": 1,
+      "exit_evidence": "Raw GitHub job log: pytest failures propagate through Firebase exec to Process completed with exit code 1; artifact upload still succeeds.",
+      "ci_job": "https://github.com/sudoleo/consens/actions/runs/36989092514/job/110781068840",
+      "artifact": "https://github.com/sudoleo/consens/actions/runs/36989092514/artifacts/11218892950",
+      "artifact_zip_sha256": "39de774915b1efd0bfe04d68520cfc25c02a87a7b3b5b7797e1e4a78b85ffb4a",
+      "result": {
+        "passed": 343,
+        "failed": 25
+      },
+      "observed": {
+        "origin": "integration/test-results/integrated/ci-browser-2afe.log",
+        "raw_sha256": "de157b73033a079cc68134f52ea858d3a8bac8f62c42fe662e886f8647c6a727",
+        "assertion_excerpt": [
+          "2026-10-02T09:35:19.5246409Z >       assert errors == [], f\"Konsolen-Fehler beim Laden: {errors}\"",
+          "2026-10-02T09:35:19.5247249Z E       AssertionError: Konsolen-Fehler beim Laden: ['Direct write to window.isUserPro is forbidden; use App.state.set()']",
+          "2026-10-02T09:35:19.5247963Z E       assert ['Direct writ....state.set()'] == []",
+          "2026-10-02T09:35:19.5248285Z E         ",
+          "2026-10-02T09:35:19.5251285Z ",
+          "2026-10-02T09:35:19.5251475Z tests/e2e/test_smoke.py:86: AssertionError",
+          "2026-10-02T09:35:19.5252031Z _____________ test_sidebar_header_hover_search_and_provider_picker _____________",
+          "2026-10-02T09:35:19.5252369Z ",
+          "2026-10-02T09:35:19.5266765Z >       expect(search_trigger).to_have_css(\"opacity\", \"1\")",
+          "2026-10-02T09:35:19.5267253Z E       AssertionError: Locator expected to have CSS '1'"
+        ],
+        "failed_cases": [
+          "tests/e2e/test_scheduler_transactions.py::test_native_topic_loop_commits_due_tick_and_stops_on_cancel[False] - RuntimeError: asyncio.run() cannot be called from a running event loop",
+          "tests/e2e/test_scheduler_transactions.py::test_native_topic_loop_commits_due_tick_and_stops_on_cancel[True] - RuntimeError: asyncio.run() cannot be called from a running event loop",
+          "tests/e2e/test_scheduler_transactions.py::test_native_seo_loop_persists_failure_releases_lease_and_cancels - RuntimeError: asyncio.run() cannot be called from a running event loop",
+          "tests/e2e/test_smoke.py::test_app_loads_without_console_errors - AssertionError: Konsolen-Fehler beim Laden: ['Direct write to window.isUserPro is forbidden; use App.state.set()']",
+          "tests/e2e/test_smoke.py::test_sidebar_header_hover_search_and_provider_picker - AssertionError: Locator expected to have CSS '1'",
+          "tests/e2e/test_smoke.py::test_question_input_grows_and_caps_on_desktop_and_mobile - assert 180.00001525878906 == 52",
+          "tests/e2e/test_smoke.py::test_desktop_composer_is_one_row_without_a_collapsed_state - assert 626 < 517",
+          "tests/e2e/test_smoke.py::test_desktop_one_row_keeps_the_run_switch_and_attachments_usable - playwright._impl._errors.Error: Locator.click: Error: strict mode violation: locator(\".chat-input-container .model-picker-display\") resolved to 2 elements:",
+          "tests/e2e/test_smoke.py::test_empty_app_and_consensus_picker_do_not_scroll_unnecessarily - assert (445.4963684082031 - 355.4963684082031) <= 1",
+          "tests/e2e/test_smoke.py::test_consensus_renders_differences_and_agreement_score - playwright._impl._errors.Error: Locator.evaluate: TypeError: Cannot read properties of null (reading 'getBoundingClientRect')",
+          "tests/e2e/test_smoke.py::test_followup_keeps_the_previous_answer_and_appends_the_new_question - AssertionError: Locator expected to have attribute 'Ask a follow-up question'",
+          "tests/e2e/test_smoke.py::test_split_claim_is_marked_in_the_colour_of_its_badge - AssertionError: mark ist nicht bernsteinfarben: [247, 237, 207]",
+          "tests/e2e/test_smoke.py::test_claim_hover_keeps_silent_models_available_on_demand - AssertionError: Locator expected to be visible",
+          "tests/e2e/test_smoke.py::test_contradiction_keeps_the_visible_control_on_a_shared_sentence - AssertionError: Locator expected to have count '1'",
+          "tests/e2e/test_smoke.py::test_emphasis_marker_still_yields_to_the_claim_badge - AssertionError: Emphasis-Marke tritt weiterhin hinter das Badge zurueck",
+          "tests/e2e/test_smoke.py::test_agent_mode_can_reveal_hidden_model_answers_on_mobile - AssertionError: Locator expected to have count '1'",
+          "tests/e2e/test_smoke.py::test_watch_dialog_uses_safe_defaults_keeps_telegram_visible_and_asks_for_a_goal - playwright._impl._errors.Error: Page.evaluate: Error: Direct write to window.lastShareResultId is forbidden; use App.state.set()",
+          "tests/e2e/test_smoke.py::test_theme_toggle - playwright._impl._errors.TimeoutError: Page.click: Timeout 30000ms exceeded.",
+          "tests/e2e/test_smoke.py::test_deep_think_temporarily_selects_configured_engine - playwright._impl._errors.Error: Page.evaluate: Error: Direct write to window.isUserPro is forbidden; use App.state.set()",
+          "tests/e2e/test_smoke.py::test_consensus_presets_apply_full_model_sets_and_gate_thorough - playwright._impl._errors.Error: Page.evaluate: Error: Direct write to window.isUserPro is forbidden; use App.state.set()",
+          "tests/e2e/test_smoke.py::test_attachment_pauses_deepseek_and_restores_previous_selection - AssertionError: assert 'cannot read attachments' in 'DeepSeek paused · No attachment support'",
+          "tests/e2e/test_smoke.py::test_pdf_drop_uses_full_attachment_whitelist - playwright._impl._errors.Error: Page.evaluate: Error: Direct write to window.isUserPro is forbidden; use App.state.set()",
+          "tests/e2e/test_smoke.py::test_attachment_send_hard_blocks_stale_deepseek_selection - playwright._impl._errors.Error: Page.evaluate: Error: Direct write to window.isUserPro is forbidden; use App.state.set()",
+          "tests/e2e/test_smoke.py::test_tier_upgrade_applies_pro_defaults_but_keeps_explicit_picker_choice - assert not True",
+          "tests/e2e/test_smoke.py::test_model_selection_persists_across_reload - playwright._impl._errors.TimeoutError: Page.wait_for_function: Timeout 10000ms exceeded."
+        ],
+        "runner_summary": [
+          "2026-10-02T09:35:19.9264588Z 25 failed, 343 passed, 2 warnings in 843.04s (0:14:03)"
+        ]
+      }
+    }
+  ],
+  "report_only_regressions": [
+    {
+      "packages": [
+        "WP-25"
+      ],
+      "regression": "Two old backfill regressions and two later claim-key collision regressions were red before correction.",
+      "implementation_commit": "bad07367 / d3500c0c",
+      "kind": "reported red-before-fix regression; no separate raw failure log retained",
+      "process_exit_code": null,
+      "run_source_commit": null,
+      "report": "docs/test-coverage/product/implementation-runtime.md"
+    },
+    {
+      "packages": [
+        "WP-26"
+      ],
+      "regression": "Disconnected body with a valid JSON prefix was wrongly passed downstream before the regression fix.",
+      "implementation_commit": "bad07367",
+      "kind": "reported red-before-fix regression; no separate raw failure log retained",
+      "process_exit_code": null,
+      "run_source_commit": null,
+      "report": "docs/test-coverage/product/implementation-runtime.md"
+    },
+    {
+      "packages": [
+        "WP-34"
+      ],
+      "regression": "Nine protocol-shape regressions failed before provider error records were preserved.",
+      "implementation_commit": "bad07367",
+      "kind": "reported red-before-fix regression; no separate raw failure log retained",
+      "process_exit_code": null,
+      "run_source_commit": null,
+      "report": "docs/test-coverage/product/implementation-runtime.md"
+    },
+    {
+      "packages": [
+        "WP-38"
+      ],
+      "regression": "Two deterministic manifest-clock regressions failed before prompt-clock normalization.",
+      "implementation_commit": "bad07367",
+      "kind": "reported red-before-fix regression; no separate raw failure log retained",
+      "process_exit_code": null,
+      "run_source_commit": null,
+      "report": "docs/test-coverage/product/implementation-runtime.md"
+    },
+    {
+      "packages": [
+        "WP-29"
+      ],
+      "regression": "Agent producer close behind an account tombstone yielded during GeneratorExit before the router fix.",
+      "implementation_commit": "5c4747eb",
+      "kind": "reported red-before-fix regression; no separate raw failure log retained",
+      "process_exit_code": null,
+      "run_source_commit": null,
+      "report": "docs/test-coverage/product/implementation-runtime.md"
+    },
+    {
+      "packages": [
+        "WP-04",
+        "WP-38"
+      ],
+      "regression": "An actual Git checkout with core.autocrlf=true changed dist bytes before the -text rule.",
+      "implementation_commit": "9f8d31f1",
+      "kind": "reported red-before-fix regression; no separate raw failure log retained",
+      "process_exit_code": null,
+      "run_source_commit": null,
+      "report": "docs/test-coverage/product/implementation-adapters.md"
+    }
+  ],
+  "not_retained": "The earlier terminal-status WP-08 mutant was observed, but its stdout file was overwritten by the stronger active/deleting mutant. It is not counted as another retained log."
+}

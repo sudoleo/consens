@@ -1,5 +1,7 @@
 # Umsetzung der Persistenzpakete – 2. Oktober 2026
 
+Die folgenden Einzel- und Zwischenläufe dokumentieren die Umsetzung in ihrer damaligen Reihenfolge. Damalige Hinweise auf noch folgende Emulator-/CI-/Gesamtprüfungen werden durch die integrierte Abnahme am Ende dieses Berichts aktualisiert.
+
 Diese Nachweise ergänzen das historische Audit. Sie verwenden den lokalen
 Firestore-Emulator 1.19.8, Firebase CLI 13.35.1 und Java 21.0.12,
 Python 3.9.7/google-cloud-firestore aus der Projekt-venv. Ausschließlich
@@ -126,3 +128,9 @@ at-least-once; es gibt weiterhin keine Exactly-once-Zusage für E-Mail/Telegram
 und keine globale Atomizität zwischen Modellkonfiguration und mehreren lokalen
 Serverruntimes. Die historischen Coverage-Prozente werden durch diese Läufe nicht
 zu einer neuen Coverage-Messung.
+
+## Integrierte Abnahme vom 02.10.2026
+
+Zusammengeführter Code `ffaca3df`. Python: 3.303 bestanden; JavaScript: 705 bestanden; Chromium / native SDK / Smoke: 368 bestanden; Firestore-Clientregeln: 49 bestanden. Die tatsächlichen Befehle und Quellstände pro Lauf stehen in [execution.json](../execution.json); dieser Abschluss ersetzt keine historischen Primärergebnisse. [Aktueller Paketstatus](work-packages.md) und [Laufbericht](../findings.md) sind für die heutige Abnahme maßgeblich.
+
+38 der 38 Arbeitspakete sind vollständig abgenommen. Die in den Berichten benannten Betriebsgrenzen bleiben ausdrücklich bestehen.

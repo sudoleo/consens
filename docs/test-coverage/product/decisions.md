@@ -20,20 +20,16 @@ an den aktuellen Providerplan angepasst; `test_publisher_config.py` prüft ihn.
 Die folgenden Hinweise erklären den früheren Widerspruch, nicht eine weiterhin
 unverändert falsche API-Dokumentation.
 
-[docs/consensus-api.md](../../consensus-api.md) enthält überholte Aussagen über
-neu gestartete API-Source-Jobs und den Ausschluss von DeepSeek im Publishermodus.
-Der aktuelle Scopevertrag in
-[test_source_check_scope.py](../../../tests/test_source_check_scope.py),
-die [API-Routen](../../../app/api/routers/api_v1.py) und die
-[Publisherkonfiguration](../../../app/services/publisher_config.py) sind
-für neue Regressionen erneut gemeinsam zu lesen.
+[docs/consensus-api.md](../../consensus-api.md) und die neuen HTTP-/Recovery-
+Nachweise bilden inzwischen den aktuellen Vertrag ab. Neue API-Läufe erzeugen
+Consensus/Differences, aber keine neue Source-Check-Arbeit. Der historische
+Source-GET bleibt für gespeicherte Jobs lesbar. Die aktuelle konfigurationsgestützte
+Providerliste ersetzt den früheren pauschalen DeepSeek-Ausschluss.
 
-Aktuell sollen neue Produkt-API-Runs Consensus/Differences behalten, aber
-keine neue Source-Check-Arbeit erzeugen. Der historische Source-GET bleibt
-für gespeicherte v4-Jobs relevant. Konfigurationsgestützte aktuelle
-Providerlisten dürfen nicht durch einen alten pauschalen DeepSeek-Ausschluss
-ersetzt werden. Vor WP-11 die betroffenen API-Dokumentationsabschnitte dem
-aktuellen Vertrag anpassen; kein Wiederbeleben alter Jobs durch Testfixtures.
+[Scopeprüfung](../../../tests/test_source_check_scope.py),
+[API-Routen](../../../app/api/routers/api_v1.py) und
+[Publisherkonfiguration](../../../app/services/publisher_config.py) bleiben
+gemeinsam zu lesen; historische Fixtures dürfen neue Jobs nicht wiederbeleben.
 
 <a id="d-02"></a>
 
@@ -67,9 +63,9 @@ Der [Morning-Brief-Claim](../../../app/services/watch_brief.py) rückt den
 Zeitplan vor und legt nun im selben Commit eine Zustellabsicht in der
 [Outbox](../../../app/services/notification_outbox.py) mit deterministischer
 Versand-ID an. Crash, Leaseübernahme, Retry, Ablauf und Unsubscribe haben
-Fake-Regressionsbelege. Ein Crash nach externer Zustellung vor dem Ack kann
+lokale und native Regressionsbelege. Ein Crash nach externer Zustellung vor dem Ack kann
 weiterhin Doppelzustellung erlauben: die Outbox ist keine atomare Transaktion
-mit SMTP/Telegram. Native Claims/SDK-Retries bleiben G-045.
+mit SMTP/Telegram. Native Claims, stale Acks und atomare Resultat-/Outboxcommits sind nun belegt; die externe Zustellgrenze bleibt bestehen.
 
 Tests sollen die konkrete aktuelle Claim-/Deduplizierungsgrenze absichern,
 einschließlich Sendefehler. Sie dürfen keine atomare Exactly-once-Garantie
@@ -138,7 +134,7 @@ Prüfung freigeben; nicht jede neue Ausgabe automatisch akzeptieren.
 | Grenze | Aktueller Hinweis | Vorgehen |
 |---|---|---|
 | Ungültige `Content-Length` | Middleware verwendet auch hier 413 | Ablehnung/Nichtaufruf zuerst schützen; Änderung zu 400 bewusst begründen |
-| Bool-/Float-Indices im Identity-Judge | Pythonkonvertierung kann mehr Formen akzeptieren als ein strikter Indexvertrag | Gewünschte Normalisierung explizit festlegen und dann parametrisieren |
+| Bool-/Float-Indices im Identity-Judge | Der Modellvertrag fordert JSON-Integer: ausschließlich `type(index) is int` | Bool, Float, numerische Strings, null, negative/zu große Indices verwerfen; bekannte eindeutige Keys und reservierte Fallbackkeys prüfen |
 | OG-Historie/Cache | Aktuelle OG-Route wählt den neuesten gültigen öffentlichen Antwortstand und übergibt leere `history_scores`; der Renderer besitzt zusätzliche Fähigkeiten | Keine beliebige historische Versionsauswahl oder Sparkline als aktuell garantierte Routenfunktion erfinden; Cachefrische an tatsächliche öffentliche Version binden |
 | Topic `noindex` | Veröffentlichte aktive/pausierte Topics bleiben öffentlich im Hub; nur die Sitemap schließt `noindex` zusätzlich aus | Indexierung nicht mit Zugriffsschutz verwechseln; keinen erfundenen privaten Topicstatus testen |
 | Erfolgreiche Antwort bei Speicherfehler | Chatabschluss kann die Antwort mit `chat_persisted=false` und `chat_turn_state=pending` liefern | Terminales `final` nicht als DB-Commit behandeln; Antwort und Persistenzstatus getrennt prüfen |
@@ -152,10 +148,10 @@ unsicher und erfordern keine pauschale Arbeitsunterbrechung.
 
 ## D-07 · Hilfsprogramme und Dry-run
 
-`benchmark/run_sample.py`, `benchmark/run_experiment.py` und die Probe-/
-Preview-Einstiege besitzen weniger aktuelle Ausführungsevidenz als die
-Haupt-Benchmark-CLI. Vor Ausbau je Einstieg klären, ob er weiterhin unterstützt
-wird. `vendorFrontend` ist ein exportierter Buildhelper, **kein CLI**; WP-30
+`benchmark/run_sample.py` und `benchmark/run_experiment.py` bleiben unterstützt
+und besitzen nun echte isolierte CLI-/Runner-/Manifest-/Resumebelege. Die
+Probe-/Preview-Einstiege bleiben Qualitäts-/Diagnosewerkzeuge; ein Liveergebnis
+ist keine automatische Modellqualitätsfreigabe. `vendorFrontend` ist ein exportierter Buildhelper, **kein CLI**; WP-30
 ruft ihn direkt auf.
 
 `backfill_claim_keys.py --dry-run` unterdrückt Datenbankwrites, ruft aber den
@@ -168,21 +164,21 @@ Ein echter Reparaturlauf ist kein Regressionstest.
 
 | Naheliegender Fehlschluss | Gegenbeleg / korrekte Grenze |
 |---|---|
-| Kein direkter Testimport bedeutet ungetestet | OG-Renderer wird indirekt über den Share-Router erreicht; schwache Inhaltsassertions sind G-020 |
+| Kein direkter Testimport bedeutet ungetestet | OG-Renderer wird indirekt über den Share-Router erreicht; neue Bildinhaltsassertions erkennen eine gültige weiße PNG |
 | Kein direktes Parsing-/Defaultmodul im Testnamen bedeutet keine Coverage | Konsensparser und Promptdefaults werden über Pipeline-/Konfigurationstests erreicht; Imports sind nur Suchhilfe |
 | Keine Real-Firestore-Chatprüfung vorhanden | `test_two_workers_cannot_exceed_owner_chat_limit` existiert; G-003 betrifft Delete/Completion |
-| Agent-Abrechnung ausschließlich Fake | Native Agent-Transaktionen existieren; G-002 betrifft reguläre Usage |
+| Agent-Abrechnung ausschließlich Fake | Native Agent- und inzwischen reguläre Usage-Transaktionen existieren; ihre konkreten Oracles stehen getrennt im Katalog |
 | `creates_updates` im Topic-Test beweist PUT | Der Test ruft Create/Run/Detail auf und ersetzt Adminauth; G-014 |
 | Endpoint-Kaskadentest beweist alle Datenbereiche | Dort ist der Löschservice ersetzt; G-004 ergänzt die konkrete Kaskade |
 | `real_provider_socket_stall` verwendet echte Sockets | Der Test nutzt MockTransport; G-032 ergänzt die Transportgrenze |
-| Ein grüner isolierter Report-Race widerlegt den roten Gesamtlauf | Primärlauf und Wiederholung sind beide Evidenz, Ursache bleibt offen |
-| Browserdatei vorhanden bedeutet Browservertrag grün | Aktuell 308 Fälle: 219 bestanden, 30 fehlgeschlagen, 4 Setupfehler, 55 nicht ausgeführt; WP-03 |
-| Hohe Zeilenabdeckung sichert Undo/OG-Inhalt | M-01/M-02 bleiben trotz konkreter Verhaltensänderung grün |
+| Ein grüner isolierter Report-Race widerlegt den roten Gesamtlauf | Primärlauf und Wiederholung bleiben beide Evidenz; konkrete SDK-Abbrüche und erfolgreiche Inkremente werden nun getrennt erfasst |
+| Browserdatei vorhanden bedeutet Browservertrag grün | Tatsächliche aktuelle Fälle/Status in execution.json nachlesen; Dateivorhandensein allein beweist weiterhin keinen Lauf |
+| Hohe Zeilenabdeckung sichert Undo/OG-Inhalt | Historische M-01/M-02 blieben grün; neue Revisions-/Bildinhaltsassertions erkennen die gezielten Mutationen |
 
 ## Zusätzliche Oracle-Korrekturen der unabhängigen Prüfung
 
-- **Memory:** Erfolgreiches Undo darf keine unverändert gebliebene Notiz nach Limitabsenkung still kürzen. Empfohlen ist eine strukturierte Ablehnung ohne Write; verlustfreie Wiederherstellung über dem aktuellen Limit braucht eine explizite Produktentscheidung (G-038/WP-10).
-- **Admin:** Modellkonfiguration besitzt jetzt eigene CAS-/Rollbackrevisionen; sie nicht mit Prompt-/Budget- oder Publishergarantien gleichsetzen. Ein Rollback darf nur den eigenen Write zurücknehmen (G-040/WP-33, native Mehrprozessprüfung offen).
+- **Memory:** Erfolgreiches Undo darf keine unverändert gebliebene Notiz nach Limitabsenkung still kürzen. Implementiert ist eine strukturierte Ablehnung ohne Write; eine andere verlustfreie Wiederherstellung über dem aktuellen Limit wäre eine neue Produktentscheidung (G-038/WP-10).
+- **Admin:** Modellkonfiguration besitzt jetzt eigene CAS-/Rollbackrevisionen; sie nicht mit Prompt-/Budget- oder Publishergarantien gleichsetzen. Ein Rollback darf nur den eigenen Write zurücknehmen (G-040/WP-33, native Konkurrenz und Rollback-RPCfehler geprüft).
 - **Benchmark:** HTTP-200-Providerfehler sind keine Modell-Enthaltung. Gültiger Antworttext ohne extrahierbare Auswahl bleibt hingegen eine Enthaltung; diese Kontrolle muss die Fehlerkorrektur begleiten (G-042/WP-34).
 - **HTTP:** Retry-After im isolierten Router ist kein Beleg für dessen Erhalt durch main.app. Ebenso beweist Pydantic-422 keinen ausgeführten Detailhandler (G-037/G-039).
 - **UI:** Logischer Fokus ist in jsdom teilweise geprüft; aktuelle Chromiumläufe einschließlich Landing/Reduced Motion stehen im Dateikatalog. Rote Tests, fehlende Tests und fehlende Laufnachweise bleiben getrennt.

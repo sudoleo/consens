@@ -12,12 +12,12 @@ Aus `main.app.routes` im Unit-Test-Modus erfasst: **174 App-Routeneinträge und 
 | R-004 | GET, HEAD | ` /redoc ` | Framework | — |
 | R-005 | GET | ` /health/maintenance ` | [maintenance_health](../../../main.py#L205) | [OPS-01](matrix.md#ops-01) |
 | R-006 | GET | ` /health/metrics ` | [operational_metrics](../../../main.py#L217) | [OPS-03](matrix.md#ops-03) |
-| R-007 | GET | ` /agent/models ` | [available_agent_models](../../../app/api/routers/agent.py#L142) | [AGENT-02](matrix.md#agent-02) |
-| R-008 | GET | ` /agent/budget ` | [available_agent_budget](../../../app/api/routers/agent.py#L153) | [AGENT-01](matrix.md#agent-01) |
-| R-009 | POST | ` /agent ` | [run_agent](../../../app/api/routers/agent.py#L162) | [AGENT-01](matrix.md#agent-01), [AGENT-02](matrix.md#agent-02), [AGENT-04](matrix.md#agent-04) |
-| R-010 | GET | ` /agent/chats/{chat_id}/turns/{turn_id}/agents ` | [list_agents](../../../app/api/routers/agent.py#L402) | [AGENT-03](matrix.md#agent-03), [AGENT-04](matrix.md#agent-04) |
-| R-011 | GET | ` /agent/chats/{chat_id}/turns/{turn_id}/agents/{agent_id} ` | [agent_details](../../../app/api/routers/agent.py#L408) | [AGENT-03](matrix.md#agent-03), [AGENT-04](matrix.md#agent-04) |
-| R-012 | POST | ` /agent/chats/{chat_id}/turns/{turn_id}/stop ` | [stop_agent_run](../../../app/api/routers/agent.py#L428) | [AGENT-04](matrix.md#agent-04) |
+| R-007 | GET | ` /agent/models ` | [available_agent_models](../../../app/api/routers/agent.py#L148) | [AGENT-02](matrix.md#agent-02) |
+| R-008 | GET | ` /agent/budget ` | [available_agent_budget](../../../app/api/routers/agent.py#L159) | [AGENT-01](matrix.md#agent-01) |
+| R-009 | POST | ` /agent ` | [run_agent](../../../app/api/routers/agent.py#L168) | [AGENT-01](matrix.md#agent-01), [AGENT-02](matrix.md#agent-02), [AGENT-04](matrix.md#agent-04) |
+| R-010 | GET | ` /agent/chats/{chat_id}/turns/{turn_id}/agents ` | [list_agents](../../../app/api/routers/agent.py#L420) | [AGENT-03](matrix.md#agent-03), [AGENT-04](matrix.md#agent-04) |
+| R-011 | GET | ` /agent/chats/{chat_id}/turns/{turn_id}/agents/{agent_id} ` | [agent_details](../../../app/api/routers/agent.py#L426) | [AGENT-03](matrix.md#agent-03), [AGENT-04](matrix.md#agent-04) |
+| R-012 | POST | ` /agent/chats/{chat_id}/turns/{turn_id}/stop ` | [stop_agent_run](../../../app/api/routers/agent.py#L446) | [AGENT-04](matrix.md#agent-04) |
 | R-163 | POST | ` /agent/chats/{chat_id}/files ` | [upload_file](../../../app/api/routers/agent_files.py#L41) | [AGENT-06](matrix.md#agent-06) |
 | R-164 | GET | ` /agent/chats/{chat_id}/files ` | [list_files](../../../app/api/routers/agent_files.py#L51) | [AGENT-06](matrix.md#agent-06) |
 | R-165 | GET | ` /agent/chats/{chat_id}/files/{file_id} ` | [download_file](../../../app/api/routers/agent_files.py#L58) | [AGENT-06](matrix.md#agent-06) |
@@ -161,18 +161,18 @@ Aus `main.app.routes` im Unit-Test-Modus erfasst: **174 App-Routeneinträge und 
 | R-137 | GET | ` /watch/follow/unsubscribe ` | [follow_unsubscribe](../../../app/api/routers/watch.py#L330) | [WATCH-03](matrix.md#watch-03) |
 | R-138 | GET | ` /watch/unsubscribe ` | [unsubscribe](../../../app/api/routers/watch.py#L342) | [WATCH-01](matrix.md#watch-01) |
 | R-139 | GET | ` /watch/brief/unsubscribe ` | [unsubscribe_brief](../../../app/api/routers/watch.py#L353) | [WATCH-05](matrix.md#watch-05) |
-| R-140 | GET | ` /topics ` | [topics_hub](../../../app/api/routers/topics.py#L252) | [TOPIC-04](matrix.md#topic-04) |
-| R-141 | GET | ` /sitemap-topics.xml ` | [sitemap_topics](../../../app/api/routers/topics.py#L290) | [TOPIC-04](matrix.md#topic-04) |
-| R-142 | GET | ` /topics/{slug} ` | [topic_page](../../../app/api/routers/topics.py#L319) | [TOPIC-04](matrix.md#topic-04) |
-| R-143 | GET | ` /api/topics/favicon ` | [topic_favicon](../../../app/api/routers/topics.py#L554) | [TOPIC-04](matrix.md#topic-04) |
-| R-144 | POST | ` /api/topics/{slug}/follow ` | [follow_topic](../../../app/api/routers/topics.py#L602) | [TOPIC-04](matrix.md#topic-04) |
-| R-145 | GET | ` /topic-follow/confirm ` | [topic_follow_confirm](../../../app/api/routers/topics.py#L639) | [TOPIC-04](matrix.md#topic-04) |
-| R-146 | GET | ` /topic-follow/unsubscribe ` | [topic_follow_unsubscribe](../../../app/api/routers/topics.py#L656) | [TOPIC-04](matrix.md#topic-04) |
-| R-147 | GET | ` /api/admin/topics ` | [admin_list_topics](../../../app/api/routers/topics.py#L681) | [TOPIC-01](matrix.md#topic-01) |
-| R-148 | POST | ` /api/admin/topics ` | [admin_create_topic](../../../app/api/routers/topics.py#L693) | [TOPIC-01](matrix.md#topic-01) |
-| R-149 | GET | ` /api/admin/topics/{topic_id} ` | [admin_get_topic](../../../app/api/routers/topics.py#L710) | [TOPIC-01](matrix.md#topic-01) |
-| R-150 | PUT | ` /api/admin/topics/{topic_id} ` | [admin_update_topic](../../../app/api/routers/topics.py#L726) | [TOPIC-01](matrix.md#topic-01) |
-| R-151 | POST | ` /api/admin/topics/{topic_id}/runs ` | [admin_create_topic_run](../../../app/api/routers/topics.py#L745) | [TOPIC-01](matrix.md#topic-01) |
+| R-140 | GET | ` /topics ` | [topics_hub](../../../app/api/routers/topics.py#L259) | [TOPIC-04](matrix.md#topic-04) |
+| R-141 | GET | ` /sitemap-topics.xml ` | [sitemap_topics](../../../app/api/routers/topics.py#L297) | [TOPIC-04](matrix.md#topic-04) |
+| R-142 | GET | ` /topics/{slug} ` | [topic_page](../../../app/api/routers/topics.py#L326) | [TOPIC-04](matrix.md#topic-04) |
+| R-143 | GET | ` /api/topics/favicon ` | [topic_favicon](../../../app/api/routers/topics.py#L561) | [TOPIC-04](matrix.md#topic-04) |
+| R-144 | POST | ` /api/topics/{slug}/follow ` | [follow_topic](../../../app/api/routers/topics.py#L609) | [TOPIC-04](matrix.md#topic-04) |
+| R-145 | GET | ` /topic-follow/confirm ` | [topic_follow_confirm](../../../app/api/routers/topics.py#L646) | [TOPIC-04](matrix.md#topic-04) |
+| R-146 | GET | ` /topic-follow/unsubscribe ` | [topic_follow_unsubscribe](../../../app/api/routers/topics.py#L663) | [TOPIC-04](matrix.md#topic-04) |
+| R-147 | GET | ` /api/admin/topics ` | [admin_list_topics](../../../app/api/routers/topics.py#L688) | [TOPIC-01](matrix.md#topic-01) |
+| R-148 | POST | ` /api/admin/topics ` | [admin_create_topic](../../../app/api/routers/topics.py#L700) | [TOPIC-01](matrix.md#topic-01) |
+| R-149 | GET | ` /api/admin/topics/{topic_id} ` | [admin_get_topic](../../../app/api/routers/topics.py#L717) | [TOPIC-01](matrix.md#topic-01) |
+| R-150 | PUT | ` /api/admin/topics/{topic_id} ` | [admin_update_topic](../../../app/api/routers/topics.py#L733) | [TOPIC-01](matrix.md#topic-01) |
+| R-151 | POST | ` /api/admin/topics/{topic_id}/runs ` | [admin_create_topic_run](../../../app/api/routers/topics.py#L752) | [TOPIC-01](matrix.md#topic-01) |
 | R-152 | GET | ` /api/v1/publisher/config ` | [get_api_publisher_config](../../../app/api/routers/api_v1.py#L195) | [API-04](matrix.md#api-04) |
 | R-153 | POST | ` /api/v1/consensus/runs ` | [create_consensus_run](../../../app/api/routers/api_v1.py#L220) | [API-02](matrix.md#api-02) |
 | R-154 | GET | ` /api/v1/consensus/runs/{run_id}/source-check ` | [get_run_source_check](../../../app/api/routers/api_v1.py#L398) | [API-03](matrix.md#api-03) |

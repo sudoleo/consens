@@ -1,5 +1,7 @@
 # Umsetzung: Runtime, Werkzeuge und gemeinsame Gates
 
+Die folgenden Einzel- und Zwischenläufe dokumentieren die Umsetzung in ihrer damaligen Reihenfolge. Damalige Hinweise auf noch folgende Emulator-/CI-/Gesamtprüfungen werden durch die integrierte Abnahme am Ende dieses Berichts aktualisiert.
+
 Stand 02.10.2026, Ausgangsstand `73e39d96`. Dieser Bericht ergänzt die
 historische Bestandsaufnahme; die zusammengeführte Abnahme wird im Audit erfasst.
 
@@ -88,3 +90,11 @@ werden nicht abgefangen; die Produkt-Retrybudgets bleiben unverändert.
 Der gemeinsame Lauf von `test_agreement_verdict.py` und
 `test_scheduler_transactions.py` bestand danach mit **7 passed** in 26,66 s
 (`test-results/integrated/scheduler-playwright-fixed.xml`).
+
+## Integrierte Abnahme vom 02.10.2026
+
+Zusammengeführter Code `ffaca3df`. Python: 3.303 bestanden; JavaScript: 705 bestanden; Chromium / native SDK / Smoke: 368 bestanden; Firestore-Clientregeln: 49 bestanden. Die tatsächlichen Befehle und Quellstände pro Lauf stehen in [execution.json](../execution.json); dieser Abschluss ersetzt keine historischen Primärergebnisse. [Aktueller Paketstatus](work-packages.md) und [Laufbericht](../findings.md) sind für die heutige Abnahme maßgeblich.
+
+38 der 38 Arbeitspakete sind vollständig abgenommen. Die in den Berichten benannten Betriebsgrenzen bleiben ausdrücklich bestehen.
+
+Die realen Windows-Einstiege einschließlich beider Shells, Rules und nativer Phase2 liefen [im GitHubjob](https://github.com/sudoleo/consens/actions/runs/36995379657/job/110800783247) auf `ffaca3df` erfolgreich.

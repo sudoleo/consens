@@ -1,5 +1,7 @@
 # Umsetzung Browser-/Frontend-Pakete, 02.10.2026
 
+Die folgenden Einzel- und Zwischenläufe dokumentieren die Umsetzung in ihrer damaligen Reihenfolge. Damalige Hinweise auf noch folgende Emulator-/CI-/Gesamtprüfungen werden durch die integrierte Abnahme am Ende dieses Berichts aktualisiert.
+
 ## WP-01 (Frontendanteil)
 
 Die alte exakte Klassenstringpruefung ist durch Klassenmitgliedschaft ersetzt.
@@ -94,7 +96,8 @@ ansonsten inaktive Quellenqueue; der Harness prueft das vor jedem Tick und
 bricht vor Verarbeitung fremder faelliger Jobs ab.
 
 - J01: zwei echte Consensuslaeufe, Bookmark-Reload und Folgefrage im gleichen
-  Chat; getrennte Turn-/Context-IDs, autoritative recent-/target-Bindung, fremder
+  Chat; getrennte Turn-IDs, erster Turn ohne Kontextversion und eine korrekt
+  gebundene Follow-up-Kontextversion mit recent/target; fremder
   Owner mit 404. Genau zwei konsumierte regulaere Runreceipts, je eine
   Consensusbuchung und exakte Summe des gemeinsamen Tokenkontos.
 - J02: echte Agent-Admission und acht gemessene Providersteps (Orchestrator,
@@ -237,3 +240,9 @@ in 16,35 s (`test-results/smoke-reader7.{log,xml}`). `npm run build:check`
 bestand ebenfalls (`test-results/smoke-build-check.log`); das neue generierte
 Appbundle enthaelt LF, keine CRLF-Normalisierung. Ganze JS-/E2E-/CI-Pruefungen
 fuer den integrierten Abschluss uebernimmt der koordinierende Hauptlauf.
+
+## Integrierte Abnahme vom 02.10.2026
+
+Zusammengeführter Code `ffaca3df`. Python: 3.303 bestanden; JavaScript: 705 bestanden; Chromium / native SDK / Smoke: 368 bestanden; Firestore-Clientregeln: 49 bestanden. Die tatsächlichen Befehle und Quellstände pro Lauf stehen in [execution.json](../execution.json); dieser Abschluss ersetzt keine historischen Primärergebnisse. [Aktueller Paketstatus](work-packages.md) und [Laufbericht](../findings.md) sind für die heutige Abnahme maßgeblich.
+
+38 der 38 Arbeitspakete sind vollständig abgenommen. Die in den Berichten benannten Betriebsgrenzen bleiben ausdrücklich bestehen.

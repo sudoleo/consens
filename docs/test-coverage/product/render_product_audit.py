@@ -143,12 +143,22 @@ def render():
           '**Vorhandene Hilfen:** '+', '.join(link(p) for p in w['reuse_helpers'])+'\n',
           '**Befehle/Prüfauftrag nach Implementierung:**\n', '\n'.join('- '+code(x) for x in w['validation_commands'])+'\n',
           '**Zu beachten:** '+ids(w['decision_ids'],'decisions.md')+'\n']
+        evidence = w.get('validation_evidence')
+        if evidence:
+            report = evidence['report']
+            if '/' not in report:
+                report = (HERE / report).relative_to(ROOT).as_posix()
+            rows += ['**Implementierungsnachweis:** ' + code(w['implementation_commit']) + ' · '
+                + link(report) + ' · ' + link(evidence['runner']) + '\n',
+                '**Ausgeführte Testbereiche:** ' + ', '.join(link(p) for p in evidence['tests']) + '\n',
+                '**Beobachtete Negativkontrolle:** ' + evidence['negative_control'] + '\n',
+                '**Verbleibende Grenze:** ' + evidence['remaining_boundary'] + '\n']
     pages['work-packages.md']='\n'.join(rows)+'\n'
 
     rows=['# Inventar der Produkt- und Betriebsdateien\n','[Einstieg und Scope](README.md) · [Maschinenlesbar mit Hashes und Python-Symbolen](sources.json)\n',
       f'{len(sources)} Dateien, {source_line_count} physische Quellzeilen. Jede Datei ist mindestens einem Verhaltensbereich zugeordnet. '
       'Das ist ein Vollständigkeitscheck der Auswahl, kein Beweis für jede Funktion/Stylesheetregel. '
-      'Direkte Testreferenzen sind ausschließlich Suchkandidaten aus dem vorherigen Testinventar. '
+      'Direkte Testreferenzen sind ausschließlich Suchkandidaten aus dem aktuellen Testinventar. '
       'Null direkte Referenzen können trotzdem indirekte Tests bedeuten. Alle positiven Testbelege stehen in der Matrix/dem Dateikatalog.\n',
       'Pythonspalte: historische Messung vom 26.09.2026 nur für seitdem unveränderte Quellen. Bei geänderten Quellen werden alte Zähler nicht übertragen. '
       'Ausgeführte Statements/Statements und ausgeführte Branches/Branches des damaligen regulären Branchlaufs; '
