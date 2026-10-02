@@ -1,3 +1,18 @@
+export function adminErrorMessage(data, status) {
+  // main wraps HTTPException.detail in `error`; bare FastAPI uses `detail`.
+  // Only display known string fields. Validation arrays/unknown objects may
+  // contain submitted values and must never be stringified into the UI.
+  for (const value of [data?.error, data?.detail]) {
+    if (typeof value === "string" && value.trim()) return value;
+    if (value && !Array.isArray(value) && typeof value === "object") {
+      for (const field of [value.message, value.error]) {
+        if (typeof field === "string" && field.trim()) return field;
+      }
+    }
+  }
+  return `HTTP ${status}`;
+}
+
 export function createAdminClient(auth) {
   return async function adminRequest(method, path, body) {
     const user = auth.currentUser;
@@ -14,16 +29,7 @@ export function createAdminClient(auth) {
     let data = {};
     try { data = await response.json(); } catch (_) { /* empty */ }
     if (!response.ok) {
-      // FastAPI-Fehler koennen ein Objekt sein ({error_code, message} oder
-      // eine Validierungsliste). Ohne Auspacken stuende hier "[object Object]".
-      const detail = data.detail;
-      const message = data.error
-        || (typeof detail === "string" ? detail : null)
-        || (detail && typeof detail === "object" && !Array.isArray(detail)
-          ? (detail.message || detail.error)
-          : null)
-        || `HTTP ${response.status}`;
-      throw new Error(message);
+      throw new Error(adminErrorMessage(data, response.status));
     }
     return data;
   };

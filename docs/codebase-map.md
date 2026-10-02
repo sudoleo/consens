@@ -5991,3 +5991,24 @@ die Zeile absolute Tokens, der Fuß die Rücksetzzeit in Ortszeit und UTC.
 
 Folgeaufgabe: Agent-Module als eigene, nur bei `agentAccess.allowed` geladene
 Bundle-Gruppe ausliefern (bewusst nicht Teil dieser Änderung).
+
+
+### Audit-Regressionsschutz: Admin und oeffentliche Browsermodule (2026-10-02)
+
+`admin-api.js::adminErrorMessage` entpackt sowohl den main-Fehlerumschlag
+`error` als auch FastAPIs `detail`. Angezeigt werden ausschliesslich bekannte
+Stringfelder (`message`/`error`); Listen, unbekannte Objekte und Nicht-JSON
+fallen auf den HTTP-Status zurueck. Ein Fehler loest keinen zweiten Write aus;
+der Prompteditor behaelt seinen konfliktbehafteten Entwurf.
+
+`admin-benchmark.js` verwendet denselben Client. Listen- und Detailgenerationen
+verwerfen Antworten einer vorherigen Auswahl oder Aktualisierung. Beim Wechsel
+verschwindet der alte Report sofort; die gelieferte `run_id` muss zur Auswahl
+passen. Die Darstellung verwendet nur kompakte Kennzahlen/Fragenmetadaten;
+Rohprompts und Rohantworten werden auch aus unerwarteten Zusatzfeldern nicht
+in die Ansicht uebernommen.
+
+`tests/e2e/test_topic_frontend.py` prueft das unveraenderte Topic-Skript mit
+kontrolliertem SSR-Markup in Chromium: Keyboardnavigation, zweistufiges Touch-
+Preview, inerte Notizen und historische/gesperrte Storagezustaende. Die
+writerfreie Browserfixture und ihr Port bleiben separat vom Emulatorprofil.

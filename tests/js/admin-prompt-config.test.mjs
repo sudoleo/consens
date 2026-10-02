@@ -3,6 +3,7 @@ import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { JSDOM } from 'jsdom';
 import { ROOT } from './helpers/appWindow.mjs';
+import { createAdminClient } from '../../static/js/admin-api.js';
 
 const template = readFileSync(path.join(ROOT, 'templates/admin.html'), 'utf8')
     .replace('{% include "partials/admin_prompt_config.html" %}', readFileSync(path.join(ROOT, 'templates/partials/admin_prompt_config.html'), 'utf8'));
@@ -27,6 +28,22 @@ function submit(window) {
 function loaded() { return { config: structuredClone(config), defaults, max_prompt_chars: 10000, cache_seconds: 30 }; }
 
 describe('Admin prompt configuration', () => {
+    it('shows the real main error envelope while retaining a conflicting draft without a second write', async () => {
+        const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(async (_url, options) => options.method === 'GET'
+            ? { ok: true, json: async () => loaded() }
+            : { ok: false, status: 409, json: async () => ({ error: { error_code: 'revision_conflict', message: 'Configuration changed in another session.' } }) });
+        const { window, doc, panel } = boot(createAdminClient({ currentUser: { getIdToken: async () => 'test-token' } }));
+        try {
+            await panel.setUser('admin');
+            change(window, 'prompt-agent', 'My unsaved draft');
+            submit(window);
+            await vi.waitFor(() => expect(doc.getElementById('promptConfigStatus').textContent).toContain('Configuration changed in another session.'));
+            expect(doc.getElementById('promptConfigStatus').textContent).not.toContain('[object Object]');
+            expect(doc.getElementById('prompt-agent').value).toBe('My unsaved draft');
+            expect(doc.getElementById('promptConfigDirty').hidden).toBe(false);
+            expect(fetch.mock.calls.filter(([, options]) => options.method === 'PUT')).toHaveLength(1);
+        } finally { fetch.mockRestore(); window.close(); }
+    });
     it('hides retired chat caps while preserving legacy values when saving current settings', async () => {
         const delegation = { enabled: true, max_calls: 32, seconds: 300, max_cost_nano_usd: 3000000000,
             max_parallel: 2, max_agents: 4, message_chars: 4000 };
