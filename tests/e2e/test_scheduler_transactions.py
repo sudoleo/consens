@@ -1,11 +1,21 @@
 """Native due queries and leases for Watch, Topic and SEO workers."""
 from datetime import datetime, timedelta, timezone
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
 import uuid
 import pytest
 from app.services import topics, watch_service, seo_weekly_review
 from native_support import native_db, race, race_with_worker_retry
+
+
+def run_scheduler_scenario(scenario):
+    # The session-scoped synchronous Playwright fixture owns a running event
+    # loop on pytest's thread. Exercise the real scheduler on a separate loop,
+    # just as the app server does, without changing the scheduler or nesting
+    # asyncio.run() in Playwright's loop. Exceptions still fail the caller.
+    with ThreadPoolExecutor(max_workers=1) as worker:
+        worker.submit(lambda: asyncio.run(scenario())).result(timeout=30)
 
 
 def test_native_due_queries_and_topic_claim_fence(native_db):
@@ -133,7 +143,7 @@ def test_native_topic_loop_commits_due_tick_and_stops_on_cancel(native_db, monke
                 await task
         await asyncio.sleep(0)
         assert len(dispatched) == 1 and task.cancelled()
-    asyncio.run(scenario())
+    run_scheduler_scenario(scenario)
 
 
 def test_native_seo_loop_persists_failure_releases_lease_and_cancels(native_db, monkeypatch):
@@ -184,4 +194,4 @@ def test_native_seo_loop_persists_failure_releases_lease_and_cancels(native_db, 
         assert seo_weekly_review._scheduler_wake_event is None
         await asyncio.sleep(0)
         assert len(collections) == 1 and task.cancelled()
-    asyncio.run(scenario())
+    run_scheduler_scenario(scenario)
