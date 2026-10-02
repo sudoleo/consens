@@ -32,7 +32,7 @@ def test_gmail_draft_revision_document_download_and_restoration(browser,phase4_s
         page.route('**/confirm',execute)
         def run(route):
             payload=route.request.post_data_json;requests.append(payload);version=len(requests)
-            file={'id':str(version)*32,'name':f'Decision-v{version}.pdf','mime':'application/pdf','size':len(raw),'status':'ready','kind':'document','document_id':'d'*32,'version':version,'source_file_ids':[],'warnings':[]}
+            file={'id':str(version)*32,'name':f'Decision-v{version}.pdf','mime':'application/pdf','size':len(raw),'status':'ready','kind':'document','document_id':'d'*32,'turn_id':str(version+6)*32,'version':version,'source_file_ids':[],'warnings':[]}
             files.append(file)
             if actions:actions[-1]['status']='superseded'
             actions.append({'id':str(version+3)*32,'hash':str(version+3)*64,'kind':'gmail_send','status':'pending','account':'owner@example.org','approval_until':'2099-01-01T00:00:00Z','created_at':f'2026-09-2{version}T10:00:00Z','replaces':actions[-1]['id'] if actions else None,

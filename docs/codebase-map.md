@@ -2252,7 +2252,10 @@ Commit-Ergebnis. Offene Abrechnungen werden nach dem Join vor finish_run erneut
 abgeschlossen; ein noch laufender Beleg verhindert weiterhin den Run-Abschluss.
 SSE-Toolarbeit läuft in einem kontrollierten Thread, während der Producer
 Aktivitäten weiter ausgibt. Stop/Disconnect schließt Provider und wartet auf die
-aktiven Worker/Tools. Abgelaufene Leases werden zu terminalen unbekannten
+aktiven Worker/Tools. Scheitert dabei das Settlement etwa an einem
+Kontotombstone, bewahrt der Router `GeneratorExit`, protokolliert den
+Cleanupfehler und gibt keinen weiteren SSE-Frame aus; die lokale Kapazität
+wird weiterhin freigegeben. Abgelaufene Leases werden zu terminalen unbekannten
 Belegen; terminale Belege geben auch bei fehlender Usage ihre Reserve frei.
 Budgetabruf und Run-Start suchen zusätzlich kontogebunden nach abgelaufenen
 Root-Belegen (höchstens 20 pro Abruf), auch wenn der Eintrag in der aktiven
@@ -2404,7 +2407,10 @@ laufenden Höhenanimationen und führt Änderungen ohne Animation aus.
 aus, sodass die gerade gelesene Antwortzeile stehen bleibt; bereits erfolgtes
 natives Scroll-Anchoring wird nicht doppelt verrechnet. Nach Run-Abschluss endet
 dauerhaftes Nachscrollen. Ein noch laufender bewusster Send-/Latest-Sprung darf
-einmal fertiglaufen. Sichtbare Statusbereiche behalten ihre kurzen Übergänge.
+einmal fertiglaufen. `chat-scroll.js` trennt diesen expliziten Sprung von einem
+nur eingeplanten Resize-/Follow-Frame; Letzterer wird beim Abschluss verworfen,
+damit neue Copy-/Evidenzzeilen die Antwort nicht nach oben verschieben.
+Sichtbare Statusbereiche behalten ihre kurzen Übergänge.
 Tool-Nennungen bleiben Text; ausschließlich bestätigte running-Toolereignisse
 oder der Review-Status bestimmen den aktuellen Arbeitsschritt im Verlauf.
 Alte gespeicherte Reasoning-Verläufe bleiben als begrenzte Auszüge lesbar.
@@ -6066,3 +6072,27 @@ die Zeile absolute Tokens, der Fuß die Rücksetzzeit in Ortszeit und UTC.
 
 Folgeaufgabe: Agent-Module als eigene, nur bei `agentAccess.allowed` geladene
 Bundle-Gruppe ausliefern (bewusst nicht Teil dieser Änderung).
+
+
+### Audit-Regressionsschutz: Admin und oeffentliche Browsermodule (2026-10-02)
+
+`admin-api.js::adminErrorMessage` entpackt sowohl den main-Fehlerumschlag
+`error` als auch FastAPIs `detail`. Angezeigt werden ausschliesslich bekannte
+Stringfelder (`message`/`error`); Listen, unbekannte Objekte und Nicht-JSON
+fallen auf den HTTP-Status zurueck. Ein Fehler loest keinen zweiten Write aus;
+der Prompteditor behaelt seinen konfliktbehafteten Entwurf.
+
+`admin-benchmark.js` verwendet denselben Client. Listen- und Detailgenerationen
+verwerfen Antworten einer vorherigen Auswahl oder Aktualisierung. Beim Wechsel
+verschwindet der alte Report sofort; die gelieferte `run_id` muss zur Auswahl
+passen. Die Darstellung verwendet nur kompakte Kennzahlen/Fragenmetadaten;
+Rohprompts und Rohantworten werden auch aus unerwarteten Zusatzfeldern nicht
+in die Ansicht uebernommen.
+
+`tests/e2e/test_topic_frontend.py` prueft das unveraenderte Topic-Skript mit
+kontrolliertem SSR-Markup in Chromium: Keyboardnavigation, zweistufiges Touch-
+Preview, inerte Notizen und historische/gesperrte Storagezustaende. Die
+writerfreie Browserfixture verwendet genau einen Server je pytest-Aufruf,
+auch wenn mehrere Module die Fixture importieren. `E2E_PHASE4_PORT` (Default
+8033) trennt parallele Worktrees; ein bereits belegter Port bricht den Start
+ab. Screenshots bleiben unter `test-results/`.
