@@ -1560,11 +1560,13 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   (volle Zustimmung, auch „4/4"), `is-minor` ein neutraler Grau-Wash (Difference
   ohne `severity: major`), `is-split` bernstein (Claim mit Dissens — dieselbe
   Note wie sein gelbes Badge), `is-major` rot (Widerspruch). Deckung bewusst
-  niedrig, damit der Textkontrast (≥ 11:1) unangetastet bleibt; seit
-  2026-10-02 ist die Lautstärke nach Informationswert gestaffelt: Grün (der
-  Normalfall, deckt den Großteil) ist die leiseste farbige Marke, Bernstein und
-  Rot stehen deutlich darüber. Dark-Rot mischt aus einem eigenen Rot statt aus
-  dem korallfarbenen `--dispute`, das sonst mit Bernstein verschwamm. Hover
+  niedrig, damit der Textkontrast (≥ 12:1) unangetastet bleibt; seit
+  2026-10-02 (User-Vorgabe: ruhig, Apple-Prinzip) sind die Marken reine
+  Systemfarben in sehr geringer Deckung (Grün #34c759, Orange #ff9500, Rot
+  #ff3b30, Grau #8e8e93; dunkel die Dark-Varianten) und nach Informationswert
+  gestaffelt: Grün (der Normalfall) am leisesten, dann Grau, Bernstein, Rot.
+  Dark-Rot mischt nicht aus dem korallfarbenen `--dispute`, das sonst mit
+  Bernstein verschwamm. Hover
   vertieft denselben Ton (`--cx-mark-*-strong`), statt eine zweite Fläche zu setzen.
   Treffen zwei Marken denselben Satz, hebt `markSentence` die Marke über
   `MARK_LEVELS` (unanimous < minor < split < major) auf die stärkere Stufe an,

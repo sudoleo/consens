@@ -314,48 +314,48 @@
    Bewusst niedrige Deckung: der Text darunter behaelt seinen WCAG-Kontrast,
    und eine Antwort, in der fast jeder Satz eine Marke traegt, bleibt lesbar.
 
-   Lautstaerke nach Informationswert (2026-10-02, gemessen in OKLab gegen
-   --ground): Gruen ist der Normalfall und deckt den Grossteil einer Antwort,
-   also ist es die leiseste FARBIGE Marke - heller, aber mit genug Buntheit,
-   dass es als Gruen erkennbar bleibt. Bernstein und Rot sind selten und der
-   eigentliche Befund; sie stehen klar darueber (dE ~8-9 statt ~5-6), Rot
-   hat jetzt mindestens so viel Buntheit wie Bernstein statt halb so viel
-   (vorher las es als Rose). Das Nuance-Grau liegt hoerbar ueber der duennen
-   Abdeckung und neben Gruen (vorher dE 1,6 bzw. 1,9 - unter der
-   Wahrnehmungsschwelle). Textkontrast bleibt ueberall >= 11:1. */
+   Ruhige Toenung nach Apples Prinzip (2026-10-02, User-Vorgabe nach einer
+   zu lauten Zwischenstufe): jede Marke ist eine reine Systemfarbe in sehr
+   geringer Deckung - Gruen #34c759, Orange #ff9500, Rot #ff3b30, Grau
+   #8e8e93 (dunkel die Dark-Varianten). Reine Farbe in duenner Schicht wirkt
+   klar, aber leise; die alten Toene waren dagegen abgedunkelte Pastelle und
+   lasen schlammig (Rot als Rose). Lautstaerke nach Informationswert,
+   gemessen in OKLab gegen --ground: Gruen dE 2,9 (der Normalfall, deckt den
+   Grossteil) < Nuance-Grau 4,2 < Bernstein 5,5 < Rot 6,2 - also nie lauter
+   als vorher (max. 6,5), aber endlich gestaffelt. Textkontrast >= 12:1. */
 :root {
-  --cx-mark-agree: #e2f6ee;
-  --cx-mark-agree-strong: #ceeee0;
-  --cx-mark-note: #e8ebef;
-  --cx-mark-note-strong: #dce0e5;
+  --cx-mark-agree: #eaf6ed;
+  --cx-mark-agree-strong: #dcf2e2;
+  --cx-mark-note: #ececed;
+  --cx-mark-note-strong: #e3e3e4;
   /* Die duenne Abdeckung ist die LEISESTE Marke von allen: gerade so viel
      Grau, dass der Satz sich vom unmarkierten Text abhebt - nicht mehr. Wer
      ueber eine Antwort liest, in der fast jeder Satz eine Marke traegt, soll
      die gemessenen Saetze sehen und nicht die ungemessenen. */
   --cx-mark-thin: #f2f3f5;
   --cx-mark-thin-strong: #e7e9ed;
-  --cx-mark-split: #fae8bc;
-  --cx-mark-split-strong: #f3dca6;
-  --cx-mark-major: #ffd6d6;
-  --cx-mark-major-strong: #fbc7c7;
+  --cx-mark-split: #fbead2;
+  --cx-mark-split-strong: #fbe0b9;
+  --cx-mark-major: #fbe1e0;
+  --cx-mark-major-strong: #fbd0ce;
 }
 
 .dark-mode {
-  /* Die Ampelfarben sind im Dark Mode ohnehin heller; eine Spur mehr Deckung
-     haelt die Marke sichtbar, ohne zu leuchten. Rot mischt bewusst NICHT
-     aus --dispute: das dunkle Korall (#db8368) liegt im Farbton so nah am
-     Bernstein, dass Widerspruch und geteilte Zustimmung als dieselbe braune
-     Flaeche erschienen (dE 2,7) und Bernstein sogar lauter war als Rot. */
-  --cx-mark-agree: color-mix(in srgb, var(--agree) 13%, transparent);
-  --cx-mark-agree-strong: color-mix(in srgb, var(--agree) 24%, transparent);
-  --cx-mark-note: color-mix(in srgb, var(--ink) 12%, transparent);
-  --cx-mark-note-strong: color-mix(in srgb, var(--ink) 19%, transparent);
+  /* Dieselben Systemfarben in ihrer Dark-Variante, transparent gemischt.
+     Rot mischt bewusst NICHT aus --dispute: das dunkle Korall (#db8368)
+     liegt im Farbton so nah am Bernstein, dass Widerspruch und geteilte
+     Zustimmung als dieselbe braune Flaeche erschienen (dE 2,7) und Bernstein
+     sogar lauter war als Rot. */
+  --cx-mark-agree: color-mix(in srgb, #30d158 9%, transparent);
+  --cx-mark-agree-strong: color-mix(in srgb, #30d158 17%, transparent);
+  --cx-mark-note: color-mix(in srgb, var(--ink) 9%, transparent);
+  --cx-mark-note-strong: color-mix(in srgb, var(--ink) 16%, transparent);
   --cx-mark-thin: color-mix(in srgb, var(--ink) 6%, transparent);
   --cx-mark-thin-strong: color-mix(in srgb, var(--ink) 13%, transparent);
-  --cx-mark-split: color-mix(in srgb, var(--partial) 20%, transparent);
-  --cx-mark-split-strong: color-mix(in srgb, var(--partial) 34%, transparent);
-  --cx-mark-major: color-mix(in srgb, #de6674 30%, transparent);
-  --cx-mark-major-strong: color-mix(in srgb, #de6674 44%, transparent);
+  --cx-mark-split: color-mix(in srgb, #ff9f0a 13%, transparent);
+  --cx-mark-split-strong: color-mix(in srgb, #ff9f0a 23%, transparent);
+  --cx-mark-major: color-mix(in srgb, #ff453a 22%, transparent);
+  --cx-mark-major-strong: color-mix(in srgb, #ff453a 34%, transparent);
 }
 
 .cx-claim {
