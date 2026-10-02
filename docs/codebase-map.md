@@ -2252,7 +2252,10 @@ Commit-Ergebnis. Offene Abrechnungen werden nach dem Join vor finish_run erneut
 abgeschlossen; ein noch laufender Beleg verhindert weiterhin den Run-Abschluss.
 SSE-Toolarbeit läuft in einem kontrollierten Thread, während der Producer
 Aktivitäten weiter ausgibt. Stop/Disconnect schließt Provider und wartet auf die
-aktiven Worker/Tools. Abgelaufene Leases werden zu terminalen unbekannten
+aktiven Worker/Tools. Scheitert dabei das Settlement etwa an einem
+Kontotombstone, bewahrt der Router `GeneratorExit`, protokolliert den
+Cleanupfehler und gibt keinen weiteren SSE-Frame aus; die lokale Kapazität
+wird weiterhin freigegeben. Abgelaufene Leases werden zu terminalen unbekannten
 Belegen; terminale Belege geben auch bei fehlender Usage ihre Reserve frei.
 Budgetabruf und Run-Start suchen zusätzlich kontogebunden nach abgelaufenen
 Root-Belegen (höchstens 20 pro Abruf), auch wenn der Eintrag in der aktiven
@@ -5323,7 +5326,9 @@ Coveragewerte von 26.09.2026 sind keine Messung des aktuellen Codes.
   ein positives endliches Budget, Sample-Run-IDs bleiben ein einzelner
   Verzeichnisname. Die Validierung erfolgt vor Dataset- oder Providerarbeit.
 - **Claim-Key-Backfill** (`scripts/backfill_claim_keys.py`): Normalbetrieb ergänzt
-  nur fehlende Keys; vorhandene Teilzuordnungen bleiben erhalten. `--force`
+  nur fehlende Keys; vorhandene Teilzuordnungen bleiben erhalten und werden
+  vor Judge-/Fallbackzuordnungen reserviert. Neue Zuordnungen kollidieren weder
+  mit erhaltenen Keys noch untereinander. `--force`
   erlaubt ausdrücklich erneute Zuordnung. Dry-run zählt geplante Änderungen
   korrekt und schreibt nichts, kann aber weiterhin den Identity-Judge aufrufen.
 - JS-Syntaxcheck einzelner Module:

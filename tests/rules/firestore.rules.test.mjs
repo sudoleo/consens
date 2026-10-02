@@ -19,10 +19,12 @@ const rules = readFileSync(new URL('../../firestore.rules', import.meta.url), 'u
 const suffix = randomUUID();
 const owner = `rules-owner-${suffix}`;
 const paths = [
-  `users/${owner}`, `users/${owner}/chats/chat`, `users/${owner}/memory/current`,
-  `users/${owner}/agent_files/file`, `users/${owner}/usage/day`,
-  `api_keys/rules-${suffix}`, `agent_sessions/rules-${suffix}`,
-  `source_check_jobs/rules-${suffix}`, `notification_outbox/rules-${suffix}`,
+  `users/${owner}`, `users/${owner}/chats/chat`, `users/${owner}/memory/profile`,
+  `users/${owner}/chats/chat/files/file`, `users/${owner}/usage_runs/day`,
+  `api_consensus_keys/rules-${suffix}`,
+  `users/${owner}/chats/chat/turns/turn/agents/agent`, `users/${owner}/llm_calls/receipt`,
+  `source_check_jobs/rules-${suffix}`, `source_check_jobs_dispatch_v1_local/rules-${suffix}`,
+  `source_check_jobs_dispatch_v1_production/rules-${suffix}`, `notification_outbox/rules-${suffix}`,
 ];
 const settings = { projectId, firestore: { host: endpoint.hostname.replace(/^\[|\]$/g, ''), port: Number(endpoint.port), rules } };
 let env;
