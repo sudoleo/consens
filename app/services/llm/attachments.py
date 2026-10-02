@@ -332,9 +332,9 @@ def pdf_goes_native(attachment: dict) -> bool:
 def parse_attachments(data: dict, attachments_allowed: bool) -> list[dict]:
     """Liest und validiert `attachments` aus dem Request-Body.
 
-    `attachments_allowed` kommt aus den Entitlements der Kontostufe (Plus und
-    Pro) -- bewusst kein `is_pro` mehr: Anhaenge kosten nur so viel wie das
-    antwortende Modell, und Plus faehrt ohnehin die guenstige Modellauswahl.
+    `attachments_allowed` kommt aus den Entitlements (seit 2026-10-02 jede
+    Stufe) und verlangt ein Konto: Anhaenge kosten Tokens aus dem gemeinsamen
+    Kontingent, ohne Konto gibt es keines.
 
     Gibt eine Liste von {name, mime, data (base64), raw (bytes)} zurück.
     """
@@ -345,7 +345,7 @@ def parse_attachments(data: dict, attachments_allowed: bool) -> list[dict]:
     if not attachments_allowed:
         raise HTTPException(
             status_code=403,
-            detail="File uploads need Plus or Pro.",
+            detail="Sign in to attach files.",
         )
 
     if not isinstance(raw_list, list):

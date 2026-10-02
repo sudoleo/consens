@@ -138,8 +138,8 @@ describe("attachments of a saved question", () => {
 
   it("gives a .csv the type the server also knows", async () => {
     const { window, document } = appWindow();
-    // Anhaenge haengen seit der Plus-Stufe an isUserPlus, nicht an isUserPro.
-    window.isUserPlus = true;
+    // Anhaenge brauchen seit 2026-10-02 nur ein Konto, keine Stufe.
+    window.auth = { currentUser: { uid: "u1" } };
 
     const input = document.getElementById("attachFileInput");
     // Was der Browser meldet, ist je nach System verschieden. Kaeme "text/csv"

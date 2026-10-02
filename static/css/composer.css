@@ -117,7 +117,7 @@
 .chat-input-container .run-mode-control .model-picker-display { background: var(--raise); }
 .chat-input-container .agent-model-picker .model-picker-display { color: var(--ink); }
 /* Agent: one chip for the chat model and the models it is compared with,
-   "Gemini 3.8 Flash +6". The name gives way, the count stays whole. */
+   "Claude Opus 5.5 +6". The name gives way, the count stays whole. */
 .chat-input-container .model-picker-display-count {
   flex: 0 0 auto; margin-left: -2px; color: var(--ink-3); font-variant-numeric: tabular-nums;
 }
@@ -156,10 +156,12 @@
 .model-picker-option-description { flex-basis: 100%; font-size: 11px; color: var(--ink-3); font-weight: 400; line-height: 1.5; }
 /* Rows that lead to another level (sections, Custom, a provider) and the
    way back keep name and chevron on one line; the chevron marks the end. */
-.chat-input-container .agent-model-controls .model-picker-option:is(.model-picker-row-open, .model-picker-back-option, .model-picker-custom-option, .model-picker-preset-option) {
+.chat-input-container .agent-model-controls .model-picker-option:is(.model-picker-row-open, .model-picker-back-option, .model-picker-custom-option, .model-picker-preset-option, .model-picker-group-option) {
   flex-wrap: nowrap; align-items: center;
 }
-.chat-input-container .agent-model-controls .model-picker-option:is(.model-picker-row-open, .model-picker-back-option, .model-picker-custom-option) { padding-right: 8px; }
+.chat-input-container .agent-model-controls .model-picker-option:is(.model-picker-row-open, .model-picker-back-option, .model-picker-custom-option, .model-picker-group-option) { padding-right: 10px; }
+/* The chevron is the last thing in a row: it ends where the row's fill ends. */
+.chat-input-container .agent-model-controls .model-picker-option:not(.model-picker-back-option) > .model-picker-option-chevron { margin-right: 0; }
 .chat-input-container .agent-model-controls .model-picker-back-option { min-height: 34px; padding-block: 6px; color: var(--ink-2); }
 .chat-input-container .agent-model-controls .model-picker-level-option .model-picker-preset-label { flex: 1 1 auto; }
 .chat-input-container .agent-model-controls .model-picker-section-label { padding: 8px 11px 4px; color: var(--ink-3); text-align: left; }
@@ -247,4 +249,96 @@
     padding-bottom: 6px;
   }
   body.composer-collapsed:not(.is-hero, .direct-comparison-preview) .chat-input-container > .input-actions-container { order: 3; margin-left: 0; }
+}
+
+/* ---- The (+) menu ---------------------------------------------------------
+   One anatomy for every row, like the model menus: a 16px icon in the row's
+   ink, the label, and at the end either a value (Auto, Off) or a switch.
+   At most one short line under a label. No borders on hover, no glass, no
+   tier badges: files are open to every account, the rest is settings. */
+.chat-input-container .attach-menu {
+  width: 300px;
+  min-width: 0;
+  max-width: calc(100vw - 32px);
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--well);
+  box-shadow: var(--lift);
+}
+.chat-input-container .attach-menu :is(.attach-menu-item, .attach-menu-toggle) {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 12px;
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.35;
+  text-align: left;
+}
+.chat-input-container .attach-menu :is(.attach-menu-item, .attach-menu-toggle):is(:hover, :focus-visible, :focus-within) {
+  background: var(--raise);
+  border-color: transparent;
+}
+.chat-input-container .attach-menu .attach-menu-item:focus-visible { outline: 2px solid var(--ink-3); outline-offset: -2px; }
+.chat-input-container .attach-menu :is(.attach-menu-item, .attach-menu-toggle) > :is(svg, .attach-menu-toggle-icon) {
+  grid-column: 1;
+  width: 16px;
+  height: 16px;
+  color: var(--ink-2);
+}
+.chat-input-container .attach-menu .attach-menu-item > svg,
+.chat-input-container .attach-menu .attach-menu-source-icon {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.chat-input-container .attach-menu .attach-menu-toggle-icon { background: var(--ink-2); }
+.chat-input-container .attach-menu :is(.attach-menu-label, .attach-menu-text, .attach-menu-toggle-text) { grid-column: 2; min-width: 0; }
+.chat-input-container .attach-menu :is(.attach-menu-text, .attach-menu-toggle-text) { display: flex; flex-direction: column; gap: 1px; }
+.chat-input-container .attach-menu :is(.attach-menu-label, .attach-menu-toggle-text .menu-switch-label) {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 500;
+}
+.chat-input-container .attach-menu :is(.attach-menu-hint, .attach-menu-toggle-sub) {
+  padding: 0;
+  color: var(--ink-3);
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+/* A value that opens a menu ends in a chevron, the way the pickers do. */
+.chat-input-container .attach-menu .attach-menu-value {
+  grid-column: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink-3);
+  font-size: 12px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+.chat-input-container .attach-menu .attach-menu-item[aria-haspopup] .attach-menu-value::after {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-right: 1.5px solid currentColor;
+  border-top: 1.5px solid currentColor;
+  transform: rotate(45deg);
+}
+.chat-input-container .attach-menu .attach-menu-switch { grid-column: 3; width: 34px; height: 20px; }
+.chat-input-container .attach-menu .attach-menu-switch .slider::before { width: 16px; height: 16px; left: 1px; bottom: 1px; }
+.chat-input-container .attach-menu .attach-menu-switch input:checked + .slider::before { transform: translateX(14px); }
+.chat-input-container .attach-menu .attach-menu-divider { height: 1px; margin: 5px 10px; background: var(--line); }
+@media (pointer: coarse) {
+  .chat-input-container .attach-menu :is(.attach-menu-item, .attach-menu-toggle) { min-height: 48px; }
 }

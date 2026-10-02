@@ -6,7 +6,7 @@
 // Exporte: window.pendingAttachments, window.renderAttachmentChips,
 // window.clearPendingAttachments, window.getAttachmentsPayload,
 // window.showBookmarkAttachments.
-// Call-time-Abhaengigkeiten: window.isUserPlus, window.trackUmamiEvent,
+// Call-time-Abhaengigkeiten: window.auth, window.trackUmamiEvent,
 // DOM (#attachTrigger, #attachMenu, #attachFileInput, #attachmentBar, ...).
 // =====================================================================
 
@@ -18,7 +18,7 @@
     }
   }
 
-  // --- ATTACHMENTS (Plus/Pro feature) ---
+  // --- ATTACHMENTS (every signed-in account) ---
   const ATTACH_MAX_FILES = 2;
   const ATTACH_MAX_BYTES = 5 * 1024 * 1024;
   // Bilder werden vor dem Hochladen verkleinert, deshalb darf HIER mehr
@@ -414,20 +414,28 @@
       });
     }
 
-    function showAttachmentProGate(source) {
+    // Files are open to every account since 2026-10-02: they are paid from
+    // the same token account as the question. They still need an account,
+    // so a guest is asked to sign in instead of seeing a file picker.
+    function canAttach() {
+      return Boolean(window.auth?.currentUser);
+    }
+    function showAttachmentSignIn(source) {
       setMenuOpen(false);
       trackAppEvent("app_attachment_locked_click", { source: source });
-      const shown = window.App?.showProFeatureModal?.("File uploads");
-      if (!shown) {
-        window.App?.showPopup?.("File uploads are not available on your account yet. You can enter your question as text.");
+      const modal = document.getElementById("loginModal");
+      if (modal) {
+        modal.style.display = "block";
+        trackAppEvent("auth_modal_open", { source: "attachments" });
+        requestAnimationFrame(() => document.getElementById("loginEmail")?.focus());
+      } else {
+        window.App?.showPopup?.("Sign in to attach files. You can enter your question as text.");
       }
     }
 
     uploadOption.addEventListener("click", function () {
-      // Anhaenge sind ab Plus frei: sie kosten nur so viel, wie das
-      // antwortende Modell ohnehin kostet, und Plus faehrt die Free-Auswahl.
-      if (!window.isUserPlus) {
-        showAttachmentProGate("picker");
+      if (!canAttach()) {
+        showAttachmentSignIn("picker");
         return;
       }
       setMenuOpen(false);
@@ -805,8 +813,8 @@
       const imagesOnly = !!(options && options.imagesOnly);
       if (!files.length) return;
 
-      if (!window.isUserPlus) {
-        showAttachmentProGate(source);
+      if (!canAttach()) {
+        showAttachmentSignIn(source);
         return;
       }
 

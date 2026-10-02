@@ -406,9 +406,7 @@ img { display: block; max-width: 100%; }
   margin-top: auto;
 }
 
-.lp-demo-btn {
-  margin-left: auto;
-}
+.lp-hero-prompt-bar { gap: 8px; }
 
 /* The marks lose their pills here. A pill is a label, and nine labels under
    the field are a paragraph the eye has to read; nine bare marks are a single
@@ -625,7 +623,6 @@ img { display: block; max-width: 100%; }
    wordmark on the left and the allowance ring on the right, so that is what
    the mock shows — quiet, on the same canvas, separated by a horizon that
    fades out at both ends instead of a ruled line. */
-.lp-app-bar,
 .lp-window-bar {
   position: relative;
   display: flex;
@@ -637,7 +634,6 @@ img { display: block; max-width: 100%; }
   border: 0;
 }
 
-.lp-app-bar::after,
 .lp-window-bar::after {
   content: "";
   position: absolute;
@@ -663,38 +659,15 @@ img { display: block; max-width: 100%; }
 .lp-mocklogo img { width: 16px; height: auto; filter: invert(1); }
 .lp-window-bar .lp-mock-login { margin-left: auto; color: var(--ink-3); font-size: var(--font-size-sm); }
 
-/* The allowance ring from the sidebar footer: the one number about your own
-   account that is always on screen in /app. */
-.lp-mock-quota {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  margin-left: auto;
-  color: var(--ink-3);
-  font-size: var(--font-size-micro);
-  font-weight: var(--font-weight-semibold);
-  font-variant-numeric: tabular-nums;
-}
-
-.lp-mock-ring {
-  width: 17px;
-  height: 17px;
-  flex: none;
-  border-radius: 50%;
-  background: conic-gradient(var(--ink-2) 0 64%, var(--line) 64% 100%);
-  -webkit-mask: radial-gradient(circle, transparent 54%, #000 55%);
-  mask: radial-gradient(circle, transparent 54%, #000 55%);
-}
-
-.lp-app-body {
+/* Scene 01: the field, its toolbar and the footnote under it. */
+.lp-ask-stage {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 14px;
-  padding: 22px 18px 16px;
 }
 
 .lp-window-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; padding: 18px; }
-.lp-app-body > *,
+.lp-ask-stage > *,
 .lp-window-body > * { min-width: 0; }
 
 /* --- Real-run model pulse -------------------------------------------------
@@ -1061,37 +1034,47 @@ img { display: block; max-width: 100%; }
 .lp-icon-btn svg,
 .lp-attach svg { width: 15px; height: 15px; }
 
-/* The run switch: how many models answer and which preset writes the
-   consensus, in one chip that sizes to its label. */
+/* The pickers of the /app composer row (composer.css): a quiet label with
+   a chevron. The mode is the first choice and keeps a light fill at rest;
+   the models chip names the agent that writes plus the count it checks
+   with, and stands on the right, next to Send. */
+.lp-mode-chip,
 .lp-run-chip {
   display: inline-flex;
   align-items: center;
   gap: 8px;
   flex: 0 0 auto;
-  min-height: 32px;
-  padding: 6px 12px;
+  min-height: 34px;
+  padding: 7px 10px;
   border: 0;
-  border-radius: var(--radius-pill);
-  background: var(--lp-field-chip);
-  color: var(--ink-2);
-  font-size: var(--font-size-xs);
+  border-radius: 9px;
+  background: transparent;
+  color: var(--ink);
+  font-size: 12px;
   font-weight: var(--font-weight-medium);
-  line-height: var(--line-height-solid);
+  line-height: 20px;
   white-space: nowrap;
   box-shadow: none;
-  transition: color 0.25s ease, box-shadow 0.25s ease;
+  transition: background-color 0.25s ease, box-shadow 0.25s ease;
 }
 
+.lp-mode-chip { background: var(--lp-field-chip); color: var(--ink-2); }
+.lp-run-chip { margin-left: auto; }
+.lp-run-chip-count { margin-left: -2px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+
+.lp-mode-chip i,
 .lp-run-chip i {
-  width: 0;
-  height: 0;
-  border-left: 4px solid transparent;
-  border-right: 4px solid transparent;
-  border-top: 5px solid var(--ink-3);
+  width: 5px;
+  height: 5px;
+  margin-top: -3px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg);
+  opacity: 0.65;
 }
 
 .lp-run-chip.is-lit {
-  color: var(--ink);
+  background: var(--lp-field-chip);
   box-shadow: 0 0 0 1px var(--line);
 }
 
@@ -1100,7 +1083,6 @@ img { display: block; max-width: 100%; }
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-  margin-left: auto;
   width: 33px;
   height: 33px;
   padding: 0;
@@ -1131,468 +1113,145 @@ img { display: block; max-width: 100%; }
 }
 
 /* --------------------------------------------------------------------------
-   The guided run — a rebuild of #consensusRun
+   The Agent turn — a rebuild of an /app Agent answer
 
-   A stepper over all four steps (done, active, still to come) with preset
-   and clock, one row per model while they answer, one calm note line. When the run ends the block collapses upward and the answer
-   below it takes over. Driven by static/js/landing-scenes.js, which maps the
-   same four phases the product uses onto scroll position.
+   The question as the reader's bubble, then what agent-activity.js draws:
+   the clock line, the agent's own notes in reading size, the steps in a
+   quieter size with the consens mark on the live one, and finally the
+   answer with its marks and the evidence row (agent-review.js). No frame
+   around the run and no progress bars: the product shows a run as text
+   that moves, so the mockup does too. Driven by landing-scenes.js.
    -------------------------------------------------------------------------- */
-.lp-thread-ask { padding: 18px 20px 0; }
-
-.lp-thread-ask-label {
-  margin-bottom: 7px;
-  font-size: var(--font-size-micro);
-  letter-spacing: var(--tracking-wide);
-  text-transform: uppercase;
-  color: var(--ink-3);
+.lp-agent {
+  --lp-agent-mark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 279 200'%3E%3Cpath d='M77.1 115.3C69.2 109.7 45.6 91.5 37.2 84.5C31.4 79.6 30.8 79.1 28.9 77.4C13.1 63.5 4.1 53.4 1.4 46.6C1.1 45.8.6 45 .4 44.7C.1 44.3 0 43.6 0 41.3C0 33.5 11.9 30.1 31.5 32.2C32.7 32.4 34.8 32.6 36.1 32.7C46.9 33.9 68.4 38 84.8 41.9C96.4 44.7 95.6 44 92.9 48.4C81.6 67.1 76.2 92.7 79.4 112.9C79.8 115.2 79.8 115.8 79.5 116.1C79.1 116.7 79 116.6 77.1 115.3Z'/%3E%3Cpath d='M263.2 94.9C242.5 88 225.4 82.5 212.1 78.3C194.5 72.7 188 70.7 180.9 68.5C169.8 65.2 165.6 63.9 162.1 62.9C159.9 62.2 156.9 61.3 155.4 60.9C152.9 60.1 132.6 54.3 126.1 52.5C120 50.8 113.4 49.1 104.9 46.9C101.8 46.1 98.8 45.3 98 45.1C95.6 44.5 95.6 44.2 97.6 41.4C112.7 20.4 136.4 5.7 161.5 1.5C163.4 1.2 165.6.8 166.4.6C168.5 0 188.6-.2 189.7.3C190.1.5 191.1.8 191.9.9C227.3 5.1 259.4 30.7 272.2 64.9C273.5 68.5 274.1 70.3 275.3 74.8C276.1 77.4 276.9 81.9 277.5 85.8C277.8 87.9 278.2 90.7 278.4 92C279 95.4 279.1 99 278.7 99.3C278 99.7 276.8 99.4 263.2 94.9Z'/%3E%3Cpath d='M167.5 199.6C167.2 199.5 165.9 199.2 164.6 199C132.3 194.6 103.9 174.1 89 144.5C85.7 138 82.6 129.1 81 122C80 117.3 79.5 117.1 91.4 125.7C93.7 127.4 96.4 129.4 97.2 130C98.1 130.6 101 132.7 103.5 134.5C106 136.3 112.2 140.8 117.2 144.4C122.3 148 128 152.1 130 153.5C132 155 134.6 156.9 135.9 157.8C138.1 159.4 140.8 161.3 148.5 167C174.3 186.1 183.7 195.1 181.8 199.1C181.4 200.1 169.2 200.5 167.5 199.6Z'/%3E%3C/svg%3E");
+  padding: 20px 24px 22px;
 }
 
-.lp-thread-ask-text {
-  max-width: 80%;
-  font-family: var(--font-sans);
-  font-size: var(--font-size-lg);
-  line-height: var(--line-height-heading);
-  letter-spacing: var(--tracking-tight);
+/* The question is the reader's own message: a bubble on the right. */
+.lp-agent-ask {
+  width: fit-content;
+  max-width: min(78%, 460px);
+  margin: 0 0 20px auto;
+  padding: 10px 14px;
+  border-radius: 16px;
+  background: var(--raise);
   color: var(--ink);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-ui);
 }
 
-/* Run and answer occupy the SAME grid cell, so the panel never resizes when
-   one replaces the other. Nothing here animates height: the handover is a
-   cross-fade, which is what keeps the scroll progress honest on a phone. */
-.lp-run-stack {
-  display: grid;
-}
+.lp-agent-body { display: flex; flex-direction: column; }
 
-.lp-run-stack > * {
-  grid-area: 1 / 1;
-  align-self: start;
-}
-
-.lp-run {
-  --lp-run-rail: color-mix(in srgb, var(--ink) 9%, transparent);
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  margin: 16px 20px 20px;
-  padding: 14px 18px 16px;
-  border: 1px solid var(--line-soft);
-  border-radius: 14px;
-  background: color-mix(in srgb, var(--ink) 2.5%, transparent);
-  container-type: inline-size;
-  transition:
-    opacity 0.32s ease,
-    transform 0.4s cubic-bezier(0.2, 0, 0, 1);
-}
-
-.lp-run.is-gone {
-  opacity: 0;
-  transform: translateY(-8px);
-  pointer-events: none;
-}
-
-.lp-run-head {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  align-items: center;
-  column-gap: 14px;
-  min-height: 24px;
-}
-
-.lp-run-compact { display: none; }
-
-.lp-run-steps {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px 10px;
-  min-width: 0;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  font-size: var(--font-size-xs);
-  line-height: 20px;
-}
-
-.lp-run-step {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  color: var(--ink-3);
-  white-space: nowrap;
-}
-
-.lp-run-step + .lp-run-step::before {
-  content: "";
-  width: 14px;
-  height: 1px;
-  margin-right: 3px;
-  background: var(--line);
-}
-
-.lp-run-step[data-status="done"] { color: var(--ink-2); }
-.lp-run-step[data-status="active"] { color: var(--ink); font-weight: var(--font-weight-medium); }
-
-.lp-run-mark {
-  display: inline-grid;
-  place-items: center;
-  flex: none;
-  width: 14px;
-  height: 14px;
-}
-
-.lp-run-mark svg {
-  display: none;
-  width: 14px;
-  height: 14px;
-  fill: none;
-  stroke: var(--agree);
-  stroke-width: 1.5;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.lp-run-mark::before,
-.lp-run-dot {
-  content: "";
-  box-sizing: border-box;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  border: 1px solid color-mix(in srgb, var(--ink-3) 70%, transparent);
-}
-
-.lp-run-step[data-status="done"] .lp-run-mark::before { content: none; }
-.lp-run-step[data-status="done"] .lp-run-mark svg { display: block; }
-
-.lp-run-step[data-status="active"] .lp-run-mark::before,
-.lp-run-dot {
-  width: 8px;
-  height: 8px;
-  border: 0;
-  background: var(--agree);
-  animation: lpRunPulse 1.8s ease-out infinite;
-}
-
-.lp-run[data-stage="done"] .lp-run-dot { animation: none; }
-
-@keyframes lpRunPulse {
-  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--agree) 45%, transparent); }
-  70%, 100% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--agree) 0%, transparent); }
-}
-
-.lp-run-count {
-  color: var(--ink-2);
-  font-weight: 400;
-  font-variant-numeric: tabular-nums;
-}
-
-.lp-run-count:empty { display: none; }
-
-.lp-run-meta {
-  min-width: 0;
-  margin: 0;
-  overflow: hidden;
-  font-size: var(--font-size-xs);
-  color: var(--ink-3);
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-.lp-run-meta-next { display: none; }
-
-.lp-run-time {
-  padding: 2px 7px;
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--ink) 6%, transparent);
-  font-size: var(--font-size-micro);
-  line-height: 16px;
-  color: var(--ink-2);
-  font-variant-numeric: tabular-nums;
-}
-
-/* Each model has its own track during the fan-out. */
-.lp-run[data-stage="answers"] > .lp-run-track { display: none; }
-
-.lp-run-track {
-  position: relative;
-  height: 2px;
-  border-radius: 2px;
-  background: var(--lp-run-rail);
-  overflow: hidden;
-}
-
-.lp-run-track i {
-  display: block;
-  height: 100%;
-  width: var(--p, 0%);
-  border-radius: inherit;
-  background: var(--ink-2);
-  transition: width 0.25s cubic-bezier(0.22, 0.61, 0.36, 1);
-}
-
-/* A phase that cannot honestly report a share of itself sweeps instead of
-   pretending to know a percentage. */
-.lp-run-track.is-indeterminate i {
-  width: 34%;
-  transition: none;
-  animation: lpRunSweep 1.25s ease-in-out infinite;
-}
-
-@keyframes lpRunSweep {
-  0% { transform: translateX(-110%); }
-  100% { transform: translateX(330%); }
-}
-
-.lp-run-note {
-  margin: 0;
-  font-size: var(--font-size-xs);
-  line-height: 1.45;
-  color: var(--ink-3);
-}
-
-.lp-run-note.is-hidden { display: none; }
-
-/* Per-model rows: present only while the models are actually answering. */
-.lp-run-detail {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  max-height: 340px;
-  padding-top: 12px;
-  border-top: 1px solid var(--line-soft);
-  overflow: hidden;
-  transition: max-height 0.35s ease, opacity 0.25s ease, padding-top 0.35s ease, margin-top 0.35s ease;
-}
-
-/* Collapsed rows give their flex gap back too, so the card closes up. */
-.lp-run-detail.is-hidden {
-  max-height: 0;
-  margin-top: -14px;
-  padding-top: 0;
-  border-top-width: 0;
-  opacity: 0;
-}
-
-/* While landing-scenes.js measures the tallest state, every transition is
-   off and the model rows are at their natural height. Without this the
-   measurement reads whatever the collapse animation happens to be passing
-   through, and the lock comes out too short. */
-.lp-run.is-measuring,
-.lp-run.is-measuring * {
-  transition: none !important;
-  animation: none !important;
-}
-
-.lp-run.is-measuring .lp-run-detail {
-  max-height: none;
-  padding-top: 12px;
-  border-top-width: 1px;
-  opacity: 1;
-}
-
-.lp-run-model {
-  display: grid;
-  grid-template-columns: minmax(84px, 132px) minmax(0, 1fr) 64px;
-  gap: 12px;
-  align-items: center;
-  min-height: 28px;
-}
-
-.lp-run-model-name {
+/* The clock line: "Working for 12s" while it runs, "Thought for 24s" after. */
+.lp-agent-clock {
   display: flex;
   align-items: center;
   gap: 9px;
-  min-width: 0;
-  font-size: var(--font-size-sm);
-  color: var(--ink);
-  white-space: nowrap;
-}
-
-.lp-run-model-name > span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.lp-run-icon {
-  flex: none;
-  width: 15px;
-  height: 15px;
-  fill: none;
-  stroke-width: 1.5;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.lp-run-icon-ring { stroke: var(--lp-run-rail); }
-.lp-run-icon-arc { stroke: var(--ink-2); }
-.lp-run-icon-check { display: none; }
-.lp-run-model:not([data-state="done"]) .lp-run-icon { animation: lpRunSpin 1s linear infinite; }
-.lp-run-model[data-state="thinking"] .lp-run-icon-arc { stroke: var(--ink-3); }
-.lp-run-model[data-state="done"] .lp-run-icon-ring { stroke: var(--agree); }
-.lp-run-model[data-state="done"] .lp-run-icon-arc { display: none; }
-.lp-run-model[data-state="done"] .lp-run-icon-check { display: inline; stroke: var(--agree); }
-
-@keyframes lpRunSpin {
-  to { transform: rotate(360deg); }
-}
-
-.lp-run-model-track {
-  height: 4px;
-  border-radius: 2px;
-  background: var(--lp-run-rail);
-  overflow: hidden;
-}
-
-.lp-run-model-track i {
-  display: block;
-  height: 100%;
-  width: var(--p, 0%);
-  border-radius: inherit;
-  background: var(--ink-2);
-  transition: width 0.18s linear;
-}
-
-/* No text yet: a short segment travels instead of a fill that would guess. */
-.lp-run-model[data-state="thinking"] .lp-run-model-track i {
-  width: 22%;
-  background: color-mix(in srgb, var(--ink-3) 70%, transparent);
-  transition: none;
-  animation: lpRunRowSweep 1.6s cubic-bezier(0.45, 0, 0.35, 1) infinite;
-}
-
-.lp-run-model:nth-child(3n + 2) .lp-run-model-track i { animation-delay: -0.5s; }
-.lp-run-model:nth-child(3n) .lp-run-model-track i { animation-delay: -1s; }
-
-@keyframes lpRunRowSweep {
-  0% { transform: translateX(-110%); }
-  100% { transform: translateX(460%); }
-}
-
-.lp-run-model[data-state="done"] .lp-run-model-track i { background: var(--agree); }
-
-.lp-run-model-time {
-  font-size: var(--font-size-xs);
+  min-height: 28px;
+  margin: 0;
   color: var(--ink-2);
-  text-align: right;
-  white-space: nowrap;
+  font-size: 13px;
+  font-weight: var(--font-weight-medium);
   font-variant-numeric: tabular-nums;
 }
 
-.lp-run-model[data-state="thinking"] .lp-run-model-time { color: var(--ink-3); }
-.lp-run-model[data-state="done"] .lp-run-model-time { color: var(--ink); }
-
-/* Medium: the preset moves under the steps so the steps stay on one line. */
-@container (min-width: 521px) and (max-width: 680px) {
-  .lp-run-head {
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-areas: "steps time" "meta meta";
-    row-gap: 4px;
-  }
-  .lp-run-steps { grid-area: steps; column-gap: 7px; }
-  .lp-run-step { gap: 6px; }
-  .lp-run-step + .lp-run-step::before { width: 8px; margin-right: 1px; }
-  .lp-run-time { grid-area: time; }
-  .lp-run-meta { grid-area: meta; }
+.lp-agent-clock i {
+  width: 5px;
+  height: 5px;
+  margin-top: -3px;
+  border-right: 1px solid currentColor;
+  border-bottom: 1px solid currentColor;
+  transform: rotate(45deg);
+  opacity: 0.6;
 }
 
-/* Narrow: the stepper folds into one line plus four segments, as in /app. */
-@container (max-width: 520px) {
-  .lp-run-head {
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-areas: "compact time" "steps steps" "meta meta";
-    row-gap: 10px;
-  }
+.lp-agent-log { display: grid; gap: 12px; margin: 8px 0 20px; }
+.lp-agent-log[hidden], .lp-agent-log > [hidden] { display: none; }
 
-  .lp-run-compact {
-    grid-area: compact;
-    display: flex;
-    align-items: center;
-    gap: 9px;
-    min-width: 0;
-    font-size: var(--font-size-sm);
-    font-weight: var(--font-weight-medium);
-    color: var(--ink);
-    white-space: nowrap;
-  }
-
-  .lp-run-compact .lp-run-count { font-size: var(--font-size-xs); }
-  .lp-run-time { grid-area: time; }
-
-  .lp-run-steps {
-    grid-area: steps;
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 4px;
-  }
-
-  .lp-run-step > *,
-  .lp-run-step + .lp-run-step::before { display: none; }
-
-  .lp-run-step {
-    height: 3px;
-    border-radius: 2px;
-    background: var(--lp-run-rail);
-  }
-
-  .lp-run-step[data-status="done"] { background: var(--agree); }
-  .lp-run-step[data-status="active"] {
-    background: linear-gradient(90deg, var(--agree) 0 34%, var(--lp-run-rail) 34%);
-  }
-
-  .lp-run-meta { grid-area: meta; white-space: normal; }
-  .lp-run-meta-next { display: inline; }
-  [data-run-meta]:not(:empty) + .lp-run-meta-next:not(:empty)::before { content: " · "; }
-
-  .lp-run-detail { gap: 10px; }
-
-  .lp-run-model {
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-rows: 24px 4px;
-    gap: 6px;
-    min-height: 34px;
-  }
-
-  .lp-run-model-track { grid-column: 1 / -1; grid-row: 2; }
-}
-
-/* What the run hands over to: the answer, and the provenance line under it. */
-.lp-run-result {
-  padding: 16px 20px 20px;
-  opacity: 0;
-  transform: translateY(10px);
-  pointer-events: none;
-  transition:
-    opacity 0.36s ease 0.06s,
-    transform 0.42s cubic-bezier(0.2, 0, 0, 1) 0.06s;
-}
-
-.lp-run-result.is-visible {
-  opacity: 1;
-  transform: none;
-}
-
-.lp-run-result h3 {
-  margin: 0 0 9px;
-  font-size: var(--font-size-micro);
-  font-weight: var(--font-weight-semibold);
-  letter-spacing: var(--tracking-wide);
-  text-transform: uppercase;
-  color: var(--ink-3);
-}
-
-.lp-run-result p {
+.lp-agent-note {
   margin: 0;
-  color: var(--ink);
-  font-size: var(--font-size-base);
-  line-height: var(--line-height-reading);
+  color: var(--ink-2);
+  font-size: var(--font-size-sm);
+  line-height: 1.7;
+  animation: lpAgentIn 0.32s cubic-bezier(0.2, 0.7, 0.2, 1) both;
 }
 
-/* The three sentences under the verdict: the answer taken apart the way the
-   product does it, each line wearing the result of the check on it. This is
-   the payoff of the whole run — a verdict on its own is something one model
-   could have written just as confidently. */
+.lp-agent-step {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 13px;
+  line-height: 1.6;
+  animation: lpAgentIn 0.32s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+/* The live row starts with the consens mark and carries one sheen, exactly
+   like .agent-current-status in /app. */
+.lp-agent-step.is-current { font-weight: var(--font-weight-medium); color: var(--ink); }
+.lp-agent-step.is-current > :first-child {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55em;
+}
+.lp-agent-step.is-current > :first-child::before {
+  content: "";
+  width: calc(0.86em * 1.395);
+  height: 0.86em;
+  background: currentColor;
+  -webkit-mask: var(--lp-agent-mark) center / contain no-repeat;
+  mask: var(--lp-agent-mark) center / contain no-repeat;
+}
+.lp-agent-step.is-current > :first-child::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: linear-gradient(105deg, transparent 43%, color-mix(in srgb, var(--ground) 60%, transparent) 50%, transparent 57%);
+  background-size: 250% 100%;
+  animation: lpAgentShine 2.4s linear infinite;
+}
+
+/* The six comparison models: faint until their answer is in. */
+.lp-agent-models { display: inline-flex; align-items: center; padding-left: 7px; }
+.lp-agent-model {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  margin-left: -7px;
+  border: 2px solid var(--ground);
+  border-radius: 50%;
+  background: var(--raise);
+  opacity: 0.35;
+  filter: grayscale(1);
+  transform: scale(0.88);
+  transition: opacity 0.25s ease, filter 0.25s ease, transform 0.3s cubic-bezier(0.2, 0.7, 0.2, 1.4);
+}
+.lp-agent-model.is-done { opacity: 1; filter: none; transform: none; }
+.lp-agent-model img { width: 13px; height: 13px; object-fit: contain; }
+.lp-agent-count { color: var(--ink-3); font-size: 12px; font-weight: var(--font-weight-regular); font-variant-numeric: tabular-nums; }
+
+/* The answer: reading size, as in /app. It streams in, a sheen passes over
+   it while the judges check it, and the marks stroke on when they are back. */
+.lp-agent-answer { position: relative; }
+.lp-agent-answer p { margin: 0; color: var(--ink); font-size: var(--font-size-base); line-height: var(--line-height-reading); }
+.lp-agent-answer [data-stream]:empty { display: none; }
+.lp-agent-answer.is-checking {
+  -webkit-mask-image: linear-gradient(105deg, #000 40%, rgba(0, 0, 0, 0.55) 50%, #000 60%);
+  mask-image: linear-gradient(105deg, #000 40%, rgba(0, 0, 0, 0.55) 50%, #000 60%);
+  -webkit-mask-size: 250% 100%;
+  mask-size: 250% 100%;
+  animation: lpAgentMask 1.6s linear infinite;
+}
+.lp-agent-answer .claim-badge { opacity: 0; transition: opacity 0.3s ease 0.25s; }
+.lp-agent-answer.is-marked .claim-badge { opacity: 1; }
+
+/* The three sentences under the verdict, each wearing the result of the
+   check on it once it is back. */
 .lp-run-claims {
   display: grid;
   gap: 10px;
@@ -1602,14 +1261,14 @@ img { display: block; max-width: 100%; }
 }
 
 /* Inline flow, not a flex row: the count belongs to the END of the sentence
-   the way it does in /app, and a flex row would drop it onto a line of its
-   own the moment the sentence fills the width. */
+   the way it does in /app. */
 .lp-run-claims li {
   min-width: 0;
   color: var(--ink);
   font-size: var(--font-size-sm);
   line-height: var(--line-height-ui);
 }
+.lp-run-claims li:has(> .cx-claim:empty) { display: none; }
 
 /* The counts are a picture here, not a control — section 03 is where they
    open — so they lose the pointer and sit on the sentence's baseline. */
@@ -1618,46 +1277,37 @@ img { display: block; max-width: 100%; }
   transform: translateY(-1px);
 }
 
-/* One line under the marks, and the only sentence on this page that says out
-   loud what the six models bought. */
-.lp-run-result .lp-run-result-open {
+.lp-agent-answer .lp-run-result-open {
   margin-top: 13px;
   color: var(--ink-3);
   font-size: var(--font-size-sm);
 }
 
-.lp-run-provenance {
+/* The evidence row under a checked answer: the score, then the links. */
+.lp-agent-evidence {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px 14px;
-  margin-top: 15px;
-  padding-top: 11px;
-  border-top: 1px solid var(--line-soft);
-  color: var(--ink-3);
-  font-size: var(--font-size-xs);
-}
-
-.lp-run-provenance > span > b { color: var(--ink-2); font-weight: var(--font-weight-medium); }
-
-.lp-run-provenance-tabs {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 4px 16px;
-  margin-left: auto;
-}
-
-.lp-run-provenance-tabs span {
+  gap: 6px 16px;
+  margin-top: 16px;
   color: var(--ink-2);
+  font-size: 12px;
   font-weight: var(--font-weight-medium);
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 0.3s ease 0.35s, transform 0.35s cubic-bezier(0.2, 0.7, 0.2, 1) 0.35s;
 }
+.lp-agent-evidence.is-visible { opacity: 1; transform: none; }
+.lp-agent-agreement { display: inline-flex; align-items: baseline; gap: 3px; color: var(--ink-3); font-weight: var(--font-weight-regular); font-variant-numeric: tabular-nums; }
+.lp-agent-agreement b { color: var(--partial); font-size: 13px; font-weight: 600; }
+.lp-agent-agreement::after { content: ""; align-self: center; width: 1px; height: 14px; margin-left: 13px; background: var(--line); }
+.lp-agent-link { display: inline-flex; align-items: center; gap: 6px; }
+.lp-agent-link b { color: var(--ink-3); font-weight: var(--font-weight-regular); font-variant-numeric: tabular-nums; }
+.lp-agent-link svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 
-.lp-run-provenance-tabs b {
-  margin-left: 5px;
-  color: var(--ink-3);
-  font-weight: var(--font-weight-regular);
-  font-variant-numeric: tabular-nums;
-}
+@keyframes lpAgentIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@keyframes lpAgentShine { from { background-position: 100% 0; } to { background-position: -150% 0; } }
+@keyframes lpAgentMask { from { -webkit-mask-position: 100% 0; mask-position: 100% 0; } to { -webkit-mask-position: -150% 0; mask-position: -150% 0; } }
 
 /* --------------------------------------------------------------------------
    Scroll-scrubbed scenes
@@ -1792,11 +1442,10 @@ img { display: block; max-width: 100%; }
 
   .lp-scene-rail { display: none; }
 
-  .lp-run-dot,
-  .lp-run-mark::before,
-  .lp-run-icon,
-  .lp-run-model-track i,
-  .lp-run-track.is-indeterminate i,
+  .lp-agent-note,
+  .lp-agent-step,
+  .lp-agent-step.is-current > :first-child::after,
+  .lp-agent-answer.is-checking,
   .lp-prompt-text.is-typing::after,
   .lp-composer-text.is-typing::after { animation: none; }
 }
@@ -3012,7 +2661,7 @@ img { display: block; max-width: 100%; }
   body { font-size: var(--font-size-base); }
   .lp-shell { width: calc(100% - 32px); }
   .lp-nav-links a:not(.lp-nav-cta) { display: none; }
-  .lp-app-body, .lp-window-body { padding: 16px 14px 14px; gap: 12px; }
+  .lp-window-body { padding: 16px 14px 14px; gap: 12px; }
   .consensus-main { padding: 10px 16px 12px; }
   .consensus-main > h2 { padding: 0 56px; }
   /* Reading key: one state per row, so no sample wraps mid-underline. */
@@ -3031,11 +2680,8 @@ img { display: block; max-width: 100%; }
   .lp-prompt-text, .lp-composer-text { min-height: 44px; font-size: var(--font-size-base); }
   .lp-run-chip { padding: 6px 10px; font-size: var(--font-size-micro); }
 
-  .lp-thread-ask { padding: 15px 16px 0; }
-  .lp-thread-ask-text { max-width: 100%; }
-  .lp-run { margin: 14px 12px 16px; padding: 14px 14px 16px; }
-  .lp-run-result { padding-inline: 16px; }
-  .lp-run-provenance-tabs { margin-left: 0; gap: 4px 12px; }
+  .lp-agent { padding: 16px 16px 18px; }
+  .lp-agent-ask { max-width: 88%; margin-bottom: 16px; }
 }
 
 /* ==========================================================================
@@ -3142,12 +2788,7 @@ img { display: block; max-width: 100%; }
     transform: translateY(-3px);
   }
 
-  /* The mocks keep their content and lose their chrome. A fake title bar and
-     a fake quota ring are what makes a screenshot look like a screenshot on a
-     wide screen; in a 343px column they are two rows that say nothing, ahead
-     of the one row that says everything. The same goes for the fine print
-     inside the composer: true, and unreadable at this size. */
-  .lp-app-bar,
+  /* The fine print under the composer is true, and unreadable at this size. */
   .lp-composer-foot { display: none; }
 
   /* Reading key: three rows of sample + caption ahead of a mock that shows
@@ -3227,11 +2868,9 @@ img { display: block; max-width: 100%; }
 }
 .dark-mode .lp-composer-tools { --lp-mode-active: #84cc9e; }
 .lp-composer-tool { display: inline-flex; align-items: center; gap: 7px; flex-shrink: 0; }
-.lp-composer-agent { font-weight: 600; color: var(--ink); }
 .lp-composer-sources { color: var(--lp-mode-active); }
 .lp-composer-state { font-size: 11px; font-weight: 500; color: var(--ink-3); }
 .lp-composer-state.is-on { color: var(--lp-mode-active); }
-.lp-composer-mode-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--lp-mode-active); box-shadow: 0 0 0 3px color-mix(in srgb, var(--lp-mode-active) 12%, transparent); }
 .lp-composer-tool svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 .lp-composer-models { display: flex; align-items: center; padding-left: 8px; }
 .lp-composer-model { display: grid; place-items: center; width: 24px; height: 24px; margin-left: -8px; border: 2px solid var(--lp-field); border-radius: 50%; background: var(--lp-field); }
@@ -3246,7 +2885,7 @@ img { display: block; max-width: 100%; }
   .lp-composer-tool-label { display: none; }
 }
 /* The Ask preview can be narrower than the viewport even on desktop. */
-@container (max-width: 600px) {
+@container (max-width: 480px) {
   .lp-composer-tool-label { display: none; }
 }
 @container (max-width: 300px) {
@@ -3255,8 +2894,6 @@ img { display: block; max-width: 100%; }
 @media (max-width: 480px) {
   .lp-composer-tools { padding: 0 8px; gap: 14px; font-size: 11px; }
   .lp-composer-tool { gap: 4px; }
-  .lp-composer-agent-name { font-size: 0; }
-  .lp-composer-agent-name::after { content: 'Agent'; font-size: 11px; }
   .lp-composer-models { padding-left: 10px; }
   .lp-composer-model { width: 22px; height: 22px; margin-left: -10px; }
   /* A single auto-minimum grid track let the benchmark teaser widen the page. */

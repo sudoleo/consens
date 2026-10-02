@@ -607,10 +607,9 @@
     const useOwnKeys = document.getElementById("useOwnKeysSwitch")?.checked === true;
     const attachments = window.getAttachmentsPayload?.() || [];
     const attachmentMeta = attachments.map(item => ({ name: item.name, mime: item.mime, size: item.size || 0 }));
-    if (attachments.length && !window.isUserPlus) {
-      if (!window.App.showProFeatureModal?.("File uploads")) {
-        window.App.showPopup?.("File uploads are not available on your account yet. Remove the attachments to continue.");
-      }
+    // Files are open to every account (2026-10-02); they only need one.
+    if (attachments.length && !window.auth?.currentUser) {
+      window.App.showPopup?.("Sign in to send files. Remove the attachments to continue.");
       return null;
     }
     const providers = selectedProviders(attachments.length);

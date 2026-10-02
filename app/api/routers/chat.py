@@ -1035,7 +1035,8 @@ def handle_ask(provider: AskProvider, request: Request, data: dict):
         provider.label,
         is_pro=is_pro_user,
     )
-    attachments = parse_attachments(data, attachments_allowed=entitlements.attachments)
+    # Files need an account: their tokens are booked to it.
+    attachments = parse_attachments(data, attachments_allowed=entitlements.attachments and uid is not None)
     model_config = cfg.get_model_config(model, provider.key)
     if attachments and model_config and not model_config.accepts_attachments:
         raise HTTPException(

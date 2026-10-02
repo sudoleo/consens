@@ -106,7 +106,7 @@ def test_composer_mode_bar(browser, phase4_server, width, dark):
 
 
 @pytest.mark.parametrize("width,dark", [(1440, False), (390, False), (320, True)])
-def test_toolbar_reasoning_is_open_and_upload_reuses_plan_gates(browser, phase4_server, width, dark):
+def test_toolbar_reasoning_and_uploads_are_open_and_plan_gates_stay_calm(browser, phase4_server, width, dark):
     context, page = _real_firebase_page(browser, phase4_server,
         init_script="localStorage.setItem('runMode', 'consensus'); localStorage.setItem('runModeDefault','agent-2026-10-02');")
     try:
@@ -126,9 +126,14 @@ def test_toolbar_reasoning_is_open_and_upload_reuses_plan_gates(browser, phase4_
         expect(reasoning).to_have_attribute('aria-checked', 'false')
         expect(page.locator('#reasoningToggle')).not_to_be_checked()
         draft.fill('The composer is still usable.')
-        page.locator('#composerAttachButton').click()
+        # Files are open to every signed-in account: the picker opens, no notice.
+        with page.expect_file_chooser():
+            page.locator('#composerAttachButton').click()
+        expect(notice).to_be_hidden()
+        # A feature that is still gated shows the same calm notice.
+        page.evaluate("App.showProFeatureModal('Resolve')")
         expect(notice).to_be_visible()
-        expect(notice).to_contain_text('File uploads')
+        expect(notice).to_contain_text('Resolve')
         expect(page.locator('#proFeatureModal')).to_be_hidden()
         expect(draft).to_have_value('The composer is still usable.')
         output = Path('test-results/early-access')

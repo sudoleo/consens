@@ -1,8 +1,11 @@
 """Drei Kontostufen statt eines Pro-Booleans.
 
-Free  - Basis-Modelle, kleines Tageskontingent.
+Free  - Basis-Modelle, kleines Tageskontingent, Anhaenge (seit
+        2026-10-02 fuer alle: jede Datei kostet Tokens aus dem eigenen
+        Kontingent; Datei-Limits siehe llm/attachments.py, Speicher pro
+        Stufe siehe agent_files.UPLOAD_QUOTAS).
 Plus  - Modellauswahl exakt wie Free (KEINE Frontier-/Premium-Modelle),
-        dafuer Anhaenge, Resolve-Runden und das groesste
+        dafuer Resolve-Runden, mehr Dateispeicher und das groesste
         Run-Kontingent. Gedacht fuer Tester, die die Funktionen ausprobieren
         sollen, ohne Frontier-Kosten ausloesen zu koennen.
 Pro   - alles.
@@ -85,7 +88,9 @@ class Entitlements:
 
     @property
     def attachments(self) -> bool:
-        return tier_at_least(self.tier, TIER_PLUS)
+        # Every tier: files are paid from the same token account as the
+        # question. The guardrails are per file and per account, not per tier.
+        return True
 
     @property
     def resolve(self) -> bool:

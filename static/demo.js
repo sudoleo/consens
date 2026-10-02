@@ -671,6 +671,251 @@ async function renderDemoConsensus(mainP, diffP) {
   showPostDemoLoginPrompt();
 }
 
+/* === DEMO: Agent turn ===================================================
+   Agent is where every question starts, so the demo plays an Agent turn on
+   the real Agent surfaces: the activity line (agent-activity.js), the
+   streamed answer (markdown-stream.js) and the answer check with its marks,
+   agreement score and evidence links (agent-review.js). The run is local and
+   scripted from the same fixtures as the Consensus demo: no request, no
+   bookmark, no vote. agent-chat.js keeps the answer panel on screen while the
+   demo owns it (App.agentChat.demoView), also for guests without Agent access.
+   ======================================================================= */
+const DEMO_AGENT_ID = "demo";
+const DEMO_AGENT_HASH = "demo-answer-v1";
+const DEMO_AGENT_BASIS = "demo-basis";
+const DEMO_AGENT_STEPS = {
+  plan: 900,            // first progress note
+  compare: 1900,        // compare_models starts
+  modelSpread: 5200,    // last comparison answer lands this long after compare
+  afterCompare: 900,    // progress note, then the answer starts streaming
+  check: 2300           // the judges hold the fixed answer against all six
+};
+const DEMO_AGENT_STREAM = { wordsPerTick: 3, tickMs: 42 };
+const DEMO_AGENT_NOTES = {
+  plan: "The draft is fine in substance; order and tone decide how it lands. I will get six independent reads before I write anything.",
+  compared: "All six would send it. They agree on putting the date first and split on the closing question, so the answer has to say so instead of picking a side."
+};
+
+const capitalize = text => text.charAt(0).toUpperCase() + text.slice(1);
+// The Agent writes its own answer: the Consensus fixture without its
+// "Consensus:" label, opened by the verdict in bold.
+function demoAgentAnswer() {
+  return demoResponseMarkdown(activeDemoData.consensus || "")
+    .replace(/^Consensus:\s*(.+)$/m, (_, verdict) => `**${capitalize(verdict.replace(/[.\s]*$/, ""))}.**`);
+}
+function demoAgentDifferences() {
+  const data = JSON.parse(JSON.stringify(activeDemoData.differencesData || {}));
+  for (const claim of data.claims || []) {
+    if (typeof claim.anchor === "string" && /^Consensus:\s*/.test(claim.anchor)) {
+      claim.anchor = capitalize(claim.anchor.replace(/^Consensus:\s*/, ""));
+    }
+  }
+  return data;
+}
+function demoAgentModels() {
+  return activeDemoModels.map(key => {
+    const pref = window.App.modelPrefs.find(item => item.key === key);
+    const select = pref && document.getElementById(pref.selectId);
+    const option = select?.selectedOptions?.[0];
+    return {
+      key,
+      label: (option?.textContent || "").trim() || pref?.label || key,
+      model: select?.value || "",
+      text: demoResponseMarkdown(activeDemoData.responses[key] || "")
+    };
+  });
+}
+// The review object a real turn carries (agent_review), reduced to one
+// comparison: who has answered, the fixed answer version and its check.
+function demoAgentReview({ answered, pending, status, answer, checked }) {
+  const comparison = {
+    id: "demo-comparison",
+    basis_hash: DEMO_AGENT_BASIS,
+    status: pending.length ? "running" : "completed",
+    question: DEMO_TYPED_QUESTION,
+    reason: "A message to a client, where order and tone decide how it lands: six models read the draft independently.",
+    answers: answered.map(model => ({
+      provider: model.key, provider_label: model.key,
+      model: { label: model.label, model: model.model }, text: model.text, sources: []
+    })),
+    pending_models: pending.map(model => ({ label: model.label, model: model.model })),
+    failed_models: []
+  };
+  const review = { status, comparisons: [comparison], versions: [], checks: [] };
+  if (answer) {
+    review.answer_version = "v1";
+    review.answer_hash = DEMO_AGENT_HASH;
+    review.versions = [{ id: "v1", text: answer, hash: DEMO_AGENT_HASH, status }];
+  }
+  if (checked) {
+    review.checks = [{
+      comparison_id: comparison.id, answer_hash: DEMO_AGENT_HASH, basis_hash: DEMO_AGENT_BASIS,
+      status: "succeeded", issues: [], differences_data: checked
+    }];
+  }
+  return review;
+}
+// renderAnswer() in agent-chat.js, for a run that is not in the registry:
+// the growing text through the streaming renderer, the final text once.
+function showDemoAgentAnswer(body, text, streaming) {
+  if (!body) return;
+  const mode = streaming && window.renderMarkdownStream ? "stream" : "full";
+  const entering = !body.dataset.markdown?.trim() && Boolean(text.trim());
+  body.dataset.markdown = text;
+  body.dataset.renderMode = mode;
+  if (mode === "stream") window.renderMarkdownStream(body, text);
+  else {
+    window.resetMarkdownStream?.(body);
+    window.injectMarkdown?.(body, text, []);
+  }
+  body._agentRenderSerial = (body._agentRenderSerial || 0) + 1;
+  if (entering) window.App.agentActivity?.reveal(body);
+}
+function clearDemoAgentAnswer() {
+  const body = document.getElementById("agentAnswerBody");
+  if (!body) return;
+  window.resetMarkdownStream?.(body);
+  delete body.dataset.markdown;
+  delete body.dataset.renderMode;
+  body.classList.remove("is-answer-checking", "is-answer-check-done");
+  body.replaceChildren();
+  window.App.agentReview?.render(body, null, { key: DEMO_AGENT_ID });
+  body.parentElement?.querySelector(".agent-answer-actions")?.remove();
+}
+
+async function runAgentDemoFlow() {
+  const App = window.App;
+  window.exitHeroMode?.();
+  App.consensusPipeline?.dismiss?.();
+  window.hideConsensusOutput?.();
+  const runId = ++demoRunId;
+  const live = () => runId === demoRunId;
+  const sendBtn = document.getElementById("sendButton");
+  if (sendBtn) sendBtn.disabled = true;
+  App.state.set("currentEvidenceSources", [], "evidence");
+
+  const qi = document.getElementById("questionInput");
+  if (DEMO_PHASES.preType && qi) {
+    await typeIntoInput(qi, DEMO_TYPED_QUESTION.slice(0, DEMO_PHASES.typeChars), DEMO_PHASES.typeSpeed);
+    await sleep(340);
+    qi.value = DEMO_SCENARIO_PROMPT;
+    qi.dispatchEvent(new Event("input", { bubbles: true }));
+    await sleep(DEMO_PHASES.pauseAfterTypingAll);
+  }
+  if (!live()) return;
+
+  // Sent: the question moves into the thread, the composer empties, and the
+  // Agent's answer surface takes over below it.
+  App.state.set("lastQuestion", DEMO_SCENARIO_PROMPT, "run");
+  App.setThreadQuestion?.(DEMO_SCENARIO_PROMPT);
+  if (qi) {
+    qi.value = "";
+    qi.dispatchEvent(new Event("input", { bubbles: true }));
+    window.syncDemoChipState?.();
+  }
+  clearDemoAgentAnswer();
+  const host = App.agentChat?.demoView?.(true);
+  const body = document.getElementById("agentAnswerBody");
+  const models = demoAgentModels();
+  const answer = demoAgentAnswer();
+  const checked = demoAgentDifferences();
+  const started = Date.now();
+  const events = [];
+  let review = null;
+  let answerText = "";
+  let running = true;
+
+  const paint = () => {
+    if (!live() || !host) return;
+    App.agentActivity?.render(host, {
+      events, review, running, answerText,
+      responding: Boolean(answerText),
+      status: running ? "running" : "succeeded",
+      elapsedMs: Date.now() - started
+    });
+  };
+  const at = async ms => {
+    const wait = started + ms - Date.now();
+    if (wait > 0) await sleep(wait);
+    return live();
+  };
+  paint();
+
+  if (!await at(DEMO_AGENT_STEPS.plan)) return;
+  events.push({ version: 1, kind: "progress", id: "demo-plan", text: DEMO_AGENT_NOTES.plan });
+  paint();
+
+  // compare_models: six independent answers, each landing on its own beat.
+  if (!await at(DEMO_AGENT_STEPS.compare)) return;
+  const compareTool = { version: 1, kind: "tool", id: "demo-compare", name: "compare_models", status: "running" };
+  events.push(compareTool);
+  const answered = [];
+  review = demoAgentReview({ answered, pending: models, status: "required" });
+  paint();
+  const order = DEMO_PHASES.order.filter(key => models.some(model => model.key === key))
+    .concat(models.map(model => model.key).filter(key => !DEMO_PHASES.order.includes(key)));
+  for (let i = 0; i < order.length; i++) {
+    const landing = DEMO_AGENT_STEPS.compare + Math.round(DEMO_AGENT_STEPS.modelSpread * ((i + 1) / order.length) ** 1.15);
+    if (!await at(landing)) return;
+    answered.push(models.find(model => model.key === order[i]));
+    review = demoAgentReview({ answered, pending: models.filter(model => !answered.includes(model)), status: "required" });
+    paint();
+  }
+  compareTool.status = "succeeded";
+  events.push({ version: 1, kind: "progress", id: "demo-compared", text: DEMO_AGENT_NOTES.compared });
+  paint();
+
+  // The answer, written in its own step after the comparison.
+  if (!await at(DEMO_AGENT_STEPS.compare + DEMO_AGENT_STEPS.modelSpread + DEMO_AGENT_STEPS.afterCompare)) return;
+  events.push({ version: 1, kind: "status", id: "demo-status", status: "responding" });
+  const tokens = answer.match(/\s+|[^\s]+/g) || [];
+  let index = 0;
+  while (index < tokens.length) {
+    let added = 0;
+    while (index < tokens.length && added < DEMO_AGENT_STREAM.wordsPerTick) {
+      const token = tokens[index++];
+      answerText += token;
+      if (token.trim()) added++;
+    }
+    showDemoAgentAnswer(body, answerText, true);
+    paint();
+    await sleep(DEMO_AGENT_STREAM.tickMs);
+    if (!live()) return;
+  }
+  showDemoAgentAnswer(body, answerText, false);
+
+  // The judges check that exact text; a quiet sheen says it is still going on.
+  review = demoAgentReview({ answered, pending: [], status: "running", answer: answerText });
+  body?.classList.add("is-answer-checking");
+  paint();
+  await sleep(DEMO_AGENT_STEPS.check);
+  if (!live()) return;
+
+  review = demoAgentReview({ answered, pending: [], status: "succeeded", answer: answerText, checked });
+  running = false;
+  paint();
+  if (body) {
+    body.classList.remove("is-answer-checking");
+    body.classList.add("is-answer-check-done");
+    setTimeout(() => body.classList.remove("is-answer-check-done"), 450);
+  }
+  // Demo results are a local preview: no bookmark, no vote, no telemetry.
+  App.agentReview?.render(body, review, { key: DEMO_AGENT_ID, question: DEMO_SCENARIO_PROMPT, reveal: true });
+  App.agentAnswerActions?.render(body, { key: DEMO_AGENT_ID, text: answerText, running: false });
+  if (sendBtn) sendBtn.disabled = false;
+  showPostDemoLoginPrompt();
+}
+
+// A new chat leaves the demo: the scripted turn stops and the panel is released.
+document.getElementById("newRunButton")?.addEventListener("click", () => {
+  if (!document.body.classList.contains("agent-demo-active")) return;
+  demoRunId++;
+  clearDemoAgentAnswer();
+  window.App.agentChat?.demoView?.(false);
+  const sendBtn = document.getElementById("sendButton");
+  if (sendBtn) sendBtn.disabled = false;
+});
+
 async function runDemoFlow() {
   // The demonstration always uses the complete Balanced lineup, not the
   // intersection of its fixture authors with a previous Daily/Custom choice.
@@ -679,6 +924,11 @@ async function runDemoFlow() {
   const balanced = window.CONSENSUS_PRESETS?.find(preset => preset.id === 'balanced');
   activeDemoModels = window.App.modelPrefs.filter(pref => balanced?.models?.[pref.provider]).map(pref => pref.key);
   activeDemoData = buildDemoDataForModels(activeDemoModels);
+  // Agent (the default, also for guests who come from the landing page)
+  // plays an Agent turn; a chosen Compare or Consensus plays that mode.
+  if (window.App?.runMode?.preference?.() === "agent" && window.App.agentChat?.demoView) {
+    return runAgentDemoFlow();
+  }
   const agentModeEnabled = window.App?.runMode?.pipeline?.() === true;
   // Auch die lokale Demo respektiert den Modus: Consensus baut den Thread
   // auf, Compare bleibt bei den sechs Antwortfenstern.

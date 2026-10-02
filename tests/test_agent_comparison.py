@@ -899,3 +899,44 @@ def test_quorum_modes():
     assert [quorum_size(6, d, "all") for d in ("quick", "full")] == [6, 6]
     assert [quorum_size(6, d, "fast") for d in ("quick", "full")] == [3, 3]
     assert [quorum_size(6, d, "balanced") for d in ("quick", "full")] == [3, 5]
+
+
+def _votes(store):
+    return [doc.to_dict() for doc in store.db.collection("model_votes").stream()]
+
+
+def test_checked_agent_answer_adds_one_best_answer_pick_to_the_model_pulse(store):
+    from app.core import config as cfg
+    loop = make_loop(store, Script())
+    list(loop.run())
+    saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
+    assert saved["agent_review"]["status"] == "succeeded"
+    votes = _votes(store)
+    assert len(votes) == 1
+    vote = votes[0]
+    assert vote["source"] == "agent" and vote["vote_type"] == "BestModel"
+    assert vote["model"] in cfg.VALID_LEADERBOARD_MODELS
+    assert vote["vote_subject_id"] == f"agent:{loop.turn_id}"
+    board = store.db.collection("leaderboard").document(vote["model"]).get().to_dict()
+    # The fake store keeps the transform; Firestore applies it.
+    assert getattr(board["BestModel"], "value", board["BestModel"]) == 1
+    # The turn is finished once: a second settlement adds nothing.
+    assert not store.finish_run(UID, loop.chat_id, loop.turn_id, completion=loop.completion,
+                                status="succeeded", run_token=loop.run_token)
+    assert len(_votes(store)) == 1
+
+
+def test_mock_runs_and_unchecked_answers_never_vote(store, monkeypatch):
+    from app.services import agent_runs, persistence_guard
+    monkeypatch.setattr(agent_runs, "mock_llm_enabled", lambda: True)
+    list(make_loop(store, Script()).run())
+    assert _votes(store) == []
+    assert persistence_guard.agent_best_model_pick({"status": "failed", "checks": []}) is None
+    review = {"status": "partial", "comparisons": [{"id": "a", "answers": [{}, {}]}, {"id": "b", "answers": [{}, {}, {}]}],
+              "checks": [{"comparison_id": "a", "status": "succeeded", "differences_data": {"best_model": "OpenAI"}},
+                         {"comparison_id": "b", "status": "partial", "differences_data": {"best_model": "Claude"}},
+                         {"comparison_id": "c", "status": "failed", "differences_data": {"best_model": "Grok"}}]}
+    # The widest comparison decides, and an alias lands on its family.
+    assert persistence_guard.agent_best_model_pick(review) == "Anthropic"
+    review["checks"][1]["differences_data"]["best_model"] = "Not a model"
+    assert persistence_guard.agent_best_model_pick(review) is None

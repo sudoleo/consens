@@ -9,11 +9,10 @@
   const closeButton = document.getElementById("closeProModal");
   const details = document.getElementById("featureAccessDetails");
   const sidebarLink = document.getElementById("upgradeLink");
-  const plusFeatures = new Set(["Resolve", "File uploads"]);
+  const plusFeatures = new Set(["Resolve"]);
   const messages = {
     "High Quality mode": "High Quality mode is not available on your account yet. Your current models are still selected.",
     "Resolve": "Resolve is not available on your account yet. You can still review the differences and model answers.",
-    "File uploads": "File uploads are not available on your account yet. You can enter your question as text.",
     "More frequent Consensus Watch checks": "More frequent Watch checks are not available on your account yet.",
     "More Consensus Watches": "Your active Watch limit has been reached. Pause a Watch to make room for another.",
   };

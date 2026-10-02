@@ -1,10 +1,10 @@
 /**
- * Ein Plus-Konto darf Dateien anhaengen.
+ * Jedes Konto darf Dateien anhaengen (seit 2026-10-02, die Dateien kosten
+ * Tokens aus dem eigenen Kontingent); ein Gast wird zur Anmeldung geschickt.
  *
- * Das Gate haengt an `window.isUserPlus`, und dieses Flag entsteht erst am Ende
- * einer Kette: /user_status -> updateUserTierUI -> App.state -> window-Getter.
- * Getestet wird deshalb die ECHTE Kette (app-state.js + user-tier.js +
- * attachments.js), nicht ein gesetztes Flag.
+ * Die Stufe entsteht am Ende einer Kette: /user_status -> updateUserTierUI ->
+ * App.state -> window-Getter. Getestet wird deshalb die ECHTE Kette
+ * (app-state.js + user-tier.js + attachments.js), nicht ein gesetztes Flag.
  *
  * Der zweite Teil sichert die Stelle, an der die Stufe wieder verloren gehen
  * kann: `is_pro_user: false` bedeutet seit Plus nur noch "nicht Pro" und
@@ -29,6 +29,7 @@ const BODY = `
 <span id="proBadge" class="pro-badge"></span>
 <a id="upgradeLink"></a>
 <label class="switch attach-menu-switch"><input type="checkbox" id="reasoningToggle"></label>
+<div id="loginModal" style="display:none"><input id="loginEmail"></div>
 <div id="proFeatureModal" style="display:none">
   <span id="proModalFeatureName"></span><p id="proModalDescription"></p>
 </div>
@@ -68,9 +69,14 @@ function clickUpload({ window, document }) {
     .dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
 }
 
+function signIn(harness) {
+  harness.window.auth = { currentUser: { uid: "u1" } };
+}
+
 describe("attachment gate per tier", () => {
   it("lets a Plus account open the file picker", () => {
     const harness = boot();
+    signIn(harness);
     harness.window.updateUserTierUI("plus", true);
 
     expect(harness.window.userTier).toBe("plus");
@@ -82,13 +88,23 @@ describe("attachment gate per tier", () => {
     expect(harness.gated).toEqual([]);
   });
 
-  it("still refuses a Free account", () => {
+  it("lets a Free account open the file picker too", () => {
     const harness = boot();
+    signIn(harness);
     harness.window.updateUserTierUI("free", true);
 
     expect(harness.window.isUserPlus).toBe(false);
     clickUpload(harness);
-    expect(harness.gated).toEqual(["File uploads"]);
+    expect(harness.gated).toEqual([]);
+    expect(harness.document.getElementById("loginModal").style.display).toBe("none");
+  });
+
+  it("asks a guest to sign in instead of opening the picker", () => {
+    const harness = boot();
+    harness.window.auth = { currentUser: null };
+    clickUpload(harness);
+    expect(harness.gated).toEqual([]);
+    expect(harness.document.getElementById("loginModal").style.display).toBe("block");
   });
 
   it("names the tier on the badge and drops the Free-only upgrade link", () => {
@@ -111,6 +127,7 @@ describe("attachment gate per tier", () => {
     // Antwort ohne "tier" (aelterer Server, Tab von vor einem Deploy) trug
     // frueher ein blankes false in updateUserTierUI und setzte damit Free.
     const harness = boot();
+    signIn(harness);
     harness.window.updateUserTierUI("plus", true);
 
     const runTier = tierSignalFor({ isProUser: false });

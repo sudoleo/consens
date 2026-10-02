@@ -20,6 +20,7 @@ from app.services.agent_runtime import AgentCapacityExceeded
 from app.services.agent_sessions import AgentSessionStore
 from app.services.chat_store import ChatStore, ChatNotFound, TurnStatusConflict, TURN_PAGE_SIZE_MAX, normalize_turn_sources
 from app.services.llm.agent_client import AgentModel
+from app.services.llm.mock_llm import mock_llm_enabled
 from app.services.llm.base import get_date_context
 from app.services.prompt_defaults import AGENT_SYSTEM_PROMPT
 
@@ -304,6 +305,16 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                     raise TurnStatusConflict("The exact answer version has not been reviewed")
             daily_ref = agent_quota.quota_ref(self.db, uid, data["quota_day"]) if data.get("quota_day") else None
             daily = daily_ref.get(transaction=tx).to_dict() or {} if daily_ref else {}
+            # A checked Agent answer adds its judge's best-answer pick to the
+            # Model Pulse, once per turn, like a Consensus run. Mock runs write
+            # nothing: a local MOCK_LLM server talks to the real Firestore.
+            pick = vote_ref = None
+            if status == "succeeded" and not mock_llm_enabled():
+                pick = persistence_guard.agent_best_model_pick(review)
+                if pick:
+                    vote_ref = persistence_guard.agent_vote_ref(self.db, uid=uid, chat_id=chat_id, turn_id=turn_id)
+                    if vote_ref.get(transaction=tx).exists:
+                        pick = None
             if daily_ref:
                 daily = agent_quota.release(daily, data.get("review_hold", 0))
                 tx.set(daily_ref, daily)
@@ -350,6 +361,9 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                                             finding.update(state="unavailable", reason_code=verification["reason_code"], checked=False)
                         patch["agent_review"] = review
                 tx.update(turn_ref, patch)
+                if pick:
+                    persistence_guard.write_agent_vote(tx, self.db, vote_ref, uid=uid, chat_id=chat_id,
+                                                       turn_id=turn_id, model=pick)
                 if chat_data.get("agent_turn_id") == turn_id:
                     tx.update(chat_ref, {"agent_lock_until": datetime.now(timezone.utc), "updated_at": firestore.SERVER_TIMESTAMP})
             return True

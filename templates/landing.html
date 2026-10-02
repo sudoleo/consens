@@ -23,7 +23,7 @@
   <meta name="twitter:image" content="https://www.consens.io/static/og-home-v2.png?v=20260802">
   <meta name="twitter:image:alt" content="The risk of one perspective | consens.io">
   <title>The AI Agent That Checks Six Models | consens.io</title>
-  <link rel="stylesheet" href="/static/css/landing.css?v=20261002-marks">
+  <link rel="stylesheet" href="/static/css/landing.css?v=20261002-agentturn">
   <link rel="stylesheet" href="/static/css/benchmark.css?v=20260731-inter1">
   <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260621-logo2" sizes="any" type="image/png">
@@ -96,7 +96,8 @@
             <span class="lp-attach" aria-hidden="true">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
             </span>
-            <span class="lp-run-chip">Gemini 3.8 Flash +6<i aria-hidden="true"></i></span>
+            <span class="lp-mode-chip">Agent<i aria-hidden="true"></i></span>
+            <span class="lp-run-chip">Claude Opus 5.5<span class="lp-run-chip-count">+6</span><i aria-hidden="true"></i></span>
             <span class="lp-demo-btn demo-action send-glow">
               <span class="demo-action-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M5 3.5v9l7-4.5z"></path></svg></span>
               <span>Try the demo</span>
@@ -134,18 +135,11 @@
               <p class="lp-lead">Agent is where every question starts: it researches, asks six models and writes one answer.<span class="lp-wide-only"> Compare and Consensus are one switch away. Check contradictions, reasoning and attachments sit right beside it.</span></p>
             </div>
             <div class="lp-scene-visual lp-reveal">
-              <div class="lp-app">
-                <div class="lp-app-bar">
-                  <span class="lp-mocklogo"><img src="/static/favicon.png" alt=""> consens.io</span>
-                  <span class="lp-mock-quota" aria-hidden="true">
-                    <span class="lp-mock-ring"></span>
-                    <span>18</span>
-                  </span>
-                </div>
-                <div class="lp-app-body">
-                  <!-- The greeting is gone on purpose. The field types a real
-                       question into itself, which says the same thing without
-                       spending a line of text on it. -->
+              <!-- The field and nothing else: no window, no title bar, no
+                   greeting. A frame around the field was a second frame
+                   around the first, and the field types a real question
+                   into itself, which says what the greeting said. -->
+              <div class="lp-ask-stage">
                   <div class="lp-composer-preview">
                   <div class="lp-composer" data-ask-composer>
                     <span class="lp-composer-text" data-ask-text></span>
@@ -153,7 +147,8 @@
                       <span class="lp-icon-btn" aria-hidden="true">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                       </span>
-                      <span class="lp-run-chip" data-ask-chip>Gemini 3.8 Flash +6<i aria-hidden="true"></i></span>
+                      <span class="lp-mode-chip">Agent<i aria-hidden="true"></i></span>
+                      <span class="lp-run-chip" data-ask-chip>Claude Opus 5.5<span class="lp-run-chip-count">+6</span><i aria-hidden="true"></i></span>
                       <span class="lp-send send-glow" data-ask-send aria-hidden="true">
                         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5.5M6 11.5l6-6 6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>
                       </span>
@@ -162,7 +157,6 @@
                   {% include "partials/composer_toolbar_mockup.html" %}
                   </div>
                   <p class="lp-composer-foot">Please avoid personal or sensitive data. AI models can make mistakes.</p>
-                </div>
               </div>
               <ul class="lp-scene-notes">
                 <li data-ask-note="0"><b>The field.</b> One question, nothing to configure first.</li>
@@ -187,103 +181,51 @@
               <p class="lp-lead">It asks six models in parallel, writes one answer from what they said, and has that answer checked against all six.<span class="lp-wide-only"> With Check contradictions on, a separate judge checks factual disagreements against existing sources from both positions. Scroll to move the run.</span></p>
             </div>
             <div class="lp-scene-visual lp-reveal">
-              <div class="lp-app">
-                <div class="lp-thread-ask">
-                  <div class="lp-thread-ask-label">Question</div>
-                  <div class="lp-thread-ask-text">I have to tell a client that our launch slips by two weeks. Can I send this as it is?</div>
-                </div>
-                <!-- The run and the answer it hands over to share one grid
-                     cell, so the panel is always as tall as the taller of the
-                     two and the handover is a cross-fade rather than a
-                     collapse. On a phone the scene's own height feeds the
-                     scroll progress, so a mock that resizes mid-run makes the
-                     animation chase itself. landing-scenes.js locks the stack
-                     to its tallest state on top of this. -->
-                <div class="lp-run-stack" data-run-stack>
-                <!-- An Agent turn in /app: the agent asks the six comparison
-                     models (compare_models), writes the answer in its own
-                     step, then the judges check that exact text
-                     (judge_answer). Four steps with a clock, one row per
-                     model while they answer, one calm note line. Narrow: one
-                     line plus four segments. Labels: landing-scenes.js. -->
-                <div class="lp-run" data-run data-stage="prepare">
-                  <div class="lp-run-head">
-                    <div class="lp-run-compact" aria-hidden="true">
-                      <span class="lp-run-dot"></span>
-                      <span data-run-compact>Planning</span>
-                      <span class="lp-run-count" data-run-compact-count></span>
+              <!-- An Agent turn in /app, the way agent-activity.js and
+                   agent-review.js draw it: the clock ("Working for 12s",
+                   later "Thought for 24s"), the agent's own notes, the
+                   comparison step with the six models landing one by one,
+                   one live status row (Writing answer… / Checking the
+                   answer…), then the answer with its marks and the evidence
+                   row. Every line, count and the score are the demo run's
+                   own data (static/demo.js). Driver: landing-scenes.js. -->
+              <div class="lp-app lp-agent" data-run>
+                <p class="lp-agent-ask">I have to tell a client that our launch slips by two weeks. Can I send this as it is?</p>
+                <div class="lp-agent-body" data-run-body>
+                  <div class="lp-agent-activity">
+                    <p class="lp-agent-clock"><span data-run-clock>Working for 0s</span><i aria-hidden="true"></i></p>
+                    <div class="lp-agent-log" data-run-log>
+                      <p class="lp-agent-note" data-run-item="plan" hidden>The draft is fine in substance; order and tone decide how it lands. Six independent reads first.</p>
+                      <div class="lp-agent-step" data-run-item="compare" hidden>
+                        <span class="lp-agent-step-label" data-run-compare>Comparing perspectives…</span>
+                        <span class="lp-agent-models" aria-hidden="true">
+                          {% for name, icon, mono in [('ChatGPT', 'chatgpt.png', true), ('Claude', 'claude.png', false), ('Gemini', 'gemini-icon.png', false), ('Mistral', 'mistral.png', false), ('DeepSeek', 'deepseek.png', false), ('Grok', 'grok.png', true)] %}
+                          <span class="lp-agent-model" data-model="{{ loop.index0 }}" title="{{ name }}"><img src="/static/icons/chat_icons/{{ icon }}" alt="" width="14" height="14"{% if mono %} class="lp-composer-mono"{% endif %}></span>
+                          {% endfor %}
+                        </span>
+                        <span class="lp-agent-count" data-run-count></span>
+                      </div>
+                      <p class="lp-agent-note" data-run-item="compared" hidden>All six would send it. They split on the closing question, so the answer says so instead of picking a side.</p>
+                      <p class="lp-agent-step is-current" data-run-item="status" hidden><span data-run-status>Writing answer…</span></p>
                     </div>
-                    <ol class="lp-run-steps">
-                      <li class="lp-run-step" data-step="prepare" data-status="active"><span class="lp-run-mark" aria-hidden="true"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="7"/><path d="M5 8.2l2 2 4-4.2"/></svg></span><span data-step-label>Planning</span></li>
-                      <li class="lp-run-step" data-step="answers" data-status="pending"><span class="lp-run-mark" aria-hidden="true"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="7"/><path d="M5 8.2l2 2 4-4.2"/></svg></span><span data-step-label>Six models</span><span class="lp-run-count" data-run-count></span></li>
-                      <li class="lp-run-step" data-step="consensus" data-status="pending"><span class="lp-run-mark" aria-hidden="true"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="7"/><path d="M5 8.2l2 2 4-4.2"/></svg></span><span data-step-label>Answer</span></li>
-                      <li class="lp-run-step" data-step="differences" data-status="pending"><span class="lp-run-mark" aria-hidden="true"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="7"/><path d="M5 8.2l2 2 4-4.2"/></svg></span><span data-step-label>Answer check</span></li>
-                    </ol>
-                    <p class="lp-run-meta"><span data-run-meta></span><span class="lp-run-meta-next" data-run-next></span></p>
-                    <span class="lp-run-time" data-run-time>0:00</span>
                   </div>
-                  <div class="lp-run-track" data-run-track><i></i></div>
-                  <div class="lp-run-detail" data-run-detail>
-                    <span class="lp-run-model" data-model="0" data-state="thinking">
-                      <span class="lp-run-model-name"><svg class="lp-run-icon" viewBox="0 0 16 16" aria-hidden="true"><circle class="lp-run-icon-ring" cx="8" cy="8" r="6.5"/><path class="lp-run-icon-arc" d="M8 1.5a6.5 6.5 0 0 1 6.5 6.5"/><path class="lp-run-icon-check" d="M5 8.2l2 2 4-4.2"/></svg><span>ChatGPT</span></span>
-                      <span class="lp-run-model-track"><i></i></span>
-                      <span class="lp-run-model-time">Thinking</span>
-                    </span>
-                    <span class="lp-run-model" data-model="1" data-state="thinking">
-                      <span class="lp-run-model-name"><svg class="lp-run-icon" viewBox="0 0 16 16" aria-hidden="true"><circle class="lp-run-icon-ring" cx="8" cy="8" r="6.5"/><path class="lp-run-icon-arc" d="M8 1.5a6.5 6.5 0 0 1 6.5 6.5"/><path class="lp-run-icon-check" d="M5 8.2l2 2 4-4.2"/></svg><span>Claude</span></span>
-                      <span class="lp-run-model-track"><i></i></span>
-                      <span class="lp-run-model-time">Thinking</span>
-                    </span>
-                    <span class="lp-run-model" data-model="2" data-state="thinking">
-                      <span class="lp-run-model-name"><svg class="lp-run-icon" viewBox="0 0 16 16" aria-hidden="true"><circle class="lp-run-icon-ring" cx="8" cy="8" r="6.5"/><path class="lp-run-icon-arc" d="M8 1.5a6.5 6.5 0 0 1 6.5 6.5"/><path class="lp-run-icon-check" d="M5 8.2l2 2 4-4.2"/></svg><span>Gemini</span></span>
-                      <span class="lp-run-model-track"><i></i></span>
-                      <span class="lp-run-model-time">Thinking</span>
-                    </span>
-                    <span class="lp-run-model" data-model="3" data-state="thinking">
-                      <span class="lp-run-model-name"><svg class="lp-run-icon" viewBox="0 0 16 16" aria-hidden="true"><circle class="lp-run-icon-ring" cx="8" cy="8" r="6.5"/><path class="lp-run-icon-arc" d="M8 1.5a6.5 6.5 0 0 1 6.5 6.5"/><path class="lp-run-icon-check" d="M5 8.2l2 2 4-4.2"/></svg><span>Mistral</span></span>
-                      <span class="lp-run-model-track"><i></i></span>
-                      <span class="lp-run-model-time">Thinking</span>
-                    </span>
-                    <span class="lp-run-model" data-model="4" data-state="thinking">
-                      <span class="lp-run-model-name"><svg class="lp-run-icon" viewBox="0 0 16 16" aria-hidden="true"><circle class="lp-run-icon-ring" cx="8" cy="8" r="6.5"/><path class="lp-run-icon-arc" d="M8 1.5a6.5 6.5 0 0 1 6.5 6.5"/><path class="lp-run-icon-check" d="M5 8.2l2 2 4-4.2"/></svg><span>DeepSeek</span></span>
-                      <span class="lp-run-model-track"><i></i></span>
-                      <span class="lp-run-model-time">Thinking</span>
-                    </span>
-                    <span class="lp-run-model" data-model="5" data-state="thinking">
-                      <span class="lp-run-model-name"><svg class="lp-run-icon" viewBox="0 0 16 16" aria-hidden="true"><circle class="lp-run-icon-ring" cx="8" cy="8" r="6.5"/><path class="lp-run-icon-arc" d="M8 1.5a6.5 6.5 0 0 1 6.5 6.5"/><path class="lp-run-icon-check" d="M5 8.2l2 2 4-4.2"/></svg><span>Grok</span></span>
-                      <span class="lp-run-model-track"><i></i></span>
-                      <span class="lp-run-model-time">Thinking</span>
-                    </span>
+                  <div class="lp-agent-answer" data-run-answer>
+                    <!-- The verdict, then three sentences of the answer, each
+                         wearing what the six actually did with it: agreed,
+                         split, or contradicted each other. -->
+                    <p class="lp-agent-verdict"><strong data-stream>Send it — after two fixes, and one call the models will not make for you.</strong></p>
+                    <ul class="lp-run-claims" aria-label="Three sentences from the answer and how the six models divided on each">
+                      <li><span class="cx-claim" data-mark="is-unanimous" data-stream>The 29th belongs in the first line, ahead of the miss and the apology.</span><span class="claim-badge" aria-hidden="true"><span class="claim-ratio">6/6</span></span></li>
+                      <li><span class="cx-claim" data-mark="is-split" data-stream>Name the day you will confirm it, so the next update is not another surprise.</span><span class="claim-badge has-dissent" aria-hidden="true"><span class="claim-ratio">4/6</span></span></li>
+                      <li><span class="cx-claim" data-mark="is-major" data-stream>Keep the closing question, or cut it — three models each way.</span></li>
+                    </ul>
+                    <p class="lp-run-result-open" data-stream>A single answer would have handed you all three as settled.</p>
                   </div>
-                  <p class="lp-run-note is-hidden" data-run-note></p>
-                </div>
-                <!-- What the run hands over to once it collapses. -->
-                <div class="lp-run-result" data-run-result>
-                  <h3>Answer</h3>
-                  <!-- What the run hands over has to be worth having waited
-                       for. One headline was a verdict with nothing behind it:
-                       it said what the product does, not what six models are
-                       for. So the answer arrives the way it does in /app — a
-                       verdict, then the sentences it is made of, each carrying
-                       what the six actually did with it: agreed, split, or
-                       contradicted each other. Every line and every count is
-                       the demo run's own data (static/demo.js), and the marks
-                       are the same ones section 03 takes apart one by one. -->
-                  <p><strong>Send it — after two fixes, and one call the models will not make for you.</strong></p>
-                  <ul class="lp-run-claims" aria-label="Three sentences from the answer and how the six models divided on each">
-                    <li><span class="cx-claim is-unanimous">The 29th belongs in the first line, ahead of the miss and the apology.</span><span class="claim-badge" aria-hidden="true"><span class="claim-ratio">6/6</span></span></li>
-                    <li><span class="cx-claim is-split">Name the day you will confirm it, so the next update is not another surprise.</span><span class="claim-badge has-dissent" aria-hidden="true"><span class="claim-ratio">4/6</span></span></li>
-                    <li><span class="cx-claim is-major">Keep the closing question, or cut it — three models each way.</span></li>
-                  </ul>
-                  <p class="lp-run-result-open">A single answer would have handed you all three as settled.</p>
-                  <div class="lp-run-provenance">
-                    <span><b>Agent + 6 models</b> · 24 s · agreement <b>45/100</b></span>
-                    <span class="lp-run-provenance-tabs">
-                      <span>Differences <b>3</b></span>
-                      <span>Model answers <b>6</b></span>
-                    </span>
+                  <div class="lp-agent-evidence" data-run-evidence>
+                    <span class="lp-agent-agreement"><b>45</b>/100 agreement</span>
+                    <span class="lp-agent-link"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20v-7M12 13 5 6M12 13l7-7M5 11V6h5M14 6h5v5"/></svg>Contradictions <b>2</b></span>
+                    <span class="lp-agent-link"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h12v10H8l-4 4V4ZM16 8h4v12l-4-4h-4"/></svg>Answers <b>6</b></span>
                   </div>
-                </div>
                 </div>
               </div>
             </div>
@@ -649,7 +591,7 @@
 
   {% include "partials/public_footer.html" %}
 
-  <script defer src="/static/js/landing-scenes.js?v=20261002-agent-run"></script>
+  <script defer src="/static/js/landing-scenes.js?v=20261002-agentturn"></script>
   <script defer src="/static/js/landing-insights.js?v=20260815-claimmark1"></script>
   <script>
     document.addEventListener("DOMContentLoaded", () => {

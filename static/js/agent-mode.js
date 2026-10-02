@@ -361,7 +361,7 @@
     const hint = document.getElementById("attachMenuHint");
     if (hint) {
       hint.dataset.uploadHint ||= hint.textContent;
-      hint.textContent = beta ? "PDF, Word, text and images · files stay available in this chat for 30 days." : hint.dataset.uploadHint;
+      hint.textContent = beta ? "PDF, Word, text, images · kept 30 days" : hint.dataset.uploadHint;
     }
     const trigger = document.getElementById("attachTrigger");
     if (trigger) {
@@ -408,6 +408,8 @@
     bar.dataset.runMode = mode;
     document.getElementById("composerModeDescription").textContent = window.App.runMode.copy(mode).description;
     const models = window.App.modelPrefs.filter(pref => document.getElementById(pref.checkId)?.checked);
+    const comparisonCount = document.querySelector("#agentComparisonMenuOption .attach-menu-value");
+    if (comparisonCount) comparisonCount.textContent = String(models.length);
     const icons = document.getElementById("composerModelIcons");
     const reasoningOn = !beta && !!document.getElementById("reasoningToggle")?.checked;
     for (const [buttonId, stateId] of [["composerReasoningToggle", "composerReasoningState"], ["agentReasoningMenuOption", "agentReasoningMenuState"]]) {
@@ -429,7 +431,7 @@
     const attachButton = document.getElementById("composerAttachButton");
     if (attachButton) {
       attachButton.disabled = false;
-      attachButton.title = `Add attachment${window.isUserPlus ? "" : " · Plus"}`;
+      attachButton.title = "Add attachment";
     }
     const labels = models.map(pref => {
       const select = document.getElementById(pref.selectId);
@@ -809,7 +811,7 @@
   });
   // Both modes share the upload path: in Agent Beta attachments.js keeps the
   // file in the composer and agent-workspace.js uploads it to the private
-  // chat store on send. The upload option carries the Plus check.
+  // chat store on send. The upload option carries the sign-in check.
   document.getElementById("composerAttachButton")?.addEventListener("click", function () {
     document.getElementById("attachUploadOption")?.click();
   });

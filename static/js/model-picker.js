@@ -464,7 +464,7 @@
     }
 
     // One chip for two choices (Agent): the chat model by name, then how many
-    // models it is compared with ("Gemini 3.8 Flash +6"). The count stays
+    // models it is compared with ("Claude Opus 5.5 +6"). The count stays
     // whole while a long model name gives way.
     let countLabel = "";
     let ariaLabel = `${select.getAttribute("aria-label") || "Choose model"}: ${displayLabel}`;

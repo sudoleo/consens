@@ -271,11 +271,19 @@ Betriebsfragen und Quellen: `docs/legal-review-2026-09-05.md`. Die primäre
 Navigation beschränkt sich auf Product, Watches, Topics, Questions, Benchmark
 und die App-CTA; Model guide und About liegen im Footer. Seit 2026-10-02
 erzählt die Landingpage Agent als Standard: Hero „One agent does the work. Six
-models check it.“, Modell-Chip im Agent-Format („Gemini 3.8 Flash +6“), Szene 02
-(`#agent-mode`) zeigt einen Agent-Turn (Planning → Six models → Answer → Answer
-check; Wörter in `landing-scenes.js`, Schritt-Schlüssel und CSS unverändert),
-Szene 03 und Watch sprechen von „answer“ statt „consensus“. Die Demo hinter dem
-Hero bleibt der clientseitige Consensus-Lauf. Der Landing-Hero
+models check it.“, Composer-Mockups wie in /app ((+), Moduswähler „Agent ⌄“,
+rechts Modell-Chip „Claude Opus 5.5 +6 ⌄“; Lippe `partials/composer_toolbar_mockup.html`
+mit Check contradictions · Reasoning Auto · Attach · Modell-Icons, ohne eigenes
+Fenster um Szene 01). Szene 02 (`#agent-mode`, `.lp-agent`) baut seit
+2026-10-02 einen Agent-Turn so nach, wie `agent-activity.js`/`agent-review.js`
+ihn zeichnen: Uhr „Working for …s“ → „Thought for 24s“, Agent-Notizen,
+„Comparing perspectives…“ mit sechs nacheinander fertig werdenden Modell-Icons,
+eine Live-Statuszeile (Writing answer… / Checking the answer…), gestreamte
+Antwort, danach Markierungen und Evidenzzeile („45/100 agreement ·
+Contradictions 2 · Answers 6“); keine Ladebalken mehr. Treiber
+`landing-scenes.js` (`buildRunScene`, Standbild bei reduced motion = fertiger
+Turn über `render.still`). Szene 03 und Watch sprechen von „answer“ statt
+„consensus“. Der Landing-Hero
 ist seit 2026-07-17 demo-first: Ein klickbares Input-Feld (Look des /app-Inputs,
 "Try the demo"-Button, Provider-Chips darunter) verlinkt auf `/app?demo=1`;
 Landing-Hero und App-Composer teilen die `.demo-action`-Gestaltung aus
@@ -325,7 +333,17 @@ Streams wird aus den lokalen HTML-Vorlagen reines Markdown in
 nicht als Antwort. Alle sechs Texte enden mit `responseState=complete`.
 Die Demo verwendet bei deaktiviertem Agent Mode ebenfalls
 `enterDirectComparisonView()` statt eigener Hero-Klassen, damit die Antworten
-im gemeinsamen Thread-Layout sichtbar bleiben. Sie bleibt vollständig clientseitig und ruft weder
+im gemeinsamen Thread-Layout sichtbar bleiben. Seit 2026-10-02 spielt sie bei
+der Moduswahl Agent (Default, auch für Gäste von der Landing) einen Agent-Turn
+(`runAgentDemoFlow`): `App.agentChat.demoView(true)` hält `#agentAnswer`
+sichtbar und setzt `body.single-agent-active.agent-demo-active` (auch ohne
+Agent-Zugang); die Demo rendert Aktivität über `App.agentActivity.render`, die
+Antwort per `renderMarkdownStream`, danach ein lokales `agent_review` mit
+einer Comparison und dem Demo-`differencesData` über `App.agentReview.render`
+(Marken, 45/100, Answers/Contradictions im Antwortleser). Ein echter Lauf
+(`registry.visible()`), der Hero-Zustand oder „New chat“ beenden die
+Demo-Ansicht. Compare und Consensus behalten ihre bisherigen Demo-Abläufe.
+Sie bleibt vollständig clientseitig und ruft weder
 `recordModelVote` noch `/consensus`/Bookmark-Persistenz auf; Demo-Läufe verändern
 damit weder das Best-answer-Nutzungssignal noch `differences_stats`.
 Produktgeschichte führt danach über Ask/Run/Decide zum vierten
@@ -1868,7 +1886,8 @@ Der Configuration-Tab liegt im inkludierten Partial `partials/admin_prompt_confi
   einen transient fehlgeschlagenen `/user_status`-Startcheck in derselben
   Sitzung heilen. Der dynamische Account-Menü-Außenklick-Listener wird bei
   jedem Token-Callback entfernt, bevor ein neuer gebunden wird.
-- **`static/demo.js`** (ES-Modul) — Demo-Flow (`runDemoFlow`) für die „Demo"-Query;
+- **`static/demo.js`** (ES-Modul) — Demo-Flow (`runDemoFlow`, im Agent-Modus
+  `runAgentDemoFlow` auf der echten Agent-Oberfläche) für die „Demo"-Query;
   zeigt Gästen nach Abschluss der Demo am Eingabebereich eine Login-/Registrierungs-
   Aufforderung, ohne die Demo-Frage aus dem deaktivierten Feld zu entfernen, und
   beendet beim Start denselben Hero-Leerzustand wie eine echte Anfrage.
@@ -1969,7 +1988,7 @@ sichtbar und werden bei der Auswahl abgelehnt. Der statische Katalog hält auße
 die separat geprüften Delegationsfähigkeiten; er begrenzt die Chatmodellauswahl nicht.
 
 Chatmodell und Vergleichsmodelle teilen sich seit 2026-10-01 EINEN Chip in
-`.composer-models` (`.agent-model-picker`, Label „Gemini 3.8 Flash +6“: Name
+`.composer-models` (`.agent-model-picker`, Label „Claude Opus 5.5 +6“: Name
 kürzt, `.model-picker-display-count` bleibt ganz). `renderControls` verknüpft
 `#consensusModelDropdown` über `App.linkModelPicker` in dessen Menü; der
 Consensus-Chip (`.consensus-model`) ist im Agent-Modus `hidden` und kehrt außerhalb
@@ -3592,9 +3611,12 @@ Chat = eine Zeile [(+) Modus][Feld][Modelle][Senden], ab der zweiten Textzeile
 über [(+) Modus … Senden]; Handy eingeklappt = [(+)][Feld][Senden], Anhänge
 und Zitat bleiben darüber sichtbar. (+) und Modus stehen nie woanders, Senden
 immer rechts außen. Alle Picker der Zeile teilen eine Optik (ruhiges Label mit
-Chevron, der Modus mit leichter Fläche). Pro Modus gibt es genau EINEN
+Chevron, der Modus mit leichter Fläche). Das (+)-Menü `#attachMenu` hat seit
+2026-10-02 eine Zeilenanatomie (`composer.css`, „The (+) menu“): 16-px-Icon ·
+Label (höchstens eine kurze Zeile darunter) · Wert mit Chevron oder Schalter;
+„Add files“ ohne Stufen-Badge, Comparison models zeigt die Anzahl. Pro Modus gibt es genau EINEN
 Modell-Chip; er nennt nur, wer antwortet („6 models · Balanced“ mit Consensus,
-„6 models“ in Compare, „Gemini 3.8 Flash +6“ in Agent: Chatmodell plus Zahl
+„6 models“ in Compare, „Claude Opus 5.5 +6“ in Agent: Chatmodell plus Zahl
 der Vergleichsmodelle, deren Menü beide Abschnitte trägt), nie den Modusnamen.
 
 ### Consensus-Lauf (historisch „Agent Mode“)
@@ -3770,7 +3792,7 @@ steht das Raster einspaltig, mit derselben fixierten Eingabe und Scrollreserve
 wie die Antworten. Eine explizite Wahl (`App.runMode.set`) ueberschreibt den
 Default dauerhaft.
 
-### Attachments (ab Plus)
+### Attachments (alle Konten seit 2026-10-02)
 Noch nicht gesendete Dateien stehen als kompakte Vorschau-/Entfernen-Chips in
 der Leiste unter dem Eingabefeld. `attachments.js` verschiebt dieselbe
 `#attachmentBar` auf dem Startbildschirm in die `#composerModeBar`; in einem Chat
@@ -3805,8 +3827,16 @@ Metadaten (Name/Typ/Größe) — siehe `bookmarks.py::sanitize_attachment_meta`.
 Bilder können zusätzlich zum Dateiauswahldialog per Paste im `#questionInput`
 angehängt werden. Drag-and-drop auf `.chat-input-container` akzeptiert wie der
 Dateiauswahldialog die vollständige PDF/DOCX/TXT/MD/CSV/PNG/JPEG/WebP-Whitelist;
-alle Wege nutzen dasselbe Tier-Gate (`entitlements.attachments`, also Plus und
-Pro) sowie dieselben Anzahl-/Größenlimits.
+alle Wege nutzen dasselbe Gate sowie dieselben Anzahl-/Größenlimits. Seit
+2026-10-02 ist `entitlements.attachments` für jede Stufe wahr (Dateien kosten
+Tokens aus dem gemeinsamen Kontingent); nötig ist nur ein Konto: `/ask_*` lässt
+Anhänge nur mit verifiziertem Token zu („Sign in to attach files.“), der
+Client öffnet für Gäste den Login statt des Dateidialogs (`canAttach()` in
+`attachments.js`). Agent-Uploads (`POST /agent/chats/{id}/files`) haben
+zusätzlich 30 Uploads je 10 Minuten pro Konto (`api_uid_limiter`,
+`agent:upload`) und einen Speicher je Stufe aus
+`agent_files.UPLOAD_QUOTAS` (Free 25 Dateien/25 MB, Plus/Pro 100/100 MB;
+generierte Dokumente nutzen die Standardgrenzen).
 Solange ein sendbarer Anhang vorliegt, schließt der Client DeepSeek sowohl im
 sichtbaren Auswahlzustand als auch defensiv im tatsächlichen Request-Fan-out aus.
 Base64 wird anhand der kodierten Länge **vor** dem Dekodieren begrenzt. DOCX
@@ -4865,7 +4895,14 @@ CLI mit `firebase deploy --only firestore:rules,firestore:indexes`):
   multi-worker-feste Bookmark-Anzahl/-Bytes sowie Feedback-Cooldown/-Tageszahl;
   weder UID noch E-Mail stehen im Dokumentpfad. `model_votes/{sha256(uid:result)}`
   bindet genau einen Vote an Owner, Pending Result und serverseitigen Gewinner.
-  Erst derselbe Firestore-Commit erhöht `leaderboard/{provider}`.
+  Erst derselbe Firestore-Commit erhöht `leaderboard/{provider}`. Seit
+  2026-10-02 zählen auch Agent-Turns: `AgentRunStore.finish_run` schreibt bei
+  erfolgreichem, geprüftem Turn (`agent_review.status` succeeded/partial) in
+  derselben Transaktion `model_votes/{sha256(uid:agent:chat:turn:BestModel)}`
+  (`source: "agent"`, `vote_subject_id: agent:{turn}`) und erhöht
+  `leaderboard/{family}.BestModel` — Pick aus dem Check der breitesten
+  Comparison (`persistence_guard.agent_best_model_pick`, Alias Claude →
+  Anthropic). Unter `MOCK_LLM=1` wird nichts geschrieben.
 - `memory_edit_usage/{sha256(uid)}` und `global_usage/memory-edit-YYYY-MM-DD` —
   persistente per-User-/Minuten-/Tages- und globale Tagesreservierungen samt
   kurzem In-flight-Lease; keine Memory- oder Feedback-Inhalte. Idempotenz- und

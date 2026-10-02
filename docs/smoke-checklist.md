@@ -105,7 +105,7 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       inklusive unbekannter/offener Messungen prüfen. Automatisiert durch
       `test_agent_runs.py`, `agent-chat.test.mjs` und
       `test_agent_chat_frontend.py` (Browser-APIs gemockt).
-      Agent zeigt in `.composer-models` genau EINEN Chip („Gemini 3.8 Flash
+      Agent zeigt in `.composer-models` genau EINEN Chip („Claude Opus 5.5
       +6“: Chatmodell + Zahl der Vergleichsmodelle, nie der Modusname); sein
       Menü öffnet mit „Agent“ (Modell, Reasoning) und „Compare with“
       (Presets/Custom, 2–6 Modelle). Agent-Modell darin per Maus/Tastatur
@@ -161,14 +161,17 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       Inline-Marker und Source-check-Status öffnen weiterhin die richtige
       Karte. Automatisiert: `tests/e2e/test_agent_comparison_frontend.py`
       (`test_differences_reader_stays_calm_with_missing_models`).
-- [ ] Agent-Run: Stepper-Kopf zeigt erledigte/aktive/offene Schritte, Preset
+- [ ] Landingpage-Szene 02 scrubbt einen Agent-Turn wie in /app (Uhr,
+      Notizen, Modell-Icons 0→6, Writing/Checking, Marken, 45/100) ohne
+      Höhensprung der Karte; Reduced Motion zeigt den fertigen Turn.
+- [ ] Consensus-Run: Stepper-Kopf zeigt erledigte/aktive/offene Schritte, Preset
       und Uhr; schmal (320/390 px) eine Zeile mit vier Segmenten. Modellzeilen
       zeigen Icon, Balken und `Writing`/`Thinking`/`Waiting`, danach nur die
       Zeit bzw. `No answer`/`Skipped`/`Canceled`; ausgefallene Modelle sinken
       nach unten und der Hinweis darunter nennt sie einmal. Empfangene Zeichen
       stehen im Tooltip, Balken bleiben monoton, neue oder gewechselte Runs
       zeigen keine fremden Werte. Light/Dark passen; Reduced Motion bleibt
-      statisch. Landingpage-Szene 02 zeigt denselben Aufbau. Screenreader lesen nur Phasen-/Abschlusswechsel vor, Skip ist
+      statisch. Screenreader lesen nur Phasen-/Abschlusswechsel vor, Skip ist
       per Tastatur erreichbar. Automatisiert: `test_consensus_live_progress.py`
       (isolierte Browser-Komponente) und `run-progress-scope.test.mjs`.
       Neue Chunks zaehlen ruhig hoch, bleiben hoechstens beim empfangenen
@@ -743,14 +746,18 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
 ## Auth / Usage / Tier
 
 - Mit Free mehrere gesperrte Funktionen anklicken (High Quality,
-  Anhänge, Resolve): ein kurzer Hinweis wird ersetzt, kein Vollbild-Dialog;
+  Resolve): ein kurzer Hinweis wird ersetzt, kein Vollbild-Dialog;
   Frage und Modellauswahl bleiben erhalten und der Composer bleibt bedienbar.
   Nach fünf Sekunden verschwindet der Hinweis automatisch; ein weiterer
   Klick auf eine gesperrte Funktion startet die fünf Sekunden erneut.
 - „About early access“ im Hinweis oder „Early access“ in der Sidebar öffnet
   die kurze Erklärung mit Kontaktmail. Schließen, Escape, Tab-Schleife und
-  Fokus-Rückgabe auf Desktop und Mobil prüfen. Plus darf Anhänge/Resolve,
+  Fokus-Rückgabe auf Desktop und Mobil prüfen. Plus darf Resolve,
   Pro alle vorhandenen Funktionen weiterhin direkt nutzen.
+- [ ] Anhänge für alle Konten: Free öffnet über (+) → „Add files“ den
+      Dateidialog (kein Stufen-Badge), ein Gast bekommt stattdessen das
+      Login-Modal. Im Agent-Modus meldet der 26. gespeicherte Upload eines
+      Free-Kontos „File storage limit reached (25 files or 25 MB)“.
 - [ ] E-Mail-Registrierung mit neuer und bestehender Adresse zeigt denselben
       neutralen „Check your inbox“-Zustand; die `/register`-Bodies sind exakt
       gleich und enthalten weder UID/E-Mail noch Custom-Token. Das eingesendete
@@ -793,6 +800,11 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
 
 ## Demo & Sonstiges
 - [ ] „Demo"-Query startet den Demo-Flow (demo.js Integration intakt).
+- [ ] Moduswahl Agent (auch als Gast über `/app?demo=1`): die Demo spielt einen
+      Agent-Turn — „Working for …s“, Planungsnotiz, „Comparing perspectives…“,
+      gestreamte Antwort, „Checking the answer…“ mit Schimmer, danach „Thought
+      for …s“, Markierungen und Evidenzzeile mit 45/100, Contradictions 2,
+      Answers 6 (öffnet alle sechs Antworten). „New chat“ beendet die Ansicht.
 - [ ] Demo zeigt 52/100 „Partial agreement" (amber), drei Differences-Karten
       (kritisch: Schlusszeile, klein: Ursache benennen, Gewichtung: Entschuldigung
       oder Plan) und sechs Claim-Badges — davon 5/6 und 4/6 mit Dissens. Alle

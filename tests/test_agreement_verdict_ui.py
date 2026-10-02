@@ -96,7 +96,7 @@ def test_public_mockups_use_the_same_score_semantics():
         'style="--val:45" title="Agreement score 45/100"' in landing
         and '<span class="verdict-headline">Partial agreement</span>' in landing
     )
-    assert "agreement <b>45/100</b>" in landing
+    assert "<b>45</b>/100 agreement" in landing
     # Der Landing-Walkthrough zeigt denselben Lauf wie die Demo in /app: unter
     # 65 faerbt der Verdict-Balken amber, sonst behauptet das Mockup eine Ruhe,
     # die der Score nicht deckt.

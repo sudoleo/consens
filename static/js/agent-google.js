@@ -275,8 +275,8 @@
       const option = node('button', '', 'attach-menu-item agent-google-menu-option');
       option.type = 'button'; option.id = 'agentGoogleMenuOption'; option.hidden = true;
       option.setAttribute('aria-haspopup', 'dialog');
-      const state = node('span', 'Off', 'agent-google-menu-state'); state.id = 'agentGoogleMenuState';
-      option.append(svg('google', ''), node('span', 'Google data'), state);
+      const state = node('span', 'Off', 'agent-google-menu-state attach-menu-value'); state.id = 'agentGoogleMenuState';
+      option.append(svg('google', ''), node('span', 'Google data', 'attach-menu-label'), state);
       option.addEventListener('click', event => { event.stopPropagation(); App.closeAttachMenu?.(); open(document.getElementById('attachTrigger')); });
       comparison.after(option);
     }

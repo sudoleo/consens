@@ -77,7 +77,8 @@ function boot({ withCanvas = true } = {}) {
     }
   );
 
-  harness.window.App.state.set("isUserPlus", true, "userTier");
+  // Files need an account (every tier since 2026-10-02).
+  harness.window.auth = { currentUser: { uid: "u1" } };
   harness.alerts = alerts;
   harness.drawn = drawn;
   return harness;

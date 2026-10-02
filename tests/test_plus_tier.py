@@ -73,9 +73,11 @@ def test_plus_gets_the_features_but_not_the_expensive_models():
     assert plus.premium_models is False
 
 
-def test_free_gets_nothing_and_pro_gets_everything():
+def test_free_gets_attachments_only_and_pro_gets_everything():
     free = entitlements_for(TIER_FREE)
-    assert not any([free.attachments, free.resolve, free.premium_models])
+    # Files are open to every account since 2026-10-02 (paid from the token account).
+    assert free.attachments is True
+    assert not any([free.resolve, free.premium_models])
     pro = entitlements_for(TIER_PRO)
     assert all([pro.attachments, pro.resolve, pro.premium_models])
 
@@ -191,13 +193,15 @@ def test_plus_cannot_pick_a_premium_model():
     assert excinfo.value.status_code == 403
 
 
-def test_attachments_open_at_plus():
+def test_attachments_open_for_every_tier_but_not_for_guests():
     data = {"attachments": [{"name": "a.txt", "mime": "text/plain", "data": "aGk="}]}
+    for tier in (TIER_FREE, TIER_PLUS, TIER_PRO):
+        assert parse_attachments(data, attachments_allowed=entitlements_for(tier).attachments)
+    # /ask_* without an account passes attachments_allowed=False.
     with pytest.raises(HTTPException) as excinfo:
-        parse_attachments(data, attachments_allowed=entitlements_for(TIER_FREE).attachments)
+        parse_attachments(data, attachments_allowed=False)
     assert excinfo.value.status_code == 403
-    # Plus kommt durch das Gate (der Inhalt wird danach normal validiert).
-    assert parse_attachments(data, attachments_allowed=entitlements_for(TIER_PLUS).attachments)
+    assert excinfo.value.detail == "Sign in to attach files."
 
 
 # --- Firestore-Lookup ------------------------------------------------------

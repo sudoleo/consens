@@ -14,6 +14,10 @@
   // projectFrame() runs once per run on screen; viewEpoch changes whenever
   // the view leaves that run, so returning to it frames it again.
   let frameKey = '', viewEpoch = 0, framedRunId = null;
+  // The local demo (demo.js) plays a scripted Agent turn on the real answer
+  // surface, also for guests without Agent access. While it is on screen the
+  // panel stays visible; the first real run or a new chat ends it.
+  let demoView = false;
   const selections = new Map();
   const cssId = value => (window.CSS?.escape ? CSS.escape(value) : String(value).replace(/["\\]/g, '\\$&'));
   const effortCopy = {
@@ -289,6 +293,7 @@
     else if ((!agent || !canUse()) && budgetTimer) { clearInterval(budgetTimer); budgetTimer = null; }
   }
   function renderShellNow() {
+    if (demoView && (registry.visible() || document.body.classList.contains("is-hero"))) demoView = false;
     const agent = selectedMode() === "agent";
     const comparisonPicker = document.getElementById("consensusModelDropdown");
     if (comparisonPicker) {
@@ -299,8 +304,9 @@
       if (chip) chip.hidden = agent;
     }
     renderControls(agent);
-    const modeChanged = document.body.classList.contains("single-agent-active") !== agent;
-    document.body.classList.toggle("single-agent-active", agent);
+    const modeChanged = document.body.classList.contains("single-agent-active") !== (agent || demoView);
+    document.body.classList.toggle("single-agent-active", agent || demoView);
+    document.body.classList.toggle("agent-demo-active", demoView);
     App.renderComposerMode?.();
     if (modeChanged) requestAnimationFrame(() => App.resizeQuestionInput?.());
     // Only the label follows the mode; the icon and the switch's thumb stay.
@@ -332,8 +338,9 @@
         : context?.metadata.recoveryState === 'running' ? 'Check run status'
           : context?.metadata.recoveryState === 'saved' ? 'Recover saved answer' : 'Check saved answer';
     }
-    if (panel) panel.hidden = !agent || (!context && !basis);
+    if (panel) panel.hidden = demoView ? false : !agent || (!context && !basis);
     if (panel?.hidden) activityHost('');
+    if (demoView) return;
     // With the Google sheet (Package A) this only re-projects cached state; the
     // connections list loads when the Google entry is first opened.
     App.agentGoogle?.refreshControls?.();
@@ -961,7 +968,14 @@
   }
   App.agentChat = { canUse, modeState, hasValidComparisonSelection, sendBlocker, syncComposer, isSelected: () => selectedMode() === "agent",
     render: () => renderShell(), renderShell, project, send, revealPendingReview, syncPendingReview,
-    tokenBudget: () => App.tokenBudget?.current?.() || null, receiveBudget };
+    tokenBudget: () => App.tokenBudget?.current?.() || null, receiveBudget,
+    // demo.js: show (true) or release (false) the answer surface for the demo.
+    // Returns the activity host for that turn, or null when released.
+    demoView: on => {
+      demoView = Boolean(on);
+      if (demoView) { document.getElementById("agentAnswer")?.removeAttribute("hidden"); renderShell(true); return activityHost("demo"); }
+      renderShell(true); return null;
+    } };
   function refreshVisibleBudget() {
     if (document.visibilityState !== 'hidden' && canUse() && selectedMode() === 'agent' && catalogStatus === 'ready') refreshBudget(catalogOwner);
   }

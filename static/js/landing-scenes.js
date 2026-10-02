@@ -9,10 +9,10 @@
 // scrolls past, and every frame is derived from one number: how far
 // through the section you are.
 //
-// Both scenes render the real /app surfaces (the composer well, the
-// guided run block from consensus-progress.js). The steps, the status
-// words and the handover to the provenance footer are the same ones the
-// product uses, so the page cannot quietly drift away from it.
+// Both scenes render the real /app surfaces: the composer, and an Agent
+// turn as agent-activity.js and agent-review.js draw it. The status words,
+// the steps and the evidence row are the same ones the product uses, so
+// the page cannot quietly drift away from it.
 //
 // Reduced motion (or no IntersectionObserver): every scene is rendered
 // at its end state once and never touched again.
@@ -109,206 +109,133 @@
 
   // ---- Scene 02: Run --------------------------------------------------
 
-  // Phase boundaries in scroll progress for one Agent turn: plan, ask the
-  // six comparison models, write the answer, check it. The comparison owns
-  // the longest stretch for the same reason it does in a real run.
-  const PREPARE_END = 0.10;
-  const ANSWERS_END = 0.60;
-  const CONSENSUS_END = 0.78;
-  const DIFFERENCES_END = 0.92;
-
-  // Where each model lands inside the answers window, and the second it
-  // finishes on. A run is only as fast as its slowest model, so the
-  // spread is deliberate rather than six bars moving in lockstep.
-  const MODEL_FINISH = [0.28, 0.40, 0.53, 0.63, 0.79, 1.0];
-  const MODEL_START = [0.0, 0.03, 0.01, 0.06, 0.04, 0.09];
-  const ANSWERS_SECONDS = 17.4;
+  // One Agent turn, on the same surfaces agent-activity.js and
+  // agent-review.js draw in /app: a note on the plan, the comparison with
+  // the six models landing one by one, the answer written in its own step,
+  // the check on that exact text, then the marks and the evidence row. The
+  // comparison owns the longest stretch, as it does in a real run.
+  const PLAN_AT = 0.05;
+  const COMPARE_AT = 0.13;
+  const COMPARE_END = 0.54;
+  const COMPARED_AT = 0.57;
+  const WRITE_AT = 0.61;
+  const CHECK_AT = 0.80;
+  const DONE_AT = 0.91;
   const RUN_SECONDS = 24;
 
-  // The step keys stay those of the Consensus stepper (landing.css styles
-  // them); the words are the Agent turn's.
-  const STEP_ORDER = ["prepare", "answers", "consensus", "differences"];
-
-  const COMPACT = {
-    prepare: "Planning",
-    answers: "Asking six models",
-    consensus: "Writing the answer",
-    differences: "Checking the answer",
-    done: "Done"
-  };
-
-  const NEXT_LINES = {
-    prepare: "Next: six models, the answer, the check",
-    answers: "Next: the answer, then the check",
-    consensus: "Next: the answer check",
-    differences: "",
-    done: ""
-  };
-
-  const NOTES = {
-    differences: "Uninvolved judges hold the answer against all six. They do not get a vote."
-  };
-
-  const RUN_META = "Agent · Gemini 3.8 Flash + 6 models";
-
-  function clockText(seconds) {
-    const total = Math.floor(Math.max(0, seconds));
-    return Math.floor(total / 60) + ":" + String(total % 60).padStart(2, "0");
-  }
+  // Where each model lands inside the comparison. A run is only as fast as
+  // its slowest model, so the spread is deliberate.
+  const MODEL_FINISH = [0.30, 0.42, 0.55, 0.66, 0.82, 1.0];
 
   function buildRunScene(scene) {
     const run = scene.querySelector("[data-run]");
     if (!run) return null;
 
-    const steps = Array.from(scene.querySelectorAll("[data-step]"));
-    const compact = scene.querySelector("[data-run-compact]");
-    const compactCount = scene.querySelector("[data-run-compact-count]");
+    const body = scene.querySelector("[data-run-body]");
+    const clock = scene.querySelector("[data-run-clock]");
+    const log = scene.querySelector("[data-run-log]");
+    const items = Object.fromEntries(Array.from(scene.querySelectorAll("[data-run-item]"))
+      .map(el => [el.dataset.runItem, el]));
+    const compareLabel = scene.querySelector("[data-run-compare]");
     const count = scene.querySelector("[data-run-count]");
-    const meta = scene.querySelector("[data-run-meta]");
-    const next = scene.querySelector("[data-run-next]");
-    const time = scene.querySelector("[data-run-time]");
-    const track = scene.querySelector("[data-run-track]");
-    const bar = track && track.querySelector("i");
-    const note = scene.querySelector("[data-run-note]");
-    const detail = scene.querySelector("[data-run-detail]");
-    const result = scene.querySelector("[data-run-result]");
-    const rows = Array.from(scene.querySelectorAll("[data-model]"));
-    const stack = scene.querySelector("[data-run-stack]");
+    const status = scene.querySelector("[data-run-status]");
+    const models = Array.from(scene.querySelectorAll("[data-model]"));
+    const answer = scene.querySelector("[data-run-answer]");
+    const evidence = scene.querySelector("[data-run-evidence]");
+    // The answer streams in as one text across its blocks, in reading order.
+    const streams = Array.from(scene.querySelectorAll("[data-stream]")).map(el => ({ el, text: el.textContent }));
+    const total = streams.reduce((sum, item) => sum + item.text.length, 0);
+    const marks = Array.from(scene.querySelectorAll("[data-mark]"));
 
-    let lastStage = "";
+    let lastChars = -1;
 
-    // The panel must not change size while the run plays. The per-model rows
-    // still collapse when the models are done — that is the app's behaviour —
-    // but they collapse INSIDE a stack locked to its tallest state, so
-    // nothing below the mock moves and the scroll progress has a fixed
-    // reference. Measured rather than hardcoded, because the tallest state
-    // depends on how the head wraps at the current width.
+    function show(el, visible) {
+      if (el && el.hidden === visible) el.hidden = !visible;
+    }
+
+    // The panel must not change size while the run plays: the log grows and
+    // folds away, the answer grows, but inside a body locked to its tallest
+    // state, so nothing below the mock moves and the scroll progress keeps a
+    // fixed reference. Measured, because that state depends on the width.
     function remeasureRun() {
-      if (!stack) return;
-      stack.style.minHeight = "";
+      if (!body) return;
+      body.style.minHeight = "";
+      let tallest = 0;
+      for (const p of [CHECK_AT + 0.01, 1]) {
+        renderRun(p);
+        tallest = Math.max(tallest, body.offsetHeight);
+      }
+      if (tallest) body.style.minHeight = tallest + "px";
+      lastChars = -1;
+    }
 
-      // Tallest state: model rows on screen, the note line shown, the
-      // longest narrow label and the longest "Next" line. render() is a pure
-      // function of progress, so nothing has to be saved and restored.
-      const wasGone = run.classList.contains("is-gone");
-      run.classList.add("is-measuring");
-      run.classList.remove("is-gone");
-      if (detail) detail.classList.remove("is-hidden");
-      if (compact) compact.textContent = COMPACT.differences;
-      if (count) count.textContent = "6/6";
-      if (meta) meta.textContent = RUN_META;
-      if (next) next.textContent = NEXT_LINES.prepare;
-      if (note) {
-        note.classList.remove("is-hidden");
-        note.textContent = NOTES.differences;
+    function renderRun(p) {
+      const done = p >= DONE_AT;
+      const seconds = done ? RUN_SECONDS : Math.floor(span(p, 0, DONE_AT) * RUN_SECONDS);
+      if (clock) {
+        const text = done ? `Thought for ${RUN_SECONDS}s` : `Working for ${seconds}s`;
+        if (clock.textContent !== text) clock.textContent = text;
+      }
+      run.classList.toggle("is-running", !done);
+
+      // The log: notes and steps appear as they happen and fold away into
+      // the clock line once the run is over, as in /app.
+      show(log, !done);
+      show(items.plan, p >= PLAN_AT);
+      show(items.compare, p >= COMPARE_AT);
+      show(items.compared, p >= COMPARED_AT);
+
+      const share = span(p, COMPARE_AT, COMPARE_END);
+      let answered = 0;
+      models.forEach((model, i) => {
+        const landed = share >= MODEL_FINISH[i];
+        if (landed) answered += 1;
+        model.classList.toggle("is-done", landed);
+      });
+      const compared = answered === models.length;
+      if (items.compare) items.compare.classList.toggle("is-current", !compared);
+      if (compareLabel) {
+        const text = compared ? "Compared perspectives" : "Comparing perspectives…";
+        if (compareLabel.textContent !== text) compareLabel.textContent = text;
+      }
+      if (count) {
+        const text = compared ? `${models.length} answers` : `${answered} of ${models.length}`;
+        if (count.textContent !== text) count.textContent = text;
       }
 
-      const tallest = Math.max(run.offsetHeight, result ? result.offsetHeight : 0);
+      // One live status row: writing, then checking the fixed text.
+      show(items.status, p >= WRITE_AT && !done);
+      if (status) {
+        const text = p >= CHECK_AT ? "Checking the answer…" : "Writing answer…";
+        if (status.textContent !== text) status.textContent = text;
+      }
 
-      run.classList.remove("is-measuring");
-      if (wasGone) run.classList.add("is-gone");
-      if (tallest) stack.style.minHeight = tallest + "px";
-
-      // Force the next paint to rewrite everything this just overwrote.
-      lastStage = "";
+      // The answer streams in while it is written; the sheen runs while it
+      // is checked; the marks stroke on once the check is back.
+      const chars = Math.round(span(p, WRITE_AT, CHECK_AT - 0.03) * total);
+      if (chars !== lastChars) {
+        let left = chars;
+        streams.forEach(item => {
+          const take = Math.max(0, Math.min(item.text.length, left));
+          left -= take;
+          const text = item.text.slice(0, take);
+          if (item.el.textContent !== text) item.el.textContent = text;
+        });
+        lastChars = chars;
+      }
+      if (answer) {
+        answer.classList.toggle("is-streaming", p >= WRITE_AT && chars < total);
+        answer.classList.toggle("is-checking", p >= CHECK_AT && !done);
+        answer.classList.toggle("is-marked", done);
+      }
+      marks.forEach(mark => mark.classList.toggle(mark.dataset.mark, done));
+      if (evidence) evidence.classList.toggle("is-visible", done);
     }
 
     remeasureRun();
     renderRun.remeasure = remeasureRun;
-
-    function renderRun(p) {
-      let stage;
-      if (p < PREPARE_END) stage = "prepare";
-      else if (p < ANSWERS_END) stage = "answers";
-      else if (p < CONSENSUS_END) stage = "consensus";
-      else if (p < DIFFERENCES_END) stage = "differences";
-      else stage = "done";
-
-      const answered = span(p, PREPARE_END, ANSWERS_END);
-
-      // ---- per-model rows: only while the models actually answer ----
-      const modelsVisible = stage === "answers";
-      if (detail) detail.classList.toggle("is-hidden", !modelsVisible);
-
-      let done = 0;
-      rows.forEach((row, i) => {
-        const from = MODEL_START[i];
-        const to = MODEL_FINISH[i];
-        const share = stage === "prepare" ? 0 : span(answered, from, to);
-        const isDone = share >= 1;
-        if (isDone) done += 1;
-
-        // Before the first text a model is thinking, then it writes.
-        const state = isDone ? "done" : (share > 0 ? "writing" : "thinking");
-        if (row.dataset.state !== state) row.dataset.state = state;
-        const rowBar = row.querySelector(".lp-run-model-track i");
-        if (rowBar) rowBar.style.setProperty("--p", (share * 100).toFixed(1) + "%");
-
-        const rowTime = row.querySelector(".lp-run-model-time");
-        if (rowTime) {
-          rowTime.textContent = isDone
-            ? (to * ANSWERS_SECONDS).toFixed(1) + "s"
-            : (state === "writing" ? "Writing" : "Thinking");
-        }
-      });
-      if (stage !== "prepare" && stage !== "answers") done = rows.length;
-
-      // ---- stepper: done, active, still to come ----
-      run.dataset.stage = stage;
-      const current = STEP_ORDER.indexOf(stage);
-      steps.forEach((item, i) => {
-        const status = stage === "done" || i < current ? "done"
-          : (i === current ? "active" : "pending");
-        if (item.dataset.status !== status) item.dataset.status = status;
-        if (item.dataset.step === "prepare") {
-          const label = item.querySelector("[data-step-label]");
-          const text = status === "active" ? "Planning" : "Planned";
-          if (label && label.textContent !== text) label.textContent = text;
-        }
-      });
-
-      const counted = stage === "answers" ? done + "/" + rows.length : "";
-      if (count) count.textContent = counted;
-      if (compactCount) compactCount.textContent = counted;
-      if (time) {
-        time.textContent = clockText(
-          stage === "done" ? RUN_SECONDS : p * RUN_SECONDS
-        );
-      }
-
-      // Phases that cannot honestly report a share of themselves sweep
-      // instead of pretending to know a percentage — exactly as in /app.
-      if (track) {
-        track.classList.toggle(
-          "is-indeterminate",
-          stage === "prepare" || stage === "consensus" || stage === "differences"
-        );
-      }
-      if (bar) {
-        const pct = stage === "answers"
-          ? (done / rows.length) * 100
-          : (stage === "done" ? 100 : 0);
-        bar.style.setProperty("--p", pct.toFixed(1) + "%");
-      }
-
-      if (stage !== lastStage) {
-        if (compact) compact.textContent = COMPACT[stage];
-        if (meta) meta.textContent = stage === "prepare" ? "" : RUN_META;
-        if (next) next.textContent = NEXT_LINES[stage];
-        if (note) {
-          note.textContent = NOTES[stage] || "";
-          note.classList.toggle("is-hidden", !NOTES[stage]);
-        }
-      }
-
-      // ---- handover: the run collapses, the answer takes over ----
-      const finished = stage === "done";
-      run.classList.toggle("is-gone", finished);
-      if (result) result.classList.toggle("is-visible", finished);
-
-      lastStage = stage;
-    }
-
+    // The still frame for reduced motion is the finished turn.
+    renderRun.still = 1;
     return renderRun;
   }
 
@@ -333,10 +260,9 @@
 
       if (reducedMotion) {
         // A still frame, chosen so each scene shows what it is about: the
-        // finished question with its toolbar, ready to send for 01; a run mid-flight (two steps checked off,
-        // the judge working) for 02. Rendering 02 at the very end would
-        // leave the page with no run on it at all.
-        render(0.86);
+        // finished question with its toolbar, ready to send, for 01; the
+        // finished turn with its marks and evidence for 02 (render.still).
+        render(typeof render.still === "number" ? render.still : 0.86);
         scene.classList.add("is-static");
       }
     });

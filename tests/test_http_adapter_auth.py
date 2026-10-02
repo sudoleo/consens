@@ -79,7 +79,7 @@ def test_real_topic_admin_put_list_and_version_have_persisted_results(
 
 
 @pytest.mark.parametrize(
-    "tier,role,is_pro,agent,attachments",
+    "tier,role,is_pro,agent,resolve",
     [
         ("free", "", False, True, False),
         ("plus", "", False, True, True),
@@ -88,7 +88,7 @@ def test_real_topic_admin_put_list_and_version_have_persisted_results(
     ],
 )
 def test_user_status_uses_real_tier_and_role_payload(
-    http_adapter, monkeypatch, tier, role, is_pro, agent, attachments
+    http_adapter, monkeypatch, tier, role, is_pro, agent, resolve
 ):
     h = http_adapter
     h.db.collection("users").document("owner").set({"tier": tier, "role": role})
@@ -102,7 +102,7 @@ def test_user_status_uses_real_tier_and_role_payload(
         data["agent_access"],
         data["attachments"],
         data["resolve"],
-    ) == (tier, is_pro, agent, attachments, attachments)
+    ) == (tier, is_pro, agent, True, resolve)  # attachments: every tier since 2026-10-02
     assert data["uid"] == "owner" and data["token_budget"]["used"] == 0
 
 

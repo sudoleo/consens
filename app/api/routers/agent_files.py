@@ -6,10 +6,10 @@ from urllib.parse import quote
 
 from app.api.routers.agent import require_agent_access
 from app.api.routers.chat_history import _chat_uid, _raise_store_error
-from app.core.entitlements import entitlements_for
+from app.core.entitlements import entitlements_for, normalize_tier
 from app.core.security import TierStatusUnavailable, db_firestore, get_user_tier, is_user_admin
-from app.core.rate_limit import limiter
-from app.services.agent_files import AgentFiles, FileUnavailable, StorageNotConfigured
+from app.core.rate_limit import ApiUidRateLimitExceeded, api_uid_limiter, limiter
+from app.services.agent_files import UPLOAD_QUOTAS, AgentFiles, FileUnavailable, StorageNotConfigured
 
 router = APIRouter()
 
@@ -26,16 +26,29 @@ def service(request):
     return uid, AgentFiles(db_firestore)
 
 
+# Uploads per account, on top of the per-IP limit: a burst of files is
+# extraction work and storage, whoever sends it.
+UPLOADS_PER_WINDOW = 30
+UPLOAD_WINDOW_SECONDS = 600
+
+
 def require_uploads(uid):
-    """Uploading follows the attachment rule of every mode (from Plus).
+    """Uploading follows the attachment rule of every mode (every tier since
+    2026-10-02) and returns the account's storage quota (files, bytes).
     Listing, downloading and deleting stay open: Agent writes documents into
     the same store for every account."""
     try:
-        allowed = entitlements_for(get_user_tier(uid)).attachments or is_user_admin(uid)
+        tier = normalize_tier(get_user_tier(uid))
+        admin = is_user_admin(uid)
     except TierStatusUnavailable:
         raise HTTPException(503, "Account tier is temporarily unavailable. Please retry.") from None
-    if not allowed:
-        raise HTTPException(403, "Attachments are available from Plus.")
+    if not (entitlements_for(tier).attachments or admin):
+        raise HTTPException(403, "Attachments are not available for this account.")
+    try:
+        api_uid_limiter.check(uid, "agent:upload", UPLOADS_PER_WINDOW, window_seconds=UPLOAD_WINDOW_SECONDS)
+    except ApiUidRateLimitExceeded:
+        raise HTTPException(429, "Too many uploads in a short time. Please wait a few minutes.") from None
+    return UPLOAD_QUOTAS["pro"] if admin else UPLOAD_QUOTAS.get(tier, UPLOAD_QUOTAS["free"])
 
 
 def invoke(operation, uid):
@@ -55,10 +68,10 @@ def invoke(operation, uid):
 @limiter.limit("10/minute")
 def upload_file(request: Request, chat_id: str, payload: Upload):
     uid, files = service(request)
-    require_uploads(uid)
+    quota = require_uploads(uid)
     def operation():
         files.expire(uid, chat_id)
-        return files.upload(uid, chat_id, payload.model_dump())
+        return files.upload(uid, chat_id, payload.model_dump(), limits=quota)
     return JSONResponse({"file": invoke(operation, uid)}, headers={"Cache-Control": "private, no-store"})
 
 

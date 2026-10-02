@@ -1,18 +1,15 @@
 {# Shared, non-interactive preview of the /app starting toolbar. #}
-<div class="lp-composer-tools" role="group" aria-label="Composer preview: Agent mode, Check contradictions on, reasoning off, attachments and six comparison models">
-  <span class="lp-composer-tool lp-composer-agent">
-    <i class="lp-composer-mode-dot" aria-hidden="true"></i>
-    <span class="lp-composer-agent-name">Agent</span>
-  </span>
+{# The mode sits in the field's own row (left of the models), as in /app. #}
+<div class="lp-composer-tools" role="group" aria-label="Composer preview: Check contradictions on, reasoning on auto, attachments and six comparison models">
   <span class="lp-composer-tool lp-composer-sources" title="Check contradictions on · Check contradictions against existing sources" aria-label="Check contradictions on">
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H5v18h14V8Z M14 3v5h5 M8 14l3 3 5-6"/></svg>
     <span class="lp-composer-tool-label">Check contradictions</span><span class="lp-composer-state is-on lp-composer-tool-label">On</span>
   </span>
-  <span class="lp-composer-tool" title="Reasoning off · think longer before answering" aria-label="Reasoning off">
+  <span class="lp-composer-tool" title="Reasoning auto · the model decides how long to think" aria-label="Reasoning auto">
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.6 6.4L21 12l-6.4 2.6L12 21l-2.6-6.4L3 12l6.4-2.6Z"/></svg>
-    <span class="lp-composer-tool-label">Reasoning</span><span class="lp-composer-state lp-composer-tool-label">Off</span>
+    <span class="lp-composer-tool-label">Reasoning</span><span class="lp-composer-state lp-composer-tool-label">Auto</span>
   </span>
-  <span class="lp-composer-tool" title="Attachments · Plus" aria-label="Attachments">
+  <span class="lp-composer-tool" title="Attachments" aria-label="Attachments">
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 12 7-7a4 4 0 0 1 5.7 5.7L10.5 20.9a6 6 0 0 1-8.5-8.5L12 2.5M6 14l9-9" transform="translate(1 1) scale(.85)"/></svg>
     <span class="lp-composer-tool-label">Attach</span>
   </span>

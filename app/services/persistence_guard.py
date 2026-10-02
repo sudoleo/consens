@@ -373,6 +373,57 @@ def record_model_vote(
     return bool(_run_transaction(db, persist))
 
 
+def agent_best_model_pick(review) -> str | None:
+    """The comparison model whose answer the judge found closest to an Agent
+    answer, as a Model Pulse family label, or None.
+
+    Only a checked answer counts: the review succeeded or partly succeeded,
+    and the pick comes from the check of the widest comparison (most answers)
+    that names one. One Agent turn can therefore add at most one pick, like a
+    Consensus run.
+    """
+    from app.core import config as cfg
+
+    if not isinstance(review, dict) or review.get("status") not in {"succeeded", "partial"}:
+        return None
+    sizes = {c.get("id"): len(c.get("answers") or []) for c in review.get("comparisons") or []}
+    best, widest = None, -1
+    for check in review.get("checks") or []:
+        data = check.get("differences_data") if check.get("status") in {"succeeded", "partial"} else None
+        model = str((data or {}).get("best_model") or "").strip()
+        size = sizes.get(check.get("comparison_id"), 0)
+        if model and size >= 2 and size > widest:
+            best, widest = model, size
+    if not best:
+        return None
+    best = cfg.LEADERBOARD_MODEL_ALIASES.get(best, best)
+    return best if best in cfg.VALID_LEADERBOARD_MODELS else None
+
+
+def agent_vote_ref(db, *, uid: str, chat_id: str, turn_id: str):
+    """The single BestModel vote of one Agent turn (idempotent by turn)."""
+    key = hashlib.sha256(f"{uid}:agent:{chat_id}:{turn_id}:BestModel".encode("utf-8")).hexdigest()
+    return db.collection(VOTES_COLLECTION).document(key)
+
+
+def write_agent_vote(tx, db, vote_ref, *, uid: str, chat_id: str, turn_id: str, model: str, now: datetime | None = None):
+    """Write an Agent turn's pick inside the caller's transaction. The caller
+    has read ``vote_ref`` first (Firestore: reads before writes) and only
+    calls this when it did not exist."""
+    now = now or utcnow()
+    _set(tx, vote_ref, {
+        "schema_version": 1,
+        "owner_hash": _hash_uid(uid),
+        "result_id": f"agent:{chat_id}:{turn_id}",
+        "vote_subject_id": f"agent:{turn_id}",
+        "model": model,
+        "vote_type": "BestModel",
+        "source": "agent",
+        "created_at": now,
+    })
+    _set(tx, db.collection("leaderboard").document(model), {"BestModel": firestore.Increment(1)}, merge=True)
+
+
 def _hash_uid(uid: str) -> str:
     return hashlib.sha256(str(uid).encode("utf-8")).hexdigest()
 

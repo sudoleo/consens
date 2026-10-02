@@ -369,8 +369,8 @@ def test_configured_bucket_wins_over_automatic_local_storage(tmp_path, monkeypat
     assert module._local_dir() == ''
 
 
-@pytest.mark.parametrize("tier,status", [("free", 403), ("plus", 200), ("pro", 200)])
-def test_uploads_follow_the_attachment_tier_while_reading_stays_open(setup, monkeypatch, tier, status):
+@pytest.mark.parametrize("tier,status", [("free", 200), ("plus", 200), ("pro", 200)])
+def test_uploads_are_open_to_every_tier_while_reading_stays_open(setup, monkeypatch, tier, status):
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
     from app.api.routers import agent_files as router
@@ -387,3 +387,37 @@ def test_uploads_follow_the_attachment_tier_while_reading_stays_open(setup, monk
     response = client.post(f'/agent/chats/{chat}/files', json={'name': 'a.txt', 'data': base64.b64encode(b'x').decode()})
     assert response.status_code == status
     assert client.get(f'/agent/chats/{chat}/files').status_code == 200
+
+
+def test_free_uploads_have_a_smaller_store_than_plus(setup):
+    from app.services.agent_files import UPLOAD_QUOTAS
+    files, chat = setup
+    free_files, free_bytes = UPLOAD_QUOTAS["free"]
+    assert (free_files, free_bytes) < UPLOAD_QUOTAS["plus"]
+    files.db.collection("users").document("owner").collection("chat_state").document("file_quota").set(
+        {"count": free_files, "bytes": 1})
+    item = {'name': 'a.txt', 'data': base64.b64encode(b'x').decode()}
+    with pytest.raises(FileUnavailable, match="File storage limit reached"):
+        files.upload('owner', chat, item, limits=UPLOAD_QUOTAS["free"])
+    # The same store still takes the file under the Plus quota.
+    assert files.upload('owner', chat, item, limits=UPLOAD_QUOTAS["plus"])["name"] == 'a.txt'
+
+
+def test_uploads_are_limited_per_account(setup, monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from app.api.routers import agent_files as router
+    from app.core.rate_limit import ApiUidRateLimiter, limiter
+    files, chat = setup
+    monkeypatch.setattr(router, 'db_firestore', files.db)
+    monkeypatch.setattr(router, '_chat_uid', lambda request: 'owner')
+    monkeypatch.setattr(router, 'require_agent_access', lambda uid: None)
+    monkeypatch.setattr(router, 'get_user_tier', lambda uid: 'free')
+    monkeypatch.setattr(router, 'is_user_admin', lambda uid: False)
+    monkeypatch.setattr(router, 'api_uid_limiter', ApiUidRateLimiter(enabled=True))
+    monkeypatch.setattr(router, 'UPLOADS_PER_WINDOW', 2)
+    monkeypatch.setattr(limiter, "enabled", False)
+    app = FastAPI(); app.include_router(router.router)
+    client = TestClient(app)
+    body = {'name': 'a.txt', 'data': base64.b64encode(b'x').decode()}
+    assert [client.post(f'/agent/chats/{chat}/files', json=body).status_code for _ in range(3)] == [200, 200, 429]
