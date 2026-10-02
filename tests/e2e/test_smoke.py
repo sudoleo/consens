@@ -1,9 +1,9 @@
 """Playwright-Smoke-Suite: automatisiert die risikoreichsten Punkte aus
 docs/smoke-checklist.md gegen den Mock-Server (MOCK_LLM/MOCK_AUTH).
 
-Bewusst NICHT abgedeckt (Stand der ersten Iteration): Resolve-Runde,
-Share-Dialog-CRUD, Attachments, Follow-up, Bookmarks, Agent-Mode-Timer,
-Demo-Flow und das vollständige Mobile-Layout - siehe tests/e2e/README.md.
+Die Firebase-Clientintegration bleibt hier ein UI-Stub. Persistierte
+Nutzerreisen und echte Owner-/Buchungsgrenzen prueft test_persisted_journeys.py;
+weitere Abdeckungsgrenzen stehen in tests/e2e/README.md.
 """
 
 import re
@@ -66,6 +66,26 @@ def _wait_for_all_final_answers(page):
     expect(page.locator("#openaiResponse")).to_contain_text("330 metres tall", timeout=15000)
 
 
+def _wait_for_composer_width(page):
+    """Wait for the real responsive width transition, not an arbitrary delay."""
+    page.evaluate("""async () => {
+      await new Promise(requestAnimationFrame);
+      await Promise.all(document.querySelector('.container').getAnimations()
+        .map(animation => animation.finished.catch(() => {})));
+      await new Promise(requestAnimationFrame);
+    }""")
+
+
+def _show_insight_fixture(page):
+    """Renderer fixtures need a visible answer for real pointer/keyboard use."""
+    page.evaluate("""() => {
+      window.exitHeroMode(); window.revealConsensusOutput();
+      const highlights = document.getElementById('consensusHighlightsSelect');
+      highlights.value = 'all'; highlights.dispatchEvent(new Event('change'));
+    }""")
+    expect(page.locator('#consensusOutput')).to_be_visible()
+
+
 def test_app_loads_without_console_errors(app_page, get_console_errors):
     """Smoke-Checkliste 'Browser-Konsole' + Script-Ladereihenfolge (§8):
     die zentralen window.*-Vertraege muessen nach dem Laden existieren."""
@@ -77,6 +97,10 @@ def test_app_loads_without_console_errors(app_page, get_console_errors):
         ].filter((name) => typeof window[name] !== "function")"""
     )
     assert missing == [], f"Fehlende window-Funktionen (Ladereihenfolge?): {missing}"
+    assert app_page.evaluate("() => window.App.authState.snapshot()") == {
+        'known': True, 'uid': 'e2e-mock-user', 'generation': 1,
+    }
+    assert app_page.evaluate("() => window.App.state.get('userTier')") == 'free'
     assert app_page.evaluate("() => typeof window.App.consensusLifecycle") == "object"
     expect(app_page).to_have_title("Compare AI Answers | consens.io")
 
@@ -180,17 +204,22 @@ def test_question_input_grows_and_caps_on_desktop_and_mobile(app_page):
           overflowY: getComputedStyle(el).overflowY,
         })"""
     )
-    assert mobile["height"] == 180
+    assert round(mobile["height"]) == 180
     assert mobile["overflowY"] == "auto"
 
     input_box.fill("")
+    _wait_for_composer_width(app_page)
+    expect(input_box).to_have_css("height", f"{round(base_height)}px")
     reset = input_box.evaluate(
         """el => ({
           height: el.getBoundingClientRect().height,
           overflowY: getComputedStyle(el).overflowY,
+          value: el.value, placeholder: el.placeholder, inline: el.style.height,
+          scrollHeight: el.scrollHeight, width: el.getBoundingClientRect().width,
+          minHeight: getComputedStyle(el).minHeight, maxHeight: getComputedStyle(el).maxHeight,
         })"""
     )
-    assert reset["height"] == base_height
+    assert round(reset["height"]) == round(base_height), reset
     assert reset["overflowY"] == "hidden"
 
     input_box.fill("First line")
@@ -315,7 +344,8 @@ def _desktop_row_geometry(page):
             ),
             field: box("#questionInput"),
             attach: box(".attach-trigger"),
-            picker: box(".chat-input-container .model-picker-display"),
+            mode: box("#runModeControl .model-picker-display"),
+            picker: box(".composer-models .consensus-model .model-picker-display"),
             send: box("#sendButton"),
             footerVisible: !!document.querySelector(".app-footer").offsetParent,
             fieldInline: document.getElementById("questionInput").style.height,
@@ -343,9 +373,9 @@ def test_desktop_composer_is_one_row_without_a_collapsed_state(app_page):
     assert row["footerVisible"] is True
 
     # (+) ganz links, dann das Feld, dann Lauf-Schalter und Senden.
-    assert row["attach"]["x"] < row["field"]["x"] < row["picker"]["x"] < row["send"]["x"]
+    assert row["attach"]["x"] < row["mode"]["x"] < row["field"]["x"] < row["picker"]["x"] < row["send"]["x"]
     # Und alle vier wirklich auf EINER Zeile, auf derselben Mittellinie.
-    for name in ("field", "attach", "picker"):
+    for name in ("field", "attach", "mode", "picker"):
         assert abs(row[name]["mid"] - row["send"]["mid"]) <= 2, name
 
     # Ein Klick fokussiert das Feld und sonst nichts: keine Hoehenaenderung.
@@ -393,11 +423,11 @@ def test_desktop_long_question_takes_the_full_width_and_drops_the_buttons(app_pa
     # Der Text nimmt die ganze Breite ...
     assert grown["field"]["w"] > one_row["field"]["w"] + 100
     # ... und jeder Knopf steht UNTER ihm, nicht mehr daneben.
-    for name in ("attach", "picker", "send"):
+    for name in ("attach", "mode", "picker", "send"):
         assert grown[name]["y"] >= grown["field"]["bottom"] - 2, name
-    # In der Knopfzeile: (+) links, Modellchip direkt daneben, Senden rechts.
-    assert grown["attach"]["x"] < grown["picker"]["x"] < grown["send"]["x"]
-    assert grown["picker"]["x"] - (grown["attach"]["x"] + grown["attach"]["w"]) <= 16
+    # (+) und Modus bleiben links; Modelle und Senden stehen rechts.
+    assert grown["attach"]["x"] < grown["mode"]["x"] < grown["picker"]["x"] < grown["send"]["x"]
+    assert grown["mode"]["x"] - (grown["attach"]["x"] + grown["attach"]["w"]) <= 16
 
     # Zurueck zur einen Zeile, sobald das Feld leer ist.
     app_page.evaluate(
@@ -459,7 +489,7 @@ def test_desktop_one_row_keeps_the_run_switch_and_attachments_usable(app_page):
     app_page.evaluate("() => window.exitHeroMode()")
     app_page.wait_for_timeout(200)
 
-    app_page.locator(".chat-input-container .model-picker-display").click()
+    app_page.locator(".composer-models .consensus-model .model-picker-display").click()
     picker_menu = (
         app_page.locator("#consensusModelDropdown").locator("xpath=..").locator(".model-picker-menu")
     )
@@ -467,7 +497,7 @@ def test_desktop_one_row_keeps_the_run_switch_and_attachments_usable(app_page):
     assert app_page.evaluate(
         """() => {
           const b = document.querySelector(
-            ".chat-input-container .model-picker-menu"
+            ".composer-models .consensus-model .model-picker-menu"
           ).getBoundingClientRect();
           return b.top >= 0 && b.bottom <= window.innerHeight;
         }"""
@@ -695,6 +725,7 @@ def test_usage_display_is_stable_and_updates_visible_quota_panel(app_page):
 
 def test_empty_app_and_consensus_picker_do_not_scroll_unnecessarily(app_page):
     app_page.set_viewport_size({"width": 390, "height": 844})
+    _wait_for_composer_width(app_page)
     page_metrics = app_page.evaluate(
         """() => ({
           scrollHeight: document.documentElement.scrollHeight,
@@ -710,7 +741,7 @@ def test_empty_app_and_consensus_picker_do_not_scroll_unnecessarily(app_page):
         """() => {
           const selectors = [
             "#attachTrigger",
-            ".consensus-model .model-picker-display",
+            "#runModeControl .model-picker-display",
             "#sendButton",
           ];
           return selectors.map(selector => {
@@ -720,8 +751,10 @@ def test_empty_app_and_consensus_picker_do_not_scroll_unnecessarily(app_page):
         }"""
     )
     centers = [control["center"] for control in control_metrics]
-    assert max(centers) - min(centers) <= 1
+    assert max(centers) - min(centers) <= 1, control_metrics
     assert all(control["height"] == 36 for control in control_metrics)
+    models = app_page.locator('.composer-models').bounding_box()
+    assert models['y'] + models['height'] <= control_metrics[0]['top']
 
     sidebar = app_page.locator(".sidebar")
     expect(sidebar).to_have_attribute("aria-hidden", "true")
@@ -823,6 +856,12 @@ def test_consensus_renders_differences_and_agreement_score(app_page, get_console
     Consensus-Button gibt es im aktuellen UI nicht mehr."""
     app_page.set_viewport_size({"width": 390, "height": 844})
     app_page.evaluate("() => window.App.runMode.set('consensus')")
+    app_page.evaluate("""() => {
+      const highlights = document.getElementById('consensusHighlightsSelect');
+      highlights.value = 'all'; highlights.dispatchEvent(new Event('change'));
+      const counts = document.getElementById('claimCountsSwitch');
+      counts.checked = true; counts.dispatchEvent(new Event('change'));
+    }""")
     # Passage-Interaktion explizit unter Touch-Bedingungen pruefen. Die alte
     # Implementierung brach bei genau diesem Media Query vor dem Binding ab.
     app_page.evaluate(
@@ -849,7 +888,7 @@ def test_consensus_renders_differences_and_agreement_score(app_page, get_console
     expect(pipeline).to_have_attribute("data-stage", "answers")
     metrics = pipeline.evaluate(
         """(el) => {
-          const current = el.querySelector('.run-now');
+          const current = el.querySelector('.run-compact');
           return {
             height: current.getBoundingClientRect().height,
             clipped: current.scrollWidth > current.clientWidth,
@@ -897,55 +936,68 @@ def test_consensus_renders_differences_and_agreement_score(app_page, get_console
         })"""
     )
     assert footer_metrics["display"] == "grid"
-    assert footer_metrics["columns"] == 3
+    # New V4 consensus has no source list: only Differences and Answers.
+    expect(app_page.locator('#consensusSourcesTab')).to_be_hidden()
+    assert footer_metrics["columns"] == 2
+    assert len(footer_metrics["buttonHeights"]) == 2
     assert footer_metrics["scrollWidth"] <= footer_metrics["clientWidth"]
     assert all(56 <= height <= 60 for height in footer_metrics["buttonHeights"])
 
-    # Mobile: kompakte Aktions-Icons und Lauf-Fakten teilen die zweite
-    # Werkzeugzeile ohne Kollision; die drei Tabs bleiben davor prominent.
+    # On mobile the same real action controls move into the fixed header;
+    # verdict, evidence navigation and run facts remain ordered in the footer.
+    expect(app_page.locator('#mobileConversationActions #consensusFooterActions')).to_be_visible()
+    expect(app_page.locator('#runProvenance #consensusFooterActions')).to_have_count(0)
     footer_layout = app_page.locator("#runProvenance").evaluate(
         """element => {
-          const actions = element.querySelector("#consensusFooterActions").getBoundingClientRect();
-          const facts = element.querySelector(".consensus-footer-facts").getBoundingClientRect();
-          const verdict = element.querySelector("#consensusVerdict").getBoundingClientRect();
-          const tabs = element.querySelector("#consensusFooterTabs").getBoundingClientRect();
-          const overlaps = (a, b) =>
-            a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+          const facts = element.querySelector('.consensus-footer-facts').getBoundingClientRect();
+          const verdict = element.querySelector('#consensusVerdict').getBoundingClientRect();
+          const tabs = element.querySelector('#consensusFooterTabs').getBoundingClientRect();
+          const header = document.querySelector('.app-mobile-header');
           return {
-            scrollWidth: element.scrollWidth,
-            clientWidth: element.clientWidth,
-            actionsFactsOverlap: overlaps(actions, facts),
-            ordered:
-              verdict.bottom <= tabs.top + 1
-              && tabs.bottom <= actions.top + 1
-              && actions.right <= facts.left + 1,
+            scrollWidth: element.scrollWidth, clientWidth: element.clientWidth,
+            ordered: verdict.bottom <= tabs.top + 1 && tabs.bottom <= facts.top + 1,
+            headerFits: header.scrollWidth <= header.clientWidth,
           };
         }"""
     )
     assert footer_layout["scrollWidth"] <= footer_layout["clientWidth"]
-    assert footer_layout["actionsFactsOverlap"] is False
     assert footer_layout["ordered"] is True
+    assert footer_layout["headerFits"] is True
 
-    # Desktop/tablet: Share/Watch/Cite sitzen an der Oberkante der gemeinsamen
-    # Summary-Flaeche und nicht mehr vertikal in der Mitte des hohen Verdicts.
-    app_page.set_viewport_size({"width": 1000, "height": 844})
+    # Desktop: the action nodes return to the original footer, with their
+    # handlers intact. The mobile header applies through 1099px.
+    app_page.set_viewport_size({"width": 1280, "height": 844})
+    _wait_for_composer_width(app_page)
+    expect(app_page.locator('#runProvenance #consensusFooterActions')).to_be_visible()
     desktop_footer = app_page.locator("#runProvenance").evaluate(
         """element => {
           const actions = element.querySelector("#consensusFooterActions").getBoundingClientRect();
           const verdict = element.querySelector("#consensusVerdict").getBoundingClientRect();
-          const surface = getComputedStyle(element, "::before");
+          const tabs = element.querySelector('#consensusFooterTabs').getBoundingClientRect();
+          const divider = getComputedStyle(element);
           return {
-            topDelta: actions.top - verdict.top,
-            hasSummaryDivider: surface.backgroundColor !== "rgba(0, 0, 0, 0)",
+            verdictBeforeControls: verdict.bottom <= Math.min(actions.top, tabs.top) + 1,
+            sameControlRow: Math.abs(actions.top + actions.height / 2 - tabs.top - tabs.height / 2) <= 1,
+            noOverlap: tabs.right <= actions.left + 1,
+            hasFooterDivider: parseFloat(divider.borderTopWidth) > 0
+              && divider.borderTopStyle !== 'none'
+              && divider.borderTopColor !== 'rgba(0, 0, 0, 0)',
           };
         }"""
     )
-    assert 0 <= desktop_footer["topDelta"] <= 12
-    assert desktop_footer["hasSummaryDivider"] is True
+    assert desktop_footer['verdictBeforeControls'] is True
+    assert desktop_footer['sameControlRow'] is True
+    assert desktop_footer['noOverlap'] is True
+    assert desktop_footer["hasFooterDivider"] is True
     app_page.set_viewport_size({"width": 390, "height": 844})
+    _wait_for_composer_width(app_page)
 
-    app_page.evaluate("window.scrollTo(0, document.documentElement.scrollHeight)")
-    app_page.wait_for_timeout(100)
+    app_page.wait_for_function("""() => {
+      const input = document.querySelector('.input-section').getBoundingClientRect();
+      const reserve = parseFloat(getComputedStyle(document.querySelector('.container')).paddingBottom);
+      return Math.abs(reserve - input.height) <= 1 && Math.abs(innerHeight - input.bottom) <= 1;
+    }""")
+    app_page.evaluate("window.scrollTo({top: document.documentElement.scrollHeight, behavior: 'instant'})")
     result_gap = app_page.evaluate(
         """() => {
           const input = document.querySelector(".input-section");
@@ -978,7 +1030,8 @@ def test_consensus_renders_differences_and_agreement_score(app_page, get_console
     # dann keine scrollbare Strecke, sondern schlicht eine kurze Seite.
     assert result_gap["gap"] >= -2
     if result_gap["scrollable"]:
-        assert abs(result_gap["gap"]) <= 2
+        # The answer keeps the documented 24px reading pause before composer.
+        assert abs(result_gap["gap"] - 24) <= 2
 
     # Nach der fertigen Antwort bleibt die Eingabe erreichbar. Auf Mobile ist
     # die Zusatzzeile bewusst eingeklappt, bis das Feld angetippt wird.
@@ -1006,18 +1059,6 @@ def test_consensus_renders_differences_and_agreement_score(app_page, get_console
     assert app_page.evaluate(
         """() => !document.querySelector("#consensusAnswerBody .claim-badge.has-dissent")"""
     ), "Strittiger Satz: rote Marke, kein Dissens-Badge daneben"
-
-    # Marke und Quote sagen dasselbe: wo ein Badge gelb ist (Dissens), darf die
-    # Marke nicht neutral grau bleiben.
-    assert app_page.evaluate(
-        """() => Array.from(
-             document.querySelectorAll("#consensusAnswerBody .claim-badge.has-dissent")
-           ).every(badge => {
-             const span = badge.previousElementSibling;
-             return span && span.classList.contains("cx-claim")
-               && (span.classList.contains("is-split") || span.classList.contains("is-major"));
-           })"""
-    ), "Gelbe Quote braucht eine Bernstein-Marke, keine graue"
 
     # Und die Marke ist wirklich eine Flaeche, keine Unterstreichung: eine
     # Linie unter dem Satz las sich wie ein Link (User-Befund 2026-08-15).
@@ -1064,115 +1105,54 @@ def test_consensus_renders_differences_and_agreement_score(app_page, get_console
     assert panel.evaluate("el => el.open") is False, "Differences starten zugeklappt"
     expect(app_page.locator(".diff-card.is-contradiction").first).to_be_hidden()
 
-    # Alle drei Disclosures geben denselben sanften Scroll-Hinweis auf den
-    # neu sichtbaren Inhalt. Sources zielt auf den ersten Beleg, Compare
-    # answers auf die erste eingeschlossene Antwort (jeweils nach dem Layout).
-    app_page.evaluate(
-        """() => {
-          window.currentEvidenceSources = [{
-            id: "S1",
-            title: "Disclosure scroll fixture",
-            url: "https://example.org/source",
-            snippet: "A source rendered specifically for the disclosure behavior test.",
-          }];
-          window.renderEvidenceSources(window.currentEvidenceSources);
-          window.__disclosureScrollTargets = [];
-          window.__originalScrollIntoView = Element.prototype.scrollIntoView;
-          Element.prototype.scrollIntoView = function (options) {
-            window.__disclosureScrollTargets.push({
-              id: this.id || "",
-              tag: this.tagName,
-              options,
-              visible: this.getBoundingClientRect().height > 0,
-            });
-            return window.__originalScrollIntoView.call(this, options);
-          };
-        }"""
-    )
-
-    sources_tab = app_page.locator("#consensusSourcesTab")
-    sources_tab.click()
-    expect(app_page.locator("#consensusSourcesPanel li").first).to_be_visible()
-    app_page.wait_for_timeout(100)
-    source_scroll = app_page.evaluate(
-        "() => window.__disclosureScrollTargets.find(item => item.tag === 'LI')"
-    )
-    assert source_scroll["visible"] is True
-    assert source_scroll["options"]["block"] == "nearest"
-    sources_tab.click()
-
+    # Differences and Answers share the real Reader dialog. The new V4 run
+    # must not fabricate a legacy source tab or source-verification list.
+    expect(app_page.locator('#consensusSourcesList .consensus-source-item')).to_have_count(0)
+    reader = app_page.locator('#modelAnswerReader')
     model_answers_toggle.click()
-    expect(app_page.locator("#openaiResponse")).to_be_visible()
-    app_page.wait_for_timeout(100)
-    answer_scroll = app_page.evaluate(
-        "() => window.__disclosureScrollTargets.find(item => item.id === 'openaiResponse')"
-    )
-    assert answer_scroll["visible"] is True
-    assert answer_scroll["options"]["block"] == "nearest"
-    model_answers_toggle.click()
+    expect(reader).to_be_visible()
+    expect(app_page.locator('#answerReaderTitle')).to_have_text('Model answers')
+    assert reader.bounding_box()['width'] <= 390
+    expect(app_page.locator('.answer-reader-body').first).to_contain_text('mock answer')
+    expect(app_page.locator('#openaiResponse')).to_be_hidden()
+    app_page.keyboard.press('Escape')
+    expect(reader).to_be_hidden()
+    expect(model_answers_toggle).to_be_focused()
 
-    app_page.evaluate(
-        """() => {
-          Element.prototype.scrollIntoView = window.__originalScrollIntoView;
-          delete window.__originalScrollIntoView;
-          delete window.__disclosureScrollTargets;
-        }"""
-    )
+    app_page.locator('#consensusDifferencesTab').click()
+    card = app_page.locator('#answerReaderInspector .diff-card.is-contradiction').first
+    expect(card).to_be_visible()
+    # A single difference is expanded by the reader on entry. Its real
+    # disclosure must close and reopen before following the model quote.
+    expect(card).to_have_attribute('open', '')
+    card.locator('summary').click()
+    expect(card).not_to_have_attribute('open', '')
+    card.locator('summary').click()
+    expect(card).to_have_attribute('open', '')
+    jump = card.locator('.diff-jump-link').first
+    expect(jump).to_be_visible()
+    jump.click()
+    expect(app_page.locator('.answer-reader-body mark.quote-flash, .answer-reader-body .quote-flash-block').first).to_be_visible()
+    assert app_page.evaluate("() => window.App.runMode.effective()") == 'consensus'
+    app_page.keyboard.press('Escape')
 
-    app_page.locator("#consensusDifferencesTab").click()
-    expect(app_page.locator(".diff-card.is-contradiction").first).to_be_visible(timeout=5000)
-
-    # Beide Sprungpfade öffnen die standardmäßig verborgenen Modellantworten.
-    # Die Difference hat ein Originalzitat und markiert es; ein Modell unter
-    # "Not addressed" öffnet nur dessen Antwort, ohne ein Zitat zu erfinden.
-    # Der Modus darf sich dabei nicht als Seiteneffekt ändern.
-    diff_jump = app_page.locator(".diff-card.is-contradiction .diff-jump-link").first
-    expect(diff_jump).to_be_visible()
-    diff_jump.click()
-    expect(app_page.locator("body.agent-mode-show-answers")).to_have_count(1)
-    expect(model_answers_toggle.locator(".consensus-tab-label")).to_have_text("Hide answers")
-    expect(app_page.locator(".response-section mark.quote-flash, .response-section .quote-flash-block").first).to_be_visible()
-    assert app_page.evaluate("() => window.isAgentModeEnabled()") is True
-
-    model_answers_toggle.click()
-    expect(app_page.locator("#openaiResponse")).to_be_hidden()
-
-    claim_badges.first.click()
-    claim_jump = app_page.locator("#claimPopover .claim-model-row.is-neutral .claim-jump-link")
-    expect(claim_jump).to_be_visible()
-    claim_jump.click()
-    expect(app_page.locator("body.agent-mode-show-answers")).to_have_count(1)
-    expect(app_page.locator("#grokResponse")).to_be_visible()
-    assert app_page.evaluate("() => window.isAgentModeEnabled()") is True
-
-    # Ausgangszustand für die bestehende Disclosure-/Reihenfolge-Prüfung.
-    model_answers_toggle.click()
-    expect(model_answers_toggle.locator(".consensus-tab-label")).to_have_text("Compare answers")
-
-    # Kopierter Text darf keine Badge-Beschriftung enthalten.
-    copied = app_page.evaluate(
-        """() => {
-          const body = window.App.consensusBodyEl();
-          const clone = body.cloneNode(true);
-          clone.querySelectorAll('.claim-badge, .copy-btn, .response-code-copy')
-            .forEach(el => el.remove());
-          clone.style.position = 'absolute';
-          clone.style.left = '-99999px';
-          document.body.appendChild(clone);
-          const text = clone.innerText.trim();
-          clone.remove();
-          return text;
-        }"""
-    )
-    assert not re.search(r"\d+\s*/\s*\d+", copied), f"Badge-Zaehlung im Copy-Text: {copied!r}"
-
-    model_answers_toggle.click()
-    expect(app_page.locator("#openaiResponse")).to_be_visible()
-    consensus_box = app_page.locator("#consensusOutput").bounding_box()
-    first_answer_box = app_page.locator("#openaiResponse").bounding_box()
-    assert consensus_box is not None
-    assert first_answer_box is not None
-    assert consensus_box["y"] < first_answer_box["y"]
+    # Exercise the real Copy action; only the OS clipboard boundary is replaced.
+    app_page.evaluate("""() => {
+      window.__copiedAnswer = null;
+      Object.defineProperty(navigator, 'clipboard', {configurable:true,
+        value:{writeText:async text => {window.__copiedAnswer = text;}}});
+      const legitimateFraction = document.createElement('p');
+      legitimateFraction.textContent = 'A legitimate fraction: 3/7.';
+      App.consensusBodyEl().append(legitimateFraction);
+    }""")
+    badge_labels = claim_badges.all_text_contents()
+    app_page.locator('#consensusFooterActions .consensus-actions-toggle').click()
+    app_page.locator('.consensus-copy-btn').click()
+    app_page.wait_for_function("() => typeof window.__copiedAnswer === 'string'")
+    copied = app_page.evaluate('window.__copiedAnswer')
+    assert 'Mock consensus' in copied and 'A legitimate fraction: 3/7.' in copied
+    assert all(label not in copied for label in badge_labels)
+    assert app_page.evaluate('document.documentElement.scrollWidth <= innerWidth')
     expect(pipeline).to_be_hidden(timeout=10000)
 
     run_again = app_page.locator("#runReplayButton")
@@ -1201,7 +1181,7 @@ def test_consensus_renders_differences_and_agreement_score(app_page, get_console
 def test_followup_keeps_the_previous_answer_and_appends_the_new_question(app_page):
     """Ein Follow-up darf den fertigen Turn nicht visuell recyceln: die alte
     Frage/Antwort bleibt stehen, die neue User-Frage beginnt darunter."""
-    app_page.evaluate("() => window.App.runMode.set('compare')")
+    app_page.evaluate("() => window.App.runMode.set('consensus')")
     _send_question(app_page)
     _wait_for_all_final_answers(app_page)
     expect(app_page.locator("#questionInput")).to_have_attribute(
@@ -1223,7 +1203,13 @@ def test_followup_keeps_the_previous_answer_and_appends_the_new_question(app_pag
         }"""
     )
     assert original_answer
-    original_agreement = app_page.locator("#consensusVerdict .verdict-score").text_content().strip()
+    original_agreement = app_page.locator("#consensusVerdict .verdict-score").evaluate(
+        """element => {
+          const clone = element.cloneNode(true);
+          clone.querySelectorAll('.visually-hidden').forEach(node => node.remove());
+          return clone.textContent.trim();
+        }"""
+    )
     assert original_agreement
 
     followup_question = "Which consideration should I prioritize first?"
@@ -1245,7 +1231,8 @@ def test_followup_keeps_the_previous_answer_and_appends_the_new_question(app_pag
     assert original_answer in archived_answer_text
     # Derselbe strukturierte Claim-Support wird auch im archivierten Turn neu
     # verankert. Das ist zugleich der Rendererpfad für ältere Bookmark-Turns.
-    expect(archived_answer.locator(".claim-badge")).to_have_count(2)
+    expect(archived_answer.locator(".claim-badge")).to_have_count(1)
+    expect(archived_answer.locator('.cx-claim.is-major')).to_have_count(1)
     archived_answer.locator(".claim-badge").first.dispatch_event("click")
     archived_jump = app_page.locator(
         "#claimPopover .claim-model-row.is-agree .claim-jump-link"
@@ -1254,9 +1241,11 @@ def test_followup_keeps_the_previous_answer_and_appends_the_new_question(app_pag
     archived_jump.click()
     # "View answer" belongs to this archived turn, not to the current live
     # provider boxes that may already contain a newer exchange.
-    expect(archived_turn.locator(".thread-history-models")).to_be_visible()
-    expect(archived_turn.locator(".thread-history-models section.jump-flash")).to_have_count(1)
+    expect(app_page.locator('#modelAnswerReader')).to_be_visible()
+    expect(app_page.locator('.answer-reader-body').first).to_contain_text('mock answer')
+    expect(app_page.locator('#answerReaderTurn')).to_have_value(re.compile(r'^turn:'))
     expect(app_page.locator(".response-box.jump-flash")).to_have_count(0)
+    app_page.keyboard.press('Escape')
     archived_agreement = archived_turn.locator(".thread-history-verdict .verdict-score")
     expect(archived_agreement).to_have_text(original_agreement)
     assert "…" not in archived_turn.locator(".thread-history-verdict .verdict-detail").text_content()
@@ -1314,13 +1303,10 @@ def test_followup_keeps_the_previous_answer_and_appends_the_new_question(app_pag
     expect(app_page.locator("#threadAskText")).to_have_text(third_question)
 
 
-def test_split_claim_is_marked_in_the_colour_of_its_badge(app_page):
-    """Geteilte Zustimmung ohne Widerspruchs-Karte: Marke und Quote muessen
-    dieselbe Bernstein-Note tragen. Vorher lief die Markierung hier neutral
-    grau, waehrend die 2/4-Quote daneben schon gelb war (User-Befund
-    2026-07-28). Das Mock-Fixture deckt nur den Ueberlappungsfall (is-major)
-    ab, deshalb wird der Renderer hier direkt mit einem geteilten Claim
-    gefuettert."""
+def test_split_claim_uses_visible_dissent_palette_and_neutral_count(app_page):
+    """Split support uses a visible dissent background while the count stays
+    neutral. The main mock covers overlap with a contradiction, so this
+    distinct renderer fixture supplies a split claim without a difference."""
     app_page.evaluate(
         """() => {
           document.getElementById("consensusAnswerBody").innerHTML =
@@ -1340,24 +1326,36 @@ def test_split_claim_is_marked_in_the_colour_of_its_badge(app_page):
     marked = app_page.locator("#consensusAnswerBody .cx-claim").first
     assert "is-split" in (marked.get_attribute("class") or "")
     expect(app_page.locator("#consensusAnswerBody .claim-ratio")).to_have_text("2/4")
-    # Bernstein statt neutral: Rot deutlich ueber Blau, in derselben Richtung
-    # wie die Schriftfarbe des Badges.
+    # Die Passage traegt die zarte Dissensflaeche; das Badge bleibt lesbar
+    # neutral. Beide folgen ihren Theme-Tokens, nicht einem RGB-Verhaeltnis.
     tones = app_page.evaluate(
         """() => {
-          const channels = (value) => (value.match(/[\\d.]+/g) || []).slice(0, 3).map(Number);
+          const color = token => {
+            const probe = document.createElement('span');
+            probe.style.backgroundColor = `var(${token})`;
+            document.body.append(probe);
+            const value = getComputedStyle(probe).backgroundColor;
+            probe.remove();
+            return value;
+          };
           const span = document.querySelector("#consensusAnswerBody .cx-claim");
           const badge = document.querySelector("#consensusAnswerBody .claim-badge");
           return {
-            mark: channels(getComputedStyle(span).backgroundColor),
-            badge: channels(getComputedStyle(badge).color),
+            mark: getComputedStyle(span).backgroundColor,
+            badge: getComputedStyle(badge).color,
+            expectedMark: color('--cx-mark-split'),
+            expectedBadge: color('--ink-2'),
           };
         }"""
     )
-    for name, (red, _green, blue) in tones.items():
-        assert red > blue * 1.5, f"{name} ist nicht bernsteinfarben: {tones[name]}"
+    assert tones['mark'] == tones['expectedMark']
+    assert tones['badge'] == tones['expectedBadge']
+    assert tones['mark'] != tones['badge']
+    assert tones['expectedMark'] not in ('transparent', 'rgba(0, 0, 0, 0)')
 
 
 def test_claim_hover_keeps_silent_models_available_on_demand(app_page):
+    _show_insight_fixture(app_page)
     app_page.evaluate(
         """() => {
           document.getElementById("consensusAnswerBody").innerHTML =
@@ -1375,11 +1373,7 @@ def test_claim_hover_keeps_silent_models_available_on_demand(app_page):
     )
     badge = app_page.locator("#consensusAnswerBody .claim-badge")
     expect(badge).to_have_text("2/2")
-    # Das isolierte Renderer-Fixture steckt in einem verborgenen Ergebnis-
-    # Container; Event-Dispatch testet denselben Hover-Handler ohne Geometrie-
-    # Voraussetzung.
-    badge.dispatch_event("mouseenter")
-    app_page.wait_for_timeout(180)
+    app_page.locator('#consensusAnswerBody .cx-claim').hover()
     preview = app_page.locator(".insight-preview")
     expect(preview).to_be_visible()
     expect(preview).to_contain_text("Not addressed")
@@ -1555,6 +1549,7 @@ def test_contradiction_keeps_the_visible_control_on_a_shared_sentence(app_page):
     verschwand praktisch jeder Widerspruch aus dem Text: der strittige
     Satz sah aus wie jeder andere und der Klick darauf oeffnete "4 of 6 models
     agree" statt der Widerspruchs-Karte (User-Befund 2026-08-07)."""
+    _show_insight_fixture(app_page)
     app_page.evaluate(
         """() => {
           document.getElementById("consensusAnswerBody").innerHTML =
@@ -1605,13 +1600,15 @@ def test_contradiction_keeps_the_visible_control_on_a_shared_sentence(app_page):
     app_page.evaluate(
         """() => document.querySelectorAll("#consensusAnswerBody .cx-claim")[0].click()"""
     )
-    expect(app_page.locator(".diff-card.is-focused")).to_have_count(1)
+    expect(app_page.locator('#modelAnswerReader')).to_be_visible()
+    expect(app_page.locator('#answerReaderInspector .diff-card.is-contradiction')).to_contain_text('Break-even-Kilometer')
     expect(app_page.locator("#claimPopover")).to_be_hidden()
 
 
 def test_emphasis_marker_still_yields_to_the_claim_badge(app_page):
     """Nur Widersprueche gewinnen. Eine blosse Gewichtungs-Differenz ist die
     schwaechere Aussage als die Stuetzungsquote und tritt weiter zurueck."""
+    _show_insight_fixture(app_page)
     app_page.evaluate(
         """() => {
           document.getElementById("consensusAnswerBody").innerHTML =
@@ -1630,16 +1627,19 @@ def test_emphasis_marker_still_yields_to_the_claim_badge(app_page):
           }, 3);
         }"""
     )
-    # Zuruecktreten heisst hier: die Passage gibt ihren Tabstopp ab, damit der
-    # Satz nicht zwei Fokusziele fuer dieselbe Aussage hat.
-    suppressed = app_page.evaluate(
+    # Bei verborgenen Quoten bleibt die Passage das zugängliche Claimziel;
+    # die schwächere Emphasis darf deren Aktion nicht übernehmen.
+    claim_control = app_page.evaluate(
         """() => {
           const passage = document.querySelector("#consensusAnswerBody .cx-claim");
-          return !!passage && !passage.hasAttribute("role") && !passage.hasAttribute("tabindex");
+          const active = passage.cxGroup.controls.find(item => !item.suppressed);
+          return { role: passage.getAttribute('role'), tabindex: passage.getAttribute('tabindex'),
+            claim: active.el.classList.contains('claim-badge'),
+            suppressedDifference: passage.cxGroup.controls.some(item => item.isPassage && item.suppressed) };
         }"""
     )
     expect(app_page.locator("#consensusAnswerBody .claim-badge")).to_have_count(1)
-    assert suppressed is True, "Emphasis-Marke tritt weiterhin hinter das Badge zurueck"
+    assert claim_control == {'role': 'button', 'tabindex': '0', 'claim': True, 'suppressedDifference': True}
 
     # Und der Klick auf den Satz oeffnet dann auch das Agreement-Popover,
     # nicht die zurueckgetretene Emphasis-Karte.
@@ -1698,11 +1698,15 @@ def test_agent_mode_can_reveal_hidden_model_answers_on_mobile(app_page):
     expect(app_page.locator("#openaiResponse")).to_be_hidden()
 
     toggle.click()
-    expect(app_page.locator("body.agent-mode-enabled.agent-mode-show-answers")).to_have_count(1)
+    expect(app_page.locator('#modelAnswerReader')).to_be_visible()
+    assert app_page.evaluate("() => window.App.runMode.effective()") == 'consensus'
     expect(toggle_label).to_have_text("Hide answers")
-    expect(app_page.locator("#openaiResponse")).to_be_visible()
+    expect(app_page.locator('.answer-reader-body').first).to_contain_text('mock answer')
+    expect(app_page.locator("#openaiResponse")).to_be_hidden()
 
-    toggle.click()
+    app_page.keyboard.press('Escape')
+    expect(app_page.locator('#modelAnswerReader')).to_be_hidden()
+    expect(toggle).to_be_focused()
     expect(toggle_label).to_have_text("Compare answers")
     expect(app_page.locator("#openaiResponse")).to_be_hidden()
 
@@ -1711,19 +1715,22 @@ def test_watch_dialog_uses_safe_defaults_keeps_telegram_visible_and_asks_for_a_g
     """Watch-Erstellung startet kompakt mit sicheren Defaults, fragt zuerst,
     worauf der Nutzer wartet, haelt Telegram sichtbar und blendet erweiterte
     Felder nur bei Bedarf ein."""
+    app_page.route('**/api/my/telegram', lambda route: route.fulfill(
+        json={'telegram': {'configured': True, 'connected': False}}))
     _send_question(app_page)
     _wait_for_all_final_answers(app_page)
     expect(app_page.locator("#consensusResponse")).to_contain_text("Mock consensus", timeout=30000)
 
-    # Share/Watch/Cite haengen an der FERTIGEN Antwort: sie stehen in der
-    # Provenance-Fusszeile, die erst erscheint, wenn der Lauf uebergeben hat.
-    # Erst danach den Ergebnis-Kontext faelschen — das Final-Event des Streams
-    # ueberschreibt window.lastShareResultId sonst wieder.
+    # The UI fixture models a finished, published result. Wait for the real
+    # run handoff and update its authoritative context, so later projection
+    # cannot restore the source-free mock final's null result ID.
     expect(app_page.locator("#consensusWatchButton")).to_be_visible(timeout=30000)
 
     # Dieser Test prüft nur Client-Validierung/Layout und braucht keinen echten
     # Firestore-persistierten pending_result.
-    app_page.evaluate("() => { window.lastShareResultId = 'e2e-watch-validation'; }")
+    app_page.wait_for_function("() => App.runRegistry.visible()?.status === 'succeeded'")
+    app_page.evaluate("""() => App.runRegistry.update(App.runRegistry.visible().runId,
+      run => { run.consensus.resultId = 'e2e-watch-validation'; })""")
     app_page.set_viewport_size({"width": 390, "height": 844})
     app_page.click("#consensusWatchButton")
     app_page.locator("#shareModal").click(position={"x": 2, "y": 2})
@@ -1964,6 +1971,7 @@ def test_theme_toggle(app_page):
         }"""
     )
     app_page.click("#editSystemPromptBtn")
+    app_page.click("#settingsTabDisplay")
     app_page.click("#mobileModeToggle")
     app_page.wait_for_function(
         "(wasDark) => document.body.classList.contains('dark-mode') !== wasDark",
@@ -1971,7 +1979,7 @@ def test_theme_toggle(app_page):
         timeout=5000,
     )
     stored = app_page.evaluate("() => localStorage.getItem('theme')")
-    assert stored in ("dark", "light")
+    assert stored == ('light' if initially_dark else 'dark')
 
     app_page.click("#mobileModeToggle")
     app_page.wait_for_function(
@@ -1989,7 +1997,7 @@ def test_deep_think_temporarily_selects_configured_engine(app_page):
     gespeicherte Consensus-Auswahl des Pro-Nutzers dauerhaft zu ersetzen."""
     initial_model = app_page.evaluate(
         """() => {
-          window.isUserPro = true;
+          window.updateUserTierUI('pro', true);
           window.updatePremiumModelsState(true);
           const select = document.getElementById("consensusModelDropdown");
           const initial = Array.from(select.options).find(option =>
@@ -2022,7 +2030,7 @@ def test_consensus_presets_apply_full_model_sets_and_gate_thorough(app_page):
     sichtbar, oeffnet mit Pro-Badge aber den Kosten-Hinweis statt eines Kaufdialogs."""
     result = app_page.evaluate(
         """() => {
-          window.isUserPro = false;
+          window.updateUserTierUI('free', true);
           window.updatePremiumModelsState(false);
           localStorage.setItem("pref_consensus_preset", "balanced");
           window.restoreModelSelections();
@@ -2173,7 +2181,7 @@ def test_attachment_pauses_deepseek_and_restores_previous_selection(app_page):
 
     assert result["whileAttached"]["checked"] is False
     assert result["whileAttached"]["disabled"] is True
-    assert "cannot read attachments" in result["whileAttached"]["notice"]
+    assert result["whileAttached"]["notice"] == "DeepSeek paused · No attachment support"
     assert result["whileAttached"]["responseExcluded"] is True
     assert result["whileAttached"]["pickerText"].startswith("5 models")
     assert result["afterTierRefresh"] == {
@@ -2288,7 +2296,7 @@ def test_pdf_drop_uses_full_attachment_whitelist(app_page):
     app_page.on("dialog", dismiss_dialog)
     app_page.evaluate(
         """() => {
-          window.isUserPro = true;
+          window.updateUserTierUI('pro', true);
           const input = document.querySelector(".chat-input-container");
           const transfer = new DataTransfer();
           transfer.items.add(new File(
@@ -2341,7 +2349,7 @@ def test_attachment_send_hard_blocks_stale_deepseek_selection(app_page):
     )
     app_page.evaluate(
         """() => {
-          window.isUserPro = true;
+          window.updateUserTierUI('pro', true);
           for (const pref of window.App.modelPrefs) {
             window.App.setModelSelectionState(pref, true, {
               persist: false,
@@ -2377,8 +2385,9 @@ def test_attachment_send_hard_blocks_stale_deepseek_selection(app_page):
         "ask_grok",
     ])
     assert "ask_deepseek" not in paths
-    assert app_page.locator("#selectDeepSeek").is_checked() is False
-    expect(app_page.locator("#deepseekResponse")).to_have_class(re.compile(r"\bexcluded\b"))
+    # The next-message picker can restore the preference after completion;
+    # the finished run's admitted provider set must still exclude DeepSeek.
+    assert app_page.evaluate("() => App.runRegistry.visible().config.providers.every(p => p.provider !== 'DeepSeek')")
 
 
 def test_tier_upgrade_applies_pro_defaults_but_keeps_explicit_picker_choice(app_page):
@@ -2387,11 +2396,14 @@ def test_tier_upgrade_applies_pro_defaults_but_keeps_explicit_picker_choice(app_
     result = app_page.evaluate(
         """() => {
           localStorage.setItem("pref_consensus_preset", "custom");
-          const pref = window.App.modelPrefs.find(item =>
-            window.FREE_DEFAULT_MODELS[item.provider] !== window.PRO_DEFAULT_MODELS[item.provider]
-          );
-          if (!pref) return { skipped: true };
+          // Tier defaults may legitimately be identical in live configuration.
+          // Supply two explicit catalog entries to exercise the switching rule.
+          const pref = window.App.modelPrefs[0];
           const select = document.getElementById(pref.selectId);
+          select.add(new Option('Smoke Free default', 'e2e-free-default'));
+          select.add(new Option('Smoke Pro default', 'e2e-pro-default'));
+          window.FREE_DEFAULT_MODELS = {...window.FREE_DEFAULT_MODELS, [pref.provider]: 'e2e-free-default'};
+          window.PRO_DEFAULT_MODELS = {...window.PRO_DEFAULT_MODELS, [pref.provider]: 'e2e-pro-default'};
           const key = "pref_select_" + pref.key;
           localStorage.removeItem(key);
 
@@ -2405,7 +2417,6 @@ def test_tier_upgrade_applies_pro_defaults_but_keeps_explicit_picker_choice(app_
           window.updatePremiumModelsState(false, false);
           window.updatePremiumModelsState(true, true);
           return {
-            skipped: false,
             freeValue,
             proValue,
             expectedFree: window.FREE_DEFAULT_MODELS[pref.provider],
@@ -2415,7 +2426,7 @@ def test_tier_upgrade_applies_pro_defaults_but_keeps_explicit_picker_choice(app_
           };
         }"""
     )
-    assert not result["skipped"]
+    assert result['freeValue'] != result['proValue']
     assert result["freeValue"] == result["expectedFree"]
     assert result["proValue"] == result["expectedPro"]
     assert result["explicitValue"] == result["freeValue"]
@@ -2427,7 +2438,10 @@ def test_model_selection_persists_across_reload(app_page):
     abgewaehlt (localStorage pref_check_*)."""
     _select_all_models(app_page)
 
-    app_page.evaluate("() => document.getElementById('selectGrok').click()")
+    app_page.locator('#sidebarModelPicker').click()
+    app_page.locator('.consensus-model .model-picker-custom-option').click()
+    app_page.locator('.consensus-model .model-picker-row-toggle[data-focus-key="toggle:Grok"]').click()
+    assert app_page.evaluate("localStorage.getItem('pref_consensus_preset')") == 'custom'
     app_page.wait_for_function(
         "() => localStorage.getItem('pref_check_Grok') === 'false'",
         timeout=5000,

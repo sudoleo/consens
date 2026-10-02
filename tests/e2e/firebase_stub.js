@@ -19,7 +19,6 @@ window.auth = {
   },
 };
 
-window.isUserPro = false;
 window.bookmarksData = [];
 
 // Mirror the real firebase.js access setup for an authenticated user.
@@ -46,7 +45,10 @@ window.sendFeedback = async () => ({ ok: true });
 // das im asynchronen onAuthStateChanged-Callback, daher hier ein Poll.
 (function initTierUI(attempt) {
   if (typeof window.updateUserTierUI === "function") {
-    window.updateUserTierUI(false, true);
+    window.App.authState.setIdentity(window.auth.currentUser.uid);
+    window.updateUserTierUI('free', true);
+    window.App.accountTier.set('free');
+    window.App.authState.publish(window.auth.currentUser.uid);
     return;
   }
   if (attempt < 100) setTimeout(() => initTierUI(attempt + 1), 50);
