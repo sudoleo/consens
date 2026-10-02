@@ -288,10 +288,15 @@ ist seit 2026-07-17 demo-first: Ein klickbares Input-Feld (Look des /app-Inputs,
 "Try the demo"-Button, Provider-Chips darunter) verlinkt auf `/app?demo=1`;
 Landing-Hero und App-Composer teilen die `.demo-action`-Gestaltung aus
 `static/css/demo-action.css` (Import in `landing.css` und `static/style.css`):
-kontrastreiche Theme-Farben, abgerundetes Rechteck, identisches Play-Symbol,
-Hover-/Druck-/Fokuszustände und mindestens 44 px Höhe auf Touch-Geräten.
+seit 2026-10-02 schlank: 36 px hoch wie der Senden-Kreis, Pille, 13 px/500,
+Play-Zeichen als Glyph ohne eigenen Kreis; auf Touch-Geräten wächst nur die
+Trefferfläche (`::after`) auf 44 px, nicht die Zeichnung.
 Die App zeigt ebenfalls „Try the demo“, bis 640 px platzsparend „Demo“;
-der zugängliche Name und der Startablauf bleiben unverändert.
+der zugängliche Name und der Startablauf bleiben unverändert. Für Gäste
+nimmt der Demo-Knopf den Platz des Senden-Knopfs ein (`components-misc.css`:
+`#sendButton[data-icon="send"]` ist ausgeblendet, solange der Chip sichtbar
+ist; im Lauf als Stopp-Knopf, beim Tippen, im Agent-Modus und im
+eingeklappten Handy-Composer steht Senden wie immer da).
 Seit 2026-10-01 tragen die Bedienelemente, die eine Frage an die Modelle
 schicken, ein Licht von unten aus `static/css/send-glow.css` (ebenfalls in
 `landing.css` und `static/style.css` importiert): ein `::before` mit
@@ -421,7 +426,11 @@ Hauslicht. Komponenten wählen den nächstliegenden Token statt eines eigenen We
 90 Ausnahmen ist entfernt; ein `<button>` startet neutral. Admin-Seiten
 geben klassenlosen Buttons den alten Look in `admin.css`.
 `shell.css` gibt Agent-/Consensus-Antworten und gespeicherten Turns denselben
-Leserhythmus: 16 px mit 1,75-facher Zeilenhöhe, normale Laufweite, eigene Absatz-,
+Leserhythmus: 17 px (`--font-size-read`) mit 1,7-facher Zeilenhöhe, Fließtext
+höchstens 66 Zeichen breit (Tabellen, Code, Formeln volle Spalte), ein kurzer
+erster Absatz (≤ 240 Zeichen, gefolgt von weiterem Inhalt) wird zum Lead
+(`.has-lead`, gesetzt von `markAnswerLead` in `markdown-stream.js` bei jedem
+Rendern, auch im Stream), normale Laufweite, eigene Absatz-,
 Listen- und Überschriftenabstände. Die Regeln für den Consensus-Labelkopf gelten
 nur für direkte `h2`-Kinder, nicht für Markdown-Überschriften im Antworttext.
 Statusmeldungen, Antwortleser, Codeblöcke und Tabellen behalten ihre eigene Typografie.
@@ -3626,7 +3635,19 @@ immer rechts außen. Alle Picker der Zeile teilen eine Optik (ruhiges Label mit
 Chevron, der Modus mit leichter Fläche). Das (+)-Menü `#attachMenu` hat seit
 2026-10-02 eine Zeilenanatomie (`composer.css`, „The (+) menu“): 16-px-Icon ·
 Label (höchstens eine kurze Zeile darunter) · Wert mit Chevron oder Schalter;
-„Add files“ ohne Stufen-Badge, Comparison models zeigt die Anzahl. Pro Modus gibt es genau EINEN
+„Add files“ ohne Stufen-Badge, Comparison models zeigt die Anzahl. Ab 701 px
+steht jede Einstellung nur einmal: Reasoning, Comparison models, Google data
+und Check contradictions schaltet die Leiste unter dem Feld
+(`#composerModeBar`), das (+)-Menü fügt dort nur Dateien hinzu; auf dem Handy
+(Leiste nur mit Icons) bleibt das Menü vollständig. Reasoning trägt überall
+denselben Vierzack-Funken, Anhänge dieselbe Büroklammer. In der Leiste stehen
+Zustände („On“, „Auto“) in Labelgröße auf derselben Grundlinie, Anbieterzeichen
+ruhen einfarbig (Filter auf dem Badge, damit invertierte Mono-Logos im Dark
+Mode invertiert bleiben) und zeigen ihre Farbe bei Hover. Rechtliches (About,
+Terms, Privacy, Imprint, Feedback) steht seit 2026-10-02 in der
+Sidebar-Fußzeile (`.sidebar-footer-meta`, nur Abstände, keine Trenner), unter
+dem Feld nur noch der Hinweissatz; der Build-Commit steht im Tooltip des
+GitHub-Zeichens statt als Text. Pro Modus gibt es genau EINEN
 Modell-Chip; er nennt nur, wer antwortet („6 models · Balanced“ mit Consensus,
 „6 models“ in Compare, „Claude Opus 5.5 +6“ in Agent: Chatmodell plus Zahl
 der Vergleichsmodelle, deren Menü beide Abschnitte trägt), nie den Modusnamen.

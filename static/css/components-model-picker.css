@@ -284,9 +284,14 @@
   font-size: var(--font-size-micro);
   font-weight: var(--font-weight-medium);
   line-height: var(--line-height-heading);
+  /* A description is read, not clipped: it may take a second line, and a
+     third is cut cleanly at a word rather than mid-sentence with "…". */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  text-wrap: pretty;
 }
 
 .model-picker-preset-option:disabled .model-picker-preset-hint {

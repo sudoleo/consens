@@ -1,4 +1,10 @@
-/* Shared demo entry on the public hero and in the app composer. */
+/* Shared demo entry on the public hero and in the app composer.
+
+   It stands where Send stands and is cut from the same piece: 36px tall like
+   the send circle and the pickers beside it, a pill so it rhymes with that
+   circle, and a 13px medium label in the controls' own voice. The play mark is
+   a glyph, not a second button inside the button. The house light comes from
+   .send-glow, which every demo entry also carries. */
 .demo-action,
 button.demo-action {
   box-sizing: border-box;
@@ -6,16 +12,16 @@ button.demo-action {
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  gap: 9px;
-  min-height: 40px;
-  padding: 0 15px 0 11px;
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
+  gap: 7px;
+  min-height: 36px;
+  padding: 0 15px 0 13px;
+  border: 0;
+  border-radius: var(--radius-pill);
   background: var(--ink);
   color: var(--ground);
   font-family: var(--font-sans);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-semibold);
+  font-size: var(--font-size-ui);
+  font-weight: var(--font-weight-medium);
   line-height: var(--line-height-tight);
   letter-spacing: var(--tracking-normal);
   white-space: nowrap;
@@ -30,17 +36,16 @@ button.demo-action {
 .demo-action-icon {
   display: grid;
   place-items: center;
-  flex: 0 0 22px;
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  background: color-mix(in srgb, currentColor 12%, transparent);
+  flex: 0 0 auto;
+  width: 10px;
+  height: 10px;
+  background: none;
 }
 
 .demo-action-icon svg {
   display: block;
-  width: 12px;
-  height: 12px;
+  width: 10px;
+  height: 10px;
   transform: translateX(.5px);
 }
 
@@ -50,21 +55,23 @@ button.demo-action {
   background: color-mix(in srgb, var(--ink) 88%, var(--ground));
 }
 
+/* A press gives way instead of moving: the control sinks into the field. */
 .demo-action:active,
 .lp-hero-prompt:active .demo-action {
   background: color-mix(in srgb, var(--ink) 80%, var(--ground));
-  transform: translateY(1px);
+  transform: scale(0.97);
 }
 
 .demo-action:focus-visible,
 .lp-hero-prompt:focus-visible .demo-action {
   outline: var(--focus-ring);
-  outline-offset: 3px;
+  outline-offset: var(--focus-ring-offset);
 }
 
+/* Touch keeps a 44px target by growing the hit area, not the drawing. */
 @media (pointer: coarse) {
-  .demo-action,
-  button.demo-action { min-height: 44px; }
+  .demo-action::after,
+  button.demo-action::after { content: ""; position: absolute; inset: -4px 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {

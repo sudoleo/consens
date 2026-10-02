@@ -365,14 +365,24 @@ def test_composer_source_check_toggle_persists_and_freezes_run_payload(browser, 
         menu_toggle = page.locator('#sourceCheckMenuSwitch')
         expect(menu_toggle).not_to_be_checked()
         assert page.locator('#attachMenu .attach-menu-toggle').last.get_attribute('for') == 'sourceCheckMenuSwitch'
-        page.locator('label[for="sourceCheckMenuSwitch"]').click()
-        expect(menu_toggle).to_be_checked()
-        expect(toggle).to_have_attribute('aria-checked', 'true')
-        expect(page.locator('#sourceCheckSwitch')).to_be_checked()
-        page.screenshot(path=str(output / f"menu-toggle-{width}.png"))
-        page.locator('label[for="sourceCheckMenuSwitch"]').click()
+        if width > 700:
+            # Desktop: each setting lives once, in the bar under the field;
+            # the (+) menu only adds files there.
+            expect(page.locator('label[for="sourceCheckMenuSwitch"]')).to_be_hidden()
+            page.keyboard.press('Escape')
+            toggle.click()
+            expect(menu_toggle).to_be_checked()
+            expect(page.locator('#sourceCheckSwitch')).to_be_checked()
+            toggle.click()
+        else:
+            page.locator('label[for="sourceCheckMenuSwitch"]').click()
+            expect(menu_toggle).to_be_checked()
+            expect(toggle).to_have_attribute('aria-checked', 'true')
+            expect(page.locator('#sourceCheckSwitch')).to_be_checked()
+            page.screenshot(path=str(output / f"menu-toggle-{width}.png"))
+            page.locator('label[for="sourceCheckMenuSwitch"]').click()
+            page.locator('#attachTrigger').click()
         expect(toggle).to_have_attribute('aria-checked', 'false')
-        page.locator('#attachTrigger').click()
         page.screenshot(path=str(output / f"toggle-{width}.png"))
         page.evaluate('''() => {
           const registry = window.App.runRegistry;

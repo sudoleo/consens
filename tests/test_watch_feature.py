@@ -2176,7 +2176,7 @@ class WatchFrontendContractTests(unittest.TestCase):
 
         self.assertIn('!modal.classList.contains("is-watch-dialog")', share_source)
         self.assertIn('consensio.watchViewSwitchHint.seen.v1', watch_source)
-        self.assertIn('animation: watchSwitchPulse 1.8s ease-out 2', css)
+        self.assertIn('animation: watchSwitchPulse 1.8s var(--ease-out) 2', css)
         self.assertIn('prefers-reduced-motion: reduce', css)
 
     def test_watch_limits_are_visible_before_creation_and_on_dashboard(self):

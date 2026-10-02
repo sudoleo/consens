@@ -159,15 +159,34 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
   align-items: center;
   justify-content: flex-start;
   text-align: left;
-  gap: 5px;
+  /* Quiet links set apart by space alone: no separators that could end up
+     at the start of a wrapped line. */
+  gap: 2px 14px;
   padding: 0 4px;
+  color: var(--ink-3);
   font-size: var(--font-size-xs);
-  opacity: 0.7;
+  line-height: 1.6;
 }
 
-.sidebar-footer-meta:hover,
-.sidebar-footer-meta:focus-within {
-  opacity: 1;
+.sidebar-footer-meta > .sidebar-footer-link,
+.sidebar-footer-meta > .feedback-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.sidebar-footer-meta > .sidebar-footer-link:hover {
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.sidebar-footer-meta > .sidebar-footer-repo {
+  margin-left: auto;
+  padding: 2px;
 }
 
 /* The account row: initial, address over plan, then allowance and settings
@@ -779,13 +798,13 @@ body.direct-comparison-active:not(:has(#watchDashboard:not([hidden]))) .view-swi
   --composer-surface: rgba(245, 245, 245, 0.96);
   --composer-edge: rgba(34, 36, 40, 0.09);
   --composer-shadow: 0 2px 6px rgba(28, 30, 33, 0.04), 0 8px 28px rgba(28, 30, 33, 0.08);
-  --composer-halo: rgba(250, 250, 250, 0.5);
+  --composer-halo: var(--ground);
 }
 body.dark-mode {
   --composer-surface: rgba(48, 51, 56, 0.96);
   --composer-edge: rgba(255, 255, 255, 0.12);
   --composer-shadow: 0 2px 6px rgba(0, 0, 0, 0.18), 0 8px 28px rgba(0, 0, 0, 0.28);
-  --composer-halo: rgba(25, 26, 28, 0.5);
+  --composer-halo: var(--ground);
 }
 .claim-popover {
   background: var(--chat-surface);
@@ -2735,17 +2754,17 @@ body:not(.is-hero).agent-mode-enabled:not(.agent-mode-show-answers):not(.direct-
   display: none;
 }
 
-/* Feathered backdrop: scrolling text remains faintly visible underneath.
-   Never intercept clicks or clip the menus above the floating field. */
+/* The composer stands on the ground: the answer dissolves over the last
+   28px above it and never runs, half-hidden, underneath the field and the
+   note below it. Never intercepts clicks or clips the menus above the field.
+   The ground reaches down to the bottom edge, past the note. */
 body:not(.is-hero) .input-section::before {
   content: "";
   position: absolute;
-  inset: -12px -8px 0;
+  inset: -28px -8px -40px;
   z-index: -1;
   pointer-events: none;
   background: var(--composer-halo);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
   -webkit-mask-image: linear-gradient(180deg, transparent, #000 28px);
   mask-image: linear-gradient(180deg, transparent, #000 28px);
 }
@@ -3132,17 +3151,16 @@ body.agreement-verdict-hidden .thread-history-footer:not(:has(.consensus-tab)) {
   display: none !important;
 }
 
-/* The answer, the drawer and the run all use the width the thread column
-   gives them. The column itself (--app-container-width) is the measure that
-   keeps the line length sane — a second cap inside it only left half the
-   page empty while the text kept wrapping. */
+/* The answer reads at 17px (Apple's reading size) with a measure of about
+   66 characters: the running text stops there, while tables, code and
+   formulas keep the full column. The column itself stays the frame. */
 .consensus-main > .consensus-answer-body,
 .agent-answer > .consensus-answer-body,
 .thread-history-answer-body {
   max-width: none;
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-read);
   font-weight: var(--font-weight-regular);
-  line-height: 1.75;
+  line-height: 1.7;
   letter-spacing: var(--tracking-normal);
   color: var(--ink);
   overflow-wrap: anywhere;
@@ -3150,10 +3168,25 @@ body.agreement-verdict-hidden .thread-history-footer:not(:has(.consensus-tab)) {
 
 /* Shared reading rhythm for rendered answers, including saved turns.
    Status, source controls, code and tables retain their own typography. */
+.consensus-answer-body :is(p, li, blockquote, h1, h2, h3, h4, h5, h6) { max-width: 66ch; }
+.consensus-answer-body :is(p, li) { text-wrap: pretty; }
+.consensus-answer-body :is(h1, h2, h3, h4, h5, h6) { text-wrap: balance; }
 .consensus-answer-body p { margin: 0 0 1em; }
+/* The lead: a short first paragraph says the answer before the reasons
+   (markAnswerLead in markdown-stream.js decides). One step up, set tight. */
+.consensus-answer-body.has-lead > p:first-child {
+  margin-bottom: .85em;
+  font-size: 1.1765em; /* 20px on the 17px reading size */
+  line-height: 1.45;
+  font-weight: var(--font-weight-medium);
+  letter-spacing: -0.012em;
+  text-wrap: balance;
+}
+.consensus-answer-body.has-lead > p:first-child :is(strong, b) { font-weight: var(--font-weight-semibold); }
 .consensus-answer-body :is(ul, ol) { margin: 1em 0; padding-inline-start: 1.5em; }
 .consensus-answer-body li { padding-inline-start: .2em; }
 .consensus-answer-body li + li { margin-top: .375em; }
+.consensus-answer-body li::marker { color: var(--ink-3); }
 .consensus-answer-body li > :is(ul, ol) { margin-block: .375em; }
 .consensus-answer-body li > p { margin-block: .375em; }
 .consensus-answer-body :is(h1, h2, h3, h4, h5, h6) {
@@ -4196,7 +4229,9 @@ body #loginModalContent .oauth-button:is(:hover, :focus-visible):not(:disabled) 
 .composer-tool { margin-left: 0; font-weight: 500; }
 .composer-tool svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
 .composer-tool[aria-checked="true"], .composer-tool[aria-checked="true"] .composer-agent-state { color: var(--mode-active); }
-.composer-agent-state { color: var(--ink-3); font-size: var(--font-size-xs); font-weight: 500; }
+/* The state is part of the label's sentence ("Reasoning Auto"): same size,
+   same baseline, one step quieter. */
+.composer-agent-state { color: var(--ink-3); font-size: inherit; font-weight: var(--font-weight-regular); }
 .composer-mode-bar { --mode-active: var(--agree); }
 .composer-mode-models { display: flex; align-items: center; gap: 8px; margin-left: 0; padding: 3px 0; color: var(--ink-3); }
 .composer-model-icons { display: flex; align-items: center; padding-left: 8px; }
@@ -4212,7 +4247,14 @@ body #loginModalContent .oauth-button:is(:hover, :focus-visible):not(:disabled) 
   box-sizing: border-box;
   font-size: 10px;
 }
+/* Provider marks rest monochrome, so the only colour in the composer is the
+   state it reports; they take their own colours while you point at them.
+   The filter sits on the badge, not the image, so a mark that is inverted
+   for dark mode (mono logos) stays inverted underneath it. */
 .composer-model-icon img { width: 14px; height: 14px; object-fit: contain; }
+.composer-model-icon { filter: grayscale(1); opacity: .8;
+  transition: filter var(--dur-state) var(--ease-standard), opacity var(--dur-state) var(--ease-standard); }
+.composer-mode-models:is(:hover, :focus-visible) .composer-model-icon { filter: none; opacity: 1; }
 /* Keep the explanation accessible without adding another visual row. */
 .composer-mode-description {
   position: absolute;
@@ -4460,4 +4502,39 @@ body.consensus-markers-hidden .src-ref[data-source-check]:focus-visible {
   .agent-sidebar-progress, .consensus-tab-count, .verdict-score-num, .quota-figure-value,
   .quota-row-value, .model-picker-display-count) {
   font-variant-numeric: tabular-nums;
+}
+
+/* --------------------------------------------------------------------------
+   Phone and tablet sidebar: it covers the page, so the page steps back
+   While the overlay sidebar is open the page behind it dims, and a tap on the
+   dimmed page closes it (app-init.js closes on any click outside). The menu
+   mark inside the sidebar turns into a close mark: three lines fold into an X,
+   so the control says what it will do.
+   -------------------------------------------------------------------------- */
+@media (max-width: 1099px) {
+  body::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: calc(var(--z-sidebar) - 1);
+    background: var(--overlay-dim);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity var(--dur-layer) var(--ease-standard), visibility 0s linear var(--dur-layer);
+  }
+  body:has(.sidebar.active)::after {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transition: opacity var(--dur-layer) var(--ease-standard), visibility 0s;
+  }
+  #sidebarToggleInner svg line {
+    transform-box: view-box;
+    transform-origin: 12px 12px;
+    transition: transform var(--dur-layer) var(--ease-out), opacity var(--dur-state) var(--ease-standard);
+  }
+  .sidebar.active #sidebarToggleInner svg line:nth-child(1) { transform: rotate(45deg) translateY(6px); }
+  .sidebar.active #sidebarToggleInner svg line:nth-child(2) { opacity: 0; }
+  .sidebar.active #sidebarToggleInner svg line:nth-child(3) { transform: rotate(-45deg) translateY(-6px); }
 }

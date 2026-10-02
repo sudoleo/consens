@@ -100,8 +100,10 @@ def test_demo_watch_nudge_and_dedicated_model_pulse_match_the_product_contract()
     assert '<span class="demo-chip-label demo-chip-label-short">Demo</span>' in demo
     assert 'btn.setAttribute("aria-label", "Start interactive demo")' in demo
     assert "inputActions.prepend(btn)" in demo
-    demo_rule = misc_css.split(".demo-chip {", 1)[1].split("}", 1)[0]
-    assert "position: static" in demo_rule
+    # The demo takes the send slot while it is offered (one filled control),
+    # and leaves the flow entirely once the guest types.
+    assert "> .demo-chip:not([hidden])) > #sendButton[data-icon=\"send\"]" in misc_css
+    assert ".chat-input-container.has-question-input .demo-chip" in misc_css
     narrow_rule = misc_css.split("@media (max-width: 640px) {", 1)[1]
     assert ".demo-chip-label-full" in narrow_rule
     assert ".demo-chip-label-short" in narrow_rule
@@ -189,20 +191,24 @@ def test_consensus_run_requires_two_selected_models_before_starting():
     assert "choose at least 2" in model_picker
 
 
-def test_cross_check_greeting_is_light_in_the_app_and_absent_from_the_landing_mock():
+def test_cross_check_greeting_speaks_in_the_app_and_is_absent_from_the_landing_mock():
     """Die Begruessung lebt nur noch in der App.
+
+    Seit dem Feinschliff (2026-10-02) spricht sie in der Stimme der Landing-H1
+    (halbfett, eng gesetzt) statt in leichter Schrift.
 
     Die Landing-Szene 01 hat sie am 04.09.2026 verloren: das Feld tippt sich
     eine echte Frage selbst hinein und sagt damit dasselbe, ohne eine Zeile
-    Text dafuer auszugeben. Der Test haelt beide Haelften fest - die leichte
-    Schrift in der App, und dass das Mock die Zeile nicht wieder einsammelt.
+    Text dafuer auszugeben. Der Test haelt beide Haelften fest - die
+    gesetzte Schrift in der App, und dass das Mock die Zeile nicht wieder einsammelt.
     """
     app_css = read("static/css/components-input.css")
     landing_css = read("static/css/landing.css")
     landing_html = read("templates/landing.html")
 
     app_rule = app_css.split(".hero-greeting {", 1)[1].split("}", 1)[0]
-    assert "font-weight: var(--font-weight-regular)" in app_rule
+    assert "font-weight: var(--font-weight-semibold)" in app_rule
+    assert "letter-spacing: -0.025em" in app_rule
 
     assert "lp-app-greeting" not in landing_html
     assert ".lp-app-greeting {" not in landing_css

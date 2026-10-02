@@ -36,8 +36,14 @@
 }
 
 .dark-mode .send-glow {
-  --glow-wash: 20%;
+  --glow-wash: 22%;
   --glow-rim: 58%;
+}
+
+/* On a light fill (dark mode) a lit rim reads as a green underline. There
+   the light stays a soft glow inside the control, with no edge of its own. */
+.dark-mode .send-glow::before {
+  box-shadow: none;
 }
 
 .send-glow::before {

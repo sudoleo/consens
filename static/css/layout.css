@@ -862,16 +862,6 @@ body:has(.sidebar.active) .brand-float {
   margin: 5px 0;
 }
 
-#version-number {
-  position: static;
-  display: inline;
-  margin: 0;
-  opacity: 1;
-  font-size: inherit;
-  color: inherit;
-  font-variant-numeric: tabular-nums;
-}
-
 /* Commit + GitHub-Mark als ein Ziel. Die Mark ist bewusst winzig und traegt
    currentColor, damit sie sich wie Text verhaelt und nicht wie ein Button. */
 .sidebar-footer-repo {

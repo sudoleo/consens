@@ -139,6 +139,21 @@ function enhanceMarkdownTables(root) {
   });
 }
 
+// An answer that opens with a short paragraph has a first sentence worth
+// reading first: it is set as a lead (shell.css, `.has-lead`). Only answer
+// bodies, only a paragraph short enough to be one thought, and only once
+// something follows it, so a one-paragraph answer stays plain text and a
+// streaming paragraph is not promoted while it is still growing.
+const ANSWER_LEAD_MAX_CHARS = 240;
+
+function markAnswerLead(el) {
+  if (!el?.classList?.contains("consensus-answer-body")) return;
+  const first = el.firstElementChild;
+  const lead = Boolean(first && first.tagName === "P" && first.nextElementSibling
+    && first.textContent.trim().length <= ANSWER_LEAD_MAX_CHARS);
+  el.classList.toggle("has-lead", lead);
+}
+
 // Utils: Markdown → HTML (sanitised) + deine Addons
 function injectMarkdown(el, md, evidenceSources = window.currentEvidenceSources) {
   el.innerHTML = renderMarkdownHtml(md);
@@ -153,9 +168,11 @@ function injectMarkdown(el, md, evidenceSources = window.currentEvidenceSources)
   }
 
   if (window.ConsensusMath) window.ConsensusMath.render(el);
+  markAnswerLead(el);
 }
 
 window.injectMarkdown = injectMarkdown;
+window.markAnswerLead = markAnswerLead;
 
 // --- Incremental Markdown for a growing answer -------------------------
 // Re-parsing the whole answer on every streamed chunk makes the total work
@@ -245,6 +262,7 @@ function renderMarkdownStream(el, md) {
     parsed += tailText.length;
   }
   state.nodeCount = el.childNodes.length;
+  markAnswerLead(el);
   return parsed;
 }
 

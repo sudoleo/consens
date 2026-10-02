@@ -88,10 +88,14 @@ body.is-hero .input-section {
   bottom: 100%;
   left: 0;
   right: 0;
-  margin: 0 0 20px;
-  font-size: var(--font-size-xl);
-  font-weight: var(--font-weight-regular);
-  letter-spacing: var(--tracking-tight);
+  margin: 0 0 22px;
+  /* The app's one headline speaks in the voice of the landing h1: set, not
+     whispered. One step below it in size, the field stays the main thing. */
+  font-size: clamp(1.375rem, 2.4vw, 1.75rem);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: -0.025em;
+  line-height: var(--line-height-heading);
+  text-wrap: balance;
   color: var(--text-color);
   opacity: 0;
   visibility: hidden;
@@ -772,8 +776,10 @@ body:not(.dark-mode) .chat-input-container::before {
   width: 16px;
   height: 16px;
   background: var(--sidebar-text-muted);
-  -webkit-mask: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1V18h6v-1.2c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg>') no-repeat center;
-  mask: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1V18h6v-1.2c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"/></svg>') no-repeat center;
+  /* The same four-point spark as Reasoning in the composer bar: one mark
+     per function wherever it appears. */
+  -webkit-mask: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 2.6 6.4L21 12l-6.4 2.6L12 21l-2.6-6.4L3 12l6.4-2.6Z"/></svg>') no-repeat center;
+  mask: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 2.6 6.4L21 12l-6.4 2.6L12 21l-2.6-6.4L3 12l6.4-2.6Z"/></svg>') no-repeat center;
   -webkit-mask-size: contain;
   mask-size: contain;
 }

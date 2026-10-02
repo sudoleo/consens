@@ -66,19 +66,35 @@
 .view-switch-btn.is-active { color: var(--ink); font-weight: var(--font-weight-semibold); cursor: default; }
 .view-switch-btn:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 .view-switch-btn svg { width: 15px; height: 15px; flex: 0 0 auto; }
+/* Something new under Watches: a small green point beside the word, not an
+   expanding ring (in a still frame a ring reads as a rendering fault). It
+   appears twice and leaves; with reduced motion it simply stays until the
+   page is opened (watch.js removes the class there). */
 #viewSwitchWatches.has-watch-pulse::after {
   content: "";
   position: absolute;
-  inset: -3px;
-  border: 1px solid color-mix(in srgb, var(--agree) 48%, transparent);
-  border-radius: 999px;
+  top: 7px;
+  right: 7px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--agree);
   pointer-events: none;
-  animation: watchSwitchPulse 1.8s ease-out 2;
+  animation: watchSwitchPulse 1.8s var(--ease-out) 2;
 }
 @keyframes watchSwitchPulse {
-  0% { opacity: 0; transform: scale(.94); }
-  18% { opacity: .55; }
-  100% { opacity: 0; transform: scale(1.18); }
+  0% { opacity: 0; transform: scale(.4); }
+  22% { opacity: 1; transform: scale(1.2); }
+  38% { transform: none; }
+  80% { opacity: 1; }
+  100% { opacity: 0; transform: none; }
+}
+/* Dark mode: the chosen half is lifted one tone above the track, never
+   pressed below it. */
+.dark-mode .view-switch { background: color-mix(in srgb, var(--ink) 5%, var(--ground)); }
+.dark-mode .view-switch-thumb {
+  background: color-mix(in srgb, var(--ink) 13%, var(--ground));
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 0 0 1px var(--line-soft);
 }
 #mobileSidebarViews .view-switch-thumb { display: none; }
 
@@ -832,7 +848,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  #viewSwitchWatches.has-watch-pulse::after { animation: none; opacity: 0; }
+  #viewSwitchWatches.has-watch-pulse::after { animation: none; }
   .view-switch-thumb { transition: none; }
   .is-rechecking .wd-dot,
   .wd-tick.is-confirming,

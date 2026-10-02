@@ -344,3 +344,18 @@
 @media (pointer: coarse) {
   .chat-input-container .attach-menu :is(.attach-menu-item, .attach-menu-toggle) { min-height: 48px; }
 }
+
+/* ---- Each setting in one place --------------------------------------------
+   On a desktop the bar under the field already switches Reasoning, the
+   comparison models and Check contradictions, with their state written out.
+   The (+) menu then only adds files (with the formats it takes). Phones keep
+   the full menu: there the bar shows icons only. */
+@media (min-width: 701px) {
+  .input-section:has(> .composer-mode-bar:not([hidden])) .chat-input-container .attach-menu
+    :is(#agentReasoningMenuOption, #agentComparisonMenuOption, .attach-menu-toggle, .attach-menu-divider) {
+    display: none;
+  }
+  .input-section:has(> .composer-mode-bar:not([hidden]) .composer-google) .chat-input-container .attach-menu .agent-google-menu-option {
+    display: none;
+  }
+}

@@ -42,6 +42,15 @@ a:hover {
   outline-offset: var(--focus-ring-offset);
 }
 
+/* Everything you press gives way a little. Zero specificity: a control that
+   already moves (its own transform) keeps its own behaviour. */
+:where(button:not(:disabled), .btn, [role="button"]):where(:active) {
+  transform: scale(0.97);
+}
+@media (prefers-reduced-motion: reduce) {
+  :where(button:not(:disabled), .btn, [role="button"]):where(:active) { transform: none; }
+}
+
 pre {
   position: relative;
   background-color: var(--code-bg);

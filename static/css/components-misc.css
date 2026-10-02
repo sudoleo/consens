@@ -350,14 +350,21 @@ header .sidebar-toggle.collapse-btn {
   --cred-frame-wash: rgba(225, 111, 111, 0.11);
 }
 
-.demo-chip {
-  position: static;
-}
-
+/* The demo takes the send slot: while it is offered, it is the one filled
+   control in the composer and the (disabled) send circle steps aside. Once
+   the guest types, the demo leaves the slot and Send is back where it always
+   is. Taken out of the flow (not just faded) so nothing holds empty space. */
 .chat-input-container.has-question-input .demo-chip,
 .demo-chip[hidden] {
-  opacity: 0;
-  pointer-events: none;
+  display: none;
+}
+
+/* Every state that hides the chip is listed here, so Send only steps aside
+   while the chip is really on screen: Agent hides it (agent-chat.css) and so
+   does the collapsed phone composer in a thread (composer.css). */
+body:not(.single-agent-active):is(:not(.composer-collapsed), .is-hero, .direct-comparison-preview)
+  .chat-input-container:not(.has-question-input) .input-actions-container:has(> .demo-chip:not([hidden])) > #sendButton[data-icon="send"] {
+  display: none;
 }
 
 /* Der Knopf steht in derselben Zeile wie (+), Lauf-Schalter und Senden. Auf
@@ -379,7 +386,7 @@ header .sidebar-toggle.collapse-btn {
   }
 
   .demo-chip.demo-action {
-    padding: 0 10px;
+    padding: 0 13px 0 11px;
     gap: 6px;
   }
 }
