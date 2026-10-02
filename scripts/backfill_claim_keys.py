@@ -57,11 +57,13 @@ def backfill_topic(topic: dict, *, dry_run: bool, force: bool) -> int:
         labels = [str(dimension.get("label") or "") for dimension in dimensions]
         matches = query_claim_identity(known, labels, api_keys, engine) if known else {}
         for index, dimension in enumerate(dimensions):
-            dimension["key"] = matches.get(index) or f"{run['id']}-{index}"
+            if force or not dimension.get("key"):
+                dimension["key"] = matches.get(index) or f"{run['id']}-{index}"
         assigned = ", ".join(
             f"{index}->{dimension['key']}" for index, dimension in enumerate(dimensions)
         )
         print(f"  v{run.get('version')} {str(run.get('observed_at'))[:10]}: {assigned}")
+        written += 1
         if dry_run:
             continue
         (
@@ -69,7 +71,6 @@ def backfill_topic(topic: dict, *, dry_run: bool, force: bool) -> int:
             .collection("runs").document(run["id"])
             .set({"opinion_map": run["opinion_map"]}, merge=True)
         )
-        written += 1
     return written
 
 

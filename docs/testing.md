@@ -35,6 +35,7 @@ PowerShell 5.1 oder neuer, aus dem Projektverzeichnis:
 .\dev.ps1 check frontend
 .\dev.ps1 check backend
 .\dev.ps1 check browser
+.\dev.ps1 check rules
 ```
 
 | Ziel | Ablauf |
@@ -42,6 +43,7 @@ PowerShell 5.1 oder neuer, aus dem Projektverzeichnis:
 | `frontend` | `npm test`, danach `npm run build:check`. Ein veralteter Build führt zum Fehler; mit `npm run build` bewusst neu erzeugen. |
 | `backend` | `venv/Scripts/python.exe -m pytest tests -q` mit `UNIT_TEST_MODE=1`; geerbte E2E-Schalter werden für den Lauf entfernt. |
 | `browser` | Voraussetzungen und Build prüfen, dann Firebase `emulators:exec` mit der Playwright-Suite. Die CLI startet und beendet ihren Emulator auch bei fehlgeschlagenen Tests; die Pytest-Fixtures verwalten den App-Server und Browser. |
+| `rules` | Derselbe sichere Emulator-Lebenszyklus, dann der separate Node-Clientrunner für `tests/rules/firestore.rules.test.mjs`; kein Admin-SDK als Zugriffsbeleg. |
 
 Die Frontend-Suite prüft auch die atomare Build-Veröffentlichung, unveränderte
 Vendor-Dateien und die begrenzte Aufbewahrung voriger Bundles in temporären
@@ -409,12 +411,33 @@ Remove-Item Env:RUN_E2E
 
 ## CI
 
-Ein allgemeiner GitHub-Actions-Workflow für die reguläre Suite,
-JavaScript-Tests, Frontend-Build und Emulator-E2E-Suite ist nicht vorhanden;
-insbesondere ist `.github/workflows/tests.yml` entfernt. Diese Prüfungen werden
-lokal mit den Befehlen in diesem Dokument ausgeführt.
+[`tests.yml`](../.github/workflows/tests.yml) prüft bei Pull Requests, Push auf
+`main` und manueller Auslösung vier Grenzen: reguläres Python, JavaScript/Build,
+Chromium mit nativen Firestore-Transaktionen und Clientregeln sowie beide
+Windows-PowerShell-Versionen und reale `dev.ps1`-Einstiege. Leere Discovery und
+Fehler schlagen fehl; Ergebnisse/Emulatorlogs werden auch bei Fehlern archiviert.
+Ein vorhandener Workflow allein ist kein bestandener Lauf; die Laufbelege und
+Paketabnahme stehen im Implementierungsbericht.
 
-Die Standalone-Publishertests bilden eine Ausnahme:
+Für Firebase CLI 13.35.1 **Node 24** verwenden: ihre heutigen transitiven
+Abhängigkeiten können mit älterem Node 18 nicht mehr geladen werden. Java 21
+bleibt Voraussetzung. Nach `npm ci` enthält das Repo auch die gepinnten
+Firebase-Client-/Rules-Testbibliotheken. Bei bereits laufendem Demo-Emulator:
+
+```powershell
+$env:FIRESTORE_EMULATOR_HOST = "127.0.0.1:8085"
+npm run test:rules
+Remove-Item Env:FIRESTORE_EMULATOR_HOST
+```
+
+Der Rules-Harness erlaubt ausschließlich Loopback und `demo-consensio-e2e`,
+seedet und entfernt nur seine eigenen Dokumente und prüft auch eine temporäre
+Regelmutation. [SDK-Verfahren](https://firebase.google.com/docs/rules/unit-tests).
+Lokale Socket-/TLS-Tests (`test_local_transport.py`) benötigen Loopback-Sockets,
+aber keine externen Provider. Wartungsskript-/CLI-Tests sperren Netzwerkzugriffe
+in ihren Subprozessen und verwenden ausschließlich synthetische Daten.
+
+Die separaten Standalone-Publishertests bleiben zusätzlich erhalten:
 [`publisher-tests.yml`](../.github/workflows/publisher-tests.yml) führt sie bei
 Push auf `main`, Pull Requests und manueller Auslösung aus.
 [`publish-consensus.yml`](../.github/workflows/publish-consensus.yml) führt

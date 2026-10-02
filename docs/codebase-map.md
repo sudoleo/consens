@@ -3897,6 +3897,9 @@ vollständigen Laufs entsprechen, das Limit dem gewünschten Tagesvolumen.
   Nach dem einmaligen Body-Replay reicht die Middleware echte nachfolgende
   ASGI-Receive-Events weiter; insbesondere wird kein künstliches
   `http.disconnect` erzeugt, das laufende SSE-Antworten abbrechen würde.
+  Bei Abbruch während des Einlesens wird auch ein bereits gepufferter Teil
+  verworfen und der echte Disconnect weitergegeben; ein gültiger JSON-Präfix
+  darf nicht als vollständiger Request eine Mutation auslösen.
   Chat-Frage und System-Prompt besitzen getrennte Zeichen- und UTF-8-Bytecaps;
   Legacy-Follow-up-Kontext wird bei Überschreitung abgewiesen statt still
   gekappt. Dadurch fallen auch extrem lange Ein-Wort-Strings vor Providerarbeit.
@@ -5238,10 +5241,13 @@ Coveragewerte von 26.09.2026 sind keine Messung des aktuellen Codes.
   2026-08-09: **39 passed, 1 warning**. Der writerfreie Phase-4-Browserlauf
   wurde nach Phase 6 erneut mit **8 passed, 1 warning** verifiziert. Details in
   `tests/e2e/README.md`.
-- **Keine allgemeine Regression-CI**: `.github/workflows/tests.yml` fehlt.
-  `publisher-tests.yml` führt jedoch Standalone-Publishertests bei Push/PR/manuell
-  aus; `publish-consensus.yml` prüft sie vor dem Publisherlauf. Das bestätigt
-  nicht die gesamte Python-/JS-/E2E-Suite. Befehle: `docs/testing.md`.
+- **Regression-CI**: `.github/workflows/tests.yml` trennt Python, JS/Build,
+  Emulator/Chromium/Clientregeln und Windows-Einstiege. Node 24, Java 21 und
+  Demo-Projekt sind festgelegt; kein Produktcredential nötig.
+  `publisher-tests.yml` und die Vorprüfung in `publish-consensus.yml` bleiben.
+  `dev.ps1 check rules` kapselt den separaten Client-Regelrunner mit demselben
+  Emulator-Lebenszyklus wie `browser`; `npm run test:rules` nutzt einen bereits
+  laufenden lokalen Emulator. Tests/Details: `docs/testing.md`.
 - **Frontend darüber hinaus manuell.** Nach JS-Änderungen
   an nicht abgedeckten Flows (Resolve, Share, Attachments, Follow-up,
   Bookmarks, Agent Mode, Demo, Mobile) die manuelle
@@ -5260,6 +5266,19 @@ Coveragewerte von 26.09.2026 sind keine Messung des aktuellen Codes.
   ab: Hauptlauf, Fehlversuche und E4-Audits (`AuditLedger`, Journal
   `audit_calls.jsonl`, Prüfung vor jedem Audit-Call, Resume ohne erneute
   Audit-Kosten); fehlende Usage wird mit der Vorab-Obergrenze verbucht.
+  HTTP-200-Fehlerobjekte und ungültige Chat-Completions-Bodies sind strukturierte
+  Fehler, keine Enthaltung; gültiger Text ohne Auswahl bleibt Enthaltung.
+  Transport-/Synthesefehler speichern keine privaten Exception-/Providertexte.
+  Manifestvergleich ersetzt nur flüchtiges Datum/Uhrzeit/UTC-Offset durch
+  Platzhalter, auch beim Lesen älterer Manifeste; Zeitzone, Instruktionen und
+  Modellparameter bleiben eingefroren. `run_sample` und `run_experiment` sind
+  unterstützte Einstiegspunkte: Dry-run/Live schließen sich aus, Live verlangt
+  ein positives endliches Budget, Sample-Run-IDs bleiben ein einzelner
+  Verzeichnisname. Die Validierung erfolgt vor Dataset- oder Providerarbeit.
+- **Claim-Key-Backfill** (`scripts/backfill_claim_keys.py`): Normalbetrieb ergänzt
+  nur fehlende Keys; vorhandene Teilzuordnungen bleiben erhalten. `--force`
+  erlaubt ausdrücklich erneute Zuordnung. Dry-run zählt geplante Änderungen
+  korrekt und schreibt nichts, kann aber weiterhin den Identity-Judge aufrufen.
 - JS-Syntaxcheck einzelner Module:
   ```powershell
   node --check static\js\<modul>.js
