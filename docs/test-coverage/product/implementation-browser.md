@@ -168,3 +168,72 @@ Producerabschluss-Beobachtung erneut gezielt geprueft:
 vor dem Workerstart an einer abgelaufenen lokalen Keepalive-Verbindung ab;
 Kontrollrequests verwenden nun ebenfalls `Connection: close`, ohne Retry.
 Die komplette integrierte E2E-Suite prueft der koordinierende Hauptlauf.
+
+
+## WP-03/WP-38: integrierte Smoke-Nacharbeit
+
+Der gemeinsame Voll-CI-Lauf fand 22 Smoke-Fehler. Der Firebase-UI-Stub schrieb
+noch auf die inzwischen schreibgeschuetzte `window.isUserPro`-Ansicht und brach
+vor der Authinitialisierung ab. Er publiziert nun Identitaet und Tier ueber die
+originalen Besitzer (`authState`, `accountTier`, `updateUserTierUI`). `app_page`
+wartet auf die bekannte passende Identitaet; der erste Smoke prueft den exakten
+Owner-/Generation-/Free-Zustand. Produktguards bleiben aktiv.
+
+Die gesamte Smoke-Datei folgt wieder den gegenwaertigen Produktvertraegen:
+Modus vor Textfeld, Modelle rechts beziehungsweise mobil in eigener Zeile;
+Display-Settings vor Themewechsel; sichtbarer Modellpicker setzt `custom` und
+persistiert die echte Benutzerauswahl. Die Splitmarkierung muss den sichtbaren
+Dissens-CSS-Token verwenden, die Zahl bleibt neutral. Ueberlappende Contradiction-
+Passagen behalten ihr einzelnes zugaengliches Steuerelement. Ein archivierter
+Claim oeffnet im echten Reader den archivierten Turn. Der moderne V4-Lauf zeigt
+keinen erfundenen Sources-Tab; vorhandene Legacyquellen pruefen separate Faelle.
+Der Reader erhaelt Fokus, Escape und die Antwortverknuepfung; mobile Aktionen
+wandern in den Header und auf Desktop zurueck. Copy wird wirklich geklickt,
+nur die Betriebssystem-Zwischenablage wird ersetzt: konkrete Badgetexte fehlen,
+ein legitimer Bruch `3/7` bleibt erhalten. Der Attachmentfall prueft den echten
+HTTP-Dispatch und die unveraenderliche Providerzulassung des Runs, auch nachdem
+der Picker fuer die naechste Nachricht wiederhergestellt wurde.
+
+Ein echter Produktfehler blieb nach der Korrektur der alten Erwartungen rot:
+Die Containerbreite animiert nach einem Viewport-/Sidebarwechsel weiter, nachdem
+das einmalige Resize-Ereignis schon verarbeitet ist. Ein in der schmalen
+Zwischenbreite geleertes Feld blieb bei 180 statt 52 Pixeln. Die Negativkontrolle
+wartet auf das Ende der realen CSS-Transition und danach bis zu fuenf Sekunden;
+sie scheitert mit altem Produktcode genau an dieser Hoehe. Der benachbarte
+Bottom-Row-Test besteht nach demselben Transition-Wait unveraendert. Beleg:
+`test-results/smoke-width-negative.{log,xml}` (1 failed, 1 passed, 18,97 s;
+Basis-HEAD caa7bac6 plus uncommittierte Testaenderungen, kein sauberer Laufcommit
+und kein separat archivierter pytest-Prozessexit).
+
+Die bisherige Autosize-Logik liegt jetzt in `composer-autosize.js` vor app-init;
+`App.resizeQuestionInput` und ihre bestehenden Ereignisse bleiben erhalten.
+Ein nach tatsaechlicher Breite gefilterter ResizeObserver misst pro Frame
+hoechstens einmal und reagiert nicht auf seine eigenen Hoehenaenderungen.
+Vier neue JS-Verhaltensfaelle pruefen Endbreite ohne weiteres Viewportereignis,
+Framebuendelung/keine Hoehenschleife, Multiline-Bestaendigkeit sowie bestehende
+Placeholder-/Viewportreaktionen. Der Python-Strukturfall prueft zusaetzlich
+Initialisierung und reale Bundlereihenfolge statt alter Funktionspositionen.
+
+Mockgrenzen: Diese Smoke-Suite behaelt ihren vollstaendigen Firebase-Clientstub,
+MOCK_AUTH und MOCK_LLM. Der Watch-Validierungsfall setzt einen ausdruecklichen
+Result-Kontext und eine konfigurierte, noch nicht verbundene Telegramgrenze;
+er behauptet keine echte Publikation. Tierwechsel nutzen zwei ausdruecklich
+verschiedene Katalogoptionen, damit identische Produktionsdefaults den Test
+nicht ausschalten. Native Persistenz, Publikation und Buchungen deckt WP-29 ab.
+
+Gezielte Pruefungen: `npm exec vitest run tests/js/composer-autosize.test.mjs`
+**4 passed**, `UNIT_TEST_MODE=1 python -m pytest tests/test_navigation_settings_ui.py -q`
+**27 passed**. `npm run build` wurde nach Integration von a831e3e1 ausgefuehrt.
+Logs: `test-results/smoke-autosize-js.log`, `test-results/smoke-navigation.log`.
+
+Der Abschlusslauf auf a831e3e1 plus diesem Patch bestand vollstaendig:
+`UNIT_TEST_MODE=1 RUN_E2E=1 FIRESTORE_EMULATOR_HOST=127.0.0.1:8085 E2E_PORT=8031
+python -m pytest tests/e2e/test_smoke.py -q --junitxml=test-results/smoke-final.xml`
+ergab **43 passed** in 102,06 s, pytest-Exit **0**. Die bestehende Python3.9-
+DeprecationWarning betrifft den asyncio-Subprozessadapter. Belege:
+`test-results/smoke-final.{log,xml}`, `test-results/smoke-final.exit`.
+Der lange Reader-/Copy-/Run-again-Fall bestand zuvor einzeln mit **1 passed**
+in 16,35 s (`test-results/smoke-reader7.{log,xml}`). `npm run build:check`
+bestand ebenfalls (`test-results/smoke-build-check.log`); das neue generierte
+Appbundle enthaelt LF, keine CRLF-Normalisierung. Ganze JS-/E2E-/CI-Pruefungen
+fuer den integrierten Abschluss uebernimmt der koordinierende Hauptlauf.
