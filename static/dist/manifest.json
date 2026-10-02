@@ -1,5 +1,5 @@
 {
-  "sources": "e7970dc22a60",
+  "sources": "d67e9ce521d0",
   "inputs": [
     "package-lock.json",
     "package.json",
@@ -36,6 +36,7 @@
     "static/css/layout.css",
     "static/css/model-answer-reader.css",
     "static/css/model-pulse.css",
+    "static/css/public-nav.css",
     "static/css/public-pages.css",
     "static/css/public-shell.css",
     "static/css/public-tokens.css",

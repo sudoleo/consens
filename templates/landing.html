@@ -23,7 +23,7 @@
   <meta name="twitter:image" content="https://www.consens.io/static/og-home-v2.png?v=20260802">
   <meta name="twitter:image:alt" content="The risk of one perspective | consens.io">
   <title>The AI Agent That Checks Six Models | consens.io</title>
-  <link rel="stylesheet" href="/static/css/landing.css?v=20261002-fein4">
+  <link rel="stylesheet" href="/static/css/landing.css?v=20261002-fein5">
   <link rel="stylesheet" href="/static/css/benchmark.css?v=20261002-fein2">
   <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260621-logo2" sizes="any" type="image/png">
@@ -77,9 +77,9 @@
          demo in /app (?demo=1 -> demo.js auto-runs the scripted flow). -->
     <section class="lp-section lp-section--white lp-section--hero">
       <div class="lp-shell lp-hero lp-hero--demo">
-        <!-- The page's h1, one voice below the display size it used to have:
-             big enough to be read before the field, small enough that the
-             field stays the thing you reach for. -->
+        <!-- The page's h1 is its loudest line (Feinschliff 2026-10-02): a
+             statement, then the field. The field stays the thing you reach
+             for through its surface and its light, not through a quiet h1. -->
         <h1 class="lp-hero-claim"><span>One agent does the work.</span> <span>Six models check it.</span></h1>
 
         <div class="lp-hero-composer lp-composer-preview">
@@ -558,12 +558,12 @@
           <p class="lp-lead">Direct comparison across major model families, so every answer can be checked against independent alternatives.</p>
         </div>
         <div class="lp-logos lp-reveal">
-          <div class="lp-logo"><span class="lp-logo-mark"><img src="/static/icons/chatgpt.png" alt="OpenAI ChatGPT"></span><span>ChatGPT</span></div>
-          <div class="lp-logo"><span class="lp-logo-mark"><img src="/static/icons/claude.png" alt="Anthropic Claude"></span><span>Claude</span></div>
-          <div class="lp-logo"><span class="lp-logo-mark"><img src="/static/icons/gemini.png" alt="Google Gemini"></span><span>Gemini</span></div>
-          <div class="lp-logo"><span class="lp-logo-mark"><img src="/static/icons/mistral.png" alt="Mistral AI"></span><span>Mistral</span></div>
-          <div class="lp-logo"><span class="lp-logo-mark"><img src="/static/icons/deepseek.png" alt="DeepSeek"></span><span>DeepSeek</span></div>
-          <div class="lp-logo"><span class="lp-logo-mark"><img src="/static/icons/grok.png" alt="xAI Grok"></span><span>Grok</span></div>
+          <div class="lp-logo"><span class="lp-logo-mark"><img src="/static/icons/chat_icons/chatgpt.png" alt="OpenAI ChatGPT"></span><span>ChatGPT</span></div>
+          <div class="lp-logo"><span class="lp-logo-mark"><img src="/static/icons/chat_icons/claude.png" alt="Anthropic Claude"></span><span>Claude</span></div>
+          <div class="lp-logo"><span class="lp-logo-mark"><img src="/static/icons/chat_icons/gemini-icon.png" alt="Google Gemini"></span><span>Gemini</span></div>
+          <div class="lp-logo"><span class="lp-logo-mark"><img src="/static/icons/chat_icons/mistral.png" alt="Mistral AI"></span><span>Mistral</span></div>
+          <div class="lp-logo"><span class="lp-logo-mark"><img src="/static/icons/chat_icons/deepseek.png" alt="DeepSeek"></span><span>DeepSeek</span></div>
+          <div class="lp-logo"><span class="lp-logo-mark"><img src="/static/icons/chat_icons/grok.png" alt="xAI Grok"></span><span>Grok</span></div>
           <div class="lp-logo"><span class="lp-logo-mark"><img src="/static/icons/chat_icons/kimi.svg" alt="Moonshot AI Kimi"></span><span>Kimi</span></div>
           <div class="lp-logo"><span class="lp-logo-mark"><img src="/static/icons/chat_icons/zai.svg" alt="Z.ai GLM"></span><span>GLM</span></div>
           <div class="lp-logo"><span class="lp-logo-mark"><img src="/static/icons/chat_icons/meta.svg" alt="Meta Muse"></span><span>Muse</span></div>
@@ -579,12 +579,30 @@
 
     <!-- ====================================================== FINAL CTA -->
     <section class="lp-section lp-section--white">
+      <!-- The page ends where it began: the same field, now empty and waiting
+           for the reader's own question, with the same light on its send
+           control. It opens the app, not the demo. -->
       <div class="lp-shell lp-final">
         <div class="lp-head lp-reveal">
-          <p class="lp-eyebrow">Get the product view</p>
           <h2 class="lp-h2">Ask the agent. Keep watching the answer.</h2>
         </div>
-        <a href="/app" class="lp-btn lp-btn--primary lp-reveal" data-umami-event="landing_final_open_app">Ask the agent</a>
+        <div class="lp-hero-composer lp-final-composer lp-composer-preview lp-reveal">
+          <a class="lp-prompt lp-hero-prompt" href="/app" data-umami-event="landing_final_open_app"
+             aria-label="Open the app and ask the agent your own question">
+            <span class="lp-prompt-text is-placeholder">What would you want a second opinion on?</span>
+            <span class="lp-hero-prompt-bar">
+              <span class="lp-attach" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+              </span>
+              <span class="lp-mode-chip">Agent<i aria-hidden="true"></i></span>
+              <span class="lp-run-chip">Claude Opus 5.5<span class="lp-run-chip-count">+6</span><i aria-hidden="true"></i></span>
+              <span class="lp-demo-btn demo-action send-glow">
+                <span>Ask the agent</span>
+                <span class="demo-action-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 19V5.5M6 11.5l6-6 6 6" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"></path></svg></span>
+              </span>
+            </span>
+          </a>
+        </div>
       </div>
     </section>
   </main>
@@ -595,13 +613,20 @@
   <script defer src="/static/js/landing-insights.js?v=20260815-claimmark1"></script>
   <script>
     document.addEventListener("DOMContentLoaded", () => {
-      // Lean scroll reveal: one fade-up per block when it enters the viewport.
+      // Lean scroll reveal: every block is visible from the first frame (link
+      // previews and reader modes see the whole page). Only blocks that start
+      // below the fold are armed; they rise 8px into place as they arrive.
       const revealItems = Array.from(document.querySelectorAll(".lp-reveal"));
       const reducedMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
       if (reducedMotion || !("IntersectionObserver" in window)) {
         revealItems.forEach(el => el.classList.add("is-visible"));
       } else {
+        const fold = window.innerHeight;
+        revealItems.forEach(el => {
+          if (el.getBoundingClientRect().top > fold) el.classList.add("is-armed");
+          else el.classList.add("is-visible");
+        });
         const observer = new IntersectionObserver((entries, obs) => {
           entries.forEach(entry => {
             if (entry.isIntersecting) {

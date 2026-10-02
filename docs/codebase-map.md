@@ -283,7 +283,17 @@ Antwort, danach Markierungen und Evidenzzeile („45/100 agreement ·
 Contradictions 2 · Answers 6“); keine Ladebalken mehr. Treiber
 `landing-scenes.js` (`buildRunScene`, Standbild bei reduced motion = fertiger
 Turn über `render.still`). Szene 03 und Watch sprechen von „answer“ statt
-„consensus“. Der Landing-Hero
+„consensus“. Seit dem Feinschliff (2026-10-02) ist die H1 `.lp-hero-claim` die lauteste
+Zeile der Seite (Display-Größe, zweiter Satz in `--ink-3`), die ganze Landing
+steht auf EINEM Grund (`--ground`; Abschnitte trennt eine auslaufende
+Haarlinie statt zweier Tonstufen), die Szenen 01/02 laufen mit 210vh (Desktop)
+bzw. 170vh durch und enden ohne Leerlauf, ihre Schiene ist 1 px und trägt an
+der Spitze das Hauslicht. `.lp-reveal` blendet nicht mehr aus: Blöcke sind ab
+dem ersten Frame sichtbar, nur unterhalb der Falz startende (`.is-armed`)
+steigen 8 px ein. Der Schluss wiederholt das Hero-Feld leer (öffnet `/app`).
+Die öffentliche Navigation hat bis 700 px ein Menü (`<details class="nav-menu">`
+in `partials/public_nav.html`, Stil in `static/css/public-nav.css`, importiert
+von `landing.css` und `public-pages.css`). Der Landing-Hero
 ist seit 2026-07-17 demo-first: Ein klickbares Input-Feld (Look des /app-Inputs,
 "Try the demo"-Button, Provider-Chips darunter) verlinkt auf `/app?demo=1`;
 Landing-Hero und App-Composer teilen die `.demo-action`-Gestaltung aus

@@ -1,0 +1,71 @@
+/* ==========================================================================
+   Public navigation on phones
+   Below the width where the links fit, they used to disappear and live only
+   in the footer. A menu mark now opens them in a small panel under the bar.
+   It is a <details>, so it works without script and closes like any
+   disclosure. Shared by landing.css and public-pages.css.
+   ========================================================================== */
+.nav-menu { display: none; position: relative; }
+
+@media (max-width: 700px) {
+  .nav-menu { display: block; }
+}
+
+.nav-menu > summary {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-pill);
+  color: var(--ink-2);
+  list-style: none;
+  cursor: pointer;
+  transition: background-color var(--dur-press) var(--ease-standard), color var(--dur-press) var(--ease-standard);
+}
+.nav-menu > summary::-webkit-details-marker { display: none; }
+.nav-menu > summary:hover,
+.nav-menu[open] > summary { background: var(--raise); color: var(--ink); }
+.nav-menu > summary:focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-ring-offset); }
+.nav-menu > summary svg { width: 18px; height: 18px; }
+.nav-menu > summary line {
+  transform-box: view-box;
+  transform-origin: 12px 12px;
+  transition: transform var(--dur-layer) var(--ease-out), opacity var(--dur-state) var(--ease-standard);
+}
+.nav-menu[open] > summary line:nth-child(1) { transform: rotate(45deg) translateY(5px); }
+.nav-menu[open] > summary line:nth-child(2) { opacity: 0; }
+.nav-menu[open] > summary line:nth-child(3) { transform: rotate(-45deg) translateY(-5px); }
+
+.nav-menu-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 50;
+  display: grid;
+  min-width: 190px;
+  padding: 6px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-md);
+  background: var(--well);
+  box-shadow: var(--lift);
+}
+.nav-links .nav-menu .nav-menu-panel a {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 12px;
+  border-radius: var(--radius-xs);
+  color: var(--ink);
+  font-size: var(--font-size-base);
+  text-decoration: none;
+}
+.nav-links .nav-menu .nav-menu-panel a:hover,
+.nav-links .nav-menu .nav-menu-panel a[aria-current="page"] { background: var(--raise); }
+
+@media (prefers-reduced-motion: no-preference) {
+  .nav-menu[open] .nav-menu-panel { animation: nav-menu-in var(--dur-state) var(--ease-out); }
+}
+@keyframes nav-menu-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}

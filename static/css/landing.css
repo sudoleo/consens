@@ -13,10 +13,11 @@
    ========================================================================== */
 
 @import url('./public-tokens.css?v=20261002-fein2');
+@import url('./public-nav.css?v=20261002-fein5');
 @import url('./skeleton.css?v=20261002-fein2');
 @import url('./components-consensus-visuals.css?v=20261002-fein2');
-@import url('./demo-action.css?v=20261002-fein4');
-@import url('./send-glow.css?v=20261002-fein4');
+@import url('./demo-action.css?v=20261002-fein5');
+@import url('./send-glow.css?v=20261002-fein5');
 
 *,
 *::before,
@@ -2910,4 +2911,162 @@ img { display: block; max-width: 100%; }
   .lp-composer-row { flex-wrap: wrap; row-gap: 4px; }
   .lp-composer-row .lp-run-chip { order: -1; flex: 1 0 100%; justify-content: flex-end; margin-left: 0; }
   .lp-composer-row .lp-send { margin-left: auto; }
+}
+
+/* ==========================================================================
+   Feinschliff (2026-10-02)
+   One statement, then the proof: the page's h1 is its loudest line again,
+   the page stands on one ground with horizons between its parts, the scroll
+   scenes keep their rhythm without idle screens, and the mockups lose the
+   boxes and shadows the product itself no longer has.
+   ========================================================================== */
+
+/* L1 — The h1 is the loudest line on the page; its second sentence answers
+   the first, one step quieter. Field and statement read as one unit. */
+.lp-hero-claim {
+  max-width: 18ch;
+  font-size: clamp(2.25rem, 4.6vw, 3.5rem);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.05;
+  letter-spacing: -0.034em;
+}
+.lp-hero-claim span:last-child { color: var(--ink-3); }
+.lp-hero-composer { margin-top: clamp(6px, 1vw, 12px); }
+
+/* L2 — One ground for the whole page. Two section tones 2% apart read as a
+   seam in the rendering, not as design; parts are set apart by a horizon
+   that fades out at both ends, like everywhere in the product. */
+.lp-nav { background: var(--ground); }
+.lp-section--white,
+.lp-section--grey {
+  background: var(--ground);
+  --surface: var(--raise);
+  --surface-2: var(--ground);
+}
+main > .lp-section + .lp-section { position: relative; }
+main > .lp-section + .lp-section::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: min(var(--maxw), calc(100% - 44px));
+  height: 1px;
+  transform: translateX(-50%);
+  background: var(--line-soft);
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 18%, #000 82%, transparent);
+          mask-image: linear-gradient(90deg, transparent, #000 18%, #000 82%, transparent);
+  pointer-events: none;
+}
+/* The pinned scenes run into each other without a seam of their own. */
+main > .lp-scene-02::before { display: none; }
+
+/* L3 — Rhythm: the pinned scenes play through in less scroll and end where
+   the stage ends, so no idle screen follows them. The rail is a 1px horizon
+   and carries the house light at its tip: the same light that runs along
+   the agent's work in the app. */
+@media (min-height: 620px) and (prefers-reduced-motion: no-preference) {
+  .lp-scroll-scene { min-height: 170vh; }
+  .lp-section.lp-scene-01,
+  .lp-section.lp-scene-02 { padding-bottom: 0; }
+  .lp-section.lp-scene-02 { padding-top: 0; }
+  /* Fade by gradient, not by mask: a mask would clip the light to 1px. */
+  .lp-scene-rail {
+    height: 1px;
+    overflow: visible;
+    background: linear-gradient(90deg, transparent, var(--line-soft) 12%, var(--line-soft) 88%, transparent);
+    -webkit-mask-image: none;
+            mask-image: none;
+  }
+  .lp-scene-rail i {
+    position: relative;
+    background: linear-gradient(90deg, transparent, var(--ink-3));
+  }
+  .lp-scene-rail i::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    right: -6px;
+    width: 64px;
+    height: 9px;
+    border-radius: 999px;
+    transform: translateY(-50%);
+    background: radial-gradient(closest-side, var(--light-core), color-mix(in srgb, var(--light) 35%, transparent) 55%, transparent);
+    filter: blur(1.5px);
+    opacity: .9;
+  }
+}
+@media (min-width: 900px) and (min-height: 620px) and (prefers-reduced-motion: no-preference) {
+  .lp-scroll-scene { min-height: 210vh; }
+}
+
+/* L5 — The slices of the product sit on one quiet tone without a shadow, as
+   in the app; the notes under the marks speak in sentence case (one
+   uppercase label per block at most). */
+.lp-excerpt { box-shadow: none; }
+.lp-mark-note {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-regular);
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--ink-3);
+}
+.lp-mark-note::first-letter { text-transform: uppercase; }
+
+/* L6 — A score and its "/100" share one baseline, as in the app. */
+.lp-examples-title {
+  font-weight: var(--font-weight-medium);
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--ink-3);
+}
+.lp-example-score {
+  grid-template-columns: auto auto;
+  align-items: baseline;
+  justify-content: start;
+  column-gap: 3px;
+}
+.lp-example-score i { margin-left: 0; }
+.lp-example-meter { grid-column: 1 / -1; }
+
+/* L7 — The watch story is two objects on the ground, not a card in a card. */
+.lp-watch-story { background: transparent; padding: 0; }
+.lp-watch-card { background: var(--surface); }
+
+/* L8 — A button as wide as its words: the result is the loud part here. */
+.lp-bench-aside .lp-btn { align-self: flex-start; width: auto; }
+
+/* L9 — Nine marks, one optical size, one row; no wordmarks. */
+@media (min-width: 900px) {
+  .lp-logos { grid-template-columns: repeat(9, minmax(0, 1fr)); gap: 4px; }
+  .lp-logos > .lp-logo:last-child:nth-child(4n + 1) { grid-column: auto; }
+}
+.lp-logo { gap: 12px; padding: 18px 4px; }
+.lp-logo-mark { height: 28px; }
+.lp-logo-mark img { height: 24px; max-width: 26px; }
+.lp-logo > span:last-child { color: var(--ink-2); font-size: var(--font-size-sm); }
+
+/* L11 — Everything is there from the first frame. A block that starts below
+   the fold rises 8px into place as it arrives; nothing waits invisible for
+   an observer (link previews and reader modes see the whole page). */
+.lp-reveal { opacity: 1; transform: none; }
+.lp-reveal.is-armed:not(.is-visible) { transform: translateY(8px); }
+.lp-reveal.is-armed { transition: transform var(--dur-light) var(--ease-out); }
+@media (prefers-reduced-motion: reduce) {
+  .lp-reveal.is-armed:not(.is-visible) { transform: none; }
+}
+
+/* L10 — The closing field: the hero's field, empty and waiting. */
+.lp-final { gap: clamp(20px, 3vw, 30px); }
+.lp-final-composer { width: min(680px, 100%); margin: 0 auto; text-align: left; }
+.lp-final-composer .lp-prompt-text.is-placeholder { color: var(--ink-3); }
+.lp-final-composer .lp-demo-btn { padding: 0 13px 0 15px; }
+.lp-final-composer .demo-action-icon,
+.lp-final-composer .demo-action-icon svg { width: 13px; height: 13px; }
+
+/* Phones: the demo action keeps its own size on its own line (right, where
+   Send stands), and nine marks make three even rows instead of an orphan. */
+@media (max-width: 600px) {
+  .lp-hero-prompt-bar .lp-demo-btn { flex: 0 0 auto; margin-left: auto; }
+  .lp-logos { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .lp-logos > .lp-logo:last-child:nth-child(4n + 1) { grid-column: auto; }
 }
