@@ -17,7 +17,7 @@ def public_topics(http_adapter, monkeypatch):
     monkeypatch.setattr(topics, "db_firestore", h.topic_db)
     monkeypatch.setenv("WATCH_UNSUBSCRIBE_SECRET", "test-only-secret")
     monkeypatch.setenv("SMTP_HOST", "mail.example.test")
-    monkeypatch.setenv("SMTP_FROM", "sender@example.test")
+    monkeypatch.setenv("MAIL_FROM", "sender@example.test")
     h.send = AsyncMock(return_value=True)
     monkeypatch.setattr(mailer, "send_message", h.send)
     return h
@@ -71,6 +71,7 @@ def test_follow_neutral_response_confirmation_escaping_and_unsubscribe(public_to
     assert not topics.list_followers(topic["id"], db=h.topic_db)
     assert h.send.await_count == 1
     message = h.send.call_args.args[0]
+    assert message["From"] == "sender@example.test"
     # Follow the actual mail link; POST generated and stored the challenge.
     plain = message.get_body(preferencelist=("plain",)).get_content()
     confirm_url = re.search(r"Confirm: (\S+)", plain).group(1)

@@ -8,6 +8,9 @@ WP-21 erhält zusätzlich einen echten `main.app`-Fehlervertrag für die
 Browserprüfung. Die übergreifende Paketabnahme und Browsernachweise werden im
 zentralen Audit geführt.
 
+Die abschließende Abnahme ergänzt außerdem WP-10 (Memory-HTTP-Grenze und
+native Commitfehler) und WP-14 (native Own-Key-Workerzuordnung); siehe unten.
+
 ## Testgrenzen
 
 Die neuen HTTP-Prüfungen verwenden `TestClient(main.app)` mit den tatsächlich
@@ -155,3 +158,87 @@ belegt zusätzlich für WP-21: unbekanntes Konto ergibt durch den echten
 Haupthandler 404 mit `error.error_code=not_found` und lesbarer
 `error.message`, ohne SDK-Diagnose. Ein isolierter Router mit `detail` ersetzt
 diesen Vertrag nicht.
+
+## Ergänzende Abnahme: WP-10, WP-14 und saubere Mailumgebung
+
+`tests/test_memory_http_contract.py` führt zwölf Fälle durch `main.app` und
+den echten Memory-Service bzw. das echte Repository aus. Nur Firebase-SDK-Auth
+und die Datenbankgrenze sind Doubles; weder `verify_user_token` noch
+`get_user_tier` oder ein Router-/Repositoryguard wird ersetzt. Die Fälle prüfen
+401, Tarifausfall 503, fremde/fehlende Revision 404, ungültige ID 422,
+abgelaufenes Undo und spätere manuelle Revision 409 sowie abgesenktes Limit
+422. Jeder Fehler lässt den vollständigen Store unverändert und startet keinen
+Provider. Eine bereits vor der Kontolöschung authentifizierte Anfrage wird bei
+Edit und Undo durch den Tombstone im Repository mit 403 abgefangen. Erfolgreiches
+Undo stellt sämtliche Profilfelder wieder her; Wiederholung verändert weder
+Revision noch Quota.
+
+`tests/e2e/test_memory_edit_transactions.py` verwendet auch an seiner
+HTTP-Grenze die SDK-Auth-Fixture und echte Tier-/Memory-Guards. Ein gezielter
+Fehler bei `DocumentReference.get` belegt den echten 503-Pfad. Der native
+Tombstonetest umfasst zusätzlich Reserve und Undo. Zwei neue Commitfehlerfälle
+lassen die echten Transaktionen sämtliche vier Apply- bzw. zwei Undo-Writes
+vorbereiten und brechen ausschließlich am SDK-Committransport ab. Profil,
+Request, Revision und Quota bleiben danach exakt unverändert. Die sieben
+nativen Memory-Fälle verwenden eigene UIDs und behalten den gemeinsamen
+Emulator-Tageszähler bei.
+
+`tests/e2e/test_source_check_transactions.py` ergänzt den vollständigen
+Own-Key-Workerpfad: Zwei echte Repositories arbeiten in isolierten nativen
+Collections. Nur der zugewiesene Worker besitzt den zufälligen Dummy-Schlüssel
+im flüchtigen Keyregister. Der fremde Worker erhält keinen Claim und darf mit
+fremder UID auch nicht neu binden. Der richtige Worker verarbeitet genau ein
+Paket über den echten Jobservice, übergibt den Schlüssel ausschließlich an den
+kontrollierten Modelltransport und entfernt ihn anschließend aus dem Speicher.
+Wiederholung erzeugt keinen zweiten Modellaufruf. Entpackte Job-/Paket- und
+Cachedaten, Worker-Dokumente und erfasste Logs enthalten keinen Schlüssel.
+Fetch und Judge sind externe Doubles; ein Rückfall auf Entwicklercredentials
+lässt den Test unmittelbar fehlschlagen.
+
+Die beiden ergänzenden Negativkontrollen liefen als isolierte Pytest-Prozesse
+mit nur im Prozess ersetzten Methoden. Die Entfernung der Undo-Revisionsprüfung
+erzeugte 200 statt 409 im echten HTTP-Fehlerfall. Die Entfernung der
+Own-Key-Affinitätsprüfung ließ den fremden Worker das native Jobdokument
+verarbeiten. Beide Kontrollen endeten mit genau einem Assertionfehler und Exit
+1, ohne Import-/Setupfehler; Produktdateien wurden dabei nicht verändert.
+Lokale Belege: `test-results/followup-mutation-memory.log`,
+`test-results/followup-mutation-affinity.log` und
+`test-results/followup-mutation-results.json`.
+
+Die öffentliche Topic-Mailfixture setzt jetzt den tatsächlich ausgewerteten
+`MAIL_FROM` statt `SMTP_FROM` und prüft den erzeugten From-Header. Dadurch hängt
+der Bestätigungslinktest nicht von einer geerbten lokalen Mailkonfiguration ab;
+der echte Konfigurationsguard bleibt aktiv und nur der Versand ist ersetzt.
+Der gemeinsame Lauf der folgenden vier Dateien ergab **32 passed**. Dabei
+waren sämtliche Mailumgebungsvariablen vor dem Start entfernt. Wiederholung mit
+den oben dokumentierten sicheren Emulatorvariablen:
+
+```powershell
+@('SMTP_HOST','SMTP_FROM','MAIL_FROM','SMTP_USER','SMTP_PASSWORD','SMTP_PORT') |
+  ForEach-Object { Remove-Item "Env:$_" -ErrorAction SilentlyContinue }
+venv/Scripts/python.exe -m pytest tests/test_topic_public_http.py tests/test_memory_http_contract.py tests/e2e/test_memory_edit_transactions.py tests/e2e/test_source_check_transactions.py -q
+```
+
+Diese Nachweise belegen lokale HTTP-, Job- und native Transaktionsverträge;
+sie ersetzen keine produktive Firebase-Authentifizierung oder echte Provider-
+bzw. Mailzustellung. Das lokale JUnit-Artefakt liegt unter
+`test-results/adapters-followup.xml`.
+
+## Korrektur zweier veralteter App-Browserprüfungen
+
+Der integrierte Lauf der echten `app_page`-Dateien deckte zwei überholte
+Testannahmen auf. `test_agreement_verdict.py` erwartete einen früheren festen
+Rotton, obwohl die aktuelle gemeinsame Statuspalette `--dispute` verwendet.
+Der Test vergleicht nun die berechnete Alertfarbe mit diesem Token und schließt
+den Agreement-Farbwert ausdrücklich aus; Klasse, Headline und Widerspruchstext
+bleiben geprüft. `test_run_cancel_and_progress.py` ersetzte die alte
+`consensusLifecycle.startRun`-Brücke, die der RunContext-Pfad nicht mehr aufruft.
+Eine passive Beobachtung tatsächlicher Registry- und DOM-Änderungen belegt nun,
+dass der Button sowohl in `pending` als auch in `streaming`/`differences`
+abbrechbar bleibt. Nach Abschluss und Abbruch wird die einzelne Cancelklasse
+unabhängig von weiteren Buttonklassen ausgeschlossen.
+
+Beide Dateien liefen gegen die echte lokale App und den sicheren Demoemulator:
+**4 passed**, eine bestehende Python-3.9-asyncio-DeprecationWarning. Es waren
+keine Produkt-, CSS- oder Buildänderungen nötig. Lokaler Beleg:
+`test-results/app-browser-targeted.xml`.
