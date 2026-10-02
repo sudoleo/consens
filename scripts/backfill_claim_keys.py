@@ -56,9 +56,31 @@ def backfill_topic(topic: dict, *, dry_run: bool, force: bool) -> int:
         )
         labels = [str(dimension.get("label") or "") for dimension in dimensions]
         matches = query_claim_identity(known, labels, api_keys, engine) if known else {}
+        # The judge only de-duplicates its own response. Existing identities in
+        # a partially migrated run also reserve their keys, including generated
+        # fallback names. Reserve accepted matches before creating any fallback.
+        used = {
+            str(dimension["key"]) for dimension in dimensions
+            if not force and dimension.get("key")
+        }
+        unmatched = []
         for index, dimension in enumerate(dimensions):
-            if force or not dimension.get("key"):
-                dimension["key"] = matches.get(index) or f"{run['id']}-{index}"
+            if not force and dimension.get("key"):
+                continue
+            key = matches.get(index)
+            if isinstance(key, str) and key and key not in used:
+                dimension["key"] = key
+                used.add(key)
+            else:
+                unmatched.append((index, dimension))
+        for index, dimension in unmatched:
+            base = f"{run['id']}-{index}"
+            key, suffix = base, 2
+            while key in used:
+                key = f"{base}-{suffix}"
+                suffix += 1
+            dimension["key"] = key
+            used.add(key)
         assigned = ", ".join(
             f"{index}->{dimension['key']}" for index, dimension in enumerate(dimensions)
         )

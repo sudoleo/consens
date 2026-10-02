@@ -72,6 +72,8 @@ else:
            provider_available=lambda p,k: True, developer_keys=lambda: {'fake':'synthetic'})
     def judge(known, labels, keys, engine):
         event('judge', labels)
+        if 'judge_matches' in case:
+            return {int(index): key for index, key in case['judge_matches'].items()}
         return {i:'stable' for i in range(len(labels))}
     module('app.services.llm.consensus_engine', query_claim_identity=judge)
     filename = 'scripts/backfill_claim_keys.py'
@@ -175,6 +177,43 @@ def test_force_can_rekey_existing_dimensions_explicitly():
     value, _ = backfill([['--slug','selected'], ['--slug','selected','--force']])
     assert len([e for e in value['events'] if e[0] == 'write']) == 4
     assert value['rows'][0]['opinion_map']['dimensions'][0]['key'] == 'r1-0'
+
+
+def test_backfill_reserves_retained_keys_and_avoids_fallback_collisions():
+    rows = [
+        {'id': 'r0', 'opinion_map': {'dimensions': [{'label': 'old', 'key': 'stable'}]}},
+        {'id': 'r1', 'opinion_map': {'dimensions': [
+            {'label': 'retained', 'key': 'stable'},
+            {'label': 'missing'},
+            {'label': 'reserved fallback', 'key': 'r1-1'},
+            {'label': 'reserved suffix', 'key': 'r1-1-2'},
+        ]}},
+    ]
+    value, _ = execute({
+        'script': 'backfill', 'rows': rows, 'judge_matches': {'1': 'stable'},
+        'calls': [['--slug', 'selected'], ['--slug', 'selected']],
+    })
+    assert value['codes'] == [0, 0]
+    dimensions = value['rows'][1]['opinion_map']['dimensions']
+    assert [item['key'] for item in dimensions] == ['stable', 'r1-1-3', 'r1-1', 'r1-1-2']
+    assert len([event for event in value['events'] if event[0] == 'write']) == 1
+    assert value['rows'][0] == rows[0]
+
+
+def test_force_assigns_valid_judge_keys_before_generating_fallbacks():
+    rows = [
+        {'id': 'r0', 'opinion_map': {'dimensions': [{'label': 'old', 'key': 'r1-0'}]}},
+        {'id': 'r1', 'opinion_map': {'dimensions': [
+            {'label': 'new identity', 'key': 'replace-me'},
+            {'label': 'continued identity'},
+        ]}},
+    ]
+    value, _ = execute({
+        'script': 'backfill', 'rows': rows, 'judge_matches': {'1': 'r1-0'},
+        'calls': [['--slug', 'selected', '--force']],
+    })
+    dimensions = value['rows'][1]['opinion_map']['dimensions']
+    assert [item['key'] for item in dimensions] == ['r1-0-2', 'r1-0']
 
 
 @pytest.mark.parametrize('args,env', [([], {}), (['--slug','selected'], {'MOCK_LLM':'1'})])
