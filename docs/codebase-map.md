@@ -2252,7 +2252,10 @@ Commit-Ergebnis. Offene Abrechnungen werden nach dem Join vor finish_run erneut
 abgeschlossen; ein noch laufender Beleg verhindert weiterhin den Run-Abschluss.
 SSE-Toolarbeit läuft in einem kontrollierten Thread, während der Producer
 Aktivitäten weiter ausgibt. Stop/Disconnect schließt Provider und wartet auf die
-aktiven Worker/Tools. Abgelaufene Leases werden zu terminalen unbekannten
+aktiven Worker/Tools. Scheitert dabei das Settlement etwa an einem
+Kontotombstone, bewahrt der Router `GeneratorExit`, protokolliert den
+Cleanupfehler und gibt keinen weiteren SSE-Frame aus; die lokale Kapazität
+wird weiterhin freigegeben. Abgelaufene Leases werden zu terminalen unbekannten
 Belegen; terminale Belege geben auch bei fehlender Usage ihre Reserve frei.
 Budgetabruf und Run-Start suchen zusätzlich kontogebunden nach abgelaufenen
 Root-Belegen (höchstens 20 pro Abruf), auch wenn der Eintrag in der aktiven
