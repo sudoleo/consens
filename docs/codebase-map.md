@@ -2958,6 +2958,9 @@ zugeordnet. Andere parallele Chats können reserviertes Budget nicht ausgeben.
 und strukturierte Antwortformate lokal mit tiktoken/cl100k. Die unveränderten
 Vokabeldaten samt Lizenz liegen komprimiert in `llm/tokenizer_data/`; Laden
 prüft SHA-256 und benötigt weder Netzwerk noch einen beschreibbaren Cache.
+Ein gemeinsamer Lock um Cache-Zugriff und Aufbau verhindert mehrfache
+Tokenizer-Initialisierung bei gleichzeitigen Kaltstarts; `encoding.cache_clear()`
+setzt den Cache unter demselben Lock zurück.
 25 % Zuschlag plus Protokollreserve berücksichtigen abweichende Tokenizer;
 das ist eine Zulassungsschätzung, keine gemessene Usage und keine garantierte
 Provider-Obergrenze. `agent_costs.RunCosts.estimate` trennt diese Kalkulation
