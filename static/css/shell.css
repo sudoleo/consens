@@ -2757,16 +2757,24 @@ body:not(.is-hero).agent-mode-enabled:not(.agent-mode-show-answers):not(.direct-
 /* The composer stands on the ground: the answer dissolves over the last
    28px above it and never runs, half-hidden, underneath the field and the
    note below it. Never intercepts clicks or clips the menus above the field.
-   The ground reaches down to the bottom edge, past the note. */
+   The ground ends with the composer: the sticky composer is the column's
+   last box, and a ground reaching further down added scrollable space below
+   the column. The page then scrolled past the column's end, and the
+   composer, held inside the column, rose by that much at the bottom of the
+   thread. Only the fixed composer (narrow screens) reaches past the edge. */
 body:not(.is-hero) .input-section::before {
   content: "";
   position: absolute;
-  inset: -28px -8px -40px;
+  inset: -28px -8px 0;
   z-index: -1;
   pointer-events: none;
   background: var(--composer-halo);
   -webkit-mask-image: linear-gradient(180deg, transparent, #000 28px);
   mask-image: linear-gradient(180deg, transparent, #000 28px);
+}
+
+@media (max-width: 1099px) {
+  body:not(.is-hero) .input-section::before { bottom: -40px; }
 }
 
 body:not(.is-hero) .consensus-section::before {

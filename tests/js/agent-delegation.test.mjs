@@ -456,4 +456,39 @@ describe("Agent sidebar", () => {
     expect(segments[1].dataset.state).toBe("done");
     dom.window.close();
   });
+  it("moves the light forward only, with the answer check as its own last stretch", () => {
+    const answer = (id, seq, status) => ({ ...agent(seq, status, id), kind: "comparison", title: "Independent answer" });
+    const judge = (seq, status) => ({ ...agent(seq, status, "f".repeat(32)), kind: "judge", title: "Coverage judge" });
+    const { window: w, document: d, dom } = boot(async () => ({ ok: true, json: async () => ({ agents: [], status: "running" }) }));
+    const light = () => d.getElementById("agentAnswerActivity").style.getPropertyValue("--light-p");
+    receive(w, answer("a".repeat(32), 1, "completed"));
+    receive(w, answer("b".repeat(32), 1, "working"));
+    w.App.agentDelegation.project({ chatId, turnId, running: true });
+    expect(light()).toBe("49%");
+    receive(w, answer("b".repeat(32), 2, "completed"));
+    expect(light()).toBe("84%");
+    // The judge row arriving used to pull the light back to 2 of 3 rows.
+    receive(w, judge(1, "working"));
+    expect(light()).toBe("88%");
+    receive(w, judge(2, "completed"));
+    expect(light()).toBe("100%");
+    dom.window.close();
+  });
+  it("projects a local demo turn without requests and releases it again", async () => {
+    const { window: w, document: d, dom } = boot();
+    d.getElementById("agentAnswerActivity").innerHTML = "<details><summary></summary></details>";
+    const call = (id, status, text = "") => ({ id, kind: "comparison", title: id, status, text,
+      model: { label: id, model: "" }, usage: status === "completed" ? { input_tokens: 10, output_tokens: 5, complete: true } : null });
+    w.App.agentDelegation.demo({ turnId: "demo-1", running: true, agents: [call("demo-OpenAI", "working"), call("demo-Gemini", "working")] });
+    expect(d.querySelectorAll(".agent-inline-model")).toHaveLength(2);
+    expect(d.querySelector(".agent-sidebar-stop").hidden).toBe(true);
+    w.App.agentDelegation.demo({ turnId: "demo-1", running: false, agents: [call("demo-OpenAI", "completed", "Send it."), call("demo-Gemini", "completed", "Keep it.")] });
+    d.querySelector(".agent-session summary").click();
+    await vi.waitFor(() => expect(d.querySelector(".agent-session-detail").textContent).toContain("Send it."));
+    expect(w.fetch).not.toHaveBeenCalled();
+    w.App.agentDelegation.demo(null);
+    expect(d.querySelector(".agent-inline-models")).toBeNull();
+    expect(d.getElementById("agentSidebar").hidden).toBe(true);
+    dom.window.close();
+  });
 });

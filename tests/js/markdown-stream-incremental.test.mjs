@@ -43,6 +43,18 @@ describe("incremental streamed Markdown", () => {
     expect(parsed).toBeLessThan(long.length * 5);
   });
 
+  it("shows an opened bold span as bold before its closing asterisks arrive", () => {
+    const { window, document } = boot();
+    const el = document.createElement("div");
+    window.renderMarkdownStream(el, "**Send it, after two");
+    expect(el.textContent).not.toContain("*");
+    expect(el.querySelector("strong")?.textContent).toBe("Send it, after two");
+    window.renderMarkdownStream(el, "**Send it, after two fixes.** Then **");
+    expect(el.textContent).not.toContain("*");
+    window.renderMarkdownStream(el, "```\nconst a = 2 ** 3;");
+    expect(el.textContent).toContain("2 ** 3");
+  });
+
   it("keeps finished nodes stable and starts over when the text does not just grow", () => {
     const { window, document } = boot();
     const el = document.createElement("div");

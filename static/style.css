@@ -24,10 +24,10 @@
 @import url('./css/components-watch.css?v=20261002-fein6');
 /* Shell layer — loaded LAST so the frameless redesign wins on equal
    specificity. Elevation, sidebar, topbar, composer and thread material. */
-@import url('./css/shell.css?v=20261002-fein6');
+@import url('./css/shell.css?v=20261002-todo1');
 @import url('./css/model-answer-reader.css?v=20261002-fein2');
 @import url('./css/composer-attachments.css?v=20261002-fein2');
-@import url('./css/agent-chat.css?v=20261002-fein6');
+@import url('./css/agent-chat.css?v=20261002-todo4');
 @import url('./css/agent-google.css?v=20261002-fein2');
 @import url('./css/agent-workspace.css?v=20261002-fein2');
 /* The composer row's layout, for every mode (see its header). */

@@ -212,7 +212,7 @@
     return data;
   }
   async function load(view) {
-    if (view.loading || !view.uid) return;
+    if (view.loading || !view.uid || view.local) return;
     view.loading = true;
     view.lastSync = Date.now();
     try {
@@ -238,7 +238,7 @@
   async function loadDetail(view, agentId, more = false) {
     // Judge summaries, progress and measured usage are already in the live
     // session snapshot. Their hidden prompt/JSON needs no extra DB request.
-    if (view.agents.get(agentId)?.kind === 'judge') return;
+    if (view.agents.get(agentId)?.kind === 'judge' || view.local) return;
     let detail = view.details.get(agentId);
     if (!detail) { detail = { messages: new Map(), cursor: 0, loadedSeq: -1 }; view.details.set(agentId, detail); }
     if (detail.loading || ((detail.hasMore || detail.error) && !more)) return;
@@ -267,7 +267,12 @@
     sidebar.tabIndex = -1;
     const header = node("div", "agent-sidebar-header");
     const title = node("h2", "", "Agent activity"); title.id = "agentSidebarTitle";
-    const close = node("button", "agent-sidebar-close", "×"); close.type = "button";
+    const close = node("button", "agent-sidebar-close"); close.type = "button";
+    const cross = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    cross.setAttribute("viewBox", "0 0 16 16"); cross.setAttribute("aria-hidden", "true");
+    const strokes = document.createElementNS(cross.namespaceURI, "path");
+    strokes.setAttribute("d", "M4 4l8 8M12 4l-8 8");
+    cross.append(strokes); close.append(cross);
     const stop = node("button", "agent-sidebar-stop"); stop.type = "button";
     stop.append(node("span", "agent-sidebar-stop-glyph"), "Stop run");
     stop.firstChild.setAttribute("aria-hidden", "true");
@@ -444,10 +449,19 @@
     const out = rows.filter(agent => ended.has(agent.status)).length;
     // The light under the live activity line advances with the models that
     // are done; before the first comparison starts it drifts (agent-chat.css).
+    // The answer check is its own last stretch, not one more model: counted
+    // in, its row arriving would pull the light back from where it stood.
+    // It never moves backwards within a turn.
     const activity = document.getElementById("agentAnswerActivity");
     if (activity) {
-      activity.classList.toggle("has-light-progress", rows.length > 0);
-      activity.style.setProperty("--light-p", rows.length ? `${Math.round(14 + (done / rows.length) * 78)}%` : "0%");
+      const work = rows.filter(agent => agent.kind !== "check");
+      const check = rows.find(agent => agent.kind === "check");
+      const workDone = work.filter(agent => settled.has(agent.status)).length;
+      const share = !work.length ? 0
+        : check ? (settled.has(check.status) ? 100 : 88) : 14 + (workDone / work.length) * 70;
+      view.light = Math.max(view.light || 0, Math.round(share));
+      activity.classList.toggle("has-light-progress", work.length > 0);
+      activity.style.setProperty("--light-p", work.length ? `${view.light}%` : "0%");
     }
     setText(sidebar.querySelector(".agent-sidebar-progress"),
       `${done} of ${rows.length} done${out ? ` · ${out} without result` : ""}`);
@@ -480,7 +494,7 @@
   function render() {
     if (!window.document?.body) return;
     ensure();
-    if (!current || current.uid !== uid()) { hide(); return; }
+    if (!current || (!current.local && current.uid !== uid())) { hide(); return; }
     const view = current;
     // Crossing into the sheet width closes a panel that opened by itself.
     if (!view.manual && !view.closed && !roomBeside()) view.closed = true;
@@ -551,7 +565,7 @@
     const usageEl = sidebar.querySelector(".agent-sidebar-usage");
     setText(usageEl, tokens(view.usage, view.running));
     setTitle(usageEl, `Total run. ${tokenDescription(view.usage)}`);
-    sidebar.querySelector(".agent-sidebar-stop").hidden = !view.running;
+    sidebar.querySelector(".agent-sidebar-stop").hidden = !view.running || view.local;
     setText(sidebar.querySelector(".agent-sidebar-status"), view.error || (view.settling ? "Finishing pending model calls…" : ""));
     const visible = rowsFor(view);
     renderOverview(view, visible);
@@ -658,9 +672,48 @@
       if (Date.now() - current.lastSync >= 10000) load(current);
     }, 2500);
   }
+  // demo.js plays a turn the server never sees. Its rows arrive here as a
+  // whole snapshot each time (null releases them), so the demo shows the same
+  // model icons, panel and light as a real run: no requests, no stop.
+  const demoAgent = /^[\w-]{1,64}$/;
+  function demo(spec) {
+    resetOwner();
+    if (!spec) {
+      if (!current?.local) return;
+      views.delete(current.key); current = null; inline?.remove(); inline = null; hide(); syncTimer(); return;
+    }
+    let view = views.get("demo");
+    if (!view || view.turnId !== spec.turnId) {
+      view = { key: "demo", local: true, uid: owner, chatId: "demo", turnId: spec.turnId, agents: new Map(), details: new Map(),
+        progress: new Map(), controller: new AbortController(), expanded: new Set(), closed: !roomBeside(), manual: false,
+        scroll: 0, loaded: true, loading: false, running: true, ended: false, settling: false, usage: null, lastSync: Date.now() };
+      views.set("demo", view);
+    }
+    if (current !== view) {
+      current = view; ensure(); sidebar._rows.clear(); sidebar.querySelector(".agent-session-list").replaceChildren();
+    }
+    for (const agent of spec.agents || []) {
+      if (!demoAgent.test(agent?.id || "")) continue;
+      const old = view.agents.get(agent.id);
+      // The clock runs here, as for a real call: it keeps going while the
+      // status stays and freezes when the call is through.
+      const same = old && old.status === agent.status;
+      view.agents.set(agent.id, { ...agent, duration_ms: same ? old.duration_ms : old ? elapsed(view, old) : 0,
+        runtimeAnchor: same ? old.runtimeAnchor : performance.now() });
+      if (agent.text && !view.details.get(agent.id)?.messages.size) {
+        view.details.set(agent.id, { messages: new Map([[`${agent.id}:answer`, { id: `${agent.id}:answer`, seq: 1, kind: "result",
+          sender: agent.id, recipient: "orchestrator", text: agent.text }]]), cursor: 1, loadedSeq: 1 });
+      } else if (!view.details.has(agent.id)) view.details.set(agent.id, { messages: new Map(), cursor: 0, loadedSeq: 0 });
+    }
+    view.usage = spec.usage || view.usage;
+    if (view.running && !spec.running) stopClock(view);
+    view.running = Boolean(spec.running) && !view.ended;
+    render();
+    syncTimer();
+  }
   window.addEventListener("consensio:run-registry-change", resetOwner);
   document.addEventListener("consensio:reader-opening", () => {
     if (current) { current.closed = true; prefs(current); hide(); render(); }
   });
-  App.agentDelegation = { receive, receiveProgress, project, tokens, isTicking: () => Boolean(timer) };
+  App.agentDelegation = { receive, receiveProgress, project, demo, tokens, isTicking: () => Boolean(timer) };
 })();

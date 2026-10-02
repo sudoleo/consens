@@ -62,7 +62,9 @@ def test_agent_live_counter_uses_streamed_progress_and_stops_animation(browser, 
         expect(label).to_have_text('Tokens pending')
         expect(track).to_be_visible()
         assert track.evaluate('el => getComputedStyle(el).height') == '2px'
-        assert track.evaluate('el => getComputedStyle(el.firstElementChild, "::after").animationName') == 'runModelShimmer'
+        # A short segment travels; no full-width rail that would read as a row divider.
+        assert track.evaluate('el => getComputedStyle(el.firstElementChild).animationName') == 'runRowSweep'
+        assert track.evaluate('el => getComputedStyle(el).backgroundColor') == 'rgba(0, 0, 0, 0)'
         assert track.bounding_box()['y'] >= label.bounding_box()['y'] + label.bounding_box()['height']
         expect(page.locator('.agent-session-state')).to_have_text('Working · 5s')
         assert label.evaluate('el => getComputedStyle(el).animationName') == 'source-label-shine'
@@ -80,12 +82,12 @@ def test_agent_live_counter_uses_streamed_progress_and_stops_animation(browser, 
             page.screenshot(path=str(target / f'agent-live-counter-{width}.png'))
         page.emulate_media(reduced_motion='reduce')
         assert label.evaluate('el => getComputedStyle(el).animationName') == 'none'
-        assert track.evaluate('el => getComputedStyle(el.firstElementChild, "::after").animationName') == 'none'
+        assert track.evaluate('el => getComputedStyle(el.firstElementChild).animationName') == 'none'
         assert icon.evaluate('el => getComputedStyle(el).animationName') == 'none'
         assert label.evaluate('el => getComputedStyle(el).color') != 'rgba(0, 0, 0, 0)'
         page.emulate_media(reduced_motion='no-preference', forced_colors='active')
         assert label.evaluate('el => getComputedStyle(el).animationName') == 'none'
-        assert track.evaluate('el => getComputedStyle(el.firstElementChild, "::after").animationName') == 'none'
+        assert track.evaluate('el => getComputedStyle(el.firstElementChild).animationName') == 'none'
         page.emulate_media(forced_colors='none')
         usage = {"input_tokens": 900, "output_tokens": 150}
         page.evaluate("e => window.__agentPush('delegation_progress',e)", {**event, "seq": 3, "chars": 2500, "usage": usage})
@@ -117,7 +119,7 @@ def test_agent_sidebar_real_app_and_saved_view(browser, phase4_server, width, da
                "duration_ms": 3200, "usage": {**usage, "estimated_cost_nano_usd": 1000000, "measured_calls": 1}}
               for i, (identity, title) in enumerate(((first, "Check Germany"), (second, "Check France")))]
     agents.extend({**agents[0], 'id': f'{i:032x}', 'seq': i, 'kind': 'comparison',
-                   'title': 'Independent answer', 'status': 'completed'} for i in range(10, 19))
+                   'title': 'Independent answer', 'status': 'completed'} for i in range(10, 24))
     agents.append({'id': 'e' * 32, 'seq': 3, 'message_seq': 3, 'status': 'completed', 'kind': 'judge',
                    'title': 'Coverage judge', 'model': {'model': 'openai/gpt-5.4-mini', 'label': 'GPT-5.4 Mini'},
                    'duration_ms': 2500, 'usage': usage, 'progress_text': 'Checking support for each statement.'})

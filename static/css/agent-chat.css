@@ -1,47 +1,51 @@
 /* Agent chat shares the shell's surfaces, picker and mobile composer. */
 .agent-sidebar[hidden], .agent-sidebar [hidden], .agent-inline-models:empty, .agent-inline-models [hidden] { display: none; }
+/* The activity panel is the app sidebar's mirror on the right: the same
+   ground, one hairline toward the column, a quiet header and a flat list.
+   No card, no shadow; only the narrow-screen sheet floats (below). */
 .agent-sidebar {
-  --agent-enter-x: 18px; --agent-enter-y: 0px; --agent-panel-bg: var(--ground);
-  /* The panel hugs its rows up to the viewport instead of standing as a
-     full-height frame with an empty lower half. */
-  position: fixed; z-index: 120; top: 66px; right: 16px; width: 330px; max-height: calc(100dvh - 90px);
+  --agent-enter-x: 12px; --agent-enter-y: 0px; --agent-panel-bg: var(--ground);
+  position: fixed; z-index: 120; top: 0; right: 0; bottom: 0; width: 346px;
   display: flex; flex-direction: column;
-  box-sizing: border-box; padding: 14px 16px 8px; overflow: hidden;
-  border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--agent-panel-bg);
-  box-shadow: 0 1px 2px color-mix(in srgb, var(--ink) 5%, transparent), 0 12px 32px -18px color-mix(in srgb, var(--ink) 30%, transparent);
+  box-sizing: border-box; padding: 12px 12px 8px 16px; overflow: hidden;
+  border: 0; border-left: 1px solid var(--line-soft); border-radius: 0; background: var(--agent-panel-bg);
   color: var(--ink); font-size: var(--font-size-ui); line-height: 1.5; scrollbar-width: thin;
+}
+/* Guests keep Log in / Sign up at the column's top right, not over the panel. */
+@media (min-width: 1200px) {
+  body.agent-sidebar-open .auth-top-actions { right: calc(346px + 16px); }
 }
 .agent-sidebar:not([hidden]) { animation: agent-sidebar-enter .24s cubic-bezier(.2, .7, .2, 1) both; }
 @keyframes agent-sidebar-enter {
   from { opacity: 0; transform: translate(var(--agent-enter-x), var(--agent-enter-y)); }
   to { opacity: 1; transform: translate(0, 0); }
 }
-.agent-sidebar-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; min-height: 32px; }
-.agent-sidebar-header h2 { margin: 0; font-size: var(--font-size-ui); font-weight: 600; }
-.agent-sidebar-actions { display: flex; align-items: center; gap: 2px; margin-right: -8px; }
+.agent-sidebar-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; min-height: 34px; padding-left: 2px; }
+.agent-sidebar-header h2 { margin: 0; font-size: var(--font-size-sm); font-weight: 600; }
+.agent-sidebar-actions { display: flex; align-items: center; gap: 4px; }
 .agent-sidebar button, .agent-inline-models button {
   border: 0; border-radius: var(--radius-2xs); background: transparent; color: var(--ink-2); font: inherit; cursor: pointer; min-height: 36px;
 }
 .agent-sidebar button:hover, .agent-inline-models button:hover { background: var(--raise); color: var(--ink); }
 .agent-sidebar :is(button, summary, a, [tabindex]):focus-visible, .agent-inline-models button:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 .agent-sidebar .agent-sidebar-stop:not([hidden]) {
-  display: inline-flex; align-items: center; gap: 6px; min-height: 28px; padding: 3px 10px;
-  border: 1px solid var(--line); border-radius: 999px; font-size: var(--font-size-xs); font-weight: 500;
+  display: inline-flex; align-items: center; gap: 7px; min-height: 30px; padding: 4px 10px;
+  border-radius: var(--radius-sm); font-size: var(--font-size-xs); font-weight: 500;
 }
 .agent-sidebar-stop-glyph { width: 7px; height: 7px; border-radius: 1.5px; background: currentColor; }
 .agent-sidebar-stop:disabled { opacity: .55; cursor: default; }
-.agent-sidebar-overview { padding: 8px 0 12px; }
+.agent-sidebar-overview { padding: 10px 2px 14px; }
 .agent-sidebar-counts { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; font-size: var(--font-size-xs); color: var(--ink-3); }
 .agent-sidebar-progress { color: var(--ink-2); }
 .agent-sidebar-usage { font-variant-numeric: tabular-nums; white-space: nowrap; }
-/* One segment per row, in the Consensus pipeline's language: green = done,
-   a sweep = running, a dashed rail = out of the run. */
-.agent-sidebar-segments { display: flex; gap: 3px; margin-top: 8px; }
+/* One segment per row, in ink only: filled = done, a sweep = running, a
+   dashed rail = out of the run. Colour belongs to the answer, not to this. */
+.agent-sidebar-segments { display: flex; gap: 2px; margin-top: 9px; }
 .agent-sidebar-segments i {
-  position: relative; flex: 1; height: 3px; border-radius: 2px; overflow: hidden;
-  background: color-mix(in srgb, var(--ink) 9%, transparent); transition: background-color var(--dur-layer) var(--ease-standard);
+  position: relative; flex: 1; height: 2px; border-radius: 1px; overflow: hidden;
+  background: var(--line-soft); transition: background-color var(--dur-layer) var(--ease-standard);
 }
-.agent-sidebar-segments i[data-state="done"] { background: var(--agree); }
+.agent-sidebar-segments i[data-state="done"] { background: var(--ink-3); }
 .agent-sidebar-segments i[data-state="out"] {
   background: repeating-linear-gradient(90deg, color-mix(in srgb, var(--ink) 16%, transparent) 0 4px, transparent 4px 7px);
 }
@@ -52,46 +56,60 @@
 }
 .agent-sidebar-status:empty { display: none; }
 /* Error/settling notes: calm ink, not an alert. */
-.agent-sidebar-status { margin: 0 0 12px; color: var(--ink-2); font-size: var(--font-size-xs); line-height: 1.55; }
+.agent-sidebar-status { margin: 0 2px 12px; color: var(--ink-2); font-size: var(--font-size-xs); line-height: 1.55; }
 .agent-check-mark { width: 15px; height: 15px; flex-shrink: 0; margin-top: 2px; fill: none; stroke: var(--ink-2); stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; }
 .agent-sidebar > :not(.agent-session-list) { flex: none; }
 /* The only scroll area. Rows and their opened details share it. */
 .agent-session-list {
   flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
-  scrollbar-width: thin; padding: 0 8px 4px; margin: 0 -8px; overflow-x: hidden;
+  scrollbar-width: thin; padding: 0 4px 4px 0; overflow-x: hidden;
 }
-.agent-session { border-top: 1px solid color-mix(in srgb, var(--line) 65%, transparent); }
+/* Rows read like the bookmarks list: no rules between them, a tone on hover. */
+.agent-session + .agent-session { margin-top: 2px; }
 .agent-session > summary {
-  display: flex; align-items: flex-start; gap: 8px; list-style: none; cursor: pointer;
-  padding: 10px 8px; margin: 0 -8px; border-radius: var(--radius-xs); background: var(--agent-panel-bg);
+  display: flex; align-items: flex-start; gap: 10px; list-style: none; cursor: pointer;
+  padding: 9px 10px; border-radius: var(--radius-sm); background: var(--agent-panel-bg);
   transition: background-color var(--dur-press) var(--ease-standard);
 }
-.agent-session > summary:hover { background-color: color-mix(in srgb, var(--raise) 70%, var(--agent-panel-bg)); }
+.agent-session > summary:hover { background-color: var(--raise); }
 /* An open row keeps its heading in view while its answer scrolls past, so
    the reader knows whose answer it is and can fold it from anywhere. */
 .agent-session[open] > summary {
   position: sticky; top: 0; z-index: 1; border-radius: 0;
-  /* Hairline under the stuck heading, as wide as the row lines. */
-  background-image: linear-gradient(color-mix(in srgb, var(--line) 65%, transparent), color-mix(in srgb, var(--line) 65%, transparent));
-  background-size: calc(100% - 16px) 1px; background-position: center bottom; background-repeat: no-repeat;
+  /* A hairline under the stuck heading that fades out at both ends. */
+  background-image: linear-gradient(90deg, transparent, var(--line-soft) 12%, var(--line-soft) 88%, transparent);
+  background-size: 100% 1px; background-position: center bottom; background-repeat: no-repeat;
 }
+.agent-session[open] > summary:hover { background-color: var(--agent-panel-bg); }
 .agent-session > summary::-webkit-details-marker { display: none; }
-.agent-session > summary::after { content: ''; width: 5px; height: 5px; flex: 0 0 5px; color: var(--ink-3); margin: 6px 2px 0 0;
-  border-right: 1px solid currentColor; border-bottom: 1px solid currentColor; transform: rotate(45deg); transition: transform var(--dur-state) var(--ease-standard); }
+/* The fold mark shows where it can act: on hover, focus, or an open row. */
+.agent-session > summary::after { content: ''; width: 5px; height: 5px; flex: 0 0 5px; color: var(--ink-3); margin: 7px 2px 0 0;
+  border-right: 1px solid currentColor; border-bottom: 1px solid currentColor; transform: rotate(45deg); opacity: 0;
+  transition: transform var(--dur-state) var(--ease-standard), opacity var(--dur-press) var(--ease-standard); }
+.agent-session > summary:is(:hover, :focus-visible)::after, .agent-session[open] > summary::after { opacity: 1; }
 .agent-session[open] > summary::after { transform: rotate(225deg); }
+@media (hover: none) { .agent-session > summary::after { opacity: 1; } }
 .agent-session > summary > :is(img, .model-mark-fallback) { margin-top: 2px; }
 .agent-session img, .agent-inline-model img { width: 15px; height: 15px; object-fit: contain; flex-shrink: 0; }
 .agent-session-info { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
 .agent-session-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 4px 10px; min-width: 0; }
-.agent-session-info strong { font-size: var(--font-size-ui); font-weight: 550; overflow-wrap: anywhere; }
+.agent-session-info strong { font-size: var(--font-size-ui); font-weight: 500; overflow-wrap: anywhere; }
 .agent-session-heading strong { min-width: 0; }
 .agent-session-role { overflow-wrap: anywhere; }
 .agent-session-meta { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 3px 8px; font-size: var(--font-size-xs); color: var(--ink-3); }
 .agent-session-state { white-space: nowrap; font-variant-numeric: tabular-nums; }
 .agent-session-tokens { flex-shrink: 0; font-size: var(--font-size-xs); font-weight: 400; color: var(--ink-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
 /* Share the Consensus track and shimmer; no percentage is implied for a live call. */
-.agent-session-track { flex: none; height: 2px; margin-top: 3px; background: var(--line-soft); opacity: .65; }
-.agent-session-track i { width: 100%; background: var(--line); }
+/* It takes no room of its own, so a row keeps its height when its call ends. */
+.agent-session > summary { position: relative; }
+.agent-session-track { position: absolute; left: 36px; right: 10px; bottom: 3px; height: 2px; border-radius: 1px; background: transparent; overflow: hidden; }
+/* No rail under a live call (a full-width line read as a row divider): only
+   the short segment that travels while the call is open. */
+.agent-session-track i {
+  width: 22%; height: 100%; border-radius: inherit; background: color-mix(in srgb, var(--ink-3) 70%, transparent);
+  animation: runRowSweep 1.6s cubic-bezier(.45, 0, .35, 1) infinite; animation-delay: var(--model-shimmer-delay, 0s);
+}
+.agent-session-track:not([hidden]) i::after { content: none; }
 .agent-session-tokens.is-loading {
   background-image: linear-gradient(105deg, var(--ink-3) 36%, var(--ink) 50%, var(--ink-3) 64%);
   background-size: 250% 100%; background-clip: text; -webkit-background-clip: text;
@@ -99,7 +117,7 @@
 }
 .agent-session[data-status="question"] .agent-session-state { color: var(--ink); font-weight: 600; }
 /* Aligned with the model name above it; no scroll area of its own. */
-.agent-session-detail { padding: 2px 0 14px 23px; overflow-wrap: anywhere; }
+.agent-session-detail { padding: 2px 10px 14px 35px; overflow-wrap: anywhere; }
 .agent-session[open] .agent-session-detail { animation: agent-detail-enter .2s ease both; }
 @keyframes agent-detail-enter { from { opacity: 0; transform: translateY(-3px); } }
 .agent-session-detail h3 { margin: 12px 0 4px; color: var(--ink-3); font-size: var(--font-size-xs); font-weight: 600; }
@@ -107,7 +125,7 @@
 .agent-session-detail p { margin: 0 0 8px; white-space: pre-wrap; font-size: var(--font-size-xs); }
 .agent-session-detail .agent-judge-purpose { color: var(--ink-2); line-height: 1.7; }
 .agent-session-detail .agent-judge-note { color: var(--ink-3); font-size: var(--font-size-xs); line-height: 1.6; }
-.agent-token-breakdown { display: flex; gap: 28px; margin: 14px 0; padding: 10px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.agent-token-breakdown { display: flex; gap: 28px; margin: 14px 0; padding: 10px 0; border-top: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft); }
 .agent-token-breakdown dt { color: var(--ink-3); font-size: 10px; }
 .agent-token-breakdown dd { margin: 3px 0 0; font-size: var(--font-size-xs); font-variant-numeric: tabular-nums; }
 .agent-detail-skeleton { display: grid; gap: 9px; padding: 8px 0 16px; min-height: 50px; }
@@ -115,14 +133,16 @@
 .agent-detail-skeleton span:nth-child(2) { width: 87%; }
 .agent-detail-skeleton span:nth-child(3) { width: 64%; }
 @keyframes agent-detail-pulse { 50% { opacity: .4; } }
-.agent-message + .agent-message { margin-top: 14px; padding-top: 12px; border-top: 1px solid color-mix(in srgb, var(--line) 65%, transparent); }
+.agent-message + .agent-message { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line-soft); }
 .agent-source { display: block; color: var(--ink-2); font-size: var(--font-size-xs); margin: 6px 0; }
 .agent-inline-models { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; max-width: 100%; vertical-align: top; }
 .agent-inline-models button { display: inline-flex; align-items: center; justify-content: center; padding: 4px 7px; font-size: var(--font-size-xs); }
 .agent-sidebar .agent-sidebar-close, #agentAnswerActivity .agent-inline-models button {
   background: none; box-shadow: none; border: none; color: var(--ink-2); padding: 4px 8px; font-size: var(--font-size-xs); font-weight: 500; min-height: 32px;
 }
-.agent-sidebar .agent-sidebar-close { font-size: var(--font-size-title); line-height: 1; width: 32px; flex: 0 0 32px; }
+/* Same footprint and voice as the app sidebar's own toggle. */
+.agent-sidebar .agent-sidebar-close { display: grid; place-items: center; width: 34px; height: 34px; min-height: 34px; flex: 0 0 34px; padding: 0; border-radius: var(--radius-sm); }
+.agent-sidebar-close svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; }
 .agent-model-stack { display: inline-flex; align-items: center; padding-left: 2px; }
 #agentAnswerActivity .agent-inline-models .agent-sidebar-toggle { width: 28px; min-height: 28px; padding: 0; color: var(--ink-3); }
 .agent-sidebar-toggle svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linejoin: round; }
@@ -168,7 +188,9 @@
 .agent-sidebar-scrim { position: fixed; inset: 0; z-index: 1290; background: color-mix(in srgb, var(--ink) 28%, transparent); }
 .agent-sidebar-scrim[hidden] { display: none; }
 @media (max-width: 1199px) {
-  .agent-sidebar { --agent-enter-x: 0px; --agent-enter-y: 16px; --agent-panel-bg: var(--well); top: auto; right: 12px; left: 12px; bottom: 12px; width: auto; max-height: min(80dvh, 720px); z-index: 1300; box-shadow: var(--lift); }
+  /* A sheet over the chat is a floating layer: the one place it lifts. */
+  .agent-sidebar { --agent-enter-x: 0px; --agent-enter-y: 16px; --agent-panel-bg: var(--well); top: auto; right: 12px; left: 12px; bottom: 12px; width: auto; max-height: min(80dvh, 720px); z-index: 1300;
+    border: 0; border-radius: var(--radius-lg); box-shadow: var(--lift); }
 }
 @media (prefers-reduced-motion: no-preference) {
   .agent-sidebar-scrim:not([hidden]) { animation: agent-scrim-enter .2s ease both; }
@@ -413,7 +435,7 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 .agent-activity-insight-actions button:disabled { color: var(--ink-3); text-decoration: none; cursor: default; }
 .agent-activity-insight-actions button:focus-visible { outline: var(--focus-ring); outline-offset: 3px; border-radius: 2px; }
 @media (prefers-reduced-motion: reduce), (forced-colors: active) {
-  .agent-session-track:not([hidden]) i::after { animation: none; background: none; }
+  .agent-session-track:not([hidden]) i { animation: none; width: 100%; opacity: .45; }
   .agent-session-tokens.is-loading { animation: none; background: none; color: var(--ink-3); }
   .agent-activity-chevron { transition: none; }
 }
@@ -476,14 +498,21 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 .agent-light {
   position: relative;
   height: 1px;
-  /* Net zero height: it sits in the gap the activity already leaves. */
-  margin: -12px 0 11px;
+  /* Net zero height: it sits in the gap the activity already leaves, at the
+     optical middle between the clock's baseline and the first progress line
+     (the summary keeps a 36px target below its text, the line-height of the
+     progress text adds its own leading above). */
+  margin: -14px 0 13px;
   /* A horizon that fades out to the right; no mask, so the light above it
      can glow beyond the 1px line. */
   background: linear-gradient(90deg, var(--line-soft) 72%, transparent);
   opacity: 0;
   pointer-events: none;
   transition: opacity var(--dur-layer) var(--ease-standard);
+}
+@media (max-width: 700px) {
+  /* The taller touch target (44px) leaves 4px more under the clock. */
+  .agent-light { margin: -18px 0 17px; }
 }
 .agent-activity.is-running + .agent-light { opacity: 1; }
 .agent-light::before,

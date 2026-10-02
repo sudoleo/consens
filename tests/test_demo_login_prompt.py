@@ -55,7 +55,7 @@ class DemoLoginPromptContractTests(unittest.TestCase):
             "    differences: [", 1
         )[0]
         anchors = (
-            "Consensus: send it — after two fixes",
+            "Consensus: send it after two fixes",
             "All six models read the draft as close to sendable",
             "Nothing in the draft is impolite",
             "The risk is in three sentences",

@@ -297,6 +297,8 @@
   }
   function renderShellNow() {
     if (demoView && (registry.visible() || document.body.classList.contains("is-hero"))) demoView = false;
+    // However the demo ends, its model icons and panel go with it.
+    if (!demoView) App.agentDelegation?.demo?.(null);
     const agent = selectedMode() === "agent";
     const comparisonPicker = document.getElementById("consensusModelDropdown");
     if (comparisonPicker) {

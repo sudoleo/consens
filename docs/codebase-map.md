@@ -355,9 +355,17 @@ sichtbar und setzt `body.single-agent-active.agent-demo-active` (auch ohne
 Agent-Zugang); die Demo rendert Aktivität über `App.agentActivity.render`, die
 Antwort per `renderMarkdownStream`, danach ein lokales `agent_review` mit
 einer Comparison und dem Demo-`differencesData` über `App.agentReview.render`
-(Marken, 45/100, Answers/Contradictions im Antwortleser). Ein echter Lauf
+(Marken, 45/100, Answers/Contradictions im Antwortleser). Die Aufrufe hinter
+dem Turn (sechs Vergleichsantworten, zwei Judges) reicht sie als ganzen
+Schnappschuss an `App.agentDelegation.demo({turnId, running, agents, usage})`:
+dieselben Modell-Icons neben der Uhr, dieselbe Aktivitätsleiste und derselbe
+Lichtweg wie ein echter Lauf, ohne Request und ohne Stop; Tokenzahlen sind aus
+den Fixture-Texten geschätzt (~4 Zeichen/Token). `demo(null)` gibt alles frei
+(`clearDemoAgentAnswer`, und `agent-chat.js` bei jedem Render ohne
+Demo-Ansicht). Ein echter Lauf
 (`registry.visible()`), der Hero-Zustand oder „New chat“ beenden die
-Demo-Ansicht. Compare und Consensus behalten ihre bisherigen Demo-Abläufe.
+Demo-Ansicht. Die Demo-Texte (Fixtures und Landing-Mockups) kommen seit
+2026-10-02 ohne Geviertstriche aus. Compare und Consensus behalten ihre bisherigen Demo-Abläufe.
 Sie bleibt vollständig clientseitig und ruft weder
 `recordModelVote` noch `/consensus`/Bookmark-Persistenz auf; Demo-Läufe verändern
 damit weder das Best-answer-Nutzungssignal noch `differences_stats`.
@@ -1466,7 +1474,11 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   seit 2026-10-02 keinen Ausschluss mehr: der gefuellte Look ist opt-in (`.btn`).
   Der Thread behält weiterhin `100dvh` und kein aeusseres Body-Bottom-Padding.
   Auf Desktop ist der Composer sticky und wird bei kurzen Antworten durch
-  `margin-top:auto` an den unteren Rand geschoben. Auf ≤1099 px ist er dagegen
+  `margin-top:auto` an den unteren Rand geschoben. Sein Untergrund
+  (`.input-section::before`) endet dort mit ihm: reichte er tiefer, wurde die
+  Seite über das Spaltenende hinaus scrollbar, und der in der Spalte gehaltene
+  Composer stieg am Thread-Ende um diese Strecke (40 px) hoch (gefixt
+  2026-10-02); nur der fixierte Composer ≤1099 px reicht über den Rand. Auf ≤1099 px ist er dagegen
   wirklich viewport-fixiert. `app-init.js::syncThreadComposerReserve()` misst
   seine aktuelle Höhe mit `ResizeObserver` (normaler Composer, kompaktes Gate
   oder Login-Hinweis) und schreibt sie als `--thread-composer-height`; dieselbe
@@ -1809,7 +1821,12 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   das Licht beim Anteil fertiger Vergleichsmodelle (`agent-delegation.js`
   `renderOverview` setzt `--light-p` und `.has-light-progress` auf
   `#agentAnswerActivity`, `agent-chat.js` setzt beides bei einem neuen Turn
-  zurück); ohne Vergleich gleitet es langsam. Beim ersten Markieren einer
+  zurück): Vergleiche füllen 14–84 %, die Zeile „Answer check“ ist eine eigene
+  letzte Strecke (88 %, fertig 100 %) statt ein weiteres Modell im Nenner, und
+  `view.light` hält den Wert monoton (vorher sprang das Licht beim Start der
+  Judges zurück); ohne Vergleich gleitet es langsam. Die Linie sitzt
+  (`margin: -14px 0 13px`, Handy -18/17) optisch mittig zwischen der Grundlinie
+  der Uhr und der ersten Fortschrittszeile. Beim ersten Markieren einer
   geprüften Antwort (`#agentAnswerBody.is-marks-revealing`) fängt
   `.agent-agreement-num` das Licht einmal ein. Reduzierte Bewegung: kein
   Gleiten, kein Aufleuchten. Alles Drückbare gibt beim Druck auf 97 % nach
@@ -6213,7 +6230,9 @@ Symbol am Zeilenende (Name per `aria-label`).
 zerlegt die wachsende Antwort an Leerzeilen außerhalb von Code-/Mathe-Blöcken in
 Top-Level-Blöcke; fertige Blöcke werden genau einmal geparst, nur der letzte
 offene neu. Listen/Zitate über Leerzeilen bleiben zusammen, eine Grenze gilt erst
-mit vollständiger Folgezeile. Fremde Schreibzugriffe oder nicht nur wachsender
+mit vollständiger Folgezeile. Ein im offenen Block begonnenes, noch nicht
+geschlossenes `**` rendert `closeOpenStrong` schon fett statt mit rohen
+Sternchen (nicht in Code-Fences). Fremde Schreibzugriffe oder nicht nur wachsender
 Text starten neu. Die finale Antwort rendert einmal vollständig mit
 `injectMarkdown` (gleiche Sanitisierung). `resetMarkdownStream(el)` verwirft den
 Zustand.
@@ -6258,7 +6277,13 @@ Tool-Schritt mehr kam; Text vor einem Tool-Aufruf ist Vorrede, nicht Antwort.
 `#agentAnswerErrorActions` nach `#agentAnswerError`, `#agentReviewNotice` vor
 `.chat-input-container`.
 
-**Aktivitätsleiste.** Unter 1200 px öffnet `agent-delegation.js` die Leiste nie
+**Aktivitätsleiste.** Ab 1200 px ist sie seit 2026-10-02 das Spiegelbild der
+App-Sidebar rechts (volle Höhe, `--ground`, eine Haarlinie `--line-soft` zur
+Spalte, keine Karte, kein Schatten; Zeilen ohne Trennlinien mit Ton beim
+Hover, Segmente nur in Tinte, laufender Aufruf als wandernder Abschnitt ohne
+Schiene, Faltzeichen nur bei Hover/Fokus/offen); `.auth-top-actions` rückt
+für Gäste neben die Leiste. Unter 1200 px bleibt sie ein schwebendes Sheet.
+Unter 1200 px öffnet `agent-delegation.js` die Leiste nie
 selbst; das Panel-Symbol neben den Modell-Icons (`.agent-sidebar-toggle`,
 `aria-label` „Activity · n“, `aria-controls="agentSidebar"`) öffnet ein
 Sheet mit Scrim, Fokusfalle und Escape. Ab 1200 px öffnet sie automatisch nur

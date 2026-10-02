@@ -231,6 +231,18 @@ function renderStreamFragment(md) {
   return Array.from(holder.childNodes);
 }
 
+// A bold span the stream has opened but not closed yet would show its raw
+// asterisks until the closing pair arrives. The unfinished tail is rendered
+// as if it were closed; the final injectMarkdown() renders the real text.
+function closeOpenStrong(text) {
+  if (/(^|\n)\s{0,3}(```|~~~)/.test(text)) return text;
+  const marks = (text.replace(/`[^`\n]*`/g, "").match(/\*\*/g) || []).length;
+  if (marks % 2 === 0) return text;
+  const trimmed = text.replace(/\s+$/, "");
+  if (trimmed.endsWith("**")) return trimmed.slice(0, -2);
+  return `${trimmed}**${text.slice(trimmed.length)}`;
+}
+
 // Renders `md` into `el`, reusing the blocks of the previous call when `md`
 // only grew. Returns the number of characters that were parsed.
 function renderMarkdownStream(el, md) {
@@ -256,7 +268,7 @@ function renderMarkdownStream(el, md) {
   const tailText = md.slice(state.committed);
   if (tailText !== state.tailText) {
     state.tail.forEach(node => node.remove());
-    state.tail = tailText.trim() ? renderStreamFragment(tailText) : [];
+    state.tail = tailText.trim() ? renderStreamFragment(closeOpenStrong(tailText)) : [];
     el.append(...state.tail);
     state.tailText = tailText;
     parsed += tailText.length;

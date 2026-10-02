@@ -36,7 +36,7 @@ const DEMO_DATA = {
   responses: {
     OpenAI:
 `<div class="ai-block">
-  <p>Short version: send it — but not in this order, and two of the four sentences are doing work you did not intend.</p>
+  <p>Short version: send it, but not in this order, and two of the four sentences are doing work you did not intend.</p>
   <h4>What already works</h4>
   <ul>
     <li>You are telling her before the 15th, not on it. That is the part most people get wrong.</li>
@@ -60,7 +60,7 @@ const DEMO_DATA = {
     <li>First line: the new date. “The launch moves to the 29th” is the sentence she needs; everything else is context for it.</li>
     <li>Second line: the reason, kept to a clause. A detailed reason moves the conversation to your process, which is the one place you do not want it.</li>
     <li>Third line: what she has on the 15th anyway. A delay with something in it is a status update; a delay with nothing in it is a gap she has to explain to someone else.</li>
-    <li>Fourth line: the apology — drop it. It asks her to absolve you, while a concrete plan tells her what you are doing about it. Only one of those helps her.</li>
+    <li>Fourth line: drop the apology. It asks her to absolve you, while a concrete plan tells her what you are doing about it. Only one of those helps her.</li>
     <li>Last line: cut “let me know if that’s a problem”. You are not offering her a choice, so do not phrase it as one; she will take you up on it and you will have to say no twice.</li>
   </ol>
   <p>Four short lines are enough. If you cannot get it under six, the message has turned into a defence.</p>
@@ -69,7 +69,7 @@ const DEMO_DATA = {
     Anthropic:
 `<div class="ai-block">
   <p>What the message is actually asking her to do</p>
-  <p>The draft asks Anna for two things: to absorb a two-week slip, and to tell you whether that is acceptable. The second request is the problem. You are asking her to rule on something you cannot change, and the honest answer to that question is yes, it is a problem — which leaves you both in a conversation with no move left in it.</p>
+  <p>The draft asks Anna for two things: to absorb a two-week slip, and to tell you whether that is acceptable. The second request is the problem. You are asking her to rule on something you cannot change, and the honest answer to that question is yes, it is a problem, which leaves you both in a conversation with no move left in it.</p>
   <ul>
     <li>Open with the new date, then the cause, then what she has in the meantime.</li>
     <li>Name the cause. “A few things” is the only sentence in the draft she cannot check, and it will be the one she remembers.</li>
@@ -83,11 +83,11 @@ const DEMO_DATA = {
 `<div class="ai-block">
   <p>How it reads on her side, sentence by sentence</p>
   <ul>
-    <li><b>“quick heads-up”</b> — signals something small. A two-week slip is not small, and the mismatch is the first thing she notices.</li>
-    <li><b>“we won’t make the 15th”</b> — the loss arrives before the fix. Reverse it: the 29th first, the miss second.</li>
-    <li><b>“a few things came up on our side”</b> — fine as it stands. She is not going to audit your sprint; she needs to know this is not the start of a pattern.</li>
-    <li><b>“sorry about that”</b> — keep it exactly as it is. One apology, early and unqualified, is what makes the rest of the message read as news rather than as a defence.</li>
-    <li><b>“let me know if that’s a problem”</b> — keep this one too, but only if you can live with the answer. It is the line that turns an announcement into a conversation.</li>
+    <li><b>“quick heads-up”</b>: it signals something small. A two-week slip is not small, and the mismatch is the first thing she notices.</li>
+    <li><b>“we won’t make the 15th”</b>: the loss arrives before the fix. Reverse it: the 29th first, the miss second.</li>
+    <li><b>“a few things came up on our side”</b>: fine as it stands. She is not going to audit your sprint; she needs to know this is not the start of a pattern.</li>
+    <li><b>“sorry about that”</b>: keep it exactly as it is. One apology, early and unqualified, is what makes the rest of the message read as news rather than as a defence.</li>
+    <li><b>“let me know if that’s a problem”</b>: keep this one too, but only if you can live with the answer. It is the line that turns an announcement into a conversation.</li>
   </ul>
   <p>What is missing entirely: what she can show her own stakeholders on the 15th. That is the question she will be asked within an hour of forwarding your message.</p>
 </div>`,
@@ -98,7 +98,7 @@ const DEMO_DATA = {
   <h4>Check</h4>
   <ul>
     <li>Is the 29th a date you would bet on? If it is a hope, you will be writing this message twice.</li>
-    <li>Does anything of hers hang on the 15th — a campaign, a client of her own, a contract date? If so, the message needs a line about that, not about you.</li>
+    <li>Does anything of hers hang on the 15th, like a campaign, a client of her own or a contract date? If so, the message needs a line about that, not about you.</li>
   </ul>
   <h4>Fix</h4>
   <ul>
@@ -123,18 +123,18 @@ const DEMO_DATA = {
     <li>Keep the “sorry”. It costs you nothing and it is the only human line in there.</li>
     <li>Keep the closing question. If the 29th genuinely wrecks something on her side, you want to hear that now and not on the 28th.</li>
   </ul>
-  <p>Two things I would not do. Don’t stack a new promise on top of one you just broke — that includes promising a check-in date. And if you normally talk to this client on the phone, call first and send the same three lines right after; a two-week slip that arrives only as text is how a working relationship gets formal.</p>
+  <p>Two things I would not do. Don’t stack a new promise on top of one you just broke. That includes promising a check-in date. And if you normally talk to this client on the phone, call first and send the same three lines right after; a two-week slip that arrives only as text is how a working relationship gets formal.</p>
 </div>`
   },
   consensus:
 `<div class="ai-consensus">
-  <p>Consensus: send it — after two fixes, and after you decide one thing yourself</p>
+  <p>Consensus: send it after two fixes, and after you decide one thing yourself</p>
   <p>All six models read the draft as close to sendable, and not one of them objects to the tone. Nothing in the draft is impolite, and that is not where the risk sits. The risk is in three sentences, and on one of them the models split three against three.</p>
   <h4>Fix before you send</h4>
   <ul>
     <li>The new date belongs in the first line, ahead of the miss, the cause and the apology. She is scanning for a date.</li>
     <li>Send it today, not on the 15th: two weeks of warning is a different message than a same-day cancellation, even though the delay is identical.</li>
-    <li>Say what Anna actually gets on the 15th instead of leaving the two weeks blank — that is the question she will be asked as soon as she forwards your message.</li>
+    <li>Say what Anna actually gets on the 15th instead of leaving the two weeks blank: that is the question she will be asked as soon as she forwards your message.</li>
     <li>Put it in writing, so she can forward it to whoever planned around the 15th.</li>
     <li>Name the day you will confirm the 29th, so the next update does not arrive as another surprise.</li>
   </ul>
@@ -142,10 +142,10 @@ const DEMO_DATA = {
   <ul>
     <li>The closing line splits the models down the middle: three read it as the only sentence that gives her a way in, three as an invitation to reopen a date you cannot move.</li>
     <li>A few things came up on our side is the weakest sentence in the draft: half the models want the actual cause in one clause, half want it left exactly as vague as it is.</li>
-    <li>The apology itself is not disputed, only who does the work — whether the apology or the plan carries it.</li>
+    <li>The apology itself is not disputed, only who does the work: whether the apology or the plan carries it.</li>
   </ul>
   <h4>What that looks like</h4>
-  <blockquote>Hi Anna, the launch moves to the 29th — we will not make the 15th. [One clause on the cause.] What you will have on the 15th is the checkout flow on staging, so your team can start testing on schedule. I will confirm the 29th by the 22nd at the latest. [Your closing line.]</blockquote>
+  <blockquote>Hi Anna, the launch moves to the 29th, so we will not make the 15th. [One clause on the cause.] What you will have on the 15th is the checkout flow on staging, so your team can start testing on schedule. I will confirm the 29th by the 22nd at the latest. [Your closing line.]</blockquote>
   <p>Both bracketed parts are the ones the models could not settle for you, and both turn on something only you know: whether the 29th is still negotiable, and whether this client reads a named cause as openness or as an excuse.</p>
 </div>`,
 
@@ -173,7 +173,7 @@ const DEMO_DATA = {
     },
     claims: [
       {
-        anchor: "Consensus: send it — after two fixes",
+        anchor: "Consensus: send it after two fixes",
         agree: DEMO_MODELS,
         dissent: [],
         coverage: "supported"
@@ -366,12 +366,12 @@ const DEMO_DATA = {
         severity: "minor",
         positions: [
           {
-            stance: "One short apology, early — it is what makes the rest readable.",
+            stance: "One short apology, early: it is what makes the rest readable.",
             models: ["OpenAI", "Gemini", "Grok"],
             quote: "One apology, early and unqualified, is what makes the rest of the message read as news rather than as a defence."
           },
           {
-            stance: "Let the plan do it — an apology puts the work on her.",
+            stance: "Let the plan do it: an apology puts the work on her.",
             models: ["Anthropic", "Mistral", "DeepSeek"],
             quote: "An apology asks something of her; a plan gives her something."
           }
@@ -384,7 +384,7 @@ const DEMO_DATA = {
   differences:
 `The consensus answer is partially credible.
 
-All six models agree on the mechanics: new date first, say what she gets on the 15th, put it in writing, and leave the tone alone. They contradict each other on the closing question — three would keep it as the only opening the message offers her, three would cut it as an invitation to reopen a date that is not negotiable — and again, more mildly, on whether the cause should be named or left vague.
+All six models agree on the mechanics: new date first, say what she gets on the 15th, put it in writing, and leave the tone alone. They contradict each other on the closing question: three would keep it as the only opening the message offers her, three would cut it as an invitation to reopen a date that is not negotiable. They split again, more mildly, on whether the cause should be named or left vague.
 
 BestModel: Anthropic`
 };
@@ -781,6 +781,38 @@ function clearDemoAgentAnswer() {
   body.replaceChildren();
   window.App.agentReview?.render(body, null, { key: DEMO_AGENT_ID });
   body.parentElement?.querySelector(".agent-answer-actions")?.remove();
+  window.App.agentDelegation?.demo?.(null);
+}
+// The calls behind the turn, as agent-delegation.js shows a real one: the
+// model icons beside the clock, the activity panel and the light under it.
+// Token counts are estimated from the fixture texts (about 4 characters per
+// token), so the panel reads like a run without claiming a measured one.
+const DEMO_AGENT_PROMPT_TOKENS = 1180;
+function demoAgentUsage(text) {
+  return { input_tokens: DEMO_AGENT_PROMPT_TOKENS, output_tokens: Math.round(text.length / 4), complete: true };
+}
+function demoAgentCalls({ models, answered, judges }) {
+  const comparisons = models.map(model => {
+    const done = answered.includes(model);
+    return {
+      id: `demo-${model.key}`, kind: "comparison", title: model.label,
+      status: done ? "completed" : "working",
+      model: { label: model.label, model: model.model, provider: model.key },
+      text: done ? model.text : "", usage: done ? demoAgentUsage(model.text) : null
+    };
+  });
+  const checks = judges.map(judge => ({
+    id: `demo-${judge.id}`, kind: "judge", title: judge.title, status: judge.status,
+    model: { label: "Answer check", model: "" },
+    usage: judge.status === "completed" ? { input_tokens: 4200, output_tokens: 640, complete: true } : null
+  }));
+  const metered = [...comparisons, ...checks].filter(call => call.usage);
+  const usage = metered.length ? {
+    input_tokens: metered.reduce((n, call) => n + call.usage.input_tokens, 0),
+    output_tokens: metered.reduce((n, call) => n + call.usage.output_tokens, 0),
+    complete: true, measured_calls: metered.length, unmetered_calls: 0
+  } : null;
+  return { agents: [...comparisons, ...checks], usage };
 }
 
 async function runAgentDemoFlow() {
@@ -824,6 +856,8 @@ async function runAgentDemoFlow() {
   let review = null;
   let answerText = "";
   let running = true;
+  const answered = [];
+  const judges = [];
 
   const paint = () => {
     if (!live() || !host) return;
@@ -833,6 +867,8 @@ async function runAgentDemoFlow() {
       status: running ? "running" : "succeeded",
       elapsedMs: Date.now() - started
     });
+    // The calls start with compare_models, as in a real turn.
+    if (review && document.body.classList.contains("agent-demo-active")) App.agentDelegation?.demo?.({ turnId: `demo-${runId}`, running, ...demoAgentCalls({ models, answered, judges }) });
   };
   const at = async ms => {
     const wait = started + ms - Date.now();
@@ -849,7 +885,6 @@ async function runAgentDemoFlow() {
   if (!await at(DEMO_AGENT_STEPS.compare)) return;
   const compareTool = { version: 1, kind: "tool", id: "demo-compare", name: "compare_models", status: "running" };
   events.push(compareTool);
-  const answered = [];
   review = demoAgentReview({ answered, pending: models, status: "required" });
   paint();
   const order = DEMO_PHASES.order.filter(key => models.some(model => model.key === key))
@@ -886,12 +921,15 @@ async function runAgentDemoFlow() {
 
   // The judges check that exact text; a quiet sheen says it is still going on.
   review = demoAgentReview({ answered, pending: [], status: "running", answer: answerText });
+  judges.push({ id: "differences", title: "Differences judge", status: "working" },
+    { id: "coverage", title: "Coverage judge", status: "working" });
   body?.classList.add("is-answer-checking");
   paint();
   await sleep(DEMO_AGENT_STEPS.check);
   if (!live()) return;
 
   review = demoAgentReview({ answered, pending: [], status: "succeeded", answer: answerText, checked });
+  judges.forEach(judge => { judge.status = "completed"; });
   running = false;
   paint();
   if (body) {
