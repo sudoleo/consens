@@ -49,7 +49,8 @@ def test_six_answers_leave_room_to_read_and_keep_touch_targets(browser, phase4_s
                   document.querySelector('#answerReaderScroll').clientWidth};
             }""")
             reader_screenshot(page, f'lean-six-{width}-{theme}')
-            assert 520 <= metrics['width'] <= 720
+            # CSS transforms can return 519.999938/720.000122 for integer widths.
+            assert 520 <= round(metrics['width']) <= 720
             assert metrics['chatWidth'] >= 550
             assert metrics['chatRight'] < metrics['readerLeft']
             assert metrics['headerHeight'] <= 36

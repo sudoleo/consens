@@ -1,8 +1,12 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
 import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
+import { createAdminClient } from "/static/js/admin-api.js?v=20261002-errors";
 
 const app = initializeApp(window.FIREBASE_CONFIG);
 const auth = getAuth(app);
+const request = createAdminClient(auth);
+let listGeneration = 0;
+let detailGeneration = 0;
 
 const SYSTEM_LABELS = {
   "model:openai": "OpenAI",
@@ -24,20 +28,7 @@ function setStatus(message, isError = false) {
 }
 
 async function api(path) {
-  const user = auth.currentUser;
-  if (!user) throw new Error("Not logged in");
-  const idToken = await user.getIdToken();
-  const response = await fetch(path, {
-    headers: { Authorization: `Bearer ${idToken}` },
-  });
-  let data = {};
-  try {
-    data = await response.json();
-  } catch (_error) {
-    // Preserve the HTTP status when an intermediary did not return JSON.
-  }
-  if (!response.ok) throw new Error(data.detail || `HTTP ${response.status}`);
-  return data;
+  return request("GET", path);
 }
 
 function fmtPct(value) {
@@ -68,16 +59,22 @@ function el(tag, props = {}, children = []) {
 }
 
 async function loadRuns() {
+  const generation = ++listGeneration;
+  ++detailGeneration;
+  const select = document.getElementById("runSelect");
+  select.replaceChildren();
+  document.getElementById("runDetail").replaceChildren();
   setStatus("Loading runs…");
   let data;
   try {
     data = await api("/api/admin/benchmark/runs");
   } catch (error) {
+    if (generation !== listGeneration) return;
     setStatus(error.message, true);
     return;
   }
+  if (generation !== listGeneration) return;
   const runs = data.runs || [];
-  const select = document.getElementById("runSelect");
   select.replaceChildren();
   if (!runs.length) {
     setStatus("No benchmark runs found.", true);
@@ -100,13 +97,21 @@ async function loadRuns() {
 }
 
 async function loadRun(runId) {
+  const generation = ++detailGeneration;
+  document.getElementById("runDetail").replaceChildren();
   if (!runId) return;
   setStatus(`Loading ${runId}…`);
   let data;
   try {
     data = await api(`/api/admin/benchmark/runs/${encodeURIComponent(runId)}`);
   } catch (error) {
+    if (generation !== detailGeneration) return;
     setStatus(error.message, true);
+    return;
+  }
+  if (generation !== detailGeneration) return;
+  if (data.run?.run_id !== runId) {
+    setStatus("The selected benchmark run could not be loaded.", true);
     return;
   }
   setStatus("");
@@ -186,25 +191,7 @@ function renderManifest(manifest, runId) {
     table.appendChild(body);
     card.appendChild(el("div", { className: "bm-model-table-wrap" }, table));
   }
-  if (data.system_prompt) {
-    card.appendChild(promptBlock("Closed-book system prompt (sent to all 6 models)", data.system_prompt));
-  }
-  if (data.consensus_prompt_template) {
-    card.appendChild(
-      promptBlock(
-        "Consensus synthesis prompt — V0 (template; {…} filled per question)",
-        data.consensus_prompt_template,
-      ),
-    );
-  }
   return card;
-}
-
-function promptBlock(label, text) {
-  return el("details", { className: "bm-prompt" }, [
-    el("summary", { textContent: label }),
-    el("pre", { textContent: text }),
-  ]);
 }
 
 function orderedSystemKeys(systems) {
@@ -296,6 +283,10 @@ function renderAudits(audits) {
       textContent: `disabled (${permutation.reason || "n/a"})`,
     }));
   } else {
+    ++listGeneration;
+    ++detailGeneration;
+    document.getElementById("runSelect").replaceChildren();
+    document.getElementById("runDetail").replaceChildren();
     permutationRow.appendChild(
       auditPill(permutation.consistent ?? 0, permutation.conclusive ?? permutation.total ?? 0),
     );

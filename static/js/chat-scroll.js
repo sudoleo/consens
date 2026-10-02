@@ -9,8 +9,17 @@
   let resumeUntil = 0, touchY = null;
   let destination = null;
   let oneShot = false;
+  let explicitJump = false;
 
   function followsOutput() { return context?.config?.executionMode === "agent"; }
+  function settleExplicitJump() {
+    // A first Send can reach the empty shell before the first response exists.
+    // Keep that user intent until there is answer content to reach (or the
+    // user interrupts); an immediately completed response still gets one jump.
+    const waitingForAnswer = followsOutput() && context.consensus && !context.finishedAt
+      && !String(context.consensus.text || context.consensus.streamText || '').trim();
+    if (!waitingForAnswer) explicitJump = false;
+  }
 
   function maxTop() {
     const root = document.scrollingElement || document.documentElement;
@@ -39,6 +48,7 @@
   }
   function pause() {
     following = false;
+    explicitJump = false;
     resumeUntil = 0;
     cancelFrame();
     syncButton();
@@ -74,11 +84,13 @@
     if (target - y <= 1) {
       if (target > y) write(target);
       if (oneShot) following = false;
+      settleExplicitJump();
       started = null; syncButton(); return;
     }
     if (motion.matches) {
       write(target);
       if (oneShot) following = false;
+      settleExplicitJump();
       started = null; syncButton(); return;
     }
     if (started === null) { started = now; from = y; }
@@ -90,6 +102,7 @@
     if (progress < 1) frame = window.requestAnimationFrame(step);
     else {
       if (oneShot) following = false;
+      settleExplicitJump();
       started = null; syncButton();
     }
   }
@@ -140,7 +153,10 @@
     if (following && next?.finishedAt) {
       // A fast answer may finish during the explicit Send jump. Let that jump
       // settle once, but never follow later review/layout updates indefinitely.
-      if (frame) oneShot = true;
+      // A queued resize/follow frame is not an unfinished user jump. Letting
+      // it settle would scroll past the reading position when the final Copy
+      // and evidence row is inserted below the answer.
+      if (explicitJump) oneShot = true;
       else pause();
     }
     syncButton();
@@ -153,6 +169,7 @@
     destination = followsOutput() ? null : maxTop();
     oneShot = !followsOutput() || !!context.bookmarkId;
     following = true;
+    explicitJump = true;
     syncButton();
     // Let the question clamp, history append and collapsed composer settle first.
     frame = window.requestAnimationFrame(() => {

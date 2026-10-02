@@ -117,6 +117,43 @@ describe("renderStoredConsensusClaims", () => {
   });
 });
 
+describe('real archived drawer row', () => {
+  it('keeps all drawers in one row, toggles only its own panel and allocates unique IDs', () => {
+    const { window, document } = loadScripts(['static/js/consensus-anchor.js', 'static/js/consensus-insights.js', 'static/js/consensus-run.js'], {
+      body: '<div id="threadHistory" hidden></div><div id="differencesCards"></div>',
+      before(window) { window.App = {}; window.Element.prototype.scrollIntoView = () => {}; },
+    });
+    const data = { question: 'What does the tower cost?', consensus: ANSWER, differences_data: DIFFERENCES_DATA,
+      sources: [{ title: 'Price list', url: 'https://example.org/prices' }],
+      model_answers: { OpenAI: { answer: '29 euros', model_label: 'OpenAI' } } };
+    window.App.followup.renderStoredTurns([{ ...data, turn_id: 'first' }, { ...data, turn_id: 'second' }]);
+    const turns = [...document.querySelectorAll('.thread-history-turn')];
+    expect(turns).toHaveLength(2);
+    const ids = [...document.querySelectorAll('[id]')].map(el => el.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    for (const turn of turns) {
+      const tabs = [...turn.querySelector('.thread-history-tabs').children];
+      expect(tabs.map(tab => tab.querySelector('.consensus-tab-label').dataset.short)).toEqual(['Differences', 'Answers', 'Sources']);
+      expect(turn.querySelector('.thread-history-details')).toBeNull();
+      for (const tab of tabs) {
+        expect(tab.classList.contains('consensus-tab')).toBe(true);
+        expect(tab.classList.contains('consensus-evidence-action')).toBe(true);
+        const panel = document.getElementById(tab.getAttribute('aria-controls'));
+        expect(turn.contains(panel)).toBe(true);
+        expect(panel.hidden).toBe(true);
+        tab.click(); expect(panel.hidden).toBe(false); expect(tab.getAttribute('aria-expanded')).toBe('true');
+        expect(document.querySelectorAll('.thread-history-panel:not([hidden])')).toHaveLength(1);
+        tab.click(); expect(panel.hidden).toBe(true); expect(tab.getAttribute('aria-expanded')).toBe('false');
+      }
+    }
+    turns[1].querySelector('.cx-claim.is-major').click();
+    expect(turns[1].querySelector('.diff-card.is-focused')).not.toBeNull();
+    expect(turns[0].querySelector('.diff-card.is-focused')).toBeNull();
+    expect(document.getElementById('differencesCards').children).toHaveLength(0);
+    window.close();
+  });
+});
+
 describe("renderStoredConsensusClaims without differences", () => {
   it("still shows the support ratio for a merely split claim", () => {
     const ctx = boot();

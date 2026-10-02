@@ -297,7 +297,7 @@ def test_comparison_review_and_saved_projection(browser, phase4_server, width, d
         if width <= 540:
             boxes = [control.bounding_box() for control in evidence_links.all()]
             assert max(box['width'] for box in boxes) - min(box['width'] for box in boxes) <= 1
-            assert max(box['y'] for box in boxes) - min(box['y'] for box in boxes) <= 1
+            assert max(round(box['y']) for box in boxes) - min(round(box['y']) for box in boxes) <= 1
             assert all(box['height'] >= 44 for box in boxes)
             assert evidence_links.evaluate_all('''links => links.every(link => {
                 const box = link.getBoundingClientRect();
