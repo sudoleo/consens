@@ -23,6 +23,12 @@ def test_low_score_without_contradictions_is_not_green_or_high(app_page):
     expect(verdict).to_have_class("consensus-verdict is-alert")
     expect(verdict.locator(".verdict-headline")).to_have_text("Low agreement")
     expect(verdict.locator(".verdict-detail")).to_contain_text("no contradictions")
-    assert verdict.evaluate(
-        "(element) => getComputedStyle(element).getPropertyValue('--verdict-ring').trim()"
-    ) == "#cf5a4a"
+    palette = verdict.evaluate(
+        """(element) => {
+          const style = getComputedStyle(element);
+          return Object.fromEntries(['--verdict-ring', '--dispute', '--agree']
+            .map(name => [name, style.getPropertyValue(name).trim()]));
+        }"""
+    )
+    assert palette["--verdict-ring"] == palette["--dispute"]
+    assert palette["--verdict-ring"] != palette["--agree"]
