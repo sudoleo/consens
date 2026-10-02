@@ -1305,6 +1305,17 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   renderProvenance,dismiss}`. `onPrepare` kommt aus `query-send.js` **vor**
   `/prepare`, `onDifferencesStart` aus dem ersten `differences.delta`
   (`consensus-run.js`).
+- **Composer-Hoehe** — `composer-autosize.js` wird vor `app-init.js` geladen.
+  `App.initComposerAutosize` installiert dessen bisherige Input-/Viewport- und
+  Placeholder-Listener; `App.resizeQuestionInput()` bleibt der explizite Trigger.
+  CSS-Min-/Maxhoehe bestimmen Wachstum und internen Scrollbereich. Mehrzeilige
+  Eingaben behalten ihre Form bis zum Leeren. Ein ResizeObserver verfolgt zudem
+  die tatsaechliche Feldbreite waehrend Sidebar-/Viewport-Transitionen und misst
+  pro Animationsframe hoechstens einmal nach. Reine Hoehenmeldungen werden
+  ignoriert, damit eigene Schreibzugriffe keine Schleife erzeugen. So bleibt
+  nach einer schmalen Zwischenbreite kein ueberhohes leeres Feld stehen.
+  `tests/js/composer-autosize.test.mjs` prueft diese Ereignisgrenzen; der Smoke-
+  Browserfall prueft echtes Layout inklusive der abgeschlossenen Transition.
 - **Thread-Layout: Composer unten (2026-07-27)** — ab dem ersten Lauf liest
   sich `/app` als Thread: Frage oben, Lauf, Antwort, Modellantworten, Composer
   am unteren Bildrand. Das DOM behaelt die Reihenfolge Input → Consensus →
@@ -1405,7 +1416,7 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   oeffnen im Thread nach **oben** in Richtung des gelesenen Ergebnisses; im
   Hero normalerweise nach unten. Der Modell-Picker passt Richtung, Position
   und Maximalhoehe an den tatsaechlichen freien Viewport an. Das Fragefeld wächst über
-  `app-init.js::resizeQuestionInput()` automatisch mit seinem Inhalt: bis
+  `composer-autosize.js::resizeQuestionInput()` automatisch mit seinem Inhalt: bis
   220 px auf Desktop bzw. 180 px auf Mobile; danach scrollt nur noch die
   Textarea. Programmatische Leerungen/Füllungen lösen dafür ein `input`-Event
   aus. Der vorhandene `ResizeObserver` zieht die mobile Thread-Reserve bei
@@ -1413,7 +1424,7 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   `fitComposerPicker()` in den sichtbaren Viewport, ohne horizontalen
   Dokument-Scroll. Wo die Teile des Composers stehen, regelt allein
   `css/composer.css` (siehe „Composer: eine Anatomie für alle Modi“). Ein
-  Platzhalterwechsel misst das leere Feld neu (MutationObserver in `app-init.js`),
+  Platzhalterwechsel misst das leere Feld neu (MutationObserver in `composer-autosize.js`),
   sonst bliebe es nach einem langen Platzhalter zu hoch. Verborgene `.response-section`-Platzhalter sind im
   mobilen Hero und im fertigen Thread bei geschlossenem „Compare answers"
   `display:none`; ebenso nimmt das geschlossene Differences-`<details>` keinen

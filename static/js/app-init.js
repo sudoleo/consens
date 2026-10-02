@@ -192,67 +192,8 @@
         const defaultQuestionPlaceholder = "Enter your question";
         const lockedQuestionPlaceholder = "Sign in to start asking questions for free.";
 
-        // Der Composer beginnt kompakt, waechst mit jeder Textzeile und wird ab
-        // der CSS-Maximalhoehe zum intern scrollenden Feld. Die Grenze bleibt im
-        // CSS, damit Desktop und Mobile sie unabhaengig setzen koennen.
-        const COMPOSER_MULTILINE_CLASS = "is-multiline";
-
-        function measureQuestionInput() {
-          questionInput.style.height = "0px";
-          questionInput.style.overflowY = "hidden";
-          const styles = window.getComputedStyle(questionInput);
-          const minHeight = Number.parseFloat(styles.minHeight) || 52;
-          const maxHeight = Number.parseFloat(styles.maxHeight) || 220;
-          const contentHeight = questionInput.scrollHeight;
-          const nextHeight = Math.max(minHeight, Math.min(contentHeight, maxHeight));
-
-          questionInput.style.height = `${Math.ceil(nextHeight)}px`;
-          questionInput.style.overflowY = contentHeight > maxHeight + 1 ? "auto" : "hidden";
-          return { minHeight, nextHeight };
-        }
-
-        function resizeQuestionInput() {
-          if (!questionInput) return;
-
-          const measured = measureQuestionInput();
-          const container = questionInput.closest(".chat-input-container");
-          if (!container) return;
-
-          // Ab der zweiten Zeile bekommt der Text die ganze Breite und die
-          // Knopfzeile rutscht darunter (Optik in shell.css, nur Desktop —
-          // Mobile ist aufgeklappt ohnehin schon so gebaut).
-          //
-          // Zurueck geht es NUR beim leeren Feld, und das ist Absicht: das
-          // Umschalten aendert die Breite des Feldes, und derselbe Text
-          // braucht breit oft eine Zeile weniger als schmal. Eine Bedingung,
-          // die selbst von dieser Breite abhaengt, wuerde in diesem
-          // Zwischenbereich bei jedem Tastendruck zwischen beiden Formen
-          // hin- und herspringen. Leer/nicht leer ist in beiden Breiten
-          // dasselbe und damit der einzige stabile Ausstieg.
-          const isMultiline = container.classList.contains(COMPOSER_MULTILINE_CLASS);
-          const wantsMultiline = questionInput.value.length > 0 &&
-            (isMultiline || measured.nextHeight > measured.minHeight + 1);
-
-          if (wantsMultiline !== isMultiline) {
-            container.classList.toggle(COMPOSER_MULTILINE_CLASS, wantsMultiline);
-            // Die neue Breite ergibt eine andere Zeilenzahl — ohne zweite
-            // Messung bliebe die Hoehe der alten Form bis zum naechsten
-            // Tastendruck stehen.
-            measureQuestionInput();
-          }
-        }
-
+        const resizeQuestionInput = window.App.initComposerAutosize(questionInput);
         window.App.resizeQuestionInput = resizeQuestionInput;
-        questionInput?.addEventListener("input", resizeQuestionInput);
-        window.addEventListener("resize", resizeQuestionInput, { passive: true });
-        // An empty field is as tall as its placeholder (scrollHeight counts
-        // it). Several modules swap the placeholder (sign-in, Agent, a run
-        // in progress); a long one measured on a phone would otherwise keep
-        // the field at full height after a short one replaced it.
-        if (questionInput && typeof MutationObserver === "function") {
-          new MutationObserver(resizeQuestionInput).observe(questionInput, { attributes: true, attributeFilter: ["placeholder"] });
-        }
-        requestAnimationFrame(resizeQuestionInput);
 
         function hasVerifiedSession() {
           return Boolean(window.auth?.currentUser?.emailVerified);

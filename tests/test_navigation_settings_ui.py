@@ -288,9 +288,11 @@ def test_chat_textarea_grows_until_responsive_height_limit():
     assert "max-height: 220px;" in input_css
     assert "@media (max-width: 1099px)" in input_css
     assert "max-height: 180px;" in input_css
-    assert "function resizeQuestionInput()" in app_init
-    assert 'questionInput?.addEventListener("input", resizeQuestionInput)' in app_init
-    assert 'contentHeight > maxHeight + 1 ? "auto" : "hidden"' in app_init
+    # The autosize module owns listeners; initialization and the public trigger
+    # remain wired through app-init. Actual resizing is covered in JS/Chromium.
+    assert "window.App.initComposerAutosize(questionInput)" in app_init
+    assert "window.App.resizeQuestionInput = resizeQuestionInput" in app_init
+    assert position("static/js/composer-autosize.js") < position("static/js/app-init.js")
 
 
 def test_hero_greeting_requires_agent_mode_and_available_space():
