@@ -949,6 +949,9 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   Requests liegen content-frei gehasht in derselben `memory`-Subcollection,
   Revisionen enthalten den exakten Vorzustand. `POST /api/my/memory/undo` kann
   ihn innerhalb 60 Sekunden nur ohne zwischenzeitliche Änderung wiederherstellen.
+  Sinkt das aktuelle Notizlimit unter die gespeicherte Länge, lehnen Patch und
+  Undo mit `memory_limit` (HTTP 422) ohne Profil-/Revisionswrite ab; eine Änderung
+  eines anderen Feldes darf bestehende Notizen niemals still kürzen.
   Der vollständige Vorzustand (`before`) wird 30 Tage nach dem Edit vom
   stündlichen Retention-Loop (`cleanup_memory_edit_records`) entfernt; die
   inhaltsfreien Status-/Revisionsfelder bleiben bis zur Kontolöschung für
@@ -5338,6 +5341,9 @@ Alle Loops werden beaufsichtigt und melden nach jedem erfolgreichen Tick Health.
 Fälligkeitscheck; `next_run_at` wird aus Intervall, lokaler Uhrzeit und Zeitzone
 DST-fest berechnet. Das persistente Config-/Lease-Dokument ist unabhängig vom
 30-Minuten-Watch-Worker; ein Review führt keine Empfehlung automatisch aus.
+Auch der Lease-Abschluss prüft `lease_run_id` und schreibt den nächsten Termin
+in einer Firestore-Transaktion. Ein alter Worker oder wiederholter Abschluss
+kann einen neu vergebenen Lease und dessen Zeitplan nicht überschreiben.
 Jeder terminale Lauf (auch Collection-Fehler) versucht anschließend eine
 Telegram-Nachricht mit Ergebnis, offenen redaktionellen Entscheidungen,
 Topic-Brief-Entscheidungsbedarf und Admin-Link; Versandfehler bleiben nicht-fatal.
@@ -5357,8 +5363,11 @@ frei, solange er noch Eigentümer ist; ein abgelaufener alter Worker kann den
 Lease eines Nachfolgers damit weder freigeben noch verlängern (R30). Jeder Einzel-Claim verwendet den dann aktuellen Zeitpunkt
 (nicht den Tick-Start), erneuert seine 15-Minuten-Lease während langer Läufe
 alle fünf Minuten und fenced Completion wie Fehlerabschluss über
-`current_run_id`. History, Watch-Pointer und Share-Pointer committen gemeinsam;
-ein alter Worker kann einen neueren Claim weder leeren noch pausieren. Jede
+`current_run_id`. History, Watch-Pointer und Share-Pointer committen gemeinsam.
+Claim, Completion und Fehlerabschluss prüfen außerdem den Account-Tombstone
+in ihrer Schreibtransaktion; bereits authentifizierte Worker bleiben nach
+Beginn einer Kontolöschung für neue Persistenzwrites gesperrt.
+Ein alter Worker kann einen neueren Claim weder leeren noch pausieren. Jede
 Änderung über `update_watch`/Admin-Status/Unsubscribe erhöht
 `config_generation`; ein echter Statuswechsel (Pause, Resume) entzieht
 zusätzlich den laufenden Claim (`current_run_id=None`). Ein alter Lauf kann einen
@@ -5428,6 +5437,10 @@ letzten Check. Nur ein „yes“ mit einer Quelle, die die geltende Antwort nich
 zitiert, zieht `next_run_at` auf jetzt und weckt den Scheduler; das Ergebnis
 steht als `last_probe` am Watch. Ist der volle Check < 30 h entfernt, entfällt
 der Scan.
+Ein einmalig konsumierter `probe_claim_token` bindet das Ergebnis an seinen Claim. Vor dem Schreiben
+werden Token, `config_generation`, Ziel, Zeitplan, Modellstufe und letzte erfolgreiche Vollprüfung
+mit dem Claim-Snapshot verglichen. Veraltete Antworten verändern weder
+`last_probe` noch `next_run_at`; Account-Tombstones sperren auch diesen Write.
 E-Mail und Telegram sind getrennte, pro Watch aktivierbare Kanäle; mindestens
 einer muss aktiv bleiben. Legacy-Watches bleiben E-Mail-only. Telegram nutzt
 denselben fertigen Run ohne zusätzlichen LLM-Call, dedupliziert über
@@ -5942,6 +5955,13 @@ und die Löschkaskade überspringt den Objektspeicher statt abzubrechen. Die
 stündliche Retention räumt abgelaufene Dateien und verwaiste Uploads seitenweise
 mit Zeitbudget auf; ein einzelner fehlschlagender Löschvorgang wird geloggt und
 im nächsten Lauf wiederholt. Collection-group-Indizes siehe Setup.
+
+Dokumentversionen unter `documents/{document_id}/versions/{version}` speichern
+Tabellenzeilen mit `storage_schema_version=2` als `{"cells": [...]}`-Maps:
+Firestore erlaubt keine direkt ineinander verschachtelten Arrays. Der interne
+Codec in `agent_documents.py` stellt beim Lesen die unveränderte DocumentSpec
+mit Zeilenlisten wieder her. Inhaltshash, API, Rendering und frühere Versionen
+behalten dieselbe Bedeutung; alte Datensätze ohne Schemafeld bleiben lesbar.
 
 `agent_file_extract.py` läuft mit 15 s Walltime und auf Linux 10 s CPU / 768 MiB
 Adressraum; höchstens 80 PDF-Seiten, 120 Auszüge / 120.000 Zeichen. DOCX-Tabellen

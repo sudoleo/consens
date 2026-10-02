@@ -25,16 +25,24 @@ for (const path of process.argv.slice(2)) {
     const [title, callback] = node.arguments;
     if (!(typeof title?.value === 'string' || title?.type === 'TemplateLiteral') || !['ArrowFunctionExpression', 'FunctionExpression'].includes(callback?.type)) return;
     const assertions = new Set();
+    const evidence = [];
     walk(callback.body, child => {
       if (child.type === 'CallExpression' && child.callee.type === 'Identifier' && child.callee.name === 'expect') {
         assertions.add(child.loc.start.line);
+        evidence.push({line: child.loc.start.line, kind: 'expect'});
+      } else if (child.type === 'CallExpression') {
+        const callee = source.slice(child.callee.start, child.callee.end);
+        if (/^assert(?:\.|Fails$|Succeeds$)/.test(callee)) {
+          evidence.push({line: child.loc.start.line, kind: 'assertion_or_helper_call'});
+        }
       }
     });
     // Template registrations inside a loop are one static definition, even
     // when the runner expands them into several differently named cases.
     const name = typeof title.value === 'string' ? title.value : source.slice(title.start, title.end);
     definitions.push({name, line: node.loc.start.line, end_line: node.loc.end.line,
-                      registration, assertion_lines: [...assertions].sort((a, b) => a - b)});
+                      registration, assertion_lines: [...assertions].sort((a, b) => a - b),
+                      assertion_evidence: [...new Map(evidence.map(a => [`${a.line}:${a.kind}`, a])).values()].sort((a, b) => a.line - b.line)});
   });
   result[path] = definitions;
 }

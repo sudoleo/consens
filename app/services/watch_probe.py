@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import logging
 import re
+import secrets
 from datetime import datetime, timedelta, timezone
 
 from google.cloud.firestore_v1.base_query import FieldFilter
@@ -25,7 +26,7 @@ import app.core.config as cfg
 from app.core.entitlements import TIER_FREE
 from app.core.observability import safe_exception
 from app.core.security import db_firestore
-from app.services import share_snapshots, watch_service
+from app.services import persistence_guard, share_snapshots, watch_service
 from app.services.llm import provider_transport
 from app.services.source_catalog import canonical_source_url
 
@@ -158,6 +159,7 @@ def claim_probe(watch_id: str, *, now=None, db=None):
     ref = db.collection(watch_service.WATCHES_COLLECTION).document(watch_id)
     budget_ref = _budget_ref(db, now)
     limit = cfg.get_watch_probe_max_per_day()
+    claim_token = secrets.token_hex(16)
 
     def claim(transaction):
         snapshot = ref.get(transaction=transaction)
@@ -169,6 +171,9 @@ def claim_probe(watch_id: str, *, now=None, db=None):
         if not eligible(data):
             transaction.update(ref, {"next_probe_at": None})
             return None, "not_eligible"
+        if data.get("owner_uid"):
+            persistence_guard.ensure_account_write_allowed(
+                uid=data["owner_uid"], db=db, transaction=transaction, now=now)
         claimed_until = data.get("claimed_until")
         next_run = data.get("next_run_at")
         if (
@@ -183,14 +188,14 @@ def claim_probe(watch_id: str, *, now=None, db=None):
         count = count if isinstance(count, int) and count >= 0 else 0
         if count >= limit:
             return None, "budget"
-        transaction.update(ref, {"next_probe_at": now + PROBE_INTERVAL})
+        transaction.update(ref, {"next_probe_at": now + PROBE_INTERVAL, "probe_claim_token": claim_token})
         transaction.set(budget_ref, {"date": now.strftime("%Y-%m-%d"), "count": count + 1})
-        return dict(data), "claimed"
+        return {**data, "probe_claim_token": claim_token}, "claimed"
 
     return watch_service._run_transaction(db, claim)
 
 
-def record_probe(watch_id: str, verdict: dict, *, now=None, db=None) -> bool:
+def record_probe(watch_id: str, verdict: dict, *, now=None, db=None, expected_claim=None) -> bool:
     """Store the probe result; on new evidence pull the full check to now."""
     db = db if db is not None else db_firestore
     now = now or utcnow()
@@ -201,7 +206,20 @@ def record_probe(watch_id: str, verdict: dict, *, now=None, db=None) -> bool:
         data = snapshot.to_dict() if snapshot.exists else None
         if not data:
             return False
-        updates = {"last_probe": {
+        # A result belongs to the exact claim/configuration it inspected. A slow
+        # provider response cannot schedule a changed watch or supersede a newer
+        # probe/full check. Legacy direct calls work only without a claimed token.
+        if data.get("probe_claim_token") or expected_claim is not None:
+            if not expected_claim or data.get("probe_claim_token") != expected_claim.get("probe_claim_token"):
+                return False
+            fields = ("config_generation", "status", "share_id", "question_hash", "condition", "interval", "model_tier",
+                      "run_time", "run_weekday", "timezone", "last_run_at", "last_successful_run_id")
+            if any(data.get(field) != expected_claim.get(field) for field in fields):
+                return False
+        if data.get("owner_uid"):
+            persistence_guard.ensure_account_write_allowed(
+                uid=data["owner_uid"], db=db, transaction=transaction, now=now)
+        updates = {"probe_claim_token": "", "last_probe": {
             "at": now,
             "outcome": verdict.get("outcome") or OUTCOME_FAILED,
             "summary": str(verdict.get("summary") or "")[:PROBE_SUMMARY_CHARS],
@@ -250,5 +268,5 @@ def run_probe(watch_id: str, *, now=None, db=None) -> str:
     except Exception as exc:
         logging.warning("Watch probe failed category=%s", safe_exception(exc))
         verdict = {"outcome": OUTCOME_FAILED}
-    pulled = record_probe(watch_id, verdict, now=utcnow(), db=db)
+    pulled = record_probe(watch_id, verdict, now=utcnow(), db=db, expected_claim=claimed)
     return "pulled" if pulled else verdict["outcome"]

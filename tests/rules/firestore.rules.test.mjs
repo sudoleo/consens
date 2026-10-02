@@ -44,7 +44,7 @@ after(async () => {
 
 for (const identity of ['anonymous', 'owner', 'foreign', 'admin-claim']) {
   for (const path of paths) {
-    test(`${identity}: no client read/write/query/delete of ${path.split('/').slice(0, -1).join('/')}`, async () => {
+    test(`${identity}: no client read/write/query/delete of ${path.replace(owner, '{uid}').split('/').slice(0, -1).join('/')}`, async () => {
       const context = identity === 'anonymous' ? env.unauthenticatedContext()
         : env.authenticatedContext(identity === 'owner' ? owner : `other-${suffix}`, identity === 'admin-claim' ? { admin: true, role: 'admin' } : {});
       const db = context.firestore();
