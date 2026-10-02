@@ -3,18 +3,40 @@ name: Regression tests
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
   workflow_dispatch:
+    inputs:
+      suite:
+        description: Checks to run (full includes browser/emulator and Windows)
+        type: choice
+        required: true
+        default: quick
+        options:
+          - quick
+          - backend
+          - frontend
+          - browser-and-rules
+          - windows-entry-points
+          - full
 
 permissions:
   contents: read
 
 concurrency:
-  group: regression-${{ github.workflow }}-${{ github.ref }}
+  # A quick push must not cancel an explicitly requested full/individual run.
+  group: regression-${{ github.workflow }}-${{ github.ref }}-${{ github.event_name == 'workflow_dispatch' && inputs.suite || github.event.action == 'ready_for_review' && 'full' || 'quick' }}
   cancel-in-progress: true
 
 jobs:
   backend:
+    if: github.event_name != 'workflow_dispatch' || inputs.suite == 'quick' || inputs.suite == 'backend' || inputs.suite == 'full'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
@@ -44,6 +66,7 @@ jobs:
           if-no-files-found: error
 
   frontend:
+    if: github.event_name != 'workflow_dispatch' || inputs.suite == 'quick' || inputs.suite == 'frontend' || inputs.suite == 'full'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -63,6 +86,7 @@ jobs:
           if-no-files-found: error
 
   browser-and-rules:
+    if: github.event.action == 'ready_for_review' || (github.event_name == 'workflow_dispatch' && (inputs.suite == 'browser-and-rules' || inputs.suite == 'full'))
     runs-on: ubuntu-latest
     timeout-minutes: 35
     env:
@@ -112,6 +136,7 @@ jobs:
           if-no-files-found: error
 
   windows-entry-points:
+    if: github.event.action == 'ready_for_review' || (github.event_name == 'workflow_dispatch' && (inputs.suite == 'windows-entry-points' || inputs.suite == 'full'))
     runs-on: windows-latest
     timeout-minutes: 30
     env:
