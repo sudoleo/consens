@@ -324,6 +324,7 @@ def run_agent(request: Request, payload: AgentRequest):
             # waiting, so Stop/status do not depend on a paid call starting.
             yield sse_pack("accepted", {"chat_id": payload.chat_id, "turn_id": turn["id"]})
             source = loop.run()
+            closing = False
             try:
                 for event in source:
                     if event:
@@ -333,8 +334,19 @@ def run_agent(request: Request, payload: AgentRequest):
                                 yield sse_pack("quota", {"token_budget": agent_quota.snapshot(store.db, uid)})
                             except Exception as exc:
                                 logging.warning("Agent allowance unavailable category=%s", safe_exception(exc))
+            except GeneratorExit:
+                closing = True
+                raise
             finally:
-                source.close()
+                try:
+                    source.close()
+                except Exception as exc:
+                    if not closing:
+                        raise
+                    # An account tombstone can refuse settlement during close.
+                    # Preserve GeneratorExit: yielding an error frame now would
+                    # violate the generator protocol and strand the producer.
+                    logging.warning("Agent stream cleanup unavailable category=%s", safe_exception(exc))
             status = "succeeded"
         except (ProviderCancelled, GeneratorExit):
             status = "cancelled"

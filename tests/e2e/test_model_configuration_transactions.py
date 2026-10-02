@@ -43,3 +43,45 @@ def test_native_failed_model_activation_preserves_other_writer(native_db, monkey
     assert ref.get().to_dict() == {"revision": initial_revision + 2, "label": "B"}
     with pytest.raises(admin.ModelConfigConflict):
         admin._persist_and_activate_models(ref, {"label": "stale"}, expected_revision=initial_revision)
+
+
+@pytest.mark.parametrize("existing", [False, True])
+def test_native_activation_and_rollback_rpc_failure_is_not_reported_as_restored(native_db, monkeypatch, caplog, existing):
+    from google.api_core.exceptions import PermissionDenied
+    from app.core import config as cfg, security
+
+    db, ref = native_db, native_db.tracked("app_config")
+    if existing:
+        ref.set({"revision": 4, "label": "initial"})
+    revision = 4 if existing else 0
+    before_runtime = cfg._capture_runtime_config()
+
+    # Only redirect the configuration document to this test's unique native ref.
+    class ConfigurationDatabase:
+        def collection(self, name):
+            assert name == "app_config"
+            return self
+        def document(self, name):
+            assert name == "models"
+            return ref
+
+    monkeypatch.setattr(admin, "db_firestore", db)
+    monkeypatch.setattr(security, "db_firestore", ConfigurationDatabase())
+    def fail_activation(*args, **kwargs):
+        raise RuntimeError("synthetic activation failure")
+    monkeypatch.setattr(cfg, "apply_watch_models", fail_activation)
+    original_commit, commits = db._firestore_api.commit, []
+    def commit(*args, **kwargs):
+        commits.append(kwargs.get("request"))
+        if len(commits) == 2:
+            raise PermissionDenied("synthetic rollback RPC failure")
+        return original_commit(*args, **kwargs)
+    monkeypatch.setattr(db._firestore_api, "commit", commit)
+
+    with pytest.raises(RuntimeError, match="synthetic activation failure"):
+        admin._persist_and_activate_models(ref, {"openai": ["gpt-5.6"]}, expected_revision=revision)
+    assert len(commits) == 2  # Native save succeeded; native rollback RPC failed.
+    assert ref.get().to_dict() == {"openai": ["gpt-5.6"], "revision": revision + 1}
+    assert cfg._capture_runtime_config() == before_runtime
+    assert "activation and persistence rollback both failed" in caplog.text
+    assert "synthetic rollback RPC failure" not in caplog.text

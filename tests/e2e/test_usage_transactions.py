@@ -63,6 +63,23 @@ def test_native_last_allowance_release_and_utc_period(native_db):
     assert agent_quota.quota_ref(db, uid, admission(tomorrow).period).get().to_dict().get("used", 0) == 0
 
 
+def test_native_distinct_bookings_preserve_both_charges(native_db):
+    db, now, uid = native_db, datetime.now(timezone.utc), native_db.owner()
+    repository = FirestoreUsageRepository(db)
+    repository.reserve(uid, "shared", RunKind.REGULAR, admission(now), now=now)
+    repository.consume(uid, "shared")
+    race(
+        lambda: FirestoreUsageRepository(db).book_operation(uid, "shared", "ask_openai", measured=11, estimated=0, final=False, now=now),
+        lambda: FirestoreUsageRepository(db).book_operation(uid, "shared", "ask_anthropic", measured=17, estimated=0, final=False, now=now),
+    )
+    ledger = agent_quota.quota_ref(db, uid, admission(now).period).get().to_dict()
+    assert ledger["used"] == 28
+    from app.services.usage_repository import _idempotency_hash
+    saved = repository._run_ref(uid, _idempotency_hash("shared")).get().to_dict()
+    assert set(saved["booked_operations"]) == {"ask_openai", "ask_anthropic"}
+    assert sum(item["measured"] for item in saved["booked_operations"].values()) == 28
+
+
 def test_native_release_consume_have_one_terminal_winner(native_db):
     db, now = native_db, datetime.now(timezone.utc)
     uid = db.owner()
