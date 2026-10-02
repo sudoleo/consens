@@ -1,12 +1,13 @@
-# Playwright-Smoke-Suite (`tests/e2e/`)
+# Browserreisen, Smoke und native Transaktionen (`tests/e2e/`)
 
-Aktueller Bestand: **30 Dateien / 308 gesammelte Fälle** (02.10.2026).
+Aktueller Bestand: **44 Dateien / 368 gesammelte Fälle** (02.10.2026).
 Ergebnisse und rote Fälle: [Laufbericht](../../docs/test-coverage/findings.md).
 Google-/Gmail-/Workspace-/Modusselektor-Dateien verwenden den writerfreien
 Phase-4-Server mit API-Doubles. `test_smoke.py`, `test_agreement_verdict.py`
 und `test_run_cancel_and_progress.py` brauchen dagegen über `app_page` den
-Emulator; ebenso die drei Transaktionsdateien. Dateiname/E2E-Verzeichnis
-allein unterscheiden diese Grenzen nicht.
+Emulator; ebenso die nativen Transaktions-/Repositorydateien und die
+persistierten Browserreisen. Dateiname/E2E-Verzeichnis allein unterscheiden
+diese Grenzen nicht; der [Katalog](../../docs/test-coverage/e2e.md) benennt sie pro Datei.
 
 Die Suite automatisiert die risikoreichsten Punkte aus
 `docs/smoke-checklist.md` gegen einen lokalen Server. LLM-Aufrufe und Login
@@ -131,12 +132,16 @@ Cleanup-Loops.
 Request-Writer bleiben absichtlich aktiv, damit echte Datenflüsse geprüft
 werden, landen aber nur im kurzlebigen Emulator. Inventar:
 
-- aktuell ausgeführt: Usage-Reservierungen/Run-Metadaten aus `/prepare` sowie
-  Chats, Turns, Context-Versionen, Modell-Completions und Turn-Abschluss,
-- im Mock-Profil ausdrücklich unterdrückt: `pending_results`, Differences-
-  Telemetrie sowie die durch `firebase_stub.js` ersetzten Bookmark-/Vote-Writes,
-- für neue Tests erreichbar, aber weiterhin emulatorgebunden: Completions,
-  Shares, Votes, Bookmarks, Watches und sonstige App-Endpunkt-Writer.
+- im `app_page`-Profil ausgeführt: Usage-Reservierungen/Run-Metadaten aus
+  `/prepare` sowie Chats, Turns, Context-Versionen, Modell-Completions und
+  Turn-Abschluss; der serverseitige Bookmark-Writer bleibt ebenfalls aktiv,
+- im Mock-Profil ausdrücklich unterdrückt: `pending_results` und Differences-
+  Telemetrie; `firebase_stub.js` ersetzt die direkten Bookmark-/Vote-Funktionen
+  des Browsers, aber nicht die serverseitigen Writes,
+- persistierte Reisen verwenden originales AppFirebase und echte HTTP-Routen
+  für Bookmarks, Shares, Follow/Watch und Kontolöschung. Native Tests erreichen
+  die jeweiligen Repository-/Serviceschichten. Details stehen in den
+  [Reisebelegen](../../docs/test-coverage/product/journeys.md).
 
 `test_phase2_transactions.py` spricht den isolierten Emulator zusätzlich direkt
 über die Service-Seams an. Die Tests starten je mindestens zwei konkurrierende
@@ -154,8 +159,9 @@ getestet; In-Memory-Fakes allein reichen für diese Race-Verträge nicht aus.
   Firebase-Bundle als auch die Source-URL durch `firebase_stub.js`.
 - Dummy-Eigenkeys passieren lokale Key-Prüfungen, lösen mit `MOCK_LLM=1` aber
   keine Provideraufrufe aus.
-- CDN-Skripte wie marked und DOMPurify werden echt geladen; der Lauf braucht
-  daher Netzzugang.
+- marked, DOMPurify und KaTeX kommen aus den lokalen versionierten
+  Vendorassets; ihre Produktimplementierungen werden echt geladen. Analytics
+  wird im `app_page`-Profil abgefangen.
 
 Noch nicht automatisiert sind unter anderem echte Firebase-Auth-Flows,
 Provideraufrufe, Mail-/Telegram-Zustellung und Admin-Produktionsabläufe. Die

@@ -2,9 +2,9 @@
 
 [Zum Katalog](../test-coverage-map.md). Die Vorbereitung dieses Folgeaudits ist
 inzwischen als **[Produktabgleich mit 38 Arbeitspaketen](product/README.md)**
-dokumentiert. Der folgende methodische Ablauf bleibt für die Umsetzung und
-weitere Reviews gültig. Bestandsaufnahme und Folgeaudit implementieren selbst
-keine fehlenden Regressionstests oder Produktkorrekturen.
+dokumentiert und durch die aktuellen Implementierungsnachweise ergänzt.
+Der folgende methodische Ablauf bleibt für weitere Reviews gültig; die aktuelle
+Umsetzung umfasst auch Regressionstests und konkrete Produktkorrekturen.
 
 ## 1. Ausgangsstand verifizieren
 

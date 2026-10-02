@@ -20,7 +20,7 @@ def file_sha256(path):
     """Git text checkouts may use CRLF; binary assets must stay byte-exact."""
     path = Path(path)
     value = path.read_bytes()
-    if path.suffix.lower() in {'.py', '.js', '.mjs', '.css', '.html', '.json', '.yml', '.yaml', '.ps1', '.rules', '.txt', '.md', '.ini', '.xml'}:
+    if path.name == '.gitattributes' or path.suffix.lower() in {'.py', '.js', '.mjs', '.css', '.html', '.json', '.yml', '.yaml', '.ps1', '.rules', '.txt', '.md', '.ini', '.xml'}:
         value = value.replace(b'\r\n', b'\n')
     return hashlib.sha256(value).hexdigest()
 

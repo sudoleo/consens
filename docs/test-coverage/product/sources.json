@@ -36,6 +36,18 @@
     "test_candidates_note": "Direct imports/literal references only; not semantic coverage."
   },
   {
+    "path": ".github/workflows/tests.yml",
+    "lines": 181,
+    "sha256": "0fa3da4b4a31934e496acf8ad4012c82e266e55662bb760146eaa78217e3699a",
+    "symbols": [],
+    "routes": [],
+    "contract_ids": [
+      "BUILD-02"
+    ],
+    "direct_test_candidates": [],
+    "test_candidates_note": "Direct imports/literal references only; not semantic coverage."
+  },
+  {
     "path": "app/api/routers/admin.py",
     "lines": 1800,
     "sha256": "f4bf7ef2b351d1a6895cd13df893d223e168041d8a54749eed6fd8cc479ff79c",
@@ -514,6 +526,7 @@
       "ADMIN-01"
     ],
     "direct_test_candidates": [
+      "tests/e2e/test_model_configuration_transactions.py",
       "tests/test_account_tier_admin.py",
       "tests/test_agent_budget_config.py",
       "tests/test_auth_revocation.py",
@@ -531,128 +544,128 @@
   },
   {
     "path": "app/api/routers/agent.py",
-    "lines": 437,
-    "sha256": "19cd32955cd728a3391087190bfe7220c66d60af71d54d92e0044bdfa35efd5e",
+    "lines": 455,
+    "sha256": "392d83dc218a6afcee0a9236e07e9a2582b569706b0ac2357dcc06644b7e092c",
     "symbols": [
       {
         "name": "require_agent_access",
         "kind": "FunctionDef",
         "line": 39,
-        "end_line": 41
+        "end_line": 47
       },
       {
         "name": "AgentRequest",
         "kind": "ClassDef",
-        "line": 44,
-        "end_line": 72
+        "line": 50,
+        "end_line": 78
       },
       {
         "name": "_save_bookmark",
         "kind": "FunctionDef",
-        "line": 75,
-        "end_line": 101
+        "line": 81,
+        "end_line": 107
       },
       {
         "name": "_final",
         "kind": "FunctionDef",
-        "line": 104,
-        "end_line": 117
+        "line": 110,
+        "end_line": 123
       },
       {
         "name": "_save_interrupted",
         "kind": "FunctionDef",
-        "line": 120,
-        "end_line": 131
+        "line": 126,
+        "end_line": 137
       },
       {
         "name": "_refresh_model_configuration",
         "kind": "FunctionDef",
-        "line": 134,
-        "end_line": 139
+        "line": 140,
+        "end_line": 145
       },
       {
         "name": "available_agent_models",
         "kind": "FunctionDef",
-        "line": 144,
-        "end_line": 150
+        "line": 150,
+        "end_line": 156
       },
       {
         "name": "available_agent_budget",
         "kind": "FunctionDef",
-        "line": 155,
-        "end_line": 159
+        "line": 161,
+        "end_line": 165
       },
       {
         "name": "run_agent",
         "kind": "FunctionDef",
-        "line": 164,
-        "end_line": 399
+        "line": 170,
+        "end_line": 417
       },
       {
         "name": "list_agents",
         "kind": "FunctionDef",
-        "line": 404,
-        "end_line": 405
+        "line": 422,
+        "end_line": 423
       },
       {
         "name": "agent_details",
         "kind": "FunctionDef",
-        "line": 410,
-        "end_line": 412
+        "line": 428,
+        "end_line": 430
       },
       {
         "name": "_agent_details",
         "kind": "FunctionDef",
-        "line": 415,
-        "end_line": 425
+        "line": 433,
+        "end_line": 443
       },
       {
         "name": "stop_agent_run",
         "kind": "FunctionDef",
-        "line": 430,
-        "end_line": 437
+        "line": 448,
+        "end_line": 455
       },
       {
         "name": "valid_files",
         "kind": "FunctionDef",
-        "line": 63,
-        "end_line": 67
+        "line": 69,
+        "end_line": 73
       },
       {
         "name": "valid_question",
         "kind": "FunctionDef",
-        "line": 71,
-        "end_line": 72
+        "line": 77,
+        "end_line": 78
       },
       {
         "name": "chat_guard",
         "kind": "FunctionDef",
-        "line": 85,
-        "end_line": 88
+        "line": 91,
+        "end_line": 94
       },
       {
         "name": "events",
         "kind": "FunctionDef",
-        "line": 311,
-        "end_line": 381
+        "line": 317,
+        "end_line": 399
       },
       {
         "name": "stream_events",
         "kind": "FunctionDef",
-        "line": 383,
-        "end_line": 389
+        "line": 401,
+        "end_line": 407
       },
       {
         "name": "cleanup",
         "kind": "FunctionDef",
-        "line": 391,
-        "end_line": 393
+        "line": 409,
+        "end_line": 411
       },
       {
         "name": "mark_google",
         "kind": "FunctionDef",
-        "line": 242,
-        "end_line": 244
+        "line": 248,
+        "end_line": 250
       }
     ],
     "routes": [
@@ -670,6 +683,7 @@
     "direct_test_candidates": [
       "tests/test_agent_capacity.py",
       "tests/test_agent_delegation.py",
+      "tests/test_agent_http_contract.py",
       "tests/test_agent_model_catalog.py",
       "tests/test_agent_reliability.py",
       "tests/test_agent_runs.py",
@@ -1165,7 +1179,8 @@
       "AUTH-02"
     ],
     "direct_test_candidates": [
-      "tests/test_auth_session.py"
+      "tests/test_auth_session.py",
+      "tests/test_http_adapter_auth.py"
     ],
     "test_candidates_note": "Direct imports/literal references only; not semantic coverage."
   },
@@ -1952,6 +1967,7 @@
       "CHAT-03"
     ],
     "direct_test_candidates": [
+      "tests/test_agent_http_contract.py",
       "tests/test_agent_runs.py",
       "tests/test_chat_context.py",
       "tests/test_chat_history.py"
@@ -2219,6 +2235,7 @@
       "DATA-01"
     ],
     "direct_test_candidates": [
+      "tests/test_feedback.py",
       "tests/test_firestore_read_contracts.py",
       "tests/test_frontend_assets.py",
       "tests/test_model_leaderboard.py",
@@ -2464,8 +2481,8 @@
   },
   {
     "path": "app/api/routers/topics.py",
-    "lines": 800,
-    "sha256": "4abae3aeeffe69e6cf4005bceaa2e2b148c49fcfabffba2e2d5f5cc850fd9b6a",
+    "lines": 807,
+    "sha256": "1325ffc623c0e82597e5c9b26359c849b6dceaa0d4765d54cea61d4ea9e4b579",
     "symbols": [
       {
         "name": "_favicon_concurrency",
@@ -2501,133 +2518,133 @@
         "name": "_require_admin",
         "kind": "FunctionDef",
         "line": 138,
-        "end_line": 148
+        "end_line": 155
       },
       {
         "name": "_date_label",
         "kind": "FunctionDef",
-        "line": 151,
-        "end_line": 155
+        "line": 158,
+        "end_line": 162
       },
       {
         "name": "_x_handle",
         "kind": "FunctionDef",
-        "line": 161,
-        "end_line": 170
+        "line": 168,
+        "end_line": 177
       },
       {
         "name": "_is_video_url",
         "kind": "FunctionDef",
-        "line": 173,
-        "end_line": 179
+        "line": 180,
+        "end_line": 186
       },
       {
         "name": "_host_of",
         "kind": "FunctionDef",
-        "line": 182,
-        "end_line": 187
+        "line": 189,
+        "end_line": 194
       },
       {
         "name": "_enrich_evidence",
         "kind": "FunctionDef",
-        "line": 190,
-        "end_line": 217
+        "line": 197,
+        "end_line": 224
       },
       {
         "name": "_admin_topic_view",
         "kind": "FunctionDef",
-        "line": 220,
-        "end_line": 229
+        "line": 227,
+        "end_line": 236
       },
       {
         "name": "_message_page",
         "kind": "FunctionDef",
-        "line": 232,
-        "end_line": 249
+        "line": 239,
+        "end_line": 256
       },
       {
         "name": "topics_hub",
         "kind": "AsyncFunctionDef",
-        "line": 253,
-        "end_line": 287
+        "line": 260,
+        "end_line": 294
       },
       {
         "name": "sitemap_topics",
         "kind": "AsyncFunctionDef",
-        "line": 291,
-        "end_line": 316
+        "line": 298,
+        "end_line": 323
       },
       {
         "name": "topic_page",
         "kind": "AsyncFunctionDef",
-        "line": 320,
-        "end_line": 542
+        "line": 327,
+        "end_line": 549
       },
       {
         "name": "topic_favicon",
         "kind": "AsyncFunctionDef",
-        "line": 556,
-        "end_line": 599
+        "line": 563,
+        "end_line": 606
       },
       {
         "name": "follow_topic",
         "kind": "AsyncFunctionDef",
-        "line": 604,
-        "end_line": 636
+        "line": 611,
+        "end_line": 643
       },
       {
         "name": "topic_follow_confirm",
         "kind": "AsyncFunctionDef",
-        "line": 641,
-        "end_line": 653
+        "line": 648,
+        "end_line": 660
       },
       {
         "name": "topic_follow_unsubscribe",
         "kind": "AsyncFunctionDef",
-        "line": 658,
-        "end_line": 669
+        "line": 665,
+        "end_line": 676
       },
       {
         "name": "_deliver_topic_notifications",
         "kind": "AsyncFunctionDef",
-        "line": 672,
-        "end_line": 678
+        "line": 679,
+        "end_line": 685
       },
       {
         "name": "admin_list_topics",
         "kind": "AsyncFunctionDef",
-        "line": 683,
-        "end_line": 690
+        "line": 690,
+        "end_line": 697
       },
       {
         "name": "admin_create_topic",
         "kind": "AsyncFunctionDef",
-        "line": 695,
-        "end_line": 707
+        "line": 702,
+        "end_line": 714
       },
       {
         "name": "admin_get_topic",
         "kind": "AsyncFunctionDef",
-        "line": 712,
-        "end_line": 723
+        "line": 719,
+        "end_line": 730
       },
       {
         "name": "admin_update_topic",
         "kind": "AsyncFunctionDef",
-        "line": 728,
-        "end_line": 742
+        "line": 735,
+        "end_line": 749
       },
       {
         "name": "admin_create_topic_run",
         "kind": "AsyncFunctionDef",
-        "line": 747,
-        "end_line": 800
+        "line": 754,
+        "end_line": 807
       },
       {
         "name": "public_runs",
         "kind": "FunctionDef",
-        "line": 379,
-        "end_line": 393
+        "line": 386,
+        "end_line": 400
       }
     ],
     "routes": [
@@ -2789,8 +2806,11 @@
       "MEM-02"
     ],
     "direct_test_candidates": [
+      "tests/e2e/test_memory_edit_transactions.py",
       "tests/test_account_deletion_chats.py",
+      "tests/test_http_adapter_auth.py",
       "tests/test_memory_edit.py",
+      "tests/test_memory_http_contract.py",
       "tests/test_pro_beta_and_copy.py",
       "tests/test_run_usage_endpoints.py",
       "tests/test_user_memory.py"
@@ -3787,6 +3807,8 @@
     ],
     "direct_test_candidates": [
       "tests/e2e/test_agent_chat_frontend.py",
+      "tests/e2e/test_memory_edit_transactions.py",
+      "tests/e2e/test_model_configuration_transactions.py",
       "tests/test_agent_accounting_audit.py",
       "tests/test_agent_comparison.py",
       "tests/test_agent_model_catalog.py",
@@ -3805,6 +3827,7 @@
       "tests/test_differences_schema.py",
       "tests/test_followup_context.py",
       "tests/test_memory_edit.py",
+      "tests/test_memory_http_contract.py",
       "tests/test_model_configuration.py",
       "tests/test_model_configuration_regressions.py",
       "tests/test_onboarding_gates.py",
@@ -3854,6 +3877,7 @@
     ],
     "direct_test_candidates": [
       "tests/e2e/test_agent_transactions.py",
+      "tests/e2e/test_persisted_journeys.py",
       "tests/e2e/test_phase2_transactions.py",
       "tests/e2e/test_prompt_config_transactions.py",
       "tests/test_dev_cli.py",
@@ -4164,6 +4188,7 @@
       "tests/test_agent_budget_config.py",
       "tests/test_agent_calendar.py",
       "tests/test_agent_files.py",
+      "tests/test_agent_http_contract.py",
       "tests/test_agent_runs.py",
       "tests/test_ask_endpoints.py",
       "tests/test_auth_session.py",
@@ -4173,6 +4198,7 @@
       "tests/test_client_error_alerts.py",
       "tests/test_consensus_answer_contract.py",
       "tests/test_consensus_chat_history.py",
+      "tests/test_feedback.py",
       "tests/test_followup_context.py",
       "tests/test_google_connections.py",
       "tests/test_memory_edit.py",
@@ -4188,14 +4214,15 @@
       "tests/test_share_feature.py",
       "tests/test_topics_feature.py",
       "tests/test_user_memory.py",
-      "tests/test_watch_feature.py"
+      "tests/test_watch_feature.py",
+      "tests/test_watch_http_contract.py"
     ],
     "test_candidates_note": "Direct imports/literal references only; not semantic coverage."
   },
   {
     "path": "app/core/request_limits.py",
-    "lines": 128,
-    "sha256": "b69452ae408b01b3b127ca95367990ebb7182414f80d888ec2d6de81dc5c7924",
+    "lines": 131,
+    "sha256": "ecfa63eb77c6732d4e4a6ef464452942649962b6cbc7e03aaf657ced057e45c7",
     "symbols": [
       {
         "name": "configured_max_request_body_bytes",
@@ -4207,7 +4234,7 @@
         "name": "RequestBodyLimitMiddleware",
         "kind": "ClassDef",
         "line": 27,
-        "end_line": 128
+        "end_line": 131
       },
       {
         "name": "__init__",
@@ -4219,13 +4246,13 @@
         "name": "__call__",
         "kind": "AsyncFunctionDef",
         "line": 45,
-        "end_line": 111
+        "end_line": 114
       },
       {
         "name": "_reject",
         "kind": "AsyncFunctionDef",
-        "line": 113,
-        "end_line": 128
+        "line": 116,
+        "end_line": 131
       },
       {
         "name": "replay_receive",
@@ -4236,8 +4263,8 @@
       {
         "name": "disconnected_receive",
         "kind": "AsyncFunctionDef",
-        "line": 106,
-        "end_line": 107
+        "line": 109,
+        "end_line": 110
       }
     ],
     "routes": [],
@@ -4411,10 +4438,15 @@
       "AUTH-02"
     ],
     "direct_test_candidates": [
+      "tests/e2e/test_memory_edit_transactions.py",
+      "tests/e2e/test_model_configuration_transactions.py",
+      "tests/test_agent_http_contract.py",
       "tests/test_agent_model_catalog.py",
+      "tests/test_api_run_recovery.py",
       "tests/test_auth_revocation.py",
       "tests/test_bookmarks.py",
       "tests/test_chat_history.py",
+      "tests/test_memory_http_contract.py",
       "tests/test_phase6_architecture.py",
       "tests/test_plus_tier.py",
       "tests/test_public_design_system.py",
@@ -4739,6 +4771,7 @@
       "AUTH-03"
     ],
     "direct_test_candidates": [
+      "tests/e2e/test_account_deletion_transactions.py",
       "tests/e2e/test_agent_transactions.py",
       "tests/test_account_deletion_retry.py",
       "tests/test_agent_runs.py",
@@ -4962,6 +4995,7 @@
       "GOOGLE-03"
     ],
     "direct_test_candidates": [
+      "tests/e2e/test_google_action_transactions.py",
       "tests/test_agent_calendar.py",
       "tests/test_agent_gmail.py"
     ],
@@ -5082,6 +5116,7 @@
     ],
     "direct_test_candidates": [
       "tests/e2e/test_agent_transactions.py",
+      "tests/e2e/test_usage_transactions.py",
       "tests/test_agent_budget_config.py",
       "tests/test_agent_comparison.py",
       "tests/test_api_run_billing_identity.py",
@@ -6071,8 +6106,8 @@
   },
   {
     "path": "app/services/agent_documents.py",
-    "lines": 238,
-    "sha256": "54bf4cc5925928ab161db0266ec1592aabb91999c1b631f0ac5d09547c94bf92",
+    "lines": 262,
+    "sha256": "20f3e3a3dfa0eef52b78f8cb09a24ee457f1ed7de87a1d7945173e5e28cbe104",
     "symbols": [
       {
         "name": "CreateDocument",
@@ -6099,88 +6134,100 @@
         "end_line": 38
       },
       {
-        "name": "render",
+        "name": "_storage_record",
         "kind": "FunctionDef",
         "line": 41,
-        "end_line": 56
+        "end_line": 49
+      },
+      {
+        "name": "_read_record",
+        "kind": "FunctionDef",
+        "line": 52,
+        "end_line": 62
+      },
+      {
+        "name": "render",
+        "kind": "FunctionDef",
+        "line": 65,
+        "end_line": 80
       },
       {
         "name": "DocumentTools",
         "kind": "ClassDef",
-        "line": 59,
-        "end_line": 198
+        "line": 83,
+        "end_line": 222
       },
       {
         "name": "cleanup_expired_documents",
         "kind": "FunctionDef",
-        "line": 201,
-        "end_line": 238
+        "line": 225,
+        "end_line": 262
       },
       {
         "name": "__init__",
         "kind": "FunctionDef",
-        "line": 60,
-        "end_line": 63
+        "line": 84,
+        "end_line": 87
       },
       {
         "name": "ref",
         "kind": "FunctionDef",
-        "line": 65,
-        "end_line": 68
+        "line": 89,
+        "end_line": 92
       },
       {
         "name": "tools",
         "kind": "FunctionDef",
-        "line": 70,
-        "end_line": 73
+        "line": 94,
+        "end_line": 97
       },
       {
         "name": "read",
         "kind": "FunctionDef",
-        "line": 75,
-        "end_line": 86
+        "line": 99,
+        "end_line": 110
       },
       {
         "name": "create",
         "kind": "FunctionDef",
-        "line": 88,
-        "end_line": 91
+        "line": 112,
+        "end_line": 115
       },
       {
         "name": "revise",
         "kind": "FunctionDef",
-        "line": 93,
-        "end_line": 100
+        "line": 117,
+        "end_line": 124
       },
       {
         "name": "save",
         "kind": "FunctionDef",
-        "line": 102,
-        "end_line": 189
+        "line": 126,
+        "end_line": 213
       },
       {
         "name": "publish",
         "kind": "FunctionDef",
-        "line": 191,
-        "end_line": 198
+        "line": 215,
+        "end_line": 222
       },
       {
         "name": "reserve",
         "kind": "FunctionDef",
-        "line": 123,
-        "end_line": 134
+        "line": 147,
+        "end_line": 158
       },
       {
         "name": "commit",
         "kind": "FunctionDef",
-        "line": 159,
-        "end_line": 169
+        "line": 183,
+        "end_line": 193
       },
       {
         "name": "release",
         "kind": "FunctionDef",
-        "line": 177,
-        "end_line": 186
+        "line": 201,
+        "end_line": 210
       }
     ],
     "routes": [],
@@ -6188,6 +6235,7 @@
       "AGENT-07"
     ],
     "direct_test_candidates": [
+      "tests/e2e/test_file_storage_transactions.py",
       "tests/test_agent_documents.py",
       "tests/test_agent_gmail.py"
     ],
@@ -6507,6 +6555,8 @@
       "AGENT-06"
     ],
     "direct_test_candidates": [
+      "tests/e2e/test_account_deletion_transactions.py",
+      "tests/e2e/test_file_storage_transactions.py",
       "tests/test_agent_calendar.py",
       "tests/test_agent_documents.py",
       "tests/test_agent_files.py",
@@ -6828,6 +6878,7 @@
       "tests/test_agent_continuation.py",
       "tests/test_agent_delegation.py",
       "tests/test_agent_gmail.py",
+      "tests/test_agent_http_contract.py",
       "tests/test_agent_loop.py",
       "tests/test_agent_search.py"
     ],
@@ -7189,6 +7240,7 @@
     ],
     "direct_test_candidates": [
       "tests/e2e/test_agent_transactions.py",
+      "tests/e2e/test_usage_transactions.py",
       "tests/test_agent_accounting_audit.py",
       "tests/test_agent_admission.py",
       "tests/test_agent_comparison.py",
@@ -7325,6 +7377,7 @@
       "tests/test_agent_documents.py",
       "tests/test_agent_files.py",
       "tests/test_agent_gmail.py",
+      "tests/test_agent_http_contract.py",
       "tests/test_agent_runs.py",
       "tests/test_google_connections.py",
       "tests/test_prompt_config.py",
@@ -7417,6 +7470,7 @@
     "direct_test_candidates": [
       "tests/e2e/test_agent_transactions.py",
       "tests/test_agent_capacity.py",
+      "tests/test_agent_http_contract.py",
       "tests/test_agent_reliability.py"
     ],
     "test_candidates_note": "Direct imports/literal references only; not semantic coverage."
@@ -8011,6 +8065,7 @@
     ],
     "direct_test_candidates": [
       "tests/test_api_account_cleanup.py",
+      "tests/test_api_run_recovery.py",
       "tests/test_consensus_api.py"
     ],
     "test_candidates_note": "Direct imports/literal references only; not semantic coverage."
@@ -8147,6 +8202,7 @@
     ],
     "direct_test_candidates": [
       "tests/test_api_run_billing_identity.py",
+      "tests/test_api_run_recovery.py",
       "tests/test_consensus_api.py",
       "tests/test_phase6_architecture.py",
       "tests/test_publisher_config.py",
@@ -8280,8 +8336,8 @@
   },
   {
     "path": "app/services/api_run_repository.py",
-    "lines": 467,
-    "sha256": "a404eaed43a979bb1526de9ed67ca9b3d279a34c91644690c755d5caa41ac326",
+    "lines": 483,
+    "sha256": "0360c4b594df9b04310a4efee10ebfc968d8a9c297dcc931d08b886b00a118d9",
     "symbols": [
       {
         "name": "ApiRunError",
@@ -8329,13 +8385,13 @@
         "name": "FirestoreApiRunRepository",
         "kind": "ClassDef",
         "line": 72,
-        "end_line": 460
+        "end_line": 476
       },
       {
         "name": "_validate_run_id",
         "kind": "FunctionDef",
-        "line": 463,
-        "end_line": 467
+        "line": 479,
+        "end_line": 483
       },
       {
         "name": "__init__",
@@ -8437,43 +8493,43 @@
         "name": "backfill_retention",
         "kind": "FunctionDef",
         "line": 307,
-        "end_line": 326
+        "end_line": 342
       },
       {
         "name": "_delete",
         "kind": "FunctionDef",
-        "line": 328,
-        "end_line": 389
+        "line": 344,
+        "end_line": 405
       },
       {
         "name": "_transition",
         "kind": "FunctionDef",
-        "line": 391,
-        "end_line": 432
+        "line": 407,
+        "end_line": 448
       },
       {
         "name": "_transaction",
         "kind": "FunctionDef",
-        "line": 434,
-        "end_line": 443
+        "line": 450,
+        "end_line": 459
       },
       {
         "name": "_run_ref",
         "kind": "FunctionDef",
-        "line": 445,
-        "end_line": 446
+        "line": 461,
+        "end_line": 462
       },
       {
         "name": "_idempotency_ref",
         "kind": "FunctionDef",
-        "line": 448,
-        "end_line": 454
+        "line": 464,
+        "end_line": 470
       },
       {
         "name": "_with_id",
         "kind": "FunctionDef",
-        "line": 457,
-        "end_line": 460
+        "line": 473,
+        "end_line": 476
       },
       {
         "name": "operation",
@@ -8490,20 +8546,26 @@
       {
         "name": "operation",
         "kind": "FunctionDef",
-        "line": 341,
-        "end_line": 387
+        "line": 357,
+        "end_line": 403
       },
       {
         "name": "operation",
         "kind": "FunctionDef",
-        "line": 403,
-        "end_line": 430
+        "line": 419,
+        "end_line": 446
       },
       {
         "name": "run",
         "kind": "FunctionDef",
-        "line": 440,
-        "end_line": 441
+        "line": 456,
+        "end_line": 457
+      },
+      {
+        "name": "backfill",
+        "kind": "FunctionDef",
+        "line": 319,
+        "end_line": 339
       }
     ],
     "routes": [],
@@ -8511,8 +8573,11 @@
       "API-02"
     ],
     "direct_test_candidates": [
+      "tests/e2e/test_api_retention_transactions.py",
       "tests/test_api_run_billing_identity.py",
+      "tests/test_api_run_recovery.py",
       "tests/test_api_run_repository.py",
+      "tests/test_api_source_history.py",
       "tests/test_consensus_api.py"
     ],
     "test_candidates_note": "Direct imports/literal references only; not semantic coverage."
@@ -8589,7 +8654,8 @@
     ],
     "direct_test_candidates": [
       "tests/test_benchmark_cli.py",
-      "tests/test_benchmark_reports.py"
+      "tests/test_benchmark_reports.py",
+      "tests/test_http_adapter_auth.py"
     ],
     "test_candidates_note": "Direct imports/literal references only; not semantic coverage."
   },
@@ -8934,6 +9000,7 @@
       "CHAT-03"
     ],
     "direct_test_candidates": [
+      "tests/e2e/test_chat_lifecycle_transactions.py",
       "tests/test_chat_context.py",
       "tests/test_chat_history.py"
     ],
@@ -9515,8 +9582,12 @@
       "CHAT-02"
     ],
     "direct_test_candidates": [
+      "tests/e2e/test_account_deletion_transactions.py",
       "tests/e2e/test_agent_comparison_frontend.py",
       "tests/e2e/test_agent_transactions.py",
+      "tests/e2e/test_chat_lifecycle_transactions.py",
+      "tests/e2e/test_file_storage_transactions.py",
+      "tests/e2e/test_google_action_transactions.py",
       "tests/e2e/test_phase2_transactions.py",
       "tests/test_agent_calendar.py",
       "tests/test_agent_delegation.py",
@@ -9853,7 +9924,8 @@
       "DATA-01"
     ],
     "direct_test_candidates": [
-      "tests/test_differences_stats.py"
+      "tests/test_differences_stats.py",
+      "tests/test_feedback.py"
     ],
     "test_candidates_note": "Direct imports/literal references only; not semantic coverage."
   },
@@ -10383,6 +10455,7 @@
       "GOOGLE-01"
     ],
     "direct_test_candidates": [
+      "tests/e2e/test_google_action_transactions.py",
       "tests/test_agent_calendar.py",
       "tests/test_agent_gmail.py",
       "tests/test_google_connections.py"
@@ -10691,6 +10764,7 @@
       "tests/test_agent_delegation.py",
       "tests/test_agent_files.py",
       "tests/test_agent_gmail.py",
+      "tests/test_agent_http_contract.py",
       "tests/test_agent_loop.py",
       "tests/test_agent_model_catalog.py",
       "tests/test_agent_progress.py",
@@ -11160,8 +11234,8 @@
   },
   {
     "path": "app/services/llm/consensus_engine.py",
-    "lines": 3022,
-    "sha256": "47b7560923659a5fca2fdfee8c53b13f62b7beca1214e6f16f41f57e355fe0a4",
+    "lines": 3023,
+    "sha256": "7546c38df0e004efd53047c645257e1b771216197df7abbb91d6512b595b85bc",
     "symbols": [
       {
         "name": "normalize_model_name",
@@ -11623,25 +11697,25 @@
         "name": "query_claim_identity",
         "kind": "FunctionDef",
         "line": 2699,
-        "end_line": 2774
+        "end_line": 2775
       },
       {
         "name": "_stream_consensus_engine",
         "kind": "FunctionDef",
-        "line": 2783,
-        "end_line": 2796
+        "line": 2784,
+        "end_line": 2797
       },
       {
         "name": "stream_consensus",
         "kind": "FunctionDef",
-        "line": 2800,
-        "end_line": 2889
+        "line": 2801,
+        "end_line": 2890
       },
       {
         "name": "stream_differences",
         "kind": "FunctionDef",
-        "line": 2893,
-        "end_line": 3022
+        "line": 2894,
+        "end_line": 3023
       },
       {
         "name": "__init__",
@@ -11695,6 +11769,8 @@
     "direct_test_candidates": [
       "tests/test_agent_contradictions.py",
       "tests/test_analysis_quality_budget.py",
+      "tests/test_benchmark_manifest_clock.py",
+      "tests/test_claim_identity_judge.py",
       "tests/test_consensus_citations.py",
       "tests/test_consensus_engine.py",
       "tests/test_coverage_judge.py",
@@ -12334,6 +12410,7 @@
     ],
     "direct_test_candidates": [
       "tests/e2e/test_agent_transactions.py",
+      "tests/e2e/test_file_storage_transactions.py",
       "tests/test_agent_admission.py",
       "tests/test_agent_answer_lifecycle.py",
       "tests/test_agent_calendar.py",
@@ -12345,12 +12422,14 @@
       "tests/test_agent_documents.py",
       "tests/test_agent_files.py",
       "tests/test_agent_gmail.py",
+      "tests/test_agent_http_contract.py",
       "tests/test_agent_loop.py",
       "tests/test_agent_reliability.py",
       "tests/test_agent_root_compaction.py",
       "tests/test_agent_runs.py",
       "tests/test_analysis_quality_budget.py",
       "tests/test_contradiction_jobs.py",
+      "tests/test_local_transport.py",
       "tests/test_logging_redaction_contract.py",
       "tests/test_phase5_operations.py",
       "tests/test_provider_timeouts.py",
@@ -12414,6 +12493,7 @@
       "LLM-01"
     ],
     "direct_test_candidates": [
+      "tests/test_api_run_recovery.py",
       "tests/test_phase5_operations.py",
       "tests/test_provider_registry.py",
       "tests/test_provider_response_errors.py",
@@ -13051,6 +13131,7 @@
     ],
     "direct_test_candidates": [
       "tests/test_logging_redaction_contract.py",
+      "tests/test_topic_public_http.py",
       "tests/test_topics_feature.py",
       "tests/test_watch_feature.py"
     ],
@@ -13058,8 +13139,8 @@
   },
   {
     "path": "app/services/memory_edit.py",
-    "lines": 1030,
-    "sha256": "1a7dbadfd934bc9759b13dced095a545bcaf370fca49723727983fcdb87f102b",
+    "lines": 1037,
+    "sha256": "f8c8b555e21fb20d1653b2cbe7226877a38d72610896ee69d81ecf543cbc4355",
     "symbols": [
       {
         "name": "_tier_key",
@@ -13158,28 +13239,34 @@
         "end_line": 327
       },
       {
+        "name": "_lossless_profile",
+        "kind": "FunctionDef",
+        "line": 330,
+        "end_line": 338
+      },
+      {
         "name": "FirestoreMemoryEditRepository",
         "kind": "ClassDef",
-        "line": 330,
-        "end_line": 820
+        "line": 341,
+        "end_line": 827
       },
       {
         "name": "_memory_doc_owner",
         "kind": "FunctionDef",
-        "line": 823,
-        "end_line": 833
+        "line": 830,
+        "end_line": 840
       },
       {
         "name": "cleanup_memory_edit_records",
         "kind": "FunctionDef",
-        "line": 836,
-        "end_line": 910
+        "line": 843,
+        "end_line": 917
       },
       {
         "name": "MemoryEditService",
         "kind": "ClassDef",
-        "line": 913,
-        "end_line": 1030
+        "line": 920,
+        "end_line": 1037
       },
       {
         "name": "__init__",
@@ -13196,116 +13283,116 @@
       {
         "name": "__init__",
         "kind": "FunctionDef",
-        "line": 331,
-        "end_line": 332
+        "line": 342,
+        "end_line": 343
       },
       {
         "name": "reserve",
         "kind": "FunctionDef",
-        "line": 334,
-        "end_line": 508
+        "line": 345,
+        "end_line": 519
       },
       {
         "name": "_interrupted_record",
         "kind": "FunctionDef",
-        "line": 511,
-        "end_line": 519
+        "line": 522,
+        "end_line": 530
       },
       {
         "name": "_released_usage",
         "kind": "FunctionDef",
-        "line": 522,
-        "end_line": 528
+        "line": 533,
+        "end_line": 539
       },
       {
         "name": "recover_expired",
         "kind": "FunctionDef",
-        "line": 530,
-        "end_line": 560
+        "line": 541,
+        "end_line": 571
       },
       {
         "name": "fail",
         "kind": "FunctionDef",
-        "line": 562,
-        "end_line": 608
+        "line": 573,
+        "end_line": 619
       },
       {
         "name": "apply_patch",
         "kind": "FunctionDef",
-        "line": 610,
-        "end_line": 699
+        "line": 621,
+        "end_line": 708
       },
       {
         "name": "undo",
         "kind": "FunctionDef",
-        "line": 701,
-        "end_line": 761
+        "line": 710,
+        "end_line": 768
       },
       {
         "name": "_patched_profile",
         "kind": "FunctionDef",
-        "line": 764,
-        "end_line": 799
-      },
-      {
-        "name": "_profile_ref",
-        "kind": "FunctionDef",
-        "line": 801,
+        "line": 771,
         "end_line": 806
       },
       {
-        "name": "_request_ref",
+        "name": "_profile_ref",
         "kind": "FunctionDef",
         "line": 808,
         "end_line": 813
       },
       {
-        "name": "_revision_ref",
+        "name": "_request_ref",
         "kind": "FunctionDef",
         "line": 815,
         "end_line": 820
       },
       {
+        "name": "_revision_ref",
+        "kind": "FunctionDef",
+        "line": 822,
+        "end_line": 827
+      },
+      {
         "name": "__init__",
         "kind": "FunctionDef",
-        "line": 914,
-        "end_line": 921
+        "line": 921,
+        "end_line": 928
       },
       {
         "name": "edit",
         "kind": "FunctionDef",
-        "line": 923,
-        "end_line": 1030
+        "line": 930,
+        "end_line": 1037
       },
       {
         "name": "operation",
         "kind": "FunctionDef",
-        "line": 358,
-        "end_line": 506
+        "line": 369,
+        "end_line": 517
       },
       {
         "name": "operation",
         "kind": "FunctionDef",
-        "line": 545,
-        "end_line": 558
+        "line": 556,
+        "end_line": 569
       },
       {
         "name": "operation",
         "kind": "FunctionDef",
-        "line": 576,
-        "end_line": 606
+        "line": 587,
+        "end_line": 617
       },
       {
         "name": "operation",
         "kind": "FunctionDef",
-        "line": 628,
-        "end_line": 697
+        "line": 639,
+        "end_line": 706
       },
       {
         "name": "operation",
         "kind": "FunctionDef",
-        "line": 715,
-        "end_line": 759
+        "line": 724,
+        "end_line": 766
       }
     ],
     "routes": [],
@@ -13313,8 +13400,10 @@
       "MEM-02"
     ],
     "direct_test_candidates": [
+      "tests/e2e/test_memory_edit_transactions.py",
       "tests/test_background_task_supervision.py",
-      "tests/test_memory_edit.py"
+      "tests/test_memory_edit.py",
+      "tests/test_memory_http_contract.py"
     ],
     "test_candidates_note": "Direct imports/literal references only; not semantic coverage."
   },
@@ -13620,6 +13709,7 @@
       "WATCH-07"
     ],
     "direct_test_candidates": [
+      "tests/e2e/test_watch_delivery_transactions.py",
       "tests/test_background_task_supervision.py",
       "tests/test_watch_review_regressions.py"
     ],
@@ -13627,8 +13717,8 @@
   },
   {
     "path": "app/services/og_image.py",
-    "lines": 178,
-    "sha256": "38de31bd9c8c8c2fae4b405d4dcdfce6cb5efba1dc5abe5e0f5241088adf15fd",
+    "lines": 180,
+    "sha256": "b5fa9895524def3a7d56bcf894214abe04bfc4c242b165f40575003251ad772e",
     "symbols": [
       {
         "name": "is_available",
@@ -13664,14 +13754,17 @@
         "name": "share_card_png",
         "kind": "FunctionDef",
         "line": 157,
-        "end_line": 178
+        "end_line": 180
       }
     ],
     "routes": [],
     "contract_ids": [
       "SHARE-04"
     ],
-    "direct_test_candidates": [],
+    "direct_test_candidates": [
+      "tests/test_og_image.py",
+      "tests/test_share_http_contract.py"
+    ],
     "test_candidates_note": "Direct imports/literal references only; not semantic coverage."
   },
   {
@@ -13980,12 +14073,18 @@
       "DATA-01"
     ],
     "direct_test_candidates": [
+      "tests/e2e/test_account_deletion_transactions.py",
+      "tests/e2e/test_memory_edit_transactions.py",
+      "tests/e2e/test_watch_delivery_transactions.py",
+      "tests/test_agent_capacity.py",
       "tests/test_agent_files.py",
       "tests/test_agent_gmail.py",
       "tests/test_agent_runs.py",
       "tests/test_api_key_repository.py",
       "tests/test_api_run_repository.py",
+      "tests/test_feedback.py",
       "tests/test_google_connections.py",
+      "tests/test_memory_http_contract.py",
       "tests/test_phase5_operations.py",
       "tests/test_pro_beta_and_copy.py",
       "tests/test_run_usage_repository.py",
@@ -14309,6 +14408,7 @@
       "AUTH-01"
     ],
     "direct_test_candidates": [
+      "tests/test_http_adapter_auth.py",
       "tests/test_registration_security.py"
     ],
     "test_candidates_note": "Direct imports/literal references only; not semantic coverage."
@@ -14753,8 +14853,8 @@
   },
   {
     "path": "app/services/seo_repository.py",
-    "lines": 459,
-    "sha256": "abefec6090c9d68e40cd2d39836d5655f19b908376b948decc09901e5ee0c13b",
+    "lines": 457,
+    "sha256": "523ccbe448986a572606e33f50ff270e85c499d9295cd660f653fad62290f658",
     "symbols": [
       {
         "name": "page_id_for_url",
@@ -14772,7 +14872,7 @@
         "name": "FirestoreSeoRepository",
         "kind": "ClassDef",
         "line": 29,
-        "end_line": 459
+        "end_line": 457
       },
       {
         "name": "__init__",
@@ -14838,79 +14938,79 @@
         "name": "list_metrics_for_pages",
         "kind": "FunctionDef",
         "line": 247,
-        "end_line": 294
+        "end_line": 292
       },
       {
         "name": "has_metrics",
         "kind": "FunctionDef",
-        "line": 296,
-        "end_line": 304
+        "line": 294,
+        "end_line": 302
       },
       {
         "name": "get_query_snapshot",
         "kind": "FunctionDef",
-        "line": 306,
-        "end_line": 316
+        "line": 304,
+        "end_line": 314
       },
       {
         "name": "save_query_snapshot",
         "kind": "FunctionDef",
-        "line": 318,
-        "end_line": 325
+        "line": 316,
+        "end_line": 323
       },
       {
         "name": "latest_query_snapshot",
         "kind": "FunctionDef",
-        "line": 327,
-        "end_line": 355
+        "line": 325,
+        "end_line": 353
       },
       {
         "name": "_metric_range_stream",
         "kind": "FunctionDef",
-        "line": 358,
-        "end_line": 367
+        "line": 356,
+        "end_line": 365
       },
       {
         "name": "create_run",
         "kind": "FunctionDef",
-        "line": 369,
-        "end_line": 370
+        "line": 367,
+        "end_line": 368
       },
       {
         "name": "update_run",
         "kind": "FunctionDef",
-        "line": 372,
-        "end_line": 373
+        "line": 370,
+        "end_line": 371
       },
       {
         "name": "last_run",
         "kind": "FunctionDef",
-        "line": 375,
-        "end_line": 408
+        "line": 373,
+        "end_line": 406
       },
       {
         "name": "append_judgment",
         "kind": "FunctionDef",
-        "line": 410,
-        "end_line": 424
+        "line": 408,
+        "end_line": 422
       },
       {
         "name": "list_judgments",
         "kind": "FunctionDef",
-        "line": 426,
-        "end_line": 459
+        "line": 424,
+        "end_line": 457
       },
       {
         "name": "timestamp",
         "kind": "FunctionDef",
-        "line": 446,
-        "end_line": 452
+        "line": 444,
+        "end_line": 450
       },
       {
         "name": "sort_key",
         "kind": "FunctionDef",
-        "line": 396,
-        "end_line": 402
+        "line": 394,
+        "end_line": 400
       }
     ],
     "routes": [],
@@ -14918,14 +15018,16 @@
       "SEO-02"
     ],
     "direct_test_candidates": [
-      "tests/test_seo_data.py"
+      "tests/e2e/test_seo_repository_queries.py",
+      "tests/test_seo_data.py",
+      "tests/test_seo_repository.py"
     ],
     "test_candidates_note": "Direct imports/literal references only; not semantic coverage."
   },
   {
     "path": "app/services/seo_weekly_review.py",
-    "lines": 1372,
-    "sha256": "3ee1e6b82a52d5d2351f3cc04cf1aa9bca337b909056e6e8e709aaf95560fb34",
+    "lines": 1383,
+    "sha256": "43c177e47dd1e8a578a190903757e525e44a4add5218c7b92b1c80a126e2ec6b",
     "symbols": [
       {
         "name": "utcnow",
@@ -15015,31 +15117,31 @@
         "name": "WeeklyReviewRepository",
         "kind": "ClassDef",
         "line": 404,
-        "end_line": 612
+        "end_line": 623
       },
       {
         "name": "SeoWeeklyReviewService",
         "kind": "ClassDef",
-        "line": 615,
-        "end_line": 1334
+        "line": 626,
+        "end_line": 1345
       },
       {
         "name": "run_due_review_tick",
         "kind": "AsyncFunctionDef",
-        "line": 1341,
-        "end_line": 1342
+        "line": 1352,
+        "end_line": 1353
       },
       {
         "name": "wake_review_scheduler",
         "kind": "FunctionDef",
-        "line": 1345,
-        "end_line": 1347
+        "line": 1356,
+        "end_line": 1358
       },
       {
         "name": "seo_review_scheduler_loop",
         "kind": "AsyncFunctionDef",
-        "line": 1350,
-        "end_line": 1372
+        "line": 1361,
+        "end_line": 1383
       },
       {
         "name": "__init__",
@@ -15129,211 +15231,217 @@
         "name": "finish_lease",
         "kind": "FunctionDef",
         "line": 514,
-        "end_line": 534
+        "end_line": 545
       },
       {
         "name": "create_review",
         "kind": "FunctionDef",
-        "line": 536,
-        "end_line": 537
+        "line": 547,
+        "end_line": 548
       },
       {
         "name": "update_review",
         "kind": "FunctionDef",
-        "line": 539,
-        "end_line": 540
+        "line": 550,
+        "end_line": 551
       },
       {
         "name": "get_review",
         "kind": "FunctionDef",
-        "line": 542,
-        "end_line": 544
+        "line": 553,
+        "end_line": 555
       },
       {
         "name": "latest_review",
         "kind": "FunctionDef",
-        "line": 546,
-        "end_line": 569
+        "line": 557,
+        "end_line": 580
       },
       {
         "name": "recent_reviews",
         "kind": "FunctionDef",
-        "line": 571,
-        "end_line": 591
+        "line": 582,
+        "end_line": 602
       },
       {
         "name": "mark_page_reviewed",
         "kind": "FunctionDef",
-        "line": 593,
-        "end_line": 597
+        "line": 604,
+        "end_line": 608
       },
       {
         "name": "mark_pages_considered",
         "kind": "FunctionDef",
-        "line": 599,
-        "end_line": 612
+        "line": 610,
+        "end_line": 623
       },
       {
         "name": "__init__",
         "kind": "FunctionDef",
-        "line": 616,
-        "end_line": 634
+        "line": 627,
+        "end_line": 645
       },
       {
         "name": "status",
         "kind": "FunctionDef",
-        "line": 636,
-        "end_line": 663
+        "line": 647,
+        "end_line": 674
       },
       {
         "name": "save_config",
         "kind": "FunctionDef",
-        "line": 665,
-        "end_line": 672
+        "line": 676,
+        "end_line": 683
       },
       {
         "name": "run",
         "kind": "FunctionDef",
-        "line": 674,
-        "end_line": 806
+        "line": 685,
+        "end_line": 817
       },
       {
         "name": "_delta_for",
         "kind": "FunctionDef",
-        "line": 808,
-        "end_line": 823
+        "line": 819,
+        "end_line": 834
       },
       {
         "name": "history",
         "kind": "FunctionDef",
-        "line": 825,
-        "end_line": 863
+        "line": 836,
+        "end_line": 874
       },
       {
         "name": "_persist_terminal_review",
         "kind": "FunctionDef",
-        "line": 865,
-        "end_line": 880
+        "line": 876,
+        "end_line": 891
       },
       {
         "name": "_build_page",
         "kind": "FunctionDef",
-        "line": 882,
-        "end_line": 952
+        "line": 893,
+        "end_line": 963
       },
       {
         "name": "_default_group",
         "kind": "FunctionDef",
-        "line": 955,
-        "end_line": 973
+        "line": 966,
+        "end_line": 984
       },
       {
         "name": "_group_pages",
         "kind": "FunctionDef",
-        "line": 975,
-        "end_line": 981
+        "line": 986,
+        "end_line": 992
       },
       {
         "name": "_merge_safe_judge_groups",
         "kind": "FunctionDef",
-        "line": 983,
-        "end_line": 1004
+        "line": 994,
+        "end_line": 1015
       },
       {
         "name": "_attach_editorial_templates",
         "kind": "FunctionDef",
-        "line": 1007,
-        "end_line": 1043
+        "line": 1018,
+        "end_line": 1054
       },
       {
         "name": "_judge_group_allowed",
         "kind": "FunctionDef",
-        "line": 1046,
-        "end_line": 1059
+        "line": 1057,
+        "end_line": 1070
       },
       {
         "name": "_fallback_summary",
         "kind": "FunctionDef",
-        "line": 1062,
-        "end_line": 1069
+        "line": 1073,
+        "end_line": 1080
       },
       {
         "name": "preview",
         "kind": "FunctionDef",
-        "line": 1071,
-        "end_line": 1079
+        "line": 1082,
+        "end_line": 1090
       },
       {
         "name": "apply",
         "kind": "FunctionDef",
-        "line": 1081,
-        "end_line": 1121
+        "line": 1092,
+        "end_line": 1132
       },
       {
         "name": "_review",
         "kind": "FunctionDef",
-        "line": 1123,
-        "end_line": 1129
+        "line": 1134,
+        "end_line": 1140
       },
       {
         "name": "_selected_pages",
         "kind": "FunctionDef",
-        "line": 1132,
-        "end_line": 1143
+        "line": 1143,
+        "end_line": 1154
       },
       {
         "name": "_preview_page",
         "kind": "FunctionDef",
-        "line": 1145,
-        "end_line": 1156
+        "line": 1156,
+        "end_line": 1167
       },
       {
         "name": "_apply_page",
         "kind": "FunctionDef",
-        "line": 1158,
-        "end_line": 1217
+        "line": 1169,
+        "end_line": 1228
       },
       {
         "name": "_revalidate_destructive",
         "kind": "FunctionDef",
-        "line": 1219,
-        "end_line": 1237
+        "line": 1230,
+        "end_line": 1248
       },
       {
         "name": "_revalidate_saved_state",
         "kind": "FunctionDef",
-        "line": 1240,
-        "end_line": 1261
+        "line": 1251,
+        "end_line": 1272
       },
       {
         "name": "record_editorial_decision",
         "kind": "FunctionDef",
-        "line": 1263,
-        "end_line": 1294
+        "line": 1274,
+        "end_line": 1305
       },
       {
         "name": "accept_topic_brief",
         "kind": "FunctionDef",
-        "line": 1296,
-        "end_line": 1320
+        "line": 1307,
+        "end_line": 1331
       },
       {
         "name": "reject_topic_brief",
         "kind": "FunctionDef",
-        "line": 1322,
-        "end_line": 1334
+        "line": 1333,
+        "end_line": 1345
+      },
+      {
+        "name": "finish",
+        "kind": "FunctionDef",
+        "line": 531,
+        "end_line": 537
       },
       {
         "name": "key",
         "kind": "FunctionDef",
-        "line": 566,
-        "end_line": 568
+        "line": 577,
+        "end_line": 579
       },
       {
         "name": "key",
         "kind": "FunctionDef",
-        "line": 587,
-        "end_line": 589
+        "line": 598,
+        "end_line": 600
       },
       {
         "name": "claim",
@@ -15348,6 +15456,7 @@
       "SEO-04"
     ],
     "direct_test_candidates": [
+      "tests/e2e/test_scheduler_transactions.py",
       "tests/test_seo_data.py",
       "tests/test_seo_weekly_review.py"
     ],
@@ -15882,6 +15991,7 @@
       "SHARE-03"
     ],
     "direct_test_candidates": [
+      "tests/e2e/test_account_deletion_transactions.py",
       "tests/e2e/test_phase2_transactions.py",
       "tests/test_analysis_quality_budget.py",
       "tests/test_bookmarks.py",
@@ -15889,12 +15999,14 @@
       "tests/test_provider_registry.py",
       "tests/test_public_citation_cleanup.py",
       "tests/test_share_feature.py",
+      "tests/test_share_http_contract.py",
       "tests/test_source_catalog.py",
       "tests/test_source_check_api.py",
       "tests/test_source_check_scope.py",
       "tests/test_source_verification.py",
       "tests/test_unscored_history.py",
-      "tests/test_watch_feature.py"
+      "tests/test_watch_feature.py",
+      "tests/test_watch_http_contract.py"
     ],
     "test_candidates_note": "Direct imports/literal references only; not semantic coverage."
   },
@@ -16142,6 +16254,8 @@
       "SRC-03"
     ],
     "direct_test_candidates": [
+      "tests/e2e/test_source_check_transactions.py",
+      "tests/test_api_source_history.py",
       "tests/test_background_task_supervision.py",
       "tests/test_consensus_chat_history.py",
       "tests/test_contradiction_jobs.py",
@@ -16481,6 +16595,9 @@
       "SRC-03"
     ],
     "direct_test_candidates": [
+      "tests/e2e/test_account_deletion_transactions.py",
+      "tests/e2e/test_source_check_transactions.py",
+      "tests/test_api_source_history.py",
       "tests/test_contradiction_jobs.py",
       "tests/test_source_check_api.py",
       "tests/test_source_check_jobs.py",
@@ -16555,7 +16672,9 @@
       "SRC-01"
     ],
     "direct_test_candidates": [
+      "tests/e2e/test_source_check_transactions.py",
       "tests/test_contradiction_jobs.py",
+      "tests/test_local_transport.py",
       "tests/test_source_check_jobs.py",
       "tests/test_source_check_scope.py",
       "tests/test_source_verification.py"
@@ -16784,6 +16903,7 @@
       "SRC-02"
     ],
     "direct_test_candidates": [
+      "tests/e2e/test_source_check_transactions.py",
       "tests/test_agent_contradictions.py",
       "tests/test_consensus_chat_history.py",
       "tests/test_contradiction_jobs.py",
@@ -17130,7 +17250,8 @@
       "WATCH-04"
     ],
     "direct_test_candidates": [
-      "tests/test_watch_feature.py"
+      "tests/test_watch_feature.py",
+      "tests/test_watch_http_contract.py"
     ],
     "test_candidates_note": "Direct imports/literal references only; not semantic coverage."
   },
@@ -17364,6 +17485,7 @@
       "WATCH-07"
     ],
     "direct_test_candidates": [
+      "tests/e2e/test_scheduler_transactions.py",
       "tests/test_claim_ledger.py",
       "tests/test_phase6_architecture.py",
       "tests/test_topics_feature.py",
@@ -17834,8 +17956,11 @@
       "TOPIC-04"
     ],
     "direct_test_candidates": [
+      "tests/e2e/test_scheduler_transactions.py",
+      "tests/test_http_adapter_auth.py",
       "tests/test_provider_registry.py",
       "tests/test_source_check_api.py",
+      "tests/test_topic_public_http.py",
       "tests/test_topics_feature.py",
       "tests/test_watch_review_regressions.py"
     ],
@@ -18273,10 +18398,13 @@
       "QUOTA-03"
     ],
     "direct_test_candidates": [
+      "tests/e2e/test_usage_transactions.py",
       "tests/test_api_run_billing_identity.py",
+      "tests/test_api_run_recovery.py",
       "tests/test_ask_endpoints.py",
       "tests/test_chat_context.py",
       "tests/test_consensus_api.py",
+      "tests/test_http_adapter_auth.py",
       "tests/test_resolve_round.py",
       "tests/test_result_integrity.py",
       "tests/test_run_usage_endpoints.py",
@@ -18489,7 +18617,9 @@
       "MEM-01"
     ],
     "direct_test_candidates": [
+      "tests/e2e/test_memory_edit_transactions.py",
       "tests/test_memory_edit.py",
+      "tests/test_memory_http_contract.py",
       "tests/test_user_memory.py",
       "tests/test_user_memory_run_cache.py"
     ],
@@ -18622,14 +18752,15 @@
     "direct_test_candidates": [
       "tests/test_phase5_operations.py",
       "tests/test_watch_feature.py",
+      "tests/test_watch_http_contract.py",
       "tests/test_watch_review_regressions.py"
     ],
     "test_candidates_note": "Direct imports/literal references only; not semantic coverage."
   },
   {
     "path": "app/services/watch_followers.py",
-    "lines": 212,
-    "sha256": "2b1fe81794b9b01b7e160c407c3a7a49ee2f81a38a24d6d6ff97f06b9f0f5b7b",
+    "lines": 215,
+    "sha256": "b04ba8ef235a0c72eec361dd6643862a1f33bc1e0b3fc06f9858cef24170e173",
     "symbols": [
       {
         "name": "normalize_email",
@@ -18677,37 +18808,37 @@
         "name": "confirm_follow",
         "kind": "FunctionDef",
         "line": 100,
-        "end_line": 169
+        "end_line": 170
       },
       {
         "name": "unsubscribe_follow",
         "kind": "FunctionDef",
-        "line": 172,
-        "end_line": 180
+        "line": 173,
+        "end_line": 183
       },
       {
         "name": "list_followers",
         "kind": "FunctionDef",
-        "line": 183,
-        "end_line": 199
+        "line": 186,
+        "end_line": 202
       },
       {
         "name": "count_followers",
         "kind": "FunctionDef",
-        "line": 202,
-        "end_line": 203
+        "line": 205,
+        "end_line": 206
       },
       {
         "name": "delete_followers_for_share",
         "kind": "FunctionDef",
-        "line": 206,
-        "end_line": 212
+        "line": 209,
+        "end_line": 215
       },
       {
         "name": "persist",
         "kind": "FunctionDef",
-        "line": 110,
-        "end_line": 161
+        "line": 111,
+        "end_line": 162
       }
     ],
     "routes": [],
@@ -18716,98 +18847,99 @@
     ],
     "direct_test_candidates": [
       "tests/test_watch_feature.py",
+      "tests/test_watch_http_contract.py",
       "tests/test_watch_review_regressions.py"
     ],
     "test_candidates_note": "Direct imports/literal references only; not semantic coverage."
   },
   {
     "path": "app/services/watch_probe.py",
-    "lines": 254,
-    "sha256": "3181224a24836b04ae6d0aab981e6b70eb6f3798afdbd6dc3bf6926fb8a26cf6",
+    "lines": 272,
+    "sha256": "811eaf8455b0b73817dc8feda97b59f9d68251bed2d8d8c4ca6255fb72be43d3",
     "symbols": [
       {
         "name": "utcnow",
         "kind": "FunctionDef",
-        "line": 46,
-        "end_line": 47
+        "line": 47,
+        "end_line": 48
       },
       {
         "name": "eligible",
         "kind": "FunctionDef",
-        "line": 50,
-        "end_line": 56
+        "line": 51,
+        "end_line": 57
       },
       {
         "name": "next_probe_after",
         "kind": "FunctionDef",
-        "line": 59,
-        "end_line": 61
+        "line": 60,
+        "end_line": 62
       },
       {
         "name": "_probe_model",
         "kind": "FunctionDef",
-        "line": 64,
-        "end_line": 73
+        "line": 65,
+        "end_line": 74
       },
       {
         "name": "_prompt",
         "kind": "FunctionDef",
-        "line": 76,
-        "end_line": 88
+        "line": 77,
+        "end_line": 89
       },
       {
         "name": "evaluate",
         "kind": "FunctionDef",
-        "line": 91,
-        "end_line": 110
+        "line": 92,
+        "end_line": 111
       },
       {
         "name": "execute_probe",
         "kind": "FunctionDef",
-        "line": 113,
-        "end_line": 124
+        "line": 114,
+        "end_line": 125
       },
       {
         "name": "_budget_ref",
         "kind": "FunctionDef",
-        "line": 131,
-        "end_line": 134
+        "line": 132,
+        "end_line": 135
       },
       {
         "name": "list_due_probe_ids",
         "kind": "FunctionDef",
-        "line": 137,
-        "end_line": 147
+        "line": 138,
+        "end_line": 148
       },
       {
         "name": "claim_probe",
         "kind": "FunctionDef",
-        "line": 150,
-        "end_line": 190
+        "line": 151,
+        "end_line": 195
       },
       {
         "name": "record_probe",
         "kind": "FunctionDef",
-        "line": 193,
-        "end_line": 224
+        "line": 198,
+        "end_line": 242
       },
       {
         "name": "run_probe",
         "kind": "FunctionDef",
-        "line": 227,
-        "end_line": 254
+        "line": 245,
+        "end_line": 272
       },
       {
         "name": "claim",
         "kind": "FunctionDef",
-        "line": 162,
-        "end_line": 188
+        "line": 164,
+        "end_line": 193
       },
       {
         "name": "persist",
         "kind": "FunctionDef",
-        "line": 199,
-        "end_line": 222
+        "line": 204,
+        "end_line": 240
       }
     ],
     "routes": [],
@@ -18815,6 +18947,7 @@
       "WATCH-08"
     ],
     "direct_test_candidates": [
+      "tests/e2e/test_watch_delivery_transactions.py",
       "tests/test_watch_evidence_model.py"
     ],
     "test_candidates_note": "Direct imports/literal references only; not semantic coverage."
@@ -18968,8 +19101,8 @@
   },
   {
     "path": "app/services/watch_service.py",
-    "lines": 1979,
-    "sha256": "c1b714d7a6c3dd205c7bb2fd7379507bb8d6cd91907e716d2bf2f7f9d4065992",
+    "lines": 1989,
+    "sha256": "9bca6eb812c38389adb95e99c2e45c65bbbf5392e680e964f40e50156f7b53e2",
     "symbols": [
       {
         "name": "_where_equal",
@@ -19245,133 +19378,133 @@
         "name": "parse_unsubscribe_token",
         "kind": "FunctionDef",
         "line": 1308,
-        "end_line": 1310
+        "end_line": 1314
       },
       {
         "name": "unsubscribe",
         "kind": "FunctionDef",
-        "line": 1313,
-        "end_line": 1328
+        "line": 1317,
+        "end_line": 1332
       },
       {
         "name": "delete_watches_for_share",
         "kind": "FunctionDef",
-        "line": 1331,
-        "end_line": 1344
+        "line": 1335,
+        "end_line": 1348
       },
       {
         "name": "delete_watches_for_owner",
         "kind": "FunctionDef",
-        "line": 1347,
-        "end_line": 1361
+        "line": 1351,
+        "end_line": 1365
       },
       {
         "name": "get_public_watch_meta",
         "kind": "FunctionDef",
-        "line": 1364,
-        "end_line": 1399
+        "line": 1368,
+        "end_line": 1403
       },
       {
         "name": "_claim_in_transaction",
         "kind": "FunctionDef",
-        "line": 1402,
-        "end_line": 1428
+        "line": 1406,
+        "end_line": 1434
       },
       {
         "name": "claim_watch",
         "kind": "FunctionDef",
-        "line": 1431,
-        "end_line": 1444
+        "line": 1437,
+        "end_line": 1450
       },
       {
         "name": "renew_watch_lease",
         "kind": "FunctionDef",
-        "line": 1447,
-        "end_line": 1469
+        "line": 1453,
+        "end_line": 1475
       },
       {
         "name": "list_due_watch_ids",
         "kind": "FunctionDef",
-        "line": 1472,
-        "end_line": 1498
+        "line": 1478,
+        "end_line": 1504
       },
       {
         "name": "_worker_lease_ref",
         "kind": "FunctionDef",
-        "line": 1501,
-        "end_line": 1502
+        "line": 1507,
+        "end_line": 1508
       },
       {
         "name": "_worker_lease_transaction",
         "kind": "FunctionDef",
-        "line": 1505,
-        "end_line": 1522
+        "line": 1511,
+        "end_line": 1528
       },
       {
         "name": "acquire_worker_lease",
         "kind": "FunctionDef",
-        "line": 1525,
-        "end_line": 1535
+        "line": 1531,
+        "end_line": 1541
       },
       {
         "name": "renew_worker_lease",
         "kind": "FunctionDef",
-        "line": 1538,
-        "end_line": 1562
+        "line": 1544,
+        "end_line": 1568
       },
       {
         "name": "release_worker_lease",
         "kind": "FunctionDef",
-        "line": 1565,
-        "end_line": 1583
+        "line": 1571,
+        "end_line": 1589
       },
       {
         "name": "effective_watch",
         "kind": "FunctionDef",
-        "line": 1596,
-        "end_line": 1602
+        "line": 1602,
+        "end_line": 1608
       },
       {
         "name": "_next_run_after",
         "kind": "FunctionDef",
-        "line": 1605,
-        "end_line": 1626
+        "line": 1611,
+        "end_line": 1632
       },
       {
         "name": "standing_run_id",
         "kind": "FunctionDef",
-        "line": 1629,
-        "end_line": 1635
+        "line": 1635,
+        "end_line": 1641
       },
       {
         "name": "_evidence_list",
         "kind": "FunctionDef",
-        "line": 1641,
-        "end_line": 1646
+        "line": 1647,
+        "end_line": 1652
       },
       {
         "name": "run_point",
         "kind": "FunctionDef",
-        "line": 1649,
-        "end_line": 1668
+        "line": 1655,
+        "end_line": 1674
       },
       {
         "name": "run_outcome",
         "kind": "FunctionDef",
-        "line": 1671,
-        "end_line": 1701
+        "line": 1677,
+        "end_line": 1707
       },
       {
         "name": "complete_watch_run",
         "kind": "FunctionDef",
-        "line": 1712,
-        "end_line": 1890
+        "line": 1718,
+        "end_line": 1898
       },
       {
         "name": "fail_watch_run",
         "kind": "FunctionDef",
-        "line": 1893,
-        "end_line": 1979
+        "line": 1901,
+        "end_line": 1989
       },
       {
         "name": "run",
@@ -19418,44 +19551,44 @@
       {
         "name": "consume",
         "kind": "FunctionDef",
-        "line": 1441,
-        "end_line": 1442
+        "line": 1447,
+        "end_line": 1448
       },
       {
         "name": "renew",
         "kind": "FunctionDef",
-        "line": 1455,
-        "end_line": 1467
+        "line": 1461,
+        "end_line": 1473
       },
       {
         "name": "acquire",
         "kind": "FunctionDef",
-        "line": 1532,
-        "end_line": 1533
+        "line": 1538,
+        "end_line": 1539
       },
       {
         "name": "renew",
         "kind": "FunctionDef",
-        "line": 1545,
-        "end_line": 1560
+        "line": 1551,
+        "end_line": 1566
       },
       {
         "name": "release",
         "kind": "FunctionDef",
-        "line": 1575,
-        "end_line": 1581
+        "line": 1581,
+        "end_line": 1587
       },
       {
         "name": "persist",
         "kind": "FunctionDef",
-        "line": 1787,
-        "end_line": 1884
+        "line": 1793,
+        "end_line": 1892
       },
       {
         "name": "fail",
         "kind": "FunctionDef",
-        "line": 1916,
-        "end_line": 1977
+        "line": 1924,
+        "end_line": 1987
       }
     ],
     "routes": [],
@@ -19465,9 +19598,14 @@
     ],
     "direct_test_candidates": [
       "tests/e2e/test_phase2_transactions.py",
+      "tests/e2e/test_scheduler_transactions.py",
+      "tests/e2e/test_watch_delivery_transactions.py",
+      "tests/test_share_http_contract.py",
+      "tests/test_topic_public_http.py",
       "tests/test_unscored_history.py",
       "tests/test_watch_evidence_model.py",
       "tests/test_watch_feature.py",
+      "tests/test_watch_http_contract.py",
       "tests/test_watch_review_regressions.py"
     ],
     "test_candidates_note": "Direct imports/literal references only; not semantic coverage."
@@ -19633,6 +19771,32 @@
       "tests/test_benchmark_mode.py",
       "tests/test_benchmark_runner.py"
     ],
+    "test_candidates_note": "Direct imports/literal references only; not semantic coverage."
+  },
+  {
+    "path": "benchmark/cli_validation.py",
+    "lines": 21,
+    "sha256": "7bab070eea1a7264b506371417f8f95bd2a5de33122300af049c1f5f826e638d",
+    "symbols": [
+      {
+        "name": "add_execution_arguments",
+        "kind": "FunctionDef",
+        "line": 6,
+        "end_line": 11
+      },
+      {
+        "name": "validate_execution_arguments",
+        "kind": "FunctionDef",
+        "line": 14,
+        "end_line": 21
+      }
+    ],
+    "routes": [],
+    "contract_ids": [
+      "BENCH-01",
+      "TOOLS-02"
+    ],
+    "direct_test_candidates": [],
     "test_candidates_note": "Direct imports/literal references only; not semantic coverage."
   },
   {
@@ -19927,7 +20091,8 @@
     "direct_test_candidates": [
       "tests/test_benchmark_cli.py",
       "tests/test_benchmark_report_reader.py",
-      "tests/test_benchmark_reports.py"
+      "tests/test_benchmark_reports.py",
+      "tests/test_http_adapter_auth.py"
     ],
     "test_candidates_note": "Direct imports/literal references only; not semantic coverage."
   },
@@ -19984,32 +20149,33 @@
       "BENCH-03"
     ],
     "direct_test_candidates": [
+      "tests/test_benchmark_protocol.py",
       "tests/test_benchmark_results.py"
     ],
     "test_candidates_note": "Direct imports/literal references only; not semantic coverage."
   },
   {
     "path": "benchmark/run_experiment.py",
-    "lines": 124,
-    "sha256": "8ed6e0c99ac06edda062f446f55a6b356b4d906e04487642df4270c6cfe276a6",
+    "lines": 122,
+    "sha256": "fbbfe84121954ba3453dcf4d8d2979af4ec5dff6708239ef8990c07d11ddfd4e",
     "symbols": [
       {
         "name": "_parse_args",
         "kind": "FunctionDef",
-        "line": 47,
-        "end_line": 53
+        "line": 48,
+        "end_line": 51
       },
       {
         "name": "_load_records",
         "kind": "FunctionDef",
-        "line": 56,
-        "end_line": 59
+        "line": 54,
+        "end_line": 57
       },
       {
         "name": "main",
         "kind": "FunctionDef",
-        "line": 62,
-        "end_line": 120
+        "line": 60,
+        "end_line": 118
       }
     ],
     "routes": [],
@@ -20021,20 +20187,20 @@
   },
   {
     "path": "benchmark/run_sample.py",
-    "lines": 118,
-    "sha256": "661c2c047d26b4cd47f2559c2f67edfa66340a7a17f4d0e512abc8ed8305c233",
+    "lines": 116,
+    "sha256": "20c5c4c9c746aab0229ad48f1b063a3da7e9c64ca1892b3994c1622b1ed34201",
     "symbols": [
       {
         "name": "_parse_args",
         "kind": "FunctionDef",
-        "line": 42,
-        "end_line": 50
+        "line": 43,
+        "end_line": 48
       },
       {
         "name": "main",
         "kind": "FunctionDef",
-        "line": 53,
-        "end_line": 114
+        "line": 51,
+        "end_line": 112
       }
     ],
     "routes": [],
@@ -20046,350 +20212,356 @@
   },
   {
     "path": "benchmark/runner.py",
-    "lines": 1243,
-    "sha256": "c528b7a228e37661fc7d29e990c4caf72906baf75d82c85ca020311ebd911768",
+    "lines": 1263,
+    "sha256": "50f20f6eb5838656078f16fb4a22db6cc3a5bed8a7ba6f8d9d5e3000191c0a83",
     "symbols": [
       {
         "name": "cell_key",
         "kind": "FunctionDef",
-        "line": 46,
-        "end_line": 48
+        "line": 47,
+        "end_line": 49
       },
       {
         "name": "load_existing_records",
         "kind": "FunctionDef",
-        "line": 51,
-        "end_line": 66
+        "line": 52,
+        "end_line": 67
       },
       {
         "name": "index_existing",
         "kind": "FunctionDef",
-        "line": 69,
-        "end_line": 84
+        "line": 70,
+        "end_line": 85
       },
       {
         "name": "load_done_keys",
         "kind": "FunctionDef",
-        "line": 87,
-        "end_line": 91
+        "line": 88,
+        "end_line": 92
       },
       {
         "name": "compute_skip_keys",
         "kind": "FunctionDef",
-        "line": 94,
-        "end_line": 107
+        "line": 95,
+        "end_line": 108
       },
       {
         "name": "spent_from_index",
         "kind": "FunctionDef",
-        "line": 110,
-        "end_line": 122
+        "line": 111,
+        "end_line": 123
       },
       {
         "name": "BudgetStop",
         "kind": "ClassDef",
-        "line": 130,
-        "end_line": 131
+        "line": 131,
+        "end_line": 132
       },
       {
         "name": "load_audit_journal",
         "kind": "FunctionDef",
-        "line": 134,
-        "end_line": 135
+        "line": 135,
+        "end_line": 136
       },
       {
         "name": "audit_spent",
         "kind": "FunctionDef",
-        "line": 138,
-        "end_line": 140
+        "line": 139,
+        "end_line": 141
       },
       {
         "name": "AuditLedger",
         "kind": "ClassDef",
-        "line": 143,
-        "end_line": 178
+        "line": 144,
+        "end_line": 179
       },
       {
         "name": "usage_known",
         "kind": "FunctionDef",
-        "line": 181,
-        "end_line": 183
+        "line": 182,
+        "end_line": 184
       },
       {
         "name": "attempt_cost",
         "kind": "FunctionDef",
-        "line": 186,
-        "end_line": 193
+        "line": 187,
+        "end_line": 194
       },
       {
         "name": "should_stop_for_budget",
         "kind": "FunctionDef",
-        "line": 199,
-        "end_line": 203
+        "line": 200,
+        "end_line": 204
       },
       {
         "name": "estimate_model_cell",
         "kind": "FunctionDef",
-        "line": 209,
-        "end_line": 214
+        "line": 210,
+        "end_line": 215
       },
       {
         "name": "append_jsonl",
         "kind": "FunctionDef",
-        "line": 220,
-        "end_line": 223
+        "line": 221,
+        "end_line": 224
       },
       {
         "name": "DryRunReport",
         "kind": "ClassDef",
-        "line": 230,
-        "end_line": 237
+        "line": 231,
+        "end_line": 238
       },
       {
         "name": "RunResult",
         "kind": "ClassDef",
-        "line": 241,
-        "end_line": 253
+        "line": 242,
+        "end_line": 254
       },
       {
         "name": "BenchmarkRunner",
         "kind": "ClassDef",
-        "line": 256,
-        "end_line": 1076
+        "line": 257,
+        "end_line": 1078
       },
       {
         "name": "_manifest_row_for_request",
         "kind": "FunctionDef",
-        "line": 1079,
-        "end_line": 1103
+        "line": 1081,
+        "end_line": 1105
       },
       {
         "name": "_reasoning_settings",
         "kind": "FunctionDef",
-        "line": 1106,
-        "end_line": 1107
+        "line": 1108,
+        "end_line": 1109
       },
       {
         "name": "_temperature",
         "kind": "FunctionDef",
-        "line": 1110,
-        "end_line": 1111
+        "line": 1112,
+        "end_line": 1113
       },
       {
         "name": "_output_token_limit",
         "kind": "FunctionDef",
-        "line": 1114,
-        "end_line": 1117
+        "line": 1116,
+        "end_line": 1119
       },
       {
         "name": "_is_latest_alias",
         "kind": "FunctionDef",
-        "line": 1120,
-        "end_line": 1121
+        "line": 1122,
+        "end_line": 1123
       },
       {
         "name": "_permutation_consistent",
         "kind": "FunctionDef",
-        "line": 1124,
-        "end_line": 1135
+        "line": 1126,
+        "end_line": 1137
       },
       {
         "name": "_now_iso",
         "kind": "FunctionDef",
-        "line": 1138,
-        "end_line": 1139
+        "line": 1140,
+        "end_line": 1141
       },
       {
         "name": "_is_secret_key",
         "kind": "FunctionDef",
-        "line": 1153,
-        "end_line": 1155
+        "line": 1155,
+        "end_line": 1157
       },
       {
         "name": "_redact_payload",
         "kind": "FunctionDef",
-        "line": 1158,
-        "end_line": 1174
+        "line": 1160,
+        "end_line": 1176
       },
       {
         "name": "_default_consensus_fn",
         "kind": "FunctionDef",
-        "line": 1177,
-        "end_line": 1202
+        "line": 1179,
+        "end_line": 1204
       },
       {
         "name": "_consensus_api_model",
         "kind": "FunctionDef",
-        "line": 1205,
-        "end_line": 1208
+        "line": 1207,
+        "end_line": 1210
+      },
+      {
+        "name": "_normalize_consensus_clock",
+        "kind": "FunctionDef",
+        "line": 1224,
+        "end_line": 1239
       },
       {
         "name": "_consensus_prompt_template",
         "kind": "FunctionDef",
-        "line": 1222,
-        "end_line": 1243
+        "line": 1242,
+        "end_line": 1263
       },
       {
         "name": "__init__",
         "kind": "FunctionDef",
-        "line": 152,
-        "end_line": 160
+        "line": 153,
+        "end_line": 161
       },
       {
         "name": "cached",
         "kind": "FunctionDef",
-        "line": 162,
-        "end_line": 163
+        "line": 163,
+        "end_line": 164
       },
       {
         "name": "admit",
         "kind": "FunctionDef",
-        "line": 165,
-        "end_line": 167
+        "line": 166,
+        "end_line": 168
       },
       {
         "name": "record",
         "kind": "FunctionDef",
-        "line": 169,
-        "end_line": 178
+        "line": 170,
+        "end_line": 179
       },
       {
         "name": "__init__",
         "kind": "FunctionDef",
-        "line": 257,
-        "end_line": 276
+        "line": 258,
+        "end_line": 277
       },
       {
         "name": "build_model_request",
         "kind": "FunctionDef",
-        "line": 278,
-        "end_line": 287
+        "line": 279,
+        "end_line": 288
       },
       {
         "name": "dry_run",
         "kind": "FunctionDef",
-        "line": 289,
-        "end_line": 325
+        "line": 290,
+        "end_line": 326
       },
       {
         "name": "run",
         "kind": "FunctionDef",
-        "line": 329,
-        "end_line": 482
+        "line": 330,
+        "end_line": 483
       },
       {
         "name": "build_synth_request",
         "kind": "FunctionDef",
-        "line": 484,
-        "end_line": 498
+        "line": 485,
+        "end_line": 499
       },
       {
         "name": "_make_cell_record",
         "kind": "FunctionDef",
-        "line": 502,
-        "end_line": 560
+        "line": 503,
+        "end_line": 561
       },
       {
         "name": "_call_consensus",
         "kind": "FunctionDef",
-        "line": 562,
-        "end_line": 580
+        "line": 563,
+        "end_line": 581
       },
       {
         "name": "_consensus_estimate",
         "kind": "FunctionDef",
-        "line": 582,
-        "end_line": 589
+        "line": 583,
+        "end_line": 590
       },
       {
         "name": "_mark_stopped",
         "kind": "FunctionDef",
-        "line": 592,
-        "end_line": 594
+        "line": 593,
+        "end_line": 595
       },
       {
         "name": "build_manifest",
         "kind": "FunctionDef",
-        "line": 596,
-        "end_line": 615
+        "line": 597,
+        "end_line": 616
       },
       {
         "name": "_model_manifest_rows",
         "kind": "FunctionDef",
-        "line": 626,
-        "end_line": 631
+        "line": 627,
+        "end_line": 632
       },
       {
         "name": "_consensus_manifest_row",
         "kind": "FunctionDef",
-        "line": 633,
-        "end_line": 644
+        "line": 634,
+        "end_line": 645
       },
       {
         "name": "_synth_manifest_row",
         "kind": "FunctionDef",
-        "line": 646,
-        "end_line": 649
+        "line": 647,
+        "end_line": 650
       },
       {
         "name": "write_or_validate_manifest",
         "kind": "FunctionDef",
-        "line": 651,
-        "end_line": 676
+        "line": 652,
+        "end_line": 678
       },
       {
         "name": "_stored_answers",
         "kind": "FunctionDef",
-        "line": 680,
-        "end_line": 688
+        "line": 682,
+        "end_line": 690
       },
       {
         "name": "audit_option_permutation",
         "kind": "FunctionDef",
-        "line": 690,
-        "end_line": 761
+        "line": 692,
+        "end_line": 763
       },
       {
         "name": "audit_consensus_order",
         "kind": "FunctionDef",
-        "line": 763,
-        "end_line": 837
+        "line": 765,
+        "end_line": 839
       },
       {
         "name": "audit_anonymized_consensus",
         "kind": "FunctionDef",
-        "line": 839,
-        "end_line": 928
+        "line": 841,
+        "end_line": 930
       },
       {
         "name": "run_pilot",
         "kind": "FunctionDef",
-        "line": 932,
-        "end_line": 1007
+        "line": 934,
+        "end_line": 1009
       },
       {
         "name": "run_smoke",
         "kind": "FunctionDef",
-        "line": 1009,
-        "end_line": 1057
+        "line": 1011,
+        "end_line": 1059
       },
       {
         "name": "validate_smoke_setup",
         "kind": "FunctionDef",
-        "line": 1059,
-        "end_line": 1076
+        "line": 1061,
+        "end_line": 1078
       },
       {
         "name": "_fn",
         "kind": "FunctionDef",
-        "line": 1192,
-        "end_line": 1200
+        "line": 1194,
+        "end_line": 1202
       },
       {
         "name": "recompute",
         "kind": "FunctionDef",
-        "line": 803,
-        "end_line": 824
+        "line": 805,
+        "end_line": 826
       }
     ],
     "routes": [],
@@ -20400,6 +20572,8 @@
       "tests/test_benchmark_audits.py",
       "tests/test_benchmark_budget.py",
       "tests/test_benchmark_cli.py",
+      "tests/test_benchmark_manifest_clock.py",
+      "tests/test_benchmark_protocol.py",
       "tests/test_benchmark_redaction.py",
       "tests/test_benchmark_results.py",
       "tests/test_benchmark_run.py",
@@ -20409,8 +20583,8 @@
   },
   {
     "path": "benchmark/transport.py",
-    "lines": 206,
-    "sha256": "da26c89a6f8244088059ed6c1ebd01ba0e28c0dd85b637c3ec95885fb4eb6e6b",
+    "lines": 229,
+    "sha256": "16fac1b81627cbee553aace7fa70859980327027d945b09d35a52c84d97dfc19",
     "symbols": [
       {
         "name": "TransportResponse",
@@ -20449,16 +20623,22 @@
         "end_line": 130
       },
       {
-        "name": "execute",
+        "name": "_valid_message",
         "kind": "FunctionDef",
         "line": 133,
-        "end_line": 194
+        "end_line": 148
+      },
+      {
+        "name": "execute",
+        "kind": "FunctionDef",
+        "line": 151,
+        "end_line": 217
       },
       {
         "name": "call_provider",
         "kind": "FunctionDef",
-        "line": 197,
-        "end_line": 206
+        "line": 220,
+        "end_line": 229
       }
     ],
     "routes": [],
@@ -20466,20 +20646,23 @@
       "BENCH-01"
     ],
     "direct_test_candidates": [
+      "tests/test_benchmark_protocol.py",
       "tests/test_benchmark_transport.py"
     ],
     "test_candidates_note": "Direct imports/literal references only; not semantic coverage."
   },
   {
     "path": "dev.ps1",
-    "lines": 252,
-    "sha256": "123d728e19ce8b7f4b6326969e171320339532c9b83cbdd90b4bed1d3f17b5ad",
+    "lines": 262,
+    "sha256": "6bc6ee54d1f6da508adf4c8d0e981009a9e0f7867944b2e9ac1626fc878a9006",
     "symbols": [],
     "routes": [],
     "contract_ids": [
       "BUILD-02"
     ],
-    "direct_test_candidates": [],
+    "direct_test_candidates": [
+      "tests/test_dev_cli.py"
+    ],
     "test_candidates_note": "Direct imports/literal references only; not semantic coverage."
   },
   {
@@ -20492,7 +20675,11 @@
       "BUILD-02",
       "AUTH-05"
     ],
-    "direct_test_candidates": [],
+    "direct_test_candidates": [
+      "tests/rules/firestore.rules.test.mjs",
+      "tests/test_dev_cli.py",
+      "tests/test_phase5_operations.py"
+    ],
     "test_candidates_note": "Direct imports/literal references only; not semantic coverage."
   },
   {
@@ -20504,7 +20691,10 @@
     "contract_ids": [
       "BUILD-02"
     ],
-    "direct_test_candidates": [],
+    "direct_test_candidates": [
+      "tests/test_firestore_read_contracts.py",
+      "tests/test_phase5_operations.py"
+    ],
     "test_candidates_note": "Direct imports/literal references only; not semantic coverage."
   },
   {
@@ -20516,7 +20706,10 @@
     "contract_ids": [
       "AUTH-05"
     ],
-    "direct_test_candidates": [],
+    "direct_test_candidates": [
+      "tests/rules/firestore.rules.test.mjs",
+      "tests/test_dev_cli.py"
+    ],
     "test_candidates_note": "Direct imports/literal references only; not semantic coverage."
   },
   {
@@ -20613,25 +20806,43 @@
       "OPS-03",
       "BUILD-04"
     ],
-    "direct_test_candidates": [],
+    "direct_test_candidates": [
+      "tests/js/user-memory.test.mjs",
+      "tests/test_api_run_billing_identity.py",
+      "tests/test_background_task_supervision.py",
+      "tests/test_consensus_api.py",
+      "tests/test_e2e_safety.py",
+      "tests/test_logging_redaction_contract.py",
+      "tests/test_resolve_round.py",
+      "tests/test_router_event_loop_contract.py",
+      "tests/test_security_controls.py",
+      "tests/test_seo_data.py",
+      "tests/test_static_delivery.py",
+      "tests/test_worker_thread_budget.py"
+    ],
     "test_candidates_note": "Direct imports/literal references only; not semantic coverage."
   },
   {
     "path": "package.json",
-    "lines": 20,
-    "sha256": "d81829cddf944fc50d8fb24b14dd888f568c9e508a17d98239dc59bd7a98fd4f",
+    "lines": 23,
+    "sha256": "0c14630bc39ebd8bc6e205a6a5fb1753df8176210c87f1c88f426f1baaa72a23",
     "symbols": [],
     "routes": [],
     "contract_ids": [
       "BUILD-01"
     ],
-    "direct_test_candidates": [],
+    "direct_test_candidates": [
+      "tests/js/dompurify-vendor.test.mjs",
+      "tests/js/vendor-frontend.test.mjs",
+      "tests/test_dev_cli.py",
+      "tests/test_frontend_build.py"
+    ],
     "test_candidates_note": "Direct imports/literal references only; not semantic coverage."
   },
   {
     "path": "scripts/backfill_claim_keys.py",
-    "lines": 110,
-    "sha256": "2671d12fd7d193992379a30e6a1a7c32f2d7de62e215a24546ca500eb63984e3",
+    "lines": 133,
+    "sha256": "3c2c066679205ab4567bbad535010438173c70fac4f48c8235e3d966e9df1c20",
     "symbols": [
       {
         "name": "_judge_engine",
@@ -20643,20 +20854,22 @@
         "name": "backfill_topic",
         "kind": "FunctionDef",
         "line": 41,
-        "end_line": 73
+        "end_line": 96
       },
       {
         "name": "main",
         "kind": "FunctionDef",
-        "line": 76,
-        "end_line": 106
+        "line": 99,
+        "end_line": 129
       }
     ],
     "routes": [],
     "contract_ids": [
       "TOOLS-01"
     ],
-    "direct_test_candidates": [],
+    "direct_test_candidates": [
+      "tests/test_maintenance_scripts.py"
+    ],
     "test_candidates_note": "Direct imports/literal references only; not semantic coverage."
   },
   {
@@ -21033,7 +21246,9 @@
     "contract_ids": [
       "TOOLS-01"
     ],
-    "direct_test_candidates": [],
+    "direct_test_candidates": [
+      "tests/test_maintenance_scripts.py"
+    ],
     "test_candidates_note": "Direct imports/literal references only; not semantic coverage."
   },
   {
@@ -21045,7 +21260,9 @@
     "contract_ids": [
       "BUILD-01"
     ],
-    "direct_test_candidates": [],
+    "direct_test_candidates": [
+      "tests/js/vendor-frontend.test.mjs"
+    ],
     "test_candidates_note": "Direct imports/literal references only; not semantic coverage."
   },
   {
@@ -21074,9 +21291,7 @@
     "contract_ids": [
       "UI-07"
     ],
-    "direct_test_candidates": [
-      "tests/test_phase6_architecture.py"
-    ],
+    "direct_test_candidates": [],
     "test_candidates_note": "Direct imports/literal references only; not semantic coverage."
   },
   {
@@ -21599,8 +21814,8 @@
   },
   {
     "path": "static/firebase.js",
-    "lines": 2835,
-    "sha256": "612d05212d61f018323558b53032f69703979e314f641d73939b726ef5e47601",
+    "lines": 2837,
+    "sha256": "c3de39d2bac5bad3e0efa2a9091fd8bd67706c6e162e1cfc6ba1008caa745d48",
     "symbols": [],
     "routes": [],
     "contract_ids": [
@@ -21639,20 +21854,24 @@
   },
   {
     "path": "static/js/admin-api.js",
-    "lines": 31,
-    "sha256": "e25871d1f12b667c236c2815f9eb6c02bed0977f892c3c4e612392d203ee0f38",
+    "lines": 37,
+    "sha256": "835e0c8357ccf9cee5ef69bd069e461bbe8499424449942ca7b81bc9671c0b2e",
     "symbols": [],
     "routes": [],
     "contract_ids": [
       "ADMIN-02"
     ],
-    "direct_test_candidates": [],
+    "direct_test_candidates": [
+      "tests/js/admin-api.test.mjs",
+      "tests/js/admin-benchmark.test.mjs",
+      "tests/js/admin-prompt-config.test.mjs"
+    ],
     "test_candidates_note": "Direct imports/literal references only; not semantic coverage."
   },
   {
     "path": "static/js/admin-benchmark.js",
-    "lines": 406,
-    "sha256": "313911b0c747b54948093436614ebe9536e45eb59961dba6cbce759b12ecabd4",
+    "lines": 397,
+    "sha256": "1723f6294b429dad00482508e4a80d463fd3bab440cfaec8781da2f786e34031",
     "symbols": [],
     "routes": [],
     "contract_ids": [
@@ -21660,6 +21879,7 @@
       "BENCH-03"
     ],
     "direct_test_candidates": [
+      "tests/js/admin-benchmark.test.mjs",
       "tests/test_phase6_architecture.py"
     ],
     "test_candidates_note": "Direct imports/literal references only; not semantic coverage."
@@ -21695,7 +21915,7 @@
   {
     "path": "static/js/admin.js",
     "lines": 3657,
-    "sha256": "9428d61eccaf28dca2969c768fb0c6ab62d714bae7566b30256aacf3d168d02a",
+    "sha256": "a06021223361a5e681ecaf42f2386b7bb10ff6a4f2c10b9e2208d54d8b6783b6",
     "symbols": [],
     "routes": [],
     "contract_ids": [
@@ -21857,7 +22077,9 @@
     "contract_ids": [
       "UI-09"
     ],
-    "direct_test_candidates": [],
+    "direct_test_candidates": [
+      "tests/js/analytics-opt-out.test.mjs"
+    ],
     "test_candidates_note": "Direct imports/literal references only; not semantic coverage."
   },
   {
@@ -21912,8 +22134,8 @@
   },
   {
     "path": "static/js/app-init.js",
-    "lines": 1838,
-    "sha256": "b1aabfc7ae5b7318bf7e731fccf29ccb5e3af8877a37a6a8d8a91185c1adf7b0",
+    "lines": 1779,
+    "sha256": "9a888cc51e322eaa4ba601feda3f753e0106c2248cdcfaf16b20e703381540de",
     "symbols": [],
     "routes": [],
     "contract_ids": [
@@ -21997,8 +22219,8 @@
   },
   {
     "path": "static/js/bundles.json",
-    "lines": 156,
-    "sha256": "503b18a370de0b45350c1a54d923bf10c7966f1cad2093cdc90e4ec5657a0c99",
+    "lines": 157,
+    "sha256": "961eba9cbb7abb3c271c51d9bc3f1ffcf289f2ce62cb22a2e21ed9bda320bed6",
     "symbols": [],
     "routes": [],
     "contract_ids": [
@@ -22009,8 +22231,8 @@
   },
   {
     "path": "static/js/chat-scroll.js",
-    "lines": 209,
-    "sha256": "380c29c7368fbef646071da9f5f90baf4791dfb6b3da76a9f83fe844df40e98c",
+    "lines": 226,
+    "sha256": "6f8009b5503a7c5c529487dd3f3c0583b201ea3e694da0b8b6bc3565c40bb356",
     "symbols": [],
     "routes": [],
     "contract_ids": [
@@ -22033,6 +22255,23 @@
     ],
     "direct_test_candidates": [
       "tests/js/run-registry.test.mjs"
+    ],
+    "test_candidates_note": "Direct imports/literal references only; not semantic coverage."
+  },
+  {
+    "path": "static/js/composer-autosize.js",
+    "lines": 80,
+    "sha256": "13ef0fed82f00c960fbe16554002f8c378ab02ac05d84acd258622feb9b2cb2a",
+    "symbols": [],
+    "routes": [],
+    "contract_ids": [
+      "UI-02",
+      "UI-06",
+      "UI-07"
+    ],
+    "direct_test_candidates": [
+      "tests/js/composer-autosize.test.mjs",
+      "tests/test_navigation_settings_ui.py"
     ],
     "test_candidates_note": "Direct imports/literal references only; not semantic coverage."
   },
@@ -22169,6 +22408,7 @@
       "tests/js/consensus-recovery.test.mjs",
       "tests/js/multi-run-view.test.mjs",
       "tests/js/result-integrity.test.mjs",
+      "tests/js/stored-turn-markers.test.mjs",
       "tests/test_consensus_progress_ui.py",
       "tests/test_multi_run_architecture.py",
       "tests/test_onboarding_gates.py",
@@ -22567,6 +22807,7 @@
       "TOPIC-05"
     ],
     "direct_test_candidates": [
+      "tests/e2e/test_topic_frontend.py",
       "tests/js/topic-page.test.mjs",
       "tests/test_topics_feature.py"
     ],
@@ -22700,7 +22941,7 @@
   {
     "path": "templates/admin.html",
     "lines": 698,
-    "sha256": "aba4bd502007d85ca3e24574d6b22d8b9140bfb38cea87e703a9db1c442a3a53",
+    "sha256": "4ed8b614af45b625dd2f2a1358d92d6970717876adb0fa63e04b8dfd0d9e2309",
     "symbols": [],
     "routes": [],
     "contract_ids": [
@@ -22723,7 +22964,7 @@
   {
     "path": "templates/admin_benchmark.html",
     "lines": 41,
-    "sha256": "3271eff75b7255684107604836de0a5072a65e12018510ef8c31b097e57a391f",
+    "sha256": "603d5557aef4d922a0c0785bae5d4af60da76d53b557f995291e6d43f3c8f615",
     "symbols": [],
     "routes": [],
     "contract_ids": [

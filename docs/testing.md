@@ -6,10 +6,11 @@ verifizierten Laufstatus. Sie enthält außerdem ein maschinenlesbares Inventar
 und das Vorgehen für den anschließenden Abgleich mit dem Produktionscode.
 Der **[Produktabgleich mit Codex-Arbeitspaketen](test-coverage/product/README.md)**
 ergänzt konkrete Lückenbelege, Verhaltensverträge, Python-Branchmessung und
-reproduzierbare Auditproben. Stand 02.10.2026: 254 Testdateien und 4.053
-Runnerfälle; Ergebnisse und rote Fälle stehen im [Laufbericht](test-coverage/findings.md).
-Paketstatus unterscheiden Planung und Teilfortschritt; alte Coveragewerte
-sind keine aktuelle Freigabe geänderter Quellen.
+reproduzierbare Auditproben. Stand 02.10.2026: 291 Testdateien und 4.425 Runnerfälle;
+Ergebnisse, ursprüngliche Fehlermessungen und Grenzen stehen im [Laufbericht](test-coverage/findings.md).
+Die 38 Arbeitspakete besitzen konkrete Implementierungs- und Abnahmebelege.
+Historische Coveragewerte bleiben ihrem damaligen Code zugeordnet und sind
+keine aktuelle Freigabe geänderter Quellen.
 
 Neue Funktionsgruppen: Agent-Dateien/DOCX/PDF (`test_agent_files.py`,
 `test_agent_documents.py`), Google/OAuth/Kalender/Gmail (`test_google_connections.py`,
@@ -76,7 +77,9 @@ Geänderte Test-Anforderungen werden nur gemeldet. Ein laufender Server mit `--r
 gemeldet. Für Browserprüfungen braucht es zusätzlich die unten beschriebenen
 E2E-Abhängigkeiten, Chromium, Firebase CLI und Java 21+ auf `PATH` oder unter
 `JAVA_HOME`. Der erste Emulatorstart kann den von der CLI benötigten Emulator
-herunterladen; Browser-Flows benötigen weiterhin die dokumentierten CDN-Assets.
+herunterladen. Paketinstallation, Chromium und der erste Emulatorstart benötigen
+Netzzugang; marked, DOMPurify und KaTeX werden im Browserlauf aus lokalen
+Vendorassets geladen. Die Browserfixtures ersetzen das Firebase-SDK.
 
 Videoproduktion und ihre Prüfungen liegen separat in
 [sudoleo/consens-video](https://github.com/sudoleo/consens-video).
@@ -388,9 +391,9 @@ Remove-Item Env:UNIT_TEST_MODE
 ```
 
 `test_smoke.py`, `test_agreement_verdict.py` und `test_run_cancel_and_progress.py`
-benötigen dagegen über `app_page` den Emulator, ebenso die drei
-`test_*_transactions.py`-Dateien. Nicht jede E2E-Datei ist ein isolierter
-Frontendtest. Aktuelle Grenzen: [Laufbericht](test-coverage/findings.md).
+benötigen dagegen über `app_page` den Emulator. Auch die nativen
+Transaktions-/Repositorydateien und persistierten Browserreisen brauchen ihn.
+Nicht jede E2E-Datei ist ein isolierter Frontendtest. Aktuelle Grenzen: [Laufbericht](test-coverage/findings.md).
 
 `tests/e2e/test_browser_failure_recovery.py` nutzt den writerfreien Phase-4-Server
 mit gemocktem Firebase und APIs. Es prüft lokal ausgelieferte Markdown-/Math-

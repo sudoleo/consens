@@ -1,5 +1,7 @@
 # Implementierung der Backendadapter, 02.10.2026
 
+Die folgenden Einzel- und Zwischenläufe dokumentieren die Umsetzung in ihrer damaligen Reihenfolge. Damalige Hinweise auf noch folgende Emulator-/CI-/Gesamtprüfungen werden durch die integrierte Abnahme am Ende dieses Berichts aktualisiert.
+
 [Arbeitspakete](work-packages.md) · [Architektur](../../codebase-map.md)
 
 Diese Nachweise ergänzen WP-11, WP-12, WP-13, WP-15, WP-16, WP-17,
@@ -242,3 +244,9 @@ Beide Dateien liefen gegen die echte lokale App und den sicheren Demoemulator:
 **4 passed**, eine bestehende Python-3.9-asyncio-DeprecationWarning. Es waren
 keine Produkt-, CSS- oder Buildänderungen nötig. Lokaler Beleg:
 `test-results/app-browser-targeted.xml`.
+
+## Integrierte Abnahme vom 02.10.2026
+
+Zusammengeführter Code `ffaca3df`. Python: 3.303 bestanden; JavaScript: 705 bestanden; Chromium / native SDK / Smoke: 368 bestanden; Firestore-Clientregeln: 49 bestanden. Die tatsächlichen Befehle und Quellstände pro Lauf stehen in [execution.json](../execution.json); dieser Abschluss ersetzt keine historischen Primärergebnisse. [Aktueller Paketstatus](work-packages.md) und [Laufbericht](../findings.md) sind für die heutige Abnahme maßgeblich.
+
+38 der 38 Arbeitspakete sind vollständig abgenommen. Die in den Berichten benannten Betriebsgrenzen bleiben ausdrücklich bestehen.
