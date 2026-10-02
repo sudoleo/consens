@@ -5313,7 +5313,9 @@ Coveragewerte von 26.09.2026 sind keine Messung des aktuellen Codes.
   ein positives endliches Budget, Sample-Run-IDs bleiben ein einzelner
   Verzeichnisname. Die Validierung erfolgt vor Dataset- oder Providerarbeit.
 - **Claim-Key-Backfill** (`scripts/backfill_claim_keys.py`): Normalbetrieb ergänzt
-  nur fehlende Keys; vorhandene Teilzuordnungen bleiben erhalten. `--force`
+  nur fehlende Keys; vorhandene Teilzuordnungen bleiben erhalten und werden
+  vor Judge-/Fallbackzuordnungen reserviert. Neue Zuordnungen kollidieren weder
+  mit erhaltenen Keys noch untereinander. `--force`
   erlaubt ausdrücklich erneute Zuordnung. Dry-run zählt geplante Änderungen
   korrekt und schreibt nichts, kann aber weiterhin den Identity-Judge aufrufen.
 - JS-Syntaxcheck einzelner Module:
