@@ -1399,12 +1399,14 @@ def get_public_watch_meta(share_id: str, db=None) -> dict | None:
     }
 
 
-def _claim_in_transaction(tx, watch_ref, budget_ref, now: datetime, daily_limit: int):
+def _claim_in_transaction(tx, watch_ref, budget_ref, now: datetime, daily_limit: int, *, db=None):
     """Pure transaction body, kept directly testable with the Firestore seam."""
     watch_snap = watch_ref.get(transaction=tx)
     data = watch_snap.to_dict() if watch_snap.exists else None
     if not data or data.get("status") != "active":
         return None, "not_due"
+    if db is not None and data.get("owner_uid"):
+        persistence_guard.ensure_account_write_allowed(uid=data["owner_uid"], db=db, transaction=tx, now=now)
     next_run = data.get("next_run_at")
     claimed_until = data.get("claimed_until")
     if not isinstance(next_run, datetime) or next_run > now:
@@ -1439,7 +1441,7 @@ def claim_watch(watch_id: str, *, now=None, db=None):
 
     @firestore.transactional
     def consume(transaction):
-        return _claim_in_transaction(transaction, watch_ref, budget_ref, now, cfg.get_watch_max_runs_per_day())
+        return _claim_in_transaction(transaction, watch_ref, budget_ref, now, cfg.get_watch_max_runs_per_day(), db=db)
 
     return consume(tx)
 
@@ -1785,6 +1787,8 @@ def complete_watch_run(watch_id: str, claimed: dict, result: dict, *, now=None,
         })
 
     def persist(transaction):
+        if uid:
+            persistence_guard.ensure_account_write_allowed(uid=uid, db=db, transaction=transaction, now=now)
         current_snapshot = watch_ref.get(transaction=transaction)
         owner_snapshot = (
             owner_ref.get(transaction=transaction) if owner_ref is not None else None
@@ -1914,6 +1918,8 @@ def fail_watch_run(watch_id: str, claimed: dict, *, now=None, db=None,
     publisher_ref = _publisher_counter_ref(db)
 
     def fail(transaction):
+        if uid:
+            persistence_guard.ensure_account_write_allowed(uid=uid, db=db, transaction=transaction, now=now)
         snapshot = ref.get(transaction=transaction)
         owner_snapshot = (
             owner_ref.get(transaction=transaction) if owner_ref is not None else None

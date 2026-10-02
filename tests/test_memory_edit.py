@@ -248,6 +248,36 @@ def test_non_unique_target_is_never_overwritten(repository):
     assert profile_ref.data["notes"] == "Firma X. then Firma X."
 
 
+@pytest.mark.parametrize("operation", ["apply", "undo"])
+def test_lowered_limit_never_truncates_existing_memory(repository, operation):
+    """A plan change cannot turn a local role edit/Undo into a notes rewrite."""
+    from copy import deepcopy
+
+    reserved = repository.reserve(UID, client_request_id="lowered-limit-01",
+        fingerprint="f" * 64, tier="free", config=config(), now=NOW)
+    arguments = dict(client_request_id="lowered-limit-01", fingerprint="f" * 64,
+        lease_nonce=reserved["lease_nonce"],
+        patch={"operation": "replace", "target": "Firma X", "replacement": "Firma Y"}, now=NOW)
+    if operation == "undo":
+        result = repository.apply_patch(UID, memory_limit=12000, **arguments)
+    before = deepcopy(repository.db.roots)
+    with pytest.raises(memory_edit.MemoryEditError) as caught:
+        if operation == "apply":
+            repository.apply_patch(UID, memory_limit=5, **arguments)
+        else:
+            repository.undo(UID, result["revision_id"], memory_limit=5, now=NOW)
+    assert caught.value.code == "memory_limit"
+    # Compare every persisted document, including revision/request/usage states.
+    assert [(path, doc.data) for path, doc in repository.db.walk() if doc.data is not None] == [
+        (path, doc.data) for path, doc in _database_with_roots(before).walk() if doc.data is not None]
+
+
+def _database_with_roots(roots):
+    database = Database()
+    database.roots = roots
+    return database
+
+
 def test_same_client_request_never_calls_provider_twice(repository):
     calls = []
 

@@ -327,6 +327,17 @@ def _nonce_matches(record: dict, lease_nonce: str | None) -> bool:
     return bool(lease_nonce) and stored == lease_nonce
 
 
+def _lossless_profile(raw: dict, memory_limit: int) -> dict:
+    """Reject a reduced allowance instead of silently discarding saved notes."""
+    notes = raw.get(user_memory.NOTES_FIELD)
+    if isinstance(notes, str) and len(notes) > max(0, int(memory_limit)):
+        raise MemoryEditError(
+            "memory_limit",
+            "Saved Memory exceeds the current plan limit. Nothing was changed.",
+        )
+    return user_memory.sanitize_profile(raw, max_notes_chars=memory_limit)
+
+
 class FirestoreMemoryEditRepository:
     def __init__(self, db):
         self.db = db
@@ -651,9 +662,7 @@ class FirestoreMemoryEditRepository:
                     "revision_conflict",
                     "Memory changed while Luna was preparing the edit. Please try again.",
                 )
-            before = user_memory.sanitize_profile(
-                profile_raw, max_notes_chars=memory_limit
-            )
+            before = _lossless_profile(profile_raw, memory_limit)
             after = self._patched_profile(before, patch, memory_limit)
             next_revision = current_revision + 1
             undo_expires_at = now + timedelta(seconds=UNDO_WINDOW_SECONDS)
@@ -737,9 +746,7 @@ class FirestoreMemoryEditRepository:
                     "revision_conflict",
                     "Memory changed after this edit, so it can no longer be undone safely.",
                 )
-            before = user_memory.sanitize_profile(
-                revision.get("before") or {}, max_notes_chars=memory_limit
-            )
+            before = _lossless_profile(revision.get("before") or {}, memory_limit)
             restored_revision = current_revision + 1
             _set(tx, profile_ref, {
                 **before,
