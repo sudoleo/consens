@@ -170,8 +170,8 @@ def test_privileged_app_and_admin_templates_are_external_script_surfaces():
     ):
         assert f'data-{attribute}="{{{{ {value} | e }}}}"' in benchmark
     assert "window.FIREBASE_CONFIG" not in benchmark
-    assert "/static/css/admin-benchmark.css?v=20260812-auditfix" in benchmark
-    assert "/static/js/admin-benchmark.js?v=20260812-auditfix" in benchmark
+    assert re.search(r'href="/static/css/admin-benchmark\.css\?v=\d{8}-[a-z0-9.-]+"', benchmark)
+    assert re.search(r'src="/static/js/admin-benchmark\.js\?v=\d{8}-[a-z0-9.-]+"', benchmark)
     assert benchmark.index("/static/js/admin-config.js") < benchmark.index(
         "/static/js/admin-benchmark.js"
     )

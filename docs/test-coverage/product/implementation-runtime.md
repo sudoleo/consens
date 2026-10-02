@@ -39,3 +39,23 @@ Judge-Matches vor Fallbacks vergeben und Fallbackkollisionen deterministisch
 aufgelöst. Zwei neue Regressionen waren davor rot. Die Rules-Pfade wurden mit
 den tatsächlichen Repository-Collections abgeglichen; auch aktive lokale und
 produktive Source-Queues sowie LLM-Receipts sind nun enthalten.
+
+Nachgeschärfte Abnahme nach unabhängiger Kriterienprüfung:
+
+- WP-19: Der wirkliche Topic-Scheduler führt native Due-Query, Claim und
+  Runabschluss aus; eine zweite Variante belegt den Fehlerabschluss. Der
+  wirkliche SEO-Loop persistiert einen externen Collectionfehler samt
+  Benachrichtigungsstatus und gibt die native Lease frei. Cancellation an
+  der nächsten Wartegrenze beendet beide Loops ohne weiteren Dispatch.
+- WP-33: Mit und ohne bestehendes Konfigurationsdokument wird nach echter
+  fehlgeschlagener Runtimeaktivierung der native Rollback-Commit gezielt
+  abgewiesen. Der ursprüngliche Fehler bleibt sichtbar, ein kritischer
+  Diagnoseeintrag weist auf den fehlgeschlagenen Rollback hin, der gespeicherte
+  neue Stand wird nicht als wiederhergestellt ausgegeben, und die lokalen
+  Runtimewerte entsprechen weiterhin dem vorherigen Snapshot.
+
+Gemeinsamer Zusatzlauf der beiden nativen Dateien: **10 bestanden**,
+19,52 s; ein dokumentierter SDK-Konkurrenzabbruch mit getrenntem Replay.
+Der erste integrierte Backendlauf ergab 3.289 bestanden und eine veraltete
+Cache-Key-Assertion. Diese prüft nun das versionierte Assetformat; der separate
+Resilience-Test prüft weiterhin Aktualität und Konsistenz gegen Git.
