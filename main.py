@@ -163,7 +163,9 @@ async def lifespan(app: FastAPI):
     api_maintenance_task = _scheduler_task(
         api_run_maintenance_loop, "consensus-api-maintenance"
     )
-    retention_task = _supervised_task(
+    # Retention deletes in the shared production Firestore, so a local mock
+    # server must not run it either.
+    retention_task = _scheduler_task(
         retention_maintenance_loop, "retention-maintenance"
     )
     api_account_cleanup_task = _supervised_task(

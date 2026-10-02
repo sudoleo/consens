@@ -155,6 +155,105 @@ def test_retention_loop_runs_cleanup_before_first_sleep(monkeypatch):
     }
 
 
+def test_scheduler_task_does_not_start_loop_under_mock_llm(monkeypatch):
+    calls = []
+
+    async def loop():
+        calls.append("ran")
+
+    monkeypatch.setattr(main, "mock_llm_enabled", lambda: True)
+
+    async def exercise():
+        await main._scheduler_task(loop, "retention-maintenance")
+
+    asyncio.run(exercise())
+    assert calls == []
+    health = background_tasks.task_health_snapshot()["retention-maintenance"]
+    assert health["state"] == "disabled"
+
+
+def test_scheduler_task_runs_loop_without_mock_llm(monkeypatch):
+    calls = []
+
+    async def loop():
+        calls.append("ran")
+
+    monkeypatch.setattr(main, "mock_llm_enabled", lambda: False)
+
+    async def exercise():
+        task = main._scheduler_task(loop, "retention-maintenance")
+        for _ in range(100):
+            if calls:
+                break
+            await asyncio.sleep(0.01)
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+    asyncio.run(exercise())
+    assert calls == ["ran"]
+
+
+def test_lifespan_gates_prod_writers_behind_mock_llm(monkeypatch):
+    """A local MOCK_LLM server shares the production Firestore: every loop that
+    claims schedule slots or deletes data must go through the gated wrapper."""
+    gated, supervised = [], []
+
+    async def idle():
+        await asyncio.Event().wait()
+
+    def record(names):
+        def factory(_func, name, **_kwargs):
+            names.append(name)
+            return asyncio.create_task(idle(), name=name)
+        return factory
+
+    monkeypatch.setattr(main, "e2e_test_mode_enabled", lambda: False)
+    monkeypatch.setattr(main, "apply_worker_thread_budget", lambda: 1)
+    monkeypatch.setattr(main, "_load_startup_configuration", lambda: None)
+    monkeypatch.setattr(main, "_scheduler_task", record(gated))
+    monkeypatch.setattr(main, "_supervised_task", record(supervised))
+    monkeypatch.setattr(main, "_one_shot_task", record(supervised))
+    from types import SimpleNamespace
+    stub = SimpleNamespace(retry_loop=idle)
+    monkeypatch.setattr(main, "FirestoreApiAccountCleanup", lambda _db: stub)
+    monkeypatch.setattr(main, "FirestoreAccountDeletion", lambda _db: stub)
+
+    async def exercise():
+        async with main.lifespan(main.app):
+            pass
+
+    asyncio.run(exercise())
+    assert set(gated) >= {
+        "consensus-watch-scheduler",
+        "topic-scheduler",
+        "seo-weekly-review-scheduler",
+        "consensus-api-maintenance",
+        "retention-maintenance",
+    }
+    assert "retention-maintenance" not in supervised
+
+
+def test_e2e_profile_starts_no_lifespan_task(monkeypatch):
+    started = []
+
+    def record(_func, name, **_kwargs):
+        started.append(name)
+        raise AssertionError(f"{name} started in the E2E profile")
+
+    monkeypatch.setattr(main, "e2e_test_mode_enabled", lambda: True)
+    monkeypatch.setattr(main, "apply_worker_thread_budget", lambda: 1)
+    monkeypatch.setattr(main, "_scheduler_task", record)
+    monkeypatch.setattr(main, "_supervised_task", record)
+    monkeypatch.setattr(main, "_one_shot_task", record)
+
+    async def exercise():
+        async with main.lifespan(main.app):
+            pass
+
+    asyncio.run(exercise())
+    assert started == []
+
+
 def test_maintenance_health_reports_degraded_task_state():
     background_tasks.mark_task_disabled("optional", "test")
     background_tasks._update("required", state="restarting")

@@ -178,6 +178,13 @@ Fehlern und hält Start-/Fehler-/letzte Erfolgszeiten für
 `GET /health/maintenance`. Cancellable Tasks übernehmen den 60-Sekunden-API-
 Maintenance-, 5-Minuten-Account-Cleanup-, stündlichen Retention- und
 30-Minuten-Consensus-Watch-Tick.
+Unter `MOCK_LLM=1` startet `_scheduler_task` in `main.py` die Writer, die in
+die (lokal geteilte) Produktions-Firestore schreiben würden, gar nicht erst und
+meldet sie in `GET /health/maintenance` als `disabled`: Consensus-Watch-,
+Topic-, SEO-Weekly-Review-Scheduler, Consensus-API-Maintenance und die
+Retention-Maintenance (Löschungen). Es gibt keinen lokalen Firestore-Emulator
+außerhalb des E2E-Profils; ein Mock-Server würde sonst Prod-Slots claimen bzw.
+Prod-Daten löschen. In Produktion (ohne `MOCK_LLM`) laufen alle unverändert.
 Im expliziten Browser-Testprofil `E2E_TEST_MODE=1` überspringt der Lifespan
 dagegen alle Startup-, Cleanup-, Recovery-, Backfill-, Webhook- und Scheduler-
 Writer. `app/core/e2e_profile.py` erlaubt Firebase vor der Initialisierung nur
@@ -5559,6 +5566,7 @@ gefiltert, deterministisch sortiert und vollständig in begrenzten Seiten
 abgearbeitet. Consensus-API-Retention/Lease-/Queue-Recovery laufen alle 60
 Sekunden; fehlgeschlagene API- und Vollkonto-Löschkaskaden alle fünf Minuten.
 Alle Loops werden beaufsichtigt und melden nach jedem erfolgreichen Tick Health.
+Unter `MOCK_LLM=1` startet die Retention-Maintenance nicht (siehe Lifespan-Abschnitt).
 
 **Weekly SEO Review** läuft in einem eigenen Lifespan-Task mit 15-minütigem
 Fälligkeitscheck; `next_run_at` wird aus Intervall, lokaler Uhrzeit und Zeitzone
