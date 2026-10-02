@@ -136,6 +136,7 @@
           "note": "Projects only runRegistry.visibleRunId into the shared DOM; must follow consensus-run.js (follow-up renderer) and precede query-send.js."
         },
         "static/js/query-send.js",
+        "static/js/tab-status.js",
         "static/js/composer-collapse.js",
         "static/js/composer-autosize.js",
         {

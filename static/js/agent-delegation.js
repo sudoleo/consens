@@ -442,6 +442,13 @@
   function renderOverview(view, rows) {
     const done = rows.filter(agent => settled.has(agent.status)).length;
     const out = rows.filter(agent => ended.has(agent.status)).length;
+    // The light under the live activity line advances with the models that
+    // are done; before the first comparison starts it drifts (agent-chat.css).
+    const activity = document.getElementById("agentAnswerActivity");
+    if (activity) {
+      activity.classList.toggle("has-light-progress", rows.length > 0);
+      activity.style.setProperty("--light-p", rows.length ? `${Math.round(14 + (done / rows.length) * 78)}%` : "0%");
+    }
     setText(sidebar.querySelector(".agent-sidebar-progress"),
       `${done} of ${rows.length} done${out ? ` · ${out} without result` : ""}`);
     const segments = sidebar.querySelector(".agent-sidebar-segments");

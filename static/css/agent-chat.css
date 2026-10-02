@@ -465,3 +465,73 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 @keyframes agent-answer-sheen-in { from { opacity: 0; } }
 @keyframes agent-mark-stroke { from { background-size: 0% 100%; } to { background-size: 100% 100%; } }
 @keyframes agent-mark-badge { from { opacity: 0; transform: translateY(2px) scale(.9); } }
+
+/* ---- The light path ---------------------------------------------------------
+   The house light (send-glow.css) leaves the send control with the question,
+   travels along one hairline under the live activity while the agent works,
+   and arrives at the agreement number when the answer has been checked. It
+   appears nowhere else. While comparison models run, the light stands at the
+   share of them that are done (agent-delegation.js sets --light-p); before
+   that it drifts slowly, because there is nothing yet to count. */
+.agent-light {
+  position: relative;
+  height: 1px;
+  /* Net zero height: it sits in the gap the activity already leaves. */
+  margin: -12px 0 11px;
+  /* A horizon that fades out to the right; no mask, so the light above it
+     can glow beyond the 1px line. */
+  background: linear-gradient(90deg, var(--line-soft) 72%, transparent);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-layer) var(--ease-standard);
+}
+.agent-activity.is-running + .agent-light { opacity: 1; }
+.agent-light::before,
+.agent-light::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+}
+.agent-light::before {
+  left: 0;
+  height: 1px;
+  width: var(--light-p, 0%);
+  transform: translateY(-50%);
+  background: linear-gradient(90deg, transparent, var(--ink-3));
+  transition: width var(--dur-light) var(--ease-out);
+}
+.agent-light::after {
+  left: var(--light-p, 0%);
+  width: 64px;
+  height: 9px;
+  border-radius: 999px;
+  transform: translate(-88%, -50%);
+  background: radial-gradient(closest-side, var(--light-core), color-mix(in srgb, var(--light) 35%, transparent) 55%, transparent);
+  filter: blur(1.5px);
+  transition: left var(--dur-light) var(--ease-out);
+}
+#agentAnswerActivity:not(.has-light-progress) .agent-light::before { width: 0; }
+@media (prefers-reduced-motion: no-preference) {
+  #agentAnswerActivity:not(.has-light-progress) .agent-activity.is-running + .agent-light::after {
+    animation: agent-light-drift 3.2s var(--ease-standard) infinite alternate;
+  }
+}
+@keyframes agent-light-drift {
+  from { left: 10%; opacity: .55; }
+  to { left: 46%; opacity: 1; }
+}
+/* Arrival: when the checked answer's marks stroke on, the agreement number
+   catches the light once. */
+@media (prefers-reduced-motion: no-preference) {
+  #agentAnswerBody.is-marks-revealing ~ .agent-review .agent-agreement-num {
+    animation: agent-agreement-arrive 1.4s var(--ease-out) .25s both;
+  }
+}
+@keyframes agent-agreement-arrive {
+  0% { text-shadow: 0 0 0 transparent; }
+  35% { text-shadow: 0 0 12px color-mix(in srgb, var(--light) 70%, transparent), 0 0 2px color-mix(in srgb, var(--light) 50%, transparent); }
+  100% { text-shadow: 0 0 0 transparent; }
+}
+@media (forced-colors: active) {
+  .agent-light { display: none; }
+}

@@ -1,5 +1,5 @@
 {
-  "sources": "23804ff38ac4",
+  "sources": "e7970dc22a60",
   "inputs": [
     "package-lock.json",
     "package.json",
@@ -97,6 +97,7 @@
     "static/js/sidebar-quota.js",
     "static/js/source-verification.js",
     "static/js/sources.js",
+    "static/js/tab-status.js",
     "static/js/token-budget.js",
     "static/js/usage-limit.js",
     "static/js/user-memory.js",
@@ -201,19 +202,19 @@
     },
     {
       "name": "app",
-      "src": "/static/dist/app.a13bbe1119d9.js",
+      "src": "/static/dist/app.1f0056ec5a61.js",
       "module": false,
       "defer": true
     }
   ],
   "styles": {
-    "app": "/static/dist/app.7efd503436d5.css"
+    "app": "/static/dist/app.0000d07e1f99.css"
   },
   "previous_assets": [
-    "app.b59fcb4c4670.css",
-    "app.f2c83044e9c2.css",
-    "app.92c819b478b0.js",
-    "app.3a78d1d3b2b7.js",
+    "app.1138f6d923f1.css",
+    "app.7efd503436d5.css",
+    "app.f54a2841540b.js",
+    "app.a13bbe1119d9.js",
     "auth.5e487d1e2570.js",
     "demo.e9726ac1eea5.js",
     "demo.37bdbf8a4b70.js",

@@ -1785,6 +1785,25 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   `consensus-lifecycle.js` bei Start/Ende der Consensus-Phase gerufen, damit
   der Cancel-Button bis zum fertigen Consensus/Differences stehen bleibt
   (ein Klick bricht dann via `cancelCurrentConsensus` ab).
+- **`tab-status.js`** (seit 2026-10-02, nach `query-send.js` gebündelt) —
+  solange die Seite verborgen ist (`document.hidden`), nennt der Tab-Titel den
+  sichtbaren Lauf: „Working… · <Titel>“, danach „Answer ready“ bzw. „Run
+  stopped“. Hört auf `consensio:run-registry-change` und `visibilitychange`;
+  sobald die Seite wieder vorne ist, steht der normale Titel da. Ein Lauf, der
+  schon vor dem Verlassen fertig war, wird nicht gemeldet.
+- **Der Lichtweg (Agent, seit 2026-10-02)** — das Hauslicht aus
+  `send-glow.css` hat genau drei Orte: der Senden-Knopf, eine Haarlinie
+  `.agent-light` unter der laufenden Aktivitätszeile (`agent-activity.js` legt
+  sie zwischen `details.agent-activity` und `.agent-progress` an, sichtbar nur
+  bei `.agent-activity.is-running`) und die Agreement-Zahl. Auf der Linie steht
+  das Licht beim Anteil fertiger Vergleichsmodelle (`agent-delegation.js`
+  `renderOverview` setzt `--light-p` und `.has-light-progress` auf
+  `#agentAnswerActivity`, `agent-chat.js` setzt beides bei einem neuen Turn
+  zurück); ohne Vergleich gleitet es langsam. Beim ersten Markieren einer
+  geprüften Antwort (`#agentAnswerBody.is-marks-revealing`) fängt
+  `.agent-agreement-num` das Licht einmal ein. Reduzierte Bewegung: kein
+  Gleiten, kein Aufleuchten. Alles Drückbare gibt beim Druck auf 97 % nach
+  (`base.css`, Spezifität 0, eigene Transforms gewinnen).
 - **`composer-collapse.js`** — der Composer klappt auf dem Handy (bis 1099 px,
   `COLLAPSE_QUERY` muss zur Grenze in `composer.css` passen) in jedem Modus auf
   (+), Feld und Senden ein: beim Absenden (`window.App.composer.collapse()` aus
