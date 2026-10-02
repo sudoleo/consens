@@ -194,8 +194,11 @@ def test_scheduler_task_runs_loop_without_mock_llm(monkeypatch):
 
 
 def test_lifespan_gates_prod_writers_behind_mock_llm(monkeypatch):
-    """A local MOCK_LLM server shares the production Firestore: every loop that
-    claims schedule slots or deletes data must go through the gated wrapper."""
+    """A local MOCK_LLM server shares the production Firestore: every task that
+    claims schedule slots or queued jobs, deletes data, writes the live model
+    config or re-registers the prod Telegram webhook must go through the gated
+    wrapper. Only the read-only model sync may start unconditionally, so a new
+    lifespan task has to choose a side here explicitly."""
     gated, supervised = [], []
 
     async def idle():
@@ -212,7 +215,6 @@ def test_lifespan_gates_prod_writers_behind_mock_llm(monkeypatch):
     monkeypatch.setattr(main, "_load_startup_configuration", lambda: None)
     monkeypatch.setattr(main, "_scheduler_task", record(gated))
     monkeypatch.setattr(main, "_supervised_task", record(supervised))
-    monkeypatch.setattr(main, "_one_shot_task", record(supervised))
     from types import SimpleNamespace
     stub = SimpleNamespace(retry_loop=idle)
     monkeypatch.setattr(main, "FirestoreApiAccountCleanup", lambda _db: stub)
@@ -223,14 +225,55 @@ def test_lifespan_gates_prod_writers_behind_mock_llm(monkeypatch):
             pass
 
     asyncio.run(exercise())
-    assert set(gated) >= {
+    assert set(gated) == {
         "consensus-watch-scheduler",
         "topic-scheduler",
         "seo-weekly-review-scheduler",
         "consensus-api-maintenance",
         "retention-maintenance",
+        "source-check-workers",
+        "consensus-api-account-cleanup",
+        "full-account-deletion-cleanup",
+        "model-configuration-backfill",
+        "publisher-watch-lineage-backfill",
+        "telegram-watch-startup-maintenance",
     }
-    assert "retention-maintenance" not in supervised
+    assert supervised == ["model-configuration-sync"]
+
+
+def test_gated_one_shot_never_runs_under_mock_llm(monkeypatch):
+    calls = []
+    monkeypatch.setattr(main, "mock_llm_enabled", lambda: True)
+
+    async def exercise():
+        await main._scheduler_task(
+            main._run_once(lambda: calls.append("ran")),
+            "telegram-watch-startup-maintenance",
+            restart=False,
+        )
+
+    asyncio.run(exercise())
+    assert calls == []
+    health = background_tasks.task_health_snapshot()
+    assert health["telegram-watch-startup-maintenance"]["state"] == "disabled"
+
+
+def test_gated_one_shot_runs_once_without_mock_llm(monkeypatch):
+    calls = []
+    monkeypatch.setattr(main, "mock_llm_enabled", lambda: False)
+    monkeypatch.setattr(main, "send_critical_error_notification", lambda *_a, **_k: None)
+
+    async def exercise():
+        await main._scheduler_task(
+            main._run_once(lambda: calls.append("ran")),
+            "publisher-watch-lineage-backfill",
+            restart=False,
+        )
+
+    asyncio.run(exercise())
+    assert calls == ["ran"]
+    health = background_tasks.task_health_snapshot()
+    assert health["publisher-watch-lineage-backfill"]["state"] == "completed"
 
 
 def test_e2e_profile_starts_no_lifespan_task(monkeypatch):
@@ -244,7 +287,6 @@ def test_e2e_profile_starts_no_lifespan_task(monkeypatch):
     monkeypatch.setattr(main, "apply_worker_thread_budget", lambda: 1)
     monkeypatch.setattr(main, "_scheduler_task", record)
     monkeypatch.setattr(main, "_supervised_task", record)
-    monkeypatch.setattr(main, "_one_shot_task", record)
 
     async def exercise():
         async with main.lifespan(main.app):

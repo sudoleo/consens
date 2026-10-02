@@ -178,13 +178,24 @@ Fehlern und hält Start-/Fehler-/letzte Erfolgszeiten für
 `GET /health/maintenance`. Cancellable Tasks übernehmen den 60-Sekunden-API-
 Maintenance-, 5-Minuten-Account-Cleanup-, stündlichen Retention- und
 30-Minuten-Consensus-Watch-Tick.
-Unter `MOCK_LLM=1` startet `_scheduler_task` in `main.py` die Writer, die in
-die (lokal geteilte) Produktions-Firestore schreiben würden, gar nicht erst und
-meldet sie in `GET /health/maintenance` als `disabled`: Consensus-Watch-,
-Topic-, SEO-Weekly-Review-Scheduler, Consensus-API-Maintenance und die
-Retention-Maintenance (Löschungen). Es gibt keinen lokalen Firestore-Emulator
-außerhalb des E2E-Profils; ein Mock-Server würde sonst Prod-Slots claimen bzw.
-Prod-Daten löschen. In Produktion (ohne `MOCK_LLM`) laufen alle unverändert.
+Unter `MOCK_LLM=1` startet `_scheduler_task` in `main.py` alle Lifespan-Tasks,
+die in die (lokal geteilte) Produktions-Firestore schreiben oder dort löschen
+würden, gar nicht erst und meldet sie in `GET /health/maintenance` als
+`disabled`: Consensus-Watch-, Topic-, SEO-Weekly-Review-Scheduler,
+Consensus-API-Maintenance, Retention-Maintenance, die Source-Check-Worker
+(Job-Claims und Heartbeat; Prüfungen laufen unter `MOCK_LLM` ohnehin inline),
+beide Account-Cleanups (`consensus-api-account-cleanup`,
+`full-account-deletion-cleanup`: löschen Daten echter Tombstone-Konten und
+Firebase-Auth-User) sowie die Einmal-Tasks `model-configuration-backfill`
+(schriebe die Normalisierung des lokalen Codes nach `app_config/models`, die
+der Live-Sync übernähme), `publisher-watch-lineage-backfill` und
+`telegram-watch-startup-maintenance` (löscht Metadaten und würde per
+`setWebhook` die Prod-Registrierung des Bots überschreiben). Einzig der
+lesende `model-configuration-sync` läuft auch lokal; der Lifespan-Test
+erzwingt, dass jeder neue Task bewusst einer der beiden Seiten zugeordnet wird.
+Es gibt keinen lokalen Firestore-Emulator außerhalb des E2E-Profils; ein
+Mock-Server würde sonst Prod-Slots und -Jobs claimen bzw. Prod-Daten löschen.
+In Produktion (ohne `MOCK_LLM`) laufen alle unverändert.
 Im expliziten Browser-Testprofil `E2E_TEST_MODE=1` überspringt der Lifespan
 dagegen alle Startup-, Cleanup-, Recovery-, Backfill-, Webhook- und Scheduler-
 Writer. `app/core/e2e_profile.py` erlaubt Firebase vor der Initialisierung nur

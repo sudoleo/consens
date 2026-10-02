@@ -91,15 +91,17 @@ async def _disabled_loop() -> None:
     return None
 
 
-def _scheduler_task(loop_factory, name: str):
+def _scheduler_task(loop_factory, name: str, *, restart: bool = True):
     """Background writers stay off in MOCK_LLM instances. They share the
     production Firestore with the live deployment, so a local mock server would
-    claim due schedule slots and publish fixture answers as real snapshots."""
+    claim due schedule slots and queued jobs, publish fixture answers as real
+    snapshots, delete real accounts' data with unreleased code, write its own
+    model defaults into the live config or re-register the prod bot webhook."""
     if mock_llm_enabled():
         logging.info("%s not started: MOCK_LLM=1", name)
         mark_task_disabled(name, "MOCK_LLM=1")
         return asyncio.create_task(_disabled_loop(), name=name)
-    return _supervised_task(loop_factory, name)
+    return _supervised_task(loop_factory, name, restart=restart)
 
 
 def _supervised_task(loop_factory, name: str, *, restart: bool = True):
@@ -114,11 +116,11 @@ def _supervised_task(loop_factory, name: str, *, restart: bool = True):
     )
 
 
-def _one_shot_task(func, name: str):
+def _run_once(func):
     async def run_once():
         await asyncio.to_thread(func)
 
-    return _supervised_task(run_once, name, restart=False)
+    return run_once
 
 
 @asynccontextmanager
@@ -141,19 +143,30 @@ async def lifespan(app: FastAPI):
     api_account_cleanup = FirestoreApiAccountCleanup(db_firestore)
     account_deletion = FirestoreAccountDeletion(db_firestore)
     _load_startup_configuration()
-    model_config_backfill_task = _one_shot_task(
-        _backfill_startup_configuration, "model-configuration-backfill"
+    # Writes the local code's normalized defaults into app_config/models,
+    # which every live process then adopts through the sync loop below.
+    model_config_backfill_task = _scheduler_task(
+        _run_once(_backfill_startup_configuration),
+        "model-configuration-backfill",
+        restart=False,
     )
     # Every process adopts a newly published model revision within one sync
-    # interval instead of waiting for its next restart (R25).
+    # interval instead of waiting for its next restart (R25). Read-only, so a
+    # MOCK_LLM server keeps following the live configuration.
     model_config_sync_task = _supervised_task(
         model_config_sync_loop, "model-configuration-sync"
     )
-    lineage_backfill_task = _one_shot_task(
-        backfill_publisher_watch_lineage, "publisher-watch-lineage-backfill"
+    lineage_backfill_task = _scheduler_task(
+        _run_once(backfill_publisher_watch_lineage),
+        "publisher-watch-lineage-backfill",
+        restart=False,
     )
-    telegram_webhook_task = _one_shot_task(
-        telegram_startup_maintenance, "telegram-watch-startup-maintenance"
+    # setWebhook points the one bot at SITE_URL with this process's secret; a
+    # local run would overwrite the production registration.
+    telegram_webhook_task = _scheduler_task(
+        _run_once(telegram_startup_maintenance),
+        "telegram-watch-startup-maintenance",
+        restart=False,
     )
     watch_task = _scheduler_task(watch_scheduler_loop, "consensus-watch-scheduler")
     topic_task = _scheduler_task(topic_scheduler_loop, "topic-scheduler")
@@ -163,16 +176,19 @@ async def lifespan(app: FastAPI):
     api_maintenance_task = _scheduler_task(
         api_run_maintenance_loop, "consensus-api-maintenance"
     )
-    # Retention deletes in the shared production Firestore, so a local mock
-    # server must not run it either.
+    # Retention, both account cleanups and the source-check workers delete or
+    # claim work in the shared production Firestore (and Firebase Auth), so a
+    # local mock server must not run them either.
     retention_task = _scheduler_task(
         retention_maintenance_loop, "retention-maintenance"
     )
-    api_account_cleanup_task = _supervised_task(
+    api_account_cleanup_task = _scheduler_task(
         api_account_cleanup.retry_loop, "consensus-api-account-cleanup"
     )
-    source_check_task = _supervised_task(source_check_worker_loop, 'source-check-workers')
-    account_deletion_task = _supervised_task(
+    source_check_task = _scheduler_task(
+        source_check_worker_loop, "source-check-workers"
+    )
+    account_deletion_task = _scheduler_task(
         account_deletion.retry_loop, "full-account-deletion-cleanup"
     )
     tasks = (
