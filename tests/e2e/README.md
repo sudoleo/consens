@@ -77,6 +77,11 @@ Bookmark-, Share-, Watch-, `/prepare`- und Providerantworten werden im Browser
 ersetzt. Dadurch sind die Konto-/Request-/Modal-Races auch ohne Java separat
 ausführbar:
 
+Der lokale Server nutzt Port 8033. Fuer parallele isolierte Worktrees kann
+`$env:E2E_PHASE4_PORT = "8043"` einen eigenen Port setzen. Screenshots der
+Source-Pruefungen gehen nach `test-results/source-verification-ui/`, nicht in
+die versionierten historischen Auditbilder.
+
 ```powershell
 $env:RUN_E2E = "1"
 venv\Scripts\python.exe -m pytest tests\e2e\test_phase4_frontend.py -q

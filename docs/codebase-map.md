@@ -2396,7 +2396,10 @@ laufenden Höhenanimationen und führt Änderungen ohne Animation aus.
 aus, sodass die gerade gelesene Antwortzeile stehen bleibt; bereits erfolgtes
 natives Scroll-Anchoring wird nicht doppelt verrechnet. Nach Run-Abschluss endet
 dauerhaftes Nachscrollen. Ein noch laufender bewusster Send-/Latest-Sprung darf
-einmal fertiglaufen. Sichtbare Statusbereiche behalten ihre kurzen Übergänge.
+einmal fertiglaufen. `chat-scroll.js` trennt diesen expliziten Sprung von einem
+nur eingeplanten Resize-/Follow-Frame; Letzterer wird beim Abschluss verworfen,
+damit neue Copy-/Evidenzzeilen die Antwort nicht nach oben verschieben.
+Sichtbare Statusbereiche behalten ihre kurzen Übergänge.
 Tool-Nennungen bleiben Text; ausschließlich bestätigte running-Toolereignisse
 oder der Review-Status bestimmen den aktuellen Arbeitsschritt im Verlauf.
 Alte gespeicherte Reasoning-Verläufe bleiben als begrenzte Auszüge lesbar.
@@ -6011,4 +6014,7 @@ in die Ansicht uebernommen.
 `tests/e2e/test_topic_frontend.py` prueft das unveraenderte Topic-Skript mit
 kontrolliertem SSR-Markup in Chromium: Keyboardnavigation, zweistufiges Touch-
 Preview, inerte Notizen und historische/gesperrte Storagezustaende. Die
-writerfreie Browserfixture und ihr Port bleiben separat vom Emulatorprofil.
+writerfreie Browserfixture verwendet genau einen Server je pytest-Aufruf,
+auch wenn mehrere Module die Fixture importieren. `E2E_PHASE4_PORT` (Default
+8033) trennt parallele Worktrees; ein bereits belegter Port bricht den Start
+ab. Screenshots bleiben unter `test-results/`.

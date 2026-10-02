@@ -102,8 +102,9 @@ def test_progress_paragraphs_collapse_at_final_and_reopen_with_keyboard(browser,
             updates[0], 'Compared perspectives', updates[1], 'Checking the answer…'])
         expect(preview.locator('.agent-current-status')).to_have_count(1)
         if quiet != 'colors':
-            trace_color = 'rgb(185, 189, 195)' if dark else 'rgb(85, 88, 94)'
-            step_color = 'rgb(255, 255, 255)' if dark else 'rgb(0, 0, 0)'
+            # Current typography uses the same secondary ink for trace and steps.
+            trace_color = 'rgb(167, 169, 173)' if dark else 'rgb(92, 95, 102)'
+            step_color = trace_color
             colors = preview.locator(':scope > *').evaluate_all('els => els.map(el => getComputedStyle(el).color)')
             assert colors == [trace_color, step_color, trace_color, step_color]
         else:

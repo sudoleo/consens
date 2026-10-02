@@ -12,6 +12,8 @@ import pytest
 from playwright.sync_api import expect
 from test_phase4_frontend import phase4_server, _real_firebase_page, _json
 
+INCOMPLETE_NOTE = "This answer may be incomplete because the run ended early. Everything received has been saved, and you can ask again at any time."
+
 CATALOG = {"default_model_id": "deepseek/deepseek-v4.1-flash", "models": [
     {"id": "deepseek/deepseek-v4.1-flash", "label": "DeepSeek V4.1 Flash", "reasoning_efforts": ["default", "low", "high", "max"], "reasoning_available": True},
     {"id": "gpt-5.6-sol", "label": "GPT-5.6 Sol", "reasoning_efforts": ["default", "low", "medium", "high"], "reasoning_available": True},
@@ -144,7 +146,7 @@ def test_saved_interruption_keeps_reason_and_partial_answer_visible(browser, pha
         page.route("**/bookmarks/interruption/conversation*", lambda r: _json(r, {"chat_id": "a" * 32, "turns": [turn], "has_more": False}))
         page.route("**/bookmarks/interruption", lambda r: _json(r, {"bookmark": bookmark}))
         page.evaluate("async () => { await window.openBookmark('interruption'); }")
-        expect(page.locator("#agentAnswerError")).to_have_text(reason)
+        expect(page.locator("#agentAnswerError")).to_have_text(INCOMPLETE_NOTE)
         expect(page.locator("#agentAnswerError")).to_be_visible()
         expect(page.locator("#agentAnswerBody h2")).to_have_text("Available result")
         expect(page.locator("#agentAnswerActivity summary")).to_contain_text("Response failed")
@@ -206,7 +208,7 @@ def test_failed_stream_adopts_saved_bookmark_and_survives_reload(browser, phase4
             expect(page.locator("#agentAnswerBody h2")).to_have_text("Available result")
         else:
             expect(page.locator("#agentAnswerBody")).to_be_empty()
-        expect(page.locator("#agentAnswerError")).to_have_text(reason)
+        expect(page.locator("#agentAnswerError")).to_have_text(INCOMPLETE_NOTE if content == "partial" else reason)
         expect(page.locator("#agentRecover")).not_to_be_visible()
         page.wait_for_function("() => App.runRegistry.visible()?.bookmark.uiReady === true")
         bookmark_id = bookmarks[0]["id"]
@@ -222,7 +224,7 @@ def test_failed_stream_adopts_saved_bookmark_and_survives_reload(browser, phase4
             expect(page.locator("#agentAnswerBody h2")).to_have_text("Available result")
         else:
             expect(page.locator("#agentAnswerBody")).to_be_empty()
-        expect(page.locator("#agentAnswerError")).to_have_text(reason)
+        expect(page.locator("#agentAnswerError")).to_have_text(INCOMPLETE_NOTE if content == "partial" else reason)
         expect(page.locator("#agentRecover")).not_to_be_visible()
         if content == 'comparison':
             page.locator('.agent-evidence-link[data-section="answers"]').click()
@@ -442,6 +444,10 @@ def test_live_reasoning_disclosure_and_stop(browser, phase4_server, width, dark)
         # the comparison models of the next message.
         chip = page.locator(".agent-model-picker .model-picker-display")
         expect(chip).to_be_enabled()
+        if width < 700:
+            # Sending collapses mobile controls; focus opens the actual composer.
+            page.locator("#questionInput").click()
+        expect(chip).to_be_visible()
         chip.click()
         expect(page.locator('.agent-model-picker [data-picker-level="models"]')).to_be_disabled()
         expect(page.locator('.agent-model-picker [data-picker-level="companion"]')).to_be_enabled()
@@ -505,7 +511,7 @@ def test_live_reasoning_disclosure_and_stop(browser, phase4_server, width, dark)
         page.wait_for_function("() => Date.now() - App.runRegistry.visible().startedAt > 800")
         page.locator("#sendButton").click()
         page.wait_for_function("() => App.runRegistry.visible()?.status === 'canceled'")
-        expect(page.locator("#agentAnswerActivity .agent-activity-title")).to_contain_text("Response stopped")
+        expect(page.locator("#agentAnswerActivity .agent-activity-title")).to_have_text(re.compile(r"^Stopped after \d+(?:m \d+)?s$"))
         expect(page.locator("#agentAnswerError")).not_to_be_visible()
         assert title.evaluate("el => getComputedStyle(el).animationName") == "none"
     finally:

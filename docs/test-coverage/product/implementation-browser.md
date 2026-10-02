@@ -51,4 +51,31 @@ unveraenderten Inputs werden geprueft. Kein Paketdownload.
 - Gesamte Frontendsuite: `npm test -- --reporter=json --outputFile=test-results/frontend-all.json`: 695 bestanden.
 - Negativkontrolle: Urspruengliche Adminclient-/Viewerquellen aus HEAD voruebergehend gegen die neuen Tests ausgefuehrt; 11 Fehler, 16 bestanden. Anschliessend korrigierten Stand bytegenau wiederhergestellt.
 - `npm run build`: bestanden; keine inhaltliche Aenderung der App-Bundles.
-- WP-03/WP-38 Browser: Ausgangslauf und Fehleranalyse laufen noch; Ergebnis wird hier ergaenzt.
+
+## WP-03 / WP-38 (Browseranteil)
+
+Der Ausgangslauf der sieben betroffenen Dateien hatte 68 bestandene und 27
+fehlgeschlagene Faelle. Fachlich veraltete Fixtures wurden auf ownergebundene
+Antwortreceipts, Dokument-Turn-IDs und aktuelle mobile Bedienung aktualisiert.
+Die Tests pruefen weiterhin die Antworten, Bindungen, gespeicherten Daten und
+Fehler; fehlende Receipts duerfen sichtbar bleiben, aber keinen Consensus starten.
+Sekundaertextfarben, gruppierte Quellenpills und unvollstaendige Agentantworten
+folgen den aktuellen Produktvertraegen. Layoutgrenzen nutzen gerundete CSS-Pixel.
+
+Der Scrolltest hielt zuvor einen beim finalen Markdownrender entfernten DOM-Knoten.
+Er verfolgt jetzt denselben Absatzinhalt nach jedem Render weiter. Damit wurde ein
+echter 48px-Sprung durch einen noch anstehenden Resize-Follow-Frame sichtbar.
+chat-scroll trennt nun explizites Send/Latest vom passiven Resize-Follow. Vier
+neue DOMfaelle pruefen Abschluss, sehr schnelle erste Antworten und Reduced Motion.
+Die Negativkontrolle mit altem Produktcode scheitert genau am Resize-Abschlussfall
+(1 fehlgeschlagen, 13 bestanden zum Zeitpunkt der Kontrolle).
+
+Importierte Phase4-Fixtures teilen pro pytest-Lauf genau einen Serverprozess.
+Ein bereits belegter Port wird abgewiesen statt unbemerkt fremden Code zu testen.
+Ein Negativfall prueft dies explizit. E2E_PHASE4_PORT erlaubt parallele isolierte
+Laeufe; Screenshots landen im ignorierten test-results-Verzeichnis.
+
+- Fokussierter Abschlusslauf Scroll/Phase4: 40 bestanden, 118,51 s.
+- Gesamter writerfreier Browserlauf: `UNIT_TEST_MODE=1 RUN_E2E=1 E2E_PHASE4_PORT=8043 python -m pytest tests/e2e --ignore=tests/e2e/test_smoke.py --ignore=tests/e2e/test_agent_transactions.py --ignore=tests/e2e/test_phase2_transactions.py --ignore=tests/e2e/test_prompt_config_transactions.py --ignore=tests/e2e/test_agreement_verdict.py --ignore=tests/e2e/test_run_cancel_and_progress.py -q`: 256 bestanden, 738,20 s; eine bestehende Python3.9-Warnung. JUnit: test-results/browser-all.xml.
+- Emulatorfaelle werden separat gemeinsam mit den Backendpaketen geprueft.
+- Abschliessende gesamte Frontendsuite: 699 bestanden; `npm run build:check` bestanden.
