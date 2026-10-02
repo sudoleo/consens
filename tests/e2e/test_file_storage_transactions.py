@@ -3,7 +3,7 @@ from types import SimpleNamespace
 import pytest
 from app.services import agent_files
 from app.services.chat_store import ChatNotFound
-from native_support import native_db, race, tree
+from native_support import native_db, race_with_worker_retry, tree
 
 
 class Bucket:
@@ -52,14 +52,32 @@ def test_native_cloud_upload_quota_foreign_download_and_delete_retry(native_db, 
     files, bucket = cloud_files(db, monkeypatch)
     chat = files.chats.create_chat(uid, execution_mode="agent")["id"]
     monkeypatch.setattr(agent_files, "MAX_FILES", 1)
-    def upload():
-        try:
-            return save(agent_files.AgentFiles(db), uid, chat)
-        except agent_files.FileUnavailable:
-            return None
-    outcomes = race(upload, upload)
+    def upload_worker():
+        worker_files = agent_files.AgentFiles(db)
+        object_attempts = []
+        actual_put = worker_files.objects.put
+        def observed_put(*args, **kwargs):
+            object_attempts.append(args[0])
+            return actual_put(*args, **kwargs)
+        monkeypatch.setattr(worker_files.objects, "put", observed_put)
+        def upload():
+            # A replay is safe only if this worker never reached object I/O.
+            # A failed finalization after upload must remain a test failure.
+            assert not object_attempts, "Cannot replay an upload after object I/O"
+            try:
+                return save(worker_files, uid, chat)
+            except agent_files.FileUnavailable:
+                return None
+        return upload
+    outcomes = race_with_worker_retry(
+        upload_worker(), upload_worker(),
+        snapshot=lambda: {"owner": tree(db.collection("users").document(uid)),
+                          "objects": dict(bucket.data), "calls": list(bucket.calls)},
+    )
     saved = next(value for value in outcomes if value)
     assert sum(value is not None for value in outcomes) == 1
+    assert len([call for call in bucket.calls if call[0] == "put"]) == 1
+    assert len(bucket.data) == 1
     assert files.quota_ref(uid).get().to_dict() == {"count": 1, "bytes": 15}
     assert files.download(uid, chat, saved["id"])[1] == b"private fixture"
     before_calls = list(bucket.calls)

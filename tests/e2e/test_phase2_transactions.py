@@ -13,6 +13,7 @@ from google.api_core.exceptions import Aborted
 
 from app.core.e2e_profile import E2E_PROJECT_ID, assert_safe_e2e_environment
 from app.services import chat_store, share_snapshots, watch_service
+from native_support import race_with_worker_retry, tree
 
 
 def _emulator_db():
@@ -66,8 +67,22 @@ def test_two_workers_cannot_exceed_owner_watch_limit(monkeypatch):
             return exc.code, ""
 
     try:
-        with ThreadPoolExecutor(max_workers=2) as pool:
-            outcomes = list(pool.map(create, share_ids))
+        # Bootstrap the real index separately from the quota race: its own
+        # committed migration is not a partial write by an aborted creation.
+        for share_id in share_ids:
+            watch_service._ensure_watch_indexes(uid, f"share:{share_id}", db=db)
+        def snapshot():
+            return {
+                "owner": tree(db.collection("users").document(uid)),
+                "shares": {share_id: tree(db.collection("shares").document(share_id))
+                           for share_id in share_ids},
+                "watches": {item.id: item.to_dict() for item in db.collection("watches").where(
+                    filter=FieldFilter("owner_uid", "==", uid)).stream()},
+            }
+        outcomes = race_with_worker_retry(
+            *(lambda share_id=share_id: create(share_id) for share_id in share_ids),
+            snapshot=snapshot,
+        )
         assert sorted(code for code, _watch_id in outcomes) == [
             "created",
             "limit_reached",

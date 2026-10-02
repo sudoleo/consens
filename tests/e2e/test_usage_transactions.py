@@ -8,7 +8,7 @@ from app.services.usage_repository import (
     FirestoreUsageRepository, TokenAdmission, RunKind, UsageLimitExceeded,
     UsageTransitionError, RunStatus,
 )
-from native_support import native_db, race
+from native_support import native_db, race, race_with_worker_retry, tree
 
 
 def admission(now, *, limit=100, estimate=60):
@@ -68,9 +68,10 @@ def test_native_distinct_bookings_preserve_both_charges(native_db):
     repository = FirestoreUsageRepository(db)
     repository.reserve(uid, "shared", RunKind.REGULAR, admission(now), now=now)
     repository.consume(uid, "shared")
-    race(
+    race_with_worker_retry(
         lambda: FirestoreUsageRepository(db).book_operation(uid, "shared", "ask_openai", measured=11, estimated=0, final=False, now=now),
         lambda: FirestoreUsageRepository(db).book_operation(uid, "shared", "ask_anthropic", measured=17, estimated=0, final=False, now=now),
+        snapshot=lambda: tree(db.collection("users").document(uid)),
     )
     ledger = agent_quota.quota_ref(db, uid, admission(now).period).get().to_dict()
     assert ledger["used"] == 28

@@ -2,11 +2,12 @@
 from datetime import datetime, timedelta, timezone
 from cryptography.fernet import Fernet
 import uuid
+import threading
 import pytest
 from app.services.agent_actions import AgentActions
 from app.services.google_connections import GoogleConnections, GoogleError, Wire
 from app.services.chat_store import ChatNotFound
-from native_support import native_db, race, tree
+from native_support import native_db, race_with_worker_retry, tree
 
 
 @pytest.mark.parametrize("kind,capability", [("gmail_send", "gmail_send"), ("calendar_event", "calendar_write")])
@@ -31,8 +32,11 @@ def test_native_google_confirmation_one_attempt_and_unknown_never_retries(native
         "fields": {"summary": "Approved fixture"}, "calendar_id": "primary", "event_id": "nativefixture", "update": False}
     proposal = actions.prepare(uid, chat, "turn-a", kind, connection_id, capability, payload, {"summary": "Exact preview"})
     attempts = []
+    active_worker = threading.local()
     def wire(self, method, url, **kwargs):
         if method != "GET":
+            if hasattr(active_worker, "writes"):
+                active_worker.writes.append((method, url))
             attempts.append((method, url, kwargs))
             raise GoogleError("Transport response lost", uncertain=True)
         return {}
@@ -41,7 +45,23 @@ def test_native_google_confirmation_one_attempt_and_unknown_never_retries(native
     monkeypatch.setattr(Wire, "request", wire)
     def confirm():
         return AgentActions(db).confirm(uid, chat, proposal["id"], proposal["hash"])
-    results = race(confirm, confirm)
+    def confirmation_worker():
+        writes = []
+        def attempt():
+            # Only an aborted pre-dispatch claim can be replayed. A lost
+            # provider response/finalization must never trigger another write.
+            assert not writes, "Cannot replay confirmation after a provider write"
+            active_worker.writes = writes
+            try:
+                return confirm()
+            finally:
+                del active_worker.writes
+        return attempt
+    results = race_with_worker_retry(
+        confirmation_worker(), confirmation_worker(),
+        snapshot=lambda: {"owner": tree(db.collection("users").document(uid)),
+                          "provider_attempts": list(attempts)},
+    )
     assert len(attempts) == 1
     assert all(result["status"] in {"executing", "unknown"} for result in results)
     assert confirm()["status"] == "unknown"

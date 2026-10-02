@@ -2,7 +2,7 @@
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 from app.services import api_run_repository as api
-from native_support import native_db, race
+from native_support import native_db, race_with_worker_retry, tree
 
 
 def test_retention_backfill_is_atomic_and_does_not_renew_another_run(
@@ -18,7 +18,11 @@ def test_retention_backfill_is_atomic_and_does_not_renew_another_run(
     mapping = repo._idempotency_ref(owner, "key")
     mapping.set({"run_id": "f" * 32, "expires_at": stamp + timedelta(days=90)})
     before = mapping.get().to_dict()
-    assert sorted(race(repo.backfill_retention, repo.backfill_retention)) == [0, 1]
+    outcomes = race_with_worker_retry(
+        repo.backfill_retention, repo.backfill_retention,
+        snapshot=lambda: {"run": tree(ref), "mapping": tree(mapping)},
+    )
+    assert sorted(outcomes) == [0, 1]
     assert ref.get().to_dict()["expires_at"] == stamp + timedelta(days=30)
     assert mapping.get().to_dict() == before
     # A missing mapping is not recreated, and missing dates stay explicitly unknown.
