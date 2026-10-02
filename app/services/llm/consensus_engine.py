@@ -2735,7 +2735,7 @@ def query_claim_identity(known_claims, new_claims, api_keys: dict,
         )
         + "\n</NEW_CLAIMS>"
     )
-    attempts = _differences_attempts(differences_model, api_keys)
+    attempts = _differences_attempts(differences_model, api_keys) or []
     known_keys = {item["key"] for item in known}
     for (provider, api_model, model_ref), _is_retry, judge_tier in attempts:
         try:
@@ -2755,9 +2755,10 @@ def query_claim_identity(known_claims, new_claims, api_keys: dict,
                 if not isinstance(match, dict):
                     continue
                 key = str(match.get("key") or "")
-                try:
-                    index = int(match.get("index"))
-                except (TypeError, ValueError):
+                # The requested schema is a JSON integer. Coercion would turn
+                # true, 0.5 or "0" into a different, apparently valid identity.
+                index = match.get("index")
+                if type(index) is not int:
                     continue
                 if key not in known_keys or key in used:
                     continue
