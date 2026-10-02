@@ -34,8 +34,8 @@ Kein Test sendet echte Google-, SMTP-, Telegram- oder Cloud-Storage-Schreibaufru
 |---|---|---|
 | WP-01 (Persistenzanteil) | `test_phase2_transactions.py`: aktueller `tier`-Parameter und gültiges Pending-Expiry; Watch-/Chatlimit und Share-Idempotenz nativ | Watch-Quotaguard entfernt: zwei Gewinner werden erkannt |
 | WP-02 | Report-Zähler, Gründe und Reviewflag ohne verlorene Inkremente; Indexstatus bleibt gemäß aktuellem R19-Vertrag unverändert | Zähler immer 1: Oracle wird rot |
-| WP-07 | `test_usage_transactions.py`: gleicher Key, letzter freier Betrag, gemessene/geschätzte Buchung, Release/Consume, alter/neuer UTC-Tag, Kontrollowner | Buchungsdeduplizierung entfernt: Doppelabbuchung erkannt |
-| WP-08 | `test_chat_lifecycle_transactions.py`: beide Commitreihenfolgen Delete/Completion, späte Turns, Context-Finalisierung hinter Tombstone, terminales Failure, komplette Nachfahren und Kontrollowner | Statusguard entfernt: fehlgeschlagener Turn wird unzulässig completed |
+| WP-07 | `test_usage_transactions.py`: gleicher Key, letzter freier Betrag, gemessene/geschätzte und getrennte konkurrierende Buchungen, Release/Consume, alter/neuer UTC-Tag, Kontrollowner | Buchungsdeduplizierung entfernt: Doppelabbuchung erkannt; echte SDK-Reads/Writes aus der Transaktion verlagert: doppelte Admission bzw. verlorene Buchung erkannt |
+| WP-08 | `test_chat_lifecycle_transactions.py`: beide Commitreihenfolgen Delete/Completion sowie tatsächlicher Zwischenzustand nach Tombstonecommit vor physischem Purge; Completion/Create/Failure ändern weder Chatnachfahren noch Löschjob, danach vollständige Kaskade; Context-Finalisierung, terminales Failure und Kontrollowner | Active-Guard entfernt: Completion schreibt während `deleting`; zusätzlich terminalen Statusguard entfernt: fehlgeschlagener Turn wird unzulässig completed |
 | WP-09 | `test_account_deletion_transactions.py`: alle **16 aktuellen** Bereiche, Google-/API-Metadaten, Dokumentversionen, fremde Daten; Objektfehler, fehlender Parent, neue Serviceinstanz, verlorene Checkpoints, Tombstone/E-Mail | Receipt-Bereich übersprungen: verbleibende persönliche Daten erkannt |
 | WP-10 | `test_memory_edit_transactions.py` + `test_memory_edit.py`: native Patch/Save-CAS, verlorene Lease, Undo-Owner/Expiry/Retry/Konflikt, Limitabsenkung ohne Writes; echtes `main` mit Auth-, Tier- und Undo-Fehlern | Verlustschutz entfernt: Undo kürzt und Regression wird rot |
 | WP-14 | `test_source_check_transactions.py`: getrennte Repositoryinstanzen, Claimübernahme, alter Lease, genau ein Paketcommit, Delete ohne Wiederanlage, vollständige Pagination und Revisionsbindung | Leasevergleich entfernt: alter Worker committet, Oracle wird rot |
@@ -53,6 +53,23 @@ Alle **13 Negativkontrollen** wurden durch fachliche Assertions abgewiesen.
 Im nativen Abschlusslauf waren die getrennten Wiederholungsaufrufe bei Source
 (zwei abgebrochene Worker) und Topic (ein Worker) erforderlich und als Warnungen
 sichtbar; ihre genaue Bedeutung steht unten.
+
+Die unabhängige Abnahme ergänzte anschließend zwei stärkere Nativefälle:
+Eine echte Löschung pausiert nach dem committed `deleting`-Tombstone und
+Löschjob vor dem physischen Purge, während ein anderer Worker Completion,
+Create und Failure versucht. Der vollständige Zustand wird vor Fortsetzung
+der Kaskade auf Nichtmutation geprüft. Getrennte gleichzeitige Buchungen
+prüfen außerdem sowohl den gemeinsamen Kontostand als auch beide Receipts.
+Die zusätzlichen Mutationen entfernen ausdrücklich den Active-/Deleting-Guard
+bzw. verlagern echte SDK-Reads und Writes aus der Transaktion. Eine Barriere
+in diesen beiden absichtlich ungeschützten Mutanten erzwingt denselben
+Ledger-Vorzustand; sie befindet sich nie in einem echten SDK-Callback.
+Alle fachlichen Quota-/Dedupguards bleiben für die Atomaritätskontrolle aktiv.
+Der fokussierte Abschluss dieser Ergänzung bestand mit **9 Tests in 14,68 s**;
+alle drei zusätzlichen Negativkontrollen scheiterten an den vorgesehenen
+fachlichen Assertions. Damit sind **16 unterschiedliche Mutationen** erkannt.
+JUnit: `test-results/persistence-acceptance.xml`; Mutationen:
+`python tests/e2e/native_mutations.py WP-07-atomicity WP-07-atomicity-charge WP-08`.
 
 Die Native-Tests benötigen diese Umgebungswerte, zusätzlich zu `UNIT_TEST_MODE=1`
 und `RUN_E2E=1`: `E2E_TEST_MODE=1`,
