@@ -279,16 +279,14 @@ class FirestoreSeoRepository:
                 if not snapshot.exists:
                     continue
                 data = snapshot.to_dict() or {}
-                page_id = str(data.get("page_id") or page_by_ref_path.get(
-                    str(getattr(snapshot.reference, "path", "")), ""
-                ))
-                if not page_id:
-                    try:
-                        page_id = snapshot.reference.parent.parent.id
-                    except AttributeError:
-                        page_id = ""
-                if page_id in result:
-                    result[page_id].append(data)
+                # BatchGet is unordered. The requested document path binds both
+                # dimensions; legacy/stale payload fields cannot move a metric
+                # into another page or date (nor invent measured zero traffic).
+                page_id = page_by_ref_path.get(
+                    str(getattr(snapshot.reference, "path", ""))
+                )
+                if page_id is not None:
+                    result[page_id].append({**data, "page_id": page_id, "date": snapshot.id})
         for metrics in result.values():
             metrics.sort(key=lambda item: item.get("date") or "")
         return result

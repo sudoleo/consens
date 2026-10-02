@@ -1858,6 +1858,11 @@ laufenden Request, Consensus oder Save gelesen werden. Entfernte Controls wie
 
 ### Agent · Beta: dynamische Vergleiche und Tokenkontingent (2026-09-19)
 
+`require_agent_access` prüft die tatsächliche Pro-/Adminregel; ein ausgefallener
+Tarif-/Rollendienst liefert sicher 503. Detail und Turn-Stop laufen owner- und
+turngebunden über den echten Store. Beide Antworten sind `private, no-store`;
+Stop setzt die Delegationssperre nur für diesen Turn, auch bei Wiederholung.
+
 Zuverlässigkeitsprüfung (20.09.2026): `POST /agent` sendet bereits vor der
 Token-Admission `accepted` mit der dauerhaften Chat-/Turn-ID. Der Browser kann
 damit auch wartende Runs zuordnen. Stop und erster Claim konkurrieren in derselben
@@ -4061,6 +4066,10 @@ vollständigen Laufs entsprechen, das Limit dem gewünschten Tagesvolumen.
   Key liefert danach stabil `410` mit `error.code=run_deleted` und startet nie
   erneut kostenpflichtige Arbeit; `GET`/erneutes `DELETE` liefern 404.
   Tombstone und Mapping verschwinden mit dem ursprünglichen Retention-Ablauf.
+  Der Retention-Backfill liest Run und Mapping erneut in einer Transaktion:
+  vorhandene Ablaufdaten bleiben erhalten, fehlende Annahmedaten werden nicht
+  erfunden, und ein inzwischen an einen anderen Run gebundenes Mapping wird
+  weder verändert noch neu angelegt. Naive Legacy-Zeitstempel gelten als UTC.
   Alle v1- und Admin-Key-Antworten sind
   `private, no-store`. Limits greifen vor Auth pro IP/API-Key und danach pro UID.
 - Der maschinenlesbare Vertrag kommt aus den typisierten FastAPI-Routen unter
@@ -4102,6 +4111,12 @@ vollständigen Laufs entsprechen, das Limit dem gewünschten Tagesvolumen.
   erfolgreich und pausiert/löscht keine bestehenden Watches.
 
 ### Sharing
+- `og_image.share_card_png` bindet seinen Cache an alle gezeichneten Inhalte:
+  Share-ID, Frage, Score, Modell-/Konfliktzahl, Historienwerte und Prüflabel.
+  Die öffentliche OG-Route verwendet weiterhin den neuesten gültigen
+  öffentlichen Stand und eine leere Historie; private/widerrufene Shares
+  erhalten kein Bild. Reale PNG-Regionen und semantische Zeichenaufrufe werden
+  gemeinsam geprüft, damit ein gültiges, aber leeres PNG nicht genügt.
 - `/consensus` legt ein `pending_results`-Dokument an → `result_id`.
 - Die Consensus-API publiziert dagegen direkt aus ihrem 30-Tage-Run-Snapshot;
   `source_api_run_id` bleibt serverintern und wird nie Teil der Public-Payload.
@@ -4154,6 +4169,19 @@ vollständigen Laufs entsprechen, das Limit dem gewünschten Tagesvolumen.
   Sonst erfolgt der 30-Tage-Hard-Delete widerrufener Shares via `cleanup_revoked_shares`.
 
 ### Kuratierte Topics
+- Alle fünf Topic-Adminmethoden verifizieren Firebase-Tokens mit
+  `check_revoked=True` und prüfen danach die echte Adminrolle. Ein Ausfall des
+  Rollendienstes ergibt 503; nicht autorisierte Requests lesen oder verändern
+  keine Topics. Der gemeinsame HMAC-Unterbau von Topic-/Watch-Follow-Tokens
+  bedeutet keine Austauschbarkeit: Watch-, Share-Follower- und Topic-Aktionen
+  verlangen ihre eigene Payloadform, bevor ein Dokumentzugriff erfolgt.
+- `query_claim_identity` akzeptiert ausschließlich JSON-Integer als Index,
+  keine Bool-/Float-/String-Coercion. Nur bekannte, einmal verwendete Keys und
+  Indices im übergebenen Fenster werden gebunden. Ungültige Antworten bzw.
+  ein unbekanntes Modell ergeben keine Zuordnung; der Aufrufer behält seinen
+  bisherigen Fallback für neue Claims. Promptfenster und Retryplan bleiben
+  begrenzt. Die Entscheidung und Nachweise stehen unter
+  [Adapter-Implementierung](test-coverage/product/implementation-adapters.md).
 - `topics.list_runs` liest lange Historien über `observed_at DESC` mit
   `max_items + 1` als Limit und gibt die letzten Runs weiter chronologisch
   nach Datum/Version/Dokument-ID aus. Bei kurzen Historien beweist eine
@@ -4239,6 +4267,12 @@ vollständigen Laufs entsprechen, das Limit dem gewünschten Tagesvolumen.
   durch die Security-Middleware als `private, no-store` ausgeliefert.
 
 ### SEO-Leistungsdaten und Recommendation Judge (Search Console, v2)
+- `FirestoreSeoRepository.list_metrics_for_pages` bündelt höchstens 400
+  Dokumentreferenzen pro BatchGet. Ungeordnete Ergebnisse werden über den
+  angeforderten Dokumentpfad zugeordnet; `snapshot.id` bestimmt den Tag.
+  Gespeicherte `page_id`-/`date`-Felder können keine Messung in eine fremde
+  Seite oder einen anderen Tag verschieben. Fehlende Dokumente bleiben
+  fehlende Messungen statt künstlichem Nulltraffic.
 - Der manuelle admin-only Lauf `POST /api/admin/seo/collect` übernimmt exakt die
   statischen URLs aus `pages.py::SITEMAP_URLS`, aktive, öffentliche,
   indexierte Shares aus `list_indexed_share_urls` sowie indexierbare Topics aus
