@@ -5,22 +5,23 @@
    in it. The box itself (surface, edge, shadow) stays in shell.css.
 
      start screen                [ field .......................................... ]
-     (hero, or the Compare       [ (+) Mode ]                 [ models ] [ Demo Send ]
+     (hero, or the Compare       [ (+) ]                      [ models ] [ Demo Send ]
      start with its empty cards)
 
-     desktop thread, one line    [ (+) Mode ][ field ........ ][ models ] [ Demo Send ]
+     desktop thread, one line    [ (+) ][ field ............. ][ models ] [ Demo Send ]
      (field grows to two rows)   → same as the start screen
 
      phones, expanded            [ field ........................ ]
                                  [ models ....................... ]
-                                 [ (+) Mode ]          [ Demo Send ]
+                                 [ (+) ]               [ Demo Send ]
 
      phones, collapsed           [ (+) ][ field ........ ][ Send ]
 
-   (+) and the mode are always the first two controls on the left, Send is
-   always last on the right; nothing changes sides between states or modes.
+   (+) is always the first control on the left, Send always last on the
+   right; nothing changes sides between states or modes. The mode is the
+   first group in the (+) menu, not a chip in the row.
    The groups come from the markup (templates/index.html):
-     .composer-lead            (+), the mode selector (App.runMode)
+     .composer-lead            (+) with its menu (mode, files, options)
      .composer-models          who answers, one chip per mode: in Agent the
                                chat model with its comparison models (one
                                menu), else the comparison or consensus
@@ -88,16 +89,14 @@
   margin: 0;
 }
 
-.run-mode-control { display: inline-flex; align-items: center; flex: 0 0 auto; min-width: 0; max-width: 140px; }
 .agent-model-picker { display: flex; justify-content: flex-start; min-width: 0; max-width: 230px; flex: 1 1 auto; }
 .agent-effort-control { display: flex; min-width: 0; flex: 0 0 auto; }
 .consensus-model { min-width: 0; margin: 0; }
-:is(.run-mode-control, .agent-model-controls, .agent-effort-control, .consensus-model)[hidden] { display: none; }
+:is(.agent-model-controls, .agent-effort-control, .consensus-model)[hidden] { display: none; }
 
 /* ---- One look for every picker in the row -------------------------------
-   The mode, the Agent model, reasoning and the models chip are the same kind
-   of control: a quiet label with a chevron that fills on hover. The mode is
-   the first choice, so it keeps a light fill at rest. */
+   The Agent model, reasoning and the models chip are the same kind of
+   control: a quiet label with a chevron that fills on hover. */
 .chat-input-container :is(.composer-lead, .composer-models) .select-wrapper { position: relative; min-width: 0; max-width: 100%; }
 .chat-input-container :is(.composer-lead, .composer-models) .select-wrapper::after { display: none; }
 .chat-input-container :is(.composer-lead, .composer-models) .native-model-picker {
@@ -114,7 +113,6 @@
 .chat-input-container :is(.composer-lead, .composer-models) .model-picker-display-text {
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.chat-input-container .run-mode-control .model-picker-display { background: var(--raise); }
 .chat-input-container .agent-model-picker .model-picker-display { color: var(--ink); }
 /* Agent: one chip for the chat model and the models it is compared with,
    "Claude Opus 5.5 +6". The name gives way, the count stays whole. */
@@ -133,26 +131,24 @@
 }
 .chat-input-container :is(.composer-lead, .composer-models) .model-picker-display:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 .chat-input-container :is(.composer-lead, .composer-models) .model-picker-display:disabled { opacity: .6; cursor: default; }
-.chat-input-container .run-mode-control .model-picker-display:disabled { background: transparent; }
-.chat-input-container .run-mode-control .model-picker-display:disabled::after { display: none; }
 
 /* (+) and Send are the two round ends of the row, as tall as a picker. */
 .chat-input-container .attach-trigger,
 .chat-input-container .input-action-btn-primary { width: 36px; height: 36px; min-width: 36px; min-height: 36px; border-radius: 50%; }
 
-/* The mode and Agent menus: a short list, one line of help per choice. The
-   models menu keeps its own panel (model rows, presets). */
-.chat-input-container :is(.run-mode-control, .agent-model-controls) .model-picker-menu {
+/* The Agent menus: a short list, one line of help per choice. The models
+   menu keeps its own panel (model rows, presets). */
+.chat-input-container .agent-model-controls .model-picker-menu {
   border: 1px solid var(--line); background: var(--well); border-radius: var(--radius-md); padding: 6px; box-shadow: var(--lift);
   overscroll-behavior: contain; scrollbar-width: thin; z-index: 1600;
 }
-.chat-input-container :is(.run-mode-control, .agent-model-controls) .model-picker-option {
+.chat-input-container .agent-model-controls .model-picker-option {
   display: flex; flex-wrap: wrap; gap: 3px; min-height: 42px; padding: 10px 30px 10px 11px;
   color: var(--ink); font-size: var(--font-size-ui); line-height: 1.4; border-radius: var(--radius-xs);
 }
-.chat-input-container :is(.run-mode-control, .agent-model-controls) .model-picker-option:is(:hover, .is-selected) { background: var(--raise); }
-.chat-input-container :is(.run-mode-control, .agent-model-controls) .model-picker-option:focus-visible { outline: var(--focus-ring); outline-offset: -2px; background: var(--raise); }
-.chat-input-container :is(.run-mode-control, .agent-model-controls) .model-picker-option-label { white-space: normal; overflow-wrap: anywhere; }
+.chat-input-container .agent-model-controls .model-picker-option:is(:hover, .is-selected) { background: var(--raise); }
+.chat-input-container .agent-model-controls .model-picker-option:focus-visible { outline: var(--focus-ring); outline-offset: -2px; background: var(--raise); }
+.chat-input-container .agent-model-controls .model-picker-option-label { white-space: normal; overflow-wrap: anywhere; }
 .model-picker-option-description { flex-basis: 100%; font-size: var(--font-size-xs); color: var(--ink-3); font-weight: 400; line-height: 1.5; }
 /* Rows that lead to another level (sections, Custom, a provider) and the
    way back keep name and chevron on one line; the chevron marks the end. */
@@ -235,7 +231,6 @@
   }
   body.composer-collapsed:not(.is-hero, .direct-comparison-preview) .chat-input-container > :is(.composer-run-notice, .agent-google-chips),
   body.composer-collapsed:not(.is-hero, .direct-comparison-preview) .composer-models,
-  body.composer-collapsed:not(.is-hero, .direct-comparison-preview) #runModeControl,
   body.composer-collapsed:not(.is-hero, .direct-comparison-preview) .demo-chip {
     display: none;
   }
@@ -341,6 +336,27 @@
 .chat-input-container .attach-menu .attach-menu-switch .slider::before { width: 16px; height: 16px; left: 1px; bottom: 1px; }
 .chat-input-container .attach-menu .attach-menu-switch input:checked + .slider::before { transform: translateX(14px); }
 .chat-input-container .attach-menu .attach-menu-divider { height: 1px; margin: 5px 10px; background: var(--line); }
+
+/* The mode: three rows like the others, the current one ends in a check.
+   A disabled row keeps its place and says why under its name. */
+.chat-input-container .attach-menu .attach-menu-modes { display: flex; flex-direction: column; }
+.chat-input-container .attach-menu .attach-menu-modes[hidden],
+.chat-input-container .attach-menu .attach-menu-modes[hidden] + .attach-menu-mode-divider { display: none; }
+.chat-input-container .attach-menu .attach-menu-mode > svg { stroke-width: 1.5; }
+.chat-input-container .attach-menu .attach-menu-mode[aria-pressed="true"] > svg { color: var(--ink); }
+.chat-input-container .attach-menu .attach-menu-mode:disabled { cursor: default; }
+.chat-input-container .attach-menu .attach-menu-mode:disabled :is(.attach-menu-label, svg) { color: var(--ink-3); }
+.chat-input-container .attach-menu .attach-menu-mode:disabled:hover { background: transparent; }
+.chat-input-container .attach-menu .attach-menu-badge {
+  margin-left: 6px; color: var(--ink-3); font-size: var(--font-size-micro, 11px); font-weight: 500;
+  letter-spacing: var(--tracking-wide, .02em); text-transform: uppercase;
+}
+.chat-input-container .attach-menu .attach-menu-check { grid-column: 3; width: 14px; height: 14px; }
+.chat-input-container .attach-menu .attach-menu-mode[aria-pressed="true"] .attach-menu-check {
+  background: var(--ink); forced-color-adjust: none;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.5l3 3 6-7' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.5l3 3 6-7' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
+}
 @media (pointer: coarse) {
   .chat-input-container .attach-menu :is(.attach-menu-item, .attach-menu-toggle) { min-height: 48px; }
 }
@@ -352,7 +368,7 @@
    the full menu: there the bar shows icons only. */
 @media (min-width: 701px) {
   .input-section:has(> .composer-mode-bar:not([hidden])) .chat-input-container .attach-menu
-    :is(#agentReasoningMenuOption, #agentComparisonMenuOption, .attach-menu-toggle, .attach-menu-divider) {
+    :is(#agentReasoningMenuOption, #agentComparisonMenuOption, .attach-menu-toggle, .attach-menu-divider:not(.attach-menu-mode-divider)) {
     display: none;
   }
   .input-section:has(> .composer-mode-bar:not([hidden]) .composer-google) .chat-input-container .attach-menu .agent-google-menu-option {

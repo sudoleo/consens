@@ -187,7 +187,7 @@ def test_j02_stop_reload_recover_preserves_partial_and_charges_only_started_step
     j = journey
     j.control('seed', {'gate': True})
     j.open()
-    j.page.locator('#runModeControl .model-picker-display').click()
+    j.page.locator('#attachTrigger').click()
     j.page.locator('#runModeControl [data-value="agent"]').click()
     j.page.fill('#questionInput', 'JOURNEY_STOP ' + j.uid)
     with j.page.expect_request(lambda r: r.url == j.base + '/agent' and r.method == 'POST') as started:
@@ -317,7 +317,7 @@ def test_j05_delete_during_agent_work_fences_late_writes_and_owner_switch(journe
         memory = j.request('PUT', '/api/my/memory', {'enabled': True, 'role': 'Original owner memory', 'expected_revision': revision})
         assert memory.ok, memory.text()
         j.open()
-        j.page.locator('#runModeControl .model-picker-display').click()
+        j.page.locator('#attachTrigger').click()
         j.page.locator('#runModeControl [data-value="agent"]').click()
         j.page.fill('#questionInput', 'JOURNEY_DELETE ' + j.uid)
         j.page.click('#sendButton')

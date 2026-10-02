@@ -66,9 +66,9 @@ def test_preview_toggle_layout_and_real_result(browser, phase4_server, width, he
         assert page.evaluate("document.body.classList.contains('is-hero')")
         # Keyboard activation works and reduced motion makes the switch instant.
         page.emulate_media(reduced_motion='reduce')
-        page.locator('#runModeControl .model-picker-display').focus()
-        page.keyboard.press('Space')
-        page.keyboard.press('Home')
+        page.locator('#attachTrigger').focus()
+        page.keyboard.press('Enter')
+        page.locator('#runModeControl [data-value="compare"]').focus()
         page.keyboard.press('Enter')
         expect(page.locator('#runModeSelect')).to_have_value('compare')
         expect(intro).to_be_visible()

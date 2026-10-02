@@ -274,11 +274,70 @@
     return "Ready for a grouped model run.";
   }
 
-  // The one mode selector (composer) and its mirror in Settings. Both are
-  // views of App.runMode: options the open chat cannot switch to stay
-  // visible but disabled with the reason, Agent only for accounts with access.
-  // renderComposerMode runs on every run status tick; the selector only
-  // changes when the mode, the open chat's family or the account changes.
+  // The one mode selector (the first group in the (+) menu) and its mirror in
+  // Settings. Both are views of App.runMode: options the open chat cannot
+  // switch to stay visible but disabled with the reason, Agent only for
+  // accounts with access. renderComposerMode runs on every run status tick;
+  // the selector only changes when the mode, the open chat's family or the
+  // account changes.
+  const MODE_ORDER = ["agent", "consensus", "compare"];
+  const MODE_ICONS = {
+    agent: "M12 3.5 13.9 10l6.6 2-6.6 2L12 20.5 10.1 14l-6.6-2 6.6-2Z",
+    consensus: "M9 6.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 1 0 0-11ZM15 6.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 1 0 0-11Z",
+    compare: "M4 5h6v14H4zM14 5h6v14h-6z",
+  };
+  function renderModeRows(group, select, mode, available) {
+    let rows = group.querySelectorAll(".attach-menu-mode");
+    if (!rows.length) {
+      for (const value of MODE_ORDER) {
+        const row = document.createElement("button");
+        row.type = "button";
+        row.className = "attach-menu-item attach-menu-mode";
+        row.dataset.value = value;
+        const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+        icon.setAttribute("viewBox", "0 0 24 24");
+        icon.setAttribute("aria-hidden", "true");
+        const path = document.createElementNS(icon.namespaceURI, "path");
+        path.setAttribute("d", MODE_ICONS[value]);
+        icon.append(path);
+        const text = document.createElement("span");
+        text.className = "attach-menu-text";
+        const label = document.createElement("span");
+        label.className = "attach-menu-label";
+        const hint = document.createElement("span");
+        hint.className = "attach-menu-hint";
+        text.append(label, hint);
+        const check = document.createElement("span");
+        check.className = "attach-menu-check";
+        check.setAttribute("aria-hidden", "true");
+        row.append(icon, text, check);
+        row.addEventListener("click", () => {
+          window.App.closeAttachMenu?.();
+          onRunModeChoice(value, "composer");
+        });
+        group.append(row);
+      }
+      rows = group.querySelectorAll(".attach-menu-mode");
+    }
+    for (const row of rows) {
+      const value = row.dataset.value;
+      const rule = available[value];
+      const copy = window.App.runMode.copy(value);
+      row.hidden = value === "agent" && !rule.visible;
+      row.disabled = !rule.enabled;
+      row.setAttribute("aria-pressed", String(value === mode));
+      const label = row.querySelector(".attach-menu-label");
+      label.textContent = copy.label;
+      if (copy.badge) {
+        const badge = document.createElement("span");
+        badge.className = "attach-menu-badge";
+        badge.textContent = copy.badge;
+        label.append(badge);
+      }
+      row.querySelector(".attach-menu-hint").textContent = rule.enabled ? copy.description : rule.reason;
+    }
+    select.title = `Mode: ${window.App.runMode.copy(mode).label}`;
+  }
   let runModeSignature = "";
   function renderRunModeControl() {
     const mode = runMode();
@@ -291,8 +350,8 @@
       select?.value, setting?.value]);
     if (signature === runModeSignature) return;
     // An open Agent chat offers nothing to switch to (its family is fixed on
-    // the server), so the selector steps aside instead of costing the single
-    // line composer its width. Settings still holds the choice for new chats.
+    // the server), so the group steps aside instead of three dead rows.
+    // Settings still holds the choice for new chats.
     const control = document.getElementById("runModeControl");
     if (control) control.hidden = !available.compare.enabled && !available.consensus.enabled;
     if (select) {
@@ -314,8 +373,8 @@
         select.appendChild(option);
       }
       if (select.value !== mode) select.value = mode;
-      select.title = `Mode: ${window.App.runMode.copy(mode).label}`;
-      window.App.initCustomModelPicker?.(select, { menuWidth: 290 });
+      if (control) renderModeRows(control, select, mode, available);
+      // The models chip names who answers, and that changes with the mode.
       window.syncCustomModelPickers?.();
     }
     // Settings holds the choice for new chats, so no per-chat locks apply.
@@ -365,37 +424,27 @@
     }
     const trigger = document.getElementById("attachTrigger");
     if (trigger) {
-      trigger.title = beta ? "Chat options" : "Add attachment";
+      // The mode lives in this menu unless an open Agent chat has fixed it.
+      const modeShown = document.getElementById("runModeControl")?.hidden === false;
+      trigger.title = modeShown ? "Mode, files and options" : beta ? "Chat options" : "Add attachment";
       trigger.setAttribute("aria-label", trigger.title);
     }
+    // Check contradictions is a standing setting (Settings → Runs), not a
+    // per-question tool: it starts on and shows its result at the
+    // contradiction under the answer (agent-review.js), not as a switch in
+    // the composer that promises more than the run shows.
     const sourcesEnabled = window.App.isSourceCheckEnabled();
-    const sourcesTitle = enabled
-      ? `Check contradictions ${sourcesEnabled ? "on" : "off"} · Check contradictions against existing sources for the next ${beta ? "chat message" : "consensus"}`
-      : "Compare has no consensus to check. Choose Consensus or Agent.";
-    ["sourceCheckMenuSwitch", "sourceCheckSwitch"].forEach(id => {
-      const control = document.getElementById(id);
-      if (control) {
-        control.checked = sourcesEnabled;
-        control.disabled = !enabled;
-        control.title = sourcesTitle;
-        const label = control.closest("label");
-        if (label) label.title = sourcesTitle;
-      }
-    });
-    // Tools follow the mode: Compare has nothing to check, so the (+) menu
-    // and the toolbar drop the control instead of showing a dead switch.
-    const menuSourcesRow = document.getElementById("sourceCheckMenuSwitch")?.closest("label");
-    if (menuSourcesRow) menuSourcesRow.hidden = !enabled;
+    const sourceSetting = document.getElementById("sourceCheckSwitch");
+    if (sourceSetting) {
+      sourceSetting.checked = sourcesEnabled;
+      sourceSetting.disabled = !enabled;
+      const title = enabled ? "" : "Compare has no consensus to check. Choose Consensus or Agent.";
+      sourceSetting.title = title;
+      const label = sourceSetting.closest("label");
+      if (label) label.title = title;
+    }
     const bar = document.getElementById("composerModeBar");
     if (!bar) return;
-    const sourcesButton = document.getElementById("composerSourcesToggle");
-    if (sourcesButton) {
-      sourcesButton.hidden = !enabled;
-      sourcesButton.setAttribute("aria-checked", String(sourcesEnabled));
-      sourcesButton.disabled = !enabled;
-      sourcesButton.title = sourcesTitle;
-      document.getElementById("composerSourcesState").textContent = sourcesEnabled ? "On" : "Off";
-    }
     // One rule for every mode and width: the tools belong to the start
     // screen (the hero, or the Compare start); in a chat they live in the
     // (+) menu. A docked bar only carries the status of a direct comparison
@@ -791,13 +840,8 @@
     window.App.runMode.set(this.value, { source: "settings" });
   });
   window.addEventListener("consensio:run-mode-change", onRunModeChange);
-  document.getElementById("composerSourcesToggle")?.addEventListener("click", function () {
-    setSourceCheckEnabled(!checkSources);
-  });
-  ["sourceCheckMenuSwitch", "sourceCheckSwitch"].forEach(id => {
-    document.getElementById(id)?.addEventListener("change", function () {
-      setSourceCheckEnabled(this.checked);
-    });
+  document.getElementById("sourceCheckSwitch")?.addEventListener("change", function () {
+    setSourceCheckEnabled(this.checked);
   });
   // Reuse the original controls, including their plan checks and file picker.
   document.getElementById("composerReasoningToggle")?.addEventListener("click", function (event) {

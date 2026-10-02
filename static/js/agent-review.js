@@ -264,12 +264,12 @@
     panel.append(sources.length ? list : node('p', 'agent-review-note', 'No source URLs were supplied for this answer.'));
     return panel;
   }
-  function evidenceButton(section, label, count) {
+  function evidenceButton(section, label, count, note = '') {
     const button = node('button', 'consensus-tab agent-evidence-link');
     button.type = 'button';
     button.dataset.section = section;
     button.setAttribute('aria-controls', 'modelAnswerReader');
-    button.setAttribute('aria-label', count === null ? label : `${label} ${count}`);
+    button.setAttribute('aria-label', [count === null ? label : `${label} ${count}`, note].filter(Boolean).join(', '));
     const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     icon.classList.add('agent-evidence-icon');
     icon.setAttribute('viewBox', '0 0 24 24');
@@ -283,6 +283,8 @@
     icon.append(path);
     button.append(icon, node('span', 'consensus-tab-label', label));
     if (count !== null) button.append(node('span', 'consensus-tab-count', String(count)));
+    // The source check speaks where the contradictions are, not in a switch.
+    if (note) button.append(node('span', 'agent-evidence-note', note));
     return button;
   }
   // The first time a live answer receives its marks they stroke on in reading
@@ -495,7 +497,11 @@
       context.links = () => {
         const differences = check?.differences_data?.differences || [];
         const contradictions = differences.filter(d => d.type === "contradiction").length;
-        return [["differences", contradictions ? "Contradictions" : differences.length ? "Differences" : "Review", contradictions || differences.length || null],
+        const verification = check?.source_verification;
+        const bound = Boolean(verification) && verification.answer_version === review.answer_hash && verification.run_id === comparison.id
+          && verification.basis_hash === comparison.basis_hash;
+        const note = contradictions && bound ? App.sourceVerification?.brief?.(verification) || '' : '';
+        return [["differences", contradictions ? "Contradictions" : differences.length ? "Differences" : "Review", contradictions || differences.length || null, note],
           ["answers", "Answers", answers.length], ["sources", "Sources", sources.length]];
       };
       return context;
@@ -512,8 +518,8 @@
       host.querySelector(':scope > .agent-agreement')?.remove();
       const agreement = agreementNode(context.check, context.modelCount);
       if (agreement) host.append(agreement);
-      for (const [section, label, count] of context.links()) {
-        const button = evidenceButton(section, label, count);
+      for (const [section, label, count, note] of context.links()) {
+        const button = evidenceButton(section, label, count, note);
         button.addEventListener("click", () => App.answerReader?.openContext(context, { section, trigger: button }));
         tabs.append(button);
       }

@@ -47,7 +47,7 @@ class DemoLoginPromptContractTests(unittest.TestCase):
         demo_module = (ROOT / "static" / "demo.js").read_text(encoding="utf-8")
 
         self.assertIn("agreement: {", demo_module)
-        self.assertIn("score: 45,", demo_module)
+        self.assertIn("score: 43,", demo_module)
 
     def test_every_checkable_demo_passage_has_a_coverage_claim(self):
         demo_module = (ROOT / "static" / "demo.js").read_text(encoding="utf-8")
@@ -55,24 +55,24 @@ class DemoLoginPromptContractTests(unittest.TestCase):
             "    differences: [", 1
         )[0]
         anchors = (
-            "Consensus: send it after two fixes",
-            "All six models read the draft as close to sendable",
-            "Nothing in the draft is impolite",
-            "The risk is in three sentences",
-            "The new date belongs in the first line",
-            "She is scanning for a date.",
-            "Send it today, not on the 15th",
-            "Say what Anna actually gets on the 15th",
-            "Put it in writing, so she can forward it",
-            "Name the day you will confirm the 29th",
-            "The closing line splits the models down the middle",
-            "A few things came up on our side is the weakest sentence in the draft",
-            "The apology itself is not disputed",
-            "Hi Anna, the launch moves to the 29th",
-            "One clause on the cause.",
-            "What you will have on the 15th is the checkout flow on staging",
-            "I will confirm the 29th by the 22nd at the latest.",
-            "Your closing line.",
+            "Consensus: probably yes, with a few radiators changed",
+            "All six models think a heat pump can heat this house",
+            "The walls were insulated in 2015",
+            "What none of them can tell you from here",
+            "Get a room-by-room heat-loss calculation",
+            "Test it this winter",
+            "Rooms that stay warm keep their radiators",
+            "Original 1970s radiators are often larger than the room needs today",
+            "Have the heat pump sized from the calculation",
+            "The models split on the target flow temperature",
+            "They also disagree on what that costs you",
+            "Keeping the gas boiler as a backup for the coldest days divides them as well",
+            "Whether to start with the survey or with the winter test",
+            "Heat-loss survey: 140 m² at roughly 8 kW.",
+            "Test week at 50 °C",
+            "Replace those two radiators, or more.",
+            "Heat pump sized at 8 to 9 kW.",
+            "Target flow temperature.",
             "Both bracketed parts are the ones the models could not settle for you",
         )
         for anchor in anchors:

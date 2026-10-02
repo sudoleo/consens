@@ -153,23 +153,23 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
   height: 16px;
 }
 
+/* One line under the account: the legal pages as quiet words on the left,
+   feedback and the source as two equal glyphs on the right. */
 .sidebar-footer-meta {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   justify-content: flex-start;
   text-align: left;
-  /* Quiet links set apart by space alone: no separators that could end up
-     at the start of a wrapped line. */
-  gap: 2px 14px;
-  padding: 0 4px;
+  gap: 12px;
+  min-height: 28px;
+  padding: 0 0 0 6px;
   color: var(--ink-3);
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-micro);
   line-height: 1.6;
 }
 
-.sidebar-footer-meta > .sidebar-footer-link,
-.sidebar-footer-meta > .feedback-button {
+.sidebar-footer-meta > .sidebar-footer-link {
   padding: 0;
   border: 0;
   background: none;
@@ -177,6 +177,7 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
   font: inherit;
   white-space: nowrap;
   cursor: pointer;
+  transition: color var(--dur-press) var(--ease-standard);
 }
 
 .sidebar-footer-meta > .sidebar-footer-link:hover {
@@ -184,9 +185,48 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
   text-decoration: none;
 }
 
-.sidebar-footer-meta > .sidebar-footer-repo {
+.sidebar-footer-icons {
+  display: flex;
+  align-items: center;
+  gap: 2px;
   margin-left: auto;
-  padding: 2px;
+}
+
+.sidebar-footer-meta .sidebar-footer-icon {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-2xs);
+  background: none;
+  color: var(--ink-3);
+  cursor: pointer;
+  transition: background-color var(--dur-press) var(--ease-standard), color var(--dur-press) var(--ease-standard);
+}
+
+.sidebar-footer-meta .sidebar-footer-icon:hover {
+  background: var(--raise);
+  color: var(--ink);
+}
+
+.sidebar-footer-meta .sidebar-footer-icon:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 1px;
+}
+
+.sidebar-footer-meta .sidebar-footer-icon svg {
+  width: 14px;
+  height: 14px;
+  opacity: 1;
+}
+
+.sidebar-footer-meta .feedback-button svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.3;
+  stroke-linejoin: round;
 }
 
 /* The account row: initial, address over plan, then allowance and settings
@@ -760,7 +800,8 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
   outline-offset: 1px;
 }
 
-/* A glyph, not a gauge: 20 px, 2 px stroke, nothing inside. */
+/* A glyph, not a gauge: 20 px, a fine ring with the rest of the day as a
+   pie inside. An open arc on its own read as a loading spinner. */
 .quota-ring {
   width: 20px;
   height: 20px;
@@ -3814,6 +3855,16 @@ a.consensus-source-title:hover {
 body:not(.is-hero) .chat-input-container .attach-menu {
   top: auto;
   bottom: calc(100% + 8px);
+}
+
+/* On narrow screens the fixed composer and the fixed 56px header share the
+   viewport. Since the mode leads the menu (2026-10-02) the menu is taller,
+   and on a short phone it ran up under the header, which covered its first
+   rows. It now ends below the header and scrolls instead. */
+@media (max-width: 1099px) {
+  body:not(.is-hero) .chat-input-container .attach-menu {
+    max-height: max(120px, min(60vh, 420px, calc(100dvh - var(--thread-composer-height, 154px) - 72px)));
+  }
 }
 
 body:not(.is-hero) .consensus-model .select-wrapper .model-picker-menu {

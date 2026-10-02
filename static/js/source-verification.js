@@ -942,22 +942,42 @@
     return verification.runtime?.fallback_used === true && typeof model === 'string' && model.trim()
       ? element('p', 'contradiction-source-context', `Source-check model: ${model.trim().slice(0, 160)} (fallback)`) : null;
   }
-  function contradictionResult(item, verification, evidenceOpen = false) {
-    const section = element('section', 'contradiction-source-check');
-    section.dataset.contradictionId = item.contradiction_id;
-    section.dataset.checkState = item.state || 'unavailable';
+  // What one checked contradiction came to: settled by its sources
+  // (`resolved`), read but not settled, or no reliable conclusion.
+  function contradictionOutcome(item, verification) {
     const position = (item.positions || []).find(pos => pos.id === item.supported_position_id);
     const positionName = position ? position.summary || (position.models || []).join(', ') : '';
-    const validationErrors = (Array.isArray(item.validation_errors) ? item.validation_errors : [])
-      .filter(error => error && typeof error.code === 'string').slice(0, 12);
-    const rejected = validationErrors.length > 0;
-    if (isRejectedContradictionCheck(item)) section.dataset.checkState = 'unavailable';
     const evidence = (Array.isArray(item.evidence) ? item.evidence : []).filter(proof => proof?.quote && proof.source_id
       && (verification.sources || []).some(source => source.id === proof.source_id));
     const inconclusive = isRejectedContradictionCheck(item);
     const supported = item.checked && !inconclusive && evidence.length > 0;
-    const resolved = supported && !inconclusive && ['supports_position', 'conditions_explain'].includes(item.verdict)
+    const resolved = supported && ['supports_position', 'conditions_explain'].includes(item.verdict)
       && (item.verdict !== 'supports_position' || Boolean(positionName));
+    return {positionName, evidence, inconclusive, supported, resolved};
+  }
+  // One short phrase for the Contradictions link under an Agent answer, so
+  // the check is seen where the contradictions are: still reading, how many
+  // its sources settled, or that they did not. Empty when nothing was
+  // checked (off, nothing checkable, failed); the reader says why.
+  function brief(verification) {
+    if (!isContradictionCheck(verification)) return '';
+    if (isPending(verification)) return 'checking sources';
+    if (!['complete', 'partial'].includes(verification.status)) return '';
+    const outcomes = (verification.findings || []).filter(Boolean)
+      .map(item => contradictionOutcome(item, verification)).filter(outcome => outcome.supported);
+    if (!outcomes.length) return '';
+    const settled = outcomes.filter(outcome => outcome.resolved).length;
+    return settled ? `${settled} settled by sources` : 'sources inconclusive';
+  }
+  function contradictionResult(item, verification, evidenceOpen = false) {
+    const section = element('section', 'contradiction-source-check');
+    section.dataset.contradictionId = item.contradiction_id;
+    section.dataset.checkState = item.state || 'unavailable';
+    const validationErrors = (Array.isArray(item.validation_errors) ? item.validation_errors : [])
+      .filter(error => error && typeof error.code === 'string').slice(0, 12);
+    const rejected = validationErrors.length > 0;
+    if (isRejectedContradictionCheck(item)) section.dataset.checkState = 'unavailable';
+    const {positionName, evidence, inconclusive, supported, resolved} = contradictionOutcome(item, verification);
     sourceCheckHeading(section,
       inconclusive ? 'No conclusion' : item.state === 'omitted' ? 'Not checked'
         : item.state === 'pending' ? 'In progress' : !item.checked ? 'Unavailable'
@@ -1257,7 +1277,7 @@
     begin();
     return stop;
   }
-  window.App.sourceVerification = Object.freeze({ render: renderSafe, renderCurrent, clear, openResults, applySourceList, getCitationCheck, watch, observe, refreshDifferences, bindDifferenceCard });
+  window.App.sourceVerification = Object.freeze({ render: renderSafe, renderCurrent, clear, openResults, applySourceList, getCitationCheck, watch, observe, refreshDifferences, bindDifferenceCard, brief });
   document.addEventListener("DOMContentLoaded", () => {
     document.querySelectorAll("[data-source-verification]").forEach(root => {
       try {

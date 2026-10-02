@@ -105,7 +105,7 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       inklusive unbekannter/offener Messungen prüfen. Automatisiert durch
       `test_agent_runs.py`, `agent-chat.test.mjs` und
       `test_agent_chat_frontend.py` (Browser-APIs gemockt).
-      Agent zeigt in `.composer-models` genau EINEN Chip („Claude Opus 5.5
+      Agent zeigt in `.composer-models` genau EINEN Chip („<Chatmodell>
       +6“: Chatmodell + Zahl der Vergleichsmodelle, nie der Modusname); sein
       Menü öffnet mit „Agent“ (Modell, Reasoning) und „Compare with“
       (Presets/Custom, 2–6 Modelle). Agent-Modell darin per Maus/Tastatur
@@ -293,17 +293,18 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       numerische Score-Anzeige im aktuellen Consensus und in archivierten Turns
       aus; die qualitative Einordnung/Widerspruchswarnung bleibt sichtbar. Nach
       Reload bleibt die Auswahl erhalten.
-- [ ] EIN Moduswähler in der Composer-Zeile (Compare / Consensus / Agent · Beta)
-      bei 1440/390/320 px, hell und dunkel: jede Option mit einer Zeile
+- [ ] EIN Moduswähler als erste Gruppe im (+)-Menü (Agent · Beta / Consensus /
+      Compare, Haken am aktuellen) bei 1440/390/320 px, hell und dunkel: kein
+      Moduschip mehr in der Composer-Zeile; jede Option mit einer Zeile
       Erklärung, Compare und Consensus für alle Stufen, Agent nur mit
       Agent-Zugang. Settings → Runs → Mode zeigt dieselbe Wahl und bleibt
       synchron; die Wahl übersteht ein Neuladen und folgt in einem zweiten Tab.
       Kein Agent-Mode-Schalter mehr im (+)-Menü, in Settings oder unter dem
       Input. In einem offenen Consensus-Chat ist Agent deaktiviert („Available
-      in a new chat“); in einem Agent-Chat verschwindet der Wähler, „New chat“
-      bringt ihn zurück. Der Composer ist in allen drei Modi derselbe: (+) und
-      Modus links (auf dem Startbildschirm unter dem Feld, im Desktop-Chat vor
-      dem Feld), Modelle und Senden rechts; auch der Compare-Start mit den
+      in a new chat“); in einem Agent-Chat verschwindet die Modusgruppe aus dem
+      (+), „New chat“ bringt sie zurück. Der Composer ist in allen drei Modi
+      derselbe: (+) links (auf dem Startbildschirm unter dem Feld, im
+      Desktop-Chat vor dem Feld), Modelle und Senden rechts; auch der Compare-Start mit den
       leeren Antwortkarten zeigt ihn so, samt Werkzeugleiste. Der Modell-Chip
       sagt nur, wer antwortet („6 models“), nie „Compare“. Direkt nach dem Laden mit gespeicherter Agent-Wahl
       sendet nichts als Consensus, solange der Agent-Zugang noch lädt.
@@ -925,10 +926,13 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       [Zuverlässigkeitsaudit](agent-reliability-audit-2026-09-20.md).
 
 - [ ] Bottom-Bar vor und nach dem Senden bei 1440/390/320 px: vor dem Senden
-      zeigt der Moduswähler „Agent“, im offenen Agent-Chat tritt er zurück und
-      das Eingabefeld behält seine Breite.
-      „Check contradictions“ schaltet die Quellenprüfung für die nächste Nachricht;
-      ein laufender Run und Recovery behalten den eingefrorenen Wert.
+      zeigt das (+)-Menü „Agent“ mit Haken, im offenen Agent-Chat tritt die
+      Modusgruppe zurück und das Eingabefeld behält seine Breite.
+      „Check contradictions against sources“ gibt es nur noch unter Settings →
+      Runs; ein laufender Run und Recovery behalten den eingefrorenen Wert.
+      Unter einer Agent-Antwort mit geprüften Widersprüchen sagt der
+      Contradictions-Link, was die Quellen ergaben („· 1 settled by sources“,
+      „· checking sources“).
       „Reasoning“ öffnet per Klick/Enter die vorhandene Reasoning-Auswahl,
       „Attach“ öffnet wie das (+)-Menü die Dateiauswahl (Upload in den privaten
       Chatspeicher). Kein horizontaler Overflow.
@@ -1099,3 +1103,13 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
   und Hintergrundantworten bewegen die neue Ansicht nicht.
 - [ ] Mobil den Composer vergrößern/Viewport ändern und Reduced Motion aktivieren:
   letzte Antwort bleibt erreichbar, reduzierte Bewegung verzichtet auf Animation.
+
+### Todo-Runde 3 (2026-10-02)
+- [ ] Sidebar-Fuß in EINER Zeile: Imprint · Privacy · Terms links, Feedback-
+      und GitHub-Zeichen rechts; das Kontingent-Glyph ist ein Kuchen im Ring
+      (kein offener Bogen, der wie ein Ladekreisel aussieht).
+- [ ] Landing: H1 „Six models answer. See where they disagree.“ auf Desktop
+      zweizeilig; Composer-Mockups ohne Moduschip und ohne graue (+)-Fläche;
+      der Modell-Chip nennt das echte Default-Modell des Agents.
+- [ ] Demo und Landing erzählen die Wärmepumpen-Frage (1978, alte Heizkörper),
+      43/100, „55 °C“ bricht nie zwischen Zahl und Einheit um.

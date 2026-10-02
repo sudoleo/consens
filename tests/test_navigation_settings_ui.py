@@ -92,7 +92,7 @@ def test_demo_watch_nudge_and_dedicated_model_pulse_match_the_product_contract()
     watch = read("static/js/watch.js")
     leaderboard = read("static/js/model-pulse.js")
     pulse_page = read("templates/model-pulse.html")
-    assert "score: 45" in demo
+    assert "score: 43" in demo
     # Zwei Beschriftungen, eine sichtbar: in der Knopfzeile des Composers ist
     # auf dem Handy kein Platz fuer den ganzen Satz, sonst faellt der
     # Senden-Knopf in eine zweite Zeile.

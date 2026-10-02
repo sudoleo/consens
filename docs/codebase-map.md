@@ -277,16 +277,21 @@ Betreiberangaben werden als direkt lesbares HTML ausgegeben. Offene rechtliche
 Betriebsfragen und Quellen: `docs/legal-review-2026-09-05.md`. Die primäre
 Navigation beschränkt sich auf Product, Watches, Topics, Questions, Benchmark
 und die App-CTA; Model guide und About liegen im Footer. Seit 2026-10-02
-erzählt die Landingpage Agent als Standard: Hero „One agent does the work. Six
-models check it.“, Composer-Mockups wie in /app ((+), Moduswähler „Agent ⌄“,
-rechts Modell-Chip „Claude Opus 5.5 +6 ⌄“; Lippe `partials/composer_toolbar_mockup.html`
-mit Check contradictions · Reasoning Auto · Attach · Modell-Icons, ohne eigenes
-Fenster um Szene 01). Szene 02 (`#agent-mode`, `.lp-agent`) baut seit
+erzählt die Landingpage Agent als Standard: Hero seit der Todo-Runde 3
+(2026-10-02) „Six models answer. See where they disagree.“ (die alte Zeile
+„One agent does the work. Six models check it.“ hatte den Mechanismus
+verdreht: die sechs antworten, ein unbeteiligter Judge prüft). Composer-Mockups
+wie in /app: (+) ohne Fläche, KEIN Moduschip mehr (der Modus steckt im (+)),
+rechts der Modell-Chip `{{ agent_label }} +6 ⌄` – `pages.py::landing` rendert
+das echte Default-Modell des Agents (`agent_client.agent_model_label()`, ohne
+Netzzugriff), nie ein Schaufenster-Modell; Lippe
+`partials/composer_toolbar_mockup.html` mit Reasoning Auto · Attach ·
+Modell-Icons, ohne eigenes Fenster um Szene 01). Szene 02 (`#agent-mode`, `.lp-agent`) baut seit
 2026-10-02 einen Agent-Turn so nach, wie `agent-activity.js`/`agent-review.js`
 ihn zeichnen: Uhr „Working for …s“ → „Thought for 24s“, Agent-Notizen,
 „Comparing perspectives…“ mit sechs nacheinander fertig werdenden Modell-Icons,
 eine Live-Statuszeile (Writing answer… / Checking the answer…), gestreamte
-Antwort, danach Markierungen und Evidenzzeile („45/100 agreement ·
+Antwort, danach Markierungen und Evidenzzeile („43/100 agreement ·
 Contradictions 2 · Answers 6“); keine Ladebalken mehr. Treiber
 `landing-scenes.js` (`buildRunScene`, Standbild bei reduced motion = fertiger
 Turn über `render.still`). Szene 03 und Watch sprechen von „answer“ statt
@@ -336,12 +341,16 @@ eingefügt. Seit 2026-08-18 bleibt der Demo-Lauf bis zum Abschluss aller sechs
 Antworten sichtbar und führt danach über die getrennten Zustände „Writing the
 consensus" und „Checking for contradictions" zum Ergebnis; die lokale synchrone
 Widerspruchsauswertung hält ihren angekündigten Zustand dafür 1,1 Sekunden. Der
-Lauf hat drei strittige Stellen (kritischer Widerspruch zur
-Schlusszeile, kleiner zur Ursachenbenennung, eine abweichende Gewichtung zur
-Entschuldigung) und aktuell 19 Claims; der Score 45/100 ist nicht gegriffen, sondern
-die Rechnung aus `consensus_scoring.py` auf genau diese Daten. Quellen gibt es
-bewusst keine — auf „kann ich das so schreiben?" zitiert kein Modell eine
-Studie, und der Quellen-Tab blendet sich bei leerer Liste ohnehin aus. Der
+Szenario ist seit 2026-10-02 eine Waermepumpe im Haus von 1978 mit den
+Original-Heizkoerpern (vorher: eine Kundennachricht umformulieren, was Max
+„laecherlich“ fand). Der Lauf hat drei strittige Stellen (kritischer
+Widerspruch zur Vorlauftemperatur 55 °C vs. 45 °C, kleiner zum Gaskessel als
+Reserve, eine abweichende Gewichtung zur Reihenfolge Heizlastberechnung vs.
+Wintertest) und 19 Claims; der Score 43/100 ist nicht gegriffen, sondern die
+Rechnung aus `consensus_scoring.py` auf genau diese Daten. Zahl und Einheit
+(°C, kW, m²) trennt ein geschuetztes Leerzeichen, auch in Zitaten und Tests.
+Quellen gibt es bewusst keine – erfundene Belege waeren die schlechtere Demo,
+und der Quellen-Tab blendet sich bei leerer Liste ohnehin aus. Der
 Landing-Walkthrough (Szene 01–03) zeigt denselben Lauf, damit Hero, Demo und
 Mockups eine Geschichte erzählen. Die Demo aktiviert vor jedem Start das konfigurierte Balanced-Preset ueber
 `App.selectConsensusPreset('balanced')`, einschliesslich aller sechs Familien
@@ -362,7 +371,7 @@ sichtbar und setzt `body.single-agent-active.agent-demo-active` (auch ohne
 Agent-Zugang); die Demo rendert Aktivität über `App.agentActivity.render`, die
 Antwort per `renderMarkdownStream`, danach ein lokales `agent_review` mit
 einer Comparison und dem Demo-`differencesData` über `App.agentReview.render`
-(Marken, 45/100, Answers/Contradictions im Antwortleser). Die Aufrufe hinter
+(Marken, 43/100, Answers/Contradictions im Antwortleser). Die Aufrufe hinter
 dem Turn (sechs Vergleichsantworten, zwei Judges) reicht sie als ganzen
 Schnappschuss an `App.agentDelegation.demo({turnId, running, agents, usage})`:
 dieselben Modell-Icons neben der Uhr, dieselbe Aktivitätsleiste und derselbe
@@ -390,9 +399,9 @@ Judge-Signal ausdrücklich vom kontrollierten Accuracy-Benchmark.
 `/benchmark` verlinkt im Hero zurück auf diese zweite Perspektive. Die Consensus-Engine-Seite nutzt weiterhin die Ergebnisdarstellung
 aus `partials/product_result_mockup.html`.
 Eingabe-Mockups im Landing-Hero und der Ask-Szene verwenden zusätzlich
-`partials/composer_toolbar_mockup.html`: dieselbe 36-px-Leiste mit dem Modus
-(seit 2026-10-02 „Agent“), Check contradictions (On) an zweiter Stelle,
-Reasoning, Attach und sechs gestapelten Provider-Icons wie die App, seitlich
+`partials/composer_toolbar_mockup.html`: dieselbe 36-px-Leiste wie die App
+(Reasoning, Attach und sechs gestapelte Provider-Icons; Modus und Check
+contradictions stehen seit 2026-10-02 nicht mehr darin), seitlich
 12 px eingerückt. Der Input liegt wie in `/app` explizit vor der animierten
 Leiste, damit seine abgerundete Unterkante vollständig sichtbar bleibt.
 Im Hero ersetzt sie die separate Provider-Zeile. Die
@@ -2062,7 +2071,7 @@ sichtbar und werden bei der Auswahl abgelehnt. Der statische Katalog hält auße
 die separat geprüften Delegationsfähigkeiten; er begrenzt die Chatmodellauswahl nicht.
 
 Chatmodell und Vergleichsmodelle teilen sich seit 2026-10-01 EINEN Chip in
-`.composer-models` (`.agent-model-picker`, Label „Claude Opus 5.5 +6“: Name
+`.composer-models` (`.agent-model-picker`, Label „<Chatmodell> +6“: Name
 kürzt, `.model-picker-display-count` bleibt ganz). `renderControls` verknüpft
 `#consensusModelDropdown` über `App.linkModelPicker` in dessen Menü; der
 Consensus-Chip (`.consensus-model`) ist im Agent-Modus `hidden` und kehrt außerhalb
@@ -2120,9 +2129,8 @@ Der Composer ist derselbe wie in Compare und Consensus (`composer.css`), auch
 das (+) auf dem Startbildschirm und im eingeklappten Handy-Composer.
 `composer-collapse.js` lässt Pointer/Fokus auf Plus und dessen Menü direkt durch,
 ohne das Layout zwischen Touch und Klick zu verschieben. Ein neuer Chat zeigt die
-Startleiste wieder. In einem offenen Agent-Chat tritt der Moduswähler zurück
-(Compare und Consensus brauchen einen neuen Chat), die Quellenprüfungs-Controls
-bleiben aktiv. `Reasoning` (`#composerReasoningToggle`) öffnet über
+Startleiste wieder. In einem offenen Agent-Chat tritt die Modusgruppe im (+)
+zurück (Compare und Consensus brauchen einen neuen Chat). `Reasoning` (`#composerReasoningToggle`) öffnet über
 `openModelPicker(select, {secondary: true})` die bestehende Reasoning-Auswahl;
 `Attach` bleibt bis zur Unterstützung von Anhängen deaktiviert. Vergleichsicons
 und Compare-Picker verwenden weiterhin dieselbe Modellauswahl.
@@ -3655,54 +3663,62 @@ die `runMode` vorbelegen, setzen die Marke mit.
 - `availability()` liefert je Modus `enabled`/`reason`; der Wähler zeigt
   gesperrte Modi mit Grund statt sie zu verstecken, Agent nur mit Zugang. In
   einem offenen Agent-Chat gibt es nichts zu wählen: dort tritt `#runModeControl`
-  zurück (der einzeilige Composer braucht die Breite fürs Feld).
+  (die Modusgruppe im (+)-Menü) zurück, das (+) heißt dann „Chat options“.
 - Aenderungen laufen nur ueber `set(mode, {source})`, feuern
   `consensio:run-mode-change` und `app_run_mode_changed` (mode, previous, source).
 - Solange eine gespeicherte Agent-Wahl auf den Agent-Zugang des Kontos wartet,
   sperrt `updateQuestionInputAccess()` das Senden, statt still als Consensus
   zu senden. Scheitert `/user_status`, setzt `firebase.js` den Zugang auf
   „nicht erlaubt“; der Wähler zeigt dann sichtbar Consensus.
-- UI: `#runModeSelect` in der Composer-Zeile direkt rechts vom (+), in jedem
-  Modus an derselben Stelle (Custom-Picker), `#runModeSetting` in Settings →
-  Runs. Der eingeklappte Handy-Composer zeigt nur (+), Feld und Senden;
-  Antippen holt den Wähler an seinem Platz zurück.
-  Werkzeuge folgen dem Modus: Compare blendet die Quellenprüfung in Leiste und
-  (+)-Menue aus. Entfernt: `#composerAgentToggle`, `#agentModeMenuSwitch`,
+- UI seit 2026-10-02: der Modus ist die ERSTE Gruppe im (+)-Menü
+  (`#runModeControl.attach-menu-modes`): `agent-mode.js::renderModeRows` baut
+  drei Zeilen Agent · Consensus · Compare (`.attach-menu-mode[data-value]`,
+  `aria-pressed`, Haken am aktuellen, gesperrte mit Grund, Agent mit „Beta“);
+  ein Klick ruft `onRunModeChoice` und schließt das Menü. `#runModeSelect`
+  bleibt versteckt im Container als Wert dahinter (Settings-Spiegel
+  `#runModeSetting`, Tests, `change`-Listener). In der Composer-Zeile steht kein
+  Moduschip mehr; das (+) heißt „Mode, files and options“.
+  Compare sperrt die Quellenprüfung (Settings-Schalter disabled). Entfernt: `#composerAgentToggle`, `#agentModeMenuSwitch`,
   `#agentModeSwitch`, `#autoConsensusToggle`, `#chatExecutionMode`,
   `window.setAgentMode`, `window.isAgentModeEnabled`, `window.toggleAllResponses`.
 
 ### Composer: eine Anatomie für alle Modi
 `templates/index.html` gliedert die Composer-Zeile in drei Gruppen, für Compare,
-Consensus und Agent dieselben: `.composer-lead` ((+) `#attachTrigger` und der
-Moduswähler `#runModeControl`), `.composer-models` (wer antwortet: in Agent
+Consensus und Agent dieselben: `.composer-lead` ((+) `#attachTrigger`, darin
+seit 2026-10-02 der Modus), `.composer-models` (wer antwortet: in Agent
 nur `#agentModelControls`, sonst der Modell-Chip `#consensusModelDropdown`)
 und `.input-actions-container` (Demo, Senden). Wo sie
 stehen, entscheidet allein `static/css/composer.css`; `shell.css` gestaltet nur
 die Box. Zustände: Startbildschirm (Hero oder Compare-Start) und aufgeklappt =
-Feld oben, darunter (+) und Modus links, Modelle und Senden rechts; Desktop im
-Chat = eine Zeile [(+) Modus][Feld][Modelle][Senden], ab der zweiten Textzeile
+Feld oben, darunter (+) links, Modelle und Senden rechts; Desktop im
+Chat = eine Zeile [(+)][Feld][Modelle][Senden], ab der zweiten Textzeile
 (`.is-multiline`) wie der Startbildschirm; Handy = Modelle in eigener Zeile
-über [(+) Modus … Senden]; Handy eingeklappt = [(+)][Feld][Senden], Anhänge
-und Zitat bleiben darüber sichtbar. (+) und Modus stehen nie woanders, Senden
+über [(+) … Senden]; Handy eingeklappt = [(+)][Feld][Senden], Anhänge
+und Zitat bleiben darüber sichtbar. (+) steht nie woanders, Senden
 immer rechts außen. Alle Picker der Zeile teilen eine Optik (ruhiges Label mit
-Chevron, der Modus mit leichter Fläche). Das (+)-Menü `#attachMenu` hat seit
+Chevron). Das (+)-Menü `#attachMenu` hat seit
 2026-10-02 eine Zeilenanatomie (`composer.css`, „The (+) menu“): 16-px-Icon ·
 Label (höchstens eine kurze Zeile darunter) · Wert mit Chevron oder Schalter;
 „Add files“ ohne Stufen-Badge, Comparison models zeigt die Anzahl. Ab 701 px
-steht jede Einstellung nur einmal: Reasoning, Comparison models, Google data
-und Check contradictions schaltet die Leiste unter dem Feld
-(`#composerModeBar`), das (+)-Menü fügt dort nur Dateien hinzu; auf dem Handy
-(Leiste nur mit Icons) bleibt das Menü vollständig. Reasoning trägt überall
+steht jede Einstellung nur einmal: Reasoning, Comparison models und Google
+data schaltet die Leiste unter dem Feld (`#composerModeBar`), das (+)-Menü
+trägt dort den Modus und Dateien; auf dem Handy (Leiste nur mit Icons) bleibt
+das Menü vollständig. Reasoning trägt überall
 denselben Vierzack-Funken, Anhänge dieselbe Büroklammer. In der Leiste stehen
 Zustände („On“, „Auto“) in Labelgröße auf derselben Grundlinie, Anbieterzeichen
 ruhen einfarbig (Filter auf dem Badge, damit invertierte Mono-Logos im Dark
-Mode invertiert bleiben) und zeigen ihre Farbe bei Hover. Rechtliches (About,
-Terms, Privacy, Imprint, Feedback) steht seit 2026-10-02 in der
-Sidebar-Fußzeile (`.sidebar-footer-meta`, nur Abstände, keine Trenner), unter
-dem Feld nur noch der Hinweissatz; der Build-Commit steht im Tooltip des
-GitHub-Zeichens statt als Text. Pro Modus gibt es genau EINEN
+Mode invertiert bleiben) und zeigen ihre Farbe bei Hover. Rechtliches steht
+in der Sidebar-Fußzeile, seit der Todo-Runde 3 in EINER Zeile
+(`.sidebar-footer-meta`): links Imprint · Privacy · Terms als leise Wörter
+(Impressum direkt erreichbar), rechts `.sidebar-footer-icons` mit zwei gleich
+großen Zeichen, Feedback (`#feedbackButton`, Sprechblase) und GitHub (Build-Commit
+im Tooltip); About steht im Public-Footer. Das Kontingent-Glyph über ihr ist
+ein Kuchen (Tagesrest) in einem feinen Ring statt eines offenen Bogens, der wie
+ein Ladekreisel aussah (`#quotaRingArc` r=3.5, stroke-width 7, gleiche
+dashoffset-Logik in `sidebar-quota.js`). Unter dem Feld steht nur der
+Hinweissatz. Pro Modus gibt es genau EINEN
 Modell-Chip; er nennt nur, wer antwortet („6 models · Balanced“ mit Consensus,
-„6 models“ in Compare, „Claude Opus 5.5 +6“ in Agent: Chatmodell plus Zahl
+„6 models“ in Compare, „<Chatmodell> +6“ in Agent: Chatmodell plus Zahl
 der Vergleichsmodelle, deren Menü beide Abschnitte trägt), nie den Modusnamen.
 
 ### Consensus-Lauf (historisch „Agent Mode“)
@@ -6069,11 +6085,17 @@ Faustregel: Wenn ein neuer Agent durch deine Änderung an einer der obigen Stell
 **überrascht** würde, gehört es hier rein. Kurz halten — verifizierte Fakten statt
 Implementierungsdetails. Bei Detailtiefe lieber auf den Code verweisen.
 
-Der Composer-Schalter `#composerSourcesToggle` („Check contradictions“) steht
-direkt nach Agent Mode und speichert On/Off unter `localStorage.checkSources`
-(Default On). `agent-mode.js` synchronisiert ihn mit `#sourceCheckMenuSwitch`
-im (+)-Menü und `#sourceCheckSwitch` unter Settings → Runs. Alle drei Controls
-verwenden denselben Setter, unabhängig vom angezeigten Lauf. Englischsprachige
+Check contradictions ist seit der Todo-Runde 3 (2026-10-02) eine stehende
+Einstellung statt eines Werkzeugs im Composer: `#composerSourcesToggle` (Leiste)
+und `#sourceCheckMenuSwitch` ((+)-Menü) sind entfernt, es bleibt nur
+`#sourceCheckSwitch` unter Settings → Runs („Check contradictions against
+sources“), gespeichert unter `localStorage.checkSources` (Default On). Grund:
+Der Schalter stand prominent, steuerte aber nur den späteren Quellenabgleich,
+dessen Ergebnis hinter Klicks lag. Das Ergebnis rückt dafür an die Antwort:
+`App.sourceVerification.brief(snapshot)` liefert eine kurze Phrase („1 settled
+by sources“, „sources inconclusive“, „checking sources“, sonst leer), die
+`agent-review.js` als `.agent-evidence-note` an den Contradictions-Link unter
+einer Agent-Antwort hängt (nur bei gebundenem Snapshot). Englischsprachige
 Hilfetexte erklären „Check contradictions against existing sources“ und die
 Produktgrenze: keine vollständige Faktenprüfung des Consensus.
 Im bisherigen Consensus-Modus ohne Agent Mode sind alle drei Quellenprüfungs-Controls ausgeschaltet und gesperrt.

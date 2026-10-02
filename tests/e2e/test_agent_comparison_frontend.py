@@ -120,11 +120,9 @@ def test_mobile_agent_plus_menu_opens_tools_from_single_line_composer(browser, p
         expect(page.locator('#runModeSelect')).to_have_value('agent')
         # Agent Beta uploads into the private chat store, so upload stays available.
         expect(page.locator('#attachUploadOption')).to_be_enabled()
-        source_label = page.locator('label[for="sourceCheckMenuSwitch"]')
-        source_label.tap()
-        expect(page.locator('#sourceCheckMenuSwitch')).not_to_be_checked()
-        source_label.tap()
-        expect(page.locator('#sourceCheckMenuSwitch')).to_be_checked()
+        # The mode leads the menu; Check contradictions is a setting, not a row here.
+        expect(page.locator('#runModeControl [data-value="agent"]')).to_have_attribute('aria-pressed', 'true')
+        expect(page.locator('#sourceCheckMenuSwitch')).to_have_count(0)
         _snapshot(page, f'agent-plus-options-{width}')
         page.locator('#agentComparisonMenuOption').tap()
         expect(page.locator('#attachMenu')).not_to_be_visible()
@@ -248,10 +246,7 @@ def test_comparison_review_and_saved_projection(browser, phase4_server, width, d
         expect(page.locator('#composerAttachButton')).to_be_enabled()
         with page.expect_file_chooser():
             page.locator('#composerAttachButton').click()
-        expect(page.locator('#composerSourcesToggle')).to_have_attribute('aria-checked', 'true')
-        page.locator('#composerSourcesToggle').click()
-        expect(page.locator('#composerSourcesToggle')).to_have_attribute('aria-checked', 'false')
-        page.locator('#composerSourcesToggle').click()
+        expect(page.locator('#composerSourcesToggle')).to_have_count(0)
         page.locator('#composerReasoningToggle').focus()
         page.keyboard.press('Enter')
         expect(page.locator('.agent-model-picker .model-picker-menu')).to_be_visible()

@@ -6,17 +6,17 @@ import { loadScripts } from "./helpers/appWindow.mjs";
 // a saved bookmark was opened while a run keeps going -- it has to fall back
 // to the controls instead of reading a run that is not there.
 const BODY = `
-  <div class="select-wrapper" id="runModeControl"><select id="runModeSelect">
+  <button id="attachTrigger"></button>
+  <div id="runModeControl" class="attach-menu-modes"><select id="runModeSelect" hidden>
     <option value="compare">Compare</option><option value="consensus">Consensus</option></select></div>
   <select id="runModeSetting"><option value="compare">Compare</option><option value="consensus">Consensus</option></select>
   <div id="composerModeBar">
-    <button id="composerSourcesToggle"></button><span id="composerSourcesState"></span>
     <p id="composerModeDescription"></p><span id="composerModelIcons"></span>
     <p id="composerComparisonStatus"></p>
     <button id="composerReasoningToggle"></button><span id="composerReasoningState"></span>
     <button id="composerAttachButton"></button>
   </div>
-  <label><input id="sourceCheckMenuSwitch" type="checkbox"></label><input id="sourceCheckSwitch" type="checkbox">
+  <label><input id="sourceCheckSwitch" type="checkbox"></label>
   <label><input id="reasoningToggle" type="checkbox"></label><button id="attachUploadOption"></button>
   <button id="agentReasoningMenuOption" hidden></button><span id="agentReasoningMenuState"></span>
   <button id="agentComparisonMenuOption" hidden></button>
@@ -80,11 +80,8 @@ describe("agent mode panel projection", () => {
     expect(window.localStorage.getItem('runMode')).toBe('compare');
     expect(select.value).toBe('agent');
     expect(window.App.isSourceCheckEnabled()).toBe(true);
-    document.getElementById('composerSourcesToggle').click();
-    expect(window.App.isSourceCheckEnabled()).toBe(false);
-    expect(document.getElementById('sourceCheckMenuSwitch').checked).toBe(false);
-    document.getElementById('composerSourcesToggle').click();
-    expect(window.App.isSourceCheckEnabled()).toBe(true);
+    // An open Agent chat names its fixed mode on the (+) trigger only.
+    expect(document.getElementById('attachTrigger').title).toBe('Chat options');
     expect(document.getElementById('composerAttachButton').disabled).toBe(false);
     expect(document.getElementById('composerReasoningState').textContent).toBe('High');
     document.getElementById('composerReasoningToggle').click();
@@ -101,46 +98,46 @@ describe("agent mode panel projection", () => {
     window.App.renderComposerMode();
     expect(document.getElementById('runModeSelect').value).toBe('compare');
     expect(document.getElementById('runModeControl').hidden).toBe(false);
+    // The mode is the first group of the (+) menu: three rows, the current one pressed.
+    const rows = [...document.querySelectorAll('#runModeControl .attach-menu-mode')];
+    expect(rows.map(row => row.dataset.value)).toEqual(['agent', 'consensus', 'compare']);
+    expect(rows.find(row => row.dataset.value === 'compare').getAttribute('aria-pressed')).toBe('true');
+    expect(rows.find(row => row.dataset.value === 'agent').textContent).toContain('Beta');
+    expect(document.getElementById('attachTrigger').title).toBe('Mode, files and options');
+    rows.find(row => row.dataset.value === 'consensus').click();
+    expect(window.localStorage.getItem('runMode')).toBe('consensus');
+    expect(rows.find(row => row.dataset.value === 'consensus').getAttribute('aria-pressed')).toBe('true');
+    window.App.runMode.set('compare');
     expect(document.getElementById('composerAttachButton').disabled).toBe(false);
-    // Compare has nothing to check: the tool leaves the toolbar and (+) menu.
-    expect(document.getElementById('composerSourcesToggle').disabled).toBe(true);
-    expect(document.getElementById('composerSourcesToggle').hidden).toBe(true);
-    expect(document.getElementById('sourceCheckMenuSwitch').closest('label').hidden).toBe(true);
+    // Compare has nothing to check: the setting is locked off.
+    expect(document.getElementById('sourceCheckSwitch').disabled).toBe(true);
     expect(document.getElementById('agentReasoningMenuOption').hidden).toBe(true);
     expect(document.getElementById('reasoningToggle').closest('label').hidden).toBe(false);
     dom.window.close();
   });
 
-  it("persists source checks for agent runs and locks every control for direct comparisons", () => {
+  it("keeps Check contradictions as one setting that persists and is locked in Compare", () => {
     const { window, document, dom } = boot();
     window.updateAgentModeUI();
-    const toggle = document.getElementById('composerSourcesToggle');
+    const setting = document.getElementById('sourceCheckSwitch');
     expect(window.App.isSourceCheckEnabled()).toBe(true);
-    expect(toggle.getAttribute('aria-checked')).toBe('true');
-    toggle.click();
+    expect(setting.checked).toBe(true);
+    // No switch in the composer bar or the (+) menu any more.
+    expect(document.getElementById('composerSourcesToggle')).toBeNull();
+    expect(document.getElementById('sourceCheckMenuSwitch')).toBeNull();
+    setting.click();
     expect(window.App.isSourceCheckEnabled()).toBe(false);
     expect(window.localStorage.getItem('checkSources')).toBe('false');
-    expect(document.getElementById('sourceCheckMenuSwitch').checked).toBe(false);
-    expect(document.getElementById('sourceCheckSwitch').checked).toBe(false);
-    expect(document.getElementById('composerSourcesState').textContent).toBe('Off');
     window.App.runMode.set('compare');
     window.projectAgentModeRun({runId: 'old', config: {agentMode: false, checkSources: true}});
-    expect(toggle.getAttribute('aria-checked')).toBe('false');
-    document.getElementById('sourceCheckMenuSwitch').click();
-    expect(window.localStorage.getItem('checkSources')).toBe('false');
-    expect(toggle.disabled).toBe(true);
-    expect(document.getElementById('sourceCheckMenuSwitch').disabled).toBe(true);
-    expect(document.getElementById('sourceCheckSwitch').disabled).toBe(true);
+    expect(setting.disabled).toBe(true);
+    expect(setting.checked).toBe(false);
     window.App.runMode.set('consensus');
-    expect(toggle.disabled).toBe(false);
+    expect(setting.disabled).toBe(false);
     expect(window.App.isSourceCheckEnabled()).toBe(false);
-    document.getElementById('sourceCheckMenuSwitch').click();
+    setting.click();
     expect(window.localStorage.getItem('checkSources')).toBe('true');
-    expect(toggle.getAttribute('aria-checked')).toBe('true');
-    expect(document.getElementById('sourceCheckSwitch').checked).toBe(true);
-    document.getElementById('sourceCheckSwitch').click();
-    expect(toggle.getAttribute('aria-checked')).toBe('false');
-    expect(document.getElementById('sourceCheckMenuSwitch').checked).toBe(false);
+    expect(window.App.isSourceCheckEnabled()).toBe(true);
     dom.window.close();
   });
 
@@ -148,7 +145,6 @@ describe("agent mode panel projection", () => {
     const { window, document, dom } = boot({ mode: "compare", checkSources });
     window.updateAgentModeUI();
     expect(window.App.isSourceCheckEnabled()).toBe(false);
-    expect(document.getElementById('composerSourcesState').textContent).toBe('Off');
     const setting = document.getElementById('sourceCheckSwitch');
     expect(setting.checked).toBe(false);
     expect(setting.disabled).toBe(true);

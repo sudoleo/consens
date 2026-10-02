@@ -10,23 +10,22 @@ if (!Array.isArray(window.currentEvidenceSources)) {
 }
 
 /* === DEMO: Data & Utilities =======================================
-   Das Szenario ist bewusst kein Faktencheck: Wer eine heikle Nachricht
-   vor dem Absenden prueft, holt sich im echten Leben zwei, drei Meinungen
-   ein — und bekommt sie auch. Genau dort ist Uneinigkeit die Nachricht
-   und nicht der Fehler. Deshalb hat der Lauf drei strittige Stellen
-   (ein kritischer Widerspruch, ein kleiner, eine andere Gewichtung)
-   statt einer einzigen Randnotiz, und der Score liegt entsprechend im
-   mittleren Bereich. Quellenlisten gibt es hier bewusst nicht: Auf
-   "kann ich das so schreiben?" zitiert kein Modell eine Studie, und
-   erfundene Belege waeren die schlechtere Demo.
+   Das Szenario ist eine Entscheidung, fuer die man sich im echten Leben
+   eine zweite und dritte Meinung holt: eine Waermepumpe im Haus von 1978
+   mit den alten Heizkoerpern. Sie kostet fuenfstellig, die Fachleute sind
+   sich wirklich uneins, und die Uneinigkeit ist die Nachricht, nicht der
+   Fehler. Deshalb hat der Lauf drei strittige Stellen (ein kritischer
+   Widerspruch zur Vorlauftemperatur, ein kleiner zum Gaskessel als Reserve,
+   eine andere Gewichtung bei der Reihenfolge) statt einer Randnotiz, und
+   der Score liegt im mittleren Bereich. Quellenlisten gibt es bewusst
+   nicht: erfundene Belege waeren die schlechtere Demo.
    ================================================================= */
 const DEMO_SCENARIO_PROMPT =
-  "I have to tell a client that our launch slips by two weeks. Can I send this as it is?\n\n" +
-  "“Hi Anna, quick heads-up: we won’t make the 15th. We’re aiming for the 29th now. " +
-  "A few things came up on our side, sorry about that. Let me know if that’s a problem.”";
+  "Our house is from 1978 and still has the original radiators. Can a heat pump heat it properly, or do we need new radiators first?\n\n" +
+  "Detached, 140 m², walls insulated in 2015, original double glazing. The gas boiler currently runs at 70 °C.";
 
-// Der Entwurf selbst wird nicht getippt, sondern eingefuegt — so macht es
-// jeder, der eine fertige Nachricht pruefen laesst.
+// Die Hausdaten werden nicht getippt, sondern eingefuegt, so wie man sie
+// aus einer Notiz oder dem Energieausweis uebernimmt.
 const DEMO_TYPED_QUESTION = DEMO_SCENARIO_PROMPT.split("\n")[0];
 
 const DEMO_MODELS = ["OpenAI", "Mistral", "Anthropic", "Gemini", "DeepSeek", "Grok"];
@@ -36,135 +35,138 @@ const DEMO_DATA = {
   responses: {
     OpenAI:
 `<div class="ai-block">
-  <p>Short version: send it, but not in this order, and two of the four sentences are doing work you did not intend.</p>
-  <h4>What already works</h4>
+  <p>Short version: very likely yes, and probably without replacing most of the radiators.</p>
+  <h4>Why the house is a better candidate than it sounds</h4>
   <ul>
-    <li>You are telling her before the 15th, not on it. That is the part most people get wrong.</li>
-    <li>The tone is fine. Nothing here is rude, and nothing needs softening.</li>
+    <li>The 2015 wall insulation matters more than the 1978 build date. Heat loss, not age, decides whether a heat pump copes.</li>
+    <li>Radiators from the 1970s were sized for an uninsulated house, so many of them are now larger than the room needs.</li>
   </ul>
-  <h4>What I would change</h4>
+  <h4>What I would do</h4>
   <ul>
-    <li>Lead with the new date. Right now the 29th arrives in the second sentence, after the bad news; put it first so she can act on it immediately.</li>
-    <li>Replace “a few things came up on our side” with the actual cause in one clause. Vagueness is the thing she will ask about.</li>
-    <li>Say what she gets on the 15th. Two silent weeks are harder to plan around than the delay itself.</li>
+    <li>Get a room-by-room heat-loss calculation before anyone quotes a size.</li>
+    <li>This winter, turn the boiler down to 50 °C for a cold week. Rooms that stay warm keep their radiators.</li>
+    <li>Replace only the radiators in rooms that fall short, and size the heat pump from the calculation, not from the old boiler.</li>
   </ul>
-  <h4>What I would keep, against the usual advice</h4>
-  <p>Keep the closing question. It is the only line in the draft that gives Anna a way in, and a delay announced without one reads like a decision taken for her.</p>
-  <p>One thing I would not add: a fixed check-in date. A promised status note is a second date you now also have to hit, and you are already explaining a missed one.</p>
+  <h4>Where I would not chase the last degree</h4>
+  <p>Running at 55 °C instead of 45 °C costs a few percent on the annual bill, and replacing every radiator to get there costs more than that difference will save in a decade.</p>
+  <p>I would also take the gas boiler out completely. A backup boiler keeps a gas connection, a standing charge and a second service visit for the few days a well-sized heat pump handles anyway.</p>
 </div>`,
 
     Mistral:
 `<div class="ai-block">
-  <p>Work through it line by line.</p>
+  <p>Work through it in this order.</p>
   <ol>
-    <li>First line: the new date. “The launch moves to the 29th” is the sentence she needs; everything else is context for it.</li>
-    <li>Second line: the reason, kept to a clause. A detailed reason moves the conversation to your process, which is the one place you do not want it.</li>
-    <li>Third line: what she has on the 15th anyway. A delay with something in it is a status update; a delay with nothing in it is a gap she has to explain to someone else.</li>
-    <li>Fourth line: drop the apology. It asks her to absolve you, while a concrete plan tells her what you are doing about it. Only one of those helps her.</li>
-    <li>Last line: cut “let me know if that’s a problem”. You are not offering her a choice, so do not phrase it as one; she will take you up on it and you will have to say no twice.</li>
+    <li>Heat-loss calculation for every room. Without it, every answer you get, including this one, is a guess.</li>
+    <li>Run the boiler at 50 °C for a cold week, so you know which rooms are the weakest before anyone quotes.</li>
+    <li>Replace the radiators in every room you use daily with larger or fan-assisted ones. That is what lets the heat pump run at 45 °C or below.</li>
+    <li>Size the heat pump from the calculation. The old boiler’s 24 kW says nothing about what the house needs.</li>
+    <li>Keep the gas boiler connected for the first winter as a backup. If the heat pump never needs it, remove it the following summer.</li>
   </ol>
-  <p>Four short lines are enough. If you cannot get it under six, the message has turned into a defence.</p>
+  <p>Every degree of flow temperature costs roughly two to three percent of efficiency. The radiators are a one-off cost; the flow temperature is paid every winter.</p>
 </div>`,
 
     Anthropic:
 `<div class="ai-block">
-  <p>What the message is actually asking her to do</p>
-  <p>The draft asks Anna for two things: to absorb a two-week slip, and to tell you whether that is acceptable. The second request is the problem. You are asking her to rule on something you cannot change, and the honest answer to that question is yes, it is a problem, which leaves you both in a conversation with no move left in it.</p>
+  <p>What actually decides this</p>
+  <p>The question is not whether the radiators are old but whether they can deliver each room’s heat loss at a low flow temperature. A radiator does not care how old it is; it cares how warm the water is. At 70 °C your radiators deliver roughly twice what they deliver at 50 °C, which is why a house that is warm today can still be cold with a heat pump.</p>
   <ul>
-    <li>Open with the new date, then the cause, then what she has in the meantime.</li>
-    <li>Name the cause. “A few things” is the only sentence in the draft she cannot check, and it will be the one she remembers.</li>
-    <li>Replace the apology with the remedy. An apology asks something of her; a plan gives her something.</li>
-    <li>Close with a commitment instead of a question: the day you will confirm the 29th.</li>
+    <li>Start with a room-by-room heat-loss calculation. The 2015 wall insulation probably brought the total down a lot, but the calculation is what tells you where.</li>
+    <li>Run the boiler at 50 °C for a cold week and note which rooms stay warm. Those radiators can stay.</li>
+    <li>Plan for 45 °C rather than 55 °C. The efficiency difference is around a quarter, and you pay it every winter for twenty years.</li>
+    <li>Size the heat pump from the calculation, not from the boiler it replaces.</li>
+    <li>Do not keep the gas boiler as a backup. Two systems mean two service contracts, and a backup tends to become the system that runs whenever it is cold.</li>
   </ul>
-  <p>Same facts, different posture. The draft reports a slip and asks for permission; the version above reports a slip and takes responsibility for the next step.</p>
+  <p>The radiators that pass your test are often more than people expect, because 1970s radiators were sized for a house with no insulation at all.</p>
 </div>`,
 
     Gemini:
 `<div class="ai-block">
-  <p>How it reads on her side, sentence by sentence</p>
+  <p>How it looks from the installer’s side</p>
   <ul>
-    <li><b>“quick heads-up”</b>: it signals something small. A two-week slip is not small, and the mismatch is the first thing she notices.</li>
-    <li><b>“we won’t make the 15th”</b>: the loss arrives before the fix. Reverse it: the 29th first, the miss second.</li>
-    <li><b>“a few things came up on our side”</b>: fine as it stands. She is not going to audit your sprint; she needs to know this is not the start of a pattern.</li>
-    <li><b>“sorry about that”</b>: keep it exactly as it is. One apology, early and unqualified, is what makes the rest of the message read as news rather than as a defence.</li>
-    <li><b>“let me know if that’s a problem”</b>: keep this one too, but only if you can live with the answer. It is the line that turns an announcement into a conversation.</li>
+    <li><b>The 1978 build date</b>: matters less than you think. With the walls insulated in 2015, the house loses far less heat than it was designed for.</li>
+    <li><b>The original radiators</b>: often oversized for today’s heat loss, because they were chosen for an uninsulated house. Many will cope at 55 °C.</li>
+    <li><b>The test you can do now</b>: set the boiler to 50 °C on a cold week. Every room that stays warm is a room you do not need to touch.</li>
+    <li><b>The quote</b>: ask for a room-by-room heat-loss calculation, and for the heat pump to be sized from it.</li>
+    <li><b>The flow temperature</b>: 55 °C is a reasonable target here. The step down to 45 °C is worth a few percent, and it usually means replacing radiators that work.</li>
+    <li><b>The gas boiler</b>: keeping it as a backup for the coldest days is a cheap safety net in the first winter, while you learn how the house behaves.</li>
   </ul>
-  <p>What is missing entirely: what she can show her own stakeholders on the 15th. That is the question she will be asked within an hour of forwarding your message.</p>
+  <p>What is missing from the question: the hot water. A cylinder that is reheated to 60 °C for hygiene can cost more efficiency than the radiator question, and nobody asks about it.</p>
 </div>`,
 
     DeepSeek:
 `<div class="ai-block">
-  <p>Before you send</p>
+  <p>Before you commit</p>
   <h4>Check</h4>
   <ul>
-    <li>Is the 29th a date you would bet on? If it is a hope, you will be writing this message twice.</li>
-    <li>Does anything of hers hang on the 15th, like a campaign, a client of her own or a contract date? If so, the message needs a line about that, not about you.</li>
+    <li>Has anyone calculated the heat loss room by room? If the installer sized it from your boiler, ask again.</li>
+    <li>What is the heat pump’s efficiency at 35 °C and at 55 °C? The datasheet gives both, and the gap is usually around a quarter.</li>
   </ul>
   <h4>Fix</h4>
   <ul>
-    <li>New date in the first line.</li>
-    <li>Name the cause in one clause. A vague cause reads as a cause you do not want to name, and that is the line she will come back to.</li>
-    <li>Cut the closing question. It invites an escalation you cannot answer and implies the 29th is negotiable when it is not.</li>
-    <li>Say what lands on the 15th, and name the day you will confirm the 29th.</li>
+    <li>Size the heat pump from the calculation, not from the old boiler’s output.</li>
+    <li>Replace the radiators in the rooms you heat most, so the system can run at 45 °C or below.</li>
+    <li>Insulate the loft if it has not been done. It is the cheapest kilowatt you will ever save.</li>
   </ul>
   <h4>Do not</h4>
   <ul>
-    <li>Do not apologise twice. One acknowledgment, then move to the plan.</li>
-    <li>Do not leave it in a chat window if the 15th sits in a contract. The same three lines in an email are the ones that count later.</li>
+    <li>Do not rely on a boiler test alone. A boiler at 50 °C on a mild day says little about a heat pump at minus ten.</li>
+    <li>Do not keep the gas boiler as a backup. You keep the standing charge and lose the reason you switched.</li>
   </ul>
 </div>`,
 
     Grok:
 `<div class="ai-block">
-  <p>Plain take: it is fine, and it is also three small edits away from being good.</p>
+  <p>Plain take: yes, it will work, and the radiator panic is mostly overblown.</p>
   <ul>
-    <li>Put the 29th first. She is scanning for a date, not for context.</li>
-    <li>Leave the reason vague. “A few things came up” is what everyone writes, and nobody has ever won a client back with a root-cause analysis.</li>
-    <li>Keep the “sorry”. It costs you nothing and it is the only human line in there.</li>
-    <li>Keep the closing question. If the 29th genuinely wrecks something on her side, you want to hear that now and not on the 28th.</li>
+    <li>Your radiators were sized for 1978. Your walls are from 2015. That gap is your margin.</li>
+    <li>Turn the boiler down to 50 °C on the next cold week. If you are comfortable, you have your answer for most rooms.</li>
+    <li>Swap the one or two radiators that cannot keep up, ideally for fan-assisted ones, and leave the rest alone.</li>
+    <li>Run it at 55 °C if that keeps the house warm. Chasing 45 °C with new radiators everywhere saves less than the radiators cost.</li>
+    <li>Keep the gas boiler for one winter. If the heat pump never calls for it, take it out in spring.</li>
   </ul>
-  <p>Two things I would not do. Don’t stack a new promise on top of one you just broke. That includes promising a check-in date. And if you normally talk to this client on the phone, call first and send the same three lines right after; a two-week slip that arrives only as text is how a working relationship gets formal.</p>
+  <p>Two things I would insist on: a room-by-room heat-loss calculation, and a heat pump sized from it rather than from the old boiler. An oversized heat pump cycles on and off, and that wears it out faster than a cold January.</p>
 </div>`
   },
   consensus:
 `<div class="ai-consensus">
-  <p>Consensus: send it after two fixes, and after you decide one thing yourself</p>
-  <p>All six models read the draft as close to sendable, and not one of them objects to the tone. Nothing in the draft is impolite, and that is not where the risk sits. The risk is in three sentences, and on one of them the models split three against three.</p>
-  <h4>Fix before you send</h4>
+  <p>Consensus: probably yes, with a few radiators changed, not all of them</p>
+  <p>All six models think a heat pump can heat this house. The walls were insulated in 2015, and that matters more than the year it was built. What none of them can tell you from here is which rooms fall short, and that is the whole question.</p>
+  <h4>Do this first</h4>
   <ul>
-    <li>The new date belongs in the first line, ahead of the miss, the cause and the apology. She is scanning for a date.</li>
-    <li>Send it today, not on the 15th: two weeks of warning is a different message than a same-day cancellation, even though the delay is identical.</li>
-    <li>Say what Anna actually gets on the 15th instead of leaving the two weeks blank: that is the question she will be asked as soon as she forwards your message.</li>
-    <li>Put it in writing, so she can forward it to whoever planned around the 15th.</li>
-    <li>Name the day you will confirm the 29th, so the next update does not arrive as another surprise.</li>
+    <li>Get a room-by-room heat-loss calculation before anyone quotes a heat pump size.</li>
+    <li>Test it this winter: turn the boiler down to 50 °C for a cold week and note which rooms stay warm.</li>
+    <li>Rooms that stay warm keep their radiators; only the rooms that fall short need larger or fan-assisted ones.</li>
+    <li>Original 1970s radiators are often larger than the room needs today, because they were sized for an uninsulated house.</li>
+    <li>Have the heat pump sized from the calculation, not from the old boiler’s output.</li>
   </ul>
   <h4>Decide for yourself</h4>
   <ul>
-    <li>The closing line splits the models down the middle: three read it as the only sentence that gives her a way in, three as an invitation to reopen a date you cannot move.</li>
-    <li>A few things came up on our side is the weakest sentence in the draft: half the models want the actual cause in one clause, half want it left exactly as vague as it is.</li>
-    <li>The apology itself is not disputed, only who does the work: whether the apology or the plan carries it.</li>
+    <li>The models split on the target flow temperature: three would keep most radiators and run at 55 °C, three would replace more of them to run at 45 °C or below.</li>
+    <li>They also disagree on what that costs you: estimates for the efficiency gap between 55 °C and 45 °C range from a few percent to about a quarter.</li>
+    <li>Keeping the gas boiler as a backup for the coldest days divides them as well: a cheap safety net for some, two systems to maintain for others.</li>
+    <li>Whether to start with the survey or with the winter test is a matter of order, not of substance.</li>
   </ul>
   <h4>What that looks like</h4>
-  <blockquote>Hi Anna, the launch moves to the 29th, so we will not make the 15th. [One clause on the cause.] What you will have on the 15th is the checkout flow on staging, so your team can start testing on schedule. I will confirm the 29th by the 22nd at the latest. [Your closing line.]</blockquote>
-  <p>Both bracketed parts are the ones the models could not settle for you, and both turn on something only you know: whether the 29th is still negotiable, and whether this client reads a named cause as openness or as an excuse.</p>
+  <blockquote>Heat-loss survey: 140 m² at roughly 8 kW. Test week at 50 °C: the living room and two bedrooms stay warm, the bathroom and the north bedroom do not. [Replace those two radiators, or more.] Heat pump sized at 8 to 9 kW. [Target flow temperature.]</blockquote>
+  <p>Both bracketed parts are the ones the models could not settle for you, and both come down to the same trade: what you spend once on radiators against what you spend every winter on electricity.</p>
 </div>`,
 
-  // Strukturierte Auswertung – exakt das Schema, das eine echte Consensus-Query
+  // Strukturierte Auswertung, exakt das Schema, das eine echte Consensus-Query
   // liefert. Treibt Verdict-Header, Agreement-Badges und die Differences-Karten
-  // (inkl. Contradiction) über window.renderConsensusInsights.
+  // (inkl. Contradiction) ueber window.renderConsensusInsights.
   //
   // Der Score ist nicht gegriffen, sondern die Rechnung aus
   // app/services/llm/consensus_scoring.py auf genau diese Daten:
-  // Claim-Schnitt 16.1667/19 = 0.8509, minus 0.25 (major) - 0.10 (minor)
-  // - 0.05 (emphasis) = 0.4509 -> 45, Deckel 0.64 greift nicht. Anders
-  // als die alte Demo traegt jetzt jeder pruefbare Satz einen Claim; dieselbe
-  // Uneinigkeit taucht deshalb auch in den paraphrasierten Beispielsaetzen auf.
+  // Claim-Schnitt 15.8333/19 = 0.8333, minus 0.25 (major) - 0.10 (minor)
+  // - 0.05 (emphasis) = 0.4333 -> 43, Deckel 0.64 greift nicht. Jeder
+  // pruefbare Satz traegt einen Claim; dieselbe Uneinigkeit taucht deshalb
+  // auch im Beispiel unten in den Klammern auf.
   differencesData: {
     models_compared: DEMO_MODELS,
     best_model: "Anthropic",
     judges: { differences: { provider: "Gemini" } },
     agreement: {
-      score: 45,
+      score: 43,
       level: "partially",
       model_count: 6,
       major_contradictions: 1,
@@ -173,141 +175,139 @@ const DEMO_DATA = {
     },
     claims: [
       {
-        anchor: "Consensus: send it after two fixes",
+        anchor: "Consensus: probably yes, with a few radiators changed",
         agree: DEMO_MODELS,
         dissent: [],
         coverage: "supported"
       },
       {
-        anchor: "All six models read the draft as close to sendable",
+        anchor: "All six models think a heat pump can heat this house",
         agree: DEMO_MODELS,
         dissent: [],
         coverage: "supported"
       },
       {
-        anchor: "Nothing in the draft is impolite",
+        anchor: "The walls were insulated in 2015",
+        agree: ["OpenAI", "Anthropic", "Gemini", "Grok"],
+        dissent: [],
+        coverage: "supported"
+      },
+      {
+        anchor: "What none of them can tell you from here",
         agree: DEMO_MODELS,
         dissent: [],
         coverage: "supported"
       },
       {
-        anchor: "The risk is in three sentences",
+        anchor: "Get a room-by-room heat-loss calculation",
         agree: DEMO_MODELS,
         dissent: [],
         coverage: "supported"
       },
       {
-        anchor: "The new date belongs in the first line",
-        agree: DEMO_MODELS,
-        dissent: [],
-        coverage: "supported"
-      },
-      {
-        anchor: "She is scanning for a date.",
-        agree: ["OpenAI", "Mistral", "Gemini", "Grok"],
-        dissent: [],
-        coverage: "supported"
-      },
-      {
-        anchor: "Send it today, not on the 15th",
-        agree: DEMO_MODELS,
-        dissent: [],
-        coverage: "supported"
-      },
-      {
-        anchor: "Say what Anna actually gets on the 15th",
-        agree: DEMO_MODELS,
-        dissent: [],
-        coverage: "supported"
-      },
-      {
-        anchor: "Put it in writing, so she can forward it",
-        agree: ["OpenAI", "Mistral", "Anthropic", "Gemini", "DeepSeek"],
+        anchor: "Test it this winter",
+        agree: ["OpenAI", "Mistral", "Anthropic", "Gemini", "Grok"],
         dissent: [{
-          model: "Grok",
-          quote: "if you normally talk to this client on the phone, call first and send the same three lines right after"
+          model: "DeepSeek",
+          quote: "Do not rely on a boiler test alone"
         }],
         coverage: "split"
       },
       {
-        anchor: "Name the day you will confirm the 29th",
-        agree: ["Mistral", "Anthropic", "Gemini", "DeepSeek"],
+        anchor: "Rooms that stay warm keep their radiators",
+        agree: ["OpenAI", "Anthropic", "Gemini", "Grok"],
         dissent: [
-          {
-            model: "OpenAI",
-            quote: "A promised status note is a second date you now also have to hit"
-          },
-          {
-            model: "Grok",
-            quote: "Don’t stack a new promise on top of one you just broke"
-          }
+          { model: "Mistral", quote: "Replace the radiators in every room you use daily" },
+          { model: "DeepSeek", quote: "Replace the radiators in the rooms you heat most" }
         ],
         coverage: "split"
       },
       {
-        anchor: "The closing line splits the models down the middle",
+        anchor: "Original 1970s radiators are often larger than the room needs today",
+        agree: ["OpenAI", "Anthropic", "Gemini", "Grok"],
+        dissent: [],
+        coverage: "supported"
+      },
+      {
+        anchor: "Have the heat pump sized from the calculation",
+        agree: DEMO_MODELS,
+        dissent: [],
+        coverage: "supported"
+      },
+      {
+        anchor: "The models split on the target flow temperature",
         agree: ["OpenAI", "Gemini", "Grok"],
         dissent: [
-          { model: "Mistral", quote: "cut ‘let me know if that’s a problem’" },
-          { model: "Anthropic", quote: "Close with a commitment instead of a question" },
-          { model: "DeepSeek", quote: "Cut the closing question" }
+          { model: "Mistral", quote: "That is what lets the heat pump run at 45 °C or below" },
+          { model: "Anthropic", quote: "Plan for 45 °C rather than 55 °C" },
+          { model: "DeepSeek", quote: "so the system can run at 45 °C or below" }
         ],
         coverage: "split"
       },
       {
-        anchor: "A few things came up on our side is the weakest sentence in the draft",
-        agree: ["OpenAI", "Anthropic", "DeepSeek"],
+        anchor: "They also disagree on what that costs you",
+        agree: ["Mistral", "Anthropic", "DeepSeek"],
         dissent: [
-          { model: "Mistral", quote: "the reason, kept to a clause" },
-          { model: "Gemini", quote: "fine as it stands" },
-          { model: "Grok", quote: "Leave the reason vague" }
+          { model: "OpenAI", quote: "costs a few percent on the annual bill" },
+          { model: "Gemini", quote: "The step down to 45 °C is worth a few percent" },
+          { model: "Grok", quote: "saves less than the radiators cost" }
         ],
         coverage: "split"
       },
       {
-        anchor: "The apology itself is not disputed",
+        anchor: "Keeping the gas boiler as a backup for the coldest days divides them as well",
+        agree: ["Mistral", "Gemini", "Grok"],
+        dissent: [
+          { model: "OpenAI", quote: "I would also take the gas boiler out completely" },
+          { model: "Anthropic", quote: "Do not keep the gas boiler as a backup" },
+          { model: "DeepSeek", quote: "You keep the standing charge and lose the reason you switched" }
+        ],
+        coverage: "split"
+      },
+      {
+        anchor: "Whether to start with the survey or with the winter test",
         agree: DEMO_MODELS,
         dissent: [],
         coverage: "supported"
       },
       {
-        anchor: "Hi Anna, the launch moves to the 29th",
+        anchor: "Heat-loss survey: 140 m² at roughly 8 kW.",
         agree: DEMO_MODELS,
         dissent: [],
         coverage: "supported"
       },
       {
-        anchor: "One clause on the cause.",
-        agree: ["OpenAI", "Anthropic", "DeepSeek"],
-        dissent: [
-          { model: "Mistral", quote: "A detailed reason moves the conversation to your process" },
-          { model: "Gemini", quote: "fine as it stands" },
-          { model: "Grok", quote: "Leave the reason vague" }
-        ],
+        anchor: "Test week at 50 °C",
+        agree: ["OpenAI", "Mistral", "Anthropic", "Gemini", "Grok"],
+        dissent: [{
+          model: "DeepSeek",
+          quote: "A boiler at 50 °C on a mild day says little about a heat pump at minus ten"
+        }],
         coverage: "split"
       },
       {
-        anchor: "What you will have on the 15th is the checkout flow on staging",
-        agree: DEMO_MODELS,
-        dissent: [],
-        coverage: "supported"
-      },
-      {
-        anchor: "I will confirm the 29th by the 22nd at the latest.",
-        agree: ["Mistral", "Anthropic", "Gemini", "DeepSeek"],
-        dissent: [
-          { model: "OpenAI", quote: "A promised status note is a second date you now also have to hit" },
-          { model: "Grok", quote: "Don’t stack a new promise on top of one you just broke" }
-        ],
-        coverage: "split"
-      },
-      {
-        anchor: "Your closing line.",
+        anchor: "Replace those two radiators, or more.",
         agree: ["OpenAI", "Gemini", "Grok"],
         dissent: [
-          { model: "Mistral", quote: "cut ‘let me know if that’s a problem’" },
-          { model: "Anthropic", quote: "Close with a commitment instead of a question" },
-          { model: "DeepSeek", quote: "Cut the closing question" }
+          { model: "Mistral", quote: "Replace the radiators in every room you use daily" },
+          { model: "Anthropic", quote: "Plan for 45 °C rather than 55 °C" },
+          { model: "DeepSeek", quote: "Replace the radiators in the rooms you heat most" }
+        ],
+        coverage: "split"
+      },
+      {
+        anchor: "Heat pump sized at 8 to 9 kW.",
+        agree: DEMO_MODELS,
+        dissent: [],
+        coverage: "supported"
+      },
+      {
+        anchor: "Target flow temperature.",
+        agree: ["OpenAI", "Gemini", "Grok"],
+        dissent: [
+          { model: "Mistral", quote: "That is what lets the heat pump run at 45 °C or below" },
+          { model: "Anthropic", quote: "Plan for 45 °C rather than 55 °C" },
+          { model: "DeepSeek", quote: "so the system can run at 45 °C or below" }
         ],
         coverage: "split"
       },
@@ -320,63 +320,63 @@ const DEMO_DATA = {
     ],
     differences: [
       {
-        claim: "Keep or cut the line asking if the delay is a problem?",
+        claim: "Run at 55 °C with most radiators, or replace more of them for 45 °C?",
         // Stelle im Konsenstext, die inline markiert wird (Wellenlinie +
         // Marker). Muss woertlich im Antworttext oben vorkommen.
-        consensus_anchor: "an invitation to reopen a date you cannot move",
+        consensus_anchor: "three would replace more of them to run at 45 °C or below",
         type: "contradiction",
         severity: "major",
         positions: [
           {
-            stance: "Keep it. It is the only opening the message offers her.",
+            stance: "55 °C. Keep every radiator that passes the test; the last ten degrees save little.",
             models: ["OpenAI", "Gemini", "Grok"],
-            quote: "It is the only line in the draft that gives Anna a way in, and a delay announced without one reads like a decision taken for her."
+            quote: "replacing every radiator to get there costs more than that difference will save in a decade."
           },
           {
-            stance: "Cut it. It asks her to rule on something you cannot change.",
+            stance: "45 °C. Replace more radiators now; the efficiency is paid every winter.",
             models: ["Anthropic", "Mistral", "DeepSeek"],
-            quote: "You are asking her to rule on something you cannot change, and the honest answer to that question is yes, it is a problem"
+            quote: "The efficiency difference is around a quarter, and you pay it every winter for twenty years."
           }
         ],
-        verify: "Decide first whether the 29th is still negotiable. If it is not, do not ask a question that implies it is."
+        verify: "Ask for the heat pump’s rated efficiency at 35 °C and at 55 °C from its datasheet, and get a price for the extra radiators. That turns the disagreement into arithmetic."
       },
       {
-        claim: "Name the cause, or leave it vague?",
-        consensus_anchor: "the weakest sentence in the draft",
+        claim: "Keep the gas boiler as a backup?",
+        consensus_anchor: "two systems to maintain for others",
         type: "contradiction",
         severity: "minor",
         positions: [
           {
-            stance: "Name it in one clause; vagueness is what she will question.",
-            models: ["OpenAI", "Anthropic", "DeepSeek"],
-            quote: "A vague cause reads as a cause you do not want to name, and that is the line she will come back to."
+            stance: "Keep it for the first winter, then decide.",
+            models: ["Mistral", "Gemini", "Grok"],
+            quote: "Keep the gas boiler connected for the first winter as a backup."
           },
           {
-            stance: "Leave it. A named cause moves the talk to your process.",
-            models: ["Mistral", "Gemini", "Grok"],
-            quote: "A detailed reason moves the conversation to your process, which is the one place you do not want it."
+            stance: "Take it out; a backup becomes the system that runs.",
+            models: ["OpenAI", "Anthropic", "DeepSeek"],
+            quote: "a backup tends to become the system that runs whenever it is cold."
           }
         ],
-        verify: "Ask whether the cause changes anything for her. If it does not, it is an explanation for you, not for her."
+        verify: "Ask what the gas connection costs per year with no gas used. If it is small, one winter of backup is cheap insurance."
       },
       {
-        claim: "Apologise, or say what you are doing about it?",
-        consensus_anchor: "whether the apology or the plan carries it",
+        claim: "Survey first, or winter test first?",
+        consensus_anchor: "a matter of order, not of substance",
         type: "emphasis",
         severity: "minor",
         positions: [
           {
-            stance: "One short apology, early: it is what makes the rest readable.",
+            stance: "Test first: it is free and shows which rooms matter.",
             models: ["OpenAI", "Gemini", "Grok"],
-            quote: "One apology, early and unqualified, is what makes the rest of the message read as news rather than as a defence."
+            quote: "Every room that stays warm is a room you do not need to touch."
           },
           {
-            stance: "Let the plan do it: an apology puts the work on her.",
+            stance: "Survey first: without it every answer is a guess.",
             models: ["Anthropic", "Mistral", "DeepSeek"],
-            quote: "An apology asks something of her; a plan gives her something."
+            quote: "Without it, every answer you get, including this one, is a guess."
           }
         ],
-        verify: "Both camps keep an acknowledgment. The question is only whether it stands alone or comes with the next step attached."
+        verify: "Both camps want both. The test can start this week; the survey is what the quote should be built on."
       }
     ]
   },
@@ -384,7 +384,7 @@ const DEMO_DATA = {
   differences:
 `The consensus answer is partially credible.
 
-All six models agree on the mechanics: new date first, say what she gets on the 15th, put it in writing, and leave the tone alone. They contradict each other on the closing question: three would keep it as the only opening the message offers her, three would cut it as an invitation to reopen a date that is not negotiable. They split again, more mildly, on whether the cause should be named or left vague.
+All six models agree that the house can work with a heat pump, that a room-by-room heat-loss calculation comes first, and that the heat pump must be sized from it. They contradict each other on the target flow temperature: three would keep most radiators and run at 55 °C, three would replace more of them for 45 °C, and they disagree on how much efficiency that difference is worth. They split again, more mildly, on keeping the gas boiler as a backup.
 
 BestModel: Anthropic`
 };
@@ -692,8 +692,8 @@ const DEMO_AGENT_STEPS = {
 };
 const DEMO_AGENT_STREAM = { wordsPerTick: 3, tickMs: 42 };
 const DEMO_AGENT_NOTES = {
-  plan: "The draft is fine in substance; order and tone decide how it lands. I will get six independent reads before I write anything.",
-  compared: "All six would send it. They agree on putting the date first and split on the closing question, so the answer has to say so instead of picking a side."
+  plan: "Whether this works depends on the heat loss of each room, not on the year the house was built. I will get six independent reads before I answer.",
+  compared: "All six say it can work. They split on the flow temperature and on what it costs, so the answer has to say so instead of picking a side."
 };
 
 const capitalize = text => text.charAt(0).toUpperCase() + text.slice(1);
@@ -733,7 +733,7 @@ function demoAgentReview({ answered, pending, status, answer, checked }) {
     basis_hash: DEMO_AGENT_BASIS,
     status: pending.length ? "running" : "completed",
     question: DEMO_TYPED_QUESTION,
-    reason: "A message to a client, where order and tone decide how it lands: six models read the draft independently.",
+    reason: "A five-figure decision where installers genuinely disagree: six models assess the house independently.",
     answers: answered.map(model => ({
       provider: model.key, provider_label: model.key,
       model: { label: model.label, model: model.model }, text: model.text, sources: []

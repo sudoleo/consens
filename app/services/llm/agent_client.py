@@ -47,6 +47,18 @@ class AgentModel:
                 "tools": list(tools_for_model(self))}
 
 
+def agent_model_label() -> str:
+    """The default agent model's display name, without the price catalog.
+
+    Public pages name the model the agent really runs on by default (the
+    landing chip "<label> +6"), so a showcase name can never drift from the
+    deployment. Same naming rule as agent_model(), no network access."""
+    defaults = AgentModel()
+    model_id = os.environ.get("AGENT_MODEL", defaults.model).strip()
+    entry = next((entry for entry in cfg.MODEL_CONFIGS.values() if entry.api_model == model_id), None)
+    return entry.label if entry else defaults.label if model_id == defaults.model else model_id
+
+
 def agent_model(*, _metadata=None) -> AgentModel:
     """Operator configuration is explicit; never silently substitute a model."""
     defaults = AgentModel()

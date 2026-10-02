@@ -247,6 +247,9 @@
 .agent-answer-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 12px; margin: 12px 0 0; color: var(--ink-3); font-size: var(--font-size-xs); }
 .agent-answer-actions button, .agent-evidence-links .agent-evidence-link { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 6px 8px; border: 0; border-radius: var(--radius-2xs); background: transparent; color: var(--ink-2); font: inherit; font-size: var(--font-size-xs); font-weight: 500; text-decoration: none; cursor: pointer; transition: background-color var(--dur-press) var(--ease-standard), color var(--dur-press) var(--ease-standard); }
 .agent-evidence-links .consensus-tab-count { color: var(--ink-3); font-weight: 400; }
+/* What the source check made of the contradictions, on the link itself. */
+.agent-evidence-note { color: var(--ink-3); font-weight: 400; white-space: nowrap; }
+.agent-evidence-note::before { content: '·'; margin-right: 6px; }
 .agent-answer-actions button:hover, .agent-evidence-links .agent-evidence-link:hover { background: var(--raise); color: var(--ink); }
 .agent-answer-actions button[aria-disabled="true"] { cursor: default; opacity: .6; }
 .agent-answer-actions svg, .agent-evidence-icon { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
@@ -313,12 +316,16 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 @media (max-width: 540px) {
   .agent-review > .agent-evidence-grid { flex: 1 0 100%; }
   .agent-review > .agent-answer-actions { order: 3; }
-  .agent-evidence-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; margin-left: 0; }
+  .agent-evidence-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: stretch; gap: 4px; margin-left: 0; }
+  /* A link with a source-check note is taller; all three keep one top and height. */
+  .agent-evidence-grid .agent-evidence-link { align-content: start; }
   .agent-evidence-grid .agent-evidence-link { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: 16px auto; gap: 5px; min-width: 0; min-height: 56px; padding: 6px 0; }
   .agent-evidence-grid .agent-evidence-icon { grid-row: 1; grid-column: 1; justify-self: end; }
   .agent-evidence-grid .consensus-tab-count { grid-row: 1; grid-column: 2; justify-self: start; line-height: 16px; }
   .agent-evidence-grid .consensus-tab-label { grid-row: 2; grid-column: 1 / -1; justify-self: center; }
   .agent-evidence-grid .agent-evidence-link:not(:has(.consensus-tab-count)) .agent-evidence-icon { grid-column: 1 / -1; justify-self: center; }
+  .agent-evidence-grid .agent-evidence-note { grid-row: 3; grid-column: 1 / -1; justify-self: center; font-size: var(--font-size-micro, 11px); white-space: normal; text-align: center; }
+  .agent-evidence-grid .agent-evidence-note::before { content: none; }
 }
 .agent-evidence-focus { display: inline-flex; gap: 8px; align-items: center; min-width: 0; max-width: 100%; color: var(--ink-3); }
 .agent-evidence-focus select { min-width: 0; max-width: 260px; background: transparent; color: var(--ink-2); border: 0; font: inherit; padding: 6px 0; }

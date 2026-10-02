@@ -25,7 +25,7 @@ CATALOG = {"default_model_id": "deepseek/deepseek-v4.1-flash", "models": [
 
 
 def _choose_mode(page, mode):
-    page.locator("#runModeControl .model-picker-display").click()
+    page.locator("#attachTrigger").click()
     page.locator(f'#runModeControl [data-value="{mode}"]').click()
     expect(page.locator("#runModeSelect")).to_have_value(mode)
 
@@ -289,7 +289,7 @@ def test_single_agent_send_followup_restore_and_layout(browser, phase4_server, w
         page.route("**/bookmarks/*/conversation*", lambda route: _json(route, {"chat_id": chat_id, "turns": turns, "next_cursor": None, "has_more": False}))
         page.route("**/bookmarks/*", lambda route: _json(route, {"bookmark": bookmark}))
         page.evaluate("async () => { await window.__switchE2EUser('account-a'); }")
-        expect(page.locator("#runModeControl")).to_be_visible()
+        page.wait_for_function("() => document.getElementById('runModeControl').hidden === false")
         page.evaluate("dark => { document.documentElement.classList.toggle('dark-mode', dark); document.body.classList.toggle('dark-mode', dark); }", dark)
         _choose_mode(page, "agent")
         assert not errors

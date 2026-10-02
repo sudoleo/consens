@@ -35,11 +35,9 @@ def test_composer_mode_bar(browser, phase4_server, width, dark):
         assert second['x'] < first['x'] + first['width']
         choose(page, 'compare')
         expect(bar).to_be_visible()
-        expect(page.locator('#composerSourcesToggle')).to_be_hidden()
-        expect(page.locator('#composerSourcesToggle')).to_be_disabled()
-        expect(page.locator('#composerSourcesToggle')).to_have_attribute('aria-checked', 'false')
+        # Check contradictions is a setting, not a tool in the bar.
+        expect(page.locator('#composerSourcesToggle')).to_have_count(0)
         expect(page.locator('#sourceCheckSwitch')).to_be_disabled()
-        expect(page.locator('#sourceCheckMenuSwitch')).to_be_disabled()
         assert page.evaluate('App.isSourceCheckEnabled()') is False
         expect(page.locator('#composerModeDescription')).to_contain_text('no consensus')
         expect(page.locator('#modeNotice')).to_have_count(0)
@@ -64,13 +62,10 @@ def test_composer_mode_bar(browser, phase4_server, width, dark):
         expect(page.locator('#composerReasoningToggle')).to_be_hidden()
         expect(page.locator('#composerAttachButton')).to_be_hidden()
         # The collapsed phone composer is (+), the field and Send in every
-        # mode; the selector comes back at its own place when it opens.
+        # mode; the mode lives in the (+) menu at every width.
         page.evaluate("document.body.classList.add('composer-collapsed')")
-        if width < 1100:
-            expect(page.locator('#attachTrigger')).to_be_visible()
-            expect(mode.locator('xpath=..')).to_be_hidden()
-        else:
-            expect(mode.locator('xpath=..')).to_be_visible()
+        expect(page.locator('#attachTrigger')).to_be_visible()
+        expect(page.locator('.composer-lead .model-picker-display')).to_have_count(0)
         # Collapsing can restart the reveal; measure its final position.
         page.wait_for_function("() => !document.body.classList.contains('composer-animating')")
         bar.evaluate("el => Promise.all(el.getAnimations().map(animation => animation.finished))")
@@ -88,8 +83,7 @@ def test_composer_mode_bar(browser, phase4_server, width, dark):
         choose(page, 'consensus')
         # The status line stays with the result on screen at every width.
         expect(bar).to_be_visible()
-        expect(page.locator('#composerSourcesToggle')).to_be_enabled()
-        expect(page.locator('#composerSourcesToggle')).to_have_attribute('aria-checked', 'true')
+        expect(page.locator('#sourceCheckSwitch')).to_be_enabled()
         # Bookmark provenance does not change when the next question changes mode.
         expect(page.locator('#composerComparisonStatus')).to_contain_text('Shown: Compare result')
         expect(page.locator('.is-direct .answer-reader-answer')).to_have_count(6)

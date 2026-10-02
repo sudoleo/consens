@@ -444,3 +444,17 @@ describe('source-check worker failure phases', () => {
     expect(document.querySelector('#sourceVerificationReport .source-verification-status').textContent).toContain(message);
   });
 });
+describe('source-check brief for the Agent contradictions link', () => {
+  it('says what the sources settled, that they are still being read, or nothing', () => {
+    const {window,dom}=boot();
+    try {
+      const brief = window.App.sourceVerification.brief;
+      expect(brief(snapshot)).toBe('1 settled by sources');
+      expect(brief({...snapshot, findings:[{...finding, verdict:'sources_conflict'}]})).toBe('sources inconclusive');
+      expect(brief({...snapshot, status:'running'})).toBe('checking sources');
+      expect(brief({...snapshot, status:'disabled'})).toBe('');
+      expect(brief({...snapshot, findings:[{...finding, checked:false, evidence:[]}]})).toBe('');
+      expect(brief(null)).toBe('');
+    } finally { dom.window.close(); }
+  });
+});

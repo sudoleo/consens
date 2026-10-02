@@ -141,7 +141,15 @@ def sitemap_pages_xml():
 
 @router.get("/", response_class=HTMLResponse)
 def landing(request: Request):
-    return templates.TemplateResponse(request=request, name="landing.html")
+    # The composer mockups name the agent's real default model, never a
+    # showcase model the visitor would not get.
+    try:
+        from app.services.llm.agent_client import agent_model_label
+        agent_label = agent_model_label()
+    except Exception:
+        agent_label = ""
+    return templates.TemplateResponse(request=request, name="landing.html",
+                                      context={"agent_label": agent_label or "Agent"})
 
 @router.get("/privacy", response_class=HTMLResponse)
 def privacy(req: Request):

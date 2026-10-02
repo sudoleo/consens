@@ -40,12 +40,15 @@ def test_public_composer_mockups(browser, phase4_server, width, dark, reduced):
         page.evaluate('() => document.fonts.ready')
         expect(page.locator('.lp-composer-tools')).to_have_count(2)
         expect(page.locator('#heroDemoField')).to_have_attribute('href', '/app?demo=1')
-        previews = page.locator('.lp-composer-preview')
+        # The closing field repeats the hero without a tool lip.
+        previews = page.locator('.lp-composer-preview:has(.lp-composer-tools)')
         for preview in previews.all():
             bar = preview.locator('.lp-composer-tools')
-            # The mode sits in the field's row (as in /app); the lip starts with the tools.
-            expect(bar.locator('.lp-composer-tool').nth(0)).to_have_attribute('aria-label', 'Check contradictions on')
-            expect(bar.locator('.lp-composer-tool').nth(1)).to_have_attribute('aria-label', 'Reasoning auto')
+            # The mode lives in the (+) menu (as in /app) and Check contradictions
+            # is a standing setting, so the lip starts with Reasoning.
+            expect(bar.locator('.lp-composer-tool').nth(0)).to_have_attribute('aria-label', 'Reasoning auto')
+            expect(bar.locator('.lp-composer-tool')).to_have_count(2)
+            expect(preview.locator('.lp-mode-chip')).to_have_count(0)
             expect(bar.locator('img')).to_have_count(6)
             assert bar.evaluate('el => el.scrollWidth <= el.clientWidth + 1')
             assert bar.evaluate('el => Math.abs(el.getBoundingClientRect().height - 36) < 1')

@@ -1014,7 +1014,8 @@ img { display: block; max-width: 100%; }
   min-width: 0;
 }
 
-/* Chips inside the well lift by one step so they stay legible against it. */
+/* The (+) of the /app composer: no fill and no ring at rest, as in the app,
+   where it carries the mode, files and options in its menu. */
 .lp-icon-btn,
 .lp-attach {
   display: inline-flex;
@@ -1026,7 +1027,7 @@ img { display: block; max-width: 100%; }
   padding: 0;
   border: 0;
   border-radius: 50%;
-  background: var(--lp-field-chip);
+  background: transparent;
   color: var(--ink-2);
   box-shadow: none;
   cursor: default;
@@ -1035,11 +1036,9 @@ img { display: block; max-width: 100%; }
 .lp-icon-btn svg,
 .lp-attach svg { width: 15px; height: 15px; }
 
-/* The pickers of the /app composer row (composer.css): a quiet label with
-   a chevron. The mode is the first choice and keeps a light fill at rest;
-   the models chip names the agent that writes plus the count it checks
-   with, and stands on the right, next to Send. */
-.lp-mode-chip,
+/* The picker of the /app composer row (composer.css): a quiet label with a
+   chevron. The models chip names the agent that writes plus the count it
+   checks with, and stands on the right, next to Send. */
 .lp-run-chip {
   display: inline-flex;
   align-items: center;
@@ -1059,11 +1058,9 @@ img { display: block; max-width: 100%; }
   transition: background-color var(--dur-state) var(--ease-standard), box-shadow var(--dur-state) var(--ease-standard);
 }
 
-.lp-mode-chip { background: var(--lp-field-chip); color: var(--ink-2); }
 .lp-run-chip { margin-left: auto; }
 .lp-run-chip-count { margin-left: -2px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
 
-.lp-mode-chip i,
 .lp-run-chip i {
   width: 5px;
   height: 5px;

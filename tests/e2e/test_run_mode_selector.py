@@ -25,7 +25,8 @@ def _shot(page, name):
 
 
 def choose(page, mode):
-    page.locator("#runModeControl .model-picker-display").click()
+    # The mode is the first group in the (+) menu since 2026-10-02.
+    page.locator("#attachTrigger").click()
     page.locator(f'#runModeControl [data-value="{mode}"]').click()
     expect(page.locator("#runModeSelect")).to_have_value(mode)
 
@@ -68,18 +69,20 @@ def test_one_selector_drives_mode_tools_and_settings(browser, phase4_server, wid
         page.evaluate("dark => { document.body.classList.toggle('dark-mode', dark); document.documentElement.classList.toggle('dark-mode', dark); }", dark)
         _signed_in(page, agent_access=True)
         control = page.locator("#runModeControl")
-        expect(control).to_be_visible()
-        expect(control.locator(".model-picker-display")).to_contain_text("Consensus")
-        expect(page.locator("#composerSourcesToggle")).to_be_visible()
+        # No mode chip in the row: (+) holds the mode, files and options.
+        expect(page.locator(".composer-lead .model-picker-display")).to_have_count(0)
+        expect(page.locator("#composerSourcesToggle")).to_have_count(0)
         _shot(page, f"{width}-{'dark' if dark else 'light'}-consensus")
 
-        # The menu lists all three with one-line descriptions.
-        control.locator(".model-picker-display").click()
-        options = control.locator(".model-picker-option")
+        # The menu lists all three with one-line descriptions, the current one checked.
+        page.locator("#attachTrigger").click()
+        expect(control).to_be_visible()
+        options = control.locator(".attach-menu-mode")
         expect(options).to_have_count(3)
+        expect(control.locator('[data-value="consensus"]')).to_have_attribute("aria-pressed", "true")
         expect(control.locator('[data-value="agent"]')).to_contain_text("Beta")
-        expect(control.locator('[data-value="compare"] .model-picker-option-description')).to_contain_text("side by side")
-        menu = control.locator(".model-picker-menu").bounding_box()
+        expect(control.locator('[data-value="compare"] .attach-menu-hint')).to_contain_text("side by side")
+        menu = page.locator("#attachMenu").bounding_box()
         assert menu["x"] >= 0 and menu["x"] + menu["width"] <= width + 1
         _shot(page, f"{width}-{'dark' if dark else 'light'}-menu")
         page.keyboard.press("Escape")
@@ -89,7 +92,6 @@ def test_one_selector_drives_mode_tools_and_settings(browser, phase4_server, wid
         assert page.evaluate("localStorage.getItem('runMode')") == "compare"
         assert page.evaluate("App.runMode.pipeline()") is False
         assert page.evaluate("App.isSourceCheckEnabled()") is False
-        expect(page.locator("#composerSourcesToggle")).to_be_hidden()
         expect(page.locator("#composerModeDescription")).to_contain_text("no consensus")
         _shot(page, f"{width}-{'dark' if dark else 'light'}-compare")
         # The chip for the models says who answers, never the mode's name.
@@ -99,14 +101,12 @@ def test_one_selector_drives_mode_tools_and_settings(browser, phase4_server, wid
         # keeps the selector where it was and never collapses there.
         assert page.evaluate("App.composer.isStartScreen()") is True
         page.evaluate("App.composer.collapse({force: true})")
-        expect(control).to_be_visible()
+        expect(page.locator("#attachTrigger")).to_be_visible()
         page.evaluate("App.composer.expand()")
         page.wait_for_function("() => !document.body.classList.contains('composer-animating')")
-        page.locator("#attachTrigger").click()
-        expect(page.locator('label[for="sourceCheckMenuSwitch"]')).to_be_hidden()
-        page.locator("#attachTrigger").click()
+        expect(page.locator('#sourceCheckMenuSwitch')).to_have_count(0)
 
-        # (+) and the mode keep their place whichever mode is chosen.
+        # (+) keeps its place whichever mode is chosen.
         def lead():
             # One measurement once motion has settled (switching modes moves
             # the whole composer).
@@ -114,8 +114,7 @@ def test_one_selector_drives_mode_tools_and_settings(browser, phase4_server, wid
               await Promise.all(document.getAnimations().map(a => a.finished.catch(() => null)));
               const box = document.querySelector('.chat-input-container').getBoundingClientRect();
               const plus = document.getElementById('attachTrigger').getBoundingClientRect();
-              const mode = document.getElementById('runModeControl').getBoundingClientRect();
-              return [Math.round(plus.x - box.x), Math.round(mode.x - box.x), Math.round(mode.y - plus.y)];
+              return [Math.round(plus.x - box.x), Math.round(plus.y - box.y)];
             }""")
         compare_lead = lead()
         # Agent: the shell switches, and the choice survives a reload.
@@ -172,7 +171,7 @@ def test_open_chat_keeps_its_family(browser, phase4_server):
         # A Consensus-family chat: Compare/Consensus alternate, Agent needs a new chat.
         page.evaluate("App.agentChat.modeState = () => ({family: 'consensus', canUse: true, pending: false}); App.renderComposerMode()")
         control = page.locator("#runModeControl")
-        control.locator(".model-picker-display").click()
+        page.locator("#attachTrigger").click()
         expect(control.locator('[data-value="agent"]')).to_be_disabled()
         expect(control.locator('[data-value="agent"]')).to_contain_text("Available in a new chat")
         expect(control.locator('[data-value="compare"]')).to_be_enabled()
@@ -183,11 +182,11 @@ def test_open_chat_keeps_its_family(browser, phase4_server):
         # nothing to switch to, the selector steps aside.
         page.evaluate("App.agentChat.modeState = () => ({family: 'agent', canUse: true, pending: false}); App.runMode.set('compare')")
         assert page.evaluate("App.runMode.effective()") == "agent"
-        expect(control).to_be_hidden()
+        page.wait_for_function("() => document.getElementById('runModeControl').hidden === true")
         expect(page.locator('#runModeSelect option[value="compare"]')).to_be_disabled()
         # A new chat brings the selector back.
         page.evaluate("App.agentChat.modeState = () => ({family: null, canUse: true, pending: false}); App.renderComposerMode()")
-        expect(control).to_be_visible()
+        page.wait_for_function("() => document.getElementById('runModeControl').hidden === false")
     finally:
         context.close()
 

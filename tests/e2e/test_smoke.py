@@ -344,7 +344,6 @@ def _desktop_row_geometry(page):
             ),
             field: box("#questionInput"),
             attach: box(".attach-trigger"),
-            mode: box("#runModeControl .model-picker-display"),
             picker: box(".composer-models .consensus-model .model-picker-display"),
             send: box("#sendButton"),
             footerVisible: !!document.querySelector(".app-footer").offsetParent,
@@ -372,10 +371,11 @@ def test_desktop_composer_is_one_row_without_a_collapsed_state(app_page):
     assert row["fieldInline"] == "34px"
     assert row["footerVisible"] is True
 
-    # (+) ganz links, dann das Feld, dann Lauf-Schalter und Senden.
-    assert row["attach"]["x"] < row["mode"]["x"] < row["field"]["x"] < row["picker"]["x"] < row["send"]["x"]
-    # Und alle vier wirklich auf EINER Zeile, auf derselben Mittellinie.
-    for name in ("field", "attach", "mode", "picker"):
+    # (+) ganz links (der Modus steckt seit 2026-10-02 in seinem Menue),
+    # dann das Feld, dann Lauf-Schalter und Senden.
+    assert row["attach"]["x"] < row["field"]["x"] < row["picker"]["x"] < row["send"]["x"]
+    # Und alle wirklich auf EINER Zeile, auf derselben Mittellinie.
+    for name in ("field", "attach", "picker"):
         assert abs(row[name]["mid"] - row["send"]["mid"]) <= 2, name
 
     # Ein Klick fokussiert das Feld und sonst nichts: keine Hoehenaenderung.
@@ -741,7 +741,6 @@ def test_empty_app_and_consensus_picker_do_not_scroll_unnecessarily(app_page):
         """() => {
           const selectors = [
             "#attachTrigger",
-            "#runModeControl .model-picker-display",
             "#sendButton",
           ];
           return selectors.map(selector => {
@@ -816,7 +815,7 @@ def test_disabled_agent_mode_stays_in_direct_six_answer_comparison(app_page):
         else None,
     )
     app_page.set_viewport_size({"width": 1280, "height": 800})
-    app_page.locator("#runModeControl .model-picker-display").click()
+    app_page.locator("#attachTrigger").click()
     app_page.locator('#runModeControl [data-value="compare"]').click()
     expect(app_page.locator("#runModeSelect")).to_have_value("compare")
     expect(app_page.locator("#runModeSetting")).to_have_value("compare")

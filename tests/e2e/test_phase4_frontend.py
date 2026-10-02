@@ -346,44 +346,22 @@ def test_source_verification_display_and_restore(browser, phase4_server, width, 
 
 
 @pytest.mark.parametrize("width", [390, 1280])
-def test_composer_source_check_toggle_persists_and_freezes_run_payload(browser, phase4_server, width):
+def test_source_check_setting_persists_and_freezes_run_payload(browser, phase4_server, width):
+    # Check contradictions is a standing setting (Settings → Runs) since
+    # 2026-10-02: no switch in the composer bar or the (+) menu any more.
     context, page = _real_firebase_page(browser, phase4_server)
     try:
         page.set_viewport_size({"width": width, "height": 820})
-        toggle = page.locator("#composerSourcesToggle")
-        expect(toggle).to_be_visible()
-        expect(toggle).to_have_attribute("aria-checked", "true")
-        assert page.locator(".composer-mode-controls > button").first.get_attribute("id") == "composerSourcesToggle"
-        toggle.click()
+        expect(page.locator("#composerSourcesToggle")).to_have_count(0)
+        expect(page.locator("#sourceCheckMenuSwitch")).to_have_count(0)
+        setting = page.locator("#sourceCheckSwitch")
+        expect(setting).to_be_checked()
+        page.evaluate("() => { const s = document.getElementById('sourceCheckSwitch'); s.checked = false; s.dispatchEvent(new Event('change')); }")
         page.reload()
-        expect(toggle).to_have_attribute("aria-checked", "false")
         page.wait_for_function("() => Boolean(window.auth?.currentUser)")
+        expect(setting).not_to_be_checked()
+        assert page.evaluate("window.App.isSourceCheckEnabled()") is False
         assert page.evaluate("document.documentElement.scrollWidth <= innerWidth + 1")
-        output = Path(__file__).resolve().parents[2] / "test-results" / "source-verification-ui"
-        output.mkdir(parents=True, exist_ok=True)
-        page.locator('#attachTrigger').click()
-        menu_toggle = page.locator('#sourceCheckMenuSwitch')
-        expect(menu_toggle).not_to_be_checked()
-        assert page.locator('#attachMenu .attach-menu-toggle').last.get_attribute('for') == 'sourceCheckMenuSwitch'
-        if width > 700:
-            # Desktop: each setting lives once, in the bar under the field;
-            # the (+) menu only adds files there.
-            expect(page.locator('label[for="sourceCheckMenuSwitch"]')).to_be_hidden()
-            page.keyboard.press('Escape')
-            toggle.click()
-            expect(menu_toggle).to_be_checked()
-            expect(page.locator('#sourceCheckSwitch')).to_be_checked()
-            toggle.click()
-        else:
-            page.locator('label[for="sourceCheckMenuSwitch"]').click()
-            expect(menu_toggle).to_be_checked()
-            expect(toggle).to_have_attribute('aria-checked', 'true')
-            expect(page.locator('#sourceCheckSwitch')).to_be_checked()
-            page.screenshot(path=str(output / f"menu-toggle-{width}.png"))
-            page.locator('label[for="sourceCheckMenuSwitch"]').click()
-            page.locator('#attachTrigger').click()
-        expect(toggle).to_have_attribute('aria-checked', 'false')
-        page.screenshot(path=str(output / f"toggle-{width}.png"))
         page.evaluate('''() => {
           const registry = window.App.runRegistry;
           const run = registry.create({question:'Check toggle', config:{agentMode:true,
@@ -393,7 +371,8 @@ def test_composer_source_check_toggle_persists_and_freezes_run_payload(browser, 
           run.modelResults = {OpenAI:{status:'complete',text:'First answer'},
             Gemini:{status:'complete',text:'Second answer'}};
           registry.setStatus(run.runId,'running');
-          document.getElementById('composerSourcesToggle').click();
+          const setting = document.getElementById('sourceCheckSwitch');
+          setting.checked = true; setting.dispatchEvent(new Event('change'));
           const fetch = window.fetch;
           window.fetch = (url, options) => {
             if (url !== '/consensus') return fetch(url, options);
@@ -409,7 +388,6 @@ def test_composer_source_check_toggle_persists_and_freezes_run_payload(browser, 
         assert page.evaluate("window.App.isSourceCheckEnabled()") is True
     finally:
         context.close()
-
 
 def test_followup_stream_preserves_history_and_model_loading_nodes(browser, phase4_server):
     context, page = _real_firebase_page(browser, phase4_server)
@@ -1869,7 +1847,7 @@ def test_disabled_agent_mode_is_six_answers_only(browser, phase4_server):
         page.route("**/bookmark", model_bookmark_route)
         mode = page.locator("#runModeSelect")
         expect(mode).to_have_value("consensus")
-        page.locator("#runModeControl .model-picker-display").click()
+        page.locator("#attachTrigger").click()
         page.locator('#runModeControl [data-value="compare"]').click()
         expect(mode).to_have_value("compare")
         expect(page.locator("#runModeSetting")).to_have_value("compare")
