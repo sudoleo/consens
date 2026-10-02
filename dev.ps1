@@ -28,6 +28,7 @@ if ($Command -eq 'help') {
     Write-Host 'Publisher only (no dependencies): python -E -S -m unittest discover -s tests -p test_publisher_standalone.py -v'
     Write-Host 'browser:  build:check + Playwright using a disposable Firestore emulator'
     Write-Host 'rules:    client SDK access checks using a disposable Firestore emulator'
+    Write-Host 'CI: pushes run backend/frontend; full checks run when a PR becomes ready for review or by manual selection.'
     Write-Host 'Setup and maintenance: docs/testing.md'
     exit 0
 }

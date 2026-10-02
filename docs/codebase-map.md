@@ -5301,7 +5301,12 @@ Coveragewerte von 26.09.2026 sind keine Messung des aktuellen Codes.
   App-Routen
   werden nie abgefangen. Grenzen und Befehle stehen in `tests/e2e/README.md`.
 - **Regression-CI**: `.github/workflows/tests.yml` trennt Python, JS/Build,
-  Emulator/Chromium/Clientregeln und Windows-Einstiege. Node 24, Java 21 und
+  Emulator/Chromium/Clientregeln und Windows-Einstiege. Normale Push-/PR-Läufe
+  prüfen nur Python und JS/Build; reine Änderungen unter `docs/` oder an
+  Markdown im Repository-Stamm lösen sie nicht aus. Der Wechsel von Entwurf zu
+  reviewbereit führt alle vier Gruppen aus; manuell sind `quick`, einzelne
+  Gruppen oder `full` wählbar, sobald der Workflow auf dem Default-Branch liegt.
+  Spätere Pushes wiederholen nur die schnellen Prüfungen. Node 24, Java 21 und
   Demo-Projekt sind festgelegt; kein Produktcredential nötig.
   `publisher-tests.yml` und die Vorprüfung in `publish-consensus.yml` bleiben.
   `dev.ps1 check rules` kapselt den separaten Client-Regelrunner mit demselben

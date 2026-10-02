@@ -413,11 +413,33 @@ Remove-Item Env:RUN_E2E
 
 ## CI
 
-[`tests.yml`](../.github/workflows/tests.yml) prüft bei Pull Requests, Push auf
-`main` und manueller Auslösung vier Grenzen: reguläres Python, JavaScript/Build,
-Chromium mit nativen Firestore-Transaktionen und Clientregeln sowie beide
-Windows-PowerShell-Versionen und reale `dev.ps1`-Einstiege. Leere Discovery und
-Fehler schlagen fehl; Ergebnisse/Emulatorlogs werden auch bei Fehlern archiviert.
+[`tests.yml`](../.github/workflows/tests.yml) unterscheidet schnelle automatische
+Prüfungen und bewusst angeforderte vollständige Regressionen:
+
+| Anlass | Prüfungen |
+|---|---|
+| Push auf `main`, PR geöffnet/aktualisiert/wieder geöffnet | Python und JavaScript/Build; keine Browser-/Emulator- oder Windows-Suite |
+| PR wechselt von Entwurf zu „Ready for review“ | Alle vier Testgruppen, einschließlich Chromium/Firestore/Clientregeln und Windows-Einstiegen |
+| „Run workflow“ → `quick` (Standard) | Python und JavaScript/Build |
+| „Run workflow“ → einzelne Suite | Nur `backend`, `frontend`, `browser-and-rules` oder `windows-entry-points` |
+| „Run workflow“ → `full` | Alle vier Testgruppen |
+
+Auch weitere Pushes auf einen bereits reviewbereiten PR starten nur die schnellen
+Prüfungen. Vor der Integration nach relevanten Folgeänderungen den vollständigen
+Lauf gezielt erneut anfordern. Automatische Läufe ignorieren Änderungen, die
+ausschließlich unter `docs/` oder in Markdown-Dateien im Repository-Stamm liegen;
+manuelle Läufe bleiben davon unabhängig. Gleichartige überholte Läufe werden
+abgebrochen; schnelle Push-Prüfungen brechen einen angeforderten vollständigen
+oder einzelnen Lauf nicht ab.
+
+Die manuelle Auswahl findet sich unter GitHub Actions → „Regression tests“ →
+„Run workflow“, sobald der Workflow auf dem Default-Branch vorhanden ist.
+Solange er nur im Entwurfs-PR liegt, löst dessen Wechsel zu „Ready for review“
+den vollständigen Lauf aus; lokal bleiben alle `dev.ps1 check`-Befehle verfügbar.
+Die Workflow-Auswahl ändert keine persönlichen GitHub-Mail-Einstellungen und
+unterdrückt keine Fehler: angeforderte Tests bleiben bei Fehlern rot.
+
+Leere Discovery und Fehler schlagen fehl; Ergebnisse/Emulatorlogs werden auch bei Fehlern archiviert.
 Ein vorhandener Workflow allein ist kein bestandener Lauf; die Laufbelege und
 Paketabnahme stehen im Implementierungsbericht.
 
