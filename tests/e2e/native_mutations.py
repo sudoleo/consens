@@ -13,6 +13,7 @@ import re
 import subprocess
 import sys
 import textwrap
+import threading
 
 
 CASES = {
@@ -25,7 +26,16 @@ CASES = {
     "WP-07": ("app.services.usage_repository", "FirestoreUsageRepository.book_operation", [
         ("if operation in booked:", "if False:")],
         "test_usage_transactions.py::test_native_identical_key_and_booking_are_exactly_once"),
+    "WP-07-atomicity": ("app.services.usage_repository", "FirestoreUsageRepository._transaction", [
+        ("return run(transaction)", "return _audit_unprotected_operation(self, uid, operation)")],
+        "test_usage_transactions.py::test_native_last_allowance_release_and_utc_period"),
+    "WP-07-atomicity-charge": ("app.services.usage_repository", "FirestoreUsageRepository._transaction", [
+        ("return run(transaction)", "return _audit_unprotected_operation(self, uid, operation)")],
+        "test_usage_transactions.py::test_native_distinct_bookings_preserve_both_charges"),
     "WP-08": ("app.services.chat_store", "ChatStore.complete_turn", [
+        ('if (chat_snapshot.to_dict() or {}).get("status") != CHAT_STATUS_ACTIVE:', 'if False:')],
+        "test_chat_lifecycle_transactions.py::test_native_deleting_tombstone_fences_writes_before_physical_purge"),
+    "WP-08-terminal": ("app.services.chat_store", "ChatStore.complete_turn", [
         ("if status != TURN_STATUS_PENDING:", "if False:")],
         "test_chat_lifecycle_transactions.py::test_native_terminal_failure_rejects_completion_and_remains_failed"),
     "WP-09": ("app.services.account_deletion", "FirestoreAccountDeletion.cleanup_uid", [
@@ -59,6 +69,37 @@ CASES = {
 }
 
 
+def _install_unprotected_native_reads():
+    """The deliberate mutant still uses actual SDK calls and every quota guard.
+
+    Both unprotected workers first read the same ledger before either writes.
+    This synchronization exists only in the mutant, never inside a production
+    SDK transaction callback. It makes the lost-update schedule deterministic.
+    """
+    from google.cloud.firestore_v1.document import DocumentReference
+    original_get = DocumentReference.get
+    both_ledgers_read = threading.Barrier(2)
+
+    class ImmediateWrites:
+        def set(self, ref, data, **kwargs):
+            return ref.set(data, **kwargs)
+
+        def update(self, ref, data, **kwargs):
+            return ref.update(data, **kwargs)
+
+    def unprotected_get(self, *args, **kwargs):
+        if isinstance(kwargs.get("transaction"), ImmediateWrites):
+            kwargs.pop("transaction")
+            snapshot = original_get(self, *args, **kwargs)
+            if self.id.startswith("agent_tokens_") and threading.current_thread().name.startswith("ThreadPoolExecutor"):
+                both_ledgers_read.wait(timeout=15)
+            return snapshot
+        return original_get(self, *args, **kwargs)
+
+    DocumentReference.get = unprotected_get
+    return lambda repository, uid, operation: operation(ImmediateWrites())
+
+
 def pytest_sessionstart(session):
     name = os.environ.get("AUDIT_NATIVE_MUTATION")
     if not name:
@@ -74,6 +115,8 @@ def pytest_sessionstart(session):
         assert old in source, f"Mutation target drift: {name} {old}"
         source = source.replace(old, new, 1)
     namespace = dict(original.__globals__)
+    if name.startswith("WP-07-atomicity"):
+        namespace["_audit_unprotected_operation"] = _install_unprotected_native_reads()
     exec(compile(source, f"<negative-control-{name}>", "exec", flags=__future__.annotations.compiler_flag), namespace)
     setattr(target, attribute, namespace[attribute])
 
