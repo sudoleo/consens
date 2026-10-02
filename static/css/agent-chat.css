@@ -235,7 +235,6 @@
   .agent-answer-actions button, .agent-composer-notice button, .agent-evidence-links .agent-evidence-link { min-height: 44px; }
 }
 body.single-agent-active :is(#consensusOutput, #consensusRun, #agentModePanel, .response-section,
-  #deepThinkInputIndicator,
   #runProvenance, .consensus-footer-actions, #composerRunNotice, #heroResponseAccess,
   .models-section, .models-section + .sidebar-separator, .demo-chip) { display: none !important; }
 body:not(.single-agent-active) #agentAnswer, body:not(.single-agent-active) #agentReviewNotice { display: none; }

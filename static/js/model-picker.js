@@ -352,8 +352,7 @@
 
   function applyConsensusPreset(select, presetId) {
     // Kein change-Event: die Preset-Aufloesung darf pref_select_consensus
-    // nicht ueberschreiben (gleiches Muster wie die temporaere
-    // Deep-Think-Auswahl in app-init.js).
+    // nicht ueberschreiben.
     const value = resolveConsensusPresetValue(select, presetId);
     if (!value) return null;
     const preset = getConsensusPresets().find(entry => entry.id === presetId);
@@ -429,7 +428,7 @@
 
     // Mit Preset-Ebene zeigt der Trigger den Preset-Namen, solange der
     // Select-Wert der Preset-Aufloesung entspricht. Weicht der Wert ab
-    // (z. B. temporaere Deep-Think-Auswahl), bleibt der echte Modellname.
+    // (z. B. eine explizite Modellwahl), bleibt der echte Modellname.
     let displayLabel = selectedLabel;
     let displayTitle = selectedLabel;
     if (state.presets) {
@@ -1267,7 +1266,7 @@
     const composer = state.host.closest('.input-section');
     if (composer) composerPickerResize?.observe(composer);
     fitComposerPicker(state);
-    // A shortcut (Deep Think, Comparison models, a notice) lands inside the
+    // A shortcut (Reasoning, Comparison models, a notice) lands inside the
     // level it named, ready for the keyboard.
     if (level) focusPickerMenu(state);
   }

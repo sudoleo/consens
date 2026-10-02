@@ -130,24 +130,32 @@ class ExistingModelFlowTests(unittest.TestCase):
             default_request["payload"]["reasoning"], {"effort": "high"},
         )
 
-        deep_request = build_provider_payload(
+        # Reasoning on keeps the default model (no Pro swap) and its Mistral
+        # reasoning default.
+        reasoning_request = build_provider_payload(
             "mistral",
             question="payload dry run",
             system_prompt="system",
             deep_search=True,
             max_output_tokens=123,
         )
-        self.assertEqual(deep_request["api_model"], "mistralai/mistral-medium-3-5")
+        self.assertEqual(reasoning_request["api_model"], "mistralai/mistral-small-2603")
         self.assertEqual(
-            deep_request["payload"]["reasoning"], {"effort": "high"},
+            reasoning_request["payload"]["reasoning"], {"effort": "high"},
         )
         self.assertNotIn("pixtral-large-latest", cfg.ALLOWED_MISTRAL_MODELS)
 
-    def test_deep_think_consensus_model_is_always_available_and_pro_gated(self):
-        self.assertIn(cfg.GEMINI_35_FLASH_MODEL, cfg.DEFAULT_CONSENSUS_MODELS)
-        self.assertTrue(cfg.is_premium_consensus_model(cfg.GEMINI_35_FLASH_MODEL))
+    def test_no_engine_is_forced_into_the_consensus_list_for_deep_think(self):
+        # Deep Think (removed 2026-10-02) used to force its own engine into
+        # every Consensus list; only preset engines are kept now.
+        self.assertFalse(hasattr(cfg, "DEEP_THINK_CONSENSUS_MODEL"))
+        self.assertFalse(hasattr(cfg, "apply_deep_think_model"))
+        self.assertFalse(hasattr(cfg, "DEEP_THINK_PROMPT"))
         normalized = cfg.normalize_consensus_models(["Grok"])
-        self.assertIn(cfg.GEMINI_35_FLASH_MODEL, normalized)
+        preset_engines = {
+            preset["consensus"] for preset in cfg.CONSENSUS_PRESET_MODELS.values()
+        }
+        self.assertEqual(set(normalized), {"Grok"} | preset_engines)
 
     def test_consensus_presets_are_complete_model_sets(self):
         presets = {preset["id"]: preset for preset in cfg.get_consensus_presets()}
@@ -214,23 +222,7 @@ class ExistingModelFlowTests(unittest.TestCase):
                 normalized[provider],
             )
 
-    def test_apply_deep_think_model_validates_and_falls_back(self):
-        snapshot = cfg.get_deep_think_consensus_model()
-        try:
-            # Gueltiger Alias wird uebernommen und in der Consensus-Liste gesichert.
-            cfg.apply_deep_think_model("Gemini-Pro")
-            self.assertEqual(cfg.get_deep_think_consensus_model(), "Gemini-Pro")
-            self.assertIn("Gemini-Pro", cfg.normalize_consensus_models(["Grok"]))
-            # Unbekannte Werte fallen auf die Basis zurueck.
-            cfg.apply_deep_think_model("not-a-model")
-            self.assertEqual(cfg.get_deep_think_consensus_model(), cfg.GEMINI_35_FLASH_MODEL)
-            # Leer/None ebenfalls.
-            cfg.apply_deep_think_model(None)
-            self.assertEqual(cfg.get_deep_think_consensus_model(), cfg.GEMINI_35_FLASH_MODEL)
-        finally:
-            cfg.apply_deep_think_model(snapshot)
-
-    def test_normalize_models_document_validates_deep_think_model(self):
+    def test_normalize_models_document_drops_the_old_deep_think_model(self):
         base = {
             "openai": [cfg.DEFAULT_OPENAI_MODEL],
             "mistral": [cfg.DEFAULT_MISTRAL_MODEL],
@@ -241,19 +233,13 @@ class ExistingModelFlowTests(unittest.TestCase):
             "premium": [],
             "consensus": ["Gemini"],
         }
-        # Alias ist gueltig und bleibt in der Consensus-Liste erhalten.
+        # An old document or client may still carry the field: it is
+        # dropped and never pulls its engine into the Consensus list.
         normalized = normalize_models_document({**base, "deep_think_model": "Anthropic-Pro"})
-        self.assertEqual(normalized["deep_think_model"], "Anthropic-Pro")
-        self.assertIn("Anthropic-Pro", normalized["consensus"])
-        # Direkte Modell-ID aus einer Provider-Liste ist gueltig.
-        normalized = normalize_models_document({**base, "deep_think_model": cfg.DEFAULT_OPENAI_MODEL})
-        self.assertEqual(normalized["deep_think_model"], cfg.DEFAULT_OPENAI_MODEL)
-        self.assertIn(cfg.DEFAULT_OPENAI_MODEL, normalized["consensus"])
-        # Unbekannte Werte und fehlendes Feld fallen auf die Basis zurueck.
-        for payload in ({**base, "deep_think_model": "not-a-model"}, dict(base)):
-            normalized = normalize_models_document(payload)
-            self.assertEqual(normalized["deep_think_model"], "Gemini")
-            self.assertIn("Gemini", normalized["consensus"])
+        self.assertNotIn("deep_think_model", normalized)
+        self.assertNotIn("Anthropic-Pro", normalized["consensus"])
+        normalized = normalize_models_document(dict(base))
+        self.assertNotIn("deep_think_model", normalized)
 
     def test_apply_judge_families_and_family_preference(self):
         from app.services.llm import consensus_engine
@@ -429,10 +415,18 @@ class ExistingModelFlowTests(unittest.TestCase):
         grok = reasoning["model_answers"]["grok"][cfg.GROK_NO_REASONING_MODEL]
         self.assertEqual(grok["reasoning"], {"effort": "none"})
         self.assertEqual(grok["source"], "MODEL_REQUEST_CONFIG")
-        self.assertEqual(
-            reasoning["deep_think_answers"]["mistral"]["reasoning"],
-            {"effort": "high"},
+        self.assertNotIn("deep_think_answers", reasoning)
+        openai_control = next(
+            control for control in reasoning["controls"]
+            if control["provider"] == "openai" and control["model"] == cfg.OPENAI_PRO_MODEL
         )
+        self.assertNotIn("deep", openai_control["previews"]["existing"])
+        self.assertEqual(
+            openai_control["previews"]["existing"]["reasoning"], {"effort": "high"},
+        )
+        self.assertTrue(any(
+            flow["name"] == "Answers with Reasoning on" for flow in reasoning["flows"]
+        ))
         self.assertEqual(
             reasoning["judges"]["mistral"]["standard"]["reasoning"],
             {"effort": "none"},
@@ -500,12 +494,15 @@ class ExistingModelFlowTests(unittest.TestCase):
         self.assertNotIn("if (!definition.pro_only && premium.has(model)) return;", module)
         self.assertNotIn("if (!definition.pro_only && isLockedConsensusModel(model)) return;", module)
 
-    def test_admin_template_has_tabs_and_deep_think_control(self):
+    def test_admin_template_has_tabs_and_no_deep_think_control(self):
         template = (ROOT / "templates" / "admin.html").read_text(encoding="utf-8")
         module = (ROOT / "static" / "js" / "admin.js").read_text(encoding="utf-8")
         css = (ROOT / "static" / "css" / "admin.css").read_text(encoding="utf-8")
-        self.assertIn('deepThinkModelSelect', template)
-        self.assertIn('deep_think_model: currentDeepThinkModel()', module)
+        self.assertNotIn('deepThinkModelSelect', template)
+        self.assertNotIn('Deep Think', template)
+        self.assertNotIn('deep_think_model', module)
+        self.assertNotIn('Deep Think', module)
+        self.assertIn("['reasoning_max_tokens',", module)
         self.assertIn('judge_models: currentJudgeModels()', module)
         self.assertIn('judge_models_pro: currentProJudgeModels()', module)
         self.assertIn('judge_families: currentJudgeFamilies()', module)
@@ -542,13 +539,22 @@ class ExistingModelFlowTests(unittest.TestCase):
         self.assertIn("grid-template-columns: minmax(0, 1fr);", picker_css)
         self.assertIn("overflow-x: hidden;", picker_css)
 
-    def test_index_injects_deep_think_consensus_model(self):
+    def test_index_no_longer_injects_a_deep_think_consensus_model(self):
         template = (ROOT / "templates" / "index.html").read_text(encoding="utf-8")
         bootstrap = (ROOT / "static" / "js" / "app-bootstrap.js").read_text(encoding="utf-8")
-        self.assertIn("data-deep-think-model", template)
-        self.assertIn("window.DEEP_THINK_CONSENSUS_MODEL", bootstrap)
         module = (ROOT / "static" / "js" / "app-init.js").read_text(encoding="utf-8")
-        self.assertIn('window.DEEP_THINK_CONSENSUS_MODEL || "gemini-3.5-flash"', module)
+        self.assertNotIn("data-deep-think-model", template)
+        self.assertNotIn("Deep Think", template)
+        self.assertNotIn("DEEP_THINK_CONSENSUS_MODEL", bootstrap)
+        self.assertNotIn("DEEP_THINK_CONSENSUS_MODEL", module)
+        # One Reasoning switch for every tier, no Pro badge on its menu row.
+        self.assertIn('id="reasoningToggle"', template)
+        self.assertIn('id="composerReasoningToggle"', template)
+        row = template[template.index('for="reasoningToggle"'):]
+        row = row[:row.index("</label>")]
+        self.assertIn("Reasoning", row)
+        self.assertNotIn("pro-badge", row)
+        self.assertNotIn('showProFeatureModal("Deep Think")', module)
 
     def test_saved_preferences_are_not_overwritten_when_present(self):
         # applyTierDefaultModels lebt seit dem index.html-Refactor in

@@ -26,14 +26,16 @@
     return error?.name === "AbortError";
   }
 
-  // Compare = answers only, otherwise the full Consensus pipeline. Deep Think
-  // is derived server-side from deep_search.
+  // Compare = answers only, otherwise the full Consensus pipeline. The
+  // Reasoning switch travels separately as deep_search (kept wire name).
   function runModeOf(context) {
     return context?.config?.agentMode ? "consensus" : "compare";
   }
 
+  // Bookmark/turn label. "Deep Think" only survives in old bookmarks; the
+  // Reasoning switch is recorded as deep_search, not as a mode.
   function getActiveMode() {
-    return document.getElementById("deepSearchToggle")?.checked ? "Deep Think" : "Standard";
+    return "Standard";
   }
 
   function isDemoQuery(question) {
@@ -54,7 +56,7 @@
     return String(option?.dataset?.modelLabel || option?.text || select?.value || "").trim();
   }
 
-  function selectedProviders(attachmentCount, deepSearch) {
+  function selectedProviders(attachmentCount) {
     return providerDefinitions().reduce((items, definition) => {
       if (!document.getElementById(definition.checkboxId)?.checked) return items;
       const select = document.getElementById(definition.selectId);
@@ -63,16 +65,13 @@
       // Die Faehigkeit gehoert zum effektiven Modell, nicht zur Familie:
       // GLM 5.3 Flash ist multimodal, GLM 5.3 text-only.
       const acceptsAttachments = typeof window.App.modelAcceptsAttachments === "function"
-        ? window.App.modelAcceptsAttachments(definition.pref, modelId, deepSearch)
+        ? window.App.modelAcceptsAttachments(definition.pref, modelId)
         : definition.pref.handlesAttachments !== false;
       if (attachmentCount > 0 && !acceptsAttachments) return items;
-      const deepLabel = window.App.deepThinkModelLabels?.[definition.provider];
       items.push({
         ...definition,
         modelId,
-        modelLabel: deepSearch && deepLabel
-          ? deepLabel
-          : (optionLabel(select) || definition.provider)
+        modelLabel: optionLabel(select) || definition.provider
       });
       return items;
     }, []);
@@ -603,7 +602,8 @@
     const agentMode = window.App.runMode.pipeline();
     const basis = registry.getSelectedConversationBasis();
     const followup = Boolean(agentMode && basis && basis.question && basis.consensus && !basis.continuationUnavailable);
-    const deepSearch = document.getElementById("deepSearchToggle")?.checked === true;
+    // Reasoning switch; kept as config.deepSearch / deep_search on the wire.
+    const deepSearch = document.getElementById("reasoningToggle")?.checked === true;
     const useOwnKeys = document.getElementById("useOwnKeysSwitch")?.checked === true;
     const attachments = window.getAttachmentsPayload?.() || [];
     const attachmentMeta = attachments.map(item => ({ name: item.name, mime: item.mime, size: item.size || 0 }));
@@ -613,7 +613,7 @@
       }
       return null;
     }
-    const providers = selectedProviders(attachments.length, deepSearch);
+    const providers = selectedProviders(attachments.length);
     if (providers.length < 2) {
       window.App.showPopup?.("Choose at least two compatible models. Remove the attachment or select another model.");
       return null;
@@ -798,7 +798,7 @@
     }
 
     const useOwnKeys = document.getElementById("useOwnKeysSwitch")?.checked === true;
-    const deepThink = document.getElementById("deepSearchToggle")?.checked === true;
+    const deepThink = document.getElementById("reasoningToggle")?.checked === true;
     const runMode = deepThink ? "deep_think" : (window.App.runMode?.pipeline?.() === false ? "compare" : "consensus");
     if (window.App.usageLimit?.blockIfExhausted?.({ useOwnKeys, deepThink, mode: runMode, source: "send" })) {
       trackAppEvent("app_query_blocked", { reason: "usage_limit" });

@@ -85,7 +85,7 @@ def get_user_status(request: Request):
 
         return {
             "uid": uid,
-            # is_pro heisst weiterhin "Frontier-Modelle und Deep Think" und ist
+            # is_pro heisst weiterhin "Frontier-Modelle" und ist
             # fuer Plus False; "tier" traegt die vollstaendige Stufe.
             "is_pro": entitlements.is_pro,
             # Agent is open to every signed-in account (2026-10-02); premium

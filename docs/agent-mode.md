@@ -80,8 +80,8 @@ Der Moduswähler (Compare / Consensus / Agent, `run-mode.js`) tritt in einem
 offenen Agent-Chat zurück: Compare und Consensus brauchen einen neuen Chat,
 weil die Chat-Familien serverseitig getrennt sind. „Check contradictions“ schaltet das
 Quellenprüfungs-Tool für die nächste Nachricht frei. Der gemeinsame On/Off-Wert
-wird beim Senden eingefroren und bei Recovery wiederverwendet. „Deep Think“
-öffnet direkt die vorhandene Reasoning-Auswahl des Chatmodells und zeigt deren
+wird beim Senden eingefroren und bei Recovery wiederverwendet. „Reasoning“
+(`#composerReasoningToggle`, im (+)-Menü `#agentReasoningMenuOption`) öffnet direkt die vorhandene Reasoning-Auswahl des Chatmodells und zeigt deren
 aktuelle Stufe. Modelle ohne wählbares Reasoning und laufende Nachrichten sperren
 dieses Menü. „Attach“ lädt PDF, Word, Text und Bilder in den privaten Chat-Dateispeicher.
 Siehe [Agent integrations](agent-integrations.md) für Limits und Konfiguration.

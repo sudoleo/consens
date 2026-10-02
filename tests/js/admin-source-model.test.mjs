@@ -98,7 +98,6 @@ describe('Admin source-check model', () => {
             const providers = [];
             function consensusListValues() { return []; }
             function currentPresetModels() { return {}; }
-            function currentDeepThinkModel() { return 'Gemini'; }
             function currentJudgeModels() { return {}; }
             function currentProJudgeModels() { return {}; }
             function currentJudgeFamilies() { return {}; }

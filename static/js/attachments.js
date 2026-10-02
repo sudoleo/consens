@@ -39,11 +39,10 @@
   // Familien, deren aktuell effektives Modell keine Anhaenge lesen kann.
   function attachmentBlockedFamilies() {
     if (window.App?.agentChat?.isSelected?.()) return [];
-    const deepThink = document.getElementById("deepSearchToggle")?.checked === true;
     return (window.App?.modelPrefs || []).filter(pref => {
       const model = document.getElementById(pref.selectId)?.value;
       const accepts = typeof window.App?.modelAcceptsAttachments === "function"
-        ? window.App.modelAcceptsAttachments(pref, model, deepThink)
+        ? window.App.modelAcceptsAttachments(pref, model)
         : pref.handlesAttachments !== false;
       return !accepts;
     });

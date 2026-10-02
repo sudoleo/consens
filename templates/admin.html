@@ -13,9 +13,9 @@
           data-firebase-app-id="{{ firebase_app_id | e }}">
     <script src="/static/js/admin-config.js?v=20260811-phase6"></script>
 <link rel="stylesheet" href="/static/style.css?v=20261002-marks">
-    <link rel="stylesheet" href="/static/css/admin.css?v=20261001-tokens1">
+    <link rel="stylesheet" href="/static/css/admin.css?v=20261002-reasoning">
 
-    <script type="module" src="/static/js/admin.js?v=20261002-errors"></script>
+    <script type="module" src="/static/js/admin.js?v=20261002-reasoning"></script>
 </head>
 <body class="dark-mode">
     <header class="top-bar">
@@ -35,7 +35,7 @@
     <div class="admin-shell">
         <nav class="admin-tabs" role="tablist" aria-label="Admin sections">
             <button type="button" data-tab="models" role="tab">Models</button>
-            <button type="button" data-tab="consensus" role="tab">Consensus &amp; Deep Think</button>
+            <button type="button" data-tab="consensus" role="tab">Consensus</button>
             <button type="button" data-tab="configuration" role="tab">Configuration</button>
             <button type="button" data-tab="limits" role="tab">Limits</button>
             <button type="button" data-tab="accounts" role="tab">Accounts</button>
@@ -73,7 +73,7 @@
                     <label>Preview request type
                         <select id="reasoningScope">
                             <option value="answers">Standard answers</option>
-                            <option value="deep">Deep Think answers</option>
+                            <option value="reasoning">Answers with Reasoning on</option>
                             <option value="synthesis">Consensus synthesis</option>
                             <option value="helpers">Judges &amp; chat memory</option>
                         </select>
@@ -82,7 +82,7 @@
                 <p id="reasoningSummary" class="section-hint" aria-live="polite"></p>
                 <label class="section-hint"><input id="reasoningShowProtected" type="checkbox"> Also show protected / unchanged models</label>
                 <div id="reasoningControls" class="reasoning-model-grid"></div>
-                <p class="section-hint">Preview applies to the next saved configuration, including Deep Think, API, Watches and Topics using these models.
+                <p class="section-hint">Preview applies to the next saved configuration, including the Reasoning switch, API, Watches and Topics using these models.
                     Use <strong>Save Changes</strong> to activate; <strong>Reload</strong> discards edits.
                     Memory edit, SEO review and Publisher screening retain their fixed task settings.</p>
                 <details class="reasoning-model-details">
@@ -116,18 +116,6 @@
             </div>
 
             <div class="admin-section">
-                <h3>Deep Think Model</h3>
-                <p class="section-hint">
-                    Consensus engine Deep Think switches to while active. Deep Think remains a separate
-                    request mode: it adds the deeper prompt, reasoning settings, token budget and quota on
-                    top of the preset selection. The selected engine stays in the Consensus list.
-                </p>
-                <div class="deepthink-card">
-                    <select id="deepThinkModelSelect" aria-label="Deep Think consensus model"></select>
-                </div>
-            </div>
-
-            <div class="admin-section">
                 <h3>Differences Judges</h3>
                 <p class="section-hint">
                     Judge models per provider family for the Differences engine and the Resolve round.
@@ -157,11 +145,11 @@
                     Default: Gemini 3.5 Flash-Lite. Changes apply to new checks;
                     checks already in progress keep their original model choices.
                 </p>
-                <div class="deepthink-card">
+                <div class="admin-select-card">
                     <label for="sourceVerificationModelSelect">Source-check model</label>
                     <select id="sourceVerificationModelSelect" aria-label="Source-check model"></select>
                 </div>
-                <div class="deepthink-card">
+                <div class="admin-select-card">
                     <label for="sourceVerificationFallbackModelSelect">Source-check fallback model</label>
                     <select id="sourceVerificationFallbackModelSelect" aria-label="Source-check fallback model"
                             aria-describedby="sourceVerificationFallbackHelp"></select>
@@ -213,7 +201,7 @@
             <form id="agentBudgetForm" class="admin-section">
                 <h3>Daily token allowance</h3>
                 <p class="section-hint">
-                    One account per user and UTC day for Compare, Consensus, Deep Think and Agent
+                    One account per user and UTC day for Compare, Consensus, Reasoning runs and Agent
                     (input + output tokens, reasoning included). A run starts only when the tokens left
                     cover its <strong>expected run</strong> cost below; it then books what it measured and
                     may end slightly below zero. Agent reserves before every call. Who may use Agent is
@@ -228,7 +216,7 @@
                                 <th scope="col">Tokens per day</th>
                                 <th scope="col">Compare run</th>
                                 <th scope="col">Consensus run</th>
-                                <th scope="col">Deep Think run</th>
+                                <th scope="col">Reasoning run</th>
                             </tr>
                         </thead>
                         <tbody id="agentBudgetRows"></tbody>
@@ -244,7 +232,8 @@
             </form>
             <p class="section-hint section-hint-compact">
                 Input, output and Watch limits per account tier. Limits apply after the daily reset.
-                Deep Think stays Pro-only.
+                The Reasoning switch is open to every tier; its output cap is the larger of the tier's
+                output limit and <em>Reasoning output tokens</em>.
             </p>
             <div id="limitsContainer" class="limits-grid">
                 <!-- Populated by JavaScript -->
@@ -256,10 +245,10 @@
                 <h3>Account tier</h3>
                 <p class="section-hint">
                     <strong>Free</strong> — base models, small daily quota.
-                    <strong>Plus</strong> — exactly the Free model choice and no Deep Think, but attachments,
+                    <strong>Plus</strong> — exactly the Free model choice, but attachments,
                     Resolve rounds and the largest run quota. Give this to testers: they cannot trigger a
                     frontier-model cost.
-                    <strong>Pro</strong> — everything, including frontier models and Deep Think.
+                    <strong>Pro</strong> — everything, including frontier models.
                     A change takes effect immediately; every change is written to an audit log.
                 </p>
                 <div class="api-key-form">

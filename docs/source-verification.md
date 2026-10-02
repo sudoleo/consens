@@ -528,7 +528,7 @@ auf einen scheinbar vollstaendigen kleinen Snapshot gekuerzt.
 
 Das Feld `source_verification_model` in `app_config/models` waehlt das Modell;
 Standard ist `google/gemini-3.5-flash-lite`. Es ist im Admin-Bereich unter
-Consensus & Deep Think → Source Checks editierbar und wird mit den anderen
+Consensus → Source Checks editierbar und wird mit den anderen
 Modelleinstellungen gespeichert, validiert und geladen. Ein fehlender Wert
 wird beim Backfill ergaenzt; alte Admin-Tabs ohne dieses Feld behalten beim
 Speichern den aktiven Wert. `SOURCE_VERIFICATION_MODEL` aus der Umgebung hat

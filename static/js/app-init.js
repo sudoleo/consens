@@ -47,7 +47,6 @@
         // unverändert bleiben (Übergangsbus, siehe app-core.js).
         const {
           modelPrefs,
-          deepThinkModelLabels,
           getModelOptionLabel,
           getSelectedModelCount,
           trackAppEvent,
@@ -72,13 +71,9 @@
         // für die Aufrufstellen in initApp.
         const updateUserTierUI = window.updateUserTierUI;
         const updatePremiumModelsState = window.updatePremiumModelsState;
-        // Brücke: user-tier.js nutzt updateDeepThinkText (gehoistete Fn-Decl in initApp).
-        window.App.updateDeepThinkText = updateDeepThinkText;
+        // Brücke: user-tier.js nutzt updateReasoningUI (gehoistete Fn-Decl in initApp).
+        window.App.updateReasoningUI = updateReasoningUI;
 
-        const deepSearchToggle = document.getElementById("deepSearchToggle");
-
-        // Auslesen des aktuellen Zustands (true, wenn aktiviert, sonst false):
-        const deepSearchActive = deepSearchToggle.checked;
         const modeToggles = Array.from(document.querySelectorAll(".theme-toggle"));
 
         function applyTheme(theme) {
@@ -359,102 +354,20 @@
         // Modi werden jetzt dort erklaert, wo man sie schaltet (Settings,
         // (+)-Menue) und waehrend sie laufen (gefuehrter Lauf).
 
-        // deepThinkModelLabels stammt aus app-core.js (window.App), siehe Alias oben.
-        // Admin-konfigurierbar via /admin (Firestore-Feld deep_think_model),
-        // vom Server ueber window.DEEP_THINK_CONSENSUS_MODEL injiziert.
-        const DEEP_THINK_CONSENSUS_MODEL = window.DEEP_THINK_CONSENSUS_MODEL || "gemini-3.5-flash";
-        let consensusModelBeforeDeepThink = null;
-
-        function syncDeepThinkConsensusModel(isActive) {
-          const select = document.getElementById("consensusModelDropdown");
-          if (!select) return;
-
-          const target = Array.from(select.options).find(option =>
-            option.value === DEEP_THINK_CONSENSUS_MODEL
-          );
-
-          if (isActive) {
-            if (!target || target.disabled || select.value === target.value) return;
-            if (consensusModelBeforeDeepThink === null) {
-              consensusModelBeforeDeepThink = select.value;
-            }
-            select.value = target.value;
-          } else {
-            const previousValue = consensusModelBeforeDeepThink;
-            consensusModelBeforeDeepThink = null;
-            if (!previousValue || !target || select.value !== target.value) return;
-            const previousOption = Array.from(select.options).find(option =>
-              option.value === previousValue && !option.disabled
-            );
-            if (!previousOption) return;
-            select.value = previousOption.value;
-          }
-
-          // Kein change-Event: die Deep-Think-Auswahl ist temporaer und darf
-          // pref_select_consensus nicht ueberschreiben. Der Custom-Picker muss
-          // den nativen Select-Wert trotzdem sofort spiegeln.
-          if (typeof window.syncCustomModelPickers === "function") {
-            window.syncCustomModelPickers();
-          }
-        }
-
-        function updateDeepThinkText() {
-          const deepSearchToggle = document.getElementById("deepSearchToggle");
-
-          const deepSearchActive = !!deepSearchToggle && deepSearchToggle.checked;
-          syncDeepThinkConsensusModel(deepSearchActive);
-
-          const deepthinkDisclaimer = document.getElementById("deepthinkDisclaimer");
-          const inputIndicator = document.getElementById("deepThinkInputIndicator");
-
-          // Keep the active mode visible in the lower action row after the (+)
-          // menu closes. The checkbox remains the single source of truth,
-          // including programmatic tier resets.
-          if (inputIndicator) {
-            inputIndicator.hidden = !deepSearchActive;
-          }
-
-          // -------------------------
-          // Suppress the inline Deep Think explainer next to the controls.
-          // -------------------------
-          const deepText = "";
-
-          // -------------------------
-          // Mobile / kleine Screens: Popup
-          // -------------------------
-          if (isCompactControlLayout()) {
-            // Priorität Deep Think: wenn beides an ist, nur Deep Think Text zeigen
-            if (deepthinkDisclaimer) deepthinkDisclaimer.style.display = "none";
-          } else {
-            // -------------------------
-            // Desktop: Text RECHTS vom Deep-Think-Toggle
-            // -------------------------
-            if (deepthinkDisclaimer) {
-              if (deepSearchActive) {
-                // Priorität:
-                // 1) Deep Think aktiv -> Deep Text
-                // 2) Nur Web Search aktiv -> Web-Search-Text
-                deepthinkDisclaimer.textContent = deepText;
-                deepthinkDisclaimer.style.display = "none";
-              } else {
-                deepthinkDisclaimer.style.display = "none";
-              }
-            }
-
-            // Den ursprünglichen Web-Search-Disclaimer-Span ausblenden
-          }
-
-          // Model-Picker zeigen/verstecken
-          const showPickers = !deepSearchActive;
+        // Der Reasoning-Schalter (#reasoningToggle) tauscht seit 2026-10-02
+        // weder Antwortmodelle noch die Consensus-Engine: dieselben gewaehlten
+        // Modelle denken nur laenger. Diese Funktion haelt deshalb nur die
+        // Modell-Ueberschriften und den Composer synchron.
+        function updateReasoningUI() {
           document.querySelectorAll(".model-picker-wrapper").forEach(el => {
-            el.style.display = showPickers ? "inline-flex" : "none";
+            el.style.display = "inline-flex";
           });
 
           const selectedModelLabel = (selectId) => {
             const select = document.getElementById(selectId);
             return getModelOptionLabel(select?.options[select.selectedIndex]) || select?.value || "";
           };
-          // Picker and Deep-Think controls configure the next run. Headings in
+          // Picker and Reasoning controls configure the next run. Headings in
           // the selected result keep the model labels frozen at that run's
           // start, even when those controls change while it is in background.
           const visibleRun = window.App.runRegistry?.visible?.();
@@ -475,10 +388,7 @@
             }
           };
           (window.App.modelPrefs || []).forEach(pref => {
-            const text = runLabels[pref.key]
-              || (deepSearchActive
-                ? (deepThinkModelLabels[pref.key] || selectedModelLabel(pref.selectId))
-                : selectedModelLabel(pref.selectId));
+            const text = runLabels[pref.key] || selectedModelLabel(pref.selectId);
             setModelText(pref.textId, text);
           });
 
@@ -487,29 +397,13 @@
           }
         }
 
-        // DEEP THINK & SMOKE TEST LOGIK
-        // Deep Search Toggle Text Update (bestehender Code)
-        document.getElementById("deepSearchToggle").addEventListener("change", function () {
-          updateDeepThinkText(true);
-          window.App.attachments?.refreshCompatibility?.();
-          trackAppEvent("app_deep_think_changed", { enabled: this.checked });
+        // Reasoning-Schalter: fuer alle Stufen frei, kein Pro-Gate.
+        document.getElementById("reasoningToggle").addEventListener("change", function () {
+          updateReasoningUI();
+          trackAppEvent("app_reasoning_changed", { enabled: this.checked });
         });
 
-        // --- DEEP THINK TOGGLE SPERRE ---
-        document.getElementById("deepSearchToggle").addEventListener("click", function (event) {
-          // Wir prüfen die globale Variable window.isUserPro
-          if (!window.isUserPro) {
-            event.preventDefault(); // Verhindert das Umschalten des Toggles
-            trackAppEvent("app_deep_think_locked_click");
-
-            // Kurzen Funktionshinweis anzeigen, ohne den Arbeitsfluss zu blockieren.
-            if (!window.App.showProFeatureModal("Deep Think")) {
-              window.App?.showPopup?.("Deep Think is not available on your account yet.");
-            }
-          }
-        });
-
-        updateDeepThinkText();
+        updateReasoningUI();
 
         // Datei-Anhaenge (Pro) sind nach static/js/attachments.js ausgelagert
         // (window.pendingAttachments, window.renderAttachmentChips,
@@ -595,8 +489,6 @@
           }
         });
 
-        // Elemente für den Search Mode:
-        const deepthinkDisclaimer = document.getElementById("deepthinkDisclaimer");
         const consensusDropdown = document.getElementById("consensusModelDropdown");
 
         // Mapping: Response-Box → zugehörige Sidebar-Checkbox
@@ -680,15 +572,10 @@
         function validateInputText() {
           const text = document.getElementById("questionInput").value.trim();
           const wordCount = text.split(/\s+/).filter(word => word.length > 0).length;
-          // Prüfe, ob der Deep Think Toggle aktiv ist:
-          const deepSearchActive = document.getElementById("deepSearchToggle").checked;
-          // Setze das Wortlimit abhängig vom Deep Think Status
-          // Deep Search gibt es nur mit Pro; das normale Wortlimit hat pro
-          // Stufe einen eigenen Admin-Wert.
+          // Das Wortlimit hat pro Stufe einen eigenen Admin-Wert und haengt
+          // nicht vom Reasoning-Schalter ab (wie serverseitig get_word_limit).
           const tier = window.userTier || "free";
-          const maxWordsRaw = deepSearchActive
-            ? (tier === "pro" ? APP_LIMITS.pro_deep_search_max_words : APP_LIMITS.free_deep_search_max_words)
-            : APP_LIMITS[`${tier}_max_words`];
+          const maxWordsRaw = APP_LIMITS[`${tier}_max_words`];
           const maxWords = Number(maxWordsRaw || 0);
 
           if (wordCount > maxWords) {
@@ -1184,8 +1071,8 @@
             // Speichere die Auswahl im LocalStorage, sobald der User sie ändert
             localStorage.setItem("pref_select_consensus", this.value);
             // Eine explizite Modellwahl (change-Event) verlaesst die
-            // Preset-Ebene; Preset-Klicks und die temporaere Deep-Think-
-            // Auswahl feuern bewusst KEIN change (siehe model-picker.js).
+            // Preset-Ebene; Preset-Klicks feuern bewusst KEIN change
+            // (siehe model-picker.js).
             window.App.markConsensusPresetCustom?.();
             const selectedLabel = getModelOptionLabel(this.options[this.selectedIndex]) || this.value;
             trackAppEvent("app_consensus_model_changed", { model: selectedLabel });

@@ -24,7 +24,7 @@
      .composer-models          who answers, one chip per mode: in Agent the
                                chat model with its comparison models (one
                                menu), else the comparison or consensus
-                               models; the Deep Think hint
+                               models
      .input-actions-container  Demo (onboarding only), Send
    Everything above the field (files, quote, run notice, Google chips) is a
    full-width row of its own.
@@ -168,8 +168,6 @@
 /* An open menu must not be clipped by the row or covered by its neighbours. */
 .chat-input-container :is(.composer-lead, .composer-models):has(.model-picker-menu.is-open) { position: relative; z-index: 2; overflow: visible; }
 
-/* The Deep Think hint repeats the toolbar; it shows only while that is gone. */
-.input-section:has(> .composer-mode-bar:not([hidden]):not([data-docked="true"])) #deepThinkInputIndicator { display: none; }
 /* A docked bar carries only the status of a comparison on screen. */
 .composer-mode-bar[data-docked="true"] .composer-mode-controls { display: none; }
 

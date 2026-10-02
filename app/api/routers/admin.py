@@ -223,6 +223,7 @@ class ModeEstimates(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     compare: Optional[RunEstimate] = None
     consensus: Optional[RunEstimate] = None
+    # Compatibility key: the estimate of a run with Reasoning on.
     deep_think: Optional[RunEstimate] = None
 
 
@@ -1098,24 +1099,10 @@ def normalize_models_document(data: dict) -> dict:
         if preset["consensus"] not in normalized_consensus:
             normalized_consensus.append(preset["consensus"])
 
-    # Deep-Think-Modell: jeder gueltige Consensus-Wert (Alias oder Modell-ID
-    # aus den Provider-Listen); ungueltige Werte fallen auf die Basis zurueck.
-    # Das gewaehlte Modell muss in der Consensus-Liste bleiben, weil Deep Think
-    # die Synthese fest daran koppelt.
-    chosen_deep = str(normalized.get("deep_think_model") or "").strip()
-    if not chosen_deep or (
-        chosen_deep not in cfg.CONSENSUS_ENGINE_ALIASES
-        and chosen_deep not in allowed_direct_consensus
-    ):
-        fallback = cfg._BASE_DEEP_THINK_CONSENSUS_MODEL
-        chosen_deep = (
-            fallback
-            if fallback in allowed_direct_consensus
-            else "Gemini"
-        )
-    if chosen_deep not in normalized_consensus:
-        normalized_consensus.append(chosen_deep)
-    normalized["deep_think_model"] = chosen_deep
+    # Deep Think (bis 2026-10-02) koppelte die Synthese an ein eigenes
+    # Modell. Das Feld "deep_think_model" alter Dokumente/Clients wird
+    # verworfen und nicht mehr gespeichert.
+    normalized.pop("deep_think_model", None)
 
     # Watch-Synthese-Engine: getrennt nach Free/Pro, aber unabhaengig von den
     # Antwortmodellen. Direkte Modell-IDs muessen in einer Providerliste
@@ -1197,7 +1184,7 @@ def _server_enforced_models() -> dict:
     """Kompatibilitaetsfeld fuer das Admin-Frontend.
 
     Providerlisten und Premium-Zuordnung kommen vollstaendig aus Firestore.
-    Interne Deep-Think-/Alias-Fallbacks muessen nicht im normalen Picker stehen
+    Interne Alias-Fallbacks muessen nicht im normalen Picker stehen
     und werden deshalb nicht mehr als unsichtbare Pflichtzeilen erzwungen.
     """
     return {provider: [] for provider in PROVIDER_KEYS}
@@ -1266,10 +1253,6 @@ def _model_dependencies(data: dict) -> dict:
     ):
         for provider, model in (data.get(field) or {}).items():
             add(provider, model, label)
-    deep_model = data.get("deep_think_model")
-    if deep_model not in cfg.CONSENSUS_ENGINE_ALIASES:
-        for provider in PROVIDER_KEYS:
-            add(provider, deep_model, "Deep Think")
     return dependencies
 
 
@@ -1281,7 +1264,6 @@ def _reasoning_admin_meta(data: dict) -> dict:
     therefore visible on the next GET without another UI edit.
     """
     model_answers = {}
-    deep_think_answers = {}
     judges = {}
     chat_memory = {}
     policy = data.get("reasoning_policy", cfg.get_reasoning_policy())
@@ -1334,23 +1316,14 @@ def _reasoning_admin_meta(data: dict) -> dict:
                 preview_policy = {"profile": choice, "models": {}}
                 previews[choice] = {
                     "answers": cfg.effective_model_reasoning(provider, model, policy=preview_policy)[0],
-                    "deep": cfg.effective_model_reasoning(provider, model, deep_think=True, policy=preview_policy)[0],
+                    "reasoning": cfg.effective_model_reasoning(provider, model, reasoning=True, policy=preview_policy)[0],
                     "synthesis": cfg.effective_engine_reasoning(provider, model, policy=preview_policy)[0],
                     "helpers": cfg.effective_engine_reasoning(provider, model, effort=cfg.judge_reasoning_effort(provider), policy=preview_policy)[0],
                 }
             controls.append({
                 "model": model, "provider": provider, "label": cfg.get_model_label(model),
-                "deep_model": model == cfg.PROVIDERS[provider].pro_model,
                 "supported": supported, "note": note, "previews": previews,
             })
-
-        deep_model = cfg.PROVIDERS[provider].pro_model
-        deep_reasoning, deep_source = cfg.effective_model_reasoning(
-            provider, deep_model, deep_think=True, policy=policy
-        )
-        deep_think_answers[provider] = entry(
-            provider, deep_model, deep_reasoning, deep_source
-        )
 
         judges[provider] = {}
         for tier, field in (
@@ -1374,7 +1347,6 @@ def _reasoning_admin_meta(data: dict) -> dict:
     return {
         "controls": controls,
         "model_answers": model_answers,
-        "deep_think_answers": deep_think_answers,
         "judges": judges,
         "chat_memory": chat_memory,
         "flows": [
@@ -1385,9 +1357,12 @@ def _reasoning_admin_meta(data: dict) -> dict:
                 "code": "app/core/config.py · MODEL_REQUEST_CONFIG",
             },
             {
-                "name": "Deep Think answers",
-                "setting": f"{cfg.REASONING_EFFORT_FOR_DEEP} fallback",
-                "detail": "Uses each family's Pro model. The Admin savings cap also applies here.",
+                "name": "Answers with Reasoning on",
+                "setting": f"{cfg.REASONING_EFFORT_ON} fallback",
+                "detail": (
+                    "Same selected model; fills only an unset model policy. "
+                    "The Admin savings cap also applies here."
+                ),
                 "code": "app/core/config.py · effective_model_reasoning",
             },
             {
@@ -1468,7 +1443,6 @@ def _admin_meta(data: dict) -> dict:
         "dependencies": _model_dependencies(data),
         "labels": labels,
         "api_models": api_models,
-        "deep_think_fallback": cfg._BASE_DEEP_THINK_CONSENSUS_MODEL,
         "judge_defaults": dict(cfg._BASE_DIFFERENCES_JUDGE_BY_PROVIDER),
         "judge_pro_defaults": dict(cfg._BASE_PRO_JUDGE_BY_PROVIDER),
         "chat_memory_defaults": dict(cfg._BASE_CHAT_MEMORY_MODEL_BY_PROVIDER),
@@ -1547,13 +1521,6 @@ def _validate_admin_models_input(data: dict, normalized: dict) -> None:
             detail="Consensus contains an unknown or removed model.",
         )
 
-    incoming_deep = cfg.canonical_model_id(data.get("deep_think_model"))
-    if not incoming_deep or incoming_deep != normalized["deep_think_model"]:
-        raise HTTPException(
-            status_code=400,
-            detail="Select a valid Deep Think consensus model.",
-        )
-
     for field, label in (
         ("judge_models", "Standard judge"),
         ("judge_models_pro", "Pro judge"),
@@ -1604,7 +1571,6 @@ def get_models(request: Request):
                     tier: dict(models) for tier, models in cfg.WATCH_MODELS_BY_TIER.items()
                 },
                 "watch_consensus_models": dict(cfg.WATCH_CONSENSUS_MODELS_BY_TIER),
-                "deep_think_model": cfg.get_deep_think_consensus_model(),
                 "judge_models": cfg.get_judge_models(),
                 "judge_models_pro": cfg.get_pro_judge_models(),
                 "judge_families": cfg.get_judge_families(),
@@ -1762,7 +1728,6 @@ def update_models(request: Request, data: dict = Body(...)):
             "defaults": normalized["defaults"],
             "watch_models": normalized["watch_models"],
             "watch_consensus_models": normalized["watch_consensus_models"],
-            "deep_think_model": normalized["deep_think_model"],
             "judge_models": normalized["judge_models"],
             "judge_models_pro": normalized["judge_models_pro"],
             "judge_families": normalized["judge_families"],

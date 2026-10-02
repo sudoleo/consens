@@ -70,6 +70,12 @@ _retention_backfilled = False
 
 
 def build_server_model_plan(*, deep_think: bool, is_pro: bool) -> dict:
+    """Server-side model plan of an API run.
+
+    ``deep_think`` is the persisted compatibility name of the Reasoning
+    switch: it no longer changes any model (answers or consensus engine),
+    only the reasoning effort and output cap of the answer calls.
+    """
     preset = cfg.CONSENSUS_PRESET_MODELS[cfg.DEFAULT_CONSENSUS_PRESET]
     preset_answers = dict(preset["answers"])
     # Nur die Familien, die das Preset auch besetzt.
@@ -80,7 +86,7 @@ def build_server_model_plan(*, deep_think: bool, is_pro: bool) -> dict:
     }
     if len(providers) < 2:
         raise ValueError("At least two API providers are required")
-    consensus_model = cfg.DEEP_THINK_CONSENSUS_MODEL if deep_think else preset["consensus"]
+    consensus_model = preset["consensus"]
     for provider, model in providers.items():
         validate_model(
             model,
@@ -124,7 +130,7 @@ def run_tier(run: dict):
 
 def token_admission_for_run(run: dict) -> TokenAdmission:
     """API runs share the account's daily tokens with app and Agent: one
-    Consensus (or Deep Think) run must fit before it is accepted."""
+    Consensus run (with or without Reasoning) must fit before it is accepted."""
     deep_think = bool((run.get("request") or {}).get("deep_think"))
     tier = agent_quota.account_tier(str(run["uid"]), run_tier(run))
     return usage_repository.admission(tier, mode="consensus", deep_think=deep_think)

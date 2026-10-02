@@ -163,7 +163,7 @@ def test_set_tier_writes_the_field_audits_it_and_drops_the_cache(db):
     assert account["attachments"] is True
     assert account["resolve"] is True
     assert account["is_pro"] is False
-    assert account["deep_think"] is False
+    assert "deep_think" not in account
 
 
 def test_set_tier_keeps_unrelated_profile_fields(db):

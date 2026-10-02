@@ -639,18 +639,6 @@
   transform: translateY(0);
 }
 
-.deepthink-disclaimer {
-  align-self: center;
-  color: var(--sidebar-text-muted);
-  line-height: var(--line-height-ui);
-  transform: translateY(1px);
-  min-width: 0;
-  max-width: min(280px, 28vw);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .explanation-popup {
   position: fixed;
   left: 50%;
@@ -673,36 +661,13 @@
 }
 
 @media (max-width: 900px) {
-  .deepthink-disclaimer {
-    display: none !important;
-  }
-
   .attach-menu {
     top: calc(100% + 8px);
     bottom: auto;
   }
 }
 
-@media (max-width: 640px) {
-  .deep-think-input-indicator {
-    width: auto;
-    min-height: 30px;
-    padding: 0 7px;
-    gap: 5px;
-    font-size: var(--font-size-micro);
-  }
-
-  .deep-think-input-indicator-word {
-    display: none;
-  }
-}
-
 @media (max-width: 420px) {
-  .deep-think-input-indicator {
-    min-height: 28px;
-    padding-inline: 6px;
-  }
-
   .attachment-chip-name {
     max-width: 120px;
   }

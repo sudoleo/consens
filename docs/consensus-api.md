@@ -55,14 +55,22 @@ X-API-Key: cns_live_…
 Idempotency-Key: 019f78b5-unique-per-logical-run
 Content-Type: application/json
 
-{"question":"Welche Evidenz spricht für und gegen diese These?","deep_think":false}
+{"question":"Welche Evidenz spricht für und gegen diese These?","reasoning":false}
 ```
 
 Antwort: HTTP `202`, `Location: /api/v1/consensus/runs/{run_id}` und ein
-Run-Objekt. Der Request akzeptiert nur `question` und optional `deep_think`;
+Run-Objekt. Der Request akzeptiert nur `question` und optional `reasoning`;
 Modelle, Modellanzahl, Kosten und Limits werden ausschließlich serverseitig
-bestimmt. Derselbe Idempotency-Key mit identischem Request liefert denselben
-Run. Mit anderem Request folgt HTTP `409`; wurde der Run dieses Keys bereits
+bestimmt. `reasoning: true` lässt dieselben serverseitig gewählten Modelle
+länger nachdenken (mehr Tokens, langsamer, gegen die größere Reasoning-Schätzung
+des Tokenkontos admittiert); es steht jeder Kontostufe offen und ändert weder
+Antwortmodelle noch Consensus-Engine. `deep_think` ist ein veralteter Alias
+desselben Schalters (Deep Think gibt es seit 2026-10-02 nicht mehr): ist eines
+der beiden Felder `true`, ist Reasoning an. Das Run-Objekt trägt `reasoning`
+und – aus Kompatibilität – `deep_think` mit demselben Wert.
+
+Derselbe Idempotency-Key mit identischem Request liefert denselben Run
+(`reasoning: true` und `deep_think: true` gelten dabei als identisch). Mit anderem Request folgt HTTP `409`; wurde der Run dieses Keys bereits
 gelöscht, folgt HTTP `410` (`run_deleted`, siehe unten).
 
 Reguläre Consensus-API-v1-Runs verwenden die feste serverseitige

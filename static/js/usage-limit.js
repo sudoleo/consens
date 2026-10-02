@@ -18,8 +18,8 @@
      - rendert eine bleibende Karte im Thread (#runBlocked), genau dort, wo
        sonst die Antwort stuende.
 
-   Seit 2026-10-01 gibt es keine Run-Zaehler mehr: Compare, Consensus, Deep
-   Think und Agent teilen ein Tokenkonto pro Tag. Ein Lauf startet, wenn das
+   Seit 2026-10-01 gibt es keine Run-Zaehler mehr: Compare, Consensus,
+   Reasoning-Laeufe und Agent teilen ein Tokenkonto pro Tag. Ein Lauf startet, wenn das
    freie Budget die erwarteten Tokens eines typischen Laufs dieses Modus
    deckt — dieselbe Regel wie die Admission auf dem Server.
 
@@ -75,7 +75,7 @@
     return window.App.tokenBudget || null;
   }
 
-  var MODE_NAMES = { compare: "Compare run", consensus: "Consensus run", deep_think: "Deep Think run" };
+  var MODE_NAMES = { compare: "Compare run", consensus: "Consensus run", deep_think: "Reasoning run" };
 
   /* "4% left today · a Consensus run needs about 8% · resets at 02:00 (in 1 h 58 min)".
      Zahlen aus der Server-Absage (frischeste Quelle, schon im Store), sonst
@@ -158,14 +158,15 @@
 
   // --- Die eigentliche Absage ------------------------------------------
 
-  function deepThinkIsOn() {
-    var toggle = el("deepSearchToggle");
+  function reasoningIsOn() {
+    var toggle = el("reasoningToggle");
     return !!(toggle && toggle.checked);
   }
 
   function currentMode(opts) {
     if (opts && opts.mode) return opts.mode;
-    if ((opts && opts.deepThink) || deepThinkIsOn()) return "deep_think";
+    // "deep_think" is the kept estimate key of a run with Reasoning on.
+    if ((opts && opts.deepThink) || reasoningIsOn()) return "deep_think";
     try {
       if (window.App.runMode && window.App.runMode.pipeline && window.App.runMode.pipeline() === false) return "compare";
     } catch (_) { /* default */ }
@@ -211,23 +212,23 @@
     }
     view.meta = metaLine(mode);
 
-    // Deep Think is the largest run. If a normal one still fits, offer it.
+    // A Reasoning run is the largest run. If a normal one still fits, offer it.
     if (mode === "deep_think" && api && api.canStart("consensus") === true) {
       // Warning tone, not refusal: there is another way (shell.css).
-      view.bucket = "deep_think";
-      view.body = "A Deep Think run needs more of today’s allowance than is left. A normal run still fits, and your question is still in the box.";
+      view.bucket = "reasoning";
+      view.body = "A Reasoning run needs more of today’s allowance than is left. A normal run still fits, and your question is still in the box.";
       view.actions.push({
-        label: "Send without Deep Think",
-        title: "Switch Deep Think off and send this question as a normal run.",
+        label: "Send without reasoning",
+        title: "Switch Reasoning off and send this question as a normal run.",
         variant: "primary",
         onClick: function () {
-          var toggle = el("deepSearchToggle");
+          var toggle = el("reasoningToggle");
           if (toggle && toggle.checked) {
             toggle.checked = false;
             toggle.dispatchEvent(new Event("change", { bubbles: true }));
           }
           hide();
-          track("deep_think_downgrade");
+          track("reasoning_downgrade");
           if (typeof window.sendQuestion === "function") window.sendQuestion();
         }
       });

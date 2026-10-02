@@ -314,7 +314,7 @@ def _compute_tier_flags(data: dict) -> dict:
     role = str(data.get("role", "")).lower()
     return {
         "tier": tier,
-        # "pro" heisst weiterhin "darf teure Modelle und Deep Think" und ist
+        # "pro" heisst weiterhin "darf teure Modelle" und ist
         # fuer Plus bewusst False (siehe app/core/entitlements.py).
         "pro": tier == TIER_PRO,
         "admin": role == "admin",
@@ -363,7 +363,7 @@ def is_user_pro(uid: str) -> bool:
     """
     Liest (gecacht) aus Firestore, ob das Feld 'tier' auf 'premium' (oder 'pro') steht.
     Plus ist hier absichtlich NICHT enthalten: das Flag steuert den Zugriff auf
-    teure Modelle und Deep Think.
+    teure Modelle.
     """
     if _mock_auth_enabled() and uid == E2E_MOCK_UID:
         return _mock_auth_tier() == TIER_PRO

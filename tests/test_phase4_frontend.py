@@ -118,10 +118,11 @@ def test_minimum_model_count_is_rechecked_after_attachment_filter_before_usage()
     usage_start = query.index("const usage = createUsage", filtered_check)
 
     assert filtered_check < usage_start
-    assert "const providers = selectedProviders(attachments.length, deepSearch);" in query
-    # Der Anhang-Filter haengt am effektiven Modell (Serverangabe), nicht an
-    # einem fest codierten Familiennamen im Frontend.
-    assert "window.App.modelAcceptsAttachments(definition.pref, modelId, deepSearch)" in query
+    assert "const providers = selectedProviders(attachments.length);" in query
+    # Der Anhang-Filter haengt am gewaehlten Modell (Serverangabe), nicht an
+    # einem fest codierten Familiennamen im Frontend; der Reasoning-Schalter
+    # tauscht kein Modell.
+    assert "window.App.modelAcceptsAttachments(definition.pref, modelId)" in query
 
 
 def test_usage_snapshot_can_recover_pro_tier_after_status_failure():

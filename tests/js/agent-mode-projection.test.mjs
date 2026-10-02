@@ -13,11 +13,11 @@ const BODY = `
     <button id="composerSourcesToggle"></button><span id="composerSourcesState"></span>
     <p id="composerModeDescription"></p><span id="composerModelIcons"></span>
     <p id="composerComparisonStatus"></p>
-    <button id="composerDeepToggle"></button><span id="composerDeepState"></span>
+    <button id="composerReasoningToggle"></button><span id="composerReasoningState"></span>
     <button id="composerAttachButton"></button>
   </div>
   <label><input id="sourceCheckMenuSwitch" type="checkbox"></label><input id="sourceCheckSwitch" type="checkbox">
-  <label><input id="deepSearchToggle" type="checkbox"></label><button id="attachUploadOption"></button>
+  <label><input id="reasoningToggle" type="checkbox"></label><button id="attachUploadOption"></button>
   <button id="agentReasoningMenuOption" hidden></button><span id="agentReasoningMenuState"></span>
   <button id="agentComparisonMenuOption" hidden></button>
   <div id="agentModePanel">
@@ -46,7 +46,6 @@ function boot({ mode = "consensus", checkSources = true } = {}) {
           textId: "openaiModelText",
           responseId: "openaiResponse"
         }],
-        deepThinkModelLabels: {},
         getModelOptionLabel: option => option?.textContent || "",
         getSelectedModelCount: () => 1,
         initCustomModelPicker: vi.fn(),
@@ -75,7 +74,7 @@ describe("agent mode panel projection", () => {
     expect(select.querySelector('[value="compare"]').dataset.description).toBe('Available in a new chat');
     expect(document.getElementById('runModeControl').hidden).toBe(true);
     expect(document.getElementById('agentReasoningMenuOption').hidden).toBe(false);
-    expect(document.getElementById('deepSearchToggle').closest('label').hidden).toBe(true);
+    expect(document.getElementById('reasoningToggle').closest('label').hidden).toBe(true);
     select.value = 'compare';
     select.dispatchEvent(new window.Event('change'));
     expect(window.localStorage.getItem('runMode')).toBe('compare');
@@ -87,8 +86,8 @@ describe("agent mode panel projection", () => {
     document.getElementById('composerSourcesToggle').click();
     expect(window.App.isSourceCheckEnabled()).toBe(true);
     expect(document.getElementById('composerAttachButton').disabled).toBe(false);
-    expect(document.getElementById('composerDeepState').textContent).toBe('High');
-    document.getElementById('composerDeepToggle').click();
+    expect(document.getElementById('composerReasoningState').textContent).toBe('High');
+    document.getElementById('composerReasoningToggle').click();
     expect(window.App.openModelPicker).toHaveBeenCalledWith(document.getElementById('agentModelDropdown'), {secondary: true});
     window.App.openModelPicker.mockClear();
     document.getElementById('agentReasoningMenuOption').click();
@@ -96,7 +95,7 @@ describe("agent mode panel projection", () => {
     expect(document.getElementById('agentReasoningMenuState').textContent).toBe('High');
     document.body.classList.add('is-hero');
     await vi.waitFor(() => expect(document.getElementById('composerModeBar').hidden).toBe(false));
-    expect(document.getElementById('deepSearchToggle').checked).toBe(false);
+    expect(document.getElementById('reasoningToggle').checked).toBe(false);
     window.App.agentChat.isSelected = () => false;
     window.App.agentChat.modeState = () => ({family: null, canUse: true, pending: false});
     window.App.renderComposerMode();
@@ -108,7 +107,7 @@ describe("agent mode panel projection", () => {
     expect(document.getElementById('composerSourcesToggle').hidden).toBe(true);
     expect(document.getElementById('sourceCheckMenuSwitch').closest('label').hidden).toBe(true);
     expect(document.getElementById('agentReasoningMenuOption').hidden).toBe(true);
-    expect(document.getElementById('deepSearchToggle').closest('label').hidden).toBe(false);
+    expect(document.getElementById('reasoningToggle').closest('label').hidden).toBe(false);
     dom.window.close();
   });
 
@@ -212,15 +211,18 @@ describe("agent mode panel projection", () => {
     dom.window.close();
   });
 
-  it("routes toolbar actions through the original controls and respects a rejected deep toggle", () => {
+  it("routes toolbar actions through the original controls and respects a rejected reasoning toggle", () => {
     const { window, document, dom } = boot();
-    const deep = document.getElementById('deepSearchToggle');
-    const button = document.getElementById('composerDeepToggle');
+    const deep = document.getElementById('reasoningToggle');
+    const button = document.getElementById('composerReasoningToggle');
     const upload = vi.fn();
     document.getElementById('attachUploadOption').addEventListener('click', upload);
     button.click();
     expect(deep.checked).toBe(true);
     expect(button.getAttribute('aria-checked')).toBe('true');
+    expect(button.title).toBe('Reasoning on · Models think longer before they answer');
+    expect(button.title).not.toContain('Pro');
+    expect(document.getElementById('composerReasoningState').textContent).toBe('On');
     deep.addEventListener('click', event => event.preventDefault());
     button.click();
     expect(deep.checked).toBe(true);

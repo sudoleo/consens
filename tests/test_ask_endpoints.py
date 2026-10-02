@@ -93,39 +93,34 @@ def test_own_keys_flag_without_openrouter_key_is_rejected():
     assert response.json()["detail"] == "Missing user OpenRouter API key."
 
 
-def test_deep_search_is_pro_only():
+@pytest.mark.parametrize("tier", ["free", "plus"])
+def test_reasoning_switch_is_open_to_every_tier_and_keeps_the_selected_model(tier):
+    """The Reasoning switch (wire name deep_search) has no Pro gate and never
+    swaps in the family's Pro model: the same selected model just thinks
+    longer, with the larger reasoning output cap."""
     client = make_client()
-    p1, p2 = auth_patches(tier="free")
-    with p1, p2:
+    p1, p2 = auth_patches(tier=tier)
+    model = free_model("grok")
+    with p1, p2, patch.object(chat_router, "_run_ask", return_value={"ok": True}) as run:
         response = client.post(
             "/ask_grok",
             headers=AUTH_HEADER,
             json={
                 "question": "hello",
-                "model": free_model("grok"),
+                "model": model,
                 "deep_search": "true",
+                "useOwnKeys": True,
+                "openrouter_key": "sk-user-key",
             },
         )
-    assert response.status_code == 403
-    assert "Pro users" in response.json()["detail"]
-
-
-def test_deep_search_is_refused_for_plus():
-    """Deep Think faehrt Frontier-Modelle und bleibt deshalb Pro -- genau die
-    Grenze, wegen der es die Plus-Stufe ueberhaupt gibt."""
-    client = make_client()
-    p1, p2 = auth_patches(tier="plus")
-    with p1, p2:
-        response = client.post(
-            "/ask_grok",
-            headers=AUTH_HEADER,
-            json={
-                "question": "hello",
-                "model": free_model("grok"),
-                "deep_search": "true",
-            },
-        )
-    assert response.status_code == 403
+    assert response.status_code == 200
+    kwargs = run.call_args.kwargs
+    assert kwargs["deep_search"] is True
+    assert kwargs["model"] == model
+    assert kwargs["model"] != cfg.PROVIDERS["grok"].pro_model
+    assert kwargs["max_tokens"] == max(
+        cfg.get_output_token_limit(tier), cfg.LIMITS["reasoning_max_tokens"]
+    )
 
 
 def test_plus_cannot_ask_a_premium_model():
@@ -162,13 +157,13 @@ def test_plus_may_attach_a_file_and_gets_the_plus_quota():
     assert len(run.call_args.kwargs["attachments"]) == 1
     extras = run.call_args.kwargs["extras"]
     assert extras["tier"] == "plus"
-    # is_pro_user bleibt das Modell-/Deep-Think-Flag.
+    # is_pro_user bleibt das Modell-Flag.
     assert extras["is_pro_user"] is False
     # Und das Wortlimit kommt aus dem eigenen Plus-Wert.
     assert cfg.get_word_limit("plus") == cfg.LIMITS["plus_max_words"]
 
 
-def test_glm_attachment_support_depends_on_the_effective_model():
+def test_glm_attachment_support_depends_on_the_selected_model():
     client = make_client()
     p1, p2 = auth_patches(tier="pro")
     with p1, p2, patch.object(chat_router, "_run_ask", return_value={"ok": True}) as run:
@@ -183,7 +178,9 @@ def test_glm_attachment_support_depends_on_the_effective_model():
                 "attachments": [PNG_ATTACHMENT],
             },
         )
-        pro = client.post(
+        # Reasoning no longer swaps in GLM 5.3 (text-only): the selected
+        # multimodal Flash model keeps reading the attachment.
+        reasoning = client.post(
             "/ask_glm",
             headers=AUTH_HEADER,
             json={
@@ -195,11 +192,23 @@ def test_glm_attachment_support_depends_on_the_effective_model():
                 "attachments": [PNG_ATTACHMENT],
             },
         )
+        pro = client.post(
+            "/ask_glm",
+            headers=AUTH_HEADER,
+            json={
+                "question": "describe it",
+                "model": cfg.PROVIDERS["glm"].pro_model,
+                "useOwnKeys": True,
+                "openrouter_key": "sk-user-key",
+                "attachments": [PNG_ATTACHMENT],
+            },
+        )
 
     assert flash.status_code == 200
+    assert reasoning.status_code == 200
     assert pro.status_code == 400
     assert pro.json()["detail"] == "GLM 5.3 cannot read attachments."
-    assert run.call_count == 1
+    assert run.call_count == 2
 
 
 def test_ask_muse_serves_the_meta_family_and_gates_its_pro_model():

@@ -521,7 +521,10 @@ def main() -> int:
         headers=headers,
         payload={
             "question": question,
-            "deep_think": env_bool("CONSENSUS_DEEP_THINK", False),
+            # CONSENSUS_DEEP_THINK is the legacy name of the same switch.
+            "reasoning": env_bool(
+                "CONSENSUS_REASONING", env_bool("CONSENSUS_DEEP_THINK", False)
+            ),
         },
     )
     run_id = str((run or {}).get("run_id") or "")

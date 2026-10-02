@@ -24,6 +24,8 @@ MAX_DAILY_TOKENS = 100_000_000
 MAX_RUN_ESTIMATE = 10_000_000
 
 TIER_KEYS = ("free", "plus", "pro", "admin")
+# "deep_think" is the kept storage key (app_config, admin API) of a run with
+# the Reasoning switch on; Deep Think itself was removed on 2026-10-02.
 RUN_MODES = ("compare", "consensus", "deep_think")
 
 # Old run quotas in production (12 / 30 / 50 runs, 5 of them Deep Think) times
@@ -38,7 +40,10 @@ DEFAULT_TIER_LIMITS = {
 
 # Expected tokens of one typical run (input + output, reasoning included), the
 # admission threshold of the pipeline. Free/Plus answer with the 4,096-token
-# cap, Pro with 8,192, Deep Think with 16,384 and five search rounds.
+# cap, Pro with 8,192. A Reasoning run ("deep_think") keeps the same models but
+# thinks with effort "high" and up to 8,192 output tokens per answer; the
+# estimate stays at the former Deep Think value on purpose (admission errs on
+# the safe side, Admin can tune it in the Limits tab).
 _STANDARD_RUN = {"compare": 32_000, "consensus": 55_000, "deep_think": 150_000}
 _PRO_RUN = {"compare": 40_000, "consensus": 75_000, "deep_think": 150_000}
 DEFAULT_RUN_ESTIMATES = {
@@ -118,7 +123,9 @@ def run_estimates_for(config, tier):
 
 
 def run_mode(mode, *, deep_think=False):
-    """Admission mode of a pipeline run. Unknown means the larger Consensus run."""
+    """Admission mode of a pipeline run. Unknown means the larger Consensus run.
+
+    ``deep_think`` means "Reasoning on" (compatibility name)."""
     if deep_think:
         return "deep_think"
     return "compare" if mode == "compare" else "consensus"

@@ -9,7 +9,7 @@
 // window.isAgentModeRunning() gelesen.
 // Exporte: window.setAgentModeStatus, window.updateAgentModeUI,
 // window.projectAgentModeRun, window.isAgentModeRunning.
-// Abhaengigkeiten: window.App.{modelPrefs,deepThinkModelLabels,
+// Abhaengigkeiten: window.App.{modelPrefs,
 // getModelOptionLabel,getSelectedModelCount,trackAppEvent,initCustomModelPicker},
 // window.updateConsensusButtonAvailability.
 // =====================================================================
@@ -225,20 +225,17 @@
           hasAnswer: Boolean(String(result.text || result.streamText || "").trim()),
           // A projected run is immutable. Render its frozen label instead of a
           // picker wired to the controls for the next comparison.
-          usesDeepThinkModel: true
+          frozenLabel: true
         };
       }).filter(Boolean);
     }
-    const deepSearchActive = !!document.getElementById("deepSearchToggle")?.checked;
     return window.App.modelPrefs
       .filter(pref => document.getElementById(pref.checkId)?.checked)
       .map(pref => {
         const select = document.getElementById(pref.selectId);
         const responseBox = document.getElementById(pref.responseId);
         const displayedText = document.getElementById(pref.textId)?.textContent || "";
-        const selectedText = deepSearchActive
-          ? (window.App.deepThinkModelLabels[pref.key] || displayedText)
-          : (window.App.getModelOptionLabel(select?.options[select.selectedIndex]) || select?.value || displayedText);
+        const selectedText = window.App.getModelOptionLabel(select?.options[select.selectedIndex]) || select?.value || displayedText;
         const modelText = selectedText.trim();
         return {
           pref,
@@ -246,7 +243,7 @@
           model: modelText,
           responseState: responseBox?.dataset?.responseState || "",
           hasAnswer: Boolean(responseBox?.querySelector(".collapsible-content")?.textContent?.trim()),
-          usesDeepThinkModel: deepSearchActive
+          frozenLabel: false
         };
       });
   }
@@ -351,8 +348,10 @@
     const mode = runMode();
     const enabled = mode !== "compare";
     renderRunModeControl();
-    const legacyDeep = document.getElementById("deepSearchToggle")?.closest("label");
-    if (legacyDeep) legacyDeep.hidden = beta;
+    // Compare/Consensus use the Reasoning switch row; Agent uses the
+    // reasoning-effort menu entry instead.
+    const reasoningRow = document.getElementById("reasoningToggle")?.closest("label");
+    if (reasoningRow) reasoningRow.hidden = beta;
     ["agentReasoningMenuOption", "agentComparisonMenuOption"].forEach(id => {
       const option = document.getElementById(id);
       if (option) option.hidden = !beta;
@@ -410,22 +409,22 @@
     document.getElementById("composerModeDescription").textContent = window.App.runMode.copy(mode).description;
     const models = window.App.modelPrefs.filter(pref => document.getElementById(pref.checkId)?.checked);
     const icons = document.getElementById("composerModelIcons");
-    const deep = !beta && !!document.getElementById("deepSearchToggle")?.checked;
-    for (const [buttonId, stateId] of [["composerDeepToggle", "composerDeepState"], ["agentReasoningMenuOption", "agentReasoningMenuState"]]) {
-      const deepButton = document.getElementById(buttonId);
-      if (!deepButton) continue;
+    const reasoningOn = !beta && !!document.getElementById("reasoningToggle")?.checked;
+    for (const [buttonId, stateId] of [["composerReasoningToggle", "composerReasoningState"], ["agentReasoningMenuOption", "agentReasoningMenuState"]]) {
+      const reasoningButton = document.getElementById(buttonId);
+      if (!reasoningButton) continue;
       const effort = document.getElementById("agentReasoningEffort");
-      deepButton.disabled = beta && (!effort || effort.disabled || effort.dataset.available !== "true");
-      deepButton.setAttribute("role", beta ? "button" : "switch");
-      deepButton.setAttribute("aria-checked", String(deep));
-      deepButton.title = `Deep Think ${deep ? "on" : "off"} · Stronger reasoning${window.isUserPro ? "" : " · Pro"}`;
-      document.getElementById(stateId).textContent = deep ? "On" : "Off";
+      reasoningButton.disabled = beta && (!effort || effort.disabled || effort.dataset.available !== "true");
+      reasoningButton.setAttribute("role", beta ? "button" : "switch");
+      reasoningButton.setAttribute("aria-checked", String(reasoningOn));
+      reasoningButton.title = `Reasoning ${reasoningOn ? "on" : "off"} · Models think longer before they answer`;
+      document.getElementById(stateId).textContent = reasoningOn ? "On" : "Off";
       if (beta) {
-        deepButton.removeAttribute("aria-checked");
-        deepButton.setAttribute("aria-haspopup", "listbox");
-        deepButton.title = deepButton.disabled ? "Reasoning is unavailable or locked during this run" : "Choose reasoning for your next chat message";
+        reasoningButton.removeAttribute("aria-checked");
+        reasoningButton.setAttribute("aria-haspopup", "listbox");
+        reasoningButton.title = reasoningButton.disabled ? "Reasoning is unavailable or locked during this run" : "Choose reasoning for your next chat message";
         document.getElementById(stateId).textContent = effort?.selectedOptions[0]?.textContent || "Auto";
-      } else deepButton.removeAttribute("aria-haspopup");
+      } else reasoningButton.removeAttribute("aria-haspopup");
     }
     const attachButton = document.getElementById("composerAttachButton");
     if (attachButton) {
@@ -434,8 +433,7 @@
     }
     const labels = models.map(pref => {
       const select = document.getElementById(pref.selectId);
-      return deep ? (window.App.deepThinkModelLabels[pref.key] || pref.label)
-        : (window.App.getModelOptionLabel(select?.selectedOptions[0]) || pref.label);
+      return window.App.getModelOptionLabel(select?.selectedOptions[0]) || pref.label;
     });
     const key = JSON.stringify(models.map((pref, i) => [pref.key, labels[i]]));
     if (icons.dataset.models !== key) {
@@ -586,7 +584,7 @@
         chip.appendChild(chipLabel);
 
         const sourceSelect = document.getElementById(modelInfo.pref.selectId);
-        if (sourceSelect && !modelInfo.usesDeepThinkModel) {
+        if (sourceSelect && !modelInfo.frozenLabel) {
           const picker = document.createElement("select");
           picker.className = "agent-mode-picker";
           picker.setAttribute("aria-label", `Choose ${modelInfo.label} model`);
@@ -800,13 +798,13 @@
     });
   });
   // Reuse the original controls, including their plan checks and file picker.
-  document.getElementById("composerDeepToggle")?.addEventListener("click", function (event) {
+  document.getElementById("composerReasoningToggle")?.addEventListener("click", function (event) {
     if (isBeta()) {
       event.stopPropagation();
       window.App.openModelPicker?.(document.getElementById("agentModelDropdown"), { secondary: true });
       return;
     }
-    document.getElementById("deepSearchToggle")?.click();
+    document.getElementById("reasoningToggle")?.click();
     renderComposerMode();
   });
   // Both modes share the upload path: in Agent Beta attachments.js keeps the

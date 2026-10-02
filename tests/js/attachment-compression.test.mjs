@@ -21,7 +21,7 @@ const BODY = `
   <div id="attachMenu" hidden><button id="attachUploadOption"></button></div>
   <input id="attachFileInput" type="file">
 </div>
-<label class="switch deep-switch"><input type="checkbox" id="deepSearchToggle"></label>
+<label class="switch attach-menu-switch"><input type="checkbox" id="reasoningToggle"></label>
 `;
 
 // Groesse der Blobs, die das gestellte Canvas ausspuckt: ein verkleinertes

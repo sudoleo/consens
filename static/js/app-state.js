@@ -12,7 +12,7 @@
     consensusCitationMeta: { owner: "consensus", initial: null },
     lastShareResultId: { owner: "share", initial: null },
     // Drei Stufen, zwei Flags: isUserPro heisst weiterhin "darf Frontier-
-    // Modelle und Deep Think" (Plus -> false), isUserPlus heisst "darf
+    // Modelle" (Plus -> false), isUserPlus heisst "darf
     // Anhaenge und Resolve" (Plus und Pro -> true). Wer nur eines der beiden
     // liest, sperrt Plus im Zweifel wie Free statt wie Pro.
     userTier: { owner: "userTier", initial: "free" },

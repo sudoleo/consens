@@ -164,19 +164,20 @@ def test_card_names_the_reset_and_never_sells_anything():
         assert sales_word not in usage, f"the card must not sell: {sales_word}"
 
 
-def test_deep_think_exhaustion_offers_the_cheaper_run():
-    """Deep Think ist der groesste Lauf. Reicht das Konto nur dafuer nicht,
-    ist der normale Lauf noch da — und das ist ein Umweg, kein Stopp."""
+def test_reasoning_exhaustion_offers_the_cheaper_run():
+    """Ein Reasoning-Lauf ist der groesste Lauf. Reicht das Konto nur dafuer
+    nicht, ist der normale Lauf noch da — und das ist ein Umweg, kein Stopp."""
     usage = read("static/js/usage-limit.js")
     shell = read("static/css/shell.css")
 
-    assert "Send without Deep Think" in usage
-    assert 'el("deepSearchToggle")' in usage
+    assert "Send without reasoning" in usage
+    assert "Deep Think" not in usage
+    assert 'el("reasoningToggle")' in usage
     assert 'new Event("change", { bubbles: true })' in usage
 
     # Warnfarbe statt Absagefarbe: die Ampel sagt "geht anders", nicht "geht
     # nicht".
-    assert '.run-blocked[data-bucket="deep_think"]' in shell
+    assert '.run-blocked[data-bucket="reasoning"]' in shell
     assert "--blocked-tone: var(--partial)" in shell
 
 

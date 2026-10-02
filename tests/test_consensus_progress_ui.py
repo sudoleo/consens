@@ -370,7 +370,7 @@ def test_composer_row_is_reduced_to_attach_run_switch_and_send():
 
     # ...but the functions are still reachable.
     assert 'id="runModeSetting"' in template
-    assert 'id="deepSearchToggle"' in template
+    assert 'id="reasoningToggle"' in template
     assert 'id="newRunButton"' in template
 
 

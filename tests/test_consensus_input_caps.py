@@ -46,10 +46,10 @@ class ConsensusInputLimitTests(unittest.TestCase):
         finally:
             cfg.apply_limits(original)
 
-    def test_answer_limit_never_clips_legit_deep_search_answers(self):
+    def test_answer_limit_never_clips_legit_reasoning_answers(self):
         # 8192 Output-Tokens entsprechen grob 32k Zeichen; der Cap muss
         # darüber liegen, sonst kappt er echte Antworten statt Abuse.
-        approx_max_answer_chars = cfg.LIMITS["pro_deep_search_max_tokens"] * 4
+        approx_max_answer_chars = cfg.LIMITS["reasoning_max_tokens"] * 4
         self.assertGreaterEqual(
             cfg.get_consensus_answer_char_limit(), approx_max_answer_chars
         )

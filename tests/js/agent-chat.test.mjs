@@ -1436,7 +1436,7 @@ describe('one Agent chip for the chat model and its comparison models', () => {
     expect(menu.classList.contains('is-open')).toBe(false);
     expect(trigger.getAttribute('aria-expanded')).toBe('false');
 
-    // (+) "Deep Think" opens reasoning; its way back is the overview.
+    // (+) "Reasoning" opens the effort picker; its way back is the overview.
     w.App.openModelPicker(agentSelect, { secondary: true });
     expect(menu.querySelector('[data-setting-value="high"]')).not.toBeNull();
     menu.querySelector('.model-picker-back-option').click();

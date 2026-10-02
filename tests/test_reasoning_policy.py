@@ -26,7 +26,6 @@ def model_document():
         "defaults": dict(cfg.FREE_DEFAULT_MODEL_BY_PROVIDER),
         "watch_models": {key: dict(value) for key, value in cfg.WATCH_MODELS_BY_TIER.items()},
         "watch_consensus_models": dict(cfg.WATCH_CONSENSUS_MODELS_BY_TIER),
-        "deep_think_model": cfg.get_deep_think_consensus_model(),
         "judge_models": cfg.get_judge_models(),
         "judge_models_pro": cfg.get_pro_judge_models(),
         "judge_families": cfg.get_judge_families(),
@@ -45,8 +44,9 @@ def model_document():
 ])
 def test_savings_reaches_answers_and_engine_aliases_without_breaking_protection(provider, model, expected):
     cfg.apply_reasoning_policy({"profile": "economy", "models": {}})
-    for deep in (False, True):
-        assert cfg.effective_model_reasoning(provider, model, deep_think=deep)[0] == expected
+    # The savings cap also covers the Reasoning switch.
+    for reasoning in (False, True):
+        assert cfg.effective_model_reasoning(provider, model, reasoning=reasoning)[0] == expected
     built = build_provider_payload(provider, question="question", model_override=model, deep_search=False)
     assert built["payload"]["reasoning"] == expected
     model_config = cfg.get_model_config(model, provider)
@@ -79,7 +79,7 @@ def test_saved_preview_matches_runtime_for_every_model_and_flow():
         provider, model = row["provider"], row["model"]
         preview = row["previews"]["economy"]
         assert preview["answers"] == cfg.effective_model_reasoning(provider, model)[0]
-        assert preview["deep"] == cfg.effective_model_reasoning(provider, model, deep_think=True)[0]
+        assert preview["reasoning"] == cfg.effective_model_reasoning(provider, model, reasoning=True)[0]
         assert preview["synthesis"] == cfg.effective_engine_reasoning(provider, model)[0]
         assert preview["helpers"] == cfg.effective_engine_reasoning(provider, model, effort=cfg.judge_reasoning_effort(provider))[0]
 

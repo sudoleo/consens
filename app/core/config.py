@@ -32,19 +32,21 @@ class ModelConfig:
 DEFAULT_LIMITS = {
     # Die frueheren Run-Kontingente (free/plus/pro_consensus_run_limit,
     # *_deep_think_run_limit) gibt es seit 2026-10-01 nicht mehr: Compare,
-    # Consensus, Deep Think und Agent teilen ein Tokenkonto pro Stufe
+    # Consensus, Reasoning-Laeufe und Agent teilen ein Tokenkonto pro Stufe
     # (app/services/agent_budget_config.py, Admin-Tab Limits). Gespeicherte
     # Altwerte faellt normalize_limits_config beim naechsten Backfill weg.
     "free_max_words": 500,
     "plus_max_words": 500,
     "pro_max_words": 500,
-    "free_deep_search_max_words": 0,
-    "pro_deep_search_max_words": 1000,
     "free_max_tokens": 4096,
     "plus_max_tokens": 4096,
     "pro_max_tokens": 4096,
-    "free_deep_search_max_tokens": 0,
-    "pro_deep_search_max_tokens": 8192,
+    # Output-Cap eines Laufs mit eingeschaltetem Reasoning-Schalter, fuer
+    # alle Stufen gleich: max(normales Stufenlimit, dieser Wert). Ersetzt seit
+    # 2026-10-02 die vier free_/pro_deep_search_max_words|tokens-Felder von
+    # Deep Think; ein altes pro_deep_search_max_tokens in Firestore wird
+    # einmalig hierher uebernommen (normalize_limits_config).
+    "reasoning_max_tokens": 8192,
     "consensus_max_tokens": 8192,
     "differences_max_tokens": 8192,
     # Der Coverage-Judge schreibt eine Zeile pro Konsens-Satz und Modell
@@ -54,7 +56,7 @@ DEFAULT_LIMITS = {
     # Serverseitige Eingabe-Caps fuer /consensus: Antworten/Frage kommen vom
     # Client und muessen begrenzt werden, bevor sie in den Engine-Prompt
     # fliessen (Kosten-/Abuse-Schutz). Grosszuegig gewaehlt, damit legitime
-    # Deep-Search-Antworten (8192 Output-Tokens) nie gekappt werden.
+    # Reasoning-Antworten (8192 Output-Tokens) nie gekappt werden.
     "consensus_max_answer_chars": 40_000,
     "consensus_max_question_chars": 8_000,
     # Serverseitige Caps fuer den Follow-up-Kontext (previous_question +
@@ -111,13 +113,14 @@ LIMITS = DEFAULT_LIMITS.copy()
 _RUNTIME_CONFIG_LOCK = threading.RLock()
 
 MAX_WORDS = LIMITS["free_max_words"]
-DEEP_SEARCH_MAX_WORDS = LIMITS["pro_deep_search_max_words"]
 MAX_TOKENS = LIMITS["pro_max_tokens"]
-DEEP_SEARCH_MAX_TOKENS = LIMITS["pro_deep_search_max_tokens"]
+REASONING_MAX_TOKENS = LIMITS["reasoning_max_tokens"]
 CONSENSUS_MAX_TOKENS = LIMITS["consensus_max_tokens"]
 DIFFERENCES_MAX_TOKENS = LIMITS["differences_max_tokens"]
 COVERAGE_MAX_TOKENS = LIMITS["coverage_max_tokens"]
-REASONING_EFFORT_FOR_DEEP = "low"
+# Reasoning-Schalter (Compare/Consensus): fuellt eine noch offene Modell-
+# Policy mit diesem Effort. Explizite Modell-Policies gewinnen weiterhin.
+REASONING_EFFORT_ON = "high"
 # Zentrale Reasoning-Policy fuer alle festen Laufarten. Modellbezogene
 # Overrides stehen weiter unten in MODEL_REQUEST_CONFIG. Aufrufer sollen
 # keine String-Literale mehr verteilen: So kann das Admin-Dashboard denselben
@@ -127,7 +130,6 @@ REASONING_EFFORT_FOR_JUDGE_BY_PROVIDER = {"mistral": "none"}
 REASONING_EFFORT_FOR_MEMORY_EDIT = "none"
 REASONING_EFFORT_FOR_SEO_REVIEW = "medium"
 GEMINI_MAX_TOKENS = MAX_TOKENS
-GEMINI_DEEP_MAX_TOKENS = DEEP_SEARCH_MAX_TOKENS
 DEFAULT_OPENAI_MODEL = "gpt-5.4-mini"
 OPENAI_LUNA_MODEL = "gpt-5.6-luna"
 OPENAI_SOL_MODEL = "gpt-5.6-sol"
@@ -194,7 +196,7 @@ class ProviderConfig:
     # die ALLOWED_*_MODELS-Aliasse zeigen auf genau dieses Set.
     models: set[str] = field(default_factory=set)
     # Modelle, die auch nach einem Admin-Override erlaubt bleiben muessen,
-    # weil Presets/Aliasse/Deep-Think auf sie zeigen (base/pro implizit).
+    # weil Presets/Aliasse auf sie zeigen (base/pro implizit).
     required_models: frozenset[str] = frozenset()
     # Praesentation. Die App zeigt eine Familie unter bis zu drei Namen; die
     # DOM-IDs sind Vertrag mit CSS, JS und den E2E-Tests und leiten sich aus
@@ -394,12 +396,6 @@ WATCH_CONSENSUS_MODELS_BY_TIER = dict(_BASE_WATCH_CONSENSUS_MODELS_BY_TIER)
 MODEL_ORDER_BY_PROVIDER: dict[str, list[str]] = {
     provider: [] for provider in DEFAULT_MODEL_BY_PROVIDER
 }
-
-# Consensus-Engine, auf die Deep Think die Synthese festkoppelt. Vom Admin
-# ueber Firestore (Feld "deep_think_model") umstellbar; ungueltige Werte
-# fallen auf die Basis zurueck (siehe apply_deep_think_model).
-_BASE_DEEP_THINK_CONSENSUS_MODEL = GEMINI_35_FLASH_MODEL
-DEEP_THINK_CONSENSUS_MODEL = _BASE_DEEP_THINK_CONSENSUS_MODEL
 
 # Standard-Judges der Differences-/Resolve-Engine je Provider (Pro-Judges
 # loesen weiterhin ueber die "<Familie>-Pro"-Aliasse auf, siehe
@@ -986,14 +982,15 @@ def effective_model_reasoning(
     provider: str,
     model_id: str | None,
     *,
-    deep_think: bool = False,
+    reasoning: bool = False,
     policy=None,
 ) -> tuple[dict[str, Any] | None, str]:
     """Resolve the reasoning payload and its source for an answer-model call.
 
     The precedence intentionally matches ``build_provider_payload``: an
     explicit model policy wins, Mistral reasoning models default to ``high``,
-    and Deep Think only fills a still-unset policy with its global effort.
+    and the Reasoning switch only fills a still-unset policy with
+    ``REASONING_EFFORT_ON``.
     Returning the source makes the exact runtime decision inspectable without
     duplicating the rules in the Admin UI.
     """
@@ -1006,8 +1003,8 @@ def effective_model_reasoning(
         return cap_model_reasoning(internal_model, dict(explicit), "MODEL_REQUEST_CONFIG", policy=policy)
     if provider_key == "mistral" and internal_model in MISTRAL_REASONING_MODELS:
         return cap_model_reasoning(internal_model, {"effort": "high"}, "MISTRAL_REASONING_MODELS", policy=policy)
-    if deep_think:
-        return cap_model_reasoning(internal_model, {"effort": REASONING_EFFORT_FOR_DEEP}, "REASONING_EFFORT_FOR_DEEP", policy=policy)
+    if reasoning:
+        return cap_model_reasoning(internal_model, {"effort": REASONING_EFFORT_ON}, "REASONING_EFFORT_ON", policy=policy)
     return cap_model_reasoning(internal_model, None, "provider default", policy=policy)
 
 
@@ -1201,12 +1198,6 @@ def normalize_consensus_models(models) -> list[str]:
         config = get_consensus_model_config(model)
         if config and config.provider:
             allowed.append(model)
-    # Deep Think koppelt die Synthese fest an das konfigurierte Deep-Think-
-    # Modell (Basis: Gemini 3.5 Flash). Deshalb muss das Modell auch bei einer
-    # Admin-/Firestore-Liste ohne diesen Eintrag als Consensus-Option
-    # verfuegbar bleiben.
-    if DEEP_THINK_CONSENSUS_MODEL not in allowed:
-        allowed.append(DEEP_THINK_CONSENSUS_MODEL)
     # Auch die Admin-konfigurierten Preset-Engines muessen im nativen Select
     # vorhanden sein; die sichtbare Preset-Ebene setzt genau diese Werte.
     for preset in CONSENSUS_PRESET_MODELS.values():
@@ -1214,31 +1205,6 @@ def normalize_consensus_models(models) -> list[str]:
         if model not in allowed:
             allowed.append(model)
     return allowed
-
-
-def get_deep_think_consensus_model() -> str:
-    return DEEP_THINK_CONSENSUS_MODEL
-
-
-def is_valid_deep_think_model(model_id) -> bool:
-    """Gueltig ist jeder Consensus-Wert (Alias oder direkte Modell-ID), der
-    sich auf einen Provider aufloesen laesst."""
-    chosen = str(model_id or "").strip()
-    if not chosen:
-        return False
-    config = get_consensus_model_config(chosen)
-    return bool(config and config.provider)
-
-
-def apply_deep_think_model(model_id) -> None:
-    """Setzt die Deep-Think-Consensus-Engine. Ungueltige/leere Werte fallen
-    auf die Basis (Gemini 3.5 Flash) zurueck."""
-    global DEEP_THINK_CONSENSUS_MODEL
-    chosen = str(model_id or "").strip()
-    if chosen and is_valid_deep_think_model(chosen):
-        DEEP_THINK_CONSENSUS_MODEL = chosen
-    else:
-        DEEP_THINK_CONSENSUS_MODEL = _BASE_DEEP_THINK_CONSENSUS_MODEL
 
 
 def is_valid_judge_model(provider: str, model_id) -> bool:
@@ -1428,8 +1394,6 @@ def get_model_families() -> list[dict]:
             "responseId": provider.response_id,
             "textId": provider.text_id,
             "endpoint": provider.ask_endpoint,
-            "deepThinkModel": provider.pro_model,
-            "deepThinkLabel": get_model_label(provider.pro_model),
             # None = alle Modelle; eine Liste = nur diese Modelle. Das alte
             # Boolean bleibt additiv fuer noch gecachte Browser erhalten.
             "attachmentModels": (
@@ -1591,23 +1555,30 @@ def _coerce_limit(value, fallback: int) -> int:
 
 
 def _sync_limit_constants():
-    global MAX_WORDS, DEEP_SEARCH_MAX_WORDS, MAX_TOKENS, DEEP_SEARCH_MAX_TOKENS
+    global MAX_WORDS, MAX_TOKENS, REASONING_MAX_TOKENS
     global CONSENSUS_MAX_TOKENS, DIFFERENCES_MAX_TOKENS, COVERAGE_MAX_TOKENS
-    global GEMINI_MAX_TOKENS, GEMINI_DEEP_MAX_TOKENS
+    global GEMINI_MAX_TOKENS
 
     MAX_WORDS = LIMITS["free_max_words"]
-    DEEP_SEARCH_MAX_WORDS = LIMITS["pro_deep_search_max_words"]
     MAX_TOKENS = LIMITS["pro_max_tokens"]
-    DEEP_SEARCH_MAX_TOKENS = LIMITS["pro_deep_search_max_tokens"]
+    REASONING_MAX_TOKENS = LIMITS["reasoning_max_tokens"]
     CONSENSUS_MAX_TOKENS = LIMITS["consensus_max_tokens"]
     DIFFERENCES_MAX_TOKENS = LIMITS["differences_max_tokens"]
     COVERAGE_MAX_TOKENS = LIMITS["coverage_max_tokens"]
     GEMINI_MAX_TOKENS = MAX_TOKENS
-    GEMINI_DEEP_MAX_TOKENS = DEEP_SEARCH_MAX_TOKENS
+
+
+# Frueheres Deep-Think-Feld -> heutiges Reasoning-Feld. Greift nur, solange
+# das neue Feld im gespeicherten Dokument noch fehlt (einmalige Uebernahme);
+# die uebrigen free_/pro_deep_search_*-Felder werden ignoriert.
+_LEGACY_LIMIT_ALIASES = {"reasoning_max_tokens": "pro_deep_search_max_tokens"}
 
 
 def normalize_limits_config(limits_data=None) -> dict:
-    incoming = limits_data if isinstance(limits_data, dict) else {}
+    incoming = dict(limits_data) if isinstance(limits_data, dict) else {}
+    for key, legacy_key in _LEGACY_LIMIT_ALIASES.items():
+        if key not in incoming and legacy_key in incoming:
+            incoming[key] = incoming[legacy_key]
     return {
         key: _coerce_limit(incoming.get(key, fallback), fallback)
         for key, fallback in DEFAULT_LIMITS.items()
@@ -1720,14 +1691,10 @@ def get_memory_ai_edit_limit(tier) -> int:
     return int(MEMORY_EDIT_CONFIG[keys[resolved]])
 
 
-def get_word_limit(tier, deep_search: bool = False) -> int:
-    if deep_search:
-        # Deep Search gibt es nur mit Pro; alle anderen Stufen sehen das
-        # Free-Limit (in der Regel 0).
-        return _tier_limit(tier, {
-            TIER_FREE: "free_deep_search_max_words",
-            TIER_PRO: "pro_deep_search_max_words",
-        })
+def get_word_limit(tier, reasoning: bool = False) -> int:
+    """Wortlimit der Frage. Haengt seit 2026-10-02 nicht mehr vom
+    Reasoning-Schalter ab; der Parameter bleibt fuer bestehende Aufrufer."""
+    del reasoning
     return _tier_limit(tier, {
         TIER_FREE: "free_max_words",
         TIER_PLUS: "plus_max_words",
@@ -1784,17 +1751,18 @@ def is_watch_daily_allowed(tier) -> bool:
     return resolved == TIER_PLUS and watch_plus_daily_allowed()
 
 
-def get_output_token_limit(tier, deep_search: bool = False) -> int:
-    if deep_search:
-        return _tier_limit(tier, {
-            TIER_FREE: "free_deep_search_max_tokens",
-            TIER_PRO: "pro_deep_search_max_tokens",
-        })
-    return _tier_limit(tier, {
+def get_output_token_limit(tier, reasoning: bool = False) -> int:
+    """Output-Cap einer Antwort. Mit Reasoning-Schalter fuer jede Stufe
+    max(normales Stufenlimit, reasoning_max_tokens), damit das laengere
+    Nachdenken die sichtbare Antwort nicht abschneidet."""
+    normal = _tier_limit(tier, {
         TIER_FREE: "free_max_tokens",
         TIER_PLUS: "plus_max_tokens",
         TIER_PRO: "pro_max_tokens",
     })
+    if reasoning:
+        return max(normal, int(LIMITS["reasoning_max_tokens"]))
+    return normal
 
 
 def _capture_runtime_config() -> dict:
@@ -1805,7 +1773,6 @@ def _capture_runtime_config() -> dict:
         "premium": set(PREMIUM_MODELS),
         "consensus": list(ALLOWED_CONSENSUS_MODELS),
         "presets": get_consensus_preset_models(),
-        "deep_think": DEEP_THINK_CONSENSUS_MODEL,
         "judges": dict(DIFFERENCES_JUDGE_MODEL_BY_PROVIDER),
         "pro_judges": dict(PRO_JUDGE_MODEL_BY_PROVIDER),
         "memory": dict(CHAT_MEMORY_MODEL_BY_PROVIDER),
@@ -1823,7 +1790,7 @@ def _capture_runtime_config() -> dict:
 
 
 def _restore_runtime_config(state: dict) -> None:
-    global ALL_ALLOWED_MODELS, DEEP_THINK_CONSENSUS_MODEL, SOURCE_VERIFICATION_MODEL
+    global ALL_ALLOWED_MODELS, SOURCE_VERIFICATION_MODEL
     global SOURCE_VERIFICATION_FALLBACK_MODEL
     for provider, target in _provider_allowed_sets().items():
         target.clear()
@@ -1842,7 +1809,6 @@ def _restore_runtime_config(state: dict) -> None:
             for key, value in state["presets"].items()
         }
     )
-    DEEP_THINK_CONSENSUS_MODEL = state["deep_think"]
     SOURCE_VERIFICATION_MODEL = state["source_verification_model"]
     SOURCE_VERIFICATION_FALLBACK_MODEL = state.get("source_verification_fallback_model", "")
     for target, key in (
@@ -1984,10 +1950,8 @@ def load_models_from_db(*, strict: bool = False, persist_backfill: bool = True) 
             # Consensus-Engines sicher im nativen Picker landen.
             apply_consensus_preset_models(data.get("preset_models"))
 
-            # Deep-Think-Modell VOR der Consensus-Normalisierung anwenden,
-            # damit normalize_consensus_models das konfigurierte Modell in der
-            # Liste sicherstellt.
-            apply_deep_think_model(data.get("deep_think_model"))
+            # Ein altes Feld "deep_think_model" (Deep Think bis 2026-10-02)
+            # wird bewusst ignoriert und nicht mehr geschrieben.
 
             # Judges (Differences/Resolve) je Provider; braucht die
             # aktualisierten Provider-Listen fuer die Validierung.
@@ -2088,7 +2052,6 @@ def load_models_from_db(*, strict: bool = False, persist_backfill: bool = True) 
                 "premium": list(PREMIUM_MODELS),
                 "consensus": list(ALLOWED_CONSENSUS_MODELS),
                 "preset_models": get_consensus_preset_models(),
-                "deep_think_model": DEEP_THINK_CONSENSUS_MODEL,
                 "judge_models": get_judge_models(),
                 "judge_models_pro": get_pro_judge_models(),
                 "judge_families": get_judge_families(),
@@ -2126,4 +2089,3 @@ def load_models_from_db(*, strict: bool = False, persist_backfill: bool = True) 
     finally:
         _RUNTIME_CONFIG_LOCK.release()
 
-DEEP_THINK_PROMPT = "Deep Think: Focus as hard as you can! But only on the essentials."

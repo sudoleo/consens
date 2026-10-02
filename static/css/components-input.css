@@ -587,45 +587,6 @@ body:not(.dark-mode) .chat-input-container::before {
 /* --------------------------------------------------------------------------
    Input Actions (Send); where the group sits is composer.css's job.
    -------------------------------------------------------------------------- */
-/* Aktiver Deep-Think-Modus: ruhiger Status-Chip in der unteren Action-Zeile,
-   direkt neben dem Consensus-Picker. Alle Farben verwenden Theme-Tokens. */
-.deep-think-input-indicator {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
-  gap: 6px;
-  min-height: 28px;
-  padding: 0 9px;
-  box-sizing: border-box;
-  border: 1px solid color-mix(in srgb, var(--glass-edge) 72%, var(--chip-border));
-  border-radius: var(--radius-pill);
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--glass-highlight) 30%, transparent), transparent 65%),
-    color-mix(in srgb, var(--glass-bg-strong) 62%, transparent);
-  color: color-mix(in srgb, var(--sidebar-text-muted) 78%, var(--text-color));
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--glass-highlight) 44%, transparent);
-  font-size: var(--font-size-micro);
-  font-weight: var(--font-weight-bold);
-  letter-spacing: var(--tracking-wide);
-  line-height: var(--line-height-solid);
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-
-.deep-think-input-indicator[hidden] {
-  display: none;
-}
-
-.deep-think-input-status-dot {
-  flex: 0 0 auto;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #2ebd6f;
-  box-shadow: 0 0 0 2px color-mix(in srgb, #2ebd6f 16%, transparent);
-}
-
 .input-actions-container button {
   display: flex;
   align-items: center;
@@ -775,7 +736,7 @@ body:not(.dark-mode) .chat-input-container::before {
 }
 
 /* --------------------------------------------------------------------------
-   Deep Think im (+)-Kontextmenü
+   Schalter im (+)-Kontextmenü (Reasoning, Check contradictions)
    -------------------------------------------------------------------------- */
 .attach-menu-divider {
   height: 1px;
@@ -835,17 +796,7 @@ body:not(.dark-mode) .chat-input-container::before {
   stroke-linejoin: round;
 }
 
-.deep-switch-actions {
-  flex: 0 0 auto;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  justify-content: space-between;
-  align-self: stretch;
-  gap: 6px;
-}
-
-.attach-menu-toggle-text .deep-switch-label {
+.attach-menu-toggle-text .menu-switch-label {
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-semibold);
   color: var(--text-color);
@@ -857,13 +808,7 @@ body:not(.dark-mode) .chat-input-container::before {
   color: var(--sidebar-text-muted);
 }
 
-.attach-menu-toggle .deepthink-disclaimer {
-  font-size: var(--font-size-micro);
-  line-height: var(--line-height-heading);
-  margin: 0;
-}
-
-/* Deep-Think-Toggle im selben Liquid-Glass-Grün-Look wie der Agent-Mode-Switch.
+/* Menue-Schalter im selben Liquid-Glass-Grün-Look wie der Agent-Mode-Switch.
    .attach-menu-Präfix, um die Basis-.switch-Maße (50px) zu überschreiben. */
 .attach-menu .attach-menu-switch {
   flex: 0 0 auto;

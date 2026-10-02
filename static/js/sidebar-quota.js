@@ -2,7 +2,7 @@
    Sidebar quota: the ring in the account footer and the panel above it.
 
    Both are a view of one number: today's token account, shared by Compare,
-   Consensus, Deep Think and Agent (App.tokenBudget, token-budget.js). The
+   Consensus, Reasoning runs and Agent (App.tokenBudget, token-budget.js). The
    ring is a quiet 20 px glyph without text — a number inside a ring that
    small either overflows or is unreadable. The exact value lives in the
    ring's tooltip/aria-label and in the panel: one primary figure, a thin
@@ -53,12 +53,13 @@
       mode = runMode && runMode.effective ? runMode.effective() : mode;
     } catch (_) { /* default */ }
     if (mode === "agent") return "agent";
-    var deep = el("deepSearchToggle");
-    if (deep && deep.checked) return "deep_think";
+    // "deep_think" is the kept estimate key of a run with Reasoning on.
+    var reasoning = el("reasoningToggle");
+    if (reasoning && reasoning.checked) return "deep_think";
     return mode === "compare" ? "compare" : "consensus";
   }
 
-  var MODE_NAMES = { compare: "Compare run", consensus: "Consensus run", deep_think: "Deep Think run" };
+  var MODE_NAMES = { compare: "Compare run", consensus: "Consensus run", deep_think: "Reasoning run" };
 
   function renderRing(view) {
     var trigger = el("quotaTrigger");
@@ -178,10 +179,10 @@
       new MutationObserver(sync).observe(source, { childList: true, subtree: true, characterData: true });
     }
     window.addEventListener("consensio:token-budget", sync);
-    // The run hint follows the mode and Deep Think switches.
+    // The run hint follows the mode and Reasoning switches.
     window.addEventListener("consensio:run-mode-change", sync);
     document.addEventListener("change", function (event) {
-      if (event.target && event.target.id === "deepSearchToggle") sync();
+      if (event.target && event.target.id === "reasoningToggle") sync();
     });
 
     trigger.addEventListener("click", function (event) {

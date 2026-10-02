@@ -347,7 +347,7 @@ async function checkUserStatusOnLoad(user, token, generation) {
       // 2. UI AKTUALISIEREN
 
       // "is_pro" ist seit der Plus-Stufe kein vollstaendiger Status mehr: es
-      // heisst nur "Frontier-Modelle und Deep Think" und ist fuer Plus false.
+      // heisst nur "Frontier-Modelle" und ist fuer Plus false.
       // Wer hier weiterhin nur das Flag durchreicht, macht aus jedem
       // Plus-Konto beim Laden ein Free-Konto. /user_status liefert "tier".
       const tier = data.tier ?? data.is_pro;
@@ -2288,21 +2288,12 @@ function loadSingleBookmarkUI(sourceBookmark, conversationTurns = [], options = 
             window.hideConsensusOutput?.();
         }
 
-        // Toggles setzen (Deep Think) - wie gehabt
-        if (bookmark.mode) {
-            const deepToggle = document.getElementById("deepSearchToggle");
-
-            // Erstmal resetten
-            if (deepToggle && deepToggle.checked) deepToggle.click();
-
-            // Dann korrekt setzen
-            if (bookmark.mode === "Deep Think") {
-                if (deepToggle && !deepToggle.checked) deepToggle.click();
-            }
-        }
+        // Der Reasoning-Schalter beschreibt den NAECHSTEN Lauf und bleibt beim
+        // Laden eines Bookmarks unangetastet -- auch fuer alte Bookmarks mit
+        // mode "Deep Think" (Deep Think gibt es seit 2026-10-02 nicht mehr).
 
         // Historische Modellnamen erst nach allen Mode-Synchronisierungen
-        // anwenden, weil updateDeepThinkText sonst wieder die aktuelle Picker-
+        // anwenden, weil updateReasoningUI sonst wieder die aktuelle Picker-
         // Auswahl in die Antworttitel schreiben würde.
         bookmarkCitationModels = applyBookmarkModelPresentation(bookmark);
         

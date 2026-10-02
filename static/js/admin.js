@@ -2,7 +2,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebas
 import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
 import { createAdminClient } from "/static/js/admin-api.js?v=20261002-errors";
 import { createPromptConfigPanel } from "/static/js/admin-prompt-config.js?v=20260919-continuous1";
-import { createAgentBudgetPanel } from "/static/js/admin-agent-budget.js?v=20261001-tokens1";
+import { createAgentBudgetPanel } from "/static/js/admin-agent-budget.js?v=20261002-reasoning";
 
 const app = initializeApp(window.FIREBASE_CONFIG);
 const auth = getAuth(app);
@@ -17,9 +17,7 @@ const limitGroups = [
         fields: [
             ['free_max_words', 'Free input words'],
             ['plus_max_words', 'Plus input words'],
-            ['pro_max_words', 'Pro input words'],
-            ['free_deep_search_max_words', 'Free Deep Think input words'],
-            ['pro_deep_search_max_words', 'Pro Deep Think input words']
+            ['pro_max_words', 'Pro input words']
         ]
     },
     {
@@ -28,8 +26,7 @@ const limitGroups = [
             ['free_max_tokens', 'Free output tokens'],
             ['plus_max_tokens', 'Plus output tokens'],
             ['pro_max_tokens', 'Pro output tokens'],
-            ['free_deep_search_max_tokens', 'Free Deep Think output tokens'],
-            ['pro_deep_search_max_tokens', 'Pro Deep Think output tokens']
+            ['reasoning_max_tokens', 'Reasoning output tokens (all tiers, at least the tier limit)']
         ]
     },
     {
@@ -226,7 +223,6 @@ function renderReasoningOverview() {
         (globalModelsData[provider] || []).forEach(model => {
             appendRow(provider, 'Answer', answers[model]);
         });
-        appendRow(provider, 'Deep Think answer', (policy.deep_think_answers || {})[provider]);
         const judgePolicy = (policy.judges || {})[provider] || {};
         appendRow(provider, 'Standard judge', judgePolicy.standard);
         appendRow(provider, 'Pro judge', judgePolicy.pro);
@@ -273,7 +269,7 @@ function renderReasoningControls() {
     let exceptions = 0;
     let protectedModels = 0;
     const controls = ((meta().reasoning || {}).controls || [])
-        .filter(control => scope.value !== 'deep' || control.deep_model);
+        .filter(control => control.previews?.existing && scope.value in control.previews.existing);
     controls.forEach(control => {
         const override = draft.models[control.model];
         const choice = override || draft.profile;
@@ -635,7 +631,6 @@ function renderUI() {
     // Alias-Aufloesung den aktuellen DOM-Stand sehen.
     renderConsensusModels();
     renderPresetModels();
-    renderDeepThinkSelect();
     renderJudgeSelects();
     renderSourceVerificationSelect(true);
     renderWatchModelConfig();
@@ -750,7 +745,6 @@ function createModelRow(provider, modelName, isPremium, isConsensus, isDefault) 
         renderJudgeSelects();
         renderConsensusAddSelect();
         renderPresetModels();
-        renderDeepThinkSelect();
         renderWatchModelConfig();
         markDirty();
     };
@@ -777,7 +771,7 @@ function moveRow(row, direction) {
 }
 
 // ==============================
-// Consensus & Deep Think
+// Consensus
 // ==============================
 function renderConsensusModels() {
     const listContainer = document.getElementById('consensusModelsList');
@@ -801,7 +795,6 @@ function createConsensusModelRow(modelName) {
     row.dataset.value = modelName;
 
     const forcedFirst = modelName === meta().consensus_forced_first;
-    const isDeepThink = modelName === currentDeepThinkModel();
 
     const upBtn = document.createElement('button');
     upBtn.type = 'button';
@@ -833,9 +826,6 @@ function createConsensusModelRow(modelName) {
     if (forcedFirst) {
         removeBtn.disabled = true;
         removeBtn.title = 'Server-enforced: this engine is always available (re-inserted on save).';
-    } else if (isDeepThink) {
-        removeBtn.disabled = true;
-        removeBtn.title = 'Currently the Deep Think model — pick a different Deep Think model first.';
     } else {
         removeBtn.title = 'Remove from Consensus picker';
     }
@@ -843,7 +833,6 @@ function createConsensusModelRow(modelName) {
         setProviderConsensusChecked(modelName, false);
         row.remove();
         renderConsensusAddSelect();
-        renderDeepThinkSelect();
         markDirty();
     };
 
@@ -852,7 +841,6 @@ function createConsensusModelRow(modelName) {
     row.appendChild(value);
     row.appendChild(desc);
     if (forcedFirst) row.appendChild(chip('required', 'Required', 'Always kept in the list by the server.'));
-    if (isDeepThink) row.appendChild(chip('deepthink', 'Deep Think', 'Deep Think switches the Consensus engine to this model.'));
     row.appendChild(removeBtn);
 
     return row;
@@ -884,7 +872,6 @@ function addConsensusListValue(modelName) {
     document.getElementById('consensusModelsList').appendChild(createConsensusModelRow(value));
     setProviderConsensusChecked(value, true);
     renderConsensusAddSelect();
-    renderDeepThinkSelect();
     renderPresetModels();
     renderWatchModelConfig();
 }
@@ -897,7 +884,6 @@ function removeConsensusListValue(modelName) {
     });
     setProviderConsensusChecked(value, false);
     renderConsensusAddSelect();
-    renderDeepThinkSelect();
     renderPresetModels();
     renderWatchModelConfig();
 }
@@ -948,45 +934,6 @@ function currentProviderModels(provider) {
     return Array.from(listContainer.querySelectorAll('.model-row input[type="text"]'))
         .map(input => input.value.trim())
         .filter(Boolean);
-}
-
-function currentDeepThinkModel() {
-    const select = document.getElementById('deepThinkModelSelect');
-    if (select && select.value) return select.value;
-    return globalModelsData.deep_think_model || (meta().deep_think_fallback || '');
-}
-
-function renderDeepThinkSelect() {
-    const select = document.getElementById('deepThinkModelSelect');
-    if (!select) return;
-    const chosen = currentDeepThinkModel();
-    select.innerHTML = '';
-    consensusListValues().forEach(value => {
-        const opt = document.createElement('option');
-        opt.value = value;
-        const descText = consensusDescription(value);
-        opt.textContent = descText ? `${value} — ${descText}` : value;
-        if (value === chosen) opt.selected = true;
-        select.appendChild(opt);
-    });
-    // Deep-Think-Badges in der Liste aktualisieren, ohne alles neu zu bauen.
-    document.querySelectorAll('#consensusModelsList .consensus-row').forEach(row => {
-        const isDeepThink = (row.dataset.value || '') === select.value;
-        const badge = row.querySelector('.admin-chip.deepthink');
-        if (isDeepThink && !badge) {
-            row.insertBefore(chip('deepthink', 'Deep Think', 'Deep Think switches the Consensus engine to this model.'), row.lastElementChild);
-        } else if (!isDeepThink && badge) {
-            badge.remove();
-        }
-        const removeBtn = row.lastElementChild;
-        const forcedFirst = (row.dataset.value || '') === meta().consensus_forced_first;
-        if (!forcedFirst) {
-            removeBtn.disabled = isDeepThink;
-            removeBtn.title = isDeepThink
-                ? 'Currently the Deep Think model — pick a different Deep Think model first.'
-                : 'Remove from Consensus picker';
-        }
-    });
 }
 
 // ==============================
@@ -1378,7 +1325,6 @@ async function saveModels() {
         reasoning_policy: globalModelsData.reasoning_policy || { profile: 'existing', models: {} },
         consensus: consensusListValues(),
         preset_models: currentPresetModels(),
-        deep_think_model: currentDeepThinkModel(),
         judge_models: currentJudgeModels(),
         judge_models_pro: currentProJudgeModels(),
         source_verification_model: currentSourceVerificationModel(),
@@ -1497,7 +1443,6 @@ document.getElementById('consensusAddBtn').addEventListener('click', () => {
         markDirty();
     }
 });
-document.getElementById('deepThinkModelSelect').addEventListener('change', renderDeepThinkSelect);
 
 // === Shared Pages Moderation ===
 let currentSharesFilter = 'reported';
@@ -1837,7 +1782,6 @@ function renderAccountTierDetail(account) {
     meta.textContent = [
         `UID: ${account.uid}`,
         `Frontier models: ${account.premium_models ? 'yes' : 'no'}`,
-        `Deep Think: ${account.deep_think ? 'yes' : 'no'}`,
         `Attachments: ${account.attachments ? 'yes' : 'no'}`,
         `Resolve: ${account.resolve ? 'yes' : 'no'}`,
         `Changed: ${formatAdminTime(account.tier_updated_at)}`,

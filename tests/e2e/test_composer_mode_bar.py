@@ -23,7 +23,7 @@ def test_composer_mode_bar(browser, phase4_server, width, dark):
         expect(mode).to_have_value('consensus')
         expect(page.locator('#composerModelIcons img')).to_have_count(6)
         expect(page.locator('#composerModelCount')).to_have_count(0)
-        expect(page.locator('#composerDeepToggle')).to_be_visible()
+        expect(page.locator('#composerReasoningToggle')).to_be_visible()
         expect(page.locator('#composerAttachButton')).to_be_visible()
         expect(page.locator('#composerModeDescription')).to_contain_text('differences and checks')
         output = Path('test-results/composer-mode-bar')
@@ -61,7 +61,7 @@ def test_composer_mode_bar(browser, phase4_server, width, dark):
         # In a chat the bar is docked: the status of the comparison on
         # screen, no tools (those are in the (+) menu).
         expect(bar).to_have_attribute('data-docked', 'true')
-        expect(page.locator('#composerDeepToggle')).to_be_hidden()
+        expect(page.locator('#composerReasoningToggle')).to_be_hidden()
         expect(page.locator('#composerAttachButton')).to_be_hidden()
         # The collapsed phone composer is (+), the field and Send in every
         # mode; the selector comes back at its own place when it opens.
@@ -106,7 +106,7 @@ def test_composer_mode_bar(browser, phase4_server, width, dark):
 
 
 @pytest.mark.parametrize("width,dark", [(1440, False), (390, False), (320, True)])
-def test_toolbar_deep_think_and_upload_reuse_plan_gates(browser, phase4_server, width, dark):
+def test_toolbar_reasoning_is_open_and_upload_reuses_plan_gates(browser, phase4_server, width, dark):
     context, page = _real_firebase_page(browser, phase4_server,
         init_script="localStorage.setItem('runMode', 'consensus'); localStorage.setItem('runModeDefault','agent-2026-10-02');")
     try:
@@ -114,17 +114,21 @@ def test_toolbar_deep_think_and_upload_reuse_plan_gates(browser, phase4_server, 
         page.evaluate("dark => document.body.classList.toggle('dark-mode', dark)", dark)
         draft = page.locator('#questionInput')
         draft.fill('Keep this question while I explore the app.')
-        deep = page.locator('#composerDeepToggle')
-        deep.click()
+        # Reasoning is open to every tier: no notice, the switch just turns on.
+        reasoning = page.locator('#composerReasoningToggle')
+        expect(reasoning).to_contain_text('Reasoning')
+        reasoning.click()
         notice = page.locator('#featureAccessNotice')
-        expect(notice).to_be_visible()
-        expect(notice).to_contain_text('Deep Think')
-        expect(page.locator('#proFeatureModal')).to_be_hidden()
-        expect(deep).to_have_attribute('aria-checked', 'false')
+        expect(notice).to_be_hidden()
+        expect(reasoning).to_have_attribute('aria-checked', 'true')
+        expect(page.locator('#reasoningToggle')).to_be_checked()
+        reasoning.click()
+        expect(reasoning).to_have_attribute('aria-checked', 'false')
+        expect(page.locator('#reasoningToggle')).not_to_be_checked()
         draft.fill('The composer is still usable.')
         page.locator('#composerAttachButton').click()
+        expect(notice).to_be_visible()
         expect(notice).to_contain_text('File uploads')
-        expect(notice).not_to_contain_text('Deep Think')
         expect(page.locator('#proFeatureModal')).to_be_hidden()
         expect(draft).to_have_value('The composer is still usable.')
         output = Path('test-results/early-access')
@@ -151,22 +155,19 @@ def test_toolbar_deep_think_and_upload_reuse_plan_gates(browser, phase4_server, 
         expect(modal).to_be_visible()
         page.locator('#keepFreeBtn').click()
         expect(modal).to_be_hidden()
-        # Plus keeps uploads and Resolve, while Deep Think stays gated.
+        # Plus keeps uploads and Resolve; a tier change leaves Reasoning alone.
+        reasoning.click()
         page.evaluate("window.updateUserTierUI('plus', true)")
         assert page.evaluate("App.showProFeatureModal('Resolve')") is False
+        expect(page.locator('#reasoningToggle')).to_be_checked()
         with page.expect_file_chooser():
             page.locator('#composerAttachButton').click()
         expect(notice).to_be_hidden()
-        deep.click()
-        expect(notice).to_contain_text('Deep Think')
         page.evaluate("window.updateUserTierUI('pro', true)")
         expect(notice).to_be_hidden()
-        deep.click()
-        expect(deep).to_have_attribute('aria-checked', 'true')
-        expect(page.locator('#deepSearchToggle')).to_be_checked()
-        expect(page.locator('#deepThinkInputIndicator')).to_be_hidden()
-        deep.click()
-        expect(page.locator('#deepSearchToggle')).not_to_be_checked()
+        expect(reasoning).to_have_attribute('aria-checked', 'true')
+        reasoning.click()
+        expect(page.locator('#reasoningToggle')).not_to_be_checked()
         with page.expect_file_chooser() as chooser:
             page.locator('#composerAttachButton').click()
         chooser.value.set_files({'name': 'toolbar.txt', 'mimeType': 'text/plain', 'buffer': b'A local attachment.'})

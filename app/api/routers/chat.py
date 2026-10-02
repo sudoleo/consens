@@ -178,7 +178,7 @@ def usage_run_fingerprint(
 def usage_response_fields(token_budget, tier) -> dict:
     entitlements = entitlements_for(tier)
     fields = {
-        # is_pro_user bleibt das Modell-/Deep-Think-Flag (Plus -> False);
+        # is_pro_user bleibt das Modell-Flag (Plus -> False);
         # "tier" ist die vollstaendige Stufe fuer die UI.
         "is_pro_user": entitlements.is_pro,
         "tier": entitlements.tier,
@@ -812,7 +812,9 @@ def _resolve_authoritative_chat_context(
         raise HTTPException(status_code=503, detail="Chat context unavailable") from exc
 
 
-def validate_question_word_limit(question: str, tier, deep_search: bool):
+def validate_question_word_limit(question: str, tier, deep_search: bool = False):
+    """Word limit of a question. Since 2026-10-02 it no longer depends on the
+    Reasoning switch (``deep_search``); the argument stays for callers."""
     question = validate_text_size(
         question,
         label="Question",
@@ -821,7 +823,7 @@ def validate_question_word_limit(question: str, tier, deep_search: bool):
         required=True,
     )
 
-    max_words_limit = cfg.get_word_limit(tier, deep_search)
+    max_words_limit = cfg.get_word_limit(tier)
     if count_words(question) > max_words_limit:
         raise HTTPException(status_code=400, detail=f"Input exceeds word limit of {max_words_limit}.")
     return question
@@ -995,6 +997,8 @@ def _run_ask(provider: AskProvider, *, stream_requested, question, key,
 
 def handle_ask(provider: AskProvider, request: Request, data: dict):
     question = data.get("question")
+    # ``deep_search`` is the kept wire name of the Reasoning switch (formerly
+    # Deep Think): same model, more reasoning, larger output cap. No tier gate.
     deep_search = parse_boolean_flag(data.get("deep_search", False))
     stream_requested = parse_boolean_flag(data.get("stream", False))
     system_prompt = validate_client_system_prompt(data.get("system_prompt"))
@@ -1020,15 +1024,11 @@ def handle_ask(provider: AskProvider, request: Request, data: dict):
             ) from None
         entitlements = entitlements_for(tier)
 
-    # is_pro_user heisst weiterhin "darf Frontier-Modelle und Deep Think".
+    # is_pro_user heisst weiterhin "darf Frontier-Modelle".
     # Plus ist hier False und faehrt damit exakt die Free-Modellauswahl.
     is_pro_user = entitlements.is_pro
 
-    # Deep Think ist strikt Pro-only.
-    if deep_search and not entitlements.deep_think:
-        raise HTTPException(status_code=403, detail="Deep Think is exclusively available for Pro users.")
-
-    question = validate_question_word_limit(question, tier, deep_search)
+    question = validate_question_word_limit(question, tier)
     validate_model(
         model,
         provider.allowed_models,
@@ -1036,8 +1036,7 @@ def handle_ask(provider: AskProvider, request: Request, data: dict):
         is_pro=is_pro_user,
     )
     attachments = parse_attachments(data, attachments_allowed=entitlements.attachments)
-    effective_model = cfg.PROVIDERS[provider.key].pro_model if deep_search else model
-    model_config = cfg.get_model_config(effective_model, provider.key)
+    model_config = cfg.get_model_config(model, provider.key)
     if attachments and model_config and not model_config.accepts_attachments:
         raise HTTPException(
             status_code=400,
@@ -1120,9 +1119,7 @@ def handle_ask(provider: AskProvider, request: Request, data: dict):
         run = answer_receipts.run_binding(uid, data.get("usage_run_key"), data.get("run_id"))
         if not uid or not run:
             return None
-        concrete_model = cfg.PROVIDERS[provider.key].pro_model if deep_search else (
-            model or cfg.PROVIDERS[provider.key].base_model
-        )
+        concrete_model = model or cfg.PROVIDERS[provider.key].base_model
 
         def store(result):
             text = coerce_text(result.get("text") or result.get("response")) if isinstance(result, dict) else ""
@@ -1264,15 +1261,6 @@ def prepare(request: Request, data: dict = Body(...)):
                 status_code=503,
                 detail="Account tier is temporarily unavailable. Please retry.",
             ) from None
-        entitlements = entitlements_for(tier)
-        if deep_think and not entitlements.deep_think:
-            raise HTTPException(
-                status_code=403,
-                detail={
-                    "error": "Deep Think is exclusively available for Pro users.",
-                    "error_code": "pro_required",
-                },
-            )
     except HTTPException as he:
         raise he
     except Exception as exc:
@@ -1283,7 +1271,7 @@ def prepare(request: Request, data: dict = Body(...)):
     # er erst in den /ask_*-Endpoints (handle_ask), sonst stuende er doppelt im
     # System-Prompt. Ein Tier-Gate gibt es nicht mehr.
 
-    validate_question_word_limit(question, tier, deep_think)
+    validate_question_word_limit(question, tier)
     raw_system_prompt = validate_client_system_prompt(data.get("system_prompt"))
     if not raw_system_prompt or not str(raw_system_prompt).strip():
         base_system_prompt = get_system_prompt()
@@ -1299,7 +1287,8 @@ def prepare(request: Request, data: dict = Body(...)):
     }
     if not use_own_keys:
         # Admission: the run starts only if the account covers the expected
-        # cost of a typical run of this mode (compare/consensus/deep think).
+        # cost of a typical run of this mode (compare/consensus, with or
+        # without Reasoning).
         usage_key, reserved, admission = reserve_usage_run(
             uid, data, tier=tier, deep_think=deep_think, mode=data.get("run_mode")
         )
@@ -1348,7 +1337,7 @@ def consensus(request: Request, data: dict = Body(...)):
             detail="Account tier is temporarily unavailable. Please retry.",
         ) from None
     entitlements = entitlements_for(tier)
-    # is_pro bleibt das Modell-/Deep-Think-Flag; Plus ist hier False.
+    # is_pro bleibt das Modell-Flag; Plus ist hier False.
     is_pro = entitlements.is_pro
 
     # A completed turn is owner-bound stored history, not a new engine run.
@@ -1560,9 +1549,6 @@ def consensus(request: Request, data: dict = Body(...)):
 
     if consensus_model not in cfg.ALLOWED_CONSENSUS_MODELS:
         raise HTTPException(status_code=400, detail="Invalid consensus model selected.")
-
-    if deep_think and not is_pro:
-        raise HTTPException(status_code=403, detail="Deep Think is exclusively available for Pro users.")
 
     # Premium-Engines bleiben Pro-exklusiv, AUCH im Own-Key-Modus: eigene Keys
     # bezahlen zwar den Call, heben aber das Tier-Gate nicht auf. Bewusst
@@ -2294,7 +2280,7 @@ def resolve(request: Request, data: dict = Body(...)):
     # Resolve ist ab Plus freigeschaltet; Free-Nutzer sehen den Button nur als
     # Teaser. Die Runde laeuft auf dem Standard-Judge, kostet also keinen
     # Frontier-Preis -- deshalb darf Plus sie testen. Serverseitig gilt das Gate
-    # auch mit eigenen Keys (wie bei Deep Think).
+    # auch mit eigenen Keys.
     if not entitlements.resolve:
         raise HTTPException(
             status_code=403,

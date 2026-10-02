@@ -1,9 +1,9 @@
-// Daily token allowance (one account for Compare, Consensus, Deep Think and
+// Daily token allowance (one account for Compare, Consensus, Reasoning runs and
 // Agent): limit per tier and the expected tokens of a typical run per tier and
 // mode, which is the admission threshold of the pipeline. Revision-guarded like
 // before; the global reset stays a separate product action.
 const TIERS = [['free', 'Free'], ['plus', 'Plus'], ['pro', 'Pro'], ['admin', 'Admin']];
-const MODES = [['compare', 'Compare run'], ['consensus', 'Consensus run'], ['deep_think', 'Deep Think run']];
+const MODES = [['compare', 'Compare run'], ['consensus', 'Consensus run'], ['deep_think', 'Reasoning run']];
 
 export function createAgentBudgetPanel(request) {
     const form = document.getElementById('agentBudgetForm');

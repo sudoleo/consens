@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
+import pytest
 from fastapi.testclient import TestClient
 
 import main
@@ -421,15 +422,54 @@ def test_request_rejects_client_model_and_limit_fields(monkeypatch):
     assert response.status_code == 422
 
 
-def test_deep_think_is_uid_tier_gated(monkeypatch):
-    setup_api(monkeypatch)
+@pytest.mark.parametrize("body", [
+    {"reasoning": True},
+    # Deprecated alias of the same switch.
+    {"deep_think": True},
+    {"reasoning": True, "deep_think": False},
+])
+def test_reasoning_is_open_to_free_accounts_and_accepts_the_legacy_alias(monkeypatch, body):
+    repo, _scheduled = setup_api(monkeypatch)
+    captured = []
+    monkeypatch.setattr(
+        api_v1,
+        "build_server_model_plan",
+        lambda **kwargs: captured.append(kwargs) or {"providers": {}, "consensus_model": "OpenAI"},
+    )
     client = TestClient(main.app)
     response = client.post(
         "/api/v1/consensus/runs",
-        headers={"X-API-Key": "cns_test", "Idempotency-Key": "deep"},
-        json={"question": "Why?", "deep_think": True},
+        headers={"X-API-Key": "cns_test", "Idempotency-Key": "reasoning-" + "-".join(sorted(body))},
+        json={"question": "Why?", **body},
     )
-    assert response.status_code == 403
+    # No Pro gate any more: a Free account gets the run.
+    assert response.status_code == 202
+    assert captured == [{"deep_think": True, "is_pro": False}]
+    # Stored under the compatibility key, exposed under both names.
+    assert repo.run["request"]["deep_think"] is True
+    assert response.json()["reasoning"] is True
+    assert response.json()["deep_think"] is True
+
+
+def test_reasoning_defaults_to_off(monkeypatch):
+    repo, _scheduled = setup_api(monkeypatch)
+    client = TestClient(main.app)
+    response = client.post(
+        "/api/v1/consensus/runs",
+        headers={"X-API-Key": "cns_test", "Idempotency-Key": "reasoning-off"},
+        json={"question": "Why?"},
+    )
+    assert response.status_code == 202
+    assert repo.run["request"]["deep_think"] is False
+    assert response.json()["reasoning"] is False
+
+
+def test_server_model_plan_does_not_swap_the_consensus_engine_for_reasoning():
+    plain = api_consensus_runner.build_server_model_plan(deep_think=False, is_pro=False)
+    reasoning = api_consensus_runner.build_server_model_plan(deep_think=True, is_pro=False)
+    assert reasoning["providers"] == plain["providers"]
+    assert reasoning["consensus_model"] == plain["consensus_model"]
+    assert reasoning["deep_think"] is True
 
 
 def test_post_is_rate_limited_per_api_key(monkeypatch):

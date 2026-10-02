@@ -1,21 +1,23 @@
 // =====================================================================
 // user-tier.js
-// Tier-/Pro-UI: Badge, Early-Access-Link, Deep-Search-Sperre, Premium-Modell-
+// Tier-/Pro-UI: Badge, Early-Access-Link, Premium-Modell-
 // Optionen je nach Pro/Plus/Free/ausgeloggt. In eigene IIFE gekapselt.
 // Extrahiert aus templates/index.html (initApp-Closure).
 // Exporte: window.updateUserTierUI, window.updatePremiumModelsState,
 // window.App.accountTier ({set, render}) fuer die Marke am Konto-Kuerzel.
 // window.App.normalizeTier kommt aus app-state.js (head-Bundle).
 // Abhaengigkeiten: window.restoreModelSelections,
-// window.syncCustomModelPickers, window.App.updateDeepThinkText,
+// window.syncCustomModelPickers, window.App.updateReasoningUI,
 // window.App.applyTierDefaultModels, window.isUserPro (State).
 //
 // Drei Stufen, zwei Flags (Serverseite: app/core/entitlements.py):
 //   Free  - Basis-Modelle, kleines Kontingent.
-//   Plus  - Modellauswahl wie Free, KEIN Deep Think, aber Anhaenge, Resolve
+//   Plus  - Modellauswahl wie Free, aber Anhaenge, Resolve
 //           und das groesste Kontingent.
 //   Pro   - alles.
-// isUserPro bleibt das Modell-/Deep-Think-Flag und ist fuer Plus false;
+// Der Reasoning-Schalter ist fuer alle Stufen frei und wird hier nicht
+// gesperrt (seit 2026-10-02; vorher Pro-only als "Deep Think").
+// isUserPro bleibt das Modell-Flag und ist fuer Plus false;
 // isUserPlus ist "Plus oder Pro". Wer nur isUserPro liest, sperrt Plus wie
 // Free -- das ist die sichere Richtung.
 // =====================================================================
@@ -44,7 +46,6 @@
     // 2. Elemente referenzieren
     const badge = document.getElementById("proBadge");
     const upgradeLink = document.getElementById("upgradeLink");
-    const deepSearchLabel = document.querySelector('.switch.deep-switch');
 
     window.App.dismissFeatureAccessNotice?.();
 
@@ -55,12 +56,6 @@
       if (upgradeLink) upgradeLink.style.display = "none";
 
       if (typeof updatePremiumModelsState === "function") updatePremiumModelsState(false);
-
-      // Deep Search sperren (wie bei Free User)
-      if (deepSearchLabel) {
-        deepSearchLabel.classList.add("locked");
-        deepSearchLabel.title = "Login required";
-      }
       return; // Funktion hier beenden!
     }
 
@@ -81,37 +76,11 @@
 
       // Dropdowns entsperren
       if (typeof updatePremiumModelsState === "function") updatePremiumModelsState(true);
-
-      // Deep Search entsperren
-      if (deepSearchLabel) {
-        deepSearchLabel.classList.remove("locked");
-        deepSearchLabel.title = "Deep Think enabled";
-        const input = deepSearchLabel.querySelector('input');
-        if (input) input.style.pointerEvents = "auto";
-      }
-
     } else {
       // --- FREE ODER PLUS (EINGELOGGT) ---
-      // Beide fahren dieselbe Modellauswahl und haben kein Deep Think; genau
-      // das macht Plus fuer Tester bezahlbar.
+      // Beide fahren dieselbe Modellauswahl; genau das macht Plus fuer
+      // Tester bezahlbar.
       if (typeof updatePremiumModelsState === "function") updatePremiumModelsState(false);
-
-      // Deep Search ausschalten & sperren
-      const deepToggle = document.getElementById("deepSearchToggle");
-      if (deepToggle && deepToggle.checked) {
-        deepToggle.checked = false;
-        if (typeof window.App.updateDeepThinkText === 'function') window.App.updateDeepThinkText();
-      }
-      if (deepSearchLabel) {
-        deepSearchLabel.classList.add("locked");
-        deepSearchLabel.title = "Off by default: one Deep Think run costs a multiple of a normal one";
-
-        // WICHTIG: Klicks auf dem gesamten Label erlauben, damit der Listener feuert
-        deepSearchLabel.style.pointerEvents = "auto";
-
-        const input = deepSearchLabel.querySelector('input');
-        if (input) input.style.pointerEvents = "auto";
-      }
     }
   }
 
@@ -156,10 +125,9 @@
       window.syncCustomModelPickers();
     }
 
-    // FIX: Nach dem Restore prüfen, ob Deep Think aktiv ist,
-    // und die Texte wieder auf die Reasoning-Namen setzen.
-    if (typeof window.App.updateDeepThinkText === "function") {
-      window.App.updateDeepThinkText();
+    // Nach dem Restore die Modell-Ueberschriften neu setzen.
+    if (typeof window.App.updateReasoningUI === "function") {
+      window.App.updateReasoningUI();
     }
   }
 

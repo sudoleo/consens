@@ -915,13 +915,13 @@ body:not(.dark-mode) .chat-input-container {
 }
 
 .input-action-btn-primary.send-glow.is-cancel-action {
-  --glow-wash: 13%;
-  --glow-rim: 40%;
+  --glow-wash: 20%;
+  --glow-rim: 58%;
 }
 
 .dark-mode .input-action-btn-primary.send-glow.is-cancel-action {
-  --glow-wash: 22%;
-  --glow-rim: 55%;
+  --glow-wash: 34%;
+  --glow-rim: 78%;
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -1581,9 +1581,9 @@ body:not(.dark-mode) .chat-input-container {
   transition: opacity 0.2s ease, transform 0.24s cubic-bezier(0.2, 0, 0, 1);
 }
 
-/* Deep Think ist aufgebraucht, ein normaler Lauf aber nicht: das ist ein
-   Umweg, kein Stopp — und liest sich deshalb als Warnung, nicht als Absage. */
-.run-blocked[data-bucket="deep_think"] {
+/* Ein Reasoning-Lauf passt nicht mehr, ein normaler Lauf aber schon: das ist
+   ein Umweg, kein Stopp — und liest sich deshalb als Warnung, nicht als Absage. */
+.run-blocked[data-bucket="reasoning"] {
   --blocked-tone: var(--partial);
   --blocked-tone-bg: var(--partial-bg);
 }

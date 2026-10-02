@@ -1,16 +1,16 @@
 """Drei Kontostufen statt eines Pro-Booleans.
 
 Free  - Basis-Modelle, kleines Tageskontingent.
-Plus  - Modellauswahl exakt wie Free (KEINE Frontier-/Premium-Modelle, KEIN
-        Deep Think), dafuer Anhaenge, Resolve-Runden und das groesste
+Plus  - Modellauswahl exakt wie Free (KEINE Frontier-/Premium-Modelle),
+        dafuer Anhaenge, Resolve-Runden und das groesste
         Run-Kontingent. Gedacht fuer Tester, die die Funktionen ausprobieren
         sollen, ohne Frontier-Kosten ausloesen zu koennen.
 Pro   - alles.
 
 Zwei Regeln halten die Kosten fest:
 
-1. ``is_pro`` behaelt UEBERALL seine alte Bedeutung "darf teure Modelle und
-   Deep Think" und ist fuer Plus ``False``. Jeder Pfad, der noch nicht
+1. ``is_pro`` behaelt UEBERALL seine alte Bedeutung "darf teure Modelle"
+   und ist fuer Plus ``False``. Jeder Pfad, der noch nicht
    tier-bewusst ist, behandelt einen Plus-Account damit automatisch wie Free
    (fail-closed) - ein vergessener Aufrufer verschenkt hoechstens Komfort,
    nie Geld.
@@ -81,10 +81,6 @@ class Entitlements:
 
     @property
     def premium_models(self) -> bool:
-        return self.is_pro
-
-    @property
-    def deep_think(self) -> bool:
         return self.is_pro
 
     @property

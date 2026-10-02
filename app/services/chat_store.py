@@ -461,6 +461,7 @@ def turn_metadata(turn_id: object, data: object) -> dict:
         "question": str(source.get("question") or ""),
         "mode": str(source.get("mode") or ""),
         "execution_mode": source.get("execution_mode", "consensus"),
+        # Persisted name of the Reasoning switch (formerly Deep Think).
         "deep_search": source.get("deep_search") is True,
         "selected_models": [
             str(item) for item in source.get("selected_models", [])

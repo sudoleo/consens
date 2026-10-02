@@ -1992,17 +1992,14 @@ def test_theme_toggle(app_page):
     expect(app_page.locator("#systemPromptModal")).to_be_hidden()
 
 
-def test_deep_think_temporarily_selects_configured_engine(app_page):
-    """Deep Think nutzt die Admin-konfigurierte Engine, ohne die zuvor
-    gespeicherte Consensus-Auswahl des Pro-Nutzers dauerhaft zu ersetzen."""
+def test_reasoning_switch_keeps_the_selected_consensus_engine(app_page):
+    """Reasoning laesst dieselben gewaehlten Modelle laenger nachdenken: weder
+    die Consensus-Engine noch die gespeicherte Auswahl aendern sich."""
     initial_model = app_page.evaluate(
         """() => {
-          window.updateUserTierUI('pro', true);
-          window.updatePremiumModelsState(true);
+          window.updateUserTierUI('free', true);
           const select = document.getElementById("consensusModelDropdown");
-          const initial = Array.from(select.options).find(option =>
-            !option.disabled && option.value !== window.DEEP_THINK_CONSENSUS_MODEL
-          ).value;
+          const initial = Array.from(select.options).find(option => !option.disabled).value;
           select.value = initial;
           select.dispatchEvent(new Event("change", { bubbles: true }));
           return initial;
@@ -2010,19 +2007,15 @@ def test_deep_think_temporarily_selects_configured_engine(app_page):
     )
     assert app_page.evaluate("() => localStorage.getItem('pref_select_consensus')") == initial_model
 
-    app_page.evaluate("() => document.getElementById('deepSearchToggle').click()")
-    app_page.wait_for_function(
-        "() => document.getElementById('consensusModelDropdown').value === window.DEEP_THINK_CONSENSUS_MODEL",
-        timeout=5000,
-    )
+    app_page.evaluate("() => document.getElementById('reasoningToggle').click()")
+    assert app_page.evaluate("() => document.getElementById('reasoningToggle').checked") is True
+    assert app_page.evaluate("() => document.getElementById('consensusModelDropdown').value") == initial_model
     assert app_page.evaluate("() => localStorage.getItem('pref_select_consensus')") == initial_model
+    assert app_page.evaluate("() => typeof window.DEEP_THINK_CONSENSUS_MODEL") == "undefined"
 
-    app_page.evaluate("() => document.getElementById('deepSearchToggle').click()")
-    app_page.wait_for_function(
-        "(initial) => document.getElementById('consensusModelDropdown').value === initial",
-        arg=initial_model,
-        timeout=5000,
-    )
+    app_page.evaluate("() => document.getElementById('reasoningToggle').click()")
+    assert app_page.evaluate("() => document.getElementById('reasoningToggle').checked") is False
+    assert app_page.evaluate("() => document.getElementById('consensusModelDropdown').value") == initial_model
 
 
 def test_consensus_presets_apply_full_model_sets_and_gate_thorough(app_page):

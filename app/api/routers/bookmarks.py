@@ -61,6 +61,9 @@ class BookmarkModelRequest(BaseModel):
     response: StrictStr = Field(min_length=1, max_length=40_000)
     modelName: BookmarkModelName
     modelLabel: StrictStr | None = Field(default=None, max_length=80)
+    # New runs always send "Standard". "Deep Think" stays accepted so bookmarks
+    # saved before the Reasoning switch replaced Deep Think (2026-10-02) can
+    # still be re-saved; the value no longer changes anything.
     mode: Literal["Standard", "Deep Think"]
     bookmarkId: StrictStr | None = Field(default=None, max_length=100)
     previousQuestion: StrictStr = Field(default="", max_length=4_000)

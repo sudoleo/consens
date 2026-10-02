@@ -71,14 +71,13 @@ def test_plus_gets_the_features_but_not_the_expensive_models():
     # Die eigentliche Kostengrenze.
     assert plus.is_pro is False
     assert plus.premium_models is False
-    assert plus.deep_think is False
 
 
 def test_free_gets_nothing_and_pro_gets_everything():
     free = entitlements_for(TIER_FREE)
-    assert not any([free.attachments, free.resolve, free.deep_think, free.premium_models])
+    assert not any([free.attachments, free.resolve, free.premium_models])
     pro = entitlements_for(TIER_PRO)
-    assert all([pro.attachments, pro.resolve, pro.deep_think, pro.premium_models])
+    assert all([pro.attachments, pro.resolve, pro.premium_models])
 
 
 # --- Limits ----------------------------------------------------------------
@@ -92,15 +91,20 @@ def test_plus_has_a_larger_token_allowance_than_free():
     assert agent_budget_config.tier_key(TIER_PLUS) == "plus"
 
 
-def test_plus_has_no_deep_think_entitlement():
-    # Ohne eigenes Deep-Think-Kontingent sperrt allein die Capability.
+def test_reasoning_is_not_an_entitlement():
+    # Deep Think (Pro-only) is gone; the Reasoning switch is open to every tier.
     from app.core.entitlements import entitlements_for
-    assert entitlements_for(TIER_PLUS).deep_think is False
+    for tier in (TIER_FREE, TIER_PLUS, TIER_PRO):
+        assert not hasattr(entitlements_for(tier), "deep_think")
 
 
-def test_plus_deep_search_limits_fall_back_to_free():
-    assert cfg.get_word_limit(TIER_PLUS, True) == cfg.get_word_limit(TIER_FREE, True)
-    assert cfg.get_output_token_limit(TIER_PLUS, True) == cfg.get_output_token_limit(TIER_FREE, True)
+def test_reasoning_limits_are_the_same_rule_for_every_tier():
+    reasoning_cap = cfg.LIMITS["reasoning_max_tokens"]
+    for tier in (TIER_FREE, TIER_PLUS, TIER_PRO):
+        assert cfg.get_word_limit(tier, True) == cfg.get_word_limit(tier)
+        assert cfg.get_output_token_limit(tier, True) == max(
+            cfg.get_output_token_limit(tier), reasoning_cap
+        )
 
 
 def test_plus_sits_between_free_and_pro_for_memory():

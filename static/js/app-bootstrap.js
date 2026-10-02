@@ -15,7 +15,6 @@
   window.APP_LIMITS = parse("limits", {});
   window.FREE_DEFAULT_MODELS = parse("freeModels", {});
   window.PRO_DEFAULT_MODELS = parse("proModels", {});
-  window.DEEP_THINK_CONSENSUS_MODEL = parse("deepThinkModel", "");
   window.CONSENSUS_PRESETS = parse("consensusPresets", []);
   window.DEFAULT_CONSENSUS_PRESET = parse("defaultConsensusPreset", "");
   // Die eine Familienliste der App: Antwortboxen, Picker, Sendepfad und

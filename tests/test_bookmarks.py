@@ -1145,9 +1145,10 @@ def test_bookmark_restore_uses_historical_model_labels_without_mutating_picker_s
     run_view = (root / "static" / "js" / "run-view.js").read_text(encoding="utf-8")
     assert "config?.modelLabel" in run_view
     assert "modelText.textContent = config.modelLabel" in run_view
-    assert firebase.index("if (bookmark.mode)") < firebase.index(
-        "bookmarkCitationModels = applyBookmarkModelPresentation(bookmark);"
-    )
+    # The Reasoning switch configures the next run: restoring a bookmark,
+    # including an old "Deep Think" one, never touches it.
+    assert "reasoningToggle" not in firebase
+    assert "deepSearchToggle" not in firebase
     assert "sourceSelect.value" not in run_view
     assert "localStorage.setItem" not in run_view
 

@@ -131,7 +131,8 @@ class ConsumerCoverageTests(unittest.TestCase):
 
     def test_engine_model_maps_cover_every_family(self):
         self.assertEqual(set(engines._DEFAULT_MODEL_BY_PROVIDER), set(cfg.PROVIDERS))
-        self.assertEqual(set(engines._DEEP_SEARCH_MODEL_BY_PROVIDER), set(cfg.PROVIDERS))
+        # The Reasoning switch no longer has its own model map (no Pro swap).
+        self.assertFalse(hasattr(engines, "_DEEP_SEARCH_MODEL_BY_PROVIDER"))
 
     def test_product_surfaces_cover_every_family(self):
         labels = set(cfg.PROVIDER_LABEL_BY_ID.values())

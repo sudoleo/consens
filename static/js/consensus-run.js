@@ -1222,7 +1222,7 @@
     const deepThink = replayRun
       ? replayRun.deepSearch === true
       : (window.App.usageRun?.current?.deepThink
-        ?? (document.getElementById("deepSearchToggle")?.checked === true));
+        ?? (document.getElementById("reasoningToggle")?.checked === true));
     const usageRun = window.App.usageRun?.ensure?.(deepThink, useOwnKeys);
 
     let id_token = null;

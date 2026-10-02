@@ -604,7 +604,7 @@
   // stehen, bevor er geklickt wird — nicht erst im Ring danach. Seit dem
   // gemeinsamen Tokenkonto ist der Preis ein ungefaehrer Anteil am Tag.
   function replayMode() {
-    return document.getElementById("deepSearchToggle")?.checked ? "deep_think" : "consensus";
+    return document.getElementById("reasoningToggle")?.checked ? "deep_think" : "consensus";
   }
 
   function replayCost() {

@@ -130,7 +130,7 @@ class FirestoreApiRunRepository:
                 "request": dict(request_payload),
                 "model_plan": dict(model_plan),
                 # Beide Felder: is_pro_at_acceptance bleibt fuer bestehende
-                # Dokumente und die Modell-/Deep-Think-Frage, tier_at_acceptance
+                # Dokumente und die Modell-Frage, tier_at_acceptance
                 # traegt die volle Stufe (Kontingent).
                 "is_pro_at_acceptance": entitlements_for(tier).is_pro,
                 "tier_at_acceptance": normalize_tier(tier),

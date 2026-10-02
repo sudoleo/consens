@@ -67,7 +67,7 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       aus `components-consensus-visuals.css`, ohne Drift einer Landing-Kopie.
 
 ## Admin
-- [ ] Reasoning budget: Sparprofil wählen, Vorschau für Antworten/Deep Think/
+- [ ] Reasoning budget: Sparprofil wählen, Vorschau für Antworten/Reasoning an/
       Consensus/Hilfsaufrufe wechseln, Modell-Ausnahme setzen und entfernen.
       Geschützte Modelle einblenden; reine Vorschau markiert nichts als geändert.
       Save und Reload erhalten die Policy; Reload vor Save verwirft Änderungen.
@@ -111,7 +111,7 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       (Presets/Custom, 2–6 Modelle). Agent-Modell darin per Maus/Tastatur
       (Rechts hinein, Links zurück) wechseln,
       nur unterstützte Reasoning-Stufen wählen; Chatmodell während eines
-      Laufs gesperrt, Vergleichsmodelle bleiben änderbar. (+) „Deep Think“ und
+      Laufs gesperrt, Vergleichsmodelle bleiben änderbar. (+) „Reasoning“ und
       „Comparison models“ öffnen die jeweilige Ebene desselben Menüs; in
       Consensus/Compare bleibt der eigene Modell-Chip. Reasoning getrennt vom Antworttext auf-/zuklappen,
       während des Denkens stoppen. Folgefrage mit anderem Modell senden und
@@ -346,11 +346,10 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       Kopfzeile von Daily/Balanced/High Quality auf die Custom-Anzeige um.
 - [ ] Echter Bild-/PDF-Anhang pausiert DeepSeek mit sichtbarer Erklärung; nach
       Entfernen aller Anhänge wird die vorherige DeepSeek-Auswahl wiederhergestellt.
-- [ ] Die Anhang-Sperre haengt am effektiven MODELL, nicht an der Familie:
-      GLM 5.3 Flash bleibt mit Anhang waehlbar, GLM 5.3 wird pausiert, und ein
-      eingeschaltetes Deep Think pausiert GLM auch dann, wenn im Picker noch
-      Flash steht (Deep Think faehrt das Pro-Modell). Kimi bleibt in beiden
-      Faellen waehlbar.
+- [ ] Die Anhang-Sperre haengt am gewaehlten MODELL, nicht an der Familie:
+      GLM 5.3 Flash bleibt mit Anhang waehlbar, GLM 5.3 wird pausiert; der
+      Reasoning-Schalter aendert daran nichts (er tauscht kein Modell). Kimi
+      bleibt in beiden Faellen waehlbar.
 - [ ] Muse liefert eine echte Antwort: Muse Glimmer 30B als Free-Modell und
       Muse Spark 1.3 als Pro-Modell. Spark braucht dafuer die einmalige
       18+-Bestaetigung des OpenRouter-Kontos
@@ -495,7 +494,7 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
 - [ ] High Quality zeigt ein Pro-Badge, hat beim Hover/Fokus eine dezente
       Power-Animation, oeffnet fuer Free den Kosten-Erklaerdialog (kein Kauf-,
       kein Zugangs-Request-Button) und setzt fuer Pro das vollstaendige
-      Premium-Model-Set. Deep Think bleibt separat.
+      Premium-Model-Set. Der Reasoning-Schalter bleibt davon unabhaengig.
 - [ ] Consensus und Differences erscheinen oberhalb der Modellantworten; der
       Reveal scrollt nur dann sanft zum Ergebnis, wenn es außerhalb des
       relevanten Viewports liegt.
@@ -743,7 +742,7 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
 
 ## Auth / Usage / Tier
 
-- Mit Free mehrere gesperrte Funktionen anklicken (Deep Think, High Quality,
+- Mit Free mehrere gesperrte Funktionen anklicken (High Quality,
   Anhänge, Resolve): ein kurzer Hinweis wird ersetzt, kein Vollbild-Dialog;
   Frage und Modellauswahl bleiben erhalten und der Composer bleibt bedienbar.
   Nach fünf Sekunden verschwindet der Hinweis automatisch; ein weiterer
@@ -918,7 +917,7 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       das Eingabefeld behält seine Breite.
       „Check contradictions“ schaltet die Quellenprüfung für die nächste Nachricht;
       ein laufender Run und Recovery behalten den eingefrorenen Wert.
-      „Deep Think“ öffnet per Klick/Enter die vorhandene Reasoning-Auswahl,
+      „Reasoning“ öffnet per Klick/Enter die vorhandene Reasoning-Auswahl,
       „Attach“ öffnet wie das (+)-Menü die Dateiauswahl (Upload in den privaten
       Chatspeicher). Kein horizontaler Overflow.
 - [ ] Bei aktivierter Quellenprüfung erscheinen Ergebnis und aufklappbare
@@ -928,7 +927,7 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
 
 - [ ] Im Agent-Chat ersetzt der verbleibende Tokenanteil als Prozentzahl den
   Run-Zähler im Sidebar-Footer (Rest unter 1 % als „<1%“). Panel: absolute
-  Tokens, Rücksetzzeit in Ortszeit und UTC, keine Deep-Think-/Watches-Zeilen.
+  Tokens, Rücksetzzeit in Ortszeit und UTC, keine Watches-Zeile.
   Keine Budgetzeile im Composer. Modus-/Accountwechsel zeigt keine fremden oder
   veralteten Zahlen.
 - [ ] Agent-Aktivität bei 1920/1440 px mit offener und eingeklappter linker
@@ -1045,8 +1044,14 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
   Bogen und Balken amber, leer rot. Ein Compare- oder Consensus-Lauf senkt den
   Prozentwert nach seinen Antworten bzw. dem Consensus; Agent zeigt dieselbe
   Zahl. Reicht das Konto nicht für einen typischen Lauf des Modus, erscheint
-  die Absage-Karte vor dem Senden (Deep Think: Angebot „Send without Deep
-  Think“, wenn ein normaler Lauf noch passt).
+  die Absage-Karte vor dem Senden (Reasoning an: Angebot „Send without
+  reasoning“, wenn ein normaler Lauf noch passt).
+- [ ] Reasoning-Schalter (Compare/Consensus) mit einem Free-Konto: (+)-Zeile
+  „Reasoning“ ohne Pro-Badge, Startleiste zeigt „Reasoning On/Off“ ohne
+  „· Pro“; mit Reasoning an laufen dieselben gewählten Modelle und dieselbe
+  Consensus-Engine (keine Modell-Überschrift wechselt), Antworten dürfen
+  länger sein. Ein altes Bookmark mit Modus „Deep Think“ lädt und schaltet
+  Reasoning nicht ein.
 - [ ] Auch ein fehlgeschlagener Agent-Run ohne Hauptantwort bleibt als Bookmark
   erhalten: Frage, Fehler, Aktivität und vorhandene Vergleichsantworten sind
   nach Reload sowie später im älteren Verlauf sichtbar.

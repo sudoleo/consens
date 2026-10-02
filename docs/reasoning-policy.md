@@ -20,7 +20,7 @@ guess for newly added models:
 | All other models | Existing behavior | No verified savings rule; provider default is not synonymous with off |
 
 The cap preserves explicit disabled/none/minimal/low settings. It applies to
-standard answers, Deep Think answers and synchronous/streamed engine calls
+standard answers, answers with the Reasoning switch on and synchronous/streamed engine calls
 (synthesis, judges, resolve, chat memory), including consumers such as API,
 Watches and Topics. It does not change routing, output caps or fixed task
 settings for Memory Edit, SEO review and Publisher screening. The selected
@@ -33,8 +33,9 @@ The main Admin table previews the selected request type using backend-generated
 values for each profile. Editable models are shown first; protected models can
 be revealed. Technical details describe the saved snapshot. Previewing a
 request type does not dirty the configuration. Changes apply after Save, and
-Reload discards them. Deep Think preview shows only each family's Pro model,
-matching the actual answer-model selection.
+Reload discards them. The "Answers with Reasoning on" preview covers every
+model: the Reasoning switch keeps the selected model and only fills a still-unset
+policy with `REASONING_EFFORT_ON` ("high"), so a savings cap can lower it again.
 
 Verified sources (2026-09-05):
 

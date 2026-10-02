@@ -70,7 +70,25 @@ class ConsensusRunRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
 
     question: str = Field(min_length=1, max_length=8_000)
-    deep_think: bool = False
+    reasoning: bool = Field(
+        False,
+        description=(
+            "Reasoning switch: the same server-selected models think longer "
+            "before they answer (more tokens, slower)."
+        ),
+    )
+    # Deprecated alias of ``reasoning`` (Deep Think was removed on 2026-10-02).
+    # Either flag set means Reasoning on; the run document keeps storing it
+    # under ``request.deep_think`` so idempotent replays stay stable.
+    deep_think: bool = Field(
+        False,
+        description="Deprecated alias of `reasoning`.",
+        json_schema_extra={"deprecated": True},
+    )
+
+    @property
+    def reasoning_on(self) -> bool:
+        return bool(self.reasoning or self.deep_think)
 
 
 class RunError(BaseModel):
@@ -81,6 +99,8 @@ class RunError(BaseModel):
 class ConsensusRunResponse(BaseModel):
     run_id: str
     status: Literal["accepted", "reserved", "running", "succeeded", "failed"]
+    reasoning: bool
+    # Deprecated alias of ``reasoning``; always carries the same value.
     deep_think: bool
     accepted_at: datetime
     expires_at: Optional[datetime] = None
@@ -253,7 +273,8 @@ def create_consensus_run(
     question = payload.question.strip()
     if not question:
         raise HTTPException(status_code=400, detail="Question must not be empty")
-    request_payload = {"question": question, "deep_think": payload.deep_think}
+    reasoning = payload.reasoning_on
+    request_payload = {"question": question, "deep_think": reasoning}
     if publisher_mode:
         request_payload["publisher_mode"] = True
     try:
@@ -289,14 +310,12 @@ def create_consensus_run(
         tier = get_user_tier(identity.uid)
         entitlements = entitlements_for(tier)
         is_pro = entitlements.is_pro
-        if payload.deep_think and not entitlements.deep_think:
-            raise HTTPException(status_code=403, detail="Deep Think requires a Pro account")
-        max_words = cfg.get_word_limit(tier, payload.deep_think)
+        max_words = cfg.get_word_limit(tier)
         if count_words(question) > max_words:
             raise HTTPException(status_code=400, detail=f"Input exceeds word limit of {max_words}")
         try:
             model_plan = build_server_model_plan(
-                deep_think=payload.deep_think,
+                deep_think=reasoning,
                 is_pro=is_pro,
             )
         except HTTPException:
@@ -817,6 +836,7 @@ def _public_run(run: dict) -> dict:
     return {
         "run_id": run["run_id"],
         "status": run["status"],
+        "reasoning": bool(request.get("deep_think")),
         "deep_think": bool(request.get("deep_think")),
         "accepted_at": run["accepted_at"],
         "expires_at": run.get("expires_at"),

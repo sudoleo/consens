@@ -251,10 +251,37 @@ def test_exhausted_firestore_contention_returns_structured_503(run_api, monkeypa
     assert response.json()["detail"]["error_code"] == "usage_storage_busy"
 
 
-def test_deep_think_is_admitted_against_the_deep_think_estimate(run_api, monkeypatch):
+def test_free_reasoning_run_passes_prepare_ask_and_consensus_without_pro_gate(run_api):
+    """Reasoning (wire name deep_search) is open to Free: no 403 anywhere in
+    the run, admitted against the Reasoning estimate (key "deep_think")."""
+    client, _repository, _db = run_api
+    key = "free-reasoning-run"
+
+    prepared = _prepare(client, key, deep=True)
+    assert prepared.status_code == 200
+    assert prepared.json()["run_estimate"] == FREE_RUN["deep_think"]
+    first = _ask(client, "/ask_openai", "openai", key, deep=True)
+    second = _ask(client, "/ask_mistral", "mistral", key, deep=True)
+    assert first.status_code == second.status_code == 200
+    payload = {
+        "usage_run_key": key,
+        "question": "What changed?",
+        "consensus_model": "Gemini",
+        "deep_search": True,
+        "answer_receipts": {
+            "openai": first.json()["answer_receipt"],
+            "mistral": second.json()["answer_receipt"],
+        },
+    }
+    with patch.object(chat_router, "query_consensus", return_value="Consensus"),          patch.object(chat_router, "query_differences", return_value=("Differences", None)),          patch.object(chat_router, "persist_pending_result", return_value=None),          patch.object(chat_router, "record_differences_stats"):
+        response = client.post("/consensus", headers=AUTH, json=payload)
+    assert response.status_code == 200
+
+
+def test_reasoning_is_admitted_against_the_reasoning_estimate(run_api, monkeypatch):
     client, _repository, db = run_api
     monkeypatch.setattr(chat_router, "get_user_tier", lambda uid: "pro")
-    key = "deep-think-run"
+    key = "reasoning-run"
 
     prepared = _prepare(client, key, deep=True)
     assert prepared.status_code == 200

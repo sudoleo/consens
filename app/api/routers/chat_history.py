@@ -86,6 +86,7 @@ class TurnCreateRequest(BaseModel):
 
     question: str
     mode: str
+    # Kept wire name of the Reasoning switch (formerly Deep Think).
     deep_search: StrictBool
     selected_models: list[str]
     consensus_model: str

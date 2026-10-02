@@ -90,7 +90,6 @@ def _serialize(uid: str, data: dict, *, email: str = "") -> dict:
         # Dieselben Flags, die auch der Nutzer bekommt -- so sieht der Admin im
         # Dashboard genau das, was der Account tatsaechlich darf.
         "is_pro": entitlements.is_pro,
-        "deep_think": entitlements.deep_think,
         "premium_models": entitlements.premium_models,
         "attachments": entitlements.attachments,
         "resolve": entitlements.resolve,

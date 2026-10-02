@@ -1,7 +1,7 @@
 /* ==========================================================================
    token-budget.js — the one daily token account in the browser
 
-   Compare, Consensus, Deep Think and Agent book on the same server-side
+   Compare, Consensus, Reasoning runs and Agent book on the same server-side
    account (app/services/agent_quota.py). Every response that knows the
    account carries the same `token_budget` snapshot: /usage, /user_status,
    /prepare, the final event of /ask_* and /consensus, /resolve, Agent's

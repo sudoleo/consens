@@ -2,7 +2,7 @@
 // app-core.js
 // Geteilte Basis (Uebergangsbus window.App) fuer die ausgelagerten
 // Feature-Module und die verbleibende initApp-Closure.
-// Haelt zentrale Config (modelPrefs, deepThinkModelLabels) und
+// Haelt zentrale Config (modelPrefs) und
 // cross-cutting Helfer (getModelOptionLabel, getSelectedModelCount,
 // trackAppEvent). MUSS vor den Feature-Modulen geladen werden.
 //
@@ -252,19 +252,18 @@
     responseId: family.responseId,
     textId: family.textId,
     endpoint: family.endpoint,
-    deepThinkModel: family.deepThinkModel,
     attachmentModels: Array.isArray(family.attachmentModels)
       ? family.attachmentModels.slice()
       : (family.attachmentModels === null ? null : undefined),
     handlesAttachments: family.handlesAttachments !== false
   }));
 
-  function modelAcceptsAttachments(pref, modelId, deepThink = false) {
+  // Der Reasoning-Schalter tauscht kein Modell: es zaehlt immer das gewaehlte.
+  function modelAcceptsAttachments(pref, modelId) {
     if (!pref) return false;
     const allowed = pref.attachmentModels;
     if (Array.isArray(allowed)) {
-      const effectiveModel = deepThink ? pref.deepThinkModel : modelId;
-      return allowed.includes(String(effectiveModel || ""));
+      return allowed.includes(String(modelId || ""));
     }
     if (allowed === null) return true;
     return pref.handlesAttachments !== false;
@@ -276,12 +275,6 @@
   const maxRunFamilies = Number(window.MAX_RUN_FAMILIES) > 0
     ? Number(window.MAX_RUN_FAMILIES)
     : 6;
-
-  const deepThinkModelLabels = Object.fromEntries(
-    modelFamilies
-      .filter(family => family.deepThinkLabel)
-      .map(family => [family.label, family.deepThinkLabel])
-  );
 
   function getModelOptionLabel(option) {
     const explicitLabel = option?.dataset?.modelLabel;
@@ -407,7 +400,6 @@
   Object.assign(window.App, {
     modelPrefs,
     maxRunFamilies,
-    deepThinkModelLabels,
     modelAcceptsAttachments,
     getModelOptionLabel,
     getSelectedModelCount,

@@ -32,14 +32,11 @@ from app.services.llm.provider_runtime import PROVIDER_HTTP_TIMEOUT, managed_pro
 
 logger = logging.getLogger(__name__)
 
-# Basis- und Deep-Think-Modell je Familie kommen aus der Provider-Registry:
-# Deep Think faehrt immer das Pro-Modell der Familie.
+# Basis-Modell je Familie aus der Provider-Registry. Der Reasoning-Schalter
+# (Wire-Feld ``deep_search``) tauscht seit 2026-10-02 KEIN Modell mehr: er
+# laesst dasselbe gewaehlte Modell nur laenger nachdenken.
 _DEFAULT_MODEL_BY_PROVIDER = {
     provider.key: provider.base_model for provider in cfg.PROVIDERS.values()
-}
-
-_DEEP_SEARCH_MODEL_BY_PROVIDER = {
-    provider.key: provider.pro_model for provider in cfg.PROVIDERS.values()
 }
 
 
@@ -152,7 +149,7 @@ def _log_model_selection(
     model_override: str | None,
 ) -> None:
     logger.info(
-        "Provider model selected: %s -> %s | deep_search=%s | override=%s",
+        "Provider model selected: %s -> %s | reasoning=%s | override=%s",
         provider,
         api_model,
         deep_search,
@@ -191,21 +188,20 @@ def build_provider_payload(
     attachments: list[dict] | None = None,
     benchmark_mode: bool = False,
 ) -> dict:
-    """Build the one OpenRouter Chat Completions payload used by every family."""
+    """Build the one OpenRouter Chat Completions payload used by every family.
+
+    ``deep_search`` is the kept wire name of the Reasoning switch: the same
+    model runs with more reasoning (see ``cfg.effective_model_reasoning``) and
+    a larger output cap, without a model swap, extra prompt or wider search.
+    """
     provider_key = str(provider or "").lower()
     if provider_key not in _DEFAULT_MODEL_BY_PROVIDER:
         raise ValueError(f"Unsupported model family: {provider}")
 
     system = system_prompt if system_prompt is not None else get_system_prompt()
-    if deep_search:
-        system += "\n" + cfg.DEEP_THINK_PROMPT
 
     default_model = _DEFAULT_MODEL_BY_PROVIDER[provider_key]
-    internal_model = (
-        _DEEP_SEARCH_MODEL_BY_PROVIDER[provider_key]
-        if deep_search
-        else (model_override or default_model)
-    )
+    internal_model = model_override or default_model
     api_model, model_config = cfg.resolve_api_model(
         internal_model,
         default_model,
@@ -232,7 +228,7 @@ def build_provider_payload(
         "provider": {"zdr": True},
     }
     if not benchmark_mode:
-        max_uses = 5 if deep_search else 1
+        max_uses = 1
         payload["tools"] = [web_search_tool(provider_key, max_uses=max_uses)]
         payload["max_tool_calls"] = max_uses + 1
 
@@ -240,7 +236,7 @@ def build_provider_payload(
     reasoning_config, _reasoning_source = cfg.effective_model_reasoning(
         provider_key,
         internal_model,
-        deep_think=deep_search,
+        reasoning=deep_search,
     )
     if reasoning_config is not None:
         request_config["reasoning"] = reasoning_config
@@ -249,7 +245,7 @@ def build_provider_payload(
     return {
         "provider": provider_key,
         "endpoint": "chat.completions",
-        "internal_model": f"deep_search:{internal_model}" if deep_search else internal_model,
+        "internal_model": internal_model,
         "api_model": api_model,
         "is_low_reasoning": bool(model_config.is_low_reasoning) if model_config else False,
         "payload": payload,

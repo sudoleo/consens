@@ -6,14 +6,14 @@ import { ROOT } from './helpers/appWindow.mjs';
 
 const source = readFileSync(path.join(ROOT, 'static/js/admin.js'), 'utf8');
 const template = readFileSync(path.join(ROOT, 'templates/admin.html'), 'utf8');
-const preview = value => Object.fromEntries(['answers', 'deep', 'synthesis', 'helpers'].map(key => [key, value]));
+const preview = value => Object.fromEntries(['answers', 'reasoning', 'synthesis', 'helpers'].map(key => [key, value]));
 
 function boot() {
     const dom = new JSDOM(template, { runScripts: 'outside-only', url: 'https://consens.io/admin' });
     const data = {
         reasoning_policy: { profile: 'existing', models: {} },
         _meta: { reasoning: { controls: [
-            { model: 'grok-4.3', provider: 'grok', label: 'Grok 4.3', deep_model: true, supported: true, note: 'Low cap',
+            { model: 'grok-4.3', provider: 'grok', label: 'Grok 4.3', supported: true, note: 'Low cap',
                 previews: { existing: preview({ effort: 'high' }), economy: preview({ effort: 'low' }) } },
             { model: 'kimi-k3', provider: 'kimi', label: '<script>unsafe</script>', supported: false, note: 'Required reasoning',
                 previews: { existing: preview({ enabled: true }), economy: preview({ enabled: true }) } },
@@ -62,8 +62,11 @@ describe('Admin reasoning policy', () => {
         change(window, window.document.getElementById('reasoningScope'), 'helpers');
         expect(window.document.getElementById('adminSavebar').classList.contains('is-dirty')).toBe(false);
         expect(window.getDraft().profile).toBe('existing');
-        change(window, window.document.getElementById('reasoningScope'), 'deep');
+        // "Reasoning on" previews every model (the switch keeps the selected
+        // model); the protected Kimi row stays hidden until requested.
+        change(window, window.document.getElementById('reasoningScope'), 'reasoning');
         expect(window.document.querySelectorAll('#reasoningControls tbody tr')).toHaveLength(1);
+        expect(window.document.getElementById('reasoningSummary').textContent).toContain('of 2 models');
         expect(window.document.getElementById('adminSavebar').classList.contains('is-dirty')).toBe(false);
         window.close();
     });

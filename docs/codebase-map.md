@@ -465,7 +465,7 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
 - **`run-registry.js`** — session-lokale Autorität für parallele Browser-Läufe.
   `window.App.runRegistry` besitzt höchstens zwei gleichzeitig ausführende
   `RunContext`s, eindeutige Run-/Request-IDs, Status/Phase, eingefrorene
-  Provider-/Modell-/Mode-/Deep-Search-/Own-Key-Konfiguration, Auth-Snapshot,
+  Provider-/Modell-/Mode-/Reasoning-(`deepSearch`)/Own-Key-Konfiguration, Auth-Snapshot,
   private ChatSession, Usage-Key, Attachments, Evidence, Modell-/Consensus-
   Puffer, AbortController, Bookmark-/Persistenzstatus und Fehler. Es trennt
   `visibleRunId`, `selectedConversationBasis` und eine geöffnete gespeicherte
@@ -504,7 +504,8 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   einer toten Login-Aktion. `consensio:auth-state` beendet den Watchdog;
   `consensio:auth-unavailable` informiert insbesondere den Watch-Deep-Link.
 - **`app-core.js`** — MUSS zuerst laden. Definiert `window.App`-Bus, `modelPrefs`
-  (zentrales Mapping Provider→DOM-IDs), `deepThinkModelLabels`, gemeinsame Helfer
+  (zentrales Mapping Provider→DOM-IDs), `modelAcceptsAttachments(pref, modelId)`
+  (immer das gewaehlte Modell; der Reasoning-Schalter tauscht keins), gemeinsame Helfer
   (`getModelOptionLabel`, `getSelectedModelCount`, `setAppTitle`, `showPopup`,
   `trackAppEvent`, `exitHeroMode`) sowie den zentralen
   `window.App.renderUsageDisplay(data, owner)`-Eingang: reicht das
@@ -523,8 +524,7 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   sechs aus den Registry-Familien gewählte Antwortmodelle plus Consensus-Engine. High Quality (interne ID
   `thorough`) ist Pro-only und zeigt
   ein Pro-Badge; eine manuelle Antwort- oder Consensus-Modellwahl wechselt zu
-  Custom. Die nativen Selects werden dabei OHNE change-Event gesetzt (Muster
-  wie Deep Think). Die High-Quality-Basis nutzt OpenAI GPT-5.6 Sol; gespeicherte
+  Custom. Die nativen Selects werden dabei OHNE change-Event gesetzt. Die High-Quality-Basis nutzt OpenAI GPT-5.6 Sol; gespeicherte
   Legacy-Werte mit GPT-5.5 werden bei der Normalisierung migriert. Zustand in localStorage
   `pref_consensus_preset` ("custom" = explizite Modellwahl, ausgeloest durch
   jedes change-Event am Dropdown); `pref_select_consensus` bleibt die
@@ -684,7 +684,7 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   erhalten. Reader-Dialoge bleiben oberhalb der Kopfleiste.
 - **`token-budget.js`** (head-Bundle, vor `firebase.js`) — `App.tokenBudget`,
   der einzige Browser-Besitzer des gemeinsamen Tokenkontos (Compare,
-  Consensus, Deep Think, Agent; siehe §4 „Ein Tokenkonto für alle Modi").
+  Consensus, Reasoning-Läufe, Agent; siehe §4 „Ein Tokenkonto für alle Modi").
   `apply(snapshot, {uid, authoritative})` validiert, bindet an den angemeldeten
   Account und ordnet parallele Snapshots (Konfigurationsrevision → UTC-Tag →
   Ledger-`revision` → `observed_at`); `/usage` und `/user_status` sind
@@ -712,7 +712,9 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   veralteter Stand). Ampelfarbe nur auf Ring-Bogen und Balkenfüllung
   (`--partial` ≤ 25 %, `--dispute` leer), nie auf einer Fläche. Bus:
   `window.App.sidebarQuota.{sync,setOpen}`; `runs()`/`deep()` und die
-  Run-/Deep-Think-Zeilen gibt es nicht mehr.
+  Run-/Deep-Think-Zeilen gibt es nicht mehr. Der Lauf-Hinweis nennt bei
+  eingeschaltetem `#reasoningToggle` den „Reasoning run" (Schätzungs-Key
+  `deep_think`).
   Seit 2026-07-27 trägt der Panel-Kopf auch den **Plan**: `#quotaPlanLabel`
   („Free") bzw. `#proBadge` — das Badge sass vorher neben „New
   comparison" und konkurrierte dort mit der einzigen Aktion der Kopfzeile.
@@ -1115,7 +1117,7 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   „agent-mode" sind historisch und meinen den Consensus-Lauf, nicht Agent Beta),
   der Moduswähler `#runModeSelect` samt Settings-Spiegel `#runModeSetting` und
   die Composer-Werkzeugleiste `#composerModeBar` direkt unter dem Input:
-  Quellenprüfung (nur Consensus/Agent), Deep Think, Upload-Shortcut und
+  Quellenprüfung (nur Consensus/Agent), Reasoning (`#composerReasoningToggle`), Upload-Shortcut und
   Anbieter-Favicons der nächsten Frage.
   Die Leiste gehört in jedem Modus und jeder Breite zum Startbildschirm (Hero
   oder Compare-Start mit leeren Antwortkarten, `App.composer.isStartScreen()`).
@@ -1126,13 +1128,13 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   Sie bleibt auf Desktop und Mobile eine einzelne 36-px-Zeile. Die Erklärung
   ist am Modusschalter als Tooltip/Screenreader-Beschreibung verfügbar;
   die doppelte Modellzahl entfällt und mobil zeigt der Bereitschaftsstatus die Kurzform.
-  Deep Think und Upload nutzen per Klick die bestehenden Controls und deren
-  Pro-/Plus-Gates. Mobil sind beide reine Icon-Buttons. Ein auf Hero-Wechsel
+  Reasoning und Upload nutzen per Klick die bestehenden Controls
+  (`#reasoningToggle` ohne Gate, Upload mit Plus-Gate). Mobil sind beide reine Icon-Buttons. Ein auf Hero-Wechsel
   begrenzter Body-Observer synchronisiert Chatstart und „New comparison“
   samt Anhangsplatzierung.
   Unter 700px tatsächlicher Leistenbreite kürzt eine Container-Query die Werkzeuglabels,
-  auch neben dem angedockten Reader auf Desktop;
-  der bestehende Deep-Think-Indikator im Input ist bei sichtbarer Leiste verborgen.
+  auch neben dem angedockten Reader auf Desktop. Einen eigenen Status-Chip im
+  Input gibt es seit 2026-10-02 nicht mehr (früher `#deepThinkInputIndicator`).
   Die Modell-Favicons überlappen leicht wie ein Icon-Stapel.
   Beim Einblenden erscheinen Opazität und 5-px-Versatz über 260 ms; bei
   `prefers-reduced-motion` entfällt die Animation. Der lange Folgeturn-Hinweis
@@ -1984,7 +1986,7 @@ Agent-Turns in `consensus-run.js`. Die Überschrift normaler Consensus-Turns ble
 mit Rückweg (verknüpft: `overview` → `groups` → `group:<key>`). Nur Modelle der
 geöffneten Familie stehen in der Liste. Reasoning bleibt eine separate Ebene für
 das ausgewählte Modell (verknüpft eine Zeile der Übersicht statt am Listenende);
-Deep Think öffnet sie direkt.
+der Composer-Knopf „Reasoning" öffnet sie im Agent-Modus direkt.
 Auswahl/Persistenz laufen weiter über dasselbe native Select. Tastatur unterstützt
 Pfeile, Home/End, Enter, Escape sowie Links/Rechts für den Ebenenwechsel.
 Kataloge ohne Anbietermetadaten behalten die flache Auswahlliste.
@@ -2018,14 +2020,16 @@ und `#agentComparisonMenuOption` die Vergleichsebene, beide im selben Menü des
 Agent-Chips (ebenso die Composer-Notiz `compare`/`choose-model`; ihre Notizen
 `.agent-composer-notice` lässt `composer-collapse.js` wie das (+) durch, sonst
 schluckte der eingeklappte Handy-Composer den Tap). Der Upload bleibt
-deaktiviert; der separate Consensus-Deep-Think-Schalter ist in Beta verborgen.
+deaktiviert; die Reasoning-Schalterzeile von Compare/Consensus (`#reasoningToggle`)
+ist in Beta verborgen, dort steht stattdessen der (+)-Eintrag „Reasoning"
+(`#agentReasoningMenuOption`) mit dem gewählten Effort.
 Der Composer ist derselbe wie in Compare und Consensus (`composer.css`), auch
 das (+) auf dem Startbildschirm und im eingeklappten Handy-Composer.
 `composer-collapse.js` lässt Pointer/Fokus auf Plus und dessen Menü direkt durch,
 ohne das Layout zwischen Touch und Klick zu verschieben. Ein neuer Chat zeigt die
 Startleiste wieder. In einem offenen Agent-Chat tritt der Moduswähler zurück
 (Compare und Consensus brauchen einen neuen Chat), die Quellenprüfungs-Controls
-bleiben aktiv. `Deep Think` öffnet über
+bleiben aktiv. `Reasoning` (`#composerReasoningToggle`) öffnet über
 `openModelPicker(select, {secondary: true})` die bestehende Reasoning-Auswahl;
 `Attach` bleibt bis zur Unterstützung von Anhängen deaktiviert. Vergleichsicons
 und Compare-Picker verwenden weiterhin dieselbe Modellauswahl.
@@ -2611,7 +2615,7 @@ Fehlende Coverage, fehlende Sätze, gekürzte Grundlagen und ausgefallene Modell
 werden nicht als vollständig geprüft dargestellt.
 
 **Tokenkontingent und Kosten.** agent_quota.py ist das zentrale UTC-Tageskonto,
-seit 2026-10-01 gemeinsam mit Compare/Consensus/Deep Think (§4 „Ein Tokenkonto
+seit 2026-10-01 gemeinsam mit Compare/Consensus/Reasoning-Läufen (§4 „Ein Tokenkonto
 für alle Modi"). Das Limit kommt aus der Kontostufe
 (`app_config/agent_budget.tier_limits[free|plus|pro|admin]`, `account_tier`:
 Admin-Rolle vor gespeicherter Stufe); das frühere globale
@@ -2779,7 +2783,7 @@ Client-Prompt behält Vorrang in `/prepare` und im Fan-out.
 
 1. Frontend `sendQuestion` (`query-send.js`) ruft zuerst **`POST /prepare`**:
    Auth sowie transaktionale Admission auf dem Tokenkonto (`run_mode`
-   `compare|consensus`, Deep Think aus `deep_search`) und sofortiger Consume
+   `compare|consensus`, Reasoning-Schätzung aus `deep_search`) und sofortiger Consume
    des vom Client erzeugten, kostenfreien `usage_run_key`; Antwort: finaler
    `system_prompt`, `token_budget` und `run_estimate`. Vorher blockt
    `usageLimit.blockIfExhausted` clientseitig mit derselben Regel.
@@ -2789,7 +2793,7 @@ Client-Prompt behält Vorrang in `/prepare` und im Fan-out.
    Key. Bleibt Firestore beschäftigt, bleibt die Frage erhalten und der Lauf
    endet vor dem Fan-out mit einer Retry-Karte.
 2. Fan-out an die ausgewählten **`/ask_<provider>`**-Endpoints (parallel), je mit
-   `stream:true`. Backend prüft Auth, Pro-Status, Deep-Search-Berechtigung,
+   `stream:true`. Backend prüft Auth, Pro-Status (nur für Premium-Modelle),
    Wortlimit (`validate_question_word_limit`) und Modell (`validate_model`),
    parst Attachments und bestätigt den bereits konsumierten Run idempotent.
    Alle parallelen Provider teilen denselben Key und sehen `consumed`; sie
@@ -3084,7 +3088,7 @@ Originalpassagenauswahl. Keine Cookies, Proxies, Browserausführung oder Suche.
 PDF bleibt ausdrücklich `unsupported_document`. Das Modell kommt weiterhin aus
 `app_config/models.source_verification_model` (Default
 `google/gemini-3.5-flash-lite`), wird bei Aufnahme eingefroren und im Admin unter
-Consensus & Deep Think → Source Checks gewählt.
+Consensus → Source Checks gewählt.
 Das daneben wählbare `source_verification_fallback_model` ist standardmäßig
 leer (`Disabled`) und erlaubt ein anderes Registry-Modell als Ersatz. Beide
 Modellwahlen werden pro Job eingefroren; ältere Jobs ohne Fallback-Feld bleiben
@@ -3347,13 +3351,26 @@ Details, Budgets und Abnahme: [source-verification.md](source-verification.md).
   SHA-256-Zielhash idempotent an genau diesen Chat/Turn und erzeugt keinen zweiten Slot;
   Own-Key nutzt ausschließlich `openrouter_key`, speichert/loggt ihn nicht und
   fällt bei Fehlen niemals auf den serverseitigen OpenRouter-Key zurück.
-- Deep Think bleibt ein separater Pro-Laufmodus neben High Quality: Das Preset
-  waehlt Premium-Modelle, Deep Think ergaenzt Prompt, Provider-Reasoning,
-  hoeheres Tokenbudget und eigenes Kontingent. Deep Think wählt im Frontend
-  temporär `Gemini 3.5 Flash` als Pro-Consensus-
-  Modell. Beim Ausschalten wird die vorherige Consensus-Auswahl wiederhergestellt,
-  ohne die gespeicherte Nutzerpräferenz zu überschreiben. Das Modell bleibt in
-  der serverseitig normalisierten Consensus-Liste verpflichtend verfügbar.
+- **Reasoning-Schalter** (seit 2026-10-02, ersetzt Deep Think; für alle
+  Stufen, kein Pro-Gate): `#reasoningToggle` im (+)-Menü bzw.
+  `#composerReasoningToggle` in der Startleiste. Ein lässt dieselben gewählten
+  Antwortmodelle länger nachdenken: kein Pro-Modell-Tausch, kein Zusatzprompt,
+  weiter eine Suchrunde, Consensus-Engine unverändert. Serverseitig füllt
+  `cfg.effective_model_reasoning(..., reasoning=True)` nur eine noch offene
+  Modell-Policy mit `REASONING_EFFORT_ON` („high"); explizite Policies
+  (`MODEL_REQUEST_CONFIG`) und Mistral-Defaults gewinnen, `cap_model_reasoning`
+  (Admin-Sparprofil) gilt weiter. Output-Cap: `max(Stufenlimit,
+  reasoning_max_tokens)` (`get_output_token_limit(tier, True)`); das Wortlimit
+  hängt nicht am Schalter. Der Lauf wird gegen die Reasoning-Schätzung
+  admittiert. **Kompatibilitätsnamen (bewusst behalten):** Wire-/Persistenzfeld
+  `deep_search` (`/ask_*`, `/prepare`, `/consensus`, Chat-Turns,
+  Run-Config `config.deepSearch`), `deep_think` (API-v1-Alias, Usage-Payload,
+  Schätzungs-Key in `app_config/agent_budget`, `RunKind.DEEP_THINK`) — sie
+  bedeuten heute „Reasoning an". Bookmarks akzeptieren weiter `mode: "Deep Think"`
+  (alte Einträge laden ohne den Schalter anzufassen); neue Läufe schreiben
+  immer `"Standard"`. Ein altes Firestore-Feld `deep_think_model` und die alten
+  `free_/pro_deep_search_max_*`-Limits werden ignoriert
+  (`pro_deep_search_max_tokens` wird einmalig zu `reasoning_max_tokens`).
 - Backend (`chat.py::consensus` → `consensus_pipeline.py` →
   `consensus_engine.py`): validiert (mind. **2**
   eingeschlossene Antworten), kappt Frage/Antworten serverseitig
@@ -3565,8 +3582,8 @@ die `runMode` vorbelegen, setzen die Marke mit.
 `templates/index.html` gliedert die Composer-Zeile in drei Gruppen, für Compare,
 Consensus und Agent dieselben: `.composer-lead` ((+) `#attachTrigger` und der
 Moduswähler `#runModeControl`), `.composer-models` (wer antwortet: in Agent
-nur `#agentModelControls`, sonst der Modell-Chip `#consensusModelDropdown`,
-dazu der Deep-Think-Hinweis) und `.input-actions-container` (Demo, Senden). Wo sie
+nur `#agentModelControls`, sonst der Modell-Chip `#consensusModelDropdown`)
+und `.input-actions-container` (Demo, Senden). Wo sie
 stehen, entscheidet allein `static/css/composer.css`; `shell.css` gestaltet nur
 die Box. Zustände: Startbildschirm (Hero oder Compare-Start) und aufgeklappt =
 Feld oben, darunter (+) und Modus links, Modelle und Senden rechts; Desktop im
@@ -3799,7 +3816,7 @@ wird nur chunkweise bis zum Budget expandiert und DTD/Entities werden abgewiesen
 
 ### Ein Tokenkonto für alle Modi (seit 2026-10-01)
 
-Compare, Consensus, Deep Think und Agent · Beta buchen auf **dasselbe**
+Compare, Consensus (je mit oder ohne Reasoning) und Agent · Beta buchen auf **dasselbe**
 Tageskonto pro Nutzer (`users/{uid}/chat_state/agent_tokens_{periode}`,
 `app/services/agent_quota.py`). Die Nutzerin sieht eine Zahl, wo immer sie
 fragt (Ring, Panel, Agent, Absage-Karte). Reset (00:00 UTC bzw. Admin-Reset
@@ -3809,11 +3826,12 @@ Agent.
 - **Konfiguration** (`app/services/agent_budget_config.py`, Dokument
   `app_config/agent_budget`, revisioniert mit Audit-Kopien unter
   `revisions/`): `tier_limits{free,plus,pro,admin}` und
-  `run_estimates{tier}{compare,consensus,deep_think}`. Fehlende Felder
+  `run_estimates{tier}{compare,consensus,deep_think}` (`deep_think` ist der
+  behaltene Key der Schätzung eines Laufs mit Reasoning an). Fehlende Felder
   erhalten ihren Default, vorhandene ungültige Werte schlagen geschlossen fehl
   (503). Das alte Einzelfeld `daily_token_limit` wird ignoriert und beim
   nächsten Speichern entfernt. Admin → Limits zeigt eine Tabelle Stufe ×
-  (Tokens/Tag, Compare-, Consensus-, Deep-Think-Lauf); `PUT
+  (Tokens/Tag, Compare-, Consensus-, Reasoning-Lauf); `PUT
   /api/admin/agent-budget` nimmt `{revision, tier_limits?, run_estimates?}`
   (strikt, Teilwerte werden mit dem Stand gemischt), `GET` liefert zusätzlich
   `defaults`. Stufe: `agent_quota.account_tier(uid, tier)` = `admin` bei
@@ -3827,7 +3845,8 @@ Agent.
     API v1 beim Annehmen): ein Lauf startet nur, wenn `remaining` (Limit −
     gemessen − geschätzt − Agent-Reservierungen − aktive Pipeline-Holds) die
     erwarteten Tokens eines typischen Laufs von Modus und Stufe deckt
-    (`run_mode`: `compare`, sonst `consensus`; Deep Think aus `deep_search`;
+    (`run_mode`: `compare`, sonst `consensus`; Reasoning-Schätzung `deep_think`
+    aus `deep_search`;
     Resolve gegen die Compare-Schätzung). Der Lauf legt diese Schätzung als
     Hold (`pipeline_holds`, zehn Minuten) ins Konto, damit parallele Tabs das
     Puffer nicht doppelt nutzen; es gibt **keine** Reservierung pro Call.
@@ -3864,8 +3883,9 @@ Agent.
 - **Anzeige**: ein Prozent-Ring für alle Modi (`token-budget.js`,
   `sidebar-quota.js`, §3). „Uses 1 run" ist ein ungefährer Anteil („about 8 %
   of today"). Die Absage-Karte (`usage-limit.js`, `#runBlocked`) nennt den
-  Rest in Prozent, den Bedarf des Modus und die Reset-Zeit; reicht nur Deep
-  Think nicht, bietet sie den normalen Lauf an.
+  Rest in Prozent, den Bedarf des Modus und die Reset-Zeit; reicht nur der
+  Reasoning-Lauf nicht, bietet sie „Send without reasoning" an
+  (`data-bucket="reasoning"`, Warnton statt Absage).
 
 **Herleitung der Defaults** (Prinzip: ein typischer Nutzer behält ungefähr
 seine bisherige Tageskapazität; Limit ≈ bisheriges Run-Limit × Tokens eines
@@ -3888,7 +3908,10 @@ Pro (1 000 Wörter, längere Antworten und Judge-Prompts): Antwort ~6 100 × 6
 ≈ 37 000, Synthese ~11 500, Judges je ~12 000 → Consensus ≈ 75 000, Compare
 ≈ 40 000. Deep Think (16 384-Cap, bis zu fünf Suchrunden, Reasoning):
 Antworten ~16 500 × 6 ≈ 99 000 + Synthese ~16 000 + Judges ~28 000 →
-≈ 150 000.
+≈ 150 000. Seit 2026-10-02 trägt der Reasoning-Lauf (gleiche Modelle, Effort
+„high", Output bis `reasoning_max_tokens` = 8 192, eine Suchrunde) bewusst
+weiter diese Schätzung: Admission irrt lieber zur sicheren Seite; nach
+Prod-Daten im Admin nachjustieren.
 
 | Stufe | Rechnung | Default `tier_limits` |
 |---|---|---|
@@ -3967,18 +3990,22 @@ vollständigen Laufs entsprechen, das Limit dem gewünschten Tagesvolumen.
   `free`, `plus` oder `pro`; der historische Tag `premium` bedeutet weiterhin
   Pro, alles Unbekannte fällt auf Free. Admin bleibt `users/{uid}.role == admin`.
 
-  | | Frontier-Modelle | Deep Think | Anhänge | Resolve | Tokenkonto/Tag (Default) |
-  |---|---|---|---|---|---|
-  | Free | – | – | – | – | 660 000 |
-  | Plus | – | – | ✓ | ✓ | 1 650 000 |
-  | Pro | ✓ | ✓ | ✓ | ✓ | 5 000 000 |
-  | Admin (Rolle) | wie Stufe | wie Stufe | wie Stufe | wie Stufe | 5 000 000 |
+  | | Frontier-Modelle | Anhänge | Resolve | Tokenkonto/Tag (Default) |
+  |---|---|---|---|---|
+  | Free | – | – | – | 660 000 |
+  | Plus | – | ✓ | ✓ | 1 650 000 |
+  | Pro | ✓ | ✓ | ✓ | 5 000 000 |
+  | Admin (Rolle) | wie Stufe | wie Stufe | wie Stufe | 5 000 000 |
+
+  Der Reasoning-Schalter (früher Pro-only „Deep Think") ist seit 2026-10-02
+  keine Berechtigung mehr: alle Stufen dürfen ihn nutzen; `entitlements.deep_think`
+  und das Feld `deep_think` der Admin-Kontoansicht sind entfernt.
 
   Plus existiert für Tester, die Funktionen ausprobieren sollen, **ohne einen
   Frontier-Lauf auslösen zu können**. Herleitung der Tokenkonten: §4 „Ein
   Tokenkonto für alle Modi".
 - **Zwei Flags, eine Regel:** `is_user_pro(uid)` behält überall seine alte
-  Bedeutung „darf teure Modelle und Deep Think" und ist für Plus **False**;
+  Bedeutung „darf teure Modelle" und ist für Plus **False**;
   `is_user_plus(uid)`/`entitlements.attachments|resolve` decken die
   Komfortfunktionen ab. Jeder Pfad, der noch nicht tier-bewusst ist, behandelt
   einen Plus-Account damit automatisch wie Free — eine Lücke kostet höchstens
@@ -4027,7 +4054,11 @@ vollständigen Laufs entsprechen, das Limit dem gewünschten Tagesvolumen.
 - Wort-, Output-, Memory- und Watch-Limits kommen aus `app/core/config.py`
   (`get_word_limit`, `get_output_token_limit`, …) und können per Firestore
   (`app_config/models.limits`) überschrieben werden; veraltete Schlüssel wie
-  `*_consensus_run_limit` fallen bei der Normalisierung weg. Das Tokenkonto
+  `*_consensus_run_limit` und `free_/pro_deep_search_max_*` fallen bei der
+  Normalisierung weg (`pro_deep_search_max_tokens` wird einmalig zu
+  `reasoning_max_tokens`, solange das neue Feld fehlt). Mit Reasoning gilt
+  `get_output_token_limit(tier, True) = max(Stufenlimit, reasoning_max_tokens)`;
+  `get_word_limit` ignoriert den Schalter. Das Tokenkonto
   lebt getrennt in `app_config/agent_budget`.
 - Die Antwortmodell-Picker wenden bei einem Tier-Wechsel die Free-/Pro-
   Defaults erneut an, solange der Nutzer für den jeweiligen Provider keine
@@ -4052,12 +4083,15 @@ vollständigen Laufs entsprechen, das Limit dem gewünschten Tagesvolumen.
   zusammen mit der aktuellen Admin-Rolle erneut geprüft. Legacy-Keys erhalten
   nur die sicheren Defaults. Liste und Widerruf laufen über
   `GET/DELETE /api/admin/api-keys`.
-- `POST /api/v1/consensus/runs` akzeptiert ausschließlich `question` und
-  `deep_think`; unbekannte Felder werden abgelehnt. Der Server wählt die sechs
-  Antwortmodelle aus dem konfigurierten Balanced-Preset, die reguläre
-  Consensus-Engine aus demselben Preset und für Deep Think stattdessen
-  `DEEP_THINK_CONSENSUS_MODEL`. Kosten, Limits, Modelle oder Modellanzahl sind
-  keine Request-Felder.
+- `POST /api/v1/consensus/runs` akzeptiert ausschließlich `question`,
+  `reasoning` (dokumentierter Name des Reasoning-Schalters) und `deep_think`
+  (veralteter Alias; eines von beiden `true` = Reasoning an, für alle Stufen,
+  kein Pro-403 mehr); unbekannte Felder werden abgelehnt. Gespeichert wird der
+  Schalter weiter als `request.deep_think` (Idempotenz alter Runs), die Antwort
+  trägt `reasoning` und `deep_think` mit demselben Wert. Der Server wählt die
+  sechs Antwortmodelle und die Consensus-Engine aus dem konfigurierten
+  Balanced-Preset — mit und ohne Reasoning dieselben. Kosten, Limits, Modelle
+  oder Modellanzahl sind keine Request-Felder.
 - API-v1-Runs verwenden bewusst immer die sechs Familien des Balanced-Presets,
   einschließlich DeepSeek; für API-Kunden gibt es keinen Provider-Opt-out. Das gilt seit
   2026-08-25 auch für den admin-only Scheduled Publisher: sein typisierter
@@ -4076,7 +4110,7 @@ vollständigen Laufs entsprechen, das Limit dem gewünschten Tagesvolumen.
   den Provider-Fan-out doppelt starten.
 - Die Usage-Reservierung nutzt `FirestoreUsageRepository` auf demselben
   Tokenkonto wie App und Agent: beim Annehmen wird der Lauf gegen die
-  Consensus- bzw. Deep-Think-Schätzung der Stufe admittiert
+  Consensus- bzw. Reasoning-Schätzung (`deep_think`) der Stufe admittiert
   (`token_admission_for_run`, Admin-Rolle zählt), beim Übergang zu `running`
   konsumiert, und nach der Pipeline bucht `OperationBooking("pipeline",
   final=True)` die gemessenen Tokens aller Antworten und Judges, auch bei
@@ -4633,7 +4667,8 @@ CLI mit `firebase deploy --only firestore:rules,firestore:indexes`):
     beim Account-Löschen mit entfernt.
   - `usage_runs/{sha256(idempotency_key)}` — idempotenter Run je UID + Key; der
     Klartext-Key wird nicht gespeichert. Enthält (Schema 3)
-    `kind=regular|deep_think`, den UTC-Tag der Admission, `quota_day`
+    `kind=regular|deep_think` (`deep_think` = Reasoning an, Kompatibilitätsname),
+    den UTC-Tag der Admission, `quota_day`
     (Kontoperiode inkl. Reset-Generation), `token_tier`, `admission_mode`,
     `admission_estimate`, `token_limit_at_admission`, `booked_operations`
     (`{operation: {measured, estimated, booked_at}}`, Exactly-once-Zaun der
@@ -4730,7 +4765,7 @@ CLI mit `firebase deploy --only firestore:rules,firestore:indexes`):
   werden weiterhin im Code zusammengesetzt. Eigene Nutzer-Prompts haben für
   Einzelantworten Vorrang. Judge-/Resolve-/Spezialprompts bleiben im Code.
 - `app_config/models` — von `load_models_from_db()` gelesen/erzeugt: erlaubte
-  Modelle pro Provider, `premium`, `consensus`, `preset_models`, `deep_think_model`,
+  Modelle pro Provider, `premium`, `consensus`, `preset_models`,
   `judge_models`, `judge_models_pro`, `judge_families`, `watch_models`,
   `watch_consensus_models`, `defaults`,
   `limits` sowie die sichere, einzeln normalisierte `memory_edit`-Konfiguration
@@ -4764,10 +4799,9 @@ CLI mit `firebase deploy --only firestore:rules,firestore:indexes`):
   Admin-Dokument zurückgeschrieben (Schema-Backfill ohne Verlust vorhandener Werte).
   Werte können historische Engine-Aliase (`Gemini-Pro`) oder direkte Modell-IDs aus
   den Provider-Listen sein. In `/admin` können Provider-Modelle per `Consensus`-
-  Checkbox in diese Liste aufgenommen werden. `deep_think_model` ist die
-  Consensus-Engine, auf die Deep Think umschaltet (`apply_deep_think_model`,
-  Fallback direkte Gemini-3.5-ID, sofern konfiguriert, sonst Alias `Gemini`; ans
-  Frontend via `window.DEEP_THINK_CONSENSUS_MODEL`).
+  Checkbox in diese Liste aufgenommen werden. Das frühere Feld
+  `deep_think_model` (Deep-Think-Engine) wird seit 2026-10-02 beim Lesen
+  ignoriert, beim Admin-Speichern verworfen und nicht mehr geschrieben.
   `judge_models`/`judge_models_pro` setzen Standard- bzw. Pro-Differences-/
   Resolve-Judge je Provider (`apply_judge_models`/`apply_pro_judge_models` in
   config.py, in-place — consensus_engine/resolve_engine aliasen dieselben
@@ -5095,7 +5129,8 @@ Picker. Die `ALLOWED_*_MODELS`-Namen bleiben Aliasse auf DASSELBE Set-Objekt der
 Registry (der Firestore-Load mutiert in place). Familienspezifische Hygiene
 steht in `PROVIDER_MODEL_MIGRATIONS`/`PROVIDER_DEPRECATED_MODELS`, Reasoning-
 Varianten als Daten in `MODEL_REQUEST_CONFIG`: Kimi K2.6 sendet
-`reasoning.enabled=false`, K3 zwingend `reasoning.enabled=true` (auch Deep Think).
+`reasoning.enabled=false`, K3 zwingend `reasoning.enabled=true` (auch mit Reasoning-Schalter;
+explizite Modell-Policies gewinnen dort).
 Beide Kimi-Modelle begrenzen OpenRouter auf `provider.only=["moonshotai"]`
 mit `allow_fallbacks=false`; das bestehende `zdr=true` bleibt beim Merge erhalten.
 Live-Diagnose: automatische Routen lieferten kaputte Tool-Ausgaben; K3 suchte
@@ -5135,8 +5170,8 @@ sichtbar (`model-picker.js`, `capBlocksInclusion`), `/consensus` weist mehr
 Antworten mit 400 ab. Weniger als sechs bleibt wie bisher moeglich.
 `attachment_models` legt die Fähigkeit pro Modell fest (`None` = alle, leeres
 Set = keines). DeepSeek bleibt mit Anhang stumm; bei GLM kann 5.3 Flash Anhänge
-lesen, während das effektive Deep-Think-Modell GLM 5.3 text-only ist. Frontend
-und Backend prüfen deshalb das tatsächlich gewählte/eingesetzte Modell. Meta
+lesen, GLM 5.3 ist text-only. Frontend und Backend prüfen deshalb das
+tatsächlich gewählte Modell (der Reasoning-Schalter tauscht keins). Meta
 liest beide Modelle Bilder (`PROVIDER_IMAGE_SUPPORT`), steht aber bewusst nicht
 in `PROVIDER_PDF_SUPPORT`: nur Muse Spark 1.3 verarbeitet PDFs nativ, das freie
 Muse Glimmer 30B nicht — die Familie bekommt deshalb den Text-Fallback.
@@ -5209,10 +5244,10 @@ konfigurierte Modell-ID); Free darf auch hier keine Pro-/Premium-Engine verwende
   `normalize_models_document` erhält die Reihenfolge (kein `sorted` mehr), entfernt
   verwaiste Premium-IDs und validiert `defaults`, `preset_models`, `watch_models`,
   `watch_consensus_models`,
-  Judges + `deep_think_model`. Provider-
+  Judges. Provider-
 Modelllisten werden bewusst nicht live gegen Provider-APIs validiert; diese
 Pflege bleibt eine explizite Admin-Aufgabe.
-Das Admin-UI (Tabs: Models / Consensus & Deep Think / Configuration / Limits / Accounts / API /
+Das Admin-UI (Tabs: Models / Consensus / Configuration / Limits / Accounts / API /
 Shared Pages / Consensus Watch / Topics / SEO) besitzt unter `/admin#configuration`
 einen unabhängigen Save-/Reload-Bereich für Systemprompts und Referenzzeitzone.
 Die anderen Konfigurations-Tabs bekommen via
@@ -5226,7 +5261,8 @@ Die anderen Konfigurations-Tabs bekommen via
   zuschaltbar. `cap_model_reasoning` begrenzt verifizierte Modelle auf `low`,
   Mistral auf das unterstützte `none`; Pflicht-Reasoning, unbekannte Modelle und
   bereits reduzierte Einstellungen bleiben erhalten. `effective_model_reasoning`
-  (Antworten inklusive Deep Think) und `effective_engine_reasoning`
+  (Antworten inklusive Reasoning-Schalter, `reasoning=True` → `REASONING_EFFORT_ON`;
+  Admin-Vorschau „Answers with Reasoning on") und `effective_engine_reasoning`
   (synchrone/streamende Consensus-, Judge-, Resolve- und Memory-Aufrufe) verwenden
   dieselbe Policy. Feste Extraktions-/SEO-/Publisher-Tasks behalten ihre Werte.
   Details und Quellen: `docs/reasoning-policy.md`.
@@ -5846,7 +5882,7 @@ ersten Check statt eines leeren Consensus-Panels.
 - **Usage-Key ist ein Backend-/Frontend-Vertrag.** Ein frischer logischer Lauf
   nutzt denselben `usage_run_key` in `/prepare`, allen `/ask_*` und
   `/consensus`; Resolve nutzt einen eigenen Key. Run-Typ (`regular` oder
-  `deep_think`) und Limits werden ausschließlich serverseitig bestimmt. Niemals
+  `deep_think` = Reasoning an) und Limits werden ausschließlich serverseitig bestimmt. Niemals
   clientseitige Kosten, Modellanzahl oder Float-Inkremente übernehmen; niemals
   Provider-Aufrufe in die Firestore-Transaktionsfunktion verschieben. Vor jeder
   Developer-Key-Operation muss nach Consume der passende einmalige Claim
@@ -6144,7 +6180,7 @@ gemessenen Judge-Aufrufe. Chip-Zähler und Modell-Icons zählen Judges nicht mit
 Eine ausgefallene Vergleichsantwort heißt `No answer`; beendete Aufrufe ohne
 gemessene Tokens zeigen keine Tokenzeile.
 
-**Kontingent.** `.quota-row[hidden]` blendet Deep-Think/Watches im Agent-Modus
+**Kontingent.** `.quota-row[hidden]` blendet Watches im Agent-Modus
 aus; ein Rest unter 1 % zeigt „<1%“ (Ring `--partial`, erst bei 0 `--dispute`),
 die Zeile absolute Tokens, der Fuß die Rücksetzzeit in Ortszeit und UTC.
 

@@ -90,7 +90,6 @@ class ModelConfigurationTests(unittest.TestCase):
                 tier: dict(models) for tier, models in cfg.WATCH_MODELS_BY_TIER.items()
             },
             "watch_consensus_models": dict(cfg.WATCH_CONSENSUS_MODELS_BY_TIER),
-            "deep_think_model": cfg.get_deep_think_consensus_model(),
             "judge_models": cfg.get_judge_models(),
             "judge_models_pro": cfg.get_pro_judge_models(),
             "judge_families": cfg.get_judge_families(),
@@ -426,12 +425,60 @@ class ModelConfigurationTests(unittest.TestCase):
                 self.assertEqual(tool["parameters"]["max_uses"], 1)
                 self.assertEqual(payload["max_tool_calls"], 2)
 
-    def test_deep_search_keeps_the_wider_search_budget(self):
-        payload = build_provider_payload(
-            "grok", question="dry run", system_prompt="system", deep_search=True
-        )["payload"]
-        self.assertEqual(payload["tools"][0]["parameters"]["max_uses"], 5)
-        self.assertEqual(payload["max_tool_calls"], 6)
+    def test_reasoning_switch_keeps_model_prompt_and_single_search_round(self):
+        """Reasoning (wire name deep_search) only thinks longer: no Pro-model
+        swap, no extra prompt, still one search round."""
+        for provider in cfg.PROVIDERS:
+            with self.subTest(provider=provider):
+                base = cfg.PROVIDERS[provider].base_model
+                plain = build_provider_payload(
+                    provider, question="dry run", system_prompt="system",
+                    model_override=base,
+                )
+                reasoning = build_provider_payload(
+                    provider, question="dry run", system_prompt="system",
+                    model_override=base, deep_search=True,
+                )
+                self.assertEqual(reasoning["internal_model"], base)
+                self.assertEqual(reasoning["api_model"], plain["api_model"])
+                self.assertEqual(
+                    reasoning["payload"]["messages"], plain["payload"]["messages"]
+                )
+                self.assertEqual(reasoning["payload"]["tools"][0]["parameters"]["max_uses"], 1)
+                self.assertEqual(reasoning["payload"]["max_tool_calls"], 2)
+
+    def test_reasoning_output_limit_is_the_larger_of_tier_and_reasoning_cap(self):
+        original = cfg.get_limits_config()
+        try:
+            cfg.apply_limits({**original, "free_max_tokens": 4096,
+                              "pro_max_tokens": 16384, "reasoning_max_tokens": 8192})
+            self.assertEqual(cfg.get_output_token_limit("free"), 4096)
+            self.assertEqual(cfg.get_output_token_limit("free", True), 8192)
+            self.assertEqual(cfg.get_output_token_limit("plus", True), 8192)
+            # A tier limit above the reasoning cap is never lowered.
+            self.assertEqual(cfg.get_output_token_limit("pro", True), 16384)
+            # The word limit no longer depends on the switch.
+            self.assertEqual(cfg.get_word_limit("free", True), cfg.get_word_limit("free"))
+        finally:
+            cfg.apply_limits(original)
+
+    def test_old_deep_think_limit_keys_are_ignored_or_mapped_once(self):
+        legacy = {
+            "free_deep_search_max_words": 0,
+            "pro_deep_search_max_words": 1000,
+            "free_deep_search_max_tokens": 0,
+            "pro_deep_search_max_tokens": 12000,
+        }
+        normalized = cfg.normalize_limits_config(legacy)
+        self.assertEqual(normalized["reasoning_max_tokens"], 12000)
+        for key in legacy:
+            self.assertNotIn(key, normalized)
+        # Once the new key exists it wins over the legacy value.
+        normalized = cfg.normalize_limits_config({**legacy, "reasoning_max_tokens": 9000})
+        self.assertEqual(normalized["reasoning_max_tokens"], 9000)
+        self.assertEqual(
+            cfg.normalize_limits_config({})["reasoning_max_tokens"], 8192
+        )
 
     def test_gemini_models_are_available_to_admin(self):
         enforced = _server_enforced_models()["gemini"]
@@ -516,7 +563,8 @@ class ModelConfigurationTests(unittest.TestCase):
         for model, deep, thinking in (
             (cfg.KIMI_BASE_MODEL, False, False),
             (cfg.KIMI_PRO_MODEL, False, True),
-            (cfg.KIMI_BASE_MODEL, True, True),
+            # Reasoning keeps Kimi's explicit model policy (no model swap).
+            (cfg.KIMI_BASE_MODEL, True, False),
         ):
             with self.subTest(model=model, deep=deep):
                 payload = build_provider_payload(
@@ -529,7 +577,7 @@ class ModelConfigurationTests(unittest.TestCase):
                 self.assertEqual(payload["reasoning"], {"enabled": thinking})
                 self.assertEqual(payload["max_tokens"], 4096)
                 self.assertEqual(payload["tools"][0]["type"], "openrouter:web_search")
-                self.assertEqual(payload["tools"][0]["parameters"]["max_uses"], 5 if deep else 1)
+                self.assertEqual(payload["tools"][0]["parameters"]["max_uses"], 1)
 
     def test_kimi_and_glm_payload_policies_are_applied(self):
         kimi = build_provider_payload(
@@ -555,11 +603,33 @@ class ModelConfigurationTests(unittest.TestCase):
             cfg.effective_model_reasoning("mistral", cfg.MISTRAL_PRO_MODEL),
             ({"effort": "high"}, "MISTRAL_REASONING_MODELS"),
         )
+        existing = {"profile": "existing", "models": {}}
+        self.assertEqual(cfg.REASONING_EFFORT_ON, "high")
+        # Reasoning on fills a still-unset policy with "high" ...
         self.assertEqual(
             cfg.effective_model_reasoning(
-                "openai", cfg.OPENAI_PRO_MODEL, deep_think=True
+                "openai", cfg.OPENAI_PRO_MODEL, reasoning=True, policy=existing
             ),
-            ({"effort": cfg.REASONING_EFFORT_FOR_DEEP}, "REASONING_EFFORT_FOR_DEEP"),
+            ({"effort": "high"}, "REASONING_EFFORT_ON"),
+        )
+        self.assertEqual(
+            cfg.effective_model_reasoning(
+                "anthropic", cfg.DEFAULT_ANTHROPIC_MODEL, reasoning=True, policy=existing
+            ),
+            ({"effort": "high"}, "REASONING_EFFORT_ON"),
+        )
+        # ... while explicit model policies and Mistral defaults keep winning.
+        self.assertEqual(
+            cfg.effective_model_reasoning(
+                "kimi", cfg.KIMI_BASE_MODEL, reasoning=True, policy=existing
+            ),
+            ({"enabled": False}, "MODEL_REQUEST_CONFIG"),
+        )
+        self.assertEqual(
+            cfg.effective_model_reasoning(
+                "mistral", cfg.MISTRAL_PRO_MODEL, reasoning=True, policy=existing
+            ),
+            ({"effort": "high"}, "MISTRAL_REASONING_MODELS"),
         )
         self.assertEqual(
             cfg.effective_model_reasoning("anthropic", cfg.DEFAULT_ANTHROPIC_MODEL),

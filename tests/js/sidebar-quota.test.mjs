@@ -3,7 +3,7 @@ import { loadScripts } from './helpers/appWindow.mjs';
 
 const MARKUP = `
   <div id="usageDisplay"><span id="watchUsageDisplay"><strong>3 / 5</strong></span><span id="countdownDisplay"></span></div>
-  <input type="checkbox" id="deepSearchToggle">
+  <input type="checkbox" id="reasoningToggle">
   <section id="sidebarQuota">
     <span id="quotaPlanLabel">Free</span>
     <div id="quotaPrimary" hidden><span id="quotaPercent"></span>
@@ -47,6 +47,13 @@ it('shows one quiet ring for the shared account, the value only in label and pan
   expect(d.getElementById('quotaPercent').textContent).toBe('62%');
   expect(d.getElementById('quotaReset').textContent).toMatch(/^Resets at .+ · in /);
   expect(d.getElementById('quotaDetail').textContent).toBe('409k of 660k tokens · a Consensus run uses about 8%');
+  // The Reasoning switch shows its own (larger) run, under its new name.
+  const reasoning = d.getElementById('reasoningToggle');
+  reasoning.checked = true;
+  w.App.sidebarQuota.sync();
+  expect(d.getElementById('quotaDetail').textContent).toBe('409k of 660k tokens · a Reasoning run uses about 23%');
+  reasoning.checked = false;
+  w.App.sidebarQuota.sync();
   expect(d.getElementById('quotaWatchValue').textContent).toBe('3 / 5');
   expect(d.getElementById('quotaFoot').hidden).toBe(true);
   dom.window.close();

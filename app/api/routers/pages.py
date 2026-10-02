@@ -468,7 +468,6 @@ def read_root(request: Request):
         "consensus_models": consensus_models,
         "consensus_presets": cfg.get_consensus_presets(),
         "default_consensus_preset": cfg.DEFAULT_CONSENSUS_PRESET,
-        "deep_think_consensus_model": cfg.get_deep_think_consensus_model(),
         "model_labels": model_labels,
         "model_badges": model_badges,
         # Statt einer handgepflegten Versionsnummer steht in der Fusszeile

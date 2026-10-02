@@ -312,7 +312,6 @@
     color: var(--sidebar-text-muted);
 }
 .admin-chip.required { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
-.admin-chip.deepthink { color: var(--accent-tertiary); border-color: color-mix(in srgb, var(--accent-tertiary) 45%, transparent); }
 .admin-chip.reasoning { color: var(--accent-secondary); border-color: color-mix(in srgb, var(--accent-secondary) 42%, transparent); }
 /* Shared traffic-light amber, same meaning as everywhere else: not broken,
    but not what the configuration above says either. */
@@ -378,7 +377,7 @@
 .admin-btn.danger { border-color: #b84848; color: #ffb2b2; background: rgba(184, 72, 72, 0.12); }
 
 /* Consensus-Tab */
-.deepthink-card { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.admin-select-card { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
 .preset-model-cards {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -446,7 +445,7 @@
     font-size: var(--font-size-sm);
     font-weight: var(--font-weight-bold);
 }
-.deepthink-card select,
+.admin-select-card select,
 .judge-row select,
 .judge-fam-row select,
 .consensus-add-row select {

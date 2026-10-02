@@ -11,7 +11,6 @@
   const sidebarLink = document.getElementById("upgradeLink");
   const plusFeatures = new Set(["Resolve", "File uploads"]);
   const messages = {
-    "Deep Think": "Deep Think is not available on your account yet. You can continue with a standard run.",
     "High Quality mode": "High Quality mode is not available on your account yet. Your current models are still selected.",
     "Resolve": "Resolve is not available on your account yet. You can still review the differences and model answers.",
     "File uploads": "File uploads are not available on your account yet. You can enter your question as text.",

@@ -13,7 +13,7 @@ const BODY = `<div class="input-section">
     <span id="composerModelIcons"></span><p id="composerComparisonStatus"></p>
     <button id="composerAttachButton"></button></div>
   </div>
-  <input id="deepSearchToggle" type="checkbox">
+  <input id="reasoningToggle" type="checkbox">
   <div id="threadAskAttachments"></div>
   <div id="attachmentViewerModal" hidden><span id="attachmentViewerTitle"></span>
     <div id="attachmentViewerBody"></div><button id="attachmentViewerClose"></button></div>`;
@@ -24,7 +24,7 @@ function boot() {
     before(window) {
       window.document.body.classList.add("is-hero");
       window.localStorage.setItem("runMode", "consensus");
-      window.App = { modelPrefs: [], deepThinkModelLabels: {},
+      window.App = { modelPrefs: [],
         getModelOptionLabel: () => "", getSelectedModelCount: () => 0,
         initCustomModelPicker: vi.fn(), trackAppEvent: vi.fn(), composer: {expand: vi.fn()} };
       window.URL.createObjectURL = () => "blob:preview";

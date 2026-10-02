@@ -7,7 +7,7 @@ werden aber keine Runs mehr, sondern Tokens auf demselben Tageskonto wie Agent
 
 * **Admission:** ein neuer Lauf startet nur, wenn das freie Budget die
   erwarteten Kosten eines typischen Laufs dieses Modus deckt (Compare,
-  Consensus, Deep Think). Der Lauf haelt diese Schaetzung kurz gegen parallele
+  Consensus, Reasoning). Der Lauf haelt diese Schaetzung kurz gegen parallele
   Admissions (``pipeline_holds`` im Kontodokument), reserviert aber nichts pro
   Call.
 * **Buchung:** jede abgeschlossene Operation (``ask:<familie>``, ``consensus``,
@@ -66,6 +66,8 @@ def execution_expiry(now: datetime) -> datetime:
 
 class RunKind(str, Enum):
     REGULAR = "regular"
+    # Persisted value of a run with the Reasoning switch on (formerly Deep
+    # Think). Kept for stored receipts and idempotent replays.
     DEEP_THINK = "deep_think"
 
 

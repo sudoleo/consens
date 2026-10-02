@@ -28,7 +28,7 @@ const BODY = `
 </div>
 <span id="proBadge" class="pro-badge"></span>
 <a id="upgradeLink"></a>
-<label class="switch deep-switch"><input type="checkbox" id="deepSearchToggle"></label>
+<label class="switch attach-menu-switch"><input type="checkbox" id="reasoningToggle"></label>
 <div id="proFeatureModal" style="display:none">
   <span id="proModalFeatureName"></span><p id="proModalDescription"></p>
 </div>
