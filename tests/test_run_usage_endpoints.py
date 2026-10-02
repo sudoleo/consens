@@ -1,6 +1,7 @@
 """Die Run-Belege der Pipeline auf dem gemeinsamen Tokenkonto, ueber die API-Flows."""
 
 from concurrent.futures import ThreadPoolExecutor
+from threading import Event
 from unittest.mock import patch
 
 import pytest
@@ -147,19 +148,80 @@ def test_prepare_is_refused_when_the_account_does_not_cover_a_run(run_api):
     assert _prepare(client, "smaller", mode="compare").status_code == 200
 
 
-def test_parallel_same_provider_operation_runs_only_once(run_api):
-    client, _repository, _db = run_api
+def test_parallel_same_provider_operation_runs_only_once(run_api, monkeypatch):
+    client, _repository, db = run_api
     key = "same-provider-race"
-    assert _prepare(client, key).status_code == 200
+    monkeypatch.setattr(chat_router, "get_system_prompt",
+                        lambda: "Reference time at request start: 12:00:00.")
+    prepared = _prepare(client, key)
+    assert prepared.status_code == 200
+    # The browser reuses /prepare's prompt. Without it, a new server clock
+    # second changes the effective payload and correctly produces a conflict.
+    payload = {
+        "question": "What changed?", "usage_run_key": key,
+        "model": cfg.FREE_DEFAULT_MODEL_BY_PROVIDER["openai"],
+        "system_prompt": prepared.json()["system_prompt"],
+    }
+    monkeypatch.setattr(chat_router, "get_system_prompt",
+                        lambda: "Reference time at request start: 12:00:01.")
+    entered, release = Event(), Event()
+    provider_calls = []
+    original_run_ask = chat_router._run_ask
+
+    def blocked_provider(provider, **kwargs):
+        provider_calls.append(provider.label)
+        entered.set()
+        assert release.wait(10), "Concurrent requests did not finish"
+        return original_run_ask(provider, **kwargs)
+
+    monkeypatch.setattr(chat_router, "_run_ask", blocked_provider)
+
+    def ask():
+        return client.post("/ask_openai", headers=AUTH, json=payload)
 
     with ThreadPoolExecutor(max_workers=5) as pool:
-        responses = list(pool.map(lambda _index: _ask(client, "/ask_openai", "openai", key), range(5)))
+        first = pool.submit(ask)
+        try:
+            assert entered.wait(10), "First request did not reach the provider"
+            rejected = list(pool.map(lambda _index: ask(), range(4)))
+        finally:
+            release.set()
+        assert first.result(timeout=10).status_code == 200
 
-    assert sum(response.status_code == 200 for response in responses) == 1
-    rejected = [response for response in responses if response.status_code == 409]
     assert len(rejected) == 4
+    # Identical replays are rejected both during the call and after booking.
+    # The first five requests exhausted the independent per-minute throttle.
+    limiter.reset()
+    rejected.append(ask())
+    assert all(response.status_code == 409 for response in rejected)
     assert all(response.json()["detail"]["error_code"] == "usage_operation_already_claimed"
                for response in rejected)
+    assert provider_calls == ["OpenAI"]
+    assert _ledger(db)["used"] == 1_500
+
+
+def test_repeated_operation_with_a_new_generated_prompt_is_a_conflict(run_api, monkeypatch):
+    client, _repository, db = run_api
+    key = "changed-request-clock"
+    original_run_ask = chat_router._run_ask
+    provider_calls = []
+
+    def provider(provider, **kwargs):
+        provider_calls.append(provider.label)
+        return original_run_ask(provider, **kwargs)
+
+    monkeypatch.setattr(chat_router, "_run_ask", provider)
+    monkeypatch.setattr(chat_router, "get_system_prompt",
+                        lambda: "Reference time at request start: 12:00:00.")
+    assert _ask(client, "/ask_openai", "openai", key).status_code == 200
+    monkeypatch.setattr(chat_router, "get_system_prompt",
+                        lambda: "Reference time at request start: 12:00:01.")
+    response = _ask(client, "/ask_openai", "openai", key)
+
+    assert response.status_code == 409
+    assert response.json()["detail"]["error_code"] == "usage_operation_conflict"
+    assert provider_calls == ["OpenAI"]
+    assert _ledger(db)["used"] == 1_500
 
 
 def test_consensus_books_its_judges_once_and_drops_the_hold(run_api):
