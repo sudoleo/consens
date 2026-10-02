@@ -150,11 +150,13 @@ Backend-Suite findet dieselben Tests ebenfalls automatisch.
 Die Abhängigkeiten sind nach Zweck getrennt:
 
 - `requirements.txt`: produktive Laufzeit,
-- `requirements-test.txt`: reguläre Unit-/Integrationstests,
+- `requirements-test.txt`: reguläre Unit-/Integrationstests einschließlich
+  `pandas` für den DataFrame-Konvertierungstest des Benchmarks,
 - `requirements-e2e.txt`: zusätzlich Python Playwright und das gepinnte
   `greenlet`,
-- `benchmark/requirements-benchmark.txt`: ausschließlich Offline-Benchmark-
-  Dataset-/Parquet-Abhängigkeiten (`huggingface-hub`, `pandas`, `pyarrow`).
+- `benchmark/requirements-benchmark.txt`: Offline-Benchmark-Dataset-/Parquet-
+  Abhängigkeiten (`huggingface-hub`, `pandas`, `pyarrow`); diese Pakete gehören
+  nicht in die produktive Laufzeit.
 
 Installation der regulären Testumgebung:
 

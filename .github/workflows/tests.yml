@@ -23,6 +23,9 @@ jobs:
       OPENROUTER_API_KEY: ci-dummy-key
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Cache-key contracts compare each asset with its actual change date.
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
