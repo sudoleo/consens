@@ -949,6 +949,9 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   Requests liegen content-frei gehasht in derselben `memory`-Subcollection,
   Revisionen enthalten den exakten Vorzustand. `POST /api/my/memory/undo` kann
   ihn innerhalb 60 Sekunden nur ohne zwischenzeitliche Änderung wiederherstellen.
+  Sinkt das aktuelle Notizlimit unter die gespeicherte Länge, lehnen Patch und
+  Undo mit `memory_limit` (HTTP 422) ohne Profil-/Revisionswrite ab; eine Änderung
+  eines anderen Feldes darf bestehende Notizen niemals still kürzen.
   Der vollständige Vorzustand (`before`) wird 30 Tage nach dem Edit vom
   stündlichen Retention-Loop (`cleanup_memory_edit_records`) entfernt; die
   inhaltsfreien Status-/Revisionsfelder bleiben bis zur Kontolöschung für
@@ -1854,6 +1857,11 @@ laufenden Request, Consensus oder Save gelesen werden. Entfernte Controls wie
 ## 4. Kern-Flows
 
 ### Agent · Beta: dynamische Vergleiche und Tokenkontingent (2026-09-19)
+
+`require_agent_access` prüft die tatsächliche Pro-/Adminregel; ein ausgefallener
+Tarif-/Rollendienst liefert sicher 503. Detail und Turn-Stop laufen owner- und
+turngebunden über den echten Store. Beide Antworten sind `private, no-store`;
+Stop setzt die Delegationssperre nur für diesen Turn, auch bei Wiederholung.
 
 Zuverlässigkeitsprüfung (20.09.2026): `POST /agent` sendet bereits vor der
 Token-Admission `accepted` mit der dauerhaften Chat-/Turn-ID. Der Browser kann
@@ -3900,6 +3908,9 @@ vollständigen Laufs entsprechen, das Limit dem gewünschten Tagesvolumen.
   Nach dem einmaligen Body-Replay reicht die Middleware echte nachfolgende
   ASGI-Receive-Events weiter; insbesondere wird kein künstliches
   `http.disconnect` erzeugt, das laufende SSE-Antworten abbrechen würde.
+  Bei Abbruch während des Einlesens wird auch ein bereits gepufferter Teil
+  verworfen und der echte Disconnect weitergegeben; ein gültiger JSON-Präfix
+  darf nicht als vollständiger Request eine Mutation auslösen.
   Chat-Frage und System-Prompt besitzen getrennte Zeichen- und UTF-8-Bytecaps;
   Legacy-Follow-up-Kontext wird bei Überschreitung abgewiesen statt still
   gekappt. Dadurch fallen auch extrem lange Ein-Wort-Strings vor Providerarbeit.
@@ -4058,6 +4069,10 @@ vollständigen Laufs entsprechen, das Limit dem gewünschten Tagesvolumen.
   Key liefert danach stabil `410` mit `error.code=run_deleted` und startet nie
   erneut kostenpflichtige Arbeit; `GET`/erneutes `DELETE` liefern 404.
   Tombstone und Mapping verschwinden mit dem ursprünglichen Retention-Ablauf.
+  Der Retention-Backfill liest Run und Mapping erneut in einer Transaktion:
+  vorhandene Ablaufdaten bleiben erhalten, fehlende Annahmedaten werden nicht
+  erfunden, und ein inzwischen an einen anderen Run gebundenes Mapping wird
+  weder verändert noch neu angelegt. Naive Legacy-Zeitstempel gelten als UTC.
   Alle v1- und Admin-Key-Antworten sind
   `private, no-store`. Limits greifen vor Auth pro IP/API-Key und danach pro UID.
 - Der maschinenlesbare Vertrag kommt aus den typisierten FastAPI-Routen unter
@@ -4099,6 +4114,12 @@ vollständigen Laufs entsprechen, das Limit dem gewünschten Tagesvolumen.
   erfolgreich und pausiert/löscht keine bestehenden Watches.
 
 ### Sharing
+- `og_image.share_card_png` bindet seinen Cache an alle gezeichneten Inhalte:
+  Share-ID, Frage, Score, Modell-/Konfliktzahl, Historienwerte und Prüflabel.
+  Die öffentliche OG-Route verwendet weiterhin den neuesten gültigen
+  öffentlichen Stand und eine leere Historie; private/widerrufene Shares
+  erhalten kein Bild. Reale PNG-Regionen und semantische Zeichenaufrufe werden
+  gemeinsam geprüft, damit ein gültiges, aber leeres PNG nicht genügt.
 - `/consensus` legt ein `pending_results`-Dokument an → `result_id`.
 - Die Consensus-API publiziert dagegen direkt aus ihrem 30-Tage-Run-Snapshot;
   `source_api_run_id` bleibt serverintern und wird nie Teil der Public-Payload.
@@ -4151,6 +4172,19 @@ vollständigen Laufs entsprechen, das Limit dem gewünschten Tagesvolumen.
   Sonst erfolgt der 30-Tage-Hard-Delete widerrufener Shares via `cleanup_revoked_shares`.
 
 ### Kuratierte Topics
+- Alle fünf Topic-Adminmethoden verifizieren Firebase-Tokens mit
+  `check_revoked=True` und prüfen danach die echte Adminrolle. Ein Ausfall des
+  Rollendienstes ergibt 503; nicht autorisierte Requests lesen oder verändern
+  keine Topics. Der gemeinsame HMAC-Unterbau von Topic-/Watch-Follow-Tokens
+  bedeutet keine Austauschbarkeit: Watch-, Share-Follower- und Topic-Aktionen
+  verlangen ihre eigene Payloadform, bevor ein Dokumentzugriff erfolgt.
+- `query_claim_identity` akzeptiert ausschließlich JSON-Integer als Index,
+  keine Bool-/Float-/String-Coercion. Nur bekannte, einmal verwendete Keys und
+  Indices im übergebenen Fenster werden gebunden. Ungültige Antworten bzw.
+  ein unbekanntes Modell ergeben keine Zuordnung; der Aufrufer behält seinen
+  bisherigen Fallback für neue Claims. Promptfenster und Retryplan bleiben
+  begrenzt. Die Entscheidung und Nachweise stehen unter
+  [Adapter-Implementierung](test-coverage/product/implementation-adapters.md).
 - `topics.list_runs` liest lange Historien über `observed_at DESC` mit
   `max_items + 1` als Limit und gibt die letzten Runs weiter chronologisch
   nach Datum/Version/Dokument-ID aus. Bei kurzen Historien beweist eine
@@ -4236,6 +4270,12 @@ vollständigen Laufs entsprechen, das Limit dem gewünschten Tagesvolumen.
   durch die Security-Middleware als `private, no-store` ausgeliefert.
 
 ### SEO-Leistungsdaten und Recommendation Judge (Search Console, v2)
+- `FirestoreSeoRepository.list_metrics_for_pages` bündelt höchstens 400
+  Dokumentreferenzen pro BatchGet. Ungeordnete Ergebnisse werden über den
+  angeforderten Dokumentpfad zugeordnet; `snapshot.id` bestimmt den Tag.
+  Gespeicherte `page_id`-/`date`-Felder können keine Messung in eine fremde
+  Seite oder einen anderen Tag verschieben. Fehlende Dokumente bleiben
+  fehlende Messungen statt künstlichem Nulltraffic.
 - Der manuelle admin-only Lauf `POST /api/admin/seo/collect` übernimmt exakt die
   statischen URLs aus `pages.py::SITEMAP_URLS`, aktive, öffentliche,
   indexierte Shares aus `list_indexed_share_urls` sowie indexierbare Topics aus
@@ -5241,10 +5281,13 @@ Coveragewerte von 26.09.2026 sind keine Messung des aktuellen Codes.
   2026-08-09: **39 passed, 1 warning**. Der writerfreie Phase-4-Browserlauf
   wurde nach Phase 6 erneut mit **8 passed, 1 warning** verifiziert. Details in
   `tests/e2e/README.md`.
-- **Keine allgemeine Regression-CI**: `.github/workflows/tests.yml` fehlt.
-  `publisher-tests.yml` führt jedoch Standalone-Publishertests bei Push/PR/manuell
-  aus; `publish-consensus.yml` prüft sie vor dem Publisherlauf. Das bestätigt
-  nicht die gesamte Python-/JS-/E2E-Suite. Befehle: `docs/testing.md`.
+- **Regression-CI**: `.github/workflows/tests.yml` trennt Python, JS/Build,
+  Emulator/Chromium/Clientregeln und Windows-Einstiege. Node 24, Java 21 und
+  Demo-Projekt sind festgelegt; kein Produktcredential nötig.
+  `publisher-tests.yml` und die Vorprüfung in `publish-consensus.yml` bleiben.
+  `dev.ps1 check rules` kapselt den separaten Client-Regelrunner mit demselben
+  Emulator-Lebenszyklus wie `browser`; `npm run test:rules` nutzt einen bereits
+  laufenden lokalen Emulator. Tests/Details: `docs/testing.md`.
 - **Frontend darüber hinaus manuell.** Nach JS-Änderungen
   an nicht abgedeckten Flows (Resolve, Share, Attachments, Follow-up,
   Bookmarks, Agent Mode, Demo, Mobile) die manuelle
@@ -5263,6 +5306,19 @@ Coveragewerte von 26.09.2026 sind keine Messung des aktuellen Codes.
   ab: Hauptlauf, Fehlversuche und E4-Audits (`AuditLedger`, Journal
   `audit_calls.jsonl`, Prüfung vor jedem Audit-Call, Resume ohne erneute
   Audit-Kosten); fehlende Usage wird mit der Vorab-Obergrenze verbucht.
+  HTTP-200-Fehlerobjekte und ungültige Chat-Completions-Bodies sind strukturierte
+  Fehler, keine Enthaltung; gültiger Text ohne Auswahl bleibt Enthaltung.
+  Transport-/Synthesefehler speichern keine privaten Exception-/Providertexte.
+  Manifestvergleich ersetzt nur flüchtiges Datum/Uhrzeit/UTC-Offset durch
+  Platzhalter, auch beim Lesen älterer Manifeste; Zeitzone, Instruktionen und
+  Modellparameter bleiben eingefroren. `run_sample` und `run_experiment` sind
+  unterstützte Einstiegspunkte: Dry-run/Live schließen sich aus, Live verlangt
+  ein positives endliches Budget, Sample-Run-IDs bleiben ein einzelner
+  Verzeichnisname. Die Validierung erfolgt vor Dataset- oder Providerarbeit.
+- **Claim-Key-Backfill** (`scripts/backfill_claim_keys.py`): Normalbetrieb ergänzt
+  nur fehlende Keys; vorhandene Teilzuordnungen bleiben erhalten. `--force`
+  erlaubt ausdrücklich erneute Zuordnung. Dry-run zählt geplante Änderungen
+  korrekt und schreibt nichts, kann aber weiterhin den Identity-Judge aufrufen.
 - JS-Syntaxcheck einzelner Module:
   ```powershell
   node --check static\js\<modul>.js
@@ -5288,6 +5344,9 @@ Alle Loops werden beaufsichtigt und melden nach jedem erfolgreichen Tick Health.
 Fälligkeitscheck; `next_run_at` wird aus Intervall, lokaler Uhrzeit und Zeitzone
 DST-fest berechnet. Das persistente Config-/Lease-Dokument ist unabhängig vom
 30-Minuten-Watch-Worker; ein Review führt keine Empfehlung automatisch aus.
+Auch der Lease-Abschluss prüft `lease_run_id` und schreibt den nächsten Termin
+in einer Firestore-Transaktion. Ein alter Worker oder wiederholter Abschluss
+kann einen neu vergebenen Lease und dessen Zeitplan nicht überschreiben.
 Jeder terminale Lauf (auch Collection-Fehler) versucht anschließend eine
 Telegram-Nachricht mit Ergebnis, offenen redaktionellen Entscheidungen,
 Topic-Brief-Entscheidungsbedarf und Admin-Link; Versandfehler bleiben nicht-fatal.
@@ -5307,8 +5366,11 @@ frei, solange er noch Eigentümer ist; ein abgelaufener alter Worker kann den
 Lease eines Nachfolgers damit weder freigeben noch verlängern (R30). Jeder Einzel-Claim verwendet den dann aktuellen Zeitpunkt
 (nicht den Tick-Start), erneuert seine 15-Minuten-Lease während langer Läufe
 alle fünf Minuten und fenced Completion wie Fehlerabschluss über
-`current_run_id`. History, Watch-Pointer und Share-Pointer committen gemeinsam;
-ein alter Worker kann einen neueren Claim weder leeren noch pausieren. Jede
+`current_run_id`. History, Watch-Pointer und Share-Pointer committen gemeinsam.
+Claim, Completion und Fehlerabschluss prüfen außerdem den Account-Tombstone
+in ihrer Schreibtransaktion; bereits authentifizierte Worker bleiben nach
+Beginn einer Kontolöschung für neue Persistenzwrites gesperrt.
+Ein alter Worker kann einen neueren Claim weder leeren noch pausieren. Jede
 Änderung über `update_watch`/Admin-Status/Unsubscribe erhöht
 `config_generation`; ein echter Statuswechsel (Pause, Resume) entzieht
 zusätzlich den laufenden Claim (`current_run_id=None`). Ein alter Lauf kann einen
@@ -5378,6 +5440,10 @@ letzten Check. Nur ein „yes“ mit einer Quelle, die die geltende Antwort nich
 zitiert, zieht `next_run_at` auf jetzt und weckt den Scheduler; das Ergebnis
 steht als `last_probe` am Watch. Ist der volle Check < 30 h entfernt, entfällt
 der Scan.
+Ein einmalig konsumierter `probe_claim_token` bindet das Ergebnis an seinen Claim. Vor dem Schreiben
+werden Token, `config_generation`, Ziel, Zeitplan, Modellstufe und letzte erfolgreiche Vollprüfung
+mit dem Claim-Snapshot verglichen. Veraltete Antworten verändern weder
+`last_probe` noch `next_run_at`; Account-Tombstones sperren auch diesen Write.
 E-Mail und Telegram sind getrennte, pro Watch aktivierbare Kanäle; mindestens
 einer muss aktiv bleiben. Legacy-Watches bleiben E-Mail-only. Telegram nutzt
 denselben fertigen Run ohne zusätzlichen LLM-Call, dedupliziert über
@@ -5892,6 +5958,13 @@ und die Löschkaskade überspringt den Objektspeicher statt abzubrechen. Die
 stündliche Retention räumt abgelaufene Dateien und verwaiste Uploads seitenweise
 mit Zeitbudget auf; ein einzelner fehlschlagender Löschvorgang wird geloggt und
 im nächsten Lauf wiederholt. Collection-group-Indizes siehe Setup.
+
+Dokumentversionen unter `documents/{document_id}/versions/{version}` speichern
+Tabellenzeilen mit `storage_schema_version=2` als `{"cells": [...]}`-Maps:
+Firestore erlaubt keine direkt ineinander verschachtelten Arrays. Der interne
+Codec in `agent_documents.py` stellt beim Lesen die unveränderte DocumentSpec
+mit Zeilenlisten wieder her. Inhaltshash, API, Rendering und frühere Versionen
+behalten dieselbe Bedeutung; alte Datensätze ohne Schemafeld bleiben lesbar.
 
 `agent_file_extract.py` läuft mit 15 s Walltime und auf Linux 10 s CPU / 768 MiB
 Adressraum; höchstens 80 PDF-Seiten, 120 Auszüge / 120.000 Zeichen. DOCX-Tabellen

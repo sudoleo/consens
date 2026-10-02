@@ -18,7 +18,7 @@ from app.core import seo_entity
 from app.core.site import SITE_URL
 from app.core.observability import safe_exception
 from app.core.rate_limit import limiter
-from app.core.security import extract_id_token, is_user_admin, verify_user_token
+from app.core.security import TierStatusUnavailable, extract_id_token, is_user_admin, verify_user_token
 from app.services import (
     claim_ledger, drift_signal, favicons, mailer, topic_finding, topic_runner,
     topics,
@@ -140,10 +140,17 @@ def _require_admin(request: Request, data: Optional[dict] = None) -> str:
     if not token:
         raise HTTPException(status_code=401, detail="Authentication required")
     try:
-        uid = verify_user_token(token)
+        uid = verify_user_token(token, check_revoked=True)
     except Exception as exc:
         raise HTTPException(status_code=401, detail="Authentication failed") from exc
-    if not is_user_admin(uid):
+    try:
+        is_admin = is_user_admin(uid)
+    except TierStatusUnavailable:
+        raise HTTPException(
+            status_code=503,
+            detail="Account role is temporarily unavailable. Please retry.",
+        ) from None
+    if not is_admin:
         raise HTTPException(status_code=403, detail="Admin privileges required")
     return uid
 

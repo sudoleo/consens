@@ -35,6 +35,7 @@ from app.services.llm import credentials
 from benchmark import config, dataset
 from benchmark import results as results_mod
 from benchmark.runner import BenchmarkRunner
+from benchmark.cli_validation import add_execution_arguments, validate_execution_arguments
 
 REQUIRED_PROVIDERS = ["OpenAI", "Mistral", "Anthropic", "Gemini", "DeepSeek", "Grok"]
 
@@ -43,11 +44,8 @@ def _parse_args(argv=None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(prog="python -m benchmark.run_sample")
     parser.add_argument("--manifest", required=True, help="Pfad zum Sample-Manifest (committet)")
     parser.add_argument("--run-id", required=True, help="Run-ID (Verzeichnis unter data/benchmark/runs/)")
-    parser.add_argument("--dry-run", action="store_true", help="Payloads + Projektion, kein HTTP")
-    parser.add_argument("--live", action="store_true", help="echten Lauf ausfuehren (Credential-Check)")
-    parser.add_argument("--budget", type=float, default=None, help="Budget-Cap in USD (bei --live Pflicht)")
-    parser.add_argument("--resume", action="store_true", help="Fehl-Zellen erneut versuchen")
-    return parser.parse_args(argv)
+    add_execution_arguments(parser)
+    return validate_execution_arguments(parser, parser.parse_args(argv))
 
 
 def main(argv=None) -> int:

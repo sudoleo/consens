@@ -7,11 +7,14 @@
     "build": "node scripts/build_frontend.mjs",
     "build:check": "node scripts/build_frontend.mjs --check",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:rules": "node --test tests/rules/firestore.rules.test.mjs"
   },
   "devDependencies": {
+    "@firebase/rules-unit-testing": "3.0.4",
     "dompurify": "3.4.16",
     "esbuild": "^0.21.5",
+    "firebase": "10.14.1",
     "jsdom": "^24.1.0",
     "katex": "0.17.0",
     "marked": "12.0.2",

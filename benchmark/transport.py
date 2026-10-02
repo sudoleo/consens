@@ -130,6 +130,24 @@ def _key_value(api_key: str | dict | None) -> str:
     return str(api_key or "").strip()
 
 
+def _valid_message(raw: Any) -> bool:
+    """A successful HTTP request still needs a Chat Completions message."""
+    if not isinstance(raw, dict):
+        return False
+    choices = raw.get("choices")
+    if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
+        return False
+    message = choices[0].get("message")
+    if not isinstance(message, dict):
+        return False
+    content = message.get("content")
+    return isinstance(content, str) or (
+        isinstance(content, list) and bool(content)
+        and all(isinstance(part, dict) and part.get("type") == "text"
+                and isinstance(part.get("text"), str) for part in content)
+    )
+
+
 def execute(
     request_data: dict,
     api_key: str | dict | None,
@@ -163,9 +181,10 @@ def execute(
             headers=openrouter_headers(_key_value(api_key)),
             timeout=timeout,
         )
-    except Exception as exc:  # noqa: BLE001 - transport failures are expected
+    except Exception:  # noqa: BLE001 - transport failures are expected
         latency_ms = (time.perf_counter() - started) * 1000
-        return _error_result(str(exc), "transport_request_failed", latency_ms)
+        # Exceptions can include authorization headers, URLs and private bodies.
+        return _error_result("OpenRouter request failed", "transport_request_failed", latency_ms)
 
     latency_ms = (time.perf_counter() - started) * 1000
     with managed_provider_resource(response):
@@ -177,10 +196,14 @@ def execute(
 
         try:
             raw = response.json()
+            if isinstance(raw, dict) and raw.get("error") is not None:
+                return _error_result("OpenRouter returned an error", "provider_response_error", latency_ms, status)
+            if not _valid_message(raw):
+                return _error_result("Invalid OpenRouter response", "response_parse_failed", latency_ms, status)
             text, sources = parse_text_and_sources(raw, provider=provider)
             usage = extract_usage(raw)
-        except Exception as exc:  # noqa: BLE001 - malformed upstream responses
-            return _error_result(str(exc), "response_parse_failed", latency_ms, status)
+        except Exception:  # noqa: BLE001 - malformed upstream responses
+            return _error_result("Invalid OpenRouter response", "response_parse_failed", latency_ms, status)
 
     return {
         "text": text,

@@ -16,13 +16,19 @@ den lokalen Firestore-Emulator mit der fest allowgelisteten Demo-Projekt-ID
 
 ## Einmaliges Setup
 
-Voraussetzungen sind Python, Node.js und Java 21. Danach:
+Voraussetzungen sind Python, Node.js 24 und Java 21. Danach:
 
 ```powershell
 venv\Scripts\python.exe -m pip install -r requirements-e2e.txt
 venv\Scripts\python.exe -m playwright install chromium
 npm install --global firebase-tools@13.35.1
 ```
+
+Die CLI-Version ist gepinnt, ihre transitiven Abhängigkeiten benötigen heute
+jedoch ein neueres Node als 18. Node 24 wird auch in der Regression-CI verwendet.
+Die separaten Zugriffsregeltests starten mit `.\dev.ps1 check rules`; sie führen
+anonyme, Owner-, Fremd- und Admin-Claim-Clientoperationen gegen dieselben Regeln
+aus und enthalten eine temporär permissive Negativkontrolle.
 
 ## Sicherer lokaler Lauf
 

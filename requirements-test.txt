@@ -1,3 +1,5 @@
 -r requirements.txt
 
 pytest==8.4.2
+# The dataset conversion regression is part of the regular suite.
+pandas==2.3.3

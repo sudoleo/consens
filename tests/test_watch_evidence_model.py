@@ -218,3 +218,19 @@ def test_new_evidence_pulls_the_full_check_forward():
     _probe_watch(db)
     assert watch_probe.record_probe("w1", {"outcome": "nothing_new"}, now=NOW, db=db) is False
     assert db.stores["watches"]["w1"]["next_run_at"] == NOW + timedelta(days=5)
+
+
+def test_claimed_probe_cannot_record_for_changed_goal_or_superseded_claim():
+    from copy import deepcopy
+    db = FakeDb()
+    _probe_watch(db, condition="original goal")
+    claimed, reason = watch_probe.claim_probe("w1", now=NOW, db=db)
+    assert reason == "claimed"
+    db.stores["watches"]["w1"]["condition"] = "changed goal"
+    before = deepcopy(db.stores["watches"]["w1"])
+    assert watch_probe.record_probe("w1", {"outcome": "new_evidence"}, now=NOW, db=db, expected_claim=claimed) is False
+    assert db.stores["watches"]["w1"] == before
+    db.stores["watches"]["w1"].update(condition="original goal", probe_claim_token="newer worker")
+    before = deepcopy(db.stores["watches"]["w1"])
+    assert watch_probe.record_probe("w1", {"outcome": "new_evidence"}, now=NOW, db=db, expected_claim=claimed) is False
+    assert db.stores["watches"]["w1"] == before

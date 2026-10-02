@@ -74,7 +74,7 @@ def check_definition_anchors(item, actual, problems):
             continue
         recorded_assertions = {(a["line"], a["kind"]) for a in definition["assertion_evidence"]}
         if "registration" in parsed:
-            anchors = {(line, "expect") for line in parsed["assertion_lines"]}
+            anchors = {(a["line"], a["kind"]) for a in parsed["assertion_evidence"]}
             if definition.get("registration") != parsed["registration"]:
                 problems.append(f"JavaScript registration differs: {item['path']}:{definition['line']}")
         else:
@@ -92,7 +92,7 @@ def main():
     try:
         js_definitions = json.loads(subprocess.check_output(
             ["node", str(CATALOG.with_name("javascript_evidence.mjs")), *javascript],
-            cwd=ROOT, text=True, stderr=subprocess.PIPE))
+            cwd=ROOT, text=True, encoding="utf-8", stderr=subprocess.PIPE))
     except (OSError, subprocess.CalledProcessError, ValueError):
         js_definitions = {}
         problems.append("Cannot parse JavaScript evidence; node and locked npm dependencies required (npm ci)")
@@ -171,7 +171,8 @@ def main():
             if expected != recorded:
                 problems.append(f"Execution totals differ: {suite}")
         for label, suite in (("backend", "backend"), ("browser", "e2e")):
-            path = CATALOG.parent / "evidence" / f"{label}-{data['review_date']}.xml"
+            path = ROOT / execution.get("runner_artifacts", {}).get(
+                suite, f"docs/test-coverage/evidence/{label}-{data['review_date']}.xml")
             reported = Counter()
             for case in ET.parse(path).findall(".//testcase"):
                 parts = case.get("classname").split(".")
@@ -183,24 +184,35 @@ def main():
             inventoried = Counter((c["id"], c["status"]) for f in files if f["suite"] == suite for c in f["cases"] if c["status"] != "not_run")
             if inventoried != reported:
                 problems.append(f"JUnit identities/statuses differ: {suite}")
-        frontend = json.loads((CATALOG.parent / "evidence" / f"frontend-{data['review_date']}.json").read_text(encoding="utf-8"))
+        frontend_path = ROOT / execution.get("runner_artifacts", {}).get(
+            "frontend", f"docs/test-coverage/evidence/frontend-{data['review_date']}.json")
+        frontend = json.loads(frontend_path.read_text(encoding="utf-8"))
         reported = Counter((f["path"], c["id"], c["status"]) for f in frontend["files"] for c in f["cases"])
         inventoried = Counter((f["path"], c["id"], c["status"]) for f in files if f["suite"] == "frontend" for c in f["cases"])
         if reported != inventoried:
             problems.append("Vitest identities/statuses differ")
+        if "rules" in execution["suites"]:
+            rules_path = ROOT / execution["runner_artifacts"]["rules"]
+            reported = Counter()
+            for case in ET.parse(rules_path).findall(".//testcase"):
+                status = next((status for tag, status in (("error", "error"), ("failure", "failed"), ("skipped", "skipped")) if case.find(tag) is not None), "passed")
+                reported[(case.get("name"), status)] += 1
+            inventoried = Counter((c["id"], c["status"]) for f in files if f["suite"] == "rules" for c in f["cases"])
+            if reported != inventoried:
+                problems.append("Node rules identities/statuses differ")
 
     try:
         diff = subprocess.run(
             ["git", "diff", "--name-only", data["base_commit"], "--",
              "app", "static", "templates", "scripts", "benchmark", "main.py", ":(exclude)static/dist"],
-            cwd=ROOT, capture_output=True, text=True, check=True,
+            cwd=ROOT, capture_output=True, text=True, encoding="utf-8", check=True,
         )
         for changed in diff.stdout.splitlines():
             problems.append(f"Production source changed since review: {changed}")
         untracked = subprocess.run(
             ["git", "ls-files", "--others", "--exclude-standard", "--",
              "app", "static", "templates", "scripts", "benchmark", "main.py", ":(exclude)static/dist"],
-            cwd=ROOT, capture_output=True, text=True, check=True,
+            cwd=ROOT, capture_output=True, text=True, encoding="utf-8", check=True,
         )
         for changed in untracked.stdout.splitlines():
             problems.append(f"New production source; review mapping: {changed}")

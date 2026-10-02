@@ -102,7 +102,10 @@ class RequestBodyLimitMiddleware:
                 return {"type": "http.disconnect"}
             return await receive()
 
-        if disconnected and not buffered:
+        if disconnected:
+            # An aborted, partially buffered request is not a complete body.
+            # Preserve the disconnect instead of letting a valid JSON prefix
+            # trigger a write after its sender has abandoned the request.
             async def disconnected_receive():
                 return {"type": "http.disconnect"}
 
