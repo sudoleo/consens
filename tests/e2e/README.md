@@ -162,3 +162,27 @@ Provideraufrufe, Mail-/Telegram-Zustellung und Admin-Produktionsabläufe. Die
 Phase-4-Suite mockt Firebase-Module, wechselt damit aber real durch die
 produktive `firebase.js`-Callback-/Generation-Logik. Echte externe Auth bleibt
 ausdrücklich außerhalb des E2E-Profils.
+
+## Persistierte Browserreisen (WP-29)
+
+`test_persisted_journeys.py` startet `journey_server.py` mit dem normalen
+`main.app`-Lifespan im E2E-Profil auf Port 8044 (`E2E_JOURNEY_PORT` ist optional).
+AppFirebase, HTTP-Routen, Transaktionen und Daten bleiben echt. Nur Firebase-
+Identity, Modellantworten und Mailtransport werden ersetzt. Browser-Firestore-
+Writes werfen absichtlich Fehler; es gibt keine API-Doubles. Jeder Fall besitzt
+eine zufaellige Owner-ID, nur diese Owner werden am Ende bereinigt. Ein
+prozesslokales Secret schuetzt die ausschliesslich im Testmodul registrierten
+Kontrollrouten. Traces und native Endzustaende liegen unter `test-results/`.
+
+```powershell
+$env:UNIT_TEST_MODE='1'
+$env:RUN_E2E='1'
+venv\Scripts\python.exe -m pytest tests/e2e/test_persisted_journeys.py -q
+```
+
+Der Emulator muss dazu auf `127.0.0.1:8085` laufen. Die sechs Reisen pruefen
+Speichern/Reload/Folgefrage, Agent-Stop/Recovery mit tatsaechlich gebuchten Steps,
+historische Sourcejobs mit Resume und Revisionspagination, Share/Follow/Watch-
+Versionen, Kontoloeschung/Ownerwechsel bei laufender Arbeit und einen nativen
+Bookmark-Speicherlimitfehler bei erfolgreicher Antwort. Neue V4-Produktruns
+erzeugen dabei keine kuenstlichen historischen V3-Sourcejobs.

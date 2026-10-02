@@ -5281,6 +5281,13 @@ Coveragewerte von 26.09.2026 sind keine Messung des aktuellen Codes.
   2026-08-09: **39 passed, 1 warning**. Der writerfreie Phase-4-Browserlauf
   wurde nach Phase 6 erneut mit **8 passed, 1 warning** verifiziert. Details in
   `tests/e2e/README.md`.
+- **Persistierte Browserreisen**: `test_persisted_journeys.py` ergaenzt sechs echte AppFirebase-/HTTP-/Firestore-
+  Reisen auf einem separaten Server (Port 8044, optional `E2E_JOURNEY_PORT`).
+  Der normale E2E-Lifespan bleibt aktiv; nur externe Identity-/Provider-/Mail-
+  Grenzen werden ersetzt. Der ausschliesslich vom Test gestartete
+  `journey_server.py` steuert Provider-Gates, native historische Jobfixtures,
+  gezielte Watchausfuehrung und Cleanup zufaelliger Testowner. App-Routen
+  werden nie abgefangen. Grenzen und Befehle stehen in `tests/e2e/README.md`.
 - **Regression-CI**: `.github/workflows/tests.yml` trennt Python, JS/Build,
   Emulator/Chromium/Clientregeln und Windows-Einstiege. Node 24, Java 21 und
   Demo-Projekt sind festgelegt; kein Produktcredential nötig.
@@ -5667,6 +5674,9 @@ ersten Check statt eines leeren Consensus-Panels.
   `RunContext.persistence`; alle Save-Aufrufe müssen `runId` und Bookmark-ID
   explizit tragen. „New comparison“ ändert die Projektion, nicht diese
   Hintergrund-Persistenz; Logout verwirft alle Contexts.
+  `bookmarkMeta` erhaelt das boolesche `has_consensus` serverseitiger Metadaten;
+  nur vollstaendige Dokumente mit `responses` leiten es erneut aus dem Text ab.
+  Sonst verlor ein real gespeicherter Consensus beim Meta-Upsert seine Kennzeichnung.
 - **`window.App.setAppTitle(question?)`** (definiert in `app-core.js`) hält den
   Standard- bzw. fragebezogenen Browser-Tab-Titel bei Query-Send, Bookmark-Open
   und Clear synchron zur aktuellen Ansicht.

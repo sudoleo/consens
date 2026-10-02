@@ -79,3 +79,61 @@ Laeufe; Screenshots landen im ignorierten test-results-Verzeichnis.
 - Gesamter writerfreier Browserlauf: `UNIT_TEST_MODE=1 RUN_E2E=1 E2E_PHASE4_PORT=8043 python -m pytest tests/e2e --ignore=tests/e2e/test_smoke.py --ignore=tests/e2e/test_agent_transactions.py --ignore=tests/e2e/test_phase2_transactions.py --ignore=tests/e2e/test_prompt_config_transactions.py --ignore=tests/e2e/test_agreement_verdict.py --ignore=tests/e2e/test_run_cancel_and_progress.py -q`: 256 bestanden, 738,20 s; eine bestehende Python3.9-Warnung. JUnit: test-results/browser-all.xml.
 - Emulatorfaelle werden separat gemeinsam mit den Backendpaketen geprueft.
 - Abschliessende gesamte Frontendsuite: 699 bestanden; `npm run build:check` bestanden.
+
+## WP-29: persistierte Nutzerreisen
+
+Sechs neue Chromiumfaelle in `tests/e2e/test_persisted_journeys.py` verwenden
+das originale gebaute AppFirebase, `main.app` mit normalem E2E-Lifespan und den
+nativen Firestore-Emulator. Die separat gestartete `journey_server.py` ersetzt
+Firebase-Identity, externe Modellantworten und Mailtransport. App-HTTP-Routen,
+Auth-/Ownerpruefung, Claims, SSE, Context, Speichern und Buchungen bleiben echt;
+direkte Browser-Firestore-Zugriffe schlagen fehl. Keine komplette erwartete
+UI-Payload wird injiziert. Zufallsowner und gezieltes Cleanup erlauben parallele
+Emulatorfaelle ohne globales Loeschen.
+
+- J01: zwei echte Consensuslaeufe, Bookmark-Reload und Folgefrage im gleichen
+  Chat; getrennte Turn-/Context-IDs, autoritative recent-/target-Bindung, fremder
+  Owner mit 404. Genau zwei konsumierte regulaere Runreceipts, je eine
+  Consensusbuchung und exakte Summe des gemeinsamen Tokenkontos.
+- J02: echte Agent-Admission und acht gemessene Providersteps (Orchestrator,
+  sechs unabhaengige Antworten, begonnene Synthese). Stop speichert eine
+  Teilantwort mit failed/cancelled, bucht 1200 Tokens und gibt Reservierungen frei.
+  Reload liest den nativen Snapshot; recover_only liefert ihn ohne weiteren
+  Providerstart und ohne zweite Buchung.
+- J03: ausdruecklich importierter historischer V3-Job fuer einen gespeicherten
+  Turn. Echte native Lease-/Packagecommits, Own-Key-Resume ueber AppFirebase,
+  neun Findings ueber mehrere HTTP-Seiten und Revisionswechsel; alte Revision
+  409, Fremdowner 404, zweiter Commit derselben Lease wirkungslos. Die UI liest
+  auch nach Reload 9/9. Neue V4-Runs erhalten keinen kuenstlichen Altjob.
+- J04: der originale Saved-Bookmark-Adapter erzeugt das Pending-Result und der
+  Share-Dialog publiziert ueber echtes POST. Followformular, abgefangene Mail,
+  Double-Opt-in, native Watchanlage, Claim, echte Pipeline mit externem
+  Modellmock und nativer Versionscommit. Eine unterscheidbare neue Antwort
+  erscheint nur in ihrer Version, die Baseline bleibt unveraendert; fremde
+  Shareloeschung wird abgewiesen.
+- J05: nativer Memory-CAS, laufende Synthese, echte Kontoloeschung mit Tombstone,
+  spaeter Providerabschluss, Wechsel auf zweiten Owner und Reload seines
+  Kontrollbookmarks. Kein wiederbelebtes Konto/Unterdokument, alte Identitaet
+  gesperrt, anderer Owner samt Tokenbuchung unveraendert und alte Antwort unsichtbar.
+- Negativreise: ein echter erschoepfter Bookmark-Quota-Datensatz provoziert den
+  Speicherfehler. Consensus und nativer completed Turn bleiben erhalten,
+  Fehlerhinweis und persistence.error bleiben ehrlich; kein Bookmark wird erfunden.
+
+Gefundener Produktfehler: AppFirebase berechnete `has_consensus` auch fuer reine
+Servermetadaten aus nicht vorhandenen `responses` und verlor so das Kennzeichen.
+Der Upsert uebernimmt jetzt explizite boolesche Metadaten. Der neue DOMtest
+verwirft truthy Strings und priorisiert vorhandene vollstaendige Antwortdaten.
+Die Nutzerreise prueft denselben Vertrag nach einem echten Save.
+
+Grenzen: kein echter externer Login, Modell-/Maildienst oder produktiver Betrieb;
+historische Fetch-/Judgeergebnisse sind deterministische externe Fixtures.
+Der E2E-Lifespan unterdrueckt globale Scheduler; J04 treibt den ownergebundenen
+Claim-/Pipeline-/Commitpfad gezielt. MOCK_LLM unterdrueckt Live-Pending-Publikation,
+daher fuehrt J04 den realen Saved-Bookmark-Pending-Adapter aus. Traces und native
+Endzustaende liegen unter test-results/journey-*.zip beziehungsweise *-state.json.
+
+Validierung vor Integration des zusaetzlich gefundenen GeneratorExit-Backendfixes:
+J01/J02/J03/J05/Speicherfehler gemeinsam bestanden; J04 nach Praezisierung des
+Originalansicht-Selektors einzeln bestanden (40,54 s). Zehn direkt betroffene
+Bookmark-DOMfaelle und `npm run build:check` bestanden. Der integrierte Abschlusslauf
+aller sechs Reisen wird nach dem Merge des Backendfixes dokumentiert.

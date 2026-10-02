@@ -1372,7 +1372,9 @@ function bookmarkMeta(bookmark) {
     title: bookmarkDisplayTitle(bookmark),
     mode: bookmark?.mode || "",
     timestamp: bookmark?.timestamp || null,
-    has_consensus: Boolean(String(responses.consensus || "").trim()),
+    has_consensus: bookmark?.responses && typeof bookmark.responses === "object"
+      ? Boolean(String(responses.consensus || "").trim())
+      : bookmark?.has_consensus === true,
     model_count: Number(bookmark?.model_count ?? modelCount) || 0,
     source_count: Number(bookmark?.source_count ?? bookmark?.sources?.length) || 0,
     attachment_count: Number(bookmark?.attachment_count ?? bookmark?.attachments?.length) || 0,
