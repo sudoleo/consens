@@ -186,3 +186,11 @@ historische Sourcejobs mit Resume und Revisionspagination, Share/Follow/Watch-
 Versionen, Kontoloeschung/Ownerwechsel bei laufender Arbeit und einen nativen
 Bookmark-Speicherlimitfehler bei erfolgreicher Antwort. Neue V4-Produktruns
 erzeugen dabei keine kuenstlichen historischen V3-Sourcejobs.
+J03 fuehrt den echten Quellenworker inklusive Queue, Cache, Judge-Request/-Parsing,
+Zitatvalidierung und Packagecommit aus. Nur Dokumentfetch und externe Judge-
+HTTP-Antwort werden ersetzt. Die lokale Quellenqueue muss waehrend dieses Falls
+ansonsten inaktiv sein; vor jedem Tick prueft der Harness, dass kein fremder
+Job faellig ist, und bricht andernfalls ohne Verarbeitung ab.
+J05 beobachtet die echte StreamingResponse und Capacity-Lease passiv. Die
+Pruefung auf ausbleibende spaete Writes beginnt erst nach Responseende und
+Leasefreigabe, wenn Producer, Settlement und Cleanup abgeschlossen sind.

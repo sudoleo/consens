@@ -5289,7 +5289,12 @@ Coveragewerte von 26.09.2026 sind keine Messung des aktuellen Codes.
   Der normale E2E-Lifespan bleibt aktiv; nur externe Identity-/Provider-/Mail-
   Grenzen werden ersetzt. Der ausschliesslich vom Test gestartete
   `journey_server.py` steuert Provider-Gates, native historische Jobfixtures,
-  gezielte Watchausfuehrung und Cleanup zufaelliger Testowner. App-Routen
+  echte Quellenworker-Ticks mit Own-Key-Affinitaet, gezielte Watchausfuehrung
+  und Cleanup zufaelliger Testowner. Der Quellenworker braucht eine ansonsten
+  inaktive Queue; eine Vorpruefung verhindert die Verarbeitung fremder Testjobs.
+  Passive Beobachtung der echten Agent-Response und Capacity-Lease macht
+  Loeschassertionen vom tatsaechlichen Producer-/Cleanupabschluss abhaengig.
+  App-Routen
   werden nie abgefangen. Grenzen und Befehle stehen in `tests/e2e/README.md`.
 - **Regression-CI**: `.github/workflows/tests.yml` trennt Python, JS/Build,
   Emulator/Chromium/Clientregeln und Windows-Einstiege. Node 24, Java 21 und

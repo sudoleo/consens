@@ -89,7 +89,9 @@ Firebase-Identity, externe Modellantworten und Mailtransport. App-HTTP-Routen,
 Auth-/Ownerpruefung, Claims, SSE, Context, Speichern und Buchungen bleiben echt;
 direkte Browser-Firestore-Zugriffe schlagen fehl. Keine komplette erwartete
 UI-Payload wird injiziert. Zufallsowner und gezieltes Cleanup erlauben parallele
-Emulatorfaelle ohne globales Loeschen.
+Emulatorfaelle ohne globales Loeschen. J03 braucht fuer seinen echten Worker eine
+ansonsten inaktive Quellenqueue; der Harness prueft das vor jedem Tick und
+bricht vor Verarbeitung fremder faelliger Jobs ab.
 
 - J01: zwei echte Consensuslaeufe, Bookmark-Reload und Folgefrage im gleichen
   Chat; getrennte Turn-/Context-IDs, autoritative recent-/target-Bindung, fremder
@@ -101,10 +103,17 @@ Emulatorfaelle ohne globales Loeschen.
   Reload liest den nativen Snapshot; recover_only liefert ihn ohne weiteren
   Providerstart und ohne zweite Buchung.
 - J03: ausdruecklich importierter historischer V3-Job fuer einen gespeicherten
-  Turn. Echte native Lease-/Packagecommits, Own-Key-Resume ueber AppFirebase,
-  neun Findings ueber mehrere HTTP-Seiten und Revisionswechsel; alte Revision
-  409, Fremdowner 404, zweiter Commit derselben Lease wirkungslos. Die UI liest
-  auch nach Reload 9/9. Neue V4-Runs erhalten keinen kuenstlichen Altjob.
+  Turn. Own-Key-Resume ueber AppFirebase und echter `jobs.process_one` inklusive
+  Queue-Scan, Worker-Affinitaet, Cache, Judge-Request/-Parsing, Passage-/Zitat-
+  Validierung und nativen Lease-/Packagecommits. Nur Dokumentfetch und externe
+  Judge-HTTP-Antwort sind Fixtures. Neun Judgecalls verwenden ausschliesslich
+  den Own-Key, ein Fetch versorgt dank nativen Caches alle neun Pakete.
+  Neun Findings ueber mehrere HTTP-Seiten und Revisionswechsel; alte Revision
+  409, Fremdowner 404, Fremdworker ohne Claim, neun Wiederholungen gespeicherter
+  Ergebnisse mit alter Lease wirkungslos. Terminaler Worker startet keinen
+  weiteren Aufruf und vergisst den Key; decodierte native Plaene, Ergebnisse
+  und Caches enthalten keinen Key. Die UI liest auch nach Reload 9/9.
+  Neue V4-Runs erhalten keinen kuenstlichen Altjob.
 - J04: der originale Saved-Bookmark-Adapter erzeugt das Pending-Result und der
   Share-Dialog publiziert ueber echtes POST. Followformular, abgefangene Mail,
   Double-Opt-in, native Watchanlage, Claim, echte Pipeline mit externem
@@ -113,7 +122,11 @@ Emulatorfaelle ohne globales Loeschen.
   Shareloeschung wird abgewiesen.
 - J05: nativer Memory-CAS, laufende Synthese, echte Kontoloeschung mit Tombstone,
   spaeter Providerabschluss, Wechsel auf zweiten Owner und Reload seines
-  Kontrollbookmarks. Kein wiederbelebtes Konto/Unterdokument, alte Identitaet
+  Kontrollbookmarks. Passive Callthrough-Beobachtung der echten StreamingResponse
+  und ihrer echten Capacity-Lease belegt vor Release den laufenden Producer.
+  Nach Release wartet der Fall explizit auf Responseende und Leasefreigabe nach
+  dem Producer-/Settlement-/Cleanupabschluss. Erst dann: kein wiederbelebtes
+  Konto/Unterdokument, alte Identitaet
   gesperrt, anderer Owner samt Tokenbuchung unveraendert und alte Antwort unsichtbar.
 - Negativreise: ein echter erschoepfter Bookmark-Quota-Datensatz provoziert den
   Speicherfehler. Consensus und nativer completed Turn bleiben erhalten,
@@ -132,7 +145,8 @@ Claim-/Pipeline-/Commitpfad gezielt. MOCK_LLM unterdrueckt Live-Pending-Publikat
 daher fuehrt J04 den realen Saved-Bookmark-Pending-Adapter aus. Traces und native
 Endzustaende liegen unter test-results/journey-*.zip beziehungsweise *-state.json.
 
-Integrierte Validierung (inklusive GeneratorExit-Backendfix):
+Integrierte Validierung vor der abschliessenden Worker-/Abschlussbeobachtung
+(inklusive GeneratorExit-Backendfix):
 `UNIT_TEST_MODE=1 RUN_E2E=1 python -m pytest tests/e2e/test_persisted_journeys.py -q
 --junitxml=test-results/journeys-integrated.xml` bestand mit **6 passed** in
 117,14 s. J05 hatte zuvor einen echten Abbruchfehler aufgedeckt: Beim Schliessen
@@ -143,3 +157,14 @@ Zehn direkt betroffene Bookmark-DOMfaelle bestanden ebenfalls.
 `npm run build:check` bestaetigte nach dem Merge die aktuellen Assets.
 Runnerbelege: `test-results/journeys-integrated.xml`,
 `test-results/journeys-integrated.log` und `test-results/bookmark-final.log`.
+
+Nach dem Review wurden J03 mit echtem Worker und J05 mit deterministischer
+Producerabschluss-Beobachtung erneut gezielt geprueft:
+`UNIT_TEST_MODE=1 RUN_E2E=1 python -m pytest tests/e2e/test_persisted_journeys.py -q
+-k j03` ergab **1 passed, 5 deselected** in 23,11 s; `-k j05` ergab
+**1 passed, 5 deselected** in 25,29 s. Belege sind
+`test-results/journey-worker-recheck.{log,xml}` und
+`test-results/journey-late-producer.{log,xml}`. Ein vorheriger J03-Versuch brach
+vor dem Workerstart an einer abgelaufenen lokalen Keepalive-Verbindung ab;
+Kontrollrequests verwenden nun ebenfalls `Connection: close`, ohne Retry.
+Die komplette integrierte E2E-Suite prueft der koordinierende Hauptlauf.

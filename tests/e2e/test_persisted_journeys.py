@@ -88,7 +88,7 @@ class Journey:
 
     def control(self, action, data=None):
         url = f'{self.base}/_journey/{self.uid}/{action}'
-        kwargs = {'headers': {'X-Journey-Secret': self.secret}}
+        kwargs = {'headers': {'X-Journey-Secret': self.secret, 'Connection': 'close'}}
         response = self.api.get(url, **kwargs) if data is None and action == 'state' else self.api.post(url, data=data or {}, **kwargs)
         assert response.ok, response.text()
         return response.json()
@@ -111,6 +111,15 @@ class Journey:
     def open(self):
         self.page.goto(self.base + '/app', wait_until='domcontentloaded')
         self.page.wait_for_function('uid => window.__consensioAuthState?.uid === uid && window.App?.state.get("isUserPro") === true', arg=self.uid)
+
+    def producer_finished(self):
+        deadline = time.monotonic() + 20
+        while time.monotonic() < deadline:
+            streams = self.control('state')['streams']
+            if streams and all(s['lease'] == 'released' and s['response_ended'] for s in streams):
+                return streams
+            time.sleep(.05)
+        pytest.fail('Real agent producer/response did not finish: ' + json.dumps(streams))
 
     def run(self, question):
         self.page.fill('#questionInput', question)
@@ -229,8 +238,13 @@ def test_j03_historical_source_job_resumes_and_pages_a_native_revision(journey):
     assert resumed.value.ok, resumed.value.text()
     assert j.request('GET', f'/api/source-checks/{job_id}', uid='journey-'+'f'*32).status == 404
     old = j.request('GET', f'/api/source-checks/{job_id}').json()
-    finished = j.control('source-finish', {'job_id': job_id})
+    completion = j.control('source-finish', {'job_id': job_id})
+    assert completion['worker'] == {'provider_calls': 9, 'fetch_calls': 1,
+        'stale_commits_rejected': 9, 'own_key_only': True, 'key_forgotten': True, 'replay_worked': False}
+    finished = completion['snapshot']
     assert finished['status'] == 'complete' and finished['scope']['checked_pairs'] == 9
+    assert finished['runtime']['calls'] == 9
+    assert finished['runtime']['prompt_tokens'] == 900 and finished['runtime']['completion_tokens'] == 450
     assert j.request('GET', f'/api/source-checks/{job_id}?cursor=1&revision={old["source_verification"]["revision"]}').status == 409
     # The actual bookmark observer gathers every page before publishing a revision.
     j.page.wait_for_function('() => {const v=window.App.runRegistry.getSelectedConversationBasis()?.currentTurn?.source_verification; return v?.status === "complete" && v.findings.length === 9;}', timeout=20000)
@@ -311,8 +325,12 @@ def test_j05_delete_during_agent_work_fences_late_writes_and_owner_switch(journe
         deleted = j.request('POST', '/delete_account', {'id_token': 'token-' + j.uid})
         assert deleted.status == 200, deleted.text()
         assert deleted.json()['status'] == 'deleted'
+        assert j.control('state')['streams'] == [{'lease': 'running', 'response_ended': False}]
         j.page.evaluate('async uid => {sessionStorage.setItem("journey_uid", uid); await window.__switchE2EUser(uid);}', other.uid)
         j.control('release', {})
+        # The real stream_events finally releases capacity only after the
+        # producer and its settlement/cleanup stack have unwound.
+        assert j.producer_finished() == [{'lease': 'released', 'response_ended': True}]
         expect(j.page.locator('#agentAnswerBody')).to_be_hidden()
         assert j.page.evaluate('() => window.__consensioAuthState.uid') == other.uid
         j.page.reload()
