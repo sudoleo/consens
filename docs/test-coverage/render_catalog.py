@@ -20,7 +20,7 @@ labels={'passed':'bestanden','failed':'fehlgeschlagen','error':'Setup-/Lauffehle
 def status(f):return ', '.join(f"{n} {labels[k]}" for k,n in f['execution'].items())
 def slug(f):return pathlib.Path(f['path']).name.replace('.','-').replace('_','-')
 def link(path,label=None):return f'[{label or path}](../../{path})'
-for suite,title in [('backend','Reguläre Python-Suite'),('frontend','JavaScript-Suite'),('e2e','Separat gestartete E2E-Suite')]:
+for suite,title in [('backend','Reguläre Python-Suite'),('frontend','JavaScript-Suite'),('e2e','Separat gestartete E2E-Suite'),('rules','Native Firestore-Client-Regeln')]:
  group=[f for f in files if f['suite']==suite]
  lines=[f'# {title}: Abdeckung pro Testdatei','',f'Stand: **{data["review_date"]}**, Quellstand `{SHA}`. [Methodik und Gesamtbefund](../test-coverage-map.md).','',f'**{len(group)} Dateien · {sum(f["definition_count"] for f in group)} statische Testdefinitionen · {sum(f["runner_case_count"] for f in group)} Runner-Fälle.**','', '„Geprüftes Verhalten“ beschreibt die vorhandenen Assertions. Der Laufstatus steht separat: bei Fehlern ist der beschriebene Vertrag nicht als bestanden belegt. Prüfaufträge sind offene Fragen, keine pauschal festgestellten Lücken der gesamten Suite. Aktuelle Befundbewertungen stehen im [Produktabgleich](product/README.md).','', 'Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Ausführungsabdeckung. Indirekte Abhängigkeiten über Fixtures/Helpers und dynamisch zusammengesetzte Pfade können fehlen. Das [JSON-Inventar](inventory.json) enthält jede Definition mit Zeilen, Assertion-Fundstellen und jeden expandierten Runner-Fall. Datum, Umgebung und Grenzen stehen im [Laufbericht](findings.md).','', f'| Datei | Definitionen | Runner-Fälle | Primärlauf {data["review_date"]} |','|---|---:|---:|---|']
  for f in group:lines.append(f'| [{pathlib.Path(f["path"]).name}](#{slug(f)}) | {f["definition_count"]} | {f["runner_case_count"]} | {status(f)} |')
@@ -37,11 +37,11 @@ for suite,title in [('backend','Reguläre Python-Suite'),('frontend','JavaScript
   lines+=['','</details>']
  (OUT/(suite+'.md')).write_text('\n'.join(lines)+'\n', encoding='utf-8')
 areas=sorted({a for f in files for a in f['areas']})
-lines=['# Einstieg nach Produktbereich','','[Methodik und Gesamtbefund](../test-coverage-map.md) · [Maschinenlesbares Inventar](inventory.json)','','Mehrfachzuordnungen sind beabsichtigt. Diese Liste geht vom Testbestand aus. Sie beweist nicht, dass alle Produktmodule oder Anforderungen einen Test besitzen; dafür ist der umgekehrte Abgleich mit Produktionscode nötig.','','| Bereich | Reguläre Python-Dateien | JavaScript-Dateien | E2E-Dateien |','|---|---|---|---|']
+lines=['# Einstieg nach Produktbereich','','[Methodik und Gesamtbefund](../test-coverage-map.md) · [Maschinenlesbares Inventar](inventory.json)','','Mehrfachzuordnungen sind beabsichtigt. Diese Liste geht vom Testbestand aus. Sie beweist nicht, dass alle Produktmodule oder Anforderungen einen Test besitzen; dafür ist der umgekehrte Abgleich mit Produktionscode nötig.','','| Bereich | Reguläre Python-Dateien | JavaScript-Dateien | E2E-Dateien | Rules-Dateien |','|---|---|---|---|---|']
 for a in areas:
  cells=[]
- for s in ['backend','frontend','e2e']:
+ for s in ['backend','frontend','e2e','rules']:
   cells.append('<br>'.join(f'[{pathlib.Path(f["path"]).name}]({s}.md#{slug(f)})' for f in files if a in f['areas'] and f['suite']==s) or '—')
  lines.append('| '+a+' | '+' | '.join(cells)+' |')
 (OUT/'areas.md').write_text('\n'.join(lines)+'\n', encoding='utf-8')
-print("Rendered backend.md, frontend.md, e2e.md and areas.md from inventory.json")
+print("Rendered backend.md, frontend.md, e2e.md, rules.md and areas.md from inventory.json")
