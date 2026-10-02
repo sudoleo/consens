@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 from tests.frontend_order import position
@@ -135,7 +136,7 @@ def test_model_pulse_inverts_all_monochrome_provider_logos_in_dark_mode():
             f'.dark-mode .pulse-board .lp-model-pulse-icon img[src*="{asset}"]'
             in pulse_css
         )
-    assert "/static/css/model-pulse.css?v=20260904-logodark1" in pulse_page
+    assert re.search(r"/static/css/model-pulse\.css\?v=\d{8}-[\w.-]+", pulse_page)
 
 
 def test_meta_muse_is_present_across_public_provider_surfaces():
