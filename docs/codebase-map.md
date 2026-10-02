@@ -419,6 +419,10 @@ der Python-Staleness-Test auch indirekte Änderungen erkennt.
 Der gemeinsame Node-/Python-Fingerprint normalisiert CRLF zu LF für Text-Inputs
 außerhalb `static/vendor/`; Vendor-Assets bleiben bytegenau. Dadurch ist ein
 unter Windows erstellter Commit auch nach einem Linux-Checkout aktuell.
+`.gitattributes` erhält die Bytes unter `static/vendor/` und `static/dist/`
+einschließlich Build-Manifest mit `-text`; Windows-Autocrlf darf die erzeugten
+Inhalte und ihre Dateinamen-Hashes nicht verändern. Der Node-Outputtest belegt
+dies durch einen echten temporären Git-Checkout mit CRLF-Gegenkontrolle.
 `scripts/frontend-output.mjs` publiziert geänderte Bundle-/Vendor-Dateien über
 atomaren Dateiersatz und schaltet das Manifest erst nach den Bundles um;
 unveränderte Dateien bleiben unangetastet. `previous_assets` hält pro JS-/CSS-

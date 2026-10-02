@@ -223,3 +223,22 @@ Diese Nachweise belegen lokale HTTP-, Job- und native Transaktionsverträge;
 sie ersetzen keine produktive Firebase-Authentifizierung oder echte Provider-
 bzw. Mailzustellung. Das lokale JUnit-Artefakt liegt unter
 `test-results/adapters-followup.xml`.
+
+## Korrektur zweier veralteter App-Browserprüfungen
+
+Der integrierte Lauf der echten `app_page`-Dateien deckte zwei überholte
+Testannahmen auf. `test_agreement_verdict.py` erwartete einen früheren festen
+Rotton, obwohl die aktuelle gemeinsame Statuspalette `--dispute` verwendet.
+Der Test vergleicht nun die berechnete Alertfarbe mit diesem Token und schließt
+den Agreement-Farbwert ausdrücklich aus; Klasse, Headline und Widerspruchstext
+bleiben geprüft. `test_run_cancel_and_progress.py` ersetzte die alte
+`consensusLifecycle.startRun`-Brücke, die der RunContext-Pfad nicht mehr aufruft.
+Eine passive Beobachtung tatsächlicher Registry- und DOM-Änderungen belegt nun,
+dass der Button sowohl in `pending` als auch in `streaming`/`differences`
+abbrechbar bleibt. Nach Abschluss und Abbruch wird die einzelne Cancelklasse
+unabhängig von weiteren Buttonklassen ausgeschlossen.
+
+Beide Dateien liefen gegen die echte lokale App und den sicheren Demoemulator:
+**4 passed**, eine bestehende Python-3.9-asyncio-DeprecationWarning. Es waren
+keine Produkt-, CSS- oder Buildänderungen nötig. Lokaler Beleg:
+`test-results/app-browser-targeted.xml`.
