@@ -132,8 +132,14 @@ Claim-/Pipeline-/Commitpfad gezielt. MOCK_LLM unterdrueckt Live-Pending-Publikat
 daher fuehrt J04 den realen Saved-Bookmark-Pending-Adapter aus. Traces und native
 Endzustaende liegen unter test-results/journey-*.zip beziehungsweise *-state.json.
 
-Validierung vor Integration des zusaetzlich gefundenen GeneratorExit-Backendfixes:
-J01/J02/J03/J05/Speicherfehler gemeinsam bestanden; J04 nach Praezisierung des
-Originalansicht-Selektors einzeln bestanden (40,54 s). Zehn direkt betroffene
-Bookmark-DOMfaelle und `npm run build:check` bestanden. Der integrierte Abschlusslauf
-aller sechs Reisen wird nach dem Merge des Backendfixes dokumentiert.
+Integrierte Validierung (inklusive GeneratorExit-Backendfix):
+`UNIT_TEST_MODE=1 RUN_E2E=1 python -m pytest tests/e2e/test_persisted_journeys.py -q
+--junitxml=test-results/journeys-integrated.xml` bestand mit **6 passed** in
+117,14 s. J05 hatte zuvor einen echten Abbruchfehler aufgedeckt: Beim Schliessen
+des Generators konnte ein Fehler im Cleanup den GeneratorExit ersetzen. Der
+integrierte Backendfix erhaelt den Abbruch und gibt die Kapazitaet frei; der
+native Loesch-/Ownerwechselpfad besteht jetzt gemeinsam mit allen anderen Reisen.
+Zehn direkt betroffene Bookmark-DOMfaelle bestanden ebenfalls.
+`npm run build:check` bestaetigte nach dem Merge die aktuellen Assets.
+Runnerbelege: `test-results/journeys-integrated.xml`,
+`test-results/journeys-integrated.log` und `test-results/bookmark-final.log`.
