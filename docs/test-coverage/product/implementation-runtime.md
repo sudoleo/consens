@@ -59,3 +59,11 @@ Gemeinsamer Zusatzlauf der beiden nativen Dateien: **10 bestanden**,
 Der erste integrierte Backendlauf ergab 3.289 bestanden und eine veraltete
 Cache-Key-Assertion. Diese prüft nun das versionierte Assetformat; der separate
 Resilience-Test prüft weiterhin Aktualität und Konsistenz gegen Git.
+
+Die native J-05-Browserreise deckte zusätzlich einen Agent-SSE-Abbruchfehler
+auf: Verweigert ein Kontotombstone das Settlement beim Schließen des Producers,
+konnte der Router während `GeneratorExit` noch einen Fehlerframe ausgeben.
+Der Router bewahrt jetzt den Abbruch und protokolliert den sekundären
+Cleanupfehler ohne weiteren Yield. Die gezielte Regression reproduzierte
+zunächst `generator ignored GeneratorExit`; danach bestanden 66 benachbarte
+Kapazitäts-, HTTP-, Reliability- und Streamingfälle.

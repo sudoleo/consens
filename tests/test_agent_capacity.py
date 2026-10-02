@@ -9,7 +9,37 @@ from starlette.requests import Request, ClientDisconnect
 from app.api.routers import agent
 from app.services.agent_runtime import AgentCapacity, AgentCapacityExceeded
 from app.services.llm.agent_client import AgentModel
+from app.services import persistence_guard
 from test_agent_runs import UID, AUTH, api, store, pending, receipt, totals
+
+
+def test_disconnect_preserves_generator_exit_when_deleted_account_blocks_cleanup(api, monkeypatch, caplog):
+    client, store, calls = api
+    capacity = AgentCapacity(1)
+    monkeypatch.setattr(agent, "agent_capacity", capacity)
+    captured, closed = [], []
+    def source(self):
+        self.claimed = True
+        try:
+            yield {"type": "delta", "text": "Partial answer"}
+        finally:
+            closed.append(True)
+            raise persistence_guard.AccountDeletionInProgress("synthetic deleting account")
+    monkeypatch.setattr(agent.DelegationLoop, "run", source)
+    monkeypatch.setattr(agent, "iter_sse_with_keepalive", lambda stream, **kwargs: captured.append(stream) or iter(()))
+    chat = store.create_chat(UID, execution_mode="agent")["id"]
+    payload = agent.AgentRequest(chat_id=chat, question="Hi", client_request_id="close-deleted", bookmark_id="closed")
+    request = Request({"type": "http", "headers": [(b"authorization", b"Bearer verified")], "client": ("test", 123)})
+    agent.run_agent.__wrapped__(request, payload)
+    stream = captured[0]
+    assert "event: accepted" in next(stream)
+    assert "event: delta" in next(stream)
+    stream.close()  # May not yield an error frame while handling GeneratorExit.
+    assert closed == [True] and not calls
+    assert "Agent completion failed" not in caplog.text
+    assert "Agent stream cleanup unavailable" in caplog.text
+    assert list(stream) == []
+    capacity.acquire().release()
 
 
 def test_owner_limit_is_atomic_across_different_chats(store):
