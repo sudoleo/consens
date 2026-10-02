@@ -17,6 +17,7 @@ from fastapi.testclient import TestClient
 from app.api.routers import admin as admin_router
 from app.core.rate_limit import limiter
 from app.services import account_tier
+from adapter_test_support import http_adapter, login
 
 AUTH_HEADER = {"Authorization": "Bearer admin-token"}
 
@@ -294,3 +295,22 @@ def test_lookup_of_an_unknown_account_is_a_404(client, db):
                               headers=AUTH_HEADER)
     assert response.status_code == 404
     assert response.json()["detail"]["error_code"] == "not_found"
+
+
+def test_unknown_account_has_structured_error_in_real_main_app(http_adapter, monkeypatch):
+    h = http_adapter
+    h.db.collection("users").document("admin").set({"role": "admin"})
+    monkeypatch.setattr(account_tier, "db_firestore", h.db)
+
+    def missing_user(uid):
+        raise account_tier.auth.UserNotFoundError("private upstream response")
+
+    monkeypatch.setattr(account_tier.auth, "get_user", missing_user)
+    response = h.client.get(
+        "/api/admin/account-tier?identifier=missing", headers=login("admin")
+    )
+    assert response.status_code == 404
+    error = response.json()["error"]
+    assert error["error_code"] == "not_found"
+    assert isinstance(error["message"], str) and error["message"]
+    assert "private" not in response.text

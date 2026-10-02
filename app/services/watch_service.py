@@ -1307,7 +1307,11 @@ def make_unsubscribe_token(watch_id: str, *, now=None, max_age_days=UNSUBSCRIBE_
 
 def parse_unsubscribe_token(token: str, *, now=None) -> str:
     payload = parse_token_payload(token, now=now)
-    return str(payload.get("wid") or "")
+    watch_id = payload.get("wid")
+    if (not isinstance(watch_id, str) or not watch_id
+            or any(key in payload for key in ("tt", "sid", "tid", "em", "un"))):
+        raise WatchError("invalid_token", "This link is invalid.")
+    return watch_id
 
 
 def unsubscribe(token: str, db=None) -> dict:

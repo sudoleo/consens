@@ -305,24 +305,40 @@ class FirestoreApiRunRepository:
         return [self._with_id(snap) for snap in query.stream()]
 
     def backfill_retention(self) -> int:
-        """Give pre-retention v1 documents the same 30-day expiry contract."""
+        """Give legacy documents expiry without changing another run's fence.
+
+        Re-read inside the transaction: cleanup or a concurrent migration can
+        change a scanned document before this worker reaches it.
+        """
         updated = 0
-        for snap in self._db.collection(API_RUNS_COLLECTION).stream():
-            data = snap.to_dict() or {}
-            if isinstance(data.get("expires_at"), datetime):
+        for scanned in self._db.collection(API_RUNS_COLLECTION).stream():
+            if isinstance((scanned.to_dict() or {}).get("expires_at"), datetime):
                 continue
-            accepted_at = data.get("accepted_at") or data.get("created_at")
-            if not isinstance(accepted_at, datetime):
-                continue
-            expires_at = accepted_at + timedelta(days=API_RUN_RETENTION_DAYS)
-            snap.reference.update({"expires_at": expires_at})
-            mapping_ref = self._idempotency_ref(
-                str(data.get("uid") or ""), str(data.get("idempotency_hash") or "")
-            )
-            mapping_snap = mapping_ref.get()
-            if mapping_snap.exists:
-                mapping_ref.update({"expires_at": expires_at})
-            updated += 1
+            ref = scanned.reference
+
+            def backfill(tx):
+                snap = ref.get(transaction=tx)
+                if not snap.exists:
+                    return False
+                data = snap.to_dict() or {}
+                if isinstance(data.get("expires_at"), datetime):
+                    return False
+                accepted_at = data.get("accepted_at") or data.get("created_at")
+                uid = str(data.get("uid") or "")
+                key_hash = str(data.get("idempotency_hash") or "")
+                if not isinstance(accepted_at, datetime) or not uid or not key_hash:
+                    return False
+                if accepted_at.tzinfo is None:
+                    accepted_at = accepted_at.replace(tzinfo=timezone.utc)
+                expires_at = accepted_at + timedelta(days=API_RUN_RETENTION_DAYS)
+                mapping_ref = self._idempotency_ref(uid, key_hash)
+                mapping = mapping_ref.get(transaction=tx)
+                tx.update(ref, {"expires_at": expires_at})
+                if mapping.exists and (mapping.to_dict() or {}).get("run_id") == snap.id:
+                    tx.update(mapping_ref, {"expires_at": expires_at})
+                return True
+
+            updated += int(self._transaction(backfill))
         return updated
 
     def _delete(
