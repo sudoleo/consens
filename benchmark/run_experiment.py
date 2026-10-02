@@ -39,6 +39,7 @@ from app.services.llm import credentials
 from benchmark import config, dataset
 from benchmark import results as results_mod
 from benchmark.runner import BenchmarkRunner
+from benchmark.cli_validation import add_execution_arguments, validate_execution_arguments
 
 RUN_ID = "experiment_v1"
 REQUIRED_PROVIDERS = ["OpenAI", "Mistral", "Anthropic", "Gemini", "DeepSeek", "Grok"]
@@ -46,11 +47,8 @@ REQUIRED_PROVIDERS = ["OpenAI", "Mistral", "Anthropic", "Gemini", "DeepSeek", "G
 
 def _parse_args(argv=None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(prog="python -m benchmark.run_experiment")
-    parser.add_argument("--dry-run", action="store_true", help="Payloads + Projektion, kein HTTP")
-    parser.add_argument("--live", action="store_true", help="echten Lauf ausfuehren (Credential-Check)")
-    parser.add_argument("--budget", type=float, default=None, help="Budget-Cap in USD (bei --live Pflicht)")
-    parser.add_argument("--resume", action="store_true", help="Fehl-Zellen erneut versuchen")
-    return parser.parse_args(argv)
+    add_execution_arguments(parser)
+    return validate_execution_arguments(parser, parser.parse_args(argv))
 
 
 def _load_records() -> list[dict]:

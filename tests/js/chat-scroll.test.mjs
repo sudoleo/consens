@@ -1,10 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import { loadScripts } from "./helpers/appWindow.mjs";
 
-function boot({ reduced = false, mode = "agent" } = {}) {
+function boot({ reduced = false, mode = "agent", emptyAnswer = false } = {}) {
   let y = 0, height = 3200, now = 0, serial = 0, resize;
   const frames = new Map();
   let visible = { runId: "one", config: { executionMode: mode, agentMode: true } };
+  if (emptyAnswer) visible.consensus = { status: 'pending', text: '', streamText: '' };
   let basis = null;
   const result = loadScripts(["static/js/app-core.js", "static/js/chat-scroll.js"], {
     body: '<main class="container"><div id="threadPendingAsk" hidden></div><div id="threadAsk">New question</div><section class="input-section"><textarea id="questionInput"></textarea></section></main>',
@@ -62,6 +63,41 @@ describe("conversation scroll", () => {
     app.window.scrollTo.mockClear(); app.grow(400); app.tick();
     expect(app.window.scrollTo).not.toHaveBeenCalled();
     expect(app.document.body.classList.contains('chat-scroll-following')).toBe(false);
+    app.dom.window.close();
+  });
+  it('cancels a queued resize-follow frame at completion without moving past the answer', () => {
+    const app = boot();
+    app.window.App.revealSentMessage(); app.tick();
+    expect(app.window.scrollY).toBe(2400);
+    app.grow(48); // Final actions arrive after the explicit jump has settled.
+    expect(app.frames.size).toBeGreaterThan(0);
+    app.show({runId:'one', finishedAt:123, config:{executionMode:'agent', agentMode:true}});
+    app.tick();
+    expect(app.window.scrollY).toBe(2400);
+    expect(app.document.body.classList.contains('chat-scroll-following')).toBe(false);
+    app.dom.window.close();
+  });
+  it('still completes an explicit send jump when a very fast answer finishes mid-animation', () => {
+    const app = boot();
+    app.window.App.revealSentMessage(); app.tick(8);
+    expect(app.window.scrollY).toBeGreaterThan(0);
+    expect(app.window.scrollY).toBeLessThan(2400);
+    app.show({runId:'one', finishedAt:123, config:{executionMode:'agent', agentMode:true}});
+    app.tick();
+    expect(app.window.scrollY).toBe(2400);
+    app.grow(48); app.tick();
+    expect(app.window.scrollY).toBe(2400);
+    app.dom.window.close();
+  });
+  it.each([false, true])('retains a Send that reached the empty shell until the first completed answer exists (reduced=%s)', reduced => {
+    const app = boot({ emptyAnswer: true, reduced });
+    app.window.App.revealSentMessage(); app.tick();
+    expect(app.window.scrollY).toBe(2400);
+    app.show({runId:'one', finishedAt:123, config:{executionMode:'agent', agentMode:true}, consensus:{text:'Immediate answer'}});
+    app.grow(1000); app.tick();
+    expect(app.window.scrollY).toBe(3400);
+    app.grow(48); app.tick();
+    expect(app.window.scrollY).toBe(3400);
     app.dom.window.close();
   });
   it.each(['agent', 'consensus'])('opens a saved %s conversation with one cancellable smooth jump', mode => {

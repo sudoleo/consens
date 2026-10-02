@@ -86,6 +86,35 @@ describe("model answer reader", () => {
     ctx.reader.reset();
     expect(ctx.document.getElementById('modelAnswerReader').hidden).toBe(true);
   });
+  it("keeps the differences panel to one open finding, without subtitle or question label", async () => {
+    const ctx = boot(); ctx.project(run());
+    const snapshot = { key: 'tool:calm', question: 'Which plan suits a team of five?', scopeLabel: 'Comparison focus',
+      answers: [{ provider: 'OpenAI', label: 'GPT', text: 'Answer', status: 'complete', sources: [] }],
+      contextGroup: () => [snapshot],
+      renderPanel() {
+        const panel = ctx.document.createElement('div');
+        // Cards arrive ordered by severity; data-difference-index keeps the
+        // index the inline markers use.
+        panel.innerHTML = [2, 0, 1].map(i => `<details class="diff-card" data-difference-index="${i}"><summary>`
+          + `<span class="diff-card-claim">Finding ${i}</span></summary><p>Evidence ${i}</p></details>`).join('');
+        return panel;
+      } };
+    ctx.reader.openContext(snapshot, { section: 'differences', index: 0 });
+    const cards = [...ctx.document.querySelectorAll('#answerReaderInspector .diff-card')];
+    expect(cards.map(card => card.open)).toEqual([false, true, false]);
+    expect(ctx.document.getElementById('answerReaderStatus').textContent).toBe('');
+    expect(ctx.document.querySelector('.answer-reader-context-top').hidden).toBe(true);
+    expect(ctx.document.querySelector('#answerReaderInspector').textContent).not.toMatch(/positions?\b/);
+    const wait = () => new Promise(resolve => setTimeout(resolve, 0));
+    await wait();
+    cards[0].open = true; await wait();
+    expect(cards.map(card => card.open)).toEqual([true, false, false]);
+    cards[2].open = true; await wait();
+    expect(cards.map(card => card.open)).toEqual([false, false, true]);
+    ctx.reader.refreshContext(snapshot);
+    expect([...ctx.document.querySelectorAll('#answerReaderInspector .diff-card')].map(card => card.open))
+      .toEqual([false, false, true]);
+  });
   it("previews selected models without creating an answer or a loading state", () => {
     const ctx = boot();
     ctx.document.body.classList.add('is-hero');
@@ -281,6 +310,24 @@ describe("model answer reader", () => {
     expect(ctx.document.activeElement).toBe(saved.button);
   });
 
+  it("shows partial and cut-off answers with their text, a small mark and one visible reason", () => {
+    const ctx = boot(); ctx.project(run());
+    const context = { key: 'tool:partial', question: 'Evidence question', renderPanel: () => ctx.document.createElement('div'), answers: [
+      { provider: 'OpenAI', label: 'GPT', text: 'Whole answer', status: 'complete', badge: 'Cut off', note: 'Its end is missing.', sources: [] },
+      { provider: 'Anthropic', label: 'Claude', text: 'First half', status: 'incomplete', error: 'Stopped before it finished.', sources: [] }] };
+    ctx.reader.openContext(context, { section: 'answers', model: 'Anthropic' });
+    const pane = ctx.document.querySelector('.answer-reader-answer');
+    expect(pane.querySelector('.answer-reader-state').hidden).toBe(false);
+    expect(pane.querySelector('.answer-reader-state').textContent).toBe('Incomplete');
+    expect(pane.querySelector('.answer-reader-note').textContent).toBe('Stopped before it finished.');
+    expect(pane.querySelector('.answer-reader-body').textContent).toBe('First half');
+    expect(pane.querySelector('.answer-reader-answer-actions button').disabled).toBe(false);
+    expect(ctx.document.getElementById('answerReaderStatus').textContent).toBe('1 of 2 ready · 1 incomplete');
+    ctx.reader.openContext(context, { section: 'answers', model: 'OpenAI' });
+    const cut = ctx.document.querySelector('.answer-reader-answer');
+    expect(cut.querySelector('.answer-reader-state').textContent).toBe('Cut off');
+    expect(cut.querySelector('.answer-reader-note').textContent).toBe('Its end is missing.');
+  });
   it("renders model names as text and never creates unsafe source links", () => {
     const ctx = boot(); const state = run(); state.config.providers[0].modelLabel = '<img src=x onerror="alert(1)">';
     state.modelResults.OpenAI.sources = [{url: "javascript:alert(1)", title: "Bad link"}]; ctx.project(state); ctx.reader.openLive();

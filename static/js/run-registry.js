@@ -14,7 +14,6 @@
   const TERMINAL = new Set(["succeeded", "failed", "canceled"]);
   const runs = new Map();
   const conversationLocks = new Map();
-  const usageSnapshotFences = new Map();
   const actions = new Map();
   const blockedBookmarkIds = new Set();
   let visibleRunId = null;
@@ -101,51 +100,6 @@
     return window.auth?.currentUser === expected.user
       && window.auth?.currentUser?.uid === expected.uid
       && window.App.authState?.generation === expected.generation;
-  }
-
-  function currentAuthMatches(auth) {
-    return Boolean(auth?.uid && auth?.user)
-      && window.auth?.currentUser === auth.user
-      && window.auth?.currentUser?.uid === auth.uid
-      && window.App.authState?.generation === auth.generation;
-  }
-
-  function usageNumber(value) {
-    if (value === null || value === undefined || value === "") return null;
-    const number = Number(value);
-    return Number.isFinite(number) ? number : null;
-  }
-
-  // Run endpoints return account-wide quota snapshots. Concurrent requests can
-  // finish in a different order from the server-side reservations that created
-  // those snapshots. Within one authenticated UTC day, never let an older,
-  // larger remaining count overwrite a newer, smaller one. Explicit /usage or
-  // release responses may seed an authoritative increase.
-  function reconcileUsageSnapshot(owner, snapshot = {}, { authoritative = false } = {}) {
-    const auth = owner?.auth || owner;
-    if (!currentAuthMatches(auth)) return null;
-    const utcDate = cleanId(snapshot.utc_date)
-      || new Date(owner?.startedAt || Date.now()).toISOString().slice(0, 10);
-    const key = `${auth.generation}:${auth.uid}:${utcDate}`;
-    const prior = usageSnapshotFences.get(key) || { remaining: null, deepRemaining: null };
-    const incomingRemaining = usageNumber(snapshot.remaining ?? snapshot.free_usage_remaining);
-    const incomingDeep = usageNumber(snapshot.deepRemaining ?? snapshot.deep_remaining);
-    const choose = (previous, incoming) => {
-      if (incoming === null) return previous;
-      if (authoritative || previous === null) return incoming;
-      return Math.min(previous, incoming);
-    };
-    const next = {
-      remaining: choose(prior.remaining, incomingRemaining),
-      deepRemaining: choose(prior.deepRemaining, incomingDeep)
-    };
-    usageSnapshotFences.set(key, next);
-    return {
-      remaining: next.remaining ?? (snapshot.remaining ?? snapshot.free_usage_remaining),
-      deepRemaining: next.deepRemaining ?? (snapshot.deepRemaining ?? snapshot.deep_remaining),
-      totalLimit: snapshot.totalLimit ?? snapshot.total_limit ?? snapshot.limit ?? window.currentMaxLimit,
-      deepLimit: snapshot.deepLimit ?? snapshot.deep_total_limit ?? snapshot.deep_limit ?? window.currentDeepLimit
-    };
   }
 
   function activeCount() {
@@ -545,7 +499,6 @@
     cancelAll(reason);
     runs.clear();
     conversationLocks.clear();
-    usageSnapshotFences.clear();
     blockedBookmarkIds.clear();
     visibleRunId = null;
     selectedConversationBasis = null;
@@ -630,7 +583,6 @@
     isExecuting,
     isVisible,
     isAuthCurrent,
-    reconcileUsageSnapshot,
     visible,
     show,
     showSavedView,

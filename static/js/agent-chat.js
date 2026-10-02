@@ -70,31 +70,19 @@
       if (!response.ok || !Array.isArray(data.models) || !data.models.length) throw new Error("Model list unavailable");
       catalog = data;
       catalogStatus = "ready";
+      receiveBudget(data.token_budget, uid);
     } catch (_) {
       if (uid === catalogOwner && generation === loadGeneration) catalogStatus = "failed";
     } finally {
       if (uid === catalogOwner && generation === loadGeneration) render();
     }
   }
+  // Agent and the pipeline share one daily token account. Validation,
+  // ordering of concurrent snapshots and the account owner fence live in
+  // App.tokenBudget (token-budget.js); Agent only feeds it.
   function receiveBudget(budget, uid) {
-    if (!budget || !catalog || !canUse() || uid !== catalogOwner || uid !== window.auth?.currentUser?.uid) return;
-    if (!Number.isSafeInteger(budget.limit) || budget.limit <= 0
-      || ['used', 'reserved', 'unknown', 'estimated', 'remaining', 'revision', 'config_revision'].some(key =>
-        budget[key] !== undefined && (!Number.isSafeInteger(budget[key]) || budget[key] < 0))) return;
-    const previous = catalog.token_budget;
-    if ((budget.config_revision ?? 0) < (previous?.config_revision ?? 0)) return;
-    if ((budget.config_revision ?? 0) === (previous?.config_revision ?? 0)) {
-      if (budget.day && previous?.day && budget.day < previous.day) return;
-      if (!budget.day || !previous?.day || budget.day === previous.day) {
-        if (Number.isSafeInteger(budget.revision) && Number.isSafeInteger(previous?.revision)) {
-          if (budget.revision < previous.revision) return;
-        } else if (Number.isFinite(budget.observed_at) && Number.isFinite(previous?.observed_at)
-          && budget.observed_at < previous.observed_at) return;
-      }
-    }
-    catalog.token_budget = budget;
-    catalog.budgetStale = false;
-    App.sidebarQuota?.sync();
+    if (!budget || !canUse() || uid !== window.auth?.currentUser?.uid) return;
+    App.tokenBudget?.apply?.(budget, { uid });
   }
   async function refreshBudget(uid) {
     const generation = loadGeneration;
@@ -112,7 +100,7 @@
       });
       if (user === window.auth?.currentUser && generation === loadGeneration) receiveBudget(data.token_budget, uid);
     } catch (_) {
-      if (generation === loadGeneration && catalog) { catalog.budgetStale = true; App.sidebarQuota?.sync(); }
+      if (generation === loadGeneration && catalog) App.tokenBudget?.markStale?.();
     } finally { if (budgetRefresh === pending) budgetRefresh = null; }
   }
   function renderControls(agent) {
@@ -132,6 +120,8 @@
     if (host) host.hidden = !agent;
     App.sidebarQuota?.sync();
     if (!agent || !select || !effort) {
+      // Outside Agent the comparison chip is the Consensus/Compare chip again.
+      App.linkModelPicker?.(select, null);
       if (select) App.collapseExpandedModelPicker?.(select);
       if (effort) App.collapseExpandedModelPicker?.(effort);
       return;
@@ -202,7 +192,14 @@
     effort.parentElement.hidden = true;
     document.getElementById("agentModelsRetry")?.toggleAttribute("hidden", catalogStatus !== "failed");
     App.initCustomModelPicker?.(select, { grouped: true, secondarySelect: effort, secondaryLabel: 'Reasoning' });
-    if (select.disabled) App.collapseExpandedModelPicker?.(select);
+    // One chip, one menu: the chat model above, the models it is compared
+    // with below (model-picker.js, linked pickers). The comparison chip of
+    // Consensus/Compare steps back while linked.
+    const comparison = document.getElementById("consensusModelDropdown");
+    App.linkModelPicker?.(select, comparison, { ownLabel: "Agent", companionLabel: "Compare with", ariaLabel: "Agent and comparison models" });
+    // A locked chat model (loading, a message running) closes only its own
+    // levels; the comparison models stay open to change for the next message.
+    if (select.disabled) App.collapseExpandedModelPicker?.(select, { ownLevelsOnly: true });
     if (effort.disabled || effort.parentElement.hidden) App.collapseExpandedModelPicker?.(effort);
     window.syncCustomModelPickers?.();
   }
@@ -288,14 +285,18 @@
     if (comparisonPicker) {
       comparisonPicker.dataset.comparisonOnly = String(agent);
       comparisonPicker.setAttribute("aria-label", agent ? "Comparison models" : "Models and consensus engine");
+      // Agent shows one chip: the comparison models live in the Agent menu.
+      const chip = comparisonPicker.closest(".consensus-model");
+      if (chip) chip.hidden = agent;
     }
     renderControls(agent);
     const modeChanged = document.body.classList.contains("single-agent-active") !== agent;
     document.body.classList.toggle("single-agent-active", agent);
     App.renderComposerMode?.();
     if (modeChanged) requestAnimationFrame(() => App.resizeQuestionInput?.());
-    const chatTab = document.getElementById("viewSwitchConsensus");
-    if (chatTab) chatTab.textContent = agent ? "Chat" : "Consensus";
+    // Only the label follows the mode; the icon and the switch's thumb stay.
+    const chatTabLabel = document.querySelector("#viewSwitchConsensus > span");
+    if (chatTabLabel) chatTabLabel.textContent = agent ? "Chat" : "Consensus";
     const greeting = document.querySelector(".hero-greeting");
     const newChat = document.getElementById("newRunButton");
     if (newChat) {
@@ -680,7 +681,7 @@
     if (action === 'compare') App.openModelPicker?.(document.getElementById('consensusModelDropdown'));
     else if (action === 'choose-model') {
       App.composer?.expand?.();
-      App.openModelPicker?.(document.getElementById('agentModelDropdown'));
+      App.openModelPicker?.(document.getElementById('agentModelDropdown'), { level: 'models' });
     } else if (action === 'google-consent') App.agentGoogle?.consent?.(true);
     else if (action === 'google-open') App.agentGoogle?.open?.();
     else if (action === 'reload') { catalogStatus = 'idle'; render(); }
@@ -951,8 +952,7 @@
   }
   App.agentChat = { canUse, modeState, hasValidComparisonSelection, sendBlocker, syncComposer, isSelected: () => selectedMode() === "agent",
     render: () => renderShell(), renderShell, project, send, revealPendingReview, syncPendingReview,
-    tokenBudget: () => canUse() && catalogOwner === window.auth?.currentUser?.uid
-      ? (catalog?.budgetStale ? {...catalog.token_budget, stale: true} : catalog?.token_budget) : null, receiveBudget };
+    tokenBudget: () => App.tokenBudget?.current?.() || null, receiveBudget };
   function refreshVisibleBudget() {
     if (document.visibilityState !== 'hidden' && canUse() && selectedMode() === 'agent' && catalogStatus === 'ready') refreshBudget(catalogOwner);
   }

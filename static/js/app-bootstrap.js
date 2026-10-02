@@ -22,7 +22,6 @@
   // Fortschritt lesen ausschliesslich hieraus (Server = cfg.PROVIDERS).
   window.MODEL_FAMILIES = parse("modelFamilies", []);
   window.MAX_RUN_FAMILIES = Number(config?.dataset.maxRunFamilies || 6);
-  window.FREE_LIMIT = Number(config?.dataset.freeLimit || 0);
 
   window.trackUmamiEvent = function (eventName, eventData = {}) {
     if (!eventName || !window.umami || typeof window.umami.track !== "function") return;
@@ -62,11 +61,6 @@
       // A resolved session owns the UI; a cached token must not overwrite it.
       if (authState?.known) return;
       if (!localStorage.getItem("id_token")) return;
-      const line = '<i class="skeleton skeleton-line skeleton-line-usage" role="img" aria-label="Loading usage"></i>';
-      const free = document.getElementById("freeUsageDisplay");
-      const deep = document.getElementById("deepUsageDisplay");
-      if (free) free.innerHTML = "Runs: " + line;
-      if (deep) deep.innerHTML = "Deep Think: " + line;
       const bookmarks = document.getElementById("bookmarksContainer");
       if (bookmarks) {
         bookmarks.innerHTML = '<div class="skeleton-group bookmarks-skeleton" role="status" aria-label="Loading chats">'

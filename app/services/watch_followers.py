@@ -100,9 +100,10 @@ def request_follow(share_id: str, email, db=None) -> dict:
 def confirm_follow(token: str, db=None, *, now=None) -> dict:
     db = db if db is not None else db_firestore
     payload = parse_token_payload(token)
-    if payload.get("un"):
+    if ("un" in payload or "tt" in payload or "wid" in payload
+            or not share_snapshots.is_valid_share_id(payload.get("sid"))):
         raise WatchError("invalid_token", "This link is invalid.")
-    share_id = str(payload.get("sid") or "")
+    share_id = payload["sid"]
     email = normalize_email(payload.get("em"))
     ref = db.collection(FOLLOWERS_COLLECTION).document(follower_id(share_id, email))
     share_ref = db.collection(share_snapshots.SHARES_COLLECTION).document(share_id)
@@ -172,9 +173,11 @@ def confirm_follow(token: str, db=None, *, now=None) -> dict:
 def unsubscribe_follow(token: str, db=None) -> dict:
     db = db if db is not None else db_firestore
     payload = parse_token_payload(token)
-    if not payload.get("un"):
+    if (type(payload.get("un")) is not int or payload["un"] != 1
+            or "tt" in payload or "wid" in payload
+            or not share_snapshots.is_valid_share_id(payload.get("sid"))):
         raise WatchError("invalid_token", "This link is invalid.")
-    share_id = str(payload.get("sid") or "")
+    share_id = payload["sid"]
     email = normalize_email(payload.get("em"))
     db.collection(FOLLOWERS_COLLECTION).document(follower_id(share_id, email)).delete()
     return {"share_id": share_id, "email": email}

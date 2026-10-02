@@ -1,37 +1,42 @@
 /* ==========================================================================
-   Sidebar quota panel
+   Sidebar quota: the ring in the account footer and the panel above it.
 
-   The footer ring + the panel above it are a *view* of the usage column that
-   already exists (#usageDisplay). That column stays the single source of
-   truth — app-core.js (renderUsageDisplay), firebase.js and watch.js keep
-   writing into it exactly as before, and a MutationObserver mirrors whatever
-   lands there into the ring and the bars. In Agent chats the same surface
-   projects the account-bound Agent token budget; runs()/deep() still expose
-   the original Consensus allowances.
+   Both are a view of one number: today's token account, shared by Compare,
+   Consensus, Deep Think and Agent (App.tokenBudget, token-budget.js). The
+   ring is a quiet 20 px glyph without text — a number inside a ring that
+   small either overflows or is unreadable. The exact value lives in the
+   ring's tooltip/aria-label and in the panel: one primary figure, a thin
+   bar, the reset time and one secondary line. Semantic colour sits only on
+   the ring's arc and the bar's fill when the account runs low, never on a
+   surface behind them.
 
-   Doing it this way means the redesign adds a surface without adding a second
-   place where "how many runs do I have left" can be computed — and therefore
-   without a second place where it can be wrong.
+   Watches keep their own allowance (watch.js writes #watchUsageDisplay);
+   the panel shows it as a separate, smaller line.
    ========================================================================== */
 (function () {
   "use strict";
 
-  var RING_LENGTH = 87.9; // 2πr for r=14, matches the stroke-dasharray in the markup
+  var STROKE = { ok: "var(--ink-2)", low: "var(--partial)", out: "var(--dispute)" };
 
   function el(id) {
     return document.getElementById(id);
   }
 
-  /* "Runs: 2 / 3" → {value: 2, limit: 3}; "Runs: Unlimited" → {unlimited: true}.
-     Returns null when the line is still a skeleton or was never filled. */
-  function parseLine(node) {
-    if (!node) return null;
-    var strong = node.querySelector("strong");
-    if (!strong) return null;
-    var text = (strong.textContent || "").trim();
+  function tokens() {
+    return window.App && window.App.tokenBudget ? window.App.tokenBudget : null;
+  }
+
+  function fmt(value) {
+    var api = tokens();
+    return api ? api.formatTokens(value) : String(value);
+  }
+
+  /* "Watches: 2 / 5" → {value: 2, limit: 5}; null while loading. */
+  function parseWatches() {
+    var strong = el("watchUsageDisplay") && el("watchUsageDisplay").querySelector("strong");
+    var text = strong ? (strong.textContent || "").trim() : "";
     if (!text || text === "...") return null;
     if (/unlimited/i.test(text)) return { unlimited: true };
-
     var parts = text.split("/");
     if (parts.length !== 2) return null;
     var value = Number(parts[0].trim());
@@ -40,158 +45,114 @@
     return { value: value, limit: limit };
   }
 
-  function renderRow(rowId, valueId, data) {
-    var row = el(rowId);
-    var valueEl = el(valueId);
-    if (!row || !valueEl) return;
-
-    if (!data) {
-      row.hidden = true;
-      return;
-    }
-
-    row.hidden = false;
-    var bar = row.querySelector(".quota-track i");
-    var track = row.querySelector(".quota-track");
-
-    if (data.unlimited) {
-      valueEl.textContent = "Unlimited";
-      if (bar) bar.style.setProperty("--p", "100%");
-      if (track) track.classList.remove("is-low", "is-out");
-      return;
-    }
-
-    valueEl.textContent = data.value + " / " + data.limit;
-    // The bar shows what is LEFT, not what is spent: a full bar is good news.
-    var share = Math.max(0, Math.min(1, data.value / data.limit));
-    if (bar) bar.style.setProperty("--p", (share * 100).toFixed(1) + "%");
-    if (track) {
-      track.classList.toggle("is-out", data.value <= 0);
-      track.classList.toggle("is-low", data.value > 0 && share <= 0.25);
-    }
+  // The mode the next message will run in, for the "one run ≈ x %" hint.
+  function nextRunMode() {
+    var mode = "consensus";
+    try {
+      var runMode = window.App.runMode;
+      mode = runMode && runMode.effective ? runMode.effective() : mode;
+    } catch (_) { /* default */ }
+    if (mode === "agent") return "agent";
+    var deep = el("deepSearchToggle");
+    if (deep && deep.checked) return "deep_think";
+    return mode === "compare" ? "compare" : "consensus";
   }
 
-  function renderRing(runs) {
+  var MODE_NAMES = { compare: "Compare run", consensus: "Consensus run", deep_think: "Deep Think run" };
+
+  function renderRing(view) {
     var trigger = el("quotaTrigger");
     var arc = el("quotaRingArc");
-    var value = el("quotaTriggerValue");
     if (!trigger) return;
-
-    // No usable number yet (guest, or still loading) → no ring at all.
-    if (!runs) {
+    // Guests and a still-loading account have no number: no ring at all.
+    if (!view) {
       trigger.hidden = true;
+      trigger.removeAttribute("data-state");
       return;
     }
-
     trigger.hidden = false;
-
-    if (runs.unlimited) {
-      if (arc) {
-        arc.setAttribute("stroke-dashoffset", "0");
-        arc.setAttribute("stroke", "var(--ink-2)");
-      }
-      if (value) value.textContent = "∞";
-      trigger.title = "Unlimited runs";
-      trigger.setAttribute("aria-label", "Unlimited runs");
-      return;
-    }
-
-    var share = Math.max(0, Math.min(1, runs.value / runs.limit));
+    trigger.dataset.state = view.state;
     if (arc) {
-      arc.setAttribute("stroke-dashoffset", String(RING_LENGTH * (1 - share)));
-      arc.setAttribute(
-        "stroke",
-        runs.value <= 0 ? "var(--dispute)" : share <= 0.25 ? "var(--partial)" : "var(--ink-2)"
-      );
+      arc.setAttribute("stroke-dashoffset", String((100 * (1 - view.share)).toFixed(2)));
+      arc.setAttribute("stroke", STROKE[view.state] || STROKE.ok);
     }
-    if (value) value.textContent = String(runs.value);
-
-    var label = runs.value + " of " + runs.limit + " runs left";
+    var label = view.percent + " of today’s allowance left · resets " + view.reset.clock;
+    if (view.stale) label += " (last confirmed value)";
     trigger.title = label;
     trigger.setAttribute("aria-label", label);
   }
 
-  // The Agent allowance resets at the start of the UTC day; say when that is here.
-  function agentResetTime() {
-    var next = new Date();
-    next.setUTCHours(24, 0, 0, 0);
-    try { return next.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }); }
-    catch (_) { return "00:00 UTC"; }
+  function renderPanel(view) {
+    var primary = el("quotaPrimary");
+    if (primary) primary.hidden = !view;
+    var detail = el("quotaDetail");
+    var foot = el("quotaFoot");
+    if (!view) {
+      if (detail) { detail.hidden = true; detail.textContent = ""; }
+      if (foot) {
+        var signedIn = !!(window.auth && window.auth.currentUser);
+        foot.textContent = signedIn ? "Loading your allowance…" : "";
+        foot.hidden = !signedIn;
+      }
+      return;
+    }
+
+    if (el("quotaPercent")) el("quotaPercent").textContent = view.percent;
+    var track = el("quotaTrack");
+    if (track) {
+      track.dataset.state = view.state;
+      var fill = track.querySelector("i");
+      if (fill) fill.style.setProperty("--p", (view.share * 100).toFixed(1) + "%");
+      track.setAttribute("aria-valuenow", String(Math.round(view.share * 100)));
+    }
+    if (el("quotaReset")) {
+      el("quotaReset").textContent = "Resets at " + view.reset.clock + " · in " + view.reset.relative;
+    }
+
+    if (detail) {
+      var line = fmt(view.left) + " of " + fmt(view.limit) + " tokens";
+      var mode = nextRunMode();
+      var share = mode !== "agent" && tokens() ? tokens().runShare(mode) : null;
+      if (share) line += " · a " + MODE_NAMES[mode] + " uses about " + share;
+      else if (mode === "agent") line += " · Agent books each model call";
+      detail.textContent = line;
+      detail.hidden = false;
+    }
+
+    if (foot) {
+      var notes = [];
+      if (view.reserved > 0) notes.push(fmt(view.reserved) + " held for work in progress.");
+      if (view.estimated > 0) notes.push(fmt(view.estimated) + " estimated until the provider reports the exact usage.");
+      if (view.state === "out") notes.push("Compare, Consensus and Agent share this allowance; it returns at the reset.");
+      if (view.stale) notes.push("Last confirmed value; it refreshes when the connection is back.");
+      foot.textContent = notes.join(" ");
+      foot.hidden = notes.length === 0;
+    }
+  }
+
+  function renderWatches() {
+    var row = el("quotaRowWatch");
+    var value = el("quotaWatchValue");
+    var watches = parseWatches();
+    if (!row) return;
+    row.hidden = !watches;
+    if (watches && value) value.textContent = watches.unlimited ? "Unlimited" : watches.value + " / " + watches.limit;
   }
 
   function sync() {
-    var runs = parseLine(el("freeUsageDisplay"));
-    var deep = parseLine(el("deepUsageDisplay"));
-    var watches = parseLine(el("watchUsageDisplay"));
+    var api = tokens();
+    var view = api ? api.view() : null;
+    renderRing(view);
+    renderPanel(view);
+    renderWatches();
 
-    var agent = window.App?.agentChat?.isSelected();
-    var budget = agent && window.App.agentChat.tokenBudget();
-    // Reservations change while calls run, but are not consumption. The ring
-    // follows measured usage; the panel separately explains available capacity.
-    // Estimates for started calls without final usage count as spent until the
-    // provider's measurement replaces them.
-    var estimated = Number.isFinite(budget?.estimated) ? budget.estimated : 0;
-    var unspent = Number.isFinite(budget?.used) ? budget.limit - budget.used - estimated
-      : budget?.remaining + (Number.isFinite(budget?.reserved) ? budget.reserved : 0);
-    var tokens = budget && Number.isFinite(unspent) && Number.isFinite(budget.limit) && budget.limit > 0
-      ? { value: Math.max(0, unspent), limit: budget.limit } : null;
-    var remaining = tokens ? Math.max(0, Math.min(100, Math.floor(tokens.value / tokens.limit * 100))) : null;
-    // 2,300 of 250,000 tokens is not "0%": anything left but under one
-    // percent reads "<1%"; only an empty allowance shows 0%.
-    var percent = remaining === 0 && tokens && tokens.value > 0 ? '<1%' : remaining + '%';
-    renderRow("quotaRowRuns", "quotaRunsValue", agent ? tokens : runs);
-    var rowTitle = el('quotaRowRuns')?.querySelector('b');
-    if (rowTitle) rowTitle.textContent = agent ? 'Agent tokens' : 'Runs';
-    renderRow("quotaRowDeep", "quotaDeepValue", deep);
-    renderRow("quotaRowWatch", "quotaWatchValue", watches);
-    renderRing(agent ? tokens : runs);
-    var trigger = el('quotaTrigger');
-    if (trigger) trigger.dataset.allowance = agent ? 'agent' : 'runs';
-    if (agent && tokens) {
-      var label = percent + ' of your daily Agent token budget unspent';
-      if (Number.isFinite(budget.remaining)) label += '; ' + budget.remaining.toLocaleString() + ' tokens available for new calls';
-      if (el('quotaTriggerValue')) el('quotaTriggerValue').textContent = percent;
-      if (trigger) { trigger.title = label; trigger.setAttribute('aria-label', label); }
-      if (el('quotaRunsValue')) {
-        el('quotaRunsValue').textContent = tokens.value.toLocaleString() + ' of ' + tokens.limit.toLocaleString();
-        el('quotaRunsValue').title = percent + ' of today\u2019s Agent tokens left';
-      }
-    }
-    if (agent) {
-      if (el('quotaRowDeep')) el('quotaRowDeep').hidden = true;
-      if (el('quotaRowWatch')) el('quotaRowWatch').hidden = true;
-    }
-
-    // Der Plan steht hier, nicht mehr neben "New comparison". Pro und Plus
-    // sprechen ueber das Badge daneben (user-tier.js blendet #proBadge ein und
-    // beschriftet es), also weicht das Textlabel dann zurueck statt den Namen
-    // doppelt zu schreiben. Nur Free hat kein Badge und braucht das Label.
+    // Der Plan steht im Kopf des Panels. Pro und Plus sprechen ueber das
+    // Badge daneben (user-tier.js), nur Free braucht das Textlabel.
     var planLabel = el("quotaPlanLabel");
     if (planLabel) {
       var tier = window.userTier || "free";
       planLabel.textContent = "Free";
       planLabel.hidden = tier !== "free";
-    }
-
-    // The countdown span carries the reset time ("Resets in 1 h 58 min").
-    var countdown = el("countdownDisplay");
-    var foot = el("quotaFoot");
-    if (foot) {
-      var resets = 'Resets at ' + agentResetTime() + ' your time (00:00 UTC).';
-      var text = agent ? (tokens ? tokens.value.toLocaleString() + ' of ' + tokens.limit.toLocaleString() + ' tokens left. ' + resets + ' Active calls temporarily reserve tokens.' : 'Agent allowance unavailable.')
-        : countdown ? (countdown.textContent || "").trim() : "";
-      if (agent && tokens && Number.isFinite(budget.reserved) && budget.reserved > 0) {
-        text = tokens.value.toLocaleString() + ' tokens unspent; ' + Math.max(0, budget.remaining).toLocaleString() + ' available for new calls. '
-          + budget.reserved.toLocaleString() + ' temporarily reserved for active calls and review. ' + resets;
-      }
-      if (agent && estimated > 0) {
-        text += ' ' + estimated.toLocaleString() + ' tokens are estimated for calls without reported final usage; measured usage replaces the estimate.';
-      } else if (agent && budget?.unknown > 0) {
-        text += ' Some completed calls have unavailable usage; they do not block the remaining allowance.';
-      }
-      if (agent && budget?.stale) text += ' Last confirmed allowance; reconnect to refresh.';
-      foot.textContent = text;
-      foot.hidden = !text;
     }
   }
 
@@ -199,24 +160,28 @@
     var panel = el("sidebarQuota");
     var trigger = el("quotaTrigger");
     if (!panel) return;
+    if (open) sync();
     panel.classList.toggle("is-open", open);
     if (trigger) trigger.setAttribute("aria-expanded", String(open));
   }
 
   function init() {
-    var source = el("usageDisplay");
     var trigger = el("quotaTrigger");
     var panel = el("sidebarQuota");
-    if (!source || !trigger || !panel) return;
+    if (!trigger || !panel) return;
 
     sync();
 
-    // characterData + subtree: renderUsageDisplay replaces children, other
-    // writers only touch text nodes. Both have to reach us.
-    new MutationObserver(sync).observe(source, {
-      childList: true,
-      subtree: true,
-      characterData: true
+    // Watches still arrive through the hidden #usageDisplay column.
+    var source = el("usageDisplay");
+    if (source) {
+      new MutationObserver(sync).observe(source, { childList: true, subtree: true, characterData: true });
+    }
+    window.addEventListener("consensio:token-budget", sync);
+    // The run hint follows the mode and Deep Think switches.
+    window.addEventListener("consensio:run-mode-change", sync);
+    document.addEventListener("change", function (event) {
+      if (event.target && event.target.id === "deepSearchToggle") sync();
     });
 
     trigger.addEventListener("click", function (event) {
@@ -244,20 +209,6 @@
     init();
   }
 
-  // Andere Module (z. B. "Run again") muessen sagen koennen, was ein Klick
-  // kostet. Sie lesen dafuer dieselbe Quelle wie der Ring, statt sich eine
-  // zweite Rechnung zu bauen: null = noch unbekannt (Gast oder ladend).
-  function runs() {
-    return parseLine(el("freeUsageDisplay"));
-  }
-
-  // Dieselbe Lesart fuer den Deep-Think-Topf. usage-limit.js braucht ihn, um
-  // vor dem Absenden sagen zu koennen, WELCHES Kontingent fehlt — und darf
-  // sich dafuer keine zweite Parse-Regel bauen.
-  function deep() {
-    return parseLine(el("deepUsageDisplay"));
-  }
-
   window.App = window.App || {};
-  window.App.sidebarQuota = { sync: sync, setOpen: setOpen, runs: runs, deep: deep };
+  window.App.sidebarQuota = { sync: sync, setOpen: setOpen };
 })();

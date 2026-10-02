@@ -46,10 +46,8 @@
       loginContainer.innerHTML = "";
       loginContainer.hidden = true;
     }
-    for (const id of ["freeUsageDisplay", "deepUsageDisplay", "watchUsageDisplay"]) {
-      const node = document.getElementById(id);
-      if (node) node.textContent = "";
-    }
+    const watchUsage = document.getElementById("watchUsageDisplay");
+    if (watchUsage) watchUsage.textContent = "";
     const bookmarks = document.getElementById("bookmarksContainer");
     if (bookmarks?.querySelector(".skeleton")) bookmarks.innerHTML = "";
 

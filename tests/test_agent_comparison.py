@@ -11,7 +11,7 @@ from app.services.agent_comparison import comparison_selection, review_is_bound,
 from app.services.agent_delegation import DelegationLoop
 from app.services.agent_delegation_config import defaults
 from app.services.agent_policy import AgentPolicy
-from app.services.llm.agent_client import AgentCompletion, measured_usage, resolve_agent_model
+from app.services.llm.agent_client import AgentCompletion, measured_usage, metered_model, resolve_agent_model
 from app.services.llm.provider_runtime import ProviderCancellation, ProviderCancelled, AnalysisBudgetExceeded
 from test_agent_runs import UID, AUTH, api, pending, receipt, store
 
@@ -235,7 +235,7 @@ def test_missing_tool_uses_existing_review_and_persists_checked_answer(store):
 
 
 def test_atomic_daily_budget_and_duplicate_settlement(store, monkeypatch):
-    monkeypatch.setenv("AGENT_DAILY_TOKEN_LIMIT", "100")
+    monkeypatch.setitem(agent_budget_config.DEFAULT_TIER_LIMITS, "pro", 100)
     loops = [make_loop(store, Script()) for _ in range(2)]
     def claim(loop):
         try:
@@ -270,7 +270,7 @@ def test_quota_rejection_distinguishes_empty_from_insufficient_reservation(remai
 
 def test_admin_budget_is_enforced_and_reset_isolated_from_inflight_settlement(store):
     config = agent_budget_config.store(store.db)
-    config.save(expected_revision=0, updated_by='admin', daily_token_limit=2000)
+    config.save(expected_revision=0, updated_by='admin', tier_limits={'pro': 2000})
     loop = make_loop(store, Script())
     params = dict(run_token=loop.run_token, policy=loop.policy.snapshot())
     with pytest.raises(agent_quota.AgentTokenBudgetExceeded):
@@ -294,6 +294,74 @@ def test_admin_budget_is_enforced_and_reset_isolated_from_inflight_settlement(st
 
 
 
+def _search(kwargs):
+    return next((t["parameters"] for t in kwargs.get("tools") or [] if t.get("type") == "openrouter:web_search"), None)
+
+
+@pytest.mark.parametrize("depth,limit", [("quick", 10_000_000), ("full", 10_000_000), ("full", 250_000)])
+def test_every_model_searches_with_one_configuration_and_judges_never_search(store, depth, limit):
+    from app.services.llm.engines import web_search_tool
+    script = Script(direct=True, depth=depth)
+    seen = []
+    base = script.factory
+    def factory():
+        completion = base()
+        stream = completion.stream
+        def recording(*, model, messages, **kwargs):
+            schema = (model.request_config.get("response_format") or {}).get("json_schema")
+            kind = ("orchestrator" if completion.step_id == "completion:0" else "answer" if completion.step_id.startswith("completion:")
+                    else "judge" if schema else "comparison")
+            seen.append((kind, model.model, kwargs["native_searches"], _search(kwargs), messages[0]["content"]))
+            yield from stream(model=model, messages=messages, **kwargs)
+        completion.stream = recording
+        return completion
+    script.factory = factory
+    from app.services.llm.provider_runtime import AnalysisBudget
+    agent_budget_config.store(store.db).save(expected_revision=0, updated_by="admin", tier_limits={"pro": limit})
+    # One family with its own search, one without.
+    loop = make_loop(store, script, models={"anthropic": "claude-haiku-4-5", "deepseek": "deepseek-v4-flash"})
+    loop.policy = AgentPolicy.for_chat(loop.config)
+    loop.costs.policy = loop.policy
+    loop.budget = AnalysisBudget(unlimited=True)
+    list(loop.run())
+    expected = lambda family, rounds: web_search_tool(family, max_uses=rounds, max_results=5,
+                                                       max_total_results=5 * rounds, max_characters=2000)["parameters"]
+    comparisons = {model: (rounds, tool, prompt) for kind, model, rounds, tool, prompt in seen if kind == "comparison"}
+    assert set(comparisons) == {"anthropic/claude-haiku-4.5", "deepseek/deepseek-v4-flash"}
+    # The same configuration as Consensus whatever the depth: OpenRouter picks
+    # the publisher's own search or Exa (engine "auto").
+    assert comparisons["anthropic/claude-haiku-4.5"][:2] == (1, expected("anthropic", 1))
+    assert comparisons["deepseek/deepseek-v4-flash"][:2] == (1, expected("deepseek", 1))
+    assert all(tool["engine"] == "auto" for _, tool, _ in comparisons.values())
+    assert all("Current date:" in prompt and "use web search once" in prompt for *_, prompt in comparisons.values())
+    # The orchestrator researches once for every answer model before comparing.
+    [(_, _, rounds, tool, _)] = [row for row in seen if row[0] == "orchestrator"]
+    assert rounds == 3 and tool == expected("anthropic", 3)
+    assert all(rounds == 0 for kind, _, rounds, _, _ in seen if kind in {"judge", "answer"})
+    assert any(kind == "judge" for kind, *_ in seen)
+    assert store.get_turn(UID, loop.chat_id, loop.turn_id)["status"] == "completed"
+
+
+def test_search_steps_down_by_rounds_and_reserves_one_bound_per_round():
+    from app.services.agent_delegation import smaller_search
+    from app.services.agent_costs import RunCosts, SEARCH_INPUT_TOKENS
+    assert [smaller_search(n) for n in (3, 2, 1)] == [1, 1, 0]
+    costs = RunCosts(AgentPolicy.for_chat({**defaults(), "enabled": True}))
+    messages = [{"role": "user", "content": "Q"}]
+    estimate = lambda model, n: costs.estimate(model, messages, native_searches=n)[0]
+    native, exa = resolve_agent_model("claude-haiku-4-5"), metered_model("deepseek-v4-flash")
+    for model in (native, exa):
+        none, one, three = estimate(model, 0), estimate(model, 1), estimate(model, 3)
+        assert none < one < three
+        # Same bound for every family: one round adds at most its search input
+        # (in its continuation) plus one more output segment.
+        assert one - 2 * none <= SEARCH_INPUT_TOKENS
+    # Never the whole context window; a small window caps the search input instead.
+    assert estimate(native, 1) < native.context_length // 2
+    small = replace(native, context_length=20_000, max_output_tokens=4_000)
+    assert estimate(small, 1) <= 2 * small.context_length
+
+
 @pytest.mark.parametrize("remaining,succeeds,context_room", [(40000, True, None), (100, False, None), (40000, False, 0)])
 def test_search_reservation_can_fall_back_without_extra_paid_claim(store, remaining, succeeds, context_room):
     calls = []
@@ -308,7 +376,6 @@ def test_search_reservation_can_fall_back_without_extra_paid_claim(store, remain
     loop = make_loop(store, Script())
     loop.factory = Completion
     loop.search_remaining = 1
-    loop.model = replace(loop.model, request_config={**loop.model.request_config, "_agent_bounded_search": True})
     if context_room is not None:
         loop.policy = replace(loop.policy, context_chars=len(json.dumps(loop.messages, ensure_ascii=False)) + context_room)
     ref = agent_quota.quota_ref(store.db, UID, agent_quota.day_key())
@@ -622,11 +689,12 @@ def test_comparison_models_answer_at_the_same_time(store):
 class Straggler(Script):
     """The Gemini answer only arrives once `release` is set (or never)."""
 
-    def __init__(self, *, release_on_answer, **kwargs):
+    def __init__(self, *, release_on_answer, partial="", **kwargs):
         import threading
         super().__init__(direct=True, **kwargs)
         self.release = threading.Event()
         self.release_on_answer = release_on_answer
+        self.partial = partial
         self.synthesis_evidence = None
 
     def factory(self):
@@ -648,6 +716,9 @@ class Straggler(Script):
                 elif not self.step_id.startswith("completion:") and model.model.startswith("google") \
                         and not model.request_config.get("response_format"):
                     cancellation = current_provider_cancellation()
+                    if script.partial:
+                        self.text = script.partial
+                        yield {"type": "delta", "text": script.partial}
                     while not script.release.wait(.02):
                         cancellation.raise_if_cancelled()
                     self.text, self.finish_reason = "Gemini: the second option is cheaper.", "stop"
@@ -694,6 +765,45 @@ def test_a_model_still_writing_at_the_check_is_stopped_and_reported(store, quick
     assert review["status"] == "partial" and review_is_bound(review, saved["consensus"])
     assert {"code": "models_unavailable", "count": 1} in review["checks"][0]["issues"]
     assert not any(t.is_alive() for t, _ in loop.comparison._running[comparison["id"]].values())
+
+
+def test_text_of_a_model_stopped_mid_answer_is_kept_as_incomplete_but_never_checked(store, quick_quorum):
+    script = Straggler(release_on_answer=False, partial="Gemini: the first half of an answer")
+    loop = make_loop(store, script, models=THREE)
+    list(loop.run())
+    saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
+    review = saved["agent_review"]
+    comparison = review["comparisons"][0]
+    [stopped] = comparison["failed_models"]
+    assert stopped["failure"]["code"] == "late_cutoff"
+    assert stopped["partial_text"] == "Gemini: the first half of an answer"
+    # Neither the synthesis nor the checked basis sees unfinished text.
+    assert "first half" not in script.synthesis_evidence
+    assert all("first half" not in a["text"] for a in comparison["answers"])
+    assert review["status"] == "partial" and review_is_bound(review, saved["consensus"])
+    view = store.delegation_view(UID, loop.chat_id, loop.turn_id)
+    [session] = [a for a in view["agents"] if a.get("partial")]
+    assert session["status"] == "stopped"
+    messages = store.delegation_view(UID, loop.chat_id, loop.turn_id, agent_id=session["id"])["messages"]
+    assert [m["kind"] for m in messages if m["kind"] == "partial"] == ["partial"]
+
+
+def test_partial_text_gives_way_before_the_review_exceeds_its_storage(store):
+    from app.services.agent_comparison import ComparisonTools
+    saved = []
+    class Loop:
+        class store:
+            @staticmethod
+            def save_review(*args):
+                saved.append(args[4])
+        uid = chat_id = turn_id = run_token = "x"
+        outgoing = type("Q", (), {"put_nowait": staticmethod(lambda item: None)})
+    tools = ComparisonTools(Loop(), {})
+    tools.comparisons = [{"id": "c", "answers": [], "failed_models": [
+        {"model": "m", "failure": {"code": "late_cutoff"}, "partial_text": "x" * 700_000}]}]
+    tools.checkpoint()
+    assert "partial_text" not in saved[0]["comparisons"][0]["failed_models"][0]
+    assert saved[0]["comparisons"][0]["failed_models"][0]["model"] == "m"
 
 
 def test_quorum_sizes():

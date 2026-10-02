@@ -14,8 +14,9 @@
 
 @import url('./public-tokens.css?v=20260906-palette1');
 @import url('./skeleton.css?v=20260909-skeleton1');
-@import url('./components-consensus-visuals.css?v=20260930-refresh');
-@import url('./demo-action.css?v=20260909-democta');
+@import url('./components-consensus-visuals.css?v=20261001-meter');
+@import url('./demo-action.css?v=20261001-glow');
+@import url('./send-glow.css?v=20261001-glow');
 
 *,
 *::before,
@@ -1116,6 +1117,10 @@ img { display: block; max-width: 100%; }
 /* Nothing to send until there is a question. */
 .lp-send.is-ready { opacity: 1; transform: none; }
 .lp-send.is-pressed { transform: scale(0.9); }
+
+/* The light below Send (send-glow.css) comes on once there is a question. */
+.lp-send.send-glow::before { opacity: 0; }
+.lp-send.send-glow.is-ready::before { opacity: 1; }
 .lp-send svg { width: 13px; height: 13px; }
 
 .lp-composer-foot {
@@ -2879,6 +2884,37 @@ img { display: block; max-width: 100%; }
 .dark-mode .lp-logo:hover .lp-logo-mark img[src*="zai"] { filter: invert(1); }
 
 .lp-logo span { color: var(--text-secondary); font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); }
+
+/* ZDR-Zeile unter den Logos: eine Eigenschaft, kein Siegel. Kein Badge, keine
+   Flaeche, keine Akzentfarbe -- nur das Schloss als leises Glyph und der Satz
+   in der Lesefarbe, damit er wie eine Tatsache klingt und nicht wie Werbung. */
+.lp-zdr {
+  max-width: 600px;
+  margin: clamp(28px, 4vw, 44px) auto 0;
+  color: var(--text-secondary);
+  font-size: var(--font-size-base);
+  line-height: 1.6;
+  text-align: center;
+  text-wrap: balance;
+}
+.lp-zdr strong { color: var(--text-primary); font-weight: var(--font-weight-semibold); }
+.lp-zdr-mark {
+  display: inline-block;
+  width: 15px;
+  height: 15px;
+  margin-right: 6px;
+  vertical-align: -2px;
+  color: var(--text-primary);
+}
+.lp-zdr a {
+  margin-left: 6px;
+  color: var(--text-primary);
+  white-space: nowrap;
+  text-decoration: underline;
+  text-decoration-color: var(--line);
+  text-underline-offset: 3px;
+}
+.lp-zdr a:hover { text-decoration-color: currentColor; }
 
 /* Inline-Links im Fliesstext einer Karte (z. B. die Kontaktadresse im
    Kosten-Abschnitt) muessen als Link lesbar sein; global gilt hier

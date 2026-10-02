@@ -1,2 +1,5 @@
 # Vendored npm assets must retain their upstream bytes on every platform.
 static/vendor/** -text -whitespace
+
+# Generated manifests and content-hashed assets must keep their build bytes.
+static/dist/** -text

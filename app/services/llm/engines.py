@@ -27,7 +27,7 @@ from app.services.llm.attachments import (
 )
 from app.services.llm.base import get_system_prompt
 from app.services.llm.citations import coerce_text, parse_openrouter_response, result_text
-from app.services.llm import completion
+from app.services.llm import completion, usage_meter
 from app.services.llm.provider_runtime import PROVIDER_HTTP_TIMEOUT, managed_provider_resource
 
 logger = logging.getLogger(__name__)
@@ -282,16 +282,25 @@ def query_model(
             benchmark_mode=benchmark_mode,
         )
         _log_model_selection(label, request_data["api_model"], deep_search, model_override)
-        response = requests.post(
-            OPENROUTER_CHAT_COMPLETIONS_URL,
-            headers=openrouter_headers(api_key),
-            json=request_data["payload"],
-            timeout=PROVIDER_HTTP_TIMEOUT,
-        )
-        with managed_provider_resource(response):
-            if response.status_code >= 400:
-                _raise_provider_http_status(response)
-            data = response.json()
+        metered = usage_meter.start_call(request_data["payload"])
+        try:
+            response = requests.post(
+                OPENROUTER_CHAT_COMPLETIONS_URL,
+                headers=openrouter_headers(api_key),
+                json=request_data["payload"],
+                timeout=PROVIDER_HTTP_TIMEOUT,
+            )
+            with managed_provider_resource(response):
+                if response.status_code >= 400:
+                    _raise_provider_http_status(response)
+                data = response.json()
+        except _ProviderHTTPStatusError:
+            metered.rejected()
+            raise
+        except BaseException:
+            metered.finish()
+            raise
+        metered.finish(data.get("usage") if isinstance(data, dict) else None)
         if data.get("error"):
             raise _ProviderResponseError(data["error"])
         choice = (data.get("choices") or [{}])[0] or {}

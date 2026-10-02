@@ -1,5 +1,12 @@
 # Messungen und gezielte Auditproben
 
+**Historische Messung vom 26.09.2026, Quellstand `145db25b`.** Die hier aufgeführten
+Prozente, Mutationen und Proben bleiben historische Messungen. Neue gezielte
+Negativkontrollen der Umsetzung stehen in den Implementierungsberichten; sie
+ersetzen diesen historischen Messlauf nicht. Aktuelle
+uninstrumentierte Läufe und neu versuchte Proben stehen im
+[Aktualisierungsbericht](current-review.md) und [Laufbericht](../findings.md).
+
 [Einstieg](README.md) · [Ausführungsmetadaten](execution.json) ·
 [Pythonbericht](python-coverage.json)
 
@@ -16,7 +23,7 @@
 | Partiell ausgeführte Branchstellen | 1.556 |
 | Python / coverage.py | 3.12.14 / 7.16.1 |
 
-Der bekannte Fehler ist weiterhin
+Der damalige Fehler war
 `tests/test_consensus_progress_ui.py::test_archived_turns_use_the_same_drawer_row_as_the_live_answer`
 ([G-028](gaps.md#g-028)). Alle zwölf Skips stammen aus `test_dev_cli.py` und
 benötigen Windows. Das [aufbewahrte Runnerprotokoll](evidence/python-branch-run.txt)
@@ -111,10 +118,10 @@ mit `detail: String` als Gegenbeleg nicht aus.
 
 Die früheren 515 bestandenen Vitestfälle, der Emulatorprimärlauf mit 9 Pass/3 Fail
 und die 267 nicht ausgeführten Browserfälle bleiben in
-[../execution.json](../execution.json) erhalten. Es wurde in diesem Folgeaudit
+[../execution-2026-09-26.json](../execution-2026-09-26.json) erhalten. Es wurde in diesem Folgeaudit
 keine neue JS-/Browser-/Emulator-Coverage erhoben. Die vorherige Java17-Umgebung
 entspricht außerdem nicht der für künftige Reproduktion dokumentierten
-Java21-Voraussetzung; der Report-Race bleibt bis WP-02 ungeklärt.
+Java21-Voraussetzung. Die spätere WP-02-Klärung steht im aktuellen Implementierungsbericht.
 
 Nächste Messung: JS-Branchinstrumentierung passend zur vorhandenen Vitestversion
 einrichten, Quellmodule und ausgeführte Bundles sauber zuordnen und

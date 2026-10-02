@@ -1,4 +1,14 @@
-"""UTC-day admission ledger. Measured tokens are input + output, never details.
+"""UTC-day token account. Measured tokens are input + output, never details.
+
+One ledger document per account and period serves Agent and the Consensus
+pipeline alike; the limit comes from the account tier (agent_budget_config).
+Agent reserves before every call and settles with measured usage. The pipeline
+is admitted per run against the expected cost of a typical run, holds that
+estimate while the run is young (``pipeline_holds``) and books the measured
+tokens of every finished operation afterwards. A run may therefore push the
+account slightly below zero; the next admission then fails. The overdraft is
+bounded because only runs with enough remaining budget are admitted and every
+admitted run holds its estimate against concurrent admissions.
 
 Reservations protect active calls only. A paid receipt is settled once;
 retries cannot release or charge it again.
@@ -14,6 +24,7 @@ for the measured tokens exactly once. Calls that provably never started are
 settled as a measured zero and release everything. There is no day-long lock.
 """
 import math
+import threading
 import time
 from datetime import datetime, timedelta, timezone
 
@@ -28,11 +39,42 @@ class AgentTokenBudgetExceeded(AnalysisBudgetExceeded):
         self.code = "agent_token_reservation" if remaining else "agent_tokens_exhausted"
         message = (f"The next model call needed a reservation of {required:,} tokens; {remaining:,} were available at that point. "
                    "Some allowance may be reserved for active calls. Completed calls release their reservations."
-                   if remaining else "No Agent tokens were available for the next model call. Active calls temporarily reserve tokens. The daily budget resets at 00:00 UTC.")
+                   if remaining else "No tokens were left in today's allowance for the next model call. Active calls temporarily reserve tokens. The daily allowance resets at 00:00 UTC.")
         super().__init__(message)
 
 
-def snapshot(db, uid):
+# Serialize short bookkeeping transactions per account inside each process.
+# Agent and pipeline write the same ledger document; Firestore still fences
+# concurrent processes, providers stay fully parallel.
+_ACCOUNT_WRITES = tuple(threading.RLock() for _ in range(128))
+
+
+def account_lock(uid):
+    return _ACCOUNT_WRITES[hash(uid) % len(_ACCOUNT_WRITES)]
+
+
+def _stored_tier(uid):
+    from app.core import security
+    return security.get_user_tier(uid)
+
+
+def _admin_role(uid):
+    from app.core import security
+    return security.is_user_admin(uid)
+
+
+def account_tier(uid, tier=None):
+    """Ledger tier of an account: admin role first, then the stored tier.
+
+    Routes that already resolved the tier pass it in. Both reads share the
+    cached user document and raise TierStatusUnavailable on storage errors;
+    callers map that to 503 instead of using another tier's limit.
+    """
+    tier = _stored_tier(uid) if tier is None else tier
+    return agent_budget_config.tier_key(tier, admin=_admin_role(uid))
+
+
+def snapshot(db, uid, *, tier=None):
     from app.services.agent_runs import AgentRunStore
     store = AgentRunStore(db)
     store.recover_allowance(uid)
@@ -51,15 +93,25 @@ def snapshot(db, uid):
         # is still measured instead of silently becoming final.
         from app.services import agent_usage_reconciliation
         agent_usage_reconciliation.schedule(db, uid)
-    return {**public(data, day.split('_')[0], limit=config['daily_token_limit']),
-            "observed_at": observed_at, "config_revision": config['revision']}
+    tier = account_tier(uid) if tier is None else agent_budget_config.tier_key(tier)
+    return {**public_snapshot(data, day, config, tier), "observed_at": observed_at}
 
 
-def remaining_tokens(db, uid):
+def public_snapshot(data, period, config, tier, *, now=None, limit=None):
+    """The one browser shape of the account, shared by Agent and the pipeline."""
+    tier = agent_budget_config.tier_key(tier)
+    limit = agent_budget_config.limit_for(config, tier) if limit is None else limit
+    return {**public(data, period.split('_')[0], limit=limit, now=now),
+            "observed_at": time.time_ns() // 1_000_000, "config_revision": config['revision'],
+            "tier": tier, "run_estimates": agent_budget_config.run_estimates_for(config, tier)}
+
+
+def remaining_tokens(db, uid, *, tier=None):
     """Plain read of today's unreserved allowance, without snapshot repairs."""
     config = agent_budget_config.get_config(db)
+    tier = account_tier(uid) if tier is None else tier
     data = quota_ref(db, uid, period_key(config)).get().to_dict() or {}
-    return _remaining(data, config['daily_token_limit'])
+    return _remaining(data, agent_budget_config.limit_for(config, tier))
 
 
 def _previous_day_has_estimates(db, uid, day):
@@ -76,7 +128,8 @@ def _previous_day_has_estimates(db, uid, day):
 
 
 def daily_limit():
-    return agent_budget_config.default_limit()
+    """Fallback for pure ledger helpers called without a limit (tests, scripts)."""
+    return agent_budget_config.DEFAULT_TIER_LIMITS["pro"]
 
 
 def day_key():
@@ -119,8 +172,89 @@ def unknown_estimate(reserved, usage):
     return max(provisional_lower_bound(usage), floor)
 
 
-def _remaining(data, limit):
-    return max(0, limit - data.get("used", 0) - data.get("reserved", 0) - data.get("estimated", 0))
+# A pipeline run holds its expected cost against concurrent admissions for at
+# most this long; measured bookings shrink the hold, expiry drops the rest.
+PIPELINE_HOLD_SECONDS = 10 * 60
+MAX_PIPELINE_HOLDS = 32
+
+
+class PipelineCapacityExceeded(Exception):
+    """Too many young pipeline runs at once on one account."""
+
+
+def _now(now=None):
+    return time.time() if now is None else now
+
+
+def active_holds(data, now=None):
+    now = _now(now)
+    holds = data.get("pipeline_holds") or {}
+    return {key: dict(hold) for key, hold in holds.items()
+            if isinstance(hold, dict) and type(hold.get("tokens")) is int and hold["tokens"] > 0
+            and isinstance(hold.get("expires_at"), (int, float)) and hold["expires_at"] > now}
+
+
+def held_tokens(data, now=None):
+    return sum(hold["tokens"] for hold in active_holds(data, now).values())
+
+
+def spent_tokens(data):
+    """Measured plus estimated consumption of both modes; holds excluded."""
+    return data.get("used", 0) + data.get("estimated", 0) + data.get("pipeline_estimated", 0)
+
+
+def _remaining(data, limit, now=None):
+    return max(0, limit - spent_tokens(data) - data.get("reserved", 0) - held_tokens(data, now))
+
+
+def admit_run(data, run_id, estimate, *, limit, now=None):
+    """Admit one pipeline run if the remaining budget covers its expected cost."""
+    data = normalize(data)
+    now = _now(now)
+    holds = active_holds(data, now)
+    if run_id in holds:
+        return data
+    remaining = _remaining(data, limit, now)
+    if estimate > remaining:
+        raise AgentTokenBudgetExceeded(remaining, estimate, reserved=data.get("reserved", 0) + held_tokens(data, now))
+    if len(holds) >= MAX_PIPELINE_HOLDS:
+        raise PipelineCapacityExceeded("Too many runs are starting at once")
+    holds[run_id] = {"tokens": int(estimate), "expires_at": now + PIPELINE_HOLD_SECONDS}
+    data["pipeline_holds"] = holds
+    data["pipeline_runs"] = data.get("pipeline_runs", 0) + 1
+    data["revision"] = data.get("revision", 0) + 1
+    return data
+
+
+def book_run(data, run_id, *, measured, estimated, now=None):
+    """Book one finished pipeline operation. It may overdraw the account."""
+    data = normalize(data)
+    measured, estimated = max(0, int(measured)), max(0, int(estimated))
+    data["used"] = data.get("used", 0) + measured
+    data["pipeline_used"] = data.get("pipeline_used", 0) + measured
+    data["pipeline_estimated"] = data.get("pipeline_estimated", 0) + estimated
+    holds = active_holds(data, now)
+    if run_id in holds:
+        left = holds[run_id]["tokens"] - measured - estimated
+        if left > 0:
+            holds[run_id]["tokens"] = left
+        else:
+            holds.pop(run_id)
+    data["pipeline_holds"] = holds
+    data["revision"] = data.get("revision", 0) + 1
+    return data
+
+
+def release_run(data, run_id, *, now=None):
+    """Drop a run's remaining hold (released before work, or finished)."""
+    data = normalize(data)
+    holds = active_holds(data, now)
+    if run_id not in holds:
+        return data
+    holds.pop(run_id)
+    data["pipeline_holds"] = holds
+    data["revision"] = data.get("revision", 0) + 1
+    return data
 
 
 def normalize(data):
@@ -182,10 +316,12 @@ def reconcile(data, estimate, actual):
     return data
 
 
-def public(data, day=None, *, limit=None):
+def public(data, day=None, *, limit=None, now=None):
     data = normalize(data)
     limit = daily_limit() if limit is None else limit
+    # `estimated` is everything charged without a final measurement (both
+    # modes), `reserved` everything held for running work (both modes).
     return {"day": day or day_key(), "revision": data.get("revision", 0), "limit": limit, "used": data.get("used", 0),
-            "reserved": data.get("reserved", 0), "unknown": data.get("unknown", 0),
-            "estimated": data.get("estimated", 0),
-            "remaining": _remaining(data, limit)}
+            "reserved": data.get("reserved", 0) + held_tokens(data, now), "unknown": data.get("unknown", 0),
+            "estimated": data.get("estimated", 0) + data.get("pipeline_estimated", 0),
+            "remaining": _remaining(data, limit, now)}

@@ -244,15 +244,13 @@ def mark_brief_sent(uid: str, *, now=None, db=None):
     db.collection(BRIEFS_COLLECTION).document(uid).update({"last_sent_at": now or utcnow()})
 
 
-SCORE_EVENT_DELTA = drift_signal.SCORE_BAND_DELTA
-
-
 def collect_brief_items(uid: str, *, since: datetime, db=None) -> tuple[list[dict], int]:
     """Digest rows for every watch of the user + count of notable new events.
 
     Notable = a history point after `since` that :mod:`app.services.drift_signal`
-    grades as material — the same signal the changes_only watch mail and the
-    page badge use, so the brief cannot count movement the page does not show.
+    grades as moved, or a goal resolved since then -- the same events the
+    watch mails and the page report, so the brief cannot count movement the
+    page does not show.
     """
     db = db if db is not None else db_firestore
     watches = watch_service.list_watches(uid, db=db, include_history=True)
@@ -269,11 +267,17 @@ def collect_brief_items(uid: str, *, since: datetime, db=None) -> tuple[list[dic
                 continue
             if ts <= since:
                 continue
-            # `history` is already classified by serialize_history_points.
             notable = point.get("trigger") == "changed"
             changes += 1 if notable else 0
             new_points.append({**point, "notable": notable})
-        previous_score = history[-2].get("agreement_score") if len(history) >= 2 else None
+        resolution = watch.get("resolution") or None
+        resolved_now = False
+        if resolution:
+            try:
+                resolved_now = datetime.fromisoformat(resolution.get("at") or "") > since
+            except ValueError:
+                resolved_now = False
+        changes += 1 if resolved_now else 0
         items.append({
             "question": watch.get("question") or "",
             "share_path": watch.get("share_path") or "",
@@ -282,8 +286,8 @@ def collect_brief_items(uid: str, *, since: datetime, db=None) -> tuple[list[dic
             "run_weekday": watch.get("run_weekday") or "",
             "run_time": watch.get("run_time") or "",
             "timezone": watch.get("timezone") or "",
-            "score": watch.get("last_agreement_score"),
-            "previous_score": previous_score,
+            "goal": watch.get("condition") or "",
+            "resolution": resolution if resolved_now else None,
             "new_points": new_points,
             "next_run_at": watch.get("next_run_at") or "",
             "last_run_at": watch.get("last_run_at") or "",

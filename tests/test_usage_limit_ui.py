@@ -64,12 +64,12 @@ def test_blocked_card_sits_where_the_answer_would_be():
 
 
 def test_server_error_codes_are_actually_matched():
-    """chat.py sendet "total_usage_limit_exceeded" bzw.
-    "deep_think_usage_limit_exceeded". Ein Vergleich auf
-    "usage_limit_exceeded" trifft deshalb NIE — genau dieser Vergleich stand
-    bis 2026-08-01 in consensus-run.js und machte die Absage dort stumm."""
+    """chat.py sendet seit dem gemeinsamen Tokenkonto "token_budget_exhausted".
+    Ein Vergleich auf einen anderen festen Code traefe NIE — genau so ein
+    Vergleich stand bis 2026-08-01 in consensus-run.js und machte die Absage
+    dort stumm."""
     chat = read("app/api/routers/chat.py")
-    assert 'f"{exc.limiting_bucket}_usage_limit_exceeded"' in chat
+    assert '"error_code": "token_budget_exhausted"' in chat
 
     consensus = read("static/js/consensus-run.js")
     assert 'error_code === "usage_limit_exceeded"' not in consensus
@@ -78,7 +78,7 @@ def test_server_error_codes_are_actually_matched():
 
     # Ein Detektor fuer die ganze App, nicht drei divergierende Kopien.
     usage = read("static/js/usage-limit.js")
-    assert "deep_think" in usage and "total" in usage
+    assert 'code === "token_budget_exhausted"' in usage
     assert "window.App.usageLimit?.isLimitError" in read("static/js/query-send.js")
 
 
@@ -132,37 +132,40 @@ def test_preflight_stays_conservative():
     usage = read("static/js/usage-limit.js")
 
     assert "if (opts.useOwnKeys) return null;" in usage
-    assert "runs && !runs.unlimited && runs.value <= 0" in usage
-    assert "deep && !deep.unlimited && deep.value <= 0" in usage
+    # Only a definite "does not fit" blocks; canStart() is null while unknown.
+    assert 'api.canStart(currentMode(opts)) === false ? "tokens" : null' in usage
 
 
 def test_quota_numbers_have_a_single_source():
-    """Die Karte liest dieselbe Zeile wie Ring und Panel (#usageDisplay ueber
-    sidebar-quota). Eine zweite Rechnung waere eine zweite Stelle, an der die
-    Zahl falsch sein kann."""
+    """Karte, Ring, Panel und Agent lesen dasselbe Tokenkonto
+    (App.tokenBudget). Eine zweite Rechnung waere eine zweite Stelle, an der
+    die Zahl falsch sein kann."""
     quota = read("static/js/sidebar-quota.js")
     usage = read("static/js/usage-limit.js")
+    agent = read("static/js/agent-chat.js")
 
-    assert "function deep()" in quota
-    assert "deep: deep" in quota
-    assert "window.App.sidebarQuota" in usage
-    assert "parseLine(el(\"deepUsageDisplay\"))" in quota
+    assert "window.App.tokenBudget" in usage
+    assert "api.view()" in quota
+    assert "App.tokenBudget?.apply?.(budget, { uid })" in agent
+    assert loads_before("token-budget.js", "firebase.js")
+    assert loads_before("token-budget.js", "sidebar-quota.js")
 
 
 def test_card_names_the_reset_and_never_sells_anything():
     """consens.io ist waehrend des Tests gratis — es gibt keinen Kauf-Ausweg.
     Die Karte sagt deshalb, wann das Kontingent zurueckkommt, und rechnet
-    dafuer auf UTC-Tagen wie usage_repository.py."""
+    dafuer auf UTC-Tagen wie das Tokenkonto (agent_quota.py)."""
     usage = read("static/js/usage-limit.js")
+    budget = read("static/js/token-budget.js")
 
-    assert "getUTCDate() + 1" in usage
+    assert "getUTCDate() + 1" in budget
     assert "resets at " in usage
     for sales_word in ("Upgrade", "upgrade", "Buy", "Subscribe", "Pricing"):
         assert sales_word not in usage, f"the card must not sell: {sales_word}"
 
 
 def test_deep_think_exhaustion_offers_the_cheaper_run():
-    """Deep Think hat ein eigenes, kleineres Kontingent. Ist nur das leer,
+    """Deep Think ist der groesste Lauf. Reicht das Konto nur dafuer nicht,
     ist der normale Lauf noch da — und das ist ein Umweg, kein Stopp."""
     usage = read("static/js/usage-limit.js")
     shell = read("static/css/shell.css")

@@ -10,6 +10,7 @@ import re
 import smtplib
 import ssl
 from email.message import EmailMessage
+from urllib.parse import urlsplit
 from datetime import datetime, timezone
 
 from app.core.observability import safe_exception
@@ -148,84 +149,6 @@ def _split_lead(summary) -> tuple[str, str]:
     return text[:match.start()], text[match.end():]
 
 
-def _score_fact(old_score, new_score) -> dict | None:
-    old_known = isinstance(old_score, (int, float))
-    new_known = isinstance(new_score, (int, float))
-    if not new_known:
-        return None
-    if not old_known:
-        return {"label": "Agreement", "value": f"{int(new_score)}/100", "note": "First measurement"}
-    delta = int(new_score) - int(old_score)
-    note = "unchanged" if not delta else f"{'+' if delta > 0 else '−'}{abs(delta)} points"
-    return {
-        "label": "Agreement",
-        "value": f"{int(old_score)} → {int(new_score)}",
-        "note": note,
-    }
-
-
-def _direction_fact(direction) -> dict | None:
-    """Model movement from the opinion map (Stable / Evolving / Turning)."""
-    if not isinstance(direction, dict):
-        return None
-    label = _normalized(direction.get("shift_label") or direction.get("label"))
-    score = direction.get("shift_score")
-    if not label:
-        return None
-    return {
-        "label": "Model positions",
-        "value": label,
-        "note": f"{int(score)}/100 movement" if isinstance(score, (int, float)) else "",
-    }
-
-
-def _severity_fact(changed: bool, severity) -> dict:
-    if not changed:
-        return {"label": "Content", "value": "No material change", "note": ""}
-    level = _normalized(severity).lower()
-    return {
-        "label": "Content",
-        "value": "Major change" if level == "major" else "Minor change",
-        "note": "",
-    }
-
-
-def _facts_html(facts: list) -> str:
-    """One quiet strip of two or three numbers, side by side."""
-    cells = [fact for fact in facts if fact]
-    if not cells:
-        return ""
-    width = 100 // len(cells)
-    rendered = "".join(
-        f'<td style="padding:12px 14px;vertical-align:top;width:{width}%">'
-        f'<div style="font-size:11px;font-weight:700;letter-spacing:.07em;'
-        f'text-transform:uppercase;color:{MUTED}">{html.escape(fact["label"])}</div>'
-        f'<div style="margin-top:3px;font-size:18px;font-weight:700;color:{INK}">'
-        f'{html.escape(str(fact["value"]))}</div>'
-        + (
-            f'<div style="margin-top:1px;font-size:12px;color:{MUTED}">'
-            f'{html.escape(str(fact["note"]))}</div>' if fact.get("note") else ""
-        )
-        + "</td>"
-        for fact in cells
-    )
-    return (
-        f'<div style="margin:18px 0;background:{PANEL};border-radius:12px">'
-        '<table role="presentation" cellpadding="0" cellspacing="0" border="0" '
-        f'style="width:100%;border-collapse:collapse"><tr>{rendered}</tr></table></div>'
-    )
-
-
-def _facts_plain(facts: list) -> str:
-    lines = []
-    for fact in facts:
-        if not fact:
-            continue
-        note = f" ({fact['note']})" if fact.get("note") else ""
-        lines.append(_ascii(f"{fact['label']}: {fact['value']}{note}"))
-    return "\n".join(lines)
-
-
 def _question_html(question, url: str, *, label: str = "Question") -> str:
     text, truncated = _question_view(question)
     more = (
@@ -295,87 +218,203 @@ def _shell_html(*, eyebrow: str, heading: str, preheader: str, body: str,
     )
 
 
-def build_change_message(*, recipient: str, question: str, old_score, new_score,
-                         summary: str, share_url: str, unsubscribe_url: str,
-                         severity: str = "major", direction=None) -> EmailMessage:
-    clipped_question = _normalized(question)
-    subject_question = clipped_question[:72] + ("…" if len(clipped_question) > 72 else "")
-    subject = f"Consensus changed: {subject_question}"
-    lead, _rest = _split_lead(summary)
-    facts = [
-        _score_fact(old_score, new_score),
-        _direction_fact(direction),
-        _severity_fact(True, severity),
-    ]
+def _subject_clip(text, limit: int = 72) -> str:
+    clipped = _normalized(text)
+    return clipped[:limit] + ("…" if len(clipped) > limit else "")
+
+
+# Why a check moved, in the words of the evidence model
+# (docs/watch-evidence-model.md). A cause without a sentence is not shown.
+_CAUSE_SENTENCES = {
+    "new_evidence": "New evidence: a source the earlier answer did not have.",
+    "reassessment": (
+        "Same evidence, read differently by the models, and a second check "
+        "confirmed that reading before this message was sent."
+    ),
+    "model_change": (
+        "The answering models changed, and a second check confirmed the new "
+        "reading before this message was sent."
+    ),
+}
+
+
+def _host(url: str) -> str:
+    return (urlsplit(str(url or "")).hostname or "").lower().removeprefix("www.")
+
+
+def _clean_sources(sources) -> list[dict]:
+    clean = []
+    for item in sources or []:
+        if isinstance(item, dict) and str(item.get("url") or "").startswith(("http://", "https://")):
+            clean.append({
+                "title": _normalized(item.get("title"))[:160] or _host(item["url"]),
+                "url": str(item["url"]),
+            })
+    return clean[:4]
+
+
+def _why_html(cause, sources) -> str:
+    sentence = _CAUSE_SENTENCES.get(str(cause or ""))
+    items = _clean_sources(sources)
+    if not sentence and not items:
+        return ""
+    links = "".join(
+        f'<li style="margin:4px 0"><a href="{html.escape(item["url"])}" '
+        f'style="color:{INK}">{html.escape(item["title"])}</a> '
+        f'<span style="color:{MUTED}">· {html.escape(_host(item["url"]))}</span></li>'
+        for item in items
+    )
+    return (
+        f'<div style="margin:18px 0 0">'
+        f'<p style="{_EYEBROW_STYLE}">Why</p>'
+        + (f'<p style="margin:5px 0 0;color:{INK_SOFT}">{html.escape(sentence)}</p>' if sentence else "")
+        + (f'<ul style="margin:8px 0 0;padding-left:18px">{links}</ul>' if links else "")
+        + "</div>"
+    )
+
+
+def _why_plain(cause, sources) -> str:
+    sentence = _CAUSE_SENTENCES.get(str(cause or ""))
+    items = _clean_sources(sources)
+    if not sentence and not items:
+        return ""
+    lines = ["WHY"] + ([sentence] if sentence else [])
+    lines += [f"- {item['title']} ({item['url']})" for item in items]
+    return _ascii("\n".join(lines))
+
+
+def _held_html(held) -> str:
+    text = _normalized(held)
+    if not text:
+        return ""
+    return (
+        f'<div style="margin:18px 0 0"><p style="{_EYEBROW_STYLE}">What held</p>'
+        f'<p style="margin:5px 0 0;color:{INK_SOFT}">{html.escape(text)}</p></div>'
+    )
+
+
+def _held_plain(held) -> str:
+    text = _normalized(held)
+    return _ascii(f"WHAT HELD\n{text}") if text else ""
+
+
+def _goal_html(goal, status_line) -> str:
+    goal = _normalized(goal)
+    if not goal:
+        return ""
+    return (
+        f'<div style="margin:18px 0 0;padding:14px 16px;background:{PANEL};border-radius:12px">'
+        f'<p style="{_EYEBROW_STYLE}">Waiting for</p>'
+        f'<p style="margin:5px 0 0;font-weight:600;color:{INK}">{html.escape(goal)}</p>'
+        + (
+            f'<p style="margin:4px 0 0;font-size:14px;color:{MUTED}">{html.escape(status_line)}</p>'
+            if status_line else ""
+        )
+        + "</div>"
+    )
+
+
+def _goal_plain(goal, status_line) -> str:
+    goal = _normalized(goal)
+    if not goal:
+        return ""
+    return _ascii(f"WAITING FOR\n{goal}" + (f"\n{status_line}" if status_line else ""))
+
+
+def _goal_status_line(delta: dict) -> str:
+    reason = _normalized(delta.get("goal_reason"))
+    if delta.get("goal_status") == "not_met":
+        return "Not yet. " + reason if reason else "Not yet."
+    if delta.get("goal_status") == "met":
+        return "Reported met, re-checking before the watch closes."
+    return reason
+
+
+def _delta_parts(delta: dict, *, notable: bool = True) -> tuple[str, str]:
+    """The change log every Watch and follower mail is built from.
+
+    What changed, why (with the sources that carry it), what held, and where
+    the goal stands. No agreement score: it steps between fixed grades and
+    is not a reason to write to anyone.
+    """
+    summary = delta.get("summary") or ""
+    goal_line = _goal_status_line(delta)
+    html_part = (
+        _change_block_html("What changed", summary, notable=notable)
+        + _why_html(delta.get("cause"), delta.get("sources"))
+        + _held_html(delta.get("held"))
+        + _goal_html(delta.get("goal"), goal_line)
+    )
+    plain_part = "\n\n".join(part for part in (
+        _change_block_plain("What changed", summary),
+        _why_plain(delta.get("cause"), delta.get("sources")),
+        _held_plain(delta.get("held")),
+        _goal_plain(delta.get("goal"), goal_line),
+    ) if part)
+    return html_part, plain_part
+
+
+def build_change_message(*, recipient: str, question: str, delta: dict,
+                         share_url: str, unsubscribe_url: str) -> EmailMessage:
+    subject = f"Moved: {_subject_clip(question)}"
+    lead, _rest = _split_lead(delta.get("summary"))
+    delta_html, delta_plain = _delta_parts(delta)
     plain = (
-        "Consensus Watch detected a material change.\n\n"
-        + _change_block_plain("What changed", summary) + "\n\n"
-        + _facts_plain(facts) + "\n\n"
+        "Your Consensus Watch found a change backed by evidence.\n\n"
+        + delta_plain + "\n\n"
         + _question_plain(question) + "\n\n"
-        f"View history: {share_url}\nUnsubscribe: {unsubscribe_url}\n"
+        f"See what changed: {share_url}\nPause this watch: {unsubscribe_url}\n"
     )
     body = (
-        _change_block_html("What changed", summary)
-        + _facts_html(facts)
-        + _question_html(question, share_url)
+        delta_html
+        + f'<div style="margin-top:22px">{_question_html(question, share_url)}</div>'
         + _button_html(share_url, "See what changed")
     )
     html_body = _shell_html(
-        eyebrow="Consensus Watch · Material change",
-        heading="The consensus changed",
-        preheader=lead or "A watched question moved.",
+        eyebrow="Consensus Watch · Moved",
+        heading="The answer moved",
+        preheader=lead or "A watched question moved on new evidence.",
         body=body,
         footer=(
-            "You received this service message because you enabled Consensus Watch. "
+            "Consensus Watch only writes when a change is backed by a source or "
+            "confirmed by a second check. "
             f'<a href="{html.escape(unsubscribe_url)}">Pause this watch</a>.'
         ),
     )
     return _base_message(recipient, subject, plain, html_body)
 
 
-def build_run_message(*, recipient: str, question: str, agreement_score,
-                      consensus: str, changed: bool, severity: str,
-                      summary: str, share_url: str, unsubscribe_url: str,
-                      old_score=None, direction=None) -> EmailMessage:
+def build_run_message(*, recipient: str, question: str, delta: dict, moved: bool,
+                      consensus: str, share_url: str, unsubscribe_url: str) -> EmailMessage:
     """Full-content notification for users who opted into every successful run."""
-    clipped_question = _normalized(question)
-    subject_question = clipped_question[:72] + ("…" if len(clipped_question) > 72 else "")
-    subject = f"New consensus: {subject_question}"
+    subject = f"New check: {_subject_clip(question)}"
     consensus_text = str(consensus or "").strip()
-    change_text = summary if changed and summary else (
-        "This check found a material change." if changed
-        else "No material content change since the last check."
-    )
-    facts = [
-        _score_fact(old_score, agreement_score),
-        _direction_fact(direction),
-        _severity_fact(changed, severity),
-    ]
+    if not moved:
+        delta = {**delta, "summary": "Nothing moved on evidence in this check.", "cause": "", "sources": []}
+    delta_html, delta_plain = _delta_parts(delta, notable=moved)
     plain = (
         "Consensus Watch completed a new check.\n\n"
-        + _change_block_plain("What changed", change_text) + "\n\n"
-        + _facts_plain(facts) + "\n\n"
+        + delta_plain + "\n\n"
         + _question_plain(question) + "\n\n"
-        f"NEW CONSENSUS\n\n{consensus_text}\n\n"
-        f"View history: {share_url}\nUnsubscribe: {unsubscribe_url}\n"
+        f"THE ANSWER\n\n{consensus_text}\n\n"
+        f"View history: {share_url}\nPause this watch: {unsubscribe_url}\n"
     )
     safe_consensus = html.escape(consensus_text).replace("\n", "<br>")
     body = (
-        _change_block_html("What changed", change_text, notable=bool(changed))
-        + _facts_html(facts)
-        + _question_html(question, share_url)
+        delta_html
+        + f'<div style="margin-top:22px">{_question_html(question, share_url)}</div>'
         + f'<div style="margin-top:20px;padding:18px;border:1px solid {BORDER};border-radius:12px">'
-        f'<p style="{_EYEBROW_STYLE}">New consensus</p>'
+        f'<p style="{_EYEBROW_STYLE}">The answer</p>'
         f'<div style="margin-top:8px;color:{INK_SOFT}">{safe_consensus}</div></div>'
         + _button_html(share_url, "View watch page and history")
     )
     html_body = _shell_html(
         eyebrow="Consensus Watch · Completed check",
-        heading="A new consensus is in",
-        preheader=_split_lead(change_text)[0],
+        heading="The answer moved" if moved else "Checked again",
+        preheader=_split_lead(delta.get("summary"))[0],
         body=body,
         footer=(
-            "You chose to receive every new consensus result. "
+            "You chose to receive every check. "
             f'<a href="{html.escape(unsubscribe_url)}">Pause this watch</a>.'
         ),
         width=680,
@@ -383,51 +422,46 @@ def build_run_message(*, recipient: str, question: str, agreement_score,
     return _base_message(recipient, subject, plain, html_body)
 
 
-def build_condition_message(*, recipient: str, question: str, condition: str,
-                            reason: str, agreement_score, consensus: str,
-                            share_url: str, unsubscribe_url: str,
-                            old_score=None, direction=None) -> EmailMessage:
-    """Notification emitted once when a user-defined condition becomes true."""
-    clipped_condition = _normalized(condition)[:500]
+def build_condition_message(*, recipient: str, question: str, goal: str, reason: str,
+                            sources, consensus: str, share_url: str,
+                            unsubscribe_url: str) -> EmailMessage:
+    """Sent once, when the goal a watch was waiting for is met on evidence."""
+    clipped_goal = _normalized(goal)[:500]
     clipped_reason = _normalized(reason)[:400]
-    subject_condition = clipped_condition[:72] + ("…" if len(clipped_condition) > 72 else "")
-    subject = f"Watch condition met: {subject_condition}"
+    subject = f"Resolved: {_subject_clip(clipped_goal)}"
     consensus_text = str(consensus or "").strip()
-    facts = [
-        _score_fact(old_score, agreement_score),
-        _direction_fact(direction),
-    ]
-    plain = (
-        "Your Consensus Watch condition is now met.\n\n"
-        + _change_block_plain("Why it triggered", clipped_reason) + "\n\n"
-        f"CONDITION\n{clipped_condition}\n\n"
-        + _facts_plain(facts) + "\n\n"
-        + _question_plain(question) + "\n\n"
-        f"NEW CONSENSUS\n\n{consensus_text}\n\n"
-        f"Open watch page: {share_url}\nPause this watch: {unsubscribe_url}\n"
-    )
+    items = _clean_sources(sources)
+    plain = "\n\n".join(part for part in (
+        "The goal your Consensus Watch was waiting for is met. The watch is complete.",
+        _goal_plain(clipped_goal, ""),
+        _change_block_plain("Why", clipped_reason),
+        _why_plain("", items),
+        _question_plain(question),
+        f"THE ANSWER\n\n{consensus_text}" if consensus_text else "",
+        f"Open the watch: {share_url}",
+    ) if part) + "\n"
     safe_consensus = html.escape(consensus_text).replace("\n", "<br>")
     body = (
-        _change_block_html("Why it triggered", clipped_reason)
-        + f'<div style="margin:18px 0;padding:14px 16px;background:#eef8f1;border-radius:12px">'
-        f'<p style="{_EYEBROW_STYLE}">Your condition</p>'
-        f'<p style="margin:5px 0 0;color:{INK}">{html.escape(clipped_condition)}</p></div>'
-        + _facts_html(facts)
-        + _question_html(question, share_url)
-        + f'<div style="margin-top:20px;padding:18px;border:1px solid {BORDER};border-radius:12px">'
-        f'<p style="{_EYEBROW_STYLE}">New consensus</p>'
-        f'<div style="margin-top:8px;color:{INK_SOFT}">{safe_consensus}</div></div>'
-        + _button_html(share_url, "Open watch page")
+        _goal_html(clipped_goal, "")
+        + _change_block_html("Why", clipped_reason)
+        + _why_html("", items)
+        + f'<div style="margin-top:22px">{_question_html(question, share_url)}</div>'
+        + (
+            f'<div style="margin-top:20px;padding:18px;border:1px solid {BORDER};border-radius:12px">'
+            f'<p style="{_EYEBROW_STYLE}">The answer</p>'
+            f'<div style="margin-top:8px;color:{INK_SOFT}">{safe_consensus}</div></div>'
+            if consensus_text else ""
+        )
+        + _button_html(share_url, "Open the watch")
     )
     html_body = _shell_html(
-        eyebrow="Consensus Watch · Condition met",
-        heading="Your watch condition is met",
-        preheader=_split_lead(clipped_reason)[0] or clipped_condition,
+        eyebrow="Consensus Watch · Resolved",
+        heading="What you were waiting for happened",
+        preheader=_split_lead(clipped_reason)[0] or clipped_goal,
         body=body,
         footer=(
-            "This message was sent because your watch condition became true. "
-            "It will not repeat while the condition remains true. "
-            f'<a href="{html.escape(unsubscribe_url)}">Pause this watch</a>.'
+            "The watch stopped checking and freed its slot. Open it to watch for "
+            "something new."
         ),
         width=680,
     )
@@ -495,35 +529,28 @@ def build_topic_follow_confirm_message(*, recipient: str, title: str,
 
 
 def build_topic_change_message(*, recipient: str, title: str, question: str,
-                               old_score, new_score, change_type: str,
-                               summary: str, topic_url: str,
+                               delta: dict, topic_url: str,
                                unsubscribe_url: str) -> EmailMessage:
     """Material-change notification for a confirmed Topic follower."""
     clipped_title = _normalized(title)
-    subject_title = clipped_title[:72] + ("…" if len(clipped_title) > 72 else "")
-    subject = f"Topic update: {subject_title}"
-    lead, _rest = _split_lead(summary)
-    facts = [
-        _score_fact(old_score, new_score),
-        {"label": "Change", "value": _normalized(change_type).title() or "Material", "note": ""},
-    ]
+    subject = f"Topic update: {_subject_clip(clipped_title)}"
+    lead, _rest = _split_lead(delta.get("summary"))
+    delta_html, delta_plain = _delta_parts(delta)
     plain = (
-        f"The curated consensus changed ({change_type}).\n\n{clipped_title}\n\n"
-        + _change_block_plain("What changed", summary) + "\n\n"
-        + _facts_plain(facts) + "\n\n"
+        f"The curated consensus moved.\n\n{clipped_title}\n\n"
+        + delta_plain + "\n\n"
         + _question_plain(question) + "\n\n"
         f"Open the timeline: {topic_url}\nUnfollow: {unsubscribe_url}\n"
     )
     body = (
-        _change_block_html("What changed", summary)
-        + _facts_html(facts)
-        + _question_html(question, topic_url, label="Tracked question")
+        delta_html
+        + f'<div style="margin-top:22px">{_question_html(question, topic_url, label="Tracked question")}</div>'
         + _button_html(topic_url, "Open the timeline")
     )
     html_body = _shell_html(
         eyebrow="consens.io · Curated topic update",
         heading=clipped_title,
-        preheader=lead or "The curated consensus changed.",
+        preheader=lead or "The curated consensus moved.",
         body=body,
         footer=(
             "You follow this curated topic on consens.io. "
@@ -533,36 +560,27 @@ def build_topic_change_message(*, recipient: str, title: str, question: str,
     return _base_message(recipient, subject, plain, html_body)
 
 
-def build_follower_change_message(*, recipient: str, question: str, old_score,
-                                  new_score, summary: str, share_url: str,
-                                  unsubscribe_url: str, severity: str = "major",
-                                  direction=None) -> EmailMessage:
+def build_follower_change_message(*, recipient: str, question: str, delta: dict,
+                                  share_url: str, unsubscribe_url: str) -> EmailMessage:
     """Änderungs-Mail an bestätigte Seiten-Follower (nicht den Watch-Owner)."""
-    clipped_question = _normalized(question)
-    subject_question = clipped_question[:72] + ("…" if len(clipped_question) > 72 else "")
-    subject = f"The AI consensus shifted: {subject_question}"
-    lead, _rest = _split_lead(summary)
-    facts = [
-        _score_fact(old_score, new_score),
-        _direction_fact(direction),
-        _severity_fact(True, severity),
-    ]
+    subject = f"The AI consensus moved: {_subject_clip(question)}"
+    lead, _rest = _split_lead(delta.get("summary"))
+    # The goal belongs to the owner; followers subscribed to the question.
+    delta_html, delta_plain = _delta_parts({**delta, "goal": ""})
     plain = (
-        "A question you follow on consens.io changed materially.\n\n"
-        + _change_block_plain("What changed", summary) + "\n\n"
-        + _facts_plain(facts) + "\n\n"
+        "A question you follow on consens.io moved.\n\n"
+        + delta_plain + "\n\n"
         + _question_plain(question) + "\n\n"
         f"See what changed: {share_url}\nUnfollow: {unsubscribe_url}\n"
     )
     body = (
-        _change_block_html("What changed", summary)
-        + _facts_html(facts)
-        + _question_html(question, share_url)
+        delta_html
+        + f'<div style="margin-top:22px">{_question_html(question, share_url)}</div>'
         + _button_html(share_url, "See what changed")
     )
     html_body = _shell_html(
         eyebrow="consens.io · Question you follow",
-        heading="The AI consensus shifted",
+        heading="The AI consensus moved",
         preheader=lead or "A question you follow moved.",
         body=body,
         footer=(
@@ -602,26 +620,30 @@ def _brief_status_label(status: str) -> str:
         "active": "Active",
         "paused": "Paused",
         "paused_error": "Paused after errors",
+        "resolved": "Resolved",
     }.get(status, "Paused")
 
 
 def _brief_summaries(item: dict) -> list:
-    return [
+    summaries = []
+    resolution = item.get("resolution") or {}
+    if resolution:
+        summaries.append(
+            "Resolved: " + (_normalized(resolution.get("reason")) or _normalized(item.get("goal")))
+        )
+    summaries += [
         _normalized(point.get("change_summary"))
         for point in (item.get("new_points") or [])
         if point.get("notable") and point.get("change_summary")
     ]
+    return summaries
 
 
-def _brief_score_line(item: dict) -> str:
-    score = item.get("score")
-    if not isinstance(score, (int, float)):
-        return "No check completed yet"
-    previous = item.get("previous_score")
-    if isinstance(previous, (int, float)) and int(previous) != int(score):
-        arrow = "↑" if score > previous else "↓"
-        return f"{int(score)}/100 agreement ({arrow} from {int(previous)})"
-    return f"{int(score)}/100 agreement"
+def _brief_goal_line(item: dict) -> str:
+    goal = _normalized(item.get("goal"))
+    if not goal:
+        return "Watching for any change on evidence"
+    return "Waiting for: " + (goal[:90] + "…" if len(goal) > 90 else goal)
 
 
 def build_brief_message(*, recipient: str, date_label: str, items: list,
@@ -642,7 +664,7 @@ def build_brief_message(*, recipient: str, date_label: str, items: list,
         question, _truncated = _question_view(item.get("question"), limit=150)
         plain_question = _ascii(question)
         status_label = _brief_status_label(str(item.get("status") or ""))
-        score_line = _brief_score_line(item)
+        goal_line = _brief_goal_line(item)
         url = site_url + str(item.get("share_path") or "")
         schedule = str(item.get("interval") or "").capitalize()
         if item.get("interval") == "weekly" and item.get("run_weekday"):
@@ -650,7 +672,7 @@ def build_brief_message(*, recipient: str, date_label: str, items: list,
         if item.get("run_time") and item.get("timezone"):
             schedule += f" at {item['run_time']} ({item['timezone']})"
         summaries = _brief_summaries(item)
-        plain = _ascii(f"- {plain_question}\n  {status_label} · {score_line} · {schedule}\n")
+        plain = _ascii(f"- {plain_question}\n  {status_label} · {goal_line} · {schedule}\n")
         for summary in summaries[:3]:
             plain += f"  CHANGED: {summary}\n"
         if not summaries:
@@ -670,7 +692,7 @@ def build_brief_message(*, recipient: str, date_label: str, items: list,
             f'<p style="margin:0;font-weight:600"><a href="{safe_url}" '
             f'style="color:{INK};text-decoration:none">{safe_question}</a></p>'
             f'<p style="margin:6px 0 0;font-size:13px;color:{MUTED}">{html.escape(status_label)} · '
-            f"{html.escape(score_line)} · {html.escape(schedule)}</p>"
+            f"{html.escape(goal_line)} · {html.escape(schedule)}</p>"
             f"{change_html}"
             f"</div>"
         )

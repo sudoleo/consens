@@ -1,8 +1,8 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
 import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
-import { createAdminClient } from "/static/js/admin-api.js?v=20260901-plustier1";
+import { createAdminClient } from "/static/js/admin-api.js?v=20261002-errors";
 import { createPromptConfigPanel } from "/static/js/admin-prompt-config.js?v=20260919-continuous1";
-import { createAgentBudgetPanel } from "/static/js/admin-agent-budget.js?v=20260919-budget1";
+import { createAgentBudgetPanel } from "/static/js/admin-agent-budget.js?v=20261001-tokens1";
 
 const app = initializeApp(window.FIREBASE_CONFIG);
 const auth = getAuth(app);
@@ -12,16 +12,6 @@ const agentBudgetPanel = createAgentBudgetPanel(shareAdminRequest);
 
 let providers = [];
 const limitGroups = [
-    {
-        title: 'Run Usage Limits (UTC day)',
-        fields: [
-            ['free_consensus_run_limit', 'Free consensus runs'],
-            ['plus_consensus_run_limit', 'Plus consensus runs'],
-            ['pro_consensus_run_limit', 'Pro consensus runs'],
-            ['free_deep_think_run_limit', 'Free Deep Think runs'],
-            ['pro_deep_think_run_limit', 'Pro Deep Think runs (Plus has none)']
-        ]
-    },
     {
         title: 'Input / Context Limits',
         fields: [
@@ -57,6 +47,7 @@ const limitGroups = [
             ['watch_plus_active_limit', 'Plus active watches'],
             ['watch_pro_active_limit', 'Pro active watches'],
             ['watch_max_runs_per_day', 'Global runs per day'],
+            ['watch_probe_max_per_day', 'Evidence probes per day (0 = off)'],
             ['watch_daily_interval_requires_pro', 'Daily interval Pro-only (1 = yes, 0 = Free too)'],
             ['watch_plus_daily_interval_allowed', 'Plus may use the daily interval (1 = yes)']
         ]

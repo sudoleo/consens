@@ -160,8 +160,10 @@ def share_card_png(share_id: str, *, question: str, score, model_count: int,
     """Gecachte Karte; None wenn Rendering nicht verfügbar/fehlgeschlagen."""
     if not is_available():
         return None
-    key = (share_id, int(score) if isinstance(score, (int, float)) else -1,
-           len(history_scores or []), checked_label)
+    # Every rendered input participates: a corrected snapshot or a replaced
+    # history point must not serve an older question/statistic for thirty minutes.
+    key = (share_id, question, int(score) if isinstance(score, (int, float)) else -1,
+           model_count, contradiction_count, tuple(history_scores or []), checked_label)
     cached = _cache.get(key)
     if cached is not None:
         return cached

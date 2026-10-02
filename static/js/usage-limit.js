@@ -13,10 +13,15 @@
    Dieses Modul ist die eine Stelle, die diesen Zustand besitzt:
 
      - erkennt Limit-Antworten (ein Detektor, nicht drei),
-     - prueft VOR dem Absenden gegen die Kontingent-Anzeige, damit der Lauf
-       gar nicht erst scheinbar losgeht,
+     - prueft VOR dem Absenden gegen dasselbe Tokenkonto wie der Ring
+       (App.tokenBudget), damit der Lauf gar nicht erst scheinbar losgeht,
      - rendert eine bleibende Karte im Thread (#runBlocked), genau dort, wo
        sonst die Antwort stuende.
+
+   Seit 2026-10-01 gibt es keine Run-Zaehler mehr: Compare, Consensus, Deep
+   Think und Agent teilen ein Tokenkonto pro Tag. Ein Lauf startet, wenn das
+   freie Budget die erwarteten Tokens eines typischen Laufs dieses Modus
+   deckt — dieselbe Regel wie die Admission auf dem Server.
 
    Die Karte verkauft nichts. consens.io ist waehrend des Tests gratis, es
    gibt also keinen Kauf-Ausweg — sie sagt, wann das Kontingent
@@ -46,92 +51,45 @@
     return data || {};
   }
 
-  // Der Server kennt zwei Codes: "total_usage_limit_exceeded" und
-  // "deep_think_usage_limit_exceeded" (chat.py, reserve_usage_run). Ein
-  // Vergleich auf "usage_limit_exceeded" trifft deshalb nie — genau der
-  // Fehler stand bis hierher in consensus-run.js.
+  // Der Server sendet "token_budget_exhausted" (chat.py, _token_limit_detail);
+  // Agent meldet "agent_tokens_exhausted". Aeltere Codes enthalten "limit".
   function isLimitError(data, message) {
     var normalized = unwrap(data);
     var code = String(normalized.error_code || normalized.code || "").toLowerCase();
     var text = String(message || normalized.error || normalized.detail || "").toLowerCase();
-    return code.indexOf("limit") !== -1
+    return code === "token_budget_exhausted"
+      || code.indexOf("limit") !== -1
       || text.indexOf("usage limit") !== -1
+      || text.indexOf("allowance") !== -1
       || text.indexOf("quota") !== -1
       || text.indexOf("used up") !== -1
       || text.indexOf("exhausted") !== -1;
   }
 
-  function bucketOf(data) {
-    var normalized = unwrap(data);
-    var code = String(normalized.error_code || "").toLowerCase();
-    if (code.indexOf("deep_think") === 0) return "deep_think";
-    if (code.indexOf("total") === 0) return "total";
-    // Ohne eindeutigen Code entscheidet, welcher Topf tatsaechlich leer ist.
-    if (normalized.deep_remaining === 0 && normalized.free_usage_remaining > 0) {
-      return "deep_think";
-    }
-    return "total";
+  // Ein Topf fuer alles; der Name bleibt fuer Telemetrie und data-bucket.
+  function bucketOf() {
+    return "tokens";
   }
 
-  // --- Kontingent-Spiegel ----------------------------------------------
-  // Dieselbe Quelle wie Ring und Panel (#usageDisplay ueber sidebar-quota),
-  // damit die Karte nie eine andere Zahl behauptet als der Ring daneben.
-  // null = noch unbekannt (Gast, oder noch nicht geladen).
-  function quota(name) {
-    try {
-      var api = window.App.sidebarQuota;
-      if (!api) return null;
-      return name === "deep" ? (api.deep ? api.deep() : null) : api.runs();
-    } catch (err) {
-      return null;
-    }
+  function budget() {
+    return window.App.tokenBudget || null;
   }
 
-  // Das Kontingent laeuft auf UTC-Tagen (usage_repository.py). Der
-  // Countdown in der Sidebar rechnet historisch gegen lokale Mitternacht;
-  // hier steht die belastbare Zahl, weil sie neben einer Absage steht.
-  function resetInfo() {
-    var now = new Date();
-    var next = new Date(Date.UTC(
-      now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 0, 0, 0, 0
-    ));
-    var ms = next - now;
-    var hours = Math.floor(ms / 3600000);
-    var minutes = Math.floor((ms % 3600000) / 60000);
-    var relative = hours > 0
-      ? hours + " h " + minutes + " min"
-      : Math.max(1, minutes) + " min";
-    var clock;
-    try {
-      clock = next.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-    } catch (err) {
-      clock = "midnight UTC";
-    }
-    return { relative: relative, clock: clock, ms: ms };
-  }
+  var MODE_NAMES = { compare: "Compare run", consensus: "Consensus run", deep_think: "Deep Think run" };
 
-  /* "0 of 3 runs left today · resets at 02:00 (in 1 h 58 min)".
-     Zahlen zuerst aus der Server-Absage (die frischeste Quelle), sonst aus
-     demselben Spiegel, den der Ring liest. Ohne belastbare Zahl bleibt nur
-     die Reset-Zeit stehen — eine erfundene Restzahl waere schlimmer als
-     keine. */
-  function metaLine(data, remainingKey, limitKey, mirrorName, noun) {
-    var remaining = data ? data[remainingKey] : undefined;
-    var limit = data ? data[limitKey] : undefined;
-    if (remaining === undefined || remaining === null
-      || limit === undefined || limit === null) {
-      var mirror = quota(mirrorName);
-      if (mirror && !mirror.unlimited) {
-        remaining = mirror.value;
-        limit = mirror.limit;
-      } else {
-        remaining = null;
-      }
-    }
-    var reset = resetInfo();
-    var tail = "resets at " + reset.clock + " (in " + reset.relative + ")";
-    if (remaining === null || remaining === undefined) return tail;
-    return remaining + " of " + limit + " " + noun + " left today · " + tail;
+  /* "4% left today · a Consensus run needs about 8% · resets at 02:00 (in 1 h 58 min)".
+     Zahlen aus der Server-Absage (frischeste Quelle, schon im Store), sonst
+     aus demselben Konto wie der Ring. Ohne Zahl bleibt die Reset-Zeit. */
+  function metaLine(mode) {
+    var api = budget();
+    var view = api ? api.view() : null;
+    var reset = api ? api.resetInfo() : null;
+    var parts = [];
+    if (view) parts.push(view.percent + " left today");
+    var share = api ? api.runShare(mode) : null;
+    if (share) parts.push("a " + MODE_NAMES[mode] + " needs about " + share);
+    if (reset) parts.push("resets at " + reset.clock + " (in " + reset.relative + ")");
+    return parts.join(" · ");
   }
 
   // --- Rendering -------------------------------------------------------
@@ -170,7 +128,7 @@
       return;
     }
 
-    card.dataset.bucket = view.bucket || "total";
+    card.dataset.bucket = view.bucket || "tokens";
 
     var title = el("runBlockedTitle");
     if (title) title.textContent = view.title;
@@ -205,6 +163,15 @@
     return !!(toggle && toggle.checked);
   }
 
+  function currentMode(opts) {
+    if (opts && opts.mode) return opts.mode;
+    if ((opts && opts.deepThink) || deepThinkIsOn()) return "deep_think";
+    try {
+      if (window.App.runMode && window.App.runMode.pipeline && window.App.runMode.pipeline() === false) return "compare";
+    } catch (_) { /* default */ }
+    return "consensus";
+  }
+
   // Das Kontingent-Panel haengt im Sidebar-Fuss. Bei zugeklappter Sidebar
   // wuerde setOpen(true) etwas Unsichtbares oeffnen — also erst die Sidebar
   // ueber ihren eigenen Toggle aufmachen (eine Mechanik, nicht zwei) und
@@ -226,44 +193,44 @@
   }
 
   function buildView(info) {
-    var data = unwrap(info && info.data);
-    var bucket = info && info.bucket ? info.bucket : bucketOf(data);
-    var phase = info && info.phase;
-    var view = { bucket: bucket, actions: [] };
+    var opts = info || {};
+    var data = unwrap(opts.data);
+    // A refusal carries the account; it becomes the ring's value too.
+    if (budget()) budget().fromResponse(data);
+    var mode = currentMode(opts);
+    var phase = opts.phase;
+    var view = { bucket: "tokens", actions: [] };
+    var api = budget();
 
-    if (bucket === "deep_think") {
-      var runsLeft = quota("runs");
-      var hasNormalRuns = !!runsLeft && (runsLeft.unlimited || runsLeft.value > 0);
-
-      view.title = "No Deep Think runs left today";
-      view.body = hasNormalRuns
-        ? "Deep Think puts the reasoning models on your question and has its own, smaller allowance — that one is used up. A normal run is still available, and your question is still in the box."
-        : "Deep Think has its own, smaller allowance and it is used up for today.";
-      view.meta = metaLine(data, "deep_remaining", "deep_limit", "deep", "Deep Think runs");
-
-      if (hasNormalRuns) {
-        view.actions.push({
-          label: "Send without Deep Think",
-          title: "Switch Deep Think off and send this question as a normal run.",
-          variant: "primary",
-          onClick: function () {
-            var toggle = el("deepSearchToggle");
-            if (toggle && toggle.checked) {
-              toggle.checked = false;
-              toggle.dispatchEvent(new Event("change", { bubbles: true }));
-            }
-            hide();
-            track("deep_think_downgrade");
-            if (typeof window.sendQuestion === "function") window.sendQuestion();
-          }
-        });
-      }
+    view.title = "Not enough of today’s allowance left";
+    if (phase === "consensus") {
+      view.body = "The models answered, but the consensus could not be written: today’s allowance ran out during this run. The individual answers are still there under “Compare answers”.";
     } else {
-      view.title = "You are out of runs for today";
-      view.body = phase === "consensus"
-        ? "The models answered, but the consensus could not be written: your daily allowance ran out during this run. The individual answers are still there under “Compare answers”."
-        : "A run asks every selected model and then writes the consensus, and your daily allowance for that is used up. Nothing was sent, and your question is still in the box.";
-      view.meta = metaLine(data, "free_usage_remaining", "limit", "runs", "runs");
+      view.body = "Compare, Consensus and Agent share one daily allowance, and what is left does not cover a typical "
+        + (MODE_NAMES[mode] || "run") + ". Nothing was sent, and your question is still in the box.";
+    }
+    view.meta = metaLine(mode);
+
+    // Deep Think is the largest run. If a normal one still fits, offer it.
+    if (mode === "deep_think" && api && api.canStart("consensus") === true) {
+      // Warning tone, not refusal: there is another way (shell.css).
+      view.bucket = "deep_think";
+      view.body = "A Deep Think run needs more of today’s allowance than is left. A normal run still fits, and your question is still in the box.";
+      view.actions.push({
+        label: "Send without Deep Think",
+        title: "Switch Deep Think off and send this question as a normal run.",
+        variant: "primary",
+        onClick: function () {
+          var toggle = el("deepSearchToggle");
+          if (toggle && toggle.checked) {
+            toggle.checked = false;
+            toggle.dispatchEvent(new Event("change", { bubbles: true }));
+          }
+          hide();
+          track("deep_think_downgrade");
+          if (typeof window.sendQuestion === "function") window.sendQuestion();
+        }
+      });
     }
 
     // Immer erreichbar: die Zahlen selbst. Der Ring im Sidebar-Fuss ist der
@@ -271,7 +238,7 @@
     // eine zweite Rechnung danebenzustellen.
     view.actions.push({
       label: "See your allowance",
-      title: "Open the quota panel in the sidebar.",
+      title: "Open the allowance panel in the sidebar.",
       onClick: function () {
         track("open_quota");
         openQuotaPanel();
@@ -289,7 +256,7 @@
     } catch (err) { /* Telemetrie darf die Meldung nie verhindern */ }
   }
 
-  /* Zeigt die Absage. info: {data, bucket, phase, source}
+  /* Zeigt die Absage. info: {data, mode, phase, source}
      Gibt die verwendete Auspraegung zurueck, damit Aufrufer sie loggen
      koennen. */
   function show(info) {
@@ -316,7 +283,7 @@
       actions: [{
         label: "Try again",
         variant: "primary",
-        title: "Retry this question with a fresh usage reservation.",
+        title: "Retry this question.",
         onClick: function () {
           hide();
           if (typeof window.sendQuestion === "function") window.sendQuestion();
@@ -328,31 +295,26 @@
     } catch (err) { /* Telemetrie darf die Meldung nie verhindern */ }
   }
 
-  /* Vor dem Absenden: gibt einen Grund zurueck, wenn der Lauf sicher nicht
+  /* Vor dem Absenden: gibt "tokens" zurueck, wenn der Lauf sicher nicht
      durchgeht, sonst null. Bewusst konservativ — bei unbekanntem Stand
      (Gast, noch nicht geladen, eigene Keys) entscheidet weiterhin der
      Server. Lieber ein Server-Nein als ein falsches Client-Nein. */
   function preflight(options) {
     var opts = options || {};
     if (opts.useOwnKeys) return null;
-
-    var runs = quota("runs");
-    if (runs && !runs.unlimited && runs.value <= 0) return "total";
-
-    if (opts.deepThink || deepThinkIsOn()) {
-      var deep = quota("deep");
-      if (deep && !deep.unlimited && deep.value <= 0) return "deep_think";
-    }
-    return null;
+    var api = budget();
+    if (!api) return null;
+    return api.canStart(currentMode(opts)) === false ? "tokens" : null;
   }
 
-  /* Blockiert den Versuch, falls kein Kontingent mehr da ist. true = der
+  /* Blockiert den Versuch, falls das Konto den Lauf nicht deckt. true = der
      Aufrufer soll abbrechen. */
   function blockIfExhausted(options) {
     var bucket = preflight(options);
     if (!bucket) return false;
     show({
-      bucket: bucket,
+      mode: currentMode(options),
+      deepThink: options && options.deepThink,
       source: (options && options.source) || "preflight",
       phase: "preflight"
     });

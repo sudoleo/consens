@@ -48,6 +48,7 @@ from app.services.llm.base import count_words
 from app.services import publisher_config, share_snapshots, watch_service
 from app.services.share_snapshots import ShareError
 from app.services.usage_repository import (
+    UsageCapacityExceeded,
     UsageLimitExceeded,
     UsageRunConflict,
     UsageRunExpired,
@@ -340,15 +341,17 @@ def create_consensus_run(
     if run.get("status") == "accepted":
         try:
             run, _usage = reserve_run(run)
-        except UsageLimitExceeded as exc:
+        except UsageLimitExceeded:
             api_run_repository.delete_accepted(run["run_id"])
             raise HTTPException(
                 status_code=429,
-                detail=(
-                    "Deep Think quota is exhausted for this UTC day"
-                    if exc.limiting_bucket == "deep_think"
-                    else "Run quota is exhausted for this UTC day"
-                ),
+                detail="The daily token allowance does not cover another run (resets at 00:00 UTC)",
+            ) from None
+        except UsageCapacityExceeded:
+            api_run_repository.delete_accepted(run["run_id"])
+            raise HTTPException(
+                status_code=429,
+                detail="Too many runs are starting at once",
             ) from None
         except UsageRunConflict as exc:
             api_run_repository.delete_accepted(run["run_id"])

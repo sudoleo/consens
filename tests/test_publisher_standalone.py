@@ -19,8 +19,8 @@ class PublisherStandaloneTests(unittest.TestCase):
         clean_env = {key: os.environ[key] for key in ("SYSTEMROOT", "PATH") if key in os.environ}
         clean_env.update(env or {})
         return subprocess.run(
-            [sys.executable, "-E", "-S", *args], cwd=cwd, env=clean_env,
-            capture_output=True, text=True, timeout=20,
+            [sys.executable, "-E", "-S", "-X", "utf8", *args], cwd=cwd, env=clean_env,
+            capture_output=True, text=True, encoding="utf-8", timeout=20,
         )
 
     def assert_success(self, result):

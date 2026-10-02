@@ -114,9 +114,12 @@ def fan_out_provider_answers(
             outcome=outcome,
         )
 
+    from contextvars import copy_context
+
+    # copy_context: provider calls report into the caller's usage meter.
     with ThreadPoolExecutor(max_workers=max(1, len(ordered))) as pool:
         futures = {
-            provider: pool.submit(invoke, provider)
+            provider: pool.submit(copy_context().run, invoke, provider)
             for provider in ordered
         }
         for provider in ordered:

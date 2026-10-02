@@ -27,8 +27,7 @@
         data-consensus-presets="{{ consensus_presets | tojson | forceescape }}"
         data-default-consensus-preset="{{ default_consensus_preset | tojson | forceescape }}"
         data-model-families="{{ model_families | tojson | forceescape }}"
-        data-max-run-families="{{ max_run_families }}"
-        data-free-limit="{{ free_limit }}">
+        data-max-run-families="{{ max_run_families }}">
   {#
     Scripts and stylesheet come from static/js/bundles.json via
     app/core/assets.py. Every URL carries a content hash, so no ?v= mark is
@@ -91,11 +90,18 @@
   <!-- Ansichts-Umschalter oben mittig (Consensus | Watches), auf Start-/Watch-Ansicht —
        ausgeloggt bittet der Watches-Klick per Popup um Login (watch.js
        verdrahtet Klicks + aktiven Zustand). -->
-  <nav id="viewSwitch" class="view-switch" aria-label="Switch view">
-    <button type="button" id="viewSwitchConsensus" class="view-switch-btn is-active" aria-pressed="true">Consensus</button>
+  <nav id="viewSwitch" class="view-switch" aria-label="Switch view" data-active="chat">
+    <span class="view-switch-thumb" aria-hidden="true"></span>
+    <button type="button" id="viewSwitchConsensus" class="view-switch-btn is-active" aria-pressed="true"
+      title="Ask several AI models at once">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M20 12a8 8 0 0 1-11.6 7.1L4 20l1-4.2A8 8 0 1 1 20 12Z"></path>
+      </svg>
+      <span>Chat</span>
+    </button>
     <button type="button" id="viewSwitchWatches" class="view-switch-btn" aria-pressed="false"
-      title="Consensus Watch: your watched questions">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+      title="Consensus Watch: questions you are waiting on">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <path d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6Z"></path>
         <circle cx="12" cy="12" r="2.5"></circle>
       </svg>
@@ -144,8 +150,6 @@
       <div id="usageOptions" class="visually-hidden u-mt-0">
         <h2 class="sidebar-static-heading">Usage</h2>
         <div id="usageDisplay">
-          <span id="freeUsageDisplay">Runs: <strong>...</strong></span><br>
-          <span id="deepUsageDisplay">Deep Think: <strong>...</strong></span><br>
           <span id="watchUsageDisplay">Watches: <strong>...</strong></span><br>
           <span id="countdownDisplay"></span>
         </div>
@@ -221,33 +225,32 @@
          ausschließlich die Auth-Aktionen oben rechts. -->
     <div class="sidebar-settings">
       <!-- Kontingent-Panel: öffnet nach oben über dem Account-Footer.
-           Gefüllt von static/js/sidebar-quota.js, das die (versteckte)
-           #usageDisplay-Spalte beobachtet — die bleibt die einzige Quelle,
-           damit app-core.js, firebase.js und watch.js unverändert bleiben. -->
-      <div id="sidebarQuota" class="sidebar-quota" role="region" aria-label="Your allowance">
+           Eine Zahl für alle Modi: das Tokenkonto des Tages (Compare,
+           Consensus, Deep Think, Agent), gefüllt von sidebar-quota.js aus
+           App.tokenBudget. Watches haben ihr eigenes Kontingent und bleiben
+           eine kleine eigene Zeile. -->
+      <div id="sidebarQuota" class="sidebar-quota" role="region" aria-labelledby="quotaHeading">
         <!-- Der Plan steht dort, wo die Zahlen stehen, die er erklärt: im Kopf
              des Kontingent-Panels. Das PRO-Badge behält id + Klasse, damit
              user-tier.js es unverändert ein-/ausblendet. -->
         <div class="sidebar-quota-head">
-          <span>Your allowance</span>
+          <span id="quotaHeading">Today’s allowance</span>
           <span class="sidebar-quota-plan">
             <span id="quotaPlanLabel">Free</span>
             <span id="proBadge" class="pro-badge u-display-none">PRO</span>
           </span>
         </div>
-        <div class="quota-row" id="quotaRowRuns" hidden>
-          <div class="quota-top"><b>Runs</b><span id="quotaRunsValue"></span></div>
-          <div class="quota-track"><i></i></div>
+        <div class="quota-primary" id="quotaPrimary" hidden>
+          <p class="quota-figure"><span id="quotaPercent" class="quota-figure-value"></span><span class="quota-figure-unit">left today</span></p>
+          <div class="quota-track" id="quotaTrack" role="meter" aria-label="Allowance left today"
+            aria-valuemin="0" aria-valuemax="100"><i></i></div>
+          <p class="quota-reset" id="quotaReset"></p>
         </div>
-        <div class="quota-row" id="quotaRowDeep" hidden>
-          <div class="quota-top"><b>Deep Think</b><span id="quotaDeepValue"></span></div>
-          <div class="quota-track"><i></i></div>
-        </div>
+        <p class="quota-detail" id="quotaDetail" hidden></p>
         <div class="quota-row" id="quotaRowWatch" hidden>
-          <div class="quota-top"><b>Watches</b><span id="quotaWatchValue"></span></div>
-          <div class="quota-track"><i></i></div>
+          <span class="quota-row-label">Watches</span><span class="quota-row-value" id="quotaWatchValue"></span>
         </div>
-        <div class="sidebar-quota-foot" id="quotaFoot" hidden></div>
+        <p class="sidebar-quota-foot" id="quotaFoot" hidden></p>
       </div>
       <div class="sidebar-footer-row">
         <div id="loginContainer" class="login-text" hidden></div>
@@ -261,16 +264,18 @@
             <span class="upgrade-link-text">Early access</span>
           </a>
         </div>
-        <!-- Kontingent-Ring: das einzige Element im Shell, das dauerhaft eine
-             Zahl über den eigenen Account zeigt. Klick öffnet #sidebarQuota. -->
+        <!-- Kontingent-Ring: ein ruhiges 20-px-Glyph ohne Zahl im Inneren. Der
+             genaue Wert steht im Tooltip/aria-label und im Panel; Klick
+             öffnet #sidebarQuota. pathLength=100: der Offset ist direkt der
+             verbrauchte Anteil in Prozent. -->
         <button type="button" id="quotaTrigger" class="quota-trigger" aria-expanded="false"
-          aria-controls="sidebarQuota" title="Your allowance" aria-label="Your allowance" hidden>
-          <svg class="quota-ring" viewBox="0 0 32 32" aria-hidden="true">
-            <circle cx="16" cy="16" r="14" fill="none" stroke="var(--line-soft)" stroke-width="2.5"></circle>
-            <circle id="quotaRingArc" cx="16" cy="16" r="14" fill="none" stroke="var(--ink-2)" stroke-width="2.5"
-              stroke-linecap="round" stroke-dasharray="87.9" stroke-dashoffset="87.9"></circle>
+          aria-controls="sidebarQuota" title="Today’s allowance" aria-label="Today’s allowance" hidden>
+          <svg class="quota-ring" viewBox="0 0 20 20" aria-hidden="true">
+            <circle class="quota-ring-track" cx="10" cy="10" r="8" fill="none" stroke-width="2"></circle>
+            <circle id="quotaRingArc" class="quota-ring-arc" cx="10" cy="10" r="8" fill="none" stroke="var(--ink-2)"
+              stroke-width="2" stroke-linecap="round" pathLength="100" stroke-dasharray="100"
+              stroke-dashoffset="100" transform="rotate(-90 10 10)"></circle>
           </svg>
-          <span class="quota-trigger-value" id="quotaTriggerValue" aria-hidden="true"></span>
         </button>
         <button id="editSystemPromptBtn" title="Settings" aria-label="Settings">
           <span class="settings-icon" aria-hidden="true">
@@ -509,8 +514,10 @@
         <!-- Composer-Anatomie, fuer Compare, Consensus und Agent dieselbe
              (Layout: static/css/composer.css, sonst nirgends):
              .composer-lead    links:  (+) und der Modus (App.runMode)
-             .composer-models  rechts: wer antwortet (Agent-Modell, Vergleichs-
-                               bzw. Consensus-Modelle, Deep-Think-Hinweis)
+             .composer-models  rechts: wer antwortet, EIN Chip je Modus (Agent:
+                               Chatmodell + Vergleichsmodelle in einem Menue,
+                               sonst Vergleichs- bzw. Consensus-Modelle) und
+                               der Deep-Think-Hinweis
              .input-actions-container rechts aussen: Demo und Senden -->
         <div class="composer-lead">
           <button type="button" id="attachTrigger" class="attach-trigger" aria-haspopup="true" aria-expanded="false" aria-controls="attachMenu" title="Add attachment" aria-label="Add attachment">
@@ -558,7 +565,7 @@
         <div class="input-actions-container">
           <!-- Pfeil nach oben im gefuellten Kreis: der Senden-Knopf ist das
                einzige massive Element im Composer (Stil in shell.css). -->
-          <button id="sendButton" class="input-action-btn-primary" data-icon="send" title="Send question" aria-label="Send question">
+          <button id="sendButton" class="input-action-btn-primary send-glow" data-icon="send" title="Send question" aria-label="Send question">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5.5M6 11.5l6-6 6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>
           </button>
         </div>
@@ -918,19 +925,19 @@
        Übersicht aller Watches + Morning Brief. URL-Sync in watch.js. -->
   <div id="watchDashboard" class="watch-page" hidden>
     <div class="watch-page-inner">
-      <div class="watch-dash-header">
-        <button type="button" id="watchDashClose" class="watch-page-back">
-          <span aria-hidden="true">&larr;</span> Back to app
-        </button>
-        <div class="watch-dash-heading-row">
-          <div>
-            <h1 id="watchDashTitle">Your Watches</h1>
-            <p class="watch-dash-subtitle">See what changed, what stayed stable, and what will be checked next.</p>
-            <div id="watchDashLimit" class="watch-limit-summary" aria-live="polite" hidden></div>
-          </div>
-          <button type="button" id="watchDashCreate" class="share-primary-btn">New Watch</button>
+      <header class="wd-head">
+        <div class="wd-head-copy">
+          <h1 id="watchDashTitle">Watches</h1>
+          <p class="wd-head-lead">Questions you are waiting on. Checked across AI model families, reported only when the evidence moves.</p>
+          <div id="watchDashLimit" class="watch-limit-summary is-compact" aria-live="polite" hidden></div>
         </div>
-      </div>
+        <div class="wd-head-actions">
+          <button type="button" id="watchDashCreate" class="wd-button is-primary">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>
+            New watch
+          </button>
+        </div>
+      </header>
       <div id="watchDashBody"></div>
     </div>
   </div>

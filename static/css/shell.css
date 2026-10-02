@@ -548,9 +548,10 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
 }
 
 /* ---- Account + quota -----------------------------------------------------
-   The footer row carries a progress ring around the avatar; clicking it opens
-   the quota panel upward. The ring is the only place in the shell where a
-   number about *your* account is always visible.
+   The footer row carries a quiet 20 px ring for today's token account (all
+   modes share it); clicking it opens the allowance panel upward. The ring
+   holds no number: the exact value is in its tooltip and in the panel.
+   Semantic colour only on the arc and the bar fill when it runs low.
    -------------------------------------------------------------------------- */
 /* The footer used to be position:fixed with an 80px margin reserved above it
    — that reserve is exactly the dead band that sat between the bookmark list
@@ -582,10 +583,10 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
   z-index: var(--z-dropdown);
   display: none;
   flex-direction: column;
-  gap: 11px;
+  gap: 10px;
   background: var(--raise);
   border-radius: var(--radius-md);
-  padding: 13px 14px;
+  padding: 14px 16px 14px;
 }
 
 .sidebar-quota.is-open {
@@ -596,41 +597,47 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: var(--font-size-micro);
-  color: var(--ink);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--ink-2);
 }
 
-.quota-row {
+/* One primary figure: "62% left today", a thin bar, the reset time. */
+.quota-primary {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 8px;
 }
 
-/* display:flex above must not override the hidden attribute (Agent mode hides
-   the Deep Think and Watches rows). */
-.quota-row[hidden] {
+.quota-primary[hidden],
+.quota-detail[hidden],
+.sidebar-quota-foot[hidden] {
   display: none;
 }
 
-.quota-top {
+.quota-figure {
+  margin: 0;
   display: flex;
-  justify-content: space-between;
-  font-size: var(--font-size-xs);
+  align-items: baseline;
+  gap: 6px;
+  color: var(--ink);
+  line-height: var(--line-height-solid);
 }
 
-.quota-top b {
-  font-weight: var(--font-weight-medium);
-  color: var(--ink);
-}
-
-.quota-top span {
-  color: var(--ink);
+.quota-figure-value {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
   font-variant-numeric: tabular-nums;
-  font-size: var(--font-size-micro);
+  letter-spacing: -0.01em;
+}
+
+.quota-figure-unit {
+  font-size: var(--font-size-xs);
+  color: var(--ink-2);
 }
 
 .quota-track {
-  height: 3px;
+  height: 4px;
   border-radius: 2px;
   background: var(--line-soft);
   overflow: hidden;
@@ -641,22 +648,54 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
   height: 100%;
   width: var(--p, 0%);
   background: var(--ink-2);
+  border-radius: inherit;
   transition: width 0.3s ease;
 }
 
 /* Nearly spent reads amber — the same amber the answer uses for "contested",
    so one colour never means two things. */
-.quota-track.is-low i {
+.quota-track[data-state="low"] i {
   background: var(--partial);
 }
 
-.quota-track.is-out i {
+.quota-track[data-state="out"] i {
   background: var(--dispute);
 }
 
+.quota-reset,
+.quota-detail,
 .sidebar-quota-foot {
+  margin: 0;
   font-size: var(--font-size-micro);
-  color: var(--ink);
+  line-height: 1.45;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.quota-reset {
+  color: var(--ink-2);
+}
+
+.quota-detail {
+  padding-top: 10px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.quota-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: var(--font-size-micro);
+  color: var(--ink-3);
+}
+
+.quota-row[hidden] {
+  display: none;
+}
+
+.quota-row-value {
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
 }
 
 .quota-trigger {
@@ -677,29 +716,29 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
   display: none;
 }
 
-.quota-trigger:hover {
+.quota-trigger:hover,
+.quota-trigger[aria-expanded="true"] {
   background: var(--raise);
 }
 
+.quota-trigger:focus-visible {
+  outline: 2px solid var(--ink-2);
+  outline-offset: 1px;
+}
+
+/* A glyph, not a gauge: 20 px, 2 px stroke, nothing inside. */
 .quota-ring {
-  position: absolute;
-  inset: 0;
-  width: 32px;
-  height: 32px;
-  transform: rotate(-90deg);
+  width: 20px;
+  height: 20px;
+  display: block;
 }
 
-.quota-ring circle {
+.quota-ring-track {
+  stroke: var(--line);
+}
+
+.quota-ring-arc {
   transition: stroke-dashoffset 0.4s ease, stroke 0.3s ease;
-}
-
-.quota-trigger-value {
-  position: relative;
-  color: var(--ink);
-  font-size: var(--font-size-micro);
-  font-weight: var(--font-weight-semibold);
-  font-variant-numeric: tabular-nums;
-  line-height: var(--line-height-solid);
 }
 
 /* --------------------------------------------------------------------------
@@ -708,30 +747,13 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
 .app-mobile-header { display: contents; }
 .mobile-conversation-actions, .mobile-sidebar-views { display: none; }
 
-.view-switch {
-  background: var(--raise);
-  border: 0;
-  box-shadow: none;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-}
-
-.view-switch-btn {
-  color: var(--ink-2);
-}
-
+/* The view switch draws its own surface and sliding thumb
+   (components-watch.css); nothing here may paint the active button. */
 /* Conversations (including direct comparisons) keep the header clear.
    Watches retains its navigation even when a conversation is underneath. */
 body:not(.is-hero):not(:has(#watchDashboard:not([hidden]))) .view-switch,
 body.direct-comparison-active:not(:has(#watchDashboard:not([hidden]))) .view-switch {
   display: none;
-}
-
-.view-switch-btn.is-active {
-  background: var(--ground);
-  color: var(--ink);
-  font-weight: var(--font-weight-semibold);
-  box-shadow: none;
 }
 
 /* --------------------------------------------------------------------------
@@ -865,6 +887,30 @@ body:not(.dark-mode) .chat-input-container {
 .input-action-btn-primary.is-cancel-action svg {
   width: 15px;
   height: 15px;
+}
+
+/* The light below Send (send-glow.css) is off while nothing can go and comes
+   on with the question. While the models work it moves to the pale stop
+   button and travels once round the rim every few seconds: something is
+   running, without a spinner. */
+.input-action-btn-primary.send-glow:disabled::before {
+  opacity: 0;
+}
+
+.input-action-btn-primary.send-glow.is-cancel-action {
+  --glow-wash: 13%;
+  --glow-rim: 40%;
+}
+
+.dark-mode .input-action-btn-primary.send-glow.is-cancel-action {
+  --glow-wash: 22%;
+  --glow-rim: 55%;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .input-action-btn-primary.send-glow.is-cancel-action::before {
+    animation: send-glow-orbit 5s linear infinite;
+  }
 }
 
 .input-action-btn-primary::after {
@@ -3350,40 +3396,125 @@ body.agent-mode-enabled .agent-mode-panel,
   display: none;
 }
 
-/* ---- Numbered citations --------------------------------------------------
-   Inside the consensus a citation is a raised number, the way printed prose
-   does it: it points at the list in the sources drawer without interrupting
-   the sentence. The favicon chips stay in the model answers, where the text
-   is evidence to scan rather than prose to read.
+/* ---- Source pills ----------------------------------------------------------
+   In chat prose (Consensus and Agent answers, saved turns, the key-claims
+   list) a citation is a quiet pill on the text baseline: favicon + short
+   domain, so the reader sees WHICH source backs the sentence without decoding
+   a footnote number. It replaced the raised numbers on 2026-10-01 (user
+   decision). Adjacent citations share one pill ("uci.org +2"); the teaser
+   lists them all. When the domain is already written right before the
+   citation, the pill shrinks to its favicon (.is-compact) instead of
+   repeating it. The `.source-link` chips stay in the raw model answers.
    -------------------------------------------------------------------------- */
 .src-ref {
-  display: inline-block;
-  vertical-align: super;
-  margin-left: 1px;
-  padding: 0 1px;
+  --src-ref-bg: var(--well);
+  display: inline-flex;
+  /* The label carries the baseline, so the pill sits on the line of text
+     instead of floating above it; the icon centres itself. */
+  align-items: baseline;
+  gap: 4px;
+  box-sizing: border-box;
+  max-width: min(15em, 100%);
+  margin-inline: 0.25em 0;
+  padding: 1px 7px 1px 3px;
+  border-radius: var(--radius-pill);
+  background: var(--src-ref-bg);
+  box-shadow: inset 0 0 0 1px var(--line-soft);
   font-size: var(--font-size-micro);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   font-variant-numeric: tabular-nums;
-  line-height: var(--line-height-solid);
+  line-height: 1.45;
   letter-spacing: var(--tracking-normal);
-  color: var(--ink-3);
+  color: var(--ink-2);
   text-decoration: none;
+  white-space: nowrap;
+  vertical-align: baseline;
   cursor: pointer;
-  transition: color 0.14s ease;
+  transition: background-color 0.14s ease, color 0.14s ease, box-shadow 0.14s ease;
 }
 
 .src-ref:hover,
 .src-ref:focus-visible {
+  --src-ref-bg: color-mix(in srgb, var(--ink) 7%, var(--well));
   color: var(--ink);
-  text-decoration: underline;
-  text-underline-offset: 2px;
-  outline: none;
+  text-decoration: none;
+  box-shadow: inset 0 0 0 1px var(--line);
 }
 
-.src-ref-sep {
-  vertical-align: super;
-  font-size: var(--font-size-micro);
+.src-ref:focus-visible {
+  outline: 2px solid var(--ink-3);
+  outline-offset: 1px;
+}
+
+.src-ref-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.src-ref-more {
+  flex: 0 0 auto;
   color: var(--ink-3);
+}
+
+.src-ref:is(:hover, :focus-visible) .src-ref-more {
+  color: var(--ink-2);
+}
+
+.src-ref-favicon,
+.src-ref-glyph {
+  flex: 0 0 auto;
+  align-self: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+}
+
+.src-ref-favicon {
+  object-fit: contain;
+  /* White backing keeps dark/transparent logos legible in both themes. */
+  background: #fff;
+  box-shadow: 0 0 0 1px var(--line-soft);
+}
+
+/* Missing or failed favicon: a neutral monogram, never a broken image. */
+.src-ref-glyph {
+  display: inline-grid;
+  place-items: center;
+  background: var(--line);
+  color: var(--ink-2);
+  font-size: 8.5px;
+  font-weight: var(--font-weight-semibold);
+  line-height: 1;
+}
+
+/* The domain is already in the sentence: favicon only (plus "+N"). */
+.src-ref.is-compact {
+  /* Without a label there is no text baseline to sit on; centre the icon
+     on the x-height instead of letting it ride above the line. */
+  vertical-align: -0.3em;
+  margin-inline-start: 0.1em;
+  padding-inline: 2px;
+}
+
+.src-ref.is-compact.is-group {
+  padding-inline-end: 6px;
+}
+
+.src-ref.is-compact .src-ref-label {
+  display: none;
+}
+
+/* Legacy separator from saved HTML; pills need no comma between them. */
+.src-ref-sep {
+  display: none;
+}
+
+/* Verdict colours from source-verification.css tint the pill; its dotted
+   underline was made for bare numbers and is dropped on the pill. */
+.src-ref[data-source-check] {
+  border-radius: var(--radius-pill);
+  text-decoration: none;
 }
 
 /* Hover teaser: enough of the source to decide whether to leave the page. */
@@ -3475,6 +3606,40 @@ body.agent-mode-enabled .agent-mode-panel,
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
   overflow: hidden;
+}
+
+/* Grouped pill: one row per source behind the "+N". */
+.source-teaser-list {
+  display: grid;
+  gap: 7px;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.source-teaser-item-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--ink-3);
+  font-size: var(--font-size-micro);
+}
+
+.source-teaser-item .source-teaser-check {
+  margin-top: 2px;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.source-teaser-title.is-single-line {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.source-teaser .src-ref-glyph {
+  border-radius: 3px;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -3625,19 +3790,13 @@ body.is-hero .consensus-section::before {
 }
 
 /* --------------------------------------------------------------------------
-   6. Watch dashboard
+   6. Watch dialog surfaces
 
-   Same treatment as the thread: the KPI tiles, cards and feeds are tinted
-   surfaces rather than bordered boxes, and the status colours come from the
-   shared traffic light instead of a private amber.
+   The dashboard itself (components-watch.css, `wd-`) is built on the
+   surface scale from the start; these are the dialog parts that predate it.
    -------------------------------------------------------------------------- */
-.watch-dash-stat,
-.watch-card,
-.watch-brief-card,
-.watch-telegram-card,
 .watch-success-card,
 .watch-limit-summary,
-.watch-notifications,
 .watch-question-preview,
 .watch-setup-summary {
   border: 0;
@@ -3647,49 +3806,17 @@ body.is-hero .consensus-section::before {
   -webkit-backdrop-filter: none;
 }
 
-/* Drift is the one thing on this page worth a colour. The tint carries that
-   meaning without the generic leading-edge accent rail. */
-.watch-dash-stat.is-drift,
-.watch-drift-feed {
-  border: 0;
-  border-radius: var(--radius-md);
-  background: var(--partial-bg);
-  box-shadow: none;
-}
-
-.watch-dash-heading-row .watch-limit-summary {
-  box-sizing: border-box;
-  width: fit-content;
-  padding: 8px 10px;
-  border-radius: var(--radius-sm);
-}
-
-.watch-card-drift-dot,
-.watch-drift-feed-dot {
-  background: var(--partial);
-}
-
 /* The rest of the watch surfaces: the plan pill, the dialog, the per-card
    disclosure, the setup fields. They were the last things on this page still
    drawing a rectangle (several of them an accent-tinted one) around content
    that the tone already separates. */
 .watch-limit-plan,
 .watch-limit-summary.is-dialog,
-.watch-card-toggle,
-.watch-empty-flow b,
-.watch-example-chip,
 .watch-advanced-settings {
   border: 0;
   background: var(--raise);
   color: var(--ink-2);
   box-shadow: none;
-}
-
-.watch-card-toggle:hover,
-.watch-example-chip:hover {
-  border: 0;
-  background: var(--app-surface-hover);
-  color: var(--ink);
 }
 
 /* The defaults block is the one place a reader decides whether this dialog is
@@ -3721,19 +3848,6 @@ body.is-hero .consensus-section::before {
 .watch-delivery-field:focus {
   outline: none;
   box-shadow: 0 0 0 1px var(--line);
-}
-
-.watch-filter {
-  background: transparent;
-  border: 0;
-  color: var(--ink-2);
-}
-
-.watch-filter:hover,
-.watch-filter.is-active,
-.watch-filter[aria-pressed="true"] {
-  background: var(--raise);
-  color: var(--ink);
 }
 
 .watch-page {
@@ -3883,6 +3997,7 @@ body:not(.claim-counts-visible) .consensus-answer-body .claim-badge {
 
 @media (prefers-reduced-motion: reduce) {
   .quota-track i,
+  .quota-ring-arc,
   .sidebar-new-run,
   .sidebar-toggle-square {
     transition: none;
@@ -3979,15 +4094,6 @@ body.dark-mode .model-picker-option:is(:hover, :focus-visible):not(:disabled):no
 
 body .model-picker-option.is-selected,
 body.dark-mode .model-picker-option.is-selected,
-body .view-switch-btn.is-active {
-  background: var(--app-surface-selected);
-}
-
-body:not(.dark-mode) .view-switch-btn.is-active {
-  background: #fff;
-  box-shadow: 0 0 0 1px rgba(34, 36, 40, 0.07), 0 1px 3px rgba(34, 36, 40, 0.06);
-}
-
 /* Match controls nested inside the new opaque panels. */
 body .theme-toggle,
 body .theme-toggle.is-dark {
@@ -4146,6 +4252,22 @@ body:is([data-consensus-highlight-mode="contradictions"], [data-consensus-highli
 
 body[data-consensus-highlight-mode] :is(.src-ref, .source-link)[data-source-check]:is(:hover, :focus-visible) {
   text-decoration: underline;
+}
+
+/* A source pill whose verdict is filtered or hidden falls back to its
+   neutral look — still a pill, never bare text. Same selectors as above and
+   in source-verification.css, so this later layer wins. */
+body[data-consensus-highlight-mode="concerns"] .src-ref[data-source-check]:not([data-source-check="contradicted"]):not([data-source-check="issue"]):not([data-source-check="unknown"]),
+body:is([data-consensus-highlight-mode="contradictions"], [data-consensus-highlight-mode="critical"]) .src-ref[data-source-check]:not([data-source-check="contradicted"]),
+body.consensus-markers-hidden .src-ref[data-source-check] {
+  color: var(--ink-2);
+  background: var(--src-ref-bg);
+}
+
+body[data-consensus-highlight-mode] .src-ref[data-source-check]:is(:hover, :focus-visible),
+body.consensus-markers-hidden .src-ref[data-source-check]:hover,
+body.consensus-markers-hidden .src-ref[data-source-check]:focus-visible {
+  text-decoration: none;
 }
 
 /* Mobile navigation has its own opaque surface above the reading area.

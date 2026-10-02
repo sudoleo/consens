@@ -19,9 +19,9 @@ from app.core.security import (
     invalidate_tier_cache,
     db_firestore,
 )
+from app.services import agent_quota
 from app.services.usage_repository import (
     FirestoreUsageRepository,
-    UsageLimits,
     UsageRunNotFound,
     UsageTransitionError,
 )
@@ -43,11 +43,18 @@ class UsageRequest(BaseModel):
     id_token: str = Field(min_length=1, max_length=8192)
 
 
-def _run_limits(tier) -> UsageLimits:
-    return UsageLimits(
-        total=cfg.get_consensus_run_limit(tier),
-        deep_think=cfg.get_deep_think_run_limit(tier),
-    )
+def _token_budget(uid: str, tier):
+    """The shared daily token account, as Agent and the pipeline report it."""
+    try:
+        return run_usage_repository.account_snapshot(uid, agent_quota.account_tier(uid, tier))
+    except TierStatusUnavailable:
+        raise HTTPException(
+            status_code=503,
+            detail="Account tier is temporarily unavailable. Please retry.",
+        ) from None
+    except Exception as exc:
+        logging.error("Token budget read failed category=%s", safe_exception(exc))
+        raise HTTPException(status_code=503, detail="Token allowance is temporarily unavailable.") from None
 
 @router.get("/user_status")
 @limiter.limit("20/minute")
@@ -76,10 +83,6 @@ def get_user_status(request: Request):
             ) from None
         entitlements = entitlements_for(tier)
 
-        # 3. Limits basierend auf Status setzen
-        limit_regular = cfg.get_consensus_run_limit(tier)
-        limit_deep = cfg.get_deep_think_run_limit(tier)
-
         return {
             "uid": uid,
             # is_pro heisst weiterhin "Frontier-Modelle und Deep Think" und ist
@@ -89,8 +92,8 @@ def get_user_status(request: Request):
             "tier": entitlements.tier,
             "attachments": entitlements.attachments,
             "resolve": entitlements.resolve,
-            "limit": limit_regular,
-            "deep_limit": limit_deep
+            # One daily token account for every mode (Agent and pipeline).
+            "token_budget": _token_budget(uid, tier),
         }
 
     except HTTPException:
@@ -103,7 +106,7 @@ def get_user_status(request: Request):
 @limiter.limit("20/minute")
 def get_usage_post(request: Request, data: UsageRequest):
     """
-    Liefert den persistenten Run-Stand des aktuellen UTC-Tags zurück.
+    Liefert das gemeinsame Tokenkonto des aktuellen UTC-Tags zurück.
     """
     token = data.id_token
     
@@ -122,25 +125,17 @@ def get_usage_post(request: Request, data: UsageRequest):
         ) from None
     entitlements = entitlements_for(tier)
 
-    # 2. Limits festlegen
-    limits = _run_limits(tier)
-
-    # 3. Persistenten UTC-Tagesstand abrufen. Ein einzelnes Tagesdokument
-    #    enthaelt Total- und Deep-Think-Bucket konsistent zusammen.
-    snapshot = run_usage_repository.snapshot(uid, limits)
+    # Ein Kontodokument pro UTC-Tag (und Reset-Generation) traegt Agent und
+    # Pipeline gemeinsam.
+    token_budget = _token_budget(uid, tier)
 
     return {
-        "remaining": snapshot.total.remaining,
-        "deep_remaining": snapshot.deep_think.remaining,
         "is_pro": entitlements.is_pro,
         "tier": entitlements.tier,
         "attachments": entitlements.attachments,
         "resolve": entitlements.resolve,
-        "total_limit": snapshot.total.limit,
-        "deep_total_limit": snapshot.deep_think.limit,
-        "reserved": snapshot.total.reserved,
-        "consumed": snapshot.total.consumed,
-        "utc_date": snapshot.utc_date,
+        "token_budget": token_budget,
+        "utc_date": token_budget["day"],
     }
 
 
@@ -167,10 +162,6 @@ def release_usage_run(request: Request, data: dict = Body(...)):
 
     return {
         "status": result.status.value,
-        "remaining": result.snapshot.total.remaining,
-        "deep_remaining": result.snapshot.deep_think.remaining,
-        "total_limit": result.snapshot.total.limit,
-        "deep_total_limit": result.snapshot.deep_think.limit,
         "utc_date": result.utc_date,
     }
 

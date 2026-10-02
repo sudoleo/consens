@@ -1,4 +1,13 @@
-# Playwright-Smoke-Suite (`tests/e2e/`)
+# Browserreisen, Smoke und native Transaktionen (`tests/e2e/`)
+
+Aktueller Bestand: **44 Dateien / 368 gesammelte Fälle** (02.10.2026).
+Ergebnisse und rote Fälle: [Laufbericht](../../docs/test-coverage/findings.md).
+Google-/Gmail-/Workspace-/Modusselektor-Dateien verwenden den writerfreien
+Phase-4-Server mit API-Doubles. `test_smoke.py`, `test_agreement_verdict.py`
+und `test_run_cancel_and_progress.py` brauchen dagegen über `app_page` den
+Emulator; ebenso die nativen Transaktions-/Repositorydateien und die
+persistierten Browserreisen. Dateiname/E2E-Verzeichnis allein unterscheiden
+diese Grenzen nicht; der [Katalog](../../docs/test-coverage/e2e.md) benennt sie pro Datei.
 
 Die Suite automatisiert die risikoreichsten Punkte aus
 `docs/smoke-checklist.md` gegen einen lokalen Server. LLM-Aufrufe und Login
@@ -8,13 +17,19 @@ den lokalen Firestore-Emulator mit der fest allowgelisteten Demo-Projekt-ID
 
 ## Einmaliges Setup
 
-Voraussetzungen sind Python, Node.js und Java 21. Danach:
+Voraussetzungen sind Python, Node.js 24 und Java 21. Danach:
 
 ```powershell
 venv\Scripts\python.exe -m pip install -r requirements-e2e.txt
 venv\Scripts\python.exe -m playwright install chromium
 npm install --global firebase-tools@13.35.1
 ```
+
+Die CLI-Version ist gepinnt, ihre transitiven Abhängigkeiten benötigen heute
+jedoch ein neueres Node als 18. Node 24 wird auch in der Regression-CI verwendet.
+Die separaten Zugriffsregeltests starten mit `.\dev.ps1 check rules`; sie führen
+anonyme, Owner-, Fremd- und Admin-Claim-Clientoperationen gegen dieselben Regeln
+aus und enthalten eine temporär permissive Negativkontrolle.
 
 ## Sicherer lokaler Lauf
 
@@ -69,6 +84,11 @@ Bookmark-, Share-, Watch-, `/prepare`- und Providerantworten werden im Browser
 ersetzt. Dadurch sind die Konto-/Request-/Modal-Races auch ohne Java separat
 ausführbar:
 
+Der lokale Server nutzt Port 8033. Fuer parallele isolierte Worktrees kann
+`$env:E2E_PHASE4_PORT = "8043"` einen eigenen Port setzen. Screenshots der
+Source-Pruefungen gehen nach `test-results/source-verification-ui/`, nicht in
+die versionierten historischen Auditbilder.
+
 ```powershell
 $env:RUN_E2E = "1"
 venv\Scripts\python.exe -m pytest tests\e2e\test_phase4_frontend.py -q
@@ -112,12 +132,16 @@ Cleanup-Loops.
 Request-Writer bleiben absichtlich aktiv, damit echte Datenflüsse geprüft
 werden, landen aber nur im kurzlebigen Emulator. Inventar:
 
-- aktuell ausgeführt: Usage-Reservierungen/Run-Metadaten aus `/prepare` sowie
-  Chats, Turns, Context-Versionen, Modell-Completions und Turn-Abschluss,
-- im Mock-Profil ausdrücklich unterdrückt: `pending_results`, Differences-
-  Telemetrie sowie die durch `firebase_stub.js` ersetzten Bookmark-/Vote-Writes,
-- für neue Tests erreichbar, aber weiterhin emulatorgebunden: Completions,
-  Shares, Votes, Bookmarks, Watches und sonstige App-Endpunkt-Writer.
+- im `app_page`-Profil ausgeführt: Usage-Reservierungen/Run-Metadaten aus
+  `/prepare` sowie Chats, Turns, Context-Versionen, Modell-Completions und
+  Turn-Abschluss; der serverseitige Bookmark-Writer bleibt ebenfalls aktiv,
+- im Mock-Profil ausdrücklich unterdrückt: `pending_results` und Differences-
+  Telemetrie; `firebase_stub.js` ersetzt die direkten Bookmark-/Vote-Funktionen
+  des Browsers, aber nicht die serverseitigen Writes,
+- persistierte Reisen verwenden originales AppFirebase und echte HTTP-Routen
+  für Bookmarks, Shares, Follow/Watch und Kontolöschung. Native Tests erreichen
+  die jeweiligen Repository-/Serviceschichten. Details stehen in den
+  [Reisebelegen](../../docs/test-coverage/product/journeys.md).
 
 `test_phase2_transactions.py` spricht den isolierten Emulator zusätzlich direkt
 über die Service-Seams an. Die Tests starten je mindestens zwei konkurrierende
@@ -135,11 +159,44 @@ getestet; In-Memory-Fakes allein reichen für diese Race-Verträge nicht aus.
   Firebase-Bundle als auch die Source-URL durch `firebase_stub.js`.
 - Dummy-Eigenkeys passieren lokale Key-Prüfungen, lösen mit `MOCK_LLM=1` aber
   keine Provideraufrufe aus.
-- CDN-Skripte wie marked und DOMPurify werden echt geladen; der Lauf braucht
-  daher Netzzugang.
+- marked, DOMPurify und KaTeX kommen aus den lokalen versionierten
+  Vendorassets; ihre Produktimplementierungen werden echt geladen. Analytics
+  wird im `app_page`-Profil abgefangen.
 
 Noch nicht automatisiert sind unter anderem echte Firebase-Auth-Flows,
 Provideraufrufe, Mail-/Telegram-Zustellung und Admin-Produktionsabläufe. Die
 Phase-4-Suite mockt Firebase-Module, wechselt damit aber real durch die
 produktive `firebase.js`-Callback-/Generation-Logik. Echte externe Auth bleibt
 ausdrücklich außerhalb des E2E-Profils.
+
+## Persistierte Browserreisen (WP-29)
+
+`test_persisted_journeys.py` startet `journey_server.py` mit dem normalen
+`main.app`-Lifespan im E2E-Profil auf Port 8044 (`E2E_JOURNEY_PORT` ist optional).
+AppFirebase, HTTP-Routen, Transaktionen und Daten bleiben echt. Nur Firebase-
+Identity, Modellantworten und Mailtransport werden ersetzt. Browser-Firestore-
+Writes werfen absichtlich Fehler; es gibt keine API-Doubles. Jeder Fall besitzt
+eine zufaellige Owner-ID, nur diese Owner werden am Ende bereinigt. Ein
+prozesslokales Secret schuetzt die ausschliesslich im Testmodul registrierten
+Kontrollrouten. Traces und native Endzustaende liegen unter `test-results/`.
+
+```powershell
+$env:UNIT_TEST_MODE='1'
+$env:RUN_E2E='1'
+venv\Scripts\python.exe -m pytest tests/e2e/test_persisted_journeys.py -q
+```
+
+Der Emulator muss dazu auf `127.0.0.1:8085` laufen. Die sechs Reisen pruefen
+Speichern/Reload/Folgefrage, Agent-Stop/Recovery mit tatsaechlich gebuchten Steps,
+historische Sourcejobs mit Resume und Revisionspagination, Share/Follow/Watch-
+Versionen, Kontoloeschung/Ownerwechsel bei laufender Arbeit und einen nativen
+Bookmark-Speicherlimitfehler bei erfolgreicher Antwort. Neue V4-Produktruns
+erzeugen dabei keine kuenstlichen historischen V3-Sourcejobs.
+J03 fuehrt den echten Quellenworker inklusive Queue, Cache, Judge-Request/-Parsing,
+Zitatvalidierung und Packagecommit aus. Nur Dokumentfetch und externe Judge-
+HTTP-Antwort werden ersetzt. Die lokale Quellenqueue muss waehrend dieses Falls
+ansonsten inaktiv sein; vor jedem Tick prueft der Harness, dass kein fremder
+Job faellig ist, und bricht andernfalls ohne Verarbeitung ab.
+J05 beobachtet die echte StreamingResponse und Capacity-Lease passiv. Die
+Pruefung auf ausbleibende spaete Writes beginnt erst nach Responseende und
+Leasefreigabe, wenn Producer, Settlement und Cleanup abgeschlossen sind.

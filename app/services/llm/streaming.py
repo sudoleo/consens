@@ -21,9 +21,10 @@ from app.services.llm.citations import (
     parse_openrouter_response,
     source_response,
 )
-from app.services.llm import completion
+from app.services.llm import completion, usage_meter
 from app.services.llm.engines import (
     OPENROUTER_CHAT_COMPLETIONS_URL,
+    _ProviderHTTPStatusError,
     _ProviderResponseError,
     _error,
     _log_model_selection,
@@ -252,6 +253,20 @@ def _iter_openrouter_chunks(*, api_key: str, payload: dict) -> Iterator[StreamEv
     raise_if_provider_cancelled()
     request_payload = dict(payload)
     request_payload["stream"] = True
+    # The final chunk then carries the provider's token usage, which the bound
+    # usage meter (if any) books for this request.
+    request_payload["stream_options"] = {"include_usage": True}
+    metered = usage_meter.start_call(request_payload)
+    try:
+        yield from _metered_openrouter_chunks(api_key, request_payload, metered)
+    except _ProviderHTTPStatusError:
+        metered.rejected()
+        raise
+    finally:
+        metered.finish()
+
+
+def _metered_openrouter_chunks(api_key, request_payload, metered) -> Iterator[StreamEvent]:
     for _, data_str in _openrouter_sse(api_key=api_key, request_payload=request_payload):
         raise_if_provider_cancelled()
         if data_str.strip() == "[DONE]":
@@ -262,6 +277,8 @@ def _iter_openrouter_chunks(*, api_key: str, payload: dict) -> Iterator[StreamEv
         data = _parse_json(data_str)
         if not data:
             continue
+        if data.get("usage"):
+            metered.observe(data["usage"])
         if data.get("error"):
             raise _ProviderResponseError(data["error"])
         for choice in data.get("choices") or []:
@@ -463,7 +480,9 @@ def streaming_model_response(
                             last_reasoning_at = now
                             yield sse_pack("reasoning", {"text": ""})
                     elif item.get("type") == "final":
-                        yield sse_pack("final", source_response(item.get("result"), **extras))
+                        # Late extras (the booked token account) ride on the event.
+                        yield sse_pack("final", source_response(
+                            item.get("result"), **{**extras, **(item.get("extras") or {})}))
                         return
         except ProviderCancelled:
             return
@@ -483,6 +502,11 @@ def streaming_model_response(
             yield sse_pack("final", payload)
         finally:
             cancellation.cancel()
+            # Close the engine generator on this (pump) thread, not later in
+            # garbage collection: metered streams settle their usage here.
+            close = getattr(stream_gen, "close", None)
+            if callable(close):
+                close()
 
     # Der Provider-Generator laeuft bewusst im eigenen Pump-Thread von
     # iter_sse_with_keepalive. Das ist keine Kosmetik: Starlette zieht einen

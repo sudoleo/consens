@@ -13,6 +13,8 @@ entfallen: der gefuehrte Lauf ueber dem Thread zeigt dieselbe Phase schon
 mit einem Balken, zwei Balken fuer einen Vorgang waren zu viel.
 """
 
+import re
+
 from playwright.sync_api import expect
 
 from test_smoke import _send_question, _wait_for_all_final_answers
@@ -43,19 +45,29 @@ def _wait_for_run_start(page, timeout=20000):
 
 
 def test_send_button_stays_cancelable_until_consensus_is_done(app_page):
-    # Zustand des Send-Buttons exakt beim Consensus-Start festhalten, damit
-    # der Test nicht gegen die Stream-Dauer rennt.
+    # Observe actual RunContext/DOM changes. The registry-owned production path
+    # no longer calls the legacy consensusLifecycle.startRun bridge.
     app_page.evaluate(
         """() => {
-          const lifecycle = window.App.consensusLifecycle;
-          const originalStartRun = lifecycle.startRun;
-          window.__sendButtonWasCancelAtConsensusStart = null;
-          lifecycle.startRun = function () {
-            const run = originalStartRun.apply(this, arguments);
-            window.__sendButtonWasCancelAtConsensusStart = document
-              .getElementById("sendButton")
-              .classList.contains("is-cancel-action");
-            return run;
+          const button = document.getElementById("sendButton");
+          window.__consensusCancelSamples = [];
+          const sample = () => {
+            if (!window.App.consensusLifecycle.isRunning()) return;
+            window.__consensusCancelSamples.push({
+              status: window.App.runRegistry.visible().consensus.status,
+              cancelable: button.classList.contains("is-cancel-action")
+            });
+          };
+          const onRunChange = () => queueMicrotask(sample);
+          window.addEventListener("consensio:run-registry-change", onRunChange);
+          const observer = new MutationObserver(sample);
+          observer.observe(button, {attributes: true, attributeFilter: ["class"]});
+          observer.observe(document.getElementById("consensusResponse"), {
+            childList: true, subtree: true, characterData: true
+          });
+          window.__stopConsensusCancelObservation = () => {
+            observer.disconnect();
+            window.removeEventListener("consensio:run-registry-change", onRunChange);
           };
         }"""
     )
@@ -64,14 +76,19 @@ def test_send_button_stays_cancelable_until_consensus_is_done(app_page):
     _wait_for_all_final_answers(app_page)
 
     app_page.wait_for_function(
-        "() => window.__sendButtonWasCancelAtConsensusStart !== null",
+        "() => window.__consensusCancelSamples.length > 0",
         timeout=30000,
     )
-    assert app_page.evaluate("() => window.__sendButtonWasCancelAtConsensusStart") is True
-
     # Erst wenn der Consensus durch ist, wird wieder gesendet statt abgebrochen.
     _wait_for_consensus_idle(app_page)
-    expect(app_page.locator("#sendButton")).not_to_have_class("is-cancel-action")
+    app_page.evaluate("() => window.__stopConsensusCancelObservation()")
+    samples = app_page.evaluate("() => window.__consensusCancelSamples")
+    assert any(sample["status"] == "pending" for sample in samples), samples
+    assert any(sample["status"] in {"streaming", "differences"} for sample in samples), samples
+    assert all(sample["cancelable"] for sample in samples), samples
+    expect(app_page.locator("#sendButton")).not_to_have_class(
+        re.compile(r"(?:^|\s)is-cancel-action(?:\s|$)")
+    )
 
 
 def test_send_button_cancels_a_running_consensus(app_page):
@@ -84,7 +101,9 @@ def test_send_button_cancels_a_running_consensus(app_page):
 
     app_page.evaluate("() => window.sendQuestion()")
     assert app_page.evaluate("() => window.App.consensusLifecycle.isRunning()") is False
-    expect(app_page.locator("#sendButton")).not_to_have_class("is-cancel-action")
+    expect(app_page.locator("#sendButton")).not_to_have_class(
+        re.compile(r"(?:^|\s)is-cancel-action(?:\s|$)")
+    )
 
 
 def test_model_rows_restart_empty_on_a_second_run(app_page):

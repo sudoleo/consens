@@ -171,7 +171,8 @@ def app_page(app_server, context, console_errors):
     page.goto(f"{app_server}/app", wait_until="domcontentloaded")
     page.wait_for_function(
         "() => window.App && typeof window.sendQuestion === 'function'"
-        " && typeof window.getConsensus === 'function'",
+        " && typeof window.getConsensus === 'function'"
+        " && window.App.authState.known && window.App.authState.uid === window.auth?.currentUser?.uid",
         timeout=30000,
     )
     return page

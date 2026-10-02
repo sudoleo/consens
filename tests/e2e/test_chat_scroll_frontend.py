@@ -51,12 +51,18 @@ def test_agent_review_and_completion_keep_visible_answer_still(browser, phase4_s
         page.wait_for_timeout(500)
         page.evaluate("""atEnd => {
           const paragraphs = document.querySelectorAll('#agentAnswerBody p');
-          window.__readingAnchor = atEnd ? paragraphs[paragraphs.length - 1] : paragraphs[20];
+          window.__readingIndex = atEnd ? paragraphs.length - 1 : 20;
+          window.__readingText = paragraphs[__readingIndex].textContent;
+          window.__readingTop = () => {
+            const node = document.querySelectorAll('#agentAnswerBody p')[__readingIndex];
+            if (!node || node.textContent !== __readingText) throw new Error('Reading paragraph disappeared or changed');
+            return node.getBoundingClientRect().top;
+          };
         }""", at_end)
         assert page.locator('#agentAnswerActivity').bounding_box()['y'] + page.locator('#agentAnswerActivity').bounding_box()['height'] < 0
         for stage in ['review', 'checked', 'finished', 'late_usage']:
             samples = page.evaluate("""stage => new Promise(resolve => {
-              const samples = [__readingAnchor.getBoundingClientRect().top];
+              const samples = [__readingTop()];
               App.runRegistry.update(__stableRun.runId, run => {
                 if (stage === 'review') run.metadata.agentActivity.push(
                   {id:'review-progress', kind:'progress', text:'The models disagree on some assumptions. I check the answer against the available comparison results.'},
@@ -71,7 +77,7 @@ def test_agent_review_and_completion_keep_visible_answer_still(browser, phase4_s
               if (stage === 'finished') App.runRegistry.setStatus(__stableRun.runId, 'succeeded');
               const start = performance.now();
               function sample() {
-                samples.push(__readingAnchor.getBoundingClientRect().top);
+                samples.push(__readingTop());
                 if (performance.now() - start < 550) requestAnimationFrame(sample);
                 else resolve(samples);
               }

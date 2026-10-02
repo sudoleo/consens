@@ -131,8 +131,11 @@ def test_followups_are_no_longer_pro_gated():
 
 def test_free_daily_runs_allow_more_than_a_single_try():
     # Drei Runs waren ein Test, keine Gewohnheit - und mit freien Follow-ups
-    # waere ein Limit von drei sofort wieder die alte Sackgasse.
-    assert cfg.get_consensus_run_limit(False) >= 10
+    # waere ein Limit von drei sofort wieder die alte Sackgasse. Seit dem
+    # Tokenkonto: das Free-Konto deckt mindestens zehn typische Laeufe.
+    from app.services import agent_budget_config
+    config = agent_budget_config.snapshot({})
+    assert config["tier_limits"]["free"] >= 10 * config["run_estimates"]["free"]["consensus"]
 
 
 # ---------------------------------------------------------------------------
@@ -150,8 +153,8 @@ def test_watch_nudge_starts_a_watch_directly_and_says_when_it_writes():
     assert ":not(.watch-feature-nudge-close)" in read("static/css/components-input.css")
     assert "Watch this question" in nudge
     # Der Knopf verspricht Stille, solange sich nichts aendert.
-    assert "when the models change their mind" in nudge
-    assert "only on a material change" in nudge
+    assert "write only when a source moves the answer" in nudge
+    assert "only on evidence" in nudge
 
     # Der Hinweis bittet um eine wiederkehrende Verpflichtung. Er darf deshalb
     # erst erscheinen, wenn die Nutzung belegt ist -- nicht nach der ersten

@@ -1166,6 +1166,21 @@
 
 .topic-timeline .is-minor .timeline-dot { background: var(--partial); }
 .topic-timeline .is-major .timeline-dot { background: var(--dispute); }
+.topic-timeline .is-held .timeline-dot { background: transparent; box-shadow: inset 0 0 0 1.5px var(--text-secondary); }
+.topic-timeline .is-confirming .timeline-dot,
+.topic-timeline .is-reverted .timeline-dot { background: color-mix(in srgb, var(--text-primary) 30%, transparent); }
+.topic-timeline .is-preliminary .timeline-dot { background: color-mix(in srgb, var(--dispute) 45%, transparent); }
+.topic-pending-check {
+  max-width: 72ch;
+  margin: 16px 0 0;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--raise);
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+}
+.topic-pending-check strong { color: var(--text-primary); }
 .topic-timeline .is-selected .timeline-dot { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-primary) 18%, transparent); }
 
 .timeline-copy {
@@ -1855,6 +1870,14 @@
 }
 
 .topic-strip-cell.is-latest.is-material { background: var(--dispute); }
+
+/* Checks whose answer did not stand (docs/watch-evidence-model.md): drawn,
+   but never as movement. */
+.topic-strip-cell.is-held { background: transparent; box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--text-primary) 45%, transparent); }
+.topic-strip-cell.is-confirming { background: color-mix(in srgb, var(--text-primary) 45%, transparent); }
+.topic-strip-cell.is-preliminary { height: 30px; background: color-mix(in srgb, var(--dispute) 45%, transparent); }
+.topic-strip-cell.is-reverted { height: 12px; background: color-mix(in srgb, var(--text-primary) 18%, transparent); }
+.topic-strip-cell.is-latest.is-held { background: transparent; }
 
 /* Checks this browser has not seen before keep a mark until the next visit. */
 .topic-strip-cell.is-unseen {

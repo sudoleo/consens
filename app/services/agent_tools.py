@@ -26,18 +26,22 @@ def search_family(model):
                  if model.model.startswith(p.openrouter_prefix.rstrip("/") + "/")), "")
 
 
+# Exa results per search round. They bound what a round can add to the
+# input (SEARCH_INPUT_TOKENS); the publishers' own search may ignore them.
+SEARCH_RESULTS, SEARCH_RESULT_CHARACTERS = 5, 2000
+
+
 def search_tools(model, searches):
-    if model.request_config.get("_agent_bounded_search"):
-        return [web_search_tool(search_family(model), max_uses=searches, engine="exa",
-                max_results=3, max_total_results=3 * searches, max_characters=1000)] if searches else []
-    return [web_search_tool(search_family(model), max_uses=searches,
-                           max_results=5, max_total_results=5 * searches, max_characters=2000)] if searches else []
+    """The one search configuration for every model, as in Consensus.
 
-
-def uses_native_search(model):
-    # auto delegates these publishers to native search; Grok deliberately
-    # shares Consensus's bounded Exa route. Other families use Exa via auto.
-    return not model.request_config.get("_agent_bounded_search") and search_family(model) in {"openai", "anthropic", "gemini"}
+    Engine "auto" lets OpenRouter choose: the publisher's own search where one
+    exists (Google grounding, OpenAI, Anthropic), Exa otherwise. The only
+    exception, Grok on Exa, lives in engines.web_search_tool. See
+    docs/agent-mode.md, "Websuche".
+    """
+    return [web_search_tool(search_family(model), max_uses=searches, max_results=SEARCH_RESULTS,
+                            max_total_results=SEARCH_RESULTS * searches,
+                            max_characters=SEARCH_RESULT_CHARACTERS)] if searches else []
 
 
 @dataclass(frozen=True)

@@ -201,9 +201,15 @@ it('explains a missing model without reporting a failed check, including older s
     d.querySelector('[data-section="differences"]').click();
     const context = w.App.answerReader.openContext.mock.calls.at(-1)[0];
     const panel = context.renderPanel('differences');
-    expect(panel.textContent).toContain('1 of 2 models returned complete answers');
-    expect(panel.textContent).toContain('GPT Luna: no answer, the provider was busy.');
-    expect(panel.textContent).toContain('differences and coverage checks completed');
+    // One quiet line; the missing model is detail on demand behind it.
+    const status = panel.querySelector('.agent-evidence-status');
+    expect(status.tagName).toBe('DETAILS');
+    expect(status.open).toBe(false);
+    expect(status.querySelector('summary').textContent).toBe('1 of 2 models answered · Checked');
+    expect(status.querySelector('.agent-evidence-status-detail').textContent).toBe('GPT Luna: no answer, the provider was busy.');
+    expect(panel.firstElementChild).toBe(status);
+    expect(panel.querySelectorAll(':scope > p.agent-review-note')).toHaveLength(0);
+    expect(panel.textContent).not.toContain('Comparison checked');
     expect(context.answers.at(-1).error).toContain('the provider was busy');
   }
   dom.window.close();
@@ -225,7 +231,37 @@ it.each([
   d.querySelector('[data-section="differences"]').click();
   const panel = w.App.answerReader.openContext.mock.calls.at(-1)[0].renderPanel('differences');
   expect(panel.textContent).toContain(reason);
-  expect(panel.textContent).not.toContain('differences and coverage checks completed');
+  const status = panel.querySelector('.agent-evidence-status');
+  expect(status.querySelector('summary').textContent).toBe('1 of 2 models answered · Partly checked');
+  // A missing check changes how the panel reads and stays visible; smaller
+  // gaps are listed behind the status line with the missing model.
+  const detail = status.querySelector('.agent-evidence-status-detail').textContent;
+  if (kind === 'coverage') {
+    expect(panel.querySelector('.agent-evidence-limit').textContent).toContain(reason);
+    expect(detail).not.toContain(reason);
+  } else {
+    expect(detail).toContain(reason);
+    expect(panel.querySelector('.agent-evidence-limit')).toBeNull();
+  }
+  dom.window.close();
+});
+it('keeps a fully answered check to one line and the source report below the findings', () => {
+  const {window: w, document: d, dom} = setup();
+  w.App.sourceVerification = {render: vi.fn()};
+  const body = d.getElementById('answer'); body.dataset.markdown = 'Exact answer.';
+  const review = snapshot();
+  review.checks[0].source_verification = {answer_version: 'answer-hash', run_id: 'c1', basis_hash: 'b1', status: 'complete'};
+  w.App.agentReview.render(body, review);
+  d.querySelector('[data-section="differences"]').click();
+  const panel = w.App.answerReader.openContext.mock.calls.at(-1)[0].renderPanel('differences');
+  const status = panel.querySelector('.agent-evidence-status');
+  expect(status.tagName).toBe('P');
+  expect(status.textContent).toBe('1 model answered · Checked');
+  const order = [...panel.children].map(child => child.className);
+  expect(order).toEqual(['agent-evidence-status', 'agent-evidence-differences', 'agent-evidence-footer']);
+  const footer = panel.querySelector('.agent-evidence-footer');
+  expect(footer.querySelector('.agent-source-check')).not.toBeNull();
+  expect(footer.textContent).toContain('Model agreement is not independent fact checking.');
   dom.window.close();
 });
 
@@ -266,6 +302,25 @@ it('names an output limit as the reason a comparison model gave no answer', () =
   const context = w.App.answerReader.openContext.mock.calls.at(-1)[0];
   expect(context.answers.at(-1).error).toContain('whole output allowance');
   expect(context.answers.at(-1).error).not.toContain('did not respond');
+  dom.window.close();
+});
+it('shows a model stopped mid-answer as a marked, readable incomplete answer, and a cut-off one as marked', () => {
+  const {window: w, document: d, dom} = setup();
+  const body = d.getElementById('answer'); body.dataset.markdown = 'Exact answer.';
+  const review = partialReview();
+  review.comparisons[0].failed_models[0] = {...review.comparisons[0].failed_models[0],
+    failure: {code: 'late_cutoff'}, partial_text: 'First half of an answer'};
+  review.comparisons[0].answers[0].truncated = true;
+  w.App.agentReview.render(body, review);
+  d.querySelector('[data-section="differences"]').click();
+  const context = w.App.answerReader.openContext.mock.calls.at(-1)[0];
+  const stopped = context.answers.at(-1);
+  expect(stopped.status).toBe('incomplete');
+  expect(stopped.text).toBe('First half of an answer');
+  expect(stopped.error).toContain('Not used for the answer or its check');
+  expect(context.answers[0]).toMatchObject({status: 'complete', badge: 'Cut off'});
+  const panel = context.renderPanel('differences');
+  expect(panel.textContent).toContain('GPT Luna: stopped before it finished, it was still writing when the answer was checked.');
   dom.window.close();
 });
 it('keeps Copy in the evidence row across re-renders and hands it back when the row goes away', async () => {

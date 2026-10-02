@@ -674,14 +674,15 @@ def test_archived_difference_cards_carry_no_live_run_controls():
     # eine Resolve-Runde laeuft immer gegen die Modelle des aktiven Laufs.
     # Archivierte Karten dürfen nur mit expliziter, turngebundener Navigation
     # Sprunglinks anbieten, niemals still auf die aktuellen Antwortboxen zeigen.
-    assert "if (!isStatic || opts.answerNavigation) {" in cards
-    assert "if (opts.answerNavigation) opts.answerNavigation.open(model, pos.quote, jump);" in cards
+    assert "if (isStatic && !opts.answerNavigation) return false;" in cards
+    assert "if (opts.answerNavigation) opts.answerNavigation.open(model, pos.quote, entry);" in cards
     assert "(isStatic && !diff.resolution)" in cards
     assert 'resolveSection.querySelectorAll("button").forEach' in cards
-    # Die Modellnamen kommen aus dem Turn, nicht aus den Live-Boxen.
+    # Die Modellnamen kommen aus dem Turn, nicht aus den Live-Boxen; Icon und
+    # Name stehen in einer Kopfzeile pro Position.
     assert "const name = labelFor(model);" in cards
-    assert "mark.title = name;" in cards
-    assert 'mark.setAttribute("aria-label", name);' in cards
+    assert "nameEl.textContent = name;" in cards
+    assert '"Open the full answer from " + name' in cards
     assert "function storedModelLabeller(modelAnswers)" in (
         (ROOT / "static" / "js" / "consensus-run.js").read_text(encoding="utf-8")
     )

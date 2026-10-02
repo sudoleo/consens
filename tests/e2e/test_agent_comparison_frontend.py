@@ -6,7 +6,7 @@ import re
 import pytest
 from playwright.sync_api import expect
 from test_phase4_frontend import phase4_server, _real_firebase_page, _json
-from test_agent_chat_frontend import CATALOG, _choose_mode, _snapshot
+from test_agent_chat_frontend import CATALOG, _choose_mode, _open_agent_level, _snapshot
 
 
 @pytest.mark.parametrize("width", [1280, 390])
@@ -23,9 +23,11 @@ def test_comparison_selection_blocks_send_before_losing_draft(browser, phase4_se
         _choose_mode(page, 'agent')
         page.locator('#questionInput').fill('Keep this draft while I choose the models.')
         expect(page.locator('#sendButton')).to_be_enabled()
-        page.locator('.consensus-model-inline .model-picker-display').click()
-        page.locator('.consensus-model-inline .model-picker-custom-option').click()
-        selected = page.locator('.consensus-model-inline .model-picker-row-toggle[aria-checked="true"]')
+        # One chip in Agent: the comparison models are a section of its menu.
+        expect(page.locator('.consensus-model-inline')).to_be_hidden()
+        _open_agent_level(page, 'companion')
+        page.locator('.agent-model-picker .model-picker-custom-option').click()
+        selected = page.locator('.agent-model-picker .model-picker-row-toggle[aria-checked="true"]')
         while selected.count() > 1:
             selected.first.click()
         expect(page.locator('#sendButton')).to_be_disabled()
@@ -46,11 +48,11 @@ def test_comparison_selection_blocks_send_before_losing_draft(browser, phase4_se
         expect(page.locator('#questionInput')).to_have_value(draft)
         assert requests == []
         page.locator('#agentComposerAction').click()
-        expect(page.locator('.consensus-model-inline .model-picker-menu')).to_be_visible()
-        custom = page.locator('.consensus-model-inline .model-picker-custom-option')
+        expect(page.locator('.agent-model-picker .model-picker-menu')).to_be_visible()
+        custom = page.locator('.agent-model-picker .model-picker-custom-option')
         if custom.is_visible():
             custom.click()
-        excluded = page.locator('.consensus-model-inline .model-picker-row-toggle[aria-checked="false"]')
+        excluded = page.locator('.agent-model-picker .model-picker-row-toggle[aria-checked="false"]')
         excluded.first.click()
         expect(page.locator('#sendButton')).to_be_disabled()
         excluded.first.click()
@@ -88,19 +90,23 @@ def test_mobile_agent_plus_menu_opens_tools_from_single_line_composer(browser, p
         page.wait_for_function("() => !document.body.classList.contains('composer-collapsed') && !document.body.classList.contains('composer-animating')")
         def box(selector):
             return page.locator(selector).evaluate('el => el.getBoundingClientRect().toJSON()')
+        # One models chip (the chat model and how many it is compared with),
+        # never a second comparison chip next to it.
         agent_model = box('.agent-model-picker .model-picker-display')
-        comparison = box('.consensus-model-inline .model-picker-display')
+        expect(page.locator('.consensus-model-inline')).to_be_hidden()
+        expect(page.locator('.composer-models .model-picker-display:visible')).to_have_count(1)
+        expect(page.locator('.agent-model-picker .model-picker-display-count')).to_have_text(re.compile(r'^\+\d$'))
         expect(page.locator('#runModeControl')).to_be_hidden()
         actions = [box('#attachTrigger'), box('#sendButton')]
-        bounds = [actions[0], agent_model, comparison, actions[-1]]
+        bounds = [actions[0], agent_model, actions[-1]]
         centers = [b['y'] + b['height'] / 2 for b in actions]
         assert max(centers) - min(centers) <= 1
         assert all(a['right'] <= b['left'] + 1 for a, b in zip(actions, actions[1:]))
-        assert max(agent_model['bottom'], comparison['bottom']) <= min(b['top'] for b in actions) + 1
+        assert agent_model['bottom'] <= min(b['top'] for b in actions) + 1
         assert page.locator('.agent-model-picker .model-picker-display-text').evaluate(
             'label => label.scrollWidth <= label.clientWidth + 1')
-        assert bounds[0]['x'] >= 0 and bounds[-1]['right'] <= width
-        assert page.locator('.consensus-model-inline .select-wrapper').evaluate(
+        assert bounds[0]['x'] >= 0 and bounds[-1]['right'] <= width and agent_model['right'] <= width
+        assert page.locator('.agent-model-picker').evaluate(
             "el => getComputedStyle(el, '::after').display === 'none'")
         _snapshot(page, f'agent-expanded-keyboard-{width}')
         page.set_viewport_size({"width": width, "height": 844})
@@ -122,12 +128,12 @@ def test_mobile_agent_plus_menu_opens_tools_from_single_line_composer(browser, p
         _snapshot(page, f'agent-plus-options-{width}')
         page.locator('#agentComparisonMenuOption').tap()
         expect(page.locator('#attachMenu')).not_to_be_visible()
-        expect(page.locator('.consensus-model-inline .model-picker-menu')).to_be_visible()
+        expect(page.locator('.agent-model-picker .model-picker-menu')).to_be_visible()
         page.wait_for_function("() => !document.body.classList.contains('composer-animating')")
-        page.locator('.consensus-model-inline .model-picker-custom-option').tap()
-        expect(page.locator('.consensus-model-inline .model-picker-menu')).to_contain_text('Answering models')
+        page.locator('.agent-model-picker .model-picker-custom-option').tap()
+        expect(page.locator('.agent-model-picker .model-picker-menu')).to_contain_text('Comparison models')
         _snapshot(page, f'agent-toolbar-models-touch-{width}')
-        selected = page.locator('.consensus-model-inline .model-picker-row-toggle[aria-checked="true"]')
+        selected = page.locator('.agent-model-picker .model-picker-row-toggle[aria-checked="true"]')
         while selected.count() > 1:
             selected.first.tap()
         page.keyboard.press('Escape')
@@ -137,8 +143,8 @@ def test_mobile_agent_plus_menu_opens_tools_from_single_line_composer(browser, p
         expect(page.locator('#composerModeBar')).not_to_be_visible()
         _snapshot(page, f'agent-followup-selection-hint-{width}')
         page.locator('#agentComposerAction').tap()
-        expect(page.locator('.consensus-model-inline .model-picker-menu')).to_be_visible()
-        page.locator('.consensus-model-inline .model-picker-row-toggle[aria-checked="false"]').first.tap()
+        expect(page.locator('.agent-model-picker .model-picker-menu')).to_be_visible()
+        page.locator('.agent-model-picker .model-picker-row-toggle[aria-checked="false"]').first.tap()
         expect(page.locator('#agentComposerNotice')).not_to_be_visible()
         page.keyboard.press('Escape')
         page.evaluate('() => App.composer.collapse({force:true})')
@@ -253,7 +259,7 @@ def test_comparison_review_and_saved_projection(browser, phase4_server, width, d
         expect(page.locator('#agentReasoningEffort')).to_have_value('high')
         expect(page.locator('#composerDeepState')).to_have_text('High')
         page.evaluate("dark => { document.documentElement.classList.toggle('dark-mode', dark); document.body.classList.toggle('dark-mode', dark); }", dark)
-        expect(page.locator("#quotaTriggerValue")).to_have_text("75%")
+        expect(page.locator('#quotaTrigger')).to_have_attribute('aria-label', re.compile(r'^75% of today'))
         expect(page.locator("#agentTokenBudget")).to_have_count(0)
         def assert_composer_layout():
             input_box = page.locator("#questionInput").bounding_box()
@@ -264,11 +270,11 @@ def test_comparison_review_and_saved_projection(browser, phase4_server, width, d
             if page.locator("#agentModelControls").is_visible():
                 label = page.locator(".agent-model-picker .model-picker-display-text").bounding_box()
                 assert label["width"] >= 90
-        picker = page.locator(".consensus-model-inline .model-picker-display")
-        expect(picker).to_have_text(re.compile(r"^\s*\d+ models?\s*$"))
-        picker.click()
-        page.locator(".consensus-model-inline .model-picker-custom-option").click()
-        expect(page.locator(".consensus-model-inline .model-picker-menu")).not_to_contain_text("Consensus engine")
+        expect(page.locator(".consensus-model-inline")).to_be_hidden()
+        expect(page.locator(".agent-model-picker .model-picker-display-count")).to_have_text(re.compile(r"^\+\d+$"))
+        _open_agent_level(page, "companion")
+        page.locator(".agent-model-picker .model-picker-custom-option").click()
+        expect(page.locator(".agent-model-picker .model-picker-menu")).not_to_contain_text("Consensus engine")
         page.keyboard.press("Escape")
         assert_composer_layout()
         _snapshot(page, f"comparison-composer-{width}")
@@ -281,7 +287,7 @@ def test_comparison_review_and_saved_projection(browser, phase4_server, width, d
         expect(page.locator('#attachTrigger')).to_be_visible()
         assert requests[0]['check_sources'] is True
         assert requests[0]['reasoning_effort'] == 'high'
-        expect(page.locator('#quotaTriggerValue')).to_have_text('56%')
+        expect(page.locator('#quotaTrigger')).to_have_attribute('aria-label', re.compile(r'^56% of today'))
         expect(page.locator('.agent-evidence-link[data-section="sources"]')).to_have_text('Sources2')
         page.wait_for_function("() => App.runRegistry.visible()?.status === 'succeeded'")
         evidence_links = page.locator('#agentAnswer .agent-evidence-link')
@@ -291,7 +297,7 @@ def test_comparison_review_and_saved_projection(browser, phase4_server, width, d
         if width <= 540:
             boxes = [control.bounding_box() for control in evidence_links.all()]
             assert max(box['width'] for box in boxes) - min(box['width'] for box in boxes) <= 1
-            assert max(box['y'] for box in boxes) - min(box['y'] for box in boxes) <= 1
+            assert max(round(box['y']) for box in boxes) - min(round(box['y']) for box in boxes) <= 1
             assert all(box['height'] >= 44 for box in boxes)
             assert evidence_links.evaluate_all('''links => links.every(link => {
                 const box = link.getBoundingClientRect();
@@ -410,7 +416,7 @@ def test_comparison_review_and_saved_projection(browser, phase4_server, width, d
 
 
 @pytest.mark.parametrize("width", [1280, 390])
-def test_saved_agent_paper_urls_are_numbered_citations(browser, phase4_server, width):
+def test_saved_agent_paper_urls_become_source_pills(browser, phase4_server, width):
     context, page = _real_firebase_page(browser, phase4_server)
     text = ("## Kurzfassung\n\nMehrere unabhängige Perspektiven können helfen.\n\n"
         "Verwandte Arbeiten: Self-Consistency (https://arxiv.org/abs/2203.07186), "
@@ -434,7 +440,9 @@ def test_saved_agent_paper_urls_are_numbered_citations(browser, phase4_server, w
         refs = page.locator('#agentAnswerBody .src-ref')
         expect(refs).to_have_count(3)
         expect(page.locator('#agentAnswerBody')).not_to_contain_text('https://')
-        assert refs.first.evaluate('el => getComputedStyle(el).verticalAlign') == 'super'
+        # Source pills sit on the text baseline (favicon + domain), no raised numbers.
+        assert refs.first.evaluate('el => getComputedStyle(el).verticalAlign') == 'baseline'
+        expect(refs.first.locator('.src-ref-label')).to_have_text('arxiv.org')
         assert page.locator('#agentAnswerBody').get_attribute('data-markdown') == text
         refs.first.focus()
         expect(page.locator('#sourceTeaser')).to_be_visible()
@@ -448,6 +456,110 @@ def test_saved_agent_paper_urls_are_numbered_citations(browser, phase4_server, w
         page.evaluate('turn => window.App.followup.renderStoredTurns([turn])', turn)
         expect(page.locator('.thread-history-turn .src-ref')).to_have_count(3)
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+        assert not errors
+    finally:
+        context.close()
+
+
+@pytest.mark.parametrize("width,dark", [(1440, False), (1440, True), (390, False), (390, True)])
+def test_differences_reader_stays_calm_with_missing_models(browser, phase4_server, width, dark):
+    """One status line, severity-first findings, one open finding at a time."""
+    from app.services.chat_store import turn_detail
+
+    context, page = _real_firebase_page(browser, phase4_server, has_touch=width < 700,
+        init_script=f"localStorage.setItem('theme', '{'dark' if dark else 'light'}');")
+    critical, minor = "The smaller plan includes five seats.", "Billing is monthly."
+    text = "For a team of five, start with the **smaller plan**.\n\n" + critical + "\n\n" + minor + "\n\nConfirm the seat limit before purchasing."
+    digest = hashlib.sha256(text.encode()).hexdigest()
+    models = [("openai", "OpenAI", "openai/gpt-5.4-mini", "GPT-5.4 Mini"),
+              ("gemini", "Gemini", "google/gemini-3.5-flash-lite", "Gemini 3.5 Flash-Lite"),
+              ("kimi", "Kimi", "moonshotai/kimi-k2.6", "Kimi K2.6"),
+              ("glm", "GLM", "z-ai/glm-5.3-flash", "GLM 5.3 Flash")]
+    answers = [{"provider": p, "provider_label": label, "model": {"model": model, "label": name},
+        "text": f"### {name}\n\nChoose the **smaller plan**. Confirm the seat limit.", "sources": []} for p, label, model, name in models]
+    failed = [{"label": "GPT-5.6 Luna", "model": "openai/gpt-5.6-luna", "failure": {"code": "late_cutoff"}},
+              {"label": "DeepSeek V4 Flash", "model": "deepseek/deepseek-v4-flash", "failure": {}}]
+    differences = [
+        {"claim": "Whether billing is monthly or annual", "consensus_anchor": minor, "type": "contradiction", "severity": "minor",
+         "positions": [{"models": ["OpenAI", "Gemini"], "stance": "Billing is monthly.", "quote": "Confirm the seat limit."},
+                       {"models": ["Kimi"], "stance": "Annual billing is cheaper.", "quote": "Choose the smaller plan."}]},
+        {"claim": "Whether the smaller plan includes five seats", "consensus_anchor": critical, "type": "contradiction", "severity": "major",
+         "positions": [{"models": ["OpenAI", "Gemini", "Kimi"], "stance": "Five seats are included.", "quote": "Choose the smaller plan."},
+                       {"models": ["GLM"], "stance": "The seat limit needs confirmation.", "quote": "Confirm the seat limit."}]},
+        {"claim": "What matters most when the team grows", "type": "emphasis",
+         "positions": [{"models": ["Gemini"], "stance": "Upgrade flexibility."}, {"models": ["GLM"], "stance": "Monthly cost."}]}]
+    question = ("Which plan suits a team of five that needs monthly billing, expects to grow to eight people next year "
+                "and wants to avoid paying for seats it does not use?")
+    review = {"status": "succeeded", "answer_version": 1, "answer_hash": digest,
+        "versions": [{"id": 1, "text": text, "hash": digest, "status": "succeeded"}],
+        "comparisons": [{"id": "c1", "basis_hash": "basis", "question": question, "reason": "Compare cost and flexibility",
+            "status": "partial", "answers": answers, "failed_models": failed}],
+        "checks": [{"comparison_id": "c1", "basis_hash": "basis", "answer_hash": digest, "status": "succeeded",
+            "issues": [{"code": "models_unavailable", "count": 2}],
+            "differences_data": {"claims": [], "differences": differences, "models_compared": [m[1] for m in models]}}]}
+    turn = turn_detail("b" * 32, {"execution_mode": "agent", "status": "completed", "question": "Compare plans for our team",
+        "assistant_response": text, "agent_review": review, "agent_settings": {"model_id": CATALOG["default_model_id"]}}, {})
+    errors = []
+    page.on('pageerror', lambda error: errors.append(str(error)))
+    theme = 'dark' if dark else 'light'
+    try:
+        page.set_viewport_size({"width": width, "height": 900})
+        page.route('**/user_status', lambda r: _json(r, {"tier": "pro", "is_pro": True, "agent_access": True}))
+        page.route('**/agent/models', lambda r: _json(r, CATALOG))
+        page.evaluate("async () => { await window.__switchE2EUser('account-a'); }")
+        page.evaluate("turn => App.runRegistry.showSavedView({type:'bookmark'}, {chatId:'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', turnId:turn.id, executionMode:'agent', question:turn.question, consensus:turn.consensus, currentTurn:turn})", turn)
+        page.evaluate('() => window.exitHeroMode()')
+        page.locator('.agent-evidence-link[data-section="differences"]').click()
+        reader = page.locator('#modelAnswerReader')
+        expect(reader).to_be_visible()
+        page.locator('.answer-reader-dialog').evaluate("async el => { await Promise.all(el.getAnimations().map(a => a.finished.catch(() => {}))); }")
+        # No subtitle, no "Comparison focus" label; the question is one line.
+        expect(page.locator('#answerReaderStatus')).to_be_hidden()
+        expect(page.locator('.answer-reader-context-top')).to_be_hidden()
+        line_box = page.locator('#answerReaderQuestion summary span').bounding_box()
+        assert line_box['height'] <= 24, line_box
+        # One quiet status line; the missing models wait behind it.
+        status = page.locator('#answerReaderInspector details.agent-evidence-status')
+        expect(status.locator('summary')).to_have_text('4 of 6 models answered · Checked')
+        expect(status.locator('.agent-evidence-status-detail')).to_be_hidden()
+        expect(page.locator('#answerReaderInspector')).not_to_contain_text('Comparison checked')
+        cards = page.locator('#answerReaderInspector .diff-card')
+        expect(cards).to_have_count(3)
+        expect(cards.locator('.diff-type-tag')).to_have_text(['Critical', 'Minor', 'Emphasis'])
+        expect(page.locator('#answerReaderInspector')).not_to_contain_text('positions')
+        for index in range(3):
+            expect(cards.nth(index)).not_to_have_attribute('open', '')
+        claim_weight = cards.first.locator('.diff-card-claim').evaluate('el => getComputedStyle(el).fontWeight')
+        assert claim_weight == '400'
+        tag_color = cards.first.locator('.diff-type-tag').evaluate('el => getComputedStyle(el).color')
+        status_color = status.evaluate('el => getComputedStyle(el).color')
+        assert tag_color == status_color  # the dot carries the colour, not the word
+        _snapshot(page, f'differences-calm-overview-{width}-{theme}')
+        status.locator('summary').click()
+        detail = status.locator('.agent-evidence-status-detail')
+        expect(detail).to_be_visible()
+        expect(detail).to_contain_text('GPT-5.6 Luna: no answer, it was still writing when the answer was checked.')
+        expect(detail).to_contain_text('DeepSeek V4 Flash: no answer, no complete answer arrived.')
+        status.locator('summary').click()
+        cards.first.locator('summary').click()
+        expect(cards.first).to_have_attribute('open', '')
+        heads = cards.first.locator('.diff-position-label')
+        expect(heads).to_have_count(2)
+        expect(heads.first.locator('.diff-position-name')).to_have_text(['GPT-5.4 Mini', 'Gemini 3.5 Flash-Lite', 'Kimi K2.6'])
+        expect(heads.first.locator('.diff-jump-link')).to_have_count(3)
+        expect(cards.first.locator('.diff-position-links')).to_have_count(0)
+        if width >= 760:
+            # Icons and names share a single line per position.
+            assert heads.first.bounding_box()['height'] <= 30
+        expect(cards.first.locator('.diff-position-quote').first).to_be_visible()
+        _snapshot(page, f'differences-calm-detail-{width}-{theme}')
+        cards.nth(1).locator('summary').click()
+        expect(cards.nth(1)).to_have_attribute('open', '')
+        expect(cards.first).not_to_have_attribute('open', '')
+        assert page.evaluate("() => { const s = document.getElementById('answerReaderScroll'); return s.scrollWidth <= s.clientWidth + 1; }")
+        assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+        cards.nth(1).locator('.diff-jump-link').last.click()
+        expect(page.locator('#answerReaderColumns h3').last).to_have_text('Kimi K2.6')
         assert not errors
     finally:
         context.close()

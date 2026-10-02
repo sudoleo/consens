@@ -204,7 +204,7 @@ Threadpool aus. `async def` bleibt nur für echte Await-Pfade (Mail, explizites
 | `users.py` | `/user_status`, `/usage`, `/usage/run/release`, `GET`/`PUT /api/my/memory` sowie `POST /api/my/memory/edit|undo` (User-Memory samt explizitem, revisioniertem Luna-Patch, siehe §3), `/delete_account`, `/track-interest`. `/delete_account` legt vor jeder Löschung einen persistenten, fail-closed Auftrag über `FirestoreAccountDeletion` an. Die idempotente Kaskade umfasst API-Zugang/Telegram, alle Nutzer-Subcollections, Chats, Waitlist/Feedback, Pending Results, Persistence-Guards/Votes, Watches/Briefs, Follow-Challenges/E-Mail-Follows, eigene Shares über deren bestehende Hard-Delete-Kaskade, Profil und Firebase Auth. Jeder Bereich wird separat quittiert und bei Fehlern vom fünfminütigen Maintenance-Loop erneut versucht; bis dahin lautet die Antwort ehrlich `202 cleanup_pending`, erst der vollständige Abschluss ergibt 200. Owner-gebundene Create/Update/Delete-Transaktionen lesen den Account-Tombstone als ersten Teil derselben Mutation; nur interne Cleanup-Kaskaden verwenden explizite Bypässe. Dadurch können bereits authentifizierte, verspätete Requests keinen zuvor quittierten Bereich neu befüllen. `/track-interest` ist der idempotente Pro-Beta-Zugangsrequest (ein Pending-Dokument pro UID, kein Billing); aktive Pro-Konten werden abgewiesen. **Seit 2026-07-25 ruft die App diesen Endpunkt nicht mehr auf** — es wird nichts mehr angeboten, das man anfragen könnte; der Endpunkt bleibt nur bestehen, damit vorhandene Waitlist-Dokumente nicht verwaisen. |
 | `bookmarks.py` | `GET /bookmarks` liefert ausschließlich kompakte Metadaten, standardmäßig 30 Einträge und einen opaken Cursor; `GET /bookmarks/{id}` liefert owner-geschützt den Vollinhalt. Chat-Bookmarks referenzieren additiv `chat_id`/letzte `turn_id`; `GET /bookmarks/{id}/conversation` paginiert dafür die vollständigen owner-gebundenen completed Turns aus `ChatStore`, statt den wachsenden Transcript in ein Bookmark-Dokument zu kopieren; der Normalpfad läuft über `ChatStore.list_turn_details` (Chat einmal pro Seite geprüft, Modellantworten je Turn mit **einer** Query) und benötigt damit `2 + N` SDK-Aufrufe pro Seite. Abgerechnet werden weiterhin Dokument-Reads: Chat + gelesene Turn-Dokumente (inklusive Pagination-Sentinel) + alle zurückgegebenen Antwortdokumente; eine Query ist nicht ein einzelner Dokument-Read. Scheitert nur dieser optimierte Collection-Read, fällt der Endpoint korrektheitshalber auf `list_turns` + owner-gebundene Turn-Details zurück, statt den Browser auf zwei Bookmark-Snapshots zu reduzieren. Der Endpunkt ist bewusst ein synchrones `def`, damit die blockierenden Reads im Threadpool statt auf dem Event-Loop laufen. `/bookmark` (POST/DELETE), `/bookmark/consensus` sowie `POST /bookmark/consensus/share-result` erhalten Speichern, Löschen und die sichere Share-/Watch-Rehydration. Consensus-Inhalte werden aus einem owner-gebundenen Pending Result oder completed Turn serverseitig materialisiert, nicht aus frei behaupteten Clientfeldern; die alten, ignorierten Client-Kopien bleiben für gecachte Clients im Schema, werden aber nicht mehr formvalidiert und können den autoritativen Save daher nicht mit 422 blockieren. Quellenlisten werden nicht nach Anzahl gekürzt; die bestehenden Dokument- und Request-Bytebudgets begrenzen den Save ausdrücklich. `persist_authoritative_consensus_bookmark` ist der gemeinsame Writer für den primären `/consensus`-Abschluss und den idempotenten `/bookmark/consensus`-Fallback. Der breite slowapi-IP-Schutz sitzt vor der Tokenprüfung; die eigentlichen Modell- und Consensus-Save-Budgets gelten danach pro UID, damit der interne Preset-Fan-out nicht mit fremden Nutzern an einem Proxy-/NAT-Bucket konkurriert. Persistent gelten höchstens 250 Bookmarks, 750 kB je Dokument und 25 MB geschätztes Gesamtbudget pro UID. `DELETE /bookmark` liest die Chat-Bindung und legt **vor** dem Entfernen des Bookmarks per `ChatStore.request_chat_deletion` in einer Transaktion Tombstone (`status=deleting`), einmaligen Zählerabzug und einen dauerhaften Auftrag `chat_deletion_jobs/{sha256(uid:chat)[:40]}` an; erst danach wird das Bookmark gelöscht und `run_chat_deletion` versucht die Kaskade sofort. Scheitert sie (auch zwischen zwei Batches) oder stirbt der Prozess, bleibt der Auftrag mit `attempts`, `last_error` (nur Kategorie) und Backoff (`next_attempt_at`, 1 min bis 6 h) sichtbar und `resume_chat_deletions` im stündlichen Retention-Loop beendet ihn; quittiert wird erst nach vollständiger Kaskade. Kann der Auftrag nicht angelegt werden, bleibt das Bookmark bestehen und die Antwort ist 500 (nichts gelöscht, erneut versuchbar). Saves akzeptieren eine validierte stabile `bookmarkId`, sodass alle Turns einer laufenden Unterhaltung dasselbe Sidebar-Bookmark aktualisieren; Legacy-Saves ohne ID bleiben fragebasiert. `previous_question`/`previous_turn` bleiben als kompatibler Ein-Turn-Fallback für alte Bookmarks ohne Chat-Bindung erhalten. Alle Bookmark-Antworten sind wie `/chats` `private, no-store`. Die Save-Endpunkte liefern weiterhin den zusammengeführten Datensatz zurück; der Client reduziert ihn sofort auf Listenmetadaten und hält höchstens das geöffnete Detail im Cache. Der seltene Browser-Fallback sendet nur IDs plus kleine Legacy-Texte, nutzt `keepalive`, wiederholt Netz-/408-/425-/429-/5xx-Fehler begrenzt und zeigt einen endgültigen Fehler dedupliziert verständlich an. |
 | `share.py` | `/api/share` (POST), `/api/share/{id}` (DELETE), `/api/my/shares` (neueste zuerst, in Firestore sortiert über Index `shares(owner_uid, created_at desc)`, `?cursor=`, Antwort mit `has_more`/`next_cursor`; der Dialog zeigt einen Hinweis, wenn ältere Links fehlen), `/api/share/{id}/report`, öffentliche Seite `/s/{slug_id}`, `sitemap-shares.xml`. |
-| `watch.py` | Consensus Watch: `/api/watch` (POST), `/api/my/watches` (inkl. Original-Baseline-Score, kompakter History je Watch und autoritativer Plan-/Active-Limit-Metadaten für die UI), `/api/watch/{id}` (PATCH/DELETE), Morning-Brief-Einstellungen `/api/my/watch-brief` (GET/PATCH), nutzergebundene Telegram-Verbindung `/api/my/telegram` (GET/DELETE), `/api/my/telegram/link|test` (POST) und der per Secret-Header geschützte `/api/telegram/webhook`; außerdem öffentliche, HMAC-signierte `/watch/unsubscribe`- und `/watch/brief/unsubscribe`-Links. |
+| `watch.py` | Consensus Watch: `/api/watch` (POST), `/api/watch/goal-suggestions` (POST, bis zu drei beobachtbare Ziele zur Frage über einen Judge-Call, 6/min; ein Fehler liefert eine leere Liste), `/api/my/watches` (inkl. Original-Baseline-Score, kompakter History mit Drift-Signal je Watch, `resolution`, `last_probe` und autoritativer Plan-/Active-/Resolved-Metadaten für die UI), `/api/watch/{id}` (PATCH/DELETE; `status=active` auf einer abgeschlossenen Watch braucht ein neues oder leeres Ziel), Morning-Brief-Einstellungen `/api/my/watch-brief` (GET/PATCH), nutzergebundene Telegram-Verbindung `/api/my/telegram` (GET/DELETE), `/api/my/telegram/link|test` (POST) und der per Secret-Header geschützte `/api/telegram/webhook`; außerdem öffentliche, HMAC-signierte `/watch/unsubscribe`- und `/watch/brief/unsubscribe`-Links. |
 | `topics.py` | Eigenständige öffentliche Topic-Ticker: Hub `/topics`, versionierte Detailseite `/topics/{slug}` (`?version=<run_id>`, rendert Position Map + Agreement-Kurve über `services/history_view.py` — dieselbe Darstellung wie die Watch-Seiten, bewusst nur bis zum gewählten Snapshot), `sitemap-topics.xml`, Double-Opt-in-Follow unter `/api/topics/{slug}/follow` + `/topic-follow/confirm|unsubscribe`; der Versand-Claim ist persistent gehasht und besitzt Resend-, Empfänger- und globales Stundenbudget. Der Favicon-Proxy ist auf 30 Requests/Minute, acht parallele Requests, einen eigenen Vierer-Executor, zwei Sekunden Upstream-Zeit sowie einen 2.000-Einträge-LRU einschließlich 24-h-Negativcache begrenzt. Admin-CRUD liegt unter `/api/admin/topics`. Ein leeres `POST /api/admin/topics/{id}/runs` führt den konfigurierten Research-/Consensus-Run aus; ein Payload mit `consensus_md` bleibt als expliziter Legacy-Import verfügbar. |
 | `api_v1.py` | Nutzergebundene asynchrone Consensus-API: Run-Start/Status/Löschung unter `/api/v1/consensus/runs`, transaktional idempotentes Publizieren erfolgreicher Runs per `POST .../{run_id}/share`, eigene Share-Liste/-Details/-Widerruf unter `/api/v1/shares` sowie direkte Admin-Indexfreigabe per `PUT /api/v1/shares/{share_id}/indexing`. Der Admin-only Scheduled Publisher liest `GET /api/v1/publisher/config`, startet Runs per `X-Consensus-Publisher: true` mit demselben Balanced-Preset-Modellplan wie jeder API-Run (kein Provider-Ausschluss) und bindet per `POST /api/v1/shares/{share_id}/watch` idempotent einen Weekly-Watch mit festem Free-Watch-Modellprofil; `public_config` meldet die tatsächlich genutzten Familien als `initial_run_providers`/`watch_providers`, die Admin-UI zeigt genau diese Listen; dessen globale Kapazität wird zusammen mit Watch und Publisher-Zähler in derselben Transaktion geprüft. Auth über gescopte `X-API-Key`s, Run-Idempotenz über den Pflichtheader `Idempotency-Key`; Pydantic-Modelle bilden den Vertrag in `/openapi.json` ab. |
 
@@ -278,6 +278,15 @@ kontrastreiche Theme-Farben, abgerundetes Rechteck, identisches Play-Symbol,
 Hover-/Druck-/Fokuszustände und mindestens 44 px Höhe auf Touch-Geräten.
 Die App zeigt ebenfalls „Try the demo“, bis 640 px platzsparend „Demo“;
 der zugängliche Name und der Startablauf bleiben unverändert.
+Seit 2026-10-01 tragen die Bedienelemente, die eine Frage an die Modelle
+schicken, ein Licht von unten aus `static/css/send-glow.css` (ebenfalls in
+`landing.css` und `static/style.css` importiert): ein `::before` mit
+Hausgrün (`--agree`) als Schimmer und beleuchteter Unterkante, links unten am
+hellsten. Klasse `send-glow` auf `#sendButton`, `.lp-send` und „Try the
+demo“ (Markup in `landing.html` und `static/demo.js`). Zustände stehen beim
+Bedienelement: in `shell.css` aus, solange nichts gesendet werden kann, beim
+Stopp-Knopf wandert es langsam um den Rand; in `landing.css` geht es an,
+sobald die Mockup-Frage fertig ist. Das Licht ist diesen Elementen vorbehalten.
 `static/demo.js` erkennt den Parameter und startet die Demo automatisch in der
 echten App. Dabei wird zuerst die vollständige Frage in den Composer getippt;
 beim simulierten Absenden wandert sie in den Thread-Kopf, der Composer wird
@@ -410,6 +419,10 @@ der Python-Staleness-Test auch indirekte Änderungen erkennt.
 Der gemeinsame Node-/Python-Fingerprint normalisiert CRLF zu LF für Text-Inputs
 außerhalb `static/vendor/`; Vendor-Assets bleiben bytegenau. Dadurch ist ein
 unter Windows erstellter Commit auch nach einem Linux-Checkout aktuell.
+`.gitattributes` erhält die Bytes unter `static/vendor/` und `static/dist/`
+einschließlich Build-Manifest mit `-text`; Windows-Autocrlf darf die erzeugten
+Inhalte und ihre Dateinamen-Hashes nicht verändern. Der Node-Outputtest belegt
+dies durch einen echten temporären Git-Checkout mit CRLF-Gegenkontrolle.
 `scripts/frontend-output.mjs` publiziert geänderte Bundle-/Vendor-Dateien über
 atomaren Dateiersatz und schaltet das Manifest erst nach den Bundles um;
 unveränderte Dateien bleiben unangetastet. `previous_assets` hält pro JS-/CSS-
@@ -485,9 +498,10 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   (zentrales Mapping Provider→DOM-IDs), `deepThinkModelLabels`, gemeinsame Helfer
   (`getModelOptionLabel`, `getSelectedModelCount`, `setAppTitle`, `showPopup`,
   `trackAppEvent`, `exitHeroMode`) sowie den zentralen
-  `window.App.renderUsageDisplay`-Renderer. Dieser ignoriert fehlende Usage-Felder
-  aus parallelen Antworten und bewahrt den DOM-/Layout-Vertrag (Label links,
-  fetter Wert rechts). Jeder `RunContext.usage` hält seinen logischen
+  `window.App.renderUsageDisplay(data, owner)`-Eingang: reicht das
+  `token_budget` einer API-Antwort (auch aus Fehler-Details) an
+  `App.tokenBudget` weiter; Antworten ohne das Feld (eigene Keys) ändern nichts.
+  Jeder `RunContext.usage` hält seinen logischen
   Idempotency-Key, geteilt von `/prepare`, allen `/ask_*` und `/consensus` genau
   dieses Laufs; `window.App.usageRun` ist nur die Legacy-/UI-Brücke.
   `setAppTitle` setzt den Standardtitel oder
@@ -517,6 +531,23 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   Uebersicht zurueck statt das Menue zu schliessen. Vorher waren die sechs
   Antwortmodelle vom Composer aus gar nicht erreichbar (im Agent Mode sind
   die Antwortboxen verborgen).
+  **Verknüpfte Picker (seit 2026-10-01):** `App.linkModelPicker(primary,
+  companion | null, {ownLabel, companionLabel, ariaLabel})` legt zwei Selects
+  in einen Chip und ein Menü. Der Companion behält Select, Persistenz und
+  Regeln, zeichnet aber in das Menü des Primary (`state.parent`/`ownMenu`,
+  `menu.dataset.owner` = wer gerade zeichnet; nur der darf `[data-value]`
+  markieren). Einstieg ist die View `overview` mit je einem Abschnitt und
+  `[data-picker-level]`-Zeilen (`models`, `secondary`, `companion`), die in die
+  bestehenden Ebenen führen; deren Rückwege enden wieder in `overview`.
+  `openModelPicker(companion)` öffnet den Primary auf der Companion-Ebene,
+  `collapseExpandedModelPicker(companion)` schließt den Primary;
+  `openModelPicker(select, {secondary | level: "models"})` springt direkt in
+  eine eigene Ebene, `collapseExpandedModelPicker(select, {ownLevelsOnly})`
+  schließt nur, wenn eine eigene Ebene offen ist. Ist ein Link angefragt,
+  bevor beide Picker existieren, holt `initCustomModelPicker` ihn nach. Jede
+  Ebene behält den Fokus im Menü (`data-focus-key`: dieselbe Zeile, sonst die
+  gewählte/erste). Rechts betritt Gruppen-, Abschnitts-, Custom-,
+  Provider- und Reasoning-Zeilen, Links nimmt die Rückweg-Zeile.
 - **Rahmenlose Shell (seit 2026-07-27)** — `static/css/shell.css` wird als
   **letztes** `@import` in `static/style.css` geladen und gewinnt damit bei
   gleicher Spezifität. Es trägt die Material-Ebene des Redesigns: Elevation
@@ -642,21 +673,37 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   aus/ein; eine offene Overlay-Sidebar blendet sie ebenfalls aus. Auf Desktop
   bleibt der Wrapper `display: contents` und die bestehende Float-Anordnung
   erhalten. Reader-Dialoge bleiben oberhalb der Kopfleiste.
-- **`sidebar-quota.js`** — Kontingent-Ring im Sidebar-Footer (`#quotaTrigger`)
-  + Panel `#sidebarQuota` (Runs / Deep Think / Watches + Reset-Zeit). Rechnet
-  **nichts** selbst: ein MutationObserver spiegelt die weiterhin von
-  `app-core.js::renderUsageDisplay`, `firebase.js` und `watch.js` beschriebene
-  Usage-Spalte `#usageDisplay`, die nur noch `visually-hidden` ist und die
-  einzige Quelle bleibt. Bus: `window.App.sidebarQuota.{sync,setOpen,runs}` —
-  `runs()` gibt dieselbe geparste Zeile zurück, aus der der Ring entsteht,
-  damit Module wie „Run again" den Preis eines Klicks benennen können, ohne
-  eine zweite Rechnung aufzumachen.
-  Im Agent-Chat projiziert derselbe Ring stattdessen den verbleibenden
-  Tokenanteil aus `App.agentChat.tokenBudget()` als Prozentzahl (0–100,
-  abgerundet). Die Quelle ist `/agent/models` bzw. der abschließende `/agent`-
-  Budget-Snapshot, strikt an den angemeldeten Account gebunden. Exakte Zahlen
-  und UTC-Reset stehen im Panel. `runs()`/`deep()` bleiben unverändert; beim
-  Wechsel zurück zu Consensus erscheinen dessen Limits wieder.
+- **`token-budget.js`** (head-Bundle, vor `firebase.js`) — `App.tokenBudget`,
+  der einzige Browser-Besitzer des gemeinsamen Tokenkontos (Compare,
+  Consensus, Deep Think, Agent; siehe §4 „Ein Tokenkonto für alle Modi").
+  `apply(snapshot, {uid, authoritative})` validiert, bindet an den angemeldeten
+  Account und ordnet parallele Snapshots (Konfigurationsrevision → UTC-Tag →
+  Ledger-`revision` → `observed_at`); `/usage` und `/user_status` sind
+  autoritativ (Reset darf den Wert erhöhen). `fromResponse(data)` liest
+  `token_budget` auch aus `{detail: …}`. `view()` liefert Prozent übrig
+  (`(limit − used − estimated) / limit`, abgerundet, `<1%` statt 0 bei Rest),
+  verfügbar für neue Arbeit (`remaining`, also ohne Holds/Reservierungen),
+  Zustand `ok|low|out` (≤ 25 % bzw. ≤ 0) und die Reset-Zeit.
+  `canStart(mode)` ist dieselbe Regel wie die Server-Admission (verfügbar ≥
+  erwartete Tokens des Modus, `null` = unbekannt), `runShare(mode)` der
+  ungefähre Anteil eines typischen Laufs („≈ 8 %"). Feuert
+  `consensio:token-budget`. Agent (`agent-chat.js::receiveBudget`) speist
+  dasselbe Objekt; `App.agentChat.tokenBudget()` liest es nur noch.
+- **`sidebar-quota.js`** — Ring im Sidebar-Footer (`#quotaTrigger`) + Panel
+  `#sidebarQuota`, für alle Modi dieselbe Ansicht von `App.tokenBudget`
+  (seit 2026-10-01). Der Ring ist ein ruhiges 20-px-Glyph mit 2-px-Strich und
+  **ohne Zahl im Inneren** (`pathLength=100`, Offset = verbrauchter Anteil);
+  Prozentwert und Reset stehen im `title`/`aria-label` und im Panel. Panel:
+  Kopf „Today's allowance" + Plan, eine Hauptzahl (`#quotaPercent` „62 %
+  left today"), dünner Balken `#quotaTrack` (`role=meter`), Reset-Zeile, eine
+  Detailzeile (`#quotaDetail`: „409k of 660k tokens · a Consensus run uses
+  about 8 %" bzw. in Agent „Agent books each model call"), Watches als
+  eigene kleine Zeile (aus `#watchUsageDisplay`, eigenes Kontingent) und nur
+  bei Bedarf eine Fußnote (Holds laufender Arbeit, Schätzungen, leeres Konto,
+  veralteter Stand). Ampelfarbe nur auf Ring-Bogen und Balkenfüllung
+  (`--partial` ≤ 25 %, `--dispute` leer), nie auf einer Fläche. Bus:
+  `window.App.sidebarQuota.{sync,setOpen}`; `runs()`/`deep()` und die
+  Run-/Deep-Think-Zeilen gibt es nicht mehr.
   Seit 2026-07-27 trägt der Panel-Kopf auch den **Plan**: `#quotaPlanLabel`
   („Free") bzw. `#proBadge` — das Badge sass vorher neben „New
   comparison" und konkurrierte dort mit der einzigen Aktion der Kopfzeile.
@@ -906,6 +953,9 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   Requests liegen content-frei gehasht in derselben `memory`-Subcollection,
   Revisionen enthalten den exakten Vorzustand. `POST /api/my/memory/undo` kann
   ihn innerhalb 60 Sekunden nur ohne zwischenzeitliche Änderung wiederherstellen.
+  Sinkt das aktuelle Notizlimit unter die gespeicherte Länge, lehnen Patch und
+  Undo mit `memory_limit` (HTTP 422) ohne Profil-/Revisionswrite ab; eine Änderung
+  eines anderen Feldes darf bestehende Notizen niemals still kürzen.
   Der vollständige Vorzustand (`before`) wird 30 Tage nach dem Edit vom
   stündlichen Retention-Loop (`cleanup_memory_edit_records`) entfernt; die
   inhaltsfreien Status-/Revisionsfelder bleiben bis zur Kontolöschung für
@@ -954,26 +1004,49 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   Quellen; ohne dritten Parameter gilt weiter `window.currentEvidenceSources`.
 - **`sources.js`** — Quellen/Evidence-Mapping; nutzt DOM-Datasets
   `dataset.consensusAnswer` / `dataset.consensusSources`; `window.currentEvidenceSources`.
-  Seit 2026-07-27 zwei Darstellungen: **im Konsenstext** (Container ist bzw.
-  liegt in `#consensusAnswerBody`) werden `[S3]`-Tags zu hochgestellten Zahlen
-  `.src-ref` — die Nummer stammt aus der expliziten Quellen-ID (`S3` → `3`),
-  unabhängig von Sortierung oder Lücken in `window.currentEvidenceSources`.
-  Nur alte Einträge ohne ID verwenden den Positions-Fallback; fehlende oder
-  mehrdeutige explizite IDs erhalten keinen Link. Dieselben IDs stehen in
+  Zwei Darstellungen: **im Chat-Fliesstext** (Container ist bzw. liegt in
+  `#consensusAnswerBody`, `.consensus-answer-body` oder der Kernaussagen-Liste)
+  werden `[S3]`-Tags seit 2026-10-01 zu **Quellen-Pillen** `.src-ref` statt
+  hochgestellter Zahlen (User-Entscheidung): Favicon (14 px, über den eigenen
+  Proxy `/api/topics/favicon`, kein Drittanbieter im Browser) + kurze Domain
+  ohne `www.` auf der Grundlinie, `--well`-Fläche, Radius voll, lange Domains
+  mit Ellipse. Scheitert das Favicon, ersetzt ein neutrales Monogramm
+  `.src-ref-glyph` das Bild. Benachbarte Tags (`[S1, S2]`, `[S1][S2]`) werden
+  **eine** Pille „uci.org +2“ (`.is-group`, `data-source-numbers="1 2 3"`);
+  `aria-label` lautet „Source: uci.org (and 2 more)“. Steht die Domain direkt
+  vor dem Tag schon im Text, zeigt die Pille nur das Favicon (`.is-compact`) —
+  der Prosatext selbst bleibt unverändert, weil Anker und Claim-Marken ihn
+  wörtlich suchen. Die Nummer bleibt am Element (`data-source-number`, aus der
+  expliziten Quellen-ID `S3` → `3`, unabhängig von Sortierung oder Lücken in
+  `window.currentEvidenceSources`); `sourceData`/`sourceGroup` tragen die
+  aufgelösten Quellen des Turns. Nur alte Einträge ohne ID verwenden den
+  Positions-Fallback; fehlende oder mehrdeutige explizite IDs erhalten keine
+  Domain (Pille „Source 9“ ohne Link). Dieselben IDs stehen in
   `#consensusSourcesList`
   (`app-init.js::renderEvidenceSources`, geoeffnet ueber den Quellen-Chip).
   In den Modellantworten bleiben es die Favicon-Chips `.source-link`.
   Agent-Antworten verwenden separat `window.linkifyAgentSources`: sichere
   HTTP(S)-Links und eindeutig auflösbare `[S#]`-Tags werden zu denselben
-  hochgestellten `.src-ref` mit Quellenvorschau. Die Nummern entsprechen der
-  deduplizierten Quellenliste des jeweiligen Turns bzw. der Einzelantwort.
-  Benannte Links behalten ihren Text; ausgeschriebene URLs samt umgebender
-  Klammer entfallen. Code, Formeln und reine Zahlennotation wie `[1]` bleiben
-  unberührt. Die Umwandlung betrifft nur den DOM, nicht Markdown oder Review-Hash.
-  Ein Hover auf `.src-ref` oeffnet `#sourceTeaser` (Favicon, Host, Titel,
-  Snippet); auf Touch/Keyboard traegt das `title`-Attribut dieselbe Info.
+  Pillen mit Quellenvorschau; nebeneinanderstehende Pillen (nur Leerraum,
+  Komma, Semikolon dazwischen) fasst `mergeAdjacentSourceRefs` zusammen. Die
+  Nummern entsprechen der deduplizierten Quellenliste des jeweiligen Turns
+  bzw. der Einzelantwort. Benannte Links behalten ihren Text; ein Linktext,
+  der nur die eigene Domain wiederholt (`[njaped.no](https://njaped.no/)`),
+  wird durch die Pille ersetzt statt verdoppelt. Ausgeschriebene URLs und
+  reine Zitat-Klammern („(url1, url2)“) entfallen samt Klammer. Code, Formeln
+  und reine Zahlennotation wie `[1]` bleiben unberührt. Die Umwandlung betrifft
+  nur den DOM, nicht Markdown oder Review-Hash; `agent-review.js` liest die
+  Quellen einer Pille über `sourceGroup` zurück.
+  Hover/Fokus auf `.src-ref` oeffnet `#sourceTeaser` (Favicon, Host, Titel,
+  Snippet, Prüfstatus); bei einer Gruppen-Pille eine Zeile je Quelle. Klick
+  öffnet wie bisher die (erste) Quelle bzw. bei geprüften Zitaten die
+  Prüfergebnisse. Quellenprüfung (`source-verification.js::mark`) bindet an
+  eine Gruppen-Pille je Nummer ein Urteil (`checks`-Map) und färbt sie nach
+  dem schwersten. Copy consensus/Copy citation lesen Pillen über
+  `window.App.sourceRefs.plainText/urls` („ (uci.org, pcs.com)“). Share- und
+  Topic-Seiten rendern serverseitig aus Markdown und sind nicht betroffen.
   `normalizeTerminalSourceTagOrder` korrigiert Modell-Output der Form
-  `Aussage [S1].` zu `Aussage.[S1]`, damit die hochgestellte Fussnote nach
+  `Aussage [S1].` zu `Aussage.[S1]`, damit die Quellen-Pille nach
   Satzendzeichen (und ggf. schliessendem Anfuehrungszeichen) steht. Der
   DOM-Linkifier besitzt denselben Fallback fuer alte Bookmarks; das
   serverseitige Pendant liegt in `app/services/public_markdown.py`. Fuer alte
@@ -1197,13 +1270,12 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   Ausgangszustand zurück und füllt die letzte Frage vor, sendet aber nicht
   automatisch. Eine Wiederholung ist ein
   **vollstaendiger zweiter Lauf** und kostet entsprechend Kontingent; seit
-  2026-07-28 steht der Preis deshalb am Knopf (`#runReplayCost`, „· uses 1
-  run", bei unbegrenztem Plan leer) und nach dem Klick bis zum Absenden ueber
-  dem Eingabefeld (`#composerRunNotice`). Beides liest `labelRunAgain` /
-  `prepareRunAgain` in `consensus-progress.js` aus `window.App.sidebarQuota
-  .runs()` — derselben Quelle wie der Kontingent-Ring, damit hier nie ein
-  zweiter, falscher Preis entsteht; ein MutationObserver auf `#usageDisplay`
-  zieht das Label nach, wenn das Kontingent spaeter eintrifft.
+  2026-07-28 steht der Preis deshalb am Knopf (`#runReplayCost`, seit
+  2026-10-01 „· about 8 % of today" statt „uses 1 run", ohne bekanntes Konto
+  leer) und nach dem Klick bis zum Absenden ueber dem Eingabefeld
+  (`#composerRunNotice`). Beides liest `labelRunAgain` / `prepareRunAgain` in
+  `consensus-progress.js` aus `App.tokenBudget.runShare/canStart` — derselben
+  Quelle wie der Ring; `consensio:token-budget` zieht das Label nach.
   Das Verdict bleibt unter der Antwort: Ampelfarbe auf der Agreement-Zahl,
   Headline mit dem schwerwiegendsten Thema, eine Meta-Zeile. Der Gauge
   (`.verdict-gauge`, Zahl /100 und Messbalken) ist weiterhin zentral in
@@ -1233,6 +1305,17 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   renderProvenance,dismiss}`. `onPrepare` kommt aus `query-send.js` **vor**
   `/prepare`, `onDifferencesStart` aus dem ersten `differences.delta`
   (`consensus-run.js`).
+- **Composer-Hoehe** — `composer-autosize.js` wird vor `app-init.js` geladen.
+  `App.initComposerAutosize` installiert dessen bisherige Input-/Viewport- und
+  Placeholder-Listener; `App.resizeQuestionInput()` bleibt der explizite Trigger.
+  CSS-Min-/Maxhoehe bestimmen Wachstum und internen Scrollbereich. Mehrzeilige
+  Eingaben behalten ihre Form bis zum Leeren. Ein ResizeObserver verfolgt zudem
+  die tatsaechliche Feldbreite waehrend Sidebar-/Viewport-Transitionen und misst
+  pro Animationsframe hoechstens einmal nach. Reine Hoehenmeldungen werden
+  ignoriert, damit eigene Schreibzugriffe keine Schleife erzeugen. So bleibt
+  nach einer schmalen Zwischenbreite kein ueberhohes leeres Feld stehen.
+  `tests/js/composer-autosize.test.mjs` prueft diese Ereignisgrenzen; der Smoke-
+  Browserfall prueft echtes Layout inklusive der abgeschlossenen Transition.
 - **Thread-Layout: Composer unten (2026-07-27)** — ab dem ersten Lauf liest
   sich `/app` als Thread: Frage oben, Lauf, Antwort, Modellantworten, Composer
   am unteren Bildrand. Das DOM behaelt die Reihenfolge Input → Consensus →
@@ -1333,7 +1416,7 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   oeffnen im Thread nach **oben** in Richtung des gelesenen Ergebnisses; im
   Hero normalerweise nach unten. Der Modell-Picker passt Richtung, Position
   und Maximalhoehe an den tatsaechlichen freien Viewport an. Das Fragefeld wächst über
-  `app-init.js::resizeQuestionInput()` automatisch mit seinem Inhalt: bis
+  `composer-autosize.js::resizeQuestionInput()` automatisch mit seinem Inhalt: bis
   220 px auf Desktop bzw. 180 px auf Mobile; danach scrollt nur noch die
   Textarea. Programmatische Leerungen/Füllungen lösen dafür ein `input`-Event
   aus. Der vorhandene `ResizeObserver` zieht die mobile Thread-Reserve bei
@@ -1341,7 +1424,7 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   `fitComposerPicker()` in den sichtbaren Viewport, ohne horizontalen
   Dokument-Scroll. Wo die Teile des Composers stehen, regelt allein
   `css/composer.css` (siehe „Composer: eine Anatomie für alle Modi“). Ein
-  Platzhalterwechsel misst das leere Feld neu (MutationObserver in `app-init.js`),
+  Platzhalterwechsel misst das leere Feld neu (MutationObserver in `composer-autosize.js`),
   sonst bliebe es nach einem langen Platzhalter zu hoch. Verborgene `.response-section`-Platzhalter sind im
   mobilen Hero und im fertigen Thread bei geschlossenem „Compare answers"
   `display:none`; ebenso nimmt das geschlossene Differences-`<details>` keinen
@@ -1366,80 +1449,65 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   Logout und Schließen aborten laufende Fetches, späte Antworten dürfen den
   gemeinsam mit Watch genutzten DOM-Knoten nicht mehr überschreiben.
 - **`consensus-actions.js`** — Copy/Citation/Share-Buttons am Consensus.
-- **`watch.js`** — `window.openWatchDialog` (Create-Dialog im Share-Modal) und
-  `window.openWatchDashboard` (eigene Seite `/app/watches`: Vollbild-View
-  `#watchDashboard` unter dem fixen View-Switch, Styles in
-  `static/css/components-watch.css`; URL-Sync via pushState/popstate, Deep-Link
-  wartet auf den asynchronen Firebase-Auth-Status): Bei vorhandenen Watches
-  Dashboard-KPIs für aktive Watches, Checks/Changes der letzten sieben Tage und nächsten Lauf, ein
-  Recent-Movement-Feed, All/Changed/Stable/Paused-Filter sowie Karten je Watch mit
-  Driftstatus/-Summary, Movement-Score, Score/Delta und eine stets platzhaltende
-  History-Sparkline (bei bestehenden Consensus-Watches ab Original-Baseline) sowie
-  Inline-Settings (Intervall/Uhrzeit/Alert-Regel/Condition, E-Mail-/Telegram-
-  Kanäle, Pause/Delete). Bei mehr als zwei Watches starten die Karten als
-  kompakte, einzeln per zentriertem Pfeil aufklappbare Zusammenfassungen mit
-  Agreement-Score, Driftstatus, letzter Prüfung und nächstem Lauf; bei ein bis zwei
-  Watches bleibt die Detailansicht offen. Telegram-Verbindungskarte mit Deep-Link/Test und
-  Morning-Brief-Karte (`/api/my/watch-brief`, Toggle im selben
-  `.switch`/`.slider`-Stil wie das Input-Feld). Ohne vorhandene Watch ist der
-  Toggle erklärend deaktiviert; das Backend erzwingt dasselbe Gate und schaltet
-  den Brief beim Löschen der letzten Watch ab. `openWatchDialog("list")`
-  leitet auf die Seite um; Einstieg zusätzlich über den login-gated,
-  schwebenden View-Switch `#viewSwitch` (Consensus/Watches; `firebase.js`
-  blendet ihn ein/aus, `watch.js` synchronisiert URL und aktiven Zustand). Ein
-  kurzer, auf zwei Zyklen begrenzter Puls weist dort dezent auf Watches hin,
-  verschwindet beim ersten Öffnen lokal dauerhaft und respektiert
-  `prefers-reduced-motion`. Nach dem
-  ersten erfolgreichen, speicherbaren Consensus zeigt `window.App.watch.*`
-  einmalig einen dezenten Hinweis am Watch-Button; Schließen oder Öffnen des
-  Features persistiert die Bestätigung in `localStorage`. Der Hinweis wird als
-  eigener, dem Watch-Knopf folgender Viewport-Layer unter `<body>` gerendert;
-  nur dieser Layer liegt über dem fixierten Composer, die Consensus-Sektion
-  selbst bleibt darunter und kann deshalb nie das Eingabefeld übermalen.
-  Seit 2026-08-04
-  enthält dieser Hinweis die **Aktion selbst**: „Watch this question"
-  (`#watchNudgeStart`) legt den Watch mit einem Klick über
-  `nudgeWatchDefaults()` an (wöchentlich, morgiger Wochentag, 09:00 lokal,
-  privat, E-Mail nur bei materieller Änderung) und ersetzt den Hinweis durch
-  eine Bestätigung mit dem ersten Prüftermin. Daneben steht ausdrücklich, wann
-  überhaupt eine Nachricht kommt („no change, no message"); „Pick a different
-  schedule" öffnet weiterhin den vollen Dialog, ein 429 ebenfalls. Die
-  Browser-IANA-Zeitzone wird zusammen mit `HH:MM` an das Backend gesendet.
-  Weekly-Watches senden zusätzlich den gewählten lokalen Wochentag
-  (`run_weekday`) und können ihn im Dashboard nachträglich ändern.
-  Der gemeinsame Notifications-Bereich ist ein einklappbares `<details>`-Panel;
-  dessen lokaler Offen-/Zu-Zustand liegt in `consensus_watch_notifications_open`.
-  `window.App.watch.resetAfterLogout()` leert das bereits geladene Dashboard
-  beim Session-Ende; auf einem direkten `/app/watches`-Deep-Link bleiben URL
-  und Seite stehen und wechseln deterministisch zum Login-Hinweis. Das globale
-  `consensio:auth-state`-Event rendert nach einem späteren Login sofort neu. Ein
-  Session-Epoch verwirft danach eintreffende Watch-/Telegram-/Limit-Antworten
-  und verhindert accountübergreifende Caches. Ein Wechsel aus dem gemeinsamen
-  Share-Modal zu „Watched“ schließt das Modal vor der Seitennavigation;
-  fehlgeschlagene Morning-Brief-Zeit-/Modusänderungen rollen auf die letzte
-  serverbestätigte Einstellung zurück.
-  Das Dashboard bietet zusätzlich einen professionell geführten Query-first-
-  Einstieg: Ohne Watch ersetzen ein dreistufiger Empty State und optionale
-  Beispielfragen die leeren KPI-/Notification-Flächen. Nach der Frage verwendet
-  der Dialog sichere Defaults (privat, wöchentlich mit dem morgigen Wochentag als
-  erstem Check, Material-Changes, E-Mail);
-  Telegram-Verbindung und Kanalauswahl bleiben als zentrale Konfiguration offen
-  sichtbar, während Zeitplan, Sichtbarkeit und erweiterte Alert-Regeln in einem
-  optionalen Details-Panel liegen. Dieses Panel `#watchAdvancedSettings` stand
-  bis 2026-07-28 als LETZTES Element im Dialog und wurde schlicht übersehen
-  („man kann ja nichts verstellen"). Es liegt jetzt direkt unter der Defaults-
-  Zusammenfassung, also **über** den Zustellkanälen, und die Zusammenfassung
-  selbst trägt den Weg dorthin: `#watchEditDefaults` („Edit"/„Done") rechts
-  neben „Ready with smart defaults", plus drei `.watch-setup-chip`-Buttons, die
-  per `data-edit-field` das Panel öffnen und ihr Feld fokussieren.
-  Dieser Pfad startet keinen
-  normalen App-Consensus; `POST /api/watch` akzeptiert dafür alternativ zu
-  `result_id`/`share_id` ein exklusives `question`-Feld. Dashboard und beide
-  Create-Schritte zeigen vor der Aktion kompakt den serverseitigen Plan, aktive
-  Watches/Limit und freie Plätze. Pausierte Watches werden ausdrücklich als
-  nicht limitrelevant erklärt; Free kommuniziert zusätzlich 5 aktive Watches
-  plus Daily als Pro-Unterschied. Am Limit wird die Create-Aktion vor dem Request
-  deaktiviert.
+- **`watch.js`** — `window.openWatchDialog` (Create-Dialog im Share-Modal),
+  `window.openWatchDashboard` und das Routing der eigenen Seite `/app/watches`
+  (Vollbild-View `#watchDashboard` unter dem fixen View-Switch, URL-Sync via
+  pushState/popstate, Deep-Link wartet auf den asynchronen Firebase-Auth-Status).
+  Gerendert wird das Dashboard von `watch-dashboard.js`; `watch.js` stellt dafür
+  `window.App.watchUi` bereit (API-Helfer mit Session-Epoch, Popup, Schedule-/
+  Intervall-/Alert-Optionen, Telegram-Connect, Limit-Rendering) und ruft
+  `window.App.watchDashboard.render()`. Der View-Switch `#viewSwitch`
+  (Chat/Consensus | Watches) ist ein Segment mit gleitendem Thumb
+  (`.view-switch-thumb`, `data-active="chat|watches"` aus `setViewSwitchState`);
+  `agent-chat.js` setzt nur das Label im ersten Segment (Agent = „Chat“,
+  sonst „Consensus“), Icon und Thumb bleiben. Ein kurzer, auf zwei Zyklen
+  begrenzter Puls weist dort dezent auf Watches hin, verschwindet beim ersten
+  Öffnen lokal dauerhaft und respektiert `prefers-reduced-motion`.
+  **Create-Dialog**: Schritt 1 die Frage (Query-first) bzw. direkt Schritt 2 für
+  einen fertigen Consensus. Schritt 2 beginnt mit **„What are you waiting
+  for?“** (`#watchGoal`, ≤ 500 Zeichen, gespeichert als `condition`): bis zu drei
+  Zielvorschläge kommen asynchron von `POST /api/watch/goal-suggestions` als
+  `.watch-goal-chip` (Klick füllt/leert das Feld, ein Fehler blendet sie nur aus).
+  Darunter die Defaults-Zusammenfassung mit `#watchEditDefaults` und den drei
+  `.watch-setup-chip`-Buttons, die per `data-edit-field` das Panel
+  `#watchAdvancedSettings` öffnen (liegt bewusst **über** den Zustellkanälen),
+  dann Kanäle und „Start watching“. Alert-Regeln: „When it moves (or resolves)“
+  (`changes_only`), „Only when it resolves“ (`condition`, braucht ein Ziel),
+  „After every check“ (`every_run`). `POST /api/watch` akzeptiert alternativ zu
+  `result_id`/`share_id` ein exklusives `question`-Feld; der Pfad startet keinen
+  App-Consensus. Dashboard und Dialog zeigen vor der Aktion den serverseitigen
+  Plan, aktive Watches/Limit und freie Plätze; am Limit wird die Create-Aktion
+  vor dem Request deaktiviert. Nach dem dritten speicherbaren Consensus zeigt
+  `window.App.watch.*` einmalig einen Hinweis am Watch-Button mit der **Aktion
+  selbst** („Watch this question“, `nudgeWatchDefaults()`: wöchentlich, morgiger
+  Wochentag, 09:00 lokal, privat, E-Mail nur auf Belege); „Add a goal or change
+  the schedule“ öffnet den vollen Dialog, ein 429 ebenfalls. Der Hinweis ist ein
+  eigener Viewport-Layer unter `<body>` und übermalt nie den Composer.
+  `window.App.watch.resetAfterLogout()` leert das Dashboard beim Session-Ende;
+  auf einem direkten `/app/watches`-Deep-Link wechselt die Seite deterministisch
+  zum Login-Hinweis, `consensio:auth-state` rendert nach späterem Login neu.
+- **`watch-dashboard.js`** — rendert `/app/watches` in `#watchDashBody`
+  (`window.App.watchDashboard.{render, cardState}`, Styles mit `wd-`-Präfix in
+  `static/css/components-watch.css`). Es präsentiert nur das Server-Signal aus
+  `drift_signal` (siehe `docs/watch-evidence-model.md`), leitet nichts selbst ab:
+  `cardState` liefert pro Watch Ton/Label/Satz/Quellen — *Moved* (mit
+  `evidence_sources` und „Held: …“), *Re-checking* (`confirming`), *Answer
+  stands* (`held`), *Watching* (letzte Bewegung oder „No change on evidence in
+  N checks“), *Resolved* (Grund + Quellen aus `resolution`), *Paused*, *First
+  check pending*. Aufbau: ruhige Kennzahlenzeile (watching / moved / resolved
+  this week / next check), einklappbares „Why a Watch, not a scheduled prompt“
+  (`.wd-explainer`, Offen-Zustand in `consensio.watchExplainer.open.v1`; im
+  Leerzustand offen mit Vergleichstabelle `.wd-compare`), Abschnitte
+  *Watching* (Moved → Re-checking → Held → Watching → Pending, dann nach nächstem
+  Check) / *Resolved* / *Paused*, am Ende *Delivery* (Telegram-Verbindung und
+  Morning Brief im `.switch`/`.slider`-Stil des Input-Felds). Jede Karte zeigt
+  Status, Frage (3 Zeilen geklemmt), „Waiting for“ + Zielstatus, den Satz des
+  Zustands, tragende Quellen, eine Check-Leiste (ein Strich je Check, Form nach
+  Signal) und rechts nächsten Check + Tages-Scan (`last_probe`). „Settings“
+  klappt in der Karte Ziel-Editor, Intervall/Tag/Uhrzeit, Alerts, Kanäle,
+  Google-Listing, Pause/Delete auf; eine abgeschlossene Watch bietet „Watch for
+  something new“ (PATCH `status=active` + neues oder leeres Ziel). Kein
+  Agreement-Score im Dashboard.
 - **`user-tier.js`** — Free/Pro-UI, Premium-Modellstatus (`updateUserTierUI`,
   `updatePremiumModelsState`) und Plan-Label im Sidebar-Account-Footer.
 - **`email-verify.js`** (klassisches Head-Skript,
@@ -1506,8 +1574,8 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   behandelt haben; „Not addressed“ bleibt separat. Dünne Abdeckung zeigt keine Quote.
   Das optionale `.claim-badge` daneben zeigt die scanbare Quote
   „4/6", jetzt als ruhige Mikro-Marke mit tabellarischen Ziffern, transparenter
-  Flaeche und feiner Kontur. Sie ist damit klar von hochgestellten
-  Quellenzahlen unterschieden; Neutral = Einigkeit, Bernstein
+  Flaeche und feiner Kontur. Sie ist damit klar von den Quellen-Pillen
+  (Favicon + Domain) unterschieden; Neutral = Einigkeit, Bernstein
   (`has-dissent`) = Abweichung. Wenn Claim und Difference denselben Satz
   belegen, bleibt genau EIN Steuerelement sichtbar — welches, entscheidet seit
   2026-08-07 die Schwere: bei **Widerspruch** gewinnt die Passage selbst und das
@@ -1576,6 +1644,19 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   Das Claim-Detail ist mobil ein echtes modales Dialogfenster (`aria-modal`,
   Fokuswechsel/-falle/-rückgabe, inerter Hintergrund); Desktop bleibt ein
   nichtmodaler Popover am Badge.
+  Seit **2026-10-01** sortiert `buildDifferenceCards` die Karten nach Schwere
+  (kritischer Widerspruch → Detail-Widerspruch → andere Gewichtung, stabil
+  innerhalb einer Stufe) und schreibt den Index in der übergebenen Liste als
+  `data-difference-index` an jede Karte. Inline-Marker, `focusDifferenceCard`,
+  `storedDifferenceFocus`, `answerReader.openPanel(…, index)` und
+  `sourceVerification.openResults` adressieren Karten über diesen Datenindex
+  (`App.differenceCardAt`), nie über die Kartenposition. Der Kartenkopf nennt
+  die Schwere in einem Wort (`Critical`/`Minor`/`Emphasis`, alte Daten ohne
+  Severity `Contradiction`; volle Bedeutung im Tooltip und als
+  `.visually-hidden`-Text), farbig ist nur der `.sev-dot`. Jede Position hat
+  eine Kopfzeile mit Icon + Modellname je Modell; ist die Originalantwort
+  erreichbar, ist genau dieses Paar der `.diff-jump-link` (keine separate
+  `.diff-position-links`-Zeile, kein Pfeil, keine Pille).
   `.diff-card.is-focused` markiert die geöffnete Karte mit einem verblassenden
   Bernstein-Wash (`diffCardFlash`), nicht mehr mit einem 2px-Ring: der Ring
   las sich über die volle Listenbreite wie ein grauer Rahmen um den ganzen
@@ -1762,7 +1843,7 @@ Der Configuration-Tab liegt im inkludierten Partial `partials/admin_prompt_confi
   relevanten Await Usage sowie Bookmark-List/Detail/Conversation/Save/Delete;
   eine zusätzliche Bookmark-View-Epoch macht die letzte Auswahl autoritativ.
   Listenfehler zeigen einen eigenen Retry-Zustand statt einer scheinbar leeren
-  Liste. `/usage` synchronisiert neben Zahlen auch den Tierstatus und kann so
+  Liste. `/usage` synchronisiert neben dem Tokenkonto auch den Tierstatus und kann so
   einen transient fehlgeschlagenen `/user_status`-Startcheck in derselben
   Sitzung heilen. Der dynamische Account-Menü-Außenklick-Listener wird bei
   jedem Token-Callback entfernt, bevor ein neuer gebunden wird.
@@ -1791,6 +1872,11 @@ laufenden Request, Consensus oder Save gelesen werden. Entfernte Controls wie
 ## 4. Kern-Flows
 
 ### Agent · Beta: dynamische Vergleiche und Tokenkontingent (2026-09-19)
+
+`require_agent_access` prüft die tatsächliche Pro-/Adminregel; ein ausgefallener
+Tarif-/Rollendienst liefert sicher 503. Detail und Turn-Stop laufen owner- und
+turngebunden über den echten Store. Beide Antworten sind `private, no-store`;
+Stop setzt die Delegationssperre nur für diesen Turn, auch bei Wiederholung.
 
 Zuverlässigkeitsprüfung (20.09.2026): `POST /agent` sendet bereits vor der
 Token-Admission `accepted` mit der dauerhaften Chat-/Turn-ID. Der Browser kann
@@ -1853,14 +1939,25 @@ Nicht auflösbare Admin-IDs bleiben als `available: false` mit `unavailable_reas
 sichtbar und werden bei der Auswahl abgelehnt. Der statische Katalog hält außerdem
 die separat geprüften Delegationsfähigkeiten; er begrenzt die Chatmodellauswahl nicht.
 
-Der Chatmodell-Picker zeigt zuerst eine kompakte Anbieterübersicht mit Modellzahl.
+Chatmodell und Vergleichsmodelle teilen sich seit 2026-10-01 EINEN Chip in
+`.composer-models` (`.agent-model-picker`, Label „Gemini 3.8 Flash +6“: Name
+kürzt, `.model-picker-display-count` bleibt ganz). `renderControls` verknüpft
+`#consensusModelDropdown` über `App.linkModelPicker` in dessen Menü; der
+Consensus-Chip (`.consensus-model`) ist im Agent-Modus `hidden` und kehrt außerhalb
+unverknüpft zurück. Das Menü öffnet mit „Agent“ (Chatmodell, Reasoning) und
+„Compare with“ (n Modelle · Preset, Familienliste). Der Chip bleibt aktiv,
+solange der Companion es ist: Während eines Laufs ist nur die Chatmodell-Zeile
+gesperrt, die Vergleichsmodelle für die nächste Nachricht bleiben änderbar.
+Die Chatmodell-Ebene zeigt zuerst eine kompakte Anbieterübersicht mit Modellzahl.
 Agent-Antworten haben keine Modellüberschrift über der Nachricht: weder die
 aktive bzw. wiederhergestellte Antwort in `agent-chat.js` noch archivierte
 Agent-Turns in `consensus-run.js`. Die Überschrift normaler Consensus-Turns bleibt bestehen.
 `agent-chat.js` erzeugt native `optgroup`-Elemente in der bestehenden Anbieterreihenfolge;
 `model-picker.js` aktiviert sie über `grouped: true` als `groups` → `group:<key>`
-mit Rückweg. Nur Modelle der geöffneten Familie stehen in der Liste. Reasoning
-bleibt eine separate Ebene für das ausgewählte Modell; Deep Think öffnet sie direkt.
+mit Rückweg (verknüpft: `overview` → `groups` → `group:<key>`). Nur Modelle der
+geöffneten Familie stehen in der Liste. Reasoning bleibt eine separate Ebene für
+das ausgewählte Modell (verknüpft eine Zeile der Übersicht statt am Listenende);
+Deep Think öffnet sie direkt.
 Auswahl/Persistenz laufen weiter über dasselbe native Select. Tastatur unterstützt
 Pfeile, Home/End, Enter, Escape sowie Links/Rechts für den Ebenenwechsel.
 Kataloge ohne Anbietermetadaten behalten die flache Auswahlliste.
@@ -1868,13 +1965,15 @@ Die Quote wird außerdem beim Start/Settlement als `quota`-SSE, in terminalen
 Fehlern und beim vorhandenen Agent-Listenpoll geliefert. `observed_at` ordnet
 Snapshots; agent-chat.js ignoriert ältere/fremde Kontenwerte und niedrigere
 Konfigurationsrevisionen. Nach Transportabbruch lädt GET /agent/budget nur das
-Kontingent neu. Der Sidebar-Ring zeigt (Limit − gemessener Verbrauch) / Limit;
+Kontingent neu; es landet in `App.tokenBudget`, dem gemeinsamen Konto aller Modi. Der Sidebar-Ring zeigt (Limit − gemessener − geschätzter Verbrauch) / Limit;
 vorläufige Reservierungen ändern die Prozentzahl nicht. Im Panel stehen zusätzlich
 die tatsächlich für neue Calls verfügbaren und die reservierten Tokens.
 
 **Auswahl und Orchestrierung.** agent-chat.js trennt Chatmodell/Denkstufe vom
 bestehenden Consensus-Preset-/Model-Picker: consensusModelDropdown erhält
-comparisonOnly und zeigt im Agent-Modus ausschließlich Vergleichsmodelle. Es
+comparisonOnly und zeigt im Agent-Modus ausschließlich Vergleichsmodelle
+(Custom: Abschnitt „Comparison models“, ohne Consensus-Engine) — als Abschnitt
+„Compare with“ im Menü des einen Agent-Chips, nicht als eigener Chip. Es
 gibt keine zweite Presetliste, keine Auto/Immer/Aus-Einstellung und keinen
 Synthesemodell-Picker. Die eingefrorene comparison_models-Auswahl kommt als
 Provider→interne Modell-ID mit POST /agent; unbekannte Familien/Modelle werden
@@ -1888,7 +1987,10 @@ Provider-Metadaten; neue Admin-Einträge benötigen keinen zusätzlichen Codeein
 Die gemeinsame `#composerModeBar` ist wie in jedem Modus nur auf dem Startbildschirm
 sichtbar. Nach Chatstart nutzt Beta das vorhandene `#attachMenu`: Quellenprüfung und Agent-Status verwenden
 dieselben Controls, `#agentReasoningMenuOption` öffnet die Denkstufe des Chatmodells
-und `#agentComparisonMenuOption` den bestehenden Compare-Picker. Der Upload bleibt
+und `#agentComparisonMenuOption` die Vergleichsebene, beide im selben Menü des
+Agent-Chips (ebenso die Composer-Notiz `compare`/`choose-model`; ihre Notizen
+`.agent-composer-notice` lässt `composer-collapse.js` wie das (+) durch, sonst
+schluckte der eingeklappte Handy-Composer den Tap). Der Upload bleibt
 deaktiviert; der separate Consensus-Deep-Think-Schalter ist in Beta verborgen.
 Der Composer ist derselbe wie in Compare und Consensus (`composer.css`), auch
 das (+) auf dem Startbildschirm und im eingeklappten Handy-Composer.
@@ -1986,9 +2088,21 @@ bis Quorum plus Nachfrist (`quorum_size`, `QUORUM_GRACE`, `MIN_GRACE_SECONDS`).
 Consensus-Modus unverändert nutzt) und führt `pending_models`, `failed_models` und
 `late`. `freeze_for_synthesis` legt `synthesis_providers` fest,
 `finish_comparisons` stoppt vor den Judges verbliebene Nachzügler (`late_cutoff`)
-und fixiert `basis_hash`; `close` beendet sie am Laufende. Vergleichsmodelle
-erhalten keine Delegations-/Vergleichstools. Recherche und benötigte Quellen werden
-vom Orchestrator bereitgestellt; die Output-Grenze ist die Completion-Grenze des
+und fixiert `basis_hash`; `close` beendet sie am Laufende (`stopped`). Was ein
+gestopptes oder mitten im Stream ausgefallenes Modell bis dahin geschrieben hat
+(`Worker.partial_text` aus `_step`), bleibt als
+`failed_models[].partial_text` erhalten: nur für den Leser, nie in Synthese,
+`answers`/`basis_hash`, Judges oder dem Tool-Ergebnis an den Orchestrator.
+Die Agent-Sitzung bekommt dazu eine Nachricht `kind: "partial"` und `partial: true`.
+Würde der Review-Snapshot 600 KB überschreiten, fallen zuerst diese Teiltexte weg. Vergleichsmodelle
+erhalten keine Delegations-/Vergleichstools, aber eine Suchrunde
+(`call(..., kind="comparison")` → `_step(searches_enabled=True)`) und mit
+`comparison_system_prompt` das aktuelle Datum. Judges suchen nie; der
+Orchestrator recherchiert vor dem ersten Vergleich bis zu drei Runden
+(`ORCHESTRATOR_SEARCH_ROUNDS`). Suchkonfiguration (`search_tools`: eine für alle
+Modelle, Engine `auto`, nur Grok fest Exa), Reservierung
+(`SEARCH_INPUT_TOKENS` pro Runde, `smaller_search`) und Messwerte stehen
+ausschließlich in [agent-mode.md](agent-mode.md), Abschnitt „Websuche“. Die Output-Grenze ist die Completion-Grenze des
 Modells, begrenzt durch `_output_share` (fairer Anteil am freien Tageskontingent
 über `agent_quota.remaining_tokens`). `depth=quick` gibt eine kurze Längenvorgabe,
 `full` keine. Technische Token-, Kontext- und Snapshotgrenzen gelten weiter. Leere, abgebrochene oder Tool-Antworten gelten als fehlgeschlagen.
@@ -2153,7 +2267,10 @@ Commit-Ergebnis. Offene Abrechnungen werden nach dem Join vor finish_run erneut
 abgeschlossen; ein noch laufender Beleg verhindert weiterhin den Run-Abschluss.
 SSE-Toolarbeit läuft in einem kontrollierten Thread, während der Producer
 Aktivitäten weiter ausgibt. Stop/Disconnect schließt Provider und wartet auf die
-aktiven Worker/Tools. Abgelaufene Leases werden zu terminalen unbekannten
+aktiven Worker/Tools. Scheitert dabei das Settlement etwa an einem
+Kontotombstone, bewahrt der Router `GeneratorExit`, protokolliert den
+Cleanupfehler und gibt keinen weiteren SSE-Frame aus; die lokale Kapazität
+wird weiterhin freigegeben. Abgelaufene Leases werden zu terminalen unbekannten
 Belegen; terminale Belege geben auch bei fehlender Usage ihre Reserve frei.
 Budgetabruf und Run-Start suchen zusätzlich kontogebunden nach abgelaufenen
 Root-Belegen (höchstens 20 pro Abruf), auch wenn der Eintrag in der aktiven
@@ -2305,7 +2422,10 @@ laufenden Höhenanimationen und führt Änderungen ohne Animation aus.
 aus, sodass die gerade gelesene Antwortzeile stehen bleibt; bereits erfolgtes
 natives Scroll-Anchoring wird nicht doppelt verrechnet. Nach Run-Abschluss endet
 dauerhaftes Nachscrollen. Ein noch laufender bewusster Send-/Latest-Sprung darf
-einmal fertiglaufen. Sichtbare Statusbereiche behalten ihre kurzen Übergänge.
+einmal fertiglaufen. `chat-scroll.js` trennt diesen expliziten Sprung von einem
+nur eingeplanten Resize-/Follow-Frame; Letzterer wird beim Abschluss verworfen,
+damit neue Copy-/Evidenzzeilen die Antwort nicht nach oben verschieben.
+Sichtbare Statusbereiche behalten ihre kurzen Übergänge.
 Tool-Nennungen bleiben Text; ausschließlich bestätigte running-Toolereignisse
 oder der Review-Status bestimmen den aktuellen Arbeitsschritt im Verlauf.
 Alte gespeicherte Reasoning-Verläufe bleiben als begrenzte Auszüge lesbar.
@@ -2316,11 +2436,20 @@ agent-delegation.js verwendet das bestehende geordnete Activity-Journal,
 überlappende Modell-Icons und die Agent-Detailseitenleiste auch für Vergleichs-
 und Judge-Aufrufe (kind). Der Stapel dedupliziert identische API-Modelle, die
 Seitenleiste behält jeden Aufruf.
-Der Kopf mit Titel, Stop/Schließen und Gesamtverbrauch bleibt außerhalb des
-Scrollbereichs sichtbar. Nur `.agent-session-list` scrollt innerhalb der auf
-Desktop bzw. Mobil begrenzten Flex-Spalte; gespeicherte Scrollpositionen pro
-Turn beziehen sich auf diese Liste. Aufgeklappte Details behalten ihren eigenen
-begrenzten Scrollbereich.
+Der Kopf mit Titel, Stop/Schließen und die Übersicht bleiben außerhalb des
+Scrollbereichs sichtbar. Die Übersicht (`.agent-sidebar-overview`) nennt
+`n of m done` (plus `· k without result` für `failed`/`stopped`) und rechts den
+Gesamtverbrauch (`.agent-sidebar-usage`); darunter ein Segment pro Zeile
+(`.agent-sidebar-segments i[data-state=done|busy|out|idle]`) in der Bildsprache
+der Consensus-Pipeline: grün fertig, Sweep laufend, gestrichelt raus. Die Leiste
+wächst mit ihren Zeilen bis zur Viewporthöhe (`max-height` statt fester Höhe),
+statt als leerer Vollhöhenrahmen zu stehen. Nur `.agent-session-list` scrollt;
+gespeicherte Scrollpositionen pro Turn beziehen sich auf diese Liste.
+Aufgeklappte Details haben bewusst keinen eigenen Scrollbereich mehr (zwei
+Scrollbalken nebeneinander): sie fließen in der Liste, der Kopf einer offenen
+Zeile klebt (`position: sticky`) oben, und ein vom Nutzer geöffneter Eintrag
+(Fokus auf dem `summary`, also Klick, Taste oder Modell-Icon) wird per
+`reveal()` in Sicht gescrollt — höher als die Liste: Anfang oben.
 Die Inline-Icons behalten ihre DOM-Knoten pro API-Modell: Statuswechsel,
 Tokenupdates und zusätzliche Aufrufe desselben Modells aktualisieren nur ihre
 Metadaten und das Ziel der Detailansicht. Neu hinzukommende Icons blenden sich
@@ -2386,12 +2515,25 @@ agent_review. Vor Markierungen prüft es Text-/Versions-/Basisbindung.
 Gründen für ausgefallene Modelle, fehlende Judge-Ergebnisse und unvollständige
 Satz-/Kontextabdeckung. `comparisons[].failed_models[].failure` enthält nur den
 sicheren Fehler aus `agent_failure`, niemals rohe Provider-Antworten. Eine
-fehlende Modellantwort hält den Gesamtstatus `partial`. Die Zeile unter der Antwort
+fehlende Modellantwort hält den Gesamtstatus `partial`. Im Leser erscheint ein
+Modell mit `partial_text` als `status: "incomplete"` (Chip „Incomplete“, eine
+sichtbare Begründungszeile `.answer-reader-note`, Kopieren erlaubt), eine am
+Output-Limit abgeschnittene Antwort (`answers[].truncated`) als fertige Antwort
+mit `badge: "Cut off"` und `note`; die Agent-Leiste zeigt „Incomplete“ statt
+„No answer“ und die Überschrift „Incomplete answer · not used“. Die Zeile unter der Antwort
 (`summaryText`) bleibt bei einer fertigen Prüfung leer und spricht nur, wenn die
 Prüfung selbst eingeschränkt ist: `Not compared · fewer than two models answered`,
 `Disagreements not checked` oder `Partly checked` (Coverage fehlt). Fehlende
-Modelle, ungeprüfte Sätze und Quellenlücken stehen nur im Leser
-(`statusText`, dort `Comparison checked · N models without an answer`).
+Modelle, ungeprüfte Sätze und Quellenlücken stehen nur im Leser: seit
+2026-10-01 als **eine** leise Zeile `evidenceStatus` (`4 of 6 models answered ·
+Checked` bzw. `· Partly checked`), hinter der ein `<details>` die fehlenden
+Modelle mit Grund, späte Antworten und kleinere Prüflücken auflistet. Nur
+entscheidende Lücken (`decisive`: keine Differences-/Coverage-Prüfung, zu wenige
+Antworten) stehen sichtbar darunter. Danach folgen die Karten; Quellenprüfbericht
+(`.agent-source-check`), Quellenprüf-Hinweise, „Model agreement is not
+independent fact checking.“ und die Kontext-Disclosures stehen in
+`.agent-evidence-footer` unter den Karten. `statusText` (`Comparison checked · N
+models without an answer`) bleibt nur für die Aktivitätsdetails.
 Copy und die Evidenz-Links teilen eine Zeile: `agent-answer-actions.js` hängt die
 Leiste in `.agent-review` (auch bei noch nicht eingehängten Verlaufs-Turns),
 `agent-review.js` erhält sie beim Neuaufbau. Key claims (Claims ohne Inline-Marke)
@@ -2419,7 +2561,7 @@ Pro Turn vereinigt die Quellenansicht Provider-/Suchquellen, die Quellen aller
 Vergleichsgrundlagen und sichere HTTP(S)-Links aus Antworten und früheren
 Textversionen. Der gemeinsame Katalog hält die Quellenzahlen beim Wechsel der
 Vergleichsgrundlage konsistent. `agent-review.js` setzt zuerst die gebundenen
-Prüfmarkierungen und danach die hochgestellten Quellenverweise; Live-, gespeicherte,
+Prüfmarkierungen und danach die Quellen-Pillen (Favicon + Domain); Live-, gespeicherte,
 abgebrochene und archivierte Antworten verwenden dieselbe Darstellung. Frühere
 Textversionen im Leser erhalten ebenfalls Quellenverweise. Vergleichsantworten
 aktivieren über `sourceReferences: 'agent'` in `model-answer-reader.js` dieselbe
@@ -2441,10 +2583,15 @@ Modellvergleichsprüfung, ausdrücklich keine unabhängige Faktenprüfung.
 Fehlende Coverage, fehlende Sätze, gekürzte Grundlagen und ausgefallene Modelle
 werden nicht als vollständig geprüft dargestellt.
 
-**Tokenkontingent und Kosten.** agent_quota.py ist die zentrale UTC-Tagesquote:
-app_config/agent_budget.daily_token_limit pro UID; ohne DB-Einstellung gilt
-AGENT_DAILY_TOKEN_LIMIT (Default 250000). agent_budget_config.py liest die globale
-Einstellung mit 30 Sekunden Cache je Prozess/DB. Admin → Limits verwendet
+**Tokenkontingent und Kosten.** agent_quota.py ist das zentrale UTC-Tageskonto,
+seit 2026-10-01 gemeinsam mit Compare/Consensus/Deep Think (§4 „Ein Tokenkonto
+für alle Modi"). Das Limit kommt aus der Kontostufe
+(`app_config/agent_budget.tier_limits[free|plus|pro|admin]`, `account_tier`:
+Admin-Rolle vor gespeicherter Stufe); das frühere globale
+`daily_token_limit`/`AGENT_DAILY_TOKEN_LIMIT` gibt es nicht mehr. Agent bleibt
+Pro/Admin (`require_agent_access`), das Konto selbst ist für jede Stufe da.
+agent_budget_config.py liest die Einstellung mit 30 Sekunden Cache je Prozess/DB.
+Admin → Limits verwendet
 GET/PUT /api/admin/agent-budget und POST /api/admin/agent-budget/reset mit
 Admin-Rollenprüfung, strikter Eingabe und erwarteter revision. Jede Änderung
 schreibt eine Audit-Revision. Reset wechselt reset_epoch für alle Agent-Konten,
@@ -2548,11 +2695,9 @@ das zentrale Tagesbudget; alte Config-Felder bleiben beim Speichern erhalten.
 Konten behalten maximal zwei aktive Läufe; AGENT_MAX_CONCURRENT_RUNS begrenzt
 Produzenten pro Prozess (Default 16). Consensus behält seine Run-Limits.
 
-Damit das Tageskontingent keine unbeschränkten nativen Suchfenster reservieren
-muss, nutzt Agent den gemeinsamen engines.web_search_tool-Builder mit begrenztem
-Exa-Transport (3 Treffer, je 1.000 Zeichen, maximal eine Suche pro Modellschritt
-ohne zusätzliche Suchanzahl pro Lauf). Es gibt keinen neuen Suchdienst. Provider-
-Routing/ZDR bleiben bestehen. Die Consensus-Suchkonfiguration bleibt unverändert.
+Agent nutzt den gemeinsamen `engines.web_search_tool`-Builder mit derselben
+Engine-Wahl wie Consensus (Details: [agent-mode.md](agent-mode.md), „Websuche“).
+Es gibt keinen neuen Suchdienst. Provider-Routing/ZDR bleiben bestehen.
 Nur bestätigte Zähler/Quellen erzeugen Suchaktivität. Kosten-/Tokenwerte bleiben
 bei unvollständiger Provider-Usage ausdrücklich unvollständig.
 
@@ -2606,9 +2751,11 @@ Prompt ergänzt der Browser wie bisher sein lokales Datum. Dieser persönliche
 Client-Prompt behält Vorrang in `/prepare` und im Fan-out.
 
 1. Frontend `sendQuestion` (`query-send.js`) ruft zuerst **`POST /prepare`**:
-   Auth sowie transaktionale Usage-Reservierung und sofortiger
-   Verbrauch anhand des vom Client erzeugten, kostenfreien `usage_run_key`; Antwort: finaler
-   `system_prompt` + persistenter UTC-Tagesstand.
+   Auth sowie transaktionale Admission auf dem Tokenkonto (`run_mode`
+   `compare|consensus`, Deep Think aus `deep_search`) und sofortiger Consume
+   des vom Client erzeugten, kostenfreien `usage_run_key`; Antwort: finaler
+   `system_prompt`, `token_budget` und `run_estimate`. Vorher blockt
+   `usageLimit.blockIfExhausted` clientseitig mit derselben Regel.
    Echtzeitdaten holen sich die Modelle über das gemeinsame OpenRouter-Web-Tool
    in jedem Modell-Call (`engines.py`), daher kein Intent-Router mehr.
    Bei `usage_storage_busy` wiederholt der Client `/prepare` kurz mit demselben
@@ -2625,7 +2772,8 @@ Client-Prompt behält Vorrang in `/prepare` und im Fan-out.
    die Usage-Zählung, aber nicht Auth/Pro-Gates.
 3. **SSE-Protokoll Modellantwort** (`streaming_model_response` in `streaming.py`):
    `event: delta {text}` … dann `event: final {response, sources,
-   free_usage_remaining, deep_remaining, is_pro_user, key_used}`. Bei Fehler kommt
+   token_budget, is_pro_user, tier, key_used}` (`token_budget` = Konto nach der
+   Buchung dieser Antwort; eigene Keys: `usage: "own_keys"`). Bei Fehler kommt
    ein `final` mit `error`. Provider-SDK-Content-Blöcke werden an dieser Grenze
    rekursiv zu Text normalisiert; Objektwerte gelangen weder als Delta noch als
    `[object Object]` ins Frontend. `sse_pack` führt außerdem jeden Event-Payload
@@ -3385,9 +3533,9 @@ die Beta verlaesst). Beim ersten Laden migriert das Modul die Altschluessel
 ### Composer: eine Anatomie für alle Modi
 `templates/index.html` gliedert die Composer-Zeile in drei Gruppen, für Compare,
 Consensus und Agent dieselben: `.composer-lead` ((+) `#attachTrigger` und der
-Moduswähler `#runModeControl`), `.composer-models` (wer antwortet:
-`#agentModelControls`, der Modell-Chip `#consensusModelDropdown`, der
-Deep-Think-Hinweis) und `.input-actions-container` (Demo, Senden). Wo sie
+Moduswähler `#runModeControl`), `.composer-models` (wer antwortet: in Agent
+nur `#agentModelControls`, sonst der Modell-Chip `#consensusModelDropdown`,
+dazu der Deep-Think-Hinweis) und `.input-actions-container` (Demo, Senden). Wo sie
 stehen, entscheidet allein `static/css/composer.css`; `shell.css` gestaltet nur
 die Box. Zustände: Startbildschirm (Hero oder Compare-Start) und aufgeklappt =
 Feld oben, darunter (+) und Modus links, Modelle und Senden rechts; Desktop im
@@ -3396,9 +3544,10 @@ Chat = eine Zeile [(+) Modus][Feld][Modelle][Senden], ab der zweiten Textzeile
 über [(+) Modus … Senden]; Handy eingeklappt = [(+)][Feld][Senden], Anhänge
 und Zitat bleiben darüber sichtbar. (+) und Modus stehen nie woanders, Senden
 immer rechts außen. Alle Picker der Zeile teilen eine Optik (ruhiges Label mit
-Chevron, der Modus mit leichter Fläche). Der Modell-Chip nennt nur, wer
-antwortet („6 models · Balanced“ mit Consensus, sonst „6 models“), nie den
-Modusnamen.
+Chevron, der Modus mit leichter Fläche). Pro Modus gibt es genau EINEN
+Modell-Chip; er nennt nur, wer antwortet („6 models · Balanced“ mit Consensus,
+„6 models“ in Compare, „Gemini 3.8 Flash +6“ in Agent: Chatmodell plus Zahl
+der Vergleichsmodelle, deren Menü beide Abschnitte trägt), nie den Modusnamen.
 
 ### Consensus-Lauf (historisch „Agent Mode“)
 Wo dieses Dokument „Agent Mode an/aus“ sagt, ist heute Consensus bzw. Compare
@@ -3487,8 +3636,12 @@ Im erweiterten Popup teilen Frage, Tabs, Modellauswahl und Inhalt dieselbe
 volle Innenbreite statt separater 840-/720px-Spalten. Desktop-Popups verwenden
 32px Seitenabstand und 16px Fliesstext fuer Einzelantworten; Zweiervergleich
 und angedockter Leser behalten ihre eigene Typografie.
-Die Frage steht in einer aufklappbaren Kontextkarte; erst mehrere Turns blenden
-die Frageauswahl ein. Modellnavigation und Antwortkopf nutzen die vorhandenen
+Die Frage steht im Dialog als **eine** abgeschnittene, aufklappbare Zeile ohne
+Label (sie steht bereits im Chat); erst mehrere Turns bzw. Vergleichsgrundlagen
+blenden `.answer-reader-context-top` mit der Frageauswahl ein (Desktop rechts
+neben der Frage, bis 759px darüber). In Differences/Sources bleibt der
+Untertitel `#answerReaderStatus` leer und verborgen; der aktive Tab benennt den
+Abschnitt. Modellnavigation und Antwortkopf nutzen die vorhandenen
 Provider-Icons. Fertige Antworten zeigen keinen redundanten Status-Badge;
 laufende und fehlgeschlagene Modelle behalten ihren sichtbaren Status.
 Frage- und Modellauswahl verwenden eigene Listbox-Popovers mit App-Tokens,
@@ -3504,9 +3657,15 @@ Archiv-Footer sowie Difference-Marker oeffnen diese Ansicht. Die bestehenden
 Karten/Quellenlisten werden mit Platzhaltern in den Leser verschoben und beim
 Schliessen/Wechsel zurueckgesetzt; IDs und Event-Handler bleiben erhalten. Der
 Legacy-Differences-Text bleibt als Streaming-Ziel an Ort und Stelle (Lesekopie).
-Differences starten als aufklappbarer Ueberblick mit Typ und Kernaussage; ihre
-Positionen, Zitate, Pruefhinweise und Resolve-Aktionen bleiben erhalten.
+Differences starten als aufklappbarer Ueberblick: Schwere-Punkt + ein Wort,
+darunter die Kernaussage in normalem Gewicht, Haarlinien statt Kartenrahmen,
+keine Positionszahl. Kritische Funde stehen oben. Ihre Positionen, Zitate,
+Pruefhinweise und Resolve-Aktionen bleiben erhalten.
 Ein einzelner Unterschied wird direkt geoeffnet; mehrere starten als Ueberblick.
+Seit 2026-10-01 ist die Liste ein Akkordeon: der `toggle`-Listener im Inspector
+schliesst beim Oeffnen einer Karte die zuvor offene (auch bei Marker-Spruengen
+und `refreshContext`). Typografie im Inspector: 14px Inhalt, 12px Meta, 13px
+Zitate, durchgehend regulaeres Gewicht.
 In der erweiterten Desktopansicht stehen Modellpositionen zweispaltig.
 Quellenkarten zeigen Favicon, Domain, Titel und unveraenderte Referenznummer;
 Auszuege werden separat aufgeklappt. Archivdaten bleiben turn-lokal.
@@ -3607,6 +3766,111 @@ akzeptiert nur sichere Word-Pfade und höchstens 256 ZIP-Einträge; Einzeldatei,
 Gesamtexpansion und Kompressionsverhältnis besitzen feste Budgets. `document.xml`
 wird nur chunkweise bis zum Budget expandiert und DTD/Entities werden abgewiesen.
 
+### Ein Tokenkonto für alle Modi (seit 2026-10-01)
+
+Compare, Consensus, Deep Think und Agent · Beta buchen auf **dasselbe**
+Tageskonto pro Nutzer (`users/{uid}/chat_state/agent_tokens_{periode}`,
+`app/services/agent_quota.py`). Die Nutzerin sieht eine Zahl, wo immer sie
+fragt (Ring, Panel, Agent, Absage-Karte). Reset (00:00 UTC bzw. Admin-Reset
+über `reset_epoch`), Revisionen und Admin-Steuerung sind dieselben wie zuvor bei
+Agent.
+
+- **Konfiguration** (`app/services/agent_budget_config.py`, Dokument
+  `app_config/agent_budget`, revisioniert mit Audit-Kopien unter
+  `revisions/`): `tier_limits{free,plus,pro,admin}` und
+  `run_estimates{tier}{compare,consensus,deep_think}`. Fehlende Felder
+  erhalten ihren Default, vorhandene ungültige Werte schlagen geschlossen fehl
+  (503). Das alte Einzelfeld `daily_token_limit` wird ignoriert und beim
+  nächsten Speichern entfernt. Admin → Limits zeigt eine Tabelle Stufe ×
+  (Tokens/Tag, Compare-, Consensus-, Deep-Think-Lauf); `PUT
+  /api/admin/agent-budget` nimmt `{revision, tier_limits?, run_estimates?}`
+  (strikt, Teilwerte werden mit dem Stand gemischt), `GET` liefert zusätzlich
+  `defaults`. Stufe: `agent_quota.account_tier(uid, tier)` = `admin` bei
+  Admin-Rolle, sonst `free|plus|pro`. Agent für weitere Stufen zu öffnen ist
+  damit nur eine Zugangsentscheidung, keine Ledger-Änderung.
+- **Agent** bleibt bei strikter Einzelabrechnung (Reserve vor jedem Call,
+  Settlement mit Messwerten, Schätzung + Reconciliation bei fehlender Usage);
+  nur das Limit kommt aus der Stufe.
+- **Pipeline: messen und danach buchen.**
+  - *Admission* (`/prepare`, Legacy-Direktaufrufe in `authorize_operation`,
+    API v1 beim Annehmen): ein Lauf startet nur, wenn `remaining` (Limit −
+    gemessen − geschätzt − Agent-Reservierungen − aktive Pipeline-Holds) die
+    erwarteten Tokens eines typischen Laufs von Modus und Stufe deckt
+    (`run_mode`: `compare`, sonst `consensus`; Deep Think aus `deep_search`;
+    Resolve gegen die Compare-Schätzung). Der Lauf legt diese Schätzung als
+    Hold (`pipeline_holds`, zehn Minuten) ins Konto, damit parallele Tabs das
+    Puffer nicht doppelt nutzen; es gibt **keine** Reservierung pro Call.
+    Absage: 403 `token_budget_exhausted` mit `token_budget` und
+    `required_tokens`; zu viele junge Läufe: 429 `usage_run_capacity`.
+  - *Messen* (`app/services/llm/usage_meter.py`, Transportschicht): jeder
+    OpenRouter-Request über `_iter_openrouter_chunks` (gestreamte Antworten
+    und Engines, mit `stream_options.include_usage`), `cancellable_post_json`
+    (Judges, Repairs, Resolve) und `engines.query_model` meldet
+    `prompt_tokens + completion_tokens` an den per ContextVar gebundenen
+    Meter. Threads über `copy_context().run` (Coverage-Judge, Provider-Fan-out,
+    Resolve) melden in denselben Meter. Fehlt die finale Usage (Abbruch,
+    Timeout, Tab zu), gilt dieselbe begrenzte Schätzung wie bei Agent: 50 %
+    der Call-Grenze (Input-Schätzung + Output-Cap); eine HTTP-Ablehnung kostet
+    nichts. Ohne gebundenen Meter (Watch, Topics, Agent-Client) sind alle Hooks
+    No-ops. MOCK_LLM bucht kleine synthetische Messwerte. Nicht gemessen
+    werden die beratende Quellenprüfung (eigener Hintergrundjob mit eigenem
+    Budget) und spätere Arbeit nach der Buchung einer Operation.
+  - *Buchen* (`app/services/run_metering.py::OperationBooking`): jede
+    abgeschlossene Operation (`ask:<familie>`, `consensus`, `resolve`, API
+    `pipeline`, Chat-Memory `context:<turn>` nur wenn ein Call lief) bucht
+    ihre Summe genau einmal über
+    `usage_repository.book_operation` (`booked_operations` als Zaun) in die
+    Kontoperiode ihrer Admission; `final=True` (Consensus, Resolve, API) gibt
+    den Rest-Hold frei. Gebucht wird vor dem `final`-Event (das das gebuchte
+    `token_budget` trägt) bzw. beim Schließen des Streams. Ein Buchungsfehler
+    bricht die Antwort nie ab, sondern wird als `Token booking failed` geloggt.
+  - *Überziehen*: eine laufende Operation darf das Konto unter null drücken;
+    danach scheitert die nächste Admission. Begrenzt, weil nur Läufe mit
+    ausreichendem Puffer starten und jeder junge Lauf seine Schätzung hält.
+  - `usage_run_key` bleibt Idempotenz und Bindung; Run-Zähler, Run-Limits und
+    Deep-Think-Kontingent sind entfernt. API v1 hängt am selben Pfad. Watches,
+    Topics und Publisher-Watches behalten ihre eigenen globalen Budgets.
+- **Anzeige**: ein Prozent-Ring für alle Modi (`token-budget.js`,
+  `sidebar-quota.js`, §3). „Uses 1 run" ist ein ungefährer Anteil („about 8 %
+  of today"). Die Absage-Karte (`usage-limit.js`, `#runBlocked`) nennt den
+  Rest in Prozent, den Bedarf des Modus und die Reset-Zeit; reicht nur Deep
+  Think nicht, bietet sie den normalen Lauf an.
+
+**Herleitung der Defaults** (Prinzip: ein typischer Nutzer behält ungefähr
+seine bisherige Tageskapazität; Limit ≈ bisheriges Run-Limit × Tokens eines
+typischen Laufs). Bisherige Produktionswerte (2026-10-01, nur gelesen):
+Free 12, Plus 30, Pro 50 Runs/Tag (davon 5 Deep Think), Agent 750 000 Tokens
+(Pro/Admin); Output-Caps Free/Plus 4 096 (500 Wörter), Pro 8 192 (1 000
+Wörter), Deep Think 16 384, Consensus 16 384, Differences 8 192, Coverage
+12 288.
+
+| Baustein (Free/Plus) | Input | Output | Summe |
+|---|---|---|---|
+| Antwort (Systemprompt ~130, Frage, Websuche ~4 000; gemessen Exa ≈ 4 800 Prompt-Tokens) | ~4 300 | ~850 (Agent-Belege günstiger Vergleichsmodelle: Ø 760–1 100) | ~5 200 × 6 ≈ 31 000 |
+| Synthese (Prompt mit 6 Antworten gemessen 4 400 + Quellen) | ~6 200 | ~1 000 | ~7 200 |
+| Differences-Judge (Prompt gemessen 5 300) | ~5 400 | ~2 000 | ~7 400 |
+| Coverage-Judge | ~5 000 | ~2 500 | ~7 500 |
+| **Consensus-Lauf** | | | **≈ 53 000 → 55 000** |
+| **Compare-Lauf** (nur Antworten) | | | **≈ 31 000 → 32 000** |
+
+Pro (1 000 Wörter, längere Antworten und Judge-Prompts): Antwort ~6 100 × 6
+≈ 37 000, Synthese ~11 500, Judges je ~12 000 → Consensus ≈ 75 000, Compare
+≈ 40 000. Deep Think (16 384-Cap, bis zu fünf Suchrunden, Reasoning):
+Antworten ~16 500 × 6 ≈ 99 000 + Synthese ~16 000 + Judges ~28 000 →
+≈ 150 000.
+
+| Stufe | Rechnung | Default `tier_limits` |
+|---|---|---|
+| Free | 12 × 55 000 | 660 000 |
+| Plus | 30 × 55 000 | 1 650 000 |
+| Pro | 50 × 75 000 + 5 × (150 000 − 75 000) Deep-Think-Aufschlag + 750 000 bisheriges Agent-Konto ≈ 4,9 Mio. | 5 000 000 |
+| Admin | wie Pro | 5 000 000 |
+
+Nachjustieren: Admin → Limits. Belastbare Werte liefern die gebuchten
+Operationen (`usage_runs.booked_operations`, `pipeline_used` im Kontodokument)
+nach einigen Tagen Betrieb; die Schätzung pro Lauf sollte etwa dem Median eines
+vollständigen Laufs entsprechen, das Limit dem gewünschten Tagesvolumen.
+
 ### Auth / Usage / Tier
 - **Early-Access-Hinweise:** `static/js/feature-access.js` lädt im App-Bundle
   nach `app-core.js`. Der bestehende Aufruf `App.showProFeatureModal(feature)`
@@ -3662,6 +3926,9 @@ wird nur chunkweise bis zum Budget expandiert und DTD/Entities werden abgewiesen
   Nach dem einmaligen Body-Replay reicht die Middleware echte nachfolgende
   ASGI-Receive-Events weiter; insbesondere wird kein künstliches
   `http.disconnect` erzeugt, das laufende SSE-Antworten abbrechen würde.
+  Bei Abbruch während des Einlesens wird auch ein bereits gepufferter Teil
+  verworfen und der echte Disconnect weitergegeben; ein gültiger JSON-Präfix
+  darf nicht als vollständiger Request eine Mutation auslösen.
   Chat-Frage und System-Prompt besitzen getrennte Zeichen- und UTF-8-Bytecaps;
   Legacy-Follow-up-Kontext wird bei Überschreitung abgewiesen statt still
   gekappt. Dadurch fallen auch extrem lange Ein-Wort-Strings vor Providerarbeit.
@@ -3669,15 +3936,16 @@ wird nur chunkweise bis zum Budget expandiert und DTD/Entities werden abgewiesen
   `free`, `plus` oder `pro`; der historische Tag `premium` bedeutet weiterhin
   Pro, alles Unbekannte fällt auf Free. Admin bleibt `users/{uid}.role == admin`.
 
-  | | Frontier-Modelle | Deep Think | Anhänge | Resolve | Run-Kontingent |
+  | | Frontier-Modelle | Deep Think | Anhänge | Resolve | Tokenkonto/Tag (Default) |
   |---|---|---|---|---|---|
-  | Free | – | – | – | – | klein |
-  | Plus | – | – | ✓ | ✓ | **größtes** |
-  | Pro | ✓ | ✓ | ✓ | ✓ | mittel |
+  | Free | – | – | – | – | 660 000 |
+  | Plus | – | – | ✓ | ✓ | 1 650 000 |
+  | Pro | ✓ | ✓ | ✓ | ✓ | 5 000 000 |
+  | Admin (Rolle) | wie Stufe | wie Stufe | wie Stufe | wie Stufe | 5 000 000 |
 
   Plus existiert für Tester, die Funktionen ausprobieren sollen, **ohne einen
-  Frontier-Lauf auslösen zu können**. Weil Plus dieselbe günstige Modellauswahl
-  fährt wie Free, darf sein Tageskontingent größer sein als das von Pro.
+  Frontier-Lauf auslösen zu können**. Herleitung der Tokenkonten: §4 „Ein
+  Tokenkonto für alle Modi".
 - **Zwei Flags, eine Regel:** `is_user_pro(uid)` behält überall seine alte
   Bedeutung „darf teure Modelle und Deep Think" und ist für Plus **False**;
   `is_user_plus(uid)`/`entitlements.attachments|resolve` decken die
@@ -3711,46 +3979,25 @@ wird nur chunkweise bis zum Budget expandiert und DTD/Entities werden abgewiesen
   `account_tier_audit`; anschließend wird der Tier-Cache verworfen, damit die
   Stufe sofort statt erst nach ≤60 s greift. Ein Konto in Löschung bekommt
   keine neue Stufe (`persistence_guard`). UI: Admin-Tab **Accounts**.
-- **Usage ist persistent und run-basiert:**
-  `app/services/usage_repository.py` definiert `UsageRepository` und die
-  Firestore-Implementierung `FirestoreUsageRepository`. Ein kompletter
-  Consensus-Run reserviert genau **einen Integer-Slot**, unabhängig von
-  Modellanzahl oder Provider-Fan-out. Deep Think zählt ebenfalls genau einmal
-  gegen dieses Total und zusätzlich gegen ein separates Deep-Think-Kontingent.
-  `reserve` bindet den Key an einen kanonischen Request-Fingerprint und den
-  nächsten UTC-Tageswechsel, führt Idempotenz-, Ablauf- und Limitprüfung
-  gemeinsam in einer Firestore-Transaktion aus; `consume` und `release`
-  wechseln den Status ebenfalls transaktional, `snapshot` liest das einzelne
-  UTC-Tagesaggregat. Nach `consume` claimt jede kostenpflichtige logische
-  Operation transaktional genau einen Slot (`ask:<provider>`, `consensus`,
-  `resolve`) mit eigenem Payload-Fingerprint. Gleiche/konkurrierende Retries
-  werden eindeutig mit 409 abgelehnt, bevor Provider- oder Judge-Arbeit startet;
-  verschiedene Operations-Slots desselben Laufs bleiben unabhängig.
-  Die Transaktionen verwenden 12 Retry-Versuche, weil der parallele Provider-
-  Fan-out denselben Run gleichzeitig konsumiert. Sind die Retries dennoch
-  ausgeschöpft, antwortet `/ask_*` strukturiert mit HTTP 503 statt mit einem
-  unlesbaren generischen 500er.
-  Der Free-Default ist seit 2026-08-04 **12** reguläre Runs pro UTC-Tag
-  (`free_consensus_run_limit`, vorher 3: drei Runs erlaubten einen Test, keine
-  Gewohnheit — und mit freigeschalteten Follow-ups wäre drei sofort wieder die
-  alte Sackgasse); Plus liegt per Default bei **750**
-  (`plus_consensus_run_limit`). Alle Run-, Wort-, Token-, Memory- und
-  Watch-Limits je Stufe sind eigene `app_config/models.limits`-Felder
-  (`plus_*` bzw. `watch_plus_*`/`memory_plus_*`) und im Admin-Tab **Limits**
-  bedienbar. Deep Think hat bewusst **kein** Plus-Feld: die Capability-Prüfung
-  blockiert Plus ohnehin, ein Kontingent wäre ein toter Schalter. `/prepare`
-  reserviert und konsumiert den Slot sofort; Provider-Fan-out und `/consensus`
-  bestätigen denselben Consume danach nur noch idempotent und claimen dann ihre
-  Operation. `/resolve` erzeugt einen eigenen Run und Claim. `/usage` und
-  `/user_status` lesen die Firestore-Tagesbasis;
-  `/usage/run/release` gibt nur noch nicht konsumierte Reservierungen frei.
+- **Usage ist persistent und tokenbasiert (seit 2026-10-01):** siehe §4 „Ein
+  Tokenkonto für alle Modi". `app/services/usage_repository.py`
+  (`FirestoreUsageRepository`) hält weiterhin genau einen Beleg pro logischem
+  Lauf (`usage_run_key`: Idempotenz, Request-Fingerprint, Operations-Claims
+  `ask:<provider>`/`consensus`/`resolve`, Chat-Kontext-Bindung, 12
+  Transaktions-Retries, strukturierte 503 bei Erschöpfung). Run-Zähler,
+  Run-Limits und das Deep-Think-Teilkontingent sind entfallen. `/prepare`
+  admittiert und konsumiert sofort; Fan-out und `/consensus` bestätigen den
+  Consume nur noch und claimen ihre Operation. `/resolve` erzeugt einen eigenen
+  Lauf. `/usage` und `/user_status` liefern `token_budget`;
+  `/usage/run/release` gibt nur nicht konsumierte Läufe (samt Hold) frei.
   Bookmark-, Feedback- und Vote-Grenzen liegen ebenfalls persistent in
   Firestore (`persistence_guard.py`); es gibt keinen prozesslokalen Abuse-
   Counter mehr.
-- Limits/Defaults kommen aus `app/core/config.py` (`get_consensus_run_limit`,
-  `get_deep_think_run_limit`, `get_word_limit`, `get_output_token_limit`, …)
-  und können per Firestore
-  (`app_config/models.limits`) überschrieben werden.
+- Wort-, Output-, Memory- und Watch-Limits kommen aus `app/core/config.py`
+  (`get_word_limit`, `get_output_token_limit`, …) und können per Firestore
+  (`app_config/models.limits`) überschrieben werden; veraltete Schlüssel wie
+  `*_consensus_run_limit` fallen bei der Normalisierung weg. Das Tokenkonto
+  lebt getrennt in `app_config/agent_budget`.
 - Die Antwortmodell-Picker wenden bei einem Tier-Wechsel die Free-/Pro-
   Defaults erneut an, solange der Nutzer für den jeweiligen Provider keine
   explizite Auswahl (`pref_select_*`) gespeichert hat. Explizite Picker-Werte
@@ -3796,10 +4043,17 @@ wird nur chunkweise bis zum Budget expandiert und DTD/Entities werden abgewiesen
   `reserved→running`-Claim ist die einzige Berechtigung zum Providerstart.
   Doppelte HTTP-Requests/Worker können deshalb weder doppelt konsumieren noch
   den Provider-Fan-out doppelt starten.
-- Die Usage-Reservierung nutzt unverändert `FirestoreUsageRepository`: ein
-  vollständiger Run konsumiert beim Übergang zu `running` genau eine Total-
-  Einheit; Deep Think zusätzlich genau eine Deep-Think-Einheit. Fehler vor
-  Providerstart releasen, Fehler nach Providerstart bleiben konsumiert.
+- Die Usage-Reservierung nutzt `FirestoreUsageRepository` auf demselben
+  Tokenkonto wie App und Agent: beim Annehmen wird der Lauf gegen die
+  Consensus- bzw. Deep-Think-Schätzung der Stufe admittiert
+  (`token_admission_for_run`, Admin-Rolle zählt), beim Übergang zu `running`
+  konsumiert, und nach der Pipeline bucht `OperationBooking("pipeline",
+  final=True)` die gemessenen Tokens aller Antworten und Judges, auch bei
+  Fehlern. Kein Konto mehr → 429 („daily token allowance does not cover another
+  run"). Fehler vor Providerstart releasen (Hold frei), Fehler nach
+  Providerstart bleiben konsumiert. Watches, Topics und Publisher-Watches
+  behalten ihre eigenen globalen Budgets; der Publisher-Run selbst läuft über
+  API v1 und bucht damit auf das Konto der Admin-UID.
   Provider- und Engine-Aufrufe liegen immer außerhalb aller Transaktionen.
   Jeder neue Run speichert seinen eigenen, nicht wiederverwendbaren
   Usage-Beleg `usage_key = consensus-api:run:{run_id}`; Retries desselben Runs
@@ -3833,6 +4087,10 @@ wird nur chunkweise bis zum Budget expandiert und DTD/Entities werden abgewiesen
   Key liefert danach stabil `410` mit `error.code=run_deleted` und startet nie
   erneut kostenpflichtige Arbeit; `GET`/erneutes `DELETE` liefern 404.
   Tombstone und Mapping verschwinden mit dem ursprünglichen Retention-Ablauf.
+  Der Retention-Backfill liest Run und Mapping erneut in einer Transaktion:
+  vorhandene Ablaufdaten bleiben erhalten, fehlende Annahmedaten werden nicht
+  erfunden, und ein inzwischen an einen anderen Run gebundenes Mapping wird
+  weder verändert noch neu angelegt. Naive Legacy-Zeitstempel gelten als UTC.
   Alle v1- und Admin-Key-Antworten sind
   `private, no-store`. Limits greifen vor Auth pro IP/API-Key und danach pro UID.
 - Der maschinenlesbare Vertrag kommt aus den typisierten FastAPI-Routen unter
@@ -3874,6 +4132,12 @@ wird nur chunkweise bis zum Budget expandiert und DTD/Entities werden abgewiesen
   erfolgreich und pausiert/löscht keine bestehenden Watches.
 
 ### Sharing
+- `og_image.share_card_png` bindet seinen Cache an alle gezeichneten Inhalte:
+  Share-ID, Frage, Score, Modell-/Konfliktzahl, Historienwerte und Prüflabel.
+  Die öffentliche OG-Route verwendet weiterhin den neuesten gültigen
+  öffentlichen Stand und eine leere Historie; private/widerrufene Shares
+  erhalten kein Bild. Reale PNG-Regionen und semantische Zeichenaufrufe werden
+  gemeinsam geprüft, damit ein gültiges, aber leeres PNG nicht genügt.
 - `/consensus` legt ein `pending_results`-Dokument an → `result_id`.
 - Die Consensus-API publiziert dagegen direkt aus ihrem 30-Tage-Run-Snapshot;
   `source_api_run_id` bleibt serverintern und wird nie Teil der Public-Payload.
@@ -3926,6 +4190,19 @@ wird nur chunkweise bis zum Budget expandiert und DTD/Entities werden abgewiesen
   Sonst erfolgt der 30-Tage-Hard-Delete widerrufener Shares via `cleanup_revoked_shares`.
 
 ### Kuratierte Topics
+- Alle fünf Topic-Adminmethoden verifizieren Firebase-Tokens mit
+  `check_revoked=True` und prüfen danach die echte Adminrolle. Ein Ausfall des
+  Rollendienstes ergibt 503; nicht autorisierte Requests lesen oder verändern
+  keine Topics. Der gemeinsame HMAC-Unterbau von Topic-/Watch-Follow-Tokens
+  bedeutet keine Austauschbarkeit: Watch-, Share-Follower- und Topic-Aktionen
+  verlangen ihre eigene Payloadform, bevor ein Dokumentzugriff erfolgt.
+- `query_claim_identity` akzeptiert ausschließlich JSON-Integer als Index,
+  keine Bool-/Float-/String-Coercion. Nur bekannte, einmal verwendete Keys und
+  Indices im übergebenen Fenster werden gebunden. Ungültige Antworten bzw.
+  ein unbekanntes Modell ergeben keine Zuordnung; der Aufrufer behält seinen
+  bisherigen Fallback für neue Claims. Promptfenster und Retryplan bleiben
+  begrenzt. Die Entscheidung und Nachweise stehen unter
+  [Adapter-Implementierung](test-coverage/product/implementation-adapters.md).
 - `topics.list_runs` liest lange Historien über `observed_at DESC` mit
   `max_items + 1` als Limit und gibt die letzten Runs weiter chronologisch
   nach Datum/Version/Dokument-ID aus. Bei kurzen Historien beweist eine
@@ -3955,7 +4232,9 @@ wird nur chunkweise bis zum Budget expandiert und DTD/Entities werden abgewiesen
   der neutralen Provider-/Consensus-/Differences-Pipeline und importiert keine
   Watch-Services. Die pro Topic gespeicherte Modellauswahl bleibt maßgeblich. Jeder Lauf
   recherchiert aktuelle Webquellen neu, dedupliziert sie zu Evidence, vergleicht
-  Consensus und Opinion Map mit dem Vorgänger und schreibt einen unveränderlichen
+  Consensus (über `evidence_change.assess`, mit Quellen) mit dem **geltenden**
+  Run (`accepted_run_id`, Altbestand `latest_run_id`) und die Opinion Map mit dem
+  Vorgänger und schreibt einen unveränderlichen
   Vollsnapshot nach
   `topics/{id}/runs/{run_id}`: Consensus-Markdown, Agreement, Change-Typ/
   -Summary, wichtige Modellbewegungen, Differences/Opinion Map, Modelle,
@@ -4009,6 +4288,12 @@ wird nur chunkweise bis zum Budget expandiert und DTD/Entities werden abgewiesen
   durch die Security-Middleware als `private, no-store` ausgeliefert.
 
 ### SEO-Leistungsdaten und Recommendation Judge (Search Console, v2)
+- `FirestoreSeoRepository.list_metrics_for_pages` bündelt höchstens 400
+  Dokumentreferenzen pro BatchGet. Ungeordnete Ergebnisse werden über den
+  angeforderten Dokumentpfad zugeordnet; `snapshot.id` bestimmt den Tag.
+  Gespeicherte `page_id`-/`date`-Felder können keine Messung in eine fremde
+  Seite oder einen anderen Tag verschieben. Fehlende Dokumente bleiben
+  fehlende Messungen statt künstlichem Nulltraffic.
 - Der manuelle admin-only Lauf `POST /api/admin/seo/collect` übernimmt exakt die
   statischen URLs aus `pages.py::SITEMAP_URLS`, aktive, öffentliche,
   indexierte Shares aus `list_indexed_share_urls` sowie indexierbare Topics aus
@@ -4124,11 +4409,15 @@ app/services/llm/
   resolve_engine.py          Resolve-Runde (run_resolve_round, normalize_resolve_positions)
   citations.py               Antwort-Parsing + Quellen (source_response, make_llm_result)
   attachments.py             Attachment-Validierung/Aufbereitung
+  usage_meter.py             Token-Meter der Transportschicht (ContextVar; Usage je OpenRouter-Request, Schaetzung bei fehlender Usage)
 app/services/
   consensus_pipeline.py      Neutraler Fan-out→Synthese→Differences→Score-Vertrag für alle Produkte
   chat_store.py              Firestore-Pfade, Turn-Lifecycle/Antwortdokumente, atomare Finalisierung, Idempotenz, Cursor + Allowlists, Loesch-Kaskade
   chat_context.py            Owner-gebundene Context-Versionen, strukturierte Memory, Frage-Auflösung vor dem Fan-out, Budgets, Lease/Idempotenz, Fallback-Rendering + Provider-Cache
-  usage_repository.py        Firestore-Usage fuer logische Runs (authorize_operation/reserve/consume/release/get_run/context-target-binding/snapshot)
+  usage_repository.py        Run-Belege auf dem Tokenkonto (admission/authorize_operation/reserve/consume/release/book_operation/get_run/context-target-binding)
+  run_metering.py            OperationBooking: Meter um eine Pipeline-Operation binden, Summe genau einmal buchen
+  agent_quota.py             Gemeinsames UTC-Tokenkonto (Agent-Reserve/Settle, Pipeline-Admission/Holds/Buchung, account_tier)
+  agent_budget_config.py     Admin-Konfiguration des Kontos: tier_limits, run_estimates, Revision/Reset
   api_account_cleanup.py     Fail-closed Account-Blocks + retrybare API-Datenlöschung
   account_deletion.py         Persistenter Vollkonto-Tombstone + bereichsweise Retry-Kaskade
   persistence_guard.py       Transaktionale Bookmark-/Feedback-Budgets + run-gebundene Votes
@@ -4151,7 +4440,9 @@ app/services/
   share_snapshots.py         Snapshot-Lifecycle (pending→share), Quoten, Cleanups, Sitemap-Quellen
   favicons.py                Begrenzter Favicon-Fetch, Singleflight, LRU-/Negativcache
   retention_maintenance.py   Periodischer Pending-/Revoked-Share-Cleanup + Outbox-Retention (30 Tage, nur Terminalstatus)
-  watch_service.py           Watch-CRUD, Tier-/Intervall-/Conditionregeln, Share-Sichtbarkeit, Unsubscribe-Tokens
+  watch_service.py           Watch-CRUD, Tier-/Intervall-/Zielregeln, Lauf-Abschluss (Signal, geltende Antwort, Abschluss), Unsubscribe-Tokens
+  evidence_change.py         Change-Judge mit Quellen + serverseitige Belegprüfung (Ursache, tragende Quellen), geteilt von Watch und Topic
+  watch_probe.py             Täglicher Beleg-Scan zwischen zwei Checks: Claim, ein günstiger Such-Call, Vorziehen des vollen Checks
   opinion_map.py             Datenminimierte, mehrdimensionale Provider-Positionen + Direction-Shift-Berechnung
   watch_brief.py             Morning-Brief-Settings (watch_briefs), transaktionaler Claim, Digest-Aggregation, Brief-Unsubscribe-Tokens
   watch_scheduler.py         Owner-gebundener Global-Lease, Tagesbudget, Pipeline-Adapter, run_brief_tick + Outbox-Retry-Pass
@@ -4306,16 +4597,16 @@ CLI mit `firebase deploy --only firestore:rules,firestore:indexes`):
     bleiben bis zur autoritativen Disposition separat; `/ask_*` schreiben nicht
     direkt. Legacy-Follow-ups ohne aktive Chat-Zuordnung bleiben ausschließlich
     im Bookmark-Flow. Bookmarks werden vorübergehend parallel weitergeschrieben.
-  - `usage_days/{YYYY-MM-DD}` — UTC-Tagesaggregat mit Schema-Version und den
-    Integer-Zählern `total_reserved`, `total_consumed`,
-    `deep_think_reserved`, `deep_think_consumed`. Reservierte und verbrauchte
-    Slots zählen gegen das jeweilige Tageslimit; jeder Run belegt das Total,
-    Deep Think zusätzlich den Deep-Bucket. Je Bucket gilt `remaining = limit -
-    reserved - consumed` (mindestens 0).
+  - `usage_days/{YYYY-MM-DD}` — **seit 2026-10-01 nicht mehr geschrieben**
+    (frühere Run-Zähler). Alte Dokumente bleiben unverändert liegen und werden
+    beim Account-Löschen mit entfernt.
   - `usage_runs/{sha256(idempotency_key)}` — idempotenter Run je UID + Key; der
-    Klartext-Key wird nicht gespeichert. Enthält `kind=regular|deep_think`, den
-    UTC-Tag der Reservierung, beide serverseitigen Limits zum
-    Reservierungszeitpunkt, `request_fingerprint`, `expires_at`,
+    Klartext-Key wird nicht gespeichert. Enthält (Schema 3)
+    `kind=regular|deep_think`, den UTC-Tag der Admission, `quota_day`
+    (Kontoperiode inkl. Reset-Generation), `token_tier`, `admission_mode`,
+    `admission_estimate`, `token_limit_at_admission`, `booked_operations`
+    (`{operation: {measured, estimated, booked_at}}`, Exactly-once-Zaun der
+    Buchung), `request_fingerprint`, `expires_at`,
     `operation_claims` mit Claim-Zeit/Payload-Fingerprint und
     `status=reserved|consumed|released`. `utc_date` ist nur der Abrechnungstag;
     `expires_at` (`execution_expiry`) ist die getrennte Ausführungs-/Retry-
@@ -4326,21 +4617,26 @@ CLI mit `firebase deploy --only firestore:rules,firestore:indexes`):
     erhält zusätzlich ausschließlich `context_target_hash` und
     `context_bound_at`; derselbe konsumierte Key kann damit nur einen
     Chat-/Turn-Context finanzieren, ohne einen weiteren Zähler zu verändern.
-    Erlaubte Übergänge: `reserved → consumed` (`/prepare` kostet genau eine
-    Run-Einheit) oder
-    `reserved → released` (fehlgeschlagener/abgebrochener Run gibt den Slot
+    Erlaubte Übergänge: `reserved → consumed` (Admission bei `/prepare`) oder
+    `reserved → released` (fehlgeschlagener/abgebrochener Run gibt seinen Hold
     frei); beide Zielzustände sind terminal, Wiederholungen idempotent. Der Key
     kann nicht für einen anderen Run-Typ/Request wiederverwendet oder über
     seine begrenzte Ausführungsgültigkeit hinaus abgespielt werden. Provider-/LLM-Aufrufe finden immer
     außerhalb der Transaktion und erst nach Consume plus erfolgreichem
     Operations-Claim statt. Beim Account-Löschen werden beide Subcollections entfernt.
     `/ask_*`, `/consensus` und `/resolve` bündeln Run-Bindung, gegebenenfalls
-    Reserve/Consume und Operations-Claim in `authorize_operation`: drei
-    Dokument-Reads (Account-Tombstone, Run, Tagesstand) pro Versuch statt acht.
-    Bereits konsumierte Runs schreiben nur den neuen Claim; Tageszähler werden
-    frisch gelesen. Legacy-Direktaufrufe können weiterhin einen Run anlegen,
-    vorbereitete Reservierungen werden atomar konsumiert. `/prepare` und die
-    externe Consensus-API behalten ihren bisherigen Reserve-/Consume-Vertrag.
+    Admission/Consume und Operations-Claim in `authorize_operation`: zwei
+    Dokument-Reads (Account-Tombstone, Run) für vorbereitete Läufe; nur ein
+    Legacy-Direktaufruf ohne `/prepare` liest zusätzlich das Kontodokument und
+    wird dort admittiert. `/prepare` und die externe Consensus-API behalten
+    ihren Reserve-/Consume-Vertrag.
+  - `chat_state/agent_tokens_{YYYY-MM-DD}[_{reset_epoch}]` — das gemeinsame
+    Tokenkonto (Agent + Pipeline): `used` (gemessen, beide Modi), `reserved`
+    (Agent-Reservierungen), `estimated` (Agent-Schätzungen, später
+    reconciled), `pipeline_used` (Anteil der Pipeline an `used`),
+    `pipeline_estimated` (Schätzungen für Pipeline-Calls ohne finale Usage),
+    `pipeline_holds` (`{run_hash: {tokens, expires_at}}`, max. 32 aktive,
+    zehn Minuten), `pipeline_runs`, `unknown`/`unknown_released`, `revision`.
   - `api_consensus_idempotency/{sha256(idempotency_key)}` — Mapping von UID +
     gehashtem HTTP-Idempotency-Key auf `run_id` und kanonischen `request_hash`;
     verhindert auch bei parallelen POSTs doppelte Runs. Kein Klartext-Key.
@@ -4931,6 +5227,15 @@ Pages-/Watch-Tabs nicht. `/admin/topics` redirectet auf diesen Tab.
 
 ## 7. Tests, Smoke-Checks & lokale Befehle
 
+**Inventar/Laufstand 02.10.2026:** 254 Dateien, 3.068 statische Definitionen,
+4.053 Runnerfälle. Python: 3.078 bestanden/3 fehlgeschlagen; JavaScript:
+664 bestanden; E2E: 219 bestanden/30 fehlgeschlagen/4 Setupfehler/55 nicht
+ausgeführt. Buildcheck bestanden. Vollständiger [Testkatalog](test-coverage-map.md),
+[Befunde](test-coverage/findings.md) und [Produktmatrix](test-coverage/product/README.md).
+Neue Bereiche umfassen Google/Kalender/Gmail, private Dateien/Dokumentversionen,
+gemeinsames Tokenkonto, Antwortreceipts und Watch-Evidenz/Outbox. Historische
+Coveragewerte von 26.09.2026 sind keine Messung des aktuellen Codes.
+
 - **Windows-Einstieg:** `dev.ps1 check frontend|backend|browser` koordiniert
   die vorhandenen npm-/Pytest-Befehle; `-TestPath` begrenzt den Lauf auf eine
   Datei oder ein Verzeichnis der gewählten Suite. Frontend prüft zusätzlich
@@ -4946,7 +5251,7 @@ Pages-/Watch-Tabs nicht. `/admin/topics` redirectet auf diesen Tab.
   ```
   Reine String-/Quelltextverträge sind mit `source_contract` gekennzeichnet und
   laufen weiterhin mit; sie gelten ausdrücklich nicht als Verhaltensabdeckung.
-  Verifizierte Baseline am 2026-08-17: **1317 passed, 9 warnings**.
+  Aktuelle Ergebnisse und Fehler stehen im oben verlinkten Laufbericht.
 - **JS-Verhaltenstests** (`tests/js/`, Vitest + jsdom):
   ```powershell
   npm test
@@ -4994,10 +5299,30 @@ Pages-/Watch-Tabs nicht. `/admin/topics` redirectet auf diesen Tab.
   2026-08-09: **39 passed, 1 warning**. Der writerfreie Phase-4-Browserlauf
   wurde nach Phase 6 erneut mit **8 passed, 1 warning** verifiziert. Details in
   `tests/e2e/README.md`.
-- **Keine CI für Tests**: `.github/workflows/tests.yml` ist am 2026-08-31
-  entfernt worden, die Suite läuft nur lokal. Die verbliebenen Workflows
-  (`publish-consensus.yml`, `restart-render.yml`) sind Betriebs-Automationen,
-  keine Tests. Befehle und Ausschlüsse stehen in `docs/testing.md`.
+- **Persistierte Browserreisen**: `test_persisted_journeys.py` ergaenzt sechs echte AppFirebase-/HTTP-/Firestore-
+  Reisen auf einem separaten Server (Port 8044, optional `E2E_JOURNEY_PORT`).
+  Der normale E2E-Lifespan bleibt aktiv; nur externe Identity-/Provider-/Mail-
+  Grenzen werden ersetzt. Der ausschliesslich vom Test gestartete
+  `journey_server.py` steuert Provider-Gates, native historische Jobfixtures,
+  echte Quellenworker-Ticks mit Own-Key-Affinitaet, gezielte Watchausfuehrung
+  und Cleanup zufaelliger Testowner. Der Quellenworker braucht eine ansonsten
+  inaktive Queue; eine Vorpruefung verhindert die Verarbeitung fremder Testjobs.
+  Passive Beobachtung der echten Agent-Response und Capacity-Lease macht
+  Loeschassertionen vom tatsaechlichen Producer-/Cleanupabschluss abhaengig.
+  App-Routen
+  werden nie abgefangen. Grenzen und Befehle stehen in `tests/e2e/README.md`.
+- **Regression-CI**: `.github/workflows/tests.yml` trennt Python, JS/Build,
+  Emulator/Chromium/Clientregeln und Windows-Einstiege. Normale Push-/PR-Läufe
+  prüfen nur Python und JS/Build; reine Änderungen unter `docs/` oder an
+  Markdown im Repository-Stamm lösen sie nicht aus. Der Wechsel von Entwurf zu
+  reviewbereit führt alle vier Gruppen aus; manuell sind `quick`, einzelne
+  Gruppen oder `full` wählbar, sobald der Workflow auf dem Default-Branch liegt.
+  Spätere Pushes wiederholen nur die schnellen Prüfungen. Node 24, Java 21 und
+  Demo-Projekt sind festgelegt; kein Produktcredential nötig.
+  `publisher-tests.yml` und die Vorprüfung in `publish-consensus.yml` bleiben.
+  `dev.ps1 check rules` kapselt den separaten Client-Regelrunner mit demselben
+  Emulator-Lebenszyklus wie `browser`; `npm run test:rules` nutzt einen bereits
+  laufenden lokalen Emulator. Tests/Details: `docs/testing.md`.
 - **Frontend darüber hinaus manuell.** Nach JS-Änderungen
   an nicht abgedeckten Flows (Resolve, Share, Attachments, Follow-up,
   Bookmarks, Agent Mode, Demo, Mobile) die manuelle
@@ -5016,6 +5341,21 @@ Pages-/Watch-Tabs nicht. `/admin/topics` redirectet auf diesen Tab.
   ab: Hauptlauf, Fehlversuche und E4-Audits (`AuditLedger`, Journal
   `audit_calls.jsonl`, Prüfung vor jedem Audit-Call, Resume ohne erneute
   Audit-Kosten); fehlende Usage wird mit der Vorab-Obergrenze verbucht.
+  HTTP-200-Fehlerobjekte und ungültige Chat-Completions-Bodies sind strukturierte
+  Fehler, keine Enthaltung; gültiger Text ohne Auswahl bleibt Enthaltung.
+  Transport-/Synthesefehler speichern keine privaten Exception-/Providertexte.
+  Manifestvergleich ersetzt nur flüchtiges Datum/Uhrzeit/UTC-Offset durch
+  Platzhalter, auch beim Lesen älterer Manifeste; Zeitzone, Instruktionen und
+  Modellparameter bleiben eingefroren. `run_sample` und `run_experiment` sind
+  unterstützte Einstiegspunkte: Dry-run/Live schließen sich aus, Live verlangt
+  ein positives endliches Budget, Sample-Run-IDs bleiben ein einzelner
+  Verzeichnisname. Die Validierung erfolgt vor Dataset- oder Providerarbeit.
+- **Claim-Key-Backfill** (`scripts/backfill_claim_keys.py`): Normalbetrieb ergänzt
+  nur fehlende Keys; vorhandene Teilzuordnungen bleiben erhalten und werden
+  vor Judge-/Fallbackzuordnungen reserviert. Neue Zuordnungen kollidieren weder
+  mit erhaltenen Keys noch untereinander. `--force`
+  erlaubt ausdrücklich erneute Zuordnung. Dry-run zählt geplante Änderungen
+  korrekt und schreibt nichts, kann aber weiterhin den Identity-Judge aufrufen.
 - JS-Syntaxcheck einzelner Module:
   ```powershell
   node --check static\js\<modul>.js
@@ -5041,6 +5381,9 @@ Alle Loops werden beaufsichtigt und melden nach jedem erfolgreichen Tick Health.
 Fälligkeitscheck; `next_run_at` wird aus Intervall, lokaler Uhrzeit und Zeitzone
 DST-fest berechnet. Das persistente Config-/Lease-Dokument ist unabhängig vom
 30-Minuten-Watch-Worker; ein Review führt keine Empfehlung automatisch aus.
+Auch der Lease-Abschluss prüft `lease_run_id` und schreibt den nächsten Termin
+in einer Firestore-Transaktion. Ein alter Worker oder wiederholter Abschluss
+kann einen neu vergebenen Lease und dessen Zeitplan nicht überschreiben.
 Jeder terminale Lauf (auch Collection-Fehler) versucht anschließend eine
 Telegram-Nachricht mit Ergebnis, offenen redaktionellen Entscheidungen,
 Topic-Brief-Entscheidungsbedarf und Admin-Link; Versandfehler bleiben nicht-fatal.
@@ -5060,8 +5403,11 @@ frei, solange er noch Eigentümer ist; ein abgelaufener alter Worker kann den
 Lease eines Nachfolgers damit weder freigeben noch verlängern (R30). Jeder Einzel-Claim verwendet den dann aktuellen Zeitpunkt
 (nicht den Tick-Start), erneuert seine 15-Minuten-Lease während langer Läufe
 alle fünf Minuten und fenced Completion wie Fehlerabschluss über
-`current_run_id`. History, Watch-Pointer und Share-Pointer committen gemeinsam;
-ein alter Worker kann einen neueren Claim weder leeren noch pausieren. Jede
+`current_run_id`. History, Watch-Pointer und Share-Pointer committen gemeinsam.
+Claim, Completion und Fehlerabschluss prüfen außerdem den Account-Tombstone
+in ihrer Schreibtransaktion; bereits authentifizierte Worker bleiben nach
+Beginn einer Kontolöschung für neue Persistenzwrites gesperrt.
+Ein alter Worker kann einen neueren Claim weder leeren noch pausieren. Jede
 Änderung über `update_watch`/Admin-Status/Unsubscribe erhöht
 `config_generation`; ein echter Statuswechsel (Pause, Resume) entzieht
 zusätzlich den laufenden Claim (`current_run_id=None`). Ein alter Lauf kann einen
@@ -5085,29 +5431,56 @@ In-Memory-Usage-Zähler. Jeder erfolgreiche Lauf schreibt unter
 kompakte Drift-/Score-Felder plus aktuellen Consensus, Differences, Quellen- und
 Modellmetadaten. Das Share-Dokument bleibt der unveränderliche Original-Baseline-
 Snapshot und erhält nur `latest_watch_run_id`/`last_watch_run_at`; nach drei
-Fehlern pausiert die Watch. Alerts vergleichen Previous → Current, während ein
-zweiter Change-Judge-Vergleich Original → Current den kumulativen Baseline-Drift
-liefert. Alte kompakte History bleibt lesbar; beim nächsten erfolgreichen Lauf
-wechselt eine Legacy-Watch automatisch in den versionierten Flow. Die bewusst
-groben Event-Typen für spätere Webhooks sind `watch.checked`, `watch.changed`,
-`watch.condition_met` und `watch.run_failed`.
-Ob ein Lauf `changed` oder nur `checked` ist, entscheidet ausschließlich
-`app/services/drift_signal.py` — eine Regel für Badge, Kurve, Dashboard,
-Morning Brief, Mail und Telegram. Material ist ein Lauf, wenn der Change-Judge
-`severity == "major"` vergibt ODER der Agreement-Score mindestens 15 Punkte von
-JEDEM der letzten drei Scores entfernt liegt (Bandregel statt Vorgänger-Delta:
-der Score springt zwischen den Caps 90/84/64/39, ein Pendeln 84↔64 ist damit
-genau ein Ereignis statt eines pro Lauf). Ein `changed=true` mit `severity ==
-"minor"` ist eine Umformulierung: es bleibt als `restated` samt Judge-Satz auf
-der Seite sichtbar, hebt aber kein Badge. Lesepfade rechnen den Trigger aus der
-Serie neu (`drift_signal.annotate_points`) und trauen dem gespeicherten Feld
-nicht — Altläufe wurden unter der lockeren Regel geschrieben.
-Die kanalneutrale Alert-Regel ist pro Watch änderbar (persistiert weiterhin im
-Legacy-Feld `email_mode`): `changes_only` nutzt die bestehende
-Major-/Score-Delta-Schwelle, `condition` lässt den bestehenden Change-Judge eine
-max. 500 Zeichen lange Nutzerbedingung gegen den neuen Consensus als
-`met|not_met|unknown` bewerten und alarmiert nur beim Übergang zu `met`,
-`every_run` sendet nach jedem erfolgreichen Lauf den neuen Consensus-Inhalt.
+Fehlern pausiert die Watch. **Belegmodell (seit 2026-10-01, Vertrag:
+`docs/watch-evidence-model.md`):** jeder Check vergleicht mit der *geltenden*
+Antwort (`watch.accepted_run_id`, Altbestand: letzter Lauf) statt mit dem
+letzten Lauf, und zwar über `evidence_change.assess`: der Change-Judge
+(`query_consensus_change`, Structured Output) bekommt beide Antworten **und**
+beide Quellenlisten (neue mit `seen_before`) und nennt `cause`
+(`new_evidence` / `evidence_missing` / `reassessment`), tragende Quellen,
+`change_summary` und `held_summary`; der Server prüft die zitierten IDs, stuft
+`new_evidence` ohne neue URL zu `reassessment` und eine Neubewertung nach
+Modellwechsel zu `model_change` um. Ein zweiter Vergleich Original → Current
+liefert weiter den kumulativen Baseline-Drift. Alte kompakte History bleibt
+lesbar. Event-Typen für spätere Webhooks: `watch.checked`, `watch.changed`,
+`watch.confirming`, `watch.condition_met` (= Abschluss) und `watch.run_failed`.
+Was ein Check bedeutet, entscheidet ausschließlich
+`app/services/drift_signal.py` (`annotate_points` für Watch-Punkte,
+`annotate_runs` für Topic-Runs) — eine Regel für Badge, Kurve, Dashboard,
+Morning Brief, Mail, Telegram, Follower und Topic-Record. Signale: `moved`
+(major + neue Belege, oder eine Neubewertung, die der direkt folgende Check
+wiederholt), `confirming` → `preliminary`/`reverted`, `held` (major +
+`evidence_missing`: die geltende Antwort bleibt), `restated`, `stable`;
+`trigger == "changed"` ⇔ `moved`. Der Agreement-Score löst kein Ereignis mehr
+aus (nur noch `score_event` als Kurvenmarke). History ohne `cause` behält die
+alte Regel (major oder Score-Band) und wird beim Lesen neu bewertet, kein
+Backfill. Ein `confirming`-Check zieht den nächsten Lauf um
+`drift_signal.CONFIRMATION_DELAY` (20 min) vor; höchstens eine Nachprüfung pro
+Ereignis.
+**Ziel und Abschluss:** die Alert-Regel bleibt im Legacy-Feld `email_mode`,
+das Ziel im Feld `condition` (UI: „What are you waiting for?“). Das Ziel wird bei
+jedem Check bewertet (`condition_status`, `condition_reason`, zitierte
+`condition_evidence`). Belegt ein Check `met` mit einer Quelle dieses Laufs —
+oder wiederholt er ein `met` für dasselbe Ziel —, setzt `complete_watch_run`
+`status = "resolved"`, `resolution = {run_id, at, condition, reason, sources}`,
+`next_run_at = None` und gibt den Aktiv-Slot frei; ein erstes unbelegtes `met`
+löst eine Nachprüfung aus. Weiterbeobachten (`PATCH status=active`) verlangt ein
+neues oder leeres Ziel (`goal_reached`, 409). `changes_only` meldet `moved` oder
+den Abschluss, `condition` nur den Abschluss, `every_run` jeden Check. Ein Ziel,
+das während des Laufs geändert wurde, wird weder bewertet noch gespeichert (R16).
+**Tages-Scan (`watch_probe.py`):** aktive Owner-Watches mit Intervall weekly/
+monthly tragen `next_probe_at` (Index `status`+`next_probe_at`). Im Watch-Tick
+claimt `run_probe` at-most-once (Termin rückt vor, Tagesdeckel
+`watch_probe_max_per_day` aus den Admin-Limits, 0 = aus) und fragt ein
+günstiges Free-Watch-Modell mit Websuche (`NEW: yes|no`) nach Neuem seit dem
+letzten Check. Nur ein „yes“ mit einer Quelle, die die geltende Antwort nicht
+zitiert, zieht `next_run_at` auf jetzt und weckt den Scheduler; das Ergebnis
+steht als `last_probe` am Watch. Ist der volle Check < 30 h entfernt, entfällt
+der Scan.
+Ein einmalig konsumierter `probe_claim_token` bindet das Ergebnis an seinen Claim. Vor dem Schreiben
+werden Token, `config_generation`, Ziel, Zeitplan, Modellstufe und letzte erfolgreiche Vollprüfung
+mit dem Claim-Snapshot verglichen. Veraltete Antworten verändern weder
+`last_probe` noch `next_run_at`; Account-Tombstones sperren auch diesen Write.
 E-Mail und Telegram sind getrennte, pro Watch aktivierbare Kanäle; mindestens
 einer muss aktiv bleiben. Legacy-Watches bleiben E-Mail-only. Telegram nutzt
 denselben fertigen Run ohne zusätzlichen LLM-Call, dedupliziert über
@@ -5123,13 +5496,18 @@ Neu angelegte Watches bekommen eine lokale Ausführungszeit; das Backend berechn
 Fehler-Retries und Resume bei. Weekly-Watches können einen lokalen Wochentag wählen;
 Legacy-Watches ohne Wochentag bzw. Zeitfelder nutzen weiter die bisherige reine
 Intervalladdition.
-Alle Benachrichtigungen (Change, Every-run, Condition, Follower, Topic, Morning
-Brief, Telegram) folgen derselben Reihenfolge: **was sich geändert hat** (erster
-Satz hervorgehoben) → **Zahlenstreifen** (Agreement alt → neu inkl. Delta,
-Direction-Shift-Label aus der Position Map, Major/Minor) → **Frage** → Button.
-Bausteine dafür liegen zentral in `mailer.py` (`_change_block_html`,
-`_facts_html`, `_question_html`, `_shell_html` inkl. Preheader für die
-Inbox-Vorschau); lange Fragen werden auf ~200 Zeichen gekürzt und verlinken auf
+Alle Benachrichtigungen (Change, Every-run, Resolved, Follower, Topic, Telegram)
+sind ein **Änderungsprotokoll** in fester Reihenfolge: **was sich geändert hat**
+(erster Satz hervorgehoben) → **warum** (Ursachensatz + tragende Quellen) →
+**was gleich blieb** (`held_summary`) → **Ziel** und sein Stand → **Frage** →
+Button. Es gibt bewusst keine Agreement-Zeile mehr. Die Outbox trägt dafür
+`payload.delta` (`notification_outbox.delta_view`: summary, held, cause,
+sources, goal, goal_status, goal_reason); Items ohne `delta` (vor 2026-10-01
+eingereiht, durch `deliver_until` begrenzt) rendern nur den Summary. Bausteine
+liegen zentral in `mailer.py` (`_delta_parts`, `_change_block_html`,
+`_why_html`, `_question_html`, `_shell_html` inkl. Preheader für die
+Inbox-Vorschau); eine abgeschlossene Watch schickt genau eine „Resolved“-Mail
+(sie passiert das Pause-Gate der Zustellung als einzige); lange Fragen werden auf ~200 Zeichen gekürzt und verlinken auf
 die Seite. Der Textteil bleibt bewusst ASCII (`_ascii`), sonst landet die
 komplette Plaintext-Hälfte in Base64 und URLs sind nicht mehr klickbar.
 Telegram sendet dieselbe Struktur als HTML (`parse_mode=HTML`), Frage und langer
@@ -5138,16 +5516,19 @@ Consensus stehen in `<blockquote expandable>`; wird die Auszeichnung abgelehnt
 Watch-Seiten erklären nur vor dem ersten Vergleich die Baseline; bei vorhandener
 History beginnt der Inhalt direkt mit Status und Zeitplan. Lange Fragen klappen im Seitenkopf auf drei Zeilen
 ein (`#shareQuestion` + `#shareQuestionMore`, gleiche Geste wie `#threadAsk` in
-/app; ohne JS bleibt der volle Text stehen), in der eingeklappten Dashboard-Karte
-auf zwei. Zeitplan und Check-Daten stehen im Kopf stets
+/app; ohne JS bleibt der volle Text stehen), in der Dashboard-Karte auf drei. Zeitplan und Check-Daten stehen im Kopf stets
 sichtbar; nur Direction-/Agreement-Metriken liegen in einklappbaren
 Expertendetails. Vor der ersten echten Vergleichsstufe
 werden keine Entwicklungsmetriken suggeriert. Bei vorhandener History integriert
 der Drift-Header einen kompakten Agreement-Chart: seine Punkte besitzen Hover-
 Beschreibungen und springen in die stets sichtbare Run-Liste. Die große Kurve
 bleibt als dezentes, zunächst geschlossenes Detail aus dem Header verlinkt. Die normale Watch-URL
-rendert serverseitig die neueste Vollversion über dem unveränderten Share-Baseline-
-Dokument; `?version=<run_id>` öffnet eine unveränderliche (aber nur kurz gecachte, widerrufbare) historische Vollversion und
+rendert serverseitig die **geltende** Vollversion (`accepted_run_id`, sonst die
+neueste) über dem unveränderten Share-Baseline-Dokument; steht der neueste Check
+nicht (`held`/`confirming`), nennt die Seite ihn als „Latest check: …“ über der
+geltenden Antwort. Ein Ziel bzw. ein Abschluss steht als `.watch-goal-banner`
+im Kopf (öffentliche Seiten zeigen das Ziel), die Quellen hinter einer Bewegung
+als `.watch-evidence-list`; `?version=<run_id>` öffnet eine unveränderliche (aber nur kurz gecachte, widerrufbare) historische Vollversion und
 `?version=original` den Ausgangs-Consensus. Shared Pages ohne Watch behalten ihr
 bisheriges Snapshot-Verhalten. Ein Backend-`display_version` ist die einzige
 Quelle für Consensus, Differences, Agreement, Modelle, Quellen, Answer-Zeit und
@@ -5178,8 +5559,9 @@ Der 30-Minuten-Loop ruft nach `run_watch_tick` ein
 `run_brief_tick` auf: fällige Briefs werden über den Composite-Index begrenzt
 gelesen und transaktional geclaimt (Zeitplan rückt vor und das Outbox-Item
 entsteht im selben Commit, siehe Zustellgarantie unten), dann wird der Digest
-aus `list_watches(include_history=True)` aggregiert (Score/Delta, notable
-Changes seit dem letzten Brief = `trigger == "changed"` aus `drift_signal`) und als
+aus `list_watches(include_history=True)` aggregiert (Ziel statt Score, notable
+Events seit dem letzten Brief = `trigger == "changed"` aus `drift_signal` oder
+ein Abschluss) und als
 Multipart-Mail versendet. Modus `changes_only` überspringt Briefs ohne notable
 Changes. Kein LLM-Call, kein Watch-Lease nötig; unverifizierte E-Mail-Adressen
 werden übersprungen. `/watch/brief/unsubscribe` (eigener HMAC-Token-Typ,
@@ -5322,6 +5704,9 @@ ersten Check statt eines leeren Consensus-Panels.
   `RunContext.persistence`; alle Save-Aufrufe müssen `runId` und Bookmark-ID
   explizit tragen. „New comparison“ ändert die Projektion, nicht diese
   Hintergrund-Persistenz; Logout verwirft alle Contexts.
+  `bookmarkMeta` erhaelt das boolesche `has_consensus` serverseitiger Metadaten;
+  nur vollstaendige Dokumente mit `responses` leiten es erneut aus dem Text ab.
+  Sonst verlor ein real gespeicherter Consensus beim Meta-Upsert seine Kennzeichnung.
 - **`window.App.setAppTitle(question?)`** (definiert in `app-core.js`) hält den
   Standard- bzw. fragebezogenen Browser-Tab-Titel bei Query-Send, Bookmark-Open
   und Clear synchron zur aktuellen Ansicht.
@@ -5614,6 +5999,13 @@ stündliche Retention räumt abgelaufene Dateien und verwaiste Uploads seitenwei
 mit Zeitbudget auf; ein einzelner fehlschlagender Löschvorgang wird geloggt und
 im nächsten Lauf wiederholt. Collection-group-Indizes siehe Setup.
 
+Dokumentversionen unter `documents/{document_id}/versions/{version}` speichern
+Tabellenzeilen mit `storage_schema_version=2` als `{"cells": [...]}`-Maps:
+Firestore erlaubt keine direkt ineinander verschachtelten Arrays. Der interne
+Codec in `agent_documents.py` stellt beim Lesen die unveränderte DocumentSpec
+mit Zeilenlisten wieder her. Inhaltshash, API, Rendering und frühere Versionen
+behalten dieselbe Bedeutung; alte Datensätze ohne Schemafeld bleiben lesbar.
+
 `agent_file_extract.py` läuft mit 15 s Walltime und auf Linux 10 s CPU / 768 MiB
 Adressraum; höchstens 80 PDF-Seiten, 120 Auszüge / 120.000 Zeichen. DOCX-Tabellen
 behalten Zellreihenfolge, Textdateien Zeilenbereiche und PDFs Seitennummern.
@@ -5715,3 +6107,27 @@ die Zeile absolute Tokens, der Fuß die Rücksetzzeit in Ortszeit und UTC.
 
 Folgeaufgabe: Agent-Module als eigene, nur bei `agentAccess.allowed` geladene
 Bundle-Gruppe ausliefern (bewusst nicht Teil dieser Änderung).
+
+
+### Audit-Regressionsschutz: Admin und oeffentliche Browsermodule (2026-10-02)
+
+`admin-api.js::adminErrorMessage` entpackt sowohl den main-Fehlerumschlag
+`error` als auch FastAPIs `detail`. Angezeigt werden ausschliesslich bekannte
+Stringfelder (`message`/`error`); Listen, unbekannte Objekte und Nicht-JSON
+fallen auf den HTTP-Status zurueck. Ein Fehler loest keinen zweiten Write aus;
+der Prompteditor behaelt seinen konfliktbehafteten Entwurf.
+
+`admin-benchmark.js` verwendet denselben Client. Listen- und Detailgenerationen
+verwerfen Antworten einer vorherigen Auswahl oder Aktualisierung. Beim Wechsel
+verschwindet der alte Report sofort; die gelieferte `run_id` muss zur Auswahl
+passen. Die Darstellung verwendet nur kompakte Kennzahlen/Fragenmetadaten;
+Rohprompts und Rohantworten werden auch aus unerwarteten Zusatzfeldern nicht
+in die Ansicht uebernommen.
+
+`tests/e2e/test_topic_frontend.py` prueft das unveraenderte Topic-Skript mit
+kontrolliertem SSR-Markup in Chromium: Keyboardnavigation, zweistufiges Touch-
+Preview, inerte Notizen und historische/gesperrte Storagezustaende. Die
+writerfreie Browserfixture verwendet genau einen Server je pytest-Aufruf,
+auch wenn mehrere Module die Fixture importieren. `E2E_PHASE4_PORT` (Default
+8033) trennt parallele Worktrees; ein bereits belegter Port bricht den Start
+ab. Screenshots bleiben unter `test-results/`.

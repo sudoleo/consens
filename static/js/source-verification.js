@@ -193,7 +193,10 @@
     const kind = result ? 'differences' : 'sources';
     const node = result || report?.querySelector('.source-verification');
     if (!node) return false;
-    const index = result ? [...cards.querySelectorAll('.diff-card')].indexOf(result.closest('.diff-card')) : null;
+    // Cards are ordered by severity; the reader addresses them by data index.
+    const resultCard = result?.closest('.diff-card');
+    const index = !resultCard ? null : resultCard.dataset.differenceIndex !== undefined
+      ? Number(resultCard.dataset.differenceIndex) : [...cards.querySelectorAll('.diff-card')].indexOf(resultCard);
     if (!window.App.answerReader?.openPanel(kind, trigger, null, index, {reveal: true})) {
       const panel = document.getElementById(kind === 'differences' ? 'consensusDifferencesPanel' : 'consensusSourcesPanel');
       if (!panel) return false;
@@ -243,7 +246,10 @@
       ? reasonLabel(item.reason_code) : '';
     return Object.freeze({state, summary, detail: Number(verification.schema_version) >= 3 ? detail : ''});
   }
-  function getCitationCheck(ref) {
+  function getCitationCheck(ref, number) {
+    // A grouped pill carries one verdict per source number. Asked for one
+    // number, answer only with that number's own bound verdict.
+    if (number != null) return bindings.get(ref)?.checks?.get(String(number)) || null;
     const check = bindings.get(ref)?.check;
     if (check) return check;
     // Never look up a global/latest run or borrow another statement's verdict
@@ -695,25 +701,45 @@
     }
     const number = String(item.source_id).replace(/^S/i, "");
     refs.forEach(ref => {
-      const refNumber = ref.dataset.sourceNumber || ref.getAttribute("href")?.match(/^#src-(\d+)$/)?.[1]
-        || ref.textContent.trim().replace(/^S/i, "");
-      if (refNumber !== number || bindings.has(ref)) return;
+      const refNumbers = ref.dataset.sourceNumbers ? ref.dataset.sourceNumbers.split(/\s+/)
+        : [ref.dataset.sourceNumber || ref.getAttribute("href")?.match(/^#src-(\d+)$/)?.[1]
+          || ref.textContent.trim().replace(/^S/i, "")];
+      if (!refNumbers.includes(number)) return;
+      const existing = bindings.get(ref);
+      if (existing) {
+        // A grouped source pill ("+2") collects the verdict of each source
+        // number it stands for and shows the most severe one.
+        if (!existing.checks || existing.checks.has(number)) return;
+        existing.checks.set(number, citationCheck(item, verification));
+        const worst = [...existing.checks.values()].sort((a, b) => severity(a.state) - severity(b.state))[0];
+        existing.check = worst;
+        applyRefState(ref, worst.state);
+        ref.setAttribute('aria-label', `${existing.ariaLabel || item.source_id}. ${worst.summary}`);
+        return;
+      }
       const state = findingState(item, verification);
-      const issue = ['issue', 'contradicted'].includes(state);
       const click = event => {
         if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey || event.button > 0) return;
         event.preventDefault(); event.stopImmediatePropagation(); open();
       };
       const check = citationCheck(item, verification);
-      bindings.set(ref, { title: ref.getAttribute("title"), ariaLabel: ref.getAttribute('aria-label'), click, check });
-      ref.dataset.sourceCheck = state;
-      ref.classList.add(issue ? "source-check-issue" : state === 'supported' ? 'source-check-supported' : "source-check-neutral");
+      bindings.set(ref, { title: ref.getAttribute("title"), ariaLabel: ref.getAttribute('aria-label'), click, check,
+        checks: new Map([[number, check]]) });
+      applyRefState(ref, state);
       const label = ref.getAttribute('aria-label') || ref.title || item.source_id;
       ref.setAttribute('aria-label', `${label}. ${check.summary}`);
       if (customTeaser(ref)) ref.removeAttribute('title');
       else ref.title = `${ref.title || item.source_id} — ${stateLabels[state]}. See Verify sources for details.`;
       ref.addEventListener("click", click, true);
     });
+  }
+  const severityOrder = ['contradicted', 'issue', 'unknown', 'pending', 'supported'];
+  function severity(state) { const index = severityOrder.indexOf(state); return index < 0 ? severityOrder.length : index; }
+  function applyRefState(ref, state) {
+    const issue = ['issue', 'contradicted'].includes(state);
+    ref.dataset.sourceCheck = state;
+    ref.classList.remove("source-check-issue", "source-check-neutral", "source-check-supported");
+    ref.classList.add(issue ? "source-check-issue" : state === 'supported' ? 'source-check-supported' : "source-check-neutral");
   }
   function reasonLabel(code) {
     if (workerFailureLabels.has(code)) return workerFailureLabels.get(code);

@@ -17,7 +17,7 @@
   <meta name="twitter:description" content="An independent tool for comparing AI model answers and spotting agreement across providers.">
   <meta name="twitter:image" content="https://www.consens.io/static/favicon-square.png">
   <title>About | consens.io</title>
-<link rel="stylesheet" href="/static/css/public-pages.css?v=20260906-palette1">
+<link rel="stylesheet" href="/static/css/public-pages.css?v=20261001-evidence">
   <link rel="stylesheet" href="/static/css/public-shell.css?v=20260826-cardfoot">
   <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260621-logo2" sizes="any" type="image/png">
@@ -128,6 +128,11 @@
         <p>
           consens.io is built around major model providers and supporting search tools. The exact line-up may
           change over time as models are added, updated, or removed.
+        </p>
+        <p>
+          Every model call is sent with zero data retention routing: requests go only to provider endpoints that
+          don't keep your prompts or answers. Web search is a separate service with its own terms;
+          <a href="/privacy#zdr">the privacy policy</a> explains what the routing does and does not cover.
         </p>
         <div class="model-grid" style="margin-top:16px;">
           <article class="model-card">

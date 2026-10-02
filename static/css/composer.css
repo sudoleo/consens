@@ -21,8 +21,10 @@
    always last on the right; nothing changes sides between states or modes.
    The groups come from the markup (templates/index.html):
      .composer-lead            (+), the mode selector (App.runMode)
-     .composer-models          who answers: Agent model and reasoning, the
-                               comparison or consensus models, Deep Think hint
+     .composer-models          who answers, one chip per mode: in Agent the
+                               chat model with its comparison models (one
+                               menu), else the comparison or consensus
+                               models; the Deep Think hint
      .input-actions-container  Demo (onboarding only), Send
    Everything above the field (files, quote, run notice, Google chips) is a
    full-width row of its own.
@@ -90,7 +92,7 @@
 .agent-model-picker { display: flex; justify-content: flex-start; min-width: 0; max-width: 230px; flex: 1 1 auto; }
 .agent-effort-control { display: flex; min-width: 0; flex: 0 0 auto; }
 .consensus-model { min-width: 0; margin: 0; }
-:is(.run-mode-control, .agent-model-controls, .agent-effort-control)[hidden] { display: none; }
+:is(.run-mode-control, .agent-model-controls, .agent-effort-control, .consensus-model)[hidden] { display: none; }
 
 /* ---- One look for every picker in the row -------------------------------
    The mode, the Agent model, reasoning and the models chip are the same kind
@@ -114,6 +116,12 @@
 }
 .chat-input-container .run-mode-control .model-picker-display { background: var(--raise); }
 .chat-input-container .agent-model-picker .model-picker-display { color: var(--ink); }
+/* Agent: one chip for the chat model and the models it is compared with,
+   "Gemini 3.8 Flash +6". The name gives way, the count stays whole. */
+.chat-input-container .model-picker-display-count {
+  flex: 0 0 auto; margin-left: -2px; color: var(--ink-3); font-variant-numeric: tabular-nums;
+}
+.chat-input-container .model-picker-display-count[hidden] { display: none; }
 .chat-input-container :is(.composer-lead, .composer-models) .model-picker-display::after {
   content: ''; flex: 0 0 5px; width: 5px; height: 5px; margin-top: -3px;
   border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor;
@@ -146,6 +154,16 @@
 .chat-input-container :is(.run-mode-control, .agent-model-controls) .model-picker-option:focus-visible { outline: 2px solid var(--ink-3); outline-offset: -2px; background: var(--raise); }
 .chat-input-container :is(.run-mode-control, .agent-model-controls) .model-picker-option-label { white-space: normal; overflow-wrap: anywhere; }
 .model-picker-option-description { flex-basis: 100%; font-size: 11px; color: var(--ink-3); font-weight: 400; line-height: 1.5; }
+/* Rows that lead to another level (sections, Custom, a provider) and the
+   way back keep name and chevron on one line; the chevron marks the end. */
+.chat-input-container .agent-model-controls .model-picker-option:is(.model-picker-row-open, .model-picker-back-option, .model-picker-custom-option, .model-picker-preset-option) {
+  flex-wrap: nowrap; align-items: center;
+}
+.chat-input-container .agent-model-controls .model-picker-option:is(.model-picker-row-open, .model-picker-back-option, .model-picker-custom-option) { padding-right: 8px; }
+.chat-input-container .agent-model-controls .model-picker-back-option { min-height: 34px; padding-block: 6px; color: var(--ink-2); }
+.chat-input-container .agent-model-controls .model-picker-level-option .model-picker-preset-label { flex: 1 1 auto; }
+.chat-input-container .agent-model-controls .model-picker-section-label { padding: 8px 11px 4px; color: var(--ink-3); text-align: left; }
+.chat-input-container .agent-model-controls .model-picker-section-label ~ .model-picker-section-label { margin-top: 4px; border-top: 1px solid var(--line); padding-top: 10px; }
 
 /* An open menu must not be clipped by the row or covered by its neighbours. */
 .chat-input-container :is(.composer-lead, .composer-models):has(.model-picker-menu.is-open) { position: relative; z-index: 2; overflow: visible; }

@@ -1,34 +1,34 @@
-"""Persistente, run-basierte Usage-Reservierungen fuer kuenftige APIs.
+"""Persistente Run-Belege der Consensus-Pipeline auf dem gemeinsamen Tokenkonto.
 
-Ein logischer Consensus-Run belegt genau einen Integer-Slot. Die Anzahl der
-Provider/Modelle ist absichtlich kein Teil dieser Schnittstelle. Deep-Think-
-Runs verwenden einen separaten Zaehler.
+Ein logischer Lauf (``usage_run_key``) ist weiterhin genau ein Beleg: er bindet
+Idempotenz, Request-Fingerprint, Operations-Claims und Chat-Kontext. Gezaehlt
+werden aber keine Runs mehr, sondern Tokens auf demselben Tageskonto wie Agent
+(``agent_quota``; Limit nach Kontostufe aus ``agent_budget_config``):
+
+* **Admission:** ein neuer Lauf startet nur, wenn das freie Budget die
+  erwarteten Kosten eines typischen Laufs dieses Modus deckt (Compare,
+  Consensus, Deep Think). Der Lauf haelt diese Schaetzung kurz gegen parallele
+  Admissions (``pipeline_holds`` im Kontodokument), reserviert aber nichts pro
+  Call.
+* **Buchung:** jede abgeschlossene Operation (``ask:<familie>``, ``consensus``,
+  ``resolve``, API ``pipeline``) bucht ihre gemessenen Tokens genau einmal
+  (``booked_operations``). Fehlt die Messung, bucht sie dieselbe begrenzte
+  Schaetzung wie Agent. Ein Lauf darf das Konto dabei leicht ueberziehen.
 
 Firestore-Datenmodell (unter ``users/{uid}``):
 
-* ``usage_days/{YYYY-MM-DD}`` enthaelt die aggregierten Integer-Zaehler
-  ``total_reserved``, ``total_consumed``, ``deep_think_reserved`` und
-  ``deep_think_consumed`` fuer den UTC-Tag der Reservierung.
 * ``usage_runs/{sha256(idempotency_key)}`` enthaelt Run-Typ, UTC-Tag, Ablauf,
-  kanonischen Request-Fingerprint, Status und transaktionale Operations-Claims.
-  ``utc_date`` ist ausschliesslich der Abrechnungstag. ``expires_at`` ist die
-  davon getrennte Ausfuehrungs-/Retry-Gueltigkeit: mindestens bis zum Ende des
-  Abrechnungstags und immer mindestens ``MIN_EXECUTION_WINDOW`` nach der
-  Reservierung. Ein kurz vor Mitternacht belasteter Run darf seine bereits
-  autorisierten Schritte deshalb nach Mitternacht beenden, ohne erneut belastet
-  zu werden; neue Runs zaehlen fuer den neuen Tag.
-  Der Klartext-Idempotency-Key wird nicht persistiert; die UID ist bereits Teil
-  des Dokumentpfads, wodurch die Idempotenz aus UID + Key entsteht.
+  kanonischen Request-Fingerprint, Status, Operations-Claims, die Konto-Periode
+  der Admission (``quota_day``), Stufe/Modus/Schaetzung und die gebuchten
+  Operationen. ``utc_date`` ist der Admissionstag; ``expires_at`` die davon
+  getrennte Ausfuehrungs-/Retry-Gueltigkeit (mindestens bis Tagesende und
+  ``MIN_EXECUTION_WINDOW``).
+* ``chat_state/agent_tokens_{periode}`` ist das gemeinsame Kontodokument.
 
-Jeder Run belegt einen Total-Slot; Deep Think belegt zusaetzlich einen Slot im
-separaten Deep-Think-Kontingent. Statusuebergaenge sind ``reserved -> consumed``
-oder ``reserved -> released``.
-``consumed`` und ``released`` sind terminal. Wiederholungen derselben Operation
-sind idempotent; ein Key darf nicht fuer einen anderen Run-Typ wiederverwendet
-werden. Reservierungen zaehlen bereits gegen das Limit, werden aber erst durch
-``consume`` als verbraucht markiert. Kostenpflichtige Arbeit darf erst nach
-``consume`` und einem erfolgreichen Operations-Claim beginnen; Provider-Aufrufe
-gehoeren niemals in eine Firestore-Transaktion.
+Statusuebergaenge bleiben ``reserved -> consumed`` oder ``reserved ->
+released``; beide terminal. Kostenpflichtige Arbeit darf erst nach ``consume``
+und einem erfolgreichen Operations-Claim beginnen; Provider-Aufrufe gehoeren
+niemals in eine Firestore-Transaktion.
 """
 
 from __future__ import annotations
@@ -36,23 +36,23 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, time, timedelta, timezone
 from enum import Enum
 from typing import Callable, Protocol, TypeVar
 
 from firebase_admin import firestore
 
-from app.services import persistence_guard
+from app.services import agent_budget_config, agent_quota, persistence_guard
 
 
-USAGE_DAYS_COLLECTION = "usage_days"
 USAGE_RUNS_COLLECTION = "usage_runs"
-USAGE_SCHEMA_VERSION = 2
+USAGE_SCHEMA_VERSION = 3
 MAX_IDEMPOTENCY_KEY_BYTES = 256
 MAX_OPERATION_NAME_BYTES = 80
 FINGERPRINT_HEX_LENGTH = 64
-# Execution validity of an already charged run, independent of its billing day.
+MAX_BOOKED_OPERATIONS = 32
+# Execution validity of an already admitted run, independent of its billing day.
 MIN_EXECUTION_WINDOW = timedelta(hours=2)
 
 
@@ -76,29 +76,35 @@ class RunStatus(str, Enum):
 
 
 @dataclass(frozen=True)
-class UsageLimits:
-    total: int
-    deep_think: int
+class TokenAdmission:
+    """What a new run must find on the account before it may start."""
+
+    tier: str
+    mode: str
+    limit: int
+    estimate: int
+    period: str
+    config: dict = field(compare=False, repr=False)
 
     def __post_init__(self) -> None:
-        _require_non_negative_int(self.total, "total limit")
-        _require_non_negative_int(self.deep_think, "deep_think limit")
+        for label, value in (("limit", self.limit), ("estimate", self.estimate)):
+            if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+                raise ValueError(f"{label} must be a positive integer")
+        if self.mode not in agent_budget_config.RUN_MODES:
+            raise ValueError("Unsupported run mode")
 
 
-@dataclass(frozen=True)
-class UsageBucketSnapshot:
-    limit: int
-    reserved: int
-    consumed: int
-    remaining: int
-
-
-@dataclass(frozen=True)
-class UsageSnapshot:
-    uid: str
-    utc_date: str
-    total: UsageBucketSnapshot
-    deep_think: UsageBucketSnapshot
+def token_admission(db, tier: str, *, mode: str | None = None, deep_think: bool = False) -> TokenAdmission:
+    """Admission parameters for one run of ``tier`` (a ledger tier incl. admin)."""
+    config = agent_budget_config.get_config(db)
+    tier = agent_budget_config.tier_key(tier)
+    run_mode = agent_budget_config.run_mode(mode, deep_think=deep_think)
+    return TokenAdmission(
+        tier=tier, mode=run_mode,
+        limit=agent_budget_config.limit_for(config, tier),
+        estimate=agent_budget_config.run_estimates_for(config, tier)[run_mode],
+        period=agent_quota.period_key(config), config=config,
+    )
 
 
 @dataclass(frozen=True)
@@ -108,7 +114,7 @@ class UsageRunResult:
     kind: RunKind
     status: RunStatus
     utc_date: str
-    snapshot: UsageSnapshot
+    token_budget: dict | None
     idempotent: bool
 
 
@@ -128,21 +134,21 @@ class UsageRepositoryError(Exception):
 
 
 class UsageLimitExceeded(UsageRepositoryError):
-    def __init__(
-        self,
-        *,
-        uid: str,
-        kind: RunKind,
-        utc_date: str,
-        snapshot: UsageSnapshot,
-        limiting_bucket: str,
-    ):
-        super().__init__(f"{limiting_bucket} usage limit reached")
+    """The remaining tokens do not cover the expected cost of this run."""
+
+    limiting_bucket = "tokens"
+
+    def __init__(self, *, uid: str, kind: RunKind, utc_date: str, token_budget: dict, required: int):
+        super().__init__("daily token allowance does not cover this run")
         self.uid = uid
         self.kind = kind
         self.utc_date = utc_date
-        self.snapshot = snapshot
-        self.limiting_bucket = limiting_bucket
+        self.token_budget = token_budget
+        self.required = required
+
+
+class UsageCapacityExceeded(UsageRepositoryError):
+    """Too many young runs on one account at once."""
 
 
 class UsageRunNotFound(UsageRepositoryError):
@@ -180,59 +186,36 @@ class UsageDataError(UsageRepositoryError):
 class UsageRepository(Protocol):
     def authorize_operation(
         self, uid: str, idempotency_key: str, kind: RunKind,
-        limits: UsageLimits, operation: str, operation_fingerprint: str,
+        admission: TokenAdmission, operation: str, operation_fingerprint: str,
         *, request_fingerprint: str, now: datetime | None = None,
     ) -> tuple[UsageRunResult, UsageOperationClaim]: ...
 
     def reserve(
-        self,
-        uid: str,
-        idempotency_key: str,
-        kind: RunKind,
-        limits: UsageLimits,
-        *,
-        request_fingerprint: str | None = None,
-        now: datetime | None = None,
+        self, uid: str, idempotency_key: str, kind: RunKind, admission: TokenAdmission,
+        *, request_fingerprint: str | None = None, now: datetime | None = None,
     ) -> UsageRunResult: ...
 
     def consume(self, uid: str, idempotency_key: str) -> UsageRunResult: ...
 
     def release(self, uid: str, idempotency_key: str) -> UsageRunResult: ...
 
-    def get_run(
-        self,
-        uid: str,
-        idempotency_key: str,
-        *,
-        now: datetime | None = None,
-    ) -> UsageRunResult: ...
+    def book_operation(
+        self, uid: str, idempotency_key: str, operation: str, *,
+        measured: int, estimated: int, final: bool = False, now: datetime | None = None,
+    ) -> dict: ...
+
+    def get_run(self, uid: str, idempotency_key: str, *, now: datetime | None = None) -> UsageRunResult: ...
 
     def bind_context_target(
-        self,
-        uid: str,
-        idempotency_key: str,
-        target_scope: str,
-        *,
-        now: datetime | None = None,
+        self, uid: str, idempotency_key: str, target_scope: str, *, now: datetime | None = None,
     ) -> None: ...
 
     def claim_operation(
-        self,
-        uid: str,
-        idempotency_key: str,
-        operation: str,
-        request_fingerprint: str,
-        *,
-        now: datetime | None = None,
+        self, uid: str, idempotency_key: str, operation: str, request_fingerprint: str,
+        *, now: datetime | None = None,
     ) -> UsageOperationClaim: ...
 
-    def snapshot(
-        self,
-        uid: str,
-        limits: UsageLimits,
-        *,
-        now: datetime | None = None,
-    ) -> UsageSnapshot: ...
+    def token_budget(self, uid: str, admission: TokenAdmission, *, now: datetime | None = None) -> dict: ...
 
 
 T = TypeVar("T")
@@ -240,7 +223,7 @@ TransactionRunner = Callable[[Callable[[object], T]], T]
 
 
 class FirestoreUsageRepository:
-    """Firestore-Implementierung mit atomarem Check-and-reserve.
+    """Firestore-Implementierung mit atomarer Admission und Buchung.
 
     ``transaction_runner`` ist ein Test-Seam. In Produktion wird immer der
     Retry-faehige ``firebase_admin.firestore.transactional``-Wrapper benutzt.
@@ -250,16 +233,60 @@ class FirestoreUsageRepository:
         self._db = db
         self._transaction_runner = transaction_runner
 
+    # --- Admission -----------------------------------------------------------
+
+    def admission(self, tier: str, *, mode: str | None = None, deep_think: bool = False) -> TokenAdmission:
+        """Admission parameters from the same database as the account."""
+        return token_admission(self._db, tier, mode=mode, deep_think=deep_think)
+
+    def account_snapshot(self, uid: str, tier: str) -> dict:
+        """The account as Agent reports it (with Agent's allowance repairs)."""
+        return agent_quota.snapshot(self._db, _validate_uid(uid), tier=tier)
+
+    def _admit(self, tx, uid, key_hash, kind, admission, now):
+        """Read the account and admit one new run (no writes yet)."""
+        ledger_ref = agent_quota.quota_ref(self._db, uid, admission.period)
+        ledger = ledger_ref.get(transaction=tx).to_dict() or {}
+        epoch = now.timestamp()
+        try:
+            admitted = agent_quota.admit_run(ledger, key_hash, admission.estimate,
+                                             limit=admission.limit, now=epoch)
+        except agent_quota.AgentTokenBudgetExceeded:
+            raise UsageLimitExceeded(
+                uid=uid, kind=kind, utc_date=now.date().isoformat(), required=admission.estimate,
+                token_budget=self._public(ledger, admission.period, admission.config, admission.tier, epoch,
+                                          limit=admission.limit),
+            ) from None
+        except agent_quota.PipelineCapacityExceeded as exc:
+            raise UsageCapacityExceeded(str(exc)) from None
+        return ledger_ref, admitted
+
+    def _new_run(self, kind, admission, request_fingerprint, now):
+        return {
+            "schema_version": USAGE_SCHEMA_VERSION,
+            "kind": kind.value,
+            "utc_date": now.date().isoformat(),
+            "quota_day": admission.period,
+            "token_tier": admission.tier,
+            "admission_mode": admission.mode,
+            "admission_estimate": admission.estimate,
+            "token_limit_at_admission": admission.limit,
+            "request_fingerprint": request_fingerprint,
+            "expires_at": execution_expiry(now),
+            "operation_claims": {},
+            "booked_operations": {},
+            "created_at": now,
+        }
+
     def authorize_operation(
         self, uid: str, idempotency_key: str, kind: RunKind,
-        limits: UsageLimits, operation: str, operation_fingerprint: str,
+        admission: TokenAdmission, operation: str, operation_fingerprint: str,
         *, request_fingerprint: str, now: datetime | None = None,
     ) -> tuple[UsageRunResult, UsageOperationClaim]:
-        """Reserve/consume/claim atomically, reading each document only once.
+        """Admit (if new)/consume/claim atomically, reading each document once.
 
-        Prepared runs only need the deletion fence, run and current day
-        counters (three reads). Legacy direct calls can still create a run;
-        reservations from older clients are consumed in this same transaction.
+        Prepared runs only need the deletion fence and the run (two reads); the
+        account is read only to admit a legacy run that skipped /prepare.
         No cached state may authorize external work.
         """
         uid = _validate_uid(uid)
@@ -276,6 +303,7 @@ class FirestoreUsageRepository:
                 uid=uid, db=self._db, transaction=tx
             )
             run_snap = run_ref.get(transaction=tx)
+            ledger_ref = admitted = None
             if run_snap.exists:
                 run_data = run_snap.to_dict() or {}
                 if _stored_kind(run_data) is not kind:
@@ -295,42 +323,12 @@ class FirestoreUsageRepository:
                 status = _stored_status(run_data)
                 if status is RunStatus.RELEASED:
                     raise UsageRunReleased("This usage run was already released. Start a new run.")
-                run_limits = _stored_limits(run_data)
             else:
-                utc_date = now.date().isoformat()
-                expires_at = execution_expiry(now)
+                ledger_ref, admitted = self._admit(tx, uid, key_hash, kind, admission, now)
+                run_data = self._new_run(kind, admission, request_fingerprint, now)
+                utc_date = run_data["utc_date"]
+                expires_at = run_data["expires_at"]
                 status = None
-                run_limits = limits
-                run_data = {
-                    "schema_version": USAGE_SCHEMA_VERSION,
-                    "kind": kind.value,
-                    "utc_date": utc_date,
-                    "total_limit_at_reservation": limits.total,
-                    "deep_think_limit_at_reservation": limits.deep_think,
-                    "request_fingerprint": request_fingerprint,
-                    "expires_at": expires_at,
-                    "operation_claims": {},
-                    "created_at": now,
-                }
-
-            day_data = self._read_day(tx, uid, utc_date)
-            if status is None:
-                snapshot = _snapshot(uid, utc_date, day_data, run_limits)
-                limiting_bucket = (
-                    "total" if snapshot.total.remaining < 1 else
-                    "deep_think" if kind is RunKind.DEEP_THINK
-                    and snapshot.deep_think.remaining < 1 else None
-                )
-                if limiting_bucket:
-                    raise UsageLimitExceeded(
-                        uid=uid, kind=kind, utc_date=utc_date,
-                        snapshot=snapshot, limiting_bucket=limiting_bucket,
-                    )
-            elif status is RunStatus.RESERVED:
-                if day_data["total_reserved"] < 1:
-                    raise UsageDataError("Reserved counter is inconsistent with usage run")
-                if kind is RunKind.DEEP_THINK and day_data["deep_think_reserved"] < 1:
-                    raise UsageDataError("Deep Think counter is inconsistent with usage run")
 
             claims = run_data.get("operation_claims")
             if claims is None:
@@ -351,19 +349,8 @@ class FirestoreUsageRepository:
                 claimed_at = now
 
             # All reads and validations precede every write, as Firestore requires.
-            if status is not RunStatus.CONSUMED:
-                if status is RunStatus.RESERVED:
-                    day_data["total_reserved"] -= 1
-                    if kind is RunKind.DEEP_THINK:
-                        day_data["deep_think_reserved"] -= 1
-                day_data["total_consumed"] += 1
-                if kind is RunKind.DEEP_THINK:
-                    day_data["deep_think_consumed"] += 1
-                day_data.update({
-                    "schema_version": USAGE_SCHEMA_VERSION,
-                    "utc_date": utc_date, "updated_at": now,
-                })
-                tx.set(self._day_ref(uid, utc_date), day_data, merge=True)
+            if admitted is not None:
+                tx.set(ledger_ref, admitted)
             if existing is None or status is not RunStatus.CONSUMED:
                 updated_claims = dict(claims)
                 updated_claims[operation] = {
@@ -380,9 +367,13 @@ class FirestoreUsageRepository:
                     tx.update(run_ref, updates)
                 else:
                     tx.set(run_ref, {**run_data, **updates})
+            budget = (self._public(admitted, admission.period, admission.config, admission.tier,
+                                   now.timestamp(), limit=admission.limit)
+                      if admitted is not None else None)
             return (
-                _result(uid, key_hash, kind, RunStatus.CONSUMED, utc_date,
-                        day_data, run_limits, idempotent=status is RunStatus.CONSUMED),
+                UsageRunResult(uid=uid, idempotency_hash=key_hash, kind=kind,
+                               status=RunStatus.CONSUMED, utc_date=utc_date,
+                               token_budget=budget, idempotent=status is RunStatus.CONSUMED),
                 UsageOperationClaim(
                     uid=uid, idempotency_hash=key_hash, operation=operation,
                     request_fingerprint=operation_fingerprint, claimed_at=claimed_at,
@@ -390,14 +381,14 @@ class FirestoreUsageRepository:
                 ),
             )
 
-        return self._transaction(authorize)
+        return self._transaction(uid, authorize)
 
     def reserve(
         self,
         uid: str,
         idempotency_key: str,
         kind: RunKind,
-        limits: UsageLimits,
+        admission: TokenAdmission,
         *,
         request_fingerprint: str | None = None,
         now: datetime | None = None,
@@ -410,8 +401,6 @@ class FirestoreUsageRepository:
             or canonical_request_fingerprint({"internal_idempotency_hash": key_hash})
         )
         now = _as_utc(now)
-        utc_date = now.date().isoformat()
-        expires_at = execution_expiry(now)
         run_ref = self._run_ref(uid, key_hash)
 
         def operation(tx):
@@ -426,86 +415,113 @@ class FirestoreUsageRepository:
                     raise UsageRunConflict(
                         "Idempotency key is already bound to a different run kind"
                     )
-                run_date = _stored_utc_date(run_data)
                 stored_fingerprint = _stored_request_fingerprint(run_data)
                 if not hmac.compare_digest(stored_fingerprint, request_fingerprint):
                     raise UsageRunConflict(
                         "Idempotency key is already bound to a different request"
                     )
-                stored_expires_at = _stored_expires_at(run_data)
-                if now >= stored_expires_at:
+                if now >= _stored_expires_at(run_data):
                     raise UsageRunExpired("Usage run has expired")
-                day_data = self._read_day(tx, uid, run_date)
-                return _result(
-                    uid,
-                    key_hash,
-                    existing_kind,
-                    _stored_status(run_data),
-                    run_date,
-                    day_data,
-                    _stored_limits(run_data),
-                    idempotent=True,
+                return UsageRunResult(
+                    uid=uid, idempotency_hash=key_hash, kind=existing_kind,
+                    status=_stored_status(run_data), utc_date=_stored_utc_date(run_data),
+                    token_budget=None, idempotent=True,
                 )
 
-            day_ref = self._day_ref(uid, utc_date)
-            day_data = self._read_day(tx, uid, utc_date)
-            snapshot = _snapshot(uid, utc_date, day_data, limits)
-            if snapshot.total.remaining < 1:
-                raise UsageLimitExceeded(
-                    uid=uid,
-                    kind=kind,
-                    utc_date=utc_date,
-                    snapshot=snapshot,
-                    limiting_bucket="total",
-                )
-            if kind is RunKind.DEEP_THINK and snapshot.deep_think.remaining < 1:
-                raise UsageLimitExceeded(
-                    uid=uid,
-                    kind=kind,
-                    utc_date=utc_date,
-                    snapshot=snapshot,
-                    limiting_bucket="deep_think",
-                )
-
-            day_data["total_reserved"] += 1
-            if kind is RunKind.DEEP_THINK:
-                day_data["deep_think_reserved"] += 1
-            day_data.update(
-                {
-                    "schema_version": USAGE_SCHEMA_VERSION,
-                    "utc_date": utc_date,
-                    "updated_at": now,
-                }
-            )
-            tx.set(day_ref, day_data, merge=True)
-            tx.set(
-                run_ref,
-                {
-                    "schema_version": USAGE_SCHEMA_VERSION,
-                    "kind": kind.value,
-                    "status": RunStatus.RESERVED.value,
-                    "utc_date": utc_date,
-                    "total_limit_at_reservation": limits.total,
-                    "deep_think_limit_at_reservation": limits.deep_think,
-                    "request_fingerprint": request_fingerprint,
-                    "expires_at": expires_at,
-                    "operation_claims": {},
-                    "created_at": now,
-                    "updated_at": now,
-                },
-            )
-            return _result(
-                uid,
-                key_hash,
-                kind,
-                RunStatus.RESERVED,
-                utc_date,
-                day_data,
-                limits,
+            ledger_ref, admitted = self._admit(tx, uid, key_hash, kind, admission, now)
+            run_data = self._new_run(kind, admission, request_fingerprint, now)
+            tx.set(ledger_ref, admitted)
+            tx.set(run_ref, {**run_data, "status": RunStatus.RESERVED.value, "updated_at": now})
+            return UsageRunResult(
+                uid=uid, idempotency_hash=key_hash, kind=kind, status=RunStatus.RESERVED,
+                utc_date=run_data["utc_date"],
+                token_budget=self._public(admitted, admission.period, admission.config,
+                                          admission.tier, now.timestamp(), limit=admission.limit),
                 idempotent=False,
             )
 
-        return self._transaction(operation)
+        return self._transaction(uid, operation)
+
+    # --- Booking -------------------------------------------------------------
+
+    def book_operation(
+        self,
+        uid: str,
+        idempotency_key: str,
+        operation: str,
+        *,
+        measured: int,
+        estimated: int,
+        final: bool = False,
+        now: datetime | None = None,
+    ) -> dict:
+        """Debit one finished operation's tokens exactly once.
+
+        ``final`` marks the last operation of a run (Consensus, API pipeline,
+        Resolve): its remaining admission hold is dropped instead of waiting
+        for expiry. Returns the account's public snapshot after the booking.
+        """
+        uid = _validate_uid(uid)
+        key_hash = _idempotency_hash(idempotency_key)
+        operation = _validate_operation(operation)
+        for label, value in (("measured", measured), ("estimated", estimated)):
+            if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                raise ValueError(f"{label} must be a non-negative integer")
+        now = _as_utc(now)
+        epoch = now.timestamp()
+        config = agent_budget_config.get_config(self._db)
+        run_ref = self._run_ref(uid, key_hash)
+
+        def book(tx):
+            persistence_guard.ensure_account_write_allowed(
+                uid=uid, db=self._db, transaction=tx
+            )
+            run_snap = run_ref.get(transaction=tx)
+            if not run_snap.exists:
+                raise UsageRunNotFound("Usage reservation does not exist")
+            run_data = run_snap.to_dict() or {}
+            if _stored_status(run_data) is not RunStatus.CONSUMED:
+                raise UsageTransitionError("Only a consumed usage run can be booked")
+            booked = run_data.get("booked_operations") or {}
+            if not isinstance(booked, dict):
+                raise UsageDataError("Invalid booked operations in Firestore")
+            period = run_data.get("quota_day")
+            if not isinstance(period, str) or not period:
+                # Runs admitted before the shared account book into today's period.
+                period = agent_quota.period_key(config)
+            tier = agent_budget_config.tier_key(run_data.get("token_tier"))
+            ledger_ref = agent_quota.quota_ref(self._db, uid, period)
+            ledger = ledger_ref.get(transaction=tx).to_dict() or {}
+            if operation in booked:
+                return self._public(ledger, period, config, tier, epoch)
+            if len(booked) >= MAX_BOOKED_OPERATIONS:
+                raise UsageDataError("Too many booked operations for one run")
+            ledger = agent_quota.book_run(ledger, key_hash, measured=measured, estimated=estimated, now=epoch)
+            if final:
+                ledger = agent_quota.release_run(ledger, key_hash, now=epoch)
+            tx.set(ledger_ref, ledger)
+            tx.update(run_ref, {
+                "booked_operations": {**booked, operation: {
+                    "measured": measured, "estimated": estimated, "booked_at": now}},
+                "updated_at": now,
+            })
+            return self._public(ledger, period, config, tier, epoch)
+
+        return self._transaction(uid, book)
+
+    def token_budget(self, uid: str, admission: TokenAdmission, *, now: datetime | None = None) -> dict:
+        """Plain read of the account for responses (no repairs, no writes)."""
+        uid = _validate_uid(uid)
+        epoch = _as_utc(now).timestamp()
+        ledger = agent_quota.quota_ref(self._db, uid, admission.period).get().to_dict() or {}
+        return self._public(ledger, admission.period, admission.config, admission.tier, epoch,
+                            limit=admission.limit)
+
+    @staticmethod
+    def _public(ledger, period, config, tier, epoch, limit=None):
+        return agent_quota.public_snapshot(ledger or {}, period, config, tier, now=epoch, limit=limit)
+
+    # --- Claims, lifecycle -----------------------------------------------------
 
     def claim_operation(
         self,
@@ -519,7 +535,7 @@ class FirestoreUsageRepository:
         """Atomically authorize one billable logical operation once.
 
         Accounting idempotency and execution authorization are deliberately
-        separate. Repeating a consumed run may read its counters, but it may
+        separate. Repeating a consumed run may read its state, but it may
         never acquire the same operation slot twice.
         """
         uid = _validate_uid(uid)
@@ -595,7 +611,7 @@ class FirestoreUsageRepository:
                 idempotent=False,
             )
 
-        return self._transaction(claim)
+        return self._transaction(uid, claim)
 
     def consume(self, uid: str, idempotency_key: str) -> UsageRunResult:
         return self._finish(uid, idempotency_key, RunStatus.CONSUMED)
@@ -610,7 +626,7 @@ class FirestoreUsageRepository:
         *,
         now: datetime | None = None,
     ) -> UsageRunResult:
-        """Read a logical run without changing its lifecycle or counters."""
+        """Read a logical run without changing its lifecycle or the account."""
         uid = _validate_uid(uid)
         key_hash = _idempotency_hash(idempotency_key)
         now = _as_utc(now)
@@ -620,21 +636,10 @@ class FirestoreUsageRepository:
         run_data = snap.to_dict() or {}
         if now >= _stored_expires_at(run_data):
             raise UsageRunExpired("Usage run has expired")
-        kind = _stored_kind(run_data)
-        status = _stored_status(run_data)
-        utc_date = _stored_utc_date(run_data)
-        limits = _stored_limits(run_data)
-        day_snap = self._day_ref(uid, utc_date).get()
-        day_data = _parse_day_data(day_snap.to_dict() if day_snap.exists else {})
-        return _result(
-            uid,
-            key_hash,
-            kind,
-            status,
-            utc_date,
-            day_data,
-            limits,
-            idempotent=True,
+        return UsageRunResult(
+            uid=uid, idempotency_hash=key_hash, kind=_stored_kind(run_data),
+            status=_stored_status(run_data), utc_date=_stored_utc_date(run_data),
+            token_budget=None, idempotent=True,
         )
 
     def bind_context_target(
@@ -647,9 +652,9 @@ class FirestoreUsageRepository:
     ) -> None:
         """Bind one consumed logical run to one chat-context target.
 
-        Only a hash of the target scope is stored. This does not reserve or
-        consume another slot; it prevents one historical consumed key from
-        financing context builds for multiple turns.
+        Only a hash of the target scope is stored. This admits nothing new; it
+        prevents one historical consumed key from financing context builds for
+        multiple turns.
         """
         uid = _validate_uid(uid)
         key_hash = _idempotency_hash(idempotency_key)
@@ -693,20 +698,7 @@ class FirestoreUsageRepository:
                 },
             )
 
-        self._transaction(operation)
-
-    def snapshot(
-        self,
-        uid: str,
-        limits: UsageLimits,
-        *,
-        now: datetime | None = None,
-    ) -> UsageSnapshot:
-        uid = _validate_uid(uid)
-        utc_date = _as_utc(now).date().isoformat()
-        snap = self._day_ref(uid, utc_date).get()
-        day_data = _parse_day_data(snap.to_dict() if snap.exists else {})
-        return _snapshot(uid, utc_date, day_data, limits)
+        self._transaction(uid, operation)
 
     def _finish(
         self, uid: str, idempotency_key: str, target: RunStatus
@@ -726,47 +718,24 @@ class FirestoreUsageRepository:
             kind = _stored_kind(run_data)
             status = _stored_status(run_data)
             utc_date = _stored_utc_date(run_data)
-            limits = _stored_limits(run_data)
-            day_ref = self._day_ref(uid, utc_date)
-            day_data = self._read_day(tx, uid, utc_date)
+            period = run_data.get("quota_day")
+            release_hold = (target is RunStatus.RELEASED and status is RunStatus.RESERVED
+                            and isinstance(period, str) and bool(period))
+            ledger_ref = agent_quota.quota_ref(self._db, uid, period) if release_hold else None
+            ledger = (ledger_ref.get(transaction=tx).to_dict() or {}) if ledger_ref else None
 
             if status is target:
-                return _result(
-                    uid,
-                    key_hash,
-                    kind,
-                    status,
-                    utc_date,
-                    day_data,
-                    limits,
-                    idempotent=True,
-                )
+                return UsageRunResult(uid=uid, idempotency_hash=key_hash, kind=kind, status=status,
+                                      utc_date=utc_date, token_budget=None, idempotent=True)
             if status is not RunStatus.RESERVED:
                 raise UsageTransitionError(
                     f"Cannot transition usage run from {status.value} to {target.value}"
                 )
 
-            if day_data["total_reserved"] < 1:
-                raise UsageDataError("Reserved counter is inconsistent with usage run")
-            if kind is RunKind.DEEP_THINK and day_data["deep_think_reserved"] < 1:
-                raise UsageDataError("Deep Think counter is inconsistent with usage run")
-            day_data["total_reserved"] -= 1
-            if target is RunStatus.CONSUMED:
-                day_data["total_consumed"] += 1
-            if kind is RunKind.DEEP_THINK:
-                day_data["deep_think_reserved"] -= 1
-                if target is RunStatus.CONSUMED:
-                    day_data["deep_think_consumed"] += 1
-
             updated_at = datetime.now(timezone.utc)
-            day_data.update(
-                {
-                    "schema_version": USAGE_SCHEMA_VERSION,
-                    "utc_date": utc_date,
-                    "updated_at": updated_at,
-                }
-            )
-            tx.set(day_ref, day_data, merge=True)
+            if ledger_ref is not None:
+                # Released before any provider work: its admission hold goes.
+                tx.set(ledger_ref, agent_quota.release_run(ledger, key_hash, now=updated_at.timestamp()))
             tx.update(
                 run_ref,
                 {
@@ -775,51 +744,33 @@ class FirestoreUsageRepository:
                     f"{target.value}_at": updated_at,
                 },
             )
-            return _result(
-                uid,
-                key_hash,
-                kind,
-                target,
-                utc_date,
-                day_data,
-                limits,
-                idempotent=False,
-            )
+            return UsageRunResult(uid=uid, idempotency_hash=key_hash, kind=kind, status=target,
+                                  utc_date=utc_date, token_budget=None, idempotent=False)
 
-        return self._transaction(operation)
+        return self._transaction(uid, operation)
 
-    def _transaction(self, operation: Callable[[object], T]) -> T:
-        if self._transaction_runner is not None:
-            return self._transaction_runner(operation)
-        # Parallel provider claims share one run document. Keep the retry
-        # budget for that contention, including legacy reserve/consume callers;
-        # transaction retries must never authorize an operation twice.
-        transaction = self._db.transaction(max_attempts=12)
+    def _transaction(self, uid: str, operation: Callable[[object], T]) -> T:
+        # Agent and pipeline write the same account document; serialize the
+        # short bookkeeping transactions of one account inside this process.
+        with agent_quota.account_lock(uid):
+            if self._transaction_runner is not None:
+                return self._transaction_runner(operation)
+            # Parallel provider claims share one run document. Keep the retry
+            # budget for that contention, including legacy reserve/consume callers;
+            # transaction retries must never authorize an operation twice.
+            transaction = self._db.transaction(max_attempts=12)
 
-        @firestore.transactional
-        def run(tx):
-            return operation(tx)
+            @firestore.transactional
+            def run(tx):
+                return operation(tx)
 
-        return run(transaction)
+            return run(transaction)
 
     def _user_ref(self, uid: str):
         return self._db.collection("users").document(uid)
 
-    def _day_ref(self, uid: str, utc_date: str):
-        return self._user_ref(uid).collection(USAGE_DAYS_COLLECTION).document(utc_date)
-
     def _run_ref(self, uid: str, key_hash: str):
         return self._user_ref(uid).collection(USAGE_RUNS_COLLECTION).document(key_hash)
-
-    def _read_day(self, tx, uid: str, utc_date: str) -> dict:
-        snap = self._day_ref(uid, utc_date).get(transaction=tx)
-        return _parse_day_data(snap.to_dict() if snap.exists else {})
-
-
-def _require_non_negative_int(value, label: str) -> int:
-    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
-        raise ValueError(f"{label} must be a non-negative integer")
-    return value
 
 
 def _validate_uid(uid: str) -> str:
@@ -891,45 +842,6 @@ def _as_utc(value: datetime | None) -> datetime:
     return value.astimezone(timezone.utc)
 
 
-def _parse_day_data(raw: dict | None) -> dict:
-    data = raw if isinstance(raw, dict) else {}
-    parsed = {}
-    for field in (
-        "total_reserved",
-        "total_consumed",
-        "deep_think_reserved",
-        "deep_think_consumed",
-    ):
-        value = data.get(field, 0)
-        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
-            raise UsageDataError(f"Invalid Firestore usage counter: {field}")
-        parsed[field] = value
-    return parsed
-
-
-def _bucket_snapshot(data: dict, prefix: str, limit: int) -> UsageBucketSnapshot:
-    _require_non_negative_int(limit, f"{prefix} limit")
-    reserved = data[f"{prefix}_reserved"]
-    consumed = data[f"{prefix}_consumed"]
-    return UsageBucketSnapshot(
-        limit=limit,
-        reserved=reserved,
-        consumed=consumed,
-        remaining=max(0, limit - reserved - consumed),
-    )
-
-
-def _snapshot(
-    uid: str, utc_date: str, day_data: dict, limits: UsageLimits
-) -> UsageSnapshot:
-    return UsageSnapshot(
-        uid=uid,
-        utc_date=utc_date,
-        total=_bucket_snapshot(day_data, "total", limits.total),
-        deep_think=_bucket_snapshot(day_data, "deep_think", limits.deep_think),
-    )
-
-
 def _stored_kind(data: dict) -> RunKind:
     try:
         return RunKind(data.get("kind"))
@@ -973,35 +885,3 @@ def _stored_datetime(value, label: str) -> datetime:
 
 def _stored_expires_at(data: dict) -> datetime:
     return _stored_datetime(data.get("expires_at"), "expiry")
-
-
-def _stored_limits(data: dict) -> UsageLimits:
-    try:
-        return UsageLimits(
-            total=data.get("total_limit_at_reservation"),
-            deep_think=data.get("deep_think_limit_at_reservation"),
-        )
-    except ValueError as exc:
-        raise UsageDataError(str(exc)) from None
-
-
-def _result(
-    uid: str,
-    key_hash: str,
-    kind: RunKind,
-    status: RunStatus,
-    utc_date: str,
-    day_data: dict,
-    limits: UsageLimits,
-    *,
-    idempotent: bool,
-) -> UsageRunResult:
-    return UsageRunResult(
-        uid=uid,
-        idempotency_hash=key_hash,
-        kind=kind,
-        status=status,
-        utc_date=utc_date,
-        snapshot=_snapshot(uid, utc_date, day_data, limits),
-        idempotent=idempotent,
-    )

@@ -30,10 +30,17 @@ def provider_cost_nanos(raw):
     return None
 
 
+# Input one search round may add, reserved for every model alike. Measured
+# 2026-10-01 per round: OpenAI's own search up to ~11k tokens, Exa (5 x 2,000
+# characters) ~2.5k, Anthropic ~2k, Google grounding ~0 (billed per request).
+# About three times the largest observation. A soft bound: settlement charges
+# the actual usage, so a rare larger round can exceed the daily allowance a little.
+SEARCH_INPUT_TOKENS = 32_000
+
+
 def search_cost_nanos(model):
-    from app.services.agent_tools import uses_native_search
-    return (provider_cost_nanos(model.web_search_usd_per_request)
-            if uses_native_search(model) else 7_000_000)
+    # The catalog prices the publishers' own search; Exa otherwise.
+    return provider_cost_nanos(model.web_search_usd_per_request) or 7_000_000
 
 
 def input_bound(messages, tools=()):
@@ -72,31 +79,25 @@ class RunCosts:
         return tokens, cost
 
     def estimate(self, model, messages, tools=(), *, native_searches=0):
-        from app.services.agent_tools import uses_native_search
         from app.services.agent_tokens import input_estimate
         inputs = (input_estimate(messages, tools, model.request_config) if self.policy.account_budget_only
                   else input_bound(messages, tools))
         initial_inputs = inputs
         if inputs + model.max_output_tokens > model.context_length:
             raise AnalysisBudgetExceeded("The selected model's context limit was reached.")
-        # Native search injects provider-owned context that we cannot count
-        # before dispatch. Reserve its entire model window, then reconcile.
-        if native_searches and uses_native_search(model):
-            inputs = model.context_length - model.max_output_tokens
-        elif native_searches:
-            # Exa: five results with 2,000 characters each. Include worst-case
-            # UTF-8, URL and argument overhead in every hidden continuation.
-            inputs += native_searches * ((3 * (1000 * 4 + 3000) + 4096)
-                if model.request_config.get("_agent_bounded_search") else (5 * (2000 * 4 + 3000) + 4096))
-            if inputs + model.max_output_tokens > model.context_length:
+        if native_searches:
+            # A provider can never add more than the window still holds.
+            room = model.context_length - model.max_output_tokens - inputs
+            if room <= 0:
                 raise AnalysisBudgetExceeded("The selected model's search context limit was reached.")
+            inputs += min(native_searches * SEARCH_INPUT_TOKENS, room)
         # Account conservatively for native model continuations hidden behind
         # the provider API. Do not advertise max_results as a native input cap.
         segments = native_searches + 1 if native_searches else 1
         total_inputs = inputs * segments
-        if self.policy.account_budget_only and native_searches and model.request_config.get("_agent_bounded_search"):
+        if self.policy.account_budget_only and native_searches:
             # Search results do not exist in the pre-search generation. Each
-            # bounded result enters only its subsequent continuations.
+            # result enters only its subsequent continuations.
             total_inputs = initial_inputs * segments + (inputs - initial_inputs) * segments // 2
         outputs = model.max_output_tokens * segments
         tokens = total_inputs + outputs

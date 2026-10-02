@@ -12,6 +12,8 @@ import pytest
 from playwright.sync_api import expect
 from test_phase4_frontend import phase4_server, _real_firebase_page, _json
 
+INCOMPLETE_NOTE = "This answer may be incomplete because the run ended early. Everything received has been saved, and you can ask again at any time."
+
 CATALOG = {"default_model_id": "deepseek/deepseek-v4.1-flash", "models": [
     {"id": "deepseek/deepseek-v4.1-flash", "label": "DeepSeek V4.1 Flash", "reasoning_efforts": ["default", "low", "high", "max"], "reasoning_available": True},
     {"id": "gpt-5.6-sol", "label": "GPT-5.6 Sol", "reasoning_efforts": ["default", "low", "medium", "high"], "reasoning_available": True},
@@ -36,9 +38,26 @@ def _snapshot(page, name):
     page.screenshot(path=str(target / f"{name}.png"))
 
 
+def _open_agent_level(page, level, tap=False):
+    """Open the one Agent chip and enter a section of its menu.
+
+    The chip carries the chat model and the comparison models; its menu opens
+    on an overview ("Agent" and "Compare with"). ``level`` is ``models`` (the
+    provider overview or flat model list), ``secondary`` (reasoning) or
+    ``companion`` (the comparison models).
+    """
+    chip = page.locator(".agent-model-picker .model-picker-display")
+    row = page.locator(f'.agent-model-picker [data-picker-level="{level}"]')
+    if tap:
+        chip.tap()
+        row.tap()
+    else:
+        chip.click()
+        row.click()
+
+
 def _choose_effort(page, effort):
-    page.locator(".agent-model-picker .model-picker-display").click()
-    page.locator('.agent-reasoning-option').click()
+    _open_agent_level(page, "secondary")
     menu = page.locator(".agent-model-picker .model-picker-menu").bounding_box()
     assert menu["x"] >= 0 and menu["x"] + menu["width"] <= page.viewport_size["width"]
     assert menu["y"] >= 0 and menu["y"] + menu["height"] <= page.viewport_size["height"]
@@ -67,7 +86,7 @@ def test_all_pro_chat_models_are_grouped_by_provider(browser, phase4_server, wid
         expect(page.locator('#agentModelDropdown')).to_be_enabled()
         expect(page.locator('#agentModelDropdown option')).to_have_count(len(catalog['models']))
         for provider in cfg.PROVIDERS.values():
-            page.locator('.agent-model-picker .model-picker-display').click()
+            _open_agent_level(page, 'models')
             menu = page.locator('.agent-model-picker .model-picker-menu').bounding_box()
             assert menu['x'] >= 0 and menu['x'] + menu['width'] <= width
             assert menu['y'] >= 0 and menu['y'] + menu['height'] <= 900
@@ -127,7 +146,7 @@ def test_saved_interruption_keeps_reason_and_partial_answer_visible(browser, pha
         page.route("**/bookmarks/interruption/conversation*", lambda r: _json(r, {"chat_id": "a" * 32, "turns": [turn], "has_more": False}))
         page.route("**/bookmarks/interruption", lambda r: _json(r, {"bookmark": bookmark}))
         page.evaluate("async () => { await window.openBookmark('interruption'); }")
-        expect(page.locator("#agentAnswerError")).to_have_text(reason)
+        expect(page.locator("#agentAnswerError")).to_have_text(INCOMPLETE_NOTE)
         expect(page.locator("#agentAnswerError")).to_be_visible()
         expect(page.locator("#agentAnswerBody h2")).to_have_text("Available result")
         expect(page.locator("#agentAnswerActivity summary")).to_contain_text("Response failed")
@@ -189,7 +208,7 @@ def test_failed_stream_adopts_saved_bookmark_and_survives_reload(browser, phase4
             expect(page.locator("#agentAnswerBody h2")).to_have_text("Available result")
         else:
             expect(page.locator("#agentAnswerBody")).to_be_empty()
-        expect(page.locator("#agentAnswerError")).to_have_text(reason)
+        expect(page.locator("#agentAnswerError")).to_have_text(INCOMPLETE_NOTE if content == "partial" else reason)
         expect(page.locator("#agentRecover")).not_to_be_visible()
         page.wait_for_function("() => App.runRegistry.visible()?.bookmark.uiReady === true")
         bookmark_id = bookmarks[0]["id"]
@@ -205,7 +224,7 @@ def test_failed_stream_adopts_saved_bookmark_and_survives_reload(browser, phase4
             expect(page.locator("#agentAnswerBody h2")).to_have_text("Available result")
         else:
             expect(page.locator("#agentAnswerBody")).to_be_empty()
-        expect(page.locator("#agentAnswerError")).to_have_text(reason)
+        expect(page.locator("#agentAnswerError")).to_have_text(INCOMPLETE_NOTE if content == "partial" else reason)
         expect(page.locator("#agentRecover")).not_to_be_visible()
         if content == 'comparison':
             page.locator('.agent-evidence-link[data-section="answers"]').click()
@@ -277,7 +296,7 @@ def test_single_agent_send_followup_restore_and_layout(browser, phase4_server, w
         expect(page.locator(".hero-greeting")).to_be_visible()
         expect(page.locator("#viewSwitchConsensus")).to_have_text("Chat")
         expect(page.locator(".demo-chip")).not_to_be_visible()
-        page.locator(".agent-model-picker .model-picker-display").click()
+        _open_agent_level(page, "models")
         expect(page.locator(".agent-model-picker .model-picker-menu")).to_be_visible()
         menu = page.locator(".agent-model-picker .model-picker-menu").bounding_box()
         assert menu["x"] >= 0 and menu["x"] + menu["width"] <= width
@@ -324,7 +343,7 @@ def test_single_agent_send_followup_restore_and_layout(browser, phase4_server, w
         page.locator("#questionInput").fill("Now explain the next step")
         expect(page.locator('#questionInput')).to_have_value('Now explain the next step')
         expect(page.locator('#questionInput')).to_be_focused()
-        page.locator(".agent-model-picker .model-picker-display").click()
+        _open_agent_level(page, "models")
         page.locator('#agentModelControls [data-value="deepseek/deepseek-v4.1-flash"]').click()
         _choose_effort(page, "low")
         page.locator("#sendButton").click()
@@ -421,7 +440,18 @@ def test_live_reasoning_disclosure_and_stop(browser, phase4_server, width, dark)
         expect(page.locator("#agentAnswerActivity details")).not_to_have_attribute('open', '')
         expect(page.locator("#agentAnswerBody")).to_be_empty()
         expect(page.locator("#agentModelDropdown")).to_be_disabled()
-        expect(page.locator(".agent-model-picker .model-picker-display")).to_be_disabled()
+        # The chat model is fixed while it answers; the one chip stays open for
+        # the comparison models of the next message.
+        chip = page.locator(".agent-model-picker .model-picker-display")
+        expect(chip).to_be_enabled()
+        if width < 700:
+            # Sending collapses mobile controls; focus opens the actual composer.
+            page.locator("#questionInput").click()
+        expect(chip).to_be_visible()
+        chip.click()
+        expect(page.locator('.agent-model-picker [data-picker-level="models"]')).to_be_disabled()
+        expect(page.locator('.agent-model-picker [data-picker-level="companion"]')).to_be_enabled()
+        page.keyboard.press("Escape")
         page.evaluate("""() => window.__emitAgent({version:1, step_id:'completion:0', kind:'status', id:'allowance',
           status:'waiting', text:'Waiting for active model calls to finish and release their unused allowance.'})""")
         expect(page.locator('#agentAnswerActivity .agent-progress .agent-current-status')).to_have_text('Waiting for available tokens…')
@@ -481,7 +511,7 @@ def test_live_reasoning_disclosure_and_stop(browser, phase4_server, width, dark)
         page.wait_for_function("() => Date.now() - App.runRegistry.visible().startedAt > 800")
         page.locator("#sendButton").click()
         page.wait_for_function("() => App.runRegistry.visible()?.status === 'canceled'")
-        expect(page.locator("#agentAnswerActivity .agent-activity-title")).to_contain_text("Response stopped")
+        expect(page.locator("#agentAnswerActivity .agent-activity-title")).to_have_text(re.compile(r"^Stopped after \d+(?:m \d+)?s$"))
         expect(page.locator("#agentAnswerError")).not_to_be_visible()
         assert title.evaluate("el => getComputedStyle(el).animationName") == "none"
     finally:
@@ -502,17 +532,20 @@ def test_small_viewport_long_model_and_missing_reasoning(browser, phase4_server)
         _choose_mode(page, "agent")
         expect(page.locator("#agentModelDropdown")).to_be_enabled()
         trigger = page.locator(".agent-model-picker .model-picker-display")
-        trigger.click()
+        _open_agent_level(page, "models")
         menu = page.locator(".agent-model-picker .model-picker-menu")
         bounds = menu.bounding_box()
         assert bounds["y"] >= 0 and bounds["y"] + bounds["height"] <= 568
         assert menu.evaluate("el => el.scrollHeight > el.clientHeight")
         page.locator('.agent-model-picker [data-value="long"]').click()
-        expect(trigger).to_have_attribute("title", "A model with a particularly long display name")
+        expect(trigger).to_have_attribute("title", re.compile(r"^A model with a particularly long display name · compared with \d+ models$"))
+        # The model name gives way; the comparison count stays whole.
+        assert page.locator(".agent-model-picker .model-picker-display-count").evaluate(
+            "el => el.offsetWidth > 0 && el.scrollWidth <= el.clientWidth + 1 && el.getBoundingClientRect().right <= innerWidth")
         assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
         _choose_effort(page, "high")
         _snapshot(page, "agent-long-name-320")
-        trigger.click()
+        _open_agent_level(page, "models")
         page.locator('.agent-model-picker [data-value="plain"]').click()
         expect(page.locator(".agent-effort-control")).not_to_be_visible()
         page.route("**/agent", lambda route: _json(route, {
@@ -553,8 +586,10 @@ def test_model_catalog_retry_and_failed_stream(browser, phase4_server):
         expect(page.locator("#agentModelsRetry")).to_be_visible()
         expect(page.locator('#agentComposerNotice')).to_contain_text('could not be loaded')
         expect(page.locator('#sendButton')).to_be_disabled()
-        expect(page.locator(".agent-model-picker .model-picker-display")).to_be_disabled()
+        expect(page.locator("#agentModelDropdown")).to_be_disabled()
+        expect(page.locator(".agent-model-picker .model-picker-display-text")).to_have_text("Models unavailable")
         page.locator("#agentModelsRetry").click()
+        expect(page.locator("#agentModelDropdown")).to_be_enabled()
         expect(page.locator(".agent-model-picker .model-picker-display")).to_be_enabled()
         expect(page.locator('#agentComposerNotice')).not_to_be_visible()
         calls = []
@@ -647,7 +682,7 @@ def test_quota_stream_and_failure_update_existing_percentage(browser, phase4_ser
         page.route('**/chats', lambda r: _json(r, {'chat': {'id': 'a' * 32}}))
         page.evaluate("async () => { await window.__switchE2EUser('account-a'); }")
         _choose_mode(page, 'agent')
-        expect(page.locator('#quotaTriggerValue')).to_have_text('75%')
+        expect(page.locator('#quotaTrigger')).to_have_attribute('aria-label', re.compile(r'^75% of today'))
         page.evaluate("""() => {
           const original = window.fetch;
           window.fetch = async (url, options) => {
@@ -661,7 +696,7 @@ def test_quota_stream_and_failure_update_existing_percentage(browser, phase4_ser
         }""")
         page.locator('#questionInput').fill('Compare the options')
         page.locator('#sendButton').click()
-        expect(page.locator('#quotaTriggerValue')).to_have_text('75%')
+        expect(page.locator('#quotaTrigger')).to_have_attribute('aria-label', re.compile(r'^75% of today'))
         page.evaluate("""() => window.__quotaEvent('error', {
           error:'The next model call needed a reservation of 50,000 tokens; 40,000 were available at that point. Completed calls release their reservations.',
           code:'agent_token_reservation', required_tokens:50000, available_tokens:40000, recoverable:false,
@@ -672,9 +707,7 @@ def test_quota_stream_and_failure_update_existing_percentage(browser, phase4_ser
         expect(page.locator('#agentAnswerErrorActions button')).to_have_text(['Try a smaller model', 'Choose models'])
         # Nothing was answered, so the question returns to the composer.
         expect(page.locator('#questionInput')).to_have_value('Compare the options')
-        expect(page.locator('#quotaTriggerValue')).to_have_text('75%')
-        expect(page.locator('#quotaTrigger')).to_have_attribute('title', re.compile('188.878 tokens available for new calls'))
-        expect(page.locator('#quotaFoot')).to_contain_text('unavailable usage; they do not block the remaining allowance')
+        expect(page.locator('#quotaTrigger')).to_have_attribute('aria-label', re.compile(r'^75% of today'))
         expect(page.locator('#agentRecover')).to_be_hidden()
         expect(page.locator('.run-status-failed')).to_have_count(1)
         expect(page.locator('.thread-ask-label')).to_have_count(0)
@@ -736,7 +769,7 @@ def test_native_search_sources_in_chat_and_saved_activity(browser, phase4_server
         page.evaluate("async () => { await window.__switchE2EUser('account-a'); }")
         page.evaluate("dark => { document.documentElement.classList.toggle('dark-mode', dark); document.body.classList.toggle('dark-mode', dark); }", dark)
         _choose_mode(page, "agent")
-        page.locator(".agent-model-picker .model-picker-display").click()
+        _open_agent_level(page, "models")
         page.locator('#agentModelControls [data-value="claude-haiku-4-5"]').click()
         expect(page.locator("#agentModelDropdown")).to_have_value("claude-haiku-4-5")
         expect(page.locator("#agentModelNotice")).to_have_count(0)

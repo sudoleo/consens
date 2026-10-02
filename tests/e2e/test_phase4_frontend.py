@@ -3,12 +3,14 @@
 import json
 import os
 import re
+import socket
 import subprocess
 import sys
 import time
 import urllib.error
 import urllib.request
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from playwright.sync_api import expect
@@ -70,7 +72,7 @@ export async function sendEmailVerification() {}
 
 
 @pytest.fixture(scope="session")
-def phase4_server():
+def phase4_server(request):
     """Read-only frontend server for fully mocked Phase-4 browser races.
 
     No request in this module reaches Firestore. E2E mode still enforces the
@@ -78,8 +80,17 @@ def phase4_server():
     intentionally not a prerequisite for these browser-only regressions.
     """
 
-    port = 8033
+    port = int(os.environ.get("E2E_PHASE4_PORT", "8033"))
     base_url = f"http://127.0.0.1:{port}"
+    # Imported fixtures acquire one FixtureDef per test module. Keep one
+    # server per pytest invocation so modules never attach to another child
+    # while their own child fails to bind the same port.
+    if getattr(request.config, "_phase4_server_url", None):
+        yield request.config._phase4_server_url
+        return
+    with socket.socket() as probe:
+        if probe.connect_ex(("127.0.0.1", port)) == 0:
+            raise RuntimeError(f"Phase-4 port {port} is already in use; choose E2E_PHASE4_PORT")
     env = os.environ.copy()
     env.update({
         "E2E_TEST_MODE": "1",
@@ -110,8 +121,10 @@ def phase4_server():
                 time.sleep(0.25)
         else:
             raise RuntimeError("Phase-4 frontend server did not become ready")
+        request.config._phase4_server_url = base_url
         yield base_url
     finally:
+        request.config._phase4_server_url = None
         proc.terminate()
         try:
             proc.wait(timeout=10)
@@ -125,6 +138,23 @@ def _json(route, payload, status=200):
         content_type="application/json",
         body=json.dumps(payload),
     )
+
+
+def test_phase4_server_reuses_its_child_and_rejects_an_unowned_listener(phase4_server, request, monkeypatch):
+    """A second imported FixtureDef must not start or terminate another child."""
+    def unexpected_process(*_args, **_kwargs):
+        raise AssertionError('A second Phase-4 process must not be started')
+    monkeypatch.setattr(subprocess, 'Popen', unexpected_process)
+    factory = globals()['phase4_server'].__wrapped__
+    imported_fixture = factory(request)
+    assert next(imported_fixture) == phase4_server
+    with pytest.raises(StopIteration):
+        next(imported_fixture)
+    assert request.config._phase4_server_url == phase4_server
+    # Another pytest invocation cannot silently attach to this listener.
+    foreign_fixture = factory(SimpleNamespace(config=SimpleNamespace()))
+    with pytest.raises(RuntimeError, match='already in use'):
+        next(foreign_fixture)
 
 
 def _real_firebase_page(
@@ -224,7 +254,7 @@ def test_source_verification_display_and_restore(browser, phase4_server, width, 
         before_position = source_label.evaluate("el => getComputedStyle(el).backgroundPosition")
         page.wait_for_function("previous => getComputedStyle(document.querySelector('#consensusSourcesTab .consensus-tab-label')).backgroundPosition !== previous", arg=before_position)
         expect(source_label.locator('.skeleton')).to_have_count(0)
-        output = Path(__file__).resolve().parents[2] / 'artifacts' / 'source-verification-ui'
+        output = Path(__file__).resolve().parents[2] / 'test-results' / 'source-verification-ui'
         output.mkdir(parents=True, exist_ok=True)
         source_label.evaluate("el => el.getAnimations({subtree: true}).forEach(a => { a.pause(); a.currentTime = 640; })")
         page.locator('#consensusSourcesTab').screenshot(path=str(output / f'label-pending-{width}-{dark}.png'))
@@ -239,7 +269,7 @@ def test_source_verification_display_and_restore(browser, phase4_server, width, 
         page.wait_for_function("() => getComputedStyle(document.querySelector('.source-check-skeleton')).opacity === '1'")
         assert page.evaluate("getComputedStyle(document.querySelector('.source-check-skeleton .skeleton')).backgroundColor") not in ('rgba(0, 0, 0, 0)', 'transparent')
         assert page.evaluate("getComputedStyle(document.querySelector('.source-check-skeleton .skeleton'), '::after').animationName") == 'skeleton-shimmer'
-        output = Path(__file__).resolve().parents[2] / 'artifacts' / 'source-verification-ui'
+        output = Path(__file__).resolve().parents[2] / 'test-results' / 'source-verification-ui'
         output.mkdir(parents=True, exist_ok=True)
         page.screenshot(path=str(output / f'pending-{width}-{dark}.png'))
         page.emulate_media(reduced_motion='reduce')
@@ -263,7 +293,7 @@ def test_source_verification_display_and_restore(browser, phase4_server, width, 
             'Students pay 20 euros. Other customers pay 30 euros.')
         expect(page.locator('#sourceVerificationReport')).to_contain_text('1 of 2 citation checks completed · 1 not checked')
         assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth + 1')
-        output = Path(__file__).resolve().parents[2] / 'artifacts' / 'source-verification-ui'
+        output = Path(__file__).resolve().parents[2] / 'test-results' / 'source-verification-ui'
         output.mkdir(parents=True, exist_ok=True)
         page.screenshot(path=str(output / f'{width}-{dark}.png'))
         page.evaluate('''() => {
@@ -305,7 +335,11 @@ def test_source_verification_display_and_restore(browser, phase4_server, width, 
         assert report.evaluate('el => el.scrollWidth <= el.clientWidth + 1')
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth + 1')
         if width <= 640:
-            expect(page.locator('#consensusSourcesTab .source-check-status-copy')).to_be_visible()
+            # Mobile uses an icon on the existing Sources button; its title
+            # and opened report retain the complete coverage information.
+            expect(page.locator('#consensusSourcesTab .consensus-source-check-icon')).to_be_visible()
+            expect(page.locator('#consensusSourcesTab .consensus-source-check-icon')).to_have_text('?')
+            expect(page.locator('#consensusSourcesTab')).to_have_attribute('title', re.compile('4/6 checked'))
         page.screenshot(path=str(output / f'reviewed-{width}-{dark}.png'))
     finally:
         context.close()
@@ -325,7 +359,7 @@ def test_composer_source_check_toggle_persists_and_freezes_run_payload(browser, 
         expect(toggle).to_have_attribute("aria-checked", "false")
         page.wait_for_function("() => Boolean(window.auth?.currentUser)")
         assert page.evaluate("document.documentElement.scrollWidth <= innerWidth + 1")
-        output = Path(__file__).resolve().parents[2] / "artifacts" / "source-verification-ui"
+        output = Path(__file__).resolve().parents[2] / "test-results" / "source-verification-ui"
         output.mkdir(parents=True, exist_ok=True)
         page.locator('#attachTrigger').click()
         menu_toggle = page.locator('#sourceCheckMenuSwitch')
@@ -492,8 +526,9 @@ def test_source_judge_stream_keeps_completed_claims_and_differences(browser, pha
         report = page.locator('#sourceVerificationReport')
         expect(report).to_contain_text('Statement supported')
         expect(report).to_contain_text('2 pending')
-        expect(page.locator('#consensusAnswerBody .src-ref[data-source-number="1"]')).to_have_attribute('data-source-check', 'supported')
-        expect(page.locator('#consensusAnswerBody .src-ref[data-source-number="2"]')).to_have_attribute('data-source-check', 'pending')
+        # Adjacent citations form one group; any pending source keeps it pending.
+        expect(page.locator('#consensusAnswerBody .src-ref[data-source-numbers="1 2 3"]')).to_have_attribute('data-source-check', 'pending')
+        expect(page.locator('#consensusAnswerBody .src-ref')).to_have_count(1)
         expect(page.locator('#consensusSourcesList [data-source-id="S1"]')).to_have_attribute('data-source-card-check', 'supported')
         expect(page.locator('#consensusSourcesList [data-source-id="S2"]')).to_have_attribute('data-source-card-check', 'pending')
         expect(page.locator('#consensusSourcesList [data-source-id="S1"]')).to_contain_text('✓ Verified support')
@@ -515,7 +550,7 @@ def test_source_judge_stream_keeps_completed_claims_and_differences(browser, pha
         expect(report).to_contain_text('1 not checked')
         expect(report.locator('.is-unchecked')).to_have_count(1)
         expect(report).to_contain_text('Support unclear')
-        expect(page.locator('#consensusAnswerBody .src-ref[data-source-number="2"]')).to_have_attribute('data-source-check', 'unknown')
+        expect(page.locator('#consensusAnswerBody .src-ref[data-source-numbers="1 2 3"]')).to_have_attribute('data-source-check', 'unknown')
         expect(page.locator('#consensusSourcesList [data-source-id="S2"]')).to_have_attribute('data-source-card-check', 'unknown')
         expect(page.locator('#consensusSourcesList [data-source-card-check="supported"]')).to_have_count(1)
         report.locator('.source-check-row > summary').nth(2).click()
@@ -529,7 +564,7 @@ def test_source_judge_stream_keeps_completed_claims_and_differences(browser, pha
           && JSON.stringify(window.__judgeRun.consensus.differencesData) === JSON.stringify(window.__judgeOriginal)''')
         assert report.evaluate('el => el.scrollWidth <= el.clientWidth + 1')
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth + 1')
-        output = Path(__file__).resolve().parents[2] / 'artifacts' / 'source-verification-ui'
+        output = Path(__file__).resolve().parents[2] / 'test-results' / 'source-verification-ui'
         output.mkdir(parents=True, exist_ok=True)
         page.screenshot(path=str(output / f'durable-progress-{width}.png'))
         # The Sources tab opened a modal reader over the answer. Dismiss it
@@ -543,12 +578,24 @@ def test_source_judge_stream_keeps_completed_claims_and_differences(browser, pha
         checked_style = ref.evaluate("el => [getComputedStyle(el).color, getComputedStyle(el).backgroundColor]")
         toggle.evaluate("el => {el.value='none'; el.dispatchEvent(new Event('change',{bubbles:true}));}")
         expect(toggle).to_have_value('none')
+        # A hidden verdict leaves the source pill in its neutral look, not bare text.
+        neutral_style = page.evaluate("""() => {
+            const pill = document.createElement('span'); pill.className = 'src-ref';
+            document.getElementById('consensusAnswerBody').append(pill);
+            const style = getComputedStyle(pill), result = [style.color, style.backgroundColor]; pill.remove(); return result;
+        }""")
+        neutral_bg = neutral_style[1]
+        # CSS transitions settle asynchronously; the preference must win after
+        # the transition, not necessarily in the same JavaScript task.
+        expect(ref).to_have_css('color', neutral_style[0])
+        expect(ref).to_have_css('background-color', neutral_bg)
         hidden_style = ref.evaluate("el => [getComputedStyle(el).color, getComputedStyle(el).backgroundColor]")
-        assert hidden_style[1] == 'rgba(0, 0, 0, 0)'
+        assert neutral_bg != 'rgba(0, 0, 0, 0)'
+        assert hidden_style[1] == neutral_bg
         assert hidden_style != checked_style
-        expect(ref).to_have_attribute('data-source-check', 'supported')
+        expect(ref).to_have_attribute('data-source-check', 'unknown')
         page.evaluate('window.App.sourceVerification.renderCurrent(window.__judgeFinished)')
-        assert ref.evaluate("el => getComputedStyle(el).backgroundColor") == 'rgba(0, 0, 0, 0)'
+        assert ref.evaluate("el => getComputedStyle(el).backgroundColor") == neutral_bg
         toggle.evaluate("(el,value) => {el.value=value; el.dispatchEvent(new Event('change',{bubbles:true}));}", original_mode)
         expect(toggle).to_have_value(original_mode)
         page.wait_for_function("style => { const el = document.querySelector('#consensusAnswerBody .src-ref[data-source-number=\"1\"]'); return getComputedStyle(el).color === style[0] && getComputedStyle(el).backgroundColor === style[1]; }", arg=checked_style)
@@ -853,7 +900,7 @@ def test_logged_out_watch_deep_link_survives_and_late_login_renders(browser, pha
 
         page.evaluate("() => window.__switchE2EUser('account-b')")
         expect(page.locator("#watchDashCreate")).to_be_visible(timeout=5000)
-        expect(page.locator("#watchDashBody")).to_contain_text("Keep changing answers current")
+        expect(page.locator("#watchDashBody")).to_contain_text("Tell us what you are waiting for.")
         assert page.url.endswith("/app/watches")
     finally:
         context.close()
@@ -1034,6 +1081,7 @@ def test_two_runs_keep_payloads_views_and_cancel_controllers_isolated(
                       const provider = item.path.replace("/ask_", "");
                       item.resolve(response({
                         response: `${question} ${provider} answer`,
+                        answer_receipt: `receipt:${question}:${provider}`,
                         sources: [],
                         usage_run_status: "consumed",
                         free_usage_remaining: 2,
@@ -1191,17 +1239,15 @@ def test_two_runs_keep_payloads_views_and_cancel_controllers_isolated(
             "question => window.__runGate.calls('consensus', question)", question_b
         )
         assert len(calls_a) == len(calls_b) == 1
-        # Die Antworten gehen als Familien-Mapping raus (Feld `answers`).
-        answers_a = calls_a[0]["body"]["answers"]
-        answers_b = calls_b[0]["body"]["answers"]
+        # The server accepts receipts, never browser-supplied answer text.
+        assert 'answers' not in calls_a[0]['body'] and 'answers' not in calls_b[0]['body']
+        answers_a = calls_a[0]["body"]["answer_receipts"]
+        answers_b = calls_b[0]["body"]["answer_receipts"]
         assert calls_a[0]["body"]["question"] == question_a
-        assert question_a in answers_a["OpenAI"]
-        assert question_a in answers_a["Mistral"]
-        assert question_b not in answers_a["OpenAI"]
+        assert answers_a == {"OpenAI": f"receipt:{question_a}:openai", "Mistral": f"receipt:{question_a}:mistral"}
         assert calls_b[0]["body"]["question"] == question_b
-        assert question_b in answers_b["OpenAI"]
-        assert question_b in answers_b["Mistral"]
-        assert question_a not in answers_b["OpenAI"]
+        assert answers_b == {"OpenAI": f"receipt:{question_b}:openai", "Mistral": f"receipt:{question_b}:mistral"}
+        assert 'sources' not in calls_a[0]['body'] and 'sources' not in calls_b[0]['body']
         assert [body["question"] for body in consensus_bookmark_bodies] == [question_b]
     finally:
         context.close()
@@ -1452,6 +1498,7 @@ def test_two_runs_finish_reverse_order_behind_a_saved_bookmark(
                       const provider = item.path.replace("/ask_", "");
                       item.resolve(response({
                         response: `${question} ${provider} answer [S1]`,
+                        answer_receipt: `receipt:${question}:${provider}`,
                         sources: [{
                           id: "S1",
                           title: `${question} ${provider} source`,
@@ -1745,6 +1792,27 @@ def test_two_runs_finish_reverse_order_behind_a_saved_bookmark(
         context.close()
 
 
+def test_missing_answer_receipts_remain_visible_but_never_start_consensus(browser, phase4_server):
+    """Negative control for the receipt-bearing provider fixtures above."""
+    context, page = _real_firebase_page(browser, phase4_server)
+    consensus_calls = []
+    try:
+        page.route('**/prepare', lambda route: _json(route, {'system_prompt': 'Prepared prompt'}))
+        page.route('**/ask_*', lambda route: _json(route, {'response': 'Unstored model answer', 'sources': []}))
+        page.route('**/consensus', lambda route: (consensus_calls.append(route.request.post_data_json), _json(route, {})))
+        page.locator('#questionInput').fill('Check the storage boundary')
+        page.locator('#sendButton').click()
+        page.wait_for_function("() => App.runRegistry.visible()?.status === 'failed'")
+        results = page.evaluate("() => Object.values(App.runRegistry.visible().modelResults).map(r => ({text:r.text,status:r.status,error:r.error,receipt:r.receipt}))")
+        assert len(results) == 6
+        assert all(item['text'] == 'Unstored model answer' and item['status'] == 'incomplete'
+                   and item['receipt'] is None and 'could not be saved' in item['error'] for item in results)
+        assert consensus_calls == []
+        expect(page.locator('#consensusAnswerBody')).not_to_contain_text('Unstored model answer')
+    finally:
+        context.close()
+
+
 def test_disabled_agent_mode_is_six_answers_only(browser, phase4_server):
     context, page = _real_firebase_page(browser, phase4_server)
     model_bookmark_bodies = []
@@ -1784,6 +1852,7 @@ def test_disabled_agent_mode_is_six_answers_only(browser, phase4_server):
             "**/ask_*",
             lambda route: _json(route, {
                 "response": "Direct answer from " + route.request.url.rsplit("_", 1)[-1],
+                "answer_receipt": "receipt:" + route.request.url.rsplit("_", 1)[-1],
                 "sources": [],
             }),
         )

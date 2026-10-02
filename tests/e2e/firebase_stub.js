@@ -19,24 +19,6 @@ window.auth = {
   },
 };
 
-function configuredLimit(key, fallback) {
-  const value = Number((window.APP_LIMITS || {})[key]);
-  return Number.isFinite(value) ? value : fallback;
-}
-
-window.LIMITS = {
-  FREE: {
-    NORMAL: configuredLimit("free_consensus_run_limit", 3),
-    DEEP: configuredLimit("free_deep_think_run_limit", 0),
-  },
-  PRO: {
-    NORMAL: configuredLimit("pro_consensus_run_limit", 500),
-    DEEP: configuredLimit("pro_deep_think_run_limit", 50),
-  },
-};
-window.currentMaxLimit = window.LIMITS.FREE.NORMAL;
-window.currentDeepLimit = window.LIMITS.FREE.DEEP;
-window.isUserPro = false;
 window.bookmarksData = [];
 
 // Mirror the real firebase.js access setup for an authenticated user.
@@ -63,7 +45,10 @@ window.sendFeedback = async () => ({ ok: true });
 // das im asynchronen onAuthStateChanged-Callback, daher hier ein Poll.
 (function initTierUI(attempt) {
   if (typeof window.updateUserTierUI === "function") {
-    window.updateUserTierUI(false, true);
+    window.App.authState.setIdentity(window.auth.currentUser.uid);
+    window.updateUserTierUI('free', true);
+    window.App.accountTier.set('free');
+    window.App.authState.publish(window.auth.currentUser.uid);
     return;
   }
   if (attempt < 100) setTimeout(() => initTierUI(attempt + 1), 50);

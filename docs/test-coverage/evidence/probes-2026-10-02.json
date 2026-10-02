@@ -1,0 +1,84 @@
+{
+  "date": "2026-10-02",
+  "network_allowed": false,
+  "observations": [
+    {
+      "probe": "header_probe",
+      "probe_error": "AssertionError: Audit probe attempted network access"
+    },
+    {
+      "probe": "memory_probe",
+      "probe_error": "MemoryEditError: This memory edit was restarted and is handled elsewhere."
+    },
+    {
+      "probe": "rollback_probe",
+      "probe_error": "ValueError: The transaction has no transaction ID, so it cannot be rolled back."
+    },
+    {
+      "probe": "topic_auth_probe",
+      "result": {
+        "id": "P-04",
+        "revoked_token": {
+          "admin": {
+            "sdk_check_revoked": [
+              true
+            ],
+            "outcome": "HTTP 401"
+          },
+          "topics": {
+            "sdk_check_revoked": [
+              false
+            ],
+            "outcome": "accepted"
+          }
+        },
+        "role_outage": {
+          "admin": {
+            "sdk_check_revoked": [
+              true
+            ],
+            "outcome": "HTTP 503"
+          },
+          "topics": {
+            "sdk_check_revoked": [
+              false
+            ],
+            "outcome": "unmapped TierStatusUnavailable"
+          }
+        }
+      }
+    },
+    {
+      "probe": "benchmark_probe",
+      "result": {
+        "id": "P-05",
+        "http_429_control": {
+          "http_status": 429,
+          "error": "OpenRouter HTTP 429",
+          "error_code": "provider_http_error",
+          "usage": {
+            "prompt": 0,
+            "completion": 0,
+            "total": 0
+          },
+          "abstain": false,
+          "resume_indexes_as_success": false,
+          "indexed_errors": 1
+        },
+        "http_200_error_body": {
+          "http_status": 200,
+          "error": null,
+          "error_code": null,
+          "usage": {
+            "prompt": 0,
+            "completion": 0,
+            "total": 0
+          },
+          "abstain": true,
+          "resume_indexes_as_success": true,
+          "indexed_errors": 0
+        }
+      }
+    }
+  ]
+}

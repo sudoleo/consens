@@ -13,7 +13,7 @@ from app.core.observability import safe_exception
 from app.core.security import verify_user_token, extract_id_token, is_user_admin
 from app.core import seo_entity
 from app.core.site import SITE_URL
-from app.services import drift_signal, og_image
+from app.services import claim_ledger, drift_signal, og_image
 from app.services import share_snapshots as snapshots
 from app.services.history_view import build_history_view
 from app.services import watch_service
@@ -76,13 +76,25 @@ def _build_watch_drift_view(history_points, selected_run_id="", query_first=Fals
     # Idempotent: the projection already classified these points, but the view
     # must never fall back to a stored trigger from the looser rule.
     history_points = drift_signal.annotate_points(history_points)
-    index = len(history_points) - 1
+    standing = drift_signal.accepted_index(history_points)
+    index = standing if standing is not None else len(history_points) - 1
     if selected_run_id:
         for candidate, point in enumerate(history_points):
             if point.get("run_id") == selected_run_id:
                 index = candidate
                 break
     point = history_points[index]
+    newest = history_points[-1]
+    # The newest check, when its answer does not stand and the reader is
+    # looking at the one that does (docs/watch-evidence-model.md).
+    pending_check = None
+    if index == standing and index != len(history_points) - 1 and not newest.get("accepted"):
+        pending_check = {
+            "signal": newest["signal"],
+            "note": claim_ledger.SIGNAL_NOTES.get(newest["signal"], ""),
+            "summary": str(newest.get("change_summary") or ""),
+            "checked_at": newest.get("ts"),
+        }
     if query_first and index == 0:
         return {
             "trigger": "stable",
@@ -108,7 +120,10 @@ def _build_watch_drift_view(history_points, selected_run_id="", query_first=Fals
     steady = drift_signal.steady_checks(history_points[:index + 1])
     return {
         "trigger": trigger,
-        "label": "Changed since last check" if trigger == "changed" else "Stable since last check",
+        "signal": point.get("signal") or "",
+        "label": _watch_drift_label(point, trigger),
+        "evidence_sources": list(point.get("evidence_sources") or []),
+        "pending_check": pending_check,
         "summary": _watch_drift_summary(point, trigger, score_delta, steady),
         "score_within_range": _score_move_is_within_range(trigger, score_delta),
         "restated": bool(point.get("restated")) and trigger == "stable",
@@ -120,6 +135,16 @@ def _build_watch_drift_view(history_points, selected_run_id="", query_first=Fals
         "baseline_changed": bool(point.get("baseline_changed")),
         "checked_at": point.get("ts"),
     }
+
+
+def _watch_drift_label(point, trigger) -> str:
+    if trigger != "changed":
+        return "Stable since last check"
+    if point.get("cause") == drift_signal.CAUSE_NEW_EVIDENCE:
+        return "Moved on new evidence"
+    if point.get("confirmed_by_recheck"):
+        return "Moved, confirmed by a re-check"
+    return "Changed since last check"
 
 
 # Ein Score-Sprung unter der Bandgrenze faellt in der Kurve auf; ohne einen Satz
@@ -201,6 +226,7 @@ def _build_watch_page_meta(meta, history_points):
         "active": "Active",
         "paused": "Paused",
         "paused_error": "Paused after errors",
+        "resolved": "Resolved",
         "history": "Archived history",
     }
     last_run = meta.get("last_run_at")
@@ -225,6 +251,23 @@ def _build_watch_page_meta(meta, history_points):
         "last_run": _watch_datetime_view(last_run, timezone_name),
         "next_run": _watch_datetime_view(meta.get("next_run_at"), timezone_name),
         "created": _watch_datetime_view(meta.get("created_at"), timezone_name),
+        "goal": str(meta.get("condition") or ""),
+        "resolution": _resolution_view(meta.get("resolution"), timezone_name),
+    }
+
+
+def _resolution_view(resolution, timezone_name=""):
+    if not isinstance(resolution, dict) or not resolution.get("run_id"):
+        return None
+    return {
+        "run_id": str(resolution.get("run_id") or ""),
+        "at": _watch_datetime_view(resolution.get("at"), timezone_name),
+        "goal": str(resolution.get("condition") or ""),
+        "reason": str(resolution.get("reason") or ""),
+        "sources": [
+            item for item in resolution.get("sources") or []
+            if isinstance(item, dict) and str(item.get("url") or "").startswith(("http://", "https://"))
+        ][:4],
     }
 
 
@@ -243,6 +286,15 @@ def _score_stats(data):
         if isinstance(d, dict) and d.get("type") == "contradiction"
     )
     return agreement, model_count, contradiction_count
+
+
+def _standing_run_id(meta, data) -> str:
+    """The Watch version a page shows by default: the one whose answer stands."""
+    meta = meta or {}
+    return str(
+        meta.get("accepted_run_id") or meta.get("last_successful_run_id")
+        or data.get("latest_watch_run_id") or ""
+    )
 
 
 def _resolve_display_version(data, watch_page, requested_version, latest_run_id, share_id):
@@ -523,10 +575,7 @@ def share_og_card(request: Request, slug_id: str):
     except Exception:
         watch_meta = None
     watch_page = _build_watch_page_meta(watch_meta, history_points)
-    latest_run_id = str(
-        (watch_meta or {}).get("last_successful_run_id")
-        or data.get("latest_watch_run_id") or ""
-    )
+    latest_run_id = _standing_run_id(watch_meta, data)
     try:
         display_version = _resolve_display_version(data, watch_page, "", latest_run_id, share_id)
     except Exception:
@@ -633,11 +682,7 @@ def share_page(request: Request, slug_id: str):
     watch_page = _build_watch_page_meta(current_watch_meta, history_points)
 
     requested_version = str(request.query_params.get("version") or "").strip()
-    latest_run_id = str(
-        (current_watch_meta or {}).get("last_successful_run_id")
-        or data.get("latest_watch_run_id")
-        or ""
-    )
+    latest_run_id = _standing_run_id(current_watch_meta, data)
     if watch_page and requested_version and requested_version != "original":
         if not re.fullmatch(r"[A-Za-z0-9]{8,64}", requested_version):
             return _unavailable_response(

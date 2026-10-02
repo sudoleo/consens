@@ -12,8 +12,8 @@
 // deferred <script> at the end of <body> in templates/index.html, so it
 // runs after every earlier module in document order.
 //
-// Server config that used to live inline as a Jinja value is now bridged
-// through window.FREE_LIMIT (run limit, set in the Jinja <head> config block).
+// The daily allowance is a token account shared by every mode; it lives in
+// window.App.tokenBudget (token-budget.js), not in a Jinja value.
 // =====================================================================
 
       (function () {
@@ -192,67 +192,8 @@
         const defaultQuestionPlaceholder = "Enter your question";
         const lockedQuestionPlaceholder = "Sign in to start asking questions for free.";
 
-        // Der Composer beginnt kompakt, waechst mit jeder Textzeile und wird ab
-        // der CSS-Maximalhoehe zum intern scrollenden Feld. Die Grenze bleibt im
-        // CSS, damit Desktop und Mobile sie unabhaengig setzen koennen.
-        const COMPOSER_MULTILINE_CLASS = "is-multiline";
-
-        function measureQuestionInput() {
-          questionInput.style.height = "0px";
-          questionInput.style.overflowY = "hidden";
-          const styles = window.getComputedStyle(questionInput);
-          const minHeight = Number.parseFloat(styles.minHeight) || 52;
-          const maxHeight = Number.parseFloat(styles.maxHeight) || 220;
-          const contentHeight = questionInput.scrollHeight;
-          const nextHeight = Math.max(minHeight, Math.min(contentHeight, maxHeight));
-
-          questionInput.style.height = `${Math.ceil(nextHeight)}px`;
-          questionInput.style.overflowY = contentHeight > maxHeight + 1 ? "auto" : "hidden";
-          return { minHeight, nextHeight };
-        }
-
-        function resizeQuestionInput() {
-          if (!questionInput) return;
-
-          const measured = measureQuestionInput();
-          const container = questionInput.closest(".chat-input-container");
-          if (!container) return;
-
-          // Ab der zweiten Zeile bekommt der Text die ganze Breite und die
-          // Knopfzeile rutscht darunter (Optik in shell.css, nur Desktop —
-          // Mobile ist aufgeklappt ohnehin schon so gebaut).
-          //
-          // Zurueck geht es NUR beim leeren Feld, und das ist Absicht: das
-          // Umschalten aendert die Breite des Feldes, und derselbe Text
-          // braucht breit oft eine Zeile weniger als schmal. Eine Bedingung,
-          // die selbst von dieser Breite abhaengt, wuerde in diesem
-          // Zwischenbereich bei jedem Tastendruck zwischen beiden Formen
-          // hin- und herspringen. Leer/nicht leer ist in beiden Breiten
-          // dasselbe und damit der einzige stabile Ausstieg.
-          const isMultiline = container.classList.contains(COMPOSER_MULTILINE_CLASS);
-          const wantsMultiline = questionInput.value.length > 0 &&
-            (isMultiline || measured.nextHeight > measured.minHeight + 1);
-
-          if (wantsMultiline !== isMultiline) {
-            container.classList.toggle(COMPOSER_MULTILINE_CLASS, wantsMultiline);
-            // Die neue Breite ergibt eine andere Zeilenzahl — ohne zweite
-            // Messung bliebe die Hoehe der alten Form bis zum naechsten
-            // Tastendruck stehen.
-            measureQuestionInput();
-          }
-        }
-
+        const resizeQuestionInput = window.App.initComposerAutosize(questionInput);
         window.App.resizeQuestionInput = resizeQuestionInput;
-        questionInput?.addEventListener("input", resizeQuestionInput);
-        window.addEventListener("resize", resizeQuestionInput, { passive: true });
-        // An empty field is as tall as its placeholder (scrollHeight counts
-        // it). Several modules swap the placeholder (sign-in, Agent, a run
-        // in progress); a long one measured on a phone would otherwise keep
-        // the field at full height after a short one replaced it.
-        if (questionInput && typeof MutationObserver === "function") {
-          new MutationObserver(resizeQuestionInput).observe(questionInput, { attributes: true, attributeFilter: ["placeholder"] });
-        }
-        requestAnimationFrame(resizeQuestionInput);
 
         function hasVerifiedSession() {
           return Boolean(window.auth?.currentUser?.emailVerified);
@@ -575,47 +516,6 @@
         // window.clearPendingAttachments, window.getAttachmentsPayload,
         // window.showBookmarkAttachments). Alle Aufrufer nutzen window.*.
 
-        function getConfiguredLimit(key, fallback) {
-          const raw = (window.APP_LIMITS || {})[key];
-          const value = Number(raw);
-          return Number.isFinite(value) ? value : fallback;
-        }
-
-        // Nur der Vorab-Wert, bis der Server im selben Response die echten
-        // Limits mitschickt. Plus hat kein eigenes Deep-Think-Kontingent --
-        // Deep Think bleibt Pro (siehe app/core/entitlements.py).
-        const LIMITS = {
-          free: {
-            NORMAL: getConfiguredLimit("free_consensus_run_limit", 0),
-            DEEP: getConfiguredLimit("free_deep_think_run_limit", 0)
-          },
-          plus: {
-            NORMAL: getConfiguredLimit("plus_consensus_run_limit", 0),
-            DEEP: getConfiguredLimit("free_deep_think_run_limit", 0)
-          },
-          pro: {
-            NORMAL: getConfiguredLimit("pro_consensus_run_limit", 0),
-            DEEP: getConfiguredLimit("pro_deep_think_run_limit", 0)
-          }
-        };
-        let currentMaxLimit = LIMITS.free.NORMAL;
-        let currentDeepLimit = LIMITS.free.DEEP;
-
-        function setCurrentUsageLimits(tier, serverLimits = {}) {
-          const normalLimit = Number(serverLimits.limit ?? serverLimits.total_limit);
-          const deepLimit = Number(serverLimits.deep_limit ?? serverLimits.deep_total_limit);
-          const fallback = LIMITS[window.App.normalizeTier?.(tier) || "free"] || LIMITS.free;
-
-          currentMaxLimit = Number.isFinite(normalLimit) ? normalLimit : fallback.NORMAL;
-          currentDeepLimit = Number.isFinite(deepLimit) ? deepLimit : fallback.DEEP;
-
-          window.App.state.set("currentMaxLimit", currentMaxLimit, "userTier");
-          window.App.state.set("currentDeepLimit", currentDeepLimit, "userTier");
-        }
-
-        setCurrentUsageLimits("free");
-        window.setCurrentUsageLimits = setCurrentUsageLimits;
-
         // Diese Funktion prüft den Status sofort beim Laden
         async function checkUserStatusOnLoad(user) {
           if (!user) return;
@@ -638,42 +538,14 @@
               // 1. UI sofort umschalten (Badge an, Modelle frei)
               updateUserTierUI(data.tier ?? data.is_pro, true);
 
-              // 2. Limits sofort aktualisieren (verhindert den 500/25 Fehler)
-              setCurrentUsageLimits(data.tier ?? data.is_pro, data);
-
-              // 3. Sidebar Text initial befüllen (damit dort nicht 25 steht bis zum ersten Klick)
-              // Wir rufen hier kurz den Usage-Endpoint auf, um die aktuellen Zahlen zu haben
-              refreshUsageDisplay(token);
+              // 2. Das Tokenkonto des Tages steht schon in /user_status.
+              window.App.tokenBudget?.apply?.(data.token_budget, {
+                uid: user.uid, authoritative: true
+              });
             }
           } catch (error) {
             console.error("Fehler beim Laden des User-Status:", error);
           }
-        }
-
-        // Hilfsfunktion um Sidebar zu aktualisieren (Refactoring)
-        async function refreshUsageDisplay(token) {
-          try {
-            const resp = await fetch("/usage", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ id_token: token })
-            });
-            const data = await resp.json();
-            setCurrentUsageLimits(data.tier ?? data.is_pro === true, data);
-
-            const usageView = window.App.runRegistry?.reconcileUsageSnapshot?.({
-              uid: window.auth?.currentUser?.uid || null,
-              generation: window.App.authState?.generation,
-              user: window.auth?.currentUser || null
-            }, data, { authoritative: true }) || {
-              remaining: data.remaining,
-              deepRemaining: data.deep_remaining,
-              totalLimit: currentMaxLimit,
-              deepLimit: currentDeepLimit
-            };
-            window.App.renderUsageDisplay(usageView);
-
-          } catch (e) { console.error(e); }
         }
 
         // Muss zum Push/Overlay-Umschaltpunkt in layout.css (1099px) passen.

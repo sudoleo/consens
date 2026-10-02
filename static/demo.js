@@ -788,7 +788,7 @@ function createStartDemoChip() {
   const questionInput = document.getElementById("questionInput");
 
   const btn = document.createElement("button");
-  btn.className = "demo-chip demo-action";
+  btn.className = "demo-chip demo-action send-glow";
   btn.type = "button";
   btn.setAttribute("aria-label", "Start interactive demo");
   // Zwei Beschriftungen, immer genau eine sichtbar. Auf einem 375er Schirm

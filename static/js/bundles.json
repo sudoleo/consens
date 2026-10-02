@@ -22,6 +22,10 @@
         "static/js/app-bootstrap.js",
         "static/js/app-state.js",
         {
+          "file": "static/js/token-budget.js",
+          "note": "The one daily token account (Compare, Consensus, Agent). Before firebase.js and every run module, which feed it."
+        },
+        {
           "file": "static/js/email-verify.js",
           "note": "Defines window.App.emailVerification before the Firebase module consumes it. It is listed directly so source-mode cache busting covers it."
         },
@@ -91,7 +95,11 @@
         "static/js/consensus-actions.js",
         {
           "file": "static/js/watch.js",
-          "note": "Needs consensus-actions.js and the share modal."
+          "note": "Needs consensus-actions.js and the share modal. Publishes window.App.watchUi."
+        },
+        {
+          "file": "static/js/watch-dashboard.js",
+          "note": "Renders /app/watches with window.App.watchUi; watch.js calls App.watchDashboard.render at view time."
         },
         {
           "file": "static/js/mobile-header.js",
@@ -129,6 +137,7 @@
         },
         "static/js/query-send.js",
         "static/js/composer-collapse.js",
+        "static/js/composer-autosize.js",
         {
           "file": "static/js/app-init.js",
           "note": "Must follow every feature module: aliases window.App.* and runs initApp() on DOMContentLoaded. app-dom-events.js then installs the remaining document-level listeners."

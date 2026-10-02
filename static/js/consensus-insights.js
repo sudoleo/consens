@@ -799,9 +799,7 @@
             return function (index) {
               const turn = body.closest?.(".thread-history-turn");
               if (turn && window.App?.answerReader?.openPanel('differences', null, turn, index)) return;
-              const card = turn?.querySelectorAll(
-                ".thread-history-differences .diff-card"
-              )[index];
+              const card = differenceCardAt(turn?.querySelector(".thread-history-differences"), index);
               if (!card) return;
               const panel = card.closest(".thread-history-panel");
               const tab = panel && turn
@@ -862,6 +860,7 @@
           // --- Verdict-Balken --------------------------------------------------
           // Neutraler Glas-Balken: Score-Ring links (Farbe = Semantik),
           // Headline + Detailzeile daneben, Judge-Attribution rechts.
+          const settledAgreements = new WeakSet();
           function renderVerdictHeader(differences, modelCount, agreement, judge) {
             const verdict = $("consensusVerdict");
             if (!verdict) return;
@@ -925,6 +924,17 @@
               meter.appendChild(fill);
               gauge.append(score, meter);
               verdict.appendChild(gauge);
+              // Die Zahl zaehlt einmal pro Ergebnis hoch (CSS, siehe
+              // components-consensus-visuals.css). Gemerkt wird das
+              // agreement-Objekt: erneutes Rendern desselben Laufs (Run-View,
+              // Projektionen) spielt es nicht noch einmal ab.
+              const target = Number(agreement.score);
+              if (Number.isInteger(target) && !settledAgreements.has(agreement)) {
+                settledAgreements.add(agreement);
+                num.style.setProperty("--score-target", String(target));
+                gauge.classList.add("is-settling");
+                setTimeout(() => gauge.classList.remove("is-settling"), 1000);
+              }
             } else {
               const icon = document.createElement("span");
               icon.className = "verdict-icon";
@@ -1116,8 +1126,7 @@
           // kurz hervor. Das <details> darüber (Phase 4) wird mit aufgeklappt.
           function focusDifferenceCard(index) {
             if (window.App?.answerReader?.openPanel('differences', null, null, index)) return;
-            const cards = $("differencesCards");
-            const card = cards?.querySelectorAll(".diff-card")[index];
+            const card = differenceCardAt($("differencesCards"), index);
             if (!card) return;
             const panel = card.closest("details.consensus-differences-panel");
             if (panel) panel.open = true;
@@ -2123,18 +2132,7 @@
                 throw new Error(message);
               }
 
-              const usageView = window.App.runRegistry?.reconcileUsageSnapshot?.(binding.auth, {
-                remaining: data.free_usage_remaining,
-                deepRemaining: data.deep_remaining,
-                totalLimit: data.limit ?? window.currentMaxLimit,
-                deepLimit: data.deep_limit ?? window.currentDeepLimit
-              }) || {
-                remaining: data.free_usage_remaining,
-                deepRemaining: data.deep_remaining,
-                totalLimit: data.limit ?? window.currentMaxLimit,
-                deepLimit: data.deep_limit ?? window.currentDeepLimit
-              };
-              window.App.renderUsageDisplay(usageView);
+              window.App.renderUsageDisplay(data, binding.auth);
 
               // Ergebnis am Widerspruch merken und Karte kennzeichnen; über
               // das Bookmark persistieren, damit es beim Wiederöffnen bleibt.
@@ -2337,6 +2335,34 @@
           // archivierter Turn bekommt die statische Fassung: seine Sprunglinks
           // zeigten sonst auf die Antwortboxen des NEUESTEN Laufs, und eine
           // Resolve-Runde gehoert immer zum aktiven Lauf.
+          function differenceRank(diff) {
+            if (diff.type !== "contradiction") return 2;
+            return diff.severity === "minor" ? 1 : 0;
+          }
+
+          function differenceTag(diff) {
+            if (diff.type !== "contradiction") {
+              return { label: "Emphasis", spoken: ": a different emphasis, not a contradiction.",
+                meaning: "Different emphasis, not a contradiction" };
+            }
+            if (diff.severity === "major") {
+              return { label: "Critical", spoken: " contradiction:", meaning: "Critical contradiction" };
+            }
+            if (diff.severity === "minor") {
+              return { label: "Minor", spoken: " contradiction, a detail:", meaning: "Minor contradiction about a detail" };
+            }
+            return { label: "Contradiction", spoken: ":", meaning: "Contradiction" };
+          }
+
+          // Karte zum Datenindex der Differences-Liste. Die Karten stehen nach
+          // Schwere sortiert; die Kartenposition ist deshalb kein Index mehr.
+          function differenceCardAt(container, index) {
+            if (!container) return null;
+            return container.querySelector('.diff-card[data-difference-index="' + Number(index) + '"]')
+              || container.querySelectorAll(".diff-card")[index] || null;
+          }
+          window.App.differenceCardAt = differenceCardAt;
+
           function buildDifferenceCards(cards, differences, modelCount, options) {
             const opts = options || {};
             const isStatic = !!opts.static;
@@ -2365,8 +2391,19 @@
               empty.append(dot, textWrap);
               cards.appendChild(empty);
             } else {
-              differences.forEach(function (diff) {
+              // Kritische Widersprueche zuerst, dann Details, dann andere
+              // Gewichtungen; innerhalb einer Stufe bleibt die Judge-Reihenfolge.
+              // Inline-Marker verlinken weiter per Datenindex
+              // (data-difference-index), nicht per Kartenposition.
+              differences
+                .map(function (diff, index) { return { diff: diff, index: index }; })
+                .sort(function (a, b) {
+                  return differenceRank(a.diff) - differenceRank(b.diff) || a.index - b.index;
+                })
+                .forEach(function (entry) {
+                const diff = entry.diff;
                 const card = document.createElement("details");
+                card.dataset.differenceIndex = String(entry.index);
                 // Source checks are advisory. A malformed check must never
                 // interrupt the original cards or the subsequent claim marks.
                 try { window.App.sourceVerification?.bindDifferenceCard(card, diff); } catch (_) {}
@@ -2387,19 +2424,21 @@
                 sevDot.setAttribute("aria-hidden", "true");
                 const typeTag = document.createElement("span");
                 typeTag.className = "diff-type-tag";
-                // Ohne Severity (alte Bookmarks/Snapshots) bleibt das neutrale Label.
-                let tagLabel = "Different emphasis";
-                if (diff.type === "contradiction") {
-                  tagLabel = "Contradiction";
-                  if (diff.severity === "major") tagLabel = "Contradiction · critical";
-                  else if (diff.severity === "minor") tagLabel = "Contradiction · minor detail";
-                }
-                typeTag.textContent = tagLabel;
+                // Ein Wort reicht: im Differences-Panel ist "Contradiction"
+                // redundant. Die volle Bedeutung steht im Tooltip und fuer
+                // Screenreader; ohne Severity (alte Bookmarks/Snapshots) bleibt
+                // das neutrale "Contradiction".
+                const tag = differenceTag(diff);
+                typeTag.textContent = tag.label;
+                typeTag.title = tag.meaning;
+                const tagMeaning = document.createElement("span");
+                tagMeaning.className = "visually-hidden";
+                tagMeaning.textContent = tag.spoken;
                 // Kopfzeile: Punkt + Label; nimmt nach dem Resolve auch den
                 // rechtsbündigen Status-Text auf.
                 const tagRow = document.createElement("span");
                 tagRow.className = "diff-card-tags";
-                tagRow.append(sevDot, typeTag);
+                tagRow.append(sevDot, typeTag, tagMeaning);
                 const claimEl = document.createElement("span");
                 claimEl.className = "diff-card-claim";
                 claimEl.textContent = diff.claim;
@@ -2412,16 +2451,24 @@
                   const posEl = document.createElement("div");
                   posEl.className = "diff-position";
 
+                  // Eine Kopfzeile pro Position: Icon + Name je Modell. Ist die
+                  // Originalantwort erreichbar, ist genau dieses Paar der
+                  // Sprunglink — keine zweite Zeile mit Namen und Pfeilen.
                   // Gleiche Modell-Icons und Theme-Behandlung wie im Antwort-Leser.
                   const label = document.createElement("div");
                   label.className = "diff-position-label";
+                  const canJump = function (model) {
+                    if (isStatic && !opts.answerNavigation) return false;
+                    return opts.answerNavigation ? opts.answerNavigation.canOpen(model) : !!MODEL_BOX_IDS[model];
+                  };
                   pos.models.forEach(function (model) {
                     const name = labelFor(model);
+                    const jumps = canJump(model);
+                    const entry = document.createElement(jumps ? "button" : "span");
+                    entry.className = "diff-position-model" + (jumps ? " diff-jump-link" : "");
                     const mark = document.createElement("span");
-                    mark.className = "diff-position-model";
-                    mark.title = name;
-                    mark.setAttribute("role", "img");
-                    mark.setAttribute("aria-label", name);
+                    mark.className = "diff-position-icon";
+                    mark.setAttribute("aria-hidden", "true");
                     const original = $(MODEL_BOX_IDS[model] || "")?.querySelector("img");
                     if (original) {
                       const icon = document.createElement("img");
@@ -2434,7 +2481,20 @@
                     } else {
                       mark.textContent = name.slice(0, 1).toUpperCase();
                     }
-                    label.appendChild(mark);
+                    const nameEl = document.createElement("span");
+                    nameEl.className = "diff-position-name";
+                    nameEl.textContent = name;
+                    entry.append(mark, nameEl);
+                    if (jumps) {
+                      entry.type = "button";
+                      entry.title = "Open the full answer from " + name;
+                      entry.setAttribute("aria-label", "Open the full answer from " + name);
+                      entry.addEventListener("click", function () {
+                        if (opts.answerNavigation) opts.answerNavigation.open(model, pos.quote, entry);
+                        else jumpToModelAnswer(model, pos.quote);
+                      });
+                    }
+                    label.appendChild(entry);
                   });
                   posEl.appendChild(label);
 
@@ -2449,26 +2509,6 @@
                     quote.className = "diff-position-quote";
                     renderInlineMarkdown(quote, pos.quote);
                     posEl.appendChild(quote);
-                  }
-
-                  // Schlichte Textlinks (Modellname) statt Pill-Buttons.
-                  if (!isStatic || opts.answerNavigation) {
-                    const links = document.createElement("div");
-                    links.className = "diff-position-links";
-                    pos.models.forEach(function (model) {
-                      if (opts.answerNavigation ? !opts.answerNavigation.canOpen(model) : !MODEL_BOX_IDS[model]) return;
-                      const jump = document.createElement("button");
-                      jump.type = "button";
-                      jump.className = "diff-jump-link";
-                      jump.textContent = labelFor(model);
-                      jump.title = "Jump to the full answer from " + labelFor(model);
-                      jump.addEventListener("click", function () {
-                        if (opts.answerNavigation) opts.answerNavigation.open(model, pos.quote, jump);
-                        else jumpToModelAnswer(model, pos.quote);
-                      });
-                      links.appendChild(jump);
-                    });
-                    if (links.childNodes.length) posEl.appendChild(links);
                   }
                   body.appendChild(posEl);
                 });

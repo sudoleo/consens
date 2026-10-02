@@ -6,7 +6,7 @@
   <meta name="description" content="Privacy and data processing notice for consens.io">
   <meta name="robots" content="noindex, noarchive">
   <title>Privacy | consens.io</title>
-<link rel="stylesheet" href="/static/css/public-pages.css?v=20260906-palette1">
+<link rel="stylesheet" href="/static/css/public-pages.css?v=20261001-evidence">
   <link rel="stylesheet" href="/static/css/public-shell.css?v=20260826-cardfoot">
   <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260621-logo2" sizes="any" type="image/png">
@@ -132,7 +132,7 @@
           dispute resolution, context preparation and explicit Memory edits can involve additional configured
           models beyond the comparison models. Scheduled Watches and API runs use server-configured models.
           Deselecting a comparison model therefore does not exclude every possible processing endpoint.</p>
-        <p>Our inference requests set OpenRouter's Zero Data Retention routing option. According to
+        <p id="zdr">Our inference requests set OpenRouter's Zero Data Retention routing option. According to
           <a href="https://openrouter.ai/docs/guides/features/zdr">OpenRouter's ZDR documentation</a>, this
           limits inference routing to endpoints with a non-retention policy. It is not a promise that every
           service keeps no data: temporary in-memory prompt caching is permitted, operational metadata is

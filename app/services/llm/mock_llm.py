@@ -57,6 +57,13 @@ MOCK_CONSENSUS_TEXT = (
 )
 
 
+def _record_usage(prompt: str, text: str) -> None:
+    """Ein plausibler gemessener Call, damit lokale Mock-Laeufe das
+    Tokenkonto bewegen (Ring/Panel sind sonst im Test nie sichtbar belastet)."""
+    from app.services.llm.usage_meter import record_mock_call
+    record_mock_call(prompt, text)
+
+
 def _chunks(text: str, size: int = 12):
     for start in range(0, len(text), size):
         yield text[start:start + size]
@@ -71,12 +78,14 @@ def mock_ask_stream(provider_label: str, question: str):
         if delay:
             time.sleep(delay)
         yield {"type": "delta", "text": chunk}
+    _record_usage(question, text)
     yield {"type": "final", "result": {"text": text, "sources": []}}
 
 
 def mock_ask_result(provider_label: str, question: str):
     """Ersatz fuer provider.query_fn (nicht-streamender Pfad)."""
     text = MOCK_MODEL_ANSWERS.get(provider_label, f"**{provider_label} mock answer.** {SHARED_FACT}")
+    _record_usage(question, text)
     return {"text": text, "sources": []}
 
 
@@ -182,8 +191,23 @@ def _build_mock_differences_json(prompt: str) -> str:
 
 def _mock_engine_output(prompt: str, json_mode: bool) -> str:
     if json_mode:
-        if "Compare the OLD and NEW consensus answers" in prompt:
-            return json.dumps({"changed": False, "severity": "minor", "change_summary": "No material change."})
+        if "You compare the STANDING answer" in prompt:
+            change = {
+                "changed": False, "severity": "minor", "cause": "none", "evidence": [],
+                "change_summary": "No material change.",
+                "held_summary": "The core answer is unchanged.",
+            }
+            if "<USER_GOAL_JSON>" in prompt:
+                change.update({
+                    "condition_status": "unknown",
+                    "condition_reason": "The answer does not settle the goal yet.",
+                    "condition_evidence": [],
+                })
+            return json.dumps(change)
+        if '"goal_suggestions"' in prompt:
+            return json.dumps({"goal_suggestions": [
+                "It is officially announced", "A firm date is published",
+            ]})
         if '"current_question"' in prompt:
             # Frage-Aufloesung vor dem Fan-out (chat_context.ChatMemoryCompressor).
             return json.dumps({
@@ -202,12 +226,15 @@ def _mock_engine_output(prompt: str, json_mode: bool) -> str:
 
 def mock_engine_text(prompt: str, json_mode: bool) -> str:
     """Ersatz fuer consensus_engine._call_engine_text."""
-    return _mock_engine_output(prompt, json_mode)
+    text = _mock_engine_output(prompt, json_mode)
+    _record_usage(prompt, text)
+    return text
 
 
 def mock_engine_stream(prompt: str, json_mode: bool):
     """Ersatz fuer consensus_engine._stream_engine_text (yieldet Text-Chunks)."""
     text = _mock_engine_output(prompt, json_mode)
+    _record_usage(prompt, text)
     delay = _delay_seconds()
     for chunk in _chunks(text, size=24):
         if delay:

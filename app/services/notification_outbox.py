@@ -99,21 +99,28 @@ def _clip(value, limit: int = TEXT_LIMIT) -> str:
     return str(value or "")[:limit]
 
 
-def _score(value):
-    return int(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else None
+def _sources(value) -> list[dict]:
+    items = []
+    for item in value or []:
+        if isinstance(item, dict) and str(item.get("url") or "").startswith(("http://", "https://")):
+            items.append({"title": _clip(item.get("title"), 240), "url": _clip(item.get("url"), 2000)})
+    return items[:4]
 
 
-def _direction(value) -> dict:
-    """Only the two fields mail/Telegram render; never the full position map."""
-    if not isinstance(value, dict):
-        return {}
-    label = _clip(value.get("shift_label") or value.get("label"), 80)
-    if not label:
-        return {}
-    shift = value.get("shift_score")
+def delta_view(result: dict, *, goal: str = "") -> dict:
+    """The change log a Watch or Topic message renders (docs/watch-evidence-model.md).
+
+    What changed, why (cause + the sources that carry it), what held and where
+    the goal stands. Deliberately no agreement score.
+    """
     return {
-        "shift_label": label,
-        "shift_score": shift if isinstance(shift, (int, float)) else None,
+        "summary": _clip(result.get("change_summary"), 1200),
+        "held": _clip(result.get("held_summary"), 240),
+        "cause": _clip(result.get("cause"), 20),
+        "sources": _sources(result.get("evidence_sources")),
+        "goal": _clip(goal, 500),
+        "goal_status": _clip(result.get("condition_status") if goal else "", 10),
+        "goal_reason": _clip(result.get("condition_reason") if goal else "", 400),
     }
 
 
@@ -160,19 +167,8 @@ def _watch_view(claimed: dict) -> dict:
     }
 
 
-def _result_view(claimed: dict, result: dict) -> dict:
-    return {
-        "old_score": _score(claimed.get("last_agreement_score")),
-        "agreement_score": _score(result.get("agreement_score")),
-        "changed": bool(result.get("changed")),
-        "severity": _clip(result.get("severity") or "minor", 10),
-        "change_summary": _clip(result.get("change_summary")),
-        "direction": _direction(result.get("opinion_map")),
-    }
-
-
 def watch_alert_items(watch_id: str, claimed: dict, result: dict, alert: str, *,
-                      now: datetime, email: bool) -> list[dict]:
+                      now: datetime, email: bool, moved: bool = False) -> list[dict]:
     """Owner alert items for one successful run (``alert`` = change|every_run|condition)."""
     uid = str(claimed.get("owner_uid") or "")
     run_id = str(claimed.get("current_run_id") or "")
@@ -180,12 +176,14 @@ def watch_alert_items(watch_id: str, claimed: dict, result: dict, alert: str, *,
         return []
     payload = {
         **_watch_view(claimed),
-        **_result_view(claimed, result),
         "alert": alert,
+        "moved": bool(moved),
+        "delta": delta_view(result, goal=str(claimed.get("condition") or "")),
     }
     if alert == "condition":
         payload["condition"] = _clip(claimed.get("condition"), 500)
         payload["condition_reason"] = _clip(result.get("condition_reason"), 800)
+        payload["condition_sources"] = _sources(result.get("condition_sources"))
     items = []
     if email and claimed.get("email_enabled") is not False:
         items.append(new_item(
@@ -226,7 +224,7 @@ def watch_follower_items(watch_id: str, claimed: dict, result: dict,
     run_id = str(claimed.get("current_run_id") or "")
     if not run_id or claimed.get("visibility") == "private":
         return []
-    payload = {**_watch_view(claimed), **_result_view(claimed, result)}
+    payload = {**_watch_view(claimed), "delta": delta_view(result)}
     return [
         new_item(
             kind=KIND_WATCH_FOLLOWER, channel=CHANNEL_EMAIL, resource_id=watch_id,
@@ -237,7 +235,7 @@ def watch_follower_items(watch_id: str, claimed: dict, result: dict,
     ]
 
 
-def topic_follower_items(topic: dict, run_id: str, run: dict, old_score,
+def topic_follower_items(topic: dict, run_id: str, run: dict,
                          follower_ids, *, now: datetime) -> list[dict]:
     topic_id = str(topic.get("id") or "")
     if not topic_id or not run_id:
@@ -246,10 +244,7 @@ def topic_follower_items(topic: dict, run_id: str, run: dict, old_score,
         "title": _clip(topic.get("title"), 240),
         "question": _clip(topic.get("lead_question"), QUESTION_LIMIT),
         "slug": _clip(topic.get("slug"), 200),
-        "old_score": _score(old_score),
-        "new_score": _score(run.get("agreement_score")),
-        "change_type": _clip(run.get("change_type"), 10),
-        "summary": _clip(run.get("change_summary"), 1200),
+        "delta": delta_view(run),
     }
     return [
         new_item(

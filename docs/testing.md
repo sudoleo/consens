@@ -6,8 +6,20 @@ verifizierten Laufstatus. Sie enthält außerdem ein maschinenlesbares Inventar
 und das Vorgehen für den anschließenden Abgleich mit dem Produktionscode.
 Der **[Produktabgleich mit Codex-Arbeitspaketen](test-coverage/product/README.md)**
 ergänzt konkrete Lückenbelege, Verhaltensverträge, Python-Branchmessung und
-reproduzierbare Auditproben. Die Paketstatus sind geplant; historische
-Laufergebnisse sind keine aktuelle Freigabe geänderter Quellen.
+reproduzierbare Auditproben. Stand 02.10.2026: 291 Testdateien und 4.425 Runnerfälle;
+Ergebnisse, ursprüngliche Fehlermessungen und Grenzen stehen im [Laufbericht](test-coverage/findings.md).
+Die 38 Arbeitspakete besitzen konkrete Implementierungs- und Abnahmebelege.
+Historische Coveragewerte bleiben ihrem damaligen Code zugeordnet und sind
+keine aktuelle Freigabe geänderter Quellen.
+
+Neue Funktionsgruppen: Agent-Dateien/DOCX/PDF (`test_agent_files.py`,
+`test_agent_documents.py`), Google/OAuth/Kalender/Gmail (`test_google_connections.py`,
+`test_agent_calendar.py`, `test_agent_gmail.py`), gemeinsames Tokenkonto und
+Nachmessung (`test_usage_meter.py`, `test_run_usage_repository.py`,
+`test_agent_usage_reconciliation.py`), Antwortreceipts (`test_result_integrity.py`)
+sowie Watch-Evidenz/Outbox (`test_watch_evidence_model.py`,
+`test_watch_review_regressions.py`). DOM-/Browsergegenstücke und Mockgrenzen
+stehen im [Bereichsindex](test-coverage/areas.md).
 
 ## Gemeinsamer Einstieg unter Windows
 
@@ -24,6 +36,7 @@ PowerShell 5.1 oder neuer, aus dem Projektverzeichnis:
 .\dev.ps1 check frontend
 .\dev.ps1 check backend
 .\dev.ps1 check browser
+.\dev.ps1 check rules
 ```
 
 | Ziel | Ablauf |
@@ -31,6 +44,7 @@ PowerShell 5.1 oder neuer, aus dem Projektverzeichnis:
 | `frontend` | `npm test`, danach `npm run build:check`. Ein veralteter Build führt zum Fehler; mit `npm run build` bewusst neu erzeugen. |
 | `backend` | `venv/Scripts/python.exe -m pytest tests -q` mit `UNIT_TEST_MODE=1`; geerbte E2E-Schalter werden für den Lauf entfernt. |
 | `browser` | Voraussetzungen und Build prüfen, dann Firebase `emulators:exec` mit der Playwright-Suite. Die CLI startet und beendet ihren Emulator auch bei fehlgeschlagenen Tests; die Pytest-Fixtures verwalten den App-Server und Browser. |
+| `rules` | Derselbe sichere Emulator-Lebenszyklus, dann der separate Node-Clientrunner für `tests/rules/firestore.rules.test.mjs`; kein Admin-SDK als Zugriffsbeleg. |
 
 Die Frontend-Suite prüft auch die atomare Build-Veröffentlichung, unveränderte
 Vendor-Dateien und die begrenzte Aufbewahrung voriger Bundles in temporären
@@ -63,7 +77,9 @@ Geänderte Test-Anforderungen werden nur gemeldet. Ein laufender Server mit `--r
 gemeldet. Für Browserprüfungen braucht es zusätzlich die unten beschriebenen
 E2E-Abhängigkeiten, Chromium, Firebase CLI und Java 21+ auf `PATH` oder unter
 `JAVA_HOME`. Der erste Emulatorstart kann den von der CLI benötigten Emulator
-herunterladen; Browser-Flows benötigen weiterhin die dokumentierten CDN-Assets.
+herunterladen. Paketinstallation, Chromium und der erste Emulatorstart benötigen
+Netzzugang; marked, DOMPurify und KaTeX werden im Browserlauf aus lokalen
+Vendorassets geladen. Die Browserfixtures ersetzen das Firebase-SDK.
 
 Videoproduktion und ihre Prüfungen liegen separat in
 [sudoleo/consens-video](https://github.com/sudoleo/consens-video).
@@ -137,11 +153,13 @@ Backend-Suite findet dieselben Tests ebenfalls automatisch.
 Die Abhängigkeiten sind nach Zweck getrennt:
 
 - `requirements.txt`: produktive Laufzeit,
-- `requirements-test.txt`: reguläre Unit-/Integrationstests,
+- `requirements-test.txt`: reguläre Unit-/Integrationstests einschließlich
+  `pandas` für den DataFrame-Konvertierungstest des Benchmarks,
 - `requirements-e2e.txt`: zusätzlich Python Playwright und das gepinnte
   `greenlet`,
-- `benchmark/requirements-benchmark.txt`: ausschließlich Offline-Benchmark-
-  Dataset-/Parquet-Abhängigkeiten (`huggingface-hub`, `pandas`, `pyarrow`).
+- `benchmark/requirements-benchmark.txt`: Offline-Benchmark-Dataset-/Parquet-
+  Abhängigkeiten (`huggingface-hub`, `pandas`, `pyarrow`); diese Pakete gehören
+  nicht in die produktive Laufzeit.
 
 Installation der regulären Testumgebung:
 
@@ -361,6 +379,22 @@ mit dem letzten Git-Commit beziehungsweise einer aktuellen Arbeitsbaumänderung.
 
 ## Browser-E2E
 
+Die neuen Google-/Gmail-/Workspace-/Modusselektor-Browserdateien verwenden den
+writerfreien Phase-4-Server mit API-Doubles. Ohne Emulator zum Beispiel:
+
+```powershell
+$env:RUN_E2E = "1"
+$env:UNIT_TEST_MODE = "1"
+venv\Scripts\python.exe -m pytest tests\e2e\test_agent_google_frontend.py tests\e2e\test_agent_workspace_frontend.py tests\e2e\test_run_mode_selector.py -q
+Remove-Item Env:RUN_E2E
+Remove-Item Env:UNIT_TEST_MODE
+```
+
+`test_smoke.py`, `test_agreement_verdict.py` und `test_run_cancel_and_progress.py`
+benötigen dagegen über `app_page` den Emulator. Auch die nativen
+Transaktions-/Repositorydateien und persistierten Browserreisen brauchen ihn.
+Nicht jede E2E-Datei ist ein isolierter Frontendtest. Aktuelle Grenzen: [Laufbericht](test-coverage/findings.md).
+
 `tests/e2e/test_browser_failure_recovery.py` nutzt den writerfreien Phase-4-Server
 mit gemocktem Firebase und APIs. Es prüft lokal ausgelieferte Markdown-/Math-
 Abhängigkeiten bei blockiertem jsDelivr sowie abgelehnte Login-/Vote-/Refresh-
@@ -382,12 +416,55 @@ Remove-Item Env:RUN_E2E
 
 ## CI
 
-Ein allgemeiner GitHub-Actions-Workflow für die reguläre Suite,
-JavaScript-Tests, Frontend-Build und Emulator-E2E-Suite ist nicht vorhanden;
-insbesondere ist `.github/workflows/tests.yml` entfernt. Diese Prüfungen werden
-lokal mit den Befehlen in diesem Dokument ausgeführt.
+[`tests.yml`](../.github/workflows/tests.yml) unterscheidet schnelle automatische
+Prüfungen und bewusst angeforderte vollständige Regressionen:
 
-Die Standalone-Publishertests bilden eine Ausnahme:
+| Anlass | Prüfungen |
+|---|---|
+| Push auf `main`, PR geöffnet/aktualisiert/wieder geöffnet | Python und JavaScript/Build; keine Browser-/Emulator- oder Windows-Suite |
+| PR wechselt von Entwurf zu „Ready for review“ | Alle vier Testgruppen, einschließlich Chromium/Firestore/Clientregeln und Windows-Einstiegen |
+| „Run workflow“ → `quick` (Standard) | Python und JavaScript/Build |
+| „Run workflow“ → einzelne Suite | Nur `backend`, `frontend`, `browser-and-rules` oder `windows-entry-points` |
+| „Run workflow“ → `full` | Alle vier Testgruppen |
+
+Auch weitere Pushes auf einen bereits reviewbereiten PR starten nur die schnellen
+Prüfungen. Vor der Integration nach relevanten Folgeänderungen den vollständigen
+Lauf gezielt erneut anfordern. Automatische Läufe ignorieren Änderungen, die
+ausschließlich unter `docs/` oder in Markdown-Dateien im Repository-Stamm liegen;
+manuelle Läufe bleiben davon unabhängig. Gleichartige überholte Läufe werden
+abgebrochen; schnelle Push-Prüfungen brechen einen angeforderten vollständigen
+oder einzelnen Lauf nicht ab.
+
+Die manuelle Auswahl findet sich unter GitHub Actions → „Regression tests“ →
+„Run workflow“, sobald der Workflow auf dem Default-Branch vorhanden ist.
+Solange er nur im Entwurfs-PR liegt, löst dessen Wechsel zu „Ready for review“
+den vollständigen Lauf aus; lokal bleiben alle `dev.ps1 check`-Befehle verfügbar.
+Die Workflow-Auswahl ändert keine persönlichen GitHub-Mail-Einstellungen und
+unterdrückt keine Fehler: angeforderte Tests bleiben bei Fehlern rot.
+
+Leere Discovery und Fehler schlagen fehl; Ergebnisse/Emulatorlogs werden auch bei Fehlern archiviert.
+Ein vorhandener Workflow allein ist kein bestandener Lauf; die Laufbelege und
+Paketabnahme stehen im Implementierungsbericht.
+
+Für Firebase CLI 13.35.1 **Node 24** verwenden: ihre heutigen transitiven
+Abhängigkeiten können mit älterem Node 18 nicht mehr geladen werden. Java 21
+bleibt Voraussetzung. Nach `npm ci` enthält das Repo auch die gepinnten
+Firebase-Client-/Rules-Testbibliotheken. Bei bereits laufendem Demo-Emulator:
+
+```powershell
+$env:FIRESTORE_EMULATOR_HOST = "127.0.0.1:8085"
+npm run test:rules
+Remove-Item Env:FIRESTORE_EMULATOR_HOST
+```
+
+Der Rules-Harness erlaubt ausschließlich Loopback und `demo-consensio-e2e`,
+seedet und entfernt nur seine eigenen Dokumente und prüft auch eine temporäre
+Regelmutation. [SDK-Verfahren](https://firebase.google.com/docs/rules/unit-tests).
+Lokale Socket-/TLS-Tests (`test_local_transport.py`) benötigen Loopback-Sockets,
+aber keine externen Provider. Wartungsskript-/CLI-Tests sperren Netzwerkzugriffe
+in ihren Subprozessen und verwenden ausschließlich synthetische Daten.
+
+Die separaten Standalone-Publishertests bleiben zusätzlich erhalten:
 [`publisher-tests.yml`](../.github/workflows/publisher-tests.yml) führt sie bei
 Push auf `main`, Pull Requests und manueller Auslösung aus.
 [`publish-consensus.yml`](../.github/workflows/publish-consensus.yml) führt

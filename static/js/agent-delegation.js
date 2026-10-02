@@ -41,6 +41,8 @@
     return id === CHECK_ID ? checkRow(view) : view.agents.get(id);
   }
   function stateLabel(agent) {
+    // Ended mid-answer: its text is kept and shown, marked incomplete.
+    if (agent.kind === "comparison" && agent.partial && ended.has(agent.status)) return "Incomplete";
     if (agent.kind === "comparison" && agent.status === "failed") return "No answer";
     return labels[agent.status] || "Waiting";
   }
@@ -263,7 +265,9 @@
     const header = node("div", "agent-sidebar-header");
     const title = node("h2", "", "Agent activity"); title.id = "agentSidebarTitle";
     const close = node("button", "agent-sidebar-close", "×"); close.type = "button";
-    const stop = node("button", "agent-sidebar-stop", "Stop run"); stop.type = "button";
+    const stop = node("button", "agent-sidebar-stop"); stop.type = "button";
+    stop.append(node("span", "agent-sidebar-stop-glyph"), "Stop run");
+    stop.firstChild.setAttribute("aria-hidden", "true");
     stop.addEventListener("click", async () => {
       const view = current;
       if (!view?.running || uid() !== view.uid) return;
@@ -285,12 +289,22 @@
     });
     close.setAttribute("aria-label", "Close agents sidebar");
     close.addEventListener("click", () => hide(true));
-    header.append(title, stop, close);
-    const usage = node("p", "agent-sidebar-usage");
+    const actions = node("div", "agent-sidebar-actions");
+    actions.append(stop, close);
+    header.append(title, actions);
+    // Run overview: how many calls are through, total usage, and one segment
+    // per row in the Consensus pipeline's language (done, running, out).
+    const overview = node("div", "agent-sidebar-overview");
+    const counts = node("div", "agent-sidebar-counts");
+    const progress = node("span", "agent-sidebar-progress");
+    const usage = node("span", "agent-sidebar-usage");
+    counts.append(progress, usage);
+    const segments = node("div", "agent-sidebar-segments"); segments.setAttribute("aria-hidden", "true");
+    overview.append(counts, segments);
     const status = node("p", "agent-sidebar-status"); status.setAttribute("role", "status");
     const list = node("div", "agent-session-list");
     sidebar._list = list;
-    sidebar.append(header, usage, status, list);
+    sidebar.append(header, overview, status, list);
     sidebar.setAttribute('role', 'complementary');
     sidebar.addEventListener("keydown", event => {
       if (event.key === "Escape") { event.preventDefault(); hide(true); return; }
@@ -368,8 +382,6 @@
     }
     const signature = JSON.stringify([detail.assignment, [...detail.messages.keys()], detail.error, detail.hasMore, detail.loading, agent.sources, agent.result_truncated, agent.progress_text]);
     if (row.body.dataset.signature === signature) return;
-    const scroll = row.body.scrollTop;
-    const follow = row.body.scrollHeight - scroll - row.body.clientHeight < 40;
     row.body.dataset.signature = signature;
     row.body.replaceChildren();
     if (agent.progress_text) {
@@ -397,6 +409,7 @@
       if (agent.kind === "comparison") {
         if (message.kind === "failure") { row.body.append(node("p", "agent-judge-note", message.text)); continue; }
         if (message.kind === "result") item.append(node("h3", "", "Answer"));
+        if (message.kind === "partial") item.append(node("h3", "", "Incomplete answer · not used"));
       } else item.append(node("h3", "", `${from} → ${to} · ${message.kind}`));
       const text = node("div", "consensus-answer-body agent-message-body");
       if (window.injectMarkdown) window.injectMarkdown(text, message.text, agent.sources || []);
@@ -404,7 +417,7 @@
       item.append(text);
       row.body.append(item);
     }
-    if (agent.result_truncated) row.body.append(node("p", "", "Result shortened to the configured limit."));
+    if (agent.result_truncated) row.body.append(node("p", "agent-judge-note", "Result shortened to the configured limit."));
     for (const source of (agent.sources || []).slice(0, 5)) {
       try {
         const url = new URL(source.url);
@@ -421,7 +434,38 @@
       more.addEventListener("click", () => loadDetail(view, agent.id, true));
       row.body.append(more);
     }
-    row.body.scrollTop = follow ? row.body.scrollHeight : scroll;
+  }
+  const settled = new Set(["completed", ...ended]);
+  function renderOverview(view, rows) {
+    const done = rows.filter(agent => settled.has(agent.status)).length;
+    const out = rows.filter(agent => ended.has(agent.status)).length;
+    setText(sidebar.querySelector(".agent-sidebar-progress"),
+      `${done} of ${rows.length} done${out ? ` · ${out} without result` : ""}`);
+    const segments = sidebar.querySelector(".agent-sidebar-segments");
+    while (segments.children.length > rows.length) segments.lastElementChild.remove();
+    while (segments.children.length < rows.length) segments.append(node("i"));
+    rows.forEach((agent, i) => {
+      const segment = segments.children[i];
+      const state = agent.status === "completed" ? "done" : ended.has(agent.status) ? "out"
+        : view.running && activeStates.has(agent.status) ? "busy" : "idle";
+      if (segment.dataset.state !== state) segment.dataset.state = state;
+    });
+  }
+  function reveal(root) {
+    const list = sidebar._list;
+    // Before layout settles the detail may still be a skeleton; the frame
+    // after it has its first height.
+    (window.requestAnimationFrame || setTimeout)(() => {
+      if (!root.isConnected || !root.open || !list.scrollBy) return;
+      const top = root.getBoundingClientRect().top - list.getBoundingClientRect().top;
+      const bottom = top + root.offsetHeight;
+      const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+      // Taller than the list: start of the row at the top. Otherwise the least
+      // movement that shows the whole row.
+      const delta = top < 0 || root.offsetHeight > list.clientHeight ? top
+        : bottom > list.clientHeight ? bottom - list.clientHeight : 0;
+      if (Math.abs(delta) > 1) list.scrollBy({ top: delta, behavior: reduce ? "auto" : "smooth" });
+    });
   }
   function render() {
     if (!window.document?.body) return;
@@ -495,11 +539,12 @@
     document.body.classList.toggle("agent-sidebar-open", !sidebar.hidden);
     document.body.classList.toggle("agent-sidebar-sheet", sheet);
     const usageEl = sidebar.querySelector(".agent-sidebar-usage");
-    setText(usageEl, `Total run · ${tokens(view.usage, view.running)}`);
-    setTitle(usageEl, tokenDescription(view.usage));
+    setText(usageEl, tokens(view.usage, view.running));
+    setTitle(usageEl, `Total run. ${tokenDescription(view.usage)}`);
     sidebar.querySelector(".agent-sidebar-stop").hidden = !view.running;
     setText(sidebar.querySelector(".agent-sidebar-status"), view.error || (view.settling ? "Finishing pending model calls…" : ""));
     const visible = rowsFor(view);
+    renderOverview(view, visible);
     for (const [id, row] of sidebar._rows) {
       if (!visible.some(agent => agent.id === id)) { row.root.remove(); sidebar._rows.delete(id); }
     }
@@ -521,7 +566,9 @@
         const track = node('span', 'run-model-track agent-session-track');
         track.setAttribute('aria-hidden', 'true');
         track.append(node('i'));
-        const body = node("div", "agent-session-detail"); body.tabIndex = 0;
+        // The detail flows inside the one scrolling list; a second scroll
+        // area beside it made two scrollbars and trapped the wheel.
+        const body = node("div", "agent-session-detail");
         info.append(heading, meta, track); summary.append(mark(agent), info); root.append(summary, body);
         summary.setAttribute('aria-describedby', state.id);
         root.addEventListener("toggle", () => {
@@ -530,6 +577,9 @@
             view.expanded.add(agent.id);
             if (agent.kind !== "check") loadDetail(view, agent.id);
             renderDetail(row, view, findRow(view, agent.id));
+            // Opened by the reader (click, key or a model icon), not restored:
+            // bring its start into view. The heading then sticks while reading.
+            if (document.activeElement === summary) reveal(root);
           }
           else view.expanded.delete(agent.id);
           prefs(view);

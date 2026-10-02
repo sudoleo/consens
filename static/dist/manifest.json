@@ -1,5 +1,5 @@
 {
-  "sources": "4847cc1f111a",
+  "sources": "7e3ebf44aecf",
   "inputs": [
     "package-lock.json",
     "package.json",
@@ -38,6 +38,7 @@
     "static/css/public-pages.css",
     "static/css/public-shell.css",
     "static/css/public-tokens.css",
+    "static/css/send-glow.css",
     "static/css/shell.css",
     "static/css/skeleton.css",
     "static/css/source-verification.css",
@@ -67,6 +68,7 @@
     "static/js/bundles.json",
     "static/js/chat-scroll.js",
     "static/js/chat-session.js",
+    "static/js/composer-autosize.js",
     "static/js/composer-collapse.js",
     "static/js/composer-quote.js",
     "static/js/consensus-actions.js",
@@ -93,9 +95,11 @@
     "static/js/sidebar-quota.js",
     "static/js/source-verification.js",
     "static/js/sources.js",
+    "static/js/token-budget.js",
     "static/js/usage-limit.js",
     "static/js/user-memory.js",
     "static/js/user-tier.js",
+    "static/js/watch-dashboard.js",
     "static/js/watch-state.js",
     "static/js/watch.js",
     "static/style.css",
@@ -171,47 +175,49 @@
   "scripts": [
     {
       "name": "head",
-      "src": "/static/dist/head.fadc4d2b6d78.js",
+      "src": "/static/dist/head.5782a8b77cb8.js",
       "module": false,
       "defer": false
     },
     {
       "name": "auth",
-      "src": "/static/dist/auth.5e487d1e2570.js",
+      "src": "/static/dist/auth.5c8ab3c866cb.js",
       "module": false,
       "defer": true
     },
     {
       "name": "firebase",
-      "src": "/static/dist/firebase.7720e6a47517.js",
+      "src": "/static/dist/firebase.eacf3eaaafe0.js",
       "module": true,
       "defer": false
     },
     {
       "name": "demo",
-      "src": "/static/dist/demo.50c2b785aabd.js",
+      "src": "/static/dist/demo.e9726ac1eea5.js",
       "module": true,
       "defer": false
     },
     {
       "name": "app",
-      "src": "/static/dist/app.11fd100e83ef.js",
+      "src": "/static/dist/app.658434cc4156.js",
       "module": false,
       "defer": true
     }
   ],
   "styles": {
-    "app": "/static/dist/app.559bafc03a8b.css"
+    "app": "/static/dist/app.0924598e6d0c.css"
   },
   "previous_assets": [
-    "app.b2c70faef4d5.css",
-    "app.6595de711ace.css",
-    "app.0e6b21d3d4ea.js",
-    "app.2a91fb2af9dd.js",
-    "demo.639b5a1996da.js",
-    "firebase.325b77abcde6.js",
-    "firebase.5cc9d6fa1098.js",
-    "head.dcc72251ba36.js",
-    "head.a7a5f459de29.js"
+    "app.fda3ca16332d.css",
+    "app.cb2a5f00060e.css",
+    "app.d04936aabb3c.js",
+    "app.af56f79d8e14.js",
+    "auth.5e487d1e2570.js",
+    "demo.37bdbf8a4b70.js",
+    "demo.50c2b785aabd.js",
+    "firebase.dfaa008e9688.js",
+    "firebase.7720e6a47517.js",
+    "head.fadc4d2b6d78.js",
+    "head.dcc72251ba36.js"
   ]
 }

@@ -3033,6 +3033,48 @@ canvas {
 .watch-drift-metrics dt { color: var(--muted); font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); }
 .watch-drift-metrics dd { margin: 0; color: var(--text); font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); }
 .watch-drift-metrics dd span { color: var(--muted); font-weight: var(--font-weight-medium); }
+/* Evidence model (docs/watch-evidence-model.md): the goal a watch waits for,
+   the sources behind a change, and the newest check when its answer does not
+   stand. */
+.watch-goal-banner {
+  margin: 18px 0 0;
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  background: var(--raise);
+}
+.watch-goal-banner.is-resolved { background: var(--agree-bg); }
+.watch-goal-banner .eyebrow { margin: 0; }
+.watch-goal-banner.is-resolved .eyebrow { color: var(--agree); }
+.watch-goal-banner-goal { display: block; margin-top: 4px; color: var(--heading); font-size: var(--font-size-base); }
+.watch-goal-banner-reason { margin: 6px 0 0; color: var(--text); font-size: var(--font-size-sm); line-height: var(--line-height-reading); }
+.watch-evidence-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 0; padding: 0; list-style: none; }
+.watch-evidence-list a {
+  display: inline-block;
+  max-width: 100%;
+  padding: 4px 10px;
+  border-radius: var(--radius-xs);
+  background: var(--well);
+  box-shadow: inset 0 0 0 1px var(--line-soft);
+  color: var(--heading);
+  font-size: var(--font-size-xs);
+  overflow: hidden;
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.watch-evidence-list a:hover { box-shadow: inset 0 0 0 1px var(--line); }
+.watch-pending-check {
+  max-width: 70ch;
+  margin: 12px 0 0;
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--raise);
+  color: var(--muted);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-ui);
+}
+.watch-pending-check strong { color: var(--heading); }
+
 .watch-drift-baseline { max-width: 78ch; margin: 10px 0 0; color: var(--muted); font-size: var(--font-size-xs); line-height: var(--line-height-ui); }
 .watch-drift-baseline strong { color: var(--heading); }
 

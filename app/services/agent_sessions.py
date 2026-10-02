@@ -5,7 +5,6 @@ There is deliberately no resume path for paid steps after process loss.
 """
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
-from threading import RLock
 
 from firebase_admin import firestore
 
@@ -73,14 +72,11 @@ def compact_root(patch, data):
 def _serialized_size(value):
     import json
     return len(json.dumps(value, default=str, ensure_ascii=False).encode("utf-8"))
-# Serialize short bookkeeping transactions per account inside each process.
-# Firestore still fences concurrent processes; providers remain fully parallel.
-_ACCOUNT_WRITES = tuple(RLock() for _ in range(128))
-
-
 class AgentSessionStore:
     def _agent_transaction(self, uid, operation):
-        with _ACCOUNT_WRITES[hash(uid) % len(_ACCOUNT_WRITES)]:
+        # Shared with the pipeline's usage transactions: both write the same
+        # token-account document.
+        with agent_quota.account_lock(uid):
             return self._transaction(operation)
 
     def agent_ref(self, uid, chat_id, turn_id, agent_id):
@@ -97,6 +93,7 @@ class AgentSessionStore:
         agent_id = step.split(":")[1] if step.startswith("agent:") else "orchestrator"
         index = int(step.split(":")[-1])
         budget_config = agent_budget_config.get_config(self.db)
+        token_limit = agent_budget_config.limit_for(budget_config, agent_quota.account_tier(uid))
 
         def operation(tx):
             persistence_guard.ensure_account_write_allowed(uid=uid, db=self.db, transaction=tx)
@@ -158,12 +155,12 @@ class AgentSessionStore:
                 previous_daily_ref = agent_quota.quota_ref(self.db, uid, data["quota_day"])
                 previous_daily = previous_daily_ref.get(transaction=tx).to_dict() or {}
                 previous_daily = agent_quota.release(previous_daily, protected)
-                daily = agent_quota.reserve(daily, protected, limit=budget_config['daily_token_limit'])
+                daily = agent_quota.reserve(daily, protected, limit=token_limit)
             can_spend = agent_id == "orchestrator" or (agent and (agent.to_dict() or {}).get("kind") == "judge")
             spend = min(protected, tokens) if can_spend else 0
             cost_hold = data.get("review_cost_hold", 0)
             cost_spend = min(cost_hold, cost) if can_spend else 0
-            daily = agent_quota.reserve(daily, tokens - spend, limit=budget_config['daily_token_limit'])
+            daily = agent_quota.reserve(daily, tokens - spend, limit=token_limit)
             if not limits.get("account_budget_only") and (len(states) + data.get("compacted_steps", 0) >= limits["max_calls"] or data["reserved_tokens"] + tokens > limits["max_tokens"]
                     or data["reserved_cost"] + cost + cost_hold - cost_spend > limits["max_cost_nano_usd"]):
                 raise AnalysisBudgetExceeded("The shared agent budget was reached.")
@@ -206,6 +203,7 @@ class AgentSessionStore:
         """Atomically protect synthesis/judges from all other concurrent runs."""
         ref = self.receipt_ref(uid, chat_id, turn_id)
         budget_config = agent_budget_config.get_config(self.db)
+        token_limit = agent_budget_config.limit_for(budget_config, agent_quota.account_tier(uid))
         def operation(tx):
             persistence_guard.ensure_account_write_allowed(uid=uid, db=self.db, transaction=tx)
             root = ref.get(transaction=tx).to_dict() or {}
@@ -223,7 +221,7 @@ class AgentSessionStore:
                 extra = max(tokens, protected)
             else:
                 extra = max(0, tokens - protected)
-            daily = agent_quota.reserve(daily, extra, limit=budget_config['daily_token_limit'])
+            daily = agent_quota.reserve(daily, extra, limit=token_limit)
             protected_cost = max(cost, root.get("review_cost_hold", 0))
             if not root["policy"].get("account_budget_only") and root["reserved_cost"] + protected_cost > root["policy"]["max_cost_nano_usd"]:
                 raise AnalysisBudgetExceeded("Not enough cost budget for synthesis and review")

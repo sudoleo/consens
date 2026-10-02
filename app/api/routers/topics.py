@@ -18,7 +18,7 @@ from app.core import seo_entity
 from app.core.site import SITE_URL
 from app.core.observability import safe_exception
 from app.core.rate_limit import limiter
-from app.core.security import extract_id_token, is_user_admin, verify_user_token
+from app.core.security import TierStatusUnavailable, extract_id_token, is_user_admin, verify_user_token
 from app.services import (
     claim_ledger, drift_signal, favicons, mailer, topic_finding, topic_runner,
     topics,
@@ -83,6 +83,7 @@ def _topic_history_view(runs_raw, selected_version: int):
             "changed": str(run.get("change_type") or "stable") != "stable",
             "change_summary": str(run.get("change_summary") or ""),
             "severity": "major" if run.get("change_type") == "major" else "",
+            "cause": run.get("cause"),
             "opinion_map": opinion_map if isinstance(opinion_map, dict) and opinion_map else None,
             "run_id": run["id"],
             "has_snapshot": True,
@@ -139,10 +140,17 @@ def _require_admin(request: Request, data: Optional[dict] = None) -> str:
     if not token:
         raise HTTPException(status_code=401, detail="Authentication required")
     try:
-        uid = verify_user_token(token)
+        uid = verify_user_token(token, check_revoked=True)
     except Exception as exc:
         raise HTTPException(status_code=401, detail="Authentication failed") from exc
-    if not is_user_admin(uid):
+    try:
+        is_admin = is_user_admin(uid)
+    except TierStatusUnavailable:
+        raise HTTPException(
+            status_code=503,
+            detail="Account role is temporarily unavailable. Please retry.",
+        ) from None
+    if not is_admin:
         raise HTTPException(status_code=403, detail="Admin privileges required")
     return uid
 
@@ -348,15 +356,19 @@ async def topic_page(
 
     # The timeline is the newest page of the record; it is navigation, not
     # the lookup for an explicit version link.
-    recent_raw = await asyncio.to_thread(
+    recent_raw = drift_signal.annotate_runs(await asyncio.to_thread(
         topics.list_runs, topic["id"], max_items=TOPIC_PAGE_RUNS
-    )
-    wanted = version or topic["latest_run_id"]
+    ))
+    # Without an explicit version the page shows the answer that stands, not
+    # the newest run: a run whose search missed the evidence does not replace
+    # it (docs/watch-evidence-model.md).
+    standing_id = str(topic.get("accepted_run_id") or topic["latest_run_id"])
+    wanted = version or standing_id
     selected_raw = next((run for run in recent_raw if run["id"] == wanted), None)
-    if selected_raw is None and version and re.fullmatch(r"[A-Za-z0-9]{1,40}", version):
+    if selected_raw is None and re.fullmatch(r"[A-Za-z0-9]{1,40}", wanted):
         # An older, still stored version is loaded directly under the topic
         # that was already resolved above, so a link never dies of old age.
-        selected_raw = await asyncio.to_thread(topics.get_run, topic["id"], version)
+        selected_raw = await asyncio.to_thread(topics.get_run, topic["id"], wanted)
     if not selected_raw:
         raise HTTPException(status_code=404, detail="Topic version not found")
     if any(run["id"] == selected_raw["id"] for run in recent_raw):
@@ -365,10 +377,10 @@ async def topic_page(
             if int(run.get("version") or 0) <= int(selected_raw.get("version") or 0)
         ]
     else:
-        record_raw = await asyncio.to_thread(
+        record_raw = drift_signal.annotate_runs(await asyncio.to_thread(
             topics.list_runs_until, topic["id"], selected_raw,
             max_items=TOPIC_PAGE_RUNS,
-        )
+        ))
     preferred_domains = (topic.get("source_rules") or {}).get("preferred_domains") or []
 
     def public_runs(raw_runs):
@@ -398,8 +410,14 @@ async def topic_page(
     if selected is None:
         selected = public_runs([selected_raw])[0]
         record_views.append(selected)
-    current = selected["id"] == topic["latest_run_id"]
+    current = selected["id"] == standing_id
     runs_desc = list(reversed(runs))
+    # The newest check, when its answer does not stand. The page names it
+    # above the standing answer instead of silently showing an older one.
+    pending_check = (
+        runs[-1] if current and runs and runs[-1]["id"] != standing_id
+        and not runs[-1].get("accepted") else None
+    )
     # Everything that describes the record is built from the runs up to the
     # selected one: an older version has to show what was known then, not
     # today's picture with an older answer above it.
@@ -519,6 +537,8 @@ async def topic_page(
         "robots_meta": robots,
         "jsonld": seo_entity.dumps(seo_entity.page_graph(jsonld)),
         "is_current": current,
+        "pending_check": pending_check,
+        "signal_notes": claim_ledger.SIGNAL_NOTES,
     })
     response.headers["X-Robots-Tag"] = robots
     # A stored version never changes, but the Topic can be archived and then
@@ -743,12 +763,10 @@ async def admin_create_topic_run(
         topic_before = await asyncio.to_thread(topics.get_topic, topic_id)
         if not topic_before:
             raise topics.TopicError("not_found", "Topic not found.")
-        old_score = topic_before.get("latest_agreement_score")
-        # Same bar as the Watch pages: a rewritten qualification ("minor") is
-        # not what a follower subscribed to, and it is not what the page marks
-        # as movement either. Follower items commit with the run (R17).
+        # Same bar as the Watch pages: only what moved on evidence reaches a
+        # follower (docs/watch-evidence-model.md). Items commit with the run (R17).
         staged = await asyncio.to_thread(
-            topic_runner.topic_notification_builder, topic_id, require_material=True,
+            topic_runner.topic_notification_builder, topic_id,
         )
         if str(payload.get("consensus_md") or "").strip():
             # Explicit legacy/editorial import. Normal admin runs send an empty
@@ -766,11 +784,7 @@ async def admin_create_topic_run(
                     notifications=staged,
                 )
             )
-        is_material = drift_signal.is_material(
-            run["change_type"] in {"minor", "major"}, run["change_type"],
-            run.get("agreement_score"),
-            [old_score] if isinstance(old_score, (int, float)) else [],
-        )
+        is_material = (run.get("outcome") or {}).get("signal") == drift_signal.SIGNAL_MOVED
         should_notify = is_material and mailer.is_configured()
         if staged.ids:
             background_tasks.add_task(_deliver_topic_notifications, list(staged.ids))

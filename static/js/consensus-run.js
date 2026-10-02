@@ -13,7 +13,6 @@
 //   - window.App.consensusLifecycle, window.App.trackAppEvent
 //   - window.createStreamRenderer / streamSSERequest / injectMarkdown
 //   - window.lastQuestion (also written by query-send in index.html)
-//   - window.currentMaxLimit / window.currentDeepLimit (usage mirrors)
 //   - window.saveBookmarkConsensus / window.recordModelVote (firebase.js)
 //   - window.auth (firebase.js)
 // =====================================================================
@@ -821,18 +820,8 @@
     const status = data?.usage_run_status || detail.usage_run_status;
     if (status && context.usage) context.usage.status = status;
     if (!window.App.runRegistry.isAuthCurrent(context)) return;
-    const usageView = window.App.runRegistry.reconcileUsageSnapshot?.(context, {
-      remaining: data?.free_usage_remaining ?? detail.free_usage_remaining,
-      deepRemaining: data?.deep_remaining ?? detail.deep_remaining,
-      totalLimit: data?.limit ?? detail.limit ?? window.currentMaxLimit,
-      deepLimit: data?.deep_limit ?? detail.deep_limit ?? window.currentDeepLimit
-    }) || {
-      remaining: data?.free_usage_remaining ?? detail.free_usage_remaining,
-      deepRemaining: data?.deep_remaining ?? detail.deep_remaining,
-      totalLimit: data?.limit ?? detail.limit ?? window.currentMaxLimit,
-      deepLimit: data?.deep_limit ?? detail.deep_limit ?? window.currentDeepLimit
-    };
-    window.App.renderUsageDisplay?.(usageView);
+    // The booked account rides on the final event (or a 403 detail).
+    window.App.renderUsageDisplay?.(data?.token_budget ? data : detail, context);
   }
 
   function contextCitationMeta(context) {
@@ -1647,22 +1636,8 @@
         return;
       }
 
-      // Aktualisiere Free Requests, falls vorhanden (Deep Think nicht benötigt)
-      const freeUsageRemaining =
-        data.free_usage_remaining !== undefined
-          ? data.free_usage_remaining
-          : consensusErrorDetail?.free_usage_remaining;
-      const deepRemaining =
-        data.deep_remaining !== undefined
-          ? data.deep_remaining
-          : consensusErrorDetail?.deep_remaining;
-
-      window.App.renderUsageDisplay({
-        remaining: freeUsageRemaining,
-        deepRemaining,
-        totalLimit: data?.limit ?? consensusErrorDetail?.limit ?? window.currentMaxLimit,
-        deepLimit: data?.deep_limit ?? consensusErrorDetail?.deep_limit ?? window.currentDeepLimit
-      });
+      // Das gebuchte Tokenkonto steht im Ergebnis oder im Fehler-Detail.
+      window.App.renderUsageDisplay(data?.token_budget ? data : (consensusErrorDetail || {}));
 
       const chatDisposition = data?.chat_turn_state
         ? data

@@ -1,0 +1,3929 @@
+{
+  "date": "2026-10-02",
+  "source_commit": "ffaca3df7c8bbb02d850fb8f31d90107f26e9293",
+  "snapshot_source_commit": "ffaca3df7c8bbb02d850fb8f31d90107f26e9293",
+  "result": {
+    "numTotalTestSuites": 173,
+    "numPassedTestSuites": 173,
+    "numFailedTestSuites": 0,
+    "numPendingTestSuites": 0,
+    "numTotalTests": 705,
+    "numPassedTests": 705,
+    "numFailedTests": 0,
+    "numPendingTests": 0,
+    "numTodoTests": 0,
+    "success": true
+  },
+  "files": [
+    {
+      "path": "tests/js/account-tier-mark.test.mjs",
+      "cases": [
+        {
+          "id": " account tier mark marks Pro in gold and names it in the popup",
+          "status": "passed",
+          "report_ordinal": 1
+        },
+        {
+          "id": " account tier mark marks Plus without gold and names it too",
+          "status": "passed",
+          "report_ordinal": 2
+        },
+        {
+          "id": " account tier mark leaves Free unmarked",
+          "status": "passed",
+          "report_ordinal": 3
+        },
+        {
+          "id": " account tier mark keeps the mark when a Free run is opened",
+          "status": "passed",
+          "report_ordinal": 4
+        },
+        {
+          "id": " account tier mark re-applies the mark after the account footer is re-rendered",
+          "status": "passed",
+          "report_ordinal": 5
+        }
+      ]
+    },
+    {
+      "path": "tests/js/admin-agent-budget.test.mjs",
+      "cases": [
+        {
+          "id": " renders one row per tier and saves limits and run estimates apart from the global reset",
+          "status": "passed",
+          "report_ordinal": 1
+        },
+        {
+          "id": " preserves the draft on failure and ignores an old account response",
+          "status": "passed",
+          "report_ordinal": 2
+        }
+      ]
+    },
+    {
+      "path": "tests/js/admin-api.test.mjs",
+      "cases": [
+        {
+          "id": " Admin HTTP error contracts unpacks only allowed strings from {\"error\":{\"error_code\":\"not_found\",\"message\":\"No account found.\"}}",
+          "status": "passed",
+          "report_ordinal": 1
+        },
+        {
+          "id": " Admin HTTP error contracts unpacks only allowed strings from {\"detail\":{\"error_code\":\"conflict\",\"message\":\"Configuration changed in another session.\"}}",
+          "status": "passed",
+          "report_ordinal": 2
+        },
+        {
+          "id": " Admin HTTP error contracts unpacks only allowed strings from {\"error\":\"Admin privileges required\"}",
+          "status": "passed",
+          "report_ordinal": 3
+        },
+        {
+          "id": " Admin HTTP error contracts unpacks only allowed strings from {\"detail\":\"Not found\"}",
+          "status": "passed",
+          "report_ordinal": 4
+        },
+        {
+          "id": " Admin HTTP error contracts unpacks only allowed strings from {\"detail\":[{\"msg\":\"bad value\",\"input\":\"private-submitted-text\"}]}",
+          "status": "passed",
+          "report_ordinal": 5
+        },
+        {
+          "id": " Admin HTTP error contracts unpacks only allowed strings from {\"error\":{\"message\":{\"raw\":\"private-submitted-text\"}}}",
+          "status": "passed",
+          "report_ordinal": 6
+        },
+        {
+          "id": " Admin HTTP error contracts unpacks only allowed strings from null",
+          "status": "passed",
+          "report_ordinal": 7
+        },
+        {
+          "id": " Admin HTTP error contracts preserves non-JSON status and never retries a write",
+          "status": "passed",
+          "report_ordinal": 8
+        },
+        {
+          "id": " Admin HTTP error contracts does not request when logged out and returns a successful compact response",
+          "status": "passed",
+          "report_ordinal": 9
+        }
+      ]
+    },
+    {
+      "path": "tests/js/admin-benchmark.test.mjs",
+      "cases": [
+        {
+          "id": " Benchmark compact report viewer renders compact data, safely quotes labels and excludes raw prompts/answers",
+          "status": "passed",
+          "report_ordinal": 1
+        },
+        {
+          "id": " Benchmark compact report viewer ignores an older selection response (success=true)",
+          "status": "passed",
+          "report_ordinal": 2
+        },
+        {
+          "id": " Benchmark compact report viewer ignores an older selection response (success=false)",
+          "status": "passed",
+          "report_ordinal": 3
+        },
+        {
+          "id": " Benchmark compact report viewer clears old data for a failed or mismatched selection: 404",
+          "status": "passed",
+          "report_ordinal": 4
+        },
+        {
+          "id": " Benchmark compact report viewer clears old data for a failed or mismatched selection: 403",
+          "status": "passed",
+          "report_ordinal": 5
+        },
+        {
+          "id": " Benchmark compact report viewer clears old data for a failed or mismatched selection: wrong-id",
+          "status": "passed",
+          "report_ordinal": 6
+        },
+        {
+          "id": " Benchmark compact report viewer invalidates pending detail when refresh finds no runs",
+          "status": "passed",
+          "report_ordinal": 7
+        }
+      ]
+    },
+    {
+      "path": "tests/js/admin-prompt-config.test.mjs",
+      "cases": [
+        {
+          "id": " Admin prompt configuration shows the real main error envelope while retaining a conflicting draft without a second write",
+          "status": "passed",
+          "report_ordinal": 1
+        },
+        {
+          "id": " Admin prompt configuration hides retired chat caps while preserving legacy values when saving current settings",
+          "status": "passed",
+          "report_ordinal": 2
+        },
+        {
+          "id": " Admin prompt configuration loads, edits, saves exactly one config with its revision, and restores defaults as a draft",
+          "status": "passed",
+          "report_ordinal": 3
+        },
+        {
+          "id": " Admin prompt configuration keeps the draft after conflict or failure and allows explicit reload",
+          "status": "passed",
+          "report_ordinal": 4
+        },
+        {
+          "id": " Admin prompt configuration does not enable saving after a failed load or apply a stale login response",
+          "status": "passed",
+          "report_ordinal": 5
+        },
+        {
+          "id": " Admin prompt configuration opens a collapsed editor when its required prompt is empty",
+          "status": "passed",
+          "report_ordinal": 6
+        },
+        {
+          "id": " Central default and personal Consensus instructions lets the server choose the central default for null",
+          "status": "passed",
+          "report_ordinal": 7
+        },
+        {
+          "id": " Central default and personal Consensus instructions lets the server choose the central default for ",
+          "status": "passed",
+          "report_ordinal": 8
+        },
+        {
+          "id": " Central default and personal Consensus instructions lets the server choose the central default for Please respond briefly and precisely, focusing only on the essentials.",
+          "status": "passed",
+          "report_ordinal": 9
+        },
+        {
+          "id": " Central default and personal Consensus instructions lets the server choose the central default for Please answer thoroughly and precisely, explaining your reasoning and covering the relevant details. Do not oversimplify. Do not ask any follow-up or clarifying questions; answer directly with the information available.",
+          "status": "passed",
+          "report_ordinal": 10
+        },
+        {
+          "id": " Central default and personal Consensus instructions preserves an explicitly customized personal prompt",
+          "status": "passed",
+          "report_ordinal": 11
+        }
+      ]
+    },
+    {
+      "path": "tests/js/admin-reasoning-policy.test.mjs",
+      "cases": [
+        {
+          "id": " Admin reasoning policy previews savings, preserves protected models and serializes a quality exception",
+          "status": "passed",
+          "report_ordinal": 1
+        },
+        {
+          "id": " Admin reasoning policy changing the preview scope does not dirty the saved configuration",
+          "status": "passed",
+          "report_ordinal": 2
+        }
+      ]
+    },
+    {
+      "path": "tests/js/admin-source-model.test.mjs",
+      "cases": [
+        {
+          "id": " Admin source-check model shows the Gemini default and renders model labels as text",
+          "status": "passed",
+          "report_ordinal": 1
+        },
+        {
+          "id": " Admin source-check model keeps a draft choice during rerenders and discards it when saved data reloads",
+          "status": "passed",
+          "report_ordinal": 2
+        },
+        {
+          "id": " Admin source-check model defaults fallback to Disabled and prevents selecting the primary model twice",
+          "status": "passed",
+          "report_ordinal": 3
+        },
+        {
+          "id": " Admin source-check model preserves a Disabled draft instead of restoring a previously saved fallback",
+          "status": "passed",
+          "report_ordinal": 4
+        },
+        {
+          "id": " Admin source-check model sends the chosen source model through the existing admin save request",
+          "status": "passed",
+          "report_ordinal": 5
+        }
+      ]
+    },
+    {
+      "path": "tests/js/admin-topic-editor.test.mjs",
+      "cases": [
+        {
+          "id": " admin Topic editor never saves the A form under B after B failed to load",
+          "status": "passed",
+          "report_ordinal": 1
+        },
+        {
+          "id": " admin Topic editor drops a slow A answer that arrives after B was selected",
+          "status": "passed",
+          "report_ordinal": 2
+        },
+        {
+          "id": " admin Topic editor an account change invalidates the editor and any open request",
+          "status": "passed",
+          "report_ordinal": 3
+        },
+        {
+          "id": " admin Topic editor keeps saving a new Topic and a loaded Topic working",
+          "status": "passed",
+          "report_ordinal": 4
+        }
+      ]
+    },
+    {
+      "path": "tests/js/admin-watch-effective-run.test.mjs",
+      "cases": [
+        {
+          "id": " watch model configuration names every provider the next run will really use",
+          "status": "passed",
+          "report_ordinal": 1
+        },
+        {
+          "id": " watch model configuration names the skipped provider when the server has no credential for it",
+          "status": "passed",
+          "report_ordinal": 2
+        },
+        {
+          "id": " watch model configuration flags a Free tier pick that is locked to Pro instead of dropping it silently",
+          "status": "passed",
+          "report_ordinal": 3
+        },
+        {
+          "id": " watch model configuration claims nothing while the server reports no credential state at all",
+          "status": "passed",
+          "report_ordinal": 4
+        }
+      ]
+    },
+    {
+      "path": "tests/js/agent-answer-actions.test.mjs",
+      "cases": [
+        {
+          "id": " Agent answer actions copies only the canonical answer and keeps controls stable across projections",
+          "status": "passed",
+          "report_ordinal": 1
+        },
+        {
+          "id": " Agent answer actions hides incomplete streams, preserves partial answers after stop and separates archived turns",
+          "status": "passed",
+          "report_ordinal": 2
+        },
+        {
+          "id": " Agent answer actions does not apply late clipboard feedback to a different answer and allows retry after denial",
+          "status": "passed",
+          "report_ordinal": 3
+        },
+        {
+          "id": " Agent answer actions checks fallback clipboard success and returns keyboard focus",
+          "status": "passed",
+          "report_ordinal": 4
+        }
+      ]
+    },
+    {
+      "path": "tests/js/agent-chat.test.mjs",
+      "cases": [
+        {
+          "id": " single-model agent chat blocks sending during catalog loading/failure and when every model is unavailable",
+          "status": "passed",
+          "report_ordinal": 1
+        },
+        {
+          "id": " single-model agent chat restores an unsent draft without replacing newer composer ownership: empty",
+          "status": "passed",
+          "report_ordinal": 2
+        },
+        {
+          "id": " single-model agent chat restores an unsent draft without replacing newer composer ownership: new draft",
+          "status": "passed",
+          "report_ordinal": 3
+        },
+        {
+          "id": " single-model agent chat restores an unsent draft without replacing newer composer ownership: new quote",
+          "status": "passed",
+          "report_ordinal": 4
+        },
+        {
+          "id": " single-model agent chat restores an unsent draft without replacing newer composer ownership: different chat",
+          "status": "passed",
+          "report_ordinal": 5
+        },
+        {
+          "id": " single-model agent chat restores an unsent draft without replacing newer composer ownership: different account",
+          "status": "passed",
+          "report_ordinal": 6
+        },
+        {
+          "id": " single-model agent chat does not restore an already dispatched request as an unsent draft",
+          "status": "passed",
+          "report_ordinal": 7
+        },
+        {
+          "id": " single-model agent chat validates 0 comparison models before clearing the draft or creating a chat",
+          "status": "passed",
+          "report_ordinal": 8
+        },
+        {
+          "id": " single-model agent chat validates 1 comparison models before clearing the draft or creating a chat",
+          "status": "passed",
+          "report_ordinal": 9
+        },
+        {
+          "id": " single-model agent chat validates 2 comparison models before clearing the draft or creating a chat",
+          "status": "passed",
+          "report_ordinal": 10
+        },
+        {
+          "id": " single-model agent chat validates 6 comparison models before clearing the draft or creating a chat",
+          "status": "passed",
+          "report_ordinal": 11
+        },
+        {
+          "id": " single-model agent chat validates 7 comparison models before clearing the draft or creating a chat",
+          "status": "passed",
+          "report_ordinal": 12
+        },
+        {
+          "id": " single-model agent chat keeps unresolved admin models visible and disabled, and repairs a saved unavailable selection",
+          "status": "passed",
+          "report_ordinal": 13
+        },
+        {
+          "id": " single-model agent chat groups chat models by provider, supports keyboard navigation and keeps reasoning tied to the chosen model",
+          "status": "passed",
+          "report_ordinal": 14
+        },
+        {
+          "id": " single-model agent chat orders allowance snapshots by reset, UTC day and ledger revision despite server clock skew",
+          "status": "passed",
+          "report_ordinal": 15
+        },
+        {
+          "id": " single-model agent chat refreshes idle allowance on focus and marks failed refreshes as stale",
+          "status": "passed",
+          "report_ordinal": 16
+        },
+        {
+          "id": " single-model agent chat recovers the model picker and budget refresh after hung control requests",
+          "status": "passed",
+          "report_ordinal": 17
+        },
+        {
+          "id": " single-model agent chat ends a silent Agent connection with recoverable partial text and a known turn identity",
+          "status": "passed",
+          "report_ordinal": 18
+        },
+        {
+          "id": " single-model agent chat explains allowance waiting outside the collapsed activity details",
+          "status": "passed",
+          "report_ordinal": 19
+        },
+        {
+          "id": " single-model agent chat keeps the newest status and usage after long runs exceed the activity window",
+          "status": "passed",
+          "report_ordinal": 20
+        },
+        {
+          "id": " single-model agent chat freezes source-check permission for sending and recovery while the next-message preference changes",
+          "status": "passed",
+          "report_ordinal": 21
+        },
+        {
+          "id": " single-model agent chat updates the allowance on terminal errors and ignores older or foreign snapshots",
+          "status": "passed",
+          "report_ordinal": 22
+        },
+        {
+          "id": " single-model agent chat refreshes the allowance after a disconnected stream",
+          "status": "passed",
+          "report_ordinal": 23
+        },
+        {
+          "id": " single-model agent chat leaves tool mentions plain and highlights only confirmed running calls",
+          "status": "passed",
+          "report_ordinal": 24
+        },
+        {
+          "id": " single-model agent chat keeps a review stage in one live row when tool events arrive",
+          "status": "passed",
+          "report_ordinal": 25
+        },
+        {
+          "id": " single-model agent chat commits a draft model before an input-triggered projection can restore the old model",
+          "status": "passed",
+          "report_ordinal": 26
+        },
+        {
+          "id": " single-model agent chat keeps a running chat's model independent of an earlier draft selection",
+          "status": "passed",
+          "report_ordinal": 27
+        },
+        {
+          "id": " single-model agent chat shows provider costs separately from estimates and removes status dashes",
+          "status": "passed",
+          "report_ordinal": 28
+        },
+        {
+          "id": " single-model agent chat keeps the selected conversation when a background follow-up ends: cancel",
+          "status": "passed",
+          "report_ordinal": 29
+        },
+        {
+          "id": " single-model agent chat keeps the selected conversation when a background follow-up ends: error",
+          "status": "passed",
+          "report_ordinal": 30
+        },
+        {
+          "id": " single-model agent chat recovers a first message without borrowing another conversation's history",
+          "status": "passed",
+          "report_ordinal": 31
+        },
+        {
+          "id": " single-model agent chat does not start a model request after cancellation during chat creation",
+          "status": "passed",
+          "report_ordinal": 32
+        },
+        {
+          "id": " single-model agent chat reconciles a removed saved model with the displayed choice before sending",
+          "status": "passed",
+          "report_ordinal": 33
+        },
+        {
+          "id": " single-model agent chat uses the same keyboard picker for effort and returns focus after choosing",
+          "status": "passed",
+          "report_ordinal": 34
+        },
+        {
+          "id": " single-model agent chat interleaves confirmed steps with complete localized updates and preserves the finished history",
+          "status": "passed",
+          "report_ordinal": 35
+        },
+        {
+          "id": " single-model agent chat reads a complete, checked answer as done even when the run failed afterwards",
+          "status": "passed",
+          "report_ordinal": 36
+        },
+        {
+          "id": " single-model agent chat names the sources a web search found instead of the bare verb",
+          "status": "passed",
+          "report_ordinal": 37
+        },
+        {
+          "id": " single-model agent chat does not claim to write the answer while a preamble led into a tool step",
+          "status": "passed",
+          "report_ordinal": 38
+        },
+        {
+          "id": " single-model agent chat shows useful run details when opened during thinking, before any progress or tool event",
+          "status": "passed",
+          "report_ordinal": 39
+        },
+        {
+          "id": " single-model agent chat ticks runtime through waiting, freezes at stop, and disposes the live timer",
+          "status": "passed",
+          "report_ordinal": 40
+        },
+        {
+          "id": " single-model agent chat restores saved runtime from terminal timestamps rather than the time since creation",
+          "status": "passed",
+          "report_ordinal": 41
+        },
+        {
+          "id": " single-model agent chat retains live insights across a partial final snapshot and uses saved tool outcomes",
+          "status": "passed",
+          "report_ordinal": 42
+        },
+        {
+          "id": " single-model agent chat retains progress paragraphs and confirmed steps when the auxiliary status window rotates",
+          "status": "passed",
+          "report_ordinal": 43
+        },
+        {
+          "id": " single-model agent chat collapses finished reasoning, preserves explicit disclosure, and restores stopped status",
+          "status": "passed",
+          "report_ordinal": 44
+        },
+        {
+          "id": " single-model agent chat requires the current account's entitlement and retains no cross-account access",
+          "status": "passed",
+          "report_ordinal": 45
+        },
+        {
+          "id": " single-model agent chat calls only the agent endpoint and continues the same persisted chat",
+          "status": "passed",
+          "report_ordinal": 46
+        },
+        {
+          "id": " single-model agent chat uploads attachments before starting the agent and freezes IDs for recovery",
+          "status": "passed",
+          "report_ordinal": 47
+        },
+        {
+          "id": " single-model agent chat restores an agent bookmark independently of the global consensus preference",
+          "status": "passed",
+          "report_ordinal": 48
+        },
+        {
+          "id": " single-model agent chat ignores late completion after logout",
+          "status": "passed",
+          "report_ordinal": 49
+        },
+        {
+          "id": " single-model agent chat recovers with the same identity and an explicit no-new-call flag",
+          "status": "passed",
+          "report_ordinal": 50
+        },
+        {
+          "id": " single-model agent chat adopts a server-saved partial answer and bookmark while preserving its failed review",
+          "status": "passed",
+          "report_ordinal": 51
+        },
+        {
+          "id": " single-model agent chat offers a status check rather than claiming an unfinished server run is already saved",
+          "status": "passed",
+          "report_ordinal": 52
+        },
+        {
+          "id": " single-model agent chat does not offer recovery without a saved answer and deduplicates concurrent recovery clicks",
+          "status": "passed",
+          "report_ordinal": 53
+        },
+        {
+          "id": " single-model agent chat keeps a new budget generation when an older worker sends a later snapshot",
+          "status": "passed",
+          "report_ordinal": 54
+        },
+        {
+          "id": " single-model agent chat rebuilds its history after displaying another conversation",
+          "status": "passed",
+          "report_ordinal": 55
+        },
+        {
+          "id": " single-model agent chat reuses the picker, sends supported effort, and leaves consensus preferences alone",
+          "status": "passed",
+          "report_ordinal": 56
+        },
+        {
+          "id": " single-model agent chat streams reasoning separately, preserves disclosure, and ignores deltas after stop",
+          "status": "passed",
+          "report_ordinal": 57
+        },
+        {
+          "id": " single-model agent chat restores reasoning and settings from a saved turn without treating reasoning as HTML",
+          "status": "passed",
+          "report_ordinal": 58
+        },
+        {
+          "id": " single-model agent chat repairs a removed history model for the next message without changing its saved label",
+          "status": "passed",
+          "report_ordinal": 59
+        },
+        {
+          "id": " single-model agent chat keeps the actual failure reason visible when reopening an incomplete answer",
+          "status": "passed",
+          "report_ordinal": 60
+        },
+        {
+          "id": " single-model agent chat hides legacy unconfirmed searches (server_tool) while preserving reasoning and measured costs",
+          "status": "passed",
+          "report_ordinal": 61
+        },
+        {
+          "id": " single-model agent chat hides legacy unconfirmed searches (provider_native) while preserving reasoning and measured costs",
+          "status": "passed",
+          "report_ordinal": 62
+        },
+        {
+          "id": " single-model agent chat renders confirmed native sources, partial usage and safe links from history",
+          "status": "passed",
+          "report_ordinal": 63
+        },
+        {
+          "id": " single-model agent chat keeps tool states honest and clears intermediate answer text for a new step",
+          "status": "passed",
+          "report_ordinal": 64
+        },
+        {
+          "id": " single-model agent chat routes resources events to the list they name and refreshes both when unsure",
+          "status": "passed",
+          "report_ordinal": 65
+        },
+        {
+          "id": " single-model agent chat never re-renders the composer shell or the full answer for a streamed chunk",
+          "status": "passed",
+          "report_ordinal": 66
+        },
+        {
+          "id": " single-model agent chat lets the fixed answer shimmer while it is checked and shows its marks as soon as the check ends",
+          "status": "passed",
+          "report_ordinal": 67
+        },
+        {
+          "id": " single-model agent chat restores the draft without a recovery or failed row when the server refuses before starting",
+          "status": "passed",
+          "report_ordinal": 68
+        },
+        {
+          "id": " single-model agent chat explains a token reservation refusal in plain words with next steps",
+          "status": "passed",
+          "report_ordinal": 69
+        },
+        {
+          "id": " single-model agent chat blocks Send with the Google blocker and runs its action",
+          "status": "passed",
+          "report_ordinal": 70
+        },
+        {
+          "id": " single-model agent chat shows a pending-review notice, bookmark dot and tab count after a run",
+          "status": "passed",
+          "report_ordinal": 71
+        },
+        {
+          "id": " one Agent chip for the chat model and its comparison models carries both choices in one menu and gives the comparison chip back outside Agent",
+          "status": "passed",
+          "report_ordinal": 72
+        },
+        {
+          "id": " one Agent chip for the chat model and its comparison models opens the named level from shortcuts and keeps the comparisons open while the chat model is locked",
+          "status": "passed",
+          "report_ordinal": 73
+        },
+        {
+          "id": " one Agent chip for the chat model and its comparison models links once the comparison picker exists, whichever picker comes first",
+          "status": "passed",
+          "report_ordinal": 74
+        }
+      ]
+    },
+    {
+      "path": "tests/js/agent-citations.test.mjs",
+      "cases": [
+        {
+          "id": " turns parenthesized paper URLs into source pills with their original titles",
+          "status": "passed",
+          "report_ordinal": 1
+        },
+        {
+          "id": " deduplicates repeated URLs and preserves named link formatting, code, math notation and unsafe links",
+          "status": "passed",
+          "report_ordinal": 2
+        },
+        {
+          "id": " maps explicit source IDs by identity without turning numeric notation or ambiguous IDs into citations",
+          "status": "passed",
+          "report_ordinal": 3
+        },
+        {
+          "id": " reformats streamed text and updates metadata without borrowing another turn or replacing focused references",
+          "status": "passed",
+          "report_ordinal": 4
+        },
+        {
+          "id": " applies citations after review markers without changing the checked answer or its version binding",
+          "status": "passed",
+          "report_ordinal": 5
+        },
+        {
+          "id": " lets a pill stand in for a link label that only repeats its domain",
+          "status": "passed",
+          "report_ordinal": 6
+        },
+        {
+          "id": " collapses adjacent citations into one pill and lists every source in the teaser",
+          "status": "passed",
+          "report_ordinal": 7
+        },
+        {
+          "id": " shows only the favicon when the domain is already written before the citation",
+          "status": "passed",
+          "report_ordinal": 8
+        },
+        {
+          "id": " replaces a failed favicon with a neutral monogram instead of a broken image",
+          "status": "passed",
+          "report_ordinal": 9
+        }
+      ]
+    },
+    {
+      "path": "tests/js/agent-delegation.test.mjs",
+      "cases": [
+        {
+          "id": " Agent sidebar stops its 2.5 s tick once nothing runs and never starts one for a saved turn",
+          "status": "passed",
+          "report_ordinal": 1
+        },
+        {
+          "id": " Agent sidebar opens as a sheet only on request under 1200 px, with a scrim and a focus trap",
+          "status": "passed",
+          "report_ordinal": 2
+        },
+        {
+          "id": " Agent sidebar does not rewrite row titles or status text when nothing changed",
+          "status": "passed",
+          "report_ordinal": 3
+        },
+        {
+          "id": " Agent sidebar keeps model icons and keyboard focus stable as statuses and same-model calls change",
+          "status": "passed",
+          "report_ordinal": 4
+        },
+        {
+          "id": " Agent sidebar uses elapsed server durations with a monotonic clock and freezes terminal or recovered sessions",
+          "status": "passed",
+          "report_ordinal": 5
+        },
+        {
+          "id": " Agent sidebar does not replace a newer polled total with a stale run projection",
+          "status": "passed",
+          "report_ordinal": 6
+        },
+        {
+          "id": " Agent sidebar discards a pending old session response after the same user signs in again",
+          "status": "passed",
+          "report_ordinal": 7
+        },
+        {
+          "id": " Agent sidebar shows live received characters, switches to provider tokens and stops shimmer on completion",
+          "status": "passed",
+          "report_ordinal": 8
+        },
+        {
+          "id": " Agent sidebar clears transient counters on stop and turn switches and never animates saved active snapshots",
+          "status": "passed",
+          "report_ordinal": 9
+        },
+        {
+          "id": " Agent sidebar shows loading independently for each model and hides it for terminal or paused sessions",
+          "status": "passed",
+          "report_ordinal": 10
+        },
+        {
+          "id": " Agent sidebar uses SSE updates without polling, repairs quiet streams, and never revives a completed run",
+          "status": "passed",
+          "report_ordinal": 11
+        },
+        {
+          "id": " Agent sidebar shows measured input plus output tokens, with no invented zero or double-counted details",
+          "status": "passed",
+          "report_ordinal": 12
+        },
+        {
+          "id": " Agent sidebar opens judge details immediately from live snapshots without detail reads",
+          "status": "passed",
+          "report_ordinal": 13
+        },
+        {
+          "id": " Agent sidebar shows a skeleton immediately and reuses cached messages on reopening",
+          "status": "passed",
+          "report_ordinal": 14
+        },
+        {
+          "id": " Agent sidebar updates the account allowance from the existing activity request",
+          "status": "passed",
+          "report_ordinal": 15
+        },
+        {
+          "id": " Agent sidebar opens on first start, shares state with inline icons and respects manual close and duplicate events",
+          "status": "passed",
+          "report_ordinal": 16
+        },
+        {
+          "id": " Agent sidebar distinguishes same-model agents and restores saved state without starting any model request",
+          "status": "passed",
+          "report_ordinal": 17
+        },
+        {
+          "id": " Agent sidebar ignores delayed responses and events after account or conversation switch",
+          "status": "passed",
+          "report_ordinal": 18
+        },
+        {
+          "id": " Agent sidebar folds judge attempts, retries and backups into one quiet Answer check row",
+          "status": "passed",
+          "report_ordinal": 19
+        },
+        {
+          "id": " Agent sidebar names a check that no model could run, once, in the Answer check row",
+          "status": "passed",
+          "report_ordinal": 20
+        },
+        {
+          "id": " Agent sidebar shows a failed comparison model's reason as a plain note without routing labels",
+          "status": "passed",
+          "report_ordinal": 21
+        },
+        {
+          "id": " Agent sidebar keeps the text of a comparison model stopped mid-answer, marked as incomplete",
+          "status": "passed",
+          "report_ordinal": 22
+        },
+        {
+          "id": " Agent sidebar renders untrusted text safely, labels unknown totals and retries details only on demand",
+          "status": "passed",
+          "report_ordinal": 23
+        },
+        {
+          "id": " Agent sidebar sums the run up in one overview and keeps opened details in the single scrolling list",
+          "status": "passed",
+          "report_ordinal": 24
+        }
+      ]
+    },
+    {
+      "path": "tests/js/agent-google.test.mjs",
+      "cases": [
+        {
+          "id": " Google selection and consent loads connections only on first use and never sends a partial selection",
+          "status": "passed",
+          "report_ordinal": 1
+        },
+        {
+          "id": " Google selection and consent requires consent on every message in a chat that already holds Google data",
+          "status": "passed",
+          "report_ordinal": 2
+        },
+        {
+          "id": " Google selection and consent removing a source chip turns it off",
+          "status": "passed",
+          "report_ordinal": 3
+        },
+        {
+          "id": " Action cards renders untrusted text safely and submits the exact displayed hash only after review",
+          "status": "passed",
+          "report_ordinal": 4
+        },
+        {
+          "id": " Action cards does not offer repeat execution for ambiguous results",
+          "status": "passed",
+          "report_ordinal": 5
+        },
+        {
+          "id": " Action cards shows expired approvals as expired and prepares them again without a model call",
+          "status": "passed",
+          "report_ordinal": 6
+        },
+        {
+          "id": " Action cards requires a per-address acknowledgement for flagged recipients and offers a send grant for unauthorized drafts",
+          "status": "passed",
+          "report_ordinal": 7
+        },
+        {
+          "id": " Action cards coalesces refreshes and discards late reads after an account change",
+          "status": "passed",
+          "report_ordinal": 8
+        },
+        {
+          "id": " Action cards projects the current chat on its own, skips a new chat while it starts and reloads when the run finishes",
+          "status": "passed",
+          "report_ordinal": 9
+        },
+        {
+          "id": " Action cards stays hidden when actions fail in a chat without Google data",
+          "status": "passed",
+          "report_ordinal": 10
+        }
+      ]
+    },
+    {
+      "path": "tests/js/agent-mode-projection.test.mjs",
+      "cases": [
+        {
+          "id": " agent mode panel projection moves Beta tools into the plus menu after chat start",
+          "status": "passed",
+          "report_ordinal": 1
+        },
+        {
+          "id": " agent mode panel projection persists source checks for agent runs and locks every control for direct comparisons",
+          "status": "passed",
+          "report_ordinal": 2
+        },
+        {
+          "id": " agent mode panel projection gates the saved source preference true on reload without changing it",
+          "status": "passed",
+          "report_ordinal": 3
+        },
+        {
+          "id": " agent mode panel projection gates the saved source preference false on reload without changing it",
+          "status": "passed",
+          "report_ordinal": 4
+        },
+        {
+          "id": " agent mode panel projection uses one toolbar rule for every mode: tools on the start screen, a docked status line in a chat",
+          "status": "passed",
+          "report_ordinal": 5
+        },
+        {
+          "id": " agent mode panel projection shows the starting toolbar, hides it in a chat in every mode and restores it on the start screen",
+          "status": "passed",
+          "report_ordinal": 6
+        },
+        {
+          "id": " agent mode panel projection routes toolbar actions through the original controls and respects a rejected deep toggle",
+          "status": "passed",
+          "report_ordinal": 7
+        },
+        {
+          "id": " agent mode panel projection keeps the mode choice independent of a frozen run and synchronizes selector and settings",
+          "status": "passed",
+          "report_ordinal": 8
+        },
+        {
+          "id": " agent mode panel projection updates selected model marks and clears stale direct-result summaries",
+          "status": "passed",
+          "report_ordinal": 9
+        },
+        {
+          "id": " agent mode panel projection falls back to the controls when no run is selected",
+          "status": "passed",
+          "report_ordinal": 10
+        }
+      ]
+    },
+    {
+      "path": "tests/js/agent-preferences.test.mjs",
+      "cases": [
+        {
+          "id": " saves both choices, restores them and ignores unknown stored values",
+          "status": "passed",
+          "report_ordinal": 1
+        },
+        {
+          "id": " offers the settings tab only to accounts with Agent Beta",
+          "status": "passed",
+          "report_ordinal": 2
+        }
+      ]
+    },
+    {
+      "path": "tests/js/agent-review.test.mjs",
+      "cases": [
+        {
+          "id": " explains the recorded comparison in the duration disclosure and opens its original evidence",
+          "status": "passed",
+          "report_ordinal": 1
+        },
+        {
+          "id": " shows the live comparison purpose while its answers and checks are still pending",
+          "status": "passed",
+          "report_ordinal": 2
+        },
+        {
+          "id": " keeps partial and stale reviews honest in activity insights and clears them for another turn",
+          "status": "passed",
+          "report_ordinal": 3
+        },
+        {
+          "id": " uses the shared markers only for the exact answer and selected comparison basis",
+          "status": "passed",
+          "report_ordinal": 4
+        },
+        {
+          "id": " renders bound source evidence with the shared contradiction cards and rejects stale evidence",
+          "status": "passed",
+          "report_ordinal": 5
+        },
+        {
+          "id": " collects chat search, answer links and comparison citations into one source view",
+          "status": "passed",
+          "report_ordinal": 6
+        },
+        {
+          "id": " makes search sources available without a comparison, including saved legacy activities",
+          "status": "passed",
+          "report_ordinal": 7
+        },
+        {
+          "id": " rejects stale comparison bindings and distinguishes incomplete results",
+          "status": "passed",
+          "report_ordinal": 8
+        },
+        {
+          "id": " explains a missing model without reporting a failed check, including older saved reviews",
+          "status": "passed",
+          "report_ordinal": 9
+        },
+        {
+          "id": " keeps coverage failures distinct from unavailable comparison models",
+          "status": "passed",
+          "report_ordinal": 10
+        },
+        {
+          "id": " keeps sentences failures distinct from unavailable comparison models",
+          "status": "passed",
+          "report_ordinal": 11
+        },
+        {
+          "id": " keeps sources failures distinct from unavailable comparison models",
+          "status": "passed",
+          "report_ordinal": 12
+        },
+        {
+          "id": " keeps a fully answered check to one line and the source report below the findings",
+          "status": "passed",
+          "report_ordinal": 13
+        },
+        {
+          "id": " adds no note under a checked answer and one calm sentence otherwise",
+          "status": "passed",
+          "report_ordinal": 14
+        },
+        {
+          "id": " speaks under the answer only when the check itself is limited ([{\"code\":\"insufficient_answers\"}])",
+          "status": "passed",
+          "report_ordinal": 15
+        },
+        {
+          "id": " speaks under the answer only when the check itself is limited ([{\"code\":\"differences_unavailable\"}])",
+          "status": "passed",
+          "report_ordinal": 16
+        },
+        {
+          "id": " speaks under the answer only when the check itself is limited ([{\"code\":\"models_unavailable\",\"count\":2},{\"code\":\"truncated_answers\",\"count\":1}])",
+          "status": "passed",
+          "report_ordinal": 17
+        },
+        {
+          "id": " names an output limit as the reason a comparison model gave no answer",
+          "status": "passed",
+          "report_ordinal": 18
+        },
+        {
+          "id": " shows a model stopped mid-answer as a marked, readable incomplete answer, and a cut-off one as marked",
+          "status": "passed",
+          "report_ordinal": 19
+        },
+        {
+          "id": " keeps Copy in the evidence row across re-renders and hands it back when the row goes away",
+          "status": "passed",
+          "report_ordinal": 20
+        },
+        {
+          "id": " strokes the marks on once, in reading order, when a live answer is first checked",
+          "status": "passed",
+          "report_ordinal": 21
+        },
+        {
+          "id": " shows marks without animation for saved answers and reduced motion",
+          "status": "passed",
+          "report_ordinal": 22
+        },
+        {
+          "id": " leaves marks hidden by the highlight setting out of the reveal",
+          "status": "passed",
+          "report_ordinal": 23
+        }
+      ]
+    },
+    {
+      "path": "tests/js/agent-workspace.test.mjs",
+      "cases": [
+        {
+          "id": " private Agent workspace renders one document card per document after the answer, grouped by version and without raw IDs",
+          "status": "passed",
+          "report_ordinal": 1
+        },
+        {
+          "id": " private Agent workspace shows only the documents of the displayed turn under the answer",
+          "status": "passed",
+          "report_ordinal": 2
+        },
+        {
+          "id": " private Agent workspace removes only after an explicit confirmation from the overflow menu",
+          "status": "passed",
+          "report_ordinal": 3
+        },
+        {
+          "id": " private Agent workspace marks partly readable files and never renders file names as markup",
+          "status": "passed",
+          "report_ordinal": 4
+        },
+        {
+          "id": " private Agent workspace describes Gmail imports of the turn by subject and sender instead of message IDs",
+          "status": "passed",
+          "report_ordinal": 5
+        },
+        {
+          "id": " private Agent workspace coalesces refreshes to one request per 300 ms and never refreshes Google actions",
+          "status": "passed",
+          "report_ordinal": 6
+        },
+        {
+          "id": " private Agent workspace keeps the list while uploading and shows a progress row per file",
+          "status": "passed",
+          "report_ordinal": 7
+        },
+        {
+          "id": " private Agent workspace keeps a failed upload in the composer with its reason",
+          "status": "passed",
+          "report_ordinal": 8
+        },
+        {
+          "id": " private Agent workspace creates the answer resources hook when the template lacks it and discards an old account response",
+          "status": "passed",
+          "report_ordinal": 9
+        },
+        {
+          "id": " private Agent workspace keeps each archived turn's documents with its own answer",
+          "status": "passed",
+          "report_ordinal": 10
+        },
+        {
+          "id": " private Agent workspace opens and removes a message attachment in the chat on screen",
+          "status": "passed",
+          "report_ordinal": 11
+        }
+      ]
+    },
+    {
+      "path": "tests/js/analytics-opt-out.test.mjs",
+      "cases": [
+        {
+          "id": " Analytics opt-out before tracker startup applies ?notrack=1 to null before the next script runs",
+          "status": "passed",
+          "report_ordinal": 1
+        },
+        {
+          "id": " Analytics opt-out before tracker startup applies ?notrack=0 to 1 before the next script runs",
+          "status": "passed",
+          "report_ordinal": 2
+        },
+        {
+          "id": " Analytics opt-out before tracker startup applies  to 1 before the next script runs",
+          "status": "passed",
+          "report_ordinal": 3
+        },
+        {
+          "id": " Analytics opt-out before tracker startup applies  to null before the next script runs",
+          "status": "passed",
+          "report_ordinal": 4
+        },
+        {
+          "id": " Analytics opt-out before tracker startup applies ?notrack=other to 1 before the next script runs",
+          "status": "passed",
+          "report_ordinal": 5
+        },
+        {
+          "id": " Analytics opt-out before tracker startup applies ?notrack= to 1 before the next script runs",
+          "status": "passed",
+          "report_ordinal": 6
+        },
+        {
+          "id": " Analytics opt-out before tracker startup applies ?other=1 to 1 before the next script runs",
+          "status": "passed",
+          "report_ordinal": 7
+        },
+        {
+          "id": " Analytics opt-out before tracker startup allows page/tracker initialization when storage write for notrack=1 throws",
+          "status": "passed",
+          "report_ordinal": 8
+        },
+        {
+          "id": " Analytics opt-out before tracker startup allows page/tracker initialization when storage write for notrack=0 throws",
+          "status": "passed",
+          "report_ordinal": 9
+        }
+      ]
+    },
+    {
+      "path": "tests/js/app-state.test.mjs",
+      "cases": [
+        {
+          "id": " App.state exposes every declared key with its initial value",
+          "status": "passed",
+          "report_ordinal": 1
+        },
+        {
+          "id": " App.state accepts a write from the owning module",
+          "status": "passed",
+          "report_ordinal": 2
+        },
+        {
+          "id": " App.state rejects a write from any other module and leaves the value alone",
+          "status": "passed",
+          "report_ordinal": 3
+        },
+        {
+          "id": " App.state rejects unknown keys on both read and write",
+          "status": "passed",
+          "report_ordinal": 4
+        },
+        {
+          "id": " App.state makes the window view read-only",
+          "status": "passed",
+          "report_ordinal": 5
+        },
+        {
+          "id": " App.state announces each change with key, owner and value",
+          "status": "passed",
+          "report_ordinal": 6
+        },
+        {
+          "id": " App.state adopts a value a previous script already put on window",
+          "status": "passed",
+          "report_ordinal": 7
+        },
+        {
+          "id": " App.state keeps the definitions frozen against tampering",
+          "status": "passed",
+          "report_ordinal": 8
+        }
+      ]
+    },
+    {
+      "path": "tests/js/attachment-compression.test.mjs",
+      "cases": [
+        {
+          "id": " client-side image compression shrinks an oversized photo before it is encoded",
+          "status": "passed",
+          "report_ordinal": 1
+        },
+        {
+          "id": " client-side image compression leaves a small screenshot untouched",
+          "status": "passed",
+          "report_ordinal": 2
+        },
+        {
+          "id": " client-side image compression still attaches the file when the browser has no canvas",
+          "status": "passed",
+          "report_ordinal": 3
+        },
+        {
+          "id": " client-side image compression refuses an image far above the input limit",
+          "status": "passed",
+          "report_ordinal": 4
+        },
+        {
+          "id": " client-side image compression keeps the tighter limit for files that cannot be shrunk",
+          "status": "passed",
+          "report_ordinal": 5
+        }
+      ]
+    },
+    {
+      "path": "tests/js/attachment-draft-generation.test.mjs",
+      "cases": [
+        {
+          "id": " attachment import generation drops a late import after the saved-chat reset",
+          "status": "passed",
+          "report_ordinal": 1
+        },
+        {
+          "id": " attachment import generation drops a late import after the draft was handed to a sent message",
+          "status": "passed",
+          "report_ordinal": 2
+        },
+        {
+          "id": " attachment import generation drops a late import after an account change",
+          "status": "passed",
+          "report_ordinal": 3
+        },
+        {
+          "id": " attachment import generation a stale import neither blocks nor leaks into the next draft's limit",
+          "status": "passed",
+          "report_ordinal": 4
+        },
+        {
+          "id": " attachment import generation keeps order and completes a normal multi-file import",
+          "status": "passed",
+          "report_ordinal": 5
+        }
+      ]
+    },
+    {
+      "path": "tests/js/bookmark-attachments.test.mjs",
+      "cases": [
+        {
+          "id": " attachments of a saved question keeps the current turn's files instead of the document's",
+          "status": "passed",
+          "report_ordinal": 1
+        },
+        {
+          "id": " attachments of a saved question shows the files of the last question when that is the one with files",
+          "status": "passed",
+          "report_ordinal": 2
+        },
+        {
+          "id": " attachments of a saved question still reads the document for chats saved before turns carried files",
+          "status": "passed",
+          "report_ordinal": 3
+        },
+        {
+          "id": " attachments of a saved question renders a read-only chip for the restored question",
+          "status": "passed",
+          "report_ordinal": 4
+        },
+        {
+          "id": " attachments of a saved question gives a .csv the type the server also knows",
+          "status": "passed",
+          "report_ordinal": 5
+        },
+        {
+          "id": " attachments of a saved question does not carry the files into the next question",
+          "status": "passed",
+          "report_ordinal": 6
+        }
+      ]
+    },
+    {
+      "path": "tests/js/bookmark-pending-state.test.mjs",
+      "cases": [
+        {
+          "id": " pending bookmark session stays disabled until both the run and its persistence write finish",
+          "status": "passed",
+          "report_ordinal": 1
+        },
+        {
+          "id": " pending bookmark session does not flash ready between model fan-out and auto-consensus",
+          "status": "passed",
+          "report_ordinal": 2
+        },
+        {
+          "id": " pending bookmark session restores an existing conversation bookmark if a follow-up saves nothing",
+          "status": "passed",
+          "report_ordinal": 3
+        },
+        {
+          "id": " pending bookmark markup preserves server metadata and never invents a consensus from truthy strings",
+          "status": "passed",
+          "report_ordinal": 4
+        },
+        {
+          "id": " pending bookmark markup renders an inaccessible loading row with a bookmark-frame spinner",
+          "status": "passed",
+          "report_ordinal": 5
+        }
+      ]
+    },
+    {
+      "path": "tests/js/bookmark-source-check.test.mjs",
+      "cases": [
+        {
+          "id": " reopened bookmark source checks hydrates even a terminal empty stub and updates only its saved turn and basis",
+          "status": "passed",
+          "report_ordinal": 1
+        },
+        {
+          "id": " reopened bookmark source checks invalidates the old observer when another bookmark or live run replaces its view",
+          "status": "passed",
+          "report_ordinal": 2
+        }
+      ]
+    },
+    {
+      "path": "tests/js/bookmark-write-queue.test.mjs",
+      "cases": [
+        {
+          "id": " bookmark write queue runs model and consensus writes for one bookmark in invocation order",
+          "status": "passed",
+          "report_ordinal": 1
+        },
+        {
+          "id": " bookmark write queue still runs the authoritative consensus write after a failed model write",
+          "status": "passed",
+          "report_ordinal": 2
+        },
+        {
+          "id": " bookmark write queue serializes the same account resource across rapid auth generations",
+          "status": "passed",
+          "report_ordinal": 3
+        }
+      ]
+    },
+    {
+      "path": "tests/js/chat-scroll.test.mjs",
+      "cases": [
+        {
+          "id": " conversation scroll keeps the reading position when offscreen activity shrinks, including native anchoring",
+          "status": "passed",
+          "report_ordinal": 1
+        },
+        {
+          "id": " conversation scroll ends automatic following when the response finishes",
+          "status": "passed",
+          "report_ordinal": 2
+        },
+        {
+          "id": " conversation scroll cancels a queued resize-follow frame at completion without moving past the answer",
+          "status": "passed",
+          "report_ordinal": 3
+        },
+        {
+          "id": " conversation scroll still completes an explicit send jump when a very fast answer finishes mid-animation",
+          "status": "passed",
+          "report_ordinal": 4
+        },
+        {
+          "id": " conversation scroll retains a Send that reached the empty shell until the first completed answer exists (reduced=false)",
+          "status": "passed",
+          "report_ordinal": 5
+        },
+        {
+          "id": " conversation scroll retains a Send that reached the empty shell until the first completed answer exists (reduced=true)",
+          "status": "passed",
+          "report_ordinal": 6
+        },
+        {
+          "id": " conversation scroll opens a saved agent conversation with one cancellable smooth jump",
+          "status": "passed",
+          "report_ordinal": 7
+        },
+        {
+          "id": " conversation scroll opens a saved consensus conversation with one cancellable smooth jump",
+          "status": "passed",
+          "report_ordinal": 8
+        },
+        {
+          "id": " conversation scroll smoothly reaches the end and follows growing agent output despite a hidden pending bubble",
+          "status": "passed",
+          "report_ordinal": 9
+        },
+        {
+          "id": " conversation scroll keeps consensus still after a single jump, including fast deltas and reduced motion: false",
+          "status": "passed",
+          "report_ordinal": 10
+        },
+        {
+          "id": " conversation scroll keeps consensus still after a single jump, including fast deltas and reduced motion: true",
+          "status": "passed",
+          "report_ordinal": 11
+        },
+        {
+          "id": " conversation scroll gives the reader control even before the first frame, then offers a keyboard usable return",
+          "status": "passed",
+          "report_ordinal": 12
+        },
+        {
+          "id": " conversation scroll never resumes from layout scrolls and cancels on a different run, saved view or account",
+          "status": "passed",
+          "report_ordinal": 13
+        },
+        {
+          "id": " conversation scroll interrupts a finger gesture and resumes only when swiping back to the end",
+          "status": "passed",
+          "report_ordinal": 14
+        },
+        {
+          "id": " conversation scroll respects reduced motion and viewport/composer changes without scrolling upwards",
+          "status": "passed",
+          "report_ordinal": 15
+        },
+        {
+          "id": " conversation scroll stops for text selection, dialogs and direct comparison",
+          "status": "passed",
+          "report_ordinal": 16
+        }
+      ]
+    },
+    {
+      "path": "tests/js/claim-coverage-states.test.mjs",
+      "cases": [
+        {
+          "id": " claim coverage states renders claims and contradictions inside separate table cells",
+          "status": "passed",
+          "report_ordinal": 1
+        },
+        {
+          "id": " claim coverage states marks a supported, a split and a thin sentence differently",
+          "status": "passed",
+          "report_ordinal": 2
+        },
+        {
+          "id": " claim coverage states shows a dash instead of a ratio when too few models addressed it",
+          "status": "passed",
+          "report_ordinal": 3
+        },
+        {
+          "id": " claim coverage states keeps the ratio on a supported sentence",
+          "status": "passed",
+          "report_ordinal": 4
+        },
+        {
+          "id": " claim coverage states defaults counts off and keeps claim details accessible by keyboard",
+          "status": "passed",
+          "report_ordinal": 5
+        },
+        {
+          "id": " claim coverage states restores an explicit opt-in",
+          "status": "passed",
+          "report_ordinal": 6
+        },
+        {
+          "id": " claim coverage states derives the state from the counts for snapshots without the field",
+          "status": "passed",
+          "report_ordinal": 7
+        },
+        {
+          "id": " claim coverage states lets a contradiction override the thin mark on the same sentence",
+          "status": "passed",
+          "report_ordinal": 8
+        },
+        {
+          "id": " claim coverage states says in the detail card that agreement is not proof",
+          "status": "passed",
+          "report_ordinal": 9
+        }
+      ]
+    },
+    {
+      "path": "tests/js/claim-mark-joins.test.mjs",
+      "cases": [
+        {
+          "id": " keeps inner joins of a split sentence flush and pads only its outer ends",
+          "status": "passed",
+          "report_ordinal": 1
+        }
+      ]
+    },
+    {
+      "path": "tests/js/composer-attachments.test.mjs",
+      "cases": [
+        {
+          "id": " composer attachment tray moves the same tray and focused control between the start toolbar, a chat in any mode and a new comparison",
+          "status": "passed",
+          "report_ordinal": 1
+        },
+        {
+          "id": " composer attachment tray hands sent files to the message, clears the draft and restores failed drafts in the visible composer",
+          "status": "passed",
+          "report_ordinal": 2
+        },
+        {
+          "id": " composer attachment tray separates preview from removal and returns focus to the next available action",
+          "status": "passed",
+          "report_ordinal": 3
+        },
+        {
+          "id": " composer attachment tray shows an Agent upload failure on the pending chip and clears it again",
+          "status": "passed",
+          "report_ordinal": 4
+        },
+        {
+          "id": " composer attachment tray marks sent Agent files that were only partly readable",
+          "status": "passed",
+          "report_ordinal": 5
+        },
+        {
+          "id": " composer attachment tray opens a stored Agent file from its sent message with download and a confirmed removal",
+          "status": "passed",
+          "report_ordinal": 6
+        },
+        {
+          "id": " composer attachment tray shows why a stored file could not be opened",
+          "status": "passed",
+          "report_ordinal": 7
+        }
+      ]
+    },
+    {
+      "path": "tests/js/composer-autosize.test.mjs",
+      "cases": [
+        {
+          "id": " composer autosize shrinks a wrapped placeholder when the actual width finishes changing without another viewport event",
+          "status": "passed",
+          "report_ordinal": 1
+        },
+        {
+          "id": " composer autosize coalesces width observations and ignores height-only notifications from its own writes",
+          "status": "passed",
+          "report_ordinal": 2
+        },
+        {
+          "id": " composer autosize keeps the multiline form while editing and resets it only when empty",
+          "status": "passed",
+          "report_ordinal": 3
+        },
+        {
+          "id": " composer autosize still responds to placeholder changes and explicit viewport changes",
+          "status": "passed",
+          "report_ordinal": 4
+        }
+      ]
+    },
+    {
+      "path": "tests/js/composer-quote.test.mjs",
+      "cases": [
+        {
+          "id": " App.quote starts empty and hidden",
+          "status": "passed",
+          "report_ordinal": 1
+        },
+        {
+          "id": " App.quote shows the passage in the composer once set",
+          "status": "passed",
+          "report_ordinal": 2
+        },
+        {
+          "id": " App.quote collapses runs of spaces and caps blank lines at one",
+          "status": "passed",
+          "report_ordinal": 3
+        },
+        {
+          "id": " App.quote normalizes CRLF so a pasted passage does not carry \\r into the run",
+          "status": "passed",
+          "report_ordinal": 4
+        },
+        {
+          "id": " App.quote truncates beyond the cap with an ellipsis",
+          "status": "passed",
+          "report_ordinal": 5
+        },
+        {
+          "id": " App.quote puts the typed question first and the passage below it",
+          "status": "passed",
+          "report_ordinal": 6
+        },
+        {
+          "id": " App.quote asks for a comment when the user typed nothing",
+          "status": "passed",
+          "report_ordinal": 7
+        },
+        {
+          "id": " App.quote returns the question untouched when there is no quote",
+          "status": "passed",
+          "report_ordinal": 8
+        },
+        {
+          "id": " App.quote hides the box again on clear",
+          "status": "passed",
+          "report_ordinal": 9
+        },
+        {
+          "id": " App.quote clears through the remove button and hands focus back to the field",
+          "status": "passed",
+          "report_ordinal": 10
+        },
+        {
+          "id": " App.quote survives a page that has no composer markup at all",
+          "status": "passed",
+          "report_ordinal": 11
+        }
+      ]
+    },
+    {
+      "path": "tests/js/consensus-anchor.test.mjs",
+      "cases": [
+        {
+          "id": " consensusAnchor.normalizeForSearch folds case, curly quotes and runs of whitespace",
+          "status": "passed",
+          "report_ordinal": 1
+        },
+        {
+          "id": " consensusAnchor.normalizeForSearch treats every quote flavour as the same character",
+          "status": "passed",
+          "report_ordinal": 2
+        },
+        {
+          "id": " consensusAnchor.normalizeForSearch survives null and undefined",
+          "status": "passed",
+          "report_ordinal": 3
+        },
+        {
+          "id": " consensusAnchor.findRangesInText maps a normalized needle back onto the raw offsets",
+          "status": "passed",
+          "report_ordinal": 4
+        },
+        {
+          "id": " consensusAnchor.findRangesInText keeps valid DOM offsets after Unicode case expansion: İstanbul",
+          "status": "passed",
+          "report_ordinal": 5
+        },
+        {
+          "id": " consensusAnchor.findRangesInText keeps valid DOM offsets after Unicode case expansion: ΟΔΟΣ",
+          "status": "passed",
+          "report_ordinal": 6
+        },
+        {
+          "id": " consensusAnchor.findRangesInText keeps valid DOM offsets after Unicode case expansion: 𐐀 test",
+          "status": "passed",
+          "report_ordinal": 7
+        },
+        {
+          "id": " consensusAnchor.findRangesInText keeps valid DOM offsets after Unicode case expansion: İ İ İstanbul: son",
+          "status": "passed",
+          "report_ordinal": 8
+        },
+        {
+          "id": " consensusAnchor.findRangesInText keeps valid DOM offsets after Unicode case expansion: 😀 İ ‘İklim’ değişiyor.",
+          "status": "passed",
+          "report_ordinal": 9
+        },
+        {
+          "id": " consensusAnchor.findRangesInText finds every non-overlapping occurrence",
+          "status": "passed",
+          "report_ordinal": 10
+        },
+        {
+          "id": " consensusAnchor.findRangesInText returns nothing for an empty needle instead of matching everywhere",
+          "status": "passed",
+          "report_ordinal": 11
+        },
+        {
+          "id": " consensusAnchor.findRangesInText returns null when the passage is not there",
+          "status": "passed",
+          "report_ordinal": 12
+        },
+        {
+          "id": " consensusAnchor.findRangesInText matches across a line break, because the source wrapped mid-sentence",
+          "status": "passed",
+          "report_ordinal": 13
+        },
+        {
+          "id": " consensusAnchor.searchVariants offers a tag-free variant, because the rendered DOM has no [S1]",
+          "status": "passed",
+          "report_ordinal": 14
+        },
+        {
+          "id": " consensusAnchor.searchVariants pulls the punctuation back to the word when the tag is dropped",
+          "status": "passed",
+          "report_ordinal": 15
+        },
+        {
+          "id": " consensusAnchor.searchVariants ranks full passages ahead of the eight-word fallbacks",
+          "status": "passed",
+          "report_ordinal": 16
+        },
+        {
+          "id": " consensusAnchor.searchVariants does not shorten a passage that is already short",
+          "status": "passed",
+          "report_ordinal": 17
+        },
+        {
+          "id": " consensusAnchor.searchVariants strips leading and trailing ellipses from a clipped quote",
+          "status": "passed",
+          "report_ordinal": 18
+        },
+        {
+          "id": " consensusAnchor.searchVariants emits no duplicates when markup makes the variants identical",
+          "status": "passed",
+          "report_ordinal": 19
+        },
+        {
+          "id": " consensusAnchor.locateAnchor finds the passage inside a rendered answer and skips the source chips",
+          "status": "passed",
+          "report_ordinal": 20
+        },
+        {
+          "id": " consensusAnchor.locateAnchor finds a sentence whose formula is already rendered by KaTeX",
+          "status": "passed",
+          "report_ordinal": 21
+        },
+        {
+          "id": " consensusAnchor.locateAnchor returns null rather than guessing when the passage is absent",
+          "status": "passed",
+          "report_ordinal": 22
+        },
+        {
+          "id": " consensusAnchor.sentenceBounds does not treat currency abbreviations as sentence endings",
+          "status": "passed",
+          "report_ordinal": 23
+        },
+        {
+          "id": " consensusAnchor.sentenceBounds keeps a German ordinal date inside its sentence",
+          "status": "passed",
+          "report_ordinal": 24
+        },
+        {
+          "id": " consensusAnchor.sentenceBounds still recognizes a quantity abbreviation at a real sentence end",
+          "status": "passed",
+          "report_ordinal": 25
+        }
+      ]
+    },
+    {
+      "path": "tests/js/consensus-coverage-verdict.test.mjs",
+      "cases": [
+        {
+          "id": " agreement coverage shows an explicit unavailable verdict instead of a reassuring score",
+          "status": "passed",
+          "report_ordinal": 1
+        },
+        {
+          "id": " agreement coverage keeps measured agreement and coverage separate",
+          "status": "passed",
+          "report_ordinal": 2
+        },
+        {
+          "id": " agreement coverage retains the legacy verdict for snapshots without coverage metadata",
+          "status": "passed",
+          "report_ordinal": 3
+        }
+      ]
+    },
+    {
+      "path": "tests/js/consensus-marker-visibility.test.mjs",
+      "cases": [
+        {
+          "id": " enables passage hover for a mouse attached after rendering, while touch stays quiet",
+          "status": "passed",
+          "report_ordinal": 1
+        },
+        {
+          "id": " consensus sentence-check visibility keeps contradiction cards and sentence marks when advisory source hooks fail",
+          "status": "passed",
+          "report_ordinal": 2
+        },
+        {
+          "id": " consensus sentence-check visibility uses the persistent settings selection without removing the analysis",
+          "status": "passed",
+          "report_ordinal": 3
+        },
+        {
+          "id": " consensus sentence-check visibility restores the hidden preference before a new answer is rendered",
+          "status": "passed",
+          "report_ordinal": 4
+        },
+        {
+          "id": " sentence highlight filters applies all before a previous answer enters the conversation",
+          "status": "passed",
+          "report_ordinal": 5
+        },
+        {
+          "id": " sentence highlight filters applies contradictions before a previous answer enters the conversation",
+          "status": "passed",
+          "report_ordinal": 6
+        },
+        {
+          "id": " sentence highlight filters applies concerns before a previous answer enters the conversation",
+          "status": "passed",
+          "report_ordinal": 7
+        },
+        {
+          "id": " sentence highlight filters applies critical before a previous answer enters the conversation",
+          "status": "passed",
+          "report_ordinal": 8
+        },
+        {
+          "id": " sentence highlight filters applies none before a previous answer enters the conversation",
+          "status": "passed",
+          "report_ordinal": 9
+        },
+        {
+          "id": " sentence highlight filters distinguishes minor contradictions from grey emphasis and restores keyboard access",
+          "status": "passed",
+          "report_ordinal": 10
+        },
+        {
+          "id": " sentence highlight filters keeps filters across settings changes, counts changes and later stored answers",
+          "status": "passed",
+          "report_ordinal": 11
+        },
+        {
+          "id": " sentence highlight filters restores saved filters and the existing hidden preference",
+          "status": "passed",
+          "report_ordinal": 12
+        },
+        {
+          "id": " sentence highlight filters falls back for invalid values and retains the session choice when writes fail",
+          "status": "passed",
+          "report_ordinal": 13
+        },
+        {
+          "id": " highlight defaults defaults new browsers to disagreements and concerns while preserving explicit all",
+          "status": "passed",
+          "report_ordinal": 14
+        }
+      ]
+    },
+    {
+      "path": "tests/js/consensus-recovery.test.mjs",
+      "cases": [
+        {
+          "id": " consensus transport recovery recovers a committed turn through GET without another generation, vote or save",
+          "status": "passed",
+          "report_ordinal": 1
+        },
+        {
+          "id": " consensus transport recovery keeps partial text and the conversation fence when the stored turn failed",
+          "status": "passed",
+          "report_ordinal": 2
+        },
+        {
+          "id": " consensus transport recovery does not hide rendering defects with transport recovery",
+          "status": "passed",
+          "report_ordinal": 3
+        },
+        {
+          "id": " consensus transport recovery bounds pending-turn polling and never treats a partial stream as complete",
+          "status": "passed",
+          "report_ordinal": 4
+        },
+        {
+          "id": " consensus transport recovery does not poll when the user cancels",
+          "status": "passed",
+          "report_ordinal": 5
+        },
+        {
+          "id": " consensus transport recovery discards a recovery response after logout",
+          "status": "passed",
+          "report_ordinal": 6
+        }
+      ]
+    },
+    {
+      "path": "tests/js/contradiction-source-verification.test.mjs",
+      "cases": [
+        {
+          "id": " source-check footer navigation opens the checked explanation in Differences with only the result highlighted and focused",
+          "status": "passed",
+          "report_ordinal": 1
+        },
+        {
+          "id": " source-check footer navigation prioritizes an excluded check among several cards and leaves other cards collapsed",
+          "status": "passed",
+          "report_ordinal": 2
+        },
+        {
+          "id": " source-check footer navigation keeps the cue through polling, expires it, retriggers it and clears it on a different answer",
+          "status": "passed",
+          "report_ordinal": 3
+        },
+        {
+          "id": " source-check footer navigation opens the report when no per-contradiction result exists (schema 3)",
+          "status": "passed",
+          "report_ordinal": 4
+        },
+        {
+          "id": " source-check footer navigation opens the report when no per-contradiction result exists (schema 4)",
+          "status": "passed",
+          "report_ordinal": 5
+        },
+        {
+          "id": " source-check footer navigation opens the relevant disclosure when the reader is unavailable",
+          "status": "passed",
+          "report_ordinal": 6
+        },
+        {
+          "id": " contradiction evidence presentation shows attributed verbatim evidence inside the contradiction, never a verified-answer badge",
+          "status": "passed",
+          "report_ordinal": 7
+        },
+        {
+          "id": " contradiction evidence presentation distinguishes empty, disabled, failed and budget omissions",
+          "status": "passed",
+          "report_ordinal": 8
+        },
+        {
+          "id": " contradiction evidence presentation distinguishes empty, disabled, failed and budget omissions",
+          "status": "passed",
+          "report_ordinal": 9
+        },
+        {
+          "id": " contradiction evidence presentation distinguishes empty, disabled, failed and budget omissions",
+          "status": "passed",
+          "report_ordinal": 10
+        },
+        {
+          "id": " contradiction evidence presentation distinguishes empty, disabled, failed and budget omissions",
+          "status": "passed",
+          "report_ordinal": 11
+        },
+        {
+          "id": " contradiction evidence presentation does not show a substantive verdict without attributed evidence or for a different answer",
+          "status": "passed",
+          "report_ordinal": 12
+        },
+        {
+          "id": " contradiction evidence presentation rejects changed positions, anchor or factual question in restored Differences",
+          "status": "passed",
+          "report_ordinal": 13
+        },
+        {
+          "id": " contradiction evidence presentation binds a side located by its stance to its card, but never a changed stance",
+          "status": "passed",
+          "report_ordinal": 14
+        },
+        {
+          "id": " contradiction evidence presentation reattaches after streamed Differences rendering, and clears old results on run changes",
+          "status": "passed",
+          "report_ordinal": 15
+        },
+        {
+          "id": " contradiction evidence presentation keeps evidence on a historical card when the reader moves its container",
+          "status": "passed",
+          "report_ordinal": 16
+        },
+        {
+          "id": " contradiction evidence presentation deduplicates paginated findings by contradiction identity and rejects mismatched versions",
+          "status": "passed",
+          "report_ordinal": 17
+        },
+        {
+          "id": " excluded contradiction visibility shows a technical exclusion on the red card and never claims no contradictions exist",
+          "status": "passed",
+          "report_ordinal": 18
+        },
+        {
+          "id": " excluded contradiction visibility counts excluded contradictions in the displayed total for a mixed result",
+          "status": "passed",
+          "report_ordinal": 19
+        },
+        {
+          "id": " excluded contradiction visibility shows classification and technical reasons together without turning them into a source verdict",
+          "status": "passed",
+          "report_ordinal": 20
+        },
+        {
+          "id": " excluded contradiction visibility derives only display explanations for old terminal v4 snapshots with missing quote matches",
+          "status": "passed",
+          "report_ordinal": 21
+        },
+        {
+          "id": " excluded contradiction visibility does not attach exclusions to different raw positions, question, anchor, or answer",
+          "status": "passed",
+          "report_ordinal": 22
+        },
+        {
+          "id": " excluded contradiction visibility explains an excluded contradiction in the public fallback when no Differences panel exists",
+          "status": "passed",
+          "report_ordinal": 23
+        },
+        {
+          "id": " precise source-judge rejection diagnostics describes the rejected source check as unresolved in the footer, report and detail",
+          "status": "passed",
+          "report_ordinal": 24
+        },
+        {
+          "id": " precise source-judge rejection diagnostics counts multiple rejected checks without implying no source comparison was attempted",
+          "status": "passed",
+          "report_ordinal": 25
+        },
+        {
+          "id": " precise source-judge rejection diagnostics separates rejected conclusions, unavailable sources and omitted checks in a mixed result",
+          "status": "passed",
+          "report_ordinal": 26
+        },
+        {
+          "id": " precise source-judge rejection diagnostics keeps running checks and inaccessible sources distinct from rejected conclusions",
+          "status": "passed",
+          "report_ordinal": 27
+        },
+        {
+          "id": " precise source-judge rejection diagnostics shows the exact safe rejection reason with its known source and model position",
+          "status": "passed",
+          "report_ordinal": 28
+        },
+        {
+          "id": " precise source-judge rejection diagnostics never displays rejected quotes, explanations or a positive verdict even with contradictory checked metadata",
+          "status": "passed",
+          "report_ordinal": 29
+        },
+        {
+          "id": " precise source-judge rejection diagnostics explains quote_not_in_passages without inventing quote content",
+          "status": "passed",
+          "report_ordinal": 30
+        },
+        {
+          "id": " precise source-judge rejection diagnostics explains date_not_in_source without inventing quote content",
+          "status": "passed",
+          "report_ordinal": 31
+        },
+        {
+          "id": " precise source-judge rejection diagnostics explains source_position_mismatch without inventing quote content",
+          "status": "passed",
+          "report_ordinal": 32
+        },
+        {
+          "id": " precise source-judge rejection diagnostics explains missing_required_evidence without inventing quote content",
+          "status": "passed",
+          "report_ordinal": 33
+        },
+        {
+          "id": " precise source-judge rejection diagnostics explains duplicate_finding without inventing quote content",
+          "status": "passed",
+          "report_ordinal": 34
+        },
+        {
+          "id": " precise source-judge rejection diagnostics explains missing_finding without inventing quote content",
+          "status": "passed",
+          "report_ordinal": 35
+        },
+        {
+          "id": " precise source-judge rejection diagnostics explains invalid_reason without inventing quote content",
+          "status": "passed",
+          "report_ordinal": 36
+        },
+        {
+          "id": " precise source-judge rejection diagnostics explains quote_total_limit without inventing quote content",
+          "status": "passed",
+          "report_ordinal": 37
+        },
+        {
+          "id": " precise source-judge rejection diagnostics does not create links for unknown, ambiguous or unsafe source identities and ignores raw diagnostics",
+          "status": "passed",
+          "report_ordinal": 38
+        },
+        {
+          "id": " precise source-judge rejection diagnostics keeps legacy evidence_mismatch honest when no detailed rejection was saved",
+          "status": "passed",
+          "report_ordinal": 39
+        },
+        {
+          "id": " precise source-judge rejection diagnostics bounds rejection diagnostics and reports fallback provenance without claiming successful verification",
+          "status": "passed",
+          "report_ordinal": 40
+        },
+        {
+          "id": " source-check worker failure phases gives an honest status and useful context for incomplete checks",
+          "status": "passed",
+          "report_ordinal": 41
+        },
+        {
+          "id": " source-check worker failure phases gives an honest status and useful context for incomplete checks",
+          "status": "passed",
+          "report_ordinal": 42
+        },
+        {
+          "id": " source-check worker failure phases gives an honest status and useful context for incomplete checks",
+          "status": "passed",
+          "report_ordinal": 43
+        },
+        {
+          "id": " source-check worker failure phases gives an honest status and useful context for incomplete checks",
+          "status": "passed",
+          "report_ordinal": 44
+        },
+        {
+          "id": " source-check worker failure phases gives an honest status and useful context for incomplete checks",
+          "status": "passed",
+          "report_ordinal": 45
+        },
+        {
+          "id": " source-check worker failure phases gives an honest status and useful context for incomplete checks",
+          "status": "passed",
+          "report_ordinal": 46
+        },
+        {
+          "id": " source-check worker failure phases does not present rejected evidence as reviewed when a saved checked flag contradicts the rejection (conditions_explain)",
+          "status": "passed",
+          "report_ordinal": 47
+        },
+        {
+          "id": " source-check worker failure phases does not present rejected evidence as reviewed when a saved checked flag contradicts the rejection (insufficient_evidence)",
+          "status": "passed",
+          "report_ordinal": 48
+        },
+        {
+          "id": " source-check worker failure phases reserves the positive status for a supported outcome without adding a failure hint",
+          "status": "passed",
+          "report_ordinal": 49
+        },
+        {
+          "id": " source-check worker failure phases explains worker_preparation_failed in the contradiction and source summary",
+          "status": "passed",
+          "report_ordinal": 50
+        },
+        {
+          "id": " source-check worker failure phases explains worker_execution_failed in the contradiction and source summary",
+          "status": "passed",
+          "report_ordinal": 51
+        },
+        {
+          "id": " source-check worker failure phases explains result_persistence_failed in the contradiction and source summary",
+          "status": "passed",
+          "report_ordinal": 52
+        },
+        {
+          "id": " source-check worker failure phases explains worker_interrupted in the contradiction and source summary",
+          "status": "passed",
+          "report_ordinal": 53
+        }
+      ]
+    },
+    {
+      "path": "tests/js/demo-claim-coverage.test.mjs",
+      "cases": [
+        {
+          "id": " interactive demo claim coverage provides six complete viewpoints and consistent claims for updated Balanced families",
+          "status": "passed",
+          "report_ordinal": 1
+        },
+        {
+          "id": " interactive demo claim coverage marks every checkable consensus passage with the current coverage contract",
+          "status": "passed",
+          "report_ordinal": 2
+        }
+      ]
+    },
+    {
+      "path": "tests/js/dompurify-vendor.test.mjs",
+      "cases": [
+        {
+          "id": " shipped DOMPurify is the pinned, maintained release and not an advisory-affected one",
+          "status": "passed",
+          "report_ordinal": 1
+        },
+        {
+          "id": " shipped DOMPurify neutralizes <img src=x onerror=alert(1)> with the default config",
+          "status": "passed",
+          "report_ordinal": 2
+        },
+        {
+          "id": " shipped DOMPurify neutralizes <svg><p><style><a id=\"</style><img src=1 onerror=alert(1)>\"> with the default config",
+          "status": "passed",
+          "report_ordinal": 3
+        },
+        {
+          "id": " shipped DOMPurify neutralizes <math><mtext><table><mglyph><style><!--</style><img title=\"--&gt;&lt;/mglyph&gt;&lt;img&Tab;src=1&Tab;onerror=alert(1)&gt;\"> with the default config",
+          "status": "passed",
+          "report_ordinal": 4
+        },
+        {
+          "id": " shipped DOMPurify neutralizes <form><math><mtext></form><form><mglyph><style></math><img src onerror=alert(1)> with the default config",
+          "status": "passed",
+          "report_ordinal": 5
+        },
+        {
+          "id": " shipped DOMPurify neutralizes <svg></p><style><a id=\"</style><img src=1 onerror=alert(1)>\"> with the default config",
+          "status": "passed",
+          "report_ordinal": 6
+        },
+        {
+          "id": " shipped DOMPurify neutralizes <math><mi><table><mi><mglyph><svg><mtext><textarea><path id=\"</textarea><img onerror=alert(1) src=1>\"></path></textarea></mtext></svg></mglyph></mi></table></mi></math> with the default config",
+          "status": "passed",
+          "report_ordinal": 7
+        },
+        {
+          "id": " shipped DOMPurify neutralizes <noscript><p title=\"</noscript><img src=x onerror=alert(1)>\"> with the default config",
+          "status": "passed",
+          "report_ordinal": 8
+        },
+        {
+          "id": " shipped DOMPurify neutralizes <a href=\"javascript:alert(1)\">x</a> with the default config",
+          "status": "passed",
+          "report_ordinal": 9
+        },
+        {
+          "id": " shipped DOMPurify neutralizes <iframe srcdoc=\"<script>alert(1)</script>\"></iframe> with the default config",
+          "status": "passed",
+          "report_ordinal": 10
+        },
+        {
+          "id": " shipped DOMPurify neutralizes <template><script>alert(1)</script></template> with the default config",
+          "status": "passed",
+          "report_ordinal": 11
+        },
+        {
+          "id": " shipped DOMPurify neutralizes <div id=\"x\"><!--</div><img src=x onerror=alert(1)>--> with the default config",
+          "status": "passed",
+          "report_ordinal": 12
+        },
+        {
+          "id": " shipped DOMPurify neutralizes <svg><foreignObject><script>alert(1)</script></foreignObject></svg> with the default config",
+          "status": "passed",
+          "report_ordinal": 13
+        },
+        {
+          "id": " shipped DOMPurify neutralizes <img src=x onerror=alert(1)> through the model-answer renderer",
+          "status": "passed",
+          "report_ordinal": 14
+        },
+        {
+          "id": " shipped DOMPurify neutralizes <svg><p><style><a id=\"</style><img src=1 onerror=alert(1)>\"> through the model-answer renderer",
+          "status": "passed",
+          "report_ordinal": 15
+        },
+        {
+          "id": " shipped DOMPurify neutralizes <math><mtext><table><mglyph><style><!--</style><img title=\"--&gt;&lt;/mglyph&gt;&lt;img&Tab;src=1&Tab;onerror=alert(1)&gt;\"> through the model-answer renderer",
+          "status": "passed",
+          "report_ordinal": 16
+        },
+        {
+          "id": " shipped DOMPurify neutralizes <form><math><mtext></form><form><mglyph><style></math><img src onerror=alert(1)> through the model-answer renderer",
+          "status": "passed",
+          "report_ordinal": 17
+        },
+        {
+          "id": " shipped DOMPurify neutralizes <svg></p><style><a id=\"</style><img src=1 onerror=alert(1)>\"> through the model-answer renderer",
+          "status": "passed",
+          "report_ordinal": 18
+        },
+        {
+          "id": " shipped DOMPurify neutralizes <math><mi><table><mi><mglyph><svg><mtext><textarea><path id=\"</textarea><img onerror=alert(1) src=1>\"></path></textarea></mtext></svg></mglyph></mi></table></mi></math> through the model-answer renderer",
+          "status": "passed",
+          "report_ordinal": 19
+        },
+        {
+          "id": " shipped DOMPurify neutralizes <noscript><p title=\"</noscript><img src=x onerror=alert(1)>\"> through the model-answer renderer",
+          "status": "passed",
+          "report_ordinal": 20
+        },
+        {
+          "id": " shipped DOMPurify neutralizes <a href=\"javascript:alert(1)\">x</a> through the model-answer renderer",
+          "status": "passed",
+          "report_ordinal": 21
+        },
+        {
+          "id": " shipped DOMPurify neutralizes <iframe srcdoc=\"<script>alert(1)</script>\"></iframe> through the model-answer renderer",
+          "status": "passed",
+          "report_ordinal": 22
+        },
+        {
+          "id": " shipped DOMPurify neutralizes <template><script>alert(1)</script></template> through the model-answer renderer",
+          "status": "passed",
+          "report_ordinal": 23
+        },
+        {
+          "id": " shipped DOMPurify neutralizes <div id=\"x\"><!--</div><img src=x onerror=alert(1)>--> through the model-answer renderer",
+          "status": "passed",
+          "report_ordinal": 24
+        },
+        {
+          "id": " shipped DOMPurify neutralizes <svg><foreignObject><script>alert(1)</script></foreignObject></svg> through the model-answer renderer",
+          "status": "passed",
+          "report_ordinal": 25
+        },
+        {
+          "id": " shipped DOMPurify still renders Markdown, formulas and numbered source anchors",
+          "status": "passed",
+          "report_ordinal": 26
+        }
+      ]
+    },
+    {
+      "path": "tests/js/error-reporter.test.mjs",
+      "cases": [
+        {
+          "id": " critical resource reporting sends a nonempty message even for a rejection without a reason",
+          "status": "passed",
+          "report_ordinal": 1
+        },
+        {
+          "id": " critical resource reporting does not throw when the reporting transport throws synchronously",
+          "status": "passed",
+          "report_ordinal": 2
+        },
+        {
+          "id": " critical resource reporting bounds the report before the keepalive request",
+          "status": "passed",
+          "report_ordinal": 3
+        },
+        {
+          "id": " critical resource reporting identifies separate failed app assets without query strings",
+          "status": "passed",
+          "report_ordinal": 4
+        },
+        {
+          "id": " critical resource reporting does not send unapproved resource names",
+          "status": "passed",
+          "report_ordinal": 5
+        },
+        {
+          "id": " critical resource reporting keeps distinct runtime locations and strips query data from the script field",
+          "status": "passed",
+          "report_ordinal": 6
+        },
+        {
+          "id": " critical resource reporting extracts an app location from a rejected promise stack",
+          "status": "passed",
+          "report_ordinal": 7
+        },
+        {
+          "id": " critical resource reporting does not include unapproved runtime metadata: https://foreign.example/static/dist/app.012345abcdef.js",
+          "status": "passed",
+          "report_ordinal": 8
+        },
+        {
+          "id": " critical resource reporting does not include unapproved runtime metadata: /static/js/private-user-file.js",
+          "status": "passed",
+          "report_ordinal": 9
+        },
+        {
+          "id": " critical resource reporting does not include unapproved runtime metadata: /static/dist/app.private.js",
+          "status": "passed",
+          "report_ordinal": 10
+        },
+        {
+          "id": " critical resource reporting preserves distinct stream failure categories during deduplication",
+          "status": "passed",
+          "report_ordinal": 11
+        },
+        {
+          "id": " critical resource reporting ignores optional source favicons",
+          "status": "passed",
+          "report_ordinal": 12
+        },
+        {
+          "id": " critical resource reporting ignores document favicons",
+          "status": "passed",
+          "report_ordinal": 13
+        },
+        {
+          "id": " critical resource reporting reports a failed app script without sending its URL",
+          "status": "passed",
+          "report_ordinal": 14
+        },
+        {
+          "id": " critical resource reporting classifies a failed CDN stylesheet",
+          "status": "passed",
+          "report_ordinal": 15
+        }
+      ]
+    },
+    {
+      "path": "tests/js/frontend-output.test.mjs",
+      "cases": [
+        {
+          "id": " frontend publishing preserves manifest and content-hashed asset bytes in an autocrlf checkout",
+          "status": "passed",
+          "report_ordinal": 1
+        },
+        {
+          "id": " frontend publishing preserves two previous versions and does not age them out on identical rebuilds",
+          "status": "passed",
+          "report_ordinal": 2
+        },
+        {
+          "id": " frontend publishing does not truncate or rewrite unchanged vendor and bundle files",
+          "status": "passed",
+          "report_ordinal": 3
+        },
+        {
+          "id": " frontend publishing leaves the old manifest and assets readable when publication fails",
+          "status": "passed",
+          "report_ordinal": 4
+        },
+        {
+          "id": " frontend publishing never prunes unrelated files and ignores untrusted retention paths",
+          "status": "passed",
+          "report_ordinal": 5
+        }
+      ]
+    },
+    {
+      "path": "tests/js/judge-stream-events.test.mjs",
+      "cases": [
+        {
+          "id": " independent judge SSE events delivers original results before the third judge finishes and completes without calling stop on structured receivers",
+          "status": "passed",
+          "report_ordinal": 1
+        }
+      ]
+    },
+    {
+      "path": "tests/js/markdown-remote-media.test.mjs",
+      "cases": [
+        {
+          "id": " untrusted model markup cannot load remote resources on render replaces remote markdown images with a visible note",
+          "status": "passed",
+          "report_ordinal": 1
+        },
+        {
+          "id": " untrusted model markup cannot load remote resources on render strips raw HTML images, srcset, media and style blocks",
+          "status": "passed",
+          "report_ordinal": 2
+        },
+        {
+          "id": " untrusted model markup cannot load remote resources on render keeps ordinary links clickable",
+          "status": "passed",
+          "report_ordinal": 3
+        }
+      ]
+    },
+    {
+      "path": "tests/js/markdown-stream-incremental.test.mjs",
+      "cases": [
+        {
+          "id": " incremental streamed Markdown ends identical to a full render when chunks are 1 chars",
+          "status": "passed",
+          "report_ordinal": 1
+        },
+        {
+          "id": " incremental streamed Markdown ends identical to a full render when chunks are 7 chars",
+          "status": "passed",
+          "report_ordinal": 2
+        },
+        {
+          "id": " incremental streamed Markdown ends identical to a full render when chunks are 30 chars",
+          "status": "passed",
+          "report_ordinal": 3
+        },
+        {
+          "id": " incremental streamed Markdown ends identical to a full render when chunks are 400 chars",
+          "status": "passed",
+          "report_ordinal": 4
+        },
+        {
+          "id": " incremental streamed Markdown parses each finished block once, so work stays linear in the answer length",
+          "status": "passed",
+          "report_ordinal": 5
+        },
+        {
+          "id": " incremental streamed Markdown keeps finished nodes stable and starts over when the text does not just grow",
+          "status": "passed",
+          "report_ordinal": 6
+        },
+        {
+          "id": " incremental streamed Markdown sanitizes streamed blocks like a full render",
+          "status": "passed",
+          "report_ordinal": 7
+        }
+      ]
+    },
+    {
+      "path": "tests/js/markdown-table.test.mjs",
+      "cases": [
+        {
+          "id": " Markdown tables keeps the semantic table inside an accessible scroll region",
+          "status": "passed",
+          "report_ordinal": 1
+        },
+        {
+          "id": " Markdown tables aligns predominantly numeric columns without changing text columns",
+          "status": "passed",
+          "report_ordinal": 2
+        }
+      ]
+    },
+    {
+      "path": "tests/js/math-render.test.mjs",
+      "cases": [
+        {
+          "id": " Markdown and KaTeX integration typesets the complete screenshot formula: \\[\n(y^2+py+q)(y^2-py+r)\n=\ny^4+(q+r-p^2)y^2+p(r-q)y+qr.\n\\]",
+          "status": "passed",
+          "report_ordinal": 1
+        },
+        {
+          "id": " Markdown and KaTeX integration typesets the complete screenshot formula: \\[\nv^3-48v+64\n=\n128\\cos(3\\theta)+64.\n\\]",
+          "status": "passed",
+          "report_ordinal": 2
+        },
+        {
+          "id": " Markdown and KaTeX integration typesets the complete screenshot formula: \\[\nt_{1,2}\n=\n-\\frac p2 \\pm \\frac{i}{2} \\sqrt{u+12+\\frac{16}{p}}.\n\\]",
+          "status": "passed",
+          "report_ordinal": 3
+        },
+        {
+          "id": " Markdown and KaTeX integration typesets the complete screenshot formula: \\[\n\\boxed{ x_{1,2}\n=\n1-\\frac p2 \\pm \\frac{i}{2} \\sqrt{u+12+\\frac{16}{p}} }\n\\]",
+          "status": "passed",
+          "report_ordinal": 4
+        },
+        {
+          "id": " Markdown and KaTeX integration typesets the complete screenshot formula: \\[\nt_{3,4}\n=\n+\\frac p2 \\pm \\frac{i}{2} \\sqrt{u+12-\\frac{16}{p}}.\n\\]",
+          "status": "passed",
+          "report_ordinal": 5
+        },
+        {
+          "id": " Markdown and KaTeX integration typesets the complete screenshot formula: \\[\n\\boxed{ x_{3,4}\n=\n1+\\frac p2 \\pm \\frac{i}{2} \\sqrt{u+12-\\frac{16}{p}} }\n\\]",
+          "status": "passed",
+          "report_ordinal": 6
+        },
+        {
+          "id": " Markdown and KaTeX integration recovers a formula once its streaming delimiter is complete",
+          "status": "passed",
+          "report_ordinal": 7
+        },
+        {
+          "id": " Markdown and KaTeX integration preserves other display delimiters and formula punctuation: $$\nx_1+x_2\n=\ny^2\n$$",
+          "status": "passed",
+          "report_ordinal": 8
+        },
+        {
+          "id": " Markdown and KaTeX integration preserves other display delimiters and formula punctuation: \\begin{align}\nx_1+x_2\n=\ny^2\n\\end{align}",
+          "status": "passed",
+          "report_ordinal": 9
+        },
+        {
+          "id": " Markdown and KaTeX integration preserves other display delimiters and formula punctuation: \\[\nx_1+x_2\n- y\n= 17{,}5\\%\n\\]",
+          "status": "passed",
+          "report_ordinal": 10
+        },
+        {
+          "id": " Markdown and KaTeX integration keeps code literal and renders ordinary Markdown and currency as before",
+          "status": "passed",
+          "report_ordinal": 11
+        },
+        {
+          "id": " ConsensusMath.prepareMarkdown laesst die Escapes einer Formel den Markdown-Pass ueberleben",
+          "status": "passed",
+          "report_ordinal": 12
+        },
+        {
+          "id": " ConsensusMath.prepareMarkdown macht aus $...$ die von KaTeX erkannte Form",
+          "status": "passed",
+          "report_ordinal": 13
+        },
+        {
+          "id": " ConsensusMath.prepareMarkdown laesst Betraege in Ruhe, auch wenn zwei davon nebeneinander stehen",
+          "status": "passed",
+          "report_ordinal": 14
+        },
+        {
+          "id": " ConsensusMath.prepareMarkdown haelt einen Preisvergleich fuer Text, keine Formel",
+          "status": "passed",
+          "report_ordinal": 15
+        },
+        {
+          "id": " ConsensusMath.prepareMarkdown schuetzt Indizes vor der Kursivschrift",
+          "status": "passed",
+          "report_ordinal": 16
+        },
+        {
+          "id": " ConsensusMath.prepareMarkdown fasst Code nicht an",
+          "status": "passed",
+          "report_ordinal": 17
+        },
+        {
+          "id": " ConsensusMath.prepareMarkdown laesst $$-Bloecke unveraendert durch",
+          "status": "passed",
+          "report_ordinal": 18
+        },
+        {
+          "id": " ConsensusMath.prepareMarkdown behaelt ein einzelnes \\( ausserhalb einer Formel sichtbar",
+          "status": "passed",
+          "report_ordinal": 19
+        },
+        {
+          "id": " ConsensusMath.stripMath liefert den Satz ohne Formel - so, wie ihn das DOM zeigt",
+          "status": "passed",
+          "report_ordinal": 20
+        },
+        {
+          "id": " ConsensusMath.stripMath erkennt auch die Dollar-Schreibweise",
+          "status": "passed",
+          "report_ordinal": 21
+        },
+        {
+          "id": " ConsensusMath.stripMath meldet mit \"\", dass gar keine Formel drin war",
+          "status": "passed",
+          "report_ordinal": 22
+        },
+        {
+          "id": " ConsensusMath.wrapBareLatex erkennt den Anker einer abgesetzten Formel aus einem alten Lauf",
+          "status": "passed",
+          "report_ordinal": 23
+        },
+        {
+          "id": " ConsensusMath.wrapBareLatex laesst jeden Anker mit gewoehnlichem Text in Ruhe",
+          "status": "passed",
+          "report_ordinal": 24
+        },
+        {
+          "id": " ConsensusMath.render uebergibt auch $...$ als echten KaTeX-Ausdruck",
+          "status": "passed",
+          "report_ordinal": 25
+        },
+        {
+          "id": " ConsensusMath.render fasst Betraege im fertigen DOM nicht an",
+          "status": "passed",
+          "report_ordinal": 26
+        }
+      ]
+    },
+    {
+      "path": "tests/js/memory-edit-auth.test.mjs",
+      "cases": [
+        {
+          "id": " memory edit dialog ownership closes and forgets A's selection when the account changes to B",
+          "status": "passed",
+          "report_ordinal": 1
+        },
+        {
+          "id": " memory edit dialog ownership refuses to submit A's selection even if no auth event was seen",
+          "status": "passed",
+          "report_ordinal": 2
+        },
+        {
+          "id": " memory edit dialog ownership a late answer for A neither reloads nor shows Undo in B's session",
+          "status": "passed",
+          "report_ordinal": 3
+        },
+        {
+          "id": " memory edit dialog ownership hides A's Undo toast when the account changes",
+          "status": "passed",
+          "report_ordinal": 4
+        },
+        {
+          "id": " memory edit dialog ownership keeps working through a token refresh of the same account",
+          "status": "passed",
+          "report_ordinal": 5
+        }
+      ]
+    },
+    {
+      "path": "tests/js/memory-edit-sources.test.mjs",
+      "cases": [
+        {
+          "id": " offers Ask about this for the current Agent answer",
+          "status": "passed",
+          "report_ordinal": 1
+        },
+        {
+          "id": " offers Ask about this for an earlier answer in the chat",
+          "status": "passed",
+          "report_ordinal": 2
+        }
+      ]
+    },
+    {
+      "path": "tests/js/mobile-header.test.mjs",
+      "cases": [
+        {
+          "id": " mobile action placement moves the actual controls and restores their exact desktop slots without duplicates",
+          "status": "passed",
+          "report_ordinal": 1
+        },
+        {
+          "id": " mobile action placement hides actions for incomplete, cleared and Watch views and restores them for the answer",
+          "status": "passed",
+          "report_ordinal": 2
+        },
+        {
+          "id": " mobile action placement uses the existing new-comparison action and closes the sidebar after switching views",
+          "status": "passed",
+          "report_ordinal": 3
+        }
+      ]
+    },
+    {
+      "path": "tests/js/model-answer-reader.test.mjs",
+      "cases": [
+        {
+          "id": " model answer reader keeps explicit tool evidence isolated across panels, bases, refresh and reset",
+          "status": "passed",
+          "report_ordinal": 1
+        },
+        {
+          "id": " model answer reader keeps the differences panel to one open finding, without subtitle or question label",
+          "status": "passed",
+          "report_ordinal": 2
+        },
+        {
+          "id": " model answer reader previews selected models without creating an answer or a loading state",
+          "status": "passed",
+          "report_ordinal": 3
+        },
+        {
+          "id": " model answer reader replaces the preview with a real run and protects its frozen answers from mode changes",
+          "status": "passed",
+          "report_ordinal": 4
+        },
+        {
+          "id": " model answer reader replaces waiting skeletons on first text and terminal states (agent=false)",
+          "status": "passed",
+          "report_ordinal": 5
+        },
+        {
+          "id": " model answer reader replaces waiting skeletons on first text and terminal states (agent=true)",
+          "status": "passed",
+          "report_ordinal": 6
+        },
+        {
+          "id": " model answer reader moves direct readiness to the composer and retains the normal reader heading",
+          "status": "passed",
+          "report_ordinal": 7
+        },
+        {
+          "id": " model answer reader keeps saved model versions independent of current model choices",
+          "status": "passed",
+          "report_ordinal": 8
+        },
+        {
+          "id": " model answer reader omits unknown legacy version undefined without inventing one",
+          "status": "passed",
+          "report_ordinal": 9
+        },
+        {
+          "id": " model answer reader omits unknown legacy version OpenAI without inventing one",
+          "status": "passed",
+          "report_ordinal": 10
+        },
+        {
+          "id": " model answer reader omits unknown legacy version Model not recorded without inventing one",
+          "status": "passed",
+          "report_ordinal": 11
+        },
+        {
+          "id": " model answer reader uses the frozen model ID if a live run has no display label",
+          "status": "passed",
+          "report_ordinal": 12
+        },
+        {
+          "id": " model answer reader shows only the selected original and updates streaming text without changing selection or scroll",
+          "status": "passed",
+          "report_ordinal": 13
+        },
+        {
+          "id": " model answer reader keeps an archived question and its own sources selected when a later turn streams",
+          "status": "passed",
+          "report_ordinal": 14
+        },
+        {
+          "id": " model answer reader keeps a completed live answer pinned when it moves into the conversation history",
+          "status": "passed",
+          "report_ordinal": 15
+        },
+        {
+          "id": " model answer reader closes when switching to an unrelated run and on logout/reset",
+          "status": "passed",
+          "report_ordinal": 16
+        },
+        {
+          "id": " model answer reader preserves an untouched direct answer while another model streams",
+          "status": "passed",
+          "report_ordinal": 17
+        },
+        {
+          "id": " model answer reader shows every direct answer inline including failed models",
+          "status": "passed",
+          "report_ordinal": 18
+        },
+        {
+          "id": " model answer reader compares two distinct models and switches between them on phones",
+          "status": "passed",
+          "report_ordinal": 19
+        },
+        {
+          "id": " model answer reader uses actual reader width for tablets with a sidebar",
+          "status": "passed",
+          "report_ordinal": 20
+        },
+        {
+          "id": " model answer reader uses one compact model picker on phones instead of a tall stack of model tabs",
+          "status": "passed",
+          "report_ordinal": 21
+        },
+        {
+          "id": " model answer reader opens claim links in the correct archived model and restores focus on close",
+          "status": "passed",
+          "report_ordinal": 22
+        },
+        {
+          "id": " model answer reader shows partial and cut-off answers with their text, a small mark and one visible reason",
+          "status": "passed",
+          "report_ordinal": 23
+        },
+        {
+          "id": " model answer reader renders model names as text and never creates unsafe source links",
+          "status": "passed",
+          "report_ordinal": 24
+        }
+      ]
+    },
+    {
+      "path": "tests/js/model-attachment-capability.test.mjs",
+      "cases": [
+        {
+          "id": " model-level attachment capability distinguishes GLM Flash from the text-only Pro model",
+          "status": "passed",
+          "report_ordinal": 1
+        },
+        {
+          "id": " model-level attachment capability keeps the legacy provider boolean as a cached-client fallback",
+          "status": "passed",
+          "report_ordinal": 2
+        }
+      ]
+    },
+    {
+      "path": "tests/js/model-family-cap.test.mjs",
+      "cases": [
+        {
+          "id": " run family cap includes a family while the run still has room",
+          "status": "passed",
+          "report_ordinal": 1
+        },
+        {
+          "id": " run family cap refuses the family beyond the cap instead of dropping another one",
+          "status": "passed",
+          "report_ordinal": 2
+        },
+        {
+          "id": " run family cap applies the cap to restored selections without shouting at the user",
+          "status": "passed",
+          "report_ordinal": 3
+        },
+        {
+          "id": " run family cap frees a slot again when a family is left out",
+          "status": "passed",
+          "report_ordinal": 4
+        }
+      ]
+    },
+    {
+      "path": "tests/js/model-pulse.test.mjs",
+      "cases": [
+        {
+          "id": " Model Pulse progressive enhancement keeps the initial server ranking without a duplicate request",
+          "status": "passed",
+          "report_ordinal": 1
+        },
+        {
+          "id": " Model Pulse progressive enhancement switches period and renders individual start dates and every returned family",
+          "status": "passed",
+          "report_ordinal": 2
+        },
+        {
+          "id": " Model Pulse progressive enhancement preserves the last ranking and restores its period when refresh fails",
+          "status": "passed",
+          "report_ordinal": 3
+        }
+      ]
+    },
+    {
+      "path": "tests/js/multi-run-view.test.mjs",
+      "cases": [
+        {
+          "id": " selected RunContext projection continues source hydration after consensus succeeds without projecting a hidden run",
+          "status": "passed",
+          "report_ordinal": 1
+        },
+        {
+          "id": " selected RunContext projection hydrates a saved terminal source stub for a historical turn only while its body exists",
+          "status": "passed",
+          "report_ordinal": 2
+        },
+        {
+          "id": " selected RunContext projection gives an archived Agent turn one evidence row with Copy inside and no second Sources footer",
+          "status": "passed",
+          "report_ordinal": 3
+        },
+        {
+          "id": " selected RunContext projection preserves completed history, open drawers and waiting model animations during follow-up streaming",
+          "status": "passed",
+          "report_ordinal": 4
+        },
+        {
+          "id": " selected RunContext projection refreshes model source mappings and terminal errors without text changes",
+          "status": "passed",
+          "report_ordinal": 5
+        },
+        {
+          "id": " selected RunContext projection publishes insights while sources are pending and preserves their DOM through source and final events",
+          "status": "passed",
+          "report_ordinal": 6
+        },
+        {
+          "id": " selected RunContext projection keeps late background updates out of the visible DOM and restores either run from its row",
+          "status": "passed",
+          "report_ordinal": 7
+        },
+        {
+          "id": " projection re-entrancy survives a surface that renders the visible run back at it",
+          "status": "passed",
+          "report_ordinal": 8
+        },
+        {
+          "id": " run-local evidence mapping rewrites source numbers against the supplied run without touching the visible global",
+          "status": "passed",
+          "report_ordinal": 9
+        },
+        {
+          "id": " run-local evidence mapping moves a legacy leading source block behind the first model claim",
+          "status": "passed",
+          "report_ordinal": 10
+        }
+      ]
+    },
+    {
+      "path": "tests/js/plus-tier-gates.test.mjs",
+      "cases": [
+        {
+          "id": " attachment gate per tier lets a Plus account open the file picker",
+          "status": "passed",
+          "report_ordinal": 1
+        },
+        {
+          "id": " attachment gate per tier still refuses a Free account",
+          "status": "passed",
+          "report_ordinal": 2
+        },
+        {
+          "id": " attachment gate per tier names the tier on the badge and drops the Free-only upgrade link",
+          "status": "passed",
+          "report_ordinal": 3
+        },
+        {
+          "id": " attachment gate per tier keeps Plus when a run reports only is_pro_user: false",
+          "status": "passed",
+          "report_ordinal": 4
+        },
+        {
+          "id": " attachment gate per tier still accepts an explicit downgrade and a bare Pro signal",
+          "status": "passed",
+          "report_ordinal": 5
+        },
+        {
+          "id": " firebase.js feeds the tier, not the pro flag never passes an is_pro flag to updateUserTierUI",
+          "status": "passed",
+          "report_ordinal": 6
+        },
+        {
+          "id": " firebase.js feeds the tier, not the pro flag reads data.tier with the pro flag only as a fallback",
+          "status": "passed",
+          "report_ordinal": 7
+        }
+      ]
+    },
+    {
+      "path": "tests/js/request-deadline.test.mjs",
+      "cases": [
+        {
+          "id": " Request deadlines aborts a stalled request and allows another attempt",
+          "status": "passed",
+          "report_ordinal": 1
+        },
+        {
+          "id": " Request deadlines preserves cancellation and never dispatches an already cancelled operation",
+          "status": "passed",
+          "report_ordinal": 2
+        },
+        {
+          "id": " Request deadlines renews streaming liveness and removes timers after completion",
+          "status": "passed",
+          "report_ordinal": 3
+        }
+      ]
+    },
+    {
+      "path": "tests/js/result-integrity.test.mjs",
+      "cases": [
+        {
+          "id": " consensus result integrity sends only receipts of complete answers, never answer text or sources",
+          "status": "passed",
+          "report_ordinal": 1
+        },
+        {
+          "id": " consensus result integrity keeps a truncated synthesis visible but marks it incomplete and failed",
+          "status": "passed",
+          "report_ordinal": 2
+        }
+      ]
+    },
+    {
+      "path": "tests/js/run-mode.test.mjs",
+      "cases": [
+        {
+          "id": " run mode migrates {} once to consensus and removes the legacy keys",
+          "status": "passed",
+          "report_ordinal": 1
+        },
+        {
+          "id": " run mode migrates { agentMode: 'true', autoConsensus: 'true' } once to consensus and removes the legacy keys",
+          "status": "passed",
+          "report_ordinal": 2
+        },
+        {
+          "id": " run mode migrates { agentMode: 'false', autoConsensus: 'false' } once to compare and removes the legacy keys",
+          "status": "passed",
+          "report_ordinal": 3
+        },
+        {
+          "id": " run mode migrates { runMode: 'agent', agentMode: 'false' } once to agent and removes the legacy keys",
+          "status": "passed",
+          "report_ordinal": 4
+        },
+        {
+          "id": " run mode migrates { runMode: 'bogus' } once to consensus and removes the legacy keys",
+          "status": "passed",
+          "report_ordinal": 5
+        },
+        {
+          "id": " run mode changes only to known modes, announces changes once and tracks the source",
+          "status": "passed",
+          "report_ordinal": 6
+        },
+        {
+          "id": " run mode resolves the effective mode from the open chat and the account",
+          "status": "passed",
+          "report_ordinal": 7
+        },
+        {
+          "id": " run mode follows a change made in another tab",
+          "status": "passed",
+          "report_ordinal": 8
+        }
+      ]
+    },
+    {
+      "path": "tests/js/run-progress-scope.test.mjs",
+      "cases": [
+        {
+          "id": " guided-run block belongs to the visible run leaves the view when a saved bookmark is opened and comes back with the run",
+          "status": "passed",
+          "report_ordinal": 1
+        },
+        {
+          "id": " guided-run block belongs to the visible run keeps counting from the real start when a running run is reopened",
+          "status": "passed",
+          "report_ordinal": 2
+        },
+        {
+          "id": " guided-run block belongs to the visible run shows a live per-model bar and completes it with the answer",
+          "status": "passed",
+          "report_ordinal": 3
+        },
+        {
+          "id": " guided-run block belongs to the visible run never shows one run's facts under another view",
+          "status": "passed",
+          "report_ordinal": 4
+        },
+        {
+          "id": " guided-run block belongs to the visible run counts raw streamed characters without Markdown UI or surrogate duplication",
+          "status": "passed",
+          "report_ordinal": 5
+        },
+        {
+          "id": " guided-run block belongs to the visible run does not count waiting or reasoning placeholders",
+          "status": "passed",
+          "report_ordinal": 6
+        },
+        {
+          "id": " guided-run block belongs to the visible run shows error as a terminal outcome, never a successful answer or character count",
+          "status": "passed",
+          "report_ordinal": 7
+        },
+        {
+          "id": " guided-run block belongs to the visible run shows skipped as a terminal outcome, never a successful answer or character count",
+          "status": "passed",
+          "report_ordinal": 8
+        },
+        {
+          "id": " guided-run block belongs to the visible run shows canceled as a terminal outcome, never a successful answer or character count",
+          "status": "passed",
+          "report_ordinal": 9
+        },
+        {
+          "id": " guided-run block belongs to the visible run freezes completion time and restores only the selected run's characters",
+          "status": "passed",
+          "report_ordinal": 10
+        },
+        {
+          "id": " guided-run block belongs to the visible run does not repeatedly announce each timer tick or streamed character",
+          "status": "passed",
+          "report_ordinal": 11
+        }
+      ]
+    },
+    {
+      "path": "tests/js/run-registry.test.mjs",
+      "cases": [
+        {
+          "id": " App.runRegistry bounds saved Agent snapshots without dropping unsaved or other pipeline results",
+          "status": "passed",
+          "report_ordinal": 1
+        },
+        {
+          "id": " App.runRegistry freezes each start snapshot and admits at most two executing runs",
+          "status": "passed",
+          "report_ordinal": 2
+        },
+        {
+          "id": " App.runRegistry projects only the selected run while background callbacks keep updating their owner",
+          "status": "passed",
+          "report_ordinal": 3
+        },
+        {
+          "id": " App.runRegistry keeps execution, visible view, and selected follow-up basis independent",
+          "status": "passed",
+          "report_ordinal": 4
+        },
+        {
+          "id": " App.runRegistry cancels exactly the addressed run and clearAll aborts the rest",
+          "status": "passed",
+          "report_ordinal": 5
+        },
+        {
+          "id": " App.runRegistry serializes follow-ups per conversation and retains an uncertain-turn fence",
+          "status": "passed",
+          "report_ordinal": 6
+        },
+        {
+          "id": " App.runRegistry does not let a failed follow-up shadow the last successful bookmark snapshot",
+          "status": "passed",
+          "report_ordinal": 7
+        },
+        {
+          "id": " App.runRegistry owns costly post-actions under the same admission and logout boundary",
+          "status": "passed",
+          "report_ordinal": 8
+        },
+        {
+          "id": " per-run ChatSession factory does not share completed or pending conversation identity",
+          "status": "passed",
+          "report_ordinal": 9
+        }
+      ]
+    },
+    {
+      "path": "tests/js/send-button.test.mjs",
+      "cases": [
+        {
+          "id": " keeps its icon across repeated syncs and launches once per run",
+          "status": "passed",
+          "report_ordinal": 1
+        }
+      ]
+    },
+    {
+      "path": "tests/js/seo-admin-alerts.test.mjs",
+      "cases": [
+        {
+          "id": " admin SEO alert strip stays silent only when everything is verified healthy",
+          "status": "passed",
+          "report_ordinal": 1
+        },
+        {
+          "id": " admin SEO alert strip catches credentials that are not configured",
+          "status": "passed",
+          "report_ordinal": 2
+        },
+        {
+          "id": " admin SEO alert strip catches a failed connection check and drops the unverified notice",
+          "status": "passed",
+          "report_ordinal": 3
+        },
+        {
+          "id": " admin SEO alert strip catches every collection run that is neither success nor partial",
+          "status": "passed",
+          "report_ordinal": 4
+        },
+        {
+          "id": " admin SEO alert strip keeps partial and success quiet, and calls a running collection out as a notice",
+          "status": "passed",
+          "report_ordinal": 5
+        },
+        {
+          "id": " admin SEO alert strip catches a portfolio that has never been collected at all",
+          "status": "passed",
+          "report_ordinal": 6
+        },
+        {
+          "id": " admin SEO alert strip catches a weekly review that ended as collection_failed or error",
+          "status": "passed",
+          "report_ordinal": 7
+        },
+        {
+          "id": " admin SEO alert strip catches a judge that did not answer",
+          "status": "passed",
+          "report_ordinal": 8
+        },
+        {
+          "id": " admin SEO alert strip catches a portfolio where no page has any stored data",
+          "status": "passed",
+          "report_ordinal": 9
+        },
+        {
+          "id": " admin SEO alert strip reproduces the five silent weeks: several failures stack instead of hiding",
+          "status": "passed",
+          "report_ordinal": 10
+        }
+      ]
+    },
+    {
+      "path": "tests/js/sidebar-quota.test.mjs",
+      "cases": [
+        {
+          "id": " shows one quiet ring for the shared account, the value only in label and panel",
+          "status": "passed",
+          "report_ordinal": 1
+        },
+        {
+          "id": " turns only the arc and the bar amber or red, and explains holds and estimates",
+          "status": "passed",
+          "report_ordinal": 2
+        },
+        {
+          "id": " orders concurrent snapshots and fences other accounts",
+          "status": "passed",
+          "report_ordinal": 3
+        },
+        {
+          "id": " admits a run like the server: available tokens against the mode estimate",
+          "status": "passed",
+          "report_ordinal": 4
+        }
+      ]
+    },
+    {
+      "path": "tests/js/skeleton-lifecycle.test.mjs",
+      "cases": [
+        {
+          "id": " loading lifecycle does not overwrite an already resolved session with cached-token placeholders: { known: true, uid: 'user' }",
+          "status": "passed",
+          "report_ordinal": 1
+        },
+        {
+          "id": " loading lifecycle does not overwrite an already resolved session with cached-token placeholders: { known: true, uid: null }",
+          "status": "passed",
+          "report_ordinal": 2
+        },
+        {
+          "id": " loading lifecycle exposes one named chat loading status and hides its decorative lines",
+          "status": "passed",
+          "report_ordinal": 3
+        },
+        {
+          "id": " loading lifecycle keeps chat placeholders through the request and removes them on success: { bookmarks: [] }",
+          "status": "passed",
+          "report_ordinal": 4
+        },
+        {
+          "id": " loading lifecycle keeps chat placeholders through the request and removes them on success: { bookmarks: [ { id: 'saved' } ] }",
+          "status": "passed",
+          "report_ordinal": 5
+        }
+      ]
+    },
+    {
+      "path": "tests/js/source-catalog-refs.test.mjs",
+      "cases": [
+        {
+          "id": " source citation identity keeps numerical notation literal in new consensus while model answers and legacy citations remain linked",
+          "status": "passed",
+          "report_ordinal": 1
+        },
+        {
+          "id": " source citation identity resolves sparse IDs by identity and leaves missing citations unresolved",
+          "status": "passed",
+          "report_ordinal": 2
+        },
+        {
+          "id": " source citation identity normalizes numeric IDs without resolving ambiguous duplicate IDs",
+          "status": "passed",
+          "report_ordinal": 3
+        },
+        {
+          "id": " source citation identity keeps positional lookup solely for legacy entries without an ID",
+          "status": "passed",
+          "report_ordinal": 4
+        }
+      ]
+    },
+    {
+      "path": "tests/js/source-teaser-check.test.mjs",
+      "cases": [
+        {
+          "id": " source teaser check disclosure shows the bound result and safe reason for {}",
+          "status": "passed",
+          "report_ordinal": 1
+        },
+        {
+          "id": " source teaser check disclosure shows the bound result and safe reason for {\"support\":\"partial\"}",
+          "status": "passed",
+          "report_ordinal": 2
+        },
+        {
+          "id": " source teaser check disclosure shows the bound result and safe reason for {\"support\":\"contradicted\"}",
+          "status": "passed",
+          "report_ordinal": 3
+        },
+        {
+          "id": " source teaser check disclosure shows the bound result and safe reason for {\"support\":\"unknown\"}",
+          "status": "passed",
+          "report_ordinal": 4
+        },
+        {
+          "id": " source teaser check disclosure shows the bound result and safe reason for {\"temporal\":\"outdated\"}",
+          "status": "passed",
+          "report_ordinal": 5
+        },
+        {
+          "id": " source teaser check disclosure shows the bound result and safe reason for {\"checked\":false,\"reason_code\":\"access_denied\"}",
+          "status": "passed",
+          "report_ordinal": 6
+        },
+        {
+          "id": " source teaser check disclosure keeps a hovered popup current through pending, checked, rerender and clearing without native titles",
+          "status": "passed",
+          "report_ordinal": 7
+        },
+        {
+          "id": " source teaser check disclosure binds one verdict per source to a grouped pill and shows the most severe one",
+          "status": "passed",
+          "report_ordinal": 8
+        },
+        {
+          "id": " source teaser check disclosure does not borrow the verdict of another statement or turn using the same source ID",
+          "status": "passed",
+          "report_ordinal": 9
+        },
+        {
+          "id": " source teaser check disclosure opens the same tooltip on keyboard focus and dismisses with Escape without stealing focus",
+          "status": "passed",
+          "report_ordinal": 10
+        }
+      ]
+    },
+    {
+      "path": "tests/js/source-url-identity.test.mjs",
+      "cases": [
+        {
+          "id": " evidence URL identity keeps sources apart that differ only in path or query case",
+          "status": "passed",
+          "report_ordinal": 1
+        },
+        {
+          "id": " evidence URL identity keeps a trailing slash as part of the resource, like the backend",
+          "status": "passed",
+          "report_ordinal": 2
+        },
+        {
+          "id": " evidence URL identity still merges URLs that differ only in scheme/host case or fragment",
+          "status": "passed",
+          "report_ordinal": 3
+        }
+      ]
+    },
+    {
+      "path": "tests/js/source-verification-watch.test.mjs",
+      "cases": [
+        {
+          "id": " bound source check watcher explains a terminal 403 refresh failure without changing the saved verdict",
+          "status": "passed",
+          "report_ordinal": 1
+        },
+        {
+          "id": " bound source check watcher explains a terminal 404 refresh failure without changing the saved verdict",
+          "status": "passed",
+          "report_ordinal": 2
+        },
+        {
+          "id": " bound source check watcher keeps results during transient failures, explains the third failure and clears its notice on recovery",
+          "status": "passed",
+          "report_ordinal": 3
+        },
+        {
+          "id": " bound source check watcher hydrates completed stubs and stops a private observer as soon as auth changes",
+          "status": "passed",
+          "report_ordinal": 4
+        },
+        {
+          "id": " bound source check watcher resumes an original own-key job once without adding the key to its snapshots",
+          "status": "passed",
+          "report_ordinal": 5
+        },
+        {
+          "id": " bound source check watcher does not automatically supply an own key to a server-key job",
+          "status": "passed",
+          "report_ordinal": 6
+        },
+        {
+          "id": " bound source check watcher loads every page before publishing and includes auth and stable revision",
+          "status": "passed",
+          "report_ordinal": 7
+        },
+        {
+          "id": " bound source check watcher backs off an unchanged revision and avoids fetching its finding pages again",
+          "status": "passed",
+          "report_ordinal": 8
+        },
+        {
+          "id": " bound source check watcher aborts on stop and never publishes a late response into another run",
+          "status": "passed",
+          "report_ordinal": 9
+        },
+        {
+          "id": " bound source check watcher restarts inconsistent pagination without publishing mixed versions",
+          "status": "passed",
+          "report_ordinal": 10
+        },
+        {
+          "id": " bound source check watcher preserves evidence on pending refresh and pauses when hidden",
+          "status": "passed",
+          "report_ordinal": 11
+        },
+        {
+          "id": " bound source check watcher supports public same-origin snapshots without credentials and rejects remote URLs",
+          "status": "passed",
+          "report_ordinal": 12
+        },
+        {
+          "id": " bound source check watcher backs off transient failures and stops after denied access",
+          "status": "passed",
+          "report_ordinal": 13
+        }
+      ]
+    },
+    {
+      "path": "tests/js/source-verification.test.mjs",
+      "cases": [
+        {
+          "id": " independent source verification keeps the compact Sources verdict honest across result and run changes",
+          "status": "passed",
+          "report_ordinal": 1
+        },
+        {
+          "id": " independent source verification shows full statements directly while source details remain collapsible across updates",
+          "status": "passed",
+          "report_ordinal": 2
+        },
+        {
+          "id": " independent source verification never presents a single green verdict when topic or time has a problem",
+          "status": "passed",
+          "report_ordinal": 3
+        },
+        {
+          "id": " independent source verification highlights the exact citation destination, survives updates, retriggers and clears without leaking to another run",
+          "status": "passed",
+          "report_ordinal": 4
+        },
+        {
+          "id": " independent source verification shows real support, original passages, checked time and bound model evidence without a success tick",
+          "status": "passed",
+          "report_ordinal": 5
+        },
+        {
+          "id": " independent source verification identifies a document cited by multiple providers as shared evidence",
+          "status": "passed",
+          "report_ordinal": 6
+        },
+        {
+          "id": " independent source verification keeps completed evidence visible during processing and separates pending from failed work",
+          "status": "passed",
+          "report_ordinal": 7
+        },
+        {
+          "id": " independent source verification does not combine matching text from a different sentence with model evidence",
+          "status": "passed",
+          "report_ordinal": 8
+        },
+        {
+          "id": " independent source verification preserves expanded passages and keyboard focus during progressive updates",
+          "status": "passed",
+          "report_ordinal": 9
+        },
+        {
+          "id": " independent source verification never relabels an old support verdict as thematic fit or repeats its opinion",
+          "status": "passed",
+          "report_ordinal": 10
+        },
+        {
+          "id": " independent source verification only decorates the relevant S reference, preserving claim and difference nodes and handlers",
+          "status": "passed",
+          "report_ordinal": 11
+        },
+        {
+          "id": " independent source verification renders unknowns neutrally and restores without accumulating marks",
+          "status": "passed",
+          "report_ordinal": 12
+        },
+        {
+          "id": " independent source verification communicates pending and clean assessments under Verify sources, including a moved reader panel",
+          "status": "passed",
+          "report_ordinal": 13
+        },
+        {
+          "id": " independent source verification keeps partial coverage explicit and never gives an unchecked report a checkmark",
+          "status": "passed",
+          "report_ordinal": 14
+        },
+        {
+          "id": " independent source verification does not turn provider text into HTML or link to unsafe URLs, and contains malformed results",
+          "status": "passed",
+          "report_ordinal": 15
+        },
+        {
+          "id": " independent source verification marks supported citations immediately but keeps a source with pending claims neutral",
+          "status": "passed",
+          "report_ordinal": 16
+        },
+        {
+          "id": " independent source verification keeps mixed or unclear source evidence out of green while preserving independent citation verdicts",
+          "status": "passed",
+          "report_ordinal": 17
+        },
+        {
+          "id": " independent source verification applies results to a late source list and removes green marks on reset without leaking into history",
+          "status": "passed",
+          "report_ordinal": 18
+        },
+        {
+          "id": " independent source verification summarizes unavailable checks with concrete reasons and counts",
+          "status": "passed",
+          "report_ordinal": 19
+        },
+        {
+          "id": " independent source verification decorates sparse public source IDs and keeps separate historical turns isolated",
+          "status": "passed",
+          "report_ordinal": 20
+        },
+        {
+          "id": " independent source verification distinguishes uncited catalogue references from pending checks and compact job stubs",
+          "status": "passed",
+          "report_ordinal": 21
+        }
+      ]
+    },
+    {
+      "path": "tests/js/sse-completion.test.mjs",
+      "cases": [
+        {
+          "id": " SSE completion and failure diagnostics recognizes final frames with \"\\r\\n\" line endings across byte boundaries",
+          "status": "passed",
+          "report_ordinal": 1
+        },
+        {
+          "id": " SSE completion and failure diagnostics recognizes final frames with \"\\r\" line endings across byte boundaries",
+          "status": "passed",
+          "report_ordinal": 2
+        },
+        {
+          "id": " SSE completion and failure diagnostics recognizes final frames with \"\\n\" line endings across byte boundaries",
+          "status": "passed",
+          "report_ordinal": 3
+        },
+        {
+          "id": " SSE completion and failure diagnostics accepts final without waiting for a later failing read",
+          "status": "passed",
+          "report_ordinal": 4
+        },
+        {
+          "id": " SSE completion and failure diagnostics accepts error without waiting for a later failing read",
+          "status": "passed",
+          "report_ordinal": 5
+        },
+        {
+          "id": " SSE completion and failure diagnostics keeps reading after consensus.final and keepalives until the persisted final",
+          "status": "passed",
+          "report_ordinal": 6
+        },
+        {
+          "id": " SSE completion and failure diagnostics distinguishes request_failed and stops renderers",
+          "status": "passed",
+          "report_ordinal": 7
+        },
+        {
+          "id": " SSE completion and failure diagnostics distinguishes stream_read_failed and stops renderers",
+          "status": "passed",
+          "report_ordinal": 8
+        },
+        {
+          "id": " SSE completion and failure diagnostics distinguishes stream_incomplete and stops renderers",
+          "status": "passed",
+          "report_ordinal": 9
+        },
+        {
+          "id": " SSE completion and failure diagnostics distinguishes stream_handler_failed and stops renderers",
+          "status": "passed",
+          "report_ordinal": 10
+        },
+        {
+          "id": " SSE completion and failure diagnostics preserves deliberate cancellation as AbortError",
+          "status": "passed",
+          "report_ordinal": 11
+        }
+      ]
+    },
+    {
+      "path": "tests/js/stored-turn-markers.test.mjs",
+      "cases": [
+        {
+          "id": " renderStoredConsensusClaims keeps the contradiction line on the disputed sentence",
+          "status": "passed",
+          "report_ordinal": 1
+        },
+        {
+          "id": " renderStoredConsensusClaims does not downgrade the contradiction to a support ratio",
+          "status": "passed",
+          "report_ordinal": 2
+        },
+        {
+          "id": " renderStoredConsensusClaims opens the difference card of its own turn, not the live footer",
+          "status": "passed",
+          "report_ordinal": 3
+        },
+        {
+          "id": " real archived drawer row keeps all drawers in one row, toggles only its own panel and allocates unique IDs",
+          "status": "passed",
+          "report_ordinal": 4
+        },
+        {
+          "id": " renderStoredConsensusClaims without differences still shows the support ratio for a merely split claim",
+          "status": "passed",
+          "report_ordinal": 5
+        },
+        {
+          "id": " difference cards in the detail panel orders critical first, names severity in one word and keeps the data index",
+          "status": "passed",
+          "report_ordinal": 6
+        },
+        {
+          "id": " difference cards in the detail panel puts each position's models on one line, as jump links only when an answer is reachable",
+          "status": "passed",
+          "report_ordinal": 7
+        },
+        {
+          "id": " difference cards in the detail panel opens the card of the clicked marker by data index, not by card position",
+          "status": "passed",
+          "report_ordinal": 8
+        }
+      ]
+    },
+    {
+      "path": "tests/js/thread-question-disclosure.test.mjs",
+      "cases": [
+        {
+          "id": " thread question disclosure stays open when a running context projects the same question again",
+          "status": "passed",
+          "report_ordinal": 1
+        },
+        {
+          "id": " thread question disclosure resets the disclosure when the projected question actually changes",
+          "status": "passed",
+          "report_ordinal": 2
+        }
+      ]
+    },
+    {
+      "path": "tests/js/topic-page.test.mjs",
+      "cases": [
+        {
+          "id": " topic strip readout treats data as text shows HTML-like notes literally on hover",
+          "status": "passed",
+          "report_ordinal": 1
+        },
+        {
+          "id": " topic strip readout treats data as text shows HTML-like notes literally on keyboard focus",
+          "status": "passed",
+          "report_ordinal": 2
+        },
+        {
+          "id": " topic strip readout treats data as text shows HTML-like notes literally on touch preview",
+          "status": "passed",
+          "report_ordinal": 3
+        },
+        {
+          "id": " topic strip readout treats data as text keeps the bold date and the score formatting",
+          "status": "passed",
+          "report_ordinal": 4
+        },
+        {
+          "id": " topic strip readout treats data as text omits the score for an unscored cell",
+          "status": "passed",
+          "report_ordinal": 5
+        },
+        {
+          "id": " topic strip readout treats data as text restores the server-rendered resting line after leaving the strip",
+          "status": "passed",
+          "report_ordinal": 6
+        },
+        {
+          "id": " topic strip readout treats data as text builds the returning-reader band from text, including hostile dates",
+          "status": "passed",
+          "report_ordinal": 7
+        }
+      ]
+    },
+    {
+      "path": "tests/js/user-memory.test.mjs",
+      "cases": [
+        {
+          "id": " memory switch loads the stored profile into the form",
+          "status": "passed",
+          "report_ordinal": 1
+        },
+        {
+          "id": " memory switch turns memory off and stays off",
+          "status": "passed",
+          "report_ordinal": 2
+        },
+        {
+          "id": " memory switch keeps the saved text when only the switch is written",
+          "status": "passed",
+          "report_ordinal": 3
+        },
+        {
+          "id": " memory save conflicts keeps the draft and offers reload when another writer won",
+          "status": "passed",
+          "report_ordinal": 4
+        },
+        {
+          "id": " memory save conflicts can deliberately overwrite the newer Memory with the kept draft",
+          "status": "passed",
+          "report_ordinal": 5
+        },
+        {
+          "id": " memory save conflicts an AI edit reload does not wipe an unsaved settings draft",
+          "status": "passed",
+          "report_ordinal": 6
+        }
+      ]
+    },
+    {
+      "path": "tests/js/vendor-frontend.test.mjs",
+      "cases": [
+        {
+          "id": " Vendoring pinned frontend libraries on disk copies every pinned library, license and font byte and retains unrelated old versions",
+          "status": "passed",
+          "report_ordinal": 1
+        },
+        {
+          "id": " Vendoring pinned frontend libraries on disk rejects stale target bytes without writing in check-only mode",
+          "status": "passed",
+          "report_ordinal": 2
+        },
+        {
+          "id": " Vendoring pinned frontend libraries on disk rejects missing target bytes without writing in check-only mode",
+          "status": "passed",
+          "report_ordinal": 3
+        },
+        {
+          "id": " Vendoring pinned frontend libraries on disk rejects version drift before creating any output",
+          "status": "passed",
+          "report_ordinal": 4
+        }
+      ]
+    },
+    {
+      "path": "tests/js/watch-dashboard-state.test.mjs",
+      "cases": [
+        {
+          "id": " cardState reads moved only from the server verdict, with the sources that carry it",
+          "status": "passed",
+          "report_ordinal": 1
+        },
+        {
+          "id": " cardState never presents a held answer as a change",
+          "status": "passed",
+          "report_ordinal": 2
+        },
+        {
+          "id": " cardState names a pending re-check and a resolved goal",
+          "status": "passed",
+          "report_ordinal": 3
+        },
+        {
+          "id": " cardState falls back to the last move while the answer is steady",
+          "status": "passed",
+          "report_ordinal": 4
+        },
+        {
+          "id": " dashboard render groups watches and shows the goal with its status",
+          "status": "passed",
+          "report_ordinal": 5
+        }
+      ]
+    },
+    {
+      "path": "tests/js/watch-feature-nudge.test.mjs",
+      "cases": [
+        {
+          "id": " watch feature nudge haelt sich bis zur dritten Frage zurueck",
+          "status": "passed",
+          "report_ordinal": 1
+        },
+        {
+          "id": " watch feature nudge portaliert nur den Hinweis ueber den Composer, nie die Antwort",
+          "status": "passed",
+          "report_ordinal": 2
+        },
+        {
+          "id": " watch feature nudge nimmt die Markierung beim Schliessen wieder zurueck",
+          "status": "passed",
+          "report_ordinal": 3
+        }
+      ]
+    }
+  ]
+}

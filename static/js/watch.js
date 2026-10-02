@@ -153,10 +153,10 @@
         <button type="button" class="watch-feature-nudge-close" aria-label="Dismiss new feature tip">&#10005;</button>
         <span class="watch-feature-nudge-label">New</span>
         <strong>Keep this answer current</strong>
-        <span class="watch-feature-nudge-copy">We re-run this question on a schedule and tell you when the models change their mind.</span>
+        <span class="watch-feature-nudge-copy">We re-check it across model families and write only when a source moves the answer.</span>
         <button type="button" class="watch-nudge-btn" id="watchNudgeStart">Watch this question</button>
-        <span class="watch-nudge-meta">Weekly &middot; e-mail only on a material change &middot; stop anytime</span>
-        <button type="button" class="watch-nudge-skip" id="watchNudgeCustomize">Pick a different schedule</button>
+        <span class="watch-nudge-meta">Weekly &middot; e-mail only on evidence &middot; stop anytime</span>
+        <button type="button" class="watch-nudge-skip" id="watchNudgeCustomize">Add a goal or change the schedule</button>
       `;
       nudge.querySelector(".watch-feature-nudge-close").addEventListener("click", event => {
         event.stopPropagation();
@@ -242,7 +242,7 @@
       <button type="button" class="watch-feature-nudge-close" aria-label="Dismiss">&#10005;</button>
       <span class="watch-feature-nudge-label is-active">Watching</span>
       <strong>You are set</strong>
-      <span class="watch-feature-nudge-copy">First check: ${escapeHtml(formatWatchSchedule(watch))}. We only write if the consensus materially changes.</span>
+      <span class="watch-feature-nudge-copy">First check: ${escapeHtml(formatWatchSchedule(watch))}. We only write when a source moves the answer.</span>
       <button type="button" class="watch-nudge-skip" id="watchNudgeOpenDash">Manage your watches</button>
     `;
     nudge.querySelector(".watch-feature-nudge-close").addEventListener("click", event => {
@@ -521,31 +521,14 @@
     }
   }
 
-  function emailModeOptions(selected) {
+  // Alert rules in the words of the evidence model: a watch writes when a
+  // source moves the answer, when its goal is reached, or after every check.
+  function emailModeOptions(selected, hasGoal) {
     return `
-      <option value="changes_only"${selected === "changes_only" || !selected ? " selected" : ""}>Material changes only</option>
-      <option value="condition"${selected === "condition" ? " selected" : ""}>When my condition is met</option>
-      <option value="every_run"${selected === "every_run" ? " selected" : ""}>Every new consensus (with content)</option>
+      <option value="changes_only"${selected === "changes_only" || !selected ? " selected" : ""}>${hasGoal ? "When it moves or resolves" : "When it moves on evidence"}</option>
+      <option value="condition"${selected === "condition" ? " selected" : ""}>Only when it resolves</option>
+      <option value="every_run"${selected === "every_run" ? " selected" : ""}>After every check</option>
     `;
-  }
-
-  function conditionField(value) {
-    return `<div id="watchConditionWrap" hidden>
-      <label class="watch-interval-label" for="watchCondition">Condition</label>
-      <textarea id="watchCondition" class="watch-condition-input" maxlength="500" rows="3" placeholder="Example: An official launch date for Germany is announced." aria-describedby="watchConditionNote watchConditionError">${escapeHtml(value)}</textarea>
-      <p id="watchConditionNote" class="watch-data-note">The condition is checked against each new consensus. You receive one alert when it changes from not met to met.</p>
-      <p id="watchConditionError" class="watch-field-error" role="alert" hidden></p>
-    </div>`;
-  }
-
-  function bindConditionVisibility(select, wrapper) {
-    if (!select || !wrapper) return;
-    const sync = () => {
-      wrapper.hidden = select.value !== "condition";
-      if (wrapper.hidden) clearWatchFieldError(document.getElementById("watchCondition"));
-    };
-    select.addEventListener("change", sync);
-    sync();
   }
 
   function bindWeekdayVisibility(intervalSelect, wrapper) {
@@ -611,7 +594,7 @@
       modal.classList.add("is-watch-dialog");
       modal.style.display = "flex";
     }
-    if (view === "create") renderQuestionStep(options?.question, modalIntent);
+    if (view === "create") renderQuestionStep(options?.question, modalIntent, options?.goal);
     else renderConfirm(undefined, modalIntent);
   }
 
@@ -619,13 +602,13 @@
     return String(value || "").replace(/\s+/g, " ").trim();
   }
 
-  function renderQuestionStep(initialQuestion, modalIntent) {
+  function renderQuestionStep(initialQuestion, modalIntent, pendingGoal) {
     const { title, body } = els();
     if (!body) return;
     title.textContent = "Create a Consensus Watch";
     body.innerHTML = `
       <div class="watch-step-label">Step 1 of 2 · Question</div>
-      <p class="watch-config-intro">Ask about something that may change over time. The first consensus will run on the schedule you choose next.</p>
+      <p class="watch-config-intro">Ask about something that will change: a release, a decision, a price, a rule. Next you tell us what you are waiting for.</p>
       <div id="watchDialogLimit" class="watch-limit-summary is-dialog" aria-live="polite"><span>Checking Watch availability…</span></div>
       <div class="watch-config-field watch-question-field">
         <label class="watch-interval-label" for="watchQuestion">What do you want to monitor?</label>
@@ -643,7 +626,7 @@
       </details>
       <p class="watch-config-assurance"><span aria-hidden="true">✓</span> No model run starts until the Watch reaches its scheduled check.</p>
       <div class="share-modal-actions">
-        <button type="button" id="watchQuestionNext" class="share-primary-btn">Continue to schedule</button>
+        <button type="button" id="watchQuestionNext" class="share-primary-btn">Continue</button>
         <button type="button" id="watchCancelBtn" class="share-secondary-btn">Cancel</button>
         <button type="button" id="watchListLink" class="share-link-btn">Open dashboard</button>
       </div>`;
@@ -662,7 +645,7 @@
         focusWatchField(input);
         return;
       }
-      renderConfirm({ question: question }, modalIntent);
+      renderConfirm({ question: question, goal: pendingGoal || "" }, modalIntent);
     });
     refreshDialogWatchLimit();
     requestAnimationFrame(() => input.focus());
@@ -670,19 +653,25 @@
 
   function renderConfirm(options, modalIntent) {
     const directQuestion = normalizeWatchQuestion(options?.question);
+    const presetGoal = normalizeWatchQuestion(options?.goal);
+    const suggestionQuestion = directQuestion || normalizeWatchQuestion(window.lastQuestion);
     const { title, body } = els();
     if (!body) return;
-    title.textContent = directQuestion ? "Configure your Watch" : "Watch this consensus";
+    title.textContent = directQuestion ? "Set up your Watch" : "Watch this answer";
     body.innerHTML = `
-      ${directQuestion ? '<div class="watch-step-label">Step 2 of 2 · Review and delivery</div>' : ""}
-      <p class="watch-config-intro">${directQuestion
-        ? "Weekly checks and material-change alerts are ready. Choose where we should notify you or customize the schedule."
-        : "Weekly checks and material-change alerts are ready for the <strong>original question</strong>."}</p>
+      ${directQuestion ? '<div class="watch-step-label">Step 2 of 2 · Goal and delivery</div>' : ""}
       <div id="watchDialogLimit" class="watch-limit-summary is-dialog" aria-live="polite"><span>Checking Watch availability…</span></div>
       ${directQuestion ? `<div class="watch-question-preview"><span>Question</span><strong>${escapeHtml(directQuestion)}</strong></div>` : ""}
+      <section class="watch-goal" aria-labelledby="watchGoalLabel">
+        <label id="watchGoalLabel" class="watch-goal-label" for="watchGoal">What are you waiting for?</label>
+        <p class="watch-goal-hint">Name the event you want to hear about. When a source confirms it, the watch closes and shows you the proof. Optional: without a goal you hear about every change on evidence.</p>
+        <div id="watchGoalSuggestions" class="watch-goal-suggestions" aria-live="polite" hidden></div>
+        <textarea id="watchGoal" class="watch-condition-input watch-goal-input" maxlength="500" rows="2" placeholder="Example: An official release date is announced" aria-describedby="watchGoalError">${escapeHtml(presetGoal)}</textarea>
+        <p id="watchGoalError" class="watch-field-error" role="alert" hidden></p>
+      </section>
       <div class="watch-setup-summary" aria-label="Watch defaults">
         <div class="watch-setup-summary-head">
-          <span class="watch-setup-summary-label">Ready with smart defaults</span>
+          <span class="watch-setup-summary-label">Schedule and alerts</span>
           <button type="button" id="watchEditDefaults" class="watch-setup-edit"
             aria-controls="watchAdvancedSettings" aria-expanded="false">Edit</button>
         </div>
@@ -691,7 +680,7 @@
           <button type="button" class="watch-setup-chip" id="watchAlertSummary" data-edit-field="watchEmailMode" title="Change when you get alerted"></button>
           <button type="button" class="watch-setup-chip" id="watchVisibilitySummary" data-edit-field="watchVisibility" title="Change page visibility"></button>
         </div>
-        <p class="watch-setup-summary-hint">Every value here can be changed — tap a chip or “Edit”.</p>
+        <p class="watch-setup-summary-hint">A daily scan between checks pulls the next check forward when a new source appears.</p>
       </div>
       <details id="watchAdvancedSettings" class="watch-advanced-settings">
         <summary><span>Customize schedule and alerts</span><small>Optional</small></summary>
@@ -702,7 +691,7 @@
               <option value="private" selected>Private, only my account</option>
               <option value="public">Public, anyone with the link</option>
             </select>
-            <p id="watchVisibilityNote" class="watch-data-note">Public pages are read-only and non-indexed by default.</p>
+            <p id="watchVisibilityNote" class="watch-data-note">Public pages are read-only, show the goal, and stay off Google unless you nominate them.</p>
             <p id="watchVisibilityError" class="watch-field-error" role="alert" hidden></p>
           </div>
           <div class="watch-config-grid">
@@ -722,10 +711,9 @@
             </div>
           </div>
           <div class="watch-config-field">
-            <label class="watch-interval-label" for="watchEmailMode">Alert rule</label>
-            <select id="watchEmailMode" class="watch-interval-select watch-email-select">${emailModeOptions("changes_only")}</select>
-            <p class="watch-data-note">“Every new consensus” includes the full generated answer.</p>
-            ${conditionField("")}
+            <label class="watch-interval-label" for="watchEmailMode">Alerts</label>
+            <select id="watchEmailMode" class="watch-interval-select watch-email-select">${emailModeOptions("changes_only", Boolean(presetGoal))}</select>
+            <p class="watch-data-note">“After every check” includes the full answer; “resolves” means a source confirmed your goal.</p>
           </div>
         </div>
       </details>
@@ -739,14 +727,13 @@
         <p id="watchTelegramNote" class="watch-data-note">Checking Telegram connection…</p>
         <p id="watchChannelsError" class="watch-field-error" role="alert" hidden></p>
       </div>
-      <p class="watch-config-assurance"><span aria-hidden="true">✓</span> Attachments and follow-up context are never resent.</p>
       <div class="share-modal-actions">
         <button type="button" id="watchConfirmBtn" class="share-primary-btn">Start watching</button>
         <button type="button" id="watchCancelBtn" class="share-secondary-btn">${directQuestion ? "Back" : "Cancel"}</button>
         <button type="button" id="watchListLink" class="share-link-btn">Open dashboard</button>
       </div>`;
     document.getElementById("watchCancelBtn").addEventListener("click", () => {
-      if (directQuestion) renderQuestionStep(directQuestion, modalIntent);
+      if (directQuestion) renderQuestionStep(directQuestion, modalIntent, goalInput.value);
       else closeDialog();
     });
     document.getElementById("watchListLink").addEventListener("click", () => {
@@ -758,14 +745,13 @@
     const weekdaySelect = document.getElementById("watchWeekday");
     const runTimeInput = document.getElementById("watchRunTime");
     const emailModeSelect = document.getElementById("watchEmailMode");
-    const conditionInput = document.getElementById("watchCondition");
+    const goalInput = document.getElementById("watchGoal");
     const emailEnabledInput = document.getElementById("watchEmailEnabled");
     const telegramEnabledInput = document.getElementById("watchTelegramEnabled");
     const telegramConnect = document.getElementById("watchTelegramConnect");
     const telegramNote = document.getElementById("watchTelegramNote");
     const channelsError = document.getElementById("watchChannelsError");
     document.getElementById("watchTimezoneLabel").textContent = browserTimezone();
-    bindConditionVisibility(emailModeSelect, document.getElementById("watchConditionWrap"));
     bindWeekdayVisibility(intervalSelect, document.getElementById("watchWeekdayWrap"));
 
     function updateSetupSummary() {
@@ -776,15 +762,65 @@
       if (runTimeInput.value) scheduleParts.push(runTimeInput.value);
       document.getElementById("watchScheduleSummary").textContent = scheduleParts.join(" · ");
       document.getElementById("watchAlertSummary").textContent =
-        emailModeSelect.options[emailModeSelect.selectedIndex]?.textContent.trim() || "Material changes only";
+        emailModeSelect.options[emailModeSelect.selectedIndex]?.textContent.trim() || "When it moves on evidence";
       document.getElementById("watchVisibilitySummary").textContent =
         visibilitySelect.value === "public" ? "Public page" : "Private page";
+    }
+    function syncAlertLabels() {
+      const selected = emailModeSelect.value;
+      emailModeSelect.innerHTML = emailModeOptions(selected, Boolean(goalInput.value.trim()));
+      updateSetupSummary();
     }
     [visibilitySelect, intervalSelect, weekdaySelect, emailModeSelect].forEach(input => {
       input.addEventListener("change", updateSetupSummary);
     });
     runTimeInput.addEventListener("input", updateSetupSummary);
+    goalInput.addEventListener("input", () => {
+      clearWatchFieldError(goalInput);
+      syncGoalChips();
+      syncAlertLabels();
+    });
     updateSetupSummary();
+
+    // Suggested goals turn "What are you waiting for?" into one tap. They
+    // are a convenience: without them (or on failure) the field just works.
+    const suggestions = document.getElementById("watchGoalSuggestions");
+    function syncGoalChips() {
+      const current = goalInput.value.trim();
+      suggestions.querySelectorAll(".watch-goal-chip").forEach(chip => {
+        chip.setAttribute("aria-pressed", String(chip.dataset.goal === current));
+      });
+    }
+    function renderGoalChips(goals) {
+      suggestions.innerHTML = "";
+      if (!goals.length) {
+        suggestions.hidden = true;
+        return;
+      }
+      goals.forEach(goal => {
+        const chip = makeButton(goal, "watch-goal-chip", () => {
+          goalInput.value = goalInput.value.trim() === goal ? "" : goal;
+          goalInput.dispatchEvent(new Event("input"));
+        });
+        chip.dataset.goal = goal;
+        suggestions.appendChild(chip);
+      });
+      suggestions.hidden = false;
+      syncGoalChips();
+    }
+    if (suggestionQuestion.length >= 8) {
+      suggestions.hidden = false;
+      suggestions.innerHTML = '<span class="watch-goal-chip is-loading" aria-hidden="true"></span>'.repeat(3)
+        + '<span class="watch-sr-only">Loading suggested goals…</span>';
+      api("POST", "/api/watch/goal-suggestions", { question: suggestionQuestion },
+        () => watchModalIntentIsCurrent(modalIntent))
+        .then(data => {
+          if (suggestions.isConnected) renderGoalChips(Array.isArray(data.goals) ? data.goals : []);
+        })
+        .catch(() => {
+          if (suggestions.isConnected) renderGoalChips([]);
+        });
+    }
 
     // Die Voreinstellungen sahen aus wie feste Fakten: das Aufklapp-Feld stand
     // ganz unten und wurde schlicht uebersehen ("man kann nichts verstellen").
@@ -836,7 +872,7 @@
     }));
     bindWatchFieldErrorReset(visibilitySelect, "change");
     bindWatchFieldErrorReset(runTimeInput, "input");
-    bindWatchFieldErrorReset(conditionInput, "input");
+    emailModeSelect.addEventListener("change", () => clearWatchFieldError(goalInput));
     const confirm = document.getElementById("watchConfirmBtn");
     if (!directQuestion && !window.lastShareResultId && window.currentBookmarkShareResultContext) {
       confirm.disabled = true;
@@ -858,9 +894,9 @@
       if (!directQuestion && !resultId) return;
       const visibility = visibilitySelect.value;
       const emailMode = emailModeSelect.value;
-      const condition = conditionInput.value.trim();
+      const goal = normalizeWatchQuestion(goalInput.value);
       const runTime = runTimeInput.value;
-      [visibilitySelect, runTimeInput, conditionInput].forEach(clearWatchFieldError);
+      [visibilitySelect, runTimeInput, goalInput].forEach(clearWatchFieldError);
       const invalidFields = [];
       if (!visibility) {
         setWatchFieldError(visibilitySelect, "Choose whether this page should be private or public.");
@@ -870,9 +906,9 @@
         setWatchFieldError(runTimeInput, "Choose a run time for the automatic check.");
         invalidFields.push(runTimeInput);
       }
-      if (emailMode === "condition" && !condition) {
-        setWatchFieldError(conditionInput, "Enter the condition you want to monitor.");
-        invalidFields.push(conditionInput);
+      if (emailMode === "condition" && !goal) {
+        setWatchFieldError(goalInput, "Name the goal, or choose a different alert rule.");
+        invalidFields.push(goalInput);
       }
       if (!emailEnabledInput.checked && !telegramEnabledInput.checked) {
         channelsError.textContent = "Keep at least one delivery channel enabled.";
@@ -887,13 +923,12 @@
       this.textContent = "Starting…";
       try {
         const payload = {
-          interval: document.getElementById("watchInterval").value,
-          run_weekday: document.getElementById("watchInterval").value === "weekly"
-            ? document.getElementById("watchWeekday").value : "",
+          interval: intervalSelect.value,
+          run_weekday: intervalSelect.value === "weekly" ? weekdaySelect.value : "",
           email_mode: emailMode,
           email_enabled: emailEnabledInput.checked,
           telegram_enabled: telegramEnabledInput.checked,
-          condition: condition,
+          condition: goal,
           visibility: visibility,
           run_time: runTime,
           timezone: browserTimezone()
@@ -910,7 +945,8 @@
         watchState.setLimits(null);
         window.App?.trackAppEvent?.("app_watch_created", {
           interval: data.watch.interval,
-          source: directQuestion ? "query_first" : "consensus"
+          source: directQuestion ? "query_first" : "consensus",
+          has_goal: Boolean(goal)
         });
         renderSuccess(data.watch, modalIntent);
       } catch (error) {
@@ -947,11 +983,12 @@
     document.getElementById("watchStartSummary").textContent = watch.query_first
       ? `First check: ${formatWatchSchedule(watch)}`
       : `Next check: ${formatWatchSchedule(watch)}`;
+    const goal = String(watch.condition || "").trim();
     document.getElementById("watchMailSummary").textContent = watch.email_mode === "every_run"
-      ? "You will receive every new consensus, including its content."
-      : watch.email_mode === "condition"
-        ? "You will be notified when your condition becomes true."
-        : "You will be notified only after a material change.";
+      ? "You will get every check, including the answer."
+      : goal
+        ? `Waiting for: ${goal}. ${watch.email_mode === "condition" ? "You hear from us when a source confirms it." : "You also hear about every change on evidence."}`
+        : "You hear from us only when a source moves the answer.";
     const successChips = document.getElementById("watchSuccessChips");
     [
       watch.visibility === "private" ? "Private page" : "Public page",
@@ -988,8 +1025,7 @@
   function dashEls() {
     return {
       page: document.getElementById("watchDashboard"),
-      body: document.getElementById("watchDashBody"),
-      close: document.getElementById("watchDashClose")
+      body: document.getElementById("watchDashBody")
     };
   }
 
@@ -1006,6 +1042,7 @@
     consensusButton.setAttribute("aria-pressed", String(!isWatchView));
     watchesButton.classList.toggle("is-active", isWatchView);
     watchesButton.setAttribute("aria-pressed", String(isWatchView));
+    consensusButton.closest(".view-switch")?.setAttribute("data-active", isWatchView ? "watches" : "chat");
   }
 
   function acknowledgeViewSwitchHint() {
@@ -1030,10 +1067,9 @@
   }
 
   function wireWatchPage() {
-    const { page, close } = dashEls();
+    const { page } = dashEls();
     if (!page || page.dataset.wired) return;
     page.dataset.wired = "1";
-    close?.addEventListener("click", closeWatchDashboard);
     document.addEventListener("keydown", event => {
       if (event.key === "Escape" && !page.hidden) closeWatchDashboard();
     });
@@ -1068,7 +1104,7 @@
     wireWatchPage();
     page.hidden = false;
     setViewSwitchState(true);
-    renderDashboard();
+    window.App.watchDashboard?.render();
   }
 
   function openWatchDashboard() {
@@ -1100,7 +1136,7 @@
     const startedAt = Date.now();
     (function waitForAuth() {
       if (window.auth?.currentUser) {
-        renderDashboard();
+        window.App.watchDashboard?.render();
         return;
       }
       if (window.__consensioAuthState?.known === true) {
@@ -1123,909 +1159,9 @@
     setViewSwitchState(true);
     body.innerHTML = "";
     const hint = document.createElement("div");
-    hint.className = "watch-dash-empty";
+    hint.className = "wd-loading";
     hint.textContent = message || "Please log in to see your Consensus Watch dashboard.";
     body.appendChild(hint);
-  }
-
-  function formatDateTime(iso) {
-    if (!iso) return "";
-    const date = new Date(iso);
-    if (isNaN(date.getTime())) return "";
-    try {
-      return new Intl.DateTimeFormat(undefined, {
-        weekday: "short", month: "short", day: "numeric",
-        hour: "2-digit", minute: "2-digit"
-      }).format(date);
-    } catch (_) {
-      return date.toLocaleString();
-    }
-  }
-
-  function relativeTime(iso) {
-    if (!iso) return "";
-    const then = new Date(iso).getTime();
-    if (isNaN(then)) return "";
-    const diffMs = Date.now() - then;
-    const minutes = Math.round(Math.abs(diffMs) / 60000);
-    const suffix = diffMs >= 0 ? " ago" : " from now";
-    if (minutes < 60) return Math.max(1, minutes) + " min" + suffix;
-    const hours = Math.round(minutes / 60);
-    if (hours < 24) return hours + " h" + suffix;
-    const days = Math.round(hours / 24);
-    return days + " d" + suffix;
-  }
-
-  function trendHistory(watch) {
-    const history = Array.isArray(watch.history) ? [...watch.history] : [];
-    if (!watch.query_first && typeof watch.baseline_agreement_score === "number") {
-      history.unshift({
-        agreement_score: watch.baseline_agreement_score,
-        changed: false,
-        baseline: true
-      });
-    }
-    return history;
-  }
-
-  function buildSparkline(history) {
-    const points = history.filter(point => typeof point.agreement_score === "number");
-    const width = 150, height = 42, pad = 4;
-    const wrapper = document.createElement("div");
-    wrapper.className = "watch-sparkline";
-    if (!points.length) {
-      wrapper.classList.add("is-empty");
-      wrapper.title = "Agreement trend starts after the first check";
-      wrapper.innerHTML =
-        `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="img" aria-label="Agreement trend awaiting first check">` +
-        `<path class="spark-placeholder" d="M ${pad} ${height / 2} L ${width - pad} ${height / 2}"></path></svg>`;
-      return wrapper;
-    }
-
-    const y = score => pad + (height - 2 * pad) * (100 - score) / 100;
-    if (points.length === 1) {
-      const score = points[0].agreement_score;
-      const scoreY = y(score);
-      wrapper.classList.add("is-single");
-      wrapper.title = "Agreement baseline; trend starts after the next check";
-      wrapper.innerHTML =
-        `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="img" aria-label="Agreement baseline ${Math.round(score)} out of 100">` +
-        `<path class="spark-path" d="M ${pad} ${scoreY.toFixed(1)} L ${width - pad} ${scoreY.toFixed(1)}"></path>` +
-        `<circle class="spark-dot" cx="${width - pad}" cy="${scoreY.toFixed(1)}" r="3"></circle></svg>`;
-      return wrapper;
-    }
-
-    const step = (width - 2 * pad) / (points.length - 1);
-    const coords = points.map((point, index) => ({
-      x: pad + step * index,
-      y: y(point.agreement_score)
-    }));
-    const path = coords.map((c, i) => (i ? "L" : "M") + c.x.toFixed(1) + " " + c.y.toFixed(1)).join(" ");
-    const area = path + ` L ${coords[coords.length - 1].x.toFixed(1)} ${height - pad} L ${coords[0].x.toFixed(1)} ${height - pad} Z`;
-    const dots = points.map((point, index) => {
-      const isEvent = isMaterialCheck(point);
-      const last = index === points.length - 1;
-      if (!isEvent && !last) return "";
-      const c = coords[index];
-      return `<circle class="spark-dot${isEvent && !last ? " event" : ""}" cx="${c.x.toFixed(1)}" cy="${c.y.toFixed(1)}" r="${last ? 3 : 2.4}"></circle>`;
-    }).join("");
-    const includesBaseline = points.some(point => point.baseline);
-    wrapper.title = "Agreement score trend (" + points.length + (includesBaseline ? " scores including baseline)" : " checks)");
-    wrapper.innerHTML =
-      `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="img" aria-label="Agreement score trend">` +
-      `<path class="spark-area" d="${area}"></path><path class="spark-path" d="${path}"></path>${dots}</svg>`;
-    return wrapper;
-  }
-
-  function statusChip(watch) {
-    const chip = document.createElement("span");
-    chip.className = "watch-chip watch-chip-" + watch.status;
-    chip.textContent = watch.status === "paused_error" ? "Paused after errors" : watch.status;
-    return chip;
-  }
-
-  // The server grades every check with one shared rule (drift_signal) and ships
-  // the verdict as `trigger`. The dashboard reads that verdict instead of the
-  // raw `changed` flag: that flag is also set for a rewritten qualification,
-  // and using it here made every card announce a change after every check.
-  function isMaterialCheck(point) {
-    return Boolean(point) && point.trigger === "changed";
-  }
-
-  function latestHistoryPoint(watch) {
-    const history = watch.history || [];
-    return history.length ? history[history.length - 1] : null;
-  }
-
-  function driftState(watch) {
-    const point = latestHistoryPoint(watch);
-    if (!point) return { key: "baseline", label: "Awaiting first check", summary: "Baseline ready" };
-    if (watch.query_first && (watch.history || []).length === 1) {
-      return {
-        key: "baseline",
-        label: "Baseline established",
-        summary: "The first scheduled consensus is ready.",
-        point: point
-      };
-    }
-    const changed = isMaterialCheck(point);
-    return {
-      key: changed ? "changed" : "stable",
-      label: changed ? "Changed" : "Stable",
-      summary: changed
-        ? (point.change_summary || "Material movement detected in the latest check.")
-        : (point.restated && point.change_summary
-          ? "Restated, not moved: " + point.change_summary
-          : "No material movement in the latest check."),
-      point: point
-    };
-  }
-
-  function renderDashboardStats(container, watches) {
-    const active = watches.filter(watch => watch.status === "active");
-    const nextRuns = active.map(watch => watch.next_run_at).filter(Boolean).sort();
-    const weekAgo = Date.now() - 7 * 24 * 3600 * 1000;
-    let recentChanges = 0;
-    let recentChecks = 0;
-    watches.forEach(watch => (watch.history || []).forEach(point => {
-      if (!point.ts || new Date(point.ts).getTime() < weekAgo) return;
-      recentChecks += 1;
-      if (isMaterialCheck(point)) recentChanges += 1;
-    }));
-    const stats = document.createElement("div");
-    stats.className = "watch-dash-stats";
-    stats.innerHTML = `
-      <article class="watch-dash-stat"><span>Active Watches</span><strong>${active.length}</strong><small>${watches.length - active.length} paused</small></article>
-      <article class="watch-dash-stat is-drift"><span>Changes · 7 days</span><strong>${recentChanges}</strong><small>material movements</small></article>
-      <article class="watch-dash-stat"><span>Checks · 7 days</span><strong>${recentChecks}</strong><small>successful runs</small></article>
-      <article class="watch-dash-stat"><span>Next check</span><strong class="is-date">${nextRuns.length ? escapeHtml(relativeTime(nextRuns[0])) : "—"}</strong><small>${nextRuns.length ? escapeHtml(formatDateTime(nextRuns[0])) : "No active schedule"}</small></article>`;
-    container.appendChild(stats);
-
-    const changes = watches
-      .map(watch => ({ watch: watch, state: driftState(watch) }))
-      .filter(item => item.state.key === "changed")
-      .sort((a, b) => new Date(b.state.point.ts || 0) - new Date(a.state.point.ts || 0))
-      .slice(0, 3);
-    if (changes.length) {
-      const panel = document.createElement("section");
-      panel.className = "watch-drift-feed";
-      panel.innerHTML = `<div class="watch-drift-feed-head"><div><span class="watch-kicker">Latest changes</span><h2>Recent movement</h2></div><span>${changes.length} update${changes.length === 1 ? "" : "s"}</span></div>`;
-      const list = document.createElement("div");
-      list.className = "watch-drift-feed-list";
-      changes.forEach(({ watch, state }) => {
-        const item = document.createElement("a");
-        item.href = watch.share_path || "#";
-        item.target = "_blank";
-        item.rel = "noopener";
-        item.innerHTML = `<span class="watch-drift-feed-dot" aria-hidden="true"></span><span><strong>${escapeHtml(watch.question || "Untitled watch")}</strong><small>${escapeHtml(state.summary)}</small></span><time>${escapeHtml(relativeTime(state.point.ts))}</time>`;
-        list.appendChild(item);
-      });
-      panel.appendChild(list);
-      container.appendChild(panel);
-    }
-  }
-
-  function renderBriefCard(container, brief, hasWatches) {
-    const card = document.createElement("div");
-    card.className = "watch-brief-card";
-    const timezone = browserTimezone();
-    card.innerHTML = `
-      <div class="watch-brief-main">
-        <label class="watch-brief-title">
-          <span class="switch watch-brief-switch">
-            <input type="checkbox" id="watchBriefToggle">
-            <span class="slider"></span>
-          </span>
-          Morning Brief
-        </label>
-        <p class="watch-brief-note">${hasWatches
-          ? `One daily e-mail summarizing all your watches, including current agreement, changes since the last brief, and upcoming checks. No extra model runs. Times use ${escapeHtml(timezone)}.`
-          : "Create a watch first to activate your daily digest."}</p>
-      </div>
-      <div class="watch-brief-controls" id="watchBriefControls" hidden>
-        <input type="time" id="watchBriefTime" class="watch-time-input" aria-label="Brief delivery time">
-        <select id="watchBriefMode" class="watch-interval-select" aria-label="Brief frequency">
-          <option value="always">Every morning</option>
-          <option value="changes_only">Only when something changed</option>
-        </select>
-      </div>`;
-    container.appendChild(card);
-
-    const toggle = card.querySelector("#watchBriefToggle");
-    const controls = card.querySelector("#watchBriefControls");
-    const timeInput = card.querySelector("#watchBriefTime");
-    const modeSelect = card.querySelector("#watchBriefMode");
-    card.classList.toggle("is-disabled", !hasWatches);
-    toggle.checked = hasWatches && !!brief.enabled;
-    toggle.disabled = !hasWatches;
-    controls.hidden = !toggle.checked;
-    timeInput.value = brief.send_time || "07:00";
-    modeSelect.value = brief.mode || "always";
-    let persistedEnabled = toggle.checked;
-    let persistedSendTime = timeInput.value;
-    let persistedMode = modeSelect.value;
-
-    async function save(changes, revert) {
-      toggle.disabled = timeInput.disabled = modeSelect.disabled = true;
-      try {
-        const data = await api("PATCH", "/api/my/watch-brief", changes);
-        const saved = data.brief || {};
-        toggle.checked = !!saved.enabled;
-        controls.hidden = !saved.enabled;
-        if (saved.send_time) timeInput.value = saved.send_time;
-        if (saved.mode) modeSelect.value = saved.mode;
-        persistedEnabled = toggle.checked;
-        persistedSendTime = timeInput.value;
-        persistedMode = modeSelect.value;
-        popup(saved.enabled ? "Morning brief updated." : "Morning brief disabled.");
-      } catch (error) {
-        popup("Brief update failed: " + error.message);
-        if (revert) revert();
-      } finally {
-        toggle.disabled = !hasWatches;
-        timeInput.disabled = modeSelect.disabled = false;
-      }
-    }
-
-    toggle.addEventListener("change", () => {
-      const enabled = toggle.checked;
-      save(
-        enabled
-          ? { enabled: true, send_time: timeInput.value || "07:00", timezone: timezone, mode: modeSelect.value }
-          : { enabled: false },
-        () => { toggle.checked = persistedEnabled; controls.hidden = !persistedEnabled; }
-      );
-    });
-    timeInput.addEventListener("change", () => {
-      if (!timeInput.value || !toggle.checked) return;
-      save(
-        { send_time: timeInput.value, timezone: timezone },
-        () => { timeInput.value = persistedSendTime; }
-      );
-    });
-    modeSelect.addEventListener("change", () => {
-      if (!toggle.checked) return;
-      save(
-        { mode: modeSelect.value },
-        () => { modeSelect.value = persistedMode; }
-      );
-    });
-  }
-
-  function renderTelegramCard(container, state, onChanged) {
-    const card = document.createElement("div");
-    card.className = "watch-telegram-card";
-    const identity = state.telegram_username
-      ? "@" + state.telegram_username
-      : (state.telegram_first_name || "your Telegram account");
-    card.innerHTML = `
-      <div class="watch-telegram-main">
-        <strong class="watch-telegram-title">Telegram alerts</strong>
-        <p class="watch-telegram-note"></p>
-      </div>
-      <div class="watch-telegram-actions"></div>`;
-    const note = card.querySelector(".watch-telegram-note");
-    const actions = card.querySelector(".watch-telegram-actions");
-    if (!state.configured) {
-      card.classList.add("is-disabled");
-      note.textContent = state.linked
-        ? "Telegram is linked, but notifications are temporarily unavailable on this consens.io deployment."
-        : "Telegram notifications are not configured on this consens.io deployment.";
-      if (state.linked) {
-        actions.appendChild(makeButton("Disconnect", "share-link-btn", async function () {
-          this.disabled = true;
-          try {
-            await api("DELETE", "/api/my/telegram", {});
-            watchState.setTelegram(null);
-            onChanged();
-          } catch (error) {
-            this.disabled = false;
-            popup("Disconnect failed: " + error.message);
-          }
-        }));
-      }
-    } else if (state.connected) {
-      note.textContent = `Connected to ${identity}. Enable Telegram separately on each watch below.`;
-      actions.appendChild(makeButton("Send test", "share-secondary-btn", async function () {
-        this.disabled = true;
-        try {
-          await api("POST", "/api/my/telegram/test", {});
-          popup("Test message sent to Telegram.");
-        } catch (error) {
-          popup("Test failed: " + error.message);
-        } finally { this.disabled = false; }
-      }));
-      actions.appendChild(makeButton("Disconnect", "share-link-btn", async function () {
-        if (!confirm("Disconnect Telegram? Watches keep their channel preference but cannot deliver there until you reconnect.")) return;
-        this.disabled = true;
-        try {
-          await api("DELETE", "/api/my/telegram", {});
-          watchState.setTelegram(null);
-          onChanged();
-        } catch (error) {
-          this.disabled = false;
-          popup("Disconnect failed: " + error.message);
-        }
-      }));
-    } else {
-      note.textContent = "Connect once, then choose Telegram as a delivery channel for any Consensus Watch.";
-      actions.appendChild(makeButton("Connect Telegram", "share-primary-btn", async function () {
-        this.disabled = true;
-        await connectTelegram(() => {
-          watchState.setTelegram(null);
-          onChanged();
-        });
-        if (this.isConnected) this.disabled = false;
-      }));
-    }
-    container.appendChild(card);
-  }
-
-  function renderNotificationsPanel(container, telegram, brief, hasWatches) {
-    const storageKey = "consensus_watch_notifications_open";
-    let isOpen = false;
-    try { isOpen = window.localStorage.getItem(storageKey) === "true"; } catch (_) {}
-
-    const panel = document.createElement("details");
-    panel.className = "watch-notifications";
-    panel.open = isOpen;
-    const telegramStatus = telegram.configured
-      ? (telegram.connected ? "Telegram connected" : "Telegram not connected")
-      : "Telegram unavailable";
-    const briefStatus = hasWatches && brief.enabled ? "Morning brief on" : "Morning brief off";
-    panel.innerHTML = `
-      <summary>
-        <span class="watch-notifications-title">Notifications</span>
-        <span class="watch-notifications-summary">${telegramStatus} · ${briefStatus}</span>
-      </summary>
-      <div class="watch-notifications-content"></div>`;
-    panel.addEventListener("toggle", () => {
-      try { window.localStorage.setItem(storageKey, String(panel.open)); } catch (_) {}
-    });
-
-    const content = panel.querySelector(".watch-notifications-content");
-    renderTelegramCard(content, telegram, renderDashboard);
-    renderBriefCard(content, brief, hasWatches);
-    container.appendChild(panel);
-  }
-
-  function renderWatchCard(watch, onListChanged, telegram, collapseByDefault = false) {
-    const card = document.createElement("li");
-    card.className = "watch-card";
-    const state = driftState(watch);
-    card.dataset.drift = state.key;
-    card.dataset.status = watch.status || "paused";
-
-    const top = document.createElement("div");
-    top.className = "watch-card-top";
-    const question = document.createElement("h3");
-    question.className = "watch-card-question";
-    const link = document.createElement("a");
-    link.href = watch.share_path || "#";
-    link.target = "_blank";
-    link.rel = "noopener";
-    link.textContent = watch.question || "(untitled)";
-    question.appendChild(link);
-    const chips = document.createElement("div");
-    chips.className = "watch-card-chips";
-    chips.appendChild(statusChip(watch));
-    const visibility = document.createElement("span");
-    visibility.className = "watch-chip";
-    visibility.textContent = watch.visibility === "private" ? "Private" : "Public";
-    chips.appendChild(visibility);
-    if (watch.telegram_enabled) {
-      const telegramChip = document.createElement("span");
-      telegramChip.className = "watch-chip watch-chip-telegram";
-      telegramChip.textContent = "Telegram";
-      chips.appendChild(telegramChip);
-    }
-    if (watch.visibility !== "private" && (watch.indexed || watch.index_requested)) {
-      const listing = document.createElement("span");
-      listing.className = "watch-chip" + (watch.indexed ? " watch-chip-listed" : " watch-chip-review");
-      listing.textContent = watch.indexed ? "On Google" : "Listing in review";
-      chips.appendChild(listing);
-    }
-    const detailsToggle = makeButton("", "watch-card-toggle", () => {
-      setCollapsed(!content.hidden);
-    });
-    detailsToggle.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 10 5 5 5-5"></path></svg>';
-
-    const compactSummary = document.createElement("div");
-    compactSummary.className = "watch-card-summary";
-    const summaryItems = [
-      typeof watch.last_agreement_score === "number"
-        ? `${Math.round(watch.last_agreement_score)}/100 agreement`
-        : "Awaiting first check",
-      state.label,
-      watch.last_run_at ? `Last checked ${relativeTime(watch.last_run_at)}` : "No completed check",
-    ];
-    if (watch.status === "active" && watch.next_run_at) {
-      summaryItems.push(`Next ${formatDateTime(watch.next_run_at)}`);
-    } else {
-      summaryItems.push(formatWatchSchedule(watch));
-    }
-    compactSummary.innerHTML = summaryItems
-      .filter(Boolean)
-      .map(item => `<span>${escapeHtml(item)}</span>`)
-      .join("");
-    top.append(question, chips, detailsToggle, compactSummary);
-
-    const content = document.createElement("div");
-    content.className = "watch-card-content";
-    function setCollapsed(collapsed) {
-      content.hidden = collapsed;
-      card.classList.toggle("is-collapsed", collapsed);
-      detailsToggle.setAttribute("aria-expanded", String(!collapsed));
-      detailsToggle.setAttribute("aria-label", collapsed ? "Show Watch details" : "Hide Watch details");
-      detailsToggle.title = collapsed ? "Show details" : "Hide details";
-    }
-    setCollapsed(collapseByDefault);
-
-    const bodyRow = document.createElement("div");
-    bodyRow.className = "watch-card-body";
-    const history = watch.history || [];
-    const trend = trendHistory(watch);
-    const drift = document.createElement("div");
-    drift.className = "watch-card-drift is-" + state.key;
-    const shiftScore = state.point?.opinion_map?.shift_score;
-    drift.innerHTML = `
-      <span class="watch-card-drift-dot" aria-hidden="true"></span>
-      <span class="watch-card-drift-copy"><strong>${escapeHtml(state.label)}</strong><small>${escapeHtml(state.summary)}</small></span>
-      ${typeof shiftScore === "number" ? `<span class="watch-card-shift"><strong>${Math.round(shiftScore)}</strong><small>/100 movement</small></span>` : ""}`;
-    bodyRow.appendChild(drift);
-    const score = document.createElement("div");
-    score.className = "watch-card-score";
-    if (typeof watch.last_agreement_score === "number") {
-      const previous = trend.length >= 2 ? trend[trend.length - 2].agreement_score : null;
-      let deltaHtml = "";
-      if (typeof previous === "number" && previous !== watch.last_agreement_score) {
-        const delta = watch.last_agreement_score - previous;
-        deltaHtml = `<span class="watch-score-delta ${delta > 0 ? "up" : "down"}">${delta > 0 ? "▲" : "▼"} ${Math.abs(delta)}</span>`;
-      }
-      score.innerHTML = `<strong>${Math.round(watch.last_agreement_score)}</strong>` +
-        `<span class="watch-score-max">/100 agreement</span>${deltaHtml}`;
-    } else {
-      score.innerHTML = '<span class="watch-score-empty">No check completed yet</span>';
-    }
-    bodyRow.appendChild(score);
-    bodyRow.appendChild(buildSparkline(trend));
-
-    const meta = document.createElement("div");
-    meta.className = "watch-card-meta";
-    const metaLines = [];
-    const lastEvent = [...history].reverse().find(point =>
-      isMaterialCheck(point) && point.change_summary
-    );
-    if (lastEvent) {
-      metaLines.push(
-        `<span class="watch-meta-change${lastEvent.severity === "major" ? " major" : ""}">` +
-        `${escapeHtml(lastEvent.change_summary)}</span> <span>(${escapeHtml(relativeTime(lastEvent.ts))}${lastEvent.severity ? ", " + escapeHtml(lastEvent.severity) : ""})</span>`
-      );
-    } else if (watch.last_run_at) {
-      metaLines.push(`Last check ${escapeHtml(relativeTime(watch.last_run_at))}. No material change.`);
-    }
-    let scheduleLine = escapeHtml(formatWatchSchedule(watch));
-    if (watch.status === "active" && watch.next_run_at) {
-      scheduleLine += " · next check " + escapeHtml(formatDateTime(watch.next_run_at));
-    }
-    metaLines.push(scheduleLine);
-    if (watch.email_mode === "condition" && watch.condition) {
-      const state = watch.last_condition_status === "met" ? "met"
-        : watch.last_condition_status === "not_met" ? "not met" : "not evaluated yet";
-      metaLines.push(`Condition (${escapeHtml(state)}): ${escapeHtml(watch.condition)}`);
-    }
-    if (watch.telegram_muted_until && new Date(watch.telegram_muted_until).getTime() > Date.now()) {
-      metaLines.push(`Telegram muted until ${escapeHtml(formatDateTime(watch.telegram_muted_until))}.`);
-    }
-    meta.innerHTML = metaLines.join("<br>");
-    bodyRow.appendChild(meta);
-
-    const actions = document.createElement("div");
-    actions.className = "watch-card-actions";
-    const settingsBtn = makeButton("Settings", "share-link-btn", () => {
-      settings.hidden = !settings.hidden;
-      settingsBtn.textContent = settings.hidden ? "Settings" : "Hide settings";
-    });
-    const openBtn = document.createElement("a");
-    openBtn.className = "share-secondary-btn";
-    openBtn.href = watch.share_path || "#";
-    openBtn.target = "_blank";
-    openBtn.rel = "noopener";
-    openBtn.textContent = "Open monitor";
-    const spacer = document.createElement("span");
-    spacer.className = "watch-card-spacer";
-    const active = watch.status === "active";
-    const pause = makeButton(active ? "Pause" : "Resume", "share-secondary-btn", async () => {
-      pause.disabled = true;
-      try {
-        await api("PATCH", "/api/watch/" + encodeURIComponent(watch.id), { status: active ? "paused" : "active" });
-        onListChanged();
-      } catch (error) {
-        pause.disabled = false;
-        if (error.status === 429) window.App?.showProFeatureModal?.("More Consensus Watches");
-        popup("Update failed: " + error.message);
-      }
-    });
-    const remove = makeButton("Delete", "share-danger-btn", async () => {
-      const message = watch.awaiting_first_run
-        ? "Delete this watch? Because no consensus has run yet, its empty monitor page will also be removed."
-        : "Delete this watch? Its existing history page will remain available with its current visibility.";
-      if (!confirm(message)) return;
-      remove.disabled = true;
-      try {
-        await api("DELETE", "/api/watch/" + encodeURIComponent(watch.id));
-        onListChanged();
-      } catch (error) { remove.disabled = false; popup("Delete failed: " + error.message); }
-    });
-    actions.append(settingsBtn, openBtn, spacer, pause, remove);
-
-    const settings = document.createElement("div");
-    settings.className = "watch-card-settings";
-    settings.hidden = true;
-    const grid = document.createElement("div");
-    grid.className = "watch-card-settings-grid";
-
-    function field(labelText, control) {
-      const wrap = document.createElement("label");
-      wrap.className = "watch-field";
-      const label = document.createElement("span");
-      label.textContent = labelText;
-      wrap.append(label, control);
-      return wrap;
-    }
-
-    const select = document.createElement("select");
-    select.className = "watch-interval-select";
-    select.innerHTML = intervalOptions(watch.interval);
-    const weekdaySelect = document.createElement("select");
-    weekdaySelect.className = "watch-interval-select";
-    weekdaySelect.innerHTML = weekdayOptions(watch.run_weekday);
-    const weekdayField = field("Run day", weekdaySelect);
-    const syncWeekdayField = () => {
-      weekdayField.hidden = select.value !== "weekly";
-    };
-    syncWeekdayField();
-    select.addEventListener("change", async () => {
-      const previousInterval = watch.interval;
-      select.disabled = true;
-      weekdaySelect.disabled = true;
-      try {
-        const data = await api("PATCH", "/api/watch/" + encodeURIComponent(watch.id), {
-          interval: select.value,
-          run_weekday: select.value === "weekly" ? weekdaySelect.value : ""
-        });
-        watch.interval = data.watch.interval;
-        watch.run_weekday = data.watch.run_weekday;
-        syncWeekdayField();
-        popup("Watch interval updated.");
-      } catch (error) {
-        popup("Update failed: " + error.message);
-        select.value = previousInterval;
-        syncWeekdayField();
-      } finally {
-        select.disabled = false;
-        weekdaySelect.disabled = false;
-      }
-    });
-    weekdaySelect.addEventListener("change", async () => {
-      const previousWeekday = watch.run_weekday || browserWeekday();
-      weekdaySelect.disabled = true;
-      try {
-        const data = await api("PATCH", "/api/watch/" + encodeURIComponent(watch.id), {
-          run_weekday: weekdaySelect.value
-        });
-        watch.run_weekday = data.watch.run_weekday;
-        popup("Weekly run day updated.");
-      } catch (error) {
-        popup("Update failed: " + error.message);
-        weekdaySelect.value = previousWeekday;
-      } finally { weekdaySelect.disabled = false; }
-    });
-    const timeInput = document.createElement("input");
-    timeInput.type = "time";
-    timeInput.className = "watch-time-input";
-    timeInput.value = watch.run_time || "";
-    timeInput.title = watch.timezone ? `Run time (${watch.timezone})` : "Choose a local run time";
-    timeInput.addEventListener("change", async () => {
-      if (!timeInput.value) return;
-      timeInput.disabled = true;
-      const previous = watch.run_time || "";
-      try {
-        const data = await api("PATCH", "/api/watch/" + encodeURIComponent(watch.id), {
-          run_time: timeInput.value,
-          timezone: browserTimezone()
-        });
-        watch.run_time = data.watch.run_time;
-        watch.timezone = data.watch.timezone;
-        popup("Watch run time updated.");
-      } catch (error) {
-        popup("Update failed: " + error.message);
-        timeInput.value = previous;
-      } finally { timeInput.disabled = false; }
-    });
-    const emailSelect = document.createElement("select");
-    emailSelect.className = "watch-interval-select watch-email-select";
-    emailSelect.innerHTML = emailModeOptions(watch.email_mode);
-    const conditionEditor = document.createElement("div");
-    conditionEditor.className = "watch-condition-editor";
-    conditionEditor.hidden = watch.email_mode !== "condition";
-    const conditionInput = document.createElement("textarea");
-    conditionInput.className = "watch-condition-input";
-    conditionInput.maxLength = 500;
-    conditionInput.rows = 2;
-    conditionInput.placeholder = "Condition to monitor";
-    conditionInput.value = watch.condition || "";
-    const saveCondition = makeButton("Save condition", "share-secondary-btn", async () => {
-      const condition = conditionInput.value.trim();
-      if (!condition) {
-        popup("Enter the condition you want to monitor.");
-        return;
-      }
-      saveCondition.disabled = true;
-      try {
-        await api("PATCH", "/api/watch/" + encodeURIComponent(watch.id), {
-          email_mode: "condition",
-          condition: condition
-        });
-        watch.email_mode = "condition";
-        watch.condition = condition;
-        popup("Watch condition updated.");
-      } catch (error) {
-        popup("Update failed: " + error.message);
-      } finally { saveCondition.disabled = false; }
-    });
-    conditionEditor.append(conditionInput, saveCondition);
-    emailSelect.addEventListener("change", async () => {
-      conditionEditor.hidden = emailSelect.value !== "condition";
-      if (emailSelect.value === "condition") {
-        conditionInput.focus();
-        return;
-      }
-      emailSelect.disabled = true;
-      try {
-        await api("PATCH", "/api/watch/" + encodeURIComponent(watch.id), { email_mode: emailSelect.value });
-        watch.email_mode = emailSelect.value;
-        popup("Watch alert rule updated.");
-      } catch (error) {
-        popup("Update failed: " + error.message);
-        emailSelect.value = watch.email_mode || "changes_only";
-      } finally { emailSelect.disabled = false; }
-    });
-
-    const channelOptions = document.createElement("div");
-    channelOptions.className = "watch-channel-options is-compact";
-    const emailChannel = document.createElement("input");
-    emailChannel.type = "checkbox";
-    emailChannel.checked = watch.email_enabled !== false;
-    const telegramChannel = document.createElement("input");
-    telegramChannel.type = "checkbox";
-    telegramChannel.checked = watch.telegram_enabled === true;
-    telegramChannel.disabled = !telegram?.connected;
-    const emailLabel = document.createElement("label");
-    emailLabel.className = "watch-channel-option";
-    emailLabel.append(emailChannel, document.createTextNode(" E-mail"));
-    const telegramLabel = document.createElement("label");
-    telegramLabel.className = "watch-channel-option";
-    telegramLabel.title = telegram?.connected ? "" : "Connect Telegram in the notification card above.";
-    telegramLabel.append(telegramChannel, document.createTextNode(" Telegram"));
-    channelOptions.append(emailLabel, telegramLabel);
-
-    async function saveChannel(input, fieldName) {
-      const previous = !input.checked;
-      if (!emailChannel.checked && !telegramChannel.checked) {
-        input.checked = previous;
-        popup("Keep at least one notification channel enabled.");
-        return;
-      }
-      emailChannel.disabled = telegramChannel.disabled = true;
-      try {
-        const data = await api("PATCH", "/api/watch/" + encodeURIComponent(watch.id), {
-          [fieldName]: input.checked
-        });
-        watch.email_enabled = data.watch.email_enabled;
-        watch.telegram_enabled = data.watch.telegram_enabled;
-        popup("Watch delivery channels updated.");
-        onListChanged();
-      } catch (error) {
-        input.checked = previous;
-        popup("Update failed: " + error.message);
-        emailChannel.disabled = false;
-        telegramChannel.disabled = !telegram?.connected;
-      }
-    }
-    emailChannel.addEventListener("change", () => saveChannel(emailChannel, "email_enabled"));
-    telegramChannel.addEventListener("change", () => saveChannel(telegramChannel, "telegram_enabled"));
-
-    grid.append(
-      field("Interval", select),
-      weekdayField,
-      field("Run time", timeInput),
-      field("Alert rule", emailSelect),
-      field("Delivery channels", channelOptions),
-      conditionEditor
-    );
-    settings.appendChild(grid);
-    if (watch.visibility !== "private" && watch.share_id) {
-      settings.appendChild(buildListingBlock(watch, onListChanged));
-    }
-
-    content.append(bodyRow, actions, settings);
-    card.append(top, content);
-    return card;
-  }
-
-  // "Google listing": Owner nominiert die eigene öffentliche Watch-Seite für
-  // den Suchindex. Setzt nur ein Anfrage-Flag – gelistet wird erst nach
-  // menschlichem Review (Admin), nie automatisch.
-  function buildListingBlock(watch, onListChanged) {
-    const block = document.createElement("div");
-    block.className = "watch-card-listing";
-    const title = document.createElement("strong");
-    title.className = "watch-listing-title";
-    title.textContent = "Google listing";
-    const note = document.createElement("p");
-    note.className = "watch-listing-note";
-    block.append(title, note);
-
-    async function requestListing(button, want) {
-      button.disabled = true;
-      try {
-        await api("POST", "/api/share/" + encodeURIComponent(watch.share_id) + "/indexing-request", { want: want });
-        window.App?.trackAppEvent?.("app_watch_listing_request", { want: want });
-        popup(want
-          ? "Thanks! Your page is nominated — we review every page before it appears on Google."
-          : "Listing request withdrawn.");
-        onListChanged();
-      } catch (error) {
-        button.disabled = false;
-        popup("Request failed: " + error.message);
-      }
-    }
-
-    if (watch.indexed) {
-      note.textContent = "This page is listed: it appears in Google's index, our sitemap, and “Related questions” on other pages.";
-    } else if (watch.index_requested) {
-      note.textContent = "Listing requested — a human reviews every page before it appears on Google. You can withdraw the request anytime.";
-      block.appendChild(makeButton("Withdraw request", "share-secondary-btn", function () {
-        requestListing(this, false);
-      }));
-    } else {
-      note.textContent = watch.index_eligible
-        ? "Public pages stay unlisted until you nominate them. This page meets the quality bar — a human still reviews it before it goes live on Google."
-        : "Public pages stay unlisted until you nominate them. This page is below the quality bar (needs several models, sources, and a substantial answer), but you can still request a review.";
-      block.appendChild(makeButton("Request Google listing", "share-secondary-btn", function () {
-        requestListing(this, true);
-      }));
-    }
-    return block;
-  }
-
-  async function renderDashboard() {
-    const { body } = dashEls();
-    if (!body) return;
-    const requestEpoch = watchState.sessionEpoch;
-    const requestUid = window.auth?.currentUser?.uid || null;
-    const dashboardIsCurrent = () => requestEpoch === watchState.sessionEpoch
-      && requestUid
-      && window.auth?.currentUser?.uid === requestUid
-      && onWatchPagePath();
-    const limitTarget = document.getElementById("watchDashLimit");
-    if (limitTarget) limitTarget.hidden = true;
-    body.innerHTML = '<p class="watch-dash-loading">Loading your watches…</p>';
-    let watches = [];
-    let brief = {};
-    let telegram = { configured: false, connected: false };
-    try {
-      const [watchData, briefData, telegramData] = await Promise.all([
-        api("GET", "/api/my/watches"),
-        api("GET", "/api/my/watch-brief").catch(() => ({ brief: {} })),
-        api("GET", "/api/my/telegram").catch(() => ({ telegram: {} }))
-      ]);
-      if (!dashboardIsCurrent()) return;
-      watches = watchData.watches || [];
-      watchState.setLimits(normalizeWatchLimits(watchData.limits, watches));
-      renderWatchLimit(limitTarget, watchState.limits);
-      brief = briefData.brief || {};
-      telegram = telegramData.telegram || telegram;
-      watchState.setTelegram(telegram);
-    } catch (error) {
-      if (!dashboardIsCurrent()) return;
-      if (limitTarget) limitTarget.hidden = true;
-      body.innerHTML = "";
-      const failed = document.createElement("p");
-      failed.className = "watch-dash-loading";
-      failed.textContent = "Could not load watches: " + error.message;
-      body.appendChild(failed);
-      return;
-    }
-    body.innerHTML = "";
-
-    if (!watches.length) {
-      const empty = document.createElement("div");
-      empty.className = "watch-dash-empty";
-      empty.innerHTML = `
-        <span class="watch-step-label">Consensus Watch</span>
-        <strong>Keep changing answers current.</strong>
-        <p>Choose a question once. consens.io checks it on your schedule and alerts you by e-mail or Telegram when the consensus materially moves.</p>
-        <div class="watch-empty-flow" aria-label="How a Watch works">
-          <span><b>1</b><small>Ask</small></span>
-          <i aria-hidden="true"></i>
-          <span><b>2</b><small>Check</small></span>
-          <i aria-hidden="true"></i>
-          <span><b>3</b><small>Alert</small></span>
-        </div>
-        <div class="watch-empty-examples">
-          <span>Try an example</span>
-          <div></div>
-        </div>`;
-      const actions = document.createElement("div");
-      actions.className = "watch-empty-actions";
-      const create = makeButton("Create your first Watch", "share-primary-btn", () => {
-        openWatchDialog("create");
-      });
-      actions.appendChild(create);
-      const examples = [
-        "Has this regulation changed?",
-        "Is this product available in Germany?",
-        "Has the company changed its pricing?"
-      ];
-      const exampleList = empty.querySelector(".watch-empty-examples > div");
-      examples.forEach(question => {
-        exampleList.appendChild(makeButton(question, "watch-example-chip", () => {
-          openWatchDialog("create", { question: question });
-        }));
-      });
-      empty.appendChild(actions);
-      body.appendChild(empty);
-      return;
-    }
-
-    renderDashboardStats(body, watches);
-    renderNotificationsPanel(body, telegram, brief, true);
-
-    const listTitle = document.createElement("h3");
-    listTitle.className = "watch-dash-section-title";
-    listTitle.textContent = "Watches";
-    body.appendChild(listTitle);
-    const list = document.createElement("ul");
-    list.className = "watch-dash-list";
-    const activeCount = watches.filter(watch => watch.status === "active").length;
-    const collapseCards = activeCount > 5;
-    watches.forEach(watch => list.appendChild(
-      renderWatchCard(watch, renderDashboard, telegram, collapseCards)
-    ));
-    const filterBar = document.createElement("div");
-    filterBar.className = "watch-filter-bar";
-    const filterDefinitions = [
-      ["all", "All", watches.length],
-      ["changed", "Changed", watches.filter(watch => driftState(watch).key === "changed").length],
-      ["stable", "Stable", watches.filter(watch => driftState(watch).key === "stable").length],
-      ["paused", "Paused", watches.filter(watch => watch.status !== "active").length]
-    ];
-    filterDefinitions.forEach(([key, label, count], index) => {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "watch-filter" + (index === 0 ? " is-active" : "");
-      button.dataset.filter = key;
-      button.setAttribute("aria-pressed", String(index === 0));
-      button.innerHTML = `${escapeHtml(label)} <span>${count}</span>`;
-      button.addEventListener("click", () => {
-        filterBar.querySelectorAll(".watch-filter").forEach(item => {
-          const active = item === button;
-          item.classList.toggle("is-active", active);
-          item.setAttribute("aria-pressed", String(active));
-        });
-        list.querySelectorAll(".watch-card").forEach(card => {
-          card.hidden = key === "changed" ? card.dataset.drift !== "changed"
-            : key === "stable" ? card.dataset.drift !== "stable"
-              : key === "paused" ? card.dataset.status === "active"
-                : false;
-        });
-      });
-      filterBar.appendChild(button);
-    });
-    body.appendChild(filterBar);
-    body.appendChild(list);
   }
 
   function initWatchButton() {
@@ -2088,12 +1224,26 @@
   window.App.watch = Object.assign(window.App.watch || {}, {
     showFeatureNudge: showWatchFeatureNudge,
     refreshQuota: () => loadWatchLimits(true),
-    resetAfterLogout: resetAfterLogout,
-    // Exposed because it is the one place the dashboard decides whether a
-    // check counts as movement; the same decision the server made in
-    // drift_signal and shipped as `trigger`.
-    driftState: driftState
+    resetAfterLogout: resetAfterLogout
   });
+  // Shared with watch-dashboard.js, which renders /app/watches.
+  window.App.watchUi = {
+    api: api,
+    popup: popup,
+    escapeHtml: escapeHtml,
+    makeButton: makeButton,
+    formatWatchSchedule: formatWatchSchedule,
+    intervalOptions: intervalOptions,
+    weekdayOptions: weekdayOptions,
+    emailModeOptions: emailModeOptions,
+    browserWeekday: browserWeekday,
+    browserTimezone: browserTimezone,
+    connectTelegram: connectTelegram,
+    normalizeWatchLimits: normalizeWatchLimits,
+    renderWatchLimit: renderWatchLimit,
+    openWatchDialog: openWatchDialog,
+    onWatchPagePath: onWatchPagePath
+  };
   initWatchButton();
   initViewSwitch();
   initDashboardCreateButton();

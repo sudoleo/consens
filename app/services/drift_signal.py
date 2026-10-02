@@ -1,44 +1,79 @@
 """One definition of what counts as movement between two consensus checks.
 
-A tracked page is only worth reading if "Changed since last check" is rarer
-than "we looked again". That stopped being true because every surface built its
-own version of the question and the loosest one won on the page:
+A tracked page is only worth reading if "the answer moved" is rarer than "we
+looked again". Two kinds of noise kept breaking that:
 
-* the change Judge returns ``changed=True`` for a rewritten qualification as
-  well, and only grades the substance in ``severity``. The page badge used the
-  flag and ignored the grade, so a paraphrase was announced as movement.
+* the Judge compared two texts without their sources, so a fact that one
+  check's web search simply did not find again read as a retraction -- the
+  GPT-6 Topic announced "officially released", "unconfirmed" and "hypothetical"
+  in four consecutive weeks while the model was out;
 * the agreement score is quantised by the caps in ``consensus_scoring`` (90/84
-  /64/39). One contradiction graded "major" once moves the score a whole cap
-  step, so ``abs(delta) >= 15`` fires on the labelling noise of a single
-  difference and fires again when the next check labels it back.
+  /64/39), so one contradiction labelled differently moves it a whole step.
 
-The rule below keeps both arms, because both can carry real news, but asks each
-one to survive that noise:
+The rule below (contract: ``docs/watch-evidence-model.md``) therefore asks
+*why* a check differs before it calls the difference movement:
 
-* the Judge arm requires ``severity == "major"`` -- the bar the change mail has
-  always used, so the badge and the alert can no longer disagree with each
-  other;
-* the score arm requires the new score to sit ``SCORE_BAND_DELTA`` points away
-  from *every* one of the last ``SCORE_BAND_WINDOW`` scores, so a value
-  oscillating between two cap steps produces one event on the way out of its
-  band instead of one on every swing.
+* ``new_evidence`` -- a newly cited source carries the change: it moved;
+* ``evidence_missing`` -- the sources behind the standing answer did not come
+  up and nothing contradicts it: the standing answer ``held``;
+* ``reassessment`` / ``model_change`` -- same evidence, read differently: that
+  only counts once the directly following check repeats it. Until then the
+  check is ``confirming``; a re-check that does not repeat it makes it
+  ``reverted``.
 
-Nothing is discarded: ``changed``/``severity`` stay on the history point, and a
-stable check that the Judge still saw a difference in is marked ``restated`` so
-a page can say "the wording moved, the conclusion held" in a quiet line instead
-of in the badge.
+The score no longer raises an event of its own; it stays a curve marker
+(``score_event``). History written before the Judge reported a cause keeps the
+older rule (major grade, or a score leaving the band of the recent checks) and
+is re-read on every render, so nothing needs a backfill.
 """
 
 from __future__ import annotations
+
+from datetime import timedelta
 
 SCORE_BAND_DELTA = 15
 SCORE_BAND_WINDOW = 3
 
 MATERIAL_SEVERITY = "major"
 
+CAUSE_NEW_EVIDENCE = "new_evidence"
+CAUSE_EVIDENCE_MISSING = "evidence_missing"
+CAUSE_REASSESSMENT = "reassessment"
+CAUSE_MODEL_CHANGE = "model_change"
+CAUSE_NONE = "none"
+CAUSES = (
+    CAUSE_NEW_EVIDENCE, CAUSE_EVIDENCE_MISSING, CAUSE_REASSESSMENT,
+    CAUSE_MODEL_CHANGE, CAUSE_NONE,
+)
+_REASSESSMENT_CAUSES = {CAUSE_REASSESSMENT, CAUSE_MODEL_CHANGE}
+# A re-check confirms a pending reassessment when it differs from the standing
+# answer in substance again -- for whichever evidence-backed reason.
+_CONFIRMING_CAUSES = _REASSESSMENT_CAUSES | {CAUSE_NEW_EVIDENCE}
+
+SIGNAL_MOVED = "moved"
+SIGNAL_CONFIRMING = "confirming"
+SIGNAL_PRELIMINARY = "preliminary"
+SIGNAL_REVERTED = "reverted"
+SIGNAL_HELD = "held"
+SIGNAL_RESTATED = "restated"
+SIGNAL_STABLE = "stable"
+# Checks whose answer stands: the next check is compared with the newest of
+# them, and a public page shows it by default.
+ACCEPTED_SIGNALS = frozenset({SIGNAL_MOVED, SIGNAL_RESTATED, SIGNAL_STABLE})
+# Checks that need a prompt re-check before the regular schedule resumes, and
+# how soon it runs. One re-check per event: the check after a "confirming" one
+# is either movement or not major, so it never asks for another.
+RECHECK_SIGNALS = frozenset({SIGNAL_CONFIRMING})
+CONFIRMATION_DELAY = timedelta(minutes=20)
+
 
 def _numeric(value):
     return value if isinstance(value, (int, float)) and not isinstance(value, bool) else None
+
+
+def normalize_cause(value) -> str:
+    cause = str(value or "").strip().lower()
+    return cause if cause in CAUSES else ""
 
 
 def recent_scores(points, limit: int = SCORE_BAND_WINDOW) -> list:
@@ -70,16 +105,8 @@ def score_left_band(score, previous_scores) -> bool:
     return all(abs(score - value) >= SCORE_BAND_DELTA for value in window)
 
 
-def is_material(changed, severity, score=None, previous_scores=()) -> bool:
-    """Did this check move the answer, or only restate it?"""
-    if bool(changed) and str(severity or "").lower() == MATERIAL_SEVERITY:
-        return True
-    return score_left_band(score, previous_scores)
-
-
-def classify(changed, severity, score=None, previous_scores=()) -> str:
-    """The persisted trigger for one check: ``changed`` or ``stable``."""
-    return "changed" if is_material(changed, severity, score, previous_scores) else "stable"
+def is_major(changed, severity) -> bool:
+    return bool(changed) and str(severity or "").lower() == MATERIAL_SEVERITY
 
 
 def is_restated(changed, severity) -> bool:
@@ -87,36 +114,128 @@ def is_restated(changed, severity) -> bool:
     return bool(changed) and str(severity or "").lower() != MATERIAL_SEVERITY
 
 
+def _legacy_signal(point: dict, window: list) -> str:
+    """History written before the Judge reported a cause."""
+    if is_major(point.get("changed"), point.get("severity")) or score_left_band(
+        point.get("agreement_score"), window,
+    ):
+        return SIGNAL_MOVED
+    if is_restated(point.get("changed"), point.get("severity")):
+        return SIGNAL_RESTATED
+    return SIGNAL_STABLE
+
+
+def _own_signal(point: dict, window: list) -> str:
+    """The signal a check earns on its own, before its successor is known."""
+    cause = normalize_cause(point.get("cause"))
+    if not cause:
+        return _legacy_signal(point, window)
+    if not is_major(point.get("changed"), point.get("severity")):
+        return SIGNAL_RESTATED if point.get("changed") else SIGNAL_STABLE
+    if cause == CAUSE_NEW_EVIDENCE:
+        return SIGNAL_MOVED
+    if cause == CAUSE_EVIDENCE_MISSING:
+        return SIGNAL_HELD
+    # A major difference the Judge could not pin on new evidence -- including
+    # an inconsistent "major, no cause" -- has to survive one re-check.
+    return SIGNAL_CONFIRMING
+
+
+def _repeats_change(point: dict) -> bool:
+    return (
+        is_major(point.get("changed"), point.get("severity"))
+        and normalize_cause(point.get("cause")) in _CONFIRMING_CAUSES
+    )
+
+
 def annotate_points(points) -> list[dict]:
     """Classify an ascending history series in one pass.
 
     Every read surface (share page, agreement curve, dashboard JSON, morning
-    brief) runs its points through here instead of re-deriving the rule, and
-    the stored ``trigger`` of older checks is recomputed rather than trusted:
-    it was written under the loose rule and would otherwise keep pages showing
-    a change badge on every row forever.
+    brief, Topic record) runs its points through here instead of re-deriving
+    the rule. Adds ``signal``, ``trigger`` (``changed`` iff moved), ``accepted``,
+    ``score_event``, ``restated`` and ``score_delta``; the stored ``trigger`` of
+    older checks is recomputed rather than trusted.
     """
     annotated = []
     window: list = []
-    for index, point in enumerate(points or []):
+    for point in points or []:
         point = dict(point or {})
         score = _numeric(point.get("agreement_score"))
-        previous = window[-1] if window else None
-        material = is_material(
-            point.get("changed"), point.get("severity"), score, window,
-        )
-        point["trigger"] = "changed" if material else "stable"
+        point["signal"] = _own_signal(point, window)
         point["score_event"] = score_left_band(score, window)
         point["restated"] = is_restated(point.get("changed"), point.get("severity"))
+        previous = window[-1] if window else None
         point["score_delta"] = (
             int(score) - int(previous)
-            if score is not None and previous is not None and index
+            if score is not None and previous is not None and annotated
             else None
         )
+        point["confirmed_by_recheck"] = False
+        if annotated and annotated[-1]["signal"] == SIGNAL_CONFIRMING:
+            pending = annotated[-1]
+            if _repeats_change(point):
+                pending["signal"] = SIGNAL_PRELIMINARY
+                point["signal"] = SIGNAL_MOVED
+                point["confirmed_by_recheck"] = True
+            else:
+                pending["signal"] = SIGNAL_REVERTED
         annotated.append(point)
         if score is not None:
             window = (window + [score])[-SCORE_BAND_WINDOW:]
+    for point in annotated:
+        point["trigger"] = "changed" if point["signal"] == SIGNAL_MOVED else "stable"
+        point["accepted"] = point["signal"] in ACCEPTED_SIGNALS
     return annotated
+
+
+# Signals whose claim inventory a Topic record does not read: their answer
+# does not stand, so the claims they drop or add are not part of the record.
+NON_RECORD_SIGNALS = frozenset({SIGNAL_HELD, SIGNAL_CONFIRMING, SIGNAL_REVERTED})
+
+
+def topic_point(run: dict) -> dict:
+    """A Topic run in the shape of a history point.
+
+    Topics never treated the agreement score as movement, so their legacy
+    rule is the Judge grade alone; the score is left out on purpose.
+    """
+    change_type = str((run or {}).get("change_type") or "stable")
+    return {
+        "changed": change_type in {"minor", MATERIAL_SEVERITY},
+        "severity": MATERIAL_SEVERITY if change_type == MATERIAL_SEVERITY else "minor",
+        "cause": (run or {}).get("cause"),
+        "agreement_score": None,
+    }
+
+
+def annotate_runs(runs) -> list[dict]:
+    """Annotate ascending Topic runs with ``signal``, ``trigger``, ``accepted``."""
+    runs = list(runs or [])
+    annotated = annotate_points([topic_point(run) for run in runs])
+    return [
+        {
+            **run,
+            "signal": point["signal"],
+            "trigger": point["trigger"],
+            "accepted": point["accepted"],
+            "confirmed_by_recheck": point["confirmed_by_recheck"],
+        }
+        for run, point in zip(runs, annotated)
+    ]
+
+
+def classify_latest(previous_points, point: dict) -> dict:
+    """The annotated newest check of ``previous_points + [point]``."""
+    return annotate_points(list(previous_points or []) + [point])[-1]
+
+
+def accepted_index(annotated) -> int | None:
+    """Index of the newest check whose answer stands, or None."""
+    for index in range(len(annotated or []) - 1, -1, -1):
+        if annotated[index].get("accepted"):
+            return index
+    return None
 
 
 def steady_checks(points) -> int:

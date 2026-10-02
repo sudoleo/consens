@@ -355,30 +355,14 @@
   window.enterDirectComparisonView = enterDirectComparisonView;
   window.syncHeroResponseAccess = syncHeroResponseAccess;
 
-  // Einziger Renderer fuer die Usage-Zeilen. API-Antworten ohne vollstaendige
-  // Usage-Felder duerfen die zuletzt bekannte Anzeige nicht mit Fallback-Nullen
-  // ueberschreiben. Das <strong>-Element ist zugleich Teil des Layout-Vertrags:
-  // Label links, tabellarischer Wert rechts.
-  function renderUsageDisplay({
-    remaining,
-    deepRemaining,
-    totalLimit = window.currentMaxLimit,
-    deepLimit = window.currentDeepLimit
-  } = {}) {
-    function renderLine(elementId, label, value, limit) {
-      if (value === undefined || value === null) return;
-      if (limit === undefined || limit === null) return;
-
-      const element = document.getElementById(elementId);
-      if (!element) return;
-
-      const strong = document.createElement("strong");
-      strong.textContent = value === "Unlimited" ? "Unlimited" : `${value} / ${limit}`;
-      element.replaceChildren(document.createTextNode(`${label}: `), strong);
-    }
-
-    renderLine("freeUsageDisplay", "Runs", remaining, totalLimit);
-    renderLine("deepUsageDisplay", "Deep Think", deepRemaining, deepLimit);
+  // Einziger Eingang fuer Kontostaende aus API-Antworten: jede Antwort, die
+  // das gemeinsame Tokenkonto kennt, traegt `token_budget` (auch in
+  // Fehler-Details). Antworten ohne das Feld (eigene Keys) aendern nichts.
+  // `owner` ist der RunContext/Auth-Stand des Aufrufers: eine spaete Antwort
+  // eines frueheren Logins malt nie das naechste Konto an.
+  function renderUsageDisplay(data, owner) {
+    const auth = owner?.auth || owner;
+    return window.App.tokenBudget?.fromResponse?.(data, { uid: auth?.uid || undefined }) || false;
   }
 
   // Ein logischer UI-Lauf teilt genau einen serverseitigen Idempotency-Key

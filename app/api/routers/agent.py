@@ -12,7 +12,7 @@ from firebase_admin import firestore
 from app.core.observability import provider_diagnostic, safe_exception, safe_traceback
 from app.core import config as cfg
 from app.core.rate_limit import limiter, api_uid_limiter, ApiUidRateLimitExceeded
-from app.core.security import db_firestore, is_user_admin, is_user_pro
+from app.core.security import TierStatusUnavailable, db_firestore, is_user_admin, is_user_pro
 from app.api.routers.chat_history import _chat_uid, _raise_store_error
 from app.api.routers.bookmarks import _bookmark_meta
 from app.services import persistence_guard, prompt_config
@@ -37,7 +37,13 @@ router = APIRouter()
 
 
 def require_agent_access(uid):
-    if not (is_user_pro(uid) or is_user_admin(uid)):
+    try:
+        allowed = is_user_pro(uid) or is_user_admin(uid)
+    except TierStatusUnavailable:
+        raise HTTPException(
+            status_code=503, detail="Account tier is temporarily unavailable. Please retry."
+        ) from None
+    if not allowed:
         raise HTTPException(status_code=403, detail="Agent Beta is available to Pro users and admins.")
 
 
@@ -259,7 +265,6 @@ def run_agent(request: Request, payload: AgentRequest):
         policy = AgentPolicy.for_chat(delegation_config)
         comparisons = comparison_selection(payload.comparison_models)
         source_limits = SourceCheckLimits.configured() if payload.check_sources and not google_data else None
-        model = replace(model, request_config={**model.request_config, "_agent_bounded_search": True})
         turn = store.create_turn(
             uid, payload.chat_id, question=payload.question, mode="Agent", deep_search=False,
             selected_models=[model.model], consensus_model=model.model,
@@ -319,6 +324,7 @@ def run_agent(request: Request, payload: AgentRequest):
             # waiting, so Stop/status do not depend on a paid call starting.
             yield sse_pack("accepted", {"chat_id": payload.chat_id, "turn_id": turn["id"]})
             source = loop.run()
+            closing = False
             try:
                 for event in source:
                     if event:
@@ -328,8 +334,19 @@ def run_agent(request: Request, payload: AgentRequest):
                                 yield sse_pack("quota", {"token_budget": agent_quota.snapshot(store.db, uid)})
                             except Exception as exc:
                                 logging.warning("Agent allowance unavailable category=%s", safe_exception(exc))
+            except GeneratorExit:
+                closing = True
+                raise
             finally:
-                source.close()
+                try:
+                    source.close()
+                except Exception as exc:
+                    if not closing:
+                        raise
+                    # An account tombstone can refuse settlement during close.
+                    # Preserve GeneratorExit: yielding an error frame now would
+                    # violate the generator protocol and strand the producer.
+                    logging.warning("Agent stream cleanup unavailable category=%s", safe_exception(exc))
             status = "succeeded"
         except (ProviderCancelled, GeneratorExit):
             status = "cancelled"
@@ -433,6 +450,6 @@ def stop_agent_run(request: Request, chat_id: str, turn_id: str):
     require_agent_access(uid)
     try:
         AgentRunStore(db_firestore).stop_delegation(uid, chat_id, turn_id)
-        return {"status": "stopping"}
+        return JSONResponse({"status": "stopping"}, headers={"Cache-Control": "private, no-store"})
     except Exception as exc:
         _raise_store_error(exc, operation="stop agent sessions", uid=uid)

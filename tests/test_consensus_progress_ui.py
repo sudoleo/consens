@@ -336,7 +336,12 @@ def test_archived_turns_use_the_same_drawer_row_as_the_live_answer():
     )[0]
     assert "thread-history-details" not in history_block
     assert '"consensus-footer-tabs thread-history-tabs"' in history_block
-    assert 'tab.className = "consensus-tab"' in history_block
+    # Class membership is the contract; the DOM regression in
+    # stored-turn-markers.test.mjs exercises each real drawer and its own turn.
+    import re
+    drawer_classes = re.search(r'tab\.className = "([^"]+)"', history_block)
+    assert drawer_classes is not None
+    assert {"consensus-tab", "consensus-evidence-action"} <= set(drawer_classes[1].split())
     assert '"Review differences",\n          "Differences",' in history_block
     assert 'addDrawer("Verify sources", "Sources", turnSources.length' in history_block
     assert 'addDrawer("Compare answers", "Answers", usableAnswers.length' in history_block

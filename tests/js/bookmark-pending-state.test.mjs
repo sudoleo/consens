@@ -92,6 +92,16 @@ describe("pending bookmark session", () => {
 });
 
 describe("pending bookmark markup", () => {
+  it("preserves server metadata and never invents a consensus from truthy strings", () => {
+    const source = readFileSync(path.join(ROOT, "static/firebase.js"), "utf8");
+    const helper = source.slice(source.indexOf("function bookmarkMeta("), source.indexOf("function upsertBookmarkMeta("));
+    const meta = Function("bookmarkDisplayQuestion", "bookmarkDisplayTitle", `${helper}; return bookmarkMeta;`)(b => b.query, b => b.title);
+    expect(meta({ id: "saved", has_consensus: true }).has_consensus).toBe(true);
+    expect(meta({ id: "compare", has_consensus: false }).has_consensus).toBe(false);
+    expect(meta({ id: "bad", has_consensus: "true" }).has_consensus).toBe(false);
+    expect(meta({ id: "full", responses: { consensus: "Saved answer" } }).has_consensus).toBe(true);
+    expect(meta({ id: "empty", responses: {}, has_consensus: true }).has_consensus).toBe(false);
+  });
   it("renders an inaccessible loading row with a bookmark-frame spinner", () => {
     const source = readFileSync(path.join(ROOT, "static/firebase.js"), "utf8");
     const start = source.indexOf("function createReadyBookmarkRow(");

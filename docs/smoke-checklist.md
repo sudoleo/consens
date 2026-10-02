@@ -1,5 +1,28 @@
 # Smoke-Checkliste — Frontend (index.html Refactor)
 
+**Aktueller automatisierter Laufstand 02.10.2026:** siehe
+[Testübersicht](test-coverage-map.md) und [rote Fälle](test-coverage/findings.md).
+219 Browserfälle bestanden, 30 scheiterten, vier endeten im Setup, 55 wurden
+nicht ausgeführt. Die unten genannten älteren Baselines/abgehakten manuellen
+Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
+
+## Neue Funktionsgruppen und Restprüfung
+
+- [ ] Google/Kalender/Gmail: echte OAuth-Rückkehr, Widerruf, Zustimmung pro
+      Nachricht, exakte Vorschau vor Senden/Terminspeichern; die Offline-
+      Browserfälle ersetzen keinen echten Providerlauf. Aktuelle Gmail-
+      Dokumentversionsfehler vor einer Freigabe klären.
+- [ ] Private Dateien/Dokumente: gespeicherte Version am richtigen Turn,
+      Download und bestätigtes Entfernen, lesbare Warnung für Teilinhalt;
+      erzeugte DOCX/PDF-Seiten zusätzlich visuell prüfen.
+- [ ] Gemeinsames Tokenkonto: Moduswechsel, Holds, geschätzter Verbrauch,
+      Kontowechsel und UTC-Reset gegen dieselbe Kontoanzeige prüfen.
+- [ ] Watch/Topic: stehende Antwort bei dünner Evidenz, neue Belege, Recheck,
+      erreichtes Ziel und erneutes Öffnen mit anderem Ziel; Zustellfehler und
+      Unsubscribe in einer kontrollierten Testumgebung prüfen.
+- [ ] Aktuelle Browserabweichungen bei Scrollabschluss, Quellenpillenstatus,
+      Agent-Stop/Reasoning und Runwechsel anhand des Laufberichts nachstellen.
+
 Teilweise automatisiert: die Playwright-Suite `tests/e2e/` deckt Konsolen-
 Fehler beim Laden, Send→Streaming, Consensus→Differences+Agreement-Score,
 Modell-Ausschluss, Theme-Toggle, Picker-Persistenz und die Phase-4-Auth-/View-
@@ -82,9 +105,15 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       inklusive unbekannter/offener Messungen prüfen. Automatisiert durch
       `test_agent_runs.py`, `agent-chat.test.mjs` und
       `test_agent_chat_frontend.py` (Browser-APIs gemockt).
-      Agent-Modell im bestehenden Custom-Picker per Maus/Tastatur wechseln,
-      nur unterstützte Reasoning-Stufen wählen; Einstellungen während eines
-      Laufs gesperrt. Reasoning getrennt vom Antworttext auf-/zuklappen,
+      Agent zeigt in `.composer-models` genau EINEN Chip („Gemini 3.8 Flash
+      +6“: Chatmodell + Zahl der Vergleichsmodelle, nie der Modusname); sein
+      Menü öffnet mit „Agent“ (Modell, Reasoning) und „Compare with“
+      (Presets/Custom, 2–6 Modelle). Agent-Modell darin per Maus/Tastatur
+      (Rechts hinein, Links zurück) wechseln,
+      nur unterstützte Reasoning-Stufen wählen; Chatmodell während eines
+      Laufs gesperrt, Vergleichsmodelle bleiben änderbar. (+) „Deep Think“ und
+      „Comparison models“ öffnen die jeweilige Ebene desselben Menüs; in
+      Consensus/Compare bleibt der eigene Modell-Chip. Reasoning getrennt vom Antworttext auf-/zuklappen,
       während des Denkens stoppen. Folgefrage mit anderem Modell senden und
       nach Bookmark-Restore Modell, Denkstufe, Aktivität und Usage prüfen.
       Mobil zuerst den eingeklappten Composer antippen; Picker bei 320/390 px
@@ -96,8 +125,12 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       Abschluss automatisch zu, manuelle Wahl beibehalten. Reduced Motion
       deaktiviert den Lichtlauf. Katalogfehler mit Reload, entfernte Modellwahl,
       fehlendes Reasoning/Usage, Output-Limit und Fehler nach Streamstart prüfen.
-      Quellen im Fließtext als hochgestellte Nummern anzeigen, inklusive
-      benannter Markdown-Links und „Paper (https://…)“. Quellenvorschau per
+      Quellen im Fließtext als Pillen (Favicon + Domain, auf der Grundlinie)
+      anzeigen, inklusive benannter Markdown-Links und „Paper (https://…)“;
+      ein Linktext, der nur die Domain nennt, erscheint nicht doppelt,
+      benachbarte Quellen bilden eine Pille „domain +N“, lange Domains enden
+      mit Ellipse, ein fehlendes Favicon zeigt ein neutrales Monogramm (hell,
+      dunkel, 390 px). Quellenvorschau per
       Hover/Fokus, passende nummerierte Quellenliste und gespeicherte/archivierte
       Antworten auch nach fehlgeschlagenem Run prüfen. Code/`[1]` bleiben Text.
       Automatisiert: `agent-citations.test.mjs`, `test_agent_comparison_frontend.py`.
@@ -106,6 +139,11 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       ersetzen sie durch Tokens. Nach Abschluss/Stop und im gespeicherten
       Verlauf endet die Animation; Reduced Motion/Forced Colors bleiben lesbar.
       Automatisiert: `test_agent_delegation_frontend.py`.
+      Ein Modell, das beim Check noch schreibt: unter Answers mit Chip
+      „Incomplete“, Begründungszeile und Teiltext; in der Leiste „Incomplete ·
+      n s“ mit „Incomplete answer · not used“. Nicht in Antwort oder Check.
+      Automatisiert: `test_agent_comparison.py`, `agent-review.test.mjs`,
+      `model-answer-reader.test.mjs`, `agent-delegation.test.mjs`.
 - [ ] Sources/Differences: kompakte Quellenlisten, kontrastreiche Titel und
       Aussagen, Check-details-Chevrons und kleiner Resolve-Button in Light/Dark
       bei 320/390 px sowie als Desktop-Sidebar. Disclosures per Enter bedienen;
@@ -113,6 +151,16 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       aus. Source Checks stehen mobil mittig unter den Tabs; nach dem letzten
       Ergebnis bleiben 24 px Luft vor dem Composer. Automatisiert:
       `tests/e2e/test_inspector_polish.py`.
+- [ ] Differences-Panel (Agent- und Consensus-Chat, Light/Dark, Desktop-Dock
+      und 390 px): kein Untertitel, Frage als eine abgeschnittene Zeile ohne
+      Label; im Agent-Chat eine Statuszeile `N of M models answered · Checked`,
+      fehlende Modelle erst nach Aufklappen. Karten: Punkt + `Critical`/
+      `Minor`/`Emphasis`, kritische zuerst, Titel in normalem Gewicht, keine
+      Positionszahl; nur eine Karte gleichzeitig offen. Pro Position eine Zeile
+      Icon + Modellname (Klick öffnet die Originalantwort), Zitat leiser.
+      Inline-Marker und Source-check-Status öffnen weiterhin die richtige
+      Karte. Automatisiert: `tests/e2e/test_agent_comparison_frontend.py`
+      (`test_differences_reader_stays_calm_with_missing_models`).
 - [ ] Agent-Run: Stepper-Kopf zeigt erledigte/aktive/offene Schritte, Preset
       und Uhr; schmal (320/390 px) eine Zeile mit vier Segmenten. Modellzeilen
       zeigen Icon, Balken und `Writing`/`Thinking`/`Waiting`, danach nur die
@@ -507,12 +555,14 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       Handy-Tastatur fügt einen Absatz ein und sendet nicht.
       Am vollständigen Scrollende liegen die geschlossenen Detail-Tabs direkt
       darüber, ohne Leerraum oder verdeckten Inhalt.
-- [ ] Quellen-Fussnoten im Consensus stehen hinter Punkt, Frage- oder
-      Ausrufezeichen; dasselbe gilt auf öffentlichen Share-Seiten.
+- [ ] Quellen-Pillen im Consensus stehen hinter Punkt, Frage- oder
+      Ausrufezeichen (Favicon-only-Pillen bleiben an ihrer Domain); dasselbe
+      gilt für die Quellenverweise auf öffentlichen Share-Seiten.
+      „Copy consensus“ liefert Domains in Klammern statt „uci.org+2“.
 - [ ] „Run again“ kehrt zum normalen Composer zurück, übernimmt die vorige
       Frage, startet aber erst nach einem bewussten Klick auf Senden. Der Knopf
-      beziffert vorher den Preis („Run again · uses 1 run“, Tooltip mit Rest-
-      Kontingent); bei unbegrenztem Plan entfällt der Zusatz. Nach dem Klick
+      beziffert vorher den ungefähren Preis („Run again · about 8% of today“,
+      Tooltip mit Rest in Prozent); ohne bekanntes Konto entfällt der Zusatz. Nach dem Klick
       steht über dem Eingabefeld, dass Senden einen vollständigen neuen Lauf
       startet — der Hinweis verschwindet mit dem Absenden oder mit
       „New comparison“.
@@ -534,7 +584,7 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       watching“ markiert fehlende Pflichtangaben direkt am jeweiligen Feld und scrollt
       zum ersten Fehler. Der Dialog bleibt auf iPhone-Größen vollständig im sichtbaren
       Bereich. Private Seiten sind in einem fremden oder ausgeloggten Browser nicht lesbar.
-- [ ] „Ready with smart defaults“ trägt rechts einen „Edit“-Schalter, die drei
+- [ ] „Schedule and alerts“ trägt rechts einen „Edit“-Schalter, die drei
       Werte-Chips öffnen selbst ihr Feld (Fokus liegt danach darin), und
       „Customize schedule and alerts“ steht direkt darunter — über den
       Zustellkanälen, nicht am Dialogende.
@@ -551,31 +601,29 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       (Pro) ist die Erstellung bereits vor dem Request gesperrt. Pro: Daily und
       bis zu fünf aktive Watches funktionieren.
 - [ ] Das Watch-Dashboard ist eine eigene Seite `/app/watches`: erreichbar über
-      den schwebenden View-Switch „Consensus | Watches“ (nur eingeloggt, Watches
-      auf Mobile icon-only) und „Watched“ im Nutzericon-Menü; aktiver Pill-Zustand,
-      Browser-Back/Forward
-      und Deep-Link/Reload auf `/app/watches` funktionieren (vor dem Login
-      erscheint ein Hinweis statt Daten). Logout lässt URL und Hinweis stehen;
-      ein später Login rendert ohne Reload das Dashboard. „Watched“ aus einem
-      Share-Dialog schließt das Modal vor dem Ansichtswechsel. Ohne Watch zeigt die Seite statt Null-
-      KPIs einen Ask→Check→Alert-Empty-State mit optionalen Beispielfragen; der
-      Query-first-Dialog nutzt private/wöchentliche/Changes-only-Defaults, hält
-      E-Mail und Telegram sichtbar und legt Zeitplan/Sichtbarkeit/Condition unter
-      „Customize schedule and alerts“. Die Vorschlags-Chips bleiben optisch sekundär;
-      Empty-State und Überschrift haben auf Desktop und Mobile ausreichend Luft. Ein
-      Klick auf den Dialog-Backdrop schließt den Watch-Dialog nicht, X/Cancel/Back
-      und Escape weiterhin schon. KPI-Karten zeigen sonst aktive Watches,
-      Checks/Änderungen der letzten sieben Tage und den nächsten Lauf; ein
-      „Recent movement“-Feed bündelt die neuesten Changes. All/Changed/Stable/Paused
-      filtern die Karten. Pro Watch zeigt die Karte Driftstatus/-Summary,
-      Direction Shift, Agreement-Score + Delta, History-Sparkline und nächsten Lauf.
-      Der Notifications-Bereich klappt Telegram und Morning Brief gemeinsam ein und
-      aus; sein Zustand bleibt beim erneuten Öffnen des Dashboards erhalten.
-      „Settings“ klappt
-      Intervall/Uhrzeit/Alert-Regel/Condition sowie E-Mail-/Telegram-Kanäle auf;
-      Pause/Resume und Delete
-      funktionieren. Delete lässt bereits vorhandene Share-History bestehen.
-      „← Back to app“ und ESC führen zurück. Light/Dark und Mobile ohne Overflow.
+      den schwebenden View-Switch „Chat/Consensus | Watches“ (gleitender Thumb,
+      beide Segmente mit Icon; Agent-Modus beschriftet das erste Segment „Chat“)
+      und „Watched“ im Nutzericon-Menü; Browser-Back/Forward und Deep-Link/Reload
+      auf `/app/watches` funktionieren (vor dem Login erscheint ein Hinweis statt
+      Daten). Logout lässt URL und Hinweis stehen; ein später Login rendert ohne
+      Reload das Dashboard. „Watched“ aus einem Share-Dialog schließt das Modal vor
+      dem Ansichtswechsel. Ohne Watch zeigt die Seite „Tell us what you are waiting
+      for.“, drei Beispielkarten (Frage + Ziel, öffnen den Dialog vorbefüllt) und die
+      offene Erklärung „Why a Watch, not a scheduled prompt“ samt Vergleichstabelle.
+      Mit Watches: Kennzahlenzeile (watching / moved / resolved this week / next
+      check), eingeklappte Erklärung, Abschnitte Watching / Resolved / Paused und
+      Delivery. Karten zeigen Status (Moved, Re-checking, Answer stands, Watching,
+      Resolved, Paused), Frage, „Waiting for“ + Zielstatus, den Satz des Zustands,
+      tragende Quellen, die Check-Leiste und rechts nächsten Check + Tages-Scan;
+      **kein** Agreement-Score. „Settings“ klappt Ziel, Intervall/Tag/Uhrzeit,
+      Alerts, Kanäle, Google-Listing, Pause/Resume und Delete in der Karte auf.
+      Eine abgeschlossene Watch bietet „Watch for something new“; dasselbe Ziel
+      wird abgelehnt, ein neues oder leeres Ziel reaktiviert sie. ESC führt zurück.
+      Light/Dark und Mobile ohne Overflow.
+- [ ] Create-Dialog: nach der Frage steht „What are you waiting for?“ ganz oben;
+      Zielvorschläge laden als Chips (Platzhalter während des Ladens, Klick füllt
+      bzw. leert das Feld, Ausfall blendet sie nur aus). „Only when it resolves“
+      ohne Ziel zeigt den Fehler am Zielfeld. „Back“ behält Frage und Ziel.
 - [ ] Der Watches-Schalter pulsiert als neuer, unbestätigter Einstieg nur zweimal
       dezent, stoppt nach dem ersten Öffnen dauerhaft und ist bei reduzierter Bewegung
       still. Er konkurriert nicht mit dem resultatspezifischen Watch-Hinweis.
@@ -583,8 +631,8 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       Digest-Mail mit Uhrzeit (Browser-Zeitzone) und Modus „Every morning“ /
       „Only when something changed“; Einstellungen überleben ein erneutes
       Öffnen. Schlägt PATCH für Uhrzeit oder Modus fehl, springen die Controls
-      auf den letzten serverbestätigten Wert zurück. Mit Test-SMTP: Brief-Mail listet alle Watches mit Score/Delta und
-      Änderungs-Summaries; der Abmelde-Link deaktiviert nur den Brief, nicht
+      auf den letzten serverbestätigten Wert zurück. Mit Test-SMTP: Brief-Mail listet alle Watches mit Ziel,
+      Bewegungen und Abschlüssen (kein Score); der Abmelde-Link deaktiviert nur den Brief, nicht
       die Watch-Mails.
 - [ ] Ohne Watch ist der Morning-Brief-Toggle deaktiviert und erklärt „Create a
       watch first“; ein direkter Aktivierungs-Request wird abgelehnt. Nach dem
@@ -606,17 +654,23 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       Shift; Provider-Trajektorien sind nachrangig aufklappbar. Alte
       Punkte ohne `opinion_map` degradieren auf den Agreement-Chart.
 - [ ] Fehlende SMTP-Konfiguration blockiert Watch-Läufe nicht. Mit Test-SMTP:
-      Major Change bzw. Score-Delta ≥15 sendet genau eine Multipart-Mail; Minor
-      Change darunter sendet im Modus „changes only“ keine. „Every new consensus“
-      sendet bei jedem erfolgreichen Lauf genau eine Mail mit Consensus-Inhalt.
-      Eine Condition sendet nur bei `not met -> met` (bzw. beim ersten `met`), nicht
-      erneut bei weiter bestehendem `met`; `unknown` löst nicht aus. Die Mail enthält
-      Condition, Begründung und neuen Consensus.
-      Abmelde-Link pausiert ohne Login.
-- [ ] Zwei aufeinanderfolgende Watch-Runs vergleichen Previous → Current für
-      Benachrichtigungen; Original → Current bleibt als langfristiger Baseline-
-      Drift erhalten. Persistierte Ereignisse bleiben grob und eindeutig:
-      `watch.checked`, `watch.changed`, `watch.condition_met`, `watch.run_failed`.
+      ein Check mit `moved` sendet genau eine Multipart-Mail „Moved: …“ als
+      Änderungsprotokoll (What changed → Why mit Quellen → What held → Waiting
+      for → Question, keine Agreement-Zeile); `held`, `confirming`, `restated`
+      senden im Modus „When it moves“ nichts. „After every check“ sendet bei
+      jedem Lauf genau eine Mail mit der Antwort. Ein belegt erreichtes Ziel
+      sendet genau eine „Resolved: …“-Mail, die Watch steht danach auf
+      „Resolved“ und läuft nicht mehr. Abmelde-Link pausiert ohne Login.
+- [ ] Belegmodell (`docs/watch-evidence-model.md`): ein Check, dessen Suche die
+      Quellen der geltenden Antwort nur nicht wiederfindet, steht als „Answer
+      stands“; die öffentliche Seite zeigt weiter die geltende Version plus
+      „Latest check: …“. Eine Neubewertung ohne neue Quelle steht als
+      „Re-checking“, der nächste Lauf ist rund 20 Minuten später fällig.
+      Persistierte Ereignisse: `watch.checked`, `watch.changed`,
+      `watch.confirming`, `watch.condition_met`, `watch.run_failed`.
+- [ ] Tages-Scan: eine weekly/monthly-Watch zeigt im Dashboard „Daily scan:
+      nothing new (…)“; findet der Scan eine neue Quelle, ist der volle Check
+      sofort fällig. Admin-Limit „Evidence probes per day“ = 0 schaltet ihn ab.
 - [ ] Mit gesetztem `TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_USERNAME` und
       `TELEGRAM_WEBHOOK_SECRET`: „Connect Telegram“ öffnet den Bot, `/start`
       verbindet ausschließlich den eingeloggten Account und das Dashboard zeigt
@@ -624,12 +678,17 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       verwendete Deep-Links werden abgelehnt.
 - [ ] Telegram lässt sich beim Erstellen und je Watch an-/abschalten; mindestens
       E-Mail oder Telegram bleibt aktiv. Ein materieller Change erzeugt genau
-      eine Telegram-Nachricht mit Score/Änderung und Buttons. „Mute 24h“
+      eine Telegram-Nachricht als Änderungsprotokoll (mit Quellen-Links, ohne Score) und Buttons. „Mute 24h“
       unterdrückt weitere Telegram-Alerts, „Pause“ verlangt eine zweite
       Bestätigung und pausiert nur die eigene Watch. Ein erneuter Scheduler-
       Versuch für dieselbe Run-ID verschickt kein Duplikat.
 
 ## Curated Topics
+- [ ] Belegmodell auf Topics: ohne `?version` zeigt die Seite den geltenden Run
+      (`accepted_run_id`); ein neuester Check mit „held“/„confirming“ erscheint als
+      „Latest check: …“-Hinweis, in Timeline und Check-Streifen als eigener,
+      nicht-materieller Zustand, und seine Claims zählen im Claim Ledger als Lücke.
+      Der Hub zeigt Score und Satz des geltenden Runs.
 - [ ] `/topics` zeigt nur Topics mit mindestens einem veröffentlichten Snapshot;
       Suche und Kategorie-Filter funktionieren ohne Reload. Navigation, Footer,
       Light/Dark, Focus States und Mobile-Layout bleiben ohne horizontalen
@@ -959,7 +1018,8 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
   Fehlende/teilweise/abgebrochene Prüfung bleibt erkennbar, Recovery startet
   keinen neuen Provider-Aufruf. Ein Account-/Chatwechsel mischt keine Daten.
 - [ ] Kontingent nahe der Grenze mit zwei parallelen Chats prüfen; Chat,
-  Vergleich und Judges teilen Tokens, UTC-Reset bleibt separat zu Consensus.
+  Vergleich und Judges teilen Tokens — seit 2026-10-01 auch mit Compare und
+  Consensus (ein Konto, ein UTC-Reset).
 - [ ] Prozentanzeige während Calls und nach Budgetfehler/Disconnect prüfen:
   aktueller Serverwert; Panel zeigt Reserven. Eine unzureichende Reserve wird
   nicht als leeres Budget bezeichnet. Optionale Suche darf vor dem Claim
@@ -975,7 +1035,18 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
 - [ ] Desktop und 390/320px, Hell/Dunkel, Tastatur und Reduced Motion prüfen.
 - [ ] Agent-Budget: Reservierung und Freigabe ohne gemessenen Verbrauch verändern
   den Prozentwert nicht; der Kontingent-Dialog zeigt Reserven separat. Admin →
-  Limits speichert das Tageslimit und kann alle Agent-Budgets zurücksetzen.
+  Limits speichert Tageslimit je Stufe und Laufschätzungen je Stufe/Modus und
+  kann alle Konten zurücksetzen.
+- [ ] Ein Tokenkonto für alle Modi: Ring im Sidebar-Fuß ist ein ruhiges
+  20-px-Glyph ohne Zahl; Hover/Screenreader nennen „62% of today's allowance
+  left · resets …“. Panel: eine Hauptzahl, dünner Balken, Reset-Zeile,
+  Detailzeile („409k of 660k tokens · a Consensus run uses about 8%“), Watches
+  separat. Hell/Dunkel, Desktop und 320/390 px; bei ≤ 25 % färben sich nur
+  Bogen und Balken amber, leer rot. Ein Compare- oder Consensus-Lauf senkt den
+  Prozentwert nach seinen Antworten bzw. dem Consensus; Agent zeigt dieselbe
+  Zahl. Reicht das Konto nicht für einen typischen Lauf des Modus, erscheint
+  die Absage-Karte vor dem Senden (Deep Think: Angebot „Send without Deep
+  Think“, wenn ein normaler Lauf noch passt).
 - [ ] Auch ein fehlgeschlagener Agent-Run ohne Hauptantwort bleibt als Bookmark
   erhalten: Frage, Fehler, Aktivität und vorhandene Vergleichsantworten sind
   nach Reload sowie später im älteren Verlauf sichtbar.

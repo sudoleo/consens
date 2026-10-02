@@ -1,149 +1,1981 @@
 {
-  "schema_version": 1,
-  "review_date": "2026-09-26",
-  "base_commit": "145db25bfe029ff7f50cd77595bd6b9e043c1a2f",
-  "os": "Linux",
-  "runtime": {
-    "python": "3.12.14",
-    "node": "24.19.0",
-    "npm": "11.9.0",
-    "java": "17.0.20",
-    "firebase_cli": "13.35.1",
-    "firestore_emulator": "1.19.8"
-  },
-  "python_packages": {
-    "pytest": "8.4.2",
-    "playwright": "1.60.0",
-    "fastapi": "0.128.8",
-    "starlette": "0.49.3",
-    "httpx": "0.28.1",
-    "google-cloud-firestore": "2.20.1",
-    "firebase-admin": "6.6.0",
-    "pandas": "2.3.3",
-    "pyarrow": "21.0.0",
-    "greenlet": "3.1.1"
-  },
-  "javascript_packages": {
-    "vitest": "1.6.1",
-    "jsdom": "24.1.3",
-    "marked": "12.0.2",
-    "dompurify": "3.0.6",
-    "katex": "0.17.0",
-    "esbuild": "0.21.5"
-  },
-  "setup": [
-    "Complete Git history fetched; initial shallow history was insufficient for asset timestamp tests.",
-    "Isolated Python environment: pip install -r requirements-e2e.txt -r benchmark/requirements-benchmark.txt",
-    "npm ci --ignore-scripts; built static/dist assets present",
-    "No production credentials and no paid provider calls."
-  ],
-  "runs": [
-    {
-      "id": "backend_primary",
-      "environment": {
-        "RUN_E2E": "unset"
-      },
-      "result": {
-        "passed": 2717,
-        "failed": 1,
-        "skipped": 12
-      },
-      "duration_seconds": 32.56,
-      "cases_in_inventory": true,
-      "reproduction_command": "OPENROUTER_API_KEY=audit-placeholder-not-a-real-key UNIT_TEST_MODE=1 python -m pytest tests -q -rs --junitxml=pytest-verified.xml"
+  "schema_version": 2,
+  "review_date": "2026-10-02",
+  "source_commit": "ffaca3df7c8bbb02d850fb8f31d90107f26e9293",
+  "scope": "Integrated implementation acceptance; actual runners, no new branch-coverage measurement.",
+  "environment": {
+    "platforms": "Windows local runners and Linux full CI; see commands for each actual run.",
+    "local_runners": {
+      "os": "Windows",
+      "python": "3.9.7",
+      "node": "24.19.0",
+      "java": "21.0.12.1",
+      "firestore_emulator": "1.19.8",
+      "firebase_cli": "13.35.1"
     },
-    {
-      "id": "frontend_primary",
-      "result": {
-        "passed": 515,
-        "failed": 0,
-        "skipped": 0
-      },
-      "file_count": 57,
-      "cases_in_inventory": true,
-      "reproduction_command": "npm test -- --reporter=json --outputFile=vitest-results.json"
-    },
-    {
-      "id": "emulator_primary",
-      "emulator_command": "firebase emulators:start --only firestore --project demo-consensio-e2e",
-      "environment": {
-        "E2E_TEST_MODE": "1",
+    "e2e": {
+      "command": "firebase emulators:exec --only firestore --project demo-consensio-e2e --config firebase.json --non-interactive \"npm run test:rules && python -m pytest tests/e2e -q --junitxml=test-results/browser.xml\"",
+      "env": {
         "RUN_E2E": "1",
-        "UNIT_TEST_MODE": "1",
-        "FIRESTORE_EMULATOR_HOST": "127.0.0.1:8085",
+        "E2E_TEST_MODE": "1",
+        "PYTHONUTF8": "1",
+        "OPENROUTER_API_KEY": "ci-dummy-key",
         "GOOGLE_CLOUD_PROJECT": "demo-consensio-e2e",
         "GCLOUD_PROJECT": "demo-consensio-e2e",
         "FIREBASE_PROJECT_ID": "demo-consensio-e2e",
-        "GOOGLE_APPLICATION_CREDENTIALS": "unset",
-        "OPENROUTER_API_KEY": "audit-placeholder-not-a-real-key"
+        "FIRESTORE_EMULATOR_HOST": "127.0.0.1:8085",
+        "UNIT_TEST_MODE": null,
+        "GOOGLE_APPLICATION_CREDENTIALS": null
       },
-      "result": {
-        "passed": 9,
-        "failed": 3,
-        "skipped": 0
-      },
-      "duration_seconds": 44.18,
-      "process_note": "Emulator and pytest started as child processes in the same local execution environment; emulator stopped after the run.",
-      "cases_in_inventory": true,
-      "reproduction_command": "python -m pytest tests/e2e/test_agent_transactions.py tests/e2e/test_phase2_transactions.py tests/e2e/test_prompt_config_transactions.py -v -rs -o faulthandler_timeout=45 --junitxml=emulator-verified.xml"
+      "source_sha": "ffaca3df7c8bbb02d850fb8f31d90107f26e9293",
+      "app_version": "ffaca3df7c8bbb02d850fb8f31d90107f26e9293",
+      "exit_code": 0,
+      "conclusion": "success",
+      "result": "368 passed, 2 warnings in 743.20s; preceding client-rules run49 passed,0 failed",
+      "ci_url": "https://github.com/sudoleo/consens/actions/runs/36995379657/job/110800783463",
+      "artifact": "browser.xml",
+      "artifact_id": 11221662639,
+      "zip_sha256": "8c1a6baff0333fc0d387c2bae9ebc47429cd5e82c8838f43cbd264ee089ecf4c",
+      "platform": "GitHub Actions ubuntu-latest",
+      "python": "3.11.16",
+      "node": "24.21.0",
+      "playwright": "1.60.0",
+      "chromium": "148.0.7778.96 (Chromium/Chrome Headless Shell, Playwright build1223)",
+      "version_evidence": "ci-browser-ffaca3df.log setup/install output",
+      "firebase_cli": "13.35.1",
+      "firestore_emulator": "1.19.8"
     },
-    {
-      "id": "emulator_isolated_recheck",
-      "environment_same_as": "emulator_primary",
-      "fresh_emulator": true,
-      "result": {
-        "passed": 1,
-        "failed": 0
-      },
-      "duration_seconds": 19.41,
-      "interpretation": "Primary run failed with transaction lock timeout, isolated recheck passed. Root cause not determined. Do not overwrite primary outcome.",
-      "reproduction_command": "python -m pytest tests/e2e/test_phase2_transactions.py::test_parallel_reports_never_lose_increments_or_noindex_transition -v -rs -o faulthandler_timeout=45 --junitxml=emulator-recheck.xml"
-    },
-    {
-      "id": "browser_collection",
-      "result": {
-        "collected_all_e2e": 279,
-        "included_emulator_cases": 12,
-        "browser_cases_not_run": 267
-      },
-      "execution_status": "not_run",
-      "blocker": "playwright install chromium failed: 0 MiB download / invalid ZIP central directory; Chromium v1223 / Chrome for Testing 148.0.7778.96.",
-      "reproduction_command": "RUN_E2E=1 UNIT_TEST_MODE=1 python -m pytest tests/e2e --collect-only -q"
-    }
-  ],
-  "reports": [
-    {
-      "id": "backend_primary",
-      "raw_report_filename": "pytest-verified.xml",
-      "raw_report_sha256": "f3aefe2708691b831c3249a7943c58b31c05705ba29555265e55a2b63c8e4cf4",
-      "raw_report_committed": false
-    },
-    {
-      "id": "frontend_primary",
-      "raw_report_filename": "vitest-results.json",
-      "raw_report_sha256": "ad2957354a41d725b7b252ef70f799a3e738eb5101d67d172b6472908e3026ed",
-      "raw_report_committed": false
-    },
-    {
-      "id": "emulator_primary",
-      "raw_report_filename": "emulator-verified.xml",
-      "raw_report_sha256": "5c3d8a2ae4bb189f0e8654090a582ac01741ca68b7eea3b0b3a0e2d328a6c681",
-      "raw_report_committed": false
-    },
-    {
-      "id": "emulator_isolated_recheck",
-      "raw_report_filename": "emulator-recheck.xml",
-      "raw_report_sha256": "d83c3550f221fc6d11490ea5f9769856f7f92b6aa34ed002a408f5065cefb4f9",
-      "raw_report_committed": false
-    }
-  ],
-  "primary_totals": {
-    "passed": 3241,
-    "failed": 4,
-    "skipped": 12,
-    "not_run": 267
+    "project": "demo-consensio-e2e",
+    "firestore_host": "127.0.0.1:8085",
+    "credentials": "Native SDK uses anonymous demo-emulator credentials; external identity/provider boundaries are controlled."
   },
-  "coverage_instrumentation": "not performed",
-  "raw_report_note": "Per-case runner names and outcomes are preserved in inventory.json; failure explanations are in findings.md. Raw transient reports are identified by checksum, not part of this repository deliverable.",
-  "command_note": "Commands reproduce the recorded runner selection; transient virtualenv paths and report destinations are normalized."
+  "runner_artifacts": {
+    "backend": "docs/test-coverage/evidence/backend-implementation-2026-10-02.xml",
+    "e2e": "docs/test-coverage/evidence/browser-implementation-2026-10-02.xml",
+    "rules": "docs/test-coverage/evidence/rules-implementation-2026-10-02.xml",
+    "frontend": "docs/test-coverage/evidence/frontend-implementation-2026-10-02.json"
+  },
+  "artifacts": [
+    {
+      "path": "docs/test-coverage/evidence/backend-implementation-2026-10-02.xml",
+      "sha256": "752e6ac868eb39d1a2600dc3f8427dad645dc872f3bc2cdfdbf1f24d924d360d",
+      "raw_input_sha256": "5c8845593ec3cd5b9b20d8602d31424f698d1d5f9005a89050a0511203d18573",
+      "run_source_commit": "ffaca3df7c8bbb02d850fb8f31d90107f26e9293",
+      "format": "Normalized original JUnit identities/statuses/messages; captured logs and traceback bodies omitted."
+    },
+    {
+      "path": "docs/test-coverage/evidence/browser-implementation-2026-10-02.xml",
+      "sha256": "2e9d4ab2a0b3b80647e22e7e29e054d786829135b244ae136e9c4d5e865b75eb",
+      "raw_input_sha256": "4d19fd0ba3e635941e99bbc8468b5a5a0eb775ef04fb18863c8897afa4325c07",
+      "run_source_commit": "ffaca3df7c8bbb02d850fb8f31d90107f26e9293",
+      "format": "Normalized original JUnit identities/statuses/messages; captured logs and traceback bodies omitted."
+    },
+    {
+      "path": "docs/test-coverage/evidence/rules-implementation-2026-10-02.xml",
+      "sha256": "ca21512d13be1d86f5544c2f8d0776c3f7d455c2fa7c7b35d3f814598e5961af",
+      "raw_input_sha256": "92c28d96508e948478a8ba66b344c5a14b79ffb35d7ca85870f052c5eb742533",
+      "run_source_commit": "1ab80feed4edcd7d864b69194b4b9added3ffca5",
+      "format": "Normalized original JUnit identities/statuses/messages; captured logs and traceback bodies omitted."
+    },
+    {
+      "path": "docs/test-coverage/evidence/windows-cli-implementation-2026-10-02.xml",
+      "sha256": "e37d74aa1e7435bd8c49a138d6f46a756da79a6436f9a503f37f32673f9c22fe",
+      "raw_input_sha256": "06413712b10f00cae54054405425a3db832f52223cc166e8ed77e5465618c004",
+      "run_source_commit": "ffaca3df7c8bbb02d850fb8f31d90107f26e9293",
+      "format": "Normalized original JUnit identities/statuses/messages; captured logs and traceback bodies omitted."
+    },
+    {
+      "path": "docs/test-coverage/evidence/backend-linux-ci-implementation-2026-10-02.xml",
+      "sha256": "e7fd0cc681f750aca77415b8b17b7e38fdf959daac301ff51200fd4706293f10",
+      "raw_input_sha256": "a6f4ca1f38b3b148568d3524555fadcf4122ed3dba1a916ba512b6c2faa031bb",
+      "run_source_commit": "ffaca3df7c8bbb02d850fb8f31d90107f26e9293",
+      "format": "Normalized original JUnit identities/statuses/messages; captured logs and traceback bodies omitted."
+    },
+    {
+      "path": "docs/test-coverage/evidence/frontend-implementation-2026-10-02.json",
+      "sha256": "09613a126e5d0fd63b8447845a624afa7d523b2b75d30ad06779c727a06023f6",
+      "raw_input_sha256": "d517b89985b1920782f9f3210eddecd990f405d455a417a9a89c130a93cc310b",
+      "run_source_commit": "ffaca3df7c8bbb02d850fb8f31d90107f26e9293",
+      "format": "Vitest original identities and statuses; runner counters retained."
+    },
+    {
+      "path": "docs/test-coverage/evidence/negative-controls-implementation-2026-10-02.json",
+      "sha256": "e445a45cb177b1d5e3e3f082d6c1b7a14a3fc797f0458652966fd13ec9277d05",
+      "format": "Retained failure assertions and log hashes, explicit exit provenance, implementation commits distinct from actual run commits."
+    }
+  ],
+  "historical_execution": "execution-pre-implementation-2026-10-02.json",
+  "commands": {
+    "backend": {
+      "command": "venv/Scripts/python.exe -m pytest tests --ignore=tests/e2e -q -rs --junitxml=test-results/integrated/backend.xml",
+      "env": {
+        "UNIT_TEST_MODE": "1",
+        "PYTHONUTF8": "1",
+        "OPENROUTER_API_KEY": "unit-dummy-key",
+        "RUN_E2E": null
+      },
+      "source_sha": "ffaca3df7c8bbb02d850fb8f31d90107f26e9293",
+      "result": "3303 passed, 16 warnings in 237.52s",
+      "python": "3.9.7",
+      "exit_code": 0,
+      "conclusion": "success",
+      "platform": "Windows local"
+    },
+    "rules": {
+      "command": "node --test --test-reporter=junit tests/rules/firestore.rules.test.mjs > test-results/integrated/rules.xml",
+      "env": {
+        "FIRESTORE_EMULATOR_HOST": "127.0.0.1:8085",
+        "GOOGLE_CLOUD_PROJECT": "demo-consensio-e2e",
+        "GCLOUD_PROJECT": "demo-consensio-e2e",
+        "FIREBASE_PROJECT_ID": "demo-consensio-e2e"
+      },
+      "source_sha": "1ab80feed4edcd7d864b69194b4b9added3ffca5",
+      "result": "49 passed",
+      "node": "24.19.0",
+      "emulator": "Firestore 1.19.8; Firebase CLI 13.35.1; Java 21.0.12.1",
+      "exit_code": 0,
+      "conclusion": "success",
+      "platform": "Windows local",
+      "source_equivalence": {
+        "validated_through_sha": "ffaca3df7c8bbb02d850fb8f31d90107f26e9293",
+        "command": "git diff --exit-code 1ab80feed4edcd7d864b69194b4b9added3ffca5 ffaca3df7c8bbb02d850fb8f31d90107f26e9293 -- firestore.rules firebase.json tests/rules/firestore.rules.test.mjs package.json package-lock.json",
+        "exit_code": 0,
+        "output": "empty diff",
+        "paths": [
+          "firestore.rules",
+          "firebase.json",
+          "tests/rules/firestore.rules.test.mjs",
+          "package.json",
+          "package-lock.json"
+        ]
+      },
+      "final_ci_confirmation": {
+        "source_sha": "ffaca3df7c8bbb02d850fb8f31d90107f26e9293",
+        "result": "49 tests,49 passed,0 failed",
+        "ci_url": "https://github.com/sudoleo/consens/actions/runs/36995379657/job/110800783463",
+        "log": "ci-browser-ffaca3df.log"
+      }
+    },
+    "frontend": {
+      "command": "node node_modules/vitest/vitest.mjs run --reporter=default --reporter=json --outputFile=test-results/integrated/frontend.json",
+      "env": {
+        "PATH_prefix": "C:/Users/maxlp/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin"
+      },
+      "source_sha": "ffaca3df7c8bbb02d850fb8f31d90107f26e9293",
+      "node": "24.19.0",
+      "result": "705 passed in 77 files; 45.64s",
+      "build": "node scripts/build_frontend.mjs --check: passed on integrated code; browser branch build included in PR20",
+      "exit_code": 0,
+      "conclusion": "success",
+      "platform": "Windows local"
+    },
+    "e2e": {
+      "command": "firebase emulators:exec --only firestore --project demo-consensio-e2e --config firebase.json --non-interactive \"npm run test:rules && python -m pytest tests/e2e -q --junitxml=test-results/browser.xml\"",
+      "env": {
+        "RUN_E2E": "1",
+        "E2E_TEST_MODE": "1",
+        "PYTHONUTF8": "1",
+        "OPENROUTER_API_KEY": "ci-dummy-key",
+        "GOOGLE_CLOUD_PROJECT": "demo-consensio-e2e",
+        "GCLOUD_PROJECT": "demo-consensio-e2e",
+        "FIREBASE_PROJECT_ID": "demo-consensio-e2e",
+        "FIRESTORE_EMULATOR_HOST": "127.0.0.1:8085",
+        "UNIT_TEST_MODE": null,
+        "GOOGLE_APPLICATION_CREDENTIALS": null
+      },
+      "source_sha": "ffaca3df7c8bbb02d850fb8f31d90107f26e9293",
+      "app_version": "ffaca3df7c8bbb02d850fb8f31d90107f26e9293",
+      "exit_code": 0,
+      "conclusion": "success",
+      "result": "368 passed, 2 warnings in 743.20s; preceding client-rules run49 passed,0 failed",
+      "ci_url": "https://github.com/sudoleo/consens/actions/runs/36995379657/job/110800783463",
+      "artifact": "browser.xml",
+      "artifact_id": 11221662639,
+      "zip_sha256": "8c1a6baff0333fc0d387c2bae9ebc47429cd5e82c8838f43cbd264ee089ecf4c",
+      "platform": "GitHub Actions ubuntu-latest",
+      "python": "3.11.16",
+      "node": "24.21.0",
+      "playwright": "1.60.0",
+      "chromium": "148.0.7778.96 (Chromium/Chrome Headless Shell, Playwright build1223)",
+      "version_evidence": "ci-browser-ffaca3df.log setup/install output",
+      "firebase_cli": "13.35.1",
+      "firestore_emulator": "1.19.8"
+    },
+    "windows_entry_points": {
+      "command": ".github/workflows/tests.yml jobs.windows-entry-points",
+      "source_sha": "ffaca3df7c8bbb02d850fb8f31d90107f26e9293",
+      "result": "28 CLI cases passed in both PowerShell versions; all real dev.ps1 backend/frontend/rules/browser steps succeeded",
+      "ci_url": "https://github.com/sudoleo/consens/actions/runs/36995379657/job/110800783247",
+      "artifact": "windows-cli.xml",
+      "exit_code": 0,
+      "conclusion": "success",
+      "platform": "GitHub Actions windows-latest",
+      "artifact_id": 11221502385,
+      "zip_sha256": "b492645c8ff065493ab5499edfac6f6c31c20e2fc10f01f50dae362054c62634"
+    },
+    "backend_linux_ci": {
+      "command": "python -m pytest tests -q --junitxml=test-results/backend.xml",
+      "env": {
+        "UNIT_TEST_MODE": "1",
+        "PYTHONUTF8": "1",
+        "OPENROUTER_API_KEY": "ci-dummy-key"
+      },
+      "source_sha": "ffaca3df7c8bbb02d850fb8f31d90107f26e9293",
+      "exit_code": 0,
+      "conclusion": "success",
+      "ci_url": "https://github.com/sudoleo/consens/actions/runs/36995379657/job/110800783441",
+      "artifact": "backend-ci-ffaca3df.xml",
+      "artifact_id": 11220234773,
+      "zip_sha256": "eb7168efd9f8c885e22d2983d377bb456748230b8fbaa1bc6f1fb4ff51626b39",
+      "result": "3274 passed, 15 skipped in 67.14s",
+      "skip_reasons": "14 Windows-only CLI variants (28 actual cases on Windows); one Parquet case requires a local optional engine. All are covered by the primary Windows backend run.",
+      "python": "3.11",
+      "platform": "GitHub Actions ubuntu-latest"
+    },
+    "full_ci": {
+      "source_sha": "ffaca3df7c8bbb02d850fb8f31d90107f26e9293",
+      "event": "ready_for_review",
+      "conclusion": "success",
+      "ci_url": "https://github.com/sudoleo/consens/actions/runs/36995379657",
+      "jobs": {
+        "backend": {
+          "conclusion": "success",
+          "ci_url": "https://github.com/sudoleo/consens/actions/runs/36995379657/job/110800783441"
+        },
+        "frontend": {
+          "conclusion": "success",
+          "ci_url": "https://github.com/sudoleo/consens/actions/runs/36995379657/job/110800783563"
+        },
+        "browser-and-rules": {
+          "conclusion": "success",
+          "ci_url": "https://github.com/sudoleo/consens/actions/runs/36995379657/job/110800783463"
+        },
+        "windows-entry-points": {
+          "conclusion": "success",
+          "ci_url": "https://github.com/sudoleo/consens/actions/runs/36995379657/job/110800783247"
+        }
+      }
+    }
+  },
+  "source_equivalence": {
+    "rules": {
+      "run_source_commit": "1ab80feed4edcd7d864b69194b4b9added3ffca5",
+      "snapshot_source_commit": "ffaca3df7c8bbb02d850fb8f31d90107f26e9293",
+      "compared_paths": [
+        "tests/rules",
+        "firestore.rules",
+        "firestore.indexes.json",
+        "firebase.json",
+        "package.json",
+        "package-lock.json"
+      ],
+      "changed_paths": [],
+      "method": "git diff --name-only RUN_SHA SNAPSHOT_SHA -- PATHS"
+    }
+  },
+  "suites": {
+    "backend": {
+      "files": 169,
+      "definitions": 2445,
+      "collected": 3303,
+      "result": {
+        "passed": 3303
+      }
+    },
+    "frontend": {
+      "files": 77,
+      "definitions": 579,
+      "collected": 705,
+      "result": {
+        "passed": 705
+      }
+    },
+    "e2e": {
+      "files": 44,
+      "definitions": 205,
+      "collected": 368,
+      "result": {
+        "passed": 368
+      }
+    },
+    "rules": {
+      "files": 1,
+      "definitions": 2,
+      "collected": 49,
+      "result": {
+        "passed": 49
+      }
+    }
+  },
+  "supplemental_platform_runs": {
+    "windows_entry_points": {
+      "runner_artifact": "docs/test-coverage/evidence/windows-cli-implementation-2026-10-02.xml",
+      "result": {
+        "passed": 28
+      },
+      "skipped_cases": [],
+      "command": {
+        "command": ".github/workflows/tests.yml jobs.windows-entry-points",
+        "source_sha": "ffaca3df7c8bbb02d850fb8f31d90107f26e9293",
+        "result": "28 CLI cases passed in both PowerShell versions; all real dev.ps1 backend/frontend/rules/browser steps succeeded",
+        "ci_url": "https://github.com/sudoleo/consens/actions/runs/36995379657/job/110800783247",
+        "artifact": "windows-cli.xml",
+        "exit_code": 0,
+        "conclusion": "success",
+        "platform": "GitHub Actions windows-latest",
+        "artifact_id": 11221502385,
+        "zip_sha256": "b492645c8ff065493ab5499edfac6f6c31c20e2fc10f01f50dae362054c62634"
+      }
+    },
+    "backend_linux_ci": {
+      "runner_artifact": "docs/test-coverage/evidence/backend-linux-ci-implementation-2026-10-02.xml",
+      "result": {
+        "passed": 3274,
+        "skipped": 15
+      },
+      "skipped_cases": [
+        {
+          "id": "tests/test_benchmark_dataset.py::SamplingTests::test_parquet_fixture_roundtrip",
+          "status": "skipped",
+          "message": "needs a parquet engine + committed fixture"
+        },
+        {
+          "id": "tests/test_dev_cli.py::test_frontend_runs_tests_then_build_check_from_repository_root[unavailable]",
+          "status": "skipped",
+          "message": "Windows PowerShell entry point"
+        },
+        {
+          "id": "tests/test_dev_cli.py::test_frontend_preserves_failure_and_stops[unavailable-npm-test-1]",
+          "status": "skipped",
+          "message": "Windows PowerShell entry point"
+        },
+        {
+          "id": "tests/test_dev_cli.py::test_frontend_preserves_failure_and_stops[unavailable-npm-run-2]",
+          "status": "skipped",
+          "message": "Windows PowerShell entry point"
+        },
+        {
+          "id": "tests/test_dev_cli.py::test_backend_isolates_inherited_e2e_flags_and_restores_caller[unavailable-]",
+          "status": "skipped",
+          "message": "Windows PowerShell entry point"
+        },
+        {
+          "id": "tests/test_dev_cli.py::test_backend_isolates_inherited_e2e_flags_and_restores_caller[unavailable-pytest]",
+          "status": "skipped",
+          "message": "Windows PowerShell entry point"
+        },
+        {
+          "id": "tests/test_dev_cli.py::test_browser_delegates_lifecycle_and_failure_to_firebase[unavailable-]",
+          "status": "skipped",
+          "message": "Windows PowerShell entry point"
+        },
+        {
+          "id": "tests/test_dev_cli.py::test_browser_delegates_lifecycle_and_failure_to_firebase[unavailable-pytest]",
+          "status": "skipped",
+          "message": "Windows PowerShell entry point"
+        },
+        {
+          "id": "tests/test_dev_cli.py::test_rules_uses_client_runner_with_emulator_lifecycle_and_restores_environment[unavailable-]",
+          "status": "skipped",
+          "message": "Windows PowerShell entry point"
+        },
+        {
+          "id": "tests/test_dev_cli.py::test_rules_uses_client_runner_with_emulator_lifecycle_and_restores_environment[unavailable-node]",
+          "status": "skipped",
+          "message": "Windows PowerShell entry point"
+        },
+        {
+          "id": "tests/test_dev_cli.py::test_browser_rejects_nonlocal_emulator_before_start[unavailable]",
+          "status": "skipped",
+          "message": "Windows PowerShell entry point"
+        },
+        {
+          "id": "tests/test_dev_cli.py::test_browser_failure_restores_initially_absent_environment_entries[unavailable]",
+          "status": "skipped",
+          "message": "Windows PowerShell entry point"
+        },
+        {
+          "id": "tests/test_dev_cli.py::test_rejects_tests_outside_selected_suite[unavailable-backend-tests/e2e/test_example.py]",
+          "status": "skipped",
+          "message": "Windows PowerShell entry point"
+        },
+        {
+          "id": "tests/test_dev_cli.py::test_rejects_tests_outside_selected_suite[unavailable-frontend-../outside.py]",
+          "status": "skipped",
+          "message": "Windows PowerShell entry point"
+        },
+        {
+          "id": "tests/test_dev_cli.py::test_missing_dependencies_have_actionable_error[unavailable]",
+          "status": "skipped",
+          "message": "Windows PowerShell entry point"
+        }
+      ],
+      "command": {
+        "command": "python -m pytest tests -q --junitxml=test-results/backend.xml",
+        "env": {
+          "UNIT_TEST_MODE": "1",
+          "PYTHONUTF8": "1",
+          "OPENROUTER_API_KEY": "ci-dummy-key"
+        },
+        "source_sha": "ffaca3df7c8bbb02d850fb8f31d90107f26e9293",
+        "exit_code": 0,
+        "conclusion": "success",
+        "ci_url": "https://github.com/sudoleo/consens/actions/runs/36995379657/job/110800783441",
+        "artifact": "backend-ci-ffaca3df.xml",
+        "artifact_id": 11220234773,
+        "zip_sha256": "eb7168efd9f8c885e22d2983d377bb456748230b8fbaa1bc6f1fb4ff51626b39",
+        "result": "3274 passed, 15 skipped in 67.14s",
+        "skip_reasons": "14 Windows-only CLI variants (28 actual cases on Windows); one Parquet case requires a local optional engine. All are covered by the primary Windows backend run.",
+        "python": "3.11",
+        "platform": "GitHub Actions ubuntu-latest"
+      }
+    }
+  },
+  "runner_identity_changes": {
+    "previous_source_commit": "2860844af9dcba2087551af1697408e87e5fe928",
+    "interpretation": "Added/removed runner identities are explicit, not automatically classified as new behavior or renames. Parameter and name changes can create both.",
+    "suites": {
+      "backend": {
+        "previous_cases": 3081,
+        "current_cases": 3303,
+        "added_cases": [
+          {
+            "path": "tests/test_account_tier_admin.py",
+            "id": "tests/test_account_tier_admin.py::test_unknown_account_has_structured_error_in_real_main_app"
+          },
+          {
+            "path": "tests/test_agent_capacity.py",
+            "id": "tests/test_agent_capacity.py::test_disconnect_preserves_generator_exit_when_deleted_account_blocks_cleanup"
+          },
+          {
+            "path": "tests/test_agent_http_contract.py",
+            "id": "tests/test_agent_http_contract.py::test_detail_pages_are_owner_bound_and_never_start_provider"
+          },
+          {
+            "path": "tests/test_agent_http_contract.py",
+            "id": "tests/test_agent_http_contract.py::test_stop_fences_only_bound_turn_repeatedly_and_rejects_late_worker"
+          },
+          {
+            "path": "tests/test_agent_http_contract.py",
+            "id": "tests/test_agent_http_contract.py::test_detail_and_stop_use_real_tier_policy[free--403]"
+          },
+          {
+            "path": "tests/test_agent_http_contract.py",
+            "id": "tests/test_agent_http_contract.py::test_detail_and_stop_use_real_tier_policy[plus--403]"
+          },
+          {
+            "path": "tests/test_agent_http_contract.py",
+            "id": "tests/test_agent_http_contract.py::test_detail_and_stop_use_real_tier_policy[pro--200]"
+          },
+          {
+            "path": "tests/test_agent_http_contract.py",
+            "id": "tests/test_agent_http_contract.py::test_detail_and_stop_use_real_tier_policy[free-admin-200]"
+          },
+          {
+            "path": "tests/test_agent_http_contract.py",
+            "id": "tests/test_agent_http_contract.py::test_agent_role_outage_is_retryable_without_private_data_or_write"
+          },
+          {
+            "path": "tests/test_agent_http_contract.py",
+            "id": "tests/test_agent_http_contract.py::test_actual_agent_capacity_through_main_preserves_retry_header"
+          },
+          {
+            "path": "tests/test_agent_http_contract.py",
+            "id": "tests/test_agent_http_contract.py::test_actual_api_uid_limit_through_main_preserves_only_server_retry_header"
+          },
+          {
+            "path": "tests/test_api_run_recovery.py",
+            "id": "tests/test_api_run_recovery.py::test_restart_requeues_only_pre_provider_work_and_deduplicates_schedule"
+          },
+          {
+            "path": "tests/test_api_run_recovery.py",
+            "id": "tests/test_api_run_recovery.py::test_retention_rechecks_expiry_and_preserves_rebound_idempotency"
+          },
+          {
+            "path": "tests/test_api_run_recovery.py",
+            "id": "tests/test_api_run_recovery.py::test_backfill_preserves_existing_expiry_and_rebound_mapping"
+          },
+          {
+            "path": "tests/test_api_run_recovery.py",
+            "id": "tests/test_api_run_recovery.py::test_recovery_backfill_failure_is_retryable_and_queue_submission_unwinds"
+          },
+          {
+            "path": "tests/test_api_source_history.py",
+            "id": "tests/test_api_source_history.py::test_historic_api_source_pages_owner_cursor_revision_and_cache"
+          },
+          {
+            "path": "tests/test_api_source_history.py",
+            "id": "tests/test_api_source_history.py::test_historic_api_rejects_mismatched_snapshot_on_full_and_unchanged_polls[params0-job_id]"
+          },
+          {
+            "path": "tests/test_api_source_history.py",
+            "id": "tests/test_api_source_history.py::test_historic_api_rejects_mismatched_snapshot_on_full_and_unchanged_polls[params0-run_id]"
+          },
+          {
+            "path": "tests/test_api_source_history.py",
+            "id": "tests/test_api_source_history.py::test_historic_api_rejects_mismatched_snapshot_on_full_and_unchanged_polls[params0-answer_version]"
+          },
+          {
+            "path": "tests/test_api_source_history.py",
+            "id": "tests/test_api_source_history.py::test_historic_api_rejects_mismatched_snapshot_on_full_and_unchanged_polls[params0-prompt_version]"
+          },
+          {
+            "path": "tests/test_api_source_history.py",
+            "id": "tests/test_api_source_history.py::test_historic_api_rejects_mismatched_snapshot_on_full_and_unchanged_polls[params1-job_id]"
+          },
+          {
+            "path": "tests/test_api_source_history.py",
+            "id": "tests/test_api_source_history.py::test_historic_api_rejects_mismatched_snapshot_on_full_and_unchanged_polls[params1-run_id]"
+          },
+          {
+            "path": "tests/test_api_source_history.py",
+            "id": "tests/test_api_source_history.py::test_historic_api_rejects_mismatched_snapshot_on_full_and_unchanged_polls[params1-answer_version]"
+          },
+          {
+            "path": "tests/test_api_source_history.py",
+            "id": "tests/test_api_source_history.py::test_historic_api_rejects_mismatched_snapshot_on_full_and_unchanged_polls[params1-prompt_version]"
+          },
+          {
+            "path": "tests/test_auxiliary_cli.py",
+            "id": "tests/test_auxiliary_cli.py::test_invalid_execution_args_stop_before_dataset_or_provider[args0-benchmark.run_sample]"
+          },
+          {
+            "path": "tests/test_auxiliary_cli.py",
+            "id": "tests/test_auxiliary_cli.py::test_invalid_execution_args_stop_before_dataset_or_provider[args0-benchmark.run_experiment]"
+          },
+          {
+            "path": "tests/test_auxiliary_cli.py",
+            "id": "tests/test_auxiliary_cli.py::test_invalid_execution_args_stop_before_dataset_or_provider[args1-benchmark.run_sample]"
+          },
+          {
+            "path": "tests/test_auxiliary_cli.py",
+            "id": "tests/test_auxiliary_cli.py::test_invalid_execution_args_stop_before_dataset_or_provider[args1-benchmark.run_experiment]"
+          },
+          {
+            "path": "tests/test_auxiliary_cli.py",
+            "id": "tests/test_auxiliary_cli.py::test_invalid_execution_args_stop_before_dataset_or_provider[args2-benchmark.run_sample]"
+          },
+          {
+            "path": "tests/test_auxiliary_cli.py",
+            "id": "tests/test_auxiliary_cli.py::test_invalid_execution_args_stop_before_dataset_or_provider[args2-benchmark.run_experiment]"
+          },
+          {
+            "path": "tests/test_auxiliary_cli.py",
+            "id": "tests/test_auxiliary_cli.py::test_invalid_execution_args_stop_before_dataset_or_provider[args3-benchmark.run_sample]"
+          },
+          {
+            "path": "tests/test_auxiliary_cli.py",
+            "id": "tests/test_auxiliary_cli.py::test_invalid_execution_args_stop_before_dataset_or_provider[args3-benchmark.run_experiment]"
+          },
+          {
+            "path": "tests/test_auxiliary_cli.py",
+            "id": "tests/test_auxiliary_cli.py::test_invalid_execution_args_stop_before_dataset_or_provider[args4-benchmark.run_sample]"
+          },
+          {
+            "path": "tests/test_auxiliary_cli.py",
+            "id": "tests/test_auxiliary_cli.py::test_invalid_execution_args_stop_before_dataset_or_provider[args4-benchmark.run_experiment]"
+          },
+          {
+            "path": "tests/test_auxiliary_cli.py",
+            "id": "tests/test_auxiliary_cli.py::test_invalid_execution_args_stop_before_dataset_or_provider[args5-benchmark.run_sample]"
+          },
+          {
+            "path": "tests/test_auxiliary_cli.py",
+            "id": "tests/test_auxiliary_cli.py::test_invalid_execution_args_stop_before_dataset_or_provider[args5-benchmark.run_experiment]"
+          },
+          {
+            "path": "tests/test_auxiliary_cli.py",
+            "id": "tests/test_auxiliary_cli.py::test_sample_run_id_cannot_escape_output_root[../escape]"
+          },
+          {
+            "path": "tests/test_auxiliary_cli.py",
+            "id": "tests/test_auxiliary_cli.py::test_sample_run_id_cannot_escape_output_root[/absolute]"
+          },
+          {
+            "path": "tests/test_auxiliary_cli.py",
+            "id": "tests/test_auxiliary_cli.py::test_sample_run_id_cannot_escape_output_root[C:\\\\outside]"
+          },
+          {
+            "path": "tests/test_auxiliary_cli.py",
+            "id": "tests/test_auxiliary_cli.py::test_sample_run_id_cannot_escape_output_root[..]"
+          },
+          {
+            "path": "tests/test_auxiliary_cli.py",
+            "id": "tests/test_auxiliary_cli.py::test_dry_run_then_live_then_resume_uses_real_runner_without_duplicate_calls[benchmark.run_sample]"
+          },
+          {
+            "path": "tests/test_auxiliary_cli.py",
+            "id": "tests/test_auxiliary_cli.py::test_dry_run_then_live_then_resume_uses_real_runner_without_duplicate_calls[benchmark.run_experiment]"
+          },
+          {
+            "path": "tests/test_auxiliary_cli.py",
+            "id": "tests/test_auxiliary_cli.py::test_missing_credential_never_starts_provider[benchmark.run_sample]"
+          },
+          {
+            "path": "tests/test_auxiliary_cli.py",
+            "id": "tests/test_auxiliary_cli.py::test_missing_credential_never_starts_provider[benchmark.run_experiment]"
+          },
+          {
+            "path": "tests/test_auxiliary_cli.py",
+            "id": "tests/test_auxiliary_cli.py::test_argument_boundary_oracle_detects_removed_finite_budget_guard"
+          },
+          {
+            "path": "tests/test_benchmark_manifest_clock.py",
+            "id": "tests/test_benchmark_manifest_clock.py::test_resume_across_seconds_days_and_dst_keeps_manifest"
+          },
+          {
+            "path": "tests/test_benchmark_manifest_clock.py",
+            "id": "tests/test_benchmark_manifest_clock.py::test_actual_configuration_drift_still_rejects_resume[timezone]"
+          },
+          {
+            "path": "tests/test_benchmark_manifest_clock.py",
+            "id": "tests/test_benchmark_manifest_clock.py::test_actual_configuration_drift_still_rejects_resume[instructions]"
+          },
+          {
+            "path": "tests/test_benchmark_manifest_clock.py",
+            "id": "tests/test_benchmark_manifest_clock.py::test_actual_configuration_drift_still_rejects_resume[model]"
+          },
+          {
+            "path": "tests/test_benchmark_manifest_clock.py",
+            "id": "tests/test_benchmark_manifest_clock.py::test_timestamped_legacy_manifest_resumes_without_rewriting_it"
+          },
+          {
+            "path": "tests/test_benchmark_protocol.py",
+            "id": "tests/test_benchmark_protocol.py::test_protocol_failures_are_not_successful_abstentions[body0-provider_response_error]"
+          },
+          {
+            "path": "tests/test_benchmark_protocol.py",
+            "id": "tests/test_benchmark_protocol.py::test_protocol_failures_are_not_successful_abstentions[body1-provider_response_error]"
+          },
+          {
+            "path": "tests/test_benchmark_protocol.py",
+            "id": "tests/test_benchmark_protocol.py::test_protocol_failures_are_not_successful_abstentions[None-response_parse_failed]"
+          },
+          {
+            "path": "tests/test_benchmark_protocol.py",
+            "id": "tests/test_benchmark_protocol.py::test_protocol_failures_are_not_successful_abstentions[body3-response_parse_failed]"
+          },
+          {
+            "path": "tests/test_benchmark_protocol.py",
+            "id": "tests/test_benchmark_protocol.py::test_protocol_failures_are_not_successful_abstentions[body4-response_parse_failed]"
+          },
+          {
+            "path": "tests/test_benchmark_protocol.py",
+            "id": "tests/test_benchmark_protocol.py::test_protocol_failures_are_not_successful_abstentions[body5-response_parse_failed]"
+          },
+          {
+            "path": "tests/test_benchmark_protocol.py",
+            "id": "tests/test_benchmark_protocol.py::test_protocol_failures_are_not_successful_abstentions[body6-response_parse_failed]"
+          },
+          {
+            "path": "tests/test_benchmark_protocol.py",
+            "id": "tests/test_benchmark_protocol.py::test_protocol_failures_are_not_successful_abstentions[body7-response_parse_failed]"
+          },
+          {
+            "path": "tests/test_benchmark_protocol.py",
+            "id": "tests/test_benchmark_protocol.py::test_protocol_failures_are_not_successful_abstentions[body8-response_parse_failed]"
+          },
+          {
+            "path": "tests/test_benchmark_protocol.py",
+            "id": "tests/test_benchmark_protocol.py::test_protocol_failures_are_not_successful_abstentions[body9-response_parse_failed]"
+          },
+          {
+            "path": "tests/test_benchmark_protocol.py",
+            "id": "tests/test_benchmark_protocol.py::test_valid_text_preserves_selection_and_abstention[I cannot determine the answer.-True-None]"
+          },
+          {
+            "path": "tests/test_benchmark_protocol.py",
+            "id": "tests/test_benchmark_protocol.py::test_valid_text_preserves_selection_and_abstention[FINAL_ANSWER: B-False-B]"
+          },
+          {
+            "path": "tests/test_benchmark_protocol.py",
+            "id": "tests/test_benchmark_protocol.py::test_exception_messages_cannot_leak_credentials_into_records"
+          },
+          {
+            "path": "tests/test_benchmark_protocol.py",
+            "id": "tests/test_benchmark_protocol.py::test_consensus_error_projection_never_persists_private_provider_details[True]"
+          },
+          {
+            "path": "tests/test_benchmark_protocol.py",
+            "id": "tests/test_benchmark_protocol.py::test_consensus_error_projection_never_persists_private_provider_details[False]"
+          },
+          {
+            "path": "tests/test_claim_identity_judge.py",
+            "id": "tests/test_claim_identity_judge.py::test_known_unique_bindings_only"
+          },
+          {
+            "path": "tests/test_claim_identity_judge.py",
+            "id": "tests/test_claim_identity_judge.py::test_only_json_integer_indices_are_accepted[True]"
+          },
+          {
+            "path": "tests/test_claim_identity_judge.py",
+            "id": "tests/test_claim_identity_judge.py::test_only_json_integer_indices_are_accepted[False]"
+          },
+          {
+            "path": "tests/test_claim_identity_judge.py",
+            "id": "tests/test_claim_identity_judge.py::test_only_json_integer_indices_are_accepted[0.0]"
+          },
+          {
+            "path": "tests/test_claim_identity_judge.py",
+            "id": "tests/test_claim_identity_judge.py::test_only_json_integer_indices_are_accepted[0.5]"
+          },
+          {
+            "path": "tests/test_claim_identity_judge.py",
+            "id": "tests/test_claim_identity_judge.py::test_only_json_integer_indices_are_accepted[0]"
+          },
+          {
+            "path": "tests/test_claim_identity_judge.py",
+            "id": "tests/test_claim_identity_judge.py::test_only_json_integer_indices_are_accepted[None]"
+          },
+          {
+            "path": "tests/test_claim_identity_judge.py",
+            "id": "tests/test_claim_identity_judge.py::test_only_json_integer_indices_are_accepted[-1]"
+          },
+          {
+            "path": "tests/test_claim_identity_judge.py",
+            "id": "tests/test_claim_identity_judge.py::test_only_json_integer_indices_are_accepted[2]"
+          },
+          {
+            "path": "tests/test_claim_identity_judge.py",
+            "id": "tests/test_claim_identity_judge.py::test_only_json_integer_indices_are_accepted[index8]"
+          },
+          {
+            "path": "tests/test_claim_identity_judge.py",
+            "id": "tests/test_claim_identity_judge.py::test_only_json_integer_indices_are_accepted[index9]"
+          },
+          {
+            "path": "tests/test_claim_identity_judge.py",
+            "id": "tests/test_claim_identity_judge.py::test_bounded_prompt_and_unmapped_outside_window"
+          },
+          {
+            "path": "tests/test_claim_identity_judge.py",
+            "id": "tests/test_claim_identity_judge.py::test_retry_fallback_is_bounded_and_logs_no_provider_content"
+          },
+          {
+            "path": "tests/test_claim_identity_judge.py",
+            "id": "tests/test_claim_identity_judge.py::test_empty_or_invalid_engine_returns_unmapped_without_transport"
+          },
+          {
+            "path": "tests/test_dev_cli.py",
+            "id": "tests/test_dev_cli.py::test_rules_uses_client_runner_with_emulator_lifecycle_and_restores_environment[pwsh-]"
+          },
+          {
+            "path": "tests/test_dev_cli.py",
+            "id": "tests/test_dev_cli.py::test_rules_uses_client_runner_with_emulator_lifecycle_and_restores_environment[pwsh-node]"
+          },
+          {
+            "path": "tests/test_dev_cli.py",
+            "id": "tests/test_dev_cli.py::test_rules_uses_client_runner_with_emulator_lifecycle_and_restores_environment[powershell-]"
+          },
+          {
+            "path": "tests/test_dev_cli.py",
+            "id": "tests/test_dev_cli.py::test_rules_uses_client_runner_with_emulator_lifecycle_and_restores_environment[powershell-node]"
+          },
+          {
+            "path": "tests/test_feedback.py",
+            "id": "tests/test_feedback.py::test_feedback_auth_payload_and_persisted_cooldown"
+          },
+          {
+            "path": "tests/test_feedback.py",
+            "id": "tests/test_feedback.py::test_feedback_daily_limit_and_storage_failure_are_safe"
+          },
+          {
+            "path": "tests/test_feedback.py",
+            "id": "tests/test_feedback.py::test_feedback_rejects_invalid_fields_before_storage[payload0]"
+          },
+          {
+            "path": "tests/test_feedback.py",
+            "id": "tests/test_feedback.py::test_feedback_rejects_invalid_fields_before_storage[payload1]"
+          },
+          {
+            "path": "tests/test_feedback.py",
+            "id": "tests/test_feedback.py::test_feedback_rejects_invalid_fields_before_storage[payload2]"
+          },
+          {
+            "path": "tests/test_feedback.py",
+            "id": "tests/test_feedback.py::test_feedback_rejects_invalid_fields_before_storage[payload3]"
+          },
+          {
+            "path": "tests/test_feedback.py",
+            "id": "tests/test_feedback.py::test_stats_wrapper_persists_only_counts_and_safe_model_metadata"
+          },
+          {
+            "path": "tests/test_feedback.py",
+            "id": "tests/test_feedback.py::test_stats_failure_never_aborts_answer_or_logs_content"
+          },
+          {
+            "path": "tests/test_http_adapter_auth.py",
+            "id": "tests/test_http_adapter_auth.py::test_every_topic_admin_method_enforces_real_policy_before_service[None-401-GET-/api/admin/topics]"
+          },
+          {
+            "path": "tests/test_http_adapter_auth.py",
+            "id": "tests/test_http_adapter_auth.py::test_every_topic_admin_method_enforces_real_policy_before_service[None-401-POST-/api/admin/topics]"
+          },
+          {
+            "path": "tests/test_http_adapter_auth.py",
+            "id": "tests/test_http_adapter_auth.py::test_every_topic_admin_method_enforces_real_policy_before_service[None-401-GET-/api/admin/topics/unknown]"
+          },
+          {
+            "path": "tests/test_http_adapter_auth.py",
+            "id": "tests/test_http_adapter_auth.py::test_every_topic_admin_method_enforces_real_policy_before_service[None-401-PUT-/api/admin/topics/unknown]"
+          },
+          {
+            "path": "tests/test_http_adapter_auth.py",
+            "id": "tests/test_http_adapter_auth.py::test_every_topic_admin_method_enforces_real_policy_before_service[None-401-POST-/api/admin/topics/unknown/runs]"
+          },
+          {
+            "path": "tests/test_http_adapter_auth.py",
+            "id": "tests/test_http_adapter_auth.py::test_every_topic_admin_method_enforces_real_policy_before_service[invalid-401-GET-/api/admin/topics]"
+          },
+          {
+            "path": "tests/test_http_adapter_auth.py",
+            "id": "tests/test_http_adapter_auth.py::test_every_topic_admin_method_enforces_real_policy_before_service[invalid-401-POST-/api/admin/topics]"
+          },
+          {
+            "path": "tests/test_http_adapter_auth.py",
+            "id": "tests/test_http_adapter_auth.py::test_every_topic_admin_method_enforces_real_policy_before_service[invalid-401-GET-/api/admin/topics/unknown]"
+          },
+          {
+            "path": "tests/test_http_adapter_auth.py",
+            "id": "tests/test_http_adapter_auth.py::test_every_topic_admin_method_enforces_real_policy_before_service[invalid-401-PUT-/api/admin/topics/unknown]"
+          },
+          {
+            "path": "tests/test_http_adapter_auth.py",
+            "id": "tests/test_http_adapter_auth.py::test_every_topic_admin_method_enforces_real_policy_before_service[invalid-401-POST-/api/admin/topics/unknown/runs]"
+          },
+          {
+            "path": "tests/test_http_adapter_auth.py",
+            "id": "tests/test_http_adapter_auth.py::test_every_topic_admin_method_enforces_real_policy_before_service[revoked-401-GET-/api/admin/topics]"
+          },
+          {
+            "path": "tests/test_http_adapter_auth.py",
+            "id": "tests/test_http_adapter_auth.py::test_every_topic_admin_method_enforces_real_policy_before_service[revoked-401-POST-/api/admin/topics]"
+          },
+          {
+            "path": "tests/test_http_adapter_auth.py",
+            "id": "tests/test_http_adapter_auth.py::test_every_topic_admin_method_enforces_real_policy_before_service[revoked-401-GET-/api/admin/topics/unknown]"
+          },
+          {
+            "path": "tests/test_http_adapter_auth.py",
+            "id": "tests/test_http_adapter_auth.py::test_every_topic_admin_method_enforces_real_policy_before_service[revoked-401-PUT-/api/admin/topics/unknown]"
+          },
+          {
+            "path": "tests/test_http_adapter_auth.py",
+            "id": "tests/test_http_adapter_auth.py::test_every_topic_admin_method_enforces_real_policy_before_service[revoked-401-POST-/api/admin/topics/unknown/runs]"
+          },
+          {
+            "path": "tests/test_http_adapter_auth.py",
+            "id": "tests/test_http_adapter_auth.py::test_every_topic_admin_method_enforces_real_policy_before_service[reader-403-GET-/api/admin/topics]"
+          },
+          {
+            "path": "tests/test_http_adapter_auth.py",
+            "id": "tests/test_http_adapter_auth.py::test_every_topic_admin_method_enforces_real_policy_before_service[reader-403-POST-/api/admin/topics]"
+          },
+          {
+            "path": "tests/test_http_adapter_auth.py",
+            "id": "tests/test_http_adapter_auth.py::test_every_topic_admin_method_enforces_real_policy_before_service[reader-403-GET-/api/admin/topics/unknown]"
+          },
+          {
+            "path": "tests/test_http_adapter_auth.py",
+            "id": "tests/test_http_adapter_auth.py::test_every_topic_admin_method_enforces_real_policy_before_service[reader-403-PUT-/api/admin/topics/unknown]"
+          },
+          {
+            "path": "tests/test_http_adapter_auth.py",
+            "id": "tests/test_http_adapter_auth.py::test_every_topic_admin_method_enforces_real_policy_before_service[reader-403-POST-/api/admin/topics/unknown/runs]"
+          },
+          {
+            "path": "tests/test_http_adapter_auth.py",
+            "id": "tests/test_http_adapter_auth.py::test_every_topic_admin_method_enforces_real_policy_before_service[outage-503-GET-/api/admin/topics]"
+          },
+          {
+            "path": "tests/test_http_adapter_auth.py",
+            "id": "tests/test_http_adapter_auth.py::test_every_topic_admin_method_enforces_real_policy_before_service[outage-503-POST-/api/admin/topics]"
+          },
+          {
+            "path": "tests/test_http_adapter_auth.py",
+            "id": "tests/test_http_adapter_auth.py::test_every_topic_admin_method_enforces_real_policy_before_service[outage-503-GET-/api/admin/topics/unknown]"
+          },
+          {
+            "path": "tests/test_http_adapter_auth.py",
+            "id": "tests/test_http_adapter_auth.py::test_every_topic_admin_method_enforces_real_policy_before_service[outage-503-PUT-/api/admin/topics/unknown]"
+          },
+          {
+            "path": "tests/test_http_adapter_auth.py",
+            "id": "tests/test_http_adapter_auth.py::test_every_topic_admin_method_enforces_real_policy_before_service[outage-503-POST-/api/admin/topics/unknown/runs]"
+          },
+          {
+            "path": "tests/test_http_adapter_auth.py",
+            "id": "tests/test_http_adapter_auth.py::test_real_topic_admin_put_list_and_version_have_persisted_results"
+          },
+          {
+            "path": "tests/test_http_adapter_auth.py",
+            "id": "tests/test_http_adapter_auth.py::test_user_status_uses_real_tier_and_role_payload[free--False-False-False]"
+          },
+          {
+            "path": "tests/test_http_adapter_auth.py",
+            "id": "tests/test_http_adapter_auth.py::test_user_status_uses_real_tier_and_role_payload[plus--False-False-True]"
+          },
+          {
+            "path": "tests/test_http_adapter_auth.py",
+            "id": "tests/test_http_adapter_auth.py::test_user_status_uses_real_tier_and_role_payload[pro--True-True-True]"
+          },
+          {
+            "path": "tests/test_http_adapter_auth.py",
+            "id": "tests/test_http_adapter_auth.py::test_user_status_uses_real_tier_and_role_payload[free-admin-False-True-False]"
+          },
+          {
+            "path": "tests/test_http_adapter_auth.py",
+            "id": "tests/test_http_adapter_auth.py::test_user_status_rejects_auth_and_tier_outage[None-401]"
+          },
+          {
+            "path": "tests/test_http_adapter_auth.py",
+            "id": "tests/test_http_adapter_auth.py::test_user_status_rejects_auth_and_tier_outage[invalid-401]"
+          },
+          {
+            "path": "tests/test_http_adapter_auth.py",
+            "id": "tests/test_http_adapter_auth.py::test_user_status_rejects_auth_and_tier_outage[owner-503]"
+          },
+          {
+            "path": "tests/test_http_adapter_auth.py",
+            "id": "tests/test_http_adapter_auth.py::test_registration_create_race_has_same_public_response_and_no_duplicate_notification"
+          },
+          {
+            "path": "tests/test_http_adapter_auth.py",
+            "id": "tests/test_http_adapter_auth.py::test_benchmark_admin_denies_before_read[None-401]"
+          },
+          {
+            "path": "tests/test_http_adapter_auth.py",
+            "id": "tests/test_http_adapter_auth.py::test_benchmark_admin_denies_before_read[reader-403]"
+          },
+          {
+            "path": "tests/test_http_adapter_auth.py",
+            "id": "tests/test_http_adapter_auth.py::test_benchmark_admin_denies_before_read[revoked-401]"
+          },
+          {
+            "path": "tests/test_http_adapter_auth.py",
+            "id": "tests/test_http_adapter_auth.py::test_benchmark_admin_reads_compact_report_and_handles_missing_ids"
+          },
+          {
+            "path": "tests/test_local_transport.py",
+            "id": "tests/test_local_transport.py::test_cancellation_closes_real_idle_provider_socket_without_retry[headers]"
+          },
+          {
+            "path": "tests/test_local_transport.py",
+            "id": "tests/test_local_transport.py::test_cancellation_closes_real_idle_provider_socket_without_retry[body]"
+          },
+          {
+            "path": "tests/test_local_transport.py",
+            "id": "tests/test_local_transport.py::test_sdk_read_deadline_closes_real_socket_and_does_not_retry"
+          },
+          {
+            "path": "tests/test_local_transport.py",
+            "id": "tests/test_local_transport.py::test_http_failure_has_one_attempt_and_oracle_detects_enabled_sdk_retry[False]"
+          },
+          {
+            "path": "tests/test_local_transport.py",
+            "id": "tests/test_local_transport.py::test_http_failure_has_one_attempt_and_oracle_detects_enabled_sdk_retry[True]"
+          },
+          {
+            "path": "tests/test_local_transport.py",
+            "id": "tests/test_local_transport.py::test_source_tls_preserves_host_sni_redirect_and_bounds_gzip"
+          },
+          {
+            "path": "tests/test_local_transport.py",
+            "id": "tests/test_local_transport.py::test_source_revalidates_redirect_before_connecting_private_target"
+          },
+          {
+            "path": "tests/test_local_transport.py",
+            "id": "tests/test_local_transport.py::test_real_source_policy_keeps_loopback_and_credentials_forbidden[http://127.0.0.1/]"
+          },
+          {
+            "path": "tests/test_local_transport.py",
+            "id": "tests/test_local_transport.py::test_real_source_policy_keeps_loopback_and_credentials_forbidden[https://localhost:8443/]"
+          },
+          {
+            "path": "tests/test_local_transport.py",
+            "id": "tests/test_local_transport.py::test_real_source_policy_keeps_loopback_and_credentials_forbidden[http://user:pass@example.test/]"
+          },
+          {
+            "path": "tests/test_maintenance_scripts.py",
+            "id": "tests/test_maintenance_scripts.py::test_repair_inspect_does_not_apply_but_selected_account_recovery_does"
+          },
+          {
+            "path": "tests/test_maintenance_scripts.py",
+            "id": "tests/test_maintenance_scripts.py::test_repair_refuses_test_or_emulator_before_lookup_or_write[env0]"
+          },
+          {
+            "path": "tests/test_maintenance_scripts.py",
+            "id": "tests/test_maintenance_scripts.py::test_repair_refuses_test_or_emulator_before_lookup_or_write[env1]"
+          },
+          {
+            "path": "tests/test_maintenance_scripts.py",
+            "id": "tests/test_maintenance_scripts.py::test_repair_refuses_test_or_emulator_before_lookup_or_write[env2]"
+          },
+          {
+            "path": "tests/test_maintenance_scripts.py",
+            "id": "tests/test_maintenance_scripts.py::test_repair_refuses_project_mismatch_before_account_lookup"
+          },
+          {
+            "path": "tests/test_maintenance_scripts.py",
+            "id": "tests/test_maintenance_scripts.py::test_repair_inspection_oracle_detects_removed_apply_guard"
+          },
+          {
+            "path": "tests/test_maintenance_scripts.py",
+            "id": "tests/test_maintenance_scripts.py::test_backfill_dry_run_counts_changes_without_writes_but_runs_judge"
+          },
+          {
+            "path": "tests/test_maintenance_scripts.py",
+            "id": "tests/test_maintenance_scripts.py::test_backfill_preserves_partial_keys_and_other_fields_and_is_idempotent"
+          },
+          {
+            "path": "tests/test_maintenance_scripts.py",
+            "id": "tests/test_maintenance_scripts.py::test_force_can_rekey_existing_dimensions_explicitly"
+          },
+          {
+            "path": "tests/test_maintenance_scripts.py",
+            "id": "tests/test_maintenance_scripts.py::test_backfill_reserves_retained_keys_and_avoids_fallback_collisions"
+          },
+          {
+            "path": "tests/test_maintenance_scripts.py",
+            "id": "tests/test_maintenance_scripts.py::test_force_assigns_valid_judge_keys_before_generating_fallbacks"
+          },
+          {
+            "path": "tests/test_maintenance_scripts.py",
+            "id": "tests/test_maintenance_scripts.py::test_backfill_requires_selection_and_refuses_fixture_identity_mode[args0-env0]"
+          },
+          {
+            "path": "tests/test_maintenance_scripts.py",
+            "id": "tests/test_maintenance_scripts.py::test_backfill_requires_selection_and_refuses_fixture_identity_mode[args1-env1]"
+          },
+          {
+            "path": "tests/test_memory_edit.py",
+            "id": "tests/test_memory_edit.py::test_lowered_limit_never_truncates_existing_memory[apply]"
+          },
+          {
+            "path": "tests/test_memory_edit.py",
+            "id": "tests/test_memory_edit.py::test_lowered_limit_never_truncates_existing_memory[undo]"
+          },
+          {
+            "path": "tests/test_memory_http_contract.py",
+            "id": "tests/test_memory_http_contract.py::test_main_undo_errors_preserve_all_state_and_never_call_provider[no_auth-401-None]"
+          },
+          {
+            "path": "tests/test_memory_http_contract.py",
+            "id": "tests/test_memory_http_contract.py::test_main_undo_errors_preserve_all_state_and_never_call_provider[invalid_auth-401-None]"
+          },
+          {
+            "path": "tests/test_memory_http_contract.py",
+            "id": "tests/test_memory_http_contract.py::test_main_undo_errors_preserve_all_state_and_never_call_provider[tier_outage-503-None]"
+          },
+          {
+            "path": "tests/test_memory_http_contract.py",
+            "id": "tests/test_memory_http_contract.py::test_main_undo_errors_preserve_all_state_and_never_call_provider[foreign-404-revision_not_found]"
+          },
+          {
+            "path": "tests/test_memory_http_contract.py",
+            "id": "tests/test_memory_http_contract.py::test_main_undo_errors_preserve_all_state_and_never_call_provider[missing-404-revision_not_found]"
+          },
+          {
+            "path": "tests/test_memory_http_contract.py",
+            "id": "tests/test_memory_http_contract.py::test_main_undo_errors_preserve_all_state_and_never_call_provider[invalid_id-422-None]"
+          },
+          {
+            "path": "tests/test_memory_http_contract.py",
+            "id": "tests/test_memory_http_contract.py::test_main_undo_errors_preserve_all_state_and_never_call_provider[expired-409-undo_expired]"
+          },
+          {
+            "path": "tests/test_memory_http_contract.py",
+            "id": "tests/test_memory_http_contract.py::test_main_undo_errors_preserve_all_state_and_never_call_provider[conflict-409-revision_conflict]"
+          },
+          {
+            "path": "tests/test_memory_http_contract.py",
+            "id": "tests/test_memory_http_contract.py::test_main_undo_errors_preserve_all_state_and_never_call_provider[limit-422-memory_limit]"
+          },
+          {
+            "path": "tests/test_memory_http_contract.py",
+            "id": "tests/test_memory_http_contract.py::test_main_previously_authenticated_memory_write_is_fenced_by_tombstone[undo]"
+          },
+          {
+            "path": "tests/test_memory_http_contract.py",
+            "id": "tests/test_memory_http_contract.py::test_main_previously_authenticated_memory_write_is_fenced_by_tombstone[edit]"
+          },
+          {
+            "path": "tests/test_memory_http_contract.py",
+            "id": "tests/test_memory_http_contract.py::test_main_undo_retry_restores_every_profile_field_without_second_revision_or_charge"
+          },
+          {
+            "path": "tests/test_og_image.py",
+            "id": "tests/test_og_image.py::test_renderer_draws_question_score_and_model_facts"
+          },
+          {
+            "path": "tests/test_og_image.py",
+            "id": "tests/test_og_image.py::test_unscored_card_keeps_conflicts_without_inventing_agreement"
+          },
+          {
+            "path": "tests/test_og_image.py",
+            "id": "tests/test_og_image.py::test_cache_tracks_all_rendered_content"
+          },
+          {
+            "path": "tests/test_og_image.py",
+            "id": "tests/test_og_image.py::test_render_failure_is_safe_and_not_cached"
+          },
+          {
+            "path": "tests/test_request_body_limits.py",
+            "id": "tests/test_request_body_limits.py::test_invalid_or_oversized_length_never_reaches_handler[-1]"
+          },
+          {
+            "path": "tests/test_request_body_limits.py",
+            "id": "tests/test_request_body_limits.py::test_invalid_or_oversized_length_never_reaches_handler[invalid]"
+          },
+          {
+            "path": "tests/test_request_body_limits.py",
+            "id": "tests/test_request_body_limits.py::test_invalid_or_oversized_length_never_reaches_handler[1.2]"
+          },
+          {
+            "path": "tests/test_request_body_limits.py",
+            "id": "tests/test_request_body_limits.py::test_invalid_or_oversized_length_never_reaches_handler[]"
+          },
+          {
+            "path": "tests/test_request_body_limits.py",
+            "id": "tests/test_request_body_limits.py::test_invalid_or_oversized_length_never_reaches_handler[999999999999999999999999999999]"
+          },
+          {
+            "path": "tests/test_request_body_limits.py",
+            "id": "tests/test_request_body_limits.py::test_request_limit_configuration_boundaries[None-16777216]"
+          },
+          {
+            "path": "tests/test_request_body_limits.py",
+            "id": "tests/test_request_body_limits.py::test_request_limit_configuration_boundaries[ -16777216]"
+          },
+          {
+            "path": "tests/test_request_body_limits.py",
+            "id": "tests/test_request_body_limits.py::test_request_limit_configuration_boundaries[1024-1024]"
+          },
+          {
+            "path": "tests/test_request_body_limits.py",
+            "id": "tests/test_request_body_limits.py::test_request_limit_configuration_boundaries[33554432-33554432]"
+          },
+          {
+            "path": "tests/test_request_body_limits.py",
+            "id": "tests/test_request_body_limits.py::test_invalid_configuration_fails_before_serving[-1]"
+          },
+          {
+            "path": "tests/test_request_body_limits.py",
+            "id": "tests/test_request_body_limits.py::test_invalid_configuration_fails_before_serving[0]"
+          },
+          {
+            "path": "tests/test_request_body_limits.py",
+            "id": "tests/test_request_body_limits.py::test_invalid_configuration_fails_before_serving[1023]"
+          },
+          {
+            "path": "tests/test_request_body_limits.py",
+            "id": "tests/test_request_body_limits.py::test_invalid_configuration_fails_before_serving[33554433]"
+          },
+          {
+            "path": "tests/test_request_body_limits.py",
+            "id": "tests/test_request_body_limits.py::test_invalid_configuration_fails_before_serving[NaN]"
+          },
+          {
+            "path": "tests/test_request_body_limits.py",
+            "id": "tests/test_request_body_limits.py::test_invalid_configuration_fails_before_serving[1.5]"
+          },
+          {
+            "path": "tests/test_request_body_limits.py",
+            "id": "tests/test_request_body_limits.py::test_early_disconnect_does_not_replay_partial_body_as_complete[]"
+          },
+          {
+            "path": "tests/test_request_body_limits.py",
+            "id": "tests/test_request_body_limits.py::test_early_disconnect_does_not_replay_partial_body_as_complete[{}]"
+          },
+          {
+            "path": "tests/test_request_body_limits.py",
+            "id": "tests/test_request_body_limits.py::test_non_http_scope_passes_through_without_reading_body"
+          },
+          {
+            "path": "tests/test_seo_repository.py",
+            "id": "tests/test_seo_repository.py::test_batch_get_binds_document_identity_and_dates_not_position_or_payload"
+          },
+          {
+            "path": "tests/test_seo_repository.py",
+            "id": "tests/test_seo_repository.py::test_latest_and_judgment_query_shapes_bound_reads_and_return_document_ids"
+          },
+          {
+            "path": "tests/test_seo_repository.py",
+            "id": "tests/test_seo_repository.py::test_fallback_dates_are_ordered_with_naive_aware_and_missing_values"
+          },
+          {
+            "path": "tests/test_share_http_contract.py",
+            "id": "tests/test_share_http_contract.py::test_app_share_publishes_authoritative_content_and_retry_does_not_charge_twice"
+          },
+          {
+            "path": "tests/test_share_http_contract.py",
+            "id": "tests/test_share_http_contract.py::test_app_share_rejects_unauthorized_or_missing_result[None-RRRRRRRRRRRRRRRR-401]"
+          },
+          {
+            "path": "tests/test_share_http_contract.py",
+            "id": "tests/test_share_http_contract.py::test_app_share_rejects_unauthorized_or_missing_result[stranger-RRRRRRRRRRRRRRRR-403]"
+          },
+          {
+            "path": "tests/test_share_http_contract.py",
+            "id": "tests/test_share_http_contract.py::test_app_share_rejects_unauthorized_or_missing_result[owner-missing-404]"
+          },
+          {
+            "path": "tests/test_share_http_contract.py",
+            "id": "tests/test_share_http_contract.py::test_app_share_rejects_unauthorized_or_missing_result[owner--400]"
+          },
+          {
+            "path": "tests/test_share_http_contract.py",
+            "id": "tests/test_share_http_contract.py::test_app_share_expiry_quota_and_transaction_failure_never_publish"
+          },
+          {
+            "path": "tests/test_share_http_contract.py",
+            "id": "tests/test_share_http_contract.py::test_og_http_route_renders_stored_question_score_and_private_revocation"
+          },
+          {
+            "path": "tests/test_topic_public_http.py",
+            "id": "tests/test_topic_public_http.py::test_hub_and_sitemap_distinguish_noindex_from_archive_or_unpublished"
+          },
+          {
+            "path": "tests/test_topic_public_http.py",
+            "id": "tests/test_topic_public_http.py::test_follow_neutral_response_confirmation_escaping_and_unsubscribe"
+          },
+          {
+            "path": "tests/test_topic_public_http.py",
+            "id": "tests/test_topic_public_http.py::test_topic_tokens_reject_without_writes[invalid-/topic-follow/confirm]"
+          },
+          {
+            "path": "tests/test_topic_public_http.py",
+            "id": "tests/test_topic_public_http.py::test_topic_tokens_reject_without_writes[invalid-/topic-follow/unsubscribe]"
+          },
+          {
+            "path": "tests/test_topic_public_http.py",
+            "id": "tests/test_topic_public_http.py::test_topic_tokens_reject_without_writes[expired-/topic-follow/confirm]"
+          },
+          {
+            "path": "tests/test_topic_public_http.py",
+            "id": "tests/test_topic_public_http.py::test_topic_tokens_reject_without_writes[expired-/topic-follow/unsubscribe]"
+          },
+          {
+            "path": "tests/test_topic_public_http.py",
+            "id": "tests/test_topic_public_http.py::test_topic_tokens_reject_without_writes[wrong_type-/topic-follow/confirm]"
+          },
+          {
+            "path": "tests/test_topic_public_http.py",
+            "id": "tests/test_topic_public_http.py::test_topic_tokens_reject_without_writes[wrong_type-/topic-follow/unsubscribe]"
+          },
+          {
+            "path": "tests/test_topic_public_http.py",
+            "id": "tests/test_topic_public_http.py::test_topic_tokens_reject_without_writes[wrong_action-/topic-follow/confirm]"
+          },
+          {
+            "path": "tests/test_topic_public_http.py",
+            "id": "tests/test_topic_public_http.py::test_topic_tokens_reject_without_writes[wrong_action-/topic-follow/unsubscribe]"
+          },
+          {
+            "path": "tests/test_watch_evidence_model.py",
+            "id": "tests/test_watch_evidence_model.py::test_claimed_probe_cannot_record_for_changed_goal_or_superseded_claim"
+          },
+          {
+            "path": "tests/test_watch_http_contract.py",
+            "id": "tests/test_watch_http_contract.py::test_watch_patch_delete_entitlement_owner_and_allowlist"
+          },
+          {
+            "path": "tests/test_watch_http_contract.py",
+            "id": "tests/test_watch_http_contract.py::test_telegram_link_test_disconnect_are_bound_to_authenticated_owner"
+          },
+          {
+            "path": "tests/test_watch_http_contract.py",
+            "id": "tests/test_watch_http_contract.py::test_unsubscribe_invalid_expired_and_wrong_type_never_mutate[invalid-/watch/unsubscribe]"
+          },
+          {
+            "path": "tests/test_watch_http_contract.py",
+            "id": "tests/test_watch_http_contract.py::test_unsubscribe_invalid_expired_and_wrong_type_never_mutate[invalid-/watch/follow/unsubscribe]"
+          },
+          {
+            "path": "tests/test_watch_http_contract.py",
+            "id": "tests/test_watch_http_contract.py::test_unsubscribe_invalid_expired_and_wrong_type_never_mutate[expired-/watch/unsubscribe]"
+          },
+          {
+            "path": "tests/test_watch_http_contract.py",
+            "id": "tests/test_watch_http_contract.py::test_unsubscribe_invalid_expired_and_wrong_type_never_mutate[expired-/watch/follow/unsubscribe]"
+          },
+          {
+            "path": "tests/test_watch_http_contract.py",
+            "id": "tests/test_watch_http_contract.py::test_unsubscribe_invalid_expired_and_wrong_type_never_mutate[wrong_type-/watch/unsubscribe]"
+          },
+          {
+            "path": "tests/test_watch_http_contract.py",
+            "id": "tests/test_watch_http_contract.py::test_unsubscribe_invalid_expired_and_wrong_type_never_mutate[wrong_type-/watch/follow/unsubscribe]"
+          },
+          {
+            "path": "tests/test_watch_http_contract.py",
+            "id": "tests/test_watch_http_contract.py::test_watch_and_follower_unsubscribe_change_only_the_bound_resource"
+          },
+          {
+            "path": "tests/test_watch_http_contract.py",
+            "id": "tests/test_watch_http_contract.py::test_follower_confirmation_escapes_stored_question"
+          },
+          {
+            "path": "tests/test_watch_http_contract.py",
+            "id": "tests/test_watch_http_contract.py::test_watch_adapters_project_storage_failure_safely[PATCH-watch]"
+          },
+          {
+            "path": "tests/test_watch_http_contract.py",
+            "id": "tests/test_watch_http_contract.py::test_watch_adapters_project_storage_failure_safely[DELETE-watch]"
+          },
+          {
+            "path": "tests/test_watch_http_contract.py",
+            "id": "tests/test_watch_http_contract.py::test_watch_adapters_project_storage_failure_safely[POST-/api/my/telegram/link]"
+          }
+        ],
+        "removed_cases": [],
+        "retained_identity_count": 3081
+      },
+      "frontend": {
+        "previous_cases": 664,
+        "current_cases": 705,
+        "added_cases": [
+          {
+            "path": "tests/js/admin-api.test.mjs",
+            "id": " Admin HTTP error contracts unpacks only allowed strings from {\"error\":{\"error_code\":\"not_found\",\"message\":\"No account found.\"}}"
+          },
+          {
+            "path": "tests/js/admin-api.test.mjs",
+            "id": " Admin HTTP error contracts unpacks only allowed strings from {\"detail\":{\"error_code\":\"conflict\",\"message\":\"Configuration changed in another session.\"}}"
+          },
+          {
+            "path": "tests/js/admin-api.test.mjs",
+            "id": " Admin HTTP error contracts unpacks only allowed strings from {\"error\":\"Admin privileges required\"}"
+          },
+          {
+            "path": "tests/js/admin-api.test.mjs",
+            "id": " Admin HTTP error contracts unpacks only allowed strings from {\"detail\":\"Not found\"}"
+          },
+          {
+            "path": "tests/js/admin-api.test.mjs",
+            "id": " Admin HTTP error contracts unpacks only allowed strings from {\"detail\":[{\"msg\":\"bad value\",\"input\":\"private-submitted-text\"}]}"
+          },
+          {
+            "path": "tests/js/admin-api.test.mjs",
+            "id": " Admin HTTP error contracts unpacks only allowed strings from {\"error\":{\"message\":{\"raw\":\"private-submitted-text\"}}}"
+          },
+          {
+            "path": "tests/js/admin-api.test.mjs",
+            "id": " Admin HTTP error contracts unpacks only allowed strings from null"
+          },
+          {
+            "path": "tests/js/admin-api.test.mjs",
+            "id": " Admin HTTP error contracts preserves non-JSON status and never retries a write"
+          },
+          {
+            "path": "tests/js/admin-api.test.mjs",
+            "id": " Admin HTTP error contracts does not request when logged out and returns a successful compact response"
+          },
+          {
+            "path": "tests/js/admin-benchmark.test.mjs",
+            "id": " Benchmark compact report viewer renders compact data, safely quotes labels and excludes raw prompts/answers"
+          },
+          {
+            "path": "tests/js/admin-benchmark.test.mjs",
+            "id": " Benchmark compact report viewer ignores an older selection response (success=true)"
+          },
+          {
+            "path": "tests/js/admin-benchmark.test.mjs",
+            "id": " Benchmark compact report viewer ignores an older selection response (success=false)"
+          },
+          {
+            "path": "tests/js/admin-benchmark.test.mjs",
+            "id": " Benchmark compact report viewer clears old data for a failed or mismatched selection: 404"
+          },
+          {
+            "path": "tests/js/admin-benchmark.test.mjs",
+            "id": " Benchmark compact report viewer clears old data for a failed or mismatched selection: 403"
+          },
+          {
+            "path": "tests/js/admin-benchmark.test.mjs",
+            "id": " Benchmark compact report viewer clears old data for a failed or mismatched selection: wrong-id"
+          },
+          {
+            "path": "tests/js/admin-benchmark.test.mjs",
+            "id": " Benchmark compact report viewer invalidates pending detail when refresh finds no runs"
+          },
+          {
+            "path": "tests/js/admin-prompt-config.test.mjs",
+            "id": " Admin prompt configuration shows the real main error envelope while retaining a conflicting draft without a second write"
+          },
+          {
+            "path": "tests/js/analytics-opt-out.test.mjs",
+            "id": " Analytics opt-out before tracker startup applies ?notrack=1 to null before the next script runs"
+          },
+          {
+            "path": "tests/js/analytics-opt-out.test.mjs",
+            "id": " Analytics opt-out before tracker startup applies ?notrack=0 to 1 before the next script runs"
+          },
+          {
+            "path": "tests/js/analytics-opt-out.test.mjs",
+            "id": " Analytics opt-out before tracker startup applies  to 1 before the next script runs"
+          },
+          {
+            "path": "tests/js/analytics-opt-out.test.mjs",
+            "id": " Analytics opt-out before tracker startup applies  to null before the next script runs"
+          },
+          {
+            "path": "tests/js/analytics-opt-out.test.mjs",
+            "id": " Analytics opt-out before tracker startup applies ?notrack=other to 1 before the next script runs"
+          },
+          {
+            "path": "tests/js/analytics-opt-out.test.mjs",
+            "id": " Analytics opt-out before tracker startup applies ?notrack= to 1 before the next script runs"
+          },
+          {
+            "path": "tests/js/analytics-opt-out.test.mjs",
+            "id": " Analytics opt-out before tracker startup applies ?other=1 to 1 before the next script runs"
+          },
+          {
+            "path": "tests/js/analytics-opt-out.test.mjs",
+            "id": " Analytics opt-out before tracker startup allows page/tracker initialization when storage write for notrack=1 throws"
+          },
+          {
+            "path": "tests/js/analytics-opt-out.test.mjs",
+            "id": " Analytics opt-out before tracker startup allows page/tracker initialization when storage write for notrack=0 throws"
+          },
+          {
+            "path": "tests/js/bookmark-pending-state.test.mjs",
+            "id": " pending bookmark markup preserves server metadata and never invents a consensus from truthy strings"
+          },
+          {
+            "path": "tests/js/chat-scroll.test.mjs",
+            "id": " conversation scroll cancels a queued resize-follow frame at completion without moving past the answer"
+          },
+          {
+            "path": "tests/js/chat-scroll.test.mjs",
+            "id": " conversation scroll still completes an explicit send jump when a very fast answer finishes mid-animation"
+          },
+          {
+            "path": "tests/js/chat-scroll.test.mjs",
+            "id": " conversation scroll retains a Send that reached the empty shell until the first completed answer exists (reduced=false)"
+          },
+          {
+            "path": "tests/js/chat-scroll.test.mjs",
+            "id": " conversation scroll retains a Send that reached the empty shell until the first completed answer exists (reduced=true)"
+          },
+          {
+            "path": "tests/js/composer-autosize.test.mjs",
+            "id": " composer autosize shrinks a wrapped placeholder when the actual width finishes changing without another viewport event"
+          },
+          {
+            "path": "tests/js/composer-autosize.test.mjs",
+            "id": " composer autosize coalesces width observations and ignores height-only notifications from its own writes"
+          },
+          {
+            "path": "tests/js/composer-autosize.test.mjs",
+            "id": " composer autosize keeps the multiline form while editing and resets it only when empty"
+          },
+          {
+            "path": "tests/js/composer-autosize.test.mjs",
+            "id": " composer autosize still responds to placeholder changes and explicit viewport changes"
+          },
+          {
+            "path": "tests/js/frontend-output.test.mjs",
+            "id": " frontend publishing preserves manifest and content-hashed asset bytes in an autocrlf checkout"
+          },
+          {
+            "path": "tests/js/stored-turn-markers.test.mjs",
+            "id": " real archived drawer row keeps all drawers in one row, toggles only its own panel and allocates unique IDs"
+          },
+          {
+            "path": "tests/js/vendor-frontend.test.mjs",
+            "id": " Vendoring pinned frontend libraries on disk copies every pinned library, license and font byte and retains unrelated old versions"
+          },
+          {
+            "path": "tests/js/vendor-frontend.test.mjs",
+            "id": " Vendoring pinned frontend libraries on disk rejects stale target bytes without writing in check-only mode"
+          },
+          {
+            "path": "tests/js/vendor-frontend.test.mjs",
+            "id": " Vendoring pinned frontend libraries on disk rejects missing target bytes without writing in check-only mode"
+          },
+          {
+            "path": "tests/js/vendor-frontend.test.mjs",
+            "id": " Vendoring pinned frontend libraries on disk rejects version drift before creating any output"
+          }
+        ],
+        "removed_cases": [],
+        "retained_identity_count": 664
+      },
+      "e2e": {
+        "previous_cases": 308,
+        "current_cases": 368,
+        "added_cases": [
+          {
+            "path": "tests/e2e/test_account_deletion_transactions.py",
+            "id": "tests/e2e/test_account_deletion_transactions.py::test_native_account_cascade_resumes_failed_objects_without_foreign_loss"
+          },
+          {
+            "path": "tests/e2e/test_account_deletion_transactions.py",
+            "id": "tests/e2e/test_account_deletion_transactions.py::test_native_account_repeats_success_after_lost_checkpoint"
+          },
+          {
+            "path": "tests/e2e/test_api_retention_transactions.py",
+            "id": "tests/e2e/test_api_retention_transactions.py::test_retention_backfill_is_atomic_and_does_not_renew_another_run"
+          },
+          {
+            "path": "tests/e2e/test_api_retention_transactions.py",
+            "id": "tests/e2e/test_api_retention_transactions.py::test_backfill_rechecks_document_after_scan_before_commit"
+          },
+          {
+            "path": "tests/e2e/test_chat_lifecycle_transactions.py",
+            "id": "tests/e2e/test_chat_lifecycle_transactions.py::test_native_chat_completion_and_delete_never_resurrect_children[False]"
+          },
+          {
+            "path": "tests/e2e/test_chat_lifecycle_transactions.py",
+            "id": "tests/e2e/test_chat_lifecycle_transactions.py::test_native_chat_completion_and_delete_never_resurrect_children[True]"
+          },
+          {
+            "path": "tests/e2e/test_chat_lifecycle_transactions.py",
+            "id": "tests/e2e/test_chat_lifecycle_transactions.py::test_native_terminal_failure_rejects_completion_and_remains_failed"
+          },
+          {
+            "path": "tests/e2e/test_chat_lifecycle_transactions.py",
+            "id": "tests/e2e/test_chat_lifecycle_transactions.py::test_native_deleting_tombstone_fences_writes_before_physical_purge"
+          },
+          {
+            "path": "tests/e2e/test_chat_lifecycle_transactions.py",
+            "id": "tests/e2e/test_chat_lifecycle_transactions.py::test_native_context_finalization_cannot_write_after_chat_tombstone"
+          },
+          {
+            "path": "tests/e2e/test_file_storage_transactions.py",
+            "id": "tests/e2e/test_file_storage_transactions.py::test_native_cloud_upload_quota_foreign_download_and_delete_retry"
+          },
+          {
+            "path": "tests/e2e/test_file_storage_transactions.py",
+            "id": "tests/e2e/test_file_storage_transactions.py::test_native_failed_cloud_upload_preserves_original_error_and_retry_cleans"
+          },
+          {
+            "path": "tests/e2e/test_file_storage_transactions.py",
+            "id": "tests/e2e/test_file_storage_transactions.py::test_native_cloud_document_versions_are_immutable_and_cascade_retries"
+          },
+          {
+            "path": "tests/e2e/test_google_action_transactions.py",
+            "id": "tests/e2e/test_google_action_transactions.py::test_native_google_confirmation_one_attempt_and_unknown_never_retries[gmail_send-gmail_send]"
+          },
+          {
+            "path": "tests/e2e/test_google_action_transactions.py",
+            "id": "tests/e2e/test_google_action_transactions.py::test_native_google_confirmation_one_attempt_and_unknown_never_retries[calendar_event-calendar_write]"
+          },
+          {
+            "path": "tests/e2e/test_google_action_transactions.py",
+            "id": "tests/e2e/test_google_action_transactions.py::test_native_google_changed_authority_or_content_performs_no_write[revision]"
+          },
+          {
+            "path": "tests/e2e/test_google_action_transactions.py",
+            "id": "tests/e2e/test_google_action_transactions.py::test_native_google_changed_authority_or_content_performs_no_write[approval]"
+          },
+          {
+            "path": "tests/e2e/test_google_action_transactions.py",
+            "id": "tests/e2e/test_google_action_transactions.py::test_native_google_changed_authority_or_content_performs_no_write[hash]"
+          },
+          {
+            "path": "tests/e2e/test_google_action_transactions.py",
+            "id": "tests/e2e/test_google_action_transactions.py::test_native_google_changed_authority_or_content_performs_no_write[superseded]"
+          },
+          {
+            "path": "tests/e2e/test_memory_edit_transactions.py",
+            "id": "tests/e2e/test_memory_edit_transactions.py::test_native_patch_and_manual_save_have_one_revision_winner"
+          },
+          {
+            "path": "tests/e2e/test_memory_edit_transactions.py",
+            "id": "tests/e2e/test_memory_edit_transactions.py::test_native_undo_is_lossless_owner_bound_idempotent_and_revision_checked"
+          },
+          {
+            "path": "tests/e2e/test_memory_edit_transactions.py",
+            "id": "tests/e2e/test_memory_edit_transactions.py::test_native_lost_lease_and_account_tombstone_never_write_memory"
+          },
+          {
+            "path": "tests/e2e/test_memory_edit_transactions.py",
+            "id": "tests/e2e/test_memory_edit_transactions.py::test_native_memory_undo_through_main_preserves_error_status_and_body"
+          },
+          {
+            "path": "tests/e2e/test_memory_edit_transactions.py",
+            "id": "tests/e2e/test_memory_edit_transactions.py::test_native_memory_commit_failure_has_no_partial_profile_request_revision_or_quota[apply-4]"
+          },
+          {
+            "path": "tests/e2e/test_memory_edit_transactions.py",
+            "id": "tests/e2e/test_memory_edit_transactions.py::test_native_memory_commit_failure_has_no_partial_profile_request_revision_or_quota[undo-2]"
+          },
+          {
+            "path": "tests/e2e/test_memory_edit_transactions.py",
+            "id": "tests/e2e/test_memory_edit_transactions.py::test_native_undo_rejects_a_later_manual_revision_without_any_write"
+          },
+          {
+            "path": "tests/e2e/test_model_configuration_transactions.py",
+            "id": "tests/e2e/test_model_configuration_transactions.py::test_native_failed_model_activation_preserves_other_writer[False]"
+          },
+          {
+            "path": "tests/e2e/test_model_configuration_transactions.py",
+            "id": "tests/e2e/test_model_configuration_transactions.py::test_native_failed_model_activation_preserves_other_writer[True]"
+          },
+          {
+            "path": "tests/e2e/test_model_configuration_transactions.py",
+            "id": "tests/e2e/test_model_configuration_transactions.py::test_native_activation_and_rollback_rpc_failure_is_not_reported_as_restored[False]"
+          },
+          {
+            "path": "tests/e2e/test_model_configuration_transactions.py",
+            "id": "tests/e2e/test_model_configuration_transactions.py::test_native_activation_and_rollback_rpc_failure_is_not_reported_as_restored[True]"
+          },
+          {
+            "path": "tests/e2e/test_persisted_journeys.py",
+            "id": "tests/e2e/test_persisted_journeys.py::test_j01_saved_consensus_reload_followup_keeps_native_identity_and_context"
+          },
+          {
+            "path": "tests/e2e/test_persisted_journeys.py",
+            "id": "tests/e2e/test_persisted_journeys.py::test_j02_stop_reload_recover_preserves_partial_and_charges_only_started_step"
+          },
+          {
+            "path": "tests/e2e/test_persisted_journeys.py",
+            "id": "tests/e2e/test_persisted_journeys.py::test_j03_historical_source_job_resumes_and_pages_a_native_revision"
+          },
+          {
+            "path": "tests/e2e/test_persisted_journeys.py",
+            "id": "tests/e2e/test_persisted_journeys.py::test_j04_app_share_follow_watch_versions_bind_to_saved_native_result"
+          },
+          {
+            "path": "tests/e2e/test_persisted_journeys.py",
+            "id": "tests/e2e/test_persisted_journeys.py::test_j05_delete_during_agent_work_fences_late_writes_and_owner_switch"
+          },
+          {
+            "path": "tests/e2e/test_persisted_journeys.py",
+            "id": "tests/e2e/test_persisted_journeys.py::test_persistence_quota_failure_keeps_answer_visible_and_never_claims_saved"
+          },
+          {
+            "path": "tests/e2e/test_phase2_transactions.py",
+            "id": "tests/e2e/test_phase2_transactions.py::test_parallel_reports_never_lose_increments_or_change_indexing"
+          },
+          {
+            "path": "tests/e2e/test_phase4_frontend.py",
+            "id": "tests/e2e/test_phase4_frontend.py::test_phase4_server_reuses_its_child_and_rejects_an_unowned_listener"
+          },
+          {
+            "path": "tests/e2e/test_phase4_frontend.py",
+            "id": "tests/e2e/test_phase4_frontend.py::test_missing_answer_receipts_remain_visible_but_never_start_consensus"
+          },
+          {
+            "path": "tests/e2e/test_scheduler_transactions.py",
+            "id": "tests/e2e/test_scheduler_transactions.py::test_native_due_queries_and_topic_claim_fence"
+          },
+          {
+            "path": "tests/e2e/test_scheduler_transactions.py",
+            "id": "tests/e2e/test_scheduler_transactions.py::test_native_seo_claim_and_finish_require_current_owner"
+          },
+          {
+            "path": "tests/e2e/test_scheduler_transactions.py",
+            "id": "tests/e2e/test_scheduler_transactions.py::test_native_watch_claim_budget_and_stale_renewal"
+          },
+          {
+            "path": "tests/e2e/test_scheduler_transactions.py",
+            "id": "tests/e2e/test_scheduler_transactions.py::test_native_topic_loop_commits_due_tick_and_stops_on_cancel[False]"
+          },
+          {
+            "path": "tests/e2e/test_scheduler_transactions.py",
+            "id": "tests/e2e/test_scheduler_transactions.py::test_native_topic_loop_commits_due_tick_and_stops_on_cancel[True]"
+          },
+          {
+            "path": "tests/e2e/test_scheduler_transactions.py",
+            "id": "tests/e2e/test_scheduler_transactions.py::test_native_seo_loop_persists_failure_releases_lease_and_cancels"
+          },
+          {
+            "path": "tests/e2e/test_seo_repository_queries.py",
+            "id": "tests/e2e/test_seo_repository_queries.py::test_seo_native_latest_judgments_and_unordered_batch_identity"
+          },
+          {
+            "path": "tests/e2e/test_smoke.py",
+            "id": "tests/e2e/test_smoke.py::test_split_claim_uses_visible_dissent_palette_and_neutral_count"
+          },
+          {
+            "path": "tests/e2e/test_source_check_transactions.py",
+            "id": "tests/e2e/test_source_check_transactions.py::test_native_source_claim_takeover_and_exactly_once_package"
+          },
+          {
+            "path": "tests/e2e/test_source_check_transactions.py",
+            "id": "tests/e2e/test_source_check_transactions.py::test_native_source_pagination_pins_revision_and_never_persists_credentials"
+          },
+          {
+            "path": "tests/e2e/test_source_check_transactions.py",
+            "id": "tests/e2e/test_source_check_transactions.py::test_native_own_key_affinity_uses_only_the_bound_workers_memory"
+          },
+          {
+            "path": "tests/e2e/test_topic_frontend.py",
+            "id": "tests/e2e/test_topic_frontend.py::test_topic_markup_stays_text_and_preview_preserves_navigation[False]"
+          },
+          {
+            "path": "tests/e2e/test_topic_frontend.py",
+            "id": "tests/e2e/test_topic_frontend.py::test_topic_markup_stays_text_and_preview_preserves_navigation[True]"
+          },
+          {
+            "path": "tests/e2e/test_topic_frontend.py",
+            "id": "tests/e2e/test_topic_frontend.py::test_topic_returning_reader_respects_historical_and_blocked_storage[False-False]"
+          },
+          {
+            "path": "tests/e2e/test_topic_frontend.py",
+            "id": "tests/e2e/test_topic_frontend.py::test_topic_returning_reader_respects_historical_and_blocked_storage[True-False]"
+          },
+          {
+            "path": "tests/e2e/test_topic_frontend.py",
+            "id": "tests/e2e/test_topic_frontend.py::test_topic_returning_reader_respects_historical_and_blocked_storage[False-True]"
+          },
+          {
+            "path": "tests/e2e/test_usage_transactions.py",
+            "id": "tests/e2e/test_usage_transactions.py::test_native_identical_key_and_booking_are_exactly_once"
+          },
+          {
+            "path": "tests/e2e/test_usage_transactions.py",
+            "id": "tests/e2e/test_usage_transactions.py::test_native_last_allowance_release_and_utc_period"
+          },
+          {
+            "path": "tests/e2e/test_usage_transactions.py",
+            "id": "tests/e2e/test_usage_transactions.py::test_native_distinct_bookings_preserve_both_charges"
+          },
+          {
+            "path": "tests/e2e/test_usage_transactions.py",
+            "id": "tests/e2e/test_usage_transactions.py::test_native_release_consume_have_one_terminal_winner"
+          },
+          {
+            "path": "tests/e2e/test_watch_delivery_transactions.py",
+            "id": "tests/e2e/test_watch_delivery_transactions.py::test_native_outbox_claim_takeover_rejects_stale_ack_and_terminal_replay"
+          },
+          {
+            "path": "tests/e2e/test_watch_delivery_transactions.py",
+            "id": "tests/e2e/test_watch_delivery_transactions.py::test_native_probe_budget_is_atomic_and_old_configuration_cannot_schedule"
+          },
+          {
+            "path": "tests/e2e/test_watch_delivery_transactions.py",
+            "id": "tests/e2e/test_watch_delivery_transactions.py::test_native_watch_result_and_outbox_commit_atomically_and_survive_worker_loss"
+          },
+          {
+            "path": "tests/e2e/test_watch_delivery_transactions.py",
+            "id": "tests/e2e/test_watch_delivery_transactions.py::test_native_owner_tombstone_fences_watch_and_probe_late_results"
+          }
+        ],
+        "removed_cases": [
+          {
+            "path": "tests/e2e/test_phase2_transactions.py",
+            "id": "tests/e2e/test_phase2_transactions.py::test_parallel_reports_never_lose_increments_or_noindex_transition"
+          },
+          {
+            "path": "tests/e2e/test_smoke.py",
+            "id": "tests/e2e/test_smoke.py::test_split_claim_is_marked_in_the_colour_of_its_badge"
+          }
+        ],
+        "retained_identity_count": 306
+      },
+      "rules": {
+        "previous_cases": 0,
+        "current_cases": 49,
+        "added_cases": [
+          {
+            "path": "tests/rules/firestore.rules.test.mjs",
+            "id": "anonymous: no client read/write/query/delete of users"
+          },
+          {
+            "path": "tests/rules/firestore.rules.test.mjs",
+            "id": "anonymous: no client read/write/query/delete of users/{uid}/chats"
+          },
+          {
+            "path": "tests/rules/firestore.rules.test.mjs",
+            "id": "anonymous: no client read/write/query/delete of users/{uid}/memory"
+          },
+          {
+            "path": "tests/rules/firestore.rules.test.mjs",
+            "id": "anonymous: no client read/write/query/delete of users/{uid}/chats/chat/files"
+          },
+          {
+            "path": "tests/rules/firestore.rules.test.mjs",
+            "id": "anonymous: no client read/write/query/delete of users/{uid}/usage_runs"
+          },
+          {
+            "path": "tests/rules/firestore.rules.test.mjs",
+            "id": "anonymous: no client read/write/query/delete of api_consensus_keys"
+          },
+          {
+            "path": "tests/rules/firestore.rules.test.mjs",
+            "id": "anonymous: no client read/write/query/delete of users/{uid}/chats/chat/turns/turn/agents"
+          },
+          {
+            "path": "tests/rules/firestore.rules.test.mjs",
+            "id": "anonymous: no client read/write/query/delete of users/{uid}/llm_calls"
+          },
+          {
+            "path": "tests/rules/firestore.rules.test.mjs",
+            "id": "anonymous: no client read/write/query/delete of source_check_jobs"
+          },
+          {
+            "path": "tests/rules/firestore.rules.test.mjs",
+            "id": "anonymous: no client read/write/query/delete of source_check_jobs_dispatch_v1_local"
+          },
+          {
+            "path": "tests/rules/firestore.rules.test.mjs",
+            "id": "anonymous: no client read/write/query/delete of source_check_jobs_dispatch_v1_production"
+          },
+          {
+            "path": "tests/rules/firestore.rules.test.mjs",
+            "id": "anonymous: no client read/write/query/delete of notification_outbox"
+          },
+          {
+            "path": "tests/rules/firestore.rules.test.mjs",
+            "id": "owner: no client read/write/query/delete of users"
+          },
+          {
+            "path": "tests/rules/firestore.rules.test.mjs",
+            "id": "owner: no client read/write/query/delete of users/{uid}/chats"
+          },
+          {
+            "path": "tests/rules/firestore.rules.test.mjs",
+            "id": "owner: no client read/write/query/delete of users/{uid}/memory"
+          },
+          {
+            "path": "tests/rules/firestore.rules.test.mjs",
+            "id": "owner: no client read/write/query/delete of users/{uid}/chats/chat/files"
+          },
+          {
+            "path": "tests/rules/firestore.rules.test.mjs",
+            "id": "owner: no client read/write/query/delete of users/{uid}/usage_runs"
+          },
+          {
+            "path": "tests/rules/firestore.rules.test.mjs",
+            "id": "owner: no client read/write/query/delete of api_consensus_keys"
+          },
+          {
+            "path": "tests/rules/firestore.rules.test.mjs",
+            "id": "owner: no client read/write/query/delete of users/{uid}/chats/chat/turns/turn/agents"
+          },
+          {
+            "path": "tests/rules/firestore.rules.test.mjs",
+            "id": "owner: no client read/write/query/delete of users/{uid}/llm_calls"
+          },
+          {
+            "path": "tests/rules/firestore.rules.test.mjs",
+            "id": "owner: no client read/write/query/delete of source_check_jobs"
+          },
+          {
+            "path": "tests/rules/firestore.rules.test.mjs",
+            "id": "owner: no client read/write/query/delete of source_check_jobs_dispatch_v1_local"
+          },
+          {
+            "path": "tests/rules/firestore.rules.test.mjs",
+            "id": "owner: no client read/write/query/delete of source_check_jobs_dispatch_v1_production"
+          },
+          {
+            "path": "tests/rules/firestore.rules.test.mjs",
+            "id": "owner: no client read/write/query/delete of notification_outbox"
+          },
+          {
+            "path": "tests/rules/firestore.rules.test.mjs",
+            "id": "foreign: no client read/write/query/delete of users"
+          },
+          {
+            "path": "tests/rules/firestore.rules.test.mjs",
+            "id": "foreign: no client read/write/query/delete of users/{uid}/chats"
+          },
+          {
+            "path": "tests/rules/firestore.rules.test.mjs",
+            "id": "foreign: no client read/write/query/delete of users/{uid}/memory"
+          },
+          {
+            "path": "tests/rules/firestore.rules.test.mjs",
+            "id": "foreign: no client read/write/query/delete of users/{uid}/chats/chat/files"
+          },
+          {
+            "path": "tests/rules/firestore.rules.test.mjs",
+            "id": "foreign: no client read/write/query/delete of users/{uid}/usage_runs"
+          },
+          {
+            "path": "tests/rules/firestore.rules.test.mjs",
+            "id": "foreign: no client read/write/query/delete of api_consensus_keys"
+          },
+          {
+            "path": "tests/rules/firestore.rules.test.mjs",
+            "id": "foreign: no client read/write/query/delete of users/{uid}/chats/chat/turns/turn/agents"
+          },
+          {
+            "path": "tests/rules/firestore.rules.test.mjs",
+            "id": "foreign: no client read/write/query/delete of users/{uid}/llm_calls"
+          },
+          {
+            "path": "tests/rules/firestore.rules.test.mjs",
+            "id": "foreign: no client read/write/query/delete of source_check_jobs"
+          },
+          {
+            "path": "tests/rules/firestore.rules.test.mjs",
+            "id": "foreign: no client read/write/query/delete of source_check_jobs_dispatch_v1_local"
+          },
+          {
+            "path": "tests/rules/firestore.rules.test.mjs",
+            "id": "foreign: no client read/write/query/delete of source_check_jobs_dispatch_v1_production"
+          },
+          {
+            "path": "tests/rules/firestore.rules.test.mjs",
+            "id": "foreign: no client read/write/query/delete of notification_outbox"
+          },
+          {
+            "path": "tests/rules/firestore.rules.test.mjs",
+            "id": "admin-claim: no client read/write/query/delete of users"
+          },
+          {
+            "path": "tests/rules/firestore.rules.test.mjs",
+            "id": "admin-claim: no client read/write/query/delete of users/{uid}/chats"
+          },
+          {
+            "path": "tests/rules/firestore.rules.test.mjs",
+            "id": "admin-claim: no client read/write/query/delete of users/{uid}/memory"
+          },
+          {
+            "path": "tests/rules/firestore.rules.test.mjs",
+            "id": "admin-claim: no client read/write/query/delete of users/{uid}/chats/chat/files"
+          },
+          {
+            "path": "tests/rules/firestore.rules.test.mjs",
+            "id": "admin-claim: no client read/write/query/delete of users/{uid}/usage_runs"
+          },
+          {
+            "path": "tests/rules/firestore.rules.test.mjs",
+            "id": "admin-claim: no client read/write/query/delete of api_consensus_keys"
+          },
+          {
+            "path": "tests/rules/firestore.rules.test.mjs",
+            "id": "admin-claim: no client read/write/query/delete of users/{uid}/chats/chat/turns/turn/agents"
+          },
+          {
+            "path": "tests/rules/firestore.rules.test.mjs",
+            "id": "admin-claim: no client read/write/query/delete of users/{uid}/llm_calls"
+          },
+          {
+            "path": "tests/rules/firestore.rules.test.mjs",
+            "id": "admin-claim: no client read/write/query/delete of source_check_jobs"
+          },
+          {
+            "path": "tests/rules/firestore.rules.test.mjs",
+            "id": "admin-claim: no client read/write/query/delete of source_check_jobs_dispatch_v1_local"
+          },
+          {
+            "path": "tests/rules/firestore.rules.test.mjs",
+            "id": "admin-claim: no client read/write/query/delete of source_check_jobs_dispatch_v1_production"
+          },
+          {
+            "path": "tests/rules/firestore.rules.test.mjs",
+            "id": "admin-claim: no client read/write/query/delete of notification_outbox"
+          },
+          {
+            "path": "tests/rules/firestore.rules.test.mjs",
+            "id": "the same denial oracle detects an accidentally permitted owner write"
+          }
+        ],
+        "removed_cases": [],
+        "retained_identity_count": 0
+      }
+    }
+  },
+  "limitations": [
+    "Local emulator and transport doubles do not prove live IAM, external delivery or paid provider quality.",
+    "Historical coverage/probes remain associated with their original sources and runs."
+  ]
 }

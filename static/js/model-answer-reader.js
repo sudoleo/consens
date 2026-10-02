@@ -257,10 +257,6 @@
       if (!inspector.seenClaims.has(key) && allCards.length === 1) inspector.expanded.add(key);
       inspector.seenClaims.add(key);
       card.dataset.readerReady = 'true'; card.open = inspector.expanded.has(key);
-      const meta = document.createElement('span'); meta.className = 'answer-reader-diff-meta';
-      const count = card.querySelectorAll('.diff-position').length;
-      meta.textContent = `${count} ${count === 1 ? 'position' : 'positions'}`;
-      card.querySelector('summary')?.append(meta);
     });
     get('Inspector').querySelectorAll('.consensus-source-snippet:not([data-reader-ready])').forEach(snippet => {
       snippet.dataset.readerReady = 'true';
@@ -334,7 +330,9 @@
     trigger?.setAttribute('aria-expanded', 'true');
     if (!options.keepFocus) get('Close').focus({ preventScroll: true });
     if (index !== null) {
-      const card = get('Inspector').querySelectorAll('.diff-card')[index];
+      // Cards are ordered by severity; markers address them by data index.
+      const card = get('Inspector').querySelector(`.diff-card[data-difference-index="${Number(index)}"]`)
+        || get('Inspector').querySelectorAll('.diff-card')[index];
       if (card) { card.open = true; card.scrollIntoView({ block: 'nearest' }); }
     }
     return true;
@@ -343,7 +341,10 @@
   get('Inspector').addEventListener('toggle', event => {
     if (!inspector || !event.target.matches('.diff-card') || !get('Inspector').contains(event.target)) return;
     const key = event.target.querySelector('.diff-card-claim')?.textContent;
-    if (event.target.open) inspector.expanded.add(key); else inspector.expanded.delete(key);
+    if (!event.target.open) { inspector.expanded.delete(key); return; }
+    // One difference at a time: opening a card closes the one read before.
+    inspector.expanded.clear(); inspector.expanded.add(key);
+    get('Inspector').querySelectorAll('.diff-card[open]').forEach(card => { if (card !== event.target) card.open = false; });
   }, true);
   get('Sections').addEventListener('click', event => {
     const kind = event.target.closest('[data-section]')?.dataset.section; if (!kind) return;
@@ -378,7 +379,9 @@
         const result = context.modelResults?.[config.provider] || {};
         return { provider: config.provider, label: config.modelLabel || config.modelId || config.provider,
           text: String(result.text || result.streamText || ""), status: result.status || "pending",
-          error: result.error?.message || result.error, sources: result.sources || context.evidenceSources || [] };
+          error: result.error?.message || result.error, sources: result.sources || context.evidenceSources || [],
+          ...(result.status === "complete" && result.completion === "token_limit" ? { badge: "Cut off",
+            note: "Stopped at the output limit, so its end is missing. It is used for the consensus as a shortened answer." } : {}) };
       })
     };
   }
@@ -480,7 +483,9 @@
     }
     select.value = value;
   }
+  // A usable answer can still carry a small mark (e.g. cut off at its limit).
   function stateLabel(answer) {
+    if (answer.badge) return String(answer.badge);
     return ({ complete: "Ready", pending: "Waiting", reasoning: "Reasoning", streaming: "Writing",
       error: "Failed", skipped: "Skipped", canceled: "Stopped", idle: "Waiting",
       incomplete: "Incomplete" })[answer.status] || "Waiting";
@@ -500,7 +505,7 @@
     status.className = "answer-reader-state";
     status.textContent = stateLabel(answer);
     status.dataset.state = answer.status;
-    status.hidden = answer.status === "complete" || answer.status === "preview";
+    status.hidden = (answer.status === "complete" && !answer.badge) || answer.status === "preview";
     const identity = document.createElement("div"); identity.className = "answer-reader-identity";
     const caption = document.createElement("span"); caption.className = "answer-reader-caption";
     caption.textContent = direct ? (knownModel && answer.label !== answer.provider ? answer.label : '') : 'Original response';
@@ -513,6 +518,7 @@
     const body = document.createElement("div");
     body.className = "consensus-answer-body answer-reader-body";
     body.dataset.provider = answer.provider;
+    let noteLine = null;
     if (answer.status === "preview") {
       body.classList.add("is-preview-placeholder");
       body.innerHTML = '<span>Answer appears here</span><div class="answer-preview-lines" aria-hidden="true"><i></i><i></i></div>';
@@ -522,6 +528,13 @@
       if (window.injectMarkdown) window.injectMarkdown(body, answer.html || answer.text, answer.sourceReferences === 'agent' ? [] : answer.sources);
       else body.textContent = answer.text;
       if (answer.status === "incomplete" && answer.error) status.title = String(answer.error);
+      // Why the text is partial or marked, visible without hovering.
+      const note = answer.note || (answer.status === "incomplete" ? answer.error : "");
+      if (note) {
+        noteLine = document.createElement("p");
+        noteLine.className = "answer-reader-note";
+        noteLine.textContent = String(note);
+      }
       if (answer.sourceReferences === 'agent') window.linkifyAgentSources?.(body, answer.sources);
     } else if (!answer.error && ['pending', 'idle', 'reasoning', 'streaming'].includes(answer.status)) {
       body.classList.add("is-loading");
@@ -540,13 +553,13 @@
     copy.type = "button";
     control(copy, "copy", "Copy answer");
     copy.setAttribute("aria-live", "polite");
-    copy.disabled = !answer.text || Boolean(answer.error);
+    copy.disabled = !answer.text || (Boolean(answer.error) && answer.status !== "incomplete");
     copy.addEventListener("click", async () => {
       try { await navigator.clipboard.writeText(answer.text); control(copy, "copy", "Copied"); }
       catch (_) { control(copy, "copy", "Copy unavailable"); }
     });
     actions.append(copy);
-    article.append(header, body);
+    article.append(header, ...(noteLine ? [noteLine] : []), body);
     if (!direct) article.append(actions);
     if (answer.sources?.length) {
       const details = document.createElement("details");
@@ -583,10 +596,14 @@
     get("TurnLabel").hidden = options.length > 1;
     root.querySelector('.answer-reader-context-top label').hidden = options.length < 2;
     get("Question").querySelector("summary span").textContent = selected.question || "Question";
+    // The question is already in the chat: one line, no label, unless a
+    // picker is needed to switch between several questions or comparisons.
+    root.querySelector('.answer-reader-context-top').hidden = options.length < 2;
     const questionText = get('Question').querySelector('summary span');
     const longQuestion = questionText.scrollHeight > questionText.clientHeight + 1;
     // Measure the collapsed text; expanded questions retain their close control.
     get('Question').classList.toggle('is-truncated', longQuestion || get('Question').open);
+    get('Question').querySelector('summary').title = longQuestion ? selected.question : '';
     get('Question').querySelector('summary').tabIndex = longQuestion || get('Question').open ? 0 : -1;
     get('Question').querySelector('summary').setAttribute('aria-disabled', String(!longQuestion && !get('Question').open));
     get('Sections').hidden = direct;
@@ -601,7 +618,8 @@
     root.querySelector('.answer-reader-header').hidden = direct;
     if (inspector) {
       inspector.trigger?.setAttribute('aria-expanded', 'true');
-      get('Status').textContent = inspector.kind === 'differences' ? 'Compare claims, then explore the detail' : 'References for this answer';
+      // The tab already names the section; a subtitle only repeated it.
+      get('Status').textContent = '';
       fillSelect(get('Turn'), options, selected.key);
       updatePicker(get('Turn'), turns().map(turn => turn.question));
       syncTriggers();
@@ -610,7 +628,7 @@
     const compactNavigation = (root.clientWidth || (pairScreen.matches ? 900 : 390)) < 500;
     get("Models").hidden = pair || compactNavigation;
     get("Single").hidden = pair || !compactNavigation;
-    fillSelect(get("Model"), selected.answers.map(a => [a.provider, a.label + (a.status === "complete" ? "" : ` · ${stateLabel(a)}`)]), primary);
+    fillSelect(get("Model"), selected.answers.map(a => [a.provider, a.label + (a.status === "complete" && !a.badge ? "" : ` · ${stateLabel(a)}`)]), primary);
     const navigationKey = JSON.stringify(selected.answers.map(a => [a.provider, a.label]));
     if (get("Models").dataset.key !== navigationKey) {
       get("Models").replaceChildren(...selected.answers.map(answer => {
@@ -635,7 +653,8 @@
     });
     const count = selected.answers.filter(a => a.status === "complete").length;
     const failures = selected.answers.filter(a => ["error", "skipped", "canceled"].includes(a.status)).length;
-    const statusText = `${count} of ${selected.answers.length} ready${failures ? ` · ${failures} unavailable` : ""}`;
+    const partial = selected.answers.filter(a => a.status === "incomplete").length;
+    const statusText = `${count} of ${selected.answers.length} ready${partial ? ` · ${partial} incomplete` : ""}${failures ? ` · ${failures} unavailable` : ""}`;
     if (get("Status").textContent !== statusText) get("Status").textContent = statusText;
     get("Compare").disabled = selected.answers.length < 2;
     control(get("Compare"), pair ? "read" : "compare", pair ? "Read one" : "Compare two");

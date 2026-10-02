@@ -131,67 +131,245 @@ function appendInlineSourceRefs(fragment, refs) {
   });
 }
 
-// --- Numbered citations in the consensus answer ---------------------------
-// The consensus is a page of prose, and a favicon chip in the middle of a
-// sentence is a piece of furniture inside it. There it gets what printed
-// prose uses: a raised number that points at the list underneath. The model
-// answers keep the chips — they are scannable evidence, not a read.
+// --- Source pills in chat prose ---------------------------------------------
+// Consensus and Agent answers are prose. A citation there is a quiet inline
+// pill: favicon + short domain, baseline-aligned, so the reader sees WHICH
+// source backs a sentence without decoding a footnote number. Adjacent
+// citations collapse into one pill ("njaped.no +2"); the hover/focus teaser
+// lists all of them. The display number stays on the element
+// (data-source-number / data-source-numbers) — the sources drawer, source
+// verification and the teaser index still address sources by it.
+// Model answers keep their own `.source-link` chips (scannable evidence).
 
 function sourceNumberFromToken(token) {
   const num = parseInt(String(token || "").replace(/^S/i, ""), 10);
   return Number.isFinite(num) && num > 0 ? num : null;
 }
 
-function createSourceRef(ref) {
-  const number = sourceNumberFromToken(ref.token);
-  const href = getSafeSourceHref(ref.src);
-  const el = href ? document.createElement("a") : document.createElement("span");
-  el.className = "src-ref";
-  el.textContent = number ? String(number) : ref.token;
-  el.dataset.sourceNumber = number ? String(number) : "";
+// Short, readable domain for the pill: the host without "www.".
+function getSourcePillLabel(src, token) {
+  const host = getSourceHost(src);
+  if (host) return host;
+  if (src && src.title) return String(src.title);
+  const number = sourceNumberFromToken(token);
+  return number ? `Source ${number}` : String(token || "Source");
+}
+
+// Neutral monogram for sources without (or with a failed) favicon: never a
+// broken-image icon. The proxy itself answers unknown hosts with a globe.
+function createSourceGlyph(label) {
+  const glyph = document.createElement("span");
+  glyph.className = "src-ref-glyph";
+  glyph.setAttribute("aria-hidden", "true");
+  const letter = String(label || "").match(/[\p{L}\p{N}]/u);
+  glyph.textContent = letter ? letter[0].toUpperCase() : "·";
+  return glyph;
+}
+
+function createSourceRefIcon(src, label) {
+  const host = getSourceHost(src);
+  if (!host) return createSourceGlyph(label);
+  // Same privacy-preserving proxy as the model-answer chips and the public
+  // pages: the browser only ever talks to consens.io.
+  const fav = document.createElement("img");
+  fav.className = "src-ref-favicon";
+  fav.src = "/api/topics/favicon?d=" + encodeURIComponent(host);
+  fav.alt = "";
+  fav.setAttribute("aria-hidden", "true");
+  fav.setAttribute("referrerpolicy", "no-referrer");
+  fav.loading = "lazy";
+  fav.decoding = "async";
+  fav.width = 14;
+  fav.height = 14;
+  fav.addEventListener("error", () => {
+    if (fav.isConnected || fav.parentNode) fav.replaceWith(createSourceGlyph(label));
+  });
+  return fav;
+}
+
+// Entries: [{src, number, token}] in citation order, unique by number/token.
+function sourceRefEntries(refs) {
+  const entries = [];
+  const seen = new Set();
+  (refs || []).forEach(ref => {
+    if (!ref) return;
+    const number = ref.number != null ? sourceNumberFromToken(ref.number) : sourceNumberFromToken(ref.token);
+    const key = number || String(ref.token || "");
+    if (seen.has(key)) return;
+    seen.add(key);
+    entries.push({ src: ref.src || null, number, token: ref.token != null ? String(ref.token) : String(number || "") });
+  });
+  return entries;
+}
+
+function sourceRefAriaLabel(entries) {
+  const first = entries[0] || {};
+  const label = getSourcePillLabel(first.src, first.token);
+  const more = entries.length - 1;
+  return more > 0 ? `Source: ${label} (and ${more} more)` : `Source: ${label}`;
+}
+
+// (Re)builds the pill's content in place. Keeping the element lets a focused
+// or hovered pill survive streamed re-renders.
+function fillSourceRef(el, refs, options = {}) {
+  const entries = sourceRefEntries(refs);
+  if (!entries.length) return el;
+  const first = entries[0];
+  const label = getSourcePillLabel(first.src, first.token);
+  const href = getSafeSourceHref(first.src);
+  el.replaceChildren();
+  el.append(createSourceRefIcon(first.src, label));
+  const text = document.createElement("span");
+  text.className = "src-ref-label";
+  text.textContent = label;
+  el.append(text);
+  if (entries.length > 1) {
+    const more = document.createElement("span");
+    more.className = "src-ref-more";
+    more.textContent = `+${entries.length - 1}`;
+    el.append(more);
+  }
+  const compact = options.compact ?? el.classList.contains("is-compact");
+  el.classList.toggle("is-compact", Boolean(compact));
+  el.classList.toggle("is-group", entries.length > 1);
+  el.dataset.sourceNumber = first.number ? String(first.number) : "";
+  if (entries.length > 1) el.dataset.sourceNumbers = entries.map(entry => entry.number || entry.token).join(" ");
+  else delete el.dataset.sourceNumbers;
   // The styled teaser also opens on keyboard focus. A title would produce a
   // second browser tooltip after a long hover.
-  el.setAttribute("aria-label", `Source ${number || ref.token}: ${getSourceTitle(ref.src, ref.token)}`);
+  el.removeAttribute("title");
+  el.setAttribute("aria-label", sourceRefAriaLabel(entries));
   // Die Nummer allein ist keine Identitaet: ein archivierter Turn nummeriert
   // seine EIGENE Quellenliste, waehrend window.currentEvidenceSources schon
-  // dem naechsten Lauf gehoert. Der Teaser liest deshalb die aufgeloeste
-  // Quelle vom Element und nicht noch einmal die Nummer nach.
-  el.sourceData = ref.src || null;
-
-  if (href) {
+  // dem naechsten Lauf gehoert. Der Teaser liest deshalb die aufgeloesten
+  // Quellen vom Element und nicht noch einmal die Nummer nach.
+  el.sourceData = first.src || null;
+  el.sourceGroup = entries;
+  if (href && el.tagName === "A") {
     el.href = href;
     el.target = "_blank";
     el.rel = "noopener noreferrer";
   }
-
   return el;
 }
 
-function appendNumberedSourceRefs(fragment, refs) {
-  const seen = new Set();
-  let written = 0;
+function createSourceRef(refs, options = {}) {
+  const list = Array.isArray(refs) ? refs : [refs];
+  const entries = sourceRefEntries(list);
+  const href = getSafeSourceHref(entries[0]?.src);
+  const el = href ? document.createElement("a") : document.createElement("span");
+  el.className = "src-ref";
+  if (!href) el.tabIndex = 0;
+  return fillSourceRef(el, entries, options);
+}
+
+function appendNumberedSourceRefs(fragment, refs, options = {}) {
+  if (!refs || !refs.length) return;
+  // An unresolved ID does not get a domain of its own inside a pill that has
+  // real sources; alone it still shows where the model cited something.
+  const resolved = refs.filter(ref => ref && ref.src);
+  fragment.appendChild(createSourceRef(resolved.length ? resolved : refs, options));
+}
+
+// Plain-text form for copy paths: "(njaped.no, uci.org)". A compact pill's
+// first domain is already written in the sentence before it.
+function sourceRefPlainText(ref) {
+  const entries = ref?.sourceGroup?.length ? ref.sourceGroup
+    : [{ src: ref?.sourceData || null, token: ref?.dataset?.sourceNumber || ref?.textContent || "" }];
+  const labels = entries.map(entry => getSourcePillLabel(entry.src, entry.token));
+  const shown = ref?.classList?.contains("is-compact") ? labels.slice(1) : labels;
+  const unique = [...new Set(shown.filter(Boolean))];
+  return unique.length ? ` (${unique.join(", ")})` : "";
+}
+
+function sourceRefUrls(ref) {
+  const entries = ref?.sourceGroup?.length ? ref.sourceGroup : [{ src: ref?.sourceData || null }];
+  return entries.map(entry => getSafeSourceHref(entry.src)).filter(Boolean);
+}
+
+// Is the cited domain already written right before the citation ("über
+// njaped.no [S1]")? Then the pill shows only the favicon: no duplicate, and
+// the model's prose stays untouched (anchors and claim marks still match).
+function textEndsWithSourceHost(text, src) {
+  const host = getSourceHost(src);
+  if (!host || !text) return false;
+  const escaped = host.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(?:^|[\\s(\\[{"'„“«/])(?:https?://)?(?:www\\.)?${escaped}/?[.,;:!?]*\\s*$`, "i").test(text);
+}
+
+// Does a link's visible label just repeat its own domain ("[njaped.no](https://njaped.no/)")?
+function labelIsSourceHost(label, src) {
+  const host = getSourceHost(src);
+  if (!host) return false;
+  const value = String(label || "").trim().toLowerCase()
+    .replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/$/, "");
+  return value === host.toLowerCase();
+}
+
+// Agent prose: separate links/tags that end up side by side ("[S1][S2]",
+// "url1, url2") become one pill. Only whitespace, commas and semicolons may
+// stand between them — anything else is prose and keeps them apart.
+function mergeAdjacentSourceRefs(containerEl) {
+  const refs = Array.from(containerEl.querySelectorAll(".src-ref"));
+  const removed = new Set();
   refs.forEach(ref => {
-    const number = sourceNumberFromToken(ref.token);
-    const key = number || ref.token;
-    if (seen.has(key)) return;
-    seen.add(key);
-    if (written > 0) {
-      const sep = document.createElement("span");
-      sep.className = "src-ref-sep";
-      sep.textContent = ",";
-      fragment.appendChild(sep);
+    if (removed.has(ref) || !ref.isConnected) return;
+    let group = ref.sourceGroup || [];
+    const between = [];
+    let node = ref.nextSibling;
+    let merged = false;
+    while (node) {
+      if (node.nodeType === Node.TEXT_NODE && /^[\s,;]*$/.test(node.nodeValue)) {
+        between.push(node);
+        node = node.nextSibling;
+        continue;
+      }
+      if (node.nodeType === Node.ELEMENT_NODE && node.classList.contains("src-ref-sep")) {
+        between.push(node);
+        node = node.nextSibling;
+        continue;
+      }
+      if (node.nodeType === Node.ELEMENT_NODE && node.classList.contains("src-ref") && !removed.has(node)) {
+        group = group.concat(node.sourceGroup || []);
+        between.forEach(item => item.remove());
+        between.length = 0;
+        removed.add(node);
+        const next = node.nextSibling;
+        node.remove();
+        merged = true;
+        node = next;
+        continue;
+      }
+      break;
     }
-    fragment.appendChild(createSourceRef(ref));
-    written += 1;
+    if (merged) fillSourceRef(ref, group);
+    unwrapCitationParens(ref);
   });
 }
 
-// Die hochgestellte Ziffer gehoert dem Konsens-Fliesstext — und der hat mehr
+// "(url1, url2)" ended as "(pill)": brackets that hold nothing but the
+// citation go, and a terminal citation follows the sentence punctuation —
+// the same rule a single bracketed URL already gets.
+function unwrapCitationParens(ref) {
+  const before = ref.previousSibling;
+  const after = ref.nextSibling;
+  if (before?.nodeType !== Node.TEXT_NODE || after?.nodeType !== Node.TEXT_NODE) return;
+  if (!/\(\s*$/.test(before.nodeValue) || !/^\s*\)/.test(after.nodeValue)) return;
+  before.nodeValue = before.nodeValue.replace(/[ \t]*\(\s*$/, "");
+  after.nodeValue = after.nodeValue.replace(/^\s*\)/, "");
+  const punctuation = after.nodeValue.match(/^([.!?]+)(?=\s|$)/);
+  if (punctuation) {
+    before.nodeValue += punctuation[1];
+    after.nodeValue = after.nodeValue.slice(punctuation[1].length);
+  }
+}
+
+// Die Quellen-Pille gehoert dem Konsens-Fliesstext — und der hat mehr
 // als eine Adresse: die ID gibt es nur einmal (der Live-Lauf), die Klasse
 // tragen auch die archivierten Turns im Thread. Die Kernaussagen-Liste
 // darunter zitiert woertlich denselben Text und muss deshalb dieselbe Form
-// sprechen; ein Favicon-Chip mitten in einer Claim-Zeile waere ein zweites
-// Vokabular fuer dieselbe Fussnote.
+// sprechen; ein `.source-link`-Chip mitten in einer Claim-Zeile waere ein
+// zweites Vokabular fuer dieselbe Quelle.
 const NUMBERED_REF_SELECTOR =
   "#consensusAnswerBody, .consensus-answer-body, .consensus-claims-fallback";
 
@@ -316,11 +494,17 @@ function linkifySourceTags(containerEl, sources) {
 
       const refs = getSourceRefs(match, sources);
       if (numbered) {
+        // Steht die Domain schon direkt davor ("procyclingstats.com [S2]"),
+        // zeigt die Pille nur das Favicon. Der Text selbst bleibt unberuehrt:
+        // Anker und Claim-Marken suchen ihn woertlich.
+        const before = offset > 0 ? text.slice(0, offset) : (node.previousSibling?.textContent || "");
+        const compact = textEndsWithSourceHost(before, refs[0]?.src);
         // Fallback fuer alte Bookmarks/Snapshots, deren Markdown noch
         // `Aussage [S1].` enthaelt: Satzzeichen im selben Textknoten vor die
-        // hochgestellte Referenz ziehen und den Leerraum davor entfernen.
+        // Quellen-Pille ziehen und den Leerraum davor entfernen. Eine
+        // Favicon-Pille bleibt dagegen an ihrer Domain stehen.
         const tail = text.slice(offset + match.length);
-        const punctuation = tail.match(/^([.!?]+(?:["'”’)\]}]+)?)(?=\s|$)/);
+        const punctuation = compact ? null : tail.match(/^([.!?]+(?:["'”’)\]}]+)?)(?=\s|$)/);
         if (punctuation) {
           const previous = fragment.lastChild;
           if (previous?.nodeType === Node.TEXT_NODE) {
@@ -328,9 +512,9 @@ function linkifySourceTags(containerEl, sources) {
           }
           fragment.appendChild(document.createTextNode(punctuation[1]));
         }
-        // Numbers never need a cluster: twelve raised digits still read as
-        // one citation, twelve chips are a paragraph of their own.
-        appendNumberedSourceRefs(fragment, refs);
+        // A pill never needs a cluster: one run of tags is one pill with
+        // "+N", and the teaser lists every source behind it.
+        appendNumberedSourceRefs(fragment, refs, { compact });
         if (punctuation) {
           lastIndex = offset + match.length + punctuation[1].length;
           return match;
@@ -380,51 +564,63 @@ function linkifyAgentSources(containerEl, sources) {
     const text = node.nodeValue;
     const fragment = document.createDocumentFragment();
     let offset = 0;
-    for (const match of text.matchAll(/\[S\d+(?:,\s*S?\d+)*\]/gi)) {
+    // A run of tags ("[S1][S2], [S3]") is one citation: one pill, and the
+    // sentence punctuation moves in front of the whole run.
+    for (const match of text.matchAll(/(?:\[S\d+(?:,\s*S?\d+)*\](?:[\s,;]*(?=\[S\d))?)+/gi)) {
       fragment.append(document.createTextNode(text.slice(offset, match.index)));
       const resolved = getSourceRefs(match[0].toUpperCase(), sources).map(ref => refs.get(canonical(ref.src?.url)));
+      const before = match.index > 0 ? text.slice(0, match.index) : (node.previousSibling?.textContent || '');
       offset = match.index + match[0].length;
       if (resolved.length && resolved.every(Boolean)) {
-        const punctuation = text.slice(offset).match(/^([.!?]+)(?=\s|$)/);
+        // "über njaped.no [S1]": the domain is already in the sentence, so
+        // the pill shows only its favicon and stays next to it.
+        const compact = textEndsWithSourceHost(before, resolved[0].src);
+        const punctuation = !compact && text.slice(offset).match(/^([.!?]+)(?=\s|$)/);
         if (punctuation) {
           fragment.lastChild.nodeValue = fragment.lastChild.nodeValue.replace(/[ \t]+$/, '');
           fragment.append(document.createTextNode(punctuation[1]));
           offset += punctuation[1].length;
         }
-        appendNumberedSourceRefs(fragment, resolved);
+        appendNumberedSourceRefs(fragment, resolved, { compact });
       } else fragment.append(document.createTextNode(match[0]));
     }
     fragment.append(document.createTextNode(text.slice(offset)));
     node.replaceWith(fragment);
   }
   for (const link of containerEl.querySelectorAll('a[href]')) {
+    if (link.classList.contains('src-ref')) {
+      // Keep focused/hovered references alive during streamed activity updates.
+      const group = link.sourceGroup?.length ? link.sourceGroup : [{src: {url: link.getAttribute('href')}}];
+      const mapped = group.map(entry => refs.get(canonical(entry.src?.url)));
+      if (mapped.some(Boolean)) fillSourceRef(link, mapped.map((entry, index) => entry || group[index]));
+      continue;
+    }
     if (link.closest('code, pre, .katex, mjx-container') || link.querySelector('img, svg')) continue;
     const ref = refs.get(canonical(link.getAttribute('href')));
     if (!ref) continue;
-    if (link.classList.contains('src-ref')) {
-      // Keep focused/hovered references alive during streamed activity updates.
-      link.textContent = ref.token;
-      link.dataset.sourceNumber = ref.token;
-      link.sourceData = ref.src;
-      link.setAttribute('aria-label', `Source ${ref.token}: ${getSourceTitle(ref.src, ref.token)}`);
-      continue;
-    }
     const label = link.textContent.trim();
     const rawUrl = canonical(label) === canonical(link.getAttribute('href'));
     const existingCitation = link.classList.contains('source-link');
+    // "[njaped.no](https://njaped.no/)": the label only repeats the domain the
+    // pill shows anyway. The pill takes the label's place instead of
+    // following it, so the domain is not written twice.
+    const hostLabel = !rawUrl && !existingCitation && labelIsSourceHost(label, ref.src);
     const before = link.previousSibling;
     const after = link.nextSibling;
-    if (rawUrl && before?.nodeType === Node.TEXT_NODE && after?.nodeType === Node.TEXT_NODE
-        && /\($/.test(before.nodeValue) && /^\)/.test(after.nodeValue)) {
+    const parenthesized = before?.nodeType === Node.TEXT_NODE && after?.nodeType === Node.TEXT_NODE
+      && /\($/.test(before.nodeValue) && /^\)/.test(after.nodeValue);
+    if ((rawUrl || hostLabel) && parenthesized) {
       before.nodeValue = before.nodeValue.replace(/[ \t]*\($/, '');
       after.nodeValue = after.nodeValue.slice(1);
     } else if (rawUrl && before?.nodeType === Node.TEXT_NODE) {
       before.nodeValue = before.nodeValue.replace(/[ \t]+$/, '');
     }
     const fragment = document.createDocumentFragment();
-    if (!rawUrl && !existingCitation) fragment.append(...link.childNodes);
+    if (!rawUrl && !existingCitation && !hostLabel) fragment.append(...link.childNodes);
     // As in Consensus, a terminal citation follows the sentence punctuation.
-    const punctuation = after?.nodeType === Node.TEXT_NODE && after.nodeValue.match(/^([.!?]+)(?=\s|$)/);
+    // A domain that stands in the sentence itself keeps its place.
+    const punctuation = !(hostLabel && !parenthesized) && after?.nodeType === Node.TEXT_NODE
+      && after.nodeValue.match(/^([.!?]+)(?=\s|$)/);
     if (punctuation) {
       fragment.append(document.createTextNode(punctuation[1]));
       after.nodeValue = after.nodeValue.slice(punctuation[1].length);
@@ -432,6 +628,7 @@ function linkifyAgentSources(containerEl, sources) {
     fragment.append(createSourceRef(ref));
     link.replaceWith(fragment);
   }
+  mergeAdjacentSourceRefs(containerEl);
 }
 window.linkifyAgentSources = linkifyAgentSources;
 
@@ -600,10 +797,11 @@ function renderModelResponseWithSources(outputEl, markdown, incomingSources) {
 }
 
 // --- Teaser on hover ------------------------------------------------------
-// A raised number says "there is a source", not "which one". Hovering it
-// answers that without leaving the sentence — the same bargain the marked
-// passages in the consensus already make: look closer, stay in place. Click
-// still opens the source; keyboard focus opens the same accessible teaser.
+// A pill names the domain, not the page. Hovering it answers "which page,
+// saying what" without leaving the sentence — the same bargain the marked
+// passages in the consensus already make: look closer, stay in place. For a
+// grouped pill ("+2") the teaser lists every source behind it. Click still
+// opens the (first) source; keyboard focus opens the same accessible teaser.
 
 const sourceTeaser = (function () {
   let el = null;
@@ -671,16 +869,72 @@ const sourceTeaser = (function () {
       node.appendChild(body);
     }
     const check = window.App.sourceVerification?.getCitationCheck(target);
+    appendCheck(node, check, 'This citation has not been checked.');
+  }
+
+  function appendCheck(node, check, fallback) {
     const note = document.createElement("div");
     note.className = "source-teaser-check";
     note.dataset.state = check?.state || 'unchecked';
-    note.textContent = check?.summary || 'This citation has not been checked.';
+    note.textContent = check?.summary || fallback;
     node.appendChild(note);
     if (check?.detail) {
       const detail = document.createElement("div");
       detail.className = "source-teaser-check-detail";
       detail.textContent = check.detail;
       node.appendChild(detail);
+    }
+  }
+
+  // One pill, several sources: the teaser is where they are all named.
+  function fillGroup(node, entries, target) {
+    node.innerHTML = "";
+    const head = document.createElement("div");
+    head.className = "source-teaser-head";
+    head.textContent = `${entries.length} sources`;
+    node.appendChild(head);
+
+    const list = document.createElement("ol");
+    list.className = "source-teaser-list";
+    const verification = window.App.sourceVerification;
+    let checked = false;
+    entries.forEach(entry => {
+      const src = entry.src;
+      const item = document.createElement("li");
+      item.className = "source-teaser-item";
+      const meta = document.createElement("div");
+      meta.className = "source-teaser-item-head";
+      if (entry.number) {
+        const index = document.createElement("span");
+        index.className = "source-teaser-index";
+        index.textContent = String(entry.number);
+        meta.appendChild(index);
+      }
+      const label = getSourcePillLabel(src, entry.token);
+      const icon = createSourceRefIcon(src, label);
+      icon.classList.add("source-teaser-favicon");
+      meta.appendChild(icon);
+      const hostEl = document.createElement("span");
+      hostEl.className = "source-teaser-host";
+      hostEl.textContent = label;
+      meta.appendChild(hostEl);
+      item.appendChild(meta);
+      const title = document.createElement("div");
+      title.className = "source-teaser-title is-single-line";
+      title.textContent = getSourceTitle(src, label);
+      item.appendChild(title);
+      // Only a verdict bound to exactly this source number; never the
+      // group's worst state copied onto every row.
+      const own = entry.number ? verification?.getCitationCheck(target, String(entry.number)) : null;
+      if (own) {
+        checked = true;
+        appendCheck(item, own, '');
+      }
+      list.appendChild(item);
+    });
+    node.appendChild(list);
+    if (!checked) {
+      appendCheck(node, verification?.getCitationCheck(target), 'These citations have not been checked.');
     }
   }
 
@@ -720,7 +974,9 @@ const sourceTeaser = (function () {
     if (anchor && anchor !== target) unlinkDescription(anchor);
     anchor = target;
     const node = ensure();
-    fill(node, src, number, target);
+    const group = (target.sourceGroup || []).filter(entry => entry && entry.src);
+    if (group.length > 1) fillGroup(node, group, target);
+    else fill(node, src, number, target);
     const descriptions = new Set((target.getAttribute('aria-describedby') || '').split(/\s+/).filter(Boolean));
     descriptions.add(node.id);
     target.setAttribute('aria-describedby', [...descriptions].join(' '));
@@ -782,3 +1038,6 @@ window.prepareResponseSources = prepareResponseSources;
 window.renderModelResponseWithSources = renderModelResponseWithSources;
 window.hideSourceTeaser = sourceTeaser.hide;
 window.App.sourceTeaser = sourceTeaser;
+// Copy paths (Copy consensus, citation) read pills through these helpers:
+// a pill's text in the DOM is "domain +2", which is no plain-text citation.
+window.App.sourceRefs = Object.freeze({ plainText: sourceRefPlainText, urls: sourceRefUrls });

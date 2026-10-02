@@ -196,27 +196,9 @@ function injectHtmlSafe(containerEl, md) {
   enhanceLinks(containerEl);
 }
 
-function getConfiguredLimit(key, fallback) {
-  const raw = (window.APP_LIMITS || {})[key];
-  const value = Number(raw);
-  return Number.isFinite(value) ? value : fallback;
-}
-
-// Globale Limits Definition
-window.LIMITS = {
-  FREE: {
-    NORMAL: getConfiguredLimit("free_consensus_run_limit", 0),
-    DEEP: getConfiguredLimit("free_deep_think_run_limit", 0)
-  },
-  PRO: {
-    NORMAL: getConfiguredLimit("pro_consensus_run_limit", 0),
-    DEEP: getConfiguredLimit("pro_deep_think_run_limit", 0)
-  }
-};
-
-// Globale Variablen für den aktuellen Zustand (Startwert: Free)
-window.App.state.set("currentMaxLimit", window.LIMITS.FREE.NORMAL, "userTier");
-window.App.state.set("currentDeepLimit", window.LIMITS.FREE.DEEP, "userTier");
+// Kontostand: ein Tokenkonto pro Tag fuer alle Modi. Es lebt in
+// App.tokenBudget (token-budget.js); /user_status und /usage liefern es als
+// `token_budget`, genau wie jede Lauf-Antwort.
 
 // merken, dass wir Bookmarks schon einmal geladen haben
 let bookmarksLoaded = false;
@@ -319,10 +301,9 @@ function clearAuthenticatedUiState() {
   localStorage.removeItem("id_token");
   window.App?.usageRun?.clear?.();
   window.App.state.set("isUserPro", false, "userTier");
-  window.App.state.set("currentMaxLimit", window.LIMITS.FREE.NORMAL, "userTier");
-  window.App.state.set("currentDeepLimit", window.LIMITS.FREE.DEEP, "userTier");
+  window.App.tokenBudget?.clear?.();
 
-  ["freeUsageDisplay", "deepUsageDisplay", "watchUsageDisplay", "countdownDisplay"]
+  ["watchUsageDisplay", "countdownDisplay"]
     .forEach(id => {
       const node = document.getElementById(id);
       if (node) node.textContent = "";
@@ -359,10 +340,9 @@ async function checkUserStatusOnLoad(user, token, generation) {
       const data = await response.json();
       if (!isCurrentAuthenticatedUser(user.uid, generation)) return;
 
-      // 1. Globale Limits sofort aktualisieren.
-      window.App.state.set("currentMaxLimit", data.limit, "userTier");
-      window.App.state.set("currentDeepLimit", data.deep_limit, "userTier");
+      // 1. Konto sofort zeigen: das Tokenkonto des Tages.
       window.App.state.set("isUserPro", data.is_pro, "userTier");
+      window.App.tokenBudget?.apply?.(data.token_budget, { uid: user.uid, authoritative: true });
 
       // 2. UI AKTUALISIEREN
 
@@ -381,12 +361,6 @@ async function checkUserStatusOnLoad(user, token, generation) {
       // Die Stufe des KONTOS -- getrennt von der Stufe auf dem Schirm, die ein
       // geoeffneter Lauf mitbringt. Sie faerbt das Konto-Kuerzel.
       window.App?.accountTier?.set?.(tier);
-      if (typeof window.setCurrentUsageLimits === "function") {
-          window.setCurrentUsageLimits(tier, data);
-      } else {
-          window.App.state.set("currentMaxLimit", data.limit, "userTier");
-          window.App.state.set("currentDeepLimit", data.deep_limit, "userTier");
-      }
 
       // B) FALLBACK -- nur wenn es den sauberen Weg oben nicht gibt. Frueher
       // lief er immer und schrieb danach das Ergebnis von updateUserTierUI
@@ -518,10 +492,9 @@ onIdTokenChanged(auth, async (user) => {
         retry.addEventListener("click", () => window.location.reload());
         loginContainer.append(message, retry);
       }
-      for (const id of ["freeUsageDisplay", "deepUsageDisplay", "watchUsageDisplay"]) {
-        const node = document.getElementById(id);
-        if (node) node.textContent = "—";
-      }
+      const watchUsage = document.getElementById("watchUsageDisplay");
+      if (watchUsage) watchUsage.textContent = "—";
+      window.App.tokenBudget?.markStale?.();
       const bookmarks = document.getElementById("bookmarksContainer");
       if (bookmarks?.querySelector(".skeleton")) bookmarks.replaceChildren();
       return;
@@ -702,9 +675,8 @@ onIdTokenChanged(auth, async (user) => {
         const badge = document.getElementById("proBadge");
         if (badge) badge.style.display = "none";
 
-        // B) Limits auf Free zurücksetzen
-        window.App.state.set("currentMaxLimit", window.LIMITS.FREE.NORMAL, "userTier");
-        window.App.state.set("currentDeepLimit", window.LIMITS.FREE.DEEP, "userTier");
+        // B) Kein Konto, kein Kontostand.
+        window.App.tokenBudget?.clear?.();
 
         // C) Premium Modelle wieder sperren (HIER WAR DER FEHLER)
         const premiumOptions = document.querySelectorAll('.premium-option');
@@ -730,16 +702,6 @@ onIdTokenChanged(auth, async (user) => {
     });
 
 async function fetchUsageData(token, uid, generation) {
-  // DOM-Elemente innerhalb der Funktion abrufen:
-  const freeDisplay = document.getElementById("freeUsageDisplay");
-  const deepDisplay = document.getElementById("deepUsageDisplay");
-  
-  // Sicherstellen, dass die Elemente vorhanden sind
-  if (!freeDisplay || !deepDisplay) {
-    console.error("Benötigte DOM-Elemente nicht gefunden.");
-    return;
-  }
-  
   try {
     const response = await fetch("/usage", {
       method: "POST",
@@ -761,32 +723,10 @@ async function fetchUsageData(token, uid, generation) {
       window.updateUserTierUI(tier, true);
     }
     window.App?.accountTier?.set?.(tier);
-    if (typeof window.setCurrentUsageLimits === "function") {
-      window.setCurrentUsageLimits(tier, data);
-    } else {
-      const totalLimit = Number(data.total_limit);
-      const deepTotalLimit = Number(data.deep_total_limit);
-      if (Number.isFinite(totalLimit)) window.App.state.set("currentMaxLimit", totalLimit, "userTier");
-      if (Number.isFinite(deepTotalLimit)) window.App.state.set("currentDeepLimit", deepTotalLimit, "userTier");
-    }
-    if (typeof window.App?.renderUsageDisplay === "function") {
-      const usageView = window.App.runRegistry?.reconcileUsageSnapshot?.({
-        uid,
-        generation,
-        user: auth.currentUser
-      }, data, { authoritative: true }) || {
-        remaining: data.remaining,
-        deepRemaining: data.deep_remaining,
-        totalLimit: window.currentMaxLimit,
-        deepLimit: window.currentDeepLimit
-      };
-      window.App.renderUsageDisplay(usageView);
-    } else {
-      // Modul- und defer-Skripte koennen bei kaltem Cache unterschiedlich
-      // schnell eintreffen. Der Fallback bewahrt denselben DOM-Vertrag.
-      freeDisplay.innerHTML = 'Runs: <strong>' + data.remaining + ' / ' + window.currentMaxLimit + '</strong>';
-      deepDisplay.innerHTML = 'Deep Think: <strong>' + data.deep_remaining + ' / ' + window.currentDeepLimit + '</strong>';
-    }
+    // /usage is authoritative: after the UTC reset or an admin reset the
+    // account may legitimately go back up. token-budget.js is in the head
+    // group, so it exists before any module response arrives.
+    window.App.tokenBudget?.apply?.(data.token_budget, { uid, authoritative: true });
     return true;
   } catch (err) {
     if (isCurrentAuthenticatedUser(uid, generation)) {
@@ -1432,7 +1372,9 @@ function bookmarkMeta(bookmark) {
     title: bookmarkDisplayTitle(bookmark),
     mode: bookmark?.mode || "",
     timestamp: bookmark?.timestamp || null,
-    has_consensus: Boolean(String(responses.consensus || "").trim()),
+    has_consensus: bookmark?.responses && typeof bookmark.responses === "object"
+      ? Boolean(String(responses.consensus || "").trim())
+      : bookmark?.has_consensus === true,
     model_count: Number(bookmark?.model_count ?? modelCount) || 0,
     source_count: Number(bookmark?.source_count ?? bookmark?.sources?.length) || 0,
     attachment_count: Number(bookmark?.attachment_count ?? bookmark?.attachments?.length) || 0,
