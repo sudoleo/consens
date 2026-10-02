@@ -1,5 +1,13 @@
 # Playwright-Smoke-Suite (`tests/e2e/`)
 
+Aktueller Bestand: **30 Dateien / 308 gesammelte Fälle** (02.10.2026).
+Ergebnisse und rote Fälle: [Laufbericht](../../docs/test-coverage/findings.md).
+Google-/Gmail-/Workspace-/Modusselektor-Dateien verwenden den writerfreien
+Phase-4-Server mit API-Doubles. `test_smoke.py`, `test_agreement_verdict.py`
+und `test_run_cancel_and_progress.py` brauchen dagegen über `app_page` den
+Emulator; ebenso die drei Transaktionsdateien. Dateiname/E2E-Verzeichnis
+allein unterscheiden diese Grenzen nicht.
+
 Die Suite automatisiert die risikoreichsten Punkte aus
 `docs/smoke-checklist.md` gegen einen lokalen Server. LLM-Aufrufe und Login
 sind gemockt; sämtliche serverseitigen Datenzugriffe gehen ausschließlich an

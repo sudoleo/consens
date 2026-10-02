@@ -1,5 +1,10 @@
 # Messungen und gezielte Auditproben
 
+**Historische Messung vom 26.09.2026, Quellstand `145db25b`.** Diese Prozente,
+Mutationen und Proben wurden am 02.10.2026 nicht neu gemessen. Aktuelle
+uninstrumentierte Läufe und neu versuchte Proben stehen im
+[Aktualisierungsbericht](current-review.md) und [Laufbericht](../findings.md).
+
 [Einstieg](README.md) · [Ausführungsmetadaten](execution.json) ·
 [Pythonbericht](python-coverage.json)
 

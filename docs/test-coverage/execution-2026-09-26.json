@@ -1,0 +1,149 @@
+{
+  "schema_version": 1,
+  "review_date": "2026-09-26",
+  "base_commit": "145db25bfe029ff7f50cd77595bd6b9e043c1a2f",
+  "os": "Linux",
+  "runtime": {
+    "python": "3.12.14",
+    "node": "24.19.0",
+    "npm": "11.9.0",
+    "java": "17.0.20",
+    "firebase_cli": "13.35.1",
+    "firestore_emulator": "1.19.8"
+  },
+  "python_packages": {
+    "pytest": "8.4.2",
+    "playwright": "1.60.0",
+    "fastapi": "0.128.8",
+    "starlette": "0.49.3",
+    "httpx": "0.28.1",
+    "google-cloud-firestore": "2.20.1",
+    "firebase-admin": "6.6.0",
+    "pandas": "2.3.3",
+    "pyarrow": "21.0.0",
+    "greenlet": "3.1.1"
+  },
+  "javascript_packages": {
+    "vitest": "1.6.1",
+    "jsdom": "24.1.3",
+    "marked": "12.0.2",
+    "dompurify": "3.0.6",
+    "katex": "0.17.0",
+    "esbuild": "0.21.5"
+  },
+  "setup": [
+    "Complete Git history fetched; initial shallow history was insufficient for asset timestamp tests.",
+    "Isolated Python environment: pip install -r requirements-e2e.txt -r benchmark/requirements-benchmark.txt",
+    "npm ci --ignore-scripts; built static/dist assets present",
+    "No production credentials and no paid provider calls."
+  ],
+  "runs": [
+    {
+      "id": "backend_primary",
+      "environment": {
+        "RUN_E2E": "unset"
+      },
+      "result": {
+        "passed": 2717,
+        "failed": 1,
+        "skipped": 12
+      },
+      "duration_seconds": 32.56,
+      "cases_in_inventory": true,
+      "reproduction_command": "OPENROUTER_API_KEY=audit-placeholder-not-a-real-key UNIT_TEST_MODE=1 python -m pytest tests -q -rs --junitxml=pytest-verified.xml"
+    },
+    {
+      "id": "frontend_primary",
+      "result": {
+        "passed": 515,
+        "failed": 0,
+        "skipped": 0
+      },
+      "file_count": 57,
+      "cases_in_inventory": true,
+      "reproduction_command": "npm test -- --reporter=json --outputFile=vitest-results.json"
+    },
+    {
+      "id": "emulator_primary",
+      "emulator_command": "firebase emulators:start --only firestore --project demo-consensio-e2e",
+      "environment": {
+        "E2E_TEST_MODE": "1",
+        "RUN_E2E": "1",
+        "UNIT_TEST_MODE": "1",
+        "FIRESTORE_EMULATOR_HOST": "127.0.0.1:8085",
+        "GOOGLE_CLOUD_PROJECT": "demo-consensio-e2e",
+        "GCLOUD_PROJECT": "demo-consensio-e2e",
+        "FIREBASE_PROJECT_ID": "demo-consensio-e2e",
+        "GOOGLE_APPLICATION_CREDENTIALS": "unset",
+        "OPENROUTER_API_KEY": "audit-placeholder-not-a-real-key"
+      },
+      "result": {
+        "passed": 9,
+        "failed": 3,
+        "skipped": 0
+      },
+      "duration_seconds": 44.18,
+      "process_note": "Emulator and pytest started as child processes in the same local execution environment; emulator stopped after the run.",
+      "cases_in_inventory": true,
+      "reproduction_command": "python -m pytest tests/e2e/test_agent_transactions.py tests/e2e/test_phase2_transactions.py tests/e2e/test_prompt_config_transactions.py -v -rs -o faulthandler_timeout=45 --junitxml=emulator-verified.xml"
+    },
+    {
+      "id": "emulator_isolated_recheck",
+      "environment_same_as": "emulator_primary",
+      "fresh_emulator": true,
+      "result": {
+        "passed": 1,
+        "failed": 0
+      },
+      "duration_seconds": 19.41,
+      "interpretation": "Primary run failed with transaction lock timeout, isolated recheck passed. Root cause not determined. Do not overwrite primary outcome.",
+      "reproduction_command": "python -m pytest tests/e2e/test_phase2_transactions.py::test_parallel_reports_never_lose_increments_or_noindex_transition -v -rs -o faulthandler_timeout=45 --junitxml=emulator-recheck.xml"
+    },
+    {
+      "id": "browser_collection",
+      "result": {
+        "collected_all_e2e": 279,
+        "included_emulator_cases": 12,
+        "browser_cases_not_run": 267
+      },
+      "execution_status": "not_run",
+      "blocker": "playwright install chromium failed: 0 MiB download / invalid ZIP central directory; Chromium v1223 / Chrome for Testing 148.0.7778.96.",
+      "reproduction_command": "RUN_E2E=1 UNIT_TEST_MODE=1 python -m pytest tests/e2e --collect-only -q"
+    }
+  ],
+  "reports": [
+    {
+      "id": "backend_primary",
+      "raw_report_filename": "pytest-verified.xml",
+      "raw_report_sha256": "f3aefe2708691b831c3249a7943c58b31c05705ba29555265e55a2b63c8e4cf4",
+      "raw_report_committed": false
+    },
+    {
+      "id": "frontend_primary",
+      "raw_report_filename": "vitest-results.json",
+      "raw_report_sha256": "ad2957354a41d725b7b252ef70f799a3e738eb5101d67d172b6472908e3026ed",
+      "raw_report_committed": false
+    },
+    {
+      "id": "emulator_primary",
+      "raw_report_filename": "emulator-verified.xml",
+      "raw_report_sha256": "5c3d8a2ae4bb189f0e8654090a582ac01741ca68b7eea3b0b3a0e2d328a6c681",
+      "raw_report_committed": false
+    },
+    {
+      "id": "emulator_isolated_recheck",
+      "raw_report_filename": "emulator-recheck.xml",
+      "raw_report_sha256": "d83c3550f221fc6d11490ea5f9769856f7f92b6aa34ed002a408f5065cefb4f9",
+      "raw_report_committed": false
+    }
+  ],
+  "primary_totals": {
+    "passed": 3241,
+    "failed": 4,
+    "skipped": 12,
+    "not_run": 267
+  },
+  "coverage_instrumentation": "not performed",
+  "raw_report_note": "Per-case runner names and outcomes are preserved in inventory.json; failure explanations are in findings.md. Raw transient reports are identified by checksum, not part of this repository deliverable.",
+  "command_note": "Commands reproduce the recorded runner selection; transient virtualenv paths and report destinations are normalized."
+}

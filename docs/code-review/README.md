@@ -1,5 +1,10 @@
 # consens: Produktcode-Review und Reparaturplan
 
+**Historischer Review vom 26./27.09.2026.** Seitdem integrierte Korrekturen und
+neue Regressionen sind im [Test-/Produktabgleich vom 02.10.2026](../test-coverage/product/current-review.md)
+erfasst. Die folgenden ursprünglichen Befundtexte sind keine aktuelle Liste
+unbehobener Fehler; ihre Belege beziehen sich auf die ausdrücklich genannte Prüfbasis.
+
 **Prüfbasis:** `4d7c061036936b06bb98b2b306b2987a5844cde4`, Stand 26. September 2026. Die Zeilenangaben beziehen sich auf diesen Commit. **33 Befunde und Verbesserungsvorschläge**, getrennt nach Belegstärke; keine Produktänderungen. Die parallele Prüfung der Testsuite und deren Befunde wurden nicht als Quelle verwendet.
 
 **Gegengeprüft am 27. September 2026 gegen `a448baa7` (voller SHA im [Gegenprüfungsprotokoll](GEGENPRUEFUNG.md)).** Der Produktcode ist gegenüber der Prüfbasis unverändert. Alle 33 Einträge wurden erneut geprüft; R07 wurde als bewusste Abrechnungsentscheidung auf P2 eingeordnet. Es verbleiben **5 P1, 26 P2 und 2 P3**; 23 Offline-Proben belegen Teilverhalten zu 20 Einträgen. Das Protokoll nennt auch Gegenargumente, Einschränkungen und die vorgenommenen Korrekturen.

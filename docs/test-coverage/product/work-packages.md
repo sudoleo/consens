@@ -2,7 +2,7 @@
 
 [Einstieg](README.md) · [Befunde](gaps.md) · [Nutzerreisen](journeys.md) · [Oracles](decisions.md)
 
-**34 Arbeitspakete · 34 geplant.** Im ursprünglichen Dokumentationsauftrag wurde keines implementiert; der aktuelle Status steht in audit.json. Die IDs sind stabil; sie geben keine zwingende lineare Reihenfolge vor. Abhängigkeiten sind fachliche/technische Voraussetzungen. Vorarbeit ist früher möglich. WP-01 bis WP-04 klären den Ausgangsstand; WP-05 macht die allgemeine CI verbindlich. WP-06 bis WP-14 sowie WP-20 schützen besonders folgenreiche Grenzen. WP-29 folgt auf tragfähige Adapter-/Persistenztests. Die restlichen Pakete bleiben im Gesamtumfang.
+**38 Arbeitspakete · 26 geplant, 12 in Arbeit.** Im ursprünglichen Dokumentationsauftrag wurde keines implementiert; der aktuelle Status steht in audit.json. Die IDs sind stabil; sie geben keine zwingende lineare Reihenfolge vor. Abhängigkeiten sind fachliche/technische Voraussetzungen. Vorarbeit ist früher möglich. WP-01 bis WP-04 klären den Ausgangsstand; WP-05 macht die allgemeine CI verbindlich. WP-06 bis WP-14 sowie WP-20 schützen besonders folgenreiche Grenzen. WP-29 folgt auf tragfähige Adapter-/Persistenztests. Die restlichen Pakete bleiben im Gesamtumfang.
 
 ## Gemeinsamer Auftrag und Abnahme
 
@@ -18,15 +18,15 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 |---|---|---|---|---|---|
 | [WP-01](#wp-01) | Bekannte Fixture- und Stringfehler bereinigen | P1 | — | [G-027](gaps.md#g-027), [G-028](gaps.md#g-028) | planned |
 | [WP-02](#wp-02) | Report-Race unter kontrollierter Emulatorumgebung klären | P1 | [WP-01](work-packages.md#wp-01) | [G-029](gaps.md#g-029) | planned |
-| [WP-03](#wp-03) | Bestehende Browserfälle tatsächlich ausführen | P1 | [WP-01](work-packages.md#wp-01) | [G-025](gaps.md#g-025) | planned |
-| [WP-04](#wp-04) | Windows-Einstieg verifizieren | P2 | — | [G-026](gaps.md#g-026) | planned |
+| [WP-03](#wp-03) | Aktuelle Browserfälle ausführen und Fehler einordnen | P1 | [WP-01](work-packages.md#wp-01) | [G-025](gaps.md#g-025) | in_progress |
+| [WP-04](#wp-04) | Windows-Einstieg verifizieren | P2 | — | [G-026](gaps.md#g-026) | in_progress |
 | [WP-05](#wp-05) | Allgemeine Regression-CI einrichten | P1 | [WP-01](work-packages.md#wp-01), [WP-02](work-packages.md#wp-02), [WP-03](work-packages.md#wp-03), [WP-04](work-packages.md#wp-04) | [G-024](gaps.md#g-024) | planned |
 | [WP-06](#wp-06) | Firestore-Regeln durch echte Clientoperationen schützen | P1 | [WP-01](work-packages.md#wp-01) | [G-001](gaps.md#g-001) | planned |
 | [WP-07](#wp-07) | Reguläre Usage nativ atomar prüfen | P1 | [WP-01](work-packages.md#wp-01) | [G-002](gaps.md#g-002) | planned |
-| [WP-08](#wp-08) | Chat-Lebenszyklus gegen späte Writes absichern | P1 | [WP-01](work-packages.md#wp-01) | [G-003](gaps.md#g-003) | planned |
-| [WP-09](#wp-09) | Kontokaskade und API-Cleanup integrieren | P1 | [WP-08](work-packages.md#wp-08), [WP-11](work-packages.md#wp-11) | [G-004](gaps.md#g-004) | planned |
-| [WP-10](#wp-10) | Memory-Revision, Undo und Löschsperre stärken | P1 | [WP-01](work-packages.md#wp-01) | [G-007](gaps.md#g-007), [G-008](gaps.md#g-008), [G-038](gaps.md#g-038) | planned |
-| [WP-11](#wp-11) | API-Recovery und historischen Source-Adapter prüfen | P1 | — | [G-005](gaps.md#g-005), [G-010](gaps.md#g-010) | planned |
+| [WP-08](#wp-08) | Chat-Lebenszyklus gegen späte Writes absichern | P1 | [WP-01](work-packages.md#wp-01) | [G-003](gaps.md#g-003) | in_progress |
+| [WP-09](#wp-09) | Kontokaskade und API-Cleanup integrieren | P1 | [WP-08](work-packages.md#wp-08), [WP-11](work-packages.md#wp-11) | [G-004](gaps.md#g-004) | in_progress |
+| [WP-10](#wp-10) | Memory-Revision, Undo und Löschsperre stärken | P1 | [WP-01](work-packages.md#wp-01) | [G-007](gaps.md#g-007), [G-008](gaps.md#g-008), [G-038](gaps.md#g-038) | in_progress |
+| [WP-11](#wp-11) | API-Recovery und historischen Source-Adapter prüfen | P1 | — | [G-005](gaps.md#g-005), [G-010](gaps.md#g-010) | in_progress |
 | [WP-12](#wp-12) | Registrierungsrace und user_status verbinden | P1 | — | [G-009](gaps.md#g-009), [G-012](gaps.md#g-012) | planned |
 | [WP-13](#wp-13) | App-Share-POST integrieren | P1 | [WP-01](work-packages.md#wp-01) | [G-011](gaps.md#g-011) | planned |
 | [WP-14](#wp-14) | Source-Queue mit nativen Leases prüfen | P1 | [WP-01](work-packages.md#wp-01) | [G-006](gaps.md#g-006) | planned |
@@ -34,22 +34,26 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 | [WP-16](#wp-16) | Topic-Administration und öffentliche Adapter schließen | P1 | — | [G-014](gaps.md#g-014), [G-041](gaps.md#g-041) | planned |
 | [WP-17](#wp-17) | Claim-Identity-Judge validieren | P2 | — | [G-016](gaps.md#g-016) | planned |
 | [WP-18](#wp-18) | SEO-Repositoryadapter ausführen | P2 | — | [G-017](gaps.md#g-017) | planned |
-| [WP-19](#wp-19) | Schedulerqueries und persistente Claims prüfen | P2 | [WP-01](work-packages.md#wp-01) | [G-031](gaps.md#g-031) | planned |
-| [WP-20](#wp-20) | Topic-Notizen als Text absichern | P1 | — | [G-018](gaps.md#g-018) | planned |
+| [WP-19](#wp-19) | Schedulerqueries und persistente Claims prüfen | P2 | [WP-01](work-packages.md#wp-01) | [G-031](gaps.md#g-031) | in_progress |
+| [WP-20](#wp-20) | Topic-Notizen als Text absichern | P1 | — | [G-018](gaps.md#g-018) | in_progress |
 | [WP-21](#wp-21) | Adminfehler aus dem echten Appumschlag anzeigen | P2 | — | [G-019](gaps.md#g-019) | planned |
 | [WP-22](#wp-22) | Benchmark-Adminadapter und Viewer prüfen | P2 | — | [G-015](gaps.md#g-015) | planned |
 | [WP-23](#wp-23) | Inhalt der OG-Karte wirksam prüfen | P2 | — | [G-020](gaps.md#g-020) | planned |
 | [WP-24](#wp-24) | Analytics-Opt-out dynamisch prüfen | P2 | — | [G-021](gaps.md#g-021) | planned |
 | [WP-25](#wp-25) | Wartungsskripte isoliert absichern | P1 | — | [G-022](gaps.md#g-022), [G-023](gaps.md#g-023) | planned |
-| [WP-26](#wp-26) | HTTP-Body- und lokale Transportgrenzen ergänzen | P2 | — | [G-032](gaps.md#g-032), [G-033](gaps.md#g-033) | planned |
+| [WP-26](#wp-26) | HTTP-Body- und lokale Transportgrenzen ergänzen | P2 | — | [G-032](gaps.md#g-032), [G-033](gaps.md#g-033) | in_progress |
 | [WP-27](#wp-27) | Feedback und Statistikwrites verbinden | P2 | — | [G-034](gaps.md#g-034) | planned |
 | [WP-28](#wp-28) | Unterstützte Hilfs-CLIs prüfen | P3 | — | [G-035](gaps.md#g-035) | planned |
-| [WP-29](#wp-29) | Persistierte Nutzerreisen durch alle internen Schichten prüfen | P1 | [WP-03](work-packages.md#wp-03), [WP-07](work-packages.md#wp-07), [WP-08](work-packages.md#wp-08), [WP-09](work-packages.md#wp-09), [WP-10](work-packages.md#wp-10), [WP-12](work-packages.md#wp-12), [WP-13](work-packages.md#wp-13), [WP-14](work-packages.md#wp-14) | [G-030](gaps.md#g-030) | planned |
+| [WP-29](#wp-29) | Persistierte Nutzerreisen durch alle internen Schichten prüfen | P1 | [WP-03](work-packages.md#wp-03), [WP-07](work-packages.md#wp-07), [WP-08](work-packages.md#wp-08), [WP-09](work-packages.md#wp-09), [WP-10](work-packages.md#wp-10), [WP-12](work-packages.md#wp-12), [WP-13](work-packages.md#wp-13), [WP-14](work-packages.md#wp-14) | [G-030](gaps.md#g-030) | in_progress |
 | [WP-30](#wp-30) | Vendorhelper mit echtem temporärem Dateisystem prüfen | P2 | — | [G-036](gaps.md#g-036) | planned |
-| [WP-31](#wp-31) | HTTPException-Header durch main bewahren | P1 | — | [G-037](gaps.md#g-037) | planned |
+| [WP-31](#wp-31) | HTTPException-Header durch main bewahren | P1 | — | [G-037](gaps.md#g-037) | in_progress |
 | [WP-32](#wp-32) | Agentdetail und Turn-Stop durch HTTP absichern | P1 | — | [G-039](gaps.md#g-039) | planned |
-| [WP-33](#wp-33) | Modellrollback gegen fremde Writes absichern | P1 | — | [G-040](gaps.md#g-040) | planned |
+| [WP-33](#wp-33) | Modellrollback gegen fremde Writes absichern | P1 | — | [G-040](gaps.md#g-040) | in_progress |
 | [WP-34](#wp-34) | Benchmarkfehler von Enthaltung trennen | P1 | — | [G-042](gaps.md#g-042) | planned |
+| [WP-35](#wp-35) | Google-Aktionsclaims mit nativen Transaktionen prüfen | P1 | — | [G-043](gaps.md#g-043) | planned |
+| [WP-36](#wp-36) | Cloud-Dateiablage und verteilte Löschkaskade integrieren | P2 | — | [G-044](gaps.md#g-044) | planned |
+| [WP-37](#wp-37) | Outbox-/Probeclaims mit nativer SDK-Konkurrenz absichern | P1 | — | [G-045](gaps.md#g-045) | planned |
+| [WP-38](#wp-38) | Aktuelle Testfehler und abweichenden Benchmark-Wiederholungslauf klären | P2 | — | [G-046](gaps.md#g-046) | planned |
 
 <a id="wp-01"></a>
 
@@ -58,6 +62,8 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 **Ziel:** F-01/F-02/F-03 erreichen wieder ihren eigentlichen Prüfvertrag.
 
 **Befunde:** [G-027](gaps.md#g-027), [G-028](gaps.md#g-028) · **Vorher:** —
+
+**Stand:** planned. G-027: Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung. G-028: Erneut fehlgeschlagen: test_archived_turns_use_the_same_drawer_row_as_the_live_answer erwartet weiterhin den exakten alten Klassenstring.
 
 **Vorgehen:** Aktuelle Produktionsvalidierung lesen; gültige Pending-/Watchdaten herstellen, Footer fachlich statt über exakten Klassenstring prüfen. Erst fehlschlagende Ausgangsläufe festhalten.
 
@@ -85,6 +91,8 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Befunde:** [G-029](gaps.md#g-029) · **Vorher:** [WP-01](work-packages.md#wp-01)
 
+**Stand:** planned. G-029: Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
+
 **Vorgehen:** Java21/Emulator dokumentieren, Kontamination zwischen Fällen ausschließen; isolierten und vollständigen Transaktionslauf mit gleichen IDs-/Zeitregeln vergleichen. Nur gezielte begrenzte Wiederholungen.
 
 **Abnahme zusätzlich zu den verknüpften Then-/Negativkontrollen:** Root-Cause oder eng belegter verbleibender Umgebungsblocker, Result-/Counter-/noindex-Assertions, nachvollziehbarer Wiederholungslauf. Kein unbegründetes Retry-Tuning.
@@ -104,11 +112,13 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 <a id="wp-03"></a>
 
-## WP-03 · Bestehende Browserfälle tatsächlich ausführen
+## WP-03 · Aktuelle Browserfälle ausführen und Fehler einordnen
 
-**Ziel:** Aktuellen Status der 267 bestehenden Browserfälle gewinnen.
+**Ziel:** Gesammelte 308 E2E-Fälle nach writerfreiem Browser, Emulatortransaktion und integriertem Smoke getrennt belegen.
 
 **Befunde:** [G-025](gaps.md#g-025) · **Vorher:** [WP-01](work-packages.md#wp-01)
+
+**Stand:** in_progress. G-025: Aktuell 308 E2E-Fälle gesammelt. Der writerfreie Chromiumlauf wird in execution.json dokumentiert; Transaktions-/Smoke-Fälle bleiben getrennt. Alte Zahl 267 ist ein historischer Laufumfang.
 
 **Vorgehen:** Chromium passend zu Playwright installieren, Build und sichere E2E-Voraussetzungen prüfen. Vollständige Suite ausführen, echte Produkt-/Fixture-/Infrastrukturfehler getrennt bearbeiten.
 
@@ -135,6 +145,8 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Befunde:** [G-026](gaps.md#g-026) · **Vorher:** —
 
+**Stand:** in_progress. G-026: Aktuelle Tests laufen unter Windows; test_dev_cli.py wird nicht mehr wegen fehlender PowerShell übersprungen. Tatsächlicher Gesamtstart mit Java/Firebase-Emulator über dev.ps1 bleibt gesondert.
+
 **Vorgehen:** Vorhandene CLI-Doubles auf unterstütztem Windows/PowerShell ausführen; echte repräsentative dev.ps1-Aufrufe ergänzen, ohne eine zweite Suiteauswahl zu pflegen.
 
 **Abnahme zusätzlich zu den verknüpften Then-/Negativkontrollen:** Alle 12 Varianten je verfügbarer Windows-Shell wirklich ausgeführt; Shellversionen und tatsächliche Fallzahl (derzeit 12 oder 24) dokumentiert. Fehlercodes, Argumente, Arbeitsverzeichnis und Envwiederherstellung belegt.
@@ -159,6 +171,8 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 **Ziel:** Neue Tests zuverlässig bei Änderungen ausführen.
 
 **Befunde:** [G-024](gaps.md#g-024) · **Vorher:** [WP-01](work-packages.md#wp-01), [WP-02](work-packages.md#wp-02), [WP-03](work-packages.md#wp-03), [WP-04](work-packages.md#wp-04)
+
+**Stand:** planned. G-024: Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
 
 **Vorgehen:** Vorbereitungen können früher erfolgen; verpflichtende Jobs erst nach geklärter Ausgangsbasis aktivieren. Python, JS/Build, Emulator/Browser und Windows unterscheiden; bestehende Publisher-CI behalten.
 
@@ -185,6 +199,8 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Befunde:** [G-001](gaps.md#g-001) · **Vorher:** [WP-01](work-packages.md#wp-01)
 
+**Stand:** planned. G-001: Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
+
 **Vorgehen:** Isolierten Rules-Testharness verwenden, Regeln aus Repository laden, Admin nur fürs Seed/Teardown. Anonym/Owner/Fremdidentität und Untercollections prüfen.
 
 **Abnahme zusätzlich zu den verknüpften Then-/Negativkontrollen:** Reale permission-denied-Nachweise und allow-true-Negativkontrolle. Test wird durch den vorgesehenen Runner/CI tatsächlich entdeckt.
@@ -206,9 +222,11 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 ## WP-07 · Reguläre Usage nativ atomar prüfen
 
-**Ziel:** Claims, Slots und Belastungen mit mehreren Repositoryinstanzen.
+**Ziel:** Gemeinsames Tokenkonto mit nativer Firestore-Admission, Buchung und Freigabe absichern.
 
 **Befunde:** [G-002](gaps.md#g-002) · **Vorher:** [WP-01](work-packages.md#wp-01)
+
+**Stand:** planned. G-002: Runzählquoten durch gemeinsames Tokenkonto ersetzt. Umfangreiche parallele Fake-Tests und Usage-Meter vorhanden; native Firestore-Admission/Buchung/Freigabe weiterhin offen.
 
 **Vorgehen:** Bestehende Usage-Regeln als Oracle verwenden; Firestoreemulator und explizite Barrieren statt Thread-Lock-Fake für die entscheidende Transaktion.
 
@@ -235,6 +253,8 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Befunde:** [G-003](gaps.md#g-003) · **Vorher:** [WP-01](work-packages.md#wp-01)
 
+**Stand:** in_progress. G-003: Dauerhafte Löschjobs und spätes Turn-/Kontextfencing ergänzt (test_chat_history.py, test_chat_context.py). Ein nativer Emulatorrace mit Completion bleibt erforderlich.
+
 **Vorgehen:** Beide zulässigen Commitreihenfolgen deterministisch herstellen, Antwort-/Context-/Turn-Dokumente direkt prüfen; bestehendes Create-Chat-Limit weiterlaufen lassen.
 
 **Abnahme zusätzlich zu den verknüpften Then-/Negativkontrollen:** Keine eigenen Waisen nach abgeschlossenem Delete, Kontrollowner unverändert, Stop/Failure/Completion präzise klassifiziert; kein Mock des entscheidenden Guards.
@@ -260,6 +280,8 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Befunde:** [G-004](gaps.md#g-004) · **Vorher:** [WP-08](work-packages.md#wp-08), [WP-11](work-packages.md#wp-11)
 
+**Stand:** in_progress. G-004: Kaskade berücksichtigt Googlegrants, Aktionen, Dokumentversionen, Antwortreceipts und Outbox. Einzelne Fake-Nachweise sind vorhanden; komplette Kaskade samt Retrygrenzen noch nicht als eine integrierte Reise belegt.
+
 **Vorgehen:** Aus tatsächlichem areas-Tupel vollständiges Seedinventar bauen, Services ausführen und nur externe Firebase-Auth/Mail/Telegram-Grenzen ersetzen; Teilfehler und neue Instanz injizieren. Bereichserfolg mit anschließendem Checkpointverlust separat vom eigentlichen Löschfehler prüfen; Wiederaufnahme aus dauerhaft gespeichertem Zustand lesen.
 
 **Abnahme zusätzlich zu den verknüpften Then-/Negativkontrollen:** Alle 14 aktuellen Bereiche mit explizitem Endzustand, kein Fremddatenverlust; pending/Retry und bereits authentifizierte Late-Writes geprüft. Änderungen des Bereichsinventars erzwingen Review. Persistiert bestätigte Bereiche überspringen, unbestätigte Operationen idempotent wiederholen. Minimalen UID-Sperrtombstone bis zum Aufbewahrungsende erhalten und Cleanup-E-Mail bei Abschluss entfernen.
@@ -284,6 +306,8 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 **Ziel:** Vorhandene Erfolgsroundtrips um konkurrierende Zustände ergänzen.
 
 **Befunde:** [G-007](gaps.md#g-007), [G-008](gaps.md#g-008), [G-038](gaps.md#g-038) · **Vorher:** [WP-01](work-packages.md#wp-01)
+
+**Stand:** in_progress. G-007: Undo-Ablauf nach 30 Tagen ist nun im Repository getestet; Konflikt, fremder Owner, Repeat und echte Undo-HTTP-Fehlergrenze bleiben zusätzlich zu G-038 offen. Alte Mutationsprobe ist historisch, nicht erneut ausgeführt. G-008: Manuelles PUT benutzt Revision-CAS, KI-Edit nutzt Leasefencing; stale Save und Save nach KI-Patch werden geprüft. Direkter konkurrierender Patch/Save/Löschtombstone im nativen Speicher bleibt offen. G-038: Undo sanitisiert den Vorzustand weiterhin mit dem aktuellen memory_limit; nach Limitabsenkung bleibt stilles Kürzen möglich. Lease-/CAS-/Retentionkorrekturen lösen diese Grenze nicht.
 
 **Vorgehen:** Unit-/Routerfälle auf echten Revisions-/Ownerguard ausrichten; nativer Commitfall für partielle Writes. Patch/Undo-Fehler müssen gespeicherten Inhalt unverändert lassen. Undo auch als echte HTTP-Anfrage ausführen. Bei kleinerem Tier-/Adminlimit den kompletten Vorzustand vergleichen; die derzeitige stille Kürzung aus P-02 nicht als Sollverhalten übernehmen.
 
@@ -311,7 +335,9 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Befunde:** [G-005](gaps.md#g-005), [G-010](gaps.md#g-010) · **Vorher:** —
 
-**Vorgehen:** Recovery/Retention mit Fakeuhr und echtem Runner-/Repositorypfad, Source-GET über echten API-Key-/Run-Adapter; Snapshotversion und No-new-job-Regel prüfen.
+**Stand:** in_progress. G-005: test_api_run_billing_identity.py führt Recovery abgelaufener Reservierungen und Lösch-/Replaypfade aus. Vollständige Retention/Backfill-/Restartorchestrierung bleibt offen; die alte Behauptung keiner ausgeführten Recovery ist überholt. G-010: Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
+
+**Vorgehen:** Vorhandene Recovery-/Billing-Identity-Tests anerkennen; fehlende Retention-/Backfill-/Restartfälle und historischen Source-Adapter ergänzen.
 
 **Abnahme zusätzlich zu den verknüpften Then-/Negativkontrollen:** Kein doppelter Providerstart, keine Löschung lebender Daten oder falsche historische Bindung; Cursor/revision/Ownership/Leases/Backfill-Grenzen belegt.
 
@@ -336,6 +362,8 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 **Ziel:** Tatsächliche Auth-/Tarifpayloads an der HTTP-Grenze.
 
 **Befunde:** [G-009](gaps.md#g-009), [G-012](gaps.md#g-012) · **Vorher:** —
+
+**Stand:** planned. G-009: Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung. G-012: Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
 
 **Vorgehen:** Lookup/Create-Race gezielt vom Firebase-SDK-Double auslösen; echten Provisioner/Statushandler verwenden. Free-Admin separat von Pro modellieren.
 
@@ -363,6 +391,8 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Befunde:** [G-011](gaps.md#g-011) · **Vorher:** [WP-01](work-packages.md#wp-01)
 
+**Stand:** planned. G-011: Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
+
 **Vorgehen:** Route plus Snapshotservice ausführen, gültigen Pending-Datensatz nutzen; main-Fehlerumschlag und Owner/Visibility/Quota/Retry prüfen.
 
 **Abnahme zusätzlich zu den verknüpften Then-/Negativkontrollen:** Response und gespeicherte Ressource stimmen überein; fremde/abgelaufene/gefälschte Payload abgelehnt. API-v1-Test wird nicht als Ersatz gezählt.
@@ -387,6 +417,8 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 **Ziel:** Alte Worker dürfen nach Reclaim nichts committen.
 
 **Befunde:** [G-006](gaps.md#g-006) · **Vorher:** [WP-01](work-packages.md#wp-01)
+
+**Stand:** planned. G-006: Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
 
 **Vorgehen:** Claim-/Finish-/Delete-Reihenfolgen im Emulator mit getrennten Repositoryinstanzen; Credentialprovider bleibt außerhalb der DB.
 
@@ -413,6 +445,8 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Befunde:** [G-013](gaps.md#g-013) · **Vorher:** —
 
+**Stand:** planned. G-013: Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
+
 **Vorgehen:** PATCH/DELETE/Link/Test durch echten Router; UID/Allowlist/Entitlements/Servicefehler mit gespeicherten Kontrollzuständen und Notifierdouble prüfen. Telegram-Disconnect und beide Watch-/Follower-Unsubscribe-Routen einschließlich Tokenfehlern und escaped HTML ergänzen.
 
 **Abnahme zusätzlich zu den verknüpften Then-/Negativkontrollen:** Alle sieben bisher unausgeführten Handler verhaltensbasiert geprüft; falscher Owner und nicht verbundener Versand haben keine Nebenwirkung. Ungültige/abgelaufene/falsch typisierte Abmeldetokens ändern keine Daten; Disconnect bleibt UID-gebunden.
@@ -437,6 +471,8 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 **Ziel:** Echte Adminberechtigung und vollständige Routenauswahl.
 
 **Befunde:** [G-014](gaps.md#g-014), [G-041](gaps.md#g-041) · **Vorher:** —
+
+**Stand:** planned. G-014: Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung. G-041: Topichelper ruft verify_user_token weiterhin ohne check_revoked=True auf; Abweichung zum zentralen Adminhelper bleibt bestehen.
 
 **Vorgehen:** PUT ausdrücklich aufrufen, Adminprüfung nicht ersetzen; Hub/Sitemap/Follow mit verschiedenen Publikationszuständen und Escapingfällen. Separate Topic-Adminprüfung gegen die zentrale Revocation-/503-Policy prüfen; nur das externe Auth-SDK ersetzen. noindex ausdrücklich von Zugriffs- und Archivzustand unterscheiden. P-04 als roten Grenztest übernehmen; gemeinsame Adminpolicy korrigieren. Adminlist/Confirm/Unsubscribe ebenso ausführen, SDK-Flags und HTTP-Umschlag getrennt prüfen.
 
@@ -463,6 +499,8 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Befunde:** [G-016](gaps.md#g-016) · **Vorher:** —
 
+**Stand:** planned. G-016: Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
+
 **Vorgehen:** Transportantworten einspeisen, query_claim_identity ausführen. Bekannte/neue/duplizierte Keys und Indexformen systematisch kombinieren.
 
 **Abnahme zusätzlich zu den verknüpften Then-/Negativkontrollen:** Unbekannte/mehrfach verwendete Zuordnungen werden verworfen, Inputs/Versuche begrenzt und Fehler nachvollziehbar. Grenzsemantik vor Änderung dokumentiert.
@@ -487,6 +525,8 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 **Ziel:** SDK-Rückgabeformen hinter vorhandenen Service-Fakes.
 
 **Befunde:** [G-017](gaps.md#g-017) · **Vorher:** —
+
+**Stand:** planned. G-017: Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
 
 **Vorgehen:** Ungeordnete/missing BatchGet-Snapshots und Grenzgrößen, Datumsmischung und Latest-/Judgmentqueries prüfen; kleiner Emulatorfall für reale Queryform.
 
@@ -513,6 +553,8 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Befunde:** [G-031](gaps.md#g-031) · **Vorher:** [WP-01](work-packages.md#wp-01)
 
+**Stand:** in_progress. G-031: Workerleaseowner, verlorene Lease und stale Watchcompletion haben neue Fake-Nachweise. Native SDK-Queries/Transaktionskonflikte samt Probe-/Outboxclaims bleiben offen.
+
 **Vorgehen:** Einzelnen Tick mit kontrollierter Uhr/Pipeline ausführen, native Claimkonkurrenz und Shutdown. Vorhandene DST-/Supervisortests wiederverwenden.
 
 **Abnahme zusätzlich zu den verknüpften Then-/Negativkontrollen:** Nur fällige Daten, ein Gewinner, keine stale Completion und kein weiterer Tick nach Shutdown; reale Query-/Leaseform statt nur Fakefilter.
@@ -538,13 +580,15 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Befunde:** [G-018](gaps.md#g-018) · **Vorher:** —
 
+**Stand:** in_progress. G-018: Behoben in 76e4873e: Checkstrip nutzt Text-/DOMknoten, Topicseite externe Skripte/strikte CSP. topic-page.test.mjs prüft inerte Notizen/Datumswerte, test_topics_feature.py CSP und aktuelle Quellenregeln. Beide Dateien im aktuellen Unitlauf grün.
+
 **Vorgehen:** DOM-Test mit inertem Markup und Interaktionen; gezielten Browserfall für Touch/Focus/Navigation ergänzen. Textknoten und konstante UI-Struktur getrennt aufbauen.
 
 **Abnahme zusätzlich zu den verknüpften Then-/Negativkontrollen:** D-01 erzeugt kein Element mehr aus Nutztext; Sonderzeichen bleiben lesbar. Unseen-/historischer Besuch und blockierter Storage funktionieren. Frontendbuild/öffentlichen Cachebuster nach Repo-Regel pflegen.
 
 **Produktstellen:** [app/services/claim_ledger.py](../../../app/services/claim_ledger.py), [static/js/topic-page.js](../../../static/js/topic-page.js), [templates/topic.html](../../../templates/topic.html)
 
-**Test-/Dokumentziele:** ` tests/e2e/test_topic_frontend.py ` (vorgeschlagen), ` tests/js/topic-page.test.mjs ` (vorgeschlagen)
+**Test-/Dokumentziele:** ` tests/e2e/test_topic_frontend.py ` (vorgeschlagen), [tests/js/topic-page.test.mjs](../../../tests/js/topic-page.test.mjs)
 
 **Vorhandene Hilfen:** [tests/js/helpers/appWindow.mjs](../../../tests/js/helpers/appWindow.mjs), [tests/test_claim_ledger.py](../../../tests/test_claim_ledger.py)
 
@@ -562,6 +606,8 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 **Ziel:** Fehlerobjekte dürfen nicht als [object Object] erscheinen.
 
 **Befunde:** [G-019](gaps.md#g-019) · **Vorher:** —
+
+**Stand:** planned. G-019: Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
 
 **Vorgehen:** createAdminClient mit tatsächlichen error-/detail-Objekten, Strings, Listen und nicht-JSON testen; AccountTier-HTTP-Response als Vertragsfixture nutzen.
 
@@ -588,6 +634,8 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Befunde:** [G-015](gaps.md#g-015) · **Vorher:** —
 
+**Stand:** planned. G-015: Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
+
 **Vorgehen:** Admin-Listen/Detailroute mit Auth, danach Viewer mit kontrolliert verspäteten Antworten. Kein Rohreport mit Prompts/Antworten als Fixture im Adminvertrag.
 
 **Abnahme zusätzlich zu den verknüpften Then-/Negativkontrollen:** Nonadmin vor Read abgelehnt; 404, falsche IDs und Auswahlwechsel korrekt; keine Staledaten oder Rohprompts.
@@ -612,6 +660,8 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 **Ziel:** Gültige PNG-Bytes reichen als Inhaltstest nicht aus.
 
 **Befunde:** [G-020](gaps.md#g-020) · **Vorher:** —
+
+**Stand:** planned. G-020: Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
 
 **Vorgehen:** Realen Renderer mit deterministischen Fonts/Inputs prüfen; Dekodierung, stabile Bildregionen und semantische Renderinputs kombinieren. Route muss richtige Inputs liefern.
 
@@ -638,6 +688,8 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Befunde:** [G-021](gaps.md#g-021) · **Vorher:** —
 
+**Stand:** planned. G-021: Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
+
 **Vorgehen:** Originalskript in frischem jsdom ausführen, Trackerstart instrumentieren und Storageausfälle injizieren.
 
 **Abnahme zusätzlich zu den verknüpften Then-/Negativkontrollen:** 1/0/fehlend/sonstige Parameter sowie setItem-/removeItem-Fehler führen zum erwarteten Flag/Seitenstart; fehlender/anderer Parameter erhält den vorhandenen Wert. Keine getItem-Verzweigung erfinden; reine Stringpräsenz genügt nicht.
@@ -662,6 +714,8 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 **Ziel:** Projekt-/Apply-/Dry-run-Grenzen ohne Produktzugriff.
 
 **Befunde:** [G-022](gaps.md#g-022), [G-023](gaps.md#g-023) · **Vorher:** —
+
+**Stand:** planned. G-022: Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung. G-023: Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
 
 **Vorgehen:** Subprozesse mit synthetischen Modulen/DB/Provider und explizitem Netzwerkverbot. Reparatur-Projektguard nicht für Tests deaktivieren; Fakeumgebung muss kontrollierten Vertrag abbilden.
 
@@ -689,6 +743,8 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Befunde:** [G-032](gaps.md#g-032), [G-033](gaps.md#g-033) · **Vorher:** —
 
+**Stand:** in_progress. G-032: ASGI-Test für unveränderte SSE-Frames hinzugekommen. Das ersetzt keine echten Socket-/Proxytests für Disconnect, Chunking und Providergrenzen. G-033: Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
+
 **Vorgehen:** Header/Env-Grenzen im vorhandenen ASGI-Harness; lokaler HTTP/TLS-Server für Stream/Cancel/Close/gzip. Testziel explizit einspeisen; SSRF-Policy separat real prüfen, keine Produktionsallowlist erweitern.
 
 **Abnahme zusätzlich zu den verknüpften Then-/Negativkontrollen:** Kein Leak/zweiter Retry/unbegrenztes Lesen; Host/SNI/Redirect-Neuvalidierung belegt. Fehlerstatus bewusst gewählt, keine Internetabhängigkeit.
@@ -715,6 +771,8 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Befunde:** [G-034](gaps.md#g-034) · **Vorher:** —
 
+**Stand:** planned. G-034: Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
+
 **Vorgehen:** Auth, Tages-/Cooldown-Limits und Storefehler durch realen Handler; Statistikwrapper mit inhaltshaltigen Eingaben ausführen und gespeicherte Felder prüfen.
 
 **Abnahme zusätzlich zu den verknüpften Then-/Negativkontrollen:** UID vor Write geprüft, Limits unverändert, Statistik ohne Prompt/Antwort/IDs. Feedback selbst darf die bewusst eingegebene Nachricht enthalten.
@@ -739,6 +797,8 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 **Ziel:** Alternative Benchmark-/Evaluations-/Preview-Einstiege.
 
 **Befunde:** [G-035](gaps.md#g-035) · **Vorher:** —
+
+**Stand:** planned. G-035: Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
 
 **Vorgehen:** Aktuelle Supportentscheidung je Einstieg festhalten; unterstützte CLIs per Subprozess mit temporären Outputs und Fakeprovider prüfen. Veraltete Modi nicht als neue Produktanforderung behandeln.
 
@@ -765,6 +825,8 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Befunde:** [G-030](gaps.md#g-030) · **Vorher:** [WP-03](work-packages.md#wp-03), [WP-07](work-packages.md#wp-07), [WP-08](work-packages.md#wp-08), [WP-09](work-packages.md#wp-09), [WP-10](work-packages.md#wp-10), [WP-12](work-packages.md#wp-12), [WP-13](work-packages.md#wp-13), [WP-14](work-packages.md#wp-14)
 
+**Stand:** in_progress. G-030: Ein neuer Agentloop verbindet Datei, Angebote, Vergleich, Dokument und Gmailentwurf; Browserfälle sind weiterhin an API-Doubles getrennt. Keine zusätzliche vollständige persistierte Browserreise belegt.
+
 **Vorgehen:** J-01/J-02 zuerst, dann J-03/J-04/J-05 gemäß journeys.md. Echtes AppFirebase, App-Routen und lokales Firestore; nur Identitäts-/Provider-/Nachrichtengrenzen ersetzen.
 
 **Abnahme zusätzlich zu den verknüpften Then-/Negativkontrollen:** UI und DB stimmen nach Reload/Ownerwechsel/Stop überein, kein zweiter Modellstart beim Recover, keine vermischten Turns/Charges. Bestehende Modul-/Browsertests bleiben schnelle Detailnachweise. Antworterfolg und Persistenzstatus getrennt prüfen. Einmalige reguläre Runbelastung von der Agent-Abrechnung tatsächlicher Providersteps unterscheiden; Recovery darf keine Buchung duplizieren.
@@ -789,6 +851,8 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 **Ziel:** Versionpins, Font-/Lizenzumfang und checkOnly.
 
 **Befunde:** [G-036](gaps.md#g-036) · **Vorher:** —
+
+**Stand:** planned. G-036: DOMPurify-Pin und Sanitizerpayloads werden nun geprüft; das führt vendorFrontend mit temporärem Dateisystem/check-only noch nicht aus.
 
 **Vorgehen:** Winzige synthetische Pakete statt realer Paketdownloads verwenden; helper direkt aufrufen, alte Assets und Mtime kontrollieren.
 
@@ -815,6 +879,8 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Befunde:** [G-037](gaps.md#g-037) · **Vorher:** —
 
+**Stand:** in_progress. G-037: Behoben in c929e343: main übernimmt exc.headers. test_registered_http_exception_handler_preserves_headers prüft 429/503 Retry-After und 401 WWW-Authenticate durch den registrierten Handler; aktuelle Pythondatei grün. Echte Ablehnungspfade bleiben zusätzliche Integration.
+
 **Vorgehen:** Zuerst P-01 als roten Integrationstest an echten Routen konkretisieren; gemeinsame Fehlerbehandlung korrigieren und bestehende isolierte Routerkontrollen behalten.
 
 **Abnahme zusätzlich zu den verknüpften Then-/Negativkontrollen:** 429/503, sichere Fehlermeldung und vorgesehenes Retry-After bleiben gemeinsam erhalten; Ablehnung startet weder Provider noch unerlaubten Write. Vorgesehene Exceptionheader werden bewahrt, keine frei vom Request kopierten Header. headers-Weitergabe im main-Handler entfernen: neue main.app-Headerassertion muss scheitern, obwohl die bestehenden isolierten Routertests grün bleiben.
@@ -839,6 +905,8 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 **Ziel:** Servicebelege bis zur tatsächlichen HTTP-Grenze erweitern.
 
 **Befunde:** [G-039](gaps.md#g-039) · **Vorher:** —
+
+**Stand:** planned. G-039: Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
 
 **Vorgehen:** Vorhandene echte Stores/Fakes wiederverwenden; main.app, echte Auth-/Tierpolicy mit externen SDK-Doubles, keine pauschale _agent_details- oder require_agent_access-Ersetzung.
 
@@ -865,6 +933,8 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Befunde:** [G-040](gaps.md#g-040) · **Vorher:** —
 
+**Stand:** in_progress. G-040: Behobenes Überschreiben in 6b80daa6: CAS und eigener Revisionsrollback bewahren simulierten fremden Writer. test_model_configuration.py grün; nativer konkurrierender Firestore-/Mehrprozesslauf noch offen.
+
 **Vorgehen:** P-03 zunächst als deterministische Regression übernehmen. Native Firestore-Versionsbedingung wählen; zwei unabhängige Writerinstanzen unter Barrieren im Emulator einschließlich fehlendem Vorgängerdokument und Rollbackausfall prüfen.
 
 **Abnahme zusätzlich zu den verknüpften Then-/Negativkontrollen:** Rollback löscht/überschreibt nur die eigene unveränderte Version mit nativer Precondition/Transaktion. B bleibt erhalten, auch wenn initial nichts existierte. Lokale Runtime bleibt beim eigenen letzten gültigen Stand; Fehler/Recoveryzustand ist ehrlich sichtbar. Keine globale DB-/Runtime-Atomizität behaupten. Bedingung aus Rollback entfernen: B-Erhalt muss rot werden; nur final==initial zu prüfen würde den Fehler festschreiben.
@@ -890,6 +960,8 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 
 **Befunde:** [G-042](gaps.md#g-042) · **Vorher:** —
 
+**Stand:** planned. G-042: Budgetkorrekturen ändern nicht die HTTP-200-Protokollfehlerklassifikation; diesen Befund weiterhin gesondert prüfen.
+
 **Vorgehen:** P-05 mit echten Record-/Resume-/Statsfunktionen in die bestehende Suite übertragen; HTTP-200-Body validieren, alte malformed-response-Sollvorgabe differenzieren und sichere Errorprojektion prüfen.
 
 **Abnahme zusätzlich zu den verknüpften Then-/Negativkontrollen:** Provider-/Protokollfehler bleiben Fehler mit sicherem Code statt Enthaltung; sie werden nicht als Erfolg dedupliziert. Explizites retry_failed folgt der vorhandenen Policy. Gültiger Antworttext ohne auswertbaren Buchstaben bleibt Enthaltung. Keine Rohcredentials/privaten Providertexte persistieren; Counts/Kostenbehauptungen aus vorliegenden Feldern ableiten. Bodyerror-Prüfung entfernen: HTTP-200-Fehler darf die kombinierte error-/abstain-/Resumeassertion nicht bestehen. Kontrolle mit gültigem Text ohne Buchstaben verhindert fälschliches Umdeuten jeder Enthaltung in einen Fehler.
@@ -903,5 +975,113 @@ Abschluss pro Paket in `audit.json`: Status `completed`, Implementierungscommit 
 **Befehle/Prüfauftrag nach Implementierung:**
 
 - ` python -m pytest tests/test_benchmark_transport.py tests/test_benchmark_runner.py tests/test_benchmark_results.py -q `
+
+**Zu beachten:** —
+
+
+<a id="wp-35"></a>
+
+## WP-35 · Google-Aktionsclaims mit nativen Transaktionen prüfen
+
+**Ziel:** Höchstens ein Writeversuch pro gültiger Aktion; unknown bleibt gegen Wiederholung gesperrt, fremder Owner/alte Revision schreibt nichts.
+
+**Befunde:** [G-043](gaps.md#g-043) · **Vorher:** —
+
+**Stand:** planned. G-043: Fake-Parallelität ist belegt; neue Aktionsclaims fehlen im bestehenden Transaktionsharness.
+
+**Vorgehen:** Bestätigen, Leaseablauf und unklaren Transportausgang im lokalen Emulator steuern.
+
+**Abnahme zusätzlich zu den verknüpften Then-/Negativkontrollen:** Höchstens ein Writeversuch pro gültiger Aktion; unknown bleibt gegen Wiederholung gesperrt, fremder Owner/alte Revision schreibt nichts.
+
+**Produktstellen:** [app/services/agent_actions.py](../../../app/services/agent_actions.py)
+
+**Test-/Dokumentziele:** [tests/test_agent_calendar.py](../../../tests/test_agent_calendar.py), [tests/test_agent_gmail.py](../../../tests/test_agent_gmail.py)
+
+**Vorhandene Hilfen:** [tests/test_agent_calendar.py](../../../tests/test_agent_calendar.py), [tests/test_agent_gmail.py](../../../tests/test_agent_gmail.py)
+
+**Befehle/Prüfauftrag nach Implementierung:**
+
+- ` Gezielte Dateien, dann kombinierter Lauf; native Transaktionen nur mit demo-consensio-e2e. `
+
+**Zu beachten:** —
+
+
+<a id="wp-36"></a>
+
+## WP-36 · Cloud-Dateiablage und verteilte Löschkaskade integrieren
+
+**Ziel:** Keine öffentliche Freigabe, kein fremder Download und keine verwaisten Quoten/Versionen nach erfolgreichem Retry; Originalfehler bleibt sichtbar.
+
+**Befunde:** [G-044](gaps.md#g-044) · **Vorher:** —
+
+**Stand:** planned. G-044: Lokale Objektablage/Parser sind geprüft; daraus folgt kein produktiver Bucket-/IAM- oder verteilter Kaskadennachweis.
+
+**Vorgehen:** Cloudadapter mit kontrolliertem Storage-Double und native Metadaten-/Quotatransaktionen samt Wiederaufnahme ausführen.
+
+**Abnahme zusätzlich zu den verknüpften Then-/Negativkontrollen:** Keine öffentliche Freigabe, kein fremder Download und keine verwaisten Quoten/Versionen nach erfolgreichem Retry; Originalfehler bleibt sichtbar.
+
+**Produktstellen:** [app/services/agent_files.py](../../../app/services/agent_files.py)
+
+**Test-/Dokumentziele:** [tests/test_agent_files.py](../../../tests/test_agent_files.py), [tests/test_agent_documents.py](../../../tests/test_agent_documents.py)
+
+**Vorhandene Hilfen:** [tests/test_agent_files.py](../../../tests/test_agent_files.py), [tests/test_agent_documents.py](../../../tests/test_agent_documents.py)
+
+**Befehle/Prüfauftrag nach Implementierung:**
+
+- ` Gezielte Dateien, dann kombinierter Lauf; native Transaktionen nur mit demo-consensio-e2e. `
+
+**Zu beachten:** —
+
+
+<a id="wp-37"></a>
+
+## WP-37 · Outbox-/Probeclaims mit nativer SDK-Konkurrenz absichern
+
+**Ziel:** Resultat und Zustellabsicht atomar; alter Worker kann neuen Claim nicht bestätigen; Probe respektiert Tagesbudget und aktuelle Watchkonfiguration.
+
+**Befunde:** [G-045](gaps.md#g-045) · **Vorher:** —
+
+**Stand:** planned. G-045: Fake-Claims und Versanddoubles belegen Logik, keine echten SDK-Retries. Externe Exactly-once-Zustellung ist ausdrücklich nicht versprochen.
+
+**Vorgehen:** Nativen Emulatorcommit, Crash nach Commit, Leaseübernahme und spätes Ack kontrollieren.
+
+**Abnahme zusätzlich zu den verknüpften Then-/Negativkontrollen:** Resultat und Zustellabsicht atomar; alter Worker kann neuen Claim nicht bestätigen; Probe respektiert Tagesbudget und aktuelle Watchkonfiguration.
+
+**Produktstellen:** [app/services/notification_outbox.py](../../../app/services/notification_outbox.py)
+
+**Test-/Dokumentziele:** [tests/test_watch_review_regressions.py](../../../tests/test_watch_review_regressions.py), [tests/test_watch_evidence_model.py](../../../tests/test_watch_evidence_model.py)
+
+**Vorhandene Hilfen:** [tests/test_watch_review_regressions.py](../../../tests/test_watch_review_regressions.py), [tests/test_watch_evidence_model.py](../../../tests/test_watch_evidence_model.py)
+
+**Befehle/Prüfauftrag nach Implementierung:**
+
+- ` Gezielte Dateien, dann kombinierter Lauf; native Transaktionen nur mit demo-consensio-e2e. `
+
+**Zu beachten:** —
+
+
+<a id="wp-38"></a>
+
+## WP-38 · Aktuelle Testfehler und abweichenden Benchmark-Wiederholungslauf klären
+
+**Ziel:** Gleiche fachliche Assertions bestehen isoliert und gemeinsam; keine Tests abschwächen oder Fehler nachträglich aus dem Primärlauf entfernen.
+
+**Befunde:** [G-046](gaps.md#g-046) · **Vorher:** —
+
+**Stand:** planned. G-046: Benchmark-Resume scheitert im Primärlauf und besteht isoliert. Publisher-Ergebnisprüfung scheitert in beiden Läufen trotz Subprozessreturncode 0. Browserergebnisse werden im Laufbericht ergänzt.
+
+**Vorgehen:** Prompt-/Mockzustand sowie Publisher-Subprozessresultat kontrolliert reproduzieren; aktuelle Browserfehler laut Laufbericht zuordnen.
+
+**Abnahme zusätzlich zu den verknüpften Then-/Negativkontrollen:** Gleiche fachliche Assertions bestehen isoliert und gemeinsam; keine Tests abschwächen oder Fehler nachträglich aus dem Primärlauf entfernen.
+
+**Produktstellen:** [tests/test_benchmark_budget.py](../../../tests/test_benchmark_budget.py)
+
+**Test-/Dokumentziele:** [tests/test_benchmark_budget.py](../../../tests/test_benchmark_budget.py), [tests/test_publisher_standalone.py](../../../tests/test_publisher_standalone.py)
+
+**Vorhandene Hilfen:** [tests/test_benchmark_budget.py](../../../tests/test_benchmark_budget.py), [tests/test_publisher_standalone.py](../../../tests/test_publisher_standalone.py)
+
+**Befehle/Prüfauftrag nach Implementierung:**
+
+- ` Gezielte Dateien, dann kombinierter Lauf; native Transaktionen nur mit demo-consensio-e2e. `
 
 **Zu beachten:** —

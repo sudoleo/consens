@@ -43,7 +43,7 @@ def render():
     status_summary = ', '.join(f'{package_status[s]} {label}' for s, label in status_labels.items() if package_status[s])
     pages = {}
     rows = ['# Produktverhalten und Testbelege\n',
-      '[Einstieg](README.md) · [Dateikatalog](../backend.md) · [Lücken](gaps.md)\n',
+      f'[Einstieg](README.md) · [Dateikatalog](../backend.md) · [Lücken](gaps.md) · Stand: {data["review_date"]}\n',
       f'{counts["contracts"]} gruppierte Verhaltensverträge, alle {counts["test_files_linked"]} Testdateien verknüpft. '
       f'Ein Abschnitt bündelt mehrere Teilverträge; die {counts["representative_definitions"]} ausgewählten Testdefinitionen sind konkrete **Teilbelege**. '
       'Sie beweisen nicht jede Klausel des Abschnitts. Der vollständige Testdateikatalog bleibt maßgeblich für die übrigen Assertions. '
@@ -65,7 +65,7 @@ def render():
           '**Konkrete Teilbelege:**\n']
         for e in c['representative_evidence']:
             rows += ['- ' + link(e['path'],e['line'],e['name']) + f' — {e["level"]}. '
-              + 'Historischer **Datei**status: ' + ', '.join(f'{k}={v}' for k,v in e['file_execution'].items()) + '.']
+              + f'**Datei**status vom {data["review_date"]}: ' + ', '.join(f'{k}={v}' for k,v in e['file_execution'].items()) + '.']
             rows += ['  - ' + link(e['path'],a['line'],f'Zeile {a["line"]}') + ': ' + code(a['excerpt']) for a in e['assertions']]
         if not c['representative_evidence']:
             rows += ['Kein repräsentativer Verhaltenstest vorhanden.']
@@ -73,22 +73,21 @@ def render():
 
     rows = ['# Verifizierte Befunde und ergänzende Tests\n',
       '[Einstieg](README.md) · [Arbeitspakete](work-packages.md) · [Suchbelege](search-evidence.json)\n',
-      f'{len(data["gaps"])} Befunde. „Verifiziert“ bezeichnet den geprüften Code-/Testabgleich. '
-      'G-018/G-019 sind durch lokale DOM-Proben beobachtete Verhaltensfehler; '
-      'G-037/G-038/G-040/G-041/G-042 durch isolierte Python-Gegenproben. '
-      'G-007/G-020 zusätzlich durch überlebende gezielte Mutationen belegte Assertionslücken. '
-      'Die Aussagegrenze jeder Probe steht beim Befund und im unabhängigen Review. '
-      'Die übrigen Kategorien unterscheiden fehlende Fälle/Integration, defekte Tests, Ausführungsnachweis und CI.\n',
+      f'{len(data["gaps"])} Befunde im Verlauf, Stand {data["review_date"]}. '
+      'Der aktuelle Status steht an jedem Befund: resolved = konkret behobener Befund, partially_addressed = Teilnachweis ergänzt, open = Restgrenze offen. '
+      'Die ursprünglichen Mutations-/DOM-/Pythonproben vom 26.09.2026 bleiben historische Belege; sie werden nicht als aktuelle Messung ausgegeben. '
+      'Der [Aktualisierungsbericht](current-review.md) trennt behobene Fehler, neue Teilbelege und erneut beobachtete Probleme.\n',
       'P1/P2/P3 ordnen die Umsetzung nach möglichen Folgen und Voraussetzungen; sie sind keine Incident-Schweregrade. '
       'Suchtreffer allein beweisen weder Vorhandensein noch Abwesenheit eines Tests. '
       'Die Schlussfolgerung verbindet Suche, Testkörper, Mockgrenzen und gegebenenfalls Branchlauf/Probe. '
       'Suggested paths sind Vorschläge, vorhandene passende Dateien bevorzugen.\n',
-      '| ID | Priorität / Art | Befund | Paket |\n|---|---|---|---|']
+      '| ID | Priorität / Art | Befund | Status | Paket |\n|---|---|---|---|---|']
     for g in data['gaps']:
-        rows += [f'| [{g["id"]}](#{g["id"].lower()}) | {g["priority"]} / {code(g["kind"])} | {g["title"]} | {ids(g["work_package_ids"],"work-packages.md")} |']
+        rows += [f'| [{g["id"]}](#{g["id"].lower()}) | {g["priority"]} / {code(g["kind"])} | {g["title"]} | {g.get("current_review", {}).get("status", "open")} | {ids(g["work_package_ids"],"work-packages.md")} |']
     for g in data['gaps']:
         search=searches[g['id']]
         rows += [heading(g), f'**{g["priority"]} · {g["kind"]}** · Verträge: {ids(g["contract_ids"],"matrix.md")} · Paket: {ids(g["work_package_ids"],"work-packages.md")}\n',
+          '**Aktuelle Bewertung:** ' + g.get('current_review', {}).get('status', 'open') + ' — ' + g.get('current_review', {}).get('note', '') + '\n',
           '**Produktbeleg:** ' + '; '.join(link(r['path'],r['line']) + ' — ' + code(r['needle']) for r in g['production']) + '\n',
           '**Vorhandene relevante Prüfungen:**\n']
         for e in g['existing_evidence']:
@@ -137,6 +136,7 @@ def render():
         rows += [f'| [{w["id"]}](#{w["id"].lower()}) | {w["title"]} | {w["priority"]} | {ids(w["dependencies"],"work-packages.md")} | {ids(w["gap_ids"],"gaps.md")} | {w["status"]} |']
     for w in data['work_packages']:
         rows += [heading(w), '**Ziel:** '+w['focus']+'\n', '**Befunde:** '+ids(w['gap_ids'],'gaps.md')+' · **Vorher:** '+ids(w['dependencies'],'work-packages.md')+'\n',
+          '**Stand:** ' + w['status'] + '. ' + w.get('current_note', '') + '\n',
           '**Vorgehen:** '+w['approach']+'\n', '**Abnahme zusätzlich zu den verknüpften Then-/Negativkontrollen:** '+w['acceptance']+'\n',
           '**Produktstellen:** '+', '.join(link(p) for p in w['source_paths'])+'\n',
           '**Test-/Dokumentziele:** '+', '.join(link(p) for p in w['target_test_paths'])+'\n',
@@ -150,13 +150,16 @@ def render():
       'Das ist ein Vollständigkeitscheck der Auswahl, kein Beweis für jede Funktion/Stylesheetregel. '
       'Direkte Testreferenzen sind ausschließlich Suchkandidaten aus dem vorherigen Testinventar. '
       'Null direkte Referenzen können trotzdem indirekte Tests bedeuten. Alle positiven Testbelege stehen in der Matrix/dem Dateikatalog.\n',
-      'Pythonspalte: ausgeführte Statements/Statements und ausgeführte Branches/Branches des regulären Branchlaufs; '
+      'Pythonspalte: historische Messung vom 26.09.2026 nur für seitdem unveränderte Quellen. Bei geänderten Quellen werden alte Zähler nicht übertragen. '
+      'Ausgeführte Statements/Statements und ausgeführte Branches/Branches des damaligen regulären Branchlaufs; '
       'bei null Branches „—“, bei nicht instrumentierter Datei „nicht gemessen“. '
       'Vorhandene ausgeführte Statements können Moduldefinitionen/Imports sein.\n',
       '| Datei | Zeilen | Verträge | Direkte Testreferenzen | Python-Ausführung |\n|---|---:|---|---:|---|']
     for s in sources:
         f=coverage['files'].get(s['path']); measure='nicht gemessen'
-        if f:
+        if f and coverage.get('meta', {}).get('source_hashes', {}).get(s['path']) != s['sha256']:
+            measure='geändert; neue Messung offen'
+        elif f:
             a=f['summary'];measure=f'{a["covered_lines"]}/{a["num_statements"]} Statements; '+(f'{a["covered_branches"]}/{a["num_branches"]} Branches' if a['num_branches'] else '— Branches')
         rows.append(f'| {link(s["path"])} | {s["lines"]} | {ids(s["contract_ids"],"matrix.md")} | {len(s["direct_test_candidates"])} | {measure} |')
     pages['sources.md']='\n'.join(rows)+'\n'

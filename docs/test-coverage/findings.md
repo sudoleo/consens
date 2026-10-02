@@ -1,142 +1,81 @@
 # Laufbefunde und Grenzen
 
-Stand: 26.09.2026, Commit `145db25bfe029ff7f50cd77595bd6b9e043c1a2f`.
-[Zum Katalog](../test-coverage-map.md).
+**Stand: 02.10.2026 · Quellstand `2860844a` · Windows, lokaler Checkout**
 
-## Nachgewiesene Auffälligkeiten
+[Katalog](../test-coverage-map.md) · [Laufmetadaten](execution.json) ·
+[Alle roten Fall-IDs und Meldungen](evidence/failures-2026-10-02.md) ·
+[Historischer Bericht](findings-2026-09-26.md)
 
-### F-01: Starrer Quelltextvertrag für historische Drawer
+## Aktuelle Ergebnisse
 
-`tests/test_consensus_progress_ui.py::test_archived_turns_use_the_same_drawer_row_as_the_live_answer`
-scheitert auch nach Korrektur der Testumgebung.
+| Lauf | Ergebnis |
+|---|---|
+| Reguläres Pytest | 3.078 bestanden, 3 fehlgeschlagen; 179,59 s |
+| Vitest | 72 Dateien, 664 Fälle bestanden; verschachtelte describe-Blöcke zählen nicht als Dateien |
+| E2E-Collection | 308 Fälle in 30 Dateien |
+| E2E-Auswahl | 219 bestanden, 30 fehlgeschlagen, 4 Setupfehler; 874,06 s |
+| E2E nicht ausgewählt | 55 Fälle: 43 Smoke- und 12 Transaktionsfälle |
+| Buildcheck | `static/dist is up to date` |
+| Isolierte Wiederholung | Benchmark-Resume bestanden, Publisher-Ergebnisprüfung erneut fehlgeschlagen |
 
-- [Assertion, Zeile 335](../../tests/test_consensus_progress_ui.py#L335):
-  erwartet exakt `tab.className = "consensus-tab"`.
-- [Implementierung, Zeile 400](../../static/js/consensus-run.js#L400):
-  setzt `tab.className = "consensus-tab consensus-evidence-action"`.
+Primärlaufzahlen wurden durch Wiederholungen nicht geändert. Normalisierte
+JUnit-/Vitestbelege behalten Originalidentitäten, Status und Fehlermeldungen;
+Capturelogs/Tracebackkörper wurden für kompakte versionierte Nachweise entfernt.
+Befehle, Versionen und Hashes stehen in [execution.json](execution.json).
 
-Der literal geprüfte Vertrag ist veraltet oder muss gegen die gewünschte
-Darstellung neu bewertet werden. Die zusätzliche Klasse allein beweist keinen
-UIfehler. Im Folgeaudit zuerst das erwartete Verhalten und die korrespondierenden
-Browserfälle prüfen; keinen Test allein für einen grünen Lauf abschwächen.
+## Pythonfehler
 
-### F-02: Watch-Transaktionstest erreicht die Transaktion nicht
+| Fall | Beobachtung / nächste Prüfung |
+|---|---|
+| `test_consensus_progress_ui.py::test_archived_turns_use_the_same_drawer_row_as_the_live_answer` | Alter exakter Klassenstring `consensus-tab` passt weiterhin nicht zu `consensus-tab consensus-evidence-action`. Historischer F-01/G-028 erneut bestätigt; kein automatisch bewiesener Layoutfehler. |
+| `test_benchmark_budget.py::BenchmarkBudgetTests::test_resume_of_a_finished_pilot_does_not_pay_for_audits_again` | Gesamtlauf meldet Drift von `consensus_prompt_template`; isoliert bestanden. Reihenfolge-/Konfigurationszustand als Ursache untersuchen, nicht aus dem Primärlauf herausrechnen. |
+| `test_publisher_standalone.py::PublisherStandaloneTests::test_scheduled_flow_without_packages_or_external_services` | Subprozessreturncode 0, aber Ergebnisprüfung addiert `None + str`. Begleitender Readerthread meldet UTF-8-Decodierfehler bei Byte 0x97. Kindprozess startet mit `-E -S` und bereinigter Umgebung; Encodingvertrag im Test prüfen. Auch isoliert rot. |
 
-`tests/e2e/test_phase2_transactions.py::test_two_workers_cannot_exceed_owner_watch_limit`
-scheitert mit `TypeError: create_watch() got an unexpected keyword argument 'is_pro'`.
+24 parametrische `test_dev_cli.py`-Fälle bestanden unter pwsh und Windows
+PowerShell; dies sind Skripttests mit Tool-Doubles. Ein echter vollständiger
+Emulatorstart über `dev.ps1 check browser` ist damit nicht nachgewiesen.
 
-Der [Testaufruf](../../tests/e2e/test_phase2_transactions.py#L52) übergibt
-`is_pro=False`; die [aktuelle Funktion](../../app/services/watch_service.py#L388)
-verlangt `tier`. Damit ist der in dieser Datei formulierte Racevertrag aktuell
-nicht durch einen bestandenen Lauf belegt. Andere Watchtests können Teilaspekte
-abdecken; das muss vor einer globalen Lückenbewertung zugeordnet werden.
+## Browserfehler nach Gruppe
 
-### F-03: Pending-Share-Fixture erfüllt den Ablaufzeitvertrag nicht
+| Datei/Gruppe | Anzahl | Beobachtete Grenze |
+|---|---:|---|
+| Agentchat | 7 | Abweichende Unterbrechungs-/Stoptexte und mobil nicht sichtbares Bedienelement |
+| Agentvergleich | 1 | Geometrieabweichung von ca. 1,016 px gegenüber 1-px-Assertion |
+| Gmail | 3 | Erwartete Dokumentversion 2 fehlt im Ressourcencontainer |
+| Agentstatus | 4 | Erwartete Farben stimmen nicht mit aktuellen Styles überein |
+| Chatscroll | 5 | Position des sichtbaren Antworttexts ändert sich beim Abschluss |
+| Phase 4 | 8 | Quellenstatus/Locator, gruppierte Quellenpille bleibt pending, drei Run-/Modus-Timeouts |
+| Readerdichte | 2 | Grenzwertabweichungen kleiner als 0,001 px |
+| Agreement-/Cancel-Setup | 4 | `app_page` benötigt den nicht gestarteten Firestore-Emulator |
 
-`tests/e2e/test_phase2_transactions.py::test_two_workers_publish_one_pending_share_and_consume_one_quota`
-scheitert mit `ShareError: Result not found or expired.`.
+Das sind beobachtete **Testfehler**, keine pauschale Liste bestätigter
+Produktdefekte. Besonders Text-/Farb-/Pixelassertions können veraltete
+Erwartungen enthalten. Gmailressourcen, Scrollsprung und Runzustände verlangen
+einen gezielten Abgleich von Produktverhalten, Fixture und Erwartung.
+Vollständige Identitäten/Meldungen stehen im [Fehlerkatalog](evidence/failures-2026-10-02.md).
 
-Die [Fixture](../../tests/e2e/test_phase2_transactions.py#L98) enthält kein
-`expires_at`. Die [Produktionsfunktion](../../app/services/share_snapshots.py#L1037)
-verlangt eine gültige Ablaufzeit und bricht vor dem Publikationstransaktionspfad
-ab. Der Test muss im Folgeauftrag mit dem aktuellen Pending-Result-Vertrag
-abgeglichen werden; die eigentliche konkurrierende Veröffentlichung wurde hier
-nicht erfolgreich nachgewiesen.
+Die Auswahl schloss `test_smoke.py` und die drei Transaktionsdateien aus.
+`test_agreement_verdict.py` und `test_run_cancel_and_progress.py` hängen
+ebenfalls an `app_page`; ihre vier Fehler sind fehlende Voraussetzungen.
+Für einen gezielten Lauf ohne Emulator zusätzlich diese beiden Dateien
+ausschließen; für eine vollständige Freigabe alle integrierten Fälle mit
+dem Demo-Emulator ausführen.
 
-### F-04: Unterschiedliche Ergebnisse bei parallelen Share-Meldungen
+## Umgebung und verbleibende Grenzen
 
-`tests/e2e/test_phase2_transactions.py::test_parallel_reports_never_lose_increments_or_noindex_transition`
-scheitert im gemeinsamen Emulatorlauf:
+Reguläre Tests: `UNIT_TEST_MODE=1`, kein `RUN_E2E`, nicht geheimer
+OpenRouter-Dummykey. Browser: `RUN_E2E=1`, `UNIT_TEST_MODE=1`, Chromium und
+writerfreier Phase-4-Server/API-Doubles, soweit die jeweilige Fixture das
+unterstützt. Git-safe.directory wurde nur pro Prozess gesetzt.
 
-```text
-Aborted: Transaction lock timeout.
-ValueError: Failed to commit transaction in 12 attempts.
-```
+Ein erster npm-Aufruf scheiterte an der Windows-Sandbox mit EPERM; der
+wiederholte Lauf außerhalb der Sandbox bestand. Keine daraus erfundene
+Produktregression. Die vorhandenen dist-Änderungen wurden erhalten und
+durch den Buildcheck geprüft.
 
-Ein anschließender isolierter Lauf desselben unveränderten Tests mit frisch
-gestartetem Emulator besteht in 19,41 Sekunden. Es liegt somit eine beobachtete
-Instabilität vor; eine konkrete Ursache wie Testreihenfolge, Emulatorlast oder
-Anwendungsfehler ist **noch nicht bestimmt**. Beide Ergebnisse bleiben im
-Inventar erhalten. Die Primärlaufstatistik zählt den Fehler weiterhin.
-
-Betroffen: [Test](../../tests/e2e/test_phase2_transactions.py#L161),
-[`report_share`](../../app/services/share_snapshots.py#L1770) und
-[Transaktionswrapper](../../app/services/share_snapshots.py#L734).
-
-## Ausführungsumfang
-
-| Lauf | Ergebnis | Einordnung |
-|---|---|---|
-| Reguläre Python-Suite | 2.717 bestanden, 1 fehlgeschlagen, 12 übersprungen; 32,56 s | Vollständige 2.730 gesammelte Fälle |
-| JavaScript | 515 bestanden | Alle 57 Dateien |
-| Emulator: Agent, Phase 2, Promptkonfiguration | 9 bestanden, 3 fehlgeschlagen; 44,18 s | Alle 12 Fälle dieser drei Dateien |
-| Isolierter Wiederholungslauf F-04 | 1 bestanden; 19,41 s | Zusätzlicher Versuch, kein zusätzlicher Testfall im Bestand |
-| Browser | 267 gesammelt, nicht ausgeführt | Chromiuminstallation blockiert |
-| Windows-CLI | 12 Fälle übersprungen | Linuxumgebung; ausdrücklich `Windows PowerShell entry point` |
-
-Die Browserinstallation über `python -m playwright install chromium` lieferte
-für Chrome for Testing 148.0.7778.96 / Chromium v1223 wiederholt ein unbrauchbares
-Archiv (`End of central directory record signature not found`, Downloadanzeige
-0 MiB). Es stand kein lokales kompatibles Browserbinary zur Verfügung. Die
-Browserdateien wurden inhaltlich geprüft und gesammelt; ihre Verhaltens- und
-Layoutassertions sind durch diesen Audit **nicht als bestanden bestätigt**.
-
-Der Emulatorlauf nutzte Firebase CLI 13.35.1, Firestore-Emulator 1.19.8 und
-Java 17.0.20. Die Repository-Anleitung verlangt Java 21; dieser Lauf ist daher
-kein Nachweis unter exakt der dort empfohlenen Javaumgebung. Für F-04 ist eine
-Wiederholung in der vorgesehenen Umgebung Bestandteil der Ursachenprüfung.
-
-## Reproduktionsumgebung
-
-Linux, Python 3.12.14, Node 24.19.0, npm 11.9.0. Die Pythonumgebung wurde aus
-`requirements-e2e.txt` und `benchmark/requirements-benchmark.txt` aufgebaut;
-JavaScriptabhängigkeiten aus dem Lockfile mit `npm ci --ignore-scripts`.
-Ein gebautes Frontend lag für die quell-/assetbezogenen Prüfungen vor.
-Relevante Paketversionen und Befehle stehen in [execution.json](execution.json).
-
-Die reguläre Suite wurde mit `UNIT_TEST_MODE=1` und dem expliziten Dummywert
-`OPENROUTER_API_KEY=audit-placeholder-not-a-real-key` ausgeführt. Ein erster
-Diagnoselauf ohne diesen Wert, ohne Benchmarkpakete und mit flacher Githistorie
-hatte zusätzliche Fehler. Nach Installation der Benchmarkpakete, vollständigem
-Git-Fetch und Dummykey blieb F-01 übrig. Es wurden dafür keine Test- oder
-Produktdateien geändert.
-
-Das zeigt auch eine spätere Auditfrage zur Testisolation: Mehrere Endpointtests
-benötigen diesen Umgebungswert trotz ersetzter Provider. Der Asset-Cachevertrag
-benötigt verlässliche Githistorie. Solche Voraussetzungen müssen im Folgeauftrag
-explizit abgesichert oder korrekt dokumentiert werden.
-
-Für Emulatorprüfungen wurden `E2E_TEST_MODE=1`, `RUN_E2E=1`,
-`FIRESTORE_EMULATOR_HOST=127.0.0.1:8085` und ausschließlich das Projekt
-`demo-consensio-e2e` verwendet. `GOOGLE_APPLICATION_CREDENTIALS` wurde entfernt.
-Emulator und Pytest liefen als Kindprozesse desselben lokalen Aufrufs. Ein
-vorheriger Versuch in getrennten Ausführungsumgebungen wurde ohne verwertbares
-Testergebnis beendet und wird nicht als Testfehler gezählt.
-
-## Grenzen der Bestandsaufnahme
-
-- Es wurden keine instrumentierte Zeilen-/Branch-Coverage, Mutationstests,
-  Lasttests oder realen Providerqualitätsmessungen ausgeführt.
-- Source-Contract-Tests werden im Katalog nach tatsächlicher Arbeitsweise
-  beschrieben. Der vorhandene Pytest-Marker allein erfasst nicht zuverlässig
-  jede statische Frontendprüfung.
-- Ein Test kann eine Fake-Implementierung stark absichern und trotzdem den
-  realen Adapter oder die Integration offenlassen. Die Dateieinträge benennen
-  diese Grenzen; die globale Gegenprüfung folgt erst im nächsten Auftrag.
-- Die Beschreibungen fassen Assertions zusammen. Sie ersetzen weder die
-  Produktanforderungen noch das erneute Lesen des Codes bei Änderungen.
-
-## Dokumentationsabweichungen im Ausgangsstand
-
-Der einleitende Altkommentar von [test_smoke.py](../../tests/e2e/test_smoke.py)
-nennt unter anderem Anhänge und Followups als nicht abgedeckt. In derselben
-Datei existieren inzwischen entsprechende Tests. Der Katalog folgt deren
-tatsächlichem Inhalt.
-
-Der CI-Abschnitt von `docs/testing.md` behauptete, es gebe keine Test-CI.
-Tatsächlich führt [publisher-tests.yml](../../.github/workflows/publisher-tests.yml)
-die Standalone-Publishertests bei Push auf main, PR und manueller Auslösung aus;
-[publish-consensus.yml](../../.github/workflows/publish-consensus.yml) führt
-dieselben Tests vor dem Publisher aus. Dieser Widerspruch wurde bei der
-Verlinkung des Katalogs korrigiert. Die Publisherprüfungen sind bereits im
-regulären Dateiinventar enthalten und werden nicht doppelt gezählt.
+Kein neuer Branch-Coveragelauf, keine neuen Mutationen, kein Live-OAuth,
+keine produktiven Modelle/Mail-/Telegram-/Cloudtests. Die historischen
+Emulatorfehler F-02/F-03 und instabilen Reports F-04 wurden nicht neu ausgeführt.
+Die historischen Coveragewerte dürfen nicht auf den heutigen Code übertragen
+werden. Neue Defizite und Umsetzungsaufträge stehen in
+[product/gaps.md](product/gaps.md), insbesondere G-043–G-046.

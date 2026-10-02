@@ -5166,6 +5166,15 @@ Pages-/Watch-Tabs nicht. `/admin/topics` redirectet auf diesen Tab.
 
 ## 7. Tests, Smoke-Checks & lokale Befehle
 
+**Inventar/Laufstand 02.10.2026:** 254 Dateien, 3.068 statische Definitionen,
+4.053 Runnerfälle. Python: 3.078 bestanden/3 fehlgeschlagen; JavaScript:
+664 bestanden; E2E: 219 bestanden/30 fehlgeschlagen/4 Setupfehler/55 nicht
+ausgeführt. Buildcheck bestanden. Vollständiger [Testkatalog](test-coverage-map.md),
+[Befunde](test-coverage/findings.md) und [Produktmatrix](test-coverage/product/README.md).
+Neue Bereiche umfassen Google/Kalender/Gmail, private Dateien/Dokumentversionen,
+gemeinsames Tokenkonto, Antwortreceipts und Watch-Evidenz/Outbox. Historische
+Coveragewerte von 26.09.2026 sind keine Messung des aktuellen Codes.
+
 - **Windows-Einstieg:** `dev.ps1 check frontend|backend|browser` koordiniert
   die vorhandenen npm-/Pytest-Befehle; `-TestPath` begrenzt den Lauf auf eine
   Datei oder ein Verzeichnis der gewählten Suite. Frontend prüft zusätzlich
@@ -5181,7 +5190,7 @@ Pages-/Watch-Tabs nicht. `/admin/topics` redirectet auf diesen Tab.
   ```
   Reine String-/Quelltextverträge sind mit `source_contract` gekennzeichnet und
   laufen weiterhin mit; sie gelten ausdrücklich nicht als Verhaltensabdeckung.
-  Verifizierte Baseline am 2026-08-17: **1317 passed, 9 warnings**.
+  Aktuelle Ergebnisse und Fehler stehen im oben verlinkten Laufbericht.
 - **JS-Verhaltenstests** (`tests/js/`, Vitest + jsdom):
   ```powershell
   npm test
@@ -5229,10 +5238,10 @@ Pages-/Watch-Tabs nicht. `/admin/topics` redirectet auf diesen Tab.
   2026-08-09: **39 passed, 1 warning**. Der writerfreie Phase-4-Browserlauf
   wurde nach Phase 6 erneut mit **8 passed, 1 warning** verifiziert. Details in
   `tests/e2e/README.md`.
-- **Keine CI für Tests**: `.github/workflows/tests.yml` ist am 2026-08-31
-  entfernt worden, die Suite läuft nur lokal. Die verbliebenen Workflows
-  (`publish-consensus.yml`, `restart-render.yml`) sind Betriebs-Automationen,
-  keine Tests. Befehle und Ausschlüsse stehen in `docs/testing.md`.
+- **Keine allgemeine Regression-CI**: `.github/workflows/tests.yml` fehlt.
+  `publisher-tests.yml` führt jedoch Standalone-Publishertests bei Push/PR/manuell
+  aus; `publish-consensus.yml` prüft sie vor dem Publisherlauf. Das bestätigt
+  nicht die gesamte Python-/JS-/E2E-Suite. Befehle: `docs/testing.md`.
 - **Frontend darüber hinaus manuell.** Nach JS-Änderungen
   an nicht abgedeckten Flows (Resolve, Share, Attachments, Follow-up,
   Bookmarks, Agent Mode, Demo, Mobile) die manuelle

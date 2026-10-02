@@ -1,0 +1,5 @@
+# Canonical audit data and normalized local test evidence.
+!inventory.json
+!execution.json
+!execution-2026-09-26.json
+!evidence/*.json

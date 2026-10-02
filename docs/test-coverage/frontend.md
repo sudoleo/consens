@@ -1,71 +1,86 @@
 # JavaScript-Suite: Abdeckung pro Testdatei
 
-Stand: **2026-09-26**, Quellstand `145db25bfe029ff7f50cd77595bd6b9e043c1a2f`. [Methodik und Gesamtbefund](../test-coverage-map.md).
+Stand: **2026-10-02**, Quellstand `2860844af9dcba2087551af1697408e87e5fe928`. [Methodik und Gesamtbefund](../test-coverage-map.md).
 
-**57 Dateien · 439 statische Testdefinitionen · 515 Runner-Fälle.**
+**72 Dateien · 556 statische Testdefinitionen · 664 Runner-Fälle.**
 
-„Geprüftes Verhalten“ beschreibt die vorhandenen Assertions. Der Laufstatus steht separat: bei Fehlern ist der beschriebene Vertrag nicht als bestanden belegt. Prüfaufträge sind offene Fragen für den Folgeaudit, keine pauschal festgestellten Lücken der gesamten Suite.
+„Geprüftes Verhalten“ beschreibt die vorhandenen Assertions. Der Laufstatus steht separat: bei Fehlern ist der beschriebene Vertrag nicht als bestanden belegt. Prüfaufträge sind offene Fragen, keine pauschal festgestellten Lücken der gesamten Suite. Aktuelle Befundbewertungen stehen im [Produktabgleich](product/README.md).
 
-Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Ausführungsabdeckung. Indirekte Abhängigkeiten über Fixtures/Helpers und dynamisch zusammengesetzte Pfade können fehlen. Das [JSON-Inventar](inventory.json) enthält jede Definition mit Zeilen, Assertion-Fundstellen und jeden expandierten Runner-Fall.
+Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Ausführungsabdeckung. Indirekte Abhängigkeiten über Fixtures/Helpers und dynamisch zusammengesetzte Pfade können fehlen. Das [JSON-Inventar](inventory.json) enthält jede Definition mit Zeilen, Assertion-Fundstellen und jeden expandierten Runner-Fall. Datum, Umgebung und Grenzen stehen im [Laufbericht](findings.md).
 
-| Datei | Definitionen | Runner-Fälle | Primärlauf |
+| Datei | Definitionen | Runner-Fälle | Primärlauf 2026-10-02 |
 |---|---:|---:|---|
 | [account-tier-mark.test.mjs](#account-tier-mark-test-mjs) | 5 | 5 | 5 bestanden |
 | [admin-agent-budget.test.mjs](#admin-agent-budget-test-mjs) | 2 | 2 | 2 bestanden |
 | [admin-prompt-config.test.mjs](#admin-prompt-config-test-mjs) | 7 | 10 | 10 bestanden |
 | [admin-reasoning-policy.test.mjs](#admin-reasoning-policy-test-mjs) | 2 | 2 | 2 bestanden |
 | [admin-source-model.test.mjs](#admin-source-model-test-mjs) | 5 | 5 | 5 bestanden |
+| [admin-topic-editor.test.mjs](#admin-topic-editor-test-mjs) | 4 | 4 | 4 bestanden |
 | [admin-watch-effective-run.test.mjs](#admin-watch-effective-run-test-mjs) | 4 | 4 | 4 bestanden |
 | [agent-answer-actions.test.mjs](#agent-answer-actions-test-mjs) | 4 | 4 | 4 bestanden |
-| [agent-chat.test.mjs](#agent-chat-test-mjs) | 51 | 61 | 61 bestanden |
-| [agent-citations.test.mjs](#agent-citations-test-mjs) | 5 | 5 | 5 bestanden |
-| [agent-delegation.test.mjs](#agent-delegation-test-mjs) | 16 | 16 | 16 bestanden |
-| [agent-mode-projection.test.mjs](#agent-mode-projection-test-mjs) | 9 | 11 | 11 bestanden |
-| [agent-review.test.mjs](#agent-review-test-mjs) | 10 | 12 | 12 bestanden |
+| [agent-chat.test.mjs](#agent-chat-test-mjs) | 64 | 74 | 74 bestanden |
+| [agent-citations.test.mjs](#agent-citations-test-mjs) | 9 | 9 | 9 bestanden |
+| [agent-delegation.test.mjs](#agent-delegation-test-mjs) | 24 | 24 | 24 bestanden |
+| [agent-google.test.mjs](#agent-google-test-mjs) | 10 | 10 | 10 bestanden |
+| [agent-mode-projection.test.mjs](#agent-mode-projection-test-mjs) | 9 | 10 | 10 bestanden |
+| [agent-preferences.test.mjs](#agent-preferences-test-mjs) | 2 | 2 | 2 bestanden |
+| [agent-review.test.mjs](#agent-review-test-mjs) | 19 | 23 | 23 bestanden |
+| [agent-workspace.test.mjs](#agent-workspace-test-mjs) | 11 | 11 | 11 bestanden |
 | [app-state.test.mjs](#app-state-test-mjs) | 8 | 8 | 8 bestanden |
 | [attachment-compression.test.mjs](#attachment-compression-test-mjs) | 5 | 5 | 5 bestanden |
+| [attachment-draft-generation.test.mjs](#attachment-draft-generation-test-mjs) | 5 | 5 | 5 bestanden |
 | [bookmark-attachments.test.mjs](#bookmark-attachments-test-mjs) | 6 | 6 | 6 bestanden |
 | [bookmark-pending-state.test.mjs](#bookmark-pending-state-test-mjs) | 4 | 4 | 4 bestanden |
 | [bookmark-source-check.test.mjs](#bookmark-source-check-test-mjs) | 2 | 2 | 2 bestanden |
 | [bookmark-write-queue.test.mjs](#bookmark-write-queue-test-mjs) | 3 | 3 | 3 bestanden |
 | [chat-scroll.test.mjs](#chat-scroll-test-mjs) | 10 | 12 | 12 bestanden |
 | [claim-coverage-states.test.mjs](#claim-coverage-states-test-mjs) | 9 | 9 | 9 bestanden |
-| [composer-attachments.test.mjs](#composer-attachments-test-mjs) | 3 | 3 | 3 bestanden |
+| [claim-mark-joins.test.mjs](#claim-mark-joins-test-mjs) | 1 | 1 | 1 bestanden |
+| [composer-attachments.test.mjs](#composer-attachments-test-mjs) | 7 | 7 | 7 bestanden |
 | [composer-quote.test.mjs](#composer-quote-test-mjs) | 11 | 11 | 11 bestanden |
-| [consensus-anchor.test.mjs](#consensus-anchor-test-mjs) | 20 | 24 | 24 bestanden |
+| [consensus-anchor.test.mjs](#consensus-anchor-test-mjs) | 21 | 25 | 25 bestanden |
 | [consensus-coverage-verdict.test.mjs](#consensus-coverage-verdict-test-mjs) | 3 | 3 | 3 bestanden |
 | [consensus-marker-visibility.test.mjs](#consensus-marker-visibility-test-mjs) | 10 | 14 | 14 bestanden |
 | [consensus-recovery.test.mjs](#consensus-recovery-test-mjs) | 6 | 6 | 6 bestanden |
-| [contradiction-source-verification.test.mjs](#contradiction-source-verification-test-mjs) | 32 | 52 | 52 bestanden |
+| [contradiction-source-verification.test.mjs](#contradiction-source-verification-test-mjs) | 33 | 53 | 53 bestanden |
 | [demo-claim-coverage.test.mjs](#demo-claim-coverage-test-mjs) | 2 | 2 | 2 bestanden |
+| [dompurify-vendor.test.mjs](#dompurify-vendor-test-mjs) | 4 | 26 | 26 bestanden |
 | [error-reporter.test.mjs](#error-reporter-test-mjs) | 13 | 15 | 15 bestanden |
 | [frontend-output.test.mjs](#frontend-output-test-mjs) | 4 | 4 | 4 bestanden |
 | [judge-stream-events.test.mjs](#judge-stream-events-test-mjs) | 1 | 1 | 1 bestanden |
+| [markdown-remote-media.test.mjs](#markdown-remote-media-test-mjs) | 3 | 3 | 3 bestanden |
+| [markdown-stream-incremental.test.mjs](#markdown-stream-incremental-test-mjs) | 4 | 7 | 7 bestanden |
 | [markdown-table.test.mjs](#markdown-table-test-mjs) | 2 | 2 | 2 bestanden |
 | [math-render.test.mjs](#math-render-test-mjs) | 19 | 26 | 26 bestanden |
+| [memory-edit-auth.test.mjs](#memory-edit-auth-test-mjs) | 5 | 5 | 5 bestanden |
+| [memory-edit-sources.test.mjs](#memory-edit-sources-test-mjs) | 1 | 2 | 2 bestanden |
 | [mobile-header.test.mjs](#mobile-header-test-mjs) | 3 | 3 | 3 bestanden |
-| [model-answer-reader.test.mjs](#model-answer-reader-test-mjs) | 19 | 22 | 22 bestanden |
+| [model-answer-reader.test.mjs](#model-answer-reader-test-mjs) | 21 | 24 | 24 bestanden |
 | [model-attachment-capability.test.mjs](#model-attachment-capability-test-mjs) | 2 | 2 | 2 bestanden |
 | [model-family-cap.test.mjs](#model-family-cap-test-mjs) | 4 | 4 | 4 bestanden |
 | [model-pulse.test.mjs](#model-pulse-test-mjs) | 3 | 3 | 3 bestanden |
-| [multi-run-view.test.mjs](#multi-run-view-test-mjs) | 9 | 9 | 9 bestanden |
-| [plus-tier-gates.test.mjs](#plus-tier-gates-test-mjs) | 7 | 8 | 8 bestanden |
+| [multi-run-view.test.mjs](#multi-run-view-test-mjs) | 10 | 10 | 10 bestanden |
+| [plus-tier-gates.test.mjs](#plus-tier-gates-test-mjs) | 7 | 7 | 7 bestanden |
 | [request-deadline.test.mjs](#request-deadline-test-mjs) | 3 | 3 | 3 bestanden |
-| [run-progress-animation.test.mjs](#run-progress-animation-test-mjs) | 3 | 3 | 3 bestanden |
+| [result-integrity.test.mjs](#result-integrity-test-mjs) | 2 | 2 | 2 bestanden |
+| [run-mode.test.mjs](#run-mode-test-mjs) | 4 | 8 | 8 bestanden |
 | [run-progress-scope.test.mjs](#run-progress-scope-test-mjs) | 9 | 11 | 11 bestanden |
-| [run-registry.test.mjs](#run-registry-test-mjs) | 10 | 10 | 10 bestanden |
+| [run-registry.test.mjs](#run-registry-test-mjs) | 9 | 9 | 9 bestanden |
+| [send-button.test.mjs](#send-button-test-mjs) | 1 | 1 | 1 bestanden |
 | [seo-admin-alerts.test.mjs](#seo-admin-alerts-test-mjs) | 10 | 10 | 10 bestanden |
-| [sidebar-quota.test.mjs](#sidebar-quota-test-mjs) | 1 | 1 | 1 bestanden |
+| [sidebar-quota.test.mjs](#sidebar-quota-test-mjs) | 4 | 4 | 4 bestanden |
 | [skeleton-lifecycle.test.mjs](#skeleton-lifecycle-test-mjs) | 3 | 5 | 5 bestanden |
 | [source-catalog-refs.test.mjs](#source-catalog-refs-test-mjs) | 4 | 4 | 4 bestanden |
-| [source-teaser-check.test.mjs](#source-teaser-check-test-mjs) | 4 | 9 | 9 bestanden |
+| [source-teaser-check.test.mjs](#source-teaser-check-test-mjs) | 5 | 10 | 10 bestanden |
+| [source-url-identity.test.mjs](#source-url-identity-test-mjs) | 3 | 3 | 3 bestanden |
 | [source-verification-watch.test.mjs](#source-verification-watch-test-mjs) | 12 | 13 | 13 bestanden |
 | [source-verification.test.mjs](#source-verification-test-mjs) | 21 | 21 | 21 bestanden |
 | [sse-completion.test.mjs](#sse-completion-test-mjs) | 5 | 11 | 11 bestanden |
-| [stored-turn-markers.test.mjs](#stored-turn-markers-test-mjs) | 4 | 4 | 4 bestanden |
+| [stored-turn-markers.test.mjs](#stored-turn-markers-test-mjs) | 7 | 7 | 7 bestanden |
 | [thread-question-disclosure.test.mjs](#thread-question-disclosure-test-mjs) | 2 | 2 | 2 bestanden |
-| [user-memory.test.mjs](#user-memory-test-mjs) | 3 | 3 | 3 bestanden |
-| [watch-drift-state.test.mjs](#watch-drift-state-test-mjs) | 2 | 2 | 2 bestanden |
+| [topic-page.test.mjs](#topic-page-test-mjs) | 5 | 7 | 7 bestanden |
+| [user-memory.test.mjs](#user-memory-test-mjs) | 6 | 6 | 6 bestanden |
+| [watch-dashboard-state.test.mjs](#watch-dashboard-state-test-mjs) | 5 | 5 | 5 bestanden |
 | [watch-feature-nudge.test.mjs](#watch-feature-nudge-test-mjs) | 3 | 3 | 3 bestanden |
 
 <a id="account-tier-mark-test-mjs"></a>
@@ -109,7 +124,7 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 **Lauf:** 2 bestanden.
 
-**Geprüftes Verhalten:** Budgetänderung mit Revision getrennt vom globalen Reset; Reset erhält gespeichertes Limit, verhindert doppelte Anfragen und sperrt während Bearbeitung; Konflikt erhält Entwurf; alte Kontenantwort wird verworfen.
+**Geprüftes Verhalten:** Eine Tabellenzeile je Tarif; Tageslimits und Modusschätzungen getrennt vom globalen Reset speichern.
 
 **Grenzen und Doubles:** Echtes Admin-Template und admin-agent-budget-Modul mit entfernter Export-Syntax; Request und Bestätigung simuliert.
 
@@ -122,8 +137,8 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 <details>
 <summary>2 Testdefinitionen und ihre Quellstellen</summary>
 
-- [saves the limit separately from the revision-guarded global reset](../../tests/js/admin-agent-budget.test.mjs#L15) (Zeile 15)
-- [preserves the draft on failure and ignores an old account response](../../tests/js/admin-agent-budget.test.mjs#L37) (Zeile 37)
+- [renders one row per tier and saves limits and run estimates apart from the global reset](../../tests/js/admin-agent-budget.test.mjs#L22) (Zeile 22)
+- [preserves the draft on failure and ignores an old account response](../../tests/js/admin-agent-budget.test.mjs#L54) (Zeile 54)
 
 </details>
 
@@ -219,6 +234,34 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 </details>
 
+<a id="admin-topic-editor-test-mjs"></a>
+
+## admin-topic-editor.test.mjs
+
+**Quelle:** [tests/js/admin-topic-editor.test.mjs](../../tests/js/admin-topic-editor.test.mjs) · **Bereiche:** Admin, Topics.
+
+**Ebene:** jsdom-Editor mit kontrollierten Fetchantworten.
+
+**Lauf:** 4 bestanden.
+
+**Geprüftes Verhalten:** Langsame/falsch zugeordnete Topicantworten dürfen nicht unter neuer ID gespeichert werden; fehlgeschlagener Load sperrt Save, Wechsel invalidiert alten Formularzustand.
+
+**Grenzen und Doubles:** Kein echter Adminrouter oder Browserlayout.
+
+**Prüfauftrag für den Folgeaudit:** Die benannten Mock-/Integrationsgrenzen am realen Adapter prüfen; Zuordnung und offene Aufgaben stehen in der Produktmatrix.
+
+**Direkte Codeverweise:** [static/js/admin.js](../../static/js/admin.js), [templates/admin.html](../../templates/admin.html).
+
+<details>
+<summary>4 Testdefinitionen und ihre Quellstellen</summary>
+
+- [never saves the A form under B after B failed to load](../../tests/js/admin-topic-editor.test.mjs#L98) (Zeile 98)
+- [drops a slow A answer that arrives after B was selected](../../tests/js/admin-topic-editor.test.mjs#L114) (Zeile 114)
+- [an account change invalidates the editor and any open request](../../tests/js/admin-topic-editor.test.mjs#L133) (Zeile 133)
+- [keeps saving a new Topic and a loaded Topic working](../../tests/js/admin-topic-editor.test.mjs#L146) (Zeile 146)
+
+</details>
+
 <a id="admin-watch-effective-run-test-mjs"></a>
 
 ## admin-watch-effective-run.test.mjs
@@ -287,72 +330,85 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 **Ebene:** JavaScript-Modulintegration mit jsdom und Transport-Doubles.
 
-**Lauf:** 61 bestanden.
+**Lauf:** 74 bestanden.
 
-**Geprüftes Verhalten:** Katalogladen/-fehler, Verfügbarkeit und zwei bis sechs Vergleichsmodelle vor Versand validiert; Modellpicker, Tastatur, entfernte gespeicherte Modelle und kontogebundene Einstellungen. Unversandten Entwurf/Zitat nur bei gleichem Eigentümer und leerem Composer wiederherstellen; Abbruch während Chatanlage. Kontingent nach Resetepoche/Tag/Revision, Fokusrefresh, Hänger und alte/fremde Antworten; Verbindungsstille erhält Teilantwort und Turn. Recovery mit stabiler Request-ID, ohne neuen Lauf, mit Duplikatschutz, Statusprüfung und Übernahme gespeicherter Teilantwort/fehlgeschlagenem Review. Quellenpräferenz pro Lauf eingefroren; Aktivität, Reasoning und Antwort getrennt; Toolstatus, begrenzte Statushistorie, Serverdauer und geschätzte/gemessene Kosten. Hintergrundabschluss verändert sichtbare Gesprächsbasis nicht; Konten-/Logoutgrenzen, Bookmarkrestore, Agentendpoint, Anhangsperre, sichere bestätigte Quellen, unbekannte Usage und Bereinigung von Zwischenantworten.
+**Geprüftes Verhalten:** Katalogladen/-fehler, Verfügbarkeit und zwei bis sechs Vergleichsmodelle vor Versand validiert; Modellpicker, Tastatur, entfernte gespeicherte Modelle und kontogebundene Einstellungen. Unversandten Entwurf/Zitat nur bei gleichem Eigentümer und leerem Composer wiederherstellen; Abbruch während Chatanlage. Kontingent nach Resetepoche/Tag/Revision, Fokusrefresh, Hänger und alte/fremde Antworten; Verbindungsstille erhält Teilantwort und Turn. Recovery mit stabiler Request-ID, ohne neuen Lauf, mit Duplikatschutz, Statusprüfung und Übernahme gespeicherter Teilantwort/fehlgeschlagenem Review. Quellenpräferenz pro Lauf eingefroren; Aktivität, Reasoning und Antwort getrennt; Toolstatus, begrenzte Statushistorie, Serverdauer und geschätzte/gemessene Kosten. Hintergrundabschluss verändert sichtbare Gesprächsbasis nicht; Konten-/Logoutgrenzen, Bookmarkrestore, Agentendpoint, Anhangsperre, sichere bestätigte Quellen, unbekannte Usage und Bereinigung von Zwischenantworten. Aktualisierung 02.10.2026: Uploads vor Start, IDs für Recovery, resources-Events gezielt verteilen, inkrementelles Rendern ohne Composer-Neuaufbau, Sendeblocker für Google und Reviewhinweise. Ein Modellpicker verbindet Chat-/Vergleichsmodelle; vollständige geprüfte Antwort bleibt trotz späterem Runfehler vollständig.
 
 **Grenzen und Doubles:** Echte Registry-, Picker-, Deadline-, Aktivitäts- und Chatmodule; Fetch/Auth/SSE-Anbindung sowie Markdown-/Followup-/Bookmarkhelfer simuliert. Keine echte Modellantwort, HTTP-Verbindung oder Persistenz.
 
 **Prüfauftrag für den Folgeaudit:** Dieselben Abbruch-/Recovery- und Kontenwechselverträge über Backend, Bookmarkpersistenz und Browser zusammenführen.
 
-**Direkte Codeverweise:** [static/js/agent-activity.js](../../static/js/agent-activity.js), [static/js/agent-chat.js](../../static/js/agent-chat.js), [static/js/model-picker.js](../../static/js/model-picker.js), [static/js/request-deadline.js](../../static/js/request-deadline.js), [static/js/run-registry.js](../../static/js/run-registry.js).
+**Direkte Codeverweise:** [static/js/agent-activity.js](../../static/js/agent-activity.js), [static/js/agent-chat.js](../../static/js/agent-chat.js), [static/js/model-picker.js](../../static/js/model-picker.js), [static/js/request-deadline.js](../../static/js/request-deadline.js), [static/js/run-mode.js](../../static/js/run-mode.js), [static/js/run-registry.js](../../static/js/run-registry.js), [static/js/token-budget.js](../../static/js/token-budget.js).
 
 **Direkte Testhelfer:** [tests/js/helpers/appWindow.mjs](../../tests/js/helpers/appWindow.mjs).
 
 <details>
-<summary>51 Testdefinitionen und ihre Quellstellen</summary>
+<summary>64 Testdefinitionen und ihre Quellstellen</summary>
 
-- [blocks sending during catalog loading/failure and when every model is unavailable](../../tests/js/agent-chat.test.mjs#L55) (Zeile 55)
-- [restores an unsent draft without replacing newer composer ownership: %s](../../tests/js/agent-chat.test.mjs#L75) (Zeile 75)
-- [does not restore an already dispatched request as an unsent draft](../../tests/js/agent-chat.test.mjs#L98) (Zeile 98)
-- [validates %i comparison models before clearing the draft or creating a chat](../../tests/js/agent-chat.test.mjs#L109) (Zeile 109)
-- [keeps unresolved admin models visible and disabled, and repairs a saved unavailable selection](../../tests/js/agent-chat.test.mjs#L133) (Zeile 133)
-- [groups chat models by provider, supports keyboard navigation and keeps reasoning tied to the chosen model](../../tests/js/agent-chat.test.mjs#L153) (Zeile 153)
-- [orders allowance snapshots by reset, UTC day and ledger revision despite server clock skew](../../tests/js/agent-chat.test.mjs#L196) (Zeile 196)
-- [refreshes idle allowance on focus and marks failed refreshes as stale](../../tests/js/agent-chat.test.mjs#L215) (Zeile 215)
-- [recovers the model picker and budget refresh after hung control requests](../../tests/js/agent-chat.test.mjs#L230) (Zeile 230)
-- [ends a silent Agent connection with recoverable partial text and a known turn identity](../../tests/js/agent-chat.test.mjs#L255) (Zeile 255)
-- [explains allowance waiting outside the collapsed activity details](../../tests/js/agent-chat.test.mjs#L279) (Zeile 279)
-- [keeps the newest status and usage after long runs exceed the activity window](../../tests/js/agent-chat.test.mjs#L289) (Zeile 289)
-- [freezes source-check permission for sending and recovery while the next-message preference changes](../../tests/js/agent-chat.test.mjs#L301) (Zeile 301)
-- [updates the allowance on terminal errors and ignores older or foreign snapshots](../../tests/js/agent-chat.test.mjs#L322) (Zeile 322)
-- [refreshes the allowance after a disconnected stream](../../tests/js/agent-chat.test.mjs#L343) (Zeile 343)
-- [leaves tool mentions plain and highlights only confirmed running calls](../../tests/js/agent-chat.test.mjs#L356) (Zeile 356)
-- [keeps a review stage in one live row when tool events arrive](../../tests/js/agent-chat.test.mjs#L380) (Zeile 380)
-- [commits a draft model before an input-triggered projection can restore the old model](../../tests/js/agent-chat.test.mjs#L396) (Zeile 396)
-- [keeps a running chat's model independent of an earlier draft selection](../../tests/js/agent-chat.test.mjs#L413) (Zeile 413)
-- [shows provider costs separately from estimates and removes status dashes](../../tests/js/agent-chat.test.mjs#L426) (Zeile 426)
-- [keeps the selected conversation when a background follow-up ends: %s](../../tests/js/agent-chat.test.mjs#L439) (Zeile 439)
-- [recovers a first message without borrowing another conversation's history](../../tests/js/agent-chat.test.mjs#L464) (Zeile 464)
-- [does not start a model request after cancellation during chat creation](../../tests/js/agent-chat.test.mjs#L482) (Zeile 482)
-- [reconciles a removed saved model with the displayed choice before sending](../../tests/js/agent-chat.test.mjs#L498) (Zeile 498)
-- [uses the same keyboard picker for effort and returns focus after choosing](../../tests/js/agent-chat.test.mjs#L519) (Zeile 519)
-- [interleaves confirmed steps with complete localized updates and preserves the finished history](../../tests/js/agent-chat.test.mjs#L544) (Zeile 544)
-- [shows useful run details when opened during thinking, before any progress or tool event](../../tests/js/agent-chat.test.mjs#L584) (Zeile 584)
-- [ticks runtime through waiting, freezes at stop, and disposes the live timer](../../tests/js/agent-chat.test.mjs#L599) (Zeile 599)
-- [restores saved runtime from terminal timestamps rather than the time since creation](../../tests/js/agent-chat.test.mjs#L630) (Zeile 630)
-- [retains live insights across a partial final snapshot and uses saved tool outcomes](../../tests/js/agent-chat.test.mjs#L644) (Zeile 644)
-- [retains progress paragraphs and confirmed steps when the auxiliary status window rotates](../../tests/js/agent-chat.test.mjs#L668) (Zeile 668)
-- [collapses finished reasoning, preserves explicit disclosure, and restores stopped status](../../tests/js/agent-chat.test.mjs#L683) (Zeile 683)
-- [requires the current account's entitlement and retains no cross-account access](../../tests/js/agent-chat.test.mjs#L707) (Zeile 707)
-- [calls only the agent endpoint and continues the same persisted chat](../../tests/js/agent-chat.test.mjs#L721) (Zeile 721)
-- [rejects attachments before any network call](../../tests/js/agent-chat.test.mjs#L747) (Zeile 747)
-- [restores an agent bookmark independently of the global consensus preference](../../tests/js/agent-chat.test.mjs#L759) (Zeile 759)
-- [ignores late completion after logout](../../tests/js/agent-chat.test.mjs#L774) (Zeile 774)
-- [recovers with the same identity and an explicit no-new-call flag](../../tests/js/agent-chat.test.mjs#L791) (Zeile 791)
-- [adopts a server-saved partial answer and bookmark while preserving its failed review](../../tests/js/agent-chat.test.mjs#L810) (Zeile 810)
-- [offers a status check rather than claiming an unfinished server run is already saved](../../tests/js/agent-chat.test.mjs#L830) (Zeile 830)
-- [does not offer recovery without a saved answer and deduplicates concurrent recovery clicks](../../tests/js/agent-chat.test.mjs#L844) (Zeile 844)
-- [keeps a new budget generation when an older worker sends a later snapshot](../../tests/js/agent-chat.test.mjs#L871) (Zeile 871)
-- [rebuilds its history after displaying another conversation](../../tests/js/agent-chat.test.mjs#L880) (Zeile 880)
-- [reuses the picker, sends supported effort, and leaves consensus preferences alone](../../tests/js/agent-chat.test.mjs#L899) (Zeile 899)
-- [streams reasoning separately, preserves disclosure, and ignores deltas after stop](../../tests/js/agent-chat.test.mjs#L921) (Zeile 921)
-- [restores reasoning and settings from a saved turn without treating reasoning as HTML](../../tests/js/agent-chat.test.mjs#L963) (Zeile 963)
-- [repairs a removed history model for the next message without changing its saved label](../../tests/js/agent-chat.test.mjs#L979) (Zeile 979)
-- [keeps the actual failure reason visible when reopening an incomplete answer](../../tests/js/agent-chat.test.mjs#L997) (Zeile 997)
-- [hides legacy unconfirmed searches (%s) while preserving reasoning and measured costs](../../tests/js/agent-chat.test.mjs#L1011) (Zeile 1011)
-- [renders confirmed native sources, partial usage and safe links from history](../../tests/js/agent-chat.test.mjs#L1034) (Zeile 1034)
-- [keeps tool states honest and clears intermediate answer text for a new step](../../tests/js/agent-chat.test.mjs#L1057) (Zeile 1057)
+- [blocks sending during catalog loading/failure and when every model is unavailable](../../tests/js/agent-chat.test.mjs#L54) (Zeile 54)
+- [restores an unsent draft without replacing newer composer ownership: %s](../../tests/js/agent-chat.test.mjs#L73) (Zeile 73)
+- [does not restore an already dispatched request as an unsent draft](../../tests/js/agent-chat.test.mjs#L96) (Zeile 96)
+- [validates %i comparison models before clearing the draft or creating a chat](../../tests/js/agent-chat.test.mjs#L107) (Zeile 107)
+- [keeps unresolved admin models visible and disabled, and repairs a saved unavailable selection](../../tests/js/agent-chat.test.mjs#L131) (Zeile 131)
+- [groups chat models by provider, supports keyboard navigation and keeps reasoning tied to the chosen model](../../tests/js/agent-chat.test.mjs#L151) (Zeile 151)
+- [orders allowance snapshots by reset, UTC day and ledger revision despite server clock skew](../../tests/js/agent-chat.test.mjs#L194) (Zeile 194)
+- [refreshes idle allowance on focus and marks failed refreshes as stale](../../tests/js/agent-chat.test.mjs#L213) (Zeile 213)
+- [recovers the model picker and budget refresh after hung control requests](../../tests/js/agent-chat.test.mjs#L228) (Zeile 228)
+- [ends a silent Agent connection with recoverable partial text and a known turn identity](../../tests/js/agent-chat.test.mjs#L252) (Zeile 252)
+- [explains allowance waiting outside the collapsed activity details](../../tests/js/agent-chat.test.mjs#L276) (Zeile 276)
+- [keeps the newest status and usage after long runs exceed the activity window](../../tests/js/agent-chat.test.mjs#L286) (Zeile 286)
+- [freezes source-check permission for sending and recovery while the next-message preference changes](../../tests/js/agent-chat.test.mjs#L298) (Zeile 298)
+- [updates the allowance on terminal errors and ignores older or foreign snapshots](../../tests/js/agent-chat.test.mjs#L319) (Zeile 319)
+- [refreshes the allowance after a disconnected stream](../../tests/js/agent-chat.test.mjs#L340) (Zeile 340)
+- [leaves tool mentions plain and highlights only confirmed running calls](../../tests/js/agent-chat.test.mjs#L353) (Zeile 353)
+- [keeps a review stage in one live row when tool events arrive](../../tests/js/agent-chat.test.mjs#L377) (Zeile 377)
+- [commits a draft model before an input-triggered projection can restore the old model](../../tests/js/agent-chat.test.mjs#L393) (Zeile 393)
+- [keeps a running chat's model independent of an earlier draft selection](../../tests/js/agent-chat.test.mjs#L410) (Zeile 410)
+- [shows provider costs separately from estimates and removes status dashes](../../tests/js/agent-chat.test.mjs#L423) (Zeile 423)
+- [keeps the selected conversation when a background follow-up ends: %s](../../tests/js/agent-chat.test.mjs#L436) (Zeile 436)
+- [recovers a first message without borrowing another conversation's history](../../tests/js/agent-chat.test.mjs#L461) (Zeile 461)
+- [does not start a model request after cancellation during chat creation](../../tests/js/agent-chat.test.mjs#L479) (Zeile 479)
+- [reconciles a removed saved model with the displayed choice before sending](../../tests/js/agent-chat.test.mjs#L495) (Zeile 495)
+- [uses the same keyboard picker for effort and returns focus after choosing](../../tests/js/agent-chat.test.mjs#L516) (Zeile 516)
+- [interleaves confirmed steps with complete localized updates and preserves the finished history](../../tests/js/agent-chat.test.mjs#L541) (Zeile 541)
+- [reads a complete, checked answer as done even when the run failed afterwards](../../tests/js/agent-chat.test.mjs#L581) (Zeile 581)
+- [names the sources a web search found instead of the bare verb](../../tests/js/agent-chat.test.mjs#L593) (Zeile 593)
+- [does not claim to write the answer while a preamble led into a tool step](../../tests/js/agent-chat.test.mjs#L607) (Zeile 607)
+- [shows useful run details when opened during thinking, before any progress or tool event](../../tests/js/agent-chat.test.mjs#L620) (Zeile 620)
+- [ticks runtime through waiting, freezes at stop, and disposes the live timer](../../tests/js/agent-chat.test.mjs#L635) (Zeile 635)
+- [restores saved runtime from terminal timestamps rather than the time since creation](../../tests/js/agent-chat.test.mjs#L666) (Zeile 666)
+- [retains live insights across a partial final snapshot and uses saved tool outcomes](../../tests/js/agent-chat.test.mjs#L680) (Zeile 680)
+- [retains progress paragraphs and confirmed steps when the auxiliary status window rotates](../../tests/js/agent-chat.test.mjs#L704) (Zeile 704)
+- [collapses finished reasoning, preserves explicit disclosure, and restores stopped status](../../tests/js/agent-chat.test.mjs#L719) (Zeile 719)
+- [requires the current account's entitlement and retains no cross-account access](../../tests/js/agent-chat.test.mjs#L743) (Zeile 743)
+- [calls only the agent endpoint and continues the same persisted chat](../../tests/js/agent-chat.test.mjs#L758) (Zeile 758)
+- [uploads attachments before starting the agent and freezes IDs for recovery](../../tests/js/agent-chat.test.mjs#L786) (Zeile 786)
+- [restores an agent bookmark independently of the global consensus preference](../../tests/js/agent-chat.test.mjs#L802) (Zeile 802)
+- [ignores late completion after logout](../../tests/js/agent-chat.test.mjs#L818) (Zeile 818)
+- [recovers with the same identity and an explicit no-new-call flag](../../tests/js/agent-chat.test.mjs#L835) (Zeile 835)
+- [adopts a server-saved partial answer and bookmark while preserving its failed review](../../tests/js/agent-chat.test.mjs#L854) (Zeile 854)
+- [offers a status check rather than claiming an unfinished server run is already saved](../../tests/js/agent-chat.test.mjs#L874) (Zeile 874)
+- [does not offer recovery without a saved answer and deduplicates concurrent recovery clicks](../../tests/js/agent-chat.test.mjs#L888) (Zeile 888)
+- [keeps a new budget generation when an older worker sends a later snapshot](../../tests/js/agent-chat.test.mjs#L915) (Zeile 915)
+- [rebuilds its history after displaying another conversation](../../tests/js/agent-chat.test.mjs#L924) (Zeile 924)
+- [reuses the picker, sends supported effort, and leaves consensus preferences alone](../../tests/js/agent-chat.test.mjs#L943) (Zeile 943)
+- [streams reasoning separately, preserves disclosure, and ignores deltas after stop](../../tests/js/agent-chat.test.mjs#L965) (Zeile 965)
+- [restores reasoning and settings from a saved turn without treating reasoning as HTML](../../tests/js/agent-chat.test.mjs#L1007) (Zeile 1007)
+- [repairs a removed history model for the next message without changing its saved label](../../tests/js/agent-chat.test.mjs#L1023) (Zeile 1023)
+- [keeps the actual failure reason visible when reopening an incomplete answer](../../tests/js/agent-chat.test.mjs#L1041) (Zeile 1041)
+- [hides legacy unconfirmed searches (%s) while preserving reasoning and measured costs](../../tests/js/agent-chat.test.mjs#L1055) (Zeile 1055)
+- [renders confirmed native sources, partial usage and safe links from history](../../tests/js/agent-chat.test.mjs#L1078) (Zeile 1078)
+- [keeps tool states honest and clears intermediate answer text for a new step](../../tests/js/agent-chat.test.mjs#L1101) (Zeile 1101)
+- [routes resources events to the list they name and refreshes both when unsure](../../tests/js/agent-chat.test.mjs#L1136) (Zeile 1136)
+- [never re-renders the composer shell or the full answer for a streamed chunk](../../tests/js/agent-chat.test.mjs#L1167) (Zeile 1167)
+- [lets the fixed answer shimmer while it is checked and shows its marks as soon as the check ends](../../tests/js/agent-chat.test.mjs#L1208) (Zeile 1208)
+- [restores the draft without a recovery or failed row when the server refuses before starting](../../tests/js/agent-chat.test.mjs#L1246) (Zeile 1246)
+- [explains a token reservation refusal in plain words with next steps](../../tests/js/agent-chat.test.mjs#L1265) (Zeile 1265)
+- [blocks Send with the Google blocker and runs its action](../../tests/js/agent-chat.test.mjs#L1288) (Zeile 1288)
+- [shows a pending-review notice, bookmark dot and tab count after a run](../../tests/js/agent-chat.test.mjs#L1307) (Zeile 1307)
+- [carries both choices in one menu and gives the comparison chip back outside Agent](../../tests/js/agent-chat.test.mjs#L1357) (Zeile 1357)
+- [opens the named level from shortcuts and keeps the comparisons open while the chat model is locked](../../tests/js/agent-chat.test.mjs#L1417) (Zeile 1417)
+- [links once the comparison picker exists, whichever picker comes first](../../tests/js/agent-chat.test.mjs#L1454) (Zeile 1454)
 
 </details>
 
@@ -364,9 +420,9 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 **Ebene:** JavaScript-Modulintegration mit jsdom.
 
-**Lauf:** 5 bestanden.
+**Lauf:** 9 bestanden.
 
-**Geprüftes Verhalten:** URL- und nummerierte Quellenverweise mit Titel, sicheren Linkattributen und ARIA; Deduplizierung, explizite IDs und unveränderte mehrdeutige/fehlende Verweise; Code-/Mathematiknotation bleibt korrekt; nachträgliche Metadaten erhalten Fokus und Turnbindung; Reviewmarker ändern geprüften Markdown-/Versionsstand nicht.
+**Geprüftes Verhalten:** URL- und nummerierte Quellenverweise mit Titel, sicheren Linkattributen und ARIA; Deduplizierung, explizite IDs und unveränderte mehrdeutige/fehlende Verweise; Code-/Mathematiknotation bleibt korrekt; nachträgliche Metadaten erhalten Fokus und Turnbindung; Reviewmarker ändern geprüften Markdown-/Versionsstand nicht. Aktualisierung 02.10.2026: Quellen als Faviconpillen: Paper-URLs, Domainlabels, Gruppen mit +N, zugängliche Vorschau und neutraler Fallback bei fehlerhaftem Favicon.
 
 **Grenzen und Doubles:** Echte sources-, markdown-stream- und agent-review-Skripte sowie marked/DOMPurify; Reviewmarkerhelfer teilweise ersetzt.
 
@@ -377,13 +433,17 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 **Direkte Testhelfer:** [tests/js/helpers/appWindow.mjs](../../tests/js/helpers/appWindow.mjs).
 
 <details>
-<summary>5 Testdefinitionen und ihre Quellstellen</summary>
+<summary>9 Testdefinitionen und ihre Quellstellen</summary>
 
-- [turns parenthesized paper URLs into numbered references with their original titles](../../tests/js/agent-citations.test.mjs#L27) (Zeile 27)
-- [deduplicates repeated URLs and preserves named link formatting, code, math notation and unsafe links](../../tests/js/agent-citations.test.mjs#L44) (Zeile 44)
-- [maps explicit source IDs by identity without turning numeric notation or ambiguous IDs into citations](../../tests/js/agent-citations.test.mjs#L57) (Zeile 57)
-- [reformats streamed text and updates metadata without borrowing another turn or replacing focused references](../../tests/js/agent-citations.test.mjs#L68) (Zeile 68)
-- [applies citations after review markers without changing the checked answer or its version binding](../../tests/js/agent-citations.test.mjs#L85) (Zeile 85)
+- [turns parenthesized paper URLs into source pills with their original titles](../../tests/js/agent-citations.test.mjs#L27) (Zeile 27)
+- [deduplicates repeated URLs and preserves named link formatting, code, math notation and unsafe links](../../tests/js/agent-citations.test.mjs#L46) (Zeile 46)
+- [maps explicit source IDs by identity without turning numeric notation or ambiguous IDs into citations](../../tests/js/agent-citations.test.mjs#L60) (Zeile 60)
+- [reformats streamed text and updates metadata without borrowing another turn or replacing focused references](../../tests/js/agent-citations.test.mjs#L71) (Zeile 71)
+- [applies citations after review markers without changing the checked answer or its version binding](../../tests/js/agent-citations.test.mjs#L88) (Zeile 88)
+- [lets a pill stand in for a link label that only repeats its domain](../../tests/js/agent-citations.test.mjs#L108) (Zeile 108)
+- [collapses adjacent citations into one pill and lists every source in the teaser](../../tests/js/agent-citations.test.mjs#L125) (Zeile 125)
+- [shows only the favicon when the domain is already written before the citation](../../tests/js/agent-citations.test.mjs#L151) (Zeile 151)
+- [replaces a failed favicon with a neutral monogram instead of a broken image](../../tests/js/agent-citations.test.mjs#L164) (Zeile 164)
 
 </details>
 
@@ -395,9 +455,9 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 **Ebene:** JavaScript-Modulintegration mit jsdom und Request-Doubles.
 
-**Lauf:** 16 bestanden.
+**Lauf:** 24 bestanden.
 
-**Geprüftes Verhalten:** Stabile Symbole/Fokus und getrennte gleichnamige Delegationen; monotone, nach Abschluss eingefrorene Dauer; verspätete Konten-/Chatantworten und veraltete Summen verworfen. Zeichen-/Token-/unbekannte Usagezustände; Liveevents reduzieren Polling, Stille aktiviert Fallback, abgeschlossene Delegation startet nicht neu. Judge-Details aus Snapshot, Skeleton/Laden/Cache und sicherer Fehlertext; Kontingent aus Aktivitätsrequest; automatisches erstes Öffnen respektiert späteres Schließen; Wiederherstellung startet keine Modelle.
+**Geprüftes Verhalten:** Stabile Symbole/Fokus und getrennte gleichnamige Delegationen; monotone, nach Abschluss eingefrorene Dauer; verspätete Konten-/Chatantworten und veraltete Summen verworfen. Zeichen-/Token-/unbekannte Usagezustände; Liveevents reduzieren Polling, Stille aktiviert Fallback, abgeschlossene Delegation startet nicht neu. Judge-Details aus Snapshot, Skeleton/Laden/Cache und sicherer Fehlertext; Kontingent aus Aktivitätsrequest; automatisches erstes Öffnen respektiert späteres Schließen; Wiederherstellung startet keine Modelle. Aktualisierung 02.10.2026: Timer endet bei Inaktivität, kein Timer für gespeicherte Turns; mobiles Sheet mit Scrim/Fokusfalle, eine Prüfreihe für Retries/Judges, lesbare unvollständige Modellantworten und stabile Details in einem Scrollbereich.
 
 **Grenzen und Doubles:** Echte Deadline-/Delegationslogik, simulierte Fetch-, Auth- und RunRegistry-Grenzen; kein Provider oder Netzwerk.
 
@@ -408,24 +468,66 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 **Direkte Testhelfer:** [tests/js/helpers/appWindow.mjs](../../tests/js/helpers/appWindow.mjs).
 
 <details>
-<summary>16 Testdefinitionen und ihre Quellstellen</summary>
+<summary>24 Testdefinitionen und ihre Quellstellen</summary>
 
-- [keeps model icons and keyboard focus stable as statuses and same-model calls change](../../tests/js/agent-delegation.test.mjs#L21) (Zeile 21)
-- [uses elapsed server durations with a monotonic clock and freezes terminal or recovered sessions](../../tests/js/agent-delegation.test.mjs#L41) (Zeile 41)
-- [does not replace a newer polled total with a stale run projection](../../tests/js/agent-delegation.test.mjs#L64) (Zeile 64)
-- [discards a pending old session response after the same user signs in again](../../tests/js/agent-delegation.test.mjs#L73) (Zeile 73)
-- [shows live received characters, switches to provider tokens and stops shimmer on completion](../../tests/js/agent-delegation.test.mjs#L87) (Zeile 87)
-- [clears transient counters on stop and turn switches and never animates saved active snapshots](../../tests/js/agent-delegation.test.mjs#L115) (Zeile 115)
-- [shows loading independently for each model and hides it for terminal or paused sessions](../../tests/js/agent-delegation.test.mjs#L131) (Zeile 131)
-- [uses SSE updates without polling, repairs quiet streams, and never revives a completed run](../../tests/js/agent-delegation.test.mjs#L143) (Zeile 143)
-- [shows measured input plus output tokens, with no invented zero or double-counted details](../../tests/js/agent-delegation.test.mjs#L171) (Zeile 171)
-- [opens judge details immediately from live snapshots without detail reads](../../tests/js/agent-delegation.test.mjs#L185) (Zeile 185)
-- [shows a skeleton immediately and reuses cached messages on reopening](../../tests/js/agent-delegation.test.mjs#L200) (Zeile 200)
-- [updates the account allowance from the existing activity request](../../tests/js/agent-delegation.test.mjs#L219) (Zeile 219)
-- [opens on first start, shares state with inline icons and respects manual close and duplicate events](../../tests/js/agent-delegation.test.mjs#L227) (Zeile 227)
-- [distinguishes same-model agents and restores saved state without starting any model request](../../tests/js/agent-delegation.test.mjs#L253) (Zeile 253)
-- [ignores delayed responses and events after account or conversation switch](../../tests/js/agent-delegation.test.mjs#L265) (Zeile 265)
-- [renders untrusted text safely, labels unknown totals and retries details only on demand](../../tests/js/agent-delegation.test.mjs#L281) (Zeile 281)
+- [stops its 2.5 s tick once nothing runs and never starts one for a saved turn](../../tests/js/agent-delegation.test.mjs#L29) (Zeile 29)
+- [opens as a sheet only on request under 1200 px, with a scrim and a focus trap](../../tests/js/agent-delegation.test.mjs#L44) (Zeile 44)
+- [does not rewrite row titles or status text when nothing changed](../../tests/js/agent-delegation.test.mjs#L66) (Zeile 66)
+- [keeps model icons and keyboard focus stable as statuses and same-model calls change](../../tests/js/agent-delegation.test.mjs#L80) (Zeile 80)
+- [uses elapsed server durations with a monotonic clock and freezes terminal or recovered sessions](../../tests/js/agent-delegation.test.mjs#L100) (Zeile 100)
+- [does not replace a newer polled total with a stale run projection](../../tests/js/agent-delegation.test.mjs#L123) (Zeile 123)
+- [discards a pending old session response after the same user signs in again](../../tests/js/agent-delegation.test.mjs#L132) (Zeile 132)
+- [shows live received characters, switches to provider tokens and stops shimmer on completion](../../tests/js/agent-delegation.test.mjs#L146) (Zeile 146)
+- [clears transient counters on stop and turn switches and never animates saved active snapshots](../../tests/js/agent-delegation.test.mjs#L174) (Zeile 174)
+- [shows loading independently for each model and hides it for terminal or paused sessions](../../tests/js/agent-delegation.test.mjs#L190) (Zeile 190)
+- [uses SSE updates without polling, repairs quiet streams, and never revives a completed run](../../tests/js/agent-delegation.test.mjs#L202) (Zeile 202)
+- [shows measured input plus output tokens, with no invented zero or double-counted details](../../tests/js/agent-delegation.test.mjs#L230) (Zeile 230)
+- [opens judge details immediately from live snapshots without detail reads](../../tests/js/agent-delegation.test.mjs#L244) (Zeile 244)
+- [shows a skeleton immediately and reuses cached messages on reopening](../../tests/js/agent-delegation.test.mjs#L260) (Zeile 260)
+- [updates the account allowance from the existing activity request](../../tests/js/agent-delegation.test.mjs#L279) (Zeile 279)
+- [opens on first start, shares state with inline icons and respects manual close and duplicate events](../../tests/js/agent-delegation.test.mjs#L287) (Zeile 287)
+- [distinguishes same-model agents and restores saved state without starting any model request](../../tests/js/agent-delegation.test.mjs#L313) (Zeile 313)
+- [ignores delayed responses and events after account or conversation switch](../../tests/js/agent-delegation.test.mjs#L325) (Zeile 325)
+- [folds judge attempts, retries and backups into one quiet Answer check row](../../tests/js/agent-delegation.test.mjs#L341) (Zeile 341)
+- [names a check that no model could run, once, in the Answer check row](../../tests/js/agent-delegation.test.mjs#L368) (Zeile 368)
+- [shows a failed comparison model's reason as a plain note without routing labels](../../tests/js/agent-delegation.test.mjs#L381) (Zeile 381)
+- [keeps the text of a comparison model stopped mid-answer, marked as incomplete](../../tests/js/agent-delegation.test.mjs#L398) (Zeile 398)
+- [renders untrusted text safely, labels unknown totals and retries details only on demand](../../tests/js/agent-delegation.test.mjs#L416) (Zeile 416)
+- [sums the run up in one overview and keeps opened details in the single scrolling list](../../tests/js/agent-delegation.test.mjs#L430) (Zeile 430)
+
+</details>
+
+<a id="agent-google-test-mjs"></a>
+
+## agent-google.test.mjs
+
+**Quelle:** [tests/js/agent-google.test.mjs](../../tests/js/agent-google.test.mjs) · **Bereiche:** Google, Agent.
+
+**Ebene:** jsdom-Auswahl und Aktionskarten mit Fetch-Doubles.
+
+**Lauf:** 10 bestanden.
+
+**Geprüftes Verhalten:** Lazy Connections, vollständige Kalenderauswahl und Zustimmung pro Nachricht; Kontowechsel leert Auswahl. Untrusted Text bleibt inert, bestätigter Hash stimmt, unklare Aktionen bieten kein Wiederholen; abgelaufene/ersetzte Vorschläge, Empfängerentfernung und Authwechsel.
+
+**Grenzen und Doubles:** Google-/Aktionsendpoints simuliert, keine echte Zustimmungspersistenz oder Browsergeometrie.
+
+**Prüfauftrag für den Folgeaudit:** Die benannten Mock-/Integrationsgrenzen am realen Adapter prüfen; Zuordnung und offene Aufgaben stehen in der Produktmatrix.
+
+**Direkte Codeverweise:** [static/js/agent-google.js](../../static/js/agent-google.js).
+
+<details>
+<summary>10 Testdefinitionen und ihre Quellstellen</summary>
+
+- [loads connections only on first use and never sends a partial selection](../../tests/js/agent-google.test.mjs#L33) (Zeile 33)
+- [requires consent on every message in a chat that already holds Google data](../../tests/js/agent-google.test.mjs#L59) (Zeile 59)
+- [removing a source chip turns it off](../../tests/js/agent-google.test.mjs#L70) (Zeile 70)
+- [renders untrusted text safely and submits the exact displayed hash only after review](../../tests/js/agent-google.test.mjs#L82) (Zeile 82)
+- [does not offer repeat execution for ambiguous results](../../tests/js/agent-google.test.mjs#L104) (Zeile 104)
+- [shows expired approvals as expired and prepares them again without a model call](../../tests/js/agent-google.test.mjs#L110) (Zeile 110)
+- [requires a per-address acknowledgement for flagged recipients and offers a send grant for unauthorized drafts](../../tests/js/agent-google.test.mjs#L123) (Zeile 123)
+- [coalesces refreshes and discards late reads after an account change](../../tests/js/agent-google.test.mjs#L155) (Zeile 155)
+- [projects the current chat on its own, skips a new chat while it starts and reloads when the run finishes](../../tests/js/agent-google.test.mjs#L166) (Zeile 166)
+- [stays hidden when actions fail in a chat without Google data](../../tests/js/agent-google.test.mjs#L182) (Zeile 182)
 
 </details>
 
@@ -437,30 +539,56 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 **Ebene:** JavaScript-Modultest mit jsdom.
 
-**Lauf:** 11 bestanden.
+**Lauf:** 10 bestanden.
 
-**Geprüftes Verhalten:** Toolbar-/Menüprojektion bei Agent, Direct und neuem Lauf; sichtbarer Lauf getrennt von Präferenz für nächste Nachricht; synchronisierte und gesperrte Schalter; Quellenpräferenz bleibt bei Direct/Reload erhalten; Anhänge im Agentmodus gesperrt; Reasoning-/Modellpicker-Routing, abgelehnte Umschaltung, Bereinigung veralteter Modellstatus und nullsicherer Fallback.
+**Geprüftes Verhalten:** Toolbar-/Menüprojektion bei Agent, Direct und neuem Lauf; sichtbarer Lauf getrennt von Präferenz für nächste Nachricht; synchronisierte und gesperrte Schalter; Quellenpräferenz bleibt bei Direct/Reload erhalten; Anhänge im Agentmodus gesperrt; Reasoning-/Modellpicker-Routing, abgelehnte Umschaltung, Bereinigung veralteter Modellstatus und nullsicherer Fallback. Aktualisierung 02.10.2026: Einheitlicher Composer und Modusselektor: Tools wechseln in das Plusmenü, Chats behalten Familie, neue Ansicht stellt Toolbar wieder her; Settings synchronisiert.
 
 **Grenzen und Doubles:** matchMedia und minimales DOM simuliert; Assertions prüfen Zustand/Attribute, keine tatsächliche Position oder CSS-Geometrie.
 
 **Prüfauftrag für den Folgeaudit:** Responsive Darstellung und Moduswechsel während laufender Antworten browserseitig abgleichen.
 
-**Direkte Codeverweise:** [static/js/agent-mode.js](../../static/js/agent-mode.js).
+**Direkte Codeverweise:** [static/js/agent-mode.js](../../static/js/agent-mode.js), [static/js/run-mode.js](../../static/js/run-mode.js).
 
 **Direkte Testhelfer:** [tests/js/helpers/appWindow.mjs](../../tests/js/helpers/appWindow.mjs).
 
 <details>
 <summary>9 Testdefinitionen und ihre Quellstellen</summary>
 
-- [moves Beta tools into the plus menu after chat start (desktop: %s)](../../tests/js/agent-mode-projection.test.mjs#L64) (Zeile 64)
-- [persists source checks for agent runs and locks every control for direct comparisons](../../tests/js/agent-mode-projection.test.mjs#L107) (Zeile 107)
-- [gates the saved source preference %s on reload without changing it](../../tests/js/agent-mode-projection.test.mjs#L140) (Zeile 140)
-- [keeps the desktop toolbar visible and resyncs attachments at the mobile breakpoint](../../tests/js/agent-mode-projection.test.mjs#L159) (Zeile 159)
-- [shows the starting toolbar, hides it in an agent chat and restores it for a new comparison](../../tests/js/agent-mode-projection.test.mjs#L183) (Zeile 183)
-- [routes toolbar actions through the original controls and respects a rejected deep toggle](../../tests/js/agent-mode-projection.test.mjs#L201) (Zeile 201)
-- [keeps the composer setting independent of a frozen run and synchronizes all switches](../../tests/js/agent-mode-projection.test.mjs#L218) (Zeile 218)
-- [updates selected model marks and clears stale direct-result summaries](../../tests/js/agent-mode-projection.test.mjs#L239) (Zeile 239)
-- [falls back to the controls when no run is selected](../../tests/js/agent-mode-projection.test.mjs#L252) (Zeile 252)
+- [moves Beta tools into the plus menu after chat start](../../tests/js/agent-mode-projection.test.mjs#L62) (Zeile 62)
+- [persists source checks for agent runs and locks every control for direct comparisons](../../tests/js/agent-mode-projection.test.mjs#L114) (Zeile 114)
+- [gates the saved source preference %s on reload without changing it](../../tests/js/agent-mode-projection.test.mjs#L147) (Zeile 147)
+- [uses one toolbar rule for every mode: tools on the start screen, a docked status line in a chat](../../tests/js/agent-mode-projection.test.mjs#L166) (Zeile 166)
+- [shows the starting toolbar, hides it in a chat in every mode and restores it on the start screen](../../tests/js/agent-mode-projection.test.mjs#L196) (Zeile 196)
+- [routes toolbar actions through the original controls and respects a rejected deep toggle](../../tests/js/agent-mode-projection.test.mjs#L214) (Zeile 214)
+- [keeps the mode choice independent of a frozen run and synchronizes selector and settings](../../tests/js/agent-mode-projection.test.mjs#L231) (Zeile 231)
+- [updates selected model marks and clears stale direct-result summaries](../../tests/js/agent-mode-projection.test.mjs#L253) (Zeile 253)
+- [falls back to the controls when no run is selected](../../tests/js/agent-mode-projection.test.mjs#L266) (Zeile 266)
+
+</details>
+
+<a id="agent-preferences-test-mjs"></a>
+
+## agent-preferences.test.mjs
+
+**Quelle:** [tests/js/agent-preferences.test.mjs](../../tests/js/agent-preferences.test.mjs) · **Bereiche:** Agent, Einstellungen.
+
+**Ebene:** jsdom-Präferenzen.
+
+**Lauf:** 2 bestanden.
+
+**Geprüftes Verhalten:** Tiefe und Quorummodus speichern und wiederherstellen, unbekannte Werte normalisieren; der Settings-Tab erscheint nur für Konten mit Agentzugriff.
+
+**Grenzen und Doubles:** Lokaler Storage; keine serverseitige Policy-/Modellprüfung.
+
+**Prüfauftrag für den Folgeaudit:** Die benannten Mock-/Integrationsgrenzen am realen Adapter prüfen; Zuordnung und offene Aufgaben stehen in der Produktmatrix.
+
+**Direkte Codeverweise:** [static/js/agent-preferences.js](../../static/js/agent-preferences.js).
+
+<details>
+<summary>2 Testdefinitionen und ihre Quellstellen</summary>
+
+- [saves both choices, restores them and ignores unknown stored values](../../tests/js/agent-preferences.test.mjs#L20) (Zeile 20)
+- [offers the settings tab only to accounts with Agent Beta](../../tests/js/agent-preferences.test.mjs#L35) (Zeile 35)
 
 </details>
 
@@ -472,20 +600,20 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 **Ebene:** JavaScript-Modultest mit jsdom.
 
-**Lauf:** 12 bestanden.
+**Lauf:** 23 bestanden.
 
-**Geprüftes Verhalten:** Vergleichszweck, Fragen/Antworten, Unterschiede, Quellenchecks und Dauer im Detailbereich; laufend/teilweise/veraltet korrekt beschriftet, Turnwechsel bereinigt. Marker nur bei passender Antwortversion und Basis; gebundene Quellenevidenz nur bei passenden Daten. Quellen aus Suche, Antwort und Vergleich zusammengeführt, Legacy-Suchquellen unterstützt; fehlendes Modell, unvollständige Prüfung und Satz-/Quellenabdeckung unterschieden; unsicherer Text entschärft.
+**Geprüftes Verhalten:** Vergleichszweck, Fragen/Antworten, Unterschiede, Quellenchecks und Dauer im Detailbereich; laufend/teilweise/veraltet korrekt beschriftet, Turnwechsel bereinigt. Marker nur bei passender Antwortversion und Basis; gebundene Quellenevidenz nur bei passenden Daten. Quellen aus Suche, Antwort und Vergleich zusammengeführt, Legacy-Suchquellen unterstützt; fehlendes Modell, unvollständige Prüfung und Satz-/Quellenabdeckung unterschieden; unsicherer Text entschärft. Aktualisierung 02.10.2026: Reviewstatus bleibt knapp, unvollständige/Tokenlimitantworten bleiben markiert lesbar; Copy bleibt in einer Belegzeile. Marken erscheinen einmal in Lesereihenfolge, gespeicherte/Reduced-Motion-/gefilterte Marken beachten ihre Grenzen.
 
 **Grenzen und Doubles:** Markdown-, Marker-, Quellen- und Reader-Helfer überwiegend Doubles; einzelne Kontexte mit echtem marked/DOMPurify.
 
 **Prüfauftrag für den Folgeaudit:** Marker- und Quellenintegration mit echten Nachbarmodulen sowie semantische Judge-Gültigkeit separat abgleichen.
 
-**Direkte Codeverweise:** [static/js/agent-review.js](../../static/js/agent-review.js).
+**Direkte Codeverweise:** [static/js/agent-answer-actions.js](../../static/js/agent-answer-actions.js), [static/js/agent-review.js](../../static/js/agent-review.js).
 
 **Direkte Testhelfer:** [tests/js/helpers/appWindow.mjs](../../tests/js/helpers/appWindow.mjs).
 
 <details>
-<summary>10 Testdefinitionen und ihre Quellstellen</summary>
+<summary>19 Testdefinitionen und ihre Quellstellen</summary>
 
 - [explains the recorded comparison in the duration disclosure and opens its original evidence](../../tests/js/agent-review.test.mjs#L21) (Zeile 21)
 - [shows the live comparison purpose while its answers and checks are still pending](../../tests/js/agent-review.test.mjs#L51) (Zeile 51)
@@ -496,7 +624,51 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 - [makes search sources available without a comparison, including saved legacy activities](../../tests/js/agent-review.test.mjs#L143) (Zeile 143)
 - [rejects stale comparison bindings and distinguishes incomplete results](../../tests/js/agent-review.test.mjs#L157) (Zeile 157)
 - [explains a missing model without reporting a failed check, including older saved reviews](../../tests/js/agent-review.test.mjs#L187) (Zeile 187)
-- [keeps %s failures distinct from unavailable comparison models](../../tests/js/agent-review.test.mjs#L207) (Zeile 207)
+- [keeps %s failures distinct from unavailable comparison models](../../tests/js/agent-review.test.mjs#L217) (Zeile 217)
+- [keeps a fully answered check to one line and the source report below the findings](../../tests/js/agent-review.test.mjs#L248) (Zeile 248)
+- [adds no note under a checked answer and one calm sentence otherwise](../../tests/js/agent-review.test.mjs#L268) (Zeile 268)
+- [speaks under the answer only when the check itself is limited (%j)](../../tests/js/agent-review.test.mjs#L280) (Zeile 280)
+- [names an output limit as the reason a comparison model gave no answer](../../tests/js/agent-review.test.mjs#L295) (Zeile 295)
+- [shows a model stopped mid-answer as a marked, readable incomplete answer, and a cut-off one as marked](../../tests/js/agent-review.test.mjs#L307) (Zeile 307)
+- [keeps Copy in the evidence row across re-renders and hands it back when the row goes away](../../tests/js/agent-review.test.mjs#L326) (Zeile 326)
+- [strokes the marks on once, in reading order, when a live answer is first checked](../../tests/js/agent-review.test.mjs#L349) (Zeile 349)
+- [shows marks without animation for saved answers and reduced motion](../../tests/js/agent-review.test.mjs#L388) (Zeile 388)
+- [leaves marks hidden by the highlight setting out of the reveal](../../tests/js/agent-review.test.mjs#L403) (Zeile 403)
+
+</details>
+
+<a id="agent-workspace-test-mjs"></a>
+
+## agent-workspace.test.mjs
+
+**Quelle:** [tests/js/agent-workspace.test.mjs](../../tests/js/agent-workspace.test.mjs) · **Bereiche:** Agent, Dateien und Dokumente.
+
+**Ebene:** jsdom-Ressourcenansicht mit Fetch-/Download-Doubles.
+
+**Lauf:** 11 bestanden.
+
+**Geprüftes Verhalten:** Upload vor Runstart, Fehlermarkierung, Dokumentversionen am richtigen Turn, Ressourcenhook ohne Template, Konto-/Chatwechsel gegen späte Antworten, private Dateivorschau und bestätigtes Entfernen.
+
+**Grenzen und Doubles:** API/Dateiinhalte simuliert; kein Cloudspeicher oder echter Browserdownload.
+
+**Prüfauftrag für den Folgeaudit:** Die benannten Mock-/Integrationsgrenzen am realen Adapter prüfen; Zuordnung und offene Aufgaben stehen in der Produktmatrix.
+
+**Direkte Codeverweise:** [static/js/agent-workspace.js](../../static/js/agent-workspace.js).
+
+<details>
+<summary>11 Testdefinitionen und ihre Quellstellen</summary>
+
+- [renders one document card per document after the answer, grouped by version and without raw IDs](../../tests/js/agent-workspace.test.mjs#L35) (Zeile 35)
+- [shows only the documents of the displayed turn under the answer](../../tests/js/agent-workspace.test.mjs#L61) (Zeile 61)
+- [removes only after an explicit confirmation from the overflow menu](../../tests/js/agent-workspace.test.mjs#L76) (Zeile 76)
+- [marks partly readable files and never renders file names as markup](../../tests/js/agent-workspace.test.mjs#L101) (Zeile 101)
+- [describes Gmail imports of the turn by subject and sender instead of message IDs](../../tests/js/agent-workspace.test.mjs#L115) (Zeile 115)
+- [coalesces refreshes to one request per 300 ms and never refreshes Google actions](../../tests/js/agent-workspace.test.mjs#L128) (Zeile 128)
+- [keeps the list while uploading and shows a progress row per file](../../tests/js/agent-workspace.test.mjs#L151) (Zeile 151)
+- [keeps a failed upload in the composer with its reason](../../tests/js/agent-workspace.test.mjs#L171) (Zeile 171)
+- [creates the answer resources hook when the template lacks it and discards an old account response](../../tests/js/agent-workspace.test.mjs#L185) (Zeile 185)
+- [keeps each archived turn's documents with its own answer](../../tests/js/agent-workspace.test.mjs#L199) (Zeile 199)
+- [opens and removes a message attachment in the chat on screen](../../tests/js/agent-workspace.test.mjs#L218) (Zeile 218)
 
 </details>
 
@@ -562,6 +734,35 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 - [still attaches the file when the browser has no canvas](../../tests/js/attachment-compression.test.mjs#L137) (Zeile 137)
 - [refuses an image far above the input limit](../../tests/js/attachment-compression.test.mjs#L150) (Zeile 150)
 - [keeps the tighter limit for files that cannot be shrunk](../../tests/js/attachment-compression.test.mjs#L162) (Zeile 162)
+
+</details>
+
+<a id="attachment-draft-generation-test-mjs"></a>
+
+## attachment-draft-generation.test.mjs
+
+**Quelle:** [tests/js/attachment-draft-generation.test.mjs](../../tests/js/attachment-draft-generation.test.mjs) · **Bereiche:** Anhänge, Frontend.
+
+**Ebene:** jsdom-Dateiimport mit kontrolliertem FileReader.
+
+**Lauf:** 5 bestanden.
+
+**Geprüftes Verhalten:** Verspätete Imports nach Senden, Chatreset oder Kontowechsel werden verworfen; alter Import blockiert nicht das nächste Limit, normale Mehrfachimporte behalten die Reihenfolge.
+
+**Grenzen und Doubles:** Simulierter FileReader; keine echten Dateidialoge.
+
+**Prüfauftrag für den Folgeaudit:** Die benannten Mock-/Integrationsgrenzen am realen Adapter prüfen; Zuordnung und offene Aufgaben stehen in der Produktmatrix.
+
+**Direkte Codeverweise:** [static/js/attachments.js](../../static/js/attachments.js).
+
+<details>
+<summary>5 Testdefinitionen und ihre Quellstellen</summary>
+
+- [drops a late import after the saved-chat reset](../../tests/js/attachment-draft-generation.test.mjs#L59) (Zeile 59)
+- [drops a late import after the draft was handed to a sent message](../../tests/js/attachment-draft-generation.test.mjs#L71) (Zeile 71)
+- [drops a late import after an account change](../../tests/js/attachment-draft-generation.test.mjs#L79) (Zeile 79)
+- [a stale import neither blocks nor leaks into the next draft's limit](../../tests/js/attachment-draft-generation.test.mjs#L87) (Zeile 87)
+- [keeps order and completes a normal multi-file import](../../tests/js/attachment-draft-generation.test.mjs#L106) (Zeile 106)
 
 </details>
 
@@ -755,6 +956,31 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 </details>
 
+<a id="claim-mark-joins-test-mjs"></a>
+
+## claim-mark-joins.test.mjs
+
+**Quelle:** [tests/js/claim-mark-joins.test.mjs](../../tests/js/claim-mark-joins.test.mjs) · **Bereiche:** Consensus, Frontend.
+
+**Ebene:** jsdom-Claim-Markierung.
+
+**Lauf:** 1 bestanden.
+
+**Geprüftes Verhalten:** Geteilte Satzmarkierungen bewahren Text und innere Verbindungen; nur äußere Enden erhalten Kantenklassen.
+
+**Grenzen und Doubles:** DOM-Klassen statt Pixel-/Browserlayout.
+
+**Prüfauftrag für den Folgeaudit:** Die benannten Mock-/Integrationsgrenzen am realen Adapter prüfen; Zuordnung und offene Aufgaben stehen in der Produktmatrix.
+
+**Direkte Codeverweise:** [static/js/consensus-anchor.js](../../static/js/consensus-anchor.js), [static/js/consensus-insights.js](../../static/js/consensus-insights.js).
+
+<details>
+<summary>1 Testdefinitionen und ihre Quellstellen</summary>
+
+- [keeps inner joins of a split sentence flush and pads only its outer ends](../../tests/js/claim-mark-joins.test.mjs#L11) (Zeile 11)
+
+</details>
+
 <a id="composer-attachments-test-mjs"></a>
 
 ## composer-attachments.test.mjs
@@ -763,24 +989,28 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 **Ebene:** JavaScript-Modulintegration mit jsdom.
 
-**Lauf:** 3 bestanden.
+**Lauf:** 7 bestanden.
 
-**Geprüftes Verhalten:** Dasselbe Anhangstableau wechselt zwischen Toolbar, Agentcomposer und neuem Vergleich ohne Duplikate oder Fokusverlust; gesendete Dateien werden schreibgeschützte Nachrichtenanhänge, Draft geleert und bei Fehler sichtbar wiederhergestellt; Vorschau und Entfernen getrennt, Fokus folgt verfügbarer Aktion.
+**Geprüftes Verhalten:** Dasselbe Anhangstableau wechselt zwischen Toolbar, Agentcomposer und neuem Vergleich ohne Duplikate oder Fokusverlust; gesendete Dateien werden schreibgeschützte Nachrichtenanhänge, Draft geleert und bei Fehler sichtbar wiederhergestellt; Vorschau und Entfernen getrennt, Fokus folgt verfügbarer Aktion. Aktualisierung 02.10.2026: Dasselbe Tray erhält Fokus bei Moduswechsel; Upload-/Lesefehler am Chip, gespeicherte Datei öffnen/downloaden und nur bestätigt entfernen.
 
 **Grenzen und Doubles:** Echte attachments-/agent-mode-Skripte mit Composer-/Umgebungsdoubles und vorgegebenen Dateien; kein Upload oder Browserlayout.
 
 **Prüfauftrag für den Folgeaudit:** Fehler nach echter Anfrage und Responsivität des vollständigen Composers abgleichen.
 
-**Direkte Codeverweise:** [static/js/agent-mode.js](../../static/js/agent-mode.js), [static/js/attachments.js](../../static/js/attachments.js).
+**Direkte Codeverweise:** [static/js/agent-mode.js](../../static/js/agent-mode.js), [static/js/attachments.js](../../static/js/attachments.js), [static/js/run-mode.js](../../static/js/run-mode.js).
 
 **Direkte Testhelfer:** [tests/js/helpers/appWindow.mjs](../../tests/js/helpers/appWindow.mjs).
 
 <details>
-<summary>3 Testdefinitionen und ihre Quellstellen</summary>
+<summary>7 Testdefinitionen und ihre Quellstellen</summary>
 
-- [moves the same tray and focused control between toolbar, agent chat and new comparison](../../tests/js/composer-attachments.test.mjs#L45) (Zeile 45)
-- [hands sent files to the message, clears the draft and restores failed drafts in the visible composer](../../tests/js/composer-attachments.test.mjs#L69) (Zeile 69)
-- [separates preview from removal and returns focus to the next available action](../../tests/js/composer-attachments.test.mjs#L87) (Zeile 87)
+- [moves the same tray and focused control between the start toolbar, a chat in any mode and a new comparison](../../tests/js/composer-attachments.test.mjs#L43) (Zeile 43)
+- [hands sent files to the message, clears the draft and restores failed drafts in the visible composer](../../tests/js/composer-attachments.test.mjs#L68) (Zeile 68)
+- [separates preview from removal and returns focus to the next available action](../../tests/js/composer-attachments.test.mjs#L86) (Zeile 86)
+- [shows an Agent upload failure on the pending chip and clears it again](../../tests/js/composer-attachments.test.mjs#L105) (Zeile 105)
+- [marks sent Agent files that were only partly readable](../../tests/js/composer-attachments.test.mjs#L116) (Zeile 116)
+- [opens a stored Agent file from its sent message with download and a confirmed removal](../../tests/js/composer-attachments.test.mjs#L126) (Zeile 126)
+- [shows why a stored file could not be opened](../../tests/js/composer-attachments.test.mjs#L154) (Zeile 154)
 
 </details>
 
@@ -829,9 +1059,9 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 **Ebene:** JavaScript-Modultest mit jsdom.
 
-**Lauf:** 24 bestanden.
+**Lauf:** 25 bestanden.
 
-**Geprüftes Verhalten:** Normalisierung von Groß-/Kleinschreibung, Anführungszeichen und Leerraum; rohe Offsets auch bei Unicode-Erweiterung; Mehrfachtreffer, leere/fehlende Passage und Zeilenumbrüche. Quellen-Tags entfernen, Interpunktion, priorisierte Vollpassage vor Kurzfallback, Ellipsen und Deduplizierung; DOM-Verankerung ohne Quellenchips und mit Mathematikmarkup; Satzgrenzen bei Währungs-/Mengenabkürzungen.
+**Geprüftes Verhalten:** Normalisierung von Groß-/Kleinschreibung, Anführungszeichen und Leerraum; rohe Offsets auch bei Unicode-Erweiterung; Mehrfachtreffer, leere/fehlende Passage und Zeilenumbrüche. Quellen-Tags entfernen, Interpunktion, priorisierte Vollpassage vor Kurzfallback, Ellipsen und Deduplizierung; DOM-Verankerung ohne Quellenchips und mit Mathematikmarkup; Satzgrenzen bei Währungs-/Mengenabkürzungen. Aktualisierung 02.10.2026: Deutsches Ordinaldatum bleibt innerhalb seines Satzes.
 
 **Grenzen und Doubles:** Vorgegebene Texte/DOM inklusive vorbereiteter Mathematikdarstellung; keine Garantie für jede Sprache oder mehrdeutige reale Antwort.
 
@@ -842,7 +1072,7 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 **Direkte Testhelfer:** [tests/js/helpers/appWindow.mjs](../../tests/js/helpers/appWindow.mjs).
 
 <details>
-<summary>20 Testdefinitionen und ihre Quellstellen</summary>
+<summary>21 Testdefinitionen und ihre Quellstellen</summary>
 
 - [folds case, curly quotes and runs of whitespace](../../tests/js/consensus-anchor.test.mjs#L34) (Zeile 34)
 - [treats every quote flavour as the same character](../../tests/js/consensus-anchor.test.mjs#L40) (Zeile 40)
@@ -863,7 +1093,8 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 - [finds a sentence whose formula is already rendered by KaTeX](../../tests/js/consensus-anchor.test.mjs#L188) (Zeile 188)
 - [returns null rather than guessing when the passage is absent](../../tests/js/consensus-anchor.test.mjs#L210) (Zeile 210)
 - [does not treat currency abbreviations as sentence endings](../../tests/js/consensus-anchor.test.mjs#L221) (Zeile 221)
-- [still recognizes a quantity abbreviation at a real sentence end](../../tests/js/consensus-anchor.test.mjs#L235) (Zeile 235)
+- [keeps a German ordinal date inside its sentence](../../tests/js/consensus-anchor.test.mjs#L235) (Zeile 235)
+- [still recognizes a quantity abbreviation at a real sentence end](../../tests/js/consensus-anchor.test.mjs#L243) (Zeile 243)
 
 </details>
 
@@ -972,9 +1203,9 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 **Ebene:** JavaScript-Modultest mit jsdom; teilweise Navigation mit echten Nachbarmodulen.
 
-**Lauf:** 52 bestanden.
+**Lauf:** 53 bestanden.
 
-**Geprüftes Verhalten:** Ergebnisnavigation öffnet passendes Unterschiedsdetail, fokussiert und markiert zeitlich begrenzt; Fallbackreport/Reader, Reduced Motion und Priorität ausgeschlossener Checks. Attribuierte Originalbelege, sichere Links, unveränderter Konsens und Snapshot; Ergebnis nur bei passender Antwort, Position, Frage und Anchor. Stream-/historische Container, paginierte Deduplizierung und Versionsschutz. Disabled, fehlgeschlagen, Budgetauslassung, technisch ausgeschlossen, abgelehnter Schluss, unerreichbare Quelle und laufend unterschieden; Legacyanzeigen. Ablehnungsdiagnosen mit sicherer Quellen-/Modellzuordnung, unbekannte/unsichere Daten unterdrückt, Liste auf zwölf begrenzt, Fallbackherkunft; keine verworfenen Zitate trotz widersprüchlichem checked-Flag. Arbeits-/Persistenz-/Interruptfehler und positive, unklare sowie unvollständige Zustände.
+**Geprüftes Verhalten:** Ergebnisnavigation öffnet passendes Unterschiedsdetail, fokussiert und markiert zeitlich begrenzt; Fallbackreport/Reader, Reduced Motion und Priorität ausgeschlossener Checks. Attribuierte Originalbelege, sichere Links, unveränderter Konsens und Snapshot; Ergebnis nur bei passender Antwort, Position, Frage und Anchor. Stream-/historische Container, paginierte Deduplizierung und Versionsschutz. Disabled, fehlgeschlagen, Budgetauslassung, technisch ausgeschlossen, abgelehnter Schluss, unerreichbare Quelle und laufend unterschieden; Legacyanzeigen. Ablehnungsdiagnosen mit sicherer Quellen-/Modellzuordnung, unbekannte/unsichere Daten unterdrückt, Liste auf zwölf begrenzt, Fallbackherkunft; keine verworfenen Zitate trotz widersprüchlichem checked-Flag. Arbeits-/Persistenz-/Interruptfehler und positive, unklare sowie unvollständige Zustände. Aktualisierung 02.10.2026: Stance-Fallback bindet an passende Karte, geänderte Positionen übernehmen keinen alten Befund.
 
 **Grenzen und Doubles:** Echte source-verification-Logik, optional progress/reader; künstliche Snapshots und Fetch/Timer/Scroll-Doubles. Prüft Darstellung und Bindung, nicht Abruf oder Wahrheit des Belegs.
 
@@ -985,7 +1216,7 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 **Direkte Testhelfer:** [tests/js/helpers/appWindow.mjs](../../tests/js/helpers/appWindow.mjs).
 
 <details>
-<summary>32 Testdefinitionen und ihre Quellstellen</summary>
+<summary>33 Testdefinitionen und ihre Quellstellen</summary>
 
 - [opens the checked explanation in Differences with only the result highlighted and focused](../../tests/js/contradiction-source-verification.test.mjs#L34) (Zeile 34)
 - [prioritizes an excluded check among several cards and leaves other cards collapsed](../../tests/js/contradiction-source-verification.test.mjs#L50) (Zeile 50)
@@ -996,29 +1227,30 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 - [distinguishes empty, disabled, failed and budget omissions](../../tests/js/contradiction-source-verification.test.mjs#L132) (Zeile 132)
 - [does not show a substantive verdict without attributed evidence or for a different answer](../../tests/js/contradiction-source-verification.test.mjs#L143) (Zeile 143)
 - [rejects changed positions, anchor or factual question in restored Differences](../../tests/js/contradiction-source-verification.test.mjs#L151) (Zeile 151)
-- [reattaches after streamed Differences rendering, and clears old results on run changes](../../tests/js/contradiction-source-verification.test.mjs#L162) (Zeile 162)
-- [keeps evidence on a historical card when the reader moves its container](../../tests/js/contradiction-source-verification.test.mjs#L173) (Zeile 173)
-- [deduplicates paginated findings by contradiction identity and rejects mismatched versions](../../tests/js/contradiction-source-verification.test.mjs#L183) (Zeile 183)
-- [shows a technical exclusion on the red card and never claims no contradictions exist](../../tests/js/contradiction-source-verification.test.mjs#L207) (Zeile 207)
-- [counts excluded contradictions in the displayed total for a mixed result](../../tests/js/contradiction-source-verification.test.mjs#L218) (Zeile 218)
-- [shows classification and technical reasons together without turning them into a source verdict](../../tests/js/contradiction-source-verification.test.mjs#L224) (Zeile 224)
-- [derives only display explanations for old terminal v4 snapshots with missing quote matches](../../tests/js/contradiction-source-verification.test.mjs#L235) (Zeile 235)
-- [does not attach exclusions to different raw positions, question, anchor, or answer](../../tests/js/contradiction-source-verification.test.mjs#L247) (Zeile 247)
-- [explains an excluded contradiction in the public fallback when no Differences panel exists](../../tests/js/contradiction-source-verification.test.mjs#L257) (Zeile 257)
-- [describes the rejected source check as unresolved in the footer, report and detail](../../tests/js/contradiction-source-verification.test.mjs#L269) (Zeile 269)
-- [counts multiple rejected checks without implying no source comparison was attempted](../../tests/js/contradiction-source-verification.test.mjs#L283) (Zeile 283)
-- [separates rejected conclusions, unavailable sources and omitted checks in a mixed result](../../tests/js/contradiction-source-verification.test.mjs#L290) (Zeile 290)
-- [keeps running checks and inaccessible sources distinct from rejected conclusions](../../tests/js/contradiction-source-verification.test.mjs#L299) (Zeile 299)
-- [shows the exact safe rejection reason with its known source and model position](../../tests/js/contradiction-source-verification.test.mjs#L309) (Zeile 309)
-- [never displays rejected quotes, explanations or a positive verdict even with contradictory checked metadata](../../tests/js/contradiction-source-verification.test.mjs#L322) (Zeile 322)
-- [explains %s without inventing quote content](../../tests/js/contradiction-source-verification.test.mjs#L332) (Zeile 332)
-- [does not create links for unknown, ambiguous or unsafe source identities and ignores raw diagnostics](../../tests/js/contradiction-source-verification.test.mjs#L346) (Zeile 346)
-- [keeps legacy evidence_mismatch honest when no detailed rejection was saved](../../tests/js/contradiction-source-verification.test.mjs#L360) (Zeile 360)
-- [bounds rejection diagnostics and reports fallback provenance without claiming successful verification](../../tests/js/contradiction-source-verification.test.mjs#L368) (Zeile 368)
-- [gives an honest status and useful context for incomplete checks](../../tests/js/contradiction-source-verification.test.mjs#L384) (Zeile 384)
-- [does not present rejected evidence as reviewed when a saved checked flag contradicts the rejection (%s)](../../tests/js/contradiction-source-verification.test.mjs#L400) (Zeile 400)
-- [reserves the positive status for a supported outcome without adding a failure hint](../../tests/js/contradiction-source-verification.test.mjs#L410) (Zeile 410)
-- [explains %s in the contradiction and source summary](../../tests/js/contradiction-source-verification.test.mjs#L418) (Zeile 418)
+- [binds a side located by its stance to its card, but never a changed stance](../../tests/js/contradiction-source-verification.test.mjs#L162) (Zeile 162)
+- [reattaches after streamed Differences rendering, and clears old results on run changes](../../tests/js/contradiction-source-verification.test.mjs#L173) (Zeile 173)
+- [keeps evidence on a historical card when the reader moves its container](../../tests/js/contradiction-source-verification.test.mjs#L184) (Zeile 184)
+- [deduplicates paginated findings by contradiction identity and rejects mismatched versions](../../tests/js/contradiction-source-verification.test.mjs#L194) (Zeile 194)
+- [shows a technical exclusion on the red card and never claims no contradictions exist](../../tests/js/contradiction-source-verification.test.mjs#L218) (Zeile 218)
+- [counts excluded contradictions in the displayed total for a mixed result](../../tests/js/contradiction-source-verification.test.mjs#L229) (Zeile 229)
+- [shows classification and technical reasons together without turning them into a source verdict](../../tests/js/contradiction-source-verification.test.mjs#L235) (Zeile 235)
+- [derives only display explanations for old terminal v4 snapshots with missing quote matches](../../tests/js/contradiction-source-verification.test.mjs#L246) (Zeile 246)
+- [does not attach exclusions to different raw positions, question, anchor, or answer](../../tests/js/contradiction-source-verification.test.mjs#L258) (Zeile 258)
+- [explains an excluded contradiction in the public fallback when no Differences panel exists](../../tests/js/contradiction-source-verification.test.mjs#L268) (Zeile 268)
+- [describes the rejected source check as unresolved in the footer, report and detail](../../tests/js/contradiction-source-verification.test.mjs#L280) (Zeile 280)
+- [counts multiple rejected checks without implying no source comparison was attempted](../../tests/js/contradiction-source-verification.test.mjs#L294) (Zeile 294)
+- [separates rejected conclusions, unavailable sources and omitted checks in a mixed result](../../tests/js/contradiction-source-verification.test.mjs#L301) (Zeile 301)
+- [keeps running checks and inaccessible sources distinct from rejected conclusions](../../tests/js/contradiction-source-verification.test.mjs#L310) (Zeile 310)
+- [shows the exact safe rejection reason with its known source and model position](../../tests/js/contradiction-source-verification.test.mjs#L320) (Zeile 320)
+- [never displays rejected quotes, explanations or a positive verdict even with contradictory checked metadata](../../tests/js/contradiction-source-verification.test.mjs#L333) (Zeile 333)
+- [explains %s without inventing quote content](../../tests/js/contradiction-source-verification.test.mjs#L343) (Zeile 343)
+- [does not create links for unknown, ambiguous or unsafe source identities and ignores raw diagnostics](../../tests/js/contradiction-source-verification.test.mjs#L357) (Zeile 357)
+- [keeps legacy evidence_mismatch honest when no detailed rejection was saved](../../tests/js/contradiction-source-verification.test.mjs#L371) (Zeile 371)
+- [bounds rejection diagnostics and reports fallback provenance without claiming successful verification](../../tests/js/contradiction-source-verification.test.mjs#L379) (Zeile 379)
+- [gives an honest status and useful context for incomplete checks](../../tests/js/contradiction-source-verification.test.mjs#L395) (Zeile 395)
+- [does not present rejected evidence as reviewed when a saved checked flag contradicts the rejection (%s)](../../tests/js/contradiction-source-verification.test.mjs#L411) (Zeile 411)
+- [reserves the positive status for a supported outcome without adding a failure hint](../../tests/js/contradiction-source-verification.test.mjs#L421) (Zeile 421)
+- [explains %s in the contradiction and source summary](../../tests/js/contradiction-source-verification.test.mjs#L429) (Zeile 429)
 
 </details>
 
@@ -1050,6 +1282,34 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 </details>
 
+<a id="dompurify-vendor-test-mjs"></a>
+
+## dompurify-vendor.test.mjs
+
+**Quelle:** [tests/js/dompurify-vendor.test.mjs](../../tests/js/dompurify-vendor.test.mjs) · **Bereiche:** Sicherheit, Frontend.
+
+**Ebene:** Echter gepinnter Sanitizer im jsdom.
+
+**Lauf:** 26 bestanden.
+
+**Geprüftes Verhalten:** Version und Angriffspayloads entfernen ausführbare Elemente, Eventhandler und javascript-URLs; Markdown, Mathematik und Quellenanker bleiben nutzbar.
+
+**Grenzen und Doubles:** Endlicher Payloadkorpus, keine vollständige Sicherheitsfreigabe oder Live-Advisory-Prüfung.
+
+**Prüfauftrag für den Folgeaudit:** Die benannten Mock-/Integrationsgrenzen am realen Adapter prüfen; Zuordnung und offene Aufgaben stehen in der Produktmatrix.
+
+**Direkte Codeverweise:** [static/js/markdown-stream.js](../../static/js/markdown-stream.js), [static/js/math-render.js](../../static/js/math-render.js), [static/js/sources.js](../../static/js/sources.js), [static/vendor/marked/12.0.2/marked.min.js](../../static/vendor/marked/12.0.2/marked.min.js).
+
+<details>
+<summary>4 Testdefinitionen und ihre Quellstellen</summary>
+
+- [is the pinned, maintained release and not an advisory-affected one](../../tests/js/dompurify-vendor.test.mjs#L68) (Zeile 68)
+- [neutralizes %s with the default config](../../tests/js/dompurify-vendor.test.mjs#L75) (Zeile 75)
+- [neutralizes %s through the model-answer renderer](../../tests/js/dompurify-vendor.test.mjs#L80) (Zeile 80)
+- [still renders Markdown, formulas and numbered source anchors](../../tests/js/dompurify-vendor.test.mjs#L87) (Zeile 87)
+
+</details>
+
 <a id="error-reporter-test-mjs"></a>
 
 ## error-reporter.test.mjs
@@ -1066,7 +1326,7 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 **Prüfauftrag für den Folgeaudit:** Client-/Serverredaktion und Deduplizierung als zusammenhängenden Vertrag prüfen.
 
-**Direkte Codeverweise:** [static/favicon.svg](../../static/favicon.svg), [static/js/error-reporter.js](../../static/js/error-reporter.js), [static/vendor/katex/0.17.0/dist/contrib/auto-render.min.js](../../static/vendor/katex/0.17.0/dist/contrib/auto-render.min.js), [static/vendor/katex/0.17.0/dist/katex.min.js](../../static/vendor/katex/0.17.0/dist/katex.min.js).
+**Direkte Codeverweise:** [static/js/error-reporter.js](../../static/js/error-reporter.js), [static/vendor/katex/0.17.0/dist/contrib/auto-render.min.js](../../static/vendor/katex/0.17.0/dist/contrib/auto-render.min.js), [static/vendor/katex/0.17.0/dist/katex.min.js](../../static/vendor/katex/0.17.0/dist/katex.min.js).
 
 **Direkte Testhelfer:** [tests/js/helpers/appWindow.mjs](../../tests/js/helpers/appWindow.mjs).
 
@@ -1144,6 +1404,61 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 </details>
 
+<a id="markdown-remote-media-test-mjs"></a>
+
+## markdown-remote-media.test.mjs
+
+**Quelle:** [tests/js/markdown-remote-media.test.mjs](../../tests/js/markdown-remote-media.test.mjs) · **Bereiche:** Sicherheit, Frontend.
+
+**Ebene:** jsdom-Markdownrenderer.
+
+**Lauf:** 3 bestanden.
+
+**Geprüftes Verhalten:** Remote-Markdownbilder werden durch Hinweise ersetzt, HTML-Medien/srcset/styles entfernt; sichere lokale Data-Bilder und normale Links bleiben.
+
+**Grenzen und Doubles:** DOM-Ausgabe statt tatsächlicher Browser-Netzwerkbeobachtung.
+
+**Prüfauftrag für den Folgeaudit:** Die benannten Mock-/Integrationsgrenzen am realen Adapter prüfen; Zuordnung und offene Aufgaben stehen in der Produktmatrix.
+
+**Direkte Codeverweise:** [static/js/markdown-stream.js](../../static/js/markdown-stream.js), [static/vendor/dompurify/3.4.16/dist/purify.min.js](../../static/vendor/dompurify/3.4.16/dist/purify.min.js), [static/vendor/marked/12.0.2/marked.min.js](../../static/vendor/marked/12.0.2/marked.min.js).
+
+<details>
+<summary>3 Testdefinitionen und ihre Quellstellen</summary>
+
+- [replaces remote markdown images with a visible note](../../tests/js/markdown-remote-media.test.mjs#L21) (Zeile 21)
+- [strips raw HTML images, srcset, media and style blocks](../../tests/js/markdown-remote-media.test.mjs#L28) (Zeile 28)
+- [keeps ordinary links clickable](../../tests/js/markdown-remote-media.test.mjs#L41) (Zeile 41)
+
+</details>
+
+<a id="markdown-stream-incremental-test-mjs"></a>
+
+## markdown-stream-incremental.test.mjs
+
+**Quelle:** [tests/js/markdown-stream-incremental.test.mjs](../../tests/js/markdown-stream-incremental.test.mjs) · **Bereiche:** Frontend, Agent.
+
+**Ebene:** jsdom-Streamingrenderer mit Parserinstrumentierung.
+
+**Lauf:** 7 bestanden.
+
+**Geprüftes Verhalten:** Vollständige und inkrementelle Ausgabe stimmen überein, fertige Blöcke bleiben stabil; Parserarbeit ist begrenzt, Textwechsel setzt zurück und Streaming sanitisiert wie Vollrendering.
+
+**Grenzen und Doubles:** Instrumentierte Zeichenmenge statt Produktions-Performancebenchmark.
+
+**Prüfauftrag für den Folgeaudit:** Die benannten Mock-/Integrationsgrenzen am realen Adapter prüfen; Zuordnung und offene Aufgaben stehen in der Produktmatrix.
+
+**Direkte Codeverweise:** [static/js/markdown-stream.js](../../static/js/markdown-stream.js), [static/vendor/dompurify/3.4.16/dist/purify.min.js](../../static/vendor/dompurify/3.4.16/dist/purify.min.js), [static/vendor/marked/12.0.2/marked.min.js](../../static/vendor/marked/12.0.2/marked.min.js).
+
+<details>
+<summary>4 Testdefinitionen und ihre Quellstellen</summary>
+
+- [ends identical to a full render when chunks are %i chars](../../tests/js/markdown-stream-incremental.test.mjs#L30) (Zeile 30)
+- [parses each finished block once, so work stays linear in the answer length](../../tests/js/markdown-stream-incremental.test.mjs#L38) (Zeile 38)
+- [keeps finished nodes stable and starts over when the text does not just grow](../../tests/js/markdown-stream-incremental.test.mjs#L46) (Zeile 46)
+- [sanitizes streamed blocks like a full render](../../tests/js/markdown-stream-incremental.test.mjs#L62) (Zeile 62)
+
+</details>
+
 <a id="markdown-table-test-mjs"></a>
 
 ## markdown-table.test.mjs
@@ -1217,6 +1532,60 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 </details>
 
+<a id="memory-edit-auth-test-mjs"></a>
+
+## memory-edit-auth.test.mjs
+
+**Quelle:** [tests/js/memory-edit-auth.test.mjs](../../tests/js/memory-edit-auth.test.mjs) · **Bereiche:** Nutzergedächtnis, Authentifizierung.
+
+**Ebene:** jsdom-Memorydialog mit gesteuerten Auth-/Fetchwechseln.
+
+**Lauf:** 5 bestanden.
+
+**Geprüftes Verhalten:** Kontowechsel entfernt Auswahl und Undo, verhindert falsche Übermittlung und verspätetes Reload; Tokenrefresh desselben Kontos bleibt zulässig.
+
+**Grenzen und Doubles:** Serverautorisierung und Persistenz werden nicht ausgeführt.
+
+**Prüfauftrag für den Folgeaudit:** Die benannten Mock-/Integrationsgrenzen am realen Adapter prüfen; Zuordnung und offene Aufgaben stehen in der Produktmatrix.
+
+**Direkte Codeverweise:** [static/js/auth-session-state.js](../../static/js/auth-session-state.js), [static/js/memory-edit.js](../../static/js/memory-edit.js).
+
+<details>
+<summary>5 Testdefinitionen und ihre Quellstellen</summary>
+
+- [closes and forgets A's selection when the account changes to B](../../tests/js/memory-edit-auth.test.mjs#L59) (Zeile 59)
+- [refuses to submit A's selection even if no auth event was seen](../../tests/js/memory-edit-auth.test.mjs#L72) (Zeile 72)
+- [a late answer for A neither reloads nor shows Undo in B's session](../../tests/js/memory-edit-auth.test.mjs#L85) (Zeile 85)
+- [hides A's Undo toast when the account changes](../../tests/js/memory-edit-auth.test.mjs#L104) (Zeile 104)
+- [keeps working through a token refresh of the same account](../../tests/js/memory-edit-auth.test.mjs#L123) (Zeile 123)
+
+</details>
+
+<a id="memory-edit-sources-test-mjs"></a>
+
+## memory-edit-sources.test.mjs
+
+**Quelle:** [tests/js/memory-edit-sources.test.mjs](../../tests/js/memory-edit-sources.test.mjs) · **Bereiche:** Nutzergedächtnis, Quellen.
+
+**Ebene:** jsdom-Auswahlmenü.
+
+**Lauf:** 2 bestanden.
+
+**Geprüftes Verhalten:** Ausgewählter Antworttext mit Quellenmarkierung öffnet das Ask-/Memory-Auswahlmenü.
+
+**Grenzen und Doubles:** Keine tatsächliche KI-Patch-/Undo-Anfrage.
+
+**Prüfauftrag für den Folgeaudit:** Die benannten Mock-/Integrationsgrenzen am realen Adapter prüfen; Zuordnung und offene Aufgaben stehen in der Produktmatrix.
+
+**Direkte Codeverweise:** [static/js/memory-edit.js](../../static/js/memory-edit.js).
+
+<details>
+<summary>1 Testdefinitionen und ihre Quellstellen</summary>
+
+- [offers Ask about this for %s](../../tests/js/memory-edit-sources.test.mjs#L32) (Zeile 32)
+
+</details>
+
 <a id="mobile-header-test-mjs"></a>
 
 ## mobile-header.test.mjs
@@ -1254,9 +1623,9 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 **Ebene:** JavaScript-Modultest mit jsdom.
 
-**Lauf:** 22 bestanden.
+**Lauf:** 24 bestanden.
 
-**Geprüftes Verhalten:** Toolbelege pro Panel/Basis, Refresh und Reset isoliert; Modellvorschau erzeugt keine Antwort oder Ladeanzeige, echter Lauf ersetzt sie. Skeleton bis erster Text/Terminalzustand; Directbereitschaft im Composer, eingefrorene Modellversionen mit ehrlichem Legacyfallback. Auswahl und Scrollposition bei Streamupdate erhalten; archivierter Turn mit eigenen Quellen bleibt während Followup gewählt; fertiger Live-Turn geht in Historie über. Fremder Lauf/Logout schließt; unveränderte Antwort-DOM bleibt; Fehler im Directvergleich, zwei verschiedene Vergleichsmodelle und schmale/mobile Picker. Claimlink öffnet richtigen historischen Provider mit Fokusrückgabe; unsichere Namen/Links blockiert.
+**Geprüftes Verhalten:** Toolbelege pro Panel/Basis, Refresh und Reset isoliert; Modellvorschau erzeugt keine Antwort oder Ladeanzeige, echter Lauf ersetzt sie. Skeleton bis erster Text/Terminalzustand; Directbereitschaft im Composer, eingefrorene Modellversionen mit ehrlichem Legacyfallback. Auswahl und Scrollposition bei Streamupdate erhalten; archivierter Turn mit eigenen Quellen bleibt während Followup gewählt; fertiger Live-Turn geht in Historie über. Fremder Lauf/Logout schließt; unveränderte Antwort-DOM bleibt; Fehler im Directvergleich, zwei verschiedene Vergleichsmodelle und schmale/mobile Picker. Claimlink öffnet richtigen historischen Provider mit Fokusrückgabe; unsichere Namen/Links blockiert. Aktualisierung 02.10.2026: Nur ein Finding offen; keine redundanten Kontextlabels, unvollständige und abgeschnittene Antworten behalten Text und sichtbare Begründung.
 
 **Grenzen und Doubles:** Echter Reader, vorbereitete Run-/Turndaten, Markdown- und Geometrie-/Dialogumgebung teilweise simuliert. Keine tatsächliche Bildschirmbreite oder Screenreaderwirkung.
 
@@ -1267,27 +1636,29 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 **Direkte Testhelfer:** [tests/js/helpers/appWindow.mjs](../../tests/js/helpers/appWindow.mjs).
 
 <details>
-<summary>19 Testdefinitionen und ihre Quellstellen</summary>
+<summary>21 Testdefinitionen und ihre Quellstellen</summary>
 
 - [keeps explicit tool evidence isolated across panels, bases, refresh and reset](../../tests/js/model-answer-reader.test.mjs#L53) (Zeile 53)
-- [previews selected models without creating an answer or a loading state](../../tests/js/model-answer-reader.test.mjs#L89) (Zeile 89)
-- [replaces the preview with a real run and protects its frozen answers from mode changes](../../tests/js/model-answer-reader.test.mjs#L108) (Zeile 108)
-- [replaces waiting skeletons on first text and terminal states (agent=%s)](../../tests/js/model-answer-reader.test.mjs#L121) (Zeile 121)
-- [moves direct readiness to the composer and retains the normal reader heading](../../tests/js/model-answer-reader.test.mjs#L141) (Zeile 141)
-- [keeps saved model versions independent of current model choices](../../tests/js/model-answer-reader.test.mjs#L156) (Zeile 156)
-- [omits unknown legacy version %s without inventing one](../../tests/js/model-answer-reader.test.mjs#L164) (Zeile 164)
-- [uses the frozen model ID if a live run has no display label](../../tests/js/model-answer-reader.test.mjs#L174) (Zeile 174)
-- [shows only the selected original and updates streaming text without changing selection or scroll](../../tests/js/model-answer-reader.test.mjs#L181) (Zeile 181)
-- [keeps an archived question and its own sources selected when a later turn streams](../../tests/js/model-answer-reader.test.mjs#L196) (Zeile 196)
-- [keeps a completed live answer pinned when it moves into the conversation history](../../tests/js/model-answer-reader.test.mjs#L206) (Zeile 206)
-- [closes when switching to an unrelated run and on logout/reset](../../tests/js/model-answer-reader.test.mjs#L216) (Zeile 216)
-- [preserves an untouched direct answer while another model streams](../../tests/js/model-answer-reader.test.mjs#L224) (Zeile 224)
-- [shows every direct answer inline including failed models](../../tests/js/model-answer-reader.test.mjs#L234) (Zeile 234)
-- [compares two distinct models and switches between them on phones](../../tests/js/model-answer-reader.test.mjs#L244) (Zeile 244)
-- [uses actual reader width for tablets with a sidebar](../../tests/js/model-answer-reader.test.mjs#L257) (Zeile 257)
-- [uses one compact model picker on phones instead of a tall stack of model tabs](../../tests/js/model-answer-reader.test.mjs#L265) (Zeile 265)
-- [opens claim links in the correct archived model and restores focus on close](../../tests/js/model-answer-reader.test.mjs#L274) (Zeile 274)
-- [renders model names as text and never creates unsafe source links](../../tests/js/model-answer-reader.test.mjs#L284) (Zeile 284)
+- [keeps the differences panel to one open finding, without subtitle or question label](../../tests/js/model-answer-reader.test.mjs#L89) (Zeile 89)
+- [previews selected models without creating an answer or a loading state](../../tests/js/model-answer-reader.test.mjs#L118) (Zeile 118)
+- [replaces the preview with a real run and protects its frozen answers from mode changes](../../tests/js/model-answer-reader.test.mjs#L137) (Zeile 137)
+- [replaces waiting skeletons on first text and terminal states (agent=%s)](../../tests/js/model-answer-reader.test.mjs#L150) (Zeile 150)
+- [moves direct readiness to the composer and retains the normal reader heading](../../tests/js/model-answer-reader.test.mjs#L170) (Zeile 170)
+- [keeps saved model versions independent of current model choices](../../tests/js/model-answer-reader.test.mjs#L185) (Zeile 185)
+- [omits unknown legacy version %s without inventing one](../../tests/js/model-answer-reader.test.mjs#L193) (Zeile 193)
+- [uses the frozen model ID if a live run has no display label](../../tests/js/model-answer-reader.test.mjs#L203) (Zeile 203)
+- [shows only the selected original and updates streaming text without changing selection or scroll](../../tests/js/model-answer-reader.test.mjs#L210) (Zeile 210)
+- [keeps an archived question and its own sources selected when a later turn streams](../../tests/js/model-answer-reader.test.mjs#L225) (Zeile 225)
+- [keeps a completed live answer pinned when it moves into the conversation history](../../tests/js/model-answer-reader.test.mjs#L235) (Zeile 235)
+- [closes when switching to an unrelated run and on logout/reset](../../tests/js/model-answer-reader.test.mjs#L245) (Zeile 245)
+- [preserves an untouched direct answer while another model streams](../../tests/js/model-answer-reader.test.mjs#L253) (Zeile 253)
+- [shows every direct answer inline including failed models](../../tests/js/model-answer-reader.test.mjs#L263) (Zeile 263)
+- [compares two distinct models and switches between them on phones](../../tests/js/model-answer-reader.test.mjs#L273) (Zeile 273)
+- [uses actual reader width for tablets with a sidebar](../../tests/js/model-answer-reader.test.mjs#L286) (Zeile 286)
+- [uses one compact model picker on phones instead of a tall stack of model tabs](../../tests/js/model-answer-reader.test.mjs#L294) (Zeile 294)
+- [opens claim links in the correct archived model and restores focus on close](../../tests/js/model-answer-reader.test.mjs#L303) (Zeile 303)
+- [shows partial and cut-off answers with their text, a small mark and one visible reason](../../tests/js/model-answer-reader.test.mjs#L313) (Zeile 313)
+- [renders model names as text and never creates unsafe source links](../../tests/js/model-answer-reader.test.mjs#L331) (Zeile 331)
 
 </details>
 
@@ -1386,30 +1757,31 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 **Ebene:** JavaScript-Modulintegration mit jsdom und Render-/Observer-Doubles.
 
-**Lauf:** 9 bestanden.
+**Lauf:** 10 bestanden.
 
-**Geprüftes Verhalten:** Quellenhydration nach Konsensabschluss ohne versteckten Lauf zu projizieren; historische Stubs nur solange ihr DOM existiert. Followup erhält Historien-DOM, offene Details, Fokus und wartende Animationen; Modellquellen/Terminalfehler aktualisieren auch ohne Textänderung. Insights erscheinen vor Quellenabschluss und bleiben als DOM erhalten; Hintergrundupdates bleiben beim Owner, Laufzeilen wechseln gezielt. Rückkopplung durch Projektion begrenzt; Quellnummern lauflokal ohne sichtbare Globals zu ändern; Legacy-Quellenblock hinter erste Aussage.
+**Geprüftes Verhalten:** Quellenhydration nach Konsensabschluss ohne versteckten Lauf zu projizieren; historische Stubs nur solange ihr DOM existiert. Followup erhält Historien-DOM, offene Details, Fokus und wartende Animationen; Modellquellen/Terminalfehler aktualisieren auch ohne Textänderung. Insights erscheinen vor Quellenabschluss und bleiben als DOM erhalten; Hintergrundupdates bleiben beim Owner, Laufzeilen wechseln gezielt. Rückkopplung durch Projektion begrenzt; Quellnummern lauflokal ohne sichtbare Globals zu ändern; Legacy-Quellenblock hinter erste Aussage. Aktualisierung 02.10.2026: Archivierter Agentturn besitzt eine Belegzeile mit Copy ohne doppelten Quellenfooter.
 
 **Grenzen und Doubles:** Echte Registry-/View- und teilweise Konsens-/Sourcesmodule, viele Rendering-/Auth-/Quellobservergrenzen ersetzt; kein tatsächliches paralleles Backend.
 
 **Prüfauftrag für den Folgeaudit:** Reale Renderer, Persistenz und mehrere Streams mit Browserläufen abgleichen.
 
-**Direkte Codeverweise:** [static/js/consensus-run.js](../../static/js/consensus-run.js), [static/js/run-registry.js](../../static/js/run-registry.js), [static/js/run-view.js](../../static/js/run-view.js), [static/js/sources.js](../../static/js/sources.js).
+**Direkte Codeverweise:** [static/js/agent-answer-actions.js](../../static/js/agent-answer-actions.js), [static/js/agent-review.js](../../static/js/agent-review.js), [static/js/consensus-run.js](../../static/js/consensus-run.js), [static/js/run-registry.js](../../static/js/run-registry.js), [static/js/run-view.js](../../static/js/run-view.js), [static/js/sources.js](../../static/js/sources.js).
 
 **Direkte Testhelfer:** [tests/js/helpers/appWindow.mjs](../../tests/js/helpers/appWindow.mjs).
 
 <details>
-<summary>9 Testdefinitionen und ihre Quellstellen</summary>
+<summary>10 Testdefinitionen und ihre Quellstellen</summary>
 
-- [continues source hydration after consensus succeeds without projecting a hidden run](../../tests/js/multi-run-view.test.mjs#L131) (Zeile 131)
-- [hydrates a saved terminal source stub for a historical turn only while its body exists](../../tests/js/multi-run-view.test.mjs#L162) (Zeile 162)
-- [preserves completed history, open drawers and waiting model animations during follow-up streaming](../../tests/js/multi-run-view.test.mjs#L181) (Zeile 181)
-- [refreshes model source mappings and terminal errors without text changes](../../tests/js/multi-run-view.test.mjs#L242) (Zeile 242)
-- [publishes insights while sources are pending and preserves their DOM through source and final events](../../tests/js/multi-run-view.test.mjs#L261) (Zeile 261)
-- [keeps late background updates out of the visible DOM and restores either run from its row](../../tests/js/multi-run-view.test.mjs#L297) (Zeile 297)
-- [survives a surface that renders the visible run back at it](../../tests/js/multi-run-view.test.mjs#L332) (Zeile 332)
-- [rewrites source numbers against the supplied run without touching the visible global](../../tests/js/multi-run-view.test.mjs#L362) (Zeile 362)
-- [moves a legacy leading source block behind the first model claim](../../tests/js/multi-run-view.test.mjs#L407) (Zeile 407)
+- [continues source hydration after consensus succeeds without projecting a hidden run](../../tests/js/multi-run-view.test.mjs#L133) (Zeile 133)
+- [hydrates a saved terminal source stub for a historical turn only while its body exists](../../tests/js/multi-run-view.test.mjs#L164) (Zeile 164)
+- [gives an archived Agent turn one evidence row with Copy inside and no second Sources footer](../../tests/js/multi-run-view.test.mjs#L183) (Zeile 183)
+- [preserves completed history, open drawers and waiting model animations during follow-up streaming](../../tests/js/multi-run-view.test.mjs#L205) (Zeile 205)
+- [refreshes model source mappings and terminal errors without text changes](../../tests/js/multi-run-view.test.mjs#L266) (Zeile 266)
+- [publishes insights while sources are pending and preserves their DOM through source and final events](../../tests/js/multi-run-view.test.mjs#L285) (Zeile 285)
+- [keeps late background updates out of the visible DOM and restores either run from its row](../../tests/js/multi-run-view.test.mjs#L321) (Zeile 321)
+- [survives a surface that renders the visible run back at it](../../tests/js/multi-run-view.test.mjs#L356) (Zeile 356)
+- [rewrites source numbers against the supplied run without touching the visible global](../../tests/js/multi-run-view.test.mjs#L386) (Zeile 386)
+- [moves a legacy leading source block behind the first model claim](../../tests/js/multi-run-view.test.mjs#L431) (Zeile 431)
 
 </details>
 
@@ -1421,9 +1793,9 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 **Ebene:** Gemischte JavaScript-Modulintegration und statische Quelltextverträge.
 
-**Lauf:** 8 bestanden.
+**Lauf:** 7 bestanden.
 
-**Geprüftes Verhalten:** Plus darf Dateiauswahl, Free wird gesperrt; Badge/Upgradelink für Free/Plus/Pro; falsches is_pro-Signal überschreibt Plus nicht, expliziter Downgrade und Prosignal gültig. Quelltextprüfungen für Tarifsinks verbieten is_pro als direkte Übergabe und fordern data.tier mit Fallback.
+**Geprüftes Verhalten:** Plus darf Dateiauswahl, Free wird gesperrt; Badge/Upgradelink für Free/Plus/Pro; falsches is_pro-Signal überschreibt Plus nicht, expliziter Downgrade und Prosignal gültig. Quelltextprüfungen für Tarifsinks verbieten is_pro als direkte Übergabe und fordern data.tier mit Fallback. Der aktuelle Diff passt Fixtures, Payloads oder Bezeichnungen an; die unten neu extrahierten Definitionen und Assertionstellen sind maßgeblich.
 
 **Grenzen und Doubles:** DOMlogik mit echten State/Core/Attachments/Tiermodulen; ausgewählte Tierauflösung und Aufrufstellen zusätzlich aus Quelltext geprüft. Keine serverseitige Autorisierung oder vollständige Authintegration.
 
@@ -1441,8 +1813,8 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 - [names the tier on the badge and drops the Free-only upgrade link](../../tests/js/plus-tier-gates.test.mjs#L94) (Zeile 94)
 - [keeps Plus when a run reports only is_pro_user: false](../../tests/js/plus-tier-gates.test.mjs#L109) (Zeile 109)
 - [still accepts an explicit downgrade and a bare Pro signal](../../tests/js/plus-tier-gates.test.mjs#L123) (Zeile 123)
-- [never passes an is_pro flag to %s](../../tests/js/plus-tier-gates.test.mjs#L169) (Zeile 169)
-- [reads data.tier with the pro flag only as a fallback](../../tests/js/plus-tier-gates.test.mjs#L175) (Zeile 175)
+- [never passes an is_pro flag to %s](../../tests/js/plus-tier-gates.test.mjs#L171) (Zeile 171)
+- [reads data.tier with the pro flag only as a fallback](../../tests/js/plus-tier-gates.test.mjs#L177) (Zeile 177)
 
 </details>
 
@@ -1475,32 +1847,57 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 </details>
 
-<a id="run-progress-animation-test-mjs"></a>
+<a id="result-integrity-test-mjs"></a>
 
-## run-progress-animation.test.mjs
+## result-integrity.test.mjs
 
-**Quelle:** [tests/js/run-progress-animation.test.mjs](../../tests/js/run-progress-animation.test.mjs) · **Bereiche:** Antwortdarstellung, Streaming und Wiederherstellung.
+**Quelle:** [tests/js/result-integrity.test.mjs](../../tests/js/result-integrity.test.mjs) · **Bereiche:** Consensus, Frontend.
 
-**Ebene:** JavaScript-Modultest mit kontrollierter Zeit/Frames und jsdom.
+**Ebene:** jsdom-Consensusablauf mit simuliertem Transport.
 
-**Lauf:** 3 bestanden.
+**Lauf:** 2 bestanden.
 
-**Geprüftes Verhalten:** Zähler nähert sich monoton dem empfangenen Wert, reagiert auf Bursts und stoppt exakt ohne Restframes; alter Frame überschreibt Terminalstatus/neuen Lauf nicht; Reduced Motion auch während Animation setzt sofort Endwert.
+**Geprüftes Verhalten:** Nur Receipts vollständiger/verwendbarer Antworten werden gesendet, keine Clientantworttexte/-quellen. Abgeschnittene Synthese bleibt sichtbar, aber fehlgeschlagen, ohne Vote oder Bookmarksave.
 
-**Grenzen und Doubles:** Künstliche Frames, Zeit und DOM; keine Bildrate, CPUmessung oder tatsächliche Bewegung geprüft.
+**Grenzen und Doubles:** SSE/API simuliert; Serverreceipt-Prüfung liegt separat in Python.
 
-**Prüfauftrag für den Folgeaudit:** Animation bei echtem Streaming und reduzierter Bewegung browserseitig abgleichen.
+**Prüfauftrag für den Folgeaudit:** Die benannten Mock-/Integrationsgrenzen am realen Adapter prüfen; Zuordnung und offene Aufgaben stehen in der Produktmatrix.
 
-**Direkte Codeverweise:** [static/js/consensus-progress.js](../../static/js/consensus-progress.js).
-
-**Direkte Testhelfer:** [tests/js/helpers/appWindow.mjs](../../tests/js/helpers/appWindow.mjs).
+**Direkte Codeverweise:** [static/js/consensus-run.js](../../static/js/consensus-run.js), [static/js/run-registry.js](../../static/js/run-registry.js).
 
 <details>
-<summary>3 Testdefinitionen und ihre Quellstellen</summary>
+<summary>2 Testdefinitionen und ihre Quellstellen</summary>
 
-- [eases monotonically toward received counts, retargets bursts and stops at the exact value](../../tests/js/run-progress-animation.test.mjs#L44) (Zeile 44)
-- [never lets a queued animation overwrite terminal status or a new run](../../tests/js/run-progress-animation.test.mjs#L69) (Zeile 69)
-- [settles immediately with Reduced Motion, including changes mid-animation](../../tests/js/run-progress-animation.test.mjs#L90) (Zeile 90)
+- [sends only receipts of complete answers, never answer text or sources](../../tests/js/result-integrity.test.mjs#L41) (Zeile 41)
+- [keeps a truncated synthesis visible but marks it incomplete and failed](../../tests/js/result-integrity.test.mjs#L53) (Zeile 53)
+
+</details>
+
+<a id="run-mode-test-mjs"></a>
+
+## run-mode.test.mjs
+
+**Quelle:** [tests/js/run-mode.test.mjs](../../tests/js/run-mode.test.mjs) · **Bereiche:** Frontend, Einstellungen.
+
+**Ebene:** jsdom-Moduszustand und Storage.
+
+**Lauf:** 8 bestanden.
+
+**Geprüftes Verhalten:** Legacy-Schalter migrieren einmalig; Compare/Consensus/Agent werden anhand von Chatfamilie und Zugriff aufgelöst. Ungültige Werte, Eventdeduplizierung und anderer Tab sind geprüft.
+
+**Grenzen und Doubles:** Keine vollständige UI-/Routerintegration.
+
+**Prüfauftrag für den Folgeaudit:** Die benannten Mock-/Integrationsgrenzen am realen Adapter prüfen; Zuordnung und offene Aufgaben stehen in der Produktmatrix.
+
+**Direkte Codeverweise:** [static/js/run-mode.js](../../static/js/run-mode.js).
+
+<details>
+<summary>4 Testdefinitionen und ihre Quellstellen</summary>
+
+- [migrates %o once to %s and removes the legacy keys](../../tests/js/run-mode.test.mjs#L15) (Zeile 15)
+- [changes only to known modes, announces changes once and tracks the source](../../tests/js/run-mode.test.mjs#L32) (Zeile 32)
+- [resolves the effective mode from the open chat and the account](../../tests/js/run-mode.test.mjs#L45) (Zeile 45)
+- [follows a change made in another tab](../../tests/js/run-mode.test.mjs#L71) (Zeile 71)
 
 </details>
 
@@ -1514,7 +1911,7 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 **Lauf:** 11 bestanden.
 
-**Geprüftes Verhalten:** Fortschritt verschwindet für Bookmarkansicht und kehrt laufgebunden zurück; Uhr zählt ab echtem Startwert; Modellbalken erst bei Erfolg voll. Fakten/Provenienz und Zeichenwerte nicht zwischen Views vermischt; rohe Unicodezeichen ohne Markdown/Placeholderdoppelzählung. Fehler/Skip/Cancel getrennt von erfolgreicher Antwort; Abschlussdauer eingefroren; keine Liveankündigung für jeden Tick/Zeichenzuwachs.
+**Geprüftes Verhalten:** Aktueller Stepper statt entfernter animierter Fortschrittsleiste; Modellstatus gehört zum sichtbaren Lauf.
 
 **Grenzen und Doubles:** Echte Registry/Progress/Viewmodule mit Auth-/Umgebungsdoubles und unmittelbaren Zählern; keine realen Zeit-/Screenreader-/Layoutmessungen.
 
@@ -1527,15 +1924,15 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 <details>
 <summary>9 Testdefinitionen und ihre Quellstellen</summary>
 
-- [leaves the view when a saved bookmark is opened and comes back with the run](../../tests/js/run-progress-scope.test.mjs#L123) (Zeile 123)
-- [keeps counting from the real start when a running run is reopened](../../tests/js/run-progress-scope.test.mjs#L156) (Zeile 156)
-- [shows a live per-model bar and completes it with the answer](../../tests/js/run-progress-scope.test.mjs#L168) (Zeile 168)
-- [never shows one run's facts under another view](../../tests/js/run-progress-scope.test.mjs#L193) (Zeile 193)
-- [counts raw streamed characters without Markdown UI or surrogate duplication](../../tests/js/run-progress-scope.test.mjs#L218) (Zeile 218)
-- [does not count waiting or reasoning placeholders](../../tests/js/run-progress-scope.test.mjs#L243) (Zeile 243)
-- [shows %s as a terminal outcome, never a successful answer or character count](../../tests/js/run-progress-scope.test.mjs#L257) (Zeile 257)
-- [freezes completion time and restores only the selected run's characters](../../tests/js/run-progress-scope.test.mjs#L273) (Zeile 273)
-- [does not repeatedly announce each timer tick or streamed character](../../tests/js/run-progress-scope.test.mjs#L300) (Zeile 300)
+- [leaves the view when a saved bookmark is opened and comes back with the run](../../tests/js/run-progress-scope.test.mjs#L130) (Zeile 130)
+- [keeps counting from the real start when a running run is reopened](../../tests/js/run-progress-scope.test.mjs#L164) (Zeile 164)
+- [shows a live per-model bar and completes it with the answer](../../tests/js/run-progress-scope.test.mjs#L176) (Zeile 176)
+- [never shows one run's facts under another view](../../tests/js/run-progress-scope.test.mjs#L201) (Zeile 201)
+- [counts raw streamed characters without Markdown UI or surrogate duplication](../../tests/js/run-progress-scope.test.mjs#L226) (Zeile 226)
+- [does not count waiting or reasoning placeholders](../../tests/js/run-progress-scope.test.mjs#L252) (Zeile 252)
+- [shows %s as a terminal outcome, never a successful answer or character count](../../tests/js/run-progress-scope.test.mjs#L266) (Zeile 266)
+- [freezes completion time and restores only the selected run's characters](../../tests/js/run-progress-scope.test.mjs#L282) (Zeile 282)
+- [does not repeatedly announce each timer tick or streamed character](../../tests/js/run-progress-scope.test.mjs#L309) (Zeile 309)
 
 </details>
 
@@ -1547,9 +1944,9 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 **Ebene:** JavaScript-Modultest mit jsdom und Auth-Doubles.
 
-**Lauf:** 10 bestanden.
+**Lauf:** 9 bestanden.
 
-**Geprüftes Verhalten:** Gespeicherte Agentsnapshots begrenzt ohne ungespeicherte/fremde Pipelineergebnisse zu verlieren; Startsnapshots eingefroren und höchstens zwei aktive Läufe. Sichtbare Projektion, Ausführung und Followupbasis getrennt; gezielter Cancel und clearAll brechen Ownercontroller ab. Followups pro Gespräch serialisiert, unsicherer Turn/Löschung gesperrt; fehlgeschlagenes Followup verdrängt letzten erfolgreichen Bookmark nicht. Usageupdates nach Reihenfolge, autoritativer Refresh; teure Folgeaktionen teilen Zulassung/Logoutgrenze; ChatSessioninstanzen teilen keine Identität.
+**Geprüftes Verhalten:** Gespeicherte Agentsnapshots begrenzt ohne ungespeicherte/fremde Pipelineergebnisse zu verlieren; Startsnapshots eingefroren und höchstens zwei aktive Läufe. Sichtbare Projektion, Ausführung und Followupbasis getrennt; gezielter Cancel und clearAll brechen Ownercontroller ab. Followups pro Gespräch serialisiert, unsicherer Turn/Löschung gesperrt; fehlgeschlagenes Followup verdrängt letzten erfolgreichen Bookmark nicht. Usageupdates nach Reihenfolge, autoritativer Refresh; teure Folgeaktionen teilen Zulassung/Logoutgrenze; ChatSessioninstanzen teilen keine Identität. Aktualisierung 02.10.2026: Entfernte Fortschrittsanimation wird nicht mehr als Registryvertrag erwartet; Run-/Chatbindung bleibt.
 
 **Grenzen und Doubles:** In-Memory-Registry und simulierte Auth-/Operationen; kein serverübergreifendes Lock oder tatsächliche Quota-Transaktion.
 
@@ -1560,7 +1957,7 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 **Direkte Testhelfer:** [tests/js/helpers/appWindow.mjs](../../tests/js/helpers/appWindow.mjs).
 
 <details>
-<summary>10 Testdefinitionen und ihre Quellstellen</summary>
+<summary>9 Testdefinitionen und ihre Quellstellen</summary>
 
 - [bounds saved Agent snapshots without dropping unsaved or other pipeline results](../../tests/js/run-registry.test.mjs#L39) (Zeile 39)
 - [freezes each start snapshot and admits at most two executing runs](../../tests/js/run-registry.test.mjs#L64) (Zeile 64)
@@ -1569,9 +1966,33 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 - [cancels exactly the addressed run and clearAll aborts the rest](../../tests/js/run-registry.test.mjs#L129) (Zeile 129)
 - [serializes follow-ups per conversation and retains an uncertain-turn fence](../../tests/js/run-registry.test.mjs#L165) (Zeile 165)
 - [does not let a failed follow-up shadow the last successful bookmark snapshot](../../tests/js/run-registry.test.mjs#L196) (Zeile 196)
-- [fences out-of-order account usage snapshots but accepts an authoritative refresh](../../tests/js/run-registry.test.mjs#L208) (Zeile 208)
-- [owns costly post-actions under the same admission and logout boundary](../../tests/js/run-registry.test.mjs#L232) (Zeile 232)
-- [does not share completed or pending conversation identity](../../tests/js/run-registry.test.mjs#L266) (Zeile 266)
+- [owns costly post-actions under the same admission and logout boundary](../../tests/js/run-registry.test.mjs#L208) (Zeile 208)
+- [does not share completed or pending conversation identity](../../tests/js/run-registry.test.mjs#L242) (Zeile 242)
+
+</details>
+
+<a id="send-button-test-mjs"></a>
+
+## send-button.test.mjs
+
+**Quelle:** [tests/js/send-button.test.mjs](../../tests/js/send-button.test.mjs) · **Bereiche:** Frontend.
+
+**Ebene:** jsdom-Sende-/Stopzustand.
+
+**Lauf:** 1 bestanden.
+
+**Geprüftes Verhalten:** SVG bleibt über wiederholte Syncs stabil; Startanimation erfolgt einmal, Stop und Ende stellen die richtigen Icons/Klassen her.
+
+**Grenzen und Doubles:** Kein visueller Nachweis von Lichtanimation/Reduced Motion.
+
+**Prüfauftrag für den Folgeaudit:** Die benannten Mock-/Integrationsgrenzen am realen Adapter prüfen; Zuordnung und offene Aufgaben stehen in der Produktmatrix.
+
+**Direkte Codeverweise:** [static/js/query-send.js](../../static/js/query-send.js).
+
+<details>
+<summary>1 Testdefinitionen und ihre Quellstellen</summary>
+
+- [keeps its icon across repeated syncs and launches once per run](../../tests/js/send-button.test.mjs#L13) (Zeile 13)
 
 </details>
 
@@ -1619,22 +2040,25 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 **Ebene:** JavaScript-Modultest mit jsdom.
 
-**Lauf:** 1 bestanden.
+**Lauf:** 4 bestanden.
 
-**Geprüftes Verhalten:** Agentrestbudget als Prozent im vorhandenen Ring, Konsensquoten bleiben intern erhalten; Reservierung und neu verfügbare Tokens passend erklärt, Werte begrenzt; ohne Budget verborgen, Rückwechsel stellt Konsens-/Deepanzeige und Resettext wieder her.
+**Geprüftes Verhalten:** Ein Kontoring und Panel für alle Modi; Holds/Schätzungen, Schwellfarben, geordnete konkurrierende Snapshots, UID-Fencing und Startprüfung gegen Modusschätzung.
 
 **Grenzen und Doubles:** Ein Test mit mehreren aufeinanderfolgenden künstlichen Budgets; keine Backendberechnung, tatsächliche Reservierung oder visuelle Ringprüfung.
 
 **Prüfauftrag für den Folgeaudit:** Reset, konkurrierende Reservierungen und kontenbezogene UIupdates zuordnen.
 
-**Direkte Codeverweise:** [static/js/sidebar-quota.js](../../static/js/sidebar-quota.js).
+**Direkte Codeverweise:** [static/js/sidebar-quota.js](../../static/js/sidebar-quota.js), [static/js/token-budget.js](../../static/js/token-budget.js).
 
 **Direkte Testhelfer:** [tests/js/helpers/appWindow.mjs](../../tests/js/helpers/appWindow.mjs).
 
 <details>
-<summary>1 Testdefinitionen und ihre Quellstellen</summary>
+<summary>4 Testdefinitionen und ihre Quellstellen</summary>
 
-- [projects remaining Agent tokens into the existing ring without changing Consensus quotas](../../tests/js/sidebar-quota.test.mjs#L4) (Zeile 4)
+- [shows one quiet ring for the shared account, the value only in label and panel](../../tests/js/sidebar-quota.test.mjs#L30) (Zeile 30)
+- [turns only the arc and the bar amber or red, and explains holds and estimates](../../tests/js/sidebar-quota.test.mjs#L55) (Zeile 55)
+- [orders concurrent snapshots and fences other accounts](../../tests/js/sidebar-quota.test.mjs#L75) (Zeile 75)
+- [admits a run like the server: available tokens against the mode estimate](../../tests/js/sidebar-quota.test.mjs#L93) (Zeile 93)
 
 </details>
 
@@ -1705,9 +2129,9 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 **Ebene:** JavaScript-Modulintegration mit jsdom.
 
-**Lauf:** 9 bestanden.
+**Lauf:** 10 bestanden.
 
-**Geprüftes Verhalten:** Popup zeigt gebundenes Support-/Teil-/Widerspruchs-/Unklar-/Zeit-/Nichtprüfbar-Ergebnis und sicheren Begründungstext; offenes Popup bleibt über Pending, Update, Neurendern und Reset aktuell. Ergebnis nicht von anderer Aussage oder anderem Turn mit derselben ID übernehmen; Tastaturfokus öffnet, Escape schließt ohne Fokusverlust und erhält bestehendes aria-describedby.
+**Geprüftes Verhalten:** Popup zeigt gebundenes Support-/Teil-/Widerspruchs-/Unklar-/Zeit-/Nichtprüfbar-Ergebnis und sicheren Begründungstext; offenes Popup bleibt über Pending, Update, Neurendern und Reset aktuell. Ergebnis nicht von anderer Aussage oder anderem Turn mit derselben ID übernehmen; Tastaturfokus öffnet, Escape schließt ohne Fokusverlust und erhält bestehendes aria-describedby. Aktualisierung 02.10.2026: Gruppenpillen behalten einen Befund pro Quelle und zeigen die stärkste Warnung.
 
 **Grenzen und Doubles:** Echte Sources/Anchor/Verificationmodule, künstliche Findings und DOMevents; keine Mausgeometrie oder Screenreaderprüfung im echten Browser.
 
@@ -1718,12 +2142,40 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 **Direkte Testhelfer:** [tests/js/helpers/appWindow.mjs](../../tests/js/helpers/appWindow.mjs).
 
 <details>
-<summary>4 Testdefinitionen und ihre Quellstellen</summary>
+<summary>5 Testdefinitionen und ihre Quellstellen</summary>
 
 - [shows the bound result and safe reason for %j](../../tests/js/source-teaser-check.test.mjs#L25) (Zeile 25)
 - [keeps a hovered popup current through pending, checked, rerender and clearing without native titles](../../tests/js/source-teaser-check.test.mjs#L45) (Zeile 45)
-- [does not borrow the verdict of another statement or turn using the same source ID](../../tests/js/source-teaser-check.test.mjs#L65) (Zeile 65)
-- [opens the same tooltip on keyboard focus and dismisses with Escape without stealing focus](../../tests/js/source-teaser-check.test.mjs#L84) (Zeile 84)
+- [binds one verdict per source to a grouped pill and shows the most severe one](../../tests/js/source-teaser-check.test.mjs#L65) (Zeile 65)
+- [does not borrow the verdict of another statement or turn using the same source ID](../../tests/js/source-teaser-check.test.mjs#L96) (Zeile 96)
+- [opens the same tooltip on keyboard focus and dismisses with Escape without stealing focus](../../tests/js/source-teaser-check.test.mjs#L115) (Zeile 115)
+
+</details>
+
+<a id="source-url-identity-test-mjs"></a>
+
+## source-url-identity.test.mjs
+
+**Quelle:** [tests/js/source-url-identity.test.mjs](../../tests/js/source-url-identity.test.mjs) · **Bereiche:** Quellen.
+
+**Ebene:** Quellenmerge und Zitatzählung im jsdom.
+
+**Lauf:** 3 bestanden.
+
+**Geprüftes Verhalten:** Pfad-/Query-Großschreibung und trailing slash unterscheiden Ressourcen; Scheme-/Hostschreibung und Fragment dürfen zusammenfallen, Zitatnummern bleiben zugeordnet.
+
+**Grenzen und Doubles:** Keine reale URL-Auflösung oder Redirectprüfung.
+
+**Prüfauftrag für den Folgeaudit:** Die benannten Mock-/Integrationsgrenzen am realen Adapter prüfen; Zuordnung und offene Aufgaben stehen in der Produktmatrix.
+
+**Direkte Codeverweise:** [app/services/source_catalog.py](../../app/services/source_catalog.py), [static/js/sources.js](../../static/js/sources.js).
+
+<details>
+<summary>3 Testdefinitionen und ihre Quellstellen</summary>
+
+- [keeps sources apart that differ only in path or query case](../../tests/js/source-url-identity.test.mjs#L24) (Zeile 24)
+- [keeps a trailing slash as part of the resource, like the backend](../../tests/js/source-url-identity.test.mjs#L48) (Zeile 48)
+- [still merges URLs that differ only in scheme/host case or fragment](../../tests/js/source-url-identity.test.mjs#L62) (Zeile 62)
 
 </details>
 
@@ -1851,9 +2303,9 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 **Ebene:** JavaScript-Modulintegration mit jsdom.
 
-**Lauf:** 4 bestanden.
+**Lauf:** 7 bestanden.
 
-**Geprüftes Verhalten:** Widerspruch bleibt an richtiger historischer Aussage und wird nicht zur bloßen Supportquote; Aktivierung öffnet Unterschiedskarte desselben Turns, nicht aktuellen Footer. Bloß geteilter Claim behält Verhältnis und zugängliches Label.
+**Geprüftes Verhalten:** Widerspruch bleibt an richtiger historischer Aussage und wird nicht zur bloßen Supportquote; Aktivierung öffnet Unterschiedskarte desselben Turns, nicht aktuellen Footer. Bloß geteilter Claim behält Verhältnis und zugängliches Label. Aktualisierung 02.10.2026: Schweregrad zuerst, einwortige Labels und stabile Differenceindizes; Modelllinks nur bei erreichbarer Antwort, Markerklick öffnet über Datenindex.
 
 **Grenzen und Doubles:** Vorgegebener historischer DOM und Analysedaten; keine Bookmarkpersistenz oder tatsächlicher Reload.
 
@@ -1864,12 +2316,15 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 **Direkte Testhelfer:** [tests/js/helpers/appWindow.mjs](../../tests/js/helpers/appWindow.mjs).
 
 <details>
-<summary>4 Testdefinitionen und ihre Quellstellen</summary>
+<summary>7 Testdefinitionen und ihre Quellstellen</summary>
 
 - [keeps the contradiction line on the disputed sentence](../../tests/js/stored-turn-markers.test.mjs#L92) (Zeile 92)
 - [does not downgrade the contradiction to a support ratio](../../tests/js/stored-turn-markers.test.mjs#L99) (Zeile 99)
 - [opens the difference card of its own turn, not the live footer](../../tests/js/stored-turn-markers.test.mjs#L106) (Zeile 106)
 - [still shows the support ratio for a merely split claim](../../tests/js/stored-turn-markers.test.mjs#L121) (Zeile 121)
+- [orders critical first, names severity in one word and keeps the data index](../../tests/js/stored-turn-markers.test.mjs#L152) (Zeile 152)
+- [puts each position's models on one line, as jump links only when an answer is reachable](../../tests/js/stored-turn-markers.test.mjs#L166) (Zeile 166)
+- [opens the card of the clicked marker by data index, not by card position](../../tests/js/stored-turn-markers.test.mjs#L190) (Zeile 190)
 
 </details>
 
@@ -1901,6 +2356,35 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 </details>
 
+<a id="topic-page-test-mjs"></a>
+
+## topic-page.test.mjs
+
+**Quelle:** [tests/js/topic-page.test.mjs](../../tests/js/topic-page.test.mjs) · **Bereiche:** Topics, Sicherheit.
+
+**Ebene:** jsdom-Checkstrip und Returning-Reader-Band.
+
+**Lauf:** 7 bestanden.
+
+**Geprüftes Verhalten:** HTMLartige Notizen/Datumswerte werden als Text angezeigt; kein eingeschleustes Bild/Eventhandler, korrekte Score-/Unscoredanzeige und Rückkehr zur Serverzeile.
+
+**Grenzen und Doubles:** Keine echte CSP-/Browserangriffskette; öffentliche Route separat als Quelltext/HTTP geprüft.
+
+**Prüfauftrag für den Folgeaudit:** Die benannten Mock-/Integrationsgrenzen am realen Adapter prüfen; Zuordnung und offene Aufgaben stehen in der Produktmatrix.
+
+**Direkte Codeverweise:** [static/js/topic-page.js](../../static/js/topic-page.js).
+
+<details>
+<summary>5 Testdefinitionen und ihre Quellstellen</summary>
+
+- [`shows HTML-like notes literally on ${label}`](../../tests/js/topic-page.test.mjs#L57) (Zeile 57)
+- [keeps the bold date and the score formatting](../../tests/js/topic-page.test.mjs#L72) (Zeile 72)
+- [omits the score for an unscored cell](../../tests/js/topic-page.test.mjs#L83) (Zeile 83)
+- [restores the server-rendered resting line after leaving the strip](../../tests/js/topic-page.test.mjs#L89) (Zeile 89)
+- [builds the returning-reader band from text, including hostile dates](../../tests/js/topic-page.test.mjs#L99) (Zeile 99)
+
+</details>
+
 <a id="user-memory-test-mjs"></a>
 
 ## user-memory.test.mjs
@@ -1909,9 +2393,9 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 
 **Ebene:** JavaScript-Modultest mit jsdom und Auth-/Fetch-Doubles.
 
-**Lauf:** 3 bestanden.
+**Lauf:** 6 bestanden.
 
-**Geprüftes Verhalten:** Gespeichertes Profil in Formular geladen; Ausschalten sendet enabled=false mit vollständigen sechs Profilfeldern und bleibt ausgeschaltet; reiner Schalterwrite erhält gespeicherte Rolle/Notizen.
+**Geprüftes Verhalten:** Gespeichertes Profil in Formular geladen; Ausschalten sendet enabled=false mit vollständigen sechs Profilfeldern und bleibt ausgeschaltet; reiner Schalterwrite erhält gespeicherte Rolle/Notizen. Aktualisierung 02.10.2026: 409 bewahrt lokalen Entwurf und bietet Reload; bewusstes Überschreiben benötigt neueste Revision, KI-Reload löscht ungespeicherten Entwurf nicht.
 
 **Grenzen und Doubles:** Künstliche GET-/PUTantworten, keine Datenbank, Servervalidierung oder Promptinjektion.
 
@@ -1922,39 +2406,43 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 **Direkte Testhelfer:** [tests/js/helpers/appWindow.mjs](../../tests/js/helpers/appWindow.mjs).
 
 <details>
-<summary>3 Testdefinitionen und ihre Quellstellen</summary>
+<summary>6 Testdefinitionen und ihre Quellstellen</summary>
 
 - [loads the stored profile into the form](../../tests/js/user-memory.test.mjs#L99) (Zeile 99)
 - [turns memory off and stays off](../../tests/js/user-memory.test.mjs#L104) (Zeile 104)
-- [keeps the saved text when only the switch is written](../../tests/js/user-memory.test.mjs#L119) (Zeile 119)
+- [keeps the saved text when only the switch is written](../../tests/js/user-memory.test.mjs#L121) (Zeile 121)
+- [keeps the draft and offers reload when another writer won](../../tests/js/user-memory.test.mjs#L187) (Zeile 187)
+- [can deliberately overwrite the newer Memory with the kept draft](../../tests/js/user-memory.test.mjs#L210) (Zeile 210)
+- [an AI edit reload does not wipe an unsaved settings draft](../../tests/js/user-memory.test.mjs#L226) (Zeile 226)
 
 </details>
 
-<a id="watch-drift-state-test-mjs"></a>
+<a id="watch-dashboard-state-test-mjs"></a>
 
-## watch-drift-state.test.mjs
+## watch-dashboard-state.test.mjs
 
-**Quelle:** [tests/js/watch-drift-state.test.mjs](../../tests/js/watch-drift-state.test.mjs) · **Bereiche:** Watch.
+**Quelle:** [tests/js/watch-dashboard-state.test.mjs](../../tests/js/watch-dashboard-state.test.mjs) · **Bereiche:** Watches, Frontend.
 
-**Ebene:** JavaScript-Modulintegration mit jsdom.
+**Ebene:** jsdom-Dashboard mit Serverzustandsfixtures.
 
-**Lauf:** 2 bestanden.
+**Lauf:** 5 bestanden.
 
-**Geprüftes Verhalten:** Serverurteil semantically_changed entscheidet statt rohem changed-Flag: Umformulierung stabil mit Erklärung, materielle Änderung mit Zusammenfassung als changed.
+**Geprüftes Verhalten:** Moved ausschließlich aus Serverurteil samt Belegen, Held bleibt stehende Antwort, Recheck/Resolved/Ziel und letzter Move werden richtig dargestellt; Gruppen Watching/Resolved/Delivery ohne Score.
 
-**Grenzen und Doubles:** Zwei vorbereitete Drifturteile und Fetchdouble; keine tatsächliche Semantikbewertung oder Watchausführung.
+**Grenzen und Doubles:** Keine echte Watch-API, Zustellung oder Browsergeometrie.
 
-**Prüfauftrag für den Folgeaudit:** Serverurteile, Legacyzustände und gemischte Ergebnisfälle zuordnen.
+**Prüfauftrag für den Folgeaudit:** Die benannten Mock-/Integrationsgrenzen am realen Adapter prüfen; Zuordnung und offene Aufgaben stehen in der Produktmatrix.
 
-**Direkte Codeverweise:** [static/js/watch-state.js](../../static/js/watch-state.js), [static/js/watch.js](../../static/js/watch.js).
-
-**Direkte Testhelfer:** [tests/js/helpers/appWindow.mjs](../../tests/js/helpers/appWindow.mjs).
+**Direkte Codeverweise:** [static/js/watch-dashboard.js](../../static/js/watch-dashboard.js), [static/js/watch-state.js](../../static/js/watch-state.js), [static/js/watch.js](../../static/js/watch.js).
 
 <details>
-<summary>2 Testdefinitionen und ihre Quellstellen</summary>
+<summary>5 Testdefinitionen und ihre Quellstellen</summary>
 
-- [reads the server verdict instead of the raw changed flag](../../tests/js/watch-drift-state.test.mjs#L31) (Zeile 31)
-- [still announces a check the judge graded as material](../../tests/js/watch-drift-state.test.mjs#L48) (Zeile 48)
+- [reads moved only from the server verdict, with the sources that carry it](../../tests/js/watch-dashboard-state.test.mjs#L36) (Zeile 36)
+- [never presents a held answer as a change](../../tests/js/watch-dashboard-state.test.mjs#L50) (Zeile 50)
+- [names a pending re-check and a resolved goal](../../tests/js/watch-dashboard-state.test.mjs#L63) (Zeile 63)
+- [falls back to the last move while the answer is steady](../../tests/js/watch-dashboard-state.test.mjs#L76) (Zeile 76)
+- [groups watches and shows the goal with its status](../../tests/js/watch-dashboard-state.test.mjs#L95) (Zeile 95)
 
 </details>
 

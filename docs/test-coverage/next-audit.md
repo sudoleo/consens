@@ -1,7 +1,7 @@
 # Folgeaudit: von vorhandenen Tests zu belegter Abdeckung
 
 [Zum Katalog](../test-coverage-map.md). Die Vorbereitung dieses Folgeaudits ist
-inzwischen als **[Produktabgleich mit 30 Arbeitspaketen](product/README.md)**
+inzwischen als **[Produktabgleich mit 38 Arbeitspaketen](product/README.md)**
 dokumentiert. Der folgende methodische Ablauf bleibt für die Umsetzung und
 weitere Reviews gültig. Bestandsaufnahme und Folgeaudit implementieren selbst
 keine fehlenden Regressionstests oder Produktkorrekturen.
@@ -9,8 +9,8 @@ keine fehlenden Regressionstests oder Produktkorrekturen.
 ## 1. Ausgangsstand verifizieren
 
 `check_inventory.py` ausführen, geänderte Test-/Produktdateien identifizieren und
-betroffene Einträge erneut lesen. Aktuellen Runnerbestand sammeln. Die vier
-Befunde aus [findings.md](findings.md) sowie Windows- und Browserausführung
+betroffene Einträge erneut lesen. Aktuellen Runnerbestand sammeln. Die aktuellen
+Befunde aus [findings.md](findings.md) sowie offene Emulator-/Browsergrenzen
 klären. Ein bekannter roter oder nicht ausgeführter Test darf nicht als grüner
 Nachweis in eine Bewertung eingehen.
 

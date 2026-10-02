@@ -1,5 +1,8 @@
 # Unabhängige Gegenprüfung von c88629ee
 
+**Historischer Bericht.** Die folgenden Aussagen beziehen sich auf den damaligen
+Quellstand. Aktuelle Funktionen, Befundstatus und Läufe: [Aktualisierung 02.10.2026](current-review.md).
+
 [Einstieg](README.md) · [Befunde](gaps.md) · [Arbeitspakete](work-packages.md)
 
 **Reviewdatum: 26.09.2026 UTC.** Eingang: `c88629eed4466de1b0944dd20eb441880833a89b`.

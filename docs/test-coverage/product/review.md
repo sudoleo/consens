@@ -1,5 +1,9 @@
 # Zweite Gegenprüfung des Testaudits
 
+**Historischer Bericht vom 26.09.2026.** Aktueller Quellstand und Befundstatus:
+[Aktualisierung 02.10.2026](current-review.md). Die folgenden Laufzahlen und
+Beobachtungen werden als damalige Nachweise erhalten.
+
 [Einstieg](README.md) · [Verträge](matrix.md) · [Befunde](gaps.md)
 
 **Aktuell:** Die [unabhängige Gegenprüfung von `c88629ee`](independent-review.md)

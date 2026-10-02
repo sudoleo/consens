@@ -15,6 +15,11 @@ des Produktverantwortlichen.
 
 ## D-01 · API-Source-Checks und Publisherkonfiguration
 
+Stand 02.10.2026: Die API-Dokumentation und Publisheranzeige wurden inzwischen
+an den aktuellen Providerplan angepasst; `test_publisher_config.py` prüft ihn.
+Die folgenden Hinweise erklären den früheren Widerspruch, nicht eine weiterhin
+unverändert falsche API-Dokumentation.
+
 [docs/consensus-api.md](../../consensus-api.md) enthält überholte Aussagen über
 neu gestartete API-Source-Jobs und den Ausschluss von DeepSeek im Publishermodus.
 Der aktuelle Scopevertrag in
@@ -59,11 +64,12 @@ beachten.
 ## D-03 · Versand ist keine verteilte Exactly-once-Transaktion
 
 Der [Morning-Brief-Claim](../../../app/services/watch_brief.py) rückt den
-Zeitplan vor dem Versand vor und dokumentiert At-most-once. Ein Prozessabbruch
-zwischen Commit und externer Zustellung kann deshalb eine Nachricht auslassen.
-Der Briefpfad besitzt keine separate deduplizierte Versand-ID.
-Ein nachgelagerter Marker kann umgekehrt nach erfolgreichem Versand bei
-Wiederholung eine Doppelzustellung ermöglichen.
+Zeitplan vor und legt nun im selben Commit eine Zustellabsicht in der
+[Outbox](../../../app/services/notification_outbox.py) mit deterministischer
+Versand-ID an. Crash, Leaseübernahme, Retry, Ablauf und Unsubscribe haben
+Fake-Regressionsbelege. Ein Crash nach externer Zustellung vor dem Ack kann
+weiterhin Doppelzustellung erlauben: die Outbox ist keine atomare Transaktion
+mit SMTP/Telegram. Native Claims/SDK-Retries bleiben G-045.
 
 Tests sollen die konkrete aktuelle Claim-/Deduplizierungsgrenze absichern,
 einschließlich Sendefehler. Sie dürfen keine atomare Exactly-once-Garantie
@@ -170,16 +176,16 @@ Ein echter Reparaturlauf ist kein Regressionstest.
 | Endpoint-Kaskadentest beweist alle Datenbereiche | Dort ist der Löschservice ersetzt; G-004 ergänzt die konkrete Kaskade |
 | `real_provider_socket_stall` verwendet echte Sockets | Der Test nutzt MockTransport; G-032 ergänzt die Transportgrenze |
 | Ein grüner isolierter Report-Race widerlegt den roten Gesamtlauf | Primärlauf und Wiederholung sind beide Evidenz, Ursache bleibt offen |
-| Browserdatei vorhanden bedeutet Browservertrag grün | 267 Fälle sind gesammelt, noch nicht ausgeführt; WP-03 |
+| Browserdatei vorhanden bedeutet Browservertrag grün | Aktuell 308 Fälle: 219 bestanden, 30 fehlgeschlagen, 4 Setupfehler, 55 nicht ausgeführt; WP-03 |
 | Hohe Zeilenabdeckung sichert Undo/OG-Inhalt | M-01/M-02 bleiben trotz konkreter Verhaltensänderung grün |
 
 ## Zusätzliche Oracle-Korrekturen der unabhängigen Prüfung
 
 - **Memory:** Erfolgreiches Undo darf keine unverändert gebliebene Notiz nach Limitabsenkung still kürzen. Empfohlen ist eine strukturierte Ablehnung ohne Write; verlustfreie Wiederherstellung über dem aktuellen Limit braucht eine explizite Produktentscheidung (G-038/WP-10).
-- **Admin:** Prompt-/Budgetrevisionierung nicht auf Modell- oder Publisherkonfiguration übertragen. Ein Rollback darf nur den eigenen Write zurücknehmen, keinen zwischenzeitlichen Writer (G-040/WP-33).
+- **Admin:** Modellkonfiguration besitzt jetzt eigene CAS-/Rollbackrevisionen; sie nicht mit Prompt-/Budget- oder Publishergarantien gleichsetzen. Ein Rollback darf nur den eigenen Write zurücknehmen (G-040/WP-33, native Mehrprozessprüfung offen).
 - **Benchmark:** HTTP-200-Providerfehler sind keine Modell-Enthaltung. Gültiger Antworttext ohne extrahierbare Auswahl bleibt hingegen eine Enthaltung; diese Kontrolle muss die Fehlerkorrektur begleiten (G-042/WP-34).
 - **HTTP:** Retry-After im isolierten Router ist kein Beleg für dessen Erhalt durch main.app. Ebenso beweist Pydantic-422 keinen ausgeführten Detailhandler (G-037/G-039).
-- **UI:** Logischer Fokus ist in jsdom teilweise geprüft; Landing-Scroll-/Reduced-Motion-Browsertests existieren, sind aber nicht ausgeführt. Fehlende Tests und fehlende Laufnachweise bleiben getrennt.
+- **UI:** Logischer Fokus ist in jsdom teilweise geprüft; aktuelle Chromiumläufe einschließlich Landing/Reduced Motion stehen im Dateikatalog. Rote Tests, fehlende Tests und fehlende Laufnachweise bleiben getrennt.
 
 ## Abschluss des späteren Gesamtvorhabens
 

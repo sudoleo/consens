@@ -2,54 +2,58 @@
 
 [Einstieg](README.md) · [Arbeitspakete](work-packages.md) · [Suchbelege](search-evidence.json)
 
-42 Befunde. „Verifiziert“ bezeichnet den geprüften Code-/Testabgleich. G-018/G-019 sind durch lokale DOM-Proben beobachtete Verhaltensfehler; G-037/G-038/G-040/G-041/G-042 durch isolierte Python-Gegenproben. G-007/G-020 zusätzlich durch überlebende gezielte Mutationen belegte Assertionslücken. Die Aussagegrenze jeder Probe steht beim Befund und im unabhängigen Review. Die übrigen Kategorien unterscheiden fehlende Fälle/Integration, defekte Tests, Ausführungsnachweis und CI.
+46 Befunde im Verlauf, Stand 2026-10-02. Der aktuelle Status steht an jedem Befund: resolved = konkret behobener Befund, partially_addressed = Teilnachweis ergänzt, open = Restgrenze offen. Die ursprünglichen Mutations-/DOM-/Pythonproben vom 26.09.2026 bleiben historische Belege; sie werden nicht als aktuelle Messung ausgegeben. Der [Aktualisierungsbericht](current-review.md) trennt behobene Fehler, neue Teilbelege und erneut beobachtete Probleme.
 
 P1/P2/P3 ordnen die Umsetzung nach möglichen Folgen und Voraussetzungen; sie sind keine Incident-Schweregrade. Suchtreffer allein beweisen weder Vorhandensein noch Abwesenheit eines Tests. Die Schlussfolgerung verbindet Suche, Testkörper, Mockgrenzen und gegebenenfalls Branchlauf/Probe. Suggested paths sind Vorschläge, vorhandene passende Dateien bevorzugen.
 
-| ID | Priorität / Art | Befund | Paket |
-|---|---|---|---|
-| [G-001](#g-001) | P1 / ` missing_integration ` | Deny-all-Regeln mit Clientidentitäten prüfen | [WP-06](work-packages.md#wp-06) |
-| [G-002](#g-002) | P1 / ` missing_integration ` | Reguläre Usage mit echten Firestore-Transaktionen absichern | [WP-07](work-packages.md#wp-07) |
-| [G-003](#g-003) | P1 / ` missing_integration ` | Chat-Löschen gegen Turn/Completion im Emulator | [WP-08](work-packages.md#wp-08) |
-| [G-004](#g-004) | P1 / ` missing_integration ` | Vollständige Kontokaskade und API-Cleanup prüfen | [WP-09](work-packages.md#wp-09) |
-| [G-005](#g-005) | P1 / ` missing_case ` | API-Neustart-Recovery und Retention tatsächlich ausführen | [WP-11](work-packages.md#wp-11) |
-| [G-006](#g-006) | P1 / ` missing_integration ` | Source-Queue-Leases und Result-Commits im Emulator | [WP-14](work-packages.md#wp-14) |
-| [G-007](#g-007) | P1 / ` assertion_gap ` | Undo-Konflikt, Ablauf, Wiederholung und HTTP-Fehlergrenze | [WP-10](work-packages.md#wp-10) |
-| [G-008](#g-008) | P1 / ` missing_case ` | Memory-Patch gegen konkurrierenden Save und Kontolöschung | [WP-10](work-packages.md#wp-10) |
-| [G-009](#g-009) | P2 / ` missing_case ` | Konkurrierende Registrierung ohne Auskunfts-/Benachrichtigungsleck | [WP-12](work-packages.md#wp-12) |
-| [G-010](#g-010) | P1 / ` missing_case ` | Historischer API-v1-Source-Check-Adapter | [WP-11](work-packages.md#wp-11) |
-| [G-011](#g-011) | P1 / ` missing_case ` | App-POST-/api/share durch den echten Router prüfen | [WP-13](work-packages.md#wp-13) |
-| [G-012](#g-012) | P1 / ` missing_case ` | user_status-Adapter einschließlich Free-Admin und Ausfällen | [WP-12](work-packages.md#wp-12) |
-| [G-013](#g-013) | P2 / ` missing_case ` | Sieben Watch-/Telegram-/Unsubscribe-HTTP-Adapter | [WP-15](work-packages.md#wp-15) |
-| [G-014](#g-014) | P1 / ` missing_case ` | Topic-PUT/List sowie öffentliche Hub-/Sitemap-/Follow-Adapter | [WP-16](work-packages.md#wp-16) |
-| [G-015](#g-015) | P2 / ` missing_case ` | Admin-Benchmark-Routen und Reportviewer | [WP-22](work-packages.md#wp-22) |
-| [G-016](#g-016) | P2 / ` missing_case ` | Claim-Identity-Judge selbst prüfen | [WP-17](work-packages.md#wp-17) |
-| [G-017](#g-017) | P2 / ` missing_case ` | SEO-Readadapter hinter den Service-Fakes | [WP-18](work-packages.md#wp-18) |
-| [G-018](#g-018) | P1 / ` observed_behavior_defect ` | Topic-Notizen werden erneut als HTML interpretiert | [WP-20](work-packages.md#wp-20) |
-| [G-019](#g-019) | P2 / ` observed_behavior_defect ` | Strukturierte Adminfehler verlieren ihre Nachricht | [WP-21](work-packages.md#wp-21) |
-| [G-020](#g-020) | P2 / ` assertion_gap ` | OG-Test akzeptiert leeres Bild | [WP-23](work-packages.md#wp-23) |
-| [G-021](#g-021) | P2 / ` assertion_gap ` | Analytics-Opt-out ausführen statt Strings suchen | [WP-24](work-packages.md#wp-24) |
-| [G-022](#g-022) | P1 / ` missing_case ` | Account-Reparaturskript ohne Produktionszugriff prüfen | [WP-25](work-packages.md#wp-25) |
-| [G-023](#g-023) | P2 / ` missing_case ` | Claim-Key-Backfill-Dry-run, Idempotenz und Datenerhalt | [WP-25](work-packages.md#wp-25) |
-| [G-024](#g-024) | P1 / ` missing_automation ` | Allgemeine Suite in CI absichern | [WP-05](work-packages.md#wp-05) |
-| [G-025](#g-025) | P1 / ` execution_gap ` | 267 vorhandene Browserfälle ausführen | [WP-03](work-packages.md#wp-03) |
-| [G-026](#g-026) | P2 / ` execution_gap ` | Windows-Einstieg tatsächlich validieren | [WP-04](work-packages.md#wp-04) |
-| [G-027](#g-027) | P1 / ` broken_test ` | Zwei veraltete Emulatorfixtures reparieren | [WP-01](work-packages.md#wp-01) |
-| [G-028](#g-028) | P2 / ` broken_test ` | Veralteten Footer-Stringvertrag korrigieren | [WP-01](work-packages.md#wp-01) |
-| [G-029](#g-029) | P1 / ` unstable_test ` | Report-Race-Instabilität isolieren | [WP-02](work-packages.md#wp-02) |
-| [G-030](#g-030) | P1 / ` missing_integration ` | Wenige vollständige Browser→Backend→Persistenz-Flows | [WP-29](work-packages.md#wp-29) |
-| [G-031](#g-031) | P2 / ` missing_integration ` | Due-Queries und Scheduler-Claims mit SDK-Formen | [WP-19](work-packages.md#wp-19) |
-| [G-032](#g-032) | P2 / ` missing_integration ` | Lokale echte Transportgrenzen statt ausschließlich MockTransport | [WP-26](work-packages.md#wp-26) |
-| [G-033](#g-033) | P2 / ` missing_case ` | Ungültige Body-Header und Konfigurationsgrenzen | [WP-26](work-packages.md#wp-26) |
-| [G-034](#g-034) | P2 / ` missing_case ` | Feedback-Adapter und Statistik-Persistenzwrapper | [WP-27](work-packages.md#wp-27) |
-| [G-035](#g-035) | P3 / ` missing_case ` | Weitere ausführbare CLI-Einstiege | [WP-28](work-packages.md#wp-28) |
-| [G-036](#g-036) | P2 / ` missing_case ` | Vendorhelper mit Version- und Check-only-Grenzen ausführen | [WP-30](work-packages.md#wp-30) |
-| [G-037](#g-037) | P1 / ` observed_behavior_defect ` | main verwirft HTTPException-Header einschließlich Retry-After | [WP-31](work-packages.md#wp-31) |
-| [G-038](#g-038) | P1 / ` observed_behavior_defect ` | Undo kürzt früheren Inhalt nach Absenkung des Memorylimits | [WP-10](work-packages.md#wp-10) |
-| [G-039](#g-039) | P1 / ` missing_case ` | Erfolgreicher Agentdetail- und Stop-HTTP-Pfad fehlen | [WP-32](work-packages.md#wp-32) |
-| [G-040](#g-040) | P1 / ` observed_behavior_defect ` | Modellrollback überschreibt einen zwischenzeitlichen Writer | [WP-33](work-packages.md#wp-33) |
-| [G-041](#g-041) | P1 / ` observed_behavior_defect ` | Topic-Admingrenze prüft Revocation nicht und verliert Rollen-503 | [WP-16](work-packages.md#wp-16) |
-| [G-042](#g-042) | P1 / ` observed_behavior_defect ` | Benchmark zählt HTTP-200-Providerfehler als erfolgreiche Enthaltung | [WP-34](work-packages.md#wp-34) |
+| ID | Priorität / Art | Befund | Status | Paket |
+|---|---|---|---|---|
+| [G-001](#g-001) | P1 / ` missing_integration ` | Deny-all-Regeln mit Clientidentitäten prüfen | open | [WP-06](work-packages.md#wp-06) |
+| [G-002](#g-002) | P1 / ` missing_integration ` | Reguläre Usage mit echten Firestore-Transaktionen absichern | open | [WP-07](work-packages.md#wp-07) |
+| [G-003](#g-003) | P1 / ` missing_integration ` | Chat-Löschen gegen Turn/Completion im Emulator | partially_addressed | [WP-08](work-packages.md#wp-08) |
+| [G-004](#g-004) | P1 / ` missing_integration ` | Vollständige Kontokaskade und API-Cleanup prüfen | partially_addressed | [WP-09](work-packages.md#wp-09) |
+| [G-005](#g-005) | P1 / ` missing_case ` | API-Neustart-Recovery und Retention tatsächlich ausführen | partially_addressed | [WP-11](work-packages.md#wp-11) |
+| [G-006](#g-006) | P1 / ` missing_integration ` | Source-Queue-Leases und Result-Commits im Emulator | open | [WP-14](work-packages.md#wp-14) |
+| [G-007](#g-007) | P1 / ` assertion_gap ` | Undo-Konflikt, Ablauf, Wiederholung und HTTP-Fehlergrenze | partially_addressed | [WP-10](work-packages.md#wp-10) |
+| [G-008](#g-008) | P1 / ` missing_case ` | Memory-Patch gegen konkurrierenden Save und Kontolöschung | partially_addressed | [WP-10](work-packages.md#wp-10) |
+| [G-009](#g-009) | P2 / ` missing_case ` | Konkurrierende Registrierung ohne Auskunfts-/Benachrichtigungsleck | open | [WP-12](work-packages.md#wp-12) |
+| [G-010](#g-010) | P1 / ` missing_case ` | Historischer API-v1-Source-Check-Adapter | open | [WP-11](work-packages.md#wp-11) |
+| [G-011](#g-011) | P1 / ` missing_case ` | App-POST-/api/share durch den echten Router prüfen | open | [WP-13](work-packages.md#wp-13) |
+| [G-012](#g-012) | P1 / ` missing_case ` | user_status-Adapter einschließlich Free-Admin und Ausfällen | open | [WP-12](work-packages.md#wp-12) |
+| [G-013](#g-013) | P2 / ` missing_case ` | Sieben Watch-/Telegram-/Unsubscribe-HTTP-Adapter | open | [WP-15](work-packages.md#wp-15) |
+| [G-014](#g-014) | P1 / ` missing_case ` | Topic-PUT/List sowie öffentliche Hub-/Sitemap-/Follow-Adapter | open | [WP-16](work-packages.md#wp-16) |
+| [G-015](#g-015) | P2 / ` missing_case ` | Admin-Benchmark-Routen und Reportviewer | open | [WP-22](work-packages.md#wp-22) |
+| [G-016](#g-016) | P2 / ` missing_case ` | Claim-Identity-Judge selbst prüfen | open | [WP-17](work-packages.md#wp-17) |
+| [G-017](#g-017) | P2 / ` missing_case ` | SEO-Readadapter hinter den Service-Fakes | open | [WP-18](work-packages.md#wp-18) |
+| [G-018](#g-018) | P1 / ` observed_behavior_defect ` | Topic-Notizen werden erneut als HTML interpretiert | resolved | [WP-20](work-packages.md#wp-20) |
+| [G-019](#g-019) | P2 / ` observed_behavior_defect ` | Strukturierte Adminfehler verlieren ihre Nachricht | open | [WP-21](work-packages.md#wp-21) |
+| [G-020](#g-020) | P2 / ` assertion_gap ` | OG-Test akzeptiert leeres Bild | open | [WP-23](work-packages.md#wp-23) |
+| [G-021](#g-021) | P2 / ` assertion_gap ` | Analytics-Opt-out ausführen statt Strings suchen | open | [WP-24](work-packages.md#wp-24) |
+| [G-022](#g-022) | P1 / ` missing_case ` | Account-Reparaturskript ohne Produktionszugriff prüfen | open | [WP-25](work-packages.md#wp-25) |
+| [G-023](#g-023) | P2 / ` missing_case ` | Claim-Key-Backfill-Dry-run, Idempotenz und Datenerhalt | open | [WP-25](work-packages.md#wp-25) |
+| [G-024](#g-024) | P1 / ` missing_automation ` | Allgemeine Suite in CI absichern | open | [WP-05](work-packages.md#wp-05) |
+| [G-025](#g-025) | P1 / ` execution_gap ` | Aktuelle Browserfälle ausführen und rote Fälle klären | partially_addressed | [WP-03](work-packages.md#wp-03) |
+| [G-026](#g-026) | P2 / ` execution_gap ` | Windows-Einstieg tatsächlich validieren | partially_addressed | [WP-04](work-packages.md#wp-04) |
+| [G-027](#g-027) | P1 / ` broken_test ` | Zwei veraltete Emulatorfixtures reparieren | open | [WP-01](work-packages.md#wp-01) |
+| [G-028](#g-028) | P2 / ` broken_test ` | Veralteten Footer-Stringvertrag korrigieren | open | [WP-01](work-packages.md#wp-01) |
+| [G-029](#g-029) | P1 / ` unstable_test ` | Report-Race-Instabilität isolieren | open | [WP-02](work-packages.md#wp-02) |
+| [G-030](#g-030) | P1 / ` missing_integration ` | Wenige vollständige Browser→Backend→Persistenz-Flows | partially_addressed | [WP-29](work-packages.md#wp-29) |
+| [G-031](#g-031) | P2 / ` missing_integration ` | Due-Queries und Scheduler-Claims mit SDK-Formen | partially_addressed | [WP-19](work-packages.md#wp-19) |
+| [G-032](#g-032) | P2 / ` missing_integration ` | Lokale echte Transportgrenzen statt ausschließlich MockTransport | partially_addressed | [WP-26](work-packages.md#wp-26) |
+| [G-033](#g-033) | P2 / ` missing_case ` | Ungültige Body-Header und Konfigurationsgrenzen | open | [WP-26](work-packages.md#wp-26) |
+| [G-034](#g-034) | P2 / ` missing_case ` | Feedback-Adapter und Statistik-Persistenzwrapper | open | [WP-27](work-packages.md#wp-27) |
+| [G-035](#g-035) | P3 / ` missing_case ` | Weitere ausführbare CLI-Einstiege | open | [WP-28](work-packages.md#wp-28) |
+| [G-036](#g-036) | P2 / ` missing_case ` | Vendorhelper mit Version- und Check-only-Grenzen ausführen | open | [WP-30](work-packages.md#wp-30) |
+| [G-037](#g-037) | P1 / ` observed_behavior_defect ` | main verwirft HTTPException-Header einschließlich Retry-After | resolved | [WP-31](work-packages.md#wp-31) |
+| [G-038](#g-038) | P1 / ` observed_behavior_defect ` | Undo kürzt früheren Inhalt nach Absenkung des Memorylimits | open | [WP-10](work-packages.md#wp-10) |
+| [G-039](#g-039) | P1 / ` missing_case ` | Erfolgreicher Agentdetail- und Stop-HTTP-Pfad fehlen | open | [WP-32](work-packages.md#wp-32) |
+| [G-040](#g-040) | P1 / ` observed_behavior_defect ` | Modellrollback überschreibt einen zwischenzeitlichen Writer | partially_addressed | [WP-33](work-packages.md#wp-33) |
+| [G-041](#g-041) | P1 / ` observed_behavior_defect ` | Topic-Admingrenze prüft Revocation nicht und verliert Rollen-503 | open | [WP-16](work-packages.md#wp-16) |
+| [G-042](#g-042) | P1 / ` observed_behavior_defect ` | Benchmark zählt HTTP-200-Providerfehler als erfolgreiche Enthaltung | open | [WP-34](work-packages.md#wp-34) |
+| [G-043](#g-043) | P1 / ` missing_integration ` | Google-Aktionsclaims mit nativen Transaktionen prüfen | open | [WP-35](work-packages.md#wp-35) |
+| [G-044](#g-044) | P2 / ` missing_integration ` | Cloud-Dateiablage und verteilte Löschkaskade integrieren | open | [WP-36](work-packages.md#wp-36) |
+| [G-045](#g-045) | P1 / ` missing_integration ` | Outbox-/Probeclaims mit nativer SDK-Konkurrenz absichern | open | [WP-37](work-packages.md#wp-37) |
+| [G-046](#g-046) | P2 / ` broken_test ` | Aktuelle Testfehler und abweichenden Benchmark-Wiederholungslauf klären | open | [WP-38](work-packages.md#wp-38) |
 
 <a id="g-001"></a>
 
@@ -57,15 +61,17 @@ P1/P2/P3 ordnen die Umsetzung nach möglichen Folgen und Voraussetzungen; sie si
 
 **P1 · missing_integration** · Verträge: [AUTH-05](matrix.md#auth-05) · Paket: [WP-06](work-packages.md#wp-06)
 
+**Aktuelle Bewertung:** open — Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
+
 **Produktbeleg:** [firestore.rules](../../../firestore.rules#L31) — ` allow read, write: if false; `; [tests/e2e/test_agent_transactions.py](../../../tests/e2e/test_agent_transactions.py#L24) — ` db = firestore.Client `
 
 **Vorhandene relevante Prüfungen:**
 
 Kein direkter repräsentativer Testbeleg für diese Grenze; Suchtreffer und verwandte Verträge sind separat berücksichtigt.
 
-**Suiteweite Gegenprüfung:** Kein Rules-Test gefunden. Alle vorhandenen Firestore-Emulatorfälle verwenden Server-/Admin-SDK und können eine versehentliche Freigabe von role/tier für Browserclients nicht erkennen.
+**Suiteweite Gegenprüfung:** Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
 
-**Suchspur:** 224 versionierte Test-/Hilfsdateien durchsucht, 0 passende Zeilen. Regexe: ` firestore\.rules `, ` assertFails|assertSucceeds|initializeTestEnvironment|rules-unit-testing `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-001 `.
+**Suchspur:** 263 versionierte Test-/Hilfsdateien durchsucht, 0 passende Zeilen. Regexe: ` firestore\.rules `, ` assertFails|assertSucceeds|initializeTestEnvironment|rules-unit-testing `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-001 `.
 
 | Szenario | Erwartung |
 |---|---|
@@ -88,16 +94,18 @@ Kein direkter repräsentativer Testbeleg für diese Grenze; Suchtreffer und verw
 
 **P1 · missing_integration** · Verträge: [QUOTA-01](matrix.md#quota-01) · Paket: [WP-07](work-packages.md#wp-07)
 
-**Produktbeleg:** [app/services/usage_repository.py](../../../app/services/usage_repository.py#L242) — ` Reserve/consume/claim atomically `; [app/services/usage_repository.py](../../../app/services/usage_repository.py#L779) — ` def _transaction( `
+**Aktuelle Bewertung:** open — Runzählquoten durch gemeinsames Tokenkonto ersetzt. Umfangreiche parallele Fake-Tests und Usage-Meter vorhanden; native Firestore-Admission/Buchung/Freigabe weiterhin offen.
+
+**Produktbeleg:** [app/services/usage_repository.py](../../../app/services/usage_repository.py#L752) — ` def _transaction( `
 
 **Vorhandene relevante Prüfungen:**
 
-- [test_same_operation_race_has_exactly_one_authorization](../../../tests/test_usage_authorization.py#L68) — Atomare Autorisierungslogik mit FakeFirestore und Threads. Assertionstellen: [72](../../../tests/test_usage_authorization.py#L72), [73](../../../tests/test_usage_authorization.py#L73), [76](../../../tests/test_usage_authorization.py#L76), [77](../../../tests/test_usage_authorization.py#L77).
-- [test_parallel_unique_reservations_cannot_oversubscribe_limit](../../../tests/test_run_usage_repository.py#L112) — Repository-/Transaktionsverträge mit FakeFirestore und Threads. Assertionstellen: [131](../../../tests/test_run_usage_repository.py#L131), [132](../../../tests/test_run_usage_repository.py#L132), [134](../../../tests/test_run_usage_repository.py#L134).
+- [test_same_operation_race_has_exactly_one_authorization](../../../tests/test_usage_authorization.py#L78) — Atomare Autorisierungslogik mit FakeFirestore und Threads. Assertionstellen: [82](../../../tests/test_usage_authorization.py#L82), [83](../../../tests/test_usage_authorization.py#L83), [86](../../../tests/test_usage_authorization.py#L86), [87](../../../tests/test_usage_authorization.py#L87).
+- [test_run_quotas_are_gone_from_the_limits_config](../../../tests/test_run_usage_repository.py#L55) — Repository-/Transaktionsverträge mit FakeFirestore und Threads. Assertionstellen: [58](../../../tests/test_run_usage_repository.py#L58), [59](../../../tests/test_run_usage_repository.py#L59), [60](../../../tests/test_run_usage_repository.py#L60), [62](../../../tests/test_run_usage_repository.py#L62).
 
-**Suiteweite Gegenprüfung:** Lockbasierte Usage-Fakes testen die Regel; die drei vorhandenen Emulator-Dateien prüfen Agentledger, Chat-Create-Limit, Watch/Share und Promptrevision. Kein Emulatorfall prüft reguläres authorize_operation/Reserve/Consume/Release.
+**Suiteweite Gegenprüfung:** Runzählquoten durch gemeinsames Tokenkonto ersetzt. Umfangreiche parallele Fake-Tests und Usage-Meter vorhanden; native Firestore-Admission/Buchung/Freigabe weiterhin offen.
 
-**Suchspur:** 224 versionierte Test-/Hilfsdateien durchsucht, 55 passende Zeilen. Regexe: ` usage_repository|FirestoreUsageRepository `, ` daily_token_admission|authorize_operation|parallel_unique_reservations `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-002 `.
+**Suchspur:** 263 versionierte Test-/Hilfsdateien durchsucht, 60 passende Zeilen. Regexe: ` usage_repository|FirestoreUsageRepository `, ` daily_token_admission|authorize_operation|parallel_unique_reservations `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-002 `.
 
 | Szenario | Erwartung |
 |---|---|
@@ -120,16 +128,18 @@ Kein direkter repräsentativer Testbeleg für diese Grenze; Suchtreffer und verw
 
 **P1 · missing_integration** · Verträge: [CHAT-01](matrix.md#chat-01), [CHAT-02](matrix.md#chat-02) · Paket: [WP-08](work-packages.md#wp-08)
 
-**Produktbeleg:** [app/services/chat_store.py](../../../app/services/chat_store.py#L1244) — ` def delete_chat( `; [app/services/chat_store.py](../../../app/services/chat_store.py#L872) — ` def complete_turn( `
+**Aktuelle Bewertung:** partially_addressed — Dauerhafte Löschjobs und spätes Turn-/Kontextfencing ergänzt (test_chat_history.py, test_chat_context.py). Ein nativer Emulatorrace mit Completion bleibt erforderlich.
+
+**Produktbeleg:** [app/services/chat_store.py](../../../app/services/chat_store.py#L1270) — ` def delete_chat( `; [app/services/chat_store.py](../../../app/services/chat_store.py#L891) — ` def complete_turn( `
 
 **Vorhandene relevante Prüfungen:**
 
-- [test_deleting_chat_state_rejects_late_completion_and_failure_writes](../../../tests/test_chat_history.py#L1484) — Router und ChatStore mit speicherbasiertem Transaktionsmodell. Assertionstellen: [1493](../../../tests/test_chat_history.py#L1493), [1497](../../../tests/test_chat_history.py#L1497), [1505](../../../tests/test_chat_history.py#L1505), [1506](../../../tests/test_chat_history.py#L1506).
+- [test_deleting_chat_state_rejects_late_completion_and_failure_writes](../../../tests/test_chat_history.py#L1491) — Router und ChatStore mit speicherbasiertem Transaktionsmodell. Assertionstellen: [1500](../../../tests/test_chat_history.py#L1500), [1504](../../../tests/test_chat_history.py#L1504), [1512](../../../tests/test_chat_history.py#L1512), [1513](../../../tests/test_chat_history.py#L1513).
 - [test_two_workers_cannot_exceed_owner_chat_limit](../../../tests/e2e/test_phase2_transactions.py#L134) — Firestore-Emulatorintegration mit echten SDK-Transaktionen und Threads. Assertionstellen: [149](../../../tests/e2e/test_phase2_transactions.py#L149), [153](../../../tests/e2e/test_phase2_transactions.py#L153).
 
-**Suiteweite Gegenprüfung:** Der bestehende echte Chat-Race schützt das Create-Chat-Limit. Delete/late Complete/Fail werden bislang über gesetzte Fake-Zustände geprüft; das ist kein reales TOCTOU-Rennen.
+**Suiteweite Gegenprüfung:** Dauerhafte Löschjobs und spätes Turn-/Kontextfencing ergänzt (test_chat_history.py, test_chat_context.py). Ein nativer Emulatorrace mit Completion bleibt erforderlich.
 
-**Suchspur:** 224 versionierte Test-/Hilfsdateien durchsucht, 15 passende Zeilen. Regexe: ` delet.*complet|complet.*delet|deleting_chat|account_deletion_tombstone `, ` test_two_workers_cannot_exceed_owner_chat_limit `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-003 `.
+**Suchspur:** 263 versionierte Test-/Hilfsdateien durchsucht, 17 passende Zeilen. Regexe: ` delet.*complet|complet.*delet|deleting_chat|account_deletion_tombstone `, ` test_two_workers_cannot_exceed_owner_chat_limit `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-003 `.
 
 | Szenario | Erwartung |
 |---|---|
@@ -152,16 +162,18 @@ Kein direkter repräsentativer Testbeleg für diese Grenze; Suchtreffer und verw
 
 **P1 · missing_integration** · Verträge: [AUTH-03](matrix.md#auth-03) · Paket: [WP-09](work-packages.md#wp-09)
 
-**Produktbeleg:** [app/services/account_deletion.py](../../../app/services/account_deletion.py#L93) — ` areas = ( `; [app/services/api_account_cleanup.py](../../../app/services/api_account_cleanup.py#L85) — ` def cleanup_uid( `; [app/services/api_account_cleanup.py](../../../app/services/api_account_cleanup.py#L135) — ` def retry_pending( `
+**Aktuelle Bewertung:** partially_addressed — Kaskade berücksichtigt Googlegrants, Aktionen, Dokumentversionen, Antwortreceipts und Outbox. Einzelne Fake-Nachweise sind vorhanden; komplette Kaskade samt Retrygrenzen noch nicht als eine integrierte Reise belegt.
+
+**Produktbeleg:** [app/services/account_deletion.py](../../../app/services/account_deletion.py#L94) — ` areas = ( `; [app/services/api_account_cleanup.py](../../../app/services/api_account_cleanup.py#L85) — ` def cleanup_uid( `; [app/services/api_account_cleanup.py](../../../app/services/api_account_cleanup.py#L135) — ` def retry_pending( `
 
 **Vorhandene relevante Prüfungen:**
 
-- [test_failed_area_remains_pending_and_only_that_area_is_retried](../../../tests/test_account_deletion_retry.py#L69) — Service mit In-Memory-Datenbank. Assertionstellen: [157](../../../tests/test_account_deletion_retry.py#L157), [158](../../../tests/test_account_deletion_retry.py#L158), [159](../../../tests/test_account_deletion_retry.py#L159), [160](../../../tests/test_account_deletion_retry.py#L160), [161](../../../tests/test_account_deletion_retry.py#L161), [162](../../../tests/test_account_deletion_retry.py#L162), [163](../../../tests/test_account_deletion_retry.py#L163), [164](../../../tests/test_account_deletion_retry.py#L164), [165](../../../tests/test_account_deletion_retry.py#L165), [166](../../../tests/test_account_deletion_retry.py#L166), [167](../../../tests/test_account_deletion_retry.py#L167), [168](../../../tests/test_account_deletion_retry.py#L168), [170](../../../tests/test_account_deletion_retry.py#L170), [171](../../../tests/test_account_deletion_retry.py#L171), [172](../../../tests/test_account_deletion_retry.py#L172), [173](../../../tests/test_account_deletion_retry.py#L173).
+- [test_failed_area_remains_pending_and_only_that_area_is_retried](../../../tests/test_account_deletion_retry.py#L69) — Service mit In-Memory-Datenbank. Assertionstellen: [163](../../../tests/test_account_deletion_retry.py#L163), [164](../../../tests/test_account_deletion_retry.py#L164), [165](../../../tests/test_account_deletion_retry.py#L165), [166](../../../tests/test_account_deletion_retry.py#L166), [167](../../../tests/test_account_deletion_retry.py#L167), [168](../../../tests/test_account_deletion_retry.py#L168), [169](../../../tests/test_account_deletion_retry.py#L169), [170](../../../tests/test_account_deletion_retry.py#L170), [172](../../../tests/test_account_deletion_retry.py#L172), [173](../../../tests/test_account_deletion_retry.py#L173), [174](../../../tests/test_account_deletion_retry.py#L174), [175](../../../tests/test_account_deletion_retry.py#L175), [176](../../../tests/test_account_deletion_retry.py#L176), [177](../../../tests/test_account_deletion_retry.py#L177), [179](../../../tests/test_account_deletion_retry.py#L179), [180](../../../tests/test_account_deletion_retry.py#L180), [181](../../../tests/test_account_deletion_retry.py#L181), [182](../../../tests/test_account_deletion_retry.py#L182).
 - [test_delete_account_cascades_into_the_owner_chats](../../../tests/test_account_deletion_chats.py#L98) — API mit Service-Double. Assertionstellen: [102](../../../tests/test_account_deletion_chats.py#L102), [103](../../../tests/test_account_deletion_chats.py#L103), [104](../../../tests/test_account_deletion_chats.py#L104).
 
-**Suiteweite Gegenprüfung:** Endpointtest ersetzt gesamten Löschservice, Retrytest die eigentlichen Bereichslöschungen. API-cleanup_uid/retry_pending sind im regulären Branchlauf vollständig unausgeführt. Emulator nutzt nur Teilkaskaden als Teardown.
+**Suiteweite Gegenprüfung:** Kaskade berücksichtigt Googlegrants, Aktionen, Dokumentversionen, Antwortreceipts und Outbox. Einzelne Fake-Nachweise sind vorhanden; komplette Kaskade samt Retrygrenzen noch nicht als eine integrierte Reise belegt.
 
-**Suchspur:** 224 versionierte Test-/Hilfsdateien durchsucht, 28 passende Zeilen. Regexe: ` FirestoreAccountDeletion|FirestoreApiAccountCleanup|cleanup_uid|retry_pending `, ` completed_areas|_delete_api_access `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-004 `.
+**Suchspur:** 263 versionierte Test-/Hilfsdateien durchsucht, 29 passende Zeilen. Regexe: ` FirestoreAccountDeletion|FirestoreApiAccountCleanup|cleanup_uid|retry_pending `, ` completed_areas|_delete_api_access `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-004 `.
 
 | Szenario | Erwartung |
 |---|---|
@@ -184,16 +196,18 @@ Kein direkter repräsentativer Testbeleg für diese Grenze; Suchtreffer und verw
 
 **P1 · missing_case** · Verträge: [API-02](matrix.md#api-02) · Paket: [WP-11](work-packages.md#wp-11)
 
-**Produktbeleg:** [app/services/api_consensus_runner.py](../../../app/services/api_consensus_runner.py#L241) — ` def recover_persisted_runs( `; [app/services/api_consensus_runner.py](../../../app/services/api_consensus_runner.py#L211) — ` def cleanup_expired_runs( `; [app/services/api_run_repository.py](../../../app/services/api_run_repository.py#L265) — ` def backfill_retention( `
+**Aktuelle Bewertung:** partially_addressed — test_api_run_billing_identity.py führt Recovery abgelaufener Reservierungen und Lösch-/Replaypfade aus. Vollständige Retention/Backfill-/Restartorchestrierung bleibt offen; die alte Behauptung keiner ausgeführten Recovery ist überholt.
+
+**Produktbeleg:** [app/services/api_consensus_runner.py](../../../app/services/api_consensus_runner.py#L285) — ` def recover_persisted_runs( `; [app/services/api_consensus_runner.py](../../../app/services/api_consensus_runner.py#L255) — ` def cleanup_expired_runs( `; [app/services/api_run_repository.py](../../../app/services/api_run_repository.py#L307) — ` def backfill_retention( `
 
 **Vorhandene relevante Prüfungen:**
 
 - [test_runner_claim_prevents_duplicate_usage_and_provider_start](../../../tests/test_consensus_api.py#L493) — Main-App-API und Runner mit Repository-/LLM-/Scheduler-Doubles; einzelne Quelltextverträge. Assertionstellen: [542](../../../tests/test_consensus_api.py#L542), [543](../../../tests/test_consensus_api.py#L543), [544](../../../tests/test_consensus_api.py#L544).
-- [test_expired_post_provider_worker_keeps_consumed_usage](../../../tests/test_consensus_api.py#L728) — Main-App-API und Runner mit Repository-/LLM-/Scheduler-Doubles; einzelne Quelltextverträge. Assertionstellen: [750](../../../tests/test_consensus_api.py#L750).
+- [test_expired_post_provider_worker_keeps_consumed_usage](../../../tests/test_consensus_api.py#L735) — Main-App-API und Runner mit Repository-/LLM-/Scheduler-Doubles; einzelne Quelltextverträge. Assertionstellen: [757](../../../tests/test_consensus_api.py#L757).
 
-**Suiteweite Gegenprüfung:** Claims/Einzel-Expiry-Helfer sind belegt. Die Recovery-/Retention-Orchestrierung und Legacy-Backfill werden von keinem regulären Test ausgeführt; suiteweite Symbolsuche findet keinen eigenen Aufruf.
+**Suiteweite Gegenprüfung:** test_api_run_billing_identity.py führt Recovery abgelaufener Reservierungen und Lösch-/Replaypfade aus. Vollständige Retention/Backfill-/Restartorchestrierung bleibt offen; die alte Behauptung keiner ausgeführten Recovery ist überholt.
 
-**Suchspur:** 224 versionierte Test-/Hilfsdateien durchsucht, 4 passende Zeilen. Regexe: ` recover_persisted_runs|cleanup_expired_runs|backfill_retention `, ` fail_expired_run|expired_post_provider|expired_pre_provider `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-005 `.
+**Suchspur:** 263 versionierte Test-/Hilfsdateien durchsucht, 6 passende Zeilen. Regexe: ` recover_persisted_runs|cleanup_expired_runs|backfill_retention `, ` fail_expired_run|expired_post_provider|expired_pre_provider `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-005 `.
 
 | Szenario | Erwartung |
 |---|---|
@@ -216,15 +230,17 @@ Kein direkter repräsentativer Testbeleg für diese Grenze; Suchtreffer und verw
 
 **P1 · missing_integration** · Verträge: [SRC-03](matrix.md#src-03) · Paket: [WP-14](work-packages.md#wp-14)
 
+**Aktuelle Bewertung:** open — Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
+
 **Produktbeleg:** [app/services/source_check_repository.py](../../../app/services/source_check_repository.py#L358) — ` def claim( `; [app/services/source_check_repository.py](../../../app/services/source_check_repository.py#L406) — ` def finish_package( `
 
 **Vorhandene relevante Prüfungen:**
 
 - [test_expired_lease_reclaims_unfinished_package_and_rejects_stale_worker](../../../tests/test_source_check_repository.py#L214) — Repository mit lockbasiertem FakeDb und Threads. Assertionstellen: [219](../../../tests/test_source_check_repository.py#L219), [221](../../../tests/test_source_check_repository.py#L221), [222](../../../tests/test_source_check_repository.py#L222), [224](../../../tests/test_source_check_repository.py#L224), [225](../../../tests/test_source_check_repository.py#L225), [226](../../../tests/test_source_check_repository.py#L226), [227](../../../tests/test_source_check_repository.py#L227).
 
-**Suiteweite Gegenprüfung:** Repository-/Jobtests verwenden Fake-Transaktionen und manipulierte Worker-IDs. Keine der vorhandenen Emulatordateien ruft diese Queue auf. Kritisch ist der Resultwrite nach konkurrierender Neubeanspruchung/Löschung.
+**Suiteweite Gegenprüfung:** Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
 
-**Suchspur:** 224 versionierte Test-/Hilfsdateien durchsucht, 69 passende Zeilen. Regexe: ` SourceCheckRepository|finish_package|lease_token `, ` transactional|run_transaction `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-006 `.
+**Suchspur:** 263 versionierte Test-/Hilfsdateien durchsucht, 75 passende Zeilen. Regexe: ` SourceCheckRepository|finish_package|lease_token `, ` transactional|run_transaction `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-006 `.
 
 | Szenario | Erwartung |
 |---|---|
@@ -247,15 +263,17 @@ Kein direkter repräsentativer Testbeleg für diese Grenze; Suchtreffer und verw
 
 **P1 · assertion_gap** · Verträge: [MEM-02](matrix.md#mem-02) · Paket: [WP-10](work-packages.md#wp-10)
 
-**Produktbeleg:** [app/services/memory_edit.py](../../../app/services/memory_edit.py#L523) — ` def undo( `; [app/services/memory_edit.py](../../../app/services/memory_edit.py#L557) — ` if current_revision != int(revision.get `; [app/api/routers/users.py](../../../app/api/routers/users.py#L306) — ` def _raise_memory_edit_error( `; [app/api/routers/users.py](../../../app/api/routers/users.py#L340) — ` def undo_user_memory( `
+**Aktuelle Bewertung:** partially_addressed — Undo-Ablauf nach 30 Tagen ist nun im Repository getestet; Konflikt, fremder Owner, Repeat und echte Undo-HTTP-Fehlergrenze bleiben zusätzlich zu G-038 offen. Alte Mutationsprobe ist historisch, nicht erneut ausgeführt.
+
+**Produktbeleg:** [app/services/memory_edit.py](../../../app/services/memory_edit.py#L701) — ` def undo( `; [app/services/memory_edit.py](../../../app/services/memory_edit.py#L735) — ` if current_revision != int(revision.get `; [app/api/routers/users.py](../../../app/api/routers/users.py#L320) — ` def _raise_memory_edit_error( `; [app/api/routers/users.py](../../../app/api/routers/users.py#L354) — ` def undo_user_memory( `
 
 **Vorhandene relevante Prüfungen:**
 
-- [test_replace_is_revision_checked_and_undo_restores_exact_content](../../../tests/test_memory_edit.py#L118) — Edit-Service/Repository und Router mit DB-/LLM-Doubles. Assertionstellen: [129](../../../tests/test_memory_edit.py#L129), [143](../../../tests/test_memory_edit.py#L143), [147](../../../tests/test_memory_edit.py#L147), [148](../../../tests/test_memory_edit.py#L148), [159](../../../tests/test_memory_edit.py#L159), [160](../../../tests/test_memory_edit.py#L160), [161](../../../tests/test_memory_edit.py#L161), [162](../../../tests/test_memory_edit.py#L162).
+- [test_replace_is_revision_checked_and_undo_restores_exact_content](../../../tests/test_memory_edit.py#L178) — Edit-Service/Repository und Router mit DB-/LLM-Doubles. Assertionstellen: [189](../../../tests/test_memory_edit.py#L189), [204](../../../tests/test_memory_edit.py#L204), [208](../../../tests/test_memory_edit.py#L208), [209](../../../tests/test_memory_edit.py#L209), [220](../../../tests/test_memory_edit.py#L220), [221](../../../tests/test_memory_edit.py#L221), [222](../../../tests/test_memory_edit.py#L222), [223](../../../tests/test_memory_edit.py#L223).
 
-**Suiteweite Gegenprüfung:** Einziger Repository-Undo-Aufruf ist der Erfolgsroundtrip. Entfernen ausschließlich des Revisionskonflikt-Guards im Testprozess lässt alle 14 Memory-Edit-Tests bestehen (Probe M-01). Kein Test setzt vor Undo eine neuere Revision. Auch die Undo-HTTP-Route und _raise_memory_edit_error sind im historischen regulären Coverage-Lauf unausgeführt; direkter Repository-Erfolg beweist nicht Auth oder HTTP-Status/Umschlag.
+**Suiteweite Gegenprüfung:** Undo-Ablauf nach 30 Tagen ist nun im Repository getestet; Konflikt, fremder Owner, Repeat und echte Undo-HTTP-Fehlergrenze bleiben zusätzlich zu G-038 offen. Alte Mutationsprobe ist historisch, nicht erneut ausgeführt.
 
-**Suchspur:** 224 versionierte Test-/Hilfsdateien durchsucht, 1 passende Zeilen. Regexe: ` undo\(|undo_expired|revision_not_found|invalid_revision `, ` revision_conflict `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-007 `.
+**Suchspur:** 263 versionierte Test-/Hilfsdateien durchsucht, 6 passende Zeilen. Regexe: ` undo\(|undo_expired|revision_not_found|invalid_revision `, ` revision_conflict `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-007 `.
 
 | Szenario | Erwartung |
 |---|---|
@@ -278,15 +296,17 @@ Kein direkter repräsentativer Testbeleg für diese Grenze; Suchtreffer und verw
 
 **P1 · missing_case** · Verträge: [MEM-02](matrix.md#mem-02), [AUTH-03](matrix.md#auth-03) · Paket: [WP-10](work-packages.md#wp-10)
 
-**Produktbeleg:** [app/services/memory_edit.py](../../../app/services/memory_edit.py#L439) — ` def apply_patch( `; [app/services/memory_edit.py](../../../app/services/memory_edit.py#L473) — ` if current_revision != int(request.get `
+**Aktuelle Bewertung:** partially_addressed — Manuelles PUT benutzt Revision-CAS, KI-Edit nutzt Leasefencing; stale Save und Save nach KI-Patch werden geprüft. Direkter konkurrierender Patch/Save/Löschtombstone im nativen Speicher bleibt offen.
+
+**Produktbeleg:** [app/services/memory_edit.py](../../../app/services/memory_edit.py#L610) — ` def apply_patch( `; [app/services/memory_edit.py](../../../app/services/memory_edit.py#L649) — ` if current_revision != int(request.get `
 
 **Vorhandene relevante Prüfungen:**
 
-- [test_replace_is_revision_checked_and_undo_restores_exact_content](../../../tests/test_memory_edit.py#L118) — Edit-Service/Repository und Router mit DB-/LLM-Doubles. Assertionstellen: [129](../../../tests/test_memory_edit.py#L129), [143](../../../tests/test_memory_edit.py#L143), [147](../../../tests/test_memory_edit.py#L147), [148](../../../tests/test_memory_edit.py#L148), [159](../../../tests/test_memory_edit.py#L159), [160](../../../tests/test_memory_edit.py#L160), [161](../../../tests/test_memory_edit.py#L161), [162](../../../tests/test_memory_edit.py#L162).
+- [test_replace_is_revision_checked_and_undo_restores_exact_content](../../../tests/test_memory_edit.py#L178) — Edit-Service/Repository und Router mit DB-/LLM-Doubles. Assertionstellen: [189](../../../tests/test_memory_edit.py#L189), [204](../../../tests/test_memory_edit.py#L204), [208](../../../tests/test_memory_edit.py#L208), [209](../../../tests/test_memory_edit.py#L209), [220](../../../tests/test_memory_edit.py#L220), [221](../../../tests/test_memory_edit.py#L221), [222](../../../tests/test_memory_edit.py#L222), [223](../../../tests/test_memory_edit.py#L223).
 
-**Suiteweite Gegenprüfung:** Memory-Edit-Fixture ersetzt ensure_account_write_allowed vollständig. apply_patch-Konfliktzweig wurde nicht ausgeführt. Guardtests anderer Repositories schützen diese konkreten Edit/Undo-Mutationen nicht.
+**Suiteweite Gegenprüfung:** Manuelles PUT benutzt Revision-CAS, KI-Edit nutzt Leasefencing; stale Save und Save nach KI-Patch werden geprüft. Direkter konkurrierender Patch/Save/Löschtombstone im nativen Speicher bleibt offen.
 
-**Suchspur:** 224 versionierte Test-/Hilfsdateien durchsucht, 7 passende Zeilen. Regexe: ` memory_edit.*ensure_account|ensure_account_write_allowed `, ` baseline_revision|revision_conflict `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-008 `.
+**Suchspur:** 263 versionierte Test-/Hilfsdateien durchsucht, 10 passende Zeilen. Regexe: ` memory_edit.*ensure_account|ensure_account_write_allowed `, ` baseline_revision|revision_conflict `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-008 `.
 
 | Szenario | Erwartung |
 |---|---|
@@ -309,6 +329,8 @@ Kein direkter repräsentativer Testbeleg für diese Grenze; Suchtreffer und verw
 
 **P2 · missing_case** · Verträge: [AUTH-01](matrix.md#auth-01) · Paket: [WP-12](work-packages.md#wp-12)
 
+**Aktuelle Bewertung:** open — Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
+
 **Produktbeleg:** [app/services/registration.py](../../../app/services/registration.py#L48) — ` except firebase_admin.auth.EmailAlreadyExistsError: `
 
 **Vorhandene relevante Prüfungen:**
@@ -316,9 +338,9 @@ Kein direkter repräsentativer Testbeleg für diese Grenze; Suchtreffer und verw
 - [test_new_user_gets_an_unguessable_server_side_password](../../../tests/test_registration_security.py#L12) — Registrierungsservice mit Firebase-/HTTP-Doubles. Assertionstellen: [24](../../../tests/test_registration_security.py#L24), [25](../../../tests/test_registration_security.py#L25), [27](../../../tests/test_registration_security.py#L27), [28](../../../tests/test_registration_security.py#L28).
 - [AuthSessionTests::test_new_and_existing_registration_responses_are_identical](../../../tests/test_auth_session.py#L110) — API mit Auth-/Mail-/Notifier-Doubles. Assertionstellen: [141](../../../tests/test_auth_session.py#L141), [142](../../../tests/test_auth_session.py#L142).
 
-**Suiteweite Gegenprüfung:** Neue und vorhandene Nutzer werden geprüft; Firebase-Create-Race wird nicht simuliert. Die betreffende Exceptionkante wurde nicht ausgeführt.
+**Suiteweite Gegenprüfung:** Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
 
-**Suchspur:** 224 versionierte Test-/Hilfsdateien durchsucht, 8 passende Zeilen. Regexe: ` EmailAlreadyExists|find_or_provision_user|create.race `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-009 `.
+**Suchspur:** 263 versionierte Test-/Hilfsdateien durchsucht, 8 passende Zeilen. Regexe: ` EmailAlreadyExists|find_or_provision_user|create.race `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-009 `.
 
 | Szenario | Erwartung |
 |---|---|
@@ -341,15 +363,17 @@ Kein direkter repräsentativer Testbeleg für diese Grenze; Suchtreffer und verw
 
 **P1 · missing_case** · Verträge: [API-03](matrix.md#api-03), [SRC-04](matrix.md#src-04) · Paket: [WP-11](work-packages.md#wp-11)
 
-**Produktbeleg:** [app/api/routers/api_v1.py](../../../app/api/routers/api_v1.py#L372) — ` def get_run_source_check( `
+**Aktuelle Bewertung:** open — Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
+
+**Produktbeleg:** [app/api/routers/api_v1.py](../../../app/api/routers/api_v1.py#L400) — ` def get_run_source_check( `
 
 **Vorhandene relevante Prüfungen:**
 
 - [test_v4_public_share_rejects_wrong_job_version_on_every_page](../../../tests/test_source_check_api.py#L125) — Router mit SourceCheckRepository/FakeDb und Share-/Topic-Doubles. Assertionstellen: [138](../../../tests/test_source_check_api.py#L138), [140](../../../tests/test_source_check_api.py#L140).
 
-**Suiteweite Gegenprüfung:** Der API-v1-Handler ist im Branchlauf vollständig unausgeführt. Andere Source-Check-Routertests belegen shared check_page, aber nicht API-Key/Run/snapshot-Verkabelung dieses Endpoints.
+**Suiteweite Gegenprüfung:** Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
 
-**Suchspur:** 224 versionierte Test-/Hilfsdateien durchsucht, 43 passende Zeilen. Regexe: ` /api/v1/consensus/runs/.{0,100}source-check `, ` get_run_source_check|expected_snapshot|answer_version `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-010 `.
+**Suchspur:** 263 versionierte Test-/Hilfsdateien durchsucht, 49 passende Zeilen. Regexe: ` /api/v1/consensus/runs/.{0,100}source-check `, ` get_run_source_check|expected_snapshot|answer_version `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-010 `.
 
 | Szenario | Erwartung |
 |---|---|
@@ -372,15 +396,17 @@ Kein direkter repräsentativer Testbeleg für diese Grenze; Suchtreffer und verw
 
 **P1 · missing_case** · Verträge: [SHARE-01](matrix.md#share-01) · Paket: [WP-13](work-packages.md#wp-13)
 
-**Produktbeleg:** [app/api/routers/share.py](../../../app/api/routers/share.py#L302) — ` def create_share( `
+**Aktuelle Bewertung:** open — Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
+
+**Produktbeleg:** [app/api/routers/share.py](../../../app/api/routers/share.py#L357) — ` def create_share( `
 
 **Vorhandene relevante Prüfungen:**
 
 - [ShareFlowTests::test_create_share_is_idempotent](../../../tests/test_share_feature.py#L780) — Große Unit-/Service-/Router-/SSR-Suite mit FakeDb und lokalen Cachethreads. Assertionstellen: [790](../../../tests/test_share_feature.py#L790), [791](../../../tests/test_share_feature.py#L791), [792](../../../tests/test_share_feature.py#L792).
 
-**Suiteweite Gegenprüfung:** Snapshotservice ist breit geprüft, HTTP-POST-Adapter im regulären Lauf gar nicht ausgeführt. API-v1-Publish ist ein anderer Adapter; Browser-Share-Modal liefert keinen aktuellen erfolgreichen Integrationstest.
+**Suiteweite Gegenprüfung:** Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
 
-**Suchspur:** 224 versionierte Test-/Hilfsdateien durchsucht, 26 passende Zeilen. Regexe: ` create_share\(|["\x27]/api/share["\x27] `, ` create_share_from_pending `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-011 `.
+**Suchspur:** 263 versionierte Test-/Hilfsdateien durchsucht, 26 passende Zeilen. Regexe: ` create_share\(|["\x27]/api/share["\x27] `, ` create_share_from_pending `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-011 `.
 
 | Szenario | Erwartung |
 |---|---|
@@ -403,15 +429,17 @@ Kein direkter repräsentativer Testbeleg für diese Grenze; Suchtreffer und verw
 
 **P1 · missing_case** · Verträge: [QUOTA-02](matrix.md#quota-02), [AUTH-02](matrix.md#auth-02) · Paket: [WP-12](work-packages.md#wp-12)
 
-**Produktbeleg:** [app/api/routers/users.py](../../../app/api/routers/users.py#L54) — ` def get_user_status( `
+**Aktuelle Bewertung:** open — Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
+
+**Produktbeleg:** [app/api/routers/users.py](../../../app/api/routers/users.py#L61) — ` def get_user_status( `
 
 **Vorhandene relevante Prüfungen:**
 
 Kein direkter repräsentativer Testbeleg für diese Grenze; Suchtreffer und verwandte Verträge sind separat berücksichtigt.
 
-**Suiteweite Gegenprüfung:** JS-/Browsertests konsumieren vorgegebene /user_status-Payloads; kein regulärer Request führt diesen Handler aus. Damit wird die echte Kombination aus Tarif, Adminrolle und Limits nicht geprüft.
+**Suiteweite Gegenprüfung:** Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
 
-**Suchspur:** 224 versionierte Test-/Hilfsdateien durchsucht, 26 passende Zeilen. Regexe: ` /user_status|get_user_status|checkUserStatusOnLoad `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-012 `.
+**Suchspur:** 263 versionierte Test-/Hilfsdateien durchsucht, 33 passende Zeilen. Regexe: ` /user_status|get_user_status|checkUserStatusOnLoad `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-012 `.
 
 | Szenario | Erwartung |
 |---|---|
@@ -434,16 +462,18 @@ Kein direkter repräsentativer Testbeleg für diese Grenze; Suchtreffer und verw
 
 **P2 · missing_case** · Verträge: [WATCH-01](matrix.md#watch-01), [WATCH-04](matrix.md#watch-04), [WATCH-03](matrix.md#watch-03) · Paket: [WP-15](work-packages.md#wp-15)
 
-**Produktbeleg:** [app/api/routers/watch.py](../../../app/api/routers/watch.py#L105) — ` def patch_watch( `; [app/api/routers/watch.py](../../../app/api/routers/watch.py#L194) — ` def remove_watch( `; [app/api/routers/watch.py](../../../app/api/routers/watch.py#L133) — ` def create_telegram_link( `; [app/api/routers/watch.py](../../../app/api/routers/watch.py#L149) — ` def test_telegram( `; [app/api/routers/watch.py](../../../app/api/routers/watch.py#L163) — ` def disconnect_telegram( `; [app/api/routers/watch.py](../../../app/api/routers/watch.py#L308) — ` def follow_unsubscribe( `; [app/api/routers/watch.py](../../../app/api/routers/watch.py#L320) — ` def unsubscribe(request: `
+**Aktuelle Bewertung:** open — Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
+
+**Produktbeleg:** [app/api/routers/watch.py](../../../app/api/routers/watch.py#L129) — ` def patch_watch( `; [app/api/routers/watch.py](../../../app/api/routers/watch.py#L218) — ` def remove_watch( `; [app/api/routers/watch.py](../../../app/api/routers/watch.py#L157) — ` def create_telegram_link( `; [app/api/routers/watch.py](../../../app/api/routers/watch.py#L173) — ` def test_telegram( `; [app/api/routers/watch.py](../../../app/api/routers/watch.py#L187) — ` def disconnect_telegram( `; [app/api/routers/watch.py](../../../app/api/routers/watch.py#L332) — ` def follow_unsubscribe( `; [app/api/routers/watch.py](../../../app/api/routers/watch.py#L344) — ` def unsubscribe(request: `
 
 **Vorhandene relevante Prüfungen:**
 
-- [WatchCrudTests::test_free_create_list_update_pause_delete](../../../tests/test_watch_feature.py#L174) — Große Service-/Scheduler-/Router-/Mailformat-Suite mit DB-/LLM-/Versand-Doubles plus UI-Sourceverträge. Assertionstellen: [176](../../../tests/test_watch_feature.py#L176), [177](../../../tests/test_watch_feature.py#L177), [178](../../../tests/test_watch_feature.py#L178), [179](../../../tests/test_watch_feature.py#L179), [180](../../../tests/test_watch_feature.py#L180), [181](../../../tests/test_watch_feature.py#L181), [182](../../../tests/test_watch_feature.py#L182), [185](../../../tests/test_watch_feature.py#L185), [187](../../../tests/test_watch_feature.py#L187), [189](../../../tests/test_watch_feature.py#L189).
-- [WatchRouteTests::test_telegram_connection_routes_and_webhook_secret](../../../tests/test_watch_feature.py#L2501) — Große Service-/Scheduler-/Router-/Mailformat-Suite mit DB-/LLM-/Versand-Doubles plus UI-Sourceverträge. Assertionstellen: [2509](../../../tests/test_watch_feature.py#L2509), [2510](../../../tests/test_watch_feature.py#L2510), [2514](../../../tests/test_watch_feature.py#L2514), [2522](../../../tests/test_watch_feature.py#L2522), [2523](../../../tests/test_watch_feature.py#L2523).
+- [WatchCrudTests::test_free_create_list_update_pause_delete](../../../tests/test_watch_feature.py#L177) — Große Service-/Scheduler-/Router-/Mailformat-Suite mit DB-/LLM-/Versand-Doubles plus UI-Sourceverträge. Assertionstellen: [179](../../../tests/test_watch_feature.py#L179), [180](../../../tests/test_watch_feature.py#L180), [181](../../../tests/test_watch_feature.py#L181), [182](../../../tests/test_watch_feature.py#L182), [183](../../../tests/test_watch_feature.py#L183), [184](../../../tests/test_watch_feature.py#L184), [185](../../../tests/test_watch_feature.py#L185), [188](../../../tests/test_watch_feature.py#L188), [190](../../../tests/test_watch_feature.py#L190), [192](../../../tests/test_watch_feature.py#L192).
+- [WatchRouteTests::test_telegram_connection_routes_and_webhook_secret](../../../tests/test_watch_feature.py#L2713) — Große Service-/Scheduler-/Router-/Mailformat-Suite mit DB-/LLM-/Versand-Doubles plus UI-Sourceverträge. Assertionstellen: [2721](../../../tests/test_watch_feature.py#L2721), [2722](../../../tests/test_watch_feature.py#L2722), [2726](../../../tests/test_watch_feature.py#L2726), [2734](../../../tests/test_watch_feature.py#L2734), [2735](../../../tests/test_watch_feature.py#L2735).
 
-**Suiteweite Gegenprüfung:** Service-CRUD, Tokenhelper und einzelne Connection-/Webhook-/Confirm-Routen sind vorhanden. Sieben Handler sind im historischen regulären Lauf unausgeführt: PATCH, DELETE, Telegram-Link, Telegram-Test, Telegram-Disconnect, Follower-Unsubscribe und Watch-Unsubscribe. Statische oder browserseitig ersetzte API-Aufrufe ersetzen keinen Adaptertest.
+**Suiteweite Gegenprüfung:** Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
 
-**Suchspur:** 224 versionierte Test-/Hilfsdateien durchsucht, 9 passende Zeilen. Regexe: ` patch_watch|remove_watch|create_telegram_link|test_telegram\( `, ` /api/watch/|/api/my/telegram/(link|test) `, ` disconnect_telegram|follow_unsubscribe|/watch/unsubscribe|/telegram/disconnect `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-013 `.
+**Suchspur:** 263 versionierte Test-/Hilfsdateien durchsucht, 11 passende Zeilen. Regexe: ` patch_watch|remove_watch|create_telegram_link|test_telegram\( `, ` /api/watch/|/api/my/telegram/(link|test) `, ` disconnect_telegram|follow_unsubscribe|/watch/unsubscribe|/telegram/disconnect `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-013 `.
 
 | Szenario | Erwartung |
 |---|---|
@@ -466,17 +496,19 @@ Kein direkter repräsentativer Testbeleg für diese Grenze; Suchtreffer und verw
 
 **P1 · missing_case** · Verträge: [AUTH-02](matrix.md#auth-02), [TOPIC-01](matrix.md#topic-01), [TOPIC-04](matrix.md#topic-04) · Paket: [WP-16](work-packages.md#wp-16)
 
-**Produktbeleg:** [app/api/routers/topics.py](../../../app/api/routers/topics.py#L133) — ` def _require_admin( `; [app/api/routers/topics.py](../../../app/api/routers/topics.py#L650) — ` async def admin_update_topic( `; [app/api/routers/topics.py](../../../app/api/routers/topics.py#L247) — ` async def topics_hub( `; [app/api/routers/topics.py](../../../app/api/routers/topics.py#L285) — ` async def sitemap_topics( `; [app/api/routers/topics.py](../../../app/api/routers/topics.py#L526) — ` async def follow_topic( `; [app/api/routers/admin.py](../../../app/api/routers/admin.py#L156) — ` uid = verify_user_token(id_token, check_revoked=True) `; [app/core/security.py](../../../app/core/security.py#L250) — ` check_revoked: bool = False `; [app/api/routers/topics.py](../../../app/api/routers/topics.py#L563) — ` def topic_follow_confirm( `; [app/api/routers/topics.py](../../../app/api/routers/topics.py#L580) — ` def topic_follow_unsubscribe( `; [app/api/routers/topics.py](../../../app/api/routers/topics.py#L605) — ` def admin_list_topics( `
+**Aktuelle Bewertung:** open — Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
+
+**Produktbeleg:** [app/api/routers/topics.py](../../../app/api/routers/topics.py#L138) — ` def _require_admin( `; [app/api/routers/topics.py](../../../app/api/routers/topics.py#L728) — ` async def admin_update_topic( `; [app/api/routers/topics.py](../../../app/api/routers/topics.py#L253) — ` async def topics_hub( `; [app/api/routers/topics.py](../../../app/api/routers/topics.py#L291) — ` async def sitemap_topics( `; [app/api/routers/topics.py](../../../app/api/routers/topics.py#L604) — ` async def follow_topic( `; [app/api/routers/admin.py](../../../app/api/routers/admin.py#L192) — ` uid = verify_user_token(id_token, check_revoked=True) `; [app/core/security.py](../../../app/core/security.py#L257) — ` check_revoked: bool = False `; [app/api/routers/topics.py](../../../app/api/routers/topics.py#L641) — ` def topic_follow_confirm( `; [app/api/routers/topics.py](../../../app/api/routers/topics.py#L658) — ` def topic_follow_unsubscribe( `; [app/api/routers/topics.py](../../../app/api/routers/topics.py#L683) — ` def admin_list_topics( `
 
 **Vorhandene relevante Prüfungen:**
 
-- [test_admin_topic_api_creates_updates_and_versions_without_share_data](../../../tests/test_topics_feature.py#L1037) — Große Service-/Router-/SSR-Suite mit FakeFirestore; einzelner echter SDK-Queryaufbau mit RPC-Mock. Assertionstellen: [1049](../../../tests/test_topics_feature.py#L1049), [1054](../../../tests/test_topics_feature.py#L1054), [1055](../../../tests/test_topics_feature.py#L1055), [1057](../../../tests/test_topics_feature.py#L1057), [1058](../../../tests/test_topics_feature.py#L1058), [1061](../../../tests/test_topics_feature.py#L1061), [1062](../../../tests/test_topics_feature.py#L1062), [1063](../../../tests/test_topics_feature.py#L1063).
+- [test_admin_topic_api_creates_updates_and_versions_without_share_data](../../../tests/test_topics_feature.py#L1137) — Große Service-/Router-/SSR-Suite mit FakeFirestore; einzelner echter SDK-Queryaufbau mit RPC-Mock. Assertionstellen: [1149](../../../tests/test_topics_feature.py#L1149), [1154](../../../tests/test_topics_feature.py#L1154), [1155](../../../tests/test_topics_feature.py#L1155), [1157](../../../tests/test_topics_feature.py#L1157), [1158](../../../tests/test_topics_feature.py#L1158), [1161](../../../tests/test_topics_feature.py#L1161), [1162](../../../tests/test_topics_feature.py#L1162), [1163](../../../tests/test_topics_feature.py#L1163).
 - [test_admin_boundary_checks_revocation_and_maps_tier_outage_to_503](../../../tests/test_auth_revocation.py#L52) — Security-Funktionen mit Auth-/Datenbank-Doubles. Assertionstellen: [65](../../../tests/test_auth_revocation.py#L65), [68](../../../tests/test_auth_revocation.py#L68), [69](../../../tests/test_auth_revocation.py#L69).
-- [test_noindex_and_unpublished_topics_are_not_in_topic_sitemap](../../../tests/test_topics_feature.py#L485) — Große Service-/Router-/SSR-Suite mit FakeFirestore; einzelner echter SDK-Queryaufbau mit RPC-Mock. Assertionstellen: [504](../../../tests/test_topics_feature.py#L504), [505](../../../tests/test_topics_feature.py#L505), [506](../../../tests/test_topics_feature.py#L506).
+- [test_noindex_and_unpublished_topics_are_not_in_topic_sitemap](../../../tests/test_topics_feature.py#L492) — Große Service-/Router-/SSR-Suite mit FakeFirestore; einzelner echter SDK-Queryaufbau mit RPC-Mock. Assertionstellen: [511](../../../tests/test_topics_feature.py#L511), [512](../../../tests/test_topics_feature.py#L512), [513](../../../tests/test_topics_feature.py#L513).
 
-**Suiteweite Gegenprüfung:** Der Testname creates_updates enthält keinen PUT; Adminprüfung ist ersetzt. PUT, Adminlist, Hub, Sitemap, Follow, Confirm und Unsubscribe sind im historischen regulären Lauf unausgeführt. Service-/SSR-Tests decken Teile ab, aber nicht diese Adapter. noindex ist keine Zugriffssperre: Der Servicetest listet das Topic öffentlich, schließt es jedoch aus der Sitemap aus. Die reproduzierte Abweichung der Topic-Adminauth ist separat G-041/P-04.
+**Suiteweite Gegenprüfung:** Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
 
-**Suchspur:** 224 versionierte Test-/Hilfsdateien durchsucht, 23 passende Zeilen. Regexe: ` admin_update_topic|topics_hub|sitemap_topics|follow_topic|_require_admin `, ` /api/admin/topics|/sitemap-topics.xml `, ` confirm_topic_follow|unsubscribe_topic|admin_list_topics|/topics/follow `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-014 `.
+**Suchspur:** 263 versionierte Test-/Hilfsdateien durchsucht, 33 passende Zeilen. Regexe: ` admin_update_topic|topics_hub|sitemap_topics|follow_topic|_require_admin `, ` /api/admin/topics|/sitemap-topics.xml `, ` confirm_topic_follow|unsubscribe_topic|admin_list_topics|/topics/follow `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-014 `.
 
 | Szenario | Erwartung |
 |---|---|
@@ -499,15 +531,17 @@ Kein direkter repräsentativer Testbeleg für diese Grenze; Suchtreffer und verw
 
 **P2 · missing_case** · Verträge: [BENCH-03](matrix.md#bench-03) · Paket: [WP-22](work-packages.md#wp-22)
 
-**Produktbeleg:** [app/api/routers/admin.py](../../../app/api/routers/admin.py#L787) — ` def admin_list_benchmark_runs( `; [app/api/routers/admin.py](../../../app/api/routers/admin.py#L801) — ` def admin_get_benchmark_run( `; [static/js/admin-benchmark.js](../../../static/js/admin-benchmark.js#L26) — ` async function `
+**Aktuelle Bewertung:** open — Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
+
+**Produktbeleg:** [app/api/routers/admin.py](../../../app/api/routers/admin.py#L872) — ` def admin_list_benchmark_runs( `; [app/api/routers/admin.py](../../../app/api/routers/admin.py#L886) — ` def admin_get_benchmark_run( `; [static/js/admin-benchmark.js](../../../static/js/admin-benchmark.js#L26) — ` async function `
 
 **Vorhandene relevante Prüfungen:**
 
 - [test_publish_run_dir_stores_compact_report_only](../../../tests/test_benchmark_reports.py#L76) — Report-Publisher mit FakeCollection. Assertionstellen: [83](../../../tests/test_benchmark_reports.py#L83), [86](../../../tests/test_benchmark_reports.py#L86), [87](../../../tests/test_benchmark_reports.py#L87), [88](../../../tests/test_benchmark_reports.py#L88), [89](../../../tests/test_benchmark_reports.py#L89), [90](../../../tests/test_benchmark_reports.py#L90).
 
-**Suiteweite Gegenprüfung:** Reader/Publish-Services sind belegt; beide Admin-HTTP-Handler im regulären Lauf unausgeführt und der Viewer nur statisch referenziert.
+**Suiteweite Gegenprüfung:** Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
 
-**Suchspur:** 224 versionierte Test-/Hilfsdateien durchsucht, 3 passende Zeilen. Regexe: ` /api/admin/benchmark|admin_list_benchmark_runs|admin_get_benchmark_run|admin-benchmark.js `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-015 `.
+**Suchspur:** 263 versionierte Test-/Hilfsdateien durchsucht, 3 passende Zeilen. Regexe: ` /api/admin/benchmark|admin_list_benchmark_runs|admin_get_benchmark_run|admin-benchmark.js `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-015 `.
 
 | Szenario | Erwartung |
 |---|---|
@@ -530,16 +564,18 @@ Kein direkter repräsentativer Testbeleg für diese Grenze; Suchtreffer und verw
 
 **P2 · missing_case** · Verträge: [TOPIC-02](matrix.md#topic-02) · Paket: [WP-17](work-packages.md#wp-17)
 
-**Produktbeleg:** [app/services/llm/consensus_engine.py](../../../app/services/llm/consensus_engine.py#L2358) — ` def query_claim_identity( `
+**Aktuelle Bewertung:** open — Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
+
+**Produktbeleg:** [app/services/llm/consensus_engine.py](../../../app/services/llm/consensus_engine.py#L2699) — ` def query_claim_identity( `
 
 **Vorhandene relevante Prüfungen:**
 
-- [test_claim_identity_result_maps_claims_onto_the_keys_they_continue](../../../tests/test_topics_feature.py#L1019) — Große Service-/Router-/SSR-Suite mit FakeFirestore; einzelner echter SDK-Queryaufbau mit RPC-Mock. Assertionstellen: [1034](../../../tests/test_topics_feature.py#L1034).
-- [test_claim_identity_falls_back_to_fresh_keys_when_the_judge_is_unavailable](../../../tests/test_topics_feature.py#L998) — Große Service-/Router-/SSR-Suite mit FakeFirestore; einzelner echter SDK-Queryaufbau mit RPC-Mock. Assertionstellen: [1016](../../../tests/test_topics_feature.py#L1016).
+- [test_claim_identity_result_maps_claims_onto_the_keys_they_continue](../../../tests/test_topics_feature.py#L1119) — Große Service-/Router-/SSR-Suite mit FakeFirestore; einzelner echter SDK-Queryaufbau mit RPC-Mock. Assertionstellen: [1134](../../../tests/test_topics_feature.py#L1134).
+- [test_claim_identity_falls_back_to_fresh_keys_when_the_judge_is_unavailable](../../../tests/test_topics_feature.py#L1098) — Große Service-/Router-/SSR-Suite mit FakeFirestore; einzelner echter SDK-Queryaufbau mit RPC-Mock. Assertionstellen: [1116](../../../tests/test_topics_feature.py#L1116).
 
-**Suiteweite Gegenprüfung:** Vorhandene Topicfälle ersetzen query_claim_identity. Seine komplette Validierung/Fallbackschleife ist unausgeführt; getestete Ledgerkeys sind bereits vorgegeben.
+**Suiteweite Gegenprüfung:** Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
 
-**Suchspur:** 224 versionierte Test-/Hilfsdateien durchsucht, 3 passende Zeilen. Regexe: ` query_claim_identity|known_keys|claim_identity_result `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-016 `.
+**Suchspur:** 263 versionierte Test-/Hilfsdateien durchsucht, 3 passende Zeilen. Regexe: ` query_claim_identity|known_keys|claim_identity_result `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-016 `.
 
 | Szenario | Erwartung |
 |---|---|
@@ -562,15 +598,17 @@ Kein direkter repräsentativer Testbeleg für diese Grenze; Suchtreffer und verw
 
 **P2 · missing_case** · Verträge: [SEO-02](matrix.md#seo-02), [SEO-04](matrix.md#seo-04) · Paket: [WP-18](work-packages.md#wp-18)
 
+**Aktuelle Bewertung:** open — Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
+
 **Produktbeleg:** [app/services/seo_repository.py](../../../app/services/seo_repository.py#L247) — ` def list_metrics_for_pages( `; [app/services/seo_repository.py](../../../app/services/seo_repository.py#L375) — ` def last_run( `; [app/services/seo_repository.py](../../../app/services/seo_repository.py#L426) — ` def list_judgments( `
 
 **Vorhandene relevante Prüfungen:**
 
-- [test_review_reuses_overview_context_without_second_metric_scan](../../../tests/test_seo_weekly_review.py#L298) — Review-Service mit Repository-/Judge-/Action-Doubles. Assertionstellen: [346](../../../tests/test_seo_weekly_review.py#L346), [347](../../../tests/test_seo_weekly_review.py#L347), [348](../../../tests/test_seo_weekly_review.py#L348).
+- [test_review_reuses_overview_context_without_second_metric_scan](../../../tests/test_seo_weekly_review.py#L300) — Review-Service mit Repository-/Judge-/Action-Doubles. Assertionstellen: [348](../../../tests/test_seo_weekly_review.py#L348), [349](../../../tests/test_seo_weekly_review.py#L349), [350](../../../tests/test_seo_weekly_review.py#L350).
 
-**Suiteweite Gegenprüfung:** Reviewtests prüfen vorgegebene Repositoryantworten. Konkretes BatchGet-Mapping, aktuellster Lauf und begrenzte Judgmentlisten sind im realen Repository unausgeführt.
+**Suiteweite Gegenprüfung:** Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
 
-**Suchspur:** 224 versionierte Test-/Hilfsdateien durchsucht, 33 passende Zeilen. Regexe: ` list_metrics_for_pages|list_judgments|last_run|latest_review|recent_reviews `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-017 `.
+**Suchspur:** 263 versionierte Test-/Hilfsdateien durchsucht, 33 passende Zeilen. Regexe: ` list_metrics_for_pages|list_judgments|last_run|latest_review|recent_reviews `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-017 `.
 
 | Szenario | Erwartung |
 |---|---|
@@ -593,15 +631,17 @@ Kein direkter repräsentativer Testbeleg für diese Grenze; Suchtreffer und verw
 
 **P1 · observed_behavior_defect** · Verträge: [TOPIC-05](matrix.md#topic-05) · Paket: [WP-20](work-packages.md#wp-20)
 
-**Produktbeleg:** [app/services/claim_ledger.py](../../../app/services/claim_ledger.py#L433) — ` note = str(run.get("change_summary") `; [templates/topic.html](../../../templates/topic.html#L225) — ` data-note="{{ cell.note }}" `; [static/js/topic-page.js](../../../static/js/topic-page.js#L32) — ` read.innerHTML = parts.join `
+**Aktuelle Bewertung:** resolved — Behoben in 76e4873e: Checkstrip nutzt Text-/DOMknoten, Topicseite externe Skripte/strikte CSP. topic-page.test.mjs prüft inerte Notizen/Datumswerte, test_topics_feature.py CSP und aktuelle Quellenregeln. Beide Dateien im aktuellen Unitlauf grün.
+
+**Produktbeleg:** [app/services/claim_ledger.py](../../../app/services/claim_ledger.py#L455) — ` note = str(run.get("change_summary") `; [templates/topic.html](../../../templates/topic.html#L231) — ` data-note="{{ cell.note }}" `
 
 **Vorhandene relevante Prüfungen:**
 
-- [test_topic_templates_expose_timeline_evidence_follow_and_admin_controls](../../../tests/test_topics_feature.py#L825) — Große Service-/Router-/SSR-Suite mit FakeFirestore; einzelner echter SDK-Queryaufbau mit RPC-Mock. Assertionstellen: [831](../../../tests/test_topics_feature.py#L831), [832](../../../tests/test_topics_feature.py#L832), [833](../../../tests/test_topics_feature.py#L833), [834](../../../tests/test_topics_feature.py#L834), [837](../../../tests/test_topics_feature.py#L837), [838](../../../tests/test_topics_feature.py#L838), [839](../../../tests/test_topics_feature.py#L839), [842](../../../tests/test_topics_feature.py#L842), [846](../../../tests/test_topics_feature.py#L846), [847](../../../tests/test_topics_feature.py#L847), [848](../../../tests/test_topics_feature.py#L848), [850](../../../tests/test_topics_feature.py#L850), [851](../../../tests/test_topics_feature.py#L851), [852](../../../tests/test_topics_feature.py#L852), [853](../../../tests/test_topics_feature.py#L853), [854](../../../tests/test_topics_feature.py#L854), [855](../../../tests/test_topics_feature.py#L855), [856](../../../tests/test_topics_feature.py#L856), [857](../../../tests/test_topics_feature.py#L857), [858](../../../tests/test_topics_feature.py#L858), [859](../../../tests/test_topics_feature.py#L859), [860](../../../tests/test_topics_feature.py#L860).
+- [test_topic_templates_expose_timeline_evidence_follow_and_admin_controls](../../../tests/test_topics_feature.py#L851) — Große Service-/Router-/SSR-Suite mit FakeFirestore; einzelner echter SDK-Queryaufbau mit RPC-Mock. Assertionstellen: [857](../../../tests/test_topics_feature.py#L857), [858](../../../tests/test_topics_feature.py#L858), [859](../../../tests/test_topics_feature.py#L859), [860](../../../tests/test_topics_feature.py#L860), [863](../../../tests/test_topics_feature.py#L863), [864](../../../tests/test_topics_feature.py#L864), [865](../../../tests/test_topics_feature.py#L865), [868](../../../tests/test_topics_feature.py#L868), [872](../../../tests/test_topics_feature.py#L872), [873](../../../tests/test_topics_feature.py#L873), [874](../../../tests/test_topics_feature.py#L874), [876](../../../tests/test_topics_feature.py#L876), [877](../../../tests/test_topics_feature.py#L877), [878](../../../tests/test_topics_feature.py#L878), [879](../../../tests/test_topics_feature.py#L879), [880](../../../tests/test_topics_feature.py#L880), [881](../../../tests/test_topics_feature.py#L881), [882](../../../tests/test_topics_feature.py#L882), [883](../../../tests/test_topics_feature.py#L883), [884](../../../tests/test_topics_feature.py#L884), [885](../../../tests/test_topics_feature.py#L885), [886](../../../tests/test_topics_feature.py#L886).
 
-**Suiteweite Gegenprüfung:** Suite enthält nur Template-/Datenbelege. Lokale DOM-Probe D-01 mit inertem `<b id=...>`-Text erzeugt ein echtes Element und entfernt die literalen Tags aus dem angezeigten Text. Datenpfad: change_summary→cell.note→escaped Attribut→dataset→innerHTML. Kein externer Exploit oder produktiver XSS-Aufruf wurde ausgeführt.
+**Suiteweite Gegenprüfung:** Behoben in 76e4873e: Checkstrip nutzt Text-/DOMknoten, Topicseite externe Skripte/strikte CSP. topic-page.test.mjs prüft inerte Notizen/Datumswerte, test_topics_feature.py CSP und aktuelle Quellenregeln. Beide Dateien im aktuellen Unitlauf grün.
 
-**Suchspur:** 224 versionierte Test-/Hilfsdateien durchsucht, 1 passende Zeilen. Regexe: ` topic-page|topicStripRead|topicReturn|topic-seen:|readStrip|returningReader `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-018 `.
+**Suchspur:** 263 versionierte Test-/Hilfsdateien durchsucht, 10 passende Zeilen. Regexe: ` topic-page|topicStripRead|topicReturn|topic-seen:|readStrip|returningReader `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-018 `.
 
 | Szenario | Erwartung |
 |---|---|
@@ -609,7 +649,7 @@ Kein direkter repräsentativer Testbeleg für diese Grenze; Suchtreffer und verw
 | When | Topicmodul laden und Zelle fokussieren/hovern/antippen; aktuellen und historischen Besuch wiederholen. |
 | Then | Notiz bleibt Text, keine aus Notiz erzeugten Elemente/Handler. Touchvorschau, zweite Navigation, Unseen-Marker und historische Storageisolation funktionieren weiterhin. |
 
-**Zielstellen:** ` tests/js/topic-page.test.mjs ` (vorgeschlagen), ` tests/e2e/test_topic_frontend.py ` (vorgeschlagen)
+**Zielstellen:** [tests/js/topic-page.test.mjs](../../../tests/js/topic-page.test.mjs), ` tests/e2e/test_topic_frontend.py ` (vorgeschlagen)
 
 **Wiederverwenden:** [tests/js/helpers/appWindow.mjs](../../../tests/js/helpers/appWindow.mjs), [tests/test_claim_ledger.py](../../../tests/test_claim_ledger.py)
 
@@ -624,15 +664,17 @@ Kein direkter repräsentativer Testbeleg für diese Grenze; Suchtreffer und verw
 
 **P2 · observed_behavior_defect** · Verträge: [ADMIN-02](matrix.md#admin-02) · Paket: [WP-21](work-packages.md#wp-21)
 
-**Produktbeleg:** [static/js/admin-api.js](../../../static/js/admin-api.js#L20) — ` const message = data.error `; [main.py](../../../main.py#L226) — ` content={"error": exc.detail} `; [app/api/routers/admin.py](../../../app/api/routers/admin.py#L570) — ` detail={"error_code": exc.code `
+**Aktuelle Bewertung:** open — Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
+
+**Produktbeleg:** [static/js/admin-api.js](../../../static/js/admin-api.js#L20) — ` const message = data.error `; [main.py](../../../main.py#L242) — ` content={"error": exc.detail} `; [app/api/routers/admin.py](../../../app/api/routers/admin.py#L642) — ` detail={"error_code": exc.code `
 
 **Vorhandene relevante Prüfungen:**
 
 - [test_configuration_tab_saves_reloads_and_preserves_conflicting_draft](../../../tests/e2e/test_admin_prompt_config.py#L15) — Chromium-Browserintegration mit simulierten Admin-APIs. Assertionstellen: [30](../../../tests/e2e/test_admin_prompt_config.py#L30), [46](../../../tests/e2e/test_admin_prompt_config.py#L46), [47](../../../tests/e2e/test_admin_prompt_config.py#L47), [49](../../../tests/e2e/test_admin_prompt_config.py#L49), [50](../../../tests/e2e/test_admin_prompt_config.py#L50), [51](../../../tests/e2e/test_admin_prompt_config.py#L51), [53](../../../tests/e2e/test_admin_prompt_config.py#L53), [55](../../../tests/e2e/test_admin_prompt_config.py#L55), [56](../../../tests/e2e/test_admin_prompt_config.py#L56), [57](../../../tests/e2e/test_admin_prompt_config.py#L57), [64](../../../tests/e2e/test_admin_prompt_config.py#L64), [65](../../../tests/e2e/test_admin_prompt_config.py#L65), [72](../../../tests/e2e/test_admin_prompt_config.py#L72), [73](../../../tests/e2e/test_admin_prompt_config.py#L73), [74](../../../tests/e2e/test_admin_prompt_config.py#L74), [76](../../../tests/e2e/test_admin_prompt_config.py#L76), [77](../../../tests/e2e/test_admin_prompt_config.py#L77), [78](../../../tests/e2e/test_admin_prompt_config.py#L78), [85](../../../tests/e2e/test_admin_prompt_config.py#L85), [86](../../../tests/e2e/test_admin_prompt_config.py#L86), [88](../../../tests/e2e/test_admin_prompt_config.py#L88), [90](../../../tests/e2e/test_admin_prompt_config.py#L90), [91](../../../tests/e2e/test_admin_prompt_config.py#L91), [92](../../../tests/e2e/test_admin_prompt_config.py#L92), [94](../../../tests/e2e/test_admin_prompt_config.py#L94), [95](../../../tests/e2e/test_admin_prompt_config.py#L95), [96](../../../tests/e2e/test_admin_prompt_config.py#L96), [101](../../../tests/e2e/test_admin_prompt_config.py#L101).
 
-**Suiteweite Gegenprüfung:** Browserkonfliktfixture liefert detail:String und ist nicht ausgeführt. Reale App verpackt strukturierte HTTPException.detail unter error. Probe D-02: detail:Object wird verständlich, error:Object dagegen als [object Object] angezeigt.
+**Suiteweite Gegenprüfung:** Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
 
-**Suchspur:** 224 versionierte Test-/Hilfsdateien durchsucht, 4 passende Zeilen. Regexe: ` createAdminClient|admin-api.js|\[object Object\] `, ` Configuration changed in another session `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-019 `.
+**Suchspur:** 263 versionierte Test-/Hilfsdateien durchsucht, 4 passende Zeilen. Regexe: ` createAdminClient|admin-api.js|\[object Object\] `, ` Configuration changed in another session `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-019 `.
 
 | Szenario | Erwartung |
 |---|---|
@@ -655,16 +697,18 @@ Kein direkter repräsentativer Testbeleg für diese Grenze; Suchtreffer und verw
 
 **P2 · assertion_gap** · Verträge: [SHARE-04](matrix.md#share-04) · Paket: [WP-23](work-packages.md#wp-23)
 
-**Produktbeleg:** [app/services/og_image.py](../../../app/services/og_image.py#L93) — ` def render_share_card( `; [app/api/routers/share.py](../../../app/api/routers/share.py#L488) — ` def share_og_card( `
+**Aktuelle Bewertung:** open — Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
+
+**Produktbeleg:** [app/services/og_image.py](../../../app/services/og_image.py#L93) — ` def render_share_card( `; [app/api/routers/share.py](../../../app/api/routers/share.py#L550) — ` def share_og_card( `
 
 **Vorhandene relevante Prüfungen:**
 
-- [ShareSeoEnhancementTests::test_og_card_route_and_meta](../../../tests/test_share_feature.py#L2459) — Große Unit-/Service-/Router-/SSR-Suite mit FakeDb und lokalen Cachethreads. Assertionstellen: [2466](../../../tests/test_share_feature.py#L2466), [2467](../../../tests/test_share_feature.py#L2467), [2468](../../../tests/test_share_feature.py#L2468), [2469](../../../tests/test_share_feature.py#L2469), [2470](../../../tests/test_share_feature.py#L2470).
-- [ShareSeoEnhancementTests::test_og_card_404_for_private_pages](../../../tests/test_share_feature.py#L2472) — Große Unit-/Service-/Router-/SSR-Suite mit FakeDb und lokalen Cachethreads. Assertionstellen: [2476](../../../tests/test_share_feature.py#L2476).
+- [ShareSeoEnhancementTests::test_og_card_route_and_meta](../../../tests/test_share_feature.py#L2597) — Große Unit-/Service-/Router-/SSR-Suite mit FakeDb und lokalen Cachethreads. Assertionstellen: [2604](../../../tests/test_share_feature.py#L2604), [2605](../../../tests/test_share_feature.py#L2605), [2606](../../../tests/test_share_feature.py#L2606), [2607](../../../tests/test_share_feature.py#L2607), [2608](../../../tests/test_share_feature.py#L2608), [2609](../../../tests/test_share_feature.py#L2609).
+- [ShareSeoEnhancementTests::test_og_card_404_for_private_pages](../../../tests/test_share_feature.py#L2611) — Große Unit-/Service-/Router-/SSR-Suite mit FakeDb und lokalen Cachethreads. Assertionstellen: [2615](../../../tests/test_share_feature.py#L2615).
 
-**Suiteweite Gegenprüfung:** Probe M-02 ersetzt Renderer durch gültiges komplett weißes PNG gleicher Größe: beide OG-Tests bleiben grün. Status/MIME/PNG-Präfix sichern den zugesagten Karteninhalt nicht.
+**Suiteweite Gegenprüfung:** Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
 
-**Suchspur:** 224 versionierte Test-/Hilfsdateien durchsucht, 4 passende Zeilen. Regexe: ` og_image|og\.png|share_card|render_share_card `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-020 `.
+**Suchspur:** 263 versionierte Test-/Hilfsdateien durchsucht, 4 passende Zeilen. Regexe: ` og_image|og\.png|share_card|render_share_card `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-020 `.
 
 | Szenario | Erwartung |
 |---|---|
@@ -687,15 +731,17 @@ Kein direkter repräsentativer Testbeleg für diese Grenze; Suchtreffer und verw
 
 **P2 · assertion_gap** · Verträge: [UI-09](matrix.md#ui-09) · Paket: [WP-24](work-packages.md#wp-24)
 
+**Aktuelle Bewertung:** open — Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
+
 **Produktbeleg:** [static/js/analytics-opt-out.js](../../../static/js/analytics-opt-out.js#L3) — ` const flag = `
 
 **Vorhandene relevante Prüfungen:**
 
 - [test_partial_ships_the_self_exclusion_switch](../../../tests/test_analytics_partial.py#L59) — Quelltextverträge. Assertionstellen: [67](../../../tests/test_analytics_partial.py#L67), [68](../../../tests/test_analytics_partial.py#L68), [69](../../../tests/test_analytics_partial.py#L69).
 
-**Suiteweite Gegenprüfung:** Bestehender Test kontrolliert vorhandene Storage-Aufrufe und Scriptreihenfolge. Queryverzweigung oder ein nie ausgeführter Aufruf könnte falsch sein und dennoch bestehen.
+**Suiteweite Gegenprüfung:** Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
 
-**Suchspur:** 224 versionierte Test-/Hilfsdateien durchsucht, 7 passende Zeilen. Regexe: ` analytics-opt-out|notrack|umami.disabled `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-021 `.
+**Suchspur:** 263 versionierte Test-/Hilfsdateien durchsucht, 7 passende Zeilen. Regexe: ` analytics-opt-out|notrack|umami.disabled `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-021 `.
 
 | Szenario | Erwartung |
 |---|---|
@@ -718,15 +764,17 @@ Kein direkter repräsentativer Testbeleg für diese Grenze; Suchtreffer und verw
 
 **P1 · missing_case** · Verträge: [TOOLS-01](matrix.md#tools-01) · Paket: [WP-25](work-packages.md#wp-25)
 
+**Aktuelle Bewertung:** open — Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
+
 **Produktbeleg:** [scripts/repair_agent_allowance.py](../../../scripts/repair_agent_allowance.py#L16) — ` def main(): `
 
 **Vorhandene relevante Prüfungen:**
 
 Kein direkter repräsentativer Testbeleg für diese Grenze; Suchtreffer und verwandte Verträge sind separat berücksichtigt.
 
-**Suiteweite Gegenprüfung:** Keine Testreferenz und keine ausgeführte Zeile. Service-Recoverytests prüfen nicht --apply-/Projekt-/Umgebungsgrenzen dieses produktionswirksamen CLI.
+**Suiteweite Gegenprüfung:** Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
 
-**Suchspur:** 224 versionierte Test-/Hilfsdateien durchsucht, 0 passende Zeilen. Regexe: ` repair_agent_allowance|Production repair cannot|Configured Firebase project `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-022 `.
+**Suchspur:** 263 versionierte Test-/Hilfsdateien durchsucht, 0 passende Zeilen. Regexe: ` repair_agent_allowance|Production repair cannot|Configured Firebase project `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-022 `.
 
 | Szenario | Erwartung |
 |---|---|
@@ -749,15 +797,17 @@ Kein direkter repräsentativer Testbeleg für diese Grenze; Suchtreffer und verw
 
 **P2 · missing_case** · Verträge: [TOOLS-01](matrix.md#tools-01) · Paket: [WP-25](work-packages.md#wp-25)
 
+**Aktuelle Bewertung:** open — Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
+
 **Produktbeleg:** [scripts/backfill_claim_keys.py](../../../scripts/backfill_claim_keys.py#L41) — ` def backfill_topic( `; [scripts/backfill_claim_keys.py](../../../scripts/backfill_claim_keys.py#L76) — ` def main() `
 
 **Vorhandene relevante Prüfungen:**
 
 Kein direkter repräsentativer Testbeleg für diese Grenze; Suchtreffer und verwandte Verträge sind separat berücksichtigt.
 
-**Suiteweite Gegenprüfung:** Kein Test oder dynamischer Aufruf. Das Script verändert gespeicherte opinion_map-Daten und ruft auch im Dry-run den Judge auf; Dry-run bedeutet laut CLI nur kein DB-Write, nicht kostenlos.
+**Suiteweite Gegenprüfung:** Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
 
-**Suchspur:** 224 versionierte Test-/Hilfsdateien durchsucht, 0 passende Zeilen. Regexe: ` backfill_claim_keys|backfill_topic|Would update `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-023 `.
+**Suchspur:** 263 versionierte Test-/Hilfsdateien durchsucht, 0 passende Zeilen. Regexe: ` backfill_claim_keys|backfill_topic|Would update `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-023 `.
 
 | Szenario | Erwartung |
 |---|---|
@@ -780,15 +830,17 @@ Kein direkter repräsentativer Testbeleg für diese Grenze; Suchtreffer und verw
 
 **P1 · missing_automation** · Verträge: [BUILD-02](matrix.md#build-02), [BUILD-03](matrix.md#build-03) · Paket: [WP-05](work-packages.md#wp-05)
 
+**Aktuelle Bewertung:** open — Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
+
 **Produktbeleg:** [.github/workflows/publisher-tests.yml](../../../.github/workflows/publisher-tests.yml#L1) — ` name: `; [package.json](../../../package.json#L9) — ` "test": `
 
 **Vorhandene relevante Prüfungen:**
 
 Kein direkter repräsentativer Testbeleg für diese Grenze; Suchtreffer und verwandte Verträge sind separat berücksichtigt.
 
-**Suiteweite Gegenprüfung:** Die vorhandenen drei Workflows betreffen Publisherregressionen, Publisherjob und Renderrestart. Kein Workflow führt die gesamte reguläre Python-/JS-/Browser-/Emulatorsuite aus.
+**Suiteweite Gegenprüfung:** Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
 
-**Suchspur:** 224 versionierte Test-/Hilfsdateien durchsucht, 693 passende Zeilen. Regexe: ` publisher-tests|pytest|vitest `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-024 `.
+**Suchspur:** 263 versionierte Test-/Hilfsdateien durchsucht, 877 passende Zeilen. Regexe: ` publisher-tests|pytest|vitest `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-024 `.
 
 | Szenario | Erwartung |
 |---|---|
@@ -807,9 +859,11 @@ Kein direkter repräsentativer Testbeleg für diese Grenze; Suchtreffer und verw
 
 <a id="g-025"></a>
 
-## G-025 · 267 vorhandene Browserfälle ausführen
+## G-025 · Aktuelle Browserfälle ausführen und rote Fälle klären
 
 **P1 · execution_gap** · Verträge: [BUILD-02](matrix.md#build-02), [UI-06](matrix.md#ui-06) · Paket: [WP-03](work-packages.md#wp-03)
+
+**Aktuelle Bewertung:** partially_addressed — Aktuell 308 E2E-Fälle gesammelt. Der writerfreie Chromiumlauf wird in execution.json dokumentiert; Transaktions-/Smoke-Fälle bleiben getrennt. Alte Zahl 267 ist ein historischer Laufumfang.
 
 **Produktbeleg:** [tests/e2e/conftest.py](../../../tests/e2e/conftest.py#L126) — ` browser = p.chromium.launch() `
 
@@ -817,9 +871,9 @@ Kein direkter repräsentativer Testbeleg für diese Grenze; Suchtreffer und verw
 
 Kein direkter repräsentativer Testbeleg für diese Grenze; Suchtreffer und verwandte Verträge sind separat berücksichtigt.
 
-**Suiteweite Gegenprüfung:** Alle 267 Browserfälle sind gesammelt und katalogisiert, aber Chromium-Download scheiterte im vorherigen Audit. Das ist ein fehlender Laufnachweis, kein Auftrag 267 Tests neu zu schreiben.
+**Suiteweite Gegenprüfung:** Aktuell 308 E2E-Fälle gesammelt. Der writerfreie Chromiumlauf wird in execution.json dokumentiert; Transaktions-/Smoke-Fälle bleiben getrennt. Alte Zahl 267 ist ein historischer Laufumfang.
 
-**Suchspur:** 224 versionierte Test-/Hilfsdateien durchsucht, 2 passende Zeilen. Regexe: ` chromium.launch|def browser\( `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-025 `.
+**Suchspur:** 263 versionierte Test-/Hilfsdateien durchsucht, 2 passende Zeilen. Regexe: ` chromium.launch|def browser\( `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-025 `.
 
 | Szenario | Erwartung |
 |---|---|
@@ -842,15 +896,17 @@ Kein direkter repräsentativer Testbeleg für diese Grenze; Suchtreffer und verw
 
 **P2 · execution_gap** · Verträge: [BUILD-02](matrix.md#build-02) · Paket: [WP-04](work-packages.md#wp-04)
 
-**Produktbeleg:** [dev.ps1](../../../dev.ps1#L12) — ` param( `; [tests/test_dev_cli.py](../../../tests/test_dev_cli.py#L25) — ` @pytest.fixture(params=SHELLS or [None] `
+**Aktuelle Bewertung:** partially_addressed — Aktuelle Tests laufen unter Windows; test_dev_cli.py wird nicht mehr wegen fehlender PowerShell übersprungen. Tatsächlicher Gesamtstart mit Java/Firebase-Emulator über dev.ps1 bleibt gesondert.
+
+**Produktbeleg:** [dev.ps1](../../../dev.ps1#L14) — ` param( `; [tests/test_dev_cli.py](../../../tests/test_dev_cli.py#L25) — ` @pytest.fixture(params=SHELLS or [None] `
 
 **Vorhandene relevante Prüfungen:**
 
 Kein direkter repräsentativer Testbeleg für diese Grenze; Suchtreffer und verwandte Verträge sind separat berücksichtigt.
 
-**Suiteweite Gegenprüfung:** Zwölf test_dev_cli-Fälle werden unter Linux explizit übersprungen. Sourcechecks belegen nicht Prozessargumente/Exitcodes des Windows-Einstiegs. Die CLI-Fixture parametrisiert jede verfügbare Windows-Shell (pwsh/powershell): derzeit 12 Varianten je Shell, also 12 oder 24 ausgeführte Fälle bei einer oder zwei Shells.
+**Suiteweite Gegenprüfung:** Aktuelle Tests laufen unter Windows; test_dev_cli.py wird nicht mehr wegen fehlender PowerShell übersprungen. Tatsächlicher Gesamtstart mit Java/Firebase-Emulator über dev.ps1 bleibt gesondert.
 
-**Suchspur:** 224 versionierte Test-/Hilfsdateien durchsucht, 1 passende Zeilen. Regexe: ` Windows PowerShell entry point|win32 `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-026 `.
+**Suchspur:** 263 versionierte Test-/Hilfsdateien durchsucht, 1 passende Zeilen. Regexe: ` Windows PowerShell entry point|win32 `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-026 `.
 
 | Szenario | Erwartung |
 |---|---|
@@ -873,6 +929,8 @@ Kein direkter repräsentativer Testbeleg für diese Grenze; Suchtreffer und verw
 
 **P1 · broken_test** · Verträge: [WATCH-01](matrix.md#watch-01), [SHARE-01](matrix.md#share-01) · Paket: [WP-01](work-packages.md#wp-01)
 
+**Aktuelle Bewertung:** open — Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
+
 **Produktbeleg:** [tests/e2e/test_phase2_transactions.py](../../../tests/e2e/test_phase2_transactions.py#L56) — ` is_pro=False `; [tests/e2e/test_phase2_transactions.py](../../../tests/e2e/test_phase2_transactions.py#L98) — ` pending_ref.set({ `
 
 **Vorhandene relevante Prüfungen:**
@@ -880,9 +938,9 @@ Kein direkter repräsentativer Testbeleg für diese Grenze; Suchtreffer und verw
 - [test_two_workers_cannot_exceed_owner_watch_limit](../../../tests/e2e/test_phase2_transactions.py#L24) — Firestore-Emulatorintegration mit echten SDK-Transaktionen und Threads. Assertionstellen: [66](../../../tests/e2e/test_phase2_transactions.py#L66), [73](../../../tests/e2e/test_phase2_transactions.py#L73), [78](../../../tests/e2e/test_phase2_transactions.py#L78).
 - [test_two_workers_publish_one_pending_share_and_consume_one_quota](../../../tests/e2e/test_phase2_transactions.py#L92) — Firestore-Emulatorintegration mit echten SDK-Transaktionen und Threads. Assertionstellen: [115](../../../tests/e2e/test_phase2_transactions.py#L115), [116](../../../tests/e2e/test_phase2_transactions.py#L116), [121](../../../tests/e2e/test_phase2_transactions.py#L121).
 
-**Suiteweite Gegenprüfung:** Vorbefunde F-02/F-03: nicht mehr vorhandenes is_pro-Argument statt tier; Pending-Result ohne expires_at. Beide scheitern vor dem intendierten Race.
+**Suiteweite Gegenprüfung:** Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
 
-**Suchspur:** 224 versionierte Test-/Hilfsdateien durchsucht, 7 passende Zeilen. Regexe: ` is_pro=False|test_two_workers_publish_one_pending_share|test_two_workers_cannot_exceed_owner_watch_limit `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-027 `.
+**Suchspur:** 263 versionierte Test-/Hilfsdateien durchsucht, 6 passende Zeilen. Regexe: ` is_pro=False|test_two_workers_publish_one_pending_share|test_two_workers_cannot_exceed_owner_watch_limit `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-027 `.
 
 | Szenario | Erwartung |
 |---|---|
@@ -905,15 +963,17 @@ Kein direkter repräsentativer Testbeleg für diese Grenze; Suchtreffer und verw
 
 **P2 · broken_test** · Verträge: [UI-04](matrix.md#ui-04) · Paket: [WP-01](work-packages.md#wp-01)
 
-**Produktbeleg:** [tests/test_consensus_progress_ui.py](../../../tests/test_consensus_progress_ui.py#L335) — ` tab.className = `; [static/js/consensus-run.js](../../../static/js/consensus-run.js#L400) — ` consensus-tab consensus-evidence-action `
+**Aktuelle Bewertung:** open — Erneut fehlgeschlagen: test_archived_turns_use_the_same_drawer_row_as_the_live_answer erwartet weiterhin den exakten alten Klassenstring.
+
+**Produktbeleg:** [tests/test_consensus_progress_ui.py](../../../tests/test_consensus_progress_ui.py#L339) — ` tab.className = `; [static/js/consensus-run.js](../../../static/js/consensus-run.js#L411) — ` consensus-tab consensus-evidence-action `
 
 **Vorhandene relevante Prüfungen:**
 
-- [test_archived_turns_use_the_same_drawer_row_as_the_live_answer](../../../tests/test_consensus_progress_ui.py#L322) — Quelltextverträge. Assertionstellen: [333](../../../tests/test_consensus_progress_ui.py#L333), [334](../../../tests/test_consensus_progress_ui.py#L334), [335](../../../tests/test_consensus_progress_ui.py#L335), [336](../../../tests/test_consensus_progress_ui.py#L336), [337](../../../tests/test_consensus_progress_ui.py#L337), [338](../../../tests/test_consensus_progress_ui.py#L338), [341](../../../tests/test_consensus_progress_ui.py#L341), [342](../../../tests/test_consensus_progress_ui.py#L342), [344](../../../tests/test_consensus_progress_ui.py#L344), [345](../../../tests/test_consensus_progress_ui.py#L345).
+- [test_archived_turns_use_the_same_drawer_row_as_the_live_answer](../../../tests/test_consensus_progress_ui.py#L326) — Quelltextverträge. Assertionstellen: [337](../../../tests/test_consensus_progress_ui.py#L337), [338](../../../tests/test_consensus_progress_ui.py#L338), [339](../../../tests/test_consensus_progress_ui.py#L339), [340](../../../tests/test_consensus_progress_ui.py#L340), [341](../../../tests/test_consensus_progress_ui.py#L341), [342](../../../tests/test_consensus_progress_ui.py#L342), [345](../../../tests/test_consensus_progress_ui.py#L345), [346](../../../tests/test_consensus_progress_ui.py#L346), [348](../../../tests/test_consensus_progress_ui.py#L348), [349](../../../tests/test_consensus_progress_ui.py#L349).
 
-**Suiteweite Gegenprüfung:** F-01 reproduziert, auch im neuen Branchlauf. Erwarteter Klassenstring ist enger als aktueller zusätzlicher Evidence-Klasse. Kein Beweis eines UI-Produktfehlers.
+**Suiteweite Gegenprüfung:** Erneut fehlgeschlagen: test_archived_turns_use_the_same_drawer_row_as_the_live_answer erwartet weiterhin den exakten alten Klassenstring.
 
-**Suchspur:** 224 versionierte Test-/Hilfsdateien durchsucht, 4 passende Zeilen. Regexe: ` test_archived_turns_use_the_same_drawer_row|consensus-evidence-action `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-028 `.
+**Suchspur:** 263 versionierte Test-/Hilfsdateien durchsucht, 4 passende Zeilen. Regexe: ` test_archived_turns_use_the_same_drawer_row|consensus-evidence-action `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-028 `.
 
 | Szenario | Erwartung |
 |---|---|
@@ -936,15 +996,17 @@ Kein direkter repräsentativer Testbeleg für diese Grenze; Suchtreffer und verw
 
 **P1 · unstable_test** · Verträge: [SHARE-03](matrix.md#share-03) · Paket: [WP-02](work-packages.md#wp-02)
 
+**Aktuelle Bewertung:** open — Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
+
 **Produktbeleg:** [tests/e2e/test_phase2_transactions.py](../../../tests/e2e/test_phase2_transactions.py#L161) — ` def test_parallel_reports_never_lose_increments `
 
 **Vorhandene relevante Prüfungen:**
 
 - [test_parallel_reports_never_lose_increments_or_noindex_transition](../../../tests/e2e/test_phase2_transactions.py#L161) — Firestore-Emulatorintegration mit echten SDK-Transaktionen und Threads. Assertionstellen: [183](../../../tests/e2e/test_phase2_transactions.py#L183), [184](../../../tests/e2e/test_phase2_transactions.py#L184), [185](../../../tests/e2e/test_phase2_transactions.py#L185), [186](../../../tests/e2e/test_phase2_transactions.py#L186), [187](../../../tests/e2e/test_phase2_transactions.py#L187).
 
-**Suiteweite Gegenprüfung:** F-04: Primärlauf Transaction-lock-timeout/12 Versuche, isolierter frischer Emulatorlauf bestanden. Ursache unbestimmt; nicht als sicherer Produktfehler oder sicherer Testflake etikettieren.
+**Suiteweite Gegenprüfung:** Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
 
-**Suchspur:** 224 versionierte Test-/Hilfsdateien durchsucht, 1 passende Zeilen. Regexe: ` test_parallel_reports_never_lose_increments `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-029 `.
+**Suchspur:** 263 versionierte Test-/Hilfsdateien durchsucht, 1 passende Zeilen. Regexe: ` test_parallel_reports_never_lose_increments `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-029 `.
 
 | Szenario | Erwartung |
 |---|---|
@@ -967,15 +1029,17 @@ Kein direkter repräsentativer Testbeleg für diese Grenze; Suchtreffer und verw
 
 **P1 · missing_integration** · Verträge: [CONS-05](matrix.md#cons-05), [CHAT-04](matrix.md#chat-04), [AUTH-04](matrix.md#auth-04), [AGENT-04](matrix.md#agent-04) · Paket: [WP-29](work-packages.md#wp-29)
 
+**Aktuelle Bewertung:** partially_addressed — Ein neuer Agentloop verbindet Datei, Angebote, Vergleich, Dokument und Gmailentwurf; Browserfälle sind weiterhin an API-Doubles getrennt. Keine zusätzliche vollständige persistierte Browserreise belegt.
+
 **Produktbeleg:** [tests/e2e/conftest.py](../../../tests/e2e/conftest.py#L140) — ` ctx.route("**/static/firebase.js*" `; [tests/e2e/test_phase4_frontend.py](../../../tests/e2e/test_phase4_frontend.py#L130) — ` def _real_firebase_page `
 
 **Vorhandene relevante Prüfungen:**
 
 Kein direkter repräsentativer Testbeleg für diese Grenze; Suchtreffer und verwandte Verträge sind separat berücksichtigt.
 
-**Suiteweite Gegenprüfung:** Smoke verbindet Browser mit Mock-LLM-Backend, ersetzt jedoch komplettes AppFirebase. Phase4 führt AppFirebase aus, ersetzt Daten-APIs/SDK. Die bisherige Kombination prüft keine vollständige Persistenz-/Reload-/Auth-Recovery-Kette.
+**Suiteweite Gegenprüfung:** Ein neuer Agentloop verbindet Datei, Angebote, Vergleich, Dokument und Gmailentwurf; Browserfälle sind weiterhin an API-Doubles getrennt. Keine zusätzliche vollständige persistierte Browserreise belegt.
 
-**Suchspur:** 224 versionierte Test-/Hilfsdateien durchsucht, 1167 passende Zeilen. Regexe: ` firebase_stub|_real_firebase_page|route\(|recover_only|bookmark `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-030 `.
+**Suchspur:** 263 versionierte Test-/Hilfsdateien durchsucht, 1257 passende Zeilen. Regexe: ` firebase_stub|_real_firebase_page|route\(|recover_only|bookmark `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-030 `.
 
 | Szenario | Erwartung |
 |---|---|
@@ -998,16 +1062,18 @@ Kein direkter repräsentativer Testbeleg für diese Grenze; Suchtreffer und verw
 
 **P2 · missing_integration** · Verträge: [WATCH-02](matrix.md#watch-02), [TOPIC-01](matrix.md#topic-01), [SEO-04](matrix.md#seo-04) · Paket: [WP-19](work-packages.md#wp-19)
 
-**Produktbeleg:** [app/services/watch_service.py](../../../app/services/watch_service.py#L1389) — ` def list_due_watch_ids( `; [app/services/topics.py](../../../app/services/topics.py#L977) — ` def claim_topic_run( `; [app/services/topics.py](../../../app/services/topics.py#L924) — ` def list_due_topic_ids( `; [app/services/seo_weekly_review.py](../../../app/services/seo_weekly_review.py#L1318) — ` async def seo_review_scheduler_loop `
+**Aktuelle Bewertung:** partially_addressed — Workerleaseowner, verlorene Lease und stale Watchcompletion haben neue Fake-Nachweise. Native SDK-Queries/Transaktionskonflikte samt Probe-/Outboxclaims bleiben offen.
+
+**Produktbeleg:** [app/services/watch_service.py](../../../app/services/watch_service.py#L1472) — ` def list_due_watch_ids( `; [app/services/topics.py](../../../app/services/topics.py#L1103) — ` def claim_topic_run( `; [app/services/topics.py](../../../app/services/topics.py#L1050) — ` def list_due_topic_ids( `; [app/services/seo_weekly_review.py](../../../app/services/seo_weekly_review.py#L1350) — ` async def seo_review_scheduler_loop `
 
 **Vorhandene relevante Prüfungen:**
 
-- [SchedulerSafetyTests::test_claim_transaction_prevents_double_run](../../../tests/test_watch_feature.py#L757) — Große Service-/Scheduler-/Router-/Mailformat-Suite mit DB-/LLM-/Versand-Doubles plus UI-Sourceverträge. Assertionstellen: [764](../../../tests/test_watch_feature.py#L764), [765](../../../tests/test_watch_feature.py#L765), [766](../../../tests/test_watch_feature.py#L766), [767](../../../tests/test_watch_feature.py#L767), [768](../../../tests/test_watch_feature.py#L768).
+- [SchedulerSafetyTests::test_claim_transaction_prevents_double_run](../../../tests/test_watch_feature.py#L760) — Große Service-/Scheduler-/Router-/Mailformat-Suite mit DB-/LLM-/Versand-Doubles plus UI-Sourceverträge. Assertionstellen: [767](../../../tests/test_watch_feature.py#L767), [768](../../../tests/test_watch_feature.py#L768), [769](../../../tests/test_watch_feature.py#L769), [770](../../../tests/test_watch_feature.py#L770), [771](../../../tests/test_watch_feature.py#L771).
 - [test_default_interval_is_seven_days_and_lease_is_persistent](../../../tests/test_seo_weekly_review.py#L81) — Review-Service mit Repository-/Judge-/Action-Doubles. Assertionstellen: [86](../../../tests/test_seo_weekly_review.py#L86), [87](../../../tests/test_seo_weekly_review.py#L87), [88](../../../tests/test_seo_weekly_review.py#L88), [89](../../../tests/test_seo_weekly_review.py#L89).
 
-**Suiteweite Gegenprüfung:** Helperclaims/Zeitslots geprüft, Wrapper und Due-Queries im regulären Lauf vielfach unausgeführt oder ersetzt. Kein nativer Topic-/SEO-Leaserace im Emulatorbestand.
+**Suiteweite Gegenprüfung:** Workerleaseowner, verlorene Lease und stale Watchcompletion haben neue Fake-Nachweise. Native SDK-Queries/Transaktionskonflikte samt Probe-/Outboxclaims bleiben offen.
 
-**Suchspur:** 224 versionierte Test-/Hilfsdateien durchsucht, 11 passende Zeilen. Regexe: ` list_due_watch_ids|list_due_topic_ids|claim_topic_run|acquire_worker_lease|seo_review_scheduler_loop `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-031 `.
+**Suchspur:** 263 versionierte Test-/Hilfsdateien durchsucht, 19 passende Zeilen. Regexe: ` list_due_watch_ids|list_due_topic_ids|claim_topic_run|acquire_worker_lease|seo_review_scheduler_loop `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-031 `.
 
 | Szenario | Erwartung |
 |---|---|
@@ -1030,15 +1096,17 @@ Kein direkter repräsentativer Testbeleg für diese Grenze; Suchtreffer und verw
 
 **P2 · missing_integration** · Verträge: [LLM-02](matrix.md#llm-02), [SRC-01](matrix.md#src-01) · Paket: [WP-26](work-packages.md#wp-26)
 
+**Aktuelle Bewertung:** partially_addressed — ASGI-Test für unveränderte SSE-Frames hinzugekommen. Das ersetzt keine echten Socket-/Proxytests für Disconnect, Chunking und Providergrenzen.
+
 **Produktbeleg:** [app/services/llm/provider_runtime.py](../../../app/services/llm/provider_runtime.py#L170) — ` def managed_provider_resource `; [app/services/source_documents.py](../../../app/services/source_documents.py#L92) — ` async def _download( `
 
 **Vorhandene relevante Prüfungen:**
 
 Kein direkter repräsentativer Testbeleg für diese Grenze; Suchtreffer und verwandte Verträge sind separat berücksichtigt.
 
-**Suiteweite Gegenprüfung:** Provider-/SSRFtests kontrollieren Fehler und Close über Transportdoubles. Der Testname real_provider_socket_stall bezeichnet ebenfalls MockTransport. Kein aktueller echter lokaler TCP/TLS-/Proxy-SSE-Nachweis.
+**Suiteweite Gegenprüfung:** ASGI-Test für unveränderte SSE-Frames hinzugekommen. Das ersetzt keine echten Socket-/Proxytests für Disconnect, Chunking und Providergrenzen.
 
-**Suchspur:** 224 versionierte Test-/Hilfsdateien durchsucht, 8 passende Zeilen. Regexe: ` MockTransport|real_provider_socket_stall|http.server|ThreadingHTTPServer|TCPServer `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-032 `.
+**Suchspur:** 263 versionierte Test-/Hilfsdateien durchsucht, 10 passende Zeilen. Regexe: ` MockTransport|real_provider_socket_stall|http.server|ThreadingHTTPServer|TCPServer `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-032 `.
 
 | Szenario | Erwartung |
 |---|---|
@@ -1061,15 +1129,17 @@ Kein direkter repräsentativer Testbeleg für diese Grenze; Suchtreffer und verw
 
 **P2 · missing_case** · Verträge: [OPS-02](matrix.md#ops-02) · Paket: [WP-26](work-packages.md#wp-26)
 
+**Aktuelle Bewertung:** open — Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
+
 **Produktbeleg:** [app/core/request_limits.py](../../../app/core/request_limits.py#L12) — ` def configured_max_request_body_bytes `; [app/core/request_limits.py](../../../app/core/request_limits.py#L58) — ` except ValueError: `
 
 **Vorhandene relevante Prüfungen:**
 
 - [test_exact_limit_body_is_replayed_once_to_the_application](../../../tests/test_request_body_limits.py#L61) — ASGI-Middleware mit kontrollierten Receive-/Send-Funktionen. Assertionstellen: [69](../../../tests/test_request_body_limits.py#L69), [70](../../../tests/test_request_body_limits.py#L70).
 
-**Suiteweite Gegenprüfung:** Vier bestehende Tests prüfen Overlimit, Chunkzählung, exakt erlaubtes Replay und SSE-Disconnect. Negative/nichtnumerische Content-Length sowie Konfigurations-Min/Max/Invalid werden nicht als Fälle ausgeführt.
+**Suiteweite Gegenprüfung:** Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
 
-**Suchspur:** 224 versionierte Test-/Hilfsdateien durchsucht, 2 passende Zeilen. Regexe: ` MAX_REQUEST_BODY_BYTES|Invalid Content-Length|configured_max_request_body|content-length `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-033 `.
+**Suchspur:** 263 versionierte Test-/Hilfsdateien durchsucht, 2 passende Zeilen. Regexe: ` MAX_REQUEST_BODY_BYTES|Invalid Content-Length|configured_max_request_body|content-length `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-033 `.
 
 | Szenario | Erwartung |
 |---|---|
@@ -1092,15 +1162,17 @@ Kein direkter repräsentativer Testbeleg für diese Grenze; Suchtreffer und verw
 
 **P2 · missing_case** · Verträge: [DATA-01](matrix.md#data-01) · Paket: [WP-27](work-packages.md#wp-27)
 
-**Produktbeleg:** [app/api/routers/pages.py](../../../app/api/routers/pages.py#L523) — ` def submit_feedback( `; [app/services/differences_stats.py](../../../app/services/differences_stats.py#L181) — ` def record_differences_stats( `
+**Aktuelle Bewertung:** open — Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
+
+**Produktbeleg:** [app/api/routers/pages.py](../../../app/api/routers/pages.py#L522) — ` def submit_feedback( `; [app/services/differences_stats.py](../../../app/services/differences_stats.py#L181) — ` def record_differences_stats( `
 
 **Vorhandene relevante Prüfungen:**
 
-- [test_feedback_cooldown_and_daily_limit_are_persistent](../../../tests/test_phase5_operations.py#L315) — Gemischt: Services mit DB-/HTTP-Doubles, Thread-/Async-Tests und Deployment-Quelltextverträge. Assertionstellen: [321](../../../tests/test_phase5_operations.py#L321), [327](../../../tests/test_phase5_operations.py#L327).
+- [test_feedback_cooldown_and_daily_limit_are_persistent](../../../tests/test_phase5_operations.py#L316) — Gemischt: Services mit DB-/HTTP-Doubles, Thread-/Async-Tests und Deployment-Quelltextverträge. Assertionstellen: [322](../../../tests/test_phase5_operations.py#L322), [328](../../../tests/test_phase5_operations.py#L328).
 
-**Suiteweite Gegenprüfung:** Feedbackguard und Aggregationsform sind separat geprüft; echter Feedbackhandler und record_differences_stats sind im regulären Lauf unausgeführt. Browserprüfungen belegen keinen tatsächlichen Write.
+**Suiteweite Gegenprüfung:** Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
 
-**Suchspur:** 224 versionierte Test-/Hilfsdateien durchsucht, 5 passende Zeilen. Regexe: ` /feedback|submit_feedback|record_differences_stats `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-034 `.
+**Suchspur:** 263 versionierte Test-/Hilfsdateien durchsucht, 6 passende Zeilen. Regexe: ` /feedback|submit_feedback|record_differences_stats `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-034 `.
 
 | Szenario | Erwartung |
 |---|---|
@@ -1123,15 +1195,17 @@ Kein direkter repräsentativer Testbeleg für diese Grenze; Suchtreffer und verw
 
 **P3 · missing_case** · Verträge: [BENCH-02](matrix.md#bench-02), [TOOLS-02](matrix.md#tools-02) · Paket: [WP-28](work-packages.md#wp-28)
 
+**Aktuelle Bewertung:** open — Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
+
 **Produktbeleg:** [benchmark/run_sample.py](../../../benchmark/run_sample.py#L53) — ` def main( `; [benchmark/run_experiment.py](../../../benchmark/run_experiment.py#L62) — ` def main( `
 
 **Vorhandene relevante Prüfungen:**
 
 Kein direkter repräsentativer Testbeleg für diese Grenze; Suchtreffer und verwandte Verträge sind separat berücksichtigt.
 
-**Suiteweite Gegenprüfung:** Haupt-Benchmark-CLI gut geprüft, alternative run_sample/run_experiment und Preview-/Probe-CLIs besitzen keinen vergleichbaren Ausführungsnachweis. Einige Evaluationhelper sind getestet, ihre CLI-Pfade nicht.
+**Suiteweite Gegenprüfung:** Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
 
-**Suchspur:** 224 versionierte Test-/Hilfsdateien durchsucht, 2 passende Zeilen. Regexe: ` run_sample|run_experiment|evaluate_agent_delegation|evaluate_source_verification|probe_agent_delegation|render_watch_preview `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-035 `.
+**Suchspur:** 263 versionierte Test-/Hilfsdateien durchsucht, 2 passende Zeilen. Regexe: ` run_sample|run_experiment|evaluate_agent_delegation|evaluate_source_verification|probe_agent_delegation|render_watch_preview `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-035 `.
 
 | Szenario | Erwartung |
 |---|---|
@@ -1154,15 +1228,17 @@ Kein direkter repräsentativer Testbeleg für diese Grenze; Suchtreffer und verw
 
 **P2 · missing_case** · Verträge: [BUILD-01](matrix.md#build-01) · Paket: [WP-30](work-packages.md#wp-30)
 
+**Aktuelle Bewertung:** open — DOMPurify-Pin und Sanitizerpayloads werden nun geprüft; das führt vendorFrontend mit temporärem Dateisystem/check-only noch nicht aus.
+
 **Produktbeleg:** [scripts/vendor_frontend.mjs](../../../scripts/vendor_frontend.mjs#L7) — ` export async function vendorFrontend( `; [scripts/vendor_frontend.mjs](../../../scripts/vendor_frontend.mjs#L18) — ` if (version !== pins[name]) `
 
 **Vorhandene relevante Prüfungen:**
 
 - [test_app_vendor_assets_are_local_versioned_and_include_fonts_and_licenses](../../../tests/test_frontend_build.py#L158) — Build-Artefakt-/Fingerprint-Verträge. Assertionstellen: [160](../../../tests/test_frontend_build.py#L160), [162](../../../tests/test_frontend_build.py#L162), [164](../../../tests/test_frontend_build.py#L164), [165](../../../tests/test_frontend_build.py#L165), [169](../../../tests/test_frontend_build.py#L169), [172](../../../tests/test_frontend_build.py#L172).
 
-**Suiteweite Gegenprüfung:** Vorhandene Tests prüfen eingecheckte Vendorartefakte, Manifest und writeAtomicIfChanged; sie rufen vendorFrontend nicht auf. Exportierter Buildhelper, kein CLI: Versionabweichung, fehlende/stale Datei und schreibfreier checkOnly-Modus haben keinen Verhaltenstest.
+**Suiteweite Gegenprüfung:** DOMPurify-Pin und Sanitizerpayloads werden nun geprüft; das führt vendorFrontend mit temporärem Dateisystem/check-only noch nicht aus.
 
-**Suchspur:** 224 versionierte Test-/Hilfsdateien durchsucht, 1 passende Zeilen. Regexe: ` vendorFrontend|vendor_frontend|Unexpected .*version|checkOnly `, ` does not truncate or rewrite unchanged vendor `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-036 `.
+**Suchspur:** 263 versionierte Test-/Hilfsdateien durchsucht, 1 passende Zeilen. Regexe: ` vendorFrontend|vendor_frontend|Unexpected .*version|checkOnly `, ` does not truncate or rewrite unchanged vendor `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-036 `.
 
 | Szenario | Erwartung |
 |---|---|
@@ -1185,7 +1261,9 @@ Kein direkter repräsentativer Testbeleg für diese Grenze; Suchtreffer und verw
 
 **P1 · observed_behavior_defect** · Verträge: [OPS-02](matrix.md#ops-02), [API-01](matrix.md#api-01), [AGENT-01](matrix.md#agent-01) · Paket: [WP-31](work-packages.md#wp-31)
 
-**Produktbeleg:** [main.py](../../../main.py#L226) — ` content={"error": exc.detail} `; [app/api/routers/api_v1.py](../../../app/api/routers/api_v1.py#L166) — ` def enforce_uid_rate_limit( `; [app/api/routers/agent.py](../../../app/api/routers/agent.py#L142) — ` def run_agent( `
+**Aktuelle Bewertung:** resolved — Behoben in c929e343: main übernimmt exc.headers. test_registered_http_exception_handler_preserves_headers prüft 429/503 Retry-After und 401 WWW-Authenticate durch den registrierten Handler; aktuelle Pythondatei grün. Echte Ablehnungspfade bleiben zusätzliche Integration.
+
+**Produktbeleg:** [main.py](../../../main.py#L242) — ` content={"error": exc.detail} `; [app/api/routers/api_v1.py](../../../app/api/routers/api_v1.py#L173) — ` def enforce_uid_rate_limit( `; [app/api/routers/agent.py](../../../app/api/routers/agent.py#L164) — ` def run_agent( `
 
 **Vorhandene relevante Prüfungen:**
 
@@ -1193,9 +1271,9 @@ Kein direkter repräsentativer Testbeleg für diese Grenze; Suchtreffer und verw
 - [ClientIpKeyTests::test_uid_limiter_cannot_be_bypassed_with_another_key](../../../tests/test_rate_limit.py#L74) — Rate-Key-/UID-Limiter-Funktionen. Assertionstellen: [77](../../../tests/test_rate_limit.py#L77).
 - [test_rate_limit_blocks_immediate_resubmission_without_another_paid_claim](../../../tests/test_agent_search.py#L121) — Usage-/Cooldownlogik, Agent-API und geskripteter Transport. Assertionstellen: [137](../../../tests/test_agent_search.py#L137), [139](../../../tests/test_agent_search.py#L139), [140](../../../tests/test_agent_search.py#L140), [141](../../../tests/test_agent_search.py#L141).
 
-**Suiteweite Gegenprüfung:** P-01 ruft den echten UID-Rejecthelfer über einen synthetischen Prozess-Router in main.app auf: HTTP 429, error-Body, aber kein Retry-After; die Standard-FastAPI-Kontrolle erhält 60. Kein echter Auth-/DB-/Agent-End-to-End-Lauf. Ursache ist fehlendes headers=exc.headers in main.handle_http_exception; auch Agent-429/503 verwenden HTTPException mit Retry-After.
+**Suiteweite Gegenprüfung:** Behoben in c929e343: main übernimmt exc.headers. test_registered_http_exception_handler_preserves_headers prüft 429/503 Retry-After und 401 WWW-Authenticate durch den registrierten Handler; aktuelle Pythondatei grün. Echte Ablehnungspfade bleiben zusätzliche Integration.
 
-**Suchspur:** 224 versionierte Test-/Hilfsdateien durchsucht, 29 passende Zeilen. Regexe: ` Retry.After|enforce_uid_rate_limit|handle_http_exception `, ` TestClient\(main\.app\) `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-037 `.
+**Suchspur:** 263 versionierte Test-/Hilfsdateien durchsucht, 40 passende Zeilen. Regexe: ` Retry.After|enforce_uid_rate_limit|handle_http_exception `, ` TestClient\(main\.app\) `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-037 `.
 
 | Szenario | Erwartung |
 |---|---|
@@ -1218,15 +1296,17 @@ Kein direkter repräsentativer Testbeleg für diese Grenze; Suchtreffer und verw
 
 **P1 · observed_behavior_defect** · Verträge: [MEM-02](matrix.md#mem-02) · Paket: [WP-10](work-packages.md#wp-10)
 
-**Produktbeleg:** [app/services/memory_edit.py](../../../app/services/memory_edit.py#L523) — ` def undo( `; [app/services/memory_edit.py](../../../app/services/memory_edit.py#L563) — ` revision.get("before") or {}, max_notes_chars=memory_limit `
+**Aktuelle Bewertung:** open — Undo sanitisiert den Vorzustand weiterhin mit dem aktuellen memory_limit; nach Limitabsenkung bleibt stilles Kürzen möglich. Lease-/CAS-/Retentionkorrekturen lösen diese Grenze nicht.
+
+**Produktbeleg:** [app/services/memory_edit.py](../../../app/services/memory_edit.py#L701) — ` def undo( `; [app/services/memory_edit.py](../../../app/services/memory_edit.py#L741) — ` revision.get("before") or {}, max_notes_chars=memory_limit `
 
 **Vorhandene relevante Prüfungen:**
 
-- [test_replace_is_revision_checked_and_undo_restores_exact_content](../../../tests/test_memory_edit.py#L118) — Edit-Service/Repository und Router mit DB-/LLM-Doubles. Assertionstellen: [129](../../../tests/test_memory_edit.py#L129), [143](../../../tests/test_memory_edit.py#L143), [147](../../../tests/test_memory_edit.py#L147), [148](../../../tests/test_memory_edit.py#L148), [159](../../../tests/test_memory_edit.py#L159), [160](../../../tests/test_memory_edit.py#L160), [161](../../../tests/test_memory_edit.py#L161), [162](../../../tests/test_memory_edit.py#L162).
+- [test_replace_is_revision_checked_and_undo_restores_exact_content](../../../tests/test_memory_edit.py#L178) — Edit-Service/Repository und Router mit DB-/LLM-Doubles. Assertionstellen: [189](../../../tests/test_memory_edit.py#L189), [204](../../../tests/test_memory_edit.py#L204), [208](../../../tests/test_memory_edit.py#L208), [209](../../../tests/test_memory_edit.py#L209), [220](../../../tests/test_memory_edit.py#L220), [221](../../../tests/test_memory_edit.py#L221), [222](../../../tests/test_memory_edit.py#L222), [223](../../../tests/test_memory_edit.py#L223).
 
-**Suiteweite Gegenprüfung:** P-02: echtes reserve/apply_patch/undo mit aktiviertem Persistenceguard und Fake-DB. 12050 Zeichen Notiz bleiben beim Rollenedit unter Limit 50000 erhalten. Undo unter 12000 meldet undone, setzt Revision 6 und kürzt auf 12000; Kontroll-Undo unter 50000 erhält alle 12050 Zeichen. Eine erfolgreiche Rücknahme stellt somit nicht den ursprünglichen Inhalt wieder her.
+**Suiteweite Gegenprüfung:** Undo sanitisiert den Vorzustand weiterhin mit dem aktuellen memory_limit; nach Limitabsenkung bleibt stilles Kürzen möglich. Lease-/CAS-/Retentionkorrekturen lösen diese Grenze nicht.
 
-**Suchspur:** 224 versionierte Test-/Hilfsdateien durchsucht, 19 passende Zeilen. Regexe: ` \.undo\(|/memory/undo `, ` over.*limit|memory_limit `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-038 `.
+**Suchspur:** 263 versionierte Test-/Hilfsdateien durchsucht, 23 passende Zeilen. Regexe: ` \.undo\(|/memory/undo `, ` over.*limit|memory_limit `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-038 `.
 
 | Szenario | Erwartung |
 |---|---|
@@ -1249,15 +1329,17 @@ Kein direkter repräsentativer Testbeleg für diese Grenze; Suchtreffer und verw
 
 **P1 · missing_case** · Verträge: [AGENT-03](matrix.md#agent-03), [AGENT-04](matrix.md#agent-04) · Paket: [WP-32](work-packages.md#wp-32)
 
-**Produktbeleg:** [app/api/routers/agent.py](../../../app/api/routers/agent.py#L350) — ` def agent_details( `; [app/api/routers/agent.py](../../../app/api/routers/agent.py#L370) — ` def stop_agent_run( `
+**Aktuelle Bewertung:** open — Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
+
+**Produktbeleg:** [app/api/routers/agent.py](../../../app/api/routers/agent.py#L410) — ` def agent_details( `; [app/api/routers/agent.py](../../../app/api/routers/agent.py#L430) — ` def stop_agent_run( `
 
 **Vorhandene relevante Prüfungen:**
 
-- [test_delegation_endpoints_are_owner_bound_and_read_only](../../../tests/test_agent_delegation.py#L262) — Echte Workerthreads/Mailboxen mit Store- und Provider-Doubles. Assertionstellen: [267](../../../tests/test_agent_delegation.py#L267), [268](../../../tests/test_agent_delegation.py#L268), [269](../../../tests/test_agent_delegation.py#L269), [270](../../../tests/test_agent_delegation.py#L270), [271](../../../tests/test_agent_delegation.py#L271), [272](../../../tests/test_agent_delegation.py#L272).
+- [test_delegation_endpoints_are_owner_bound_and_read_only](../../../tests/test_agent_delegation.py#L265) — Echte Workerthreads/Mailboxen mit Store- und Provider-Doubles. Assertionstellen: [270](../../../tests/test_agent_delegation.py#L270), [271](../../../tests/test_agent_delegation.py#L271), [272](../../../tests/test_agent_delegation.py#L272), [273](../../../tests/test_agent_delegation.py#L273), [274](../../../tests/test_agent_delegation.py#L274), [275](../../../tests/test_agent_delegation.py#L275).
 
-**Suiteweite Gegenprüfung:** Die bestehende API-Prüfung ruft Liste, fehlende Auth, fremden Chat und Detail mit limit=51 auf; 422 entsteht vor dem Handler. Kein erfolgreicher Detailbody und kein HTTP-Stop. Store-/Service-Stoptests sind vorhanden, aber belegen nicht UID-/Pfad-/Fehlerprojektion des Routers.
+**Suiteweite Gegenprüfung:** Die bestehende Testgrenze bleibt nach Abgleich der zugeordneten Tests und aktualisierter Suchspur offen. Frühere Lauf-/Mutationsangaben sind historische Belege vom 26.09.2026, keine neue Ausführung.
 
-**Suchspur:** 224 versionierte Test-/Hilfsdateien durchsucht, 10 passende Zeilen. Regexe: ` /agents|/stop `, ` agent_details|stop_agent_run|stop_turn `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-039 `.
+**Suchspur:** 263 versionierte Test-/Hilfsdateien durchsucht, 12 passende Zeilen. Regexe: ` /agents|/stop `, ` agent_details|stop_agent_run|stop_turn `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-039 `.
 
 | Szenario | Erwartung |
 |---|---|
@@ -1280,15 +1362,17 @@ Kein direkter repräsentativer Testbeleg für diese Grenze; Suchtreffer und verw
 
 **P1 · observed_behavior_defect** · Verträge: [ADMIN-01](matrix.md#admin-01) · Paket: [WP-33](work-packages.md#wp-33)
 
-**Produktbeleg:** [app/api/routers/admin.py](../../../app/api/routers/admin.py#L51) — ` def _persist_and_activate_models( `
+**Aktuelle Bewertung:** partially_addressed — Behobenes Überschreiben in 6b80daa6: CAS und eigener Revisionsrollback bewahren simulierten fremden Writer. test_model_configuration.py grün; nativer konkurrierender Firestore-/Mehrprozesslauf noch offen.
+
+**Produktbeleg:** [app/api/routers/admin.py](../../../app/api/routers/admin.py#L59) — ` def _persist_and_activate_models( `
 
 **Vorhandene relevante Prüfungen:**
 
-- [ModelConfigurationTests::test_admin_update_restores_persisted_document_on_activation_error](../../../tests/test_model_configuration.py#L97) — Konfigurations-/Payload-Unit-Tests, Admin-/DB-Doubles und UI-Sourceverträge. Assertionstellen: [120](../../../tests/test_model_configuration.py#L120), [124](../../../tests/test_model_configuration.py#L124), [125](../../../tests/test_model_configuration.py#L125), [126](../../../tests/test_model_configuration.py#L126), [127](../../../tests/test_model_configuration.py#L127).
+- [ModelConfigurationTests::test_admin_update_restores_persisted_document_on_activation_error](../../../tests/test_model_configuration.py#L147) — Konfigurations-/Payload-Unit-Tests, Admin-/DB-Doubles und UI-Sourceverträge. Assertionstellen: [160](../../../tests/test_model_configuration.py#L160), [164](../../../tests/test_model_configuration.py#L164), [165](../../../tests/test_model_configuration.py#L165), [169](../../../tests/test_model_configuration.py#L169), [170](../../../tests/test_model_configuration.py#L170).
 
-**Suiteweite Gegenprüfung:** P-03 führt den realen Save-/Rollbackhelper aus. Im Dokument-Double folgt auf A ein simulierter externer Write B, dann schlägt As Aktivierung fehl: der bedingungslose Rollback schreibt initial über B. Einzelwriter-Kontrolle stellt initial korrekt wieder her. Prozesslokales Lock schützt keinen zweiten Prozess; dies ist eine kontrollierte Interleaving-Probe, kein beobachteter produktiver Vorfall oder nativer Firestore-Racetest.
+**Suiteweite Gegenprüfung:** Behobenes Überschreiben in 6b80daa6: CAS und eigener Revisionsrollback bewahren simulierten fremden Writer. test_model_configuration.py grün; nativer konkurrierender Firestore-/Mehrprozesslauf noch offen.
 
-**Suchspur:** 224 versionierte Test-/Hilfsdateien durchsucht, 12 passende Zeilen. Regexe: ` persist_and_activate_models|activation_error `, ` rollback|restores_persisted `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-040 `.
+**Suchspur:** 263 versionierte Test-/Hilfsdateien durchsucht, 13 passende Zeilen. Regexe: ` persist_and_activate_models|activation_error `, ` rollback|restores_persisted `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-040 `.
 
 | Szenario | Erwartung |
 |---|---|
@@ -1311,16 +1395,18 @@ Kein direkter repräsentativer Testbeleg für diese Grenze; Suchtreffer und verw
 
 **P1 · observed_behavior_defect** · Verträge: [AUTH-02](matrix.md#auth-02), [TOPIC-01](matrix.md#topic-01) · Paket: [WP-16](work-packages.md#wp-16)
 
-**Produktbeleg:** [app/api/routers/topics.py](../../../app/api/routers/topics.py#L133) — ` def _require_admin( `; [app/api/routers/admin.py](../../../app/api/routers/admin.py#L151) — ` def _require_admin( `; [app/core/security.py](../../../app/core/security.py#L250) — ` check_revoked: bool = False `
+**Aktuelle Bewertung:** open — Topichelper ruft verify_user_token weiterhin ohne check_revoked=True auf; Abweichung zum zentralen Adminhelper bleibt bestehen.
+
+**Produktbeleg:** [app/api/routers/topics.py](../../../app/api/routers/topics.py#L138) — ` def _require_admin( `; [app/api/routers/admin.py](../../../app/api/routers/admin.py#L187) — ` def _require_admin( `; [app/core/security.py](../../../app/core/security.py#L257) — ` check_revoked: bool = False `
 
 **Vorhandene relevante Prüfungen:**
 
 - [test_admin_boundary_checks_revocation_and_maps_tier_outage_to_503](../../../tests/test_auth_revocation.py#L52) — Security-Funktionen mit Auth-/Datenbank-Doubles. Assertionstellen: [65](../../../tests/test_auth_revocation.py#L65), [68](../../../tests/test_auth_revocation.py#L68), [69](../../../tests/test_auth_revocation.py#L69).
-- [test_admin_topic_api_creates_updates_and_versions_without_share_data](../../../tests/test_topics_feature.py#L1037) — Große Service-/Router-/SSR-Suite mit FakeFirestore; einzelner echter SDK-Queryaufbau mit RPC-Mock. Assertionstellen: [1049](../../../tests/test_topics_feature.py#L1049), [1054](../../../tests/test_topics_feature.py#L1054), [1055](../../../tests/test_topics_feature.py#L1055), [1057](../../../tests/test_topics_feature.py#L1057), [1058](../../../tests/test_topics_feature.py#L1058), [1061](../../../tests/test_topics_feature.py#L1061), [1062](../../../tests/test_topics_feature.py#L1062), [1063](../../../tests/test_topics_feature.py#L1063).
+- [test_admin_topic_api_creates_updates_and_versions_without_share_data](../../../tests/test_topics_feature.py#L1137) — Große Service-/Router-/SSR-Suite mit FakeFirestore; einzelner echter SDK-Queryaufbau mit RPC-Mock. Assertionstellen: [1149](../../../tests/test_topics_feature.py#L1149), [1154](../../../tests/test_topics_feature.py#L1154), [1155](../../../tests/test_topics_feature.py#L1155), [1157](../../../tests/test_topics_feature.py#L1157), [1158](../../../tests/test_topics_feature.py#L1158), [1161](../../../tests/test_topics_feature.py#L1161), [1162](../../../tests/test_topics_feature.py#L1162), [1163](../../../tests/test_topics_feature.py#L1163).
 
-**Suiteweite Gegenprüfung:** P-04 führt beide echten Adminhelfer und verify_user_token aus; nur Firebase-SDK, Tombstoneabfrage und Rollendienst sind Doubles. Synthetisches widerrufenes Token wird zentral mit check_revoked=True zu 401; Topic fordert False an und akzeptiert es. Rollenfehler wird zentral 503, bei Topics bleibt TierStatusUnavailable ungemappt. Kein echter Firebase-Revocationtest; die Flags und divergierende Kontrollflüsse sind beobachtet.
+**Suiteweite Gegenprüfung:** Topichelper ruft verify_user_token weiterhin ohne check_revoked=True auf; Abweichung zum zentralen Adminhelper bleibt bestehen.
 
-**Suchspur:** 224 versionierte Test-/Hilfsdateien durchsucht, 28 passende Zeilen. Regexe: ` _require_admin|check_revoked|TierStatusUnavailable `, ` /api/admin/topics `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-041 `.
+**Suchspur:** 263 versionierte Test-/Hilfsdateien durchsucht, 38 passende Zeilen. Regexe: ` _require_admin|check_revoked|TierStatusUnavailable `, ` /api/admin/topics `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-041 `.
 
 | Szenario | Erwartung |
 |---|---|
@@ -1343,15 +1429,17 @@ Kein direkter repräsentativer Testbeleg für diese Grenze; Suchtreffer und verw
 
 **P1 · observed_behavior_defect** · Verträge: [BENCH-02](matrix.md#bench-02), [BENCH-03](matrix.md#bench-03) · Paket: [WP-34](work-packages.md#wp-34)
 
-**Produktbeleg:** [benchmark/transport.py](../../../benchmark/transport.py#L133) — ` def execute( `; [benchmark/runner.py](../../../benchmark/runner.py#L69) — ` def index_existing( `; [benchmark/runner.py](../../../benchmark/runner.py#L413) — ` def _make_cell_record( `
+**Aktuelle Bewertung:** open — Budgetkorrekturen ändern nicht die HTTP-200-Protokollfehlerklassifikation; diesen Befund weiterhin gesondert prüfen.
+
+**Produktbeleg:** [benchmark/transport.py](../../../benchmark/transport.py#L133) — ` def execute( `; [benchmark/runner.py](../../../benchmark/runner.py#L69) — ` def index_existing( `; [benchmark/runner.py](../../../benchmark/runner.py#L502) — ` def _make_cell_record( `
 
 **Vorhandene relevante Prüfungen:**
 
 - [test_malformed_response_is_structured](../../../tests/test_benchmark_transport.py#L111) — Transportfunktionen mit injiziertem POST. Assertionstellen: [114](../../../tests/test_benchmark_transport.py#L114), [115](../../../tests/test_benchmark_transport.py#L115), [116](../../../tests/test_benchmark_transport.py#L116).
 
-**Suiteweite Gegenprüfung:** P-05: realer Transport, Cellrecord und Resumeindex mit synthetischer Antwort {error:{code:429,...}}. HTTP 429 ergibt Fehler, abstain=False, kein Erfolg. Identischer Body bei HTTP 200 ergibt error=None, abstain=True und index.success; Resume behandelt die Providerablehnung dadurch als erledigte Zelle. Kein Live-Provider und keine Aussage über aktuelle Häufigkeit.
+**Suiteweite Gegenprüfung:** Budgetkorrekturen ändern nicht die HTTP-200-Protokollfehlerklassifikation; diesen Befund weiterhin gesondert prüfen.
 
-**Suchspur:** 224 versionierte Test-/Hilfsdateien durchsucht, 21 passende Zeilen. Regexe: ` malformed_response|provider_http_error|response_parse_failed `, ` index_existing|retry_failed|abstain `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-042 `.
+**Suchspur:** 263 versionierte Test-/Hilfsdateien durchsucht, 25 passende Zeilen. Regexe: ` malformed_response|provider_http_error|response_parse_failed `, ` index_existing|retry_failed|abstain `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-042 `.
 
 | Szenario | Erwartung |
 |---|---|
@@ -1366,3 +1454,139 @@ Kein direkter repräsentativer Testbeleg für diese Grenze; Suchtreffer und verw
 **Validierung nach Implementierung:** ` python -m pytest tests/test_benchmark_transport.py tests/test_benchmark_runner.py tests/test_benchmark_results.py -q `
 
 **Gezielte Negativkontrolle:** Bodyerror-Prüfung entfernen: HTTP-200-Fehler darf die kombinierte error-/abstain-/Resumeassertion nicht bestehen. Kontrolle mit gültigem Text ohne Buchstaben verhindert fälschliches Umdeuten jeder Enthaltung in einen Fehler.
+
+
+<a id="g-043"></a>
+
+## G-043 · Google-Aktionsclaims mit nativen Transaktionen prüfen
+
+**P1 · missing_integration** · Verträge: [GOOGLE-02](matrix.md#google-02) · Paket: [WP-35](work-packages.md#wp-35)
+
+**Aktuelle Bewertung:** open — Fake-Parallelität ist belegt; neue Aktionsclaims fehlen im bestehenden Transaktionsharness.
+
+**Produktbeleg:** [app/services/agent_actions.py](../../../app/services/agent_actions.py#L142) — ` def confirm( `
+
+**Vorhandene relevante Prüfungen:**
+
+- [test_prepare_does_not_write_and_confirmation_is_exact_once](../../../tests/test_agent_calendar.py#L42) — Kalender-Service und HTTP-Adapter mit Fake-DB und Google-Transport. Assertionstellen: [45](../../../tests/test_agent_calendar.py#L45), [46](../../../tests/test_agent_calendar.py#L46), [48](../../../tests/test_agent_calendar.py#L48), [49](../../../tests/test_agent_calendar.py#L49), [51](../../../tests/test_agent_calendar.py#L51), [55](../../../tests/test_agent_calendar.py#L55), [56](../../../tests/test_agent_calendar.py#L56), [57](../../../tests/test_agent_calendar.py#L57), [58](../../../tests/test_agent_calendar.py#L58), [59](../../../tests/test_agent_calendar.py#L59).
+- [test_separate_oauth_read_and_send_scopes_and_local_draft_before_send](../../../tests/test_agent_gmail.py#L50) — Gmail-/Aktionsdienste und echter Agentloop mit Transport-/DB-Doubles. Assertionstellen: [54](../../../tests/test_agent_gmail.py#L54), [55](../../../tests/test_agent_gmail.py#L55), [58](../../../tests/test_agent_gmail.py#L58), [59](../../../tests/test_agent_gmail.py#L59), [60](../../../tests/test_agent_gmail.py#L60), [61](../../../tests/test_agent_gmail.py#L61).
+
+**Suiteweite Gegenprüfung:** Fake-Parallelität ist belegt; neue Aktionsclaims fehlen im bestehenden Transaktionsharness.
+
+**Suchspur:** 263 versionierte Test-/Hilfsdateien durchsucht, 220 passende Zeilen. Regexe: ` confirm|reconcile|expected_hash|agent_actions `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-043 `.
+
+| Szenario | Erwartung |
+|---|---|
+| Given | Zwei Prozesse bestätigen denselben sichtbaren Aktionshash. |
+| When | Bestätigen, Leaseablauf und unklaren Transportausgang im lokalen Emulator steuern. |
+| Then | Höchstens ein Writeversuch pro gültiger Aktion; unknown bleibt gegen Wiederholung gesperrt, fremder Owner/alte Revision schreibt nichts. |
+
+**Zielstellen:** [tests/test_agent_calendar.py](../../../tests/test_agent_calendar.py), [tests/test_agent_gmail.py](../../../tests/test_agent_gmail.py)
+
+**Wiederverwenden:** [tests/test_agent_calendar.py](../../../tests/test_agent_calendar.py), [tests/test_agent_gmail.py](../../../tests/test_agent_gmail.py)
+
+**Validierung nach Implementierung:** ` Gezielte Dateien, dann kombinierter Lauf; native Transaktionen nur mit demo-consensio-e2e. `
+
+**Gezielte Negativkontrolle:** Entscheidenden Guard oder Fehlerpfad kontrolliert ausschalten: der neue Test muss gezielt scheitern.
+
+
+<a id="g-044"></a>
+
+## G-044 · Cloud-Dateiablage und verteilte Löschkaskade integrieren
+
+**P2 · missing_integration** · Verträge: [AGENT-06](matrix.md#agent-06) · Paket: [WP-36](work-packages.md#wp-36)
+
+**Aktuelle Bewertung:** open — Lokale Objektablage/Parser sind geprüft; daraus folgt kein produktiver Bucket-/IAM- oder verteilter Kaskadennachweis.
+
+**Produktbeleg:** [app/services/agent_files.py](../../../app/services/agent_files.py#L136) — ` class AgentFiles `
+
+**Vorhandene relevante Prüfungen:**
+
+- [test_real_extraction_storage_download_and_owner_isolation](../../../tests/test_agent_files.py#L28) — Datei-Service, echte Extraktion und isolierte HTTP-Adapter. Assertionstellen: [32](../../../tests/test_agent_files.py#L32), [33](../../../tests/test_agent_files.py#L33), [34](../../../tests/test_agent_files.py#L34), [35](../../../tests/test_agent_files.py#L35), [38](../../../tests/test_agent_files.py#L38), [39](../../../tests/test_agent_files.py#L39).
+- [test_real_docx_pdf_version_and_saved_provenance](../../../tests/test_agent_documents.py#L24) — Dokument-Service mit echten DOCX-/PDF-Renderern und temporärem Speicher. Assertionstellen: [30](../../../tests/test_agent_documents.py#L30), [33](../../../tests/test_agent_documents.py#L33), [37](../../../tests/test_agent_documents.py#L37), [40](../../../tests/test_agent_documents.py#L40), [42](../../../tests/test_agent_documents.py#L42), [43](../../../tests/test_agent_documents.py#L43), [45](../../../tests/test_agent_documents.py#L45), [48](../../../tests/test_agent_documents.py#L48), [51](../../../tests/test_agent_documents.py#L51), [52](../../../tests/test_agent_documents.py#L52), [53](../../../tests/test_agent_documents.py#L53), [54](../../../tests/test_agent_documents.py#L54), [55](../../../tests/test_agent_documents.py#L55).
+
+**Suiteweite Gegenprüfung:** Lokale Objektablage/Parser sind geprüft; daraus folgt kein produktiver Bucket-/IAM- oder verteilter Kaskadennachweis.
+
+**Suchspur:** 263 versionierte Test-/Hilfsdateien durchsucht, 14 passende Zeilen. Regexe: ` AgentFiles|ObjectStorage|AGENT_FILES_BUCKET|storage.Client `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-044 `.
+
+| Szenario | Erwartung |
+|---|---|
+| Given | Private Datei/Dokumentversion und Löschjob mit fehlgeschlagenem Objektzugriff. |
+| When | Cloudadapter mit kontrolliertem Storage-Double und native Metadaten-/Quotatransaktionen samt Wiederaufnahme ausführen. |
+| Then | Keine öffentliche Freigabe, kein fremder Download und keine verwaisten Quoten/Versionen nach erfolgreichem Retry; Originalfehler bleibt sichtbar. |
+
+**Zielstellen:** [tests/test_agent_files.py](../../../tests/test_agent_files.py), [tests/test_agent_documents.py](../../../tests/test_agent_documents.py)
+
+**Wiederverwenden:** [tests/test_agent_files.py](../../../tests/test_agent_files.py), [tests/test_agent_documents.py](../../../tests/test_agent_documents.py)
+
+**Validierung nach Implementierung:** ` Gezielte Dateien, dann kombinierter Lauf; native Transaktionen nur mit demo-consensio-e2e. `
+
+**Gezielte Negativkontrolle:** Entscheidenden Guard oder Fehlerpfad kontrolliert ausschalten: der neue Test muss gezielt scheitern.
+
+
+<a id="g-045"></a>
+
+## G-045 · Outbox-/Probeclaims mit nativer SDK-Konkurrenz absichern
+
+**P1 · missing_integration** · Verträge: [WATCH-07](matrix.md#watch-07) · Paket: [WP-37](work-packages.md#wp-37)
+
+**Aktuelle Bewertung:** open — Fake-Claims und Versanddoubles belegen Logik, keine echten SDK-Retries. Externe Exactly-once-Zustellung ist ausdrücklich nicht versprochen.
+
+**Produktbeleg:** [app/services/notification_outbox.py](../../../app/services/notification_outbox.py#L379) — ` def claim( `
+
+**Vorhandene relevante Prüfungen:**
+
+- [test_pause_then_stale_failure_keeps_watch_paused_and_counter_consistent](../../../tests/test_watch_review_regressions.py#L86) — Scheduler-/Outbox-/Deliverydienste mit Fake-DB und Versand-Doubles. Assertionstellen: [88](../../../tests/test_watch_review_regressions.py#L88), [90](../../../tests/test_watch_review_regressions.py#L90), [91](../../../tests/test_watch_review_regressions.py#L91), [93](../../../tests/test_watch_review_regressions.py#L93), [96](../../../tests/test_watch_review_regressions.py#L96), [97](../../../tests/test_watch_review_regressions.py#L97).
+- [test_new_evidence_must_cite_a_source_the_standing_answer_did_not_have](../../../tests/test_watch_evidence_model.py#L31) — Evidence-/Probe-/Ledgerdienste mit Fake-DB. Assertionstellen: [36](../../../tests/test_watch_evidence_model.py#L36), [37](../../../tests/test_watch_evidence_model.py#L37), [45](../../../tests/test_watch_evidence_model.py#L45), [46](../../../tests/test_watch_evidence_model.py#L46).
+
+**Suiteweite Gegenprüfung:** Fake-Claims und Versanddoubles belegen Logik, keine echten SDK-Retries. Externe Exactly-once-Zustellung ist ausdrücklich nicht versprochen.
+
+**Suchspur:** 263 versionierte Test-/Hilfsdateien durchsucht, 41 passende Zeilen. Regexe: ` notification_outbox|watch_probe|lease_owner `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-045 `.
+
+| Szenario | Erwartung |
+|---|---|
+| Given | Zwei Worker, ein Ergebnis/Outboxitem und eine fällige Probe. |
+| When | Nativen Emulatorcommit, Crash nach Commit, Leaseübernahme und spätes Ack kontrollieren. |
+| Then | Resultat und Zustellabsicht atomar; alter Worker kann neuen Claim nicht bestätigen; Probe respektiert Tagesbudget und aktuelle Watchkonfiguration. |
+
+**Zielstellen:** [tests/test_watch_review_regressions.py](../../../tests/test_watch_review_regressions.py), [tests/test_watch_evidence_model.py](../../../tests/test_watch_evidence_model.py)
+
+**Wiederverwenden:** [tests/test_watch_review_regressions.py](../../../tests/test_watch_review_regressions.py), [tests/test_watch_evidence_model.py](../../../tests/test_watch_evidence_model.py)
+
+**Validierung nach Implementierung:** ` Gezielte Dateien, dann kombinierter Lauf; native Transaktionen nur mit demo-consensio-e2e. `
+
+**Gezielte Negativkontrolle:** Entscheidenden Guard oder Fehlerpfad kontrolliert ausschalten: der neue Test muss gezielt scheitern.
+
+
+<a id="g-046"></a>
+
+## G-046 · Aktuelle Testfehler und abweichenden Benchmark-Wiederholungslauf klären
+
+**P2 · broken_test** · Verträge: [BUILD-02](matrix.md#build-02) · Paket: [WP-38](work-packages.md#wp-38)
+
+**Aktuelle Bewertung:** open — Benchmark-Resume scheitert im Primärlauf und besteht isoliert. Publisher-Ergebnisprüfung scheitert in beiden Läufen trotz Subprozessreturncode 0. Browserergebnisse werden im Laufbericht ergänzt.
+
+**Produktbeleg:** [tests/test_benchmark_budget.py](../../../tests/test_benchmark_budget.py#L73) — ` def test_resume_of_a_finished_pilot_does_not_pay_for_audits_again `
+
+**Vorhandene relevante Prüfungen:**
+
+- [BenchmarkBudgetTests::test_tight_budget_stops_before_the_first_uncovered_audit_call](../../../tests/test_benchmark_budget.py#L53) — Benchmarkrunner mit deterministischem Transport und temporären Artefakten. Assertionstellen: [60](../../../tests/test_benchmark_budget.py#L60), [65](../../../tests/test_benchmark_budget.py#L65), [66](../../../tests/test_benchmark_budget.py#L66), [67](../../../tests/test_benchmark_budget.py#L67), [68](../../../tests/test_benchmark_budget.py#L68), [69](../../../tests/test_benchmark_budget.py#L69), [70](../../../tests/test_benchmark_budget.py#L70), [71](../../../tests/test_benchmark_budget.py#L71).
+- [PublisherStandaloneTests::test_cli_reaches_configuration_validation_without_packages](../../../tests/test_publisher_standalone.py#L29) — Echte Python-Subprozesse ohne Site-Packages mit HTTP-Doubles. Assertionstellen: [38](../../../tests/test_publisher_standalone.py#L38), [39](../../../tests/test_publisher_standalone.py#L39), [40](../../../tests/test_publisher_standalone.py#L40).
+
+**Suiteweite Gegenprüfung:** Benchmark-Resume scheitert im Primärlauf und besteht isoliert. Publisher-Ergebnisprüfung scheitert in beiden Läufen trotz Subprozessreturncode 0. Browserergebnisse werden im Laufbericht ergänzt.
+
+**Suchspur:** 263 versionierte Test-/Hilfsdateien durchsucht, 2 passende Zeilen. Regexe: ` consensus_prompt_template|test_scheduled_flow_without_packages|test_resume_of_a_finished_pilot `. Vollständige Treffer mit Pfad/Zeile in [search-evidence.json](search-evidence.json) unter ` G-046 `.
+
+| Szenario | Erwartung |
+|---|---|
+| Given | Gesamtlauf unter Windows und isolierter Wiederholungslauf. |
+| When | Prompt-/Mockzustand sowie Publisher-Subprozessresultat kontrolliert reproduzieren; aktuelle Browserfehler laut Laufbericht zuordnen. |
+| Then | Gleiche fachliche Assertions bestehen isoliert und gemeinsam; keine Tests abschwächen oder Fehler nachträglich aus dem Primärlauf entfernen. |
+
+**Zielstellen:** [tests/test_benchmark_budget.py](../../../tests/test_benchmark_budget.py), [tests/test_publisher_standalone.py](../../../tests/test_publisher_standalone.py)
+
+**Wiederverwenden:** [tests/test_benchmark_budget.py](../../../tests/test_benchmark_budget.py), [tests/test_publisher_standalone.py](../../../tests/test_publisher_standalone.py)
+
+**Validierung nach Implementierung:** ` Gezielte Dateien, dann kombinierter Lauf; native Transaktionen nur mit demo-consensio-e2e. `
+
+**Gezielte Negativkontrolle:** Entscheidenden Guard oder Fehlerpfad kontrolliert ausschalten: der neue Test muss gezielt scheitern.

@@ -6,8 +6,19 @@ verifizierten Laufstatus. Sie enthält außerdem ein maschinenlesbares Inventar
 und das Vorgehen für den anschließenden Abgleich mit dem Produktionscode.
 Der **[Produktabgleich mit Codex-Arbeitspaketen](test-coverage/product/README.md)**
 ergänzt konkrete Lückenbelege, Verhaltensverträge, Python-Branchmessung und
-reproduzierbare Auditproben. Die Paketstatus sind geplant; historische
-Laufergebnisse sind keine aktuelle Freigabe geänderter Quellen.
+reproduzierbare Auditproben. Stand 02.10.2026: 254 Testdateien und 4.053
+Runnerfälle; Ergebnisse und rote Fälle stehen im [Laufbericht](test-coverage/findings.md).
+Paketstatus unterscheiden Planung und Teilfortschritt; alte Coveragewerte
+sind keine aktuelle Freigabe geänderter Quellen.
+
+Neue Funktionsgruppen: Agent-Dateien/DOCX/PDF (`test_agent_files.py`,
+`test_agent_documents.py`), Google/OAuth/Kalender/Gmail (`test_google_connections.py`,
+`test_agent_calendar.py`, `test_agent_gmail.py`), gemeinsames Tokenkonto und
+Nachmessung (`test_usage_meter.py`, `test_run_usage_repository.py`,
+`test_agent_usage_reconciliation.py`), Antwortreceipts (`test_result_integrity.py`)
+sowie Watch-Evidenz/Outbox (`test_watch_evidence_model.py`,
+`test_watch_review_regressions.py`). DOM-/Browsergegenstücke und Mockgrenzen
+stehen im [Bereichsindex](test-coverage/areas.md).
 
 ## Gemeinsamer Einstieg unter Windows
 
@@ -360,6 +371,22 @@ prüft ein einheitliches `?v=YYYYMMDD-label` je Asset und vergleicht das Datum
 mit dem letzten Git-Commit beziehungsweise einer aktuellen Arbeitsbaumänderung.
 
 ## Browser-E2E
+
+Die neuen Google-/Gmail-/Workspace-/Modusselektor-Browserdateien verwenden den
+writerfreien Phase-4-Server mit API-Doubles. Ohne Emulator zum Beispiel:
+
+```powershell
+$env:RUN_E2E = "1"
+$env:UNIT_TEST_MODE = "1"
+venv\Scripts\python.exe -m pytest tests\e2e\test_agent_google_frontend.py tests\e2e\test_agent_workspace_frontend.py tests\e2e\test_run_mode_selector.py -q
+Remove-Item Env:RUN_E2E
+Remove-Item Env:UNIT_TEST_MODE
+```
+
+`test_smoke.py`, `test_agreement_verdict.py` und `test_run_cancel_and_progress.py`
+benötigen dagegen über `app_page` den Emulator, ebenso die drei
+`test_*_transactions.py`-Dateien. Nicht jede E2E-Datei ist ein isolierter
+Frontendtest. Aktuelle Grenzen: [Laufbericht](test-coverage/findings.md).
 
 `tests/e2e/test_browser_failure_recovery.py` nutzt den writerfreien Phase-4-Server
 mit gemocktem Firebase und APIs. Es prüft lokal ausgelieferte Markdown-/Math-

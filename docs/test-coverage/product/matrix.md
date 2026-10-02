@@ -1,8 +1,8 @@
 # Produktverhalten und Testbelege
 
-[Einstieg](README.md) · [Dateikatalog](../backend.md) · [Lücken](gaps.md)
+[Einstieg](README.md) · [Dateikatalog](../backend.md) · [Lücken](gaps.md) · Stand: 2026-10-02
 
-77 gruppierte Verhaltensverträge, alle 216 Testdateien verknüpft. Ein Abschnitt bündelt mehrere Teilverträge; die 83 ausgewählten Testdefinitionen sind konkrete **Teilbelege**. Sie beweisen nicht jede Klausel des Abschnitts. Der vollständige Testdateikatalog bleibt maßgeblich für die übrigen Assertions. Zuordnung, Testzahl und Zeilenausführung sind keine fachliche Coveragequote.
+87 gruppierte Verhaltensverträge, alle 254 Testdateien verknüpft. Ein Abschnitt bündelt mehrere Teilverträge; die 93 ausgewählten Testdefinitionen sind konkrete **Teilbelege**. Sie beweisen nicht jede Klausel des Abschnitts. Der vollständige Testdateikatalog bleibt maßgeblich für die übrigen Assertions. Zuordnung, Testzahl und Zeilenausführung sind keine fachliche Coveragequote.
 
 | Vertrag | Verhalten | Quellen | Testdateien | Befunde |
 |---|---|---:|---:|---|
@@ -12,38 +12,38 @@
 | [AUTH-01](#auth-01) | Registrierung ohne Kontoauskunft | 2 | 2 | [G-009](gaps.md#g-009) |
 | [AUTH-02](#auth-02) | Token, Session und Rollen | 6 | 5 | [G-012](gaps.md#g-012), [G-014](gaps.md#g-014), [G-041](gaps.md#g-041) |
 | [AUTH-03](#auth-03) | Kontolöschung mit Wiederaufnahme | 4 | 5 | [G-004](gaps.md#g-004), [G-008](gaps.md#g-008) |
-| [AUTH-04](#auth-04) | Browser-Identität und Sitzungswechsel | 5 | 5 | [G-030](gaps.md#g-030) |
-| [QUOTA-01](#quota-01) | Ein regulärer Lauf, eine Belastung | 3 | 3 | [G-002](gaps.md#g-002) |
+| [AUTH-04](#auth-04) | Browser-Identität und Sitzungswechsel | 5 | 7 | [G-030](gaps.md#g-030) |
+| [QUOTA-01](#quota-01) | Ein regulärer Lauf, eine Belastung | 3 | 4 | [G-002](gaps.md#g-002) |
 | [QUOTA-02](#quota-02) | Rate-Limits und Kontostufen | 7 | 7 | [G-012](gaps.md#g-012) |
 | [CHAT-01](#chat-01) | Chats, Turns und Cursor | 2 | 1 | [G-003](gaps.md#g-003) |
 | [CHAT-02](#chat-02) | Abschluss und Löschsperre | 2 | 3 | [G-003](gaps.md#g-003) |
 | [CHAT-03](#chat-03) | Kontext und Nutzergedächtnis im Lauf | 3 | 5 | — |
 | [CHAT-04](#chat-04) | Bookmarks und vollständiger Verlauf | 3 | 7 | [G-030](gaps.md#g-030) |
 | [MEM-01](#mem-01) | Memory lesen und manuell speichern | 3 | 3 | — |
-| [MEM-02](#mem-02) | Expliziter KI-Patch und sicheres Undo | 3 | 2 | [G-007](gaps.md#g-007), [G-008](gaps.md#g-008), [G-038](gaps.md#g-038) |
+| [MEM-02](#mem-02) | Expliziter KI-Patch und sicheres Undo | 3 | 4 | [G-007](gaps.md#g-007), [G-008](gaps.md#g-008), [G-038](gaps.md#g-038) |
 | [API-01](#api-01) | API-Schlüssel und Scopes | 4 | 3 | [G-037](gaps.md#g-037) |
-| [API-02](#api-02) | Dauerhafte API-Runs | 3 | 2 | [G-005](gaps.md#g-005) |
+| [API-02](#api-02) | Dauerhafte API-Runs | 3 | 3 | [G-005](gaps.md#g-005) |
 | [API-03](#api-03) | Historische Source-Checks der API | 3 | 2 | [G-010](gaps.md#g-010) |
 | [API-04](#api-04) | API-Publish und Publisher-Watch | 3 | 3 | — |
 | [LLM-01](#llm-01) | Registry, Credentials und Payload | 9 | 7 | — |
-| [LLM-02](#llm-02) | Providerstream, Fehler und Ressourcen | 4 | 5 | [G-032](gaps.md#g-032) |
+| [LLM-02](#llm-02) | Providerstream, Fehler und Ressourcen | 4 | 6 | [G-032](gaps.md#g-032) |
 | [CONS-01](#cons-01) | Neutrale Pipeline und Teilergebnisse | 3 | 5 | — |
 | [CONS-02](#cons-02) | Strukturierte Differences und Agreement | 4 | 5 | — |
-| [CONS-03](#cons-03) | Quellenkatalog und Zitatprovenienz | 4 | 5 | — |
+| [CONS-03](#cons-03) | Quellenkatalog und Zitatprovenienz | 4 | 7 | — |
 | [CONS-04](#cons-04) | Resolve als eigener Lauf | 3 | 3 | — |
 | [CONS-05](#cons-05) | Finalisierung, Replay und Browser-Recovery | 5 | 5 | [G-030](gaps.md#g-030) |
-| [AGENT-01](#agent-01) | Admission und Token-/Kostenledger | 7 | 6 | [G-037](gaps.md#g-037) |
-| [AGENT-02](#agent-02) | Chatpolicy und Legacy-Toolloop | 7 | 7 | — |
-| [AGENT-03](#agent-03) | Delegierte Sitzungen und Kommunikation | 4 | 5 | [G-039](gaps.md#g-039) |
+| [AGENT-01](#agent-01) | Admission und Token-/Kostenledger | 7 | 7 | [G-037](gaps.md#g-037) |
+| [AGENT-02](#agent-02) | Chatpolicy und Legacy-Toolloop | 7 | 8 | — |
+| [AGENT-03](#agent-03) | Delegierte Sitzungen und Kommunikation | 4 | 6 | [G-039](gaps.md#g-039) |
 | [AGENT-04](#agent-04) | Agent-Recovery und Eigentümerbindung | 4 | 5 | [G-030](gaps.md#g-030), [G-039](gaps.md#g-039) |
-| [AGENT-05](#agent-05) | Agent-Ansicht und bestätigter Fortschritt | 6 | 9 | — |
+| [AGENT-05](#agent-05) | Agent-Ansicht und bestätigter Fortschritt | 7 | 11 | — |
 | [SRC-01](#src-01) | Sicherer begrenzter Quellenabruf | 2 | 1 | [G-032](gaps.md#g-032) |
 | [SRC-02](#src-02) | Prüfplan und konservative Urteile | 3 | 4 | — |
 | [SRC-03](#src-03) | Dauerhafte Jobqueue und Credentials | 2 | 4 | [G-006](gaps.md#g-006) |
 | [SRC-04](#src-04) | Private und öffentliche Jobseiten | 2 | 2 | [G-010](gaps.md#g-010) |
-| [SRC-05](#src-05) | Sources-/Differences-UI und Nachladen | 3 | 10 | — |
+| [SRC-05](#src-05) | Sources-/Differences-UI und Nachladen | 3 | 13 | — |
 | [SHARE-01](#share-01) | Autoritative Share-Erstellung | 3 | 3 | [G-011](gaps.md#g-011), [G-027](gaps.md#g-027) |
-| [SHARE-02](#share-02) | Öffentliche und private Darstellung | 6 | 4 | — |
+| [SHARE-02](#share-02) | Öffentliche und private Darstellung | 6 | 5 | — |
 | [SHARE-03](#share-03) | Reports, Moderation und Kaskade | 3 | 2 | [G-029](gaps.md#g-029) |
 | [SHARE-04](#share-04) | Open-Graph-Karte | 2 | 1 | [G-020](gaps.md#g-020) |
 | [WATCH-01](#watch-01) | Watch-Erstellung und Planrechte | 2 | 3 | [G-013](gaps.md#g-013), [G-027](gaps.md#g-027) |
@@ -51,38 +51,48 @@
 | [WATCH-03](#watch-03) | E-Mail-Follow mit Einwilligungsnachweis | 4 | 3 | [G-013](gaps.md#g-013) |
 | [WATCH-04](#watch-04) | Telegram-Link und Zustellung | 3 | 1 | [G-013](gaps.md#g-013) |
 | [WATCH-05](#watch-05) | Morning Brief | 4 | 2 | — |
-| [WATCH-06](#watch-06) | Watch-Frontend | 3 | 6 | — |
-| [TOPIC-01](#topic-01) | Topic-Administration und versionierte Runs | 2 | 1 | [G-014](gaps.md#g-014), [G-031](gaps.md#g-031), [G-041](gaps.md#g-041) |
+| [WATCH-06](#watch-06) | Watch-Frontend | 3 | 5 | — |
+| [TOPIC-01](#topic-01) | Topic-Administration und versionierte Runs | 2 | 2 | [G-014](gaps.md#g-014), [G-031](gaps.md#g-031), [G-041](gaps.md#g-041) |
 | [TOPIC-02](#topic-02) | Topic-Pipeline und Identitätsjudge | 3 | 2 | [G-016](gaps.md#g-016) |
 | [TOPIC-03](#topic-03) | Zeitlicher Claim-/Quellenverlauf | 5 | 5 | — |
-| [TOPIC-04](#topic-04) | Öffentliche Topic-Seiten und Follow | 5 | 3 | [G-014](gaps.md#g-014) |
-| [TOPIC-05](#topic-05) | Interaktiver Check-Strip | 3 | 2 | [G-018](gaps.md#g-018) |
+| [TOPIC-04](#topic-04) | Öffentliche Topic-Seiten und Follow | 6 | 4 | [G-014](gaps.md#g-014) |
+| [TOPIC-05](#topic-05) | Interaktiver Check-Strip | 3 | 3 | [G-018](gaps.md#g-018) |
 | [SEO-01](#seo-01) | Search-Console-Erfassung | 2 | 1 | — |
 | [SEO-02](#seo-02) | SEO-Repository und Dossiers | 3 | 2 | [G-017](gaps.md#g-017) |
 | [SEO-03](#seo-03) | Konservative Empfehlungen und Aktionen | 3 | 3 | — |
 | [SEO-04](#seo-04) | Wöchentlicher Review und Publikationsdaten | 3 | 1 | [G-017](gaps.md#g-017), [G-031](gaps.md#g-031) |
 | [SEO-05](#seo-05) | Öffentliche Navigation und Suchmetadaten | 27 | 5 | — |
 | [ADMIN-01](#admin-01) | Konfiguration: Revisionen und Aktivierungsrollback | 6 | 7 | [G-040](gaps.md#g-040) |
-| [ADMIN-02](#admin-02) | Adminoberfläche und HTTP-Adapter | 9 | 8 | [G-019](gaps.md#g-019) |
+| [ADMIN-02](#admin-02) | Adminoberfläche und HTTP-Adapter | 9 | 9 | [G-019](gaps.md#g-019) |
 | [UI-01](#ui-01) | Run-State und getrennte Ansichten | 4 | 6 | — |
-| [UI-02](#ui-02) | Senden, Presets und Moduswechsel | 6 | 7 | — |
+| [UI-02](#ui-02) | Senden, Presets und Moduswechsel | 8 | 11 | — |
 | [UI-03](#ui-03) | Streaming, Deadlines und Fortschritt | 4 | 6 | — |
-| [UI-04](#ui-04) | Antworten, Markdown und zugängliche Details | 6 | 15 | [G-028](gaps.md#g-028) |
-| [UI-05](#ui-05) | Anhänge und Composer | 4 | 8 | — |
+| [UI-04](#ui-04) | Antworten, Markdown und zugängliche Details | 6 | 20 | [G-028](gaps.md#g-028) |
+| [UI-05](#ui-05) | Anhänge und Composer | 5 | 9 | — |
 | [UI-06](#ui-06) | Navigation, Scroll und Modals | 7 | 6 | [G-025](gaps.md#g-025) |
 | [UI-07](#ui-07) | Bootstrap, Skript-Reihenfolge und Styles | 42 | 5 | — |
 | [UI-08](#ui-08) | Demo und Landing-Interaktionen | 7 | 4 | — |
 | [UI-09](#ui-09) | Analytics-Selbstausschluss | 2 | 1 | [G-021](gaps.md#g-021) |
 | [DATA-01](#data-01) | Votes, Feedback und Modellstatistik | 3 | 4 | [G-034](gaps.md#g-034) |
-| [BENCH-01](#bench-01) | Dataset, Budget und Closed-book-Vertrag | 7 | 6 | — |
-| [BENCH-02](#bench-02) | Runner, Resume und Artefakte | 5 | 5 | [G-035](gaps.md#g-035), [G-042](gaps.md#g-042) |
+| [BENCH-01](#bench-01) | Dataset, Budget und Closed-book-Vertrag | 7 | 7 | — |
+| [BENCH-02](#bench-02) | Runner, Resume und Artefakte | 5 | 6 | [G-035](gaps.md#g-035), [G-042](gaps.md#g-042) |
 | [BENCH-03](#bench-03) | Ergebnisberechnung und Adminberichte | 4 | 3 | [G-015](gaps.md#g-015), [G-042](gaps.md#g-042) |
-| [BUILD-01](#build-01) | Reproduzierbare Frontendartefakte | 6 | 3 | [G-036](gaps.md#g-036) |
-| [BUILD-02](#build-02) | Test- und Emulator-Einstieg | 4 | 3 | [G-024](gaps.md#g-024), [G-025](gaps.md#g-025), [G-026](gaps.md#g-026) |
+| [BUILD-01](#build-01) | Reproduzierbare Frontendartefakte | 6 | 4 | [G-036](gaps.md#g-036) |
+| [BUILD-02](#build-02) | Test- und Emulator-Einstieg | 4 | 3 | [G-024](gaps.md#g-024), [G-025](gaps.md#g-025), [G-026](gaps.md#g-026), [G-046](gaps.md#g-046) |
 | [BUILD-03](#build-03) | Scheduled Publisher und Workflows | 4 | 2 | [G-024](gaps.md#g-024) |
 | [TOOLS-01](#tools-01) | Wartungs- und Reparaturwerkzeuge | 2 | 0 | [G-022](gaps.md#g-022), [G-023](gaps.md#g-023) |
 | [TOOLS-02](#tools-02) | Evaluations-/Vorschauwerkzeuge | 4 | 2 | [G-035](gaps.md#g-035) |
 | [AUTH-05](#auth-05) | Direkte Firestore-Clients bleiben gesperrt | 2 | 0 | [G-001](gaps.md#g-001) |
+| [AGENT-06](#agent-06) | Private Dateien und Nachrichtenzuordnung | 5 | 5 | [G-044](gaps.md#g-044) |
+| [AGENT-07](#agent-07) | Versionierte DOCX-/PDF-Dokumente | 3 | 4 | — |
+| [GOOGLE-01](#google-01) | Google-Verbindung und Datenfreigabe | 4 | 3 | — |
+| [GOOGLE-02](#google-02) | Kalender lesen und exakt bestätigen | 4 | 3 | [G-043](gaps.md#g-043) |
+| [GOOGLE-03](#google-03) | Gmail lesen, Entwurf und Versandfreigabe | 4 | 3 | — |
+| [CONS-06](#cons-06) | Autoritative Antwortreceipts und Abschlusszustand | 5 | 4 | — |
+| [QUOTA-03](#quota-03) | Gemeinsames Tokenkonto und Nachmessung | 7 | 7 | — |
+| [WATCH-07](#watch-07) | Dauerhafte Benachrichtigungs-Outbox | 5 | 3 | [G-045](gaps.md#g-045) |
+| [WATCH-08](#watch-08) | Belegbasierte Änderung, Ziel und Probe | 7 | 4 | — |
+| [BUILD-04](#build-04) | Statische Auslieferung ohne SSE-Pufferung | 2 | 1 | — |
 
 <a id="ops-01"></a>
 
@@ -119,13 +129,13 @@ Readiness wartet nur auf den begrenzten Konfigurationsread; Writer starten danac
 
 **Konkrete Teilbelege:**
 
-- [test_supervisor_restarts_crashes_and_keeps_last_success_health](../../../tests/test_background_task_supervision.py#L12) — Async-Supervisor und Startupfunktionen mit Cleanup-Doubles. Historischer **Datei**status: passed=7.
+- [test_supervisor_restarts_crashes_and_keeps_last_success_health](../../../tests/test_background_task_supervision.py#L12) — Async-Supervisor und Startupfunktionen mit Cleanup-Doubles. **Datei**status vom 2026-10-02: passed=8.
   - [Zeile 43](../../../tests/test_background_task_supervision.py#L43): ` assert attempts == 3 `
   - [Zeile 44](../../../tests/test_background_task_supervision.py#L44): ` assert health["restart_count"] == 2 `
   - [Zeile 45](../../../tests/test_background_task_supervision.py#L45): ` assert health["consecutive_failures"] == 0 `
   - [Zeile 46](../../../tests/test_background_task_supervision.py#L46): ` assert health["last_success_at"] `
   - [Zeile 47](../../../tests/test_background_task_supervision.py#L47): ` assert health["state"] == "stopped" `
-- [test_e2e_guard_rejects_missing_remote_or_unknown_targets](../../../tests/test_e2e_safety.py#L42) — Guard-Unit-Tests und Python-Subprozess-/Lifespan-Verträge. Historischer **Datei**status: passed=10.
+- [test_e2e_guard_rejects_missing_remote_or_unknown_targets](../../../tests/test_e2e_safety.py#L42) — Guard-Unit-Tests und Python-Subprozess-/Lifespan-Verträge. **Datei**status vom 2026-10-02: passed=10.
   - [Zeile 43](../../../tests/test_e2e_safety.py#L43): ` with pytest.raises(RuntimeError, match=message): `
   - [Zeile 44](../../../tests/test_e2e_safety.py#L44): ` assert_safe_e2e_environment(safe_env(**overrides)) `
 
@@ -162,12 +172,12 @@ Readiness wartet nur auf den begrenzten Konfigurationsread; Writer starten danac
 
 **Konkrete Teilbelege:**
 
-- [test_replayed_body_does_not_synthesize_disconnect_for_delayed_stream](../../../tests/test_request_body_limits.py#L75) — ASGI-Middleware mit kontrollierten Receive-/Send-Funktionen. Historischer **Datei**status: passed=4.
-  - [Zeile 109](../../../tests/test_request_body_limits.py#L109): ` assert await inner_receive() == {                 "type": "http.request",                 "body": b"{}",                 "more_body": False,             } `
-  - [Zeile 133](../../../tests/test_request_body_limits.py#L133): ` assert body_messages == [         {             "type": "http.response.body",             "body": b'event: final\ndata: {"response":"ok"}\n\n',             "more_body": True,         },         {"type": "http.response.body", "body": b"", "more_body": False},     ] `
-- [test_app_and_all_admin_pages_receive_strict_script_csp](../../../tests/test_phase6_architecture.py#L184) — Gemischt: Pipeline-/CSP-Runtime und Quelltextarchitektur. Historischer **Datei**status: passed=8.
-  - [Zeile 196](../../../tests/test_phase6_architecture.py#L196): ` assert "'unsafe-inline'" not in script_src `
-  - [Zeile 201](../../../tests/test_phase6_architecture.py#L201): ` assert "'unsafe-inline'" in public_script_src `
+- [test_replayed_body_does_not_synthesize_disconnect_for_delayed_stream](../../../tests/test_request_body_limits.py#L75) — ASGI-Middleware mit kontrollierten Receive-/Send-Funktionen. **Datei**status vom 2026-10-02: passed=4.
+  - [Zeile 109](../../../tests/test_request_body_limits.py#L109): ` assert await inner_receive() == { `
+  - [Zeile 133](../../../tests/test_request_body_limits.py#L133): ` assert body_messages == [ `
+- [test_app_and_all_admin_pages_receive_strict_script_csp](../../../tests/test_phase6_architecture.py#L184) — Gemischt: Pipeline-/CSP-Runtime und Quelltextarchitektur. **Datei**status vom 2026-10-02: passed=8.
+  - [Zeile 199](../../../tests/test_phase6_architecture.py#L199): ` assert "'unsafe-inline'" not in script_src `
+  - [Zeile 204](../../../tests/test_phase6_architecture.py#L204): ` assert "'unsafe-inline'" in public_script_src `
 
 <a id="ops-03"></a>
 
@@ -206,10 +216,10 @@ Logs, Metriken und Browsermeldungen enthalten erlaubte Kategorien, keine Prompts
 
 **Konkrete Teilbelege:**
 
-- [test_client_error_report_is_accepted_and_sanitized](../../../tests/test_client_error_alerts.py#L38) — Router mit Notification-Double und Bundle-Quelltextvertrag. Historischer **Datei**status: passed=34.
+- [test_client_error_report_is_accepted_and_sanitized](../../../tests/test_client_error_alerts.py#L38) — Router mit Notification-Double und Bundle-Quelltextvertrag. **Datei**status vom 2026-10-02: passed=34.
   - [Zeile 55](../../../tests/test_client_error_alerts.py#L55): ` assert response.status_code == 202 `
   - [Zeile 56](../../../tests/test_client_error_alerts.py#L56): ` assert response.json() == {"status": "accepted"} `
-  - [Zeile 57](../../../tests/test_client_error_alerts.py#L57): ` assert captured == [{         "source": "browser",         "type": "run_failed",         "phase": "model_fanout",         "message": "A browser run failed.",         "path": "/s/{share_id}",     }] `
+  - [Zeile 57](../../../tests/test_client_error_alerts.py#L57): ` assert captured == [{ `
 
 <a id="auth-01"></a>
 
@@ -241,7 +251,7 @@ Neue und vorhandene Adressen erhalten dieselbe öffentliche Antwort und den Mail
 
 **Konkrete Teilbelege:**
 
-- [AuthSessionTests::test_new_and_existing_registration_responses_are_identical](../../../tests/test_auth_session.py#L110) — API mit Auth-/Mail-/Notifier-Doubles. Historischer **Datei**status: passed=8.
+- [AuthSessionTests::test_new_and_existing_registration_responses_are_identical](../../../tests/test_auth_session.py#L110) — API mit Auth-/Mail-/Notifier-Doubles. **Datei**status vom 2026-10-02: passed=8.
   - [Zeile 141](../../../tests/test_auth_session.py#L141): ` self.assertEqual(created.status_code, existing.status_code) `
   - [Zeile 142](../../../tests/test_auth_session.py#L142): ` self.assertEqual(created.content, existing.content) `
 
@@ -263,12 +273,12 @@ Die zentrale Adminprüfung verlangt Revocationprüfung und Adminrolle; Tokenprü
 
 **Produktdateien:**
 
+- [app/api/routers/admin.py](../../../app/api/routers/admin.py)
 - [app/api/routers/auth.py](../../../app/api/routers/auth.py)
+- [app/api/routers/topics.py](../../../app/api/routers/topics.py)
 - [app/core/entitlements.py](../../../app/core/entitlements.py)
 - [app/core/security.py](../../../app/core/security.py)
 - [app/services/account_tier.py](../../../app/services/account_tier.py)
-- [app/api/routers/admin.py](../../../app/api/routers/admin.py)
-- [app/api/routers/topics.py](../../../app/api/routers/topics.py)
 
 **Testdateien:**
 
@@ -282,7 +292,7 @@ Die zentrale Adminprüfung verlangt Revocationprüfung und Adminrolle; Tokenprü
 
 **Konkrete Teilbelege:**
 
-- [test_admin_boundary_checks_revocation_and_maps_tier_outage_to_503](../../../tests/test_auth_revocation.py#L52) — Security-Funktionen mit Auth-/Datenbank-Doubles. Historischer **Datei**status: passed=4.
+- [test_admin_boundary_checks_revocation_and_maps_tier_outage_to_503](../../../tests/test_auth_revocation.py#L52) — Security-Funktionen mit Auth-/Datenbank-Doubles. **Datei**status vom 2026-10-02: passed=4.
   - [Zeile 65](../../../tests/test_auth_revocation.py#L65): ` with pytest.raises(admin_router.HTTPException) as exc_info: `
   - [Zeile 68](../../../tests/test_auth_revocation.py#L68): ` assert verify.call_args.kwargs["check_revoked"] is True `
   - [Zeile 69](../../../tests/test_auth_revocation.py#L69): ` assert exc_info.value.status_code == 503 `
@@ -322,23 +332,13 @@ Vor dem Löschen persistiert eine Sperre. Die 14 Kaskadenbereiche werden idempot
 
 **Konkrete Teilbelege:**
 
-- [test_failed_area_remains_pending_and_only_that_area_is_retried](../../../tests/test_account_deletion_retry.py#L69) — Service mit In-Memory-Datenbank. Historischer **Datei**status: passed=1.
-  - [Zeile 157](../../../tests/test_account_deletion_retry.py#L157): ` assert first_errors == ["owned_shares"] `
-  - [Zeile 158](../../../tests/test_account_deletion_retry.py#L158): ` assert second_errors == [] `
-  - [Zeile 159](../../../tests/test_account_deletion_retry.py#L159): ` assert calls["shares"] == 2 `
-  - [Zeile 160](../../../tests/test_account_deletion_retry.py#L160): ` assert calls["source_checks"] == 1 `
-  - [Zeile 161](../../../tests/test_account_deletion_retry.py#L161): ` assert calls["api"] == 1 `
-  - [Zeile 162](../../../tests/test_account_deletion_retry.py#L162): ` assert calls["subcollections"] == 1 `
-  - [Zeile 163](../../../tests/test_account_deletion_retry.py#L163): ` assert calls["chats"] == 1 `
-  - [Zeile 164](../../../tests/test_account_deletion_retry.py#L164): ` assert calls["watches"] == 1 `
-  - [Zeile 165](../../../tests/test_account_deletion_retry.py#L165): ` assert calls["watch_indexes"] == 1 `
-  - [Zeile 166](../../../tests/test_account_deletion_retry.py#L166): ` assert calls["guards"] == 1 `
-  - [Zeile 167](../../../tests/test_account_deletion_retry.py#L167): ` assert calls["follows"] == 1 `
-  - [Zeile 168](../../../tests/test_account_deletion_retry.py#L168): ` assert calls["auth"] == 1 `
-  - [Zeile 170](../../../tests/test_account_deletion_retry.py#L170): ` assert job["status"] == "completed" `
-  - [Zeile 171](../../../tests/test_account_deletion_retry.py#L171): ` assert job["cleanup_pending"] is False `
-  - [Zeile 172](../../../tests/test_account_deletion_retry.py#L172): ` assert "email" not in job `
-  - [Zeile 173](../../../tests/test_account_deletion_retry.py#L173): ` assert all(job["completed_areas"].values()) `
+- [test_failed_area_remains_pending_and_only_that_area_is_retried](../../../tests/test_account_deletion_retry.py#L69) — Service mit In-Memory-Datenbank. **Datei**status vom 2026-10-02: passed=1.
+  - [Zeile 163](../../../tests/test_account_deletion_retry.py#L163): ` assert first_errors == ["owned_shares"] `
+  - [Zeile 164](../../../tests/test_account_deletion_retry.py#L164): ` assert second_errors == [] `
+  - [Zeile 165](../../../tests/test_account_deletion_retry.py#L165): ` assert calls["shares"] == 2 `
+  - [Zeile 166](../../../tests/test_account_deletion_retry.py#L166): ` assert calls["source_checks"] == 1 `
+  - [Zeile 167](../../../tests/test_account_deletion_retry.py#L167): ` assert calls["api"] == 1 `
+  - [Zeile 168](../../../tests/test_account_deletion_retry.py#L168): ` assert calls["subcollections"] == 1 `
 
 <a id="auth-04"></a>
 
@@ -368,7 +368,9 @@ Jeder asynchrone Read/Write und jede Ansicht gehört zur aktuellen UID und Auth-
 
 - [tests/e2e/test_browser_failure_recovery.py](../../../tests/e2e/test_browser_failure_recovery.py)
 - [tests/e2e/test_phase4_frontend.py](../../../tests/e2e/test_phase4_frontend.py)
+- [tests/js/attachment-draft-generation.test.mjs](../../../tests/js/attachment-draft-generation.test.mjs)
 - [tests/js/bookmark-write-queue.test.mjs](../../../tests/js/bookmark-write-queue.test.mjs)
+- [tests/js/memory-edit-auth.test.mjs](../../../tests/js/memory-edit-auth.test.mjs)
 - [tests/js/skeleton-lifecycle.test.mjs](../../../tests/js/skeleton-lifecycle.test.mjs)
 - [tests/js/source-verification-watch.test.mjs](../../../tests/js/source-verification-watch.test.mjs)
 
@@ -376,7 +378,7 @@ Jeder asynchrone Read/Write und jede Ansicht gehört zur aktuellen UID und Auth-
 
 **Konkrete Teilbelege:**
 
-- [serializes the same account resource across rapid auth generations](../../../tests/js/bookmark-write-queue.test.mjs#L59) — Ausgeführter Firebase-Funktionsausschnitt in Node. Historischer **Datei**status: passed=3.
+- [serializes the same account resource across rapid auth generations](../../../tests/js/bookmark-write-queue.test.mjs#L59) — Ausgeführter Firebase-Funktionsausschnitt in Node. **Datei**status vom 2026-10-02: passed=3.
   - [Zeile 75](../../../tests/js/bookmark-write-queue.test.mjs#L75): ` expect(events).toEqual(["old:start"]); `
   - [Zeile 78](../../../tests/js/bookmark-write-queue.test.mjs#L78): ` expect(events).toEqual(["old:start", "old:end", "new"]); `
 
@@ -384,7 +386,7 @@ Jeder asynchrone Read/Write und jede Ansicht gehört zur aktuellen UID und Auth-
 
 ## QUOTA-01 · Ein regulärer Lauf, eine Belastung
 
-Prepare/Fan-out/Consensus teilen einen owner- und payloadgebundenen Run-Key; pro Provideroperation gewinnt genau ein Claim. Reserve/Consume/Release bleiben integerbasiert, UTC-gebunden und fail-closed.
+Prepare/Fanout/Consensus teilen einen owner-/payloadgebundenen Run-Key und ein Tokenkonto. Admission hält eine Modusschätzung; einzelne Provider-/Judgeoperationen buchen idempotent, Final/Release löst Restholds. Der Admissiontag bleibt über UTC-Mitternacht gebunden; alte Runzählquoten entfallen.
 
 **Anforderungsbasis:** [docs/codebase-map.md](../../codebase-map.md) · ` documented_contract `. Die Basis ist eine Fundstelle, keine Behauptung, dass ältere Spezifikationen jede aktuelle Klausel wörtlich enthalten; [abweichende Oracles](decisions.md) beachten.
 
@@ -404,6 +406,7 @@ Prepare/Fan-out/Consensus teilen einen owner- und payloadgebundenen Run-Key; pro
 
 **Testdateien:**
 
+- [tests/test_api_run_billing_identity.py](../../../tests/test_api_run_billing_identity.py)
 - [tests/test_run_usage_endpoints.py](../../../tests/test_run_usage_endpoints.py)
 - [tests/test_run_usage_repository.py](../../../tests/test_run_usage_repository.py)
 - [tests/test_usage_authorization.py](../../../tests/test_usage_authorization.py)
@@ -412,20 +415,18 @@ Prepare/Fan-out/Consensus teilen einen owner- und payloadgebundenen Run-Key; pro
 
 **Konkrete Teilbelege:**
 
-- [test_prepare_and_parallel_models_consume_exactly_one_run](../../../tests/test_run_usage_endpoints.py#L88) — Router-Integration mit FakeFirestore und Provider-/Engine-Doubles. Historischer **Datei**status: passed=11.
-  - [Zeile 93](../../../tests/test_run_usage_endpoints.py#L93): ` assert prepared.status_code == 200 `
-  - [Zeile 97](../../../tests/test_run_usage_endpoints.py#L97): ` assert prepared.json()["usage_run_status"] == "consumed" `
-  - [Zeile 98](../../../tests/test_run_usage_endpoints.py#L98): ` assert prepared.json()["free_usage_remaining"] == FREE_TOTAL - 1 `
-  - [Zeile 111](../../../tests/test_run_usage_endpoints.py#L111): ` assert all(response.status_code == 200 for response in responses) `
-  - [Zeile 112](../../../tests/test_run_usage_endpoints.py#L112): ` assert all(response.json()["usage_run_status"] == "consumed" for response in responses) `
-  - [Zeile 114](../../../tests/test_run_usage_endpoints.py#L114): ` assert snapshot.total.reserved == 0 `
-  - [Zeile 115](../../../tests/test_run_usage_endpoints.py#L115): ` assert snapshot.total.consumed == 1 `
-  - [Zeile 116](../../../tests/test_run_usage_endpoints.py#L116): ` assert snapshot.total.remaining == FREE_TOTAL - 1 `
-- [test_same_operation_race_has_exactly_one_authorization](../../../tests/test_usage_authorization.py#L68) — Atomare Autorisierungslogik mit FakeFirestore und Threads. Historischer **Datei**status: passed=19.
-  - [Zeile 72](../../../tests/test_usage_authorization.py#L72): ` assert sum(not claim.idempotent for _, claim in results) == 1 `
-  - [Zeile 73](../../../tests/test_usage_authorization.py#L73): ` assert repo.snapshot("owner", LIMITS, now=NOW).total.consumed == 1 `
-  - [Zeile 76](../../../tests/test_usage_authorization.py#L76): ` assert repeated.idempotent `
-  - [Zeile 77](../../../tests/test_usage_authorization.py#L77): ` assert db.documents == before `
+- [test_prepare_admits_once_and_answers_book_their_measured_tokens](../../../tests/test_run_usage_endpoints.py#L100) — Router-Integration mit FakeFirestore und Provider-/Engine-Doubles. **Datei**status vom 2026-10-02: passed=14.
+  - [Zeile 105](../../../tests/test_run_usage_endpoints.py#L105): ` assert prepared.status_code == 200 `
+  - [Zeile 107](../../../tests/test_run_usage_endpoints.py#L107): ` assert body["usage_run_status"] == "consumed" `
+  - [Zeile 108](../../../tests/test_run_usage_endpoints.py#L108): ` assert body["run_estimate"] == FREE_RUN["consensus"] `
+  - [Zeile 109](../../../tests/test_run_usage_endpoints.py#L109): ` assert body["token_budget"]["used"] == 0 `
+  - [Zeile 110](../../../tests/test_run_usage_endpoints.py#L110): ` assert body["token_budget"]["reserved"] == FREE_RUN["consensus"] `
+  - [Zeile 111](../../../tests/test_run_usage_endpoints.py#L111): ` assert body["token_budget"]["run_estimates"] == FREE_RUN `
+- [test_same_operation_race_has_exactly_one_authorization](../../../tests/test_usage_authorization.py#L78) — Atomare Autorisierungslogik mit FakeFirestore und Threads. **Datei**status vom 2026-10-02: passed=15.
+  - [Zeile 82](../../../tests/test_usage_authorization.py#L82): ` assert sum(not claim.idempotent for _, claim in results) == 1 `
+  - [Zeile 83](../../../tests/test_usage_authorization.py#L83): ` assert db.documents[LEDGER]["pipeline_runs"] == 1 `
+  - [Zeile 86](../../../tests/test_usage_authorization.py#L86): ` assert repeated.idempotent `
+  - [Zeile 87](../../../tests/test_usage_authorization.py#L87): ` assert db.documents == before `
 
 <a id="quota-02"></a>
 
@@ -467,7 +468,7 @@ Rechte und Kosten ergeben sich aus serverseitiger Stufe/Modellwahl; Own-Key umge
 
 **Konkrete Teilbelege:**
 
-- [test_plus_gets_the_features_but_not_the_expensive_models](../../../tests/test_plus_tier.py#L67) — Entitlements-/Konfigurationslogik und Security mit DB-Double. Historischer **Datei**status: passed=34.
+- [test_plus_gets_the_features_but_not_the_expensive_models](../../../tests/test_plus_tier.py#L67) — Entitlements-/Konfigurationslogik und Security mit DB-Double. **Datei**status vom 2026-10-02: passed=34.
   - [Zeile 69](../../../tests/test_plus_tier.py#L69): ` assert plus.attachments is True `
   - [Zeile 70](../../../tests/test_plus_tier.py#L70): ` assert plus.resolve is True `
   - [Zeile 72](../../../tests/test_plus_tier.py#L72): ` assert plus.is_pro is False `
@@ -503,10 +504,10 @@ Ownergebundene Chats/Turns verwenden stabile Request-IDs, monotone Positionen un
 
 **Konkrete Teilbelege:**
 
-- [test_chat_cursor_keeps_original_boundary_when_boundary_chat_moves](../../../tests/test_chat_history.py#L504) — Router und ChatStore mit speicherbasiertem Transaktionsmodell. Historischer **Datei**status: passed=72.
-  - [Zeile 521](../../../tests/test_chat_history.py#L521): ` assert delivered_ids == [chats[3]["id"], chats[2]["id"]] `
-  - [Zeile 522](../../../tests/test_chat_history.py#L522): ` assert second_ids == [chats[1]["id"], chats[0]["id"]] `
-  - [Zeile 523](../../../tests/test_chat_history.py#L523): ` assert set(delivered_ids).isdisjoint(second_ids) `
+- [test_chat_cursor_keeps_original_boundary_when_boundary_chat_moves](../../../tests/test_chat_history.py#L511) — Router und ChatStore mit speicherbasiertem Transaktionsmodell. **Datei**status vom 2026-10-02: passed=77.
+  - [Zeile 528](../../../tests/test_chat_history.py#L528): ` assert delivered_ids == [chats[3]["id"], chats[2]["id"]] `
+  - [Zeile 529](../../../tests/test_chat_history.py#L529): ` assert second_ids == [chats[1]["id"], chats[0]["id"]] `
+  - [Zeile 530](../../../tests/test_chat_history.py#L530): ` assert set(delivered_ids).isdisjoint(second_ids) `
 
 <a id="chat-02"></a>
 
@@ -539,33 +540,18 @@ Completion persistiert erlaubte Turn-/Antwortdaten atomar, ist bei identischem P
 
 **Konkrete Teilbelege:**
 
-- [test_complete_turn_atomically_persists_six_separate_answer_documents](../../../tests/test_chat_history.py#L824) — Router und ChatStore mit speicherbasiertem Transaktionsmodell. Historischer **Datei**status: passed=72.
-  - [Zeile 838](../../../tests/test_chat_history.py#L838): ` assert completed["status"] == "completed" `
-  - [Zeile 839](../../../tests/test_chat_history.py#L839): ` assert completed["answer_count"] == 6 `
-  - [Zeile 840](../../../tests/test_chat_history.py#L840): ` assert completed["agreement_score"] == 83 `
-  - [Zeile 841](../../../tests/test_chat_history.py#L841): ` assert completed["included_models"] == list(PROVIDERS) `
-  - [Zeile 842](../../../tests/test_chat_history.py#L842): ` assert set(completed["model_answers"]) == set(PROVIDERS) `
-  - [Zeile 843](../../../tests/test_chat_history.py#L843): ` assert set(stored_answers) == {         chat_store.PROVIDER_DOCUMENT_IDS[provider] for provider in PROVIDERS     } `
-  - [Zeile 846](../../../tests/test_chat_history.py#L846): ` assert all(         set(answer) == {             "schema_version", "provider", "model_label", "answer", "sources",             "created_at", "updated_at",         }         for answer in stored_answers.values()     ) `
-  - [Zeile 853](../../../tests/test_chat_history.py#L853): ` assert all("api_key" not in answer for answer in stored_answers.values()) `
-  - [Zeile 854](../../../tests/test_chat_history.py#L854): ` assert all("raw_attachment" not in answer for answer in stored_answers.values()) `
-  - [Zeile 855](../../../tests/test_chat_history.py#L855): ` assert "model_answers" not in stored_turn `
-  - [Zeile 856](../../../tests/test_chat_history.py#L856): ` assert not any(provider in stored_turn for provider in PROVIDERS) `
-  - [Zeile 857](../../../tests/test_chat_history.py#L857): ` assert stored_turn["completion_fingerprint"] `
-  - [Zeile 858](../../../tests/test_chat_history.py#L858): ` assert stored_turn["result_id"] == "AbCdEf0123456789" `
-  - [Zeile 859](../../../tests/test_chat_history.py#L859): ` assert stored_turn["sources"] == [{         "id": "S1", "title": "Turn source", "url": "https://example.test/turn",         "provider": "OpenAI",     }] `
-  - [Zeile 863](../../../tests/test_chat_history.py#L863): ` assert "secret" not in stored_turn["differences_data"]["claims"][0] `
-  - [Zeile 864](../../../tests/test_chat_history.py#L864): ` assert "api_key" not in stored_turn["differences_data"] `
-  - [Zeile 865](../../../tests/test_chat_history.py#L865): ` assert stored_chat["turn_count"] == chat_before["turn_count"] == 1 `
-  - [Zeile 866](../../../tests/test_chat_history.py#L866): ` assert stored_chat["latest_question"] == chat_before["latest_question"] `
-  - [Zeile 867](../../../tests/test_chat_history.py#L867): ` assert stored_chat["updated_at"] > chat_before["updated_at"] `
-  - [Zeile 869](../../../tests/test_chat_history.py#L869): ` assert len(committed_paths) == 8 `
-  - [Zeile 870](../../../tests/test_chat_history.py#L870): ` assert committed_paths[-2:] == [         ("users", "owner-uid", "chats", chat["id"], "turns", turn["id"]),         ("users", "owner-uid", "chats", chat["id"]),     ] `
-- [test_deleting_chat_state_rejects_late_completion_and_failure_writes](../../../tests/test_chat_history.py#L1484) — Router und ChatStore mit speicherbasiertem Transaktionsmodell. Historischer **Datei**status: passed=72.
-  - [Zeile 1493](../../../tests/test_chat_history.py#L1493): ` with pytest.raises(chat_store.ChatNotFound): `
-  - [Zeile 1497](../../../tests/test_chat_history.py#L1497): ` with pytest.raises(chat_store.ChatNotFound): `
-  - [Zeile 1505](../../../tests/test_chat_history.py#L1505): ` assert database.documents == before `
-  - [Zeile 1506](../../../tests/test_chat_history.py#L1506): ` assert database.model_answers("owner-uid", chat["id"], turn["id"]) == {} `
+- [test_complete_turn_atomically_persists_six_separate_answer_documents](../../../tests/test_chat_history.py#L831) — Router und ChatStore mit speicherbasiertem Transaktionsmodell. **Datei**status vom 2026-10-02: passed=77.
+  - [Zeile 845](../../../tests/test_chat_history.py#L845): ` assert completed["status"] == "completed" `
+  - [Zeile 846](../../../tests/test_chat_history.py#L846): ` assert completed["answer_count"] == 6 `
+  - [Zeile 847](../../../tests/test_chat_history.py#L847): ` assert completed["agreement_score"] == 83 `
+  - [Zeile 848](../../../tests/test_chat_history.py#L848): ` assert completed["included_models"] == list(PROVIDERS) `
+  - [Zeile 849](../../../tests/test_chat_history.py#L849): ` assert set(completed["model_answers"]) == set(PROVIDERS) `
+  - [Zeile 850](../../../tests/test_chat_history.py#L850): ` assert set(stored_answers) == { `
+- [test_deleting_chat_state_rejects_late_completion_and_failure_writes](../../../tests/test_chat_history.py#L1491) — Router und ChatStore mit speicherbasiertem Transaktionsmodell. **Datei**status vom 2026-10-02: passed=77.
+  - [Zeile 1500](../../../tests/test_chat_history.py#L1500): ` with pytest.raises(chat_store.ChatNotFound): `
+  - [Zeile 1504](../../../tests/test_chat_history.py#L1504): ` with pytest.raises(chat_store.ChatNotFound): `
+  - [Zeile 1512](../../../tests/test_chat_history.py#L1512): ` assert database.documents == before `
+  - [Zeile 1513](../../../tests/test_chat_history.py#L1513): ` assert database.model_answers("owner-uid", chat["id"], turn["id"]) == {} `
 
 <a id="chat-03"></a>
 
@@ -601,7 +587,7 @@ Ein autoritativer Kontext ist an Owner/Turn/Frage/Version gebunden, einmalig geb
 
 **Konkrete Teilbelege:**
 
-- [test_each_model_sees_only_its_own_previous_answer](../../../tests/test_chat_context.py#L1043) — Service/Repository/Router mit FakeChatDatabase und künstlichem Compressor. Historischer **Datei**status: passed=37.
+- [test_each_model_sees_only_its_own_previous_answer](../../../tests/test_chat_context.py#L1043) — Service/Repository/Router mit FakeChatDatabase und künstlichem Compressor. **Datei**status vom 2026-10-02: passed=41.
   - [Zeile 1074](../../../tests/test_chat_context.py#L1074): ` assert "My earlier reading of the site." in claude `
   - [Zeile 1075](../../../tests/test_chat_context.py#L1075): ` assert "A different earlier reading." not in claude `
   - [Zeile 1076](../../../tests/test_chat_context.py#L1076): ` assert "A different earlier reading." in grok `
@@ -645,16 +631,16 @@ Speichern materialisiert den autoritativen Run/Turn statt Clientkopien; stabile 
 
 **Konkrete Teilbelege:**
 
-- [test_chat_bookmark_conversation_falls_back_without_losing_middle_turns](../../../tests/test_bookmarks.py#L881) — Router/Service mit Firestore-Doubles und Quelltextverträgen. Historischer **Datei**status: passed=38.
-  - [Zeile 894](../../../tests/test_bookmarks.py#L894): ` assert (uid, requested_chat_id, cursor, limit) == (                 "uid-1", chat_id, "", 50,             ) `
+- [test_chat_bookmark_conversation_falls_back_without_losing_middle_turns](../../../tests/test_bookmarks.py#L881) — Router/Service mit Firestore-Doubles und Quelltextverträgen. **Datei**status vom 2026-10-02: passed=40.
+  - [Zeile 894](../../../tests/test_bookmarks.py#L894): ` assert (uid, requested_chat_id, cursor, limit) == ( `
   - [Zeile 931](../../../tests/test_bookmarks.py#L931): ` assert response.status_code == 200 `
-  - [Zeile 932](../../../tests/test_bookmarks.py#L932): ` assert [turn["question"] for turn in response.json()["turns"]] == [         "Question 1", "Question 2", "Question 3", "Question 4",     ] `
+  - [Zeile 932](../../../tests/test_bookmarks.py#L932): ` assert [turn["question"] for turn in response.json()["turns"]] == [ `
 
 <a id="mem-01"></a>
 
 ## MEM-01 · Memory lesen und manuell speichern
 
-Auth und Feldallowlist begrenzen Memory; fehlende/pausierte Profile sind neutral, ein Legacy-Save erhält unübermittelte Notizen und Kontolöschung sperrt Writes.
+Manuelles Memory-PUT benötigt expected_revision. Stale oder revisionslose Writes erhalten 409 ohne Datenverlust; die UI bewahrt Entwürfe und verlangt bewussten Reload/Overwrite.
 
 **Anforderungsbasis:** [docs/codebase-map.md](../../codebase-map.md) · ` documented_contract `. Die Basis ist eine Fundstelle, keine Behauptung, dass ältere Spezifikationen jede aktuelle Klausel wörtlich enthalten; [abweichende Oracles](decisions.md) beachten.
 
@@ -682,7 +668,7 @@ Auth und Feldallowlist begrenzen Memory; fehlende/pausierte Profile sind neutral
 
 **Konkrete Teilbelege:**
 
-- [test_legacy_save_without_notes_preserves_an_existing_long_note](../../../tests/test_user_memory.py#L234) — Sanitizer-/Repository-/Router-/Prompt-Integration mit Doubles und einem Sourcevertrag. Historischer **Datei**status: passed=29.
+- [test_legacy_save_without_notes_preserves_an_existing_long_note](../../../tests/test_user_memory.py#L234) — Sanitizer-/Repository-/Router-/Prompt-Integration mit Doubles und einem Sourcevertrag. **Datei**status vom 2026-10-02: passed=34.
   - [Zeile 237](../../../tests/test_user_memory.py#L237): ` assert saved["role"] == "Senior doctor" `
   - [Zeile 238](../../../tests/test_user_memory.py#L238): ` assert saved["notes"] == "Keep this imported memory" `
   - [Zeile 241](../../../tests/test_user_memory.py#L241): ` assert cleared["notes"] == "" `
@@ -691,13 +677,13 @@ Auth und Feldallowlist begrenzen Memory; fehlende/pausierte Profile sind neutral
 
 ## MEM-02 · Expliziter KI-Patch und sicheres Undo
 
-KI-Edit wendet nur den kleinsten erlaubten Patch gegen die reservierte Revision an, belastet Request/Budget einmal und überschreibt keine fremde Zwischenänderung. Undo ist zeitlich/owner-/revisionsgebunden.
+KI-Patch bindet Revision, Request und begrenzt erneuerbare Lease; Retention terminiert verwaiste Arbeit. Undo prüft Owner/Revision und 30-Tage-Fenster; Vorzustände verfallen, Idempotenz bleibt. Undo nach Limitabsenkung kann weiterhin kürzen (G-038).
 
 **Anforderungsbasis:** [docs/codebase-map.md](../../codebase-map.md) · ` documented_contract `. Die Basis ist eine Fundstelle, keine Behauptung, dass ältere Spezifikationen jede aktuelle Klausel wörtlich enthalten; [abweichende Oracles](decisions.md) beachten.
 
 **Bewertung:** Teilweise belegt. Dateien liefern Belege für die im Testkatalog beschriebenen Teilfälle. Die Zuordnung behauptet keine vollständige Assertion jeder Vertragskante.
 
-**Testgrenze:** Guard im Repository-Test deaktiviert. Undo-Erfolg belegt nicht Konflikt, Ablauf, fremden Owner oder wiederholtes Undo. P-02 führt den realen Guard mit Fake-DB aus und reproduziert stillen Notizverlust bei Undo mit kleinerem Limit (G-038).
+**Testgrenze:** Repository-Fakes; Ablauf und Lease-Recovery ergänzt. Undo-HTTP/Owner/Conflict/Replay sind nicht dadurch vollständig belegt; Limitabsenkung weiterhin problematisch.
 
 **Befunde:** [G-007](gaps.md#g-007), [G-008](gaps.md#g-008), [G-038](gaps.md#g-038). Kein verknüpfter Befund bedeutet keine Vollständigkeitsfreigabe.
 
@@ -712,21 +698,21 @@ KI-Edit wendet nur den kleinsten erlaubten Patch gegen die reservierte Revision 
 **Testdateien:**
 
 - [tests/e2e/test_reader_review_regressions.py](../../../tests/e2e/test_reader_review_regressions.py)
+- [tests/js/memory-edit-auth.test.mjs](../../../tests/js/memory-edit-auth.test.mjs)
+- [tests/js/memory-edit-sources.test.mjs](../../../tests/js/memory-edit-sources.test.mjs)
 - [tests/test_memory_edit.py](../../../tests/test_memory_edit.py)
 
 </details>
 
 **Konkrete Teilbelege:**
 
-- [test_replace_is_revision_checked_and_undo_restores_exact_content](../../../tests/test_memory_edit.py#L118) — Edit-Service/Repository und Router mit DB-/LLM-Doubles. Historischer **Datei**status: passed=14.
-  - [Zeile 129](../../../tests/test_memory_edit.py#L129): ` assert reserved["baseline_revision"] == 4 `
-  - [Zeile 143](../../../tests/test_memory_edit.py#L143): ` assert result["status"] == "applied" `
-  - [Zeile 147](../../../tests/test_memory_edit.py#L147): ` assert profile["role"] == "Works at Firma Y." `
-  - [Zeile 148](../../../tests/test_memory_edit.py#L148): ` assert revision == 5 `
-  - [Zeile 159](../../../tests/test_memory_edit.py#L159): ` assert undone["status"] == "undone" `
-  - [Zeile 160](../../../tests/test_memory_edit.py#L160): ` assert restored["role"] == "Works at Firma X." `
-  - [Zeile 161](../../../tests/test_memory_edit.py#L161): ` assert restored["notes"] == "Prefers short answers." `
-  - [Zeile 162](../../../tests/test_memory_edit.py#L162): ` assert restored_revision == 6 `
+- [test_replace_is_revision_checked_and_undo_restores_exact_content](../../../tests/test_memory_edit.py#L178) — Edit-Service/Repository und Router mit DB-/LLM-Doubles. **Datei**status vom 2026-10-02: passed=20.
+  - [Zeile 189](../../../tests/test_memory_edit.py#L189): ` assert reserved["baseline_revision"] == 4 `
+  - [Zeile 204](../../../tests/test_memory_edit.py#L204): ` assert result["status"] == "applied" `
+  - [Zeile 208](../../../tests/test_memory_edit.py#L208): ` assert profile["role"] == "Works at Firma Y." `
+  - [Zeile 209](../../../tests/test_memory_edit.py#L209): ` assert revision == 5 `
+  - [Zeile 220](../../../tests/test_memory_edit.py#L220): ` assert undone["status"] == "undone" `
+  - [Zeile 221](../../../tests/test_memory_edit.py#L221): ` assert restored["role"] == "Works at Firma X." `
 
 <a id="api-01"></a>
 
@@ -761,27 +747,25 @@ Nur aktive verifizierte Konten bekommen Schlüssel; Klartext wird einmal ausgege
 
 **Konkrete Teilbelege:**
 
-- [test_plaintext_key_is_returned_once_but_never_persisted](../../../tests/test_api_key_repository.py#L71) — Repository mit Firestore-Fake. Historischer **Datei**status: passed=5.
+- [test_plaintext_key_is_returned_once_but_never_persisted](../../../tests/test_api_key_repository.py#L71) — Repository mit Firestore-Fake. **Datei**status vom 2026-10-02: passed=5.
   - [Zeile 76](../../../tests/test_api_key_repository.py#L76): ` assert issued["api_key"].startswith("cns_live_") `
   - [Zeile 77](../../../tests/test_api_key_repository.py#L77): ` assert issued["key_id"] in db.documents `
   - [Zeile 78](../../../tests/test_api_key_repository.py#L78): ` assert issued["api_key"] not in repr(db.documents) `
   - [Zeile 79](../../../tests/test_api_key_repository.py#L79): ` assert "api_key" not in db.documents[issued["key_id"]] `
   - [Zeile 81](../../../tests/test_api_key_repository.py#L81): ` assert identity.uid == "user-1" `
   - [Zeile 82](../../../tests/test_api_key_repository.py#L82): ` assert identity.key_id == issued["key_id"] `
-  - [Zeile 83](../../../tests/test_api_key_repository.py#L83): ` assert identity.scopes == tuple(sorted(DEFAULT_API_KEY_SCOPES)) `
-  - [Zeile 86](../../../tests/test_api_key_repository.py#L86): ` assert db.documents[issued["key_id"]]["last_used_at"] == first_last_used `
 
 <a id="api-02"></a>
 
 ## API-02 · Dauerhafte API-Runs
 
-Idempotency-Key und Payload bestimmen einen Run. Nur ein Worker beginnt bezahlte Arbeit; accepted/reserved dürfen wieder aufgenommen werden, running nach unklarem Ausfall darf nicht blind erneut generieren.
+Idempotenzschlüssel und Payload bestimmen einen Run mit eigenem nicht wiederverwendbarem Usagebeleg. Löschen hinterlässt einen begrenzten Tombstone und Wiederholung liefert 410; neue Schlüssel starten neue bezahlte Arbeit. Verwaiste accepted/reserved-Runs werden konservativ abgeschlossen, running wird nicht blind neu generiert.
 
 **Anforderungsbasis:** [docs/consensus-api.md](../../consensus-api.md) · ` documented_contract `. Die Basis ist eine Fundstelle, keine Behauptung, dass ältere Spezifikationen jede aktuelle Klausel wörtlich enthalten; [abweichende Oracles](decisions.md) beachten.
 
 **Bewertung:** Teilweise belegt. Dateien liefern Belege für die im Testkatalog beschriebenen Teilfälle. Die Zuordnung behauptet keine vollständige Assertion jeder Vertragskante.
 
-**Testgrenze:** Zustandsübergänge und execute-Pfad belegt; tatsächliche Recovery-/Retention-Orchestrierung in regulärer Suite nicht ausgeführt.
+**Testgrenze:** Fake-Recoverytests für abgelaufene Reservierungen und echte isolierte Routerfälle vorhanden; voller Prozessneustart/Retention/DB bleiben offen.
 
 **Befunde:** [G-005](gaps.md#g-005). Kein verknüpfter Befund bedeutet keine Vollständigkeitsfreigabe.
 
@@ -795,6 +779,7 @@ Idempotency-Key und Payload bestimmen einen Run. Nur ein Worker beginnt bezahlte
 
 **Testdateien:**
 
+- [tests/test_api_run_billing_identity.py](../../../tests/test_api_run_billing_identity.py)
 - [tests/test_api_run_repository.py](../../../tests/test_api_run_repository.py)
 - [tests/test_consensus_api.py](../../../tests/test_consensus_api.py)
 
@@ -802,11 +787,11 @@ Idempotency-Key und Payload bestimmen einen Run. Nur ein Worker beginnt bezahlte
 
 **Konkrete Teilbelege:**
 
-- [test_expired_running_lease_fails_without_requeueing](../../../tests/test_api_run_repository.py#L199) — Repository mit synchronisiertem Firestore-Fake. Historischer **Datei**status: passed=8.
-  - [Zeile 210](../../../tests/test_api_run_repository.py#L210): ` assert changed is True `
-  - [Zeile 211](../../../tests/test_api_run_repository.py#L211): ` assert failed["status"] == "failed" `
-  - [Zeile 212](../../../tests/test_api_run_repository.py#L212): ` assert failed["error"]["code"] == "worker_interrupted" `
-  - [Zeile 213](../../../tests/test_api_run_repository.py#L213): ` assert repo.fail_if_lease_expired(run["run_id"]) is False `
+- [test_expired_running_lease_fails_without_requeueing](../../../tests/test_api_run_repository.py#L200) — Repository mit synchronisiertem Firestore-Fake. **Datei**status vom 2026-10-02: passed=8.
+  - [Zeile 211](../../../tests/test_api_run_repository.py#L211): ` assert changed is True `
+  - [Zeile 212](../../../tests/test_api_run_repository.py#L212): ` assert failed["status"] == "failed" `
+  - [Zeile 213](../../../tests/test_api_run_repository.py#L213): ` assert failed["error"]["code"] == "worker_interrupted" `
+  - [Zeile 214](../../../tests/test_api_run_repository.py#L214): ` assert repo.fail_if_lease_expired(run["run_id"]) is False `
 
 <a id="api-03"></a>
 
@@ -839,14 +824,13 @@ Historische API-Prüfberichte bleiben owner-, run- und antwortversionsgebunden l
 
 **Konkrete Teilbelege:**
 
-- [test_product_runs_keep_consensus_and_differences_without_source_work](../../../tests/test_source_check_scope.py#L20) — Produkt-Pipeline-Integration im Mock-LLM-Modus mit verbotenen Source-Hooks. Historischer **Datei**status: passed=12.
-  - [Zeile 39](../../../tests/test_source_check_scope.py#L39): ` assert result.get('consensus') or result.get('consensus_response') `
-  - [Zeile 40](../../../tests/test_source_check_scope.py#L40): ` assert isinstance(result['differences_data']['agreement']['score'], int) `
-  - [Zeile 41](../../../tests/test_source_check_scope.py#L41): ` assert result.get('source_verification') is None `
-  - [Zeile 43](../../../tests/test_source_check_scope.py#L43): ` assert len(result['included_models']) == 2 `
-  - [Zeile 44](../../../tests/test_source_check_scope.py#L44): ` assert 'sources' in result `
-  - [Zeile 45](../../../tests/test_source_check_scope.py#L45): ` assert 'opinion_map' in result `
-  - [Zeile 46](../../../tests/test_source_check_scope.py#L46): ` assert 'changed' in result `
+- [test_product_runs_keep_consensus_and_differences_without_source_work](../../../tests/test_source_check_scope.py#L20) — Produkt-Pipeline-Integration im Mock-LLM-Modus mit verbotenen Source-Hooks. **Datei**status vom 2026-10-02: passed=12.
+  - [Zeile 41](../../../tests/test_source_check_scope.py#L41): ` assert result.get('consensus') or result.get('consensus_response') `
+  - [Zeile 42](../../../tests/test_source_check_scope.py#L42): ` assert isinstance(result['differences_data']['agreement']['score'], int) `
+  - [Zeile 43](../../../tests/test_source_check_scope.py#L43): ` assert result.get('source_verification') is None `
+  - [Zeile 45](../../../tests/test_source_check_scope.py#L45): ` assert len(result['included_models']) == 2 `
+  - [Zeile 46](../../../tests/test_source_check_scope.py#L46): ` assert 'sources' in result `
+  - [Zeile 47](../../../tests/test_source_check_scope.py#L47): ` assert 'opinion_map' in result `
 
 <a id="api-04"></a>
 
@@ -880,13 +864,13 @@ Nur eigene erfolgreiche Runs werden publiziert; Indexing verlangt Scope und aktu
 
 **Konkrete Teilbelege:**
 
-- [test_direct_indexing_requires_scope_admin_and_returns_indexed_state](../../../tests/test_consensus_api.py#L930) — Main-App-API und Runner mit Repository-/LLM-/Scheduler-Doubles; einzelne Quelltextverträge. Historischer **Datei**status: passed=27.
-  - [Zeile 967](../../../tests/test_consensus_api.py#L967): ` assert response.status_code == 200 `
-  - [Zeile 968](../../../tests/test_consensus_api.py#L968): ` assert response.json()["indexing_status"] == "indexed" `
-  - [Zeile 969](../../../tests/test_consensus_api.py#L969): ` assert response.json()["robots"] == "index, follow" `
-  - [Zeile 970](../../../tests/test_consensus_api.py#L970): ` assert response.json()["in_sitemap"] is True `
-  - [Zeile 978](../../../tests/test_consensus_api.py#L978): ` assert denied_scope.status_code == 403 `
-  - [Zeile 987](../../../tests/test_consensus_api.py#L987): ` assert denied_admin.status_code == 403 `
+- [test_direct_indexing_requires_scope_admin_and_returns_indexed_state](../../../tests/test_consensus_api.py#L937) — Main-App-API und Runner mit Repository-/LLM-/Scheduler-Doubles; einzelne Quelltextverträge. **Datei**status vom 2026-10-02: passed=27.
+  - [Zeile 974](../../../tests/test_consensus_api.py#L974): ` assert response.status_code == 200 `
+  - [Zeile 975](../../../tests/test_consensus_api.py#L975): ` assert response.json()["indexing_status"] == "indexed" `
+  - [Zeile 976](../../../tests/test_consensus_api.py#L976): ` assert response.json()["robots"] == "index, follow" `
+  - [Zeile 977](../../../tests/test_consensus_api.py#L977): ` assert response.json()["in_sitemap"] is True `
+  - [Zeile 985](../../../tests/test_consensus_api.py#L985): ` assert denied_scope.status_code == 403 `
+  - [Zeile 994](../../../tests/test_consensus_api.py#L994): ` assert denied_admin.status_code == 403 `
 
 <a id="llm-01"></a>
 
@@ -930,9 +914,9 @@ Angebotene Modelle, Fähigkeiten, Reasoning und Suchoptionen folgen der Registry
 
 **Konkrete Teilbelege:**
 
-- [test_own_keys_flag_without_openrouter_key_is_rejected](../../../tests/test_ask_endpoints.py#L78) — Router und Usage-Repository mit Auth-/Provider-Doubles. Historischer **Datei**status: passed=14.
-  - [Zeile 91](../../../tests/test_ask_endpoints.py#L91): ` assert response.status_code == 400 `
-  - [Zeile 92](../../../tests/test_ask_endpoints.py#L92): ` assert response.json()["detail"] == "Missing user OpenRouter API key." `
+- [test_own_keys_flag_without_openrouter_key_is_rejected](../../../tests/test_ask_endpoints.py#L79) — Router und Usage-Repository mit Auth-/Provider-Doubles. **Datei**status vom 2026-10-02: passed=14.
+  - [Zeile 92](../../../tests/test_ask_endpoints.py#L92): ` assert response.status_code == 400 `
+  - [Zeile 93](../../../tests/test_ask_endpoints.py#L93): ` assert response.json()["detail"] == "Missing user OpenRouter API key." `
 
 <a id="llm-02"></a>
 
@@ -959,6 +943,7 @@ Timeouts sind begrenzt, HTTP-200-Fehlerbodies werden als Fehler erkannt, Ressour
 
 **Testdateien:**
 
+- [tests/test_agent_reasoning_continuation.py](../../../tests/test_agent_reasoning_continuation.py)
 - [tests/test_agent_reliability.py](../../../tests/test_agent_reliability.py)
 - [tests/test_provider_response_errors.py](../../../tests/test_provider_response_errors.py)
 - [tests/test_provider_timeouts.py](../../../tests/test_provider_timeouts.py)
@@ -969,7 +954,7 @@ Timeouts sind begrenzt, HTTP-200-Fehlerbodies werden als Fehler erkannt, Ressour
 
 **Konkrete Teilbelege:**
 
-- [test_body_error_preserves_status_without_content_or_retry](../../../tests/test_provider_response_errors.py#L55) — Adapter/Fan-out mit HTTP-Response-Doubles. Historischer **Datei**status: passed=38.
+- [test_body_error_preserves_status_without_content_or_retry](../../../tests/test_provider_response_errors.py#L55) — Adapter/Fan-out mit HTTP-Response-Doubles. **Datei**status vom 2026-10-02: passed=38.
   - [Zeile 64](../../../tests/test_provider_response_errors.py#L64): ` assert result["error_code"] == expected `
   - [Zeile 65](../../../tests/test_provider_response_errors.py#L65): ` assert result["text"] == "" `
   - [Zeile 66](../../../tests/test_provider_response_errors.py#L66): ` assert result["sources"] == [] `
@@ -1010,7 +995,7 @@ Fan-out sammelt gültige Antworten, synthetisiert Consensus und analysiert Unter
 
 **Konkrete Teilbelege:**
 
-- [test_neutral_pipeline_can_select_the_first_successful_provider_as_engine](../../../tests/test_phase6_architecture.py#L76) — Gemischt: Pipeline-/CSP-Runtime und Quelltextarchitektur. Historischer **Datei**status: passed=8.
+- [test_neutral_pipeline_can_select_the_first_successful_provider_as_engine](../../../tests/test_phase6_architecture.py#L76) — Gemischt: Pipeline-/CSP-Runtime und Quelltextarchitektur. **Datei**status vom 2026-10-02: passed=8.
   - [Zeile 83](../../../tests/test_phase6_architecture.py#L83): ` assert args[3] == "Mistral" `
   - [Zeile 102](../../../tests/test_phase6_architecture.py#L102): ` assert [item["provider"] for item in result["model_answers"]] == ["Mistral", "Gemini"] `
 
@@ -1049,7 +1034,7 @@ Parser/Scorer akzeptieren nur zulässige Modelle, Claims, Anchors und bounded We
 
 **Konkrete Teilbelege:**
 
-- [test_empty_or_sparse_evidence_does_not_create_a_numeric_score](../../../tests/test_analysis_quality_budget.py#L28) — Scoring-/Snapshot-/Budgetlogik und HTTPX-MockTransport. Historischer **Datei**status: passed=14.
+- [test_empty_or_sparse_evidence_does_not_create_a_numeric_score](../../../tests/test_analysis_quality_budget.py#L28) — Scoring-/Snapshot-/Budgetlogik und HTTPX-MockTransport. **Datei**status vom 2026-10-02: passed=14.
   - [Zeile 31](../../../tests/test_analysis_quality_budget.py#L31): ` assert result["score"] is None `
   - [Zeile 32](../../../tests/test_analysis_quality_budget.py#L32): ` assert result["level"] == "insufficient" `
   - [Zeile 33](../../../tests/test_analysis_quality_budget.py#L33): ` assert result["coverage_status"] == "insufficient" `
@@ -1081,7 +1066,9 @@ Quellen werden normalisiert, nummeriert und an den richtigen Run/Antworttext geb
 **Testdateien:**
 
 - [tests/js/agent-citations.test.mjs](../../../tests/js/agent-citations.test.mjs)
+- [tests/js/claim-mark-joins.test.mjs](../../../tests/js/claim-mark-joins.test.mjs)
 - [tests/js/source-catalog-refs.test.mjs](../../../tests/js/source-catalog-refs.test.mjs)
+- [tests/js/source-url-identity.test.mjs](../../../tests/js/source-url-identity.test.mjs)
 - [tests/test_citations.py](../../../tests/test_citations.py)
 - [tests/test_consensus_citations.py](../../../tests/test_consensus_citations.py)
 - [tests/test_source_catalog.py](../../../tests/test_source_catalog.py)
@@ -1090,7 +1077,7 @@ Quellen werden normalisiert, nummeriert und an den richtigen Run/Antworttext geb
 
 **Konkrete Teilbelege:**
 
-- [resolves sparse IDs by identity and leaves missing citations unresolved](../../../tests/js/source-catalog-refs.test.mjs#L14) — JavaScript-Modultest mit jsdom. Historischer **Datei**status: passed=4.
+- [resolves sparse IDs by identity and leaves missing citations unresolved](../../../tests/js/source-catalog-refs.test.mjs#L14) — JavaScript-Modultest mit jsdom. **Datei**status vom 2026-10-02: passed=4.
   - [Zeile 18](../../../tests/js/source-catalog-refs.test.mjs#L18): ` expect(refs.map(item => item.src?.url || null)).toEqual([null, 'https://two.example', 'https://seven.example']); `
 
 <a id="cons-04"></a>
@@ -1125,9 +1112,9 @@ Resolve verwendet vorhandene Konflikte/Kontext, bleibt tier-/ownergebunden und n
 
 **Konkrete Teilbelege:**
 
-- [test_resolve_does_not_persist_after_the_bookmark_revision_advanced](../../../tests/test_resolve_round.py#L400) — Resolve-Unit-/Routertests mit Engine-/DB-Doubles. Historischer **Datei**status: passed=23.
-  - [Zeile 438](../../../tests/test_resolve_round.py#L438): ` assert persisted is False `
-  - [Zeile 439](../../../tests/test_resolve_round.py#L439): ` assert "resolution" not in bookmark_ref.data["responses"]["differences_data"]["differences"][0] `
+- [test_resolve_does_not_persist_after_the_bookmark_revision_advanced](../../../tests/test_resolve_round.py#L394) — Resolve-Unit-/Routertests mit Engine-/DB-Doubles. **Datei**status vom 2026-10-02: passed=23.
+  - [Zeile 432](../../../tests/test_resolve_round.py#L432): ` assert persisted is False `
+  - [Zeile 433](../../../tests/test_resolve_round.py#L433): ` assert "resolution" not in bookmark_ref.data["responses"]["differences_data"]["differences"][0] `
 
 <a id="cons-05"></a>
 
@@ -1165,27 +1152,20 @@ Vor dem abschließenden Ergebnis werden angeforderte Turn-/Bookmarkwrites versuc
 
 **Konkrete Teilbelege:**
 
-- [recovers a committed turn through GET without another generation, vote or save](../../../tests/js/consensus-recovery.test.mjs#L40) — JavaScript-Modulintegration mit Request-/Stream-Doubles. Historischer **Datei**status: passed=6.
+- [recovers a committed turn through GET without another generation, vote or save](../../../tests/js/consensus-recovery.test.mjs#L40) — JavaScript-Modulintegration mit Request-/Stream-Doubles. **Datei**status vom 2026-10-02: passed=6.
   - [Zeile 43](../../../tests/js/consensus-recovery.test.mjs#L43): ` expect(context.status, context.consensus.error?.message).toBe('succeeded'); `
   - [Zeile 44](../../../tests/js/consensus-recovery.test.mjs#L44): ` expect(context.consensus.text).toBe('Stored answer'); `
   - [Zeile 45](../../../tests/js/consensus-recovery.test.mjs#L45): ` expect(context.consensus.resultId).toBe('stored-result'); `
   - [Zeile 46](../../../tests/js/consensus-recovery.test.mjs#L46): ` expect(context.chatSession.handleConsensusResult).toHaveBeenCalledWith(expect.objectContaining({ chatTurnState: 'completed' })); `
   - [Zeile 47](../../../tests/js/consensus-recovery.test.mjs#L47): ` expect(window.streamSSERequest).toHaveBeenCalledOnce(); `
   - [Zeile 48](../../../tests/js/consensus-recovery.test.mjs#L48): `` expect(window.fetch).toHaveBeenCalledWith(`/chats/${'a'.repeat(32)}/turns/${'b'.repeat(32)}`, expect.objectContaining({ cache: 'no-store', headers: { Authorization: 'Bearer token' } })); ``
-  - [Zeile 49](../../../tests/js/consensus-recovery.test.mjs#L49): ` expect(window.recordModelVote).not.toHaveBeenCalled(); `
-  - [Zeile 50](../../../tests/js/consensus-recovery.test.mjs#L50): ` expect(window.saveBookmarkConsensus).not.toHaveBeenCalled(); `
-  - [Zeile 51](../../../tests/js/consensus-recovery.test.mjs#L51): ` expect(window.App.reportCriticalError).not.toHaveBeenCalled(); `
-- [test_consensus_persists_requested_bookmark_before_successful_final_event](../../../tests/test_consensus_chat_history.py#L249) — Router/SSE-Verträge mit RecordingStore und Engine-Doubles. Historischer **Datei**status: passed=52.
-  - [Zeile 304](../../../tests/test_consensus_chat_history.py#L304): ` assert response.status_code == 200 `
-  - [Zeile 305](../../../tests/test_consensus_chat_history.py#L305): ` assert body["bookmark_persisted"] is True `
-  - [Zeile 306](../../../tests/test_consensus_chat_history.py#L306): ` assert body["bookmark_meta"]["id"] == "stable_bookmark" `
-  - [Zeile 307](../../../tests/test_consensus_chat_history.py#L307): ` assert len(writes) == 1 `
-  - [Zeile 309](../../../tests/test_consensus_chat_history.py#L309): ` assert uid == UID `
-  - [Zeile 310](../../../tests/test_consensus_chat_history.py#L310): ` assert data["chatId"] == CHAT_ID `
-  - [Zeile 311](../../../tests/test_consensus_chat_history.py#L311): ` assert data["turnId"] == TURN_ID `
-  - [Zeile 312](../../../tests/test_consensus_chat_history.py#L312): ` assert data["previousTurn"]["consensus"] == "Earlier consensus" `
-  - [Zeile 313](../../../tests/test_consensus_chat_history.py#L313): ` assert authoritative["model_responses"] == {         "OpenAI": "OpenAI answer",         "Mistral": "Mistral answer",     } `
-  - [Zeile 317](../../../tests/test_consensus_chat_history.py#L317): ` assert store.completions `
+- [test_consensus_persists_requested_bookmark_before_successful_final_event](../../../tests/test_consensus_chat_history.py#L251) — Router/SSE-Verträge mit RecordingStore und Engine-Doubles. **Datei**status vom 2026-10-02: passed=52.
+  - [Zeile 306](../../../tests/test_consensus_chat_history.py#L306): ` assert response.status_code == 200 `
+  - [Zeile 307](../../../tests/test_consensus_chat_history.py#L307): ` assert body["bookmark_persisted"] is True `
+  - [Zeile 308](../../../tests/test_consensus_chat_history.py#L308): ` assert body["bookmark_meta"]["id"] == "stable_bookmark" `
+  - [Zeile 309](../../../tests/test_consensus_chat_history.py#L309): ` assert len(writes) == 1 `
+  - [Zeile 311](../../../tests/test_consensus_chat_history.py#L311): ` assert uid == UID `
+  - [Zeile 312](../../../tests/test_consensus_chat_history.py#L312): ` assert data["chatId"] == CHAT_ID `
 
 <a id="agent-01"></a>
 
@@ -1221,12 +1201,13 @@ Modellaufrufe benötigen atomare Admission; Tokens, Kosten, Reserven und unbekan
 - [tests/test_agent_budget_config.py](../../../tests/test_agent_budget_config.py)
 - [tests/test_agent_capacity.py](../../../tests/test_agent_capacity.py)
 - [tests/test_agent_quota_recovery.py](../../../tests/test_agent_quota_recovery.py)
+- [tests/test_agent_root_compaction.py](../../../tests/test_agent_root_compaction.py)
 
 </details>
 
 **Konkrete Teilbelege:**
 
-- [test_final_usage_replaces_cumulative_values_and_releases_reservation](../../../tests/test_agent_accounting_audit.py#L85) — Abrechnung über realen Agent-Loop und geskripteten Transport. Historischer **Datei**status: passed=58.
+- [test_final_usage_replaces_cumulative_values_and_releases_reservation](../../../tests/test_agent_accounting_audit.py#L85) — Abrechnung über realen Agent-Loop und geskripteten Transport. **Datei**status vom 2026-10-02: passed=58.
   - [Zeile 91](../../../tests/test_agent_accounting_audit.py#L91): ` assert budget['used'] == 130 and budget['reserved'] == budget['unknown'] == 0 `
   - [Zeile 92](../../../tests/test_agent_accounting_audit.py#L92): ` assert loop.completion.usage['complete'] `
 
@@ -1234,7 +1215,7 @@ Modellaufrufe benötigen atomare Admission; Tokens, Kosten, Reserven und unbekan
 
 ## AGENT-02 · Chatpolicy und Legacy-Toolloop
 
-Agent-Chat erlaubt registrierte Tools/Modelle und verwendet das atomare Kontotokenbudget; aktive Chats haben keine alten Gesamtzeit-/Call-/Suchlimits. Parallelität, Nachrichtenformate, Provider-Kontext und Stillstandsfristen bleiben begrenzt. Legacy-AgentLoop behält seine separate begrenzte Policy.
+Aktive Chats verwenden das Kontotokenbudget, keine alten Gesamtlauf-/Calllimits. Parallele Vergleiche unterstützen Quorum oder alle Modelle, Tiefe und Antwortbeginn; eine Suchkonfiguration gilt für alle Modelle, Judges suchen nicht. Unfertige Vergleichstexte bleiben markiert, Reasoningsignaturen korrekt fortsetzbar.
 
 **Anforderungsbasis:** [docs/codebase-map.md](../../codebase-map.md) · ` documented_contract `. Die Basis ist eine Fundstelle, keine Behauptung, dass ältere Spezifikationen jede aktuelle Klausel wörtlich enthalten; [abweichende Oracles](decisions.md) beachten.
 
@@ -1262,6 +1243,7 @@ Agent-Chat erlaubt registrierte Tools/Modelle und verwendet das atomare Kontotok
 - [tests/test_agent_continuation.py](../../../tests/test_agent_continuation.py)
 - [tests/test_agent_contradictions.py](../../../tests/test_agent_contradictions.py)
 - [tests/test_agent_loop.py](../../../tests/test_agent_loop.py)
+- [tests/test_agent_reasoning_continuation.py](../../../tests/test_agent_reasoning_continuation.py)
 - [tests/test_agent_reliability.py](../../../tests/test_agent_reliability.py)
 - [tests/test_agent_search.py](../../../tests/test_agent_search.py)
 - [tests/test_agent_synthesis_context.py](../../../tests/test_agent_synthesis_context.py)
@@ -1270,19 +1252,16 @@ Agent-Chat erlaubt registrierte Tools/Modelle und verwendet das atomare Kontotok
 
 **Konkrete Teilbelege:**
 
-- [test_more_than_one_hundred_steps_and_seventeen_minutes_complete_with_live_lease](../../../tests/test_agent_continuation.py#L46) — Langlauf-/Recovery-Verträge mit Fake-Uhr, Store und Providern. Historischer **Datei**status: passed=13.
-  - [Zeile 66](../../../tests/test_agent_continuation.py#L66): ` assert loop.budget.deadline == float("inf") `
-  - [Zeile 70](../../../tests/test_agent_continuation.py#L70): ` assert saved["status"] == "completed" and saved["consensus"] == "Finished after many rounds." `
-  - [Zeile 71](../../../tests/test_agent_continuation.py#L71): ` assert timer.stamp - started == timedelta(minutes=17) `
-  - [Zeile 72](../../../tests/test_agent_continuation.py#L72): ` assert root["step_states"]["completion:101"] == "succeeded" `
-  - [Zeile 73](../../../tests/test_agent_continuation.py#L73): ` assert root["policy"]["seconds"] is None and root["policy"]["max_calls"] is None `
-  - [Zeile 74](../../../tests/test_agent_continuation.py#L74): ` assert loop.tools_used == 101 and loop.budget.calls == 102 `
-  - [Zeile 75](../../../tests/test_agent_continuation.py#L75): ` assert totals(store)["unsettled_calls"] == 0 `
-  - [Zeile 76](../../../tests/test_agent_continuation.py#L76): ` assert all(searches) `
-  - [Zeile 78](../../../tests/test_agent_continuation.py#L78): ` assert quota["used"] == 102 * 120 and quota["reserved"] == 0 `
-- [test_consensus_and_legacy_analysis_budgets_remain_bounded](../../../tests/test_agent_continuation.py#L155) — Langlauf-/Recovery-Verträge mit Fake-Uhr, Store und Providern. Historischer **Datei**status: passed=13.
-  - [Zeile 157](../../../tests/test_agent_continuation.py#L157): ` with pytest.raises(AnalysisBudgetExceeded, match="deadline"): `
-  - [Zeile 159](../../../tests/test_agent_continuation.py#L159): ` assert not AgentPolicy.from_config(defaults()).account_budget_only `
+- [test_more_than_one_hundred_steps_and_seventeen_minutes_complete_with_live_lease](../../../tests/test_agent_continuation.py#L45) — Langlauf-/Recovery-Verträge mit Fake-Uhr, Store und Providern. **Datei**status vom 2026-10-02: passed=13.
+  - [Zeile 65](../../../tests/test_agent_continuation.py#L65): ` assert loop.budget.deadline == float("inf") `
+  - [Zeile 69](../../../tests/test_agent_continuation.py#L69): ` assert saved["status"] == "completed" and saved["consensus"] == "Finished after many rounds." `
+  - [Zeile 70](../../../tests/test_agent_continuation.py#L70): ` assert timer.stamp - started == timedelta(minutes=17) `
+  - [Zeile 71](../../../tests/test_agent_continuation.py#L71): ` assert root["step_states"]["completion:101"] == "succeeded" `
+  - [Zeile 72](../../../tests/test_agent_continuation.py#L72): ` assert root["policy"]["seconds"] is None and root["policy"]["max_calls"] is None `
+  - [Zeile 73](../../../tests/test_agent_continuation.py#L73): ` assert loop.tools_used == 101 and loop.budget.calls == 102 `
+- [test_consensus_and_legacy_analysis_budgets_remain_bounded](../../../tests/test_agent_continuation.py#L154) — Langlauf-/Recovery-Verträge mit Fake-Uhr, Store und Providern. **Datei**status vom 2026-10-02: passed=13.
+  - [Zeile 156](../../../tests/test_agent_continuation.py#L156): ` with pytest.raises(AnalysisBudgetExceeded, match="deadline"): `
+  - [Zeile 158](../../../tests/test_agent_continuation.py#L158): ` assert not AgentPolicy.from_config(defaults()).account_budget_only `
 
 <a id="agent-03"></a>
 
@@ -1314,29 +1293,19 @@ Orchestrator und Worker besitzen eigene Identitäten/Verläufe, geordnete dedupl
 - [tests/js/agent-delegation.test.mjs](../../../tests/js/agent-delegation.test.mjs)
 - [tests/test_agent_delegation.py](../../../tests/test_agent_delegation.py)
 - [tests/test_agent_reliability.py](../../../tests/test_agent_reliability.py)
+- [tests/test_agent_root_compaction.py](../../../tests/test_agent_root_compaction.py)
 
 </details>
 
 **Konkrete Teilbelege:**
 
-- [test_parallel_question_answer_rework_and_review_persist_same_session_and_total_costs](../../../tests/test_agent_delegation.py#L102) — Echte Workerthreads/Mailboxen mit Store- und Provider-Doubles. Historischer **Datei**status: passed=16.
+- [test_parallel_question_answer_rework_and_review_persist_same_session_and_total_costs](../../../tests/test_agent_delegation.py#L102) — Echte Workerthreads/Mailboxen mit Store- und Provider-Doubles. **Datei**status vom 2026-10-02: passed=16.
   - [Zeile 106](../../../tests/test_agent_delegation.py#L106): ` assert loop.completion.text == "Product 6; sum 5." `
   - [Zeile 107](../../../tests/test_agent_delegation.py#L107): ` assert len(loop.workers) == 2 `
   - [Zeile 108](../../../tests/test_agent_delegation.py#L108): ` assert script.actions.count("start_agent") == 2 and script.actions.count("send_agent") == 2 `
   - [Zeile 109](../../../tests/test_agent_delegation.py#L109): ` assert all(w.reviewed and not w.thread.is_alive() for w in loop.workers.values()) `
   - [Zeile 113](../../../tests/test_agent_delegation.py#L113): ` assert [m["kind"] for m in messages] == ["question", "answer", "result", "rework", "result", "review"] `
   - [Zeile 114](../../../tests/test_agent_delegation.py#L114): ` assert [m["text"] for m in messages if m["kind"] == "result"] == ["5", "6"] `
-  - [Zeile 115](../../../tests/test_agent_delegation.py#L115): ` assert detail["agent"]["assignment"]["goal"] == "multiply" `
-  - [Zeile 116](../../../tests/test_agent_delegation.py#L116): ` assert any(e.get("agent", {}).get("status") == "question" for e in events) `
-  - [Zeile 118](../../../tests/test_agent_delegation.py#L118): ` assert seqs == sorted(set(seqs)) `
-  - [Zeile 119](../../../tests/test_agent_delegation.py#L119): ` assert totals(store)["calls"] == loop.costs.calls `
-  - [Zeile 120](../../../tests/test_agent_delegation.py#L120): ` assert totals(store)["estimated_cost_nano_usd"] == loop.costs.calls * 200_000 `
-  - [Zeile 121](../../../tests/test_agent_delegation.py#L121): ` assert loop.completion.usage["estimated_cost_nano_usd"] == totals(store)["estimated_cost_nano_usd"] `
-  - [Zeile 122](../../../tests/test_agent_delegation.py#L122): ` assert detail["agent"]["usage"]["estimated_cost_nano_usd"] == 600_000 `
-  - [Zeile 124](../../../tests/test_agent_delegation.py#L124): ` assert view["usage"] == loop.completion.usage `
-  - [Zeile 126](../../../tests/test_agent_delegation.py#L126): ` assert page["has_more"] and len(page["messages"]) == 2 `
-  - [Zeile 128](../../../tests/test_agent_delegation.py#L128): ` assert len(next_page["messages"]) == 4 `
-  - [Zeile 129](../../../tests/test_agent_delegation.py#L129): ` with pytest.raises(ChatNotFound): `
 
 <a id="agent-04"></a>
 
@@ -1373,10 +1342,10 @@ Run-/Turn-/Agentdetails sind ownergebunden; recover_only startet nie Modelle. Ab
 
 **Konkrete Teilbelege:**
 
-- [test_recovery_never_starts_a_new_call](../../../tests/test_agent_runs.py#L275) — Store-/API-Verträge mit Auth-/Transport-Doubles. Historischer **Datei**status: passed=38.
-  - [Zeile 280](../../../tests/test_agent_runs.py#L280): ` assert response.status_code == 404 `
-  - [Zeile 281](../../../tests/test_agent_runs.py#L281): ` assert calls == [] `
-  - [Zeile 282](../../../tests/test_agent_runs.py#L282): ` assert store.get_chat(UID, chat_id)["turn_count"] == 0 `
+- [test_recovery_never_starts_a_new_call](../../../tests/test_agent_runs.py#L278) — Store-/API-Verträge mit Auth-/Transport-Doubles. **Datei**status vom 2026-10-02: passed=38.
+  - [Zeile 283](../../../tests/test_agent_runs.py#L283): ` assert response.status_code == 404 `
+  - [Zeile 284](../../../tests/test_agent_runs.py#L284): ` assert calls == [] `
+  - [Zeile 285](../../../tests/test_agent_runs.py#L285): ` assert store.get_chat(UID, chat_id)["turn_count"] == 0 `
 
 <a id="agent-05"></a>
 
@@ -1400,6 +1369,7 @@ Sidebar/Antworten zeigen echte Ereignisse, Reasoning getrennt vom Antworttext, b
 - [static/js/agent-activity.js](../../../static/js/agent-activity.js)
 - [static/js/agent-answer-actions.js](../../../static/js/agent-answer-actions.js)
 - [static/js/agent-chat.js](../../../static/js/agent-chat.js)
+- [static/js/agent-preferences.js](../../../static/js/agent-preferences.js)
 - [static/js/agent-review.js](../../../static/js/agent-review.js)
 - [static/js/sidebar-quota.js](../../../static/js/sidebar-quota.js)
 
@@ -1409,8 +1379,10 @@ Sidebar/Antworten zeigen echte Ereignisse, Reasoning getrennt vom Antworttext, b
 - [tests/e2e/test_agent_comparison_frontend.py](../../../tests/e2e/test_agent_comparison_frontend.py)
 - [tests/e2e/test_agent_delegation_frontend.py](../../../tests/e2e/test_agent_delegation_frontend.py)
 - [tests/e2e/test_agent_status_frontend.py](../../../tests/e2e/test_agent_status_frontend.py)
+- [tests/e2e/test_run_mode_selector.py](../../../tests/e2e/test_run_mode_selector.py)
 - [tests/js/agent-answer-actions.test.mjs](../../../tests/js/agent-answer-actions.test.mjs)
 - [tests/js/agent-chat.test.mjs](../../../tests/js/agent-chat.test.mjs)
+- [tests/js/agent-preferences.test.mjs](../../../tests/js/agent-preferences.test.mjs)
 - [tests/js/agent-review.test.mjs](../../../tests/js/agent-review.test.mjs)
 - [tests/js/sidebar-quota.test.mjs](../../../tests/js/sidebar-quota.test.mjs)
 - [tests/test_agent_progress.py](../../../tests/test_agent_progress.py)
@@ -1419,14 +1391,13 @@ Sidebar/Antworten zeigen echte Ereignisse, Reasoning getrennt vom Antworttext, b
 
 **Konkrete Teilbelege:**
 
-- [test_short_highlights_update_at_boundaries_and_remain_bounded](../../../tests/test_agent_progress.py#L14) — Fortschrittsfunktionen und Loop mit kontrollierter Uhr/Providern. Historischer **Datei**status: passed=10.
+- [test_short_highlights_update_at_boundaries_and_remain_bounded](../../../tests/test_agent_progress.py#L14) — Fortschrittsfunktionen und Loop mit kontrollierter Uhr/Providern. **Datei**status vom 2026-10-02: passed=10.
   - [Zeile 16](../../../tests/test_agent_progress.py#L16): ` assert progress.update(event("Checking the ")) is None `
   - [Zeile 18](../../../tests/test_agent_progress.py#L18): ` assert first["text"] == "Checking the available evidence." `
   - [Zeile 19](../../../tests/test_agent_progress.py#L19): ` assert first["summary_source"] == "excerpt" and first["append"] is False `
   - [Zeile 20](../../../tests/test_agent_progress.py#L20): ` assert progress.update(event(" Next")) is None `
   - [Zeile 24](../../../tests/test_agent_progress.py#L24): ` assert len(value["text"]) <= 542 `
   - [Zeile 25](../../../tests/test_agent_progress.py#L25): ` assert len(value["text"].splitlines()) <= 3 `
-  - [Zeile 26](../../../tests/test_agent_progress.py#L26): ` assert progress.updates <= 8 and len(progress.text) <= 8000 `
 
 <a id="src-01"></a>
 
@@ -1457,7 +1428,7 @@ Abruf validiert URL, DNS, Redirects und Ziel-IP, erhält Host/SNI und begrenzt B
 
 **Konkrete Teilbelege:**
 
-- [test_fetch_pins_ip_and_checks_redirect_again](../../../tests/test_source_verification.py#L436) — Verifikations-/Dokument-/Pipeline-Integration mit Fetch/Judge/HTTPX-Doubles und Threads. Historischer **Datei**status: passed=122.
+- [test_fetch_pins_ip_and_checks_redirect_again](../../../tests/test_source_verification.py#L436) — Verifikations-/Dokument-/Pipeline-Integration mit Fetch/Judge/HTTPX-Doubles und Threads. **Datei**status vom 2026-10-02: passed=122.
   - [Zeile 443](../../../tests/test_source_verification.py#L443): ` assert request.url.host == '93.184.216.34' `
   - [Zeile 444](../../../tests/test_source_verification.py#L444): ` assert request.headers['host'] == 'example.com' `
   - [Zeile 445](../../../tests/test_source_verification.py#L445): ` assert request.extensions['sni_hostname'] == 'example.com' `
@@ -1497,9 +1468,9 @@ Nur geeignete Widersprüche werden anhand vorhandener Quellen geprüft; beide Po
 
 **Konkrete Teilbelege:**
 
-- [test_original_evidence_validation_rejects_invented_or_incomplete_verdicts](../../../tests/test_contradiction_verification.py#L177) — Deterministische Planungs-/Validierungs- und Ausführungstests mit injizierten Fetch/Judge-Funktionen. Historischer **Datei**status: passed=64.
-  - [Zeile 193](../../../tests/test_contradiction_verification.py#L193): ` assert not result['findings'][0]['checked'] `
-  - [Zeile 194](../../../tests/test_contradiction_verification.py#L194): ` assert result['findings'][0]['reason_code'] in ('evidence_mismatch', 'invalid_output') `
+- [test_original_evidence_validation_rejects_invented_or_incomplete_verdicts](../../../tests/test_contradiction_verification.py#L208) — Deterministische Planungs-/Validierungs- und Ausführungstests mit injizierten Fetch/Judge-Funktionen. **Datei**status vom 2026-10-02: passed=67.
+  - [Zeile 224](../../../tests/test_contradiction_verification.py#L224): ` assert not result['findings'][0]['checked'] `
+  - [Zeile 225](../../../tests/test_contradiction_verification.py#L225): ` assert result['findings'][0]['reason_code'] in ('evidence_mismatch', 'invalid_output') `
 
 <a id="src-03"></a>
 
@@ -1533,15 +1504,14 @@ Claims/Resultwrites sind lease-/revisionsgebunden; eigene Keys bleiben im Prozes
 
 **Konkrete Teilbelege:**
 
-- [test_expired_lease_reclaims_unfinished_package_and_rejects_stale_worker](../../../tests/test_source_check_repository.py#L214) — Repository mit lockbasiertem FakeDb und Threads. Historischer **Datei**status: passed=36.
+- [test_expired_lease_reclaims_unfinished_package_and_rejects_stale_worker](../../../tests/test_source_check_repository.py#L214) — Repository mit lockbasiertem FakeDb und Threads. **Datei**status vom 2026-10-02: passed=36.
   - [Zeile 219](../../../tests/test_source_check_repository.py#L219): ` assert repo.claim(job["job_id"], now=now + timedelta(seconds=LEASE_SECONDS - 1)) is None `
   - [Zeile 221](../../../tests/test_source_check_repository.py#L221): ` assert second["lease_token"] != first["lease_token"] `
   - [Zeile 222](../../../tests/test_source_check_repository.py#L222): ` assert second["completed_packages"] == 0 `
   - [Zeile 224](../../../tests/test_source_check_repository.py#L224): ` assert not repo.finish_package(first, result) `
   - [Zeile 225](../../../tests/test_source_check_repository.py#L225): ` assert not repo.retry(first) `
   - [Zeile 226](../../../tests/test_source_check_repository.py#L226): ` assert repo.finish_package(second, result) `
-  - [Zeile 227](../../../tests/test_source_check_repository.py#L227): ` assert repo.get(job["job_id"])["completed_packages"] == 1 `
-- [test_restart_pauses_own_key_work_without_developer_fallback_then_owner_resumes](../../../tests/test_source_check_jobs.py#L80) — Job-Worker mit FakeDb/Fetch/Judge und simulierten Workeridentitäten. Historischer **Datei**status: passed=23.
+- [test_restart_pauses_own_key_work_without_developer_fallback_then_owner_resumes](../../../tests/test_source_check_jobs.py#L80) — Job-Worker mit FakeDb/Fetch/Judge und simulierten Workeridentitäten. **Datei**status vom 2026-10-02: passed=23.
   - [Zeile 89](../../../tests/test_source_check_jobs.py#L89): ` assert jobs.process_one(repo) `
   - [Zeile 90](../../../tests/test_source_check_jobs.py#L90): ` assert repo.get(snapshot['job_id'])['status'] == 'awaiting_credentials' `
   - [Zeile 91](../../../tests/test_source_check_jobs.py#L91): ` assert used == [] `
@@ -1579,7 +1549,7 @@ Jede Seite prüft Owner oder aktive öffentliche Ressource sowie Run/Antwort/Rev
 
 **Konkrete Teilbelege:**
 
-- [test_v4_public_share_rejects_wrong_job_version_on_every_page](../../../tests/test_source_check_api.py#L125) — Router mit SourceCheckRepository/FakeDb und Share-/Topic-Doubles. Historischer **Datei**status: passed=14.
+- [test_v4_public_share_rejects_wrong_job_version_on_every_page](../../../tests/test_source_check_api.py#L125) — Router mit SourceCheckRepository/FakeDb und Share-/Topic-Doubles. **Datei**status vom 2026-10-02: passed=14.
   - [Zeile 138](../../../tests/test_source_check_api.py#L138): ` assert client.get(url, params=params).status_code == 200 `
   - [Zeile 140](../../../tests/test_source_check_api.py#L140): ` assert client.get(url, params=params).status_code == 404 `
 
@@ -1613,16 +1583,19 @@ UI unterscheidet alle Prüfzustände, zeigt Originalpassagen und bindet verspät
 - [tests/js/bookmark-source-check.test.mjs](../../../tests/js/bookmark-source-check.test.mjs)
 - [tests/js/claim-coverage-states.test.mjs](../../../tests/js/claim-coverage-states.test.mjs)
 - [tests/js/contradiction-source-verification.test.mjs](../../../tests/js/contradiction-source-verification.test.mjs)
+- [tests/js/memory-edit-sources.test.mjs](../../../tests/js/memory-edit-sources.test.mjs)
 - [tests/js/source-catalog-refs.test.mjs](../../../tests/js/source-catalog-refs.test.mjs)
 - [tests/js/source-teaser-check.test.mjs](../../../tests/js/source-teaser-check.test.mjs)
+- [tests/js/source-url-identity.test.mjs](../../../tests/js/source-url-identity.test.mjs)
 - [tests/js/source-verification-watch.test.mjs](../../../tests/js/source-verification-watch.test.mjs)
 - [tests/js/source-verification.test.mjs](../../../tests/js/source-verification.test.mjs)
+- [tests/test_source_pills_ui.py](../../../tests/test_source_pills_ui.py)
 
 </details>
 
 **Konkrete Teilbelege:**
 
-- [keeps the compact Sources verdict honest across result and run changes](../../../tests/js/source-verification.test.mjs#L16) — JavaScript-Modulintegration mit jsdom. Historischer **Datei**status: passed=21.
+- [keeps the compact Sources verdict honest across result and run changes](../../../tests/js/source-verification.test.mjs#L16) — JavaScript-Modulintegration mit jsdom. **Datei**status vom 2026-10-02: passed=21.
   - [Zeile 37](../../../tests/js/source-verification.test.mjs#L37): ` expect(tab.dataset.checkState).toBe(state); `
   - [Zeile 38](../../../tests/js/source-verification.test.mjs#L38): ` expect(tab.querySelectorAll('.consensus-source-check-icon')).toHaveLength(1); `
   - [Zeile 39](../../../tests/js/source-verification.test.mjs#L39): ` expect(tab.querySelector('.consensus-source-check-icon').textContent).toBe(icon); `
@@ -1661,7 +1634,7 @@ Ein gültiger eigener Pending-Run wird idempotent veröffentlicht; Sichtbarkeit,
 
 **Konkrete Teilbelege:**
 
-- [ShareFlowTests::test_create_share_is_idempotent](../../../tests/test_share_feature.py#L780) — Große Unit-/Service-/Router-/SSR-Suite mit FakeDb und lokalen Cachethreads. Historischer **Datei**status: passed=151.
+- [ShareFlowTests::test_create_share_is_idempotent](../../../tests/test_share_feature.py#L780) — Große Unit-/Service-/Router-/SSR-Suite mit FakeDb und lokalen Cachethreads. **Datei**status vom 2026-10-02: passed=156.
   - [Zeile 790](../../../tests/test_share_feature.py#L790): ` self.assertEqual(first["share_id"], second["share_id"]) `
   - [Zeile 791](../../../tests/test_share_feature.py#L791): ` self.assertFalse(second["created"]) `
   - [Zeile 792](../../../tests/test_share_feature.py#L792): ` self.assertEqual(len(quota_calls), 1) `
@@ -1694,6 +1667,7 @@ Status/Sichtbarkeit und gewählte Version bestimmen Inhalt, Quellen, Canonical u
 **Testdateien:**
 
 - [tests/test_public_citation_cleanup.py](../../../tests/test_public_citation_cleanup.py)
+- [tests/test_public_markdown.py](../../../tests/test_public_markdown.py)
 - [tests/test_seo_basics.py](../../../tests/test_seo_basics.py)
 - [tests/test_share_feature.py](../../../tests/test_share_feature.py)
 - [tests/test_unscored_history.py](../../../tests/test_unscored_history.py)
@@ -1702,14 +1676,13 @@ Status/Sichtbarkeit und gewählte Version bestimmen Inhalt, Quellen, Canonical u
 
 **Konkrete Teilbelege:**
 
-- [SharePageRouteTests::test_private_share_requires_owner_and_is_never_publicly_cached](../../../tests/test_share_feature.py#L1387) — Große Unit-/Service-/Router-/SSR-Suite mit FakeDb und lokalen Cachethreads. Historischer **Datei**status: passed=151.
-  - [Zeile 1393](../../../tests/test_share_feature.py#L1393): ` self.assertEqual(denied.status_code, 403) `
-  - [Zeile 1394](../../../tests/test_share_feature.py#L1394): ` self.assertNotIn("Photosynthese wandelt", denied.text) `
-  - [Zeile 1400](../../../tests/test_share_feature.py#L1400): ` self.assertEqual(allowed.status_code, 200) `
-  - [Zeile 1401](../../../tests/test_share_feature.py#L1401): ` self.assertEqual(allowed.headers["Cache-Control"], "private, no-store") `
-  - [Zeile 1402](../../../tests/test_share_feature.py#L1402): ` self.assertIn("· Private", allowed.text) `
-  - [Zeile 1403](../../../tests/test_share_feature.py#L1403): ` self.assertNotIn("Report this page", allowed.text) `
-  - [Zeile 1404](../../../tests/test_share_feature.py#L1404): ` self.assertIn("noindex, nofollow", allowed.headers["X-Robots-Tag"]) `
+- [SharePageRouteTests::test_private_share_requires_owner_and_is_never_publicly_cached](../../../tests/test_share_feature.py#L1515) — Große Unit-/Service-/Router-/SSR-Suite mit FakeDb und lokalen Cachethreads. **Datei**status vom 2026-10-02: passed=156.
+  - [Zeile 1521](../../../tests/test_share_feature.py#L1521): ` self.assertEqual(denied.status_code, 403) `
+  - [Zeile 1522](../../../tests/test_share_feature.py#L1522): ` self.assertNotIn("Photosynthese wandelt", denied.text) `
+  - [Zeile 1528](../../../tests/test_share_feature.py#L1528): ` self.assertEqual(allowed.status_code, 200) `
+  - [Zeile 1529](../../../tests/test_share_feature.py#L1529): ` self.assertEqual(allowed.headers["Cache-Control"], "private, no-store") `
+  - [Zeile 1530](../../../tests/test_share_feature.py#L1530): ` self.assertIn("· Private", allowed.text) `
+  - [Zeile 1531](../../../tests/test_share_feature.py#L1531): ` self.assertNotIn("Report this page", allowed.text) `
 
 <a id="share-03"></a>
 
@@ -1742,7 +1715,7 @@ Reports zählen ohne verlorene Inkremente; Schwellwerte und Adminentscheidungen 
 
 **Konkrete Teilbelege:**
 
-- [test_parallel_reports_never_lose_increments_or_noindex_transition](../../../tests/e2e/test_phase2_transactions.py#L161) — Firestore-Emulatorintegration mit echten SDK-Transaktionen und Threads. Historischer **Datei**status: failed=3, passed=1.
+- [test_parallel_reports_never_lose_increments_or_noindex_transition](../../../tests/e2e/test_phase2_transactions.py#L161) — Firestore-Emulatorintegration mit echten SDK-Transaktionen und Threads. **Datei**status vom 2026-10-02: not_run=4.
   - [Zeile 183](../../../tests/e2e/test_phase2_transactions.py#L183): ` assert sorted(counts) == list(range(1, 9)) `
   - [Zeile 184](../../../tests/e2e/test_phase2_transactions.py#L184): ` assert stored["reports_count"] == 8 `
   - [Zeile 185](../../../tests/e2e/test_phase2_transactions.py#L185): ` assert stored["report_reasons"] == {"spam": 8} `
@@ -1778,12 +1751,13 @@ Aktive öffentliche Shares liefern eine PNG-Karte aus dem neuesten gültigen öf
 
 **Konkrete Teilbelege:**
 
-- [ShareSeoEnhancementTests::test_og_card_route_and_meta](../../../tests/test_share_feature.py#L2459) — Große Unit-/Service-/Router-/SSR-Suite mit FakeDb und lokalen Cachethreads. Historischer **Datei**status: passed=151.
-  - [Zeile 2466](../../../tests/test_share_feature.py#L2466): ` self.assertIn("/og.png", page.text) `
-  - [Zeile 2467](../../../tests/test_share_feature.py#L2467): ` self.assertIn("summary_large_image", page.text) `
-  - [Zeile 2468](../../../tests/test_share_feature.py#L2468): ` self.assertEqual(og.status_code, 200) `
-  - [Zeile 2469](../../../tests/test_share_feature.py#L2469): ` self.assertEqual(og.headers["content-type"], "image/png") `
-  - [Zeile 2470](../../../tests/test_share_feature.py#L2470): ` self.assertTrue(og.content.startswith(b"\x89PNG")) `
+- [ShareSeoEnhancementTests::test_og_card_route_and_meta](../../../tests/test_share_feature.py#L2597) — Große Unit-/Service-/Router-/SSR-Suite mit FakeDb und lokalen Cachethreads. **Datei**status vom 2026-10-02: passed=156.
+  - [Zeile 2604](../../../tests/test_share_feature.py#L2604): ` self.assertIn("/og.png", page.text) `
+  - [Zeile 2605](../../../tests/test_share_feature.py#L2605): ` self.assertIn("summary_large_image", page.text) `
+  - [Zeile 2606](../../../tests/test_share_feature.py#L2606): ` self.assertEqual(og.status_code, 200) `
+  - [Zeile 2607](../../../tests/test_share_feature.py#L2607): ` self.assertEqual(og.headers["content-type"], "image/png") `
+  - [Zeile 2608](../../../tests/test_share_feature.py#L2608): ` self.assertTrue(og.content.startswith(b"\x89PNG")) `
+  - [Zeile 2609](../../../tests/test_share_feature.py#L2609): ` self.assertEqual(og.headers["Cache-Control"], share_router.SHARE_CACHE_CONTROL) `
 
 <a id="watch-01"></a>
 
@@ -1816,17 +1790,17 @@ Watches sind ownergebunden, quota-/tierbegrenzt und verwenden konsistente Baseli
 
 **Konkrete Teilbelege:**
 
-- [WatchCrudTests::test_pause_delete_and_resume_keep_owner_counter_consistent](../../../tests/test_watch_feature.py#L410) — Große Service-/Scheduler-/Router-/Mailformat-Suite mit DB-/LLM-/Versand-Doubles plus UI-Sourceverträge. Historischer **Datei**status: passed=146.
-  - [Zeile 420](../../../tests/test_watch_feature.py#L420): ` self.assertEqual(state_store["quota"]["active_count"], 2) `
-  - [Zeile 425](../../../tests/test_watch_feature.py#L425): ` self.assertEqual(state_store["quota"]["active_count"], 1) `
-  - [Zeile 429](../../../tests/test_watch_feature.py#L429): ` self.assertEqual(state_store["quota"]["active_count"], 2) `
-  - [Zeile 431](../../../tests/test_watch_feature.py#L431): ` self.assertEqual(state_store["quota"]["active_count"], 1) `
+- [WatchCrudTests::test_pause_delete_and_resume_keep_owner_counter_consistent](../../../tests/test_watch_feature.py#L413) — Große Service-/Scheduler-/Router-/Mailformat-Suite mit DB-/LLM-/Versand-Doubles plus UI-Sourceverträge. **Datei**status vom 2026-10-02: passed=157.
+  - [Zeile 423](../../../tests/test_watch_feature.py#L423): ` self.assertEqual(state_store["quota"]["active_count"], 2) `
+  - [Zeile 428](../../../tests/test_watch_feature.py#L428): ` self.assertEqual(state_store["quota"]["active_count"], 1) `
+  - [Zeile 432](../../../tests/test_watch_feature.py#L432): ` self.assertEqual(state_store["quota"]["active_count"], 2) `
+  - [Zeile 434](../../../tests/test_watch_feature.py#L434): ` self.assertEqual(state_store["quota"]["active_count"], 1) `
 
 <a id="watch-02"></a>
 
 ## WATCH-02 · Zeitplan, Claim und Ausführung
 
-Lokale Zeit/DST, Lease und deterministische Run-ID erlauben einen Lauf je Slot. Aktueller Tarif/Modellplan, Budget und wiederholte Fehler bestimmen Ausführung/Pause; stale Worker dürfen keinen neuen Stand überschreiben.
+Slots, ownergebundene Workerleases und Konfigurationsgenerationen schützen Pause/Resume/Terminwechsel vor späten Ergebnissen. Aktueller Tarif/Modellplan, Fehlerstatus und belegbasierte Ergebnisannahme bestimmen Lauf und nächste Prüfung; Outbox hält die Zustellabsicht fest.
 
 **Anforderungsbasis:** [docs/codebase-map.md](../../codebase-map.md) · ` documented_contract `. Die Basis ist eine Fundstelle, keine Behauptung, dass ältere Spezifikationen jede aktuelle Klausel wörtlich enthalten; [abweichende Oracles](decisions.md) beachten.
 
@@ -1856,11 +1830,11 @@ Lokale Zeit/DST, Lease und deterministische Run-ID erlauben einen Lauf je Slot. 
 
 **Konkrete Teilbelege:**
 
-- [SchedulerSafetyTests::test_stale_run_cannot_complete_or_fail_newer_claim](../../../tests/test_watch_feature.py#L1065) — Große Service-/Scheduler-/Router-/Mailformat-Suite mit DB-/LLM-/Versand-Doubles plus UI-Sourceverträge. Historischer **Datei**status: passed=146.
-  - [Zeile 1089](../../../tests/test_watch_feature.py#L1089): ` self.assertIsNone(             watch_service.complete_watch_run("w1", claimed, result, db=db)         ) `
-  - [Zeile 1092](../../../tests/test_watch_feature.py#L1092): ` self.assertIsNone(watch_service.fail_watch_run("w1", claimed, db=db)) `
-  - [Zeile 1093](../../../tests/test_watch_feature.py#L1093): ` self.assertEqual(db.stores["watches"]["w1"]["current_run_id"], "new-run") `
-  - [Zeile 1094](../../../tests/test_watch_feature.py#L1094): ` self.assertEqual(db.stores[f"shares/{share_id}/watch_history"], {}) `
+- [SchedulerSafetyTests::test_stale_run_cannot_complete_or_fail_newer_claim](../../../tests/test_watch_feature.py#L1124) — Große Service-/Scheduler-/Router-/Mailformat-Suite mit DB-/LLM-/Versand-Doubles plus UI-Sourceverträge. **Datei**status vom 2026-10-02: passed=157.
+  - [Zeile 1148](../../../tests/test_watch_feature.py#L1148): ` self.assertIsNone( `
+  - [Zeile 1151](../../../tests/test_watch_feature.py#L1151): ` self.assertIsNone(watch_service.fail_watch_run("w1", claimed, db=db)) `
+  - [Zeile 1152](../../../tests/test_watch_feature.py#L1152): ` self.assertEqual(db.stores["watches"]["w1"]["current_run_id"], "new-run") `
+  - [Zeile 1153](../../../tests/test_watch_feature.py#L1153): ` self.assertEqual(db.stores[f"shares/{share_id}/watch_history"], {}) `
 
 <a id="watch-03"></a>
 
@@ -1895,12 +1869,12 @@ Follow wird erst nach atomar konsumierter Challenge aktiv; Rate-/Resendlimits, D
 
 **Konkrete Teilbelege:**
 
-- [FollowerTests::test_cleanup_or_removed_watch_invalidates_outstanding_confirm_link](../../../tests/test_watch_feature.py#L2743) — Große Service-/Scheduler-/Router-/Mailformat-Suite mit DB-/LLM-/Versand-Doubles plus UI-Sourceverträge. Historischer **Datei**status: passed=146.
-  - [Zeile 2746](../../../tests/test_watch_feature.py#L2746): ` self.assertTrue(pending["token"]) `
-  - [Zeile 2751](../../../tests/test_watch_feature.py#L2751): ` with self.assertRaisesRegex(WatchError, "invalid or expired"): `
-  - [Zeile 2753](../../../tests/test_watch_feature.py#L2753): ` self.assertEqual(self.db.stores[watch_followers.FOLLOWERS_COLLECTION], {}) `
-  - [Zeile 2757](../../../tests/test_watch_feature.py#L2757): ` with self.assertRaisesRegex(WatchError, "no Consensus Watch"): `
-  - [Zeile 2759](../../../tests/test_watch_feature.py#L2759): ` self.assertEqual(self.db.stores[watch_followers.FOLLOWERS_COLLECTION], {}) `
+- [FollowerTests::test_cleanup_or_removed_watch_invalidates_outstanding_confirm_link](../../../tests/test_watch_feature.py#L2967) — Große Service-/Scheduler-/Router-/Mailformat-Suite mit DB-/LLM-/Versand-Doubles plus UI-Sourceverträge. **Datei**status vom 2026-10-02: passed=157.
+  - [Zeile 2970](../../../tests/test_watch_feature.py#L2970): ` self.assertTrue(pending["token"]) `
+  - [Zeile 2975](../../../tests/test_watch_feature.py#L2975): ` with self.assertRaisesRegex(WatchError, "invalid or expired"): `
+  - [Zeile 2977](../../../tests/test_watch_feature.py#L2977): ` self.assertEqual(self.db.stores[watch_followers.FOLLOWERS_COLLECTION], {}) `
+  - [Zeile 2981](../../../tests/test_watch_feature.py#L2981): ` with self.assertRaisesRegex(WatchError, "no Consensus Watch"): `
+  - [Zeile 2983](../../../tests/test_watch_feature.py#L2983): ` self.assertEqual(self.db.stores[watch_followers.FOLLOWERS_COLLECTION], {}) `
 
 <a id="watch-04"></a>
 
@@ -1932,13 +1906,13 @@ Secret-Webhook, einmaliger Linktoken und Ownerbindung schützen Verbindung/Aktio
 
 **Konkrete Teilbelege:**
 
-- [TelegramWatchTests::test_watch_delivery_is_deduplicated_and_contains_actions](../../../tests/test_watch_feature.py#L1785) — Große Service-/Scheduler-/Router-/Mailformat-Suite mit DB-/LLM-/Versand-Doubles plus UI-Sourceverträge. Historischer **Datei**status: passed=146.
-  - [Zeile 1799](../../../tests/test_watch_feature.py#L1799): ` self.assertTrue(telegram_watch.send_watch_notification(                 "w1", "run1", "change", watch, result, now=self.now, db=self.db,             )) `
-  - [Zeile 1802](../../../tests/test_watch_feature.py#L1802): ` self.assertFalse(telegram_watch.send_watch_notification(                 "w1", "run1", "change", watch, result, now=self.now, db=self.db,             )) `
-  - [Zeile 1805](../../../tests/test_watch_feature.py#L1805): ` send.assert_called_once() `
-  - [Zeile 1808](../../../tests/test_watch_feature.py#L1808): ` self.assertIn("wm:w1", callbacks) `
-  - [Zeile 1809](../../../tests/test_watch_feature.py#L1809): ` self.assertIn("wp:w1", callbacks) `
-  - [Zeile 1810](../../../tests/test_watch_feature.py#L1810): ` self.assertEqual(len(self.db.stores[telegram_watch.DELIVERIES_COLLECTION]), 1) `
+- [WatchCrudTests::test_free_create_list_update_pause_delete](../../../tests/test_watch_feature.py#L177) — Große Service-/Scheduler-/Router-/Mailformat-Suite mit DB-/LLM-/Versand-Doubles plus UI-Sourceverträge. **Datei**status vom 2026-10-02: passed=157.
+  - [Zeile 179](../../../tests/test_watch_feature.py#L179): ` self.assertEqual(created["status"], "active") `
+  - [Zeile 180](../../../tests/test_watch_feature.py#L180): ` self.assertEqual(created["email_mode"], "changes_only") `
+  - [Zeile 181](../../../tests/test_watch_feature.py#L181): ` self.assertTrue(created["email_enabled"]) `
+  - [Zeile 182](../../../tests/test_watch_feature.py#L182): ` self.assertFalse(created["telegram_enabled"]) `
+  - [Zeile 183](../../../tests/test_watch_feature.py#L183): ` self.assertEqual(created["last_agreement_score"], 60) `
+  - [Zeile 184](../../../tests/test_watch_feature.py#L184): ` self.assertEqual(created["baseline_agreement_score"], 60) `
 
 <a id="watch-05"></a>
 
@@ -1972,12 +1946,12 @@ Brief bündelt fällige Inhalte nach lokaler Zeit. Der persistente Claim rückt 
 
 **Konkrete Teilbelege:**
 
-- [BriefClaimTests::test_claim_advances_before_sending_and_prevents_double_send](../../../tests/test_watch_feature.py#L2231) — Große Service-/Scheduler-/Router-/Mailformat-Suite mit DB-/LLM-/Versand-Doubles plus UI-Sourceverträge. Historischer **Datei**status: passed=146.
-  - [Zeile 2233](../../../tests/test_watch_feature.py#L2233): ` self.assertIsNotNone(claimed) `
-  - [Zeile 2234](../../../tests/test_watch_feature.py#L2234): ` self.assertEqual(claimed["baseline"], self.now - timedelta(days=3)) `
-  - [Zeile 2235](../../../tests/test_watch_feature.py#L2235): ` self.assertGreater(self.store["u1"]["next_send_at"], self.now) `
-  - [Zeile 2236](../../../tests/test_watch_feature.py#L2236): ` self.assertEqual(self.store["u1"]["last_evaluated_at"], self.now) `
-  - [Zeile 2237](../../../tests/test_watch_feature.py#L2237): ` self.assertIsNone(watch_brief._claim_in_transaction(FakeTransaction(), self.ref, self.now)) `
+- [BriefClaimTests::test_claim_advances_before_sending_and_prevents_double_send](../../../tests/test_watch_feature.py#L2433) — Große Service-/Scheduler-/Router-/Mailformat-Suite mit DB-/LLM-/Versand-Doubles plus UI-Sourceverträge. **Datei**status vom 2026-10-02: passed=157.
+  - [Zeile 2435](../../../tests/test_watch_feature.py#L2435): ` self.assertIsNotNone(claimed) `
+  - [Zeile 2436](../../../tests/test_watch_feature.py#L2436): ` self.assertEqual(claimed["baseline"], self.now - timedelta(days=3)) `
+  - [Zeile 2437](../../../tests/test_watch_feature.py#L2437): ` self.assertGreater(self.store["u1"]["next_send_at"], self.now) `
+  - [Zeile 2438](../../../tests/test_watch_feature.py#L2438): ` self.assertEqual(self.store["u1"]["last_evaluated_at"], self.now) `
+  - [Zeile 2439](../../../tests/test_watch_feature.py#L2439): ` self.assertIsNone(watch_brief._claim_in_transaction(FakeTransaction(), self.ref, self.now)) `
 
 <a id="watch-06"></a>
 
@@ -2006,7 +1980,6 @@ Dashboard lädt eigene Metadaten/History und autoritative Limitwerte, Modals erh
 - [tests/e2e/test_mobile_navigation.py](../../../tests/e2e/test_mobile_navigation.py)
 - [tests/e2e/test_phase4_frontend.py](../../../tests/e2e/test_phase4_frontend.py)
 - [tests/js/source-verification-watch.test.mjs](../../../tests/js/source-verification-watch.test.mjs)
-- [tests/js/watch-drift-state.test.mjs](../../../tests/js/watch-drift-state.test.mjs)
 - [tests/js/watch-feature-nudge.test.mjs](../../../tests/js/watch-feature-nudge.test.mjs)
 - [tests/test_phase4_frontend.py](../../../tests/test_phase4_frontend.py)
 
@@ -2014,10 +1987,13 @@ Dashboard lädt eigene Metadaten/History und autoritative Limitwerte, Modals erh
 
 **Konkrete Teilbelege:**
 
-- [reads the server verdict instead of the raw changed flag](../../../tests/js/watch-drift-state.test.mjs#L31) — JavaScript-Modulintegration mit jsdom. Historischer **Datei**status: passed=2.
-  - [Zeile 43](../../../tests/js/watch-drift-state.test.mjs#L43): ` expect(restated.key).toBe("stable"); `
-  - [Zeile 44](../../../tests/js/watch-drift-state.test.mjs#L44): ` expect(restated.label).toBe("Stable"); `
-  - [Zeile 45](../../../tests/js/watch-drift-state.test.mjs#L45): ` expect(restated.summary).toContain("Restated, not moved"); `
+- [test_usage_countdown_tracks_utc_midnight_and_refreshes_server_state](../../../tests/test_phase4_frontend.py#L27) — Quelltextverträge. **Datei**status vom 2026-10-02: passed=14.
+  - [Zeile 31](../../../tests/test_phase4_frontend.py#L31): ` assert "getUTCFullYear()" in countdown `
+  - [Zeile 32](../../../tests/test_phase4_frontend.py#L32): ` assert "Date.UTC(" in countdown `
+  - [Zeile 33](../../../tests/test_phase4_frontend.py#L33): ` assert "window.refreshUsageData?.()" in countdown `
+  - [Zeile 34](../../../tests/test_phase4_frontend.py#L34): ` assert "usageRefreshTargetUtcDay" in countdown `
+  - [Zeile 35](../../../tests/test_phase4_frontend.py#L35): ` assert "refreshed === true" in countdown `
+  - [Zeile 36](../../../tests/test_phase4_frontend.py#L36): ` assert "location.reload()" not in countdown `
 
 <a id="topic-01"></a>
 
@@ -2042,16 +2018,17 @@ Adminrechte, Slugreservierung, Archive/Indexing und unveränderliche Runversione
 
 **Testdateien:**
 
+- [tests/js/admin-topic-editor.test.mjs](../../../tests/js/admin-topic-editor.test.mjs)
 - [tests/test_topics_feature.py](../../../tests/test_topics_feature.py)
 
 </details>
 
 **Konkrete Teilbelege:**
 
-- [test_topic_run_and_latest_pointer_commit_or_fail_together](../../../tests/test_topics_feature.py#L414) — Große Service-/Router-/SSR-Suite mit FakeFirestore; einzelner echter SDK-Queryaufbau mit RPC-Mock. Historischer **Datei**status: passed=58.
-  - [Zeile 420](../../../tests/test_topics_feature.py#L420): ` with pytest.raises(RuntimeError, match="injected transaction failure"): `
-  - [Zeile 425](../../../tests/test_topics_feature.py#L425): ` assert db.documents[("topics", topic["id"])] == before `
-  - [Zeile 426](../../../tests/test_topics_feature.py#L426): ` assert not any(         len(path) == 4 and path[:3] == ("topics", topic["id"], "runs")         for path in db.documents     ) `
+- [test_topic_run_and_latest_pointer_commit_or_fail_together](../../../tests/test_topics_feature.py#L421) — Große Service-/Router-/SSR-Suite mit FakeFirestore; einzelner echter SDK-Queryaufbau mit RPC-Mock. **Datei**status vom 2026-10-02: passed=65.
+  - [Zeile 427](../../../tests/test_topics_feature.py#L427): ` with pytest.raises(RuntimeError, match="injected transaction failure"): `
+  - [Zeile 432](../../../tests/test_topics_feature.py#L432): ` assert db.documents[("topics", topic["id"])] == before `
+  - [Zeile 433](../../../tests/test_topics_feature.py#L433): ` assert not any( `
 
 <a id="topic-02"></a>
 
@@ -2084,14 +2061,14 @@ Die neutrale Pipeline erzeugt neue Topicruns, vorhandene Claimidentitäten werde
 
 **Konkrete Teilbelege:**
 
-- [test_claim_identity_falls_back_to_fresh_keys_when_the_judge_is_unavailable](../../../tests/test_topics_feature.py#L998) — Große Service-/Router-/SSR-Suite mit FakeFirestore; einzelner echter SDK-Queryaufbau mit RPC-Mock. Historischer **Datei**status: passed=58.
-  - [Zeile 1016](../../../tests/test_topics_feature.py#L1016): ` assert [item["key"] for item in position_map["dimensions"]] == ["run-7-0", "run-7-1"] `
+- [test_claim_identity_falls_back_to_fresh_keys_when_the_judge_is_unavailable](../../../tests/test_topics_feature.py#L1098) — Große Service-/Router-/SSR-Suite mit FakeFirestore; einzelner echter SDK-Queryaufbau mit RPC-Mock. **Datei**status vom 2026-10-02: passed=65.
+  - [Zeile 1116](../../../tests/test_topics_feature.py#L1116): ` assert [item["key"] for item in position_map["dimensions"]] == ["run-7-0", "run-7-1"] `
 
 <a id="topic-03"></a>
 
 ## TOPIC-03 · Zeitlicher Claim-/Quellenverlauf
 
-Materialänderung, Formulierungswechsel, fehlende Messung und Claim-Retirement bleiben getrennt; historische Ansicht nutzt nur damals verfügbare Runs/Quellen und erfindet keine Nullscores.
+Neue Belege, reine Wiederbewertung, Modellwechsel und fehlende Messung bleiben getrennt. Held-Runs widerrufen keine stehenden Claims; historische Ansichten verwenden nur damals vorhandene Daten und begrenzte Versionsfenster werden sichtbar ausgewiesen.
 
 **Anforderungsbasis:** [docs/codebase-map.md](../../codebase-map.md) · ` documented_contract `. Die Basis ist eine Fundstelle, keine Behauptung, dass ältere Spezifikationen jede aktuelle Klausel wörtlich enthalten; [abweichende Oracles](decisions.md) beachten.
 
@@ -2123,7 +2100,7 @@ Materialänderung, Formulierungswechsel, fehlende Messung und Claim-Retirement b
 
 **Konkrete Teilbelege:**
 
-- [test_a_check_without_a_claim_list_is_a_gap_not_a_retirement](../../../tests/test_claim_ledger.py#L85) — Deterministische Unit-Tests. Historischer **Datei**status: passed=21.
+- [test_a_check_without_a_claim_list_is_a_gap_not_a_retirement](../../../tests/test_claim_ledger.py#L85) — Deterministische Unit-Tests. **Datei**status vom 2026-10-02: passed=21.
   - [Zeile 98](../../../tests/test_claim_ledger.py#L98): ` assert ledger["thin"] == 1 `
   - [Zeile 99](../../../tests/test_claim_ledger.py#L99): ` assert ledger["enumerated"] == 2 `
   - [Zeile 101](../../../tests/test_claim_ledger.py#L101): ` assert claim["streak"] == 2, "the gap must not break the streak" `
@@ -2152,12 +2129,14 @@ Der öffentliche Hub enthält aktive oder pausierte Topics mit veröffentlichtem
 - [app/api/routers/topics.py](../../../app/api/routers/topics.py)
 - [app/services/favicons.py](../../../app/services/favicons.py)
 - [app/services/topics.py](../../../app/services/topics.py)
+- [static/js/public-theme.js](../../../static/js/public-theme.js)
 - [templates/topic.html](../../../templates/topic.html)
 - [templates/topics.html](../../../templates/topics.html)
 
 **Testdateien:**
 
 - [tests/test_phase5_operations.py](../../../tests/test_phase5_operations.py)
+- [tests/test_public_markdown.py](../../../tests/test_public_markdown.py)
 - [tests/test_seo_basics.py](../../../tests/test_seo_basics.py)
 - [tests/test_topics_feature.py](../../../tests/test_topics_feature.py)
 
@@ -2165,14 +2144,13 @@ Der öffentliche Hub enthält aktive oder pausierte Topics mit veröffentlichtem
 
 **Konkrete Teilbelege:**
 
-- [test_public_topic_history_is_ssr_and_historical_version_is_noindex](../../../tests/test_topics_feature.py#L1246) — Große Service-/Router-/SSR-Suite mit FakeFirestore; einzelner echter SDK-Queryaufbau mit RPC-Mock. Historischer **Datei**status: passed=58.
-  - [Zeile 1273](../../../tests/test_topics_feature.py#L1273): ` assert current.status_code == 200 `
-  - [Zeile 1274](../../../tests/test_topics_feature.py#L1274): ` assert "The <strong>current</strong> consensus moved." in current.text `
-  - [Zeile 1275](../../../tests/test_topics_feature.py#L1275): ` assert current.headers["x-robots-tag"] == "index, follow" `
-  - [Zeile 1276](../../../tests/test_topics_feature.py#L1276): ` assert historical.status_code == 200 `
-  - [Zeile 1277](../../../tests/test_topics_feature.py#L1277): ` assert "No confirmed release date exists." in historical.text `
-  - [Zeile 1278](../../../tests/test_topics_feature.py#L1278): ` assert historical.headers["x-robots-tag"] == "noindex, follow" `
-  - [Zeile 1279](../../../tests/test_topics_feature.py#L1279): ` assert "Return to the current consensus" in historical.text `
+- [test_public_topic_history_is_ssr_and_historical_version_is_noindex](../../../tests/test_topics_feature.py#L1440) — Große Service-/Router-/SSR-Suite mit FakeFirestore; einzelner echter SDK-Queryaufbau mit RPC-Mock. **Datei**status vom 2026-10-02: passed=65.
+  - [Zeile 1467](../../../tests/test_topics_feature.py#L1467): ` assert current.status_code == 200 `
+  - [Zeile 1468](../../../tests/test_topics_feature.py#L1468): ` assert "The <strong>current</strong> consensus moved." in current.text `
+  - [Zeile 1469](../../../tests/test_topics_feature.py#L1469): ` assert current.headers["x-robots-tag"] == "index, follow" `
+  - [Zeile 1470](../../../tests/test_topics_feature.py#L1470): ` assert historical.status_code == 200 `
+  - [Zeile 1471](../../../tests/test_topics_feature.py#L1471): ` assert "No confirmed release date exists." in historical.text `
+  - [Zeile 1472](../../../tests/test_topics_feature.py#L1472): ` assert historical.headers["x-robots-tag"] == "noindex, follow" `
 
 <a id="topic-05"></a>
 
@@ -2198,6 +2176,7 @@ Hover/Fokus zeigt den gewählten historischen Check, Touch trennt Vorschau und N
 
 **Testdateien:**
 
+- [tests/js/topic-page.test.mjs](../../../tests/js/topic-page.test.mjs)
 - [tests/test_claim_ledger.py](../../../tests/test_claim_ledger.py)
 - [tests/test_topics_feature.py](../../../tests/test_topics_feature.py)
 
@@ -2205,14 +2184,13 @@ Hover/Fokus zeigt den gewählten historischen Check, Touch trennt Vorschau und N
 
 **Konkrete Teilbelege:**
 
-- [test_the_check_strip_gives_every_check_one_cell_and_a_reason](../../../tests/test_claim_ledger.py#L395) — Deterministische Unit-Tests. Historischer **Datei**status: passed=21.
+- [test_the_check_strip_gives_every_check_one_cell_and_a_reason](../../../tests/test_claim_ledger.py#L395) — Deterministische Unit-Tests. **Datei**status vom 2026-10-02: passed=21.
   - [Zeile 409](../../../tests/test_claim_ledger.py#L409): ` assert [cell["kind"] for cell in strip] == ["first", "stable", "material", "event"] `
   - [Zeile 410](../../../tests/test_claim_ledger.py#L410): ` assert strip[0]["note"] == "First check. The record starts here." `
   - [Zeile 411](../../../tests/test_claim_ledger.py#L411): ` assert strip[2]["note"] == "A rumoured window entered the answer." `
   - [Zeile 413](../../../tests/test_claim_ledger.py#L413): ` assert "entered" in strip[3]["note"] and "dropped out" in strip[3]["note"] `
   - [Zeile 414](../../../tests/test_claim_ledger.py#L414): ` assert strip[-1]["is_latest"] is True `
   - [Zeile 415](../../../tests/test_claim_ledger.py#L415): ` assert [cell["is_latest"] for cell in strip[:-1]] == [False, False, False] `
-  - [Zeile 416](../../../tests/test_claim_ledger.py#L416): ` assert strip[2]["run_id"] == "run-2" `
 
 <a id="seo-01"></a>
 
@@ -2243,7 +2221,7 @@ Read-only Credentials und begrenzte paginierte Erfassung liefern finale Zeiträu
 
 **Konkrete Teilbelege:**
 
-- [test_truncated_ranges_do_not_persist_omitted_rows_as_zeroes](../../../tests/test_seo_data.py#L251) — GSC-/Repository-/Recommendation-/Router-Integration mit Service-/HTTP-/DB-Doubles; UI-Sourceverträge. Historischer **Datei**status: passed=35.
+- [test_truncated_ranges_do_not_persist_omitted_rows_as_zeroes](../../../tests/test_seo_data.py#L251) — GSC-/Repository-/Recommendation-/Router-Integration mit Service-/HTTP-/DB-Doubles; UI-Sourceverträge. **Datei**status vom 2026-10-02: passed=39.
   - [Zeile 269](../../../tests/test_seo_data.py#L269): ` assert result["status"] == "partial" `
   - [Zeile 270](../../../tests/test_seo_data.py#L270): ` assert result["days_requested"] == 90 `
   - [Zeile 271](../../../tests/test_seo_data.py#L271): ` assert result["days_collected"] == 0 `
@@ -2281,12 +2259,12 @@ Seitengruppen, Zeiträume und neueste Läufe werden deterministisch, begrenzt un
 
 **Konkrete Teilbelege:**
 
-- [test_share_dossier_keeps_only_a_bounded_representation](../../../tests/test_seo_data.py#L677) — GSC-/Repository-/Recommendation-/Router-Integration mit Service-/HTTP-/DB-Doubles; UI-Sourceverträge. Historischer **Datei**status: passed=35.
-  - [Zeile 701](../../../tests/test_seo_data.py#L701): ` assert len(dossier["content_representation"]) <= seo_dossier.MAX_SHARE_CONTENT_REPRESENTATION_CHARS `
-  - [Zeile 702](../../../tests/test_seo_data.py#L702): ` assert dossier["source_freshness"]["source_count"] == 1 `
-  - [Zeile 703](../../../tests/test_seo_data.py#L703): ` assert dossier["watch_freshness"]["last_checked_at"] == checked.isoformat() `
-  - [Zeile 704](../../../tests/test_seo_data.py#L704): ` assert dossier["last_content_change_at"] == changed.isoformat() `
-  - [Zeile 705](../../../tests/test_seo_data.py#L705): ` assert dossier["technical_uncertainties"] == [] `
+- [test_share_dossier_keeps_only_a_bounded_representation](../../../tests/test_seo_data.py#L774) — GSC-/Repository-/Recommendation-/Router-Integration mit Service-/HTTP-/DB-Doubles; UI-Sourceverträge. **Datei**status vom 2026-10-02: passed=39.
+  - [Zeile 798](../../../tests/test_seo_data.py#L798): ` assert len(dossier["content_representation"]) <= seo_dossier.MAX_SHARE_CONTENT_REPRESENTATION_CHARS `
+  - [Zeile 799](../../../tests/test_seo_data.py#L799): ` assert dossier["source_freshness"]["source_count"] == 1 `
+  - [Zeile 800](../../../tests/test_seo_data.py#L800): ` assert dossier["watch_freshness"]["last_checked_at"] == checked.isoformat() `
+  - [Zeile 801](../../../tests/test_seo_data.py#L801): ` assert dossier["last_content_change_at"] == changed.isoformat() `
+  - [Zeile 802](../../../tests/test_seo_data.py#L802): ` assert dossier["technical_uncertainties"] == [] `
 
 <a id="seo-03"></a>
 
@@ -2320,13 +2298,13 @@ Deterministische Evidenzgates schützen Gewinner/Graceperiod; Content-Judge umge
 
 **Konkrete Teilbelege:**
 
-- [test_apply_all_never_includes_delete_and_delete_requires_publisher_lineage](../../../tests/test_seo_weekly_review.py#L573) — Review-Service mit Repository-/Judge-/Action-Doubles. Historischer **Datei**status: passed=20.
-  - [Zeile 576](../../../tests/test_seo_weekly_review.py#L576): ` assert service.apply(RUN_ID, admin_uid="admin", apply_all=True)["results"] == [] `
-  - [Zeile 577](../../../tests/test_seo_weekly_review.py#L577): ` assert deleted == [] `
-  - [Zeile 582](../../../tests/test_seo_weekly_review.py#L582): ` assert result["results"][0]["status"] == "error" `
-  - [Zeile 583](../../../tests/test_seo_weekly_review.py#L583): ` assert deleted == [] `
-  - [Zeile 587](../../../tests/test_seo_weekly_review.py#L587): ` assert result["results"][0]["status"] == "success" `
-  - [Zeile 588](../../../tests/test_seo_weekly_review.py#L588): ` assert deleted == ["S" * 16] `
+- [test_apply_all_never_includes_delete_and_delete_requires_publisher_lineage](../../../tests/test_seo_weekly_review.py#L575) — Review-Service mit Repository-/Judge-/Action-Doubles. **Datei**status vom 2026-10-02: passed=20.
+  - [Zeile 578](../../../tests/test_seo_weekly_review.py#L578): ` assert service.apply(RUN_ID, admin_uid="admin", apply_all=True)["results"] == [] `
+  - [Zeile 579](../../../tests/test_seo_weekly_review.py#L579): ` assert deleted == [] `
+  - [Zeile 584](../../../tests/test_seo_weekly_review.py#L584): ` assert result["results"][0]["status"] == "error" `
+  - [Zeile 585](../../../tests/test_seo_weekly_review.py#L585): ` assert deleted == [] `
+  - [Zeile 589](../../../tests/test_seo_weekly_review.py#L589): ` assert result["results"][0]["status"] == "success" `
+  - [Zeile 590](../../../tests/test_seo_weekly_review.py#L590): ` assert deleted == ["S" * 16] `
 
 <a id="seo-04"></a>
 
@@ -2358,10 +2336,10 @@ Reviews folgen dem konfigurierten Intervall von 1–90 Tagen (Default 7) samt lo
 
 **Konkrete Teilbelege:**
 
-- [test_review_uses_at_most_one_portfolio_judge_call](../../../tests/test_seo_weekly_review.py#L179) — Review-Service mit Repository-/Judge-/Action-Doubles. Historischer **Datei**status: passed=20.
-  - [Zeile 182](../../../tests/test_seo_weekly_review.py#L182): ` assert result["status"] == "completed" `
-  - [Zeile 183](../../../tests/test_seo_weekly_review.py#L183): ` assert judge.calls == 1 `
-  - [Zeile 184](../../../tests/test_seo_weekly_review.py#L184): ` assert result["judge_called"] is True `
+- [test_review_uses_at_most_one_portfolio_judge_call](../../../tests/test_seo_weekly_review.py#L181) — Review-Service mit Repository-/Judge-/Action-Doubles. **Datei**status vom 2026-10-02: passed=20.
+  - [Zeile 184](../../../tests/test_seo_weekly_review.py#L184): ` assert result["status"] == "completed" `
+  - [Zeile 185](../../../tests/test_seo_weekly_review.py#L185): ` assert judge.calls == 1 `
+  - [Zeile 186](../../../tests/test_seo_weekly_review.py#L186): ` assert result["judge_called"] is True `
 
 <a id="seo-05"></a>
 
@@ -2421,26 +2399,25 @@ SSR liefert Canonical, Robots/Sitemaps und konsistente Entität; App/Privat/Admi
 
 **Konkrete Teilbelege:**
 
-- [test_pulse_failure_is_retryable_not_a_fake_zero_ranking](../../../tests/test_model_leaderboard.py#L60) — Pages/API mit FakeDb und echten lokalen Threads. Historischer **Datei**status: passed=18.
+- [test_pulse_failure_is_retryable_not_a_fake_zero_ranking](../../../tests/test_model_leaderboard.py#L60) — Pages/API mit FakeDb und echten lokalen Threads. **Datei**status vom 2026-10-02: passed=18.
   - [Zeile 68](../../../tests/test_model_leaderboard.py#L68): ` assert page.status_code == 503 `
   - [Zeile 69](../../../tests/test_model_leaderboard.py#L69): ` assert page.headers["cache-control"] == "no-store" `
   - [Zeile 70](../../../tests/test_model_leaderboard.py#L70): ` assert page.headers["retry-after"] == "60" `
   - [Zeile 71](../../../tests/test_model_leaderboard.py#L71): ` assert "temporarily unavailable" in page.text `
   - [Zeile 72](../../../tests/test_model_leaderboard.py#L72): ` assert 'role="listitem"' not in page.text `
   - [Zeile 73](../../../tests/test_model_leaderboard.py#L73): ` assert "0 judge selections" not in page.text `
-  - [Zeile 74](../../../tests/test_model_leaderboard.py#L74): ` assert client.get("/model-pulse?period=invalid").status_code == 400 `
 
 <a id="admin-01"></a>
 
 ## ADMIN-01 · Konfiguration: Revisionen und Aktivierungsrollback
 
-Adminsave validiert vor Mutation. Prompt- und Agentbudget-Konfiguration speichern Revision/Audit; Modellkonfiguration nutzt einen prozesslokalen Save-/Aktivierungsrollback, Publisherkonfiguration einen eigenen Savepfad ohne dieselbe Revisionsgarantie. Fehlgeschlagene Aktivierung soll den eigenen letzten gültigen Zustand erhalten, aber keine zwischenzeitlichen Writes anderer Prozesse überschreiben. Alte Clients erhalten neue Felder.
+Modellkonfiguration verwendet CAS-Revisionssave und eigenen revisionsgebundenen Rollback; andere Prozesse übernehmen neuere veröffentlichte Revisionen. Prompt-/Budgetkonfiguration bleiben revisioniert; Publisher hat einen separaten Savepfad. Keine gemeinsame atomare DB-/Runtimeaktivierung aller Prozesse.
 
 **Anforderungsbasis:** [docs/codebase-map.md](../../codebase-map.md) · ` documented_contract `. Die Basis ist eine Fundstelle, keine Behauptung, dass ältere Spezifikationen jede aktuelle Klausel wörtlich enthalten; [abweichende Oracles](decisions.md) beachten.
 
 **Bewertung:** Teilweise belegt. Dateien liefern Belege für die im Testkatalog beschriebenen Teilfälle. Die Zuordnung behauptet keine vollständige Assertion jeder Vertragskante.
 
-**Testgrenze:** Promptrevisionen haben Emulator-Konkurrenzbelege. Modellrollback ist im Einzelwriter-Fake belegt; P-03 zeigt ein Überschreiben eines simulierten externen Writers. Keine gemeinsame atomare DB-/Runtime-Aktivierung über Prozesse (G-040).
+**Testgrenze:** Revision/CAS und simulierter fremder Write werden geprüft; nativer Mehrprozess-/Firestore- und Aktivierungsausfallnachweis fehlt weiterhin.
 
 **Befunde:** [G-040](gaps.md#g-040). Kein verknüpfter Befund bedeutet keine Vollständigkeitsfreigabe.
 
@@ -2469,20 +2446,13 @@ Adminsave validiert vor Mutation. Prompt- und Agentbudget-Konfiguration speicher
 
 **Konkrete Teilbelege:**
 
-- [test_admin_read_is_write_free_and_save_is_versioned_and_audited](../../../tests/test_prompt_config.py#L94) — Router/Store und Runtime-Prompt-Integration mit Fake-DB. Historischer **Datei**status: passed=19.
+- [test_admin_read_is_write_free_and_save_is_versioned_and_audited](../../../tests/test_prompt_config.py#L94) — Router/Store und Runtime-Prompt-Integration mit Fake-DB. **Datei**status vom 2026-10-02: passed=19.
   - [Zeile 96](../../../tests/test_prompt_config.py#L96): ` assert response.status_code == 200 `
   - [Zeile 97](../../../tests/test_prompt_config.py#L97): ` assert response.json()["config"]["revision"] == 0 `
   - [Zeile 98](../../../tests/test_prompt_config.py#L98): ` assert response.json()["defaults"] == prompt_config.defaults() `
   - [Zeile 99](../../../tests/test_prompt_config.py#L99): ` assert config_store.db.documents == {} `
   - [Zeile 101](../../../tests/test_prompt_config.py#L101): ` assert response.status_code == 200 `
   - [Zeile 103](../../../tests/test_prompt_config.py#L103): ` assert saved["revision"] == 1 and saved["updated_by"] == "admin" `
-  - [Zeile 104](../../../tests/test_prompt_config.py#L104): ` assert saved["prompts"] == changed()["prompts"] `
-  - [Zeile 105](../../../tests/test_prompt_config.py#L105): ` assert config_store.db.documents[("app_config", "prompts")] == config_store.db.documents[("app_config", "prompts", "revisions", "000000000001")] `
-  - [Zeile 106](../../../tests/test_prompt_config.py#L106): ` assert client.get("/api/admin/prompt-config", headers=AUTH).json()["config"] == saved `
-  - [Zeile 108](../../../tests/test_prompt_config.py#L108): ` assert conflict.status_code == 409 `
-  - [Zeile 109](../../../tests/test_prompt_config.py#L109): ` assert config_store.read()["revision"] == 1 `
-  - [Zeile 111](../../../tests/test_prompt_config.py#L111): ` assert restored.status_code == 200 and restored.json()["config"]["revision"] == 2 `
-  - [Zeile 112](../../../tests/test_prompt_config.py#L112): ` assert config_store.db.documents[("app_config", "prompts", "revisions", "000000000001")]["prompts"] == changed()["prompts"] `
 
 <a id="admin-02"></a>
 
@@ -2520,6 +2490,7 @@ Adminaktionen tragen den aktuellen Token, lesen/speichern die passende Ressource
 - [tests/js/admin-prompt-config.test.mjs](../../../tests/js/admin-prompt-config.test.mjs)
 - [tests/js/admin-reasoning-policy.test.mjs](../../../tests/js/admin-reasoning-policy.test.mjs)
 - [tests/js/admin-source-model.test.mjs](../../../tests/js/admin-source-model.test.mjs)
+- [tests/js/admin-topic-editor.test.mjs](../../../tests/js/admin-topic-editor.test.mjs)
 - [tests/js/admin-watch-effective-run.test.mjs](../../../tests/js/admin-watch-effective-run.test.mjs)
 - [tests/test_phase6_architecture.py](../../../tests/test_phase6_architecture.py)
 
@@ -2527,7 +2498,7 @@ Adminaktionen tragen den aktuellen Token, lesen/speichern die passende Ressource
 
 **Konkrete Teilbelege:**
 
-- [keeps the draft after conflict or failure and allows explicit reload](../../../tests/js/admin-prompt-config.test.mjs#L69) — JavaScript-Modultest und ausgeführte Quellcodeausschnitte mit jsdom. Historischer **Datei**status: passed=10.
+- [keeps the draft after conflict or failure and allows explicit reload](../../../tests/js/admin-prompt-config.test.mjs#L69) — JavaScript-Modultest und ausgeführte Quellcodeausschnitte mit jsdom. **Datei**status vom 2026-10-02: passed=10.
   - [Zeile 75](../../../tests/js/admin-prompt-config.test.mjs#L75): ` await vi.waitFor(() => expect(doc.getElementById('promptConfigStatus').textContent).toContain('another session')); `
   - [Zeile 76](../../../tests/js/admin-prompt-config.test.mjs#L76): ` expect(doc.getElementById('prompt-agent').value).toBe('My unsaved draft'); `
   - [Zeile 77](../../../tests/js/admin-prompt-config.test.mjs#L77): ` expect(doc.getElementById('promptConfigDirty').hidden).toBe(false); `
@@ -2570,7 +2541,7 @@ RunRegistry besitzt Ausführung/Abbruch; visibleRunId bestimmt nur Rendering. Hi
 
 **Konkrete Teilbelege:**
 
-- [rejects a write from any other module and leaves the value alone](../../../tests/js/app-state.test.mjs#L36) — JavaScript-Modultest mit jsdom. Historischer **Datei**status: passed=8.
+- [rejects a write from any other module and leaves the value alone](../../../tests/js/app-state.test.mjs#L36) — JavaScript-Modultest mit jsdom. **Datei**status vom 2026-10-02: passed=8.
   - [Zeile 40](../../../tests/js/app-state.test.mjs#L40): ` expect(() => `
   - [Zeile 43](../../../tests/js/app-state.test.mjs#L43): ` expect(window.App.state.get("lastQuestion")).toBe("original"); `
 
@@ -2578,7 +2549,7 @@ RunRegistry besitzt Ausführung/Abbruch; visibleRunId bestimmt nur Rendering. Hi
 
 ## UI-02 · Senden, Presets und Moduswechsel
 
-Eingaben/Modelle/Quoten werden vor Runbeginn geprüft und pro Context eingefroren; Moduswechsel verändert nicht den laufenden Auftrag, Follow-up nutzt autoritative Chatbasis.
+Ein Compare/Consensus/Agent-Modusselektor migriert Legacywerte und synchronisiert Settings. Chatfamilie, Accountzugriff und ausstehende Autorisierung bestimmen effektiven Modus; laufende Konfiguration bleibt eingefroren. Ein Agentpicker verbindet Chatmodell und Vergleiche.
 
 **Anforderungsbasis:** [docs/codebase-map.md](../../codebase-map.md) · ` documented_contract `. Die Basis ist eine Fundstelle, keine Behauptung, dass ältere Spezifikationen jede aktuelle Klausel wörtlich enthalten; [abweichende Oracles](decisions.md) beachten.
 
@@ -2592,20 +2563,26 @@ Eingaben/Modelle/Quoten werden vor Runbeginn geprüft und pro Context eingefrore
 
 **Produktdateien:**
 
+- [static/css/send-glow.css](../../../static/css/send-glow.css)
 - [static/js/agent-mode.js](../../../static/js/agent-mode.js)
 - [static/js/app-core.js](../../../static/js/app-core.js)
 - [static/js/app-init.js](../../../static/js/app-init.js)
 - [static/js/feature-access.js](../../../static/js/feature-access.js)
 - [static/js/model-picker.js](../../../static/js/model-picker.js)
 - [static/js/query-send.js](../../../static/js/query-send.js)
+- [static/js/run-mode.js](../../../static/js/run-mode.js)
 
 **Testdateien:**
 
 - [tests/e2e/test_direct_comparison_preview.py](../../../tests/e2e/test_direct_comparison_preview.py)
+- [tests/e2e/test_run_mode_selector.py](../../../tests/e2e/test_run_mode_selector.py)
 - [tests/js/agent-mode-projection.test.mjs](../../../tests/js/agent-mode-projection.test.mjs)
+- [tests/js/agent-preferences.test.mjs](../../../tests/js/agent-preferences.test.mjs)
 - [tests/js/model-attachment-capability.test.mjs](../../../tests/js/model-attachment-capability.test.mjs)
 - [tests/js/model-family-cap.test.mjs](../../../tests/js/model-family-cap.test.mjs)
 - [tests/js/plus-tier-gates.test.mjs](../../../tests/js/plus-tier-gates.test.mjs)
+- [tests/js/run-mode.test.mjs](../../../tests/js/run-mode.test.mjs)
+- [tests/js/send-button.test.mjs](../../../tests/js/send-button.test.mjs)
 - [tests/test_agent_mode_ui.py](../../../tests/test_agent_mode_ui.py)
 - [tests/test_usage_limit_ui.py](../../../tests/test_usage_limit_ui.py)
 
@@ -2613,21 +2590,13 @@ Eingaben/Modelle/Quoten werden vor Runbeginn geprüft und pro Context eingefrore
 
 **Konkrete Teilbelege:**
 
-- [persists source checks for agent runs and locks every control for direct comparisons](../../../tests/js/agent-mode-projection.test.mjs#L107) — JavaScript-Modultest mit jsdom. Historischer **Datei**status: passed=11.
-  - [Zeile 111](../../../tests/js/agent-mode-projection.test.mjs#L111): ` expect(window.App.isSourceCheckEnabled()).toBe(true); `
-  - [Zeile 112](../../../tests/js/agent-mode-projection.test.mjs#L112): ` expect(toggle.getAttribute('aria-checked')).toBe('true'); `
-  - [Zeile 114](../../../tests/js/agent-mode-projection.test.mjs#L114): ` expect(window.App.isSourceCheckEnabled()).toBe(false); `
-  - [Zeile 115](../../../tests/js/agent-mode-projection.test.mjs#L115): ` expect(window.localStorage.getItem('checkSources')).toBe('false'); `
-  - [Zeile 116](../../../tests/js/agent-mode-projection.test.mjs#L116): ` expect(document.getElementById('sourceCheckMenuSwitch').checked).toBe(false); `
-  - [Zeile 117](../../../tests/js/agent-mode-projection.test.mjs#L117): ` expect(document.getElementById('sourceCheckSwitch').checked).toBe(false); `
-  - [Zeile 118](../../../tests/js/agent-mode-projection.test.mjs#L118): ` expect(document.getElementById('composerSourcesState').textContent).toBe('Off'); `
-  - [Zeile 121](../../../tests/js/agent-mode-projection.test.mjs#L121): ` expect(toggle.getAttribute('aria-checked')).toBe('false'); `
-  - [Zeile 124](../../../tests/js/agent-mode-projection.test.mjs#L124): ` expect(toggle.disabled).toBe(true); `
-  - [Zeile 125](../../../tests/js/agent-mode-projection.test.mjs#L125): ` expect(document.getElementById('sourceCheckMenuSwitch').disabled).toBe(true); `
-  - [Zeile 126](../../../tests/js/agent-mode-projection.test.mjs#L126): ` expect(document.getElementById('sourceCheckSwitch').disabled).toBe(true); `
-  - [Zeile 128](../../../tests/js/agent-mode-projection.test.mjs#L128): ` expect(toggle.disabled).toBe(false); `
-  - [Zeile 131](../../../tests/js/agent-mode-projection.test.mjs#L131): ` expect(window.localStorage.getItem('checkSources')).toBe('true'); `
-  - [Zeile 133](../../../tests/js/agent-mode-projection.test.mjs#L133): ` expect(document.getElementById('sourceCheckSwitch').checked).toBe(true); `
+- [persists source checks for agent runs and locks every control for direct comparisons](../../../tests/js/agent-mode-projection.test.mjs#L114) — JavaScript-Modultest mit jsdom. **Datei**status vom 2026-10-02: passed=10.
+  - [Zeile 118](../../../tests/js/agent-mode-projection.test.mjs#L118): ` expect(window.App.isSourceCheckEnabled()).toBe(true); `
+  - [Zeile 119](../../../tests/js/agent-mode-projection.test.mjs#L119): ` expect(toggle.getAttribute('aria-checked')).toBe('true'); `
+  - [Zeile 121](../../../tests/js/agent-mode-projection.test.mjs#L121): ` expect(window.App.isSourceCheckEnabled()).toBe(false); `
+  - [Zeile 122](../../../tests/js/agent-mode-projection.test.mjs#L122): ` expect(window.localStorage.getItem('checkSources')).toBe('false'); `
+  - [Zeile 123](../../../tests/js/agent-mode-projection.test.mjs#L123): ` expect(document.getElementById('sourceCheckMenuSwitch').checked).toBe(false); `
+  - [Zeile 124](../../../tests/js/agent-mode-projection.test.mjs#L124): ` expect(document.getElementById('sourceCheckSwitch').checked).toBe(false); `
 
 <a id="ui-03"></a>
 
@@ -2656,8 +2625,8 @@ Parser verarbeitet geteilte SSE-Chunks, genau ein finales Ergebnis und verständ
 
 - [tests/e2e/test_consensus_live_progress.py](../../../tests/e2e/test_consensus_live_progress.py)
 - [tests/js/judge-stream-events.test.mjs](../../../tests/js/judge-stream-events.test.mjs)
+- [tests/js/markdown-stream-incremental.test.mjs](../../../tests/js/markdown-stream-incremental.test.mjs)
 - [tests/js/request-deadline.test.mjs](../../../tests/js/request-deadline.test.mjs)
-- [tests/js/run-progress-animation.test.mjs](../../../tests/js/run-progress-animation.test.mjs)
 - [tests/js/run-progress-scope.test.mjs](../../../tests/js/run-progress-scope.test.mjs)
 - [tests/js/sse-completion.test.mjs](../../../tests/js/sse-completion.test.mjs)
 
@@ -2665,15 +2634,16 @@ Parser verarbeitet geteilte SSE-Chunks, genau ein finales Ergebnis und verständ
 
 **Konkrete Teilbelege:**
 
-- [renews streaming liveness and removes timers after completion](../../../tests/js/request-deadline.test.mjs#L22) — JavaScript-Modultest mit jsdom. Historischer **Datei**status: passed=3.
+- [renews streaming liveness and removes timers after completion](../../../tests/js/request-deadline.test.mjs#L22) — JavaScript-Modultest mit jsdom. **Datei**status vom 2026-10-02: passed=3.
   - [Zeile 29](../../../tests/js/request-deadline.test.mjs#L29): ` for (let i = 0; i < 10; i++) { progress(); expect(timers.size).toBe(1); } `
   - [Zeile 32](../../../tests/js/request-deadline.test.mjs#L32): ` expect(result).toBe('done'); expect(timers.size).toBe(0); `
+  - [Zeile 33](../../../tests/js/request-deadline.test.mjs#L33): ` touch(); expect(timers.size).toBe(0); `
 
 <a id="ui-04"></a>
 
 ## UI-04 · Antworten, Markdown und zugängliche Details
 
-Antworttext, Zitate, Mathematik, Marker und gespeicherte Turns rendern konsistent und sanitisiert; Filter entfernen keine Beweise, verborgene Elemente erzeugen keine unsichtbaren Tabstopps.
+Sanitisierte Markdown-/Mathematik-/Antwortansichten bewahren Quellenidentität und gespeicherte Turns. Quellen erscheinen als gruppierbare Faviconpillen, Differences werden nach Schweregrad angezeigt; inkrementelles Streaming erhält fertige Blöcke und vermeidet Remote-Medien.
 
 **Anforderungsbasis:** [docs/codebase-map.md](../../codebase-map.md) · ` documented_contract `. Die Basis ist eine Fundstelle, keine Behauptung, dass ältere Spezifikationen jede aktuelle Klausel wörtlich enthalten; [abweichende Oracles](decisions.md) beachten.
 
@@ -2700,10 +2670,14 @@ Antworttext, Zitate, Mathematik, Marker und gespeicherte Turns rendern konsisten
 - [tests/e2e/test_model_answer_reader.py](../../../tests/e2e/test_model_answer_reader.py)
 - [tests/e2e/test_reader_density.py](../../../tests/e2e/test_reader_density.py)
 - [tests/e2e/test_reader_review_regressions.py](../../../tests/e2e/test_reader_review_regressions.py)
+- [tests/js/claim-mark-joins.test.mjs](../../../tests/js/claim-mark-joins.test.mjs)
 - [tests/js/consensus-anchor.test.mjs](../../../tests/js/consensus-anchor.test.mjs)
 - [tests/js/consensus-coverage-verdict.test.mjs](../../../tests/js/consensus-coverage-verdict.test.mjs)
 - [tests/js/consensus-marker-visibility.test.mjs](../../../tests/js/consensus-marker-visibility.test.mjs)
 - [tests/js/consensus-recovery.test.mjs](../../../tests/js/consensus-recovery.test.mjs)
+- [tests/js/dompurify-vendor.test.mjs](../../../tests/js/dompurify-vendor.test.mjs)
+- [tests/js/markdown-remote-media.test.mjs](../../../tests/js/markdown-remote-media.test.mjs)
+- [tests/js/markdown-stream-incremental.test.mjs](../../../tests/js/markdown-stream-incremental.test.mjs)
 - [tests/js/markdown-table.test.mjs](../../../tests/js/markdown-table.test.mjs)
 - [tests/js/math-render.test.mjs](../../../tests/js/math-render.test.mjs)
 - [tests/js/model-answer-reader.test.mjs](../../../tests/js/model-answer-reader.test.mjs)
@@ -2711,12 +2685,13 @@ Antworttext, Zitate, Mathematik, Marker und gespeicherte Turns rendern konsisten
 - [tests/js/thread-question-disclosure.test.mjs](../../../tests/js/thread-question-disclosure.test.mjs)
 - [tests/test_agreement_verdict_ui.py](../../../tests/test_agreement_verdict_ui.py)
 - [tests/test_consensus_progress_ui.py](../../../tests/test_consensus_progress_ui.py)
+- [tests/test_source_pills_ui.py](../../../tests/test_source_pills_ui.py)
 
 </details>
 
 **Konkrete Teilbelege:**
 
-- [keeps measured agreement and coverage separate](../../../tests/js/consensus-coverage-verdict.test.mjs#L24) — JavaScript-Modulintegration mit jsdom. Historischer **Datei**status: passed=3.
+- [keeps measured agreement and coverage separate](../../../tests/js/consensus-coverage-verdict.test.mjs#L24) — JavaScript-Modulintegration mit jsdom. **Datei**status vom 2026-10-02: passed=3.
   - [Zeile 26](../../../tests/js/consensus-coverage-verdict.test.mjs#L26): ` expect(verdict.querySelector(".verdict-score-num").textContent).toContain("64"); `
   - [Zeile 27](../../../tests/js/consensus-coverage-verdict.test.mjs#L27): ` expect(verdict.textContent).toContain("Coverage: 2/4 claims (50%)"); `
   - [Zeile 28](../../../tests/js/consensus-coverage-verdict.test.mjs#L28): ` expect(verdict.textContent).toContain("evidence incomplete"); `
@@ -2740,6 +2715,7 @@ Ab Plus akzeptierte Dateien werden validiert, komprimiert und pro Turn eingefror
 **Produktdateien:**
 
 - [app/services/llm/attachments.py](../../../app/services/llm/attachments.py)
+- [static/css/composer.css](../../../static/css/composer.css)
 - [static/js/attachments.js](../../../static/js/attachments.js)
 - [static/js/composer-collapse.js](../../../static/js/composer-collapse.js)
 - [static/js/composer-quote.js](../../../static/js/composer-quote.js)
@@ -2748,6 +2724,7 @@ Ab Plus akzeptierte Dateien werden validiert, komprimiert und pro Turn eingefror
 
 - [tests/e2e/test_composer_mode_bar.py](../../../tests/e2e/test_composer_mode_bar.py)
 - [tests/js/attachment-compression.test.mjs](../../../tests/js/attachment-compression.test.mjs)
+- [tests/js/attachment-draft-generation.test.mjs](../../../tests/js/attachment-draft-generation.test.mjs)
 - [tests/js/bookmark-attachments.test.mjs](../../../tests/js/bookmark-attachments.test.mjs)
 - [tests/js/composer-attachments.test.mjs](../../../tests/js/composer-attachments.test.mjs)
 - [tests/js/composer-quote.test.mjs](../../../tests/js/composer-quote.test.mjs)
@@ -2759,7 +2736,7 @@ Ab Plus akzeptierte Dateien werden validiert, komprimiert und pro Turn eingefror
 
 **Konkrete Teilbelege:**
 
-- [shrinks an oversized photo before it is encoded](../../../tests/js/attachment-compression.test.mjs#L106) — JavaScript-Modulintegration mit simuliertem Bild-/Canvasverhalten. Historischer **Datei**status: passed=5.
+- [shrinks an oversized photo before it is encoded](../../../tests/js/attachment-compression.test.mjs#L106) — JavaScript-Modulintegration mit simuliertem Bild-/Canvasverhalten. **Datei**status vom 2026-10-02: passed=5.
   - [Zeile 114](../../../tests/js/attachment-compression.test.mjs#L114): ` expect(attachments).toHaveLength(1); `
   - [Zeile 115](../../../tests/js/attachment-compression.test.mjs#L115): ` expect(attachments[0].mime).toBe("image/jpeg"); `
   - [Zeile 117](../../../tests/js/attachment-compression.test.mjs#L117): ` expect(attachments[0].name).toBe("photo.jpg"); `
@@ -2805,15 +2782,13 @@ Sidebar, Settings, Login und Shared-Modal sind erreichbar, geben Fokus zurück u
 
 **Konkrete Teilbelege:**
 
-- [moves the actual controls and restores their exact desktop slots without duplicates](../../../tests/js/mobile-header.test.mjs#L24) — JavaScript-Modultest mit jsdom. Historischer **Datei**status: passed=3.
+- [moves the actual controls and restores their exact desktop slots without duplicates](../../../tests/js/mobile-header.test.mjs#L24) — JavaScript-Modultest mit jsdom. **Datei**status vom 2026-10-02: passed=3.
   - [Zeile 30](../../../tests/js/mobile-header.test.mjs#L30): ` expect(actions.parentElement.id).toBe('mobileConversationActions'); `
   - [Zeile 31](../../../tests/js/mobile-header.test.mjs#L31): ` expect(views.parentElement.id).toBe('mobileSidebarViews'); `
   - [Zeile 32](../../../tests/js/mobile-header.test.mjs#L32): ` document.getElementById('action').click();expect(listener).toHaveBeenCalledOnce(); `
   - [Zeile 34](../../../tests/js/mobile-header.test.mjs#L34): ` expect(actions.previousElementSibling.id).toBe('before'); `
   - [Zeile 35](../../../tests/js/mobile-header.test.mjs#L35): ` expect(actions.nextElementSibling.id).toBe('after'); `
   - [Zeile 36](../../../tests/js/mobile-header.test.mjs#L36): ` expect(views.parentElement.tagName).toBe('HEADER'); `
-  - [Zeile 37](../../../tests/js/mobile-header.test.mjs#L37): ` expect(document.querySelectorAll('#action')).toHaveLength(1); `
-  - [Zeile 38](../../../tests/js/mobile-header.test.mjs#L38): ` expect(actions.hidden).toBe(false); `
 
 <a id="ui-07"></a>
 
@@ -2888,7 +2863,7 @@ Serverkonfiguration wird escaped über Bootstrap-Daten übergeben; klassische Sk
 
 **Konkrete Teilbelege:**
 
-- [test_source_mode_serves_every_file_in_declared_order](../../../tests/test_frontend_assets.py#L55) — Asset-Funktionen, Dateisystem und isolierte Pages-Routen. Historischer **Datei**status: passed=14.
+- [test_source_mode_serves_every_file_in_declared_order](../../../tests/test_frontend_assets.py#L55) — Asset-Funktionen, Dateisystem und isolierte Pages-Routen. **Datei**status vom 2026-10-02: passed=14.
   - [Zeile 67](../../../tests/test_frontend_assets.py#L67): ` assert served == expected `
 
 <a id="ui-08"></a>
@@ -2928,7 +2903,7 @@ Demo bleibt lokal, startet auf bewusste Aktion, zeigt konsistente Beispielantwor
 
 **Konkrete Teilbelege:**
 
-- [marks every checkable consensus passage with the current coverage contract](../../../tests/js/demo-claim-coverage.test.mjs#L33) — JavaScript-Daten-/Modulintegration mit VM und jsdom. Historischer **Datei**status: passed=2.
+- [marks every checkable consensus passage with the current coverage contract](../../../tests/js/demo-claim-coverage.test.mjs#L33) — JavaScript-Daten-/Modulintegration mit VM und jsdom. **Datei**status vom 2026-10-02: passed=2.
   - [Zeile 60](../../../tests/js/demo-claim-coverage.test.mjs#L60): ` expect(body.querySelectorAll(".cx-claim").length).toBe(19); `
   - [Zeile 61](../../../tests/js/demo-claim-coverage.test.mjs#L61): ` expect(fallback.hidden).toBe(true); `
   - [Zeile 71](../../../tests/js/demo-claim-coverage.test.mjs#L71): ` expect(unmarkedWords, passage.textContent).toBe(""); `
@@ -2962,10 +2937,10 @@ notrack=1 deaktiviert Tracking vor Trackerstart, notrack=0 hebt den Ausschluss a
 
 **Konkrete Teilbelege:**
 
-- [test_partial_ships_the_self_exclusion_switch](../../../tests/test_analytics_partial.py#L59) — Quelltextverträge. Historischer **Datei**status: passed=5.
+- [test_partial_ships_the_self_exclusion_switch](../../../tests/test_analytics_partial.py#L59) — Quelltextverträge. **Datei**status vom 2026-10-02: passed=5.
   - [Zeile 67](../../../tests/test_analytics_partial.py#L67): ` assert 'localStorage.setItem("umami.disabled", "1")' in opt_out `
   - [Zeile 68](../../../tests/test_analytics_partial.py#L68): ` assert 'localStorage.removeItem("umami.disabled")' in opt_out `
-  - [Zeile 69](../../../tests/test_analytics_partial.py#L69): ` assert partial.index("analytics-opt-out.js") < partial.index("cloud.umami.is"), (         "Das Opt-out muss vor dem Tracker laufen, sonst geht der erste Pageview raus."     ) `
+  - [Zeile 69](../../../tests/test_analytics_partial.py#L69): ` assert partial.index("analytics-opt-out.js") < partial.index("cloud.umami.is"), ( `
 
 <a id="data-01"></a>
 
@@ -3000,7 +2975,7 @@ Feedback ist UID-begrenzt, Votes sind owner-/resultgebunden und zählen einmal. 
 
 **Konkrete Teilbelege:**
 
-- [BuildDifferencesStatsDocTests::test_no_content_leaks_into_doc](../../../tests/test_differences_stats.py#L134) — Unit-Tests für Statistikprojektion. Historischer **Datei**status: passed=4.
+- [BuildDifferencesStatsDocTests::test_no_content_leaks_into_doc](../../../tests/test_differences_stats.py#L134) — Unit-Tests für Statistikprojektion. **Datei**status vom 2026-10-02: passed=4.
   - [Zeile 147](../../../tests/test_differences_stats.py#L147): ` self.assertNotIn(forbidden, flat) `
 
 <a id="bench-01"></a>
@@ -3032,6 +3007,7 @@ Stichproben sind deterministisch und Pilot/Final disjunkt; Parser bewertet nur e
 **Testdateien:**
 
 - [tests/test_benchmark_audits.py](../../../tests/test_benchmark_audits.py)
+- [tests/test_benchmark_budget.py](../../../tests/test_benchmark_budget.py)
 - [tests/test_benchmark_credentials.py](../../../tests/test_benchmark_credentials.py)
 - [tests/test_benchmark_dataset.py](../../../tests/test_benchmark_dataset.py)
 - [tests/test_benchmark_mode.py](../../../tests/test_benchmark_mode.py)
@@ -3042,9 +3018,9 @@ Stichproben sind deterministisch und Pilot/Final disjunkt; Parser bewertet nur e
 
 **Konkrete Teilbelege:**
 
-- [ExtractLetterTests::test_final_answer_marker_on_last_line](../../../tests/test_benchmark_parse.py#L9) — Reine Parser-/Auswertungsfunktionen. Historischer **Datei**status: passed=12.
-  - [Zeile 10](../../../tests/test_benchmark_parse.py#L10): ` self.assertEqual(             extract_letter("Brief reason first.\nFINAL_ANSWER: C"),             "C",         ) `
-  - [Zeile 14](../../../tests/test_benchmark_parse.py#L14): ` self.assertEqual(             extract_letter("The supported calculation gives 2/3.\n\nFINAL_ANSWER: J"),             "J",         ) `
+- [ExtractLetterTests::test_final_answer_marker_on_last_line](../../../tests/test_benchmark_parse.py#L9) — Reine Parser-/Auswertungsfunktionen. **Datei**status vom 2026-10-02: passed=12.
+  - [Zeile 10](../../../tests/test_benchmark_parse.py#L10): ` self.assertEqual( `
+  - [Zeile 14](../../../tests/test_benchmark_parse.py#L14): ` self.assertEqual( `
 
 <a id="bench-02"></a>
 
@@ -3073,6 +3049,7 @@ Runs speichern effektive Konfiguration und getrennte Modell-/Consensus-/Synthese
 **Testdateien:**
 
 - [tests/test_benchmark_audits.py](../../../tests/test_benchmark_audits.py)
+- [tests/test_benchmark_budget.py](../../../tests/test_benchmark_budget.py)
 - [tests/test_benchmark_cli.py](../../../tests/test_benchmark_cli.py)
 - [tests/test_benchmark_redaction.py](../../../tests/test_benchmark_redaction.py)
 - [tests/test_benchmark_run.py](../../../tests/test_benchmark_run.py)
@@ -3082,7 +3059,7 @@ Runs speichern effektive Konfiguration und getrennte Modell-/Consensus-/Synthese
 
 **Konkrete Teilbelege:**
 
-- [test_dry_run_creates_run_dir_and_manifest_without_http](../../../tests/test_benchmark_cli.py#L54) — CLI-Funktionen mit Dataset-/Runner-/Publisher-Doubles. Historischer **Datei**status: passed=20.
+- [test_dry_run_creates_run_dir_and_manifest_without_http](../../../tests/test_benchmark_cli.py#L54) — CLI-Funktionen mit Dataset-/Runner-/Publisher-Doubles. **Datei**status vom 2026-10-02: passed=20.
   - [Zeile 56](../../../tests/test_benchmark_cli.py#L56): ` assert rc == 0 `
   - [Zeile 58](../../../tests/test_benchmark_cli.py#L58): ` assert (run_dir / "manifest.json").exists() `
   - [Zeile 59](../../../tests/test_benchmark_cli.py#L59): ` assert not (run_dir / "calls.jsonl").exists() `
@@ -3121,7 +3098,7 @@ Deduplizierte Zellen bestimmen Accuracy/Kosten/Fehler; Publish speichert kompakt
 
 **Konkrete Teilbelege:**
 
-- [test_publish_run_dir_stores_compact_report_only](../../../tests/test_benchmark_reports.py#L76) — Report-Publisher mit FakeCollection. Historischer **Datei**status: passed=2.
+- [test_publish_run_dir_stores_compact_report_only](../../../tests/test_benchmark_reports.py#L76) — Report-Publisher mit FakeCollection. **Datei**status vom 2026-10-02: passed=2.
   - [Zeile 83](../../../tests/test_benchmark_reports.py#L83): ` assert summary["run_id"] == "pilot_v1" `
   - [Zeile 86](../../../tests/test_benchmark_reports.py#L86): ` assert stored["storage_version"] == benchmark_reports.STORAGE_VERSION `
   - [Zeile 87](../../../tests/test_benchmark_reports.py#L87): ` assert stored["report"]["questions"][0]["models"]["openai"]["letter"] == "C" `
@@ -3156,6 +3133,7 @@ Manifest/Fingerprint und Inhaltsnamen passen zu aktuellen Quellen; alter Output 
 
 **Testdateien:**
 
+- [tests/js/dompurify-vendor.test.mjs](../../../tests/js/dompurify-vendor.test.mjs)
 - [tests/js/frontend-output.test.mjs](../../../tests/js/frontend-output.test.mjs)
 - [tests/test_frontend_assets.py](../../../tests/test_frontend_assets.py)
 - [tests/test_frontend_build.py](../../../tests/test_frontend_build.py)
@@ -3164,7 +3142,7 @@ Manifest/Fingerprint und Inhaltsnamen passen zu aktuellen Quellen; alter Output 
 
 **Konkrete Teilbelege:**
 
-- [leaves the old manifest and assets readable when publication fails](../../../tests/js/frontend-output.test.mjs#L56) — Node-Integration mit echtem temporärem Dateisystem. Historischer **Datei**status: passed=4.
+- [leaves the old manifest and assets readable when publication fails](../../../tests/js/frontend-output.test.mjs#L56) — Node-Integration mit echtem temporärem Dateisystem. **Datei**status vom 2026-10-02: passed=4.
   - [Zeile 59](../../../tests/js/frontend-output.test.mjs#L59): ` await expect(publishBuild(dir, new Map([["invalid.js", "bad"]]), {})).rejects.toThrow(); `
   - [Zeile 60](../../../tests/js/frontend-output.test.mjs#L60): ` expect(JSON.parse(await fs.readFile(path.join(dir, "manifest.json"), "utf8"))).toEqual(first.manifest); `
   - [Zeile 61](../../../tests/js/frontend-output.test.mjs#L61): ` expect(await fs.readFile(path.join(dir, first.name), "utf8")).toBe("/* version 1 */"); `
@@ -3181,7 +3159,7 @@ Backend/Frontend/Browser sind reproduzierbar auswählbar; Browser nutzt ausschli
 
 **Testgrenze:** Zwölf Windowsfälle übersprungen; bestehende CI führt nur Publisherregressionen aus.
 
-**Befunde:** [G-024](gaps.md#g-024), [G-025](gaps.md#g-025), [G-026](gaps.md#g-026). Kein verknüpfter Befund bedeutet keine Vollständigkeitsfreigabe.
+**Befunde:** [G-024](gaps.md#g-024), [G-025](gaps.md#g-025), [G-026](gaps.md#g-026), [G-046](gaps.md#g-046). Kein verknüpfter Befund bedeutet keine Vollständigkeitsfreigabe.
 
 <details><summary>Produktdateien und zugeordnete Testdateien</summary>
 
@@ -3202,7 +3180,7 @@ Backend/Frontend/Browser sind reproduzierbar auswählbar; Browser nutzt ausschli
 
 **Konkrete Teilbelege:**
 
-- [test_frontend_preserves_failure_and_stops](../../../tests/test_dev_cli.py#L164) — Windows-Prozessintegration mit Fake-CLI-Werkzeugen. Historischer **Datei**status: skipped=12.
+- [test_frontend_preserves_failure_and_stops](../../../tests/test_dev_cli.py#L164) — Windows-Prozessintegration mit Fake-CLI-Werkzeugen. **Datei**status vom 2026-10-02: passed=24.
   - [Zeile 167](../../../tests/test_dev_cli.py#L167): ` assert result.returncode == 23, result.stdout + result.stderr `
   - [Zeile 168](../../../tests/test_dev_cli.py#L168): ` assert len(calls) == expected_calls `
   - [Zeile 169](../../../tests/test_dev_cli.py#L169): ` assert "[dev] OK" not in result.stdout `
@@ -3239,8 +3217,8 @@ Standalone-Publisher funktioniert ohne Backendabhängigkeiten, verwendet stabile
 
 **Konkrete Teilbelege:**
 
-- [PublisherStandaloneTests::test_scheduled_flow_without_packages_or_external_services](../../../tests/test_publisher_standalone.py#L98) — Echte Python-Subprozesse ohne Site-Packages mit HTTP-Doubles. Historischer **Datei**status: passed=3.
-  - [Zeile 156](../../../tests/test_publisher_standalone.py#L156): ` self.assert_success(self.run_python(["-c", code], env={                     "TEST_MODE": mode,                     "CONSENSUS_API_BASE_URL": "https://consensus.invalid",                     "CONSENSUS_API_KEY": "test-consensus-key",                     "OPENROUTER_API_KEY": "test-topic-key",                     "CONSENSUS_IDEMPOTENCY_KEY": "scheduled-publisher-test",                     "GITHUB_STEP_SUMMARY": str(Path(temp) / "summary.md"),                 })) `
+- [PublisherStandaloneTests::test_scheduled_flow_without_packages_or_external_services](../../../tests/test_publisher_standalone.py#L98) — Echte Python-Subprozesse ohne Site-Packages mit HTTP-Doubles. **Datei**status vom 2026-10-02: passed=2, failed=1.
+  - [Zeile 156](../../../tests/test_publisher_standalone.py#L156): ` self.assert_success(self.run_python(["-c", code], env={ `
 
 <a id="tools-01"></a>
 
@@ -3305,15 +3283,15 @@ Evaluationen haben begrenzte Inputs/Modelle/Budgets und nachvollziehbare Ergebni
 
 **Konkrete Teilbelege:**
 
-- [test_evaluation_dataset_has_complete_v3_expected_verdicts](../../../tests/test_source_verification.py#L753) — Verifikations-/Dokument-/Pipeline-Integration mit Fetch/Judge/HTTPX-Doubles und Threads. Historischer **Datei**status: passed=122.
+- [test_evaluation_dataset_has_complete_v3_expected_verdicts](../../../tests/test_source_verification.py#L753) — Verifikations-/Dokument-/Pipeline-Integration mit Fetch/Judge/HTTPX-Doubles und Threads. **Datei**status vom 2026-10-02: passed=122.
   - [Zeile 755](../../../tests/test_source_verification.py#L755): ` assert all(len(case) == 7 for case in CASES) `
   - [Zeile 757](../../../tests/test_source_verification.py#L757): ` assert expected['contradiction'] == expected['untrusted_instructions'] == 'contradicted' `
   - [Zeile 758](../../../tests/test_source_verification.py#L758): ` assert expected['missing_condition'] == 'partial' `
-- [test_quality_gate_rejects_cheap_bad_unknown_unpaired_or_unused_delegation](../../../tests/test_agent_delegation.py#L296) — Echte Workerthreads/Mailboxen mit Store- und Provider-Doubles. Historischer **Datei**status: passed=16.
-  - [Zeile 302](../../../tests/test_agent_delegation.py#L302): ` assert gate(rows)["approved"] is True `
-  - [Zeile 307](../../../tests/test_agent_delegation.py#L307): ` assert gate(candidate)["approved"] is False `
-  - [Zeile 308](../../../tests/test_agent_delegation.py#L308): ` assert not gate([r for r in rows if r["task"] == "parallel_ledgers"])["approved"] `
-  - [Zeile 309](../../../tests/test_agent_delegation.py#L309): ` assert not gate([{**r, "agents": 0} for r in rows])["approved"] `
+- [test_quality_gate_rejects_cheap_bad_unknown_unpaired_or_unused_delegation](../../../tests/test_agent_delegation.py#L299) — Echte Workerthreads/Mailboxen mit Store- und Provider-Doubles. **Datei**status vom 2026-10-02: passed=16.
+  - [Zeile 305](../../../tests/test_agent_delegation.py#L305): ` assert gate(rows)["approved"] is True `
+  - [Zeile 310](../../../tests/test_agent_delegation.py#L310): ` assert gate(candidate)["approved"] is False `
+  - [Zeile 311](../../../tests/test_agent_delegation.py#L311): ` assert not gate([r for r in rows if r["task"] == "parallel_ledgers"])["approved"] `
+  - [Zeile 312](../../../tests/test_agent_delegation.py#L312): ` assert not gate([{**r, "agents": 0} for r in rows])["approved"] `
 
 <a id="auth-05"></a>
 
@@ -3345,3 +3323,422 @@ Keine.
 **Konkrete Teilbelege:**
 
 Kein repräsentativer Verhaltenstest vorhanden.
+
+<a id="agent-06"></a>
+
+## AGENT-06 · Private Dateien und Nachrichtenzuordnung
+
+Agentdateien sind owner-/chatgebunden, privat gespeichert, begrenzt extrahiert und an ihrem Turn wiederauffindbar. Löschen und Kontosperren verhindern spätere Neuerstellung.
+
+**Anforderungsbasis:** [docs/codebase-map.md](../../codebase-map.md) · ` documented_contract `. Die Basis ist eine Fundstelle, keine Behauptung, dass ältere Spezifikationen jede aktuelle Klausel wörtlich enthalten; [abweichende Oracles](decisions.md) beachten.
+
+**Bewertung:** Teilweise belegt. Aktualisierung 02.10.2026: Assertions und ersetzte Grenzen im aktuellen Dateikatalog beschrieben.
+
+**Testgrenze:** Echte Parser und lokale Dateioperationen, Fake-DB/Transport. Cloudspeicher, IAM und atomare DB-/Objektkaskade sind nicht dadurch belegt.
+
+**Befunde:** [G-044](gaps.md#g-044). Kein verknüpfter Befund bedeutet keine Vollständigkeitsfreigabe.
+
+<details><summary>Produktdateien und zugeordnete Testdateien</summary>
+
+**Produktdateien:**
+
+- [app/api/routers/agent_files.py](../../../app/api/routers/agent_files.py)
+- [app/services/agent_file_extract.py](../../../app/services/agent_file_extract.py)
+- [app/services/agent_files.py](../../../app/services/agent_files.py)
+- [static/css/agent-workspace.css](../../../static/css/agent-workspace.css)
+- [static/js/agent-workspace.js](../../../static/js/agent-workspace.js)
+
+**Testdateien:**
+
+- [tests/e2e/test_agent_workspace_frontend.py](../../../tests/e2e/test_agent_workspace_frontend.py)
+- [tests/js/agent-workspace.test.mjs](../../../tests/js/agent-workspace.test.mjs)
+- [tests/test_agent_files.py](../../../tests/test_agent_files.py)
+- [tests/test_attachment_meta.py](../../../tests/test_attachment_meta.py)
+- [tests/test_pdf_extraction_isolation.py](../../../tests/test_pdf_extraction_isolation.py)
+
+</details>
+
+**Konkrete Teilbelege:**
+
+- [test_real_extraction_storage_download_and_owner_isolation](../../../tests/test_agent_files.py#L28) — Datei-Service, echte Extraktion und isolierte HTTP-Adapter. **Datei**status vom 2026-10-02: passed=24.
+  - [Zeile 32](../../../tests/test_agent_files.py#L32): ` assert raw.startswith(b'Price: 42') `
+  - [Zeile 33](../../../tests/test_agent_files.py#L33): ` assert data['parts'][0]['locator'] == 'lines 1-2' `
+  - [Zeile 34](../../../tests/test_agent_files.py#L34): ` assert 'object_key' not in meta and 'parts' not in meta `
+  - [Zeile 35](../../../tests/test_agent_files.py#L35): ` assert all(not isinstance(v, bytes) for doc in files.db.documents.values() for v in doc.values()) `
+  - [Zeile 38](../../../tests/test_agent_files.py#L38): ` with pytest.raises(ChatNotFound): action() `
+  - [Zeile 39](../../../tests/test_agent_files.py#L39): ` assert files.download('owner', chat, meta['id'])[1] == raw `
+
+<a id="agent-07"></a>
+
+## AGENT-07 · Versionierte DOCX-/PDF-Dokumente
+
+Dokumente entstehen aus validierter Spezifikation; Versionen erhalten Quellenhashes und Vergleichsbelege. Fehlgeschlagene Revisionen verändern keine veröffentlichte Version.
+
+**Anforderungsbasis:** [docs/codebase-map.md](../../codebase-map.md) · ` documented_contract `. Die Basis ist eine Fundstelle, keine Behauptung, dass ältere Spezifikationen jede aktuelle Klausel wörtlich enthalten; [abweichende Oracles](decisions.md) beachten.
+
+**Bewertung:** Teilweise belegt. Aktualisierung 02.10.2026: Assertions und ersetzte Grenzen im aktuellen Dateikatalog beschrieben.
+
+**Testgrenze:** Echte DOCX/PDF-Bytes und ausgewählte Text-/Tabellenassertions; keine vollständige visuelle Drucklayoutkontrolle und keine native Cloudtransaktion.
+
+**Befunde:** —. Kein verknüpfter Befund bedeutet keine Vollständigkeitsfreigabe.
+
+<details><summary>Produktdateien und zugeordnete Testdateien</summary>
+
+**Produktdateien:**
+
+- [app/services/agent_document_render.py](../../../app/services/agent_document_render.py)
+- [app/services/agent_document_spec.py](../../../app/services/agent_document_spec.py)
+- [app/services/agent_documents.py](../../../app/services/agent_documents.py)
+
+**Testdateien:**
+
+- [tests/e2e/test_agent_workspace_frontend.py](../../../tests/e2e/test_agent_workspace_frontend.py)
+- [tests/js/agent-workspace.test.mjs](../../../tests/js/agent-workspace.test.mjs)
+- [tests/test_agent_documents.py](../../../tests/test_agent_documents.py)
+- [tests/test_agent_gmail.py](../../../tests/test_agent_gmail.py)
+
+</details>
+
+**Konkrete Teilbelege:**
+
+- [test_real_docx_pdf_version_and_saved_provenance](../../../tests/test_agent_documents.py#L24) — Dokument-Service mit echten DOCX-/PDF-Renderern und temporärem Speicher. **Datei**status vom 2026-10-02: passed=12.
+  - [Zeile 30](../../../tests/test_agent_documents.py#L30): ` assert len(created["files"]) == 2 `
+  - [Zeile 33](../../../tests/test_agent_documents.py#L33): ` assert meta["turn_id"] == "first" and meta["source_file_ids"] == [source["id"]] `
+  - [Zeile 37](../../../tests/test_agent_documents.py#L37): ` assert "Tax treatment" in text and "Model B prioritizes" in text and "42 EUR" in text `
+  - [Zeile 40](../../../tests/test_agent_documents.py#L40): ` assert document.tables[0].cell(1, 1).text == "42 EUR" `
+  - [Zeile 42](../../../tests/test_agent_documents.py#L42): ` assert saved["sources"][0]["sha256"] == source["sha256"] `
+  - [Zeile 43](../../../tests/test_agent_documents.py#L43): ` assert saved["content_hash"] == created["content_hash"] `
+
+<a id="google-01"></a>
+
+## GOOGLE-01 · Google-Verbindung und Datenfreigabe
+
+OAuth bindet State/PKCE an Browser und Owner; Scopes werden getrennt gewährt, Tokens verschlüsselt gespeichert und nach Widerruf/Disconnect nicht wiederbelebt. Google-Daten dürfen nur mit expliziter Nachrichtenzustimmung und zugelassenem Modellhosting verarbeitet werden.
+
+**Anforderungsbasis:** [docs/codebase-map.md](../../codebase-map.md) · ` documented_contract `. Die Basis ist eine Fundstelle, keine Behauptung, dass ältere Spezifikationen jede aktuelle Klausel wörtlich enthalten; [abweichende Oracles](decisions.md) beachten.
+
+**Bewertung:** Teilweise belegt. Aktualisierung 02.10.2026: Assertions und ersetzte Grenzen im aktuellen Dateikatalog beschrieben.
+
+**Testgrenze:** Signierte synthetische Identität, Google-/DB-/Auth-Doubles. Browser testet echten Callback/CSP mit gemocktem OAuth-Finish, keinen Live-OAuth.
+
+**Befunde:** —. Kein verknüpfter Befund bedeutet keine Vollständigkeitsfreigabe.
+
+<details><summary>Produktdateien und zugeordnete Testdateien</summary>
+
+**Produktdateien:**
+
+- [app/api/routers/agent_google.py](../../../app/api/routers/agent_google.py)
+- [app/services/google_connections.py](../../../app/services/google_connections.py)
+- [static/css/agent-google.css](../../../static/css/agent-google.css)
+- [static/js/agent-google.js](../../../static/js/agent-google.js)
+
+**Testdateien:**
+
+- [tests/e2e/test_agent_google_frontend.py](../../../tests/e2e/test_agent_google_frontend.py)
+- [tests/js/agent-google.test.mjs](../../../tests/js/agent-google.test.mjs)
+- [tests/test_google_connections.py](../../../tests/test_google_connections.py)
+
+</details>
+
+**Konkrete Teilbelege:**
+
+- [test_oauth_state_pkce_browser_owner_and_incremental_scopes](../../../tests/test_google_connections.py#L35) — OAuth-/Connectiondienste, signierte Testidentität und HTTP-Adapter. **Datei**status vom 2026-10-02: passed=15.
+  - [Zeile 38](../../../tests/test_google_connections.py#L38): ` assert query["include_granted_scopes"]==["true"] and query["code_challenge_method"]==["S256"] `
+  - [Zeile 39](../../../tests/test_google_connections.py#L39): ` assert "gmail" not in query["scope"][0] and "calendar.events" not in query["scope"][0] `
+  - [Zeile 41](../../../tests/test_google_connections.py#L41): ` with pytest.raises(GoogleError,match="session"): `
+  - [Zeile 47](../../../tests/test_google_connections.py#L47): ` assert result["capabilities"]==["calendar_read"] `
+  - [Zeile 48](../../../tests/test_google_connections.py#L48): ` assert "new-access" not in json.dumps(list(google.db.documents.values())) and "new-refresh" not in json.dumps(result) `
+  - [Zeile 51](../../../tests/test_google_connections.py#L51): ` assert base64.urlsafe_b64encode(hashlib.sha256(sent["code_verifier"].encode()).digest()).decode().rstrip("=")==query["code_challenge"][0] `
+
+<a id="google-02"></a>
+
+## GOOGLE-02 · Kalender lesen und exakt bestätigen
+
+Nur ausgewählte Kalender und begrenzte Zeiträume werden gelesen. Ein vorgeschlagener Write benötigt den angezeigten Hash, aktuelle Berechtigung und gegebenenfalls ETag. Unklarer Ausgang wird reconciled, nie blind erneut geschrieben.
+
+**Anforderungsbasis:** [docs/codebase-map.md](../../codebase-map.md) · ` documented_contract `. Die Basis ist eine Fundstelle, keine Behauptung, dass ältere Spezifikationen jede aktuelle Klausel wörtlich enthalten; [abweichende Oracles](decisions.md) beachten.
+
+**Bewertung:** Teilweise belegt. Aktualisierung 02.10.2026: Assertions und ersetzte Grenzen im aktuellen Dateikatalog beschrieben.
+
+**Testgrenze:** Parallele Bestätigung im Fake, keine nativen Firestore-Claims oder echte Kalenderzustellung.
+
+**Befunde:** [G-043](gaps.md#g-043). Kein verknüpfter Befund bedeutet keine Vollständigkeitsfreigabe.
+
+<details><summary>Produktdateien und zugeordnete Testdateien</summary>
+
+**Produktdateien:**
+
+- [app/api/routers/agent_google.py](../../../app/api/routers/agent_google.py)
+- [app/services/agent_actions.py](../../../app/services/agent_actions.py)
+- [app/services/agent_calendar.py](../../../app/services/agent_calendar.py)
+- [static/js/agent-google.js](../../../static/js/agent-google.js)
+
+**Testdateien:**
+
+- [tests/e2e/test_agent_google_frontend.py](../../../tests/e2e/test_agent_google_frontend.py)
+- [tests/js/agent-google.test.mjs](../../../tests/js/agent-google.test.mjs)
+- [tests/test_agent_calendar.py](../../../tests/test_agent_calendar.py)
+
+</details>
+
+**Konkrete Teilbelege:**
+
+- [test_prepare_does_not_write_and_confirmation_is_exact_once](../../../tests/test_agent_calendar.py#L42) — Kalender-Service und HTTP-Adapter mit Fake-DB und Google-Transport. **Datei**status vom 2026-10-02: passed=9.
+  - [Zeile 45](../../../tests/test_agent_calendar.py#L45): ` assert writes(google)==[] and prepared["status"]=="pending" `
+  - [Zeile 46](../../../tests/test_agent_calendar.py#L46): ` assert "reviewer@example.org" in prepared["preview"]["attendees"] `
+  - [Zeile 48](../../../tests/test_agent_calendar.py#L48): ` assert repeated["id"]==prepared["id"] `
+  - [Zeile 49](../../../tests/test_agent_calendar.py#L49): ` with pytest.raises(GoogleError,match="changed"): `
+  - [Zeile 51](../../../tests/test_agent_calendar.py#L51): ` assert writes(google)==[] `
+  - [Zeile 55](../../../tests/test_agent_calendar.py#L55): ` assert any(result["status"]=="succeeded" for result in results) `
+
+<a id="google-03"></a>
+
+## GOOGLE-03 · Gmail lesen, Entwurf und Versandfreigabe
+
+Gezielte Suche, begrenzte Thread-/Bodyseiten und private Anhangimporte liefern untrusted Evidenz. Vorschläge binden Empfänger, Replymetadaten und Anhangversion; Versand benötigt separate Sendeberechtigung und erneute Bestätigung nach Änderung.
+
+**Anforderungsbasis:** [docs/codebase-map.md](../../codebase-map.md) · ` documented_contract `. Die Basis ist eine Fundstelle, keine Behauptung, dass ältere Spezifikationen jede aktuelle Klausel wörtlich enthalten; [abweichende Oracles](decisions.md) beachten.
+
+**Bewertung:** Teilweise belegt. Aktualisierung 02.10.2026: Assertions und ersetzte Grenzen im aktuellen Dateikatalog beschrieben.
+
+**Testgrenze:** Echte MIME-Erzeugung und Agentloop mit synthetischem Transport/DB; keine produktive Mailzustellung.
+
+**Befunde:** —. Kein verknüpfter Befund bedeutet keine Vollständigkeitsfreigabe.
+
+<details><summary>Produktdateien und zugeordnete Testdateien</summary>
+
+**Produktdateien:**
+
+- [app/api/routers/agent_google.py](../../../app/api/routers/agent_google.py)
+- [app/services/agent_actions.py](../../../app/services/agent_actions.py)
+- [app/services/agent_gmail.py](../../../app/services/agent_gmail.py)
+- [static/js/agent-google.js](../../../static/js/agent-google.js)
+
+**Testdateien:**
+
+- [tests/e2e/test_agent_gmail_frontend.py](../../../tests/e2e/test_agent_gmail_frontend.py)
+- [tests/js/agent-google.test.mjs](../../../tests/js/agent-google.test.mjs)
+- [tests/test_agent_gmail.py](../../../tests/test_agent_gmail.py)
+
+</details>
+
+**Konkrete Teilbelege:**
+
+- [test_separate_oauth_read_and_send_scopes_and_local_draft_before_send](../../../tests/test_agent_gmail.py#L50) — Gmail-/Aktionsdienste und echter Agentloop mit Transport-/DB-Doubles. **Datei**status vom 2026-10-02: passed=21.
+  - [Zeile 54](../../../tests/test_agent_gmail.py#L54): ` assert 'calendar' not in scope and 'gmail.compose' not in scope and 'gmail.modify' not in scope `
+  - [Zeile 55](../../../tests/test_agent_gmail.py#L55): ` assert ('gmail.send' in scope)==(cap=='gmail_send') `
+  - [Zeile 58](../../../tests/test_agent_gmail.py#L58): ` assert saved['preview']['send_authorized'] is False and not google.wire.calls `
+  - [Zeile 59](../../../tests/test_agent_gmail.py#L59): ` with pytest.raises(GoogleError): actions.confirm('owner',chat,saved['id'],saved['hash']) `
+  - [Zeile 60](../../../tests/test_agent_gmail.py#L60): ` assert actions.get('owner',chat,saved['id'])['status']=='pending' `
+  - [Zeile 61](../../../tests/test_agent_gmail.py#L61): ` assert all(t.name not in {'send_mail','confirm_action'} for t in tool.tools()) `
+
+<a id="cons-06"></a>
+
+## CONS-06 · Autoritative Antwortreceipts und Abschlusszustand
+
+Nur gespeicherte, an Owner/Run/Frage/Modell gebundene Antworten bilden Consensus. Unterbrochene Antworten gelten nicht als fertig, Tokenlimit bleibt sichtbar markiert; unvollständige Synthese wird nicht als vollständiges Ergebnis gespeichert oder gewertet.
+
+**Anforderungsbasis:** [docs/codebase-map.md](../../codebase-map.md) · ` documented_contract `. Die Basis ist eine Fundstelle, keine Behauptung, dass ältere Spezifikationen jede aktuelle Klausel wörtlich enthalten; [abweichende Oracles](decisions.md) beachten.
+
+**Bewertung:** Teilweise belegt. Aktualisierung 02.10.2026: Assertions und ersetzte Grenzen im aktuellen Dateikatalog beschrieben.
+
+**Testgrenze:** Router-/Service- und DOMgrenzen getrennt; synthetische Provider, keine durchgehende persistierte Browserreise.
+
+**Befunde:** —. Kein verknüpfter Befund bedeutet keine Vollständigkeitsfreigabe.
+
+<details><summary>Produktdateien und zugeordnete Testdateien</summary>
+
+**Produktdateien:**
+
+- [app/api/routers/chat.py](../../../app/api/routers/chat.py)
+- [app/services/answer_receipts.py](../../../app/services/answer_receipts.py)
+- [app/services/llm/completion.py](../../../app/services/llm/completion.py)
+- [static/js/consensus-run.js](../../../static/js/consensus-run.js)
+- [static/js/query-send.js](../../../static/js/query-send.js)
+
+**Testdateien:**
+
+- [tests/js/result-integrity.test.mjs](../../../tests/js/result-integrity.test.mjs)
+- [tests/test_phase5_operations.py](../../../tests/test_phase5_operations.py)
+- [tests/test_result_integrity.py](../../../tests/test_result_integrity.py)
+- [tests/test_streaming.py](../../../tests/test_streaming.py)
+
+</details>
+
+**Konkrete Teilbelege:**
+
+- [test_bookmark_quota_counts_merges_and_rejects_oversize](../../../tests/test_phase5_operations.py#L160) — Gemischt: Services mit DB-/HTTP-Doubles, Thread-/Async-Tests und Deployment-Quelltextverträge. **Datei**status vom 2026-10-02: passed=34.
+  - [Zeile 161](../../../tests/test_phase5_operations.py#L161): ` assert persistence_guard.MAX_BOOKMARKS_PER_USER == 250 `
+  - [Zeile 176](../../../tests/test_phase5_operations.py#L176): ` assert first["query"] == "Q" `
+  - [Zeile 177](../../../tests/test_phase5_operations.py#L177): ` assert isinstance(first["timestamp"], datetime) `
+  - [Zeile 178](../../../tests/test_phase5_operations.py#L178): ` assert jsonable_encoder(first)["timestamp"] == first["timestamp"].isoformat() `
+  - [Zeile 179](../../../tests/test_phase5_operations.py#L179): ` assert second["responses"] == {"OpenAI": "A", "Gemini": "B"} `
+  - [Zeile 184](../../../tests/test_phase5_operations.py#L184): ` assert usage["bookmark_count"] == 1 `
+
+<a id="quota-03"></a>
+
+## QUOTA-03 · Gemeinsames Tokenkonto und Nachmessung
+
+Compare, Consensus, Deep Think und Agent nutzen ein UTC-Tageskonto je Nutzer. Admission hält eine Modusschätzung, einzelne Operationen buchen einmal und geben Restholds frei; unbekannter Verbrauch bleibt als begrenzte Schätzung belastet und kann genau einmal nachgemessen werden.
+
+**Anforderungsbasis:** [docs/codebase-map.md](../../codebase-map.md) · ` documented_contract `. Die Basis ist eine Fundstelle, keine Behauptung, dass ältere Spezifikationen jede aktuelle Klausel wörtlich enthalten; [abweichende Oracles](decisions.md) beachten.
+
+**Bewertung:** Teilweise belegt. Aktualisierung 02.10.2026: Assertions und ersetzte Grenzen im aktuellen Dateikatalog beschrieben.
+
+**Testgrenze:** Synthetische Usage/Stats und Fake-Transaktionen; echte Kosten, Native-Retries und Mehrinstanzadmission bleiben gesondert.
+
+**Befunde:** —. Kein verknüpfter Befund bedeutet keine Vollständigkeitsfreigabe.
+
+<details><summary>Produktdateien und zugeordnete Testdateien</summary>
+
+**Produktdateien:**
+
+- [app/services/agent_quota.py](../../../app/services/agent_quota.py)
+- [app/services/agent_usage_reconciliation.py](../../../app/services/agent_usage_reconciliation.py)
+- [app/services/llm/usage_meter.py](../../../app/services/llm/usage_meter.py)
+- [app/services/run_metering.py](../../../app/services/run_metering.py)
+- [app/services/usage_repository.py](../../../app/services/usage_repository.py)
+- [static/js/sidebar-quota.js](../../../static/js/sidebar-quota.js)
+- [static/js/token-budget.js](../../../static/js/token-budget.js)
+
+**Testdateien:**
+
+- [tests/js/sidebar-quota.test.mjs](../../../tests/js/sidebar-quota.test.mjs)
+- [tests/test_agent_root_compaction.py](../../../tests/test_agent_root_compaction.py)
+- [tests/test_agent_usage_reconciliation.py](../../../tests/test_agent_usage_reconciliation.py)
+- [tests/test_run_usage_endpoints.py](../../../tests/test_run_usage_endpoints.py)
+- [tests/test_run_usage_repository.py](../../../tests/test_run_usage_repository.py)
+- [tests/test_usage_authorization.py](../../../tests/test_usage_authorization.py)
+- [tests/test_usage_meter.py](../../../tests/test_usage_meter.py)
+
+</details>
+
+**Konkrete Teilbelege:**
+
+- [test_hundreds_of_sequential_steps_keep_the_root_bounded_without_losing_usage](../../../tests/test_agent_root_compaction.py#L36) — Session-/Usage-Repositories mit Fake-Transaktionen. **Datei**status vom 2026-10-02: passed=7.
+  - [Zeile 43](../../../tests/test_agent_root_compaction.py#L43): ` assert store.claim(*args, loop.model, step=step, run_token=loop.run_token, `
+  - [Zeile 50](../../../tests/test_agent_root_compaction.py#L50): ` assert len(root["step_states"]) == len(root["step_usage"]) == ROOT_SETTLED_STEP_WINDOW `
+  - [Zeile 51](../../../tests/test_agent_root_compaction.py#L51): ` assert len(root["reservations"]) == ROOT_SETTLED_STEP_WINDOW `
+  - [Zeile 52](../../../tests/test_agent_root_compaction.py#L52): ` assert root["compacted_steps"] == steps - ROOT_SETTLED_STEP_WINDOW `
+  - [Zeile 53](../../../tests/test_agent_root_compaction.py#L53): ` assert max(sizes) < ROOT_MAX_BYTES and max(sizes) - min(sizes) < 1024  # flat, not growing `
+  - [Zeile 54](../../../tests/test_agent_root_compaction.py#L54): ` assert root["step_states"][f"completion:{steps - 1}"] == "succeeded" `
+
+<a id="watch-07"></a>
+
+## WATCH-07 · Dauerhafte Benachrichtigungs-Outbox
+
+Watch-/Topicresultat und Zustellabsicht werden zusammen committed. Ein begrenzter Retry prüft vor Versand aktuellen Owner/Status/Consent, Leaseowner sperrt alte Worker; unklare externe Zustellung ist keine globale Exactly-once-Garantie.
+
+**Anforderungsbasis:** [docs/codebase-map.md](../../codebase-map.md) · ` documented_contract `. Die Basis ist eine Fundstelle, keine Behauptung, dass ältere Spezifikationen jede aktuelle Klausel wörtlich enthalten; [abweichende Oracles](decisions.md) beachten.
+
+**Bewertung:** Teilweise belegt. Aktualisierung 02.10.2026: Assertions und ersetzte Grenzen im aktuellen Dateikatalog beschrieben.
+
+**Testgrenze:** Fake-DB und SMTP-/Telegram-Doubles; kein nativer Transaktions- oder produktiver Zustellnachweis.
+
+**Befunde:** [G-045](gaps.md#g-045). Kein verknüpfter Befund bedeutet keine Vollständigkeitsfreigabe.
+
+<details><summary>Produktdateien und zugeordnete Testdateien</summary>
+
+**Produktdateien:**
+
+- [app/services/mailer.py](../../../app/services/mailer.py)
+- [app/services/notification_delivery.py](../../../app/services/notification_delivery.py)
+- [app/services/notification_outbox.py](../../../app/services/notification_outbox.py)
+- [app/services/topic_runner.py](../../../app/services/topic_runner.py)
+- [app/services/watch_scheduler.py](../../../app/services/watch_scheduler.py)
+
+**Testdateien:**
+
+- [tests/test_account_deletion_retry.py](../../../tests/test_account_deletion_retry.py)
+- [tests/test_watch_feature.py](../../../tests/test_watch_feature.py)
+- [tests/test_watch_review_regressions.py](../../../tests/test_watch_review_regressions.py)
+
+</details>
+
+**Konkrete Teilbelege:**
+
+- [test_failed_area_remains_pending_and_only_that_area_is_retried](../../../tests/test_account_deletion_retry.py#L69) — Service mit In-Memory-Datenbank. **Datei**status vom 2026-10-02: passed=1.
+  - [Zeile 163](../../../tests/test_account_deletion_retry.py#L163): ` assert first_errors == ["owned_shares"] `
+  - [Zeile 164](../../../tests/test_account_deletion_retry.py#L164): ` assert second_errors == [] `
+  - [Zeile 165](../../../tests/test_account_deletion_retry.py#L165): ` assert calls["shares"] == 2 `
+  - [Zeile 166](../../../tests/test_account_deletion_retry.py#L166): ` assert calls["source_checks"] == 1 `
+  - [Zeile 167](../../../tests/test_account_deletion_retry.py#L167): ` assert calls["api"] == 1 `
+  - [Zeile 168](../../../tests/test_account_deletion_retry.py#L168): ` assert calls["subcollections"] == 1 `
+
+<a id="watch-08"></a>
+
+## WATCH-08 · Belegbasierte Änderung, Ziel und Probe
+
+Neue Quellen, Wiederbewertung und Modellwechsel bleiben getrennt. Die stehende Antwort bleibt bei dünner Evidenz erhalten; Recheck bestätigt Wiederbewertung. Ein belegtes Ziel beendet den Watch, begrenzte Probes ziehen Vollprüfung nur bei neuen Belegen vor.
+
+**Anforderungsbasis:** [docs/codebase-map.md](../../codebase-map.md) · ` documented_contract `. Die Basis ist eine Fundstelle, keine Behauptung, dass ältere Spezifikationen jede aktuelle Klausel wörtlich enthalten; [abweichende Oracles](decisions.md) beachten.
+
+**Bewertung:** Teilweise belegt. Aktualisierung 02.10.2026: Assertions und ersetzte Grenzen im aktuellen Dateikatalog beschrieben.
+
+**Testgrenze:** Synthetische Quellen/Judgeurteile und jsdom; keine fachliche Live-Qualitätsbewertung oder vollständige Browser/Backend-Probereise.
+
+**Befunde:** —. Kein verknüpfter Befund bedeutet keine Vollständigkeitsfreigabe.
+
+<details><summary>Produktdateien und zugeordnete Testdateien</summary>
+
+**Produktdateien:**
+
+- [app/services/claim_ledger.py](../../../app/services/claim_ledger.py)
+- [app/services/drift_signal.py](../../../app/services/drift_signal.py)
+- [app/services/evidence_change.py](../../../app/services/evidence_change.py)
+- [app/services/watch_probe.py](../../../app/services/watch_probe.py)
+- [static/js/watch-dashboard.js](../../../static/js/watch-dashboard.js)
+- [static/js/watch.js](../../../static/js/watch.js)
+- [templates/topic.html](../../../templates/topic.html)
+
+**Testdateien:**
+
+- [tests/js/watch-dashboard-state.test.mjs](../../../tests/js/watch-dashboard-state.test.mjs)
+- [tests/test_drift_signal.py](../../../tests/test_drift_signal.py)
+- [tests/test_watch_evidence_model.py](../../../tests/test_watch_evidence_model.py)
+- [tests/test_watch_feature.py](../../../tests/test_watch_feature.py)
+
+</details>
+
+**Konkrete Teilbelege:**
+
+- [test_the_gpt6_record_holds_the_release_instead_of_flip_flopping](../../../tests/test_drift_signal.py#L26) — Deterministische Unit-Tests. **Datei**status vom 2026-10-02: passed=15.
+  - [Zeile 39](../../../tests/test_drift_signal.py#L39): ` assert [point["signal"] for point in annotated] == ["stable", "moved", "held", "held"] `
+  - [Zeile 40](../../../tests/test_drift_signal.py#L40): ` assert [point["trigger"] for point in annotated] == ["stable", "changed", "stable", "stable"] `
+  - [Zeile 41](../../../tests/test_drift_signal.py#L41): ` assert drift_signal.accepted_index(annotated) == 1 `
+
+<a id="build-04"></a>
+
+## BUILD-04 · Statische Auslieferung ohne SSE-Pufferung
+
+Gehashtes dist ist immutable und komprimierbar, HTML komprimierbar, ungehashte Assets revalidieren. SSE und API-JSON bleiben unkomprimiert; SSE-Frames werden unmittelbar weitergegeben.
+
+**Anforderungsbasis:** [docs/codebase-map.md](../../codebase-map.md) · ` documented_contract `. Die Basis ist eine Fundstelle, keine Behauptung, dass ältere Spezifikationen jede aktuelle Klausel wörtlich enthalten; [abweichende Oracles](decisions.md) beachten.
+
+**Bewertung:** Teilweise belegt. Aktualisierung 02.10.2026: Assertions und ersetzte Grenzen im aktuellen Dateikatalog beschrieben.
+
+**Testgrenze:** ASGI-/TestClient-Nachweis ohne realen Socket/Reverseproxy/CDN.
+
+**Befunde:** —. Kein verknüpfter Befund bedeutet keine Vollständigkeitsfreigabe.
+
+<details><summary>Produktdateien und zugeordnete Testdateien</summary>
+
+**Produktdateien:**
+
+- [app/core/static_delivery.py](../../../app/core/static_delivery.py)
+- [main.py](../../../main.py)
+
+**Testdateien:**
+
+- [tests/test_static_delivery.py](../../../tests/test_static_delivery.py)
+
+</details>
+
+**Konkrete Teilbelege:**
+
+- [test_event_stream_is_never_gzip_encoded](../../../tests/test_static_delivery.py#L39) — ASGI-/TestClient-Middleware und echte lokale Assets. **Datei**status vom 2026-10-02: passed=8.
+  - [Zeile 42](../../../tests/test_static_delivery.py#L42): ` assert response.status_code == 200 `
+  - [Zeile 43](../../../tests/test_static_delivery.py#L43): ` assert response.headers["content-type"].startswith("text/event-stream") `
+  - [Zeile 44](../../../tests/test_static_delivery.py#L44): ` assert "content-encoding" not in response.headers `
+  - [Zeile 45](../../../tests/test_static_delivery.py#L45): ` assert "accept-encoding" not in response.headers.get("vary", "").lower() `
+  - [Zeile 46](../../../tests/test_static_delivery.py#L46): ` assert response.text.count("event: delta") == 3 `

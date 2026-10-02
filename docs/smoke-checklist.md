@@ -1,5 +1,28 @@
 # Smoke-Checkliste — Frontend (index.html Refactor)
 
+**Aktueller automatisierter Laufstand 02.10.2026:** siehe
+[Testübersicht](test-coverage-map.md) und [rote Fälle](test-coverage/findings.md).
+219 Browserfälle bestanden, 30 scheiterten, vier endeten im Setup, 55 wurden
+nicht ausgeführt. Die unten genannten älteren Baselines/abgehakten manuellen
+Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
+
+## Neue Funktionsgruppen und Restprüfung
+
+- [ ] Google/Kalender/Gmail: echte OAuth-Rückkehr, Widerruf, Zustimmung pro
+      Nachricht, exakte Vorschau vor Senden/Terminspeichern; die Offline-
+      Browserfälle ersetzen keinen echten Providerlauf. Aktuelle Gmail-
+      Dokumentversionsfehler vor einer Freigabe klären.
+- [ ] Private Dateien/Dokumente: gespeicherte Version am richtigen Turn,
+      Download und bestätigtes Entfernen, lesbare Warnung für Teilinhalt;
+      erzeugte DOCX/PDF-Seiten zusätzlich visuell prüfen.
+- [ ] Gemeinsames Tokenkonto: Moduswechsel, Holds, geschätzter Verbrauch,
+      Kontowechsel und UTC-Reset gegen dieselbe Kontoanzeige prüfen.
+- [ ] Watch/Topic: stehende Antwort bei dünner Evidenz, neue Belege, Recheck,
+      erreichtes Ziel und erneutes Öffnen mit anderem Ziel; Zustellfehler und
+      Unsubscribe in einer kontrollierten Testumgebung prüfen.
+- [ ] Aktuelle Browserabweichungen bei Scrollabschluss, Quellenpillenstatus,
+      Agent-Stop/Reasoning und Runwechsel anhand des Laufberichts nachstellen.
+
 Teilweise automatisiert: die Playwright-Suite `tests/e2e/` deckt Konsolen-
 Fehler beim Laden, Send→Streaming, Consensus→Differences+Agreement-Score,
 Modell-Ausschluss, Theme-Toggle, Picker-Persistenz und die Phase-4-Auth-/View-

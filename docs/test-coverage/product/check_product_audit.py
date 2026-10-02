@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import re
 import subprocess
+import sys
 import xml.etree.ElementTree as ET
 from urllib.parse import unquote
 
@@ -12,6 +13,8 @@ from render_product_audit import render
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[2]
+sys.path.insert(0, str(HERE.parent))
+from check_inventory import file_sha256
 
 def read(name):
     return json.loads((HERE/name).read_text(encoding='utf-8'))
@@ -42,13 +45,14 @@ def main():
     text_cache={}
     def lines(path):
         if path not in text_cache:
-            text_cache[path]=(ROOT/path).read_text(encoding='utf-8-sig').splitlines()
+            text_cache[path]=(ROOT/path).read_text(encoding='utf-8-sig').split('\n')
+            if text_cache[path][-1] == '': text_cache[path].pop()
         return text_cache[path]
     for s in sources + data['reference_hashes'] + inv['files'] + inv['support_files']:
         path=ROOT/s['path']
         require(path.is_file(),f'Missing {s["path"]}')
         if path.is_file():
-            require(hashlib.sha256(path.read_bytes()).hexdigest()==s['sha256'],f'Changed; review required: {s["path"]}')
+            require(file_sha256(path)==s['sha256'],f'Changed; review required: {s["path"]}')
     for s in sources:
         require(len(lines(s['path']))==s['lines'],f'Line count drift: {s["path"]}')
         require(s['contract_ids']==[c['id'] for c in data['contracts'] if s['path'] in c['source_paths']],f'Bad reverse mapping: {s["path"]}')
@@ -139,6 +143,15 @@ def main():
     for field in ('covered_lines','num_statements','missing_lines','excluded_lines','num_branches','num_partial_branches','covered_branches','missing_branches'):
         require(sum(f['summary'][field] for f in cov['files'].values())==cov['totals'][field],f'Coverage total mismatch: {field}')
     require(set(cov['files'])<=source_paths,'Coverage source outside inventory')
+    historical_lines = {}
+    def coverage_length(path):
+        # Coverage positions belong to the measured revision, not the current
+        # file. Still validate them strictly against that historical source.
+        if path not in historical_lines:
+            source = subprocess.check_output(['git', 'show', cov['meta']['source_commit'] + ':' + path], cwd=ROOT)
+            historical_lines[path] = len(source.decode('utf-8-sig').split('\n')) - source.endswith(b'\n')
+        return historical_lines[path]
+    require(cov['meta'].get('source_commit') == data.get('historical_product_test_base_commit'), 'Historical coverage base differs')
     for path,f in cov['files'].items():
         summary=f['summary']
         for array,field in (('executed_lines','covered_lines'),('missing_lines','missing_lines'),('excluded_lines','excluded_lines'),('executed_branches','covered_branches'),('missing_branches','missing_branches')):
@@ -147,14 +160,14 @@ def main():
             keys=[tuple(v) if isinstance(v,list) else v for v in values]
             require(len(keys)==len(set(keys)),f'Duplicate coverage detail: {path} {array}')
             if array.endswith('branches'):
-                require(all(len(v)==2 and all(isinstance(n,int) and 0<abs(n)<=len(lines(path)) for n in v) for v in values),f'Invalid branch position: {path}')
+                require(all(len(v)==2 and all(isinstance(n,int) and 0<abs(n)<=coverage_length(path) for n in v) for v in values),f'Invalid branch position: {path}')
             else:
-                require(all(isinstance(n,int) and 1<=n<=len(lines(path)) for n in values),f'Invalid coverage line: {path}')
+                require(all(isinstance(n,int) and 1<=n<=coverage_length(path) for n in values),f'Invalid coverage line: {path}')
         require(not (set(f['executed_lines']) & set(f['missing_lines'])),f'Executed/missing lines overlap: {path}')
         require(not ({tuple(v) for v in f['executed_branches']} & {tuple(v) for v in f['missing_branches']}),f'Executed/missing branches overlap: {path}')
         require(summary['num_statements']==summary['covered_lines']+summary['missing_lines'],f'Statement count mismatch: {path}')
         require(summary['num_branches']==summary['covered_branches']+summary['missing_branches'],f'Branch count mismatch: {path}')
-        require(all(1<=v['start_line']<=len(lines(path)) for v in f['unexecuted_functions']),f'Invalid unexecuted function line: {path}')
+        require(all(1<=v['start_line']<=coverage_length(path) for v in f['unexecuted_functions']),f'Invalid unexecuted function line: {path}')
     for probe_id,filename in (('M-01','probe-memory.xml'),('M-02','probe-og.xml')):
         probes=[p for p in execution['probes'] if p['id']==probe_id]
         require(len(probes)==1,f'Missing/duplicate probe metadata: {probe_id}')
@@ -166,12 +179,12 @@ def main():
             result[status]+=1
         require(dict(result)==probes[0]['result'],f'Probe result differs from JUnit: {probe_id}')
         require([dict(c.attrib) for c in cases]==probes[0]['cases'],f'Probe cases differ from JUnit: {probe_id}')
-    require(execution['reviewed_commit']==data['reviewed_commit'],'Execution/review commit mismatch')
+    require(execution['reviewed_commit']==data.get('historical_reviewed_commit',data['reviewed_commit']),'Historical execution/review commit mismatch')
     independent = execution['independent_review']
     require(independent['input_commit']==data['independent_review']['input_commit'],'Independent input commit differs')
     for artifact in independent['artifact_hashes']:
         path = ROOT/artifact['path']
-        require(path.is_file() and hashlib.sha256(path.read_bytes()).hexdigest()==artifact['sha256'],f'Independent artifact changed: {artifact["path"]}')
+        require(path.is_file() and file_sha256(path)==artifact['sha256'],f'Independent artifact changed: {artifact["path"]}')
     observations = read(independent['probe_json'])
     require([p['id'] for p in observations['observations']]==independent['probe_ids'],'Independent probe IDs differ')
     require(observations['network_allowed'] is False and observations['product_sources_changed'] is False,'Independent probe isolation metadata differs')
