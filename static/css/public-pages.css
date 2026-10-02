@@ -3,7 +3,7 @@
    ========================================================================== */
 
 @import url('./public-tokens.css?v=20261002-fein2');
-@import url('./public-nav.css?v=20261002-fein5');
+@import url('./public-nav.css?v=20261002-fein6');
 
 *,
 *::before,
@@ -1508,7 +1508,7 @@ canvas {
     animation-duration: 0.001ms !important;
     animation-iteration-count: 1 !important;
     scroll-behavior: auto !important;
-    transition-duration: var(--dur-press) !important;
+    transition-duration: 0.001ms !important;
   }
 }
 

@@ -129,7 +129,7 @@ body:has(.watch-page:not([hidden])) .app-nav-float {
   .app-nav-float,
   .app-mobile-header,
   .view-switch {
-    transition-duration: var(--dur-press) !important;
+    transition-duration: 0.01ms !important;
   }
 }
 

@@ -370,7 +370,7 @@ body:not(.dark-mode) .chat-input-container::before {
 @media (prefers-reduced-motion: reduce) {
   .consensus-pipeline,
   .consensus-pipeline-bar {
-    transition-duration: var(--dur-press);
+    transition-duration: 0.01ms;
   }
 
   .consensus-pipeline-dot,

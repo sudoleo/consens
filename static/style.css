@@ -5,33 +5,33 @@
 
 @import url('./css/variables.css?v=20261002-fein2');
 @import url('./css/source-verification.css?v=20261002-fein2');
-@import url('./css/base.css?v=20261002-fein5');
-@import url('./css/layout.css?v=20261002-fein5');
+@import url('./css/base.css?v=20261002-fein6');
+@import url('./css/layout.css?v=20261002-fein6');
 @import url('./css/skeleton.css?v=20261002-fein2');
 /* components.css was split by section into the files below (same cascade order). */
-@import url('./css/components-input.css?v=20261002-fein5');
+@import url('./css/components-input.css?v=20261002-fein6');
 @import url('./css/components-attachment-viewer.css?v=20261002-fein2');
-@import url('./css/components-consensus.css?v=20261002-fein5');
+@import url('./css/components-consensus.css?v=20261002-fein6');
 @import url('./css/components-controls.css?v=20261002-fein2');
 @import url('./css/components-modals.css?v=20261002-fein2');
-@import url('./css/components-misc.css?v=20261002-fein5');
-@import url('./css/demo-action.css?v=20261002-fein5');
-@import url('./css/send-glow.css?v=20261002-fein5');
+@import url('./css/components-misc.css?v=20261002-fein6');
+@import url('./css/demo-action.css?v=20261002-fein6');
+@import url('./css/send-glow.css?v=20261002-fein6');
 @import url('./css/components-memory-edit.css?v=20261002-fein2');
-@import url('./css/components-model-picker.css?v=20261002-fein5');
+@import url('./css/components-model-picker.css?v=20261002-fein6');
 @import url('./css/components-feedback.css?v=20260731-inter1');
 @import url('./css/components-consensus-insights.css?v=20261002-fein2');
-@import url('./css/components-watch.css?v=20261002-fein5');
+@import url('./css/components-watch.css?v=20261002-fein6');
 /* Shell layer — loaded LAST so the frameless redesign wins on equal
    specificity. Elevation, sidebar, topbar, composer and thread material. */
-@import url('./css/shell.css?v=20261002-fein5');
+@import url('./css/shell.css?v=20261002-fein6');
 @import url('./css/model-answer-reader.css?v=20261002-fein2');
 @import url('./css/composer-attachments.css?v=20261002-fein2');
-@import url('./css/agent-chat.css?v=20261002-fein5');
+@import url('./css/agent-chat.css?v=20261002-fein6');
 @import url('./css/agent-google.css?v=20261002-fein2');
 @import url('./css/agent-workspace.css?v=20261002-fein2');
 /* The composer row's layout, for every mode (see its header). */
-@import url('./css/composer.css?v=20261002-fein5');
+@import url('./css/composer.css?v=20261002-fein6');
 @import url('./css/chat-scroll.css?v=20261002-fein2');
 /* Native selects: chevron and open list, after every component's box. */
 @import url('./css/select.css?v=20261002-fein2');
