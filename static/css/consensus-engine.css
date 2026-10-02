@@ -569,7 +569,7 @@
 .ce-step,
 .ce-diff-stage,
 .ce-faq-list article {
-  transition: background-color 0.18s ease;
+  transition: background-color var(--dur-state) var(--ease-standard);
 }
 
 /* These panels have no frame left to tint on hover, so hover is a tone —

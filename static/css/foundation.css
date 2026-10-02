@@ -1,0 +1,45 @@
+/* ==========================================================================
+   Foundation — the few values everything else is allowed to use
+
+   Shared by /app (variables.css) and the public pages (public-tokens.css),
+   like typography.css. The rule behind it: a surface looks calm when there is
+   little of everything. One focus ring, three elevations, six radii, three
+   curves and four durations. A component that needs a value outside these
+   picks the nearest one instead of inventing a seventh.
+   ========================================================================== */
+
+:root {
+  /* Radii. Nested corners follow the concentric rule: inner radius = outer
+     radius minus the inset between them, so a control inside a field looks
+     cast from the same piece. --radius-lg stays 16px (public contract). */
+  --radius-2xs: 6px;
+
+  /* Motion. Standard for anything that changes in place, out for things that
+     arrive, in for things that leave. Four durations: a press, a state, a
+     layer, and the light (the one slow, deliberate movement in the product). */
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --dur-press: 120ms;
+  --dur-state: 200ms;
+  --dur-layer: 320ms;
+  --dur-light: 560ms;
+
+  /* Focus. One ring for every control, drawn outside the control so it never
+     changes its size; it follows the control's own radius. */
+  --focus-ring-color: var(--ink-2);
+  --focus-ring: 2px solid var(--focus-ring-color);
+  --focus-ring-offset: 2px;
+
+  /* Elevation. Flat is the default; --lift is for layers that float above
+     the page (menus, popovers, modals). --shadow-press is the one shadow a
+     pressed control may cast inward. */
+  --shadow-overlay: var(--lift);
+  --shadow-none: none;
+
+  /* The house light (see send-glow.css). It belongs to the path a question
+     takes: the send control, the run that answers it and the agreement that
+     comes back. Nothing else carries it. */
+  --light: var(--agree);
+  --light-core: color-mix(in srgb, var(--agree) 88%, white);
+}

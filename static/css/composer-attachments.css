@@ -29,7 +29,7 @@
   gap: 0;
   padding: 0;
   border: 1px solid var(--line-soft);
-  border-radius: 9px;
+  border-radius: var(--radius-xs);
   background: var(--well);
   overflow: hidden;
 }
@@ -42,7 +42,7 @@
   min-height: 38px;
   padding: 6px 8px;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--radius-xs);
   background: transparent;
   color: var(--ink);
   font: inherit;
@@ -54,23 +54,23 @@
 #attachmentBar .attachment-chip-icon {
   width: 24px;
   height: 24px;
-  border-radius: 5px;
+  border-radius: var(--radius-2xs);
 }
 #attachmentBar .attachment-chip-meta { flex: 1; gap: 0; }
 #attachmentBar .attachment-chip-name {
   max-width: none;
-  font-size: 12px;
+  font-size: var(--font-size-xs);
   font-weight: 500;
 }
 #attachmentBar .attachment-chip-size { font-size: 10px; line-height: 1.4; }
 #attachmentBar .attachment-chip-remove {
   width: 32px;
   height: 38px;
-  border-radius: 0 8px 8px 0;
+  border-radius: 0 var(--radius-xs) var(--radius-xs) 0;
   margin: 0;
 }
 #attachmentBar :is(.attachment-chip-preview, .attachment-chip-remove):focus-visible {
-  outline: 2px solid var(--accent);
+  outline: var(--focus-ring);
   outline-offset: -3px;
 }
 #attachmentBar .attachment-provider-notice {
@@ -78,7 +78,7 @@
   padding: 0 2px;
   background: transparent;
   color: var(--ink-2);
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   font-weight: 400;
 }
 /* In a chat the files sit above the question (row: composer.css). */
@@ -89,7 +89,7 @@
   #attachmentBar .attachment-chip { flex: 1 1 calc(50% - 4px); }
   #attachmentBar .attachment-chip:only-child { flex-grow: 0; flex-basis: 100%; }
   #attachmentBar .attachment-chip-preview { gap: 6px; padding-inline: 6px; }
-  #attachmentBar .attachment-chip-name { font-size: 11px; }
+  #attachmentBar .attachment-chip-name { font-size: var(--font-size-xs); }
 }
 @media (pointer: coarse) {
   #attachmentBar .attachment-chip-preview { min-height: 44px; }

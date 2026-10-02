@@ -7,7 +7,7 @@
   isolation: isolate;
   flex-shrink: 0;
   background: color-mix(in srgb, var(--ink) 8%, transparent);
-  border-radius: 4px;
+  border-radius: var(--radius-2xs);
   pointer-events: none;
 }
 

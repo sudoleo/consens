@@ -57,10 +57,10 @@ def test_blocked_card_sits_where_the_answer_would_be():
     assert template.index('id="runBlocked"') < template.index('class="input-section"')
     assert 'body:not(.is-hero) #runBlocked { order: 2; }' in shell
 
-    # Der globale Button-Reset darf die Karten-Buttons nicht ueberfahren.
+    # Kein globaler Button-Stil darf die Karten-Buttons ueberfahren: der
+    # gefuellte Look ist opt-in (`.btn`).
     controls = read("static/css/components-input.css")
-    assert ":not(.run-blocked-btn)" in controls
-    assert ":not(.run-blocked-close)" in controls
+    assert "button:not(" not in controls
 
 
 def test_server_error_codes_are_actually_matched():

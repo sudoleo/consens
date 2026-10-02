@@ -43,7 +43,7 @@
   font-weight: var(--font-weight-semibold);
   line-height: var(--line-height-solid);
   white-space: nowrap;
-  transition: background-color 120ms ease, color 120ms ease;
+  transition: background-color var(--dur-press) var(--ease-standard), color var(--dur-press) var(--ease-standard);
 }
 
 .memory-selection-action:hover,
@@ -228,7 +228,7 @@ html.memory-edit-open body {
   font-variant-numeric: tabular-nums;
   line-height: var(--line-height-ui);
   opacity: 0;
-  transition: opacity 120ms ease;
+  transition: opacity var(--dur-press) var(--ease-standard);
 }
 
 .memory-edit-field-head span[data-near="true"] { opacity: 1; }
@@ -249,7 +249,7 @@ html.memory-edit-open body {
   font: inherit;
   font-size: var(--font-size-sm);
   line-height: var(--line-height-ui);
-  transition: border-color 120ms ease, box-shadow 120ms ease;
+  transition: border-color var(--dur-press) var(--ease-standard), box-shadow var(--dur-press) var(--ease-standard);
 }
 
 .memory-edit-dialog textarea::placeholder { color: var(--sidebar-text-muted); }

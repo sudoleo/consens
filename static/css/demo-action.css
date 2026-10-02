@@ -24,7 +24,7 @@ button.demo-action {
   user-select: none;
   touch-action: manipulation;
   box-shadow: none;
-  transition: background-color .16s ease, transform .12s ease;
+  transition: background-color var(--dur-state) var(--ease-standard), transform var(--dur-press) var(--ease-standard);
 }
 
 .demo-action-icon {
@@ -58,7 +58,7 @@ button.demo-action {
 
 .demo-action:focus-visible,
 .lp-hero-prompt:focus-visible .demo-action {
-  outline: 2px solid var(--ink);
+  outline: var(--focus-ring);
   outline-offset: 3px;
 }
 

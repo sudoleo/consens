@@ -46,13 +46,13 @@
     margin-block: 6px;
     padding: 5px;
     border: 1px solid var(--line, rgba(34, 36, 40, 0.14));
-    border-radius: 12px;
+    border-radius: var(--radius-sm);
     background: var(--well, #fff);
     color: var(--ink, #222428);
     box-shadow: var(--lift, 0 1px 2px rgba(28, 30, 33, 0.05), 0 14px 34px rgba(28, 30, 33, 0.08));
     opacity: 0;
     translate: 0 -4px;
-    transition: opacity .14s ease, translate .14s ease, overlay .14s allow-discrete, display .14s allow-discrete;
+    transition: opacity var(--dur-press) var(--ease-standard), translate var(--dur-press) var(--ease-standard), overlay var(--dur-press) allow-discrete, display var(--dur-press) allow-discrete;
   }
 
   :root :is(.hub-toolbar, .topics-toolbar, .share-report-form, .settings-select) select:open::picker(select),
@@ -76,10 +76,10 @@
     gap: 10px;
     min-height: 36px;
     padding: 7px 10px;
-    border-radius: 8px;
+    border-radius: var(--radius-xs);
     color: var(--ink, #222428);
     font: inherit;
-    font-size: 14px;
+    font-size: var(--font-size-sm);
     line-height: 1.35;
     white-space: nowrap;
     cursor: pointer;

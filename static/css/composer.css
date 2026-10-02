@@ -106,10 +106,10 @@
 .chat-input-container :is(.composer-lead, .composer-models) .model-picker-display {
   display: inline-flex; align-items: center; justify-content: flex-start; gap: 8px;
   width: auto; min-width: 0; max-width: 100%; min-height: 36px; padding: 7px 10px;
-  border: 1px solid transparent; border-radius: 9px; background: transparent; box-shadow: none;
-  color: var(--ink-2); font: inherit; font-size: 12px; font-weight: 500; line-height: 20px;
+  border: 1px solid transparent; border-radius: var(--radius-xs); background: transparent; box-shadow: none;
+  color: var(--ink-2); font: inherit; font-size: var(--font-size-xs); font-weight: 500; line-height: 20px;
   backdrop-filter: none; -webkit-backdrop-filter: none;
-  cursor: pointer; transition: background .15s ease, color .15s ease;
+  cursor: pointer; transition: background var(--dur-press) var(--ease-standard), color var(--dur-press) var(--ease-standard);
 }
 .chat-input-container :is(.composer-lead, .composer-models) .model-picker-display-text {
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -131,7 +131,7 @@
 .chat-input-container :is(.composer-lead, .composer-models) .model-picker-display[aria-expanded="true"] {
   background: var(--raise); color: var(--ink); border-color: transparent; box-shadow: none;
 }
-.chat-input-container :is(.composer-lead, .composer-models) .model-picker-display:focus-visible { outline: 2px solid var(--ink-2); outline-offset: 2px; }
+.chat-input-container :is(.composer-lead, .composer-models) .model-picker-display:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 .chat-input-container :is(.composer-lead, .composer-models) .model-picker-display:disabled { opacity: .6; cursor: default; }
 .chat-input-container .run-mode-control .model-picker-display:disabled { background: transparent; }
 .chat-input-container .run-mode-control .model-picker-display:disabled::after { display: none; }
@@ -143,17 +143,17 @@
 /* The mode and Agent menus: a short list, one line of help per choice. The
    models menu keeps its own panel (model rows, presets). */
 .chat-input-container :is(.run-mode-control, .agent-model-controls) .model-picker-menu {
-  border: 1px solid var(--line); background: var(--well); border-radius: 14px; padding: 6px; box-shadow: var(--lift);
+  border: 1px solid var(--line); background: var(--well); border-radius: var(--radius-md); padding: 6px; box-shadow: var(--lift);
   overscroll-behavior: contain; scrollbar-width: thin; z-index: 1600;
 }
 .chat-input-container :is(.run-mode-control, .agent-model-controls) .model-picker-option {
   display: flex; flex-wrap: wrap; gap: 3px; min-height: 42px; padding: 10px 30px 10px 11px;
-  color: var(--ink); font-size: 13px; line-height: 1.4; border-radius: 8px;
+  color: var(--ink); font-size: var(--font-size-ui); line-height: 1.4; border-radius: var(--radius-xs);
 }
 .chat-input-container :is(.run-mode-control, .agent-model-controls) .model-picker-option:is(:hover, .is-selected) { background: var(--raise); }
-.chat-input-container :is(.run-mode-control, .agent-model-controls) .model-picker-option:focus-visible { outline: 2px solid var(--ink-3); outline-offset: -2px; background: var(--raise); }
+.chat-input-container :is(.run-mode-control, .agent-model-controls) .model-picker-option:focus-visible { outline: var(--focus-ring); outline-offset: -2px; background: var(--raise); }
 .chat-input-container :is(.run-mode-control, .agent-model-controls) .model-picker-option-label { white-space: normal; overflow-wrap: anywhere; }
-.model-picker-option-description { flex-basis: 100%; font-size: 11px; color: var(--ink-3); font-weight: 400; line-height: 1.5; }
+.model-picker-option-description { flex-basis: 100%; font-size: var(--font-size-xs); color: var(--ink-3); font-weight: 400; line-height: 1.5; }
 /* Rows that lead to another level (sections, Custom, a provider) and the
    way back keep name and chevron on one line; the chevron marks the end. */
 .chat-input-container .agent-model-controls .model-picker-option:is(.model-picker-row-open, .model-picker-back-option, .model-picker-custom-option, .model-picker-preset-option, .model-picker-group-option) {
@@ -262,7 +262,7 @@
   max-width: calc(100vw - 32px);
   padding: 6px;
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: var(--radius-md);
   background: var(--well);
   box-shadow: var(--lift);
 }
@@ -274,11 +274,11 @@
   min-height: 40px;
   padding: 8px 10px;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--radius-xs);
   background: transparent;
   color: var(--ink);
   font: inherit;
-  font-size: 13px;
+  font-size: var(--font-size-ui);
   font-weight: 400;
   line-height: 1.35;
   text-align: left;
@@ -287,7 +287,7 @@
   background: var(--raise);
   border-color: transparent;
 }
-.chat-input-container .attach-menu .attach-menu-item:focus-visible { outline: 2px solid var(--ink-3); outline-offset: -2px; }
+.chat-input-container .attach-menu .attach-menu-item:focus-visible { outline: var(--focus-ring); outline-offset: -2px; }
 .chat-input-container .attach-menu :is(.attach-menu-item, .attach-menu-toggle) > :is(svg, .attach-menu-toggle-icon) {
   grid-column: 1;
   width: 16px;
@@ -307,13 +307,13 @@
 .chat-input-container .attach-menu :is(.attach-menu-text, .attach-menu-toggle-text) { display: flex; flex-direction: column; gap: 1px; }
 .chat-input-container .attach-menu :is(.attach-menu-label, .attach-menu-toggle-text .menu-switch-label) {
   color: var(--ink);
-  font-size: 13px;
+  font-size: var(--font-size-ui);
   font-weight: 500;
 }
 .chat-input-container .attach-menu :is(.attach-menu-hint, .attach-menu-toggle-sub) {
   padding: 0;
   color: var(--ink-3);
-  font-size: 11.5px;
+  font-size: var(--font-size-xs);
   line-height: 1.4;
 }
 /* A value that opens a menu ends in a chevron, the way the pickers do. */
@@ -323,7 +323,7 @@
   align-items: center;
   gap: 8px;
   color: var(--ink-3);
-  font-size: 12px;
+  font-size: var(--font-size-xs);
   font-weight: 400;
   font-variant-numeric: tabular-nums;
 }

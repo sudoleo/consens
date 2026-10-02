@@ -2,7 +2,7 @@
    Public pages
    ========================================================================== */
 
-@import url('./public-tokens.css?v=20260906-palette1');
+@import url('./public-tokens.css?v=20261002-fein1');
 
 *,
 *::before,
@@ -112,7 +112,7 @@ a:hover {
 
 .nav-links a {
   white-space: nowrap;
-  transition: color .15s ease;
+  transition: color var(--dur-press) var(--ease-standard);
 }
 
 .nav-links a:not(.nav-cta):hover {
@@ -131,7 +131,7 @@ a:hover {
   font-weight: var(--font-weight-medium);
   letter-spacing: var(--tracking-normal);
   line-height: var(--line-height-solid);
-  transition: transform .18s ease, border-color .18s ease, background-color .18s ease, color .18s ease, box-shadow .18s ease;
+  transition: transform var(--dur-state) var(--ease-standard), border-color var(--dur-state) var(--ease-standard), background-color var(--dur-state) var(--ease-standard), color var(--dur-state) var(--ease-standard), box-shadow var(--dur-state) var(--ease-standard);
 }
 
 .nav-cta {
@@ -541,7 +541,7 @@ a:hover {
     0 4px 10px rgba(30, 32, 35, 0.1),
     inset 0 1px 1px rgba(255, 255, 255, 0.9),
     inset 0 -1px 2px rgba(30, 32, 35, 0.1);
-  transition: transform 0.28s ease, background-color 0.28s ease, box-shadow 0.28s ease;
+  transition: transform var(--dur-layer) var(--ease-standard), background-color var(--dur-layer) var(--ease-standard), box-shadow var(--dur-layer) var(--ease-standard);
 }
 
 .mock-switch.is-on {
@@ -714,7 +714,7 @@ a:hover {
 
 .story-consensus {
   position: relative;
-  transition: transform .34s ease, border-color .34s ease, box-shadow .34s ease;
+  transition: transform var(--dur-layer) var(--ease-standard), border-color var(--dur-layer) var(--ease-standard), box-shadow var(--dur-layer) var(--ease-standard);
 }
 
 .story-consensus.is-focus-pulse {
@@ -760,7 +760,7 @@ a:hover {
 .story-consensus-panel {
   position: relative;
   overflow: hidden;
-  transition: border-color .34s ease, box-shadow .34s ease, transform .34s ease;
+  transition: border-color var(--dur-layer) var(--ease-standard), box-shadow var(--dur-layer) var(--ease-standard), transform var(--dur-layer) var(--ease-standard);
 }
 
 .story-consensus-text {
@@ -914,7 +914,7 @@ a:hover {
     linear-gradient(180deg, color-mix(in srgb, var(--glass-highlight) 26%, transparent), transparent),
     color-mix(in srgb, var(--glass-bg-strong) 54%, transparent);
   opacity: 0.62;
-  transition: opacity .2s ease, border-color .2s ease, transform .2s ease, background-color .2s ease;
+  transition: opacity var(--dur-state) var(--ease-standard), border-color var(--dur-state) var(--ease-standard), transform var(--dur-state) var(--ease-standard), background-color var(--dur-state) var(--ease-standard);
 }
 
 .story-step.is-active {
@@ -964,7 +964,7 @@ a:hover {
 }
 
 .story-scene {
-  transition: opacity var(--scene-transition-duration) ease, transform var(--scene-transition-duration) ease, filter var(--scene-transition-duration) ease;
+  transition: opacity var(--scene-transition-duration) var(--ease-standard), transform var(--scene-transition-duration) var(--ease-standard), filter var(--scene-transition-duration) var(--ease-standard);
 }
 
 [data-active-scene="ask"] .scene-agent,
@@ -997,7 +997,7 @@ a:hover {
   border-radius: var(--radius-xl);
   background: radial-gradient(62% 78% at 50% 44%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 72%);
   opacity: 0;
-  transition: opacity .45s ease;
+  transition: opacity var(--dur-light) var(--ease-standard);
   pointer-events: none;
   z-index: -1;
 }
@@ -1200,7 +1200,7 @@ a:hover {
 
 .info-card,
 .model-card {
-  transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease;
+  transition: transform var(--dur-state) var(--ease-standard), box-shadow var(--dur-state) var(--ease-standard), border-color var(--dur-state) var(--ease-standard);
 }
 
 .info-card:hover,
@@ -1507,7 +1507,7 @@ canvas {
     animation-duration: 0.001ms !important;
     animation-iteration-count: 1 !important;
     scroll-behavior: auto !important;
-    transition-duration: 0.001ms !important;
+    transition-duration: var(--dur-press) !important;
   }
 }
 
@@ -2311,7 +2311,7 @@ canvas {
   font-size: var(--font-size-sm);
   text-align: left;
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  transition: background var(--dur-press) var(--ease-standard), border-color var(--dur-press) var(--ease-standard);
 }
 
 .share-diff-teaser:hover {
@@ -2346,7 +2346,7 @@ canvas {
 }
 
 .share-follow-form input[type="email"]:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent) 60%, transparent);
+  outline: var(--focus-ring);
   outline-offset: 1px;
 }
 
@@ -2420,7 +2420,7 @@ canvas {
   height: 18px;
   flex-shrink: 0;
   object-fit: contain;
-  border-radius: 4px;
+  border-radius: var(--radius-2xs);
 }
 
 .share-model-name {
@@ -2475,7 +2475,7 @@ canvas {
   padding: 8px 18px;
   border-radius: var(--radius-pill);
   cursor: pointer;
-  transition: background-color .15s ease, color .15s ease, box-shadow .15s ease, border-color .15s ease;
+  transition: background-color var(--dur-press) var(--ease-standard), color var(--dur-press) var(--ease-standard), box-shadow var(--dur-press) var(--ease-standard), border-color var(--dur-press) var(--ease-standard);
 }
 
 .share-toggle button[aria-pressed="true"] {
@@ -2573,7 +2573,7 @@ canvas {
   overflow: hidden;
   text-overflow: ellipsis;
   box-shadow: inset 0 1px 0 color-mix(in srgb, var(--glass-highlight) 36%, transparent);
-  transition: background-color .15s ease, border-color .15s ease, color .15s ease;
+  transition: background-color var(--dur-press) var(--ease-standard), border-color var(--dur-press) var(--ease-standard), color var(--dur-press) var(--ease-standard);
 }
 
 .share-md a[href^="#src-"]:hover,
@@ -2623,7 +2623,7 @@ canvas {
   margin: 0;
   padding: 5px 6px;
   border-radius: var(--radius-xs);
-  transition: background-color .2s ease;
+  transition: background-color var(--dur-state) var(--ease-standard);
 }
 
 .share-sources.is-collapsed li:nth-child(n+9) {
@@ -2655,7 +2655,7 @@ canvas {
   flex: 0 0 auto;
   width: 18px;
   height: 18px;
-  border-radius: 5px;
+  border-radius: var(--radius-2xs);
   object-fit: contain;
   background: color-mix(in srgb, var(--text) 6%, transparent);
 }
@@ -2709,7 +2709,7 @@ canvas {
   font-weight: var(--font-weight-semibold);
   line-height: var(--line-height-solid);
   cursor: pointer;
-  transition: color .15s ease, border-color .15s ease, background-color .15s ease;
+  transition: color var(--dur-press) var(--ease-standard), border-color var(--dur-press) var(--ease-standard), background-color var(--dur-press) var(--ease-standard);
 }
 
 .share-sources-toggle:hover {
@@ -2864,7 +2864,7 @@ canvas {
     linear-gradient(180deg, color-mix(in srgb, var(--glass-highlight) 22%, transparent), transparent 50%),
     color-mix(in srgb, var(--glass-bg-strong) 48%, transparent);
   color: var(--text);
-  transition: border-color .16s ease, background-color .16s ease, transform .16s ease;
+  transition: border-color var(--dur-state) var(--ease-standard), background-color var(--dur-state) var(--ease-standard), transform var(--dur-state) var(--ease-standard);
 }
 
 .share-related-item:hover,
@@ -3245,7 +3245,7 @@ canvas {
 .watch-chart-point { fill: var(--panel-bg); stroke: var(--accent); stroke-width: 3; }
 .watch-chart-point.is-change { fill: var(--accent-secondary); stroke: var(--panel-bg); stroke-width: 2; }
 .watch-chart-target { cursor: pointer; outline: none; }
-.watch-chart-target .watch-chart-point { transform-box: fill-box; transform-origin: center; transition: transform .14s ease, filter .14s ease; }
+.watch-chart-target .watch-chart-point { transform-box: fill-box; transform-origin: center; transition: transform var(--dur-press) var(--ease-standard), filter var(--dur-press) var(--ease-standard); }
 .watch-chart-target:hover .watch-chart-point,
 .watch-chart-target:focus .watch-chart-point { transform: scale(1.35); filter: drop-shadow(0 0 4px color-mix(in srgb, var(--accent) 48%, transparent)); }
 
@@ -3342,7 +3342,7 @@ canvas {
   text-underline-offset: 2px;
   cursor: pointer;
   padding: 0;
-  transition: color .15s ease;
+  transition: color var(--dur-press) var(--ease-standard);
 }
 
 .share-report-toggle:hover {
@@ -3377,7 +3377,7 @@ canvas {
 .share-report-form button {
   font-weight: var(--font-weight-semibold);
   cursor: pointer;
-  transition: border-color .15s ease, background-color .15s ease;
+  transition: border-color var(--dur-press) var(--ease-standard), background-color var(--dur-press) var(--ease-standard);
 }
 
 .share-report-form button:hover {
@@ -3471,7 +3471,7 @@ canvas {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   padding: 10px 14px;
-  transition: border-color .16s ease, box-shadow .16s ease;
+  transition: border-color var(--dur-state) var(--ease-standard), box-shadow var(--dur-state) var(--ease-standard);
 }
 
 .hub-toolbar input {
@@ -3521,7 +3521,7 @@ canvas {
   gap: 16px;
   padding: 13px 8px;
   border-radius: var(--radius-sm, 8px);
-  transition: background-color .14s ease;
+  transition: background-color var(--dur-press) var(--ease-standard);
 }
 
 .hub-row:hover,
@@ -3628,7 +3628,7 @@ canvas {
 .hub-arrow {
   color: var(--muted);
   font-weight: var(--font-weight-semibold);
-  transition: transform .14s ease, color .14s ease;
+  transition: transform var(--dur-press) var(--ease-standard), color var(--dur-press) var(--ease-standard);
 }
 
 .hub-row:hover .hub-arrow {

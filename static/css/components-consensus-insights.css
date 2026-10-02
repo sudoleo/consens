@@ -2,7 +2,7 @@
    Consensus Insights: Verdict-Header, Claim-Badges, Differences-Karten
    ========================================================================== */
 
-@import url('./components-consensus-visuals.css?v=20261002-marks');
+@import url('./components-consensus-visuals.css?v=20261002-fein1');
 
 /* Karte, die ein Inline-Marker gerade geoeffnet hat: kurzer Wash in der
    Bernstein-Note des Markers, der von selbst verblasst. Bewusst kein Ring -
@@ -140,7 +140,7 @@
 }
 
 .claim-popover-close:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent) 60%, transparent);
+  outline: var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -233,7 +233,7 @@
   line-height: var(--line-height-heading);
   cursor: pointer;
   white-space: nowrap;
-  transition: box-shadow 0.2s ease, background-color 0.2s ease;
+  transition: box-shadow var(--dur-state) var(--ease-standard), background-color var(--dur-state) var(--ease-standard);
 }
 
 .claim-jump-link:hover,
@@ -431,13 +431,13 @@
   gap: 6px;
   padding: 2px 0;
   border: 0;
-  border-radius: 4px;
+  border-radius: var(--radius-2xs);
   background: transparent;
   color: var(--ink-2);
   font: inherit;
   cursor: pointer;
   text-align: left;
-  transition: color 0.15s ease;
+  transition: color var(--dur-press) var(--ease-standard);
 }
 
 .diff-jump-link:hover,
@@ -453,7 +453,7 @@
 }
 
 .diff-jump-link:focus-visible {
-  outline: 2px solid var(--ink-2);
+  outline: var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -489,7 +489,7 @@
   gap: 10px;
   min-height: 40px;
   padding: 10px 12px;
-  border-radius: 6px;
+  border-radius: var(--radius-2xs);
   border: 1px solid color-mix(in srgb, var(--sidebar-border) 90%, transparent);
   background: transparent;
   color: color-mix(in srgb, var(--text-color) 88%, var(--sidebar-text-muted));
@@ -500,7 +500,7 @@
   text-align: left;
   cursor: pointer;
   white-space: normal;
-  transition: box-shadow 0.2s ease, color 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
+  transition: box-shadow var(--dur-state) var(--ease-standard), color var(--dur-state) var(--ease-standard), border-color var(--dur-state) var(--ease-standard), background-color var(--dur-state) var(--ease-standard);
 }
 
 /* Der Button wird nach dem Resolve per [hidden] entfernt. Ohne diese Regel
@@ -569,7 +569,7 @@
   flex-shrink: 0;
   margin-left: auto;
   padding: 1px 5px;
-  border-radius: 4px;
+  border-radius: var(--radius-2xs);
   font-size: var(--font-size-micro);
   line-height: 1.4;
   letter-spacing: var(--tracking-wide);
@@ -661,7 +661,7 @@
   align-items: center;
   flex-shrink: 0;
   color: var(--sidebar-text-muted);
-  transition: transform 0.18s ease;
+  transition: transform var(--dur-state) var(--ease-standard);
 }
 
 .resolve-model-row.is-open .resolve-disclosure {
@@ -756,7 +756,7 @@
 
 .resolve-prompt-toggle svg {
   flex-shrink: 0;
-  transition: transform 0.18s ease;
+  transition: transform var(--dur-state) var(--ease-standard);
 }
 
 .resolve-prompt.is-open .resolve-prompt-toggle svg {
@@ -833,7 +833,7 @@ mark.quote-flash {
 
 .response-box.jump-flash {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 36%, transparent), var(--card-shadow);
-  transition: box-shadow 0.3s ease;
+  transition: box-shadow var(--dur-layer) var(--ease-standard);
 }
 
 @keyframes quoteFlashFade {

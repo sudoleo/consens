@@ -69,7 +69,7 @@ def test_sentence_checks_have_a_discreet_persistent_visibility_control():
 
     assert 'id="consensusMarkerToggle"' not in template
     assert 'id="consensusHighlightsSelect"' in template
-    assert ":not(.consensus-marker-toggle)" in inputs
+    assert "button:not(" not in inputs
     assert "consensio.showConsensusMarkers.v1" in insights
     assert 'classList.toggle(MARKERS_HIDDEN_CLASS, !show)' in insights
     assert "body.consensus-markers-hidden .consensus-answer-body .claim-badge" in shell

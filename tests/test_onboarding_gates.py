@@ -148,9 +148,10 @@ def test_watch_nudge_starts_a_watch_directly_and_says_when_it_writes():
     nudge = watch[watch.index("nudge.className = \"watch-feature-nudge\""):]
     nudge = nudge[:nudge.index("anchor.classList.add(\"has-feature-nudge\")")]
     assert 'id="watchNudgeStart"' in nudge
-    # Der Schliessen-Knopf muss in der `button:not(...)`-Kette stehen, sonst
-    # gewinnt der globale Button-Stil und er rendert als graue Pille.
-    assert ":not(.watch-feature-nudge-close)" in read("static/css/components-input.css")
+    # Der Schliessen-Knopf darf nicht als gefuellte Pille rendern: der
+    # Button-Stil ist opt-in (`.btn`), es gibt keine globale Kette mehr.
+    assert "button:not(" not in read("static/css/components-input.css")
+    assert "btn" not in nudge[nudge.index("watch-feature-nudge-close"):][:80]
     assert "Watch this question" in nudge
     # Der Knopf verspricht Stille, solange sich nichts aendert.
     assert "write only when a source moves the answer" in nudge

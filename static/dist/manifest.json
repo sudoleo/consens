@@ -1,5 +1,5 @@
 {
-  "sources": "a60e40bc8229",
+  "sources": "639574466912",
   "inputs": [
     "package-lock.json",
     "package.json",
@@ -31,6 +31,7 @@
     "static/css/composer.css",
     "static/css/consensus-engine.css",
     "static/css/demo-action.css",
+    "static/css/foundation.css",
     "static/css/landing.css",
     "static/css/layout.css",
     "static/css/model-answer-reader.css",
@@ -188,7 +189,7 @@
     },
     {
       "name": "firebase",
-      "src": "/static/dist/firebase.6cbc23d9776b.js",
+      "src": "/static/dist/firebase.120ec5b74818.js",
       "module": true,
       "defer": false
     },
@@ -206,18 +207,18 @@
     }
   ],
   "styles": {
-    "app": "/static/dist/app.55a06b02d7ac.css"
+    "app": "/static/dist/app.c342751ac2df.css"
   },
   "previous_assets": [
-    "app.10f22fe189c9.css",
-    "app.913a70fd2ed4.css",
+    "app.35b66f70ed01.css",
+    "app.55a06b02d7ac.css",
     "app.3a78d1d3b2b7.js",
     "app.40532815d80b.js",
     "auth.5e487d1e2570.js",
     "demo.e9726ac1eea5.js",
     "demo.37bdbf8a4b70.js",
+    "firebase.6cbc23d9776b.js",
     "firebase.76a6690b2d60.js",
-    "firebase.239b29c77756.js",
     "head.b02c622bf5be.js",
     "head.5782a8b77cb8.js"
   ]

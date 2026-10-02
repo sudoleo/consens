@@ -5,14 +5,14 @@
   min-height: 34px; padding: 6px 13px 6px 10px; border: 1px solid var(--line-soft); border-radius: 999px;
   background: var(--ground); color: var(--ink-2);
   box-shadow: 0 2px 8px rgba(0, 0, 0, .08), 0 0 0 1px color-mix(in srgb, var(--ground) 70%, transparent);
-  font: inherit; font-size: 12px; font-weight: var(--font-weight-medium); line-height: 1.4;
+  font: inherit; font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); line-height: 1.4;
   white-space: nowrap; cursor: pointer;
   animation: chat-latest-enter 160ms ease-out both;
-  transition: color 140ms ease, background-color 140ms ease, border-color 140ms ease;
+  transition: color var(--dur-press) var(--ease-standard), background-color var(--dur-press) var(--ease-standard), border-color var(--dur-press) var(--ease-standard);
 }
 .chat-scroll-latest-icon { width: 17px; height: 17px; flex: none; }
 .chat-scroll-latest:hover { background: var(--raise); color: var(--ink); border-color: var(--line); }
-.chat-scroll-latest:focus-visible { outline: 2px solid var(--ink-2); outline-offset: 3px; }
+.chat-scroll-latest:focus-visible { outline: var(--focus-ring); outline-offset: 3px; }
 .chat-scroll-latest[hidden], body.is-hero .chat-scroll-latest { display: none; }
 body.chat-scroll-following .container { overflow-anchor: none; }
 @keyframes chat-latest-enter {

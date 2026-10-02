@@ -224,7 +224,7 @@ body {
   background: var(--line-soft);
 }
 
-.model-card { transition: background-color 0.18s ease; }
+.model-card { transition: background-color var(--dur-state) var(--ease-standard); }
 .model-card:hover { transform: none; background: var(--surface); }
 .hub-item:hover { background: var(--surface); }
 
@@ -431,7 +431,7 @@ body {
   border: 0;
   border-radius: var(--radius-lg);
   background: var(--surface);
-  transition: background-color 0.18s ease;
+  transition: background-color var(--dur-state) var(--ease-standard);
 }
 
 .topic-card:hover {

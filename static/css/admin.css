@@ -1,6 +1,16 @@
-/* Hinweis: der globale button:not(...)-Selektor in components-input.css
-   uebersteuert page-lokale Buttons; kompakte Admin-Buttons brauchen
-   deshalb !important auf den betroffenen Properties. */
+/* Admin buttons style themselves (.admin-btn, .icon-btn, .add-btn, tabs).
+   A button without any class keeps the solid default it had when that look
+   was global; see `.btn` in components-input.css. */
+button:not([class]),
+button[class=""] {
+    padding: 10px 16px;
+    font-size: var(--font-size-base);
+    background: var(--button-bg);
+    color: var(--button-text);
+    border: none;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+}
 .top-bar {
     position: fixed;
     inset: 0 0 auto;

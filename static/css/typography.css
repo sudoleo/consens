@@ -29,13 +29,20 @@
     monospace;
   --font: var(--font-sans);
 
-  --font-size-micro: 0.6875rem;
-  --font-size-xs: 0.75rem;
-  --font-size-sm: 0.875rem;
-  --font-size-base: 1rem;
-  --font-size-lg: 1.125rem;
-  --font-size-xl: 1.5rem;
-  --font-size-2xl: 2rem;
+  /* Nine text steps and two display sizes. 12px is the floor: counters,
+     footnotes and badges, never running text. 13px is the voice of controls,
+     17px the voice of answers (Apple's reading size). `micro` survives as an
+     alias of the floor so older call sites keep working. */
+  --font-size-xs: 0.75rem;      /* 12 */
+  --font-size-micro: var(--font-size-xs);
+  --font-size-ui: 0.8125rem;    /* 13 */
+  --font-size-sm: 0.875rem;     /* 14 */
+  --font-size-base: 1rem;       /* 16 */
+  --font-size-read: 1.0625rem;  /* 17 */
+  --font-size-lg: 1.125rem;     /* 18 */
+  --font-size-title: 1.25rem;   /* 20 */
+  --font-size-xl: 1.5rem;       /* 24 */
+  --font-size-2xl: 2rem;        /* 32 */
   --font-size-display-sm: clamp(2rem, 4.4vw, 3rem);
   --font-size-display-lg: clamp(2.75rem, 7vw, 4.25rem);
 

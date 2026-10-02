@@ -67,8 +67,10 @@ def test_sidebar_navigation_is_self_contained_and_guest_login_is_top_only():
     assert "isAwaitingChoice" not in app_init
     assert "before changing models" not in app_init
     assert "function syncSidebarModelCount()" in model_picker
-    assert ":not(.sidebar-model-entry)" in input_css
-    assert ":not(.sidebar-search-trigger)" in input_css
+    # The solid button look is opt-in (`.btn`), so sidebar controls start
+    # neutral instead of needing an entry in an exception chain.
+    assert "button:not(" not in input_css
+    assert ".btn {" in input_css
 
 
 def test_public_navigation_is_compact_and_learning_links_live_in_footer():
@@ -238,7 +240,7 @@ def test_fixed_navigation_yields_while_consensus_or_watch_content_is_read():
     assert "body.is-reading-chrome-hidden .app-nav-float" in layout
     assert "body.is-reading-chrome-hidden .view-switch" in layout
     assert "prefers-reduced-motion: reduce" in layout
-    assert "transition: transform 0.22s ease" in watch_css
+    assert "transition: transform var(--dur-state) var(--ease-standard)" in watch_css
 
 
 def test_disclaimer_stays_attached_below_the_moving_input_section():
@@ -367,17 +369,17 @@ def test_every_settings_category_is_a_tab_panel_with_a_nav_item():
 
 
 def test_settings_tabs_read_as_navigation_not_as_buttons():
-    """Die Reiter muessen in der `button:not(...)`-Kette stehen.
+    """Die Reiter rendern als Navigation, nicht als gefuellte Aktionsknoepfe.
 
-    Sonst gewinnt der globale Button-Stil und die sechs Kategorien rendern als
-    sechs grosse gefuellte Aktionsknoepfe — eine Navigation, die aussieht wie
-    ein Formular. Dieselbe Falle wie beim Watch-Nudge-Schliessknopf.
+    Frueher musste dafuer jede Klasse in einer globalen `button:not(...)`-Kette
+    stehen. Seit der Button-Stil opt-in ist (`.btn`), darf es diese Kette nicht
+    mehr geben, und die Reiter tragen `.btn` nicht.
     """
     input_css = read("static/css/components-input.css")
     modals_css = read("static/css/components-modals.css")
 
-    assert ":not(.settings-nav-item)" in input_css
-    assert ":not(.settings-inline-btn)" in input_css
+    assert "button:not(" not in input_css
+    assert 'class="btn settings-nav-item' not in read("templates/index.html")
 
     nav_item = modals_css[modals_css.index(".settings-nav-item {"):]
     nav_item = nav_item[:nav_item.index(".settings-body {")]

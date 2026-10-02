@@ -1,4 +1,4 @@
-@import url('./public-tokens.css?v=20260906-palette1');
+@import url('./public-tokens.css?v=20261002-fein1');
 
 :root {
   --accent-primary: var(--accent);
@@ -69,7 +69,7 @@
   width: 100%;
   min-height: 48px;
   border: 1px solid var(--border-light);
-  border-radius: 13px;
+  border-radius: var(--radius-md);
   padding: 0 15px;
   color: var(--text-primary);
   background: var(--surface-raised);
@@ -96,14 +96,14 @@
   flex-direction: column;
   padding: 26px;
   border: 1px solid var(--border-light);
-  border-radius: 20px;
+  border-radius: var(--radius-xl);
   color: inherit;
   background:
     radial-gradient(circle at 93% 3%, color-mix(in srgb, var(--accent-secondary) 11%, transparent), transparent 34%),
     var(--surface-raised);
   box-shadow: var(--shadow-sm);
   text-decoration: none;
-  transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease;
+  transition: transform var(--dur-state) var(--ease-standard), border-color var(--dur-state) var(--ease-standard), box-shadow var(--dur-state) var(--ease-standard);
 }
 
 .topic-card:hover {
@@ -269,7 +269,7 @@
   grid-template-columns: 1.1fr .9fr;
   gap: 60px;
   padding: 42px;
-  border-radius: 22px;
+  border-radius: var(--radius-xl);
   color: var(--ink);
   background: var(--raise);
 }
@@ -394,7 +394,7 @@
 .topic-version-notice {
   margin-top: 28px;
   border-left: 3px solid var(--partial);
-  border-radius: 0 10px 10px 0;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
   padding: 12px 16px;
   color: var(--text-secondary);
   background: color-mix(in srgb, var(--partial) 10%, transparent);
@@ -487,7 +487,7 @@
   color: var(--text-muted);
   font-size: var(--font-size-lg);
   font-weight: var(--font-weight-medium);
-  transition: transform .16s ease;
+  transition: transform var(--dur-state) var(--ease-standard);
 }
 
 .topic-analysis-disclosure[open] > summary b,
@@ -557,7 +557,7 @@
 .topic-change-summary {
   margin-bottom: 28px;
   border-left: 3px solid var(--accent-secondary);
-  border-radius: 0 12px 12px 0;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
   padding: 15px 18px;
   background: color-mix(in srgb, var(--accent-secondary) 8%, transparent);
 }
@@ -637,7 +637,7 @@
 
 .opinion-change {
   border: 1px solid var(--border-subtle);
-  border-radius: 14px;
+  border-radius: var(--radius-md);
   padding: 18px;
   background: var(--surface-muted);
 }
@@ -660,7 +660,7 @@
 
 .opinion-direction span {
   padding: 8px 10px;
-  border-radius: 9px;
+  border-radius: var(--radius-xs);
   background: var(--surface-raised);
 }
 
@@ -731,7 +731,7 @@
   /* Sits with the middle of the line rather than on the baseline, so the chip
      reads as part of the sentence instead of hovering above it. */
   vertical-align: middle;
-  transition: background .15s ease, border-color .15s ease;
+  transition: background var(--dur-press) var(--ease-standard), border-color var(--dur-press) var(--ease-standard);
 }
 
 .topic-consensus a[href^="#src-"]::before {
@@ -791,14 +791,14 @@
   flex-direction: column;
   gap: 10px;
   border: 1px solid var(--border-subtle);
-  border-radius: 16px;
+  border-radius: var(--radius-lg);
   padding: 16px 17px;
   color: inherit;
   background: var(--surface-muted);
   text-decoration: none;
   scroll-margin-top: 90px;
-  transition: border-color .15s ease, background .15s ease,
-              transform .15s ease, box-shadow .2s ease;
+  transition: border-color var(--dur-press) var(--ease-standard), background var(--dur-press) var(--ease-standard),
+              transform var(--dur-press) var(--ease-standard), box-shadow var(--dur-state) var(--ease-standard);
 }
 
 .src-embed.is-quality-low {
@@ -841,7 +841,7 @@
   flex: 0 0 auto;
   width: 26px;
   height: 26px;
-  border-radius: 7px;
+  border-radius: var(--radius-xs);
   overflow: hidden;
   background: var(--surface-raised);
   border: 1px solid var(--border-subtle);
@@ -990,7 +990,7 @@
   display: grid;
   place-items: center;
   aspect-ratio: 16 / 9;
-  border-radius: 11px;
+  border-radius: var(--radius-sm);
   background: var(--well);
 }
 
@@ -1024,7 +1024,7 @@
 .topic-secondary-sources > summary {
   padding: 11px 13px;
   border: 1px solid var(--border-light);
-  border-radius: 11px;
+  border-radius: var(--radius-sm);
   color: var(--text-secondary);
   background: var(--surface-muted);
   cursor: pointer;
@@ -1074,7 +1074,7 @@
 .topic-follow-card input,
 .topic-follow-card button {
   min-height: 44px;
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   font: inherit;
 }
 
@@ -1221,7 +1221,7 @@
   display: block;
   height: 3px;
   margin-top: 6px;
-  border-radius: 9px;
+  border-radius: var(--radius-xs);
   background: var(--border-subtle);
 }
 
@@ -1350,7 +1350,7 @@
 
 .claim-group h3 b {
   min-width: 20px;
-  border-radius: 20px;
+  border-radius: var(--radius-xl);
   padding: 1px 7px;
   color: var(--text-secondary);
   background: var(--surface-muted);
@@ -1446,7 +1446,7 @@
 }
 
 .claim-position li {
-  border-radius: 5px;
+  border-radius: var(--radius-2xs);
   padding: 1px 6px;
   color: var(--text-secondary);
   background: var(--surface-muted);
@@ -1512,7 +1512,7 @@
   align-items: baseline;
   gap: 6px;
   border: 1px solid var(--border-subtle);
-  border-radius: 20px;
+  border-radius: var(--radius-xl);
   padding: 3px 10px;
   font-size: var(--font-size-micro);
   font-weight: var(--font-weight-semibold);
@@ -1565,7 +1565,7 @@
   color: var(--text-muted);
   font-size: var(--font-size-sm);
   line-height: 1;
-  transition: transform 0.15s ease;
+  transition: transform var(--dur-press) var(--ease-standard);
 }
 
 .topic-timeline-quiet > details[open] > summary b {
@@ -1667,7 +1667,7 @@
   }
 
   .topic-panel {
-    border-radius: 16px;
+    border-radius: var(--radius-lg);
     padding: 21px;
   }
 
@@ -1841,7 +1841,7 @@
   background: color-mix(in srgb, var(--text-primary) 13%, transparent);
   cursor: pointer;
   text-decoration: none;
-  transition: transform 0.12s ease;
+  transition: transform var(--dur-press) var(--ease-standard);
 }
 
 .topic-strip-cell.is-stable,
@@ -2080,7 +2080,7 @@
 .fact-row > summary::-webkit-details-marker { display: none; }
 
 .fact-row > summary:focus-visible {
-  outline: 2px solid var(--text-primary);
+  outline: var(--focus-ring);
   outline-offset: 2px;
   border-radius: var(--radius-xs);
 }
@@ -2112,7 +2112,7 @@
 .fact-chevron {
   color: var(--text-muted);
   font-size: var(--font-size-sm);
-  transition: transform 0.15s ease;
+  transition: transform var(--dur-press) var(--ease-standard);
 }
 
 .fact-row[open] > summary .fact-chevron { transform: rotate(90deg); }
@@ -2199,7 +2199,7 @@ details.fact-group.is-dropped > summary::-webkit-details-marker { display: none;
 details.fact-group.is-dropped > summary b {
   color: var(--text-muted);
   font-size: var(--font-size-base);
-  transition: transform 0.15s ease;
+  transition: transform var(--dur-press) var(--ease-standard);
 }
 
 details.fact-group.is-dropped[open] > summary b { transform: rotate(45deg); }
@@ -2234,7 +2234,7 @@ details.fact-group.is-dropped[open] > summary b { transform: rotate(45deg); }
 .topic-deep-item > summary::-webkit-details-marker { display: none; }
 
 .topic-deep-item > summary:focus-visible {
-  outline: 2px solid var(--text-primary);
+  outline: var(--focus-ring);
   outline-offset: -2px;
 }
 
@@ -2255,7 +2255,7 @@ details.fact-group.is-dropped[open] > summary b { transform: rotate(45deg); }
 .topic-deep-item > summary b {
   color: var(--text-muted);
   font-size: var(--font-size-lg);
-  transition: transform 0.15s ease;
+  transition: transform var(--dur-press) var(--ease-standard);
 }
 
 .topic-deep-item[open] > summary b { transform: rotate(45deg); }

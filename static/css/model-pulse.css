@@ -108,7 +108,7 @@
 }
 
 .pulse-period-filter button:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -138,7 +138,7 @@
 .pulse-board .lp-model-pulse-icon {
   width: 32px;
   height: 32px;
-  border-radius: 9px;
+  border-radius: var(--radius-xs);
 }
 
 .pulse-board .lp-model-pulse-icon img {

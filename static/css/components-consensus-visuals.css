@@ -236,7 +236,7 @@
   height: 16px;
   border: 0;
   /* Nur noch die Ecke der Hover-Flaeche, kein Rahmen im Ruhezustand. */
-  border-radius: 4px;
+  border-radius: var(--radius-2xs);
   background: transparent;
   color: var(--ink-2);
   font-family: inherit;
@@ -247,7 +247,7 @@
   line-height: var(--line-height-solid);
   cursor: pointer;
   white-space: nowrap;
-  transition: color 0.15s ease, background-color 0.15s ease;
+  transition: color var(--dur-press) var(--ease-standard), background-color var(--dur-press) var(--ease-standard);
 }
 
 /* .is-linked-hover: die zugehoerige Passage wird gehovert (siehe .cx-claim). */
@@ -381,7 +381,7 @@
   /* Ueber einen Zeilenumbruch hinweg bekommt jedes Fragment eigene Ecken. */
   -webkit-box-decoration-break: clone;
   box-decoration-break: clone;
-  transition: background-color 0.14s ease;
+  transition: background-color var(--dur-press) var(--ease-standard);
 }
 
 .cx-claim.is-thin {
@@ -458,7 +458,7 @@
 /* Tastaturfokus auf der Passage: der Ring liegt aussen um die Marke, damit er
    nicht mit ihr verschmilzt. */
 .cx-claim:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline: var(--focus-ring);
   outline-offset: 2px;
   border-radius: 3px;
 }

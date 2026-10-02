@@ -490,6 +490,7 @@ onIdTokenChanged(auth, async (user) => {
         message.textContent = "Your session could not be refreshed. Check your connection and reload.";
         const retry = document.createElement("button");
         retry.type = "button";
+        retry.className = "btn";
         retry.textContent = "Reload";
         retry.addEventListener("click", () => window.location.reload());
         loginContainer.append(message, retry);

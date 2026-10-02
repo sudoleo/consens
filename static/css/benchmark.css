@@ -44,7 +44,7 @@
   color: var(--ink-3);
   font-size: var(--font-size-xs);
   line-height: var(--line-height-ui);
-  transition: color 0.15s ease, border-color 0.15s ease;
+  transition: color var(--dur-press) var(--ease-standard), border-color var(--dur-press) var(--ease-standard);
 }
 
 .bench-related-signal:hover {
@@ -200,11 +200,11 @@
   width: 100%;
   max-width: 62px;
   height: 0;
-  border-radius: 7px 7px 0 0;
+  border-radius: var(--radius-xs) var(--radius-xs) 0 0;
   border: 1px solid var(--bench-model-edge);
   border-bottom: 0;
   background: var(--bench-model-fill);   /* flat matte fill, no gloss */
-  transition: height 0.95s cubic-bezier(0.22, 0.61, 0.36, 1);
+  transition: height 0.95s var(--ease-out);
   transition-delay: calc(var(--i, 0) * 65ms);
 }
 
@@ -236,7 +236,7 @@
   letter-spacing: var(--tracking-tight);
   font-variant-numeric: tabular-nums;
   opacity: 0;
-  transition: opacity 0.4s ease;
+  transition: opacity var(--dur-layer) var(--ease-standard);
   transition-delay: calc(var(--i, 0) * 65ms + 0.5s);
 }
 .bench-chart.is-visible .bench-val { opacity: 1; }
@@ -252,7 +252,7 @@
   height: calc((var(--hi) - var(--lo)) * var(--scale));
   background: var(--bench-ci-color);
   opacity: 0;
-  transition: opacity 0.4s ease;
+  transition: opacity var(--dur-layer) var(--ease-standard);
   transition-delay: calc(var(--i, 0) * 65ms + 0.7s);
 }
 .bench-chart.is-visible .bench-ci { opacity: 1; }
@@ -340,7 +340,7 @@
   font-size: var(--font-size-sm);
 }
 .bench-legend span { display: inline-flex; align-items: center; gap: 8px; }
-.bench-swatch { width: 14px; height: 14px; border-radius: 4px; flex: 0 0 auto; }
+.bench-swatch { width: 14px; height: 14px; border-radius: var(--radius-2xs); flex: 0 0 auto; }
 .bench-swatch.is-consensus { background: var(--bench-consensus-fill); border: 1px solid var(--bench-consensus-edge); }
 .bench-swatch.is-model { background: var(--bench-model-fill); border: 1px solid var(--bench-model-edge); }
 .bench-swatch.is-majority { background: var(--bench-majority-fill); border: 1px solid var(--bench-majority-edge); }
@@ -461,7 +461,7 @@
   font-variant-numeric: tabular-nums;
   color: var(--text-secondary);
   opacity: 0;
-  transition: opacity 0.4s ease;
+  transition: opacity var(--dur-layer) var(--ease-standard);
   transition-delay: calc(var(--i, 0) * 70ms + 0.45s);
 }
 .bench-mini-col.is-consensus .bench-mini-val { color: var(--accent); }
@@ -470,11 +470,11 @@
   width: 100%;
   max-width: 40px;
   height: 0;
-  border-radius: 6px 6px 0 0;
+  border-radius: var(--radius-2xs) var(--radius-2xs) 0 0;
   border: 1px solid #9b9ea1;
   border-bottom: 0;
   background: #bdbfc2;
-  transition: height 0.9s cubic-bezier(0.22, 0.61, 0.36, 1);
+  transition: height 0.9s var(--ease-out);
   transition-delay: calc(var(--i, 0) * 70ms);
 }
 .is-visible .bench-mini-bar,

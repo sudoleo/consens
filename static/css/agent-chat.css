@@ -7,9 +7,9 @@
   position: fixed; z-index: 120; top: 66px; right: 16px; width: 330px; max-height: calc(100dvh - 90px);
   display: flex; flex-direction: column;
   box-sizing: border-box; padding: 14px 16px 8px; overflow: hidden;
-  border: 1px solid var(--line); border-radius: 12px; background: var(--agent-panel-bg);
+  border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--agent-panel-bg);
   box-shadow: 0 1px 2px color-mix(in srgb, var(--ink) 5%, transparent), 0 12px 32px -18px color-mix(in srgb, var(--ink) 30%, transparent);
-  color: var(--ink); font-size: 13px; line-height: 1.5; scrollbar-width: thin;
+  color: var(--ink); font-size: var(--font-size-ui); line-height: 1.5; scrollbar-width: thin;
 }
 .agent-sidebar:not([hidden]) { animation: agent-sidebar-enter .24s cubic-bezier(.2, .7, .2, 1) both; }
 @keyframes agent-sidebar-enter {
@@ -17,21 +17,21 @@
   to { opacity: 1; transform: translate(0, 0); }
 }
 .agent-sidebar-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; min-height: 32px; }
-.agent-sidebar-header h2 { margin: 0; font-size: 13px; font-weight: 600; }
+.agent-sidebar-header h2 { margin: 0; font-size: var(--font-size-ui); font-weight: 600; }
 .agent-sidebar-actions { display: flex; align-items: center; gap: 2px; margin-right: -8px; }
 .agent-sidebar button, .agent-inline-models button {
-  border: 0; border-radius: 6px; background: transparent; color: var(--ink-2); font: inherit; cursor: pointer; min-height: 36px;
+  border: 0; border-radius: var(--radius-2xs); background: transparent; color: var(--ink-2); font: inherit; cursor: pointer; min-height: 36px;
 }
 .agent-sidebar button:hover, .agent-inline-models button:hover { background: var(--raise); color: var(--ink); }
-.agent-sidebar :is(button, summary, a, [tabindex]):focus-visible, .agent-inline-models button:focus-visible { outline: 2px solid var(--ink-2); outline-offset: 2px; }
+.agent-sidebar :is(button, summary, a, [tabindex]):focus-visible, .agent-inline-models button:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 .agent-sidebar .agent-sidebar-stop:not([hidden]) {
   display: inline-flex; align-items: center; gap: 6px; min-height: 28px; padding: 3px 10px;
-  border: 1px solid var(--line); border-radius: 999px; font-size: 12px; font-weight: 500;
+  border: 1px solid var(--line); border-radius: 999px; font-size: var(--font-size-xs); font-weight: 500;
 }
 .agent-sidebar-stop-glyph { width: 7px; height: 7px; border-radius: 1.5px; background: currentColor; }
 .agent-sidebar-stop:disabled { opacity: .55; cursor: default; }
 .agent-sidebar-overview { padding: 8px 0 12px; }
-.agent-sidebar-counts { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; font-size: 11px; color: var(--ink-3); }
+.agent-sidebar-counts { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; font-size: var(--font-size-xs); color: var(--ink-3); }
 .agent-sidebar-progress { color: var(--ink-2); }
 .agent-sidebar-usage { font-variant-numeric: tabular-nums; white-space: nowrap; }
 /* One segment per row, in the Consensus pipeline's language: green = done,
@@ -39,7 +39,7 @@
 .agent-sidebar-segments { display: flex; gap: 3px; margin-top: 8px; }
 .agent-sidebar-segments i {
   position: relative; flex: 1; height: 3px; border-radius: 2px; overflow: hidden;
-  background: color-mix(in srgb, var(--ink) 9%, transparent); transition: background-color .3s ease;
+  background: color-mix(in srgb, var(--ink) 9%, transparent); transition: background-color var(--dur-layer) var(--ease-standard);
 }
 .agent-sidebar-segments i[data-state="done"] { background: var(--agree); }
 .agent-sidebar-segments i[data-state="out"] {
@@ -52,7 +52,7 @@
 }
 .agent-sidebar-status:empty { display: none; }
 /* Error/settling notes: calm ink, not an alert. */
-.agent-sidebar-status { margin: 0 0 12px; color: var(--ink-2); font-size: 12px; line-height: 1.55; }
+.agent-sidebar-status { margin: 0 0 12px; color: var(--ink-2); font-size: var(--font-size-xs); line-height: 1.55; }
 .agent-check-mark { width: 15px; height: 15px; flex-shrink: 0; margin-top: 2px; fill: none; stroke: var(--ink-2); stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; }
 .agent-sidebar > :not(.agent-session-list) { flex: none; }
 /* The only scroll area. Rows and their opened details share it. */
@@ -63,8 +63,8 @@
 .agent-session { border-top: 1px solid color-mix(in srgb, var(--line) 65%, transparent); }
 .agent-session > summary {
   display: flex; align-items: flex-start; gap: 8px; list-style: none; cursor: pointer;
-  padding: 10px 8px; margin: 0 -8px; border-radius: 8px; background: var(--agent-panel-bg);
-  transition: background-color .15s ease;
+  padding: 10px 8px; margin: 0 -8px; border-radius: var(--radius-xs); background: var(--agent-panel-bg);
+  transition: background-color var(--dur-press) var(--ease-standard);
 }
 .agent-session > summary:hover { background-color: color-mix(in srgb, var(--raise) 70%, var(--agent-panel-bg)); }
 /* An open row keeps its heading in view while its answer scrolls past, so
@@ -77,18 +77,18 @@
 }
 .agent-session > summary::-webkit-details-marker { display: none; }
 .agent-session > summary::after { content: ''; width: 5px; height: 5px; flex: 0 0 5px; color: var(--ink-3); margin: 6px 2px 0 0;
-  border-right: 1px solid currentColor; border-bottom: 1px solid currentColor; transform: rotate(45deg); transition: transform .18s ease; }
+  border-right: 1px solid currentColor; border-bottom: 1px solid currentColor; transform: rotate(45deg); transition: transform var(--dur-state) var(--ease-standard); }
 .agent-session[open] > summary::after { transform: rotate(225deg); }
 .agent-session > summary > :is(img, .model-mark-fallback) { margin-top: 2px; }
 .agent-session img, .agent-inline-model img { width: 15px; height: 15px; object-fit: contain; flex-shrink: 0; }
 .agent-session-info { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
 .agent-session-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 4px 10px; min-width: 0; }
-.agent-session-info strong { font-size: 13px; font-weight: 550; overflow-wrap: anywhere; }
+.agent-session-info strong { font-size: var(--font-size-ui); font-weight: 550; overflow-wrap: anywhere; }
 .agent-session-heading strong { min-width: 0; }
 .agent-session-role { overflow-wrap: anywhere; }
-.agent-session-meta { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 3px 8px; font-size: 11px; color: var(--ink-3); }
+.agent-session-meta { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 3px 8px; font-size: var(--font-size-xs); color: var(--ink-3); }
 .agent-session-state { white-space: nowrap; font-variant-numeric: tabular-nums; }
-.agent-session-tokens { flex-shrink: 0; font-size: 11px; font-weight: 400; color: var(--ink-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.agent-session-tokens { flex-shrink: 0; font-size: var(--font-size-xs); font-weight: 400; color: var(--ink-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
 /* Share the Consensus track and shimmer; no percentage is implied for a live call. */
 .agent-session-track { flex: none; height: 2px; margin-top: 3px; background: var(--line-soft); opacity: .65; }
 .agent-session-track i { width: 100%; background: var(--line); }
@@ -102,27 +102,27 @@
 .agent-session-detail { padding: 2px 0 14px 23px; overflow-wrap: anywhere; }
 .agent-session[open] .agent-session-detail { animation: agent-detail-enter .2s ease both; }
 @keyframes agent-detail-enter { from { opacity: 0; transform: translateY(-3px); } }
-.agent-session-detail h3 { margin: 12px 0 4px; color: var(--ink-3); font-size: 11px; font-weight: 600; }
+.agent-session-detail h3 { margin: 12px 0 4px; color: var(--ink-3); font-size: var(--font-size-xs); font-weight: 600; }
 .agent-session-detail > :first-child, .agent-session-detail > :first-child h3 { margin-top: 6px; }
-.agent-session-detail p { margin: 0 0 8px; white-space: pre-wrap; font-size: 12px; }
+.agent-session-detail p { margin: 0 0 8px; white-space: pre-wrap; font-size: var(--font-size-xs); }
 .agent-session-detail .agent-judge-purpose { color: var(--ink-2); line-height: 1.7; }
-.agent-session-detail .agent-judge-note { color: var(--ink-3); font-size: 11px; line-height: 1.6; }
+.agent-session-detail .agent-judge-note { color: var(--ink-3); font-size: var(--font-size-xs); line-height: 1.6; }
 .agent-token-breakdown { display: flex; gap: 28px; margin: 14px 0; padding: 10px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
 .agent-token-breakdown dt { color: var(--ink-3); font-size: 10px; }
-.agent-token-breakdown dd { margin: 3px 0 0; font-size: 12px; font-variant-numeric: tabular-nums; }
+.agent-token-breakdown dd { margin: 3px 0 0; font-size: var(--font-size-xs); font-variant-numeric: tabular-nums; }
 .agent-detail-skeleton { display: grid; gap: 9px; padding: 8px 0 16px; min-height: 50px; }
-.agent-detail-skeleton span { display: block; height: 8px; border-radius: 4px; background: var(--line); animation: agent-detail-pulse 1.5s ease-in-out infinite; }
+.agent-detail-skeleton span { display: block; height: 8px; border-radius: var(--radius-2xs); background: var(--line); animation: agent-detail-pulse 1.5s ease-in-out infinite; }
 .agent-detail-skeleton span:nth-child(2) { width: 87%; }
 .agent-detail-skeleton span:nth-child(3) { width: 64%; }
 @keyframes agent-detail-pulse { 50% { opacity: .4; } }
 .agent-message + .agent-message { margin-top: 14px; padding-top: 12px; border-top: 1px solid color-mix(in srgb, var(--line) 65%, transparent); }
-.agent-source { display: block; color: var(--ink-2); font-size: 12px; margin: 6px 0; }
+.agent-source { display: block; color: var(--ink-2); font-size: var(--font-size-xs); margin: 6px 0; }
 .agent-inline-models { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; max-width: 100%; vertical-align: top; }
-.agent-inline-models button { display: inline-flex; align-items: center; justify-content: center; padding: 4px 7px; font-size: 12px; }
+.agent-inline-models button { display: inline-flex; align-items: center; justify-content: center; padding: 4px 7px; font-size: var(--font-size-xs); }
 .agent-sidebar .agent-sidebar-close, #agentAnswerActivity .agent-inline-models button {
-  background: none; box-shadow: none; border: none; color: var(--ink-2); padding: 4px 8px; font-size: 12px; font-weight: 500; min-height: 32px;
+  background: none; box-shadow: none; border: none; color: var(--ink-2); padding: 4px 8px; font-size: var(--font-size-xs); font-weight: 500; min-height: 32px;
 }
-.agent-sidebar .agent-sidebar-close { font-size: 20px; line-height: 1; width: 32px; flex: 0 0 32px; }
+.agent-sidebar .agent-sidebar-close { font-size: var(--font-size-title); line-height: 1; width: 32px; flex: 0 0 32px; }
 .agent-model-stack { display: inline-flex; align-items: center; padding-left: 2px; }
 #agentAnswerActivity .agent-inline-models .agent-sidebar-toggle { width: 28px; min-height: 28px; padding: 0; color: var(--ink-3); }
 .agent-sidebar-toggle svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linejoin: round; }
@@ -134,7 +134,7 @@
 }
 .agent-model-stack .agent-inline-model {
   animation: agent-icon-enter .24s cubic-bezier(.2, .7, .2, 1) var(--agent-icon-delay, 0ms) both;
-  transition: background-color .18s ease;
+  transition: background-color var(--dur-state) var(--ease-standard);
 }
 @keyframes agent-icon-enter {
   from { opacity: 0; transform: translateY(4px); }
@@ -143,13 +143,13 @@
 .agent-model-stack .agent-inline-model:first-child { margin-left: 0; }
 .agent-model-stack .agent-inline-model:is(:hover, :focus-visible) { z-index: 2; background: var(--raise); }
 .agent-history-models { margin: 2px 0 12px; }
-.model-mark-fallback { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; font-size: 11px; color: var(--ink-2); }
-.agent-session-progress { font-size: 12px; line-height: 1.7; color: var(--ink-2); }
+.model-mark-fallback { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; font-size: var(--font-size-xs); color: var(--ink-2); }
+.agent-session-progress { font-size: var(--font-size-xs); line-height: 1.7; color: var(--ink-2); }
 .agent-session-task > summary { cursor: pointer; padding: 8px 0; color: var(--ink-3); }
-.agent-session-detail .agent-message-body { font-size: 12px; line-height: 1.7; white-space: normal; }
+.agent-session-detail .agent-message-body { font-size: var(--font-size-xs); line-height: 1.7; white-space: normal; }
 .agent-session-detail .agent-message-body p { white-space: normal; }
 @media (min-width: 1200px) {
-  body.single-agent-active:not(.answer-reader-docked) .container { transition: width .24s ease, max-width .24s ease, margin-left .24s ease; }
+  body.single-agent-active:not(.answer-reader-docked) .container { transition: width var(--dur-state) var(--ease-standard), max-width var(--dur-state) var(--ease-standard), margin-left var(--dur-state) var(--ease-standard); }
   /* Activity overlays the shell without changing the reading column. */
   body.single-agent-active:not(.answer-reader-docked) .container {
     --agent-chat-width: min(var(--app-container-width), calc(100vw - var(--app-sidebar-offset) - 48px));
@@ -182,33 +182,33 @@
 .agent-effort-control .model-picker-display-text::before { content: 'Reasoning · '; color: var(--ink-3); font-weight: 400; }
 :is(#agentModelsRetry, #agentRecover):not([hidden]) {
   display: inline-flex; align-items: center; min-height: 38px; padding: 4px 8px;
-  border-radius: 6px; font-size: 12px; white-space: nowrap;
+  border-radius: var(--radius-2xs); font-size: var(--font-size-xs); white-space: nowrap;
 }
-:is(#agentModelsRetry, #agentRecover):focus-visible { outline: 2px solid var(--ink-2); outline-offset: 2px; }
+:is(#agentModelsRetry, #agentRecover):focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 .agent-answer { width: 100%; min-width: 0; padding: 22px 0; order: 4; }
 .agent-answer[hidden] { display: none; }
-#agentAnswerError { color: var(--ink-2); border-left: 2px solid var(--line); padding: 4px 0 4px 12px; font-size: 13px; line-height: 1.6; }
+#agentAnswerError { color: var(--ink-2); border-left: 2px solid var(--line); padding: 4px 0 4px 12px; font-size: var(--font-size-ui); line-height: 1.6; }
 #agentAnswerError:has(+ .agent-answer-error-actions:not([hidden])) { margin-bottom: 4px; }
 .agent-answer-error-actions { display: flex; flex-wrap: wrap; gap: 4px 12px; padding-left: 14px; margin: 0 0 12px; }
 .agent-answer-error-actions[hidden] { display: none; }
 .agent-answer-error-actions button, .agent-review-notice button, .agent-progress-review-jump {
-  display: inline-flex; align-items: center; min-height: 36px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px;
-  background: var(--ground); color: var(--ink); font: inherit; font-size: 12px; font-weight: 500; cursor: pointer;
-  transition: background-color .15s ease, border-color .15s ease;
+  display: inline-flex; align-items: center; min-height: 36px; padding: 6px 10px; border: 1px solid var(--line); border-radius: var(--radius-xs);
+  background: var(--ground); color: var(--ink); font: inherit; font-size: var(--font-size-xs); font-weight: 500; cursor: pointer;
+  transition: background-color var(--dur-press) var(--ease-standard), border-color var(--dur-press) var(--ease-standard);
 }
 .agent-answer-error-actions button:first-child { background: var(--button-bg, var(--ink)); border-color: var(--button-bg, var(--ink)); color: var(--button-text, var(--ground)); }
 .agent-answer-error-actions button:hover, .agent-review-notice button:hover, .agent-progress-review-jump:hover { background: var(--raise); }
 .agent-answer-error-actions button:first-child:hover { background: color-mix(in srgb, var(--button-bg, var(--ink)) 88%, var(--ground)); }
-.agent-answer-error-actions button:focus-visible, .agent-progress-review-jump:focus-visible { outline: 2px solid var(--ink-2); outline-offset: 2px; }
+.agent-answer-error-actions button:focus-visible, .agent-progress-review-jump:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 #agentAnswerResources:empty { display: none; }
 /* The one "waiting on you" signal: a compact notice above the composer. */
 .agent-review-notice { align-items: center; gap: 8px 10px; padding: 6px 6px 6px 12px; margin: 0 0 6px; text-align: left; box-sizing: border-box; border: 1px solid color-mix(in srgb, var(--partial) 40%, var(--line));
-  border-radius: 10px; background: var(--partial-bg); color: var(--ink); }
+  border-radius: var(--radius-sm); background: var(--partial-bg); color: var(--ink); }
 .agent-review-notice[hidden] { display: none; }
 .agent-review-notice-dot { width: 7px; height: 7px; flex: none; border-radius: 50%; background: var(--partial); }
 .agent-review-notice #agentReviewMessage { flex: 1 1 auto; min-width: 0; font-weight: 500; }
 .agent-composer-notice.agent-review-notice button { text-decoration: none; padding: 4px 12px; min-height: 32px; border: 1px solid color-mix(in srgb, var(--partial) 45%, var(--line));
-  border-radius: 7px; background: var(--ground); color: var(--ink); font-weight: 500; }
+  border-radius: var(--radius-xs); background: var(--ground); color: var(--ink); font-weight: 500; }
 .agent-composer-notice.agent-review-notice button:hover { background: var(--raise); }
 .agent-progress-review { margin: -6px 0 16px; }
 .agent-progress-review-jump { gap: 7px; color: var(--agent-ink, var(--ink)); border-color: color-mix(in srgb, var(--partial) 45%, var(--line)); background: var(--partial-bg); }
@@ -219,16 +219,16 @@
   .agent-answer-error-actions button, .agent-progress-review-jump, .agent-composer-notice.agent-review-notice button { min-height: 44px; }
 }
 #agentAnswerBody:empty { display: none; }
-.agent-composer-notice { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; padding: 8px 12px 0; color: var(--ink-2); font-size: 12px; line-height: 1.5; }
+.agent-composer-notice { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; padding: 8px 12px 0; color: var(--ink-2); font-size: var(--font-size-xs); line-height: 1.5; }
 .agent-composer-notice[hidden], .agent-answer-actions[hidden], .agent-answer-actions [hidden], .agent-composer-notice [hidden] { display: none; }
 .agent-composer-notice button { border: 0; padding: 4px 0; background: transparent; color: var(--ink); font: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
-.agent-answer-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 12px; margin: 12px 0 0; color: var(--ink-3); font-size: 12px; }
-.agent-answer-actions button, .agent-evidence-links .agent-evidence-link { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 6px 8px; border: 0; border-radius: 6px; background: transparent; color: var(--ink-2); font: inherit; font-size: 12px; font-weight: 500; text-decoration: none; cursor: pointer; transition: background-color .15s ease, color .15s ease; }
+.agent-answer-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 12px; margin: 12px 0 0; color: var(--ink-3); font-size: var(--font-size-xs); }
+.agent-answer-actions button, .agent-evidence-links .agent-evidence-link { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 6px 8px; border: 0; border-radius: var(--radius-2xs); background: transparent; color: var(--ink-2); font: inherit; font-size: var(--font-size-xs); font-weight: 500; text-decoration: none; cursor: pointer; transition: background-color var(--dur-press) var(--ease-standard), color var(--dur-press) var(--ease-standard); }
 .agent-evidence-links .consensus-tab-count { color: var(--ink-3); font-weight: 400; }
 .agent-answer-actions button:hover, .agent-evidence-links .agent-evidence-link:hover { background: var(--raise); color: var(--ink); }
 .agent-answer-actions button[aria-disabled="true"] { cursor: default; opacity: .6; }
 .agent-answer-actions svg, .agent-evidence-icon { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
-.agent-answer-actions button:focus-visible, .agent-composer-notice button:focus-visible, .agent-evidence-links .agent-evidence-link:focus-visible { outline: 2px solid var(--ink-2); outline-offset: 2px; }
+.agent-answer-actions button:focus-visible, .agent-composer-notice button:focus-visible, .agent-evidence-links .agent-evidence-link:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 .agent-copy-status { overflow-wrap: anywhere; }
 .agent-copy-buffer { position: fixed; top: 0; left: -9999px; }
 @media (pointer: coarse) {
@@ -246,11 +246,11 @@ body.single-agent-active #composerAgentToggle:hover { background: transparent; }
 .attach-menu-item:disabled { opacity: .5; cursor: default; }
 #agentReasoningMenuOption .attach-menu-toggle-icon { flex: 0 0 16px; }
 #agentReasoningMenuOption > span:nth-child(2) { flex: 1; }
-#agentReasoningMenuState { color: var(--ink-3); font-size: 12px; }
+#agentReasoningMenuState { color: var(--ink-3); font-size: var(--font-size-xs); }
 
 .agent-model-picker .model-picker-display-text::before { content: none; }
 .agent-reasoning-option { border-top: 1px solid var(--line) !important; margin-top: 6px; padding-top: 12px !important; }
-.agent-review { display: flex; flex-wrap: wrap; align-items: center; gap: 0 12px; margin: 18px 0 8px; color: var(--ink-2); font-size: 12px; }
+.agent-review { display: flex; flex-wrap: wrap; align-items: center; gap: 0 12px; margin: 18px 0 8px; color: var(--ink-2); font-size: var(--font-size-xs); }
 .agent-review[hidden], .agent-review-summary[hidden], .agent-review-status[hidden] { display: none; }
 /* One quiet row: the agreement score first, the evidence links after it,
    Copy as an icon at the end. The summary line and the claims fallback keep
@@ -262,9 +262,9 @@ body.single-agent-active #composerAgentToggle:hover { background: transparent; }
 /* The agreement score, discreet: row-sized type, only the number in the
    traffic-light ink, no meter, no tinted surface. Settings → Agreement score:
    "Summary only" swaps the number for the words, "Hidden" removes it. */
-.agent-agreement { display: inline-flex; align-items: center; min-height: 36px; padding: 0 4px 0 0; color: var(--ink-3); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; cursor: default; }
+.agent-agreement { display: inline-flex; align-items: center; min-height: 36px; padding: 0 4px 0 0; color: var(--ink-3); font-size: var(--font-size-xs); font-variant-numeric: tabular-nums; white-space: nowrap; cursor: default; }
 .agent-agreement-score { display: inline-flex; align-items: baseline; gap: 3px; }
-.agent-agreement-num { color: var(--ink-2); font-size: 13px; font-weight: 600; letter-spacing: -0.01em; }
+.agent-agreement-num { color: var(--ink-2); font-size: var(--font-size-ui); font-weight: 600; letter-spacing: -0.01em; }
 .agent-agreement[data-tone="calm"] .agent-agreement-num { color: var(--agree); }
 .agent-agreement[data-tone="warn"] .agent-agreement-num { color: var(--partial); }
 .agent-agreement[data-tone="alert"] .agent-agreement-num { color: var(--dispute); }
@@ -277,15 +277,15 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 /* Key claims (claims no inline mark could hold) read before the buttons, as
    a quiet list: text first, its model ratio right behind it. */
 .agent-review > .consensus-claims-fallback { order: 0; margin: 0 0 10px; padding-top: 0; border-top: 0; }
-.agent-review .claims-fallback-title { margin-bottom: 4px; font-size: 12px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--ink-3); }
-.agent-review .claims-fallback-row { justify-content: flex-start; gap: 8px; padding: 2px 0; font-size: 13px; line-height: 1.5; color: var(--ink-2); }
+.agent-review .claims-fallback-title { margin-bottom: 4px; font-size: var(--font-size-xs); font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--ink-3); }
+.agent-review .claims-fallback-row { justify-content: flex-start; gap: 8px; padding: 2px 0; font-size: var(--font-size-ui); line-height: 1.5; color: var(--ink-2); }
 .agent-review .claims-fallback-row .claim-badge { margin: 0; }
 .thread-history-footer[hidden] { display: none; }
 .agent-review-summary { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px; margin-bottom: 6px; }
 .agent-review-status { color: var(--ink-2); font-weight: 400; }
 .agent-review-status::before { content: ''; display: inline-block; width: 5px; height: 5px; margin: 0 7px 2px 0; border-radius: 50%; background: var(--ink-3); }
-.agent-review-status[data-state="succeeded"]::before { background: #438b75; }
-.agent-review-status:is([data-state="partial"], [data-state="failed"], [data-state="missing"])::before { background: #b58c48; }
+.agent-review-status[data-state="succeeded"]::before { background: var(--agree); }
+.agent-review-status:is([data-state="partial"], [data-state="failed"], [data-state="missing"])::before { background: var(--partial); }
 .agent-evidence-links { justify-content: flex-start; gap: 4px 12px; margin-left: -8px; }
 .agent-evidence-link .consensus-tab-label { white-space: nowrap; }
 @media (max-width: 540px) {
@@ -300,13 +300,13 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 }
 .agent-evidence-focus { display: inline-flex; gap: 8px; align-items: center; min-width: 0; max-width: 100%; color: var(--ink-3); }
 .agent-evidence-focus select { min-width: 0; max-width: 260px; background: transparent; color: var(--ink-2); border: 0; font: inherit; padding: 6px 0; }
-.agent-evidence-panel { font-size: 13px; line-height: 1.7; overflow-wrap: anywhere; }
+.agent-evidence-panel { font-size: var(--font-size-ui); line-height: 1.7; overflow-wrap: anywhere; }
 .agent-evidence-status { font-weight: 550; margin-top: 0; }
 .agent-evidence-context { border-top: 1px solid var(--line); margin-top: 20px; padding-top: 12px; color: var(--ink-2); }
 .agent-evidence-context > summary { cursor: pointer; color: var(--ink-3); min-height: 32px; }
 .agent-evidence-context p { white-space: pre-wrap; }
 .agent-review-note { color: var(--ink-3); line-height: 1.6; margin: 6px 0 12px; }
-.agent-review :is(select, button):focus-visible, .agent-evidence-context > summary:focus-visible { outline: 2px solid var(--ink-2); outline-offset: 3px; }
+.agent-review :is(select, button):focus-visible, .agent-evidence-context > summary:focus-visible { outline: var(--focus-ring); outline-offset: 3px; }
 @media (max-width: 400px) {
   .agent-model-picker .model-picker-display-text::before { content: ''; }
 }
@@ -324,21 +324,21 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
    meta text are --ink-3. Hierarchy inside comes from weight and size, never
    from a second black. Tokens carry light and dark mode. */
 .agent-activity, .agent-progress { --agent-ink: var(--ink-2); --agent-trace-ink: var(--ink-2); }
-.agent-activity { margin: 0 0 18px; color: var(--ink-2); font-size: 13px; }
+.agent-activity { margin: 0 0 18px; color: var(--ink-2); font-size: var(--font-size-ui); }
 .agent-activity > summary {
   display: flex; flex-wrap: wrap; align-items: center; gap: 9px; width: fit-content; max-width: 100%;
   min-height: 36px; padding: 4px 4px 4px 0; box-sizing: border-box; list-style: none;
-  cursor: pointer; border-radius: 5px; line-height: 1.5;
+  cursor: pointer; border-radius: var(--radius-2xs); line-height: 1.5;
 }
 .agent-activity > summary::-webkit-details-marker { display: none; }
-.agent-activity > summary:focus-visible { outline: 2px solid var(--ink-2); outline-offset: 3px; }
+.agent-activity > summary:focus-visible { outline: var(--focus-ring); outline-offset: 3px; }
 .agent-activity > summary:hover { color: var(--ink); }
 .agent-activity-title { font-weight: 500; font-variant-numeric: tabular-nums; }
-.agent-activity-chevron { width: 5px; height: 5px; margin-left: 2px; border-right: 1px solid currentColor; border-bottom: 1px solid currentColor; transform: rotate(45deg); transition: transform .18s ease; opacity: .6; }
+.agent-activity-chevron { width: 5px; height: 5px; margin-left: 2px; border-right: 1px solid currentColor; border-bottom: 1px solid currentColor; transform: rotate(45deg); transition: transform var(--dur-state) var(--ease-standard); opacity: .6; }
 .agent-activity[open] .agent-activity-chevron { transform: rotate(225deg); }
 .agent-activity.is-closing .agent-activity-chevron { transform: rotate(45deg); }
 .agent-activity-history { display: flow-root; border-top: 1px solid var(--line); margin-top: 6px; padding-top: 12px; }
-.agent-activity-run-details { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 16px; margin: 0 0 18px; font-size: 12px; line-height: 1.65; }
+.agent-activity-run-details { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 16px; margin: 0 0 18px; font-size: var(--font-size-xs); line-height: 1.65; }
 .agent-activity-run-details[hidden] { display: none; }
 .agent-activity-run-details dt { color: var(--ink-3); }
 .agent-activity-run-details dd { margin: 0; color: var(--agent-ink); overflow-wrap: anywhere; }
@@ -347,13 +347,13 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 }
 .agent-activity-content[hidden] { display: none; }
 .agent-activity-content:focus-visible { outline: 1px solid var(--ink-3); outline-offset: 2px; border-radius: 3px; }
-.agent-activity-reasoning { color: var(--agent-trace-ink); white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.75; font-size: 14px; }
+.agent-activity-reasoning { color: var(--agent-trace-ink); white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.75; font-size: var(--font-size-sm); }
 .agent-activity-reasoning + .agent-activity-reasoning { margin-top: 12px; }
 .agent-activity-tool { margin: 12px 0; padding: 0; color: var(--agent-ink); overflow-wrap: anywhere; line-height: 1.65; }
-.agent-progress { display: flow-root; margin: -8px 0 24px; color: var(--agent-trace-ink); font-size: 14px; line-height: 1.75; }
+.agent-progress { display: flow-root; margin: -8px 0 24px; color: var(--agent-trace-ink); font-size: var(--font-size-sm); line-height: 1.75; }
 .agent-progress p, .agent-activity-update { margin: 0 0 14px; overflow-wrap: anywhere; }
-.agent-activity-update { color: var(--agent-trace-ink); font-size: 14px; line-height: 1.75; }
-.agent-progress-step { margin: 0 0 16px; color: var(--agent-ink); font-size: 13px; line-height: 1.65; }
+.agent-activity-update { color: var(--agent-trace-ink); font-size: var(--font-size-sm); line-height: 1.75; }
+.agent-progress-step { margin: 0 0 16px; color: var(--agent-ink); font-size: var(--font-size-ui); line-height: 1.65; }
 .agent-current-status { font-weight: 500; }
 /* The live status row starts with the consens mark, drawn as a mask in the
    row's ink. One sheen crosses mark and label in a single stroke: it is an
@@ -389,29 +389,29 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 .agent-progress p:last-child, .agent-progress-step:last-child, .agent-activity-update:last-child { margin-bottom: 0; }
 .agent-progress-step[hidden] { display: none; }
 .agent-progress[hidden], .agent-activity[open] + .agent-progress { display: none; }
-.agent-activity-tool strong { display: block; font-size: 12px; font-weight: 500; }
-.agent-activity-tool p { white-space: pre-wrap; margin: 6px 0; font-size: 12px; }
-.agent-activity-tool a { display: block; width: fit-content; max-width: 100%; margin-top: 5px; color: var(--ink-2); font-size: 12px; text-decoration: underline; text-underline-offset: 3px; }
+.agent-activity-tool strong { display: block; font-size: var(--font-size-xs); font-weight: 500; }
+.agent-activity-tool p { white-space: pre-wrap; margin: 6px 0; font-size: var(--font-size-xs); }
+.agent-activity-tool a { display: block; width: fit-content; max-width: 100%; margin-top: 5px; color: var(--ink-2); font-size: var(--font-size-xs); text-decoration: underline; text-underline-offset: 3px; }
 .agent-activity-tool a:hover { color: var(--ink); }
-.agent-activity-tool a:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
-.agent-activity-note, .agent-usage { margin: 8px 0 4px; font-size: 11px; line-height: 1.6; color: var(--ink-3); }
+.agent-activity-tool a:focus-visible { outline: var(--focus-ring); outline-offset: 3px; }
+.agent-activity-note, .agent-usage { margin: 8px 0 4px; font-size: var(--font-size-xs); line-height: 1.6; color: var(--ink-3); }
 .agent-usage { font-variant-numeric: tabular-nums; }
 .agent-activity-insights { color: var(--agent-ink); border-top: 1px solid var(--line); margin-top: 16px; padding-top: 16px; overflow-wrap: anywhere; }
 .agent-activity-insights[hidden] { display: none; }
-.agent-activity-insights h3 { margin: 0 0 16px; font-size: 13px; font-weight: 600; }
+.agent-activity-insights h3 { margin: 0 0 16px; font-size: var(--font-size-ui); font-weight: 600; }
 .agent-activity-insight + .agent-activity-insight { margin-top: 20px; }
-.agent-activity-insight h4 { margin: 0 0 8px; font-size: 12px; font-weight: 600; }
-.agent-activity-insight p { margin: 6px 0; font-size: 13px; line-height: 1.65; }
+.agent-activity-insight h4 { margin: 0 0 8px; font-size: var(--font-size-xs); font-weight: 600; }
+.agent-activity-insight p { margin: 6px 0; font-size: var(--font-size-ui); line-height: 1.65; }
 .agent-activity-focus { font-weight: 500; }
-.agent-activity-insight .agent-activity-models { font-size: 12px; color: var(--ink-2); }
+.agent-activity-insight .agent-activity-models { font-size: var(--font-size-xs); color: var(--ink-2); }
 .agent-activity-check { font-weight: 500; }
 .agent-activity-findings { margin: 8px 0; padding-left: 18px; line-height: 1.65; }
 .agent-activity-findings li + li { margin-top: 5px; }
 .agent-activity-insight-actions { display: flex; flex-wrap: wrap; gap: 4px 18px; margin-top: 8px; }
-.agent-activity-insight-actions button { color: var(--ink-2); background: none; border: 0; padding: 7px 0; font: inherit; font-size: 12px; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.agent-activity-insight-actions button { color: var(--ink-2); background: none; border: 0; padding: 7px 0; font: inherit; font-size: var(--font-size-xs); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 .agent-activity-insight-actions button:hover { color: var(--agent-ink); }
 .agent-activity-insight-actions button:disabled { color: var(--ink-3); text-decoration: none; cursor: default; }
-.agent-activity-insight-actions button:focus-visible { outline: 2px solid var(--ink-2); outline-offset: 3px; border-radius: 2px; }
+.agent-activity-insight-actions button:focus-visible { outline: var(--focus-ring); outline-offset: 3px; border-radius: 2px; }
 @media (prefers-reduced-motion: reduce), (forced-colors: active) {
   .agent-session-track:not([hidden]) i::after { animation: none; background: none; }
   .agent-session-tokens.is-loading { animation: none; background: none; color: var(--ink-3); }
@@ -441,12 +441,12 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 #agentAnswerBody:is(.is-answer-checking, .is-answer-check-done) { position: relative; }
 @media (prefers-reduced-motion: no-preference) and (forced-colors: none) {
   #agentAnswerBody:is(.is-answer-checking, .is-answer-check-done)::after {
-    content: ''; position: absolute; inset: -2px -6px; pointer-events: none; border-radius: 6px;
+    content: ''; position: absolute; inset: -2px -6px; pointer-events: none; border-radius: var(--radius-2xs);
     background-image: linear-gradient(105deg, transparent 38%,
       color-mix(in srgb, var(--bg-color, #fff) 40%, transparent) 50%, transparent 62%);
     background-size: 250% 100%;
     animation: source-label-shine 2.8s linear infinite, agent-answer-sheen-in .5s ease backwards;
-    transition: opacity .45s ease;
+    transition: opacity var(--dur-light) var(--ease-standard);
   }
   #agentAnswerBody.is-answer-check-done::after { opacity: 0; }
   /* The marks stroke on in reading order; badges settle in behind them. */

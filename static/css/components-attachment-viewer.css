@@ -24,7 +24,7 @@
   width: min(94vw, 760px);
   max-height: min(88dvh, 820px);
   border: var(--card-border);
-  border-radius: 14px;
+  border-radius: var(--radius-md);
   background:
     linear-gradient(180deg, color-mix(in srgb, var(--glass-highlight) 34%, transparent), transparent 42%),
     var(--container-bg);
@@ -67,7 +67,7 @@
   color: var(--sidebar-text-muted);
   font-size: var(--font-size-sm);
   cursor: pointer;
-  transition: background-color 0.15s ease, color 0.15s ease;
+  transition: background-color var(--dur-press) var(--ease-standard), color var(--dur-press) var(--ease-standard);
 }
 
 .attachment-viewer-close:hover {
@@ -213,7 +213,7 @@
 }
 
 .attachment-viewer-action:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: var(--focus-ring);
   outline-offset: 2px;
 }
 

@@ -2264,9 +2264,10 @@ class WatchFrontendContractTests(unittest.TestCase):
         self.assertIn('"wd-action wd-action-toggle"', dashboard)
         self.assertIn('toggle.setAttribute("aria-expanded"', dashboard)
         self.assertIn("Watch for something new", dashboard)
-        # The global button rule must not repaint any button on the page.
-        self.assertIn(":not(.watch-page button)", input_css)
-        self.assertIn(":not(.watch-goal-chip)", input_css)
+        # No global button rule may repaint any button on the page: the solid
+        # look is opt-in via `.btn`.
+        self.assertNotIn("button:not(", input_css)
+        self.assertIn(".btn {", input_css)
 
 
 class WatchPageRouteTests(unittest.TestCase):

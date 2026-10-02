@@ -403,6 +403,23 @@ definiert die verbindlichen Größen-, Gewichts-, Zeilenhöhen- und Laufweiten-T
 und lässt Formularelemente die Produktschrift erben. Google-Fonts-Links und deren
 CSP-Freigaben existieren nicht mehr; Monospace bleibt ausschließlich für Code und
 technische Identifikatoren, KaTeX behält seine eigene Mathematikschrift.
+Die Typo-Skala hat seit dem Feinschliff (2026-10-02) neun Textstufen:
+`--font-size-xs` 12 (Untergrenze, `--font-size-micro` ist nur noch ein Alias),
+`-ui` 13 (Bedienelemente), `-sm` 14, `-base` 16, `-read` 17 (Antworttext),
+`-lg` 18, `-title` 20, `-xl` 24, `-2xl` 32, dazu zwei Display-Größen. Hart
+kodierte Pixelgrößen gibt es im App-CSS nur noch für Glyphen in Icons (<11 px).
+Daneben liegt **`static/css/foundation.css`**, ebenfalls von `variables.css`
+und `public-tokens.css` importiert: `--radius-2xs` (6 px, neben xs 8 · sm 10 ·
+md 14 · lg 16 · xl 20 · pill; Regel: innerer Radius = äußerer minus Abstand),
+die Bewegungs-Tokens (`--ease-standard`/`--ease-out`/`--ease-in`,
+`--dur-press` 120 · `--dur-state` 200 · `--dur-layer` 320 · `--dur-light` 560 ms),
+EIN Fokusring (`--focus-ring`, `--focus-ring-offset`; `base.css` setzt ihn per
+`:where(...)` als Default für jedes fokussierbare Element) und `--light` für das
+Hauslicht. Komponenten wählen den nächstliegenden Token statt eines eigenen Werts.
+**Buttons:** Der gefüllte Standardknopf ist opt-in (`.btn`, Altname `.button`,
+`components-input.css`). Die frühere globale `button:not(...)`-Kette mit rund
+90 Ausnahmen ist entfernt; ein `<button>` startet neutral. Admin-Seiten
+geben klassenlosen Buttons den alten Look in `admin.css`.
 `shell.css` gibt Agent-/Consensus-Antworten und gespeicherten Turns denselben
 Leserhythmus: 16 px mit 1,75-facher Zeilenhöhe, normale Laufweite, eigene Absatz-,
 Listen- und Überschriftenabstände. Die Regeln für den Consensus-Labelkopf gelten
@@ -781,11 +798,9 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   ist in Runs (`#runModeSetting`, seit 2026-09-30 statt `#agentModeSwitch`/
   `#autoConsensusToggle`) und Display (Theme, `#agreementDisplaySelect`) aufgeteilt.
   Die Reiter tragen die Sprache der Sidebar-Listen: flache Zeile, transparent
-  im Ruhezustand, mindestens 44 px hoch, Hover und Auswahl sind ein Tint. **`.settings-nav-item`
-  muss in der `button:not(...)`-Kette in `components-input.css` stehen** —
-  ohne den Ausschluss bekommen die Reiter die gefüllte Button-Fläche samt
-  10/16-Polsterung und sehen aus wie sechs Aktionsknöpfe statt wie eine
-  Navigation (dieselbe Falle wie beim Watch-Nudge-Schließknopf). Die Tints
+  im Ruhezustand, mindestens 44 px hoch, Hover und Auswahl sind ein Tint. Seit der
+  Button-Stil opt-in ist (`.btn`, 2026-10-02), tragen die Reiter ihn schlicht
+  nicht; eine Ausnahmeliste gibt es nicht mehr. Die Tints
   werden aus `--text-color` gemischt, **nicht** aus der Oberflächenskala: im
   Dark Mode ist `--raise` exakt der Modalhintergrund, ein Hover darauf wäre
   unsichtbar.
@@ -1188,9 +1203,8 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   `.response-answer-more`-Knopf; geklappt wird nur, was wirklich ueberlaeuft,
   und nie waehrend des Streams (`is-streaming` / `dataset.responseState`).
   Die Nutzerentscheidung steht in `dataset.answerOpen` und wird beim naechsten
-  Lauf verworfen. **Falle:** der globale `button:not(...)`-Selektor in
-  `components-input.css` musste den neuen Knopf ausnehmen, sonst wird aus dem
-  stillen Link eine schwarze Pille.
+  Lauf verworfen. (Die frühere Falle, ihn aus einem globalen
+  Button-Selektor auszunehmen, entfällt seit `.btn` opt-in ist.)
   **Folgefalle:** wer den Text einer Antwortbox liest, muss `textContent`
   nehmen — `innerText` liefert fuer `display:none` den leeren String. Die
   Zaehlung in `consensus-lifecycle.js`, die Zitations-Modelle in
@@ -1429,10 +1443,8 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   Antwort-Typo im Mockup-Mass: `.consensus-main`-H2 als Eyebrow, Body 1.03rem/
   1.7 auf max. 64ch; `.consensus-main` ist `overflow:visible`, weil der alte
   `overflow-x:auto` mit den -8px-Copy-Icons einen Quer-Scrollbalken unter der
-  Provenance-Zeile malte. Achtung-Falle erneut bestaetigt: neue stille Buttons
-  (`.run-replay-btn`, `.thread-ask-more`, `.consensus-tab`,
-  `.model-picker-row-toggle`) muessen in die globale
-  `button:not(...)`-Kette in `components-input.css`.
+  Provenance-Zeile malte. Neue stille Buttons brauchen
+  seit 2026-10-02 keinen Ausschluss mehr: der gefuellte Look ist opt-in (`.btn`).
   Der Thread behält weiterhin `100dvh` und kein aeusseres Body-Bottom-Padding.
   Auf Desktop ist der Composer sticky und wird bei kurzen Antworten durch
   `margin-top:auto` an den unteren Rand geschoben. Auf ≤1099 px ist er dagegen

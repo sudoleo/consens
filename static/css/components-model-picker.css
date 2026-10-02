@@ -35,7 +35,7 @@
   opacity: 0.62;
   cursor: help;
   flex-shrink: 0;
-  transition: opacity .2s ease, color .2s ease;
+  transition: opacity var(--dur-state) var(--ease-standard), color var(--dur-state) var(--ease-standard);
 }
 
 .no-web-indicator svg {
@@ -69,7 +69,7 @@
   border-radius: 999px;
   background: transparent;
   border: 0;
-  transition: background-color .2s ease, color .2s ease, transform .12s ease;
+  transition: background-color var(--dur-state) var(--ease-standard), color var(--dur-state) var(--ease-standard), transform var(--dur-press) var(--ease-standard);
   flex-shrink: 0;
   cursor: pointer;
 }
@@ -91,7 +91,7 @@
   border-right: 3px solid transparent;
   border-top: 4px solid var(--sidebar-text-muted);
   pointer-events: none;
-  transition: border-color .2s ease, transform .2s ease;
+  transition: border-color var(--dur-state) var(--ease-standard), transform var(--dur-state) var(--ease-standard);
 }
 
 .model-picker-wrapper:hover::after,
@@ -187,7 +187,7 @@
   min-height: 34px;
   padding: 8px 6px 8px 10px;
   border: 0;
-  border-radius: 9px;
+  border-radius: var(--radius-xs);
   background: transparent;
   color: var(--text-color);
   cursor: pointer;
@@ -209,7 +209,7 @@
 
 .model-picker-option:focus-visible {
   background: color-mix(in srgb, var(--accent) 8%, var(--glass-bg-strong));
-  outline: 2px solid color-mix(in srgb, var(--accent) 56%, transparent);
+  outline: var(--focus-ring);
   outline-offset: -2px;
   opacity: 1;
 }
@@ -255,7 +255,7 @@
 
 .model-picker-group-option { min-height: 36px; gap: 12px; }
 .model-picker-group-option.is-current-group { background: var(--app-surface-hover); }
-.model-picker-group-count { color: var(--ink-3); font-size: 11px; font-variant-numeric: tabular-nums; }
+.model-picker-group-count { color: var(--ink-3); font-size: var(--font-size-xs); font-variant-numeric: tabular-nums; }
 @media (pointer: coarse) {
   .model-picker-group-option { min-height: 44px; }
 }
@@ -303,12 +303,12 @@
   opacity: 1;
 }
 
-/* High Quality: dezenter "Power-up" beim Hover, ohne dauerhaftes Geflimmer. */
+/* High Quality: the row keeps its own stacking for the selected mark. */
 .model-picker-preset-option[data-preset="thorough"] {
   isolation: isolate;
   overflow: hidden;
   transform: translateZ(0);
-  transition: background-color .2s ease, box-shadow .25s ease, color .2s ease, transform .2s ease;
+  transition: background-color var(--dur-state) var(--ease-standard), box-shadow var(--dur-state) var(--ease-standard), color var(--dur-state) var(--ease-standard), transform var(--dur-state) var(--ease-standard);
 }
 
 .model-picker-preset-option[data-preset="thorough"] > * {
@@ -316,93 +316,14 @@
   z-index: 1;
 }
 
-.model-picker-preset-option[data-preset="thorough"]::before {
-  content: "";
-  position: absolute;
-  z-index: 0;
-  inset: -55% -35%;
-  border-radius: inherit;
-  background: linear-gradient(
-    105deg,
-    transparent 31%,
-    rgba(99, 102, 241, 0.04) 39%,
-    rgba(59, 130, 246, 0.22) 48%,
-    rgba(168, 85, 247, 0.18) 53%,
-    rgba(236, 72, 153, 0.08) 59%,
-    transparent 68%
-  );
-  opacity: 0;
-  pointer-events: none;
-  transform: translateX(-62%) skewX(-10deg);
-}
-
-.model-picker-preset-option[data-preset="thorough"]:not(:disabled):hover,
-.model-picker-preset-option[data-preset="thorough"]:not(:disabled):focus-visible {
-  background: color-mix(in srgb, #6366f1 10%, var(--glass-bg-strong));
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, #818cf8 26%, transparent),
-    0 5px 18px color-mix(in srgb, #6366f1 15%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.36);
-  animation: high-quality-power-pulse 1.8s ease-in-out infinite;
-}
-
-.model-picker-preset-option[data-preset="thorough"]:not(:disabled):hover::before,
-.model-picker-preset-option[data-preset="thorough"]:not(:disabled):focus-visible::before {
-  opacity: 1;
-  animation: high-quality-power-sweep 1.55s cubic-bezier(.2, .75, .25, 1) infinite;
-}
-
-.model-picker-preset-option[data-preset="thorough"]:not(:disabled):hover .model-picker-preset-name,
-.model-picker-preset-option[data-preset="thorough"]:not(:disabled):focus-visible .model-picker-preset-name {
-  text-shadow: 0 0 12px color-mix(in srgb, #818cf8 32%, transparent);
-}
-
-.model-picker-preset-option[data-preset="thorough"]:not(:disabled):hover .model-picker-pro-badge,
-.model-picker-preset-option[data-preset="thorough"]:not(:disabled):focus-visible .model-picker-pro-badge {
-  animation: high-quality-badge-charge 1.8s ease-in-out infinite;
-}
-
-.model-picker-preset-option[data-preset="thorough"].is-selected::after {
-  z-index: 1;
-}
-
-@keyframes high-quality-power-sweep {
-  0% { transform: translateX(-62%) skewX(-10deg); }
-  68%, 100% { transform: translateX(62%) skewX(-10deg); }
-}
-
-@keyframes high-quality-power-pulse {
-  0%, 100% { transform: translateZ(0) scale(1); }
-  50% { transform: translateZ(0) scale(1.008); }
-}
-
-@keyframes high-quality-badge-charge {
-  0%, 100% { filter: brightness(1); transform: translateY(0); }
-  50% { filter: brightness(1.08); transform: translateY(-1px); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .model-picker-preset-option[data-preset="thorough"]:not(:disabled):hover,
-  .model-picker-preset-option[data-preset="thorough"]:not(:disabled):focus-visible,
-  .model-picker-preset-option[data-preset="thorough"]:not(:disabled):hover::before,
-  .model-picker-preset-option[data-preset="thorough"]:not(:disabled):focus-visible::before,
-  .model-picker-preset-option[data-preset="thorough"]:not(:disabled):hover .model-picker-pro-badge,
-  .model-picker-preset-option[data-preset="thorough"]:not(:disabled):focus-visible .model-picker-pro-badge {
-    animation: none;
-  }
-
-  .model-picker-preset-option[data-preset="thorough"]:not(:disabled):hover::before,
-  .model-picker-preset-option[data-preset="thorough"]:not(:disabled):focus-visible::before {
-    opacity: .55;
-    transform: translateX(0) skewX(-10deg);
-  }
-}
+/* The Pro preset hovers like every other row. What makes it different is
+   said by its gold badge, not by a coloured sweep. */
 
 /* "Custom"-Zeile: fuehrt zur vollen Modell-Liste, leichte Trennung oben. */
 .model-picker-custom-option {
   margin-top: 5px;
   border-top: 1px solid color-mix(in srgb, var(--sidebar-border) 55%, transparent);
-  border-radius: 0 0 9px 9px;
+  border-radius: 0 0 var(--radius-xs) var(--radius-xs);
 }
 
 /* Chevron (›) fuer die Custom-Zeile bzw. (‹) fuer die Back-Zeile. */
@@ -437,7 +358,7 @@
   min-height: 30px;
   margin-bottom: 5px;
   border-bottom: 1px solid color-mix(in srgb, var(--sidebar-border) 55%, transparent);
-  border-radius: 9px 9px 0 0;
+  border-radius: var(--radius-xs) var(--radius-xs) 0 0;
   color: var(--sidebar-text-muted);
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-semibold);
@@ -473,9 +394,9 @@
 .model-picker-requirement {
   margin: 2px 8px 6px;
   padding: 7px 9px;
-  border-radius: 8px;
-  background: color-mix(in srgb, #b45309 9%, var(--glass-bg-strong));
-  color: color-mix(in srgb, #b45309 78%, var(--text-color));
+  border-radius: var(--radius-xs);
+  background: var(--partial-bg);
+  color: var(--partial);
   font-size: var(--font-size-micro);
   font-weight: var(--font-weight-semibold);
   line-height: var(--line-height-ui);
@@ -504,7 +425,7 @@
   width: 44px;
   min-height: 42px;
   border: 0;
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   background: transparent;
   cursor: pointer;
   padding: 0;
@@ -515,7 +436,7 @@
 }
 
 .model-picker-row-toggle:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent) 56%, transparent);
+  outline: var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -529,9 +450,9 @@
   width: 20px;
   height: 20px;
   border: 1px solid var(--line, var(--sidebar-border));
-  border-radius: 6px;
+  border-radius: var(--radius-2xs);
   background: var(--well, var(--glass-bg-strong));
-  transition: background-color 0.15s ease, border-color 0.15s ease;
+  transition: background-color var(--dur-press) var(--ease-standard), border-color var(--dur-press) var(--ease-standard);
 }
 
 .model-picker-row-check::after {
@@ -545,7 +466,7 @@
   border-bottom: 2px solid transparent;
   opacity: 0;
   transform: rotate(45deg) scale(0.8);
-  transition: opacity 0.12s ease, transform 0.12s ease;
+  transition: opacity var(--dur-press) var(--ease-standard), transform var(--dur-press) var(--ease-standard);
 }
 
 .model-picker-row-toggle[aria-checked="true"] .model-picker-row-check {
@@ -588,8 +509,8 @@
 
 .model-name-trigger {
   cursor: pointer;
-  border-radius: 4px;
-  transition: color .15s ease, background-color .15s ease, box-shadow .15s ease, max-width .2s ease;
+  border-radius: var(--radius-2xs);
+  transition: color var(--dur-press) var(--ease-standard), background-color var(--dur-press) var(--ease-standard), box-shadow var(--dur-press) var(--ease-standard), max-width var(--dur-state) var(--ease-standard);
   display: inline-block;
   vertical-align: middle;
   white-space: nowrap;
@@ -657,7 +578,7 @@
   transform: translateX(-50%);
   opacity: 0;
   pointer-events: none;
-  transition: opacity .18s ease;
+  transition: opacity var(--dur-state) var(--ease-standard);
 }
 
 @media (max-width: 900px) {
