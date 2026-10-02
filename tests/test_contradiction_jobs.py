@@ -264,3 +264,80 @@ def test_failure_from_another_package_does_not_mislabel_a_lost_lease(store):
     assert jobs.process_one(store)
     result = store.page(stub['job_id'], uid='owner')['source_verification']
     assert result['findings'][0]['reason_code'] == 'worker_interrupted'
+
+
+DAY = '2026-10-02'
+
+
+def metered(store, *, limit=1_000_000, limits=None, run='run-1'):
+    with jobs.source_check_context('owner', run):
+        return jobs.submit_advisory(question='Price?', consensus=CONSENSUS, sources=SOURCES,
+            model_sources=SOURCES, model_answers=ANSWERS, differences_data=differences(),
+            keys={}, limits=limits, binding={'basis_hash': 'basis-1'},
+            metering={'account': 'agent', 'quota_day': DAY, 'limit': limit})
+
+
+def ledger(store):
+    from app.services import agent_quota
+    return agent_quota.quota_ref(store.db, 'owner', DAY).get().to_dict() or {}
+
+
+def measured_judge(payload, *args):
+    raw, _ = judge(payload, *args)
+    return raw, {'prompt_tokens': 900, 'completion_tokens': 100}
+
+
+def test_metered_job_holds_its_bound_and_settles_measured_tokens_with_the_result(store, monkeypatch):
+    monkeypatch.setattr(cv, 'judge_contradictions', measured_judge)
+    limits = replace(sv.Limits.configured(), output_tokens=1000)
+    stub = metered(store, limits=limits)
+    bound = jobs.package_token_bound(limits)
+    assert stub['status'] == 'queued' and stub['basis_hash'] == 'basis-1'
+    assert store.get_plan(stub['job_id'])['limits'] == asdict(limits)
+    assert ledger(store)['reserved'] == bound
+    # Admission is idempotent: the same plan never holds twice.
+    assert metered(store, limits=limits)['job_id'] == stub['job_id']
+    assert ledger(store)['reserved'] == bound
+    assert jobs.process_one(store)
+    account = ledger(store)
+    assert account['reserved'] == 0 and account['used'] == 1000
+    header = store.get(stub['job_id'])
+    assert header['metering']['state'] == 'settled' and header['metering']['charged'] == 1000
+    assert header['snapshot']['basis_hash'] == 'basis-1'
+
+
+def test_metered_job_charges_a_bounded_estimate_when_a_lost_attempt_may_have_paid(store):
+    from app.services import agent_quota
+    stub = metered(store)
+    bound = jobs.package_token_bound(sv.Limits.configured())
+    store.ref(stub['job_id']).set({'attempts': 3}, merge=True)
+    assert jobs.process_one(store)
+    account = ledger(store)
+    assert store.page(stub['job_id'])['source_verification']['findings'][0]['reason_code'] == 'worker_interrupted'
+    assert account['reserved'] == 0 and account.get('used', 0) == 0
+    assert account['estimated'] == agent_quota.unknown_estimate(bound, None)
+
+
+def test_metered_job_without_a_model_call_charges_nothing(store, monkeypatch):
+    monkeypatch.setattr(docs, 'fetch_document', lambda *a: (_ for _ in ()).throw(TimeoutError('slow')))
+    stub = metered(store)
+    assert jobs.process_one(store)
+    account = ledger(store)
+    assert store.page(stub['job_id'])['source_verification']['status'] == 'partial'
+    assert account['reserved'] == 0 and account.get('used', 0) == 0 and account.get('estimated', 0) == 0
+
+
+def test_metered_admission_refuses_a_check_the_account_cannot_cover(store):
+    bound = jobs.package_token_bound(sv.Limits.configured())
+    result = metered(store, limit=bound - 1)
+    assert result['status'] == 'failed' and result['reason_code'] == 'token_budget_exhausted'
+    assert result['run_id'] == 'run-1' and 'job_id' not in result
+    assert ledger(store) == {}
+    assert not [path for path in store.db.documents if path[0] == store.collection]
+
+
+def test_deleting_a_metered_job_returns_its_unspent_reservation(store):
+    stub = metered(store)
+    assert ledger(store)['reserved'] > 0
+    assert store.delete(stub['job_id'])
+    assert ledger(store)['reserved'] == 0

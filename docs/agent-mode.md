@@ -193,19 +193,26 @@ die Pro-Tabelle und weitere Modellfamilien werden nicht als Ausweichstufen genut
 
 Bei eingeschaltetem „Check contradictions“ folgt das Tool `check_contradictions`.
 Es verwendet den bestehenden Contradiction Judge für große, faktisch prüfbare
-Widersprüche und bereits vorhandene Originalquellen. Abruf, validierte Zitate,
-Ausschlussgründe, konfigurierte Judge-Modelle und Verfügbarkeits-Fallbacks sind
-dieselben wie in Consensus. Jeder bezahlte Versuch zählt zum Agent-Tokenbudget.
-Ohne passende Widersprüche wird die Quellenprüfung ohne Abrufe oder bezahlten
-Quellen-Judge übersprungen. Ausgeschaltet ist das Tool nicht verfügbar;
+Widersprüche und bereits vorhandene Originalquellen. Seit 2026-10-03 läuft die
+Prüfung als Hintergrundjob in derselben Queue wie in Consensus
+(`source_check_jobs.py`): das Tool reiht je Vergleich einen Job ein, der Turn
+endet sofort danach mit dem Jobverweis, und die Seite verfolgt den Job, bis er
+fertig ist. Abruf, validierte Zitate, Ausschlussgründe, konfigurierte
+Judge-Modelle und Verfügbarkeits-Fallbacks sind dieselben wie in Consensus.
+Die Kosten bleiben auf dem Tokenkonto: der Job reserviert seine Obergrenze bei
+der Aufnahme und bucht die gemessenen Tokens mit seinem Ergebnis; reicht das
+Konto nicht, wird nicht geprüft (`token_budget_exhausted`).
+Ohne passende Widersprüche wird die Quellenprüfung ohne Job, Abrufe oder
+bezahlten Quellen-Judge übersprungen. Ausgeschaltet ist das Tool nicht verfügbar;
 Differences und Coverage bleiben Bestandteil jedes Modellvergleichs.
 `judge_answer(finalize=true)` beendet bei eingeschalteter Quellenprüfung erst
-nach deren Abschluss; das Modell erhält `check_contradictions` als nächsten
-Tool-Schritt. Fehlerhafte oder fehlende Belege bleiben ausdrücklich ungeprüft.
-Ergebnisse und Originalbelege stehen direkt an den Widerspruchskarten, auch
-im gespeicherten Verlauf. Eine neue Antwort oder Vergleichsgrundlage braucht
-eine neue Prüfung; wiederholte Tool-Aufrufe derselben Prüfung starten keinen
-weiteren Quellen-Judge.
+nach dem Einreihen; das Modell erhält `check_contradictions` als nächsten
+Tool-Schritt und sieht selbst keine Quellenurteile. Fehlerhafte oder fehlende
+Belege bleiben ausdrücklich ungeprüft. Ergebnisse und Originalbelege stehen
+direkt an den Widerspruchskarten und als kurze Notiz am Contradictions-Link
+(„checking sources“ → „1 settled by sources“), auch im gespeicherten Verlauf.
+Eine neue Antwort oder Vergleichsgrundlage braucht eine neue Prüfung;
+wiederholte Tool-Aufrufe derselben Prüfung reihen keinen weiteren Job ein.
 
 Die Anzeige unterscheidet vollständig, teilweise, fehlgeschlagen, fehlend und
 abgebrochen. Vollständig bedeutet, dass beide Judges ihre Aufgabe abgeschlossen

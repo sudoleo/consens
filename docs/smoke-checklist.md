@@ -940,6 +940,12 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       Originalbelege direkt in den Widerspruchskarten, auch nach Öffnen des
       gespeicherten Chats. Off lässt Modellvergleich/Coverage aktiv. Fehlende
       oder abgelehnte Belege werden nicht als Bestätigung dargestellt.
+- [ ] Mit Quellenprüfung endet der Agent-Lauf direkt nach dem Antwort-Check
+      (kein Warten auf Abrufe); der Contradictions-Link zeigt „checking sources“,
+      bis der Hintergrundjob fertig ist, dann z. B. „1 settled by sources“, und
+      ein offener Reader zeigt die Urteile an den Karten. Neu laden während der
+      Prüfung: der gespeicherte Turn verfolgt denselben Job weiter. Der
+      Kontostand sinkt um die gemessenen Tokens der Prüfung.
 
 - [ ] Im Agent-Chat ersetzt der verbleibende Tokenanteil als Prozentzahl den
   Run-Zähler im Sidebar-Footer (Rest unter 1 % als „<1%“). Panel: absolute

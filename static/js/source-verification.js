@@ -387,7 +387,8 @@
       if (workerFailureLabels.has(code)) return workerFailureLabels.get(code);
       return {timeout: "Source check timed out", output_limit: "Source check response incomplete",
         invalid_output: "Source check response invalid", missing_credential: "Source check needs an API key",
-        provider_error: "Source service unavailable"}[code] || "Source check unavailable";
+        provider_error: "Source service unavailable",
+        token_budget_exhausted: "Not checked: today's token allowance is used up"}[code] || "Source check unavailable";
     }
     if (verification.status === "skipped") return "No cited statements";
     const { issues, unknown } = assessment(verification);
@@ -878,7 +879,7 @@
       });
   }
   function sameBinding(a, b) {
-    return ['job_id', 'run_id', 'answer_version', 'schema_version', 'check_type', 'prompt_version'].every(key => a?.[key] == null || a[key] === b?.[key]);
+    return ['job_id', 'run_id', 'answer_version', 'basis_hash', 'schema_version', 'check_type', 'prompt_version'].every(key => a?.[key] == null || a[key] === b?.[key]);
   }
   const rejectionExplanations = {
     invalid_output: 'The judge response had an invalid format.',

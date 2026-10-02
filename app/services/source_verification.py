@@ -225,7 +225,7 @@ def _availability_error(exc):
     return None
 
 
-def judge_sources(payload, keys, limits, *, transport=None):
+def judge_sources(payload, keys, limits):
     """One primary attempt and at most one availability fallback, same credentials.
 
     The parent deadline/call budget remains authoritative; the primary receives
@@ -239,7 +239,7 @@ def judge_sources(payload, keys, limits, *, transport=None):
     if limits.fallback_model and limits.fallback_model != limits.model:
         models.append(limits.fallback_model)
     attempts = []
-    request = transport or _judge_sources_once
+    request = _judge_sources_once
     parent = current_analysis_budget()
     contradiction = payload.get('check_type') == 'contradiction_evidence' or payload.get('mode') == 'contradiction_evidence'
     if contradiction:

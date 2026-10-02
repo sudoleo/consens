@@ -2306,23 +2306,60 @@ Ein konfiguriertes Chatmodell ohne Engine-Alias
 verwendet seine Familie nur zur Judge-Policy-Auswahl, niemals zur Synthese.
 
 Bei `check_sources=true` ergänzt `agent_contradictions.py` das strikte Tool
-`check_contradictions`. Nach `judge_answer` ist dessen Abschluss vor dem finalen
-Vergleichsergebnis erforderlich; ausgeschaltet wird es nicht registriert.
-Die bestehende `source_verification`-/`contradiction_verification`-Planung,
-Originaldokument-Abrufe und Belegvalidierung laufen je Vergleich auf dessen
-exakter Antwort-/Quellengrundlage. Keine neue Suche und kein separater Hintergrund-
-Job. Ein optionaler `judge_sources(..., transport=...)` injiziert ausschließlich
-für Agent den gemessenen Providertransport. Primär- und Fallback-Judge laufen
-über `ComparisonTools.call` mit eigenen Schrittbelegen, gemeinsamem Tokenbudget
-und dem lokalen Quellenprüfungs-Zeitbudget. Lokale Quellenfehler ergeben einen
-explizit unvollständigen Befund; Nutzer-Stopp beendet weiterhin den Run.
-`checks[].source_verification` speichert Schema-4-Snapshots inklusive Antwort-Hash,
-Vergleichs-ID als `run_id` und `basis_hash`. `finish_run` prüft diese Bindung;
-identische Tool-Wiederholungen verwenden das gespeicherte Ergebnis. Die fertige
-Synthese und ihre Vergleichsgrundlagen bleiben für diesen Turn fest. Bei Abbruch
-bleiben keine aktiven Befunde stehen. Recovery spielt nur den gespeicherten Snapshot ab.
+`check_contradictions`; ausgeschaltet wird es nicht registriert. Seit
+2026-10-03 prüft es **nicht mehr im Turn**, sondern reiht je Vergleich einen
+Job in die Consensus-Queue `source_check_jobs.py` ein
+(`submit_advisory(..., limits=<eingefrorene Turn-Limits>, binding={basis_hash},
+metering=…)`, Kontext: `run_key` = Vergleichs-ID, Parent-Referenz
+`users/{uid}/chats/{chat_id}`, Server-Key). Grund: Abruf und Quellen-Judge
+kosteten bis zu 60 s je Vergleich (bis zu drei), obwohl ihr Ergebnis erst
+nach der Antwort angezeigt wird. Der Turn finalisiert direkt nach
+`judge_answer` mit `checks[].source_verification` = kleinem Jobverweis
+(`status: queued`, `job_id`, Antwort-Hash als `answer_version`, Vergleichs-ID
+als `run_id`, `basis_hash`; der `basis_hash` steht im Plan-Snapshot und damit in
+jedem gepollten Job-Snapshot). `source_check_is_bound` akzeptiert neben
+terminalen Zuständen `queued`/`running` nur mit `job_id`; `finish_run` prüft
+diese Bindung. Ohne Differences entsteht `failed`/`differences_failed`, ohne
+prüfbare Widersprüche `skipped` – beide ohne Job. Fasst das Tool nicht der
+Orchestrator an, reiht der Server es nach der Synthese ein (`_finish_review`).
+Identische Tool-Wiederholungen und Neueinreichungen derselben Grundlage
+treffen dieselbe Job-ID (keine zweite Reservierung). Stop vor dem Einreihen
+hinterlässt keinen Job; ein einmal eingereihter Job läuft zu Ende. Planung,
+Abruf, Belegvalidierung, Fallback-Modell, Leases, Recovery und Polling sind
+die der Consensus-Jobs (§ Quellenprüfung). Google-Daten-Chats: unverändert kein
+Tool (`agent.py` setzt `check_sources` aus, `_execute` weist es ab).
+
+**Abrechnung (Entscheidung 2026-10-03): der Hintergrundjob bleibt auf dem
+Agent-Tokenkonto.** Vorher liefen Primär-/Fallback-Judge über `metered_model`
+mit Schrittbelegen; ohne Metering würden die Kosten still auf den Server-Key
+wandern. `ContradictionChecks.metering()` übergibt Konto, Periode
+(`agent_quota.period_key`) und Stufenlimit; `SourceCheckRepository.create`
+reserviert die Obergrenze `package_token_bound(limits)` (Input-Budget +
+Output-Cap je erlaubtem Modellversuch, Default 27 000 bzw. 30 000 mit Fallback)
+im selben Commit wie die Job-Aufnahme (`job.metering`, Zustand `reserved`).
+Deckt das Konto sie nicht, wird nichts aufgenommen: `failed` mit
+`reason_code`/`runtime.error_code` `token_budget_exhausted` („Not checked:
+today's token allowance is used up“), der Turn endet trotzdem. `finish_package`
+settlet im selben Commit wie das Paketergebnis über `agent_quota.settle`
+(Messwerte `prompt_tokens`/`completion_tokens`; kein Call oder Cache-Treffer =
+0; unbekannte Usage nach gestartetem Call oder `worker_interrupted`/
+`worker_execution_failed`/`result_persistence_failed` = begrenzte Schätzung
+wie bei Agent-Schritten) in die Periode der Reservierung. `delete` gibt eine
+offene Reservierung zurück (nicht während einer Kontolöschung). Die Kosten
+erscheinen im Kontostand, nicht in `agent_usage` des Turns.
+Die frühere Agent-Transport-Injektion `judge_sources(..., transport=...)` ist
+entfernt.
+
 `agent-review.js` bindet diese Ergebnisse an dieselben Widerspruchskarten im
-Answer Reader. `context.mark` baut das markierte DOM nur bei geändertem Text,
+Answer Reader. Wartende Jobs verfolgt `render` selbst (`followSources`): je
+`job_id` eines gezeigten Reviews ein `App.sourceVerification.observe`
+(Owner-Auth, `GET /api/source-checks/{job_id}`); jede neue Revision ersetzt
+`check.source_verification` im Review-Objekt (Basis-Hash aus dem Verweis) und
+zeichnet Antwortzeile und offenen Reader neu (`refreshContext`). Ein gespeicherter
+Turn spielt seinen Verweis ab und beobachtet den Job erneut; das neueste
+Snapshot je Job (`settledSources`) ersetzt beim erneuten Zeichnen einer älteren
+Kopie den Verweis sofort. `sameBinding` in `source-verification.js` prüft
+zusätzlich `basis_hash`. `context.mark` baut das markierte DOM nur bei geändertem Text,
 Check, Quellen oder `_agentRenderSerial` neu (sonst würde jede Live-Aktualisierung
 die Animation neu starten); `revealMarks` setzt eine laufende Animation nach einem
 neuen DOM über negative Verzögerungen fort. `query-send.js::setSendButtonRunning`
@@ -2343,7 +2380,7 @@ Stimmen werden nicht zu einem künstlich größeren Panel addiert. Die erste fer
 Synthese wird serverseitig festgeschrieben: spätere Orchestrator-Deltas werden
 weder veröffentlicht noch als Teilantwort gespeichert. `capture` erhält den
 exakten Text und seine Hash-/Prüfbindung; neue Vergleiche nach der Synthese werden
-abgewiesen. Judge und optionale Quellenprüfung schließen auch bei
+abgewiesen. Judge und das Einreihen der optionalen Quellenprüfung schließen auch bei
 `finalize=false` ab (das Feld bleibt zur Kompatibilität akzeptiert). Teilweise,
 fehlgeschlagene oder übersprungene Prüfungen bleiben ehrlich gekennzeichnet,
 lösen aber keine automatische Überarbeitung aus. Nach vollständigem Protokoll-
@@ -3159,9 +3196,12 @@ mit validierter Quellen-/Positionszuordnung. Bedingungen, Datum, Geltungsbereich
 und Einschränkungen gehören zum Judge-Vertrag. Quellenfehler und fehlende
 Belege widerlegen keine Position; Modellmehrheit ist kein Quellenbeweis.
 
-Ausschließlich Consensus-Chat-Kontexte geben UID und stabile Run-ID an
+Consensus-Chat-Kontexte und seit 2026-10-03 Agent-Turns (je Vergleich, siehe
+Agent-Abschnitt „check_contradictions“) geben UID und stabile Run-ID an
 `source_check_jobs.py`. Start erst **nach erfolgreichem Differences-Abschluss**
 in `consensus_pipeline.py` und im separaten Streaming-Pfad von `chat.py`.
+`submit_source_check` nimmt optional eingefrorene `limits`, eine `binding`
+(Felder für jeden Job-Snapshot) und `metering` (Kontobuchung, nur Agent).
 `consensus.final` liefert vorher den Antworttext; `differences.final` beendet
 den Vergleich. Danach können `sources.final` und das gemeinsame `final` einen
 noch wartenden Jobverweis liefern. Der Antwortabschluss wartet nicht auf
@@ -3995,8 +4035,11 @@ Agent.
     der Call-Grenze (Input-Schätzung + Output-Cap); eine HTTP-Ablehnung kostet
     nichts. Ohne gebundenen Meter (Watch, Topics, Agent-Client) sind alle Hooks
     No-ops. MOCK_LLM bucht kleine synthetische Messwerte. Nicht gemessen
-    werden die beratende Quellenprüfung (eigener Hintergrundjob mit eigenem
-    Budget) und spätere Arbeit nach der Buchung einer Operation.
+    werden die beratende Consensus-Quellenprüfung (eigener Hintergrundjob mit
+    eigenem Budget) und spätere Arbeit nach der Buchung einer Operation. Die
+    Agent-Quellenprüfung läuft in derselben Queue, bucht aber über
+    `job.metering` auf dieses Konto (Reserve bei Aufnahme, Settlement je
+    Paketergebnis, siehe Agent-Abschnitt „check_contradictions“).
   - *Buchen* (`app/services/run_metering.py::OperationBooking`): jede
     abgeschlossene Operation (`ask:<familie>`, `consensus`, `resolve`, API
     `pipeline`, Chat-Memory `context:<turn>` nur wenn ein Call lief) bucht

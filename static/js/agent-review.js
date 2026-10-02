@@ -324,8 +324,55 @@
       for (const el of body.querySelectorAll('[style*="--cx-reveal-delay"]')) el.style.removeProperty('--cx-reveal-delay');
     }, Math.max(0, body._revealTotal - elapsed));
   }
+  // A contradiction source check settles after its turn: the turn ends with a
+  // queued job reference per comparison (agent_contradictions.py). Each
+  // answer follows the jobs its shown review names and repaints its evidence
+  // row and reader as their snapshots arrive. The newest snapshot of a job
+  // also replaces the stored reference when a saved turn is drawn again.
+  const settledSources = new Map();
+  const sourceWatches = new WeakMap();
+  const pendingSource = value => Boolean(value?.job_id) && ['queued', 'running'].includes(value.status);
+  function adoptSources(review) {
+    for (const check of review?.checks || []) {
+      const value = check?.source_verification;
+      const latest = value?.job_id && settledSources.get(value.job_id);
+      if (latest && latest !== value && (latest.revision ?? -1) >= (value.revision ?? -1)) check.source_verification = latest;
+    }
+  }
+  function followSources(body, review, evidence) {
+    const watches = sourceWatches.get(body) || new Map();
+    sourceWatches.set(body, watches);
+    body._sourceReview = { review, evidence };
+    const shownCheck = jobId => (body._sourceReview.review?.checks || []).find(c => c?.source_verification?.job_id === jobId);
+    const pending = new Set();
+    for (const check of review?.checks || []) {
+      const value = check?.source_verification;
+      if (!pendingSource(value)) continue;
+      const jobId = value.job_id;
+      pending.add(jobId);
+      if (watches.has(jobId)) continue;
+      const user = window.auth?.currentUser;
+      const stop = App.sourceVerification?.observe?.({ snapshot: value,
+        auth: { user, uid: user?.uid, generation: App.authState?.generation },
+        isActive: () => body.isConnected && Boolean(shownCheck(jobId)),
+        onUpdate(next) {
+          const target = shownCheck(jobId);
+          if (!target) return;
+          // The job id carries the answer binding; the reference keeps the basis.
+          const settled = { basis_hash: target.source_verification.basis_hash, ...next };
+          settledSources.set(jobId, settled);
+          target.source_verification = settled;
+          const shown = body._sourceReview;
+          render(body, shown.review, { ...shown.evidence, reveal: false });
+        } });
+      watches.set(jobId, stop || (() => {}));
+    }
+    for (const [jobId, stop] of watches) if (!pending.has(jobId)) { stop(); watches.delete(jobId); }
+  }
   function render(body, review, evidence = {}) {
     if (!body?.parentElement) return;
+    adoptSources(review);
+    followSources(body, review?.comparisons?.length ? review : null, evidence);
     const version = review?.versions?.find(v => v.id === review.answer_version);
     const raw = body.dataset.markdown ?? version?.text;
     // A source pill carries a favicon and may stand for several sources.

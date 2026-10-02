@@ -107,8 +107,25 @@ def resume_source_check(job_id, uid, key):
     return resumed
 
 
+def package_token_bound(limits):
+    """Most tokens one admitted v4 package can spend: the input budget both
+    model attempts share, plus each attempt's output cap."""
+    attempts = 2 if limits.fallback_model and limits.fallback_model != limits.model else 1
+    return limits.input_tokens + limits.output_tokens * attempts
+
+
 def submit_source_check(*, question, consensus, sources, keys, resolved_question='', context=None,
-                        differences_data=None, model_answers=None, model_sources=None, run_id=''):
+                        differences_data=None, model_answers=None, model_sources=None, run_id='',
+                        limits=None, binding=None, metering=None):
+    """Plan and enqueue one source check; returns a small job reference.
+
+    `limits` freezes the caller's admitted budgets (Agent turns store theirs).
+    `binding` adds caller identity to every snapshot of the job (Agent: the
+    comparison's `basis_hash`). `metering` ({account: 'agent', quota_day,
+    limit}) charges the job to the owner's token account: its upper bound is
+    reserved atomically with admission, and each package settles its measured
+    tokens in the same commit as its result.
+    """
     from app.services.source_verification import Limits, plan_source_verification
     from app.services.llm.credentials import openrouter_api_key
     context = context or current_context()
@@ -116,29 +133,32 @@ def submit_source_check(*, question, consensus, sources, keys, resolved_question
         raise ValueError('Source check requires an owner context')
     if context.get('origin', 'interactive') != 'interactive':
         return None
-    limits = Limits.configured()
+    limits = limits or Limits.configured()
     plan = plan_source_verification(question=question, consensus=consensus, sources=sources,
         resolved_question=resolved_question, limits=limits, differences_data=differences_data,
         model_answers=model_answers, model_sources=model_sources, run_id=str(context['run_key']))
+    plan['snapshot'].update(binding or {})
     if not plan['packages']:
         return plan['snapshot']
     from app.services.llm.mock_llm import mock_llm_enabled
     if mock_llm_enabled():
         from app.services.source_verification import verify_sources
-        return verify_sources(question=question, consensus=consensus, sources=sources,
+        return {**verify_sources(question=question, consensus=consensus, sources=sources,
             keys={}, resolved_question=resolved_question,
             differences_data=differences_data, model_answers=model_answers,
             model_sources=model_sources, run_id=str(context['run_key']),
-            fetch=lambda *_: (_ for _ in ()).throw(ValueError('mock_unavailable')))
+            fetch=lambda *_: (_ for _ in ()).throw(ValueError('mock_unavailable'))), **(binding or {})}
     plan['limits'] = asdict(limits)
     # Admission accepts the entire bounded plan atomically, before any paid work.
     repo = repository()
     if context.get('own_keys'):
         _refresh_worker(repo, force=True)
+    if metering:
+        metering = {**metering, 'reserved': package_token_bound(limits) * len(plan['packages'])}
     job = repo.create(uid=context['uid'], run_key=context['run_key'], plan=plan,
         credential_mode='own' if context.get('own_keys') else 'server',
         references=context.get('references', ()), origin=context.get('origin', 'interactive'),
-        credential_worker_id=WORKER_ID if context.get('own_keys') else None)
+        credential_worker_id=WORKER_ID if context.get('own_keys') else None, metering=metering)
     if context.get('own_keys') and job['status'] not in ('complete', 'partial', 'skipped'):
         key = openrouter_api_key(keys)
         if key:
@@ -172,10 +192,17 @@ def disabled_snapshot(consensus):
 
 
 def submit_advisory(**kwargs):
+    from app.services.agent_quota import AgentTokenBudgetExceeded
     try:
         return submit_source_check(**kwargs)
     except (AccountDeletionInProgress, SourceCheckResourceGone):
         raise
+    except AgentTokenBudgetExceeded:
+        # A metered check that the account cannot cover is never admitted.
+        record_metric('source_check', 'admission', outcome='token_budget')
+        context = kwargs.get('context') or current_context() or {}
+        return unavailable_snapshot(kwargs['consensus'], 'token_budget_exhausted',
+            check_type='contradiction_evidence', run_id=str(context.get('run_key') or ''))
     except Exception as exc:
         logging.warning('Source check persistence failed category=%s', safe_exception(exc))
         record_metric('source_check', 'persistence', outcome='failure')

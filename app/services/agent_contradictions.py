@@ -1,37 +1,44 @@
 """Agent tool for the shared, source-backed contradiction judge.
 
-Plans and outcomes belong to the exact comparison/answer snapshot. Paid judge
-attempts use Agent receipts and quota; retrieval keeps the shared document rules.
+The tool only plans and enqueues: each comparison's check becomes a durable
+job in `source_check_jobs` (the queue Consensus uses), bound to the exact
+comparison/answer snapshot. The turn finalizes with the job references; the
+browser follows each job until it settles. Paid judge attempts stay on the
+owner's token account: the job reserves its bound at admission and settles
+its measured tokens with each result.
 """
-from dataclasses import replace
-import json
 
 from app.services.agent_tools import ReadOnlyTool
-from app.services.llm.agent_client import metered_model
-from app.services.llm.provider_runtime import current_analysis_budget
-from app.services.source_verification import (
-    Limits, SourceCheckError, _parse_judge_output, execute_source_package,
-    judge_sources, merge_source_verification, plan_source_verification,
-)
+from app.services.source_verification import Limits
 
 
 PROMPT = """Check contradictions is ON for this message. After judge_answer,
-call check_contradictions to examine factual disagreements using existing original
-sources. This separate tool does not change the synthesis or model agreement.
-The source check finishes the run with the exact fixed answer. It never allows
-a revision or a second review round, including when finalize=false is supplied.
-No eligible disagreements means a skipped source check, not a verified answer.
-Do not claim missing, failed or inconclusive evidence proves either position.
+call check_contradictions. It queues the factual disagreements for a check
+against existing original sources, which runs after the answer is delivered and
+shows next to the contradictions. You never see its verdicts in this run, so do
+not claim any source settled a disagreement. It does not change the synthesis or
+model agreement. Queuing the check finishes the run with the exact fixed answer.
+It never allows a revision or a second review round, including when
+finalize=false is supplied. No eligible disagreements means a skipped source
+check, not a verified answer. Do not claim missing, failed or inconclusive
+evidence proves either position.
 """
+
+# A queued or running job is a valid end of the turn: its reference is bound
+# and the worker settles it. Terminal snapshots come from skipped plans,
+# admission failures and jobs that already finished (idempotent re-submits).
+PENDING = {"queued", "running"}
+TERMINAL = {"complete", "partial", "skipped", "failed"}
 
 
 def source_check_is_bound(check, comparison, digest):
     value = check.get("source_verification") or {}
+    status = value.get("status")
     return (value.get("answer_version") == digest
             and value.get("run_id") == comparison["id"]
             and value.get("basis_hash") == comparison.get("basis_hash")
             and value.get("check_type") == "contradiction_evidence"
-            and value.get("status") in {"complete", "partial", "skipped", "failed"})
+            and (status in TERMINAL or (status in PENDING and bool(value.get("job_id")))))
 
 
 class ContradictionChecks:
@@ -39,7 +46,8 @@ class ContradictionChecks:
         self.comparison = comparison
         self.limits = limits or Limits.configured()
         self.tool = ReadOnlyTool("check_contradictions",
-            "Check factual contradictions found by judge_answer against existing original sources. Never rewrites the answer.",
+            "Queue a check of the factual contradictions found by judge_answer against existing original sources. "
+            "Runs after the answer; never rewrites it.",
             arguments, self.check)
 
     def complete(self):
@@ -47,21 +55,29 @@ class ContradictionChecks:
         return bool(owner.review) and all(source_check_is_bound(check, comparison, owner.snapshot()["answer_hash"])
             for comparison, check in zip(owner.comparisons, owner.review["checks"])) and len(owner.review["checks"]) == len(owner.comparisons)
 
-    def transport(self, payload, keys, limits):
-        from app.services.contradiction_verification import SYSTEM
-        model = metered_model(limits.model, max_tokens=limits.output_tokens)
-        config = {"response_format": {"type": "json_object"}}
-        if model.model == "openai/gpt-5-mini":
-            config["reasoning"] = {"effort": "minimal"}
-        value = self.comparison.call(replace(model, request_config=config), [
-            {"role": "system", "content": SYSTEM},
-            {"role": "user", "content": json.dumps(payload, ensure_ascii=False)}],
-            title="Contradiction source judge", kind="judge", budget=current_analysis_budget())
-        if len(value.text) > limits.output_chars:
-            raise SourceCheckError("output_limit")
-        usage = value.usage or {}
-        return _parse_judge_output(value.text), {**usage,
-            "prompt_tokens": usage.get("input_tokens", 0), "completion_tokens": usage.get("output_tokens", 0)}
+    def metering(self):
+        """The Agent account the background job charges, as Agent steps do."""
+        from app.services import agent_budget_config, agent_quota
+        loop = self.comparison.loop
+        config = agent_budget_config.get_config(loop.store.db)
+        return {"account": "agent", "quota_day": agent_quota.period_key(config),
+                "limit": agent_budget_config.limit_for(config, agent_quota.account_tier(loop.uid))}
+
+    def submit(self, comparison, check):
+        from app.services.source_check_jobs import submit_advisory
+        owner, loop = self.comparison, self.comparison.loop
+        sources = [*loop.completion.sources]
+        for event in loop.completion.activity:
+            sources.extend(event.get("sources") or [])
+        # The job's run is the comparison; its parent is the chat, so deleting
+        # the chat also stops and deletes its pending checks.
+        return submit_advisory(question=comparison["question"], consensus=owner.text, sources=sources,
+            keys={"OpenRouter": loop.api_key}, differences_data=check["differences_data"],
+            model_answers={a["provider_label"]: a["text"] for a in comparison["answers"]},
+            model_sources={a["provider_label"]: a["sources"] for a in comparison["answers"]},
+            limits=self.limits, binding={"basis_hash": comparison.get("basis_hash")}, metering=self.metering(),
+            context={"uid": loop.uid, "run_key": comparison["id"], "own_keys": False, "origin": "interactive",
+                     "references": [f"users/{loop.uid}/chats/{loop.chat_id}"]})
 
     def check(self, args, *, cancellation):
         from app.services.agent_comparison import review_is_bound
@@ -73,39 +89,19 @@ class ContradictionChecks:
         for comparison, check in zip(owner.comparisons, owner.review["checks"]):
             if source_check_is_bound(check, comparison, owner.snapshot()["answer_hash"]):
                 continue
+            binding = {"run_id": comparison["id"], "basis_hash": comparison.get("basis_hash")}
             if not isinstance(check.get("differences_data"), dict):
                 check["source_verification"] = {**unavailable_snapshot(owner.text, "differences_failed",
-                    check_type="contradiction_evidence"), "run_id": comparison["id"], "basis_hash": comparison.get("basis_hash")}
-                owner.checkpoint()
-                continue
-            sources = [*loop.completion.sources]
-            for event in loop.completion.activity:
-                sources.extend(event.get("sources") or [])
-            plan = plan_source_verification(question=comparison["question"], consensus=owner.text,
-                sources=sources, differences_data=check["differences_data"],
-                model_answers={a["provider_label"]: a["text"] for a in comparison["answers"]},
-                model_sources={a["provider_label"]: a["sources"] for a in comparison["answers"]},
-                run_id=comparison["id"], limits=self.limits)
-            snapshot = plan["snapshot"]
-            snapshot["basis_hash"] = comparison.get("basis_hash")
-            check["source_verification"] = snapshot
+                    check_type="contradiction_evidence"), **binding}
+            else:
+                loop._check(cancellation)
+                check["source_verification"] = {**self.submit(comparison, check), **binding}
             owner.checkpoint()
-            for package in plan["packages"]:
-                loop._check(cancellation)
-                partial = execute_source_package(package=package, question=comparison["question"],
-                    answer_version=plan["answer_version"], keys={"OpenRouter": loop.api_key}, limits=self.limits,
-                    judge=lambda payload, keys, limits: judge_sources(payload, keys, limits, transport=self.transport))
-                loop._check(cancellation)
-                snapshot = merge_source_verification(snapshot, partial)
-                check["source_verification"] = snapshot
-                owner.checkpoint()
         owner.versions[-1]["checks"] = owner.review["checks"]
         owner.finalized = self.complete()
         owner.checkpoint()
-        # Full originals are persisted for the UI, not copied back into context.
         return {"finalized": owner.finalized, "checks": [
             {"comparison_id": c["comparison_id"], "status": c["source_verification"]["status"],
-             "reason_code": c["source_verification"].get("reason_code"),
-             "findings": [{k: f.get(k) for k in ("contradiction_id", "checked", "verdict", "supported_position_id", "reason", "reason_code")}
-                          for f in c["source_verification"].get("findings", [])]}
-            for c in owner.review["checks"]]}
+             "reason_code": c["source_verification"].get("reason_code")}
+            for c in owner.review["checks"]],
+            "note": "Queued checks finish after this run. Their verdicts are not available to you."}

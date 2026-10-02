@@ -447,3 +447,57 @@ it('leads the evidence row with a quiet agreement score of the comparison it sho
   expect(score()).toBeNull();
   dom.window.close();
 });
+it('follows a queued contradiction job after the turn and repaints the answer evidence as it settles', () => {
+  const {window: w, document: d, dom} = setup();
+  const watches = [];
+  w.auth = {currentUser: {uid: 'owner'}};
+  w.App.sourceVerification = {render: vi.fn(), observe: vi.fn(options => { const stop = vi.fn(); watches.push({options, stop}); return stop; })};
+  const body = d.getElementById('answer'); body.dataset.markdown = 'Exact answer.';
+  const review = snapshot(); review.check_sources = true;
+  review.checks[0].differences_data.differences = [{type: 'contradiction', claim: 'Price'}];
+  const queued = {job_id: 'job-1', status: 'queued', revision: 0, schema_version: 4, check_type: 'contradiction_evidence',
+    answer_version: 'answer-hash', run_id: 'c1', basis_hash: 'b1', findings: []};
+  review.checks[0].source_verification = queued;
+  w.App.agentReview.render(body, review, {key: 'turn-1'});
+  // One watcher per pending job, bound to its reference and the owner.
+  expect(watches).toHaveLength(1);
+  expect(watches[0].options.snapshot).toBe(queued);
+  expect(watches[0].options.auth.uid).toBe('owner');
+  expect(watches[0].options.isActive()).toBe(true);
+  w.App.agentReview.render(body, review, {key: 'turn-1'});
+  expect(watches).toHaveLength(1);
+  w.App.answerReader.refreshContext.mockClear();
+  // The poll returns the job snapshot; the reference keeps its basis.
+  const {basis_hash, ...settledJob} = {...queued, status: 'complete', revision: 1, findings: [{contradiction_id: 'x', checked: true}]};
+  watches[0].options.onUpdate(settledJob);
+  expect(review.checks[0].source_verification).toMatchObject({status: 'complete', basis_hash: 'b1', revision: 1});
+  expect(w.App.answerReader.refreshContext).toHaveBeenCalledWith(expect.objectContaining({key: 'agent-evidence:c1'}));
+  expect(watches[0].stop).toHaveBeenCalled();
+  d.querySelector('[data-section="differences"]').click();
+  const panel = w.App.answerReader.openContext.mock.calls.at(-1)[0].renderPanel('differences');
+  expect(w.App.sourceVerification.render).toHaveBeenLastCalledWith(panel.querySelector('.agent-evidence-differences'),
+    panel.querySelector('.agent-source-check'), review.checks[0].source_verification, expect.anything());
+  // A saved copy of the turn still names the queued job: it shows the settled
+  // snapshot at once instead of starting over.
+  const saved = structuredClone(review);
+  saved.checks[0].source_verification = {...queued};
+  w.App.agentReview.render(body, saved, {key: 'turn-1'});
+  expect(saved.checks[0].source_verification.status).toBe('complete');
+  expect(watches).toHaveLength(1);
+  dom.window.close();
+});
+it('stops following a job when its answer leaves the page or shows another review', () => {
+  const {window: w, document: d, dom} = setup();
+  const stops = [];
+  w.auth = {currentUser: {uid: 'owner'}};
+  w.App.sourceVerification = {render: vi.fn(), observe: vi.fn(() => { const stop = vi.fn(); stops.push(stop); return stop; })};
+  const body = d.getElementById('answer'); body.dataset.markdown = 'Exact answer.';
+  const review = snapshot();
+  review.checks[1].source_verification = {job_id: 'job-2', status: 'running', answer_version: 'answer-hash', run_id: 'c2', basis_hash: 'b2'};
+  w.App.agentReview.render(body, review);
+  const options = w.App.sourceVerification.observe.mock.calls[0][0];
+  w.App.agentReview.render(body, snapshot());
+  expect(stops[0]).toHaveBeenCalled();
+  expect(options.isActive()).toBe(false);
+  dom.window.close();
+});

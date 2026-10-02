@@ -316,9 +316,12 @@ Providerfehlern und ungültige Metadaten sind abgedeckt. Der Picker-Browsertest
 Einträge in ihrer Reihenfolge und deaktivierte, nicht auflösbare IDs auf Desktop
 und Mobil. `AGENT_SCREENSHOTS=<Verzeichnis>` speichert die Ansichten.
 
-`tests/test_agent_contradictions.py` prüft Tool-Freigabe, Originalbelege,
-getrennte Modell-/Quellenurteile, Primär-/Fallback-Abrechnung, Versionsbindung,
-Abbruch und Wiederholung/Recovery ohne zusätzlichen Quellen-Judge. Die Agent-Frontend-Tests prüfen
+`tests/test_agent_contradictions.py` prüft Tool-Freigabe, dass der Turn mit
+einem gebundenen Jobverweis endet (kein Abruf/Judge im Turn), die Auswertung
+durch den Worker, Reservierung und Settlement auf dem Tokenkonto,
+eingefrorene Limits, Budgetabsage, Versionsbindung, Stop vor dem Einreihen,
+Chat-Löschung und Wiederholung ohne zweiten Job; `tests/test_contradiction_jobs.py`
+deckt das Job-Metering (Messwerte, Schätzung, kein Call, Löschung) ab. Die Agent-Frontend-Tests prüfen
 zusätzlich eingefrorene Einstellungen, die Startleiste und die Reasoning-Verknüpfung.
 `tests/e2e/test_agent_comparison_frontend.py` prüft den einzeiligen Composer nach
 dem Senden und bei gespeicherten Chats, das (+)-Menü per Touch mit Quellenprüfung,

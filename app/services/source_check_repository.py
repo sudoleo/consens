@@ -23,6 +23,7 @@ from google.api_core.retry import Retry
 from firebase_admin import firestore
 
 from app.services import persistence_guard as guard
+from app.services.persistence_guard import AccountDeletionInProgress
 
 LEGACY_COLLECTION = 'source_check_jobs'
 DISPATCH_PROTOCOL = 'dispatch_v1'
@@ -43,6 +44,8 @@ WORKER_COLLECTION = 'source_check_workers'
 CREDENTIAL_AFFINITY_SECONDS = 30
 ACTIVE = {'queued', 'running'}
 TERMINAL = {'complete', 'partial', 'failed', 'skipped', 'cancelled'}
+# Package results whose earlier, lost attempt may already have paid a model.
+UNCERTAIN_PACKAGE_CODES = {'worker_interrupted', 'worker_execution_failed', 'result_persistence_failed'}
 LEASE_SECONDS = 300
 PAGE_PACKAGES = 4
 MAX_PACKED_BYTES = 700_000
@@ -260,7 +263,8 @@ class SourceCheckRepository:
         return bool(snap.exists and (snap.to_dict() or {}).get('status') not in
                     ('deleting', 'revoked', 'blocked', 'deleted'))
 
-    def create(self, *, uid, run_key, plan, credential_mode='server', references=(), origin='interactive', credential_worker_id=None):
+    def create(self, *, uid, run_key, plan, credential_mode='server', references=(), origin='interactive', credential_worker_id=None,
+               metering=None):
         job_id = digest([uid, run_key, plan['snapshot']['answer_version'],
                          plan['snapshot'].get('prompt_version'), plan.get('sources', plan['snapshot'].get('sources'))])
         contradiction = plan['snapshot'].get('check_type') == 'contradiction_evidence'
@@ -298,6 +302,9 @@ class SourceCheckRepository:
             job['credential_worker_id'] = credential_worker_id
         job['source_totals'] = totals
         job['statement_totals'] = statements
+        if metering and plan['packages']:
+            job['metering'] = {'account': metering['account'], 'quota_day': metering['quota_day'],
+                               'reserved': int(metering['reserved']), 'charged': 0, 'state': 'reserved'}
 
         def operation(tx):
             self._fence(tx, job)
@@ -307,8 +314,19 @@ class SourceCheckRepository:
                 if data.get('status') == 'deleting':
                     raise SourceCheckResourceGone('Source check is being deleted')
                 return data
+            ledger = None
+            if job.get('metering'):
+                # Strict account metering: the whole bound is held before any
+                # paid work, in the admission commit itself. A shortfall
+                # raises AgentTokenBudgetExceeded and admits nothing.
+                from app.services import agent_quota
+                ledger_ref = agent_quota.quota_ref(self.db, uid, metering['quota_day'])
+                ledger = agent_quota.reserve(ledger_ref.get(transaction=tx, **_READ_OPTIONS).to_dict() or {},
+                                             job['metering']['reserved'], limit=metering['limit'])
             tx.set(ref, job)
             tx.set(ref.collection('data').document('plan'), {'payload': payload})
+            if ledger is not None:
+                tx.set(ledger_ref, ledger)
             return job
         result = self._transaction(operation)
         self._remember_route(job_id, self.collection)
@@ -423,6 +441,7 @@ class SourceCheckRepository:
             plan = unpack(plan_snap.to_dict()['payload'])
             completed_result = _complete_result(plan, plan['packages'][index], result)
             payload = pack(completed_result)
+            settlement = self._settlement(tx, job, completed_result, last=index + 1 == job['package_count'])
             if plan['snapshot'].get('check_type') == 'contradiction_evidence':
                 # V4 deliberately admits one bounded package: both positions
                 # share one URL set, one token budget and one execution deadline.
@@ -443,7 +462,8 @@ class SourceCheckRepository:
                 tx.set(ref.collection('packages').document(f'{index:06d}'), {'payload': payload})
                 tx.update(ref, dict(status=status, snapshot=summary, revision=revision,
                     completed_packages=index + 1, updated_at=now,
-                    next_attempt_at=None, lease_token=None, attempts=0, last_failure=None))
+                    next_attempt_at=None, lease_token=None, attempts=0, last_failure=None,
+                    **self._settle(tx, settlement)))
                 return True
             old = job['snapshot']
             summary = dict(old)
@@ -503,9 +523,50 @@ class SourceCheckRepository:
             tx.update(ref, dict(status=status, snapshot=summary, revision=revision,
                 completed_packages=completed, source_progress=progress, statement_progress=statement_progress,
                 fetched_documents=fetched_documents, updated_at=now,
-                next_attempt_at=now if status == 'queued' else None, lease_token=None, attempts=0, last_failure=None))
+                next_attempt_at=now if status == 'queued' else None, lease_token=None, attempts=0, last_failure=None,
+                **self._settle(tx, settlement)))
             return True
         return self._transaction(operation)
+
+    def _settlement(self, tx, job, result, *, last):
+        """Read the ledger a metered job settles into (reads precede writes).
+
+        Each package settles its share of the reservation with its measured
+        tokens; the last one releases the rest. Unknown usage after a started
+        call is charged the ledger's bounded estimate, as for Agent steps.
+        """
+        metering = job.get('metering')
+        if not metering or metering.get('state') != 'reserved':
+            return None
+        from app.services import agent_quota
+        runtime = result.get('runtime') if isinstance(result.get('runtime'), dict) else {}
+        tokens = [runtime.get(key) for key in ('prompt_tokens', 'completion_tokens')]
+        if runtime.get('error_code') in UNCERTAIN_PACKAGE_CODES:
+            usage = None  # A lost earlier attempt may have spent tokens.
+        elif not runtime.get('calls'):
+            usage = {'input_tokens': 0, 'output_tokens': 0}  # Nothing ran, or a cache hit.
+        elif all(type(value) is int and value >= 0 for value in tokens):
+            usage = {'input_tokens': tokens[0], 'output_tokens': tokens[1]}
+        else:
+            usage = None
+        share = metering['reserved'] if last else metering['reserved'] // max(1, job['package_count'] - job['completed_packages'])
+        ledger_ref = agent_quota.quota_ref(self.db, job['uid'], metering['quota_day'])
+        ledger = ledger_ref.get(transaction=tx, **_READ_OPTIONS).to_dict() or {}
+        return {'ref': ledger_ref, 'ledger': ledger, 'usage': usage, 'share': share,
+                'metering': metering, 'last': last}
+
+    def _settle(self, tx, settlement):
+        if settlement is None:
+            return {}
+        from app.services import agent_quota
+        metering = dict(settlement['metering'])
+        usage, share = settlement['usage'], settlement['share']
+        tx.set(settlement['ref'], agent_quota.settle(settlement['ledger'], share, usage))
+        measured = agent_quota.measured_tokens(usage)
+        charged = measured if measured is not None else agent_quota.unknown_estimate(share, usage)
+        metering.update(reserved=metering['reserved'] - share, charged=metering.get('charged', 0) + charged,
+                        state='settled' if settlement['last'] else 'reserved')
+        return {'metering': metering}
 
     def set_source_totals(self, job_id, uid, totals):
         ref = self.ref(job_id)
@@ -649,7 +710,10 @@ class SourceCheckRepository:
                         return False
                     if any(self._reference_live(path, transaction=tx) for path in job.get('references', [])):
                         return False
+                release = self._release_reservation(tx, job)
                 tx.update(ref, {'status': 'deleting', 'next_attempt_at': None})
+                if release:
+                    tx.set(*release)
             return True
         if not self._transaction(mark):
             return False
@@ -658,6 +722,21 @@ class SourceCheckRepository:
                 snap.reference.delete(**_READ_OPTIONS)
         ref.delete(**_READ_OPTIONS)
         return True
+
+    def _release_reservation(self, tx, job):
+        """Tokens a deleted job still holds go back to its account, except
+        while the account itself is being deleted (its ledger goes too)."""
+        metering = job.get('metering') or {}
+        if metering.get('state') != 'reserved' or not metering.get('reserved'):
+            return None
+        from app.services import agent_quota
+        try:
+            guard.ensure_account_write_allowed(uid=job['uid'], db=self.db, transaction=tx)
+        except AccountDeletionInProgress:
+            return None
+        ledger_ref = agent_quota.quota_ref(self.db, job['uid'], metering['quota_day'])
+        ledger = ledger_ref.get(transaction=tx, **_READ_OPTIONS).to_dict() or {}
+        return ledger_ref, agent_quota.release(ledger, metering['reserved'])
 
     def delete_owner(self, uid):
         for collection in READ_COLLECTIONS:
