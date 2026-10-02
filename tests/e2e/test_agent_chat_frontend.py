@@ -79,6 +79,8 @@ def test_all_pro_chat_models_are_grouped_by_provider(browser, phase4_server, wid
     try:
         page.set_viewport_size({'width': width, 'height': 900})
         page.route('**/user_status', lambda r: _json(r, {'tier': 'pro', 'is_pro': True, 'agent_access': True}))
+        # /usage re-asserts the tier; premium chat models unlock only for Pro.
+        page.route('**/usage', lambda r: _json(r, {'tier': 'pro', 'is_pro': True}))
         page.route('**/agent/models', lambda r: _json(r, catalog))
         page.evaluate("async () => { await window.__switchE2EUser('account-a'); }")
         page.evaluate("dark => { document.body.classList.toggle('dark-mode', dark); document.documentElement.classList.toggle('dark-mode', dark); }", dark)
@@ -721,7 +723,10 @@ def test_shared_consensus_picker_still_navigates_submenus(browser, phase4_server
     context, page = _real_firebase_page(browser, phase4_server)
     try:
         page.route("**/user_status", lambda route: _json(route, {"tier": "pro", "is_pro": True, "agent_access": True}))
+        page.route("**/usage", lambda route: _json(route, {"tier": "pro", "is_pro": True}))
         page.evaluate("async () => { await window.__switchE2EUser('account-a'); }")
+        # Agent is the default mode; this checks the Consensus chip.
+        page.evaluate("App.runMode.set('consensus')")
         picker = page.locator(".consensus-model-inline")
         picker.locator(".model-picker-display").click()
         picker.locator(".model-picker-custom-option").click()

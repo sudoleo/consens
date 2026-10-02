@@ -186,6 +186,14 @@
       icon.classList.toggle("is-plus", tier === TIER_PLUS);
     }
 
+    // The plan line under the address in the sidebar footer.
+    const plan = document.getElementById("accountPlanName");
+    if (plan) {
+      plan.textContent = tier === TIER_PRO ? "Pro" : tier === TIER_PLUS ? "Plus" : "Free";
+      plan.classList.toggle("is-pro", tier === TIER_PRO);
+      plan.classList.toggle("is-plus", tier === TIER_PLUS);
+    }
+
     const label = document.getElementById("accountTierLabel");
     if (label) {
       label.hidden = tier === TIER_FREE;

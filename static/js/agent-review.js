@@ -28,6 +28,29 @@
     if (reviewedAnswer(review, raw)) return '';
     return 'This answer may be incomplete because the run ended early. Everything received has been saved, and you can ask again at any time.';
   }
+  // The agreement score under an Agent answer: the same number and words as
+  // the Consensus verdict (consensus-insights.js), set quietly in the
+  // evidence row. Only the number carries the traffic-light colour. Settings
+  // decide how much shows: body.agreement-score-hidden keeps the words,
+  // body.agreement-verdict-hidden removes it (agent-chat.css).
+  function agreementLevel(score) {
+    return score >= 85 ? 'High agreement' : score >= 65 ? 'Strong agreement' : score >= 40 ? 'Partial agreement'
+      : score >= 20 ? 'Low agreement' : 'Very low agreement';
+  }
+  function agreementNode(check, modelCount) {
+    const agreement = check?.differences_data?.agreement;
+    if (!agreement || typeof agreement.score !== 'number' || agreement.coverage_status === 'insufficient') return null;
+    const score = Math.max(0, Math.min(100, Math.round(agreement.score)));
+    const level = agreementLevel(score);
+    const el = node('span', 'agent-agreement');
+    el.dataset.tone = score >= 65 ? 'calm' : score >= 40 ? 'warn' : 'alert';
+    el.title = `${level}: agreement score ${score}/100 across ${modelCount} model${modelCount === 1 ? '' : 's'}. `
+      + 'Model agreement compares perspectives; it is not independent fact checking.';
+    const value = node('span', 'agent-agreement-score');
+    value.append(node('span', 'agent-agreement-num', String(score)), node('span', 'agent-agreement-unit', '/100 agreement'));
+    el.append(value, node('span', 'agent-agreement-level', level));
+    return el;
+  }
   const activityContexts = new WeakMap();
   // The live run renders evidence only once, from its final review object; an
   // activity card built from the streamed review finds its context by key.
@@ -368,6 +391,7 @@
       const sources = turnSources;
       const findAnswer = name => answers.find(a => [a.provider, a.provider_label, a.model?.label].some(v => v?.toLowerCase() === name?.toLowerCase()));
       const context = { key: `agent-evidence:${comparison.id}`, question: comparison.question, scopeLabel: "Comparison focus",
+        check, modelCount: answers.length,
         contextLabel: comparison.question.length > 64 ? comparison.question.slice(0, 61) + "…" : comparison.question,
         contextGroup: () => contexts,
         answers: [
@@ -484,6 +508,10 @@
     function select(context) {
       chosen = context; host._selectedBasis = context.key;
       context.mark(); tabs.replaceChildren();
+      // The score belongs to the comparison the row shows.
+      host.querySelector(':scope > .agent-agreement')?.remove();
+      const agreement = agreementNode(context.check, context.modelCount);
+      if (agreement) host.append(agreement);
       for (const [section, label, count] of context.links()) {
         const button = evidenceButton(section, label, count);
         button.addEventListener("click", () => App.answerReader?.openContext(context, { section, trigger: button }));

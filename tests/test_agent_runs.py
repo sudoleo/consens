@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 import pytest
 
+from app.core import config as cfg
 from app.api.routers import agent, chat_history
 from app.core.rate_limit import limiter, api_uid_limiter
 from app.services import persistence_guard
@@ -207,6 +208,7 @@ def api(monkeypatch, store):
     monkeypatch.setattr(agent, "db_firestore", store.db)
     monkeypatch.setattr(agent, "is_user_pro", lambda uid: True)
     monkeypatch.setattr(agent, "is_user_admin", lambda uid: False)
+    monkeypatch.setattr(agent, "get_user_tier", lambda uid: "pro")
     monkeypatch.setattr(agent, "resolve_developer_api_keys", lambda: {"OpenRouter": "test"})
     monkeypatch.setattr(agent, "mock_llm_enabled", lambda: False)
     monkeypatch.setattr(agent, '_refresh_model_configuration', lambda: None)
@@ -252,17 +254,23 @@ def test_endpoint_single_call_replay_and_cumulative_costs(api, monkeypatch):
     assert totals(store)["estimated_cost_nano_usd"] == 180600
 
 
-@pytest.mark.parametrize("pro,admin,allowed", [(False, False, False), (True, False, True), (False, True, True)])
-def test_access_is_enforced_on_server(api, monkeypatch, pro, admin, allowed):
+@pytest.mark.parametrize("pro,admin", [(False, False), (True, False), (False, True)])
+def test_agent_is_open_to_every_account_and_premium_models_stay_pro(api, monkeypatch, pro, admin):
     client, store, calls = api
     monkeypatch.setattr(agent, "is_user_pro", lambda uid: pro)
     monkeypatch.setattr(agent, "is_user_admin", lambda uid: admin)
-    response = client.post("/chats", json={"execution_mode": "agent"}, headers=AUTH)
-    assert response.status_code == (201 if allowed else 403)
+    assert client.post("/chats", json={"execution_mode": "agent"}, headers=AUTH).status_code == 201
     chat_id = store.create_chat(UID, execution_mode="agent")["id"]
-    response = client.post("/agent", json={"chat_id": chat_id, "question": "Hi", "client_request_id": "r1", "bookmark_id": "bm1"}, headers=AUTH)
-    assert response.status_code == (200 if allowed else 403)
-    assert len(calls) == (1 if allowed else 0)
+    payload = {"chat_id": chat_id, "question": "Hi", "client_request_id": "r1", "bookmark_id": "bm1"}
+    assert client.post("/agent", json=payload, headers=AUTH).status_code == 200
+    assert len(calls) == 1
+    premium = {**payload, "client_request_id": "r2", "model_id": cfg.ANTHROPIC_PRO_MODEL}
+    response = client.post("/agent", json=premium, headers=AUTH)
+    assert response.status_code == (200 if pro or admin else 403)
+    comparison = {**payload, "client_request_id": "r3",
+                  "comparison_models": {"openai": cfg.OPENAI_SOL_MODEL, "deepseek": cfg.DEEPSEEK_PRO_MODEL}}
+    assert client.post("/agent", json=comparison, headers=AUTH).status_code == (200 if pro or admin else 403)
+    assert len(calls) == (3 if pro or admin else 1)
 
 
 def test_foreign_chat_and_client_supplied_models_or_usage_are_rejected(api):
@@ -410,8 +418,11 @@ def test_catalog_reuses_allowlist_and_restricts_reasoning(api, monkeypatch):
     trimmed_preset_models = {item['id'] for item in client.get('/agent/models', headers=AUTH).json()['models']}
     assert cfg.PREMIUM_MODELS <= trimmed_preset_models
     assert {p.pro_model for p in cfg.PROVIDERS.values()} <= trimmed_preset_models
+    # Every account sees the catalog; premium models carry their flag.
     monkeypatch.setattr(agent, "is_user_pro", lambda uid: False)
-    assert client.get("/agent/models", headers=AUTH).status_code == 403
+    listed = client.get("/agent/models", headers=AUTH)
+    assert listed.status_code == 200
+    assert {item['id'] for item in listed.json()['models'] if item.get('premium')} == cfg.PREMIUM_MODELS & trimmed_preset_models
     assert client.get("/agent/models").status_code == 401
     assert not calls
 

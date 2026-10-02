@@ -269,7 +269,13 @@ Chat-/Bookmark-Speicherung, zusätzliche KI-/Suchaufrufe und tatsächliche Reten
 Betreiberangaben werden als direkt lesbares HTML ausgegeben. Offene rechtliche
 Betriebsfragen und Quellen: `docs/legal-review-2026-09-05.md`. Die primäre
 Navigation beschränkt sich auf Product, Watches, Topics, Questions, Benchmark
-und die App-CTA; Model guide und About liegen im Footer. Der Landing-Hero
+und die App-CTA; Model guide und About liegen im Footer. Seit 2026-10-02
+erzählt die Landingpage Agent als Standard: Hero „One agent does the work. Six
+models check it.“, Modell-Chip im Agent-Format („Gemini 3.8 Flash +6“), Szene 02
+(`#agent-mode`) zeigt einen Agent-Turn (Planning → Six models → Answer → Answer
+check; Wörter in `landing-scenes.js`, Schritt-Schlüssel und CSS unverändert),
+Szene 03 und Watch sprechen von „answer“ statt „consensus“. Die Demo hinter dem
+Hero bleibt der clientseitige Consensus-Lauf. Der Landing-Hero
 ist seit 2026-07-17 demo-first: Ein klickbares Input-Feld (Look des /app-Inputs,
 "Try the demo"-Button, Provider-Chips darunter) verlinkt auf `/app?demo=1`;
 Landing-Hero und App-Composer teilen die `.demo-action`-Gestaltung aus
@@ -285,7 +291,9 @@ Hausgrün (`--agree`) als Schimmer und beleuchteter Unterkante, links unten am
 hellsten. Klasse `send-glow` auf `#sendButton`, `.lp-send` und „Try the
 demo“ (Markup in `landing.html` und `static/demo.js`). Zustände stehen beim
 Bedienelement: in `shell.css` aus, solange nichts gesendet werden kann, beim
-Stopp-Knopf wandert es langsam um den Rand; in `landing.css` geht es an,
+Stopp-Knopf atmet es seit 2026-10-02 nur noch in der Deckkraft
+(`send-glow-breathe`, kein umlaufendes Licht mehr; Start-Ring und
+Stopp-Einblendung deutlich kleiner); in `landing.css` geht es an,
 sobald die Mockup-Frage fertig ist. Das Licht ist diesen Elementen vorbehalten.
 `static/demo.js` erkennt den Parameter und startet die Demo automatisch in der
 echten App. Dabei wird zuerst die vollständige Frage in den Composer getippt;
@@ -334,8 +342,9 @@ Judge-Signal ausdrücklich vom kontrollierten Accuracy-Benchmark.
 `/benchmark` verlinkt im Hero zurück auf diese zweite Perspektive. Die Consensus-Engine-Seite nutzt weiterhin die Ergebnisdarstellung
 aus `partials/product_result_mockup.html`.
 Eingabe-Mockups im Landing-Hero und der Ask-Szene verwenden zusätzlich
-`partials/composer_toolbar_mockup.html`: dieselbe 36-px-Leiste mit Agent Mode,
-Check Sources (On) an zweiter Stelle, Deep Think, Attach und sechs gestapelten Provider-Icons wie die App, seitlich
+`partials/composer_toolbar_mockup.html`: dieselbe 36-px-Leiste mit dem Modus
+(seit 2026-10-02 „Agent“), Check contradictions (On) an zweiter Stelle,
+Reasoning, Attach und sechs gestapelten Provider-Icons wie die App, seitlich
 12 px eingerückt. Der Input liegt wie in `/app` explizit vor der animierten
 Leiste, damit seine abgerundete Unterkante vollständig sichtbar bleibt.
 Im Hero ersetzt sie die separate Provider-Zeile. Die
@@ -826,7 +835,11 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   sieht.
   Die Usage-Gruppe zeigt zusätzlich das aktive Watch-Kontingent aus
   `/api/my/watches`. Gesperrte Features zeigen einen kurzen Hinweis ohne
-  Unterbrechung; der Sidebar-Link „Early access“ öffnet die allgemeine Erklärung
+  Unterbrechung; der Sidebar-Link „Early access“ (seit 2026-10-02 ein
+  Textlink in der Tarifzeile `#accountPlanLine` unter der Adresse
+  `#accountIdentity`, die dasselbe Konto-Menü öffnet wie das neutrale
+  Kürzel; firebase.js füllt die Adresse, user-tier.js `#accountPlanName`)
+  öffnet die allgemeine Erklärung
   mit Kontaktmail und Hinweis auf spätere bezahlte Angebote. Verhalten und
   Modulvertrag stehen unter **Auth / Usage / Tier**.
 - **User Memory (`user-memory.js`, `memory-edit.js`, `app/services/user_memory.py`,
@@ -1879,8 +1892,16 @@ laufenden Request, Consensus oder Save gelesen werden. Entfernte Controls wie
 
 ### Agent · Beta: dynamische Vergleiche und Tokenkontingent (2026-09-19)
 
-`require_agent_access` prüft die tatsächliche Pro-/Adminregel; ein ausgefallener
-Tarif-/Rollendienst liefert sicher 503. Detail und Turn-Stop laufen owner- und
+**Zugang seit 2026-10-02: jedes angemeldete Konto.** `require_agent_access`
+verlangt nur noch eine UID (`/user_status` meldet `agent_access: true`); das
+Tageskonto begrenzt Agent pro Stufe. Pro bleiben die Premium-Modelle:
+`require_model_access` lehnt in `POST /agent` ein Chatmodell oder
+Vergleichsmodell aus `cfg.PREMIUM_MODELS` für Free/Plus mit 403 ab (ein
+ausgefallener Tarif-/Rollendienst liefert sicher 503), `/agent/models` markiert
+sie mit `premium`, und `agent-chat.js` zeigt sie mit Pro-Badge, aber gesperrt
+(`locked()`/`selectable()`). Uploads (`POST /agent/chats/{chat}/files`) folgen
+der Anhangregel ab Plus (`require_uploads`); Liste, Download und Löschen
+bleiben offen, weil Agent Dokumente für jedes Konto in denselben Speicher schreibt. Detail und Turn-Stop laufen owner- und
 turngebunden über den echten Store. Beide Antworten sind `private, no-store`;
 Stop setzt die Delegationssperre nur für diesen Turn, auch bei Wiederholung.
 
@@ -1917,7 +1938,7 @@ Taskzeile zeigt ebenfalls „Waiting for tokens“. Siehe
 [Audit und verbleibende Grenzen](agent-reliability-audit-2026-09-20.md).
 
 Agent · Beta ist ein eigener, pro Unterhaltung unveränderlicher execution_mode
-für Pro-Nutzer und Admins. Der alte Agent-Mode-Schalter gehört weiterhin zur
+für alle angemeldeten Konten (bis 2026-10-01 nur Pro und Admins). Der alte Agent-Mode-Schalter gehört weiterhin zur
 unveränderten Consensus-Pipeline. POST /agent besitzt strikte owner-gebundene
 Chat-/Turn-/Request-Identitäten; recover_only startet niemals Modellaufrufe.
 Fertige Antworten sowie gespeicherte fehlgeschlagene Vergleichsantworten können
@@ -3505,10 +3526,14 @@ an dessen Bookmark statt an die inzwischen geöffnete Ansicht.
 ### Modus: Compare, Consensus, Agent (seit 2026-09-30)
 Eine Wahl, ein Besitzer: `static/js/run-mode.js` (`App.runMode`) haelt
 `localStorage.runMode` ∈ {`compare`, `consensus`, `agent`}. `DEFAULT_MODE`
-steht dort als eine Konstante (heute `consensus`; wird `agent`, sobald Agent
-die Beta verlaesst). Beim ersten Laden migriert das Modul die Altschluessel
-(`agentMode=false` → compare, sonst consensus) und loescht `agentMode` und
-`autoConsensus`; andere Tabs folgen ueber das `storage`-Event.
+steht dort als eine Konstante (seit 2026-10-02 `agent`). Beim ersten Laden
+migriert das Modul die Altschluessel (`agentMode=false` → compare, sonst der
+Default) und loescht `agentMode` und `autoConsensus`; andere Tabs folgen ueber
+das `storage`-Event. Weil bis dahin jeder Erstbesuch ungefragt `consensus`
+speicherte, zieht `migrateDefault()` einen gespeicherten `consensus`-Wert genau
+einmal auf den Default (Marke `localStorage.runModeDefault =
+"agent-2026-10-02"`, auch von `set()` gesetzt); `compare` bleibt. E2E-Tests,
+die `runMode` vorbelegen, setzen die Marke mit.
 - `preference()` ist die Wahl fuer neue Nachrichten, `effective()` das, was die
   naechste Nachricht tatsaechlich tut: ein offener Agent-Chat bleibt Agent, ein
   offener Consensus-Chat kann nur zwischen Compare und Consensus wechseln
@@ -3792,8 +3817,8 @@ Agent.
   /api/admin/agent-budget` nimmt `{revision, tier_limits?, run_estimates?}`
   (strikt, Teilwerte werden mit dem Stand gemischt), `GET` liefert zusätzlich
   `defaults`. Stufe: `agent_quota.account_tier(uid, tier)` = `admin` bei
-  Admin-Rolle, sonst `free|plus|pro`. Agent für weitere Stufen zu öffnen ist
-  damit nur eine Zugangsentscheidung, keine Ledger-Änderung.
+  Admin-Rolle, sonst `free|plus|pro`. Agent für alle Stufen zu öffnen
+  (2026-10-02) war deshalb nur eine Zugangsentscheidung, keine Ledger-Änderung.
 - **Agent** bleibt bei strikter Einzelabrechnung (Reserve vor jedem Call,
   Settlement mit Messwerten, Schätzung + Reconciliation bei fehlender Usage);
   nur das Limit kommt aus der Stufe.
@@ -6039,6 +6064,15 @@ billig, `render()` aus eigenen Aktionen erzwingt es. `project(context)` ruft
 und danach nur noch den Lauf: Antwort, Aktivität, Delegation. Der
 Registry-Listener rendert keinen zweiten Durchgang. Evidence-Links
 (`agentReview.render`) und „Copy answer“ entstehen erst am Ende eines Laufs.
+Seit 2026-10-02 führt die Evidenzzeile `.agent-review` mit einem dezenten
+Agreement-Score (`.agent-agreement`, „72 /100 agreement“): Wert aus
+`check.differences_data.agreement` der gewählten Vergleichsbasis (wechselt mit
+„Evidence for“), gleiche Stufenwörter wie der Consensus-Verdict, nur die Zahl in
+Ampelfarbe, kein Balken; ohne bewertbare Abdeckung (`coverage_status:
+insufficient`) oder bei nicht gebundenem Check keine Zahl. Settings → Agreement
+score gilt auch hier (`agreement-score-hidden` zeigt die Wörter,
+`agreement-verdict-hidden` blendet aus). „Copy answer“ ist seitdem ein reines
+Symbol am Zeilenende (Name per `aria-label`).
 
 **Streaming-Markdown.** `markdown-stream.js::renderMarkdownStream(el, md)`
 zerlegt die wachsende Antwort an Leerzeilen außerhalb von Code-/Mathe-Blöcken in
@@ -6092,8 +6126,11 @@ Tool-Schritt mehr kam; Text vor einem Tool-Aufruf ist Vorrede, nicht Antwort.
 **Aktivitätsleiste.** Unter 1200 px öffnet `agent-delegation.js` die Leiste nie
 selbst; das Panel-Symbol neben den Modell-Icons (`.agent-sidebar-toggle`,
 `aria-label` „Activity · n“, `aria-controls="agentSidebar"`) öffnet ein
-Sheet mit Scrim, Fokusfalle und Escape. Ab 1200 px öffnet sie automatisch nur,
-wenn die Lesespalte daneben mindestens 600 px behält; offen rückt die Spalte
+Sheet mit Scrim, Fokusfalle und Escape. Ab 1200 px öffnet sie automatisch nur
+für einen LAUFENDEN Turn (`get(chat, turn, live)`: `project({running})` bzw.
+Live-SSE) und nur, wenn die Lesespalte daneben mindestens 600 px behält; ein
+geöffnetes Bookmark oder ein fertiger Turn bleibt seit 2026-10-02 zu, bis man
+sie über Chip/Toggle öffnet; offen rückt die Spalte
 nach links (`body.agent-sidebar-open`), statt unter der Leiste zu liegen. Nur
 explizites Öffnen/Schließen wird pro Turn gemerkt. Der 2,5-s-Takt existiert nur
 während eines laufenden bzw. abschließenden Laufs und endet danach.

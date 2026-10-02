@@ -1,4 +1,4 @@
-"""Admin/Pro-only bounded Agent turns in the existing chat storage."""
+"""Bounded Agent turns in the existing chat storage (every signed-in account)."""
 from __future__ import annotations
 
 import logging
@@ -12,7 +12,7 @@ from firebase_admin import firestore
 from app.core.observability import provider_diagnostic, safe_exception, safe_traceback
 from app.core import config as cfg
 from app.core.rate_limit import limiter, api_uid_limiter, ApiUidRateLimitExceeded
-from app.core.security import TierStatusUnavailable, db_firestore, is_user_admin, is_user_pro
+from app.core.security import TierStatusUnavailable, db_firestore, get_user_tier, is_user_admin, is_user_pro
 from app.api.routers.chat_history import _chat_uid, _raise_store_error
 from app.api.routers.bookmarks import _bookmark_meta
 from app.services import persistence_guard, prompt_config
@@ -37,14 +37,40 @@ router = APIRouter()
 
 
 def require_agent_access(uid):
+    """Agent is open to every signed-in account since 2026-10-02.
+
+    The daily token account (agent_quota) limits it per tier; what stays Pro
+    are the premium models (require_model_access) and, from Plus, uploads.
+    The tier is still read here (cached) although it no longer decides
+    access: every Agent route reads it again for the token account, and an
+    unavailable tier service must answer 503 up front, before any write,
+    rather than fail later inside a route.
+    """
+    if not uid:
+        raise HTTPException(status_code=401, detail="Sign in to use Agent.")
     try:
-        allowed = is_user_pro(uid) or is_user_admin(uid)
+        get_user_tier(uid)
     except TierStatusUnavailable:
         raise HTTPException(
             status_code=503, detail="Account tier is temporarily unavailable. Please retry."
         ) from None
-    if not allowed:
-        raise HTTPException(status_code=403, detail="Agent Beta is available to Pro users and admins.")
+
+
+def _premium_allowed(uid):
+    try:
+        return is_user_pro(uid) or is_user_admin(uid)
+    except TierStatusUnavailable:
+        raise HTTPException(
+            status_code=503, detail="Account tier is temporarily unavailable. Please retry."
+        ) from None
+
+
+def require_model_access(uid, model_ids):
+    """Premium models stay Pro in Agent exactly as in Compare and Consensus."""
+    premium = [model_id for model_id in model_ids if model_id and model_id in cfg.PREMIUM_MODELS]
+    if premium and not _premium_allowed(uid):
+        labels = ", ".join(cfg.get_model_label(model_id) for model_id in premium)
+        raise HTTPException(status_code=403, detail=f"{labels} is available on Pro. Choose another model.")
 
 
 class AgentRequest(BaseModel):
@@ -227,6 +253,8 @@ def run_agent(request: Request, payload: AgentRequest):
             model = configured_model(resolve_agent_model(payload.model_id, payload.reasoning_effort))
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from None
+        # None means the preset default, which is never a premium model.
+        require_model_access(uid, [model.selection_id, *(payload.comparison_models or {}).values()])
         key = openrouter_api_key(resolve_developer_api_keys())
         if not key and not mock_llm_enabled():
             raise HTTPException(status_code=503, detail="Agent model is not configured.")

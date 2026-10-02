@@ -361,6 +361,8 @@ async function checkUserStatusOnLoad(user, token, generation) {
       // Die Stufe des KONTOS -- getrennt von der Stufe auf dem Schirm, die ein
       // geoeffneter Lauf mitbringt. Sie faerbt das Konto-Kuerzel.
       window.App?.accountTier?.set?.(tier);
+      // Premium Agent models unlock with the tier, which arrives after access.
+      window.App.agentChat?.render?.();
 
       // B) FALLBACK -- nur wenn es den sauberen Weg oben nicht gibt. Frueher
       // lief er immer und schrieb danach das Ergebnis von updateUserTierUI
@@ -581,6 +583,17 @@ onIdTokenChanged(auth, async (user) => {
 
     const emailIcon = document.getElementById("emailIcon");
     const emailPopup = document.getElementById("emailPopup");
+    // The address beside the initial opens the same menu (sidebar footer).
+    const accountIdentity = document.getElementById("accountIdentity");
+    if (accountIdentity) {
+      accountIdentity.textContent = user.email;
+      accountIdentity.title = user.email;
+      accountIdentity.setAttribute("aria-label", `Account menu for ${user.email}`);
+      accountIdentity.hidden = false;
+      accountIdentity.onclick = e => { e.stopPropagation(); emailIcon.click(); };
+    }
+    const accountPlanLine = document.getElementById("accountPlanLine");
+    if (accountPlanLine) accountPlanLine.hidden = false;
     const logoutButton = document.getElementById("logoutButton");
     const sharedLinksButton = document.getElementById("sharedLinksButton");
     const watchedLinksButton = document.getElementById("watchedLinksButton");
@@ -666,6 +679,10 @@ onIdTokenChanged(auth, async (user) => {
 
         const upgradeLinkOff = document.getElementById("upgradeLink");
         if (upgradeLinkOff) upgradeLinkOff.style.display = "none";
+        const accountIdentityOff = document.getElementById("accountIdentity");
+        if (accountIdentityOff) { accountIdentityOff.hidden = true; accountIdentityOff.textContent = ""; accountIdentityOff.onclick = null; }
+        const accountPlanLineOff = document.getElementById("accountPlanLine");
+        if (accountPlanLineOff) accountPlanLineOff.hidden = true;
 
         if (usageOptions) usageOptions.style.display = "none";
 
@@ -723,6 +740,7 @@ async function fetchUsageData(token, uid, generation) {
       window.updateUserTierUI(tier, true);
     }
     window.App?.accountTier?.set?.(tier);
+    window.App.agentChat?.render?.();
     // /usage is authoritative: after the UTC reset or an admin reset the
     // account may legitimately go back up. token-budget.js is in the head
     // group, so it exists before any module response arrives.

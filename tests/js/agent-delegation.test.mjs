@@ -310,6 +310,17 @@ describe("Agent sidebar", () => {
     dom.window.close();
   });
 
+  it("keeps the panel closed when a saved turn is opened, even with room beside the column", async () => {
+    const { window: w, document: d, dom } = boot(async () => ({ ok: true, json: async () => ({ agents: [agent(1, "completed")], status: "succeeded" }) }));
+    w.App.agentDelegation.project({ chatId, turnId, running: false });
+    await vi.waitFor(() => expect(d.querySelectorAll(".agent-session")).toHaveLength(1));
+    expect(d.getElementById("agentSidebar").hidden).toBe(true);
+    expect(d.body.classList.contains("agent-sidebar-open")).toBe(false);
+    d.querySelector(".agent-sidebar-toggle").click();
+    expect(d.getElementById("agentSidebar").hidden).toBe(false);
+    dom.window.close();
+  });
+
   it("distinguishes same-model agents and restores saved state without starting any model request", async () => {
     const { window: w, document: d, dom } = boot();
     receive(w, agent()); receive(w, { ...agent(2, "waiting", "b".repeat(32)), title: "Check France" });

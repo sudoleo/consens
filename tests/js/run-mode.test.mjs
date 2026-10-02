@@ -13,11 +13,11 @@ function boot(storage = {}) {
 
 describe("run mode", () => {
   it.each([
-    [{}, "consensus"],
-    [{agentMode: "true", autoConsensus: "true"}, "consensus"],
+    [{}, "agent"],
+    [{agentMode: "true", autoConsensus: "true"}, "agent"],
     [{agentMode: "false", autoConsensus: "false"}, "compare"],
     [{runMode: "agent", agentMode: "false"}, "agent"],
-    [{runMode: "bogus"}, "consensus"],
+    [{runMode: "bogus"}, "agent"],
   ])("migrates %o once to %s and removes the legacy keys", (storage, expected) => {
     const {window, dom} = boot(storage);
     expect(window.App.runMode.preference()).toBe(expected);
@@ -29,8 +29,23 @@ describe("run mode", () => {
     dom.window.close();
   });
 
+  // Before 2026-10-02 every first visit stored "consensus" unasked. It moves
+  // to the new default once; a later choice of Consensus is kept.
+  it.each([
+    [{runMode: "consensus"}, "agent"],
+    [{runMode: "compare"}, "compare"],
+    [{runMode: "consensus", runModeDefault: "agent-2026-10-02"}, "consensus"],
+  ])("moves an unchosen stored mode %o to the default once (%s)", (storage, expected) => {
+    const {window, dom} = boot(storage);
+    expect(window.App.runMode.preference()).toBe(expected);
+    expect(window.localStorage.getItem("runModeDefault")).toBe("agent-2026-10-02");
+    window.App.runMode.set("consensus");
+    expect(window.App.runMode.preference()).toBe("consensus");
+    dom.window.close();
+  });
+
   it("changes only to known modes, announces changes once and tracks the source", () => {
-    const {window, dom} = boot({runMode: "consensus"});
+    const {window, dom} = boot({runMode: "consensus", runModeDefault: "agent-2026-10-02"});
     const heard = vi.fn();
     window.addEventListener("consensio:run-mode-change", event => heard(event.detail));
     expect(window.App.runMode.set("nonsense")).toBe(false);
@@ -69,7 +84,7 @@ describe("run mode", () => {
   });
 
   it("follows a change made in another tab", () => {
-    const {window, dom} = boot({runMode: "consensus"});
+    const {window, dom} = boot({runMode: "consensus", runModeDefault: "agent-2026-10-02"});
     const heard = vi.fn();
     window.addEventListener("consensio:run-mode-change", event => heard(event.detail));
     window.dispatchEvent(new window.StorageEvent("storage", {key: "runMode", oldValue: "consensus", newValue: "compare"}));

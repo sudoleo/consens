@@ -11,7 +11,7 @@ from test_run_mode_selector import choose
 @pytest.mark.parametrize("width,dark", [(1440, False), (1440, True), (390, False), (320, True)])
 def test_composer_mode_bar(browser, phase4_server, width, dark):
     context, page = _real_firebase_page(browser, phase4_server,
-        init_script="localStorage.setItem('runMode', 'consensus');")
+        init_script="localStorage.setItem('runMode', 'consensus'); localStorage.setItem('runModeDefault','agent-2026-10-02');")
     errors = []
     page.on('pageerror', lambda error: errors.append(str(error)))
     try:
@@ -108,7 +108,7 @@ def test_composer_mode_bar(browser, phase4_server, width, dark):
 @pytest.mark.parametrize("width,dark", [(1440, False), (390, False), (320, True)])
 def test_toolbar_deep_think_and_upload_reuse_plan_gates(browser, phase4_server, width, dark):
     context, page = _real_firebase_page(browser, phase4_server,
-        init_script="localStorage.setItem('runMode', 'consensus');")
+        init_script="localStorage.setItem('runMode', 'consensus'); localStorage.setItem('runModeDefault','agent-2026-10-02');")
     try:
         page.set_viewport_size({'width': width, 'height': 844})
         page.evaluate("dark => document.body.classList.toggle('dark-mode', dark)", dark)

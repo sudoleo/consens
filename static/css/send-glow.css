@@ -73,10 +73,10 @@
   }
 }
 
-/* A host can let the light travel round the rim (the /app stop button does
-   while the models work, see shell.css). */
-@keyframes send-glow-orbit {
-  to { transform: rotate(360deg); }
+/* A host can let the light breathe in place (the /app stop button does
+   while the models work, see shell.css). Opacity only: nothing travels. */
+@keyframes send-glow-breathe {
+  50% { opacity: 0.45; }
 }
 
 /* High-contrast themes: no light, the control stays a plain button. */

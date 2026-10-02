@@ -147,26 +147,15 @@ def test_stop_fences_only_bound_turn_repeatedly_and_rejects_late_worker(agent_ht
     )
 
 
-@pytest.mark.parametrize(
-    "tier,role,expected",
-    [("free", "", 403), ("plus", "", 403), ("pro", "", 200), ("free", "admin", 200)],
-)
-def test_detail_and_stop_use_real_tier_policy(agent_http, tier, role, expected):
+@pytest.mark.parametrize("tier,role", [("free", ""), ("plus", ""), ("pro", ""), ("free", "admin")])
+def test_detail_and_stop_are_open_to_every_account(agent_http, tier, role):
+    # Agent is open to every signed-in account since 2026-10-02; only the
+    # owner binding of chat and turn guards details and stop.
     h = agent_http
     h.db.collection("users").document("owner").update({"tier": tier, "role": role})
     security.invalidate_tier_cache("owner")
-    before = deepcopy(h.db.documents)
-    assert (
-        h.client.get(
-            h.base + "/agents/" + h.agent_id, headers=login("owner")
-        ).status_code
-        == expected
-    )
-    assert (
-        h.client.post(h.base + "/stop", headers=login("owner")).status_code == expected
-    )
-    if expected == 403:
-        assert h.db.documents == before
+    assert h.client.get(h.base + "/agents/" + h.agent_id, headers=login("owner")).status_code == 200
+    assert h.client.post(h.base + "/stop", headers=login("owner")).status_code == 200
 
 
 def test_agent_role_outage_is_retryable_without_private_data_or_write(agent_http):

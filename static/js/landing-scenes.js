@@ -109,9 +109,9 @@
 
   // ---- Scene 02: Run --------------------------------------------------
 
-  // Phase boundaries in scroll progress. They mirror the four stages in
-  // static/js/consensus-progress.js; answers own the longest stretch for
-  // the same reason they do in a real run.
+  // Phase boundaries in scroll progress for one Agent turn: plan, ask the
+  // six comparison models, write the answer, check it. The comparison owns
+  // the longest stretch for the same reason it does in a real run.
   const PREPARE_END = 0.10;
   const ANSWERS_END = 0.60;
   const CONSENSUS_END = 0.78;
@@ -125,30 +125,31 @@
   const ANSWERS_SECONDS = 17.4;
   const RUN_SECONDS = 24;
 
-  // Same steps, words and states as the stepper in consensus-progress.js.
+  // The step keys stay those of the Consensus stepper (landing.css styles
+  // them); the words are the Agent turn's.
   const STEP_ORDER = ["prepare", "answers", "consensus", "differences"];
 
   const COMPACT = {
-    prepare: "Preparing",
-    answers: "Answering",
-    consensus: "Writing the consensus",
-    differences: "Checking for contradictions",
+    prepare: "Planning",
+    answers: "Asking six models",
+    consensus: "Writing the answer",
+    differences: "Checking the answer",
     done: "Done"
   };
 
   const NEXT_LINES = {
-    prepare: "Next: answers, consensus, contradiction check",
-    answers: "Next: consensus, then contradiction check",
-    consensus: "Next: contradiction check",
+    prepare: "Next: six models, the answer, the check",
+    answers: "Next: the answer, then the check",
+    consensus: "Next: the answer check",
     differences: "",
     done: ""
   };
 
   const NOTES = {
-    differences: "An uninvolved model compares all answers. It does not get a vote."
+    differences: "Uninvolved judges hold the answer against all six. They do not get a vote."
   };
 
-  const RUN_META = "Balanced · 6 models";
+  const RUN_META = "Agent · Gemini 3.8 Flash + 6 models";
 
   function clockText(seconds) {
     const total = Math.floor(Math.max(0, seconds));
@@ -261,7 +262,7 @@
         if (item.dataset.status !== status) item.dataset.status = status;
         if (item.dataset.step === "prepare") {
           const label = item.querySelector("[data-step-label]");
-          const text = status === "active" ? "Preparing" : "Prepared";
+          const text = status === "active" ? "Planning" : "Planned";
           if (label && label.textContent !== text) label.textContent = text;
         }
       });

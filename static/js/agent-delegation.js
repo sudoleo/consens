@@ -116,7 +116,10 @@
     inline = null;
     document.body.classList.remove("agent-sidebar-open", "agent-sidebar-sheet");
   }
-  function get(chatId, turnId) {
+  // `live`: the turn is running as it is first shown. Only then may the
+  // panel open by itself; an opened bookmark or a finished turn keeps it
+  // closed until asked (the chip and the toggle still open it).
+  function get(chatId, turnId, live = false) {
     resetOwner();
     const key = keyFor(chatId, turnId);
     if (!views.has(key)) {
@@ -124,7 +127,7 @@
       try { saved = JSON.parse(sessionStorage.getItem(`agent-view:${key}`) || "{}"); } catch (_) {}
       views.set(key, { key, uid: owner, user: ownerUser, authGeneration: ownerGeneration, chatId, turnId, agents: new Map(), details: new Map(), progress: new Map(),
         controller: new AbortController(), expanded: new Set(saved.expanded || []),
-        closed: typeof saved.closed === 'boolean' ? saved.closed : !roomBeside(), manual: typeof saved.closed === 'boolean',
+        closed: typeof saved.closed === 'boolean' ? saved.closed : !(live && roomBeside()), manual: typeof saved.closed === 'boolean',
         scroll: saved.scroll || 0, loaded: false, loading: false, running: false, ended: false, settling: false, usage: null, lastSync: 0 });
       if (views.size > 24) {
         const old = [...views.values()].find(v => v.key !== current?.key && !v.running);
@@ -169,7 +172,7 @@
     if (context.metadata.agentTurnId && context.metadata.agentTurnId !== event.turn_id) return;
     context.metadata.agentTurnId = event.turn_id;
     context.metadata.delegation = true;
-    const view = get(event.chat_id, event.turn_id);
+    const view = get(event.chat_id, event.turn_id, true);
     view.lastSync = Date.now();
     merge(view, event.agent);
     if (current === view) render();
@@ -615,7 +618,7 @@
   function project(spec) {
     resetOwner();
     if (!spec?.chatId || !spec?.turnId || !owner) { current = null; inline?.remove(); inline = null; hide(); syncTimer(); return; }
-    const view = get(spec.chatId, spec.turnId);
+    const view = get(spec.chatId, spec.turnId, !!spec.running);
     const changed = current !== view;
     const wasRunning = view.running;
     if (changed) {

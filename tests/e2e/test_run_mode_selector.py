@@ -37,7 +37,7 @@ def _signed_in(page, *, agent_access):
     page.evaluate("async () => { await window.__switchE2EUser('account-a'); }")
 
 
-@pytest.mark.parametrize("legacy,expected", [("true", "consensus"), ("false", "compare"), (None, "consensus")])
+@pytest.mark.parametrize("legacy,expected", [("true", "agent"), ("false", "compare"), (None, "agent")])
 def test_legacy_agent_mode_switch_migrates_once(browser, phase4_server, legacy, expected):
     script = "localStorage.removeItem('runMode');" + (
         f"localStorage.setItem('agentMode', '{legacy}'); localStorage.setItem('autoConsensus', '{legacy}');" if legacy else "")
@@ -51,7 +51,8 @@ def test_legacy_agent_mode_switch_migrates_once(browser, phase4_server, legacy, 
         # Every old control is gone; the one selector remains.
         for gone in ("#composerAgentToggle", "#agentModeMenuSwitch", "#agentModeSwitch", "#autoConsensusToggle", "#chatExecutionMode"):
             expect(page.locator(gone)).to_have_count(0)
-        expect(page.locator("#runModeSelect")).to_have_value(expected)
+        # Signed out, Agent is the stored choice but runs (and shows) as Consensus.
+        expect(page.locator("#runModeSelect")).to_have_value("compare" if expected == "compare" else "consensus")
     finally:
         context.close()
 
@@ -59,7 +60,7 @@ def test_legacy_agent_mode_switch_migrates_once(browser, phase4_server, legacy, 
 @pytest.mark.parametrize("width,dark", [(1440, False), (1440, True), (390, False), (320, True)])
 def test_one_selector_drives_mode_tools_and_settings(browser, phase4_server, width, dark):
     context, page = _real_firebase_page(browser, phase4_server,
-        init_script="if (!sessionStorage.seeded) { localStorage.setItem('runMode', 'consensus'); sessionStorage.seeded = 1; }")
+        init_script="if (!sessionStorage.seeded) { localStorage.setItem('runMode', 'consensus'); localStorage.setItem('runModeDefault','agent-2026-10-02'); sessionStorage.seeded = 1; }")
     errors = []
     page.on("pageerror", lambda error: errors.append(str(error)))
     try:
@@ -149,7 +150,7 @@ def test_one_selector_drives_mode_tools_and_settings(browser, phase4_server, wid
 
 def test_without_agent_access_agent_is_not_offered_and_falls_back(browser, phase4_server):
     context, page = _real_firebase_page(browser, phase4_server,
-        init_script="if (!sessionStorage.seeded) { localStorage.setItem('runMode', 'agent'); sessionStorage.seeded = 1; }")
+        init_script="if (!sessionStorage.seeded) { localStorage.setItem('runMode', 'agent'); localStorage.setItem('runModeDefault','agent-2026-10-02'); sessionStorage.seeded = 1; }")
     try:
         _signed_in(page, agent_access=False)
         expect(page.locator("#runModeSelect")).to_have_value("consensus")
@@ -165,7 +166,7 @@ def test_without_agent_access_agent_is_not_offered_and_falls_back(browser, phase
 
 def test_open_chat_keeps_its_family(browser, phase4_server):
     context, page = _real_firebase_page(browser, phase4_server,
-        init_script="if (!sessionStorage.seeded) { localStorage.setItem('runMode', 'consensus'); sessionStorage.seeded = 1; }")
+        init_script="if (!sessionStorage.seeded) { localStorage.setItem('runMode', 'consensus'); localStorage.setItem('runModeDefault','agent-2026-10-02'); sessionStorage.seeded = 1; }")
     try:
         _signed_in(page, agent_access=True)
         # A Consensus-family chat: Compare/Consensus alternate, Agent needs a new chat.
@@ -193,7 +194,7 @@ def test_open_chat_keeps_its_family(browser, phase4_server):
 
 def test_stored_agent_choice_waits_for_access_instead_of_sending_consensus(browser, phase4_server):
     context, page = _real_firebase_page(browser, phase4_server, initial_uid=None,
-        init_script="if (!sessionStorage.seeded) { localStorage.setItem('runMode', 'agent'); sessionStorage.seeded = 1; }")
+        init_script="if (!sessionStorage.seeded) { localStorage.setItem('runMode', 'agent'); localStorage.setItem('runModeDefault','agent-2026-10-02'); sessionStorage.seeded = 1; }")
     try:
         held = []
         page.route("**/user_status", lambda route: held.append(route))  # never answered: access stays pending
@@ -208,7 +209,7 @@ def test_stored_agent_choice_waits_for_access_instead_of_sending_consensus(brows
 
 def test_failed_status_check_releases_the_agent_wait(browser, phase4_server):
     context, page = _real_firebase_page(browser, phase4_server, initial_uid=None,
-        init_script="if (!sessionStorage.seeded) { localStorage.setItem('runMode', 'agent'); sessionStorage.seeded = 1; }")
+        init_script="if (!sessionStorage.seeded) { localStorage.setItem('runMode', 'agent'); localStorage.setItem('runModeDefault','agent-2026-10-02'); sessionStorage.seeded = 1; }")
     try:
         page.route("**/user_status", lambda route: route.fulfill(status=503, body="{}"))
         page.evaluate("async () => { await window.__switchE2EUser('account-a'); }")

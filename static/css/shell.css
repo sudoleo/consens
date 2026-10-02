@@ -161,6 +161,21 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
   text-align: left;
   gap: 5px;
   padding: 0 4px;
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+.sidebar-footer-meta:hover,
+.sidebar-footer-meta:focus-within {
+  opacity: 1;
+}
+
+/* The account row: initial, address over plan, then allowance and settings
+   as two quiet icons of the same size. */
+.sidebar-footer-row {
+  gap: 10px;
+  min-height: 44px;
+  padding: 4px 2px 2px;
 }
 
 /* "New comparison" und die erste Navigation gehoeren enger zusammen als
@@ -834,8 +849,10 @@ body:not(.dark-mode) .chat-input-container {
 
 /* The send button is the one filled control in the composer: an up arrow in
    a circle. Ink when the question can go, a quiet grey while it cannot; the
-   arrow lifts a little on hover. Sending fans the question out to the
-   models: three arcs leave the button and fade, the stop square settles in. */
+   arrow lifts a little on hover. Sending sends one short, faint ring out
+   from the button and the stop square fades in; while the run lasts nothing
+   moves (2026-10-02: the orbiting light and the wide fan-out were too much
+   motion for a control people keep in view for a minute). */
 .input-action-btn-primary {
   position: relative;
   display: inline-grid;
@@ -890,9 +907,9 @@ body:not(.dark-mode) .chat-input-container {
 }
 
 /* The light below Send (send-glow.css) is off while nothing can go and comes
-   on with the question. While the models work it moves to the pale stop
-   button and travels once round the rim every few seconds: something is
-   running, without a spinner. */
+   on with the question. While the models work it stays on the pale stop
+   button and breathes slowly in place: something is running, without a
+   spinner and without anything travelling round the rim. */
 .input-action-btn-primary.send-glow:disabled::before {
   opacity: 0;
 }
@@ -909,7 +926,7 @@ body:not(.dark-mode) .chat-input-container {
 
 @media (prefers-reduced-motion: no-preference) {
   .input-action-btn-primary.send-glow.is-cancel-action::before {
-    animation: send-glow-orbit 5s linear infinite;
+    animation: send-glow-breathe 4.8s ease-in-out infinite;
   }
 }
 
@@ -928,21 +945,21 @@ body:not(.dark-mode) .chat-input-container {
 
 @media (prefers-reduced-motion: no-preference) and (forced-colors: none) {
   .input-action-btn-primary.is-launching::after {
-    animation: send-fan-out 0.75s cubic-bezier(0.2, 0.7, 0.3, 1);
+    animation: send-fan-out 0.6s ease-out;
   }
 
   .input-action-btn-primary.is-cancel-action svg {
-    animation: send-stop-in 0.28s cubic-bezier(0.3, 0.7, 0.3, 1.2) 0.08s backwards;
+    animation: send-stop-in 0.22s ease-out 0.06s backwards;
   }
 }
 
 @keyframes send-fan-out {
-  0% { opacity: 0.55; transform: scale(1) rotate(0deg); }
-  100% { opacity: 0; transform: scale(1.8) rotate(48deg); }
+  0% { opacity: 0.3; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.25); }
 }
 
 @keyframes send-stop-in {
-  from { opacity: 0; transform: scale(0.6); }
+  from { opacity: 0; transform: scale(0.88); }
 }
 
 @media (forced-colors: active) {
@@ -3429,6 +3446,11 @@ body.agent-mode-enabled .agent-mode-panel,
   text-decoration: none;
   white-space: nowrap;
   vertical-align: baseline;
+  /* On the baseline the smaller label pulls the pill's middle below the
+     middle of the prose letters; lifted optically, without changing the
+     line box (a raised vertical-align would open up the line spacing). */
+  position: relative;
+  top: -0.14em;
   cursor: pointer;
   transition: background-color 0.14s ease, color 0.14s ease, box-shadow 0.14s ease;
 }
@@ -3493,6 +3515,7 @@ body.agent-mode-enabled .agent-mode-panel,
   /* Without a label there is no text baseline to sit on; centre the icon
      on the x-height instead of letting it ride above the line. */
   vertical-align: -0.3em;
+  top: 0;
   margin-inline-start: 0.1em;
   padding-inline: 2px;
 }

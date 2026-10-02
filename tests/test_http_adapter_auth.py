@@ -81,8 +81,8 @@ def test_real_topic_admin_put_list_and_version_have_persisted_results(
 @pytest.mark.parametrize(
     "tier,role,is_pro,agent,attachments",
     [
-        ("free", "", False, False, False),
-        ("plus", "", False, False, True),
+        ("free", "", False, True, False),
+        ("plus", "", False, True, True),
         ("pro", "", True, True, True),
         ("free", "admin", False, True, False),
     ],

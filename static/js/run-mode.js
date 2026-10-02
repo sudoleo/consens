@@ -22,10 +22,15 @@
 
   const STORAGE_KEY = "runMode";
   const MODES = Object.freeze(["compare", "consensus", "agent"]);
-  // For people who never chose. When Agent leaves Beta this becomes
-  // "agent"; accounts without Agent access still fall back to consensus in
-  // effective(), so the switch is this one line.
-  const DEFAULT_MODE = "consensus";
+  // For people who never chose. Agent is the default since 2026-10-02;
+  // accounts without Agent access (guests, a failed status check) still fall
+  // back to consensus in effective().
+  const DEFAULT_MODE = "agent";
+  // Until 2026-10-02 every first visit stored "consensus" without anyone
+  // choosing it, so a stored "consensus" cannot be told apart from a choice.
+  // It moves to the new default once; "compare" was always chosen and stays.
+  const DEFAULT_MIGRATION_KEY = "runModeDefault";
+  const DEFAULT_MIGRATION = "agent-2026-10-02";
   // Before 2026-10 two switches decided this: "agentMode" (consensus on/off)
   // and an in-memory Agent Beta choice. "autoConsensus" only mirrored the
   // first. Migrated once and removed, so nothing can read a stale copy.
@@ -43,13 +48,22 @@
     return MODES.includes(mode);
   }
 
+  function migrateDefault(stored) {
+    if (localStorage.getItem(DEFAULT_MIGRATION_KEY) === DEFAULT_MIGRATION) return stored;
+    localStorage.setItem(DEFAULT_MIGRATION_KEY, DEFAULT_MIGRATION);
+    if (stored !== "consensus") return stored;
+    localStorage.setItem(STORAGE_KEY, DEFAULT_MODE);
+    return DEFAULT_MODE;
+  }
+
   function read() {
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
-      if (valid(stored)) return stored;
+      if (valid(stored)) return migrateDefault(stored);
       const legacy = localStorage.getItem("agentMode");
-      const migrated = legacy === "false" ? "compare" : legacy === "true" ? "consensus" : DEFAULT_MODE;
+      const migrated = legacy === "false" ? "compare" : DEFAULT_MODE;
       localStorage.setItem(STORAGE_KEY, migrated);
+      localStorage.setItem(DEFAULT_MIGRATION_KEY, DEFAULT_MIGRATION);
       LEGACY_KEYS.forEach(key => localStorage.removeItem(key));
       return migrated;
     } catch (_) {
@@ -65,7 +79,10 @@
     if (!valid(mode)) return false;
     const previous = read();
     if (previous === mode) return false;
-    try { localStorage.setItem(STORAGE_KEY, mode); } catch (_) { memory = mode; }
+    try {
+      localStorage.setItem(STORAGE_KEY, mode);
+      localStorage.setItem(DEFAULT_MIGRATION_KEY, DEFAULT_MIGRATION);
+    } catch (_) { memory = mode; }
     if (options.source) {
       window.App?.trackAppEvent?.("app_run_mode_changed", { mode, previous, source: options.source });
     }

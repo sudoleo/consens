@@ -124,6 +124,7 @@ def test_file_endpoints_validate_auth_and_return_private_download(setup, monkeyp
     monkeypatch.setattr(router, 'db_firestore', files.db)
     monkeypatch.setattr(router, '_chat_uid', lambda request: request.headers.get('X-User', 'owner'))
     monkeypatch.setattr(router, 'require_agent_access', lambda uid: None)
+    monkeypatch.setattr(router, 'require_uploads', lambda uid: None)
     monkeypatch.setattr(limiter, "enabled", False)
     app = FastAPI(); app.include_router(router.router)
     client = TestClient(app)
@@ -241,6 +242,7 @@ def test_missing_storage_returns_503(setup, monkeypatch):
     monkeypatch.setattr(router, 'db_firestore', files.db)
     monkeypatch.setattr(router, '_chat_uid', lambda request: 'owner')
     monkeypatch.setattr(router, 'require_agent_access', lambda uid: None)
+    monkeypatch.setattr(router, 'require_uploads', lambda uid: None)
     monkeypatch.setattr(limiter, "enabled", False)
     app = FastAPI(); app.include_router(router.router)
     response = TestClient(app).post(f'/agent/chats/{chat}/files', json={'name': 'a.txt', 'data': base64.b64encode(b'x').decode()})
@@ -365,3 +367,23 @@ def test_configured_bucket_wins_over_automatic_local_storage(tmp_path, monkeypat
     _local_machine(monkeypatch, tmp_path)
     monkeypatch.setenv('AGENT_FILES_BUCKET', 'private-bucket')
     assert module._local_dir() == ''
+
+
+@pytest.mark.parametrize("tier,status", [("free", 403), ("plus", 200), ("pro", 200)])
+def test_uploads_follow_the_attachment_tier_while_reading_stays_open(setup, monkeypatch, tier, status):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from app.api.routers import agent_files as router
+    from app.core.rate_limit import limiter
+    files, chat = setup
+    monkeypatch.setattr(router, 'db_firestore', files.db)
+    monkeypatch.setattr(router, '_chat_uid', lambda request: 'owner')
+    monkeypatch.setattr(router, 'require_agent_access', lambda uid: None)
+    monkeypatch.setattr(router, 'get_user_tier', lambda uid: tier)
+    monkeypatch.setattr(router, 'is_user_admin', lambda uid: False)
+    monkeypatch.setattr(limiter, "enabled", False)
+    app = FastAPI(); app.include_router(router.router)
+    client = TestClient(app)
+    response = client.post(f'/agent/chats/{chat}/files', json={'name': 'a.txt', 'data': base64.b64encode(b'x').decode()})
+    assert response.status_code == status
+    assert client.get(f'/agent/chats/{chat}/files').status_code == 200

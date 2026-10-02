@@ -225,7 +225,6 @@
 .agent-answer-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 12px; margin: 12px 0 0; color: var(--ink-3); font-size: 12px; }
 .agent-answer-actions button, .agent-evidence-links .agent-evidence-link { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 6px 8px; border: 0; border-radius: 6px; background: transparent; color: var(--ink-2); font: inherit; font-size: 12px; font-weight: 500; text-decoration: none; cursor: pointer; transition: background-color .15s ease, color .15s ease; }
 .agent-evidence-links .consensus-tab-count { color: var(--ink-3); font-weight: 400; }
-.agent-answer-actions button:first-child { margin-left: -8px; }
 .agent-answer-actions button:hover, .agent-evidence-links .agent-evidence-link:hover { background: var(--raise); color: var(--ink); }
 .agent-answer-actions button[aria-disabled="true"] { cursor: default; opacity: .6; }
 .agent-answer-actions svg, .agent-evidence-icon { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
@@ -254,11 +253,28 @@ body.single-agent-active #composerAgentToggle:hover { background: transparent; }
 .agent-reasoning-option { border-top: 1px solid var(--line) !important; margin-top: 6px; padding-top: 12px !important; }
 .agent-review { display: flex; flex-wrap: wrap; align-items: center; gap: 0 12px; margin: 18px 0 8px; color: var(--ink-2); font-size: 12px; }
 .agent-review[hidden], .agent-review-summary[hidden], .agent-review-status[hidden] { display: none; }
-/* One quiet row: Copy first, the evidence links after it. The summary line
-   and the claims fallback keep their own full-width rows. */
-.agent-review > :not(.agent-evidence-links, .agent-answer-actions) { flex: 1 0 100%; }
-.agent-review > .agent-answer-actions { order: 1; margin: 0; }
+/* One quiet row: the agreement score first, the evidence links after it,
+   Copy as an icon at the end. The summary line and the claims fallback keep
+   their own full-width rows. */
+.agent-review > :not(.agent-evidence-links, .agent-answer-actions, .agent-agreement) { flex: 1 0 100%; }
+.agent-review > .agent-agreement { order: 1; }
 .agent-review > .agent-evidence-links { order: 2; margin-left: 0; }
+.agent-review > .agent-answer-actions { order: 3; margin: 0 0 0 auto; }
+/* The agreement score, discreet: row-sized type, only the number in the
+   traffic-light ink, no meter, no tinted surface. Settings → Agreement score:
+   "Summary only" swaps the number for the words, "Hidden" removes it. */
+.agent-agreement { display: inline-flex; align-items: center; min-height: 36px; padding: 0 4px 0 0; color: var(--ink-3); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; cursor: default; }
+.agent-agreement-score { display: inline-flex; align-items: baseline; gap: 3px; }
+.agent-agreement-num { color: var(--ink-2); font-size: 13px; font-weight: 600; letter-spacing: -0.01em; }
+.agent-agreement[data-tone="calm"] .agent-agreement-num { color: var(--agree); }
+.agent-agreement[data-tone="warn"] .agent-agreement-num { color: var(--partial); }
+.agent-agreement[data-tone="alert"] .agent-agreement-num { color: var(--dispute); }
+.agent-agreement-level { display: none; color: var(--ink-2); }
+.agent-agreement::after { content: ""; align-self: center; width: 1px; height: 14px; margin-left: 12px; background: var(--line); }
+body.agreement-score-hidden .agent-agreement-score { display: none; }
+body.agreement-score-hidden .agent-agreement-level { display: inline; }
+body.agreement-verdict-hidden .agent-agreement { display: none; }
+.agent-answer-actions:not(.agent-review > *) button:first-child { margin-left: -8px; }
 /* Key claims (claims no inline mark could hold) read before the buttons, as
    a quiet list: text first, its model ratio right behind it. */
 .agent-review > .consensus-claims-fallback { order: 0; margin: 0 0 10px; padding-top: 0; border-top: 0; }

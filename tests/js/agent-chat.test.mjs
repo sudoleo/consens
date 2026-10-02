@@ -19,6 +19,9 @@ function boot({ allowed = true, catalog = CATALOG, body = BODY, setup: prepare }
   const setup = loadScripts(["static/js/run-mode.js", "static/js/run-registry.js", "static/js/token-budget.js", "static/js/model-picker.js", "static/js/request-deadline.js", "static/js/agent-activity.js", "static/js/agent-chat.js"], {
     body,
     before(window) {
+      // These cases start from a Consensus preference; Agent is the default.
+      window.localStorage.setItem("runMode", "consensus");
+      window.localStorage.setItem("runModeDefault", "agent-2026-10-02");
       window.auth = { currentUser: { uid: "owner", getIdToken: async () => "verified" } };
       window.App = {
         agentAccess: { uid: "owner", allowed }, showPopup: vi.fn(),

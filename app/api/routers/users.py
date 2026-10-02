@@ -88,7 +88,9 @@ def get_user_status(request: Request):
             # is_pro heisst weiterhin "Frontier-Modelle und Deep Think" und ist
             # fuer Plus False; "tier" traegt die vollstaendige Stufe.
             "is_pro": entitlements.is_pro,
-            "agent_access": entitlements.is_pro or is_user_admin(uid),
+            # Agent is open to every signed-in account (2026-10-02); premium
+            # models inside it still follow is_pro.
+            "agent_access": True,
             "tier": entitlements.tier,
             "attachments": entitlements.attachments,
             "resolve": entitlements.resolve,

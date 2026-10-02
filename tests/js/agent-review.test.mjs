@@ -421,3 +421,29 @@ it('leaves marks hidden by the highlight setting out of the reveal', () => {
   expect(body.classList.contains('is-marks-revealing')).toBe(false);
   dom.window.close();
 });
+
+it('leads the evidence row with a quiet agreement score of the comparison it shows', () => {
+  const {window: w, document: d, dom} = setup();
+  const body = d.getElementById('answer');
+  body.dataset.markdown = 'Exact answer.';
+  const review = snapshot();
+  review.checks[0].differences_data.agreement = { score: 72, coverage_status: 'sufficient' };
+  review.checks[1].differences_data.agreement = { score: 31, coverage_status: 'sufficient' };
+  w.App.agentReview.render(body, review);
+  const score = () => body._agentReview.querySelector(':scope > .agent-agreement');
+  expect(score().textContent).toBe('72/100 agreementStrong agreement');
+  expect(score().dataset.tone).toBe('calm');
+  expect(score().title).toContain('not independent fact checking');
+  // Switching the evidence basis switches the number with it.
+  const picker = body._agentReview.querySelector('.agent-evidence-focus select');
+  picker.value = 'agent-evidence:c2'; picker.dispatchEvent(new w.Event('change'));
+  expect(body._agentReview.querySelectorAll('.agent-agreement')).toHaveLength(1);
+  expect(score().dataset.tone).toBe('alert');
+  expect(score().querySelector('.agent-agreement-level').textContent).toBe('Low agreement');
+  // Too little overlap to score, or a stale check: no number at all.
+  const thin = snapshot();
+  thin.checks[0].differences_data.agreement = { score: 90, coverage_status: 'insufficient' };
+  w.App.agentReview.render(body, thin);
+  expect(score()).toBeNull();
+  dom.window.close();
+});

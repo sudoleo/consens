@@ -508,7 +508,7 @@ def test_direct_comparison_shares_chat_shell_and_fits_picker(browser, phase4_ser
 def test_fresh_agent_mode_session_opens_saved_direct_answers(browser, phase4_server, width, theme):
     import json
     context, page = _real_firebase_page(browser, phase4_server,
-        init_script=f"localStorage.setItem('theme','{theme}');localStorage.setItem('runMode','consensus');")
+        init_script=f"localStorage.setItem('theme','{theme}');localStorage.setItem('runMode','consensus'); localStorage.setItem('runModeDefault','agent-2026-10-02');")
     try:
         page.set_viewport_size({'width':width, 'height':900})
         page.route('**/bookmarks/direct-saved', lambda route: route.fulfill(content_type='application/json', body=json.dumps({
@@ -551,7 +551,7 @@ def test_fresh_agent_mode_session_opens_saved_direct_answers(browser, phase4_ser
 @pytest.mark.parametrize('agent_mode', [False, True])
 def test_demo_uses_all_balanced_models_and_never_displays_spinner_markup(browser, phase4_server, agent_mode):
     context, page = _real_firebase_page(browser, phase4_server,
-        init_script=f"localStorage.setItem('runMode','{'consensus' if agent_mode else 'compare'}');")
+        init_script=f"localStorage.setItem('runMode','{'consensus' if agent_mode else 'compare'}');localStorage.setItem('runModeDefault','agent-2026-10-02');")
     try:
         page.set_viewport_size({'width':1440, 'height':900})
         cdn_dir = os.environ.get('READER_CDN_DIR')

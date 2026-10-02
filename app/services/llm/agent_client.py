@@ -153,7 +153,7 @@ def agent_model_options():
     catalog = agent_model_metadata.snapshot()
     options = [
         {"id": model.selection_id, "label": model.label, **_provider_options(model),
-         "available": True,
+         "available": True, "premium": model.selection_id in cfg.PREMIUM_MODELS,
          "reasoning_efforts": _choices(model, metadata),
          "default_reasoning": model.request_config.get("reasoning", metadata.get("reasoning") or {}),
          "reasoning_available": bool(metadata.get("reasoning")),
@@ -174,7 +174,7 @@ def agent_model_options():
         models.append(available.get(entry.internal_id) or {
             'id': entry.internal_id, 'label': entry.label, 'provider': entry.provider,
             'provider_label': cfg.PROVIDERS[entry.provider].label,
-            'available': False, 'unavailable_reason': 'Model information unavailable · check the model ID or retry later',
+            'available': False, 'premium': entry.internal_id in cfg.PREMIUM_MODELS, 'unavailable_reason': 'Model information unavailable · check the model ID or retry later',
             'reasoning_efforts': ['default'], 'reasoning_available': False,
         })
     return {'default_model_id': default['id'], 'models': models}

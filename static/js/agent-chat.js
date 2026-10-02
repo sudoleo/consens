@@ -41,9 +41,17 @@
     try { preferred = JSON.parse(localStorage.getItem(`agent_settings_${catalogOwner}`) || "null"); } catch (_) {}
     return selections.get(selectionKey()) || saved || preferred || { model_id: catalog?.default_model_id, reasoning_effort: "default" };
   }
+  // Premium models stay Pro in Agent as in every other mode. They stay in the
+  // list with their badge; the server refuses them for other tiers as well.
+  function locked(model) {
+    return Boolean(model?.premium) && window.App?.state?.get?.("isUserPro") !== true;
+  }
+  function selectable(model) {
+    return Boolean(model) && model.available !== false && !locked(model);
+  }
   function selection() {
     const preferred = preferredSelection() || {};
-    const available = catalog?.models.filter(item => item.available !== false);
+    const available = catalog?.models.filter(selectable);
     const model = available?.find(item => item.id === preferred.model_id)
       || available?.find(item => item.id === catalog.default_model_id) || available?.[0];
     return model ? { model_id: model.id,
@@ -140,7 +148,7 @@
       }
     }
     const options = ready ? catalog.models : [{ id: "", label: catalogStatus === "failed" ? "Models unavailable" : "Loading models…" }];
-    const signature = JSON.stringify(options);
+    const signature = JSON.stringify([options, options.map(locked)]);
     if (select.dataset.options !== signature) {
       const groups = new Map();
       const grouped = options.some(model => model.provider);
@@ -149,7 +157,8 @@
         option.value = model.id;
         option.textContent = model.label;
         option.dataset.modelLabel = model.label;
-        option.disabled = model.available === false;
+        option.disabled = model.available === false || locked(model);
+        if (model.premium) option.dataset.modelBadge = "Pro";
         if (model.unavailable_reason) option.dataset.description = model.unavailable_reason;
         if (grouped) {
           const key = model.provider || 'other';
@@ -170,7 +179,7 @@
       select.dataset.options = signature;
     }
     select.value = ready ? current.model_id || catalog.default_model_id : "";
-    select.disabled = !ready || running || !catalog.models.some(item => item.available !== false);
+    select.disabled = !ready || running || !catalog.models.some(selectable);
     const model = catalog?.models.find(item => item.id === select.value);
     const efforts = model?.reasoning_efforts || ["default"];
     const effortSignature = JSON.stringify([model?.id, efforts]);
@@ -207,7 +216,7 @@
     const select = document.getElementById("agentModelDropdown");
     const effort = document.getElementById("agentReasoningEffort");
     const model = catalog?.models.find(item => item.id === select?.value);
-    if (!model || model.available === false || !canUse()) return;
+    if (!selectable(model) || !canUse()) return;
     const value = { model_id: model.id, reasoning_effort: model.reasoning_efforts.includes(effort.value) ? effort.value : "default" };
     rememberSelection(value);
     render();
@@ -606,7 +615,7 @@
     return models.length >= 2 && models.length <= limit && models.every(id => typeof id === 'string' && id.trim());
   }
   function sendBlocker() {
-    if (!canUse()) return { message: 'Agent Beta is available with Pro.' };
+    if (!canUse()) return { message: 'Sign in to use Agent.' };
     if (catalogStatus === 'failed') return { message: 'Chat models could not be loaded. Retry to continue.' };
     if (catalogStatus !== 'ready') return { message: 'Loading chat models… You can already write your message.' };
     if (!catalog.models.some(model => model.available !== false)) {
@@ -748,7 +757,7 @@
   }
   async function send(recovery = null) {
     if (recovery) return recoverAnswer(recovery);
-    if (!canUse()) { App.showPopup?.("Agent Beta is available to Pro users and admins."); return; }
+    if (!canUse()) { App.showPopup?.("Sign in to use Agent."); return; }
     const input = document.getElementById("questionInput");
     const draft = input?.value || "";
     const question = recovery?.question || String(App.quote?.compose?.(draft) ?? draft).trim();

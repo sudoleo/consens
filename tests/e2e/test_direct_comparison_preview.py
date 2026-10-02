@@ -21,7 +21,7 @@ def settle(page):
     (320, 568, 'dark'), (844, 390, 'light')])
 def test_preview_toggle_layout_and_real_result(browser, phase4_server, width, height, theme):
     context, page = _real_firebase_page(browser, phase4_server,
-        init_script=f"localStorage.setItem('runMode','consensus'); localStorage.setItem('theme','{theme}');")
+        init_script=f"localStorage.setItem('runMode','consensus'); localStorage.setItem('runModeDefault','agent-2026-10-02'); localStorage.setItem('theme','{theme}');")
     errors, requests = [], []
     page.on('pageerror', lambda error: errors.append(str(error)))
     page.on('request', lambda request: requests.append(request.url)
@@ -88,7 +88,7 @@ def test_preview_toggle_layout_and_real_result(browser, phase4_server, width, he
 
 def test_persisted_off_new_comparison_and_model_selection(browser, phase4_server):
     context, page = _real_firebase_page(browser, phase4_server,
-        init_script="localStorage.setItem('runMode','compare');")
+        init_script="localStorage.setItem('runMode','compare'); localStorage.setItem('runModeDefault','agent-2026-10-02');")
     try:
         intro = page.locator('#answerReaderPreviewIntro')
         cards = page.locator('.is-preview .answer-reader-answer')

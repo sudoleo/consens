@@ -243,53 +243,36 @@ body:has(.sidebar.active) .brand-float {
   box-shadow: none;
 }
 
-/* "Why limits" in der Fusszeile. Seit der Kontoname daneben weg ist, hat die
-   Zeile Platz fuer eine ruhige, aber eindeutig anfassbare Flaeche: Rahmen nur
-   als Haarlinie, das Fragezeichen als eigenes Glyph, damit die Zeile auch
-   ohne Farbe als Hilfe lesbar ist. Kein Blau — /app ist monochrom. */
+/* Early access: since 2026-10-02 a plain text link on the plan line under
+   the account address ("Free · Early access"), no pill, no question mark.
+   user-tier.js still switches it with style.display. */
 #upgradeLink {
   display: none;
-  align-items: center;
-  gap: 6px;
-  flex: 0 0 auto;
-  height: 26px;
-  padding: 0 10px 0 7px;
-  border: 1px solid var(--line-soft);
-  border-radius: var(--radius-pill);
+  align-items: baseline;
+  gap: 0;
+  min-width: 0;
+  padding: 0;
+  border: 0;
   background: transparent;
   color: var(--sidebar-text-muted);
-  font-size: var(--font-size-micro);
-  font-weight: var(--font-weight-medium);
-  letter-spacing: var(--tracking-normal);
-  line-height: var(--line-height-solid);
+  font: inherit;
   white-space: nowrap;
+  text-decoration: none;
   cursor: pointer;
-  transition: color .15s ease, border-color .15s ease, background-color .15s ease;
+  transition: color .15s ease;
 }
 
-.upgrade-link-glyph {
-  display: grid;
-  place-items: center;
-  width: 15px;
-  height: 15px;
-  flex: none;
-  border-radius: 50%;
-  border: 1px solid currentColor;
-  font-size: 9px;
-  font-weight: var(--font-weight-bold);
-  line-height: 1;
-  opacity: .75;
+#upgradeLink::before {
+  content: "\00b7";
+  margin: 0 5px;
+  color: var(--sidebar-text-muted);
 }
 
 #upgradeLink:hover,
 #upgradeLink:focus-visible {
   color: var(--text-color);
-  border-color: var(--line);
-  background: var(--sidebar-hover);
-}
-
-#upgradeLink:hover .upgrade-link-glyph {
-  opacity: 1;
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 /* Ehemalige Topbar-Link-Optik; lebt weiter in den Links des Account-Popups
@@ -632,13 +615,74 @@ body:has(.sidebar.active) .brand-float {
   padding: 0 2px;
 }
 
+/* Address over plan, one quiet column between the initial and the icons. */
 .sidebar-account-meta {
   flex: 1;
   min-width: 0;
   display: flex;
-  align-items: center;
-  gap: 8px;
-  justify-content: flex-start;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 1px;
+}
+
+#accountIdentity.account-identity {
+  display: block;
+  max-width: 100%;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  overflow: hidden;
+  color: var(--text-color);
+  font: inherit;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.35;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+#accountIdentity.account-identity[hidden],
+.account-plan-line[hidden] {
+  display: none;
+}
+
+#accountIdentity.account-identity:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+#accountIdentity.account-identity:focus-visible {
+  outline: 2px solid var(--ink-3);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+.account-plan-line {
+  display: flex;
+  align-items: baseline;
+  max-width: 100%;
+  min-width: 0;
+  color: var(--sidebar-text-muted);
+  font-size: var(--font-size-micro);
+  line-height: 1.35;
+}
+
+.account-plan-name.is-plus {
+  color: var(--agree);
+}
+
+.account-plan-name.is-pro {
+  color: color-mix(in srgb, #a8841f 82%, var(--text-color));
+}
+
+.dark-mode .account-plan-name.is-pro {
+  color: color-mix(in srgb, #e8c76a 82%, var(--text-color));
 }
 
 .sidebar-footer-meta {
@@ -859,14 +903,16 @@ body:has(.sidebar.active) .brand-float {
    firebase.js rendert .email-icon; Optik lebt hier statt in Inline-Styles. */
 .email-icon {
   display: inline-block;
-  width: 32px;
-  height: 32px;
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
-  background-color: color-mix(in srgb, #1d9e75 20%, var(--sidebar-bg));
-  border: 1px solid color-mix(in srgb, #1d9e75 34%, var(--sidebar-border));
-  color: color-mix(in srgb, #0f6e56 72%, var(--text-color));
+  /* Neutral since 2026-10-02: the initial is the account, not a brand
+     surface. Plus and Pro still colour it (is-plus / is-pro below). */
+  background-color: var(--well, color-mix(in srgb, var(--text-color) 7%, var(--sidebar-bg)));
+  border: 1px solid var(--line, var(--sidebar-border));
+  color: var(--text-color);
   text-align: center;
-  line-height: 30px;
+  line-height: 28px;
   font-weight: var(--font-weight-bold);
   font-size: var(--font-size-sm);
   cursor: pointer;
@@ -879,15 +925,11 @@ body:has(.sidebar.active) .brand-float {
 /* Der Kreis sah bisher wie ein Etikett aus. Ein kleiner Hub plus ein
    deutlicherer Rand sagt beim Hovern, dass hier etwas aufgeht. */
 .email-icon:hover {
-  background-color: color-mix(in srgb, #1d9e75 30%, var(--sidebar-bg));
-  border-color: color-mix(in srgb, #1d9e75 60%, var(--sidebar-border));
-  transform: translateY(-1px);
-  box-shadow: 0 3px 10px color-mix(in srgb, #1d9e75 22%, transparent);
+  border-color: color-mix(in srgb, var(--text-color) 30%, var(--sidebar-border));
 }
 
 .email-icon:active {
-  transform: translateY(0) scale(0.96);
-  box-shadow: none;
+  transform: scale(0.96);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -900,7 +942,7 @@ body:has(.sidebar.active) .brand-float {
 }
 
 .email-icon:focus-visible {
-  outline: 2px solid color-mix(in srgb, #1d9e75 50%, transparent);
+  outline: 2px solid var(--ink-3, var(--sidebar-text-muted));
   outline-offset: 2px;
 }
 
@@ -1017,15 +1059,15 @@ body:has(.sidebar.active) .brand-float {
 .email-icon.is-pro:hover {
   background-color: color-mix(in srgb, #c9a232 28%, var(--sidebar-bg));
   border-color: color-mix(in srgb, #d4af37 76%, var(--sidebar-border));
-  box-shadow: 0 3px 10px color-mix(in srgb, #c9a232 24%, transparent);
 }
 
 /* Plus bleibt in der Farbe des Hauses -- Gold gehoert zu den teuren Modellen,
    und die hat Plus gerade nicht. Es traegt denselben Kreis, nur mit einem
    Rand, den man sieht. */
 .email-icon.is-plus {
-  background-color: color-mix(in srgb, #1d9e75 36%, var(--sidebar-bg));
-  border-color: color-mix(in srgb, #1d9e75 66%, var(--sidebar-border));
+  background-color: color-mix(in srgb, #1d9e75 22%, var(--sidebar-bg));
+  border-color: color-mix(in srgb, #1d9e75 56%, var(--sidebar-border));
+  color: color-mix(in srgb, #0f6e56 72%, var(--text-color));
 }
 
 .email-icon.is-plus:hover {
@@ -1034,7 +1076,8 @@ body:has(.sidebar.active) .brand-float {
 }
 
 .dark-mode .email-icon.is-plus {
-  background-color: color-mix(in srgb, #1d9e75 44%, var(--sidebar-bg));
+  background-color: color-mix(in srgb, #1d9e75 30%, var(--sidebar-bg));
+  color: color-mix(in srgb, #5fd3ad 80%, var(--text-color));
 }
 
 .dark-mode .email-icon.is-pro {
@@ -1181,7 +1224,9 @@ body:has(.sidebar.active) .brand-float {
   overflow: hidden;
   color: var(--sidebar-text-muted);
   font-size: 0.64rem;
-  line-height: 1;
+  /* overflow:hidden clips at the line box: with line-height 1 the
+     descenders of "Working" (g, p) were cut off. */
+  line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;
   transform: translateY(-50%);

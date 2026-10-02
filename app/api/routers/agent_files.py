@@ -6,7 +6,8 @@ from urllib.parse import quote
 
 from app.api.routers.agent import require_agent_access
 from app.api.routers.chat_history import _chat_uid, _raise_store_error
-from app.core.security import db_firestore
+from app.core.entitlements import entitlements_for
+from app.core.security import TierStatusUnavailable, db_firestore, get_user_tier, is_user_admin
 from app.core.rate_limit import limiter
 from app.services.agent_files import AgentFiles, FileUnavailable, StorageNotConfigured
 
@@ -23,6 +24,18 @@ def service(request):
     uid = _chat_uid(request)
     require_agent_access(uid)
     return uid, AgentFiles(db_firestore)
+
+
+def require_uploads(uid):
+    """Uploading follows the attachment rule of every mode (from Plus).
+    Listing, downloading and deleting stay open: Agent writes documents into
+    the same store for every account."""
+    try:
+        allowed = entitlements_for(get_user_tier(uid)).attachments or is_user_admin(uid)
+    except TierStatusUnavailable:
+        raise HTTPException(503, "Account tier is temporarily unavailable. Please retry.") from None
+    if not allowed:
+        raise HTTPException(403, "Attachments are available from Plus.")
 
 
 def invoke(operation, uid):
@@ -42,6 +55,7 @@ def invoke(operation, uid):
 @limiter.limit("10/minute")
 def upload_file(request: Request, chat_id: str, payload: Upload):
     uid, files = service(request)
+    require_uploads(uid)
     def operation():
         files.expire(uid, chat_id)
         return files.upload(uid, chat_id, payload.model_dump())

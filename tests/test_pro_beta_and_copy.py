@@ -159,8 +159,9 @@ def test_access_information_explains_availability_and_sells_nothing():
 def test_sidebar_link_explains_limits_instead_of_offering_an_upgrade():
     html = (ROOT / "templates" / "index.html").read_text(encoding="utf-8")
     layout = (ROOT / "static" / "css" / "layout.css").read_text(encoding="utf-8")
-    assert 'aria-label="About early access"' in html
-    assert ">Early access</span>" in html
+    # Since 2026-10-02 a plain text link on the plan line, no pill.
+    assert 'title="About early access"' in html
+    assert ">Early access</a>" in html
     assert "#upgradeLink" in layout
     assert "white-space: nowrap" in layout
     # Der Kontoname stand daneben und hat die Zeile ueberfuellt; er ist raus.

@@ -254,15 +254,18 @@
       </div>
       <div class="sidebar-footer-row">
         <div id="loginContainer" class="login-text" hidden></div>
-        <!-- Der Kontoname stand hier frueher neben der Frage nach den Limits.
-             Beides zusammen war in der schmalen Fusszeile zu viel, und der
-             Name sagt nichts, was das Avatar-Kuerzel daneben nicht schon
-             zeigt — die Adresse steht weiterhin im Konto-Popup. -->
+        <!-- Seit 2026-10-02 eine ruhige Identitaet wie in jedem Konto-Footer:
+             oben die Adresse (oeffnet dasselbe Konto-Menue wie das Kuerzel),
+             darunter der Tarif und fuer Free der Hinweis auf Early access als
+             schlichter Textlink statt einer Pille mit Fragezeichen.
+             firebase.js fuellt die Adresse, user-tier.js den Tarif. -->
         <div class="sidebar-account-meta">
-          <a id="upgradeLink" class="u-display-none" href="#" aria-label="About early access" title="About early access">
-            <span class="upgrade-link-glyph" aria-hidden="true">?</span>
-            <span class="upgrade-link-text">Early access</span>
-          </a>
+          <button type="button" id="accountIdentity" class="account-identity" aria-haspopup="menu"
+            aria-controls="emailPopup" hidden></button>
+          <span id="accountPlanLine" class="account-plan-line" hidden>
+            <span id="accountPlanName" class="account-plan-name">Free</span>
+            <a id="upgradeLink" class="u-display-none" href="#" title="About early access">Early access</a>
+          </span>
         </div>
         <!-- Kontingent-Ring: ein ruhiges 20-px-Glyph ohne Zahl im Inneren. Der
              genaue Wert steht im Tooltip/aria-label und im Panel; Klick
@@ -1268,7 +1271,7 @@
                 <label for="agreementDisplaySelect" class="settings-switch-row settings-choice-row">
                   <span>
                     <strong>Agreement score</strong>
-                    <small>How much of the agreement verdict shows below consensus answers. Hidden leaves only the drawers.</small>
+                    <small>How much of the agreement verdict shows below Consensus and Agent answers. Hidden leaves only the drawers.</small>
                   </span>
                   <span class="settings-select">
                     <select id="agreementDisplaySelect">

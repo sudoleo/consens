@@ -53,6 +53,7 @@ function boot({ mode = "consensus", checkSources = true } = {}) {
         trackAppEvent: vi.fn()
       };
       window.localStorage.setItem("runMode", mode);
+      window.localStorage.setItem("runModeDefault", "agent-2026-10-02");
       window.localStorage.setItem("checkSources", String(checkSources));
     }
   });

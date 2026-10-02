@@ -4,18 +4,20 @@
   const App = window.App = window.App || {};
   const views = new WeakMap();
 
+  // Icon-only: the row under an answer leads with the agreement score; Copy
+  // is the quiet last control in it (name and tooltip carry the label).
   function button(label, path) {
     const control = document.createElement('button');
     control.type = 'button';
+    control.setAttribute('aria-label', label);
+    control.title = label;
     const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     icon.setAttribute('viewBox', '0 0 24 24');
     icon.setAttribute('aria-hidden', 'true');
     const shape = document.createElementNS(icon.namespaceURI, 'path');
     shape.setAttribute('d', path);
     icon.append(shape);
-    const text = document.createElement('span');
-    text.textContent = label;
-    control.append(icon, text);
+    control.append(icon);
     return control;
   }
 
