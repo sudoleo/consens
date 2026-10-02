@@ -105,12 +105,12 @@ def test_transport_exception_is_structured():
 
     result = transport.call_provider(request_data(), "k", http_post=boom)
     assert result["error_code"] == "transport_request_failed"
-    assert "network down" in result["error"]
+    assert result["error"] == "OpenRouter request failed"
 
 
 def test_malformed_response_is_structured():
     post = make_post({}, FakeResponse({"choices": []}))
     result = transport.execute(request_data(), "k", http_post=post)
-    assert result["error"] is None
+    assert result["error_code"] == "response_parse_failed"
     assert result["text"] == ""
     assert result["usage"] == {"prompt": 0, "completion": 0, "total": 0}

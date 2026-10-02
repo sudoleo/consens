@@ -39,7 +39,7 @@ def cli(tmp_path, request):
             encoding="utf-8",
         )
 
-    for relative in ("tests/js/example.test.mjs", "tests/e2e/test_example.py", "tests/test_example.py",
+    for relative in ("tests/js/example.test.mjs", "tests/e2e/test_example.py", "tests/test_example.py", "tests/rules/firestore.rules.test.mjs",
                      "node_modules/vitest/vitest.mjs", "node_modules/esbuild/package.json"):
         path = root / relative
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -72,7 +72,7 @@ def record(tool, args):
             'env': {key: os.environ.get(key) for key in (
                 'RUN_E2E', 'UNIT_TEST_MODE', 'E2E_TEST_MODE', 'FIRESTORE_EMULATOR_HOST',
                 'GOOGLE_CLOUD_PROJECT', 'GCLOUD_PROJECT', 'FIREBASE_PROJECT_ID',
-                'GOOGLE_APPLICATION_CREDENTIALS')}}) + '\\n')
+                'GOOGLE_APPLICATION_CREDENTIALS', 'PYTHONUTF8')}}) + '\\n')
 
 def main(tool, args=None):
     args = sys.argv[1:] if args is None else args
@@ -108,7 +108,7 @@ if __name__ == '__main__':
             "JAVA_HOME": "", "DEV_SCRIPT": str(root / "dev.ps1"),
             "DEV_LOG": str(tmp_path / "calls.jsonl"), "DEV_STATE": str(tmp_path / "state.json"),
             "DEV_TARGET": target, "DEV_COMMAND": command, "DEV_TEST_PATH": test_path,
-            "DEV_FAIL": failure, "RUN_E2E": "inherited-run", "UNIT_TEST_MODE": "inherited-unit",
+            "DEV_FAIL": failure, "RUN_E2E": "inherited-run", "UNIT_TEST_MODE": "inherited-unit", "PYTHONUTF8": "0",
             "E2E_TEST_MODE": "inherited-e2e", "FIRESTORE_EMULATOR_HOST": "inherited-host:1234",
             "GOOGLE_APPLICATION_CREDENTIALS": "inherited-credential.json",
             "GOOGLE_CLOUD_PROJECT": "inherited-project", "GCLOUD_PROJECT": "inherited-gcloud",
@@ -126,7 +126,7 @@ $code = $LASTEXITCODE
 $state = @{ cwd = (Get-Location).Path; originalPath = $originalPath; env = @{} }
 foreach ($name in @('PATH', 'RUN_E2E', 'UNIT_TEST_MODE', 'E2E_TEST_MODE',
     'FIRESTORE_EMULATOR_HOST', 'GOOGLE_APPLICATION_CREDENTIALS',
-    'GOOGLE_CLOUD_PROJECT', 'GCLOUD_PROJECT', 'FIREBASE_PROJECT_ID')) {
+    'GOOGLE_CLOUD_PROJECT', 'GCLOUD_PROJECT', 'FIREBASE_PROJECT_ID', 'PYTHONUTF8')) {
     $state.env[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
 }
 $state | ConvertTo-Json -Depth 3 | Set-Content -LiteralPath $env:DEV_STATE -Encoding UTF8
@@ -200,7 +200,20 @@ def test_browser_delegates_lifecycle_and_failure_to_firebase(cli, failure):
         "FIRESTORE_EMULATOR_HOST": "127.0.0.1:9876", "GOOGLE_APPLICATION_CREDENTIALS": None,
         "GOOGLE_CLOUD_PROJECT": "demo-consensio-e2e", "GCLOUD_PROJECT": "demo-consensio-e2e",
         "FIREBASE_PROJECT_ID": "demo-consensio-e2e",
+        "PYTHONUTF8": "1",
     }
+
+
+@pytest.mark.parametrize('failure', ['', 'node'])
+def test_rules_uses_client_runner_with_emulator_lifecycle_and_restores_environment(cli, failure):
+    _, run = cli
+    result, calls = run('rules', failure=failure)
+    assert result.returncode == (23 if failure else 0), result.stdout + result.stderr
+    assert [call['tool'] for call in calls] == ['java', 'firebase', 'emulator-start', 'node', 'emulator-stop']
+    assert calls[1]['args'][-1] == 'node --test tests/rules/firestore.rules.test.mjs'
+    assert calls[3]['args'] == ['--test', 'tests/rules/firestore.rules.test.mjs']
+    assert calls[3]['env']['FIREBASE_PROJECT_ID'] == 'demo-consensio-e2e'
+    assert calls[3]['env']['GOOGLE_APPLICATION_CREDENTIALS'] is None
 
 
 def test_browser_rejects_nonlocal_emulator_before_start(cli):

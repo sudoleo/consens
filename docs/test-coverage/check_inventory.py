@@ -92,7 +92,7 @@ def main():
     try:
         js_definitions = json.loads(subprocess.check_output(
             ["node", str(CATALOG.with_name("javascript_evidence.mjs")), *javascript],
-            cwd=ROOT, text=True, stderr=subprocess.PIPE))
+            cwd=ROOT, text=True, encoding="utf-8", stderr=subprocess.PIPE))
     except (OSError, subprocess.CalledProcessError, ValueError):
         js_definitions = {}
         problems.append("Cannot parse JavaScript evidence; node and locked npm dependencies required (npm ci)")
@@ -193,14 +193,14 @@ def main():
         diff = subprocess.run(
             ["git", "diff", "--name-only", data["base_commit"], "--",
              "app", "static", "templates", "scripts", "benchmark", "main.py", ":(exclude)static/dist"],
-            cwd=ROOT, capture_output=True, text=True, check=True,
+            cwd=ROOT, capture_output=True, text=True, encoding="utf-8", check=True,
         )
         for changed in diff.stdout.splitlines():
             problems.append(f"Production source changed since review: {changed}")
         untracked = subprocess.run(
             ["git", "ls-files", "--others", "--exclude-standard", "--",
              "app", "static", "templates", "scripts", "benchmark", "main.py", ":(exclude)static/dist"],
-            cwd=ROOT, capture_output=True, text=True, check=True,
+            cwd=ROOT, capture_output=True, text=True, encoding="utf-8", check=True,
         )
         for changed in untracked.stdout.splitlines():
             problems.append(f"New production source; review mapping: {changed}")

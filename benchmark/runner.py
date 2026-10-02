@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import datetime as _dt
 import json
+import re
 import logging
 import random
 from dataclasses import dataclass, field
@@ -569,13 +570,13 @@ class BenchmarkRunner:
                 answers=answers,
                 model_sources=None,
             )
-        except Exception as exc:  # noqa: BLE001
+        except Exception:  # noqa: BLE001
             return {"text": "", "usage": None, "latency_ms": None, "status": None,
-                    "error": str(exc), "error_code": "consensus_failed"}
+                    "error": "Consensus request failed", "error_code": "consensus_failed"}
         text = text or ""
         if text.strip().startswith(("Consensus error", "Invalid consensus model")):
             return {"text": "", "usage": None, "latency_ms": None, "status": None,
-                    "error": text.strip(), "error_code": "consensus_failed"}
+                    "error": "Consensus request failed", "error_code": "consensus_failed"}
         return {"text": text, "usage": None, "latency_ms": None, "status": None,
                 "error": None, "error_code": None}
 
@@ -667,7 +668,8 @@ class BenchmarkRunner:
         drifted = [
             field
             for field in self._MANIFEST_FROZEN_FIELDS
-            if existing.get(field) != current.get(field)
+            if (_normalize_consensus_clock(existing.get(field)) if field == "consensus_prompt_template" else existing.get(field))
+            != (_normalize_consensus_clock(current.get(field)) if field == "consensus_prompt_template" else current.get(field))
         ]
         if drifted:
             raise RuntimeError(
@@ -1219,6 +1221,24 @@ _CONSENSUS_TEMPLATE_PLACEHOLDERS = (
 )
 
 
+def _normalize_consensus_clock(template):
+    """Only volatile clock values are placeholders; zone/instructions stay frozen.
+
+    Also accepts pre-fix manifests without rewriting their historical content.
+    The live prompt always keeps its fresh clock.
+    """
+    if not isinstance(template, str):
+        return template
+    return re.sub(
+        r"\ACurrent date: [A-Za-z]+, \d{4}-\d{2}-\d{2}\. "
+        r"Reference time at request start: \d{2}:\d{2}:\d{2}\. "
+        r"Reference timezone: ([^\n]+?) \(UTC[+-]\d{2}:\d{2}\)\.",
+        r"Current date: {REFERENCE_DATE}. Reference time at request start: {REFERENCE_TIME}. "
+        r"Reference timezone: \1 (UTC{REFERENCE_OFFSET}).",
+        template, count=1,
+    )
+
+
 def _consensus_prompt_template() -> str:
     """Der produktive Consensus-Synthese-Prompt als Template – die pro Frage
     variablen Teile (Frage, sechs Kandidatenantworten) sind durch Platzhalter
@@ -1234,10 +1254,10 @@ def _consensus_prompt_template() -> str:
     from app.services.llm.consensus_engine import _build_consensus_prompt
 
     question, *answers = _CONSENSUS_TEMPLATE_PLACEHOLDERS
-    return _build_consensus_prompt(
+    return _normalize_consensus_clock(_build_consensus_prompt(
         question,
         dict(zip(cfg.PROVIDERS, answers)),
         [],
         model_sources=None,
         shuffle=False,
-    )
+    ))

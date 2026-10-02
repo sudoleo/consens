@@ -14,19 +14,20 @@ Run the project's existing local checks. See docs/testing.md for setup.
 param(
     [ValidateSet('check', 'update', 'help')]
     [string]$Command = 'help',
-    [ValidateSet('frontend', 'backend', 'browser')]
+    [ValidateSet('frontend', 'backend', 'browser', 'rules')]
     [string]$Target,
     [string]$TestPath
 )
 
 if ($Command -eq 'help') {
-    Write-Host 'Usage: .\dev.ps1 check <frontend|backend|browser> [-TestPath <test file or directory>]'
+    Write-Host 'Usage: .\dev.ps1 check <frontend|backend|browser|rules> [-TestPath <test file or directory>]'
     Write-Host '       .\dev.ps1 update'
     Write-Host 'update:   bring main up to date with origin/main (fast-forward only) and install changed dependencies'
     Write-Host 'frontend: JavaScript tests + build:check (run npm run build to rebuild)'
     Write-Host 'backend:  isolated pytest suite; browser tests excluded'
     Write-Host 'Publisher only (no dependencies): python -E -S -m unittest discover -s tests -p test_publisher_standalone.py -v'
     Write-Host 'browser:  build:check + Playwright using a disposable Firestore emulator'
+    Write-Host 'rules:    client SDK access checks using a disposable Firestore emulator'
     Write-Host 'Setup and maintenance: docs/testing.md'
     exit 0
 }
@@ -136,7 +137,7 @@ if ($Command -eq 'update') {
 }
 
 try {
-    if (-not $Target) { throw 'Choose frontend, backend or browser. Run .\dev.ps1 help.' }
+    if (-not $Target) { throw 'Choose frontend, backend, browser or rules. Run .\dev.ps1 help.' }
     Push-Location -LiteralPath $PSScriptRoot
     $locationPushed = $true
 
@@ -144,6 +145,7 @@ try {
         'frontend' { 'tests/js' }
         'backend' { 'tests' }
         'browser' { 'tests/e2e' }
+        'rules' { 'tests/rules' }
     }
     $selectedTests = $testRoot
     if ($TestPath) {
@@ -163,7 +165,11 @@ try {
         }
     }
 
-    if ($Target -in @('frontend', 'browser')) {
+    if ($Target -eq 'rules' -and $selectedTests -eq 'tests/rules') {
+        $selectedTests = 'tests/rules/firestore.rules.test.mjs'
+    }
+
+    if ($Target -in @('frontend', 'browser', 'rules')) {
         $null = Find-DevCommand 'node' 'Install Node.js and add it to PATH.'
         $npm = Find-DevCommand 'npm.cmd' 'Install Node.js including npm.'
         if (-not (Test-Path -LiteralPath 'node_modules/vitest/vitest.mjs') -or -not (Test-Path -LiteralPath 'node_modules/esbuild/package.json')) {
@@ -171,17 +177,18 @@ try {
         }
     }
 
-    if ($Target -in @('backend', 'browser')) {
+    if ($Target -in @('backend', 'browser', 'rules')) {
         $python = Join-Path $PSScriptRoot 'venv/Scripts/python.exe'
         if (-not (Test-Path -LiteralPath $python)) {
             throw 'Missing venv/Scripts/python.exe. Create it with python -m venv venv; see docs/testing.md.'
         }
         Invoke-DevStep 'Python test dependencies (setup: python -m pip install -r requirements-test.txt in venv)' $python @('-c', 'import pytest; from app.services.agent_tokens import encoding; encoding()')
+        Set-DevEnvironment 'PYTHONUTF8' '1'
         # Do not inherit an E2E run into the backend suite, or UNIT_TEST_MODE
         # into a browser run. Restore the caller's environment in finally.
         Set-DevEnvironment 'RUN_E2E' $(if ($Target -eq 'browser') { '1' } else { $null })
         Set-DevEnvironment 'UNIT_TEST_MODE' $(if ($Target -eq 'backend') { '1' } else { $null })
-        Set-DevEnvironment 'E2E_TEST_MODE' $(if ($Target -eq 'browser') { '1' } else { $null })
+        Set-DevEnvironment 'E2E_TEST_MODE' $(if ($Target -in @('browser', 'rules')) { '1' } else { $null })
     }
 
     switch ($Target) {
@@ -194,14 +201,15 @@ try {
         'backend' {
             Invoke-DevStep 'Backend tests' $python @('-m', 'pytest', $selectedTests, '-q')
         }
-        'browser' {
+        { $_ -in @('browser', 'rules') } {
             $firebase = Find-DevCommand 'firebase.cmd' 'Install the Firebase CLI as documented in tests/e2e/README.md.'
             if ($env:JAVA_HOME -and (Test-Path -LiteralPath (Join-Path $env:JAVA_HOME 'bin/java.exe'))) {
                 Set-DevEnvironment 'PATH' ((Join-Path $env:JAVA_HOME 'bin') + [IO.Path]::PathSeparator + $env:PATH)
             }
             $java = Find-DevCommand 'java' 'Install Java 21+ and set JAVA_HOME or PATH.'
             Invoke-DevStep 'Java runtime' $java @('--version')
-            $browserCheck = @'
+            if ($Target -eq 'browser') {
+              $browserCheck = @'
 from pathlib import Path
 from playwright.sync_api import sync_playwright
 import uvicorn
@@ -209,8 +217,9 @@ with sync_playwright() as p:
     if not Path(p.chromium.executable_path).is_file():
         raise SystemExit('Chromium is missing. Run venv/Scripts/python.exe -m playwright install chromium.')
 '@
-            Invoke-DevStep 'Browser dependencies (setup: requirements-e2e.txt)' $python @('-c', $browserCheck)
-            Invoke-DevStep 'Frontend build freshness (fix: npm run build)' $npm @('run', 'build:check')
+              Invoke-DevStep 'Browser dependencies (setup: requirements-e2e.txt)' $python @('-c', $browserCheck)
+              Invoke-DevStep 'Frontend build freshness (fix: npm run build)' $npm @('run', 'build:check')
+            }
 
             # Read the existing configuration and safety contract rather than
             # maintaining a second copy of the emulator project or port here.
@@ -230,8 +239,8 @@ with sync_playwright() as p:
 
             # Firebase owns startup and shutdown, including a failing pytest
             # command. No background process or second terminal is needed.
-            $testCommand = "venv\Scripts\python.exe -m pytest $selectedTests -q"
-            Invoke-DevStep 'Browser tests with temporary Firestore emulator' $firebase @(
+            $testCommand = if ($Target -eq 'rules') { "node --test $selectedTests" } else { "venv\Scripts\python.exe -m pytest $selectedTests -q" }
+            Invoke-DevStep "$Target tests with temporary Firestore emulator" $firebase @(
                 'emulators:exec', '--only', 'firestore', '--project', $project,
                 '--config', 'firebase.json', '--non-interactive', $testCommand
             )
