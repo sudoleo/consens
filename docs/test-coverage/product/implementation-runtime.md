@@ -67,3 +67,24 @@ Der Router bewahrt jetzt den Abbruch und protokolliert den sekundären
 Cleanupfehler ohne weiteren Yield. Die gezielte Regression reproduzierte
 zunächst `generator ignored GeneratorExit`; danach bestanden 66 benachbarte
 Kapazitäts-, HTTP-, Reliability- und Streamingfälle.
+
+Der erste vollständige Linux-E2E-Lauf zeigte außerdem eine Interferenz im
+Testharness: Die synchrone Playwright-Session hält im Pytest-Thread bereits
+eine Ereignisschleife aktiv. Die drei nativen Scheduler-Loop-Fälle konnten
+dort kein weiteres `asyncio.run()` starten. Sie führen die unveränderten
+Scheduler nun in einem eigenen Thread mit eigener Schleife aus; Exceptions
+werden an den Test zurückgegeben. Die gemeinsame Prüfung mit einer vorher
+gestarteten Playwright-Session schützt diese Suite-Grenze.
+
+Dieser Kombinationslauf belegte zudem einen bisher nicht erfassten nativen
+Lockabbruch beim Lesen innerhalb einer Transaktion: Die SDK gab `Aborted`
+direkt weiter, während ein ausgeschöpfter Commitretry als `ValueError` mit
+`Aborted`-Ursache erscheint. Der Testhelfer erfasst beide konkreten Formen,
+meldet den Abbruch weiterhin als Warnung und prüft bei ausschließlich
+abgebrochenen Versuchen den unveränderten Datenstand. Erst danach folgt der
+bereits dokumentierte einzelne explizite Wiederholungsversuch. Andere Fehler
+werden nicht abgefangen; die Produkt-Retrybudgets bleiben unverändert.
+
+Der gemeinsame Lauf von `test_agreement_verdict.py` und
+`test_scheduler_transactions.py` bestand danach mit **7 passed** in 26,66 s
+(`test-results/integrated/scheduler-playwright-fixed.xml`).

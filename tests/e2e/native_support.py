@@ -25,7 +25,8 @@ def race(*operations):
 def race_with_worker_retry(*operations, snapshot):
     """Observe a transient SDK loser, then one explicit next-tick replay.
 
-    Emulator pessimistic lock upgrades can exhaust SDK retries. Preserve that
+    Emulator pessimistic lock upgrades can abort a read or exhaust commit
+    retries. Preserve that
     outcome instead of changing production retry budgets; only replay after a
     competing worker has completed, exactly as a durable worker's next tick.
     Any other exception remains a test failure. If all attempts abort, their
@@ -35,8 +36,8 @@ def race_with_worker_retry(*operations, snapshot):
         def run():
             try:
                 return (False, operation())
-            except ValueError as exc:
-                if not isinstance(exc.__cause__, Aborted):
+            except (Aborted, ValueError) as exc:
+                if not isinstance(exc, Aborted) and not isinstance(exc.__cause__, Aborted):
                     raise
                 return (True, None)
         return run
