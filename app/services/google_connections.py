@@ -52,7 +52,10 @@ def configuration():
     if os.getenv("GOOGLE_INTEGRATIONS_ENABLED") != "1" or not all(values.values()):
         raise GoogleError("Google connections are not configured on this installation.", 503)
     uri = urlparse(values["REDIRECT_URI"])
-    local = uri.hostname in {"localhost", "127.0.0.1"} and os.getenv("UNIT_TEST_MODE") == "1"
+    # Plain http only for a local checkout (Google allows loopback redirects);
+    # a hosted deploy always needs https, like the private file store.
+    hosted = bool(os.getenv("RENDER_SERVICE_NAME")) or os.getenv("ENVIRONMENT") == "production"
+    local = uri.hostname in {"localhost", "127.0.0.1"} and (os.getenv("UNIT_TEST_MODE") == "1" or not hosted)
     if (uri.scheme != "https" and not local) or uri.path != "/agent/google/callback" or uri.query or uri.fragment or uri.username:
         raise GoogleError("Google redirect configuration is invalid.", 503)
     return values

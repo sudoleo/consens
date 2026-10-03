@@ -293,6 +293,20 @@ def test_read_only_installation_never_requests_prepares_or_executes_writes(googl
     assert "prepare_calendar_event" in [t.name for t in CalendarTools(loop,google,actions,selection).tools()]
 
 
+def test_plain_http_redirect_only_on_a_local_checkout(google, monkeypatch):
+    from app.services.google_connections import configuration
+    monkeypatch.setenv("UNIT_TEST_MODE", "0")
+    monkeypatch.delenv("RENDER_SERVICE_NAME", raising=False)
+    monkeypatch.delenv("ENVIRONMENT", raising=False)
+    monkeypatch.setenv("GOOGLE_REDIRECT_URI", "http://localhost:8044/agent/google/callback")
+    assert configuration()["REDIRECT_URI"].startswith("http://localhost")
+    monkeypatch.setenv("GOOGLE_REDIRECT_URI", "http://consens.example/agent/google/callback")
+    with pytest.raises(GoogleError, match="redirect"): configuration()
+    monkeypatch.setenv("GOOGLE_REDIRECT_URI", "http://localhost:8044/agent/google/callback")
+    monkeypatch.setenv("RENDER_SERVICE_NAME", "consensio")
+    with pytest.raises(GoogleError, match="redirect"): configuration()
+
+
 def test_drive_picker_configuration_is_public_and_complete_or_absent(monkeypatch):
     from app.services.google_connections import drive_picker
     for key in ("GOOGLE_INTEGRATIONS_ENABLED","GOOGLE_CLIENT_ID","GOOGLE_PICKER_API_KEY","GOOGLE_PROJECT_NUMBER"):
