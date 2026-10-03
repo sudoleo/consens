@@ -7,12 +7,11 @@ from test_agent_chat_frontend import CATALOG, _choose_mode, _snapshot
 
 
 def open_google(page):
-    """The hero shows the toolbar entry; a thread composer shows it in the (+) menu."""
-    toolbar=page.locator('#composerGoogleButton')
-    if toolbar.is_visible():
-        toolbar.click()
-    else:
-        page.locator('#attachTrigger').click();page.locator('#agentGoogleMenuOption').click()
+    """Gmail & Calendar live in the (+) menu only; the row appears once the
+    installation reports them configured (the menu's opening asks)."""
+    if page.locator('#attachMenu').is_hidden():
+        page.locator('#attachTrigger').click()
+    page.locator('#agentGoogleMenuOption').click()
     sheet=page.get_by_role('dialog',name='Gmail & Calendar')
     expect(sheet).to_be_visible()
     return sheet

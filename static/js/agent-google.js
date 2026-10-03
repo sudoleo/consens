@@ -309,37 +309,25 @@
       option.addEventListener('click', event => { event.stopPropagation(); App.closeAttachMenu?.(); open(document.getElementById('attachTrigger')); });
       anchor.after(option);
     }
-    const toolbar = document.querySelector('#composerModeBar .composer-mode-controls');
-    if (toolbar && !document.getElementById('composerGoogleButton')) {
-      const toggle = node('button', '', 'composer-agent-toggle composer-tool composer-google');
-      toggle.type = 'button'; toggle.id = 'composerGoogleButton'; toggle.hidden = true;
-      toggle.setAttribute('aria-haspopup', 'dialog');
-      toggle.title = 'Gmail & Calendar · Read them as sources for your next message';
-      const state = node('span', 'Off', 'composer-agent-state composer-tool-label'); state.id = 'composerGoogleState';
-      toggle.append(svg('google', ''), node('span', 'Google', 'composer-tool-label'), state);
-      toggle.addEventListener('click', () => open(toggle));
-      const models = document.getElementById('composerModelPicker');
-      if (models?.parentNode === toolbar) models.before(toggle); else toolbar.append(toggle);
-    }
+    // Google lives only in the (+) menu, next to the files; there is no
+    // second entry in the toolbar.
   }
   function stateText() {
     if (!sourcesOn()) return 'Off';
     if (gmailOn && calendarOn) return 'Gmail, Calendar';
     return gmailOn ? 'Gmail' : 'Calendar';
   }
+  // The row appears only once the installation is known to offer Gmail and
+  // Calendar (cached per tab session): an entry that vanishes on first use,
+  // or opens onto "not available", is a dead end.
   function syncEntry() {
     const agent = agentActive(), known = connections.configured ?? hint()?.configured;
-    const show = agent && known !== false;
+    const show = agent && known === true;
     const option = document.getElementById('agentGoogleMenuOption');
-    const toggle = document.getElementById('composerGoogleButton');
-    for (const el of [option, toggle]) if (el && el.hidden === show) el.hidden = !show;
-    const text = stateText(), label = `Gmail & Calendar: ${text === 'Off' ? 'off' : text}`;
-    for (const id of ['agentGoogleMenuState', 'composerGoogleState']) {
-      const el = document.getElementById(id);
-      if (el && el.textContent !== text) el.textContent = text;
-    }
-    if (toggle && toggle.getAttribute('aria-label') !== label) toggle.setAttribute('aria-label', label);
-    toggle?.classList.toggle('is-active', sourcesOn());
+    if (option && option.hidden === show) option.hidden = !show;
+    const text = stateText(), state = document.getElementById('agentGoogleMenuState');
+    if (state && state.textContent !== text) state.textContent = text;
+    option?.setAttribute('aria-label', `Gmail & Calendar: ${text === 'Off' ? 'off' : text}`);
   }
   function chip(icon, text, onOpen, removeLabel, onRemove, tone = '') {
     const wrap = node('span', '', `agent-google-chip${tone ? ' ' + tone : ''}`);

@@ -26,7 +26,7 @@
 .agent-google-btn[aria-busy="true"] { cursor: progress; }
 .agent-google-btn:disabled { cursor: not-allowed; }
 :is(.agent-google-sheet, .agent-google-chips, .agent-google-actions) :is(button, a, summary, input):focus-visible,
-.agent-google-menu-option:focus-visible, .composer-google:focus-visible {
+.agent-google-menu-option:focus-visible {
   outline: var(--focus-ring); outline-offset: 2px;
 }
 :is(.agent-google-sheet, .agent-google-chips, .agent-google-actions) input[type="checkbox"],
@@ -35,11 +35,10 @@
 }
 .agent-google-consent input[type="checkbox"] { margin-top: 0; }
 
-/* ---- Entry points ------------------------------------------------------- */
+/* ---- Entry point: one row in the (+) menu ------------------------------- */
 .agent-google-menu-option svg { color: var(--sidebar-text-muted); }
 .agent-google-menu-state { flex: none; color: var(--ink-3); font-size: var(--font-size-xs); font-weight: var(--font-weight-regular); }
-.composer-google.is-active, .composer-google.is-active .composer-agent-state { color: var(--mode-active); }
-.composer-google[hidden], .agent-google-menu-option[hidden] { display: none; }
+.agent-google-menu-option[hidden] { display: none; }
 
 /* ---- Composer chips: what this message will use, plus its consent ------ */
 .agent-google-chips {
@@ -323,10 +322,6 @@ body.agent-google-sheet-open { overflow: hidden; }
   .agent-google-btn.is-primary { border: 1px solid ButtonText; }
 }
 
-/* The Google entry adds one icon to the hero toolbar; keep it inside 320 px. */
-@media (max-width: 400px) {
-  .composer-mode-controls:has(#composerGoogleButton:not([hidden])) { gap: 2px; }
-}
 @media (max-width: 540px) {
   .agent-google-chips { gap: 4px 10px; }
   /* The list spans the row, so the chip's 78 % refers to the row width and

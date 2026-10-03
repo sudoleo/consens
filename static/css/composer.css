@@ -371,7 +371,4 @@
     :is(#agentReasoningMenuOption, #agentComparisonMenuOption, .attach-menu-toggle, .attach-menu-divider:not(.attach-menu-mode-divider)) {
     display: none;
   }
-  .input-section:has(> .composer-mode-bar:not([hidden]) .composer-google) .chat-input-container .attach-menu .agent-google-menu-option {
-    display: none;
-  }
 }

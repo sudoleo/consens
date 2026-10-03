@@ -95,8 +95,9 @@ version supersedes the old one and needs its own review. `GET .../actions` lists
 actions and Gmail evidence by `created_at` and returns the chat's `google_data`
 marker, which the `/agent` `final` event also carries.
 `agent-google.js` (+ `agent-google.css`) supplies the Google data dialog (opened
-from the (+) menu `#agentGoogleMenuOption` or the hero toolbar
-`#composerGoogleButton`; connections load on first use), removable composer chips
+only from the (+) menu row `#agentGoogleMenuOption`, which appears once the
+installation reports Gmail/Calendar configured — no toolbar entry since
+2026-10-03; connections load when (+) opens), removable composer chips
 `#agentGoogleChips` with the per-chat consent `#googleDataConsent`, and the
 action cards in `#agentGoogleActions` (after `#agentAnswer`): verb title, status
 badge, per-address acknowledgement of flagged recipients, calendar diff with

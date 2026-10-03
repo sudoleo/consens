@@ -101,6 +101,25 @@ describe('Google selection and consent',()=>{
     expect(w.App.attachments.removeDriveFiles).toHaveBeenCalled();
     expect(w.App.showPopup).toHaveBeenCalledWith(expect.stringContaining('Agent chats only'));
   });
+  it('lives only in the (+) menu and appears once the installation offers it',async()=>{
+    const {window:w,document:d}=boot();
+    w.App.agentGoogle.refreshControls();
+    const option=d.getElementById('agentGoogleMenuOption');
+    // Unknown yet: no row that could vanish on first use or open onto "not available".
+    expect(option.hidden).toBe(true);
+    expect(d.getElementById('composerGoogleButton')).toBeNull();
+    d.getElementById('attachTrigger').click();
+    await vi.waitFor(()=>expect(option.hidden).toBe(false));
+    expect(option.textContent).toContain('Read as sources');
+  });
+  it('never offers the row on an installation without Gmail and Calendar',async()=>{
+    const {window:w,document:d,state}=boot();
+    w.fetch=vi.fn(async()=>({ok:true,json:async()=>({configured:false,writes:false,drive:null,connections:[]})}));
+    d.getElementById('attachTrigger').click();
+    await vi.waitFor(()=>expect(w.fetch).toHaveBeenCalled());
+    await flush();
+    expect(d.getElementById('agentGoogleMenuOption').hidden).toBe(true);
+  });
   it('says plainly that Google is read-only and offers no write permission',async()=>{
     const {window:w,document:d}=boot();
     w.App.agentGoogle.open();
