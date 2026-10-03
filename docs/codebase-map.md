@@ -38,8 +38,16 @@ aus Google Drive als normale Anhänge; zurückgeschrieben wird standardmäßig n
   „Share with the models in this chat“ erscheint, solange der Chat sie nicht hat
   (Gmail/Kalender aktiv, Drive-Datei im Entwurf oder Altchat mit `google_data`).
 - UI-Sprache: (+)-Menü „Add from Google Drive“ und „Gmail & Calendar · Read as
-  sources“ direkt unter „Add files“; Dialog „Gmail & Calendar“; Info-Chip
-  „Private chat · Google data“. Dokumentation: `docs/google-integrations-setup.md`.
+  sources“ direkt unter „Add files“ (verbunden: „Connected · konto“ mit grünem
+  Punkt); Dialog „Gmail & Calendar“; Info-Chip „Private chat · Google data“.
+  Dokumentation: `docs/google-integrations-setup.md`.
+- Sichtbarkeit: `user_allowed(uid)` prüft `GOOGLE_TEST_USERS` (bestätigte
+  consens-E-Mails, `*` = alle, leer = niemand; E-Mail per Firebase Admin, 5 min
+  gecacht). Andere Konten bekommen von `GET /agent/google/connections`
+  `configured:false, drive:null` und sehen nichts; connect/finish/calendars/
+  confirm/renew, Drive-Uploads und `google_selection` in `/agent` antworten 403.
+- Lokaler Test: `configuration()` akzeptiert eine `http://localhost`-Rückleitung,
+  solange weder `RENDER_SERVICE_NAME` noch `ENVIRONMENT=production` gesetzt ist.
 
 Gmail in Agent Mode (27.09.2026): `agent_gmail.py` adds root-only `gmail_read`,
 `import_gmail_attachment` and `prepare_gmail_draft` to the same server registry.

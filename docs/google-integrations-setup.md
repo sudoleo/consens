@@ -86,6 +86,17 @@ their refresh tokens after 7 days, the sheet then shows "Needs reconnection").
    and account/chat deletion in a dedicated staging account. Existing files and
    document features work without these Google settings. Leave
    `GOOGLE_WRITES_ENABLED` unset unless writing back is a deliberate decision.
+7. Set `GOOGLE_TEST_USERS` to the verified email addresses of the consens accounts
+   that may see Google (comma-separated; the same people as the consent screen's
+   test users). Everyone else gets "not available" from the connections endpoint
+   and sees no Google entry, so nobody runs into Google's "unverified app" wall.
+   Unset means nobody; set `*` once Google has verified the app. Connect, finish,
+   calendar list, confirm/renew, Drive uploads and Google selections in `/agent`
+   refuse other accounts with 403.
+8. Local testing: add `http://localhost:PORT` as JavaScript origin and
+   `http://localhost:PORT/agent/google/callback` as redirect URI on the OAuth client,
+   and `http://localhost:PORT/*` on the Picker key; a local checkout (no
+   `RENDER_SERVICE_NAME`, no `ENVIRONMENT=production`) accepts the http redirect.
 
 ## Permissions and consent
 
