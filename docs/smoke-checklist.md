@@ -209,8 +209,7 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
 - [ ] Skeletons: Bei gedrosseltem Laden bleiben Chat-Platzhalter bis zur
       Metadatenantwort stehen; leere Liste, Fehler und Logout entfernen sie.
       Wartende Modellantworten zeigen Textzeilen bis zum ersten Token oder
-      Abbruch/Fehler. Light/Dark, Mobile und Reduced Motion pruefen; der Model
-      Pulse reserviert neun Ranking-Zeilen und ersetzt sie durch echte Daten.
+      Abbruch/Fehler. Light/Dark, Mobile und Reduced Motion pruefen.
 - [ ] Frischer `/app`-Load passt ohne vertikales Scrollen in den Desktop-
       Viewport; der Consensus-Picker hat keinen horizontalen Scrollbalken.
 - [ ] Frischer `/app`-Load: keine Topbar; Brand + Collapse im Sidebar-Kopf,
@@ -250,11 +249,16 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       New chat erscheint erst angemeldet. Beide Buttons wirken flach und bleiben
       auch bei 320 px neben den Aktionen einer fertigen Antwort ohne Überlappung
       bedienbar. Light/Dark, Login/Logout und Fokusrückgabe nach Schließen prüfen.
-- [ ] Die Landingpage verlinkt direkt im Hero mit einer schmalen Live-Zeile auf
-      `/model-pulse`. Die eigene Seite erklärt „Best answer“ als anonymisierte
-      Judge-Auswahl (kein Benchmark/User-Vote/Accuracy-Score), führt
-      Anthropic/Claude nicht doppelt und verlinkt den kontrollierten Benchmark;
-      `/benchmark` verlinkt seinerseits sichtbar zurück auf den Model pulse.
+- [ ] Landing: Der Benchmark-Abschnitt steht vor `#watch` und trägt darunter
+      den Live-Streifen „No model wins every time.“ (Top-5-Raten mit
+      Fair-Share-Tick, Link auf `/model-pulse`); im Hero steht keine Pulse-Zeile
+      mehr. `/model-pulse` zeigt Best-answer-Raten (Picks ÷ Läufe der Familie)
+      mit Band und Fair-Share-Tick; Zeitraum/Runs/„Only runs with“/Sortierung
+      wechseln ohne Reload, die URL folgt, ohne JS funktioniert das Formular.
+      Mit „Only runs with“ ist die Rivalen-Zeile markiert und jede andere zeigt
+      `vs <Rivale> W–L`. Familien unter 10 Läufen stehen nur in „Too few runs“.
+      Light/Dark (Logos invertiert), 320–1440 px ohne horizontalen Überlauf;
+      `/benchmark` verlinkt zurück auf den Model pulse.
 - [ ] Settings: Memory, Model behavior, Runs, Display, Connections und Account
       bleiben bei 320/390/700/768/1440 px Breite und geringer Höhe erreichbar.
       Kein horizontaler Inhaltsüberlauf; Kopf und Schließen bleiben beim Scrollen

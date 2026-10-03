@@ -93,12 +93,24 @@ the manifest with its last version; `ChatStore._delete_chat_tree` removes
 The render subprocess imports only `agent_document_spec.py` (no Firebase).
 See `docs/agent-integrations.md` for limits, font configuration and validation.
 
-Öffentliche Seiten (12.09.2026): `/model-pulse?period=all|since-2026-08-31`
-rendert Rangliste, Counts und familienbezogene Startdaten bereits serverseitig
-aus demselben 60-s-Cache wie die JSON-API. Das GET-Formular funktioniert ohne
-JavaScript; `model-pulse.js` ergänzt den Wechsel ohne Reload und erhält bei
-Fetch-Fehlern die zuletzt erfolgreiche Ansicht samt Zeitraum. Ein fehlgeschlagener
-SSR-Read liefert 503 + Retry-After statt erfundener Nullstände (Lifetime-Read
+Öffentliche Seiten (seit 03.10.2026): `/model-pulse?period=7d|30d|90d|all&mode=all|consensus|agent&with=<provider>&sort=rate|lift|runs`
+zeigt pro Familie die **Best-answer-Rate** (Picks ÷ Läufe, in denen die
+Familie war) statt absoluter Picks, dazu den Fair Share (Σ 1/n der Läufe,
+Tick am Balken), `lift` (Picks ÷ Fair Share), ein 95-%-Wilson-Band und —
+mit `with=` — die Head-to-Head-Bilanz gegen eine Rivalen-Familie. Unter
+`MIN_RUNS` (10) Läufen wird eine Familie gelistet, aber nicht gerankt. Rechnung
+und Cache: `app/services/model_pulse.py` (`build_view` rein; `PulseLedger`
+lädt einmal alle `model_votes` mit `pulse_version == 1`, liest danach höchstens
+1×/Minute nur Votes ab dem letzten Zeitstempel − 5 min nach und lädt alle 6 h
+voll neu, damit Kontolöschungen herausfallen; gehalten werden nur Zeit, Quelle,
+Teilnehmer, Pick — kein Owner). Server rendert die erste Ansicht (GET-Formular
+ohne JS), `model-pulse.js` holt Filterwechsel über `GET /api/model-pulse` und
+schreibt sie in die URL; Lesefehler → 503 + Retry-After statt Nullständen.
+Die Landing zeigt im Benchmark-Abschnitt (seit 03.10.2026 vor `#watch`) einen
+Live-Streifen aus derselben Ansicht (`landing_pulse_preview`: Top 5, versteckt
+unter 3 gerankten Familien); die frühere Pulse-Statuszeile im Hero ist entfallen.
+`/api/model-leaderboard` (absolute Picks, `period=all|since-2026-08-31`) bleibt
+als Legacy-API bestehen (Lifetime-Read
 ohne SDK-Retries, mit 5-s-Timeout). Öffentliche Legacy-Citations werden in
 `public_markdown.py` beim Rendern nummeriert; bekannte kurze Quellenlinks werden
 auf bestehende Quellenanker abgebildet, beschreibende Links und Aussagen bleiben
@@ -219,7 +231,7 @@ Threadpool aus. `async def` bleibt nur für echte Await-Pfade (Mail, explizites
 |---|---|
 | `agent.py` | `GET /agent/models` und `POST /agent`: Admin/Pro-geschützter Modellkatalog aus den vollständigen Firestore-Anbieterlisten samt Reihenfolge, aktuellen Provider-Metadaten und konfiguriertem Standard und begrenzter Modell-/Tool-Lauf im bestehenden Chat. Strikte Auswahl, owner-gebundene IDs, SSE mit bestätigten Fortschritten, Tool-Ergebnissen/Quellen und aggregierter Usage. Alle angebotenen Chatmodelle nutzen den gemeinsamen Websuch-Builder mit begrenzten Exa-Ergebnissen; kein eigener Suchdienst. Vorrang für gemeldete Provider-Gesamtkosten, idempotente Schrittbelege, modellgebundene 429-Wartefrist und Wiederaufnahme fertiger Antworten. Geprüfte Delegation mit eigenen Sitzungen, Mailboxen, Seitenleiste und atomarem gemeinsamen Budget; ergänzende `/agent/chats/{chat}/turns/{turn}/agents`-Detail-/Stop-Endpunkte. Kein `/prepare` oder Memory-Kompressor; dynamische Vergleichs-/Judge-Tools mit eigener Tokenquote (siehe Agent-Beta-Abschnitt). `recover_only` startet nie einen Modellaufruf. |
 | `source_checks.py` | Dauerhafte Quellenprüfung: owner-gebundenes `GET /api/source-checks/{job_id}` mit `cursor`, `revision` und `after_revision`; `POST .../{job_id}/resume` nimmt den eigenen OpenRouter-Key nur in den Prozessspeicher auf. `GET /api/share/{share_id}/source-check?version=...` und `GET /api/topics/{slug}/source-check?version=...` prüfen pro Paketseite aktive Ressource, Sichtbarkeit, Run- und Antwortversion. Seiten liefern `source_verification` plus `next_cursor`, bei geändertem Stand 409. API-Key-Clients verwenden den rungebundenen Endpoint in `api_v1.py`: `GET /api/v1/consensus/runs/{run_id}/source-check`, auch als `result.source_verification.status_url` ausgegeben. |
-| `pages.py` | HTML-Seiten + SEO: `/` (Landing, auch mit aktiver Session direkt erreichbar), `/model-pulse` (öffentliche, erklärte Best-answer-Rangliste), `/app` (Haupt-App), `/app/watches` (gleiche App-Shell; watch.js öffnet anhand des Pfads das Watch-Dashboard), `/admin` (inkl. Topics-Tab), `/admin/topics` (308-Kompatibilitätsredirect auf `/admin#topics`), `/admin/benchmark` (Benchmark-Run-Visualisierung), `/about`, `/ai-model-comparison`, `/consensus-engine` (nutzerfreundliche Consensus-Engine-Erklärung), `/privacy` `/imprint` `/terms`, `robots.txt`, `sitemap*.xml`. Außerdem der öffentliche, familienaggregierte Best-answer-Zähler `GET /api/model-leaderboard` (60 s Browser-/CDN-Cache; `period=all|since-2026-08-31`; alle neun Familien einschließlich Nullständen, Kimi/GLM und Meta/Muse mit eigenem Verfügbarkeitsdatum aus `_LEADERBOARD_AVAILABLE_SINCE`). Beide Zeiträume nutzen zusätzlich einen serverseitigen 60-s-Cache mit serialisiertem Refresh pro Zeitraum/Prozess. Der gemeinsame Zeitraum zählt die datierten, deduplizierten `model_votes` ab 31.08.2026 über indexierte `count()`-Abfragen pro Familie; Modellkatalog und Counts werden im selben Read-only-Transaktionssnapshot gelesen. Solange der neue `model_votes`-Index aus `firestore.indexes.json` fehlt/aufbaut, greift nur für diesen Indexfehler der gecachte Legacy-Scan. Kontolöschungen entfernen weiterhin Votes aus dem Zeitraum, ohne Lifetime-Zähler zurückzusetzen; `/feedback`, `/vote`, `/check_keys` bleiben die weiteren internen Seiten-Routen (Key-Test nur für verifizierte Logins). Feedback ist persistent pro UID auf 30 Sekunden und 10/UTC-Tag begrenzt. Ein Best-answer-Vote muss an ein noch gültiges, owner-gebundenes `result_id` gebunden sein, zum serverseitigen Gewinner passen und kann pro Lauf genau einmal zählen. |
+| `pages.py` | HTML-Seiten + SEO: `/` (Landing, auch mit aktiver Session direkt erreichbar), `/model-pulse` (öffentliche Best-answer-Raten mit Filtern; API `GET /api/model-pulse`), `/app` (Haupt-App), `/app/watches` (gleiche App-Shell; watch.js öffnet anhand des Pfads das Watch-Dashboard), `/admin` (inkl. Topics-Tab), `/admin/topics` (308-Kompatibilitätsredirect auf `/admin#topics`), `/admin/benchmark` (Benchmark-Run-Visualisierung), `/about`, `/ai-model-comparison`, `/consensus-engine` (nutzerfreundliche Consensus-Engine-Erklärung), `/privacy` `/imprint` `/terms`, `robots.txt`, `sitemap*.xml`. Außerdem der öffentliche, familienaggregierte Best-answer-Zähler `GET /api/model-leaderboard` (60 s Browser-/CDN-Cache; `period=all|since-2026-08-31`; alle neun Familien einschließlich Nullständen, Kimi/GLM und Meta/Muse mit eigenem Verfügbarkeitsdatum aus `_LEADERBOARD_AVAILABLE_SINCE`). Beide Zeiträume nutzen zusätzlich einen serverseitigen 60-s-Cache mit serialisiertem Refresh pro Zeitraum/Prozess. Der gemeinsame Zeitraum zählt die datierten, deduplizierten `model_votes` ab 31.08.2026 über indexierte `count()`-Abfragen pro Familie; Modellkatalog und Counts werden im selben Read-only-Transaktionssnapshot gelesen. Solange der neue `model_votes`-Index aus `firestore.indexes.json` fehlt/aufbaut, greift nur für diesen Indexfehler der gecachte Legacy-Scan. Kontolöschungen entfernen weiterhin Votes aus dem Zeitraum, ohne Lifetime-Zähler zurückzusetzen; `/feedback`, `/vote`, `/check_keys` bleiben die weiteren internen Seiten-Routen (Key-Test nur für verifizierte Logins). Feedback ist persistent pro UID auf 30 Sekunden und 10/UTC-Tag begrenzt. Ein Best-answer-Vote muss an ein noch gültiges, owner-gebundenes `result_id` gebunden sein, zum serverseitigen Gewinner passen und kann pro Lauf genau einmal zählen. |
 | `chat.py` | Kern-LLM-Flow: `/prepare`, die aus `cfg.PROVIDERS[*].ask_endpoint` erzeugten `/ask_*`-Routen (aktuell zusätzlich `/ask_kimi` und `/ask_glm`), `/consensus`, `/resolve`. `/prepare` und die `/ask_*`-Endpoints akzeptieren weiter das optionale Legacy-`context`-Feld für nicht migrierte Bookmark-Fortsetzungen. Additiv laden `/ask_*` das owner-gebundene Tripel `chat_id`/`turn_id`/`context_version_id`; Legacy- und Versionskontext zusammen werden abgewiesen. Alle `/ask_*`-Endpoints laufen über `handle_ask` + die deklarative Familien-Registry `ASK_PROVIDERS`; Transport und Credential sind für alle OpenRouter, `useOwnKeys` wählt optional `openrouter_key`. `/consensus` akzeptiert optional Chat-/Turn-IDs plus `turn_sources` und die exakt am Turn verknüpfte `context_version_id`, prüft alles owner-gebunden vor dem Judge und finalisiert nach Consensus, Differences und Share-`result_id` in Streaming- wie JSON-Pfad über `ChatStore`. Sendet der Browser die stabile `bookmarkId`, schreibt `/consensus` den autoritativen Bookmark-Snapshot vor seinem erfolgreichen Final-Event und liefert kompakte `bookmark_meta`; ein separater Browser-Request ist nur noch Fallback. Ein bereits completed Turn wird mit Consensus, Differences, Quellen und Modellantworten owner-geschützt wiedergegeben, ohne Engine-/Differences-/Share-/Statistik-/Completion- oder Usage-Write; ohne IDs bleibt der Legacy-Vertrag unverändert. |
 | `chat_history.py` | Additive, owner-gebundene Chat-Persistenz: `POST/GET /chats`, `GET /chats/{chat_id}`, `DELETE /chats/{chat_id}` (dreistufige Kaskade über `ChatStore.delete_chat`; vor der Enumeration wird der Chat transaktional auf `deleting` gesetzt und zugleich ein dauerhafter `chat_deletion_jobs`-Auftrag angelegt, damit kein paralleler Turn als Subcollection-Waise nachrutschen kann und eine unterbrochene Kaskade vom Retention-Loop fortgesetzt wird; `deleting`-Chats sind in Liste, Detail, Turns und neuen Context-Versionen bereits unsichtbar bzw. gesperrt), `POST/GET /chats/{chat_id}/turns`, das vollständige `GET /chats/{chat_id}/turns/{turn_id}` sowie `POST /chats/{chat_id}/turns/{turn_id}/context` für eine idempotente autoritative Context-Version. Das UID-Budget `build_context` liegt ausschließlich auf diesem POST, nicht auf dem Turn-GET. Listen sind begrenzt und mit selbstenthaltenden, UID-/Ressourcen-gebundenen HMAC-Cursors paginiert (`updated_at` + Dokument-ID für Chats, `position` + Dokument-ID für Turns); Cursor-Dokumente werden nicht erneut als veränderliche Seitengrenze gelesen. Create-Chat serialisiert das Owner-Limit über `chat_state/quota`, Create-Turn ist über `client_request_id` idempotent. `ChatStore.complete_turn`/`fail_turn` lesen Chat, Turn und Account-Tombstone in derselben Transaktion und akzeptieren ausschließlich einen weiterhin `active` Chat; eine nach dem `deleting`-Marker eintreffende Completion kann deshalb keine Modellantwort-Waisen erzeugen. Completion bleibt per Payload-Fingerprint idempotent. Es gibt bewusst keinen öffentlichen Completion-/Fail-Write-Endpoint. Alle `/chats`-Antworten erhalten über die Security-Middleware `private, no-store`. Bei einer aktiven Fortsetzung erzeugt der Browser den pending Turn nach `/prepare` vor Context und Fan-out; Turn 1 entsteht erst bei der Consensus-Anforderung. Consensus-Turns werden serverseitig über `/consensus`, Agent-Turns über `/agent` finalisiert. |
 | `client_errors.py` | Nimmt unter `POST /api/client-errors` ausschließlich same-origin, größenbegrenzte kritische Browsermeldungen an (5/min pro IP). Freitext, Stack, konkrete IDs/Slugs und Providerdetails werden verworfen; nur allowgelistete Typ-/Phasenkategorien, eine abstrahierte Route und bei echten Skript-/Stylesheet-Ladefehlern eine grobe Ressourcenklasse (`app_bundle`, `static_asset`, `jsdelivr_dependency`, `firebase_dependency`, `same_origin_resource`, `unknown_resource`) erreichen den nicht-blockierenden Telegram-Alert. Der Endpoint liefert keine Konfigurationsdetails zurück. |
@@ -404,13 +416,11 @@ damit weder das Best-answer-Nutzungssignal noch `differences_stats`.
 Produktgeschichte führt danach über Ask/Run/Decide zum vierten
 Landing-Schritt `#watch`: Eine kompakte Baseline→Change→Telegram-Visualisierung
 erklärt Consensus Watch und verlinkt direkt auf `/app/watches`; derselbe Anker
-ist in der öffentlichen Navigation erreichbar. Eine schmale Live-Zeile direkt
-im Landing-Hero verlinkt auf die eigenständige Seite `/model-pulse`; dort liest
-`static/js/model-pulse.js` `/api/model-leaderboard`, zeigt alle neun
-familienaggregierten, anonymisierten Best-answer-Auswahlen aus echten Runs und
-bietet wegen der am 31.08.2026 ergänzten Familien Kimi/GLM neben All-time einen
-gemeinsamen Zeitraum ab diesem Datum; später ergänzte Familien (Meta/Muse ab
-02.09.2026) tragen ihr eigenes Startdatum in der Zeile. Es trennt dieses
+ist in der öffentlichen Navigation erreichbar. Direkt davor steht seit
+03.10.2026 der Benchmark-Abschnitt mit dem Live-Streifen aus dem Model Pulse
+(„No model wins every time.“), der auf `/model-pulse` verlinkt. Die Seite
+zeigt Best-answer-Raten pro Lauf, in dem eine Familie war (siehe oben), und
+trennt dieses
 Judge-Signal ausdrücklich vom kontrollierten Accuracy-Benchmark.
 `/benchmark` verlinkt im Hero zurück auf diese zweite Perspektive. Die Consensus-Engine-Seite nutzt weiterhin die Ergebnisdarstellung
 aus `partials/product_result_mockup.html`.
@@ -5103,8 +5113,15 @@ CLI mit `firebase deploy --only firestore:rules,firestore:indexes`):
   derselben Transaktion `model_votes/{sha256(uid:agent:chat:turn:BestModel)}`
   (`source: "agent"`, `vote_subject_id: agent:{turn}`) und erhöht
   `leaderboard/{family}.BestModel` — Pick aus dem Check der breitesten
-  Comparison (`persistence_guard.agent_best_model_pick`, Alias Claude →
-  Anthropic). Unter `MOCK_LLM=1` wird nichts geschrieben.
+  Comparison (`persistence_guard.agent_best_model_choice`, Alias Claude →
+  Anthropic). Unter `MOCK_LLM=1` wird nichts geschrieben. Seit 2026-10-03
+  tragen beide Vote-Arten zusätzlich `participants` (Provider-Keys der
+  verglichenen Antworten: Consensus aus `pending.included_models`, Agent aus
+  der breitesten Comparison), `picked` und `pulse_version: 1` — der Nenner der
+  Model-Pulse-Rate (`model_pulse.participation`; weniger als zwei Familien oder
+  ein Pick außerhalb des Laufs → Felder entfallen). Ältere Votes ergänzt
+  `scripts/backfill_model_pulse.py` (Dry-Run per Default, `--apply` schreibt nur
+  diese drei Felder), soweit Chat-Turn/Bookmark des Laufs noch existiert.
 - `memory_edit_usage/{sha256(uid)}` und `global_usage/memory-edit-YYYY-MM-DD` —
   persistente per-User-/Minuten-/Tages- und globale Tagesreservierungen samt
   kurzem In-flight-Lease; keine Memory- oder Feedback-Inhalte. Idempotenz- und

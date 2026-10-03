@@ -3,21 +3,21 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="See which AI provider families most often earn the independent consensus judge's best-answer selection across real consens.io runs.">
+  <meta name="description" content="When a model is in a real consens.io run, how often does an independent judge pick its answer as the best one? Live best-answer rates per AI model family, compared with chance.">
   <meta name="robots" content="index, follow">
   <link rel="canonical" href="https://www.consens.io/model-pulse">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="consens.io">
   <meta property="og:title" content="Live AI Model Pulse | consens.io">
-  <meta property="og:description" content="An anonymized, all-time signal showing which individual model answers stand out in real consensus runs.">
+  <meta property="og:description" content="Live best-answer rates: how often each AI model family gives the judge's pick in the real runs it takes part in.">
   <meta property="og:url" content="https://www.consens.io/model-pulse">
   <meta property="og:image" content="https://www.consens.io/static/favicon-square.png">
   <meta name="twitter:card" content="summary">
   <meta name="twitter:title" content="Live AI Model Pulse | consens.io">
-  <meta name="twitter:description" content="Which model answers most often earn the independent judge's pick in real consens.io runs?">
+  <meta name="twitter:description" content="When a model is in the run, how often is its answer the best? Live rates from real consens.io runs.">
   <title>Live AI Model Pulse | consens.io</title>
-  <link rel="stylesheet" href="/static/css/landing.css?v=20261003-todo3">
-  <link rel="stylesheet" href="/static/css/model-pulse.css?v=20261002-fein2">
+  <link rel="stylesheet" href="/static/css/landing.css?v=20261003-pulse">
+  <link rel="stylesheet" href="/static/css/model-pulse.css?v=20261003-pulse">
   <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260621-logo2" sizes="any" type="image/png">
   <script>
@@ -34,67 +34,130 @@
 <body>
   {% include "partials/public_nav.html" %}
 
+  {#- One row of the board. model-pulse.js builds the same markup after a
+      filter change; tests/js/model-pulse.test.mjs holds both to it. -#}
+  {% macro pulse_row(row, scale, rival) -%}
+  <li class="pulse-row{% if row.is_rival %} is-rival{% endif %}" data-family="{{ row.key }}">
+    <span class="pulse-rank">{{ '%02d' | format(row.rank) }}</span>
+    <span class="lp-model-pulse-icon"><img src="{{ row.icon }}" alt=""></span>
+    <span class="pulse-copy">
+      <span class="pulse-name">{{ row.family }}</span>
+      <span class="pulse-sub">{{ row.picks }} of {{ row.runs }} runs{% if row.lift is not none %} · <b>{{ '%.1f' | format(row.lift) }}×</b> fair share{% endif %}{% if row.h2h %} · <span class="pulse-h2h">vs {{ rival }} <b>{{ row.h2h.wins }}–{{ row.h2h.losses }}</b></span>{% endif %}</span>
+      <span class="pulse-meter" style="--rate: {{ row.rate / scale * 100 }}; --fair: {{ row.fair_share / scale * 100 }}; --lo: {{ row.interval[0] / scale * 100 }}; --hi: {{ row.interval[1] / scale * 100 }}" aria-hidden="true"><i class="pulse-meter-range"></i><i class="pulse-meter-bar"></i><i class="pulse-meter-fair"></i></span>
+    </span>
+    <span class="pulse-rate">{{ '%.0f' | format(row.rate) }}<small>%</small></span>
+  </li>
+  {%- endmacro %}
+
+  {% set rival_short = (families | selectattr('key', 'equalto', pulse.rival) | map(attribute='short') | first) if pulse and pulse.rival else '' %}
+
   <main>
     <section class="lp-section lp-section--white pulse-hero">
       <div class="lp-shell pulse-hero-grid">
         <div class="lp-head">
           <p class="lp-eyebrow"><span class="pulse-live-dot" aria-hidden="true"></span> Live model pulse</p>
-          <h1 class="lp-display">Which model answers stand out in real runs?</h1>
-          <p class="lp-lead">A running, anonymized signal from consens.io: every time the independent judge identifies the strongest individual answer behind a consensus, that provider family earns one selection.</p>
+          <h1 class="lp-display">When a model is in the run, how often is its answer the best?</h1>
+          <p class="lp-lead">Every consens.io run sends one question to several models. An independent judge then picks the strongest single answer. Here you see, for each model family, how often that pick went to it, out of the runs it was actually in.</p>
         </div>
-        <div class="pulse-hero-note">
-          <strong>Useful signal, honest limits.</strong>
-          <p>This is not a popularity vote and it is not an accuracy benchmark. It shows which answers the judge finds most useful across the changing mix of questions people actually ask.</p>
-        </div>
+        {% if pulse and pulse.leader %}
+        <aside class="pulse-headline" id="modelPulseHeadline" aria-label="Headline result">
+          <span class="pulse-headline-figure"><img src="{{ pulse.leader.icon }}" alt=""><b>{{ '%.0f' | format(pulse.leader.rate) }}%</b></span>
+          <p><strong>{{ pulse.leader.short }} has the highest best-answer rate.</strong> Still, in {{ '%.0f' | format(pulse.leader.others_rate) }}% of its runs the best answer came from another model. No single model wins every time.</p>
+        </aside>
+        {% endif %}
       </div>
     </section>
 
     <section class="lp-section lp-section--grey pulse-board-section">
       <div class="lp-shell pulse-board-grid">
-        <article class="lp-model-pulse pulse-board" id="modelLeaderboard" aria-labelledby="modelLeaderboardTitle">
-          <div class="lp-model-pulse-head">
-            <p class="lp-eyebrow" id="modelLeaderboardPeriod">{{ 'All-time ranking' if pulse_period == 'all' else 'Shared-window ranking' }}</p>
-            <h2 id="modelLeaderboardTitle">Best-answer selections</h2>
-            <p>Provider and product aliases are combined into one family, so Claude and Anthropic never appear as separate competitors.</p>
-            <form action="/model-pulse" method="get" class="pulse-period-filter" aria-label="Model pulse time period">
-              <button type="submit" name="period" value="all" data-model-pulse-period="all" aria-pressed="{{ 'true' if pulse_period == 'all' else 'false' }}">All time</button>
-              <button type="submit" name="period" value="since-2026-08-31" data-model-pulse-period="since-2026-08-31" aria-pressed="{{ 'false' if pulse_period == 'all' else 'true' }}">Since 31 Aug</button>
-            </form>
-            <p class="pulse-availability-note"><strong>Kimi and GLM joined consens.io on 31 August 2026, Meta Muse on 2 September 2026.</strong> Use the shared-window view to compare the families over one period; every late arrival carries its own start date.</p>
+        <article class="pulse-board" id="modelPulse" aria-labelledby="modelPulseTitle">
+          <div class="pulse-board-head">
+            <h2 id="modelPulseTitle">Best-answer rate</h2>
+            <p>Share of a family's runs in which the judge picked its answer. Base and Pro models count as one family.</p>
           </div>
-          <div id="modelLeaderboardRows" class="lp-model-pulse-list is-ready" role="list" aria-live="polite" aria-busy="false" data-period="{{ pulse_period }}">
-            {% for row in pulse_rows or [] %}
-            <div class="lp-model-pulse-row" role="listitem">
-              <span class="lp-model-pulse-rank">{{ '%02d' | format(loop.index) }}</span>
-              <span class="lp-model-pulse-icon"><img src="{{ row.icon }}" alt=""></span>
-              <span class="lp-model-pulse-copy">
-                <span class="lp-model-pulse-name">{{ row.family }}{% if row.available_since %}<small class="lp-model-pulse-since">tracked since <time datetime="{{ row.available_since }}">{{ row.available_since }}</time></small>{% endif %}</span>
-                <span class="lp-model-pulse-meter" style="--pulse-share: {{ row.selections / pulse_max * 100 }}"><i></i></span>
-              </span>
-              <span class="lp-model-pulse-value">{{ '{:,}'.format(row.selections) }}<small>{{ 'pick' if row.selections == 1 else 'picks' }}</small></span>
+
+          <form action="/model-pulse" method="get" class="pulse-filters" id="modelPulseFilters" aria-label="Filter the model pulse">
+            <fieldset class="pulse-segment">
+              <legend>Period</legend>
+              {% for value, label in [('7d', '7 days'), ('30d', '30 days'), ('90d', '90 days'), ('all', 'All time')] %}
+              <label><input type="radio" name="period" value="{{ value }}"{% if (pulse.period if pulse else 'all') == value %} checked{% endif %}><span>{{ label }}</span></label>
+              {% endfor %}
+            </fieldset>
+            <fieldset class="pulse-segment">
+              <legend>Runs</legend>
+              {% for value, label in [('all', 'All'), ('consensus', 'Consensus'), ('agent', 'Agent')] %}
+              <label><input type="radio" name="mode" value="{{ value }}"{% if (pulse.mode if pulse else 'all') == value %} checked{% endif %}><span>{{ label }}</span></label>
+              {% endfor %}
+            </fieldset>
+            <label class="pulse-select">
+              <span>Only runs with</span>
+              <select name="with">
+                <option value="">any model</option>
+                {% for family in families %}
+                <option value="{{ family.key }}"{% if pulse and pulse.rival == family.key %} selected{% endif %}>{{ family.short }}</option>
+                {% endfor %}
+              </select>
+            </label>
+            <label class="pulse-select">
+              <span>Sort by</span>
+              <select name="sort">
+                {% for value, label in [('rate', 'Best-answer rate'), ('lift', 'Above fair share'), ('runs', 'Most runs')] %}
+                <option value="{{ value }}"{% if (pulse.sort if pulse else 'rate') == value %} selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+              </select>
+            </label>
+            <noscript><button type="submit" class="pulse-apply">Apply</button></noscript>
+          </form>
+
+          <div id="modelPulseBoard" class="pulse-board-body is-ready" aria-live="polite" aria-busy="false">
+            {% if pulse is none %}
+            <p class="pulse-empty">The model pulse is temporarily unavailable. Please try again shortly.</p>
+            {% else %}
+            {% if pulse.rival %}
+            <p class="pulse-rival-note">Only runs that included <strong>{{ rival_short }}</strong>. The score beside each family counts the runs in which it beat {{ rival_short }} to the pick, and the runs {{ rival_short }} won.</p>
+            {% endif %}
+            {% if pulse.rows %}
+            <ol class="pulse-list">
+              {% for row in pulse.rows %}{{ pulse_row(row, pulse.scale, rival_short) }}{% endfor %}
+            </ol>
+            <div class="pulse-legend" aria-hidden="true">
+              <span><i class="pulse-key-bar"></i>Best-answer rate</span>
+              <span><i class="pulse-key-range"></i>Plausible range (95%)</span>
+              <span><i class="pulse-key-fair"></i>Fair share by chance</span>
             </div>
             {% else %}
-            <p class="lp-model-pulse-empty">Model pulse is temporarily unavailable. Please try again shortly.</p>
-            {% endfor %}
+            <p class="pulse-empty">No family has {{ pulse.min_runs }} judged runs in this view yet. Try a longer period.</p>
+            {% endif %}
+            {% if pulse.sparse %}
+            <p class="pulse-sparse"><strong>Too few runs to rank</strong> (under {{ pulse.min_runs }}): {% for row in pulse.sparse %}{{ row.short }} <span>{{ row.runs }}</span>{% if not loop.last %}, {% endif %}{% endfor %}</p>
+            {% endif %}
+            {% endif %}
           </div>
-          <div class="lp-model-pulse-foot">
-            <p><span id="modelLeaderboardTotal">{% if pulse_rows is not none %}{{ '{:,}'.format(pulse_total) }} judge selections {{ 'from all real runs' if pulse_period == 'all' else 'since 31 Aug 2026' }}.{% else %}The live tally is temporarily unavailable.{% endif %}</span> No prompt text or user identity is shown in this tally.</p>
-          </div>
+
+          <p class="pulse-foot" id="modelPulseFoot">{% if pulse and pulse.runs %}{{ '{:,}'.format(pulse.runs) }} judged runs{% if pulse.since %} since <time datetime="{{ pulse.since }}">{{ pulse.since }}</time>{% endif %} · {{ pulse.average_field }} answers per run on average.{% elif pulse %}No judged runs in this view yet.{% endif %} No prompt text or user identity enters this tally.</p>
         </article>
 
         <aside class="pulse-explainer" aria-label="How to read the model pulse">
           <p class="lp-eyebrow">How to read it</p>
           <div class="pulse-explainer-item">
             <span>01</span>
-            <div><h3>One run can produce one pick</h3><p>The judge compares the completed answers and may identify the strongest individual response behind the consensus or the agent's checked answer.</p></div>
+            <div><h3>A rate, not a vote count</h3><p>A family that is in more runs collects more picks without being any better. So each family's picks are divided by the runs it was in: 30 picks from 100 runs is a 30% best-answer rate.</p></div>
           </div>
           <div class="pulse-explainer-item">
             <span>02</span>
-            <div><h3>Counts show recurring usefulness</h3><p>A higher total means that provider's answers have stood out more often across real consens.io questions.</p></div>
+            <div><h3>The tick is chance</h3><p>With six answers in a run, a blind draw would pick each one about 17% of the time. The tick on every bar marks that fair share for the runs the family was in. "2.8× fair share" means picked 2.8 times as often as chance.</p></div>
           </div>
           <div class="pulse-explainer-item">
             <span>03</span>
-            <div><h3>The question mix is not controlled</h3><p>Models, topics and difficulty vary between runs. Use the ranking as a product pulse, not a scientific league table.</p></div>
+            <div><h3>Wide band, few runs</h3><p>The shaded band is the range the true rate plausibly lies in. Families under {{ pulse.min_runs if pulse else 10 }} runs are listed but not ranked.</p></div>
+          </div>
+          <div class="pulse-explainer-item">
+            <span>04</span>
+            <div><h3>Pick a rival</h3><p>"Only runs with" narrows the board to runs that included one family and shows each other family's head-to-head score against it.</p></div>
+          </div>
+          <div class="pulse-explainer-item">
+            <span>05</span>
+            <div><h3>Honest limits</h3><p>The questions are real and uncontrolled, and the pick is a judgment, not a verified answer key. This is not a popularity vote and not an accuracy benchmark.</p></div>
           </div>
         </aside>
       </div>
@@ -109,10 +172,10 @@
         <div class="pulse-lenses">
           <article>
             <span class="pulse-lens-label">Model pulse</span>
-            <h3>What stands out in everyday runs?</h3>
+            <h3>Whose answer stands out in everyday runs?</h3>
             <dl>
               <div><dt>Questions</dt><dd>Real, changing prompts</dd></div>
-              <div><dt>Signal</dt><dd>Independent judge selections</dd></div>
+              <div><dt>Signal</dt><dd>Independent judge picks per run a family was in</dd></div>
               <div><dt>Best used for</dt><dd>Product behavior and model momentum</dd></div>
             </dl>
           </article>
@@ -134,7 +197,7 @@
       <div class="lp-shell lp-final">
         <div class="lp-head">
           <p class="lp-eyebrow">Run your own comparison</p>
-          <h2 class="lp-h2">Ask once. See every answer. Keep the consensus.</h2>
+          <h2 class="lp-h2">No model wins every time. So ask several.</h2>
         </div>
         <a href="/app" class="lp-btn lp-btn--primary" data-umami-event="pulse_open_app">Open app</a>
       </div>
@@ -142,6 +205,6 @@
   </main>
 
   {% include "partials/public_footer.html" %}
-  <script defer src="/static/js/model-pulse.js?v=20260912-public-refresh"></script>
+  <script defer src="/static/js/model-pulse.js?v=20261003-pulse"></script>
 </body>
 </html>

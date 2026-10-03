@@ -368,6 +368,7 @@ def record_model_vote(
         vote_snapshot = _get(vote_ref, tx)
         if vote_snapshot.exists:
             return False
+        from app.services import model_pulse
         _set(tx, vote_ref, {
             "schema_version": 1,
             "owner_hash": _hash_uid(uid),
@@ -375,7 +376,11 @@ def record_model_vote(
             "vote_subject_id": vote_subject_id,
             "model": model,
             "vote_type": vote_type,
+            "source": "consensus",
             "created_at": now,
+            # Who was in the run: the denominator of the Model Pulse rate.
+            **(model_pulse.participation(
+                model_pulse.consensus_participants(pending), model) or {}),
         })
         if tx is None:
             leaderboard_ref.set({vote_type: firestore.Increment(1)}, merge=True)
@@ -386,9 +391,10 @@ def record_model_vote(
     return bool(_run_transaction(db, persist))
 
 
-def agent_best_model_pick(review) -> str | None:
+def agent_best_model_choice(review) -> tuple[str | None, list[str]]:
     """The comparison model whose answer the judge found closest to an Agent
-    answer, as a Model Pulse family label, or None.
+    answer, as a Model Pulse family label, plus the families that judge
+    compared; (None, []) when there is no pick.
 
     Only a checked answer counts: the review succeeded or partly succeeded,
     and the pick comes from the check of the widest comparison (most answers)
@@ -398,19 +404,25 @@ def agent_best_model_pick(review) -> str | None:
     from app.core import config as cfg
 
     if not isinstance(review, dict) or review.get("status") not in {"succeeded", "partial"}:
-        return None
-    sizes = {c.get("id"): len(c.get("answers") or []) for c in review.get("comparisons") or []}
-    best, widest = None, -1
+        return None, []
+    comparisons = {c.get("id"): c.get("answers") or [] for c in review.get("comparisons") or []}
+    best, widest, field = None, -1, []
     for check in review.get("checks") or []:
         data = check.get("differences_data") if check.get("status") in {"succeeded", "partial"} else None
         model = str((data or {}).get("best_model") or "").strip()
-        size = sizes.get(check.get("comparison_id"), 0)
-        if model and size >= 2 and size > widest:
-            best, widest = model, size
+        answers = comparisons.get(check.get("comparison_id"), [])
+        if model and len(answers) >= 2 and len(answers) > widest:
+            best, widest = model, len(answers)
+            field = [str(a.get("provider_label") or a.get("provider") or "")
+                     for a in answers if isinstance(a, dict)]
     if not best:
-        return None
+        return None, []
     best = cfg.LEADERBOARD_MODEL_ALIASES.get(best, best)
-    return best if best in cfg.VALID_LEADERBOARD_MODELS else None
+    return (best, field) if best in cfg.VALID_LEADERBOARD_MODELS else (None, [])
+
+
+def agent_best_model_pick(review) -> str | None:
+    return agent_best_model_choice(review)[0]
 
 
 def agent_vote_ref(db, *, uid: str, chat_id: str, turn_id: str):
@@ -419,10 +431,12 @@ def agent_vote_ref(db, *, uid: str, chat_id: str, turn_id: str):
     return db.collection(VOTES_COLLECTION).document(key)
 
 
-def write_agent_vote(tx, db, vote_ref, *, uid: str, chat_id: str, turn_id: str, model: str, now: datetime | None = None):
+def write_agent_vote(tx, db, vote_ref, *, uid: str, chat_id: str, turn_id: str, model: str,
+                     participants=(), now: datetime | None = None):
     """Write an Agent turn's pick inside the caller's transaction. The caller
     has read ``vote_ref`` first (Firestore: reads before writes) and only
     calls this when it did not exist."""
+    from app.services import model_pulse
     now = now or utcnow()
     _set(tx, vote_ref, {
         "schema_version": 1,
@@ -433,6 +447,7 @@ def write_agent_vote(tx, db, vote_ref, *, uid: str, chat_id: str, turn_id: str, 
         "vote_type": "BestModel",
         "source": "agent",
         "created_at": now,
+        **(model_pulse.participation(participants, model) or {}),
     })
     _set(tx, db.collection("leaderboard").document(model), {"BestModel": firestore.Increment(1)}, merge=True)
 

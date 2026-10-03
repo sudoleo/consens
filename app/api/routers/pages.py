@@ -20,7 +20,7 @@ from app.core.security import verify_user_token, extract_id_token, db_firestore
 from firebase_admin import firestore
 from google.api_core.exceptions import FailedPrecondition
 from google.cloud.firestore_v1.base_query import FieldFilter
-from app.services import persistence_guard
+from app.services import model_pulse, persistence_guard
 from pydantic import BaseModel, ConfigDict, Field, StrictStr, field_validator
 from app.services.llm.provider_runtime import (
     PROVIDER_KEY_CHECK_TIMEOUT_SECONDS,
@@ -85,7 +85,7 @@ SITEMAP_URLS = (
     {"loc": f"{SITE_URL}/questions", "lastmod": "2026-07-19", "changefreq": "weekly", "priority": "0.8"},
     {"loc": f"{SITE_URL}/topics", "lastmod": "2026-07-23", "changefreq": "weekly", "priority": "0.9"},
     {"loc": f"{SITE_URL}/benchmark", "lastmod": "2026-06-30", "changefreq": "monthly", "priority": "0.7"},
-    {"loc": f"{SITE_URL}/model-pulse", "lastmod": "2026-07-31", "changefreq": "weekly", "priority": "0.8"},
+    {"loc": f"{SITE_URL}/model-pulse", "lastmod": "2026-10-03", "changefreq": "weekly", "priority": "0.8"},
     {"loc": f"{SITE_URL}/about", "lastmod": "2026-06-03", "changefreq": "monthly", "priority": "0.6"},
 )
 
@@ -149,7 +149,8 @@ def landing(request: Request):
     except Exception:
         agent_label = ""
     return templates.TemplateResponse(request=request, name="landing.html",
-                                      context={"agent_label": agent_label or "Agent"})
+                                      context={"agent_label": agent_label or "Agent",
+                                               "pulse": landing_pulse_preview()})
 
 @router.get("/privacy", response_class=HTMLResponse)
 def privacy(req: Request):
@@ -186,27 +187,62 @@ def benchmark(req: Request):
     return templates.TemplateResponse(request=req, name="benchmark.html")
 
 
-@router.get("/model-pulse", response_class=HTMLResponse)
-def model_pulse(req: Request):
-    period = str(req.query_params.get("period") or "all").strip().lower()
-    if period not in {"all", _MODEL_PULSE_PERIOD}:
-        raise HTTPException(status_code=400, detail="Unsupported model pulse period")
+def _pulse_view(params) -> dict | None:
+    """One Model Pulse view, or None when the ledger cannot be read. An
+    unknown filter is the caller's error (400), never an empty ranking."""
     try:
-        rows = _leaderboard_rows(_read_leaderboard_totals(period))
+        filters = model_pulse.normalize(
+            period=params.get("period"), mode=params.get("mode"),
+            rival=params.get("with"), sort=params.get("sort"),
+        )
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Unsupported model pulse filter") from None
+    try:
+        return model_pulse.public_view(db_firestore, **filters)
     except Exception as exc:
-        logging.error("model pulse page read failed category=%s", safe_exception(exc))
-        rows = None
+        logging.error("model pulse read failed category=%s", safe_exception(exc))
+        return None
+
+
+def landing_pulse_preview() -> dict | None:
+    """The landing page's live strip: the top families of all runs, or None
+    while there are not enough runs to say anything (the strip then hides)."""
+    try:
+        view = model_pulse.public_view(db_firestore)
+    except Exception as exc:
+        logging.warning("landing model pulse unavailable category=%s", safe_exception(exc))
+        return None
+    if len(view["rows"]) < 3 or not view["leader"]:
+        return None
+    return {**view, "rows": view["rows"][:5]}
+
+
+@router.get("/model-pulse", response_class=HTMLResponse)
+def model_pulse_page(req: Request):
+    view = _pulse_view(req.query_params)
     response = templates.TemplateResponse(request=req, name="model-pulse.html", context={
-        "pulse_rows": rows,
-        "pulse_period": period,
-        "pulse_total": sum(row["selections"] for row in rows or []),
-        "pulse_max": max([row["selections"] for row in rows or []] + [1]),
-    }, status_code=200 if rows is not None else 503)
+        "pulse": view,
+        "families": [
+            {"key": key, "short": model_pulse.FAMILY_SHORT[key]} for key in cfg.PROVIDERS
+        ],
+    }, status_code=200 if view is not None else 503)
     response.headers["Cache-Control"] = (
-        "public, max-age=60, stale-while-revalidate=300" if rows is not None else "no-store"
+        "public, max-age=60, stale-while-revalidate=300" if view is not None else "no-store"
     )
-    if rows is None:
+    if view is None:
         response.headers["Retry-After"] = "60"
+    return response
+
+
+@router.get("/api/model-pulse")
+@limiter.limit("30/minute")
+def public_model_pulse(request: Request):
+    """Pick rates per family for one filter (period, mode, with, sort)."""
+    view = _pulse_view(request.query_params)
+    if view is None:
+        raise HTTPException(status_code=503, detail="Model pulse is temporarily unavailable")
+    response = JSONResponse(view)
+    response.headers["Cache-Control"] = "public, max-age=60, stale-while-revalidate=300"
     return response
 
 
