@@ -71,6 +71,17 @@ passen — bei Abweichung gilt der Code, und die Karte wird korrigiert.
   Auftrag mitpflegen. Prüfumfang nach betroffenem Verhalten und Risiko wählen;
   vollständige Suiten bei übergreifenden Änderungen oder vorgeschriebenen Checks.
   Nach erfolgreichen Prüfungen nur bei weiteren Änderungen, Fehlern oder
-  konkreten offenen Risiken erneut oder breiter testen. Für Verhalten ohne
+  konkreten offenen Risiken erneut oder breiter testen.
+- **Laufzeitbudget:** Die vollständige Browser-Suite (`tests/e2e`, gemessen
+  ca. 6–12 s pro Fall, bei über 300 Fällen 1 Stunde und mehr) wird lokal
+  **nicht** nach einer Implementierung gestartet. Stattdessen nur die Dateien
+  zum geänderten Verhalten (`-TestPath tests/e2e/<datei>`, meist 1–3 Dateien),
+  dazu `frontend` (Sekunden) und bei Backend-Änderungen die betroffenen
+  Backend-Dateien statt aller (Gesamtlauf 3–7 min). Die volle Browser-Suite
+  läuft in der CI (`workflow_dispatch` → `browser-and-rules`) und nur lokal,
+  wenn der Nutzer sie ausdrücklich verlangt. Nie zwei Browser-Läufe
+  gleichzeitig starten (feste Ports 8085/8031/8033, sonst Fehlalarme) und
+  einen schon laufenden Lauf nicht „nochmal“ anstoßen, sondern abwarten oder
+  gezielt abbrechen. Für Verhalten ohne
   Auto-Tests die betroffenen Punkte in `docs/smoke-checklist.md` prüfen;
   reine Dokumentationskorrekturen auf Inhalt, Links und Diff prüfen.
