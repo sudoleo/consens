@@ -92,8 +92,11 @@
   // Agent and the pipeline share one daily token account. Validation,
   // ordering of concurrent snapshots and the account owner fence live in
   // App.tokenBudget (token-budget.js); Agent only feeds it.
+  // When the allowance was last confirmed (a fetch or a run's own report).
+  let budgetSeenAt = 0;
   function receiveBudget(budget, uid) {
     if (!budget || !canUse() || uid !== window.auth?.currentUser?.uid) return;
+    budgetSeenAt = Date.now();
     App.tokenBudget?.apply?.(budget, { uid });
   }
   async function refreshBudget(uid) {
@@ -112,6 +115,8 @@
       });
       if (user === window.auth?.currentUser && generation === loadGeneration) receiveBudget(data.token_budget, uid);
     } catch (_) {
+      // A stale figure may be asked for again on the next focus.
+      budgetSeenAt = 0;
       if (generation === loadGeneration && catalog) App.tokenBudget?.markStale?.();
     } finally { if (budgetRefresh === pending) budgetRefresh = null; }
   }
@@ -290,9 +295,12 @@
     return true;
   }
   function render() { renderShell(true); }
-  // The 60 s allowance refresh only runs while Agent mode is on screen.
+  // The allowance refresh only runs while Agent mode is on screen. Runs in
+  // this tab report their own spending, so the poll only catches other tabs,
+  // devices and the daily reset: every 5 minutes (each poll reads the token
+  // account in Firestore; 60 s cost ~300 reads an hour per open tab).
   function syncBudgetPolling(agent) {
-    if (agent && canUse() && !budgetTimer) budgetTimer = setInterval(refreshVisibleBudget, 60000);
+    if (agent && canUse() && !budgetTimer) budgetTimer = setInterval(refreshVisibleBudget, 300000);
     else if ((!agent || !canUse()) && budgetTimer) { clearInterval(budgetTimer); budgetTimer = null; }
   }
   function renderShellNow() {
@@ -981,7 +989,10 @@
       if (demoView) { document.getElementById("agentAnswer")?.removeAttribute("hidden"); renderShell(true); return activityHost("demo"); }
       renderShell(true); return null;
     } };
+  // Coming back to the tab refreshes a figure older than a minute; switching
+  // between editor and browser no longer fetches it every time.
   function refreshVisibleBudget() {
+    if (Date.now() - budgetSeenAt < 60000) return;
     if (document.visibilityState !== 'hidden' && canUse() && selectedMode() === 'agent' && catalogStatus === 'ready') refreshBudget(catalogOwner);
   }
   document.addEventListener('visibilitychange', refreshVisibleBudget);

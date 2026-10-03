@@ -144,6 +144,8 @@ def test_background_scheduling_is_disabled_in_unit_test_mode(store):
 
 def test_snapshot_schedules_reconciliation_for_yesterdays_estimates(store, monkeypatch):
     from datetime import datetime, timezone
+    # Shortly after midnight yesterday is read on every snapshot.
+    monkeypatch.setattr(agent_quota, "PREVIOUS_DAY_GRACE", timedelta(days=2))
     scheduled = []
     monkeypatch.setattr(reconciliation, "schedule", lambda db, uid: scheduled.append(uid) or True)
     config = agent_quota.agent_budget_config.get_config(store.db)
@@ -155,3 +157,22 @@ def test_snapshot_schedules_reconciliation_for_yesterdays_estimates(store, monke
     agent_quota.quota_ref(store.db, UID, yesterday).set({"estimated": 250})
     agent_quota.snapshot(store.db, UID)
     assert scheduled == [UID]
+
+
+def test_a_settled_empty_yesterday_is_not_read_on_every_snapshot(store, monkeypatch):
+    reads = []
+    real = agent_quota.quota_ref
+
+    def counting(db, uid, day):
+        reads.append(day)
+        return real(db, uid, day)
+
+    monkeypatch.setattr(agent_quota, "PREVIOUS_DAY_GRACE", timedelta(0))
+    monkeypatch.setattr(agent_quota, "quota_ref", counting)
+    agent_quota._quiet_until.clear()
+    agent_quota.snapshot(store.db, UID)
+    first = len(reads)
+    agent_quota.snapshot(store.db, UID)
+    # Today's ledger is read again; the closed, empty yesterday is not.
+    assert len(reads) - first == first - 1
+    agent_quota._quiet_until.clear()

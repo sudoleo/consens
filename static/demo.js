@@ -817,7 +817,6 @@ function demoAgentCalls({ models, answered, judges }) {
 
 async function runAgentDemoFlow() {
   const App = window.App;
-  window.exitHeroMode?.();
   App.consensusPipeline?.dismiss?.();
   window.hideConsensusOutput?.();
   const runId = ++demoRunId;
@@ -837,7 +836,10 @@ async function runAgentDemoFlow() {
   if (!live()) return;
 
   // Sent: the question moves into the thread, the composer empties, and the
-  // Agent's answer surface takes over below it.
+  // Agent's answer surface takes over below it. As in a real chat the field
+  // is typed into where it stands and only glides down when it is sent;
+  // leaving the hero before typing made it jump down first.
+  window.exitHeroMode?.();
   App.state.set("lastQuestion", DEMO_SCENARIO_PROMPT, "run");
   App.setThreadQuestion?.(DEMO_SCENARIO_PROMPT);
   if (qi) {

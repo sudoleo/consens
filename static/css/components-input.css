@@ -67,14 +67,20 @@ textarea:focus {
   margin-bottom: 20px;
   position: relative;
   z-index: 5;
-  transition: transform var(--dur-light) var(--ease-out);
+  /* Keine transform-Transition: Der Hero zentriert per translateY(... - 50%),
+     und jede Hoehenaenderung beim Laden (Picker, Composer) oder der
+     Hero-Ausstieg liess das Feld damit von einer falschen Stelle aus gleiten
+     — beim Ausstieg von unterhalb des Bildschirms herauf, weil der Rest der
+     Hero-Verschiebung schon auf die neue Position am unteren Rand gerechnet
+     wurde. Ortswechsel gleitet App.glideComposer (app-core.js) von der
+     tatsaechlich gezeichneten alten zur neuen Stelle. */
 }
 
 /* --------------------------------------------------------------------------
    Hero-Zustand: Vor der ersten Frage sitzt das Eingabefeld vertikal mittig
    (body.is-hero, index.html). window.exitHeroMode() entfernt die Klasse beim
-   Senden/Bookmark-Laden/Demo-Start — das Feld gleitet dann per Transform nach
-   oben und der Antwortbereich blendet ein.
+   Senden/Bookmark-Laden/Demo-Start — das Feld gleitet dann (App.glideComposer)
+   an seinen Platz im Thread und der Antwortbereich blendet ein.
    68px = body padding-top (10px) + .container padding-top (58px).
    -------------------------------------------------------------------------- */
 body.is-hero .input-section {

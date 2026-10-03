@@ -1211,7 +1211,7 @@ def test_bookmark_list_is_compact_and_cursor_paginated():
     assert "responses" not in first.json()["bookmarks"][0]
     assert first.json()["bookmarks"][0]["has_consensus"] is True
     assert second.json()["bookmarks"] == [{
-        "id": "third_id", "query": "Third", "title": "Third", "mode": "",
+        "id": "third_id", "query": "Third", "title": "Third", "title_source": "", "mode": "",
         "timestamp": None, "has_consensus": False, "model_count": 1,
         "source_count": 0, "attachment_count": 0,
     }]

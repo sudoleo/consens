@@ -396,3 +396,71 @@ def test_queue_scan_wraps_to_previously_busy_owner_without_starvation(store):
     jobs._active_owners.remove('busy')
     assert jobs.process_one(repo)
     assert repo.get(first['job_id'])['status'] == 'complete'
+
+
+def test_heartbeat_is_written_only_while_this_process_holds_an_owner_key(monkeypatch):
+    writes = []
+
+    class Repo:
+        def heartbeat_worker(self, worker_id):
+            writes.append(worker_id)
+
+    repo = Repo()
+    jobs._keys.clear()
+    jobs._heartbeats.clear()
+    jobs._refresh_worker(repo)
+    assert writes == []  # nothing to vouch for: no write every 10s
+    jobs._refresh_worker(repo, force=True)
+    assert writes == [jobs.WORKER_ID]
+    jobs._heartbeats.clear()
+    jobs.remember_key('job', 'owner', 'own-secret')
+    try:
+        jobs._refresh_worker(repo)
+        assert writes == [jobs.WORKER_ID, jobs.WORKER_ID]
+    finally:
+        jobs._keys.clear()
+        jobs._heartbeats.clear()
+
+
+def test_an_idle_queue_is_scanned_by_one_worker_with_backoff_until_woken(monkeypatch):
+    import asyncio
+    import threading
+
+    monkeypatch.setattr('app.services.llm.mock_llm.mock_llm_enabled', lambda: False)
+    monkeypatch.setattr(jobs, 'IDLE_POLL_MIN', .02)
+    monkeypatch.setattr(jobs, 'IDLE_POLL_MAX', .08)
+    monkeypatch.setattr(jobs, '_refresh_worker', lambda *_a, **_k: None)
+    monkeypatch.setattr(jobs, 'repository', lambda: None)
+    scans = []
+    work = {'left': 0}
+    lock = threading.Lock()
+
+    def process_one(repo=None):
+        with lock:
+            scans.append(threading.get_ident())
+            if work['left']:
+                work['left'] -= 1
+                return True
+            return False
+
+    monkeypatch.setattr(jobs, 'process_one', process_one)
+
+    async def scenario():
+        loop_task = asyncio.create_task(jobs.source_check_worker_loop())
+        await asyncio.sleep(.5)
+        idle_scans = len(scans)
+        with lock:
+            work['left'] = 6
+        jobs.wake_workers()
+        await asyncio.sleep(.3)
+        loop_task.cancel()
+        await asyncio.gather(loop_task, return_exceptions=True)
+        return idle_scans
+
+    idle_scans = asyncio.run(scenario())
+    # 2s polling by four workers would be ~4 scans per interval; the scout
+    # alone, backing off .02 -> .08, needs only a handful in .5s.
+    assert 1 <= idle_scans <= 10
+    # The wake-up drains the six ready jobs and then goes quiet again.
+    assert work['left'] == 0
+    assert len(scans) - idle_scans <= 6 + 4 + 6

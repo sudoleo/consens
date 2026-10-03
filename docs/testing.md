@@ -21,6 +21,18 @@ sowie Watch-Evidenz/Outbox (`test_watch_evidence_model.py`,
 `test_watch_review_regressions.py`). DOM-/Browsergegenstücke und Mockgrenzen
 stehen im [Bereichsindex](test-coverage/areas.md).
 
+## Lokaler Server und Produktions-Firestore
+
+Ein lokaler `uvicorn` (mit oder ohne `MOCK_LLM`) spricht mit der
+Produktions-Firestore. Seit 2026-10-03 startet er deshalb keine geteilten
+Hintergrund-Writer mehr (Watch-/Topic-/SEO-Scheduler, API-Maintenance,
+Retention, Account-Cleanups, Startup-Backfills); sie laufen nur in Produktion
+und stehen lokal in `GET /health/maintenance` als `disabled`. Wer einen davon
+lokal braucht, startet mit `LOCAL_BACKGROUND_JOBS=1` (wirkt nicht zusammen mit
+`MOCK_LLM=1`). Der Modell-Config-Sync läuft immer, die Quellenprüfungs-Worker
+auf jedem Nicht-Mock-Server (eigene lokale Queue);
+die Worker scannen eine leere Queue nur noch höchstens alle 30 s.
+
 ## Gemeinsamer Einstieg unter Windows
 
 Delegation: `tests/test_agent_delegation.py` prüft Kommunikation, Abbruch,

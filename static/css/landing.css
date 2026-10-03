@@ -497,76 +497,14 @@ img { display: block; max-width: 100%; }
    otherwise the second one takes the next line. */
 .lp-hero-claim span { display: inline-block; }
 
-.lp-hero-pulse {
-  width: min(100%, 760px);
-  margin: 20px auto 0;
-  display: grid;
-  grid-template-columns: 8px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  border-top: 1px solid var(--line-soft);
-  border-bottom: 1px solid var(--line-soft);
-  color: var(--ink-3);
-  font-size: var(--font-size-xs);
-  line-height: var(--line-height-ui);
-  text-align: left;
-  transition: color var(--dur-press) var(--ease-standard), border-color var(--dur-press) var(--ease-standard);
-}
-
-.lp-hero-pulse:hover {
-  color: var(--ink);
-  border-color: var(--line);
-}
-
-.lp-hero-pulse strong {
-  margin-right: 5px;
-  color: var(--ink);
-  font-weight: var(--font-weight-semibold);
-}
-
-.lp-hero-pulse-status {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--agree);
-  box-shadow: 0 0 0 3px var(--agree-bg);
-}
-
-.lp-hero-pulse-link {
-  color: var(--ink-2);
-  font-weight: var(--font-weight-semibold);
-  white-space: nowrap;
-}
-
-/* A status line belongs on an edge, not in the middle of a stack. Where the
-   hero is tall enough that pinning the line does not crowd the claim, the
-   pulse leaves the flow and sits on the fold, and the group above centres in
-   the space left over. Only the height matters — a phone held upright has the
-   same fold a monitor has, so it gets the same treatment; on anything shorter
-   (a phone on its side, a half-height window) the line stays in the stack,
-   because there the fold is not a fixed place on the screen anyway.
-
-   The three selectors are deliberately one step more specific than the phone
-   block further down the file, which would otherwise take the reserved space
-   and the width back. */
+/* The field reads better above the middle of the first screen than on it.
+   Where the hero is tall enough, reserved height under the stack lifts it:
+   half of whatever is reserved here is how far the field moves up. Only the
+   height matters, so a phone held upright gets the same treatment. (Until
+   2026-10-03 a Model Pulse status line sat in this space; the pulse now
+   lives with the benchmark further down, as data instead of a link.) */
 @media (min-height: 620px) {
-  .lp-section--hero { position: relative; }
-
-  /* Reserved height, so centring the stack can never run it into the line —
-     and more of it than the line needs, because the group reads better above
-     the middle than on it. Half of whatever is reserved here is how far the
-     field moves up. */
   .lp-section--hero .lp-hero.lp-hero--demo { padding-bottom: clamp(76px, 20vh, 220px); }
-
-  .lp-section--hero .lp-hero-pulse {
-    position: absolute;
-    left: 50%;
-    bottom: clamp(14px, 2.6vh, 30px);
-    width: min(760px, calc(100% - 44px));
-    margin: 0;
-    transform: translateX(-50%);
-  }
 }
 
 /* Tablets and short laptop windows: the marks tighten before they wrap, and
@@ -578,7 +516,6 @@ img { display: block; max-width: 100%; }
 @media (max-width: 600px) {
   .lp-prompt.lp-hero-prompt { padding: 16px; padding-bottom: 12px; gap: 18px; min-height: 140px; }
 
-  .lp-hero-pulse { width: 100%; }
 
   /* Attach + run switch + "Try the demo" need 339px and a phone gives the
      field 311, so the row used to push ~28px past its own edge. The two
@@ -861,6 +798,161 @@ img { display: block; max-width: 100%; }
 
 @media (prefers-reduced-motion: reduce) {
   .lp-model-pulse-meter i { transition: none; }
+}
+
+/* --- Live pulse beside the benchmark ---------------------------------------
+   The benchmark is the controlled proof; this strip is the live half of it.
+   Same three marks as the Model Pulse board, reduced to bar and fair-share
+   tick. The meter axis is real percent on the board's shared scale. */
+.lp-live-pulse {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  align-items: center;
+  gap: 18px clamp(32px, 6vw, 80px);
+  margin-top: clamp(48px, 7vw, 88px);
+  padding-top: clamp(32px, 4vw, 48px);
+  border-top: 1px solid var(--line-soft);
+}
+
+.lp-live-pulse-head .lp-eyebrow {
+  display: flex;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.lp-live-pulse .pulse-live-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: var(--agree);
+  box-shadow: 0 0 0 3px var(--agree-bg);
+}
+
+.lp-live-pulse-head h3 {
+  margin: 0;
+  color: var(--ink);
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--tracking-tight);
+  line-height: var(--line-height-heading);
+}
+
+.lp-live-pulse-head p:not(.lp-eyebrow) {
+  max-width: 44ch;
+  margin: 12px 0 0;
+  color: var(--ink-3);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-ui);
+}
+
+.lp-live-pulse-head .lp-link {
+  display: inline-flex;
+  margin-top: 18px;
+}
+
+.lp-live-pulse-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lp-live-pulse-list li {
+  display: grid;
+  grid-template-columns: 26px 72px minmax(0, 1fr) 44px;
+  align-items: center;
+  gap: 12px;
+  min-height: 38px;
+}
+
+.lp-live-pulse-name {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lp-live-pulse-meter {
+  position: relative;
+  display: block;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--line-soft);
+}
+
+.lp-live-pulse-meter i,
+.lp-live-pulse-meter b {
+  position: absolute;
+  display: block;
+}
+
+.lp-live-pulse-meter i {
+  inset: 0 auto 0 0;
+  width: max(3px, calc(var(--rate) * 1%));
+  border-radius: inherit;
+  background: var(--ink-3);
+  transform-origin: left;
+  transition: transform var(--dur-light) var(--ease-out) 120ms;
+}
+
+.lp-live-pulse-list li:first-child .lp-live-pulse-meter i {
+  background: var(--agree);
+}
+
+/* Same contract as .lp-reveal: full bars without JS, grown in on arrival. */
+.lp-live-pulse.is-armed:not(.is-visible) .lp-live-pulse-meter i {
+  transform: scaleX(0);
+}
+
+.lp-live-pulse-meter b {
+  top: -3px;
+  bottom: -3px;
+  left: calc(var(--fair) * 1%);
+  width: 2px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: var(--ink);
+  opacity: 0.5;
+}
+
+.lp-live-pulse-rate {
+  color: var(--ink);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.lp-live-pulse-foot {
+  grid-column: 2;
+  margin: 4px 0 0;
+  color: var(--ink-3);
+  font-size: var(--font-size-micro);
+  line-height: var(--line-height-ui);
+}
+
+.dark-mode .lp-live-pulse .lp-model-pulse-icon img[src*="chatgpt"],
+.dark-mode .lp-live-pulse .lp-model-pulse-icon img[src*="grok"],
+.dark-mode .lp-live-pulse .lp-model-pulse-icon img[src*="kimi"],
+.dark-mode .lp-live-pulse .lp-model-pulse-icon img[src*="meta.svg"],
+.dark-mode .lp-live-pulse .lp-model-pulse-icon img[src*="zai"] {
+  filter: invert(1);
+}
+
+@media (max-width: 820px) {
+  .lp-live-pulse { grid-template-columns: 1fr; }
+  .lp-live-pulse-foot { grid-column: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lp-live-pulse-meter i,
+  .lp-live-pulse.is-armed:not(.is-visible) .lp-live-pulse-meter i { transition: none; transform: none; }
 }
 
 /* --- Hero window: the end result (verdict + consensus + differences) ------- */
@@ -2743,14 +2835,6 @@ img { display: block; max-width: 100%; }
      which is exactly how it read: like a caption for the field rather than
      the sentence the page is about. Only the measure narrows. */
   .lp-hero-claim { max-width: 24ch; }
-
-  /* Without its explanatory half the pulse strip is a status line again, so
-     it goes back to one row: dot, label, link. */
-  .lp-hero-pulse {
-    grid-template-columns: 7px minmax(0, 1fr) auto;
-    margin-top: 18px;
-  }
-  .lp-hero-pulse-link { grid-column: auto; }
 
   /* Every section gets a screen of its own. A phone used to show the end of
      one topic and the beginning of the next in the same frame, which is why

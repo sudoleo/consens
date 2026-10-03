@@ -2617,6 +2617,11 @@ body:not(.is-hero) {
   padding-bottom: 0;
 }
 
+/* The thread scrolls, the hero does not. Without a reserved gutter the
+   whole column stepped sideways by half a scrollbar the moment the first
+   answer made the page scrollable (and back on "New comparison"). */
+html { scrollbar-gutter: stable; }
+
 body:not(.is-hero) .container {
   display: flex;
   flex-direction: column;

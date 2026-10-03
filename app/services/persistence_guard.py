@@ -169,6 +169,18 @@ def _bookmark_bootstrap(bookmarks) -> tuple[int, int]:
     return count, total_bytes
 
 
+def _keep_generated_title(current: dict, patch: dict) -> dict:
+    """A generated sidebar title (chat_titles.py) outlives later saves.
+
+    Every save of a run merges the opening question as ``title`` again; the
+    title request can land between them. Checked inside the write so no
+    interleaving can put the question back.
+    """
+    if current.get("title_source") == "generated" and "title" in patch and "title_source" not in patch:
+        return {key: value for key, value in patch.items() if key != "title"}
+    return patch
+
+
 def write_bookmark(*, uid: str, doc_ref, patch: dict, db, current_guard=None, transaction_guard=None) -> dict:
     """Merge one bookmark while enforcing persistent count/byte quotas."""
     if not hasattr(db, "transaction") and not hasattr(db, "run_transaction"):
@@ -179,7 +191,7 @@ def write_bookmark(*, uid: str, doc_ref, patch: dict, db, current_guard=None, tr
         current = current_snapshot.to_dict() or {} if current_snapshot.exists else {}
         if current_guard is not None and not current_guard(current):
             raise PersistenceConflictError("Bookmark changed during the operation.")
-        doc_ref.set(patch, merge=True)
+        doc_ref.set(_keep_generated_title(current, patch), merge=True)
         return _get(doc_ref).to_dict() or {}
     bookmarks = db.collection("users").document(uid).collection("bookmarks")
     usage_ref = db.collection(USAGE_COLLECTION).document(_owner_key("bookmarks", uid))
@@ -194,12 +206,13 @@ def write_bookmark(*, uid: str, doc_ref, patch: dict, db, current_guard=None, tr
         current = current_snapshot.to_dict() or {} if current_snapshot.exists else {}
         if current_guard is not None and not current_guard(current):
             raise PersistenceConflictError("Bookmark changed during the operation.")
+        effective = _keep_generated_title(current, patch)
         usage_snapshot = _get(usage_ref, tx)
         usage = usage_snapshot.to_dict() or {} if usage_snapshot.exists else {}
         count = int(usage.get("bookmark_count") or bootstrap[0])
         total = int(usage.get("bookmark_bytes") or bootstrap[1])
         old_size = int(current.get("_quota_bytes") or estimate_document_bytes(current)) if current else 0
-        merged = _deep_merge(current, patch)
+        merged = _deep_merge(current, effective)
         merged.pop("_quota_bytes", None)
         new_size = estimate_document_bytes(merged)
         if new_size > MAX_BOOKMARK_DOCUMENT_BYTES:
@@ -210,7 +223,7 @@ def write_bookmark(*, uid: str, doc_ref, patch: dict, db, current_guard=None, tr
             raise PersistenceLimitError("bookmark_count_limit", "Bookmark limit reached.")
         if new_total > MAX_BOOKMARK_BYTES_PER_USER:
             raise PersistenceLimitError("bookmark_storage_limit", "Bookmark storage limit reached.")
-        patch_with_size = dict(patch)
+        patch_with_size = dict(effective)
         patch_with_size["_quota_bytes"] = new_size
         _set(tx, doc_ref, patch_with_size, merge=True)
         _set(tx, usage_ref, {
@@ -355,6 +368,7 @@ def record_model_vote(
         vote_snapshot = _get(vote_ref, tx)
         if vote_snapshot.exists:
             return False
+        from app.services import model_pulse
         _set(tx, vote_ref, {
             "schema_version": 1,
             "owner_hash": _hash_uid(uid),
@@ -362,7 +376,11 @@ def record_model_vote(
             "vote_subject_id": vote_subject_id,
             "model": model,
             "vote_type": vote_type,
+            "source": "consensus",
             "created_at": now,
+            # Who was in the run: the denominator of the Model Pulse rate.
+            **(model_pulse.participation(
+                model_pulse.consensus_participants(pending), model) or {}),
         })
         if tx is None:
             leaderboard_ref.set({vote_type: firestore.Increment(1)}, merge=True)
@@ -373,9 +391,10 @@ def record_model_vote(
     return bool(_run_transaction(db, persist))
 
 
-def agent_best_model_pick(review) -> str | None:
+def agent_best_model_choice(review) -> tuple[str | None, list[str]]:
     """The comparison model whose answer the judge found closest to an Agent
-    answer, as a Model Pulse family label, or None.
+    answer, as a Model Pulse family label, plus the families that judge
+    compared; (None, []) when there is no pick.
 
     Only a checked answer counts: the review succeeded or partly succeeded,
     and the pick comes from the check of the widest comparison (most answers)
@@ -385,19 +404,25 @@ def agent_best_model_pick(review) -> str | None:
     from app.core import config as cfg
 
     if not isinstance(review, dict) or review.get("status") not in {"succeeded", "partial"}:
-        return None
-    sizes = {c.get("id"): len(c.get("answers") or []) for c in review.get("comparisons") or []}
-    best, widest = None, -1
+        return None, []
+    comparisons = {c.get("id"): c.get("answers") or [] for c in review.get("comparisons") or []}
+    best, widest, field = None, -1, []
     for check in review.get("checks") or []:
         data = check.get("differences_data") if check.get("status") in {"succeeded", "partial"} else None
         model = str((data or {}).get("best_model") or "").strip()
-        size = sizes.get(check.get("comparison_id"), 0)
-        if model and size >= 2 and size > widest:
-            best, widest = model, size
+        answers = comparisons.get(check.get("comparison_id"), [])
+        if model and len(answers) >= 2 and len(answers) > widest:
+            best, widest = model, len(answers)
+            field = [str(a.get("provider_label") or a.get("provider") or "")
+                     for a in answers if isinstance(a, dict)]
     if not best:
-        return None
+        return None, []
     best = cfg.LEADERBOARD_MODEL_ALIASES.get(best, best)
-    return best if best in cfg.VALID_LEADERBOARD_MODELS else None
+    return (best, field) if best in cfg.VALID_LEADERBOARD_MODELS else (None, [])
+
+
+def agent_best_model_pick(review) -> str | None:
+    return agent_best_model_choice(review)[0]
 
 
 def agent_vote_ref(db, *, uid: str, chat_id: str, turn_id: str):
@@ -406,10 +431,12 @@ def agent_vote_ref(db, *, uid: str, chat_id: str, turn_id: str):
     return db.collection(VOTES_COLLECTION).document(key)
 
 
-def write_agent_vote(tx, db, vote_ref, *, uid: str, chat_id: str, turn_id: str, model: str, now: datetime | None = None):
+def write_agent_vote(tx, db, vote_ref, *, uid: str, chat_id: str, turn_id: str, model: str,
+                     participants=(), now: datetime | None = None):
     """Write an Agent turn's pick inside the caller's transaction. The caller
     has read ``vote_ref`` first (Firestore: reads before writes) and only
     calls this when it did not exist."""
+    from app.services import model_pulse
     now = now or utcnow()
     _set(tx, vote_ref, {
         "schema_version": 1,
@@ -420,6 +447,7 @@ def write_agent_vote(tx, db, vote_ref, *, uid: str, chat_id: str, turn_id: str, 
         "vote_type": "BestModel",
         "source": "agent",
         "created_at": now,
+        **(model_pulse.participation(participants, model) or {}),
     })
     _set(tx, db.collection("leaderboard").document(model), {"BestModel": firestore.Increment(1)}, merge=True)
 

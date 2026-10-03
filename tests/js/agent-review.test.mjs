@@ -374,13 +374,19 @@ it('strokes the marks on once, in reading order, when a live answer is first che
   expect(delay(first)).toBe(-400);
   expect(delay(badge)).toBeGreaterThan(delay(first));
   expect(delay(second)).toBeGreaterThan(delay(first));
+  // So does a rebuild from a render that does not ask for the reveal itself
+  // (a settled source check repaints with reveal: false).
+  now = 1500; body._agentRenderSerial = 3;
+  w.App.agentReview.render(body, review, {});
+  expect(delay(body.querySelector('.cx-claim'))).toBe(-500);
+  expect(body.classList.contains('is-marks-revealing')).toBe(true);
   vi.runAllTimers();
   expect(body.classList.contains('is-marks-revealing')).toBe(false);
   expect(body.querySelector('.cx-claim').getAttribute('style') || '').not.toContain('--cx-reveal-delay');
   // After the reveal a re-rendered answer shows its marks at once.
   now = 9000; body._agentRenderSerial = 2;
   w.App.agentReview.render(body, review, { reveal: true });
-  expect(w.renderStoredConsensusClaims).toHaveBeenCalledTimes(3);
+  expect(w.renderStoredConsensusClaims).toHaveBeenCalledTimes(4);
   expect(body.classList.contains('is-marks-revealing')).toBe(false);
   vi.useRealTimers();
   dom.window.close();

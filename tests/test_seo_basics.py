@@ -112,7 +112,7 @@ class SeoBasicsTests(unittest.TestCase):
         self.assertIn('<link rel="canonical" href="https://www.consens.io/model-pulse">', template)
         self.assertIn('<meta name="robots" content="index, follow">', template)
         self.assertIn('property="og:title"', template)
-        with patch.object(pages_router, "_read_leaderboard_totals", return_value={}):
+        with patch.object(pages_router.model_pulse.LEDGER, "entries", return_value=[]):
             response = self.client.get("/model-pulse")
         self.assertEqual(response.status_code, 200)
         self.assertIn("Live model pulse", response.text)

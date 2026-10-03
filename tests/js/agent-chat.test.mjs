@@ -215,11 +215,20 @@ describe("single-model agent chat", () => {
   });
   it('refreshes idle allowance on focus and marks failed refreshes as stale', async () => {
     const {window:w,dom} = boot();
+    let now = w.Date.now();
+    w.Date.now = () => now;
     await selectAgent(w);
+    // Focus right after the catalog brought the allowance: nothing to fetch.
+    const loaded = w.fetch.mock.calls.length;
+    w.dispatchEvent(new w.Event('focus'));
+    await new Promise(resolve => setTimeout(resolve, 20));
+    expect(w.fetch.mock.calls.length).toBe(loaded);
+    now += 61000;
     const budget = {limit:250000,remaining:250000,observed_at:10};
     w.fetch.mockImplementation(async () => ({ok:true,json:async () => ({token_budget:budget})}));
     w.dispatchEvent(new w.Event('focus'));
     await vi.waitFor(() => expect(w.App.agentChat.tokenBudget()).toEqual(budget));
+    now += 61000;
     w.fetch.mockImplementation(async () => ({ok:false}));
     w.dispatchEvent(new w.Event('focus'));
     await vi.waitFor(() => expect(w.App.agentChat.tokenBudget().stale).toBe(true));
@@ -243,6 +252,8 @@ describe("single-model agent chat", () => {
     await vi.waitFor(() => expect(d.querySelector('#agentModelDropdown').disabled).toBe(false));
     w.fetch.mockImplementationOnce(() => new Promise(() => {}));
     const before = w.fetch.mock.calls.length;
+    const later = w.Date.now() + 61000;
+    w.Date.now = () => later;
     w.dispatchEvent(new w.Event('focus'));
     await vi.waitFor(() => expect(w.fetch.mock.calls.length).toBe(before + 1));
     timeout();

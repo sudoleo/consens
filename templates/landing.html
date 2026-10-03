@@ -23,7 +23,7 @@
   <meta name="twitter:image" content="https://www.consens.io/static/og-home-v2.png?v=20260802">
   <meta name="twitter:image:alt" content="The risk of one perspective | consens.io">
   <title>The AI Agent That Checks Six Models | consens.io</title>
-  <link rel="stylesheet" href="/static/css/landing.css?v=20261003-todo3">
+  <link rel="stylesheet" href="/static/css/landing.css?v=20261003-pulse">
   <link rel="stylesheet" href="/static/css/benchmark.css?v=20261002-fein2">
   <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260621-logo2" sizes="any" type="image/png">
@@ -110,14 +110,6 @@
         </a>
         {% include "partials/composer_toolbar_mockup.html" %}
         </div>
-        <!-- On a screen tall enough for it the pulse is pinned to the bottom
-             edge of the first screen (see landing.css): a status line reads as
-             a status line down there, and it shows the page continues. -->
-        <a class="lp-hero-pulse" href="/model-pulse" data-umami-event="landing_open_model_pulse">
-          <span class="lp-hero-pulse-status" aria-hidden="true"></span>
-          <span><strong>Live model pulse</strong><span class="lp-wide-only">See which model answers most often earn the judge's pick in real runs.</span></span>
-          <span class="lp-hero-pulse-link">View leaderboard&nbsp;›</span>
-        </a>
       </div>
     </section>
 
@@ -437,6 +429,74 @@
       </div>
     </section>
 
+    <!-- ====================================================== BENCHMARK PROOF -->
+    <section id="benchmark" class="lp-section lp-section--white">
+      <div class="lp-shell">
+        <div class="lp-head lp-reveal">
+          <p class="lp-eyebrow">Proof, not promises</p>
+          <h2 class="lp-h2">We benchmarked the consensus.</h2>
+          <p class="lp-lead">On 314 closed-book MMLU-Pro questions, the consensus ranks first overall, and pulls clear exactly where the models disagree.</p>
+        </div>
+        <div class="bench-hero lp-reveal" style="margin-top: clamp(36px, 5vw, 56px);">
+          <div class="bench-mini">
+            <p class="bench-mini-title">When the models disagree</p>
+            <p class="bench-mini-sub">Accuracy on the questions where they split · MMLU-Pro</p>
+            <div class="bench-mini-plot">
+              <div class="bench-mini-col is-consensus" style="--i:0; --v:72.1"><span class="bench-mini-val">72.1%</span><div class="bench-mini-bar"></div></div>
+              <div class="bench-mini-col" style="--i:1; --v:70.6"><span class="bench-mini-val">70.6%</span><div class="bench-mini-bar"></div></div>
+              <div class="bench-mini-col" style="--i:2; --v:69.1"><span class="bench-mini-val">69.1%</span><div class="bench-mini-bar"></div></div>
+              <div class="bench-mini-col" style="--i:3; --v:64.7"><span class="bench-mini-val">64.7%</span><div class="bench-mini-bar"></div></div>
+              <div class="bench-mini-col" style="--i:4; --v:58.8"><span class="bench-mini-val">58.8%</span><div class="bench-mini-bar"></div></div>
+              <div class="bench-mini-col" style="--i:5; --v:44.1"><span class="bench-mini-val">44.1%</span><div class="bench-mini-bar"></div></div>
+              <div class="bench-mini-col" style="--i:6; --v:39.7"><span class="bench-mini-val">39.7%</span><div class="bench-mini-bar"></div></div>
+            </div>
+            <div class="bench-mini-icons">
+              <span><img src="/static/favicon.png" alt="consens.io"></span>
+              <span><img src="/static/icons/chat_icons/claude.png" alt="Claude"></span>
+              <span><img src="/static/icons/chat_icons/chatgpt.png" alt="GPT-5.5"></span>
+              <span><img src="/static/icons/chat_icons/gemini-icon.png" alt="Gemini"></span>
+              <span><img src="/static/icons/chat_icons/grok.png" alt="Grok"></span>
+              <span><img src="/static/icons/chat_icons/deepseek.png" alt="DeepSeek"></span>
+              <span><img src="/static/icons/chat_icons/mistral.png" alt="Mistral"></span>
+            </div>
+          </div>
+          <div class="lp-bench-aside">
+            <div class="bench-stat-row" style="margin-top:0;">
+              <div class="bench-stat"><b>#1</b><small>Highest accuracy overall and on the hard questions. The top of the field is a statistical tie.</small></div>
+              <div class="bench-stat"><b>+32pts</b><small>Lead over the weakest model on questions where the answers split.</small></div>
+            </div>
+            <a href="/benchmark" class="lp-btn lp-btn--primary" style="margin-top: 30px;" data-umami-event="landing_see_benchmark">See the full benchmark</a>
+          </div>
+        </div>
+        {% if pulse %}
+        <!-- The live half of the proof: the benchmark is the controlled test,
+             this is what happens in real runs, and it makes the same point
+             from the other side. No single model gives the best answer every
+             time, so asking several is worth it. Rendered from the Model Pulse
+             ledger; hidden while there are too few runs to rank. -->
+        <div class="lp-live-pulse lp-reveal">
+          <div class="lp-live-pulse-head">
+            <p class="lp-eyebrow"><span class="pulse-live-dot" aria-hidden="true"></span>Live from real runs</p>
+            <h3>No model wins every time.</h3>
+            <p>Even {{ pulse.leader.short }}, the model with the highest best-answer rate, gives the judge's pick in {{ '%.0f' | format(pulse.leader.rate) }}% of the runs it is in. In the other {{ '%.0f' | format(pulse.leader.others_rate) }}%, the best answer came from another model.</p>
+            <a href="/model-pulse" class="lp-link" data-umami-event="landing_open_model_pulse">Open the model pulse</a>
+          </div>
+          <ol class="lp-live-pulse-list" aria-label="Best-answer rate per model family">
+            {% for row in pulse.rows %}
+            <li>
+              <span class="lp-model-pulse-icon"><img src="{{ row.icon }}" alt=""></span>
+              <span class="lp-live-pulse-name">{{ row.short }}</span>
+              <span class="lp-live-pulse-meter" style="--rate: {{ row.rate / pulse.scale * 100 }}; --fair: {{ row.fair_share / pulse.scale * 100 }}" aria-hidden="true"><i></i><b></b></span>
+              <span class="lp-live-pulse-rate">{{ '%.0f' | format(row.rate) }}%</span>
+            </li>
+            {% endfor %}
+          </ol>
+          <p class="lp-live-pulse-foot">Share of its runs in which a model's answer was the judge's pick · {{ '{:,}'.format(pulse.runs) }} judged runs · the tick marks a fair share by chance.</p>
+        </div>
+        {% endif %}
+      </div>
+    </section>
+
     <!-- ====================================================== WATCH -->
     <section id="watch" class="lp-section lp-section--white lp-scene-04">
       <div class="lp-shell">
@@ -478,48 +538,6 @@
             </div>
             <p>The latest run now includes new transparency requirements. The core conclusion moved materially.</p>
             <a href="/app/watches" data-umami-event="landing_watch_create">Create a Watch <span aria-hidden="true">›</span></a>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ====================================================== BENCHMARK PROOF -->
-    <section id="benchmark" class="lp-section lp-section--white">
-      <div class="lp-shell">
-        <div class="lp-head lp-reveal">
-          <p class="lp-eyebrow">Proof, not promises</p>
-          <h2 class="lp-h2">We benchmarked the consensus.</h2>
-          <p class="lp-lead">On 314 closed-book MMLU-Pro questions, the consensus ranks first overall, and pulls clear exactly where the models disagree.</p>
-        </div>
-        <div class="bench-hero lp-reveal" style="margin-top: clamp(36px, 5vw, 56px);">
-          <div class="bench-mini">
-            <p class="bench-mini-title">When the models disagree</p>
-            <p class="bench-mini-sub">Accuracy on the questions where they split · MMLU-Pro</p>
-            <div class="bench-mini-plot">
-              <div class="bench-mini-col is-consensus" style="--i:0; --v:72.1"><span class="bench-mini-val">72.1%</span><div class="bench-mini-bar"></div></div>
-              <div class="bench-mini-col" style="--i:1; --v:70.6"><span class="bench-mini-val">70.6%</span><div class="bench-mini-bar"></div></div>
-              <div class="bench-mini-col" style="--i:2; --v:69.1"><span class="bench-mini-val">69.1%</span><div class="bench-mini-bar"></div></div>
-              <div class="bench-mini-col" style="--i:3; --v:64.7"><span class="bench-mini-val">64.7%</span><div class="bench-mini-bar"></div></div>
-              <div class="bench-mini-col" style="--i:4; --v:58.8"><span class="bench-mini-val">58.8%</span><div class="bench-mini-bar"></div></div>
-              <div class="bench-mini-col" style="--i:5; --v:44.1"><span class="bench-mini-val">44.1%</span><div class="bench-mini-bar"></div></div>
-              <div class="bench-mini-col" style="--i:6; --v:39.7"><span class="bench-mini-val">39.7%</span><div class="bench-mini-bar"></div></div>
-            </div>
-            <div class="bench-mini-icons">
-              <span><img src="/static/favicon.png" alt="consens.io"></span>
-              <span><img src="/static/icons/chat_icons/claude.png" alt="Claude"></span>
-              <span><img src="/static/icons/chat_icons/chatgpt.png" alt="GPT-5.5"></span>
-              <span><img src="/static/icons/chat_icons/gemini-icon.png" alt="Gemini"></span>
-              <span><img src="/static/icons/chat_icons/grok.png" alt="Grok"></span>
-              <span><img src="/static/icons/chat_icons/deepseek.png" alt="DeepSeek"></span>
-              <span><img src="/static/icons/chat_icons/mistral.png" alt="Mistral"></span>
-            </div>
-          </div>
-          <div class="lp-bench-aside">
-            <div class="bench-stat-row" style="margin-top:0;">
-              <div class="bench-stat"><b>#1</b><small>Highest accuracy overall and on the hard questions. The top of the field is a statistical tie.</small></div>
-              <div class="bench-stat"><b>+32pts</b><small>Lead over the weakest model on questions where the answers split.</small></div>
-            </div>
-            <a href="/benchmark" class="lp-btn lp-btn--primary" style="margin-top: 30px;" data-umami-event="landing_see_benchmark">See the full benchmark</a>
           </div>
         </div>
       </div>

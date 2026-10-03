@@ -32,6 +32,7 @@ from app.services.chat_store import (
     derive_title,
 )
 from app.services.share_snapshots import sanitize_differences_data
+from app.services.chat_titles import generate_title
 
 router = APIRouter()
 BOOKMARK_PAGE_SIZE = 35
@@ -355,6 +356,9 @@ def _bookmark_meta(bookmark_id, data):
         "id": str(bookmark_id),
         "query": _bookmark_display_question(data),
         "title": _bookmark_title(data),
+        # "generated" once chat_titles.py named the conversation; the
+        # browser asks for a name only while it is missing.
+        "title_source": "generated" if data.get("title_source") == "generated" else "",
         "mode": str(data.get("mode") or ""),
         "timestamp": data.get("timestamp"),
         "has_consensus": bool(str(responses.get("consensus") or "").strip()),
@@ -451,6 +455,61 @@ def load_bookmark_detail(request: Request, bookmark_id: str):
     bookmark = snap.to_dict() or {}
     bookmark["id"] = snap.id
     return {"status": "success", "bookmark": bookmark}
+
+
+@router.post("/bookmarks/{bookmark_id}/title")
+@limiter.limit("20/minute")
+# Sync like the other bookmark routes: the LLM call and the Firestore writes
+# block, so FastAPI runs this in the threadpool.
+def name_bookmark(request: Request, bookmark_id: str):
+    """Give a saved conversation a short topic title, once.
+
+    The browser asks after the first save of a conversation. The opening
+    question (``title``, else ``query``) is named by one cheap structured
+    call; the result goes onto the chat first, which later Agent and
+    follow-up saves copy, then onto the bookmark. Any failure keeps the
+    question as the name: this route never errors a saved run.
+    """
+    uid = _bookmark_uid(request)
+    if not BOOKMARK_ID_RE.fullmatch(bookmark_id):
+        raise HTTPException(status_code=404, detail="Bookmark not found")
+    doc_ref = (
+        db_firestore.collection("users").document(uid)
+        .collection("bookmarks").document(bookmark_id)
+    )
+    try:
+        snap = doc_ref.get()
+    except Exception as exc:
+        logging.error("Error loading bookmark for title category=%s", safe_exception(exc))
+        raise HTTPException(status_code=500, detail="Error loading bookmark") from exc
+    if not snap.exists:
+        raise HTTPException(status_code=404, detail="Bookmark not found")
+    data = snap.to_dict() or {}
+    if data.get("title_source") == "generated":
+        return {"status": "success", "bookmark": _bookmark_meta(bookmark_id, data)}
+
+    title = generate_title(_bookmark_title(data))
+    if not title:
+        return {"status": "skipped", "bookmark": _bookmark_meta(bookmark_id, data)}
+
+    chat_id = str(data.get("chat_id") or "")
+    if CHAT_ID_RE.fullmatch(chat_id):
+        try:
+            _chat_store()._chat_ref(uid, chat_id).update({"title": title})
+        except Exception as exc:
+            # A deleted chat keeps its bookmark name; nothing to repair.
+            logging.warning("Chat title update skipped category=%s", safe_exception(exc))
+    try:
+        bookmark = persistence_guard.write_bookmark(
+            uid=uid, db=db_firestore, doc_ref=doc_ref,
+            # Never recreate a bookmark deleted while the title was written.
+            current_guard=lambda current: bool(current),
+            patch={"title": title, "title_source": "generated"},
+        )
+    except Exception as exc:
+        logging.warning("Bookmark title write skipped category=%s", safe_exception(exc))
+        return {"status": "skipped", "bookmark": _bookmark_meta(bookmark_id, data)}
+    return {"status": "success", "bookmark": _bookmark_meta(bookmark_id, bookmark)}
 
 
 @router.get("/bookmarks/{bookmark_id}/conversation")

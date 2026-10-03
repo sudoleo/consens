@@ -30,8 +30,10 @@ def test_sidebar_navigation_is_self_contained_and_guest_login_is_top_only():
     assert 'id="modelInsights"' not in template
     assert 'class="faq-answer faq-model-insights"' not in template
     assert 'id="leaderboardContent"' not in template
-    assert 'class="lp-hero-pulse" href="/model-pulse"' in landing
-    assert 'id="modelLeaderboard"' not in landing
+    # Since 2026-10-03 the pulse sits with the benchmark as live data, not
+    # as a status-line link in the hero.
+    assert 'class="lp-hero-pulse"' not in landing
+    assert 'href="/model-pulse" class="lp-link" data-umami-event="landing_open_model_pulse"' in landing
     assert ".faq-item > p, .faq-item > .faq-answer" in app_init
     assert 'id="authTopActions"' in template
     assert 'id="loginContainer" class="login-text" hidden></div>' in template
@@ -120,11 +122,11 @@ def test_demo_watch_nudge_and_dedicated_model_pulse_match_the_product_contract()
         in watch
     )
     assert "rows.forEach" in leaderboard
-    assert "row.available_since" in leaderboard
-    assert 'data-model-pulse-period="since-2026-08-31"' in pulse_page
-    assert "Kimi and GLM joined consens.io on 31 August 2026" in pulse_page
-    assert "Meta Muse on 2 September 2026" in pulse_page
-    assert 'id="modelLeaderboard"' in pulse_page
+    assert "/api/model-pulse?" in leaderboard
+    for name in ('name="period"', 'name="mode"', 'name="with"', 'name="sort"'):
+        assert name in pulse_page
+    assert 'id="modelPulse"' in pulse_page
+    assert "fair share" in pulse_page.lower()
     assert "not a popularity vote" in pulse_page.lower()
     assert 'href="/benchmark"' in pulse_page
 

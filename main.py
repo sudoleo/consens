@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
@@ -22,7 +23,7 @@ from app.core.observability import (
     safe_exception,
 )
 configure_logging()
-from app.core.security import CustomSecurityMiddleware, db_firestore
+from app.core.security import CustomSecurityMiddleware, _is_production, db_firestore
 from app.core.background_tasks import (
     mark_task_disabled,
     supervise_background_task,
@@ -91,15 +92,34 @@ async def _disabled_loop() -> None:
     return None
 
 
-def _scheduler_task(loop_factory, name: str, *, restart: bool = True):
-    """Background writers stay off in MOCK_LLM instances. They share the
-    production Firestore with the live deployment, so a local mock server would
-    claim due schedule slots and queued jobs, publish fixture answers as real
-    snapshots, delete real accounts' data with unreleased code, write its own
-    model defaults into the live config or re-register the prod bot webhook."""
+def _background_writers_off_reason(*, local: bool = False) -> str:
+    """Why this process must not run a shared background writer, or "".
+
+    A local server shares the production Firestore with the live deployment.
+    Under MOCK_LLM it would claim due schedule slots and queued jobs, publish
+    fixture answers as real snapshots, delete real accounts' data with
+    unreleased code, write its own model defaults into the live config or
+    re-register the prod bot webhook. Without MOCK_LLM it still repeated the
+    deployment's own work: every scheduler, cleanup and startup backfill
+    polled the shared database on its own (~10k reads a day per dev server,
+    plus full collection scans on every --reload) and competed for the same
+    slots. Production runs them; a local server opts in with
+    LOCAL_BACKGROUND_JOBS=1. `local` tasks (own local queue) run on every
+    non-mock server.
+    """
     if mock_llm_enabled():
-        logging.info("%s not started: MOCK_LLM=1", name)
-        mark_task_disabled(name, "MOCK_LLM=1")
+        return "MOCK_LLM=1"
+    if not local and not _is_production() and os.environ.get("LOCAL_BACKGROUND_JOBS") != "1":
+        return "local server (LOCAL_BACKGROUND_JOBS=1 starts it)"
+    return ""
+
+
+def _scheduler_task(loop_factory, name: str, *, restart: bool = True, local: bool = False):
+    """A shared background writer: started only where it belongs (above)."""
+    reason = _background_writers_off_reason(local=local)
+    if reason:
+        logging.info("%s not started: %s", name, reason)
+        mark_task_disabled(name, reason)
         return asyncio.create_task(_disabled_loop(), name=name)
     return _supervised_task(loop_factory, name, restart=restart)
 
@@ -178,15 +198,18 @@ async def lifespan(app: FastAPI):
     )
     # Retention, both account cleanups and the source-check workers delete or
     # claim work in the shared production Firestore (and Firebase Auth), so a
-    # local mock server must not run them either.
+    # local mock server must not run them either (and a local server only
+    # its own source-check queue).
     retention_task = _scheduler_task(
         retention_maintenance_loop, "retention-maintenance"
     )
     api_account_cleanup_task = _scheduler_task(
         api_account_cleanup.retry_loop, "consensus-api-account-cleanup"
     )
+    # Local source checks use their own queue (queue_environment), so a
+    # non-mock local server keeps its workers; idle, one read per <=30s scan.
     source_check_task = _scheduler_task(
-        source_check_worker_loop, "source-check-workers"
+        source_check_worker_loop, "source-check-workers", local=True
     )
     account_deletion_task = _scheduler_task(
         account_deletion.retry_loop, "full-account-deletion-cleanup"

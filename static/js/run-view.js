@@ -472,8 +472,8 @@
     row.title = `${statusLabel(context)} — open this run`;
     row.replaceChildren();
     const label = document.createElement("p");
-    const words = String(context.bookmark.title || context.question || "New comparison").split(/\s+/);
-    label.textContent = words.length > 5 ? `${words.slice(0, 5).join(" ")}...` : words.join(" ");
+    // The whole name; the row's own ellipsis cuts it where the space ends.
+    label.textContent = String(context.bookmark.title || context.question || "New comparison").replace(/\s+/g, " ").trim();
     const status = document.createElement("span");
     status.className = "run-entry-status";
     status.textContent = context.persistence?.errors?.length && context.status === "succeeded"
