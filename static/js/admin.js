@@ -77,6 +77,18 @@ function activateTab(tabId) {
     });
     document.getElementById('adminSavebar').hidden = ['topics', 'accounts', 'configuration'].includes(tabId);
     history.replaceState(null, '', `#${tabId}`);
+    if (tabId === 'seo') ensureSeoOverview();
+}
+
+// The SEO overview reads every tracked page with 28 days of metrics
+// (thousands of Firestore reads), so it loads when its tab is first opened,
+// not on every admin visit. Collect and reload refresh it as before.
+let seoOverviewUser = null;
+let seoOverviewLoadedFor = null;
+function ensureSeoOverview() {
+    if (!seoOverviewUser || seoOverviewLoadedFor === seoOverviewUser) return;
+    seoOverviewLoadedFor = seoOverviewUser;
+    loadSeoOverview();
 }
 document.querySelectorAll('.admin-tabs button').forEach(btn => {
     btn.addEventListener('click', () => activateTab(btn.dataset.tab));
@@ -1726,10 +1738,12 @@ function renderPublisherWatches(watches) {
     });
 }
 
-async function loadPublisherWatches() {
+// `pending` lets the first admin load share one /api/admin/watches request
+// between this list and the Watches tab (each costs up to ~200 reads).
+async function loadPublisherWatches(pending) {
     publisherWatchesStatus('Loading...', false);
     try {
-        const data = await shareAdminRequest('GET', '/api/admin/watches');
+        const data = await (pending instanceof Promise ? pending : shareAdminRequest('GET', '/api/admin/watches'));
         renderPublisherWatches(data.watches || []);
         publisherWatchesStatus('', false);
     } catch (err) {
@@ -2128,10 +2142,10 @@ function renderAdminWatches(watches) {
     });
 }
 
-async function loadAdminWatches() {
+async function loadAdminWatches(pending) {
     watchesStatus('Loading…', false);
     try {
-        const data = await shareAdminRequest('GET', '/api/admin/watches');
+        const data = await (pending instanceof Promise ? pending : shareAdminRequest('GET', '/api/admin/watches'));
         document.getElementById('smtpConfigState').textContent = data.smtp_configured ? 'SMTP configured' : 'SMTP not configured';
         renderAdminWatches(data.watches || []);
         watchesStatus('', false);
@@ -3588,13 +3602,18 @@ onAuthStateChanged(auth, async (user) => {
         const idToken = await user.getIdToken();
         fetchModels(idToken);
         loadPublisherConfig();
-        loadPublisherWatches();
+        const watches = shareAdminRequest('GET', '/api/admin/watches');
+        watches.catch(() => {});
+        loadPublisherWatches(watches);
         loadApiKeys();
         loadShares('reported');
-        loadAdminWatches();
+        loadAdminWatches(watches);
         loadAdminTopics();
-        loadSeoOverview();
+        seoOverviewUser = user.uid;
+        if (!document.getElementById('tab-seo').hidden) ensureSeoOverview();
     } else {
+        seoOverviewUser = null;
+        seoOverviewLoadedFor = null;
         setStatus('Please log in to access the admin panel.', true);
         window.location.href = '/';
     }

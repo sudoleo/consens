@@ -579,7 +579,10 @@
       label.append(picker); summary.append(label);
     }
     select(chosen);
-    if (evidence.reveal) revealMarks(body, review.answer_hash);
+    // A later render of the same answer (a settled source check, the end of
+    // the run) may rebuild the marks while they still stroke on; it carries
+    // the stroke on instead of dropping every mark in at once.
+    if (evidence.reveal || body._revealedMarks === review.answer_hash) revealMarks(body, review.answer_hash);
     summary.hidden = [...summary.children].every(child => child.hidden);
     keepActions(host, actions);
     if (body.classList.contains('thread-history-answer-body')) {

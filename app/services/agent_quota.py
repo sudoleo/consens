@@ -74,10 +74,39 @@ def account_tier(uid, tier=None):
     return agent_budget_config.tier_key(tier, admin=_admin_role(uid))
 
 
+# Read throttles for snapshot(), which runs on every allowance poll and on
+# every usage event of an Agent run. Both extra reads mostly find nothing:
+# an owner with no running delegation is asked again after RECOVERY_QUIET_S,
+# and a yesterday without estimates stays without them once the new day is
+# PREVIOUS_DAY_GRACE old (a call reserved before midnight may still book its
+# estimate there shortly after it).
+RECOVERY_QUIET_S = 120
+PREVIOUS_DAY_QUIET_S = 600
+PREVIOUS_DAY_GRACE = timedelta(hours=2)
+_quiet_lock = threading.Lock()
+_quiet_until = {}
+
+
+def _quiet(key):
+    with _quiet_lock:
+        return _quiet_until.get(key, 0) > time.monotonic()
+
+
+def _mark_quiet(key, seconds):
+    with _quiet_lock:
+        if len(_quiet_until) > 4096:
+            now = time.monotonic()
+            for stale in [k for k, until in _quiet_until.items() if until <= now]:
+                _quiet_until.pop(stale, None)
+        _quiet_until[key] = time.monotonic() + seconds
+
+
 def snapshot(db, uid, *, tier=None):
     from app.services.agent_runs import AgentRunStore
     store = AgentRunStore(db)
-    store.recover_allowance(uid)
+    recovery_key = ("recovery", id(db), uid)
+    if not _quiet(recovery_key) and not store.recover_allowance(uid):
+        _mark_quiet(recovery_key, RECOVERY_QUIET_S)
     # Timestamp the read's start so a slower HTTP response cannot overwrite a
     # newer terminal snapshot in the browser.
     observed_at = time.time_ns() // 1_000_000
@@ -121,10 +150,17 @@ def _previous_day_has_estimates(db, uid, day):
         return False
     suffix = day[len(day.split('_')[0]):]
     previous = (today - timedelta(days=1)).strftime("%Y-%m-%d") + suffix
+    quiet_key = ("previous-day", id(db), uid, previous)
+    settled = datetime.now(timezone.utc).replace(tzinfo=None) - today >= PREVIOUS_DAY_GRACE
+    if settled and _quiet(quiet_key):
+        return False
     try:
-        return (quota_ref(db, uid, previous).get().to_dict() or {}).get('estimated', 0) > 0
+        pending = (quota_ref(db, uid, previous).get().to_dict() or {}).get('estimated', 0) > 0
     except Exception:
         return False
+    if settled and not pending:
+        _mark_quiet(quiet_key, PREVIOUS_DAY_QUIET_S)
+    return pending
 
 
 def daily_limit():

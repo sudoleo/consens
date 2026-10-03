@@ -113,7 +113,7 @@ describe("pending bookmark markup", () => {
     const create = Function(
       "document",
       "window",
-      "truncateText",
+      "bookmarkLabelText",
       "bookmarkDisplayTitle",
       "deleteBookmark",
       `${helperSource}\nreturn { ensurePendingBookmarkDOM };`

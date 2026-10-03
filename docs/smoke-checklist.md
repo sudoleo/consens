@@ -22,6 +22,14 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       Unsubscribe in einer kontrollierten Testumgebung prüfen.
 - [ ] Aktuelle Browserabweichungen bei Scrollabschluss, Quellenpillenstatus,
       Agent-Stop/Reasoning und Runwechsel anhand des Laufberichts nachstellen.
+- [ ] Ruhe beim Laden (2026-10-03): eingeloggt neu laden — die Chat-Skelette
+      blenden in die Einträge über, nichts springt. `/app?demo=1`: die Frage
+      wird im zentrierten Feld getippt, beim Absenden gleitet das Feld nach
+      unten (kein Sprung aus dem Bild, keine seitliche Verschiebung der Spalte
+      beim Agent-Start). Die Widerspruchsmarken laufen bis zur letzten durch.
+- [ ] Bookmark-Titel: Nach der ersten Antwort eines neuen Chats wechselt der
+      Sidebar-Name kurz darauf weich von der Frage auf einen 2–6-Wörter-Titel
+      und bleibt bei Follow-ups und nach Reload stehen.
 
 Teilweise automatisiert: die Playwright-Suite `tests/e2e/` deckt Konsolen-
 Fehler beim Laden, Send→Streaming, Consensus→Differences+Agreement-Score,

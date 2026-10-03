@@ -178,24 +178,29 @@ Fehlern und hält Start-/Fehler-/letzte Erfolgszeiten für
 `GET /health/maintenance`. Cancellable Tasks übernehmen den 60-Sekunden-API-
 Maintenance-, 5-Minuten-Account-Cleanup-, stündlichen Retention- und
 30-Minuten-Consensus-Watch-Tick.
-Unter `MOCK_LLM=1` startet `_scheduler_task` in `main.py` alle Lifespan-Tasks,
-die in die (lokal geteilte) Produktions-Firestore schreiben oder dort löschen
-würden, gar nicht erst und meldet sie in `GET /health/maintenance` als
+`_scheduler_task` in `main.py` startet jeden Lifespan-Task, der in die
+(lokal geteilte) Produktions-Firestore schreibt, dort löscht oder Jobs claimt,
+nur wo er hingehört, und meldet ihn sonst in `GET /health/maintenance` als
 `disabled`: Consensus-Watch-, Topic-, SEO-Weekly-Review-Scheduler,
-Consensus-API-Maintenance, Retention-Maintenance, die Source-Check-Worker
-(Job-Claims und Heartbeat; Prüfungen laufen unter `MOCK_LLM` ohnehin inline),
+Consensus-API-Maintenance, Retention-Maintenance, die Source-Check-Worker,
 beide Account-Cleanups (`consensus-api-account-cleanup`,
 `full-account-deletion-cleanup`: löschen Daten echter Tombstone-Konten und
-Firebase-Auth-User) sowie die Einmal-Tasks `model-configuration-backfill`
-(schriebe die Normalisierung des lokalen Codes nach `app_config/models`, die
-der Live-Sync übernähme), `publisher-watch-lineage-backfill` und
-`telegram-watch-startup-maintenance` (löscht Metadaten und würde per
-`setWebhook` die Prod-Registrierung des Bots überschreiben). Einzig der
-lesende `model-configuration-sync` läuft auch lokal; der Lifespan-Test
-erzwingt, dass jeder neue Task bewusst einer der beiden Seiten zugeordnet wird.
-Es gibt keinen lokalen Firestore-Emulator außerhalb des E2E-Profils; ein
-Mock-Server würde sonst Prod-Slots und -Jobs claimen bzw. Prod-Daten löschen.
-In Produktion (ohne `MOCK_LLM`) laufen alle unverändert.
+Firebase-Auth-User) sowie die Einmal-Tasks (`_run_once`, `restart=False`)
+`model-configuration-backfill` (schriebe die Normalisierung des lokalen Codes
+nach `app_config/models`, die der Live-Sync übernähme),
+`publisher-watch-lineage-backfill` und `telegram-watch-startup-maintenance`
+(löscht Metadaten und würde per `setWebhook` die Prod-Registrierung des Bots
+überschreiben). Regel (`_background_writers_off_reason`): unter `MOCK_LLM=1`
+läuft keiner davon; ohne Mock laufen sie seit 2026-10-03 nur in Produktion
+(`RENDER_SERVICE_NAME` oder `ENVIRONMENT=prod/production`, `_is_production`)
+oder lokal mit `LOCAL_BACKGROUND_JOBS=1`. Ein lokaler Server bezahlte sonst jede
+Abfrage der Deployment-Loops doppelt (~10k Reads/Tag pro Dev-Server, plus
+volle Collection-Scans bei jedem `--reload`) und konkurrierte um dieselben
+Slots. Ausnahme `local=True`: die Source-Check-Worker arbeiten auf jedem
+Nicht-Mock-Server ihre eigene lokale Queue ab (s. Quellenprüfung). Einzig der
+lesende `model-configuration-sync` läuft immer; der Lifespan-Test erzwingt,
+dass jeder neue Task bewusst einer der beiden Seiten zugeordnet wird. Es gibt
+keinen lokalen Firestore-Emulator außerhalb des E2E-Profils.
 Im expliziten Browser-Testprofil `E2E_TEST_MODE=1` überspringt der Lifespan
 dagegen alle Startup-, Cleanup-, Recovery-, Backfill-, Webhook- und Scheduler-
 Writer. `app/core/e2e_profile.py` erlaubt Firebase vor der Initialisierung nur
@@ -220,7 +225,7 @@ Threadpool aus. `async def` bleibt nur für echte Await-Pfade (Mail, explizites
 | `client_errors.py` | Nimmt unter `POST /api/client-errors` ausschließlich same-origin, größenbegrenzte kritische Browsermeldungen an (5/min pro IP). Freitext, Stack, konkrete IDs/Slugs und Providerdetails werden verworfen; nur allowgelistete Typ-/Phasenkategorien, eine abstrahierte Route und bei echten Skript-/Stylesheet-Ladefehlern eine grobe Ressourcenklasse (`app_bundle`, `static_asset`, `jsdelivr_dependency`, `firebase_dependency`, `same_origin_resource`, `unknown_resource`) erreichen den nicht-blockierenden Telegram-Alert. Der Endpoint liefert keine Konfigurationsdetails zurück. |
 | `auth.py` | `/register`, `/confirm-registration` (setzt nach verifiziertem Login zusätzlich eine kurzlebige HttpOnly-Session für private servergerenderte Seiten), `DELETE /auth/session` (lokales Logout-Cleanup). `/register` gibt für Neuanlage, Bestand und Create-Race exakt `{"status":"check_inbox"}` zurück, nie UID/E-Mail/Custom-Token. Unbekannte Adressen erhalten ein serverseitig zufälliges, dem anonymen Aufrufer unbekanntes Übergangspasswort; neue und bestehende Adressen durchlaufen danach denselben Firebase-Mailbox-Setup-Pfad. Der Browser versucht keinen Login mit den eingesendeten Legacy-Credentials. Nur ein tatsächlich neues Konto löst den PII-freien Telegram-Admin-Alert aus. `/confirm-registration` prüft Revocation live und erkennt damit auch gerade neu angelegte Google-Konten serverseitig. |
 | `users.py` | `/user_status`, `/usage`, `/usage/run/release`, `GET`/`PUT /api/my/memory` sowie `POST /api/my/memory/edit|undo` (User-Memory samt explizitem, revisioniertem Luna-Patch, siehe §3), `/delete_account`, `/track-interest`. `/delete_account` legt vor jeder Löschung einen persistenten, fail-closed Auftrag über `FirestoreAccountDeletion` an. Die idempotente Kaskade umfasst API-Zugang/Telegram, alle Nutzer-Subcollections, Chats, Waitlist/Feedback, Pending Results, Persistence-Guards/Votes, Watches/Briefs, Follow-Challenges/E-Mail-Follows, eigene Shares über deren bestehende Hard-Delete-Kaskade, Profil und Firebase Auth. Jeder Bereich wird separat quittiert und bei Fehlern vom fünfminütigen Maintenance-Loop erneut versucht; bis dahin lautet die Antwort ehrlich `202 cleanup_pending`, erst der vollständige Abschluss ergibt 200. Owner-gebundene Create/Update/Delete-Transaktionen lesen den Account-Tombstone als ersten Teil derselben Mutation; nur interne Cleanup-Kaskaden verwenden explizite Bypässe. Dadurch können bereits authentifizierte, verspätete Requests keinen zuvor quittierten Bereich neu befüllen. `/track-interest` ist der idempotente Pro-Beta-Zugangsrequest (ein Pending-Dokument pro UID, kein Billing); aktive Pro-Konten werden abgewiesen. **Seit 2026-07-25 ruft die App diesen Endpunkt nicht mehr auf** — es wird nichts mehr angeboten, das man anfragen könnte; der Endpunkt bleibt nur bestehen, damit vorhandene Waitlist-Dokumente nicht verwaisen. |
-| `bookmarks.py` | `GET /bookmarks` liefert ausschließlich kompakte Metadaten, standardmäßig 30 Einträge und einen opaken Cursor; `GET /bookmarks/{id}` liefert owner-geschützt den Vollinhalt. Chat-Bookmarks referenzieren additiv `chat_id`/letzte `turn_id`; `GET /bookmarks/{id}/conversation` paginiert dafür die vollständigen owner-gebundenen completed Turns aus `ChatStore`, statt den wachsenden Transcript in ein Bookmark-Dokument zu kopieren; der Normalpfad läuft über `ChatStore.list_turn_details` (Chat einmal pro Seite geprüft, Modellantworten je Turn mit **einer** Query) und benötigt damit `2 + N` SDK-Aufrufe pro Seite. Abgerechnet werden weiterhin Dokument-Reads: Chat + gelesene Turn-Dokumente (inklusive Pagination-Sentinel) + alle zurückgegebenen Antwortdokumente; eine Query ist nicht ein einzelner Dokument-Read. Scheitert nur dieser optimierte Collection-Read, fällt der Endpoint korrektheitshalber auf `list_turns` + owner-gebundene Turn-Details zurück, statt den Browser auf zwei Bookmark-Snapshots zu reduzieren. Der Endpunkt ist bewusst ein synchrones `def`, damit die blockierenden Reads im Threadpool statt auf dem Event-Loop laufen. `/bookmark` (POST/DELETE), `/bookmark/consensus` sowie `POST /bookmark/consensus/share-result` erhalten Speichern, Löschen und die sichere Share-/Watch-Rehydration. Consensus-Inhalte werden aus einem owner-gebundenen Pending Result oder completed Turn serverseitig materialisiert, nicht aus frei behaupteten Clientfeldern; die alten, ignorierten Client-Kopien bleiben für gecachte Clients im Schema, werden aber nicht mehr formvalidiert und können den autoritativen Save daher nicht mit 422 blockieren. Quellenlisten werden nicht nach Anzahl gekürzt; die bestehenden Dokument- und Request-Bytebudgets begrenzen den Save ausdrücklich. `persist_authoritative_consensus_bookmark` ist der gemeinsame Writer für den primären `/consensus`-Abschluss und den idempotenten `/bookmark/consensus`-Fallback. Der breite slowapi-IP-Schutz sitzt vor der Tokenprüfung; die eigentlichen Modell- und Consensus-Save-Budgets gelten danach pro UID, damit der interne Preset-Fan-out nicht mit fremden Nutzern an einem Proxy-/NAT-Bucket konkurriert. Persistent gelten höchstens 250 Bookmarks, 750 kB je Dokument und 25 MB geschätztes Gesamtbudget pro UID. `DELETE /bookmark` liest die Chat-Bindung und legt **vor** dem Entfernen des Bookmarks per `ChatStore.request_chat_deletion` in einer Transaktion Tombstone (`status=deleting`), einmaligen Zählerabzug und einen dauerhaften Auftrag `chat_deletion_jobs/{sha256(uid:chat)[:40]}` an; erst danach wird das Bookmark gelöscht und `run_chat_deletion` versucht die Kaskade sofort. Scheitert sie (auch zwischen zwei Batches) oder stirbt der Prozess, bleibt der Auftrag mit `attempts`, `last_error` (nur Kategorie) und Backoff (`next_attempt_at`, 1 min bis 6 h) sichtbar und `resume_chat_deletions` im stündlichen Retention-Loop beendet ihn; quittiert wird erst nach vollständiger Kaskade. Kann der Auftrag nicht angelegt werden, bleibt das Bookmark bestehen und die Antwort ist 500 (nichts gelöscht, erneut versuchbar). Saves akzeptieren eine validierte stabile `bookmarkId`, sodass alle Turns einer laufenden Unterhaltung dasselbe Sidebar-Bookmark aktualisieren; Legacy-Saves ohne ID bleiben fragebasiert. `previous_question`/`previous_turn` bleiben als kompatibler Ein-Turn-Fallback für alte Bookmarks ohne Chat-Bindung erhalten. Alle Bookmark-Antworten sind wie `/chats` `private, no-store`. Die Save-Endpunkte liefern weiterhin den zusammengeführten Datensatz zurück; der Client reduziert ihn sofort auf Listenmetadaten und hält höchstens das geöffnete Detail im Cache. Der seltene Browser-Fallback sendet nur IDs plus kleine Legacy-Texte, nutzt `keepalive`, wiederholt Netz-/408-/425-/429-/5xx-Fehler begrenzt und zeigt einen endgültigen Fehler dedupliziert verständlich an. |
+| `bookmarks.py` | `GET /bookmarks` liefert ausschließlich kompakte Metadaten, standardmäßig 30 Einträge und einen opaken Cursor; `GET /bookmarks/{id}` liefert owner-geschützt den Vollinhalt. Sidebar-Name: `title` ist die erste Frage (`query` die letzte); seit 2026-10-03 benennt `POST /bookmarks/{id}/title` die Unterhaltung einmalig ChatGPT-artig mit 2–6 Wörtern (`app/services/chat_titles.py`: ein strukturierter Call über `query_engine_json` mit dem Chat-Memory-Modell der ersten verfügbaren Familie, Gemini zuerst, auf Betreiberkosten; MOCK_LLM liefert `Topic: …`). Der Titel landet zuerst auf dem Chat-Dokument (Agent- und Follow-up-Saves kopieren dessen `title`), dann mit `title_source: "generated"` auf dem Bookmark; `persistence_guard.write_bookmark` verwirft in derselben Transaktion jedes spätere `title` ohne `title_source`, damit Modell-/Consensus-Saves desselben Laufs den Namen nicht zurücksetzen. Scheitert der Call, bleibt die Frage der Name (`status: "skipped"`, nie ein Fehler); fehlende Bookmarks werden nicht neu angelegt. Listenmetadaten tragen `title_source`. Chat-Bookmarks referenzieren additiv `chat_id`/letzte `turn_id`; `GET /bookmarks/{id}/conversation` paginiert dafür die vollständigen owner-gebundenen completed Turns aus `ChatStore`, statt den wachsenden Transcript in ein Bookmark-Dokument zu kopieren; der Normalpfad läuft über `ChatStore.list_turn_details` (Chat einmal pro Seite geprüft, Modellantworten je Turn mit **einer** Query) und benötigt damit `2 + N` SDK-Aufrufe pro Seite. Abgerechnet werden weiterhin Dokument-Reads: Chat + gelesene Turn-Dokumente (inklusive Pagination-Sentinel) + alle zurückgegebenen Antwortdokumente; eine Query ist nicht ein einzelner Dokument-Read. Scheitert nur dieser optimierte Collection-Read, fällt der Endpoint korrektheitshalber auf `list_turns` + owner-gebundene Turn-Details zurück, statt den Browser auf zwei Bookmark-Snapshots zu reduzieren. Der Endpunkt ist bewusst ein synchrones `def`, damit die blockierenden Reads im Threadpool statt auf dem Event-Loop laufen. `/bookmark` (POST/DELETE), `/bookmark/consensus` sowie `POST /bookmark/consensus/share-result` erhalten Speichern, Löschen und die sichere Share-/Watch-Rehydration. Consensus-Inhalte werden aus einem owner-gebundenen Pending Result oder completed Turn serverseitig materialisiert, nicht aus frei behaupteten Clientfeldern; die alten, ignorierten Client-Kopien bleiben für gecachte Clients im Schema, werden aber nicht mehr formvalidiert und können den autoritativen Save daher nicht mit 422 blockieren. Quellenlisten werden nicht nach Anzahl gekürzt; die bestehenden Dokument- und Request-Bytebudgets begrenzen den Save ausdrücklich. `persist_authoritative_consensus_bookmark` ist der gemeinsame Writer für den primären `/consensus`-Abschluss und den idempotenten `/bookmark/consensus`-Fallback. Der breite slowapi-IP-Schutz sitzt vor der Tokenprüfung; die eigentlichen Modell- und Consensus-Save-Budgets gelten danach pro UID, damit der interne Preset-Fan-out nicht mit fremden Nutzern an einem Proxy-/NAT-Bucket konkurriert. Persistent gelten höchstens 250 Bookmarks, 750 kB je Dokument und 25 MB geschätztes Gesamtbudget pro UID. `DELETE /bookmark` liest die Chat-Bindung und legt **vor** dem Entfernen des Bookmarks per `ChatStore.request_chat_deletion` in einer Transaktion Tombstone (`status=deleting`), einmaligen Zählerabzug und einen dauerhaften Auftrag `chat_deletion_jobs/{sha256(uid:chat)[:40]}` an; erst danach wird das Bookmark gelöscht und `run_chat_deletion` versucht die Kaskade sofort. Scheitert sie (auch zwischen zwei Batches) oder stirbt der Prozess, bleibt der Auftrag mit `attempts`, `last_error` (nur Kategorie) und Backoff (`next_attempt_at`, 1 min bis 6 h) sichtbar und `resume_chat_deletions` im stündlichen Retention-Loop beendet ihn; quittiert wird erst nach vollständiger Kaskade. Kann der Auftrag nicht angelegt werden, bleibt das Bookmark bestehen und die Antwort ist 500 (nichts gelöscht, erneut versuchbar). Saves akzeptieren eine validierte stabile `bookmarkId`, sodass alle Turns einer laufenden Unterhaltung dasselbe Sidebar-Bookmark aktualisieren; Legacy-Saves ohne ID bleiben fragebasiert. `previous_question`/`previous_turn` bleiben als kompatibler Ein-Turn-Fallback für alte Bookmarks ohne Chat-Bindung erhalten. Alle Bookmark-Antworten sind wie `/chats` `private, no-store`. Die Save-Endpunkte liefern weiterhin den zusammengeführten Datensatz zurück; der Client reduziert ihn sofort auf Listenmetadaten und hält höchstens das geöffnete Detail im Cache. Der seltene Browser-Fallback sendet nur IDs plus kleine Legacy-Texte, nutzt `keepalive`, wiederholt Netz-/408-/425-/429-/5xx-Fehler begrenzt und zeigt einen endgültigen Fehler dedupliziert verständlich an. |
 | `share.py` | `/api/share` (POST), `/api/share/{id}` (DELETE), `/api/my/shares` (neueste zuerst, in Firestore sortiert über Index `shares(owner_uid, created_at desc)`, `?cursor=`, Antwort mit `has_more`/`next_cursor`; der Dialog zeigt einen Hinweis, wenn ältere Links fehlen), `/api/share/{id}/report`, öffentliche Seite `/s/{slug_id}`, `sitemap-shares.xml`. |
 | `watch.py` | Consensus Watch: `/api/watch` (POST), `/api/watch/goal-suggestions` (POST, bis zu drei beobachtbare Ziele zur Frage über einen Judge-Call, 6/min; ein Fehler liefert eine leere Liste), `/api/my/watches` (inkl. Original-Baseline-Score, kompakter History mit Drift-Signal je Watch, `resolution`, `last_probe` und autoritativer Plan-/Active-/Resolved-Metadaten für die UI), `/api/watch/{id}` (PATCH/DELETE; `status=active` auf einer abgeschlossenen Watch braucht ein neues oder leeres Ziel), Morning-Brief-Einstellungen `/api/my/watch-brief` (GET/PATCH), nutzergebundene Telegram-Verbindung `/api/my/telegram` (GET/DELETE), `/api/my/telegram/link|test` (POST) und der per Secret-Header geschützte `/api/telegram/webhook`; außerdem öffentliche, HMAC-signierte `/watch/unsubscribe`- und `/watch/brief/unsubscribe`-Links. |
 | `topics.py` | Eigenständige öffentliche Topic-Ticker: Hub `/topics`, versionierte Detailseite `/topics/{slug}` (`?version=<run_id>`, rendert Position Map + Agreement-Kurve über `services/history_view.py` — dieselbe Darstellung wie die Watch-Seiten, bewusst nur bis zum gewählten Snapshot), `sitemap-topics.xml`, Double-Opt-in-Follow unter `/api/topics/{slug}/follow` + `/topic-follow/confirm|unsubscribe`; der Versand-Claim ist persistent gehasht und besitzt Resend-, Empfänger- und globales Stundenbudget. Der Favicon-Proxy ist auf 30 Requests/Minute, acht parallele Requests, einen eigenen Vierer-Executor, zwei Sekunden Upstream-Zeit sowie einen 2.000-Einträge-LRU einschließlich 24-h-Negativcache begrenzt. Admin-CRUD liegt unter `/api/admin/topics`. Ein leeres `POST /api/admin/topics/{id}/runs` führt den konfigurierten Research-/Consensus-Run aus; ein Payload mit `consensus_md` bleibt als expliziter Legacy-Import verfügbar. |
@@ -245,7 +250,7 @@ als Auslöser, verlangen aber eine Frage, die das Ereignis überlebt: ob eine
 Behauptung hält, nicht ob etwas existiert oder wann es erscheint. Über die
 Veröffentlichung entscheidet danach der Judge: Runs, deren Modelle sich einig
 sind, werden bezahlt und trotzdem verworfen.
-| `admin.py` | `/api/admin/shares` (Filter `reported` = `reports_count > 0` nach Report-Anzahl bzw. `all` = neueste zuerst, jeweils in der Firestore-Abfrage vor dem Limit; `cursor`/`limit`, Antwort mit `has_more`/`next_cursor`, UI mit „Load more“), `/api/admin/shares/{id}/moderate`, `DELETE /api/admin/shares/{id}` (sofortiger Hard-Delete inklusive Watch/History/Followern), `/api/admin/models` (GET/POST; enthält auch die validierte `memory_edit`-Konfiguration), Publisher-Steuerung unter `/api/admin/publisher-config` (GET/PUT), API-Key-Ausgabe/-Liste/-Widerruf unter `/api/admin/api-keys`, Kontostufen unter `/api/admin/account-tier` (GET Lookup per UID/E-Mail, PUT setzen) und `/api/admin/account-tiers` (Liste + Audit), `/api/admin/watches` (cursor-paginierte Diagnose-Liste mit `limit`, `next_cursor`, `has_more`; im API-Tab zusätzlich als gefilterte Publisher-Watch-Seitenliste), `/api/admin/watches/{id}/run` (fällig stellen + Scheduler sofort wecken), `/api/admin/watches/test-email` (SMTP-Test an die verifizierte Admin-Adresse), read-only SEO-Übersicht `GET /api/admin/seo`, sanitisierten Live-Check `POST /api/admin/seo/check`, manueller Search-Console-Lauf `POST /api/admin/seo/collect` sowie speicherbare read-only Judgements per `POST /api/admin/seo/pages/{page_id}/recommendation` und optional `.../content-judge`, `/api/admin/benchmark/runs` (Liste) + `/api/admin/benchmark/runs/{run_id}` (Detail, liest Firestore-publizierte kompakte Benchmark-Reports mit lokalem Disk-Fallback über `benchmark/report_reader.py`). Alle hinter `is_user_admin`. |
+| `admin.py` | `/api/admin/shares` (Filter `reported` = `reports_count > 0` nach Report-Anzahl bzw. `all` = neueste zuerst, jeweils in der Firestore-Abfrage vor dem Limit; `cursor`/`limit`, Antwort mit `has_more`/`next_cursor`, UI mit „Load more“), `/api/admin/shares/{id}/moderate`, `DELETE /api/admin/shares/{id}` (sofortiger Hard-Delete inklusive Watch/History/Followern), `/api/admin/models` (GET/POST; enthält auch die validierte `memory_edit`-Konfiguration), Publisher-Steuerung unter `/api/admin/publisher-config` (GET/PUT), API-Key-Ausgabe/-Liste/-Widerruf unter `/api/admin/api-keys`, Kontostufen unter `/api/admin/account-tier` (GET Lookup per UID/E-Mail, PUT setzen) und `/api/admin/account-tiers` (Liste + Audit), `/api/admin/watches` (cursor-paginierte Diagnose-Liste mit `limit`, `next_cursor`, `has_more`; im API-Tab zusätzlich als gefilterte Publisher-Watch-Seitenliste), `/api/admin/watches/{id}/run` (fällig stellen + Scheduler sofort wecken), `/api/admin/watches/test-email` (SMTP-Test an die verifizierte Admin-Adresse), read-only SEO-Übersicht `GET /api/admin/seo` (liest jede Seite samt 28 Tagesmetriken, also Tausende Firestore-Reads: `admin.js` lädt sie seit 2026-10-03 erst beim ersten Öffnen des SEO-Tabs, `ensureSeoOverview`; die beiden Watch-Listen teilen sich beim Laden einen `/api/admin/watches`-Request), sanitisierten Live-Check `POST /api/admin/seo/check`, manueller Search-Console-Lauf `POST /api/admin/seo/collect` sowie speicherbare read-only Judgements per `POST /api/admin/seo/pages/{page_id}/recommendation` und optional `.../content-judge`, `/api/admin/benchmark/runs` (Liste) + `/api/admin/benchmark/runs/{run_id}` (Detail, liest Firestore-publizierte kompakte Benchmark-Reports mit lokalem Disk-Fallback über `benchmark/report_reader.py`). Alle hinter `is_user_admin`. |
 
 Weekly-SEO-Admin-Erweiterung: `GET /api/admin/seo/review`, `PUT
 /api/admin/seo/review/config` und `POST /api/admin/seo/review/run` liefern bzw.
@@ -539,7 +544,8 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   Modellantworten und den oeffentlichen Model Pulse: formgetreue Zeilen,
   verzögertes Einblenden, ruhiger Transform-Shimmer, statisch bei Reduced Motion.
   Die Chatlisten-Skeletons bleiben in `firebase.js` bis zur erfolgreichen
-  Metadatenantwort erhalten; Fehler/Logout/Watchdog raeumen sie weiter ab.
+  Metadatenantwort erhalten und blenden dann in die echten Zeilen über
+  (`revealLoadedBookmarks`); Fehler/Logout/Watchdog raeumen sie weiter ab.
   Der Antwortleser ersetzt Platzhalter mit dem ersten Text oder einem terminalen
   Zustand; Statuslabels bleiben sichtbar, die leere Ladeflaeche ist `aria-busy`.
 - **`app-state.js`** — einzige Schreibschnittstelle für laufbezogene Frage,
@@ -1417,6 +1423,18 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   nach einer schmalen Zwischenbreite kein ueberhohes leeres Feld stehen.
   `tests/js/composer-autosize.test.mjs` prueft diese Ereignisgrenzen; der Smoke-
   Browserfall prueft echtes Layout inklusive der abgeschlossenen Transition.
+- **Hero ↔ Thread gleitet (2026-10-03)** — `.input-section` hat keine
+  `transform`-Transition mehr: die Hero-Zentrierung `translateY(… - 50%)` liess
+  das Feld bei jeder Höhenänderung und beim Ausstieg von falscher Stelle
+  gleiten (beim Ausstieg von unterhalb des Bildschirms herauf).
+  `App.glideComposer(change)` (app-core.js) misst das Feld vor dem
+  Klassenwechsel, liest die neue Lage im nächsten Frame und animiert die
+  Differenz per WAAPI-`translate` (420 ms); `exitHeroMode`,
+  `enterDirectComparisonView` und „New comparison“ nutzen es. Die Agent-Demo
+  tippt im Hero und verlässt ihn erst beim simulierten Absenden.
+  `html { scrollbar-gutter: stable }` (shell.css) hält die Spalte beim
+  Erscheinen der Scrollleiste still; die Agent-Spalte zentriert über `100%`
+  statt `100vw` und steht damit exakt wie der normale Thread.
 - **Thread-Layout: Composer unten (2026-07-27)** — ab dem ersten Lauf liest
   sich `/app` als Thread: Frage oben, Lauf, Antwort, Modellantworten, Composer
   am unteren Bildrand. Das DOM behaelt die Reihenfolge Input → Consensus →
@@ -1914,6 +1932,20 @@ Der Configuration-Tab liegt im inkludierten Partial `partials/admin_prompt_confi
   Nutzericon-Menü im Sidebar-Footer (Avatar, Name/Plan, „Shared links“ und
   direkt darunter „Watched“). Ein geöffnetes Bookmark beendet den Hero-
   Leerzustand sofort. Bookmark-
+  Jeder vom Server bestätigte Save (`upsertBookmarkMeta`, nicht das Laden der
+  Liste) fordert für ein Bookmark ohne `title_source: "generated"` einmal pro
+  Sitzung `POST /bookmarks/{id}/title` an (`requestBookmarkTitle`) und blendet
+  den Namen in Sidebar-Zeile, Run-Zeile und `bookmarksData` weich ein
+  (`applyBookmarkTitle`); ältere Unterhaltungen bekommen ihn beim nächsten
+  Turn. Die Sidebar zeigt den ganzen Namen, gekürzt nur noch per CSS-Ellipse
+  (vorher hart nach fünf Wörtern mit „...“). Die erste Listenseite übernimmt
+  vom Skeleton an Ort und Stelle (`revealLoadedBookmarks`): das Skeleton
+  blendet absolut positioniert aus, die ersten 16 Zeilen blenden gestaffelt
+  ein. `onIdTokenChanged` richtet eine Sitzung (UID + Auth-Generation) nur
+  einmal ein; der stündliche Token-Refresh erneuert nur noch das
+  Session-Cookie (`/confirm-registration`) statt Status, Usage, Watches und
+  Account-Menü neu zu laden. `/usage` läuft beim Start nur noch, wenn
+  `/user_status` scheiterte (gleiche Nutzlast).
   Die paginierte Liste hält nur kompakte Metadaten in `window.bookmarksData`;
   Vollinhalte kommen erst beim Öffnen über `GET /bookmarks/{id}` und nur das
   aktuell geöffnete Detail bleibt im Cache. Suche lädt bei Bedarf weitere
@@ -1976,9 +2008,9 @@ Der Configuration-Tab liegt im inkludierten Partial `partials/admin_prompt_confi
   relevanten Await Usage sowie Bookmark-List/Detail/Conversation/Save/Delete;
   eine zusätzliche Bookmark-View-Epoch macht die letzte Auswahl autoritativ.
   Listenfehler zeigen einen eigenen Retry-Zustand statt einer scheinbar leeren
-  Liste. `/usage` synchronisiert neben dem Tokenkonto auch den Tierstatus und kann so
-  einen transient fehlgeschlagenen `/user_status`-Startcheck in derselben
-  Sitzung heilen. Der dynamische Account-Menü-Außenklick-Listener wird bei
+  Liste. `/usage` synchronisiert neben dem Tokenkonto auch den Tierstatus und heilt
+  so einen transient fehlgeschlagenen `/user_status`-Startcheck in derselben
+  Sitzung; beim Start läuft es nur noch in diesem Fehlerfall. Der dynamische Account-Menü-Außenklick-Listener wird bei
   jedem Token-Callback entfernt, bevor ein neuer gebunden wird.
 - **`static/demo.js`** (ES-Modul) — Demo-Flow (`runDemoFlow`, im Agent-Modus
   `runAgentDemoFlow` auf der echten Agent-Oberfläche) für die „Demo"-Query;
@@ -2373,7 +2405,10 @@ Kopie den Verweis sofort. `sameBinding` in `source-verification.js` prüft
 zusätzlich `basis_hash`. `context.mark` baut das markierte DOM nur bei geändertem Text,
 Check, Quellen oder `_agentRenderSerial` neu (sonst würde jede Live-Aktualisierung
 die Animation neu starten); `revealMarks` setzt eine laufende Animation nach einem
-neuen DOM über negative Verzögerungen fort. `query-send.js::setSendButtonRunning`
+neuen DOM über negative Verzögerungen fort — seit 2026-10-03 auch, wenn der
+neue Render selbst kein `reveal` verlangt (z. B. `reveal: false` einer
+eingetroffenen Quellenprüfung), solange derselbe `answer_hash` noch im
+Reveal-Fenster ist; vorher standen dann alle Marken schlagartig da. `query-send.js::setSendButtonRunning`
 tauscht das Icon nur bei echtem Zustandswechsel (`data-icon`) und setzt beim Start
 eines Laufs einmal `is-launching` (drei Bögen fächern aus, `shell.css`). `agent-chat.js::project` rendert den Review schon während des
 Laufs, sobald er `succeeded`/`partial` ist (Quellenprüfung darf weiterlaufen);
@@ -3272,6 +3307,17 @@ Shares, Retention und Accountlöschung. Es gibt keine automatische Migration
 oder Wiederholung alter Ergebnisse. Fremde BYOK-Queues können nicht auf den
 aktuellen Worker umgebogen werden; `/resume` liefert nach Ownerprüfung HTTP 409.
 Die physische Trennung schützt auch vor alten Workern ohne Versionsprüfung.
+
+Polling (seit 2026-10-03): Firestore berechnet jede Query, auch eine leere.
+Vier Worker mit je einem Scan alle 2 s kosteten ~170k Reads am Tag pro
+Prozess (lokale Dev-Server eingeschlossen). Jetzt scannt im Leerlauf nur ein
+„Scout“-Worker, mit Backoff von `IDLE_POLL_MIN` 2 s bis `IDLE_POLL_MAX` 30 s;
+`submit_source_check`/`resume_source_check` wecken per `wake_workers()` alle
+vier sofort, gefundene Arbeit hält alle beschäftigt, bis die Queue leer ist.
+Retries mit Verzögerung (15/31 s) werden spätestens beim nächsten Scout-Scan
+übernommen. Der Worker-Heartbeat (`source_check_workers/{id}`) wird nur noch
+geschrieben, solange dieser Prozess einen BYOK-Schlüssel hält (oder erzwungen
+bei Submit/Resume mit eigenem Key): nur dafür liest `claim()` ihn.
 
 Neue Chat-/Bookmark-/Share-Snapshots speichern den v4-Jobverweis;
 Wiederöffnen startet keinen neuen Judge. Owner-Polling bleibt paginiert und
@@ -5224,6 +5270,9 @@ LLM-Aufrufe verwenden keinen Gemini-Service-Account und kein Google ADC; das
 alte Gemini-ADC-JSON ist entfernt.
 
 **Umgebungsvariablen** (`.env`, Beispiel in `.env.example`):
+- Hintergrund-Writer lokal: `LOCAL_BACKGROUND_JOBS=1` startet auf einem
+  Nicht-Produktionsserver die sonst nur in Produktion laufenden Scheduler,
+  Cleanups und Startup-Backfills (§2 Lifespan); unter `MOCK_LLM=1` wirkungslos.
 - Request-Schutz: `MAX_REQUEST_BODY_BYTES` (Default 16 MiB, erlaubter Bereich
   1 KiB bis 32 MiB) begrenzt den vollständigen HTTP-Body vor Framework-Parsing.
 - Firebase Web-Config: `FIREBASE_API_KEY`, `FIREBASE_AUTH_DOMAIN`,
@@ -6339,7 +6388,13 @@ nicht gesendet: Entwurf/Zitat kommen zurück, keine Recovery, kein „Failed“-
 Sidebar-Eintrag (Folgefrage: Zeile kehrt zum gespeicherten Chat zurück).
 `agent_token_reservation`/`agent_tokens_exhausted` erhalten Klartext mit
 Rücksetzzeit in Ortszeit und Aktionen; ohne Antworttext kehrt die Frage in den
-Composer zurück. Budget-Polling (60 s) läuft nur im Agent-Modus.
+Composer zurück. Budget-Polling läuft nur im Agent-Modus: alle 5 min, bei
+Fokus/Sichtbarkeit nur, wenn der letzte bestätigte Kontostand (Fetch oder
+Laufmeldung) älter als 60 s ist oder der letzte Refresh scheiterte.
+Serverseitig fragt `agent_quota.snapshot` laufende Delegations-Wurzeln nur
+alle `RECOVERY_QUIET_S` (120 s) pro Nutzer erneut ab, wenn keine lief, und
+merkt sich ein geschlossenes leeres Vortagsblatt (`PREVIOUS_DAY_GRACE` 2 h nach
+Mitternacht) für 10 min.
 
 **Wartet auf Nutzer.** Nach Laufende zeigt `#agentReviewNotice` über dem
 Composer „n items need your review“ aus `App.agentGoogle?.pendingCount?.(chatId)`

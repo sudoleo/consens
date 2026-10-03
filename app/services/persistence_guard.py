@@ -169,6 +169,18 @@ def _bookmark_bootstrap(bookmarks) -> tuple[int, int]:
     return count, total_bytes
 
 
+def _keep_generated_title(current: dict, patch: dict) -> dict:
+    """A generated sidebar title (chat_titles.py) outlives later saves.
+
+    Every save of a run merges the opening question as ``title`` again; the
+    title request can land between them. Checked inside the write so no
+    interleaving can put the question back.
+    """
+    if current.get("title_source") == "generated" and "title" in patch and "title_source" not in patch:
+        return {key: value for key, value in patch.items() if key != "title"}
+    return patch
+
+
 def write_bookmark(*, uid: str, doc_ref, patch: dict, db, current_guard=None, transaction_guard=None) -> dict:
     """Merge one bookmark while enforcing persistent count/byte quotas."""
     if not hasattr(db, "transaction") and not hasattr(db, "run_transaction"):
@@ -179,7 +191,7 @@ def write_bookmark(*, uid: str, doc_ref, patch: dict, db, current_guard=None, tr
         current = current_snapshot.to_dict() or {} if current_snapshot.exists else {}
         if current_guard is not None and not current_guard(current):
             raise PersistenceConflictError("Bookmark changed during the operation.")
-        doc_ref.set(patch, merge=True)
+        doc_ref.set(_keep_generated_title(current, patch), merge=True)
         return _get(doc_ref).to_dict() or {}
     bookmarks = db.collection("users").document(uid).collection("bookmarks")
     usage_ref = db.collection(USAGE_COLLECTION).document(_owner_key("bookmarks", uid))
@@ -194,12 +206,13 @@ def write_bookmark(*, uid: str, doc_ref, patch: dict, db, current_guard=None, tr
         current = current_snapshot.to_dict() or {} if current_snapshot.exists else {}
         if current_guard is not None and not current_guard(current):
             raise PersistenceConflictError("Bookmark changed during the operation.")
+        effective = _keep_generated_title(current, patch)
         usage_snapshot = _get(usage_ref, tx)
         usage = usage_snapshot.to_dict() or {} if usage_snapshot.exists else {}
         count = int(usage.get("bookmark_count") or bootstrap[0])
         total = int(usage.get("bookmark_bytes") or bootstrap[1])
         old_size = int(current.get("_quota_bytes") or estimate_document_bytes(current)) if current else 0
-        merged = _deep_merge(current, patch)
+        merged = _deep_merge(current, effective)
         merged.pop("_quota_bytes", None)
         new_size = estimate_document_bytes(merged)
         if new_size > MAX_BOOKMARK_DOCUMENT_BYTES:
@@ -210,7 +223,7 @@ def write_bookmark(*, uid: str, doc_ref, patch: dict, db, current_guard=None, tr
             raise PersistenceLimitError("bookmark_count_limit", "Bookmark limit reached.")
         if new_total > MAX_BOOKMARK_BYTES_PER_USER:
             raise PersistenceLimitError("bookmark_storage_limit", "Bookmark storage limit reached.")
-        patch_with_size = dict(patch)
+        patch_with_size = dict(effective)
         patch_with_size["_quota_bytes"] = new_size
         _set(tx, doc_ref, patch_with_size, merge=True)
         _set(tx, usage_ref, {

@@ -35,6 +35,14 @@ _heartbeat_lock = threading.Lock()
 _heartbeats = {}
 _scan_lock = threading.Lock()
 _scans = {}
+# Idle polling (Firestore bills every query, an empty one too). Four workers
+# scanning every 2s cost ~170k reads a day per process, local dev servers
+# included. Now one worker scans an idle queue, backing off to IDLE_POLL_MAX;
+# a submission in this process wakes all of them at once, and found work
+# keeps all four busy until the queue is empty again.
+IDLE_POLL_MIN = 2.0
+IDLE_POLL_MAX = 30.0
+_wake = {'loop': None, 'event': None}
 
 
 def repository():
@@ -79,10 +87,29 @@ def forget_key(job_id):
         _keys.pop(job_id, None)
 
 
+def wake_workers():
+    """Let the workers scan now; callable from request threads."""
+    loop, event = _wake['loop'], _wake['event']
+    if loop is None or event is None:
+        return
+    try:
+        loop.call_soon_threadsafe(event.set)
+    except RuntimeError:
+        pass  # The loop has shut down.
+
+
 def _refresh_worker(repo, *, force=False):
     # The independent heartbeat clears idle credentials even without another
     # submission, and before any database failure can interrupt the refresh.
     purge_expired_keys()
+    # The heartbeat only tells other processes that this one still holds an
+    # owner's key (claim() pauses an own-key job whose process is gone).
+    # Without keys there is nothing to vouch for, and the write every 10s
+    # cost ~8.6k writes a day per process.
+    with _keys_lock:
+        holds_keys = bool(_keys)
+    if not force and not holds_keys:
+        return
     with _heartbeat_lock:
         last = _heartbeats.get((id(repo), WORKER_ID), float('-inf'))
         if force or time.monotonic() - last >= 10:
@@ -100,6 +127,7 @@ def resume_source_check(job_id, uid, key):
     _refresh_worker(repo, force=True)
     remember_key(job_id, uid, key)
     resumed = repo.resume(job_id, uid, worker_id=WORKER_ID)
+    wake_workers()
     # A running package retains its credential process until the lease ends.
     # A POST served by another node must not interrupt that in-flight call.
     if resumed.get('credential_worker_id') != WORKER_ID or resumed['status'] in ('complete', 'partial', 'skipped', 'failed'):
@@ -164,6 +192,7 @@ def submit_source_check(*, question, consensus, sources, keys, resolved_question
         if key:
             job = resume_source_check(job['job_id'], context['uid'], key)
     record_metric('source_check', 'accepted', processed=job['package_count'])
+    wake_workers()
     # The response is a small durable reference. The paginated endpoint exposes
     # every planned pair, including ones that are still waiting for a worker.
     return {**job['snapshot'], 'findings': [], 'documents': [], 'sources': []}
@@ -434,14 +463,35 @@ def process_one(repo=None):
 
 async def source_check_worker_loop():
     from app.services.llm.mock_llm import mock_llm_enabled
-    async def worker():
+    busy = asyncio.Event()
+    _wake.update(loop=asyncio.get_running_loop(), event=busy)
+    idle_delay = IDLE_POLL_MIN
+
+    async def worker(scout):
+        nonlocal idle_delay
         while True:
-            if not mock_llm_enabled():
-                worked = await asyncio.to_thread(process_one)
-                task_succeeded('source-check-workers')
+            if mock_llm_enabled():
+                await asyncio.sleep(IDLE_POLL_MIN)
+                continue
+            if scout:
+                # The scout looks at an idle queue now and then; a wake-up
+                # (submission, resume, found work) cuts the wait short.
+                try:
+                    await asyncio.wait_for(busy.wait(), idle_delay)
+                except asyncio.TimeoutError:
+                    pass
             else:
-                worked = False
-            await asyncio.sleep(.1 if worked else 2)
+                await busy.wait()
+            worked = await asyncio.to_thread(process_one)
+            task_succeeded('source-check-workers')
+            if worked:
+                idle_delay = IDLE_POLL_MIN
+                busy.set()
+                await asyncio.sleep(.1)
+            else:
+                busy.clear()
+                if scout:
+                    idle_delay = min(idle_delay * 2, IDLE_POLL_MAX)
     # No unbounded executor queue: each loop submits at most one package.
     async def heartbeat():
         while True:
@@ -452,7 +502,7 @@ async def source_check_worker_loop():
                     logging.warning('Source worker heartbeat failed category=%s', safe_exception(exc))
                     record_metric('source_queue', 'heartbeat', outcome='failure')
             await asyncio.sleep(10)
-    workers = [asyncio.create_task(worker()) for _ in range(4)]
+    workers = [asyncio.create_task(worker(index == 0)) for index in range(4)]
     # Independent liveness continues while every package worker awaits a model.
     workers.append(asyncio.create_task(heartbeat()))
     try:

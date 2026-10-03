@@ -668,8 +668,12 @@
             input.disabled = false;
             input.dispatchEvent(new Event("input", { bubbles: true }));
           }
-          document.body.classList.add("is-hero");
-          window.syncHeroResponseAccess?.();
+          const enterHero = () => {
+            document.body.classList.add("is-hero");
+            window.syncHeroResponseAccess?.();
+          };
+          if (window.App?.glideComposer) window.App.glideComposer(enterHero);
+          else enterHero();
           window.App?.setAppTitle?.();
           window.App?.setThreadQuestion?.("");
 

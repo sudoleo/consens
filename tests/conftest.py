@@ -54,6 +54,17 @@ def _default_token_account_tier(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _fresh_token_account_read_throttles():
+    """agent_quota remembers per process which extra reads found nothing.
+    Keyed by id(db), a later test's fake could inherit an earlier one's."""
+    from app.services import agent_quota
+
+    agent_quota._quiet_until.clear()
+    yield
+    agent_quota._quiet_until.clear()
+
+
+@pytest.fixture(autouse=True)
 def _neutral_user_memory_profile():
     """Jeder authentifizierte /ask_* liest jetzt das User-Memory-Profil.
 

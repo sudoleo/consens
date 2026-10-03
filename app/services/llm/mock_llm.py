@@ -204,6 +204,11 @@ def _mock_engine_output(prompt: str, json_mode: bool) -> str:
                     "condition_evidence": [],
                 })
             return json.dumps(change)
+        if "<CHAT_TITLE_QUESTION>" in prompt:
+            # Sidebar-Titel (chat_titles.py): deterministisch aus der Frage.
+            question = prompt.split("<CHAT_TITLE_QUESTION>", 1)[1].split("</CHAT_TITLE_QUESTION>", 1)[0]
+            words = question.split()[:4]
+            return json.dumps({"title": "Topic: " + " ".join(words).rstrip("?.!,")})
         if '"goal_suggestions"' in prompt:
             return json.dumps({"goal_suggestions": [
                 "It is officially announced", "A firm date is published",

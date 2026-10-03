@@ -324,7 +324,8 @@ function clearAuthenticatedUiState() {
 }
 
 async function checkUserStatusOnLoad(user, token, generation) {
-  if (!user || !token) return;
+  if (!user || !token) return false;
+  let loaded = false;
 
   try {
     const response = await fetch("/user_status", {
@@ -340,6 +341,7 @@ async function checkUserStatusOnLoad(user, token, generation) {
       const data = await response.json();
       if (!isCurrentAuthenticatedUser(user.uid, generation)) return;
 
+      loaded = true;
       // 1. Konto sofort zeigen: das Tokenkonto des Tages.
       window.App.state.set("isUserPro", data.is_pro, "userTier");
       window.App.tokenBudget?.apply?.(data.token_budget, { uid: user.uid, authoritative: true });
@@ -394,7 +396,13 @@ async function checkUserStatusOnLoad(user, token, generation) {
     window.App.agentAccess = { uid: user.uid, allowed: false };
     window.App.agentChat?.render?.();
   }
+  return loaded;
 }
+
+// The signed-in user object (with its uid + auth generation) whose UI this
+// tab already set up. Firebase keeps the same User instance across its token
+// refreshes; a new sign-in brings a new one.
+let initializedAuthSession = null;
 
 onIdTokenChanged(auth, async (user) => {
   const loginContainer = document.getElementById("loginContainer");
@@ -526,11 +534,20 @@ onIdTokenChanged(auth, async (user) => {
       console.error("Error during confirm-registration:", err);
     }
 
-    await checkUserStatusOnLoad(user, token, generation);
+    // Firebase refreshes the ID token hourly and fires this handler again
+    // for the same session. The session cookie above needs the new token;
+    // status, usage, bookmarks, watches and the account menu are current.
+    // Reloading them cost Firestore reads every hour in every open tab and
+    // redrew the account menu under the user's pointer.
+    const sessionKey = { user, key: `${user.uid}:${generation}` };
+    if (initializedAuthSession?.user === user && initializedAuthSession.key === sessionKey.key) return;
+
+    const statusLoaded = await checkUserStatusOnLoad(user, token, generation);
     if (!isCurrentAuthenticatedUser(user.uid, generation)) return;
 
-    // 2) Usage laden
-    fetchUsageData(token, user.uid, generation);
+    // 2) /usage carries the same tier and token account as /user_status; it
+    // is only the second chance when that request failed.
+    if (!statusLoaded) fetchUsageData(token, user.uid, generation);
 
     // 3) Bookmarks einmal pro Login laden
     if (!bookmarksLoaded) {
@@ -654,10 +671,12 @@ onIdTokenChanged(auth, async (user) => {
       }
     };
     document.addEventListener("click", accountMenuDocumentClickHandler);
+    initializedAuthSession = sessionKey;
     publishAuthState(user.uid);
 
     } else {
         // Cleanup bei Logout
+        initializedAuthSession = null;
         hideEmailVerificationGate();
         resetLoadedRunAfterLogout();
         clearAuthenticatedUiState();
@@ -1216,13 +1235,11 @@ async function recordModelVote(model, type, resultId = window.lastShareResultId)
 
 window.recordModelVote = recordModelVote;
 
-// Hilfsfunktion zum Kürzen des Textes auf maximal 5 Wörter
-function truncateText(text, maxWords = 5) {
-  const words = text.split(' ');
-  if (words.length > maxWords) {
-    return words.slice(0, maxWords).join(' ') + '...';
-  }
-  return text;
+// The sidebar shows the whole name; the row's CSS ellipsis cuts it where the
+// space ends. The former five-word cut ("Our house is from 1978...")
+// shortened even names that fitted.
+function bookmarkLabelText(text) {
+  return String(text || "").replace(/\s+/g, " ").trim();
 }
 
 function bookmarkDisplayQuestion(bookmark) {
@@ -1389,6 +1406,7 @@ function bookmarkMeta(bookmark) {
     id: bookmark?.id || "",
     query: bookmarkDisplayQuestion(bookmark),
     title: bookmarkDisplayTitle(bookmark),
+    title_source: bookmark?.title_source === "generated" ? "generated" : "",
     mode: bookmark?.mode || "",
     timestamp: bookmark?.timestamp || null,
     has_consensus: bookmark?.responses && typeof bookmark.responses === "object"
@@ -1404,7 +1422,8 @@ function upsertBookmarkMeta(bookmark, {
   prepend = true,
   runId = null,
   writeType = "model",
-  requestUid = auth.currentUser?.uid || null
+  requestUid = auth.currentUser?.uid || null,
+  nameIt = true
 } = {}) {
   const meta = bookmarkMeta(bookmark);
   if (!meta.id) return;
@@ -1432,6 +1451,58 @@ function upsertBookmarkMeta(bookmark, {
     addBookmarkToDOM(meta, { prepend });
   }
   if (runId) window.App.bookmarkUi?.finalizeRun?.(window.App.runRegistry?.get?.(runId));
+  // A save confirmed by the server names its conversation once; the list
+  // load never does (older chats keep their question as the name).
+  if (nameIt && meta.title_source !== "generated") requestBookmarkTitle(meta.id, requestUid);
+}
+
+// Asks the server for a short topic title (chat_titles.py) and swaps it in
+// when it arrives. One request per bookmark and session; a failure leaves
+// the question as the name.
+const bookmarkTitleRequests = new Set();
+async function requestBookmarkTitle(bookmarkId, requestUid) {
+  const user = auth.currentUser;
+  const key = `${requestUid}:${bookmarkId}`;
+  if (!bookmarkId || !user || user.uid !== requestUid || bookmarkTitleRequests.has(key)) return;
+  bookmarkTitleRequests.add(key);
+  const generation = authState.generation;
+  try {
+    const idToken = await user.getIdToken(false);
+    if (!isCurrentAuthenticatedUser(requestUid, generation)) return;
+    const response = await fetch("/bookmarks/" + encodeURIComponent(bookmarkId) + "/title", {
+      method: "POST",
+      headers: { "Authorization": "Bearer " + idToken }
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !isCurrentAuthenticatedUser(requestUid, generation)) return;
+    if (data.bookmark?.title_source === "generated") applyBookmarkTitle(data.bookmark);
+  } catch (error) {
+    console.warn("Bookmark title unavailable:", error);
+  }
+}
+
+function applyBookmarkTitle(named) {
+  if (!bookmarkWriteAllowed(auth.currentUser?.uid || null, named.id)) return;
+  const title = bookmarkDisplayTitle(named);
+  const entry = (window.bookmarksData || []).find(item => item.id === named.id);
+  if (entry) Object.assign(entry, { title, title_source: "generated" });
+  for (const context of window.App.runRegistry?.list?.() || []) {
+    if (context.bookmark?.id !== named.id) continue;
+    window.App.runRegistry.update(context.runId, run => {
+      run.bookmark.title = title;
+      if (run.bookmark.latestMeta) Object.assign(run.bookmark.latestMeta, { title, title_source: "generated" });
+    }, { render: false });
+  }
+  window.App.bookmarkSession?.noteSavedMeta?.({ ...(entry || bookmarkMeta(named)), title, title_source: "generated" });
+  // The name settles in place of the question instead of switching.
+  for (const label of document.querySelectorAll(`.bookmark[data-id="${named.id}"] > p`)) {
+    if (label.textContent === bookmarkLabelText(title)) continue;
+    label.textContent = bookmarkLabelText(title);
+    if (label.animate && !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+      label.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 260, easing: "ease-out" });
+    }
+  }
+  window.filterBookmarks?.(document.getElementById("chatSearch")?.value || "");
 }
 
 let lastBookmarkSaveNotice = { key: "", shownAt: 0 };
@@ -2435,8 +2506,11 @@ async function loadBookmarks({ append = false, loadAll = false } = {}) {
       const data = await response.json();
       if (!isCurrentAuthenticatedUser(requestUid, requestGeneration)) return false;
       if (!response.ok) throw new Error(data.detail || `Could not load bookmarks (${response.status})`);
-      container?.querySelector(".bookmarks-skeleton")?.remove();
-      (data.bookmarks || []).forEach(item => upsertBookmarkMeta(item, { prepend: false }));
+      const skeleton = container?.querySelector(".bookmarks-skeleton");
+      const shown = new Set(container?.children || []);
+      (data.bookmarks || []).forEach(item => upsertBookmarkMeta(item, { prepend: false, nameIt: false }));
+      if (!append && container) revealLoadedBookmarks(container, skeleton, shown);
+      else skeleton?.remove();
       bookmarksNextCursor = data.next_cursor || null;
       cursor = bookmarksNextCursor;
     } while (loadAll && cursor);
@@ -2453,6 +2527,35 @@ async function loadBookmarks({ append = false, loadAll = false } = {}) {
   } finally {
     if (requestId === bookmarksLoadRequestId) bookmarksLoading = false;
   }
+}
+
+// The first page takes over from the placeholder in place: the skeleton
+// fades out where it stood while the real rows fade in over it. Swapping
+// grey bars for 35 rows in one frame read as a jolt at the end of loading.
+function revealLoadedBookmarks(container, skeleton, shown) {
+  const rows = [...container.children].filter(row => !shown.has(row) && row !== skeleton);
+  const quiet = !container.animate || window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+  if (quiet || !rows.length || !skeleton?.isConnected) {
+    skeleton?.remove();
+    if (quiet) return;
+  } else {
+    // Out of the flow at its exact place, so the rows take its slot now.
+    const top = skeleton.getBoundingClientRect().top - container.getBoundingClientRect().top - container.clientTop;
+    skeleton.removeAttribute("role");
+    skeleton.setAttribute("aria-hidden", "true");
+    Object.assign(skeleton.style, { position: "absolute", top: `${top}px`, left: "0", right: "0", pointerEvents: "none" });
+    container.style.position = "relative";
+    const fade = skeleton.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 200, easing: "ease-out", fill: "forwards" });
+    fade.finished.catch(() => {}).then(() => {
+      skeleton.remove();
+      if (!container.querySelector(".bookmarks-skeleton")) container.style.position = "";
+    });
+  }
+  // Only what is on screen settles in; the rows below the fold just appear.
+  rows.slice(0, 16).forEach((row, index) => row.animate(
+    [{ opacity: 0 }, { opacity: 1 }],
+    { duration: 240, delay: Math.min(index, 10) * 16, easing: "ease-out", fill: "backwards" }
+  ));
 }
 
 async function loadBookmarkDetail(bookmarkId) {
@@ -2710,7 +2813,7 @@ window.sendFeedback = sendFeedback;
 function updateBookmarkDOM(bookmark) {
   const row = document.querySelector(`.bookmark:not(.run-entry)[data-id="${bookmark.id}"]`);
   const label = row?.querySelector("p");
-  if (label) label.textContent = truncateText(bookmarkDisplayTitle(bookmark));
+  if (label) label.textContent = bookmarkLabelText(bookmarkDisplayTitle(bookmark));
 }
 
 function createReadyBookmarkRow(bookmark, runId = null) {
@@ -2721,7 +2824,7 @@ function createReadyBookmarkRow(bookmark, runId = null) {
   // Die Frage kommt als freier Nutzertext und darf nie als HTML interpretiert
   // werden - deshalb textContent statt Template-Interpolation in innerHTML.
   const label = document.createElement("p");
-  label.textContent = truncateText(bookmarkDisplayTitle(bookmark));
+  label.textContent = bookmarkLabelText(bookmarkDisplayTitle(bookmark));
   const deleteSpan = document.createElement("span");
   deleteSpan.className = "delete-bookmark";
   deleteSpan.setAttribute("role", "button");
@@ -2776,7 +2879,7 @@ function ensurePendingBookmarkDOM(pending) {
   row.replaceChildren();
 
   const label = document.createElement("p");
-  label.textContent = truncateText(pending.question || "New comparison");
+  label.textContent = bookmarkLabelText(pending.question || "New comparison");
 
   const spinner = document.createElement("span");
   spinner.className = "bookmark-pending-spinner";

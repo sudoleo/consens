@@ -1,5 +1,7 @@
 import asyncio
 
+import pytest
+
 import main
 from app.core import background_tasks
 from app.services import retention_maintenance
@@ -179,6 +181,7 @@ def test_scheduler_task_runs_loop_without_mock_llm(monkeypatch):
         calls.append("ran")
 
     monkeypatch.setattr(main, "mock_llm_enabled", lambda: False)
+    monkeypatch.setattr(main, "_is_production", lambda: True)
 
     async def exercise():
         task = main._scheduler_task(loop, "retention-maintenance")
@@ -191,6 +194,52 @@ def test_scheduler_task_runs_loop_without_mock_llm(monkeypatch):
 
     asyncio.run(exercise())
     assert calls == ["ran"]
+
+
+@pytest.mark.parametrize(("production", "opt_in", "runs"), [
+    (True, None, True),
+    (False, None, False),
+    (False, "1", True),
+])
+def test_scheduler_task_runs_locally_only_on_explicit_opt_in(monkeypatch, production, opt_in, runs):
+    """A local server shares the production Firestore; its background writers
+    polled it in parallel to the deployment (reads) and raced it for slots."""
+    calls = []
+
+    async def loop():
+        calls.append("ran")
+
+    monkeypatch.setattr(main, "mock_llm_enabled", lambda: False)
+    monkeypatch.setattr(main, "_is_production", lambda: production)
+    if opt_in is None:
+        monkeypatch.delenv("LOCAL_BACKGROUND_JOBS", raising=False)
+    else:
+        monkeypatch.setenv("LOCAL_BACKGROUND_JOBS", opt_in)
+
+    async def exercise():
+        task = main._scheduler_task(loop, "topic-scheduler")
+        for _ in range(50):
+            if calls:
+                break
+            await asyncio.sleep(0.01)
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+    asyncio.run(exercise())
+    assert calls == (["ran"] if runs else [])
+    if not runs:
+        assert background_tasks.task_health_snapshot()["topic-scheduler"]["state"] == "disabled"
+
+
+def test_local_tasks_run_on_a_local_server_but_never_under_mock_llm(monkeypatch):
+    """The source-check workers serve the local queue of a non-mock dev server."""
+    monkeypatch.setattr(main, "_is_production", lambda: False)
+    monkeypatch.delenv("LOCAL_BACKGROUND_JOBS", raising=False)
+    monkeypatch.setattr(main, "mock_llm_enabled", lambda: False)
+    assert main._background_writers_off_reason(local=True) == ""
+    assert main._background_writers_off_reason() != ""
+    monkeypatch.setattr(main, "mock_llm_enabled", lambda: True)
+    assert main._background_writers_off_reason(local=True) == "MOCK_LLM=1"
 
 
 def test_lifespan_gates_prod_writers_behind_mock_llm(monkeypatch):
@@ -261,6 +310,7 @@ def test_gated_one_shot_never_runs_under_mock_llm(monkeypatch):
 def test_gated_one_shot_runs_once_without_mock_llm(monkeypatch):
     calls = []
     monkeypatch.setattr(main, "mock_llm_enabled", lambda: False)
+    monkeypatch.setattr(main, "_is_production", lambda: True)
     monkeypatch.setattr(main, "send_critical_error_notification", lambda *_a, **_k: None)
 
     async def exercise():

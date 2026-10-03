@@ -190,6 +190,20 @@ def test_bookmark_quota_counts_merges_and_rejects_oversize(monkeypatch):
         )
 
 
+def test_a_generated_bookmark_title_survives_later_saves_inside_the_transaction():
+    db = Database()
+    ref = db.collection("users").document("u1").collection("bookmarks").document("b1")
+    persistence_guard.write_bookmark(uid="u1", doc_ref=ref, db=db,
+                                     patch={"query": "Q?", "title": "Q?", "responses": {}})
+    named = persistence_guard.write_bookmark(uid="u1", doc_ref=ref, db=db,
+                                             patch={"title": "Topic", "title_source": "generated"})
+    later = persistence_guard.write_bookmark(uid="u1", doc_ref=ref, db=db,
+                                             patch={"query": "Q?", "title": "Q?", "responses": {"OpenAI": "A"}})
+    assert named["title"] == "Topic"
+    assert later["title"] == "Topic"
+    assert later["responses"] == {"OpenAI": "A"}
+
+
 def test_persistence_transactions_have_a_contention_retry_budget(monkeypatch):
     transaction_options = []
     transaction = object()

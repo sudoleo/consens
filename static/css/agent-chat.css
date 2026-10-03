@@ -174,7 +174,11 @@
   body.single-agent-active:not(.answer-reader-docked) .container {
     --agent-chat-width: min(var(--app-container-width), calc(100vw - var(--app-sidebar-offset) - 48px));
     left: 0; width: var(--agent-chat-width); max-width: var(--agent-chat-width);
-    margin-left: calc(var(--app-sidebar-offset) + (100vw - var(--app-sidebar-offset) - var(--agent-chat-width)) / 2); margin-right: 0;
+    /* Centred in the canvas beside the sidebar like the plain thread: 100%
+       is the body's content box, which leaves out the scrollbar and the
+       body's padding on both sides. 100vw counted both, so the column
+       stepped 15px to the right when an Agent run took over the view. */
+    margin-left: calc((var(--app-sidebar-offset) + 100% - var(--agent-chat-width)) / 2); margin-right: 0;
   }
 }
 @media (min-width: 1200px) {
@@ -182,7 +186,7 @@
      the space left of it instead of running underneath. */
   body.single-agent-active.agent-sidebar-open:not(.answer-reader-docked) .container {
     --agent-chat-width: min(var(--app-container-width), calc(100vw - var(--app-sidebar-offset) - 346px - 48px));
-    margin-left: calc(var(--app-sidebar-offset) + (100vw - var(--app-sidebar-offset) - 346px - var(--agent-chat-width)) / 2);
+    margin-left: calc((var(--app-sidebar-offset) + 100% - 346px - var(--agent-chat-width)) / 2);
   }
 }
 .agent-sidebar-scrim { position: fixed; inset: 0; z-index: 1290; background: color-mix(in srgb, var(--ink) 28%, transparent); }

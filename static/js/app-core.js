@@ -332,16 +332,49 @@
   // verlaesst auch den Direktvergleich. Die Marke haengen zu lassen waere eine
   // Mine — sie steuert Sichtbarkeit und inert der .response-section.
   function exitHeroMode() {
-    document.body.classList.remove("is-hero", "direct-comparison-active", "direct-comparison-preview");
-    syncHeroResponseAccess();
+    glideComposer(() => {
+      document.body.classList.remove("is-hero", "direct-comparison-active", "direct-comparison-preview");
+      syncHeroResponseAccess();
+    });
   }
 
   // Direct answers share the normal thread shell: question bubble, dimensions,
   // compact composer and upward-opening menus. Only the result differs.
   function enterDirectComparisonView() {
-    document.body.classList.remove("is-hero", "direct-comparison-preview");
-    document.body.classList.add("direct-comparison-active");
-    syncHeroResponseAccess();
+    glideComposer(() => {
+      document.body.classList.remove("is-hero", "direct-comparison-preview");
+      document.body.classList.add("direct-comparison-active");
+      syncHeroResponseAccess();
+    });
+  }
+
+  // Hero <-> thread moves the composer from the middle of the screen to its
+  // place at the bottom (or back). The layouts share no transform a CSS
+  // transition could run between, so the field glides from where it was
+  // last drawn to where it now stands (FLIP). The new place is read just
+  // before the next paint, after the rest of the task has built the thread
+  // around it, so no frame shows the field at its end before it moves.
+  let composerGlide = null;
+  const quietComposerMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)");
+  function glideComposer(change) {
+    const composer = document.querySelector(".input-section");
+    const wasHero = document.body.classList.contains("is-hero");
+    const before = composer?.animate && !quietComposerMotion?.matches ? composer.getBoundingClientRect() : null;
+    change();
+    if (!before || wasHero === document.body.classList.contains("is-hero")) return;
+    requestAnimationFrame(() => {
+      composerGlide?.cancel();
+      composerGlide = null;
+      if (!composer.isConnected) return;
+      const after = composer.getBoundingClientRect();
+      const dx = before.left - after.left;
+      const dy = before.top - after.top;
+      if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
+      composerGlide = composer.animate([
+        { translate: `${dx}px ${dy}px` },
+        { translate: "0px 0px" }
+      ], { duration: 420, easing: "cubic-bezier(.22, 1, .36, 1)" });
+    });
   }
 
   window.exitHeroMode = exitHeroMode;
@@ -415,6 +448,7 @@
     showPopup,
     exitHeroMode,
     enterDirectComparisonView,
+    glideComposer,
     syncHeroResponseAccess,
     renderUsageDisplay,
     usageRun

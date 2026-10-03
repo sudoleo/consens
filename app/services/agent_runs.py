@@ -68,12 +68,17 @@ class AgentRunStore(AgentSessionStore, ChatStore):
             filter=FieldFilter('run_status', '==', 'running')).where(
             filter=FieldFilter('policy.delegation', '==', True)).limit(20).stream()
         now = datetime.now(timezone.utc)
+        running = 0
         for snapshot in roots:
+            running += 1
             root = snapshot.to_dict() or {}
             lease = root.get('lease_until')
             if (isinstance(lease, datetime) and lease <= now and (root.get('policy') or {}).get('delegation')
                     and root.get('chat_id') and root.get('turn_id')):
                 self.reap_delegation(uid, root['chat_id'], root['turn_id'])
+        # Whether any delegation root is still running (the caller may then
+        # skip asking again for a while when there is none).
+        return running
 
     def active_ref(self, uid):
         return self.db.collection("users").document(uid).collection("chat_state").document("agent_runs")

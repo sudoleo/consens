@@ -189,14 +189,17 @@ body.answer-reader-modal { overflow: hidden; }
   body.answer-reader-docked {
     --reader-dock-width: clamp(520px, 36vw, 720px);
     --reader-left-rail: 260px;
-    --reader-chat-width: min(900px, calc(100vw - var(--reader-left-rail) - var(--reader-dock-width) - 64px));
+    /* 100% is resolved on .container: the body's content box. With the
+       reserved scrollbar gutter (shell.css) 100vw overstated the canvas. */
+    --reader-chat-width: min(900px, calc(100% + 20px - var(--reader-left-rail) - var(--reader-dock-width) - 64px));
   }
   body.answer-reader-docked:has(.sidebar.collapsed) { --reader-left-rail: 0px; }
   body.answer-reader-docked .container {
     transition: none;
     left: 0;
     width: var(--reader-chat-width);
-    margin-left: calc(var(--reader-left-rail) + (100vw - var(--reader-left-rail) - var(--reader-dock-width) - var(--reader-chat-width)) / 2 - 10px);
+    /* Centred between the rail and the docked reader, as the Agent column. */
+    margin-left: calc((var(--reader-left-rail) + 100% - var(--reader-dock-width) - var(--reader-chat-width)) / 2);
     margin-right: 0;
   }
   body.answer-reader-docked:has(.sidebar.collapsed) .container { width: var(--reader-chat-width); }
