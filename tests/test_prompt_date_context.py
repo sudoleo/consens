@@ -2,6 +2,7 @@
 from datetime import datetime, timezone
 
 import pytest
+pytestmark = pytest.mark.usefixtures("deepseek_default_agent")
 
 from app.services import agent_runs
 from app.services.llm import base, consensus_engine
@@ -45,7 +46,7 @@ def test_agent_followup_refreshes_clock_and_model_without_rewriting_history(stor
     chat_id, first = pending(store)
     first_messages = store.messages(UID, chat_id, first, model=model)
     assert "Tuesday, 2026-09-15" in first_messages[0]["content"]
-    assert "Selected model for this response: DeepSeek V4.1 Flash" in first_messages[0]["content"]
+    assert "Selected model for this response: GPT-6 Luna" in first_messages[0]["content"]
     answer = receipt()
     answer.text = "Today is September 15."
     assert store.claim(UID, chat_id, first["id"], model)

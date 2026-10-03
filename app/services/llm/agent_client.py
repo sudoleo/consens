@@ -21,17 +21,19 @@ from app.services.llm.streaming import _sse_pairs
 
 @dataclass(frozen=True)
 class AgentModel:
-    model: str = "deepseek/deepseek-v4.1-flash"
-    label: str = "DeepSeek V4.1 Flash"
+    # The Agent's default chat model: the cheap base model of the catalogue
+    # (since 2026-10-04 GPT-6 Luna, before DeepSeek V4.1 Flash).
+    model: str = "openai/gpt-6-luna"
+    label: str = "GPT-6 Luna"
     max_output_tokens: int = 4096
     # USD / million tokens. A versioned simulation, not an invoice.
-    input_usd_per_million: str = "0.15"
-    output_usd_per_million: str = "0.60"
-    cache_read_usd_per_million: str = "0.003"
+    input_usd_per_million: str = "0.10"
+    output_usd_per_million: str = "0.50"
+    cache_read_usd_per_million: str = "0.01"
     cache_write_usd_per_million: str = ""
     web_search_usd_per_request: str | None = None
-    pricing_version: str = "openrouter-2026-09-14"
-    selection_id: str = "deepseek/deepseek-v4.1-flash"
+    pricing_version: str = "openrouter-2026-10-03"
+    selection_id: str = "gpt-6-luna"
     reasoning_effort: str = "default"
     request_config: dict = field(default_factory=dict)
     context_length: int = 1_048_576
@@ -88,7 +90,9 @@ def agent_model(*, _metadata=None) -> AgentModel:
         if not price.is_finite() or price < 0 or price > 1000:
             raise ValueError("Invalid agent price")
     values["max_output_tokens"] = min(values["max_output_tokens"], metadata["top_provider"].get("max_completion_tokens") or values["max_output_tokens"])
-    return AgentModel(**values, selection_id=values["model"], context_length=metadata["context_length"],
+    # The registry ID, like every other model in the picker: the default is
+    # listed once and premium/access checks see the ID they know.
+    return AgentModel(**values, selection_id=entry.internal_id if entry else values["model"], context_length=metadata["context_length"],
                       web_search_usd_per_request=defaults.web_search_usd_per_request,
                       request_config=dict(entry.request_config or {}) if entry else {})
 
@@ -213,8 +217,10 @@ def metered_model(model_id, *, max_tokens=2048):
 
 def resolve_agent_model(model_id=None, reasoning_effort="default"):
     models = agent_models()
+    wanted = model_id or models[0][0].selection_id
     for model, metadata in models:
-        if model.selection_id != (model_id or models[0][0].selection_id):
+        # Older clients may still send the default by its OpenRouter ID.
+        if wanted not in (model.selection_id, model.model):
             continue
         return _resolve_effort(model, metadata, reasoning_effort)
     if model_id in cfg.MODEL_CONFIGS:

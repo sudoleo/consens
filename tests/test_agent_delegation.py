@@ -6,6 +6,7 @@ import threading
 from datetime import datetime, timedelta, timezone
 
 import pytest
+pytestmark = pytest.mark.usefixtures("deepseek_default_agent")
 
 from app.services.agent_delegation import DelegationLoop
 from app.services.agent_delegation_config import defaults

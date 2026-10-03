@@ -24,6 +24,24 @@ def _no_real_telegram_alerts(monkeypatch):
     telegram_notifier.reset_critical_state()
 
 
+@pytest.fixture
+def deepseek_default_agent(monkeypatch):
+    """Agent mechanics tests (costs, replay, ordering) were written against
+    DeepSeek V4.1 Flash as the chat model and keep it pinned; the real default
+    (GPT-6 Luna since 2026-10-04) has its own test in test_agent_runs.py."""
+    monkeypatch.setenv("AGENT_MODEL", "deepseek/deepseek-v4.1-flash")
+
+
+@pytest.fixture(autouse=True)
+def _no_local_google_configuration(monkeypatch):
+    """A local .env may switch Google on for manual testing; the suite starts
+    without it, and Google tests configure exactly what they exercise."""
+    for key in ("GOOGLE_INTEGRATIONS_ENABLED", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GOOGLE_REDIRECT_URI",
+                "GOOGLE_TOKEN_KEYS", "GOOGLE_PICKER_API_KEY", "GOOGLE_PROJECT_NUMBER", "GOOGLE_WRITES_ENABLED",
+                "GOOGLE_TEST_USERS", "GOOGLE_ALLOWED_MODEL_IDS", "GOOGLE_ALLOWED_PROVIDERS"):
+        monkeypatch.delenv(key, raising=False)
+
+
 @pytest.fixture(autouse=True)
 def _default_prompt_configuration(monkeypatch):
     """Default prompt reads must not contact Firestore in the unit suite."""

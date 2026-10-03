@@ -52,7 +52,13 @@ Premium-Zuordnung filtern diese Liste nicht zusätzlich. Vor einer neuen Nachric
 wird die Konfiguration ebenfalls gelesen; gespeicherte Antworten lassen sich
 ohne diesen Abruf wiederherstellen. Beide Abrufe schreiben nichts in die DB.
 IDs, Labels und Routing kommen aus cfg.MODEL_CONFIGS; AGENT_MODEL ergänzt den
-Standard (weiterhin deepseek/deepseek-v4.1-flash).
+Standard (seit 2026-10-04 openai/gpt-6-luna, das günstige Basismodell; vorher
+deepseek/deepseek-v4.1-flash). Der Standard trägt die Registry-ID wie alle
+anderen Modelle (einmal in der Liste); die OpenRouter-ID wird für ältere Clients
+weiter aufgelöst. Er steht im eingebauten Katalog `agent_model_catalog.json`,
+damit der Agent auch ohne Live-Katalog startet; die Landing-Mockups zeigen sein
+Label (`agent_model_label()`). Hilfsagenten (Delegation) hat Luna nicht geprüft;
+die Delegation ist ohnehin standardmäßig aus.
 
 Preise, Kontextgrenzen und Reasoning-Stufen werden aus dem öffentlichen
 OpenRouter-Modellkatalog nachgeladen und fünf Minuten zwischengespeichert.

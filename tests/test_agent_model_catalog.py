@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
+pytestmark = pytest.mark.usefixtures("deepseek_default_agent")
 
 from app.core import config as cfg, security
 from app.api.routers import agent

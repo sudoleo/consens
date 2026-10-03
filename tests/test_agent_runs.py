@@ -8,6 +8,7 @@ import threading
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 import pytest
+pytestmark = pytest.mark.usefixtures("deepseek_default_agent")
 
 from app.core import config as cfg
 from app.api.routers import agent, chat_history
@@ -67,7 +68,7 @@ def test_usage_uses_reported_tokens_and_does_not_double_count_reasoning():
     usage = receipt().usage
     assert usage["input_tokens"] == 1000
     assert usage["output_tokens"] == 100
-    assert usage["estimated_cost_nano_usd"] == 180600
+    assert usage["estimated_cost_nano_usd"] == 132000
     assert usage["billing_mode"] == "simulation"
     for invalid in ({}, {"prompt_tokens": True, "completion_tokens": 2},
                     {"prompt_tokens": 2.4, "completion_tokens": 2},
@@ -86,7 +87,7 @@ def test_parallel_claims_and_settlement_are_exactly_once(store):
     with ThreadPoolExecutor(max_workers=2) as pool:
         settled = list(pool.map(lambda _: store.settle(UID, chat_id, turn["id"], completion=receipt(), status="succeeded"), range(2)))
     assert sorted(settled) == [False, True]
-    assert totals(store)["estimated_cost_nano_usd"] == 180600
+    assert totals(store)["estimated_cost_nano_usd"] == 132000
     assert totals(store)["unsettled_calls"] == 0
     assert store.get_turn(UID, chat_id, turn["id"])["consensus"] == "A helpful answer"
     assert not any("usage_runs" in path for path in store.db.documents)
@@ -138,7 +139,7 @@ def test_chat_deletion_does_not_erase_cost_or_resurrect_turn(store):
     store.claim(UID, chat_id, turn["id"], AgentModel())
     store.delete_chat(UID, chat_id)
     store.settle(UID, chat_id, turn["id"], completion=receipt(), status="succeeded")
-    assert totals(store)["estimated_cost_nano_usd"] == 180600
+    assert totals(store)["estimated_cost_nano_usd"] == 132000
     assert not store._chat_ref(UID, chat_id).get().exists
     assert not store._turn_ref(UID, chat_id, turn["id"]).get().exists
 
@@ -251,7 +252,7 @@ def test_endpoint_single_call_replay_and_cumulative_costs(api, monkeypatch):
     assert replay.status_code == 200, replay.text
     assert replay.json()["response"] == "A helpful answer"
     assert len(calls) == 1 and totals(store)["calls"] == 1
-    assert totals(store)["estimated_cost_nano_usd"] == 180600
+    assert totals(store)["estimated_cost_nano_usd"] == 132000
 
 
 @pytest.mark.parametrize("pro,admin", [(False, False), (True, False), (False, True)])
@@ -302,7 +303,7 @@ def test_old_replay_keeps_newest_bookmark_and_sums_both_calls(api):
     assert client.post("/agent", json={**payload, "recover_only": True}, headers=AUTH).status_code == 200
     saved = store.db.collection("users").document(UID).collection("bookmarks").document("bm1").get().to_dict()
     assert saved["query"] == "Second"
-    assert len(calls) == 2 and totals(store)["estimated_cost_nano_usd"] == 361200
+    assert len(calls) == 2 and totals(store)["estimated_cost_nano_usd"] == 264000
 
 
 def test_provider_error_after_usage_still_records_cost(api, monkeypatch):
@@ -319,7 +320,7 @@ def test_provider_error_after_usage_still_records_cost(api, monkeypatch):
     assert "event: error" in response.text and "event: final" not in response.text
     assert "event: delta" not in response.text
     assert totals(store)["measured_calls"] == 1
-    assert totals(store)["estimated_cost_nano_usd"] == 180600
+    assert totals(store)["estimated_cost_nano_usd"] == 132000
     assert store.list_turns(UID, chat_id)["turns"][0]["status"] == "failed"
     error = json.loads(response.text.split("event: error\ndata: ")[1].split("\n\n")[0])
     assert error["token_budget"]["used"] == 1100
