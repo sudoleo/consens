@@ -3,12 +3,17 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.api.routers import client_errors
+from app.core import sourcemaps
 from app.core.rate_limit import limiter
 from tests.frontend_order import group_of, loads_before
+from tests.sourcemap_fixtures import write_map
 
 
-def _client(monkeypatch, captured):
+def _client(monkeypatch, captured, *, commit=""):
     limiter.reset()
+    # Der Commit kommt sonst aus dem Checkout und machte die exakten
+    # Erwartungen unten vom Arbeitsverzeichnis abhaengig.
+    monkeypatch.setattr(client_errors, "get_commit_short", lambda: commit)
     monkeypatch.setattr(
         client_errors,
         "send_critical_error_notification",
@@ -232,3 +237,92 @@ def test_runtime_report_rejects_invalid_coordinates(monkeypatch, number):
     assert response.status_code == 202
     assert "line" not in captured[0]
     assert "column" not in captured[0]
+
+
+# --- Source-Map-Aufloesung, Frames und Code-Fehlermeldungen -----------------
+
+BUNDLE = "app.0123456789ab.js"
+
+
+@pytest.fixture
+def mapped_bundle(tmp_path, monkeypatch):
+    sourcemaps.clear_cache()
+    monkeypatch.setattr(sourcemaps, "DIST_DIR", tmp_path)
+    write_map(tmp_path, BUNDLE, ["static/js/agent-chat.js", "static/js/app-core.js"], [
+        [(0, 0, 0, 0), (100, 0, 119, 8), (400, 1, 39, 2)],
+    ])
+    yield
+    sourcemaps.clear_cache()
+
+
+def test_runtime_location_and_frames_resolve_through_the_source_map(monkeypatch, mapped_bundle):
+    captured = []
+    response = _client(monkeypatch, captured, commit="683a2fa").post("/api/client-errors", json={
+        "type": "unhandled_error", "phase": "browser_runtime", "path": "/app/private-chat-id",
+        "message": "Uncaught TypeError: Cannot read properties of undefined (reading 'turns')",
+        "error_name": "TypeError", "script": BUNDLE, "line": 1, "column": 150,
+        "bundle": BUNDLE,
+        "frames": [
+            [BUNDLE, 1, 150], [BUNDLE, 1, 401], ["head.012345abcdef.js", 1, 9],
+            ["https://evil.example/x.js", 1, 1], [BUNDLE, "1", 2], [BUNDLE, 1, 0],
+            [BUNDLE, 1, 1],  # sechster Eintrag: jenseits der fuenf erlaubten
+        ],
+    })
+    assert response.status_code == 202
+    report = captured[0]
+    assert report["location"] == "static/js/agent-chat.js:120:9"
+    assert report["frames"] == [
+        "static/js/agent-chat.js:120:9",
+        "static/js/app-core.js:40:3",
+        "head.012345abcdef.js:1:9",  # ohne Map bleibt die Bundle-Koordinate
+    ]
+    assert report["bundle"] == BUNDLE
+    assert report["commit"] == "683a2fa"
+    assert report["path"] == "/app/{view}"
+    assert report["error_message"] == "Cannot read properties of undefined (reading 'turns')"
+
+
+@pytest.mark.parametrize("frames", ["app.0123456789ab.js:1:2", {"a": 1}, [["x"]], [[BUNDLE, 1]]])
+def test_malformed_frames_are_dropped(monkeypatch, frames):
+    captured = []
+    response = _client(monkeypatch, captured).post("/api/client-errors", json={
+        "type": "unhandled_error", "message": "private", "frames": frames,
+    })
+    assert response.status_code == 202
+    assert "frames" not in captured[0]
+
+
+def test_code_error_message_is_scrubbed(monkeypatch):
+    captured = []
+    response = _client(monkeypatch, captured).post("/api/client-errors", json={
+        "type": "unhandled_rejection", "error_name": "SyntaxError",
+        "message": ('SyntaxError: Unexpected token \'p\', "private question text with details" is not valid '
+                    "JSON at https://private.example/path?token=abc for person@example.test "
+                    "Authorization: Bearer abc.def.ghi " + "x" * 400),
+    })
+    assert response.status_code == 202
+    message = captured[0]["error_message"]
+    assert message.startswith("Unexpected token 'p', … is not valid JSON at [url] for [email]")
+    assert len(message) <= 200
+    for leaked in ("private", "person@", "abc.def.ghi", "token=abc"):
+        assert leaked not in message
+
+
+@pytest.mark.parametrize("error_name", ["Error", "SecurityError", "private"])
+def test_other_error_messages_stay_generic(monkeypatch, error_name):
+    captured = []
+    response = _client(monkeypatch, captured).post("/api/client-errors", json={
+        "type": "unhandled_error", "error_name": error_name, "message": "Provider said: private answer",
+    })
+    assert response.status_code == 202
+    assert "error_message" not in captured[0]
+    assert "private" not in str(captured)
+
+
+@pytest.mark.parametrize("bundle", ["app.private.js", "https://x/app.0123456789ab.js", "app.0123456789ab.js?x"])
+def test_bundle_name_is_allowlisted(monkeypatch, bundle):
+    captured = []
+    _client(monkeypatch, captured).post("/api/client-errors", json={
+        "type": "run_failed", "message": "Failed", "bundle": bundle,
+    })
+    assert "bundle" not in captured[0]

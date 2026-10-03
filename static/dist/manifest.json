@@ -1,10 +1,11 @@
 {
-  "sources": "85b4e03f5630",
+  "sources": "ed93168e09b1",
   "inputs": [
     "package-lock.json",
     "package.json",
     "scripts/build_frontend.mjs",
     "scripts/frontend-output.mjs",
+    "scripts/frontend-sourcemaps.mjs",
     "scripts/vendor_frontend.mjs",
     "static/app-ui.js",
     "static/css/admin-benchmark.css",
@@ -180,7 +181,7 @@
   "scripts": [
     {
       "name": "head",
-      "src": "/static/dist/head.783ee7d749eb.js",
+      "src": "/static/dist/head.5d57d190ad5d.js",
       "module": false,
       "defer": false
     },
@@ -222,7 +223,7 @@
     "demo.3f6bae43147c.js",
     "firebase.120ec5b74818.js",
     "firebase.6cbc23d9776b.js",
-    "head.b02c622bf5be.js",
-    "head.5782a8b77cb8.js"
+    "head.783ee7d749eb.js",
+    "head.b02c622bf5be.js"
   ]
 }

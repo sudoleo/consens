@@ -9,6 +9,7 @@ import logging
 import threading
 from typing import Awaitable, Callable
 
+from app.core.error_context import server_error_report
 from app.core.observability import safe_exception
 
 
@@ -121,16 +122,18 @@ async def supervise_background_task(
             )
             alert_threshold = 1 if not restart else max(1, int(alert_after_failures))
             if failures == alert_threshold:
+                # Frames, Commit und Instanz machen den Absturz auffindbar;
+                # die Exception-Message bleibt wie ueberall draussen.
                 await _send_alert(
                     alert,
-                    {
-                        "source": "server",
-                        "type": "background_task_repeated_failure",
-                        "phase": "background",
-                        "message": f"Background task {name} failed repeatedly.",
-                        "path": name,
-                        "details": f"error_type={type(exc).__name__}; failures={failures}",
-                    },
+                    server_error_report(
+                        exc,
+                        phase="background",
+                        path=name,
+                        message=f"Background task {name} failed repeatedly.",
+                        type="background_task_repeated_failure",
+                        details=f"error_type={type(exc).__name__}; failures={failures}",
+                    ),
                 )
             if not restart:
                 return

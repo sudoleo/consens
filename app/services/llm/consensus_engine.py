@@ -14,6 +14,7 @@ from typing import Mapping
 import app.core.config as cfg
 from app.services import prompt_config
 from app.core.observability import safe_exception, safe_traceback
+from app.services.error_alerts import report_server_exception
 from app.services.llm.citations import coerce_text
 from app.services.llm import completion
 from app.services.llm.base import get_date_context
@@ -2315,6 +2316,7 @@ def _apply_coverage(data: dict, coverage_result, coverage_meta, context, consens
             "Coverage merge failed category=%s at=%s",
             safe_exception(exc), safe_traceback(exc),
         )
+        report_server_exception(exc, where="consensus_engine.coverage_merge")
         return None
 
 
@@ -2359,6 +2361,9 @@ def _collect_coverage(pool, future):
             "Coverage judge thread failed category=%s at=%s",
             safe_exception(exc), safe_traceback(exc),
         )
+        # Timeouts (Analysebudget) und Providerfehler bleiben beim Log; nur
+        # ein Programmierfehler im Judge-Pfad wird gemeldet.
+        report_server_exception(exc, where="consensus_engine.coverage_judge")
         return None, None
     finally:
         from app.services.llm.task_transport import task_transport

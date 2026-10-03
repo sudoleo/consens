@@ -15,6 +15,7 @@ from google.api_core.exceptions import Aborted as FirestoreAborted
 
 from app.core.rate_limit import limiter
 from app.core.observability import record_metric, safe_exception, safe_traceback
+from app.services.error_alerts import report_server_exception
 from app.core.entitlements import TIER_FREE, entitlements_for
 from app.core.security import (
     TierStatusUnavailable,
@@ -1961,6 +1962,7 @@ def consensus(request: Request, data: dict = Body(...)):
                             "Differences analysis failed category=%s at=%s",
                             safe_exception(exc), safe_traceback(exc),
                         )
+                        report_server_exception(exc, where="chat.differences_stream")
                         if not differences_complete:
                             differences_text = ""
                             differences_data = None
@@ -1987,6 +1989,7 @@ def consensus(request: Request, data: dict = Body(...)):
                     "Consensus streaming failed category=%s at=%s",
                     safe_exception(exc), safe_traceback(exc),
                 )
+                report_server_exception(exc, where="chat.consensus_stream")
                 stream_failed = True
                 if not consensus_text:
                     consensus_text = (

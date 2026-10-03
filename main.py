@@ -9,7 +9,6 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.exceptions import RequestValidationError
-from starlette.background import BackgroundTask
 from starlette.status import HTTP_422_UNPROCESSABLE_CONTENT
 
 # Init Environment
@@ -17,11 +16,16 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 
 from app.core.observability import (
+    CORRELATION_SCOPE_KEY,
     CorrelationMiddleware,
     configure_logging,
+    correlation_scope,
     metrics_snapshot,
+    new_correlation_id,
     safe_exception,
+    safe_traceback,
 )
+from app.core.error_context import server_error_report
 configure_logging()
 from app.core.security import CustomSecurityMiddleware, _is_production, db_firestore
 from app.core.background_tasks import (
@@ -68,7 +72,10 @@ from app.services.watch_scheduler import watch_scheduler_loop
 from app.services.watch_service import backfill_publisher_watch_lineage
 from app.services.seo_weekly_review import seo_review_scheduler_loop
 from app.services.telegram_watch import run_startup_maintenance as telegram_startup_maintenance
-from app.services.telegram_notifier import send_critical_error_notification
+from app.services.telegram_notifier import (
+    dispatch_critical_error_notification,
+    send_critical_error_notification,
+)
 
 
 def _load_startup_configuration() -> None:
@@ -312,24 +319,37 @@ async def handle_validation_exception(request, exc: RequestValidationError):
 @app.exception_handler(Exception)
 async def handle_unexpected_exception(request, exc: Exception):
     route = getattr(request.scope.get("route"), "path", "unmatched")
-    category = safe_exception(exc)
-    logging.error(
-        "Unhandled request exception method=%s route=%s category=%s",
-        request.method,
-        route,
-        category,
-    )
-    report = {
-        "source": "server",
-        "type": category,
-        "phase": "request",
-        "message": "Unhandled server exception.",
-        "path": f"{request.method} {route}",
-    }
+    # Starlette ruft diesen Handler ausserhalb der CorrelationMiddleware auf;
+    # die Request-ID kommt deshalb aus dem Scope (oder wird hier vergeben).
+    corr = request.scope.get(CORRELATION_SCOPE_KEY) or new_correlation_id("err")
+    with correlation_scope(corr):
+        logging.error(
+            "Unhandled request exception method=%s route=%s category=%s at=%s",
+            request.method,
+            route,
+            safe_exception(exc),
+            safe_traceback(exc),
+        )
+    # Keine Exception-Message: sie kann Nutzerinhalt tragen. Frames, Commit
+    # und Correlation-ID sind der Fundort (app/core/error_context.py).
+    try:
+        report = server_error_report(
+            exc,
+            phase="request",
+            path=f"{request.method} {route}",
+            message="Unhandled server exception.",
+            correlation=corr,
+            status=500,
+        )
+        # Unabhaengig von der Antwort versenden: ein BackgroundTask am 500er
+        # lief nie, wenn die Antwort schon begonnen hatte (SSE-Streams).
+        dispatch_critical_error_notification(report)
+    except Exception as alert_error:
+        logging.warning("Critical alert could not be prepared category=%s", safe_exception(alert_error))
     return JSONResponse(
         status_code=500,
         content={"error": "Internal server error"},
-        background=BackgroundTask(send_critical_error_notification, report),
+        headers={"x-correlation-id": corr},
     )
 
 # Include Routers

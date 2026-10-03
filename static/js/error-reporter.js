@@ -34,30 +34,59 @@
     "IndexSizeError", "QuotaExceededError", "NetworkError", "NotSupportedError"
   ]);
 
+  const BUNDLE_PATH = /^\/static\/dist\/((?:head|auth|firebase|demo|app)\.[a-f0-9]{12}\.js)$/;
+  const MAX_FRAMES = 5;
+
+  function validCoordinate(number) {
+    return Number.isInteger(number) && number > 0 && number <= 10000000;
+  }
+
+  // Same-origin app bundle name for a script URL, or "" for anything else.
+  function bundleName(filename) {
+    if (!filename) return "";
+    try {
+      const url = new URL(filename, window.location.href);
+      const match = url.pathname.match(BUNDLE_PATH);
+      return url.origin === window.location.origin && match ? match[1] : "";
+    } catch (_) { return ""; }
+  }
+
+  // The app bundle this page runs; its content hash identifies the deploy.
+  function currentBundle() {
+    try {
+      for (const script of document.querySelectorAll("script[src]")) {
+        const name = bundleName(script.getAttribute("src"));
+        if (name && name.startsWith("app.")) return name;
+      }
+    } catch (_) { /* No bundle in source mode. */ }
+    return "";
+  }
+
   function runtimeContext(value) {
     const context = {};
     const error = value.error || value.reason;
     if (ERROR_NAMES.has(error?.name)) context.error_name = error.name;
-    function locate(filename, line, column) {
-      if (!filename) return false;
-      try {
-        const url = new URL(filename, window.location.href);
-        const match = url.pathname.match(/^\/static\/dist\/((?:head|auth|firebase|demo|app)\.[a-f0-9]{12}\.js)$/);
-        if (url.origin !== window.location.origin || !match) return false;
-        context.script = match[1];
-        for (const [key, number] of [["line", line], ["column", column]]) {
-          if (Number.isInteger(number) && number > 0 && number <= 10000000) context[key] = number;
-        }
-        return true;
-      } catch (_) { return false; }
+    // Frames are (bundle, line, column) tuples only: never stack text, URLs
+    // or function names. The server maps them through the bundle source maps.
+    const frames = [];
+    const stack = String(value.stack || error?.stack || "").slice(0, 4000);
+    for (const match of stack.matchAll(/(https?:\/\/[^\s()]+):(\d+):(\d+)/g)) {
+      const script = bundleName(match[1]);
+      const line = Number(match[2]);
+      const column = Number(match[3]);
+      if (!script || !validCoordinate(line) || !validCoordinate(column)) continue;
+      frames.push([script, line, column]);
+      if (frames.length >= MAX_FRAMES) break;
     }
-    if (!locate(value.filename, value.line, value.column)) {
-      // Keep only an app bundle location, never stack text, URLs or function names.
-      const stack = String(value.stack || error?.stack || "").slice(0, 4000);
-      for (const match of stack.matchAll(/(https?:\/\/[^\s()]+):(\d+):(\d+)/g)) {
-        if (locate(match[1], Number(match[2]), Number(match[3]))) break;
-      }
+    const filename = bundleName(value.filename);
+    if (filename) {
+      context.script = filename;
+      if (validCoordinate(value.line)) context.line = value.line;
+      if (validCoordinate(value.column)) context.column = value.column;
+    } else if (frames.length) {
+      [context.script, context.line, context.column] = frames[0];
     }
+    if (frames.length) context.frames = frames;
     return context;
   }
 
@@ -132,6 +161,8 @@
       message: asText(value.message || value.error || value.reason, "Unknown browser error").trim().slice(0, 700) || "Unknown browser error",
       path: window.location.pathname.slice(0, 300)
     };
+    const bundle = currentBundle();
+    if (bundle) report.bundle = bundle;
     const resourceClass = String(value.resource_class || "").slice(0, 80);
     if (report.type === "unhandled_error" || report.type === "unhandled_rejection") {
       Object.assign(report, runtimeContext(value));

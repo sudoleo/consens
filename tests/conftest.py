@@ -14,6 +14,17 @@ if os.environ.get("RUN_E2E") != "1":
 
 
 @pytest.fixture(autouse=True)
+def _no_real_telegram_alerts(monkeypatch):
+    """main.py laedt die lokale .env; mit einem echten Bot-Token darf ein Test,
+    der einen Fehlerpfad uebt, nie eine echte Telegram-Nachricht ausloesen.
+    Tests, die den Versand pruefen, setzen den Token selbst (und mocken HTTP)."""
+    from app.services import telegram_notifier
+
+    monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
+    telegram_notifier.reset_critical_state()
+
+
+@pytest.fixture(autouse=True)
 def _default_prompt_configuration(monkeypatch):
     """Default prompt reads must not contact Firestore in the unit suite."""
     from types import SimpleNamespace
