@@ -156,7 +156,11 @@ getestet; In-Memory-Fakes allein reichen für diese Race-Verträge nicht aus.
   laufen echt. `MOCK_LLM_DELAY_MS=40` hält Streaming-Zwischenzustände sichtbar.
 - `MOCK_AUTH=1` akzeptiert nur `e2e-mock-token` als Free-User
   `e2e-mock-user`. Im Browser ersetzt eine Playwright-Route sowohl das gehashte
-  Firebase-Bundle als auch die Source-URL durch `firebase_stub.js`.
+  Firebase-Bundle als auch die Source-URL durch `firebase_stub.js`. Der Stub
+  setzt wie `/user_status` auch `App.agentAccess` (Agent offen); fehlt das,
+  bleibt eine gespeicherte Agent-Wahl „pending“ und `#sendButton` gesperrt.
+  Das `app_page`-Profil startet einmal pro Tab im Modus Consensus, weil es den
+  Consensus-/Compare-Pfad prüft; Agent-Flows haben eigene `test_agent_*`-Dateien.
 - Dummy-Eigenkeys passieren lokale Key-Prüfungen, lösen mit `MOCK_LLM=1` aber
   keine Provideraufrufe aus.
 - marked, DOMPurify und KaTeX kommen aus den lokalen versionierten

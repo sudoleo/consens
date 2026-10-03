@@ -46,9 +46,14 @@ window.sendFeedback = async () => ({ ok: true });
 (function initTierUI(attempt) {
   if (typeof window.updateUserTierUI === "function") {
     window.App.authState.setIdentity(window.auth.currentUser.uid);
+    // Wie /user_status: Agent ist seit 2026-10-02 fuer jedes Konto offen.
+    // Ohne diese Antwort bliebe der Zugang "pending", und der Sende-Waechter
+    // fuer eine gespeicherte Agent-Wahl sperrte #sendButton dauerhaft.
+    window.App.agentAccess = { uid: window.auth.currentUser.uid, allowed: true };
     window.updateUserTierUI('free', true);
     window.App.accountTier.set('free');
     window.App.authState.publish(window.auth.currentUser.uid);
+    window.App.agentChat?.render?.();
     return;
   }
   if (attempt < 100) setTimeout(() => initTierUI(attempt + 1), 50);

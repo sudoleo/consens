@@ -139,6 +139,16 @@ def context(browser):
 
     ctx.route("**/static/firebase.js*", fulfill_firebase_stub)
     ctx.route("**/static/dist/firebase.*.js", fulfill_firebase_stub)
+    # Diese Suiten pruefen den Consensus-/Compare-Pfad; Agent ist seit
+    # 2026-10-02 der Default und hat eigene Dateien (test_agent_*). Einmal pro
+    # Tab setzen, damit ein Test, der den Modus wechselt und neu laedt, seine
+    # Wahl behaelt.
+    ctx.add_init_script(
+        "if (!sessionStorage.getItem('e2eRunModeSeeded')) {"
+        " localStorage.setItem('runMode', 'consensus');"
+        " localStorage.setItem('runModeDefault', 'agent-2026-10-02');"
+        " sessionStorage.setItem('e2eRunModeSeeded', '1'); }"
+    )
     # Analytics im Test nicht laden (Netz-Rauschen + Konsolen-Warnungen).
     ctx.route(
         "https://cloud.umami.is/**",

@@ -77,6 +77,14 @@ class Journey:
         self.uid = 'journey-' + uuid.uuid4().hex
         self.context = browser.new_context(viewport={'width': 1440, 'height': 950})
         self.context.add_init_script('window.__E2E_INITIAL_UID = sessionStorage.getItem("journey_uid") || ' + json.dumps(self.uid))
+        # Agent is the default since 2026-10-02; these journeys start from a
+        # Consensus run and pick Agent explicitly where they need it. Seeded
+        # once per tab so a reload keeps the mode the journey chose.
+        self.context.add_init_script(
+            "if (!sessionStorage.getItem('journeyRunModeSeeded')) {"
+            " localStorage.setItem('runMode', 'consensus');"
+            " localStorage.setItem('runModeDefault', 'agent-2026-10-02');"
+            " sessionStorage.setItem('journeyRunModeSeeded', '1'); }")
         for name, source in [('app', FIREBASE_APP_STUB), ('auth', FIREBASE_AUTH_STUB), ('firestore', FIRESTORE_GUARD)]:
             self.context.route(f'https://www.gstatic.com/firebasejs/9.22.0/firebase-{name}.js',
                 lambda route, request, source=source: route.fulfill(content_type='application/javascript', body=source))
@@ -325,7 +333,14 @@ def test_j05_delete_during_agent_work_fences_late_writes_and_owner_switch(journe
         deleted = j.request('POST', '/delete_account', {'id_token': 'token-' + j.uid})
         assert deleted.status == 200, deleted.text()
         assert deleted.json()['status'] == 'deleted'
-        assert j.control('state')['streams'] == [{'lease': 'running', 'response_ended': False}]
+        # Deletion finished while the producer is still inside the gated
+        # provider step, so everything it writes after release is a late
+        # write. Whether the HTTP response already ended is timing: the run
+        # watcher polls saved state every 3 s, sees the deleted account and
+        # cancels the shared stream, while the producer only unwinds (and
+        # releases its lease) once the gate opens.
+        [stream] = j.control('state')['streams']
+        assert stream['lease'] == 'running'
         j.page.evaluate('async uid => {sessionStorage.setItem("journey_uid", uid); await window.__switchE2EUser(uid);}', other.uid)
         j.control('release', {})
         # The real stream_events finally releases capacity only after the

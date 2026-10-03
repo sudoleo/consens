@@ -318,11 +318,26 @@ def test_mobile_composer_collapses_after_a_question_and_opens_on_tap(app_page):
     assert expanded["height"] > collapsed["height"]
 
 
+# Senden und Demo teilen sich einen Platz: bei leerem Feld steht dort der
+# Demo-Knopf, und der (deaktivierte) Senden-Kreis tritt zur Seite
+# (components-misc.css). Gemessen wird, was den Platz gerade fuellt; genau
+# einer der beiden ist sichtbar.
+SEND_SLOT_JS = """() => {
+  const rendered = [
+    document.getElementById("sendButton"),
+    document.querySelector(".input-actions-container > .demo-chip"),
+  ].filter(el => el && el.getBoundingClientRect().width > 0);
+  if (rendered.length !== 1) throw new Error(`send slot holds ${rendered.length} controls`);
+  return rendered[0];
+}"""
+
+
 def _desktop_row_geometry(page):
     return page.evaluate(
         """() => {
+          const sendSlot = """ + SEND_SLOT_JS + """;
           const box = (sel) => {
-            const el = document.querySelector(sel);
+            const el = typeof sel === "string" ? document.querySelector(sel) : sel;
             if (!el) return null;
             const b = el.getBoundingClientRect();
             return {
@@ -345,7 +360,7 @@ def _desktop_row_geometry(page):
             field: box("#questionInput"),
             attach: box(".attach-trigger"),
             picker: box(".composer-models .consensus-model .model-picker-display"),
-            send: box("#sendButton"),
+            send: box(sendSlot()),
             footerVisible: !!document.querySelector(".app-footer").offsetParent,
             fieldInline: document.getElementById("questionInput").style.height,
             focused: document.activeElement === document.getElementById("questionInput"),
@@ -423,11 +438,11 @@ def test_desktop_long_question_takes_the_full_width_and_drops_the_buttons(app_pa
     # Der Text nimmt die ganze Breite ...
     assert grown["field"]["w"] > one_row["field"]["w"] + 100
     # ... und jeder Knopf steht UNTER ihm, nicht mehr daneben.
-    for name in ("attach", "mode", "picker", "send"):
+    for name in ("attach", "picker", "send"):
         assert grown[name]["y"] >= grown["field"]["bottom"] - 2, name
-    # (+) und Modus bleiben links; Modelle und Senden stehen rechts.
-    assert grown["attach"]["x"] < grown["mode"]["x"] < grown["picker"]["x"] < grown["send"]["x"]
-    assert grown["mode"]["x"] - (grown["attach"]["x"] + grown["attach"]["w"]) <= 16
+    # (+) bleibt links (der Modus steckt seit 2026-10-02 in seinem Menue);
+    # Modelle und Senden stehen rechts.
+    assert grown["attach"]["x"] < grown["picker"]["x"] < grown["send"]["x"]
 
     # Zurueck zur einen Zeile, sobald das Feld leer ist.
     app_page.evaluate(
@@ -739,13 +754,10 @@ def test_empty_app_and_consensus_picker_do_not_scroll_unnecessarily(app_page):
 
     control_metrics = app_page.evaluate(
         """() => {
-          const selectors = [
-            "#attachTrigger",
-            "#sendButton",
-          ];
-          return selectors.map(selector => {
-            const rect = document.querySelector(selector).getBoundingClientRect();
-            return { selector, top: rect.top, height: rect.height, center: rect.top + rect.height / 2 };
+          const sendSlot = """ + SEND_SLOT_JS + """;
+          return [document.getElementById("attachTrigger"), sendSlot()].map(element => {
+            const rect = element.getBoundingClientRect();
+            return { id: element.id, top: rect.top, height: rect.height, center: rect.top + rect.height / 2 };
           });
         }"""
     )
