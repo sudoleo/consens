@@ -106,7 +106,7 @@ def test_global_exception_handler_logs_and_alerts_only_safe_categories(
     captured = []
     monkeypatch.setattr(
         main,
-        "send_critical_error_notification",
+        "dispatch_critical_error_notification",
         lambda report: captured.append(report),
     )
     request = SimpleNamespace(
@@ -119,17 +119,21 @@ def test_global_exception_handler_logs_and_alerts_only_safe_categories(
         response = asyncio.run(
             main.handle_unexpected_exception(request, RuntimeError(secret))
         )
-        asyncio.run(response.background())
 
     assert response.status_code == 500
-    assert captured == [{
+    assert response.background is None
+    report = captured[0]
+    assert {key: report[key] for key in ("source", "type", "phase", "message", "path", "status")} == {
         "source": "server",
         "type": "RuntimeError",
         "phase": "request",
         "message": "Unhandled server exception.",
         "path": "GET /api/private/{item_id}",
-    }]
+        "status": 500,
+    }
+    assert report["correlation_id"] == response.headers["x-correlation-id"]
     assert secret not in caplog.text
+    assert secret not in str(captured)
 
 
 def test_safe_traceback_reports_where_not_what():

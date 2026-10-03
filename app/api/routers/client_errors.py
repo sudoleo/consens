@@ -1,12 +1,15 @@
 """Rate-limited intake for critical failures detected by the app shell."""
 
 import re
+from typing import Optional
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, BackgroundTasks, Body, HTTPException, Request, status
 
 from app.core.rate_limit import limiter
-from app.services.telegram_notifier import send_critical_error_notification
+from app.core.sourcemaps import BUNDLE_SCRIPT, resolve_bundle_location
+from app.core.version import get_commit_short
+from app.services.telegram_notifier import _scrub_alert_text, send_critical_error_notification
 
 
 router = APIRouter()
@@ -54,7 +57,16 @@ _ALLOWED_ERROR_NAMES = {
     "URIError", "EvalError", "AggregateError", "SecurityError", "InvalidStateError",
     "IndexSizeError", "QuotaExceededError", "NetworkError", "NotSupportedError",
 }
-_BUNDLE_SCRIPT = re.compile(r"(?:head|auth|firebase|demo|app)\.[a-f0-9]{12}\.js")
+_BUNDLE_SCRIPT = BUNDLE_SCRIPT
+# Nur bei diesen Fehlerarten ist die Browser-Message in aller Regel Code-Text
+# ("Cannot read properties of undefined (reading 'x')") und hilft beim Fixen.
+# Alles andere (Error, Promise-Rejections mit Provider-Text, ...) bleibt beim
+# festen Standardtext.
+_MESSAGE_ERROR_NAMES = {"TypeError", "ReferenceError", "RangeError", "SyntaxError"}
+_MAX_CLIENT_FRAMES = 5
+_LONG_QUOTED = re.compile(r'"[^"]{25,}"|\'[^\']{25,}\'|`[^`]{25,}`')
+_URL_TEXT = re.compile(r"\b[a-z][a-z0-9+.-]*://\S+", re.IGNORECASE)
+_EMAIL_TEXT = re.compile(r"[^\s@'\"`()]+@[^\s@'\"`()]+\.[A-Za-z]{2,}")
 _BUNDLE_ASSET = re.compile(r"dist/(?:(?:head|auth|firebase|demo|app)\.[a-f0-9]{12}\.js|app\.[a-f0-9]{12}\.css)")
 _STATIC_ASSETS = {
     "js/analytics-opt-out.js",
@@ -108,6 +120,49 @@ def _route_family(path: str) -> str:
         return "/admin/{view}"
     return "/other"
 
+def _coordinate(value) -> Optional[int]:
+    return value if type(value) is int and 0 < value <= 10_000_000 else None
+
+
+def _bundle_frame(script, line, column) -> Optional[str]:
+    """Ein Frame nur aus Allowlist-Bundle + Zahlen, ueber die Source-Map
+    aufgeloest. Freitext (URLs, Funktionsnamen) kommt hier nie durch."""
+    if not isinstance(script, str) or not _BUNDLE_SCRIPT.fullmatch(script):
+        return None
+    line, column = _coordinate(line), _coordinate(column)
+    if line is None or column is None:
+        return None
+    return resolve_bundle_location(script, line, column) or f"{script}:{line}:{column}"
+
+
+def _client_frames(raw) -> list[str]:
+    if not isinstance(raw, list):
+        return []
+    frames = []
+    for item in raw[:_MAX_CLIENT_FRAMES]:
+        if isinstance(item, (list, tuple)) and len(item) == 3:
+            frame = _bundle_frame(*item)
+            if frame:
+                frames.append(frame)
+    return frames
+
+
+def _js_error_message(raw: str, error_name: str) -> str:
+    """Die Browser-Message eines Code-Fehlers, entschaerft.
+
+    Lange String-Literale (z. B. JSON.parse-Ausschnitte aus Modellantworten)
+    werden zu "…", URLs und Mailadressen zu Platzhaltern, Secrets ueber
+    ``_scrub_alert_text`` entfernt; hoechstens 200 Zeichen."""
+    text = " ".join(str(raw or "").split())
+    for prefix in ("Uncaught ", f"{error_name}: "):
+        if text.startswith(prefix):
+            text = text[len(prefix):]
+    text = _LONG_QUOTED.sub("…", text)
+    text = _URL_TEXT.sub("[url]", text)
+    text = _EMAIL_TEXT.sub("[email]", text)
+    return _scrub_alert_text(text, limit=200)
+
+
 @router.post("/api/client-errors", status_code=status.HTTP_202_ACCEPTED)
 @limiter.limit("5/minute")
 def report_client_error(
@@ -122,8 +177,9 @@ def report_client_error(
 
     # Validate the client fields, but never forward their free-form content to
     # logs or Telegram. Browser errors routinely contain prompts, URLs, e-mail
-    # addresses, access tokens, and provider response bodies.
-    _bounded_string(data, "message", 700, required=True)
+    # addresses, access tokens, and provider response bodies. Einzige Ausnahme:
+    # die entschaerfte Message von Code-Fehlern (_MESSAGE_ERROR_NAMES).
+    raw_message = _bounded_string(data, "message", 700, required=True)
     _bounded_string(data, "details", 1_500)
     _bounded_string(data, "stack", 4_000)
     raw_phase = _bounded_string(data, "phase", 80)
@@ -144,6 +200,13 @@ def report_client_error(
         "message": _GENERIC_MESSAGES[error_type],
         "path": path,
     }
+    commit = get_commit_short()
+    if commit:
+        report["commit"] = commit
+    # Welcher App-Build im Browser lief (der Hash gehoert zum Deploy).
+    bundle = _bounded_string(data, "bundle", 100)
+    if _BUNDLE_SCRIPT.fullmatch(bundle):
+        report["bundle"] = bundle
     if resource_class:
         report["resource_class"] = resource_class
     if error_type == "resource_load_failed":
@@ -157,12 +220,23 @@ def report_client_error(
         error_name = _bounded_string(data, "error_name", 80)
         if error_name in _ALLOWED_ERROR_NAMES:
             report["error_name"] = error_name
+            if error_name in _MESSAGE_ERROR_NAMES:
+                error_message = _js_error_message(raw_message, error_name)
+                if error_message:
+                    report["error_message"] = error_message
         script = _bounded_string(data, "script", 100)
         if _BUNDLE_SCRIPT.fullmatch(script):
             report["script"] = script
             for field in ("line", "column"):
-                number = data.get(field)
-                if type(number) is int and 0 < number <= 10_000_000:
+                number = _coordinate(data.get(field))
+                if number is not None:
                     report[field] = number
+            if "line" in report and "column" in report:
+                location = resolve_bundle_location(script, report["line"], report["column"])
+                if location:
+                    report["location"] = location
+        frames = _client_frames(data.get("frames"))
+        if frames:
+            report["frames"] = frames
     background_tasks.add_task(send_critical_error_notification, report)
     return {"status": "accepted"}

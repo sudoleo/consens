@@ -97,6 +97,45 @@ describe("critical resource reporting", () => {
     dom.window.close();
   });
 
+  it("sends up to five bundle frames as coordinate tuples only", () => {
+    const { window, dom, reports } = boot();
+    const origin = window.location.origin;
+    const app = `${origin}/static/dist/app.012345abcdef.js`;
+    const event = new window.Event("unhandledrejection");
+    event.reason = { name: "TypeError", message: "private",
+      stack: [
+        "TypeError: private",
+        `    at secretFunction (${app}:3:100)`,
+        "    at foreign (https://foreign.example/static/dist/app.012345abcdef.js:1:1)",
+        `    at ${origin}/static/js/private-user-file.js:1:2`,
+        `    at other (${origin}/static/dist/head.abcdef012345.js:1:77)`,
+        ...[1, 2, 3, 4, 5].map((n) => `    at f${n} (${app}:1:${n})`),
+      ].join("\n") };
+    window.dispatchEvent(event);
+    expect(reports[0].frames).toEqual([
+      ["app.012345abcdef.js", 3, 100],
+      ["head.abcdef012345.js", 1, 77],
+      ["app.012345abcdef.js", 1, 1],
+      ["app.012345abcdef.js", 1, 2],
+      ["app.012345abcdef.js", 1, 3],
+    ]);
+    expect(reports[0]).toMatchObject({ script: "app.012345abcdef.js", line: 3, column: 100 });
+    expect(JSON.stringify(reports[0].frames)).not.toMatch(/secret|foreign|private|https?:/);
+    dom.window.close();
+  });
+
+  it("names the running app bundle so the alert knows the deploy", () => {
+    const { window, document, dom, reports } = boot();
+    for (const src of ["/static/dist/head.abcdef012345.js", "/static/dist/app.0123456789ab.js"]) {
+      const script = document.createElement("script");
+      script.setAttribute("src", src);
+      document.body.appendChild(script);
+    }
+    window.App.reportCriticalError({ type: "run_failed", message: "Failed" });
+    expect(reports.find((report) => report.type === "run_failed").bundle).toBe("app.0123456789ab.js");
+    dom.window.close();
+  });
+
   it.each([
     "https://foreign.example/static/dist/app.012345abcdef.js",
     "/static/js/private-user-file.js",

@@ -5,6 +5,10 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 
 const BUNDLE = /^([a-z][a-z0-9-]*)\.[a-f0-9]{12}\.(js|css)$/;
+// External source map next to a JS bundle (frontend-sourcemaps.mjs). It lives
+// and is pruned together with its bundle, so a retained previous bundle keeps
+// resolvable error locations during a deploy transition.
+const SOURCE_MAP = /^([a-z][a-z0-9-]*\.[a-f0-9]{12}\.js)\.map$/;
 
 export async function writeAtomicIfChanged(target, content) {
   const bytes = Buffer.isBuffer(content) ? content : Buffer.from(content);
@@ -55,8 +59,13 @@ export async function previousAssets(dist, outputs) {
 }
 
 export async function publishBuild(dist, outputs, manifest) {
+  for (const name of outputs.keys()) {
+    const map = name.match(SOURCE_MAP);
+    if (!BUNDLE.test(name) && !(map && outputs.has(map[1]))) {
+      throw new Error(`Invalid bundle filename: ${name}`);
+    }
+  }
   for (const [name, content] of outputs) {
-    if (!BUNDLE.test(name)) throw new Error(`Invalid bundle filename: ${name}`);
     await writeAtomicIfChanged(path.join(dist, name), content);
   }
   await writeAtomicIfChanged(path.join(dist, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
@@ -64,6 +73,8 @@ export async function publishBuild(dist, outputs, manifest) {
   // Only prune known bundle basenames inside dist, after the manifest switch.
   const keep = new Set([...outputs.keys(), ...(manifest.previous_assets || [])]);
   for (const name of await fs.readdir(dist)) {
-    if (BUNDLE.test(name) && !keep.has(name)) await fs.rm(path.join(dist, name));
+    const map = name.match(SOURCE_MAP);
+    const stale = map ? !keep.has(map[1]) : BUNDLE.test(name) && !keep.has(name);
+    if (stale) await fs.rm(path.join(dist, name));
   }
 }

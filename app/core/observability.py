@@ -211,6 +211,14 @@ def safe_traceback(exc: BaseException, *, limit: int = SAFE_TRACEBACK_FRAMES) ->
     return ">".join(rendered)
 
 
+# Der globale Exception-Handler laeuft in Starlettes ServerErrorMiddleware,
+# also AUSSERHALB dieser Middleware: deren Kontextvariable ist dann schon
+# zurueckgesetzt und ihr send-Wrapper umgangen. Die ID liegt deshalb zusaetzlich
+# im (geteilten) ASGI-Scope, damit Handler, Log-Zeile, 500er-Header und Alert
+# dieselbe Kennung tragen.
+CORRELATION_SCOPE_KEY = "consensio.correlation_id"
+
+
 class CorrelationMiddleware:
     def __init__(self, app):
         self.app = app
@@ -222,6 +230,7 @@ class CorrelationMiddleware:
         started = time.monotonic()
         status_code = 500
         with correlation_scope(prefix="req") as current:
+            scope[CORRELATION_SCOPE_KEY] = current
             async def send_with_correlation(message):
                 nonlocal status_code
                 if message.get("type") == "http.response.start":

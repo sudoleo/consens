@@ -95,6 +95,18 @@ Vendor-Verzeichnis entfernen. `tests/js/dompurify-vendor.test.mjs` liest die
 DOMPurify-Version aus `package.json` und prüft den ausgelieferten Pfad.
 `asset_url` ergänzt Inhalts-Hashes.
 
+**Source-Maps.** Jedes JS-Bundle bekommt eine externe Map
+`static/dist/<name>.<hash>.js.map` (ohne `sourcesContent`, ohne `names`, ohne
+`sourceMappingURL`-Kommentar im Bundle — der Dateinamen-Hash bleibt ein Hash der
+ausgelieferten Bytes). Für Klassik-Gruppen zeigt esbuilds Map zunächst in die
+Verkettung; `scripts/frontend-sourcemaps.mjs` schreibt sie auf die echten Dateien
+um (`sources` = `static/js/<datei>.js`). Zweck sind die Browser-Fehler-Alerts:
+`app/core/sourcemaps.py` löst damit `app.<hash>.js:1:<spalte>` auf die Quellzeile
+auf ([`error-alerts.md`](error-alerts.md)). Die Maps verraten nichts Neues — die
+unminifizierten Quellen unter `static/js` sind ohnehin öffentlich. Sie werden mit
+ihrem Bundle veröffentlicht, mitcommittet und zusammen mit ihm bereinigt
+(`frontend-output.mjs`); `build:check` vergleicht auch sie.
+
 CSS: `style.css` ist ein `@import`-Aggregator. Der Build zieht die Kette in
 Kaskadenreihenfolge in **eine** Datei. `static/dist/` liegt neben `static/css/`,
 deshalb zeigen `url(../fonts/…)` und `url(../icons/…)` weiter auf dieselben

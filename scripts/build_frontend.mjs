@@ -26,6 +26,12 @@ import { fileURLToPath } from "node:url";
 import * as esbuild from "esbuild";
 import { vendorFrontend } from "./vendor_frontend.mjs";
 import { previousAssets, publishBuild } from "./frontend-output.mjs";
+import {
+  concatenationLayout,
+  normalizeBundleMap,
+  remapConcatenated,
+  serializeMap,
+} from "./frontend-sourcemaps.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const DIST = path.join(ROOT, "static", "dist");
@@ -70,9 +76,12 @@ async function readBytes(relative) {
  */
 async function buildClassicGroup(group) {
   const parts = [];
+  const files = [];
   for (const entry of group.files) {
     const relative = entryPath(entry);
-    parts.push(`/* ${relative} */\n${await read(relative)}\n;`);
+    const content = await read(relative);
+    files.push({ file: relative, content });
+    parts.push(`/* ${relative} */\n${content}\n;`);
   }
   const source = parts.join("\n");
 
@@ -84,9 +93,16 @@ async function buildClassicGroup(group) {
     keepNames: true,
     target: TARGET,
     legalComments: "none",
+    // External map without a sourceMappingURL comment (see
+    // frontend-sourcemaps.mjs); rewritten from the concatenation onto the
+    // real files, so an alert can name static/js/<file>.js:<line>.
+    sourcemap: "external",
+    sourcefile: `${group.name}.concat.js`,
+    sourcesContent: false,
   });
   return {
     code: result.code,
+    map: (file) => remapConcatenated(JSON.parse(result.map), concatenationLayout(files), file),
     inputs: group.files.map(entryPath),
   };
 }
@@ -117,6 +133,11 @@ async function buildModuleGroup(group) {
     entryPoints: [group.entry],
     bundle: true,
     write: false,
+    // Only anchors the map's relative source paths; nothing is written and
+    // the published name carries the content hash.
+    outfile: path.join(DIST, `${group.name}.js`),
+    sourcemap: "external",
+    sourcesContent: false,
     format: "esm",
     minify: true,
     keepNames: true,
@@ -125,8 +146,11 @@ async function buildModuleGroup(group) {
     metafile: true,
     plugins: [staticResolver],
   });
+  const code = result.outputFiles.find((file) => file.path.endsWith(".js"));
+  const map = result.outputFiles.find((file) => file.path.endsWith(".js.map"));
   return {
-    code: result.outputFiles[0].text,
+    code: code.text,
+    map: (file) => normalizeBundleMap(JSON.parse(map.text), "static/dist", file),
     // External CDN modules are absent from the metafile. Normalize the local
     // paths so Python can recompute this exact input set on every platform.
     inputs: Object.keys(result.metafile.inputs).map((input) =>
@@ -195,6 +219,7 @@ async function sourceFingerprint(inputFiles) {
     BUILD_SCRIPT,
     "scripts/vendor_frontend.mjs",
     "scripts/frontend-output.mjs",
+    "scripts/frontend-sourcemaps.mjs",
     "package.json",
     "package-lock.json",
     ...inputFiles,
@@ -235,6 +260,7 @@ async function build() {
     sourceInputs.push(...built.inputs);
     const filename = `${group.name}.${hash(code)}.js`;
     outputs.set(filename, code);
+    outputs.set(`${filename}.map`, serializeMap(built.map(filename)));
     manifest.scripts.push({
       name: group.name,
       src: `/static/dist/${filename}`,
@@ -293,6 +319,8 @@ async function verify(outputs, manifestJson) {
 function report(outputs) {
   let total = 0;
   for (const [filename, content] of outputs) {
+    // Maps are never sent to browsers; keep the total a bundle-size figure.
+    if (filename.endsWith(".map")) continue;
     const size = Buffer.byteLength(content);
     total += size;
     console.log(`  ${filename.padEnd(28)} ${(size / 1024).toFixed(1)} KB`);

@@ -234,7 +234,7 @@ Threadpool aus. `async def` bleibt nur für echte Await-Pfade (Mail, explizites
 | `pages.py` | HTML-Seiten + SEO: `/` (Landing, auch mit aktiver Session direkt erreichbar), `/model-pulse` (öffentliche Best-answer-Raten mit Filtern; API `GET /api/model-pulse`), `/app` (Haupt-App), `/app/watches` (gleiche App-Shell; watch.js öffnet anhand des Pfads das Watch-Dashboard), `/admin` (inkl. Topics-Tab), `/admin/topics` (308-Kompatibilitätsredirect auf `/admin#topics`), `/admin/benchmark` (Benchmark-Run-Visualisierung), `/about`, `/ai-model-comparison`, `/consensus-engine` (nutzerfreundliche Consensus-Engine-Erklärung), `/privacy` `/imprint` `/terms`, `robots.txt`, `sitemap*.xml`. Außerdem der öffentliche, familienaggregierte Best-answer-Zähler `GET /api/model-leaderboard` (60 s Browser-/CDN-Cache; `period=all|since-2026-08-31`; alle neun Familien einschließlich Nullständen, Kimi/GLM und Meta/Muse mit eigenem Verfügbarkeitsdatum aus `_LEADERBOARD_AVAILABLE_SINCE`). Beide Zeiträume nutzen zusätzlich einen serverseitigen 60-s-Cache mit serialisiertem Refresh pro Zeitraum/Prozess. Der gemeinsame Zeitraum zählt die datierten, deduplizierten `model_votes` ab 31.08.2026 über indexierte `count()`-Abfragen pro Familie; Modellkatalog und Counts werden im selben Read-only-Transaktionssnapshot gelesen. Solange der neue `model_votes`-Index aus `firestore.indexes.json` fehlt/aufbaut, greift nur für diesen Indexfehler der gecachte Legacy-Scan. Kontolöschungen entfernen weiterhin Votes aus dem Zeitraum, ohne Lifetime-Zähler zurückzusetzen; `/feedback`, `/vote`, `/check_keys` bleiben die weiteren internen Seiten-Routen (Key-Test nur für verifizierte Logins). Feedback ist persistent pro UID auf 30 Sekunden und 10/UTC-Tag begrenzt. Ein Best-answer-Vote muss an ein noch gültiges, owner-gebundenes `result_id` gebunden sein, zum serverseitigen Gewinner passen und kann pro Lauf genau einmal zählen. |
 | `chat.py` | Kern-LLM-Flow: `/prepare`, die aus `cfg.PROVIDERS[*].ask_endpoint` erzeugten `/ask_*`-Routen (aktuell zusätzlich `/ask_kimi` und `/ask_glm`), `/consensus`, `/resolve`. `/prepare` und die `/ask_*`-Endpoints akzeptieren weiter das optionale Legacy-`context`-Feld für nicht migrierte Bookmark-Fortsetzungen. Additiv laden `/ask_*` das owner-gebundene Tripel `chat_id`/`turn_id`/`context_version_id`; Legacy- und Versionskontext zusammen werden abgewiesen. Alle `/ask_*`-Endpoints laufen über `handle_ask` + die deklarative Familien-Registry `ASK_PROVIDERS`; Transport und Credential sind für alle OpenRouter, `useOwnKeys` wählt optional `openrouter_key`. `/consensus` akzeptiert optional Chat-/Turn-IDs plus `turn_sources` und die exakt am Turn verknüpfte `context_version_id`, prüft alles owner-gebunden vor dem Judge und finalisiert nach Consensus, Differences und Share-`result_id` in Streaming- wie JSON-Pfad über `ChatStore`. Sendet der Browser die stabile `bookmarkId`, schreibt `/consensus` den autoritativen Bookmark-Snapshot vor seinem erfolgreichen Final-Event und liefert kompakte `bookmark_meta`; ein separater Browser-Request ist nur noch Fallback. Ein bereits completed Turn wird mit Consensus, Differences, Quellen und Modellantworten owner-geschützt wiedergegeben, ohne Engine-/Differences-/Share-/Statistik-/Completion- oder Usage-Write; ohne IDs bleibt der Legacy-Vertrag unverändert. |
 | `chat_history.py` | Additive, owner-gebundene Chat-Persistenz: `POST/GET /chats`, `GET /chats/{chat_id}`, `DELETE /chats/{chat_id}` (dreistufige Kaskade über `ChatStore.delete_chat`; vor der Enumeration wird der Chat transaktional auf `deleting` gesetzt und zugleich ein dauerhafter `chat_deletion_jobs`-Auftrag angelegt, damit kein paralleler Turn als Subcollection-Waise nachrutschen kann und eine unterbrochene Kaskade vom Retention-Loop fortgesetzt wird; `deleting`-Chats sind in Liste, Detail, Turns und neuen Context-Versionen bereits unsichtbar bzw. gesperrt), `POST/GET /chats/{chat_id}/turns`, das vollständige `GET /chats/{chat_id}/turns/{turn_id}` sowie `POST /chats/{chat_id}/turns/{turn_id}/context` für eine idempotente autoritative Context-Version. Das UID-Budget `build_context` liegt ausschließlich auf diesem POST, nicht auf dem Turn-GET. Listen sind begrenzt und mit selbstenthaltenden, UID-/Ressourcen-gebundenen HMAC-Cursors paginiert (`updated_at` + Dokument-ID für Chats, `position` + Dokument-ID für Turns); Cursor-Dokumente werden nicht erneut als veränderliche Seitengrenze gelesen. Create-Chat serialisiert das Owner-Limit über `chat_state/quota`, Create-Turn ist über `client_request_id` idempotent. `ChatStore.complete_turn`/`fail_turn` lesen Chat, Turn und Account-Tombstone in derselben Transaktion und akzeptieren ausschließlich einen weiterhin `active` Chat; eine nach dem `deleting`-Marker eintreffende Completion kann deshalb keine Modellantwort-Waisen erzeugen. Completion bleibt per Payload-Fingerprint idempotent. Es gibt bewusst keinen öffentlichen Completion-/Fail-Write-Endpoint. Alle `/chats`-Antworten erhalten über die Security-Middleware `private, no-store`. Bei einer aktiven Fortsetzung erzeugt der Browser den pending Turn nach `/prepare` vor Context und Fan-out; Turn 1 entsteht erst bei der Consensus-Anforderung. Consensus-Turns werden serverseitig über `/consensus`, Agent-Turns über `/agent` finalisiert. |
-| `client_errors.py` | Nimmt unter `POST /api/client-errors` ausschließlich same-origin, größenbegrenzte kritische Browsermeldungen an (5/min pro IP). Freitext, Stack, konkrete IDs/Slugs und Providerdetails werden verworfen; nur allowgelistete Typ-/Phasenkategorien, eine abstrahierte Route und bei echten Skript-/Stylesheet-Ladefehlern eine grobe Ressourcenklasse (`app_bundle`, `static_asset`, `jsdelivr_dependency`, `firebase_dependency`, `same_origin_resource`, `unknown_resource`) erreichen den nicht-blockierenden Telegram-Alert. Der Endpoint liefert keine Konfigurationsdetails zurück. |
+| `client_errors.py` | Nimmt unter `POST /api/client-errors` ausschließlich same-origin, größenbegrenzte kritische Browsermeldungen an (5/min pro IP). Freitext, Stack, konkrete IDs/Slugs und Providerdetails werden verworfen; nur allowgelistete Typ-/Phasenkategorien, eine abstrahierte Route und bei echten Skript-/Stylesheet-Ladefehlern eine grobe Ressourcenklasse (`app_bundle`, `static_asset`, `jsdelivr_dependency`, `firebase_dependency`, `same_origin_resource`, `unknown_resource`) erreichen den nicht-blockierenden Telegram-Alert. Runtime-Fehler liefern zusätzlich Bundle-Koordinaten (Ort + bis zu fünf `[bundle, zeile, spalte]`-Frames), die über `static/dist/<bundle>.map` auf `static/js/…:zeile:spalte` aufgelöst werden, den Namen des laufenden App-Bundles und nur bei `TypeError`/`ReferenceError`/`RangeError`/`SyntaxError` die entschärfte Message (lange Literale → „…“, URLs/Mails/Secrets raus, max. 200 Zeichen). Der Endpoint liefert keine Konfigurationsdetails zurück. |
 | `auth.py` | `/register`, `/confirm-registration` (setzt nach verifiziertem Login zusätzlich eine kurzlebige HttpOnly-Session für private servergerenderte Seiten), `DELETE /auth/session` (lokales Logout-Cleanup). `/register` gibt für Neuanlage, Bestand und Create-Race exakt `{"status":"check_inbox"}` zurück, nie UID/E-Mail/Custom-Token. Unbekannte Adressen erhalten ein serverseitig zufälliges, dem anonymen Aufrufer unbekanntes Übergangspasswort; neue und bestehende Adressen durchlaufen danach denselben Firebase-Mailbox-Setup-Pfad. Der Browser versucht keinen Login mit den eingesendeten Legacy-Credentials. Nur ein tatsächlich neues Konto löst den PII-freien Telegram-Admin-Alert aus. `/confirm-registration` prüft Revocation live und erkennt damit auch gerade neu angelegte Google-Konten serverseitig. |
 | `users.py` | `/user_status`, `/usage`, `/usage/run/release`, `GET`/`PUT /api/my/memory` sowie `POST /api/my/memory/edit|undo` (User-Memory samt explizitem, revisioniertem Luna-Patch, siehe §3), `/delete_account`, `/track-interest`. `/delete_account` legt vor jeder Löschung einen persistenten, fail-closed Auftrag über `FirestoreAccountDeletion` an. Die idempotente Kaskade umfasst API-Zugang/Telegram, alle Nutzer-Subcollections, Chats, Waitlist/Feedback, Pending Results, Persistence-Guards/Votes, Watches/Briefs, Follow-Challenges/E-Mail-Follows, eigene Shares über deren bestehende Hard-Delete-Kaskade, Profil und Firebase Auth. Jeder Bereich wird separat quittiert und bei Fehlern vom fünfminütigen Maintenance-Loop erneut versucht; bis dahin lautet die Antwort ehrlich `202 cleanup_pending`, erst der vollständige Abschluss ergibt 200. Owner-gebundene Create/Update/Delete-Transaktionen lesen den Account-Tombstone als ersten Teil derselben Mutation; nur interne Cleanup-Kaskaden verwenden explizite Bypässe. Dadurch können bereits authentifizierte, verspätete Requests keinen zuvor quittierten Bereich neu befüllen. `/track-interest` ist der idempotente Pro-Beta-Zugangsrequest (ein Pending-Dokument pro UID, kein Billing); aktive Pro-Konten werden abgewiesen. **Seit 2026-07-25 ruft die App diesen Endpunkt nicht mehr auf** — es wird nichts mehr angeboten, das man anfragen könnte; der Endpunkt bleibt nur bestehen, damit vorhandene Waitlist-Dokumente nicht verwaisen. |
 | `bookmarks.py` | `GET /bookmarks` liefert ausschließlich kompakte Metadaten, standardmäßig 30 Einträge und einen opaken Cursor; `GET /bookmarks/{id}` liefert owner-geschützt den Vollinhalt. Sidebar-Name: `title` ist die erste Frage (`query` die letzte); seit 2026-10-03 benennt `POST /bookmarks/{id}/title` die Unterhaltung einmalig ChatGPT-artig mit 2–6 Wörtern (`app/services/chat_titles.py`: ein strukturierter Call über `query_engine_json` mit dem Chat-Memory-Modell der ersten verfügbaren Familie, Gemini zuerst, auf Betreiberkosten; MOCK_LLM liefert `Topic: …`). Der Titel landet zuerst auf dem Chat-Dokument (Agent- und Follow-up-Saves kopieren dessen `title`), dann mit `title_source: "generated"` auf dem Bookmark; `persistence_guard.write_bookmark` verwirft in derselben Transaktion jedes spätere `title` ohne `title_source`, damit Modell-/Consensus-Saves desselben Laufs den Namen nicht zurücksetzen. Scheitert der Call, bleibt die Frage der Name (`status: "skipped"`, nie ein Fehler); fehlende Bookmarks werden nicht neu angelegt. Listenmetadaten tragen `title_source`. Chat-Bookmarks referenzieren additiv `chat_id`/letzte `turn_id`; `GET /bookmarks/{id}/conversation` paginiert dafür die vollständigen owner-gebundenen completed Turns aus `ChatStore`, statt den wachsenden Transcript in ein Bookmark-Dokument zu kopieren; der Normalpfad läuft über `ChatStore.list_turn_details` (Chat einmal pro Seite geprüft, Modellantworten je Turn mit **einer** Query) und benötigt damit `2 + N` SDK-Aufrufe pro Seite. Abgerechnet werden weiterhin Dokument-Reads: Chat + gelesene Turn-Dokumente (inklusive Pagination-Sentinel) + alle zurückgegebenen Antwortdokumente; eine Query ist nicht ein einzelner Dokument-Read. Scheitert nur dieser optimierte Collection-Read, fällt der Endpoint korrektheitshalber auf `list_turns` + owner-gebundene Turn-Details zurück, statt den Browser auf zwei Bookmark-Snapshots zu reduzieren. Der Endpunkt ist bewusst ein synchrones `def`, damit die blockierenden Reads im Threadpool statt auf dem Event-Loop laufen. `/bookmark` (POST/DELETE), `/bookmark/consensus` sowie `POST /bookmark/consensus/share-result` erhalten Speichern, Löschen und die sichere Share-/Watch-Rehydration. Consensus-Inhalte werden aus einem owner-gebundenen Pending Result oder completed Turn serverseitig materialisiert, nicht aus frei behaupteten Clientfeldern; die alten, ignorierten Client-Kopien bleiben für gecachte Clients im Schema, werden aber nicht mehr formvalidiert und können den autoritativen Save daher nicht mit 422 blockieren. Quellenlisten werden nicht nach Anzahl gekürzt; die bestehenden Dokument- und Request-Bytebudgets begrenzen den Save ausdrücklich. `persist_authoritative_consensus_bookmark` ist der gemeinsame Writer für den primären `/consensus`-Abschluss und den idempotenten `/bookmark/consensus`-Fallback. Der breite slowapi-IP-Schutz sitzt vor der Tokenprüfung; die eigentlichen Modell- und Consensus-Save-Budgets gelten danach pro UID, damit der interne Preset-Fan-out nicht mit fremden Nutzern an einem Proxy-/NAT-Bucket konkurriert. Persistent gelten höchstens 250 Bookmarks, 750 kB je Dokument und 25 MB geschätztes Gesamtbudget pro UID. `DELETE /bookmark` liest die Chat-Bindung und legt **vor** dem Entfernen des Bookmarks per `ChatStore.request_chat_deletion` in einer Transaktion Tombstone (`status=deleting`), einmaligen Zählerabzug und einen dauerhaften Auftrag `chat_deletion_jobs/{sha256(uid:chat)[:40]}` an; erst danach wird das Bookmark gelöscht und `run_chat_deletion` versucht die Kaskade sofort. Scheitert sie (auch zwischen zwei Batches) oder stirbt der Prozess, bleibt der Auftrag mit `attempts`, `last_error` (nur Kategorie) und Backoff (`next_attempt_at`, 1 min bis 6 h) sichtbar und `resume_chat_deletions` im stündlichen Retention-Loop beendet ihn; quittiert wird erst nach vollständiger Kaskade. Kann der Auftrag nicht angelegt werden, bleibt das Bookmark bestehen und die Antwort ist 500 (nichts gelöscht, erneut versuchbar). Saves akzeptieren eine validierte stabile `bookmarkId`, sodass alle Turns einer laufenden Unterhaltung dasselbe Sidebar-Bookmark aktualisieren; Legacy-Saves ohne ID bleiben fragebasiert. `previous_question`/`previous_turn` bleiben als kompatibler Ein-Turn-Fallback für alte Bookmarks ohne Chat-Bindung erhalten. Alle Bookmark-Antworten sind wie `/chats` `private, no-store`. Die Save-Endpunkte liefern weiterhin den zusammengeführten Datensatz zurück; der Client reduziert ihn sofort auf Listenmetadaten und hält höchstens das geöffnete Detail im Cache. Der seltene Browser-Fallback sendet nur IDs plus kleine Legacy-Texte, nutzt `keepalive`, wiederholt Netz-/408-/425-/429-/5xx-Fehler begrenzt und zeigt einen endgültigen Fehler dedupliziert verständlich an. |
@@ -594,10 +594,13 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   `AbortError`-Abbrüche werden ignoriert; Session-Deduplizierung verhindert
   Wiederholungen desselben Fehlers. Runtime-Alarme ergänzen einen allowgelisteten
   JS-/DOM-Fehlernamen und, sofern verfügbar, den same-origin Bundle-Dateinamen
-  (`head|auth|firebase|demo|app` mit zwölfstelligem Content-Hash) mit Zeile/Spalte.
-  `/api/client-errors` validiert diese Felder erneut; Telegram und beide
-  Deduplizierungsstufen erhalten die Codeposition, weiterhin keine freien
-  Meldungen, Stacktexte, URLs oder Nutzinhalte. Alte Clients bleiben kompatibel.
+  (`head|auth|firebase|demo|app` mit zwölfstelligem Content-Hash) mit Zeile/Spalte,
+  dazu bis zu fünf Stack-Frames als reine `[bundle, zeile, spalte]`-Tupel und
+  jeder Report den Namen des laufenden `app.<hash>.js` (`bundle`).
+  `/api/client-errors` validiert diese Felder erneut, löst sie über die
+  Source-Maps auf und gibt die Message nur bei `TypeError`/`ReferenceError`/
+  `RangeError`/`SyntaxError` entschärft weiter; Stacktexte, URLs und sonstige
+  Meldungen bleiben draußen. Alte Clients bleiben kompatibel.
   Vor dem Keepalive-Request begrenzt der Reporter Meldung/Details/Stack und die
   übrigen Felder auf die Intake-Limits; fehlende Fehlergründe erhalten einen
   gültigen Fallback. Synchrone Transportfehler und Promise-Rejections des
@@ -3633,9 +3636,8 @@ Details, Budgets und Abnahme: [source-verification.md](source-verification.md).
   erhalten blieb; bewusste Stop-/Skip-Aktionen und Usage-Limits bleiben ruhig.
   Ungefangene Backend-Exceptions erzeugen zusätzlich über den globalen
   Exception-Handler einen serverseitigen Alert und antworten weiterhin nur mit
-  einem neutralen HTTP 500. `telegram_notifier.py` entfernt Secrets, dedupliziert
-  identische Alerts zehn Minuten und begrenzt pro Prozess auf zehn Alerts in
-  zehn Minuten.
+  einem neutralen HTTP 500 (mit `x-correlation-id`). Aufbau, Dedup und Budgets
+  der Alerts: „Kritische Fehler-Alerts (Telegram)“ unten.
 - Robustheit Differences (`consensus_engine.py`): einheitlicher Engine-Dispatch
   (`_resolve_engine`/`_call_engine_text`/`_stream_engine_text`) über OpenRouter
   Chat Completions. Strukturierte Aufgaben senden in Streaming- und
@@ -4682,6 +4684,60 @@ vollständigen Laufs entsprechen, das Limit dem gewünschten Tagesvolumen.
   Brief und speichert nur `topic_brief` über `publisher_config.save_config`;
   automatische Prompt- oder Action-Übernahmen existieren nicht.
 
+### Kritische Fehler-Alerts (Telegram, seit 2026-10-03)
+
+Ziel: Ein Alert lässt sich unverändert in Claude Code einfügen und führt dort
+direkt zur Codestelle. Betreiber-Anleitung: [`error-alerts.md`](error-alerts.md).
+
+- **Quellen.** (1) Globaler Exception-Handler in `main.py` (ungefangene
+  Request-Exceptions, auch nach Stream-Beginn), (2) `background_tasks.py`
+  (Absturz eines Lifespan-Tasks nach drei Fehlern bzw. Einmal-Task sofort),
+  (3) `error_alerts.report_server_exception(exc, where=…)` an Stellen, die
+  Fehler abfangen und nur loggen: `chat.consensus_stream`,
+  `chat.differences_stream`, `consensus_engine.coverage_merge`,
+  `consensus_engine.coverage_judge`, `agent.turn_stream`. Dort alarmieren nur
+  Programmierfehler (`error_context.is_unexpected_exception`: AttributeError,
+  Lookup-/Name-/Type-/Arithmetik-/Assertion-/Rekursionsfehler,
+  NotImplementedError) — Abbrüche, Provider-/Netz-/Timeout-, Firestore- und
+  Domänenfehler (inkl. ValueError) bleiben beim Log. (4) Browser über
+  `POST /api/client-errors` (§2, `error-reporter.js` §3).
+- **Inhalt Server.** `error_context.server_error_report`: `type` =
+  `safe_exception`, bis zu acht Repo-relative Frames `pfad:zeile:funktion`
+  (innerster zuerst, Bibliotheks-Frames entfernt), `commit`
+  (`version.get_commit_short`), `instance`, `correlation_id`, beim Handler
+  `path` = `METHODE Routen-Template` und `status`. Die Exception-Message bleibt
+  bewusst draußen (kann Nutzerinhalt tragen); die Frames sind der Fundort.
+- **Correlation-ID.** `CorrelationMiddleware` legt die ID zusätzlich unter
+  `observability.CORRELATION_SCOPE_KEY` in den ASGI-Scope: Starlettes
+  `ServerErrorMiddleware` ruft den Handler außerhalb der Middleware auf (Kontext
+  schon zurückgesetzt, send-Wrapper umgangen). Der Handler nimmt die ID aus dem
+  Scope (sonst `err-…`), loggt in deren `correlation_scope` (Log-Zeile mit
+  `[corr=…]` und `at=<safe_traceback>`) und setzt `x-correlation-id` am 500er.
+- **Zustellung.** `telegram_notifier.dispatch_critical_error_notification`
+  reserviert synchron (Dedup + Budget) und sendet auf einem Daemon-Thread
+  `critical-alert` — unabhängig vom Response; früher hing der Alert als
+  BackgroundTask am 500er und lief bei schon gestarteten SSE-Antworten nie.
+  Background-Tasks und Browser-Intake senden weiter synchron im eigenen
+  Thread bzw. BackgroundTask des 202ers.
+- **Dedup/Budget.** Schlüssel ist `critical_fingerprint` (8 Hex; Quelle, Typ,
+  Phase, Pfad, Ressource/Asset/Failure, Fehlername, Ort bzw. innerster Frame —
+  ohne Message). Identische Alerts 10 min unterdrückt; je Prozess eigene Budgets
+  `server` 10 und `browser` 5 pro 10 min. Unterdrückte werden je Fingerprint
+  gezählt und am nächsten zugestellten Alert als `(+N similar since last alert)`
+  angezeigt. Ein fehlgeschlagener Versand (HTTP-Fehler, `ok:false`, Exception)
+  gibt Slot und Zähler frei und loggt WARNING mit Telegram-`description`
+  (nie den Token).
+- **Format.** Klartext ≤ 4096 Zeichen: Kopfzeilen (Source, Type, Environment,
+  Instance, Commit, Time, Phase, `Route: … -> 500` bzw. `Path:`, Correlation,
+  Browser: Bundle, `Error: Name: message`, `Location: static/js/x.js:z:s
+  (bundle app.<hash>.js:1:s)`), Meldung, `Frames (innermost first)`, Details;
+  zuletzt immer (Kürzung davor) die Zeile `fix-context: fp=… commit=… route=…
+  corr=… [bundle=… loc=…] frames=a < b`.
+- **Source-Maps.** Der Build schreibt `static/dist/<bundle>.js.map`
+  ([`frontend-build.md`](frontend-build.md)); `app/core/sourcemaps.py`
+  dekodiert sie (lru-gecacht, nur allowgelistete Bundle-Namen, fehlende oder
+  kaputte Map → Bundle-Koordinate bleibt stehen).
+
 ---
 
 ## 5. Backend-Struktur
@@ -4696,7 +4752,9 @@ app/core/
   security.py                Firebase-Init, Token/Tier/Admin-Checks (get_user_tier, is_user_pro, is_user_plus), CSP-Middleware
   request_limits.py          ASGI-Bodylimit vor JSON-/Form-Parsing (Content-Length + chunked)
   rate_limit.py              slowapi-Limiter (erste, von Render gesetzte Client-IP in XFF) + prozesslokale UID-Budgets
-  observability.py           PII-freie Correlation-IDs, strukturierte Logs + Prozessmetriken
+  observability.py           PII-freie Correlation-IDs (auch im ASGI-Scope), strukturierte Logs + Prozessmetriken
+  error_context.py           Inhaltsfreier Alert-Fundort: Repo-Frames, Commit, Instanz, Programmierfehler-Filter
+  sourcemaps.py              VLQ-Decoder: Browser-Bundle-Koordinate -> static/js/<datei>.js:<zeile>:<spalte>
 app/api/routers/             siehe §2
   api_v1.py                  Gescopte Run-, Publish-, Share-Lifecycle- und Indexing-API + OpenAPI-Modelle
   chat_history.py            Owner-gebundene Chat-/Turn-API inkl. vollständigem Turn-Detail
@@ -4740,7 +4798,8 @@ app/services/
   seo_data.py               URL-Discovery, inkrementelle Collection, Query-Snapshots + Statusregeln
   seo_recommendation.py     Deterministische Regeln + optionaler strukturierter Content-Judge
   seo_weekly_review.py      Leased Terra-Portfolio-Review, Gruppen/Entscheidungen + Topic-Brief-Vorschlag
-  telegram_notifier.py      Gemeinsamer Bot-API-Client + Best-effort-Statusmeldungen für SEO-Reviews
+  telegram_notifier.py      Gemeinsamer Bot-API-Client, Critical-Alerts (Fingerprint, Budgets, fix-context) + SEO-Review-Meldungen
+  error_alerts.py           report_server_exception: abgefangene Programmierfehler in Streams als Alert
   telegram_watch.py         User-Link-Deep-Links/Webhook, Callback-Aktionen + ein Watch-Nachrichtenversuch (send_watch_message)
   notification_outbox.py     Dauerhafte Benachrichtigungs-Outbox (notification_outbox): stabile Delivery-IDs, Lease, Versuche, Terminalstatus
   notification_delivery.py   Ein Zustellversuch je Outbox-Item mit Abmelde-/Pause-/Kanalprüfung + Retry-Pass run_outbox_tick
@@ -5354,7 +5413,13 @@ alte Gemini-ADC-JSON ist entfernt.
 - Kritische App-/Serverfehler verwenden `TELEGRAM_BOT_TOKEN` und optional
   `CRITICAL_ERROR_TELEGRAM_CHAT_ID`; ohne eigene Ziel-ID fällt der Versand auf
   `TELEGRAM_CHAT_ID` zurück. Fehlende Konfiguration deaktiviert Alerts
-  best-effort, ohne App-Flows zu beeinflussen.
+  best-effort, ohne App-Flows zu beeinflussen. Die Umgebungszeile der Alerts
+  (auch der Registrierungsmeldung) ist auf Render (`RENDER` oder
+  `RENDER_SERVICE_NAME` gesetzt) `RENDER_SERVICE_NAME`/`ENVIRONMENT`/
+  `production`, sonst `ENVIRONMENT` oder `local`; die Instanz kommt aus
+  `RENDER_INSTANCE_ID` (Fallback Hostname). Die Unit-Suite entfernt
+  `TELEGRAM_BOT_TOKEN` per Autouse-Fixture, damit eine lokale `.env` nie echte
+  Nachrichten aus Fehlerpfad-Tests auslöst.
 - Neue E-Mail/Passwort- und Google-Registrierungen verwenden denselben
   Telegram-Admin-Kanal. Eine prozesslokale, gehashte UID-Deduplizierung für 24
   Stunden verhindert Doppelmeldungen zwischen Create- und Confirm-Flow.

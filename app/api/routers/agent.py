@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from firebase_admin import firestore
 
 from app.core.observability import provider_diagnostic, safe_exception, safe_traceback
+from app.services.error_alerts import report_server_exception
 from app.core import config as cfg
 from app.core.rate_limit import limiter, api_uid_limiter, ApiUidRateLimitExceeded
 from app.core.security import TierStatusUnavailable, db_firestore, get_user_tier, is_user_admin, is_user_pro
@@ -397,6 +398,9 @@ def run_agent(request: Request, payload: AgentRequest):
             logging.warning("Agent completion failed category=%s model=%s code=%s retry_after=%s detail=%s where=%s",
                             safe_exception(exc), model.model, failure["code"], failure.get("retry_after"),
                             provider_diagnostic(exc), safe_traceback(exc))
+            # Providerfehler landen hier regulaer; gemeldet wird nur ein
+            # Programmierfehler (error_context.is_unexpected_exception).
+            report_server_exception(exc, where="agent.turn_stream")
         if status != "succeeded":
             for event in loop._events():
                 yield sse_pack(event["type"], event)
