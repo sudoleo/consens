@@ -71,6 +71,8 @@
   color: var(--ink); font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); line-height: 1.4; cursor: pointer;
 }
 .agent-google-chips:has(.agent-google-chip.is-incomplete) .agent-google-consent { color: var(--ink-2); }
+/* Asked once per chat: gone once the chat holds the consent. */
+.agent-google-consent[hidden] { display: none; }
 
 /* Where the chips sit in the composer (above the question): composer.css. */
 

@@ -4,12 +4,40 @@ This feature is disabled until configured. OAuth is for each Consens user's own
 Google account; there is no service-account impersonation or domain-wide delegation.
 Do not use production mail or invitation recipients for automated smoke tests.
 
+## Scope: Google is a source, not a hand (since 2026-10-03)
+
+Consens compares models; disagreement is the product. Google data earns its place
+as **private evidence for a question** ("which of the offers in my inbox?", "does
+my calendar allow this project?"), the same role as an uploaded file. Agent chats
+therefore:
+
+- read **Gmail and Calendar** for a message the user selected them for
+  ((+) menu → "Gmail & Calendar"), and
+- take **files from Google Drive** as ordinary attachments ((+) menu → "Add from
+  Google Drive", Google's own picker, `drive.file` only).
+
+Writing back (sending mail, creating or changing events) stays in the code but is
+**off unless `GOOGLE_WRITES_ENABLED=1`**: without it no write scope is requested,
+no preparation tool is offered to the agent, confirmation is refused before any
+claim, and older proposals can only be discarded. Assistants that live inside
+Google do this natively; disagreement between models adds little to "3 or 4 pm?",
+while these are the operations an instruction hidden in a mail would target.
+
+Release path: Drive (`drive.file`, non-sensitive) and Calendar reading (sensitive)
+can go public after Google's standard app verification. Gmail reading is a
+restricted scope (security assessment, see below), so it stays in the consent
+screen's **Testing** mode with listed test users (at most 100; Google expires
+their refresh tokens after 7 days, the sheet then shows "Needs reconnection").
+
 ## Configuration
 
-1. In a dedicated Google Cloud project, enable Calendar API and Gmail API. Configure an OAuth
-   web application and its consent screen, verified domain, support contact, home
-   page and privacy-policy URL. Use test users while verification is pending.
-2. Register exactly `https://YOUR_HOST/agent/google/callback` as the redirect URI.
+1. In a dedicated Google Cloud project, enable Calendar API, Gmail API, Google
+   Drive API and Google Picker API. Configure an OAuth web application and its
+   consent screen, verified domain, support contact, home page and privacy-policy
+   URL. Use test users while verification is pending.
+2. Register exactly `https://YOUR_HOST/agent/google/callback` as the redirect URI
+   and `https://YOUR_HOST` as an **authorized JavaScript origin** (the Drive picker
+   gets its token in the browser through Google Identity Services).
    Preserve this same origin through the reverse proxy. The popup callback has no
    external assets and clears its query immediately; redact its query string in
    **proxy/load-balancer logs as well as application logs**. The application
@@ -25,15 +53,29 @@ Do not use production mail or invitation recipients for automated smoke tests.
    least privilege. Keep old keys available until all retained credentials have
    been re-encrypted by refresh/reconnection; losing all old keys requires users
    to reconnect. Do not commit or print keys in deployment diagnostics.
-4. Review the processing terms of the actual OpenRouter hosting endpoints, not
-   just model developers. Set `GOOGLE_ALLOWED_MODEL_IDS` to a comma-separated list
-   of approved **OpenRouter model IDs**, and `GOOGLE_ALLOWED_PROVIDERS` to approved
-   OpenRouter provider slugs. Include the configured synthesis, comparison,
-   Differences and Coverage judge models. Every model call in a Google-data chat
-   is checked, uses `provider.only`, `allow_fallbacks=false`, `data_collection=deny`
-   and ZDR, and fails closed if no approved route exists. Model/router logging and
-   provider contracts must also prohibit general-purpose training and secondary
-   use. These flags alone are not a compliance attestation.
+4. Model routing. Every model call in a chat with Google data (agent, comparison,
+   synthesis, Differences and Coverage judges) requires OpenRouter's zero data
+   retention **and** `data_collection: "deny"`; existing provider routing of a model
+   is kept. OpenRouter fails such a call closed when no endpoint qualifies; that
+   model then fails like any unavailable model and the run continues with the
+   others. No list has to be maintained: a live probe on 2026-10-03 reached 48 of
+   52 catalogue models from all nine families under this rule; the four others
+   have no ZDR endpoint at all (or need the account's 18+ confirmation) and fail
+   in every chat already. Re-run the probe after a model refresh.
+   Optional and stricter: `GOOGLE_ALLOWED_MODEL_IDS` (comma-separated OpenRouter
+   model IDs; other models are refused with 403) and `GOOGLE_ALLOWED_PROVIDERS`
+   (OpenRouter provider slugs; adds `provider.only` and `allow_fallbacks=false`).
+   Review the processing terms of the hosting endpoints you rely on. These flags
+   alone are not a compliance attestation.
+4a. Drive picker: create an **API key** restricted to the Google Picker API and to
+   HTTP referrer `https://YOUR_HOST/*`, and note the project **number**. Set
+   `GOOGLE_PICKER_API_KEY` and `GOOGLE_PROJECT_NUMBER` (the picker's app ID: files
+   picked there become readable to this project only, `drive.file`). Both values
+   and `GOOGLE_CLIENT_ID` reach the browser by design; Drive needs no server
+   secret, stores no grant and works even before the Gmail/Calendar secrets exist.
+   The browser holds the short-lived token in memory, downloads the picked file
+   (Docs as DOCX, Sheets as CSV of the first sheet, Slides as PDF) and uploads it
+   with `drive_file_id`; the stored file is `kind: drive_file`.
 5. Deploy `firestore.indexes.json`. OAuth state/action/evidence/intent expiry use collection-group
    indexes; credentials, OAuth secrets, proposal bodies and previews are excluded
    from indexes. Keep the existing deny-all browser Firestore rules. Production
@@ -42,7 +84,8 @@ Do not use production mail or invitation recipients for automated smoke tests.
 6. Set `GOOGLE_INTEGRATIONS_ENABLED=1`, deploy, and verify the unconnected state,
    consent disclosure, account selection, incremental permissions, disconnect,
    and account/chat deletion in a dedicated staging account. Existing files and
-   document features work without these Google settings.
+   document features work without these Google settings. Leave
+   `GOOGLE_WRITES_ENABLED` unset unless writing back is a deliberate decision.
 
 ## Permissions and consent
 
@@ -50,18 +93,23 @@ Do not use production mail or invitation recipients for automated smoke tests.
 | --- | --- | --- |
 | Google account identity | `openid email` | Verified subject and account label; no profile scope |
 | Calendar reading | `https://www.googleapis.com/auth/calendar.readonly` | Calendar selection, event search/read/instances and free/busy |
-| Calendar changes (separate request) | `https://www.googleapis.com/auth/calendar.events` | Create and patch events after exact confirmation |
+| Calendar changes (separate request; only with `GOOGLE_WRITES_ENABLED=1`) | `https://www.googleapis.com/auth/calendar.events` | Create and patch events after exact confirmation |
 | Gmail reading (restricted) | `https://www.googleapis.com/auth/gmail.readonly` | Targeted search, messages, complete paged threads, selected attachments and read-only send reconciliation |
-| Gmail sending (sensitive; separate request) | `https://www.googleapis.com/auth/gmail.send` | Send the exact locally reviewed MIME message |
+| Gmail sending (sensitive; separate request; only with `GOOGLE_WRITES_ENABLED=1`) | `https://www.googleapis.com/auth/gmail.send` | Send the exact locally reviewed MIME message |
+| Drive files (non-sensitive; browser token, never stored) | `https://www.googleapis.com/auth/drive.file` | Read only the files the user picks in Google's picker |
 
 The token response determines actual capabilities; a partial OAuth grant does not
-imply a missing permission. Connections are selected per message. A separate,
-unchecked data-sharing box discloses processing by approved selected/review models;
-it is cleared after submitting the message. Consent is required again for follow-up
-processing of a chat containing Google-derived information, even without new API
-reads. Such chats disable web search and external source-checking to avoid sending
-private excerpts as search queries. Users can still combine prior research, their
-uploaded files, comparisons, documents and selected Google data in the chat.
+imply a missing permission. Connections are selected per message. Google data in a
+chat (a Gmail/Calendar selection or a Drive file) needs the user's consent **once
+per chat**: an unchecked box "Share with the models in this chat" discloses
+processing by the chat's models, including comparison and review models. The first
+consented run stores `google_consent` on the chat; the browser then sends the
+consent with every later message of that chat, and the server still refuses any
+request of a Google-data chat without it (older chats without the stored consent
+ask once more). Such chats disable web search and external source-checking to
+avoid sending private excerpts as search queries. Users can still combine prior
+research, their uploaded files, comparisons, documents and selected Google data.
+Drive files are Agent-only: a draft that leaves Agent mode loses them, with a notice.
 
 ## Lifecycle, limits and recovery
 

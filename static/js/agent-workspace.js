@@ -559,7 +559,8 @@
       try {
         const response = await request(`/agent/chats/${chatId}/files`, {
           method: 'POST', signal, headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: file.name, data: file.data }) });
+          body: JSON.stringify({ name: file.name, data: file.data,
+            ...(file.origin?.source === 'google_drive' && file.origin.file_id ? { drive_file_id: file.origin.file_id } : {}) }) });
         data = await response.json();
       } catch (failure) {
         if (failure.name === 'AbortError' || signal.aborted) { uploads.delete(chatId); update(); throw failure; }

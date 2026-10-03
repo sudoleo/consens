@@ -28,6 +28,9 @@ SCOPES = {
 }
 IDENTITY_SCOPES = ["openid", "email"]
 TOKEN_URL = "https://oauth2.googleapis.com/token"
+# Sending email and creating/changing events. Google is a source of evidence
+# in Consens; writing back is a separate operator decision (off by default).
+WRITE_CAPABILITIES = {"calendar_write", "gmail_send"}
 
 
 class GoogleError(ValueError):
@@ -63,6 +66,29 @@ def available():
         return False
 
 
+def writes_enabled():
+    """Read access works without this; tools that prepare emails or events,
+    their confirmation and the write scopes all need GOOGLE_WRITES_ENABLED=1."""
+    return os.getenv("GOOGLE_WRITES_ENABLED") == "1"
+
+
+def drive_picker():
+    """Public browser configuration for Google's own file picker, or None.
+
+    Drive needs no stored grant and no server secret: the browser asks Google
+    for a short-lived drive.file token, the user picks files in Google's
+    picker, and the picked files become ordinary chat attachments. All three
+    values are public by design (the API key is restricted to the Picker API
+    and this site's origin in the Cloud console).
+    """
+    if os.getenv("GOOGLE_INTEGRATIONS_ENABLED") != "1":
+        return None
+    client_id, api_key, app_id = (os.getenv(key, "").strip() for key in ("GOOGLE_CLIENT_ID", "GOOGLE_PICKER_API_KEY", "GOOGLE_PROJECT_NUMBER"))
+    if not (client_id and re.fullmatch(r"[A-Za-z0-9_-]{20,100}", api_key) and re.fullmatch(r"\d{6,20}", app_id)):
+        return None
+    return {"client_id": client_id, "api_key": api_key, "app_id": app_id}
+
+
 class Wire:
     """Allowlisted callers provide fixed Google hosts; no automatic retries."""
     def request(self, method, url, **kwargs):
@@ -94,17 +120,33 @@ class Wire:
 
 
 def public_connection(data):
-    return {key: data[key] for key in ("id", "email", "status", "capabilities", "updated_at", "revision") if key in data}
+    public = {key: data[key] for key in ("id", "email", "status", "capabilities", "updated_at", "revision") if key in data}
+    # A grant can still hold write scopes from an earlier consent; without
+    # writes they must not look usable anywhere.
+    if "capabilities" in public and not writes_enabled():
+        public["capabilities"] = [c for c in public["capabilities"] if c not in WRITE_CAPABILITIES]
+    return public
 
 
 def restricted_model(model):
-    """Apply the operator-reviewed routing boundary to every model, including judges."""
+    """Routing boundary for every model call in a chat with Google data,
+    including comparison and review models.
+
+    Each request requires zero data retention and excludes every endpoint that
+    may collect or train on prompts. OpenRouter fails such a call closed when
+    no endpoint qualifies; that model then fails like any other unavailable
+    model, the run continues with the others. Operators can narrow this
+    further with GOOGLE_ALLOWED_MODEL_IDS and GOOGLE_ALLOWED_PROVIDERS.
+    """
     from dataclasses import replace
     allowed = set(filter(None, (s.strip() for s in os.getenv("GOOGLE_ALLOWED_MODEL_IDS", "").split(","))))
     providers = list(filter(None, (s.strip() for s in os.getenv("GOOGLE_ALLOWED_PROVIDERS", "").split(","))))
-    if model.model not in allowed or not providers:
-        raise GoogleError("This model is not approved for Google data on this installation. Choose an approved model or ask the operator to configure Google model routing.", 403)
-    return replace(model, request_config={**model.request_config, "provider": {"zdr": True, "data_collection": "deny", "only": providers, "allow_fallbacks": False}})
+    if allowed and model.model not in allowed:
+        raise GoogleError("This model is not approved for Google data on this installation. Choose another model for this chat.", 403)
+    provider = {**(model.request_config.get("provider") or {}), "zdr": True, "data_collection": "deny"}
+    if providers:
+        provider.update(only=providers, allow_fallbacks=False)
+    return replace(model, request_config={**model.request_config, "provider": provider})
 
 
 class GoogleConnections:
@@ -170,6 +212,8 @@ class GoogleConnections:
         self.guard(uid)
         if not capabilities or any(c not in SCOPES for c in capabilities):
             raise GoogleError("Unknown Google permission request.")
+        if not writes_enabled() and WRITE_CAPABILITIES & set(capabilities):
+            raise GoogleError("Consens only reads Google data on this installation.", 403)
         existing = None
         if connection_id:
             existing = self.ref(uid, connection_id).get().to_dict()

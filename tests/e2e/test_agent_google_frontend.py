@@ -13,7 +13,7 @@ def open_google(page):
         toolbar.click()
     else:
         page.locator('#attachTrigger').click();page.locator('#agentGoogleMenuOption').click()
-    sheet=page.get_by_role('dialog',name='Google data for this message')
+    sheet=page.get_by_role('dialog',name='Gmail & Calendar')
     expect(sheet).to_be_visible()
     return sheet
 
@@ -33,11 +33,11 @@ def test_selected_calendar_and_exact_confirmation(browser,phase4_server,width):
         page.route('**/agent/budget',lambda r:_json(r,{'token_budget':{'remaining':250000,'limit':250000}}))
         seen=[]
         page.on('request',lambda r:seen.append(r.url))
-        page.route('**/agent/google/connections',lambda r:_json(r,{'configured':True,'connections':[{'id':cid,'email':'owner@example.org','status':'connected','capabilities':['calendar_read','calendar_write']}]}))
+        page.route('**/agent/google/connections',lambda r:_json(r,{'configured':True,'writes':True,'connections':[{'id':cid,'email':'owner@example.org','status':'connected','capabilities':['calendar_read','calendar_write']}]}))
         page.route('**/calendars?*',lambda r:_json(r,{'calendars':[{'id':'primary','summary':'Personal calendar','timeZone':'Europe/Copenhagen'}]}))
         page.route('**/chats',lambda r:_json(r,{'chat':{'id':chat}}))
         page.route('**/files',lambda r:_json(r,{'files':[]}))
-        page.route('**/actions',lambda r:_json(r,{'actions':visible,'evidence':[],'google_data':bool(visible)}))
+        page.route('**/actions',lambda r:_json(r,{'actions':visible,'evidence':[],'google_data':bool(visible),'google_consent':bool(visible),'writes':True}))
         def execute(route):
             confirmed.append(route.request.post_data_json);action['status']='succeeded';action['result']={'event_id':'saved'}
             _json(route,{'action':action})
@@ -45,12 +45,15 @@ def test_selected_calendar_and_exact_confirmation(browser,phase4_server,width):
         def agent(route):
             payload=route.request.post_data_json;requests.append(payload);visible.append(action)
             turn={'id':'e'*32,'question':payload['question'],'execution_mode':'agent','status':'completed','consensus':'The proposed meeting is ready for review.'}
-            route.fulfill(content_type='text/event-stream',body='event: final\ndata: '+json.dumps({'chat_id':chat,'turn_id':turn['id'],'turn':turn,'response':turn['consensus'],'google_data':True,'bookmark_meta':{'id':payload['bookmark_id'],'chat_id':chat,'execution_mode':'agent','query':payload['question']}})+'\n\n')
+            route.fulfill(content_type='text/event-stream',body='event: final\ndata: '+json.dumps({'chat_id':chat,'turn_id':turn['id'],'turn':turn,'response':turn['consensus'],'google_data':True,'google_consent':payload['google_data_consent'],'bookmark_meta':{'id':payload['bookmark_id'],'chat_id':chat,'execution_mode':'agent','query':payload['question']}})+'\n\n')
         page.route('**/agent',agent)
         page.evaluate("async()=>await window.__switchE2EUser('account-a')")
-        _choose_mode(page,'agent')
-        # No Google request before the user asks for Google data.
+        # No Google request on page open. Opening (+) in Agent mode is the first
+        # point it may matter (Drive and Gmail & Calendar live there); Agent is
+        # the default mode, so the next step may already load the connections.
+        page.wait_for_timeout(300)
         assert not any('/agent/google/connections' in url for url in seen)
+        _choose_mode(page,'agent')
         sheet=open_google(page)
         _snapshot(page,f'calendar-sheet-{width}')
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth + 1')
@@ -64,7 +67,7 @@ def test_selected_calendar_and_exact_confirmation(browser,phase4_server,width):
         assert page.evaluate("App.agentGoogle.blocker().action")=='google-consent'
         chips=page.locator('#agentGoogleChips')
         expect(chips).to_contain_text('Personal calendar')
-        chips.get_by_label('Share with my models for this message',exact=True).check()
+        chips.get_by_label('Share with the models in this chat',exact=True).check()
         expect(page.locator('#sendButton')).to_be_enabled()
         page.locator('#sendButton').click()
         expect(page.locator('#agentGoogleActions')).to_contain_text('reviewer@example.org')
@@ -79,13 +82,13 @@ def test_selected_calendar_and_exact_confirmation(browser,phase4_server,width):
         button.click()
         expect(page.locator('#agentGoogleActions')).to_contain_text('Google confirmed this action.')
         assert confirmed==[{'expected_hash':'d'*64}]
-        # Consent is per message; the next message in this Google chat asks again.
-        expect(chips.get_by_label('Share with my models for this message',exact=True)).not_to_be_checked()
+        # Consent holds for the chat: the follow-up needs no new checkbox and
+        # still sends it, and the chat says it holds private Google data.
         page.locator('#questionInput').fill('Check availability for a follow-up meeting')
         expect(chips).to_be_visible()
-        assert page.evaluate("App.agentGoogle.blocker().action")=='google-consent'
-        chips.get_by_label('Share with my models for this message',exact=True).check()
+        expect(chips.get_by_label('Share with the models in this chat',exact=True)).to_be_hidden()
         assert page.evaluate("App.agentGoogle.blocker()") is None
+        assert page.evaluate("App.agentGoogle.consent()") is True
         expect(page.locator('#sendButton')).to_be_enabled()
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth + 1')
     finally:context.close()

@@ -494,6 +494,16 @@
               <span id="attachMenuHint" class="attach-menu-hint">PDF, Word, text, images &middot; max. 5 MB</span>
             </span>
           </button>
+          <!-- Google as a source, Agent chats only (agent-drive.js, agent-google.js):
+               a Drive file is just another file for the next message; Gmail &
+               Calendar (inserted after this row) are read for the message. -->
+          <button type="button" id="attachDriveOption" class="attach-menu-item" hidden>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.6 3.5h6.8l6.1 10.6-3.4 5.9H6l-3.5-5.9z"/><path d="m8.6 3.5 6.1 10.6h6.8M15.4 3.5 9.3 14.1 6 20"/></svg>
+            <span class="attach-menu-text">
+              <span class="attach-menu-label">Add from Google Drive</span>
+              <span class="attach-menu-hint">Docs, Sheets, Slides, PDFs &middot; max. 5 MB</span>
+            </span>
+          </button>
           <div class="attach-menu-divider"></div>
           <!-- Reasoning lebt im (+)-Kontextmenü: im Agent-Modus der
                Effort-Picker, sonst der Schalter darunter (für alle Stufen). -->

@@ -1,4 +1,6 @@
 """Authenticated private file operations for Agent chats."""
+from typing import Optional
+
 from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import Response, JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
@@ -18,6 +20,9 @@ class Upload(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     name: str = Field(min_length=1, max_length=200)
     data: str = Field(min_length=1, max_length=7_000_000)
+    # Set when the browser fetched the file from Google's picker. The file is
+    # then Google data: the chat it is sent in follows the Google rules.
+    drive_file_id: Optional[str] = Field(default=None, pattern=r"^[A-Za-z0-9_-]{10,200}$")
 
 
 def service(request):
@@ -69,9 +74,15 @@ def invoke(operation, uid):
 def upload_file(request: Request, chat_id: str, payload: Upload):
     uid, files = service(request)
     quota = require_uploads(uid)
+    extra = None
+    if payload.drive_file_id:
+        from app.services.google_connections import drive_picker
+        if not drive_picker():
+            raise HTTPException(403, "Google Drive is not available on this installation.")
+        extra = {"kind": "drive_file", "origin": {"source": "google_drive", "file_id": payload.drive_file_id}}
     def operation():
         files.expire(uid, chat_id)
-        return files.upload(uid, chat_id, payload.model_dump(), limits=quota)
+        return files.upload(uid, chat_id, payload.model_dump(exclude={"drive_file_id"}), limits=quota, extra=extra)
     return JSONResponse({"file": invoke(operation, uid)}, headers={"Cache-Control": "private, no-store"})
 
 

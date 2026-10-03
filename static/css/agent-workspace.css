@@ -161,6 +161,14 @@
 /* Composer and message chips (attachments.js). */
 .attachment-chip.has-error { border-color: color-mix(in srgb, var(--dispute) 50%, var(--line)) !important; }
 .attachment-chip.has-error .attachment-chip-size { color: var(--dispute); white-space: normal; }
+/* A file from Google Drive: an ordinary chip that names its origin; while it
+   loads, the size line says so and pulses quietly. */
+.attachment-chip.is-loading { cursor: progress; }
+.attachment-chip.is-loading .attachment-chip-size { animation: attachment-drive-loading 1.4s ease-in-out infinite; }
+@keyframes attachment-drive-loading { 50% { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) {
+  .attachment-chip.is-loading .attachment-chip-size { animation: none; }
+}
 .attachment-chip-warning {
   align-self: flex-start; margin-top: 2px; padding: 0 6px; border-radius: var(--radius-pill, 999px);
   background: var(--partial-bg); color: color-mix(in srgb, var(--partial) 70%, var(--ink)); font-size: 10px; font-weight: 600; line-height: 1.6;

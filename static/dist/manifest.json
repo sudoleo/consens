@@ -1,5 +1,5 @@
 {
-  "sources": "04a45f0c2a00",
+  "sources": "b4d613ad7129",
   "inputs": [
     "package-lock.json",
     "package.json",
@@ -55,6 +55,7 @@
     "static/js/agent-answer-actions.js",
     "static/js/agent-chat.js",
     "static/js/agent-delegation.js",
+    "static/js/agent-drive.js",
     "static/js/agent-google.js",
     "static/js/agent-mode.js",
     "static/js/agent-preferences.js",
@@ -203,15 +204,17 @@
     },
     {
       "name": "app",
-      "src": "/static/dist/app.6dd3556824e6.js",
+      "src": "/static/dist/app.71d3b5924a8d.js",
       "module": false,
       "defer": true
     }
   ],
   "styles": {
-    "app": "/static/dist/app.c4c990d52fa6.css"
+    "app": "/static/dist/app.984d8fd32367.css"
   },
   "previous_assets": [
+    "app.c4c990d52fa6.css",
+    "app.6dd3556824e6.js",
     "auth.5e487d1e2570.js",
     "demo.3f6bae43147c.js",
     "firebase.6cbc23d9776b.js",

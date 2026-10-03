@@ -112,6 +112,12 @@ def normalize_attachment_meta(raw) -> list[dict]:
             kept = [str(w)[:300] for w in warnings if isinstance(w, str) and w.strip()][:5]
             if kept:
                 entry["warnings"] = kept
+        # A file picked from Google Drive keeps saying so on its message: the
+        # chat it was sent in follows the Google rules from then on.
+        origin = item.get("origin")
+        if (item.get("kind") == "drive_file" or item.get("source") == "google_drive"
+                or (isinstance(origin, dict) and origin.get("source") == "google_drive")):
+            entry["source"] = "google_drive"
         normalized.append(entry)
     return normalized
 

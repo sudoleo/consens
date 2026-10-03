@@ -130,6 +130,10 @@
         "static/js/consensus-run.js",
         "static/js/agent-workspace.js",
         "static/js/agent-google.js",
+        {
+          "file": "static/js/agent-drive.js",
+          "note": "Uses App.agentGoogle (config, agentActive) and App.attachments.addRemote; must follow agent-google.js and attachments.js."
+        },
         "static/js/agent-chat.js",
         {
           "file": "static/js/run-view.js",

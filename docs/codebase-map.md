@@ -1,5 +1,46 @@
 # consens.io — Codebase Map
 
+Google als Quelle (03.10.2026): Google ist in Consens eine **Quelle von Belegen,
+keine Hand**. Agent-Chats lesen Gmail und Kalender pro Nachricht und nehmen Dateien
+aus Google Drive als normale Anhänge; zurückgeschrieben wird standardmäßig nichts.
+- `google_connections.writes_enabled()` (`GOOGLE_WRITES_ENABLED=1`, Default aus)
+  schaltet den ganzen Schreibpfad: ohne ihn registrieren `CalendarTools`/`GmailTools`
+  nur `calendar_read` bzw. `gmail_read`/`import_gmail_attachment`, `start()` lehnt
+  `calendar_write`/`gmail_send` ab, `public_connection` blendet gespeicherte
+  Schreib-Grants aus, `AgentActions.prepare`/`confirm` werfen 403 (vor jedem Claim),
+  der Agent-Prompt sagt „read-only, Text in die Antwort schreiben“. Ältere Vorschläge
+  lassen sich nur noch verwerfen (`reject`); die Karte erklärt das.
+- `restricted_model()` gilt für jeden Modellaufruf eines Chats mit `google_data`
+  (Root, Vergleich, Judges): Provider-Routing behält seine Felder und erzwingt
+  `zdr: true` + `data_collection: "deny"`; kein Endpunkt → der Aufruf scheitert bei
+  OpenRouter wie jedes ausgefallene Modell. `GOOGLE_ALLOWED_MODEL_IDS`/`_PROVIDERS`
+  sind nur noch optionale Verengung (vorher Pflicht, sonst alles gesperrt). Live-Probe
+  03.10.2026: 48/52 Katalogmodelle aller neun Familien antworten unter der Regel; die
+  vier Ausfälle haben auch ohne `deny` keinen ZDR-Endpunkt bzw. fehlende 18+-Bestätigung.
+- Drive: `drive_picker()` liefert die öffentliche Picker-Konfiguration
+  (`GOOGLE_CLIENT_ID`, `GOOGLE_PICKER_API_KEY`, `GOOGLE_PROJECT_NUMBER`) oder `None`;
+  kein Server-Secret, keine gespeicherte Verbindung. `GET /agent/google/connections`
+  meldet zusätzlich `writes` und `drive`. `agent-drive.js` (Bundle nach
+  `agent-google.js`) zeigt `#attachDriveOption` im (+)-Menü nur im Agent-Modus bei
+  konfiguriertem Picker, holt per Google Identity Services ein kurzlebiges
+  `drive.file`-Token (nur im Seitenspeicher), öffnet Googles Picker (`setAppId` =
+  Projektnummer) und lädt die Datei im Browser (Docs → DOCX, Sheets → CSV der ersten
+  Tabelle, Slides → PDF, sonst `alt=media`). `App.attachments.addRemote` hält dafür
+  einen Lade-Chip (zählt als Import, Send wartet) und schickt die Bytes durch dieselbe
+  Prüfung wie lokale Dateien; der Anhang trägt `origin: {source:'google_drive', file_id}`.
+  Der Upload sendet `drive_file_id` → Datei-Meta `kind: "drive_file"` + `origin`;
+  `/agent` setzt `google_data`, sobald ein `file_id` ein Drive-File ist. Verlässt der
+  Entwurf den Agent-Modus, entfernt `agent-google.js` Drive-Anhänge mit Hinweis.
+- Zustimmung **einmal pro Chat**: `/agent` speichert beim ersten zugestimmten Lauf
+  `google_consent` am Chat; `final` und `GET .../actions` melden `google_consent`.
+  Der Browser schickt die Zustimmung danach bei jeder Nachricht dieses Chats mit
+  (`chatConsented`), der Server verlangt sie weiterhin pro Request. Die Checkbox
+  „Share with the models in this chat“ erscheint, solange der Chat sie nicht hat
+  (Gmail/Kalender aktiv, Drive-Datei im Entwurf oder Altchat mit `google_data`).
+- UI-Sprache: (+)-Menü „Add from Google Drive“ und „Gmail & Calendar · Read as
+  sources“ direkt unter „Add files“; Dialog „Gmail & Calendar“; Info-Chip
+  „Private chat · Google data“. Dokumentation: `docs/google-integrations-setup.md`.
+
 Gmail in Agent Mode (27.09.2026): `agent_gmail.py` adds root-only `gmail_read`,
 `import_gmail_attachment` and `prepare_gmail_draft` to the same server registry.
 `GoogleSelection.gmail` is explicit per message; older Calendar-only frozen
@@ -39,8 +80,9 @@ allowlisted Google transport. Tokens never enter tools or model contexts. The
 checked on replay. `agent_calendar.py` registers selected-calendar read/search,
 instances/freebusy and preparation tools; workers get no direct connection tools.
 Calendar excerpts and proposals enter the existing tool-free synthesis as explicit
-untrusted evidence. A chat's `google_data` marker enforces model/provider allowlists
-for all later steps, including comparison and judges; web search/source checks stop.
+untrusted evidence. A chat's `google_data` marker enforces the Google routing rule
+(ZDR + no data collection, optional allowlists; see "Google als Quelle" above) for all
+later steps, including comparison and judges; web search/source checks stop.
 
 `agent_actions.py` persists exact proposals in chat `actions` subcollections. Only
 the authenticated `/agent/chats/{chat}/actions/{id}/confirm` endpoint can claim an
@@ -55,7 +97,7 @@ marker, which the `/agent` `final` event also carries.
 `agent-google.js` (+ `agent-google.css`) supplies the Google data dialog (opened
 from the (+) menu `#agentGoogleMenuOption` or the hero toolbar
 `#composerGoogleButton`; connections load on first use), removable composer chips
-`#agentGoogleChips` with the per-message consent `#googleDataConsent`, and the
+`#agentGoogleChips` with the per-chat consent `#googleDataConsent`, and the
 action cards in `#agentGoogleActions` (after `#agentAnswer`): verb title, status
 badge, per-address acknowledgement of flagged recipients, calendar diff with
 changed rows, "Earlier versions" per `replaces` chain, expiry rechecked every 30 s.
@@ -65,7 +107,10 @@ Contract on `App.agentGoogle`: `blocker()` → `{message, action:'google-consent
 `consent(bool?)`, `resetConsent()`, `open()`, `pendingCount(chatId)`,
 `evidenceFor(messageId)` → `{subject, from}|null`, `refreshActions(chatId, force)`
 (one request per 300 ms per chat; the module also projects the current chat from
-`refreshControls()` and reloads after a finished Agent run), `noteGoogleData`.
+`refreshControls()` and reloads after a finished Agent run), `noteGoogleData(chatId,
+googleData, consented)`, `config()` → `{configured, writes, drive}`, `knownDrive()`,
+`agentActive()`. It listens to `consensio:attachments-change` (attachments.js) so a
+Drive file in the draft asks for consent.
 It dispatches `consensio:agent-google-change` and `consensio:agent-actions-change`
 (`{chatId, pending, googleData}`).
 Hourly retention purges expired OAuth states/actions (skipped without Google
@@ -6200,6 +6245,10 @@ Die Anhangs-Metadaten des Turns (`attachments`, `normalize_attachment_meta`)
 behalten bei Agent-Uploads die Datei-`id` (32 Hex) und `warnings`, damit der
 Chip an der Nachricht die Datei später wieder öffnen kann; Consensus-Anhänge
 bleiben reine Metadaten. Gmail-Importe tragen die `turn_id` des holenden Turns.
+Der Upload nimmt optional `drive_file_id` (nur bei konfiguriertem Drive-Picker,
+sonst 403): die Datei wird `kind: "drive_file"` mit `origin: {source:
+"google_drive", file_id}` und bringt den Chat beim nächsten `/agent` unter die
+Google-Regeln (siehe „Google als Quelle“ oben). Die Bytes holt der Browser selbst.
 Dateien werden nicht in Shares, Memory oder Watch-Inputs übernommen.
 
 `GET .../files` liefert die Liste chronologisch (`created_at`, Firestore streamt in

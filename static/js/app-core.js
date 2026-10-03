@@ -61,7 +61,10 @@
         ...(/^[a-f0-9]{32}$/.test(String(item.id || "")) ? { id: String(item.id) } : {}),
         // Agent files carry extraction warnings (for a "Partly read" badge).
         ...(Array.isArray(item.warnings) && item.warnings.length
-          ? { warnings: item.warnings.map(String).slice(0, 5) } : {})
+          ? { warnings: item.warnings.map(String).slice(0, 5) } : {}),
+        // A file from Google Drive keeps saying so on its message.
+        ...(item.source === "google_drive" || item.kind === "drive_file" || item.origin?.source === "google_drive"
+          ? { source: "google_drive" } : {})
       }));
     const row = document.getElementById("threadAskAttachments");
     if (!row) return;

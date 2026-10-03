@@ -8,10 +8,16 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
 
 ## Neue Funktionsgruppen und Restprüfung
 
-- [ ] Google/Kalender/Gmail: echte OAuth-Rückkehr, Widerruf, Zustimmung pro
-      Nachricht, exakte Vorschau vor Senden/Terminspeichern; die Offline-
-      Browserfälle ersetzen keinen echten Providerlauf. Aktuelle Gmail-
-      Dokumentversionsfehler vor einer Freigabe klären.
+- [ ] Google als Quelle (Standard: nur lesen): echte OAuth-Rückkehr mit nur
+      Lese-Scopes, Widerruf, Zustimmung **einmal pro Chat** (Folgefrage ohne
+      Checkbox, Info-Chip „Private chat · Google data“), keine Schreib-Zeilen im
+      Dialog „Gmail & Calendar“; die Offline-Browserfälle ersetzen keinen echten
+      Providerlauf. Nur mit `GOOGLE_WRITES_ENABLED=1`: exakte Vorschau vor
+      Senden/Terminspeichern.
+- [ ] Google Drive: (+) → „Add from Google Drive“ nur im Agent-Modus; echter
+      Picker (Google-Konto wählen, Doc/Sheet/Slide/PDF), Chip „Google Drive“,
+      Zustimmung vor dem Senden, Datei am gesendeten Turn; Wechsel nach
+      Compare/Consensus entfernt den Drive-Anhang mit Hinweis.
 - [ ] Private Dateien/Dokumente: gespeicherte Version am richtigen Turn,
       Download und bestätigtes Entfernen, lesbare Warnung für Teilinhalt;
       erzeugte DOCX/PDF-Seiten zusätzlich visuell prüfen.

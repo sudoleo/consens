@@ -3,29 +3,33 @@ import {loadScripts} from './helpers/appWindow.mjs';
 
 const BODY='<div class="input-section"><div class="chat-input-container"><textarea id="questionInput"></textarea><div id="attachMenu"><button id="agentComparisonMenuOption"></button></div><button id="attachTrigger"></button></div><div id="composerModeBar"><div class="composer-mode-controls"><button id="composerModelPicker"></button></div></div></div><section id="agentAnswer"></section>';
 
-function boot({chatId='',googleData=false}={}){
+function boot({chatId='',googleData=false,googleConsent=false,writes=false,drive=null}={}){
   const connection='a'.repeat(32),chat='b'.repeat(32);
   const action={id:'c'.repeat(32),kind:'calendar_event',hash:'d'.repeat(64),status:'pending',account:'owner@example.org',connection_id:connection,approval_until:'2099-01-01T00:00:00Z',preview:{operation:'Create event',calendar:'primary',calendar_name:'Personal',target:'single',before:{},after:{summary:'<img src=x onerror=bad()>',start:{dateTime:'2026-10-01T10:00:00+02:00',timeZone:'Europe/Copenhagen'},attendees:[{email:'a@example.org'}]},attendees:['a@example.org'],invitations:'Will notify attendees'}};
-  const state={actions:[action],evidence:[],googleData,connections:[{id:connection,email:'owner@example.org',status:'connected',capabilities:['calendar_read','gmail_read']}],renewed:null};
+  const state={actions:[action],evidence:[],googleData,googleConsent,writes,drive,driveFiles:false,connections:[{id:connection,email:'owner@example.org',status:'connected',capabilities:['calendar_read','gmail_read']}],renewed:null};
   const setup=loadScripts(['static/js/agent-google.js'],{body:BODY,before(w){
     w.auth={currentUser:{uid:'owner',getIdToken:async()=> 'token'}};
-    w.App={agentChat:{isSelected:()=>true,canUse:()=>true},showPopup:vi.fn(),
+    let agent=true;
+    w.App={agentChat:{isSelected:()=>agent,canUse:()=>true},showPopup:vi.fn(),
+      attachments:{hasDriveFiles:()=>state.driveFiles,removeDriveFiles:vi.fn(()=>{const had=state.driveFiles;state.driveFiles=false;return had?1:0;})},
       runRegistry:{visible:()=>null,isExecuting:()=>false,getSelectedConversationBasis:()=>chatId?{chatId,currentTurn:{}}:null}};
+    state.setAgent=value=>{agent=value;};
     w.updateQuestionInputAccess=vi.fn();
     w.fetch=vi.fn(async(url,options={})=>({ok:true,json:async()=>{
-      if(url.endsWith('/connections'))return {configured:true,connections:state.connections};
+      if(url.endsWith('/connections'))return {configured:true,writes:state.writes,drive:state.drive,connections:state.connections};
       if(url.includes('/calendars?'))return {calendars:[{id:'primary',summary:'Personal',timeZone:'Europe/Copenhagen'}]};
       if(url.endsWith('/confirm')){state.actions.at(-1).status='succeeded';return {action:state.actions.at(-1)};}
       if(url.endsWith('/renew')){const old=state.actions.at(-1);old.status='superseded';const next={...structuredClone(old),id:'e'.repeat(32),hash:'f'.repeat(64),status:'pending',replaces:old.id,approval_until:'2099-01-01T00:00:00Z'};
         const removed=JSON.parse(options.body).remove_recipients||[];
         if(next.preview.bcc){next.preview.bcc=next.preview.bcc.filter(e=>!removed.includes(e));next.preview.recipient_warnings=(next.preview.recipient_warnings||[]).filter(w=>!removed.includes(w.email));}
         state.renewed=JSON.parse(options.body);state.actions.push(next);return {action:next};}
-      if(url.endsWith('/actions'))return {actions:state.actions,evidence:state.evidence,google_data:state.googleData};
+      if(url.endsWith('/actions'))return {actions:state.actions,evidence:state.evidence,google_data:state.googleData,google_consent:state.googleConsent,writes:state.writes};
       return {};
     }}));
   }});
   return {...setup,connection,chat,action,state};
 }
+const bootGoogle=boot;
 const buttons=(d,text)=>[...d.querySelectorAll('button')].filter(b=>b.textContent===text);
 const flush=()=>new Promise(r=>setTimeout(r,0));
 
@@ -56,16 +60,59 @@ describe('Google selection and consent',()=>{
     w.auth.currentUser={uid:'other',getIdToken:async()=> 'new'};w.dispatchEvent(new w.Event('consensio:auth-state'));
     expect(w.App.agentGoogle.selection()).toBeNull();expect(d.getElementById('agentGoogleChips').hidden).toBe(true);
   });
-  it('requires consent on every message in a chat that already holds Google data',async()=>{
+  it('asks for consent in a chat with Google data that has none yet',async()=>{
     const chat='b'.repeat(32);
     const {window:w,document:d}=boot({chatId:chat,googleData:true});
     const changes=vi.fn();w.addEventListener('consensio:agent-google-change',changes);
     await w.App.agentGoogle.refreshActions(chat);
-    expect(w.App.agentGoogle.blocker()).toMatchObject({action:'google-consent'});
+    expect(w.App.agentGoogle.blocker()).toMatchObject({action:'google-consent',label:'Allow for this chat'});
     expect(d.getElementById('agentGoogleChips').textContent).toContain('This chat contains Google data');
+    expect(d.querySelector('.agent-google-consent').hidden).toBe(false);
+    expect(d.querySelector('.agent-google-consent').textContent).toBe('Share with the models in this chat');
     w.App.agentGoogle.consent(true);
     expect(w.App.agentGoogle.blocker()).toBeNull();expect(changes).toHaveBeenCalled();
     expect(w.App.agentGoogle.selection()).toBeNull();
+  });
+  it('remembers the consent for the whole chat',async()=>{
+    const chat='b'.repeat(32);
+    const {window:w,document:d}=boot({chatId:chat,googleData:true,googleConsent:true});
+    await w.App.agentGoogle.refreshActions(chat);
+    // No checkbox on every follow-up: the chat already holds the consent.
+    expect(w.App.agentGoogle.blocker()).toBeNull();
+    expect(w.App.agentGoogle.consent()).toBe(true);
+    expect(d.querySelector('.agent-google-consent').hidden).toBe(true);
+    expect(d.getElementById('agentGoogleChips').textContent).toContain('Private chat · Google data');
+    // A final event can carry the consent before the actions list arrives.
+    const other='9'.repeat(32);
+    w.App.agentGoogle.noteGoogleData(other,true,true);
+    w.App.runRegistry.getSelectedConversationBasis=()=>({chatId:other,currentTurn:{}});
+    expect(w.App.agentGoogle.consent()).toBe(true);
+  });
+  it('treats a Drive file like Google data: consent first, Agent chats only',async()=>{
+    const {window:w,document:d,state}=boot();
+    expect(w.App.agentGoogle.blocker()).toBeNull();
+    state.driveFiles=true;w.dispatchEvent(new w.Event('consensio:attachments-change'));
+    expect(w.App.agentGoogle.blocker()).toMatchObject({action:'google-consent'});
+    expect(d.getElementById('agentGoogleChips').hidden).toBe(false);
+    w.App.agentGoogle.consent(true);
+    expect(w.App.agentGoogle.blocker()).toBeNull();
+    // Switching this draft away from Agent takes the Drive file off it, with a reason.
+    state.setAgent(false);w.App.agentGoogle.refreshControls();
+    expect(w.App.attachments.removeDriveFiles).toHaveBeenCalled();
+    expect(w.App.showPopup).toHaveBeenCalledWith(expect.stringContaining('Agent chats only'));
+  });
+  it('says plainly that Google is read-only and offers no write permission',async()=>{
+    const {window:w,document:d}=boot();
+    w.App.agentGoogle.open();
+    await vi.waitFor(()=>expect(d.getElementById('googleCalendarEnabled')).not.toBeNull());
+    const sheet=d.getElementById('agentGoogleSheet');
+    expect(sheet.querySelector('h2').textContent).toBe('Gmail & Calendar');
+    expect(sheet.textContent).toContain('Read-only: Consens never sends, changes or deletes anything in Google.');
+    expect(sheet.textContent).toContain('zero data retention');
+    expect(sheet.textContent).not.toContain('Send emails you confirm');
+    expect(sheet.textContent).not.toContain('Create and edit events');
+    expect(d.getElementById('agentGoogleMenuOption').textContent).toContain('Gmail & Calendar');
+    expect(await w.App.agentGoogle.config()).toEqual({configured:true,writes:false,drive:null});
   });
   it('removing a source chip turns it off',async()=>{
     const {window:w,document:d}=boot();
@@ -78,7 +125,24 @@ describe('Google selection and consent',()=>{
   });
 });
 
+describe('Action cards on a read-only installation',()=>{
+  it('shows an older proposal as it was, never confirms it and lets it be discarded',async()=>{
+    const {window:w,document:d,chat,action}=boot();
+    await w.App.agentGoogle.refreshActions(chat);
+    const card=d.querySelector('.agent-action-card');
+    expect(card.textContent).toContain('can no longer be sent or applied');
+    expect(buttons(d,'Create event')).toHaveLength(0);
+    expect(d.getElementById('approve-'+action.id)).toBeNull();
+    expect(buttons(d,'Prepare again')).toHaveLength(0);
+    buttons(d,'Discard')[0].click();
+    await vi.waitFor(()=>expect(w.fetch.mock.calls.some(([url])=>url.endsWith('/reject'))).toBe(true));
+    expect(w.fetch.mock.calls.some(([url])=>url.endsWith('/confirm'))).toBe(false);
+  });
+});
+
+// With GOOGLE_WRITES_ENABLED the dormant write path keeps working.
 describe('Action cards',()=>{
+  const boot=(options={})=>bootGoogle({writes:true,...options});
   it('renders untrusted text safely and submits the exact displayed hash only after review',async()=>{
     const {window:w,document:d,chat,action}=boot();
     const changes=vi.fn();w.addEventListener('consensio:agent-actions-change',e=>changes(e.detail));

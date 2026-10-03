@@ -17,11 +17,11 @@ def test_gmail_draft_revision_document_download_and_restoration(browser,phase4_s
         page.set_viewport_size({'width':width,'height':900})
         for endpoint,data in [('user_status',{'tier':'pro','is_pro':True,'agent_access':True}),('usage',{'is_pro':True,'remaining':100,'total_limit':100}),('agent/models',CATALOG),('agent/budget',{'token_budget':{'remaining':250000,'limit':250000}})]:
             page.route('**/'+endpoint,(lambda payload: lambda r:_json(r,payload))(data))
-        page.route('**/agent/google/connections',lambda r:_json(r,{'configured':True,'connections':[{'id':cid,'email':'owner@example.org','status':'connected','capabilities':['gmail_read','gmail_send']}]}))
+        page.route('**/agent/google/connections',lambda r:_json(r,{'configured':True,'writes':True,'connections':[{'id':cid,'email':'owner@example.org','status':'connected','capabilities':['gmail_read','gmail_send']}]}))
         page.route('**/chats',lambda r:_json(r,{'chat':{'id':chat}}))
         page.route('**/files',lambda r:_json(r,{'files':files}))
         evidence={'id':'e'*32,'kind':'gmail_message','account':'owner@example.org','message_id':'original1','thread_id':'thread1','headers':{'from':'Supplier <supplier@example.org>','to':'owner@example.org','subject':'Offers <script>untrusted</script>','date':'2026-09-21'}}
-        page.route('**/actions',lambda r:_json(r,{'actions':actions,'evidence':[evidence] if actions else [],'google_data':bool(actions)}))
+        page.route('**/actions',lambda r:_json(r,{'actions':actions,'evidence':[evidence] if actions else [],'google_data':bool(actions),'google_consent':bool(actions),'writes':True}))
         def download(route):
             assert route.request.headers.get('authorization','').startswith('Bearer ')
             route.fulfill(body=raw,content_type='application/pdf',headers={'Content-Disposition':'attachment; filename="Decision.pdf"'})
@@ -41,24 +41,26 @@ def test_gmail_draft_revision_document_download_and_restoration(browser,phase4_s
                     'reply':{'from':'Supplier <supplier@example.org>','subject':'Offers','message_id':'original1','thread_id':'thread1'},
                     'recipient_warnings':[{'email':'private@example.org','field':'bcc'}]}})
             turn={'id':str(version+6)*32,'question':payload['question'],'execution_mode':'agent','status':'completed','consensus':'The document and unsent email draft are ready for your review.'}
-            route.fulfill(content_type='text/event-stream',body='event: final\ndata: '+json.dumps({'chat_id':chat,'turn_id':turn['id'],'turn':turn,'response':turn['consensus'],'google_data':True,'bookmark_meta':{'id':payload['bookmark_id'],'chat_id':chat,'execution_mode':'agent','query':payload['question']}})+'\n\n')
+            route.fulfill(content_type='text/event-stream',body='event: final\ndata: '+json.dumps({'chat_id':chat,'turn_id':turn['id'],'turn':turn,'response':turn['consensus'],'google_data':True,'google_consent':payload['google_data_consent'],'bookmark_meta':{'id':payload['bookmark_id'],'chat_id':chat,'execution_mode':'agent','query':payload['question']}})+'\n\n')
         page.route('**/agent',run)
         page.evaluate("async()=>await window.__switchE2EUser('account-a')")
         _choose_mode(page,'agent')
         sheet=open_google(page)
         sheet.get_by_label('Use Gmail for this message',exact=True).check()
         sheet.get_by_role('button',name='Done',exact=True).click()
-        consent=page.locator('#agentGoogleChips').get_by_label('Share with my models for this message',exact=True)
+        consent=page.locator('#agentGoogleChips').get_by_label('Share with the models in this chat',exact=True)
         expect(page.locator('#agentGoogleChips')).to_contain_text('Gmail · owner@example.org')
         consent.check();page.locator('#questionInput').fill('Compare the offers, create a decision brief and prepare an email with the PDF.')
         page.locator('#sendButton').click()
         expect(page.locator('#agentGoogleActions')).to_contain_text('Decision-v1.pdf')
         assert requests[0]['google_selection']['gmail'] is True and requests[0]['google_selection']['calendar'] is False
-        expect(consent).not_to_be_checked();assert not confirmed
+        assert requests[0]['google_data_consent'] is True and not confirmed
         expect(page.get_by_role('button',name='Send email',exact=True)).to_be_disabled()
         with page.expect_download() as download_info:page.get_by_role('button',name='Review attachment Decision-v1.pdf',exact=True).click()
         assert download_info.value.failure() is None
-        page.locator('#questionInput').fill('Revise the plan for Monday and update the email attachment.');consent.check()
+        page.locator('#questionInput').fill('Revise the plan for Monday and update the email attachment.')
+        # The chat holds the consent now: no second checkbox.
+        expect(consent).to_be_hidden()
         page.locator('#sendButton').click()
         expect(page.locator('#agentGoogleActions')).to_contain_text('Decision-v2.pdf')
         expect(page.locator('#agentAnswerResources')).to_contain_text('Version 2')

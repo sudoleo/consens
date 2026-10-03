@@ -137,16 +137,20 @@ def _final(uid, payload, store, turn):
     bookmark_meta = _save_bookmark(uid, payload, store, turn)
     # Tell the browser whether the next message needs Google consent. The
     # chat marker can be set by a tool during this turn (Gmail evidence).
-    google_data = bool((turn.get("agent_settings") or {}).get("google_data"))
+    settings = turn.get("agent_settings") or {}
+    google_data = bool(settings.get("google_data"))
+    google_consent = google_data and settings.get("google_data_consent") is True
     if not google_data:
         try:
-            google_data = bool((store._chat_ref(uid, payload.chat_id).get().to_dict() or {}).get("google_data"))
+            chat = store._chat_ref(uid, payload.chat_id).get().to_dict() or {}
+            google_data = bool(chat.get("google_data"))
+            google_consent = google_data and chat.get("google_consent") is True
         except Exception as exc:
             # A hint for the composer only; the server rule still enforces consent.
             logging.warning("Agent chat Google marker unavailable category=%s", safe_exception(exc))
     return {"chat_id": payload.chat_id, "turn_id": turn["id"], "turn": turn,
             "response": turn.get("consensus", ""), "execution_mode": "agent", "bookmark_meta": bookmark_meta,
-            "google_data": google_data, "token_budget": agent_quota.snapshot(store.db, uid)}
+            "google_data": google_data, "google_consent": google_consent, "token_budget": agent_quota.snapshot(store.db, uid)}
 
 
 def _save_interrupted(uid, payload, store, turn_id):
@@ -267,7 +271,11 @@ def run_agent(request: Request, payload: AgentRequest):
         files = AgentFiles(db_firestore)
         file_meta = [public_file(files.get(uid, payload.chat_id, fid)) for fid in payload.file_ids]
         file_context = FileContext(files, uid, payload.chat_id, payload.file_ids)
-        google_data = bool(payload.google_selection or (store._chat_ref(uid, payload.chat_id).get().to_dict() or {}).get("google_data"))
+        # Google data enters a chat through a Gmail/Calendar selection or a file
+        # picked from Google Drive; once there, the chat keeps the Google rules.
+        drive_files = any(meta.get("kind") == "drive_file" for meta in file_meta)
+        google_data = bool(payload.google_selection or drive_files
+                           or (store._chat_ref(uid, payload.chat_id).get().to_dict() or {}).get("google_data"))
         if google_data:
             from app.services.google_connections import restricted_model
             if not payload.google_data_consent:
@@ -275,7 +283,9 @@ def run_agent(request: Request, payload: AgentRequest):
             model = restricted_model(model)
             def mark_google(tx):
                 files.guard(uid, payload.chat_id, tx)
-                tx.update(store._chat_ref(uid, payload.chat_id), {"google_data": True})
+                # The consent covers this chat from now on (the browser offers
+                # it once per chat); every request still has to carry it.
+                tx.update(store._chat_ref(uid, payload.chat_id), {"google_data": True, "google_consent": True})
             store._transaction(mark_google)
         if payload.google_selection:
             from app.services.google_connections import GoogleConnections, configuration

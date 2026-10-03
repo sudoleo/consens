@@ -13,7 +13,7 @@ from app.core.rate_limit import limiter
 from app.core.security import db_firestore
 from app.services.agent_documents import Strict
 from app.services.agent_actions import AgentActions
-from app.services.google_connections import GoogleConnections, GoogleError, available, configuration
+from app.services.google_connections import GoogleConnections, GoogleError, available, configuration, drive_picker, writes_enabled
 
 router = APIRouter()
 
@@ -63,7 +63,11 @@ def invoke(uid, operation):
 @limiter.limit("30/minute")
 def connections(request: Request):
     uid = account_owner(request)
-    return invoke(uid, lambda: {"configured": available(), "connections": GoogleConnections(db_firestore).list(uid)})
+    # One answer for every Google entry point: account connections (Gmail and
+    # Calendar), whether Consens may write back, and the public Drive picker
+    # configuration (Drive works without a stored connection).
+    return invoke(uid, lambda: {"configured": available(), "writes": writes_enabled(), "drive": drive_picker(),
+        "connections": GoogleConnections(db_firestore).list(uid)})
 
 
 @router.post("/agent/google/connect")
@@ -150,8 +154,11 @@ def actions(request: Request, chat_id: str):
             if data.get("expires_at", "") > current]
         # The browser needs this before sending: every message in a chat that
         # already holds Google data requires fresh model-sharing consent.
-        google_data = bool((chat_ref.get().to_dict() or {}).get("google_data"))
-        return {"actions": actions, "evidence": evidence, "google_data": google_data}
+        chat = chat_ref.get().to_dict() or {}
+        # google_consent: the user already allowed sharing this chat's Google
+        # data with its models; later messages need no new checkbox.
+        return {"actions": actions, "evidence": evidence, "google_data": bool(chat.get("google_data")),
+            "google_consent": bool(chat.get("google_data") and chat.get("google_consent")), "writes": writes_enabled()}
     return invoke(uid, operation)
 
 

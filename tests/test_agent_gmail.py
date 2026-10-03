@@ -339,6 +339,7 @@ def test_local_build_failure_is_failed_not_unknown_and_does_not_fence(gmail, mon
     tool,actions,google,chat=gmail
     saved=draft(tool)
     import app.services.agent_gmail as module
+    original=module.build_message
     def broken(payload):
         raise ValueError('Header values may not contain linefeed or carriage return characters')
     monkeypatch.setattr(module,'build_message',broken)
@@ -346,7 +347,8 @@ def test_local_build_failure_is_failed_not_unknown_and_does_not_fence(gmail, mon
     result=actions.confirm('owner',chat,saved['id'],saved['hash'])
     assert result['status']=='failed' and 'Nothing was sent' in result['error']
     assert not any('/messages/send' in url for _,url,_ in google.wire.calls)
-    monkeypatch.undo()
+    # Only the builder: undo() would also drop the fixture's environment.
+    monkeypatch.setattr(module,'build_message',original)
     # A failed attempt must not block an equivalent fresh draft.
     again=draft(tool,body='Please review the decision brief. ')
     assert again['status']=='pending'

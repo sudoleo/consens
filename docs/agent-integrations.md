@@ -1,5 +1,13 @@
 # Agent integrations: implementation and review map
 
+> **Scope since 2026-10-03:** Google is a source, not a hand. Gmail and Calendar
+> are read for a message, Google Drive files arrive as ordinary attachments, and
+> the write path of PRs 3/4 (Calendar changes, Gmail sending) is off unless
+> `GOOGLE_WRITES_ENABLED=1`. Model routing for Google-data chats is ZDR plus
+> `data_collection=deny` for every model (optional allowlists), consent is asked
+> once per chat. Current setup: [`google-integrations-setup.md`](google-integrations-setup.md);
+> architecture: "Google als Quelle" in [`codebase-map.md`](codebase-map.md).
+
 Baseline: `main` at `b13e0205` (2026-09-27); no open PRs at inspection. Existing
 worktrees were left intact. Review in order: attachments → documents → Google
 Calendar → Gmail. Each later PR targets the preceding feature branch; none is

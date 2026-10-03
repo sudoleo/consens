@@ -10,7 +10,9 @@ import re
 
 from app.services.agent_documents import digest
 from app.services.agent_files import AgentFiles, ID_PATTERN
-from app.services.google_connections import GoogleConnections, GoogleError, now
+from app.services.google_connections import GoogleConnections, GoogleError, now, writes_enabled
+
+WRITES_OFF = "Consens only reads Google data on this installation. Nothing was sent or changed."
 
 
 def public_action(data):
@@ -48,6 +50,8 @@ class AgentActions:
         return [public_action(data) for data in (s.to_dict() or {} for s in snapshots) if data.get("expires_at", "") > current]
 
     def prepare(self, uid, chat, turn, kind, connection_id, capability, payload, preview, *, replaces=None, require_capability=True):
+        if not writes_enabled():
+            raise GoogleError(WRITES_OFF, 403)
         connection = self.connections.get(uid, connection_id, capability if require_capability else None)
         hashed = digest({"kind": kind, "connection": connection_id, "revision": connection["revision"], "payload": payload, "preview": preview})
         excluded = {"message_id"} if kind == "gmail_send" else ({"event_id"} if not payload.get("update") else set())
@@ -140,6 +144,10 @@ class AgentActions:
         raise GoogleError("This action is not supported.")
 
     def confirm(self, uid, chat, action_id, expected_hash):
+        # Before any claim: an older proposal stays visible and can be
+        # discarded, but never executes once writing is turned off.
+        if not writes_enabled():
+            raise GoogleError(WRITES_OFF, 403)
         ref = self.ref(uid, chat, action_id)
         def claim(tx):
             self.files.guard(uid, chat, tx)

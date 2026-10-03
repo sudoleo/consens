@@ -1,6 +1,12 @@
-// Google data for Agent Beta: explicit per-message selection and consent, and
-// exact-content action cards. Every external write needs one explicit gesture
-// bound to the displayed hash; restored or revised cards always start unapproved.
+// Google as a source for Agent chats: Gmail and Calendar are selected per
+// message and read for it; files from Google Drive arrive as ordinary
+// attachments (agent-drive.js). Google data in a chat needs the user's consent
+// once per chat, and every later message carries it.
+//
+// Writing back (sending mail, creating or changing events) is an operator
+// switch, off by default. With it on, every external write needs one explicit
+// gesture bound to the displayed hash; restored or revised cards always start
+// unapproved. With it off, older proposals can only be discarded.
 (() => {
   const App = window.App = window.App || {};
   const MAX_CALENDARS = 5, DEBOUNCE_MS = 300, EXPIRY_TICK_MS = 30000;
@@ -22,6 +28,10 @@
   // ---- State -----------------------------------------------------------
   let connections = {status: 'idle', configured: null, accounts: [], error: ''};
   let connectionsPromise = null, connectionsGen = 0;
+  // writes: the installation lets Consens send mail and change calendars.
+  // drive: public configuration for Google's file picker, or null.
+  let writes = false, drive = null;
+  const consentHints = new Map();
   let chosen = '', gmailOn = false, calendarOn = false;
   let calendars = {account: '', items: [], next: null, status: 'idle', error: ''}, calendarGen = 0;
   const selectedCalendars = new Map();
@@ -102,20 +112,25 @@
   function account() { return connections.accounts.find(item => item.id === chosen) || null; }
   function can(item, capability) { return Boolean(item?.capabilities?.includes(capability)); }
   function consentInput() { return document.getElementById('googleDataConsent'); }
-  function consentGiven() { return consentInput()?.checked === true; }
+  // The user allowed sharing this chat's Google data once; it holds for the chat.
+  function chatConsented(chatId) { return Boolean(chatId && consentHints.get(chatId) === true); }
+  function consentGiven() { return consentInput()?.checked === true || chatConsented(currentChatId()); }
   function sourcesOn() { return Boolean(chosen && (gmailOn || calendarOn)); }
+  function driveFiles() { return App.attachments?.hasDriveFiles?.() === true; }
+  // Google data that this message brings into the chat.
+  function bringsGoogle() { return sourcesOn() || driveFiles(); }
 
   // ---- Selection and consent contract ----------------------------------
+  const CONSENT_LABEL = 'Share with the models in this chat';
   function selectionProblem() {
-    if (!sourcesOn()) return null;
-    if (account() && account().status !== 'connected') {
+    if (sourcesOn() && account() && account().status !== 'connected') {
       return {message: `Reconnect ${account().email} to use its Google data.`, action: 'google-open', label: 'Reconnect'};
     }
-    if (calendarOn && !selectedCalendars.size) {
+    if (sourcesOn() && calendarOn && !selectedCalendars.size) {
       return {message: 'Choose at least one calendar for this message.', action: 'google-open', label: 'Choose calendars'};
     }
-    if (!consentGiven()) {
-      return {message: 'Allow sharing the selected Google data with your models for this message.', action: 'google-consent', label: 'Allow for this message'};
+    if (bringsGoogle() && !consentGiven()) {
+      return {message: 'Allow sharing your Google data with the models in this chat.', action: 'google-consent', label: 'Allow for this chat'};
     }
     return null;
   }
@@ -123,8 +138,8 @@
     if (!agentActive()) return null;
     const problem = selectionProblem();
     if (problem) return problem;
-    if (!sourcesOn() && chatUsesGoogle(currentChatId()) && !consentGiven()) {
-      return {message: 'This chat contains Google data. Allow sharing it with your models for this message.', action: 'google-consent', label: 'Allow for this message'};
+    if (!bringsGoogle() && chatUsesGoogle(currentChatId()) && !consentGiven()) {
+      return {message: 'This chat contains Google data. Allow sharing it with the models in this chat.', action: 'google-consent', label: 'Allow for this chat'};
     }
     return null;
   }
@@ -188,7 +203,9 @@
         const result = await api('/agent/google/connections');
         if (seq !== connectionsGen || owner !== uid()) return;
         connections = {status: 'ready', configured: result.configured !== false, accounts: result.connections || [], error: ''};
-        writeHint({configured: connections.configured, accounts: connections.accounts.length});
+        writes = result.writes === true;
+        drive = result.drive && typeof result.drive === 'object' ? result.drive : null;
+        writeHint({configured: connections.configured, accounts: connections.accounts.length, drive: Boolean(drive)});
         if (chosen && !account()) clearSelection();
         if (!chosen) {
           const usable = connections.accounts.filter(item => item.status === 'connected');
@@ -206,6 +223,14 @@
     })();
     connectionsPromise = promise;
     return promise;
+  }
+  // What this installation offers, for the Drive entry (agent-drive.js).
+  async function config() {
+    await loadConnections();
+    return {configured: connections.configured === true, writes, drive: connections.status === 'ready' ? drive : null};
+  }
+  function knownDrive() {
+    return connections.status === 'ready' ? Boolean(drive) : hint()?.drive === true;
   }
   // Must run synchronously inside the click that asked for it (popup blocker).
   function connect(capabilities, connectionId, after) {
@@ -264,28 +289,32 @@
       row.id = 'agentGoogleChips'; row.hidden = true;
       row.setAttribute('role', 'group'); row.setAttribute('aria-label', 'Google data for this message');
       const list = node('div', '', 'agent-google-chip-list'); list.id = 'agentGoogleChipList';
-      const consentRow = checkbox('Share with my models for this message', 'googleDataConsent', 'agent-google-consent');
-      consentRow.title = 'Relevant Google excerpts and saved chat context go to your chosen models for this one message.';
+      const consentRow = checkbox(CONSENT_LABEL, 'googleDataConsent', 'agent-google-consent');
+      consentRow.title = 'Relevant excerpts go to the models of this chat, with zero data retention. Asked once per chat.';
       consentRow.querySelector('input').addEventListener('change', changed);
       row.append(list, consentRow);
       input.after(row);
     }
-    const comparison = document.getElementById('agentComparisonMenuOption');
-    if (comparison && !document.getElementById('agentGoogleMenuOption')) {
+    // In the (+) menu next to the files: Drive adds a file, this row picks
+    // what the agent may read for the message.
+    const anchor = document.getElementById('attachDriveOption') || document.getElementById('agentComparisonMenuOption');
+    if (anchor && !document.getElementById('agentGoogleMenuOption')) {
       const option = node('button', '', 'attach-menu-item agent-google-menu-option');
       option.type = 'button'; option.id = 'agentGoogleMenuOption'; option.hidden = true;
       option.setAttribute('aria-haspopup', 'dialog');
       const state = node('span', 'Off', 'agent-google-menu-state attach-menu-value'); state.id = 'agentGoogleMenuState';
-      option.append(svg('google', ''), node('span', 'Google data', 'attach-menu-label'), state);
+      const text = node('span', '', 'attach-menu-text');
+      text.append(node('span', 'Gmail & Calendar', 'attach-menu-label'), node('span', 'Read as sources', 'attach-menu-hint'));
+      option.append(svg('google', ''), text, state);
       option.addEventListener('click', event => { event.stopPropagation(); App.closeAttachMenu?.(); open(document.getElementById('attachTrigger')); });
-      comparison.after(option);
+      anchor.after(option);
     }
     const toolbar = document.querySelector('#composerModeBar .composer-mode-controls');
     if (toolbar && !document.getElementById('composerGoogleButton')) {
       const toggle = node('button', '', 'composer-agent-toggle composer-tool composer-google');
       toggle.type = 'button'; toggle.id = 'composerGoogleButton'; toggle.hidden = true;
       toggle.setAttribute('aria-haspopup', 'dialog');
-      toggle.title = 'Google data · Use Gmail or Calendar for your next message';
+      toggle.title = 'Gmail & Calendar · Read them as sources for your next message';
       const state = node('span', 'Off', 'composer-agent-state composer-tool-label'); state.id = 'composerGoogleState';
       toggle.append(svg('google', ''), node('span', 'Google', 'composer-tool-label'), state);
       toggle.addEventListener('click', () => open(toggle));
@@ -304,7 +333,7 @@
     const option = document.getElementById('agentGoogleMenuOption');
     const toggle = document.getElementById('composerGoogleButton');
     for (const el of [option, toggle]) if (el && el.hidden === show) el.hidden = !show;
-    const text = stateText(), label = `Google data: ${text === 'Off' ? 'off' : text}`;
+    const text = stateText(), label = `Gmail & Calendar: ${text === 'Off' ? 'off' : text}`;
     for (const id of ['agentGoogleMenuState', 'composerGoogleState']) {
       const el = document.getElementById(id);
       if (el && el.textContent !== text) el.textContent = text;
@@ -331,10 +360,12 @@
     const row = document.getElementById('agentGoogleChips'), list = document.getElementById('agentGoogleChipList');
     if (!row || !list) return;
     const agent = agentActive(), chatId = currentChatId();
-    const chatGoogle = chatUsesGoogle(chatId);
-    const show = agent && (sourcesOn() || chatGoogle);
+    const chatGoogle = chatUsesGoogle(chatId), consented = chatConsented(chatId), files = driveFiles();
+    const show = agent && (sourcesOn() || chatGoogle || files);
+    // The checkbox appears until the chat holds the user's consent.
+    const ask = show && !consented;
     const email = account()?.email || '';
-    const key = JSON.stringify([show, gmailOn, calendarOn, email, [...selectedCalendars.values()], chatGoogle, sourcesOn()]);
+    const key = JSON.stringify([show, gmailOn, calendarOn, email, [...selectedCalendars.values()], chatGoogle, sourcesOn(), consented, files]);
     if (row.dataset.key !== key) {
       row.dataset.key = key;
       const chips = [];
@@ -344,13 +375,17 @@
         const text = !names.length ? 'Calendar · choose calendars' : names.length === 1 ? `Calendar · ${names[0]}` : `${names.length} calendars`;
         chips.push(chip('calendar', text, open, 'Stop using calendars for this message', () => setCalendar(false), names.length ? '' : 'is-incomplete'));
       }
-      if (show && !sourcesOn() && chatGoogle) chips.push(chip('google', 'This chat contains Google data', open, '', null, 'is-info'));
+      if (show && !sourcesOn() && chatGoogle) {
+        chips.push(chip('google', consented ? 'Private chat · Google data' : 'This chat contains Google data', open, '', null, 'is-info'));
+      }
       list.replaceChildren(...chips);
+      const consentRow = row.querySelector('.agent-google-consent');
+      if (consentRow) consentRow.hidden = !ask;
     }
     if (row.hidden === show) row.hidden = !show;
     // Consent never outlives the context it was given for.
     const box = consentInput();
-    if (box && (!show || consentChat !== null && consentChat !== chatId) && box.checked) box.checked = false;
+    if (box && (!ask || consentChat !== null && consentChat !== chatId) && box.checked) box.checked = false;
     consentChat = chatId;
   }
   // Cheap re-projection; never loads connections by itself. A changed chat
@@ -359,6 +394,13 @@
   function refreshControls(force = false) {
     ensureDom();
     const agent = agentActive(), chatId = currentChatId();
+    // Drive files are Google data, and only Agent chats keep Google's rules.
+    // Leaving Agent for this draft takes them off it, with a reason.
+    // Only a real mode change counts, not a moment without access data.
+    if (App.agentChat?.isSelected && !App.agentChat.isSelected() && driveFiles()) {
+      const removed = App.attachments?.removeDriveFiles?.() || 0;
+      if (removed) App.showPopup?.(`Files from Google Drive work in Agent chats only. ${removed === 1 ? 'It was' : 'They were'} removed from this message.`);
+    }
     const key = `${agent}:${uid()}:${chatId}`;
     if (key !== controlsKey || force) {
       controlsKey = key;
@@ -377,9 +419,9 @@
     dialog.setAttribute('role', 'dialog'); dialog.setAttribute('aria-modal', 'true');
     dialog.setAttribute('aria-labelledby', 'agentGoogleSheetTitle'); dialog.setAttribute('aria-describedby', 'agentGoogleSheetIntro');
     const head = node('header', '', 'agent-google-sheet-head');
-    const title = node('h2', 'Google data for this message'); title.id = 'agentGoogleSheetTitle';
+    const title = node('h2', 'Gmail & Calendar'); title.id = 'agentGoogleSheetTitle';
     const close = node('button', '', 'settings-inline-btn agent-google-close'); close.type = 'button';
-    close.setAttribute('aria-label', 'Close Google data'); close.append(svg('close'));
+    close.setAttribute('aria-label', 'Close Gmail & Calendar'); close.append(svg('close'));
     close.addEventListener('click', closeSheet);
     head.append(title, close);
     const body = node('div', '', 'agent-google-sheet-body'); body.id = 'agentGoogleSheetBody';
@@ -454,15 +496,15 @@
     input.setAttribute('role', 'switch');
     input.setAttribute('aria-label', gmail ? 'Use Gmail for this message' : 'Use selected calendars');
     const sub = node('small', !enabled ? `Allow ${gmail ? 'reading emails' : 'reading calendars'} first.`
-      : gmail ? 'Searches and reads only emails relevant to your request.' : `Choose up to ${MAX_CALENDARS} calendars below.`);
+      : gmail ? 'Finds and reads only emails relevant to your question.' : `Choose up to ${MAX_CALENDARS} calendars below.`);
     toggle.querySelector('span').append(sub);
     toggle.prepend(svg(gmail ? 'mail' : 'calendar', 'agent-google-icon agent-google-source-icon'));
     input.addEventListener('change', () => gmail ? setGmail(input.checked) : setCalendar(input.checked));
     section.append(toggle);
     if (!gmail) { const list = node('div', '', 'google-calendar-list'); list.id = 'agentGoogleCalendarList'; section.append(list); }
     const caps = node('ul', '', 'agent-google-caps');
-    if (gmail) caps.append(capabilityRow(item, 'Read emails', 'gmail_read'), capabilityRow(item, 'Send emails you confirm', 'gmail_send'));
-    else caps.append(capabilityRow(item, 'Read calendars', 'calendar_read'), capabilityRow(item, 'Create and edit events you confirm', 'calendar_write'));
+    caps.append(gmail ? capabilityRow(item, 'Read emails', 'gmail_read') : capabilityRow(item, 'Read calendars', 'calendar_read'));
+    if (writes) caps.append(gmail ? capabilityRow(item, 'Send emails you confirm', 'gmail_send') : capabilityRow(item, 'Create and edit events you confirm', 'calendar_write'));
     section.append(caps);
     return section;
   }
@@ -505,9 +547,10 @@
     const focused = sheet.contains(document.activeElement) ? document.activeElement.id : '';
     const children = [];
     const points = node('ul', '', 'agent-google-points'); points.id = 'agentGoogleSheetIntro';
-    for (const [icon, text] of [['google', 'Reads only the calendars and emails that are relevant to your request.'],
-      ['info', 'Relevant excerpts go to your chosen models, including comparison and review models. Only approved providers are used, and web search is off in these chats.'],
-      ['check', 'Nothing is sent or changed in Google without your explicit confirmation.']]) {
+    for (const [icon, text] of [['google', 'Consens reads only the emails and events that matter for your question.'],
+      ['info', 'Excerpts go only to the models in this chat, with zero data retention. Web search stays off in chats with Google data.'],
+      ['check', writes ? 'Nothing is sent or changed in Google without your explicit confirmation.'
+        : 'Read-only: Consens never sends, changes or deletes anything in Google.']]) {
       const item = node('li'); item.append(svg(icon), node('span', text)); points.append(item);
     }
     const details = node('a', 'Privacy details', 'agent-google-link'); details.href = '/privacy'; details.target = '_blank'; details.rel = 'noopener';
@@ -515,10 +558,11 @@
     const status = connections.status;
     if (status === 'idle' || status === 'loading') children.push(node('p', 'Loading Google accounts…', 'agent-google-muted'));
     else if (status === 'error') children.push(notice(`Couldn't load Google accounts. ${connections.error}`, 'error', () => loadConnections(true)));
-    else if (!connections.configured) children.push(notice('Google data is not available on this installation.', 'info'));
+    else if (!connections.configured) children.push(notice('Gmail and Calendar are not available on this installation.', 'info'));
     else if (!connections.accounts.length) {
       const empty = node('section', '', 'agent-google-empty');
-      empty.append(node('h3', 'Connect a Google account'), node('p', 'Choose what Consens may read. You can add more permissions later.', 'agent-google-muted'));
+      empty.append(node('h3', 'Connect a Google account'), node('p', writes ? 'Choose what Consens may read. You can add more permissions later.'
+        : 'Consens asks for read access only. You can disconnect at any time.', 'agent-google-muted'));
       const actions = node('div', '', 'agent-google-row');
       actions.append(button('Connect Gmail', () => connect(['gmail_read']), 'is-primary'), button('Connect Google Calendar', () => connect(['calendar_read'])));
       empty.append(actions); children.push(empty);
@@ -781,6 +825,22 @@
   function controlsFor(action, chatId, card) {
     const state = status(action), preview = action.preview || {};
     const box = node('div', '', 'agent-action-controls');
+    // A proposal from before writing was turned off: shown as it was, never
+    // executed or prepared again; an open one can still be discarded.
+    if (!writes && ['pending', 'expired', 'failed'].includes(state)) {
+      const text = node('div', '', 'agent-action-callout');
+      text.append(svg('info'), node('p', 'Consens now only reads Google data, so this can no longer be sent or applied. Copy what you need, or discard it.'));
+      box.append(text);
+      if (state !== 'failed') {
+        const buttons = node('div', '', 'agent-action-buttons');
+        buttons.append(button('Discard', async () => {
+          await post(`/agent/chats/${chatId}/actions/${action.id}/reject`, {expected_hash: action.hash});
+          await afterChange(chatId, action.id);
+        }));
+        box.append(buttons);
+      }
+      return box;
+    }
     const confirmable = state === 'pending' && preview.send_authorized !== false;
     if (confirmable) {
       const review = checkbox('I have reviewed this exact change and its recipients.', `approve-${action.id}`, 'agent-action-review');
@@ -933,7 +993,7 @@
       if (!answer) return null;
       panel = node('section', '', 'agent-google-actions');
       panel.id = 'agentGoogleActions'; panel.hidden = true;
-      panel.setAttribute('aria-label', 'Email and calendar actions');
+      panel.setAttribute('aria-label', 'Google sources and actions');
       answer.after(panel);
     }
     return panel;
@@ -1011,6 +1071,8 @@
       chats.set(chatId, {actions: result.actions || [], evidence: result.evidence || []});
       // The chat marker is permanent; a final-event hint may arrive first.
       if (typeof result.google_data === 'boolean') googleDataHints.set(chatId, result.google_data || googleDataHints.get(chatId) === true);
+      if (result.google_consent === true) consentHints.set(chatId, true);
+      if (typeof result.writes === 'boolean') writes = result.writes;
       renderActions(chatId);
       emitActions(chatId);
       syncChips(); window.updateQuestionInputAccess?.();
@@ -1084,16 +1146,23 @@
     loadedKey = key; shownChat = chatId;
     return schedule(chatId);
   }
-  function noteGoogleData(chatId, value) {
+  function noteGoogleData(chatId, value, consented = false) {
     if (!chatId) return;
     if (value) googleDataHints.set(chatId, true);
     else if (!googleDataHints.has(chatId)) googleDataHints.set(chatId, false);
+    if (value && consented) consentHints.set(chatId, true);
     syncChips(); window.updateQuestionInputAccess?.();
   }
+
+  // A Drive file added to or removed from the draft changes what it needs.
+  window.addEventListener('consensio:attachments-change', () => {
+    ensureDom(); syncChips(); window.updateQuestionInputAccess?.();
+  });
 
   window.addEventListener('consensio:auth-state', () => {
     connectionsGen++; actionGeneration++; calendarGen++;
     connections = {status: 'idle', configured: null, accounts: [], error: ''}; connectionsPromise = null;
+    writes = false; drive = null; consentHints.clear();
     clearSelection(); chats.clear(); googleDataHints.clear(); silentRetries.clear();
     for (const entry of schedules.values()) clearTimeout(entry.timer);
     schedules.clear(); loadedKey = ''; shownChat = ''; controlsKey = ''; consentChat = null;
@@ -1128,5 +1197,5 @@
   else ensureDom();
 
   App.agentGoogle = {selection, consent, resetConsent, blocker, pendingCount, open: () => open(), close: closeSheet,
-    refreshControls, refreshActions, evidenceFor, noteGoogleData};
+    refreshControls, refreshActions, evidenceFor, noteGoogleData, config, knownDrive, agentActive};
 })();

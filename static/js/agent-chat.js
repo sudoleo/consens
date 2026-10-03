@@ -548,7 +548,7 @@
     const turn = { ...data.turn, turn_id: data.turn_id };
     context.metadata.resourcesSeen = true;
     App.agentWorkspace?.refresh(data.chat_id, true);
-    App.agentGoogle?.noteGoogleData?.(data.chat_id, data.google_data === true);
+    App.agentGoogle?.noteGoogleData?.(data.chat_id, data.google_data === true, data.google_consent === true);
     App.agentGoogle?.refreshActions?.(data.chat_id, true);
     // A final/recovery snapshot may omit earlier progress. Keep confirmed live
     // entries, while the saved snapshot remains authoritative for matching IDs.
@@ -639,7 +639,7 @@
     }
     const basis = registry.getSelectedConversationBasis({ includeHistory: false });
     if (basis && (!basis.chatId || basis.continuationUnavailable)) return { message: 'Reopen this saved chat before continuing.' };
-    // Google data needs consent for every message (Package A owns the rules).
+    // Google data needs the chat's consent (agent-google.js owns the rules).
     try {
       const google = App.agentGoogle?.blocker?.();
       if (google?.message) return google;

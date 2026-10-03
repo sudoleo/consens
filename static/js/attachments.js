@@ -442,6 +442,10 @@
       fileInput.click();
     });
 
+    function isDriveFile(att) {
+      return Boolean(att && att.origin && att.origin.source === "google_drive");
+    }
+
     function formatFileSize(bytes) {
       if (bytes >= 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + " MB";
       return Math.max(1, Math.round(bytes / 1024)) + " KB";
@@ -479,7 +483,14 @@
       nameEl.title = att.name;
       const sizeEl = document.createElement("span");
       sizeEl.className = "attachment-chip-size";
-      if (att.error) {
+      // A file from Google Drive is an ordinary file of the message; only its
+      // origin is named, because Google data changes the chat's rules.
+      const fromDrive = isDriveFile(att);
+      if (fromDrive) chip.classList.add("is-drive");
+      if (att.loading) {
+        chip.classList.add("is-loading");
+        sizeEl.textContent = "Loading from Google Drive…";
+      } else if (att.error) {
         // Agent uploads keep a rejected file in the composer with the server's
         // reason, so the user can remove or replace it and send again.
         chip.classList.add("has-error");
@@ -491,6 +502,9 @@
         sizeEl.textContent = att.previewOnly
           ? (att.size ? formatFileSize(att.size) + " · saved chat" : "saved chat")
           : formatFileSize(att.size);
+      }
+      if (fromDrive && !att.loading && !att.error) {
+        sizeEl.textContent = "Google Drive" + (sizeEl.textContent ? " · " + sizeEl.textContent : "");
       }
       meta.appendChild(nameEl);
       meta.appendChild(sizeEl);
@@ -511,8 +525,9 @@
       }
 
       // A sent message's file can only be opened again when it was stored
-      // (Agent chats); other sent chips are plain labels.
-      if (readonly && !att.fileId) return chip;
+      // (Agent chats); other sent chips are plain labels. A file still
+      // loading from Drive has nothing to preview yet.
+      if ((readonly && !att.fileId) || att.loading) return chip;
       if (readonly) chip.removeAttribute("role");
 
       // Preview and removal are sibling buttons, never nested controls.
@@ -548,6 +563,8 @@
           warnings: Array.isArray(item.warnings) ? item.warnings.map(String).slice(0, 5) : [],
           // Agent uploads stay in their chat, so the chip can open them again.
           fileId: /^[a-f0-9]{32}$/.test(String(item.id || "")) ? String(item.id) : "",
+          origin: item.source === "google_drive" || item.kind === "drive_file" || item.origin?.source === "google_drive"
+            ? { source: "google_drive" } : null,
           data: null
         }, { readonly: true }));
       });
@@ -568,7 +585,9 @@
       return (window.pendingAttachments || [])
         .filter(function (att) { return !att.previewOnly && att.data; })
         .map(function (att) {
-          return { name: att.name, mime: att.mime, size: att.size || 0 };
+          const meta = { name: att.name, mime: att.mime, size: att.size || 0 };
+          if (isDriveFile(att)) meta.origin = { source: "google_drive" };
+          return meta;
         });
     }
 
@@ -632,6 +651,8 @@
       // Files arriving from the picker/paste must stay visible on mobile,
       // even if the composer collapsed while the file was being read.
       if (items.length) window.App?.composer?.expand?.();
+      // A Drive file brings Google data (consent, agent-google.js).
+      window.dispatchEvent(new CustomEvent("consensio:attachments-change"));
     }
 
     // Agent uploads report a per-file failure (or clear it with an empty
@@ -650,11 +671,14 @@
     window.renderAttachmentChips = renderAttachmentChips;
     window.App = window.App || {};
     window.App.attachments = {
+      maxFiles: ATTACH_MAX_FILES,
       detachForMessage: detachForMessage,
       // True while a picked/pasted/dropped file of the CURRENT draft is still
       // being read. Send paths refuse to go out then, so a file can never
       // silently miss its question or land on the next one.
-      isImporting: function () { return pendingFileReads > 0; },
+      isImporting: function () {
+        return pendingFileReads > 0 || (window.pendingAttachments || []).some(function (att) { return att.loading; });
+      },
       messageMeta: messageMeta,
       renderMessageAttachments: renderMessageAttachments,
       markError: markError,
@@ -856,12 +880,14 @@
             pendingFileReads = Math.max(0, pendingFileReads - 1);
             if (owner !== window.auth?.currentUser?.uid || !base64Data) return;
             if (window.pendingAttachments.length >= ATTACH_MAX_FILES) return;
-            window.pendingAttachments.push({
+            const attachment = {
               name: shrunk ? renameToJpeg(name) : name,
               mime: shrunk ? shrunk.mime : mime,
               size: payload.size,
               data: base64Data
-            });
+            };
+            if (options && options.origin) attachment.origin = options.origin;
+            window.pendingAttachments.push(attachment);
             renderAttachmentChips();
             trackAppEvent("app_attachment_added", {
               mime: shrunk ? shrunk.mime : mime,
@@ -877,6 +903,52 @@
         });
       });
     }
+
+    // A file that first has to be fetched (Google Drive). It holds its slot as
+    // a loading chip, so Send waits and the file limit counts it; the fetched
+    // bytes then pass the same checks as a picked file. Removing the chip
+    // while it loads drops the result.
+    function addRemote(item, load) {
+      const generation = readGeneration;
+      const owner = window.auth?.currentUser?.uid;
+      const source = item.source || "remote";
+      if (!canAttach()) {
+        showAttachmentSignIn(source);
+        return false;
+      }
+      if (window.pendingAttachments.length + pendingFileReads >= ATTACH_MAX_FILES) {
+        alert("You can attach up to " + ATTACH_MAX_FILES + " files per question.");
+        return false;
+      }
+      const placeholder = { name: String(item.name || "File"), mime: item.mime || "", size: item.size || 0,
+        origin: item.origin || null, loading: true };
+      window.pendingAttachments.push(placeholder);
+      renderAttachmentChips();
+      function release() {
+        const index = window.pendingAttachments.indexOf(placeholder);
+        if (index === -1 || generation !== readGeneration) return false;
+        window.pendingAttachments.splice(index, 1);
+        renderAttachmentChips();
+        return true;
+      }
+      Promise.resolve().then(load).then(function (file) {
+        if (owner !== window.auth?.currentUser?.uid) return;
+        if (release()) addFiles([file], { source: source, origin: item.origin });
+      }).catch(function (failure) {
+        if (release()) window.App?.showPopup?.(failure?.message || "The file could not be loaded. Please try again.");
+      });
+      return true;
+    }
+    window.App.attachments.addRemote = addRemote;
+    window.App.attachments.hasDriveFiles = function () {
+      return (window.pendingAttachments || []).some(isDriveFile);
+    };
+    window.App.attachments.removeDriveFiles = function () {
+      const before = window.pendingAttachments.length;
+      window.pendingAttachments = window.pendingAttachments.filter(function (att) { return !isDriveFile(att); });
+      if (window.pendingAttachments.length !== before) renderAttachmentChips();
+      return before - window.pendingAttachments.length;
+    };
 
     function transferFiles(dataTransfer) {
       if (!dataTransfer) return [];
@@ -963,7 +1035,10 @@
     return (window.pendingAttachments || [])
       .filter(function (att) { return !att.previewOnly && att.data; })
       .map(function (att) {
-        return { name: att.name, mime: att.mime, size: att.size, data: att.data };
+        const item = { name: att.name, mime: att.mime, size: att.size, data: att.data };
+        // Only Agent chats take Drive files; the upload names their origin.
+        if (att.origin && att.origin.source === "google_drive") item.origin = att.origin;
+        return item;
       });
   };
 
