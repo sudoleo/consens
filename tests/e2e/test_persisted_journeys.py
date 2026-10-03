@@ -77,6 +77,14 @@ class Journey:
         self.uid = 'journey-' + uuid.uuid4().hex
         self.context = browser.new_context(viewport={'width': 1440, 'height': 950})
         self.context.add_init_script('window.__E2E_INITIAL_UID = sessionStorage.getItem("journey_uid") || ' + json.dumps(self.uid))
+        # Agent is the default since 2026-10-02; these journeys start from a
+        # Consensus run and pick Agent explicitly where they need it. Seeded
+        # once per tab so a reload keeps the mode the journey chose.
+        self.context.add_init_script(
+            "if (!sessionStorage.getItem('journeyRunModeSeeded')) {"
+            " localStorage.setItem('runMode', 'consensus');"
+            " localStorage.setItem('runModeDefault', 'agent-2026-10-02');"
+            " sessionStorage.setItem('journeyRunModeSeeded', '1'); }")
         for name, source in [('app', FIREBASE_APP_STUB), ('auth', FIREBASE_AUTH_STUB), ('firestore', FIRESTORE_GUARD)]:
             self.context.route(f'https://www.gstatic.com/firebasejs/9.22.0/firebase-{name}.js',
                 lambda route, request, source=source: route.fulfill(content_type='application/javascript', body=source))

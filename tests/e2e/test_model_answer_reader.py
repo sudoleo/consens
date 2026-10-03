@@ -581,7 +581,7 @@ def test_demo_uses_all_balanced_models_and_never_displays_spinner_markup(browser
           window.__demoFinished = false;
           window.runDemoFlow().then(() => window.__demoFinished = true);
         }""")
-        expect(page.locator('#threadAskText')).to_contain_text('client', timeout=30000)
+        expect(page.locator('#threadAskText')).to_contain_text('heat pump', timeout=30000)
         if not agent_mode:
             expect(page.locator('#modelAnswerReader')).to_be_visible(timeout=30000)
             # The first demo answer starts 500 ms after the question; check the
