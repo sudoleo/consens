@@ -13,7 +13,8 @@ from app.core.rate_limit import limiter
 from app.core.security import db_firestore
 from app.services.agent_documents import Strict
 from app.services.agent_actions import AgentActions
-from app.services.google_connections import GoogleConnections, GoogleError, available, configuration, drive_picker, writes_enabled
+from app.services.google_connections import (GoogleConnections, GoogleError, available, configuration, drive_picker,
+                                             user_allowed, writes_enabled)
 
 router = APIRouter()
 
@@ -48,6 +49,14 @@ def account_owner(request):
     return _chat_uid(request)
 
 
+def tester(request):
+    """New Google access only for accounts on GOOGLE_TEST_USERS."""
+    uid = owner(request)
+    if not user_allowed(uid):
+        raise HTTPException(403, "Google is not available for this account yet.")
+    return uid
+
+
 def invoke(uid, operation):
     try:
         return JSONResponse(operation(), headers={"Cache-Control": "private, no-store"})
@@ -63,6 +72,11 @@ def invoke(uid, operation):
 @limiter.limit("30/minute")
 def connections(request: Request):
     uid = account_owner(request)
+    # An account Google would refuse (unverified app, not a test user) sees
+    # no Google entry at all, as on an installation without Google.
+    if not user_allowed(uid):
+        return JSONResponse({"configured": False, "writes": False, "drive": None, "connections": []},
+                            headers={"Cache-Control": "private, no-store"})
     # One answer for every Google entry point: account connections (Gmail and
     # Calendar), whether Consens may write back, and the public Drive picker
     # configuration (Drive works without a stored connection).
@@ -73,7 +87,7 @@ def connections(request: Request):
 @router.post("/agent/google/connect")
 @limiter.limit("10/minute")
 def connect(request: Request, payload: Connect):
-    uid = owner(request)
+    uid = tester(request)
     def operation():
         data, browser = GoogleConnections(db_firestore).start(uid, payload.capabilities, connection_id=payload.connection_id)
         return {**data, "browser": browser}
@@ -109,7 +123,7 @@ if (window.opener) {
 @router.post("/agent/google/finish")
 @limiter.limit("10/minute")
 def finish(request: Request, payload: Finish):
-    uid = owner(request)
+    uid = tester(request)
     try:
         response = invoke(uid, lambda: {"connection": GoogleConnections(db_firestore).finish(uid, payload.state, payload.code, request.cookies.get("consens_google_oauth", ""))})
     except HTTPException as exc:
@@ -129,7 +143,7 @@ def disconnect(request: Request, connection_id: str):
 @router.get("/agent/google/connections/{connection_id}/calendars")
 @limiter.limit("30/minute")
 def calendars(request: Request, connection_id: str, page_token: str = Query(default="", max_length=2000)):
-    uid = owner(request)
+    uid = tester(request)
     def operation():
         params = {"maxResults": 50, "minAccessRole": "reader"}
         if page_token:
@@ -165,7 +179,7 @@ def actions(request: Request, chat_id: str):
 @router.post("/agent/chats/{chat_id}/actions/{action_id}/confirm")
 @limiter.limit("10/minute")
 def confirm_action(request: Request, chat_id: str, action_id: str, payload: Confirm):
-    uid = owner(request)
+    uid = tester(request)
     return invoke(uid, lambda: {"action": AgentActions(db_firestore).confirm(uid, chat_id, action_id, payload.expected_hash)})
 
 
@@ -177,7 +191,7 @@ def renew_action(request: Request, chat_id: str, action_id: str, payload: Renew)
     No model call and no new content: optionally fewer email recipients.
     The new version supersedes the old one and needs its own review.
     """
-    uid = owner(request)
+    uid = tester(request)
     return invoke(uid, lambda: {"action": AgentActions(db_firestore).renew(uid, chat_id, action_id, payload.expected_hash,
         remove_recipients=payload.remove_recipients)})
 

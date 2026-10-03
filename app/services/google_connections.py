@@ -69,6 +69,38 @@ def available():
         return False
 
 
+_USER_EMAILS = {}
+
+
+def user_allowed(uid):
+    """Who sees Google at all while the OAuth app is unverified.
+
+    GOOGLE_TEST_USERS lists the consens accounts (verified email addresses)
+    that are also test users on Google's consent screen; "*" opens it to every
+    account once Google has verified the app. Unset means nobody: an account
+    Google would refuse never sees an entry that ends in "unverified app".
+    """
+    raw = os.getenv("GOOGLE_TEST_USERS", "").strip()
+    if raw == "*":
+        return True
+    allowed = {item.strip().casefold() for item in raw.split(",") if item.strip()}
+    if not allowed or not uid:
+        return False
+    import time
+    cached = _USER_EMAILS.get(uid)
+    if cached and cached[1] > time.monotonic():
+        email = cached[0]
+    else:
+        try:
+            from firebase_admin import auth
+            user = auth.get_user(uid)
+            email = (user.email or "").casefold() if user.email_verified else ""
+        except Exception:
+            return False
+        _USER_EMAILS[uid] = (email, time.monotonic() + 300)
+    return bool(email) and email in allowed
+
+
 def writes_enabled():
     """Read access works without this; tools that prepare emails or events,
     their confirmation and the write scopes all need GOOGLE_WRITES_ENABLED=1."""

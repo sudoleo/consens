@@ -110,7 +110,19 @@ describe('Google selection and consent',()=>{
     expect(d.getElementById('composerGoogleButton')).toBeNull();
     d.getElementById('attachTrigger').click();
     await vi.waitFor(()=>expect(option.hidden).toBe(false));
+    // Connected accounts show right in the row, with the green dot class.
+    expect(option.textContent).toContain('Connected · owner@example.org');
+    expect(option.classList.contains('is-connected')).toBe(true);
+  });
+  it('invites to read as sources while no account is connected',async()=>{
+    const {window:w,document:d,state}=boot();
+    state.connections=[];
+    w.App.agentGoogle.refreshControls();
+    d.getElementById('attachTrigger').click();
+    const option=d.getElementById('agentGoogleMenuOption');
+    await vi.waitFor(()=>expect(option.hidden).toBe(false));
     expect(option.textContent).toContain('Read as sources');
+    expect(option.classList.contains('is-connected')).toBe(false);
   });
   it('never offers the row on an installation without Gmail and Calendar',async()=>{
     const {window:w,document:d,state}=boot();

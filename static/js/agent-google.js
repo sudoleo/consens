@@ -251,9 +251,11 @@
     if (current.uid !== uid()) { current.popup.close(); return; }
     try {
       if (event.data.error || !event.data.code) throw new Error('Google authorization was not completed. No permissions were added.');
-      await post('/agent/google/finish', {state: event.data.state, code: event.data.code});
+      const finished = await post('/agent/google/finish', {state: event.data.state, code: event.data.code});
       current.popup.close();
       await loadConnections(true);
+      const email = finished?.connection?.email;
+      if (email) App.showPopup?.(`Connected ${email}. Choose Gmail or calendars for your message.`);
       await current.after?.();
     } catch (error) { App.showPopup?.(error.message); }
   });
@@ -304,7 +306,8 @@
       option.setAttribute('aria-haspopup', 'dialog');
       const state = node('span', 'Off', 'agent-google-menu-state attach-menu-value'); state.id = 'agentGoogleMenuState';
       const text = node('span', '', 'attach-menu-text');
-      text.append(node('span', 'Gmail & Calendar', 'attach-menu-label'), node('span', 'Read as sources', 'attach-menu-hint'));
+      const sub = node('span', 'Read as sources', 'attach-menu-hint agent-google-menu-hint'); sub.id = 'agentGoogleMenuHint';
+      text.append(node('span', 'Gmail & Calendar', 'attach-menu-label'), sub);
       option.append(svg('google', ''), text, state);
       option.addEventListener('click', event => { event.stopPropagation(); App.closeAttachMenu?.(); open(document.getElementById('attachTrigger')); });
       anchor.after(option);
@@ -327,7 +330,14 @@
     if (option && option.hidden === show) option.hidden = !show;
     const text = stateText(), state = document.getElementById('agentGoogleMenuState');
     if (state && state.textContent !== text) state.textContent = text;
-    option?.setAttribute('aria-label', `Gmail & Calendar: ${text === 'Off' ? 'off' : text}`);
+    // Which Google account is connected, right where Google is picked.
+    const linked = connections.accounts.filter(item => item.status === 'connected');
+    const sub = document.getElementById('agentGoogleMenuHint');
+    const subText = !linked.length ? (connections.accounts.length ? 'Reconnect to use' : 'Read as sources')
+      : linked.length === 1 ? `Connected · ${linked[0].email}` : `${linked.length} accounts connected`;
+    if (sub && sub.textContent !== subText) sub.textContent = subText;
+    option?.classList.toggle('is-connected', linked.length > 0);
+    option?.setAttribute('aria-label', `Gmail & Calendar: ${text === 'Off' ? 'off' : text}. ${subText}`);
   }
   function chip(icon, text, onOpen, removeLabel, onRemove, tone = '') {
     const wrap = node('span', '', `agent-google-chip${tone ? ' ' + tone : ''}`);

@@ -272,6 +272,10 @@ def run_agent(request: Request, payload: AgentRequest):
         files = AgentFiles(db_firestore)
         file_meta = [public_file(files.get(uid, payload.chat_id, fid)) for fid in payload.file_ids]
         file_context = FileContext(files, uid, payload.chat_id, payload.file_ids)
+        if payload.google_selection:
+            from app.services.google_connections import user_allowed
+            if not user_allowed(uid):
+                raise HTTPException(403, "Google is not available for this account yet.")
         # Google data enters a chat through a Gmail/Calendar selection or a file
         # picked from Google Drive; once there, the chat keeps the Google rules.
         drive_files = any(meta.get("kind") == "drive_file" for meta in file_meta)

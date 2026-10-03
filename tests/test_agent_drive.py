@@ -6,7 +6,8 @@ import pytest
 from test_agent_runs import api, store  # noqa: F401  (fixtures)
 
 PICKER = {"GOOGLE_INTEGRATIONS_ENABLED": "1", "GOOGLE_CLIENT_ID": "client.apps.googleusercontent.com",
-          "GOOGLE_PICKER_API_KEY": "AIzaSyExampleExampleExample0123", "GOOGLE_PROJECT_NUMBER": "123456789012"}
+          "GOOGLE_PICKER_API_KEY": "AIzaSyExampleExampleExample0123", "GOOGLE_PROJECT_NUMBER": "123456789012",
+          "GOOGLE_TEST_USERS": "*"}
 
 
 def files_client(db, monkeypatch):

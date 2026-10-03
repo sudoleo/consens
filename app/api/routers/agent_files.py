@@ -76,9 +76,9 @@ def upload_file(request: Request, chat_id: str, payload: Upload):
     quota = require_uploads(uid)
     extra = None
     if payload.drive_file_id:
-        from app.services.google_connections import drive_picker
-        if not drive_picker():
-            raise HTTPException(403, "Google Drive is not available on this installation.")
+        from app.services.google_connections import drive_picker, user_allowed
+        if not drive_picker() or not user_allowed(uid):
+            raise HTTPException(403, "Google Drive is not available for this account.")
         extra = {"kind": "drive_file", "origin": {"source": "google_drive", "file_id": payload.drive_file_id}}
     def operation():
         files.expire(uid, chat_id)

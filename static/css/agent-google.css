@@ -39,6 +39,12 @@
 .agent-google-menu-option svg { color: var(--sidebar-text-muted); }
 .agent-google-menu-state { flex: none; color: var(--ink-3); font-size: var(--font-size-xs); font-weight: var(--font-weight-regular); }
 .agent-google-menu-option[hidden] { display: none; }
+/* Connected: a green dot leads the account line; the colour sits on the
+   glyph, not on a surface. */
+.agent-google-menu-option.is-connected .agent-google-menu-hint { display: inline-flex; align-items: center; gap: 5px; min-width: 0; }
+.agent-google-menu-option.is-connected .agent-google-menu-hint::before {
+  content: ""; flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--agree);
+}
 
 /* ---- Composer chips: what this message will use, plus its consent ------ */
 .agent-google-chips {

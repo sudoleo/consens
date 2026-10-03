@@ -21,7 +21,7 @@ def google(monkeypatch):
     # path covered. The read-only installation has its own tests below.
     for key, value in {"GOOGLE_INTEGRATIONS_ENABLED":"1", "GOOGLE_CLIENT_ID":"test-client", "GOOGLE_CLIENT_SECRET":"secret-client",
         "GOOGLE_REDIRECT_URI":"https://consens.example/agent/google/callback", "GOOGLE_TOKEN_KEYS":Fernet.generate_key().decode(),
-        "GOOGLE_WRITES_ENABLED":"1"}.items():
+        "GOOGLE_WRITES_ENABLED":"1", "GOOGLE_TEST_USERS":"*"}.items():
         monkeypatch.setenv(key, value)
     return GoogleConnections(Database(), FakeWire())
 
@@ -291,6 +291,43 @@ def test_read_only_installation_never_requests_prepares_or_executes_writes(googl
     assert [t.name for t in GmailTools(loop,google,actions,selection).tools()]==["gmail_read","import_gmail_attachment"]
     monkeypatch.setenv("GOOGLE_WRITES_ENABLED","1")
     assert "prepare_calendar_event" in [t.name for t in CalendarTools(loop,google,actions,selection).tools()]
+
+
+def test_only_listed_verified_accounts_see_google(google, monkeypatch):
+    from types import SimpleNamespace
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    import firebase_admin.auth
+    from app.api.routers import agent_google as router
+    from app.core.rate_limit import limiter
+    from app.services import google_connections as module
+    users = {"tester": SimpleNamespace(email="Tester@Example.org", email_verified=True),
+             "stranger": SimpleNamespace(email="someone@example.org", email_verified=True),
+             "unverified": SimpleNamespace(email="tester@example.org", email_verified=False)}
+    monkeypatch.setattr(firebase_admin.auth, "get_user", lambda uid: users[uid])
+    monkeypatch.setattr(module, "_USER_EMAILS", {})
+    monkeypatch.setenv("GOOGLE_TEST_USERS", "tester@example.org")
+    assert module.user_allowed("tester") and not module.user_allowed("stranger") and not module.user_allowed("unverified")
+    monkeypatch.setenv("GOOGLE_TEST_USERS", "")
+    monkeypatch.setattr(module, "_USER_EMAILS", {})
+    assert not module.user_allowed("tester")  # unset: nobody
+    monkeypatch.setenv("GOOGLE_TEST_USERS", "*")
+    assert module.user_allowed("stranger")
+    # Through the routes: a stranger sees no Google and cannot start one.
+    monkeypatch.setenv("GOOGLE_TEST_USERS", "tester@example.org")
+    monkeypatch.setattr(module, "_USER_EMAILS", {})
+    monkeypatch.setenv("GOOGLE_PICKER_API_KEY", "AIzaSyExampleExampleExample0123")
+    monkeypatch.setenv("GOOGLE_PROJECT_NUMBER", "123456789012")
+    monkeypatch.setattr(router, "db_firestore", google.db)
+    monkeypatch.setattr(router, "require_agent_access", lambda uid: None)
+    monkeypatch.setattr(limiter, "enabled", False)
+    app = FastAPI(); app.include_router(router.router)
+    for uid, configured in (("stranger", False), ("tester", True)):
+        monkeypatch.setattr(router, "_chat_uid", lambda request, uid=uid: uid)
+        body = TestClient(app).get("/agent/google/connections").json()
+        assert body["configured"] is configured and (body["drive"] is not None) is configured
+    monkeypatch.setattr(router, "_chat_uid", lambda request: "stranger")
+    assert TestClient(app).post("/agent/google/connect", json={"capabilities": ["calendar_read"]}).status_code == 403
 
 
 def test_plain_http_redirect_only_on_a_local_checkout(google, monkeypatch):
