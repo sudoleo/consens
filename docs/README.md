@@ -19,8 +19,7 @@ Most documents are written in German (internal working notes). Start here.
 
 ## Research
 
-[benchmark-plan.md](benchmark-plan.md) · [test-coverage-map.md](test-coverage-map.md) ·
-[code-review/](code-review/README.md)
+[benchmark-plan.md](benchmark-plan.md) · [test-coverage-map.md](test-coverage-map.md)
 
 ## Operations
 
@@ -31,4 +30,5 @@ Most documents are written in German (internal working notes). Start here.
 ## Dated audits and reviews
 
 Files with a date in their name (`*-2026-*.md`) are snapshots tied to the code at
-that time, not current specifications.
+that time, not current specifications. Internal audits and legal drafts are kept
+out of the public repository.

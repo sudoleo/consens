@@ -64,3 +64,18 @@ _preview/
 
 # UI-Beleg-Screenshots bleiben lokal (rund 64 MB, kein Repo-Inhalt)
 artifacts/**/*.png
+
+# Interne Notizen, Audits und Rechtsentwürfe bleiben lokal (nicht öffentlich)
+/docs/legal-review-*.md
+/docs/incident-*.md
+/docs/code-review/
+/docs/share-rechtstext-bausteine.md
+/docs/linkedin-content-guide.md
+/docs/*-ux-briefing*.md
+/docs/ux-chat-audit-*.md
+/docs/agent-accounting-audit.md
+/docs/agent-reliability-audit-*.md
+/docs/check-sources-architecture-review-*.md
+/docs/consensus-evidence-feasibility-*.md
+/docs/agent-mode-effort-assessment-*.md
+/docs/source-verification-manual-review.md

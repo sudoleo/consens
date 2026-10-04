@@ -60,6 +60,12 @@
   <img src="https://img.shields.io/badge/data-Firestore-FFCA28" alt="Firestore">
 </p>
 
+<p align="center">
+  <img src="docs/assets/screenshot-differences.png" alt="A consensus answer with agreement score, the disputed claim, and which model families said what" width="900">
+  <br>
+  <sub>One answer, an agreement score, and the disputed claim with the models behind each position. Rendered with the built-in mock models (demo data).</sub>
+</p>
+
 **consens.io** sends one question to models from nine independent providers,
 keeps their answers separate, and shows what they agree on, where they
 contradict each other, and how well each claim is backed by sources. The result
@@ -136,6 +142,10 @@ see [docs/testing.md](docs/testing.md) for the safe setup.
 
 CI runs on every push and pull request ([workflow](.github/workflows/tests.yml)).
 Details: [docs/testing.md](docs/testing.md), [docs/frontend-build.md](docs/frontend-build.md).
+
+## License
+
+Licensed under the [Apache License 2.0](LICENSE).
 
 ## Status
 
