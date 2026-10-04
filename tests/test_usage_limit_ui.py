@@ -73,7 +73,7 @@ def test_server_error_codes_are_actually_matched():
 
     consensus = read("static/js/consensus-run.js")
     assert 'error_code === "usage_limit_exceeded"' not in consensus
-    assert "usageLimit.isLimitError" in consensus
+    assert "usageLimit?.isLimitError" in consensus
     assert "usageLimit.show" in consensus
 
     # Ein Detektor fuer die ganze App, nicht drei divergierende Kopien.

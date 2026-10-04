@@ -729,7 +729,8 @@ def test_the_browser_sends_the_run_snapshot_with_every_consensus_bookmark():
     consensus_run = (
         Path(__file__).resolve().parents[1] / "static" / "js" / "consensus-run.js"
     ).read_text(encoding="utf-8")
-    assert "data.result_id || null," in consensus_run
+    assert "context.consensus.resultId = data.result_id || null;" in consensus_run
+    assert "resultId: context.consensus.resultId" in consensus_run
     assert "bookmarkPreviousQuestion ? null : data.result_id" not in consensus_run
 
 

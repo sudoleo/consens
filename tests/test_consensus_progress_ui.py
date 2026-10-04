@@ -102,7 +102,8 @@ def test_run_covers_every_phase_and_terminal_state():
     # sidebar keeps counting instead of restarting its clock.
     assert "pipeline.onPrepare?.(context.startedAt)" in view
     # The differences judge gets its own step, signalled from the stream.
-    assert "onDifferencesStart" in read("static/js/consensus-run.js")
+    assert 'context.phase = "differences"' in read("static/js/consensus-run.js")
+    assert 'if (context.phase === "differences") pipeline.onDifferencesStart?.();' in view
 
 
 def test_completed_consensus_survives_differences_or_transport_failure():
@@ -110,9 +111,9 @@ def test_completed_consensus_survives_differences_or_transport_failure():
     chat = read("app/api/routers/chat.py")
 
     assert 'sse_pack("consensus.final"' in chat
-    assert '"consensus.final": consensusFinalPhaseRenderer' in run
-    assert "const preservedConsensus = completedConsensusText || streamedConsensusText" in run
-    assert "differences analysis could not be completed" in run
+    assert '"consensus.final": contextConsensusRenderer(context, "consensus-final")' in run
+    assert "context.consensus.text = context.consensus.text || context.consensus.streamText" in run
+    assert 'context.consensus.error = { message:' in run
 
 
 def test_run_is_compact_and_unknowable_phases_stay_indeterminate():

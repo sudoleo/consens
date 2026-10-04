@@ -61,10 +61,10 @@ def test_query_and_consensus_callbacks_use_their_bound_context_not_visible_dom()
     assert "pendingChatTurn" in context_path
     assert 'document.getElementById("openaiResponse")' not in context_path
     manual_bridge = consensus.split("window.getConsensus =", 1)[1]
-    assert "if (window.App.runRegistry)" in manual_bridge
-    assert manual_bridge.index("if (window.App.runRegistry)") < manual_bridge.index(
-        "consensusLifecycle.startRun()"
-    )
+    assert 'registry?.visible?.()' in manual_bridge
+    assert 'registry.isExecuting(boundContext.runId)' in manual_bridge
+    assert 'consensusLifecycle.startRun()' not in manual_bridge
+    assert 'streamSSERequest(' not in manual_bridge
     assert "prepareResponseSourcesForEvidence" in sources
 
 

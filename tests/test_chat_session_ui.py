@@ -233,14 +233,14 @@ def test_chat_session_script_order_consensus_payload_and_legacy_bookmarks_remain
     assert loads_before("consensus-run.js", "query-send.js")
     assert loads_before("query-send.js", "app-init.js")
     assert 'data-engine-provider="{{ model.provider }}"' in template
-    assert "consensusPayload.chat_id = chatTurnIds.chatId" in consensus
-    assert "consensusPayload.turn_id = chatTurnIds.turnId" in consensus
-    assert "consensusPayload.context_version_id = chatTurnIds.contextVersionId" in consensus
-    assert "streamSSERequest(\"/consensus\", consensusPayload" in consensus
+    assert "payload.chat_id = chatTurnIds.chatId" in consensus
+    assert "payload.turn_id = chatTurnIds.turnId" in consensus
+    assert "payload.context_version_id = chatTurnIds.contextVersionId" in consensus
+    assert "streamSSERequest(\"/consensus\", payload" in consensus
     assert consensus.index("ensurePendingTurn") < consensus.index(
-        'streamSSERequest("/consensus", consensusPayload'
+        'streamSSERequest("/consensus", payload'
     )
-    assert "window.saveBookmarkConsensus(" in consensus
+    assert "window.saveBookmarkConsensus?.(" in consensus
     assert "window.saveBookmark?.(" in query
     assert "context.config.providers.map(provider => runProvider(" in query
     assert "window.App?.chatSession?.reset?.();" in firebase
@@ -263,7 +263,7 @@ def test_chat_session_script_order_consensus_payload_and_legacy_bookmarks_remain
     assert "turnData.model_answers" in history_block
     assert "thread-history-sources" in history_block
     assert "terminalError" not in consensus
-    assert "chatTurnState: chatDisposition.chat_turn_state" in consensus
+    assert "chatTurnState: disposition.chat_turn_state" in consensus
 
 
 def test_chat_turn_payload_contains_no_key_or_answer_fields():
@@ -287,11 +287,10 @@ def test_session6_frontend_replay_disposition_and_ui_ordering_contracts():
         encoding="utf-8"
     )
 
-    assert 'const completedReplay = data.chat_replayed === true;' in consensus
-    assert "if (!completedReplay && window.auth?.currentUser)" in consensus
-    assert "if (!completedReplay && bestModelFromConsensus)" in consensus
-    assert 'const dispositionOnly = trigger === "disposition";' in consensus
-    assert "replayPendingTurn || dispositionOnly" in consensus
+    assert 'registry.isAuthCurrent(context) && data.chat_replayed !== true' in consensus
+    assert 'options.dispositionOnly === true' in consensus
+    assert 'dispositionOnly: trigger === "disposition"' in consensus
+    assert 'successfulAnswers < 2 && context.chatSession?.pendingTurnId' in consensus
     assert 'trigger: "disposition", dispositionOnly: true' in query
     assert "context.keepConversationLock = true" in query
 
@@ -480,32 +479,15 @@ session.beginRun({{
     assert result.returncode == 0, result.stdout + result.stderr
 
 
-def test_replay_repaints_model_boxes_from_the_stored_turn():
-    consensus = (ROOT / "static" / "js" / "consensus-run.js").read_text(
-        encoding="utf-8"
-    )
-
-    # A replay never calls the providers, so the boxes must come from the
-    # stored turn rather than from whatever the previous run left behind.
-    assert "function restoreStoredModelAnswers(storedAnswers)" in consensus
-    assert "restoreStoredModelAnswers(data.model_answers)" in consensus
-    restore_call = consensus.index("restoreStoredModelAnswers(data.model_answers)")
-    guard = consensus.index("const replayedAnswerCount = completedReplay")
-    assert guard < restore_call
-
-    body = consensus.split("function restoreStoredModelAnswers", 1)[1].split(
-        "\n    }", 1
-    )[0]
-    # Providers without a stored answer are blanked, never left stale.
-    assert 'box.dataset.responseState = "idle"' in body
-    assert 'outputEl.innerHTML = ""' in body
-    assert "delete box.dataset.responseError" in body
-    assert 'box.dataset.responseState = "complete"' in body
-    # Sources travel per stored answer so old [S…] links cannot leak across turns.
-    assert "Array.isArray(stored?.sources)" in body
-
-    # The agreement widget must count the stored models, not the stale DOM.
-    assert "completedReplay ? replayedAnswerCount : includedAnswerCount" in consensus
+def test_replay_uses_stored_answers_and_sources_in_the_run_context():
+    consensus = (ROOT / "static" / "js" / "consensus-run.js").read_text(encoding="utf-8")
+    # Behavioral replay, source isolation, missing-answer clearing and no
+    # second vote/save are covered by consensus-recovery.test.mjs.
+    replay = consensus.split('if (data.chat_replayed === true) {', 1)[1].split('context.consensus.status = "complete"', 1)[0]
+    assert 'context.modelResults = Object.fromEntries' in replay
+    assert 'const stored = data.model_answers || {}' in replay
+    assert 'status: text ? "complete" : "skipped"' in replay
+    assert 'Array.isArray(answer?.sources) ? answer.sources : []' in replay
 
 
 def test_pending_turn_creation_does_not_rewrite_the_logical_run():

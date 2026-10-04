@@ -1870,14 +1870,21 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   ursprüngliche Start-/End-Offsets, damit Zitatmarkierungen gültige DOM-Ranges
   bilden. Suchtext und Zitat werden identisch pro Unicode-Codepoint normalisiert
   (auch griechisches Sigma und Zeichen außerhalb der BMP).
-- **`consensus-run.js`** — `window.getConsensus`: baut `/consensus`-Payload, fährt
-  den SSE-Stream, rendert Ergebnis + Citation/Share-Meta und archiviert jeden
+- **`consensus-run.js`** — `window.App.executeConsensusRun(context, options)` ist
+  der einzige Consensus-Ausführungspfad: baut `/consensus`-Payload, fährt den
+  SSE-Stream, rendert Ergebnis + Citation/Share-Meta und archiviert jeden
   abgeschlossenen Turn inklusive turnbezogener Quellen, Differences und
-  Modellantworten. Der Multi-Run-Pfad ist
-  `window.App.executeConsensusRun(context, options)`: Payload, Stream,
-  Turn-Disposition und Persistenz bleiben am übergebenen `RunContext`; nur
-  dessen sichtbare Projektion darf den Haupt-DOM ändern. `window.getConsensus`
-  bleibt als Legacy-Brücke für Demo/alte gespeicherte Ansichten. `parseBestModel`.
+  Modellantworten. Payload, Stream, Turn-Disposition und Persistenz bleiben am
+  übergebenen `RunContext`; nur dessen sichtbare Projektion darf den Haupt-DOM
+  ändern. `window.getConsensus` ist nur noch eine Brücke: sie delegiert an den
+  sichtbaren, laufenden Context und startet sonst nichts (der alte DOM-/
+  Singleton-Ablauf ist seit 2026-10-04 entfernt). Bricht der Stream ab, liest
+  `recoverConsensusResult` den Turn owner-gebunden nach: `completed` ersetzt
+  Consensus **und** Modellantworten durch die gespeicherten (Replay, zählt nicht
+  als `app_consensus_completed`), `failed` ist eine echte Disposition und gibt
+  die Gesprächssperre frei; nur unbekannt/pending bleibt gesperrt. Ein
+  Tokenlimit-Fehler öffnet für den sichtbaren Lauf das `#runBlocked`-Panel.
+  `parseBestModel`.
 - **`chat-session.js`** — `window.App.createChatSession(initial)` erzeugt pro
   `RunContext` eine private Chat-Zustandsmaschine für completed Basis, pending
   Turn/Context, stabile `client_request_id`, Usage-Key und whitelisted
