@@ -84,7 +84,7 @@
                 <div id="reasoningControls" class="reasoning-model-grid"></div>
                 <p class="section-hint">Preview applies to the next saved configuration, including the Reasoning switch, API, Watches and Topics using these models.
                     Use <strong>Save Changes</strong> to activate; <strong>Reload</strong> discards edits.
-                    Memory edit, SEO review and Publisher screening retain their fixed task settings.</p>
+                    Memory edit retains its fixed task setting.</p>
                 <details class="reasoning-model-details">
                     <summary>Saved configuration · technical details</summary>
                     <div id="reasoningFlowOverview" class="reasoning-flow-grid"></div>
@@ -290,66 +290,11 @@
 
         <section id="tab-api" class="admin-tab-panel" role="tabpanel" hidden>
             <div class="admin-section">
-                <h3>Scheduled Consensus Publisher</h3>
-                <p class="section-hint">
-                    Controls the GitHub Actions publishing run from Firestore. Generated titles are
-                    checked for a short, single Google search intent before a Consensus run starts.
-                    New pages are generated Monday, Wednesday, and Friday by the scheduled workflow.
-                    Every generated Watch is weekly and permanently pinned to the configured
-                    <strong>Free Watch providers</strong>, regardless of the owner account tier.
-                    No provider is excluded: the initial run uses the Balanced-preset families like every API run,
-                    and each Watch rerun uses the Free Watch providers listed below.
-                </p>
-                <div class="publisher-config-grid">
-                    <div class="publisher-config-options wide">
-                        <label><input id="publisherEnabled" type="checkbox"> Publisher enabled</label>
-                        <label><input id="publisherAutoIndex" type="checkbox"> Index eligible pages automatically</label>
-                        <label><input id="publisherWeeklyWatch" type="checkbox"> Create weekly Watch</label>
-                        <span id="publisherWatchProfile" class="section-hint">weekly · free Watch providers</span>
-                        <span id="publisherProviderPlan" class="section-hint"></span>
-                    </div>
-                    <div class="api-key-field wide">
-                        <label for="publisherTopicBrief">Topic brief</label>
-                        <textarea id="publisherTopicBrief" maxlength="6000" spellcheck="true"></textarea>
-                    </div>
-                    <div class="api-key-field">
-                        <label for="publisherWatchWeekday">Watch weekday</label>
-                        <select id="publisherWatchWeekday">
-                            <option value="monday">Monday</option>
-                            <option value="tuesday">Tuesday</option>
-                            <option value="wednesday">Wednesday</option>
-                            <option value="thursday">Thursday</option>
-                            <option value="friday">Friday</option>
-                            <option value="saturday">Saturday</option>
-                            <option value="sunday">Sunday</option>
-                        </select>
-                    </div>
-                    <div class="api-key-field">
-                        <label for="publisherWatchTime">Watch time</label>
-                        <input id="publisherWatchTime" type="time" value="09:00">
-                    </div>
-                    <div class="api-key-field">
-                        <label for="publisherWatchTimezone">IANA timezone</label>
-                        <input id="publisherWatchTimezone" type="text" maxlength="64" value="Europe/Berlin" spellcheck="false">
-                    </div>
-                    <div class="api-key-field">
-                        <label for="publisherWatchLimit">Maximum active Publisher Watches</label>
-                        <input id="publisherWatchLimit" type="number" min="1" max="100" value="12">
-                    </div>
-                </div>
-                <div class="publisher-config-actions">
-                    <button id="savePublisherConfigBtn" type="button" class="admin-btn">Save Publisher</button>
-                    <button id="reloadPublisherConfigBtn" type="button" class="admin-btn secondary">Reload</button>
-                    <span id="publisherConfigStatus" class="admin-status-text" role="status"></span>
-                </div>
-            </div>
-
-            <div class="admin-section">
                 <h3>Consensus API keys</h3>
                 <p class="section-hint">
                     Issue a key for an active, e-mail-verified Firebase user. The key inherits that
                     UID's tier and its daily token allowance (shared with the app). All v1 runs use the six server-selected Balanced-preset
-                    families, including DeepSeek processing in China; the Scheduled Publisher is no exception.
+                    families, including DeepSeek processing in China.
                     Run content expires after 30 days.
                     Only a SHA-256 hash is stored; the full key is shown exactly once and should be copied directly
                     into a secret manager.
@@ -397,13 +342,14 @@
             </div>
 
             <div class="admin-section">
-                <h3>Automation Watch pages</h3>
+                <h3>Former Publisher pages</h3>
                 <p class="section-hint">
-                    Pages created by the Scheduled Consensus Publisher with its permanently pinned
-                    weekly Free-model Watch. Deleting a page also removes its Watch schedule,
+                    Pages the retired Scheduled Publisher created, each with a weekly Free-model Watch
+                    that still reruns until you pause it. Deleting a page also removes its Watch schedule,
                     Watch history, and follower subscriptions.
                 </p>
                 <div class="watch-admin-toolbar">
+                    <button id="pauseAllPublisherWatchesBtn" type="button" class="admin-btn">Pause all watches</button>
                     <button id="reloadPublisherWatchesBtn" type="button" class="admin-btn secondary">Reload pages</button>
                     <span id="publisherWatchesStatus" class="admin-status-text" role="status"></span>
                 </div>
@@ -440,7 +386,7 @@
                     Manual runs make real model calls, write history, advance their schedule, and apply their configured e-mail rule.
                 </p>
                 <h4>Watch models by user tier</h4>
-                <p class="section-hint">Choose one answer model per enabled provider and a separate Consensus engine for the Free/Plus profile and the Pro profile. Plus deliberately uses the same model profile as Free; only its limits and optional daily interval differ. At least two answer providers are required. Premium models stay listed for Free/Plus but are locked (“Pro only”). An arrow (→) marks a variant that sends a different API model. The <strong>Actually runs</strong> row shows what the next run will really use — a configured provider that gets skipped is named there with its reason. The Scheduled Publisher also uses the Free/Plus profile; personal watches follow the owner's current tier.</p>
+                <p class="section-hint">Choose one answer model per enabled provider and a separate Consensus engine for the Free/Plus profile and the Pro profile. Plus deliberately uses the same model profile as Free; only its limits and optional daily interval differ. At least two answer providers are required. Premium models stay listed for Free/Plus but are locked (“Pro only”). An arrow (→) marks a variant that sends a different API model. The <strong>Actually runs</strong> row shows what the next run will really use — a configured provider that gets skipped is named there with its reason. Personal watches follow the owner's current tier.</p>
                 <div id="watchModelConfig" class="watch-model-grid"></div>
                 <div class="watch-admin-toolbar">
                     <button id="loadWatchesBtn" type="button" class="admin-btn secondary">Reload watches</button>
@@ -537,149 +483,37 @@
 
         <section id="tab-seo" class="admin-tab-panel" role="tabpanel" hidden>
             <div class="admin-section">
-                <h3>Search Console performance</h3>
+                <h3>SEO pulse</h3>
                 <p class="section-hint">
-                    Read-only performance for public, indexable static pages and active indexed shares.
-                    This section never changes indexing, pages, robots directives, or publisher settings.
+                    Every Monday at 09:00 (Berlin) the pulse reads Search Console, sends a short
+                    Telegram note and sets indexed share pages to noindex that had no click and fewer
+                    than 10 impressions in 90 days. Nothing else runs on its own.
                 </p>
-                <div class="watch-admin-toolbar">
-                    <button id="checkSeoConnectionBtn" type="button" class="admin-btn secondary" hidden>Check Search Console connection</button>
-                    <button id="collectSeoBtn" type="button" class="admin-btn" hidden>Collect Search Console data now</button>
-                    <button id="runSeoReviewBtn" type="button" class="admin-btn">Run weekly review now</button>
-                    <button id="reloadSeoBtn" type="button" class="admin-btn secondary">Reload</button>
+                <div class="publisher-config-actions">
+                    <label class="seo-pulse-toggle"><input id="seoPulseEnabled" type="checkbox" class="checkbox-auto-width"> Weekly pulse</label>
+                    <button id="runSeoPulseBtn" type="button" class="admin-btn">Run now</button>
                     <span id="seoStatus" class="admin-status-text" role="status"></span>
                 </div>
+                <p id="seoPulseSchedule" class="section-hint"></p>
+                <div id="seoPulseError" class="seo-alert is-error" role="alert" hidden></div>
 
-                <div id="seoAlerts" class="seo-alerts" role="status" hidden></div>
-
-                <div class="seo-portfolio">
-                    <div class="seo-portfolio-head">
-                        <div>
-                            <h4 class="seo-block-title">Portfolio</h4>
-                            <p id="seoPortfolioLine" class="section-hint u-m-0">No SEO data loaded yet.</p>
-                        </div>
+                <div class="seo-pulse-week">
+                    <h4 id="seoPulseWeek" class="seo-block-title">No report yet</h4>
+                    <div class="seo-pulse-body">
                         <div class="seo-figures">
-                            <div class="seo-figure"><span>Pages with stored data</span><strong id="seoCapturedCount">0 / 0</strong></div>
-                            <div class="seo-figure"><span>Change since previous review</span><strong id="seoReviewDelta">unknown</strong></div>
-                            <div class="seo-figure"><span>Last review</span><strong id="seoReviewLast">never</strong><span>Next: <span id="seoReviewNext">not scheduled</span></span></div>
+                            <div class="seo-figure"><span>Impressions</span><strong id="seoPulseImpressions">–</strong><span id="seoPulseImpressionsPrev"></span></div>
+                            <div class="seo-figure"><span>Clicks</span><strong id="seoPulseClicks">–</strong><span id="seoPulseClicksPrev"></span></div>
+                            <div class="seo-figure"><span>Avg position</span><strong id="seoPulsePosition">–</strong></div>
                         </div>
-                    </div>
-                    <div id="seoStatusBar" class="seo-status-bar" aria-hidden="true"></div>
-                    <div id="seoStatusLegend" class="seo-status-legend"></div>
-                    <p class="section-hint u-m-0">Assessment at run time: <strong id="seoReviewSummary">No weekly review yet.</strong></p>
-                    <div id="seoReviewFindings" class="seo-findings" hidden>
-                        <strong>What the judge observed</strong>
-                        <div id="seoReviewFindingsPositive"></div>
-                        <div id="seoReviewFindingsNegative"></div>
+                        <div id="seoPulseTrend" class="seo-trend" role="img" aria-label="Impressions per week, last 12 weeks" hidden></div>
                     </div>
                 </div>
 
-                <details class="seo-details">
-                    <summary>Diagnostics &amp; configuration</summary>
-                    <div class="seo-summary-grid">
-                        <div class="seo-summary-card"><span>Configuration</span><strong id="seoConfigState">unknown</strong><span id="seoConfigMessage"></span></div>
-                        <div class="seo-summary-card"><span>Connection</span><strong id="seoConnectionState">not checked</strong><span id="seoConnectionMessage"></span></div>
-                        <div class="seo-summary-card"><span>Latest collection run</span><strong id="seoLastRun">No collection run yet</strong><span id="seoLastRunMessage"></span></div>
-                        <div class="seo-summary-card"><span>Data collection in last review</span><strong id="seoReviewCollection">unknown</strong><span id="seoReviewCollectionMessage"></span></div>
-                        <div class="seo-summary-card"><span>Portfolio Judge</span><strong id="seoPortfolioJudge">unknown</strong></div>
-                        <div class="seo-summary-card"><span>Judge in last review</span><strong id="seoReviewJudgeState">unknown</strong><span id="seoReviewJudgeError"></span></div>
-                        <div class="seo-summary-card"><span>Publisher Watches</span><strong id="seoPublisherWatchCount">0 / 12</strong></div>
-                        <div class="seo-summary-card"><span>Latest finalized date</span><strong id="seoFinalDate">–</strong><span>Optional content judge: <span id="seoContentJudgeState">unknown</span></span></div>
-                    </div>
-                    <div class="watch-admin-toolbar">
-                        <label><input id="seoReviewEnabled" type="checkbox"> enabled</label>
-                        <label>Every <input id="seoReviewInterval" class="seo-review-interval-input" type="number" min="1" max="90" value="7"> days</label>
-                        <label>at <input id="seoReviewTime" type="time" value="09:00"></label>
-                        <label>timezone <input id="seoReviewTimezone" class="seo-review-timezone-input" type="text" maxlength="64" value="Europe/Berlin" spellcheck="false"></label>
-                        <button id="saveSeoReviewConfigBtn" type="button" class="admin-btn secondary">Save schedule</button>
-                    </div>
-                    <p id="seoDisclaimer" class="section-hint"></p>
-                    <details class="u-mt-12">
-                        <summary>Read-only hard-coded search opportunity rules</summary>
-                        <p id="seoSearchRules" class="section-hint"></p>
-                    </details>
-                </details>
+                <h4 class="seo-block-title">What moved</h4>
+                <ul id="seoPulseMovers" class="seo-movers"></ul>
 
-                <div class="seo-review-panel">
-                    <div class="seo-review-group-head">
-                        <div>
-                            <h3 class="seo-review-title">Decisions to make</h3>
-                            <p class="section-hint u-m-0">No action or Topic Brief change is automatic. Indexing and Watch status stay independent.</p>
-                        </div>
-                        <button id="applyAllSeoReviewBtn" type="button" class="admin-btn" hidden>Apply all safe recommendations</button>
-                    </div>
-                    <p id="seoReviewProgress" class="section-hint">No review progress yet.</p>
-                    <p id="seoWorklistEmpty" class="seo-worklist-empty" hidden>Nothing needs a decision right now.</p>
-                    <div id="seoReviewGroups" class="seo-review-groups"></div>
-                    <div id="seoTopicBriefPanel" class="seo-review-group u-mt-12" hidden>
-                        <h4 class="u-mt-0">Publisher prompt decision</h4>
-                        <p class="section-hint">Terra proposed a Topic Brief change from the collected SEO portfolio data. It is never applied automatically.</p>
-                        <p id="seoTopicBriefStrength" class="section-hint"></p>
-                        <p id="seoTopicBriefReason" class="section-hint"></p>
-                        <p class="section-hint"><strong>Evidence:</strong> <span id="seoTopicBriefEvidence"></span></p>
-                        <div class="seo-topic-diff">
-                            <div><strong>Current</strong><pre id="seoCurrentTopicBrief"></pre></div>
-                            <div><strong>Proposed</strong><pre id="seoProposedTopicBrief"></pre></div>
-                        </div>
-                        <div class="publisher-config-actions">
-                            <button id="acceptSeoTopicBriefBtn" type="button" class="admin-btn">Accept suggested Topic Brief</button>
-                            <button id="rejectSeoTopicBriefBtn" type="button" class="admin-btn secondary">Reject and keep current</button>
-                            <span id="seoTopicBriefDecision" class="section-hint">Decision: pending</span>
-                        </div>
-                    </div>
-                    <details id="seoReviewCompleted" class="u-mt-12" hidden>
-                        <summary>Completed in this review</summary>
-                        <div id="seoReviewCompletedList" class="seo-review-completed-list"></div>
-                    </details>
-                    <details id="seoReviewHistoryPanel" class="u-mt-12">
-                        <summary>Review history</summary>
-                        <div id="seoReviewHistory" class="seo-review-completed-list"></div>
-                    </details>
-                </div>
-
-                <div class="seo-inventory">
-                    <div class="seo-review-group-head">
-                        <div>
-                            <h3 class="seo-review-title">All pages</h3>
-                            <p id="seoInventoryCount" class="section-hint u-m-0">No pages loaded.</p>
-                        </div>
-                    </div>
-                    <div class="seo-filter-bar">
-                        <input id="seoSearch" class="seo-filter-search" type="search" placeholder="Search URL or title" spellcheck="false" autocomplete="off">
-                        <select id="seoScopeFilter" title="Which pages the list shows by default">
-                            <option value="attention">Needs attention</option>
-                            <option value="all">All pages</option>
-                        </select>
-                        <select id="seoStatusFilter" title="Filter by performance status"><option value="">Any status</option></select>
-                        <select id="seoRecommendationFilter" title="Filter by latest recommendation"><option value="">Any recommendation</option></select>
-                        <select id="seoOriginFilter" title="Filter by page origin"><option value="">Any origin</option></select>
-                        <button id="resetSeoFiltersBtn" type="button" class="admin-btn secondary">Reset filters</button>
-                    </div>
-                    <div class="seo-table-wrap">
-                        <table class="seo-table">
-                            <thead>
-                                <tr>
-                                    <th>Page</th>
-                                    <th>Visibility</th>
-                                    <th>Clicks<small>28 d / 7 d</small></th>
-                                    <th>Impr.<small>28 d / 7 d</small></th>
-                                    <th>CTR<small>28 d / 7 d</small></th>
-                                    <th>Pos.<small>28 d / 7 d</small></th>
-                                    <th>Status</th>
-                                    <th>Recommendation</th>
-                                    <th>Read-only analysis</th>
-                                </tr>
-                            </thead>
-                            <tbody id="seoTableBody"></tbody>
-                        </table>
-                    </div>
-                    <p id="seoEmptyState" class="section-hint">No SEO metrics collected yet.</p>
-                    <p id="seoFilterEmptyState" class="section-hint" hidden>No page matches the current filter.</p>
-                    <details class="u-mt-12">
-                        <summary>What the status classes mean</summary>
-                        <p id="seoRules" class="seo-rules"></p>
-                    </details>
-                </div>
+                <h4 class="seo-block-title">Set to noindex by the pulse</h4>
+                <div id="seoPulseNoindexed" class="seo-pulse-list"></div>
             </div>
         </section>
     </div>

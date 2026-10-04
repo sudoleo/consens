@@ -146,22 +146,6 @@ Netzwerkfristen und die sichtbare Warteanzeige werden in den Agent-JS- und
 Browsertests geprüft. Ergebnisse und Grenzen:
 [Agent-Zuverlässigkeitsaudit](agent-reliability-audit-2026-09-20.md).
 
-### Standalone Publisher
-
-Der Scheduled Publisher benötigt nur Python 3.11 und die Standardbibliothek.
-Sein CI-Vertrag läuft ohne Paketinstallation, ohne geerbte Credentials und mit
-deaktivierten site-packages; HTTP-Aufrufe werden im Test ersetzt:
-
-```powershell
-python -E -S -m unittest discover -s tests -p test_publisher_standalone.py -v
-```
-
-Die Tests prüfen direkten Skriptstart (auch außerhalb des Repos), Modulstart,
-Modell-ID-Auflösung, Credentials sowie automatisches Auswählen, Publizieren,
-Watch/Indexing und die Disabled-/Disagreement-Skip-Pfade. Sie laufen bei Push/PR
-in `publisher-tests.yml` und vor jedem produktiven Publisher-Lauf. Die reguläre
-Backend-Suite findet dieselben Tests ebenfalls automatisch.
-
 Die Abhängigkeiten sind nach Zweck getrennt:
 
 - `requirements.txt`: produktive Laufzeit,
@@ -476,13 +460,6 @@ Regelmutation. [SDK-Verfahren](https://firebase.google.com/docs/rules/unit-tests
 Lokale Socket-/TLS-Tests (`test_local_transport.py`) benötigen Loopback-Sockets,
 aber keine externen Provider. Wartungsskript-/CLI-Tests sperren Netzwerkzugriffe
 in ihren Subprozessen und verwenden ausschließlich synthetische Daten.
-
-Die separaten Standalone-Publishertests bleiben zusätzlich erhalten:
-[`publisher-tests.yml`](../.github/workflows/publisher-tests.yml) führt sie bei
-Push auf `main`, Pull Requests und manueller Auslösung aus.
-[`publish-consensus.yml`](../.github/workflows/publish-consensus.yml) führt
-dieselben Tests vor dem produktiven Publisher-Lauf aus. Sie gehören ebenfalls
-zum regulären Testbestand und sind keine zusätzliche Testdateimenge.
 
 Tests dürfen weiterhin nicht still von der lokalen `.env` abhängen; nötige
 Environment-Variablen im Test selbst setzen (`monkeypatch.setenv`) statt sie

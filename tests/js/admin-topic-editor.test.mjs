@@ -18,7 +18,7 @@ import { ROOT } from "./helpers/appWindow.mjs";
 function topicSection() {
     const js = readFileSync(path.join(ROOT, "static/js/admin.js"), "utf8");
     const start = js.indexOf("// === Public Topic tickers ===");
-    const end = js.indexOf("// === Read-only SEO data foundation ===");
+    const end = js.indexOf("// === SEO pulse ===");
     if (start < 0 || end <= start) throw new Error("Topic section not found in static/js/admin.js");
     return js.slice(start, end);
 }

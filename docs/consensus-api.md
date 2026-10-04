@@ -42,9 +42,9 @@ Jeder Schlüssel trägt explizite Scopes:
 Neue Schlüssel erhalten standardmäßig `consensus:run` und `share:write`.
 Legacy-Schlüssel ohne gespeichertes Scope-Feld erhalten dieselben sicheren
 Defaults, aber niemals rückwirkend `share:index`.
-Für den Scheduled Publisher muss im Admin-Dashboard „Direct indexing“ aktiviert
-werden; äquivalent kann die Ausgabe mit
-`{"uid":"<admin-uid>","label":"scheduled-publisher","scopes":["consensus:run","share:write","share:index"]}`
+Für direkte Indexfreigabe per API muss bei der Ausgabe im Admin-Dashboard
+„Direct indexing“ aktiviert werden; äquivalent kann die Ausgabe mit
+`{"uid":"<admin-uid>","label":"admin-indexing","scopes":["consensus:run","share:write","share:index"]}`
 erfolgen.
 
 ## Run starten
@@ -76,12 +76,8 @@ gelöscht, folgt HTTP `410` (`run_deleted`, siehe unten).
 Reguläre Consensus-API-v1-Runs verwenden die feste serverseitige
 Sechs-Provider-Auswahl OpenAI, Mistral, Anthropic, Gemini, DeepSeek und Grok.
 DeepSeek ist für API-Kunden verpflichtend und verarbeitet den Prompt in China;
-es gibt keinen allgemeinen per-Request Opt-out. Die einzige Ausnahme ist der
-interne, Admin-only Scheduled Publisher. Sein Skript setzt den typisierten
-Header `X-Consensus-Publisher: true`; der Server prüft erneut die Admin-Rolle
-und entfernt DeepSeek aus Antwortmodellen, Consensus-Engine/Fallbacks und
-Differences-Judges. Dieser Header ist kein Provider-Schalter für normale API-
-Kunden.
+es gibt keinen per-Request Opt-out. Den früheren Publisher-Header
+`X-Consensus-Publisher` wertet der Server seit 2026-10-04 nicht mehr aus.
 
 ## Status/Ergebnis lesen
 
@@ -229,76 +225,13 @@ Erfolg liefert die Seite `index, follow` und ist in `sitemap-shares.xml` enthalt
 Das macht die URL indexierbar; die tatsächliche Aufnahme in einen externen
 Suchindex bleibt Sache der jeweiligen Suchmaschine/Search Console.
 
-## Geplanter Publisher via GitHub Actions
+## Geplanter Publisher (entfernt)
 
-`scripts/publish_consensus.py` bildet den kompletten Ablauf ab:
-
-1. Admin-Konfiguration über `GET /api/v1/publisher/config` laden und bei
-   `enabled=false` ohne LLM-Call erfolgreich beenden,
-2. letzte eigene Share-Fragen laden,
-3. optional per OpenRouter Chat Completions + Web Search eine neue, nicht
-   redundante Frage wählen,
-4. die Frage als kurze, einzelne Google-Suchintention prüfen (6–16 Wörter,
-   höchstens 110 Zeichen, kein „As of …“, keine verschachtelte Trade-off-Frage)
-   und bei Bedarf bis zu zweimal neu generieren,
-5. Consensus-Run im Admin-only Publisher-Modus ohne DeepSeek starten, pollen
-   und publizieren,
-6. per `POST /api/v1/shares/{share_id}/watch` idempotent einen wöchentlichen
-   Watch anlegen; dieser ist serverseitig dauerhaft auf die in
-   `app_config/models.watch_models.free` konfigurierten Free Watch Provider
-   gepinnt, wobei DeepSeek selbst dann explizit ausgeschlossen bleibt,
-7. den geeigneten Share abhängig von der Admin-Konfiguration direkt
-   indexierbar schalten,
-8. bei konfiguriertem `TELEGRAM_BOT_TOKEN` und `TELEGRAM_CHAT_ID` die fertige
-   Frage samt Share-URL per Telegram senden. Ein fehlgeschlagener
-   Benachrichtigungsversand wird als Warnung geloggt und macht die bereits
-   erfolgreiche Veröffentlichung nicht nachträglich rot.
-
-Für Telegram muss der Empfänger den Bot zuerst mit `/start` aktivieren. Danach
-werden Bot-Token und numerische Ziel-Chat-ID im Repository unter
-**Settings → Secrets and variables → Actions** als `TELEGRAM_BOT_TOKEN` und
-`TELEGRAM_CHAT_ID` angelegt. Der Bot-Token gehört nie in Workflow-YAML, Logs
-oder Quellcode.
-
-Die Admin-Steuerung liegt unter `/admin#api` und wird in Firestore als
-`app_config/scheduled_consensus_publisher` gespeichert. Änderbar sind:
-
-- Publisher an/aus,
-- Topic Brief,
-- automatische Indexfreigabe,
-- Weekly-Watch an/aus sowie Wochentag, lokale Uhrzeit und IANA-Zeitzone.
-
-Intervall, Provider-Tier und DeepSeek-Ausschluss des automatisch erzeugten
-Watches sind bewusst nicht editierbar: `weekly`, `free`, `exclude deepseek`.
-Die zugehörigen API-Routen sind Admin-
-only und benötigen einen Schlüssel mit `share:write`; die Indexfreigabe
-benötigt zusätzlich weiterhin `share:index`. Diese internen Publisher-Watches
-zählen nicht gegen das persönliche aktive Watch-Limit der Admin-UID, bleiben
-aber Teil des globalen täglichen Watch-Run-Budgets.
-
-Der Workflow `.github/workflows/publish-consensus.yml` läuft standardmäßig
-montags, mittwochs und freitags um 07:15 UTC und kann manuell mit einer festen
-Frage gestartet werden. Bei der automatischen Themenwahl verlangen die
-`Search-opportunity requirements` ein konkretes AI-Modell- oder Produktereignis
-aus den letzten 24 Stunden (höchstens 48) als Auslöser — Release, Rückzug,
-Preis- oder Limitänderung, Benchmark- oder Capability-Behauptung — zusammen mit
-einem belegten Nachfragesignal (laufende Diskussion auf Hacker News, X oder
-Reddit, oder Berichterstattung mehrerer Medien am selben Tag).
-
-Die Frage selbst muss das Ereignis überleben: ob eine Behauptung standhält oder
-was sich praktisch ändert, nicht ob etwas echt ist oder wann es erscheint —
-Letzteres ist binnen einer Woche beantwortet und die Seite stirbt mit der
-Antwort. Ob am Ende veröffentlicht wird, entscheidet der Judge: Läufe über
-`CONSENSUS_MAX_AGREEMENT_SCORE` (Default 80) oder unter
-`CONSENSUS_MIN_CONTRADICTIONS` (Default 1) werden verworfen.
-Im GitHub-Repository werden folgende Actions-Secrets benötigt:
-
-- `CONSENSUS_API_KEY`: Key einer Admin-UID mit allen drei Scopes.
-- `OPENROUTER_API_KEY`: für die automatische Themenwahl über OpenRouter; bei
-  manueller Frage wird dieser zusätzliche Themenwahl-Call nicht ausgeführt.
-
-Optionale Repository-Variablen: `CONSENSUS_API_BASE_URL` und
-`OPENAI_TOPIC_MODEL` (Default `gpt-5.6-luna`). Topic Brief und Index-Schalter
-kommen im normalen Actions-Lauf aus Firestore statt aus GitHub-Variablen.
-Der Workflow verwendet eine Run-stabile Idempotency-Key-ID; ein Retry kann
-deshalb keinen zweiten Consensus-Run für denselben Workflow-Lauf starten.
+Der Scheduled Publisher (`scripts/publish_consensus.py`, GitHub-Workflow
+`publish-consensus.yml`, `GET /api/v1/publisher/config`,
+`POST /api/v1/shares/{share_id}/watch`) ist seit 2026-10-04 entfernt: 16
+automatisch publizierte Seiten brachten in ~11 Wochen 2 Klicks. Bestehende
+Publisher-Shares und ihre Weekly-Watches bleiben als Daten erhalten; die Watches
+lassen sich unter `/admin#api` („Former Publisher pages“) pausieren. Die
+wöchentliche Search-Console-Auswertung übernimmt der SEO-Puls
+(`docs/codebase-map.md`, §4 „SEO-Puls“).

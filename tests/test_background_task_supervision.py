@@ -281,14 +281,13 @@ def test_lifespan_gates_prod_writers_behind_mock_llm(monkeypatch):
     assert set(gated) == {
         "consensus-watch-scheduler",
         "topic-scheduler",
-        "seo-weekly-review-scheduler",
+        "seo-pulse-scheduler",
         "consensus-api-maintenance",
         "retention-maintenance",
         "source-check-workers",
         "consensus-api-account-cleanup",
         "full-account-deletion-cleanup",
         "model-configuration-backfill",
-        "publisher-watch-lineage-backfill",
         "telegram-watch-startup-maintenance",
     }
     assert supervised == ["model-configuration-sync"]
@@ -320,14 +319,14 @@ def test_gated_one_shot_runs_once_without_mock_llm(monkeypatch):
     async def exercise():
         await main._scheduler_task(
             main._run_once(lambda: calls.append("ran")),
-            "publisher-watch-lineage-backfill",
+            "model-configuration-backfill",
             restart=False,
         )
 
     asyncio.run(exercise())
     assert calls == ["ran"]
     health = background_tasks.task_health_snapshot()
-    assert health["publisher-watch-lineage-backfill"]["state"] == "completed"
+    assert health["model-configuration-backfill"]["state"] == "completed"
 
 
 def test_e2e_profile_starts_no_lifespan_task(monkeypatch):

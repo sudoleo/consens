@@ -47,9 +47,9 @@ CASES = {
     "WP-14": ("app.services.source_check_repository", "SourceCheckRepository.finish_package", [
         ("or job.get('lease_token') != claimed['lease_token']", "or False")],
         "test_source_check_transactions.py::test_native_source_claim_takeover_and_exactly_once_package"),
-    "WP-19": ("app.services.seo_weekly_review", "WeeklyReviewRepository.finish_lease", [
-        ('if (data or {}).get("lease_run_id") != run_id:', 'if False:')],
-        "test_scheduler_transactions.py::test_native_seo_claim_and_finish_require_current_owner"),
+    "WP-19": ("app.services.seo_pulse", "SeoPulseService._acquire", [
+        ('if current and current > now:', 'if False:')],
+        "test_scheduler_transactions.py::test_native_seo_pulse_lease_is_exclusive_and_released"),
     "WP-33": ("app.api.routers.admin", "_persist_and_activate_models", [
         ('if cfg.model_config_revision_of(current) != new_revision:', 'if False:')],
         "test_model_configuration_transactions.py::test_native_failed_model_activation_preserves_other_writer"),

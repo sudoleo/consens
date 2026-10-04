@@ -5,7 +5,6 @@ import threading
 from dataclasses import dataclass, field
 from typing import Any
 from dotenv import load_dotenv
-from app.core.openrouter_contract import REASONING_EFFORT_FOR_PUBLISHER_SCREEN
 
 from app.core.entitlements import (
     TIER_FREE,
@@ -128,7 +127,6 @@ REASONING_EFFORT_ON = "high"
 REASONING_EFFORT_FOR_JUDGE = "low"
 REASONING_EFFORT_FOR_JUDGE_BY_PROVIDER = {"mistral": "none"}
 REASONING_EFFORT_FOR_MEMORY_EDIT = "none"
-REASONING_EFFORT_FOR_SEO_REVIEW = "medium"
 GEMINI_MAX_TOKENS = MAX_TOKENS
 DEFAULT_OPENAI_MODEL = "gpt-5.4-mini"
 OPENAI_LUNA_MODEL = "gpt-5.6-luna"

@@ -109,20 +109,19 @@ def test_openapi_contract_declares_api_key_and_idempotency_header():
         param for param in operation["parameters"] if param["name"] == "Idempotency-Key"
     )
     assert idempotency["required"] is True
-    publisher_header = next(
-        param for param in operation["parameters"] if param["name"] == "X-Consensus-Publisher"
+    assert not any(
+        param["name"] == "X-Consensus-Publisher" for param in operation["parameters"]
     )
-    assert publisher_header["required"] is False
     request_schema = operation["requestBody"]["content"]["application/json"]["schema"]
     assert request_schema["$ref"].endswith("/ConsensusRunRequest")
     run_path = schema["paths"]["/api/v1/consensus/runs/{run_id}"]
     assert "get" in run_path and "delete" in run_path
     assert "post" in schema["paths"]["/api/v1/consensus/runs/{run_id}/share"]
     assert "get" in schema["paths"]["/api/v1/shares"]
-    assert "get" in schema["paths"]["/api/v1/publisher/config"]
+    assert "/api/v1/publisher/config" not in schema["paths"]
     share_path = schema["paths"]["/api/v1/shares/{share_id}"]
     assert "get" in share_path and "delete" in share_path
-    assert "post" in schema["paths"]["/api/v1/shares/{share_id}/watch"]
+    assert "/api/v1/shares/{share_id}/watch" not in schema["paths"]
     assert "put" in schema["paths"]["/api/v1/shares/{share_id}/indexing"]
     response_properties = schema["components"]["schemas"]["ConsensusRunResponse"][
         "properties"
@@ -144,41 +143,8 @@ def test_admin_dashboard_exposes_safe_api_key_management_section():
     assert "`/api/admin/api-keys/${encodeURIComponent(key.key_id)}`" in admin_source
     assert "input.value = '';" in admin_source
     assert "Only a SHA-256 hash is stored" in template
-    assert 'id="publisherEnabled"' in template
-    assert 'id="publisherTopicBrief"' in template
-    assert "Free Watch providers" in template
-    assert "No provider is excluded" in template
-    assert "'/api/admin/publisher-config'" in admin_source
-
-
-def test_admin_can_load_and_save_publisher_configuration(monkeypatch):
-    saved = []
-    config = {
-        "enabled": True,
-        "topic_brief": "Choose a useful evidence-rich topic.",
-        "auto_index": True,
-        "weekly_watch_enabled": True,
-        "watch_weekday": "tuesday",
-        "watch_time": "09:00",
-        "watch_timezone": "Europe/Berlin",
-    }
-    monkeypatch.setattr(admin_router, "_require_admin", lambda request, data: "admin-1")
-    monkeypatch.setattr(admin_router.publisher_config, "get_config", lambda: dict(config))
-    monkeypatch.setattr(
-        admin_router.publisher_config,
-        "save_config",
-        lambda data, *, updated_by: saved.append((data, updated_by)) or dict(data),
-    )
-    client = TestClient(main.app)
-
-    loaded = client.get("/api/admin/publisher-config")
-    updated = client.put("/api/admin/publisher-config", json={**config, "enabled": False})
-
-    assert loaded.status_code == 200
-    assert loaded.json()["config"]["watch_model_tier"] == "free"
-    assert updated.status_code == 200
-    assert updated.json()["config"]["enabled"] is False
-    assert saved[0][1] == "admin-1"
+    assert "publisherEnabled" not in template
+    assert "/api/admin/publisher-config" not in admin_source
 
 
 def test_admin_can_issue_list_and_revoke_api_keys(monkeypatch):
@@ -289,54 +255,6 @@ def test_post_returns_accepted_run_and_duplicate_run_id(monkeypatch):
     assert first.headers["cache-control"] == "private, no-store"
     assert first.headers["pragma"] == "no-cache"
     assert scheduled == ["a" * 32, "a" * 32]
-
-
-def test_admin_publisher_run_keeps_every_provider_in_the_persisted_plan(monkeypatch):
-    repo, _scheduled = setup_api(monkeypatch)
-    captured = {}
-    monkeypatch.setattr(api_v1, "is_user_admin", lambda uid: True)
-
-    def build_plan(**kwargs):
-        captured.update(kwargs)
-        return {
-            "providers": {"openai": "openai-model", "deepseek": "deepseek-model"},
-            "consensus_model": "OpenAI",
-        }
-
-    monkeypatch.setattr(api_v1, "build_server_model_plan", build_plan)
-    client = TestClient(main.app)
-    response = client.post(
-        "/api/v1/consensus/runs",
-        headers={
-            "X-API-Key": "cns_test",
-            "Idempotency-Key": "publisher-full-roster",
-            "X-Consensus-Publisher": "true",
-        },
-        json={"question": "Which evidence should be compared?"},
-    )
-
-    assert response.status_code == 202
-    # Publisher mode marks lineage only; it must not narrow the model plan.
-    assert set(captured) == {"deep_think", "is_pro"}
-    assert repo.run["request"]["publisher_mode"] is True
-
-
-def test_publisher_mode_requires_admin(monkeypatch):
-    setup_api(monkeypatch)
-    monkeypatch.setattr(api_v1, "is_user_admin", lambda uid: False)
-    client = TestClient(main.app)
-
-    response = client.post(
-        "/api/v1/consensus/runs",
-        headers={
-            "X-API-Key": "cns_test",
-            "Idempotency-Key": "publisher-denied",
-            "X-Consensus-Publisher": "true",
-        },
-        json={"question": "Which evidence should be compared?"},
-    )
-
-    assert response.status_code == 403
 
 
 def test_server_model_plan_uses_exactly_the_configured_preset_models():
@@ -584,7 +502,7 @@ def test_runner_claim_prevents_duplicate_usage_and_provider_start(monkeypatch):
     assert run_repo.succeeded == 1
 
 
-def test_publisher_pipeline_runs_the_full_plan_including_deepseek(monkeypatch):
+def test_api_pipeline_runs_the_full_plan_including_deepseek(monkeypatch):
     provider_calls = []
     consensus_keys = []
     differences_keys = []
@@ -592,7 +510,6 @@ def test_publisher_pipeline_runs_the_full_plan_including_deepseek(monkeypatch):
         "request": {
             "question": "Do data centers raise electricity prices?",
             "deep_think": False,
-            "publisher_mode": True,
         },
         "is_pro_at_acceptance": True,
         "model_plan": {
@@ -871,107 +788,6 @@ def test_api_key_can_publish_list_read_and_revoke_own_share(monkeypatch):
     assert deleted.status_code == 204
     assert publication_calls == [("user-publisher", run_id)]
     assert revoked == [(share_id, "user-publisher")]
-
-
-def test_admin_api_configures_weekly_watch_with_free_provider_tier(monkeypatch):
-    identity = SimpleNamespace(
-        uid="admin-publisher",
-        key_id="e" * 64,
-        scopes=("share:write",),
-    )
-    captured = {}
-
-    class PublisherKeyRepo:
-        def authenticate(self, key):
-            return identity
-
-    config = {
-        "enabled": True,
-        "topic_brief": "Choose a useful topic.",
-        "auto_index": True,
-        "weekly_watch_enabled": True,
-        "watch_weekday": "wednesday",
-        "watch_time": "08:30",
-        "watch_timezone": "Europe/Berlin",
-    }
-
-    def create_watch(uid, **kwargs):
-        captured.update(uid=uid, **kwargs)
-        return {
-            "id": "watch-1",
-            "share_id": "C" * 16,
-            "status": "active",
-            "interval": kwargs["interval"],
-            "model_tier": kwargs["model_tier"],
-        }
-
-    monkeypatch.setattr(api_v1, "api_key_repository", PublisherKeyRepo())
-    monkeypatch.setattr(
-        api_v1, "api_account_cleanup", SimpleNamespace(ensure_active=lambda uid: None)
-    )
-    monkeypatch.setattr(api_v1, "is_user_admin", lambda uid: True)
-    monkeypatch.setattr(api_v1, "get_user_tier", lambda uid: "pro")
-    monkeypatch.setattr(api_v1.publisher_config, "get_config", lambda: dict(config))
-    monkeypatch.setattr(
-        api_v1.watch_service,
-        "publisher_watch_counts",
-        lambda: {"active": 0, "paused": 0},
-    )
-    monkeypatch.setattr(
-        api_v1.watch_service, "find_watch_for_share", lambda share_id: None
-    )
-    monkeypatch.setattr(api_v1.watch_service, "create_watch", create_watch)
-    client = TestClient(main.app)
-    headers = {"X-API-Key": "cns_publisher"}
-
-    loaded = client.get("/api/v1/publisher/config", headers=headers)
-    watched = client.post(f"/api/v1/shares/{'C' * 16}/watch", headers=headers)
-
-    assert loaded.status_code == 200
-    assert loaded.json()["watch_interval"] == "weekly"
-    assert loaded.json()["watch_model_tier"] == "free"
-    assert loaded.json()["excluded_providers"] == []
-    assert watched.status_code == 200
-    assert watched.json()["watch"]["model_tier"] == "free"
-    assert captured["interval"] == "weekly"
-    assert captured["model_tier"] == "free"
-    assert captured["return_existing"] is True
-    assert captured["bypass_active_limit"] is True
-    assert "excluded_providers" not in captured
-    assert captured["run_weekday"] == "wednesday"
-
-
-def test_publisher_watch_capacity_returns_successful_skip(monkeypatch):
-    identity = SimpleNamespace(uid="admin-publisher", key_id="e" * 64, scopes=("share:write",))
-    monkeypatch.setattr(
-        api_v1, "api_key_repository",
-        SimpleNamespace(authenticate=lambda key: identity),
-    )
-    monkeypatch.setattr(api_v1, "api_account_cleanup", SimpleNamespace(ensure_active=lambda uid: None))
-    monkeypatch.setattr(api_v1, "is_user_admin", lambda uid: True)
-    monkeypatch.setattr(api_v1.publisher_config, "get_config", lambda: {
-        **api_v1.publisher_config.DEFAULT_CONFIG,
-        "max_active_publisher_watches": 12,
-    })
-    monkeypatch.setattr(api_v1.watch_service, "publisher_watch_counts", lambda: {"active": 12, "paused": 3})
-    monkeypatch.setattr(api_v1, "get_user_tier", lambda uid: "free")
-
-    def reject_at_transaction_boundary(*args, **kwargs):
-        assert kwargs["publisher_active_limit"] == 12
-        raise api_v1.watch_service.WatchError(
-            "publisher_capacity", "Active Publisher Watch limit reached."
-        )
-
-    monkeypatch.setattr(
-        api_v1.watch_service, "create_watch",
-        reject_at_transaction_boundary,
-    )
-    response = TestClient(main.app).post(
-        f"/api/v1/shares/{'C' * 16}/watch", headers={"X-API-Key": "cns_publisher"}
-    )
-    assert response.status_code == 200
-    assert response.json()["watch_status"] == "watch_skipped_capacity"
-    assert response.json()["watch"] is None
 
 
 def test_direct_indexing_requires_scope_admin_and_returns_indexed_state(monkeypatch):

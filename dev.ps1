@@ -25,7 +25,6 @@ if ($Command -eq 'help') {
     Write-Host 'update:   bring main up to date with origin/main (fast-forward only) and install changed dependencies'
     Write-Host 'frontend: JavaScript tests + build:check (run npm run build to rebuild)'
     Write-Host 'backend:  isolated pytest suite; browser tests excluded'
-    Write-Host 'Publisher only (no dependencies): python -E -S -m unittest discover -s tests -p test_publisher_standalone.py -v'
     Write-Host 'browser:  build:check + Playwright using a disposable Firestore emulator'
     Write-Host 'rules:    client SDK access checks using a disposable Firestore emulator'
     Write-Host 'CI: pushes run backend/frontend; full checks run when a PR becomes ready for review or by manual selection.'

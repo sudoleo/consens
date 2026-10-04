@@ -951,10 +951,6 @@ def create_share_from_api_run(uid, run, db=None, consume_quota=None):
         payload,
         visibility="public",
         source_api_run_id=run_id,
-        publication_source=(
-            "scheduled_publisher"
-            if bool((run.get("request") or {}).get("publisher_mode")) else ""
-        ),
     )
     share_ref = db.collection(SHARES_COLLECTION).document(share_id)
     quota_ref = _daily_share_quota_ref(db, uid)

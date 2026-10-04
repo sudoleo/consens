@@ -102,6 +102,15 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
 - [ ] Light-/Dark-unabhängiges Admin-Layout hat nach der Auslagerung nach
       `admin.css` keine fehlenden Abstände, abgeschnittenen Tabellen oder
       ungestylten Dialoge. Die Browser-Konsole meldet keine Modul-/CSP-Fehler.
+- [ ] `/admin#seo` (SEO-Puls): Schalter speichert und überlebt Reload, die
+      Zeitplanzeile nennt den nächsten Montag 09:00 bzw. „paused“. „Run now“
+      füllt Wochenzahlen, 12-Wochen-Balken und „What moved“ und schickt die
+      Telegram-Notiz; ohne GSC-Credentials erscheint das Fehlerbanner statt
+      leerer Zahlen.
+- [ ] „Keep indexed“ unter „Set to noindex by the pulse“ entfernt die Zeile, die
+      Share-Seite liefert wieder `index, follow`. API-Tab „Former Publisher
+      pages“: „Pause watch“/„Resume watch“ und „Pause all watches“ ändern den
+      Status sichtbar.
 
 ## Kern-Flow
 - [x] Consensus-Scroll (18.09.2026): Einmaliger Sprung beim Absenden und bei

@@ -18,74 +18,32 @@ class Response:
         return b"{}"
 
 
-def test_seo_review_notification_is_sent_even_without_open_decisions(monkeypatch):
+def test_admin_note_uses_the_critical_alert_chat(monkeypatch):
     captured = {}
+    monkeypatch.delenv("TELEGRAM_CHAT_ID", raising=False)
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test-token")
-    monkeypatch.setenv("TELEGRAM_CHAT_ID", "123")
-    monkeypatch.setenv("SEO_ADMIN_URL", "https://example.test/admin#seo")
+    # Only the critical-alert chat id is configured; the note must still land.
+    monkeypatch.setenv("CRITICAL_ERROR_TELEGRAM_CHAT_ID", "456")
 
     def fake_urlopen(request, timeout):
         captured["url"] = request.full_url
         captured["payload"] = json.loads(request.data)
-        captured["timeout"] = timeout
         return Response()
 
     monkeypatch.setattr(telegram_notifier, "urlopen", fake_urlopen)
-    result = telegram_notifier.send_seo_review_notification({
-        "status": "completed",
-        "summary": "Everything is stable.",
-        "pages": [{"page_id": "a"}],
-        "groups": {"manual_improvement": []},
-        "editorial_decisions": {},
-        "proposed_topic_brief": None,
-    })
+    result = telegram_notifier.send_admin_note("SEO week 24 Sep – 30 Sep")
 
     assert result["status"] == "sent"
     assert captured["url"].endswith("/bottest-token/sendMessage")
-    assert "Everything is stable." in captured["payload"]["text"]
-    assert "Editorial decisions open: 0" in captured["payload"]["text"]
-    assert "https://example.test/admin#seo" in captured["payload"]["text"]
-
-
-def test_seo_review_notification_names_the_judge_failure_and_findings(monkeypatch):
-    captured = {}
-    monkeypatch.delenv("TELEGRAM_CHAT_ID", raising=False)
-    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test-token")
-    # Only the critical-alert chat id is configured; the review must still land.
-    monkeypatch.setenv("CRITICAL_ERROR_TELEGRAM_CHAT_ID", "456")
-
-    def fake_urlopen(request, timeout):
-        captured["payload"] = json.loads(request.data)
-        return Response()
-
-    monkeypatch.setattr(telegram_notifier, "urlopen", fake_urlopen)
-    result = telegram_notifier.send_seo_review_notification({
-        "status": "completed",
-        "summary": "Reviewed 12 SEO pages.",
-        "pages": [{"page_id": "a"}],
-        "groups": {"manual_improvement": []},
-        "editorial_decisions": {},
-        "judge_called": False,
-        "judge_error": "The portfolio judge returned invalid JSON.",
-        "findings": {"positive": ["One page is being shown."], "negative": ["Most pages are commodity answers."]},
-        "status_counts": {"emerging": 11, "opportunity": 1},
-        "delta": {"comparable": True, "changed": [{"title": "Agent pricing", "from": "emerging", "to": "opportunity"}], "new_pages": []},
-    })
-
-    text = captured["payload"]["text"]
-    assert result["status"] == "sent"
     assert captured["payload"]["chat_id"] == "456"
-    assert "Portfolio judge: FAILED" in text
-    assert "Most pages are commodity answers." in text
-    assert "emerging 11" in text
-    assert "Agent pricing: emerging -> opportunity" in text
+    assert captured["payload"]["text"] == "SEO week 24 Sep – 30 Sep"
 
 
-def test_seo_review_notification_is_recorded_as_skipped_without_config(monkeypatch):
+def test_admin_note_is_skipped_without_config(monkeypatch):
     monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
     monkeypatch.delenv("TELEGRAM_CHAT_ID", raising=False)
     monkeypatch.delenv("CRITICAL_ERROR_TELEGRAM_CHAT_ID", raising=False)
-    result = telegram_notifier.send_seo_review_notification({"status": "error"})
+    result = telegram_notifier.send_admin_note("anything")
     assert result["status"] == "skipped_not_configured"
 
 

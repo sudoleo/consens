@@ -50,8 +50,6 @@ WATCH_EVENT_CHANGED = "watch.changed"
 WATCH_EVENT_CONDITION_MET = "watch.condition_met"
 WATCH_EVENT_CONFIRMING = "watch.confirming"
 WATCH_EVENT_RUN_FAILED = "watch.run_failed"
-PUBLISHER_SOURCE = "scheduled_publisher"
-API_RUNS_COLLECTION = "api_consensus_runs"
 WATCH_STATE_COLLECTION = "watch_state"
 WATCH_UNIQUES_COLLECTION = "watch_uniques"
 PUBLISHER_COUNTER_ID = "publisher_capacity"
@@ -783,71 +781,6 @@ def list_watches_for_admin_page(*, db=None, cursor="", max_items=100) -> dict:
 
 def list_watches_for_admin(db=None) -> list[dict]:
     return list_watches_for_admin_page(db=db, max_items=200)["items"]
-
-
-def publisher_watch_counts(db=None) -> dict:
-    """Count managed Publisher Watches, including pre-lineage records."""
-    db = db if db is not None else db_firestore
-    active = paused = 0
-    # model_tier=free is only written by the admin-only Publisher Watch API.
-    # It remains the compatibility marker for Watches created before the
-    # explicit publication_source lineage field was introduced.
-    docs = _where_equal(
-        db.collection(WATCHES_COLLECTION), "model_tier", "free"
-    ).stream()
-    for doc in docs:
-        data = doc.to_dict() or {}
-        if data.get("status") == "active":
-            active += 1
-        elif data.get("status") in {"paused", "paused_error"}:
-            paused += 1
-    return {"active": active, "paused": paused}
-
-
-def backfill_publisher_watch_lineage(db=None) -> dict:
-    """Backfill explicit lineage when a legacy Watch points to a Publisher run.
-
-    Free-tier Watches are sufficient for capacity counting. Destructive SEO
-    safeguards still require verified Publisher lineage on the immutable Share,
-    so ambiguous legacy records are deliberately left untouched.
-    """
-    db = db if db is not None else db_firestore
-    checked = updated_watches = updated_shares = 0
-    docs = _where_equal(
-        db.collection(WATCHES_COLLECTION), "model_tier", "free"
-    ).stream()
-    for doc in docs:
-        checked += 1
-        watch = doc.to_dict() or {}
-        share_id = str(watch.get("share_id") or "")
-        if not share_id:
-            continue
-        share_ref = db.collection(share_snapshots.SHARES_COLLECTION).document(share_id)
-        share_snap = share_ref.get()
-        share = share_snap.to_dict() if share_snap.exists else None
-        if not share:
-            continue
-        verified = str(share.get("publication_source") or "") == PUBLISHER_SOURCE
-        if not verified:
-            run_id = str(share.get("source_api_run_id") or "")
-            if run_id:
-                run_snap = db.collection(API_RUNS_COLLECTION).document(run_id).get()
-                run = run_snap.to_dict() if run_snap.exists else {}
-                verified = bool((run.get("request") or {}).get("publisher_mode"))
-        if not verified:
-            continue
-        if str(watch.get("publication_source") or "") != PUBLISHER_SOURCE:
-            doc.reference.update({"publication_source": PUBLISHER_SOURCE})
-            updated_watches += 1
-        if str(share.get("publication_source") or "") != PUBLISHER_SOURCE:
-            share_ref.update({"publication_source": PUBLISHER_SOURCE})
-            share_snapshots.invalidate_share_cache(share_id)
-            updated_shares += 1
-    return {
-        "checked": checked,
-        "updated_watches": updated_watches,
-        "updated_shares": updated_shares,
-    }
 
 
 def find_watch_for_share(share_id: str, db=None, *, share=None) -> dict | None:

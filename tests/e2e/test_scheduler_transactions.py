@@ -5,7 +5,8 @@ from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
 import uuid
 import pytest
-from app.services import topics, watch_service, seo_weekly_review
+from app.services import topics, watch_service, seo_pulse
+from app.services.google_search_console import SearchConsoleError
 from native_support import native_db, race, race_with_worker_retry
 
 
@@ -48,27 +49,25 @@ def test_native_due_queries_and_topic_claim_fence(native_db):
     assert fresh["current_run_id"] != old["current_run_id"]
 
 
-def test_native_seo_claim_and_finish_require_current_owner(native_db):
-    db, now = native_db, datetime.now(timezone.utc)
-    ref = db.tracked("app_config")
-    class Repository(seo_weekly_review.WeeklyReviewRepository):
+def _pulse_service(ref):
+    class Service(seo_pulse.SeoPulseService):
         @property
         def config_ref(self):
             return ref
-    outcomes = race_with_worker_retry(lambda: Repository(db).acquire("first", now),
-        lambda: Repository(db).acquire("second", now), snapshot=lambda: ref.get().to_dict())
+    return Service
+
+
+def test_native_seo_pulse_lease_is_exclusive_and_released(native_db):
+    db, now = native_db, datetime.now(timezone.utc)
+    ref = db.tracked("app_config")
+    Service = _pulse_service(ref)
+    outcomes = race_with_worker_retry(lambda: Service(db)._acquire("first", now),
+        lambda: Service(db)._acquire("second", now), snapshot=lambda: ref.get().to_dict())
     assert sorted(outcomes) == [False, True]
-    old = ref.get().to_dict()["lease_run_id"]
-    later = now + timedelta(minutes=seo_weekly_review.LEASE_MINUTES + 1)
-    assert Repository(db).acquire("replacement", later)
-    before = ref.get().to_dict()
-    assert Repository(db).finish_lease(old, later, 7) is False
-    assert ref.get().to_dict() == before
-    assert Repository(db).finish_lease("replacement", later, 7) is True
-    saved = ref.get().to_dict()
-    assert saved["lease_run_id"] == "" and saved["next_run_at"] > later
-    assert Repository(db).finish_lease("replacement", later + timedelta(hours=1), 7) is False
-    assert ref.get().to_dict() == saved
+    assert not Service(db)._acquire("third", now + timedelta(minutes=1))
+    later = now + timedelta(minutes=seo_pulse.LEASE_MINUTES + 1)
+    assert Service(db)._acquire("replacement", later)
+    assert ref.get().to_dict()["lease_run_id"] == "replacement"
 
 
 def test_native_watch_claim_budget_and_stale_renewal(native_db):
@@ -146,52 +145,20 @@ def test_native_topic_loop_commits_due_tick_and_stops_on_cancel(native_db, monke
     run_scheduler_scenario(scenario)
 
 
-def test_native_seo_loop_persists_failure_releases_lease_and_cancels(native_db, monkeypatch):
+def test_native_seo_pulse_failure_releases_lease_and_reschedules(native_db):
     db, now = native_db, datetime.now(timezone.utc)
-    config_ref = db.tracked("app_config")
-    review_collection = "scheduler-seo-" + uuid.uuid4().hex
-    monkeypatch.setattr(seo_weekly_review, "REVIEWS_COLLECTION", review_collection)
-    class Repository(seo_weekly_review.WeeklyReviewRepository):
-        @property
-        def config_ref(self):
-            return config_ref
-        def create_review(self, run_id, data):
-            db.tracked(review_collection, run_id)
-            return super().create_review(run_id, data)
-    config_ref.set({"enabled": True, "interval_days": 7, "run_time": "08:00", "timezone": "UTC", "next_run_at": now})
-    collections, notifications = [], []
-    def collect():
-        collections.append(config_ref.get().to_dict()["lease_run_id"])
-        assert collections[-1]
-        return {"status": "failed", "reason": "synthetic external collection failure"}
-    service = seo_weekly_review.SeoWeeklyReviewService(db, repository=Repository(db),
-        data_service=SimpleNamespace(collect=collect), clock=lambda: now,
-        notifier=lambda value: notifications.append(value) or {"status": "sent"})
-    monkeypatch.setattr(seo_weekly_review, "default_service", service)
-    monkeypatch.setattr(seo_weekly_review, "SCHEDULER_TICK_SECONDS", 3600)
+    ref = db.tracked("app_config")
+    ref.set({"enabled": True, "next_run_at": now})
+    notes = []
 
-    async def scenario():
-        completed = asyncio.Event()
-        original_health = seo_weekly_review.task_succeeded
-        def health(*args, **kwargs):
-            original_health(*args, **kwargs)
-            completed.set()
-        monkeypatch.setattr(seo_weekly_review, "task_succeeded", health)
-        task = asyncio.create_task(seo_weekly_review.seo_review_scheduler_loop())
-        try:
-            await asyncio.wait_for(completed.wait(), 20)
-            assert len(collections) == len(notifications) == 1
-            row = db.collection(review_collection).document(collections[0]).get().to_dict()
-            assert row["status"] == "collection_failed" and row["judge_called"] is False
-            assert row["telegram_notification"]["status"] == "sent"
-            saved = config_ref.get().to_dict()
-            assert saved["lease_run_id"] == "" and saved["lease_until"] is None
-            assert saved["next_run_at"] > now
-        finally:
-            task.cancel()
-            with pytest.raises(asyncio.CancelledError):
-                await task
-        assert seo_weekly_review._scheduler_wake_event is None
-        await asyncio.sleep(0)
-        assert len(collections) == 1 and task.cancelled()
-    run_scheduler_scenario(scenario)
+    def broken_client():
+        raise SearchConsoleError("not_configured", "Not configured: GSC_SITE_URL.")
+
+    service = _pulse_service(ref)(db, client_factory=broken_client, clock=lambda: now,
+                                  notify=notes.append)
+    assert service.run() == {"status": "failed"}
+    saved = ref.get().to_dict()
+    assert saved["lease_run_id"] == "" and saved["lease_until"] is None
+    assert saved["next_run_at"] > now
+    assert saved["report"]["error"] == "Not configured: GSC_SITE_URL."
+    assert len(notes) == 1 and "Not configured" in notes[0]

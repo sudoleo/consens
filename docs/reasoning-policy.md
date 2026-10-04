@@ -23,7 +23,8 @@ The cap preserves explicit disabled/none/minimal/low settings. It applies to
 standard answers, answers with the Reasoning switch on and synchronous/streamed engine calls
 (synthesis, judges, resolve, chat memory), including consumers such as API,
 Watches and Topics. It does not change routing, output caps or fixed task
-settings for Memory Edit, SEO review and Publisher screening. The selected
+settings such as Memory Edit (the SEO review and Publisher screening rows were
+removed on 2026-10-04). The selected
 model's exception restores its original **flow-specific** behavior, not one
 invented global effort. Smaller models and cheaper token prices remain a
 separate model-selection decision; the cap is not a token or currency limit.

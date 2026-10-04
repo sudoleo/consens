@@ -70,8 +70,7 @@ from app.services.retention_maintenance import retention_maintenance_loop
 from app.services.source_check_jobs import source_check_worker_loop
 from app.services.topic_runner import topic_scheduler_loop
 from app.services.watch_scheduler import watch_scheduler_loop
-from app.services.watch_service import backfill_publisher_watch_lineage
-from app.services.seo_weekly_review import seo_review_scheduler_loop
+from app.services.seo_pulse import seo_pulse_scheduler_loop
 from app.services.telegram_watch import run_startup_maintenance as telegram_startup_maintenance
 from app.services.telegram_notifier import (
     dispatch_critical_error_notification,
@@ -184,11 +183,6 @@ async def lifespan(app: FastAPI):
     model_config_sync_task = _supervised_task(
         model_config_sync_loop, "model-configuration-sync"
     )
-    lineage_backfill_task = _scheduler_task(
-        _run_once(backfill_publisher_watch_lineage),
-        "publisher-watch-lineage-backfill",
-        restart=False,
-    )
     # setWebhook points the one bot at SITE_URL with this process's secret; a
     # local run would overwrite the production registration.
     telegram_webhook_task = _scheduler_task(
@@ -198,9 +192,7 @@ async def lifespan(app: FastAPI):
     )
     watch_task = _scheduler_task(watch_scheduler_loop, "consensus-watch-scheduler")
     topic_task = _scheduler_task(topic_scheduler_loop, "topic-scheduler")
-    seo_review_task = _scheduler_task(
-        seo_review_scheduler_loop, "seo-weekly-review-scheduler"
-    )
+    seo_pulse_task = _scheduler_task(seo_pulse_scheduler_loop, "seo-pulse-scheduler")
     api_maintenance_task = _scheduler_task(
         api_run_maintenance_loop, "consensus-api-maintenance"
     )
@@ -225,7 +217,7 @@ async def lifespan(app: FastAPI):
     tasks = (
         watch_task,
         topic_task,
-        seo_review_task,
+        seo_pulse_task,
         api_maintenance_task,
         retention_task,
         source_check_task,
@@ -233,7 +225,6 @@ async def lifespan(app: FastAPI):
         account_deletion_task,
         model_config_backfill_task,
         model_config_sync_task,
-        lineage_backfill_task,
         telegram_webhook_task,
     )
     try:

@@ -23,11 +23,8 @@ from app.services import (
     agent_budget_config,
     mailer,
     persistence_guard,
-    publisher_config,
     prompt_config,
-    seo_data,
-    seo_recommendation,
-    seo_weekly_review,
+    seo_pulse,
     watch_scheduler,
     watch_service,
 )
@@ -42,9 +39,6 @@ from app.services.api_account_cleanup import FirestoreApiAccountCleanup
 router = APIRouter()
 api_key_repository = FirestoreApiKeyRepository(db_firestore)
 api_account_cleanup = FirestoreApiAccountCleanup(db_firestore)
-seo_data_service = seo_data.SeoDataService(db_firestore)
-seo_recommendation_service = seo_recommendation.SeoRecommendationService(db_firestore)
-seo_weekly_review_service = seo_weekly_review.default_service
 _MODEL_CONFIG_UPDATE_LOCK = threading.Lock()
 
 
@@ -128,51 +122,16 @@ class AdminPromptConfigRequest(BaseModel):
     config: dict
 
 
-class AdminPublisherConfigRequest(BaseModel):
+class AdminSeoPulseConfigRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
 
     enabled: bool
-    topic_brief: str = Field(min_length=1, max_length=publisher_config.TOPIC_BRIEF_MAX_CHARS)
-    auto_index: bool
-    weekly_watch_enabled: bool
-    watch_weekday: Literal[
-        "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"
-    ]
-    watch_time: str = Field(min_length=5, max_length=5)
-    watch_timezone: str = Field(min_length=1, max_length=64)
-    max_active_publisher_watches: int = Field(default=12, ge=1, le=100)
 
 
-class AdminSeoReviewConfigRequest(BaseModel):
+class AdminWatchStatusRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
 
-    enabled: bool
-    interval_days: int = Field(default=7, ge=1, le=90)
-    run_time: str = Field(default="09:00", min_length=5, max_length=5)
-    timezone: str = Field(default="Europe/Berlin", min_length=1, max_length=64)
-
-
-class AdminSeoReviewActionRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
-
-    group: Optional[Literal[
-        "keep_indexed", "pause_watch_only", "resume_watch", "noindex_only",
-        "noindex_and_pause_watch", "delete_candidate", "manual_improvement",
-    ]] = None
-    page_ids: list[str] = Field(default_factory=list, max_length=100)
-    apply_all: bool = False
-    confirm_delete: bool = False
-
-
-class AdminSeoEditorialDecisionRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
-
-    page_id: str = Field(pattern=r"^[0-9a-f]{64}$")
-    decision: Literal[
-        "keep_as_is", "create_successor", "investigate", "noindex", "delete",
-        "edit_static_page",
-    ]
-    note: str = Field(default="", max_length=500)
+    status: Literal["active", "paused"]
 
 
 class AdminAccountTierRequest(BaseModel):
@@ -317,253 +276,51 @@ def admin_save_prompt_config(request: Request, data: AdminPromptConfigRequest):
 
 
 @router.get("/api/admin/seo")
-async def admin_get_seo_overview(request: Request):
+async def admin_get_seo_pulse(request: Request):
     await asyncio.to_thread(_require_admin, request, {})
     try:
-        result = await asyncio.to_thread(seo_data_service.overview)
-        result["content_judge"] = seo_recommendation_service.content_judge.status()
-        result["weekly_review"] = await asyncio.to_thread(seo_weekly_review_service.status)
-        return result
+        return await asyncio.to_thread(seo_pulse.default_service.status)
     except Exception as exc:
-        logging.error(
-            "admin_get_seo_overview failed category=%s", safe_exception(exc)
-        )
-        raise HTTPException(status_code=500, detail="Failed to load SEO data")
+        logging.error("admin_get_seo_pulse failed category=%s", safe_exception(exc))
+        raise HTTPException(status_code=500, detail="Failed to load the SEO pulse")
 
 
-@router.post("/api/admin/seo/check")
-async def admin_check_seo_connection(request: Request, data: dict = Body(default={})):
+@router.put("/api/admin/seo/config")
+async def admin_save_seo_pulse_config(request: Request, data: AdminSeoPulseConfigRequest):
+    await asyncio.to_thread(_require_admin, request, {})
+    try:
+        return await asyncio.to_thread(seo_pulse.default_service.set_enabled, data.enabled)
+    except Exception as exc:
+        logging.error("admin_save_seo_pulse_config failed category=%s", safe_exception(exc))
+        raise HTTPException(status_code=500, detail="Failed to save the SEO pulse setting")
+
+
+@router.post("/api/admin/seo/run")
+@limiter.limit("6/hour")
+async def admin_run_seo_pulse(request: Request, data: dict = Body(default={})):
     await asyncio.to_thread(_require_admin, request, data)
     try:
-        return await asyncio.to_thread(seo_data_service.check_connection)
-    except Exception:
-        # Do not include exception details here: configuration failures may
-        # originate while opening the secret file. The admin receives only the
-        # stable sanitized error below.
-        logging.error("admin_check_seo_connection failed safely")
-        raise HTTPException(status_code=500, detail="Search Console connection check failed safely")
-
-
-@router.post("/api/admin/seo/collect")
-async def admin_collect_seo_data(request: Request, data: dict = Body(default={})):
-    await asyncio.to_thread(_require_admin, request, data)
-    try:
-        return await asyncio.to_thread(seo_data_service.collect)
-    except seo_data.CollectionAlreadyRunning:
-        raise HTTPException(status_code=409, detail="SEO collection is already running")
+        await asyncio.to_thread(seo_pulse.default_service.run, force=True)
+        return await asyncio.to_thread(seo_pulse.default_service.status)
+    except seo_pulse.PulseAlreadyRunning:
+        raise HTTPException(status_code=409, detail="The SEO pulse is already running")
     except Exception as exc:
-        logging.error(
-            "admin_collect_seo_data failed category=%s", safe_exception(exc)
-        )
-        raise HTTPException(status_code=500, detail="SEO collection failed safely")
+        logging.error("admin_run_seo_pulse failed category=%s", safe_exception(exc))
+        raise HTTPException(status_code=500, detail="The SEO pulse failed safely")
 
 
-_SEO_RECOMMENDATION_STATUS = {
-    "not_found": 404,
-    "llm_not_configured": 409,
-    "content_judge_not_applicable": 409,
-    "invalid_llm_response": 502,
-    "unsafe_llm_response": 502,
-}
-
-
-def _raise_seo_recommendation_error(exc):
-    raise HTTPException(
-        status_code=_SEO_RECOMMENDATION_STATUS.get(exc.code, 400),
-        detail=exc.safe_message,
-    )
-
-
-def _raise_seo_review_error(exc):
-    status = {
-        "not_found": 404,
-        "delete_confirmation_required": 409,
-        "topic_brief_changed": 409,
-        "state_changed": 409,
-        "recommendation_stale": 409,
-        "insufficient_evidence": 409,
-    }.get(exc.code, 400)
-    raise HTTPException(status_code=status, detail=exc.safe_message)
-
-
-@router.get("/api/admin/seo/review")
-async def admin_get_seo_weekly_review(request: Request):
-    await asyncio.to_thread(_require_admin, request, {})
-    try:
-        return await asyncio.to_thread(seo_weekly_review_service.status)
-    except Exception as exc:
-        logging.error(
-            "admin_get_seo_weekly_review failed category=%s", safe_exception(exc)
-        )
-        raise HTTPException(status_code=500, detail="Failed to load weekly SEO review")
-
-
-@router.get("/api/admin/seo/reviews")
-async def admin_list_seo_weekly_reviews(request: Request, limit: int = 12):
-    await asyncio.to_thread(_require_admin, request, {})
-    try:
-        return await asyncio.to_thread(seo_weekly_review_service.history, limit)
-    except Exception as exc:
-        logging.error(
-            "admin_list_seo_weekly_reviews failed category=%s", safe_exception(exc)
-        )
-        raise HTTPException(status_code=500, detail="Failed to load SEO review history")
-
-
-@router.put("/api/admin/seo/review/config")
-async def admin_save_seo_weekly_review_config(
-    request: Request, data: AdminSeoReviewConfigRequest = Body(...)
-):
-    await asyncio.to_thread(_require_admin, request, {})
-    try:
-        return await asyncio.to_thread(
-            seo_weekly_review_service.save_config,
-            enabled=data.enabled,
-            interval_days=data.interval_days,
-            run_time=data.run_time,
-            timezone_name=data.timezone,
-        )
-    except seo_weekly_review.ReviewError as exc:
-        _raise_seo_review_error(exc)
-    except Exception as exc:
-        logging.error(
-            "admin_save_seo_weekly_review_config failed category=%s",
-            safe_exception(exc),
-        )
-        raise HTTPException(status_code=500, detail="Failed to save weekly SEO review configuration")
-
-
-@router.post("/api/admin/seo/review/run")
-@limiter.limit("3/minute")
-async def admin_run_seo_weekly_review(request: Request, data: dict = Body(default={})):
-    await asyncio.to_thread(_require_admin, request, data)
-    try:
-        return await asyncio.to_thread(seo_weekly_review_service.run, force=True)
-    except seo_weekly_review.ReviewAlreadyRunning:
-        raise HTTPException(status_code=409, detail="A weekly SEO review is already running")
-    except Exception as exc:
-        logging.error(
-            "admin_run_seo_weekly_review failed category=%s", safe_exception(exc)
-        )
-        raise HTTPException(status_code=500, detail="Weekly SEO review failed safely")
-
-
-@router.post("/api/admin/seo/reviews/{run_id}/preview")
-async def admin_preview_seo_review_actions(
-    request: Request, run_id: str, data: AdminSeoReviewActionRequest = Body(...)
-):
-    await asyncio.to_thread(_require_admin, request, {})
-    try:
-        return await asyncio.to_thread(
-            seo_weekly_review_service.preview,
-            run_id,
-            group=data.group,
-            page_ids=data.page_ids,
-            apply_all=data.apply_all,
-        )
-    except seo_weekly_review.ReviewError as exc:
-        _raise_seo_review_error(exc)
-
-
-@router.post("/api/admin/seo/reviews/{run_id}/apply")
-@limiter.limit("10/minute")
-async def admin_apply_seo_review_actions(
-    request: Request, run_id: str, data: AdminSeoReviewActionRequest = Body(...)
-):
-    admin_uid = await asyncio.to_thread(_require_admin, request, {})
-    try:
-        return await asyncio.to_thread(
-            seo_weekly_review_service.apply,
-            run_id,
-            admin_uid=admin_uid,
-            group=data.group,
-            page_ids=data.page_ids,
-            apply_all=data.apply_all,
-            confirm_delete=data.confirm_delete,
-        )
-    except seo_weekly_review.ReviewError as exc:
-        _raise_seo_review_error(exc)
-
-
-@router.post("/api/admin/seo/reviews/{run_id}/topic-brief/accept")
-async def admin_accept_seo_review_topic_brief(
-    request: Request, run_id: str, data: dict = Body(default={})
-):
+@router.post("/api/admin/seo/shares/{share_id}/keep")
+async def admin_keep_seo_share_indexed(request: Request, share_id: str, data: dict = Body(default={})):
     admin_uid = await asyncio.to_thread(_require_admin, request, data)
     try:
         return await asyncio.to_thread(
-            seo_weekly_review_service.accept_topic_brief, run_id, admin_uid=admin_uid
+            seo_pulse.default_service.keep_indexed, share_id, admin_uid=admin_uid
         )
-    except seo_weekly_review.ReviewError as exc:
-        _raise_seo_review_error(exc)
-
-
-@router.post("/api/admin/seo/reviews/{run_id}/topic-brief/reject")
-async def admin_reject_seo_review_topic_brief(
-    request: Request, run_id: str, data: dict = Body(default={})
-):
-    admin_uid = await asyncio.to_thread(_require_admin, request, data)
-    try:
-        return await asyncio.to_thread(
-            seo_weekly_review_service.reject_topic_brief, run_id, admin_uid=admin_uid
-        )
-    except seo_weekly_review.ReviewError as exc:
-        _raise_seo_review_error(exc)
-
-
-@router.post("/api/admin/seo/reviews/{run_id}/editorial-decision")
-async def admin_record_seo_editorial_decision(
-    request: Request, run_id: str, data: AdminSeoEditorialDecisionRequest = Body(...)
-):
-    admin_uid = await asyncio.to_thread(_require_admin, request, {})
-    try:
-        return await asyncio.to_thread(
-            seo_weekly_review_service.record_editorial_decision,
-            run_id,
-            page_id=data.page_id,
-            decision=data.decision,
-            note=data.note,
-            admin_uid=admin_uid,
-        )
-    except seo_weekly_review.ReviewError as exc:
-        _raise_seo_review_error(exc)
-
-
-@router.post("/api/admin/seo/pages/{page_id}/recommendation")
-async def admin_generate_seo_recommendation(
-    request: Request, page_id: str, data: dict = Body(default={})
-):
-    await asyncio.to_thread(_require_admin, request, data)
-    try:
-        return await asyncio.to_thread(seo_recommendation_service.generate, page_id)
-    except seo_recommendation.SeoRecommendationError as exc:
-        _raise_seo_recommendation_error(exc)
+    except ShareError as exc:
+        raise HTTPException(status_code=404 if exc.code == "not_found" else 409, detail=exc.message)
     except Exception as exc:
-        logging.error(
-            "admin_generate_seo_recommendation failed category=%s",
-            safe_exception(exc),
-        )
-        raise HTTPException(status_code=500, detail="SEO recommendation failed safely")
-
-
-@router.post("/api/admin/seo/pages/{page_id}/content-judge")
-@limiter.limit("5/minute")
-async def admin_ask_seo_content_judge(
-    request: Request, page_id: str, data: dict = Body(default={})
-):
-    await asyncio.to_thread(_require_admin, request, data)
-    try:
-        return await asyncio.to_thread(
-            seo_recommendation_service.ask_content_judge, page_id
-        )
-    except seo_recommendation.SeoRecommendationError as exc:
-        _raise_seo_recommendation_error(exc)
-    except Exception as exc:
-        logging.error(
-            "admin_ask_seo_content_judge failed category=%s",
-            safe_exception(exc),
-        )
-        raise HTTPException(status_code=500, detail="SEO content judge failed safely")
+        logging.error("admin_keep_seo_share_indexed failed category=%s", safe_exception(exc))
+        raise HTTPException(status_code=500, detail="Failed to re-index the page")
 
 
 @router.post("/api/admin/api-keys", status_code=201)
@@ -698,38 +455,6 @@ def admin_list_account_tiers(request: Request, changes: int = 25):
         raise HTTPException(status_code=500, detail="Failed to list account tiers")
 
 
-@router.get("/api/admin/publisher-config")
-@limiter.limit("30/minute")
-def admin_get_publisher_config(request: Request):
-    _require_admin(request, {})
-    try:
-        return {"config": publisher_config.public_config(publisher_config.get_config())}
-    except Exception as exc:
-        logging.error(
-            "admin_get_publisher_config failed category=%s", safe_exception(exc)
-        )
-        raise HTTPException(status_code=500, detail="Failed to load publisher configuration")
-
-
-@router.put("/api/admin/publisher-config")
-@limiter.limit("20/minute")
-def admin_update_publisher_config(
-    request: Request, data: AdminPublisherConfigRequest = Body(...)
-):
-    admin_uid = _require_admin(request, {})
-    try:
-        config = publisher_config.save_config(data.model_dump(), updated_by=admin_uid)
-    except publisher_config.PublisherConfigError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from None
-    except Exception as exc:
-        logging.error(
-            "admin_update_publisher_config failed category=%s",
-            safe_exception(exc),
-        )
-        raise HTTPException(status_code=500, detail="Failed to save publisher configuration")
-    return {"status": "success", "config": publisher_config.public_config(config)}
-
-
 @router.get("/api/admin/watches")
 def admin_list_watches(
     request: Request,
@@ -766,6 +491,20 @@ async def admin_run_watch(request: Request, watch_id: str, data: dict = Body(def
         logging.error("admin_run_watch failed category=%s", safe_exception(exc))
         raise HTTPException(status_code=500, detail="Failed to start watch")
     return {"status": "success", "watch": watch, "run_requested": True}
+
+
+@router.post("/api/admin/watches/{watch_id}/status")
+async def admin_set_watch_status(request: Request, watch_id: str, data: AdminWatchStatusRequest):
+    await asyncio.to_thread(_require_admin, request, {})
+    try:
+        watch = await asyncio.to_thread(watch_service.set_watch_status_admin, watch_id, data.status)
+    except watch_service.WatchError as exc:
+        status = 404 if exc.code == "not_found" else 409
+        raise HTTPException(status_code=status, detail=exc.message)
+    except Exception as exc:
+        logging.error("admin_set_watch_status failed category=%s", safe_exception(exc))
+        raise HTTPException(status_code=500, detail="Failed to change the watch status")
+    return {"status": "success", "watch": watch}
 
 
 @router.post("/api/admin/watches/test-email")
@@ -1394,18 +1133,6 @@ def _reasoning_admin_meta(data: dict) -> dict:
                 "setting": cfg.REASONING_EFFORT_FOR_MEMORY_EDIT,
                 "detail": "Fixed extraction task.",
                 "code": "app/core/config.py · REASONING_EFFORT_FOR_MEMORY_EDIT",
-            },
-            {
-                "name": "SEO portfolio review",
-                "setting": cfg.REASONING_EFFORT_FOR_SEO_REVIEW,
-                "detail": "Fixed review task.",
-                "code": "app/core/config.py · REASONING_EFFORT_FOR_SEO_REVIEW",
-            },
-            {
-                "name": "Publisher topic screen",
-                "setting": cfg.REASONING_EFFORT_FOR_PUBLISHER_SCREEN,
-                "detail": "Fixed scheduled-publisher task.",
-                "code": "app/core/config.py · REASONING_EFFORT_FOR_PUBLISHER_SCREEN",
             },
         ],
     }
