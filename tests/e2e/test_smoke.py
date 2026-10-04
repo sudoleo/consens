@@ -764,8 +764,10 @@ def test_empty_app_and_consensus_picker_do_not_scroll_unnecessarily(app_page):
     centers = [control["center"] for control in control_metrics]
     assert max(centers) - min(centers) <= 1, control_metrics
     assert all(control["height"] == 36 for control in control_metrics)
+    # Phones: the models stand between (+) and Send, on their line.
     models = app_page.locator('.composer-models').bounding_box()
-    assert models['y'] + models['height'] <= control_metrics[0]['top']
+    assert abs(models['y'] + models['height'] / 2 - centers[0]) <= 1
+    assert control_metrics[0]['top'] >= app_page.locator('#questionInput').bounding_box()['y']
 
     sidebar = app_page.locator(".sidebar")
     expect(sidebar).to_have_attribute("aria-hidden", "true")

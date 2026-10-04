@@ -12,8 +12,7 @@
      (field grows to two rows)   → same as the start screen
 
      phones, expanded            [ field ........................ ]
-                                 [ models ....................... ]
-                                 [ (+) ]               [ Demo Send ]
+                                 [ (+) ][ models ]     [ Demo Send ]
 
      phones, collapsed           [ (+) ][ field ........ ][ Send ]
 
@@ -196,25 +195,27 @@
   body.single-agent-active:not(.is-hero) .agent-effort-control .model-picker-display-text::before { content: ''; }
 }
 
-/* ---- Phones: models get a row of their own -------------------------------
-   (+), the mode and Send share the bottom row; a model name stays whole. */
+/* ---- Phones: the models stand beside (+) ---------------------------------
+   One row under the field: (+), who answers, then Send at the far end. A
+   row of its own for the models cost the composer 44px of a phone's height,
+   which the open keyboard leaves little of. The chip takes the free space,
+   so a long model name gives way (ellipsis) before the count or Send do. */
 @media (max-width: 640px) {
   .composer-models {
-    order: 2;
-    flex: 1 1 100%;
-    flex-wrap: wrap;
+    order: 3;
+    flex: 1 1 0;
     margin-left: 0;
   }
-  .composer-lead { order: 3; }
-  .chat-input-container > .input-actions-container { order: 4; margin-left: auto; }
-  .agent-model-controls { flex-wrap: wrap; }
+  .chat-input-container > .input-actions-container { order: 4; margin-left: 0; }
+  .agent-model-picker { max-width: 100%; }
   .chat-input-container :is(.composer-lead, .composer-models) .model-picker-display { padding-inline: 8px; }
 }
 /* The narrowest phones: the onboarding Demo button keeps its play mark and
    its accessible name but gives up the word, so the bottom row stays one. */
 @media (max-width: 360px) {
   .chat-input-container .demo-chip-label-short { display: none; }
-  .chat-input-container .demo-chip.demo-action { padding: 0 9px; }
+  /* Round like (+) and Send, not a narrow oval around the mark. */
+  .chat-input-container .demo-chip.demo-action { width: 36px; min-width: 36px; padding: 0; justify-content: center; }
 }
 
 /* ---- Phones in a thread: collapsed to (+), the field and Send ------------

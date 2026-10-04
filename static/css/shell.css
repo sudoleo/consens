@@ -2823,6 +2823,36 @@ body:not(.is-hero) .input-section::before {
   body:not(.is-hero) .input-section::before { bottom: -40px; }
 }
 
+/* ---- C) Handy mit offener Tastatur ----------------------------------------
+   Safari auf iOS laesst das Layout-Viewport unter der Tastatur stehen; ein
+   bottom: 0 meint dort den Rand HINTER der Tastatur. composer-keyboard.js
+   misst die Unterkante des sichtbaren Bereichs (--keyboard-edge), und der
+   Composer haengt mit seiner Unterkante daran — wie hoch er gerade ist
+   (eingeklappt, aufgeklappt, mehrzeilig), regelt translateY(-100%) ohne
+   eigene Messung. Der Hinweissatz weicht, solange getippt wird: jede Zeile
+   ueber der Tastatur gehoert der Antwort. */
+@media (max-width: 1099px) {
+  body.keyboard-open:not(.is-hero) .input-section {
+    top: var(--keyboard-edge, auto);
+    bottom: auto;
+    padding-bottom: 6px;
+    transform: translate(-50%, -100%);
+  }
+
+  body.keyboard-open:not(.is-hero) .app-footer {
+    display: none;
+  }
+
+  /* Die Auf-/Zuklapp-Bewegung animiert die Hoehe; der Wechsel an die
+     Tastaturkante darf nicht als Gleiten mitlaufen. */
+  body.keyboard-open.composer-animating:not(.is-hero) .input-section {
+    transition:
+      height var(--dur-state) var(--ease-out),
+      padding-top var(--dur-state) var(--ease-out),
+      padding-bottom var(--dur-state) var(--ease-out);
+  }
+}
+
 body:not(.is-hero) .consensus-section::before {
   display: none;
 }
@@ -4414,9 +4444,15 @@ body.consensus-markers-hidden .src-ref[data-source-check]:focus-visible {
     height: var(--app-mobile-header-height);
     padding: calc(5px + env(safe-area-inset-top, 0px)) max(12px, env(safe-area-inset-right, 0px)) 6px max(12px, env(safe-area-inset-left, 0px));
     background: var(--ground);
-    border-bottom: 1px solid var(--line-soft);
-    transition: transform var(--dur-state) var(--ease-standard), opacity var(--dur-state) var(--ease-standard), visibility 0s linear 0s;
+    /* The edge only appears once something scrolls beneath it
+       (mobile-header.js sets .is-scrolled); on an empty start screen a
+       line would divide nothing from nothing. */
+    border-bottom: 1px solid transparent;
+    transition: transform var(--dur-state) var(--ease-standard), opacity var(--dur-state) var(--ease-standard), visibility 0s linear 0s,
+      border-bottom-color var(--dur-state) var(--ease-standard);
   }
+
+  .app-mobile-header.is-scrolled { border-bottom-color: var(--line-soft); }
 
   .app-mobile-header .app-nav-float,
   body:has(.sidebar.collapsed) .app-mobile-header .app-nav-float {
@@ -4438,6 +4474,14 @@ body.consensus-markers-hidden .src-ref[data-source-check]:focus-visible {
   .app-mobile-header .sidebar-toggle:focus-visible {
     outline: var(--focus-ring);
     outline-offset: -3px;
+  }
+
+  /* Every icon in the bar is one kind of control: the same ink, the same
+     22px glyph, the same flat fill on hover. The desktop float's glassy lift
+     would stick to a tapped button on a touch screen. */
+  .app-mobile-header .sidebar-toggle:hover {
+    background: var(--raise);
+    box-shadow: none;
   }
 
   .app-mobile-header .view-switch {
@@ -4480,8 +4524,20 @@ body.consensus-markers-hidden .src-ref[data-source-check]:focus-visible {
     outline: var(--focus-ring); outline-offset: -3px;
   }
 
+  /* The start screen names the product, the way the public header does;
+     in a thread the bar belongs to the answer's actions. */
   .app-mobile-header .brand-float,
   body:not(.is-hero) .app-mobile-header .brand-float { display: none; }
+  body.is-hero .app-mobile-header .brand-float {
+    display: inline-flex;
+    min-width: 0;
+    min-height: 44px;
+    padding-inline: 2px 6px;
+    border-radius: var(--radius-xs);
+  }
+  body.is-hero .app-mobile-header .brand-float:focus-visible { outline: var(--focus-ring); outline-offset: -3px; }
+  /* layout.css drops the name below 641px; the bar has room for it. */
+  body.is-hero .app-mobile-header .brand-float-title { display: inline; }
 
   body:has(.watch-page:not([hidden])) .app-mobile-header .app-nav-float { display: flex; }
 
@@ -4496,12 +4552,18 @@ body.consensus-markers-hidden .src-ref[data-source-check]:focus-visible {
   .app-mobile-header :is(.mobile-new-run, .consensus-share-pill, .consensus-actions-toggle) {
     display: inline-flex; align-items: center; justify-content: center; flex: 0 0 44px;
     width: 44px; height: 44px; min-height: 44px; padding: 0; border: 0;
-    border-radius: var(--radius-xs); background: transparent; color: var(--ink-2); cursor: pointer;
+    border-radius: var(--radius-xs); background: transparent; color: var(--ink); cursor: pointer;
   }
   .app-mobile-header :is(.mobile-new-run, .consensus-share-pill, .consensus-actions-toggle):hover { color: var(--ink); background: var(--raise); }
   .app-mobile-header :is(.mobile-new-run, .consensus-share-pill, .consensus-actions-toggle):focus-visible { outline: var(--focus-ring); outline-offset: -3px; }
-  .app-mobile-header :is(.mobile-new-run, .consensus-share-pill, .consensus-actions-toggle) svg { width: 21px; height: 21px; flex: 0 0 21px; }
+  .app-mobile-header :is(.mobile-new-run, .consensus-share-pill, .consensus-actions-toggle) svg { width: 22px; height: 22px; flex: 0 0 22px; }
   .app-mobile-header :is(.consensus-share-pill, .consensus-actions-toggle) > span { display: none; }
+  /* A tap leaves :hover behind on touch screens; no fill may stick to it. */
+  @media (hover: none) {
+    .app-mobile-header :is(.sidebar-toggle, .mobile-new-run, .consensus-share-pill, .consensus-actions-toggle):hover {
+      background: transparent;
+    }
+  }
 
   .sidebar-pinned { margin-top: 0; }
   .mobile-sidebar-views { display: block; margin-bottom: 8px; }
@@ -4555,6 +4617,11 @@ body.consensus-markers-hidden .src-ref[data-source-check]:focus-visible {
 @media (max-width: 400px) {
   .app-mobile-header #authTopActions { gap: 4px; }
   .app-mobile-header #authTopActions button { padding-inline: 6px; font-size: var(--font-size-xs); }
+}
+
+/* Beside Log in and Sign up the narrowest phones keep the mark, not the name. */
+@media (max-width: 359px) {
+  body.is-hero .app-mobile-header:has(#authTopActions:not([hidden])) .brand-float-title { display: none; }
 }
 
 /* --------------------------------------------------------------------------

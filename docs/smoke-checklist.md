@@ -576,6 +576,13 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       Handy-Tastatur fügt einen Absatz ein und sendet nicht.
       Am vollständigen Scrollende liegen die geschlossenen Detail-Tabs direkt
       darüber, ohne Leerraum oder verdeckten Inhalt.
+- [ ] iPhone (echtes Safari, nicht emuliert): im Thread ins Feld tippen —
+      der Composer sitzt direkt auf der Tastatur bzw. ihrer Formularleiste,
+      ohne Thread-Streifen dazwischen und ohne Hinweissatz; Tastatur zu, sitzt
+      er wieder am unteren Rand. Automatisiert nur mit nachgestelltem
+      `visualViewport` (`test_mobile_navigation.py`).
+- [ ] Landing auf dem Handy (375 px) bis ganz unten scrollen: die Seite
+      verschiebt sich nie seitlich (`test_public_composer_mockups.py`).
 - [ ] Quellen-Pillen im Consensus stehen hinter Punkt, Frage- oder
       Ausrufezeichen (Favicon-only-Pillen bleiben an ihrer Domain); dasselbe
       gilt für die Quellenverweise auf öffentlichen Share-Seiten.

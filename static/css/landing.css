@@ -3046,7 +3046,10 @@ main > .lp-scene-02::before { display: none; }
    and carries the house light at its tip: the same light that runs along
    the agent's work in the app. */
 @media (min-height: 620px) and (prefers-reduced-motion: no-preference) {
-  .lp-scroll-scene { min-height: 170vh; }
+  /* clip, not hidden: no scroll container, so the pinned stage stays sticky.
+     Whatever light or mark reaches past the edge must not widen the page:
+     on a phone that let the whole landing pan sideways. */
+  .lp-scroll-scene { min-height: 170vh; overflow-x: clip; }
   .lp-section.lp-scene-01,
   .lp-section.lp-scene-02 { padding-bottom: 0; }
   .lp-section.lp-scene-02 { padding-top: 0; }
@@ -3062,11 +3065,13 @@ main > .lp-scene-02::before { display: none; }
     position: relative;
     background: linear-gradient(90deg, transparent, var(--ink-3));
   }
+  /* The light ends at the tip of the rail. Past it (it once sat 6px
+     further), a full rail pushed it over the right edge of the page. */
   .lp-scene-rail i::after {
     content: "";
     position: absolute;
     top: 50%;
-    right: -6px;
+    right: 0;
     width: 64px;
     height: 9px;
     border-radius: 999px;

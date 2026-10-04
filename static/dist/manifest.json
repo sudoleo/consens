@@ -1,5 +1,5 @@
 {
-  "sources": "f78178d5d70d",
+  "sources": "affa7b0f17b2",
   "inputs": [
     "package-lock.json",
     "package.json",
@@ -75,6 +75,7 @@
     "static/js/chat-session.js",
     "static/js/composer-autosize.js",
     "static/js/composer-collapse.js",
+    "static/js/composer-keyboard.js",
     "static/js/composer-quote.js",
     "static/js/consensus-actions.js",
     "static/js/consensus-anchor.js",
@@ -205,19 +206,19 @@
     },
     {
       "name": "app",
-      "src": "/static/dist/app.76709cbff85c.js",
+      "src": "/static/dist/app.51dde961e78c.js",
       "module": false,
       "defer": true
     }
   ],
   "styles": {
-    "app": "/static/dist/app.8fa236af9443.css"
+    "app": "/static/dist/app.1a28b29bd98c.css"
   },
   "previous_assets": [
+    "app.8fa236af9443.css",
     "app.9ea2e0ee5f73.css",
-    "app.cc13d5daf15a.css",
+    "app.76709cbff85c.js",
     "app.f70fa22cf726.js",
-    "app.6d95b7656f7d.js",
     "auth.5e487d1e2570.js",
     "demo.f49fb1011eb0.js",
     "demo.3f6bae43147c.js",

@@ -82,9 +82,9 @@ def test_mobile_agent_plus_menu_opens_tools_from_single_line_composer(browser, p
         assert page.locator('.chat-input-container').bounding_box()['height'] <= 60
         _snapshot(page, f'agent-single-line-{width}')
         # Focusing a follow-up expands the composer into the same anatomy as
-        # every mode: the models on their own row, below them (+) and Send
-        # (an open Agent chat has no mode to choose), even with a
-        # keyboard-sized viewport.
+        # every mode on a phone: the field, under it ONE row of (+), the
+        # models and Send (an open Agent chat has no mode to choose), even
+        # with a keyboard-sized viewport.
         page.set_viewport_size({"width": width, "height": 450})
         page.locator('#questionInput').tap()
         page.wait_for_function("() => !document.body.classList.contains('composer-collapsed') && !document.body.classList.contains('composer-animating')")
@@ -97,12 +97,11 @@ def test_mobile_agent_plus_menu_opens_tools_from_single_line_composer(browser, p
         expect(page.locator('.composer-models .model-picker-display:visible')).to_have_count(1)
         expect(page.locator('.agent-model-picker .model-picker-display-count')).to_have_text(re.compile(r'^\+\d$'))
         expect(page.locator('#runModeControl')).to_be_hidden()
-        actions = [box('#attachTrigger'), box('#sendButton')]
-        bounds = [actions[0], agent_model, actions[-1]]
-        centers = [b['y'] + b['height'] / 2 for b in actions]
+        bounds = [box('#attachTrigger'), agent_model, box('#sendButton')]
+        centers = [b['y'] + b['height'] / 2 for b in bounds]
         assert max(centers) - min(centers) <= 1
-        assert all(a['right'] <= b['left'] + 1 for a, b in zip(actions, actions[1:]))
-        assert agent_model['bottom'] <= min(b['top'] for b in actions) + 1
+        assert all(a['right'] <= b['left'] + 1 for a, b in zip(bounds, bounds[1:]))
+        assert box('#questionInput')['bottom'] <= min(b['top'] for b in bounds) + 1
         assert page.locator('.agent-model-picker .model-picker-display-text').evaluate(
             'label => label.scrollWidth <= label.clientWidth + 1')
         assert bounds[0]['x'] >= 0 and bounds[-1]['right'] <= width and agent_model['right'] <= width

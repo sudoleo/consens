@@ -91,3 +91,26 @@ def test_public_composer_mockups(browser, phase4_server, width, dark, reduced):
         assert errors == []
     finally:
         context.close()
+
+
+@pytest.mark.parametrize('width', [375, 390])
+def test_landing_never_pans_sideways_while_scrolling(browser, phase4_server, width):
+    # The pinned scenes' progress rail carried its light 6px past its tip;
+    # at a full rail that widened the page and a phone panned sideways.
+    context = browser.new_context(viewport={'width': width, 'height': 812})
+    context.route('https://cloud.umami.is/**', lambda route: route.fulfill(body=''))
+    page = context.new_page()
+    try:
+        page.goto(phase4_server + '/', wait_until='networkidle')
+        widest = page.evaluate("""async () => {
+            let widest = 0;
+            for (let y = 0; y < document.documentElement.scrollHeight; y += 200) {
+                window.scrollTo({top: y, behavior: 'instant'});
+                await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+                widest = Math.max(widest, document.documentElement.scrollWidth);
+            }
+            return widest;
+        }""")
+        assert widest <= width
+    finally:
+        context.close()

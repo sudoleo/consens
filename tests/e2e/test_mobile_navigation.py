@@ -232,3 +232,112 @@ def test_mobile_actions_keep_dialogs_focus_and_new_chat_behavior(browser, phase4
         reader_screenshot(page,'mobile-topbar-new-chat')
     finally:
         context.close()
+
+
+# Safari on iOS keeps the layout viewport under the keyboard and only shrinks
+# and pans the visual viewport. Chromium cannot open a virtual keyboard, so
+# the test stands in a visual viewport that reports what Safari reports.
+FAKE_VISUAL_VIEWPORT = """(() => {
+  const viewport = new EventTarget();
+  Object.assign(viewport, {offsetTop: 0, offsetLeft: 0, pageTop: 0, pageLeft: 0, scale: 1, width: 390, height: 820});
+  Object.defineProperty(window, 'visualViewport', {configurable: true, get: () => viewport});
+  window.__keyboard = (height, offsetTop = 0, event = 'resize') => {
+    viewport.height = height; viewport.offsetTop = offsetTop;
+    viewport.dispatchEvent(new Event(event));
+  };
+})();"""
+
+
+def test_mobile_composer_hangs_from_the_keyboard_edge(browser, phase4_server):
+    context, page = _real_firebase_page(browser, phase4_server, has_touch=True, init_script=FAKE_VISUAL_VIEWPORT)
+    try:
+        page.set_viewport_size({'width': 390, 'height': 820})
+        seed_long_answer(page)
+        settle = "() => !document.body.classList.contains('composer-animating')"
+        page.wait_for_function(settle)
+        page.wait_for_function("() => Math.abs(document.querySelector('.input-section').getBoundingClientRect().bottom - 820) <= 1")
+
+        page.locator('#questionInput').tap()
+        expect(page.locator('#questionInput')).to_be_focused()
+        page.evaluate('() => window.__keyboard(420)')
+        expect(page.locator('body')).to_have_class(re.compile(r'\bkeyboard-open\b'))
+        page.wait_for_function(settle)
+        page.wait_for_function("() => Math.abs(document.querySelector('.input-section').getBoundingClientRect().bottom - 420) <= 1")
+        # Every line above the keyboard belongs to the answer: the note waits.
+        expect(page.locator('.input-section .app-footer')).to_be_hidden()
+        # Expanded, it is still the phone's one row: (+), models, Send.
+        rows = [page.locator(sel).bounding_box() for sel in ('#attachTrigger', '.composer-models .model-picker-display:visible', '.chat-input-container > .input-actions-container')]
+        centers = [box['y'] + box['height'] / 2 for box in rows]
+        assert max(centers) - min(centers) <= 1
+        reader_screenshot(page, 'mobile-composer-keyboard')
+
+        # Safari pans the visual viewport within the layout viewport.
+        page.evaluate("() => window.__keyboard(420, 140, 'scroll')")
+        page.wait_for_function("() => Math.abs(document.querySelector('.input-section').getBoundingClientRect().bottom - 560) <= 1")
+
+        # Pinch zoom also shrinks the visual viewport; that is no keyboard.
+        page.evaluate("() => { visualViewport.scale = 2; window.__keyboard(410, 0); }")
+        expect(page.locator('body')).not_to_have_class(re.compile(r'\bkeyboard-open\b'))
+        page.evaluate("() => { visualViewport.scale = 1; window.__keyboard(420, 0); }")
+        expect(page.locator('body')).to_have_class(re.compile(r'\bkeyboard-open\b'))
+
+        # Keyboard closed: back on the bottom edge, the note returns.
+        page.evaluate('() => { document.activeElement.blur(); window.__keyboard(820, 0); }')
+        expect(page.locator('body')).not_to_have_class(re.compile(r'\bkeyboard-open\b'))
+        page.wait_for_function(settle)
+        page.wait_for_function("() => Math.abs(document.querySelector('.input-section').getBoundingClientRect().bottom - 820) <= 1")
+        assert page.evaluate("getComputedStyle(document.documentElement).getPropertyValue('--keyboard-edge')") == ''
+    finally:
+        context.close()
+
+
+@pytest.mark.parametrize('width', [320, 375, 390])
+def test_mobile_header_names_the_product_on_the_start_screen(browser, phase4_server, width):
+    context, page = _real_firebase_page(browser, phase4_server)
+    try:
+        page.set_viewport_size({'width': width, 'height': 820})
+        header = page.locator('.app-mobile-header')
+        brand = header.locator('.brand-float')
+        expect(page.locator('body')).to_have_class(re.compile(r'\bis-hero\b'))
+        expect(brand).to_be_visible()
+        expect(brand.locator('.brand-float-title')).to_be_visible()
+        # Nothing scrolls beneath the bar on an empty start screen, so it
+        # draws no edge; one icon ink for menu and new chat.
+        expect(header).not_to_have_class(re.compile(r'\bis-scrolled\b'))
+        expect(header).to_have_css('border-bottom-color', 'rgba(0, 0, 0, 0)')
+        assert header.locator('#mobileNewRunButton').evaluate('el => getComputedStyle(el).color') == \
+            header.locator('#toggleSidebarButton').evaluate('el => getComputedStyle(el).color')
+        menu, new_chat = (header.locator(sel).bounding_box() for sel in ('#toggleSidebarButton', '#mobileNewRunButton'))
+        mark = brand.bounding_box()
+        assert menu['x'] + menu['width'] <= mark['x'] and mark['x'] + mark['width'] <= new_chat['x']
+        assert mark['height'] >= 44
+        reader_screenshot(page, f'mobile-header-start-{width}')
+
+        seed_long_answer(page)
+        expect(brand).to_be_hidden()
+        page.evaluate('window.scrollTo(0, 200)')
+        expect(header).to_have_class(re.compile(r'\bis-scrolled\b'))
+        page.evaluate('window.scrollTo(0, 0)')
+        expect(header).not_to_have_class(re.compile(r'\bis-scrolled\b'))
+    finally:
+        context.close()
+
+
+@pytest.mark.parametrize('width', [320, 390])
+def test_guest_start_header_keeps_the_mark_beside_the_auth_buttons(browser, phase4_server, width):
+    context, page = _real_firebase_page(browser, phase4_server, initial_uid=None)
+    try:
+        page.set_viewport_size({'width': width, 'height': 820})
+        brand = page.locator('.app-mobile-header .brand-float')
+        expect(page.locator('#authTopLoginBtn')).to_be_visible()
+        expect(brand).to_be_visible()
+        title = brand.locator('.brand-float-title')
+        if width < 360:
+            expect(title).to_be_hidden()
+        else:
+            expect(title).to_be_visible()
+        mark = brand.bounding_box()
+        assert mark['x'] + mark['width'] <= page.locator('#authTopLoginBtn').bounding_box()['x']
+        assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+    finally:
+        context.close()

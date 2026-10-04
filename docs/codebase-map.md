@@ -821,8 +821,14 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   verändert weder Sidebar-Persistenz noch Watch-/Consensus-Daten.
 - **Mobile Kopfleiste** — `header.app-mobile-header` zeigt bei ≤1099 px links
   das Menü und rechts angemeldet New chat sowie Share/Watch/Cite für die fertige Antwort.
-  Logo und mittlerer Titel entfallen. Die deckende Fläche ist 56 px hoch mit
-  Safe-Area-Zuschlag und feiner Unterkante; alle Icons haben 44 × 44 px Touchflächen.
+  Auf dem Startbildschirm (`body.is-hero`) steht neben dem Menü die Marke
+  (`.brand-float`, Logo + „consens.io“, 44 px Touchfläche; ≤359 px neben
+  Log in/Sign up nur das Logo), im Thread gehört der Platz den Aktionen; ein
+  mittlerer Titel entfällt. Die deckende Fläche ist 56 px hoch mit
+  Safe-Area-Zuschlag; ihre feine Unterkante erscheint erst, wenn darunter
+  gescrollt ist (`.is-scrolled` aus `mobile-header.js`, Window- oder
+  Watch-Scroll). Alle Icons teilen Tinte (`--ink`), 22-px-Glyphen und
+  44 × 44 px Touchflächen; auf Touch-Geräten bleibt keine Hover-Fläche stehen.
   `mobile-header.js` lädt nach `consensus-actions.js` und `watch.js` und verschiebt
   dieselben `#consensusFooterActions`-DOM-Knoten nach `#mobileConversationActions`,
   auf Desktop exakt zurück in den Footer. Readiness folgt `#runProvenance`,
@@ -1953,6 +1959,18 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   Compare-Start) sind bewusst ausgenommen. Ein
   stehendes Zitat (`#composerQuote`) zählt wie ein Anhang als „Angefangenes“
   und verhindert das automatische Zuklappen.
+- **`composer-keyboard.js`** (seit 2026-10-04, nach `composer-collapse.js`) —
+  hält den fixierten Thread-Composer auf dem Handy (≤1099 px) an der
+  Tastaturkante. Safari auf iOS ignoriert `interactive-widget=resizes-content`
+  und lässt das Layout-Viewport unter der Tastatur stehen; `bottom: 0` lag dort
+  hinter der Tastatur bzw. nach Safaris Scroll mitten im Bild. Solange ein
+  Textfeld fokussiert ist und `visualViewport` mehr als 120 px kürzer als
+  `documentElement.clientHeight` ist (ungezoomt), setzt das Modul
+  `body.keyboard-open` und `--keyboard-edge` = `offsetTop + height`;
+  `shell.css` (Abschnitt C) hängt den Composer per `top` +
+  `translate(-50%, -100%)` daran und blendet den Hinweissatz aus. Android
+  (Layout-Viewport schrumpft mit) und Desktop bleiben unberührt.
+  Export `window.App.composerKeyboard.sync`.
 - **`composer-quote.js`** (seit 2026-08-17) — **„Ask about this"**: der in einer
   Antwort markierte Abschnitt wandert als sichtbares Zitat über das Eingabefeld
   (`#composerQuote`, gefüllt aus dem Auswahlmenü in `memory-edit.js`) und geht
@@ -3855,8 +3873,10 @@ stehen, entscheidet allein `static/css/composer.css`; `shell.css` gestaltet nur
 die Box. Zustände: Startbildschirm (Hero oder Compare-Start) und aufgeklappt =
 Feld oben, darunter (+) links, Modelle und Senden rechts; Desktop im
 Chat = eine Zeile [(+)][Feld][Modelle][Senden], ab der zweiten Textzeile
-(`.is-multiline`) wie der Startbildschirm; Handy = Modelle in eigener Zeile
-über [(+) … Senden]; Handy eingeklappt = [(+)][Feld][Senden], Anhänge
+(`.is-multiline`) wie der Startbildschirm; Handy (≤640 px, seit 2026-10-04) =
+unter dem Feld EINE Zeile [(+)][Modelle … ][Senden], der Chip nimmt den
+freien Platz und kürzt einen langen Modellnamen per Ellipse; Handy
+eingeklappt = [(+)][Feld][Senden], Anhänge
 und Zitat bleiben darüber sichtbar. (+) steht nie woanders, Senden
 immer rechts außen. Alle Picker der Zeile teilen eine Optik (ruhiges Label mit
 Chevron). Das (+)-Menü `#attachMenu` hat seit

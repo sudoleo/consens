@@ -41,6 +41,7 @@
     const movedViews = place(views, mobile ? sidebarViews : homes.get(views).parentElement);
     if (movedViews && focusedView && mobile) document.getElementById('toggleSidebarButton')?.focus({preventScroll:true});
     else if ((movedActions && focusedAction && !actions.hidden) || (movedViews && focusedView)) focused.focus({preventScroll:true});
+    syncEdge();
   }
 
   document.getElementById('mobileNewRunButton')?.addEventListener('click', () => {
@@ -50,6 +51,17 @@
     if (media.matches && event.target.closest('.view-switch-btn')
       && document.querySelector('.sidebar.active')) document.getElementById('sidebarToggleInner')?.click();
   });
+  // The bar's edge shows only once the page (or the Watch page, which
+  // scrolls on its own) has moved beneath it.
+  const bar = header.closest('.app-mobile-header');
+  function syncEdge() {
+    const watchScrolled = watch && !watch.hidden && watch.scrollTop > 0;
+    bar?.classList.toggle('is-scrolled', window.scrollY > 0 || Boolean(watchScrolled));
+  }
+  window.addEventListener('scroll', syncEdge, {passive:true});
+  watch?.addEventListener('scroll', syncEdge, {passive:true});
+  syncEdge();
+
   media.addEventListener('change', sync);
   const observer = new MutationObserver(sync);
   observer.observe(document.body, {attributes:true, attributeFilter:['class']});

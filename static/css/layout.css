@@ -1344,6 +1344,12 @@ body:has(.sidebar.active) .brand-float {
     transform: translateX(-100%);
   }
 
+  /* 82vw is rarely a whole pixel: parked at exactly -100%, the edge line
+     of the closed sidebar bled a hairline onto the page's left edge. */
+  .sidebar:not(.active) {
+    transform: translateX(calc(-100% - 2px));
+  }
+
   .sidebar.active {
     transform: translateX(0);
   }
