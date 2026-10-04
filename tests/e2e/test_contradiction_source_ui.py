@@ -153,7 +153,12 @@ def test_new_consensus_stream_preserves_claims_and_checks_only_major_contradicti
           window.__v4Claim=document.querySelector('#consensusAnswerBody .cx-claim');
           window.__v4Cards=[...document.querySelectorAll('.diff-card')];
           __v4Send('sources.final',{source_verification:__v4Snapshot});
-          __v4Send('final',{consensus_response:__v4Text,differences:'Price disagreement and different emphasis.',differences_data:__v4Differences,source_verification:__v4Snapshot,chat_replayed:true});
+          // A replay carries the authoritative saved answers; it must not
+          // borrow model text from the local pre-recovery projection.
+          const model_answers=Object.fromEntries(Object.entries(__v4Run.modelResults).map(([provider,result])=>[
+            provider,{answer:result.text,model_label:provider,sources:result.sources}
+          ]));
+          __v4Send('final',{consensus_response:__v4Text,differences:'Price disagreement and different emphasis.',differences_data:__v4Differences,source_verification:__v4Snapshot,model_answers,chat_replayed:true});
           __v4Stream.close();
         }""")
         page.wait_for_function("window.__v4Run.status === 'succeeded'")

@@ -260,6 +260,18 @@ describe("model answer reader", () => {
     expect(ctx.document.querySelector('.answer-reader-body[data-provider="Anthropic"]').textContent).toContain('continued');
   });
 
+  it("keeps the first pane of \"Compare two\" while the second model streams", () => {
+    const ctx = boot(); const state = run(); ctx.project(state); ctx.reader.openLive();
+    ctx.document.getElementById("answerReaderCompare").click();
+    const panes = () => [...ctx.document.querySelectorAll('.answer-reader-answer')];
+    expect(panes()).toHaveLength(2);
+    const [first, second] = panes();
+    state.modelResults.Anthropic.text += ' continued'; ctx.project(state);
+    expect(panes()[0]).toBe(first);
+    expect(panes()[1]).not.toBe(second);
+    expect(ctx.document.querySelector('.answer-reader-body[data-provider="Anthropic"]').textContent).toContain('continued');
+  });
+
   it("shows every direct answer inline including failed models", () => {
     const ctx = boot(); const state = run(); state.config.agentMode = false;
     state.modelResults.Anthropic = {status: "error", error: "Model timed out"}; ctx.project(state);

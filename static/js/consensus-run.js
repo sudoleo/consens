@@ -101,7 +101,18 @@
           if (!response.ok) continue;
           const { turn } = await response.json();
           if (!current() || recovery.signal.aborted) break;
-          if (turn?.status === 'failed') break;
+          if (turn?.status === 'failed') {
+            // The owner-bound read is an authoritative terminal disposition.
+            // Keep the partial text, but let ChatSession clear the pending
+            // turn and release the conversation lock instead of treating the
+            // outcome as unknown (which demanded a page reload).
+            return { ok: false, status: 409, streamed: false, data: {
+              error: 'This conversation turn failed. Its partial answer was not saved as a completed result.',
+              chat_id: payload.chat_id, turn_id: payload.turn_id,
+              chat_persisted: false, chat_turn_state: 'failed',
+              consensus_completion: 'interrupted'
+            } };
+          }
           if (turn?.status !== 'completed' || typeof turn.consensus !== 'string' || !turn.consensus.trim()) continue;
           return { ok: true, status: 200, streamed: false, data: {
             consensus_response: turn.consensus,
@@ -1010,11 +1021,30 @@
         context.credentials = null;
         context.attachments = [];
         registry.setStatus(context.runId, "failed", context.consensus.error);
+        const limitDetail = data?.detail && typeof data.detail === "object" ? data.detail : data;
+        if (registry.isVisible(context.runId) && window.App.usageLimit?.isLimitError(limitDetail, message)) {
+          window.App.usageLimit.show({ data: limitDetail, source: "consensus", phase: "consensus" });
+        }
         trackAppEvent("app_consensus_completed", { status: "error", trigger, included_models: successfulAnswers });
         return data;
       }
 
       if (Array.isArray(data.sources)) context.evidenceSources = data.sources.map(source => ({ ...source }));
+      if (data.chat_replayed === true) {
+        // Recovery is authoritative. Answers absent from the stored turn must
+        // not borrow text or sources from the interrupted local projection.
+        const stored = data.model_answers || {};
+        context.modelResults = Object.fromEntries((context.config.providers || []).map(provider => {
+          const answer = stored[provider.provider];
+          const text = typeof answer === "string" ? answer : String(answer?.answer || "");
+          const modelLabel = answer?.model_label || answer?.model_id || provider.modelLabel || provider.modelId;
+          if (text && modelLabel) modelLabels[provider.provider] = modelLabel;
+          return [provider.provider, { ...(context.modelResults[provider.provider] || {}),
+            text, streamText: text, status: text ? "complete" : "skipped",
+            error: text ? null : "No stored answer is available for this model.", modelLabel,
+            sources: Array.isArray(answer?.sources) ? answer.sources : [] }];
+        }));
+      }
       context.consensus.status = "complete";
       context.consensus.text = String(data.consensus_response || context.consensus.text || "");
       context.consensus.streamText = context.consensus.text;
@@ -1127,11 +1157,13 @@
       if (registry.isVisible(context.runId) && data.chat_replayed !== true) {
         window.App.watch?.showFeatureNudge?.();
       }
-      trackAppEvent("app_consensus_completed", {
-        status: data.error ? "partial" : "success",
-        trigger,
-        included_models: successfulAnswers
-      });
+      if (data.chat_replayed !== true) {
+        trackAppEvent("app_consensus_completed", {
+          status: data.error ? "partial" : "success",
+          trigger,
+          included_models: successfulAnswers
+        });
+      }
       return data;
     } catch (error) {
       if (isAbortError(error) || !registry.isExecuting(context.runId)) return null;

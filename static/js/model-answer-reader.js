@@ -681,11 +681,11 @@
     if (renderKey !== nextKey) {
       const scroller = scrollArea();
       const scroll = scroller.scrollTop;
-      if (direct) {
+      {
         // A streaming sibling must not destroy selection, focus or open sources
-        // in an answer that the user is already reading.
+        // in an answer that the user is already reading (grid and "Compare two").
         visibleAnswers.forEach((answer, index) => {
-          const signature = JSON.stringify([selected.key, answer]);
+          const signature = JSON.stringify([selected.key, direct, index, answer]);
           const current = columns.children[index];
           if (current?.dataset.answerKey === signature) return;
           const next = pane(answer, index === 0 ? "a" : "b");
@@ -693,8 +693,6 @@
           if (current) current.replaceWith(next); else columns.append(next);
         });
         while (columns.children.length > visibleAnswers.length) columns.lastElementChild.remove();
-      } else {
-        columns.replaceChildren(...visibleAnswers.map((answer, index) => pane(answer, index === 0 ? "a" : "b")));
       }
       renderKey = nextKey;
       scroller.scrollTop = scroll;
