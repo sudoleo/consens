@@ -16,10 +16,10 @@
   <meta name="twitter:title" content="Live AI Model Pulse | consens.io">
   <meta name="twitter:description" content="When a model is in the run, how often is its answer the best? Live rates from real consens.io runs.">
   <title>Live AI Model Pulse | consens.io</title>
-  <link rel="stylesheet" href="/static/css/landing.css?v=20261004-mobile">
-  <link rel="stylesheet" href="/static/css/model-pulse.css?v=20261003-pulse">
-  <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
-  <link rel="icon" href="/static/favicon-square-dark.png?v=20260621-logo2" sizes="any" type="image/png">
+  <link rel="stylesheet" href="{{ asset_url('/static/css/landing.css') }}">
+  <link rel="stylesheet" href="{{ asset_url('/static/css/model-pulse.css') }}">
+  <link rel="icon" href="{{ asset_url('/static/favicon.svg') }}" type="image/svg+xml">
+  <link rel="icon" href="{{ asset_url('/static/favicon-square-dark.png') }}" sizes="any" type="image/png">
   <script>
     (function () {
       const savedTheme = localStorage.getItem("theme");
@@ -205,6 +205,6 @@
   </main>
 
   {% include "partials/public_footer.html" %}
-  <script defer src="/static/js/model-pulse.js?v=20261003-pulse"></script>
+  <script defer src="{{ asset_url('/static/js/model-pulse.js') }}"></script>
 </body>
 </html>

@@ -2,9 +2,13 @@
 
 Two narrow jobs, both applied as one ASGI middleware:
 
-* Content-hashed build output (``static/dist/<group>.<12 hex>.js|css``) never
-  changes under its name, so browsers may keep it for a year without
-  revalidation. Everything else keeps the default ETag revalidation.
+* Content-hashed build output (``static/dist/<group>.<12 hex>.js|css``) and
+  URLs carrying ``asset_url``'s content hash (``?v=<12 hex>``) never change
+  under their name, so browsers may keep them for a year without
+  revalidation. Every other ``/static`` response is ``no-cache``: browsers and
+  the CDN must revalidate (ETag, usually a 304). That covers the unversioned
+  nested ``@import``/ESM URLs whose bytes are already folded into the entry
+  file's hash, and it replaces the hand-bumped ``?v=`` marks.
 * Static text assets and HTML pages are gzip-compressed when the client asks
   for it. API payloads are left alone, and Server-Sent Events are never
   compressed or buffered: an SSE frame must reach the browser the moment the
@@ -19,6 +23,8 @@ import zlib
 from starlette.datastructures import Headers, MutableHeaders
 
 IMMUTABLE_CACHE_CONTROL = "public, max-age=31536000, immutable"
+REVALIDATE_CACHE_CONTROL = "no-cache"
+_CONTENT_VERSION = re.compile(r"(?:^|&)v=[0-9a-f]{12}(?:&|$)")
 _HASHED_DIST = re.compile(r"^/static/dist/[A-Za-z0-9_-]+\.[0-9a-f]{12}\.(?:js|css|mjs)$")
 _COMPRESSIBLE_STATIC = (
     "text/css",
@@ -35,6 +41,17 @@ MINIMUM_SIZE = 1024
 
 def is_hashed_dist_path(path: str) -> bool:
     return bool(_HASHED_DIST.match(path or ""))
+
+
+def static_cache_control(path: str, query_string: str = "") -> "str | None":
+    """Cache-Control for a /static response, or None to leave it alone."""
+    if is_hashed_dist_path(path):
+        return IMMUTABLE_CACHE_CONTROL
+    if not (path or "").startswith("/static/"):
+        return None
+    if _CONTENT_VERSION.search(query_string or ""):
+        return IMMUTABLE_CACHE_CONTROL
+    return REVALIDATE_CACHE_CONTROL
 
 
 def _media_type(headers: Headers) -> str:
@@ -69,7 +86,8 @@ class StaticDeliveryMiddleware:
             return
         path = str(scope.get("path") or "")
         accepts_gzip = "gzip" in Headers(scope=scope).get("accept-encoding", "").lower()
-        immutable = is_hashed_dist_path(path)
+        query = (scope.get("query_string") or b"").decode("latin-1")
+        cache_control = static_cache_control(path, query)
         state = {"mode": None, "start": None, "compressor": None}
 
         async def wrapped_send(message):
@@ -77,8 +95,8 @@ class StaticDeliveryMiddleware:
             if kind == "http.response.start":
                 headers = MutableHeaders(raw=list(message.get("headers") or []))
                 status = int(message.get("status") or 200)
-                if immutable and status in (200, 304):
-                    headers["Cache-Control"] = IMMUTABLE_CACHE_CONTROL
+                if cache_control and status in (200, 304):
+                    headers["Cache-Control"] = cache_control
                 if _should_compress(path, status, headers):
                     headers.add_vary_header("Accept-Encoding")
                     if accepts_gzip:

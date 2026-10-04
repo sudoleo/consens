@@ -32,9 +32,8 @@ def test_public_pages_share_navigation_and_footer_partials():
 
 
 def test_public_styles_share_the_app_aligned_token_layer():
-    # Version-agnostic: the cache buster is bumped on every CSS change, and
-    # pinning it here only ever fails for the bump, never for a real drift.
-    token_import = re.compile(r"@import url\('\./public-tokens\.css\?v=[\w.-]+'\);")
+    # Nested imports are unversioned; the entry URL's content hash covers them.
+    token_import = re.compile(r"@import url\('\./public-tokens\.css'\);")
     assert token_import.search(read("static/css/landing.css"))
     assert token_import.search(read("static/css/public-pages.css"))
 
@@ -87,7 +86,7 @@ def test_typography_is_self_hosted_and_shared_by_every_surface():
     ):
         assert contract in typography
 
-    typography_import = re.compile(r"@import url\('\./typography\.css\?v=[\w.-]+'\);")
+    typography_import = re.compile(r"@import url\('\./typography\.css'\);")
     assert typography_import.search(app_tokens)
     assert typography_import.search(public_tokens)
 
@@ -114,7 +113,7 @@ def test_product_result_mockup_is_reused():
 def test_share_page_loads_the_common_math_renderer():
     template = read("templates/share.html")
     assert "katex@0.17.0/dist/katex.min.js" in template
-    assert re.search(r"/static/js/math-render\.js\?v=[\w.-]+", template)
+    assert "asset_url('/static/js/math-render.js')" in template
     # Die Klassenliste des Shells waechst (share-shell, topic-detail-shell);
     # gepruefft wird, dass der Renderer am Shell haengt, nicht ihre Reihenfolge.
     assert re.search(r'<main class="page-shell[^"]*" data-math-render>', template)

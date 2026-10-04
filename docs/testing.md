@@ -388,9 +388,9 @@ venv\Scripts\python.exe -m pytest -m source_contract -q
 Kritische Verträge aus `test_agent_mode_ui.py` und
 `test_frontend_resilience.py` haben korrespondierende Playwright-Flows für
 Disclosure/Agent Mode, Streaming-Degradation und die App-Shell. Der Cache-
-Vertrag inventarisiert dagegen bewusst alle aktiven lokalen JS-/CSS-URLs,
-prüft ein einheitliches `?v=YYYYMMDD-label` je Asset und vergleicht das Datum
-mit dem letzten Git-Commit beziehungsweise einer aktuellen Arbeitsbaumänderung.
+Vertrag verbietet dagegen handgeschriebene `?v=`-Marken und unversionierte
+CSS/JS-Links in Templates (Identität kommt aus `asset_url()`), und jeder
+verschachtelte Import muss auf eine vorhandene Datei zeigen.
 
 ## Browser-E2E
 

@@ -8,6 +8,7 @@ from fastapi import APIRouter, Request, Body, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 
+from app.core.assets import register_asset_globals
 from app.core.rate_limit import limiter
 from app.core.observability import safe_exception
 from app.core.security import verify_user_token, extract_id_token, is_user_admin
@@ -33,6 +34,7 @@ from app.services.public_markdown import (
 SHARE_CACHE_CONTROL = "public, max-age=60, s-maxage=60, stale-while-revalidate=60"
 
 templates = Jinja2Templates(directory="templates")
+register_asset_globals(templates)
 
 router = APIRouter()
 

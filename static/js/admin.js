@@ -1,8 +1,8 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
 import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
-import { createAdminClient } from "/static/js/admin-api.js?v=20261002-errors";
-import { createPromptConfigPanel } from "/static/js/admin-prompt-config.js?v=20260919-continuous1";
-import { createAgentBudgetPanel } from "/static/js/admin-agent-budget.js?v=20261002-reasoning";
+import { createAdminClient } from "/static/js/admin-api.js";
+import { createPromptConfigPanel } from "/static/js/admin-prompt-config.js";
+import { createAgentBudgetPanel } from "/static/js/admin-agent-budget.js";
 
 const app = initializeApp(window.FIREBASE_CONFIG);
 const auth = getAuth(app);

@@ -18,12 +18,6 @@ def source(path: str) -> str:
     return (ROOT / path).read_text(encoding="utf-8")
 
 
-def _visuals_cache_key(stylesheet: str):
-    """Der ?v=-Token, mit dem ein Blatt components-consensus-visuals.css holt."""
-    match = re.search(r"components-consensus-visuals\.css\?v=([^'\")\s]+)", stylesheet)
-    return match.group(1) if match else None
-
-
 def test_public_site_origin_is_neutral_validated_core_configuration():
     assert normalize_public_site_url(None) == "https://www.consens.io"
     assert normalize_public_site_url("https://preview.example/") == "https://preview.example"
@@ -155,8 +149,8 @@ def test_privileged_app_and_admin_templates_are_external_script_surfaces():
         assert not re.search(r"\sstyle\s*=", html, re.I)
     admin = source("templates/admin.html")
     assert len(admin.splitlines()) < 700
-    assert re.search(r'href="/static/css/admin\.css\?v=\d{8}-[a-z0-9.-]+"', admin)
-    assert re.search(r'src="/static/js/admin\.js\?v=\d{8}-[a-z0-9.-]+"', admin)
+    assert "href=\"{{ asset_url('/static/css/admin.css') }}\"" in admin
+    assert "src=\"{{ asset_url('/static/js/admin.js') }}\"" in admin
     assert "createAdminClient" in source("static/js/admin.js")
     benchmark = source("templates/admin_benchmark.html")
     assert 'id="adminBootstrapConfig"' in benchmark
@@ -170,8 +164,8 @@ def test_privileged_app_and_admin_templates_are_external_script_surfaces():
     ):
         assert f'data-{attribute}="{{{{ {value} | e }}}}"' in benchmark
     assert "window.FIREBASE_CONFIG" not in benchmark
-    assert re.search(r'href="/static/css/admin-benchmark\.css\?v=\d{8}-[a-z0-9.-]+"', benchmark)
-    assert re.search(r'src="/static/js/admin-benchmark\.js\?v=\d{8}-[a-z0-9.-]+"', benchmark)
+    assert "href=\"{{ asset_url('/static/css/admin-benchmark.css') }}\"" in benchmark
+    assert "src=\"{{ asset_url('/static/js/admin-benchmark.js') }}\"" in benchmark
     assert benchmark.index("/static/js/admin-config.js") < benchmark.index(
         "/static/js/admin-benchmark.js"
     )
@@ -218,12 +212,10 @@ def test_consensus_visuals_are_shared_and_dead_dom_contracts_are_gone():
     # test_all_active_local_assets_have_current_consistent_cache_keys, und ein
     # hartes Datum machte aus jedem faelligen Bump einen Testfehler an einer
     # Stelle, die davon gar nicht handelt.
-    keys = {
-        _visuals_cache_key(source(path))
-        for path in ("static/css/landing.css", "static/css/components-consensus-insights.css")
-    }
-    assert None not in keys, "a stylesheet imports the shared visuals without a cache key"
-    assert len(keys) == 1, f"the shared visuals are imported with different cache keys: {keys}"
+    # Nested imports carry no version: asset_url folds their bytes into the
+    # entry stylesheet's hash (see test_frontend_assets).
+    for path in ("static/css/landing.css", "static/css/components-consensus-insights.css"):
+        assert "@import url('./components-consensus-visuals.css');" in source(path)
     all_static = "\n".join(
         path.read_text(encoding="utf-8")
         for path in (ROOT / "static").rglob("*")

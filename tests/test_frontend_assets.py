@@ -186,3 +186,27 @@ def test_no_manual_version_marks_hide_inside_app_javascript_imports():
             offenders.append(relative)
 
     assert offenders == []
+
+
+@pytest.mark.parametrize(("entry", "nested"), [
+    # public-pages.css -> public-tokens.css -> foundation.css
+    ("/static/css/public-pages.css", "static/css/foundation.css"),
+    # admin.js -> import ... from "/static/js/admin-api.js"
+    ("/static/js/admin.js", "static/js/admin-api.js"),
+])
+def test_nested_import_change_changes_the_entry_url(entry, nested):
+    """Nested @import/ESM URLs carry no version of their own, so the entry
+    URL must change when any file in its import closure changes."""
+
+    target = assets.ROOT / nested
+    original = target.read_bytes()
+    before = assets.asset_url(entry)
+    try:
+        target.write_bytes(original + b"\n/* touched by the test */\n")
+        after = assets.asset_url(entry)
+    finally:
+        target.write_bytes(original)
+
+    assert re.search(r"\?v=[0-9a-f]{12}$", before)
+    assert before != after
+    assert assets.asset_url(entry) == before

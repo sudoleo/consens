@@ -164,10 +164,8 @@ Absicht dahinter.
   `templates/admin.html`. `tests/test_phase6_architecture.py` prüft das.
 - **`templates/admin.html` muss unter 700 Zeilen bleiben** (aktuell 508). Der
   Test prüft es. Wenn das Markup wächst, gehört Struktur nach `admin.js`.
-- Derselbe Test pinnt die Versionsmarken
-  `/static/css/admin.css?v=…` und `/static/js/admin.js?v=…`. **Wer CSS oder JS
-  ändert, muss die Marke im Template hochziehen *und* den Test anpassen** —
-  sonst wird veraltetes CSS ausgeliefert.
+- `admin.css`/`admin.js` laufen über `asset_url()`; der Inhalts-Hash umfasst
+  auch die von `admin.js` importierten Module. Nichts von Hand zu bumpen.
 - **Kein `innerHTML` mit Serverdaten.** `admin.js` baut alles über
   `createElement` + `textContent` (siehe `appendSeoText`). Seitentitel und
   Suchanfragen sind Fremdtext und werden als Daten behandelt, nie als Markup.

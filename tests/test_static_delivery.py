@@ -133,3 +133,19 @@ def test_hashed_dist_pattern():
     assert not is_hashed_dist_path("/static/dist/manifest.json")
     assert not is_hashed_dist_path("/static/js/agent-chat.js")
     assert not is_hashed_dist_path("/static/dist/app.js")
+
+
+def test_static_cache_policy_revalidates_unversioned_and_pins_content_hashes():
+    client = TestClient(_app())
+    plain = client.get("/static/css/foundation.css")
+    hashed = client.get("/static/css/foundation.css?v=0123456789ab")
+    manual = client.get("/static/css/foundation.css?v=20261002-fein2")
+    assert plain.status_code == hashed.status_code == manual.status_code == 200
+    # Unversioned (nested imports, images): always revalidate via ETag.
+    assert plain.headers["cache-control"] == "no-cache"
+    # asset_url's content hash never changes under its URL.
+    assert hashed.headers["cache-control"] == IMMUTABLE_CACHE_CONTROL
+    # A hand-written mark is no proof of content and is never pinned.
+    assert manual.headers["cache-control"] == "no-cache"
+    revalidated = client.get("/static/css/foundation.css", headers={"if-none-match": plain.headers["etag"]})
+    assert revalidated.status_code == 304

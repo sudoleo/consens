@@ -62,8 +62,10 @@ passen — bei Abweichung gilt der Code, und die Karte wird korrigiert.
   `static/js/bundles.json`, nicht mehr in `templates/index.html`.
 - Nach Änderungen unter `static/` für `/app`: `npm run build` (Marke kommt aus
   dem Inhalt, es gibt dort nichts mehr von Hand zu bumpen) — Details in
-  [`docs/frontend-build.md`](docs/frontend-build.md). Die öffentlichen Seiten
-  und `admin.html` hängen weiter am manuellen `?v=`-Buster.
+  [`docs/frontend-build.md`](docs/frontend-build.md). Öffentliche Seiten und
+  `admin.html` binden Assets über `{{ asset_url('/static/...') }}` (Inhalts-Hash
+  inkl. verschachtelter Imports); handgeschriebene `?v=`-Marken gibt es nirgends
+  mehr, ein Test verbietet sie.
 - Windows-Einstieg für Tests: `.\dev.ps1 check frontend|backend|browser`,
   optional `-TestPath <Datei oder Verzeichnis>`; direkte Runner-Befehle und Setup
   stehen in `docs/testing.md`. Bei Änderungen an Test-/Build-Einstiegspunkten

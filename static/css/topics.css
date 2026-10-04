@@ -1,4 +1,4 @@
-@import url('./public-tokens.css?v=20261002-fein2');
+@import url('./public-tokens.css');
 
 :root {
   --accent-primary: var(--accent);

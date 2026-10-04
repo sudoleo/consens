@@ -12,12 +12,12 @@
    one under the floating app mock.
    ========================================================================== */
 
-@import url('./public-tokens.css?v=20261002-fein2');
-@import url('./public-nav.css?v=20261002-fein6');
-@import url('./skeleton.css?v=20261002-fein2');
-@import url('./components-consensus-visuals.css?v=20261002-fein2');
-@import url('./demo-action.css?v=20261002-fein6');
-@import url('./send-glow.css?v=20261002-fein6');
+@import url('./public-tokens.css');
+@import url('./public-nav.css');
+@import url('./skeleton.css');
+@import url('./components-consensus-visuals.css');
+@import url('./demo-action.css');
+@import url('./send-glow.css');
 
 *,
 *::before,

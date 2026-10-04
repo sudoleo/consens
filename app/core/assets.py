@@ -18,6 +18,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -234,12 +235,71 @@ def register_asset_globals(templates) -> None:
     templates.env.globals["frontend_assets"] = frontend_assets
 
 
+# Local dependencies a stylesheet or ES module pulls in by URL. Their bytes
+# must count towards the importing file's hash: the nested URLs carry no
+# version of their own, so editing foundation.css has to change the URL of
+# public-pages.css (which imports public-tokens.css, which imports it).
+_CSS_IMPORT = re.compile(r"""@import\s+(?:url\(\s*)?["']?([^"')\s;]+)""")
+_JS_IMPORT = re.compile(
+    r"""(?:\bimport\s*(?:[\w*{}\s,$]+\s*from\s*)?|\bexport\s*[\w*{}\s,$]+\s*from\s*|\bimport\s*\(\s*)["']([^"']+)["']"""
+)
+
+
+def _local_dependencies(path: Path) -> list[Path]:
+    if path.suffix == ".css":
+        pattern = _CSS_IMPORT
+    elif path.suffix in (".js", ".mjs"):
+        pattern = _JS_IMPORT
+    else:
+        return []
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return []
+    found = []
+    for reference in pattern.findall(text):
+        clean = reference.split("?", 1)[0].split("#", 1)[0]
+        if "://" in clean or clean.startswith("//") or clean.startswith("data:"):
+            continue
+        if clean.startswith("/static/"):
+            target = ROOT / clean.lstrip("/")
+        elif clean.startswith("."):
+            target = path.parent / clean
+        else:
+            continue  # bare specifiers and other origins are not ours to hash
+        target = target.resolve()
+        if target.is_file():
+            found.append(target)
+    return found
+
+
+def _dependency_closure(entry: Path) -> list[Path]:
+    seen: dict[Path, None] = {}
+    pending = [entry.resolve()]
+    while pending:
+        current = pending.pop()
+        if current in seen:
+            continue
+        seen[current] = None
+        pending.extend(_local_dependencies(current))
+    return list(seen)
+
+
+# asset_url runs on every public page render. The dependency closure is only
+# re-read when one of its known files changed (mtime/size), so a warm process
+# pays a few stat() calls per URL, not a parse.
+_closure_cache: dict[str, tuple[tuple, str]] = {}
+
+
 def asset_url(path: str) -> str:
     """Append a content hash to a ``/static/...`` URL.
 
-    Used for one-off assets (favicons, images) that are not part of a bundle.
-    An unknown path is returned unchanged rather than raising -- a missing
-    favicon must not take the page down.
+    Stylesheets and ES modules hash their local ``@import``/``import``
+    dependencies too, transitively. Nested URLs therefore stay unversioned and
+    are revalidated (``no-cache``, see static_delivery), while the entry URL
+    changes whenever anything below it changes. An unknown path is returned
+    unchanged rather than raising -- a missing favicon must not take the page
+    down.
     """
 
     clean = path.split("?", 1)[0]
@@ -248,5 +308,13 @@ def asset_url(path: str) -> str:
     target = ROOT / clean.lstrip("/")
     if not target.is_file():
         return clean
-    digest = _memoize(f"asset:{clean}", [target], lambda: _content_hash([target]))
+    cached = _closure_cache.get(clean)
+    if cached is not None:
+        stamp, digest = cached
+        if _fingerprint([Path(item[0]) for item in stamp]) == stamp:
+            return f"{clean}?v={digest}"
+    closure = _dependency_closure(target)
+    stamp = _fingerprint(closure)
+    digest = _content_hash(closure)
+    _closure_cache[clean] = (stamp, digest)
     return f"{clean}?v={digest}"

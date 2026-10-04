@@ -220,8 +220,10 @@ Framework-Parsing greifende `RequestBodyLimitMiddleware`,
 hinzu, mountet
 `/static`, registriert globale Exception-Handler und inkludiert alle Router.
 Äußerste Schicht ist `StaticDeliveryMiddleware` (`app/core/static_delivery.py`):
-content-gehashte Bundles `static/dist/<gruppe>.<12 hex>.js|css` erhalten
-`Cache-Control: public, max-age=31536000, immutable`, statische Textassets und
+content-gehashte Bundles `static/dist/<gruppe>.<12 hex>.js|css` und
+`asset_url()`-URLs mit `?v=<12 hex>` erhalten
+`Cache-Control: public, max-age=31536000, immutable`, jede andere
+`/static`-Antwort `no-cache` (ETag-Revalidierung), statische Textassets und
 HTML ab 1 KiB gzip bei passendem `Accept-Encoding`. API-JSON und
 `text/event-stream` laufen unverändert Frame für Frame durch (SSE wird nie
 komprimiert oder gepuffert); `tests/test_static_delivery.py` sichert beides ab.
@@ -6294,12 +6296,13 @@ ersten Check statt eines leeren Consensus-Panels.
   weil `static/dist/` mitcommittet wird. `tests/test_frontend_build.py`
   vergleicht dazu einen im Manifest hinterlegten Quell-Fingerabdruck mit den
   echten Dateien und schlägt bei vergessenem Build fehl.
-  Für die **öffentlichen Seiten und `admin.html`** gilt weiterhin das manuelle
-  `?v=YYYYMMDD-kurzlabel` in allen aktiven Referenzen. Der Test
-  `test_all_active_local_assets_have_current_consistent_cache_keys`
-  inventarisiert diese Referenzen, verlangt pro Asset einen einheitlichen Key
-  und weist Keys ab, deren Datum vor dem letzten Git-Commit beziehungsweise
-  einer aktuellen Arbeitsbaumänderung liegt.
+  Für die **öffentlichen Seiten und `admin.html`** seit 2026-10-04 ebenfalls:
+  Templates nutzen `{{ asset_url('/static/...') }}`; der Hash umfasst die
+  transitiven lokalen `@import`-/ESM-Abhängigkeiten, deren eigene URLs
+  unversioniert bleiben. `StaticDeliveryMiddleware` cacht `?v=<12 hex>` und
+  `static/dist` ein Jahr `immutable`, alles andere unter `/static` ist
+  `no-cache` (ETag-Revalidierung). Handgeschriebene `?v=` verbietet
+  `tests/test_frontend_resilience.py`; Details in `docs/frontend-build.md`.
 - **Provider-Label-Konvention**: Frontend nutzt teils `Claude`, Backend kanonisch
   `Anthropic`. Beim Verdrahten neuer Modelle Mapping in `app-core.js::modelPrefs`
   und Backend-`normalize_model_name` synchron halten.
@@ -6394,11 +6397,9 @@ Commit/PR**, wenn sich Folgendes ändert:
     Die Marke selbst kommt aus dem Inhalt, es gibt dort nichts von Hand zu
     bumpen. Lokal reicht der Source-Modus (`FRONTEND_DEV=1`, Launch-Config
     `consensio-mock-dev`), der die Einzeldateien mit Inhalts-Hash ausliefert.
-  - **Öffentliche Seiten und `admin.html`**: `?v=YYYYMMDD-kurzlabel` der
-    betroffenen Datei bumpen — der `public-tokens.css`-Import in
-    `landing.css`/`public-pages.css`/`topics.css` und die `<link>`/`<script>`-Tags
-    der jeweiligen Templates. Ohne Bump liefern Browser/CDN die alte Datei aus
-    und die Änderung ist in Produktion unsichtbar (§8).
+  - **Öffentliche Seiten und `admin.html`**: nichts zu tun. Neue Dateien im
+    Template immer als `{{ asset_url('/static/...') }}` einbinden, verschachtelte
+    Imports ohne `?v=`; der Inhalts-Hash übernimmt den Rest.
 
 Faustregel: Wenn ein neuer Agent durch deine Änderung an einer der obigen Stellen
 **überrascht** würde, gehört es hier rein. Kurz halten — verifizierte Fakten statt

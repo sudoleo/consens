@@ -140,7 +140,7 @@ def test_model_pulse_inverts_all_monochrome_provider_logos_in_dark_mode():
             f'.dark-mode .pulse-board .lp-model-pulse-icon img[src*="{asset}"]'
             in pulse_css
         )
-    assert re.search(r"/static/css/model-pulse\.css\?v=\d{8}-[\w.-]+", pulse_page)
+    assert "asset_url('/static/css/model-pulse.css')" in pulse_page
 
 
 def test_meta_muse_is_present_across_public_provider_surfaces():

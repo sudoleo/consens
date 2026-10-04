@@ -1,6 +1,6 @@
-@import url('./typography.css?v=20261002-fein2');
-@import url('./status-palette.css?v=20260906-palette1');
-@import url('./foundation.css?v=20261002-fein2');
+@import url('./typography.css');
+@import url('./status-palette.css');
+@import url('./foundation.css');
 
 /* ==========================================================================
    Variables & Design Tokens

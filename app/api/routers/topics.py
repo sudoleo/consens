@@ -14,6 +14,7 @@ from fastapi import APIRouter, BackgroundTasks, Body, HTTPException, Query, Requ
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 
+from app.core.assets import register_asset_globals
 from app.core import seo_entity
 from app.core.site import SITE_URL
 from app.core.observability import safe_exception
@@ -39,6 +40,7 @@ _FAVICON_ACQUIRE_TIMEOUT_SECONDS = 1.0
 # for the timeline, and for an older version the runs ending at it.
 TOPIC_PAGE_RUNS = 100
 templates = Jinja2Templates(directory="templates")
+register_asset_globals(templates)
 
 
 def _favicon_concurrency() -> asyncio.Semaphore:

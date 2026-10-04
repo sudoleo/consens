@@ -1,8 +1,8 @@
 # Frontend-Build & JS-Tests
 
-Betrifft **`/app`** (`templates/index.html`). Die öffentlichen Seiten
-(`landing.html`, `share.html`, `topic.html`, …) hängen weiterhin am manuellen
-`?v=`-Regime — siehe „Noch offen“ unten.
+Betrifft **`/app`** (`templates/index.html`). Die öffentlichen Seiten und
+`admin.html` nutzen seit 2026-10-04 `asset_url()` — siehe „Öffentliche Seiten“
+unten. Handgepflegte `?v=`-Marken gibt es nirgends mehr.
 
 ## Warum
 
@@ -179,13 +179,29 @@ Abgedeckt: `app-state.js` (Owner-Enforcement), `composer-quote.js`,
 `Object.freeze` auf der Owner-Tabelle war flach, jedes Skript konnte einen Owner
 umschreiben und danach vorn herein schreiben. Behoben in `app-state.js`.
 
+## Öffentliche Seiten und Admin
+
+Templates außerhalb von `/app` binden jede lokale Datei als
+`{{ asset_url('/static/...') }}` (registriert in `pages.py`, `share.py`,
+`topics.py`). `asset_url` hängt `?v=<12 hex>` an, gebildet aus dem Inhalt der
+Datei **und** aller lokalen Dateien, die sie per `@import url(...)` bzw.
+ES-`import`/`export from`/`import()` transitiv nachlädt. Die verschachtelten
+URLs selbst bleiben unversioniert. `StaticDeliveryMiddleware` liefert:
+
+- `static/dist/<name>.<hash>` und URLs mit `?v=<12 hex>`: ein Jahr `immutable`;
+- jede andere `/static`-Antwort (verschachtelte Imports, Bilder, alte
+  Hand-Marken): `no-cache`, also Revalidierung per ETag (meist 304).
+
+Damit gibt es nichts mehr hochzuzählen, und ein vergessener Bump kann kein
+veraltetes CSS mehr ausliefern. `tests/test_frontend_resilience.py` verbietet
+handgeschriebene `?v=` und unversionierte CSS/JS-Links in Templates;
+`tests/test_frontend_assets.py` prüft, dass eine Änderung tief in der
+Import-Kette die Einstiegs-URL ändert; `tests/test_static_delivery.py` prüft
+die Cache-Header. Die `?v=`-Marken in `static/style.css` waren ohnehin wirkungslos:
+der Build inlined die Imports in `dist/app.<hash>.css`.
+
 ## Noch offen
 
-- Die öffentlichen Seiten (`landing.html`, `share.html`, `topic.html`,
-  `topics.html`, `questions.html`, `benchmark.html`, `consensus-engine.html`,
-  `model-pulse.html`, `about/terms/privacy/imprint`) sowie `admin.html` laufen
-  weiter mit handgepflegten `?v=`-Marken. Der Vertrag dafür ist unverändert und
-  wird von `tests/test_frontend_resilience.py` durchgesetzt.
 - Die verbleibenden Python-Quelltext-Verträge (`source_contract` und die
   Teilstring-Prüfungen in `test_*_ui.py`) sind weiter da. Sie sollten Stück für
   Stück nach `tests/js/` wandern, wo sie Verhalten statt Schreibweise prüfen.

@@ -1,10 +1,7 @@
 """Regression checks for browser failures that must degrade gracefully."""
 
-from datetime import datetime
-from functools import lru_cache
 from pathlib import Path
 import re
-import subprocess
 
 import pytest
 
@@ -42,95 +39,55 @@ def test_usage_storage_busy_is_retried_and_stops_before_model_fanout():
     assert busy_branch < fanout
 
 
-LOCAL_ASSET_PATTERN = re.compile(
-    r'''(?:src|href)=["'](?P<html>/static/[^"']+\.(?:js|css))'''
-    r'''(?:\?v=(?P<html_version>[^"']+))?["']'''
-    r'''|@import\s+(?:url\()?['"]?(?P<css>[^'"\)\s]+\.css)'''
-    r'''(?:\?v=(?P<css_version>[^'"\)\s]+))?'''
+# Local CSS/JS references: template URLs plus nested @import/ESM imports.
+TEMPLATE_ASSET = re.compile(r"""(?:src|href)=["'](?P<url>/static/[^"'?]+\.(?:js|css|mjs))""")
+NESTED_IMPORT = re.compile(
+    r"""@import\s+url\(['"]?(?P<css>[^'"\)\s]+\.css)[^)]*\)"""
+    r"""|from\s+["'](?P<js>/static/[^"']+\.m?js)[^"']*["']"""
 )
-VERSION_PATTERN = re.compile(r"^(?P<date>\d{8})-[a-z0-9][a-z0-9.-]*$")
+HAND_MARK = re.compile(r"""/static/[^"'\s)]+\?v=|\.(?:css|m?js)\?v=""")
 
 
-def _active_local_asset_references():
+def _asset_sources():
     sources = sorted((ROOT / "templates").rglob("*.html"))
-    sources += sorted((ROOT / "static").rglob("*.css"))
-    for source in sources:
+    sources += [
+        path for path in sorted((ROOT / "static").rglob("*"))
+        if path.suffix in {".css", ".js", ".mjs"}
+        and path.relative_to(ROOT / "static").parts[0] not in {"dist", "vendor"}
+    ]
+    return sources
+
+
+def test_no_hand_maintained_cache_marks_remain():
+    """Cache identity comes from content: asset_url() in templates (with the
+    transitive @import/ESM closure folded in) and static/dist for /app. A
+    hand-written ?v= is exactly the stale-cache trap this replaced."""
+
+    offenders = [
+        f"{source.relative_to(ROOT)}: {match.group(0)}"
+        for source in _asset_sources()
+        for match in HAND_MARK.finditer(source.read_text(encoding="utf-8"))
+    ]
+    assert offenders == []
+
+
+def test_template_assets_go_through_asset_url_and_nested_imports_exist():
+    for source in _asset_sources():
         text = source.read_text(encoding="utf-8")
-        for match in LOCAL_ASSET_PATTERN.finditer(text):
-            if match.group("html"):
-                target = ROOT / match.group("html").lstrip("/")
-                version = match.group("html_version")
-            else:
-                target = source.parent / match.group("css")
-                version = match.group("css_version")
-            yield source, target.resolve(), version
-
-
-@lru_cache(maxsize=1)
-def _asset_git_state():
-    dirty_output = subprocess.run(
-        ["git", "status", "--porcelain", "--untracked-files=all", "--", "static"],
-        cwd=ROOT,
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout
-    dirty = {
-        Path(line[3:].split(" -> ")[-1].strip().strip('"'))
-        for line in dirty_output.splitlines()
-        if line.strip()
-    }
-    history_output = subprocess.run(
-        ["git", "log", "--format=@@%cs", "--name-only", "--", "static"],
-        cwd=ROOT,
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout
-    latest_dates = {}
-    commit_date = ""
-    for line in history_output.splitlines():
-        if line.startswith("@@"):
-            commit_date = line[2:].replace("-", "")
-        elif line.strip() and commit_date:
-            latest_dates.setdefault(Path(line.strip()), commit_date)
-    return dirty, latest_dates
-
-
-def _required_asset_date(target: Path) -> str:
-    relative = target.relative_to(ROOT)
-    dirty, latest_dates = _asset_git_state()
-    if relative in dirty:
-        return datetime.fromtimestamp(target.stat().st_mtime).strftime("%Y%m%d")
-    committed = latest_dates.get(relative)
-    assert committed, f"tracked asset has no Git history: {relative}"
-    return committed
-
-
-def test_all_active_local_assets_have_current_consistent_cache_keys():
-    """Validate the real asset graph instead of blessing remembered versions."""
-
-    versions_by_target = {}
-    references = list(_active_local_asset_references())
-    assert references, "no local JS/CSS asset references were discovered"
-    for source, target, version in references:
-        relative_source = source.relative_to(ROOT)
-        relative_target = target.relative_to(ROOT)
-        assert target.is_file(), f"{relative_source} references missing {relative_target}"
-        assert version, f"{relative_source} references {relative_target} without ?v="
-        parsed = VERSION_PATTERN.fullmatch(version)
-        assert parsed, f"invalid cache key for {relative_target}: {version}"
-        assert parsed.group("date") >= _required_asset_date(target), (
-            f"stale cache key for {relative_target}: {version} predates its latest change"
-        )
-        versions_by_target.setdefault(relative_target, set()).add(version)
-
-    inconsistent = {
-        str(target): sorted(versions)
-        for target, versions in versions_by_target.items()
-        if len(versions) != 1
-    }
-    assert not inconsistent, f"inconsistent active cache keys: {inconsistent}"
+        relative = source.relative_to(ROOT)
+        if source.suffix == ".html":
+            unversioned = [match.group("url") for match in TEMPLATE_ASSET.finditer(text)]
+            assert unversioned == [], f"{relative} links CSS/JS without asset_url()"
+            for url in re.findall(r"asset_url\('(/static/[^']+)'\)", text):
+                assert (ROOT / url.lstrip("/")).is_file(), f"{relative} references missing {url}"
+            continue
+        for match in NESTED_IMPORT.finditer(text):
+            target = (
+                source.parent / match.group("css")
+                if match.group("css")
+                else ROOT / match.group("js").lstrip("/")
+            )
+            assert target.resolve().is_file(), f"{relative} imports missing {target}"
 
 
 def test_mobile_enter_keeps_the_textarea_newline_behavior():
