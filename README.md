@@ -5,7 +5,7 @@
 </h1>
 
 <p align="center">
-  <strong>Multi-model consensus for large language models.</strong>
+  <strong>Ask several AI models at once. See where they agree, where they don't, and why.</strong>
 </p>
 
 <table align="center">
@@ -49,44 +49,99 @@
   </tr>
 </table>
 
-**consens.io** is an experimental multi-model AI system for comparing and synthesizing responses from independent large language models.
+<p align="center">
+  <a href="https://consens.io"><strong>consens.io</strong></a> ·
+  <a href="https://consens.io/benchmark">Benchmark</a> ·
+  <a href="docs/codebase-map.md">Architecture</a> ·
+  <a href="docs/README.md">Documentation</a>
+  <br><br>
+  <a href="https://github.com/sudoleo/consens/actions/workflows/tests.yml"><img src="https://github.com/sudoleo/consens/actions/workflows/tests.yml/badge.svg" alt="Regression tests"></a>
+  <img src="https://img.shields.io/badge/python-FastAPI-009688" alt="FastAPI">
+  <img src="https://img.shields.io/badge/data-Firestore-FFCA28" alt="Firestore">
+</p>
 
-Instead of relying on a single model, consens.io queries models from multiple providers independently and analyzes their responses to identify **agreement, disagreement, and uncertainty**. A separate synthesis step can then generate a consolidated answer from the collected outputs.
+**consens.io** sends one question to models from nine independent providers,
+keeps their answers separate, and shows what they agree on, where they
+contradict each other, and how well each claim is backed by sources. The result
+is one answer with inline confidence, not a wall of nine answers.
 
-The project explores whether model diversity and aggregation can improve the robustness, transparency, and reliability of LLM-based answers.
+Agreement between models is a signal, not proof. consens.io treats it as one
+input next to source verification, never as a substitute for it.
 
-## Method
+## What it does
 
-1. A user query is evaluated independently by multiple language models.
-2. Their responses are retained as separate observations.
-3. Agreement and disagreement between the responses are analyzed.
-4. A synthesis model produces a consolidated answer while preserving relevant differences.
-
-consens.io currently integrates models from **OpenAI, Anthropic, Google, Mistral AI, DeepSeek, xAI, Zhipu AI / GLM, Moonshot AI / Kimi, and Meta (Muse)**.
+- **Agent mode (default).** An agent plans the research, picks models per round,
+  searches the web, reads attachments and Google sources (read-only), and
+  answers with citations. Server-side rules require at least two model families
+  and a judge before an answer ships.
+- **Direct comparison.** Run the same question across models side by side and
+  read the answers independently.
+- **Consensus.** Anonymised, shuffled answers go to a cross-family judge that
+  extracts consensus, disagreements, and an agreement score; a second judge
+  checks that every consensus statement is covered.
+- **Source checks and Watch.** Claims can be re-verified over time. Watches
+  report only evidence-backed changes, not score noise.
+- **Share pages and API.** Public snapshots of results, plus a keyed
+  [Consensus API v1](docs/consensus-api.md).
 
 ## Research
 
-The repository includes experiments and benchmarks investigating multi-model aggregation strategies and the relationship between individual model performance and consensus-based answers.
+The repository contains the benchmark harness and the frozen sample manifests
+behind the published [MMLU-Pro results](https://consens.io/benchmark) (`benchmark/`,
+`data/benchmark/`). Method, prompts, and caveats are in
+[docs/benchmark-plan.md](docs/benchmark-plan.md). Models, prompts, and
+aggregation methods change over time; results are tied to the version that
+produced them.
 
-Model agreement should not be interpreted as factual correctness. Consensus is treated as an additional signal rather than a substitute for source verification or empirical evidence.
+## Architecture
 
-## Stack
+```
+app/api        FastAPI routers (ask, consensus, agent, bookmarks, share, admin, ...)
+app/core       configuration, auth, assets, rate limits
+app/services   LLM clients, judges, agent, usage metering, source verification
+static/        classic-script frontend (window.* modules, esbuild bundles)
+templates/     Jinja2 pages (app shell, landing, public pages)
+benchmark/     MMLU-Pro experiment runner
+tests/         pytest, Playwright (E2E), Vitest (frontend), Firestore rules
+```
 
-- Python / FastAPI
-- JavaScript
-- Firebase / Firestore
-- Multiple LLM provider APIs
+Stack: Python / FastAPI, vanilla JavaScript built with esbuild, Firebase Auth and
+Firestore, all LLM traffic through OpenRouter. The full map (routing, core flows,
+data model, `window.*` contracts) is [docs/codebase-map.md](docs/codebase-map.md).
 
-## Live
+## Run locally
 
-**[consens.io](https://consens.io)**
+Requirements: Python 3.9+, Node 18+.
 
----
+```bash
+python -m venv venv && source venv/bin/activate   # Windows: venv\Scriptsctivate
+pip install -r requirements.txt
+npm ci && npm run build
+cp .env.example .env                              # fill in Firebase + OpenRouter values
+MOCK_LLM=1 uvicorn main:app --reload
+```
 
-This repository contains the implementation of an actively developed experimental system. Models, prompts, aggregation methods, and evaluation procedures may change over time.
+`MOCK_LLM=1` serves canned model output, so no provider calls are billed.
+Note that a local server still talks to the Firestore project in your `.env`;
+see [docs/testing.md](docs/testing.md) for the safe setup.
 
-## Product video
+## Tests
 
-The film and its editable scene code, assets, render commands and production
-notes now live in [sudoleo/consens-video](https://github.com/sudoleo/consens-video).
-The video project is independent of this application.
+```powershell
+.\dev.ps1 check frontend   # Vitest + build freshness
+.\dev.ps1 check backend    # pytest
+.\dev.ps1 check browser    # Playwright against the Firebase emulator
+.\dev.ps1 check rules      # Firestore security rules
+```
+
+CI runs on every push and pull request ([workflow](.github/workflows/tests.yml)).
+Details: [docs/testing.md](docs/testing.md), [docs/frontend-build.md](docs/frontend-build.md).
+
+## Status
+
+consens.io is an actively developed solo project and is currently free to use
+while in testing. Internal design notes and audits in `docs/` are mostly in
+German; the index in [docs/README.md](docs/README.md) says which are current.
+
+The product film lives in its own repository,
+[sudoleo/consens-video](https://github.com/sudoleo/consens-video).
