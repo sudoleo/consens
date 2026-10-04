@@ -429,10 +429,18 @@ class DelegationLoop(AgentLoop):
             # A refused change never stops the comparison; the model reads why.
             memory_result = None
             if registry is self.registry and getattr(args, "memory", None) and tool.name != "update_memory":
+                memory_step = f"{value.step_id}:{call['id']}:memory"
                 try:
                     memory_result = self.memory.apply(args.memory)
+                    applied = sum(change["op"] != "noop" for change in memory_result.get("changes", []))
+                    self.outgoing.put_nowait(self.tool_event(memory_step, "update_memory", "succeeded",
+                        text=f"{applied} memory change{'s' if applied != 1 else ''} saved." if applied
+                        else "Already in memory."))
                 except ValueError as exc:
                     memory_result = {"error": str(exc)[:500]}
+                    # Content-free reason in the saved activity: refusals stay diagnosable.
+                    self.outgoing.put_nowait(self.tool_event(memory_step, "update_memory", "blocked",
+                                                             text=memory_result["error"]))
             result = tool.execute(args, cancellation=cancellation)
             if memory_result is not None and isinstance(result, dict):
                 result = {**result, "memory": memory_result}

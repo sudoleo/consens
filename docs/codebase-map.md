@@ -1177,11 +1177,13 @@ für `/app` und `/app/watches` wird mit `private, no-store` ausgeliefert.
   Settings → Memory → „Let Agent update memory“ (`auto_memory` im
   Profil-Dokument, Default aus, nur wirksam bei `enabled`). Dann entscheidet der
   Orchestrator selbst, was er speichert, ändert oder löscht — ohne zusätzlichen
-  Modellaufruf: Änderungen reiten als optionales Feld `memory` auf dem ohnehin
-  fälligen `compare_models`-Aufruf (`agent_comparison.py` baut das Schema per
+  Modellaufruf: Änderungen reiten als **Pflichtfeld** `memory` auf dem ohnehin
+  fälligen `compare_models`-Aufruf (`[]` = bewusst nichts; ein optionales Feld
+  ließ GPT-6 Luna im ersten Praxistest einfach weg) (`agent_comparison.py` baut das Schema per
   `create_model`, die Ausführung in `DelegationLoop._execute`; ein abgelehnter
   Memory-Teil bricht den Vergleich nie ab, das Ergebnis steht unter `memory`
-  im Tool-Result und nie im gespeicherten Vergleich). Eine Nachricht, die nur
+  im Tool-Result und nie im gespeicherten Vergleich; gespeicherte wie abgelehnte
+  Versuche landen inhaltsfrei als Tool-Eintrag `update_memory` in `agent_activity`). Eine Nachricht, die nur
   ums Merken/Vergessen bittet, nutzt das Tool `update_memory` und antwortet
   danach direkt; `_free_floor` lässt diese Direktantwort im freien Modus zu.
   Serverseitige Verträge: (1) jede Agent-Änderung trägt `evidence`, ein

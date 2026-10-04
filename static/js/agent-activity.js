@@ -25,6 +25,7 @@
     gmail_read: ['Gmail', 'Reading relevant emails…', 'Read relevant emails'],
     import_gmail_attachment: ['Email attachment', 'Importing an email attachment…', 'Imported an email attachment'],
     prepare_gmail_draft: ['Email draft', 'Drafting an email for your review…', 'Email draft ready for review'],
+    update_memory: ['Memory', 'Updating memory…', 'Updated memory'],
   };
   // Tools whose success leaves an external write waiting for the user.
   const reviewTools = new Set(['prepare_calendar_event', 'prepare_gmail_draft']);

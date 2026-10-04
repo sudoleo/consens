@@ -244,6 +244,7 @@ class MemoryScript(Script):
     def __init__(self, *, memory=None, standalone=None, **kwargs):
         super().__init__(**kwargs)
         self.memory, self.standalone = memory, standalone
+        self.omit_memory = False
         self.system_prompts = []
 
     def factory(self):
@@ -267,9 +268,14 @@ class MemoryScript(Script):
                     yield {"type": "delta", "text": self.text}
                     return
                 yield from super().stream(model=model, messages=messages, **kwargs)
-                if self.step_id == "completion:0" and script.memory is not None and self.tool_calls:
+                compare = next((tool for tool in kwargs.get("tools") or []
+                                if tool.get("function", {}).get("name") == "compare_models"), None)
+                required = "memory" in ((compare or {}).get("function", {}).get("parameters", {}).get("required") or [])
+                if self.tool_calls and self.tool_calls[0]["function"]["name"] == "compare_models" and (
+                        script.memory is not None or (required and not script.omit_memory)):
                     call = self.tool_calls[0]["function"]
-                    call["arguments"] = json.dumps({**json.loads(call["arguments"]), "memory": script.memory})
+                    memory = script.memory if script.memory is not None and self.step_id == "completion:0" else []
+                    call["arguments"] = json.dumps({**json.loads(call["arguments"]), "memory": memory})
         return Completion()
 
 
@@ -336,6 +342,25 @@ def test_memory_from_anything_but_the_users_words_is_refused(store):
     assert saved["status"] == "completed" and not saved.get("agent_memory")
     tool_results = [m for m in loop.messages if m.get("role") == "tool"]
     assert "exact quote of the user's own words" in json.loads(tool_results[0]["content"])["memory"]["error"]
+    # The refusal stays diagnosable in the saved activity, without memory content.
+    blocked = [event for event in saved["agent_activity"]
+               if event.get("name") == "update_memory" and event.get("status") == "blocked"]
+    assert blocked and "evil.example" not in json.dumps(blocked)
+
+
+def test_the_memory_decision_is_required_on_every_comparison(store):
+    """An optional field was left out in practice; [] must be an explicit choice."""
+    snapshot = writable_snapshot(store)
+    script = MemoryScript()
+    script.omit_memory = True
+    loop = memory_loop(store, script, snapshot=snapshot)
+    with pytest.raises(Exception):
+        list(loop.run())
+    rejected = [json.loads(m["content"]) for m in loop.messages if m.get("role") == "tool"]
+    assert "memory" in rejected[0]["error"] and "Field required" in rejected[0]["error"]
+    compare = next(tool for tool in script.tools if tool["name"] == "compare_models")
+    assert "memory" in compare["parameters"]["required"]
+    assert "vegetarian" in script.system_prompts[0]
 
 
 @pytest.mark.parametrize("autonomy", ["guided", "free"])

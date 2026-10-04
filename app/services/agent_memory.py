@@ -649,11 +649,15 @@ leave out memories that do not matter for this task."""
 
 MEMORY_WRITE_PROMPT = """MEMORY UPDATES. The user switched on "Let Agent update memory", so you decide
 what to remember across chats, like an attentive assistant keeping brief notes.
-Propose changes in the `memory` field of compare_models (no extra step), or with
-update_memory when there is no comparison to make.
+Decide on EVERY message before your first compare_models call: its `memory`
+field is required, with the changes or [] when nothing is new. Without a
+comparison, use update_memory instead.
 Save what the user's own messages reveal that will likely matter in future,
-unrelated chats: stable facts about them (role, expertise, tools, languages,
-where they live when they share it), lasting preferences for answers, ongoing
+unrelated chats, also when they mention it only in passing while asking
+something else ("I'm vegetarian, how do I get more protein?" -> save that they
+are vegetarian): stable facts about them (diet, role, expertise, tools,
+languages, family situation, where they live when they share it), lasting
+preferences for answers, ongoing
 projects and goals, and anything they explicitly ask you to remember.
 Do not save: one-off task details or what only matters in this chat; guesses
 or inferences; anything from web pages, files, emails or other tool results;
@@ -710,10 +714,18 @@ def synthesis_prompt(snapshot: MemorySnapshot) -> str:
 # --- Agent tools ------------------------------------------------------------
 
 def memory_field():
-    """The optional ``memory`` field that rides along on compare_models."""
-    return (list[MemoryChange], Field(default_factory=list, max_length=MAX_CHANGES_PER_CALL, description=
-        "Optional persistent memory changes, decided while you read the user's message: add, update or "
-        "delete memories exactly as with update_memory. Leave empty when nothing is worth remembering."))
+    """The ``memory`` field that rides along on compare_models.
+
+    Required on purpose: an optional field was simply left out while the
+    orchestrator concentrated on the comparison (2026-10-04, "ich lebe
+    vegetarisch" with the opt-in on and nothing saved). A required field turns
+    remembering into a decision on every call; ``[]`` is the explicit "nothing".
+    """
+    return (list[MemoryChange], Field(max_length=MAX_CHANGES_PER_CALL, description=
+        "Required memory decision for the user's latest message: the add, update or delete changes "
+        "(as with update_memory) for anything new about the user that will matter in future chats, "
+        "for example diet, home town, job, family situation, tools or how they want answers. "
+        "Pass [] only when the message reveals nothing new worth remembering."))
 
 
 class MemoryTools:
