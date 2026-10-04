@@ -86,7 +86,12 @@ def metered_events(source, booking: OperationBooking):
                     event = {**event, "extras": {**(event.get("extras") or {}), **booking.extras()}}
                 yield event
         finally:
-            close = getattr(source, "close", None)
-            if callable(close):
-                close()
-            booking.finish()
+            try:
+                close = getattr(source, "close", None)
+                if callable(close):
+                    close()
+            finally:
+                # A failing transport cleanup must not skip spent-token
+                # settlement. Storage failures are handled by finish(); the
+                # original cleanup exception still reaches the caller.
+                booking.finish()

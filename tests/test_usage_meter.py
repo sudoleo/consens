@@ -165,3 +165,36 @@ def test_metered_events_put_the_booked_account_on_the_final_event_and_book_on_cl
     stream.close()  # client left before the final event
     assert repo.booked == [("ask:mistral", 10, 0, False)]
     assert usage_meter.current_meter() is None
+
+
+@pytest.mark.parametrize("storage_fails", [False, True])
+def test_stream_cleanup_error_still_books_once_without_masking_cleanup_error(storage_fails):
+    class RecordingRepo(Repo):
+        def book_operation(self, *args, **kwargs):
+            result = super().book_operation(*args, **kwargs)
+            if storage_fails:
+                raise OSError("storage unavailable")
+            return result
+
+    cleanup_error = RuntimeError("provider cleanup failed")
+
+    def source():
+        try:
+            usage_meter.current_meter().record({"prompt_tokens": 7, "completion_tokens": 3})
+            yield {"type": "delta", "text": "partial"}
+        finally:
+            raise cleanup_error
+
+    repo = RecordingRepo()
+    booking = OperationBooking(repo, "uid", "run", "consensus", final=True)
+    stream = metered_events(source(), booking)
+    next(stream)
+    with pytest.raises(RuntimeError) as raised:
+        stream.close()
+    assert raised.value is cleanup_error
+    assert repo.booked == [("consensus", 10, 0, True)]
+    assert booking.meter.closed
+    stream.close()
+    booking.finish()
+    assert repo.booked == [("consensus", 10, 0, True)]
+    assert usage_meter.current_meter() is None
